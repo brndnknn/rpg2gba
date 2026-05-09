@@ -1,4 +1,4 @@
-# How to Use AGENTS.md, MEMORY.md, and system.md
+# How to Use CLAUDE.md, MEMORY.md, and system.md
 
 **Audience:** You, Brandon — instructions for what to tell a new build agent session when starting work on rpg2gba.
 
@@ -8,11 +8,11 @@
 
 | File | Who reads it | What it does |
 |---|---|---|
-| `AGENTS.md` | Build agent | Permanent operating manual. Conventions, principles, boundaries. Rarely changes. |
+| `CLAUDE.md` | Build agent | Permanent operating manual. Conventions, principles, boundaries. Rarely changes. |
 | `MEMORY.md` | Build agent | Running project state. Changes every session. Replaces the need to re-scan the repo. |
 | `src/conversion_agent/prompts/system.md` | Conversion agent (at runtime) | The conversion agent's instructions. Maintained by the build agent as a source file. |
 
-The build agent reads AGENTS.md and MEMORY.md. It also *maintains* system.md — treating it like any other source file — but it does not run as the conversion agent.
+The build agent reads CLAUDE.md and MEMORY.md. It also *maintains* system.md — treating it like any other source file — but it does not run as the conversion agent.
 
 ---
 
@@ -21,7 +21,7 @@ The build agent reads AGENTS.md and MEMORY.md. It also *maintains* system.md —
 This is the exact prompt to give Claude Code (or whatever build agent you're using) at the start of a session. Copy-paste it, or keep it as a saved snippet:
 
 ```
-Read AGENTS.md, then MEMORY.md, then stop and tell me:
+Read CLAUDE.md, then MEMORY.md, then stop and tell me:
 1. What phase we're in and what the next concrete task is
 2. Any open questions from last session that need answers before we proceed
 3. Anything you want to confirm before starting work
@@ -67,7 +67,7 @@ The agent should update:
 The first session is different — there's no existing MEMORY.md state yet. Use this prompt:
 
 ```
-Read AGENTS.md in full. Then read ROADMAP.md. Then read MEMORY.md.
+Read CLAUDE.md in full. Then read ROADMAP.md. Then read MEMORY.md.
 
 This is the first session on this project. MEMORY.md is a blank template.
 Your job in this session is Phase 0 reconnaissance as described in ROADMAP.md.
@@ -102,13 +102,13 @@ Show me the diff before committing.
 ## Quick Reference: Session Patterns
 
 **Starting cold (new session):**
-> "Read AGENTS.md, then MEMORY.md, then stop and tell me where we are."
+> "Read CLAUDE.md, then MEMORY.md, then stop and tell me where we are."
 
 **Starting the project for the first time:**
-> "Read AGENTS.md, ROADMAP.md, MEMORY.md. First session. Tell me your Phase 0 plan and confirm you understand the build/conversion agent distinction."
+> "Read CLAUDE.md, ROADMAP.md, MEMORY.md. First session. Tell me your Phase 0 plan and confirm you understand the build/conversion agent distinction."
 
 **Picking up mid-phase:**
-> "Read AGENTS.md and MEMORY.md. Last session summary will tell you where we left off. Continue from there."
+> "Read CLAUDE.md and MEMORY.md. Last session summary will tell you where we left off. Continue from there."
 
 **Updating the conversion agent's instructions:**
 > "Update system.md to add [rule]. Show me the diff first."
@@ -120,5 +120,5 @@ Show me the diff before committing.
 > "Check MEMORY.md first — the answer may already be there."
 
 **Agent is about to hit a manual review gate:**
-> The agent should stop itself (it's in AGENTS.md). If it doesn't, tell it:
+> The agent should stop itself (it's in CLAUDE.md). If it doesn't, tell it:
 > "This is a manual review gate. Stop, show me what you have, and wait for my approval."

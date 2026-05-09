@@ -1,6 +1,6 @@
 # rpg2gba Agent Memory
 
-> This file is maintained by the build agent. Read AGENTS.md for instructions on how to use it.
+> This file is maintained by the build agent. Read CLAUDE.md for instructions on how to use it.
 > Update with targeted edits, not full rewrites. Keep entries concise.
 
 ---
@@ -9,9 +9,9 @@
 
 **Active phase:** Phase 0 — Reconnaissance (not yet started)
 
-**Completed phases:** None
+**Completed phases:** Phase 1 (repo scaffold)
 
-**Next concrete task:** Clone the Uranium source repo and run the Phase 0 map inventory script. See ROADMAP.md §Phase 0.
+**Next concrete task:** Clone the Uranium source repo and begin Phase 0 map inventory. See ROADMAP.md §Phase 0.
 
 ---
 
@@ -36,7 +36,7 @@
 
 ## Flag Registry Notes
 
-*Registry not yet initialized. Full state will live in `src/conversion_agent/flag_registry.py`; notable assignments go here.*
+*Registry not yet initialized. Full state will live in `src/rpg2gba/conversion_agent/flag_registry.py`; notable assignments go here.*
 
 ---
 

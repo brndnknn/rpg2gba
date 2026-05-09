@@ -1,4 +1,4 @@
-# AGENTS.md
+# CLAUDE.md
 
 **Audience:** This file is for the AI agent assisting development in the `rpg2gba` repository. If you are reading this, you are the **build agent**. Read this entire file before making changes. Re-read it when you've been away from the repo for a while.
 
@@ -17,9 +17,9 @@ A pipeline that converts RPG Maker XP / Pokémon Essentials fan games into playa
 There are two AI agents in this project. **You are one of them.** Do not confuse your role with the other.
 
 - **You are the build agent.** You work on rpg2gba's Python, Ruby, and C code. You read this file. You have full repo access and can run tests, refactor, and propose new features. You behave like a developer joining the project.
-- **The other agent is the conversion agent.** It is a *runtime component of rpg2gba itself* — an LLM the orchestrator invokes at runtime to translate event JSON into Poryscript. It has no awareness of the codebase. Its instructions live in `src/conversion_agent/prompts/system.md`, which you maintain like any other source file.
+- **The other agent is the conversion agent.** It is a *runtime component of rpg2gba itself* — an LLM the orchestrator invokes at runtime to translate event JSON into Poryscript. It has no awareness of the codebase. Its instructions live in `src/rpg2gba/conversion_agent/prompts/system.md`, which you maintain like any other source file.
 
-You will never run as the conversion agent. The conversion agent will never run as you. If you find yourself uncertain which role you're in, you're the build agent — the conversion agent doesn't read AGENTS.md.
+You will never run as the conversion agent. The conversion agent will never run as you. If you find yourself uncertain which role you're in, you're the build agent — the conversion agent doesn't read CLAUDE.md.
 
 ### Your operator
 
@@ -68,7 +68,7 @@ Scanning the full repo to rebuild context burns tokens and time. MEMORY.md is yo
 
 ## Key File Notes
 <!-- Short notes on non-obvious files. Don't duplicate what's already obvious from
-     the repo layout in AGENTS.md. Only note things that would take >30s to figure
+     the repo layout in CLAUDE.md. Only note things that would take >30s to figure
      out from reading the file itself. -->
 
 ## Decisions Made
@@ -113,7 +113,7 @@ Scanning the full repo to rebuild context burns tokens and time. MEMORY.md is yo
 
 - Update MEMORY.md with targeted `str_replace` edits, not full rewrites — other sections shouldn't be disturbed when you update one
 - Keep entries concise. If a Key File Note is longer than two sentences, it probably belongs in `reference/` as a proper doc, not here
-- Don't put information here that's already in AGENTS.md or ROADMAP.md — link or reference instead
+- Don't put information here that's already in CLAUDE.md or ROADMAP.md — link or reference instead
 - MEMORY.md is committed to git. Session-to-session state persists in version history. Don't gitignore it.
 
 ---
@@ -124,30 +124,31 @@ Scanning the full repo to rebuild context burns tokens and time. MEMORY.md is yo
 rpg2gba/
 ├── README.md                   # Public-facing project description
 ├── ROADMAP.md                  # The plan; read for "what next"
-├── AGENTS.md                   # This file
+├── CLAUDE.md                   # This file
 ├── pyproject.toml
 ├── src/
-│   ├── pbs_converter/          # Phase 2: deterministic Python
-│   │   ├── pokemon.py
-│   │   ├── moves.py
-│   │   ├── items.py
-│   │   ├── trainers.py
-│   │   ├── abilities.py
-│   │   └── encounters.py
-│   ├── rxdata_deserializer/    # Phase 3: Ruby
-│   │   └── deserialize.rb
-│   ├── conversion_agent/       # Phase 4: runtime LLM component
-│   │   ├── orchestrator.py     # The driver loop
-│   │   ├── flag_registry.py    # Single source of truth for FLAG_*/VAR_* names
-│   │   ├── backends/
-│   │   │   ├── ollama.py
-│   │   │   ├── claude_code.py
-│   │   │   └── anthropic_api.py
-│   │   └── prompts/
-│   │       ├── system.md       # The agent's frozen instruction set
-│   │       └── few_shot/       # Example conversions, one .md per scenario
-│   ├── tileset_converter/      # Phase 5
-│   └── pipeline.py             # Top-level orchestration entry point
+│   └── rpg2gba/
+│       ├── pbs_converter/          # Phase 2: deterministic Python
+│       │   ├── pokemon.py
+│       │   ├── moves.py
+│       │   ├── items.py
+│       │   ├── trainers.py
+│       │   ├── abilities.py
+│       │   └── encounters.py
+│       ├── rxdata_deserializer/    # Phase 3: Ruby
+│       │   └── deserialize.rb
+│       ├── conversion_agent/       # Phase 4: runtime LLM component
+│       │   ├── orchestrator.py     # The driver loop
+│       │   ├── flag_registry.py    # Single source of truth for FLAG_*/VAR_* names
+│       │   ├── backends/
+│       │   │   ├── ollama.py
+│       │   │   ├── claude_code.py
+│       │   │   └── anthropic_api.py
+│       │   └── prompts/
+│       │       ├── system.md       # The agent's frozen instruction set
+│       │       └── few_shot/       # Example conversions, one .md per scenario
+│       ├── tileset_converter/      # Phase 5
+│       └── pipeline.py             # Top-level orchestration entry point
 ├── tests/
 │   ├── test_pbs_pokemon.py     # Round-trip and golden-output tests
 │   ├── ...
@@ -187,9 +188,9 @@ Every converter must be safely re-runnable from scratch. If running it twice pro
 
 | Concept | Source of truth |
 |---|---|
-| `SPECIES_*` constants | `src/pbs_converter/pokemon.py` output |
-| `MOVE_*` constants | `src/pbs_converter/moves.py` output |
-| `FLAG_*` / `VAR_*` names | `src/conversion_agent/flag_registry.py` |
+| `SPECIES_*` constants | `src/rpg2gba/pbs_converter/pokemon.py` output |
+| `MOVE_*` constants | `src/rpg2gba/pbs_converter/moves.py` output |
+| `FLAG_*` / `VAR_*` names | `src/rpg2gba/conversion_agent/flag_registry.py` |
 | Uranium internal name → expansion constant | `reference/uranium_id_map.json` |
 | Tile substitution table | `reference/tileset_map.json` |
 
@@ -205,7 +206,7 @@ When a converter encounters something it doesn't recognize — an unexpected PBS
 
 ### 4.6 Tests for every converter
 
-Every module in `src/pbs_converter/` has a corresponding test in `tests/`. New converters do not get merged without:
+Every module in `src/rpg2gba/pbs_converter/` has a corresponding test in `tests/`. New converters do not get merged without:
 
 1. A round-trip test (parse → emit → parse → diff)
 2. At least one golden-output test against a hand-curated sample
@@ -266,8 +267,8 @@ def find_by_name(name: str) -> Optional[Species]: ...
 
 The conversion agent's prompts are source code. Treat them with the same care.
 
-- `src/conversion_agent/prompts/system.md` is the canonical instruction set
-- Few-shot examples live in `src/conversion_agent/prompts/few_shot/` as individual `.md` files, one per scenario, named descriptively (`give_item_with_fanfare.md`, `branching_dialogue.md`)
+- `src/rpg2gba/conversion_agent/prompts/system.md` is the canonical instruction set
+- Few-shot examples live in `src/rpg2gba/conversion_agent/prompts/few_shot/` as individual `.md` files, one per scenario, named descriptively (`give_item_with_fanfare.md`, `branching_dialogue.md`)
 - Changes to these files require regenerating the calibration set output and confirming it still meets quality bar
 - Do not edit these files during an active conversion run
 
@@ -310,7 +311,7 @@ Your job here is to read code and write reports in `reference/`. No production c
 
 ### Phase 2: PBS conversion
 
-Each PBS file gets its own module under `src/pbs_converter/`. Modules follow a consistent shape:
+Each PBS file gets its own module under `src/rpg2gba/pbs_converter/`. Modules follow a consistent shape:
 
 ```python
 def parse(path: Path) -> list[Record]: ...

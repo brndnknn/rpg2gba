@@ -14,9 +14,9 @@
 
 ### The Build Agent
 
-The AI assistant helping you *develop* rpg2gba itself. Operates inside the rpg2gba repo. Reads `AGENTS.md`. Has full access to the codebase, can run tests, refactor, debug, write new converters. In practice this is Claude Code (or whatever you use day-to-day in your IDE). It behaves like a junior developer joining the project.
+The AI assistant helping you *develop* rpg2gba itself. Operates inside the rpg2gba repo. Reads `CLAUDE.md`. Has full access to the codebase, can run tests, refactor, debug, write new converters. In practice this is Claude Code (or whatever you use day-to-day in your IDE). It behaves like a junior developer joining the project.
 
-When this roadmap says "the build agent" or references `AGENTS.md`, this is what's meant.
+When this roadmap says "the build agent" or references `CLAUDE.md`, this is what's meant.
 
 ### The Conversion Agent
 
@@ -29,12 +29,12 @@ When this roadmap says "the conversion agent" — particularly in Phase 4 — th
 | | Build Agent | Conversion Agent |
 |---|---|---|
 | **Lives in** | Your IDE | The rpg2gba pipeline |
-| **Reads** | `AGENTS.md`, full repo, tests | Single map's event JSON + flag registry |
+| **Reads** | `CLAUDE.md`, full repo, tests | Single map's event JSON + flag registry |
 | **Writes** | Python, Ruby, C, Markdown | Poryscript only |
 | **Tools** | File edit, bash, test runners | None — pure text in/out |
 | **Memory** | Conversation + codebase | Stateless per call |
 | **Failure mode** | Asks for clarification | Marks command "unhandled" |
-| **Configured by** | `AGENTS.md` | Prompt template + backend abstraction |
+| **Configured by** | `CLAUDE.md` | Prompt template + backend abstraction |
 | **You interact with** | Constantly during development | Never directly — only via orchestrator |
 
 Treat them as separate systems. The build agent should not be modifying the conversion agent's prompts at runtime; the conversion agent should not be writing converter code. Each has one job.
@@ -153,7 +153,7 @@ Run the build pipeline on the **Ubuntu desktop**. The GBA decomp toolchain is ha
 rpg2gba/
 ├── README.md
 ├── ROADMAP.md                  # this file
-├── AGENTS.md                   # build agent instructions
+├── CLAUDE.md                   # build agent instructions
 ├── pyproject.toml
 ├── src/
 │   ├── pbs_converter/
@@ -268,10 +268,10 @@ Have a clean pokeemerald-expansion fork that builds successfully, plus the empty
 - Create the directory structure listed above
 - Stub out empty modules
 
-**1.3 Write AGENTS.md (for the build agent)**
+**1.3 Write CLAUDE.md (for the build agent)**
 - This document is for the **build agent only** — the AI assistant working in the rpg2gba codebase day-to-day
-- It is not the conversion agent's prompt; that lives in `src/conversion_agent/prompts/` and is governed separately
-- You have a pattern for AGENTS.md from Recursor — adapt it
+- It is not the conversion agent's prompt; that lives in `src/rpg2gba/conversion_agent/prompts/` and is governed separately
+- You have a pattern for CLAUDE.md from Recursor — adapt it
 - Specify: code conventions, when to ask for clarification, how to handle data fidelity decisions, the boundary between deterministic converters and LLM-assisted ones, the rule that the build agent never modifies the conversion agent's prompts at runtime
 
 **1.4 Establish a "smoke test ROM"**
@@ -282,7 +282,7 @@ Have a clean pokeemerald-expansion fork that builds successfully, plus the empty
 
 - [ ] Forked decomp builds and runs in Delta
 - [ ] Pipeline repo scaffolded with passing CI
-- [ ] AGENTS.md written
+- [ ] CLAUDE.md written
 - [ ] Build cycle time documented
 
 ---
@@ -468,7 +468,7 @@ The conversion agent has multiple viable LLM backends. The right approach is a s
 - This component is identical regardless of which backend the conversion agent is using
 
 **4.2 Conversion agent backend abstraction**
-- Build a thin LLM client interface inside `src/conversion_agent/`: `convert_event(event_json, registry_state, prompt) -> ConversionResult`
+- Build a thin LLM client interface inside `src/rpg2gba/conversion_agent/`: `convert_event(event_json, registry_state, prompt) -> ConversionResult`
 - Implement three backends behind it:
   - `OllamaBackend` (local, used for Stage B)
   - `ClaudeCodeBackend` (interactive, used for Stages A and C — really a "review and approve" wrapper around terminal Claude Code sessions)
@@ -704,7 +704,7 @@ This roadmap involves two agents (see [Two Agents in This Project](#two-agents-i
 
 ### Build Agent Guidance
 
-What you'd hand to Claude Code (or any agent) working in the rpg2gba repo. The full version lives in `AGENTS.md`; this is the conceptual outline.
+What you'd hand to Claude Code (or any agent) working in the rpg2gba repo. The full version lives in `CLAUDE.md`; this is the conceptual outline.
 
 **Operating principles**
 
@@ -723,7 +723,7 @@ What you'd hand to Claude Code (or any agent) working in the rpg2gba repo. The f
 
 ### Conversion Agent Guidance
 
-The conversion agent is the runtime LLM component inside rpg2gba. Its instructions live in `src/conversion_agent/prompts/system.md` — the build agent maintains this file, but the conversion agent is what actually consumes it. The conceptual outline:
+The conversion agent is the runtime LLM component inside rpg2gba. Its instructions live in `src/rpg2gba/conversion_agent/prompts/system.md` — the build agent maintains this file, but the conversion agent is what actually consumes it. The conceptual outline:
 
 **The conversion agent's job, in one sentence**
 
