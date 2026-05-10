@@ -1,9 +1,15 @@
 """Backend abstraction for the conversion agent's LLM provider.
 
-Three backends are supported:
-  - OllamaBackend: local model on the Ubuntu desktop (Stage B)
-  - ClaudeCodeBackend: interactive Claude Code sessions (Stages A and C)
-  - AnthropicAPIBackend: direct API calls (Stage D fallback)
+The orchestrator calls convert_event() on whichever backend is configured.
+Two backends are supported:
+
+  OllamaBackend     — local model on the Ubuntu desktop; used for bulk Stage B runs
+  ClaudeCodeBackend — interactive queue-review helper for Stage C; not a programmatic
+                      LLM call, but a tool for presenting the unhandled queue in a
+                      Claude Code session and writing results back to the pipeline
+
+No paid API backend is used. All conversion is either local (Ollama) or interactive
+(Claude Code via existing Pro subscription).
 """
 from __future__ import annotations
 

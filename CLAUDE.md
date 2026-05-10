@@ -46,7 +46,7 @@ The user is a developer comfortable with Python, Swift, C, CLI tooling, and GBA 
 - **Do not invent pokeemerald-expansion C constants outside the flag registry.** See section 6.
 - **Do not commit anything from the Uranium source tree, or any base ROM, into this repo.** Those are external inputs. They live on disk outside the repo and are referenced by config.
 - **Do not bypass the manual review gates.** See section 9.
-- **Do not change the conversion agent's prompt template during a Stage B or Stage C run.** Prompt changes happen between stages, never during. If you discover a prompt bug mid-run, log it and wait — don't hot-patch.
+- **Do not change the conversion agent's prompt template during an active bulk run.** Prompt changes happen between runs, never during. If you discover a prompt bug mid-run, log it and wait — don't hot-patch.
 
 ---
 
@@ -142,8 +142,7 @@ rpg2gba/
 │       │   ├── flag_registry.py    # Single source of truth for FLAG_*/VAR_* names
 │       │   ├── backends/
 │       │   │   ├── ollama.py
-│       │   │   ├── claude_code.py
-│       │   │   └── anthropic_api.py
+│       │   │   └── claude_code.py
 │       │   └── prompts/
 │       │       ├── system.md       # The agent's frozen instruction set
 │       │       └── few_shot/       # Example conversions, one .md per scenario
@@ -332,14 +331,19 @@ This is where the build/conversion role distinction is most likely to get muddle
 Your job in Phase 4 is to:
 
 - Build the orchestrator (`orchestrator.py`)
-- Build the backend abstraction and its three implementations
+- Build the backend abstraction and its two implementations (Ollama, ClaudeCode queue-review)
 - Build the flag registry
 - Author and refine the conversion agent's prompts and few-shot examples
 - Build the unhandled queue and the retry-with-compiler-error logic
 
 You do *not* manually convert events yourself. The conversion agent does that at runtime.
 
-When iterating on prompts during Stage A: change prompt → run on calibration set → review output → repeat. Don't try to fix individual bad outputs by hand-editing them; if the output is bad, the prompt or examples need work.
+Three stages — no paid API involved:
+- **Stage A (calibration):** Run 5 representative maps interactively in a Claude Code session to tune the prompt. Goal: ~80% first-try compile rate.
+- **Stage B (bulk):** Run the frozen prompt against all maps overnight via OllamaBackend. Hard cases land in `output/unhandled.jsonl`.
+- **Stage C (queue review):** Open the unhandled queue in a Claude Code session and work through it using ClaudeCodeBackend.
+
+When iterating on prompts during Stage A: change prompt → run on calibration set → review output → repeat. Don't fix individual bad outputs by hand; if output is bad, the prompt or examples need work.
 
 ### Phase 6: Custom C in pokeemerald-expansion fork
 
@@ -380,7 +384,7 @@ Fix the failure. Do not skip, mark xfail, or comment out failing tests without e
 There are three points where you must stop and wait for the user, even if everything appears to be working:
 
 1. **End of Phase 2** — before any PBS-generated content is committed to the pokeemerald-expansion fork, the user reviews the generated C output and the unfixed-issues list
-2. **End of Phase 4 Stage A** — before any bulk conversion runs, the user approves the frozen prompt template and the calibration set output
+2. **End of Phase 4 calibration** — before any bulk Ollama runs, the user approves the frozen prompt template and the calibration set output
 3. **End of Phase 7** — before declaring the ROM "playable," the user does a manual playthrough of the success-criteria scenarios
 
 These gates exist because each one is a place where systematic errors propagate cheaply to fix early and expensively to fix late. Do not push past them on autopilot.
@@ -438,8 +442,7 @@ A list of mistakes the build agent (you, or earlier sessions of you) is likely t
 | `RPG2GBA_URANIUM_SRC` | Path to the Uranium source tree on disk |
 | `RPG2GBA_POKEEMERALD` | Path to the pokeemerald-expansion fork |
 | `RPG2GBA_OUTPUT` | Output directory (defaults to `./output`) |
-| `OLLAMA_HOST` | Pointed at the Ubuntu desktop for Stage B runs |
-| `ANTHROPIC_API_KEY` | Only needed for Stage D fallback |
+| `OLLAMA_HOST` | Ollama server on the Ubuntu desktop (accessed over Tailscale) |
 
 ### Useful one-liners
 
@@ -450,8 +453,8 @@ python -m rpg2gba.pipeline phase2 --clean
 # Validate the flag registry's current state
 python -m rpg2gba.conversion_agent.flag_registry validate
 
-# Convert a single map for debugging (any backend)
-python -m rpg2gba.pipeline convert-map --map-id 042 --backend ollama
+# Convert a single map for debugging
+python -m rpg2gba.pipeline convert-map --map-id 042
 
 # Build the pokeemerald-expansion fork
 (cd $RPG2GBA_POKEEMERALD && make -j$(nproc) modern)
