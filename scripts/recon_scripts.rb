@@ -24,29 +24,53 @@ FileUtils.mkdir_p(out_dir)
 scripts = Marshal.load(File.binread(scripts_path))
 puts "#{scripts.size} script sections found"
 
-# Section names present in vanilla Pokémon Essentials (v15/v16 era).
-# Anything not on this list is potentially Uranium-custom.
-VANILLA = %w[
-  Main PokemonMain PokemonUtilities PokemonMessages PokemonBitmapSprite
-  PokemonText PokemonSystem PokemonSave PokemonLoad PokemonStartScreen
-  PokemonPokeBattle PokemonBattle PokemonBattleCommon PokemonBattleAI
-  PokemonMove PokemonMoveEffects PokemonItems PokemonItemEffects
-  PokemonTrainers PokemonEncounters PokemonMap PokemonOverworldMoves
-  PokemonField PokemonFieldMoves PokemonMenu PokemonPokedex PokemonSummary
-  PokemonParty PokemonPC PokemonBag PokemonShop PokemonEvolution
-  PokemonEgg PokemonForms PokemonMega PokemonHiddenMoves
-  PokemonDebug PokemonTest PokemonVersion
-  Interpreter Interpreter2 Interpreter3 Interpreter4 Interpreter5
-  Interpreter6 Interpreter7
-  Game_Temp Game_System Game_Switches Game_Variables Game_SelfSwitches
-  Game_Screen Game_Troop Game_Map Game_CommonEvent Game_Character
-  Game_Player Game_Event Game_Actor Game_Actors Game_Party
-  Game_Battler Game_BattleAction Game_Enemy
-  Scene_Map Scene_Battle Scene_Title Scene_Battle2 Scene_Battle3 Scene_Battle4
-  Sprite_Character Sprite_Battler Spriteset_Map Spriteset_Battle
-  Window_Base Window_Selectable Window_Command Window_Help
-  Window_Gold Window_PlayTime Window_Steps Window_SaveFile
-].map(&:downcase).to_set
+# Sections matching these prefixes are vanilla Essentials / RPG Maker XP / common
+# third-party Essentials mods (BW UI mod, EliteBattle, Klein utilities, etc.).
+# Anything NOT matched here is flagged as potentially Uranium-original and
+# warrants manual inspection during Phase 0.4.
+VANILLA_PREFIXES = [
+  # RPG Maker XP / RGSS framework
+  'Game_', 'Sprite_', 'Spriteset_', 'Window_', 'Scene_', 'Tilemap',
+  'RPG_Sprite_', 'Interpreter',
+  # Pokémon Essentials core (PB* = data, PField_*, PItem_*, PScreen_*,
+  # PokeBattle_*, Pokemon_*, PMinigame_*, PSystem_*, PBattle_*, PTrainer_*)
+  'PB', 'PField_', 'PItem_', 'PScreen_', 'PokeBattle_', 'Pokemon_',
+  'PMinigame_', 'PSystem_', 'PBattle_', 'PTrainer_',
+  # Common third-party Essentials mods Uranium ships with
+  'BW_',                  # Black/White-style UI overrides
+  'EliteBattle_',         # Battle scene replacement
+  'Klein_',               # Klein utilities (footprints, bitmap fns, animations)
+  'GEN6_',
+].freeze
+
+# Exact section names that are vanilla / standard / known-third-party but
+# don't match a prefix above.
+VANILLA_EXACT = Set.new(%w[
+  Hard_Reset Settings RGSS2Compatibility _Win32API _Sockets DebugConsole
+  _Sprite_Resizer ParticleEngine_v17 EventHandlers_v17 File_Mixins_v17
+  Intl_Messages PBDebug_v17 Audio AudioPlay_v17 AudioUtilities_v17
+  FileTests_v17 _BitmapCache _SpriteWindow SpriteWindow_text
+  SpriteWindow_sprites_v17 DrawText Messages TextEntry EventScene_v17
+  Transitions PBTerrain_v17 _Compiler Compiler Main
+  Mouse_Input Pathfinder Change_Tileset Fossil_Ressussect Egg_Animation_
+  Tutor_to_Pokemon TM_to_Pokemon LukaSJ_animated_sprites Punching_Bag
+  Debug_Passability Multiple_Fogs FMOD RGSS_Linker
+  XInput Control_Binding Language_Selection PSystem_Controls
+  TilesetEditor BattleAnimationEditor Editor CUSTOM_SCRIPTS
+  CJK_Utilities Window_v17 NOT_USED
+  GENERATE_CALC_DATA GENERATE_WIKI_PAGES GENERATE_JSON_DATA
+  BENCHMARK BITMAP_EXPORT MAP_EXPORT
+]).freeze
+
+def vanilla?(name)
+  return true if name.nil? || name.empty?
+  # Section names use various separators (space, *, _, /). Normalize aggressively
+  # so prefix / exact matching is robust.
+  normalized = name.strip.gsub(/[^\w]/, '_').gsub(/_+/, '_').sub(/\A_+/, '').sub(/_+\z/, '')
+  return true if normalized.empty?            # divider sections like "==========="
+  return true if VANILLA_EXACT.include?(normalized)
+  VANILLA_PREFIXES.any? { |p| normalized.start_with?(p) }
+end
 
 index_lines = [
   '# Scripts.rxdata Index',
@@ -61,12 +85,16 @@ index_lines = [
 scripts.each_with_index do |(_, name, compressed), i|
   begin
     source     = Zlib::Inflate.inflate(compressed)
-    line_count = source.lines.size
+    # Inflate returns ASCII-8BIT. Uranium scripts contain Windows-1252 bytes
+    # (smart quotes, em-dashes, accented chars). Transcode so dumped files are
+    # valid UTF-8. CLAUDE.md §5 documents the Windows-1252 hazard.
+    utf8       = source.force_encoding('Windows-1252').encode('UTF-8', invalid: :replace, undef: :replace)
+    line_count = utf8.lines.size
     safe_name  = name.gsub(/[^\w\-]/, '_').gsub(/__+/, '_')
     out_file   = File.join(out_dir, format('%03d_%s.rb', i, safe_name))
-    File.write(out_file, source, encoding: 'utf-8')
+    File.binwrite(out_file, utf8)
 
-    flag = VANILLA.include?(name.downcase) ? '' : '⚠'
+    flag = vanilla?(name) ? '' : '⚠'
     index_lines << "| #{i} | `#{name}` | #{line_count} | #{flag} |"
   rescue => e
     index_lines << "| #{i} | `#{name}` | — | ERROR: #{e.message} |"

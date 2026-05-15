@@ -17,21 +17,41 @@ out_path    = 'reference/map_inventory.md'
 # Minimal enough for Marshal.load to succeed without the RMXP runtime.
 
 class Table
-  def marshal_load(data)
-    _dim, @xsize, @ysize, @zsize, size = data.unpack('L5')
-    @data = data[20..].unpack("s#{size}")
+  attr_accessor :xsize, :ysize, :zsize, :data
+  def self._load(bytes)
+    obj = allocate
+    _dim, xs, ys, zs, size = bytes.unpack('L5')
+    obj.xsize = xs
+    obj.ysize = ys
+    obj.zsize = zs
+    obj.data = bytes[20, size * 2].unpack("s#{size}")
+    obj
+  end
+  def _dump(_)
+    [3, xsize || 0, ysize || 1, zsize || 1, (data || []).size].pack('L5') +
+      (data || []).pack('s*')
   end
   def [](x, y = 0, z = 0)
-    @data[z.to_i * (@ysize || 1) * (@xsize || 1) + y.to_i * (@xsize || 1) + x.to_i] rescue 0
+    (data || [])[z.to_i * (ysize || 1) * (xsize || 1) + y.to_i * (xsize || 1) + x.to_i] || 0
   end
 end
 
 class Color
-  def marshal_load(data); @r, @g, @b, @a = data.unpack('D4'); end
+  def self._load(data)
+    obj = allocate
+    obj.instance_variable_set(:@r, data.unpack('D4')[0])
+    obj
+  end
+  def _dump(_); [@r || 0, @g || 0, @b || 0, @a || 0].pack('D4'); end
 end
 
 class Tone
-  def marshal_load(data); @r, @g, @b, @a = data.unpack('D4'); end
+  def self._load(data)
+    obj = allocate
+    obj.instance_variable_set(:@r, data.unpack('D4')[0])
+    obj
+  end
+  def _dump(_); [@r || 0, @g || 0, @b || 0, @a || 0].pack('D4'); end
 end
 
 module RPG
@@ -45,13 +65,32 @@ module RPG
   class Event
     attr_accessor :id, :name, :x, :y, :pages
     def initialize; @pages = []; end
-  end
 
-  class EventPage
-    attr_accessor :condition, :graphic, :move_type, :move_speed, :move_frequency,
-                  :move_route, :walk_anime, :step_anime, :direction_fix,
-                  :through, :always_on_top, :trigger, :list
-    def initialize; @list = []; end
+    class Page
+      attr_accessor :condition, :graphic, :move_type, :move_speed, :move_frequency,
+                    :move_route, :walk_anime, :step_anime, :direction_fix,
+                    :through, :always_on_top, :trigger, :list
+      def initialize; @list = []; end
+
+      class Condition
+        attr_accessor :switch1_valid, :switch2_valid, :variable1_valid, :variable2_valid,
+                      :self_switch_valid, :switch1_id, :switch2_id, :variable1_id,
+                      :variable1_value, :variable2_id, :variable2_value, :self_switch_ch
+        def initialize
+          @switch1_valid = @switch2_valid = @variable1_valid =
+            @variable2_valid = @self_switch_valid = false
+        end
+      end
+
+      class Graphic
+        attr_accessor :tile_id, :character_name, :character_hue, :direction,
+                      :pattern, :opacity, :blend_type
+        def initialize
+          @tile_id = 0; @character_name = ''; @character_hue = 0
+          @direction = 2; @pattern = 0; @opacity = 255; @blend_type = 0
+        end
+      end
+    end
   end
 
   class EventCommand
@@ -79,38 +118,38 @@ module RPG
   end
 
   BGM = BGS = ME = SE = AudioFile
-
-  class EventCondition
-    attr_accessor :switch1_valid, :switch2_valid, :variable1_valid, :variable2_valid,
-                  :self_switch_valid, :switch1_id, :switch2_id, :variable1_id,
-                  :variable1_value, :variable2_id, :variable2_value, :self_switch_ch
-    def initialize
-      @switch1_valid = @switch2_valid = @variable1_valid =
-        @variable2_valid = @self_switch_valid = false
-    end
-  end
-
-  class EventGraphic
-    attr_accessor :tile_id, :character_name, :character_hue, :direction,
-                  :pattern, :opacity, :blend_type
-    def initialize
-      @tile_id = 0; @character_name = ''; @character_hue = 0
-      @direction = 2; @pattern = 0; @opacity = 255; @blend_type = 0
-    end
-  end
 end
 
-# Command codes common in vanilla Essentials — not inherently complex.
+# RPG Maker XP standard event command codes. Anything outside this set is
+# likely a Uranium-custom or third-party-mod command worth investigating.
+# Reference: RMXP RGSS docs (http://www.tktkgame.com/tech/rgss/event.html).
 COMMON_CODES = Set.new([
-  0, 101, 401, 102, 402, 403, 404, 111, 411, 112, 412, 113, 115,
-  117, 118, 119, 121, 122, 123, 124, 125, 126, 127, 128, 129,
-  131, 132, 133, 134, 135, 136, 201, 202, 203, 204, 205, 206,
-  207, 208, 209, 210, 211, 212, 213, 214, 221, 222, 223, 224,
-  225, 231, 232, 233, 234, 235, 236, 241, 242, 243, 244, 245,
-  246, 247, 248, 249, 250, 251, 261, 281, 282, 283, 284, 285,
-  301, 302, 303, 311, 312, 313, 314, 315, 316, 317, 318, 319,
-  320, 321, 322, 331, 332, 333, 334, 335, 336, 340, 341, 342,
-  351, 352, 353, 354, 355, 655,
+  0,                                             # empty / end-of-page
+  101, 401,                                      # Show Text (+ continuation)
+  102, 402, 403,                                 # Show Choices (+ branches)
+  103,                                           # Input Number
+  104,                                           # Change Text Options
+  105,                                           # Button Input Processing
+  106,                                           # Wait
+  108, 408,                                      # Comment (+ continuation)
+  111, 411, 412, 413,                            # Conditional / Else / End / Repeat
+  112, 113,                                      # Loop / Break Loop
+  115, 116, 117, 118, 119,                       # Exit Event / Erase / Common / Label / Jump
+  121, 122, 123, 124, 125, 126, 127, 128, 129,   # Switch / Variable / Self-switch / Timer / Gold / Item / Weapon / Armor / Party
+  131, 132, 133, 134, 135, 136,                  # Window/Player options
+  201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214,  # Map ops
+  221, 222, 223, 224, 225,                       # Screen ops
+  231, 232, 233, 234, 235, 236,                  # Picture ops
+  241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251,                 # Audio ops
+  261,                                           # Movie
+  281, 282, 283, 284, 285,                       # Map name display etc.
+  301, 302, 303,                                 # Battle Processing / Shop / Name Input
+  311, 312, 313, 314, 315, 316, 317, 318, 319, 320, 321, 322,            # Actor changes
+  331, 332, 333, 334, 335, 336,                  # Enemy changes
+  340, 341, 342, 351, 352, 353, 354, 355,        # Game system / scripting
+  401, 402, 403, 404, 405, 406, 407, 408,        # Continuations
+  509,                                           # Move command (inside MoveRoute)
+  655,                                           # Script line continuation
 ])
 
 COMPLEX_THRESHOLD = 30  # pages with more commands than this get flagged

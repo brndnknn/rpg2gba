@@ -1,0 +1,6072 @@
+# Uranium Source Structure
+
+Source: `/home/b/Pokemon_Uranium_132/_unpacked`
+
+```
+_unpacked/
+├── Audio/  [378 .ogg, 272 .wav, 55 .mp3, 4 .mid]
+│   ├── BGM/  [79 .ogg, 3 .mid, 1 .sfk, 1 .wav]
+│   │   ├── blank.mid
+│   │   ├── blank.wav
+│   │   ├── dppt opening.mid
+│   │   ├── Pokemon Anime Soundtrack - Hoenn Elite Four Battle (EXTENDED).ogg
+│   │   ├── PU-Amatree Town.ogg
+│   │   ├── PU-Angelure Town.ogg
+│   │   ├── PU-Anthell.ogg
+│   │   ├── PU-Beachdesert.ogg
+│   │   ├── PU-Bealbeach City.ogg
+│   │   ├── PU-Burole City.ogg
+│   │   ├── PU-Bycicle(mp3).ogg
+│   │   ├── PU-Credits.ogg
+│   │   ├── PU-CurieUrayneBattle.ogg
+│   │   ├── PU-DecisiveBattle.ogg
+│   │   ├── PU-Dream Mountain.ogg
+│   │   ├── PU-Dream Nestlands.ogg
+│   │   ├── PU-Dream Palace.ogg
+│   │   ├── PU-Dream Venesi.ogg
+│   │   ├── PU-EliteBattle.ogg
+│   │   ├── PU-EliteBattle2.ogg
+│   │   ├── PU-evolve.ogg
+│   │   ├── PU-Garlikidmp3.ogg
+│   │   ├── PU-Gym2.ogg
+│   │   ├── PU-GymBattle.ogg
+│   │   ├── PU-Hero House.ogg
+│   │   ├── PU-HoF.ogg
+│   │   ├── PU-Intro.ogg
+│   │   ├── PU-Kevlar Town.ogg
+│   │   ├── PU-Lab.ogg
+│   │   ├── PU-Larkspurr Lab.ogg
+│   │   ├── PU-Legen Town.ogg
+│   │   ├── PU-LegendaryBattle.ogg
+│   │   ├── PU-mistery.ogg
+│   │   ├── PU-Moki Town.ogg
+│   │   ├── PU-NewIntro.ogg
+│   │   ├── PU-NewIntro.ogg.sfk
+│   │   ├── PU-NinjaBattle.ogg
+│   │   ├── PU-Nowtoch City.ogg
+│   │   ├── PU-Nuclear Plant.ogg
+│   │   ├── PU-NuclearEvent.ogg
+│   │   ├── PU-NuclearZeta.ogg
+│   │   ├── PU-Online Battle.ogg
+│   │   ├── PU-Online.ogg
+│   │   ├── PU-OtherCaves.ogg
+│   │   ├── PU-Passage Cave.ogg
+│   │   ├── PU-PirateTheme.ogg
+│   │   ├── PU-PokeCenter.ogg
+│   │   ├── PU-PokeMart.ogg
+│   │   ├── PU-Pokeradar.ogg
+│   │   ├── PU-PunkTheme.ogg
+│   │   ├── PU-Radio_ Oak.ogg
+│   │   ├── PU-RangerTheme.ogg
+│   │   ├── PU-Revelation.ogg
+│   │   ├── PU-Rival Theme.ogg
+│   │   ├── PU-Rochfale Town.ogg
+│   │   ├── PU-Route 01.ogg
+│   │   ├── PU-Route 03.ogg
+│   │   ├── PU-Route 04.ogg
+│   │   ├── PU-Route 05-06.ogg
+│   │   ├── PU-Route 08.ogg
+│   │   ├── PU-Route 13.ogg
+│   │   ├── PU-Route 16.ogg
+│   │   ├── PU-Route09.ogg
+│   │   ├── PU-ShowMeAround.ogg
+│   │   ├── PU-Silverport Town.ogg
+│   │   ├── PU-Snowbank Town.ogg
+│   │   ├── PU-Solgaleo.ogg
+│   │   ├── PU-Specialpoke.ogg
+│   │   ├── PU-Surfing(mp3).ogg
+│   │   ├── PU-TheoBattle.ogg
+│   │   ├── PU-Title.ogg
+│   │   ├── PU-TitleScreen.ogg
+│   │   ├── PU-TrainerPokeBattle.ogg
+│   │   ├── PU-Tsukinami Village.ogg
+│   │   ├── PU-UrayneDefeated.ogg
+│   │   ├── PU-Venesi City.ogg
+│   │   ├── PU-Victory Road.ogg
+│   │   ├── PU-Vinoville Town.ogg
+│   │   ├── PU-Vinoville=[.ogg
+│   │   ├── PU-WildDreamBattle.ogg
+│   │   ├── PU-WildNuclearBattle.ogg
+│   │   ├── PU-WildPokeBattle.ogg
+│   │   ├── PU-WildVictory.ogg
+│   │   └── Radio - Lullaby.mid
+│   ├── BGS/  [12 .ogg]
+│   │   ├── Battle Open.ogg
+│   │   ├── BaykalForest.ogg
+│   │   ├── Choose.ogg
+│   │   ├── Door.ogg
+│   │   ├── Emergency Civil Defense Alarm [Air Raid Siren].ogg
+│   │   ├── Flee.ogg
+│   │   ├── Open Pokeball.ogg
+│   │   ├── PU-Blizzard.ogg
+│   │   ├── PU-Crowd.ogg
+│   │   ├── PU-River.ogg
+│   │   ├── PU-Sea.ogg
+│   │   └── Select.ogg
+│   ├── ME/  [23 .ogg, 1 .sfk]
+│   │   ├── BadgeME.ogg
+│   │   ├── BW_captured.ogg
+│   │   ├── BW_lvup.ogg
+│   │   ├── BW_lvup.ogg.sfk
+│   │   ├── Emergency Civil Defense Alarm [Air Raid Siren].ogg
+│   │   ├── expgoing.ogg
+│   │   ├── Jingle - Egg Received.ogg
+│   │   ├── Jingle - HMTM.ogg
+│   │   ├── Jingle - Obtained Berry.ogg
+│   │   ├── Jingle - Regular Item.ogg
+│   │   ├── Jinlge - KeyItem.ogg
+│   │   ├── Pokemon Healing.ogg
+│   │   ├── PU-CoolHikerFisherEncounter.ogg
+│   │   ├── PU-FemaleEncounter.ogg
+│   │   ├── PU-GymVictory.ogg
+│   │   ├── PU-Item Found!.ogg
+│   │   ├── PU-MaleEncounter.ogg
+│   │   ├── PU-NinjaEncounter.ogg
+│   │   ├── PU-PirateTheme.ogg
+│   │   ├── PU-PokemonObtained.ogg
+│   │   ├── PU-PsychicAthlete spotted.ogg
+│   │   ├── PU-Victory Trainer Battle.ogg
+│   │   ├── PU-Victory Wild Pokemon.ogg
+│   │   └── Reinorpgintro.ogg
+│   └── SE/  [271 .wav, 264 .ogg, 55 .mp3, 1 .reapeaks]
+│       ├── 001Cry.wav
+│       ├── 002Cry.wav
+│       ├── 003Cry.wav
+│       ├── 004Cry.wav
+│       ├── 005Cry.wav
+│       ├── 006Cry.wav
+│       ├── 007Cry.wav
+│       ├── 008Cry.wav
+│       ├── 009Cry.wav
+│       ├── 010Cry.wav
+│       ├── 011Cry.wav
+│       ├── 012Cry.wav
+│       ├── 013Cry.wav
+│       ├── 014Cry.wav
+│       ├── 015-Jump01.ogg
+│       ├── 015Cry.wav
+│       ├── 016Cry.wav
+│       ├── 017Cry.wav
+│       ├── 018Cry.wav
+│       ├── 019Cry.wav
+│       ├── 020Cry.wav
+│       ├── 021-Dive01.ogg
+│       ├── 021Cry.wav
+│       ├── 022-Dive02.ogg
+│       ├── 022Cry.wav
+│       ├── 023-Dive03.ogg
+│       ├── 023Cry.wav
+│       ├── 024-Door01.ogg
+│       ├── 024Cry.wav
+│       ├── 025-Door02.ogg
+│       ├── 025Cry.wav
+│       ├── 026-Door03.ogg
+│       ├── 026Cry.wav
+│       ├── 027-Door04.ogg
+│       ├── 027Cry.wav
+│       ├── 028-Door05.ogg
+│       ├── 028Cry.wav
+│       ├── 029-Door06.ogg
+│       ├── 029Cry.wav
+│       ├── 030-Door07.ogg
+│       ├── 030Cry.wav
+│       ├── 031-Door08.ogg
+│       ├── 031Cry.wav
+│       ├── 032-Switch01.ogg
+│       ├── 032Cry.wav
+│       ├── 033-Switch02.ogg
+│       ├── 033Cry.wav
+│       ├── 034-Switch03.ogg
+│       ├── 034Cry.wav
+│       ├── 035-Switch04.ogg
+│       ├── 035Cry.wav
+│       ├── 036-Switch05.ogg
+│       ├── 036Cry.wav
+│       ├── 037-Switch06.ogg
+│       ├── 037Cry.wav
+│       ├── 038-Switch07.ogg
+│       ├── 038Cry.wav
+│       ├── 039-Switch08.ogg
+│       ├── 039Cry.wav
+│       ├── 040-Knock01.ogg
+│       ├── 040Cry.wav
+│       ├── 041-Knock02.ogg
+│       ├── 041Cry.wav
+│       ├── 042-Knock03.ogg
+│       ├── 042Cry.wav
+│       ├── 043-Knock04.ogg
+│       ├── 043Cry.wav
+│       ├── 044-Chest01.ogg
+│       ├── 044Cry.wav
+│       ├── 045-Push01.ogg
+│       ├── 045Cry.wav
+│       ├── 046-Book01.ogg
+│       ├── 046Cry.wav
+│       ├── 047-Book02.ogg
+│       ├── 047Cry.wav
+│       ├── 048-Explosion01.ogg
+│       ├── 048Cry.wav
+│       ├── 049-Explosion02.ogg
+│       ├── 049Cry.wav
+│       ├── 050-Explosion03.ogg
+│       ├── 050Cry.wav
+│       ├── 051-Explosion04.ogg
+│       ├── 051Cry.wav
+│       ├── 052-Cannon01.ogg
+│       ├── 052Cry.wav
+│       ├── 053-Cannon02.ogg
+│       ├── 053Cry.wav
+│       ├── 054-Cannon03.ogg
+│       ├── 054Cry.wav
+│       ├── 055-Right01.ogg
+│       ├── 055Cry.wav
+│       ├── 056-Right02.ogg
+│       ├── 056Cry.wav
+│       ├── 057-Wrong01.ogg
+│       ├── 057Cry.wav
+│       ├── 058-Wrong02.ogg
+│       ├── 058Cry.wav
+│       ├── 059-Applause01.ogg
+│       ├── 059Cry.wav
+│       ├── 060-Cheer01.ogg
+│       ├── 060Cry.wav
+│       ├── 061-Thunderclap01.ogg
+│       ├── 061Cry.wav
+│       ├── 062-Swing01.ogg
+│       ├── 062Cry.wav
+│       ├── 063-Swing02.ogg
+│       ├── 063Cry.wav
+│       ├── 064-Swing03.ogg
+│       ├── 064Cry.wav
+│       ├── 065-Swing04.ogg
+│       ├── 065Cry.wav
+│       ├── 066-Animal01.ogg
+│       ├── 066Cry.wav
+│       ├── 067-Animal02.ogg
+│       ├── 067Cry.wav
+│       ├── 068-Animal03.ogg
+│       ├── 068Cry.wav
+│       ├── 069-Animal04.ogg
+│       ├── 069Cry.wav
+│       ├── 070-Animal05.ogg
+│       ├── 070Cry.wav
+│       ├── 071-Animal06.ogg
+│       ├── 071Cry.wav
+│       ├── 072-Animal07.ogg
+│       ├── 072Cry.wav
+│       ├── 073-Animal08.ogg
+│       ├── 073Cry.wav
+│       ├── 074-Small01.ogg
+│       ├── 074Cry.wav
+│       ├── 075-Small02.ogg
+│       ├── 075Cry.wav
+│       ├── 076-Small03.ogg
+│       ├── 076Cry.wav
+│       ├── 077-Small04.ogg
+│       ├── 077Cry.wav
+│       ├── 078-Small05.ogg
+│       ├── 078Cry.wav
+│       ├── 079-Monster01.ogg
+│       ├── 079Cry.wav
+│       ├── 080-Monster02.ogg
+│       ├── 080Cry.wav
+│       ├── 081-Monster03.ogg
+│       ├── 081Cry.wav
+│       ├── 082-Monster04.ogg
+│       ├── 082Cry.wav
+│       ├── 083-Monster05.ogg
+│       ├── 083Cry.wav
+│       ├── 084-Monster06.ogg
+│       ├── 084Cry.wav
+│       ├── 085-Monster07.ogg
+│       ├── 085-Monster07.ogg.reapeaks
+│       ├── 085Cry.wav
+│       ├── 086-Action01.ogg
+│       ├── 086Cry.wav
+│       ├── 087-Action02.ogg
+│       ├── 087Cry.wav
+│       ├── 088-Action03.ogg
+│       ├── 088Cry.wav
+│       ├── 089-Attack01.ogg
+│       ├── 089Cry.wav
+│       ├── 090-Attack02.ogg
+│       ├── 090Cry.wav
+│       ├── 091-Attack03.ogg
+│       ├── 091Cry.wav
+│       ├── 092-Attack04.ogg
+│       ├── 092Cry.wav
+│       ├── 093-Attack05.ogg
+│       ├── 093Cry.wav
+│       ├── 094-Attack06.ogg
+│       ├── 094Cry.wav
+│       ├── 095-Attack07.ogg
+│       ├── 095Cry.wav
+│       ├── 096-Attack08.ogg
+│       ├── 096Cry.wav
+│       ├── 097-Attack09.ogg
+│       ├── 097Cry.wav
+│       ├── 098-Attack10.ogg
+│       ├── 098Cry.wav
+│       ├── 099-Attack11.ogg
+│       ├── 099Cry.wav
+│       ├── 100-Attack12.ogg
+│       ├── 100Cry.wav
+│       ├── 101-Attack13.ogg
+│       ├── 101Cry.wav
+│       ├── 102-Attack14.ogg
+│       ├── 102Cry.wav
+│       ├── 103-Attack15.ogg
+│       ├── 103Cry.wav
+│       ├── 104-Attack16.ogg
+│       ├── 104Cry.wav
+│       ├── 105-Heal01.ogg
+│       ├── 105Cry.wav
+│       ├── 106-Heal02.ogg
+│       ├── 106Cry.wav
+│       ├── 107-Heal03.ogg
+│       ├── 107Cry.wav
+│       ├── 108-Heal04.ogg
+│       ├── 108Cry.wav
+│       ├── 109-Heal05.ogg
+│       ├── 109Cry.wav
+│       ├── 110-Heal06.ogg
+│       ├── 110Cry.wav
+│       ├── 111-Heal07.ogg
+│       ├── 111Cry.wav
+│       ├── 112-Heal08.ogg
+│       ├── 112Cry.wav
+│       ├── 113-Remedy01.ogg
+│       ├── 113Cry.wav
+│       ├── 114-Remedy02.ogg
+│       ├── 114Cry.wav
+│       ├── 115-Raise01.ogg
+│       ├── 115Cry.wav
+│       ├── 116-Raise02.ogg
+│       ├── 116Cry.wav
+│       ├── 117-Fire01.ogg
+│       ├── 117Cry.wav
+│       ├── 118-Fire02.ogg
+│       ├── 118Cry.wav
+│       ├── 119-Fire03.ogg
+│       ├── 119Cry.wav
+│       ├── 120-Ice01.ogg
+│       ├── 120Cry.wav
+│       ├── 121-Ice02.ogg
+│       ├── 121Cry.wav
+│       ├── 122-Ice03.ogg
+│       ├── 122Cry.wav
+│       ├── 123-Thunder01.ogg
+│       ├── 123Cry.wav
+│       ├── 124-Thunder02.ogg
+│       ├── 124Cry.wav
+│       ├── 125-Thunder03.ogg
+│       ├── 125Cry.wav
+│       ├── 126-Water01.ogg
+│       ├── 126Cry.wav
+│       ├── 127-Water02.ogg
+│       ├── 127Cry.wav
+│       ├── 128-Water03.ogg
+│       ├── 128Cry.wav
+│       ├── 129-Earth01.ogg
+│       ├── 129Cry.wav
+│       ├── 130-Earth02.ogg
+│       ├── 130Cry.wav
+│       ├── 131-Earth03.ogg
+│       ├── 131Cry.wav
+│       ├── 132-Wind01.ogg
+│       ├── 132Cry.wav
+│       ├── 133-Wind02.ogg
+│       ├── 133Cry.wav
+│       ├── 134-Wind03.ogg
+│       ├── 134Cry.wav
+│       ├── 135-Light01.ogg
+│       ├── 135Cry.wav
+│       ├── 136-Light02.ogg
+│       ├── 136Cry.wav
+│       ├── 137-Light03.ogg
+│       ├── 137Cry.wav
+│       ├── 138-Darkness01.ogg
+│       ├── 138Cry.wav
+│       ├── 139-Darkness02.ogg
+│       ├── 139Cry.wav
+│       ├── 140-Darkness03.ogg
+│       ├── 140Cry.wav
+│       ├── 141-Burst01.ogg
+│       ├── 141Cry.wav
+│       ├── 142-Burst02.ogg
+│       ├── 142Cry.wav
+│       ├── 143-Support01.ogg
+│       ├── 143Cry.wav
+│       ├── 144-Support02.ogg
+│       ├── 144Cry.wav
+│       ├── 145-Support03.ogg
+│       ├── 145Cry.wav
+│       ├── 146-Support04.ogg
+│       ├── 146Cry.wav
+│       ├── 147-Support05.ogg
+│       ├── 147Cry.wav
+│       ├── 148-Support06.ogg
+│       ├── 148Cry.wav
+│       ├── 149-Support07.ogg
+│       ├── 149Cry.wav
+│       ├── 150-Support08.ogg
+│       ├── 150Cry.wav
+│       ├── 151-Support09.ogg
+│       ├── 151Cry.wav
+│       ├── 152-Support10.ogg
+│       ├── 152Cry.wav
+│       ├── 153-Support11.ogg
+│       ├── 153Cry.wav
+│       ├── 154-Support12.ogg
+│       ├── 154Cry.wav
+│       ├── 155-Support13.ogg
+│       ├── 155Cry.wav
+│       ├── 156-Support14.ogg
+│       ├── 156Cry.wav
+│       ├── 157-Skill01.ogg
+│       ├── 157Cry.wav
+│       ├── 158-Skill02.ogg
+│       ├── 158Cry.wav
+│       ├── 159-Skill03.ogg
+│       ├── 159Cry.wav
+│       ├── 160-Skill04.ogg
+│       ├── 160Cry.wav
+│       ├── 161-Skill05.ogg
+│       ├── 161Cry.wav
+│       ├── 162-Skill06.ogg
+│       ├── 162Cry.wav
+│       ├── 163-Skill07.ogg
+│       ├── 163Cry.wav
+│       ├── 164-Skill08.ogg
+│       ├── 164Cry.wav
+│       ├── 165-Skill09.ogg
+│       ├── 165Cry.wav
+│       ├── 166-Skill10.ogg
+│       ├── 166Cry.wav
+│       ├── 167-Skill11.ogg
+│       ├── 167Cry.wav
+│       ├── 168-Skill12.ogg
+│       ├── 168Cry.wav
+│       ├── 169-Skill13.ogg
+│       ├── 169Cry.wav
+│       ├── 170-Skill14.ogg
+│       ├── 170Cry.wav
+│       ├── 171-Skill15.ogg
+│       ├── 171Cry.wav
+│       ├── 172-Skill16.ogg
+│       ├── 172Cry.wav
+│       ├── 173-Skill17.ogg
+│       ├── 173Cry.wav
+│       ├── 174-Skill18.ogg
+│       ├── 174Cry.wav
+│       ├── 175-Skill19.ogg
+│       ├── 175Cry.wav
+│       ├── 176-Skill20.ogg
+│       ├── 176Cry.wav
+│       ├── 177-Skill21.ogg
+│       ├── 177Cry.wav
+│       ├── 178-Skill22.ogg
+│       ├── 178Cry.wav
+│       ├── 179-Skill23.ogg
+│       ├── 179Cry.wav
+│       ├── 180-Skill24.ogg
+│       ├── 180Cry.wav
+│       ├── 181Cry.wav
+│       ├── 182Cry.wav
+│       ├── 183Cry.wav
+│       ├── 184Cry.wav
+│       ├── 185Cry.wav
+│       ├── 186Cry.wav
+│       ├── 187Cry.wav
+│       ├── 188Cry.wav
+│       ├── 189Cry.wav
+│       ├── 190Cry.wav
+│       ├── 191Cry.wav
+│       ├── 195Cry.wav
+│       ├── 196Cry.wav
+│       ├── 197Cry.wav
+│       ├── 201Cry.wav
+│       ├── Absorb2.ogg
+│       ├── accesspc.wav
+│       ├── Ace.wav
+│       ├── Acupressure.mp3
+│       ├── Applause.ogg
+│       ├── balldrop.wav
+│       ├── ballshake.wav
+│       ├── Battle.WAV
+│       ├── Battle1.ogg
+│       ├── beam01.ogg
+│       ├── Beamattack.ogg
+│       ├── Bite.ogg
+│       ├── BlisseyCry.wav
+│       ├── BlizzardSound.ogg
+│       ├── Blow1.ogg
+│       ├── Blow3.ogg
+│       ├── Blow4.ogg
+│       ├── Blow5.ogg
+│       ├── Blow6.ogg
+│       ├── Blow7.ogg
+│       ├── Bow1.ogg
+│       ├── bump.WAV
+│       ├── buzzer.wav
+│       ├── BW2BagSound.WAV
+│       ├── BW2BattleBalls.mp3
+│       ├── BW2Cancel.WAV
+│       ├── BW2CloseMenu.WAV
+│       ├── BW2MenuChoose.WAV
+│       ├── BW2MenuSelect.WAV
+│       ├── BW2OpenMenu.WAV
+│       ├── BW2Summary.mp3
+│       ├── BW_ability.wav
+│       ├── BW_exp.wav
+│       ├── BW_flee.wav
+│       ├── BW_open.wav
+│       ├── Choose.WAV
+│       ├── Collapse1.ogg
+│       ├── Comet Punch.mp3
+│       ├── computerclose.WAV
+│       ├── computeropen.WAV
+│       ├── Confuse.ogg
+│       ├── Crash.ogg
+│       ├── Damage1.ogg
+│       ├── Darkness2.ogg
+│       ├── Darkness6.ogg
+│       ├── decrease.wav
+│       ├── Defense Curl.mp3
+│       ├── desktop.ini
+│       ├── dexselect.wav
+│       ├── Dizzy Punch.mp3
+│       ├── drop.wav
+│       ├── Earth1.ogg
+│       ├── Earth3.ogg
+│       ├── Earth4.ogg
+│       ├── Earth5.ogg
+│       ├── Entering Door.wav
+│       ├── Exit Door.WAV
+│       ├── expfull.mp3
+│       ├── Explosion.mp3
+│       ├── Explosion1.ogg
+│       ├── Explosion2.ogg
+│       ├── Explosion3.ogg
+│       ├── Explosion4.ogg
+│       ├── Explosion6.ogg
+│       ├── Explosion7.ogg
+│       ├── faint.wav
+│       ├── Fire1.ogg
+│       ├── Fire2.ogg
+│       ├── Fire3.ogg
+│       ├── Fire4.ogg
+│       ├── Fire5.ogg
+│       ├── Fire6.ogg
+│       ├── Fire7.ogg
+│       ├── Fire8.ogg
+│       ├── Flail.mp3
+│       ├── Flash.mp3
+│       ├── Flash2.ogg
+│       ├── Flee.WAV
+│       ├── flybird.wav
+│       ├── fog2.mp3
+│       ├── Follow Me.mp3
+│       ├── Frozen.ogg
+│       ├── Fury Swipes.mp3
+│       ├── GeigerCounter.ogg
+│       ├── Gotaway.ogg
+│       ├── gust.mp3
+│       ├── Harden.mp3
+│       ├── hit.wav
+│       ├── Ice2.ogg
+│       ├── Ice5.ogg
+│       ├── Ice8.ogg
+│       ├── increase.wav
+│       ├── infatuated.mp3
+│       ├── itemlevel.wav
+│       ├── jump.wav
+│       ├── jumptoball.wav
+│       ├── Knock.ogg
+│       ├── Lock On.mp3
+│       ├── Lovely Kiss.mp3
+│       ├── Lucky Chant.mp3
+│       ├── Marill.WAV
+│       ├── Mega Punch.mp3
+│       ├── menu.wav
+│       ├── metal.mp3
+│       ├── Metronome.mp3
+│       ├── MiningCollapse.mp3
+│       ├── MiningHammer.mp3
+│       ├── MiningPing.mp3
+│       ├── Natural Gift.mp3
+│       ├── navclose.wav
+│       ├── navopen.wav
+│       ├── normaldamage.wav
+│       ├── notverydamage.wav
+│       ├── Open Pokeball.WAV
+│       ├── Paralyze1.ogg
+│       ├── Paralyze3.ogg
+│       ├── PkmRS-Caught.mid
+│       ├── Poison.ogg
+│       ├── Pollen.ogg
+│       ├── Present - Heal.mp3
+│       ├── Protect.mp3
+│       ├── Psych Up.mp3
+│       ├── Psycho Cut.wav
+│       ├── PU-ChargeElectricity.ogg
+│       ├── PU-DMAntarki.wav
+│       ├── PU-DMFall.wav
+│       ├── PU-DMKinglaugh.wav
+│       ├── PU-DMKinglaugh2.wav
+│       ├── PU-DMKinglaugh3.wav
+│       ├── PU-DMKingscoff.wav
+│       ├── PU-DMMaskingillusion.wav
+│       ├── PU-DMMirror.wav
+│       ├── PU-DMMirrorlaugh.wav
+│       ├── PU-DModdobj.wav
+│       ├── PU-DMPage.wav
+│       ├── PU-DMPowerup.wav
+│       ├── PU-DMSlime.ogg
+│       ├── PU-Grasswalk.ogg
+│       ├── PU-partypreview.mp3
+│       ├── PU-PokeradarShiny.wav
+│       ├── PU-RangerStyler.wav
+│       ├── PU-RecordScratch.mp3
+│       ├── PU-SnowWalk.ogg
+│       ├── PU-TaikoDrumroll.ogg
+│       ├── PU-turnpage.ogg
+│       ├── PU-Walk.ogg
+│       ├── PU-WoodWalk.ogg
+│       ├── punch5.wav
+│       ├── recall.wav
+│       ├── Recovery.ogg
+│       ├── Refresh.mp3
+│       ├── Rush.ogg
+│       ├── Saint1.ogg
+│       ├── Saint3.ogg
+│       ├── Saint4.ogg
+│       ├── Saint6.ogg
+│       ├── Saint7.ogg
+│       ├── Saint8.ogg
+│       ├── Saint9.ogg
+│       ├── Sand.ogg
+│       ├── save.wav
+│       ├── Scary Face.mp3
+│       ├── SE_EM.wav
+│       ├── SE_Select1.wav
+│       ├── SE_Select2.wav
+│       ├── SE_Select3.wav
+│       ├── SE_Zoom.wav
+│       ├── SE_Zoom2.wav
+│       ├── SE_Zoom3.wav
+│       ├── SE_Zoom4.wav
+│       ├── SE_Zoom5.wav
+│       ├── SE_Zoom6.wav
+│       ├── seBomb_MarisaA.wav
+│       ├── Select.WAV
+│       ├── Shell Smash.mp3
+│       ├── shiny.wav
+│       ├── Sing.mp3
+│       ├── Slam.mp3
+│       ├── Slash.mp3
+│       ├── Slash1.ogg
+│       ├── Slash10.ogg
+│       ├── Slash11.ogg
+│       ├── Slash2.ogg
+│       ├── Slash3.ogg
+│       ├── Slash5.ogg
+│       ├── Slash6.ogg
+│       ├── Slash7.ogg
+│       ├── Slash8.ogg
+│       ├── Slash9.ogg
+│       ├── Sleep.ogg
+│       ├── Smokescreen.mp3
+│       ├── Snore.mp3
+│       ├── Sound2.ogg
+│       ├── Splash.mp3
+│       ├── Staraptor.wav
+│       ├── Stare.ogg
+│       ├── Steam.ogg
+│       ├── Storm.ogg
+│       ├── Substitute.mp3
+│       ├── Super Fang.mp3
+│       ├── superdamage.wav
+│       ├── surf.ogg
+│       ├── Swagger.mp3
+│       ├── Sweet Scent.mp3
+│       ├── Sword1.ogg
+│       ├── Sword2.ogg
+│       ├── Swords Dance.mp3
+│       ├── Take Down.mp3
+│       ├── Teleport.ogg
+│       ├── throw.wav
+│       ├── Thunder1.ogg
+│       ├── Thunder3.ogg
+│       ├── Thunder4.ogg
+│       ├── Thunder9.ogg
+│       ├── Trump Card.mp3
+│       ├── Twine.ogg
+│       ├── Up.ogg
+│       ├── Uproar.mp3
+│       ├── Vice Grip.mp3
+│       ├── Voltorb Flip Explosion.mp3
+│       ├── Voltorb Flip Mark.wav
+│       ├── Water1.ogg
+│       ├── Water2.ogg
+│       ├── Water3.ogg
+│       ├── Water5.ogg
+│       ├── Weatherball.mp3
+│       ├── Whirlwind.mp3
+│       ├── Wind1.ogg
+│       ├── Wind5.ogg
+│       ├── Wind7.ogg
+│       ├── Wind8.ogg
+│       ├── Work Up.mp3
+│       ├── Wring Out.mp3
+│       ├── Yawn.mp3
+│       ├── Zap01.ogg
+│       └── ZapCharge01.ogg
+├── Data/  [218 .rxdata, 36 .dat]
+│   ├── Actors.rxdata
+│   ├── Animations.rxdata
+│   ├── Armors.rxdata
+│   ├── attacksRS.dat
+│   ├── BackupSave.dat
+│   ├── berryplants.dat
+│   ├── btpokemon.dat
+│   ├── bttrainers.dat
+│   ├── Classes.rxdata
+│   ├── CommonEvents.rxdata
+│   ├── connections.dat
+│   ├── Constants.rxdata
+│   ├── dexdata.dat
+│   ├── eggEmerald.dat
+│   ├── encounters.dat
+│   ├── Enemies.rxdata
+│   ├── evolutions.dat
+│   ├── intl_1337.dat
+│   ├── intl_chinese.dat
+│   ├── intl_dutch.dat
+│   ├── intl_french.dat
+│   ├── intl_german.dat
+│   ├── intl_korean.dat
+│   ├── intl_koreantest.dat
+│   ├── intl_portuguese.dat
+│   ├── intl_spanish.dat
+│   ├── items.dat
+│   ├── Items.rxdata
+│   ├── Map001.rxdata
+│   ├── Map002.rxdata
+│   ├── Map003.rxdata
+│   ├── Map004.rxdata
+│   ├── Map005.rxdata
+│   ├── Map006.rxdata
+│   ├── Map007.rxdata
+│   ├── Map008.rxdata
+│   ├── Map009.rxdata
+│   ├── Map010.rxdata
+│   ├── Map011.rxdata
+│   ├── Map012.rxdata
+│   ├── Map013.rxdata
+│   ├── Map014.rxdata
+│   ├── Map017.rxdata
+│   ├── Map018.rxdata
+│   ├── Map019.rxdata
+│   ├── Map020.rxdata
+│   ├── Map021.rxdata
+│   ├── Map022.rxdata
+│   ├── Map024.rxdata
+│   ├── Map025.rxdata
+│   ├── Map026.rxdata
+│   ├── Map027.rxdata
+│   ├── Map028.rxdata
+│   ├── Map029.rxdata
+│   ├── Map030.rxdata
+│   ├── Map031.rxdata
+│   ├── Map032.rxdata
+│   ├── Map033.rxdata
+│   ├── Map035.rxdata
+│   ├── Map036.rxdata
+│   ├── Map037.rxdata
+│   ├── Map038.rxdata
+│   ├── Map039.rxdata
+│   ├── Map040.rxdata
+│   ├── Map041.rxdata
+│   ├── Map042.rxdata
+│   ├── Map043.rxdata
+│   ├── Map044.rxdata
+│   ├── Map045.rxdata
+│   ├── Map046.rxdata
+│   ├── Map047.rxdata
+│   ├── Map048.rxdata
+│   ├── Map049.rxdata
+│   ├── Map050.rxdata
+│   ├── Map051.rxdata
+│   ├── Map052.rxdata
+│   ├── Map053.rxdata
+│   ├── Map054.rxdata
+│   ├── Map055.rxdata
+│   ├── Map056.rxdata
+│   ├── Map057.rxdata
+│   ├── Map058.rxdata
+│   ├── Map059.rxdata
+│   ├── Map060.rxdata
+│   ├── Map062.rxdata
+│   ├── Map064.rxdata
+│   ├── Map065.rxdata
+│   ├── Map066.rxdata
+│   ├── Map067.rxdata
+│   ├── Map068.rxdata
+│   ├── Map069.rxdata
+│   ├── Map070.rxdata
+│   ├── Map071.rxdata
+│   ├── Map073.rxdata
+│   ├── Map074.rxdata
+│   ├── Map075.rxdata
+│   ├── Map076.rxdata
+│   ├── Map078.rxdata
+│   ├── Map079.rxdata
+│   ├── Map080.rxdata
+│   ├── Map081.rxdata
+│   ├── Map082.rxdata
+│   ├── Map083.rxdata
+│   ├── Map084.rxdata
+│   ├── Map085.rxdata
+│   ├── Map086.rxdata
+│   ├── Map087.rxdata
+│   ├── Map088.rxdata
+│   ├── Map089.rxdata
+│   ├── Map090.rxdata
+│   ├── Map091.rxdata
+│   ├── Map092.rxdata
+│   ├── Map093.rxdata
+│   ├── Map094.rxdata
+│   ├── Map095.rxdata
+│   ├── Map096.rxdata
+│   ├── Map097.rxdata
+│   ├── Map098.rxdata
+│   ├── Map099.rxdata
+│   ├── Map100.rxdata
+│   ├── Map101.rxdata
+│   ├── Map102.rxdata
+│   ├── Map103.rxdata
+│   ├── Map104.rxdata
+│   ├── Map105.rxdata
+│   ├── Map106.rxdata
+│   ├── Map107.rxdata
+│   ├── Map108.rxdata
+│   ├── Map109.rxdata
+│   ├── Map111.rxdata
+│   ├── Map112.rxdata
+│   ├── Map113.rxdata
+│   ├── Map114.rxdata
+│   ├── Map115.rxdata
+│   ├── Map117.rxdata
+│   ├── Map118.rxdata
+│   ├── Map121.rxdata
+│   ├── Map122.rxdata
+│   ├── Map123.rxdata
+│   ├── Map124.rxdata
+│   ├── Map125.rxdata
+│   ├── Map126.rxdata
+│   ├── Map127.rxdata
+│   ├── Map128.rxdata
+│   ├── Map129.rxdata
+│   ├── Map130.rxdata
+│   ├── Map131.rxdata
+│   ├── Map132.rxdata
+│   ├── Map133.rxdata
+│   ├── Map134.rxdata
+│   ├── Map135.rxdata
+│   ├── Map136.rxdata
+│   ├── Map137.rxdata
+│   ├── Map139.rxdata
+│   ├── Map140.rxdata
+│   ├── Map141.rxdata
+│   ├── Map142.rxdata
+│   ├── Map143.rxdata
+│   ├── Map144.rxdata
+│   ├── Map145.rxdata
+│   ├── Map146.rxdata
+│   ├── Map147.rxdata
+│   ├── Map148.rxdata
+│   ├── Map149.rxdata
+│   ├── Map150.rxdata
+│   ├── Map151.rxdata
+│   ├── Map152.rxdata
+│   ├── Map153.rxdata
+│   ├── Map154.rxdata
+│   ├── Map155.rxdata
+│   ├── Map156.rxdata
+│   ├── Map157.rxdata
+│   ├── Map158.rxdata
+│   ├── Map159.rxdata
+│   ├── Map160.rxdata
+│   ├── Map161.rxdata
+│   ├── Map162.rxdata
+│   ├── Map163.rxdata
+│   ├── Map165.rxdata
+│   ├── Map166.rxdata
+│   ├── Map167.rxdata
+│   ├── Map168.rxdata
+│   ├── Map170.rxdata
+│   ├── Map171.rxdata
+│   ├── Map172.rxdata
+│   ├── Map173.rxdata
+│   ├── Map174.rxdata
+│   ├── Map175.rxdata
+│   ├── Map177.rxdata
+│   ├── Map178.rxdata
+│   ├── Map179.rxdata
+│   ├── Map180.rxdata
+│   ├── Map181.rxdata
+│   ├── Map183.rxdata
+│   ├── Map184.rxdata
+│   ├── Map185.rxdata
+│   ├── Map186.rxdata
+│   ├── Map187.rxdata
+│   ├── Map188.rxdata
+│   ├── Map189.rxdata
+│   ├── Map190.rxdata
+│   ├── Map191.rxdata
+│   ├── Map192.rxdata
+│   ├── Map193.rxdata
+│   ├── Map194.rxdata
+│   ├── Map195.rxdata
+│   ├── Map196.rxdata
+│   ├── Map197.rxdata
+│   ├── Map198.rxdata
+│   ├── Map199.rxdata
+│   ├── Map200.rxdata
+│   ├── Map201.rxdata
+│   ├── Map202.rxdata
+│   ├── Map203.rxdata
+│   ├── Map204.rxdata
+│   ├── Map205.rxdata
+│   ├── Map206.rxdata
+│   ├── Map207.rxdata
+│   ├── Map208.rxdata
+│   ├── Map209.rxdata
+│   ├── Map210.rxdata
+│   ├── Map212.rxdata
+│   ├── Map213.rxdata
+│   ├── Map214.rxdata
+│   ├── Map216.rxdata
+│   ├── Map217.rxdata
+│   ├── Map999.rxdata
+│   ├── MapInfos.rxdata
+│   ├── messages.dat
+│   ├── metadata.dat
+│   ├── metrics.dat
+│   ├── move2anim.dat
+│   ├── moves.dat
+│   ├── phone.dat
+│   ├── PkmnAnimations.rxdata
+│   ├── PositionerScripts.rxdata
+│   ├── regionals.dat
+│   ├── Scripts.rxdata
+│   ├── shadowmoves.dat
+│   ├── Skills.rxdata
+│   ├── States.rxdata
+│   ├── System.rxdata
+│   ├── Tilesets.rxdata
+│   ├── TilesetsTemp.rxdata
+│   ├── tm.dat
+│   ├── tmpbs.dat
+│   ├── townmap.dat
+│   ├── trainerlists.dat
+│   ├── trainers.dat
+│   ├── trainertypes.dat
+│   ├── Troops.rxdata
+│   ├── tutor.dat
+│   ├── types.dat
+│   └── Weapons.rxdata
+├── Fonts/  [11 .ttf, 1 .otf]
+│   ├── NotoSansCJKsc-Medium.otf
+│   ├── pkmndp.ttf
+│   ├── pkmndpb.ttf
+│   ├── pkmnem.ttf
+│   ├── pkmnemn.ttf
+│   ├── pkmnems.ttf
+│   ├── pkmnfl.ttf
+│   ├── pkmnrs.ttf
+│   ├── pkmnrsi.ttf
+│   ├── PokemonUraniumKR.ttf
+│   ├── VL-Gothic-Regular.ttf
+│   └── VL-PGothic-Regular.ttf
+└── Graphics/  [5498 .png, 14 .txt, 5 .pdn, 3 .gif]
+    ├── Animations/  [181 .png]
+    │   ├── !.png
+    │   ├── 003-Attack01.png
+    │   ├── 004-Attack02.png
+    │   ├── 007-Weapon02.png
+    │   ├── 008-Weapon03.png
+    │   ├── 009-Weapon04.png
+    │   ├── 011-Weapon06.png
+    │   ├── 015-Fire01.png
+    │   ├── 016-Ice01.png
+    │   ├── 016-Ice02.png
+    │   ├── 017-Thunder01.png
+    │   ├── 018-Water01.png
+    │   ├── 022-Darkness01.png
+    │   ├── 023-Burst01.png
+    │   ├── 028-State01.png
+    │   ├── 029-Emotion01.png
+    │   ├── 030-Explosion01.png
+    │   ├── 2003addition1[1].png
+    │   ├── 2003barrier[1].png
+    │   ├── 2003breath[1].png
+    │   ├── 2003flame[1].png
+    │   ├── 2003ground[1].png
+    │   ├── 2003paralysis[1].png
+    │   ├── 2003revival[1].png
+    │   ├── 2003water[1].png
+    │   ├── 2003WIND[1].png
+    │   ├── 23urigy[1].png
+    │   ├── ADDITION[1].png
+    │   ├── Aerial Ace.png
+    │   ├── Alexandre[1].png
+    │   ├── Alterations[1].png
+    │   ├── Ancient-PowerFilesheet.png
+    │   ├── anim grimace.png
+    │   ├── anim poke 2.PNG
+    │   ├── anim poke 3.PNG
+    │   ├── anim poke 4.PNG
+    │   ├── anim poke 5.PNG
+    │   ├── anim poke 6.PNG
+    │   ├── anim poke 7.PNG
+    │   ├── anim poke 8.PNG
+    │   ├── anim poke 9.PNG
+    │   ├── anim poke.PNG
+    │   ├── anim sheet.2.png
+    │   ├── anim sheet.png
+    │   ├── Anima (1).png
+    │   ├── Anima (2).png
+    │   ├── Animation%20(C0045).png
+    │   ├── anime10th4[1].png
+    │   ├── animsheet.png
+    │   ├── Attack12.png
+    │   ├── Attack7.png
+    │   ├── Attack8.png
+    │   ├── BABACOMETRO.png
+    │   ├── Blizzard.png
+    │   ├── block.png
+    │   ├── Claws_cut_ etc..png
+    │   ├── confused.png
+    │   ├── Constrict.png
+    │   ├── Cosmo-01.png
+    │   ├── Crunch.png
+    │   ├── Divine_Smash.png
+    │   ├── dragon claw.png
+    │   ├── Dragon_Claw.png
+    │   ├── DustandGrass.png
+    │   ├── Earth1.png
+    │   ├── efftest4.png
+    │   ├── EFFTEST4[1].png
+    │   ├── electric1.png
+    │   ├── electric2.png
+    │   ├── Electric_moves.png
+    │   ├── element fangs.png
+    │   ├── estranho.png
+    │   ├── face and eye.png
+    │   ├── Fakeout.png
+    │   ├── finger.spoon.png
+    │   ├── fire blast.png
+    │   ├── Fire3.png
+    │   ├── fire4.png
+    │   ├── fire5.png
+    │   ├── Fire_moves.png
+    │   ├── Firebird.png
+    │   ├── firepoison.png
+    │   ├── Fissure.png
+    │   ├── Flames.png
+    │   ├── flamew.png
+    │   ├── Flash_confuse_ray.png
+    │   ├── fly copy.png
+    │   ├── Flying_moves.png
+    │   ├── Fogo - 01.png
+    │   ├── FR_Fire_moves.png
+    │   ├── FR_Grass_moves.png
+    │   ├── FR_Misc_moves_01.png
+    │   ├── FR_Misc_moves_02.png
+    │   ├── FR_Misc_moves_03.png
+    │   ├── FR_Water_moves.png
+    │   ├── ghost1.png
+    │   ├── ghost2.png
+    │   ├── grass.png
+    │   ├── grass2.png
+    │   ├── Grass_moves.png
+    │   ├── Ground_moves.png
+    │   ├── Growl.png
+    │   ├── Gust.png
+    │   ├── Heal3.png
+    │   ├── Heal5.png
+    │   ├── Heat wave.png
+    │   ├── Hydro-Blast.png
+    │   ├── Hydro-Cannon-Back.png
+    │   ├── HyperBeam.png
+    │   ├── Ice1.png
+    │   ├── Ice2.png
+    │   ├── icewater.png
+    │   ├── Iron Head.png
+    │   ├── Last-Resort.png
+    │   ├── leech-seed.png
+    │   ├── leer.png
+    │   ├── Light1.png
+    │   ├── many.png
+    │   ├── MegaEvobg.png
+    │   ├── Misc_moves_1.png
+    │   ├── Misc_moves_2.png
+    │   ├── mixed status.png
+    │   ├── mixed.png
+    │   ├── normal1.png
+    │   ├── normal2.png
+    │   ├── NucEvent.png
+    │   ├── nuclear.png
+    │   ├── NukeSlash.png
+    │   ├── Physical_moves.png
+    │   ├── pic_3.png
+    │   ├── poi.hear.mus.png
+    │   ├── poison.png
+    │   ├── poison2.png
+    │   ├── poison3.png
+    │   ├── poison4.png
+    │   ├── Poison_moves.png
+    │   ├── Protection.png
+    │   ├── Psycho Cut.png
+    │   ├── PU-FlameimpactBG.png
+    │   ├── PU-GammaUrayne.png
+    │   ├── PU-Sandwalk.png
+    │   ├── punches.png
+    │   ├── Rays.png
+    │   ├── Roar_screech_bite.png
+    │   ├── Rock Tomb.png
+    │   ├── rockice.png
+    │   ├── Rush.png
+    │   ├── Sand-Attack.png
+    │   ├── Scratch + Shadow Claw.png
+    │   ├── scratchbattle.png
+    │   ├── shadow.png
+    │   ├── shadowball.png
+    │   ├── Shockwave.png
+    │   ├── Sky_Backdrop.png
+    │   ├── sleep.png
+    │   ├── Sludgewave.png
+    │   ├── Special5.png
+    │   ├── State1.png
+    │   ├── Struggle.png
+    │   ├── swift.png
+    │   ├── Sword5.png
+    │   ├── Sword6.png
+    │   ├── T. Shock.png
+    │   ├── Tackle_B.png
+    │   ├── teeth.png
+    │   ├── Thunder2.png
+    │   ├── THUNDER[1].png
+    │   ├── triattack.png
+    │   ├── Trovao.png
+    │   ├── Ultra Beam.png
+    │   ├── Water pulse.png
+    │   ├── Water2[1].png
+    │   ├── water3.png
+    │   ├── Water[1].png
+    │   ├── Water_moves.png
+    │   ├── Waterfall.png
+    │   ├── weather.png
+    │   ├── Wind1.png
+    │   ├── Wind2.png
+    │   ├── X-Scizzor.png
+    │   └── zan03.png
+    ├── Autotiles/  [111 .png, 1 .pdn]
+    │   ├── AutoTile n8p.png
+    │   ├── autumm Path.png
+    │   ├── Beach.png
+    │   ├── Beach2.png
+    │   ├── Beach3.png
+    │   ├── beachwater.png
+    │   ├── Black.png
+    │   ├── Brick path.png
+    │   ├── bush.png
+    │   ├── bush2.png
+    │   ├── bush3.png
+    │   ├── Calm Water(1).png
+    │   ├── Calm Water(2).png
+    │   ├── calmwater.png
+    │   ├── deepcave.png
+    │   ├── door.png
+    │   ├── DreamGrassyBricks.png
+    │   ├── Flower.png
+    │   ├── Flowerrs.png
+    │   ├── Flowers.png
+    │   ├── Flowers1.png
+    │   ├── Flowers2.png
+    │   ├── FlowingGrass1.png
+    │   ├── FlowingGrass2.png
+    │   ├── FlowingGrass3.png
+    │   ├── Forest Path.png
+    │   ├── Grassy Path.png
+    │   ├── Grassy Path2.png
+    │   ├── Grassy Path3.png
+    │   ├── Grassy Path4.png
+    │   ├── Grassy Path5.png
+    │   ├── Island.png
+    │   ├── Lake.png
+    │   ├── Land.png
+    │   ├── Land2 (2).png
+    │   ├── Land2-1.png
+    │   ├── Land2.png
+    │   ├── Land3.png
+    │   ├── Land4.png
+    │   ├── Leafy Dirt.png
+    │   ├── Ocean.png
+    │   ├── oceanhgss.png
+    │   ├── PU-AutumnDirt.png
+    │   ├── PU-Beach1.png
+    │   ├── PU-Beach2.png
+    │   ├── PU-BeachPlant.png
+    │   ├── PU-Dirt(Victory).png
+    │   ├── PU-Flower1.png
+    │   ├── PU-Flower2.png
+    │   ├── PU-Flower3.png
+    │   ├── PU-Flower4.png
+    │   ├── PU-Flower5.png
+    │   ├── PU-Flower6.png
+    │   ├── PU-Flower7.png
+    │   ├── PU-Flower8.png
+    │   ├── PU-Flower9.png
+    │   ├── PU-Grass(Nuclear).png
+    │   ├── PU-Grass(Victory).png
+    │   ├── PU-Grassy Tiles.png
+    │   ├── PU-LavaWaterfall.png
+    │   ├── PU-Pond(baykal).png
+    │   ├── PU-Pond(Burole).png
+    │   ├── PU-Pond(Dream).png
+    │   ├── PU-Pond(Dream2).png
+    │   ├── PU-Pond(Lava).png
+    │   ├── PU-Pond(nuclear8).png
+    │   ├── PU-Pond(route1-2).png
+    │   ├── PU-Pond(route16).png
+    │   ├── PU-Pond(transp).png
+    │   ├── PU-Pond(Victory).png
+    │   ├── PU-Pond(vinoville).png
+    │   ├── PU-RiverDive.png
+    │   ├── PU-SandWater.png
+    │   ├── PU-Tall Grass(Dream).png
+    │   ├── PU-Waterfall(baykal).png
+    │   ├── PU-Waterfall(transp).png
+    │   ├── PU-Waterfall(transp-Dream).png
+    │   ├── river.png
+    │   ├── riverhgss.png
+    │   ├── Sand Path.png
+    │   ├── Sandy Dirt.png
+    │   ├── Sandy Dirt2.png
+    │   ├── Sandy Dirt3.png
+    │   ├── Sandy Dirt4.png
+    │   ├── Sandy Dirt5.png
+    │   ├── Sea.png
+    │   ├── Sea2.png
+    │   ├── Sea3.png
+    │   ├── Sea4.png
+    │   ├── Seaedge.png
+    │   ├── Seaedge2.png
+    │   ├── sealink.png
+    │   ├── seatest.png
+    │   ├── seateste.png
+    │   ├── shallowsea.png
+    │   ├── SnowBrick path.png
+    │   ├── SnowRiver.png
+    │   ├── Tall Grass.png
+    │   ├── Tall Grass2.png
+    │   ├── Tall Grass3.png
+    │   ├── Tall Grass4.png
+    │   ├── Tall Grass5.png
+    │   ├── Tall Grass6.png
+    │   ├── Tall Grass7.png
+    │   ├── test.png
+    │   ├── underwater16pn.png
+    │   ├── Water(height).pdn
+    │   ├── Water.png
+    │   ├── Water2.png
+    │   ├── Water2b41049.png
+    │   ├── waterfall.png
+    │   └── watterforest.png
+    ├── Battlebacks/  [84 .png]
+    │   ├── battlebg.png
+    │   ├── battlebg122.png
+    │   ├── battlebg66.png
+    │   ├── battlebgAbyssal.png
+    │   ├── battlebgBeach.png
+    │   ├── battlebgCave.png
+    │   ├── battlebgChampionship.png
+    │   ├── battlebgChampionship2.png
+    │   ├── battlebgCity.png
+    │   ├── battlebgDive.png
+    │   ├── battlebgDreammountain.png
+    │   ├── battlebgField.PNG
+    │   ├── battlebgField2.PNG
+    │   ├── battlebgFieldB.PNG
+    │   ├── battlebgFlower.png
+    │   ├── battlebgForest.PNG
+    │   ├── battlebgGamma.png
+    │   ├── battlebgGym4.png
+    │   ├── battlebgIceCave.PNG
+    │   ├── battlebgIndoorA.png
+    │   ├── battlebgIndoorB.png
+    │   ├── battlebgIndoorC.png
+    │   ├── battlebgMountain.png
+    │   ├── battlebgNestlands.png
+    │   ├── battlebgNuclear.png
+    │   ├── battlebgpalace.png
+    │   ├── battlebgPunkBros.png
+    │   ├── battlebgPVP.png
+    │   ├── battlebgRiver.png
+    │   ├── battlebgshelter.png
+    │   ├── battlebgSnow.png
+    │   ├── battlebgVolcano.png
+    │   ├── battlebgWater.png
+    │   ├── enemybase.png
+    │   ├── enemybaseBeach.png
+    │   ├── enemybaseCave.png
+    │   ├── enemybaseChampionship.png
+    │   ├── enemybaseChampionship2.png
+    │   ├── enemybaseCity.png
+    │   ├── enemybaseDive.png
+    │   ├── enemybaseField.png
+    │   ├── enemybaseField2.png
+    │   ├── enemybaseFieldB.png
+    │   ├── enemybaseFlower.png
+    │   ├── enemybaseForest.png
+    │   ├── enemybaseGamma.png
+    │   ├── enemybaseGym4.png
+    │   ├── enemybaseIceCave.png
+    │   ├── enemybaseIndoorA.png
+    │   ├── enemybaseMountain.png
+    │   ├── enemybaseNuclear.png
+    │   ├── enemybaseNuclear8.png
+    │   ├── enemybasePVP.png
+    │   ├── enemybaseRiver.png
+    │   ├── enemybaseshelter.png
+    │   ├── enemybaseSnow.png
+    │   ├── enemybaseVolcano.png
+    │   ├── enemybaseWater.png
+    │   ├── playerbase.png
+    │   ├── playerbase0.png
+    │   ├── playerbaseBeach.png
+    │   ├── playerbaseCave.png
+    │   ├── playerbaseChampionship.png
+    │   ├── playerbaseChampionship2.png
+    │   ├── playerbaseCity.png
+    │   ├── playerbaseDive.png
+    │   ├── playerbaseField.png
+    │   ├── playerbaseField2.png
+    │   ├── playerbaseFieldB.png
+    │   ├── playerbaseFlower.png
+    │   ├── playerbaseForest.png
+    │   ├── playerbaseGamma.png
+    │   ├── playerbaseGym4.png
+    │   ├── playerbaseIceCave.png
+    │   ├── playerbaseIndoorA.png
+    │   ├── playerbaseMountain.png
+    │   ├── playerbaseNuclear.png
+    │   ├── playerbaseNuclear8.png
+    │   ├── playerbasePVP.png
+    │   ├── playerbaseRiver.png
+    │   ├── playerbaseshelter.png
+    │   ├── playerbaseSnow.png
+    │   ├── playerbaseVolcano.png
+    │   └── playerbaseWater.png
+    ├── Battlers/  [1644 .png, 2 .act]
+    │   ├── 000.png
+    │   ├── 000b.png
+    │   ├── 001.png
+    │   ├── 001b.png
+    │   ├── 001egg.png
+    │   ├── 001s.png
+    │   ├── 001sb.png
+    │   ├── 002.png
+    │   ├── 002_1.png
+    │   ├── 002b.PNG
+    │   ├── 002b_1.png
+    │   ├── 002s.png
+    │   ├── 002s_1.png
+    │   ├── 002sb.png
+    │   ├── 002sb_1.png
+    │   ├── 003.png
+    │   ├── 003b.png
+    │   ├── 003egg.png
+    │   ├── 003s.png
+    │   ├── 003sb.png
+    │   ├── 004.png
+    │   ├── 004_1.png
+    │   ├── 004b.png
+    │   ├── 004b_1.png
+    │   ├── 004s.png
+    │   ├── 004s_1.png
+    │   ├── 004sb.png
+    │   ├── 004sb_1.png
+    │   ├── 005.png
+    │   ├── 005b.png
+    │   ├── 005egg.png
+    │   ├── 005s.png
+    │   ├── 005sb.png
+    │   ├── 006.png
+    │   ├── 006_1.PNG
+    │   ├── 006b.PNG
+    │   ├── 006b_1.PNG
+    │   ├── 006s.png
+    │   ├── 006s_1.png
+    │   ├── 006sb.png
+    │   ├── 006sb_1.png
+    │   ├── 007.png
+    │   ├── 007_1.png
+    │   ├── 007b.png
+    │   ├── 007b_1.png
+    │   ├── 007egg.png
+    │   ├── 007s.png
+    │   ├── 007s_1.png
+    │   ├── 007sb.png
+    │   ├── 007sb_1.png
+    │   ├── 008.png
+    │   ├── 008_1.png
+    │   ├── 008b.png
+    │   ├── 008b_1.png
+    │   ├── 008s.png
+    │   ├── 008s_1.png
+    │   ├── 008sb.png
+    │   ├── 008sb_1.png
+    │   ├── 009.png
+    │   ├── 009b.png
+    │   ├── 009egg.png
+    │   ├── 009s.png
+    │   ├── 009sb.png
+    │   ├── 010.png
+    │   ├── 010b.png
+    │   ├── 010s.png
+    │   ├── 010sb.png
+    │   ├── 011.png
+    │   ├── 011b.png
+    │   ├── 011s.png
+    │   ├── 011sb.png
+    │   ├── 012.png
+    │   ├── 012b.png
+    │   ├── 012egg.png
+    │   ├── 012s.png
+    │   ├── 012sb.png
+    │   ├── 013.png
+    │   ├── 013b.png
+    │   ├── 013s.png
+    │   ├── 013sb.png
+    │   ├── 014.png
+    │   ├── 014b.png
+    │   ├── 014s.png
+    │   ├── 014sb.png
+    │   ├── 015.png
+    │   ├── 015b.PNG
+    │   ├── 015egg.png
+    │   ├── 015s.png
+    │   ├── 015sb.png
+    │   ├── 016.png
+    │   ├── 016b.png
+    │   ├── 016s.png
+    │   ├── 016sb.png
+    │   ├── 017.png
+    │   ├── 017b.png
+    │   ├── 017s.png
+    │   ├── 017sb.png
+    │   ├── 018.PNG
+    │   ├── 018_3.png
+    │   ├── 018b.png
+    │   ├── 018b_3.png
+    │   ├── 018egg.png
+    │   ├── 018s.png
+    │   ├── 018s_3.png
+    │   ├── 018sb.png
+    │   ├── 018sb_3.png
+    │   ├── 019.PNG
+    │   ├── 019_3.png
+    │   ├── 019b.png
+    │   ├── 019b_3.png
+    │   ├── 019s.png
+    │   ├── 019s_3.png
+    │   ├── 019sb.png
+    │   ├── 019sb_3.png
+    │   ├── 020.png
+    │   ├── 020_1.png
+    │   ├── 020b.png
+    │   ├── 020b_1.png
+    │   ├── 020egg.png
+    │   ├── 020s.png
+    │   ├── 020s_1.png
+    │   ├── 020sb.png
+    │   ├── 020sb_1.png
+    │   ├── 021.png
+    │   ├── 021_1.png
+    │   ├── 021b.png
+    │   ├── 021b_1.png
+    │   ├── 021s.png
+    │   ├── 021s_1.png
+    │   ├── 021sb.png
+    │   ├── 021sb_1.png
+    │   ├── 022.png
+    │   ├── 022b.png
+    │   ├── 022egg.png
+    │   ├── 022s.png
+    │   ├── 022sb.png
+    │   ├── 023.png
+    │   ├── 023b.png
+    │   ├── 023f.png
+    │   ├── 023fb.png
+    │   ├── 023fs.png
+    │   ├── 023fsb.png
+    │   ├── 023s.png
+    │   ├── 023sb.png
+    │   ├── 024.png
+    │   ├── 024b.png
+    │   ├── 024egg.png
+    │   ├── 024s.png
+    │   ├── 024sb.png
+    │   ├── 025.PNG
+    │   ├── 025b.PNG
+    │   ├── 025s.png
+    │   ├── 025sb.png
+    │   ├── 026.png
+    │   ├── 026b.png
+    │   ├── 026s.png
+    │   ├── 026sb.png
+    │   ├── 027.png
+    │   ├── 027_1.png
+    │   ├── 027_2.png
+    │   ├── 027b.png
+    │   ├── 027b_1.png
+    │   ├── 027b_2.png
+    │   ├── 027egg.png
+    │   ├── 027f.png
+    │   ├── 027f_2.png
+    │   ├── 027fb.png
+    │   ├── 027fb_2.png
+    │   ├── 027fs.png
+    │   ├── 027fs_2.png
+    │   ├── 027fsb.png
+    │   ├── 027fsb_2.png
+    │   ├── 027s.png
+    │   ├── 027s_1.png
+    │   ├── 027s_2.png
+    │   ├── 027sb.png
+    │   ├── 027sb_1.png
+    │   ├── 027sb_2.png
+    │   ├── 028.png
+    │   ├── 028_1.png
+    │   ├── 028_2.png
+    │   ├── 028_3.png
+    │   ├── 028b.png
+    │   ├── 028b_1.png
+    │   ├── 028b_2.png
+    │   ├── 028b_3.png
+    │   ├── 028f.png
+    │   ├── 028f_2.png
+    │   ├── 028f_3.png
+    │   ├── 028fb.png
+    │   ├── 028fb_2.png
+    │   ├── 028fb_3.png
+    │   ├── 028fs.png
+    │   ├── 028fs_2.png
+    │   ├── 028fs_3.png
+    │   ├── 028fsb.png
+    │   ├── 028fsb_2.png
+    │   ├── 028fsb_3.png
+    │   ├── 028s.png
+    │   ├── 028s_1.png
+    │   ├── 028s_2.png
+    │   ├── 028s_3.png
+    │   ├── 028sb.png
+    │   ├── 028sb_1.png
+    │   ├── 028sb_2.png
+    │   ├── 028sb_3.png
+    │   ├── 029.png
+    │   ├── 029_3.png
+    │   ├── 029b.png
+    │   ├── 029b_3.png
+    │   ├── 029egg.png
+    │   ├── 029s.png
+    │   ├── 029s_3.png
+    │   ├── 029sb.png
+    │   ├── 029sb_3.png
+    │   ├── 030.PNG
+    │   ├── 030_3.png
+    │   ├── 030b.png
+    │   ├── 030b_3.png
+    │   ├── 030f.png
+    │   ├── 030f_3.png
+    │   ├── 030fb.png
+    │   ├── 030fb_3.png
+    │   ├── 030fs.png
+    │   ├── 030fs_3.png
+    │   ├── 030fsb.png
+    │   ├── 030fsb_3.png
+    │   ├── 030s.png
+    │   ├── 030s_3.png
+    │   ├── 030sb.png
+    │   ├── 030sb_3.png
+    │   ├── 031.png
+    │   ├── 031_3.png
+    │   ├── 031b.png
+    │   ├── 031b_3.png
+    │   ├── 031f.PNG
+    │   ├── 031f_3.png
+    │   ├── 031fb.png
+    │   ├── 031fb_3.png
+    │   ├── 031fs.png
+    │   ├── 031fs_3.png
+    │   ├── 031fsb.png
+    │   ├── 031fsb_3.png
+    │   ├── 031s.png
+    │   ├── 031s_3.png
+    │   ├── 031sb.png
+    │   ├── 031sb_3.png
+    │   ├── 032.png
+    │   ├── 032b.png
+    │   ├── 032egg.png
+    │   ├── 032s.png
+    │   ├── 032sb.png
+    │   ├── 033.png
+    │   ├── 033b.png
+    │   ├── 033s.png
+    │   ├── 033sb.png
+    │   ├── 034.PNG
+    │   ├── 034b.png
+    │   ├── 034f.png
+    │   ├── 034fb.png
+    │   ├── 034fs.png
+    │   ├── 034fsb.png
+    │   ├── 034s.png
+    │   ├── 034sb.png
+    │   ├── 035.png
+    │   ├── 035_1.png
+    │   ├── 035_3.png
+    │   ├── 035b.png
+    │   ├── 035b_1.png
+    │   ├── 035b_3.png
+    │   ├── 035egg.png
+    │   ├── 035s.png
+    │   ├── 035s_1.png
+    │   ├── 035s_3.png
+    │   ├── 035sb.png
+    │   ├── 035sb_1.png
+    │   ├── 035sb_3.png
+    │   ├── 036.png
+    │   ├── 036_1.png
+    │   ├── 036_3.png
+    │   ├── 036b.png
+    │   ├── 036b_1.png
+    │   ├── 036b_3.png
+    │   ├── 036s.png
+    │   ├── 036s_1.png
+    │   ├── 036s_3.png
+    │   ├── 036sb.png
+    │   ├── 036sb_1.png
+    │   ├── 036sb_3.png
+    │   ├── 037.png
+    │   ├── 037_3.png
+    │   ├── 037b.png
+    │   ├── 037b_3.png
+    │   ├── 037egg.png
+    │   ├── 037s.png
+    │   ├── 037s_3.png
+    │   ├── 037sb.png
+    │   ├── 037sb_3.png
+    │   ├── 038.png
+    │   ├── 038_3.png
+    │   ├── 038b.png
+    │   ├── 038b_3.png
+    │   ├── 038s.png
+    │   ├── 038s_3.png
+    │   ├── 038sb.png
+    │   ├── 038sb_3.png
+    │   ├── 039.png
+    │   ├── 039_3.png
+    │   ├── 039b.png
+    │   ├── 039b_3.png
+    │   ├── 039f.png
+    │   ├── 039fb.png
+    │   ├── 039fs.png
+    │   ├── 039fsb.png
+    │   ├── 039s.png
+    │   ├── 039s_3.png
+    │   ├── 039sb.png
+    │   ├── 039sb_3.png
+    │   ├── 040.PNG
+    │   ├── 040b.png
+    │   ├── 040egg.png
+    │   ├── 040s.png
+    │   ├── 040sb.png
+    │   ├── 041.PNG
+    │   ├── 041b.png
+    │   ├── 041s.png
+    │   ├── 041sb.png
+    │   ├── 042.PNG
+    │   ├── 042b.png
+    │   ├── 042egg.png
+    │   ├── 042s.PNG
+    │   ├── 042sb.png
+    │   ├── 043.png
+    │   ├── 043b.png
+    │   ├── 043s.png
+    │   ├── 043sb.png
+    │   ├── 044.png
+    │   ├── 044_2.png
+    │   ├── 044b.png
+    │   ├── 044b_2.png
+    │   ├── 044egg.png
+    │   ├── 044s.png
+    │   ├── 044s_2.png
+    │   ├── 044sb.png
+    │   ├── 044sb_2.png
+    │   ├── 045.png
+    │   ├── 045_1.png
+    │   ├── 045_2.png
+    │   ├── 045_3.png
+    │   ├── 045b.png
+    │   ├── 045b_1.png
+    │   ├── 045b_2.png
+    │   ├── 045b_3.png
+    │   ├── 045s.png
+    │   ├── 045s_1.png
+    │   ├── 045s_2.png
+    │   ├── 045s_3.png
+    │   ├── 045sb.png
+    │   ├── 045sb_1.png
+    │   ├── 045sb_2.png
+    │   ├── 045sb_3.png
+    │   ├── 046.png
+    │   ├── 046_1.png
+    │   ├── 046_3.png
+    │   ├── 046_6.png
+    │   ├── 046b.png
+    │   ├── 046b_1.png
+    │   ├── 046b_3.png
+    │   ├── 046b_6.png
+    │   ├── 046egg.png
+    │   ├── 046s.png
+    │   ├── 046s_1.png
+    │   ├── 046s_3.png
+    │   ├── 046s_6.png
+    │   ├── 046sb.png
+    │   ├── 046sb_1.png
+    │   ├── 046sb_3.png
+    │   ├── 046sb_6.png
+    │   ├── 047.png
+    │   ├── 047_1.png
+    │   ├── 047_3.png
+    │   ├── 047_6.png
+    │   ├── 047b.png
+    │   ├── 047b_1.png
+    │   ├── 047b_3.png
+    │   ├── 047b_6.png
+    │   ├── 047s.png
+    │   ├── 047s_1.png
+    │   ├── 047s_3.png
+    │   ├── 047s_6.png
+    │   ├── 047sb.png
+    │   ├── 047sb_1.png
+    │   ├── 047sb_3.png
+    │   ├── 047sb_6.png
+    │   ├── 048.png
+    │   ├── 048b.png
+    │   ├── 048egg.png
+    │   ├── 048s.png
+    │   ├── 048sb.png
+    │   ├── 049.png
+    │   ├── 049b.png
+    │   ├── 049s.png
+    │   ├── 049sb.png
+    │   ├── 050.PNG
+    │   ├── 050_1.png
+    │   ├── 050b.png
+    │   ├── 050b_1.png
+    │   ├── 050egg.png
+    │   ├── 050s.png
+    │   ├── 050s_1.png
+    │   ├── 050sb.png
+    │   ├── 050sb_1.png
+    │   ├── 051.PNG
+    │   ├── 051_1.png
+    │   ├── 051b.png
+    │   ├── 051b_1.png
+    │   ├── 051s.png
+    │   ├── 051s_1.png
+    │   ├── 051sb.png
+    │   ├── 051sb_1.png
+    │   ├── 052.png
+    │   ├── 052_1.png
+    │   ├── 052b.png
+    │   ├── 052b_1.png
+    │   ├── 052s.png
+    │   ├── 052s_1.png
+    │   ├── 052sb.png
+    │   ├── 052sb_1.png
+    │   ├── 053.png
+    │   ├── 053_1.png
+    │   ├── 053b.png
+    │   ├── 053b_1.png
+    │   ├── 053egg.png
+    │   ├── 053s.png
+    │   ├── 053s_1.png
+    │   ├── 053sb.png
+    │   ├── 053sb_1.png
+    │   ├── 054.png
+    │   ├── 054_3.png
+    │   ├── 054b.png
+    │   ├── 054b_3.png
+    │   ├── 054egg.png
+    │   ├── 054s.png
+    │   ├── 054s_3.png
+    │   ├── 054sb.png
+    │   ├── 054sb_3.png
+    │   ├── 055.png
+    │   ├── 055_3.png
+    │   ├── 055b.png
+    │   ├── 055b_3.png
+    │   ├── 055s.png
+    │   ├── 055s_3.png
+    │   ├── 055sb.png
+    │   ├── 055sb_3.png
+    │   ├── 056.png
+    │   ├── 056_3.png
+    │   ├── 056b.png
+    │   ├── 056b_3.png
+    │   ├── 056s.png
+    │   ├── 056s_3.png
+    │   ├── 056sb.png
+    │   ├── 056sb_3.png
+    │   ├── 057.png
+    │   ├── 057b.png
+    │   ├── 057egg.png
+    │   ├── 057s.png
+    │   ├── 057sb.png
+    │   ├── 058.png
+    │   ├── 058b.png
+    │   ├── 058s.png
+    │   ├── 058sb.png
+    │   ├── 059.png
+    │   ├── 059_1.png
+    │   ├── 059b.png
+    │   ├── 059b_1.png
+    │   ├── 059s.png
+    │   ├── 059s_1.png
+    │   ├── 059sb.png
+    │   ├── 059sb_1.png
+    │   ├── 060.PNG
+    │   ├── 060_2.png
+    │   ├── 060_4.png
+    │   ├── 060b.PNG
+    │   ├── 060b_2.png
+    │   ├── 060b_4.png
+    │   ├── 060egg.png
+    │   ├── 060s.png
+    │   ├── 060s_2.png
+    │   ├── 060s_4.png
+    │   ├── 060sb.png
+    │   ├── 060sb_2.png
+    │   ├── 060sb_4.png
+    │   ├── 061.PNG
+    │   ├── 061_2.png
+    │   ├── 061_4.png
+    │   ├── 061b.PNG
+    │   ├── 061b_2.png
+    │   ├── 061b_4.png
+    │   ├── 061s.png
+    │   ├── 061s_2.png
+    │   ├── 061s_4.png
+    │   ├── 061sb.png
+    │   ├── 061sb_2.png
+    │   ├── 061sb_4.png
+    │   ├── 062.PNG
+    │   ├── 062_1.png
+    │   ├── 062_2.png
+    │   ├── 062_3.png
+    │   ├── 062_4.png
+    │   ├── 062_5.png
+    │   ├── 062b.png
+    │   ├── 062b_1.png
+    │   ├── 062b_2.png
+    │   ├── 062b_3.png
+    │   ├── 062b_4.png
+    │   ├── 062b_5.png
+    │   ├── 062s.png
+    │   ├── 062s_1.png
+    │   ├── 062s_2.png
+    │   ├── 062s_3.png
+    │   ├── 062s_4.png
+    │   ├── 062s_5.png
+    │   ├── 062sb.png
+    │   ├── 062sb_1.png
+    │   ├── 062sb_2.png
+    │   ├── 062sb_3.png
+    │   ├── 062sb_4.png
+    │   ├── 062sb_5.png
+    │   ├── 063.png
+    │   ├── 063b.png
+    │   ├── 063egg.png
+    │   ├── 063s.png
+    │   ├── 063sb.png
+    │   ├── 064.png
+    │   ├── 064b.png
+    │   ├── 064s.png
+    │   ├── 064sb.png
+    │   ├── 065.png
+    │   ├── 065_1.png
+    │   ├── 065b.png
+    │   ├── 065b_1.png
+    │   ├── 065egg.png
+    │   ├── 065s.png
+    │   ├── 065s_1.png
+    │   ├── 065sb.png
+    │   ├── 065sb_1.png
+    │   ├── 066.png
+    │   ├── 066_1.png
+    │   ├── 066b.png
+    │   ├── 066b_1.png
+    │   ├── 066s.png
+    │   ├── 066s_1.png
+    │   ├── 066sb.png
+    │   ├── 066sb_1.png
+    │   ├── 067.png
+    │   ├── 067_3.png
+    │   ├── 067b.png
+    │   ├── 067b_3.png
+    │   ├── 067egg.png
+    │   ├── 067s.png
+    │   ├── 067sb.png
+    │   ├── 068.png
+    │   ├── 068_3.png
+    │   ├── 068b.png
+    │   ├── 068b_3.png
+    │   ├── 068f.png
+    │   ├── 068fb.png
+    │   ├── 068fs.png
+    │   ├── 068fsb.png
+    │   ├── 068s.png
+    │   ├── 068sb.png
+    │   ├── 069.png
+    │   ├── 069_3.png
+    │   ├── 069b.png
+    │   ├── 069b_3.png
+    │   ├── 069egg.png
+    │   ├── 069s.png
+    │   ├── 069sb.png
+    │   ├── 070.png
+    │   ├── 070_3.png
+    │   ├── 070b.png
+    │   ├── 070b_3.png
+    │   ├── 070s.png
+    │   ├── 070sb.png
+    │   ├── 071.png
+    │   ├── 071b.png
+    │   ├── 071egg.png
+    │   ├── 071f.png
+    │   ├── 071fb.png
+    │   ├── 071fs.png
+    │   ├── 071fsb.png
+    │   ├── 071s.png
+    │   ├── 071sb.png
+    │   ├── 072.png
+    │   ├── 072b.png
+    │   ├── 072f.png
+    │   ├── 072fb.png
+    │   ├── 072fs.png
+    │   ├── 072fsb.png
+    │   ├── 072s.png
+    │   ├── 072sb.png
+    │   ├── 073.png
+    │   ├── 073b.png
+    │   ├── 073egg.png
+    │   ├── 073s.png
+    │   ├── 073sb.png
+    │   ├── 074.png
+    │   ├── 074_1.png
+    │   ├── 074b.png
+    │   ├── 074b_1.png
+    │   ├── 074s.png
+    │   ├── 074s_1.png
+    │   ├── 074sb.png
+    │   ├── 074sb_1.png
+    │   ├── 075.png
+    │   ├── 075_1.png
+    │   ├── 075b.png
+    │   ├── 075b_1.png
+    │   ├── 075egg.png
+    │   ├── 075f.png
+    │   ├── 075f_1.png
+    │   ├── 075fb.png
+    │   ├── 075fs.png
+    │   ├── 075fs_1.png
+    │   ├── 075fsb.png
+    │   ├── 075s.png
+    │   ├── 075s_1.png
+    │   ├── 075sb.png
+    │   ├── 075sb_1.png
+    │   ├── 076.png
+    │   ├── 076_1.png
+    │   ├── 076b.png
+    │   ├── 076b_1.png
+    │   ├── 076s.png
+    │   ├── 076s_1.png
+    │   ├── 076sb.png
+    │   ├── 076sb_1.png
+    │   ├── 077.png
+    │   ├── 077_1.png
+    │   ├── 077_4.png
+    │   ├── 077_5.png
+    │   ├── 077b.png
+    │   ├── 077b_1.png
+    │   ├── 077b_4.png
+    │   ├── 077b_5.png
+    │   ├── 077egg.png
+    │   ├── 077s.png
+    │   ├── 077s_1.png
+    │   ├── 077s_4.png
+    │   ├── 077s_5.png
+    │   ├── 077sb.png
+    │   ├── 077sb_1.png
+    │   ├── 077sb_4.png
+    │   ├── 077sb_5.png
+    │   ├── 078.png
+    │   ├── 078_3.png
+    │   ├── 078b.png
+    │   ├── 078b_3.png
+    │   ├── 078egg.png
+    │   ├── 078s.png
+    │   ├── 078sb.png
+    │   ├── 079.png
+    │   ├── 079_3.png
+    │   ├── 079b.png
+    │   ├── 079b_3.png
+    │   ├── 079s.png
+    │   ├── 079sb.png
+    │   ├── 080.png
+    │   ├── 080_3.png
+    │   ├── 080b.png
+    │   ├── 080b_3.png
+    │   ├── 080s.png
+    │   ├── 080sb.png
+    │   ├── 081.png
+    │   ├── 081_1.png
+    │   ├── 081_2.png
+    │   ├── 081_3.png
+    │   ├── 081b.png
+    │   ├── 081b_1.png
+    │   ├── 081b_3.png
+    │   ├── 081egg.png
+    │   ├── 081s.png
+    │   ├── 081s_1.png
+    │   ├── 081s_2.png
+    │   ├── 081s_3.png
+    │   ├── 081sb.png
+    │   ├── 081sb_1.png
+    │   ├── 081sb_3.png
+    │   ├── 082.png
+    │   ├── 082_1.png
+    │   ├── 082_3.png
+    │   ├── 082b.png
+    │   ├── 082b_1.png
+    │   ├── 082b_3.png
+    │   ├── 082s.png
+    │   ├── 082s_1.png
+    │   ├── 082s_3.png
+    │   ├── 082sb.png
+    │   ├── 082sb_1.png
+    │   ├── 082sb_3.png
+    │   ├── 083.png
+    │   ├── 083_1.png
+    │   ├── 083_3.png
+    │   ├── 083b.png
+    │   ├── 083b_1.png
+    │   ├── 083b_3.png
+    │   ├── 083egg.png
+    │   ├── 083s.png
+    │   ├── 083s_1.png
+    │   ├── 083s_3.png
+    │   ├── 083sb.png
+    │   ├── 083sb_1.png
+    │   ├── 083sb_3.png
+    │   ├── 084.png
+    │   ├── 084_1.png
+    │   ├── 084_3.png
+    │   ├── 084b.png
+    │   ├── 084b_1.png
+    │   ├── 084b_3.png
+    │   ├── 084s.png
+    │   ├── 084s_1.png
+    │   ├── 084s_3.png
+    │   ├── 084sb.png
+    │   ├── 084sb_1.png
+    │   ├── 084sb_3.png
+    │   ├── 085.png
+    │   ├── 085_3.png
+    │   ├── 085b.png
+    │   ├── 085b_3.png
+    │   ├── 085egg.png
+    │   ├── 085s.png
+    │   ├── 085s_3.png
+    │   ├── 085sb.png
+    │   ├── 085sb_3.png
+    │   ├── 086.png
+    │   ├── 086_3.png
+    │   ├── 086b.png
+    │   ├── 086b_3.png
+    │   ├── 086s.png
+    │   ├── 086s_3.png
+    │   ├── 086sb.png
+    │   ├── 086sb_3.png
+    │   ├── 087.png
+    │   ├── 087_3.png
+    │   ├── 087b.png
+    │   ├── 087b_3.png
+    │   ├── 087s.png
+    │   ├── 087s_3.png
+    │   ├── 087sb.png
+    │   ├── 087sb_3.png
+    │   ├── 088.png
+    │   ├── 088_1.png
+    │   ├── 088_3.png
+    │   ├── 088b.png
+    │   ├── 088b_1.png
+    │   ├── 088b_3.png
+    │   ├── 088egg.png
+    │   ├── 088s.png
+    │   ├── 088s_1.png
+    │   ├── 088s_3.png
+    │   ├── 088sb.png
+    │   ├── 088sb_1.png
+    │   ├── 088sb_3.png
+    │   ├── 089.png
+    │   ├── 089_1.png
+    │   ├── 089_3.png
+    │   ├── 089b.png
+    │   ├── 089b_1.png
+    │   ├── 089b_3.png
+    │   ├── 089s.png
+    │   ├── 089s_1.png
+    │   ├── 089s_3.png
+    │   ├── 089sb.png
+    │   ├── 089sb_1.png
+    │   ├── 089sb_3.png
+    │   ├── 090.png
+    │   ├── 090b.png
+    │   ├── 090egg.png
+    │   ├── 090s.png
+    │   ├── 090sb.png
+    │   ├── 091.png
+    │   ├── 091_1.png
+    │   ├── 091b.png
+    │   ├── 091b_1.png
+    │   ├── 091s.png
+    │   ├── 091s_1.png
+    │   ├── 091sb.png
+    │   ├── 091sb_1.png
+    │   ├── 092.png
+    │   ├── 092b.png
+    │   ├── 092egg.png
+    │   ├── 092s.png
+    │   ├── 092sb.png
+    │   ├── 093.png
+    │   ├── 093b.png
+    │   ├── 093s.png
+    │   ├── 093sb.png
+    │   ├── 094.png
+    │   ├── 094_1.png
+    │   ├── 094b.png
+    │   ├── 094b_1.png
+    │   ├── 094bs.png
+    │   ├── 094egg.png
+    │   ├── 094s.png
+    │   ├── 094s_1.png
+    │   ├── 094sb.png
+    │   ├── 094sb_1.png
+    │   ├── 095.png
+    │   ├── 095_3.png
+    │   ├── 095b.png
+    │   ├── 095b_3.png
+    │   ├── 095egg.png
+    │   ├── 095s.png
+    │   ├── 095s_3.png
+    │   ├── 095sb.png
+    │   ├── 095sb_3.png
+    │   ├── 096.png
+    │   ├── 096_3.png
+    │   ├── 096b.png
+    │   ├── 096b_3.png
+    │   ├── 096f.png
+    │   ├── 096fb.png
+    │   ├── 096fs.png
+    │   ├── 096fsb.png
+    │   ├── 096s.png
+    │   ├── 096s_3.png
+    │   ├── 096sb.png
+    │   ├── 096sb_3.png
+    │   ├── 097.png
+    │   ├── 097_4.png
+    │   ├── 097b.png
+    │   ├── 097b_4.png
+    │   ├── 097egg.png
+    │   ├── 097s.png
+    │   ├── 097s_4.png
+    │   ├── 097sb.png
+    │   ├── 097sb_4.png
+    │   ├── 098.png
+    │   ├── 098_1.png
+    │   ├── 098_4.png
+    │   ├── 098_5.png
+    │   ├── 098b.png
+    │   ├── 098b_1.png
+    │   ├── 098b_4.png
+    │   ├── 098b_5.png
+    │   ├── 098s.png
+    │   ├── 098s_1.png
+    │   ├── 098s_4.png
+    │   ├── 098s_5.png
+    │   ├── 098sb.png
+    │   ├── 098sb_1.png
+    │   ├── 098sb_4.png
+    │   ├── 098sb_5.png
+    │   ├── 099.png
+    │   ├── 099_1.png
+    │   ├── 099_3.png
+    │   ├── 099b.png
+    │   ├── 099b_1.png
+    │   ├── 099b_3.png
+    │   ├── 099egg.png
+    │   ├── 099f_3.png
+    │   ├── 099fb_3.png
+    │   ├── 099fs_3.png
+    │   ├── 099fsb_3.png
+    │   ├── 099s.png
+    │   ├── 099s_1.png
+    │   ├── 099s_3.png
+    │   ├── 099sb.png
+    │   ├── 099sb_1.png
+    │   ├── 099sb_3.png
+    │   ├── 100.png
+    │   ├── 100_1.png
+    │   ├── 100_3.png
+    │   ├── 100b.png
+    │   ├── 100b_1.png
+    │   ├── 100b_3.png
+    │   ├── 100f_3.png
+    │   ├── 100fb_3.png
+    │   ├── 100fs_3.png
+    │   ├── 100fsb_3.png
+    │   ├── 100s.png
+    │   ├── 100s_1.png
+    │   ├── 100s_3.png
+    │   ├── 100sb.png
+    │   ├── 100sb_1.png
+    │   ├── 100sb_3.png
+    │   ├── 101.PNG
+    │   ├── 101_4.png
+    │   ├── 101b.png
+    │   ├── 101b_4.png
+    │   ├── 101egg.png
+    │   ├── 101s.png
+    │   ├── 101s_4.png
+    │   ├── 101sb.png
+    │   ├── 101sb_4.png
+    │   ├── 102.PNG
+    │   ├── 102_1.png
+    │   ├── 102_4.png
+    │   ├── 102_5.png
+    │   ├── 102b.PNG
+    │   ├── 102b_1.png
+    │   ├── 102b_4.png
+    │   ├── 102b_5.png
+    │   ├── 102s.png
+    │   ├── 102s_1.png
+    │   ├── 102s_4.png
+    │   ├── 102s_5.png
+    │   ├── 102sb.png
+    │   ├── 102sb_1.png
+    │   ├── 102sb_4.png
+    │   ├── 102sb_5.png
+    │   ├── 103.png
+    │   ├── 103_3.png
+    │   ├── 103b.png
+    │   ├── 103b_3.png
+    │   ├── 103egg.png
+    │   ├── 103s.png
+    │   ├── 103s_3.png
+    │   ├── 103sb.png
+    │   ├── 103sb_3.png
+    │   ├── 104.png
+    │   ├── 104_3.png
+    │   ├── 104b.png
+    │   ├── 104b_3.png
+    │   ├── 104f.png
+    │   ├── 104f_3.png
+    │   ├── 104fb.png
+    │   ├── 104fb_3.png
+    │   ├── 104fs.png
+    │   ├── 104fs_3.png
+    │   ├── 104fsb.png
+    │   ├── 104fsb_3.png
+    │   ├── 104s.png
+    │   ├── 104s_3.png
+    │   ├── 104sb.png
+    │   ├── 104sb_3.png
+    │   ├── 105.png
+    │   ├── 105_3.png
+    │   ├── 105b.png
+    │   ├── 105b_3.png
+    │   ├── 105egg.png
+    │   ├── 105s.png
+    │   ├── 105s_3.png
+    │   ├── 105sb.png
+    │   ├── 105sb_3.png
+    │   ├── 106.png
+    │   ├── 106_3.png
+    │   ├── 106b.png
+    │   ├── 106b_3.png
+    │   ├── 106s.png
+    │   ├── 106s_3.png
+    │   ├── 106sb.png
+    │   ├── 106sb_3.png
+    │   ├── 107.png
+    │   ├── 107b.png
+    │   ├── 107egg.png
+    │   ├── 107s.png
+    │   ├── 107sb.png
+    │   ├── 108.png
+    │   ├── 108b.png
+    │   ├── 108f.png
+    │   ├── 108fb.png
+    │   ├── 108fs.png
+    │   ├── 108fsb.png
+    │   ├── 108s.png
+    │   ├── 108sb.png
+    │   ├── 109.png
+    │   ├── 109_3.png
+    │   ├── 109b.png
+    │   ├── 109b_3.png
+    │   ├── 109egg.png
+    │   ├── 109s.png
+    │   ├── 109s_3.png
+    │   ├── 109sb.png
+    │   ├── 109sb_3.png
+    │   ├── 110.png
+    │   ├── 110_3.png
+    │   ├── 110b.png
+    │   ├── 110b_3.png
+    │   ├── 110s.png
+    │   ├── 110s_3.png
+    │   ├── 110sb.png
+    │   ├── 110sb_3.png
+    │   ├── 111.png
+    │   ├── 111_3.png
+    │   ├── 111b.png
+    │   ├── 111b_3.png
+    │   ├── 111s.png
+    │   ├── 111s_3.png
+    │   ├── 111sb.png
+    │   ├── 111sb_3.png
+    │   ├── 112.png
+    │   ├── 112_3.png
+    │   ├── 112b.png
+    │   ├── 112b_3.png
+    │   ├── 112egg.png
+    │   ├── 112s.png
+    │   ├── 112s_3.png
+    │   ├── 112sb.png
+    │   ├── 112sb_3.png
+    │   ├── 113.png
+    │   ├── 113b.png
+    │   ├── 113egg.png
+    │   ├── 113s.png
+    │   ├── 113sb.png
+    │   ├── 114.png
+    │   ├── 114b.png
+    │   ├── 114s.png
+    │   ├── 114sb.png
+    │   ├── 115.png
+    │   ├── 115b.png
+    │   ├── 115egg.png
+    │   ├── 115s.png
+    │   ├── 115sb.png
+    │   ├── 116.png
+    │   ├── 116b.png
+    │   ├── 116s.png
+    │   ├── 116sb.png
+    │   ├── 117.png
+    │   ├── 117_3.png
+    │   ├── 117b.png
+    │   ├── 117b_3.png
+    │   ├── 117egg.png
+    │   ├── 117s.png
+    │   ├── 117s_3.png
+    │   ├── 117sb.png
+    │   ├── 117sb_3.png
+    │   ├── 118.png
+    │   ├── 118b.png
+    │   ├── 118egg.png
+    │   ├── 118s.png
+    │   ├── 118sb.png
+    │   ├── 119.png
+    │   ├── 119b.png
+    │   ├── 119s.png
+    │   ├── 119sb.png
+    │   ├── 120.png
+    │   ├── 120b.png
+    │   ├── 120s.png
+    │   ├── 120sb.png
+    │   ├── 121.png
+    │   ├── 121_4.png
+    │   ├── 121b.png
+    │   ├── 121b_4.png
+    │   ├── 121egg.png
+    │   ├── 121s.png
+    │   ├── 121s_4.png
+    │   ├── 121sb.png
+    │   ├── 121sb_4.png
+    │   ├── 122.png
+    │   ├── 122_1.png
+    │   ├── 122_4.png
+    │   ├── 122_5.png
+    │   ├── 122b.png
+    │   ├── 122b_1.png
+    │   ├── 122b_4.png
+    │   ├── 122b_5.png
+    │   ├── 122s.png
+    │   ├── 122s_1.png
+    │   ├── 122s_4.png
+    │   ├── 122s_5.png
+    │   ├── 122sb.png
+    │   ├── 122sb_1.png
+    │   ├── 122sb_4.png
+    │   ├── 122sb_5.png
+    │   ├── 123.png
+    │   ├── 123_3.png
+    │   ├── 123b.png
+    │   ├── 123b_3.png
+    │   ├── 123egg.png
+    │   ├── 123s.png
+    │   ├── 123s_3.png
+    │   ├── 123sb.png
+    │   ├── 123sb_3.png
+    │   ├── 124.png
+    │   ├── 124_3.png
+    │   ├── 124b.png
+    │   ├── 124b_3.png
+    │   ├── 124s.png
+    │   ├── 124s_3.png
+    │   ├── 124sb.png
+    │   ├── 124sb_3.png
+    │   ├── 125.png
+    │   ├── 125_3.png
+    │   ├── 125b.png
+    │   ├── 125b_3.png
+    │   ├── 125s.png
+    │   ├── 125s_3.png
+    │   ├── 125sb.png
+    │   ├── 125sb_3.png
+    │   ├── 126.png
+    │   ├── 126_3.png
+    │   ├── 126b.png
+    │   ├── 126b_3.png
+    │   ├── 126egg.png
+    │   ├── 126s.png
+    │   ├── 126sb.png
+    │   ├── 127.png
+    │   ├── 127_3.png
+    │   ├── 127b.png
+    │   ├── 127b_3.png
+    │   ├── 127s.png
+    │   ├── 127sb.png
+    │   ├── 128.png
+    │   ├── 128b.png
+    │   ├── 128s.png
+    │   ├── 128sb.png
+    │   ├── 129.png
+    │   ├── 129b.png
+    │   ├── 129egg.png
+    │   ├── 129s.png
+    │   ├── 129sb.png
+    │   ├── 130.png
+    │   ├── 130b.png
+    │   ├── 130s.png
+    │   ├── 130sb.png
+    │   ├── 131.png
+    │   ├── 131b.png
+    │   ├── 131s.png
+    │   ├── 131sb.png
+    │   ├── 132.png
+    │   ├── 132b.png
+    │   ├── 132s.png
+    │   ├── 132sb.png
+    │   ├── 133.png
+    │   ├── 133b.png
+    │   ├── 133s.png
+    │   ├── 133sb.png
+    │   ├── 134.png
+    │   ├── 134b.png
+    │   ├── 134s.png
+    │   ├── 134sb.png
+    │   ├── 135.png
+    │   ├── 135b.png
+    │   ├── 135s.png
+    │   ├── 135sb.png
+    │   ├── 136.png
+    │   ├── 136b.png
+    │   ├── 136s.png
+    │   ├── 136sb.png
+    │   ├── 137.png
+    │   ├── 137b.png
+    │   ├── 137s.png
+    │   ├── 137sb.png
+    │   ├── 138.png
+    │   ├── 138b.png
+    │   ├── 138s.png
+    │   ├── 138sb.png
+    │   ├── 139.png
+    │   ├── 139_3.png
+    │   ├── 139b.png
+    │   ├── 139b_3.png
+    │   ├── 139egg.png
+    │   ├── 139s.png
+    │   ├── 139s_3.png
+    │   ├── 139sb.png
+    │   ├── 139sb_3.png
+    │   ├── 140.png
+    │   ├── 140_3.png
+    │   ├── 140b.png
+    │   ├── 140b_3.png
+    │   ├── 140s.png
+    │   ├── 140s_3.png
+    │   ├── 140sb.png
+    │   ├── 140sb_3.png
+    │   ├── 141.png
+    │   ├── 141_3.png
+    │   ├── 141b.png
+    │   ├── 141b_3.png
+    │   ├── 141egg.png
+    │   ├── 141s.png
+    │   ├── 141s_3.png
+    │   ├── 141sb.png
+    │   ├── 141sb_3.png
+    │   ├── 142.png
+    │   ├── 142_2.png
+    │   ├── 142_4.png
+    │   ├── 142b.png
+    │   ├── 142b_2.png
+    │   ├── 142b_4.png
+    │   ├── 142egg.png
+    │   ├── 142s.png
+    │   ├── 142s_2.png
+    │   ├── 142s_4.png
+    │   ├── 142sb.png
+    │   ├── 142sb_2.png
+    │   ├── 142sb_4.png
+    │   ├── 143.png
+    │   ├── 143_1.png
+    │   ├── 143_2.png
+    │   ├── 143_3.png
+    │   ├── 143_4.png
+    │   ├── 143_5.png
+    │   ├── 143_6.png
+    │   ├── 143_7.png
+    │   ├── 143_8.png
+    │   ├── 143b.png
+    │   ├── 143b_1.png
+    │   ├── 143b_2.png
+    │   ├── 143b_3.png
+    │   ├── 143b_4.png
+    │   ├── 143b_5.png
+    │   ├── 143b_6.png
+    │   ├── 143b_7.png
+    │   ├── 143b_8.png
+    │   ├── 143s.png
+    │   ├── 143s_1.png
+    │   ├── 143s_2.png
+    │   ├── 143s_3.png
+    │   ├── 143s_4.png
+    │   ├── 143s_5.png
+    │   ├── 143s_6.png
+    │   ├── 143s_7.png
+    │   ├── 143sb.png
+    │   ├── 143sb_1.png
+    │   ├── 143sb_2.png
+    │   ├── 143sb_3.png
+    │   ├── 143sb_4.png
+    │   ├── 143sb_5.png
+    │   ├── 143sb_6.png
+    │   ├── 143sb_7.png
+    │   ├── 144.png
+    │   ├── 144_3.png
+    │   ├── 144b.png
+    │   ├── 144b_3.png
+    │   ├── 144egg.png
+    │   ├── 144s.png
+    │   ├── 144s_3.png
+    │   ├── 144sb.png
+    │   ├── 144sb_3.png
+    │   ├── 145.png
+    │   ├── 145_1.png
+    │   ├── 145_3.png
+    │   ├── 145b.png
+    │   ├── 145b_1.png
+    │   ├── 145b_3.png
+    │   ├── 145egg.png
+    │   ├── 145s.png
+    │   ├── 145s_1.png
+    │   ├── 145s_3.png
+    │   ├── 145sb.png
+    │   ├── 145sb_1.png
+    │   ├── 145sb_3.png
+    │   ├── 146.png
+    │   ├── 146_1.png
+    │   ├── 146_3.png
+    │   ├── 146b.png
+    │   ├── 146b_1.png
+    │   ├── 146b_3.png
+    │   ├── 146s.png
+    │   ├── 146s_1.png
+    │   ├── 146s_3.png
+    │   ├── 146sb.png
+    │   ├── 146sb_1.png
+    │   ├── 146sb_3.png
+    │   ├── 147.png
+    │   ├── 147_3.png
+    │   ├── 147b.png
+    │   ├── 147b_3.png
+    │   ├── 147egg.png
+    │   ├── 147s.png
+    │   ├── 147s_3.png
+    │   ├── 147sb.png
+    │   ├── 147sb_3.png
+    │   ├── 148.png
+    │   ├── 148_3.png
+    │   ├── 148b.png
+    │   ├── 148b_3.png
+    │   ├── 148s.png
+    │   ├── 148s_3.png
+    │   ├── 148sb.png
+    │   ├── 148sb_3.png
+    │   ├── 149.png
+    │   ├── 149_3.png
+    │   ├── 149b.png
+    │   ├── 149b_3.png
+    │   ├── 149egg.png
+    │   ├── 149s.png
+    │   ├── 149sb.png
+    │   ├── 150.png
+    │   ├── 150_3.png
+    │   ├── 150b.png
+    │   ├── 150b_3.png
+    │   ├── 150s.png
+    │   ├── 150sb.png
+    │   ├── 151.PNG
+    │   ├── 151_3.png
+    │   ├── 151b.png
+    │   ├── 151b_3.png
+    │   ├── 151s.png
+    │   ├── 151sb.png
+    │   ├── 152.png
+    │   ├── 152b.png
+    │   ├── 152bs.png
+    │   ├── 152egg.png
+    │   ├── 152s.png
+    │   ├── 152sb.png
+    │   ├── 153.png
+    │   ├── 153b.png
+    │   ├── 153bs.png
+    │   ├── 153s.png
+    │   ├── 153sb.png
+    │   ├── 154.png
+    │   ├── 154b.png
+    │   ├── 154bs.png
+    │   ├── 154s.png
+    │   ├── 154sb.png
+    │   ├── 155.png
+    │   ├── 155_3.png
+    │   ├── 155b.png
+    │   ├── 155b_3.png
+    │   ├── 155egg.png
+    │   ├── 155s.png
+    │   ├── 155s_3.png
+    │   ├── 155sb.png
+    │   ├── 155sb_3.png
+    │   ├── 156.png
+    │   ├── 156_3.png
+    │   ├── 156b.png
+    │   ├── 156b_3.png
+    │   ├── 156bf.png
+    │   ├── 156bfs.png
+    │   ├── 156f.png
+    │   ├── 156f_3.png
+    │   ├── 156fb.png
+    │   ├── 156fb_3.png
+    │   ├── 156fbs.png
+    │   ├── 156fs.png
+    │   ├── 156fs_3.png
+    │   ├── 156fsb.png
+    │   ├── 156fsb_3.png
+    │   ├── 156s.png
+    │   ├── 156s_3.png
+    │   ├── 156sb.png
+    │   ├── 156sb_3.png
+    │   ├── 157.png
+    │   ├── 157b.png
+    │   ├── 157egg.png
+    │   ├── 157s.png
+    │   ├── 157sb.png
+    │   ├── 158.png
+    │   ├── 158b.png
+    │   ├── 158s.png
+    │   ├── 158sb.png
+    │   ├── 159.png
+    │   ├── 159_3.png
+    │   ├── 159b.png
+    │   ├── 159b_3.png
+    │   ├── 159egg.png
+    │   ├── 159s.png
+    │   ├── 159s_3.png
+    │   ├── 159sb.png
+    │   ├── 159sb_3.png
+    │   ├── 160.png
+    │   ├── 160b.png
+    │   ├── 160egg.png
+    │   ├── 160s.png
+    │   ├── 160sb.png
+    │   ├── 161.png
+    │   ├── 161b.png
+    │   ├── 161s.png
+    │   ├── 161sb.png
+    │   ├── 162.png
+    │   ├── 162b.png
+    │   ├── 162s.png
+    │   ├── 162sb.png
+    │   ├── 163.png
+    │   ├── 163b.png
+    │   ├── 163egg.png
+    │   ├── 163s.png
+    │   ├── 163sb.png
+    │   ├── 164.png
+    │   ├── 164_3.png
+    │   ├── 164b.png
+    │   ├── 164b_3.png
+    │   ├── 164egg.png
+    │   ├── 164s.png
+    │   ├── 164s_3.png
+    │   ├── 164sb.png
+    │   ├── 164sb_3.png
+    │   ├── 165.png
+    │   ├── 165_3.png
+    │   ├── 165b.png
+    │   ├── 165b_3.png
+    │   ├── 165s.png
+    │   ├── 165s_3.png
+    │   ├── 165sb.png
+    │   ├── 165sb_3.png
+    │   ├── 166.png
+    │   ├── 166_1.png
+    │   ├── 166_3.png
+    │   ├── 166b.png
+    │   ├── 166b_1.png
+    │   ├── 166b_3.png
+    │   ├── 166egg.png
+    │   ├── 166s.png
+    │   ├── 166s_1.png
+    │   ├── 166s_3.png
+    │   ├── 166sb.png
+    │   ├── 166sb_1.png
+    │   ├── 166sb_3.png
+    │   ├── 167.png
+    │   ├── 167_1.png
+    │   ├── 167_3.png
+    │   ├── 167b.png
+    │   ├── 167b_1.png
+    │   ├── 167b_3.png
+    │   ├── 167s.png
+    │   ├── 167s_1.png
+    │   ├── 167s_3.png
+    │   ├── 167sb.png
+    │   ├── 167sb_1.png
+    │   ├── 167sb_3.png
+    │   ├── 168.png
+    │   ├── 168b.png
+    │   ├── 168egg.png
+    │   ├── 168s.png
+    │   ├── 168sb.png
+    │   ├── 169.png
+    │   ├── 169b.png
+    │   ├── 169s.png
+    │   ├── 169sb.png
+    │   ├── 170.png
+    │   ├── 170b.png
+    │   ├── 170s.png
+    │   ├── 170sb.png
+    │   ├── 171.png
+    │   ├── 171_3.png
+    │   ├── 171b.png
+    │   ├── 171b_3.png
+    │   ├── 171egg.png
+    │   ├── 171s.png
+    │   ├── 171s_3.png
+    │   ├── 171sb.png
+    │   ├── 171sb_3.png
+    │   ├── 172.png
+    │   ├── 172b.png
+    │   ├── 172egg.png
+    │   ├── 172s.png
+    │   ├── 172sb.png
+    │   ├── 173.png
+    │   ├── 173b.png
+    │   ├── 173egg.png
+    │   ├── 173s.png
+    │   ├── 173sb.png
+    │   ├── 174.png
+    │   ├── 174_1.png
+    │   ├── 174b.png
+    │   ├── 174b_1.png
+    │   ├── 174s.png
+    │   ├── 174s_1.png
+    │   ├── 174sb.png
+    │   ├── 174sb_1.png
+    │   ├── 175.png
+    │   ├── 175_1.png
+    │   ├── 175b.png
+    │   ├── 175b_1.png
+    │   ├── 175s.png
+    │   ├── 175s_1.png
+    │   ├── 175sb.png
+    │   ├── 175sb_1.png
+    │   ├── 176.png
+    │   ├── 176_3.png
+    │   ├── 176b.png
+    │   ├── 176b_3.png
+    │   ├── 176egg.png
+    │   ├── 176s.png
+    │   ├── 176sb.png
+    │   ├── 177.png
+    │   ├── 177_3.png
+    │   ├── 177b.png
+    │   ├── 177b_3.png
+    │   ├── 177s.png
+    │   ├── 177sb.png
+    │   ├── 178.png
+    │   ├── 178_3.png
+    │   ├── 178b.png
+    │   ├── 178b_3.png
+    │   ├── 178s.png
+    │   ├── 178sb.png
+    │   ├── 179.png
+    │   ├── 179_3.png
+    │   ├── 179b.png
+    │   ├── 179b_3.png
+    │   ├── 179egg.png
+    │   ├── 179s.png
+    │   ├── 179s_3.png
+    │   ├── 179sb.png
+    │   ├── 179sb_3.png
+    │   ├── 180.png
+    │   ├── 180_3.png
+    │   ├── 180b.png
+    │   ├── 180b_3.png
+    │   ├── 180egg.png
+    │   ├── 180s.png
+    │   ├── 180s_3.png
+    │   ├── 180sb.png
+    │   ├── 180sb_3.png
+    │   ├── 181.png
+    │   ├── 181_3.png
+    │   ├── 181b.png
+    │   ├── 181b_3.png
+    │   ├── 181egg.png
+    │   ├── 181s.png
+    │   ├── 181s_3.png
+    │   ├── 181sb.png
+    │   ├── 181sb_3.png
+    │   ├── 182.png
+    │   ├── 182_3.png
+    │   ├── 182b.png
+    │   ├── 182b_3.png
+    │   ├── 182s.png
+    │   ├── 182s_3.png
+    │   ├── 182sb.png
+    │   ├── 182sb_3.png
+    │   ├── 183.png
+    │   ├── 183_3.png
+    │   ├── 183b.png
+    │   ├── 183b_3.png
+    │   ├── 183s.png
+    │   ├── 183s_3.png
+    │   ├── 183sb.png
+    │   ├── 183sb_3.png
+    │   ├── 184.png
+    │   ├── 184_3.png
+    │   ├── 184b.png
+    │   ├── 184b_3.png
+    │   ├── 184egg.png
+    │   ├── 184f.png
+    │   ├── 184f_3.png
+    │   ├── 184fb.png
+    │   ├── 184fb_3.png
+    │   ├── 184fs.png
+    │   ├── 184fs_3.png
+    │   ├── 184fsb.png
+    │   ├── 184fsb_3.png
+    │   ├── 184s.png
+    │   ├── 184s_3.png
+    │   ├── 184sb.png
+    │   ├── 184sb_3.png
+    │   ├── 185.png
+    │   ├── 185_3.png
+    │   ├── 185b.png
+    │   ├── 185b_3.png
+    │   ├── 185f.png
+    │   ├── 185f_3.png
+    │   ├── 185fb.png
+    │   ├── 185fb_3.png
+    │   ├── 185fs.png
+    │   ├── 185fs_3.png
+    │   ├── 185fsb.png
+    │   ├── 185fsb_3.png
+    │   ├── 185s.png
+    │   ├── 185s_3.png
+    │   ├── 185sb.png
+    │   ├── 185sb_3.png
+    │   ├── 186.png
+    │   ├── 186_3.png
+    │   ├── 186b.png
+    │   ├── 186b_3.png
+    │   ├── 186f.png
+    │   ├── 186f_3.png
+    │   ├── 186fb.png
+    │   ├── 186fb_3.png
+    │   ├── 186fs.png
+    │   ├── 186fs_3.png
+    │   ├── 186fsb.png
+    │   ├── 186fsb_3.png
+    │   ├── 186s.png
+    │   ├── 186s_3.png
+    │   ├── 186sb.png
+    │   ├── 186sb_3.png
+    │   ├── 187.png
+    │   ├── 187_3.png
+    │   ├── 187b.png
+    │   ├── 187b_3.png
+    │   ├── 187egg.png
+    │   ├── 187s.png
+    │   ├── 187s_3.png
+    │   ├── 187sb.png
+    │   ├── 187sb_3.png
+    │   ├── 188.png
+    │   ├── 188_3.png
+    │   ├── 188b.png
+    │   ├── 188b_3.png
+    │   ├── 188s.png
+    │   ├── 188s_3.png
+    │   ├── 188sb.png
+    │   ├── 188sb_3.png
+    │   ├── 189.png
+    │   ├── 189_3.png
+    │   ├── 189b.png
+    │   ├── 189b_3.png
+    │   ├── 189s.png
+    │   ├── 189s_3.png
+    │   ├── 189sb.png
+    │   ├── 189sb_3.png
+    │   ├── 190.png
+    │   ├── 190b.png
+    │   ├── 190s.png
+    │   ├── 190sb.png
+    │   ├── 191.png
+    │   ├── 191b.png
+    │   ├── 191s.png
+    │   ├── 191sb.png
+    │   ├── 192.png
+    │   ├── 193.png
+    │   ├── 194.png
+    │   ├── 194b.png
+    │   ├── 195.png
+    │   ├── 195b.png
+    │   ├── 195s.png
+    │   ├── 195sb.png
+    │   ├── 196.png
+    │   ├── 196_1.png
+    │   ├── 196b.png
+    │   ├── 196b_1.png
+    │   ├── 196s.png
+    │   ├── 196s_1.png
+    │   ├── 196sb.png
+    │   ├── 196sb_1.png
+    │   ├── 197.png
+    │   ├── 197_1.png
+    │   ├── 197_2.png
+    │   ├── 197b.png
+    │   ├── 197b_1.png
+    │   ├── 197s.png
+    │   ├── 197s_1.png
+    │   ├── 197s_2.png
+    │   ├── 197sb.png
+    │   ├── 197sb_1.png
+    │   ├── 198.png
+    │   ├── 199.png
+    │   ├── 200.png
+    │   ├── 201.png
+    │   ├── 201_1.png
+    │   ├── 201b.png
+    │   ├── 201bs.png
+    │   ├── 201s.png
+    │   ├── as.act
+    │   ├── asas.act
+    │   ├── battlers.png
+    │   ├── egg.png
+    │   ├── QuestAnim1.png
+    │   ├── QuestAnim2.png
+    │   └── testebg.png
+    ├── Characters/  [718 .png]
+    │   ├── antarki.png
+    │   ├── antarki2.png
+    │   ├── aotius_npc.png
+    │   ├── berrytreeACAIBERRY.png
+    │   ├── berrytreeAGUAVBERRY.png
+    │   ├── berrytreeAPICOTBERRY.png
+    │   ├── berrytreeASPEARBERRY.png
+    │   ├── berrytreeBABIRIBERRY.png
+    │   ├── berrytreeBACUBERRY.png
+    │   ├── berrytreeBELUEBERRY.png
+    │   ├── berrytreeBLUKBERRY.png
+    │   ├── berrytreeCHARTIBERRY.png
+    │   ├── berrytreeCHERIBERRY.png
+    │   ├── berrytreeCHESTOBERRY.png
+    │   ├── berrytreeCHILANBERRY.png
+    │   ├── berrytreeCHOPLEBERRY.png
+    │   ├── berrytreeCOBABERRY.png
+    │   ├── berrytreeCOLBURBERRY.png
+    │   ├── berrytreeCORNNBERRY.png
+    │   ├── berrytreeCUPUBERRY.png
+    │   ├── berrytreeCUSTAPBERRY.png
+    │   ├── berrytreedamp.png
+    │   ├── berrytreedry.png
+    │   ├── berrytreeDURINBERRY.png
+    │   ├── berrytreeENIGMABERRY.png
+    │   ├── berrytreeFIGYBERRY.png
+    │   ├── berrytreeGANLONBERRY.png
+    │   ├── berrytreeGREPABERRY.png
+    │   ├── berrytreeGUARABERRY.png
+    │   ├── berrytreeHABANBERRY.png
+    │   ├── berrytreeHAFLIBERRY.png
+    │   ├── berrytreeHONDEWBERRY.png
+    │   ├── berrytreeIAPAPABERRY.png
+    │   ├── berrytreeJABOCABERRY.png
+    │   ├── berrytreeKASIBBERRY.png
+    │   ├── berrytreeKEBIABERRY.png
+    │   ├── berrytreeKELPSYBERRY.png
+    │   ├── berrytreeLANSATBERRY.png
+    │   ├── berrytreeLEPPABERRY.png
+    │   ├── berrytreeLIECHIBERRY.png
+    │   ├── berrytreeLUMBERRY.png
+    │   ├── berrytreeMAGOBERRY.png
+    │   ├── berrytreeMAGOSTBERRY.png
+    │   ├── berrytreeMICLEBERRY.png
+    │   ├── berrytreeNANABBERRY.png
+    │   ├── berrytreeNOMELBERRY.png
+    │   ├── berrytreeOCCABERRY.png
+    │   ├── berrytreeORANBERRY.png
+    │   ├── berrytreePAMTREBERRY.png
+    │   ├── berrytreePASSHOBERRY.png
+    │   ├── berrytreePAYAPABERRY.png
+    │   ├── berrytreePECHABERRY.png
+    │   ├── berrytreePERSIMBERRY.png
+    │   ├── berrytreePETAYABERRY.png
+    │   ├── berrytreePINAPBERRY.png
+    │   ├── berrytreeplanted.png
+    │   ├── berrytreePOMEGBERRY.png
+    │   ├── berrytreeQUALOTBERRY.png
+    │   ├── berrytreeRABUTABERRY.png
+    │   ├── berrytreeRAWSTBERRY.png
+    │   ├── berrytreeRAZZBERRY.png
+    │   ├── berrytreeRINDOBERRY.png
+    │   ├── berrytreeROWAPBERRY.png
+    │   ├── berrytreeSALACBERRY.png
+    │   ├── berrytreeSHUCABERRY.png
+    │   ├── berrytreeSITRUSBERRY.png
+    │   ├── berrytreeSPELONBERRY.png
+    │   ├── berrytreeSTARFBERRY.png
+    │   ├── berrytreeTAMATOBERRY.png
+    │   ├── berrytreeTANGABERRY.png
+    │   ├── berrytreeWACANBERRY.png
+    │   ├── berrytreeWATMELBERRY.png
+    │   ├── berrytreeWEPEARBERRY.png
+    │   ├── berrytreewet.png
+    │   ├── berrytreeWIKIBERRY.png
+    │   ├── berrytreeYACHEBERRY.png
+    │   ├── boat.png
+    │   ├── boulder2.png
+    │   ├── campfireanimation.png
+    │   ├── Cave.png
+    │   ├── clockanimation.png
+    │   ├── door habidome.png
+    │   ├── door2 (4).png
+    │   ├── door2.png
+    │   ├── dp_poke_04.png
+    │   ├── dp_poke_05.png
+    │   ├── dp_poke_18.png
+    │   ├── dramsama.png
+    │   ├── dramsama2.png
+    │   ├── fishing000.png
+    │   ├── fishing001.png
+    │   ├── fk106-cut-tree.png
+    │   ├── fk107-rocksmash.png
+    │   ├── fk108-objects.png
+    │   ├── FKdoors1.png
+    │   ├── forestchars.png
+    │   ├── Gillian.png
+    │   ├── HERO-BIKE.png
+    │   ├── HERO-FISH.png
+    │   ├── HERO-RUN.png
+    │   ├── HERO-SURF.png
+    │   ├── HERO.png
+    │   ├── HERO_1.png
+    │   ├── HERO_SCUBAGEAR.png
+    │   ├── HERO_SURFBOARD.png
+    │   ├── HEROINE-BIKE.png
+    │   ├── HEROINE-FISH.png
+    │   ├── HEROINE-RUN.png
+    │   ├── HEROINE-SURF.png
+    │   ├── HEROINE.png
+    │   ├── HEROINE_1.png
+    │   ├── HEROINE_SCUBAGEAR.png
+    │   ├── HEROINE_SURFBOARD.png
+    │   ├── HeroIntro.png
+    │   ├── HGSS_000.png
+    │   ├── HGSS_001.png
+    │   ├── HGSS_002.png
+    │   ├── HGSS_003.png
+    │   ├── HGSS_004.png
+    │   ├── HGSS_005.png
+    │   ├── HGSS_006.png
+    │   ├── HGSS_007.png
+    │   ├── HGSS_008.png
+    │   ├── HGSS_009.png
+    │   ├── HGSS_010.png
+    │   ├── HGSS_011.png
+    │   ├── HGSS_012.png
+    │   ├── HGSS_013.png
+    │   ├── HGSS_014.png
+    │   ├── HGSS_015.png
+    │   ├── HGSS_016.png
+    │   ├── HGSS_017.png
+    │   ├── HGSS_018.png
+    │   ├── HGSS_019.png
+    │   ├── HGSS_019_s.png
+    │   ├── HGSS_020.png
+    │   ├── HGSS_021.png
+    │   ├── HGSS_022.png
+    │   ├── HGSS_023.png
+    │   ├── HGSS_024.png
+    │   ├── HGSS_025.png
+    │   ├── HGSS_026.png
+    │   ├── HGSS_027.png
+    │   ├── HGSS_028.png
+    │   ├── HGSS_029.png
+    │   ├── HGSS_030.png
+    │   ├── HGSS_031.png
+    │   ├── HGSS_032.png
+    │   ├── HGSS_033.png
+    │   ├── HGSS_034.png
+    │   ├── HGSS_035.png
+    │   ├── HGSS_036.png
+    │   ├── HGSS_037.png
+    │   ├── HGSS_038.png
+    │   ├── HGSS_039.png
+    │   ├── HGSS_040.png
+    │   ├── HGSS_041.png
+    │   ├── HGSS_042.png
+    │   ├── HGSS_043.png
+    │   ├── HGSS_044.png
+    │   ├── HGSS_045.png
+    │   ├── HGSS_046.png
+    │   ├── HGSS_047.png
+    │   ├── HGSS_048.png
+    │   ├── HGSS_049.png
+    │   ├── HGSS_050.png
+    │   ├── HGSS_051.png
+    │   ├── HGSS_052.png
+    │   ├── HGSS_053.png
+    │   ├── HGSS_054.png
+    │   ├── HGSS_055.png
+    │   ├── HGSS_056.png
+    │   ├── HGSS_057.png
+    │   ├── HGSS_058.png
+    │   ├── HGSS_059.png
+    │   ├── HGSS_060.png
+    │   ├── HGSS_061.png
+    │   ├── HGSS_062.png
+    │   ├── HGSS_063.png
+    │   ├── HGSS_064.png
+    │   ├── HGSS_065.png
+    │   ├── HGSS_066.png
+    │   ├── HGSS_067.png
+    │   ├── HGSS_068.png
+    │   ├── HGSS_069.png
+    │   ├── HGSS_070.png
+    │   ├── HGSS_071.png
+    │   ├── HGSS_072.png
+    │   ├── HGSS_073.png
+    │   ├── HGSS_074.png
+    │   ├── HGSS_075.png
+    │   ├── HGSS_076.png
+    │   ├── HGSS_077.png
+    │   ├── HGSS_078.png
+    │   ├── HGSS_079.png
+    │   ├── HGSS_080.png
+    │   ├── HGSS_081.png
+    │   ├── HGSS_082.png
+    │   ├── HGSS_083.png
+    │   ├── HGSS_084.png
+    │   ├── HGSS_085.png
+    │   ├── HGSS_086.png
+    │   ├── HGSS_087.png
+    │   ├── HGSS_088.png
+    │   ├── HGSS_089.png
+    │   ├── HGSS_090.png
+    │   ├── HGSS_091.png
+    │   ├── HGSS_092.png
+    │   ├── HGSS_093.png
+    │   ├── HGSS_094.png
+    │   ├── HGSS_095.png
+    │   ├── HGSS_096.png
+    │   ├── HGSS_097.png
+    │   ├── HGSS_098.png
+    │   ├── HGSS_099.png
+    │   ├── HGSS_100.png
+    │   ├── HGSS_101.png
+    │   ├── HGSS_102.png
+    │   ├── HGSS_103.png
+    │   ├── HGSS_104.png
+    │   ├── HGSS_105.png
+    │   ├── HGSS_106.png
+    │   ├── HGSS_107.png
+    │   ├── HGSS_108.png
+    │   ├── HGSS_109.png
+    │   ├── HGSS_110.png
+    │   ├── HGSS_111.png
+    │   ├── HGSS_112.png
+    │   ├── HGSS_113.png
+    │   ├── HGSS_114.png
+    │   ├── HGSS_115.png
+    │   ├── HGSS_116.png
+    │   ├── HGSS_117.png
+    │   ├── HGSS_118.png
+    │   ├── HGSS_119.png
+    │   ├── HGSS_120.png
+    │   ├── HGSS_121.png
+    │   ├── HGSS_122.png
+    │   ├── HGSS_123.png
+    │   ├── HGSS_124.png
+    │   ├── HGSS_125.png
+    │   ├── HGSS_126.png
+    │   ├── HGSS_127.png
+    │   ├── HGSS_128.png
+    │   ├── HGSS_129.png
+    │   ├── HGSS_130.png
+    │   ├── HGSS_131.png
+    │   ├── HGSS_132.png
+    │   ├── HGSS_133.png
+    │   ├── HGSS_134.png
+    │   ├── HGSS_135.png
+    │   ├── HGSS_136.png
+    │   ├── HGSS_137.png
+    │   ├── HGSS_138.png
+    │   ├── HGSS_139.png
+    │   ├── HGSS_140.png
+    │   ├── HGSS_141.png
+    │   ├── HGSS_142.png
+    │   ├── HGSS_143.png
+    │   ├── HGSS_144.png
+    │   ├── HGSS_145.png
+    │   ├── HGSS_146.png
+    │   ├── HGSS_147.png
+    │   ├── HGSS_148.png
+    │   ├── HGSS_149.png
+    │   ├── HGSS_150.png
+    │   ├── HGSS_151.png
+    │   ├── HGSS_152.png
+    │   ├── HGSS_153.png
+    │   ├── HGSS_154.png
+    │   ├── HGSS_155.png
+    │   ├── HGSS_156.png
+    │   ├── HGSS_157.png
+    │   ├── HGSS_158.png
+    │   ├── HGSS_159.png
+    │   ├── HGSS_160.png
+    │   ├── HGSS_161.png
+    │   ├── HGSS_162.png
+    │   ├── HGSS_163.png
+    │   ├── HGSS_164.png
+    │   ├── HGSS_165.png
+    │   ├── HGSS_166.png
+    │   ├── HGSS_167.png
+    │   ├── HGSS_168.png
+    │   ├── HGSS_169.png
+    │   ├── HGSS_170.png
+    │   ├── HGSS_171.png
+    │   ├── HGSS_172.png
+    │   ├── HGSS_173.png
+    │   ├── HGSS_174.png
+    │   ├── HGSS_175.png
+    │   ├── HGSS_176.png
+    │   ├── HGSS_177.png
+    │   ├── HGSS_178.png
+    │   ├── HGSS_179.png
+    │   ├── HGSS_180.png
+    │   ├── HGSS_181.png
+    │   ├── HGSS_182.png
+    │   ├── HGSS_183.png
+    │   ├── HGSS_184.png
+    │   ├── HGSS_185.png
+    │   ├── HGSS_186.png
+    │   ├── HGSS_187.png
+    │   ├── HGSS_188.png
+    │   ├── HGSS_189.png
+    │   ├── HGSS_190.png
+    │   ├── HGSS_191.png
+    │   ├── HGSS_192.png
+    │   ├── HGSS_193.png
+    │   ├── HGSS_194.png
+    │   ├── HGSS_195.png
+    │   ├── HGSS_196.png
+    │   ├── HGSS_197.png
+    │   ├── HGSS_198.png
+    │   ├── HGSS_199.png
+    │   ├── HGSS_200.png
+    │   ├── HGSS_201.png
+    │   ├── HGSS_202.png
+    │   ├── HGSS_203.png
+    │   ├── HGSS_207.png
+    │   ├── HGSS_208.png
+    │   ├── HGSS_209.png
+    │   ├── HGSS_212.png
+    │   ├── HGSS_213.png
+    │   ├── HGSS_214.png
+    │   ├── HGSS_215.png
+    │   ├── HGSS_216.png
+    │   ├── HGSS_217.png
+    │   ├── HGSS_218.png
+    │   ├── HGSS_219.png
+    │   ├── HGSS_220.png
+    │   ├── HGSS_221.png
+    │   ├── HGSS_222.png
+    │   ├── HGSS_223.png
+    │   ├── HGSS_224.png
+    │   ├── HGSS_225.png
+    │   ├── HGSS_226.png
+    │   ├── HGSS_227.png
+    │   ├── HGSS_228.png
+    │   ├── HGSS_229.png
+    │   ├── HGSS_230.png
+    │   ├── HGSS_231.png
+    │   ├── HGSS_242.png
+    │   ├── HGSS_243.png
+    │   ├── HGSS_244.png
+    │   ├── HGSS_245.png
+    │   ├── HGSS_246.png
+    │   ├── HGSS_247.png
+    │   ├── HGSS_249.png
+    │   ├── HGSS_250.png
+    │   ├── HGSS_251.png
+    │   ├── HGSS_252.png
+    │   ├── HGSS_253.png
+    │   ├── HGSS_254.png
+    │   ├── HGSS_255.png
+    │   ├── HGSS_256.png
+    │   ├── HGSS_257.png
+    │   ├── HGSS_258.png
+    │   ├── HGSS_259.png
+    │   ├── HGSS_260.png
+    │   ├── HGSS_261.png
+    │   ├── HGSS_262.png
+    │   ├── HGSS_263.png
+    │   ├── HGSS_264.png
+    │   ├── HGSS_265.png
+    │   ├── HGSS_266.png
+    │   ├── HGSS_267.png
+    │   ├── HGSS_268.png
+    │   ├── HGSS_276.png
+    │   ├── HGSS_277.png
+    │   ├── HGSS_278.png
+    │   ├── HGSS_280.png
+    │   ├── HGSS_281.png
+    │   ├── HGSS_282.png
+    │   ├── HGSS_283.png
+    │   ├── HGSS_284.png
+    │   ├── invisible.png
+    │   ├── itemball.png
+    │   ├── JV-Coral.png
+    │   ├── KELLYN.png
+    │   ├── lamp.png
+    │   ├── Lass.png
+    │   ├── light.png
+    │   ├── linkite.png
+    │   ├── maskingegg.png
+    │   ├── Miasmedic.png
+    │   ├── mimic0.png
+    │   ├── mimic1.png
+    │   ├── mimic2.png
+    │   ├── mutios_npc.png
+    │   ├── nageki.png
+    │   ├── onbike.png
+    │   ├── Park - Cubone.png
+    │   ├── phone035.PNG
+    │   ├── PIRATE GIRL.png
+    │   ├── PIRATE MAN.png
+    │   ├── pokeballs on left.png
+    │   ├── pokeballs on right.png
+    │   ├── PU-5gym.png
+    │   ├── PU-Acolyte.png
+    │   ├── PU-Actan.png
+    │   ├── PU-ActanNuclear.png
+    │   ├── PU-ActorFemale.png
+    │   ├── PU-ActorMale.png
+    │   ├── PU-Adam.png
+    │   ├── PU-Baaschaf.png
+    │   ├── PU-Barewl.png
+    │   ├── PU-Blissey.png
+    │   ├── PU-Bubbles.png
+    │   ├── PU-Bugqueen.png
+    │   ├── PU-BurolePillar.png
+    │   ├── PU-Cali.png
+    │   ├── PU-Cam.png
+    │   ├── PU-CamComa.png
+    │   ├── PU-Cassino Lights.png
+    │   ├── PU-Chyinmunk.png
+    │   ├── PU-Coral.png
+    │   ├── PU-Corsola.png
+    │   ├── PU-Cottonee.png
+    │   ├── PU-Crowd1.png
+    │   ├── PU-Crowd2.png
+    │   ├── PU-Crowd3.png
+    │   ├── PU-Crown.png
+    │   ├── PU-CURIE.png
+    │   ├── PU-CURIEend.png
+    │   ├── PU-Davern.png
+    │   ├── PU-Diver.png
+    │   ├── PU-Door_black.png
+    │   ├── PU-Door_white.png
+    │   ├── PU-doors1.png
+    │   ├── PU-doorsdew.PNG
+    │   ├── PU-doorsdew3.png
+    │   ├── PU-Dream-Misc.png
+    │   ├── PU-DreamLoomerL.png
+    │   ├── PU-DreamLoomerR.png
+    │   ├── PU-DreamLoomers.png
+    │   ├── PU-Eletux.png
+    │   ├── PU-elevator.png
+    │   ├── PU-Empirilla.png
+    │   ├── PU-EmptyHazardsuit.png
+    │   ├── PU-entrance.png
+    │   ├── PU-Feleng.png
+    │   ├── PU-Fennel-Animation.png
+    │   ├── PU-Fennel.png
+    │   ├── PU-fire gym5.png
+    │   ├── PU-Firoke.png
+    │   ├── PU-Flaaffy.png
+    │   ├── PU-Fountain.png
+    │   ├── PU-Gargryph-birbtail-red-1.png
+    │   ├── PU-Gargryph-birbtail-red-2.png
+    │   ├── PU-Gargryph-trap.png
+    │   ├── PU-Gargryph.png
+    │   ├── PU-Gargryph_agro.png
+    │   ├── PU-Gargryph_agro1.png
+    │   ├── PU-Gargryph_birbtail.png
+    │   ├── PU-Garlikid.png
+    │   ├── PU-GlassCrack.png
+    │   ├── PU-Guara Berry.png
+    │   ├── PU-Harylect.png
+    │   ├── PU-Hazardsuit.png
+    │   ├── PU-Hazma.png
+    │   ├── PU-HazmaArms-2.png
+    │   ├── PU-HazmaArms.png
+    │   ├── PU-helmetCurie.png
+    │   ├── PU-Hinata.png
+    │   ├── PU-JackSurf.png
+    │   ├── PU-JV.png
+    │   ├── PU-Kaito.png
+    │   ├── PU-lamp.png
+    │   ├── PU-Lanthan.png
+    │   ├── PU-Larkspur.png
+    │   ├── PU-Laser.png
+    │   ├── PU-levers.png
+    │   ├── PU-Lucille.png
+    │   ├── PU-Lunapup.png
+    │   ├── PU-Mankey.png
+    │   ├── PU-Mareep.png
+    │   ├── PU-Maria.png
+    │   ├── PU-Masking.png
+    │   ├── PU-MegaStone.png
+    │   ├── PU-Minyan.png
+    │   ├── PU-Modrille.png
+    │   ├── PU-Musharna.png
+    │   ├── PU-Neopunk.png
+    │   ├── PU-Nikki-Wake.png
+    │   ├── PU-Nikki.png
+    │   ├── PU-Ninja.png
+    │   ├── PU-NinjaDai.png
+    │   ├── PU-NinjaKen.png
+    │   ├── PU-NinjaLand.png
+    │   ├── PU-NinjaLand2.png
+    │   ├── PU-NinjaTarou.png
+    │   ├── PU-NucArbok.png
+    │   ├── PU-NucEkans.png
+    │   ├── PU-NucGligar.png
+    │   ├── PU-NucGyarados.png
+    │   ├── PU-NuclearBoat.png
+    │   ├── PU-Orchynx.png
+    │   ├── PU-Owten.png
+    │   ├── PU-Pajay.png
+    │   ├── PU-Panel.png
+    │   ├── PU-pillarlights.png
+    │   ├── PU-PirateMale.png
+    │   ├── PU-PirateShip.png
+    │   ├── PU-Pluto.png
+    │   ├── PU-Pluto_1.png
+    │   ├── PU-PlutoBike.png
+    │   ├── PU-PlutoFish.png
+    │   ├── PU-PlutoRun.png
+    │   ├── PU-PlutoSucbaGear.png
+    │   ├── PU-PlutoSurf.png
+    │   ├── PU-PlutoSurfboard.png
+    │   ├── PU-POKEBALL.png
+    │   ├── PU-PokeballMachine.png
+    │   ├── PU-Praseopunk.png
+    │   ├── PU-ProfHolly.png
+    │   ├── PU-RangerFemale.png
+    │   ├── PU-RangerGasmask.png
+    │   ├── PU-RangerGasmask2.png
+    │   ├── PU-RangerGasmaskF.png
+    │   ├── PU-RangerMale.png
+    │   ├── PU-RangerMale2.png
+    │   ├── PU-Raptorch.png
+    │   ├── PU-Ratsy.png
+    │   ├── PU-Rosalind.png
+    │   ├── PU-s51.png
+    │   ├── PU-s51A.png
+    │   ├── PU-Shadow.png
+    │   ├── PU-Shadow2.png
+    │   ├── PU-Sheldon.png
+    │   ├── PU-SilvaSurf.png
+    │   ├── PU-Sponaree.png
+    │   ├── PU-Staraptor.png
+    │   ├── Pu-Tancoon.png
+    │   ├── Pu-TancoonNuclear.png
+    │   ├── PU-Tanscure.png
+    │   ├── PU-TanscureNuclear.png
+    │   ├── PU-Terlard.png
+    │   ├── PU-TheoCutsceneAnimation.png
+    │   ├── PU-TheoGasmask.png
+    │   ├── PU-Tiko.png
+    │   ├── PU-TikoCutscene.png
+    │   ├── PU-Titanice.png
+    │   ├── PU-TitaniceStatic.png
+    │   ├── PU-Trawpint.png
+    │   ├── PU-TrawpintNuclear.png
+    │   ├── PU-Urayne-Alpha.png
+    │   ├── PU-Urayne.png
+    │   ├── PU-UrayneGamma.png
+    │   ├── PU-UrayneGamma2.png
+    │   ├── PU-Vaeryn.png
+    │   ├── PU-Wendy.png
+    │   ├── PU-Xenogen.png
+    │   ├── PU-Xenomite.png
+    │   ├── PU-Yatagaryu.png
+    │   ├── Red.png
+    │   ├── Rivaltheo.PNG
+    │   ├── Rivaltheo2.PNG
+    │   ├── statue.png
+    │   ├── statues pseudos.png
+    │   ├── taomasking.png
+    │   ├── taomasking2.png
+    │   ├── teeth.png
+    │   ├── teste.png
+    │   ├── train.png
+    │   ├── trainer000.PNG
+    │   ├── trainer001.png
+    │   ├── trainer002.png
+    │   ├── trainer003.png
+    │   ├── trainer004.png
+    │   ├── trainer005.png
+    │   ├── trainer006.png
+    │   ├── trainer007.png
+    │   ├── trainer008.png
+    │   ├── trainer009.png
+    │   ├── trainer010.png
+    │   ├── trainer011.png
+    │   ├── trainer012.png
+    │   ├── trainer013.png
+    │   ├── trainer014.png
+    │   ├── trainer015.png
+    │   ├── trainer016.png
+    │   ├── trainer017.png
+    │   ├── trainer018.png
+    │   ├── trainer019.png
+    │   ├── trainer020.png
+    │   ├── trainer021.png
+    │   ├── trainer022.png
+    │   ├── trainer023.png
+    │   ├── trainer024.png
+    │   ├── trainer025.png
+    │   ├── trainer026.png
+    │   ├── trainer027.png
+    │   ├── trainer028.png
+    │   ├── trainer029.png
+    │   ├── trainer030.png
+    │   ├── trainer031.png
+    │   ├── trainer032.png
+    │   ├── trainer033.png
+    │   ├── trainer034.png
+    │   ├── trainer035.png
+    │   ├── trainer036.png
+    │   ├── trainer037.png
+    │   ├── trainer038.png
+    │   ├── trainer039.png
+    │   ├── trainer040.png
+    │   ├── trainer041.png
+    │   ├── trainer042.png
+    │   ├── trainer043.png
+    │   ├── trainer044.png
+    │   ├── trainer045.png
+    │   ├── trainer046.png
+    │   ├── trainer047.png
+    │   ├── trainer048.png
+    │   ├── trainer049.png
+    │   ├── trainer050.png
+    │   ├── trainer051.png
+    │   ├── trainer052.png
+    │   ├── trainer053.png
+    │   ├── trainer054.png
+    │   ├── trainer055.png
+    │   ├── trainer056.png
+    │   ├── trainer057.png
+    │   ├── trainer058.png
+    │   ├── trainer059.png
+    │   ├── trainer060.png
+    │   ├── trainer061.png
+    │   ├── trainer062.png
+    │   ├── trainer063.png
+    │   ├── trainer064.png
+    │   ├── trainer065.png
+    │   ├── trainer066.png
+    │   ├── trainer067.png
+    │   ├── trainer068.png
+    │   ├── trainer069.png
+    │   ├── trainer070.png
+    │   ├── trainer071.png
+    │   ├── trainer072.png
+    │   ├── trainer073.png
+    │   ├── trainer074.png
+    │   ├── trainer075.png
+    │   ├── trainer076.png
+    │   ├── trainer077.png
+    │   ├── trainer078.png
+    │   ├── trainer079.png
+    │   ├── trainer080.png
+    │   ├── trainer081.png
+    │   ├── trainer082.png
+    │   ├── trainer083.png
+    │   ├── trainer084.png
+    │   ├── trainer085.png
+    │   ├── trainer086.png
+    │   ├── trainer087.png
+    │   ├── trainer088.png
+    │   ├── trainer089.png
+    │   ├── trainer090.png
+    │   ├── trainer091.png
+    │   ├── trainer092.png
+    │   ├── trainer093.png
+    │   ├── trainer094.png
+    │   ├── trainer095.png
+    │   ├── trainer096.png
+    │   ├── trainer097.png
+    │   ├── trainer098.png
+    │   ├── trainer099.png
+    │   ├── trainer100.png
+    │   ├── trainer101.png
+    │   ├── trainer102.png
+    │   ├── trainer103.png
+    │   ├── trainer104.png
+    │   ├── trainer105.png
+    │   ├── trainer106.png
+    │   ├── trainer107.png
+    │   ├── trainer108.png
+    │   ├── trainer109.png
+    │   ├── trainer110.png
+    │   ├── trainer112.png
+    │   ├── trainer113.png
+    │   ├── trainer114.png
+    │   ├── trainer115.png
+    │   ├── trainer116.png
+    │   ├── trainer117.png
+    │   ├── trainer118.png
+    │   ├── trainer119.png
+    │   ├── trainer120.png
+    │   ├── trainer121.png
+    │   ├── trainer122.png
+    │   ├── trainer123.png
+    │   ├── trainer124.png
+    │   ├── trainer125.png
+    │   ├── trainer126.png
+    │   ├── trainer127.png
+    │   ├── trainer128.png
+    │   ├── trainer129.png
+    │   ├── trback000.png
+    │   ├── trback000_1.png
+    │   ├── trback001.png
+    │   ├── trback001_1.png
+    │   ├── trback009.png
+    │   ├── trback009_1.png
+    │   ├── trback086.png
+    │   ├── trback110.png
+    │   ├── trback111.png
+    │   ├── trback121.png
+    │   ├── trchar002.png
+    │   ├── trchar003.png
+    │   ├── trchar004.png
+    │   ├── trchar006.png
+    │   ├── trchar011.png
+    │   ├── trchar012.png
+    │   ├── trchar028.png
+    │   ├── trchar041.png
+    │   ├── trchar042.png
+    │   ├── trchar095.png
+    │   ├── Trem.png
+    │   ├── trfront.png
+    │   ├── ZP- Professor.PNG
+    │   └── ZP- Professor2.PNG
+    ├── Fogs/  [26 .png]
+    │   ├── 001-Fog01.png
+    │   ├── 002-Clouds01.png
+    │   ├── 003-Shade01.png
+    │   ├── 004-Shade02.png
+    │   ├── 005-Sandstorm01.png
+    │   ├── 006-Sandstorm02.png
+    │   ├── 007-Water01.png
+    │   ├── 008-Water02.png
+    │   ├── 009-Water03.png
+    │   ├── 010-Water04.png
+    │   ├── dreambg7.png
+    │   ├── Elevator.png
+    │   ├── FinalBattle.png
+    │   ├── lanthanite.png
+    │   ├── lavabg.png
+    │   ├── nuclearbg.png
+    │   ├── PU-BuroleGym.png
+    │   ├── PU-CometCave.png
+    │   ├── PU-flashback.png
+    │   ├── PU-NuclearPlant3.png
+    │   ├── PU-NuclearPlant3_2.png
+    │   ├── PU-PassageCave1.png
+    │   ├── PU-PassageCave2.png
+    │   ├── PU-Volcano1.png
+    │   ├── PU-Volcano2.png
+    │   └── Soft Sunshine.png
+    ├── Gameovers/  [1 .png]
+    │   └── GameOver.png
+    ├── Icons/  [1441 .png]
+    │   ├── Arrow.png
+    │   ├── Arrow2.png
+    │   ├── Arrow3.png
+    │   ├── Arrow4.png
+    │   ├── bagPocket1.png
+    │   ├── bagPocket2.png
+    │   ├── bagPocket3.png
+    │   ├── bagPocket4.png
+    │   ├── bagPocket5.png
+    │   ├── bagPocket6.png
+    │   ├── bagPocket7.png
+    │   ├── bagPocket8.png
+    │   ├── Black.png
+    │   ├── Flowers.png
+    │   ├── icon000 - Cвpia.png
+    │   ├── icon000.png
+    │   ├── icon001.png
+    │   ├── icon001egg.png
+    │   ├── icon001s.png
+    │   ├── icon002.png
+    │   ├── icon002_1.png
+    │   ├── icon002s.png
+    │   ├── icon002s_1.png
+    │   ├── icon003.png
+    │   ├── icon003egg.png
+    │   ├── icon003s.png
+    │   ├── icon004.png
+    │   ├── icon004_1.png
+    │   ├── icon004s.png
+    │   ├── icon004s_1.png
+    │   ├── icon005.png
+    │   ├── icon005egg.png
+    │   ├── icon005s.png
+    │   ├── icon006.png
+    │   ├── icon006_1.png
+    │   ├── icon006s.png
+    │   ├── icon006s_1.png
+    │   ├── icon007.png
+    │   ├── icon007_1.png
+    │   ├── icon007egg.png
+    │   ├── icon007s.png
+    │   ├── icon007s_1.png
+    │   ├── icon008.png
+    │   ├── icon008_1.png
+    │   ├── icon008s.png
+    │   ├── icon008s_1.png
+    │   ├── icon009.png
+    │   ├── icon009egg.png
+    │   ├── icon009s.png
+    │   ├── icon010.png
+    │   ├── icon010s.png
+    │   ├── icon011.png
+    │   ├── icon011s.png
+    │   ├── icon012.png
+    │   ├── icon012egg.png
+    │   ├── icon012s.png
+    │   ├── icon013.png
+    │   ├── icon013s.png
+    │   ├── icon014.png
+    │   ├── icon014s.png
+    │   ├── icon015.png
+    │   ├── icon015egg.png
+    │   ├── icon015s.png
+    │   ├── icon016.png
+    │   ├── icon016s.png
+    │   ├── icon017.png
+    │   ├── icon017s.png
+    │   ├── icon018.png
+    │   ├── icon018_3.png
+    │   ├── icon018egg.png
+    │   ├── icon018s.png
+    │   ├── icon018s_3.png
+    │   ├── icon019.png
+    │   ├── icon019_3.png
+    │   ├── icon019s.png
+    │   ├── icon019s_3.png
+    │   ├── icon020.png
+    │   ├── icon020_1.png
+    │   ├── icon020egg.png
+    │   ├── icon020s.png
+    │   ├── icon020s_1.png
+    │   ├── icon021.png
+    │   ├── icon021_1.png
+    │   ├── icon021s.png
+    │   ├── icon021s_1.png
+    │   ├── icon022.png
+    │   ├── icon022egg.png
+    │   ├── icon022s.png
+    │   ├── icon023.png
+    │   ├── icon023s.png
+    │   ├── icon024.png
+    │   ├── icon024egg.png
+    │   ├── icon024s.png
+    │   ├── icon025.png
+    │   ├── icon025s.png
+    │   ├── icon026.png
+    │   ├── icon026s.png
+    │   ├── icon027.png
+    │   ├── icon027_2.png
+    │   ├── icon027egg.png
+    │   ├── icon027f.png
+    │   ├── icon027fs.png
+    │   ├── icon027s.png
+    │   ├── icon027s_2.png
+    │   ├── icon028.png
+    │   ├── icon028_1.png
+    │   ├── icon028_2.png
+    │   ├── icon028_3.png
+    │   ├── icon028f.png
+    │   ├── icon028fs.png
+    │   ├── icon028s.png
+    │   ├── icon028s_1.png
+    │   ├── icon028s_2.png
+    │   ├── icon028s_3.png
+    │   ├── icon029.png
+    │   ├── icon029_3.png
+    │   ├── icon029egg.png
+    │   ├── icon029s.png
+    │   ├── icon029s_3.png
+    │   ├── icon030.png
+    │   ├── icon030_3.png
+    │   ├── icon030f_3.png
+    │   ├── icon030fs_3.png
+    │   ├── icon030s.png
+    │   ├── icon030s_3.png
+    │   ├── icon031.png
+    │   ├── icon031_3.png
+    │   ├── icon031f.png
+    │   ├── icon031f_3.png
+    │   ├── icon031fs.png
+    │   ├── icon031fs_3.png
+    │   ├── icon031s.png
+    │   ├── icon031s_3.png
+    │   ├── icon032.png
+    │   ├── icon032egg.png
+    │   ├── icon032s.png
+    │   ├── icon033.png
+    │   ├── icon033s.png
+    │   ├── icon034.png
+    │   ├── icon034s.png
+    │   ├── icon035.png
+    │   ├── icon035_1.png
+    │   ├── icon035_3.png
+    │   ├── icon035egg.png
+    │   ├── icon035s.png
+    │   ├── icon035s_1.png
+    │   ├── icon035s_3.png
+    │   ├── icon036.png
+    │   ├── icon036_1.png
+    │   ├── icon036_3.png
+    │   ├── icon036s.png
+    │   ├── icon036s_1.png
+    │   ├── icon036s_3.png
+    │   ├── icon037.png
+    │   ├── icon037_3.png
+    │   ├── icon037egg.png
+    │   ├── icon037s.png
+    │   ├── icon037s_3.png
+    │   ├── icon038.png
+    │   ├── icon038_3.png
+    │   ├── icon038s.png
+    │   ├── icon038s_3.png
+    │   ├── icon039.png
+    │   ├── icon039_3.png
+    │   ├── icon039s.png
+    │   ├── icon039s_3.png
+    │   ├── icon040.png
+    │   ├── icon040egg.png
+    │   ├── icon040s.png
+    │   ├── icon041.png
+    │   ├── icon041s.png
+    │   ├── icon042.png
+    │   ├── icon042egg.png
+    │   ├── icon042s.png
+    │   ├── icon043.png
+    │   ├── icon043s.png
+    │   ├── icon044.png
+    │   ├── icon044_2.png
+    │   ├── icon044egg.png
+    │   ├── icon044s.png
+    │   ├── icon044s_2.png
+    │   ├── icon045.png
+    │   ├── icon045_1.png
+    │   ├── icon045_2.png
+    │   ├── icon045_3.png
+    │   ├── icon045s.png
+    │   ├── icon045s_1.png
+    │   ├── icon045s_2.png
+    │   ├── icon045s_3.png
+    │   ├── icon046.png
+    │   ├── icon046_1.png
+    │   ├── icon046_3.png
+    │   ├── icon046_6.png
+    │   ├── icon046egg.png
+    │   ├── icon046s.png
+    │   ├── icon046s_1.png
+    │   ├── icon046s_3.png
+    │   ├── icon046s_6.png
+    │   ├── icon047.png
+    │   ├── icon047_1.png
+    │   ├── icon047_3.png
+    │   ├── icon047_6.png
+    │   ├── icon047s.png
+    │   ├── icon047s_1.png
+    │   ├── icon047s_3.png
+    │   ├── icon047s_6.png
+    │   ├── icon048.png
+    │   ├── icon048egg.png
+    │   ├── icon048s.png
+    │   ├── icon049.png
+    │   ├── icon049s.png
+    │   ├── icon050.png
+    │   ├── icon050_1.png
+    │   ├── icon050egg.png
+    │   ├── icon050s.png
+    │   ├── icon050s_1.png
+    │   ├── icon051.png
+    │   ├── icon051_1.png
+    │   ├── icon051s.png
+    │   ├── icon051s_1.png
+    │   ├── icon052.png
+    │   ├── icon052_1.png
+    │   ├── icon052s.png
+    │   ├── icon052s_1.png
+    │   ├── icon053.png
+    │   ├── icon053_1.png
+    │   ├── icon053egg.png
+    │   ├── icon053s.png
+    │   ├── icon053s_1.png
+    │   ├── icon054.png
+    │   ├── icon054_3.png
+    │   ├── icon054egg.png
+    │   ├── icon054s.png
+    │   ├── icon054s_3.png
+    │   ├── icon055.png
+    │   ├── icon055_3.png
+    │   ├── icon055s.png
+    │   ├── icon055s_3.png
+    │   ├── icon056.png
+    │   ├── icon056_3.png
+    │   ├── icon056s.png
+    │   ├── icon056s_3.png
+    │   ├── icon057.png
+    │   ├── icon057egg.png
+    │   ├── icon057s.png
+    │   ├── icon058.png
+    │   ├── icon058s.png
+    │   ├── icon058s_alt.png
+    │   ├── icon059.png
+    │   ├── icon059_1.png
+    │   ├── icon059s.png
+    │   ├── icon059s_1.png
+    │   ├── icon060.png
+    │   ├── icon060_2.png
+    │   ├── icon060_4.png
+    │   ├── icon060egg.png
+    │   ├── icon060s.png
+    │   ├── icon060s_2.png
+    │   ├── icon060s_4.png
+    │   ├── icon061.png
+    │   ├── icon061_2.png
+    │   ├── icon061_4.png
+    │   ├── icon061s.png
+    │   ├── icon061s_2.png
+    │   ├── icon061s_4.png
+    │   ├── icon062.png
+    │   ├── icon062_1.png
+    │   ├── icon062_2.png
+    │   ├── icon062_3.png
+    │   ├── icon062_4.png
+    │   ├── icon062_5.png
+    │   ├── icon062s.png
+    │   ├── icon062s_1.png
+    │   ├── icon062s_2.png
+    │   ├── icon062s_3.png
+    │   ├── icon062s_4.png
+    │   ├── icon062s_5.png
+    │   ├── icon063.png
+    │   ├── icon063egg.png
+    │   ├── icon063s.png
+    │   ├── icon064.png
+    │   ├── icon064s.png
+    │   ├── icon065.png
+    │   ├── icon065_1.png
+    │   ├── icon065egg.png
+    │   ├── icon065s.png
+    │   ├── icon065s_1.png
+    │   ├── icon066.png
+    │   ├── icon066_1.png
+    │   ├── icon066s.png
+    │   ├── icon066s_1.png
+    │   ├── icon067.png
+    │   ├── icon067_3.png
+    │   ├── icon067egg.png
+    │   ├── icon067s.png
+    │   ├── icon068.png
+    │   ├── icon068_3.png
+    │   ├── icon068s.png
+    │   ├── icon069.png
+    │   ├── icon069_3.png
+    │   ├── icon069egg.png
+    │   ├── icon069s.png
+    │   ├── icon070.png
+    │   ├── icon070_3.png
+    │   ├── icon070s.png
+    │   ├── icon071.png
+    │   ├── icon071egg.png
+    │   ├── icon071s.png
+    │   ├── icon072.png
+    │   ├── icon072s.png
+    │   ├── icon073.png
+    │   ├── icon073egg.png
+    │   ├── icon073s.png
+    │   ├── icon074.png
+    │   ├── icon074_1.png
+    │   ├── icon074s.png
+    │   ├── icon074s_1.png
+    │   ├── icon075.png
+    │   ├── icon075_1.png
+    │   ├── icon075egg.png
+    │   ├── icon075s.png
+    │   ├── icon075s_1.png
+    │   ├── icon076.png
+    │   ├── icon076_1.png
+    │   ├── icon076s.png
+    │   ├── icon076s_1.png
+    │   ├── icon077.png
+    │   ├── icon077_1.png
+    │   ├── icon077_4.png
+    │   ├── icon077_5.png
+    │   ├── icon077egg.png
+    │   ├── icon077s.png
+    │   ├── icon077s_1.png
+    │   ├── icon077s_4.png
+    │   ├── icon077s_5.png
+    │   ├── icon078.png
+    │   ├── icon078_3.png
+    │   ├── icon078egg.png
+    │   ├── icon078s.png
+    │   ├── icon079.png
+    │   ├── icon079_3.png
+    │   ├── icon079s.png
+    │   ├── icon080.png
+    │   ├── icon080_3.png
+    │   ├── icon080s.png
+    │   ├── icon081.png
+    │   ├── icon081_1.png
+    │   ├── icon081_3.png
+    │   ├── icon081egg.png
+    │   ├── icon081s.png
+    │   ├── icon081s_1.png
+    │   ├── icon081s_3.png
+    │   ├── icon082.png
+    │   ├── icon082_1.png
+    │   ├── icon082_3.png
+    │   ├── icon082s.png
+    │   ├── icon082s_1.png
+    │   ├── icon082s_3.png
+    │   ├── icon083.png
+    │   ├── icon083_1.png
+    │   ├── icon083_3.png
+    │   ├── icon083egg.png
+    │   ├── icon083s.png
+    │   ├── icon083s_1.png
+    │   ├── icon083s_3.png
+    │   ├── icon084.png
+    │   ├── icon084_1.png
+    │   ├── icon084_3.png
+    │   ├── icon084s.png
+    │   ├── icon084s_1.png
+    │   ├── icon084s_3.png
+    │   ├── icon085.png
+    │   ├── icon085_3.png
+    │   ├── icon085egg.png
+    │   ├── icon085s.png
+    │   ├── icon085s_3.png
+    │   ├── icon086.png
+    │   ├── icon086_3.png
+    │   ├── icon086s.png
+    │   ├── icon086s_3.png
+    │   ├── icon087.png
+    │   ├── icon087_3.png
+    │   ├── icon087s.png
+    │   ├── icon087s_3.png
+    │   ├── icon088.png
+    │   ├── icon088_1.png
+    │   ├── icon088_3.png
+    │   ├── icon088egg.png
+    │   ├── icon088s.png
+    │   ├── icon088s_1.png
+    │   ├── icon088s_3.png
+    │   ├── icon089.png
+    │   ├── icon089_1.png
+    │   ├── icon089_3.png
+    │   ├── icon089s.png
+    │   ├── icon089s_1.png
+    │   ├── icon089s_3.png
+    │   ├── icon090.png
+    │   ├── icon090egg.png
+    │   ├── icon090s.png
+    │   ├── icon091.png
+    │   ├── icon091_1.png
+    │   ├── icon091s.png
+    │   ├── icon091s_1.png
+    │   ├── icon092.png
+    │   ├── icon092egg.png
+    │   ├── icon092s.png
+    │   ├── icon093.png
+    │   ├── icon093s.png
+    │   ├── icon094.png
+    │   ├── icon094_1.png
+    │   ├── icon094egg.png
+    │   ├── icon094s.png
+    │   ├── icon094s_1.png
+    │   ├── icon095.png
+    │   ├── icon095_3.png
+    │   ├── icon095egg.png
+    │   ├── icon095s.png
+    │   ├── icon095s_3.png
+    │   ├── icon096.png
+    │   ├── icon096_3.png
+    │   ├── icon096f.png
+    │   ├── icon096fs.png
+    │   ├── icon096s.png
+    │   ├── icon096s_3.png
+    │   ├── icon097.png
+    │   ├── icon097_4.png
+    │   ├── icon097egg.png
+    │   ├── icon097s.png
+    │   ├── icon097s_4.png
+    │   ├── icon098.png
+    │   ├── icon098_1.png
+    │   ├── icon098_4.png
+    │   ├── icon098_5.png
+    │   ├── icon098s.png
+    │   ├── icon098s_1.png
+    │   ├── icon098s_4.png
+    │   ├── icon098s_5.png
+    │   ├── icon099.png
+    │   ├── icon099_1.png
+    │   ├── icon099_2.png
+    │   ├── icon099_3.png
+    │   ├── icon099egg.png
+    │   ├── icon099f_2.png
+    │   ├── icon099f_3.png
+    │   ├── icon099fs_2.png
+    │   ├── icon099fs_3.png
+    │   ├── icon099s.png
+    │   ├── icon099s_1.png
+    │   ├── icon099s_2.png
+    │   ├── icon099s_3.png
+    │   ├── icon100.png
+    │   ├── icon100_1.png
+    │   ├── icon100_3.png
+    │   ├── icon100f_3.png
+    │   ├── icon100fs_3.png
+    │   ├── icon100s.png
+    │   ├── icon100s_1.png
+    │   ├── icon100s_3.png
+    │   ├── icon101.png
+    │   ├── icon101_4.png
+    │   ├── icon101egg.png
+    │   ├── icon101s.png
+    │   ├── icon101s_4.png
+    │   ├── icon102.png
+    │   ├── icon102_1.png
+    │   ├── icon102_4.png
+    │   ├── icon102_5.png
+    │   ├── icon102s.png
+    │   ├── icon102s_1.png
+    │   ├── icon102s_4.png
+    │   ├── icon102s_5.png
+    │   ├── icon103.png
+    │   ├── icon103_3.png
+    │   ├── icon103egg.png
+    │   ├── icon103s.png
+    │   ├── icon103s_3.png
+    │   ├── icon104.png
+    │   ├── icon104_3.png
+    │   ├── icon104f.png
+    │   ├── icon104f_3.png
+    │   ├── icon104fs.png
+    │   ├── icon104fs_3.png
+    │   ├── icon104s.png
+    │   ├── icon104s_3.png
+    │   ├── icon105.png
+    │   ├── icon105_3.png
+    │   ├── icon105egg.png
+    │   ├── icon105s.png
+    │   ├── icon105s_3.png
+    │   ├── icon106.png
+    │   ├── icon106_3.png
+    │   ├── icon106s.png
+    │   ├── icon106s_3.png
+    │   ├── icon107.png
+    │   ├── icon107egg.png
+    │   ├── icon107s.png
+    │   ├── icon108.png
+    │   ├── icon108s.png
+    │   ├── icon109.png
+    │   ├── icon109_3.png
+    │   ├── icon109egg.png
+    │   ├── icon109s.png
+    │   ├── icon109s_3.png
+    │   ├── icon110.png
+    │   ├── icon110_3.png
+    │   ├── icon110s.png
+    │   ├── icon110s_3.png
+    │   ├── icon111.png
+    │   ├── icon111_3.png
+    │   ├── icon111s.png
+    │   ├── icon111s_3.png
+    │   ├── icon112.png
+    │   ├── icon112_3.png
+    │   ├── icon112egg.png
+    │   ├── icon112s.png
+    │   ├── icon112s_3.png
+    │   ├── icon113.png
+    │   ├── icon113egg.png
+    │   ├── icon113s.png
+    │   ├── icon114.png
+    │   ├── icon114s.png
+    │   ├── icon115.png
+    │   ├── icon115egg.png
+    │   ├── icon115s.png
+    │   ├── icon116.png
+    │   ├── icon116s.png
+    │   ├── icon117.png
+    │   ├── icon117_3.png
+    │   ├── icon117egg.png
+    │   ├── icon117s.png
+    │   ├── icon117s_3.png
+    │   ├── icon118.png
+    │   ├── icon118egg.png
+    │   ├── icon118s.png
+    │   ├── icon119.png
+    │   ├── icon119s.png
+    │   ├── icon120.png
+    │   ├── icon120s.png
+    │   ├── icon121.png
+    │   ├── icon121_4.png
+    │   ├── icon121egg.png
+    │   ├── icon121s.png
+    │   ├── icon121s_4.png
+    │   ├── icon122.png
+    │   ├── icon122_1.png
+    │   ├── icon122_4.png
+    │   ├── icon122_5.png
+    │   ├── icon122s.png
+    │   ├── icon122s_1.png
+    │   ├── icon122s_4.png
+    │   ├── icon122s_5.png
+    │   ├── icon123.png
+    │   ├── icon123_3.png
+    │   ├── icon123egg.png
+    │   ├── icon123s.png
+    │   ├── icon123s_3.png
+    │   ├── icon123s_alt.png
+    │   ├── icon124.png
+    │   ├── icon124_3.png
+    │   ├── icon124s.png
+    │   ├── icon124s_3.png
+    │   ├── icon124s_alt.png
+    │   ├── icon125.png
+    │   ├── icon125_3.png
+    │   ├── icon125s.png
+    │   ├── icon125s_3.png
+    │   ├── icon126.png
+    │   ├── icon126_3.png
+    │   ├── icon126egg.png
+    │   ├── icon126s.png
+    │   ├── icon127.png
+    │   ├── icon127_3.png
+    │   ├── icon127s.png
+    │   ├── icon128.png
+    │   ├── icon128s.png
+    │   ├── icon129.png
+    │   ├── icon129egg.png
+    │   ├── icon129s.png
+    │   ├── icon130.png
+    │   ├── icon130s.png
+    │   ├── icon131.png
+    │   ├── icon131s.png
+    │   ├── icon132.png
+    │   ├── icon132s.png
+    │   ├── icon133.png
+    │   ├── icon133s.png
+    │   ├── icon134.png
+    │   ├── icon134s.png
+    │   ├── icon135.png
+    │   ├── icon135s.png
+    │   ├── icon136.png
+    │   ├── icon136s.png
+    │   ├── icon137.png
+    │   ├── icon137s.png
+    │   ├── icon137s_alt.png
+    │   ├── icon138.png
+    │   ├── icon138s.png
+    │   ├── icon139.png
+    │   ├── icon139_3.png
+    │   ├── icon139egg.png
+    │   ├── icon139s.png
+    │   ├── icon139s_3.png
+    │   ├── icon140.png
+    │   ├── icon140_3.png
+    │   ├── icon140s.png
+    │   ├── icon140s_3.png
+    │   ├── icon141.png
+    │   ├── icon141_3.png
+    │   ├── icon141egg.png
+    │   ├── icon141s.png
+    │   ├── icon141s_3.png
+    │   ├── icon142.png
+    │   ├── icon142_2.png
+    │   ├── icon142_4.png
+    │   ├── icon142egg.png
+    │   ├── icon142s.png
+    │   ├── icon142s_2.png
+    │   ├── icon142s_4.png
+    │   ├── icon143.png
+    │   ├── icon143_1.png
+    │   ├── icon143_2.png
+    │   ├── icon143_3.png
+    │   ├── icon143_4.png
+    │   ├── icon143_5.png
+    │   ├── icon143_6.png
+    │   ├── icon143s.png
+    │   ├── icon143s_1.png
+    │   ├── icon143s_2.png
+    │   ├── icon143s_3.png
+    │   ├── icon143s_4.png
+    │   ├── icon143s_5.png
+    │   ├── icon144.png
+    │   ├── icon144_3.png
+    │   ├── icon144egg.png
+    │   ├── icon144s.png
+    │   ├── icon144s_3.png
+    │   ├── icon145.png
+    │   ├── icon145_1.png
+    │   ├── icon145_3.png
+    │   ├── icon145egg.png
+    │   ├── icon145s.png
+    │   ├── icon145s_1.png
+    │   ├── icon145s_3.png
+    │   ├── icon146.png
+    │   ├── icon146_1.png
+    │   ├── icon146_3.png
+    │   ├── icon146s.png
+    │   ├── icon146s_1.png
+    │   ├── icon146s_3.png
+    │   ├── icon147.png
+    │   ├── icon147_3.png
+    │   ├── icon147egg.png
+    │   ├── icon147s.png
+    │   ├── icon147s_3.png
+    │   ├── icon148.png
+    │   ├── icon148_3.png
+    │   ├── icon148s.png
+    │   ├── icon148s_3.png
+    │   ├── icon149.png
+    │   ├── icon149_3.png
+    │   ├── icon149egg.png
+    │   ├── icon149s.png
+    │   ├── icon150.png
+    │   ├── icon150_3.png
+    │   ├── icon150s.png
+    │   ├── icon151.png
+    │   ├── icon151_3.png
+    │   ├── icon151s.png
+    │   ├── icon152.png
+    │   ├── icon152egg.png
+    │   ├── icon152s.png
+    │   ├── icon153.png
+    │   ├── icon153s.png
+    │   ├── icon154.png
+    │   ├── icon154s.png
+    │   ├── icon155.png
+    │   ├── icon155_3.png
+    │   ├── icon155egg.png
+    │   ├── icon155s.png
+    │   ├── icon155s_3.png
+    │   ├── icon156.png
+    │   ├── icon156_3.png
+    │   ├── icon156f.png
+    │   ├── icon156f_3.png
+    │   ├── icon156fs.png
+    │   ├── icon156fs_3.png
+    │   ├── icon156s.png
+    │   ├── icon156s_3.png
+    │   ├── icon157.png
+    │   ├── icon157egg.png
+    │   ├── icon157s.png
+    │   ├── icon158.png
+    │   ├── icon158s.png
+    │   ├── icon159.png
+    │   ├── icon159_3.png
+    │   ├── icon159egg.png
+    │   ├── icon159s.png
+    │   ├── icon159s_3.png
+    │   ├── icon160.png
+    │   ├── icon160egg.png
+    │   ├── icon160s.png
+    │   ├── icon161.png
+    │   ├── icon161s.png
+    │   ├── icon162.png
+    │   ├── icon162s.png
+    │   ├── icon163.png
+    │   ├── icon163egg.png
+    │   ├── icon163s.png
+    │   ├── icon164.png
+    │   ├── icon164_3.png
+    │   ├── icon164egg.png
+    │   ├── icon164s.png
+    │   ├── icon164s_3.png
+    │   ├── icon165.png
+    │   ├── icon165_3.png
+    │   ├── icon165s.png
+    │   ├── icon165s_3.png
+    │   ├── icon166.png
+    │   ├── icon166_1.png
+    │   ├── icon166_3.png
+    │   ├── icon166egg.png
+    │   ├── icon166s.png
+    │   ├── icon166s_1.png
+    │   ├── icon166s_3.png
+    │   ├── icon167.png
+    │   ├── icon167_1.png
+    │   ├── icon167_3.png
+    │   ├── icon167s.png
+    │   ├── icon167s_1.png
+    │   ├── icon167s_3.png
+    │   ├── icon168.png
+    │   ├── icon168egg.png
+    │   ├── icon168s.png
+    │   ├── icon169.png
+    │   ├── icon169s.png
+    │   ├── icon170.png
+    │   ├── icon170s.png
+    │   ├── icon171.png
+    │   ├── icon171_3.png
+    │   ├── icon171egg.png
+    │   ├── icon171s.png
+    │   ├── icon171s_3.png
+    │   ├── icon172.png
+    │   ├── icon172egg.png
+    │   ├── icon172s.png
+    │   ├── icon173.png
+    │   ├── icon173egg.png
+    │   ├── icon173s.png
+    │   ├── icon174.png
+    │   ├── icon174s.png
+    │   ├── icon175.png
+    │   ├── icon175_1.png
+    │   ├── icon175s.png
+    │   ├── icon175s_1.png
+    │   ├── icon176.png
+    │   ├── icon176_3.png
+    │   ├── icon176egg.png
+    │   ├── icon176s.png
+    │   ├── icon177.png
+    │   ├── icon177_3.png
+    │   ├── icon177s.png
+    │   ├── icon178.png
+    │   ├── icon178_3.png
+    │   ├── icon178s.png
+    │   ├── icon179.png
+    │   ├── icon179_3.png
+    │   ├── icon179egg.png
+    │   ├── icon179s.png
+    │   ├── icon179s_3.png
+    │   ├── icon180.png
+    │   ├── icon180_3.png
+    │   ├── icon180egg.png
+    │   ├── icon180s.png
+    │   ├── icon180s_3.png
+    │   ├── icon181.png
+    │   ├── icon181_3.png
+    │   ├── icon181egg.png
+    │   ├── icon181s.png
+    │   ├── icon181s_3.png
+    │   ├── icon182.png
+    │   ├── icon182_3.png
+    │   ├── icon182s.png
+    │   ├── icon182s_3.png
+    │   ├── icon183.png
+    │   ├── icon183_3.png
+    │   ├── icon183s.png
+    │   ├── icon183s_3.png
+    │   ├── icon184.png
+    │   ├── icon184_3.png
+    │   ├── icon184egg.png
+    │   ├── icon184f_3.png
+    │   ├── icon184s.png
+    │   ├── icon184s_3.png
+    │   ├── icon184sf_3.png
+    │   ├── icon185.png
+    │   ├── icon185_3.png
+    │   ├── icon185f.png
+    │   ├── icon185f_3.png
+    │   ├── icon185fs.png
+    │   ├── icon185fs_3.png
+    │   ├── icon185s.png
+    │   ├── icon185s_3.png
+    │   ├── icon186.png
+    │   ├── icon186_3.png
+    │   ├── icon186f.png
+    │   ├── icon186f_3.png
+    │   ├── icon186fs.png
+    │   ├── icon186fs_3.png
+    │   ├── icon186s.png
+    │   ├── icon186s_3.png
+    │   ├── icon187.png
+    │   ├── icon187_3.png
+    │   ├── icon187egg.png
+    │   ├── icon187s.png
+    │   ├── icon187s_3.png
+    │   ├── icon188.png
+    │   ├── icon188_3.png
+    │   ├── icon188s.png
+    │   ├── icon188s_3.png
+    │   ├── icon189.png
+    │   ├── icon189_3.png
+    │   ├── icon189s.png
+    │   ├── icon189s_3.png
+    │   ├── icon190.png
+    │   ├── icon190s.png
+    │   ├── icon191.png
+    │   ├── icon191s.png
+    │   ├── icon195.png
+    │   ├── icon195s.png
+    │   ├── icon196.png
+    │   ├── icon196_1.png
+    │   ├── icon196s.png
+    │   ├── icon196s_1.png
+    │   ├── icon197.png
+    │   ├── icon197_1.png
+    │   ├── icon197s.png
+    │   ├── icon197s_1.png
+    │   ├── icon201.png
+    │   ├── icon201s.png
+    │   ├── iconEgg.png
+    │   ├── item000.png
+    │   ├── item001.png
+    │   ├── item002.png
+    │   ├── item003.png
+    │   ├── item004.png
+    │   ├── item005.png
+    │   ├── item006.png
+    │   ├── item007.png
+    │   ├── item008.png
+    │   ├── item009.png
+    │   ├── item010.png
+    │   ├── item011.png
+    │   ├── item012.png
+    │   ├── item013.png
+    │   ├── item014.png
+    │   ├── item015.png
+    │   ├── item016.png
+    │   ├── item017.png
+    │   ├── item018.png
+    │   ├── item019.png
+    │   ├── item020.png
+    │   ├── item021.png
+    │   ├── item022.png
+    │   ├── item023.png
+    │   ├── item024.png
+    │   ├── item025.png
+    │   ├── item026.png
+    │   ├── item027.png
+    │   ├── item028.png
+    │   ├── item029.png
+    │   ├── item030.png
+    │   ├── item031.png
+    │   ├── item032.png
+    │   ├── item033.png
+    │   ├── item034.png
+    │   ├── item035.png
+    │   ├── item036.png
+    │   ├── item037.png
+    │   ├── item038.png
+    │   ├── item039.png
+    │   ├── item040.png
+    │   ├── item041.png
+    │   ├── item042.png
+    │   ├── item043.png
+    │   ├── item044.png
+    │   ├── item045.png
+    │   ├── item046.png
+    │   ├── item047.png
+    │   ├── item048.png
+    │   ├── item049.png
+    │   ├── item050.png
+    │   ├── item051.png
+    │   ├── item052.png
+    │   ├── item053.png
+    │   ├── item054.png
+    │   ├── item055.png
+    │   ├── item056.png
+    │   ├── item057.png
+    │   ├── item058.png
+    │   ├── item059.png
+    │   ├── item060.png
+    │   ├── item061.png
+    │   ├── item062.png
+    │   ├── item063.png
+    │   ├── item064.png
+    │   ├── item065.png
+    │   ├── item066.png
+    │   ├── item067.png
+    │   ├── item068.png
+    │   ├── item069.png
+    │   ├── item070.png
+    │   ├── item071.png
+    │   ├── item072.png
+    │   ├── item073.png
+    │   ├── item074.png
+    │   ├── item075.png
+    │   ├── item076.png
+    │   ├── item077.png
+    │   ├── item078.png
+    │   ├── item079.png
+    │   ├── item080.png
+    │   ├── item081.png
+    │   ├── item082.png
+    │   ├── item083.png
+    │   ├── item084.png
+    │   ├── item085.png
+    │   ├── item086.png
+    │   ├── item087.png
+    │   ├── item088.png
+    │   ├── item089.png
+    │   ├── item090.png
+    │   ├── item091.png
+    │   ├── item092.png
+    │   ├── item093.png
+    │   ├── item094.png
+    │   ├── item095.png
+    │   ├── item096.png
+    │   ├── item097.png
+    │   ├── item098.png
+    │   ├── item099.png
+    │   ├── item100.png
+    │   ├── item101.png
+    │   ├── item102.png
+    │   ├── item103.png
+    │   ├── item104.png
+    │   ├── item105.png
+    │   ├── item106.png
+    │   ├── item107.png
+    │   ├── item108.png
+    │   ├── item109.png
+    │   ├── item110.png
+    │   ├── item111.png
+    │   ├── item112.png
+    │   ├── item113.png
+    │   ├── item114.png
+    │   ├── item115.png
+    │   ├── item116.png
+    │   ├── item117.png
+    │   ├── item118.png
+    │   ├── item119.png
+    │   ├── item120.png
+    │   ├── item121.png
+    │   ├── item122.png
+    │   ├── item123.png
+    │   ├── item124.png
+    │   ├── item125.png
+    │   ├── item126.png
+    │   ├── item127.png
+    │   ├── item128.png
+    │   ├── item129.png
+    │   ├── item130.png
+    │   ├── item131.png
+    │   ├── item132.png
+    │   ├── item133.png
+    │   ├── item134.png
+    │   ├── item135.png
+    │   ├── item136.png
+    │   ├── item137.png
+    │   ├── item138.png
+    │   ├── item139.png
+    │   ├── item140.png
+    │   ├── item141.png
+    │   ├── item142.png
+    │   ├── item143.png
+    │   ├── item144.png
+    │   ├── item145.png
+    │   ├── item146.png
+    │   ├── item147.png
+    │   ├── item148.png
+    │   ├── item149.png
+    │   ├── item150.png
+    │   ├── item151.png
+    │   ├── item152.png
+    │   ├── item153.png
+    │   ├── item154.png
+    │   ├── item155.png
+    │   ├── item156.png
+    │   ├── item157.png
+    │   ├── item158.png
+    │   ├── item159.png
+    │   ├── item160.png
+    │   ├── item161.png
+    │   ├── item162.png
+    │   ├── item163.png
+    │   ├── item164.png
+    │   ├── item165.png
+    │   ├── item166.png
+    │   ├── item167.png
+    │   ├── item168.png
+    │   ├── item169.png
+    │   ├── item170.png
+    │   ├── item171.png
+    │   ├── item172.png
+    │   ├── item173.png
+    │   ├── item174.png
+    │   ├── item175.png
+    │   ├── item176.png
+    │   ├── item177.png
+    │   ├── item178.png
+    │   ├── item179.png
+    │   ├── item180.png
+    │   ├── item181.png
+    │   ├── item182.png
+    │   ├── item183.png
+    │   ├── item184.png
+    │   ├── item185.png
+    │   ├── item186.png
+    │   ├── item187.png
+    │   ├── item188.png
+    │   ├── item189.png
+    │   ├── item190.png
+    │   ├── item191.png
+    │   ├── item192.png
+    │   ├── item193.png
+    │   ├── item194.png
+    │   ├── item195.png
+    │   ├── item196.png
+    │   ├── item197.png
+    │   ├── item198.png
+    │   ├── item199.png
+    │   ├── item200.png
+    │   ├── item201.png
+    │   ├── item202.png
+    │   ├── item203.png
+    │   ├── item204.png
+    │   ├── item205.png
+    │   ├── item206.png
+    │   ├── item207.png
+    │   ├── item208.png
+    │   ├── item209.png
+    │   ├── item210.png
+    │   ├── item211.png
+    │   ├── item212.png
+    │   ├── item213.png
+    │   ├── item214.png
+    │   ├── item215.png
+    │   ├── item216.png
+    │   ├── item217.png
+    │   ├── item218.png
+    │   ├── item219.png
+    │   ├── item220.png
+    │   ├── item221.png
+    │   ├── item222.png
+    │   ├── item223.png
+    │   ├── item224.png
+    │   ├── item225.png
+    │   ├── item226.png
+    │   ├── item227.png
+    │   ├── item228.png
+    │   ├── item229.png
+    │   ├── item230.png
+    │   ├── item231.png
+    │   ├── item232.png
+    │   ├── item233.png
+    │   ├── item234.png
+    │   ├── item235.png
+    │   ├── item236.png
+    │   ├── item237.png
+    │   ├── item238.png
+    │   ├── item239.png
+    │   ├── item240.png
+    │   ├── item241.png
+    │   ├── item242.png
+    │   ├── item243.png
+    │   ├── item244.png
+    │   ├── item245.png
+    │   ├── item246.png
+    │   ├── item247.png
+    │   ├── item248.png
+    │   ├── item249.png
+    │   ├── item250.png
+    │   ├── item251.png
+    │   ├── item252.png
+    │   ├── item253.png
+    │   ├── item254.png
+    │   ├── item255.png
+    │   ├── item256.png
+    │   ├── item257.png
+    │   ├── item258.png
+    │   ├── item259.png
+    │   ├── item260.png
+    │   ├── item261.png
+    │   ├── item262.png
+    │   ├── item263.png
+    │   ├── item264.png
+    │   ├── item265.png
+    │   ├── item266.png
+    │   ├── item267.png
+    │   ├── item268.png
+    │   ├── item269.png
+    │   ├── item270.png
+    │   ├── item271.png
+    │   ├── item272.png
+    │   ├── item273.png
+    │   ├── item274.png
+    │   ├── item275.png
+    │   ├── item276.png
+    │   ├── item277.png
+    │   ├── item278.png
+    │   ├── item279.png
+    │   ├── item280.png
+    │   ├── item281.png
+    │   ├── item282.png
+    │   ├── item283.png
+    │   ├── item284.png
+    │   ├── item285.png
+    │   ├── item286.png
+    │   ├── item287.png
+    │   ├── item288.png
+    │   ├── item289.png
+    │   ├── item290.png
+    │   ├── item291.png
+    │   ├── item292.png
+    │   ├── item293.png
+    │   ├── item294.png
+    │   ├── item295.png
+    │   ├── item296.png
+    │   ├── item297.png
+    │   ├── item298.png
+    │   ├── item299.png
+    │   ├── item300.png
+    │   ├── item301.png
+    │   ├── item302.png
+    │   ├── item303.png
+    │   ├── item304.png
+    │   ├── item305.png
+    │   ├── item306.png
+    │   ├── item307.png
+    │   ├── item308.png
+    │   ├── item309.png
+    │   ├── item310.png
+    │   ├── item311.png
+    │   ├── item312.png
+    │   ├── item313.png
+    │   ├── item314.png
+    │   ├── item315.png
+    │   ├── item316.png
+    │   ├── item317.png
+    │   ├── item318.png
+    │   ├── item319.png
+    │   ├── item320.png
+    │   ├── item321.png
+    │   ├── item322.png
+    │   ├── item323.png
+    │   ├── item324.png
+    │   ├── item325.png
+    │   ├── item326.png
+    │   ├── item327.png
+    │   ├── item328.png
+    │   ├── item329.png
+    │   ├── item330.png
+    │   ├── item331.png
+    │   ├── item332.png
+    │   ├── item333.png
+    │   ├── item334.png
+    │   ├── item335.png
+    │   ├── item336.png
+    │   ├── item337.png
+    │   ├── item338.png
+    │   ├── item339.png
+    │   ├── item340.png
+    │   ├── item341.png
+    │   ├── item342.png
+    │   ├── item343.png
+    │   ├── item344.png
+    │   ├── item345.png
+    │   ├── item346.png
+    │   ├── item347.png
+    │   ├── item348.png
+    │   ├── item349.png
+    │   ├── item350.png
+    │   ├── item351.png
+    │   ├── item352.png
+    │   ├── item353.png
+    │   ├── item354.png
+    │   ├── item355.png
+    │   ├── item356.png
+    │   ├── item357.png
+    │   ├── item358.png
+    │   ├── item359.png
+    │   ├── item360.png
+    │   ├── item361.png
+    │   ├── item362.png
+    │   ├── item363.png
+    │   ├── item364.png
+    │   ├── item365.png
+    │   ├── item366.png
+    │   ├── item367.png
+    │   ├── item368.png
+    │   ├── item369.png
+    │   ├── item370.png
+    │   ├── item371.png
+    │   ├── item372.png
+    │   ├── item373.png
+    │   ├── item374.png
+    │   ├── item375.png
+    │   ├── item376.png
+    │   ├── item377.png
+    │   ├── item378.png
+    │   ├── item379.png
+    │   ├── item380.png
+    │   ├── item381.png
+    │   ├── item382.png
+    │   ├── item383.png
+    │   ├── item384.png
+    │   ├── item385.png
+    │   ├── item386.png
+    │   ├── item387.png
+    │   ├── item388.png
+    │   ├── item389.png
+    │   ├── item390.png
+    │   ├── item391.png
+    │   ├── item392.png
+    │   ├── item393.png
+    │   ├── item394.png
+    │   ├── item395.png
+    │   ├── item396.png
+    │   ├── item397.png
+    │   ├── item398.png
+    │   ├── item399.png
+    │   ├── item400.png
+    │   ├── item401.png
+    │   ├── item402.png
+    │   ├── item403.png
+    │   ├── item404.png
+    │   ├── item405.png
+    │   ├── item406.png
+    │   ├── item407.png
+    │   ├── item408.png
+    │   ├── item409.png
+    │   ├── item410.png
+    │   ├── item411.png
+    │   ├── item412.png
+    │   ├── item413.png
+    │   ├── item414.png
+    │   ├── item415.png
+    │   ├── item416.png
+    │   ├── item417.png
+    │   ├── item418.png
+    │   ├── item419.png
+    │   ├── item420.png
+    │   ├── item421.png
+    │   ├── item422.png
+    │   ├── item423.png
+    │   ├── item424.png
+    │   ├── item425.png
+    │   ├── item426.png
+    │   ├── item427.png
+    │   ├── item428.png
+    │   ├── item429.png
+    │   ├── item430.png
+    │   ├── item431.png
+    │   ├── item432.png
+    │   ├── item433.png
+    │   ├── item434.png
+    │   ├── item435.png
+    │   ├── item436.png
+    │   ├── item437.png
+    │   ├── item438.png
+    │   ├── item439.png
+    │   ├── item440.png
+    │   ├── item441.png
+    │   ├── item442.png
+    │   ├── item443.png
+    │   ├── item444.png
+    │   ├── item445.png
+    │   ├── item446.png
+    │   ├── item447.png
+    │   ├── item448.png
+    │   ├── item449.png
+    │   ├── item450.png
+    │   ├── item451.png
+    │   ├── item452.png
+    │   ├── item453.png
+    │   ├── item454.png
+    │   ├── item455.png
+    │   ├── item456.png
+    │   ├── item457.png
+    │   ├── item458.png
+    │   ├── item459.png
+    │   ├── item460.png
+    │   ├── item461.png
+    │   ├── item462.png
+    │   ├── item463.png
+    │   ├── item464.png
+    │   ├── item465.png
+    │   ├── item466.png
+    │   ├── item467.png
+    │   ├── item468.png
+    │   ├── item469.png
+    │   ├── item470.png
+    │   ├── item471.png
+    │   ├── item472.png
+    │   ├── item473.png
+    │   ├── item474.png
+    │   ├── item475.png
+    │   ├── item476.png
+    │   ├── item477.png
+    │   ├── item478.png
+    │   ├── item479.png
+    │   ├── item480.png
+    │   ├── item481.png
+    │   ├── item482.png
+    │   ├── item483.png
+    │   ├── item484.png
+    │   ├── item485.png
+    │   ├── item486.png
+    │   ├── item487.png
+    │   ├── item488.png
+    │   ├── item489.png
+    │   ├── item491.png
+    │   ├── item493.png
+    │   ├── item494.png
+    │   ├── item495.png
+    │   ├── item496.png
+    │   ├── item497.png
+    │   ├── item498.png
+    │   ├── item499.png
+    │   ├── item500.png
+    │   ├── item501.png
+    │   ├── item502.png
+    │   ├── item503.png
+    │   ├── item504.png
+    │   ├── item505.png
+    │   ├── item506.png
+    │   ├── item507.png
+    │   ├── item508.png
+    │   ├── item509.png
+    │   ├── item510.png
+    │   ├── item511.png
+    │   ├── item512.png
+    │   ├── item513.png
+    │   ├── item514.png
+    │   ├── item515.png
+    │   ├── item516.png
+    │   ├── item517.png
+    │   ├── item518.png
+    │   ├── item519.png
+    │   ├── item520.png
+    │   ├── item521.png
+    │   ├── item522.png
+    │   ├── item523.png
+    │   ├── item524.png
+    │   ├── item525.png
+    │   ├── item526.png
+    │   ├── item527.png
+    │   ├── item528.png
+    │   ├── item529.png
+    │   ├── item530.png
+    │   ├── item531.png
+    │   ├── item532.png
+    │   ├── item533.png
+    │   ├── item534.png
+    │   ├── item535.png
+    │   ├── item536.png
+    │   ├── item537.png
+    │   ├── item538.png
+    │   ├── item539.png
+    │   ├── item540.png
+    │   ├── item541.png
+    │   ├── item542.png
+    │   ├── item543.png
+    │   ├── item544.png
+    │   ├── item545.png
+    │   ├── item546.png
+    │   ├── item547.png
+    │   ├── item548.png
+    │   ├── item549.png
+    │   ├── item550.png
+    │   ├── item551.png
+    │   ├── item552.png
+    │   ├── item553.png
+    │   ├── item554.png
+    │   ├── item555.png
+    │   ├── item556.png
+    │   ├── item557.png
+    │   ├── item558.png
+    │   ├── item559.png
+    │   ├── item560.png
+    │   ├── item561.png
+    │   ├── item563.png
+    │   ├── item564.png
+    │   ├── item565.png
+    │   ├── item566.png
+    │   ├── item567.png
+    │   ├── item568.png
+    │   ├── item569.png
+    │   ├── item570.png
+    │   ├── item571.png
+    │   ├── item572.png
+    │   ├── item573.png
+    │   ├── item574.png
+    │   ├── item575.png
+    │   ├── item576.png
+    │   ├── item577.png
+    │   ├── item578.png
+    │   ├── item579.png
+    │   ├── item580.png
+    │   ├── item581.png
+    │   ├── item582.png
+    │   ├── item583.png
+    │   ├── item584.png
+    │   ├── item585.png
+    │   ├── item586.png
+    │   ├── item587.png
+    │   ├── item588.png
+    │   ├── item589.png
+    │   ├── item590.png
+    │   ├── item591.png
+    │   ├── item592.png
+    │   ├── item593.png
+    │   ├── item594.png
+    │   ├── item595.png
+    │   ├── item596.png
+    │   ├── item597.png
+    │   ├── item598.png
+    │   ├── item599.png
+    │   ├── item600.png
+    │   ├── item607.png
+    │   └── unymphicon.png
+    ├── Panoramas/  [3 .png]
+    │   ├── Elevator.png
+    │   ├── nightsky.png
+    │   └── sky.png
+    ├── Pictures/  [845 .png, 4 .pdn, 3 .gif, 1 .net]
+    │   ├── Bag/  [22 .png]
+    │   │   ...
+    │   ├── BATTLE/  [39 .png]
+    │   │   ...
+    │   ├── Gender/  [5 .png]
+    │   │   ...
+    │   ├── GTS/  [9 .png]
+    │   │   ...
+    │   ├── HallOfFame/  [28 .png]
+    │   │   ...
+    │   ├── INTRO/  [1 .png]
+    │   │   ...
+    │   ├── MENU/  [13 .png]
+    │   │   ...
+    │   ├── ONLINE/  [27 .png]
+    │   │   ...
+    │   ├── Options/  [7 .png]
+    │   │   ...
+    │   ├── Party/  [23 .png]
+    │   │   ...
+    │   ├── Pokedex/  [39 .png]
+    │   │   ...
+    │   ├── SCOREBOARD/  [2 .png]
+    │   │   ...
+    │   ├── Slot Machine/  [16 .png]
+    │   │   ...
+    │   ├── Starter/  [6 .png]
+    │   │   ...
+    │   ├── Summary/  [46 .png]
+    │   │   ...
+    │   ├── TownMap/  [12 .png]
+    │   │   ...
+    │   ├── Uranium Summary/  [2 .png]
+    │   │   ...
+    │   ├── Voltorb Flip/  [8 .png]
+    │   │   ...
+    │   ├── a09.png
+    │   ├── a10.png
+    │   ├── a11.png
+    │   ├── a12.png
+    │   ├── a13.png
+    │   ├── a14.png
+    │   ├── a15.png
+    │   ├── a16.png
+    │   ├── a17.png
+    │   ├── a18.png
+    │   ├── a19.png
+    │   ├── a20.png
+    │   ├── a21.png
+    │   ├── a22.png
+    │   ├── a23.png
+    │   ├── a24.png
+    │   ├── a25.png
+    │   ├── a26.png
+    │   ├── a27.png
+    │   ├── a28.png
+    │   ├── a29.png
+    │   ├── a30.png
+    │   ├── a31.png
+    │   ├── a32.png
+    │   ├── a33.png
+    │   ├── a34.png
+    │   ├── a35.png
+    │   ├── a36.png
+    │   ├── a37.png
+    │   ├── a38.png
+    │   ├── AdvancedPokedex.png
+    │   ├── AdvancedPokedexEntryBar.png
+    │   ├── AdvancedPokedexFormBar.png
+    │   ├── AdvancedPokedexNestBar.png
+    │   ├── advHPBar.png
+    │   ├── advPartyActive.png
+    │   ├── advPartyActiveSel.png
+    │   ├── advPartyEmpty.png
+    │   ├── advPartyInactive.png
+    │   ├── advPartyInactiveSel.png
+    │   ├── animatedbg.png
+    │   ├── Appear_Effect.PNG
+    │   ├── Arrow.PNG
+    │   ├── Arrow1.png
+    │   ├── Arrow2.png
+    │   ├── Arrow3.png
+    │   ├── Arrow4.png
+    │   ├── arrowkeys.png
+    │   ├── arrows.png
+    │   ├── badges.png
+    │   ├── bag1.PNG
+    │   ├── bag1f.PNG
+    │   ├── Bag2.PNG
+    │   ├── bag2f.PNG
+    │   ├── Bag3.PNG
+    │   ├── bag3f.PNG
+    │   ├── Bag4.PNG
+    │   ├── bag4f.PNG
+    │   ├── bag5.PNG
+    │   ├── bag5f.PNG
+    │   ├── bag6.PNG
+    │   ├── bag6f.PNG
+    │   ├── bag7.PNG
+    │   ├── bag7f.PNG
+    │   ├── bag8.PNG
+    │   ├── bag8f.PNG
+    │   ├── bagbg1.png
+    │   ├── bagbg2.png
+    │   ├── bagbg3.png
+    │   ├── bagbg4.png
+    │   ├── bagbg5.png
+    │   ├── bagbg6.png
+    │   ├── bagbg7.png
+    │   ├── bagbg8.png
+    │   ├── bagReg.PNG
+    │   ├── bagscreen.net
+    │   ├── bagSel.png
+    │   ├── bagSlider.png
+    │   ├── ball00.png
+    │   ├── ball00_open.png
+    │   ├── ball01.png
+    │   ├── ball01_open.png
+    │   ├── ball02.png
+    │   ├── ball02_open.png
+    │   ├── ball03.png
+    │   ├── ball03_open.png
+    │   ├── ball04.png
+    │   ├── ball04_open.png
+    │   ├── ball05.png
+    │   ├── ball05_open.png
+    │   ├── ball06.png
+    │   ├── ball06_open.png
+    │   ├── ball07.png
+    │   ├── ball07_open.png
+    │   ├── ball08.png
+    │   ├── ball08_open.png
+    │   ├── ball09.png
+    │   ├── ball09_open.png
+    │   ├── ball10.png
+    │   ├── ball10_open.png
+    │   ├── ball11.png
+    │   ├── ball11_open.png
+    │   ├── ball12.png
+    │   ├── ball12_open.png
+    │   ├── ball13.png
+    │   ├── ball13_open.png
+    │   ├── ball14.png
+    │   ├── ball14_open.png
+    │   ├── ball15.png
+    │   ├── ball15_open.png
+    │   ├── ball16.png
+    │   ├── ball16_open.png
+    │   ├── ball17.png
+    │   ├── ball17_open.png
+    │   ├── ball18.png
+    │   ├── ball18_open.png
+    │   ├── ball19.png
+    │   ├── ball19_open.png
+    │   ├── ball20.png
+    │   ├── ball20_open.png
+    │   ├── ball21.png
+    │   ├── ball21_open.png
+    │   ├── ball22.png
+    │   ├── ball22_open.png
+    │   ├── ball23.png
+    │   ├── ball23_open.png
+    │   ├── ball24_0.png
+    │   ├── ball24_1.png
+    │   ├── ball24_2.png
+    │   ├── ball26.png
+    │   ├── ball26_open.png
+    │   ├── ball27.png
+    │   ├── ball27_open.png
+    │   ├── ballcatch.png
+    │   ├── ballempty.png
+    │   ├── ballfainted.png
+    │   ├── ballnormal.png
+    │   ├── ballstatus.PNG
+    │   ├── BAMBO_BLINK.png
+    │   ├── BAMBO_PIC.png
+    │   ├── BAMBO_PIC2.png
+    │   ├── battleBoxOwned.png
+    │   ├── battleCommand.png
+    │   ├── battleCommandButtons.png
+    │   ├── battleEffectFoe.png
+    │   ├── battleEffectPlayer.png
+    │   ├── battleFight.png
+    │   ├── battleFightButtons.png
+    │   ├── battleFoeBoxD.png
+    │   ├── battleLineup.png
+    │   ├── battleMegaEvo.png
+    │   ├── battleMegaEvoBox.png
+    │   ├── battleMessage.png
+    │   ├── battlePlayerBoxD.png
+    │   ├── battlePlayerSafari.png
+    │   ├── battleshadow.PNG
+    │   ├── battlestatuses.PNG
+    │   ├── bbtrans.png
+    │   ├── bbtrans_opp.png
+    │   ├── berrytag.PNG
+    │   ├── black.png
+    │   ├── Blackness.png
+    │   ├── border.png
+    │   ├── box0.png
+    │   ├── box1.png
+    │   ├── box10.png
+    │   ├── box11.png
+    │   ├── box12.png
+    │   ├── box13.png
+    │   ├── box14.png
+    │   ├── box15.png
+    │   ├── box16.png
+    │   ├── box17.png
+    │   ├── box18.png
+    │   ├── box19.png
+    │   ├── box2.png
+    │   ├── box20.png
+    │   ├── box21.png
+    │   ├── box22.png
+    │   ├── box23.png
+    │   ├── box24.png
+    │   ├── box25.png
+    │   ├── box3.png
+    │   ├── box4.png
+    │   ├── box5.png
+    │   ├── box6.png
+    │   ├── box7.png
+    │   ├── box8.png
+    │   ├── box9.png
+    │   ├── boxbg.png
+    │   ├── boxfist.PNG
+    │   ├── boxgrab.PNG
+    │   ├── boxpartytab.PNG
+    │   ├── boxpoint1.PNG
+    │   ├── boxpoint2.PNG
+    │   ├── boxsides.png
+    │   ├── boxstatuses.png
+    │   ├── buttonp.png
+    │   ├── buttonunp.png
+    │   ├── Cancel-Normal.png
+    │   ├── Cancel-Selected.png
+    │   ├── category.png
+    │   ├── categorybw.png
+    │   ├── cavePheno.png
+    │   ├── ckey.png
+    │   ├── command.png
+    │   ├── commandMenuButtons.png
+    │   ├── DarkArea2.png
+    │   ├── Darkbg.png
+    │   ├── Darkbg2.png
+    │   ├── descbag.png
+    │   ├── descexit.png
+    │   ├── descoptions.png
+    │   ├── descpokedex.png
+    │   ├── descpokemon.png
+    │   ├── descpokepod.png
+    │   ├── descsave.png
+    │   ├── desctemplate.pdn
+    │   ├── desctrcard.png
+    │   ├── dialup.png
+    │   ├── dirArrow.png
+    │   ├── doubleEnemyBox.png
+    │   ├── doublePlayerBox.png
+    │   ├── downarrow.PNG
+    │   ├── egg.png
+    │   ├── emtextskin.png
+    │   ├── entrycursor.png
+    │   ├── entrycursor2.png
+    │   ├── Evolution.png
+    │   ├── evolutionbg.png
+    │   ├── exicon.png
+    │   ├── exicon2.png
+    │   ├── exparea.png
+    │   ├── exparea_opp.png
+    │   ├── expbar.png
+    │   ├── f5key.png
+    │   ├── fightbox.png
+    │   ├── flags.png
+    │   ├── flybird.png
+    │   ├── flycopter.png
+    │   ├── footset.png
+    │   ├── footsetbike.png
+    │   ├── foreign.png
+    │   ├── frlgtextskin.png
+    │   ├── frlgtextskin2.png
+    │   ├── globalicons.png
+    │   ├── grassPheno.png
+    │   ├── hallfamebars.png
+    │   ├── hallfamebg.png
+    │   ├── hatchsheet.png
+    │   ├── HealthUp.png
+    │   ├── helpadventurebg.png
+    │   ├── helpArrowKeys.png
+    │   ├── helpbg.png
+    │   ├── helpCkey.png
+    │   ├── helpF5key.png
+    │   ├── helpXkey.png
+    │   ├── helpZkey.png
+    │   ├── hiddenMovebg.png
+    │   ├── hiddenMoveStrobes.png
+    │   ├── hparea.png
+    │   ├── hpbars.png
+    │   ├── hpind.png
+    │   ├── hudpanel.png
+    │   ├── icon.png
+    │   ├── iconEgg.png
+    │   ├── intro2.png
+    │   ├── introbg.PNG
+    │   ├── intropokemon.png
+    │   ├── iPod.png
+    │   ├── item.png
+    │   ├── item121.png
+    │   ├── item122.PNG
+    │   ├── item123.PNG
+    │   ├── item124.PNG
+    │   ├── item125.PNG
+    │   ├── item126.PNG
+    │   ├── item127.PNG
+    │   ├── item128.PNG
+    │   ├── item129.PNG
+    │   ├── item130.PNG
+    │   ├── item131.PNG
+    │   ├── item132.PNG
+    │   ├── jukeboxbg.png
+    │   ├── keyitemsbg.png
+    │   ├── keyitemsel.png
+    │   ├── keys.png
+    │   ├── keys2.png
+    │   ├── king_intro.png
+    │   ├── languagebg.png
+    │   ├── languagebtn.png
+    │   ├── languageconfirmbg.png
+    │   ├── languageconfirmbtn.png
+    │   ├── LE.PNG
+    │   ├── leftarrow.png
+    │   ├── leftrightarrows.png
+    │   ├── lettertab1.png
+    │   ├── lettertab2.png
+    │   ├── lettertab3.png
+    │   ├── Lightbg2.png
+    │   ├── loadbg.png
+    │   ├── loadPanels.png
+    │   ├── loadsavepanel.png
+    │   ├── loadsavepanel_1.png
+    │   ├── mail.png
+    │   ├── mailAIRMAIL.png
+    │   ├── mailbg.png
+    │   ├── Male.png
+    │   ├── Map.PNG
+    │   ├── map_cursor.PNG
+    │   ├── Map_icon - Cвpia.png
+    │   ├── Map_Mouse.png
+    │   ├── mapbg.png
+    │   ├── mapbottom.PNG
+    │   ├── mapCursor.png
+    │   ├── mapeast.png
+    │   ├── mapFly.png
+    │   ├── mapicon.png
+    │   ├── mapPlayer000.png
+    │   ├── mapPlayer001.png
+    │   ├── mapPlayer009.png
+    │   ├── MapTandorhgss.pdn
+    │   ├── MapTandorhgss2.pdn
+    │   ├── maptandorhgssB.pdn
+    │   ├── maptandorhgssB.png
+    │   ├── mapwest.png
+    │   ├── martscreen.png
+    │   ├── martSel.png
+    │   ├── mega_sym.png
+    │   ├── megaEvoButton.png
+    │   ├── messagebox.png
+    │   ├── mm cursors.png
+    │   ├── movescreen.png
+    │   ├── movesel.PNG
+    │   ├── moveSelButtons.png
+    │   ├── mysteryGiftbg.png
+    │   ├── nameentrybg.png
+    │   ├── nameentryctls.png
+    │   ├── nameentryptr.png
+    │   ├── naming2bg.png
+    │   ├── namingbg.png
+    │   ├── namingControls.png
+    │   ├── NamingCursor1.png
+    │   ├── NamingCursor2.png
+    │   ├── NamingCursor3.png
+    │   ├── namingMode.png
+    │   ├── namingShadow.png
+    │   ├── namingStorage.png
+    │   ├── namingTab1.png
+    │   ├── namingTab2.png
+    │   ├── namingTab3.png
+    │   ├── NE2-bg.png
+    │   ├── NE2-curie1.png
+    │   ├── NE2-curie2.png
+    │   ├── NE2-curie3.png
+    │   ├── NE2-rangercurie.png
+    │   ├── NE2-rangerurayne.png
+    │   ├── NE2-smokeleft.png
+    │   ├── NE2-smokeright.png
+    │   ├── newBattleMessageBox.png
+    │   ├── newBattleMessageSmall.png
+    │   ├── newCommandBox.png
+    │   ├── newPartyBalls.png
+    │   ├── newStatuses.png
+    │   ├── normalbar.png
+    │   ├── nuzlocke.png
+    │   ├── Oak.PNG
+    │   ├── Oak_1.png
+    │   ├── panel.png
+    │   ├── partyActive.png
+    │   ├── partyBall.PNG
+    │   ├── partyBallSel.PNG
+    │   ├── partybg.PNG
+    │   ├── partyCancel.png
+    │   ├── partyCancelNarrow.png
+    │   ├── partyCancelSel.png
+    │   ├── partyCancelSelNarrow.png
+    │   ├── partyHP.png
+    │   ├── partyHPfnt.png
+    │   ├── partyHPswap.png
+    │   ├── partyInactive.png
+    │   ├── partyPanelBlank.png
+    │   ├── partyPanelRect.png
+    │   ├── partyPanelRectDead.png
+    │   ├── partyPanelRectFnt.png
+    │   ├── partyPanelRectSel.png
+    │   ├── partyPanelRectSelDead.png
+    │   ├── partyPanelRectSelFnt.png
+    │   ├── partyPanelRectSelSwap.png
+    │   ├── partyPanelRectSwap.png
+    │   ├── partyPanelRound.png
+    │   ├── partyPanelRoundDead.png
+    │   ├── partyPanelRoundFnt.png
+    │   ├── partyPanelRoundSel.png
+    │   ├── partyPanelRoundSelDead.png
+    │   ├── partyPanelRoundSelFnt.png
+    │   ├── partyPanelRoundSelSwap.png
+    │   ├── partyPanelRoundSwap.png
+    │   ├── pause.png
+    │   ├── pbarrow.png
+    │   ├── pcitembg.PNG
+    │   ├── phonebg.png
+    │   ├── phoneRematch.png
+    │   ├── phoneSel.png
+    │   ├── phonicon.png
+    │   ├── phonicon2.png
+    │   ├── pokeball.png
+    │   ├── pokeballopen.png
+    │   ├── pokeballs.png
+    │   ├── pokedexbg.PNG
+    │   ├── pokedexentry.PNG
+    │   ├── pokedexForm.png
+    │   ├── pokedexMenubg.png
+    │   ├── pokedexNest.png
+    │   ├── pokedexNestUnknown.png
+    │   ├── pokedexOwned.png
+    │   ├── pokedexSearchbg.png
+    │   ├── pokedexSeen.png
+    │   ├── pokedexSel.png
+    │   ├── pokedexSlider.png
+    │   ├── pokedexTypes.png
+    │   ├── Pokegearback.png
+    │   ├── pokeselball.PNG
+    │   ├── pokeselballsm.png
+    │   ├── pokeselcancel.png
+    │   ├── pokeselcancelsel.png
+    │   ├── pokeselopenball.PNG
+    │   ├── pokeselopenballsm.png
+    │   ├── proflily.png
+    │   ├── PU-firststrikeGIF(1).gif
+    │   ├── PU-firststrikeGIF.gif
+    │   ├── PU-intro1.png
+    │   ├── pu-intro2.png
+    │   ├── pu-intro3.png
+    │   ├── pu-intro4.png
+    │   ├── pu-intro5.png
+    │   ├── PU-menuback.png
+    │   ├── PU-menuico1.png
+    │   ├── PU-menuico2.png
+    │   ├── PU-menuico3.png
+    │   ├── PU-menuico4.png
+    │   ├── PU-menuico5.png
+    │   ├── PU-menuico6.png
+    │   ├── PU-menuico7.png
+    │   ├── PU-menuico8.png
+    │   ├── PU-menupkbox.png
+    │   ├── PU-NinjaScene1.png
+    │   ├── PU-sunbeam.png
+    │   ├── punchBag.png
+    │   ├── punchBagBar.png
+    │   ├── punchBagField.png
+    │   ├── punchBagStar.png
+    │   ├── pvpcard1.png
+    │   ├── pvpcard2.png
+    │   ├── pvpcard3.png
+    │   ├── pvpcard4.png
+    │   ├── pvpcard5.png
+    │   ├── pvpcard6.png
+    │   ├── pvpcard7.png
+    │   ├── radicon.png
+    │   ├── radicon2.png
+    │   ├── raw.js
+    │   ├── regitem.PNG
+    │   ├── ribbons.png
+    │   ├── rightarrow.png
+    │   ├── rstextskin.png
+    │   ├── rstextskin2.png
+    │   ├── safariPlayerBox.PNG
+    │   ├── sandstorm.PNG
+    │   ├── sandwind.PNG
+    │   ├── savemenu.png
+    │   ├── ScrollbgR.png
+    │   ├── ScrollbgR2.png
+    │   ├── selarr.png
+    │   ├── selarrow.png
+    │   ├── selarrowwhite.png
+    │   ├── selHand.png
+    │   ├── shiny.png
+    │   ├── shopscreen.png
+    │   ├── Soft Sunshine.png
+    │   ├── staraptorcutscenev2.gif
+    │   ├── Start.png
+    │   ├── starterevent1.png
+    │   ├── starterevent2.png
+    │   ├── starterevent3.png
+    │   ├── StatDown.png
+    │   ├── StatUp.png
+    │   ├── statuses.PNG
+    │   ├── statuspane.PNG
+    │   ├── summary6.PNG
+    │   ├── summaryball00.png
+    │   ├── summaryball01.png
+    │   ├── summaryball02.png
+    │   ├── summaryball03.png
+    │   ├── summaryball04.png
+    │   ├── summaryball05.png
+    │   ├── summaryball06.png
+    │   ├── summaryball07.png
+    │   ├── summaryball08.png
+    │   ├── summaryball09.png
+    │   ├── summaryball10.png
+    │   ├── summaryball11.png
+    │   ├── summaryball12.png
+    │   ├── summaryball13.png
+    │   ├── summaryball14.png
+    │   ├── summaryball15.png
+    │   ├── summaryball16.png
+    │   ├── summaryball17.png
+    │   ├── summaryball18.png
+    │   ├── summaryball19.png
+    │   ├── summaryball20.png
+    │   ├── summaryball21.png
+    │   ├── summaryball22.png
+    │   ├── summaryball23.png
+    │   ├── summaryball26.png
+    │   ├── summaryEgg.PNG
+    │   ├── summaryEgg6.PNG
+    │   ├── summaryEggOne.PNG
+    │   ├── summarymovesel.PNG
+    │   ├── summaryPokerus.png
+    │   ├── summaryShadow.png
+    │   ├── summaryShadowBar.png
+    │   ├── Sunburst.png
+    │   ├── tagcircle.PNG
+    │   ├── testback.PNG
+    │   ├── testfront.PNG
+    │   ├── testscreen.PNG
+    │   ├── tradebg.png
+    │   ├── trainer000.PNG
+    │   ├── trainer001.png
+    │   ├── trainer009.png
+    │   ├── trainer047.png
+    │   ├── trainer047_1.png
+    │   ├── trainer086_1.png
+    │   ├── trcard.PNG
+    │   ├── trcardbg.bmp
+    │   ├── trcardbg.png
+    │   ├── trcase.png
+    │   ├── trcaseicon.png
+    │   ├── trfront.png
+    │   ├── types.png
+    │   ├── typesbw.png
+    │   ├── uparrow.PNG
+    │   ├── updownarrows.png
+    │   ├── Urayneshadow.png
+    │   ├── Urayneshadow2.png
+    │   ├── waterPheno.png
+    │   ├── windowskin.png
+    │   ├── xkey.png
+    │   └── zkey.png
+    ├── Tilesets/  [61 .png]
+    │   ├── Cavetiles.png
+    │   ├── foresttiles.png
+    │   ├── Gatehouse.png
+    │   ├── Indoor(1).png
+    │   ├── Inside Gyms.png
+    │   ├── NPU-Angelure.png
+    │   ├── NPU-Bealbeach.png
+    │   ├── NPU-Legen Town.png
+    │   ├── NPU-Legen_Town.png
+    │   ├── NPU-Nowtoch.png
+    │   ├── NPU-Rainforest.png
+    │   ├── NPU-Route01-02-Moki-Kevlar.png
+    │   ├── NPU-Route03-Comet.png
+    │   ├── NPU-Route05-06.png
+    │   ├── NPU-Route08.png
+    │   ├── NPU-Route09.png
+    │   ├── NPU-Route16.png
+    │   ├── NPU-Silverport.png
+    │   ├── NPU-Tsukinami.png
+    │   ├── NPU-Veneza.png
+    │   ├── OLDPU-Victory Road.png
+    │   ├── Outside(new).png
+    │   ├── Outside.png
+    │   ├── Pokemon Center.png
+    │   ├── Pokemon Mart.png
+    │   ├── PU-Angelure.png
+    │   ├── PU-AngelureFinal.png
+    │   ├── PU-Anthell.png
+    │   ├── PU-Bealbeach.png
+    │   ├── PU-CaveSet.png
+    │   ├── PU-Championship.png
+    │   ├── PU-DreamPalace.png
+    │   ├── PU-Elevator.png
+    │   ├── PU-FloatingIsle.png
+    │   ├── PU-Gym 4.png
+    │   ├── PU-Gym 5.png
+    │   ├── PU-Legen Town.png
+    │   ├── PU-Nowtoch.png
+    │   ├── PU-Nuclear08.png
+    │   ├── PU-NuclearPlant.png
+    │   ├── PU-NuclearPlantInside.png
+    │   ├── PU-NuclearPlantInsideDream.png
+    │   ├── PU-PokemonCenter.png
+    │   ├── PU-PowerPlant_2.png
+    │   ├── PU-Rainforest.png
+    │   ├── PU-Route01-02-Moki-Kevlar.png
+    │   ├── PU-Route03-Comet.png
+    │   ├── PU-Route05-06.png
+    │   ├── PU-Route08.png
+    │   ├── PU-Route09.png
+    │   ├── PU-Route16.png
+    │   ├── PU-SandWater.png
+    │   ├── PU-Silverport.png
+    │   ├── PU-Tsukinami-Indoors.png
+    │   ├── PU-Tsukinami.png
+    │   ├── PU-Underwater.png
+    │   ├── PU-Venesi-dream.png
+    │   ├── PU-Veneza.png
+    │   ├── PU-VictoryRoad.png
+    │   ├── teste.png
+    │   └── tileset blank.png
+    ├── Titles/  [82 .png, 1 .jpg]
+    │   ├── Intro/  [24 .png]
+    │   │   ...
+    │   ├── credits1.png
+    │   ├── credits10.png
+    │   ├── credits11.png
+    │   ├── credits12.png
+    │   ├── credits13.png
+    │   ├── credits14.png
+    │   ├── credits15.png
+    │   ├── credits16.png
+    │   ├── credits17.png
+    │   ├── credits18.png
+    │   ├── credits19.png
+    │   ├── credits2.png
+    │   ├── credits20.png
+    │   ├── credits21.png
+    │   ├── credits22.png
+    │   ├── credits23.png
+    │   ├── credits24.png
+    │   ├── credits25.png
+    │   ├── credits26.png
+    │   ├── credits27.png
+    │   ├── credits28.png
+    │   ├── credits29.png
+    │   ├── credits3.png
+    │   ├── credits30.png
+    │   ├── credits31.png
+    │   ├── credits32.jpg
+    │   ├── credits4.png
+    │   ├── credits5.png
+    │   ├── credits6.png
+    │   ├── credits7.png
+    │   ├── credits8.png
+    │   ├── credits9.png
+    │   ├── custom_background.png
+    │   ├── custom_bars.png
+    │   ├── custom_bars_shine.png
+    │   ├── custom_effect.png
+    │   ├── custom_pokelogo.png
+    │   ├── custom_pokelogo_shine.png
+    │   ├── gen_4_sil.png
+    │   ├── gen_6_effect2.png
+    │   ├── gen_6_particle.png
+    │   ├── gen_6_particle2.png
+    │   ├── gen_6_shine.png
+    │   ├── intro1.png
+    │   ├── pic1.png
+    │   ├── Pic_1.png
+    │   ├── Pic_2.png
+    │   ├── pic_3.png
+    │   ├── pic_4.png
+    │   ├── pic_4under.png
+    │   ├── Pic_light.png
+    │   ├── Pic_light2.png
+    │   ├── Pic_light3.png
+    │   ├── Pic_oculta.png
+    │   ├── Pic_overlay.png
+    │   ├── PU-intro1.png
+    │   ├── pu-intro2.png
+    │   ├── splash.png
+    │   └── Start.png
+    ├── Transitions/  [45 .png]
+    │   ├── 021-Normal01.png
+    │   ├── 022-Normal02.png
+    │   ├── Battle.png
+    │   ├── battle1.png
+    │   ├── battle2.png
+    │   ├── battle3.png
+    │   ├── battle4.png
+    │   ├── computertr.png
+    │   ├── computertrclose.png
+    │   ├── hexatr.png
+    │   ├── hexatrc.png
+    │   ├── hexatzr.png
+    │   ├── Image1.png
+    │   ├── Image2.png
+    │   ├── Image3.png
+    │   ├── Image4.png
+    │   ├── RotatingPieces.png
+    │   ├── vs.png
+    │   ├── vsBall.png
+    │   ├── vsBar102.png
+    │   ├── vsBar103.png
+    │   ├── vsBar110.png
+    │   ├── vsBar115.png
+    │   ├── vsBar116.png
+    │   ├── vsBar71.png
+    │   ├── vsBar86.png
+    │   ├── vsBar87.png
+    │   ├── vsBar89.png
+    │   ├── vsBar92.png
+    │   ├── vsBar94.png
+    │   ├── vsFlash.png
+    │   ├── vsTrainer0.png
+    │   ├── vsTrainer1.png
+    │   ├── vsTrainer102.png
+    │   ├── vsTrainer103.png
+    │   ├── vsTrainer110.png
+    │   ├── vsTrainer115.png
+    │   ├── vsTrainer116.png
+    │   ├── vsTrainer71.png
+    │   ├── vsTrainer86.png
+    │   ├── vsTrainer87.png
+    │   ├── vsTrainer89.png
+    │   ├── vsTrainer9.png
+    │   ├── vsTrainer92.png
+    │   └── vsTrainer94.png
+    ├── Translations/  [191 .png, 1 .ini]
+    │   ├── Dutch/  [28 .png]
+    │   │   ...
+    │   ├── French/  [35 .png]
+    │   │   ...
+    │   ├── German/  [39 .png, 1 .ini]
+    │   │   ...
+    │   ├── Korean/  [27 .png]
+    │   │   ...
+    │   ├── Simplified Chinese/  [30 .png]
+    │   │   ...
+    │   └── Spanish/  [32 .png]
+    │       ...
+    └── Windowskins/  [65 .png, 14 .txt]
+        ├── 001-Blue01.png
+        ├── emtextskin.png
+        ├── emtextskin.txt
+        ├── frlgtextskin.png
+        ├── frlgtextskin.txt
+        ├── frlgtextskin1.png
+        ├── frlgtextskin2.png
+        ├── frlgtextskinold.png
+        ├── goldskin.png
+        ├── Infosys.PNG
+        ├── particles.txt
+        ├── rstextskin.png
+        ├── rstextskin.txt
+        ├── rstextskin2.png
+        ├── rstextskin2.txt
+        ├── sign1.png
+        ├── SignShow2To.png
+        ├── signskin.png
+        ├── signskin.txt
+        ├── skin1.png
+        ├── skin10.png
+        ├── skin11.png
+        ├── skin12.png
+        ├── skin13.png
+        ├── skin14.png
+        ├── skin15.png
+        ├── skin16.png
+        ├── skin17.png
+        ├── skin18.png
+        ├── skin19.png
+        ├── skin2.png
+        ├── skin20.png
+        ├── skin21.png
+        ├── skin22.png
+        ├── skin23.png
+        ├── skin24.png
+        ├── skin25.png
+        ├── skin26.png
+        ├── skin27.png
+        ├── skin28.png
+        ├── skin3.png
+        ├── skin4.png
+        ├── skin5.png
+        ├── skin6.png
+        ├── skin7.png
+        ├── skin8.png
+        ├── skin9.png
+        ├── skinskin159869.png
+        ├── SpeechShow.png
+        ├── textbox0.png
+        ├── textbox1.png
+        ├── textbox10.png
+        ├── textbox11.png
+        ├── textbox12.png
+        ├── textbox12.txt
+        ├── textbox13.png
+        ├── textbox13.txt
+        ├── textbox14.png
+        ├── textbox14.txt
+        ├── textbox15.png
+        ├── textbox15.txt
+        ├── textbox16.png
+        ├── textbox17.png
+        ├── textbox18.png
+        ├── textbox19.png
+        ├── textbox2.png
+        ├── textbox3.png
+        ├── textbox4.png
+        ├── textbox4.txt
+        ├── textbox5.png
+        ├── textbox5.txt
+        ├── textbox6.png
+        ├── textbox6.txt
+        ├── textbox7.png
+        ├── textbox7.txt
+        ├── textbox8.png
+        ├── textbox9.png
+        ├── Window.png
+        └── Windowskin.PNG
+```
+
+## File type totals
+
+| Extension | Count |
+|---|---|
+| `.rxdata` | 218 |
+| `.dat` | 36 |

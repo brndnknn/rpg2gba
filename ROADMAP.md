@@ -143,7 +143,7 @@ Run the build pipeline on the **Ubuntu desktop**. The GBA decomp toolchain is ha
 
 ### Source Materials
 
-- **Pokémon Uranium source:** Available on GitHub (the team open-sourced it). Clone to a working directory. Note that the source contains copyrighted Game Freak assets (sprites, sounds reused from official games) — the resulting ROM will too, so this is a personal-use-only project.
+- **Pokémon Uranium source:** Pokémon Uranium was **not** open-sourced. The artifact is the distributed game (download `Pokemon_Uranium_1.3.2.zip` or similar). Most game data is packed inside `Uranium.rgssad`, an RPG Maker XP RGSSAD v1 archive; extract it with `scripts/extract_rgssad.py` (no PBS source ships — Essentials compiles the human-readable PBS to binary `.dat` files, so Phase 2 reads `.dat` via Ruby instead of parsing text). The distribution contains copyrighted Game Freak assets (sprites, sounds reused from official games) — the resulting ROM will too, so this is a personal-use-only project.
 - **pokeemerald-expansion:** rh-hideout fork of pret's pokeemerald. Already includes Gen 1–9 data, modern battle mechanics, and a working Poryscript pipeline. Fork this; don't start from vanilla pokeemerald.
 - **Clean Pokémon Emerald base ROM:** Required by the decomp build to extract a few baseline assets. You provide this yourself.
 
@@ -200,15 +200,17 @@ Build a complete inventory of what you're actually converting before writing any
 
 ### Tasks
 
-**0.1 Clone and inspect Uranium**
-- Get the full Uranium source tree on disk
+**0.1 Acquire and unpack Uranium**
+- Download the distributed game (`Pokemon_Uranium_1.3.2.zip`) and extract the zip
+- Run `scripts/extract_rgssad.py` on `Uranium.rgssad` to unpack `Data/` (maps + `.rxdata` + compiled `.dat` files); the unpacked tree lives outside the rpg2gba repo, referenced by `RPG2GBA_URANIUM_SRC`
 - Document directory layout in `reference/uranium_structure.md`
-- Note the Essentials version it's built on (this matters — Essentials evolved significantly between versions, and the PBS format changed)
+- Note the Essentials version it's built on (Uranium is **v17** — see `reference/uranium_essentials_version.md`); this matters because the PBS format changed between versions
 
-**0.2 PBS file inventory**
-- List every PBS file, count entries in each
-- Identify any non-standard PBS files Uranium added
-- Flag any custom fields (e.g., Nuclear-type related extensions to `pokemon.txt`)
+**0.2 Compiled `.dat` inventory** *(was: PBS file inventory)*
+- The distribution ships only Essentials' compiled `.dat` files, not human-readable `PBS/*.txt`
+- List every `.dat` file, identify what PBS concept it corresponds to (`reference/uranium_dat_inventory.md`)
+- Flag Uranium-specific files (`shadowmoves.dat`, `regionals.dat`, `tmpbs.dat`, etc.)
+- Identify which `.dat` holds the species table (notably absent from a `pokemon.dat`-named file) — this is a spike task before Phase 2 can start
 
 **0.3 Map inventory**
 - Count `.rxdata` map files
@@ -297,53 +299,62 @@ Convert all Uranium PBS files to pokeemerald-expansion C data tables. This is th
 
 ### Approach
 
-PBS conversion is **mostly Python, occasionally LLM**. The Python layer handles structural parsing and 1:1 field mapping. The LLM is invoked only for fuzzy decisions: naming a custom ability, picking a closest-match official ability when one is missing, or deciding how to map a non-standard move effect.
+PBS conversion is **Ruby + Python, occasionally LLM**. Uranium's distribution ships compiled `.dat` files only (no PBS text), so the input layer is a **Ruby `Marshal.load` deserializer** that dumps each `.dat` to JSON. The Python converters then read JSON and emit C — same downstream contract as the original text-PBS plan. The LLM is still invoked only for fuzzy decisions (naming a custom ability, mapping a non-standard move effect to a closest-match constant).
+
+### Spike before Phase 2 starts
+
+Before any per-record converter is written, do a deserialization spike:
+1. Add `scripts/dump_dat.rb` that loads each `.dat` with class stubs and prints its top-level Ruby class name and shape
+2. Confirm which `.dat` holds the species table (it's not named `pokemon.dat` in Uranium's distribution; see `reference/uranium_dat_inventory.md`)
+3. Manually verify one entry round-trips correctly (e.g., load `moves.dat`, find Pound, confirm power=40)
+
+Without this spike, none of the per-record converters can be written.
 
 ### Order of attack
 
-Do these in order — each depends on the species/move IDs being stable.
+Do these in order — each depends on the species/move IDs being stable. The "input file" column below is the compiled `.dat` rather than its conceptual PBS source.
 
-**2.1 `pokemon.txt` → species data**
+**2.1 species data → C** (input: TBD by spike — possibly `attacksRS.dat`, `tmpbs.dat`, or inside `dexdata.dat`)
 - Parse all entries
 - Generate `gSpeciesInfo[]` entries in pokeemerald-expansion's format
 - Generate the `SPECIES_*` enum
 - Handle Uranium's 190+ Pokémon, including Nuclear-type entries
 - Custom abilities get placeholder names; resolved in 2.4
 
-**2.2 `moves.txt` → battle moves**
-- Parse, generate `gMovesInfo[]` entries
+**2.2 moves → battle moves** (input: `moves.dat`, possibly cross-checked with `attacksRS.dat`)
+- Generate `gMovesInfo[]` entries
 - For each move, identify whether it's a vanilla Gen 1–9 move (use existing constant) or a Uranium-original move (new entry)
 - Uranium-original move effects often map to existing effect constants — LLM-assisted decision
 
-**2.3 `items.txt` → items**
+**2.3 items** (input: `items.dat`)
 - Generate item data
 - Map item categories (Pokéball, healing, evolution stone, key item) to existing pokeemerald-expansion categories
 
-**2.4 `abilities.txt` → abilities**
+**2.4 abilities** (input: TBD — abilities may live inside species/`tmpbs.dat`)
 - Most will map to existing abilities
 - Custom abilities (Nuclear-related, others) get marked for Phase 6 C implementation
 
-**2.5 `tm.txt` and TM/HM lists**
+**2.5 TM/HM lists** (input: `tm.dat`, `tutor.dat`)
 - Translate to expansion's TM data structure
 
-**2.6 `trainers.txt` and `trainertypes.txt`**
+**2.6 trainers** (input: `trainers.dat`, `trainertypes.dat`, `trainerlists.dat`)
 - Generate trainer parties and trainer class data
 - Important: trainer scripts in maps reference these by ID — keep IDs stable
 
-**2.7 `encounters.txt`**
+**2.7 encounters** (input: `encounters.dat`)
 - Wild encounter tables per map
 - These tie into map IDs from Phase 5, so output keyed by Uranium map ID for now
 
-**2.8 `metadata.txt` and game-level config**
+**2.8 metadata and game-level config** (input: `metadata.dat`)
 - Starting position, party limits, etc.
 
 ### Validation
 
-For each PBS file, write a round-trip test: parse → emit C → re-parse the C → diff against the original parsed structure. Anything that doesn't round-trip cleanly is a bug.
+For each `.dat`, write a round-trip test: deserialize → emit C → re-parse the C → diff against the deserialized structure. Anything that doesn't round-trip cleanly is a bug.
 
 ### Phase 2 Exit Criteria
 
-- [ ] All PBS files have a converter
+- [ ] All shipped `.dat` files (excluding localization and `BackupSave.dat`) have a converter or an explicit STRIP decision
 - [ ] Round-trip tests pass
 - [ ] Generated C compiles cleanly when dropped into the fork
 - [ ] A test ROM with all Uranium species data builds and at least the species list shows correctly in the Pokédex (even if maps and events aren't done yet)
@@ -790,7 +801,7 @@ A non-exhaustive list of traps documented before they bite:
 - huderlem/porymap (map editor)
 - Pokémon Essentials Wiki (PBS format docs)
 - RPG Maker XP RGSS reference (event command codes)
-- Pokémon Uranium open-source repository on GitHub
+- Pokémon Uranium 1.3.2 distribution (the team's last public release; not open-sourced — extract the `.rgssad` archive to access game data)
 
 ---
 

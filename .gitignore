@@ -6,3 +6,9 @@ dist/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+
+# Verbatim Uranium source extracted by recon scripts. Per CLAUDE.md, never commit.
+# Summaries (reference/*.md) are derived and OK to track; raw dumps are not.
+reference/scripts_dump/
+reference/maps_dump/
+reference/dat_dump/
