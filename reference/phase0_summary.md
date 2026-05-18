@@ -22,13 +22,13 @@ The conversion target is the **complete Uranium game from start to end credits**
 
 ## Biggest Unknowns / Decisions Needed Before Phase 2
 
-1. **`.dat` file deserialization strategy** — We need to reverse-engineer the exact Ruby class structure each `.dat` contains. The Compiler section in Scripts.rxdata shows how they're written; we must match those writes exactly when reading back. **Blocker until Phase 3 starts**, but low risk.
+1. **`.dat` file deserialization strategy** — ✓ **Resolved (2026-05-18 spike).** Two formats in use: custom Essentials binary (species, learnsets, moves, items, etc.) and Ruby Marshal (trainers, encounters, connections, etc.). Full details in `uranium_dat_inventory.md`. Species data confirmed in `dexdata.dat` (76 bytes/species, 201 species). No longer a blocker.
 
-2. **Shadow Pokémon and Shadow Moves** — Uranium's Colosseum/XD-style Shadow mechanic is **fully implemented but inert**: `scripts_dump/124_Pokemon_ShadowPokemon.rb` (806 lines) defines heart gauge, hyper mode, shadow moves, Relic Stone purification, Shadow Sky weather, etc., and `145_PScreen_PurifyChamber.rb` (~1,170 lines) implements the Purify Chamber UI. However, no script outside those two ever calls `pbRelicStone`, `pbPurifyChamber`, or sets `$PokemonGlobal.snagMachine = true`. The only live consumer of the snag-ball plumbing is `224_Nuclear_Horde_Battles.rb:7-11`, which aliases `pbIsSnagBall?` to enable horde catches for the (unrelated) Nuclear-Horde feature. **Recommend STRIP** — but final confirmation requires checking `trainers.txt` for any `TPSHADOW=true` rows during the Phase 2 spike. The Nuclear-Horde snag-ball check must be preserved.
+2. **Shadow Pokémon and Shadow Moves** — ✓ **Resolved (2026-05-18 spike). STRIP confirmed.** `trainers.dat` has 0 TPSHADOW hits across 331 trainers. `shadowmoves.dat` is empty (Array[0]). Nuclear-Horde snag-ball check must still be preserved separately.
 
 3. **Regional Pokédex (`regionals.dat`)** — Uranium has region-specific Pokédex entries, separate from the main national dex. **Decision: CONVERT** as a feature (maps to pokeemerald-expansion's region dex system), but we need to understand the data structure first.
 
-4. **Actan Scripts (Script 228)** — Unknown 32-line script segment. Likely utility or small patch. **Needs inspection** before committing to any decision.
+4. **Actan Scripts (Script 228)** — ✓ **Resolved (2026-05-18). Decision: STRIP.** Two anti-cheat/event-cleanup utilities (`pbRemoveActan`, `pbRemoveNuclearActan`). Called from map events; no standalone infrastructure. Phase 4 note: preserve party-empty Chyinmunk fallback in converted event logic.
 
 5. **Map complexity tail** — 132 out of 199 maps are flagged as "complex" (30+ event commands per page, or unknown event codes). Phase 3 deserialization + Phase 4 conversion will be the bottleneck. **No blocker; expected in scope.** Allocate time for edge cases during bulk conversion.
 

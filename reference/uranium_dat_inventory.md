@@ -2,18 +2,23 @@
 
 Pokémon Uranium ships its data as binary `.dat` files in `Data/` (alongside `Scripts.rxdata` and `Map*.rxdata`). There is **no** `PBS/` directory — Essentials compiles the human-readable PBS source to these `.dat` files at first run, and only the compiled output is shipped. The 36 files below are the authoritative list extracted from `Uranium.rgssad`.
 
-The `.dat` files are Ruby `Marshal.dump` output (same format as `.rxdata`). Reading them requires the matching Essentials class definitions to be in scope — see `scripts_dump/175__Compiler.rb` for the writing logic, which dictates the read schema.
+**Two distinct binary formats are in use — not all `.dat` files are Ruby Marshal:**
+
+- **Ruby Marshal format** (`trainers.dat`, `trainertypes.dat`, `encounters.dat`, `connections.dat`, `metadata.dat`, `townmap.dat`, `berryplants.dat`, `bttrainers.dat`, `phone.dat`, `shadowmoves.dat`): Loaded with `Marshal.load` given correct class stubs.
+- **Essentials custom binary format** (`dexdata.dat`, `attacksRS.dat`, `tmpbs.dat`, `eggEmerald.dat`, `evolutions.dat`, `regionals.dat`, `moves.dat`, `items.dat`, `tutor.dat`, `tm.dat`, `metrics.dat`): Written using `fputb`/`fputw`/`fputdw` helpers (1/2/4-byte little-endian int writes). `Marshal.load` raises on these with "incompatible marshal file format". Parse using the write schema in `scripts_dump/175__Compiler.rb`.
+
+See `scripts/spike_dat_inventory.rb` for the probe results that determined which format each file uses.
 
 ## Confirmed file list
 
 | File | Likely concept | Custom to Uranium? | Notes |
 |---|---|---|---|
-| `attacksRS.dat` | Move data in Ruby/Sapphire-compatible format | Possible | "RS" suffix suggests R/S-style; relationship to `moves.dat` not yet confirmed |
+| `attacksRS.dat` | **Level-up learnsets by species ID** | No | Custom binary. Index table (species_count × 8 bytes: uint32 offset + uint32 byte-length), then [level uint16, move_id uint16] pairs per species. Confirmed 201 species. "RS" = "Ruby/Sapphire era format" inherited from Essentials; unrelated to `moves.dat`. |
 | `berryplants.dat` | Berry growth timers / yields | No | Standard Essentials |
 | `btpokemon.dat` | Battle facility (Battle Tower-equivalent) Pokémon templates | Likely yes | Uranium has post-game battle facility content |
 | `bttrainers.dat` | Battle facility trainers | Likely yes | Pairs with `btpokemon.dat` |
 | `connections.dat` | Map-to-map edge connections | No | Standard Essentials |
-| `dexdata.dat` | Pokédex flavor entries (height/weight/category/description) | No | Standard Essentials |
+| `dexdata.dat` | **Main species table (base stats, types, abilities, etc.)** | No | Custom binary. Flat array of 76 bytes per species, no header. Species 1 at offset 0, species N at offset (N-1)×76. Field layout defined by `requiredtypes`/`optionaltypes` dicts in `Compiler.rb`. Confirmed: 15276 bytes ÷ 76 = **201 species**. |
 | `eggEmerald.dat` | Egg group / breeding compatibility | No | Standard Essentials v17 |
 | `encounters.dat` | Wild encounter tables per map | No | Standard Essentials |
 | `evolutions.dat` | Species evolution conditions | No | Standard Essentials |
@@ -25,10 +30,10 @@ The `.dat` files are Ruby `Marshal.dump` output (same format as `.rxdata`). Read
 | `move2anim.dat` | Move-to-animation index | Possible | May be vanilla; verify against compiler |
 | `moves.dat` | Compiled move table (the main one) | No | Standard Essentials. Relationship to `attacksRS.dat` unclear |
 | `phone.dat` | Phone contact list / call scripts | No | Standard Essentials |
-| `regionals.dat` | Regional Pokédex tables (Tandor dex) | Likely yes | Uranium-specific dex region |
-| `shadowmoves.dat` | Shadow Pokémon move set | Yes | Engine is code-complete in `scripts_dump/124_Pokemon_ShadowPokemon.rb` (806 lines, loads `shadowmoves.dat` via `makeShadow`) but **never activated** — no map/trainer sets `snagMachine=true`. Recommended: STRIP after confirming `trainers.txt` has no `TPSHADOW=true` rows. The Nuclear-Horde feature (script 224) aliases `pbIsSnagBall?` and must be preserved separately. |
+| `regionals.dat` | Tandor regional dex numbers | Yes | Custom binary. Header: uint16 num_regionals (=1), uint16 num_species (=202). Then a 1×202 matrix of uint16 Tandor dex numbers. 200 of 201 species have a Tandor number (1–200); 1 species has no Tandor entry (likely a form or secret placeholder). **Tandor dex = 200 entries.** |
+| `shadowmoves.dat` | Shadow Pokémon move set | Yes | Ruby Marshal. **Array[0] — empty.** Shadow mechanic confirmed dead: `trainers.dat` has 0 TPSHADOW hits across 331 trainers. **STRIP confirmed safe.** Nuclear-Horde snag-ball check still needs preservation (unrelated). |
 | `tm.dat` | TM/HM → move mapping | No | Standard Essentials |
-| `tmpbs.dat` | Unknown — name suggests "temp PBS" intermediate | Yes | Investigate; possibly compilation scratch left in build |
+| `tmpbs.dat` | **Uranium-custom extra move compatibility list per species** | Yes | Custom binary. Same indexed format as `attacksRS.dat` but content is single move IDs (uint16 each, not pairs). Corresponds to the `TMPBS` field in `pokemon.txt` PBS — a Uranium-original field (`optionaltypes` in Compiler.rb, not present in vanilla Essentials v17). Confirmed 201 species. Purpose: likely additional move-compatibility data beyond TM/tutor/egg lists. |
 | `townmap.dat` | Region map (Town Map UI) data | No | Standard Essentials |
 | `trainerlists.dat` | Trainer category groupings | Possible | Verify; may be Uranium-only |
 | `trainers.dat` | Trainer parties (per trainer ID) | No | Standard Essentials |
@@ -37,16 +42,21 @@ The `.dat` files are Ruby `Marshal.dump` output (same format as `.rxdata`). Read
 | `types.dat` | Type definitions and effectiveness chart | No | **Will contain Nuclear type** — central to Phase 6 decisions |
 | `BackupSave.dat` | Player save backup, not data | No | Ignore for conversion |
 
-**Where is species data?** Notably absent from this list: a `pokemon.dat` or `species.dat`. In Essentials v17 the compiled species table is typically named `species.dat` or stored under an Essentials-specific name. It may live inside `dexdata.dat` (combined with Pokédex flavor) or under a name we haven't recognized — `attacksRS.dat` and `tmpbs.dat` are both candidates worth opening. **Spike task before Phase 2:** open the unrecognized `.dat` files in Ruby and print their top-level class to confirm. (See Phase 2 implications below.)
+**Species data confirmed: `dexdata.dat`.** 201 species × 76 bytes = 15,276 bytes flat binary. Field layout from `Compiler.rb` `requiredtypes`/`optionaltypes` dicts. Tandor dex = 200 entries (from `regionals.dat`). One internal species ID (201) has no Tandor number — identity TBD.
 
 ## Phase 2 implications
 
-The roadmap's Phase 2 plan assumes parsing PBS text. With no PBS source shipped, the converters must instead:
+The roadmap's Phase 2 plan assumes parsing PBS text. With no PBS source shipped, the converters must instead parse two distinct binary formats directly:
 
-1. **Extend the Ruby deserializer.** Add a script (e.g., `scripts/dump_dat.rb`) that loads each `.dat` with `Marshal.load`, given the right class stubs, and dumps to JSON.
-2. **Map the JSON to the existing converter modules.** The Python modules under `src/rpg2gba/pbs_converter/` consume the JSON instead of text.
-3. **Identify the species table.** Cannot start `pbs_converter/pokemon.py` until we know which `.dat` holds species data.
-4. **Confirm `types.dat` shape.** Determines whether Nuclear type is already represented as a 15th type in the table, and how its effectiveness rules are encoded — feeds Phase 6 directly.
-5. **Decide per Uranium-only file.** `regionals.dat` (convert), `shadowmoves.dat` (recommend strip), `tmpbs.dat` (investigate), `bt*.dat` (defer to post-Phase-7 if scope allows).
+**Custom Essentials binary** (`dexdata.dat`, `attacksRS.dat`, `tmpbs.dat`, `eggEmerald.dat`, `evolutions.dat`, `regionals.dat`, `moves.dat`, `items.dat`, `tutor.dat`, `tm.dat`): Write Python parsers by reading the `fputb`/`fputw`/`fputdw` write sequences in `scripts_dump/175__Compiler.rb`. No Ruby involved.
 
-The deterministic-converter goal is preserved — the parser just lives one level deeper (Ruby Marshal instead of `.txt`).
+**Ruby Marshal** (`trainers.dat`, `trainertypes.dat`, `encounters.dat`, `connections.dat`, `metadata.dat`, etc.): Load with `Marshal.load` in a Ruby script with minimal class stubs, dump to JSON, consume in Python — same approach as the map/script recon scripts.
+
+Key confirmed facts for Phase 2 planning:
+1. **Species → `dexdata.dat`**: 201 species, 76 bytes each, field offsets known from Compiler.
+2. **Learnsets → `attacksRS.dat`**: indexed binary, 201 species, [level, move_id] pairs.
+3. **Shadow Pokémon → STRIP**: 0 TPSHADOW hits in 331 trainers, `shadowmoves.dat` empty.
+4. **`tmpbs.dat` → Uranium-custom**: extra move list per species; include in species JSON output.
+5. **`types.dat` → 20-type effectiveness matrix**: Nuclear type already encoded. Confirmed 400-entry matrix (20×20). Parse in Phase 6.
+6. **`bt*.dat`**: defer to post-Phase-7.
+7. **`messages.dat`**: regenerated from event scripts during conversion; skip in Phase 2.

@@ -118,10 +118,10 @@ This document lists Uranium-specific mechanics found in `Scripts.rxdata` and mak
 - **Justification:** Story-critical (the player cannot beat the 8th gym leader without completing the puzzle). The underlying spawn-event engine and live HUD don't translate directly — re-express the puzzle as a Poryscript / movement-script encounter on the gym map, with the tile layouts becoming statically-placed events and the HUD becoming a `VAR_*`-driven message line. Flag registry pre-seeds: `$game_variables[1]` → `VAR_GYM8_WHITE_TILES`, `$game_variables[121]` → `VAR_GYM8_PROGRESS` (proposed names; confirm during flag-registry build).
 
 ### Actan Scripts
-- **Where it lives:** Script 228 (Actan Scripts) – 32 lines, likely small utility functions
-- **What it does:** Unknown from name alone; likely Uranium developer utilities or small patches
-- **Decision: INVESTIGATE AND DECIDE**
-- **Justification:** Need to read the actual script to determine purpose. If it's utility-only (debug, profiling), strip. If it patches core mechanics, understand and port as needed.
+- **Where it lives:** Script 228 (Actan Scripts) – 32 lines
+- **What it does:** Two map-event utility functions. `pbRemoveActan` removes the rental Actan from party at the end of its scripted story sequence. `pbRemoveNuclearActan` is an anti-cheat that purges Nuclear-form Actan (form 1) from party and all PC boxes; if the party is left empty it silently adds a lv.5 Chyinmunk as a fallback.
+- **Decision: STRIP** (functions are called from map events; no standalone infrastructure)
+- **Phase 4 note:** The "give Chyinmunk if party empty" safety guard in `pbRemoveNuclearActan` must be preserved in the converted event logic.
 
 ### Custom Input and Controls
 - **Where it lives:** Scripts 7 (Win32API), 8 (Sockets), 165–167 (PSystem_Controls, XInput, Control Binding)
@@ -171,7 +171,7 @@ This document lists Uranium-specific mechanics found in `Scripts.rxdata` and mak
 | Multiple fogs | STRIP | None | — |
 | Custom Mode (Nuzlocke/randomizer) | ADAPT (Phase 8) | High | 8 |
 | Gym 8 tile puzzle | ADAPT | Medium | 3/4 |
-| Actan scripts | INVESTIGATE | TBD | — |
+| Actan scripts | STRIP | 4 | Party-empty guard must survive in converted event |
 | Input/Win32API | STRIP/REPLACE | None | — |
 | Klein utilities | STRIP | None | — |
 | FMOD | STRIP | None | — |

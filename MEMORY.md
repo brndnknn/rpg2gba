@@ -7,11 +7,11 @@
 
 ## Current Phase
 
-**Active phase:** Phase 0 — Reconnaissance (in progress; awaits user review at exit gate)
+**Active phase:** Phase 2 prep — `.dat` deserialization spike (blocks Phase 2 proper)
 
-**Completed phases:** Phase 1 (repo scaffold)
+**Completed phases:** Phase 0 (Reconnaissance ✓), Phase 1 (repo scaffold ✓)
 
-**Next concrete task:** User reviews Phase 0 deliverables in `reference/` (especially `phase0_summary.md` and `uranium_custom_features.md`). Several agent-generated claims in those docs need verification — see Open Questions. After review, plan the Phase 1 fork setup + the `.dat` deserialization spike that gates Phase 2.
+**Next concrete task:** Run Ruby spike to identify which `.dat` file holds the species table (candidates: `attacksRS.dat`, `tmpbs.dat`, `dexdata.dat`), confirm trainer data has no `TPSHADOW=true` rows, and inspect `tmpbs.dat`. Then begin Phase 2 PBS converters.
 
 ---
 
@@ -45,7 +45,13 @@
 - **Scripts.rxdata has 260 sections;** ~13 are clearly Uranium-original (Nuclear_*, URANIUM_*, Bambo, Tandor, Custom_Trainers, GenderSelect, StarterSelect, etc.). See `reference/scripts_index.md` ⚠ flags. Note: `220_Custom_Mode.rb` and `222_Gym_8.rb` were in the dump but missed in the agent's `uranium_custom_features.md` summary.
 - **Audio middleware: FMOD.** Uranium uses FMOD via DLL (`fmodex.dll`), wrapped by scripts 247–249. Strip — GBA cannot use FMOD.
 - **EliteBattle and BW UI overrides** are third-party Essentials mods (not Uranium-original) shipped with the game; both strip on conversion since pokeemerald-expansion has its own UI/battle scene.
-- **Tandor dex lower bound: ≥194 species.** Derived from `scripts_dump/213_Bambo_Reward.rb:12` SHINYCHARM threshold. Scripts never embed the total — `PBSpecies.maxValue` is computed by the compiler from `PBS/pokemon.txt`. The "~200 species, 18 Uranium-original" claim is currently unsupported; resolve in the `.dat` spike.
+- **Tandor dex: 200 entries, 201 internal species IDs.** Confirmed from `dexdata.dat` (15276 bytes ÷ 76 = 201) and `regionals.dat` (200 species with Tandor numbers 1–200; 1 species has no Tandor number — identity TBD). The "~200 species, 18 Uranium-original" claim is resolved for count but fakemon identity still unconfirmed.
+- **Two `.dat` binary formats.** Custom Essentials binary (`dexdata.dat`, `attacksRS.dat`, `tmpbs.dat`, `evolutions.dat`, `eggEmerald.dat`, `regionals.dat`, `moves.dat`, `items.dat`, `tutor.dat`, `tm.dat`, `metrics.dat`) — parse from `Compiler.rb` write schema, no Ruby needed. Ruby Marshal (`trainers.dat`, `encounters.dat`, `connections.dat`, `metadata.dat`, etc.) — load with stubs. See `uranium_dat_inventory.md`.
+- **`dexdata.dat` = main species table.** 76 bytes per species, no header, field offsets in `Compiler.rb` `requiredtypes`/`optionaltypes` dicts. Start `pbs_converter/pokemon.py` here.
+- **`attacksRS.dat` = level-up learnsets.** Indexed binary: (offset, byte_length) table at front, then [level uint16, move_id uint16] pairs per species.
+- **`tmpbs.dat` = Uranium-custom TMPBS field.** Same indexed format as attacksRS, single move IDs per entry. Extra move compatibility list — semantics TBD.
+- **Shadow Pokémon STRIP confirmed.** 0 TPSHADOW hits in 331 trainers. `shadowmoves.dat` = Array[0] (empty).
+- **types.dat = 20-type effectiveness matrix.** Array[400] = 20×20. Nuclear type already encoded (Uranium extends vanilla 18 types → 20 total).
 - **Shadow Pokémon code is complete but inert.** `scripts_dump/124_Pokemon_ShadowPokemon.rb` (806 lines) + `145_PScreen_PurifyChamber.rb` implement the full Colosseum/XD mechanic (heart gauge, hyper mode, Relic Stone, Purify Chamber, Shadow Sky), but no script ever sets `$PokemonGlobal.snagMachine = true`, and only `224_Nuclear_Horde_Battles.rb:7-11` aliases `pbIsSnagBall?` (for Nuclear hordes, not shadows). Treat as dead code — STRIP after Phase 2 spike confirms no `TPSHADOW=true` rows in `trainers.txt`.
 - **Gym 8 has a custom tile puzzle.** `scripts_dump/222_Gym_8.rb` defines three hardcoded layouts (5×4, 10×9, 16×15) plus a spawn-event runtime patch and a live HUD. Story-critical (cannot beat 8th gym without it). ADAPT — re-express as a Poryscript movement/event puzzle.
 - **Tandor Championship is a 4-round randomized bracket**, not a fixed sequence. `scripts_dump/227_Tandor_Championship.rb` picks 2 from `TCTRAINERS` + 2 from `TCTRAINERS2` (former Gym Leaders). Decision changed to ADAPT (was CONVERT) since the map-event NPC graphic mutation doesn't translate directly.
@@ -73,17 +79,21 @@ Bambo reward thresholds (count-of-owned, not switches/vars) from `213_Bambo_Rewa
 
 ## Open Questions
 
-- **Which `.dat` holds the species table?** Candidates: `attacksRS.dat`, `tmpbs.dat`, possibly inside `dexdata.dat`. Resolve via the Phase 2 deserialization spike. Blocks Phase 2.
-- **Exact Tandor regional dex size + fakemon count.** Lower bound from scripts is ≥194; the "~200 species / 18 Uranium-original" claim has no script-level support. Resolve in the spike against `Data/regionals.dat` + the species `.dat`.
 - **Locate the Nuclear 1/8-HP-per-turn out-of-battle effect.** Not in `217_Nuclear_Forms_Moves.rb`; likely in a field/step hook or `PokeBattle_Pokemon` patch. Resolve before Phase 6.
-- **Confirm no `TPSHADOW=true` rows** in `trainers.txt` (or whichever `.dat` holds trainer data) before stripping the Shadow Pokémon code path entirely. Resolve during the Phase 2 spike.
-- **`tmpbs.dat`** — name suggests "temp PBS" intermediate. May be compilation scratch left in build, or may hold real data. Inspect during the Phase 2 spike.
+- **Identity of species ID 201** — has no Tandor dex number in `regionals.dat`. Could be a form variant, placeholder, or secret event Pokémon. Resolve during Phase 2 species parsing.
+- **Exact TMPBS field purpose** — Uranium-custom extra move list per species (`tmpbs.dat`); likely move-reminder or broad compatibility list. Determine exact semantics before deciding how to represent in Phase 2 JSON output.
 - **Verify pre-seeded `VAR_GYM8_*` / `VAR_TANDOR_CHAMPIONSHIP_*` names** at Phase 4 flag-registry build (proposed in Flag Registry Notes; subject to renaming based on registry policy).
-- ~~Re-examine other previously-undumped sections for description accuracy.~~ **Resolved 2026-05-15.** Verified `209_Achievements_System.rb` (STRIP stands; dead URL stub at 209:118 confirms online dep), `216_Custom_Trainers.rb` (description rewritten — was filename-inferred and wrong; decision still ADAPT but real porting work), `231_Beta_Save_Transfer.rb` (STRIP stands; uses hardcoded `$game_switches[113]`, `$game_switches[130]`, `$game_variables[19]` (trainer id), `$game_variables[20]` (savenumber), plus `NEW_VERSION_SWITCH` constant — only relevant if a future Phase 8 tool migrates real Uranium saves).
+- ~~Re-examine other previously-undumped sections for description accuracy.~~ **Resolved 2026-05-15.**
+- ~~Which `.dat` holds the species table?~~ **Resolved 2026-05-18: `dexdata.dat`.**
+- ~~Exact Tandor dex size.~~ **Resolved 2026-05-18: 200 entries (regionals.dat), 201 internal species IDs.**
+- ~~Confirm no TPSHADOW=true rows.~~ **Resolved 2026-05-18: 0 hits in 331 trainers. STRIP confirmed.**
+- ~~tmpbs.dat unknown.~~ **Resolved 2026-05-18: Uranium-custom TMPBS extra move list per species.**
 
 ---
 
 ## Last Session Summary
+
+**2026-05-18:** Closed Phase 0 and ran the `.dat` deserialization spike. Confirmed: species data in `dexdata.dat` (76 bytes/species, 201 species); level-up learnsets in `attacksRS.dat`; `tmpbs.dat` = Uranium-custom extra move list; Shadow Pokémon STRIP confirmed (0 TPSHADOW hits, `shadowmoves.dat` empty); Tandor dex = 200 entries; two distinct binary formats (custom Essentials binary vs Ruby Marshal). Updated `uranium_dat_inventory.md` throughout. Spike script at `scripts/spike_dat_inventory.rb`. Phase 2 is now unblocked — start with `dexdata.dat` parser in `pbs_converter/pokemon.py`.
 
 **2026-05-12:** Phase 0 verification pass. Walked the user through the seven Phase-0 deliverables. Then attempted the four quick-win + two medium verification items from Open Questions via three parallel Opus sub-agents. First-round agents reported several files as "0 bytes / empty stubs" — investigation revealed a **dumper encoding bug** in `recon_scripts.rb`: 85 of 260 sections had failed to write because `File.write(out, source, encoding: 'utf-8')` raised on Windows-1252 bytes. Fixed by transcoding `Windows-1252 → UTF-8` and using `File.binwrite`; re-ran the dumper (all 260 sections now valid; 40 genuinely empty). Re-spawned the three Opus agents against the corrected dump. Applied verified updates to `uranium_custom_features.md` (expanded Nuclear-move list to 9 codenames, corrected Multiple Fogs #232→#223, rewrote Tandor Championship entry + downgraded CONVERT→ADAPT, added new sections for Custom Mode and Gym 8 puzzle, updated Summary Decision Matrix), `phase0_summary.md` (Tandor dex statement now lower-bound-only with citation, expanded Shadow note with code-complete-but-inert finding), `uranium_dat_inventory.md` (shadowmoves entry updated). Populated Flag Registry Notes with 4 pre-seed candidates from gym-8 and championship scripts. Pick up at: user re-reviews Phase 0 docs at exit gate, then Phase 1 fork setup + `.dat` deserialization spike. The Bambo SHINYCHARM threshold ≥194 + the missing exact species/fakemon counts are now top of Open Questions.
 
