@@ -1,0 +1,22 @@
+{
+  "0": "NORMAL",
+  "1": "FIGHTING",
+  "2": "FLYING",
+  "3": "POISON",
+  "4": "GROUND",
+  "5": "ROCK",
+  "6": "BUG",
+  "7": "GHOST",
+  "8": "STEEL",
+  "9": "QMARKS",
+  "10": "FIRE",
+  "11": "WATER",
+  "12": "GRASS",
+  "13": "ELECTRIC",
+  "14": "PSYCHIC",
+  "15": "ICE",
+  "16": "DRAGON",
+  "17": "DARK",
+  "18": "NUCLEAR",
+  "19": "FAIRY"
+}

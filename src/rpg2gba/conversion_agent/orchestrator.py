@@ -16,7 +16,7 @@ The backend is swappable:
 """
 from pathlib import Path
 
-from rpg2gba.conversion_agent.backends import ConversionBackend, ConversionResult
+from rpg2gba.conversion_agent.backends import ConversionBackend
 from rpg2gba.conversion_agent.flag_registry import FlagRegistry
 
 
