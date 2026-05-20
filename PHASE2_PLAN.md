@@ -351,7 +351,7 @@ Tasks:
 - [x] Edge test: a Uranium-original ability (`ABILITY_GEIGER_SENSE`) is marked
       `needs_engine`. Plus `test_edge_evolutions_forward_only` for the mask fix.
 
-### 2.2 — Moves (`moves.py`) — source: `moves.dat` + `messages.dat`-derived sidecar
+### 2.2 — Moves (`moves.py`) — source: `moves.dat` + `messages.dat`-derived sidecar — ✓ COMPLETE (2026-05-20)
 
 Schema (verified from `175__Compiler.rb` lines ~1166–1280):
 - **`moves.dat` is a flat 14-byte-per-move table**, not indexed. Each
@@ -378,14 +378,14 @@ Schema (verified from `175__Compiler.rb` lines ~1166–1280):
   `reference/scripts_dump/`. Grep for `class PBMoves` to find the file.
 
 Tasks:
-- [ ] Write `Move` dataclass + `parse(path) -> list[Move]` for `moves.dat` (flat 14-byte records).
-- [ ] Resolve `MOVE_*` internal names from `Scripts.rxdata` `PBMoves` section; mint via `_id_map`.
-- [ ] Mark the 9 Nuclear-type moves (GAMMARAY, RADIOACID, NUCLEARWASTE, HALFLIFE, NUCLEARSLASH, NUCLEARWIND, PROTONBEAM, ATOMICPUNCH, METALCRUNCHER) as `needs_engine`; emit placeholder entries with `EFFECT_NONE` + `// TODO Phase 6` comment.
-- [ ] Emit `moves_info.h` (`gMovesInfo[]`) and `moves.h` (`MOVE_*` enum).
-- [ ] Cross-check: every move ID referenced from `attacksRS.dat` resolves in the move table. Fail loud on miss.
-- [ ] Round-trip test (parse → emit → regex-read C → diff).
-- [ ] Golden test: snapshot first 5 entries (Pound, Tackle, one Nuclear move) into `tests/fixtures/moves_golden.h`.
-- [ ] Edge test: a Uranium-original move is marked `needs_engine`.
+- [x] Write `Move` dataclass + `parse(path) -> list[Move]` for `moves.dat` (flat 14-byte records, struct `"<HBBBBBBHBHB"`).
+- [x] Resolve `MOVE_*` via `_naming.to_constant` on the display name (matches §2.1 learnset emit) + mint via `_id_map`, keyed by internal name from `reference/move_internal_names.json` (the dumped `PBMoves` section).
+- [x] Nuclear moves flagged `needs_engine` (detected by type idx 18, not a hardcoded name list → 9 moves). **Deviation:** ALL move effects deferred to Phase 6, not just Nuclear — every move emits `EFFECT_PLACEHOLDER` (`EFFECT_NONE` would lose the distinction) + `// TODO Phase 6: function code N` comment + a complete `intermediate/move_function_codes.json` worklist. See MEMORY.md 2026-05-20 decision.
+- [x] Emit `moves_info.h` (`gMovesInfo[]`, designated initializers) and `moves.h` (`MOVE_*` `#define`s). Target via PBTargets→`TARGET_*` map; positive flags only.
+- [x] Cross-check covered by the shared resolver: `pokemon.py` learnset/egg-move emit resolves every referenced move id through `move_constant`, which fails loud if the id is absent from `move_internal_names.json`.
+- [x] Round-trip test (`test_pbs_moves.py::test_roundtrip_numeric` — power/accuracy/pp/priority).
+- [x] Golden test: `tests/fixtures/moves_golden.h` pins MOVE_TACKLE + the Nuclear move MOVE_ATOMIC_PUNCH.
+- [x] Edge tests: Nuclear move `needs_engine`; every move `EFFECT_PLACEHOLDER` + worklisted losslessly.
 
 ### 2.3 — Items (`items.py`) — source: `items.dat`
 

@@ -89,7 +89,17 @@ TYPE_TO_FILE.each do |type_id, name|
       next
     end
 
-  payload = pairs.to_h { |id, s| [id.to_s, s.to_s.force_encoding('windows-1252').encode('utf-8', invalid: :replace, undef: :replace)] }
+  # messages.dat strings are stored as raw UTF-8 bytes tagged ASCII-8BIT
+  # (e.g. "Pok\xC3\xA9mon", "SWIMMER\xE2\x99\x80"). Tag them UTF-8 directly.
+  # Only the rare string that isn't valid UTF-8 is treated as Windows-1252.
+  payload = pairs.to_h do |id, s|
+    str = s.to_s.dup.force_encoding('UTF-8')
+    unless str.valid_encoding?
+      str = s.to_s.dup.force_encoding('windows-1252')
+                  .encode('UTF-8', invalid: :replace, undef: :replace)
+    end
+    [id.to_s, str]
+  end
   out_path = File.join(out_dir, "#{name}.json")
   File.write(out_path, JSON.pretty_generate(payload) + "\n")
   written << "#{name}.json (#{payload.size} entries)"

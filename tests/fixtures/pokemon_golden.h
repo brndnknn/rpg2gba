@@ -50,6 +50,6 @@
         .weight = 2400,
         .speciesName = _("Urayne"),
         .categoryName = _("ATOMIC"),
-        .description = COMPOUND_STRING("An artificial Pok\xC3\xA9mon created to be a source of unlimited energy. The more radioactive fuel it consumes, the greater its power becomes. At max potential, it can split atoms."),
+        .description = COMPOUND_STRING("An artificial Pok\xE9mon created to be a source of unlimited energy. The more radioactive fuel it consumes, the greater its power becomes. At max potential, it can split atoms."),
         .levelUpLearnset = sLevelUpLearnset_URAYNE,
     },
