@@ -23,6 +23,7 @@ derived name that isn't in the set is a Uranium-original → `needs_engine`.
 from __future__ import annotations
 
 import re
+import unicodedata
 from pathlib import Path
 
 # Characters dropped entirely (apostrophes, periods): "Farfetch'd" → FARFETCHD,
@@ -32,6 +33,17 @@ _DROP = re.compile(r"['.]")
 _SEP = re.compile(r"[^A-Za-z0-9]+")
 
 
+def _fold_accents(name: str) -> str:
+    """Strip diacritics so accented names match the ASCII expansion constants.
+
+    "Poké Ball" → "Poke Ball" → ITEM_POKE_BALL (the fork constant), not
+    ITEM_POK_BALL. NFKD decomposes "é" into "e" + combining acute; dropping the
+    combining mark (category "Mn") leaves the base letter.
+    """
+    decomposed = unicodedata.normalize("NFKD", name)
+    return "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
+
+
 def to_constant(prefix: str, name: str) -> str:
     """Normalize a display/internal name into a `PREFIX_UPPER_SNAKE` constant.
 
@@ -39,7 +51,7 @@ def to_constant(prefix: str, name: str) -> str:
     for the vanilla overlap; Uranium-original names normalize cleanly too, they
     just won't resolve against the fork constant set (→ needs_engine).
     """
-    cleaned = _DROP.sub("", name)
+    cleaned = _DROP.sub("", _fold_accents(name))
     snake = _SEP.sub("_", cleaned).strip("_").upper()
     return f"{prefix}_{snake}"
 

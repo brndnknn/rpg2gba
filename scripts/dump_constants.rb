@@ -50,7 +50,11 @@ scripts.each do |entry|
   pairs = {}
   source.each_line do |line|
     line.strip!
-    if (m = line.match(/^([A-Z][A-Z0-9_]*)\s*=\s*(\d+)\s*$/))
+    # Constant names are conventionally all-caps, but Uranium's PBS contains
+    # author typos with stray lowercase letters (e.g. `POKeBALL=211`). Accept
+    # any identifier so those ids aren't silently dropped (fail-loud downstream
+    # depends on every shipped id having an internal name).
+    if (m = line.match(/^([A-Za-z][A-Za-z0-9_]*)\s*=\s*(\d+)\s*$/))
       pairs[m[2]] = m[1]
     end
   end

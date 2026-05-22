@@ -387,23 +387,45 @@ Tasks:
 - [x] Golden test: `tests/fixtures/moves_golden.h` pins MOVE_TACKLE + the Nuclear move MOVE_ATOMIC_PUNCH.
 - [x] Edge tests: Nuclear move `needs_engine`; every move `EFFECT_PLACEHOLDER` + worklisted losslessly.
 
-### 2.3 — Items (`items.py`) — source: `items.dat`
+### 2.3 — Items (`items.py`) — source: `items.dat` — ✓ COMPLETE (2026-05-21)
 
-Schema (from `pbCompileItems` around line 810): indexed binary; per item:
-ID, internal name, display name, plural name, pocket (uint8), price
-(uint16), description (string), use in field flag (uint8), use in battle
-flag (uint8), special item type (uint8), Mach Bike / TM / HM / etc.
-markers.
+**Corrected schema:** `items.dat` is **not** the simple fput indexed binary —
+it's Essentials' `writeSerialRecords` format (Compiler.rb:446). Header is
+`numrec` × (uint32 offset, uint32 byte_length) pairs, where the first uint32 is
+`numrec << 3`. Each record body is self-describing **TLV** (1-byte tag per field:
+`i`=varint int, `"`=length-prefixed string, `0`=nil, `T`/`F`=bool;
+SerialRecord.encode/decode :310). 9 fields per item, order from
+117_PItem_Items.rb: `ITEMID, ITEMNAME, ITEMPOCKET, ITEMPRICE, ITEMDESC,
+ITEMUSE, ITEMBATTLEUSE, ITEMTYPE, ITEMMACHINE`. 607 records. Embedded strings
+are raw UTF-8 bytes (read past, discarded — display text comes from sidecars).
 
 Tasks:
-- [ ] Verify exact `items.dat` field order against `pbCompileItems` (Compiler.rb ~810). Update schema above if different.
-- [ ] Write `Item` dataclass + parser.
-- [ ] Build pocket/category enum-mapping table from P4 (`include/constants/items.h` in fork).
-- [ ] Mint `ITEM_*` constants via `_id_map`; mark Uranium-original items as `needs_engine`.
-- [ ] Emit `items.h` and `items.h` constants header.
-- [ ] Round-trip test.
-- [ ] Golden test: snapshot first 5 items + one Uranium-original.
-- [ ] Edge test: a `needs_engine` item is correctly marked.
+- [x] Verify exact `items.dat` field order against `pbCompileItems` (Compiler.rb 810). Schema corrected above (SerialRecords TLV, not fput).
+- [x] Write `Item` dataclass + parser (`_decode_record` TLV walker; fail-loud on bad tag / wrong field count / unknown pocket).
+- [x] Build pocket enum-mapping table (Essentials 1..8 → fork POCKET_*; lossy consolidation — Medicine/Mail/Battle Items fold into POCKET_ITEMS; Key Items → `.importance = 1`).
+- [x] Mint `ITEM_*` via `_id_map` (same `to_constant` rule as pokemon.py's `item_constant`); 111 Uranium-original/unmatched → `needs_engine`.
+- [x] Emit `src/data/items.h` (`gItemsInfo[]`) + `include/constants/items.h` (`ITEM_*` `#define`s).
+- [x] Round-trip test (`test_roundtrip_price`).
+- [x] Golden test (`tests/fixtures/items_golden.h`: ITEM_REPEL + accent-folded ITEM_POKE_BALL).
+- [x] Edge tests: key-item `.importance`, accent fold (POKeBALL→ITEM_POKE_BALL), needs_engine.
+
+**Deviation (mirrors §2.2 / D3):** item *behavior* (field-use, battle-use,
+special-type, TM/HM linkage) is **deferred to Phase 6**. Only deterministic,
+lossless fields (name, price, description, pocket, importance) are emitted;
+raw Essentials codes for all 607 items are preserved in
+`intermediate/item_field_codes.json` (Phase 6 worklist). Behavior struct
+fields left at default.
+
+**Two fixes landed here (touch shared code — carry forward):**
+1. `scripts/dump_constants.rb` regex was all-caps-only and silently dropped
+   `POKeBALL=211` (author typo, lowercase `e`) → item 211 had no internal name.
+   Loosened to `[A-Za-z][A-Za-z0-9_]*`. Regenerating the sidecars **also
+   recovered ~70 mixed-case `trainer_class_internal_names` entries** that were
+   being dropped (PkMnTRAINER_Male, LEADER_Roxanne, SWIMMERfE, …) — **relevant
+   to §2.6 trainers.** Species/moves/abilities/types sidecars unchanged.
+2. `_naming.to_constant` now NFKD-folds diacritics ("Poké Ball" → ITEM_POKE_BALL,
+   not ITEM_POK_BALL). Only 3 item names were accented; no move/species/ability
+   name was, so §2.1/§2.2 constants are unchanged.
 
 ### 2.4 — Abilities (`abilities.py`) — source: `dexdata.dat` references + script-side names
 
