@@ -1,0 +1,1393 @@
+{
+  "classes": {
+    "TRAINER_CLASS_ACESNOW_FEMALE": {
+      "id": 81,
+      "name": "ACE TRAINER",
+      "base_money": 95,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-CoolHikerFisherEncounter.ogg",
+      "gender": "Male",
+      "skill": 95
+    },
+    "TRAINER_CLASS_ACESNOW_MALE": {
+      "id": 82,
+      "name": "ACE TRAINER",
+      "base_money": 95,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-CoolHikerFisherEncounter.ogg",
+      "gender": "Male",
+      "skill": 95
+    },
+    "TRAINER_CLASS_ACOLYTE_1": {
+      "id": 105,
+      "name": "ACOLYTE",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-CoolHikerFisherEncounter.ogg",
+      "gender": "Male",
+      "skill": 60
+    },
+    "TRAINER_CLASS_ACOLYTE_2": {
+      "id": 106,
+      "name": "ACOLYTE",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-CoolHikerFisherEncounter.ogg",
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_ACOLYTE_3": {
+      "id": 107,
+      "name": "ACOLYTE",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-CoolHikerFisherEncounter.ogg",
+      "gender": "Male",
+      "skill": 60
+    },
+    "TRAINER_CLASS_ACOLYTE_4": {
+      "id": 108,
+      "name": "ACOLYTE",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-CoolHikerFisherEncounter.ogg",
+      "gender": "Male",
+      "skill": 60
+    },
+    "TRAINER_CLASS_ACOLYTE_5": {
+      "id": 109,
+      "name": "ACOLYTE",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-CoolHikerFisherEncounter.ogg",
+      "gender": "Male",
+      "skill": 60
+    },
+    "TRAINER_CLASS_ACTOR": {
+      "id": 99,
+      "name": "ACTOR",
+      "base_money": 80,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-PsychicAthlete spotted",
+      "gender": "Male",
+      "skill": 80
+    },
+    "TRAINER_CLASS_ACTRESS": {
+      "id": 100,
+      "name": "ACTRESS",
+      "base_money": 80,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-PsychicAthlete spotted",
+      "gender": "Female",
+      "skill": 80
+    },
+    "TRAINER_CLASS_APOCALYPSE": {
+      "id": 120,
+      "name": "APOCALYPSE",
+      "base_money": 140,
+      "battle_bgm": "PU-CurieUrayneBattle.ogg",
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Mixed",
+      "skill": 200
+    },
+    "TRAINER_CLASS_AQUALEADER": {
+      "id": 70,
+      "name": "AQUA LEADER",
+      "base_money": 100,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_AROMALADY": {
+      "id": 53,
+      "name": "AROMA LADY",
+      "base_money": 40,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 40
+    },
+    "TRAINER_CLASS_BATTLEGIRL": {
+      "id": 33,
+      "name": "BATTLE GIRL",
+      "base_money": 65,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-PsychicAthlete spotted.ogg",
+      "gender": "Female",
+      "skill": 65
+    },
+    "TRAINER_CLASS_BEAUTY": {
+      "id": 5,
+      "name": "BEAUTY",
+      "base_money": 50,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 50
+    },
+    "TRAINER_CLASS_BIKER": {
+      "id": 96,
+      "name": "BIKER",
+      "base_money": 50,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-CoolHikerFisherEncounter.ogg",
+      "gender": "Male",
+      "skill": 50
+    },
+    "TRAINER_CLASS_BIRDKEEPER": {
+      "id": 42,
+      "name": "BIRD KEEPER",
+      "base_money": 45,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 45
+    },
+    "TRAINER_CLASS_BLACKBELT": {
+      "id": 16,
+      "name": "BLACK BELT",
+      "base_money": 65,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-PsychicAthlete spotted.ogg",
+      "gender": "Male",
+      "skill": 65
+    },
+    "TRAINER_CLASS_BUGCATCHER": {
+      "id": 12,
+      "name": "BUG CATCHER",
+      "base_money": 16,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 16
+    },
+    "TRAINER_CLASS_BUGMANIAC": {
+      "id": 45,
+      "name": "BUG MANIAC",
+      "base_money": 45,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 45
+    },
+    "TRAINER_CLASS_CAMPER": {
+      "id": 59,
+      "name": "CAMPER",
+      "base_money": 30,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 30
+    },
+    "TRAINER_CLASS_CHAMPION": {
+      "id": 29,
+      "name": "CHAMPION",
+      "base_money": 100,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_COLLECTOR": {
+      "id": 47,
+      "name": "COLLECTOR",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 60
+    },
+    "TRAINER_CLASS_COOLCOUPLE": {
+      "id": 91,
+      "name": "COOL COUPLE",
+      "base_money": 70,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Mixed",
+      "skill": 70
+    },
+    "TRAINER_CLASS_COOLTRAINER_FEMALE": {
+      "id": 56,
+      "name": "COOLTRAINER",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 60
+    },
+    "TRAINER_CLASS_COOLTRAINER_MALE": {
+      "id": 55,
+      "name": "COOLTRAINER",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-CoolHikerFisherEncounter.ogg",
+      "gender": "Male",
+      "skill": 60
+    },
+    "TRAINER_CLASS_DIVER": {
+      "id": 112,
+      "name": "DIVER",
+      "base_money": 50,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 50
+    },
+    "TRAINER_CLASS_DRAGONTAMER": {
+      "id": 41,
+      "name": "DRAGON TAMER",
+      "base_money": 75,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 75
+    },
+    "TRAINER_CLASS_DREAMGARGRYPH": {
+      "id": 127,
+      "name": "DREAM",
+      "base_money": 0,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Mixed",
+      "skill": 200
+    },
+    "TRAINER_CLASS_DREAMURAYNE": {
+      "id": 129,
+      "name": "BIOFIBER CONSTRUCT",
+      "base_money": 0,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Mixed",
+      "skill": 200
+    },
+    "TRAINER_CLASS_ELITEADAM": {
+      "id": 121,
+      "name": "ELITE TRAINER",
+      "base_money": 110,
+      "battle_bgm": "PU-EliteBattle.ogg",
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Male",
+      "skill": 110
+    },
+    "TRAINER_CLASS_ELITECHELSEA": {
+      "id": 126,
+      "name": "ELITE TRAINER",
+      "base_money": 110,
+      "battle_bgm": "PU-EliteBattle.ogg",
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Female",
+      "skill": 110
+    },
+    "TRAINER_CLASS_ELITEFOUR_PHOEBE": {
+      "id": 80,
+      "name": "ELITE FOUR",
+      "base_money": 100,
+      "battle_bgm": "elite",
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Female",
+      "skill": 100
+    },
+    "TRAINER_CLASS_ELITEFOUR_SIDNEY": {
+      "id": 79,
+      "name": "ELITE FOUR",
+      "base_money": 100,
+      "battle_bgm": "elite",
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_ELITEPAUL": {
+      "id": 122,
+      "name": "ELITE TRAINER",
+      "base_money": 110,
+      "battle_bgm": "PU-EliteBattle.ogg",
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Male",
+      "skill": 110
+    },
+    "TRAINER_CLASS_ELITESOL": {
+      "id": 125,
+      "name": "ELITE TRAINER",
+      "base_money": 110,
+      "battle_bgm": "PU-EliteBattle.ogg",
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Male",
+      "skill": 110
+    },
+    "TRAINER_CLASS_EXPERT_FEMALE": {
+      "id": 38,
+      "name": "EXPERT",
+      "base_money": 80,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 80
+    },
+    "TRAINER_CLASS_EXPERT_MALE": {
+      "id": 37,
+      "name": "EXPERT",
+      "base_money": 80,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 80
+    },
+    "TRAINER_CLASS_FAKELEADER": {
+      "id": 101,
+      "name": "LEADER?",
+      "base_money": 90,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Male",
+      "skill": 80
+    },
+    "TRAINER_CLASS_FARMER_FEMALE": {
+      "id": 93,
+      "name": "FARMER",
+      "base_money": 40,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 40
+    },
+    "TRAINER_CLASS_FARMER_MALE": {
+      "id": 118,
+      "name": "FARMER",
+      "base_money": 40,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 40
+    },
+    "TRAINER_CLASS_FISHERMAN": {
+      "id": 6,
+      "name": "FISHERMAN",
+      "base_money": 40,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-CoolHikerFisherEncounter.ogg",
+      "gender": "Male",
+      "skill": 40
+    },
+    "TRAINER_CLASS_GENTLEMAN": {
+      "id": 28,
+      "name": "GENTLEMAN",
+      "base_money": 75,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 75
+    },
+    "TRAINER_CLASS_GUITARIST": {
+      "id": 27,
+      "name": "GUITARIST",
+      "base_money": 50,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-PsychicAthlete spotted.ogg",
+      "gender": "Male",
+      "skill": 50
+    },
+    "TRAINER_CLASS_HERO": {
+      "id": 88,
+      "name": "HERO",
+      "base_money": 0,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Male",
+      "skill": 0
+    },
+    "TRAINER_CLASS_HEXMANIAC": {
+      "id": 20,
+      "name": "HEX MANIAC",
+      "base_money": 45,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-CoolHikerFisherEncounter.ogg",
+      "gender": "Female",
+      "skill": 45
+    },
+    "TRAINER_CLASS_HIKER": {
+      "id": 4,
+      "name": "HIKER",
+      "base_money": 50,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-CoolHikerFisherEncounter.ogg",
+      "gender": "Male",
+      "skill": 50
+    },
+    "TRAINER_CLASS_INTERVIEWERS": {
+      "id": 24,
+      "name": "INTERVIEWERS",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Mixed",
+      "skill": 60
+    },
+    "TRAINER_CLASS_KINDLER": {
+      "id": 58,
+      "name": "KINDLER",
+      "base_money": 50,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 50
+    },
+    "TRAINER_CLASS_KING": {
+      "id": 128,
+      "name": "KING",
+      "base_money": 0,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Mixed",
+      "skill": 200
+    },
+    "TRAINER_CLASS_LADY": {
+      "id": 7,
+      "name": "LADY",
+      "base_money": 80,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 80
+    },
+    "TRAINER_CLASS_LASS": {
+      "id": 2,
+      "name": "LASS",
+      "base_money": 24,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 24
+    },
+    "TRAINER_CLASS_LEADERS_LIZATATE": {
+      "id": 77,
+      "name": "LEADERS",
+      "base_money": 100,
+      "battle_bgm": "gymleader",
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Mixed",
+      "skill": 100
+    },
+    "TRAINER_CLASS_LEADER_BRAWLY": {
+      "id": 72,
+      "name": "LEADER",
+      "base_money": 100,
+      "battle_bgm": "gymleader",
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_LEADER_CAFF": {
+      "id": 87,
+      "name": "LEADER",
+      "base_money": 100,
+      "battle_bgm": "PU-GymBattle.ogg",
+      "win_bgm": "PU-GymVictory.ogg",
+      "intro_bgm": null,
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_LEADER_CALI": {
+      "id": 89,
+      "name": "LEADER",
+      "base_money": 100,
+      "battle_bgm": "PU-GymBattle.ogg",
+      "win_bgm": "PU-GymVictory.ogg",
+      "intro_bgm": null,
+      "gender": "Female",
+      "skill": 100
+    },
+    "TRAINER_CLASS_LEADER_FLANNERY": {
+      "id": 74,
+      "name": "LEADER",
+      "base_money": 100,
+      "battle_bgm": "gymleader",
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Female",
+      "skill": 100
+    },
+    "TRAINER_CLASS_LEADER_HINATA": {
+      "id": 115,
+      "name": "LEADER",
+      "base_money": 110,
+      "battle_bgm": "PU-GymBattle.ogg",
+      "win_bgm": "PU-GymVictory.ogg",
+      "intro_bgm": null,
+      "gender": "Female",
+      "skill": 110
+    },
+    "TRAINER_CLASS_LEADER_KAITO": {
+      "id": 116,
+      "name": "LEADER",
+      "base_money": 110,
+      "battle_bgm": "PU-GymBattle.ogg",
+      "win_bgm": "PU-GymVictory.ogg",
+      "intro_bgm": null,
+      "gender": "Male",
+      "skill": 110
+    },
+    "TRAINER_CLASS_LEADER_NORMAN": {
+      "id": 75,
+      "name": "LEADER",
+      "base_money": 100,
+      "battle_bgm": "gymleader",
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_LEADER_ROSALIND": {
+      "id": 102,
+      "name": "LEADER",
+      "base_money": 110,
+      "battle_bgm": "PU-GymBattle.ogg",
+      "win_bgm": "PU-GymVictory.ogg",
+      "intro_bgm": null,
+      "gender": "Female",
+      "skill": 110
+    },
+    "TRAINER_CLASS_LEADER_ROXANNE": {
+      "id": 71,
+      "name": "LEADER",
+      "base_money": 100,
+      "battle_bgm": "PU-GymBattle.ogg",
+      "win_bgm": "PU-GymVictory.ogg",
+      "intro_bgm": null,
+      "gender": "Female",
+      "skill": 100
+    },
+    "TRAINER_CLASS_LEADER_SHELDON": {
+      "id": 92,
+      "name": "LEADER",
+      "base_money": 100,
+      "battle_bgm": "PU-GymBattle.ogg",
+      "win_bgm": "PU-GymVictory.ogg",
+      "intro_bgm": null,
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_LEADER_TIKO": {
+      "id": 94,
+      "name": "LEADER",
+      "base_money": 100,
+      "battle_bgm": "PU-GymBattle.ogg",
+      "win_bgm": "PU-GymVictory.ogg",
+      "intro_bgm": null,
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_LEADER_VAERYN": {
+      "id": 103,
+      "name": "LEADER",
+      "base_money": 110,
+      "battle_bgm": "PU-GymBattle.ogg",
+      "win_bgm": "PU-GymVictory.ogg",
+      "intro_bgm": null,
+      "gender": "Male",
+      "skill": 110
+    },
+    "TRAINER_CLASS_LEADER_WALLACE": {
+      "id": 78,
+      "name": "LEADER",
+      "base_money": 100,
+      "battle_bgm": "gymleader",
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_LEADER_WATTSON": {
+      "id": 73,
+      "name": "LEADER",
+      "base_money": 100,
+      "battle_bgm": "gymleader",
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_LEADER_WINONA": {
+      "id": 76,
+      "name": "LEADER",
+      "base_money": 100,
+      "battle_bgm": "gymleader",
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Female",
+      "skill": 100
+    },
+    "TRAINER_CLASS_MAGMALEADER": {
+      "id": 30,
+      "name": "MAGMA LEADER",
+      "base_money": 100,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_NAMININJA": {
+      "id": 114,
+      "name": "NAMI NINJA",
+      "base_money": 70,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-NinjaEncounter.ogg",
+      "gender": "Male",
+      "skill": 70
+    },
+    "TRAINER_CLASS_NINJABOSS": {
+      "id": 98,
+      "name": "NINJA BOSS",
+      "base_money": 90,
+      "battle_bgm": "PU-NinjaBattle.ogg",
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Male",
+      "skill": 90
+    },
+    "TRAINER_CLASS_NINJABOY": {
+      "id": 43,
+      "name": "NINJA BOY",
+      "base_money": 50,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 50
+    },
+    "TRAINER_CLASS_NINJASURFERS": {
+      "id": 97,
+      "name": "NINJA SURFERS",
+      "base_money": 70,
+      "battle_bgm": "PU-NinjaBattle.ogg",
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Mixed",
+      "skill": 70
+    },
+    "TRAINER_CLASS_NINJATUTOR": {
+      "id": 117,
+      "name": "NINJA MASTER",
+      "base_money": 30,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-NinjaEncounter.ogg",
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_NUCLEARHORDE": {
+      "id": 119,
+      "name": "NUCLEAR HORDE",
+      "base_money": 0,
+      "battle_bgm": "PU-WildNuclearBattle.ogg",
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Mixed",
+      "skill": 80
+    },
+    "TRAINER_CLASS_OLDCOUPLE": {
+      "id": 66,
+      "name": "OLD COUPLE",
+      "base_money": 90,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Mixed",
+      "skill": 90
+    },
+    "TRAINER_CLASS_PARASOLLADY": {
+      "id": 44,
+      "name": "PARASOL LADY",
+      "base_money": 50,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 50
+    },
+    "TRAINER_CLASS_PICNICKER": {
+      "id": 60,
+      "name": "PICNICKER",
+      "base_money": 30,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 30
+    },
+    "TRAINER_CLASS_PIRATE_JACK": {
+      "id": 123,
+      "name": "PIRATE",
+      "base_money": 80,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-PirateTheme",
+      "gender": "Male",
+      "skill": 80
+    },
+    "TRAINER_CLASS_PIRATE_SILVA": {
+      "id": 124,
+      "name": "PIRATE",
+      "base_money": 80,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-PirateTheme",
+      "gender": "Male",
+      "skill": 80
+    },
+    "TRAINER_CLASS_PKMNBREEDER_FEMALE": {
+      "id": 21,
+      "name": "PkMn BREEDER",
+      "base_money": 40,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 40
+    },
+    "TRAINER_CLASS_PKMNBREEDER_MALE": {
+      "id": 48,
+      "name": "PkMn BREEDER",
+      "base_money": 40,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 40
+    },
+    "TRAINER_CLASS_PKMNRANGER_FEMALE": {
+      "id": 50,
+      "name": "PkMn RANGER",
+      "base_money": 55,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 55
+    },
+    "TRAINER_CLASS_PKMNRANGER_KELLYN": {
+      "id": 111,
+      "name": "PkMn RANGER",
+      "base_money": 100,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_PKMNRANGER_MALE": {
+      "id": 49,
+      "name": "PkMn RANGER",
+      "base_money": 55,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 55
+    },
+    "TRAINER_CLASS_PKMNTRAINER_FEMALE": {
+      "id": 1,
+      "name": "PkMn TRAINER",
+      "base_money": 100,
+      "battle_bgm": "PU-Online Battle.ogg",
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Female",
+      "skill": 120
+    },
+    "TRAINER_CLASS_PKMNTRAINER_MALE": {
+      "id": 0,
+      "name": "PkMn TRAINER",
+      "base_money": 100,
+      "battle_bgm": "PU-Online Battle.ogg",
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Male",
+      "skill": 120
+    },
+    "TRAINER_CLASS_PKMNTRAINER_MIXED": {
+      "id": 9,
+      "name": "PkMn TRAINER",
+      "base_money": 100,
+      "battle_bgm": "PU-Online Battle.ogg",
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Mixed",
+      "skill": 120
+    },
+    "TRAINER_CLASS_PKMNTRAINER_WALLY": {
+      "id": 17,
+      "name": "PkMn TRAINER",
+      "base_money": 100,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_POKEFAN_FEMALE": {
+      "id": 36,
+      "name": "POKéFAN",
+      "base_money": 40,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 40
+    },
+    "TRAINER_CLASS_POKEFAN_MALE": {
+      "id": 64,
+      "name": "POKéFAN",
+      "base_money": 40,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 40
+    },
+    "TRAINER_CLASS_POKEMANIAC": {
+      "id": 57,
+      "name": "POKéMANIAC",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 60
+    },
+    "TRAINER_CLASS_PROFESSOR": {
+      "id": 104,
+      "name": "PROFESSOR",
+      "base_money": 100,
+      "battle_bgm": "PU-Specialpoke.ogg",
+      "win_bgm": "PU-GymVictory.ogg",
+      "intro_bgm": null,
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_PSYCHIC_FEMALE": {
+      "id": 62,
+      "name": "PSYCHIC",
+      "base_money": 40,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-PsychicAthlete spotted.ogg",
+      "gender": "Female",
+      "skill": 40
+    },
+    "TRAINER_CLASS_PSYCHIC_MALE": {
+      "id": 61,
+      "name": "PSYCHIC",
+      "base_money": 40,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-PsychicAthlete spotted.ogg",
+      "gender": "Male",
+      "skill": 40
+    },
+    "TRAINER_CLASS_PYROMANIAC": {
+      "id": 95,
+      "name": "PYROMANIAC",
+      "base_money": 50,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-CoolHikerFisherEncounter.ogg",
+      "gender": "Male",
+      "skill": 50
+    },
+    "TRAINER_CLASS_RICHBOY": {
+      "id": 14,
+      "name": "RICH BOY",
+      "base_money": 80,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 80
+    },
+    "TRAINER_CLASS_RIVAL": {
+      "id": 86,
+      "name": "RIVAL",
+      "base_money": 70,
+      "battle_bgm": "PU-TheoBattle.ogg",
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Male",
+      "skill": 80
+    },
+    "TRAINER_CLASS_RIVAL2": {
+      "id": 110,
+      "name": "RIVAL",
+      "base_money": 90,
+      "battle_bgm": "PU-TheoBattle.ogg",
+      "win_bgm": null,
+      "intro_bgm": null,
+      "gender": "Male",
+      "skill": 100
+    },
+    "TRAINER_CLASS_RUINMANIAC": {
+      "id": 54,
+      "name": "RUIN MANIAC",
+      "base_money": 55,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 55
+    },
+    "TRAINER_CLASS_SAILOR": {
+      "id": 46,
+      "name": "SAILOR",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 60
+    },
+    "TRAINER_CLASS_SCHOOLKID": {
+      "id": 84,
+      "name": "SCHOOL KID",
+      "base_money": 40,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 40
+    },
+    "TRAINER_CLASS_SCHOOLKIDDO": {
+      "id": 85,
+      "name": "SCHOOLKIDDO",
+      "base_money": 40,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 40
+    },
+    "TRAINER_CLASS_SCHOOLKID_FEMALE": {
+      "id": 63,
+      "name": "SCHOOL KID",
+      "base_money": 20,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 20
+    },
+    "TRAINER_CLASS_SCHOOLKID_MALE": {
+      "id": 13,
+      "name": "SCHOOL KID",
+      "base_money": 20,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 20
+    },
+    "TRAINER_CLASS_SISANDBRO": {
+      "id": 65,
+      "name": "SIS AND BRO",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Mixed",
+      "skill": 60
+    },
+    "TRAINER_CLASS_SRANDJR": {
+      "id": 15,
+      "name": "SR. AND JR.",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Mixed",
+      "skill": 60
+    },
+    "TRAINER_CLASS_SUPERSCIENTIST": {
+      "id": 90,
+      "name": "SUPER SCIENTIST",
+      "base_money": 55,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-CoolHikerFisherEncounter.ogg",
+      "gender": "Male",
+      "skill": 55
+    },
+    "TRAINER_CLASS_SWIMMERFE": {
+      "id": 11,
+      "name": "SWIMMER♀",
+      "base_money": 50,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 50
+    },
+    "TRAINER_CLASS_SWIMMERMA": {
+      "id": 35,
+      "name": "SWIMMER♂",
+      "base_money": 50,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 50
+    },
+    "TRAINER_CLASS_TEAMAQUA_FEMALE": {
+      "id": 18,
+      "name": "TEAM AQUA",
+      "base_money": 40,
+      "battle_bgm": "006-Boss02",
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 40
+    },
+    "TRAINER_CLASS_TEAMAQUA_FEMALEALT": {
+      "id": 68,
+      "name": "TEAM AQUA",
+      "base_money": 60,
+      "battle_bgm": "006-Boss02",
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 60
+    },
+    "TRAINER_CLASS_TEAMAQUA_MALEALT": {
+      "id": 67,
+      "name": "TEAM AQUA",
+      "base_money": 60,
+      "battle_bgm": "006-Boss02",
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 60
+    },
+    "TRAINER_CLASS_TEAMAQUA_MALEALT2": {
+      "id": 69,
+      "name": "TEAM AQUA",
+      "base_money": 60,
+      "battle_bgm": "006-Boss02",
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 60
+    },
+    "TRAINER_CLASS_TEAMMAGMA_FEMALE": {
+      "id": 23,
+      "name": "TEAM MAGMA",
+      "base_money": 40,
+      "battle_bgm": "006-Boss02",
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 40
+    },
+    "TRAINER_CLASS_TEAMMAGMA_FEMALEALT": {
+      "id": 52,
+      "name": "TEAM MAGMA",
+      "base_money": 65,
+      "battle_bgm": "006-Boss02",
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 65
+    },
+    "TRAINER_CLASS_TEAMMAGMA_MALEALT": {
+      "id": 51,
+      "name": "TEAM MAGMA",
+      "base_money": 65,
+      "battle_bgm": "006-Boss02",
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 65
+    },
+    "TRAINER_CLASS_TEAMROCKET_M": {
+      "id": 83,
+      "name": "ROCKET GRUNT",
+      "base_money": 32,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 32
+    },
+    "TRAINER_CLASS_TRIATHLETE_FEMALECYCLIST": {
+      "id": 34,
+      "name": "TRIATHLETE",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 60
+    },
+    "TRAINER_CLASS_TRIATHLETE_FEMALERUNNER": {
+      "id": 31,
+      "name": "TRIATHLETE",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-PsychicAthlete spotted.ogg",
+      "gender": "Female",
+      "skill": 60
+    },
+    "TRAINER_CLASS_TRIATHLETE_FEMALESWIMMER": {
+      "id": 40,
+      "name": "TRIATHLETE",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-PsychicAthlete spotted.ogg",
+      "gender": "Female",
+      "skill": 60
+    },
+    "TRAINER_CLASS_TRIATHLETE_MALECYCLIST": {
+      "id": 8,
+      "name": "TRIATHLETE",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-PsychicAthlete spotted.ogg",
+      "gender": "Male",
+      "skill": 60
+    },
+    "TRAINER_CLASS_TRIATHLETE_MALERUNNER": {
+      "id": 32,
+      "name": "TRIATHLETE",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-PsychicAthlete spotted.ogg",
+      "gender": "Male",
+      "skill": 60
+    },
+    "TRAINER_CLASS_TRIATHLETE_MALESWIMMER": {
+      "id": 39,
+      "name": "TRIATHLETE",
+      "base_money": 60,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-PsychicAthlete spotted.ogg",
+      "gender": "Male",
+      "skill": 60
+    },
+    "TRAINER_CLASS_TSUKININJA": {
+      "id": 113,
+      "name": "TSUKI NINJA",
+      "base_money": 70,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-NinjaEncounter.ogg",
+      "gender": "Male",
+      "skill": 70
+    },
+    "TRAINER_CLASS_TUBER_FEMALE": {
+      "id": 19,
+      "name": "TUBER",
+      "base_money": 25,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 25
+    },
+    "TRAINER_CLASS_TUBER_MALE": {
+      "id": 25,
+      "name": "TUBER",
+      "base_money": 25,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 25
+    },
+    "TRAINER_CLASS_TWINS": {
+      "id": 10,
+      "name": "TWINS",
+      "base_money": 50,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Female",
+      "skill": 50
+    },
+    "TRAINER_CLASS_WORKER": {
+      "id": 22,
+      "name": "WORKER",
+      "base_money": 50,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-CoolHikerFisherEncounter.ogg",
+      "gender": "Male",
+      "skill": 50
+    },
+    "TRAINER_CLASS_YOUNGCOUPLE": {
+      "id": 26,
+      "name": "YOUNG COUPLE",
+      "base_money": 80,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-FemaleEncounter.ogg",
+      "gender": "Mixed",
+      "skill": 80
+    },
+    "TRAINER_CLASS_YOUNGSTER": {
+      "id": 3,
+      "name": "YOUNGSTER",
+      "base_money": 24,
+      "battle_bgm": null,
+      "win_bgm": null,
+      "intro_bgm": "PU-MaleEncounter.ogg",
+      "gender": "Male",
+      "skill": 24
+    }
+  },
+  "trainers": {
+    "TRAINER_ABE_GAYLE_166": {
+      "id": 166,
+      "trainer_class": "TRAINER_CLASS_COOLCOUPLE",
+      "name": "Abe & Gayle",
+      "party_id": 0,
+      "items": [],
+      "party": [
+        {
+          "species": "SPECIES_ESHOUTEN",
+          "level": 37,
+          "moves": [
+            "MOVE_SING",
+            "MOVE_DOUBLE_TEAM",
+            "MOVE_AIR_SLASH",
+            "MOVE_PSYCH_UP"
+          ],
+          "iv": 10,
+          "happiness": 70
+        },
+        {
+          "species": "SPECIES_SPLENDIFOWL",
+          "level": 37,
+          "iv": 10,
+          "happiness": 70
+        }
+      ]
+    },
+    "TRAINER_ADAM_101": {
+      "id": 101,
+      "trainer_class": "TRAINER_CLASS_BUGCATCHER",
+      "name": "Adam",
+      "party_id": 0,
+      "items": [],
+      "party": [
+        {
+          "species": "SPECIES_FIROKE",
+          "level": 26,
+          "iv": 10,
+          "happiness": 70
+        }
+      ]
+    },
+    "TRAINER_ADAM_200": {
+      "id": 200,
+      "trainer_class": "TRAINER_CLASS_SUPERSCIENTIST",
+      "name": "Adam",
+      "party_id": 0,
+      "items": [],
+      "party": [
+        {
+          "species": "SPECIES_TRACTON",
+          "level": 62,
+          "moves": [
+            "MOVE_IRON_HEAD",
+            "MOVE_LOCK_ON",
+            "MOVE_DISCHARGE",
+            "MOVE_DRAGON_RUSH"
+          ],
+          "iv": 10,
+          "happiness": 70
+        },
+        {
+          "species": "SPECIES_TRAWPINT",
+          "level": 62,
+          "moves": [
+            "MOVE_SWALLOW",
+            "MOVE_SLUDGE_BOMB",
+            "MOVE_TOXIC",
+            "MOVE_PSYCHIC"
+          ],
+          "iv": 10,
+          "happiness": 70
+        },
+        {
+          "species": "SPECIES_GELLIN",
+          "level": 63,
+          "moves": [
+            "MOVE_RECOVER",
+            "MOVE_ENERGY_BALL",
+            "MOVE_ACID_ARMOR",
+            "MOVE_SOLAR_BEAM"
+          ],
+          "iv": 10,
+          "happiness": 70
+        }
+      ]
+    }
+  }
+}
