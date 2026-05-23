@@ -453,29 +453,30 @@ species-referenced ability must exist in the sidecar). This adds ids 209/210 to
 `needs_engine.abilities` beyond §2.1's 17 → 19 total; no conflict (IdMap is
 idempotent), and the id_map is now complete for the form abilities.
 
-### 2.5 — TM / HM (`tm_hm.py`) — source: `tm.dat`, `tutor.dat`
+### 2.5 — TM / HM (`tm_hm.py`) — source: `tm.dat` (`tutor.dat` empty) — ✓ COMPLETE (2026-05-23)
 
-Both are indexed-binary with single uint16 move IDs per entry.
+**Format correction (verified):** `tm.dat` is **Ruby Marshal**, not indexed
+binary — an array indexed by move id where each entry is an Essentials
+`WordArray` of species ids (move→species). `tutor.dat` is **header-only/empty**
+(all 201 entries `len=0`). The shared `_marshal.dump_dat` + a `WordArray` stub in
+`deserialize.rb` handle it.
 
-- `tm.dat`: entry index = TM number, body = list of species IDs that can
-  learn that TM. (Verify per Compiler.rb — the inverse mapping may also
-  be valid; pick whichever matches the file's byte structure.)
-- `tutor.dat`: entry per species, body = list of move IDs that species
-  can learn from move tutors. (Already touched by §2.1; this step writes
-  the dedicated output.)
+**Emit reconciliation (MEMORY P4):** the fork **build-generates** teachable
+learnsets (`make_teachables.py`); there is no per-species TM bitfield to emit. So
+instead of `tm_hm_compatibility.h`/`tutor_learnsets.h`, §2.5 inverts `tm.dat` into
+the fork's `all_learnables.json` form (species internal name → sorted `MOVE_*`)
+and emits `intermediate/uranium_tm_learnables.json` (V6 merges it before the
+generator runs).
 
-Tasks:
-- [ ] Verify `tm.dat` byte structure against Compiler.rb; nail down direction (TM→species or species→TM).
-- [ ] Parse `tm.dat` and `tutor.dat`.
-- [ ] Emit `tm_hm_compatibility.h` (per-species bitfield, matching P4-discovered shape).
-- [ ] Emit `tutor_learnsets.h` here (remove from §2.1 emit list — single source).
-- [ ] Round-trip test.
-- [ ] Golden test: snapshot one species' TM bitfield + one species' tutor list.
-- [ ] Edge test: a species that learns 0 TMs round-trips correctly.
+- [x] Verify `tm.dat` byte structure / direction → Marshal, move→species (Compiler.rb:1579-1638).
+- [x] Parse `tm.dat`; assert `tutor.dat` empty (fail-loud if a body appears).
+- [x] ~~Emit `tm_hm_compatibility.h` bitfield~~ → emit `intermediate/uranium_tm_learnables.json` (all_learnables form). 196 species, 180 machine moves.
+- [x] ~~Emit `tutor_learnsets.h`~~ → `tutor.dat` empty, nothing to emit (§2.1 already declined it).
+- [x] Round-trip + golden (ORCHYNX) + edge (tutor empty; keys are bare internal names). 4 tests.
 
-### 2.6 — Trainers (`trainers.py`) — source: `trainers.dat` + `trainertypes.dat`
+### 2.6 — Trainers (`trainers.py`) — source: `trainers.dat` + `trainertypes.dat` — ✓ COMPLETE (2026-05-23)
 
-These are **Ruby Marshal format** (per D2 — uses `deserialize.rb --dat`).
+These are **Ruby Marshal format** (per D2 — uses `deserialize.rb dat`).
 
 - `trainers.dat`: array of trainer objects. Each has class ID, name,
   party (array of Pokémon templates: species, level, item, moves,
@@ -485,16 +486,23 @@ These are **Ruby Marshal format** (per D2 — uses `deserialize.rb --dat`).
 - `trainertypes.dat`: array of trainer-class definitions: name, BGM,
   AI flag, base prize money, double-battle flag.
 
-Tasks:
-- [ ] Use `deserialize.rb --dat` to dump `trainers.dat` and `trainertypes.dat` to JSON.
-- [ ] Write Python parser over the JSON into `Trainer` / `TrainerType` dataclasses.
-- [ ] Assert 0 `TPSHADOW` hits across all trainers; fail loud if non-zero.
-- [ ] Mint `TRAINER_*` and `TRAINER_CLASS_*` via `_id_map`, preserving Uranium IDs.
-- [ ] Emit `trainers.h`, `trainers.h` constants, `trainer_classes.h`.
-- [ ] Add banner pointing to MEMORY.md 2026-05-15 decision re: script 216 custom trainers (Phase 4 work, not here).
-- [ ] Round-trip test.
-- [ ] Golden test: snapshot first 3 trainers + all class definitions.
-- [ ] Edge test: a doubles trainer + a trainer with a custom-moveset Pokémon.
+**Emit reconciliation:** the modern fork **build-generates** `src/data/trainers.h`
+from `data/trainers.party` (DSL) via `trainerproc`, so Phase 2 emits
+constants-keyed **intermediate JSON** (`trainers.json`, `trainer_types.json`)
+rather than hand-writing C; V6 generates the `.party` DSL from it.
+
+Schema (verified): `trainers.dat` = `[class_id, name, items, party, party_id]`;
+party mon = 17-slot TP* array (`TPSPECIES=0 … TPBALL=16`, 115_PTrainer_NPCTrainers.rb).
+`trainertypes.dat` = `[id, internal, display, money, battleBGM, winBGM, introBGM,
+gender, skill]`.
+
+Tasks (✓ COMPLETE 2026-05-23):
+- [x] `dump_dat` both files → `Trainer`/`TrainerType` dataclasses.
+- [x] Assert 0 `TPSHADOW` across all 331 trainers / 1026 party mons (fail-loud in `_parse_mon`).
+- [x] Mint `TRAINER_*` (331, keyed by array index) + `TRAINER_CLASS_*` (130) via `_id_map`.
+- [x] ~~Emit `trainers.h`/`trainer_classes.h`~~ → `intermediate/trainers.json` + `trainer_types.json` (constants-keyed; V6 → `.party`).
+- [x] Banner in module docstring → MEMORY 2026-05-15 (script 216 = Phase 4).
+- [x] Round-trip + golden (130 classes + 3 trainers) + edge (Cool Couple doubles w/ custom moveset; 0-TPSHADOW). 4 tests.
 
 ### 2.7 — Encounters (`encounters.py`) — source: `encounters.dat`
 
@@ -504,13 +512,12 @@ Hash keyed by map ID; value is the encounter table for that map (slots
 per encounter type: grass, surf, fishing, rock smash, headbutt, etc.;
 each slot = [species_id, min_level, max_level]).
 
-Tasks:
-- [ ] Use `deserialize.rb --dat` to dump `encounters.dat` to JSON.
-- [ ] Write Python parser into per-map `EncounterTable` dataclasses.
-- [ ] Map Essentials encounter types → expansion encounter types via a static lookup table inside `encounters.py`.
-- [ ] Emit `wild_encounters.json` keyed by Uranium map ID (Phase 5 remaps).
-- [ ] Round-trip test.
-- [ ] Golden test: snapshot first 3 map encounter tables (pick maps from `reference/map_inventory.md` covering grass + water + fishing).
+Tasks (✓ COMPLETE 2026-05-23):
+- [x] `dump_dat` `encounters.dat` → `{map_id: [densities(13), slots]}` (Compiler.rb:1001-1104).
+- [x] Parse per-map; 13 EncounterTypes (104_PField_Encounters.rb). 52 maps.
+- [x] Map Essentials types → fork fields (land/water/rock_smash/fishing w/ rod groups); Cave/time-of-day/Headbutt/BugContest preserved under per-map `uranium_extra` (fail-loud, nothing dropped — conservation-tested).
+- [x] Emit `intermediate/wild_encounters.json` keyed by Uranium map ID (Phase 5 remaps).
+- [x] Round-trip (slot-list conservation) + golden (maps 8/22/214: land+water+all-rods, extra, cave) + edge (rod sub-groups; extra never in fork fields). 4 tests.
 
 ### 2.8 — Metadata (`metadata.py`) — source: `metadata.dat`
 
@@ -520,36 +527,34 @@ Hash of map-level metadata. Per Essentials: weather, outdoor flag, BGM
 override, battle background, escape map, etc. Plus a global "Home"
 record at index 0 with party start position.
 
-Tasks:
-- [ ] Use `deserialize.rb --dat` to dump `metadata.dat` to JSON.
-- [ ] Parse JSON into `GlobalMetadata` + `MapMetadata` dataclasses.
-- [ ] Emit `metadata.h` (player spawn x/y/map/direction).
-- [ ] Emit `map_metadata.json` for per-map metadata (Phase 5 consumer).
-- [ ] Round-trip test.
-- [ ] Golden test: snapshot global record + one map record.
+Tasks (✓ COMPLETE 2026-05-23):
+- [x] `dump_dat` `metadata.dat` → array indexed by map id (107__PField_Map.rb:305-379 field ids).
+- [x] Parse `GlobalMetadata` (index-0 Home = [map,x,y,dir]) + `MapMetadata` (188 maps). NOTE: Uranium has no "escape map"; respawn is `HealingSpot`.
+- [x] Emit `include/constants/metadata.h` (player spawn map 49 @ 7,7 dir 2).
+- [x] Emit `intermediate/map_metadata.json` (outdoor/weather/healing_spot/map_position/battle_back/… per map).
+- [x] Round-trip + golden (metadata.h spawn) + edge (map 12 outdoor+Rain@50%, map 2 healing spot). 3 tests.
 
 ### 2.9 — TMPBS sidecar (`tmpbs.py`) — source: `tmpbs.dat`
 
 Functionally already parsed alongside §2.1, but it's Uranium-original
 and worth a dedicated module for the emit step.
 
-Tasks:
-- [ ] Parse `tmpbs.dat` (indexed format, single uint16 per entry).
-- [ ] Emit `uranium_tmpbs.h` as a per-species extra-moves table.
-- [ ] Add `// TODO: confirm tmpbs semantics — see MEMORY.md Open Questions` banner on the emitted header.
-- [ ] Round-trip test.
-- [ ] Golden test: snapshot a species with a non-empty TMPBS list.
+Tasks (✓ COMPLETE 2026-05-23):
+- [x] Parse `tmpbs.dat` (reuses `pokemon.parse_indexed_u16_list`). 196 species, 9586 move entries.
+- [x] Emit `src/data/pokemon/uranium_tmpbs.h` (per-species `sUraniumTMPBS_*` arrays, egg-move style, MOVE_UNAVAILABLE-terminated).
+- [x] `// TODO: confirm tmpbs semantics` banner on the header.
+- [x] Round-trip + golden (ORCHYNX) + edge (empty species → no block). 3 tests.
 
 ### 2.10 — Types snapshot (`types_dump`, no emit) — source: `types.dat`
 
 Per D7, Phase 2 dumps a JSON sidecar only.
 
-Tasks:
-- [ ] Verify `types.dat` format (Marshal vs custom). Route accordingly.
-- [ ] Parse 20-type effectiveness matrix; locate Nuclear index.
-- [ ] Resolve type names from `Scripts.rxdata` `PBTypes` section.
-- [ ] Emit `reference/types_dump.json` with `{ "types": [...], "matrix": [[...]], "nuclear_index": N }`. No C emission.
-- [ ] Sanity test: matrix is 20×20 and Nuclear index is present.
+Tasks (✓ COMPLETE 2026-05-23):
+- [x] `types.dat` is Ruby Marshal `[pseudotypes, specialtypes, typechart]` (Compiler.rb:2262).
+- [x] Parse 20-type matrix; `matrix[attacking][defending] = typechart[attacking*20 + defending]` (0=immune/1=NVE/2=normal/4=SE). Nuclear @ index 18.
+- [x] Type names from `reference/type_internal_names.json` (20 entries).
+- [x] Emit `reference/types_dump.json` `{types, matrix(20×20), nuclear_index, pseudotypes, special_types}`. No C (standalone `types_dump.py`, NOT in module_order; D7).
+- [x] Sanity test (20×20, Nuclear present) + matchup spot-check (Ground→Flying=0, Ground→Fire=4). 2 tests.
 
 ---
 

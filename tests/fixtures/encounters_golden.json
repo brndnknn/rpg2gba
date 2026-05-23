@@ -1,0 +1,481 @@
+{
+  "8": {
+    "land_mons": {
+      "encounter_rate": 4,
+      "mons": [
+        {
+          "species": "SPECIES_COCARAN",
+          "min_level": 15,
+          "max_level": 16
+        },
+        {
+          "species": "SPECIES_COCARAN",
+          "min_level": 16,
+          "max_level": 17
+        },
+        {
+          "species": "SPECIES_GROZARD",
+          "min_level": 17,
+          "max_level": 18
+        },
+        {
+          "species": "SPECIES_GROZARD",
+          "min_level": 16,
+          "max_level": 17
+        },
+        {
+          "species": "SPECIES_CASSNAIL",
+          "min_level": 17,
+          "max_level": 17
+        },
+        {
+          "species": "SPECIES_CASSNAIL",
+          "min_level": 16,
+          "max_level": 16
+        },
+        {
+          "species": "SPECIES_CASSNAIL",
+          "min_level": 15,
+          "max_level": 17
+        },
+        {
+          "species": "SPECIES_CORSOLA",
+          "min_level": 15,
+          "max_level": 17
+        },
+        {
+          "species": "SPECIES_COCARAN",
+          "min_level": 17,
+          "max_level": 18
+        },
+        {
+          "species": "SPECIES_CORSOLA",
+          "min_level": 18,
+          "max_level": 18
+        },
+        {
+          "species": "SPECIES_CASSNAIL",
+          "min_level": 19,
+          "max_level": 20
+        },
+        {
+          "species": "SPECIES_CASSNAIL",
+          "min_level": 19,
+          "max_level": 19
+        }
+      ]
+    },
+    "water_mons": {
+      "encounter_rate": 10,
+      "mons": [
+        {
+          "species": "SPECIES_BRAILIP",
+          "min_level": 26,
+          "max_level": 30
+        },
+        {
+          "species": "SPECIES_TUBJAW",
+          "min_level": 28,
+          "max_level": 31
+        },
+        {
+          "species": "SPECIES_TUBJAW",
+          "min_level": 27,
+          "max_level": 30
+        },
+        {
+          "species": "SPECIES_TUBJAW",
+          "min_level": 27,
+          "max_level": 30
+        },
+        {
+          "species": "SPECIES_TUBJAW",
+          "min_level": 30,
+          "max_level": 30
+        }
+      ]
+    },
+    "fishing_mons": {
+      "old_rod": [
+        {
+          "species": "SPECIES_MAGIKARP",
+          "min_level": 10,
+          "max_level": 10
+        },
+        {
+          "species": "SPECIES_MAGIKARP",
+          "min_level": 12,
+          "max_level": 12
+        }
+      ],
+      "good_rod": [
+        {
+          "species": "SPECIES_BRAILIP",
+          "min_level": 12,
+          "max_level": 18
+        },
+        {
+          "species": "SPECIES_TUBJAW",
+          "min_level": 12,
+          "max_level": 20
+        },
+        {
+          "species": "SPECIES_GLASLUG",
+          "min_level": 14,
+          "max_level": 22
+        }
+      ],
+      "super_rod": [
+        {
+          "species": "SPECIES_FOLEROG",
+          "min_level": 28,
+          "max_level": 28
+        },
+        {
+          "species": "SPECIES_FOLEROG",
+          "min_level": 28,
+          "max_level": 28
+        },
+        {
+          "species": "SPECIES_MAGIKARP",
+          "min_level": 35,
+          "max_level": 35
+        },
+        {
+          "species": "SPECIES_BLUBELROG",
+          "min_level": 36,
+          "max_level": 36
+        },
+        {
+          "species": "SPECIES_GYARADOS",
+          "min_level": 36,
+          "max_level": 36
+        }
+      ]
+    }
+  },
+  "22": {
+    "land_mons": {
+      "encounter_rate": 25,
+      "mons": [
+        {
+          "species": "SPECIES_CUBBLFLY",
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species": "SPECIES_TANCOON",
+          "min_level": 14,
+          "max_level": 16
+        },
+        {
+          "species": "SPECIES_PAHAR",
+          "min_level": 11,
+          "max_level": 14
+        },
+        {
+          "species": "SPECIES_LUNAPUP",
+          "min_level": 13,
+          "max_level": 15
+        },
+        {
+          "species": "SPECIES_TRICWE",
+          "min_level": 14,
+          "max_level": 16
+        },
+        {
+          "species": "SPECIES_TANCOON",
+          "min_level": 14,
+          "max_level": 16
+        },
+        {
+          "species": "SPECIES_LUNAPUP",
+          "min_level": 15,
+          "max_level": 16
+        },
+        {
+          "species": "SPECIES_PAHAR",
+          "min_level": 16,
+          "max_level": 16
+        },
+        {
+          "species": "SPECIES_SPONEE",
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species": "SPECIES_SPONEE",
+          "min_level": 16,
+          "max_level": 16
+        },
+        {
+          "species": "SPECIES_BAASHAUN",
+          "min_level": 15,
+          "max_level": 16
+        },
+        {
+          "species": "SPECIES_TANCOON",
+          "min_level": 17,
+          "max_level": 17
+        }
+      ]
+    },
+    "fishing_mons": {
+      "old_rod": [
+        {
+          "species": "SPECIES_MAGIKARP",
+          "min_level": 10,
+          "max_level": 10
+        },
+        {
+          "species": "SPECIES_MAGIKARP",
+          "min_level": 12,
+          "max_level": 12
+        }
+      ],
+      "good_rod": [
+        {
+          "species": "SPECIES_SPONEE",
+          "min_level": 18,
+          "max_level": 22
+        },
+        {
+          "species": "SPECIES_SPONEE",
+          "min_level": 24,
+          "max_level": 26
+        },
+        {
+          "species": "SPECIES_MAGIKARP",
+          "min_level": 19,
+          "max_level": 19
+        }
+      ],
+      "super_rod": [
+        {
+          "species": "SPECIES_SPONAREE",
+          "min_level": 28,
+          "max_level": 28
+        },
+        {
+          "species": "SPECIES_SPONEE",
+          "min_level": 28,
+          "max_level": 28
+        },
+        {
+          "species": "SPECIES_MAGIKARP",
+          "min_level": 35,
+          "max_level": 35
+        },
+        {
+          "species": "SPECIES_MAGIKARP",
+          "min_level": 36,
+          "max_level": 36
+        },
+        {
+          "species": "SPECIES_SPONAREE",
+          "min_level": 36,
+          "max_level": 36
+        }
+      ]
+    },
+    "uranium_extra": {
+      "land_morning": {
+        "encounter_rate": 25,
+        "mons": [
+          {
+            "species": "SPECIES_CUBBLFLY",
+            "min_level": 15,
+            "max_level": 15
+          },
+          {
+            "species": "SPECIES_TANCOON",
+            "min_level": 14,
+            "max_level": 16
+          },
+          {
+            "species": "SPECIES_PAHAR",
+            "min_level": 11,
+            "max_level": 14
+          },
+          {
+            "species": "SPECIES_LUNAPUP",
+            "min_level": 13,
+            "max_level": 15
+          },
+          {
+            "species": "SPECIES_TRICWE",
+            "min_level": 14,
+            "max_level": 16
+          },
+          {
+            "species": "SPECIES_TANCOON",
+            "min_level": 14,
+            "max_level": 16
+          },
+          {
+            "species": "SPECIES_LUNAPUP",
+            "min_level": 15,
+            "max_level": 16
+          },
+          {
+            "species": "SPECIES_PAHAR",
+            "min_level": 16,
+            "max_level": 16
+          },
+          {
+            "species": "SPECIES_SPONEE",
+            "min_level": 15,
+            "max_level": 16
+          },
+          {
+            "species": "SPECIES_SPONEE",
+            "min_level": 16,
+            "max_level": 16
+          },
+          {
+            "species": "SPECIES_BAASHAUN",
+            "min_level": 15,
+            "max_level": 16
+          },
+          {
+            "species": "SPECIES_TANCOON",
+            "min_level": 17,
+            "max_level": 17
+          }
+        ]
+      },
+      "land_night": {
+        "encounter_rate": 25,
+        "mons": [
+          {
+            "species": "SPECIES_OWTEN",
+            "min_level": 15,
+            "max_level": 15
+          },
+          {
+            "species": "SPECIES_TANCOON",
+            "min_level": 14,
+            "max_level": 16
+          },
+          {
+            "species": "SPECIES_PAHAR",
+            "min_level": 11,
+            "max_level": 14
+          },
+          {
+            "species": "SPECIES_MINYAN",
+            "min_level": 13,
+            "max_level": 15
+          },
+          {
+            "species": "SPECIES_TRICWE",
+            "min_level": 14,
+            "max_level": 16
+          },
+          {
+            "species": "SPECIES_TANCOON",
+            "min_level": 14,
+            "max_level": 16
+          },
+          {
+            "species": "SPECIES_MINYAN",
+            "min_level": 15,
+            "max_level": 16
+          },
+          {
+            "species": "SPECIES_PAHAR",
+            "min_level": 16,
+            "max_level": 16
+          },
+          {
+            "species": "SPECIES_SPONEE",
+            "min_level": 15,
+            "max_level": 16
+          },
+          {
+            "species": "SPECIES_SPONEE",
+            "min_level": 16,
+            "max_level": 16
+          },
+          {
+            "species": "SPECIES_BAASHAUN",
+            "min_level": 15,
+            "max_level": 16
+          },
+          {
+            "species": "SPECIES_TANCOON",
+            "min_level": 17,
+            "max_level": 17
+          }
+        ]
+      }
+    }
+  },
+  "214": {
+    "land_mons": {
+      "encounter_rate": 5,
+      "mons": [
+        {
+          "species": "SPECIES_TONEMY",
+          "min_level": 25,
+          "max_level": 30
+        },
+        {
+          "species": "SPECIES_TONEMY",
+          "min_level": 25,
+          "max_level": 30
+        },
+        {
+          "species": "SPECIES_GLIGAR",
+          "min_level": 25,
+          "max_level": 45
+        },
+        {
+          "species": "SPECIES_GLIGAR",
+          "min_level": 25,
+          "max_level": 45
+        },
+        {
+          "species": "SPECIES_EKANS",
+          "min_level": 30,
+          "max_level": 40
+        },
+        {
+          "species": "SPECIES_PAHAR",
+          "min_level": 30,
+          "max_level": 40
+        },
+        {
+          "species": "SPECIES_BARAND",
+          "min_level": 30,
+          "max_level": 38
+        },
+        {
+          "species": "SPECIES_HAGOOP",
+          "min_level": 30,
+          "max_level": 38
+        },
+        {
+          "species": "SPECIES_OWTEN",
+          "min_level": 30,
+          "max_level": 38
+        },
+        {
+          "species": "SPECIES_TANCOON",
+          "min_level": 30,
+          "max_level": 34
+        },
+        {
+          "species": "SPECIES_BAASHAUN",
+          "min_level": 30,
+          "max_level": 34
+        },
+        {
+          "species": "SPECIES_MASKING",
+          "min_level": 46,
+          "max_level": 46
+        }
+      ]
+    }
+  }
+}
