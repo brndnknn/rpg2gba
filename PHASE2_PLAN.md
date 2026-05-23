@@ -427,19 +427,31 @@ fields left at default.
    not ITEM_POK_BALL). Only 3 item names were accented; no move/species/ability
    name was, so §2.1/§2.2 constants are unchanged.
 
-### 2.4 — Abilities (`abilities.py`) — source: `dexdata.dat` references + script-side names
+### 2.4 — Abilities (`abilities.py`) — source: `dexdata.dat` references + script-side names — ✓ COMPLETE (2026-05-22)
 
 Abilities don't have their own `.dat`. Compiler.rb `pbCompileAbilities`
 writes them into a script section, not a separate file.
 
 Tasks:
-- [ ] Read every `Abilities` and `HiddenAbility` byte from `dexdata.dat` to get the set of ability IDs in use.
-- [ ] Locate the `PBAbilities` script section in `reference/scripts_dump/`; build ID → internal name map.
-- [ ] Mint `ABILITY_*` via `_id_map`; mark Uranium-originals (incl. `CHERNOBYL`) as `needs_engine`.
-- [ ] Emit `include/constants/abilities.h` with only the Uranium-original `ABILITY_*` constants.
-- [ ] Emit `src/data/abilities/uranium_abilities.c` with NULL/no-op placeholder handlers.
-- [ ] Round-trip test (parse → emit → re-extract ID set → diff).
-- [ ] Golden test: snapshot Uranium-only `ABILITY_*` block into `tests/fixtures/abilities_golden.h`.
+- [x] Read every `Abilities` and `HiddenAbility` byte from `dexdata.dat` to get the set of ability IDs in use (`collect_ability_ids`, reusing `pokemon.parse_dexdata`). **Used as a sanity cross-check, not as the emit set — see deviation.**
+- [x] Locate the `PBAbilities` script section in `reference/scripts_dump/`; build ID → internal name map. (Already dumped to `reference/ability_internal_names.json`, 210 entries; display names/descs in `ability_names.json`/`ability_descriptions.json`.)
+- [x] Mint `ABILITY_*` via `_id_map`; mark Uranium-originals (incl. `CHERNOBYL`) as `needs_engine`. **19 originals (ids 192–210), idempotent with §2.1's 17.**
+- [x] Emit `include/constants/abilities.h` with only the Uranium-original `ABILITY_*` constants.
+- [x] Emit `src/data/abilities/uranium_abilities.c` with placeholder handlers. **The fork has no ability-handler table (effects are inline in battle scripts), so this is a documented placeholder TU + an `intermediate/ability_codes.json` Phase 6 worklist (name+desc per Uranium-original ability), rather than literal C stubs that would invent fork API.**
+- [x] Round-trip test (`test_roundtrip_constants`: emit → regex-read `#define`s → diff {constant: id}).
+- [x] Golden test: full Uranium-only constants header pinned in `tests/fixtures/abilities_golden.h`.
+- [x] Edge tests: CHERNOBYL form-ability emitted despite absence from dexdata (`test_edge_chernobyl_form_ability`); vanilla ability not redefined (`test_edge_vanilla_not_emitted`).
+
+**Deviation:** the authoritative Uranium-original set is *not* the dexdata
+in-use scan the task list assumed — that scan misses abilities assigned only to
+alternate **forms** by script (`CHERNOBYL` = URAYNE form 2, `NIGHT_TERROR`),
+which the task list nonetheless explicitly named. Instead the set is "every
+`PBAbilities` sidecar entry whose derived constant is absent from the fork enum"
+— a clean contiguous Uranium id block (192–210), zero false positives among
+vanilla 1–191. The dexdata scan is retained as a fail-loud cross-check (every
+species-referenced ability must exist in the sidecar). This adds ids 209/210 to
+`needs_engine.abilities` beyond §2.1's 17 → 19 total; no conflict (IdMap is
+idempotent), and the id_map is now complete for the form abilities.
 
 ### 2.5 — TM / HM (`tm_hm.py`) — source: `tm.dat`, `tutor.dat`
 

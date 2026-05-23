@@ -10,6 +10,8 @@
 
 ## Retired Session Summaries
 
+**2026-05-20 (§2.2 moves):** Fixed the `messages.dat` mojibake in `dump_messages.rb` (UTF-8 bytes were being mis-transcoded as windows-1252) and regenerated all 22 sidecars; re-pinned the §2.1 golden fixture to the corrected `Pok\xE9mon`. **Completed §2.2 moves:** `moves.py` parses flat 14-byte `moves.dat` (637 nonzero of 639) and emits `gMovesInfo[]`, `moves.h` (`MOVE_*` defines), and the `move_function_codes.json` Phase 6 worklist. Mapped target (PBTargets→TARGET_*), category, type, and positive flags faithfully; **deferred all move effects to Phase 6** via `EFFECT_PLACEHOLDER` + worklist (see Decisions) — 324 function codes have no clean map. 9 Nuclear moves flagged needs_engine (32 moves total). Output idempotent (`diff -r` clean across two full `phase2 --clean` runs); id_map now 201 species / 637 moves / 19 types. **9 phase2 tests pass** (4 new §2.2: roundtrip, golden Tackle+Atomic Punch, effect-placeholder/worklist, Nuclear needs_engine), ruff clean. New working-pref memory: prefer temp script files over inline multi-line shell. Pickup: §2.3 items. **Phase 2 manual review gate (§9 #1) still NOT reached — it's at the END of Phase 2.** Not yet committed this session.
+
 **2026-05-20 (§2.1 species):** Cloned the pokeemerald-expansion fork
 (`/home/b/repos/pokeemerald-expansion`, shallow, HEAD `21c24202`; `make modern`
 not yet run — needs devkitARM). Added `.env` (gitignored) +
