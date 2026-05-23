@@ -68,6 +68,19 @@ class Tone
   end
 end
 
+# WordArray — Essentials' compact integer array (175__Compiler.rb:1829). Its
+# _dump packs the ints with "v*" (little-endian uint16); _load unpacks them.
+# Used by tm.dat (move_id => WordArray of species ids). Without a real _load
+# the AutoStub would keep the packed bytes as a @_raw blob; this decodes them
+# to an int list, which the generic jsonify walker then emits as `a`.
+class WordArray
+  def self._load(str)
+    obj = allocate
+    obj.instance_variable_set(:@a, str.unpack('v*'))
+    obj
+  end
+end
+
 # OrderedHash — Essentials predates modern Ruby's insertion-order guarantee
 # and ships a custom Marshal format that dumps `[keys, values]`.
 # Source: reference/scripts_dump/044_Intl_Messages.rb:348-399.
