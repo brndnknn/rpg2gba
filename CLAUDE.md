@@ -52,69 +52,18 @@ The user is a developer comfortable with Python, Swift, C, CLI tooling, and GBA 
 
 ## Memory System
 
-You have a persistent memory file at `MEMORY.md` in the repo root. Its purpose is to prevent you from re-scanning the entire codebase at the start of every session. **Read it before anything else. Update it before you finish.**
+You have a persistent memory file at `MEMORY.md` in the repo root. It's your
+running notes on project state — what's done, what each key file does, what's been
+decided, what's open — so you don't re-scan the whole repo every session. The full
+protocol and section template live in `reference/memory-protocol.md`; read it once
+to learn the structure. The rules that bind every session:
 
-### Why this exists
-
-Scanning the full repo to rebuild context burns tokens and time. MEMORY.md is your running notes on the state of the project — what's been done, what each key file actually does, what decisions have been made, and what's still open. A well-maintained MEMORY.md means the next session starts in 30 seconds, not 5 minutes.
-
-### Structure of MEMORY.md
-
-```markdown
-# rpg2gba Agent Memory
-
-## Current Phase
-<!-- Which phase is active, what's been completed, what the next concrete task is -->
-
-## Key File Notes
-<!-- Short notes on non-obvious files. Don't duplicate what's already obvious from
-     the repo layout in CLAUDE.md. Only note things that would take >30s to figure
-     out from reading the file itself. -->
-
-## Decisions Made
-<!-- Architectural and data-fidelity decisions that are settled. Format:
-     - [DATE] Decision: <what was decided>. Reason: <why>. -->
-
-## Uranium-Specific Discoveries
-<!-- Quirks of the Uranium source that affect converter logic.
-     Things you found during Phase 0 or stumbled on later. -->
-
-## Flag Registry Notes
-<!-- Summary of any notable flag/var assignments made so far.
-     Full state is in the registry file; this is just notable ones. -->
-
-## Open Questions
-<!-- Things that need the user's input before you can proceed. Clear an item
-     when the user answers it. -->
-
-## Last Session Summary
-<!-- One paragraph: what you did, what you left unfinished, where to pick up. -->
-```
-
-### How to use it
-
-**At the start of a session:**
-1. Read MEMORY.md first, before any other file
-2. If Current Phase or Last Session Summary tells you exactly what to do next, start there
-3. If you need to verify something in code, check the specific file — don't re-scan the whole repo
-
-**During a session:**
-- Update Key File Notes when you learn something non-obvious about a file
-- Add to Decisions Made when a significant decision gets settled
-- Add to Open Questions when you hit something that needs user input before proceeding
-- Add to Uranium-Specific Discoveries when you find a quirk
-
-**At the end of a session (or at a natural stopping point):**
-1. Update Last Session Summary with what you did and where to pick up
-2. Update Current Phase to reflect progress
-3. Clear any Open Questions that got answered
-
-### Rules
-
-- Update MEMORY.md with targeted `str_replace` edits, not full rewrites — other sections shouldn't be disturbed when you update one
-- Keep entries concise. If a Key File Note is longer than two sentences, it probably belongs in `reference/` as a proper doc, not here
-- Don't put information here that's already in CLAUDE.md or ROADMAP.md — link or reference instead
-- MEMORY.md is committed to git. Session-to-session state persists in version history. Don't gitignore it.
+- **Read MEMORY.md first, before any other file. Update it before you finish.**
+- Make **targeted edits, not full rewrites** — don't disturb sections you aren't changing.
+- Keep entries concise. A Key File Note longer than two sentences belongs in `reference/` as a proper doc.
+- Don't duplicate what's already in CLAUDE.md or ROADMAP.md — link instead.
+- **Evict stale entries.** Keep at most the 2 most recent Last Session Summary entries and only *live* Open Questions in MEMORY.md; move retired summaries and resolved-question breadcrumbs to `reference/memory-archive.md`. Before retiring a resolved question, confirm its conclusion is captured in Decisions Made or Uranium-Specific Discoveries.
+- MEMORY.md is committed to git; don't gitignore it.
 
 ---
 
@@ -275,79 +224,31 @@ The conversion agent's prompts are source code. Treat them with the same care.
 
 ## 6. The Flag Registry
 
-This deserves its own section because it's the most common place pipelines like this go wrong.
+The full policy lives in **`reference/flag_registry_policy.md`** — it's a Phase 4
+component, dormant during the current Phase 2. Read it when Phase 4 starts. It's
+the most common place pipelines like this go wrong, so don't wing it.
 
-### The problem it solves
-
-RPG Maker uses numbered switches and variables (`Switch 42`, `Variable 17`). pokeemerald-expansion uses named flags and vars (`FLAG_RECEIVED_STARTER`, `VAR_STORY_PROGRESS`). The conversion agent must translate between them — and must do so consistently across all 200+ maps. If `Switch 42` becomes `FLAG_RECEIVED_STARTER` in one map and `FLAG_GOT_FIRST_POKEMON` in another, the game breaks.
-
-### How the registry works
-
-- `flag_registry.py` is a stateful singleton during a pipeline run
-- The conversion agent never invents a flag name in its output. It either uses a name the registry has already assigned to that switch ID, or it *proposes* a name and the orchestrator decides whether to accept
-- New flag proposals go through a validation step:
-  - Name follows the `FLAG_*` / `VAR_*` convention
-  - Name doesn't collide with an existing pokeemerald-expansion constant
-  - Name passes a basic sanity check (not empty, not "FLAG_TODO", not gibberish)
-- Once accepted, the assignment is permanent for that pipeline run
-- The final registry state is dumped to a `.h` file the pokeemerald-expansion fork includes
-
-### Pre-seeded mappings
-
-Before the first run, the registry is pre-seeded with known stable mappings — things every Pokémon game has (received starter, beat first gym, talked to professor). Look at `reference/essentials_to_emerald_map.md` for the canonical list. Add new pre-seeds when you confirm a Uranium switch maps to a vanilla concept.
-
-### Hard rule for you
-
-You may modify `flag_registry.py`. You may modify `reference/essentials_to_emerald_map.md`. You may NOT manually edit the registry's persistent state file mid-run. If the registry's state is wrong, fix the input data or the registry logic — don't patch the output.
+**Hard rule (applies always):** Every flag/var name goes through the registry —
+never hardcode one, even one you're certain of. You may modify `flag_registry.py`
+and `reference/essentials_to_emerald_map.md`, but you may **never** hand-edit the
+registry's persistent state file mid-run. If the state is wrong, fix the input
+data or the registry logic — don't patch the output.
 
 ---
 
 ## 7. Working with Each Pipeline Phase
 
-### Phase 0: Reconnaissance
+Per-phase detail — goals, tasks, exit criteria, and the Phase 4 three-stage
+strategy (calibration → bulk → queue review) — lives in **ROADMAP.md** (Phases
+0–8, plus its "Build Agent Guidance" section). The active phase and the next
+concrete task live in **MEMORY.md → Current Phase**. Read the relevant ROADMAP
+phase before you start work in it.
 
-Your job here is to read code and write reports in `reference/`. No production code is written in Phase 0. If you're tempted to start writing converters, you're not done with reconnaissance yet.
-
-### Phase 2: PBS conversion
-
-Each PBS file gets its own module under `src/rpg2gba/pbs_converter/`. Modules follow a consistent shape:
-
-```python
-def parse(path: Path) -> list[Record]: ...
-def emit_c(records: list[Record], out: Path) -> None: ...
-def round_trip_check(path: Path) -> bool: ...
-```
-
-When Uranium has fields vanilla Essentials doesn't, document them in `reference/uranium_custom_features.md` and decide explicitly: map to existing expansion constant, add new constant, or strip. Never silently drop a field.
-
-### Phase 3: rxdata deserialization
-
-The Ruby deserializer is intentionally dumb. It loads, dumps, exits. All interpretation happens in downstream Python. If the Python side is missing context to interpret something, do not add interpretation logic to Ruby — extend the JSON schema to include the missing context.
-
-### Phase 4: Conversion agent
-
-This is where the build/conversion role distinction is most likely to get muddled. Re-read section 1 if you feel uncertain.
-
-Your job in Phase 4 is to:
-
-- Build the orchestrator (`orchestrator.py`)
-- Build the backend abstraction and its two implementations (Ollama, ClaudeCode queue-review)
-- Build the flag registry
-- Author and refine the conversion agent's prompts and few-shot examples
-- Build the unhandled queue and the retry-with-compiler-error logic
-
-You do *not* manually convert events yourself. The conversion agent does that at runtime.
-
-Three stages — no paid API involved:
-- **Stage A (calibration):** Run 5 representative maps interactively in a Claude Code session to tune the prompt. Goal: ~80% first-try compile rate.
-- **Stage B (bulk):** Run the frozen prompt against all maps overnight via OllamaBackend. Hard cases land in `output/unhandled.jsonl`.
-- **Stage C (queue review):** Open the unhandled queue in a Claude Code session and work through it using ClaudeCodeBackend.
-
-When iterating on prompts during Stage A: change prompt → run on calibration set → review output → repeat. Don't fix individual bad outputs by hand; if output is bad, the prompt or examples need work.
-
-### Phase 6: Custom C in pokeemerald-expansion fork
-
-This is the only phase where you write C. You're working in a separate repo (the fork). Treat that fork's conventions as authoritative. New types, abilities, or field effects follow the patterns the expansion already establishes — don't invent new patterns when an existing one fits.
+One reinforcement that's too important to leave behind a pointer: **Phase 4 is
+where the build/conversion role distinction gets muddled.** You build the
+orchestrator, backends, flag registry, prompts, and unhandled-queue logic. You do
+**not** convert events yourself — the conversion agent does that at runtime. If you
+feel uncertain which role you're in, re-read §1.
 
 ---
 
@@ -420,16 +321,12 @@ These gates exist because each one is a place where systematic errors propagate 
 
 ## 11. Common Pitfalls
 
-A list of mistakes the build agent (you, or earlier sessions of you) is likely to make:
+The three most expensive, most repeated mistakes — internalize these; the full
+list is in ROADMAP.md "Known Pitfalls":
 
 - **Conflating the two agents.** If you're unsure whether a piece of work belongs to you or the conversion agent: code lives with you, runtime LLM calls live with the conversion agent. Always.
-- **Editing generated output to "fix" something.** You must fix the converter, not its output. The output gets regenerated.
-- **Hand-converting events to "show" something.** No. The conversion agent does that at runtime. Your job is to make the conversion agent capable of doing it well.
-- **Adding silent fallbacks for unknown PBS fields.** Fail loud. Always.
-- **Bypassing the flag registry to "just hardcode" a name.** No. Every flag name goes through the registry, even if it's a flag you're 100% sure is `FLAG_RECEIVED_STARTER`.
-- **Treating the Uranium source as canonical for pokeemerald-expansion conventions.** It's not. When in doubt about how the fork should look, the fork's existing patterns win.
-- **Committing files from outside the repo.** The Uranium source and base ROMs never go into git. If you find yourself running `git add` on something from `$RPG2GBA_URANIUM_SRC`, stop.
-- **Skipping Phase 0.** Reconnaissance feels like procrastination. It's not. Every hour there saves five later.
+- **Editing generated output to "fix" something.** Fix the converter, not its output — the output gets regenerated. (Corollary: never add silent fallbacks for unknown PBS fields; fail loud.)
+- **Hand-converting events to "show" something.** No. The conversion agent does that at runtime. Your job is to make it capable of doing it well.
 
 ---
 
@@ -462,14 +359,8 @@ python -m rpg2gba.pipeline convert-map --map-id 042
 
 ### Glossary
 
-- **Build agent.** You.
-- **Conversion agent.** The runtime LLM component inside rpg2gba.
-- **Essentials.** Pokémon Essentials, the Ruby framework Uranium is built on.
-- **PBS.** Pokémon Batch Script — Essentials' plain-text data format.
-- **rxdata.** RPG Maker XP's serialized Ruby object files.
-- **Poryscript.** The high-level scripting language pokeemerald-expansion uses.
-- **The fork.** The user's clone of pokeemerald-expansion that becomes the Uranium ROM.
-- **The roadmap.** `ROADMAP.md`. Read it.
+See the Glossary in **ROADMAP.md** for term definitions (build agent, conversion
+agent, Essentials, PBS, rxdata, Poryscript, the fork).
 
 ---
 
