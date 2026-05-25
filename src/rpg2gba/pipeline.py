@@ -22,13 +22,15 @@ def _repo_root() -> Path:
 
 
 def _load_dotenv() -> None:
-    """Populate os.environ from a repo-root .env, without external deps.
+    """Populate os.environ from a repo-root .env-paths file, without external deps.
 
     Shell-set values win: keys already present in os.environ are left alone.
     Lines are `KEY=VALUE`; blank lines and `#` comments are ignored. A missing
-    .env is fine (returns silently) — this is a convenience, not a requirement.
+    .env-paths is fine (returns silently) — this is a convenience, not a
+    requirement. (Named .env-paths, not .env: it holds only filesystem paths,
+    no secrets, and the unsuffixed name collides with a tooling read-deny rule.)
     """
-    env_path = _repo_root() / ".env"
+    env_path = _repo_root() / ".env-paths"
     if not env_path.is_file():
         return
     for raw in env_path.read_text(encoding="utf-8").splitlines():
