@@ -19,9 +19,17 @@ from dataclasses import dataclass, field
 
 @dataclass
 class ConversionResult:
+    """One event's conversion output — mirrors prompts/system.md's JSON schema.
+
+    new_flags / new_vars are lists of proposals the orchestrator feeds to the
+    flag registry, each `{switch_id|var_id, name, reason}`. unhandled is a list of
+    `{command_code, description, event_id, page, line}`. Lists (not dicts) so the
+    agent's `reason` survives for logging + the unhandled-queue triage.
+    """
+
     script: str
-    new_flags: dict[str, str] = field(default_factory=dict)
-    new_vars: dict[str, str] = field(default_factory=dict)
+    new_flags: list[dict] = field(default_factory=list)
+    new_vars: list[dict] = field(default_factory=list)
     unhandled: list[dict] = field(default_factory=list)
 
 

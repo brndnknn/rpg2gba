@@ -169,23 +169,121 @@ def phase3(clean: bool) -> None:
     logger.info("phase3 complete: %d maps deserialized + validated + cataloged", n_maps)
 
 
+def _phase4_registry(out_dir: Path, clean: bool, fork_path: Path | None):
+    """Load or pre-seed the flag registry (Phase 4 §4.1). Wipes run state on --clean."""
+    from rpg2gba.conversion_agent.flag_registry import FlagRegistry
+
+    state_path = out_dir / "flag_state.json"
+    if clean:
+        for d in (out_dir / "scripts", out_dir / "checkpoints"):
+            if d.exists():
+                shutil.rmtree(d)
+        for f in (state_path, out_dir / "unhandled.jsonl"):
+            if f.exists():
+                f.unlink()
+    if state_path.is_file():
+        return FlagRegistry.load(state_path, fork_path=fork_path)
+    reg = FlagRegistry(fork_path=fork_path)
+    reg.pre_seed(
+        REFERENCE_DIR / "essentials_to_emerald_map.md",
+        REFERENCE_DIR / "uranium_switches.json",
+        REFERENCE_DIR / "uranium_variables.json",
+    )
+    reg.save(state_path)
+    return reg
+
+
+def _phase4_backend(name: str):
+    """Construct the chosen conversion backend with the frozen system prompt."""
+    from rpg2gba.conversion_agent import prompt_builder
+
+    system_prompt = prompt_builder.load_system_prompt()
+    if name == "claude_code":
+        from rpg2gba.conversion_agent.backends.claude_code import ClaudeCodeBackend
+
+        return ClaudeCodeBackend(system_prompt)
+    from rpg2gba.conversion_agent.backends.ollama import OllamaBackend
+
+    return OllamaBackend(system_prompt)
+
+
 @main.command()
-@click.option("--clean", is_flag=True)
-def phase4(clean: bool) -> None:
-    """Run conversion agent orchestrator (Phase 4)."""
-    raise NotImplementedError("Phase 4 is not yet implemented.")
+@click.option("--clean", is_flag=True, help="Wipe scripts/checkpoints/registry state first.")
+@click.option(
+    "--run",
+    is_flag=True,
+    help="Actually convert (spawns the backend per event — spends Pro/API budget).",
+)
+@click.option(
+    "--backend",
+    default="claude_code",
+    type=click.Choice(["claude_code", "ollama"]),
+)
+def phase4(clean: bool, run: bool, backend: str) -> None:
+    """Build the conversion-agent machinery (Phase 4). Add --run to convert."""
+    from rpg2gba.conversion_agent import orchestrator as orch
+
+    _, out_dir = _resolve_paths()
+    maps_dir = out_dir / "maps"
+    if not maps_dir.is_dir():
+        raise click.ClickException(f"{maps_dir} not found — run `phase3` first.")
+    fork = os.environ.get("RPG2GBA_POKEEMERALD")
+    fork_path = Path(fork) if fork and Path(fork).is_dir() else None
+
+    registry = _phase4_registry(out_dir, clean, fork_path)
+    registry.dump_header(out_dir / "intermediate" / "rpg2gba_flags.h")
+
+    done = {p.stem for p in (out_dir / "checkpoints").glob("*.done")}
+    pending = [p for p in sorted(maps_dir.glob("Map*.json")) if p.stem not in done]
+    state = registry.to_state()
+
+    if not run:
+        logger.info(
+            "machinery ready: %d flags + %d vars pre-seeded, %d script-switches blocked; "
+            "%d/%d maps pending. Re-run with --run to convert via %s (spawns the backend "
+            "per event — spends budget).",
+            len(state["switches"]),
+            len(state["variables"]),
+            len(state["script_switches"]),
+            len(pending),
+            len(list(maps_dir.glob("Map*.json"))),
+            backend,
+        )
+        return
+
+    backend_obj = _phase4_backend(backend)
+    orchestrator = orch.Orchestrator(backend_obj, registry, out_dir)
+    n = orchestrator.convert_all(maps_dir)
+    logger.info("phase4: processed %d maps; triage=%s", n, orch.triage(out_dir / "unhandled.jsonl"))
 
 
 @main.command("convert-map")
 @click.option("--map-id", required=True)
 @click.option(
     "--backend",
-    default="ollama",
-    type=click.Choice(["ollama", "claude_code"]),
+    default="claude_code",
+    type=click.Choice(["claude_code", "ollama"]),
 )
 def convert_map(map_id: str, backend: str) -> None:
-    """Convert a single map for debugging (Phase 4)."""
-    raise NotImplementedError("convert-map is not yet implemented.")
+    """Convert a single map for debugging (Phase 4; spawns the backend)."""
+    from rpg2gba.conversion_agent import orchestrator as orch
+
+    _, out_dir = _resolve_paths()
+    stem = f"Map{int(map_id):03d}"
+    map_file = out_dir / "maps" / f"{stem}.json"
+    if not map_file.is_file():
+        raise click.ClickException(f"{map_file} not found — run `phase3` first.")
+    fork = os.environ.get("RPG2GBA_POKEEMERALD")
+    fork_path = Path(fork) if fork and Path(fork).is_dir() else None
+
+    registry = _phase4_registry(out_dir, clean=False, fork_path=fork_path)
+    backend_obj = _phase4_backend(backend)
+    orchestrator = orch.Orchestrator(backend_obj, registry, out_dir)
+    cp = out_dir / "checkpoints" / f"{stem}.done"
+    if cp.exists():
+        cp.unlink()  # force re-conversion of this one map
+    orchestrator.convert_map(map_file)
+    logger.info("converted %s -> %s", stem, out_dir / "scripts" / f"{stem}.pory")
 
 
 if __name__ == "__main__":
