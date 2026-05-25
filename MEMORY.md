@@ -96,14 +96,18 @@
 
 **Phase 4 seed inputs (from Phase 3 §3.3):** `reference/uranium_switches.json` (235 named switches, by index) + `reference/uranium_variables.json` (119 named variables). These are the named entries from `System.rxdata`; index 0 is nil, unnamed entries dropped. **Caveat:** some switch "names" are Essentials *script-switches* (e.g. `s:pbIsWeekday(-1,2,4,6)`) — evaluated at runtime, not stored state; the flag registry must special-case (not mint a `FLAG_*` for these).
 
-### Pre-seed candidates from Phase 0 verification (uncommitted; subject to Phase 4 review)
+### Pre-seed candidates (CORRECTED 2026-05-25 against the §3.3 sidecars — authoritative)
 
-| Uranium `$game_variables[N]` | Proposed `VAR_*` | Source script | Purpose |
+**The Phase 3 `reference/uranium_variables.json` / `uranium_switches.json` names supersede the Phase 0 hand-guesses.** Two Phase 0 guesses were wrong: `var[1]` is **"Temp Pokemon Choice"** (NOT the gym-8 white-tile counter), and the white-tile counter is actually **`var[87]` "White Tiles"**. Verified indices below use the real System.rxdata names; mint `VAR_*` from these at the Phase 4 registry build.
+
+| Uranium index | Real name (System.rxdata) | Source script | Purpose |
 |---|---|---|---|
-| `[1]` | `VAR_GYM8_WHITE_TILES` | `222_Gym_8.rb` | Live white-tile counter for 8th-gym puzzle HUD |
-| `[23]` | `VAR_TANDOR_CHAMPIONSHIP_BRACKET` | `227_Tandor_Championship.rb` | 4-trainer bracket array (random 2+2 selection) |
-| `[24]` | `VAR_TANDOR_CHAMPIONSHIP_ROUND` | `227_Tandor_Championship.rb` | Current round 1–4 |
-| `[121]` | `VAR_GYM8_PROGRESS` | `222_Gym_8.rb` | Gym-8 quest-state sentinel; HUD dismisses on change |
+| `var[87]` | `White Tiles` | `222_Gym_8.rb` | Live white-tile counter for 8th-gym puzzle HUD |
+| `var[121]` | `Gym 8 Progress` | `222_Gym_8.rb` | Gym-8 quest-state sentinel |
+| `var[23]` | `CHAMPIONSHIP LIST` | `227_Tandor_Championship.rb` | 4-trainer bracket array (random 2+2) |
+| `var[24]` | `CHAMPIONSHIP PROGRESS` | `227_Tandor_Championship.rb` | Current round 1–4 |
+
+The sidecars carry **dozens** more gym/championship/puzzle flags (e.g. `switch[121]` "Gym 8 end", `switch[55]` "Gym 1 defeated", per-gym puzzle switches/vars) — the registry build should mint from the sidecars wholesale, not from this short hand-list.
 
 Bambo reward thresholds (count-of-owned, not switches/vars) from `213_Bambo_Reward.rb`: 10, 20, 30, 50, 75, 100, 125, 150, 175, **194** (SHINYCHARM, final real tier).
 
