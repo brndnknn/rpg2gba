@@ -29,6 +29,7 @@ where = ["src"]
 testpaths = ["tests"]
 markers = [
     "phase2: converter tests that read the real Uranium .dat files (need RPG2GBA_URANIUM_SRC)",
+    "phase3: map-deserializer tests that read the real Uranium .rxdata files (need RPG2GBA_URANIUM_SRC)",
 ]
 
 [tool.ruff]

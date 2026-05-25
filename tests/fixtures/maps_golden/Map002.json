@@ -1,0 +1,3729 @@
+{
+  "map_id": 2,
+  "tileset_id": 42,
+  "width": 20,
+  "height": 20,
+  "autoplay_bgm": true,
+  "bgm": {
+    "name": "PU-PokeCenter",
+    "volume": 100,
+    "pitch": 100
+  },
+  "autoplay_bgs": false,
+  "bgs": {
+    "name": "",
+    "volume": 80,
+    "pitch": 100
+  },
+  "encounter_list": [
+
+  ],
+  "encounter_step": 30,
+  "tiles": {
+    "xsize": 20,
+    "ysize": 20,
+    "zsize": 3,
+    "data": [
+      0,
+      65,
+      414,
+      415,
+      414,
+      415,
+      414,
+      415,
+      414,
+      415,
+      414,
+      415,
+      414,
+      415,
+      414,
+      415,
+      414,
+      415,
+      414,
+      49,
+      0,
+      64,
+      422,
+      423,
+      422,
+      423,
+      422,
+      423,
+      422,
+      423,
+      422,
+      423,
+      422,
+      423,
+      422,
+      423,
+      392,
+      423,
+      422,
+      48,
+      0,
+      66,
+      392,
+      393,
+      392,
+      393,
+      392,
+      393,
+      392,
+      393,
+      392,
+      393,
+      392,
+      393,
+      392,
+      393,
+      392,
+      393,
+      392,
+      48,
+      0,
+      80,
+      392,
+      388,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      56,
+      0,
+      80,
+      392,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      64,
+      0,
+      80,
+      392,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      64,
+      0,
+      80,
+      392,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      49,
+      0,
+      80,
+      392,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      48,
+      0,
+      80,
+      392,
+      385,
+      384,
+      414,
+      415,
+      414,
+      415,
+      414,
+      415,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      48,
+      0,
+      80,
+      392,
+      385,
+      384,
+      422,
+      423,
+      422,
+      423,
+      422,
+      423,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      56,
+      0,
+      80,
+      392,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      64,
+      0,
+      80,
+      392,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      49,
+      0,
+      80,
+      392,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      48,
+      0,
+      80,
+      392,
+      385,
+      384,
+      385,
+      384,
+      445,
+      446,
+      384,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      48,
+      0,
+      80,
+      392,
+      385,
+      384,
+      385,
+      384,
+      453,
+      454,
+      385,
+      384,
+      414,
+      415,
+      414,
+      415,
+      414,
+      415,
+      414,
+      415,
+      48,
+      0,
+      80,
+      392,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      422,
+      423,
+      422,
+      423,
+      422,
+      423,
+      422,
+      423,
+      56,
+      0,
+      80,
+      392,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      387,
+      392,
+      393,
+      392,
+      393,
+      392,
+      393,
+      392,
+      64,
+      0,
+      80,
+      392,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      64,
+      0,
+      92,
+      400,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      384,
+      385,
+      399,
+      77,
+      0,
+      0,
+      82,
+      68,
+      68,
+      68,
+      68,
+      68,
+      68,
+      68,
+      68,
+      68,
+      68,
+      68,
+      68,
+      68,
+      68,
+      68,
+      84,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      525,
+      526,
+      527,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      410,
+      0,
+      0,
+      0,
+      0,
+      413,
+      533,
+      534,
+      535,
+      0,
+      413,
+      0,
+      0,
+      0,
+      0,
+      0,
+      413,
+      0,
+      0,
+      0,
+      418,
+      0,
+      0,
+      0,
+      0,
+      421,
+      0,
+      0,
+      0,
+      0,
+      421,
+      0,
+      0,
+      0,
+      0,
+      0,
+      421,
+      0,
+      0,
+      0,
+      426,
+      428,
+      416,
+      0,
+      408,
+      409,
+      428,
+      416,
+      0,
+      408,
+      409,
+      428,
+      416,
+      0,
+      408,
+      427,
+      429,
+      0,
+      0,
+      0,
+      434,
+      436,
+      437,
+      0,
+      434,
+      435,
+      436,
+      437,
+      0,
+      434,
+      435,
+      436,
+      437,
+      0,
+      434,
+      435,
+      437,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      508,
+      509,
+      510,
+      509,
+      510,
+      509,
+      510,
+      484,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      516,
+      517,
+      518,
+      517,
+      518,
+      517,
+      518,
+      492,
+      0,
+      0,
+      431,
+      450,
+      451,
+      430,
+      0,
+      0,
+      0,
+      0,
+      469,
+      470,
+      524,
+      0,
+      520,
+      521,
+      522,
+      523,
+      0,
+      500,
+      0,
+      0,
+      430,
+      458,
+      459,
+      431,
+      0,
+      0,
+      0,
+      0,
+      477,
+      478,
+      472,
+      410,
+      496,
+      497,
+      530,
+      531,
+      413,
+      500,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      485,
+      486,
+      480,
+      418,
+      504,
+      505,
+      538,
+      417,
+      421,
+      500,
+      0,
+      430,
+      450,
+      451,
+      431,
+      0,
+      0,
+      0,
+      0,
+      0,
+      493,
+      494,
+      0,
+      426,
+      512,
+      513,
+      428,
+      425,
+      429,
+      500,
+      0,
+      431,
+      458,
+      459,
+      430,
+      0,
+      0,
+      0,
+      0,
+      0,
+      501,
+      502,
+      503,
+      434,
+      435,
+      435,
+      436,
+      433,
+      437,
+      500,
+      510,
+      0,
+      0,
+      0,
+      0,
+      509,
+      510,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      444,
+      0,
+      0,
+      447,
+      0,
+      517,
+      518,
+      517,
+      518,
+      517,
+      518,
+      517,
+      518,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      452,
+      0,
+      0,
+      455,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      460,
+      461,
+      462,
+      463,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      430,
+      450,
+      451,
+      431,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      431,
+      458,
+      459,
+      430,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      525,
+      526,
+      527,
+      442,
+      443,
+      0,
+      0,
+      0,
+      0,
+      442,
+      443,
+      0,
+      525,
+      526,
+      527,
+      0,
+      0,
+      0,
+      0,
+      0,
+      533,
+      534,
+      535,
+      412,
+      0,
+      0,
+      0,
+      0,
+      412,
+      0,
+      412,
+      0,
+      533,
+      534,
+      535,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      420,
+      0,
+      0,
+      0,
+      0,
+      420,
+      0,
+      420,
+      0,
+      0,
+      0,
+      0,
+      506,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      424,
+      514,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      432,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      471,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      479,
+      0,
+      528,
+      529,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      487,
+      0,
+      536,
+      537,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      507,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      495,
+      0,
+      427,
+      427,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      515,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      412,
+      0,
+      0,
+      0,
+      0,
+      411,
+      509,
+      0,
+      509,
+      510,
+      509,
+      510,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      420,
+      0,
+      0,
+      0,
+      0,
+      419,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      448,
+      449,
+      412,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      456,
+      457,
+      420,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      539,
+      540,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "events": [
+    {
+      "id": 1,
+      "name": "EV001",
+      "x": 8,
+      "y": 11,
+      "pages": [
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 0,
+            "self_switch_valid": false,
+            "variable_id": 1,
+            "variable_valid": false,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "HGSS_135",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 2,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": true,
+          "step_anime": false,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 355,
+              "indent": 0,
+              "parameters": [
+                "Kernel.pbSetPokemonCenter"
+              ]
+            },
+            {
+              "code": 355,
+              "indent": 0,
+              "parameters": [
+                "pbCallBub(2,0,3)"
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 0,
+              "parameters": [
+                "Hello, and welcome to the Pokémon Center."
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 0,
+              "parameters": [
+                "We restore your tired Pokémon to full health."
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 0,
+              "parameters": [
+                "Would you like to rest your Pokémon?"
+              ]
+            },
+            {
+              "code": 102,
+              "indent": 0,
+              "parameters": [
+                [
+                  "YES",
+                  "NO"
+                ],
+                2
+              ]
+            },
+            {
+              "code": 402,
+              "indent": 0,
+              "parameters": [
+                0,
+                "YES"
+              ]
+            },
+            {
+              "code": 355,
+              "indent": 1,
+              "parameters": [
+                "pbCallBub(2)"
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 1,
+              "parameters": [
+                "OK, I'll take your Pokémon for a few seconds."
+              ]
+            },
+            {
+              "code": 314,
+              "indent": 1,
+              "parameters": [
+                0
+              ]
+            },
+            {
+              "code": 209,
+              "indent": 1,
+              "parameters": [
+                0,
+                {
+                  "__class__": "RPG::MoveRoute",
+                  "list": [
+                    {
+                      "__class__": "RPG::MoveCommand",
+                      "parameters": [
+
+                      ],
+                      "code": 17
+                    },
+                    {
+                      "__class__": "RPG::MoveCommand",
+                      "parameters": [
+
+                      ],
+                      "code": 0
+                    }
+                  ],
+                  "skippable": false,
+                  "repeat": false
+                }
+              ]
+            },
+            {
+              "code": 509,
+              "indent": 1,
+              "parameters": [
+                {
+                  "__class__": "RPG::MoveCommand",
+                  "parameters": [
+
+                  ],
+                  "code": 17
+                }
+              ]
+            },
+            {
+              "code": 210,
+              "indent": 1,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 249,
+              "indent": 1,
+              "parameters": [
+                {
+                  "__class__": "RPG::AudioFile",
+                  "volume": 100,
+                  "name": "Pokemon Healing",
+                  "pitch": 100
+                }
+              ]
+            },
+            {
+              "code": 355,
+              "indent": 1,
+              "parameters": [
+                "$game_variables[43]=$Trainer.party.length"
+              ]
+            },
+            {
+              "code": 655,
+              "indent": 1,
+              "parameters": [
+                "$game_map.need_refresh=true"
+              ]
+            },
+            {
+              "code": 106,
+              "indent": 1,
+              "parameters": [
+                40
+              ]
+            },
+            {
+              "code": 122,
+              "indent": 1,
+              "parameters": [
+                43,
+                43,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "code": 111,
+              "indent": 1,
+              "parameters": [
+                12,
+                "Kernel.pbPokerus?"
+              ]
+            },
+            {
+              "code": 121,
+              "indent": 2,
+              "parameters": [
+                3,
+                3,
+                0
+              ]
+            },
+            {
+              "code": 355,
+              "indent": 2,
+              "parameters": [
+                "pbCallBub(2,0,3)"
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 2,
+              "parameters": [
+                "Your Pokémon may be infected by PokeRus."
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 2,
+              "parameters": [
+                "Little is known about the PokeRus except that they "
+              ]
+            },
+            {
+              "code": 401,
+              "indent": 2,
+              "parameters": [
+                "are microscopic life-forms that attach to Pokémon."
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 2,
+              "parameters": [
+                "While infected, Pokémon are said to grow "
+              ]
+            },
+            {
+              "code": 401,
+              "indent": 2,
+              "parameters": [
+                "exceptionally well."
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 2,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 411,
+              "indent": 1,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 209,
+              "indent": 2,
+              "parameters": [
+                0,
+                {
+                  "__class__": "RPG::MoveRoute",
+                  "list": [
+                    {
+                      "__class__": "RPG::MoveCommand",
+                      "parameters": [
+
+                      ],
+                      "code": 16
+                    },
+                    {
+                      "__class__": "RPG::MoveCommand",
+                      "parameters": [
+
+                      ],
+                      "code": 0
+                    }
+                  ],
+                  "skippable": false,
+                  "repeat": false
+                }
+              ]
+            },
+            {
+              "code": 509,
+              "indent": 2,
+              "parameters": [
+                {
+                  "__class__": "RPG::MoveCommand",
+                  "parameters": [
+
+                  ],
+                  "code": 16
+                }
+              ]
+            },
+            {
+              "code": 355,
+              "indent": 2,
+              "parameters": [
+                "pbCallBub(2,0,3)"
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 2,
+              "parameters": [
+                "Thank you for waiting."
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 2,
+              "parameters": [
+                "We've restored your Pokémon to full health."
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 2,
+              "parameters": [
+                "We hope to see you again!"
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 2,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 412,
+              "indent": 1,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 1,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 402,
+              "indent": 0,
+              "parameters": [
+                1,
+                "NO"
+              ]
+            },
+            {
+              "code": 355,
+              "indent": 1,
+              "parameters": [
+                "pbCallBub(2)"
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 1,
+              "parameters": [
+                "We hope to see you again!"
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 1,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 404,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        },
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 5,
+            "switch1_valid": true,
+            "variable_value": 0,
+            "self_switch_valid": false,
+            "variable_id": 1,
+            "variable_valid": false,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "HGSS_135",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 2,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": true,
+          "step_anime": false,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 3,
+          "list": [
+            {
+              "code": 355,
+              "indent": 0,
+              "parameters": [
+                "pbCallBub(2)"
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 0,
+              "parameters": [
+                "First, you should restore your Pokémon to full "
+              ]
+            },
+            {
+              "code": 401,
+              "indent": 0,
+              "parameters": [
+                "health."
+              ]
+            },
+            {
+              "code": 314,
+              "indent": 0,
+              "parameters": [
+                0
+              ]
+            },
+            {
+              "code": 209,
+              "indent": 0,
+              "parameters": [
+                0,
+                {
+                  "__class__": "RPG::MoveRoute",
+                  "list": [
+                    {
+                      "__class__": "RPG::MoveCommand",
+                      "parameters": [
+
+                      ],
+                      "code": 17
+                    },
+                    {
+                      "__class__": "RPG::MoveCommand",
+                      "parameters": [
+
+                      ],
+                      "code": 0
+                    }
+                  ],
+                  "skippable": false,
+                  "repeat": false
+                }
+              ]
+            },
+            {
+              "code": 509,
+              "indent": 0,
+              "parameters": [
+                {
+                  "__class__": "RPG::MoveCommand",
+                  "parameters": [
+
+                  ],
+                  "code": 17
+                }
+              ]
+            },
+            {
+              "code": 210,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 249,
+              "indent": 0,
+              "parameters": [
+                {
+                  "__class__": "RPG::AudioFile",
+                  "volume": 100,
+                  "name": "Pokemon Healing",
+                  "pitch": 100
+                }
+              ]
+            },
+            {
+              "code": 355,
+              "indent": 0,
+              "parameters": [
+                "$game_variables[43]=$Trainer.party.length"
+              ]
+            },
+            {
+              "code": 655,
+              "indent": 0,
+              "parameters": [
+                "$game_map.need_refresh=true"
+              ]
+            },
+            {
+              "code": 106,
+              "indent": 0,
+              "parameters": [
+                40
+              ]
+            },
+            {
+              "code": 122,
+              "indent": 0,
+              "parameters": [
+                43,
+                43,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "code": 209,
+              "indent": 0,
+              "parameters": [
+                0,
+                {
+                  "__class__": "RPG::MoveRoute",
+                  "list": [
+                    {
+                      "__class__": "RPG::MoveCommand",
+                      "parameters": [
+
+                      ],
+                      "code": 16
+                    },
+                    {
+                      "__class__": "RPG::MoveCommand",
+                      "parameters": [
+
+                      ],
+                      "code": 0
+                    }
+                  ],
+                  "skippable": false,
+                  "repeat": false
+                }
+              ]
+            },
+            {
+              "code": 509,
+              "indent": 0,
+              "parameters": [
+                {
+                  "__class__": "RPG::MoveCommand",
+                  "parameters": [
+
+                  ],
+                  "code": 16
+                }
+              ]
+            },
+            {
+              "code": 355,
+              "indent": 0,
+              "parameters": [
+                "pbCallBub(2,0,2)"
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 0,
+              "parameters": [
+                "Your Pokémon have been healed to perfect health."
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 0,
+              "parameters": [
+                "We hope you excel!"
+              ]
+            },
+            {
+              "code": 121,
+              "indent": 0,
+              "parameters": [
+                5,
+                5,
+                1
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "EV002",
+      "x": 7,
+      "y": 19,
+      "pages": [
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 0,
+            "self_switch_valid": false,
+            "variable_id": 1,
+            "variable_valid": false,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 2,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": true,
+          "step_anime": false,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 1,
+          "list": [
+            {
+              "code": 250,
+              "indent": 0,
+              "parameters": [
+                {
+                  "__class__": "RPG::AudioFile",
+                  "volume": 80,
+                  "name": "Exit Door",
+                  "pitch": 100
+                }
+              ]
+            },
+            {
+              "code": 223,
+              "indent": 0,
+              "parameters": [
+                {
+                  "__class__": "Tone",
+                  "rgba": [
+                    -255.0,
+                    -255.0,
+                    -255.0,
+                    0.0
+                  ]
+                },
+                6
+              ]
+            },
+            {
+              "code": 106,
+              "indent": 0,
+              "parameters": [
+                8
+              ]
+            },
+            {
+              "code": 201,
+              "indent": 0,
+              "parameters": [
+                0,
+                60,
+                21,
+                20,
+                0,
+                1
+              ]
+            },
+            {
+              "code": 223,
+              "indent": 0,
+              "parameters": [
+                {
+                  "__class__": "Tone",
+                  "rgba": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                },
+                6
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "EV003",
+      "x": 10,
+      "y": 13,
+      "pages": [
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 0,
+            "self_switch_valid": false,
+            "variable_id": 1,
+            "variable_valid": false,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 2,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": true,
+          "step_anime": false,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 355,
+              "indent": 0,
+              "parameters": [
+                "pbPokeCenterPC"
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "EV004",
+      "x": 10,
+      "y": 16,
+      "pages": [
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 0,
+            "self_switch_valid": false,
+            "variable_id": 1,
+            "variable_valid": false,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "HGSS_008",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 2,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": true,
+          "step_anime": false,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 122,
+              "indent": 0,
+              "parameters": [
+                102,
+                102,
+                0,
+                2,
+                0,
+                2
+              ]
+            },
+            {
+              "code": 355,
+              "indent": 0,
+              "parameters": [
+                "pbCallBub(2)"
+              ]
+            },
+            {
+              "code": 111,
+              "indent": 0,
+              "parameters": [
+                1,
+                102,
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 1,
+              "parameters": [
+                "Hey, man. No, I won't battle you, but listen. This Gym Leader? Don't take him for granted; he's much harder than Maria in Nowtoch was."
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 1,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 411,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 111,
+              "indent": 1,
+              "parameters": [
+                1,
+                102,
+                0,
+                2,
+                0
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 2,
+              "parameters": [
+                "Davern uses Ground, Water, Rock, and Dark-types. It's kind of hard to prepare for him."
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 2,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 411,
+              "indent": 1,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 2,
+              "parameters": [
+                "I just got beaten soundly at the Gym. Stock up on supplies at the mart before you try it."
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 2,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 412,
+              "indent": 1,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 1,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 412,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "left pokéballs",
+      "x": 6,
+      "y": 11,
+      "pages": [
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 0,
+            "self_switch_valid": false,
+            "variable_id": 43,
+            "variable_valid": true,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 2,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 4,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": true,
+          "step_anime": false,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        },
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 1,
+            "self_switch_valid": false,
+            "variable_id": 43,
+            "variable_valid": true,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "pokeballs on left",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 4,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": false,
+          "step_anime": true,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        },
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 2,
+            "self_switch_valid": false,
+            "variable_id": 43,
+            "variable_valid": true,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "pokeballs on left",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 4,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": false,
+          "step_anime": true,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        },
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 3,
+            "self_switch_valid": false,
+            "variable_id": 43,
+            "variable_valid": true,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "pokeballs on left",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 6,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": false,
+          "step_anime": true,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        },
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 4,
+            "self_switch_valid": false,
+            "variable_id": 43,
+            "variable_valid": true,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "pokeballs on left",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 6,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": false,
+          "step_anime": true,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        },
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 5,
+            "self_switch_valid": false,
+            "variable_id": 43,
+            "variable_valid": true,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "pokeballs on left",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 8,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": false,
+          "step_anime": true,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        },
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 6,
+            "self_switch_valid": false,
+            "variable_id": 43,
+            "variable_valid": true,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "pokeballs on left",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 8,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": false,
+          "step_anime": true,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "right pokéballs",
+      "x": 7,
+      "y": 11,
+      "pages": [
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 0,
+            "self_switch_valid": false,
+            "variable_id": 43,
+            "variable_valid": true,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 2,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": true,
+          "step_anime": false,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        },
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 1,
+            "self_switch_valid": false,
+            "variable_id": 43,
+            "variable_valid": true,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "pokeballs on right",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 2,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": false,
+          "step_anime": true,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        },
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 2,
+            "self_switch_valid": false,
+            "variable_id": 43,
+            "variable_valid": true,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "pokeballs on right",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 4,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": false,
+          "step_anime": true,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        },
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 3,
+            "self_switch_valid": false,
+            "variable_id": 43,
+            "variable_valid": true,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "pokeballs on right",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 4,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": false,
+          "step_anime": true,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        },
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 4,
+            "self_switch_valid": false,
+            "variable_id": 43,
+            "variable_valid": true,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "pokeballs on right",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 6,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": false,
+          "step_anime": true,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        },
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 5,
+            "self_switch_valid": false,
+            "variable_id": 43,
+            "variable_valid": true,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "pokeballs on right",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 6,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": false,
+          "step_anime": true,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        },
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 6,
+            "self_switch_valid": false,
+            "variable_id": 43,
+            "variable_valid": true,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "pokeballs on right",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 8,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": false,
+          "step_anime": true,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "EV007",
+      "x": 13,
+      "y": 7,
+      "pages": [
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 0,
+            "self_switch_valid": false,
+            "variable_id": 1,
+            "variable_valid": false,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "HGSS_050",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 6,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": true,
+          "step_anime": false,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 122,
+              "indent": 0,
+              "parameters": [
+                102,
+                102,
+                0,
+                2,
+                1,
+                2
+              ]
+            },
+            {
+              "code": 355,
+              "indent": 0,
+              "parameters": [
+                "pbCallBub(2)"
+              ]
+            },
+            {
+              "code": 111,
+              "indent": 0,
+              "parameters": [
+                1,
+                102,
+                0,
+                2,
+                0
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 1,
+              "parameters": [
+                "I like the Pokémon Owten! Owten Owten Owten! It's so cute!"
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 1,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 411,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 111,
+              "indent": 1,
+              "parameters": [
+                1,
+                102,
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "code": 101,
+              "indent": 2,
+              "parameters": [
+                "Owten evolves at level 21 into an even fluffier flying "
+              ]
+            },
+            {
+              "code": 401,
+              "indent": 2,
+              "parameters": [
+                "cat owl thing!"
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 2,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 412,
+              "indent": 1,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 1,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 412,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "EV008",
+      "x": 8,
+      "y": 19,
+      "pages": [
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 0,
+            "self_switch_valid": false,
+            "variable_id": 1,
+            "variable_valid": false,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 2,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": true,
+          "step_anime": false,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 1,
+          "list": [
+            {
+              "code": 250,
+              "indent": 0,
+              "parameters": [
+                {
+                  "__class__": "RPG::AudioFile",
+                  "volume": 80,
+                  "name": "Exit Door",
+                  "pitch": 100
+                }
+              ]
+            },
+            {
+              "code": 223,
+              "indent": 0,
+              "parameters": [
+                {
+                  "__class__": "Tone",
+                  "rgba": [
+                    -255.0,
+                    -255.0,
+                    -255.0,
+                    0.0
+                  ]
+                },
+                6
+              ]
+            },
+            {
+              "code": 106,
+              "indent": 0,
+              "parameters": [
+                8
+              ]
+            },
+            {
+              "code": 201,
+              "indent": 0,
+              "parameters": [
+                0,
+                60,
+                21,
+                20,
+                0,
+                1
+              ]
+            },
+            {
+              "code": 223,
+              "indent": 0,
+              "parameters": [
+                {
+                  "__class__": "Tone",
+                  "rgba": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ]
+                },
+                6
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "Receptionist PVP",
+      "x": 10,
+      "y": 4,
+      "pages": [
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 0,
+            "self_switch_valid": false,
+            "variable_id": 1,
+            "variable_valid": false,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "HGSS_134",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 2,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": true,
+          "step_anime": false,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 117,
+              "indent": 0,
+              "parameters": [
+                5
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "Receptionist TRADE",
+      "x": 15,
+      "y": 4,
+      "pages": [
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 0,
+            "self_switch_valid": false,
+            "variable_id": 1,
+            "variable_valid": false,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "HGSS_134",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 2,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": true,
+          "step_anime": false,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 117,
+              "indent": 0,
+              "parameters": [
+                6
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "EV011",
+      "x": 7,
+      "y": 12,
+      "pages": [
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 0,
+            "self_switch_valid": false,
+            "variable_id": 1,
+            "variable_valid": false,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 2,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": true,
+          "step_anime": false,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        },
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 22,
+            "switch1_valid": true,
+            "variable_value": 0,
+            "self_switch_valid": false,
+            "variable_id": 1,
+            "variable_valid": false,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 2,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": true,
+          "step_anime": false,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 3,
+          "list": [
+            {
+              "code": 111,
+              "indent": 0,
+              "parameters": [
+                12,
+                "get_character(0).onEvent?"
+              ]
+            },
+            {
+              "code": 209,
+              "indent": 1,
+              "parameters": [
+                -1,
+                {
+                  "__class__": "RPG::MoveRoute",
+                  "list": [
+                    {
+                      "__class__": "RPG::MoveCommand",
+                      "parameters": [
+
+                      ],
+                      "code": 37
+                    },
+                    {
+                      "__class__": "RPG::MoveCommand",
+                      "parameters": [
+
+                      ],
+                      "code": 1
+                    },
+                    {
+                      "__class__": "RPG::MoveCommand",
+                      "parameters": [
+
+                      ],
+                      "code": 38
+                    },
+                    {
+                      "__class__": "RPG::MoveCommand",
+                      "parameters": [
+
+                      ],
+                      "code": 0
+                    }
+                  ],
+                  "skippable": true,
+                  "repeat": false
+                }
+              ]
+            },
+            {
+              "code": 509,
+              "indent": 1,
+              "parameters": [
+                {
+                  "__class__": "RPG::MoveCommand",
+                  "parameters": [
+
+                  ],
+                  "code": 37
+                }
+              ]
+            },
+            {
+              "code": 509,
+              "indent": 1,
+              "parameters": [
+                {
+                  "__class__": "RPG::MoveCommand",
+                  "parameters": [
+
+                  ],
+                  "code": 1
+                }
+              ]
+            },
+            {
+              "code": 509,
+              "indent": 1,
+              "parameters": [
+                {
+                  "__class__": "RPG::MoveCommand",
+                  "parameters": [
+
+                  ],
+                  "code": 38
+                }
+              ]
+            },
+            {
+              "code": 210,
+              "indent": 1,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 1,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 412,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            },
+            {
+              "code": 355,
+              "indent": 0,
+              "parameters": [
+                "setTempSwitchOn(\"A\")"
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "name": "Receptionist TRADE",
+      "x": 5,
+      "y": 4,
+      "pages": [
+        {
+          "condition": {
+            "switch2_valid": false,
+            "self_switch_ch": "A",
+            "switch1_id": 1,
+            "switch1_valid": false,
+            "variable_value": 0,
+            "self_switch_valid": false,
+            "variable_id": 1,
+            "variable_valid": false,
+            "switch2_id": 1
+          },
+          "graphic": {
+            "opacity": 255,
+            "character_name": "HGSS_134",
+            "pattern": 0,
+            "tile_id": 0,
+            "direction": 2,
+            "blend_type": 0,
+            "character_hue": 0
+          },
+          "move_type": 0,
+          "move_speed": 3,
+          "move_frequency": 3,
+          "move_route": {
+            "repeat": true,
+            "skippable": false,
+            "list": [
+              {
+                "code": 0,
+                "parameters": [
+
+                ]
+              }
+            ]
+          },
+          "walk_anime": true,
+          "step_anime": false,
+          "direction_fix": false,
+          "through": false,
+          "always_on_top": false,
+          "trigger": 0,
+          "list": [
+            {
+              "code": 117,
+              "indent": 0,
+              "parameters": [
+                4
+              ]
+            },
+            {
+              "code": 0,
+              "indent": 0,
+              "parameters": [
+
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

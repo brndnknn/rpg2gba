@@ -152,11 +152,21 @@ def phase2(clean: bool, only: str | None) -> None:
     logger.info("saved id map → %s", ID_MAP_PATH)
 
 
+REFERENCE_DIR = Path("reference")
+
+
 @main.command()
-@click.option("--clean", is_flag=True)
+@click.option("--clean", is_flag=True, help="Wipe output/uranium-build/maps/ before running.")
 def phase3(clean: bool) -> None:
-    """Run rxdata deserializer (Phase 3)."""
-    raise NotImplementedError("Phase 3 is not yet implemented.")
+    """Run the rxdata map deserializer (Phase 3)."""
+    from rpg2gba.map_deserializer import command_catalog, driver, validate
+
+    uranium_src, out_dir = _resolve_paths()
+
+    n_maps = driver.run(uranium_src, out_dir, clean=clean)
+    validate.validate_output(out_dir)
+    command_catalog.build(out_dir, REFERENCE_DIR)
+    logger.info("phase3 complete: %d maps deserialized + validated + cataloged", n_maps)
 
 
 @main.command()

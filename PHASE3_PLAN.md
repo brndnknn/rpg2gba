@@ -52,14 +52,12 @@ What "done" looks like (ROADMAP §Phase 3 exit criteria, restated):
 
 ## Prerequisites & sanity checks
 
-- [ ] **P1.** `$RPG2GBA_URANIUM_SRC/Data/` reachable; `Map*.rxdata`,
-      `CommonEvents.rxdata`, `System.rxdata`, `MapInfos.rxdata` present.
-- [ ] **P2.** Confirm `ruby` available and `deserialize.rb dat` mode still works
-      (smoke: it's exercised by the Phase 2 suite).
-- [ ] **P3.** Confirm the inventory oracle: `reference/map_inventory.md` =
-      199 maps / 5,301 events / 8,429 pages, zero unknown codes. The conservation
-      test asserts against these numbers; if `recon_maps.rb` is re-run and they
-      change, update both.
+- [x] **P1.** `$RPG2GBA_URANIUM_SRC/Data/` reachable; `Map*.rxdata` (199),
+      `CommonEvents.rxdata`, `System.rxdata`, `MapInfos.rxdata` all present.
+- [x] **P2.** `ruby` available; `deserialize.rb dat` mode still works (Phase 2 suite).
+- [x] **P3.** Inventory oracle confirmed: 199 maps / 5,301 events / 8,429 pages.
+      The `rxdata` smoke run reproduces these counts exactly; 58 distinct command
+      codes, all within the known catalog.
 
 ---
 
@@ -145,50 +143,54 @@ Per map (`MapNNN.json`):
 
 ## Per-task list
 
-### 3.0 — Deserializer core (`deserialize.rb` rxdata branch)
+### 3.0 — Deserializer core (`deserialize.rb` rxdata branch) — ✓ COMPLETE
 
-- [ ] Fold `recon_maps.rb`'s `RPG` module stubs into `deserialize.rb` (nested
-      `Event::Page::Condition/Graphic`, `MoveRoute`, `MoveCommand`,
-      `EventCommand`, `AudioFile`, `BGM/BGS/ME/SE`). Keep `deserialize.rb`'s
-      fuller `Color/Tone/Table` `_load` (not `recon_maps.rb`'s `@r`-only).
-- [ ] Implement `rxdata <data_dir> <output_dir>`: glob `Map[0-9]*.rxdata`, sort,
-      `Marshal.load` each, `jsonify`, write `MapNNN.json` (zero-padded to match
-      source, e.g. `Map007.json`). Also load `CommonEvents.rxdata`,
-      `System.rxdata`, `MapInfos.rxdata` → their JSON files.
-- [ ] Fail loud on any map that raises during load (abort with map id), per E7.
-- [ ] Stable JSON key ordering for idempotent diffs.
+- [x] Folded `recon_maps.rb`'s nested `RPG` stubs into `deserialize.rb` (kept the
+      fuller `Color/Tone/Table` `_load`). **Wrinkle:** Marshal does NOT trigger
+      `const_missing` for *nested* names (`RPG::System`, `System::Words`), so
+      added `marshal_load_lenient` — on "undefined class/module X", synthesise the
+      stub class and retry. The `RPG.const_missing` is kept as belt-and-suspenders
+      but the lenient loader is the real fix.
+- [x] Implemented `rxdata <data_dir> <output_dir>`: writes `maps/MapNNN.json`
+      (zero-padded, matches source) + `common_events.json` + `system.json` +
+      `map_infos.json`. Map/event/page/command containers shaped explicitly (E1);
+      command `parameters`, condition, graphic, encounter_list via generic walker.
+- [x] Fail loud: `marshal_load_lenient` aborts with the filename on a real load
+      error (only `undefined class/module` is recovered).
+- [x] Stable output: explicit key ordering + events sorted by id. Smoke run:
+      199 maps / 5301 events / 8429 pages (exact), script calls preserved raw.
 
-### 3.1 — Python driver (`map_deserializer/driver.py`)
+### 3.1 — Python driver (`map_deserializer/driver.py`) — ✓ COMPLETE
 
-- [ ] `run(clean: bool)`: optionally wipe `output/uranium-build/maps/`, shell to
-      `deserialize.rb rxdata` (reuse `_marshal.py` subprocess pattern),
-      confirm expected file count.
-- [ ] Wire `pipeline.py phase3 [--clean]` Click command.
+- [x] `driver.run(uranium_src, out_dir, clean)`: wipes `maps/`, shells to
+      `deserialize.rb rxdata`, returns map count. Fail-loud on non-zero exit.
+- [x] Wired `pipeline.py phase3 [--clean]` → driver → validate → command_catalog.
+      **Note:** run via the project venv: `.venv/bin/python -m rpg2gba.pipeline`.
 
-### 3.2 — Command-code reference + script-call list (`command_catalog.py`)
+### 3.2 — Command-code reference + script-call list (`command_catalog.py`) — ✓ COMPLETE
 
-- [ ] Scan all map + common-event JSON; tally every distinct command `code` and
-      its frequency. Assert no code outside the known catalog (E7) — currently
-      zero unknown, so this *locks* the invariant.
-- [ ] Emit `reference/rgss_event_commands.md`: each code in use → name +
-      Direct / Adaptable / Needs-C / Strip tag (seed names from
-      `recon_maps.rb`'s `COMMON_CODES` comments).
-- [ ] Extract distinct **script-call signatures** from code-355/655 command
-      bodies (the leading `pbXxx(` / method token); list them with occurrence
-      counts in the same doc under a "Script calls (Phase 4 input)" section. No
-      per-signature Direct/Adaptable/etc. tagging yet (E2).
+- [x] Scans maps + common events; tallies all codes. **59 codes in use, 83,237
+      command instances.** Coverage guard (E7): `CATALOG` is a superset of the
+      standard RGSS set; any code outside it is fail-loud. Zero unknown today.
+- [x] Emits `reference/rgss_event_commands.md`: code → name + advisory
+      Direct/Adaptable/NeedsC/Strip tag + count.
+- [x] Extracts distinct script-call signatures from 355/655 (**250 distinct**),
+      listed with counts under "Script calls (Phase 4 input)" — no per-signature
+      classification yet (E2).
 
-### 3.3 — Switch / variable dump
+### 3.3 — Switch / variable dump — ✓ COMPLETE
 
-- [ ] From `system.json`, write `reference/uranium_switches.json` and
-      `reference/uranium_variables.json` (`{index: name}`), committed (E6). These
-      seed the Phase 4 flag registry; cross-reference the pre-seed candidates
-      already in `MEMORY.md → Flag Registry Notes`.
+- [x] `command_catalog._write_switch_var_tables` writes
+      `reference/uranium_switches.json` (**235 named**) +
+      `uranium_variables.json` (**119 named**), `{index: name}`, named entries
+      only. Phase 4 flag-registry seed; cross-ref `MEMORY.md → Flag Registry Notes`.
+      **Finding:** some "switches" are Essentials script-switches, e.g.
+      `s:pbIsWeekday(-1,2,4,6)` — evaluated, not stored. Phase 4 must special-case.
 
-### 3.4 — Common events
+### 3.4 — Common events — ✓ COMPLETE
 
-- [ ] Confirm `common_events.json` deserializes (handled by 3.0); validate each
-      entry has `{id, name, trigger, list}`.
+- [x] `common_events.json` (100 entries) shaped with `{id, name, trigger,
+      switch_id, list}`; presence + parseability checked by `validate_output`.
 
 ---
 
@@ -217,19 +219,22 @@ skip + a `phase3` marker (add to `pyproject.toml`).
 
 ## Verification — Phase 3 exit gate
 
-- [ ] **V1.** `python -m rpg2gba.pipeline phase3 --clean` exits 0; emits one JSON
-      per map + `common_events.json` + `system.json` + the `reference/` sidecars.
-- [ ] **V2.** `pytest -m phase3 -v` green.
-- [ ] **V3.** Idempotence: re-run, `diff -r` empty.
-- [ ] **V4.** Manual spot-check (ROADMAP §Phase 3 validation): open the 3
-      representative maps' JSON, confirm event count + a couple of event scripts
-      against expected in-game behavior (use the `pokemon-uranium-wiki` skill /
-      `reference/map_names.json` to identify maps).
-- [ ] **V5.** `reference/rgss_event_commands.md` reviewed: every code tagged;
-      script-call list present.
-- [ ] **V6.** `MEMORY.md` updated — Current Phase → Phase 3 done / Phase 4 ready;
-      new Last Session Summary; note switch/var sidecars as Phase 4 flag-registry
-      seed. Commit.
+- [x] **V1.** `.venv/bin/python -m rpg2gba.pipeline phase3 --clean` exits 0; emits
+      199 `maps/MapNNN.json` + `common_events.json` + `system.json` +
+      `map_infos.json` + the three `reference/` sidecars.
+- [x] **V2.** `pytest -m phase3 -v` green (9 tests); full suite 75 passed; ruff clean.
+- [x] **V3.** Idempotence: `test_idempotence` re-runs clean and asserts byte
+      identity across all 199 map JSON; golden tests pin 4 maps byte-for-byte.
+- [ ] **V4.** *(user)* Manual spot-check: open Map002 (Burole Town PC interior),
+      Map001/Map021 (routes), Map071 (stress, 1018-cmd page) JSON; confirm event
+      counts + a few scripts vs in-game (`pokemon-uranium-wiki` skill). **Note a
+      naming oddity to verify:** `map_infos["1"]` = "Route 03" but `Map001`'s BGM
+      is "PU-Hero House" — confirm the map-id↔name alignment.
+- [ ] **V5.** *(user)* Review `reference/rgss_event_commands.md`: every code
+      tagged; script-call list present (250 signatures).
+- [x] **V6.** `MEMORY.md` updated (Current Phase → Phase 3 done / Phase 4 next;
+      new Last Session Summary; switch/var sidecars noted as flag-registry seed).
+      Committed.
 
 ---
 
