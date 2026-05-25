@@ -10,6 +10,7 @@ All are env-gated via the `uranium_data` fixture (skip if the source is absent).
 """
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -84,6 +85,34 @@ def test_edge_species201_no_tandor_dex(uranium_data: Path, reference_dir: Path) 
     assert s201 is not None
     assert s201.internal_name == "GENGAR"
     assert s201.regional_dex_number is None
+
+
+def test_gate_unobtainable_and_extra_hidden_sidecars(
+    uranium_data: Path, tmp_path: Path
+) -> None:
+    """V5 gate deltas via the real run() path:
+    * unobtainable_species.json isolates exactly id 201 GENGAR, and its emitted
+      species_info entry carries the UNOBTAINABLE marker comment.
+    * extra_hidden_abilities.json records the 8 species with a 2nd hidden ability,
+      and every extra is flagged needs_engine on the id_map.
+    """
+    id_map = IdMap()
+    pokemon.run(uranium_data.parent, tmp_path, id_map)
+    inter = tmp_path / "intermediate"
+
+    unobtainable = json.loads((inter / "unobtainable_species.json").read_text(encoding="utf-8"))
+    assert unobtainable == ["SPECIES_GENGAR"]
+
+    info = (tmp_path / "src" / "data" / "pokemon" / "species_info.h").read_text(encoding="utf-8")
+    assert "UNOBTAINABLE" in _entry(info, "SPECIES_GENGAR")
+
+    extra = json.loads((inter / "extra_hidden_abilities.json").read_text(encoding="utf-8"))
+    assert len(extra) == 8
+    assert {"SPECIES_MAGIKARP", "SPECIES_MINYAN"} <= set(extra)
+    for consts in extra.values():
+        assert consts, "extra-hidden entry must be non-empty"
+        for c in consts:
+            assert c in id_map.needs_engine["abilities"], f"{c} not flagged needs_engine"
 
 
 def test_edge_evolutions_forward_only(uranium_data: Path) -> None:

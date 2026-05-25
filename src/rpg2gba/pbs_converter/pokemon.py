@@ -638,6 +638,15 @@ def _emit_species_info(species: list[Species | None], r: _Resolver) -> str:
         const = r.species_constant(s.id)
         lines: list[str] = [f"    [{const}] =", "    {"]
 
+        # Species with real stats but no Tandor dex number (regional_dex_number==0)
+        # are placeholder slots — only Uranium id 201 "GENGAR". Emit-and-mark
+        # UNOBTAINABLE per the V5 gate decision; see intermediate/unobtainable_species.json.
+        if not s.regional_dex_number:
+            lines.append(
+                f"        // Uranium id {s.id}: placeholder slot, no Tandor dex entry — "
+                "UNOBTAINABLE (do not wire into dex/encounters)."
+            )
+
         for fld, val in zip(_STAT_FIELDS, s.base_stats):
             lines.append(f"        .{fld} = {val},")
 
@@ -778,6 +787,33 @@ def run(uranium_src: Path, out_dir: Path, id_map: IdMap) -> None:
     }
     (inter / "tandor_dex.json").write_text(
         json.dumps(dict(sorted(tandor.items())), indent=2) + "\n", encoding="utf-8"
+    )
+
+    # Hidden-ability drift (V5 gate decision): fork has 1 hidden slot, but 8 species
+    # ship a 2nd. The first hidden is emitted into .abilities[2]; the extras are
+    # recorded here and flagged needs_engine (no Phase 6 multi-hidden engine work).
+    extra_hidden: dict[str, list[str]] = {}
+    for s in species:
+        if s is None:
+            continue
+        extras = [r.ability_constant(h) for h in s.hidden_abilities[1:] if h]
+        if extras:
+            extra_hidden[r.species_constant(s.id)] = extras
+            for const in extras:
+                id_map.mark_needs_engine("abilities", const)
+    (inter / "extra_hidden_abilities.json").write_text(
+        json.dumps(dict(sorted(extra_hidden.items())), indent=2) + "\n", encoding="utf-8"
+    )
+
+    # Placeholder species with no Tandor dex entry (V5 gate decision: emit-and-mark
+    # unobtainable). The regional_dex_number==0 rule isolates exactly id 201 GENGAR.
+    unobtainable = sorted(
+        r.species_constant(s.id)
+        for s in species
+        if s is not None and not s.regional_dex_number
+    )
+    (inter / "unobtainable_species.json").write_text(
+        json.dumps(unobtainable, indent=2) + "\n", encoding="utf-8"
     )
 
     logger.info("emitted species data for %d species", sum(1 for s in species if s is not None))
