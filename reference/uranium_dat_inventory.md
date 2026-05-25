@@ -44,6 +44,43 @@ See `scripts/spike_dat_inventory.rb` for the probe results that determined which
 
 **Species data confirmed: `dexdata.dat`.** 201 species × 76 bytes = 15,276 bytes flat binary. Field layout from `Compiler.rb` `requiredtypes`/`optionaltypes` dicts. Tandor dex = 200 entries (from `regionals.dat`). One internal species ID (201) has no Tandor number — identity TBD.
 
+## Phase 2 conversion status
+
+Per-file disposition after Phase 2 (§2.x). **CONVERTED** = a Phase 2 converter consumes it; **STRIP** = intentionally dropped (dead/irrelevant on GBA); **DEFER** = belongs to a later phase, not Phase 2.
+
+| File | Status | Converter / reason |
+|---|---|---|
+| `dexdata.dat` | **CONVERTED** | §2.1 species → `gSpeciesInfo[]` + `SPECIES_*` |
+| `attacksRS.dat` | **CONVERTED** | §2.1 level-up learnsets |
+| `evolutions.dat` | **CONVERTED** | §2.1 evolutions |
+| `eggEmerald.dat` | **CONVERTED** | §2.1 egg moves |
+| `regionals.dat` | **CONVERTED** | §2.1 → `intermediate/tandor_dex.json` |
+| `moves.dat` | **CONVERTED** | §2.2 moves → `gMovesInfo[]` + `MOVE_*` (effects DEFER→Phase 6) |
+| `items.dat` | **CONVERTED** | §2.3 items → `gItemsInfo[]` + `ITEM_*` (behavior DEFER→Phase 6) |
+| `tm.dat` | **CONVERTED** | §2.5 → `intermediate/uranium_tm_learnables.json` |
+| `tutor.dat` | **CONVERTED** | §2.5 (header-only/empty, asserted) |
+| `tmpbs.dat` | **CONVERTED** | §2.9 → `sUraniumTMPBS_*` (semantics still open) |
+| `trainers.dat` | **CONVERTED** | §2.6 → `intermediate/trainers.json` |
+| `trainertypes.dat` | **CONVERTED** | §2.6 → `intermediate/trainer_types.json` |
+| `encounters.dat` | **CONVERTED** | §2.7 → `intermediate/wild_encounters.json` |
+| `metadata.dat` | **CONVERTED** | §2.8 → `metadata.h` + per-map JSON |
+| `types.dat` | **CONVERTED** | §2.10 → `reference/types_dump.json` (C emit DEFER→Phase 6) |
+| `shadowmoves.dat` | **STRIP** | Empty array; Shadow mechanic dead (0 TPSHADOW in 331 trainers) |
+| `intl_*.dat` (9) | **STRIP** | Localization tables; English-only target |
+| `BackupSave.dat` | **STRIP** | Player save backup, not game data |
+| `messages.dat` | **DEFER** | Names/dex sourced via sidecars now; full dialogue regenerated from events in Phase 4/5 |
+| `connections.dat` | **DEFER** | Map-edge graph → Phase 5 map wiring |
+| `metrics.dat` | **DEFER** | Battler sprite offsets → Phase 5 graphics |
+| `move2anim.dat` | **DEFER** | Move→animation index → Phase 5/6 |
+| `townmap.dat` | **DEFER** | Region-map UI → Phase 5 |
+| `phone.dat` | **DEFER** | Phone contacts/call scripts → Phase 4 events |
+| `trainerlists.dat` | **DEFER** | Trainer groupings → Phase 4 |
+| `berryplants.dat` | **DEFER** | Berry growth data → Phase 6 |
+| `btpokemon.dat` | **DEFER** | Battle-facility templates → post-Phase-7 |
+| `bttrainers.dat` | **DEFER** | Battle-facility trainers → post-Phase-7 |
+
+No shipped `.dat` is unaccounted for; nothing tagged CONVERTED is missing a converter, and nothing Phase-2-relevant is left untagged.
+
 ## Phase 2 implications
 
 The roadmap's Phase 2 plan assumes parsing PBS text. With no PBS source shipped, the converters must instead parse two distinct binary formats directly:
