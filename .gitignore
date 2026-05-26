@@ -7,6 +7,9 @@ dist/
 .pytest_cache/
 .ruff_cache/
 
+# Claude Code runtime artifacts (the tracked skills under .claude/skills/ stay).
+.claude/scheduled_tasks.lock
+
 # Verbatim Uranium source extracted by recon scripts. Per CLAUDE.md, never commit.
 # Summaries (reference/*.md) are derived and OK to track; raw dumps are not.
 reference/scripts_dump/

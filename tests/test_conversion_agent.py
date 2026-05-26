@@ -277,3 +277,18 @@ def test_build_prompt_has_sections() -> None:
 
 def test_system_prompt_loads() -> None:
     assert "conversion agent" in prompt_builder.load_system_prompt().lower()
+
+
+def test_filter_command_reference() -> None:
+    full = prompt_builder.load_command_reference(REFERENCE)
+    out = prompt_builder.filter_command_reference(full, {101, 355})
+    assert "| 101 |" in out and "| 355 |" in out
+    assert "| 122 |" not in out  # a real code we didn't ask for is dropped
+    assert len(out) < len(full)  # the slice is smaller than the full reference
+
+
+def test_event_codes() -> None:
+    ev = {
+        "pages": [{"list": [{"code": 101}, {"code": 355}], "move_route": {"list": [{"code": 1}]}}]
+    }
+    assert orch._event_codes(ev) == {1, 101, 355}

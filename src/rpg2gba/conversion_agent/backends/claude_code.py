@@ -37,7 +37,7 @@ class ClaudeCodeBackend(ConversionBackend):
         max_budget_usd: float | None = None,
         bare: bool = False,
         extra_args: list[str] | None = None,
-        timeout: float = 300.0,
+        timeout: float = 600.0,
     ) -> None:
         self.system_prompt = system_prompt
         self.claude_path = claude_path

@@ -15,10 +15,14 @@ Stable chunks come first so a future caching backend can reuse them.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 _PKG = Path(__file__).resolve().parent
 _PROMPTS = _PKG / "prompts"
+
+# A data row in reference/rgss_event_commands.md: `| 355 | Script | Adaptable | 12 |`.
+_REF_ROW = re.compile(r"^\|\s*(\d+)\s*\|")
 
 
 def load_system_prompt(prompts_dir: Path | None = None) -> str:
@@ -40,6 +44,24 @@ def load_cheatsheet(reference_dir: Path) -> str:
 
 def load_command_reference(reference_dir: Path) -> str:
     return (reference_dir / "rgss_event_commands.md").read_text(encoding="utf-8")
+
+
+def filter_command_reference(full_text: str, codes: set[int]) -> str:
+    """Keep only the command-code table rows whose code is used in this event.
+
+    The full reference embeds the whole 59-code table plus the 250-signature
+    script-call list — large, static, and re-billed on every cold spawn. The agent
+    only needs the rows for codes actually present (and it gets the raw script-call
+    text from the event JSON anyway), so we send a compact, per-event slice.
+    """
+    kept = [
+        ln
+        for ln in full_text.splitlines()
+        if (m := _REF_ROW.match(ln)) and int(m.group(1)) in codes
+    ]
+    header = "| Code | Name | Tag | Count |\n|---|---|---|---|"
+    body = "\n".join(kept) if kept else "| (no catalogued codes in this event) |"
+    return "Command codes used in this event:\n\n" + header + "\n" + body
 
 
 def _render_registry(registry_state: dict) -> str:

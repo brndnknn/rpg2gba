@@ -79,18 +79,20 @@ class Orchestrator:
 
         m = json.loads(map_json_path.read_text(encoding="utf-8"))
         map_id = m["map_id"]
+        self.scripts_dir.mkdir(parents=True, exist_ok=True)
+        out_pory = self.scripts_dir / f"{stem}.pory"
         blocks: list[str] = []
         for event in m["events"]:
             script = self._convert_event(map_id, event)
             if script is not None:
                 blocks.append(script)
+            # Flush after every event so a mid-map stop never loses accepted work
+            # (per-event LLM calls are slow + interruptible — ROADMAP §4.5).
+            out_pory.write_text(("\n\n".join(blocks) + "\n") if blocks else "", encoding="utf-8")
+            self.registry.save(self.registry_state_path)
 
-        self.scripts_dir.mkdir(parents=True, exist_ok=True)
-        out_pory = self.scripts_dir / f"{stem}.pory"
-        out_pory.write_text(("\n\n".join(blocks) + "\n") if blocks else "", encoding="utf-8")
         self._checkpoint(stem).parent.mkdir(parents=True, exist_ok=True)
         self._checkpoint(stem).write_text("ok\n", encoding="utf-8")
-        self.registry.save(self.registry_state_path)
         logger.info("%s: %d/%d events converted", stem, len(blocks), len(m["events"]))
 
     # -- per-event --------------------------------------------------------
@@ -149,7 +151,9 @@ class Orchestrator:
             self._registry_state(),
             few_shots=self._few_shots,
             cheatsheet=self._cheatsheet,
-            command_ref=self._command_ref,
+            command_ref=prompt_builder.filter_command_reference(
+                self._command_ref, _event_codes(payload)
+            ),
         )
 
     @staticmethod
@@ -181,6 +185,19 @@ class Orchestrator:
         self.unhandled_path.parent.mkdir(parents=True, exist_ok=True)
         with self.unhandled_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def _event_codes(event: dict) -> set[int]:
+    """Every RPG Maker command code used in an event (page lists + move routes)."""
+    codes: set[int] = set()
+    for page in event.get("pages", []):
+        for cmd in page.get("list", []):
+            codes.add(cmd["code"])
+        mr = page.get("move_route")
+        if isinstance(mr, dict):
+            for cmd in mr.get("list", []):
+                codes.add(cmd["code"])
+    return codes
 
 
 def triage(queue_path: Path) -> dict[str, int]:
