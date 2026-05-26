@@ -61,11 +61,11 @@ What "machinery done" looks like:
 - [x] **P1.** Phase 3 outputs present: `output/uranium-build/maps/MapNNN.json`
       (199), `reference/uranium_switches.json`, `uranium_variables.json`,
       `rgss_event_commands.md`. (Re-run `phase3 --clean` if `output/` is wiped.)
-- [ ] **P2.** Poryscript binary obtained: **download a pinned release** from
-      `huderlem/poryscript`, place outside the repo, reference via a configurable
-      path (env `RPG2GBA_PORYSCRIPT`, default discovered on `PATH`). Needed for the
-      compile-gate test (4.2). *New tool — confirm version with the user.*
-      **STILL PENDING** — `test_compile_gate` skips until this is done.
+- [x] **P2.** Poryscript **3.6.0** installed at
+      `/home/b/tools/poryscript/poryscript-linux/poryscript`; `RPG2GBA_PORYSCRIPT`
+      added to `.env-paths`. The release's `command_config.json`/`font_config.json`
+      are auto-passed via `-cc`/`-fc` (override dir: `RPG2GBA_PORYSCRIPT_CONFIG`).
+      `test_compile_gate` now runs green.
 - [ ] **P3.** `claude` CLI on `PATH` + authenticated (the headless backend shells
       to it). Needed only when a real run starts (calibration onward), **not** to
       build/test the machinery (tests use `MockBackend`). Ollama at `$OLLAMA_HOST`
@@ -235,13 +235,12 @@ Add a `phase4` marker to `pyproject.toml` (mirror the `phase3` gating in
 
 - [x] **V1.** `flag_registry validate` exits 0 — "OK: 8 flags, 5 vars, 34
       script-switches blocked".
-- [x] **V2.** Full suite **97 passed / 1 skipped**, ruff clean. (The skip is
-      `test_compile_gate`, gated on P2; the orchestrator loop is covered via an
-      injected fake compiler + MockBackend.)
+- [x] **V2.** Full suite **98 passed / 0 skipped**, ruff clean (compile-gate now
+      runs against poryscript 3.6.0).
 - [x] **V3.** Orchestrator integration tests prove the loop end-to-end
       (retry-once, double-failure→queue, proposal commit, checkpoint-skip +
-      idempotence) with a fake compiler. The real-binary compile-gate is the only
-      piece pending P2.
+      idempotence) with a fake compiler; `test_compile_gate` validates the real
+      binary accepts a good script and rejects a broken one.
 - [x] **V4.** `pipeline phase4 --clean` (dry) pre-seeds 8 flags + 5 vars, blocks
       34 script-switches, reports 199 maps pending — no live model.
 - [x] **V5.** `MEMORY.md` updated (Current Phase, Flag Registry Notes, new Last

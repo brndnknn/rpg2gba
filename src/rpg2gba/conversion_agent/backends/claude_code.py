@@ -33,19 +33,30 @@ class ClaudeCodeBackend(ConversionBackend):
         *,
         claude_path: str = "claude",
         model: str = "claude-sonnet-4-6",
+        disallowed_tools: str | None = "Bash Edit Write Read Glob Grep WebFetch WebSearch Task",
+        max_budget_usd: float | None = None,
+        bare: bool = False,
         extra_args: list[str] | None = None,
         timeout: float = 300.0,
     ) -> None:
         self.system_prompt = system_prompt
         self.claude_path = claude_path
         self.model = model
-        # Tool-restriction flags belong here once verified against the installed
-        # `claude` version — the conversion agent needs no tools (pure text I/O).
+        # The conversion agent is pure text I/O — deny every tool by default so a
+        # spawned process can't wander off and run commands.
+        self.disallowed_tools = disallowed_tools
+        # Optional hard dollar cap per spawn (`claude --max-budget-usd`).
+        self.max_budget_usd = max_budget_usd
+        # `--bare` isolates the spawn from the repo's CLAUDE.md/hooks (cleaner
+        # build/conversion boundary) BUT forces ANTHROPIC_API_KEY auth — it never
+        # reads OAuth/keychain, so it bypasses a Pro subscription. Leave off unless
+        # you're intentionally running on an API key.
+        self.bare = bare
         self.extra_args = extra_args or []
         self.timeout = timeout
 
     def _build_cmd(self) -> list[str]:
-        return [
+        cmd = [
             self.claude_path,
             "-p",
             "--output-format",
@@ -54,8 +65,15 @@ class ClaudeCodeBackend(ConversionBackend):
             self.model,
             "--system-prompt",
             self.system_prompt,
-            *self.extra_args,
         ]
+        if self.bare:
+            cmd.append("--bare")
+        if self.disallowed_tools:
+            cmd += ["--disallowed-tools", self.disallowed_tools]
+        if self.max_budget_usd is not None:
+            cmd += ["--max-budget-usd", str(self.max_budget_usd)]
+        cmd += self.extra_args
+        return cmd
 
     def _run(self, prompt: str) -> str:
         proc = subprocess.run(

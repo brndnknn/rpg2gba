@@ -60,6 +60,25 @@ def is_available() -> bool:
         return False
 
 
+def _config_args(binary: Path) -> list[str]:
+    """`-cc`/`-fc` flags pointing at poryscript's command/font config JSON.
+
+    poryscript looks for `command_config.json`/`font_config.json` in the cwd by
+    default; we run from a temp dir, so point it at explicit files. Resolution:
+    `RPG2GBA_PORYSCRIPT_CONFIG` (a dir) if set, else the config files shipped
+    beside the binary. Missing files are simply omitted (poryscript falls back to
+    built-in defaults).
+    """
+    cfg_dir = os.environ.get("RPG2GBA_PORYSCRIPT_CONFIG")
+    base = Path(cfg_dir) if cfg_dir else binary.parent
+    args: list[str] = []
+    for flag, name in (("-cc", "command_config.json"), ("-fc", "font_config.json")):
+        path = base / name
+        if path.is_file():
+            args += [flag, str(path)]
+    return args
+
+
 def compile_script(script: str) -> CompileResult:
     """Compile a Poryscript string; return success + captured compiler output.
 
@@ -72,7 +91,7 @@ def compile_script(script: str) -> CompileResult:
         out = Path(td) / "event.inc"
         src.write_text(script, encoding="utf-8")
         proc = subprocess.run(
-            [str(binary), "-i", str(src), "-o", str(out)],
+            [str(binary), "-i", str(src), "-o", str(out), *_config_args(binary)],
             capture_output=True,
             text=True,
         )
