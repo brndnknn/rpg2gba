@@ -46,6 +46,16 @@ def load_command_reference(reference_dir: Path) -> str:
     return (reference_dir / "rgss_event_commands.md").read_text(encoding="utf-8")
 
 
+def load_script_call_reference(reference_dir: Path) -> str:
+    """The Uranium `pbXxx`/Kernel/`$game_*` script-call disposition table.
+
+    Stable, ~40-row chunk (see reference/uranium_script_calls.md). It tells the
+    agent which script calls to MAP, STRIP, or queue as UNHANDLED — the real
+    translation surface, since Uranium adds no custom command *codes*.
+    """
+    return (reference_dir / "uranium_script_calls.md").read_text(encoding="utf-8")
+
+
 def filter_command_reference(full_text: str, codes: set[int]) -> str:
     """Keep only the command-code table rows whose code is used in this event.
 
@@ -84,6 +94,7 @@ def build_prompt(
     few_shots: list[str],
     cheatsheet: str,
     command_ref: str,
+    script_call_ref: str,
 ) -> str:
     """Compose the per-event user prompt from its parts."""
     examples = "\n\n---\n\n".join(few_shots) if few_shots else "(no examples provided)"
@@ -91,6 +102,7 @@ def build_prompt(
         [
             "# Poryscript cheatsheet\n\n" + cheatsheet,
             "# Command-code reference\n\n" + command_ref,
+            "# Uranium script-call reference\n\n" + script_call_ref,
             "# Few-shot examples\n\n" + examples,
             "# Flag registry\n\n" + _render_registry(registry_state),
             "# Event to convert\n\n```json\n"

@@ -56,6 +56,7 @@ class Orchestrator:
         self._few_shots = prompt_builder.load_few_shots()
         self._cheatsheet = prompt_builder.load_cheatsheet(reference_dir)
         self._command_ref = prompt_builder.load_command_reference(reference_dir)
+        self._script_call_ref = prompt_builder.load_script_call_reference(reference_dir)
 
     # -- public -----------------------------------------------------------
 
@@ -154,6 +155,7 @@ class Orchestrator:
             command_ref=prompt_builder.filter_command_reference(
                 self._command_ref, _event_codes(payload)
             ),
+            script_call_ref=self._script_call_ref,
         )
 
     @staticmethod

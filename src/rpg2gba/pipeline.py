@@ -193,15 +193,23 @@ def _phase4_registry(out_dir: Path, clean: bool, fork_path: Path | None):
     return reg
 
 
-def _phase4_backend(name: str):
-    """Construct the chosen conversion backend with the frozen system prompt."""
+_DEFAULT_MODEL = "claude-sonnet-4-6"
+
+
+def _phase4_backend(name: str, model: str = _DEFAULT_MODEL):
+    """Construct the chosen conversion backend with the frozen system prompt.
+
+    `model` selects the Claude model for the `claude_code` backend (the
+    Sonnet-vs-Opus calibration knob); it is ignored by the Ollama backend, which
+    is configured via OLLAMA_HOST/its own model setting.
+    """
     from rpg2gba.conversion_agent import prompt_builder
 
     system_prompt = prompt_builder.load_system_prompt()
     if name == "claude_code":
         from rpg2gba.conversion_agent.backends.claude_code import ClaudeCodeBackend
 
-        return ClaudeCodeBackend(system_prompt)
+        return ClaudeCodeBackend(system_prompt, model=model)
     from rpg2gba.conversion_agent.backends.ollama import OllamaBackend
 
     return OllamaBackend(system_prompt)
@@ -219,7 +227,12 @@ def _phase4_backend(name: str):
     default="claude_code",
     type=click.Choice(["claude_code", "ollama"]),
 )
-def phase4(clean: bool, run: bool, backend: str) -> None:
+@click.option(
+    "--model",
+    default=_DEFAULT_MODEL,
+    help="Claude model for the claude_code backend (e.g. claude-sonnet-4-6, claude-opus-4-7).",
+)
+def phase4(clean: bool, run: bool, backend: str, model: str) -> None:
     """Build the conversion-agent machinery (Phase 4). Add --run to convert."""
     from rpg2gba.conversion_agent import orchestrator as orch
 
@@ -251,7 +264,7 @@ def phase4(clean: bool, run: bool, backend: str) -> None:
         )
         return
 
-    backend_obj = _phase4_backend(backend)
+    backend_obj = _phase4_backend(backend, model)
     orchestrator = orch.Orchestrator(backend_obj, registry, out_dir)
     n = orchestrator.convert_all(maps_dir)
     logger.info("phase4: processed %d maps; triage=%s", n, orch.triage(out_dir / "unhandled.jsonl"))
@@ -264,7 +277,12 @@ def phase4(clean: bool, run: bool, backend: str) -> None:
     default="claude_code",
     type=click.Choice(["claude_code", "ollama"]),
 )
-def convert_map(map_id: str, backend: str) -> None:
+@click.option(
+    "--model",
+    default=_DEFAULT_MODEL,
+    help="Claude model for the claude_code backend (e.g. claude-sonnet-4-6, claude-opus-4-7).",
+)
+def convert_map(map_id: str, backend: str, model: str) -> None:
     """Convert a single map for debugging (Phase 4; spawns the backend)."""
     from rpg2gba.conversion_agent import orchestrator as orch
 
@@ -277,7 +295,7 @@ def convert_map(map_id: str, backend: str) -> None:
     fork_path = Path(fork) if fork and Path(fork).is_dir() else None
 
     registry = _phase4_registry(out_dir, clean=False, fork_path=fork_path)
-    backend_obj = _phase4_backend(backend)
+    backend_obj = _phase4_backend(backend, model)
     orchestrator = orch.Orchestrator(backend_obj, registry, out_dir)
     cp = out_dir / "checkpoints" / f"{stem}.done"
     if cp.exists():

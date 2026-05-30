@@ -133,6 +133,21 @@ def test_claude_convert_event_mocks_subprocess(monkeypatch: pytest.MonkeyPatch) 
     assert backend.convert_event({}, {}, "prompt").script == "script S { end }"
 
 
+def test_claude_model_in_cmd() -> None:
+    cmd = claude_code.ClaudeCodeBackend("SYSTEM", model="claude-opus-4-7")._build_cmd()
+    assert "--model" in cmd
+    assert cmd[cmd.index("--model") + 1] == "claude-opus-4-7"
+
+
+def test_phase4_backend_threads_model() -> None:
+    from rpg2gba import pipeline
+
+    backend = pipeline._phase4_backend("claude_code", "claude-opus-4-7")
+    assert backend.model == "claude-opus-4-7"
+    # default is Sonnet (the calibration baseline)
+    assert pipeline._phase4_backend("claude_code").model == pipeline._DEFAULT_MODEL
+
+
 def test_ollama_parse() -> None:
     payload = {"message": {"content": json.dumps(_GOOD)}}
     assert ollama._parse_chat(payload).script == "script S { end }"
@@ -268,9 +283,12 @@ def test_build_prompt_has_sections() -> None:
         few_shots=prompt_builder.load_few_shots(),
         cheatsheet=prompt_builder.load_cheatsheet(REFERENCE),
         command_ref=prompt_builder.load_command_reference(REFERENCE),
+        script_call_ref=prompt_builder.load_script_call_reference(REFERENCE),
     )
     assert "FLAG_RECEIVED_STARTER" in prompt
     assert "Poryscript cheatsheet" in prompt
+    assert "Uranium script-call reference" in prompt
+    assert "pbCallBub" in prompt
     assert "Few-shot examples" in prompt
     assert '"name": "EV001"' in prompt
 

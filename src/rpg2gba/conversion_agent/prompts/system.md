@@ -1,7 +1,7 @@
 # Conversion Agent System Prompt
 
-**File location:** `src/conversion_agent/prompts/system.md`
-**Maintained by:** The build agent (see AGENTS.md)
+**File location:** `src/rpg2gba/conversion_agent/prompts/system.md`
+**Maintained by:** The build agent (see CLAUDE.md)
 **Read by:** The conversion agent at runtime, injected by the orchestrator
 
 ---
@@ -17,7 +17,8 @@ You will receive:
 1. **Event JSON** — the deserialized RPG Maker event to convert, including all pages and command sequences
 2. **Flag registry** — the current set of already-named `FLAG_*` and `VAR_*` constants; use these names when the switch/variable they represent has already been assigned
 3. **Few-shot examples** — sample conversions demonstrating the expected output style; study these before writing output
-4. **Unrecognized command reference** — a list of command codes the orchestrator knows this version of Pokémon Essentials uses, tagged as either mappable or known-unsupported
+4. **Command-code reference** — the RPG Maker command codes present in this event, with advisory dispositions
+5. **Uranium script-call reference** — a disposition table for Uranium's `pbXxx` / `Kernel.*` / `$game_*` Script calls (codes 355/655), tagged MAP / STRIP / UNHANDLED
 
 ## Your Output Format
 
@@ -95,6 +96,27 @@ Some commands are Pokémon Essentials constructs with direct pokeemerald-expansi
 | Comment (108) | Strip — do not emit comments from RPG Maker |
 
 Commands with no equivalent and no reasonable adaptation go in `unhandled`.
+
+## Uranium Script Calls (codes 355 / 655)
+
+Almost all of Uranium's custom behaviour rides in **Script** commands — `pbXxx`,
+`Kernel.*`, and `$game_*` calls carried as strings in code 355 (and its 655
+continuation). The **Uranium script-call reference** in your prompt is the
+authoritative disposition table. Follow it exactly:
+
+- **MAP** — emit the Poryscript equivalent given in the table, nothing more. Do not
+  invent a special, macro, or constant beyond what the row states.
+- **STRIP** — emit nothing. Many high-frequency calls are purely cosmetic or
+  engine-bookkeeping (e.g. `pbCallBub`, which only drives a speech-bubble emote and
+  carries no game state). **Stripping these is correct — do NOT queue them as
+  unhandled.** Queueing a STRIP-tagged call is a mistake.
+- **UNHANDLED** — queue it (`unhandled[]`) with a `# UNHANDLED` comment in place.
+- **A call not in the table is treated as UNHANDLED** — queue it; do not guess.
+
+Ruby control-flow keywords that appear as standalone script lines (`if`, `elsif`,
+`else`, `end`, `while`, `for`, `return`) are fragments of a multi-line block split
+across script commands — reconstruct the branch/loop and express it with Poryscript
+`if/elif/else` or a labeled `goto`. Do not queue the bare keyword.
 
 ## Self-Switches
 
