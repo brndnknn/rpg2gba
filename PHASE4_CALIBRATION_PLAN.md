@@ -26,7 +26,7 @@ converting and compiling — the substance of the §9 #2 calibration gate.
   later (open follow-up).
 - Pro subscription → **no `--max-budget-usd`** (it forces API-key auth and bypasses Pro
   OAuth). Per-event 600s timeout is the only guardrail.
-- **Compare both models** (`claude-sonnet-4-6` vs `claude-opus-4-7`) on the same events —
+- **Compare both models** (`claude-sonnet-4-6` vs `claude-opus-4-8`) on the same events —
   don't just default to Sonnet. The `--model` knob is the mechanism (Part B).
 - Sequence: smoke test → Map002 until green → other calibration maps later.
 
@@ -123,7 +123,7 @@ Prompt files are edited **between** runs only, never during one (CLAUDE.md §1/�
 1. **Smoke test (Sonnet first):** `convert-map --map-id <trivial> --model claude-sonnet-4-6`.
    Verify the full pipe end-to-end: `claude` spawns, response parses, script compiles
    through poryscript, `.pory` + registry flush to disk. Catches machinery bugs cheaply.
-   Then repeat with `--model claude-opus-4-7` to confirm both model paths work.
+   Then repeat with `--model claude-opus-4-8` to confirm both model paths work.
 2. **Map002 — iterate to green (on Sonnet):** `convert-map --map-id 2 --model claude-sonnet-4-6`.
    Inspect the `.pory`, registry deltas, and `unhandled.jsonl`. Iterate `system.md` /
    few-shots / `uranium_script_calls.md` **between** runs until: EV001/EV003/EV004 convert
@@ -151,7 +151,7 @@ Prompt files are edited **between** runs only, never during one (CLAUDE.md §1/�
 - Map002: all events convert + compile; `unhandled.jsonl` free of `pbCallBub` and of any of
   the calls tagged MAP/STRIP in the reference; remaining queue entries are expected
   long-tail UNHANDLED calls only.
-- Map002 run through **both** `claude-sonnet-4-6` and `claude-opus-4-7` from an identical
+- Map002 run through **both** `claude-sonnet-4-6` and `claude-opus-4-8` from an identical
   registry baseline, with a side-by-side comparison (compile, unhandled count, idiom,
   naming, latency) to inform the frozen-model choice.
 

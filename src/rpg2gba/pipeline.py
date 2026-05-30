@@ -230,7 +230,7 @@ def _phase4_backend(name: str, model: str = _DEFAULT_MODEL):
 @click.option(
     "--model",
     default=_DEFAULT_MODEL,
-    help="Claude model for the claude_code backend (e.g. claude-sonnet-4-6, claude-opus-4-7).",
+    help="Claude model for the claude_code backend (e.g. claude-sonnet-4-6, claude-opus-4-8).",
 )
 def phase4(clean: bool, run: bool, backend: str, model: str) -> None:
     """Build the conversion-agent machinery (Phase 4). Add --run to convert."""
@@ -280,7 +280,7 @@ def phase4(clean: bool, run: bool, backend: str, model: str) -> None:
 @click.option(
     "--model",
     default=_DEFAULT_MODEL,
-    help="Claude model for the claude_code backend (e.g. claude-sonnet-4-6, claude-opus-4-7).",
+    help="Claude model for the claude_code backend (e.g. claude-sonnet-4-6, claude-opus-4-8).",
 )
 def convert_map(map_id: str, backend: str, model: str) -> None:
     """Convert a single map for debugging (Phase 4; spawns the backend)."""

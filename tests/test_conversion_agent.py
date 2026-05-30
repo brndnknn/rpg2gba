@@ -134,16 +134,16 @@ def test_claude_convert_event_mocks_subprocess(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_claude_model_in_cmd() -> None:
-    cmd = claude_code.ClaudeCodeBackend("SYSTEM", model="claude-opus-4-7")._build_cmd()
+    cmd = claude_code.ClaudeCodeBackend("SYSTEM", model="claude-opus-4-8")._build_cmd()
     assert "--model" in cmd
-    assert cmd[cmd.index("--model") + 1] == "claude-opus-4-7"
+    assert cmd[cmd.index("--model") + 1] == "claude-opus-4-8"
 
 
 def test_phase4_backend_threads_model() -> None:
     from rpg2gba import pipeline
 
-    backend = pipeline._phase4_backend("claude_code", "claude-opus-4-7")
-    assert backend.model == "claude-opus-4-7"
+    backend = pipeline._phase4_backend("claude_code", "claude-opus-4-8")
+    assert backend.model == "claude-opus-4-8"
     # default is Sonnet (the calibration baseline)
     assert pipeline._phase4_backend("claude_code").model == pipeline._DEFAULT_MODEL
 

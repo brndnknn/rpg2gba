@@ -458,7 +458,7 @@ The conversion agent has multiple viable LLM backends. The right approach is a s
 
 **Stage D — API Fallback (only if needed)**
 - Only escalate to direct Anthropic API as the conversion agent's backend if Stage C runs into Pro window exhaustion repeatedly, or if you need programmatic retry-with-compiler-error loops at scale
-- If you do escalate: use prompt caching aggressively (the stable prompt chunk is 8–15k tokens, cacheable), and use `claude-opus-4-7` for hard maps, `claude-sonnet-4-6` for routine ones
+- If you do escalate: use prompt caching aggressively (the stable prompt chunk is 8–15k tokens, cacheable), and use `claude-opus-4-8` for hard maps, `claude-sonnet-4-6` for routine ones
 - Realistic cost if it comes to this: $20–80 (much lower than the original estimate, because most maps will already be done by then)
 
 ### Why this beats the API-first approach
