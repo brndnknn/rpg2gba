@@ -57,6 +57,16 @@ _PRESEED_ROW = re.compile(
 )
 
 
+def self_switch_flag_name(map_id: int, event_id: int, letter: str) -> str:
+    """Deterministic per-event self-switch flag name (must match prompts/system.md).
+
+    RPG Maker self-switches (A-D) are local to an event instance, so they have no
+    global switch id — the name is derived from (map, event, letter): e.g.
+    self-switch A on event 48 of map 31 -> ``FLAG_MAP031_EVENT048_SSA``.
+    """
+    return f"FLAG_MAP{int(map_id):03d}_EVENT{int(event_id):03d}_SS{letter.upper()}"
+
+
 class RegistryError(RuntimeError):
     """Raised on a validation failure, collision, or corrupt state."""
 
@@ -67,8 +77,10 @@ class FlagRegistry:
     def __init__(self, fork_path: Path | None = None) -> None:
         self._switch_names: dict[int, str] = {}
         self._var_names: dict[int, str] = {}
-        # Reverse index name -> ("flag"|"var", id) for collision detection.
-        self._used: dict[str, tuple[str, int]] = {}
+        # Per-event self-switch flags, keyed by (map_id, event_id, letter).
+        self._selfswitch_names: dict[tuple[int, int, str], str] = {}
+        # Reverse index name -> ("flag"|"var"|"selfswitch", id_or_key) for collisions.
+        self._used: dict[str, tuple[str, object]] = {}
         self._sources: dict[str, str] = {}  # name -> "preseed" | "proposed"
         self._script_switches: set[int] = set()
         self._switch_labels: dict[int, str] = {}
@@ -134,6 +146,32 @@ class FlagRegistry:
             return existing
         self._validate("var", name)
         self._commit("var", vid, name, "proposed")
+        return name
+
+    def mint_self_switch(self, map_id: int, event_id: int, letter: str) -> str:
+        """Register the deterministic per-event self-switch flag (idempotent).
+
+        Self-switches have no integer switch id, so the conversion agent emits
+        their names directly without a registry proposal (prompts/system.md +
+        few_shot/give_item_with_fanfare.md). The orchestrator calls this so the
+        registry knows the flag exists and ``dump_header`` defines the constant —
+        otherwise it's an undefined symbol at assembly. Keyed by (map, event,
+        letter); re-minting the same key returns the existing name.
+        """
+        key = (int(map_id), int(event_id), letter.upper())
+        existing = self._selfswitch_names.get(key)
+        if existing is not None:
+            return existing
+        name = self_switch_flag_name(*key)
+        self._validate("flag", name)
+        prior = self._used.get(name)
+        if prior is not None:
+            raise RegistryError(
+                f"self-switch name {name!r} collides with an existing {prior[0]} assignment"
+            )
+        self._selfswitch_names[key] = name
+        self._used[name] = ("selfswitch", key)
+        self._sources[name] = "selfswitch"
         return name
 
     # -- internals ---------------------------------------------------------
@@ -214,6 +252,10 @@ class FlagRegistry:
         return {
             "switches": {str(k): v for k, v in sorted(self._switch_names.items())},
             "variables": {str(k): v for k, v in sorted(self._var_names.items())},
+            "self_switches": {
+                f"{m}:{e}:{letter}": name
+                for (m, e, letter), name in sorted(self._selfswitch_names.items())
+            },
             "source": dict(sorted(self._sources.items())),
             "script_switches": sorted(self._script_switches),
         }
@@ -233,12 +275,31 @@ class FlagRegistry:
             reg._commit("flag", int(k), v, state["source"].get(v, "preseed"))
         for k, v in state.get("variables", {}).items():
             reg._commit("var", int(k), v, state["source"].get(v, "preseed"))
+        for k, v in state.get("self_switches", {}).items():
+            m, e, letter = k.split(":")
+            key = (int(m), int(e), letter)
+            reg._selfswitch_names[key] = v
+            reg._used[v] = ("selfswitch", key)
+            reg._sources[v] = state["source"].get(v, "selfswitch")
         return reg
 
     # -- header emit -------------------------------------------------------
 
-    def dump_header(self, out_path: str | Path) -> None:
-        """Emit a C header defining every assigned flag/var (Phase 7 sets real bases)."""
+    def dump_header(
+        self,
+        out_path: str | Path,
+        *,
+        flag_base: int = 0x500,
+        var_base: int = 0x40D0,
+        selfswitch_base: int = 0x600,
+    ) -> None:
+        """Emit a C header defining every assigned flag/var/self-switch.
+
+        The base offsets are placeholders by default (the values only need to be
+        unique to *assemble*). Phase 7 passes real, free, reserved ranges when the
+        header drops into the fork — see reference/flag_registry_policy.md on the
+        flag-budget sizing (Uranium needs more saved flags than vanilla has free).
+        """
         out = Path(out_path)
         out.parent.mkdir(parents=True, exist_ok=True)
         lines = [
@@ -247,8 +308,9 @@ class FlagRegistry:
             "",
             "// Generated by rpg2gba flag_registry — do not hand-edit (CLAUDE.md §6).",
             "// Phase 7 assigns the real base offsets when these drop into the fork.",
-            "#define RPG2GBA_FLAG_BASE 0x500   // TODO Phase 7: free flag range",
-            "#define RPG2GBA_VAR_BASE  0x40D0  // TODO Phase 7: free var range",
+            f"#define RPG2GBA_FLAG_BASE       0x{flag_base:X}   // TODO Phase 7: free flag range",
+            f"#define RPG2GBA_VAR_BASE        0x{var_base:X}  // TODO Phase 7: free var range",
+            f"#define RPG2GBA_SELFSWITCH_BASE 0x{selfswitch_base:X}   // TODO Phase 7: free range",
             "",
         ]
         for i, (_id, name) in enumerate(sorted(self._switch_names.items())):
@@ -256,12 +318,16 @@ class FlagRegistry:
         lines.append("")
         for i, (_id, name) in enumerate(sorted(self._var_names.items())):
             lines.append(f"#define {name} (RPG2GBA_VAR_BASE + {i})")
+        lines.append("")
+        for i, (_key, name) in enumerate(sorted(self._selfswitch_names.items())):
+            lines.append(f"#define {name} (RPG2GBA_SELFSWITCH_BASE + {i})")
         lines += ["", "#endif // GUARD_RPG2GBA_FLAGS_H", ""]
         out.write_text("\n".join(lines), encoding="utf-8")
         logger.info(
-            "dumped %d flags + %d vars -> %s",
+            "dumped %d flags + %d vars + %d self-switches -> %s",
             len(self._switch_names),
             len(self._var_names),
+            len(self._selfswitch_names),
             out,
         )
 
@@ -282,6 +348,11 @@ class FlagRegistry:
             if name in seen:
                 raise RegistryError(f"duplicate name {name!r}")
             seen[name] = ("var", vid)
+        for key, name in self._selfswitch_names.items():
+            self._validate("flag", name)
+            if name in seen:
+                raise RegistryError(f"duplicate name {name!r}")
+            seen[name] = ("selfswitch", key)
 
 
 @click.group()

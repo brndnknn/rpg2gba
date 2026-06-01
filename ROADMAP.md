@@ -663,6 +663,7 @@ Bring all converted artifacts into the fork, build a complete ROM, and get it lo
 
 **7.4 Save file format check**
 - Make sure the save format change (new species, new flags) doesn't conflict with the expansion's save migration logic
+- **Flag-space expansion (the flag budget).** Uranium's ~860 self-switch flags (derived by the orchestrator, minted in `flag_registry`) plus the global switches/vars in use exceed vanilla's free saved-flag slots. Expand `FLAGS_COUNT` (grows `SaveBlock1`) and assign real, reserved base offsets via `flag_registry.dump_header(flag_base=…, var_base=…, selfswitch_base=…)`. The default bases assemble but are not runtime-correct. See `reference/flag_registry_policy.md` → "The flag budget".
 
 **7.5 First ROM boot**
 - Open in Delta

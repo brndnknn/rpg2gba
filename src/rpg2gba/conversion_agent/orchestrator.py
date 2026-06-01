@@ -127,7 +127,19 @@ class Orchestrator:
                 self._queue(map_id, event, reason=f"compile failed twice: {err}")
                 return None
 
-        # Script accepted. Any agent-flagged unhandled commands are still logged.
+        # Script accepted. Register any per-event self-switch flags it relies on so
+        # dump_header defines them: the agent emits FLAG_MAP..SS* names (system.md)
+        # but never proposes them, and the registry can't mint them itself — without
+        # this they're undefined symbols at assembly. Deterministic + idempotent; a
+        # mint failure would leave a dangling symbol, so fail loud and queue.
+        for letter in sorted(_event_self_switches(event)):
+            try:
+                self.registry.mint_self_switch(map_id, event["id"], letter)
+            except RegistryError as exc:
+                self._queue(map_id, event, reason=f"self-switch mint failed: {exc}")
+                return None
+
+        # Any agent-flagged unhandled commands are still logged.
         for u in result.unhandled:
             self._queue(map_id, event, reason="agent-flagged unhandled", extra=u)
         return result.script
@@ -200,6 +212,26 @@ def _event_codes(event: dict) -> set[int]:
             for cmd in mr.get("list", []):
                 codes.add(cmd["code"])
     return codes
+
+
+def _event_self_switches(event: dict) -> set[str]:
+    """Self-switch letters an event uses — set via Control Self Switch (code 123)
+    or gated on by a page condition (``self_switch_valid``). Each maps to a
+    deterministic per-event FLAG_* the registry must mint so the assembler can
+    resolve it (the agent emits the name but never proposes it)."""
+    letters: set[str] = set()
+    for page in event.get("pages", []):
+        cond = page.get("condition", {})
+        if cond.get("self_switch_valid"):
+            ch = cond.get("self_switch_ch")
+            if ch:
+                letters.add(str(ch).upper())
+        for cmd in page.get("list", []):
+            if cmd.get("code") == 123:
+                params = cmd.get("parameters", [])
+                if params and isinstance(params[0], str):
+                    letters.add(params[0].upper())
+    return letters
 
 
 def triage(queue_path: Path) -> dict[str, int]:

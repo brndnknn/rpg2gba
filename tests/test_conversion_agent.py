@@ -21,7 +21,11 @@ from rpg2gba.conversion_agent.backends import (
     claude_code,
     ollama,
 )
-from rpg2gba.conversion_agent.flag_registry import FlagRegistry, RegistryError
+from rpg2gba.conversion_agent.flag_registry import (
+    FlagRegistry,
+    RegistryError,
+    self_switch_flag_name,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REFERENCE = REPO_ROOT / "reference"
@@ -100,6 +104,44 @@ def test_dump_header(tmp_path: Path) -> None:
     text = out.read_text(encoding="utf-8")
     assert "#define FLAG_RECEIVED_STARTER" in text
     assert "#define VAR_GYM8_WHITE_TILES" in text
+
+
+def test_mint_self_switch_deterministic_and_idempotent() -> None:
+    reg = FlagRegistry()
+    name = reg.mint_self_switch(31, 48, "A")
+    assert name == "FLAG_MAP031_EVENT048_SSA" == self_switch_flag_name(31, 48, "a")
+    assert reg.mint_self_switch(31, 48, "A") == name  # idempotent on the same key
+    assert reg.mint_self_switch(31, 48, "B") != name  # distinct letter
+    assert reg.mint_self_switch(31, 49, "A") != name  # distinct event
+
+
+def test_mint_self_switch_collision_with_global_flag() -> None:
+    reg = FlagRegistry()
+    reg.mint_self_switch(31, 48, "A")
+    # A global-flag proposal landing on the same deterministic name is rejected.
+    with pytest.raises(RegistryError):
+        reg.propose_flag(900, "FLAG_MAP031_EVENT048_SSA")
+
+
+def test_self_switch_state_roundtrip(tmp_path: Path) -> None:
+    reg = _seeded()
+    reg.mint_self_switch(31, 48, "A")
+    state_path = tmp_path / "flag_state.json"
+    reg.save(state_path)
+    reloaded = FlagRegistry.load(state_path)
+    assert reloaded.mint_self_switch(31, 48, "A") == "FLAG_MAP031_EVENT048_SSA"
+    reloaded.check_integrity()
+
+
+def test_dump_header_self_switch_block_and_custom_bases(tmp_path: Path) -> None:
+    reg = _seeded()
+    reg.mint_self_switch(31, 48, "A")
+    out = tmp_path / "rpg2gba_flags.h"
+    reg.dump_header(out, flag_base=0x20, selfswitch_base=0x100)
+    text = out.read_text(encoding="utf-8")
+    assert "RPG2GBA_SELFSWITCH_BASE" in text
+    assert "0x20" in text and "0x100" in text  # the Phase-7 base hooks
+    assert "#define FLAG_MAP031_EVENT048_SSA (RPG2GBA_SELFSWITCH_BASE + 0)" in text
 
 
 # ----------------------------------------------------------------------------
@@ -310,3 +352,33 @@ def test_event_codes() -> None:
         "pages": [{"list": [{"code": 101}, {"code": 355}], "move_route": {"list": [{"code": 1}]}}]
     }
     assert orch._event_codes(ev) == {1, 101, 355}
+
+
+def test_event_self_switches() -> None:
+    ev = {
+        "pages": [
+            {"condition": {"self_switch_valid": False, "self_switch_ch": "A"},
+             "list": [{"code": 123, "parameters": ["A", 0]}]},
+            {"condition": {"self_switch_valid": True, "self_switch_ch": "A"},
+             "list": [{"code": 101, "parameters": ["hi"]}]},
+        ]
+    }
+    assert orch._event_self_switches(ev) == {"A"}
+
+
+def test_orchestrator_mints_self_switches(tmp_path: Path) -> None:
+    event = {
+        "id": 7, "name": "npc", "x": 0, "y": 0,
+        "pages": [
+            {"condition": {"self_switch_valid": False, "self_switch_ch": "A"},
+             "list": [{"code": 123, "parameters": ["A", 0]}]},
+            {"condition": {"self_switch_valid": True, "self_switch_ch": "A"},
+             "list": [{"code": 101, "parameters": ["hi"]}]},
+        ],
+    }
+    backend = MockBackend([ConversionResult(script="GOOD script")])
+    o = _orchestrator(tmp_path, backend)
+    map_file = _write_map(tmp_path / "out" / "maps", 31, [event])
+    o.convert_map(map_file)
+    state = json.loads((tmp_path / "out" / "flag_state.json").read_text(encoding="utf-8"))
+    assert state["self_switches"] == {"31:7:A": "FLAG_MAP031_EVENT007_SSA"}
