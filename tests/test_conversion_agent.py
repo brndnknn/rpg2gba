@@ -269,8 +269,9 @@ def test_compile_gate() -> None:
 
 
 class MockBackend(ConversionBackend):
-    def __init__(self, results: list[ConversionResult]) -> None:
+    def __init__(self, results: list[ConversionResult], system_prompt: str = "") -> None:
         self.results = results
+        self.system_prompt = system_prompt  # drives the memo fingerprint (dedup C)
         self.calls = 0
 
     def convert_event(self, event_json, registry_state, prompt) -> ConversionResult:
@@ -460,6 +461,86 @@ def test_convert_common_events_only_ids_partial_no_checkpoint(tmp_path: Path) ->
     assert backend.calls == 1  # only CE 4
     assert backend.payloads[0]["common_event_id"] == 4
     assert not (tmp_path / "out" / "checkpoints" / "CommonEvents.done").exists()
+
+
+# ----------------------------------------------------------------------------
+# 4c. Event memoization (Phase 4 dedup C)
+# ----------------------------------------------------------------------------
+
+# A self-switch event (code 123 + a gated page): exercises flag-name rewriting on reuse.
+_SS_EVENT = {
+    "id": 7, "name": "npc", "x": 3, "y": 4,
+    "pages": [
+        {"condition": {"self_switch_valid": False, "self_switch_ch": "A"},
+         "list": [{"code": 123, "parameters": ["A", 0]}]},
+        {"condition": {"self_switch_valid": True, "self_switch_ch": "A"},
+         "list": [{"code": 101, "parameters": ["hi"]}]},
+    ],
+}
+
+
+def test_memo_cross_map_hit_rewrites_self_switch(tmp_path: Path) -> None:
+    # The source script references the source event's deterministic SS flag + "GOOD".
+    src_script = "script npc { setflag(FLAG_MAP010_EVENT007_SSA) GOOD }"
+    backend = MockBackend([ConversionResult(script=src_script)])
+    o = _orchestrator(tmp_path, backend)
+    m10 = _write_map(tmp_path / "out" / "maps", 10, [dict(_SS_EVENT)])
+    m20 = _write_map(tmp_path / "out" / "maps", 20, [dict(_SS_EVENT)])
+    o.convert_map(m10)
+    o.convert_map(m20)
+
+    assert backend.calls == 1  # map 20 is a memo hit -> no second spawn
+    p10 = (tmp_path / "out" / "scripts" / "Map010.pory").read_text()
+    p20 = (tmp_path / "out" / "scripts" / "Map020.pory").read_text()
+    assert "FLAG_MAP010_EVENT007_SSA" in p10
+    assert "FLAG_MAP020_EVENT007_SSA" in p20  # rewritten to the current map
+    assert "FLAG_MAP010_EVENT007_SSA" not in p20
+    state = json.loads((tmp_path / "out" / "flag_state.json").read_text(encoding="utf-8"))
+    # Both events' self-switches are minted (mints replay for the reused event).
+    assert state["self_switches"]["10:7:A"] == "FLAG_MAP010_EVENT007_SSA"
+    assert state["self_switches"]["20:7:A"] == "FLAG_MAP020_EVENT007_SSA"
+
+
+def test_memo_stale_token_falls_back_to_spawn(tmp_path: Path) -> None:
+    # Source references SSA (used by the event) AND SSB (not). On reuse only SSA is
+    # rewritten; the surviving FLAG_MAP010_EVENT007_ token trips the guard -> real spawn.
+    src_script = (
+        "script npc { setflag(FLAG_MAP010_EVENT007_SSA) "
+        "setflag(FLAG_MAP010_EVENT007_SSB) GOOD }"
+    )
+    backend = MockBackend([ConversionResult(script=src_script)])
+    o = _orchestrator(tmp_path, backend)
+    o.convert_map(_write_map(tmp_path / "out" / "maps", 10, [dict(_SS_EVENT)]))
+    o.convert_map(_write_map(tmp_path / "out" / "maps", 20, [dict(_SS_EVENT)]))
+    assert backend.calls == 2  # guard failed on the memo hit -> fell back to a spawn
+
+
+def test_memo_persists_and_reloads(tmp_path: Path) -> None:
+    backend1 = MockBackend([ConversionResult(script="GOOD")], system_prompt="PROMPT_V1")
+    o1 = _orchestrator(tmp_path, backend1)
+    o1.convert_map(_write_map(tmp_path / "out" / "maps", 1, [dict(_EVENT)]))
+    manifest = json.loads((tmp_path / "out" / "memo_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["entries"]  # an entry was stored
+    assert len(manifest["prompt_fingerprint"]) == 12
+
+    # A fresh orchestrator with the SAME system prompt reloads the manifest; an identical
+    # event on a different map is served from it with no spawn.
+    backend2 = MockBackend([ConversionResult(script="GOOD")], system_prompt="PROMPT_V1")
+    o2 = _orchestrator(tmp_path, backend2)
+    o2.convert_map(_write_map(tmp_path / "out" / "maps", 2, [dict(_EVENT)]))
+    assert backend2.calls == 0  # reused from the persisted manifest
+
+
+def test_memo_fingerprint_mismatch_discards(tmp_path: Path) -> None:
+    backend1 = MockBackend([ConversionResult(script="GOOD")], system_prompt="PROMPT_V1")
+    o1 = _orchestrator(tmp_path, backend1)
+    o1.convert_map(_write_map(tmp_path / "out" / "maps", 1, [dict(_EVENT)]))
+
+    # A different system prompt -> different fingerprint -> manifest discarded on load.
+    backend2 = MockBackend([ConversionResult(script="GOOD")], system_prompt="PROMPT_V2")
+    o2 = _orchestrator(tmp_path, backend2)
+    o2.convert_map(_write_map(tmp_path / "out" / "maps", 2, [dict(_EVENT)]))
+    assert backend2.calls == 1  # prompt changed -> not reused -> real spawn
 
 
 # ----------------------------------------------------------------------------

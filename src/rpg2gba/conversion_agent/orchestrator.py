@@ -19,20 +19,43 @@ MockBackend, never the real `poryscript`/`claude` binaries (F7).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
 from collections import Counter
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from rpg2gba.conversion_agent import poryscript, prompt_builder
 from rpg2gba.conversion_agent.backends import ConversionBackend, ConversionResult
-from rpg2gba.conversion_agent.flag_registry import FlagRegistry, RegistryError
+from rpg2gba.conversion_agent.flag_registry import (
+    FlagRegistry,
+    RegistryError,
+    self_switch_flag_name,
+    temp_switch_flag_name,
+)
 
 logger = logging.getLogger(__name__)
 
 CompileFn = Callable[[str], poryscript.CompileResult]
+
+
+@dataclass
+class MemoEntry:
+    """One accepted conversion, reusable for a structurally identical event (dedup C).
+
+    ``src_map`` / ``src_event`` are the identity of the event this script was first
+    generated for; they let ``_reinstantiate`` rewrite the deterministic self/temp-switch
+    flag names to a new map/event on reuse."""
+
+    script: str
+    src_map: int
+    src_event: int
+    new_flags: list[dict] = field(default_factory=list)
+    new_vars: list[dict] = field(default_factory=list)
+    unhandled: list[dict] = field(default_factory=list)
 
 
 class Orchestrator:
@@ -58,6 +81,12 @@ class Orchestrator:
         # rides in the backend's system prompt (dedup Phase B) — composed once in
         # pipeline._phase4_backend — so it is not loaded or assembled here.
         self._command_ref = prompt_builder.load_command_reference(reference_dir)
+        # Event memo (dedup C): structurally identical events reuse a prior conversion
+        # instead of re-spawning. Persisted + fingerprinted by the system prompt so it
+        # survives across runs but is discarded if the prompt changed.
+        self.memo_path = self.output_dir / "memo_manifest.json"
+        self._memo: dict[str, MemoEntry] = {}
+        self._load_memo()
 
     # -- public -----------------------------------------------------------
 
@@ -194,50 +223,168 @@ class Orchestrator:
         """Convert one map event; return its Poryscript, or None if it was queued."""
         payload = {"map_id": map_id, **event}
         ctx = self._event_ctx(map_id, event)
+
+        # Memo (dedup C): if a structurally identical event was already converted, reuse
+        # its script instead of spawning. Any doubt (stale-token guard or compile-gate
+        # failure) falls through to a real spawn below — the memo never relaxes a check.
+        key = _memo_key(payload)
+        entry = self._memo.get(key)
+        if entry is not None:
+            reused = self._try_reuse_memo(map_id, event, ctx, entry)
+            if reused is not None:
+                return reused
+
         result = self._convert(payload, ctx)
         if result is None:
             return None
-
-        # Script accepted. Register any per-event self-switch flags it relies on so
-        # dump_header defines them: the agent emits FLAG_MAP..SS* names (system.md)
-        # but never proposes them, and the registry can't mint them itself — without
-        # this they're undefined symbols at assembly. Deterministic + idempotent; a
-        # mint failure would leave a dangling symbol, so fail loud and queue.
-        for letter in sorted(_event_self_switches(event)):
-            try:
-                self.registry.mint_self_switch(map_id, event["id"], letter)
-            except RegistryError as exc:
-                self._queue(ctx, reason=f"self-switch mint failed: {exc}")
-                return None
-
-        # Same for Uranium temp-switches (setTempSwitchOn, code 355): the agent emits
-        # FLAG_MAP..TS* and the orchestrator mints it from the auto-reset TEMP range.
-        # These are distinct from self-switches (per-map-visit, not saved) — see
-        # _event_temp_switches and prompts/system.md.
-        for key in sorted(_event_temp_switches(event)):
-            try:
-                self.registry.mint_temp_switch(map_id, event["id"], key)
-            except RegistryError as exc:
-                self._queue(ctx, reason=f"temp-switch mint failed: {exc}")
-                return None
-
-        # Any agent-flagged unhandled commands are still logged.
-        for u in result.unhandled:
-            self._queue(ctx, reason="agent-flagged unhandled", extra=u)
+        if not self._mint_event_switches(map_id, event, ctx):
+            return None
+        self._log_unhandled(ctx, result.unhandled)
+        self._store_memo(key, map_id, event, result)
         return result.script
 
     def _convert_common_event(self, payload: dict) -> str | None:
         """Convert one common event (already adapted to page-shape); None if queued.
 
         Common events have no per-event self/temp-switches, so the mint loops are
-        skipped (Phase 4 dedup A)."""
+        skipped (Phase 4 dedup A); they are also not memoized (a fixed set of ~22)."""
         ctx = {"common_event_id": payload["common_event_id"], "event_name": payload.get("name")}
         result = self._convert(payload, ctx)
         if result is None:
             return None
-        for u in result.unhandled:
-            self._queue(ctx, reason="agent-flagged unhandled", extra=u)
+        self._log_unhandled(ctx, result.unhandled)
         return result.script
+
+    def _mint_event_switches(self, map_id: int, event: dict, ctx: dict) -> bool:
+        """Mint the per-event self/temp-switch flags the accepted script relies on.
+
+        The agent emits FLAG_MAP..SS*/..TS* names (system.md) but never proposes them,
+        and the registry can't mint them itself — without this they are undefined symbols
+        at assembly. Deterministic + idempotent; a mint failure would leave a dangling
+        symbol, so fail loud and queue (returns False). Self-switches (code 123) are
+        saved; Uranium temp-switches (setTempSwitchOn, code 355/655) come from the
+        auto-reset TEMP range — distinct idioms, see prompts/system.md."""
+        for letter in sorted(_event_self_switches(event)):
+            try:
+                self.registry.mint_self_switch(map_id, event["id"], letter)
+            except RegistryError as exc:
+                self._queue(ctx, reason=f"self-switch mint failed: {exc}")
+                return False
+        for key in sorted(_event_temp_switches(event)):
+            try:
+                self.registry.mint_temp_switch(map_id, event["id"], key)
+            except RegistryError as exc:
+                self._queue(ctx, reason=f"temp-switch mint failed: {exc}")
+                return False
+        return True
+
+    def _log_unhandled(self, ctx: dict, unhandled: list[dict]) -> None:
+        for u in unhandled:
+            self._queue(ctx, reason="agent-flagged unhandled", extra=u)
+
+    # -- memo (dedup C) ----------------------------------------------------
+
+    def _try_reuse_memo(self, map_id: int, event: dict, ctx: dict, entry: MemoEntry) -> str | None:
+        """Reuse a memoized conversion for a structurally identical event.
+
+        Returns the re-instantiated script on success, or None to fall through to a real
+        spawn (fail-safe). The script's deterministic self/temp-switch flag names are the
+        only map/event-derived tokens, so rewriting them to the current map/event yields
+        a correct reuse; the stale-token guard + compile-gate catch any divergence before
+        acceptance, and the registry proposals/mints are replayed for the current event."""
+        script = self._reinstantiate(entry, map_id, event)
+        if script is None:  # stale-token guard failed
+            return None
+        if not self.compile_fn(script).ok:  # reused script must still compile
+            logger.debug("memo hit failed compile-gate; re-spawning %s", ctx)
+            return None
+        # Validated. Replay the entry's proposals (idempotent — same global ids/names) and
+        # this event's switch mints so the registry stays correct, then log its unhandled.
+        if not self._commit_proposals(ctx, _entry_result(entry)):
+            return None
+        if not self._mint_event_switches(map_id, event, ctx):
+            return None
+        self._log_unhandled(ctx, entry.unhandled)
+        logger.debug("memo hit: reused %s ev%s for %s", entry.src_map, entry.src_event, ctx)
+        return script
+
+    @staticmethod
+    def _reinstantiate(entry: MemoEntry, cur_map: int, event: dict) -> str | None:
+        """Rewrite the source event's deterministic self/temp-switch flag names to the
+        current map/event. Returns the rewritten script, or None if any source-event
+        identity token survives the rewrite (stale-token guard → caller re-spawns)."""
+        cur_event = int(event["id"])
+        script = entry.script
+        for letter in _event_self_switches(event):
+            src = self_switch_flag_name(entry.src_map, entry.src_event, letter)
+            script = script.replace(src, self_switch_flag_name(cur_map, cur_event, letter))
+        for k in _event_temp_switches(event):
+            src = temp_switch_flag_name(entry.src_map, entry.src_event, k)
+            script = script.replace(src, temp_switch_flag_name(cur_map, cur_event, k))
+        if f"FLAG_MAP{entry.src_map:03d}_EVENT{entry.src_event:03d}_" in script:
+            return None  # a source token the per-key rewrite missed — bail to a real spawn
+        return script
+
+    def _store_memo(self, key: str, map_id: int, event: dict, result: ConversionResult) -> None:
+        self._memo[key] = MemoEntry(
+            script=result.script,
+            src_map=int(map_id),
+            src_event=int(event["id"]),
+            new_flags=result.new_flags,
+            new_vars=result.new_vars,
+            unhandled=result.unhandled,
+        )
+        self._save_memo()
+
+    def _prompt_fingerprint(self) -> str:
+        """12-hex digest of the backend's system prompt (system.md + static context).
+
+        The memo manifest is keyed to this so outputs produced under one prompt are never
+        reused under a different one (dedup C)."""
+        sp = getattr(self.backend, "system_prompt", "") or ""
+        return hashlib.sha256(sp.encode("utf-8")).hexdigest()[:12]
+
+    def _save_memo(self) -> None:
+        payload = {
+            "prompt_fingerprint": self._prompt_fingerprint(),
+            "entries": {
+                k: {
+                    "script": e.script,
+                    "src_map": e.src_map,
+                    "src_event": e.src_event,
+                    "new_flags": e.new_flags,
+                    "new_vars": e.new_vars,
+                    "unhandled": e.unhandled,
+                }
+                for k, e in self._memo.items()
+            },
+        }
+        self.memo_path.parent.mkdir(parents=True, exist_ok=True)
+        self.memo_path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+
+    def _load_memo(self) -> None:
+        self._memo = {}
+        if not self.memo_path.is_file():
+            return
+        try:
+            data = json.loads(self.memo_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            logger.warning("memo manifest %s unreadable — ignoring", self.memo_path)
+            return
+        if data.get("prompt_fingerprint") != self._prompt_fingerprint():
+            logger.info("memo manifest fingerprint mismatch — discarding (prompt changed)")
+            return
+        for k, e in data.get("entries", {}).items():
+            self._memo[k] = MemoEntry(
+                script=e["script"],
+                src_map=e["src_map"],
+                src_event=e["src_event"],
+                new_flags=e.get("new_flags", []),
+                new_vars=e.get("new_vars", []),
+                unhandled=e.get("unhandled", []),
+            )
 
     def _commit_proposals(self, ctx: dict, result: ConversionResult) -> bool:
         """Commit flag/var proposals; queue + return False if any is rejected."""
@@ -331,6 +478,30 @@ def _common_event_payload(ce: dict) -> dict:
         "name": ce.get("name", ""),
         "pages": [{"list": ce.get("list", []), "condition": {}}],
     }
+
+
+def _memo_key(payload: dict) -> str:
+    """Stable content hash of an event with its map/event identity removed (dedup C).
+
+    Normalizes out **only** ``map_id`` and the event's own ``id`` — name, dialogue, and
+    all command content stay in the key — so two copy-pasted events that differ only by
+    where they live collapse to one key, while anything that could change the script keeps
+    them distinct. The agent derives script-block labels from the (retained) event name,
+    so the only map/event-derived tokens left in a reused script are the deterministic
+    self/temp-switch flag names, which ``_reinstantiate`` rewrites exactly."""
+    content = {k: v for k, v in payload.items() if k not in ("map_id", "id")}
+    blob = json.dumps(content, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _entry_result(entry: MemoEntry) -> ConversionResult:
+    """A ConversionResult view of a memo entry, for replaying proposals on reuse."""
+    return ConversionResult(
+        script=entry.script,
+        new_flags=entry.new_flags,
+        new_vars=entry.new_vars,
+        unhandled=entry.unhandled,
+    )
 
 
 def _event_self_switches(event: dict) -> set[str]:

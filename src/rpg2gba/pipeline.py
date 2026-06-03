@@ -178,7 +178,7 @@ def _phase4_registry(out_dir: Path, clean: bool, fork_path: Path | None):
         for d in (out_dir / "scripts", out_dir / "checkpoints"):
             if d.exists():
                 shutil.rmtree(d)
-        for f in (state_path, out_dir / "unhandled.jsonl"):
+        for f in (state_path, out_dir / "unhandled.jsonl", out_dir / "memo_manifest.json"):
             if f.exists():
                 f.unlink()
     if state_path.is_file():
