@@ -266,6 +266,11 @@ def phase4(clean: bool, run: bool, backend: str, model: str) -> None:
 
     backend_obj = _phase4_backend(backend, model)
     orchestrator = orch.Orchestrator(backend_obj, registry, out_dir)
+    # Convert common events before maps so each map's `call CommonEvent_<NNN>` has a
+    # target (dedup Phase A). Idempotent: a CommonEvents.done checkpoint skips re-runs.
+    ce_file = out_dir / "common_events.json"
+    if ce_file.is_file():
+        orchestrator.convert_common_events(ce_file)
     n = orchestrator.convert_all(maps_dir)
     logger.info("phase4: processed %d maps; triage=%s", n, orch.triage(out_dir / "unhandled.jsonl"))
 
@@ -302,6 +307,45 @@ def convert_map(map_id: str, backend: str, model: str) -> None:
         cp.unlink()  # force re-conversion of this one map
     orchestrator.convert_map(map_file)
     logger.info("converted %s -> %s", stem, out_dir / "scripts" / f"{stem}.pory")
+
+
+@main.command("convert-common-events")
+@click.option(
+    "--backend",
+    default="claude_code",
+    type=click.Choice(["claude_code", "ollama"]),
+)
+@click.option(
+    "--model",
+    default=_DEFAULT_MODEL,
+    help="Claude model for the claude_code backend (e.g. claude-sonnet-4-6, claude-opus-4-8).",
+)
+@click.option(
+    "--ce-id",
+    "ce_ids",
+    multiple=True,
+    type=int,
+    help="Convert only these common-event id(s) (debug; partial run, skips the checkpoint).",
+)
+def convert_common_events(backend: str, model: str, ce_ids: tuple[int, ...]) -> None:
+    """Convert the common events for debugging (Phase 4 dedup A; spawns the backend)."""
+    from rpg2gba.conversion_agent import orchestrator as orch
+
+    _, out_dir = _resolve_paths()
+    ce_file = out_dir / "common_events.json"
+    if not ce_file.is_file():
+        raise click.ClickException(f"{ce_file} not found — run `phase3` first.")
+    fork = os.environ.get("RPG2GBA_POKEEMERALD")
+    fork_path = Path(fork) if fork and Path(fork).is_dir() else None
+
+    registry = _phase4_registry(out_dir, clean=False, fork_path=fork_path)
+    backend_obj = _phase4_backend(backend, model)
+    orchestrator = orch.Orchestrator(backend_obj, registry, out_dir)
+    cp = out_dir / "checkpoints" / "CommonEvents.done"
+    if not ce_ids and cp.exists():
+        cp.unlink()  # force a full re-conversion (a filtered run leaves it alone)
+    orchestrator.convert_common_events(ce_file, only_ids=set(ce_ids) or None)
+    logger.info("converted common events -> %s", out_dir / "scripts" / "CommonEvents.pory")
 
 
 if __name__ == "__main__":

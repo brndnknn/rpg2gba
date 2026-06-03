@@ -77,6 +77,7 @@ def filter_command_reference(full_text: str, codes: set[int]) -> str:
 def _render_registry(registry_state: dict) -> str:
     flags = registry_state.get("flags", {})
     vars_ = registry_state.get("vars", {})
+    script_switches = registry_state.get("script_switches", [])
     lines = ["Already-assigned names (reuse these; do not rename):"]
     for sid, name in sorted(flags.items(), key=lambda kv: int(kv[0])):
         lines.append(f"- switch {sid} -> {name}")
@@ -84,6 +85,12 @@ def _render_registry(registry_state: dict) -> str:
         lines.append(f"- variable {vid} -> {name}")
     if not flags and not vars_:
         lines.append("- (none yet)")
+    if script_switches:
+        ids = ", ".join(str(s) for s in sorted(script_switches))
+        lines.append(
+            "\nScript-switches (Essentials runtime-evaluated — NEVER propose a FLAG_ "
+            "for these; queue any conditional that tests them as unhandled): " + ids
+        )
     return "\n".join(lines)
 
 

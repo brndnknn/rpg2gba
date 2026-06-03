@@ -25,6 +25,7 @@ from rpg2gba.conversion_agent.flag_registry import (
     FlagRegistry,
     RegistryError,
     self_switch_flag_name,
+    temp_switch_flag_name,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -144,6 +145,54 @@ def test_dump_header_self_switch_block_and_custom_bases(tmp_path: Path) -> None:
     assert "#define FLAG_MAP031_EVENT048_SSA (RPG2GBA_SELFSWITCH_BASE + 0)" in text
 
 
+def test_mint_temp_switch_deterministic_and_idempotent() -> None:
+    reg = FlagRegistry()
+    name = reg.mint_temp_switch(2, 11, "A")
+    assert name == "FLAG_MAP002_EVENT011_TSA" == temp_switch_flag_name(2, 11, "a")
+    assert reg.mint_temp_switch(2, 11, "A") == name  # idempotent on the same key
+    assert reg.mint_temp_switch(2, 11, "B") != name  # distinct key
+    assert reg.mint_temp_switch(2, 12, "A") != name  # distinct event
+
+
+def test_temp_switch_distinct_from_self_switch() -> None:
+    # The TS marker keeps temp- and self-switches in separate namespaces even for
+    # the same (map, event, letter) — both can coexist without collision.
+    reg = FlagRegistry()
+    ss = reg.mint_self_switch(2, 11, "A")
+    ts = reg.mint_temp_switch(2, 11, "A")
+    assert ss == "FLAG_MAP002_EVENT011_SSA"
+    assert ts == "FLAG_MAP002_EVENT011_TSA"
+    reg.check_integrity()
+
+
+def test_temp_switch_collision_with_global_flag() -> None:
+    reg = FlagRegistry()
+    reg.mint_temp_switch(2, 11, "A")
+    with pytest.raises(RegistryError):
+        reg.propose_flag(900, "FLAG_MAP002_EVENT011_TSA")
+
+
+def test_temp_switch_state_roundtrip(tmp_path: Path) -> None:
+    reg = _seeded()
+    reg.mint_temp_switch(2, 11, "A")
+    state_path = tmp_path / "flag_state.json"
+    reg.save(state_path)
+    reloaded = FlagRegistry.load(state_path)
+    assert reloaded.mint_temp_switch(2, 11, "A") == "FLAG_MAP002_EVENT011_TSA"
+    reloaded.check_integrity()
+
+
+def test_dump_header_temp_switch_block_and_custom_base(tmp_path: Path) -> None:
+    reg = _seeded()
+    reg.mint_temp_switch(2, 11, "A")
+    out = tmp_path / "rpg2gba_flags.h"
+    reg.dump_header(out, tempswitch_base=0x800)
+    text = out.read_text(encoding="utf-8")
+    assert "RPG2GBA_TEMPSWITCH_BASE" in text
+    assert "0x800" in text  # the Phase-7 auto-reset-range hook
+    assert "#define FLAG_MAP002_EVENT011_TSA (RPG2GBA_TEMPSWITCH_BASE + 0)" in text
+
+
 # ----------------------------------------------------------------------------
 # 2. Backend response parsing (no live spawn / network)
 # ----------------------------------------------------------------------------
@@ -249,7 +298,10 @@ def _write_map(maps_dir: Path, map_id: int, events: list[dict]) -> Path:
     return path
 
 
-_EVENT = {"id": 1, "name": "EV001", "x": 0, "y": 0, "pages": [{"list": []}]}
+_EVENT = {
+    "id": 1, "name": "EV001", "x": 0, "y": 0,
+    "pages": [{"list": [{"code": 101, "parameters": ["hi"]}]}],
+}
 
 
 def _orchestrator(tmp_path: Path, backend: ConversionBackend) -> orch.Orchestrator:
@@ -313,6 +365,104 @@ def test_triage(tmp_path: Path) -> None:
 
 
 # ----------------------------------------------------------------------------
+# 4b. Common-event conversion (Phase 4 dedup A)
+# ----------------------------------------------------------------------------
+
+
+class _RecordingBackend(ConversionBackend):
+    """Records each payload it is asked to convert and returns a per-payload result."""
+
+    def __init__(self, script_for) -> None:  # script_for: (payload) -> ConversionResult
+        self.script_for = script_for
+        self.payloads: list[dict] = []
+        self.calls = 0
+
+    def convert_event(self, event_json, registry_state, prompt) -> ConversionResult:
+        self.payloads.append(event_json)
+        self.calls += 1
+        return self.script_for(event_json)
+
+
+def _write_common_events(out_dir: Path, ces: list[dict]) -> Path:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "common_events.json"
+    path.write_text(json.dumps(ces), encoding="utf-8")
+    return path
+
+
+def _labeled_block(payload: dict) -> ConversionResult:
+    """A stand-in agent result that labels its block CommonEvent_<NNN>, like the real one."""
+    label = f"CommonEvent_{payload['common_event_id']:03d}"
+    return ConversionResult(script=f"script {label} {{ GOOD }}")
+
+
+def test_convert_common_events(tmp_path: Path) -> None:
+    ces = [
+        {"id": 4, "name": "GTS", "trigger": 0, "switch_id": 1,
+         "list": [{"code": 101, "parameters": ["hi"]}, {"code": 0, "parameters": []}]},
+        {"id": 7, "name": "Decoration", "trigger": 0, "switch_id": 1,
+         "list": [{"code": 0, "parameters": []}]},  # no real commands -> skipped
+    ]
+    ce_path = _write_common_events(tmp_path / "out", ces)
+    backend = _RecordingBackend(_labeled_block)
+    o = _orchestrator(tmp_path, backend)
+    o.convert_common_events(ce_path)
+
+    # Only CE 4 has commands -> exactly one spawn, carrying common_event_id + page-shape.
+    assert backend.calls == 1
+    assert backend.payloads[0]["common_event_id"] == 4
+    assert "pages" in backend.payloads[0]  # adapted from the flat list for the helpers
+    pory = (tmp_path / "out" / "scripts" / "CommonEvents.pory").read_text(encoding="utf-8")
+    assert "CommonEvent_004" in pory
+    assert (tmp_path / "out" / "checkpoints" / "CommonEvents.done").exists()
+
+
+def test_convert_common_events_queues_failure(tmp_path: Path) -> None:
+    ces = [{"id": 5, "name": "VT", "trigger": 0, "switch_id": 1,
+            "list": [{"code": 101, "parameters": ["x"]}]}]
+    ce_path = _write_common_events(tmp_path / "out", ces)
+    backend = MockBackend([ConversionResult(script="BAD always")])
+    o = _orchestrator(tmp_path, backend)
+    o.convert_common_events(ce_path)
+
+    entries = [
+        json.loads(line)
+        for line in (tmp_path / "out" / "unhandled.jsonl").read_text().splitlines()
+    ]
+    assert any(
+        e.get("common_event_id") == 5 and "compile failed twice" in e["reason"] for e in entries
+    )
+    # No self/temp-switch minting happened for the common event.
+    state = json.loads((tmp_path / "out" / "flag_state.json").read_text(encoding="utf-8"))
+    assert state["self_switches"] == {} and state["temp_switches"] == {}
+
+
+def test_convert_common_events_checkpoint_skips_rerun(tmp_path: Path) -> None:
+    ces = [{"id": 4, "name": "A", "list": [{"code": 101, "parameters": ["a"]}]}]
+    ce_path = _write_common_events(tmp_path / "out", ces)
+    backend = _RecordingBackend(lambda p: ConversionResult(script="GOOD"))
+    o = _orchestrator(tmp_path, backend)
+    o.convert_common_events(ce_path)
+    calls_after_first = backend.calls
+    o.convert_common_events(ce_path)  # checkpoint exists -> whole pass skipped
+    assert backend.calls == calls_after_first
+
+
+def test_convert_common_events_only_ids_partial_no_checkpoint(tmp_path: Path) -> None:
+    ces = [
+        {"id": 4, "name": "A", "list": [{"code": 101, "parameters": ["a"]}]},
+        {"id": 5, "name": "B", "list": [{"code": 101, "parameters": ["b"]}]},
+    ]
+    ce_path = _write_common_events(tmp_path / "out", ces)
+    backend = _RecordingBackend(_labeled_block)
+    o = _orchestrator(tmp_path, backend)
+    o.convert_common_events(ce_path, only_ids={4})
+    assert backend.calls == 1  # only CE 4
+    assert backend.payloads[0]["common_event_id"] == 4
+    assert not (tmp_path / "out" / "checkpoints" / "CommonEvents.done").exists()
+
+
+# ----------------------------------------------------------------------------
 # 5. Prompt assembly
 # ----------------------------------------------------------------------------
 
@@ -333,6 +483,12 @@ def test_build_prompt_has_sections() -> None:
     assert "pbCallBub" in prompt
     assert "Few-shot examples" in prompt
     assert '"name": "EV001"' in prompt
+
+
+def test_render_registry_lists_script_switches() -> None:
+    out = prompt_builder._render_registry({"flags": {}, "vars": {}, "script_switches": [1, 22, 4]})
+    assert "Script-switches" in out
+    assert "1, 4, 22" in out  # sorted, never proposed as flags
 
 
 def test_system_prompt_loads() -> None:
@@ -382,3 +538,56 @@ def test_orchestrator_mints_self_switches(tmp_path: Path) -> None:
     o.convert_map(map_file)
     state = json.loads((tmp_path / "out" / "flag_state.json").read_text(encoding="utf-8"))
     assert state["self_switches"] == {"31:7:A": "FLAG_MAP031_EVENT007_SSA"}
+
+
+def test_event_temp_switches() -> None:
+    ev = {
+        "pages": [
+            {"list": [
+                {"code": 355, "parameters": ['setTempSwitchOn("A")']},
+                {"code": 111, "parameters": [12, 'tsOff?("B")']},  # not a 355/655 — ignored
+            ]},
+            {"list": [{"code": 655, "parameters": ['setTempSwitchOff("a")']}]},
+        ]
+    }
+    # Only the 355/655 script-call forms count; keys are upper-cased.
+    assert orch._event_temp_switches(ev) == {"A"}
+
+
+def test_event_temp_switches_read_form() -> None:
+    ev = {"pages": [{"list": [{"code": 355, "parameters": ['x = tsOn?("C")']}]}]}
+    assert orch._event_temp_switches(ev) == {"C"}
+
+
+def test_orchestrator_mints_temp_switches(tmp_path: Path) -> None:
+    # Mirrors Map002 EV011: a code-355 setTempSwitchOn the agent emits as a TS flag.
+    event = {
+        "id": 11, "name": "EV011", "x": 7, "y": 12,
+        "pages": [
+            {"condition": {"self_switch_valid": False, "self_switch_ch": "A"},
+             "list": [{"code": 355, "parameters": ['setTempSwitchOn("A")']}]},
+        ],
+    }
+    backend = MockBackend([ConversionResult(script="GOOD script")])
+    o = _orchestrator(tmp_path, backend)
+    map_file = _write_map(tmp_path / "out" / "maps", 2, [event])
+    o.convert_map(map_file)
+    state = json.loads((tmp_path / "out" / "flag_state.json").read_text(encoding="utf-8"))
+    assert state["temp_switches"] == {"2:11:A": "FLAG_MAP002_EVENT011_TSA"}
+    # It is a temp-switch, not a self-switch (no code 123 / self_switch_valid page).
+    assert state["self_switches"] == {}
+
+
+def test_event_has_commands() -> None:
+    assert orch._event_has_commands({"pages": [{"list": [{"code": 101}]}]})
+    assert not orch._event_has_commands({"pages": [{"list": [{"code": 0}]}, {"list": []}]})
+
+
+def test_orchestrator_skips_empty_event(tmp_path: Path) -> None:
+    empty = {"id": 9, "name": "decoration", "pages": [{"list": [{"code": 0}]}]}
+    backend = MockBackend([ConversionResult(script="GOOD")])
+    o = _orchestrator(tmp_path, backend)
+    map_file = _write_map(tmp_path / "out" / "maps", 5, [empty])
+    o.convert_map(map_file)
+    assert backend.calls == 0  # no spawn for a command-less event
+    assert (tmp_path / "out" / "scripts" / "Map005.pory").read_text() == ""

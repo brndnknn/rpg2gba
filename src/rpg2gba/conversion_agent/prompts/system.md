@@ -66,6 +66,7 @@ When you encounter a switch or variable ID not already in the flag registry:
 - If context is genuinely ambiguous, use the most descriptive name you can and note the ambiguity in the `reason` field
 - Never reuse a name already in the flag registry for a different ID
 - Never invent a name that matches an existing pokeemerald-expansion constant (e.g., `FLAG_SYS_GAME_CLEAR`, `VAR_FACING`)
+- **Script-switches:** the Flag registry section may list certain switch IDs as *script-switches* — Essentials switches evaluated at runtime (weekday/time/random checks), not stored state. **Never propose a `FLAG_` for a script-switch.** If an event's conditional branch tests one, queue that branch as `unhandled` (there is no stored-flag equivalent) and translate the rest of the event.
 
 ## Unhandled Commands
 
@@ -97,6 +98,12 @@ Some commands are Pokémon Essentials constructs with direct pokeemerald-expansi
 
 Commands with no equivalent and no reasonable adaptation go in `unhandled`.
 
+### Command-specific rules
+
+- **Transfer Player (201) to another map** → `warp(MAP_URANIUM_<N>, x, y)`, where `<N>` is the raw destination map ID from the command parameters (map 60 → `MAP_URANIUM_60`). The real pokeemerald map constant is assigned later (Phase 5), so also add **one** `unhandled` entry noting the map needs resolution. Always use this exact `MAP_URANIUM_<N>` form — never invent another placeholder, and use the same form for every warp to the same map so they stay consistent.
+- **Call Common Event (117)** → `call CommonEvent_<NNN>`, with the common-event ID zero-padded to three digits (event 5 → `call CommonEvent_005`). Do **not** queue it — the common event is translated separately under that label.
+- **Standard pokeemerald script macros are available; use them directly, never with a `# CHECK` or an `unhandled` entry:** `setvar`, `addvar`, `subvar`, `copyvar`, `random`, `setflag`, `clearflag`, `goto`, `call`. (`random(n)` writes `VAR_RESULT` with a value in `0..n-1`.)
+
 ## Uranium Script Calls (codes 355 / 655)
 
 Almost all of Uranium's custom behaviour rides in **Script** commands — `pbXxx`,
@@ -122,9 +129,44 @@ across script commands — reconstruct the branch/loop and express it with Porys
 
 RPG Maker events use self-switches (A, B, C, D) local to each event instance. Map these to per-event flags using the pattern `FLAG_MAP{MAP_ID}_EVENT{EVENT_ID}_SS{LETTER}`. For example, self-switch A on event 3 of map 042 becomes `FLAG_MAP042_EVENT003_SSA`. These names are deterministic — do not vary the format.
 
+## Temp-Switches (`setTempSwitchOn` / `tsOn?`)
+
+Uranium has a **second, distinct** switch idiom carried in Script calls (code 355):
+`setTempSwitchOn("A")` / `setTempSwitchOff("A")`, read via `tsOn?("A")` / `tsOff?("A")`.
+Unlike self-switches (code 123), these are **per-map-visit** state that resets every
+time the map reloads — they are **not** persistent. Map them to a *separate* per-event
+flag using the pattern `FLAG_MAP{MAP_ID}_EVENT{EVENT_ID}_TS{LETTER}` — note **`TS`**, not
+`SS`. The orchestrator allocates this flag from the engine's auto-reset-on-warp range,
+so it keeps the temporary semantics.
+
+- `setTempSwitchOn("A")`  → `setflag(FLAG_MAP{MAP_ID}_EVENT{EVENT_ID}_TSA)`
+- `setTempSwitchOff("A")` → `clearflag(FLAG_MAP{MAP_ID}_EVENT{EVENT_ID}_TSA)`
+- a conditional on `tsOn?("A")` → `if (flag(FLAG_..._TSA))`; on `tsOff?("A")` → `if (!flag(FLAG_..._TSA))`
+
+Do **not** use the `SS` self-switch pattern for these, and do **not** queue a plain
+set/clear/read as unhandled — the flag is defined for you. (If the temp-switch read is
+buried inside a Uranium time-cooldown helper you can't translate — `cooledDown?`,
+`expired?`, `expiredDays?` — queue *that* branch as unhandled, but still emit the
+`setflag`/`clearflag` for any plain `setTempSwitch*` you can see.)
+
 ## Multi-Page Events
 
 RPG Maker events have multiple pages, each with activation conditions. Translate each page as a separate script block within the same `.pory` file, labeled `{event_name}_Page1`, `{event_name}_Page2`, etc. The orchestrator handles wiring the page-switching logic to the flag system; your job is to translate what each page does when active.
+
+## Common Events
+
+Most inputs are map events with `pages`. A **common event** is different: it carries a
+`common_event_id` field, and its commands are a single page (shared logic that map
+events invoke via Call Common Event, 117). When the input has `common_event_id`:
+
+- Emit **exactly one** script block, labeled `CommonEvent_<NNN>` — the `common_event_id`
+  zero-padded to three digits (`common_event_id` 5 → `CommonEvent_005`). This label must
+  match exactly, because that is the target other events `call CommonEvent_<NNN>`.
+- Do **not** use page labels (`_Page1`, …); a common event has no pages.
+- Common events use only global switches/vars — never self-switches (`SS`) or
+  temp-switches (`TS`).
+- Everything else — dialogue, branching, script-call dispositions, flag/var naming —
+  works exactly as for a map event.
 
 ## Dialogue
 

@@ -1,5 +1,6 @@
 """Diagnostic: how do Uranium events actually express the talk-once idiom?"""
 from __future__ import annotations
+
 import json
 from collections import Counter
 from pathlib import Path

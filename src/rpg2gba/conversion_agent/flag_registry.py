@@ -67,6 +67,18 @@ def self_switch_flag_name(map_id: int, event_id: int, letter: str) -> str:
     return f"FLAG_MAP{int(map_id):03d}_EVENT{int(event_id):03d}_SS{letter.upper()}"
 
 
+def temp_switch_flag_name(map_id: int, event_id: int, key: str) -> str:
+    """Deterministic per-event temp-switch flag name (must match prompts/system.md).
+
+    Uranium temp-switches (``Game_Event#@tempSwitches``, set via ``setTempSwitchOn``
+    / read via ``tsOn?``, RPG Maker script code 355) are per-map-visit state that is
+    rebuilt every map load — pokeemerald auto-reset TEMP flag semantics, NOT a saved
+    self-switch. Named like a self-switch but with a ``TS`` marker so the two idioms
+    never collide: temp-switch A on event 11 of map 2 -> ``FLAG_MAP002_EVENT011_TSA``.
+    """
+    return f"FLAG_MAP{int(map_id):03d}_EVENT{int(event_id):03d}_TS{key.upper()}"
+
+
 class RegistryError(RuntimeError):
     """Raised on a validation failure, collision, or corrupt state."""
 
@@ -79,7 +91,9 @@ class FlagRegistry:
         self._var_names: dict[int, str] = {}
         # Per-event self-switch flags, keyed by (map_id, event_id, letter).
         self._selfswitch_names: dict[tuple[int, int, str], str] = {}
-        # Reverse index name -> ("flag"|"var"|"selfswitch", id_or_key) for collisions.
+        # Per-event temp-switch flags (Uranium setTempSwitchOn), keyed the same way.
+        self._tempswitch_names: dict[tuple[int, int, str], str] = {}
+        # Reverse index name -> ("flag"|"var"|"selfswitch"|"tempswitch", id_or_key).
         self._used: dict[str, tuple[str, object]] = {}
         self._sources: dict[str, str] = {}  # name -> "preseed" | "proposed"
         self._script_switches: set[int] = set()
@@ -174,6 +188,32 @@ class FlagRegistry:
         self._sources[name] = "selfswitch"
         return name
 
+    def mint_temp_switch(self, map_id: int, event_id: int, key: str) -> str:
+        """Register the deterministic per-event temp-switch flag (idempotent).
+
+        Mirrors ``mint_self_switch`` but for Uranium temp-switches (``setTempSwitchOn``
+        / ``tsOn?``, script code 355), which are per-map-visit state and so map to an
+        auto-reset TEMP flag rather than a saved self-switch. The conversion agent
+        emits the name directly (prompts/system.md); the orchestrator calls this so
+        ``dump_header`` defines the constant — otherwise it's an undefined symbol at
+        assembly. Keyed by (map, event, key); re-minting the same key is a no-op.
+        """
+        tkey = (int(map_id), int(event_id), key.upper())
+        existing = self._tempswitch_names.get(tkey)
+        if existing is not None:
+            return existing
+        name = temp_switch_flag_name(*tkey)
+        self._validate("flag", name)
+        prior = self._used.get(name)
+        if prior is not None:
+            raise RegistryError(
+                f"temp-switch name {name!r} collides with an existing {prior[0]} assignment"
+            )
+        self._tempswitch_names[tkey] = name
+        self._used[name] = ("tempswitch", tkey)
+        self._sources[name] = "tempswitch"
+        return name
+
     # -- internals ---------------------------------------------------------
 
     def _validate(self, kind: str, name: str) -> None:
@@ -256,6 +296,10 @@ class FlagRegistry:
                 f"{m}:{e}:{letter}": name
                 for (m, e, letter), name in sorted(self._selfswitch_names.items())
             },
+            "temp_switches": {
+                f"{m}:{e}:{key}": name
+                for (m, e, key), name in sorted(self._tempswitch_names.items())
+            },
             "source": dict(sorted(self._sources.items())),
             "script_switches": sorted(self._script_switches),
         }
@@ -281,6 +325,12 @@ class FlagRegistry:
             reg._selfswitch_names[key] = v
             reg._used[v] = ("selfswitch", key)
             reg._sources[v] = state["source"].get(v, "selfswitch")
+        for k, v in state.get("temp_switches", {}).items():
+            m, e, tk = k.split(":")
+            tkey = (int(m), int(e), tk)
+            reg._tempswitch_names[tkey] = v
+            reg._used[v] = ("tempswitch", tkey)
+            reg._sources[v] = state["source"].get(v, "tempswitch")
         return reg
 
     # -- header emit -------------------------------------------------------
@@ -292,13 +342,16 @@ class FlagRegistry:
         flag_base: int = 0x500,
         var_base: int = 0x40D0,
         selfswitch_base: int = 0x600,
+        tempswitch_base: int = 0x700,
     ) -> None:
-        """Emit a C header defining every assigned flag/var/self-switch.
+        """Emit a C header defining every assigned flag/var/self-switch/temp-switch.
 
         The base offsets are placeholders by default (the values only need to be
         unique to *assemble*). Phase 7 passes real, free, reserved ranges when the
         header drops into the fork — see reference/flag_registry_policy.md on the
         flag-budget sizing (Uranium needs more saved flags than vanilla has free).
+        Temp-switches must land in the engine's auto-reset-on-warp TEMP range so they
+        keep their per-map-visit semantics — that's the Phase 7 ``tempswitch_base``.
         """
         out = Path(out_path)
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -311,6 +364,7 @@ class FlagRegistry:
             f"#define RPG2GBA_FLAG_BASE       0x{flag_base:X}   // TODO Phase 7: free flag range",
             f"#define RPG2GBA_VAR_BASE        0x{var_base:X}  // TODO Phase 7: free var range",
             f"#define RPG2GBA_SELFSWITCH_BASE 0x{selfswitch_base:X}   // TODO Phase 7: free range",
+            f"#define RPG2GBA_TEMPSWITCH_BASE 0x{tempswitch_base:X}   // TODO Phase 7: TEMP range",
             "",
         ]
         for i, (_id, name) in enumerate(sorted(self._switch_names.items())):
@@ -321,13 +375,17 @@ class FlagRegistry:
         lines.append("")
         for i, (_key, name) in enumerate(sorted(self._selfswitch_names.items())):
             lines.append(f"#define {name} (RPG2GBA_SELFSWITCH_BASE + {i})")
+        lines.append("")
+        for i, (_key, name) in enumerate(sorted(self._tempswitch_names.items())):
+            lines.append(f"#define {name} (RPG2GBA_TEMPSWITCH_BASE + {i})")
         lines += ["", "#endif // GUARD_RPG2GBA_FLAGS_H", ""]
         out.write_text("\n".join(lines), encoding="utf-8")
         logger.info(
-            "dumped %d flags + %d vars + %d self-switches -> %s",
+            "dumped %d flags + %d vars + %d self-switches + %d temp-switches -> %s",
             len(self._switch_names),
             len(self._var_names),
             len(self._selfswitch_names),
+            len(self._tempswitch_names),
             out,
         )
 
@@ -353,6 +411,11 @@ class FlagRegistry:
             if name in seen:
                 raise RegistryError(f"duplicate name {name!r}")
             seen[name] = ("selfswitch", key)
+        for key, name in self._tempswitch_names.items():
+            self._validate("flag", name)
+            if name in seen:
+                raise RegistryError(f"duplicate name {name!r}")
+            seen[name] = ("tempswitch", key)
 
 
 @click.group()

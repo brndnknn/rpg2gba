@@ -36,7 +36,8 @@ Rules:
 
 | Signature | Count | Poryscript equivalent | Notes |
 |---|---|---|---|
-| `setTempSwitchOn` / `setTempSwitchOff` | 345 | `setflag(<flag>)` / `clearflag(<flag>)` | Temporary per-event switch keyed by a letter; treat like a self-switch — use the `FLAG_MAP{ID}_EVENT{ID}_SS{LETTER}` pattern. Temp-reset-on-exit semantics are lost (acceptable). |
+| `setTempSwitchOn` / `setTempSwitchOff` | 345 | `setflag(<flag>)` / `clearflag(<flag>)` | Per-**map-visit** temp switch (`Game_Event#@tempSwitches`, rebuilt every map load) — **NOT** a saved self-switch. Use the `FLAG_MAP{ID}_EVENT{ID}_TS{LETTER}` pattern (**TS**, not SS); the orchestrator allocates it from the engine auto-reset-on-warp TEMP range, preserving the temporary semantics. Always `"A"` in this corpus. |
+| `tsOn?` / `tsOff?` / `isTempSwitchOn?` / `isTempSwitchOff?` | — | `flag(FLAG_..._TS{L})` / `!flag(...)` | Reads the temp switch above. If wrapped in an untranslatable cooldown helper (`cooledDown?`, `expired?`, `expiredDays?`), queue that branch instead. |
 | `pbSetSelfSwitch` | 336 | `setflag(<self-switch flag>)` / `clearflag(...)` | Args `(event, switch, value)`; `value` 0 → clear, else set. Same per-event flag pattern as code 123. |
 | `pbSet` / `setVariable` | 46 | `setvar(VAR_*, n)` | Sets an event/game variable. |
 | `$game_variables[N]=...` | 78 | `setvar(VAR_*, n)` when RHS is a literal | If the RHS is an expression (e.g. `$Trainer.party.length`) with no Poryscript analogue → UNHANDLED. |
