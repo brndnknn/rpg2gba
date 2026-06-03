@@ -53,11 +53,11 @@ class Orchestrator:
         self.unhandled_path = self.output_dir / "unhandled.jsonl"
         self.registry_state_path = self.output_dir / "flag_state.json"
         self.compile_fn = compile_fn or poryscript.compile_script
-        # Stable prompt chunks, loaded once.
-        self._few_shots = prompt_builder.load_few_shots()
-        self._cheatsheet = prompt_builder.load_cheatsheet(reference_dir)
+        # The command-code reference is sliced per event into the user prompt. The
+        # event-invariant context (cheatsheet, script-call reference, few-shots) now
+        # rides in the backend's system prompt (dedup Phase B) — composed once in
+        # pipeline._phase4_backend — so it is not loaded or assembled here.
         self._command_ref = prompt_builder.load_command_reference(reference_dir)
-        self._script_call_ref = prompt_builder.load_script_call_reference(reference_dir)
 
     # -- public -----------------------------------------------------------
 
@@ -254,15 +254,12 @@ class Orchestrator:
     # -- helpers ----------------------------------------------------------
 
     def _build_prompt(self, payload: dict) -> str:
-        return prompt_builder.build_prompt(
+        return prompt_builder.build_user_prompt(
             payload,
             self._registry_state(),
-            few_shots=self._few_shots,
-            cheatsheet=self._cheatsheet,
             command_ref=prompt_builder.filter_command_reference(
                 self._command_ref, _event_codes(payload)
             ),
-            script_call_ref=self._script_call_ref,
         )
 
     @staticmethod

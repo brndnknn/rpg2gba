@@ -199,13 +199,23 @@ _DEFAULT_MODEL = "claude-sonnet-4-6"
 def _phase4_backend(name: str, model: str = _DEFAULT_MODEL):
     """Construct the chosen conversion backend with the frozen system prompt.
 
+    The system prompt = the frozen instructions (`system.md`) + the event-invariant
+    static context (cheatsheet, script-call reference, few-shots). Composing it once
+    here — rather than in the per-event user message — keeps it byte-stable across all
+    spawns so `claude -p` hits the server-side prompt cache (dedup Phase B).
+
     `model` selects the Claude model for the `claude_code` backend (the
     Sonnet-vs-Opus calibration knob); it is ignored by the Ollama backend, which
     is configured via OLLAMA_HOST/its own model setting.
     """
     from rpg2gba.conversion_agent import prompt_builder
 
-    system_prompt = prompt_builder.load_system_prompt()
+    static_context = prompt_builder.build_static_context(
+        cheatsheet=prompt_builder.load_cheatsheet(REFERENCE_DIR),
+        script_call_ref=prompt_builder.load_script_call_reference(REFERENCE_DIR),
+        few_shots=prompt_builder.load_few_shots(),
+    )
+    system_prompt = prompt_builder.load_system_prompt() + "\n\n" + static_context
     if name == "claude_code":
         from rpg2gba.conversion_agent.backends.claude_code import ClaudeCodeBackend
 

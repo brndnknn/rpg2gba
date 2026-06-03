@@ -467,22 +467,64 @@ def test_convert_common_events_only_ids_partial_no_checkpoint(tmp_path: Path) ->
 # ----------------------------------------------------------------------------
 
 
-def test_build_prompt_has_sections() -> None:
+def test_build_static_context_has_invariant_chunks() -> None:
+    static = prompt_builder.build_static_context(
+        cheatsheet=prompt_builder.load_cheatsheet(REFERENCE),
+        script_call_ref=prompt_builder.load_script_call_reference(REFERENCE),
+        few_shots=prompt_builder.load_few_shots(),
+    )
+    assert "Poryscript cheatsheet" in static
+    assert "Uranium script-call reference" in static
+    assert "pbCallBub" in static  # from the script-call reference
+    assert "Few-shot examples" in static
+
+
+def test_build_user_prompt_excludes_static_context() -> None:
     state = {"flags": {"2": "FLAG_RECEIVED_STARTER"}, "vars": {}}
-    prompt = prompt_builder.build_prompt(
+    user = prompt_builder.build_user_prompt(
         {"id": 1, "name": "EV001", "pages": []},
         state,
-        few_shots=prompt_builder.load_few_shots(),
-        cheatsheet=prompt_builder.load_cheatsheet(REFERENCE),
-        command_ref=prompt_builder.load_command_reference(REFERENCE),
-        script_call_ref=prompt_builder.load_script_call_reference(REFERENCE),
+        command_ref=prompt_builder.filter_command_reference(
+            prompt_builder.load_command_reference(REFERENCE), {101}
+        ),
     )
-    assert "FLAG_RECEIVED_STARTER" in prompt
-    assert "Poryscript cheatsheet" in prompt
-    assert "Uranium script-call reference" in prompt
-    assert "pbCallBub" in prompt
-    assert "Few-shot examples" in prompt
-    assert '"name": "EV001"' in prompt
+    # Per-event-variable content is present...
+    assert "FLAG_RECEIVED_STARTER" in user
+    assert '"name": "EV001"' in user
+    assert "Command-code reference" in user
+    # ...but the event-invariant static context is NOT (it lives in the system prompt).
+    assert "Poryscript cheatsheet" not in user
+    assert "Few-shot examples" not in user
+
+
+def test_phase4_backend_system_prompt_includes_static_context() -> None:
+    from rpg2gba import pipeline
+
+    backend = pipeline._phase4_backend("claude_code")
+    # system prompt = frozen system.md + the static context (dedup Phase B)
+    assert "conversion agent" in backend.system_prompt.lower()  # from system.md
+    assert "Poryscript cheatsheet" in backend.system_prompt  # from static context
+    assert "Few-shot examples" in backend.system_prompt
+
+
+def test_claude_parse_logs_cache_usage(caplog: pytest.LogCaptureFixture) -> None:
+    envelope = json.dumps(
+        {
+            "type": "result",
+            "result": json.dumps(_GOOD),
+            "usage": {
+                "input_tokens": 10,
+                "cache_read_input_tokens": 1234,
+                "cache_creation_input_tokens": 0,
+                "output_tokens": 50,
+            },
+            "total_cost_usd": 0.012,
+        }
+    )
+    with caplog.at_level("INFO", logger="rpg2gba.conversion_agent.backends.claude_code"):
+        result = claude_code._parse_response(envelope)
+    assert result.script == "script S { end }"
+    assert "cache_read=1234" in caplog.text
 
 
 def test_render_registry_lists_script_switches() -> None:

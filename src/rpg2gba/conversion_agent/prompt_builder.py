@@ -1,16 +1,17 @@
-"""Assemble the per-event conversion prompt (Phase 4 §4.4).
+"""Assemble the conversion prompt, split for prompt-caching (Phase 4 §4.4 + dedup B).
 
-The conversion agent's *frozen instructions* are `prompts/system.md` (passed to a
-backend as its system prompt). This module builds the per-event **user** prompt
-and loads the stable, cacheable chunks that go in it:
+The prompt is split across two channels by how often it varies:
 
-  - the current flag-registry state (names already assigned),
-  - the Poryscript cheatsheet (`reference/poryscript_cheatsheet.md`),
-  - 2–3 few-shot examples (`prompts/few_shot/*.md`),
-  - the command-code reference (`reference/rgss_event_commands.md`),
-  - the event JSON itself.
+  * **system prompt** = `load_system_prompt()` (frozen instructions, `prompts/system.md`)
+    + `build_static_context(...)` — the event-invariant cheatsheet, script-call
+      reference, and few-shot examples. Composed once in `pipeline._phase4_backend` and
+      passed as `claude -p --system-prompt`, so back-to-back spawns hit the server-side
+      prompt cache instead of re-billing it every event.
+  * **user prompt** = `build_user_prompt(...)` — only the per-event-variable content:
+    the filtered command-code reference, the current flag-registry state, and the
+    event JSON.
 
-Stable chunks come first so a future caching backend can reuse them.
+The orchestrator builds the user prompt; the pipeline builds the system prompt.
 """
 from __future__ import annotations
 
@@ -94,23 +95,35 @@ def _render_registry(registry_state: dict) -> str:
     return "\n".join(lines)
 
 
-def build_prompt(
-    event_json: dict,
-    registry_state: dict,
-    *,
-    few_shots: list[str],
-    cheatsheet: str,
-    command_ref: str,
-    script_call_ref: str,
-) -> str:
-    """Compose the per-event user prompt from its parts."""
+def build_static_context(*, cheatsheet: str, script_call_ref: str, few_shots: list[str]) -> str:
+    """The frozen, event-invariant block that rides in the cacheable system prompt.
+
+    The cheatsheet, script-call reference, and few-shot examples are byte-identical
+    for all 5,301 events. Moving them out of the per-event user message and into the
+    `claude -p --system-prompt` (composed once in `pipeline._phase4_backend`) lets
+    back-to-back spawns hit Anthropic's server-side prompt cache instead of re-billing
+    this tonnage every time (dedup Phase B). Appended after `load_system_prompt()`.
+    """
     examples = "\n\n---\n\n".join(few_shots) if few_shots else "(no examples provided)"
     return "\n\n".join(
         [
             "# Poryscript cheatsheet\n\n" + cheatsheet,
-            "# Command-code reference\n\n" + command_ref,
             "# Uranium script-call reference\n\n" + script_call_ref,
             "# Few-shot examples\n\n" + examples,
+        ]
+    )
+
+
+def build_user_prompt(event_json: dict, registry_state: dict, *, command_ref: str) -> str:
+    """The per-event **user** message: only content that varies per event.
+
+    The filtered command-code reference (sliced to this event's codes), the current
+    flag-registry state, and the event JSON. The event-invariant context (cheatsheet,
+    script-call reference, few-shots) lives in the system prompt — see
+    `build_static_context`."""
+    return "\n\n".join(
+        [
+            "# Command-code reference\n\n" + command_ref,
             "# Flag registry\n\n" + _render_registry(registry_state),
             "# Event to convert\n\n```json\n"
             + json.dumps(event_json, indent=2, ensure_ascii=False)

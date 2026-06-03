@@ -106,12 +106,33 @@ def _parse_response(raw: str) -> ConversionResult:
     try:
         envelope = json.loads(text)
         if isinstance(envelope, dict) and "result" in envelope:
+            _log_cache_usage(envelope)  # dedup Phase B: confirm the system prompt caches
             text = envelope["result"]
         elif isinstance(envelope, dict) and "script" in envelope:
             return _to_result(envelope)
     except json.JSONDecodeError:
         pass
     return _to_result(_extract_object(text))
+
+
+def _log_cache_usage(envelope: dict) -> None:
+    """Log the `claude -p` token usage so we can confirm prompt caching engages.
+
+    The static context now rides in the system prompt (dedup Phase B); back-to-back
+    spawns should report a non-zero `cache_read_input_tokens` once the cache is warm
+    (5-min TTL). If it stays zero, the restructure is still correct + harmless — the
+    numbers just tell us whether the cache saved spend. No-op when usage is absent."""
+    usage = envelope.get("usage")
+    if not isinstance(usage, dict):
+        return
+    logger.info(
+        "claude usage: input=%s cache_read=%s cache_creation=%s output=%s cost_usd=%s",
+        usage.get("input_tokens"),
+        usage.get("cache_read_input_tokens"),
+        usage.get("cache_creation_input_tokens"),
+        usage.get("output_tokens"),
+        envelope.get("total_cost_usd"),
+    )
 
 
 def _extract_object(text: str) -> dict:
