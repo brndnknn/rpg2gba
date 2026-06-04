@@ -19,6 +19,7 @@
 set -euo pipefail
 
 OUT="output/uranium-build"
+LOG="$OUT/calibration_map002.log"
 
 echo "==> Restoring baseline flag state..."
 cp "$OUT/flag_state.baseline.json" "$OUT/flag_state.json"
@@ -34,10 +35,12 @@ rm -f "$OUT/checkpoints/Map100.done"
 rm -f "$OUT/checkpoints/Map115.done"
 
 echo "==> Running Map002 conversion (Opus, spends budget)..."
-python -m rpg2gba.pipeline convert-map --map-id 2 --model claude-opus-4-8
+echo "    Log: $LOG"
+python -m rpg2gba.pipeline convert-map --map-id 2 --model claude-opus-4-8 2>&1 | tee "$LOG"
 
 echo ""
-echo "==> Done. Bring back the following for gate review:"
-echo "    cat $OUT/scripts/Map002.pory"
-echo "    cat $OUT/unhandled.jsonl"
-echo "    cat $OUT/flag_state.json"
+echo "==> Done. Results:"
+echo "    $LOG"
+echo "    $OUT/scripts/Map002.pory"
+echo "    $OUT/unhandled.jsonl"
+echo "    $OUT/flag_state.json"
