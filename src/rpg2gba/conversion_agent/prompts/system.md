@@ -48,7 +48,7 @@ If there are no new flags, new vars, or unhandled commands, return empty arrays 
 - Use `msgbox` for all dialogue; never use raw `message` calls
 - Use `giveitem` for item grants; use `givemon` for Pokémon grants
 - Use `trainerbattle` for trainer battles; include the trainer ID from the provided data
-- Use `applymovement` for movement sequences; define the movement with `movement`
+- Do **not** emit `applymovement` — RPG Maker move routes are deferred to Phase 5 (see the Move Routes section below)
 - Use named flag and var constants exclusively — never use raw numeric IDs in the Poryscript output
 - Branch conditions use `if flag(FLAG_X)` and `if var(VAR_X) == value` syntax
 - End every script that can finish with `end`; end every script that hands off to another with `goto` or `return`
@@ -151,7 +151,23 @@ buried inside a Uranium time-cooldown helper you can't translate — `cooledDown
 
 ## Multi-Page Events
 
-RPG Maker events have multiple pages, each with activation conditions. Translate each page as a separate script block within the same `.pory` file, labeled `{event_name}_Page1`, `{event_name}_Page2`, etc. The orchestrator handles wiring the page-switching logic to the flag system; your job is to translate what each page does when active.
+RPG Maker events have multiple pages, each with activation conditions. Translate each page as a separate script block within the same `.pory` file, labeled `{event_name}_Page1`, `{event_name}_Page2`, etc. **The page-switching dispatch — which page runs, based on each page's activation conditions — is wired during Phase-5 map assembly, not by you and not in this output.** Your job is only to translate what each page does when active. (The orchestrator does mint the self/temp-switch flags your pages set, so those names resolve.)
+
+## Move Routes
+
+"Set Move Route" (code 209), "Wait for Move's Completion" (210), and the individual
+move commands (509) script an event or the player along a path. **Defer all of these
+to Phase 5 — do not emit `applymovement`.** A move route targets the player, *this*
+event, or *another* event; every target resolves to a pokeemerald object **local id**
+assigned during Phase-5 map wiring, which you do not have, so you cannot name the
+target correctly.
+
+- Emit a single `# UNHANDLED: move route — see unhandled[]` breadcrumb where the route
+  occurs, plus one `unhandled[]` entry describing the target and the intent (e.g.
+  "player walks down 2, faces left" / "NPC 14 approaches the player").
+- **Translate the rest of the event normally** — dialogue, flags, items, and the
+  branches *around* a move route are unaffected. Only the route itself is deferred.
+- A bare "Wait for Move's Completion" (210) with no route is plumbing — strip it.
 
 ## Common Events
 
