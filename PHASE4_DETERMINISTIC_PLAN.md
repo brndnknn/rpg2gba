@@ -1,0 +1,518 @@
+# Phase 4 — Deterministic Pre-Filter Plan
+
+**Purpose:** Reduce Opus spawns before the bulk `phase4 --run` by routing
+events with fully-mechanical structure through a deterministic handler instead
+of the LLM. The LLM adds nothing for these events — the output is a direct
+structural translation of data that is already fully present in the event JSON.
+
+**Build agent:** implement the classifiers in the order given below, testing
+between each one. Do not start the next classifier until the current one has
+passing tests and a verified count on the real corpus.
+
+---
+
+## 1. Background
+
+### Why this is safe
+
+The orchestrator's job is to produce correct Poryscript. For events whose
+entire content can be translated with a lookup table and a few fixed macros,
+the LLM path is strictly more expensive and more likely to introduce variance.
+A deterministic handler is:
+
+- **Cheaper** — no API call
+- **Faster** — no subprocess spawn
+- **More consistent** — same input always produces same output
+- **Fail-safe** — if the compile-gate rejects the output, the event falls
+  through to the existing LLM path unchanged
+
+### Research findings (2026-06-04)
+
+Measured against the 3,581 command-bearing map events in the Phase 3 corpus:
+
+| Pattern | Events | % of total |
+|---|---|---|
+| Pure dialogue | 452 | 12.6% |
+| Simple warp (doormat) | 317 | 8.9% |
+| Item ball | 45 | 1.3% |
+| Trainer battle | 299 | 8.3% |
+| Memo hits (already built) | 65 | 1.8% |
+| **Deterministic ceiling** | **~1,113** | **~31%** |
+
+Realistic Opus spawn reduction: **3,581 → ~2,500** (pure dialogue + simple
+warp alone get ~750 of those; trainer battles are the largest remaining bucket
+but have the most edge cases).
+
+---
+
+## 2. Architecture
+
+### Where the pre-filter lives
+
+Add a `_try_deterministic(map_id, event)` method to `Orchestrator`. It is
+called at the **top** of `_convert_event`, before the memo check and before
+any LLM spawn:
+
+```python
+def _convert_event(self, map_id: int, event: dict) -> str | None:
+    payload = {"map_id": map_id, **event}
+    ctx = self._event_ctx(map_id, event)
+
+    # NEW: try deterministic handler first
+    det = self._try_deterministic(map_id, event)
+    if det is not None:
+        compiled = self.compile_fn(det)
+        if compiled.ok:
+            if not self._mint_event_switches(map_id, event, ctx):
+                return None
+            self._store_memo(_memo_key(payload), map_id, event,
+                             ConversionResult(script=det))
+            logger.info("ev%s deterministic:\n%s", event.get("id"), det)
+            return det
+        # compile failed — fall through to LLM (fail-safe)
+        logger.debug("ev%s deterministic output failed compile; falling through", event.get("id"))
+
+    # memo check, then LLM (existing path, unchanged)
+    key = _memo_key(payload)
+    ...
+```
+
+`_try_deterministic` returns a Poryscript string on match or `None` to
+fall through. It must never raise — any unexpected structure should return
+`None`.
+
+### What the deterministic handler does NOT do
+
+- It does **not** call the registry's `propose_flag` / `propose_var`. It only
+  calls `_mint_event_switches` (for self-switches), which the orchestrator
+  already does post-accept.
+- It does **not** write to `unhandled.jsonl`. If a pattern is only partially
+  translatable (e.g. a warp whose map constant is a placeholder) that is fine
+  — the warp placeholder is emitted exactly as Opus would emit it, and the
+  `unhandled.jsonl` entry for the Phase-5 warp resolution is **not** written
+  (we're intentionally not queuing it, since the placeholder is the known
+  right output). If you want to queue it, do so explicitly inside the handler.
+- It stores the result in the memo so cross-map identical events get reused
+  automatically.
+
+---
+
+## 3. Text extraction helper
+
+All patterns need to concatenate multi-line RMXP dialogue (codes 101 + 401
+continuations) into a single Poryscript string. Write this helper once and
+reuse it across all handlers:
+
+```python
+def _extract_text_blocks(page: dict) -> list[str]:
+    """Return each complete Show Text block as one string.
+
+    Code 101 starts a block; codes 401 are continuations. Each block becomes
+    one msgbox call. Text parameters are in parameters[0]."""
+    blocks: list[str] = []
+    current: list[str] = []
+    for cmd in page.get("list", []):
+        code = cmd.get("code", 0)
+        params = cmd.get("parameters", [])
+        if code == 101:
+            if current:
+                blocks.append("".join(current))
+            current = [params[0] if params else ""]
+        elif code == 401:
+            current.append(params[0] if params else "")
+        # other codes: flush current block if open, ignore
+        elif current:
+            blocks.append("".join(current))
+            current = []
+    if current:
+        blocks.append("".join(current))
+    return blocks
+```
+
+Poryscript string quoting: wrap each block in `format_pory_string(text)`,
+which escapes backslashes and double-quotes and wraps in double-quotes. Write
+this helper too — you'll use it everywhere.
+
+---
+
+## 4. Classifier 1 — Pure Dialogue
+
+**Count: 452 events (12.6%)**
+
+### Detection
+
+An event qualifies if **every page** passes this check:
+
+- Every command code is in the safe set `{0, 5, 6, 7, 101, 401}`, OR
+- The command is code 355/655 **and** its first parameter matches
+  `^\s*pbCallBub\b` (STRIP — no output)
+
+No code 111 (branch), 123 (self-switch set), 201 (warp), or any other
+script call. All pages must qualify; one non-qualifying page fails the whole
+event.
+
+```python
+_PURE_DIALOGUE_SAFE = {0, 5, 6, 7, 101, 401}
+_PBCALLBUB_RE = re.compile(r"^\s*pbCallBub\b")
+
+def _page_is_pure_dialogue(page: dict) -> bool:
+    for cmd in page.get("list", []):
+        code = cmd.get("code", 0)
+        if code in _PURE_DIALOGUE_SAFE:
+            continue
+        if code in (355, 655):
+            p = cmd.get("parameters", [""])[0]
+            if isinstance(p, str) and _PBCALLBUB_RE.match(p):
+                continue
+        return False
+    return True
+```
+
+### Output
+
+Each page becomes one script block. A page with no text produces a block
+with just `end`. Include `lock`/`faceplayer`/`release` only if the source
+page contains those codes (5/6/7 respectively).
+
+```
+script Map{m:03d}_{name}_Page1 {
+    lock
+    faceplayer
+    msgbox("...")
+    msgbox("...")
+    release
+    end
+}
+
+script Map{m:03d}_{name}_Page2 {
+    lock
+    faceplayer
+    msgbox("...")
+    release
+    end
+}
+```
+
+Block label format: `Map{map_id:03d}_{event_name}_Page{n}` — identical to
+what the LLM produces so memo reuse and label rewrites work correctly.
+
+### Edge cases
+
+- Pages with **no text** (only lock/release/pbCallBub/end): emit a minimal
+  `script { end }` block — do not skip the page.
+- Multi-page events: emit all pages. The page-switching dispatch is Phase-5
+  work; the handler's job is just the per-page content.
+- `\n`, `\l`, `\p` line-break codes inside text strings: pass through
+  verbatim — Poryscript handles them.
+
+### Tests
+
+1. Single-page event with one 101+401+401 text block → correct msgbox
+2. Multi-page event → correct number of script blocks, each labeled correctly
+3. Event with `pbCallBub` mixed in → pbCallBub stripped, text preserved
+4. Event with code 111 → returns None (not a match)
+5. Event with code 355 that is NOT pbCallBub → returns None
+6. Output from a real corpus event compiles through poryscript (phase4 marker test)
+
+---
+
+## 5. Classifier 2 — Simple Warp
+
+**Count: 317 events (8.9%)**
+
+### What these are
+
+Single-page doormat events (player-touch trigger) that fade the screen and
+warp to another map. All the meaningful content is in code 201 (Transfer
+Player). Everything else is plumbing: fade (223/224), screen tone (223/224
+overlap in RMXP), wait (106), lock/release (5/7), SE (355 audio STRIP).
+
+### Detection
+
+An event qualifies if it is **single-page** and every command code is in:
+
+```python
+_WARP_SAFE_CODES = {0, 5, 6, 7, 106, 201, 221, 222, 223, 224, 249, 250}
+```
+
+Plus codes 355/655 are allowed only if the call is audio-only (matches
+`^\s*(pbSEPlay|pbPlayCry|XInput\.vibrate)\b`). Any other code fails the check.
+
+Exactly **one** code-201 command must be present (the warp target). Zero or
+two warps → fall through to LLM.
+
+### Output
+
+```
+script Map{m:03d}_{name}_Page1 {
+    lockall
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_{target_map_id}, {x}, {y})
+    releaseall
+    end
+}
+```
+
+The warp target: code-201 parameters are `[map_id, x, y, direction,
+fade_type]` in RMXP. Emit `MAP_URANIUM_{map_id}` as the placeholder — exactly
+what Opus produces, and a known Phase-5 resolution target. Do **not** queue
+it in `unhandled.jsonl`; the placeholder is the intended output.
+
+Omit `lockall`/`releaseall` if codes 5/7 are absent from the page. Most
+doormat warps won't have them.
+
+### Edge cases
+
+- Multi-page warp events → fall through (Phase-5 concern; rare).
+- Warp with conditional branch → fall through.
+- Direction parameter in code 201: emit as-is in the warp if non-zero, or
+  omit — pokeemerald `warp` macro takes `(map, x, y)` with no direction arg.
+
+### Tests
+
+1. Single-page warp-only event → correct `warp(MAP_URANIUM_N, x, y)`
+2. Warp with fade codes mixed in → same output (plumbing stripped)
+3. Warp with SE 355 → audio stripped, warp emitted
+4. Multi-page event → returns None
+5. Event with two 201 commands → returns None
+6. Output compiles through poryscript
+
+---
+
+## 6. Classifier 3 — Item Ball
+
+**Count: 45 events (1.3%)**
+
+### What these are
+
+Ground item-ball pickups: player touches the event, receives an item, the
+event sets self-switch A so it never triggers again. Typically 2–3 pages:
+page 1 is the pickup (no self-switch condition), page 2+ is the empty
+"already collected" state (self-switch A condition → blank).
+
+### Detection
+
+An event qualifies if:
+
+- At least one page contains a `pbItemBall` or `Kernel.pbItemBall` call
+  (code 355/655, parameter matches `^\s*(Kernel\.)?pbItemBall\b`)
+- All **other** codes across all pages are in
+  `{0, 5, 6, 7, 101, 401, 123, 355, 655}` (text + lock/release + self-switch
+  set + script calls)
+- The only non-pbItemBall, non-pbCallBub script calls are audio STRIP
+
+### Parsing the item call
+
+`pbItemBall` signature: `pbItemBall(:ITEM_CONSTANT)` or
+`pbItemBall(:ITEM_CONSTANT, qty)`.
+
+Extract the item symbol from the parameter string with a regex:
+```python
+_ITEM_BALL_PARSE = re.compile(r"pbItemBall\(:(\w+)(?:,\s*(\d+))?\)")
+```
+
+Map symbol to `ITEM_*` constant: load
+`output/uranium-build/intermediate/item_field_codes.json` (Phase 2 output,
+maps internal symbol → `ITEM_*`). If the symbol is not in the map → fall
+through to LLM.
+
+### Output
+
+```
+script Map{m:03d}_{name}_Page1 {
+    lock
+    faceplayer
+    finditem(ITEM_*, qty)
+    setflag(FLAG_MAP{m:03d}_EVENT{e:03d}_SSA)
+    release
+    end
+}
+
+script Map{m:03d}_{name}_Page2 {
+    end
+}
+```
+
+`finditem` is the pokeemerald macro for ground-item pickup (shows the "found
+X!" fanfare). Use qty from the call if present, else 1.
+
+Self-switch A is set deterministically — it is also minted by
+`_mint_event_switches` which runs after accept, so the registry handles it
+correctly.
+
+### Tests
+
+1. Standard 2-page item ball → correct `finditem(ITEM_*, 1)`
+2. Item ball with qty 2 → `finditem(ITEM_*, 2)`
+3. Unknown item symbol → returns None (falls through to LLM)
+4. Event with non-STRIP extra script call → returns None
+5. Output compiles through poryscript
+
+---
+
+## 7. Classifier 4 — Trainer Battle
+
+**Count: 299 events (8.3%), ~250 realistic clean matches**
+
+This is the most complex classifier. Build it last and only after the first
+three are working and tested.
+
+### How Uranium trainer events work
+
+The RMXP event structure for a standard route trainer:
+
+**Page 1** (no condition — encounter state):
+```
+108  ["Battle: <pre-battle dialogue>"]          ← comment encoding
+408  ["<continuation>"]
+108  ["EndBattle: <already-beaten dialogue>"]   ← comment encoding
+108  ["Type: FISHERMAN"]                        ← comment encoding
+108  ["Name: Matt"]                             ← comment encoding
+108  ["EndSpeech: <loss speech>"]               ← comment encoding (optional)
+355  ["pbTrainerIntro(:FISHERMAN)"]
+355  ["Kernel.pbNoticePlayer(get_character(0))"]
+355  ["pbCallBub(2)"]                           ← optional
+101  ["<pre-battle dialogue text>"]
+401  ["<continuation>"]
+111  [12, "pbTrainerBattle(PBTrainers::FISHERMAN,\"Matt\",_I(\"loss speech\"),...)"]
+123  ["A", 0]                                   ← set self-switch A on win
+412  []                                         ← end branch
+355  ["pbTrainerEnd"]
+```
+
+**Page 2** (self-switch A = true — already beaten):
+```
+355  ["pbCallBub(2)"]
+101  ["<already-beaten dialogue>"]
+```
+
+Key observations:
+- Code 108/408 are **comment lines** that encode structured data — parse them
+  for trainer type/name/speeches as they are more reliable than parsing the
+  111 branch string.
+- `pbTrainerBattle(...)` is the **condition** of a code-111 branch (type 12 =
+  "script evaluation"), NOT a code-355 call. The return value is the
+  win/loss boolean.
+- The self-switch set (123) is inside the branch body (executed on win).
+- `pbTrainerEnd` ends the encounter.
+
+### Comment line parsing
+
+Code-108 comments follow these prefixes (from `scripts_dump/`):
+- `Battle: ` — pre-battle dialogue (may span multiple 108/408 lines)
+- `EndBattle: ` — already-beaten dialogue
+- `Type: ` — trainer class symbol (e.g. `FISHERMAN`)
+- `Name: ` — trainer name string (e.g. `Matt`)
+- `EndSpeech: ` — loss speech (what the trainer says when they lose)
+
+Parse these directly. They are more reliable than extracting from the 111
+branch string because the branch string may have escaping/interpolation.
+
+### TRAINER_* constant lookup
+
+The handler needs `TRAINER_FISHERMAN_MATT` from `(PBTrainers::FISHERMAN, "Matt")`.
+
+Load `output/uranium-build/intermediate/trainers.json` (Phase 2 output).
+The constant is keyed by `(class_internal_name, trainer_name, party_id)`.
+Because a trainer can appear multiple times (rematches use `party_id > 0`),
+the first encounter is `party_id = 0`.
+
+If no match is found → fall through to LLM.
+
+### Detection
+
+An event qualifies if **all** of the following hold:
+
+1. Has exactly **2 pages** (encounter + already-beaten)
+2. Page 1 contains exactly **one** code-111 branch of type 12 whose
+   parameter string matches `pbTrainerBattle\(` or `pbDoubleTrainerBattle\(`
+3. Page 1 contains code 123 `["A", 0]` (self-switch A set on win)
+4. Page 2 only has codes in `{0, 5, 6, 7, 101, 401, 355, 655}` with only
+   STRIP script calls (pure dialogue page)
+5. No extra code-111 branches anywhere beyond the trainer battle branch
+   (guards against cutscene trainers with extra conditional logic)
+
+Fall through to LLM for: gym leaders, story trainers, double-battle
+partners, or any trainer with extra pre-battle cutscene codes (209 move
+routes, 201 warps, 223 fades outside the battle branch).
+
+### Output
+
+```
+script Map{m:03d}_{name}_Page1 {
+    lock
+    faceplayer
+    msgbox("<pre-battle dialogue>")
+    trainerbattle(TRAINER_*, "<pre-battle text label>", "<loss speech label>")
+    setflag(FLAG_MAP{m:03d}_EVENT{e:03d}_SSA)
+    release
+    end
+}
+
+script Map{m:03d}_{name}_Page2 {
+    lock
+    faceplayer
+    msgbox("<already-beaten dialogue>")
+    release
+    end
+}
+```
+
+For double battles, use `trainerbattle_double(...)` — verify the exact
+pokeemerald macro signature before emitting.
+
+### Tests
+
+1. Clean 2-page route trainer → correct `trainerbattle(TRAINER_*, ...)` + flag
+2. Unknown trainer constant → returns None
+3. Event with extra code-111 branches → returns None
+4. Event with move route (209) → returns None
+5. Double battle variant → correct `trainerbattle_double(...)` or None
+6. Page 2 post-battle dialogue emitted correctly
+7. Output compiles through poryscript
+8. Run against the real corpus and print the match count + a few examples
+
+---
+
+## 8. Integration and acceptance
+
+After all four classifiers are implemented:
+
+1. Add a `--dry-run` count to `convert-map` or write a script
+   `scripts/count_deterministic_actual.py` that runs `_try_deterministic`
+   against the full corpus (no spawns) and reports how many events each
+   classifier claimed.
+
+2. Run `phase4 --clean` dry-counts: the 8/5/34/199 numbers must be unchanged
+   (the pre-filter doesn't touch the registry seed).
+
+3. Run the full pytest suite (including the `phase4` marker tests). The
+   deterministic path must not break any existing test.
+
+4. Re-run `calibrate_map002.sh` to confirm Map002 output is equivalent —
+   Map002 has simple-warp events (EV002/EV008) and pure-dialogue events that
+   should now be handled deterministically. Verify the `.pory` file is
+   functionally identical to the gate-approved run.
+
+5. Present the final deterministic match counts to the user before starting
+   the bulk `phase4 --run`.
+
+---
+
+## 9. What this does NOT cover
+
+These patterns are explicitly out of scope for deterministic handling and
+remain in the Opus path:
+
+- Events with conditional branches (111) other than the trainer battle check
+- Events with variable manipulation (122 / setvar / copyvar)
+- Events with Uranium script calls that aren't STRIP-classified
+- Move routes (209) — Phase-5 deferred per the gate decision
+- Multi-page events where page-switching depends on global switches/variables
+  (Phase-5 dispatch concern)
+- Any event the classifier returns None for — the LLM path is unchanged and
+  is the correct fallback
+
+The goal is not to eliminate the LLM. It is to avoid spending Opus budget on
+events where the output is fully determined by a direct structural read of the
+input data.
