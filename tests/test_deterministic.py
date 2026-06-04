@@ -463,13 +463,134 @@ def test_ss_output_compiles() -> None:
 
 
 # ----------------------------------------------------------------------------
+# Classifier 4 — Simple Warp (plan §7)
+# ----------------------------------------------------------------------------
+
+
+def test_warp_basic() -> None:
+    """Single page with one TRANSFER_PLAYER → claimed; warp line + frame present."""
+    ev = _event(_page(_cmd(D.TRANSFER_PLAYER, 0, 60, 21, 20, 0, 1)), id=2, name="EV002")
+    out = D.classify_simple_warp(2, ev)
+    assert out is not None
+    assert "warp(MAP_URANIUM_60, 21, 20)" in out.script
+    assert "lockall" in out.script
+    assert "waitstate" in out.script
+    assert "releaseall" in out.script
+    assert "end" in out.script
+    assert "script Map002_EV002_Page1 {" in out.script
+    assert "fadescreen" not in out.script
+
+
+def test_warp_queues_one_unhandled() -> None:
+    """The single code-201 is queued as the one unhandled command."""
+    ev = _event(_page(_cmd(D.TRANSFER_PLAYER, 0, 60, 21, 20, 0, 1)), id=2, name="EV002")
+    out = D.classify_simple_warp(2, ev)
+    assert out is not None
+    assert len(out.unhandled) == 1
+    assert out.unhandled[0]["command_code"] == 201
+    assert "MAP_URANIUM_60" in out.unhandled[0]["description"]
+
+
+def test_warp_strips_plumbing() -> None:
+    """SE/fade/wait codes around the warp are stripped; exactly one warp emitted."""
+    ev = _event(
+        _page(
+            _cmd(250, {}),
+            _cmd(223, {}, 6),
+            _cmd(106, 8),
+            _cmd(D.TRANSFER_PLAYER, 0, 60, 21, 20, 0, 1),
+            _cmd(223, {}, 6),
+        ),
+        id=2,
+        name="EV002",
+    )
+    out = D.classify_simple_warp(2, ev)
+    assert out is not None
+    assert out.script.count("warp(") == 1
+    assert "warp(MAP_URANIUM_60, 21, 20)" in out.script
+    assert "223" not in out.script
+    assert "playse" not in out.script.lower()
+
+
+def test_warp_audio_script_call_stripped() -> None:
+    """A STRIP-classified 355 call (pbSEPlay) is dropped; warp still emitted."""
+    ev = _event(
+        _page(
+            _cmd(D.SCRIPT, "pbSEPlay(:EXIT_DOOR)"),
+            _cmd(D.TRANSFER_PLAYER, 0, 60, 21, 20, 0, 1),
+        ),
+        id=2,
+        name="EV002",
+    )
+    out = D.classify_simple_warp(2, ev)
+    assert out is not None
+    assert "warp(MAP_URANIUM_60, 21, 20)" in out.script
+    assert "pbSEPlay" not in out.script
+
+
+def test_warp_mode_nonzero_returns_none() -> None:
+    """mode != 0 (variable warp) → classifier declines."""
+    ev = _event(_page(_cmd(D.TRANSFER_PLAYER, 1, 60, 21, 20, 0, 1)), id=2, name="EV002")
+    assert D.classify_simple_warp(2, ev) is None
+
+
+def test_warp_two_warps_returns_none() -> None:
+    """Two code-201 commands on one page → classifier declines."""
+    ev = _event(
+        _page(
+            _cmd(D.TRANSFER_PLAYER, 0, 60, 21, 20, 0, 1),
+            _cmd(D.TRANSFER_PLAYER, 0, 61, 5, 5, 0, 1),
+        ),
+        id=2,
+        name="EV002",
+    )
+    assert D.classify_simple_warp(2, ev) is None
+
+
+def test_warp_multipage_returns_none() -> None:
+    """Multi-page event → classifier declines."""
+    ev = _event(
+        _page(_cmd(D.TRANSFER_PLAYER, 0, 60, 21, 20, 0, 1)),
+        _page(_cmd(D.TRANSFER_PLAYER, 0, 61, 5, 5, 0, 1)),
+        id=2,
+        name="EV002",
+    )
+    assert D.classify_simple_warp(2, ev) is None
+
+
+def test_warp_text_returns_none() -> None:
+    """A SHOW_TEXT (101) alongside the warp is not in the safe set → None."""
+    ev = _event(
+        _page(
+            _text("hi"),
+            _cmd(D.TRANSFER_PLAYER, 0, 60, 21, 20, 0, 1),
+        ),
+        id=2,
+        name="EV002",
+    )
+    assert D.classify_simple_warp(2, ev) is None
+
+
+@pytest.mark.phase4
+@pytest.mark.skipif(not poryscript.is_available(), reason="poryscript binary not installed")
+def test_warp_output_compiles() -> None:
+    """A representative simple-warp output compiles through poryscript."""
+    ev = _event(_page(_cmd(D.TRANSFER_PLAYER, 0, 60, 21, 20, 0, 1)), id=2, name="EV002")
+    out = D.classify_simple_warp(2, ev)
+    assert out is not None
+    result = poryscript.compile_script(out.script)
+    assert result.ok, result.stderr
+
+
+# ----------------------------------------------------------------------------
 # dispatcher
 # ----------------------------------------------------------------------------
 
 
 def test_dispatcher_returns_classifier_1_match() -> None:
     ev = _event(_page(_text("Hello!")), id=4)
-    assert D.try_deterministic(1, ev) == D.classify_pure_dialogue(1, ev)
+    # The dispatcher normalizes a classifier's bare-str return into a DetResult.
+    assert D.try_deterministic(1, ev) == D.DetResult(D.classify_pure_dialogue(1, ev))
 
 
 def test_dispatcher_swallows_classifier_errors(monkeypatch: pytest.MonkeyPatch) -> None:

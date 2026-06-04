@@ -268,11 +268,14 @@ class Orchestrator:
         Mirrors the accept path of ``_convert_event``: the candidate must pass the
         compile-gate and the self/temp-switch mint, exactly as an LLM result would, so
         a deterministic miss is indistinguishable downstream from an LLM conversion.
-        Any failure returns None and the caller proceeds to the memo/LLM path."""
-        script = deterministic.try_deterministic(map_id, event, self._det_context)
-        if script is None:
+        A classifier may also carry queue entries (e.g. a warp's MAP_URANIUM_<N>
+        placeholder that Phase 5 must resolve); these are logged to unhandled.jsonl
+        exactly as an LLM result's would be. Any failure returns None and the caller
+        proceeds to the memo/LLM path."""
+        match = deterministic.try_deterministic(map_id, event, self._det_context)
+        if match is None:
             return None
-        if not self.compile_fn(script).ok:
+        if not self.compile_fn(match.script).ok:
             logger.debug(
                 "ev%s deterministic output failed compile-gate — falling through",
                 event.get("id"),
@@ -280,14 +283,15 @@ class Orchestrator:
             return None
         if not self._mint_event_switches(map_id, event, ctx):
             return None
+        self._log_unhandled(ctx, match.unhandled)
         self._store_memo(
             _memo_key({"map_id": map_id, **event}),
             map_id,
             event,
-            ConversionResult(script=script),
+            ConversionResult(script=match.script, unhandled=match.unhandled),
         )
-        logger.info("ev%s deterministic:\n%s", event.get("id"), script)
-        return script
+        logger.info("ev%s deterministic:\n%s", event.get("id"), match.script)
+        return match.script
 
     def _convert_common_event(self, payload: dict) -> str | None:
         """Convert one common event (already adapted to page-shape); None if queued.

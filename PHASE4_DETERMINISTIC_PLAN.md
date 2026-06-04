@@ -39,7 +39,14 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   compile clean; `_dialogue_body(allow_self_switch=True)` already existed —
   `saw_switch`-guarded twin; flag names agree with `_mint_event_switches` by
   construction; no unprescribed-content bucket)
-- [ ] Classifier 4 — Simple Warp (§7) · target 317 · actual: ___
+- [x] Classifier 4 — Simple Warp (§7) · target 317 · **actual: 304** (all compile
+  clean; first non-dialogue classifier + first to **queue**). **§7 spec corrected:**
+  201 params are `[mode, map_id, x, y, dir, fade]` (6) — target = `params[1]`, and
+  `mode != 0` (variable-indirection) falls through. Body shape `lockall`/`warp`/
+  `waitstate`/`releaseall` chosen from the fork's OWN scripts (no `fadescreen` — `warp`
+  owns the fade; explicit fade would double it). Emits `warp(MAP_URANIUM_<N>,x,y)` +
+  one queued unhandled entry (matches frozen Opus). Added a `DetResult{script,
+  unhandled}` return type (dispatcher normalizes C1–3's bare-str returns)
 - [ ] Classifier 5 — Item Ball (§8) · target 45 · actual: ___
 - [ ] Classifier 6 — Trainer Battle (§9) · target ~250 · actual: ___
 

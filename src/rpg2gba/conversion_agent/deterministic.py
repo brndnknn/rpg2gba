@@ -309,7 +309,86 @@ def classify_self_switch_dialogue(
     return "\n\n".join(blocks)
 
 
+# -- Classifier 4: Simple Warp (plan §7) --------------------------------------
+
+_WARP_SAFE_CODES = {0, 5, 6, 7, 106, 201, 221, 222, 223, 224, 249, 250}
+# 0 term · 5/6/7 lock/face/release (absent in corpus, allowed) · 106 wait ·
+# 201 transfer · 221/222 transition · 223 tone-fade · 224 flash · 249/250 ME/SE
+
+
+def classify_simple_warp(
+    map_id: int, event: dict, ctx: "Context | None" = None
+) -> "DetResult | None":
+    """A single-page doormat warp: code 201 transfer plus only plumbing (fade/wait/SE).
+
+    Emits the canonical pokeemerald scripted-warp idiom (lockall / warp / waitstate /
+    releaseall) with a ``MAP_URANIUM_<N>`` placeholder, and queues one unhandled entry
+    so Phase 5 resolves the real map constant."""
+    pages = event.get("pages", [])
+    if len(pages) != 1:
+        return None
+    warp_cmd = None
+    for cmd in pages[0].get("list", []):
+        code = cmd.get("code", 0)
+        if code == TRANSFER_PLAYER:
+            if warp_cmd is not None:
+                return None  # 2+ warps → fall through to the LLM
+            warp_cmd = cmd
+        elif code in _WARP_SAFE_CODES:
+            continue
+        elif code in (SCRIPT, SCRIPT_CONT):
+            params = cmd.get("parameters") or [""]
+            first = params[0] if params else ""
+            if isinstance(first, str) and _DIALOGUE_STRIP_RE.match(first):
+                continue  # stateless STRIP call (audio etc.) — no output
+            return None
+        else:
+            return None
+    if warp_cmd is None:
+        return None
+    params = warp_cmd.get("parameters", [])
+    # RMXP 201 params: [mode, map_id, x, y, direction, fade]. mode 0 = literal target;
+    # mode 1 = variable-indirection (target is a variable id) → cannot resolve, bail.
+    if len(params) < 4 or params[0] != 0:
+        return None
+    target_map, x, y = params[1], params[2], params[3]
+    if not all(isinstance(v, int) for v in (target_map, x, y)):
+        return None
+    script = _block(
+        _page_label(map_id, event, 1),
+        [
+            "lockall",
+            f"warp(MAP_URANIUM_{target_map}, {x}, {y})",
+            "waitstate",
+            "releaseall",
+            "end",
+        ],
+    )
+    entry = {
+        "command_code": TRANSFER_PLAYER,
+        "page": 1,
+        "description": (
+            f"Transfer Player to Uranium map {target_map} at ({x}, {y}) — emitted as "
+            f"placeholder warp(MAP_URANIUM_{target_map}, {x}, {y}); the real pokeemerald "
+            f"MAP_* constant must be resolved in Phase 5."
+        ),
+    }
+    return DetResult(script, [entry])
+
+
 # -- context + dispatcher -----------------------------------------------------
+
+
+@dataclass(frozen=True)
+class DetResult:
+    """A deterministic match: the Poryscript plus any unhandled queue entries.
+
+    Classifiers may return a bare ``str`` (script only) or a ``DetResult`` when they
+    also need to queue an ``unhandled.jsonl`` entry (e.g. a warp placeholder that
+    Phase 5 must resolve). ``try_deterministic`` normalizes the bare-``str`` form."""
+
+    script: str
+    unhandled: list[dict] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -338,20 +417,27 @@ def load_context(*, reference_dir: Path, intermediate_dir: Path) -> Context:
 # Classifiers are tried in this order; the first non-None wins. Order follows the
 # plan (most general dialogue first); detection is strict enough that overlaps do
 # not occur, but order still matters for events a looser classifier could claim.
-_CLASSIFIERS: list[Callable[[int, dict, "Context | None"], str | None]] = [
+_CLASSIFIERS: list[
+    Callable[[int, dict, "Context | None"], "str | DetResult | None"]
+] = [
     classify_pure_dialogue,
     classify_call_common_event,  # Classifier 2
     classify_self_switch_dialogue,  # Classifier 3
+    classify_simple_warp,  # Classifier 4
 ]
 
 
-def try_deterministic(map_id: int, event: dict, ctx: Context | None = None) -> str | None:
-    """Try each classifier in order; return the first match, or None to use the LLM."""
+def try_deterministic(
+    map_id: int, event: dict, ctx: "Context | None" = None
+) -> "DetResult | None":
+    """Try each classifier in order; return the first match (normalized to a
+    ``DetResult``), or ``None`` to fall through to the LLM."""
     for classify in _CLASSIFIERS:
         try:
             out = classify(map_id, event, ctx)
         except Exception:  # a classifier must never abort the run — fall through
             out = None
-        if out is not None:
-            return out
+        if out is None:
+            continue
+        return out if isinstance(out, DetResult) else DetResult(out)
     return None

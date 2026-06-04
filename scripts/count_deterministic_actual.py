@@ -42,7 +42,8 @@ def claim(map_id: int, event: dict, ctx: deterministic.Context) -> tuple[str | N
         except Exception:
             out = None
         if out is not None:
-            return fn.__name__, out
+            script = out.script if isinstance(out, deterministic.DetResult) else out
+            return fn.__name__, script
     return None, None
 
 
