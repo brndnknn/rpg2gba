@@ -28,20 +28,27 @@ A deterministic handler is:
 
 ### Research findings (2026-06-04)
 
-Measured against the 3,581 command-bearing map events in the Phase 3 corpus:
+Measured against the 3,581 command-bearing map events in the Phase 3 corpus.
+Findings from two passes: initial pattern survey, then a deeper survey of the
+remaining ~2,473 events to find additional patterns.
 
 | Pattern | Events | % of total |
 |---|---|---|
-| Pure dialogue | 452 | 12.6% |
+| Pure dialogue (expanded STRIP list) | ~620 | ~17.3% |
 | Simple warp (doormat) | 317 | 8.9% |
+| Call Common Event only | 52 | 1.5% |
+| Self-switch dialogue | 67 | 1.9% |
 | Item ball | 45 | 1.3% |
 | Trainer battle | 299 | 8.3% |
 | Memo hits (already built) | 65 | 1.8% |
-| **Deterministic ceiling** | **~1,113** | **~31%** |
+| **Deterministic ceiling** | **~1,465** | **~41%** |
 
-Realistic Opus spawn reduction: **3,581 → ~2,500** (pure dialogue + simple
-warp alone get ~750 of those; trainer battles are the largest remaining bucket
-but have the most edge cases).
+The ~620 pure-dialogue figure replaces the initial 452 count — 168 additional
+events failed the original filter only because of STRIP-classified script calls
+(pbSetPokemonCenter, pbRemoveDependency2, set_fog2, etc.) that carry no game
+state. Widening the STRIP whitelist in the detector absorbs them for free.
+
+Realistic Opus spawn reduction: **3,581 → ~2,150** after all six classifiers.
 
 ---
 
@@ -137,23 +144,42 @@ this helper too — you'll use it everywhere.
 
 ## 4. Classifier 1 — Pure Dialogue
 
-**Count: 452 events (12.6%)**
+**Count: ~620 events (~17.3%)**
 
 ### Detection
 
 An event qualifies if **every page** passes this check:
 
 - Every command code is in the safe set `{0, 5, 6, 7, 101, 401}`, OR
-- The command is code 355/655 **and** its first parameter matches
-  `^\s*pbCallBub\b` (STRIP — no output)
+- The command is code 355/655 **and** its first parameter matches one of the
+  STRIP patterns below (no output for any of them)
 
-No code 111 (branch), 123 (self-switch set), 201 (warp), or any other
+No code 111 (branch), 123 (self-switch set), 201 (warp), or any non-STRIP
 script call. All pages must qualify; one non-qualifying page fails the whole
 event.
 
+**STRIP script-call patterns** (all produce no output — extend this list if
+additional STRIP calls are verified in `reference/uranium_script_calls.md`):
+
 ```python
+_DIALOGUE_STRIP_RE = re.compile(
+    r"^\s*("
+    r"pbCallBub"
+    r"|set_fog2"
+    r"|XInput\.vibrate"
+    r"|pbSEPlay"
+    r"|pbPlayCry"
+    r"|\$scene\.spriteset\.addUserSprite"
+    r"|\$game_map\.need_refresh\s*="
+    r"|pbRemoveDependency2"
+    r"|Kernel\.pbRemoveDependency2"
+    r"|pbAddDependency2"
+    r"|Kernel\.pbAddDependency2"
+    r"|Kernel\.pbSetPokemonCenter"
+    r")\b"
+)
+
 _PURE_DIALOGUE_SAFE = {0, 5, 6, 7, 101, 401}
-_PBCALLBUB_RE = re.compile(r"^\s*pbCallBub\b")
 
 def _page_is_pure_dialogue(page: dict) -> bool:
     for cmd in page.get("list", []):
@@ -162,7 +188,7 @@ def _page_is_pure_dialogue(page: dict) -> bool:
             continue
         if code in (355, 655):
             p = cmd.get("parameters", [""])[0]
-            if isinstance(p, str) and _PBCALLBUB_RE.match(p):
+            if isinstance(p, str) and _DIALOGUE_STRIP_RE.match(p):
                 continue
         return False
     return True
@@ -209,14 +235,152 @@ what the LLM produces so memo reuse and label rewrites work correctly.
 
 1. Single-page event with one 101+401+401 text block → correct msgbox
 2. Multi-page event → correct number of script blocks, each labeled correctly
-3. Event with `pbCallBub` mixed in → pbCallBub stripped, text preserved
-4. Event with code 111 → returns None (not a match)
-5. Event with code 355 that is NOT pbCallBub → returns None
-6. Output from a real corpus event compiles through poryscript (phase4 marker test)
+3. Event with `pbCallBub` mixed in → stripped, text preserved
+4. Event with `Kernel.pbSetPokemonCenter` → stripped, text preserved
+5. Event with `pbRemoveDependency2` → stripped, text preserved
+6. Event with `set_fog2` → stripped, text preserved
+7. Event with code 111 → returns None
+8. Event with code 355 that is NOT in the STRIP list → returns None
+9. Output from a real corpus event compiles through poryscript (phase4 marker test)
+10. Run detector against full corpus and confirm count is ~620 (report actual)
 
 ---
 
-## 5. Classifier 2 — Simple Warp
+## 5. Classifier 2 — Call Common Event
+
+**Count: 52 events (1.5%)**
+
+### What these are
+
+Events that delegate entirely to a common event via code 117 (Call Common
+Event), with only dialogue and STRIP script calls alongside. The common event
+does the real work; the map event is just a wrapper that calls it. The call
+target is already deterministic — we know it's `CommonEvent_NNN`.
+
+### Detection
+
+An event qualifies if **every page** passes this check:
+
+- Every command code is in `{0, 5, 6, 7, 101, 401, 117}`, OR
+- The command is code 355/655 matching `_DIALOGUE_STRIP_RE` (same STRIP list
+  as Classifier 1 — reuse it)
+
+No code 111 (branch), 123 (self-switch set), 201 (warp), or non-STRIP script
+calls. Multiple 117 calls per page are fine — emit one `call` per occurrence.
+
+### Output
+
+```
+script Map{m:03d}_{name}_Page1 {
+    lock
+    faceplayer
+    msgbox("...")          ← if any dialogue precedes the call
+    call CommonEvent_005
+    release
+    end
+}
+```
+
+Extract the common event ID from code-117 parameters: `parameters[0]` is the
+integer common event ID. Format as `CommonEvent_{id:03d}`.
+
+Include `lock`/`faceplayer`/`release` only if codes 5/6/7 are present. Text
+blocks (101/401) before or after the call are emitted as `msgbox` in order.
+
+### Edge cases
+
+- A page with **only** a call and no dialogue: emit `call CommonEvent_NNN` +
+  `end`, no lock/release.
+- Multiple `call` commands in one page: emit them in order.
+- Code 117 with id 0 → fall through (invalid common event reference).
+
+### Tests
+
+1. Single call, no dialogue → `call CommonEvent_NNN` only
+2. Dialogue before the call → `msgbox` then `call`
+3. Multiple calls in one page → emitted in order
+4. Code 117 id=0 → returns None
+5. Event with code 111 → returns None
+6. Output compiles through poryscript
+
+---
+
+## 6. Classifier 3 — Self-Switch Dialogue
+
+**Count: 67 events (1.9%)**
+
+### What these are
+
+Events that are essentially pure dialogue but also set a self-switch (code
+123) — the classic "say something once, never repeat" pattern without a branch
+to check the condition first. The self-switch flip is the only non-dialogue
+content. Page-switching dispatch (which page runs based on the self-switch
+state) is Phase-5 work; the handler only emits what each page does.
+
+### Detection
+
+An event qualifies if **every page** passes this check:
+
+- Every command code is in `{0, 5, 6, 7, 101, 401, 123}`, OR
+- The command is code 355/655 matching `_DIALOGUE_STRIP_RE`
+
+No code 111 (branch), 201 (warp), or non-STRIP script calls.
+
+### Parsing the self-switch set
+
+Code 123 parameters: `[letter, value]` where letter is `"A"`/`"B"`/`"C"`/`"D"`
+and value is `0` (on) or `1` (off). Map to:
+- value 0 (turn on) → `setflag(FLAG_MAP{m:03d}_EVENT{e:03d}_SS{letter})`
+- value 1 (turn off) → `clearflag(FLAG_MAP{m:03d}_EVENT{e:03d}_SS{letter})`
+
+The flag name matches what `flag_registry.self_switch_flag_name` produces —
+critical for `_mint_event_switches` and memo reuse to work correctly.
+
+### Output
+
+```
+script Map{m:03d}_{name}_Page1 {
+    lock
+    faceplayer
+    msgbox("...")
+    setflag(FLAG_MAP{m:03d}_EVENT{e:03d}_SSA)
+    release
+    end
+}
+
+script Map{m:03d}_{name}_Page2 {
+    lock
+    faceplayer
+    msgbox("...")
+    release
+    end
+}
+```
+
+Emit `setflag`/`clearflag` inline in the script in the position the code-123
+command appears relative to any text blocks on the same page.
+
+### Edge cases
+
+- A page with **only** a self-switch set and no dialogue: emit just
+  `setflag(...)`/`clearflag(...)` + `end`.
+- Multiple self-switch sets on one page: emit each in order.
+- Self-switch letter other than A (B/C/D): supported — the flag name uses the
+  correct letter; `_mint_event_switches` already handles all letters.
+
+### Tests
+
+1. Single-page event with text + `123 ["A", 0]` → `msgbox` + `setflag`
+2. Self-switch turn off (`123 ["A", 1]`) → `clearflag`
+3. Self-switch letter B → `FLAG_..._SSB`
+4. Page with only self-switch set, no text → `setflag` + `end`
+5. Event with code 111 → returns None
+6. Flag name matches `flag_registry.self_switch_flag_name(map_id, event_id, "A")`
+7. Output compiles through poryscript
+
+---
+
+## 7. Classifier 4 — Simple Warp
 
 **Count: 317 events (8.9%)**
 
@@ -279,7 +443,7 @@ doormat warps won't have them.
 
 ---
 
-## 6. Classifier 3 — Item Ball
+## 8. Classifier 5 — Item Ball
 
 **Count: 45 events (1.3%)**
 
@@ -350,7 +514,7 @@ correctly.
 
 ---
 
-## 7. Classifier 4 — Trainer Battle
+## 9. Classifier 6 — Trainer Battle
 
 **Count: 299 events (8.3%), ~250 realistic clean matches**
 
@@ -474,9 +638,9 @@ pokeemerald macro signature before emitting.
 
 ---
 
-## 8. Integration and acceptance
+## 10. Integration and acceptance
 
-After all four classifiers are implemented:
+After all six classifiers are implemented:
 
 1. Add a `--dry-run` count to `convert-map` or write a script
    `scripts/count_deterministic_actual.py` that runs `_try_deterministic`
@@ -490,16 +654,17 @@ After all four classifiers are implemented:
    deterministic path must not break any existing test.
 
 4. Re-run `calibrate_map002.sh` to confirm Map002 output is equivalent —
-   Map002 has simple-warp events (EV002/EV008) and pure-dialogue events that
-   should now be handled deterministically. Verify the `.pory` file is
-   functionally identical to the gate-approved run.
+   Map002 has simple-warp events (EV002/EV008), pure-dialogue events, and
+   call-common-event events (EV009/EV010/EV012) that should now all be handled
+   deterministically. Verify the `.pory` file is functionally identical to the
+   gate-approved run.
 
 5. Present the final deterministic match counts to the user before starting
    the bulk `phase4 --run`.
 
 ---
 
-## 9. What this does NOT cover
+## 11. What this does NOT cover
 
 These patterns are explicitly out of scope for deterministic handling and
 remain in the Opus path:
