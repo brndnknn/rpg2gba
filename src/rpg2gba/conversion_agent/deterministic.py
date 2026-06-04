@@ -284,6 +284,31 @@ def classify_call_common_event(
     return "\n\n".join(blocks)
 
 
+# -- Classifier 3: Self-Switch Dialogue (plan §6) -----------------------------
+
+
+def classify_self_switch_dialogue(
+    map_id: int, event: dict, ctx: "Context | None" = None
+) -> str | None:
+    """A talk NPC that is pure dialogue plus a self-switch set (code 123), no
+    conditional branch. Claims only events that actually set a self-switch —
+    pure-dialogue events stay with Classifier 1."""
+    if not _all_pages_action_button(event):
+        return None
+    saw_switch = False
+    blocks: list[str] = []
+    for i, page in enumerate(event.get("pages", []), start=1):
+        body = _dialogue_body(page, map_id=map_id, event_id=event["id"], allow_self_switch=True)
+        if body is None:
+            return None
+        if any(line.startswith(("setflag(", "clearflag(")) for line in body):
+            saw_switch = True
+        blocks.append(_talk_block(_page_label(map_id, event, i), body))
+    if not saw_switch:
+        return None
+    return "\n\n".join(blocks)
+
+
 # -- context + dispatcher -----------------------------------------------------
 
 
@@ -316,6 +341,7 @@ def load_context(*, reference_dir: Path, intermediate_dir: Path) -> Context:
 _CLASSIFIERS: list[Callable[[int, dict, "Context | None"], str | None]] = [
     classify_pure_dialogue,
     classify_call_common_event,  # Classifier 2
+    classify_self_switch_dialogue,  # Classifier 3
 ]
 
 

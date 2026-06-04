@@ -35,7 +35,10 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] Classifier 2 — Call Common Event (§5) · target 52 · **actual: 50** (all
   compile clean; `_dialogue_body(allow_call=True)` already existed — Classifier 2
   is a `saw_call`-guarded twin of Classifier 1; no unprescribed-content bucket)
-- [ ] Classifier 3 — Self-Switch Dialogue (§6) · target 67 · actual: ___
+- [x] Classifier 3 — Self-Switch Dialogue (§6) · target 67 · **actual: 58** (all
+  compile clean; `_dialogue_body(allow_self_switch=True)` already existed —
+  `saw_switch`-guarded twin; flag names agree with `_mint_event_switches` by
+  construction; no unprescribed-content bucket)
 - [ ] Classifier 4 — Simple Warp (§7) · target 317 · actual: ___
 - [ ] Classifier 5 — Item Ball (§8) · target 45 · actual: ___
 - [ ] Classifier 6 — Trainer Battle (§9) · target ~250 · actual: ___

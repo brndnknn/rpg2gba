@@ -15,6 +15,7 @@ import pytest
 
 from rpg2gba.conversion_agent import deterministic as D
 from rpg2gba.conversion_agent import poryscript
+from rpg2gba.conversion_agent.flag_registry import self_switch_flag_name
 
 # ----------------------------------------------------------------------------
 # event/page builders
@@ -322,6 +323,140 @@ def test_cc_output_compiles() -> None:
         name="guide",
     )
     out = D.classify_call_common_event(4, ev)
+    assert out is not None
+    result = poryscript.compile_script(out)
+    assert result.ok, result.stderr
+
+
+# ----------------------------------------------------------------------------
+# Classifier 3 — Self-Switch Dialogue (plan §6)
+# ----------------------------------------------------------------------------
+
+
+def test_ss_text_then_setflag() -> None:
+    """Text followed by self-switch set → claimed; msgbox before setflag."""
+    ev = _event(
+        _page(_text("Once only."), _cmd(D.CONTROL_SELF_SWITCH, "A", 0)),
+        id=3,
+        name="npc",
+    )
+    out = D.classify_self_switch_dialogue(1, ev)
+    assert out is not None
+    assert 'msgbox("Once only.")' in out
+    assert "setflag(FLAG_MAP001_EVENT003_SSA)" in out
+    assert out.index('msgbox("Once only.")') < out.index("setflag(FLAG_MAP001_EVENT003_SSA)")
+    assert "script Map001_npc_Page1 {" in out
+
+
+def test_ss_turn_off_is_clearflag() -> None:
+    """Self-switch value 1 → clearflag, not setflag."""
+    ev = _event(
+        _page(_text("Cleared."), _cmd(D.CONTROL_SELF_SWITCH, "A", 1)),
+        id=3,
+    )
+    out = D.classify_self_switch_dialogue(1, ev)
+    assert out is not None
+    assert "clearflag(" in out
+    assert "setflag(" not in out
+
+
+def test_ss_letter_b() -> None:
+    """Letter B → flag name ends with _SSB."""
+    ev = _event(
+        _page(_text("B switch."), _cmd(D.CONTROL_SELF_SWITCH, "B", 0)),
+        id=3,
+    )
+    out = D.classify_self_switch_dialogue(1, ev)
+    assert out is not None
+    assert "_SSB)" in out
+
+
+def test_ss_switch_only_no_text() -> None:
+    """Page with only a self-switch (no text) → setflag present; no msgbox; talk wrapper emitted."""
+    ev = _event(
+        _page(_cmd(D.CONTROL_SELF_SWITCH, "A", 0)),
+        id=3,
+    )
+    out = D.classify_self_switch_dialogue(1, ev)
+    assert out is not None
+    assert "setflag(" in out
+    assert "msgbox(" not in out
+    assert "lock" in out
+    assert "faceplayer" in out
+    assert "release" in out
+    assert "end" in out
+
+
+def test_ss_branch_returns_none() -> None:
+    """Conditional branch alongside a self-switch → None."""
+    ev = _event(
+        _page(
+            _text("Choose."),
+            _cmd(D.CONTROL_SELF_SWITCH, "A", 0),
+            _cmd(D.CONDITIONAL_BRANCH, 12, "x"),
+        ),
+        id=3,
+    )
+    assert D.classify_self_switch_dialogue(1, ev) is None
+
+
+def test_ss_call_returns_none() -> None:
+    """Call Common Event alongside a self-switch → None (Classifier 3 does not allow calls)."""
+    ev = _event(
+        _page(_cmd(D.CONTROL_SELF_SWITCH, "A", 0), _cmd(D.CALL_COMMON_EVENT, 5)),
+        id=3,
+    )
+    assert D.classify_self_switch_dialogue(1, ev) is None
+
+
+def test_ss_pure_dialogue_no_switch_returns_none() -> None:
+    """Page with only text and no self-switch → Classifier 3 declines."""
+    ev = _event(_page(_text("Just talking.")), id=3)
+    assert D.classify_self_switch_dialogue(1, ev) is None
+
+
+def test_ss_flag_name_agreement() -> None:
+    """Emitted flag name matches what the flag_registry produces for (map, event, letter)."""
+    ev = _event(
+        _page(_text("Hello."), _cmd(D.CONTROL_SELF_SWITCH, "A", 0)),
+        id=4,
+        name="npc",
+    )
+    out = D.classify_self_switch_dialogue(7, ev)
+    assert out is not None
+    expected = f"setflag({self_switch_flag_name(7, 4, 'A')})"
+    assert expected in out
+
+
+def test_ss_multi_page() -> None:
+    """Two pages each emits its own labeled script block."""
+    ev = _event(
+        _page(_text("First visit."), _cmd(D.CONTROL_SELF_SWITCH, "A", 0)),
+        _page(_text("Already done.")),
+        id=1,
+        name="guard",
+    )
+    out = D.classify_self_switch_dialogue(5, ev)
+    assert out is not None
+    assert "script Map005_guard_Page1 {" in out
+    assert "script Map005_guard_Page2 {" in out
+    assert out.count("script Map005_guard_Page") == 2
+
+
+@pytest.mark.phase4
+@pytest.mark.skipif(not poryscript.is_available(), reason="poryscript binary not installed")
+def test_ss_output_compiles() -> None:
+    """A representative self-switch event output compiles through poryscript."""
+    ev = _event(
+        _page(
+            _cmd(D.SCRIPT, "pbCallBub(2)"),
+            _text("First time only!"),
+            _cmd(D.CONTROL_SELF_SWITCH, "A", 0),
+        ),
+        id=2,
+        name="giver",
+    )
+    out = D.classify_self_switch_dialogue(4, ev)
     assert out is not None
     result = poryscript.compile_script(out)
     assert result.ok, result.stderr
