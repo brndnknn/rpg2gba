@@ -214,6 +214,120 @@ def test_decorative_page_then_text_page() -> None:
 
 
 # ----------------------------------------------------------------------------
+# Classifier 2 — Call Common Event (plan §5)
+# ----------------------------------------------------------------------------
+
+
+def test_cc_single_call_no_dialogue() -> None:
+    """One page with only a CE call → claimed; block has lock/faceplayer/release/end."""
+    ev = _event(_page(_cmd(D.CALL_COMMON_EVENT, 5)), id=1, name="npc")
+    out = D.classify_call_common_event(1, ev)
+    assert out is not None
+    assert out.count("call CommonEvent_005") == 1
+    assert "msgbox(" not in out
+    assert "lock" in out
+    assert "faceplayer" in out
+    assert "release" in out
+    assert "end" in out
+    assert "script Map001_npc_Page1 {" in out
+
+
+def test_cc_dialogue_before_call() -> None:
+    """Text before a CE call → msgbox appears before call in output."""
+    ev = _event(_page(_text("Hi there."), _cmd(D.CALL_COMMON_EVENT, 12)), id=1)
+    out = D.classify_call_common_event(1, ev)
+    assert out is not None
+    assert 'msgbox("Hi there.")' in out
+    assert "call CommonEvent_012" in out
+    assert out.index('msgbox("Hi there.")') < out.index("call CommonEvent_012")
+
+
+def test_cc_multiple_calls_in_order() -> None:
+    """Multiple CE calls on one page preserve source order."""
+    ev = _event(
+        _page(_cmd(D.CALL_COMMON_EVENT, 3), _cmd(D.CALL_COMMON_EVENT, 7)), id=1
+    )
+    out = D.classify_call_common_event(1, ev)
+    assert out is not None
+    assert "call CommonEvent_003" in out
+    assert "call CommonEvent_007" in out
+    assert out.index("call CommonEvent_003") < out.index("call CommonEvent_007")
+
+
+def test_cc_call_id_zero_returns_none() -> None:
+    """CE id of 0 is invalid → None."""
+    ev = _event(_page(_cmd(D.CALL_COMMON_EVENT, 0)), id=1)
+    assert D.classify_call_common_event(1, ev) is None
+
+
+def test_cc_branch_returns_none() -> None:
+    """A conditional branch alongside a call → None."""
+    ev = _event(
+        _page(_cmd(D.CALL_COMMON_EVENT, 5), _cmd(D.CONDITIONAL_BRANCH, 12, "x")), id=1
+    )
+    assert D.classify_call_common_event(1, ev) is None
+
+
+def test_cc_self_switch_returns_none() -> None:
+    """A self-switch alongside a call → None (belongs to Classifier 3)."""
+    ev = _event(
+        _page(_cmd(D.CALL_COMMON_EVENT, 5), _cmd(D.CONTROL_SELF_SWITCH, "A", 0)), id=1
+    )
+    assert D.classify_call_common_event(1, ev) is None
+
+
+def test_cc_pure_dialogue_no_call_returns_none() -> None:
+    """Page with only text and no CE call → Classifier 2 declines."""
+    ev = _event(_page(_text("Just talking.")), id=1)
+    assert D.classify_call_common_event(1, ev) is None
+
+
+def test_cc_strip_script_call_preserved() -> None:
+    """STRIP script call is silently dropped; CE call survives in output."""
+    ev = _event(
+        _page(_cmd(D.SCRIPT, "pbCallBub(2)"), _cmd(D.CALL_COMMON_EVENT, 9)), id=1
+    )
+    out = D.classify_call_common_event(1, ev)
+    assert out is not None
+    assert "call CommonEvent_009" in out
+    assert "pbCallBub" not in out
+
+
+def test_cc_multi_page_one_block_each() -> None:
+    """Two pages each with a CE call → two labeled script blocks."""
+    ev = _event(
+        _page(_cmd(D.CALL_COMMON_EVENT, 1)),
+        _page(_cmd(D.CALL_COMMON_EVENT, 2)),
+        id=3,
+        name="helper",
+    )
+    out = D.classify_call_common_event(5, ev)
+    assert out is not None
+    assert "script Map005_helper_Page1 {" in out
+    assert "script Map005_helper_Page2 {" in out
+    assert out.count("script Map005_helper_Page") == 2
+
+
+@pytest.mark.phase4
+@pytest.mark.skipif(not poryscript.is_available(), reason="poryscript binary not installed")
+def test_cc_output_compiles() -> None:
+    """A representative CE-call event output compiles through poryscript."""
+    ev = _event(
+        _page(
+            _cmd(D.SCRIPT, "pbCallBub(2)"),
+            _text("Off we go!"),
+            _cmd(D.CALL_COMMON_EVENT, 7),
+        ),
+        id=2,
+        name="guide",
+    )
+    out = D.classify_call_common_event(4, ev)
+    assert out is not None
+    result = poryscript.compile_script(out)
+    assert result.ok, result.stderr
+
+
+# ----------------------------------------------------------------------------
 # dispatcher
 # ----------------------------------------------------------------------------
 

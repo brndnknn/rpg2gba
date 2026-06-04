@@ -32,7 +32,9 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 ### Classifiers (build in order; test + corpus-count each before the next)
 - [x] Classifier 1 — Pure Dialogue (§4) · target ~620 · **actual: 372** (all
   compile clean; see §12 for why 372 not ~620 and the deferred `\sign` bucket)
-- [ ] Classifier 2 — Call Common Event (§5) · target 52 · actual: ___
+- [x] Classifier 2 — Call Common Event (§5) · target 52 · **actual: 50** (all
+  compile clean; `_dialogue_body(allow_call=True)` already existed — Classifier 2
+  is a `saw_call`-guarded twin of Classifier 1; no unprescribed-content bucket)
 - [ ] Classifier 3 — Self-Switch Dialogue (§6) · target 67 · actual: ___
 - [ ] Classifier 4 — Simple Warp (§7) · target 317 · actual: ___
 - [ ] Classifier 5 — Item Ball (§8) · target 45 · actual: ___

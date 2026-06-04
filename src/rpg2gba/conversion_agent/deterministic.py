@@ -259,6 +259,31 @@ def classify_pure_dialogue(map_id: int, event: dict, ctx: "Context | None" = Non
     return "\n\n".join(blocks)
 
 
+# -- Classifier 2: Call Common Event (plan §5) --------------------------------
+
+
+def classify_call_common_event(
+    map_id: int, event: dict, ctx: "Context | None" = None
+) -> str | None:
+    """A talk NPC that delegates to a common event (code 117), with only
+    dialogue + STRIP script calls alongside. Claims only events that actually
+    contain a call — pure-dialogue events stay with Classifier 1."""
+    if not _all_pages_action_button(event):
+        return None
+    saw_call = False
+    blocks: list[str] = []
+    for i, page in enumerate(event.get("pages", []), start=1):
+        body = _dialogue_body(page, map_id=map_id, event_id=event["id"], allow_call=True)
+        if body is None:
+            return None
+        if any(line.startswith("call CommonEvent_") for line in body):
+            saw_call = True
+        blocks.append(_talk_block(_page_label(map_id, event, i), body))
+    if not saw_call:
+        return None
+    return "\n\n".join(blocks)
+
+
 # -- context + dispatcher -----------------------------------------------------
 
 
@@ -290,6 +315,7 @@ def load_context(*, reference_dir: Path, intermediate_dir: Path) -> Context:
 # not occur, but order still matters for events a looser classifier could claim.
 _CLASSIFIERS: list[Callable[[int, dict, "Context | None"], str | None]] = [
     classify_pure_dialogue,
+    classify_call_common_event,  # Classifier 2
 ]
 
 
