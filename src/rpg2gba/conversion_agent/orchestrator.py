@@ -28,7 +28,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from rpg2gba.conversion_agent import poryscript, prompt_builder
+from rpg2gba.conversion_agent import deterministic, poryscript, prompt_builder
 from rpg2gba.conversion_agent.backends import ConversionBackend, ConversionResult
 from rpg2gba.conversion_agent.flag_registry import (
     FlagRegistry,
@@ -81,6 +81,12 @@ class Orchestrator:
         # rides in the backend's system prompt (dedup Phase B) — composed once in
         # pipeline._phase4_backend — so it is not loaded or assembled here.
         self._command_ref = prompt_builder.load_command_reference(reference_dir)
+        # Deterministic pre-filter lookup tables (item-ball / trainer classifiers).
+        # Empty if the Phase-2 intermediates aren't present — those classifiers then
+        # simply fall through; the dialogue/warp classifiers need no data.
+        self._det_context = deterministic.load_context(
+            reference_dir=Path(reference_dir), intermediate_dir=self.output_dir / "intermediate"
+        )
         # Event memo (dedup C): structurally identical events reuse a prior conversion
         # instead of re-spawning. Persisted + fingerprinted by the system prompt so it
         # survives across runs but is discarded if the prompt changed.
@@ -226,6 +232,13 @@ class Orchestrator:
         payload = {"map_id": map_id, **event}
         ctx = self._event_ctx(map_id, event)
 
+        # Deterministic pre-filter (PHASE4_DETERMINISTIC_PLAN): fully-mechanical events
+        # are translated by lookup, not by an LLM spawn. Fail-safe — a non-match or a
+        # compile-gate failure returns None and falls through to the memo/LLM path below.
+        det = self._try_deterministic(map_id, event, ctx)
+        if det is not None:
+            return det
+
         # Memo (dedup C): if a structurally identical event was already converted, reuse
         # its script instead of spawning. Any doubt (stale-token guard or compile-gate
         # failure) falls through to a real spawn below — the memo never relaxes a check.
@@ -248,6 +261,33 @@ class Orchestrator:
         self._store_memo(key, map_id, event, result)
         logger.info("ev%s accepted:\n%s", event.get("id"), result.script)
         return result.script
+
+    def _try_deterministic(self, map_id: int, event: dict, ctx: dict) -> str | None:
+        """Translate a fully-mechanical event without an LLM spawn; None to fall through.
+
+        Mirrors the accept path of ``_convert_event``: the candidate must pass the
+        compile-gate and the self/temp-switch mint, exactly as an LLM result would, so
+        a deterministic miss is indistinguishable downstream from an LLM conversion.
+        Any failure returns None and the caller proceeds to the memo/LLM path."""
+        script = deterministic.try_deterministic(map_id, event, self._det_context)
+        if script is None:
+            return None
+        if not self.compile_fn(script).ok:
+            logger.debug(
+                "ev%s deterministic output failed compile-gate — falling through",
+                event.get("id"),
+            )
+            return None
+        if not self._mint_event_switches(map_id, event, ctx):
+            return None
+        self._store_memo(
+            _memo_key({"map_id": map_id, **event}),
+            map_id,
+            event,
+            ConversionResult(script=script),
+        )
+        logger.info("ev%s deterministic:\n%s", event.get("id"), script)
+        return script
 
     def _convert_common_event(self, payload: dict) -> str | None:
         """Convert one common event (already adapted to page-shape); None if queued.

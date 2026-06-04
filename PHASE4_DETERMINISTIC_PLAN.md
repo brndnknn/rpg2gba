@@ -9,6 +9,43 @@ structural translation of data that is already fully present in the event JSON.
 between each one. Do not start the next classifier until the current one has
 passing tests and a verified count on the real corpus.
 
+**Session decisions (2026-06-04):** stop before any budget-gated run — build +
+test all six classifiers, run only the no-budget acceptance checks (§10 steps
+1–3), do the budget-free part of the Map002 comparison, present match counts,
+and **stop before the Opus Map002 re-run (§10 step 4 full) and the bulk run.**
+Work proceeds on a feature branch with **one commit per classifier** once its
+tests pass.
+
+---
+
+## 0. Progress Tracker
+
+Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
+
+### Shared scaffolding (§3, §2)
+- [x] text-block extraction helper — landed as `_dialogue_body` (walks the page,
+  collapses 101+401 runs into `msgbox`, interleaves 117/123) rather than the
+  plan's standalone `_extract_text_blocks`
+- [x] `format_pory_string` helper
+- [x] `_try_deterministic` dispatch wired into `_convert_event`
+
+### Classifiers (build in order; test + corpus-count each before the next)
+- [x] Classifier 1 — Pure Dialogue (§4) · target ~620 · **actual: 372** (all
+  compile clean; see §12 for why 372 not ~620 and the deferred `\sign` bucket)
+- [ ] Classifier 2 — Call Common Event (§5) · target 52 · actual: ___
+- [ ] Classifier 3 — Self-Switch Dialogue (§6) · target 67 · actual: ___
+- [ ] Classifier 4 — Simple Warp (§7) · target 317 · actual: ___
+- [ ] Classifier 5 — Item Ball (§8) · target 45 · actual: ___
+- [ ] Classifier 6 — Trainer Battle (§9) · target ~250 · actual: ___
+
+### Acceptance — no-budget only this session (§10)
+- [ ] `scripts/count_deterministic_actual.py` full-corpus count (§10.1)
+- [ ] `phase4 --clean` dry counts still 8/5/34/199 (§10.2)
+- [ ] full pytest incl. phase4 marker green (§10.3)
+- [ ] budget-free part of Map002 comparison (§10.4)
+- [ ] present final match counts to user (§10.5)
+- [ ] DEFERRED (budget-gated, NOT this session): calibrate_map002.sh Opus re-run (§10.4 full) + bulk `phase4 --run`
+
 ---
 
 ## 1. Background
@@ -681,3 +718,45 @@ remain in the Opus path:
 The goal is not to eliminate the LLM. It is to avoid spending Opus budget on
 events where the output is fully determined by a direct structural read of the
 input data.
+
+---
+
+## 12. Deferred deterministic candidates — validate against Opus at the end
+
+Classifier 1's real numbers (measured 2026-06-04, `count_deterministic_actual.py`
++ the throwaway `_tmp_dropcause.py` per-event attribution):
+
+| Stage | Events |
+|---|---|
+| pass the code filter | 458 (the plan's ~620 was optimistic; **458 is the real max**) |
+| − non-trigger-0 (autorun) page | −7 → 451 |
+| − dialogue control codes | −94 → **357** baseline |
+| + `\PN` → `{PLAYER}` (prescribed by `system.md`) | +15 → **372 claimed** |
+
+The 94 control-code drops attribute almost entirely to **two** codes:
+
+- **`\PN` (16 events)** — player name. `system.md` prescribes `\PN` → `{PLAYER}`
+  verbatim, so this is now handled deterministically (`_TEXT_SUBS`). 15 of the 16
+  recovered (the 16th also carries `\.`).
+- **`\sign[id]TEXT` (70 events)** — sign-window message, e.g.
+  `\sign[sign1]Comet Cave, Rochfale City right ahead.`. **DEFERRED — do not claim
+  yet.** It *looks* like `msgbox(TEXT, MSGBOX_SIGN)` (that compiles), but
+  `system.md` says **nothing** about signs, so `MSGBOX_SIGN` is our inference, not
+  a frozen-prompt spec — claiming it deterministically would be an unprescribed
+  content decision on frozen territory. The remaining tail is `\.` (pause, 6) and
+  one-off `\wt`/`\[`/`\N…`.
+
+**The bucket to test at the end (after all six classifiers are built, before the
+bulk run):** observe what frozen-Opus actually emits for a `\sign` event (one
+spawn, budget-gated — fold into the Map002 re-run or a single sign-event check).
+If Opus consistently produces `msgbox(…, MSGBOX_SIGN)`, that is evidence the idiom
+is both deterministic and prompt-faithful, and `\sign` can be added to `_TEXT_SUBS`
+the same way `\PN` was (~10 lines + tests + re-count) — **but only worth doing
+pre-bulk-run**, since the pre-filter saves a spawn only if it claims the event
+before Opus does. Suspicion (per the user): this "compiles-but-unprescribed"
+pattern will recur in later classifiers (warp/item/trainer placeholders), so keep
+a running list here as each classifier surfaces one, and validate them together at
+the end against a small observed-Opus sample rather than guessing per-classifier.
+
+**Running deferred-candidate list:**
+- `\sign[..]` sign-window dialogue → likely `msgbox(…, MSGBOX_SIGN)` (70 events)
