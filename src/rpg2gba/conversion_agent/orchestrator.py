@@ -110,6 +110,8 @@ class Orchestrator:
 
         m = json.loads(map_json_path.read_text(encoding="utf-8"))
         map_id = m["map_id"]
+        n_events = len(m["events"])
+        logger.info("=== %s: starting (%d events) ===", stem, n_events)
         self.scripts_dir.mkdir(parents=True, exist_ok=True)
         out_pory = self.scripts_dir / f"{stem}.pory"
         out_pory.write_text("", encoding="utf-8")  # exists even if every event is skipped
@@ -234,6 +236,9 @@ class Orchestrator:
             if reused is not None:
                 return reused
 
+        logger.info(
+            "--- ev%s (%s): converting ---", event.get("id"), event.get("name", "")
+        )
         result = self._convert(payload, ctx)
         if result is None:
             return None
@@ -241,6 +246,7 @@ class Orchestrator:
             return None
         self._log_unhandled(ctx, result.unhandled)
         self._store_memo(key, map_id, event, result)
+        logger.info("ev%s accepted:\n%s", event.get("id"), result.script)
         return result.script
 
     def _convert_common_event(self, payload: dict) -> str | None:
@@ -305,7 +311,13 @@ class Orchestrator:
         if not self._mint_event_switches(map_id, event, ctx):
             return None
         self._log_unhandled(ctx, entry.unhandled)
-        logger.debug("memo hit: reused %s ev%s for %s", entry.src_map, entry.src_event, ctx)
+        logger.info(
+            "ev%s memo hit (reused map%s ev%s):\n%s",
+            event.get("id"),
+            entry.src_map,
+            entry.src_event,
+            script,
+        )
         return script
 
     @staticmethod
@@ -454,6 +466,7 @@ class Orchestrator:
         entry = {**ctx, "reason": reason}
         if extra:
             entry.update(extra)
+        logger.info("QUEUED %s — %s", ctx, reason)
         self.unhandled_path.parent.mkdir(parents=True, exist_ok=True)
         with self.unhandled_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
