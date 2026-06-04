@@ -310,9 +310,20 @@ class Orchestrator:
 
     @staticmethod
     def _reinstantiate(entry: MemoEntry, cur_map: int, event: dict) -> str | None:
-        """Rewrite the source event's deterministic self/temp-switch flag names to the
-        current map/event. Returns the rewritten script, or None if any source-event
-        identity token survives the rewrite (stale-token guard → caller re-spawns)."""
+        """Rewrite the source event's map/event-derived tokens to the current map/event.
+
+        Two token families carry the source identity: the deterministic self/temp-switch
+        flag names (``FLAG_MAP{m}_EVENT{e}_SS*``/``_TS*``), and the script-block **labels**
+        (``script Map{m}_<name>_Page<n>``). The memo key keeps the event name, so the
+        ``<name>_Page<n>`` part is identical between source and reuse — only the ``Map{NNN}_``
+        label prefix and the flag names differ. Both are rewritten here; the flag-name and
+        label rewrites don't collide (``FLAG_MAP…`` is upper-case, the label prefix ``Map…``
+        is mixed-case, so the case-sensitive replaces are disjoint).
+
+        Returns the rewritten script, or None if any source-identity token survives the
+        rewrite (stale-token guard → caller re-spawns). The label-prefix rewrite is
+        essential: poryscript validates each file in isolation, so a stale ``Map{src}_``
+        label compiles fine but collides / dangles at assembly when the maps are linked."""
         cur_event = int(event["id"])
         script = entry.script
         for letter in _event_self_switches(event):
@@ -323,6 +334,10 @@ class Orchestrator:
             script = script.replace(src, temp_switch_flag_name(cur_map, cur_event, k))
         if f"FLAG_MAP{entry.src_map:03d}_EVENT{entry.src_event:03d}_" in script:
             return None  # a source token the per-key rewrite missed — bail to a real spawn
+        if entry.src_map != cur_map:
+            script = script.replace(f"Map{entry.src_map:03d}_", f"Map{cur_map:03d}_")
+            if f"Map{entry.src_map:03d}_" in script:
+                return None  # a source-map label token survived — bail to a real spawn
         return script
 
     def _store_memo(self, key: str, map_id: int, event: dict, result: ConversionResult) -> None:

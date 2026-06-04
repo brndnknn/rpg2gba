@@ -480,8 +480,10 @@ _SS_EVENT = {
 
 
 def test_memo_cross_map_hit_rewrites_self_switch(tmp_path: Path) -> None:
-    # The source script references the source event's deterministic SS flag + "GOOD".
-    src_script = "script npc { setflag(FLAG_MAP010_EVENT007_SSA) GOOD }"
+    # The source script uses the real label convention (Map{m}_<name>_Page<n>) plus the
+    # source event's deterministic SS flag + "GOOD". On reuse BOTH the label prefix and the
+    # flag name must be rewritten to the current map.
+    src_script = "script Map010_npc_Page1 { setflag(FLAG_MAP010_EVENT007_SSA) GOOD }"
     backend = MockBackend([ConversionResult(script=src_script)])
     o = _orchestrator(tmp_path, backend)
     m10 = _write_map(tmp_path / "out" / "maps", 10, [dict(_SS_EVENT)])
@@ -493,12 +495,31 @@ def test_memo_cross_map_hit_rewrites_self_switch(tmp_path: Path) -> None:
     p10 = (tmp_path / "out" / "scripts" / "Map010.pory").read_text()
     p20 = (tmp_path / "out" / "scripts" / "Map020.pory").read_text()
     assert "FLAG_MAP010_EVENT007_SSA" in p10
-    assert "FLAG_MAP020_EVENT007_SSA" in p20  # rewritten to the current map
+    assert "FLAG_MAP020_EVENT007_SSA" in p20  # flag rewritten to the current map
     assert "FLAG_MAP010_EVENT007_SSA" not in p20
+    # The script-block label must also be rewritten — a stale Map010_ label compiles in
+    # isolation but collides / dangles at assembly when both maps are linked.
+    assert "Map020_npc_Page1" in p20
+    assert "Map010_" not in p20
     state = json.loads((tmp_path / "out" / "flag_state.json").read_text(encoding="utf-8"))
     # Both events' self-switches are minted (mints replay for the reused event).
     assert state["self_switches"]["10:7:A"] == "FLAG_MAP010_EVENT007_SSA"
     assert state["self_switches"]["20:7:A"] == "FLAG_MAP020_EVENT007_SSA"
+
+
+def test_memo_cross_map_hit_rewrites_label_without_switches(tmp_path: Path) -> None:
+    # The real bug the live confirmation caught: an event with NO self/temp switches (e.g.
+    # the pbPokeCenterPC stub) — its ONLY map-derived token is the Map{m}_ label prefix.
+    src_script = "script Map100_EV001_Page1 { GOOD }"
+    backend = MockBackend([ConversionResult(script=src_script)])
+    o = _orchestrator(tmp_path, backend)
+    o.convert_map(_write_map(tmp_path / "out" / "maps", 100, [dict(_EVENT)]))
+    o.convert_map(_write_map(tmp_path / "out" / "maps", 115, [dict(_EVENT)]))
+
+    assert backend.calls == 1  # map 115 is a memo hit -> no second spawn
+    p115 = (tmp_path / "out" / "scripts" / "Map115.pory").read_text()
+    assert "Map115_EV001_Page1" in p115  # label rewritten to the current map
+    assert "Map100_" not in p115  # no stale source-map label survives
 
 
 def test_memo_stale_token_falls_back_to_spawn(tmp_path: Path) -> None:
