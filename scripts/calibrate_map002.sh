@@ -36,7 +36,7 @@ rm -f "$OUT/checkpoints/Map115.done"
 
 echo "==> Running Map002 conversion (Opus, spends budget)..."
 echo "    Log: $LOG"
-python -m rpg2gba.pipeline convert-map --map-id 2 --model claude-opus-4-8 2>&1 | tee "$LOG"
+.venv/bin/python -m rpg2gba.pipeline convert-map --map-id 2 --model claude-opus-4-8 2>&1 | tee "$LOG"
 
 echo ""
 echo "==> Done. Results:"
