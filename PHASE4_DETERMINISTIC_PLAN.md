@@ -31,7 +31,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ### Classifiers (build in order; test + corpus-count each before the next)
 - [x] Classifier 1 — Pure Dialogue (§4) · target ~620 · **actual: 372** (all
-  compile clean; see §12 for why 372 not ~620 and the deferred `\sign` bucket)
+  compile clean; see §12 for why 372 not ~620 and the now-validated `\sign` bucket)
 - [x] Classifier 2 — Call Common Event (§5) · target 52 · **actual: 50** (all
   compile clean; `_dialogue_body(allow_call=True)` already existed — Classifier 2
   is a `saw_call`-guarded twin of Classifier 1; no unprescribed-content bucket)
@@ -64,6 +64,12 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   **verified** to compile (poryscript auto-generates the Text_ labels). `load_context`
   now loads `trainers.json` → `(class_const, name, party_id)→TRAINER_*` via the shared
   `to_constant`; no orchestrator/counter change.
+- [x] Classifier 7 — Sign Dialogue (§12) · target ~70 (validated GO) · sibling of
+  Classifier 1 gated on `_has_sign_prefix`. Reuses `_dialogue_body(strip_sign=True)`
+  to strip a leading `\sign[..]` and reject quote-bearing text; wraps in the new
+  no-faceplayer `_sign_block` (`lock`/…/`release`/`end`). Plain `msgbox`, no
+  `MSGBOX_SIGN` — byte-identical to the §12-validated frozen-Opus output. Registered
+  2nd in `_CLASSIFIERS` (no real overlap: C1–C3 reject `\sign`, sign rejects no-sign).
 
 ### Acceptance — no-budget only this session (§10)
 - [ ] `scripts/count_deterministic_actual.py` full-corpus count (§10.1)
@@ -766,24 +772,58 @@ The 94 control-code drops attribute almost entirely to **two** codes:
   verbatim, so this is now handled deterministically (`_TEXT_SUBS`). 15 of the 16
   recovered (the 16th also carries `\.`).
 - **`\sign[id]TEXT` (70 events)** — sign-window message, e.g.
-  `\sign[sign1]Comet Cave, Rochfale City right ahead.`. **DEFERRED — do not claim
-  yet.** It *looks* like `msgbox(TEXT, MSGBOX_SIGN)` (that compiles), but
-  `system.md` says **nothing** about signs, so `MSGBOX_SIGN` is our inference, not
-  a frozen-prompt spec — claiming it deterministically would be an unprescribed
-  content decision on frozen territory. The remaining tail is `\.` (pause, 6) and
-  one-off `\wt`/`\[`/`\N…`.
+  `\sign[sign1]Comet Cave, Rochfale City right ahead.`. **VALIDATED 2026-06-04 —
+  see below.** Our pre-validation inference was `msgbox(TEXT, MSGBOX_SIGN)`; the
+  observed frozen-Opus behavior is **different** (plain `msgbox`, no `MSGBOX_SIGN`).
+  The remaining tail is `\.` (pause, 6) and one-off `\wt`/`\[`/`\N…`.
 
-**The bucket to test at the end (after all six classifiers are built, before the
-bulk run):** observe what frozen-Opus actually emits for a `\sign` event (one
-spawn, budget-gated — fold into the Map002 re-run or a single sign-event check).
-If Opus consistently produces `msgbox(…, MSGBOX_SIGN)`, that is evidence the idiom
-is both deterministic and prompt-faithful, and `\sign` can be added to `_TEXT_SUBS`
-the same way `\PN` was (~10 lines + tests + re-count) — **but only worth doing
-pre-bulk-run**, since the pre-filter saves a spawn only if it claims the event
-before Opus does. Suspicion (per the user): this "compiles-but-unprescribed"
-pattern will recur in later classifiers (warp/item/trainer placeholders), so keep
-a running list here as each classifier surfaces one, and validate them together at
-the end against a small observed-Opus sample rather than guessing per-classifier.
+**VALIDATION RESULT (2026-06-04, 3 budget-gated Opus spawns).** Ran three clean
+single-`\sign` dialogue events through the real frozen pipeline
+(`claude-opus-4-8` + frozen `system.md`): Map132 EV045 (plain), Map040 EV061
+(`\n` line break), Map060 EV045 (wrapping `"…"` quotes + apostrophe). Opus was
+**consistent** and produced, for every one:
+
+```
+script Map132_Sign_Page1 {
+    lock
+    msgbox("Tunnel to Lanthanite Cave.")
+    release
+    end
+}
+```
+
+Key findings — the `MSGBOX_SIGN` inference was **wrong**, and validating instead
+of guessing prevented a silent 70-event error:
+
+1. **No `MSGBOX_SIGN`.** Opus emits a plain default-type `msgbox(...)`; it
+   **strips** the `\sign[id]` prefix entirely rather than mapping it to a sign
+   window. (Had we hard-coded `MSGBOX_SIGN`, all ~70 would render as sign-style
+   windows vs Opus's ordinary message boxes — distinguishable downstream, breaking
+   the pre-filter invariant.)
+2. **No `faceplayer`.** Opus emits bare `lock`/`release` — not Classifier 1's
+   `lock`/`faceplayer`/`release`. Correct: a signpost is not a person to turn
+   toward. So signs **cannot** simply route through Classifier 1's `_talk_block`;
+   they need a no-faceplayer wrapper.
+3. **Embedded-quote nuance (1 of 3 samples).** Map060's source wrapped its text in
+   literal `"…"`; Opus **dropped** the quotes. `format_pory_string` currently
+   *escapes* `"`→`\"` instead. With only one sample of this, the safe rule is to
+   **not claim** sign events whose text contains a `"` (let those few fall through
+   to Opus) rather than guess Opus's quote-dropping rule.
+
+**Disposition: faithful determinization is feasible but is a 7th classifier, not a
+`_TEXT_SUBS` one-liner.** A small dedicated `classify_sign_dialogue` (sibling to
+C1) that: detects a leading `\sign[..]`, strips it, reuses the dialogue body
+walker, wraps in a **no-faceplayer** `lock`/`release`/`end` block, and skips any
+text containing `"`. Output is then byte-identical to observed Opus. Reclaims
+~70 events (≈+2%: 934/26.1% → ~1,000/~28%). Only worth building pre-bulk-run
+(the pre-filter saves a spawn only if it claims before Opus). **BUILT 2026-06-05
+(Classifier 7).** Implemented exactly as dispositioned: `classify_sign_dialogue`
+reuses `_dialogue_body(strip_sign=True)` + new `_sign_block`; registered 2nd in
+`_CLASSIFIERS`; 10 unit tests + compile-gate green. Suspicion (per the user): this
+"compiles-but-unprescribed" pattern recurs in later classifiers
+(warp/item/trainer placeholders) — keep validating observed-Opus rather than
+guessing per-classifier.
 
 **Running deferred-candidate list:**
-- `\sign[..]` sign-window dialogue → likely `msgbox(…, MSGBOX_SIGN)` (70 events)
+- `\sign[..]` sign-window dialogue → **BUILT** (Classifier 7): plain `msgbox`, strip
+  prefix, no faceplayer, no `MSGBOX_SIGN` (~70 events)

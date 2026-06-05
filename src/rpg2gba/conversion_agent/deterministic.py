@@ -98,6 +98,9 @@ _TEXT_SUBS: tuple[tuple[re.Pattern[str], str], ...] = ((re.compile(r"\\PN"), "{P
 # before. The lookahead is case-sensitive: ``\p`` (paragraph) is safe.
 _UNSAFE_TEXT_RE = re.compile(r"\\(?![nlp])|[{}]")
 
+# Matches a leading \sign[...] control code anchored at the start of dialogue text.
+_SIGN_PREFIX_RE = re.compile(r"^\\sign\[[^\]]*\]")
+
 
 def _translate_text(text: str) -> str | None:
     """Apply the prescribed substitutions, or ``None`` if any unhandled code remains.
@@ -166,6 +169,13 @@ def _talk_block(label: str, body: list[str]) -> str:
     return _block(label, ["lock", "faceplayer", *body, "release", "end"])
 
 
+def _sign_block(label: str, body: list[str]) -> str:
+    """A signpost page: lock/release with no faceplayer (validated Opus output)."""
+    if not body:
+        return _block(label, ["end"])
+    return _block(label, ["lock", *body, "release", "end"])
+
+
 # -- dialogue-family page walker (classifiers 1–3) ----------------------------
 
 
@@ -176,6 +186,7 @@ def _dialogue_body(
     event_id: int,
     allow_call: bool = False,
     allow_self_switch: bool = False,
+    strip_sign: bool = False,
 ) -> list[str] | None:
     """Ordered body statements for a dialogue-family page, or ``None`` to bail.
 
@@ -196,6 +207,11 @@ def _dialogue_body(
         buf = []
         if not text:
             return
+        if strip_sign:
+            text = _SIGN_PREFIX_RE.sub("", text, count=1)
+            if '"' in text:
+                unsafe = True
+                return
         translated = _translate_text(text)
         if translated is None:
             unsafe = True
@@ -245,6 +261,18 @@ def _all_pages_action_button(event: dict) -> bool:
     return bool(pages) and all(pg.get("trigger") == ACTION_BUTTON_TRIGGER for pg in pages)
 
 
+def _has_sign_prefix(event: dict) -> bool:
+    """True if any page's Show-Text (101/401) run text contains a \\sign[ code."""
+    for page in event.get("pages", []):
+        for cmd in page.get("list", []):
+            if cmd.get("code") in (SHOW_TEXT, SHOW_TEXT_CONT):
+                params = cmd.get("parameters", [])
+                first = params[0] if params else ""
+                if isinstance(first, str) and "\\sign[" in first:
+                    return True
+    return False
+
+
 # -- Classifier 1: Pure Dialogue (plan §4) ------------------------------------
 
 
@@ -258,6 +286,29 @@ def classify_pure_dialogue(map_id: int, event: dict, ctx: "Context | None" = Non
         if body is None:
             return None
         blocks.append(_talk_block(_page_label(map_id, event, i), body))
+    return "\n\n".join(blocks)
+
+
+# -- Classifier 7: Sign Dialogue (plan §12) -----------------------------------
+
+
+def classify_sign_dialogue(map_id: int, event: dict, ctx: "Context | None" = None) -> str | None:
+    """A signpost: action-button dialogue whose text leads with \\sign[..].
+
+    Strips the prefix and emits a plain msgbox in a no-faceplayer lock/release
+    block (validated frozen-Opus output, plan §12 — no MSGBOX_SIGN, no faceplayer).
+    Claims only events that actually carry a \\sign code; text containing a quote
+    falls through to the LLM (Opus's quote-drop rule is unconfirmed)."""
+    if not _all_pages_action_button(event):
+        return None
+    if not _has_sign_prefix(event):
+        return None
+    blocks: list[str] = []
+    for i, page in enumerate(event.get("pages", []), start=1):
+        body = _dialogue_body(page, map_id=map_id, event_id=event["id"], strip_sign=True)
+        if body is None:
+            return None
+        blocks.append(_sign_block(_page_label(map_id, event, i), body))
     return "\n\n".join(blocks)
 
 
@@ -606,6 +657,7 @@ _CLASSIFIERS: list[
     Callable[[int, dict, "Context | None"], "str | DetResult | None"]
 ] = [
     classify_pure_dialogue,
+    classify_sign_dialogue,  # Classifier 7
     classify_call_common_event,  # Classifier 2
     classify_self_switch_dialogue,  # Classifier 3
     classify_simple_warp,  # Classifier 4

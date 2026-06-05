@@ -800,3 +800,137 @@ def test_load_context_empty_dir_yields_empty_trainers(tmp_path: Path) -> None:
     """Missing trainers.json → empty trainers dict (tolerant, no crash)."""
     ctx = D.load_context(reference_dir=tmp_path, intermediate_dir=tmp_path)
     assert ctx.trainers == {}
+
+
+# ----------------------------------------------------------------------------
+# Classifier 7 — Sign Dialogue (plan §12)
+# ----------------------------------------------------------------------------
+
+
+def test_sign_basic() -> None:
+    """Single page with \\sign prefix → lock/msgbox/release/end, no faceplayer, no MSGBOX_SIGN."""
+    ev = _event(
+        _page(_cmd(D.SHOW_TEXT, r"\sign[sign1]Tunnel to Lanthanite Cave.")),
+        id=1,
+        name="Sign",
+    )
+    out = D.classify_sign_dialogue(132, ev)
+    assert out is not None
+    assert 'msgbox("Tunnel to Lanthanite Cave.")' in out
+    assert "lock" in out
+    assert "release" in out
+    assert "end" in out
+    assert "faceplayer" not in out
+    assert "MSGBOX_SIGN" not in out
+    assert "script Map132_Sign_Page1 {" in out
+
+
+def test_sign_line_break_preserved() -> None:
+    """\\n inside sign text is safe and passes through verbatim."""
+    ev = _event(
+        _page(_cmd(D.SHOW_TEXT, r"\sign[s]Top\nBottom")),
+        id=2,
+        name="Sign",
+    )
+    out = D.classify_sign_dialogue(1, ev)
+    assert out is not None
+    assert r"Top\nBottom" in out
+
+
+def test_sign_multi_page() -> None:
+    """Two action-button pages both with \\sign → two script blocks."""
+    ev = _event(
+        _page(_cmd(D.SHOW_TEXT, r"\sign[s1]First line.")),
+        _page(_cmd(D.SHOW_TEXT, r"\sign[s2]Second line.")),
+        id=3,
+        name="DualSign",
+    )
+    out = D.classify_sign_dialogue(10, ev)
+    assert out is not None
+    assert "script Map010_DualSign_Page1 {" in out
+    assert "script Map010_DualSign_Page2 {" in out
+    assert out.count("script Map010_DualSign_Page") == 2
+    assert 'msgbox("First line.")' in out
+    assert 'msgbox("Second line.")' in out
+
+
+def test_sign_bail_on_embedded_quote() -> None:
+    """Embedded quote in sign text → None (Opus quote-drop rule unconfirmed)."""
+    ev = _event(
+        _page(_cmd(D.SHOW_TEXT, r'\sign[s]He said "hi"')),
+        id=4,
+        name="Sign",
+    )
+    assert D.classify_sign_dialogue(1, ev) is None
+
+
+def test_sign_bail_on_extra_essentials_code() -> None:
+    """Extra \\. code after sign prefix → None (unsafe code detected)."""
+    ev = _event(
+        _page(_cmd(D.SHOW_TEXT, r"\sign[s]Wait\. here")),
+        id=5,
+        name="Sign",
+    )
+    assert D.classify_sign_dialogue(1, ev) is None
+
+
+def test_sign_bail_no_sign_prefix() -> None:
+    """Plain-dialogue event without \\sign prefix → classify_sign_dialogue returns None."""
+    ev = _event(
+        _page(_cmd(D.SHOW_TEXT, "Just a plain NPC.")),
+        id=6,
+        name="npc",
+    )
+    assert D.classify_sign_dialogue(1, ev) is None
+
+
+def test_sign_bail_non_action_button_trigger() -> None:
+    """Autorun page (trigger=3) carrying a sign → None."""
+    ev = _event(
+        _page(_cmd(D.SHOW_TEXT, r"\sign[s]Autorun sign."), trigger=3),
+        id=7,
+        name="Sign",
+    )
+    assert D.classify_sign_dialogue(1, ev) is None
+
+
+def test_sign_no_regression_pure_dialogue() -> None:
+    """Pure-dialogue event still classified by classify_pure_dialogue unchanged."""
+    ev = _event(
+        _page(_cmd(D.SHOW_TEXT, "Hello there!")),
+        id=8,
+        name="npc",
+    )
+    out = D.classify_pure_dialogue(1, ev)
+    assert out is not None
+    assert 'msgbox("Hello there!")' in out
+    assert "faceplayer" in out
+    assert "lock" in out
+    assert "release" in out
+
+
+def test_sign_dispatch_no_faceplayer() -> None:
+    """try_deterministic on a sign event → DetResult with no faceplayer in script."""
+    ev = _event(
+        _page(_cmd(D.SHOW_TEXT, r"\sign[s]Cave entrance ahead.")),
+        id=9,
+        name="Sign",
+    )
+    result = D.try_deterministic(1, ev)
+    assert result is not None
+    assert "faceplayer" not in result.script
+
+
+@pytest.mark.phase4
+@pytest.mark.skipif(not poryscript.is_available(), reason="poryscript binary not installed")
+def test_sign_output_compiles() -> None:
+    """A representative sign-dialogue output compiles through poryscript."""
+    ev = _event(
+        _page(_cmd(D.SHOW_TEXT, r"\sign[sign1]Comet Cave, Rochfale City right ahead.")),
+        id=1,
+        name="Sign",
+    )
+    out = D.classify_sign_dialogue(132, ev)
+    assert out is not None
+    result = poryscript.compile_script(out)
+    assert result.ok, result.stderr
