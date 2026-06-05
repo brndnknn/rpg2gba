@@ -735,3 +735,29 @@ def test_orchestrator_skips_empty_event(tmp_path: Path) -> None:
     o.convert_map(map_file)
     assert backend.calls == 0  # no spawn for a command-less event
     assert (tmp_path / "out" / "scripts" / "Map005.pory").read_text() == ""
+
+
+def test_deterministic_warp_queues_unhandled(tmp_path: Path) -> None:
+    # A single-page doormat warp (code 201) is claimed by the deterministic pre-filter
+    # (Classifier 4 — no backend spawn) and its DetResult carries one unhandled entry so
+    # Phase 5 resolves the MAP_URANIUM_<N> placeholder. A non-keyed always-ok compiler is
+    # used because the warp output (no "GOOD" token) would fail _fake_compile.
+    warp = {
+        "id": 2, "name": "EV002", "x": 0, "y": 0,
+        "pages": [{"trigger": 1, "list": [{"code": 201, "parameters": [0, 60, 21, 20, 0, 1]}]}],
+    }
+    backend = MockBackend([ConversionResult(script="GOOD")])
+    o = orch.Orchestrator(
+        backend, FlagRegistry(), tmp_path / "out", reference_dir=REFERENCE,
+        compile_fn=lambda s: poryscript.CompileResult(ok=True, stdout="", stderr=""),
+    )
+    map_file = _write_map(tmp_path / "out" / "maps", 5, [warp])
+    o.convert_map(map_file)
+    assert backend.calls == 0  # deterministic — no spawn
+    pory = (tmp_path / "out" / "scripts" / "Map005.pory").read_text(encoding="utf-8")
+    assert "warp(MAP_URANIUM_60, 21, 20)" in pory
+    queue = (tmp_path / "out" / "unhandled.jsonl").read_text().splitlines()
+    entries = [json.loads(line) for line in queue]
+    assert len(entries) == 1
+    assert entries[0]["command_code"] == 201
+    assert "MAP_URANIUM_60" in entries[0]["description"]
