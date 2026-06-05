@@ -34,12 +34,14 @@ and the §9-gate-approved Map002 output:
 """
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from rpg2gba.conversion_agent.flag_registry import self_switch_flag_name
+from rpg2gba.pbs_converter._naming import to_constant
 
 # -- RMXP command codes (reference/rgss_event_commands.md) --------------------
 SHOW_TEXT = 101
@@ -376,6 +378,183 @@ def classify_simple_warp(
     return DetResult(script, [entry])
 
 
+# -- Classifier 6: Trainer Battle (plan §9) -----------------------------------
+
+# STRIP-classified trainer-scripting calls (in addition to _DIALOGUE_STRIP_RE).
+_TRAINER_STRIP_RE = re.compile(
+    r"^\s*(?:Kernel\.)?(?:pbTrainerIntro|pbNoticePlayer|pbTrainerEnd)\b"
+)
+
+_PAGE1_TRAINER_ALLOWED = {0, 5, 6, 7, 101, 401, 108, 408, 123, 355, 655, 111, 412}
+_PAGE2_TRAINER_ALLOWED = {0, 5, 6, 7, 101, 401, 355, 655}
+
+
+def _is_trainer_strip(p: object) -> bool:
+    """True if a Script (355/655) parameter is a STRIP call in the trainer context."""
+    return isinstance(p, str) and (
+        bool(_DIALOGUE_STRIP_RE.match(p)) or bool(_TRAINER_STRIP_RE.match(p))
+    )
+
+
+def classify_trainer_battle(
+    map_id: int, event: dict, ctx: "Context | None" = None
+) -> str | None:
+    """A route trainer event: exactly 2 pages, single pbTrainerBattle, emits
+    ``trainerbattle_single``.  Returns ``None`` on any mismatch (falls through
+    to the LLM).
+    """
+    pages = event.get("pages", [])
+    if len(pages) != 2:
+        return None
+
+    # Count code-111 across BOTH pages; exactly one allowed, must be on page 1
+    branch_count = 0
+    branch_cmd: dict | None = None
+    branch_page: int | None = None
+    for pg_idx, page in enumerate(pages, start=1):
+        for cmd in page.get("list", []):
+            if cmd.get("code") == CONDITIONAL_BRANCH:
+                branch_count += 1
+                branch_page = pg_idx
+                branch_cmd = cmd
+    if branch_count != 1 or branch_page != 1 or branch_cmd is None:
+        return None
+
+    # Branch params: [0]==12 and [1] must contain pbTrainerBattle( (not double)
+    b_params = branch_cmd.get("parameters", [])
+    if len(b_params) < 2 or b_params[0] != 12:
+        return None
+    call: object = b_params[1]
+    if not isinstance(call, str):
+        return None
+    if "pbTrainerBattle(" not in call or "pbDoubleTrainerBattle" in call:
+        return None
+
+    # Page 1 must have code-123 with params ["A", 0]
+    page1 = pages[0]
+    has_self_switch = False
+    for cmd in page1.get("list", []):
+        if cmd.get("code") == CONTROL_SELF_SWITCH:
+            p = cmd.get("parameters", [])
+            if p and p[0] == "A" and (len(p) < 2 or p[1] == 0):
+                has_self_switch = True
+    if not has_self_switch:
+        return None
+
+    # Validate every page-1 command code
+    for cmd in page1.get("list", []):
+        code = cmd.get("code", 0)
+        if code not in _PAGE1_TRAINER_ALLOWED:
+            return None
+        if code in (COMMENT, COMMENT_CONT):
+            continue
+        if code in (SCRIPT, SCRIPT_CONT):
+            p = cmd.get("parameters", [""])
+            if not _is_trainer_strip(p[0] if p else ""):
+                return None
+
+    # Validate every page-2 command code
+    page2 = pages[1]
+    for cmd in page2.get("list", []):
+        code = cmd.get("code", 0)
+        if code not in _PAGE2_TRAINER_ALLOWED:
+            return None
+        if code in (SCRIPT, SCRIPT_CONT):
+            p = cmd.get("parameters", [""])
+            if not _is_trainer_strip(p[0] if p else ""):
+                return None
+
+    # --- Parse the trainer call ------------------------------------------------
+    # class symbol
+    m_class = re.search(r"(?:::)?PBTrainers::(\w+)", call)
+    if not m_class:
+        return None
+    sym = m_class.group(1)
+    class_const = to_constant("TRAINER_CLASS", sym)
+
+    # defeat text (inside _I("..."))
+    m_defeat = re.search(r'_I\("((?:[^"\\]|\\.)*)"\)', call)
+    defeat_raw = m_defeat.group(1) if m_defeat else ""
+
+    # party_id: strip the _I("...") blob first so its commas don't confuse split
+    cleaned_call = re.sub(r'_I\("(?:[^"\\]|\\.)*"\)', "_I", call)
+    m_inner = re.search(r"pbTrainerBattle\((.*?)\)\s*$", cleaned_call, re.DOTALL)
+    if not m_inner:
+        return None
+    args = [a.strip() for a in m_inner.group(1).split(",")]
+    # args: [class_expr, name_str, _I, canlose, party_id, ...]
+    party_id = 0
+    if len(args) >= 5 and args[4].isdigit():
+        party_id = int(args[4])
+
+    # trainer name (first quoted string in the call)
+    m_name = re.search(r'"([^"]*)"', call)
+    if not m_name:
+        return None
+    name = m_name.group(1)
+
+    # --- Lookup in context -----------------------------------------------------
+    if ctx is None:
+        return None
+    trainer_const = ctx.trainers.get((class_const, name, party_id))
+    if trainer_const is None:
+        return None
+
+    # --- Collect intro text from page-1 Show-Text run -------------------------
+    intro_parts: list[str] = []
+    in_intro = False
+    for cmd in page1.get("list", []):
+        code = cmd.get("code", 0)
+        params = cmd.get("parameters", [])
+        if code == SHOW_TEXT:
+            in_intro = True
+            intro_parts = [params[0] if params else ""]
+        elif code == SHOW_TEXT_CONT and in_intro:
+            intro_parts.append(params[0] if params else "")
+        elif code != SHOW_TEXT_CONT:
+            in_intro = False
+    intro_raw = "".join(intro_parts).strip()
+
+    # --- Collect post-battle text from page-2 Show-Text run -------------------
+    post_parts: list[str] = []
+    in_post = False
+    for cmd in page2.get("list", []):
+        code = cmd.get("code", 0)
+        params = cmd.get("parameters", [])
+        if code == SHOW_TEXT:
+            in_post = True
+            post_parts = [params[0] if params else ""]
+        elif code == SHOW_TEXT_CONT and in_post:
+            post_parts.append(params[0] if params else "")
+        elif code != SHOW_TEXT_CONT:
+            in_post = False
+    post_raw = "".join(post_parts).strip()
+
+    # --- Translate texts -------------------------------------------------------
+    intro = _translate_text(intro_raw)
+    if intro is None:
+        return None
+    defeat = _translate_text(defeat_raw)
+    if defeat is None:
+        return None
+    post: str | None = None
+    if post_raw:
+        post = _translate_text(post_raw)
+        if post is None:
+            return None
+
+    # --- Emit ------------------------------------------------------------------
+    battle_line = (
+        f"trainerbattle_single({trainer_const},"
+        f" {format_pory_string(intro)}, {format_pory_string(defeat)})"
+    )
+    lines: list[str] = [battle_line]
+    if post is not None:
+        lines.append(f"msgbox({format_pory_string(post)})")
+    lines += ["release", "end"]
+    return _block(_page_label(map_id, event, 1), lines)
+
+
 # -- context + dispatcher -----------------------------------------------------
 
 
@@ -408,10 +587,16 @@ def load_context(*, reference_dir: Path, intermediate_dir: Path) -> Context:
 
     Tolerant by design: a missing/unreadable file yields an empty table, and the
     classifier that needs it then falls through to the LLM rather than failing the
-    run. The item-ball and trainer tables are populated when those classifiers are
-    implemented; until then this returns an empty context.
+    run.
     """
-    return Context()
+    trainers: dict[tuple[str, str, int], str] = {}
+    try:
+        data = json.loads((intermediate_dir / "trainers.json").read_text(encoding="utf-8"))
+        for const, v in data["trainers"].items():
+            trainers[(v["trainer_class"], v["name"], v["party_id"])] = const
+    except Exception:
+        pass
+    return Context(trainers=trainers)
 
 
 # Classifiers are tried in this order; the first non-None wins. Order follows the
@@ -424,6 +609,7 @@ _CLASSIFIERS: list[
     classify_call_common_event,  # Classifier 2
     classify_self_switch_dialogue,  # Classifier 3
     classify_simple_warp,  # Classifier 4
+    classify_trainer_battle,  # Classifier 6
 ]
 
 

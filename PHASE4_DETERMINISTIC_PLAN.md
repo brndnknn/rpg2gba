@@ -47,8 +47,23 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   owns the fade; explicit fade would double it). Emits `warp(MAP_URANIUM_<N>,x,y)` +
   one queued unhandled entry (matches frozen Opus). Added a `DetResult{script,
   unhandled}` return type (dispatcher normalizes C1–3's bare-str returns)
-- [ ] Classifier 5 — Item Ball (§8) · target 45 · actual: ___
-- [ ] Classifier 6 — Trainer Battle (§9) · target ~250 · actual: ___
+- [~] Classifier 5 — Item Ball (§8) · target 45 · **DROPPED** (investigated +
+  rejected). Corpus has no clean ground-item-balls: of 45 `pbItemBall` events, 38 are
+  embedded in branches/move-routes/variables, and the 7 "clean" ones are story-gated
+  **Dream-World Mega-Stone** pickups whose page dispatch depends on global
+  switches/variables (Phase-5 territory; wiki-confirmed). Also `finditem` is
+  unprescribed and the symbol→`ITEM_*` map doesn't exist. The 7 fall through to the
+  LLM. `Context.items` left unused.
+- [x] Classifier 6 — Trainer Battle (§9) · target ~250 · **actual: 150** (all compile
+  clean; first to use `Context`). **§9 spec corrected:** ~150 clean *single* trainers,
+  not 250 (doubles excluded by their `ablePokemonCount` pre-check; the ~10 below the
+  160 code-filter estimate = unknown-trainer / control-code fall-throughs). Emits a
+  **single** `trainerbattle_single(TRAINER, "intro", "defeat")` + post-battle `msgbox`
+  block (NOT §9's two-block — the engine's per-trainer flag handles already-beaten;
+  the event's code-123 self-switch is minted-but-unused, harmless). Inline-string text
+  **verified** to compile (poryscript auto-generates the Text_ labels). `load_context`
+  now loads `trainers.json` → `(class_const, name, party_id)→TRAINER_*` via the shared
+  `to_constant`; no orchestrator/counter change.
 
 ### Acceptance — no-budget only this session (§10)
 - [ ] `scripts/count_deterministic_actual.py` full-corpus count (§10.1)

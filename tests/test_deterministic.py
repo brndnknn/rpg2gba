@@ -11,6 +11,9 @@ Event/page shape mirrors the Phase-3 deserializer output: an event is
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from rpg2gba.conversion_agent import deterministic as D
@@ -626,3 +629,174 @@ def test_classifier_1_output_compiles() -> None:
     assert out is not None
     result = poryscript.compile_script(out)
     assert result.ok, result.stderr
+
+
+# ----------------------------------------------------------------------------
+# Classifier 5 — Trainer Battle (plan §8)
+# ----------------------------------------------------------------------------
+
+# Shared fixtures for trainer tests.
+# Page 1: FISHERMAN "Matt" — one pbTrainerBattle branch, comment + script plumbing.
+_FISHERMAN_BATTLE_ARG = (
+    'pbTrainerBattle(PBTrainers::FISHERMAN,"Matt",'
+    '_I("T-the ones you have are nice too..."),false,0,false,0)'
+)
+
+_FISHERMAN_PAGE1 = _page(
+    _cmd(D.COMMENT, "Type: FISHERMAN"),
+    _cmd(D.COMMENT, "Name: Matt"),
+    _cmd(D.SCRIPT, "pbTrainerIntro(:FISHERMAN)"),
+    _cmd(D.SCRIPT, "pbCallBub(2)"),
+    _text("The ocean holds different species!"),
+    _cmd(D.CONDITIONAL_BRANCH, 12, _FISHERMAN_BATTLE_ARG),
+    _cmd(D.CONTROL_SELF_SWITCH, "A", 0),
+    _cmd(D.SCRIPT, "pbTrainerEnd"),
+)
+
+_FISHERMAN_PAGE2 = _page(
+    _cmd(D.SCRIPT, "pbCallBub(2)"),
+    _text("Y'know, the Gym Leader is tough."),
+)
+
+_FISHERMAN_CTX = D.Context(trainers={("TRAINER_CLASS_FISHERMAN", "Matt", 0): "TRAINER_BRANDON_16"})
+
+
+def test_trainer_clean_single_match() -> None:
+    """FISHERMAN event + injected ctx → claimed; output has trainerbattle_single, intro, defeat."""
+    ev = _event(_FISHERMAN_PAGE1, _FISHERMAN_PAGE2, id=5, name="Fisherman_Matt")
+    out = D.classify_trainer_battle(8, ev, _FISHERMAN_CTX)
+    assert out is not None
+    assert "trainerbattle_single(TRAINER_BRANDON_16," in out
+    assert '"The ocean holds different species!"' in out
+    assert '"T-the ones you have are nice too..."' in out
+    assert "script Map008_Fisherman_Matt_Page1 {" in out
+    assert "release" in out
+    assert "end" in out
+
+
+def test_trainer_postbattle_msgbox() -> None:
+    """Page-2 post-battle text appears as msgbox AFTER the trainerbattle line."""
+    ev = _event(_FISHERMAN_PAGE1, _FISHERMAN_PAGE2, id=5, name="Fisherman_Matt")
+    out = D.classify_trainer_battle(8, ev, _FISHERMAN_CTX)
+    assert out is not None
+    postbattle = 'msgbox("Y\'know, the Gym Leader is tough.")'
+    assert postbattle in out
+    assert out.index("trainerbattle_single(") < out.index(postbattle)
+
+
+def test_trainer_unknown_returns_none() -> None:
+    """Empty ctx (lookup miss) → None."""
+    ev = _event(_FISHERMAN_PAGE1, _FISHERMAN_PAGE2, id=5, name="Fisherman_Matt")
+    assert D.classify_trainer_battle(8, ev, D.Context()) is None
+
+
+def test_trainer_party_id_nonzero() -> None:
+    """party_id 7 is parsed correctly; output contains the right TRAINER_ constant."""
+    page1 = _page(
+        _cmd(D.SCRIPT, "pbTrainerIntro(:RIVAL)"),
+        _text("Let's go, rival!"),
+        _cmd(
+            D.CONDITIONAL_BRANCH,
+            12,
+            'pbTrainerBattle(PBTrainers::RIVAL,"Theo",_I("Gyaaah!"),false,7)',
+        ),
+        _cmd(D.CONTROL_SELF_SWITCH, "A", 0),
+        _cmd(D.SCRIPT, "pbTrainerEnd"),
+    )
+    page2 = _page(_text("You're not bad."))
+    ctx = D.Context(trainers={("TRAINER_CLASS_RIVAL", "Theo", 7): "TRAINER_THEO_42"})
+    ev = _event(page1, page2, id=10, name="Rival_Theo")
+    out = D.classify_trainer_battle(3, ev, ctx)
+    assert out is not None
+    assert "trainerbattle_single(TRAINER_THEO_42," in out
+
+
+def test_trainer_double_returns_none() -> None:
+    """pbDoubleTrainerBattle in the branch → None."""
+    page1 = _page(
+        _cmd(D.SCRIPT, "pbTrainerIntro(:FISHERMAN)"),
+        _text("Two vs two!"),
+        _cmd(
+            D.CONDITIONAL_BRANCH,
+            12,
+            'pbDoubleTrainerBattle(PBTrainers::FISHERMAN,"Matt",_I("Ugh!"),false,0)',
+        ),
+        _cmd(D.CONTROL_SELF_SWITCH, "A", 0),
+        _cmd(D.SCRIPT, "pbTrainerEnd"),
+    )
+    page2 = _page(_text("Good match."))
+    ev = _event(page1, page2, id=5, name="Fisherman_Matt")
+    assert D.classify_trainer_battle(8, ev, _FISHERMAN_CTX) is None
+
+
+def test_trainer_extra_branch_returns_none() -> None:
+    """Second code-111 on page 1 → None."""
+    page1 = _page(
+        _cmd(D.SCRIPT, "pbTrainerIntro(:FISHERMAN)"),
+        _text("Two branches!"),
+        _cmd(D.CONDITIONAL_BRANCH, 12, _FISHERMAN_BATTLE_ARG),
+        _cmd(D.CONDITIONAL_BRANCH, 12, "$Trainer.ablePokemonCount<=1"),
+        _cmd(D.CONTROL_SELF_SWITCH, "A", 0),
+        _cmd(D.SCRIPT, "pbTrainerEnd"),
+    )
+    page2 = _page(_text("Post battle."))
+    ev = _event(page1, page2, id=5, name="Fisherman_Matt")
+    assert D.classify_trainer_battle(8, ev, _FISHERMAN_CTX) is None
+
+
+def test_trainer_three_pages_returns_none() -> None:
+    """More than 2 pages → None."""
+    page3 = _page(_text("Extra page."))
+    ev = _event(_FISHERMAN_PAGE1, _FISHERMAN_PAGE2, page3, id=5, name="Fisherman_Matt")
+    assert D.classify_trainer_battle(8, ev, _FISHERMAN_CTX) is None
+
+
+def test_trainer_no_self_switch_returns_none() -> None:
+    """Missing code-123 on page 1 → None."""
+    page1_no_ss = _page(
+        _cmd(D.SCRIPT, "pbTrainerIntro(:FISHERMAN)"),
+        _cmd(D.SCRIPT, "pbCallBub(2)"),
+        _text("The ocean holds different species!"),
+        _cmd(D.CONDITIONAL_BRANCH, 12, _FISHERMAN_BATTLE_ARG),
+        _cmd(D.SCRIPT, "pbTrainerEnd"),
+    )
+    ev = _event(page1_no_ss, _FISHERMAN_PAGE2, id=5, name="Fisherman_Matt")
+    assert D.classify_trainer_battle(8, ev, _FISHERMAN_CTX) is None
+
+
+@pytest.mark.phase4
+@pytest.mark.skipif(not poryscript.is_available(), reason="poryscript binary not installed")
+def test_trainer_output_compiles() -> None:
+    """A representative trainer-battle output compiles through poryscript."""
+    ev = _event(_FISHERMAN_PAGE1, _FISHERMAN_PAGE2, id=5, name="Fisherman_Matt")
+    out = D.classify_trainer_battle(8, ev, _FISHERMAN_CTX)
+    assert out is not None
+    result = poryscript.compile_script(out)
+    assert result.ok, result.stderr
+
+
+# ----------------------------------------------------------------------------
+# load_context
+# ----------------------------------------------------------------------------
+
+
+def test_load_context_reads_trainers(tmp_path: Path) -> None:
+    """trainers.json → ctx.trainers keyed by (trainer_class, name, party_id)."""
+    trainers_data = {
+        "trainers": {
+            "TRAINER_BRANDON_16": {
+                "trainer_class": "TRAINER_CLASS_FISHERMAN",
+                "name": "Matt",
+                "party_id": 0,
+            }
+        }
+    }
+    (tmp_path / "trainers.json").write_text(json.dumps(trainers_data), encoding="utf-8")
+    ctx = D.load_context(reference_dir=tmp_path, intermediate_dir=tmp_path)
+    assert ctx.trainers[("TRAINER_CLASS_FISHERMAN", "Matt", 0)] == "TRAINER_BRANDON_16"
+
+
+def test_load_context_empty_dir_yields_empty_trainers(tmp_path: Path) -> None:
+    """Missing trainers.json → empty trainers dict (tolerant, no crash)."""
+    ctx = D.load_context(reference_dir=tmp_path, intermediate_dir=tmp_path)
+    assert ctx.trainers == {}
