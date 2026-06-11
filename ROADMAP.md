@@ -20,7 +20,7 @@ When this roadmap says "the build agent" or references `CLAUDE.md`, this is what
 
 ### The Conversion Agent
 
-A *component of the pipeline itself* — the LLM invoked at runtime by the rpg2gba orchestrator to translate event JSON into Poryscript, one event at a time. It receives a tightly-scoped prompt, returns structured output, and has no awareness of the codebase that called it. Across Phase 4's stages this role is filled by different backends (Claude via Claude Code, local Ollama, Anthropic API), but it's always the same role.
+A *component of the pipeline itself* — the LLM invoked at runtime by the rpg2gba orchestrator to translate event JSON into Poryscript, one event at a time. It receives a tightly-scoped prompt, returns structured output, and has no awareness of the codebase that called it. Its backend is pluggable (headless Claude Code running Opus is the production choice; a local Ollama fallback exists but was rejected for production), but it's always the same role.
 
 When this roadmap says "the conversion agent" — particularly in Phase 4 — this is what's meant.
 
@@ -93,8 +93,8 @@ Treat them as separate systems. The build agent should not be modifying the conv
                       ┌──────────────┐
                       │ Conversion   │
                       │ Agent        │
-                      │ (Ollama /    │
-                      │ Claude /     │
+                      │ (Opus + det. │
+                      │ pre-filter   │
                       │ + flag map)  │
                       └──────┬───────┘
                              │
@@ -432,42 +432,47 @@ A rule-based converter could mechanically translate command codes 1:1, but the o
 - **Idiom matching.** A 12-command RPG Maker sequence that means "give the player an item with a fanfare" should become `giveitem ITEM_X` in Poryscript, not 12 separate calls.
 - **Edge case handling.** Events that mix dialogue with custom commands need creative restructuring.
 
-### Strategy: Hybrid Local-First, Escalate When Needed
+### Strategy: Single-Model Opus + Deterministic Pre-Filter (decided 2026-06-03 → 2026-06-11)
 
-The conversion agent has multiple viable LLM backends. The right approach is a staged, local-first one that matches the project's existing philosophy (and your existing Ollama setup). Note that **the conversion agent is the same component throughout** — only its backend changes per stage.
+> **Historical note:** the original plan here was a staged local-first strategy
+> (Ollama bulk pass → Claude cleanup pass → API fallback). It was retired before
+> the bulk run started. The controlled Sonnet-vs-Opus calibration comparison
+> showed the dangerous error class is *compile-clean-but-wrong* output (e.g.
+> silently dropping a game variable), which a cheap first pass doesn't reduce —
+> it adds a review burden on exactly the events that matter. A local model
+> amplifies that silent-wrong risk across the ~73% of events that need real
+> judgment. On a get-it-right-once corpus, one strong model plus deterministic
+> cost levers beats a cheap-draft pipeline.
 
-**Stage A — Prompt Development (5 calibration maps): Claude as conversion agent backend, via Claude Code**
-- Pick 5 representative maps: a small town, a route, a building interior, a complex story scene, and one with custom commands
-- Use Claude Code interactively as the conversion agent's backend, iterating on the prompt structure, few-shot examples, and output format
-- This stage uses Claude Code for fast iteration on the conversion agent itself — you (or the build agent) are tuning the conversion agent's prompts based on what comes out
-- Goal: converge on a prompt that produces clean, idiomatic Poryscript that compiles on first try ~80% of the time
-- Output of this stage is a frozen prompt template, not converted maps
+The decided shape:
 
-**Stage B — Bulk First Pass: Local Ollama as conversion agent backend**
-- Run the frozen prompt against the entire map corpus using a local model on the Ubuntu desktop
-- **Recommended model:** Qwen3 7B or larger (you've already validated tool-call reliability with this), or gpt-oss 20b if you want more headroom for nuanced output
-- Run overnight, in batches, with a checkpoint after every map so any crash is recoverable
-- Quality bar at this stage: "syntactically valid Poryscript that compiles, even if ugly or verbose"
-- Expect ~70–85% of maps to come through cleanly; the rest land in an unhandled/needs-review queue
-
-**Stage C — Quality & Unhandled Pass: Claude as conversion agent backend, via Claude Code**
-- Take the maps the local backend flagged as unhandled or that produced obviously wrong output
-- Take a 10% random sample of "passed" output for sanity checking — don't trust the local model blindly
-- Run these through Claude Code interactively, in 5-hour windows
-- This is where the bulk of your Pro subscription's budget gets spent
-
-**Stage D — API Fallback (only if needed)**
-- Only escalate to direct Anthropic API as the conversion agent's backend if Stage C runs into Pro window exhaustion repeatedly, or if you need programmatic retry-with-compiler-error loops at scale
-- If you do escalate: use prompt caching aggressively (the stable prompt chunk is 8–15k tokens, cacheable), and use `claude-opus-4-8` for hard maps, `claude-sonnet-4-6` for routine ones
-- Realistic cost if it comes to this: $20–80 (much lower than the original estimate, because most maps will already be done by then)
-
-### Why this beats the API-first approach
-
-- Costs $0–20 instead of $50–200
-- Uses the Ubuntu desktop you already have, with the Ollama setup you already have
-- Calendar time, not wall-clock time, becomes the bottleneck — and you can run the local model overnight while you do other things
-- Forces good engineering hygiene: resumability, checkpointing, idempotent re-runs — all of which would be needed eventually anyway
-- Keeps the API as a real fallback rather than the primary path
+- **One model for every LLM conversion: `claude-opus-4-8`** via headless Claude
+  Code (`claude -p`, Pro OAuth). Model and prompt were frozen together at the
+  §9 #2 gate (2026-06-04); neither changes mid-run.
+- **Deterministic pre-filter first.** Seven classifiers convert the mechanical
+  ~28% of events (pure/sign dialogue, common-event calls, self-switch dialogue,
+  simple warps, trainer battles) by lookup — same compile-gate, flag minting,
+  and unhandled-queue channel as LLM output, zero spawns.
+- **Dedup levers:** the static prompt context is served as a cacheable system
+  prompt (confirmed live: `cache_read≈13.7k` tokens/spawn), and structurally
+  identical events are reinstantiated from a persistent memo instead of
+  re-spawned.
+- **Throughput (decided 2026-06-11): accept the calendar time.** The bulk run
+  executes through Pro usage windows via `scripts/run_bulk.py --timed` until
+  done. Measured reality: ~$0.195/spawn equivalent, ~22 spawns/day under
+  limit-capped windows, ~2,500 spawns remaining after the pre-filter — roughly
+  three months wall-clock, overlapped with Phase 5 build work (which is
+  deterministic and budget-free).
+  - **API escalation rejected** (user decision 2026-06-11): no API-key spend
+    for the bulk run. `AnthropicAPIBackend` was never built; the backend
+    abstraction still admits it if circumstances change.
+  - **Sonnet difficulty-routing rejected on measurement** (2026-06-11,
+    `scripts/_tmp_sonnet_tier.py`): the pre-filter already claims the
+    mechanical tier, leaving only 133 trivial events among the 2,584 LLM-bound
+    (5.1%) — about 4% calendar savings, not worth a second quality bar mid-run.
+  - The remaining cheap lever is extending the deterministic classifiers to
+    claim those ~133 trivial near-misses (saves the whole spawn, no model
+    question). Noted as optional polish, not scheduled.
 
 ### Architecture
 
@@ -480,10 +485,10 @@ The conversion agent has multiple viable LLM backends. The right approach is a s
 
 **4.2 Conversion agent backend abstraction**
 - Build a thin LLM client interface inside `src/rpg2gba/conversion_agent/`: `convert_event(event_json, registry_state, prompt) -> ConversionResult`
-- Implement three backends behind it:
-  - `OllamaBackend` (local, used for Stage B)
-  - `ClaudeCodeBackend` (interactive, used for Stages A and C — really a "review and approve" wrapper around terminal Claude Code sessions)
-  - `AnthropicAPIBackend` (programmatic, used for Stage D if needed)
+- Implemented backends behind it:
+  - `ClaudeCodeBackend` (production — spawns headless `claude -p` per event under the frozen Opus model)
+  - `OllamaBackend` (built as an optional local fallback; rejected for production use — see Strategy)
+  - `AnthropicAPIBackend` (planned escalation path; rejected 2026-06-11 with the throughput decision — the abstraction still admits it if ever needed)
 - This abstraction is the single most important architectural decision in this phase. It lets the conversion agent swap backends per stage without rewriting the orchestrator
 - The backend abstraction is *also* what cleanly separates the conversion agent (one stable component) from its varying LLM provider (the implementation detail)
 
@@ -510,30 +515,29 @@ The conversion agent has multiple viable LLM backends. The right approach is a s
 
 **4.5 Iteration strategy**
 - Don't try to convert all 200+ maps in one pass with any backend
-- Stage A converges the conversion agent's prompt on 5 maps. Stage B handles the bulk. Stage C cleans up the tail.
+- Calibration converged the prompt on sample maps before the freeze; the bulk run proceeds in limit-bounded rounds (`run_bulk.py`), resuming via per-map checkpoints + the event memo
 - Resist the urge to do "one big run" — checkpoint-based incremental progress is the only sustainable approach for a corpus this size
 
-### Local backend considerations
+### Bulk-run mechanics
 
-- **Memory bandwidth, not GPU cores, is the bottleneck on the Ubuntu desktop.** A 20B model will run, but slowly. Plan for 30s–2min per event conversion at that size
-- Qwen3 7B is the pragmatic sweet spot — fast enough to chew through the corpus overnight, capable enough for syntactically valid output
-- Keep `OLLAMA_HOST` pointed at the desktop so you can kick off runs from the MacBook over Tailscale and monitor remotely
-- Local models tend to be more verbose and less idiomatic; the few-shot examples in the conversion agent's prompt are doing more work here than they would with Claude. Invest extra time in those examples during Stage A
+- `scripts/prep_bulk_run.py` resets once to the pristine post-gate baseline; `scripts/run_bulk.py` runs until the usage limit (`--timed` waits out 5-hour windows and resumes; a weekly cap stops the loop); `scripts/run_stats.py` reports progress/tokens/cost anytime
+- Usage caps and transport failures abort the run cleanly (they are never queued as event failures), so checkpoints + memo make every restart safe
+- `OLLAMA_HOST` / the Ubuntu desktop are no longer on the Phase 4 critical path
 
 ### Validation
 
 - Each generated `.pory` file must compile through Poryscript without errors before being committed
 - Spot-check generated scripts against original RPG Maker events for semantic equivalence on the 5 calibration maps
-- After Stage B, run a 10% random-sample manual review on local-backend output before declaring it "passed"
+- Run a ~10% random-sample manual review of bulk output between rounds — don't trust any backend blindly
 
 ### Phase 4 Exit Criteria
 
-- [ ] Conversion agent implementation is complete with all three backends working
+- [ ] Conversion agent implementation is complete (ClaudeCodeBackend production path + deterministic pre-filter; Ollama fallback optional)
 - [ ] All maps have generated `.pory` files
 - [ ] All `.pory` files compile through Poryscript
 - [ ] Flag registry is complete and consistent
 - [ ] Unhandled queue is fully triaged (every item has a decision)
-- [ ] 10% sample of Stage B output has been manually reviewed and approved
+- [ ] ~10% sample of bulk output has been manually reviewed and approved
 
 ---
 
@@ -760,7 +764,7 @@ Translate one RPG Maker event's command list into the equivalent Poryscript, usi
 
 - **Hallucinated flag names.** Mitigated by the registry being the source of truth and the orchestrator validating new flag proposals before accepting them.
 - **Silently skipped commands.** Mitigated by structured output that requires explicit acknowledgment of every input command.
-- **Verbose, non-idiomatic output (especially from local backends).** Mitigated by quality of few-shot examples and the optional Stage C refinement pass.
+- **Verbose, non-idiomatic output.** Mitigated by the quality of the few-shot examples, converged during calibration before the prompt freeze.
 
 ---
 
