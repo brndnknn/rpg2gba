@@ -1,0 +1,20 @@
+{
+  "__doc__": "Phase 5 §5.1 source of truth: Uranium (tileset_id, tile_id) -> pokeemerald metatile. Hand-authored, seeded incrementally (Approach A: reuse existing pokeemerald metatiles). See PHASE5_PLAN.md + src/rpg2gba/tileset_converter/tile_map.py. RMXP tile_id: 0=empty; 48..383=autotiles (base=48*n); >=384 static. GBA metatile_id: 0x000..0x1FF primary, 0x200+ secondary. Q4 (first pass): every tileset maps to ONE universal pair. Q3: collision/elevation override the metatile baseline only where needed. Q1: 'stacks' holds opt-in composite overrides keyed 'z0,z1,z2', consulted before 'tiles'. Entries below are PLACEHOLDER EXAMPLES.",
+  "tilesets": {
+    "12": {
+      "primary": "gTileset_General",
+      "secondary": "gTileset_Lavaridge"
+    }
+  },
+  "tiles": {
+    "12": {
+      "48": { "metatile": 1, "collision": 0, "elevation": 3 },
+      "384": { "metatile": 16, "collision": 1, "elevation": 0 }
+    }
+  },
+  "stacks": {
+    "12": {
+      "48,390,0": { "metatile": 42 }
+    }
+  }
+}
