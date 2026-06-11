@@ -16,7 +16,28 @@ until its section says so.
 | 5 | Q2/MapInfos naming contradiction | **DESIGN SETTLED 2026-06-11** |
 | 6 | Move-route section in PHASE5_PLAN | **DESIGN SETTLED 2026-06-11** — section write queued with implementation |
 | 7 | Commit the pile + compress MEMORY | **DONE 2026-06-11** |
-| 8 | Phase 5 reachability check | not yet discussed |
+| 8 | Phase 5 reachability check | **DESIGN SETTLED 2026-06-11** |
+
+## Consolidated implementation queue (decided 2026-06-11)
+
+All eight suggestions dispositioned. Pipeline-touching work, in order:
+
+1. **F1 label-uniquing fix** + regen replay of converted maps (live bug) — the **#4
+   assembly smoke harness** lands alongside to verify the repair end-to-end
+2. **#3 cluster-aware triage** (read-only reporting) + first novel-cluster review pass
+3. **#2 STRIP skip** (`strip_list.json` + CE stubs + `--regen-ce` remediation) **+
+   near-miss Tier-1 rider** (frozen-Opus validation first)
+
+Phase-5-track, before the relevant sections:
+
+4. **#5 map-name overrides** (signals script → wiki arbitration →
+   `map_name_overrides.json`) before `map_constants.py`
+5. **#6 §5.5 move-routes + #8 §5.6 reachability** PHASE5_PLAN doc pass; reachability
+   implementation after 5.2–5.4 produce output (needs the Tilesets.rxdata
+   terrain-tags/passages deserializer extension)
+
+Done: **#1** (decision only — no implementation), **#7** (hygiene, executed
+2026-06-11: commits `ceb9320`/`b7a7be2`/`abb4e01`).
 
 ---
 
@@ -471,3 +492,58 @@ Phase 5 acceptance stubs; ruff clean).
   build narrative (machinery → calibration A–D → rung 2/3 → dedup A/B/C → pre-filter
   C1–C7 → scaffold) moved **verbatim** to `reference/memory-archive.md` under "Phase 4
   Build Narrative".
+
+---
+
+## Suggestion 8 — Phase 5 reachability check (soft-lock detector)
+
+**Decision (2026-06-11): build it as a Phase 5 acceptance gate.** Q3 (inherit
+collision from the substituted metatile) × Q4 (one universal tileset) guarantees
+walkability errors exactly where geometry is the gameplay — caves, gyms, puzzle
+rooms. Two user-driven amendments strengthen the critique's sketch: **ledges are
+modeled in v1** (not deferred) and **pessimistic failures route to build-agent wiki
+review**.
+
+### Design (settled)
+
+1. **Graph:** walkable cells from the emitted collision (5.1 metatile baseline + 5.2
+   `map.bin`). **Entries** = warp landings into the map (every map's 201 commands in
+   the Phase 3 JSON, resolved via `map_constants`) + connection edges (5.4) + player
+   spawn (`URANIUM_START_MAP`) + healing spots (§2.8 metadata). **Exits** = the map's
+   own warp-event cells + connection edges. Alarm = an exit unreachable from every
+   entry.
+2. **Directed BFS with one-way ledge edges, v1** (user call 2026-06-11 — one-way
+   edges are *the* soft-lock mechanism: hop down, can't climb back). A jump-behavior
+   metatile contributes an approach→landing edge with no reverse.
+3. **Ledge data pipeline:** Essentials marks ledges via terrain tags in
+   `Tilesets.rxdata` — **not yet deserialized** (deserialize.rb only carries
+   `tileset_id`; small extension, the `Table` marshal machinery already exists).
+   Directional ledge tile ids → `MB_JUMP_SOUTH/EAST/WEST/NORTH` metatile rows in
+   `tileset_map.json` (all present in the vanilla general tileset, Q4-compatible);
+   fail loud on an unmapped ledge tile.
+4. **Passages oracle (free upgrade):** the same Tilesets.rxdata dump yields RMXP
+   `passages` — source-side walkability ground truth. Diff it cell-by-cell against
+   the emitted GBA collision to catch Q3/Q4 substitution errors directly, not just
+   via connectivity. Q3's *emit* decision is unchanged; this is validation only.
+5. **Three-way classification + review flow:** run optimistic (object-event cells
+   passable) and pessimistic (impassable); water = separate "HM-gated" class, never a
+   failure. Fail-optimistic = unconditional defect (no user eyes needed).
+   Fail-pessimistic-pass-optimistic = **build-agent wiki review** (#3's channel,
+   spoiler-free): confirm the gating is intended per the location's documented
+   HM/puzzle requirements. The wiki cannot prove converted-puzzle *solvability* —
+   those maps (Gym 8, Strength caves, …) become an explicit **Phase 7 playthrough
+   checklist**, enumerated as a byproduct of the review.
+
+### Implementation checklist (when picked up — after 5.2/5.3/5.4 produce output)
+
+- [ ] `deserialize.rb`: dump `Tilesets.rxdata` → per-tile `terrain_tags` + `passages`
+- [ ] `tileset_map.json`: directional ledge rows; confirm jump metatiles in the
+      universal tileset
+- [ ] `tileset_converter/reachability.py`: directed BFS, three-mode classification,
+      passages-vs-emitted collision diff
+- [ ] PHASE5_PLAN §5.6 + exit-criteria addition (write in the same doc pass as #6's
+      §5.5)
+- [ ] Acceptance tests on synthetic grids: blocked exit, ledge one-way trap, HM-gated
+      water, puzzle-gated (optimistic-only) pass
+- [ ] Wiki-review pass over pessimistic-fail maps → dispositions + the Phase 7 puzzle
+      checklist
