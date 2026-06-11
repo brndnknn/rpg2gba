@@ -29,7 +29,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from rpg2gba.conversion_agent import deterministic, poryscript, prompt_builder
-from rpg2gba.conversion_agent.backends import ConversionBackend, ConversionResult
+from rpg2gba.conversion_agent.backends import (
+    BackendTransportError,
+    BudgetReached,
+    ConversionBackend,
+    ConversionResult,
+    RateLimitError,
+)
 from rpg2gba.conversion_agent.flag_registry import (
     FlagRegistry,
     RegistryError,
@@ -101,8 +107,12 @@ class Orchestrator:
         maps = sorted(Path(map_dir).glob("Map*.json"))
         if not maps:
             raise FileNotFoundError(f"no MapNNN.json under {map_dir}")
+        total = len(maps)
+        done = sum(1 for p in maps if self._checkpoint(p.stem).exists())
+        logger.info("maps: %d total, %d already converted — %d to go", total, done, total - done)
         n = 0
-        for path in maps:
+        for i, path in enumerate(maps, start=1):
+            logger.info("[map %d/%d] %s", i, total, path.stem)
             self.convert_map(path)
             n += 1
         return n
@@ -158,6 +168,16 @@ class Orchestrator:
         whole pass on re-run. ``only_ids`` restricts the pass to specific ids for cheap
         single-shot iteration and intentionally does **not** write the checkpoint (it is
         a partial, debug-only run).
+
+        **Per-CE resumability:** unlike map events, common events are NOT memoized, so a
+        run that aborts mid-pass (usage cap or ``--limit``) would otherwise re-spend every
+        CE it had already converted on the next invocation — and since the ``.done``
+        checkpoint is only written after the *whole* pass, a near-cap budget could loop
+        forever re-doing the same CEs and never reach the maps. To prevent that, each CE we
+        process is recorded in ``checkpoints/CommonEvents.blocks.json`` (its emitted script,
+        or ``null`` if it was fully queued); a restart skips those and rebuilds the .pory
+        from them, so bounded/interrupted rounds accumulate. The ``only_ids`` debug path is
+        partial and intentionally stateless.
         """
         common_events_path = Path(common_events_path)
         stem = "CommonEvents"
@@ -170,26 +190,75 @@ class Orchestrator:
             ces = [ce for ce in ces if ce.get("id") in only_ids]
         self.scripts_dir.mkdir(parents=True, exist_ok=True)
         out_pory = self.scripts_dir / f"{stem}.pory"
-        out_pory.write_text("", encoding="utf-8")  # exists even if every CE is skipped
-        blocks: list[str] = []
-        n_with_cmds = 0
-        for ce in ces:
+
+        use_progress = only_ids is None
+        progress_path = self.checkpoint_dir / f"{stem}.blocks.json"
+        done: dict[str, str | None] = {}
+        if use_progress and progress_path.is_file():
+            try:
+                done = json.loads(progress_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                done = {}
+
+        def _flush_pory() -> None:
+            blocks = [done[str(ce.get("id"))] for ce in ces if done.get(str(ce.get("id")))]
+            out_pory.write_text(
+                ("\n\n".join(blocks) + "\n") if blocks else "", encoding="utf-8"
+            )
+
+        _flush_pory()  # exists even if every CE is skipped; reflects any prior progress
+
+        # Only common events with real commands ever spawn; pre-filter so the heartbeat
+        # below can show a true "N/total" against the work that actually costs budget.
+        eligible = [ce for ce in ces if _event_has_commands(_common_event_payload(ce))]
+        remaining = [
+            ce for ce in eligible if not (use_progress and str(ce.get("id")) in done)
+        ]
+        logger.info(
+            "%s: %d common events with commands, %d already done — converting %d this run",
+            stem,
+            len(eligible),
+            len(eligible) - len(remaining),
+            len(remaining),
+        )
+        n_processed = 0
+        for idx, ce in enumerate(remaining, start=1):
+            cid = str(ce.get("id"))
             payload = _common_event_payload(ce)
-            # Decorative/empty common events produce no script — skip without spawning.
-            if not _event_has_commands(payload):
-                logger.debug("CommonEvent %s: no commands, skipping", ce.get("id"))
-                continue
-            n_with_cmds += 1
-            script = self._convert_common_event(payload)
-            if script is not None:
-                blocks.append(script)
-            out_pory.write_text(("\n\n".join(blocks) + "\n") if blocks else "", encoding="utf-8")
+            n_processed += 1
+            logger.info(
+                "[CE %d/%d] CommonEvent %s (%s): converting…",
+                idx,
+                len(remaining),
+                ce.get("id"),
+                ce.get("name", ""),
+            )
+            script = self._convert_common_event(payload)  # may raise → abort (resumable)
+            done[cid] = script
+            if use_progress:
+                self._save_ce_progress(progress_path, done)
+            _flush_pory()
             self.registry.save(self.registry_state_path)
+            logger.info(
+                "[CE %d/%d] CommonEvent %s: %s",
+                idx,
+                len(remaining),
+                ce.get("id"),
+                "emitted" if script else "queued (unhandled)",
+            )
 
         if only_ids is None:
             self._checkpoint(stem).parent.mkdir(parents=True, exist_ok=True)
             self._checkpoint(stem).write_text("ok\n", encoding="utf-8")
-        logger.info("%s: %d/%d common events converted", stem, len(blocks), n_with_cmds)
+        emitted = sum(1 for v in done.values() if v)
+        logger.info(
+            "%s: %d processed this run, %d emitted total", stem, n_processed, emitted
+        )
+
+    def _save_ce_progress(self, path: Path, done: dict[str, str | None]) -> None:
+        """Persist the per-common-event progress ledger (id → script-or-null)."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(done, ensure_ascii=False) + "\n", encoding="utf-8")
 
     # -- per-event --------------------------------------------------------
 
@@ -203,6 +272,12 @@ class Orchestrator:
         prompt = self._build_prompt(payload)
         try:
             result = self.backend.convert_event(payload, self._registry_state(), prompt)
+        except (RateLimitError, BackendTransportError, BudgetReached):
+            # Usage cap / transport failure / self-imposed --limit — the event is fine,
+            # we just can't (or won't) spend right now. Abort the run (resumable) instead
+            # of queuing good work as a permanent failure. The bulk runner decides what to
+            # do next (pause, stop, or clean exit).
+            raise
         except Exception as exc:  # backend/parse failure — queue, don't abort the run
             self._queue(ctx, reason=f"backend error: {exc}")
             return None
@@ -215,6 +290,8 @@ class Orchestrator:
             retry_prompt = self._retry_prompt(prompt, compiled.stderr)
             try:
                 result = self.backend.convert_event(payload, self._registry_state(), retry_prompt)
+            except (RateLimitError, BackendTransportError, BudgetReached):
+                raise
             except Exception as exc:
                 self._queue(ctx, reason=f"backend error on retry: {exc}")
                 return None

@@ -196,7 +196,7 @@ def _phase4_registry(out_dir: Path, clean: bool, fork_path: Path | None):
 _DEFAULT_MODEL = "claude-sonnet-4-6"
 
 
-def _phase4_backend(name: str, model: str = _DEFAULT_MODEL):
+def _phase4_backend(name: str, model: str = _DEFAULT_MODEL, usage_log_path: Path | None = None):
     """Construct the chosen conversion backend with the frozen system prompt.
 
     The system prompt = the frozen instructions (`system.md`) + the event-invariant
@@ -206,7 +206,9 @@ def _phase4_backend(name: str, model: str = _DEFAULT_MODEL):
 
     `model` selects the Claude model for the `claude_code` backend (the
     Sonnet-vs-Opus calibration knob); it is ignored by the Ollama backend, which
-    is configured via OLLAMA_HOST/its own model setting.
+    is configured via OLLAMA_HOST/its own model setting. `usage_log_path`, when set,
+    makes the claude_code backend append per-spawn token/cost usage there so a bulk
+    run can be tallied (scripts/run_stats.py); also ignored by Ollama.
     """
     from rpg2gba.conversion_agent import prompt_builder
 
@@ -219,7 +221,7 @@ def _phase4_backend(name: str, model: str = _DEFAULT_MODEL):
     if name == "claude_code":
         from rpg2gba.conversion_agent.backends.claude_code import ClaudeCodeBackend
 
-        return ClaudeCodeBackend(system_prompt, model=model)
+        return ClaudeCodeBackend(system_prompt, model=model, usage_log_path=usage_log_path)
     from rpg2gba.conversion_agent.backends.ollama import OllamaBackend
 
     return OllamaBackend(system_prompt)
