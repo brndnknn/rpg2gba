@@ -347,6 +347,72 @@ rescue ArgumentError => e
   retry
 end
 
+# ---- Tilesets.rxdata shaping (Phase 5 — terrain_tags + passages oracle) -----
+
+# RPG::Tileset — RMXP tileset record.  The fields we care about are the three
+# 1-D Table objects indexed by tile id:
+#   passages    — uint16 per tile: bit 0=down, 1=up, 2=right, 3=left, 4=above (0=open,1=blocked)
+#   terrain_tags — uint16 per tile: Essentials terrain tag id
+#   priorities  — uint16 per tile: layer priority
+# All three share the same Table binary layout the existing stub already handles.
+module RPG
+  class Tileset
+    attr_accessor :id, :name, :tileset_name, :autotile_names,
+                  :passages, :priorities, :terrain_tags,
+                  :panorama_name, :panorama_hue,
+                  :fog_name, :fog_hue, :fog_opacity, :fog_blend_type,
+                  :fog_zoom, :fog_sx, :fog_sy,
+                  :battleback_name
+  end
+end unless RPG.const_defined?(:Tileset, false)
+
+def table_to_array(t)
+  # Returns the flat data array from a Table (or nil if the ivar is missing).
+  return [] if t.nil?
+  d = t.instance_variable_get(:@data)
+  d.nil? ? [] : d
+end
+
+def shape_tileset(ts)
+  return nil if ts.nil?
+  {
+    'id'           => iv(ts, :@id),
+    'name'         => iv(ts, :@name),
+    'tileset_name' => iv(ts, :@tileset_name),
+    'passages'     => table_to_array(iv(ts, :@passages)),
+    'priorities'   => table_to_array(iv(ts, :@priorities)),
+    'terrain_tags' => table_to_array(iv(ts, :@terrain_tags)),
+  }
+end
+
+def run_tilesets(data_dir, out_dir)
+  abort "data dir not found: #{data_dir}" unless Dir.exist?(data_dir)
+  require 'fileutils'
+  FileUtils.mkdir_p(out_dir)
+
+  path = File.join(data_dir, 'Tilesets.rxdata')
+  abort "Tilesets.rxdata not found in #{data_dir}" unless File.exist?(path)
+
+  begin
+    raw = marshal_load_lenient(File.binread(path))
+  rescue => e
+    abort "FAILED to load #{path}: #{e.class}: #{e.message}"
+  end
+
+  # raw is an Array; index 0 is nil (RMXP tileset ids start at 1).
+  result = {}
+  raw.each_with_index do |ts, idx|
+    next if ts.nil?
+    shaped = shape_tileset(ts)
+    next unless shaped
+    result[shaped['id'] || idx] = shaped
+  end
+
+  out_path = File.join(out_dir, 'tilesets.json')
+  write_json(out_path, result)
+  puts "wrote #{result.size} tilesets → #{out_path}"
+end
+
 def run_rxdata(data_dir, out_dir)
   abort "data dir not found: #{data_dir}" unless Dir.exist?(data_dir)
   maps_out = File.join(out_dir, 'maps')
@@ -415,6 +481,11 @@ when 'rxdata'
   abort 'usage: deserialize.rb rxdata <data_dir> <output_dir>' unless data_dir && out_dir
   run_rxdata(data_dir, out_dir)
 
+when 'tilesets'
+  data_dir, out_dir = rest
+  abort 'usage: deserialize.rb tilesets <data_dir> <output_dir>' unless data_dir && out_dir
+  run_tilesets(data_dir, out_dir)
+
 else
-  abort "usage:\n  deserialize.rb dat <input.dat> <output.json>\n  deserialize.rb rxdata <data_dir> <output_dir>"
+  abort "usage:\n  deserialize.rb dat <input.dat> <output.json>\n  deserialize.rb rxdata <data_dir> <output_dir>\n  deserialize.rb tilesets <data_dir> <output_dir>"
 end

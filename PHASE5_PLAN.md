@@ -237,6 +237,141 @@ Porymap work (ROADMAP §5.4 explicitly allows manual wiring).
 - [ ] Offsets are consistent both directions (A→B up ⇒ B→A down).
 - [ ] Documented list of maps left for manual wiring (fail-loud, not silent).
 
+### 5.5 — Move Routes  ·  `move_routes.py`
+
+**Objective.** Translate the deferred RMXP scripted move-route commands (event
+codes 209/210/509) into pokeemerald `applymovement` / movement-script sequences
+and inject them into the emitted `.pory` without mutating frozen Phase 4 output.
+
+**Background (2026-06-03 decision, `FABLES_DECISIONS.md` §6):** the Phase 4
+conversion agent deliberately skips move routes, emitting a `# UNHANDLED:
+move route` breadcrumb for every 209/210/509 command and queuing one entry. This
+section resolves the entire deferred corpus in a deterministic post-pass — no LLM
+budget spent.
+
+**Census (2026-06-11):**
+
+- **1,191 events** carry scripted 209 routes; of those, **531 (45%) target only
+  the player** (`OBJ_EVENT_ID_PLAYER`) — translatable with no local-id dependency.
+- **Trigger profile:** autorun 393 + parallel 134 = **527 cutscene/ambient events**
+  (fidelity-critical tier); player/event-touch 510 (mostly nudge/anti-stuck
+  patterns); talk 154.
+- **Scope reduction:** page-level autonomous movement (wandering NPCs,
+  `movement_type`) is **not** 209 work — it maps natively to pokeemerald
+  `movement_type` in 5.3 metadata wiring.
+- **Vocabulary (~20k commands) — three translator classes:**
+  1. **Direct macro map (~70%):** moves/turns/waits/jumps/diagonals all have
+     movement-macro equivalents.
+  2. **Hoistable side-effects:** `play_se` (287 occurrences), `change_graphic`
+     (608), route-embedded switches (12) — split the route and emit a script
+     command between `applymovement` calls.
+  3. **Approximate-or-drop:** `change_opacity` 2,280 → binary
+     `set_invisible`/`set_visible`; `through_on/off` 1,757 (no equivalent);
+     `always_on_top` 171. RMXP ghost/fade flourishes; binary is the honest
+     substitute.
+
+**Open design questions (answer at implementation):**
+
+- **Q-MR1 — local-id convention:** object-event local ids are minted in event-id
+  order, with the mapping persisted by 5.3 (one source of truth). Verify
+  pokeemerald's per-map object-template ceiling (~64) against Uranium's biggest
+  maps (map 148 has events into the 190s).
+- **Q-MR2 — vocabulary translator:** implement the three-class vocabulary mapping
+  above.
+- **Q-MR3 — timing conversion:** RMXP runs at 40 fps; GBA at 60 fps. Convert wait
+  frames accordingly (`delay_*` macros).
+- **Q-MR4 — injection architecture (the genuinely open one):** translated routes
+  must re-enter emitted `.pory` without hand-editing generated output. Two options:
+  (a) a deterministic idempotent post-pass over `.pory` + the unhandled queue; or
+  (b) regen-with-translator via memo replay (the same mechanism as the F1 label
+  repair). The frozen Phase 4 agent keeps emitting breadcrumbs either way.
+- **Q-MR5 — degrade tiers:** tackle player-only routes (531) first — dependency-
+  free; then cutscene tier (527) — fidelity-critical; remaining events default to
+  static-NPC degrade and are retained as an audit trail in the queue.
+
+**Inputs:** Phase 4 `.pory` files + `unhandled.jsonl`; the Phase 3
+`MapNNN.json` (raw 209/210/509 command payloads); the 5.3 local-id map.
+**Output:** augmented `.pory` with `applymovement` + movement-script blocks; the
+queue entries resolved.
+
+**Acceptance:**
+- [ ] Move-route census parses: for each map the tool reports how many events
+      carry routes and their target-class breakdown (player / self / other).
+- [ ] Player-only routes (531 events) translated and compile-gated in isolation
+      before any other tier is touched.
+- [ ] Timing conversion: a 40-frame RMXP wait round-trips to the nearest GBA
+      `delay_*` value.
+- [ ] No mutation of Phase 4 frozen output except via the agreed injection
+      mechanism from Q-MR4.
+- [ ] Re-running the post-pass on already-processed maps is idempotent.
+
+### 5.6 — Reachability Check  ·  `reachability.py`
+
+**Objective.** Run a directed BFS over each map's emitted collision data to verify
+that every exit is reachable from every entry. Catch soft-locks introduced by
+Q3/Q4 substitution errors before Phase 7. Runs **after 5.2–5.4** produce output.
+
+**Background (2026-06-11 decision, `FABLES_DECISIONS.md` §8):** Q3 (collision
+inherited from substituted metatile) × Q4 (one universal tileset) guarantees
+walkability errors exactly where geometry is the gameplay — caves, gyms, puzzle
+rooms. Two design choices strengthen the check: **ledges are modeled in v1** (not
+deferred) because they are the primary soft-lock mechanism, and **pessimistic
+failures route to build-agent wiki review** rather than immediately to the user.
+
+**Design (settled):**
+
+1. **Graph construction:** walkable cells come from the emitted collision in `map.bin`
+   (5.1 metatile baseline, Q3 overrides from 5.2). **Entries** = warp landings
+   into this map (every 201 command in Phase 3 JSON, resolved via `map_constants`)
+   + connection edges (5.4) + player spawn (`URANIUM_START_MAP` from §2.8 metadata)
+   + healing spots (§2.8 metadata). **Exits** = the map's own warp-event cells +
+   connection edges. Alarm = an exit unreachable from every entry.
+2. **Directed BFS with one-way ledge edges (v1):** a jump-behavior metatile
+   contributes an approach→landing edge with no reverse (hop down, can't climb
+   back). This is the mechanism that produces soft-locks, so it must be modeled in
+   the first pass.
+3. **Ledge data pipeline:** Essentials marks ledges via terrain tags in
+   `Tilesets.rxdata`, which is **not yet deserialized** (deserialize.rb currently
+   carries only `tileset_id`). A small extension to `deserialize.rb` dumps
+   `terrain_tags` + `passages` per tileset. Directional ledge tile ids map to
+   `MB_JUMP_SOUTH/EAST/WEST/NORTH` metatile rows in `tileset_map.json`; fail loud
+   on an unmapped ledge tile.
+4. **Passages oracle:** the same `Tilesets.rxdata` dump yields RMXP `passages` —
+   the source-side walkability ground truth. Diff it cell-by-cell against the
+   emitted GBA collision to catch Q3/Q4 substitution errors directly, not just
+   via connectivity. Q3's emit decision is unchanged; this is validation only.
+5. **Three-way classification + review flow:**
+   - Run BFS in both **optimistic** mode (object-event cells treated as passable)
+     and **pessimistic** mode (impassable).
+   - **Water tiles** = separate "HM-gated" class, never a failure.
+   - **Fail-optimistic** = unconditional defect (no user eyes needed; file as a
+     tileset-map or collision bug).
+   - **Fail-pessimistic / pass-optimistic** = build-agent wiki review (spoiler-free
+     mechanical summary): confirm the gating is intended per the location's
+     documented HM/puzzle requirements.
+   - **Puzzle solvability** (Gym 8, Strength caves, …) is beyond static analysis
+     → flagged maps become an explicit **Phase 7 playthrough checklist** generated
+     as a byproduct of the wiki-review pass.
+
+**Inputs:** `map.bin` + `layouts.json` (from 5.2); `map.json` warp/connection data
+(from 5.3/5.4); `intermediate/map_metadata.json` (spawn + heal spots); per-tileset
+`terrain_tags` + `passages` dumped from `Tilesets.rxdata`.
+**Output:** per-map reachability report (entries→exits graph, classification,
+defect list); passages-vs-emitted collision diff report; Phase 7 puzzle checklist.
+
+**Acceptance:**
+- [ ] BFS on a synthetic map with a blocked exit is classified as a defect.
+- [ ] A one-way ledge edge allows passage in the forward direction only; the
+      reverse direction is unreachable.
+- [ ] Water-only cells between an entry and an exit are classified "HM-gated", not
+      a defect.
+- [ ] A puzzle-gated map (passable only in optimistic mode) is flagged for wiki
+      review and added to the Phase 7 checklist, not auto-failed.
+- [ ] Passages oracle diff reports every cell where emitted GBA collision disagrees
+      with the RMXP source `passages` value.
+- [ ] All 199 maps produce a reachability report; 0 unconditional defects in the
+      output corpus before Phase 7 begins.
+
 ---
 
 ## Open Design Questions — RESOLVED 2026-06-06 (with the operator)
@@ -284,6 +419,14 @@ while the Phase 4 bulk run is active.
       unmapped tile / unknown tileset / dangling map reference.
 - [ ] Maps render in Porymap (the human spot-check; not a §9 hard gate, but the
       practical proof the geometry is right before Phase 7).
+- [ ] (§5.5) Player-only move routes (531 events) translated and compile-gated;
+      remaining tiers have a documented degrade decision.
+- [ ] (§5.5) Every cluster in the move-route unhandled queue has a disposition
+      (translated / degraded-static / deferred-Phase-6).
+- [ ] (§5.6) All 199 maps produce a reachability report; 0 unconditional defects
+      (fail-optimistic maps) before Phase 7 begins.
+- [ ] (§5.6) Passages oracle diff complete; every cell disagreement either
+      accepted (known Q3/Q4 substitution) or resolved as a tileset-map fix.
 
 ---
 

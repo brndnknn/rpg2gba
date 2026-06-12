@@ -114,3 +114,56 @@ def test_connections_bidirectional() -> None:
 def test_connections_no_dangling_map() -> None:
     """No emitted connection references a non-existent MAP_*."""
     pytest.skip(_TODO)
+
+
+# --- 5.5 move_routes ---------------------------------------------------------
+
+def test_move_route_census_parses() -> None:
+    """Census tool reports per-map event count and target-class breakdown (player/self/other)."""
+    pytest.skip("Phase 5 §5.5 — not yet implemented")
+
+
+def test_move_route_player_only_translation() -> None:
+    """A player-only 209 route translates to applymovement(OBJ_EVENT_ID_PLAYER, …)
+    and compile-gates clean."""
+    pytest.skip("Phase 5 §5.5 — not yet implemented")
+
+
+def test_move_route_timing_conversion() -> None:
+    """A wait command of N frames at RMXP 40fps converts to the nearest GBA 60fps delay value."""
+    pytest.skip("Phase 5 §5.5 — not yet implemented")
+
+
+def test_move_route_injection_idempotent() -> None:
+    """Re-running the move-route post-pass on already-processed .pory output is idempotent."""
+    pytest.skip("Phase 5 §5.5 — not yet implemented")
+
+
+# --- 5.6 reachability --------------------------------------------------------
+
+def test_reachability_blocked_exit_is_defect() -> None:
+    """BFS on a synthetic map where an exit cell is walled off classifies it as a defect."""
+    pytest.skip("Phase 5 §5.6 — not yet implemented")
+
+
+def test_reachability_ledge_one_way() -> None:
+    """A ledge edge allows forward traversal (approach→landing) but the reverse
+    direction is unreachable."""
+    pytest.skip("Phase 5 §5.6 — not yet implemented")
+
+
+def test_reachability_water_is_hm_gated() -> None:
+    """An exit reachable only through water tiles is classified HM-gated, not a defect."""
+    pytest.skip("Phase 5 §5.6 — not yet implemented")
+
+
+def test_reachability_puzzle_gated_routes_to_wiki_review() -> None:
+    """An exit passable in optimistic mode but not pessimistic is flagged for
+    wiki review, not auto-failed."""
+    pytest.skip("Phase 5 §5.6 — not yet implemented")
+
+
+def test_passages_oracle_diff_reports_disagreements() -> None:
+    """Passages oracle diff reports every cell where emitted GBA collision
+    disagrees with the RMXP source passages value."""
+    pytest.skip("Phase 5 §5.6 — not yet implemented")
