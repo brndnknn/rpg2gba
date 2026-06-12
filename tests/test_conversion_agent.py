@@ -498,8 +498,10 @@ def test_memo_cross_map_hit_rewrites_self_switch(tmp_path: Path) -> None:
     assert "FLAG_MAP020_EVENT007_SSA" in p20  # flag rewritten to the current map
     assert "FLAG_MAP010_EVENT007_SSA" not in p20
     # The script-block label must also be rewritten — a stale Map010_ label compiles in
-    # isolation but collides / dangles at assembly when both maps are linked.
-    assert "Map020_npc_Page1" in p20
+    # isolation but collides / dangles at assembly when both maps are linked. Labels are
+    # EV-qualified on accept (F1 label-collision fix), so both files carry the EV tag.
+    assert "Map010_EV007_npc_Page1" in p10
+    assert "Map020_EV007_npc_Page1" in p20
     assert "Map010_" not in p20
     state = json.loads((tmp_path / "out" / "flag_state.json").read_text(encoding="utf-8"))
     # Both events' self-switches are minted (mints replay for the reused event).

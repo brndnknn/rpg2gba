@@ -25,7 +25,7 @@ import logging
 import re
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from rpg2gba.conversion_agent import deterministic, poryscript, prompt_builder
@@ -132,6 +132,7 @@ class Orchestrator:
         out_pory = self.scripts_dir / f"{stem}.pory"
         out_pory.write_text("", encoding="utf-8")  # exists even if every event is skipped
         blocks: list[str] = []
+        seen_labels: set[str] = set()
         for event in m["events"]:
             # Decorative/graphic-only events (no real commands) produce no script —
             # skip them without spawning the backend (saves budget across the corpus).
@@ -140,6 +141,18 @@ class Orchestrator:
                 continue
             script = self._convert_event(map_id, event)
             if script is not None:
+                # Invariant (F1): every accepted script's labels are unique within the
+                # map. _qualify_labels guarantees this by construction; a violation
+                # means the qualification missed a path — abort loud rather than emit
+                # a duplicate symbol the compile-gate can't see.
+                labels = _script_labels(script)
+                dup = labels & seen_labels
+                if dup:
+                    raise RuntimeError(
+                        f"{stem} ev{event.get('id')}: duplicate script label(s) "
+                        f"{sorted(dup)} — label qualification failed"
+                    )
+                seen_labels |= labels
                 blocks.append(script)
             # Flush after every event so a mid-map stop never loses accepted work
             # (per-event LLM calls are slow + interruptible — ROADMAP §4.5).
@@ -262,13 +275,22 @@ class Orchestrator:
 
     # -- per-event --------------------------------------------------------
 
-    def _convert(self, payload: dict, ctx: dict) -> ConversionResult | None:
+    def _convert(
+        self,
+        payload: dict,
+        ctx: dict,
+        *,
+        transform: Callable[[str], str] | None = None,
+    ) -> ConversionResult | None:
         """Shared convert core: prompt → backend → commit → compile-gate → retry-once.
 
         Returns the accepted ``ConversionResult`` (script compiled), or ``None`` if the
         item was queued. The caller handles what differs between map events and common
         events: self/temp-switch minting and unhandled-command logging. ``ctx`` is the
-        queue context (identifies the item in ``unhandled.jsonl``)."""
+        queue context (identifies the item in ``unhandled.jsonl``). ``transform`` is an
+        optional deterministic script rewrite (label qualification, F1) applied to every
+        backend result *before* the compile-gate, so what is gated, memoized, and emitted
+        are the same text."""
         prompt = self._build_prompt(payload)
         try:
             result = self.backend.convert_event(payload, self._registry_state(), prompt)
@@ -284,6 +306,8 @@ class Orchestrator:
 
         if not self._commit_proposals(ctx, result):
             return None
+        if transform is not None:
+            result = replace(result, script=transform(result.script))
 
         compiled = self.compile_fn(result.script)
         if not compiled.ok:
@@ -297,6 +321,8 @@ class Orchestrator:
                 return None
             if not self._commit_proposals(ctx, result):
                 return None
+            if transform is not None:
+                result = replace(result, script=transform(result.script))
             compiled = self.compile_fn(result.script)
             if not compiled.ok:
                 err = compiled.stderr.strip()
@@ -329,7 +355,11 @@ class Orchestrator:
         logger.info(
             "--- ev%s (%s): converting ---", event.get("id"), event.get("name", "")
         )
-        result = self._convert(payload, ctx)
+        result = self._convert(
+            payload,
+            ctx,
+            transform=lambda s: _qualify_labels(s, map_id, int(event["id"])),
+        )
         if result is None:
             return None
         if not self._mint_event_switches(map_id, event, ctx):
@@ -352,7 +382,8 @@ class Orchestrator:
         match = deterministic.try_deterministic(map_id, event, self._det_context)
         if match is None:
             return None
-        if not self.compile_fn(match.script).ok:
+        script = _qualify_labels(match.script, map_id, int(event["id"]))
+        if not self.compile_fn(script).ok:
             logger.debug(
                 "ev%s deterministic output failed compile-gate — falling through",
                 event.get("id"),
@@ -365,10 +396,10 @@ class Orchestrator:
             _memo_key({"map_id": map_id, **event}),
             map_id,
             event,
-            ConversionResult(script=match.script, unhandled=match.unhandled),
+            ConversionResult(script=script, unhandled=match.unhandled),
         )
-        logger.info("ev%s deterministic:\n%s", event.get("id"), match.script)
-        return match.script
+        logger.info("ev%s deterministic:\n%s", event.get("id"), script)
+        return script
 
     def _convert_common_event(self, payload: dict) -> str | None:
         """Convert one common event (already adapted to page-shape); None if queued.
@@ -422,6 +453,10 @@ class Orchestrator:
         script = self._reinstantiate(entry, map_id, event)
         if script is None:  # stale-token guard failed
             return None
+        # Qualify for the CURRENT event (F1). New-format entries arrive already
+        # qualified (no-op); entries stored before the label fix arrive name-only and
+        # gain the EV tag here, so old memo manifests replay correctly.
+        script = _qualify_labels(script, map_id, int(event["id"]))
         if not self.compile_fn(script).ok:  # reused script must still compile
             logger.debug("memo hit failed compile-gate; re-spawning %s", ctx)
             return None
@@ -446,17 +481,20 @@ class Orchestrator:
         """Rewrite the source event's map/event-derived tokens to the current map/event.
 
         Two token families carry the source identity: the deterministic self/temp-switch
-        flag names (``FLAG_MAP{m}_EVENT{e}_SS*``/``_TS*``), and the script-block **labels**
-        (``script Map{m}_<name>_Page<n>``). The memo key keeps the event name, so the
-        ``<name>_Page<n>`` part is identical between source and reuse — only the ``Map{NNN}_``
-        label prefix and the flag names differ. Both are rewritten here; the flag-name and
-        label rewrites don't collide (``FLAG_MAP…`` is upper-case, the label prefix ``Map…``
-        is mixed-case, so the case-sensitive replaces are disjoint).
+        flag names (``FLAG_MAP{m}_EVENT{e}_SS*``/``_TS*``), and the script-block **labels**.
+        Labels come in two formats: post-F1 entries are EV-qualified
+        (``Map{m}_EV{e}_<name>_Page<n>``) and rewrite whenever the (map, event) identity
+        differs — *including same-map reuse between two copy-paste events, the case F1
+        exists for*; pre-F1 entries are name-only (``Map{m}_<name>_Page<n>``) and keep the
+        legacy cross-map prefix rewrite, with the caller's ``_qualify_labels`` adding the
+        EV tag afterwards. The flag-name and label rewrites don't collide (``FLAG_MAP…``
+        is upper-case, the label prefix ``Map…`` is mixed-case, so the case-sensitive
+        replaces are disjoint).
 
         Returns the rewritten script, or None if any source-identity token survives the
         rewrite (stale-token guard → caller re-spawns). The label-prefix rewrite is
-        essential: poryscript validates each file in isolation, so a stale ``Map{src}_``
-        label compiles fine but collides / dangles at assembly when the maps are linked."""
+        essential: poryscript validates each file in isolation, so a stale source label
+        compiles fine but collides / dangles at assembly when the maps are linked."""
         cur_event = int(event["id"])
         script = entry.script
         for letter in _event_self_switches(event):
@@ -467,6 +505,13 @@ class Orchestrator:
             script = script.replace(src, temp_switch_flag_name(cur_map, cur_event, k))
         if f"FLAG_MAP{entry.src_map:03d}_EVENT{entry.src_event:03d}_" in script:
             return None  # a source token the per-key rewrite missed — bail to a real spawn
+        src_qualified = f"Map{entry.src_map:03d}_EV{entry.src_event:03d}_"
+        if (entry.src_map, entry.src_event) != (cur_map, cur_event):
+            script = script.replace(
+                src_qualified, f"Map{cur_map:03d}_EV{cur_event:03d}_"
+            )
+            if src_qualified in script:
+                return None  # a source-identity label token survived — bail to a real spawn
         if entry.src_map != cur_map:
             script = script.replace(f"Map{entry.src_map:03d}_", f"Map{cur_map:03d}_")
             if f"Map{entry.src_map:03d}_" in script:
@@ -593,6 +638,35 @@ class Orchestrator:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
+def _qualify_labels(script: str, map_id: int, event_id: int) -> str:
+    """Make a map event's script labels unique per event (F1 label-collision fix).
+
+    The agent (and the deterministic classifiers, historically) derive labels from the
+    event *name* (``Map{NNN}_{name}_Page{n}``), but RMXP names repeat freely — 103/199
+    maps have same-named command-bearing events, so name-derived labels collide at
+    assembly (duplicate symbols the per-event compile-gate can't see). Qualify every
+    ``Map{NNN}_`` label token with the event id: ``Map{NNN}_EV{eee}_…``. Plain string
+    rewrite, so definitions and goto references move together (the technique
+    ``_reinstantiate`` proved); case-sensitive, so the upper-case ``FLAG_MAP…`` flag
+    names are untouched.
+
+    Idempotent: a token already qualified with *this* event's id is left alone — which
+    also keeps default-named events (name ``EV011`` on event 11) at their natural
+    ``Map002_EV011_Page1`` rather than ``Map002_EV011_EV011_Page1``."""
+    prefix = f"Map{int(map_id):03d}_"
+    tag = f"EV{int(event_id):03d}_"
+    pattern = re.compile(re.escape(prefix) + f"(?!{re.escape(tag)})")
+    return pattern.sub(prefix + tag, script)
+
+
+_SCRIPT_LABEL_RE = re.compile(r"^\s*script\s+(\w+)", re.MULTILINE)
+
+
+def _script_labels(script: str) -> set[str]:
+    """The ``script <label>`` block names defined in a Poryscript fragment."""
+    return set(_SCRIPT_LABEL_RE.findall(script))
+
+
 def _event_codes(event: dict) -> set[int]:
     """Every RPG Maker command code used in an event (page lists + move routes)."""
     codes: set[int] = set()
@@ -635,9 +709,9 @@ def _memo_key(payload: dict) -> str:
     Normalizes out **only** ``map_id`` and the event's own ``id`` — name, dialogue, and
     all command content stay in the key — so two copy-pasted events that differ only by
     where they live collapse to one key, while anything that could change the script keeps
-    them distinct. The agent derives script-block labels from the (retained) event name,
-    so the only map/event-derived tokens left in a reused script are the deterministic
-    self/temp-switch flag names, which ``_reinstantiate`` rewrites exactly."""
+    them distinct. The map/event-derived tokens in a stored script are the deterministic
+    self/temp-switch flag names and the EV-qualified ``Map{m}_EV{e}_`` label prefixes
+    (F1); ``_reinstantiate`` rewrites both exactly on reuse."""
     content = {k: v for k, v in payload.items() if k not in ("map_id", "id")}
     blob = json.dumps(content, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()

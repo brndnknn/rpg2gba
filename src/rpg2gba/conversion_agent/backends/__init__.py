@@ -1,15 +1,16 @@
 """Backend abstraction for the conversion agent's LLM provider.
 
 The orchestrator calls convert_event() on whichever backend is configured.
-Two backends are supported:
 
-  OllamaBackend     — local model on the Ubuntu desktop; used for bulk Stage B runs
-  ClaudeCodeBackend — interactive queue-review helper for Stage C; not a programmatic
-                      LLM call, but a tool for presenting the unhandled queue in a
-                      Claude Code session and writing results back to the pipeline
+  ClaudeCodeBackend — PRODUCTION: headless `claude -p` per event on the frozen
+                      bulk-run model (Pro subscription, no API key)
+  OllamaBackend     — optional local fallback; rejected for production
+                      (silent-wrong risk — see ROADMAP Phase 4 strategy)
 
-No paid API backend is used. All conversion is either local (Ollama) or interactive
-(Claude Code via existing Pro subscription).
+Wrappers (compose around either):
+
+  CappingBackend    — bound a run to N spawns (`run_bulk.py --limit`)
+  NullBackend       — spend-nothing guard for maintenance replays
 """
 from __future__ import annotations
 
@@ -114,3 +115,28 @@ class CappingBackend(ConversionBackend):
             raise BudgetReached(self.limit)
         self.count += 1
         return self.inner.convert_event(event_json, registry_state, prompt)
+
+
+class NullBackend(ConversionBackend):
+    """A spend-nothing guard for maintenance replays (`scripts/regen_outputs.py`).
+
+    Wraps the production backend ONLY for its ``system_prompt`` — the memo manifest
+    is fingerprinted by it, so a replay must look identical to the real run or every
+    entry would be discarded as cross-prompt reuse. Any actual ``convert_event`` call
+    means the replay needed a real spawn; raise ``BudgetReached`` so the run aborts
+    cleanly (fail loud) instead of spending."""
+
+    def __init__(self, inner: ConversionBackend) -> None:
+        self.inner = inner
+
+    @property
+    def system_prompt(self) -> str:
+        return getattr(self.inner, "system_prompt", "")
+
+    def convert_event(
+        self,
+        event_json: dict,
+        registry_state: dict,
+        prompt: str,
+    ) -> ConversionResult:
+        raise BudgetReached(0)
