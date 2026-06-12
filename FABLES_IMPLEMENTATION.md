@@ -22,13 +22,19 @@ unticked box, and resume there.
 
 ## Status
 
-- **Current position:** Phase 1 starting.
+- **Current position:** Phase 1 — 1.1–1.4 DONE and committed (verified 2026-06-11:
+  243 pass / 10 skips from repo root; ruff clean on `src tests` + both new scripts —
+  the 7 repo-wide ruff hits are pre-existing in old recon/measurement scripts,
+  untouched). Next box: **1.5a = GATE G1, ask user** before running the smoke
+  build on pre-regen output.
 
 ---
 
 ## Phase 1 — F1 label uniquing + repair, verified by #4 smoke harness
 
-- [ ] **1.1 (lead)** `orchestrator.py`: `_qualify_labels(script, map_id, event_id)` —
+- [x] **1.1 (lead)** *(done 2026-06-11 — suite 235 pass / ruff clean; one legacy test
+      assertion in `tests/test_conversion_agent.py` updated to the EV-qualified label
+      format)* `orchestrator.py`: `_qualify_labels(script, map_id, event_id)` —
       idempotent `Map{NNN:03d}_` → `Map{NNN:03d}_EV{eee:03d}_` rewrite (skip when
       already followed by `EV{eee:03d}_`), applied on all three accept paths (LLM,
       memo after `_reinstantiate`, deterministic) before the compile-gate; memo
@@ -36,15 +42,15 @@ unticked box, and resume there.
       `Map{src}_EV{srcev}_` → `Map{cur}_EV{curev}_` + stale guard (old unqualified
       entries: old rewrite then qualification); per-map duplicate-label fail-loud
       assertion at `.pory` flush; `NullBackend` in `backends/__init__.py`.
-- [ ] **1.2 (Sonnet)** `tests/test_label_uniquing.py`: same-named events → distinct
+- [x] **1.2 (Sonnet)** `tests/test_label_uniquing.py`: same-named events → distinct
       labels; goto refs rewritten; idempotence; memo cross-map EV-prefix rewrite;
       `EVnnn`-named events not double-qualified; dup assertion fires.
-- [ ] **1.3 (Sonnet)** `scripts/regen_outputs.py`: `--maps N…`/`--all-done`,
+- [x] **1.3 (Sonnet)** `scripts/regen_outputs.py`: `--maps N…`/`--all-done`,
       `--ce N…`; clears checkpoints/ledger entries (+`CommonEvents.done` when CEs
       targeted); deletes orphaned partial `.pory` (no checkpoint); re-runs
       orchestrator with `NullBackend` (zero spawns by construction, abort loud on
       any miss).
-- [ ] **1.4 (Sonnet)** `scripts/assembly_smoke.py`: fork worktree on throwaway
+- [x] **1.4 (Sonnet)** `scripts/assembly_smoke.py`: fork worktree on throwaway
       branch; all `.pory`→`.inc`; generated headers (registry `dump_header`,
       `MAP_URANIUM_<N>` dummy aliases, `TRAINER_*` from `intermediate/trainers.json`,
       fail loud on unknown unresolved family); `.include` wiring; `make -j modern`;
@@ -55,7 +61,7 @@ unticked box, and resume there.
 - [ ] **1.5b** `regen_outputs.py --all-done` (maps 1–7, 0 spawns) → corpus dup-label
       scan = 0 on regenerated output
 - [ ] **1.5c** smoke again → green
-- [ ] Commits: 1.1+1.2 `____` · 1.3 `____` · 1.4 `____`
+- [x] Commits: 1.1+1.2 `dc8e436` · 1.3 `9921285` · 1.4 `ed6e857`
 
 ## Phase 2 — #3 cluster-aware triage
 
