@@ -185,22 +185,27 @@ for Phase 2, possible deterministic post-accept repairs (would need design OK):
 
 ## Phase 4 — Phase-5-track prep (parallel Sonnet fan-out, disjoint files)
 
-- [ ] **4.1 (Sonnet)** PHASE5_PLAN.md §5.5 (move-route census + Q-MR1–5) + §5.6
-      (reachability: directed BFS w/ ledge edges, passages oracle, three-mode
-      classification, Phase 7 puzzle checklist) + skipped acceptance stubs in
-      `tests/test_tileset_converter.py`.
-- [ ] **4.2 (Sonnet)** `deserialize.rb` `tilesets` mode: `Tilesets.rxdata` →
-      `tilesets.json` (per-tile `terrain_tags` + `passages`) + pytest against the
-      real file.
-- [ ] **4.3 (Sonnet)** `scripts/map_identity_check.py`: sign-text/BGM/parent-tree/
-      dup-group signals vs `map_infos.json`; flag disagreements; identify the
-      missing 199th map.
+- [x] **4.1 (Sonnet)** *(done 2026-06-12)* PHASE5_PLAN.md §5.5 (move-route census +
+      Q-MR1–5, 3 translator classes) + §5.6 (reachability BFS w/ ledge edges,
+      passages oracle, three-mode classification, Phase-7 puzzle checklist),
+      transcribed from FABLES_DECISIONS #6/#8 + **9 skip stubs** in
+      `tests/test_tileset_converter.py` (collect+skip clean).
+- [x] **4.2 (Sonnet)** *(done 2026-06-12)* `deserialize.rb` additive `tilesets` mode:
+      `Tilesets.rxdata` → `tilesets.json` (per-tile `passages`/`priorities`/
+      `terrain_tags`, reuses `marshal_load_lenient`+Table stub, fail-loud). New
+      `tests/test_tilesets_deserialize.py` vs the real file — **60 tilesets**
+      (OverWorld = 1880 tiles); skips if no Uranium tree.
+- [x] **4.3 (Sonnet)** *(done 2026-06-12)* `scripts/map_identity_check.py` (read-only):
+      sign-text/BGM/parent-tree/dup-group signals vs `map_infos.json`. Missing 199th =
+      **Map999** (0 events, no infos entry → fail-loud at mint); **35** dup-name groups;
+      **31** flagged disagreements incl. Comet/Passage Cave BGM cross-assignment (maps
+      7/10/96 labeled Comet Cave but play `PU-Passage Cave`).
 - [ ] **4.4 (lead)** Wiki arbitration (delegated per-location lookups, lead
       synthesizes) → `reference/map_name_overrides.json` (map 7 → Passage Cave is
       the known seed) + CLAUDE.md §4.3 row. Spoiler-free output for the user.
 - [ ] **4.5 (lead)** Close out: tick FABLES_DECISIONS checklists, MEMORY.md
       live-state update, final commit; offer to resume `run_bulk.py --timed`.
-- [ ] Commits: 4.1 `____` · 4.2 `____` · 4.3 `____` · 4.4 `____` · 4.5 `____`
+- [ ] Commits: 4.1+4.2+4.3 `2bd4e6d` (parallel Sonnet fan-out) · 4.4 `____` · 4.5 `____`
 
 ## Verification gates (end state)
 
@@ -213,6 +218,7 @@ for Phase 2, possible deterministic post-accept repairs (would need design OK):
 - [x] `CommonEvents.pory`: exactly 3 `# STRIPPED:` stubs, compiles rc 0 (2026-06-12)
 - [x] Pre-filter claims ≈ +40 after rider (post-G2) — **+49** (997 → 1046, 27.8% →
       29.2%); near-miss residue 133 → 86 (2026-06-12)
-- [ ] `tilesets.json` terrain-tag spot-check; identity check flags map 7
+- [x] `tilesets.json` produced (60 tilesets, terrain_tags+passages); identity check
+      flags map 7 (Comet/Passage Cave cross-assignment) + finds missing Map999 (2026-06-12)
 - [ ] Clean tree; only `reachability.py` + `map_constants.py` integration left
       (blocked on Phase 5 §5.1–5.4 by design)
