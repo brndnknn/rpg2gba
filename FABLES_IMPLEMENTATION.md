@@ -200,12 +200,18 @@ for Phase 2, possible deterministic post-accept repairs (would need design OK):
       **Map999** (0 events, no infos entry → fail-loud at mint); **35** dup-name groups;
       **31** flagged disagreements incl. Comet/Passage Cave BGM cross-assignment (maps
       7/10/96 labeled Comet Cave but play `PU-Passage Cave`).
-- [ ] **4.4 (lead)** Wiki arbitration (delegated per-location lookups, lead
-      synthesizes) → `reference/map_name_overrides.json` (map 7 → Passage Cave is
-      the known seed) + CLAUDE.md §4.3 row. Spoiler-free output for the user.
+- [x] **4.4 (lead)** *(done 2026-06-12)* `reference/map_name_overrides.json` (new
+      §4.3 source of truth) + CLAUDE.md row. Wiki pass (spoiler-free) over the 4.3
+      flags. **Result: 0 overrides.** The seed "map 7 → Passage Cave" is **REFUTED** —
+      wiki topology shows maps 7/96/10 link Route 04↔05 = Comet Cave (label correct);
+      19/36/37 off Kevlar Town = Passage Cave (label correct); the shared
+      `PU-Passage Cave` BGM is a reused asset, not identity. V4 over-indexed on BGM.
+      Other 29 flags = FPs (neighbour signs / third-party battle BGM). All 6 cave maps
+      → `phase7_confirm`. Orphan **Map999** (empty, no infos entry) → recommend
+      whole-map STRIP (user call). *MEMORY V4 breadcrumb to correct in 4.5.*
 - [ ] **4.5 (lead)** Close out: tick FABLES_DECISIONS checklists, MEMORY.md
       live-state update, final commit; offer to resume `run_bulk.py --timed`.
-- [ ] Commits: 4.1+4.2+4.3 `2bd4e6d` (parallel Sonnet fan-out) · 4.4 `____` · 4.5 `____`
+- [ ] Commits: 4.1+4.2+4.3 `2bd4e6d` (parallel Sonnet fan-out) · 4.4 `a125019` · 4.5 `____`
 
 ## Verification gates (end state)
 
