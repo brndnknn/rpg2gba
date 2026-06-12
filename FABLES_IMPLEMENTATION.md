@@ -22,11 +22,13 @@ unticked box, and resume there.
 
 ## Status
 
-- **Current position:** Phase 1 — 1.1–1.4 DONE and committed (verified 2026-06-11:
-  243 pass / 10 skips from repo root; ruff clean on `src tests` + both new scripts —
-  the 7 repo-wide ruff hits are pre-existing in old recon/measurement scripts,
-  untouched). Next box: **1.5a = GATE G1, ask user** before running the smoke
-  build on pre-regen output.
+- **Current position:** Phase 1 COMPLETE except 1.5c-green (blocked on non-F1
+  findings, see "G1 findings" below — user decisions needed). G1 run 2026-06-12
+  with user OK: smoke red pre-regen, dup flagged; maps 1–7 regenerated at zero
+  spawns; corpus dup scan = 0; targeted re-assembly of Map002 shows the dup gone.
+  244 pass / 10 skips; ruff clean on `src tests` + new scripts (7 repo-wide hits
+  pre-existing in old recon scripts). Next: **Phase 2 (triage)** — and fold the
+  G1 findings into its disposition rules.
 
 ---
 
@@ -56,11 +58,50 @@ unticked box, and resume there.
       fail loud on unknown unresolved family); `.include` wiring; `make -j modern`;
       duplicate-symbol/undefined-ref error clustering. Script only — first real
       build is gate G1.
-- [ ] **1.5a [GATE G1 — ask user]** smoke on pre-regen output → must flag the
-      `Map002_Receptionist_TRADE_Page1` duplicate (red)
-- [ ] **1.5b** `regen_outputs.py --all-done` (maps 1–7, 0 spawns) → corpus dup-label
-      scan = 0 on regenerated output
-- [ ] **1.5c** smoke again → green
+- [x] **1.5a [GATE G1 — user OK'd 2026-06-12]** smoke on pre-regen output → RED.
+      Full build died first at the CE-084 `\$` preproc error (see findings), so the
+      dup evidence came from a targeted run of the fork's exact event_scripts.s
+      toolchain (preproc|cpp|preproc|as) with only Map002.inc wired:
+      ``Map002.pory:116: Error: symbol `Map002_Receptionist_TRADE_Page1' is
+      already defined`` ✓
+- [x] **1.5b** regen maps 1–7 (`--maps 1 2 3 4 5 6 7`, NullBackend, **0 spawns**)
+      → corpus dup-label scan **0** (103 labels / 8 .pory; `scripts/dup_label_scan.py`).
+      Two latent bugs fixed en route, see commits: (a) 1.1's `_reinstantiate`
+      stale-guard bailed on same-(map,event) replay (own flag tokens misread as
+      stale → every self/temp-switch event would have re-spawned); (b) 1.3's
+      `run_replay` used `convert_all`, which would have walked into unconverted
+      maps 8+ and mutated memo/registry mid-bulk-run — now converts selected ids only.
+- [ ] **1.5c** smoke green — **BLOCKED on non-F1 findings** (below). F1 scope is
+      verified: targeted Map002 re-assembly post-regen shows the dup GONE; residual
+      errors are exactly the recorded findings. Full-corpus green needs the findings
+      dispositioned first (user call; most look deterministic-repair-able).
+
+### G1 findings (all pre-existing agent output, compile-gate-green, assembly-red)
+
+All from the §9-reviewed first corpus (CommonEvents + maps 1–7); queue/triage fodder
+for Phase 2, possible deterministic post-accept repairs (would need design OK):
+
+1. **CE-084 `\"` escape** (`CommonEvents.pory:285`, `msgbox("\"Garroooough!\"")`):
+   poryscript doesn't support `\"` — silently splits into garbage text blocks; GAS/
+   preproc dies on `unknown escape '\$'`. **This single error aborts the whole
+   event_scripts.s assembly** (preproc exits before `as` runs), masking everything
+   else. Fix needs a re-spawn (CE, not memoised) or content decision.
+2. **`healparty` ×2** (Map002 EV001): not a fork command (correct:
+   `special(HealPlayerParty)`). Poryscript passes unknown commands through raw.
+3. **Bare `call CommonEvent_NNN` ×3** (Map002 → CEs 4/5/6, the strip-list CEs):
+   poryscript splits into two raw statements; correct form `call(CommonEvent_NNN)`.
+4. **Constant-naming drift, 4 families** (unresolved at assembly; smoke now
+   dummy-defines them via opt-in `--define-unresolved`, each logged as FINDING):
+   - `ITEM_TURTICKET` / `ITEM_KELLYNLETTER` — agent used internal names; Phase 2
+     minted `ITEM_TUR_TICKET` (494) / `ITEM_KELLYNS_LETTER` (572). Deterministic map.
+   - `TRAINER_<CLASS>_<NAME>` scheme (7 tokens seen) ≠ registry `TRAINER_<NAME>_<ID>`
+     scheme — Phase 5/7 reconciliation.
+   - `MULTI_*` ×4 — agent-invented multichoice ids; need `gMultichoiceLists`
+     entries (Phase 5/6).
+   - `FLAG_MAP007_EVENT019_SSA` — agent setflag for a self-switch the orchestrator
+     never minted (set is inside a script call, not code 123) — mint-derivation gap.
+   (Counts above are from the full 9-file scan incl. the since-deleted Map008
+   orphan partial; the live 8-file corpus shows a subset. All return as maps convert.)
 - [x] Commits: 1.1+1.2 `dc8e436` · 1.3 `9921285` · 1.4 `ed6e857`
 
 ## Phase 2 — #3 cluster-aware triage
@@ -125,7 +166,8 @@ unticked box, and resume there.
 
 ## Verification gates (end state)
 
-- [ ] Smoke: red on pre-regen output → green post-regen (G1)
+- [ ] Smoke: red on pre-regen output → green post-regen (G1) — *red ✓ + dup-free ✓
+      2026-06-12; full green blocked on the G1 findings (non-F1 scope)*
 - [ ] Triage: ≥ ~80% of the live 241 auto-tagged; novel residue ≈ 30–50
 - [ ] `CommonEvents.pory`: exactly 3 `# STRIPPED:` stubs, compiles
 - [ ] Pre-filter claims ≈ +40 after rider (post-G2)
