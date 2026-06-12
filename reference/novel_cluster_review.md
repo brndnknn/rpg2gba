@@ -31,14 +31,16 @@ for every cluster this round.
 | `111:cond12:pbNextMysteryGiftID` (1) | **Needs-engine.** Mystery-gift family (table already queues `pbReceiveMysteryGift`). |
 | `355:pbPushThisBoulder` (1) | **Phase 5.** Strength boulder push is native pokeemerald (pushable boulder objects + flags); wire at object placement. |
 
-## Open §10 calls for the user
+## §10 calls — RESOLVED (user, 2026-06-12)
 
-1. **Racing minigame (CE10/11):** ADAPT (build engine minigame, Phase 8) vs STRIP
-   (replace with a simple outcome). Recommended: stub now + Phase 8 ADAPT list.
-2. **Dream/vision sequence (CE86/87):** ADAPT (party-stash engine state, Phase 6/8)
-   vs STRIP-stub. Recommended: ADAPT later; stub meanwhile.
-3. **Custom VS-intro (CE76):** standard battle intro now; custom VS screen only as
-   Phase 8 polish. Recommended: accept the loss.
+1. **Racing minigame (CE10/11):** **STUB now → Phase 8 ADAPT.** Strip to a simple
+   outcome substitute for the bulk run; list the engine minigame as a Phase 8 ADAPT
+   item (consistent with the Custom Mode precedent).
+2. **Dream/vision sequence (CE86/87):** **STUB now → ADAPT Phase 6/8.** Strip-stub
+   meanwhile; build the party-stash engine state in Phase 6/8.
+3. **Custom VS-intro (CE76):** **Accept the loss — standard battle intro.** No custom
+   VS screen; pokeemerald `trainerbattle`'s own intro is the substitute. (Not even a
+   Phase 8 polish item unless revisited.)
 
 ## Rule promotions (deferred, with reasons)
 
