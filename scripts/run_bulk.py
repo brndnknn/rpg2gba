@@ -25,6 +25,13 @@ deterministic / memo reuse does not count toward N.
   python scripts/run_bulk.py --limit 5
       Convert at most 5 events via the LLM, then stop. Run it again for the next 5.
 
+Add `--skip-lane` to spend ONLY on events outside the hand-conversion lane (the hard
+ones); dialogue / self-switch / simple-branch events are held for
+`scripts/run_human.py` and their maps become `.partial`. Do those by hand, then run a
+plain `run_bulk` (no `--skip-lane`) to assemble them and finish the maps — your hand
+conversions come back as free memo hits, so the mop-up spends only on lane events
+nobody did.
+
 Token/progress tally is written to token_usage.jsonl as it goes; see it any time
 with `python scripts/run_stats.py`. A summary also prints on exit.
 """
@@ -95,6 +102,14 @@ def main() -> int:
     ap.add_argument("--model", default=FROZEN_MODEL)
     ap.add_argument("--backend", default="claude_code", choices=["claude_code", "ollama"])
     ap.add_argument(
+        "--skip-lane",
+        action="store_true",
+        help="don't spend on hand-conversion-lane events (dialogue/self-switch/simple "
+        "branches) — hold them for scripts/run_human.py. Opus only spawns on the hard "
+        "events; lane maps become .partial. Finish with a plain run_bulk (no --skip-lane) "
+        "to assemble the lane events you did by hand and complete those maps.",
+    )
+    ap.add_argument(
         "-n",
         "--limit",
         type=int,
@@ -144,7 +159,9 @@ def main() -> int:
     if args.limit is not None:
         backend = CappingBackend(backend, args.limit)
         logger.info("bounded run: stopping after %d LLM conversion(s) this invocation", args.limit)
-    orchestrator = orch.Orchestrator(backend, registry, out_dir)
+    orchestrator = orch.Orchestrator(backend, registry, out_dir, skip_lane=args.skip_lane)
+    if args.skip_lane:
+        logger.info("--skip-lane: holding hand-conversion-lane events for run_human")
     state_path = out_dir / "run_state.json"
     ce_file = out_dir / "common_events.json"
 

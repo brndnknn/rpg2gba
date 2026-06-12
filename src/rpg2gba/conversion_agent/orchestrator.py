@@ -28,12 +28,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from rpg2gba.conversion_agent import deterministic, poryscript, prompt_builder
+from rpg2gba.conversion_agent import deterministic, lane, poryscript, prompt_builder
 from rpg2gba.conversion_agent.backends import (
     BackendTransportError,
     BudgetReached,
     ConversionBackend,
     ConversionResult,
+    EventDeferred,
     RateLimitError,
 )
 from rpg2gba.conversion_agent.flag_registry import (
@@ -46,6 +47,22 @@ from rpg2gba.conversion_agent.flag_registry import (
 logger = logging.getLogger(__name__)
 
 CompileFn = Callable[[str], poryscript.CompileResult]
+
+
+class LaneSkipped(Exception):
+    """A `--skip-lane` bulk run reached a human-lane event that would otherwise spawn.
+
+    Internal orchestrator control flow (NOT a backend exception): raised in
+    ``_convert_event`` only when ``skip_lane`` is set and the event is in the hand-conversion
+    lane — and only *after* the deterministic and memo checks, so events convertible for free
+    are still converted. Caught one level up in ``convert_map``, which marks the map
+    ``.partial`` and leaves the event for ``run_human``. Never reaches the backend or the
+    bulk runner."""
+
+    def __init__(self, map_id: int, event_id: int) -> None:
+        super().__init__(f"lane event held for hand-conversion: map {map_id} ev {event_id}")
+        self.map_id = map_id
+        self.event_id = event_id
 
 
 @dataclass
@@ -73,6 +90,7 @@ class Orchestrator:
         *,
         reference_dir: Path = Path("reference"),
         compile_fn: CompileFn | None = None,
+        skip_lane: bool = False,
     ) -> None:
         self.backend = backend
         self.registry = registry
@@ -82,6 +100,10 @@ class Orchestrator:
         self.unhandled_path = self.output_dir / "unhandled.jsonl"
         self.registry_state_path = self.output_dir / "flag_state.json"
         self.compile_fn = compile_fn or poryscript.compile_script
+        # `run_bulk --skip-lane`: hold hand-conversion-lane events for run_human instead of
+        # spending a spawn on them (the partition that prevents wasted Opus spend). Off by
+        # default — a normal bulk run converts everything, lane included (the mop-up pass).
+        self.skip_lane = skip_lane
         # The command-code reference is sliced per event into the user prompt. The
         # event-invariant context (cheatsheet, script-call reference, few-shots) now
         # rides in the backend's system prompt (dedup Phase B) — composed once in
@@ -120,6 +142,20 @@ class Orchestrator:
             n += 1
         return n
 
+    def convert_single(self, map_id: int, event: dict) -> str | None:
+        """Convert ONE map event in isolation, seeding the memo (the human-pass entry point).
+
+        Unlike ``convert_map``, this writes no ``.pory`` and no per-map checkpoint — it
+        runs the identical per-event core (deterministic pre-filter → memo → backend →
+        compile-gate → switch mint → memo store), so a hand-conversion accepted here
+        becomes a free memo hit when ``run_bulk.py`` later sweeps the corpus in map
+        order, and so does every structurally identical twin. Returns the accepted
+        script, or ``None`` if the event was queued. ``EventDeferred`` (a human punt to
+        Opus) propagates out so the driver can skip to the next event, leaving this one
+        unconverted + un-memoized for the bulk run. Registry state is the caller's to
+        persist (it owns the run lifecycle); the memo is saved here via ``_store_memo``."""
+        return self._convert_event(int(map_id), event)
+
     def convert_map(self, map_json_path: Path) -> None:
         map_json_path = Path(map_json_path)
         stem = map_json_path.stem  # "Map042"
@@ -139,6 +175,7 @@ class Orchestrator:
         out_pory.write_text("", encoding="utf-8")  # exists even if every event is skipped
         blocks: list[str] = []
         seen_labels: set[str] = set()
+        skipped_lane = False  # any lane event held for hand-conversion (--skip-lane)?
         for event in m["events"]:
             # Whole-artifact STRIP (FABLES_DECISIONS #2): the event itself is the
             # stripped feature (no NPC value to keep) — skip it entirely. Empty for
@@ -153,7 +190,18 @@ class Orchestrator:
             if not _event_has_commands(event):
                 logger.debug("%s event %s: no commands, skipping", stem, event.get("id"))
                 continue
-            script = self._convert_event(map_id, event)
+            try:
+                script = self._convert_event(map_id, event)
+            except LaneSkipped:
+                # --skip-lane: held for run_human. Leave it unconverted; the map becomes
+                # .partial (not .done) so it is re-entered later to assemble the full .pory.
+                logger.info(
+                    "%s event %s: lane-skipped — held for hand-conversion",
+                    stem,
+                    event.get("id"),
+                )
+                skipped_lane = True
+                continue
             if script is not None:
                 # Invariant (F1): every accepted script's labels are unique within the
                 # map. _qualify_labels guarantees this by construction; a violation
@@ -173,9 +221,21 @@ class Orchestrator:
             out_pory.write_text(("\n\n".join(blocks) + "\n") if blocks else "", encoding="utf-8")
             self.registry.save(self.registry_state_path)
 
-        self._checkpoint(stem).parent.mkdir(parents=True, exist_ok=True)
-        self._checkpoint(stem).write_text("ok\n", encoding="utf-8")
-        logger.info("%s: %d/%d events converted", stem, len(blocks), len(m["events"]))
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        if skipped_lane:
+            # Partial: non-lane events done, lane events held for run_human. NOT .done, so
+            # the top-of-function guard re-enters this map on a later run (the done events
+            # come back as free memo hits) until the lane is filled and it completes.
+            self._partial(stem).write_text("partial\n", encoding="utf-8")
+            logger.info(
+                "%s: PARTIAL — %d converted, lane event(s) held for hand-conversion",
+                stem,
+                len(blocks),
+            )
+        else:
+            self._checkpoint(stem).write_text("ok\n", encoding="utf-8")
+            self._partial(stem).unlink(missing_ok=True)  # promote a previously-partial map
+            logger.info("%s: %d/%d events converted", stem, len(blocks), len(m["events"]))
 
     def convert_common_events(
         self, common_events_path: Path, *, only_ids: set[int] | None = None
@@ -362,11 +422,11 @@ class Orchestrator:
         prompt = self._build_prompt(payload)
         try:
             result = self.backend.convert_event(payload, self._registry_state(), prompt)
-        except (RateLimitError, BackendTransportError, BudgetReached):
-            # Usage cap / transport failure / self-imposed --limit — the event is fine,
-            # we just can't (or won't) spend right now. Abort the run (resumable) instead
-            # of queuing good work as a permanent failure. The bulk runner decides what to
-            # do next (pause, stop, or clean exit).
+        except (RateLimitError, BackendTransportError, BudgetReached, EventDeferred):
+            # Usage cap / transport failure / self-imposed --limit / human punt-to-Opus —
+            # the event is fine, we just can't (or won't) convert it right now. Abort the
+            # run (resumable) instead of queuing good work as a permanent failure. The
+            # caller (bulk runner or run_human) decides what to do next (pause, stop, skip).
             raise
         except Exception as exc:  # backend/parse failure — queue, don't abort the run
             self._queue(ctx, reason=f"backend error: {exc}")
@@ -382,7 +442,7 @@ class Orchestrator:
             retry_prompt = self._retry_prompt(prompt, compiled.stderr)
             try:
                 result = self.backend.convert_event(payload, self._registry_state(), retry_prompt)
-            except (RateLimitError, BackendTransportError, BudgetReached):
+            except (RateLimitError, BackendTransportError, BudgetReached, EventDeferred):
                 raise
             except Exception as exc:
                 self._queue(ctx, reason=f"backend error on retry: {exc}")
@@ -419,6 +479,12 @@ class Orchestrator:
             reused = self._try_reuse_memo(map_id, event, ctx, entry)
             if reused is not None:
                 return reused
+
+        # Partition (run_bulk --skip-lane): everything above is free (deterministic / memo
+        # reuse). Only events that would actually spawn reach here, so skipping the lane ones
+        # now matches run_human's queue exactly. Caught in convert_map → marks the map .partial.
+        if self.skip_lane and lane.in_lane(event):
+            raise LaneSkipped(map_id, int(event["id"]))
 
         logger.info(
             "--- ev%s (%s): converting ---", event.get("id"), event.get("name", "")
@@ -696,6 +762,11 @@ class Orchestrator:
 
     def _checkpoint(self, stem: str) -> Path:
         return self.checkpoint_dir / f"{stem}.done"
+
+    def _partial(self, stem: str) -> Path:
+        """Marker for a map whose non-lane events are done but whose lane events are held
+        for hand-conversion (--skip-lane). Distinct from .done so the map is re-entered."""
+        return self.checkpoint_dir / f"{stem}.partial"
 
     @staticmethod
     def _event_ctx(map_id: int, event: dict) -> dict:

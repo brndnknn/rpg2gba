@@ -222,6 +222,16 @@ def _phase4_backend(name: str, model: str = _DEFAULT_MODEL, usage_log_path: Path
         from rpg2gba.conversion_agent.backends.claude_code import ClaudeCodeBackend
 
         return ClaudeCodeBackend(system_prompt, model=model, usage_log_path=usage_log_path)
+    if name == "human":
+        # Interactive hand-conversion (scripts/run_human.py). Same frozen system prompt
+        # so its memo entries share the production fingerprint — work done by hand and by
+        # Opus dedupe against each other. `?` in the UI shows the compact lane quickref,
+        # NOT this system prompt.
+        from rpg2gba.conversion_agent.backends.human import HumanBackend
+
+        qr_path = REFERENCE_DIR / "human_quickref.md"
+        quickref = qr_path.read_text(encoding="utf-8") if qr_path.is_file() else ""
+        return HumanBackend(system_prompt, quickref=quickref)
     from rpg2gba.conversion_agent.backends.ollama import OllamaBackend
 
     return OllamaBackend(system_prompt)

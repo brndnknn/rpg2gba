@@ -60,6 +60,17 @@ class BackendTransportError(Exception):
     on restart instead of poisoning the queue with spurious 'backend error' rows."""
 
 
+class EventDeferred(Exception):
+    """The human operator punted this event to the Opus bulk run instead of converting it.
+
+    Only raised by HumanBackend (the interactive hand-conversion path). Like the usage-cap
+    exceptions, the *event* is fine — the human simply chose not to do this one. The
+    orchestrator re-raises it (never queues) so the per-event driver (`scripts/run_human.py`)
+    can skip to the next event, leaving this one unconverted and un-memoized so the bulk run
+    (`run_bulk.py`) claims it later. Distinct from the usage caps so the driver can tell
+    "skip one event" apart from "stop the whole run"."""
+
+
 class BudgetReached(Exception):
     """The run hit its self-imposed ``--limit`` on backend spawns for this invocation.
 
