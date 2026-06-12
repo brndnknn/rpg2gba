@@ -29,9 +29,12 @@ unticked box, and resume there.
   244 pass / 10 skips; ruff clean on `src tests` + new scripts (7 repo-wide hits
   pre-existing in old recon scripts).
 - **Phase 2 COMPLETE (2026-06-12):** 274 pass / 10 skips. Live triage: 214 queued,
-  29 novel clusters reviewed (`reference/novel_cluster_review.md`). Next:
-  **Phase 3 (3.1 strip_list.json)** — note three §10 calls + the G1 findings are
-  awaiting user decisions; G2 (3.5) is the next pause-gate.
+  29 novel clusters reviewed (`reference/novel_cluster_review.md`).
+- **Phase 3 3.1–3.3 DONE (2026-06-12, `e394986`):** 284 pass / 10 skips, ruff clean.
+  STRIP skip wired (CEs 4/5/6 stub-emitted, never queued). Next: **3.4 regen CEs
+  4/5/6** (NullBackend, 0 spawns) → **3.5 GATE G2** (2–3 frozen-Opus rider spawns,
+  needs user OK) → 3.6 deterministic Wait/SE tolerance. Three §10 calls + the G1
+  findings still awaiting user decisions.
 
 ---
 
@@ -133,14 +136,16 @@ for Phase 2, possible deterministic post-accept repairs (would need design OK):
 
 ## Phase 3 — #2 STRIP skip + near-miss Tier-1 rider
 
-- [ ] **3.1 (lead)** `reference/strip_list.json`: CEs 4/5/6, `expect_name`
+- [x] **3.1 (lead)** `reference/strip_list.json`: CEs 4/5/6, `expect_name`
       assertions, `feature`, `stub_message` = "The Tandor Network is currently
       unavailable." ; `map_events: []`.
-- [ ] **3.2 (lead)** `orchestrator.py`: loader (fail-loud name assertion, absent
+- [x] **3.2 (lead)** `orchestrator.py`: loader (fail-loud name assertion, absent
       file = empty + info log); CE stub path (`# STRIPPED:` + msgbox + end,
       compile-gated, through the blocks ledger, never queued); `(map_id, event_id)`
       skip in `convert_map`; `run_report` counts `# STRIPPED:`; CLAUDE.md §4.3 row.
-- [ ] **3.3 (Sonnet)** `tests/test_strip_skip.py`: stub emission+compile; name
+      (Existing `test_convert_common_events*` shift CE ids → 104/105/107 since the
+      orchestrators now load the real strip_list.)
+- [x] **3.3 (Sonnet)** `tests/test_strip_skip.py` (10): stub emission+compile; name
       mismatch aborts; absent file OK; ledger idempotence; map-event skip; no queue
       entries.
 - [ ] **3.4 (lead)** `regen_outputs.py --ce 4 5 6` → 3 stub blocks in
@@ -152,7 +157,7 @@ for Phase 2, possible deterministic post-accept repairs (would need design OK):
 - [ ] **3.6 (lead)** `deterministic.py` `_dialogue_body` Wait-106/SE-250 tolerance
       per G2 evidence + tests; recount via `scripts/count_deterministic_actual.py` +
       `scripts/near_miss_families.py` (expect ≈ +40 claims, ~93 trivial left).
-- [ ] Commits: 3.1+3.2+3.3 `____` · 3.4 `____` · 3.6 `____`
+- [ ] Commits: 3.1+3.2+3.3 `e394986` · 3.4 `____` · 3.6 `____`
 
 ## Phase 4 — Phase-5-track prep (parallel Sonnet fan-out, disjoint files)
 
