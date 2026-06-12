@@ -1,0 +1,48 @@
+{
+  "_comment": "Source of truth for CORRECTED map identity (CLAUDE.md §4.3). Phase-5 `mint` consults `overrides` BEFORE map_infos.json, because RMXP MapInfos editor names can be stale. `overrides` = map id -> {display_name, evidence}; mint reads ONLY this map. `reviewed` records identity questions checked against the wiki that need NO override, so they are not re-litigated. `orphans` = maps with no map_infos entry, pending disposition. `phase7_confirm` = ids to verify in the §9 #3 manual playthrough. Build-agent-maintained; arbitration is spoiler-free (location names / BGM asset / connection topology only). Wiki: https://pokemon-uranium.fandom.com/wiki/",
+
+  "overrides": {},
+
+  "reviewed": {
+    "7": {
+      "map_infos_name": "Comet Cave",
+      "verdict": "CORRECT — no override",
+      "evidence": "Connects map 76 (Route 04) <-> map 142 (Route 05). Wiki: Comet Cave = the Route 4<->Route 5 dungeon (Burole/Amatree Town -> Rochfale Town). Topology matches the label. The 'PU-Passage Cave' BGM shared across maps 7/10/96 AND 19/36/37 is a reused cave-music asset, not an identity signal. REFUTES the Phase-3 V4 hypothesis (map 7 = Passage Cave), which over-indexed on that shared BGM."
+    },
+    "10": {
+      "map_infos_name": "Comet Cave",
+      "verdict": "CORRECT — no override",
+      "evidence": "Comet Cave inner floor; connects map 96 + map 142 (Route 05)."
+    },
+    "96": {
+      "map_infos_name": "Comet Cave",
+      "verdict": "CORRECT — no override",
+      "evidence": "Comet Cave inner floor; connects maps 7 and 10."
+    },
+    "19": {
+      "map_infos_name": "Passage Cave",
+      "verdict": "CORRECT — no override",
+      "evidence": "Hangs off map 31 (Kevlar Town). Wiki: Passage Cave = the Kevlar Town -> Nowtoch City dungeon (the Route 2 rockslide alternative). Label matches topology; same shared cave BGM as Comet Cave."
+    },
+    "36": {
+      "map_infos_name": "Passage Cave",
+      "verdict": "CORRECT — no override",
+      "evidence": "Passage Cave floor (parent of map 37). Same cave system as map 19."
+    },
+    "37": {
+      "map_infos_name": "Passage Cave",
+      "verdict": "CORRECT — no override",
+      "evidence": "Passage Cave inner floor (child of map 36)."
+    }
+  },
+
+  "orphans": {
+    "999": {
+      "map_infos_name": null,
+      "events": 0,
+      "note": "Empty 80x80 debug/template map (tileset 6, blank BGM, no events, NO map_infos entry). Recommend WHOLE-MAP STRIP — exclude from Phase-5 mint rather than naming. Disposition is a user fidelity call (§10)."
+    }
+  },
+
+  "phase7_confirm": [7, 10, 96, 19, 36, 37]
+}

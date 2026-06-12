@@ -142,6 +142,7 @@ Every converter must be safely re-runnable from scratch. If running it twice pro
 | Uranium internal name → expansion constant | `reference/uranium_id_map.json` |
 | Tile substitution table | `reference/tileset_map.json` |
 | Whole-artifact STRIP decisions (CE ids / map events) | `reference/strip_list.json` |
+| Corrected map identity / display name (overrides `MapInfos`) | `reference/map_name_overrides.json` |
 
 Anything else that *uses* these reads from the source of truth. Nothing else *creates* them.
 
