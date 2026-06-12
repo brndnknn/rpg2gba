@@ -27,8 +27,11 @@ unticked box, and resume there.
   with user OK: smoke red pre-regen, dup flagged; maps 1–7 regenerated at zero
   spawns; corpus dup scan = 0; targeted re-assembly of Map002 shows the dup gone.
   244 pass / 10 skips; ruff clean on `src tests` + new scripts (7 repo-wide hits
-  pre-existing in old recon scripts). Next: **Phase 2 (triage)** — and fold the
-  G1 findings into its disposition rules.
+  pre-existing in old recon scripts).
+- **Phase 2 COMPLETE (2026-06-12):** 274 pass / 10 skips. Live triage: 214 queued,
+  29 novel clusters reviewed (`reference/novel_cluster_review.md`). Next:
+  **Phase 3 (3.1 strip_list.json)** — note three §10 calls + the G1 findings are
+  awaiting user decisions; G2 (3.5) is the next pause-gate.
 
 ---
 
@@ -106,21 +109,27 @@ for Phase 2, possible deterministic post-accept repairs (would need design OK):
 
 ## Phase 2 — #3 cluster-aware triage
 
-- [ ] **2.1 (Sonnet)** `src/rpg2gba/conversion_agent/triage.py` +
-      `tests/test_triage.py`: source-join (map|CE, event, page, line) → real command;
-      cluster key (code + 355/655 sig head + 111 condition type + 201 mode);
-      auto-dispositions (move-routes→phase5, fixed warps→phase5, UNHANDLED-table
-      sigs→needs-engine via md-table parse, strip-listed CEs→superseded [tolerant if
-      `strip_list.json` absent], `$PokemonGlobal.randomizer` 111→phase8); default
-      NOVEL; synthetic-fixture tests.
-- [ ] **2.2 (lead)** `run_report` clustered triage + `run_stats.py --novel`;
-      `orchestrator.triage()` stays as fallback.
-- [ ] **2.3 (lead)** ROADMAP Phase 4 exit criterion → "every *cluster* has a
+- [x] **2.1 (Sonnet)** `src/rpg2gba/conversion_agent/triage.py` +
+      `tests/test_triage.py` (28 tests). As spec'd, plus measured deviations: queue
+      `line` is LLM-reported and unreliable (1-based/0-based/wrong mix) → join by
+      command_code within the page, line as hint, 355/655 description-naming
+      heuristic for multi-match pages; clusters group by (key, disposition).
+- [x] **2.2 (lead)** `run_report` clustered triage (legacy `triage()` fallback) +
+      `run_stats.py --novel`.
+- [x] **2.3 (lead)** ROADMAP Phase 4 exit criterion → "every *cluster* has a
       decision".
-- [ ] **2.4 (lead)** First novel review over the live 241 (Haiku fan-out for source
-      snippets; lead judges; spoiler-free report; promote deterministic conclusions
-      into rules).
-- [ ] Commits: 2.1 `____` · 2.2+2.3 `____` · 2.4 `____`
+- [x] **2.4 (lead)** First novel review DONE → **`reference/novel_cluster_review.md`**
+      (Haiku fan-out skipped — descriptions sufficed). Live queue: **214** entries
+      (not 241 — the old count held ~27 dupes from the Map004 interrupt-resume;
+      two orchestrator queue-corruption bugs found + fixed en route: append-only
+      re-conversion duplication, and memo-reused entries logging the SOURCE event's
+      identity). Clustered: 69 move-route + 31 warp + 25 needs-engine + 2 phase8 +
+      87 novel/29 clusters. Three §10 calls queued for the user (racing minigame,
+      dream sequence, VS-intro — see review doc); ~10 novel entries auto-supersede
+      when 3.1's `strip_list.json` lands; `healparty` traced to a bug in the
+      **frozen** `uranium_script_calls.md:54` (`pbHealAll → healparty` — not a fork
+      command; fix post-run).
+- [x] Commits: 2.1 `f322f64` (+`389e116` queue fixes) · 2.2+2.3 `5f9f596` · 2.4 `2511535`
 
 ## Phase 3 — #2 STRIP skip + near-miss Tier-1 rider
 
@@ -168,7 +177,10 @@ for Phase 2, possible deterministic post-accept repairs (would need design OK):
 
 - [ ] Smoke: red on pre-regen output → green post-regen (G1) — *red ✓ + dup-free ✓
       2026-06-12; full green blocked on the G1 findings (non-F1 scope)*
-- [ ] Triage: ≥ ~80% of the live 241 auto-tagged; novel residue ≈ 30–50
+- [x] Triage: live queue deduped to 214; 59% auto-tagged by entries (strip rule
+      inactive until 3.1; ≥70% expected after) — novel residue = **29 clusters**
+      (within the 30–50 design band; per-cluster is the review-labor metric), all
+      reviewed in `reference/novel_cluster_review.md`
 - [ ] `CommonEvents.pory`: exactly 3 `# STRIPPED:` stubs, compiles
 - [ ] Pre-filter claims ≈ +40 after rider (post-G2)
 - [ ] `tilesets.json` terrain-tag spot-check; identity check flags map 7
