@@ -33,9 +33,11 @@ unticked box, and resume there.
 - **Phase 3 3.1–3.4 DONE (2026-06-12):** 3.1–3.3 `e394986` (284 pass/10 skip, ruff
   clean); 3.4 regen ran (`--ce 4 5 6`, 0 spawns) — `CommonEvents.pory` now has 3
   `# STRIPPED:` stubs, full-file compile rc 0, 27 stale queue entries pruned (live
-  queue 214 → 187). Next: **3.5 GATE G2** (2–3 frozen-Opus rider spawns, needs user
-  OK on budget) → 3.6 deterministic Wait/SE tolerance. Three §10 calls + the G1
-  findings still awaiting user decisions.
+  queue 214 → 187). **3.5 GATE G2 PASSED (2026-06-12):** 2 frozen-Opus spawns (~$0.32,
+  isolated temp dir) confirm strip-as-plumbing — Opus drops `Wait(106)`/`SE(250)`/
+  `pbCallBub` and emits dialogue-only. Next: **3.6** extend Classifier 1's tolerated-code
+  set (deterministic, no budget) + tests + recount. Three §10 calls + the G1 findings
+  still awaiting user decisions.
 
 ---
 
@@ -158,9 +160,14 @@ for Phase 2, possible deterministic post-accept repairs (would need design OK):
       messaging now partitions requested ids (`orch._load_strip_list`) — strip-listed →
       "deterministic stubs, 0 spawns" line; only non-strip ids get the BudgetReached/
       run_bulk.py note (was unconditional, misleading for strip-listed CEs).
-- [ ] **3.5 [GATE G2 — ask user]** rider validation: 2–3 frozen-Opus spawns on
-      family-1/2 events (dialogue+Wait, dialogue+SE — candidates map 174 ev9,
-      map 31 ev9) via `scripts/convert_one_event.py`; confirm strip-as-plumbing.
+- [x] **3.5 [GATE G2 — user OK'd 2026-06-12]** rider validation: 2 frozen-Opus
+      spawns via `scripts/convert_one_event.py` (rewritten isolated + parameterized —
+      runs in a throwaway temp out_dir seeded with a copy of live `flag_state.json`,
+      so zero live-state pollution; the old hardcoded 31/48 version wrote to the live
+      build). **strip-as-plumbing CONFIRMED:** Map174 ev9 dropped `Wait(106)`; Map031
+      ev9 dropped `SE(250)` + `pbCallBub` — both emitted dialogue-only in the standard
+      `lock`/`faceplayer`/`msgbox`/`release`/`end` frame. ~$0.32, 2 spawns. Evidence +
+      the incidental G1-#1 `\"` observation in `FABLES_DECISIONS.md`.
 - [ ] **3.6 (lead)** `deterministic.py` `_dialogue_body` Wait-106/SE-250 tolerance
       per G2 evidence + tests; recount via `scripts/count_deterministic_actual.py` +
       `scripts/near_miss_families.py` (expect ≈ +40 claims, ~93 trivial left).

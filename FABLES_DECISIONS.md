@@ -183,10 +183,19 @@ Essentials games**, not just this Uranium run.
 - [ ] §4.6 tests: stub emission + compile, name-assertion failure, absent-file behavior,
       ledger idempotence on re-run, map-event skip
 - [ ] `run_report` counts `# STRIPPED:` blocks (optional, small)
-- [ ] **Rider (near-miss Tier 1, decided 2026-06-11 — see suggestion 1):** extend
-      Classifier 1's tolerated-code set with `Wait (106)` + plumbing `SE (250)` after
-      a ~2–3-spawn frozen-Opus validation of the strip-as-plumbing shape; claims ~40
-      events (`scripts/near_miss_families.py` families 1–2 + kin) + tests
+- [x] **Rider validation (GATE G2, 2026-06-12):** 2 frozen-Opus spawns
+      (`claude-opus-4-8`, isolated temp out_dir, ~$0.32) confirm **strip-as-plumbing**:
+      - Family 1 — Map174 ev9 `[101,106,101,401×3]`: Opus **dropped `Wait(106)`**,
+        emitted `lock`/`faceplayer` + one `msgbox` per `101` + `release`/`end`.
+      - Family 2 — Map031 ev9 `[250, 355 pbCallBub(1), 101]`: Opus **dropped both
+        `SE(250)` and `pbCallBub`**, emitted dialogue-only in the same NPC frame.
+      → Classifier-1 may tolerate `Wait(106)`/`SE(250)`/`pbCallBub`-355 and emit
+      dialogue-only with output matching Opus. (Side-note: the Baitatao text carries
+      literal `\"` quotes — the G1-finding-#1 `\"` poryscript→preproc hazard; the
+      deterministic emitter in 3.6 faces the same content, track with G1 #1.)
+- [ ] **Rider impl (3.6):** extend Classifier 1's tolerated-code set with `Wait (106)`
+      + plumbing `SE (250)` + `pbCallBub`-355 per the G2 evidence; claims ~40 events
+      (`scripts/near_miss_families.py` families 1–2 + kin) + tests + recount.
 
 ### Open sub-decisions (user call, before/while implementing)
 
