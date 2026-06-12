@@ -13,7 +13,7 @@
 
 - **Bulk run state:** CommonEvents done + 7/199 maps (87 spawns, $16.93 provider-reported, 241 queued; last round limit_reached). Resume: `scripts/run_bulk.py --timed`; stats: `scripts/run_stats.py`. ~2,500 Opus spawns remain ≈ ~3 months (throughput decision 2026-06-11: ride the Pro plan).
 - **Deterministic pre-filter COMPLETE:** 7 classifiers claim ~997/3,581 command-bearing events (~28%) spawn-free; output indistinguishable downstream (same compile-gate/mint/queue).
-- **LIVE BUG F1:** name-derived script labels collide (103/199 maps, ~768 dup labels; Map002.pory affected today). Fix designed — FRONT of the queue.
+- **BUG F1 — fix COMMITTED 2026-06-11** (`dc8e436` `_qualify_labels` EV-tags all accept paths + per-map dup guard; `9921285` `regen_outputs.py` zero-spend NullBackend replay; `ed6e857` `assembly_smoke.py` rung-2 harness). On-disk output (maps 1–7) still carries old colliding labels — repair = G1 smoke (expect red) → `regen_outputs.py --all-done` → smoke green. **Runbook: `FABLES_IMPLEMENTATION.md`; next box 1.5a = GATE G1, needs user OK.**
 - **Implementation queue (all 8 critique suggestions dispositioned; designs + consolidated queue in `FABLES_DECISIONS.md`):** F1 label fix → #3 cluster triage → #2 STRIP skip + near-miss Tier-1 rider; #4 assembly smoke alongside F1. Phase-5 track: #5 map-name overrides before map_constants; #6 §5.5 move-routes + #8 §5.6 reachability (after 5.2–5.4; needs Tilesets.rxdata deserializer extension).
 - **Phase 5:** scaffold committed (`b7a7be2`); next section = 5.1 `tile_map.py`; design Qs resolved in `PHASE5_PLAN.md` (Q2 amended by suggestion #5).
 - **Phase 4 build history** (machinery, calibration A–D, rung 2/3, dedup A/B/C, pre-filter C1–C7): archived 2026-06-11 → `reference/memory-archive.md`.
