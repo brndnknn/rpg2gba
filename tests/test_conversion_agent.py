@@ -443,10 +443,12 @@ def _labeled_block(payload: dict) -> ConversionResult:
 
 
 def test_convert_common_events(tmp_path: Path) -> None:
+    # CE ids deliberately avoid 4/5/6 — those are strip-listed for Uranium in the
+    # real reference/strip_list.json, which these orchestrators load.
     ces = [
-        {"id": 4, "name": "GTS", "trigger": 0, "switch_id": 1,
+        {"id": 104, "name": "GTS", "trigger": 0, "switch_id": 1,
          "list": [{"code": 101, "parameters": ["hi"]}, {"code": 0, "parameters": []}]},
-        {"id": 7, "name": "Decoration", "trigger": 0, "switch_id": 1,
+        {"id": 107, "name": "Decoration", "trigger": 0, "switch_id": 1,
          "list": [{"code": 0, "parameters": []}]},  # no real commands -> skipped
     ]
     ce_path = _write_common_events(tmp_path / "out", ces)
@@ -454,17 +456,17 @@ def test_convert_common_events(tmp_path: Path) -> None:
     o = _orchestrator(tmp_path, backend)
     o.convert_common_events(ce_path)
 
-    # Only CE 4 has commands -> exactly one spawn, carrying common_event_id + page-shape.
+    # Only CE 104 has commands -> exactly one spawn, carrying common_event_id + page-shape.
     assert backend.calls == 1
-    assert backend.payloads[0]["common_event_id"] == 4
+    assert backend.payloads[0]["common_event_id"] == 104
     assert "pages" in backend.payloads[0]  # adapted from the flat list for the helpers
     pory = (tmp_path / "out" / "scripts" / "CommonEvents.pory").read_text(encoding="utf-8")
-    assert "CommonEvent_004" in pory
+    assert "CommonEvent_104" in pory
     assert (tmp_path / "out" / "checkpoints" / "CommonEvents.done").exists()
 
 
 def test_convert_common_events_queues_failure(tmp_path: Path) -> None:
-    ces = [{"id": 5, "name": "VT", "trigger": 0, "switch_id": 1,
+    ces = [{"id": 105, "name": "VT", "trigger": 0, "switch_id": 1,
             "list": [{"code": 101, "parameters": ["x"]}]}]
     ce_path = _write_common_events(tmp_path / "out", ces)
     backend = MockBackend([ConversionResult(script="BAD always")])
@@ -476,7 +478,7 @@ def test_convert_common_events_queues_failure(tmp_path: Path) -> None:
         for line in (tmp_path / "out" / "unhandled.jsonl").read_text().splitlines()
     ]
     assert any(
-        e.get("common_event_id") == 5 and "compile failed twice" in e["reason"] for e in entries
+        e.get("common_event_id") == 105 and "compile failed twice" in e["reason"] for e in entries
     )
     # No self/temp-switch minting happened for the common event.
     state = json.loads((tmp_path / "out" / "flag_state.json").read_text(encoding="utf-8"))
@@ -484,7 +486,7 @@ def test_convert_common_events_queues_failure(tmp_path: Path) -> None:
 
 
 def test_convert_common_events_checkpoint_skips_rerun(tmp_path: Path) -> None:
-    ces = [{"id": 4, "name": "A", "list": [{"code": 101, "parameters": ["a"]}]}]
+    ces = [{"id": 104, "name": "A", "list": [{"code": 101, "parameters": ["a"]}]}]
     ce_path = _write_common_events(tmp_path / "out", ces)
     backend = _RecordingBackend(lambda p: ConversionResult(script="GOOD"))
     o = _orchestrator(tmp_path, backend)
@@ -496,15 +498,15 @@ def test_convert_common_events_checkpoint_skips_rerun(tmp_path: Path) -> None:
 
 def test_convert_common_events_only_ids_partial_no_checkpoint(tmp_path: Path) -> None:
     ces = [
-        {"id": 4, "name": "A", "list": [{"code": 101, "parameters": ["a"]}]},
-        {"id": 5, "name": "B", "list": [{"code": 101, "parameters": ["b"]}]},
+        {"id": 104, "name": "A", "list": [{"code": 101, "parameters": ["a"]}]},
+        {"id": 105, "name": "B", "list": [{"code": 101, "parameters": ["b"]}]},
     ]
     ce_path = _write_common_events(tmp_path / "out", ces)
     backend = _RecordingBackend(_labeled_block)
     o = _orchestrator(tmp_path, backend)
-    o.convert_common_events(ce_path, only_ids={4})
-    assert backend.calls == 1  # only CE 4
-    assert backend.payloads[0]["common_event_id"] == 4
+    o.convert_common_events(ce_path, only_ids={104})
+    assert backend.calls == 1  # only CE 104
+    assert backend.payloads[0]["common_event_id"] == 104
     assert not (tmp_path / "out" / "checkpoints" / "CommonEvents.done").exists()
 
 

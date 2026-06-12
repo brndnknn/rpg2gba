@@ -67,12 +67,15 @@ def collect_stats(out_dir: Path, reference_dir: Path | None = None) -> dict:
             cost_usd += rec.get("cost_usd") or 0.0
 
     script_blocks = 0
+    stripped_blocks = 0
     scripts_dir = out_dir / "scripts"
     if scripts_dir.is_dir():
         for pory in scripts_dir.glob("*.pory"):
             for ln in pory.read_text(encoding="utf-8").splitlines():
                 if ln.lstrip().startswith("script "):
                     script_blocks += 1
+                elif ln.lstrip().startswith("# STRIPPED:"):
+                    stripped_blocks += 1
 
     queue_path = out_dir / "unhandled.jsonl"
     run_state_path = out_dir / "run_state.json"
@@ -99,6 +102,7 @@ def collect_stats(out_dir: Path, reference_dir: Path | None = None) -> dict:
         "common_events_done": "CommonEvents" in done_stems,
         "spawns": spawns,
         "script_blocks": script_blocks,
+        "stripped_blocks": stripped_blocks,
         "tokens": tokens,
         "cost_usd": round(cost_usd, 4),
         "queued": _count_lines(queue_path),
@@ -134,7 +138,12 @@ def format_stats(stats: dict) -> str:
         "-------------------------",
         f"  maps:      {stats['maps_done']}/{stats['maps_total']} converted"
         f"   (common events: {ce})",
-        f"  emitted:   {_fmt_int(stats['script_blocks'])} script blocks",
+        f"  emitted:   {_fmt_int(stats['script_blocks'])} script blocks"
+        + (
+            f"   ({stats['stripped_blocks']} stripped stubs)"
+            if stats.get("stripped_blocks")
+            else ""
+        ),
         f"  spawns:    {_fmt_int(stats['spawns'])} backend calls (LLM)",
         f"  queued:    {_fmt_int(stats['queued'])} unhandled",
         "  tokens:    "

@@ -141,6 +141,7 @@ Every converter must be safely re-runnable from scratch. If running it twice pro
 | `FLAG_*` / `VAR_*` names | `src/rpg2gba/conversion_agent/flag_registry.py` |
 | Uranium internal name → expansion constant | `reference/uranium_id_map.json` |
 | Tile substitution table | `reference/tileset_map.json` |
+| Whole-artifact STRIP decisions (CE ids / map events) | `reference/strip_list.json` |
 
 Anything else that *uses* these reads from the source of truth. Nothing else *creates* them.
 

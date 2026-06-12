@@ -99,6 +99,9 @@ class Orchestrator:
         self.memo_path = self.output_dir / "memo_manifest.json"
         self._memo: dict[str, MemoEntry] = {}
         self._load_memo()
+        # Whole-artifact STRIP decisions (FABLES_DECISIONS #2): CE ids → stub spec,
+        # (map_id, event_id) pairs → skip. Absent file = no strips for this game.
+        self._strip_ces, self._strip_map_events = _load_strip_list(Path(reference_dir))
 
     # -- public -----------------------------------------------------------
 
@@ -137,6 +140,14 @@ class Orchestrator:
         blocks: list[str] = []
         seen_labels: set[str] = set()
         for event in m["events"]:
+            # Whole-artifact STRIP (FABLES_DECISIONS #2): the event itself is the
+            # stripped feature (no NPC value to keep) — skip it entirely. Empty for
+            # Uranium; the mechanism exists for future games.
+            if (map_id, event.get("id")) in self._strip_map_events:
+                logger.info(
+                    "%s event %s: strip-listed — skipping", stem, event.get("id")
+                )
+                continue
             # Decorative/graphic-only events (no real commands) produce no script —
             # skip them without spawning the backend (saves budget across the corpus).
             if not _event_has_commands(event):
@@ -240,11 +251,28 @@ class Orchestrator:
         n_processed = 0
         for idx, ce in enumerate(remaining, start=1):
             cid = str(ce.get("id"))
-            payload = _common_event_payload(ce)
             n_processed += 1
             # Same §4.2 replace-don't-accumulate rule as convert_map: this CE is
             # about to re-log its queue entries (ledger-dropped or only_ids re-run).
             self._prune_unhandled(common_event_id=ce.get("id"))
+            strip = self._strip_ces.get(ce.get("id"))
+            if strip is not None:
+                # Whole-artifact STRIP (FABLES_DECISIONS #2): deterministic stub,
+                # zero spawns, never queued. Keeps every `call CommonEvent_NNN`
+                # site valid. Goes through the blocks ledger like any conversion.
+                logger.info(
+                    "[CE %d/%d] CommonEvent %s (%s): STRIPPED — emitting stub",
+                    idx,
+                    len(remaining),
+                    ce.get("id"),
+                    ce.get("name", ""),
+                )
+                done[cid] = self._strip_stub(ce, strip)  # raises on any mismatch
+                if use_progress:
+                    self._save_ce_progress(progress_path, done)
+                _flush_pory()
+                continue
+            payload = _common_event_payload(ce)
             logger.info(
                 "[CE %d/%d] CommonEvent %s (%s): converting…",
                 idx,
@@ -278,6 +306,40 @@ class Orchestrator:
         """Persist the per-common-event progress ledger (id → script-or-null)."""
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(done, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    def _strip_stub(self, ce: dict, strip: dict) -> str:
+        """Build + compile-gate the deterministic stub for a strip-listed common event.
+
+        Every failure here is a RuntimeError, not a queue entry: the strip list is
+        hand-authored project data, so a name mismatch (re-export renumbered the CEs),
+        a missing stub_message, or a stub that fails the compile-gate is a data/code
+        bug to fix, never something to retry or silently skip (§4.5)."""
+        ce_id = int(ce.get("id"))
+        expected = strip.get("expect_name")
+        actual = ce.get("name", "")
+        if expected != actual:
+            raise RuntimeError(
+                f"strip_list.json CE {ce_id} expects name {expected!r} but "
+                f"common_events.json has {actual!r} — refusing to stub "
+                f"(did a re-export renumber the common events?)"
+            )
+        message = strip.get("stub_message")
+        if not message:
+            raise RuntimeError(f"strip_list.json CE {ce_id} has no stub_message")
+        feature = strip.get("feature", "strip_list.json")
+        script = (
+            f"script CommonEvent_{ce_id:03d} {{\n"
+            f"    # STRIPPED: {feature} (strip_list.json)\n"
+            f'    msgbox("{message}")\n'
+            f"    end\n"
+            f"}}"
+        )
+        result = self.compile_fn(script)
+        if not result.ok:
+            raise RuntimeError(
+                f"strip stub for CE {ce_id} failed the compile-gate: {result.stderr}"
+            )
+        return script
 
     # -- per-event --------------------------------------------------------
 
@@ -696,6 +758,26 @@ class Orchestrator:
                 "y" if dropped == 1 else "ies",
                 f"map {map_id}" if map_id is not None else f"CE {common_event_id}",
             )
+
+
+def _load_strip_list(reference_dir: Path) -> tuple[dict[int, dict], set[tuple[int, int]]]:
+    """Load reference/strip_list.json → (CE id → entry, set of (map_id, event_id)).
+
+    The file holds whole-artifact STRIP decisions (CLAUDE.md §4.3); a game with no
+    strip decisions simply has no file (info log, empty result). A malformed file is
+    NOT tolerated — it is hand-authored project data, so fail loud (§4.5)."""
+    path = reference_dir / "strip_list.json"
+    if not path.is_file():
+        logger.info("no strip_list.json — no whole-artifact strips for this game")
+        return {}, set()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    ces = {int(entry["id"]): entry for entry in data.get("common_events", [])}
+    map_events = {(int(m), int(e)) for m, e in data.get("map_events", [])}
+    if ces or map_events:
+        logger.info(
+            "strip list: %d common event(s), %d map event(s)", len(ces), len(map_events)
+        )
+    return ces, map_events
 
 
 def _qualify_labels(script: str, map_id: int, event_id: int) -> str:

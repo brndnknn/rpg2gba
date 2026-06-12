@@ -1,0 +1,24 @@
+{
+  "_comment": "Whole-artifact STRIP decisions (CLAUDE.md §4.3 source of truth; design: FABLES_DECISIONS.md Suggestion 2). Layer boundary: whole CEs / map events here; intra-event script-call strips live in the game's script-call reference table; command-code strips live in system.md. expect_name is a fail-loud assertion against re-export renumbering.",
+  "common_events": [
+    {
+      "id": 4,
+      "expect_name": "GTS/WT",
+      "feature": "online (phase0: scripts 233/235/236)",
+      "stub_message": "The Tandor Network is currently unavailable."
+    },
+    {
+      "id": 5,
+      "expect_name": "VT",
+      "feature": "online (phase0: scripts 233/235/236)",
+      "stub_message": "The Tandor Network is currently unavailable."
+    },
+    {
+      "id": 6,
+      "expect_name": "LOBBY",
+      "feature": "online (phase0: scripts 233/235/236)",
+      "stub_message": "The Tandor Network is currently unavailable."
+    }
+  ],
+  "map_events": []
+}
