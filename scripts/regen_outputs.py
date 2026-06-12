@@ -136,6 +136,7 @@ def clear_ce_checkpoints(checkpoint_dir: Path, ce_ids: set[int]) -> None:
 def run_replay(
     out_dir: Path,
     maps_dir: Path,
+    map_ids: list[int],
     backend_name: str = "claude_code",
     model: str = FROZEN_MODEL,
 ) -> tuple[int, int]:
@@ -143,7 +144,10 @@ def run_replay(
 
     Builds the production backend (solely for its ``system_prompt`` / memo
     fingerprint), wraps it in a ``NullBackend`` (zero-spend guarantee), then runs
-    ``convert_common_events`` (if the CE file exists) followed by ``convert_all``.
+    ``convert_common_events`` (if the CE file exists) followed by ``convert_map``
+    on exactly the selected *map_ids* — NOT ``convert_all``, which would walk
+    into not-yet-converted maps and abort (and mutate memo/registry state for
+    maps the bulk run hasn't reached).
 
     The memo fingerprint must match the production run or memo entries are discarded
     and every event needs a real spawn. For maps, memo/deterministic replay should
@@ -175,7 +179,14 @@ def run_replay(
             except (json.JSONDecodeError, OSError):
                 pass
 
-    maps_count = orchestrator.convert_all(maps_dir)
+    maps_count = 0
+    for mid in map_ids:
+        map_path = maps_dir / f"Map{mid:03d}.json"
+        if not map_path.is_file():
+            logger.warning("Map%03d.json not found in %s — skipped", mid, maps_dir)
+            continue
+        orchestrator.convert_map(map_path)
+        maps_count += 1
     return maps_count, ces_in_ledger
 
 
@@ -289,7 +300,9 @@ def main() -> int:
 
     # Phase 2: replay via NullBackend.
     try:
-        _, _ = run_replay(out_dir, maps_dir, backend_name=args.backend, model=args.model)
+        _, _ = run_replay(
+            out_dir, maps_dir, map_ids, backend_name=args.backend, model=args.model
+        )
     except BudgetReached as exc:
         logger.error(
             "INCOMPLETE REGEN: an event was not covered by memo/deterministic "
