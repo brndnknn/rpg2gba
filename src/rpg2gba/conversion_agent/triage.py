@@ -226,6 +226,19 @@ def _join_command(
         if line in matches:
             return cmd_list[line], True
 
+    # Script calls with a dead line hint: the agent's description usually names
+    # the call ("GTS.open — …"), which beats taking the first 355 on the page
+    # (measured live: CE4's GTS.open entries mis-keyed under the page's leading
+    # pbCallBub without this).
+    if code in (355, 655):
+        desc = str(entry.get("description", ""))
+        if desc:
+            for i in matches:
+                params = cmd_list[i].get("parameters", [])
+                head = _sig_head(str(params[0])) if params else ""
+                if head and (head in desc or _bare_method(head) in desc):
+                    return cmd_list[i], True
+
     # Fall through to first match — cluster keys for same-code repeats are
     # often identical anyway, so this is benign.
     return cmd_list[matches[0]], True

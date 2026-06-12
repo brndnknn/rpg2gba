@@ -456,6 +456,27 @@ def test_out_of_range_line_falls_back_to_first(tmp_path: Path) -> None:
     assert report.clusters[0].entries[0].joined
 
 
+def test_dead_line_hint_resolved_by_description(tmp_path: Path) -> None:
+    """A wrong line hint on a multi-355 page joins via the description naming the call.
+
+    Measured live: CE4's GTS.open entries carried agent-invented line numbers and
+    mis-keyed under the page's leading pbCallBub before this heuristic."""
+    entries = [
+        {
+            "map_id": 1,
+            "event_id": 3,
+            "command_code": 355,
+            "description": "SecondScript opens the second thing — no GBA equivalent",
+            "page": 1,
+            "line": 999,
+        }
+    ]
+    out_dir, ref_dir, path = _write_fixtures(tmp_path, entries=entries)
+    report = triage_queue(path, out_dir, ref_dir)
+    assert report.clusters[0].key == "355:SecondScript"
+    assert report.clusters[0].entries[0].joined
+
+
 def test_missing_event_yields_unjoined_and_rule_still_fires(tmp_path: Path) -> None:
     """Missing event → joined=False, key '{code}:unjoined', rule 1 still fires."""
     entries = [
