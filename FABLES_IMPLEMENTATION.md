@@ -37,10 +37,14 @@ unticked box, and resume there.
   isolated temp dir) confirm strip-as-plumbing — Opus drops `Wait(106)`/`SE(250)`/
   `pbCallBub` and emits dialogue-only. **3.6 DONE (2026-06-12):** `_dialogue_body` skips
   WAIT(106)/PLAY_SE(250) with a `has_dialogue` guard; pre-filter 997 → 1046 (+49),
-  residue 133 → 86, +7 tests, 291 pass / ruff clean. **Phase 3 COMPLETE.** Next:
-  **Phase 4** (Phase-5-track prep — 4.1 PHASE5_PLAN §5.5/§5.6 + acceptance stubs, 4.2
-  `deserialize.rb` tilesets mode, 4.3 map-identity check, 4.4 wiki arbitration, 4.5
-  close-out). Three §10 calls + the G1 findings still awaiting user decisions.
+  residue 133 → 86, +7 tests, 291 pass / ruff clean. **Phase 3 COMPLETE.**
+- **Phase 4 COMPLETE (2026-06-12):** 4.1–4.3 parallel Sonnet fan-out `2bd4e6d`
+  (§5.5/§5.6 docs + 9 stubs; `tilesets` deserializer = 60 tilesets; identity check);
+  4.4 `a125019` (`map_name_overrides.json`, **0 overrides** — V4 cave hypothesis
+  refuted); 4.5 close-out (Map999 whole-map STRIP in `strip_list.json`; 28
+  FABLES_DECISIONS boxes ticked; MEMORY.md refreshed incl. corrected V4 breadcrumb).
+  **ALL FABLES PHASES 1–4 DONE.** Bulk run NOT resumed (user's call). **Still parked:**
+  3 §10 fidelity calls + G1 finding dispositions.
 
 ---
 
@@ -209,9 +213,13 @@ for Phase 2, possible deterministic post-accept repairs (would need design OK):
       Other 29 flags = FPs (neighbour signs / third-party battle BGM). All 6 cave maps
       → `phase7_confirm`. Orphan **Map999** (empty, no infos entry) → recommend
       whole-map STRIP (user call). *MEMORY V4 breadcrumb to correct in 4.5.*
-- [ ] **4.5 (lead)** Close out: tick FABLES_DECISIONS checklists, MEMORY.md
-      live-state update, final commit; offer to resume `run_bulk.py --timed`.
-- [ ] Commits: 4.1+4.2+4.3 `2bd4e6d` (parallel Sonnet fan-out) · 4.4 `a125019` · 4.5 `____`
+- [x] **4.5 (lead)** *(done 2026-06-12)* Close-out: Map999 → whole-map STRIP
+      (`strip_list.json` new `maps` key + CLAUDE.md §4.3 "whole maps" + overrides orphan
+      note); 28 FABLES_DECISIONS checklist boxes ticked (only 7 Phase-5-proper items
+      left: `reachability.py`, `map_constants.py`, ledge rows, synthetic-grid tests,
+      GBA header length, optional smoke-hook); MEMORY.md live-state refreshed +
+      corrected the V4 cave breadcrumb. Bulk run left stopped (user's call).
+- [x] Commits: 4.1+4.2+4.3 `2bd4e6d` (parallel Sonnet fan-out) · 4.4 `a125019` · 4.5 `61e9fc3`
 
 ## Verification gates (end state)
 
