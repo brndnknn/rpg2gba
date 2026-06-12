@@ -128,6 +128,9 @@ class Orchestrator:
         map_id = m["map_id"]
         n_events = len(m["events"])
         logger.info("=== %s: starting (%d events) ===", stem, n_events)
+        # (Re-)converting this map re-logs its queue entries; drop the stale ones
+        # first so resume/regen replaces rather than duplicates them (§4.2).
+        self._prune_unhandled(map_id=map_id)
         self.scripts_dir.mkdir(parents=True, exist_ok=True)
         out_pory = self.scripts_dir / f"{stem}.pory"
         out_pory.write_text("", encoding="utf-8")  # exists even if every event is skipped
@@ -239,6 +242,9 @@ class Orchestrator:
             cid = str(ce.get("id"))
             payload = _common_event_payload(ce)
             n_processed += 1
+            # Same §4.2 replace-don't-accumulate rule as convert_map: this CE is
+            # about to re-log its queue entries (ledger-dropped or only_ids re-run).
+            self._prune_unhandled(common_event_id=ce.get("id"))
             logger.info(
                 "[CE %d/%d] CommonEvent %s (%s): converting…",
                 idx,
@@ -635,13 +641,61 @@ class Orchestrator:
         return {"map_id": map_id, "event_id": event.get("id"), "event_name": event.get("name")}
 
     def _queue(self, ctx: dict, *, reason: str, extra: dict | None = None) -> None:
-        entry = {**ctx, "reason": reason}
-        if extra:
-            entry.update(extra)
+        # ctx (the artifact being converted NOW) must win over extra: a memo-reused
+        # event replays the SOURCE conversion's unhandled[] items, whose embedded
+        # event_id/event_name identify the source event — left to overwrite ctx they
+        # mint phantom queue refs (seen live: map5's "Map" events logged as the
+        # nonexistent map5 ev6, the memo source's id). extra still supplies the
+        # command detail (command_code/page/line/description).
+        entry = {**(extra or {}), **ctx, "reason": reason}
         logger.info("QUEUED %s — %s", ctx, reason)
         self.unhandled_path.parent.mkdir(parents=True, exist_ok=True)
         with self.unhandled_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    def _prune_unhandled(
+        self, *, map_id: int | None = None, common_event_id: int | None = None
+    ) -> None:
+        """Drop a map's (or CE's) stale entries from unhandled.jsonl before re-converting.
+
+        The queue is append-only at event level, so re-converting an artifact —
+        interrupt-resume of an unfinished map, or a targeted regen — would duplicate
+        every entry it re-logs (idempotence, CLAUDE.md §4.2). Pruning the artifact's
+        old entries first makes re-conversion replace rather than accumulate. Exactly
+        one selector must be given; map entries carry no ``common_event_id`` key and
+        CE entries always do, so the filters cannot cross-match."""
+        if not self.unhandled_path.is_file():
+            return
+        kept: list[str] = []
+        dropped = 0
+        for line in self.unhandled_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                kept.append(line)  # not ours to judge — leave malformed lines alone
+                continue
+            if map_id is not None and "common_event_id" not in entry:
+                match = entry.get("map_id") == map_id
+            elif common_event_id is not None:
+                match = entry.get("common_event_id") == common_event_id
+            else:
+                match = False
+            if match:
+                dropped += 1
+            else:
+                kept.append(line)
+        if dropped:
+            self.unhandled_path.write_text(
+                ("\n".join(kept) + "\n") if kept else "", encoding="utf-8"
+            )
+            logger.info(
+                "pruned %d stale unhandled entr%s for %s",
+                dropped,
+                "y" if dropped == 1 else "ies",
+                f"map {map_id}" if map_id is not None else f"CE {common_event_id}",
+            )
 
 
 def _qualify_labels(script: str, map_id: int, event_id: int) -> str:

@@ -356,6 +356,51 @@ def test_checkpoint_skip_and_idempotence(tmp_path: Path) -> None:
     assert (tmp_path / "out" / "scripts" / "Map004.pory").read_bytes() == first
 
 
+def test_reconversion_prunes_stale_unhandled(tmp_path: Path) -> None:
+    # The queue is append-only at event level; re-converting a map (resume after an
+    # interrupt, targeted regen) re-logs its entries, so without pruning every
+    # re-conversion would duplicate them (§4.2 idempotence).
+    backend = MockBackend(
+        [ConversionResult(script="GOOD", unhandled=[{"command_code": 209, "description": "mr"}])]
+    )
+    o = _orchestrator(tmp_path, backend)
+    map_file = _write_map(tmp_path / "out" / "maps", 6, [dict(_EVENT)])
+    o.convert_map(map_file)
+    queue = tmp_path / "out" / "unhandled.jsonl"
+    first = [json.loads(line) for line in queue.read_text().splitlines()]
+
+    (tmp_path / "out" / "checkpoints" / "Map006.done").unlink()
+    o.convert_map(map_file)  # re-conversion must replace, not accumulate
+    second = [json.loads(line) for line in queue.read_text().splitlines()]
+    assert second == first
+
+    # Another map's entries survive a prune of map 6.
+    o._prune_unhandled(map_id=6)
+    o._queue({"map_id": 7, "event_id": 1, "event_name": "x"}, reason="agent-flagged unhandled")
+    o._prune_unhandled(map_id=6)
+    left = [json.loads(line) for line in queue.read_text().splitlines()]
+    assert left == [
+        {"map_id": 7, "event_id": 1, "event_name": "x", "reason": "agent-flagged unhandled"}
+    ]
+
+
+def test_queue_ctx_wins_over_memoized_extra(tmp_path: Path) -> None:
+    # A memo-reused event replays unhandled[] items recorded for the SOURCE event;
+    # their embedded event_id/event_name must not overwrite the current event's
+    # identity in the queue entry (live bug: phantom map5 ev6 from a map3 ev6 memo).
+    backend = MockBackend([ConversionResult(script="GOOD")])
+    o = _orchestrator(tmp_path, backend)
+    o._queue(
+        {"map_id": 5, "event_id": 4, "event_name": "Map"},
+        reason="agent-flagged unhandled",
+        extra={"command_code": 355, "event_id": 6, "event_name": "Map", "line": 2},
+    )
+    entry = json.loads((tmp_path / "out" / "unhandled.jsonl").read_text().splitlines()[0])
+    assert entry["event_id"] == 4          # ctx identity wins
+    assert entry["command_code"] == 355    # extra detail kept
+    assert entry["line"] == 2
+
+
 def test_triage(tmp_path: Path) -> None:
     backend = MockBackend([ConversionResult(script="BAD")])
     o = _orchestrator(tmp_path, backend)
