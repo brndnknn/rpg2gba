@@ -54,6 +54,16 @@ SCRIPT = 355
 SCRIPT_CONT = 655
 COMMENT = 108
 COMMENT_CONT = 408
+WAIT = 106  # RMXP "Wait N frames" — pure pacing, no GBA equivalent
+PLAY_SE = 250  # RMXP "Play SE" — a sound effect; cosmetic plumbing in a dialogue
+
+# Native RMXP commands that carry no game state and produce no Poryscript in a
+# dialogue context. Frozen-Opus drops both (FABLES gate G2, 2026-06-12: Map174 ev9
+# dropped Wait(106), Map031 ev9 dropped SE(250)+pbCallBub, both dialogue-only). They
+# are tolerated ONLY on a page that also has real dialogue — a page whose sole
+# content is a stripped SE/Wait is a cosmetic-only event whose Opus output is
+# unvalidated (declined near-miss Tier 2), so it falls through to the LLM.
+_DIALOGUE_PLUMBING_CODES = frozenset({WAIT, PLAY_SE})
 
 ACTION_BUTTON_TRIGGER = 0  # RMXP page trigger: "talk to" (the NPC case)
 
@@ -200,6 +210,12 @@ def _dialogue_body(
     body: list[str] = []
     buf: list[str] = []
     unsafe = False
+    # Pre-scan: plumbing codes (Wait/SE) are dropped only when the page actually
+    # speaks. A page that would be content-less but for a stripped SE/Wait is the
+    # unvalidated cosmetic-only class — bail so it reaches the LLM (see gate G2).
+    has_dialogue = any(
+        cmd.get("code") == SHOW_TEXT for cmd in page.get("list", [])
+    )
 
     def flush() -> None:
         nonlocal buf, unsafe
@@ -247,6 +263,10 @@ def _dialogue_body(
             if isinstance(p, str) and _DIALOGUE_STRIP_RE.match(p):
                 continue  # STRIP — no output
             return None
+        elif code in _DIALOGUE_PLUMBING_CODES:
+            if not has_dialogue:
+                return None  # cosmetic-only (no text) — unvalidated, defer to LLM
+            continue  # Wait/SE alongside dialogue — drop as plumbing (gate G2)
         else:
             return None
 

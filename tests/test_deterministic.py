@@ -141,6 +141,100 @@ def test_non_strip_script_call_falls_through() -> None:
 
 
 # ----------------------------------------------------------------------------
+# Classifier 1 — Wait(106)/SE(250) plumbing tolerance (FABLES gate G2)
+# ----------------------------------------------------------------------------
+
+
+def test_wait_106_dropped_between_text_runs() -> None:
+    """Family 1 (Map174 ev9 shape): a Wait between two Show-Text runs is dropped,
+    each run becomes its own msgbox (frozen-Opus G2 evidence)."""
+    ev = _event(
+        _page(
+            _text("Baitatao: the serpent."),
+            _cmd(D.WAIT, 20),
+            _text("It has not been seen since."),
+            _text_cont(" Many wonder why."),
+        ),
+        id=9,
+        name="Baitatao",
+    )
+    out = D.classify_pure_dialogue(174, ev)
+    assert out is not None
+    assert out.count("msgbox(") == 2
+    assert 'msgbox("Baitatao: the serpent.")' in out
+    assert 'msgbox("It has not been seen since. Many wonder why.")' in out
+    assert "106" not in out  # Wait left no trace
+
+
+def test_play_se_250_and_bubble_dropped_dialogue_preserved() -> None:
+    """Family 2 (Map031 ev9 shape): leading SE(250) + pbCallBub 355 are both dropped,
+    only the dialogue survives (frozen-Opus G2 evidence)."""
+    ev = _event(
+        _page(
+            _cmd(D.PLAY_SE, {"name": "035Cry", "volume": 100}),
+            _cmd(D.SCRIPT, "pbCallBub(1)"),
+            _text("Owten!"),
+        ),
+        id=9,
+        name="EV009",
+    )
+    out = D.classify_pure_dialogue(31, ev)
+    assert out is not None
+    assert out.count("msgbox(") == 1
+    assert 'msgbox("Owten!")' in out
+    assert "pbCallBub" not in out
+
+
+def test_wait_and_se_interleaved_with_dialogue() -> None:
+    """Wait + SE mixed into a single dialogue run are both dropped (Tier-1 kin)."""
+    ev = _event(
+        _page(
+            _text("Listen..."),
+            _cmd(D.WAIT, 30),
+            _cmd(D.PLAY_SE, {"name": "chime"}),
+            _text_cont(" can you hear it?"),
+        ),
+        id=119,
+    )
+    out = D.classify_pure_dialogue(84, ev)
+    assert out is not None
+    assert out.count("msgbox(") == 1
+    assert 'msgbox("Listen... can you hear it?")' in out
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        _page(_cmd(D.PLAY_SE, {"name": "boom"})),  # SE-only bridge
+        _page(_cmd(D.WAIT, 60)),  # Wait-only
+        # SE + strip call, no text:
+        _page(_cmd(D.PLAY_SE, {"name": "boom"}), _cmd(D.SCRIPT, "pbCallBub(1)")),
+    ],
+)
+def test_cosmetic_only_no_dialogue_falls_through(page: dict) -> None:
+    """A page whose only content is stripped Wait/SE (no Show-Text) is the declined
+    cosmetic-only class — defer to the LLM, do NOT emit an empty block (gate G2)."""
+    assert D.classify_pure_dialogue(1, _event(page, id=4)) is None
+
+
+def test_wait_se_output_compiles() -> None:
+    """The Wait/SE-tolerant dialogue output compiles through poryscript."""
+    ev = _event(
+        _page(
+            _cmd(D.PLAY_SE, {"name": "035Cry"}),
+            _cmd(D.SCRIPT, "pbCallBub(1)"),
+            _text("Owten!"),
+        ),
+        id=9,
+        name="EV009",
+    )
+    out = D.classify_pure_dialogue(31, ev)
+    assert out is not None
+    result = poryscript.compile_script(out)
+    assert result.ok, result.stderr
+
+
+# ----------------------------------------------------------------------------
 # Classifier 1 — design deviations (module docstring)
 # ----------------------------------------------------------------------------
 

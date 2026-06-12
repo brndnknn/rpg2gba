@@ -35,9 +35,12 @@ unticked box, and resume there.
   `# STRIPPED:` stubs, full-file compile rc 0, 27 stale queue entries pruned (live
   queue 214 → 187). **3.5 GATE G2 PASSED (2026-06-12):** 2 frozen-Opus spawns (~$0.32,
   isolated temp dir) confirm strip-as-plumbing — Opus drops `Wait(106)`/`SE(250)`/
-  `pbCallBub` and emits dialogue-only. Next: **3.6** extend Classifier 1's tolerated-code
-  set (deterministic, no budget) + tests + recount. Three §10 calls + the G1 findings
-  still awaiting user decisions.
+  `pbCallBub` and emits dialogue-only. **3.6 DONE (2026-06-12):** `_dialogue_body` skips
+  WAIT(106)/PLAY_SE(250) with a `has_dialogue` guard; pre-filter 997 → 1046 (+49),
+  residue 133 → 86, +7 tests, 291 pass / ruff clean. **Phase 3 COMPLETE.** Next:
+  **Phase 4** (Phase-5-track prep — 4.1 PHASE5_PLAN §5.5/§5.6 + acceptance stubs, 4.2
+  `deserialize.rb` tilesets mode, 4.3 map-identity check, 4.4 wiki arbitration, 4.5
+  close-out). Three §10 calls + the G1 findings still awaiting user decisions.
 
 ---
 
@@ -168,10 +171,17 @@ for Phase 2, possible deterministic post-accept repairs (would need design OK):
       ev9 dropped `SE(250)` + `pbCallBub` — both emitted dialogue-only in the standard
       `lock`/`faceplayer`/`msgbox`/`release`/`end` frame. ~$0.32, 2 spawns. Evidence +
       the incidental G1-#1 `\"` observation in `FABLES_DECISIONS.md`.
-- [ ] **3.6 (lead)** `deterministic.py` `_dialogue_body` Wait-106/SE-250 tolerance
-      per G2 evidence + tests; recount via `scripts/count_deterministic_actual.py` +
-      `scripts/near_miss_families.py` (expect ≈ +40 claims, ~93 trivial left).
-- [ ] Commits: 3.1+3.2+3.3 `e394986` · 3.4 = output regen only (gitignored), tracker `____` · 3.6 `____`
+- [x] **3.6 (lead)** *(done 2026-06-12)* `deterministic.py` `_dialogue_body` skips
+      native `WAIT (106)` + `PLAY_SE (250)` as plumbing per G2, **guarded by a
+      `has_dialogue` pre-scan** — a page whose only content is a stripped SE/Wait
+      (no Show-Text) is the declined cosmetic-only class and falls through to the LLM
+      (so `[106,201,223,250]` warps and `[250]`-only bridges stay unclaimed).
+      `pbCallBub`/`pbSEPlay` were already 355-strips. +7 tests in
+      `test_deterministic.py` (Wait-drop, SE+bubble-drop, interleaved, 3× cosmetic-only
+      fall-through, compile). Recount: pre-filter **997 → 1046 (+49**: pure_dialogue
+      +47, self_switch +2); near-miss residue **133 → 86** trivial (35 → 27 families).
+- [x] Commits: 3.1+3.2+3.3 `e394986` · 3.4 = output regen only (gitignored), tracker
+      `ca8a5af` (+ regen-msg fix `e25e96f`) · 3.5 GATE G2 `444fbee` · 3.6 `____`
 
 ## Phase 4 — Phase-5-track prep (parallel Sonnet fan-out, disjoint files)
 
@@ -201,7 +211,8 @@ for Phase 2, possible deterministic post-accept repairs (would need design OK):
       (within the 30–50 design band; per-cluster is the review-labor metric), all
       reviewed in `reference/novel_cluster_review.md`
 - [x] `CommonEvents.pory`: exactly 3 `# STRIPPED:` stubs, compiles rc 0 (2026-06-12)
-- [ ] Pre-filter claims ≈ +40 after rider (post-G2)
+- [x] Pre-filter claims ≈ +40 after rider (post-G2) — **+49** (997 → 1046, 27.8% →
+      29.2%); near-miss residue 133 → 86 (2026-06-12)
 - [ ] `tilesets.json` terrain-tag spot-check; identity check flags map 7
 - [ ] Clean tree; only `reachability.py` + `map_constants.py` integration left
       (blocked on Phase 5 §5.1–5.4 by design)
