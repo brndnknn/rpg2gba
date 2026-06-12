@@ -536,7 +536,10 @@ The decided shape:
 - [ ] All maps have generated `.pory` files
 - [ ] All `.pory` files compile through Poryscript
 - [ ] Flag registry is complete and consistent
-- [ ] Unhandled queue is fully triaged (every item has a decision)
+- [ ] Unhandled queue is fully triaged (every *cluster* has a decision — entries are
+      clustered by source-join and auto-dispositioned per `conversion_agent/triage.py`;
+      novel clusters get a build-agent review with spoiler-free summaries for any §10
+      fidelity calls)
 - [ ] ~10% sample of bulk output has been manually reviewed and approved
 
 ---

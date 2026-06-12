@@ -15,10 +15,18 @@ summary on exit.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from pathlib import Path
 
 from rpg2gba.conversion_agent.orchestrator import triage
+from rpg2gba.conversion_agent.triage import TriageReport, triage_queue
+
+logger = logging.getLogger(__name__)
+
+# The reference tree lives at the repo root (src layout: src/rpg2gba/conversion_agent/
+# run_report.py → three parents up). Callers may override via collect_stats().
+_DEFAULT_REFERENCE_DIR = Path(__file__).resolve().parents[3] / "reference"
 
 
 def _count_lines(path: Path) -> int:
@@ -27,9 +35,10 @@ def _count_lines(path: Path) -> int:
     return sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
 
 
-def collect_stats(out_dir: Path) -> dict:
+def collect_stats(out_dir: Path, reference_dir: Path | None = None) -> dict:
     """Gather a snapshot of bulk-run progress and token usage from `out_dir`."""
     out_dir = Path(out_dir)
+    reference_dir = Path(reference_dir) if reference_dir else _DEFAULT_REFERENCE_DIR
     maps_dir = out_dir / "maps"
     checkpoints = out_dir / "checkpoints"
     usage_log = out_dir / "token_usage.jsonl"
@@ -74,6 +83,16 @@ def collect_stats(out_dir: Path) -> dict:
         except json.JSONDecodeError:
             run_state = None
 
+    # Clustered triage (FABLES_DECISIONS #3) is the primary view; the legacy
+    # reason-grouped triage() stays as the fallback when the queue or the
+    # reference tree is unavailable (e.g. tests with a bare out_dir).
+    triage_report: TriageReport | None = None
+    if queue_path.is_file():
+        try:
+            triage_report = triage_queue(queue_path, out_dir, reference_dir)
+        except FileNotFoundError as exc:
+            logger.warning("clustered triage unavailable (%s) — falling back", exc)
+
     return {
         "maps_total": maps_total,
         "maps_done": maps_done,
@@ -84,6 +103,7 @@ def collect_stats(out_dir: Path) -> dict:
         "cost_usd": round(cost_usd, 4),
         "queued": _count_lines(queue_path),
         "triage": triage(queue_path),
+        "triage_clustered": triage_report,
         "run_state": run_state,
     }
 
@@ -126,7 +146,14 @@ def format_stats(stats: dict) -> str:
         wl = _window_line(stats["run_state"])
         if wl:
             lines.append(wl)
-    if stats["triage"]:
+    report = stats.get("triage_clustered")
+    if report is not None and report.total:
+        lines.append(
+            f"  triage (clustered; novel = build-agent review queue,"
+            f" {report.novel_total} entries):"
+        )
+        lines.extend(report.summary_lines())
+    elif stats["triage"]:
         lines.append("  triage:")
         for reason, count in sorted(stats["triage"].items(), key=lambda kv: -kv[1]):
             lines.append(f"    {count:>4}  {reason}")
