@@ -254,6 +254,44 @@ def test_pre_f1_memo_entry_replays_with_ev_tag(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Test 7b: same-identity memo replay keeps its own switch-flag tokens
+# ---------------------------------------------------------------------------
+
+
+def test_same_identity_replay_with_self_switch_flag(tmp_path: Path) -> None:
+    # The regen/checkpoint-recovery case: the memo entry's (src_map, src_event)
+    # equals the current event. Its FLAG_MAP{m}_EVENT{e}_* tokens are the event's
+    # OWN flags — the per-key rewrite is a no-op and the stale-token guard must
+    # not misread them as stale (it did: any self/temp-switch event could never
+    # replay onto itself, turning a zero-spend regen into a spawn attempt).
+    event = {
+        "id": 2, "name": "EV002", "x": 0, "y": 0,
+        "pages": [{"list": [
+            {"code": 355, "parameters": ['setTempSwitchOn("A")']},
+        ]}],
+    }
+    backend = MockBackend([ConversionResult(script="SHOULD NOT BE CALLED")])
+    o = _orchestrator(tmp_path, backend)
+
+    key = orch._memo_key({"map_id": 1, **event})
+    o._memo[key] = orch.MemoEntry(
+        script=(
+            "script Map001_EV002_Page1 {"
+            " setflag(FLAG_MAP001_EVENT002_TSA) GOOD }"
+        ),
+        src_map=1,
+        src_event=2,
+    )
+
+    o.convert_map(_write_map(tmp_path / "out" / "maps", 1, [event]))
+
+    assert backend.calls == 0  # replayed from memo — no spawn
+    pory = (tmp_path / "out" / "scripts" / "Map001.pory").read_text(encoding="utf-8")
+    assert "setflag(FLAG_MAP001_EVENT002_TSA)" in pory
+    assert "script Map001_EV002_Page1 {" in pory
+
+
+# ---------------------------------------------------------------------------
 # Test 8: duplicate-label assertion fires
 # ---------------------------------------------------------------------------
 

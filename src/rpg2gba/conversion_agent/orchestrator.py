@@ -492,7 +492,9 @@ class Orchestrator:
         replaces are disjoint).
 
         Returns the rewritten script, or None if any source-identity token survives the
-        rewrite (stale-token guard → caller re-spawns). The label-prefix rewrite is
+        rewrite (stale-token guard → caller re-spawns). The guard only applies when the
+        identities differ: a same-(map, event) replay — the regen/checkpoint-recovery
+        case — keeps its own flag tokens by construction. The label-prefix rewrite is
         essential: poryscript validates each file in isolation, so a stale source label
         compiles fine but collides / dangles at assembly when the maps are linked."""
         cur_event = int(event["id"])
@@ -503,10 +505,14 @@ class Orchestrator:
         for k in _event_temp_switches(event):
             src = temp_switch_flag_name(entry.src_map, entry.src_event, k)
             script = script.replace(src, temp_switch_flag_name(cur_map, cur_event, k))
-        if f"FLAG_MAP{entry.src_map:03d}_EVENT{entry.src_event:03d}_" in script:
+        same_identity = (entry.src_map, entry.src_event) == (cur_map, cur_event)
+        if (
+            not same_identity
+            and f"FLAG_MAP{entry.src_map:03d}_EVENT{entry.src_event:03d}_" in script
+        ):
             return None  # a source token the per-key rewrite missed — bail to a real spawn
         src_qualified = f"Map{entry.src_map:03d}_EV{entry.src_event:03d}_"
-        if (entry.src_map, entry.src_event) != (cur_map, cur_event):
+        if not same_identity:
             script = script.replace(
                 src_qualified, f"Map{cur_map:03d}_EV{cur_event:03d}_"
             )
