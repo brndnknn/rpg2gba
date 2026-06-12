@@ -215,7 +215,8 @@ def main() -> int:
         metavar="ID",
         default=[],
         help="Common event ids to drop from the ledger for re-conversion (e.g. --ce 4 5 6). "
-        "Use run_bulk.py after this to actually re-convert them (CEs are not memoised).",
+        "Strip-listed CEs re-emit deterministic stubs here (zero spend); for normal CEs, "
+        "run run_bulk.py afterwards to actually re-convert them (CEs are not memoised).",
     )
     ap.add_argument(
         "--yes",
@@ -263,6 +264,15 @@ def main() -> int:
     scripts_dir = out_dir / "scripts"
     ce_ids: set[int] = set(args.ce)
 
+    # Partition the requested CEs into strip-listed (re-emit deterministic stubs,
+    # zero spend, complete here) vs normal (need a real spawn via run_bulk.py). The
+    # strip path never touches the backend, so BudgetReached is NOT raised for them —
+    # the messaging below must reflect that or it tells the user to run run_bulk.py
+    # for CEs that are already done.
+    strip_ces, _ = orch._load_strip_list(Path("reference"))
+    stripped_ids = sorted(ce_ids & strip_ces.keys())
+    normal_ids = sorted(ce_ids - strip_ces.keys())
+
     # Resolve the final map id list (explicit + all-done).
     map_ids = resolve_map_ids(checkpoint_dir, args.maps, args.all_done)
 
@@ -275,9 +285,11 @@ def main() -> int:
         print(f"  patch CE ledger   : drop ids {sorted(ce_ids)}")
         print("  delete CommonEvents.done")
     print("  replay via NullBackend (memo/deterministic — zero LLM spend)")
-    if ce_ids:
-        print("  NOTE: CEs are not memoised — BudgetReached is expected; run")
-        print("        run_bulk.py afterwards to actually re-convert them.")
+    if stripped_ids:
+        print(f"  strip-listed CEs  : {stripped_ids} → deterministic # STRIPPED: stubs, 0 spawns")
+    if normal_ids:
+        print(f"  NOTE: CEs {normal_ids} are not memoised — BudgetReached is expected;")
+        print("        run run_bulk.py afterwards to actually re-convert them.")
 
     if not args.yes:
         reply = input("Proceed? type 'yes': ").strip().lower()

@@ -154,9 +154,10 @@ for Phase 2, possible deterministic post-accept repairs (would need design OK):
       deterministic, no `BudgetReached`), 3 `# STRIPPED:` stub blocks now in
       `CommonEvents.pory`; full-file compile rc 0. Orchestrator pruned **27** stale
       unhandled entries (9+12+6) for the stripped CEs on re-conversion → live queue
-      214 → **187**, 0 entries remain for 4/5/6. (Note: `regen_outputs.py`'s `--ce`
-      print/help still says "BudgetReached expected; run run_bulk.py after" — stale
-      for strip-listed CEs, accurate for normal ones; left as-is.)
+      214 → **187**, 0 entries remain for 4/5/6. Follow-up: `regen_outputs.py` `--ce`
+      messaging now partitions requested ids (`orch._load_strip_list`) — strip-listed →
+      "deterministic stubs, 0 spawns" line; only non-strip ids get the BudgetReached/
+      run_bulk.py note (was unconditional, misleading for strip-listed CEs).
 - [ ] **3.5 [GATE G2 — ask user]** rider validation: 2–3 frozen-Opus spawns on
       family-1/2 events (dialogue+Wait, dialogue+SE — candidates map 174 ev9,
       map 31 ev9) via `scripts/convert_one_event.py`; confirm strip-as-plumbing.
