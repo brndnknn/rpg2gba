@@ -30,10 +30,11 @@ unticked box, and resume there.
   pre-existing in old recon scripts).
 - **Phase 2 COMPLETE (2026-06-12):** 274 pass / 10 skips. Live triage: 214 queued,
   29 novel clusters reviewed (`reference/novel_cluster_review.md`).
-- **Phase 3 3.1–3.3 DONE (2026-06-12, `e394986`):** 284 pass / 10 skips, ruff clean.
-  STRIP skip wired (CEs 4/5/6 stub-emitted, never queued). Next: **3.4 regen CEs
-  4/5/6** (NullBackend, 0 spawns) → **3.5 GATE G2** (2–3 frozen-Opus rider spawns,
-  needs user OK) → 3.6 deterministic Wait/SE tolerance. Three §10 calls + the G1
+- **Phase 3 3.1–3.4 DONE (2026-06-12):** 3.1–3.3 `e394986` (284 pass/10 skip, ruff
+  clean); 3.4 regen ran (`--ce 4 5 6`, 0 spawns) — `CommonEvents.pory` now has 3
+  `# STRIPPED:` stubs, full-file compile rc 0, 27 stale queue entries pruned (live
+  queue 214 → 187). Next: **3.5 GATE G2** (2–3 frozen-Opus rider spawns, needs user
+  OK on budget) → 3.6 deterministic Wait/SE tolerance. Three §10 calls + the G1
   findings still awaiting user decisions.
 
 ---
@@ -148,16 +149,21 @@ for Phase 2, possible deterministic post-accept repairs (would need design OK):
 - [x] **3.3 (Sonnet)** `tests/test_strip_skip.py` (10): stub emission+compile; name
       mismatch aborts; absent file OK; ledger idempotence; map-event skip; no queue
       entries.
-- [ ] **3.4 (lead)** `regen_outputs.py --ce 4 5 6` → 3 stub blocks in
-      `CommonEvents.pory`, compiles rc 0; 27 stale queue entries auto-classify as
-      superseded (Phase 2 triage).
+- [x] **3.4 (lead)** *(done 2026-06-12)* `regen_outputs.py --ce 4 5 6` → CEs 4/5/6
+      dropped from ledger, re-processed via NullBackend (**0 spawns** — strip path is
+      deterministic, no `BudgetReached`), 3 `# STRIPPED:` stub blocks now in
+      `CommonEvents.pory`; full-file compile rc 0. Orchestrator pruned **27** stale
+      unhandled entries (9+12+6) for the stripped CEs on re-conversion → live queue
+      214 → **187**, 0 entries remain for 4/5/6. (Note: `regen_outputs.py`'s `--ce`
+      print/help still says "BudgetReached expected; run run_bulk.py after" — stale
+      for strip-listed CEs, accurate for normal ones; left as-is.)
 - [ ] **3.5 [GATE G2 — ask user]** rider validation: 2–3 frozen-Opus spawns on
       family-1/2 events (dialogue+Wait, dialogue+SE — candidates map 174 ev9,
       map 31 ev9) via `scripts/convert_one_event.py`; confirm strip-as-plumbing.
 - [ ] **3.6 (lead)** `deterministic.py` `_dialogue_body` Wait-106/SE-250 tolerance
       per G2 evidence + tests; recount via `scripts/count_deterministic_actual.py` +
       `scripts/near_miss_families.py` (expect ≈ +40 claims, ~93 trivial left).
-- [ ] Commits: 3.1+3.2+3.3 `e394986` · 3.4 `____` · 3.6 `____`
+- [ ] Commits: 3.1+3.2+3.3 `e394986` · 3.4 = output regen only (gitignored), tracker `____` · 3.6 `____`
 
 ## Phase 4 — Phase-5-track prep (parallel Sonnet fan-out, disjoint files)
 
@@ -186,7 +192,7 @@ for Phase 2, possible deterministic post-accept repairs (would need design OK):
       inactive until 3.1; ≥70% expected after) — novel residue = **29 clusters**
       (within the 30–50 design band; per-cluster is the review-labor metric), all
       reviewed in `reference/novel_cluster_review.md`
-- [ ] `CommonEvents.pory`: exactly 3 `# STRIPPED:` stubs, compiles
+- [x] `CommonEvents.pory`: exactly 3 `# STRIPPED:` stubs, compiles rc 0 (2026-06-12)
 - [ ] Pre-filter claims ≈ +40 after rider (post-G2)
 - [ ] `tilesets.json` terrain-tag spot-check; identity check flags map 7
 - [ ] Clean tree; only `reachability.py` + `map_constants.py` integration left
