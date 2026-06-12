@@ -40,7 +40,7 @@
     "999": {
       "map_infos_name": null,
       "events": 0,
-      "note": "Empty 80x80 debug/template map (tileset 6, blank BGM, no events, NO map_infos entry). Recommend WHOLE-MAP STRIP — exclude from Phase-5 mint rather than naming. Disposition is a user fidelity call (§10)."
+      "note": "Empty 80x80 debug/template map (tileset 6, blank BGM, no events, NO map_infos entry). DECIDED 2026-06-12 (user-approved): whole-map STRIP — excluded from Phase-5 mint. Recorded in reference/strip_list.json `maps`."
     }
   },
 

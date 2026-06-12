@@ -174,15 +174,15 @@ Essentials games**, not just this Uranium run.
 
 ### Implementation checklist (when picked up)
 
-- [ ] `reference/strip_list.json` (3 online CEs; `map_events: []`)
-- [ ] Loader + name assertion (fail loud on mismatch; absent file = empty)
-- [ ] Stub path in `orchestrator.convert_common_events` (before `_convert_common_event`;
+- [x] `reference/strip_list.json` (3 online CEs; `map_events: []`)
+- [x] Loader + name assertion (fail loud on mismatch; absent file = empty)
+- [x] Stub path in `orchestrator.convert_common_events` (before `_convert_common_event`;
       compile-gate the stub; write through the blocks ledger)
-- [ ] `map_events` skip in `orchestrator.convert_map` (next to `_event_has_commands`)
-- [ ] CLAUDE.md §4.3 row: "Whole-artifact STRIP decisions | `reference/strip_list.json`"
-- [ ] §4.6 tests: stub emission + compile, name-assertion failure, absent-file behavior,
+- [x] `map_events` skip in `orchestrator.convert_map` (next to `_event_has_commands`)
+- [x] CLAUDE.md §4.3 row: "Whole-artifact STRIP decisions | `reference/strip_list.json`"
+- [x] §4.6 tests: stub emission + compile, name-assertion failure, absent-file behavior,
       ledger idempotence on re-run, map-event skip
-- [ ] `run_report` counts `# STRIPPED:` blocks (optional, small)
+- [x] `run_report` counts `# STRIPPED:` blocks (optional, small)
 - [x] **Rider validation (GATE G2, 2026-06-12):** 2 frozen-Opus spawns
       (`claude-opus-4-8`, isolated temp out_dir, ~$0.32) confirm **strip-as-plumbing**:
       - Family 1 — Map174 ev9 `[101,106,101,401×3]`: Opus **dropped `Wait(106)`**,
@@ -193,7 +193,7 @@ Essentials games**, not just this Uranium run.
       dialogue-only with output matching Opus. (Side-note: the Baitatao text carries
       literal `\"` quotes — the G1-finding-#1 `\"` poryscript→preproc hazard; the
       deterministic emitter in 3.6 faces the same content, track with G1 #1.)
-- [ ] **Rider impl (3.6):** extend Classifier 1's tolerated-code set with `Wait (106)`
+- [x] **Rider impl (3.6):** extend Classifier 1's tolerated-code set with `Wait (106)`
       + plumbing `SE (250)` + `pbCallBub`-355 per the G2 evidence; claims ~40 events
       (`scripts/near_miss_families.py` families 1–2 + kin) + tests + recount.
 
@@ -267,16 +267,16 @@ orchestrator-touching window.
 
 ### Implementation checklist (when picked up)
 
-- [ ] Source-join + cluster-key derivation (likely a new `triage` module or extension
+- [x] Source-join + cluster-key derivation (likely a new `triage` module or extension
       of `run_report.py`; keep `orchestrator.triage()` as the trivial fallback)
-- [ ] Auto-disposition rules incl. the `uranium_script_calls.md` table parser and the
+- [x] Auto-disposition rules incl. the `uranium_script_calls.md` table parser and the
       `strip_list.json` reader (file-only dependency on #2)
-- [ ] Clustered triage in `collect_stats`/`format_stats` (run_stats + bulk-runner exit
+- [x] Clustered triage in `collect_stats`/`format_stats` (run_stats + bulk-runner exit
       report show it per round)
-- [ ] `--novel` listing mode (the build-agent review queue)
-- [ ] Tests: synthetic queue + map JSON, no external binaries
-- [ ] ROADMAP Phase 4 exit-criterion reword
-- [ ] First novel-cluster review pass over the existing 241 once the tool lands
+- [x] `--novel` listing mode (the build-agent review queue)
+- [x] Tests: synthetic queue + map JSON, no external binaries
+- [x] ROADMAP Phase 4 exit-criterion reword
+- [x] First novel-cluster review pass over the existing 241 once the tool lands
 
 ---
 
@@ -361,12 +361,12 @@ immediate regression corpus: its first run must flag the Map002 duplicate (pre-F
 
 ### Implementation checklist (when picked up)
 
-- [ ] `scripts/assembly_smoke.py`: worktree setup/teardown, .pory→.inc, header
+- [x] `scripts/assembly_smoke.py`: worktree setup/teardown, .pory→.inc, header
       generation, include wiring, `make -j modern`, error clustering, report
-- [ ] MAP_URANIUM placeholder-alias generator (scan output for `MAP_URANIUM_\d+`)
-- [ ] TRAINER_* header from `trainers.json`
-- [ ] Fail-loud check for unknown unresolved constant families
-- [ ] First-run regression assertion: detects the known Map002 duplicate before the F1
+- [x] MAP_URANIUM placeholder-alias generator (scan output for `MAP_URANIUM_\d+`)
+- [x] TRAINER_* header from `trainers.json`
+- [x] Fail-loud check for unknown unresolved constant families
+- [x] First-run regression assertion: detects the known Map002 duplicate before the F1
       repair, passes clean after
 - [ ] (later, optional) hook into `run_bulk` pause windows
 
@@ -412,14 +412,14 @@ an internal constant.
 
 ### Implementation checklist (when picked up — Phase 5 pre-task, before map_constants)
 
-- [ ] Identify the map missing from `map_infos.json`
-- [ ] `scripts/map_identity_check.py`: harvest sign-text/BGM/connection/parent signals,
+- [x] Identify the map missing from `map_infos.json`
+- [x] `scripts/map_identity_check.py`: harvest sign-text/BGM/connection/parent signals,
       flag disagreements with map_infos names
-- [ ] Build-agent wiki arbitration pass over flagged maps + ~50 canonical locations →
+- [x] Build-agent wiki arbitration pass over flagged maps + ~50 canonical locations →
       `reference/map_name_overrides.json` (with evidence strings)
 - [ ] `map_constants.py`: consult overrides before map_infos; MAPSEC grouping support
       (shared section constants + display names)
-- [ ] CLAUDE.md §4.3 row for the overrides file
+- [x] CLAUDE.md §4.3 row for the overrides file
 - [ ] Check GBA location-header length limits against the corrected names
 
 ---
@@ -468,8 +468,8 @@ decision (agent breadcrumbs + queue, no `applymovement`) stands unchanged.
 
 ### Implementation checklist (when picked up)
 
-- [ ] Write PHASE5_PLAN.md §5.5 with the census + Q-MR1–5 + exit-criteria additions
-- [ ] Acceptance-test stubs in `tests/test_tileset_converter.py` pattern (skipped
+- [x] Write PHASE5_PLAN.md §5.5 with the census + Q-MR1–5 + exit-criteria additions
+- [x] Acceptance-test stubs in `tests/test_tileset_converter.py` pattern (skipped
       checklist style, like the other Phase 5 sections)
 
 ---
@@ -545,12 +545,12 @@ review**.
 
 ### Implementation checklist (when picked up — after 5.2/5.3/5.4 produce output)
 
-- [ ] `deserialize.rb`: dump `Tilesets.rxdata` → per-tile `terrain_tags` + `passages`
+- [x] `deserialize.rb`: dump `Tilesets.rxdata` → per-tile `terrain_tags` + `passages`
 - [ ] `tileset_map.json`: directional ledge rows; confirm jump metatiles in the
       universal tileset
 - [ ] `tileset_converter/reachability.py`: directed BFS, three-mode classification,
       passages-vs-emitted collision diff
-- [ ] PHASE5_PLAN §5.6 + exit-criteria addition (write in the same doc pass as #6's
+- [x] PHASE5_PLAN §5.6 + exit-criteria addition (write in the same doc pass as #6's
       §5.5)
 - [ ] Acceptance tests on synthetic grids: blocked exit, ledge one-way trap, HM-gated
       water, puzzle-gated (optimistic-only) pass

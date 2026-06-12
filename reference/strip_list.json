@@ -1,5 +1,5 @@
 {
-  "_comment": "Whole-artifact STRIP decisions (CLAUDE.md §4.3 source of truth; design: FABLES_DECISIONS.md Suggestion 2). Layer boundary: whole CEs / map events here; intra-event script-call strips live in the game's script-call reference table; command-code strips live in system.md. expect_name is a fail-loud assertion against re-export renumbering.",
+  "_comment": "Whole-artifact STRIP decisions (CLAUDE.md §4.3 source of truth; design: FABLES_DECISIONS.md Suggestion 2). Layer boundary: whole CEs / whole maps / map events here; intra-event script-call strips live in the game's script-call reference table; command-code strips live in system.md. expect_name/expect_events are fail-loud assertions against re-export renumbering. `maps` = whole-map strips, honored by Phase-5 mint (the Phase-4 orchestrator reads only common_events + map_events).",
   "common_events": [
     {
       "id": 4,
@@ -20,5 +20,13 @@
       "stub_message": "The Tandor Network is currently unavailable."
     }
   ],
-  "map_events": []
+  "map_events": [],
+  "maps": [
+    {
+      "id": 999,
+      "expect_events": 0,
+      "feature": "empty debug/template map (80x80, tileset 6, no MapInfos entry)",
+      "reason": "Not a real location; excluded from Phase-5 mint. User-approved 2026-06-12. See reference/map_name_overrides.json orphans."
+    }
+  ]
 }
