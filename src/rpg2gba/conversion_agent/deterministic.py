@@ -47,6 +47,8 @@ from rpg2gba.pbs_converter._naming import to_constant
 SHOW_TEXT = 101
 SHOW_TEXT_CONT = 401
 CONDITIONAL_BRANCH = 111
+ELSE_BRANCH = 411  # RMXP conditional "Else"
+BRANCH_END = 412  # RMXP conditional "Branch End"
 CALL_COMMON_EVENT = 117
 CONTROL_SELF_SWITCH = 123
 TRANSFER_PLAYER = 201
@@ -382,6 +384,86 @@ def classify_self_switch_dialogue(
     return "\n\n".join(blocks)
 
 
+# -- Classifier 8: Ground Item / pbItemBall (iterative roadmap Group 1) --------
+
+# The Essentials ground-item idiom: a script-type (param[0] == 12) conditional
+# branch testing ``pbItemBall(::PBItems::SYMBOL)``. ``pbItemBall`` gives the item
+# (quantity 1), shows its own "found" fanfare message, and returns success; the
+# event sets a self-switch so the pickup can't repeat, with an empty else. All 230
+# corpus instances share the exact page-1 shape (111 → 123 → 411 empty → 412) with
+# no quantity argument; frozen-Opus collapses it to a bare ``giveitem`` (pokeemerald
+# handles the bag-full case the conditional guarded). No ``faceplayer`` — it is a
+# pickup, not an NPC talk (validated: Map007 EV006/011/012 et al.).
+_ITEMBALL_RE = re.compile(r"^\s*(?:Kernel\.)?pbItemBall\(\s*::PBItems::(\w+)\s*\)\s*$")
+
+
+def classify_ground_item(
+    map_id: int, event: dict, ctx: "Context | None" = None
+) -> str | None:
+    """A ground-item pickup whose page 1 is ``if pbItemBall(::PBItems::X)`` setting
+    a self-switch (empty else); any later page is the empty post-pickup gate.
+
+    Emits the canonical pokeemerald ground-item idiom — lock / giveitem(ITEM_X, 1)
+    / setflag(<self-switch>) / release / end, plus a bare ``end`` block per gate
+    page. Needs ``ctx.items`` to resolve the PBItems symbol to its ``ITEM_*``
+    constant; an unknown symbol or any structural deviation falls through to the
+    LLM."""
+    if ctx is None or not ctx.items:
+        return None
+    if not _all_pages_action_button(event):
+        return None
+    pages = event.get("pages", [])
+    if not pages:
+        return None
+    symbol: str | None = None
+    letter: str | None = None
+    sw_value = 0
+    for cmd in pages[0].get("list", []):
+        code = cmd.get("code", 0)
+        if code == CONDITIONAL_BRANCH:
+            if symbol is not None:
+                return None  # a second branch — not the bare pickup idiom
+            params = cmd.get("parameters", [])
+            if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+                return None  # not a script-type conditional
+            m = _ITEMBALL_RE.match(params[1])
+            if m is None:
+                return None  # script-type branch, but not pbItemBall
+            symbol = m.group(1)
+        elif code == CONTROL_SELF_SWITCH:
+            if letter is not None:
+                return None
+            params = cmd.get("parameters", [])
+            if not params or not isinstance(params[0], str):
+                return None
+            letter = params[0]
+            sw_value = params[1] if len(params) > 1 else 0
+        elif code in (0, ELSE_BRANCH, BRANCH_END, COMMENT, COMMENT_CONT):
+            continue  # control-flow scaffolding / blanks — no output
+        else:
+            return None  # any other command — defer to the LLM
+    if symbol is None or letter is None:
+        return None
+    const = ctx.items.get(symbol)
+    if const is None:
+        return None  # unknown item symbol — fall through
+    for page in pages[1:]:  # gate pages must carry no real commands
+        for cmd in page.get("list", []):
+            if cmd.get("code", 0) not in (0, COMMENT, COMMENT_CONT):
+                return None
+    flag = self_switch_flag_name(map_id, event["id"], letter)
+    set_line = f"setflag({flag})" if sw_value == 0 else f"clearflag({flag})"
+    blocks = [
+        _block(
+            _page_label(map_id, event, 1),
+            ["lock", f"giveitem({const}, 1)", set_line, "release", "end"],
+        )
+    ]
+    for i in range(2, len(pages) + 1):
+        blocks.append(_block(_page_label(map_id, event, i), ["end"]))
+    return "\n\n".join(blocks)
+
+
 # -- Classifier 4: Simple Warp (plan §7) --------------------------------------
 
 _WARP_SAFE_CODES = {0, 5, 6, 7, 106, 201, 221, 222, 223, 224, 249, 250}
@@ -653,6 +735,26 @@ class Context:
     trainers: dict[tuple[str, str, int], str] = field(default_factory=dict)
 
 
+def _load_item_symbols(reference_dir: Path) -> dict[str, str]:
+    """Map each Essentials ``PBItems`` symbol → its ``ITEM_*`` constant.
+
+    Uses the same naming rule as ``pbs_converter.items._ItemResolver.constant``
+    (display name through ``to_constant``, internal-symbol fallback), so the
+    constant the ground-item classifier emits is exactly the one Phase 2 defined.
+    Tolerant: a missing/unreadable sidecar yields ``{}``."""
+    try:
+        internal = json.loads(
+            (reference_dir / "item_internal_names.json").read_text(encoding="utf-8")
+        )
+        names = json.loads((reference_dir / "item_names.json").read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    out: dict[str, str] = {}
+    for iid, sym in internal.items():
+        out[sym] = to_constant("ITEM", names.get(iid) or sym)
+    return out
+
+
 def load_context(*, reference_dir: Path, intermediate_dir: Path) -> Context:
     """Build the data-driven classifiers' lookup tables from Phase-2 outputs.
 
@@ -667,7 +769,7 @@ def load_context(*, reference_dir: Path, intermediate_dir: Path) -> Context:
             trainers[(v["trainer_class"], v["name"], v["party_id"])] = const
     except Exception:
         pass
-    return Context(trainers=trainers)
+    return Context(trainers=trainers, items=_load_item_symbols(reference_dir))
 
 
 # Classifiers are tried in this order; the first non-None wins. Order follows the
@@ -680,6 +782,7 @@ _CLASSIFIERS: list[
     classify_sign_dialogue,  # Classifier 7
     classify_call_common_event,  # Classifier 2
     classify_self_switch_dialogue,  # Classifier 3
+    classify_ground_item,  # Classifier 8
     classify_simple_warp,  # Classifier 4
     classify_trainer_battle,  # Classifier 6
 ]

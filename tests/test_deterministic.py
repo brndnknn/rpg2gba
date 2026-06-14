@@ -12,6 +12,7 @@ Event/page shape mirrors the Phase-3 deserializer output: an event is
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -1028,3 +1029,193 @@ def test_sign_output_compiles() -> None:
     assert out is not None
     result = poryscript.compile_script(out)
     assert result.ok, result.stderr
+
+
+# ----------------------------------------------------------------------------
+# Classifier 8 — Ground Item / pbItemBall (iterative roadmap Group 1)
+# ----------------------------------------------------------------------------
+
+_ITEM_CTX = D.Context(items={"HPUP": "ITEM_HP_UP", "FULLHEAL": "ITEM_FULL_HEAL"})
+
+
+def _itemball_event(symbol: str = "HPUP", *, letter: str = "A", value: int = 0,
+                    id: int = 6, name: str = "EV006", gate_pages: int = 1) -> dict:
+    """A ground-item event: page 1 = if pbItemBall(symbol) { self-switch }, plus
+    `gate_pages` empty post-pickup pages."""
+    page1 = _page(
+        _cmd(D.CONDITIONAL_BRANCH, 12, f"Kernel.pbItemBall(::PBItems::{symbol})"),
+        _cmd(D.CONTROL_SELF_SWITCH, letter, value),
+        _cmd(D.ELSE_BRANCH),
+        _cmd(D.BRANCH_END),
+    )
+    return _event(page1, *([_page()] * gate_pages), id=id, name=name)
+
+
+def test_ground_item_golden_output() -> None:
+    """Matches frozen-Opus byte-for-byte (Map007 EV006): lock/giveitem/setflag/release/end."""
+    out = D.classify_ground_item(7, _itemball_event(), _ITEM_CTX)
+    expected = (
+        "script Map007_EV006_Page1 {\n"
+        "    lock\n"
+        "    giveitem(ITEM_HP_UP, 1)\n"
+        f"    setflag({self_switch_flag_name(7, 6, 'A')})\n"
+        "    release\n"
+        "    end\n"
+        "}\n\n"
+        "script Map007_EV006_Page2 {\n"
+        "    end\n"
+        "}"
+    )
+    assert out == expected
+
+
+def test_ground_item_no_faceplayer() -> None:
+    """A pickup, not an NPC talk — never emits faceplayer."""
+    out = D.classify_ground_item(7, _itemball_event(), _ITEM_CTX)
+    assert out is not None and "faceplayer" not in out
+
+
+def test_ground_item_self_switch_b() -> None:
+    """The self-switch letter is read from the 123 command (not hardcoded to A)."""
+    out = D.classify_ground_item(7, _itemball_event(letter="B"), _ITEM_CTX)
+    assert out is not None
+    assert f"setflag({self_switch_flag_name(7, 6, 'B')})" in out
+
+
+def test_ground_item_single_page() -> None:
+    """A pickup with no gate page emits only the page-1 block."""
+    out = D.classify_ground_item(7, _itemball_event(gate_pages=0), _ITEM_CTX)
+    assert out is not None
+    assert "Page1" in out and "Page2" not in out
+
+
+def test_ground_item_no_context_falls_through() -> None:
+    """Without an item map the symbol can't be resolved → defer to the LLM."""
+    assert D.classify_ground_item(7, _itemball_event(), None) is None
+    assert D.classify_ground_item(7, _itemball_event(), D.Context()) is None
+
+
+def test_ground_item_unknown_symbol_falls_through() -> None:
+    """An item symbol absent from the map → fall through, never a bad constant."""
+    assert D.classify_ground_item(7, _itemball_event(symbol="NUCLEARGEM"), _ITEM_CTX) is None
+
+
+def test_ground_item_non_itemball_script_falls_through() -> None:
+    """A script-type 111 that isn't pbItemBall (e.g. a trainer battle) → None."""
+    ev = _event(
+        _page(
+            _cmd(D.CONDITIONAL_BRANCH, 12, "pbTrainerBattle(PBTrainers::YOUNGSTER, \"Joey\")"),
+            _cmd(D.CONTROL_SELF_SWITCH, "A", 0),
+        ),
+        id=6,
+    )
+    assert D.classify_ground_item(7, ev, _ITEM_CTX) is None
+
+
+def test_ground_item_non_action_button_falls_through() -> None:
+    """A non-talk trigger (autorun/parallel) is not the pickup idiom → None."""
+    page1 = _page(
+        _cmd(D.CONDITIONAL_BRANCH, 12, "Kernel.pbItemBall(::PBItems::HPUP)"),
+        _cmd(D.CONTROL_SELF_SWITCH, "A", 0),
+        trigger=3,
+    )
+    assert D.classify_ground_item(7, _event(page1, _page(), id=6), _ITEM_CTX) is None
+
+
+def test_ground_item_extra_command_falls_through() -> None:
+    """Dialogue or any non-scaffolding command alongside the pickup → defer to LLM."""
+    ev = _event(
+        _page(
+            _cmd(D.CONDITIONAL_BRANCH, 12, "Kernel.pbItemBall(::PBItems::HPUP)"),
+            _text("You found something!"),
+            _cmd(D.CONTROL_SELF_SWITCH, "A", 0),
+        ),
+        _page(),
+        id=6,
+    )
+    assert D.classify_ground_item(7, ev, _ITEM_CTX) is None
+
+
+def test_ground_item_nonempty_gate_page_falls_through() -> None:
+    """A gate page that carries real commands is not the empty post-pickup page → None."""
+    ev = _event(
+        _page(
+            _cmd(D.CONDITIONAL_BRANCH, 12, "Kernel.pbItemBall(::PBItems::HPUP)"),
+            _cmd(D.CONTROL_SELF_SWITCH, "A", 0),
+        ),
+        _page(_text("Still here.")),
+        id=6,
+    )
+    assert D.classify_ground_item(7, ev, _ITEM_CTX) is None
+
+
+def test_ground_item_dispatch() -> None:
+    """try_deterministic routes a pickup to the ground-item classifier (ctx required)."""
+    result = D.try_deterministic(7, _itemball_event(), _ITEM_CTX)
+    assert result is not None
+    assert "giveitem(ITEM_HP_UP, 1)" in result.script
+    assert result.unhandled == []
+
+
+@pytest.mark.phase4
+@pytest.mark.skipif(not poryscript.is_available(), reason="poryscript binary not installed")
+def test_ground_item_output_compiles() -> None:
+    """A representative ground-item output compiles through poryscript."""
+    out = D.classify_ground_item(7, _itemball_event(), _ITEM_CTX)
+    assert out is not None
+    result = poryscript.compile_script(out)
+    assert result.ok, result.stderr
+
+
+# -- differential validation vs the frozen-Opus oracle (invariant 4) ----------
+
+_BUILD = Path("output/uranium-build")
+
+
+def _blocks_by_label(text: str) -> dict[str, str]:
+    """Map each ``script <label> { ... }`` block to its (line-rstripped) text."""
+    out: dict[str, str] = {}
+    label: str | None = None
+    cur: list[str] = []
+    for line in text.split("\n"):
+        if label is None:
+            m = re.match(r"^script\s+(\S+)\s*\{", line)
+            if m:
+                label, cur = m.group(1), [line.rstrip()]
+        else:
+            cur.append(line.rstrip())
+            if line.strip() == "}":
+                out[label] = "\n".join(cur)
+                label = None
+    return out
+
+
+def test_ground_item_differential_vs_frozen_opus() -> None:
+    """Every event the classifier claims in a fully-converted map must reproduce
+    the frozen-Opus .pory block byte-for-byte (iterative roadmap invariant 4).
+
+    The reliable oracle is the set of maps with a `.done` checkpoint (a `.partial`
+    map — paused mid-conversion — has gaps that are absent, not divergent)."""
+    checkpoints, maps_dir, scripts_dir = _BUILD / "checkpoints", _BUILD / "maps", _BUILD / "scripts"
+    if not (checkpoints.is_dir() and maps_dir.is_dir() and scripts_dir.is_dir()):
+        pytest.skip("on-disk corpus/oracle absent (output/ is gitignored)")
+    ctx = D.load_context(reference_dir=Path("reference"), intermediate_dir=_BUILD / "intermediate")
+    if not ctx.items:
+        pytest.skip("item sidecars absent — classifier inert")
+    done = sorted(int(p.stem[3:]) for p in checkpoints.glob("Map*.done"))
+    checked = 0
+    for mid in done:
+        mp, po = maps_dir / f"Map{mid:03d}.json", scripts_dir / f"Map{mid:03d}.pory"
+        if not mp.is_file() or not po.is_file():
+            continue
+        oracle = _blocks_by_label(po.read_text(encoding="utf-8"))
+        data = json.loads(mp.read_text(encoding="utf-8"))
+        for ev in data.get("events", []):
+            out = D.classify_ground_item(mid, ev, ctx)
+            if out is None:
+                continue
+            for label, block in _blocks_by_label(out).items():
+                assert label in oracle, f"Map{mid:03d}: {label} not in frozen-Opus oracle"
+                assert block == oracle[label], f"Map{mid:03d}: {label} diverges from frozen-Opus"
+                checked += 1
+    assert checked > 0, "no ground items validated — corpus/oracle out of sync?"
