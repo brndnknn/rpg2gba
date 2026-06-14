@@ -1,6 +1,7 @@
 # OQ-3 — empirical plan: is RMXP move-route → `applymovement` deterministic?
 
-**Status:** proposal / draft — not yet executed.
+**Status:** Step 1 EXECUTED 2026-06-13 (`scripts/moveroute_coverage.py`) — see §7.
+Step 2 (budget-gated calibration) pending user authorization; Step 3 follows it.
 **Date:** 2026-06-13.
 **Relationship to existing docs:** Answers open question **OQ-3** from
 `ITERATIVE_ROADMAP.md §9` (carried forward from `DETERMINISTIC_EXPANSION_STRATEGY.md`).
@@ -131,6 +132,72 @@ paid).
 
 Step 1 alone likely resolves OQ-3; Step 2 is only needed if the bucket-C residue
 turns out to be large or scattered.
+
+---
+
+## 7. Step 1 results (executed 2026-06-13)
+
+`scripts/moveroute_coverage.py` (zero-spend, mirrors `idiom_frequency.py`). It
+reproduces the plan's anchors exactly — **3,804 `209` routes, 1,191 events, 531
+player-only (45%)** — which cross-validates the corpus walk.
+
+### The headline numbers, two ways
+
+The candidate map buckets each inner code A (fixed macro) / B (parameterized-
+deterministic) / C (no analog / context-dependent). Within C, a **SOFT** subset
+(through, opacity, SE, graphic, on-top, freq, anim, blend, switch) is the §5.5
+drop/hoist/approximate family — rule-fixable, not judgement; the rest is **HARD**
+(diagonals, random, toward/away-player, facing-relative steps & turns, script).
+
+| Partition | player-only (reclaim now) | self/other (Track-B) | tail | deterministic % |
+|---|---|---|---|---|
+| **Conservative** (A/B only) | 158 | 137 | 896 | **295/1191 = 24%** |
+| **Potential** (A/B + SOFT-C) | 199 | 581 | 411 | **780/1191 = 65%** |
+
+### The answer to OQ-3
+
+**Vocabulary determinism is real but conditional, and the §5.5 "~70%" estimate
+was measuring the *potential*, not the raw macro rate.**
+
+- **Raw 1:1 macro determinism is only 24%.** A pure direct-macro translator
+  (no drop/hoist/approximate rules) leaves 76% of move-route events to Opus.
+- **The 24%→65% gap is NOT scattered judgement — it is ~5 recurring SOFT-C
+  commands**, exactly the §5.5-predicted families:
+  - Through ON/OFF (37/38): **1,757 events** combined — the single biggest killer.
+  - Change Opacity (42): 527 events.
+  - Play SE (44): 275; Change Graphic (41): 274; On-top (39/40): ~170.
+  Each is one fixed rule (37/38 → drop; 42 → binary visible/invisible; 44 → hoist
+  `playse`; 41 → hoist sprite swap; 39/40 → drop/fixed-priority). If those rules
+  are behavior-preserving, determinism jumps to **65%**.
+- **The irreducible HARD tail is 411 events (35%)**: relative/random turns
+  (20/21/22/24), diagonals (5–8, no GBA diagonal walk), toward/away-player moves
+  (10/11), facing-relative step fwd/back (12/13), random move (9), script (45).
+  These genuinely need Opus (or a per-event facing-tracking analysis beyond a
+  static vocabulary map).
+
+### Bucket-B parameter caveats (held up well)
+
+- **Jump (14):** 205 occ, only **10** are diagonal/>2-tile true-C — **174 are
+  `(0,0)` jump-in-place** (→ `MOVEMENT_ACTION_JUMP_IN_PLACE_*`, mappable). Jump is
+  effectively deterministic.
+- **Wait (15):** frames cluster at 1/2/4/5/6/8/10/30 → round to `DELAY_{1,2,4,8,16}`.
+- **Speed (29):** values 1–6 → `WALK_{SLOW,NORMAL,FAST,FASTER}`. Both clean functions.
+
+### Decision this produces
+
+Step 1 resolves the *structure* of OQ-3: the mapping is deterministic for a
+**well-defined 65% ceiling**, gated on validating **five specific SOFT-C rules** —
+not an open-ended judgement problem. That turns Step 2 from "is this even
+determinizable?" into a **narrow, ~30–50-event calibration stratified across
+exactly those 5 commands** (does dropping through / approximating opacity /
+hoisting SE & graphic / dropping on-top preserve the behavior Opus would emit?).
+
+Step 2 spends Pro budget, so it is **gated on user authorization** (CLAUDE.md §10).
+If the user declines the calibration, the SOFT-C leans can be adopted as-is at
+implementation with the §5.5 rationale and revisited at the Phase-7 playthrough.
+
+**Immediate reclaim (no Step 2, no Track-B):** 158 player-only events are
+fully-deterministic under A/B macros *today* — the concrete Group-3 first cut.
 
 ---
 
