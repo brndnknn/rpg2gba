@@ -464,6 +464,68 @@ def classify_ground_item(
     return "\n\n".join(blocks)
 
 
+# -- Classifier 9: Poké Mart / pbPokemonMart (iterative roadmap Group 1) -------
+
+# Items inside ``pbPokemonMart([...])`` — both ``::PBItems::X`` and ``PBItems::X``
+# spellings occur (Map004 EV002 uses the bare ``PBItems::POKeBALL`` form, incl. the
+# known ``POKeBALL`` typo). Order is preserved in the emitted mart list.
+_PBPOKEMART_ITEM_RE = re.compile(r"(?:::)?PBItems::(\w+)")
+_PBPOKEMART_LIST_RE = re.compile(r"pbPokemonMart\(\s*\[(.*)\]", re.DOTALL)
+
+
+def classify_pokemart(map_id: int, event: dict, ctx: "Context | None" = None) -> str | None:
+    """A mart clerk whose page-1 sole content is ``pbPokemonMart([item, …])``.
+
+    Emits the pokeemerald shop idiom — lock / faceplayer / pokemart(<label>) /
+    release / end — plus a ``mart <label> { ITEM_* … }`` block listing the items
+    in source order (byte-for-byte vs frozen-Opus, Map004 EV002). Needs
+    ``ctx.items`` to resolve every symbol; an unresolved item or any non-mart
+    command on the page falls through to the LLM."""
+    if ctx is None or not ctx.items:
+        return None
+    if not _all_pages_action_button(event):
+        return None
+    pages = event.get("pages", [])
+    if not pages:
+        return None
+    parts: list[str] = []
+    for cmd in pages[0].get("list", []):
+        code = cmd.get("code", 0)
+        if code in (SCRIPT, SCRIPT_CONT):
+            p = cmd.get("parameters") or [""]
+            parts.append(p[0] if p else "")
+        elif code in (0, COMMENT, COMMENT_CONT):
+            continue
+        else:
+            return None  # anything but the mart call + plumbing — defer to the LLM
+    call = "".join(parts)
+    m = _PBPOKEMART_LIST_RE.search(call)
+    if m is None:
+        return None
+    consts: list[str] = []
+    for sym in _PBPOKEMART_ITEM_RE.findall(m.group(1)):
+        const = ctx.items.get(sym)
+        if const is None:
+            return None  # unresolved item symbol — fall through
+        consts.append(const)
+    if not consts:
+        return None
+    for page in pages[1:]:  # any extra page must carry no real commands
+        for cmd in page.get("list", []):
+            if cmd.get("code", 0) not in (0, COMMENT, COMMENT_CONT):
+                return None
+    mart_label = f"Map{int(map_id):03d}_{_label_name(event.get('name', ''))}_Mart"
+    script = _block(
+        _page_label(map_id, event, 1),
+        ["lock", "faceplayer", f"pokemart({mart_label})", "release", "end"],
+    )
+    mart_inner = "\n".join(f"    {const}" for const in consts)
+    blocks = [script, f"mart {mart_label} {{\n{mart_inner}\n}}"]
+    for i in range(2, len(pages) + 1):
+        blocks.append(_block(_page_label(map_id, event, i), ["end"]))
+    return "\n\n".join(blocks)
+
+
 # -- Classifier 4: Simple Warp (plan §7) --------------------------------------
 
 _WARP_SAFE_CODES = {0, 5, 6, 7, 106, 201, 221, 222, 223, 224, 249, 250}
@@ -783,6 +845,7 @@ _CLASSIFIERS: list[
     classify_call_common_event,  # Classifier 2
     classify_self_switch_dialogue,  # Classifier 3
     classify_ground_item,  # Classifier 8
+    classify_pokemart,  # Classifier 9
     classify_simple_warp,  # Classifier 4
     classify_trainer_battle,  # Classifier 6
 ]

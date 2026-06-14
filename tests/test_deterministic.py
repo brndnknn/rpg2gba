@@ -1170,16 +1170,29 @@ def test_ground_item_output_compiles() -> None:
 # -- differential validation vs the frozen-Opus oracle (invariant 4) ----------
 
 _BUILD = Path("output/uranium-build")
+_ITEM_TOK = re.compile(r"ITEM_[A-Z0-9_]+")
+
+
+def _norm_items(block: str) -> str:
+    """Collapse every ``ITEM_*`` constant to a placeholder.
+
+    Frozen-Opus is an UNRELIABLE oracle for Uranium item names — it guesses the
+    vanilla spelling (e.g. ``ITEM_PARALYZE_HEAL``) where Phase 2 emitted Uranium's
+    own (``ITEM_PARLYZ_HEAL`` from display name "Parlyz Heal"). So the differential
+    validates structure/labels/counts against Opus while item spellings are checked
+    separately against the Phase-2 source of truth (`test_emitted_item_constants_are_real`)."""
+    return _ITEM_TOK.sub("ITEM_*", block)
 
 
 def _blocks_by_label(text: str) -> dict[str, str]:
-    """Map each ``script <label> { ... }`` block to its (line-rstripped) text."""
+    """Map each top-level ``<kw> <label> { ... }`` block (script/mart/movement/…)
+    to its (line-rstripped) text."""
     out: dict[str, str] = {}
     label: str | None = None
     cur: list[str] = []
     for line in text.split("\n"):
         if label is None:
-            m = re.match(r"^script\s+(\S+)\s*\{", line)
+            m = re.match(r"^(?:script|mart|movement|text|raw)\s+(\S+)\s*\{", line)
             if m:
                 label, cur = m.group(1), [line.rstrip()]
         else:
@@ -1190,12 +1203,14 @@ def _blocks_by_label(text: str) -> dict[str, str]:
     return out
 
 
-def test_ground_item_differential_vs_frozen_opus() -> None:
-    """Every event the classifier claims in a fully-converted map must reproduce
-    the frozen-Opus .pory block byte-for-byte (iterative roadmap invariant 4).
+def _differential(classify) -> int:
+    """Run `classify` over every `.done` map and assert each block it claims
+    reproduces the frozen-Opus .pory byte-for-byte (iterative roadmap invariant 4).
 
     The reliable oracle is the set of maps with a `.done` checkpoint (a `.partial`
-    map — paused mid-conversion — has gaps that are absent, not divergent)."""
+    map — paused mid-conversion — has gaps that are absent, not divergent).
+    `pytest.skip`s when the gitignored corpus/oracle isn't on disk; otherwise
+    returns the number of blocks validated."""
     checkpoints, maps_dir, scripts_dir = _BUILD / "checkpoints", _BUILD / "maps", _BUILD / "scripts"
     if not (checkpoints.is_dir() and maps_dir.is_dir() and scripts_dir.is_dir()):
         pytest.skip("on-disk corpus/oracle absent (output/ is gitignored)")
@@ -1211,11 +1226,138 @@ def test_ground_item_differential_vs_frozen_opus() -> None:
         oracle = _blocks_by_label(po.read_text(encoding="utf-8"))
         data = json.loads(mp.read_text(encoding="utf-8"))
         for ev in data.get("events", []):
-            out = D.classify_ground_item(mid, ev, ctx)
+            out = classify(mid, ev, ctx)
             if out is None:
                 continue
             for label, block in _blocks_by_label(out).items():
                 assert label in oracle, f"Map{mid:03d}: {label} not in frozen-Opus oracle"
-                assert block == oracle[label], f"Map{mid:03d}: {label} diverges from frozen-Opus"
+                assert _norm_items(block) == _norm_items(oracle[label]), (
+                    f"Map{mid:03d}: {label} diverges from frozen-Opus (structure)"
+                )
                 checked += 1
-    assert checked > 0, "no ground items validated — corpus/oracle out of sync?"
+    return checked
+
+
+def test_ground_item_differential_vs_frozen_opus() -> None:
+    assert _differential(D.classify_ground_item) > 0, "no ground items validated"
+
+
+# ----------------------------------------------------------------------------
+# Classifier 9 — Poké Mart / pbPokemonMart (iterative roadmap Group 1 Step 2)
+# ----------------------------------------------------------------------------
+
+_MART_CTX = D.Context(items={"POKeBALL": "ITEM_POKE_BALL", "POTION": "ITEM_POTION",
+                             "ANTIDOTE": "ITEM_ANTIDOTE"})
+
+
+def _mart_event(*calls: str, id: int = 2, name: str = "EV002") -> dict:
+    """A mart event whose page 1 is a 355 + 655-continuation pbPokemonMart run."""
+    cmds = [_cmd(D.SCRIPT, calls[0])]
+    cmds += [_cmd(D.SCRIPT_CONT, c) for c in calls[1:]]
+    return _event(_page(*cmds), id=id, name=name)
+
+
+def test_pokemart_golden_output() -> None:
+    """Matches frozen-Opus (Map004 EV002): pokemart(label) script + mart block."""
+    ev = _mart_event(
+        "pbPokemonMart([", "PBItems::POKeBALL,", "PBItems::POTION,", "PBItems::ANTIDOTE", "])",
+    )
+    out = D.classify_pokemart(4, ev, _MART_CTX)
+    expected = (
+        "script Map004_EV002_Page1 {\n"
+        "    lock\n"
+        "    faceplayer\n"
+        "    pokemart(Map004_EV002_Mart)\n"
+        "    release\n"
+        "    end\n"
+        "}\n\n"
+        "mart Map004_EV002_Mart {\n"
+        "    ITEM_POKE_BALL\n"
+        "    ITEM_POTION\n"
+        "    ITEM_ANTIDOTE\n"
+        "}"
+    )
+    assert out == expected
+
+
+def test_pokemart_accepts_double_colon_prefix() -> None:
+    """Both ::PBItems::X and PBItems::X spellings resolve."""
+    ev = _mart_event("pbPokemonMart([::PBItems::POTION])")
+    out = D.classify_pokemart(4, ev, _MART_CTX)
+    assert out is not None and "ITEM_POTION" in out
+
+
+def test_pokemart_no_context_falls_through() -> None:
+    ev = _mart_event("pbPokemonMart([PBItems::POTION])")
+    assert D.classify_pokemart(4, ev, None) is None
+    assert D.classify_pokemart(4, ev, D.Context()) is None
+
+
+def test_pokemart_unresolved_item_falls_through() -> None:
+    """An item absent from the map → fall through, never a bad constant."""
+    ev = _mart_event("pbPokemonMart([PBItems::MYSTERYORB])")
+    assert D.classify_pokemart(4, ev, _MART_CTX) is None
+
+
+def test_pokemart_extra_command_falls_through() -> None:
+    """Dialogue/choice alongside the mart call (the shopkeeper-prompt variant) → LLM."""
+    ev = _event(
+        _page(_text("Buy something?"), _cmd(D.SCRIPT, "pbPokemonMart([PBItems::POTION])")),
+        id=2,
+    )
+    assert D.classify_pokemart(4, ev, _MART_CTX) is None
+
+
+def test_pokemart_non_mart_script_falls_through() -> None:
+    ev = _mart_event("pbPokeCenterPC")
+    assert D.classify_pokemart(4, ev, _MART_CTX) is None
+
+
+def test_pokemart_dispatch() -> None:
+    ev = _mart_event("pbPokemonMart([PBItems::POTION])")
+    result = D.try_deterministic(4, ev, _MART_CTX)
+    assert result is not None
+    assert "pokemart(Map004_EV002_Mart)" in result.script
+
+
+@pytest.mark.phase4
+@pytest.mark.skipif(not poryscript.is_available(), reason="poryscript binary not installed")
+def test_pokemart_output_compiles() -> None:
+    """A representative mart output compiles through poryscript."""
+    ev = _mart_event("pbPokemonMart([", "PBItems::POKeBALL,", "PBItems::POTION", "])")
+    out = D.classify_pokemart(4, ev, _MART_CTX)
+    assert out is not None
+    result = poryscript.compile_script(out)
+    assert result.ok, result.stderr
+
+
+def test_pokemart_differential_vs_frozen_opus() -> None:
+    assert _differential(D.classify_pokemart) > 0, "no mart events validated"
+
+
+def test_emitted_item_constants_are_real() -> None:
+    """Every ITEM_* the item classifiers emit across `.done` maps must be a real
+    Phase-2 constant (a key in item_field_codes.json) — the authoritative oracle
+    for Uranium item names, vs frozen-Opus's vanilla guesses (invariant 4)."""
+    checkpoints, maps_dir = _BUILD / "checkpoints", _BUILD / "maps"
+    codes = _BUILD / "intermediate" / "item_field_codes.json"
+    if not (checkpoints.is_dir() and maps_dir.is_dir() and codes.is_file()):
+        pytest.skip("on-disk corpus/Phase-2 output absent (output/ is gitignored)")
+    ctx = D.load_context(reference_dir=Path("reference"), intermediate_dir=_BUILD / "intermediate")
+    if not ctx.items:
+        pytest.skip("item sidecars absent — classifiers inert")
+    real = set(json.loads(codes.read_text(encoding="utf-8")).keys())
+    checked = 0
+    for mid in sorted(int(p.stem[3:]) for p in checkpoints.glob("Map*.done")):
+        mp = maps_dir / f"Map{mid:03d}.json"
+        if not mp.is_file():
+            continue
+        for ev in json.loads(mp.read_text(encoding="utf-8")).get("events", []):
+            for fn in (D.classify_ground_item, D.classify_pokemart):
+                out = fn(mid, ev, ctx)
+                if out is None:
+                    continue
+                for tok in _ITEM_TOK.findall(out):
+                    assert tok in real, f"Map{mid:03d}: {tok} not a Phase-2 item constant"
+                    checked += 1
+    assert checked > 0, "no item constants validated — corpus out of sync?"
