@@ -19,7 +19,9 @@ from rpg2gba.tileset_converter import map_constants as mc
 from rpg2gba.tileset_converter.layout import TileGrid
 from rpg2gba.tileset_converter.tile_map import (
     METATILE_ID_MASK,
+    Bucket,
     Metatile,
+    TileMap,
     TilesetChoice,
     load_tile_map,
     normalize_tile_id,
@@ -157,15 +159,194 @@ def test_tile_map_validate_rejects(tmp_path: Path) -> None:
 
 # --- 5.2 layout --------------------------------------------------------------
 
-def test_layout_round_trip() -> None:
-    """convert_layout on a 2x2 synthetic map -> map.bin of width*height*2 bytes,
-    re-readable to the same metatile ids."""
-    pytest.skip(_TODO)
+# tile ids 384..389 -> metatiles 10..15 (distinct, passable); 500 blocks.
+def _layout_tilemap(priorities: dict[int, int] | None = None) -> TileMap:
+    """A small TileMap with explicit metatiles + a passages oracle so layout tests
+    can distinguish cells and exercise the combined-collision rule."""
+    n = 600
+    passages = [0] * n
+    passages[500] = 15  # tile 500 blocks (low nibble != 0)
+    prio = [0] * n
+    for tid, p in (priorities or {}).items():
+        prio[tid] = p
+    return TileMap(
+        tiles={7: {384 + i: Metatile(10 + i, 0, 3) for i in range(6)} | {500: Metatile(20, 1, 0)}},
+        tilesets={7: TilesetChoice("gTileset_P", "gTileset_S")},
+        buckets={7: Bucket(passable=5, blocked=6, void=7)},
+        passages={7: passages},
+        priorities={7: prio},
+    )
 
 
-def test_layout_idempotent() -> None:
-    """Re-running convert_layout + write_blockdata yields byte-identical .bin."""
-    pytest.skip(_TODO)
+def _grid(width: int, height: int, layer0, layer1=None, layer2=None) -> TileGrid:
+    """Build a 3-layer TileGrid from row-major (y*width+x) per-layer lists."""
+    cells = width * height
+    z1 = list(layer1) if layer1 is not None else [0] * cells
+    z2 = list(layer2) if layer2 is not None else [0] * cells
+    return TileGrid(width, height, 3, list(layer0) + z1 + z2)
+
+
+def _map_json(grid: TileGrid, tileset_id: int = 7) -> dict:
+    return {
+        "tiles": {"xsize": grid.xsize, "ysize": grid.ysize, "zsize": grid.zsize, "data": grid.data},
+        "width": grid.xsize,
+        "height": grid.ysize,
+        "tileset_id": tileset_id,
+    }
+
+
+def test_collapse_precedence() -> None:
+    """Topmost-non-empty layer wins for the visual metatile; all-empty -> void."""
+    tm = _layout_tilemap()
+    # z = [floor(384), 0, table(385)] -> table on top wins (metatile 11)
+    g = _grid(1, 1, [384], [0], [385])
+    assert layout_mod.collapse_column(g, 0, 0, tm, 7).metatile_id == 11
+    # z = [floor(384), 0, 0] -> floor (metatile 10)
+    g = _grid(1, 1, [384])
+    assert layout_mod.collapse_column(g, 0, 0, tm, 7).metatile_id == 10
+    # all-empty column -> the tileset's void metatile (impassable)
+    g = _grid(1, 1, [0])
+    assert layout_mod.collapse_column(g, 0, 0, tm, 7) == Metatile(7, 1, 0)
+
+
+def test_collapse_collision_is_layer_combined() -> None:
+    """A passable over-the-player tile (priority>0) above a blocking trunk reads
+    blocked — collision comes from the combined rule, not the topmost tile alone.
+    The visual metatile is still the topmost one (an invisible wall)."""
+    tm = _layout_tilemap(priorities={387: 1})  # tile 387 drawn over the player
+    g = _grid(1, 1, [500], [0], [387])  # trunk(500, blocks) under treetop(387, passable)
+    mt = layout_mod.collapse_column(g, 0, 0, tm, 7)
+    assert mt.metatile_id == 13  # visual = topmost (387 -> metatile 13)
+    assert mt.collision == 1     # but collision from the blocking trunk beneath
+
+
+def test_index_order_row_major() -> None:
+    """convert_layout emits blocks in row-major y*width+x order (guards the
+    layer-major -> row-major transposition)."""
+    tm = _layout_tilemap()
+    g = _grid(3, 2, [384, 385, 386, 387, 388, 389])  # metatiles 10..15
+    layout = layout_mod.convert_layout(_map_json(g), tm, name="T", layout_const="LAYOUT_T")
+    for i in range(6):
+        assert layout.blocks[i] & METATILE_ID_MASK == 10 + i
+    assert len(layout.blocks) == 6
+
+
+def test_layout_round_trip(tmp_path: Path) -> None:
+    """convert_layout on a 2x2 map -> map.bin of width*height*2 bytes, re-readable
+    to the same metatile ids."""
+    tm = _layout_tilemap()
+    g = _grid(2, 2, [384, 385, 386, 387])
+    layout = layout_mod.convert_layout(_map_json(g), tm, name="T", layout_const="LAYOUT_T")
+    layout.write(tmp_path)
+    map_bin = tmp_path / "layouts" / "T" / "map.bin"
+    assert map_bin.stat().st_size == 2 * 2 * 2  # width*height*2 bytes
+    blocks = layout_mod.read_blockdata(map_bin)
+    assert [b & METATILE_ID_MASK for b in blocks] == [10, 11, 12, 13]
+    assert (tmp_path / "layouts" / "T" / "border.bin").stat().st_size == 8
+
+
+def test_warp_walkable_override() -> None:
+    """walkable_overrides forces a blocked warp/door cell to collision 0 while
+    keeping its visual metatile."""
+    tm = _layout_tilemap()
+    g = _grid(2, 1, [384, 500])  # cell (1,0) is the blocking door tile (metatile 20)
+    plain = layout_mod.convert_layout(_map_json(g), tm, name="T", layout_const="LAYOUT_T")
+    assert (plain.blocks[1] >> 10) & 0x3 == 1  # blocked without override
+    forced = layout_mod.convert_layout(
+        _map_json(g), tm, name="T", layout_const="LAYOUT_T", walkable_overrides={(1, 0)}
+    )
+    assert forced.blocks[1] & METATILE_ID_MASK == 20  # visual unchanged
+    assert (forced.blocks[1] >> 10) & 0x3 == 0  # forced walkable
+
+
+def test_layout_fail_loud_on_unmapped_tile() -> None:
+    """A tile with no explicit entry and no bucket aborts the map with its ids."""
+    tm = TileMap(
+        tiles={7: {384: Metatile(10, 0, 3)}},
+        tilesets={7: TilesetChoice("gP", "gS")},
+        buckets={},  # no bucket -> nothing falls back
+    )
+    g = _grid(1, 1, [999])
+    with pytest.raises(KeyError) as exc:
+        layout_mod.convert_layout(_map_json(g), tm, name="T", layout_const="LAYOUT_T")
+    assert "999" in str(exc.value)
+
+
+def test_layout_idempotent(tmp_path: Path) -> None:
+    """Re-running convert_layout + write yields byte-identical .bin; append_layouts
+    twice yields identical json."""
+    tm = _layout_tilemap()
+    g = _grid(3, 2, [384, 385, 386, 387, 388, 389])
+    a = layout_mod.convert_layout(_map_json(g), tm, name="T", layout_const="LAYOUT_T")
+    b = layout_mod.convert_layout(_map_json(g), tm, name="T", layout_const="LAYOUT_T")
+    assert a.blocks == b.blocks and a.border == b.border
+    a.write(tmp_path / "one")
+    b.write(tmp_path / "two")
+    assert (tmp_path / "one" / "layouts" / "T" / "map.bin").read_bytes() == (
+        tmp_path / "two" / "layouts" / "T" / "map.bin"
+    ).read_bytes()
+
+
+def test_append_layouts_upsert_and_sorted(tmp_path: Path) -> None:
+    """append_layouts upserts by id (no dupes) and sorts; re-run is a no-op diff."""
+    path = tmp_path / "layouts.json"
+    e1 = {"id": "LAYOUT_B", "name": "B_Layout"}
+    e2 = {"id": "LAYOUT_A", "name": "A_Layout"}
+    layout_mod.append_layouts([e1, e2], path)
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    assert doc["layouts_table_label"] == "gMapLayouts"
+    assert [e["id"] for e in doc["layouts"]] == ["LAYOUT_A", "LAYOUT_B"]  # sorted
+    first = path.read_text(encoding="utf-8")
+    layout_mod.append_layouts([e1, e2], path)  # re-run
+    assert path.read_text(encoding="utf-8") == first  # idempotent
+    layout_mod.append_layouts([{"id": "LAYOUT_A", "name": "A2_Layout"}], path)  # replace
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    assert len(doc["layouts"]) == 2
+    assert next(e for e in doc["layouts"] if e["id"] == "LAYOUT_A")["name"] == "A2_Layout"
+
+
+def test_to_layouts_entry_schema() -> None:
+    """The layouts.json entry matches the fork schema with fork-relative paths."""
+    tm = _layout_tilemap()
+    g = _grid(2, 2, [384, 385, 386, 387])
+    layout = layout_mod.convert_layout(
+        _map_json(g), tm, name="MokiTown_PlayersHouse_2F", layout_const="LAYOUT_MOKI_2F"
+    )
+    entry = layout.to_layouts_entry()
+    assert entry["id"] == "LAYOUT_MOKI_2F"
+    assert entry["name"] == "MokiTown_PlayersHouse_2F_Layout"
+    assert entry["primary_tileset"] == "gTileset_P"
+    assert entry["secondary_tileset"] == "gTileset_S"
+    assert entry["blockdata_filepath"] == "data/layouts/MokiTown_PlayersHouse_2F/map.bin"
+    assert entry["border_filepath"] == "data/layouts/MokiTown_PlayersHouse_2F/border.bin"
+    assert entry["layout_version"] == "emerald"
+    assert entry["width"] == 2 and entry["height"] == 2
+
+
+_MAPS_DIR = Path("output/uranium-build/maps")
+_SLICE_IDS = (49, 48, 32)  # bedroom 1F, upstairs 2F, Moki Town
+
+
+@pytest.mark.skipif(
+    not all((_MAPS_DIR / f"Map{m:03d}.json").exists() for m in _SLICE_IDS),
+    reason="slice map JSON not generated",
+)
+@pytest.mark.parametrize("map_id", _SLICE_IDS)
+def test_slice_smoke(map_id: int) -> None:
+    """Each real slice map converts with zero unresolved tiles, correct byte
+    length, and a sane (non-degenerate) void ratio."""
+    tm = load_tile_map()
+    data = json.loads((_MAPS_DIR / f"Map{map_id:03d}.json").read_text(encoding="utf-8"))
+    layout = layout_mod.convert_layout(
+        data, tm, name=f"Uranium_Map{map_id:03d}", layout_const=f"LAYOUT_URANIUM_MAP{map_id:03d}"
+    )
+    expected = data["width"] * data["height"]
+    assert len(layout.blocks) == expected
+    raw = struct.pack(f"<{len(layout.blocks)}H", *layout.blocks)
+    assert len(raw) == expected * 2  # bytes
+    void_id = tm.void(data["tileset_id"]).metatile_id
+    voids = sum(1 for b in layout.blocks if b & METATILE_ID_MASK == void_id)
+    assert voids / len(layout.blocks) < 0.60  # not a transposed/misread grid
 
 
 # --- map_constants -----------------------------------------------------------
