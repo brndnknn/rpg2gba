@@ -1,72 +1,68 @@
 """Phase 5 §5.1 — Tile mapping table (the source of truth).
 
-ASSIGNMENT
+ASSIGNMENT (see PATHFINDER_STEP2_TILE_MAP_PLAN.md + PHASE5_PLAN.md §5.1)
 ==========
-Objective
-    Establish and validate the single source of truth that maps an Uranium
-    `(tileset_id, tile_id)` onto a pokeemerald `metatile_id` (+ collision /
-    elevation), plus the `tileset_id -> (primary, secondary)` tileset choice.
-    This is `reference/tileset_map.json`, named in CLAUDE.md §4.3.
+Resolve an Uranium `(tileset_id, tile_id)` to a pokeemerald `metatile_id`
+(+ collision / elevation), plus the `tileset_id -> (primary, secondary)` choice.
 
-    You build the *loader, schema validator, and lookup* — NOT the table data
-    (that is hand-authored grunt work, seeded incrementally as maps are
-    encountered). Approach A (ROADMAP §Phase 5): every Uranium tile resolves to
-    an *existing* pokeemerald metatile, so we author no new tileset graphics.
+PATHFINDER v1 = PURE PASSABILITY BUCKETS (user decision 2026-06-15)
+    The P2 census found 433 distinct tiles — too many to hand-author for throwaway
+    Approach-A art. So `reference/tileset_map.json` carries an empty `tiles` table
+    and a per-tileset `buckets` = {passable, blocked, void} metatile triple; every
+    tile resolves by its *source passability* (`output/uranium-build/tilesets.json`
+    `passages`, low nibble 0 => passable). Hand-mapping high-frequency tiles into
+    `tiles` (each overrides its bucket) is a later fidelity pass.
 
-The two id spaces (see PHASE5_PLAN.md "two tile models")
+The two id spaces
     RMXP tile_id:  0 = empty;  48..383 = autotiles (48 ids each, base = 48*n);
-                   >=384 = static tiles, (row,col) = divmod(tile_id-384, 8).
+                   >=384 = static tiles.
     GBA metatile_id: 0x000..0x1FF primary tileset, 0x200+ secondary.
 
-Inputs
-    reference/tileset_map.json  (hand-authored; see _SCHEMA below)
-    $RPG2GBA_POKEEMERALD tileset metatile inventory (read-only, to know which
-        metatile_ids are legal targets — optional validation hook).
-Output
-    An in-memory `TileMap` the layout/wiring sections call.
-
 Constraints
-    - FAIL LOUD (CLAUDE.md §4.5): `lookup()` on an unmapped (tileset_id, tile_id)
-      raises with the exact ids — a hole must never silently become metatile 0.
-    - Idempotent: load -> serialize -> load is stable.
-
-Acceptance
-    [ ] round-trip load/serialize/load stable
-    [ ] unmapped lookup raises with the offending ids in the message
-    [ ] autotile base ids (48*n) and static ids (>=384) both resolvable
-    [ ] golden test on a tiny hand-built table
+    - FAIL LOUD (CLAUDE.md §4.5): an unresolvable tile (no explicit entry AND no
+      bucket for the tileset) raises with the exact ids — never silent metatile 0.
+    - The bucket fallback is explicit + logged, not a silent default.
 """
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Default location of the hand-authored substitution table (CLAUDE.md §4.3).
+# Default locations (CLAUDE.md §4.3 + the Phase-5-prep passages oracle).
 DEFAULT_TILE_MAP_PATH = Path("reference/tileset_map.json")
+DEFAULT_PASSAGES_PATH = Path("output/uranium-build/tilesets.json")
 
-# pokeemerald block-packing constants (PHASE5_PLAN.md "GBA model"). Shared with
-# layout.py — keep one definition. A block u16 = metatile | collision<<10 | elev<<12.
+# pokeemerald block-packing (shared with layout.py). block u16 =
+# metatile | collision<<10 | elevation<<12.
 METATILE_ID_MASK = 0x03FF
 COLLISION_SHIFT = 10
 ELEVATION_SHIFT = 12
 NUM_METATILES_IN_PRIMARY = 0x200  # secondary tileset metatiles start here
 
-# Shape of reference/tileset_map.json (informational; enforce in `_validate`):
-#   {
-#     "tilesets": { "<uranium_tileset_id>": {"primary": "gTileset_General",
-#                                             "secondary": "gTileset_<Area>"} },
-#     "tiles":    { "<uranium_tileset_id>": { "<tile_id>": {"metatile": <int>,
-#                                             "collision": 0, "elevation": 3} } },
-#     # Q1 hybrid: opt-in composite overrides keyed by the "z0,z1,z2" stack;
-#     # `lookup` consults these FIRST, then falls back to per-tile "tiles".
-#     "stacks":   { "<uranium_tileset_id>": { "<z0>,<z1>,<z2>": {"metatile": <int>} } }
-#   }
-# Q3: collision/elevation default to the target metatile's baseline; an entry may
-# override them per cell. Q4 (first pass): every tileset maps to ONE universal pair.
-_SCHEMA = ("tilesets", "tiles")  # "stacks" optional
+# RMXP tile-id ranges.
+AUTOTILE_BASE = 48   # ids 48..383 are autotiles, 48 per autotile
+STATIC_BASE = 384    # ids >= 384 are static tiles
+
+# Bucket fallback (PATHFINDER v1): the low nibble of an RMXP passage byte is the
+# directional-block mask (down/left/right/up); 0 => fully passable. Higher bits
+# (e.g. 0x40) are non-collision flags and are ignored here.
+PASSAGE_BLOCK_MASK = 0x0F
+PASSABLE_COLLISION = 0
+BLOCKED_COLLISION = 1
+PASSABLE_ELEVATION = 3
+BLOCKED_ELEVATION = 0
+
+# Required top-level keys in reference/tileset_map.json. "buckets"/"stacks" are
+# optional in the schema, but a tile with no explicit entry needs a bucket.
+_SCHEMA = ("tilesets", "tiles")
+
+_MAX_METATILE = METATILE_ID_MASK  # 0x3FF — anything larger truncates in to_block
+_VALID_COLLISION = {0, 1, 2, 3}
+_MAX_ELEVATION = 0xF
 
 
 @dataclass(frozen=True)
@@ -94,42 +90,219 @@ class TilesetChoice:
     secondary: str
 
 
+@dataclass(frozen=True)
+class Bucket:
+    """Per-tileset passability-bucket metatiles (PATHFINDER v1): a generic passable
+    (floor/ground), blocked (wall/obstacle), and void (border/empty) metatile."""
+
+    passable: int
+    blocked: int
+    void: int
+
+
+def normalize_tile_id(tile_id: int) -> int:
+    """Fold an autotile variant (48..383) to its base 48*n; pass 0 and statics through.
+
+    All 48 variants of an autotile are the same terrain (Approach A maps them to one
+    metatile), so the explicit `tiles` table is keyed by base id only."""
+    if AUTOTILE_BASE <= tile_id < STATIC_BASE:
+        return (tile_id // AUTOTILE_BASE) * AUTOTILE_BASE
+    return tile_id
+
+
 class TileMap:
-    """Loaded substitution table. The geometry sections resolve every Uranium tile
-    through `lookup()`; unmapped tiles fail loud."""
+    """Loaded substitution table. Geometry sections resolve every Uranium tile
+    through `lookup()`; an unresolvable tile fails loud."""
 
     def __init__(
         self,
         tiles: dict[int, dict[int, Metatile]],
         tilesets: dict[int, TilesetChoice],
+        buckets: dict[int, Bucket] | None = None,
+        passages: dict[int, list[int]] | None = None,
+        priorities: dict[int, list[int]] | None = None,
     ) -> None:
         self._tiles = tiles
         self._tilesets = tilesets
+        self._buckets = buckets or {}
+        self._passages = passages or {}
+        self._priorities = priorities or {}
+
+    # --- resolution ---------------------------------------------------------
 
     def lookup(self, tileset_id: int, tile_id: int) -> Metatile:
         """Resolve one Uranium tile to a pokeemerald Metatile.
 
-        Raises KeyError (fail loud) with both ids if the pair is unmapped. Empty
-        RMXP tile_id 0 is the caller's concern (it usually means "no tile on this
-        layer"), not an error here — decide that policy in layout.py (Q1)."""
-        raise NotImplementedError("5.1: resolve (tileset_id, tile_id); fail loud on miss")
+        Order: explicit `tiles[tileset_id][normalize(tile_id)]`, else the
+        passability-bucket fallback. `tile_id == 0` is the empty marker and is the
+        caller's concern (layout.collapse handles empty columns via `void()`), so it
+        raises here. Fails loud (KeyError) with the ids when nothing resolves."""
+        if tile_id == 0:
+            raise ValueError(
+                "lookup() called with empty tile_id 0; the layout collapse handles "
+                "empty columns via void(tileset_id), not lookup()"
+            )
+        nid = normalize_tile_id(tile_id)
+        explicit = self._tiles.get(tileset_id)
+        if explicit and nid in explicit:
+            return explicit[nid]
+
+        bucket = self._buckets.get(tileset_id)
+        if bucket is None:
+            raise KeyError(
+                f"unmapped tile: tileset={tileset_id} tile_id={tile_id} "
+                f"(normalized {nid}); no explicit entry and no bucket — add it to "
+                f"{DEFAULT_TILE_MAP_PATH}"
+            )
+        if self.is_passable(tileset_id, tile_id):
+            return Metatile(bucket.passable, PASSABLE_COLLISION, PASSABLE_ELEVATION)
+        return Metatile(bucket.blocked, BLOCKED_COLLISION, BLOCKED_ELEVATION)
+
+    def void(self, tileset_id: int) -> Metatile:
+        """The border / empty-column metatile for a tileset (impassable)."""
+        bucket = self._buckets.get(tileset_id)
+        if bucket is None:
+            raise KeyError(f"no bucket (hence no void metatile) for tileset {tileset_id}")
+        return Metatile(bucket.void, BLOCKED_COLLISION, BLOCKED_ELEVATION)
 
     def tileset_for(self, tileset_id: int) -> TilesetChoice:
         """The primary/secondary pokeemerald tileset for an Uranium tileset id (Q4)."""
-        raise NotImplementedError("5.1: return the TilesetChoice for this Uranium tileset id")
+        try:
+            return self._tilesets[tileset_id]
+        except KeyError:
+            raise KeyError(
+                f"no (primary, secondary) assigned for Uranium tileset {tileset_id}"
+            ) from None
+
+    # --- source-passability accessors (used by lookup + layout.collapse) ----
+
+    def passage(self, tileset_id: int, tile_id: int) -> int:
+        """Raw RMXP passage byte for a tile (the layout converter combines these
+        across layers, masking out priority>0 over-the-player tiles)."""
+        passages = self._passages.get(tileset_id)
+        if passages is None:
+            raise KeyError(
+                f"no passages array for tileset {tileset_id}; generate "
+                f"{DEFAULT_PASSAGES_PATH} (deserialize.rb tilesets)"
+            )
+        if not 0 <= tile_id < len(passages):
+            raise KeyError(
+                f"tile_id {tile_id} out of range for tileset {tileset_id} passages "
+                f"(len {len(passages)})"
+            )
+        return passages[tile_id]
+
+    def priority(self, tileset_id: int, tile_id: int) -> int:
+        """RMXP priority for a tile (>0 = drawn over the player; does not block)."""
+        priorities = self._priorities.get(tileset_id)
+        if priorities is None or not 0 <= tile_id < len(priorities):
+            return 0
+        return priorities[tile_id]
+
+    def is_passable(self, tileset_id: int, tile_id: int) -> bool:
+        """True if the tile's source passage permits walking (low nibble == 0)."""
+        return (self.passage(tileset_id, tile_id) & PASSAGE_BLOCK_MASK) == 0
+
+    def has_bucket(self, tileset_id: int) -> bool:
+        return tileset_id in self._buckets
 
 
-def load_tile_map(path: Path = DEFAULT_TILE_MAP_PATH) -> TileMap:
+def load_tile_map(
+    path: Path = DEFAULT_TILE_MAP_PATH,
+    passages_path: Path | None = DEFAULT_PASSAGES_PATH,
+) -> TileMap:
     """Read + validate `reference/tileset_map.json` into a `TileMap`.
 
-    Hints:
-      - open with encoding="utf-8" (CLAUDE.md §5).
-      - JSON object keys are strings; coerce tileset/tile ids to int.
-      - call `_validate(raw)` before building; fail loud on a bad shape.
-    """
-    raise NotImplementedError("5.1: parse + validate tileset_map.json")
+    Also loads the per-tileset `passages`/`priorities` arrays from the Phase-5-prep
+    oracle (`passages_path`) for the bucket fallback. Pass `passages_path=None` to
+    skip the oracle (explicit-`tiles`-only tables, e.g. unit tests)."""
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    _validate(raw)
+
+    tilesets = {
+        int(k): TilesetChoice(v["primary"], v["secondary"])
+        for k, v in raw["tilesets"].items()
+    }
+    tiles: dict[int, dict[int, Metatile]] = {}
+    for ts_k, entries in raw["tiles"].items():
+        tiles[int(ts_k)] = {
+            int(tid): Metatile(
+                e["metatile"], e.get("collision", 0), e.get("elevation", 3)
+            )
+            for tid, e in entries.items()
+        }
+    buckets = {
+        int(k): Bucket(b["passable"], b["blocked"], b["void"])
+        for k, b in raw.get("buckets", {}).items()
+    }
+
+    passages: dict[int, list[int]] = {}
+    priorities: dict[int, list[int]] = {}
+    if passages_path is not None and buckets:
+        passages, priorities = _load_oracle(Path(passages_path), tilesets.keys())
+
+    return TileMap(tiles, tilesets, buckets, passages, priorities)
+
+
+def _load_oracle(path: Path, tileset_ids) -> tuple[dict[int, list[int]], dict[int, list[int]]]:
+    """Read `passages`/`priorities` for the needed tilesets from tilesets.json."""
+    if not path.exists():
+        raise FileNotFoundError(
+            f"passages oracle {path} missing; run "
+            f"`deserialize.rb tilesets <data_dir> output/uranium-build`"
+        )
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    passages: dict[int, list[int]] = {}
+    priorities: dict[int, list[int]] = {}
+    for ts in tileset_ids:
+        entry = raw.get(str(ts))
+        if entry is None:
+            raise KeyError(f"tileset {ts} absent from {path}")
+        passages[ts] = entry["passages"]
+        priorities[ts] = entry["priorities"]
+    return passages, priorities
 
 
 def _validate(raw: dict) -> None:
     """Fail loud if the table is missing top-level keys or has malformed entries."""
-    raise NotImplementedError("5.1: enforce _SCHEMA, reject negative/None metatile ids, etc.")
+    for key in _SCHEMA:
+        if key not in raw:
+            raise ValueError(f"tileset_map.json missing required key {key!r}")
+
+    tileset_ids = set()
+    for ts_k, choice in raw["tilesets"].items():
+        tileset_ids.add(ts_k)
+        if not isinstance(choice, dict) or not choice.get("primary") or not choice.get("secondary"):
+            raise ValueError(f"tileset {ts_k}: needs non-empty 'primary' and 'secondary'")
+
+    for ts_k, entries in raw["tiles"].items():
+        if ts_k not in tileset_ids:
+            raise ValueError(f"tiles references tileset {ts_k} absent from 'tilesets'")
+        for tid, e in entries.items():
+            _validate_metatile_entry(f"tiles[{ts_k}][{tid}]", e)
+
+    for ts_k, b in raw.get("buckets", {}).items():
+        if ts_k not in tileset_ids:
+            raise ValueError(f"buckets references tileset {ts_k} absent from 'tilesets'")
+        for role in ("passable", "blocked", "void"):
+            if role not in b:
+                raise ValueError(f"bucket[{ts_k}] missing role {role!r}")
+            _check_metatile_id(f"bucket[{ts_k}].{role}", b[role])
+
+
+def _validate_metatile_entry(where: str, e: dict) -> None:
+    if "metatile" not in e:
+        raise ValueError(f"{where}: missing 'metatile'")
+    _check_metatile_id(where, e["metatile"])
+    if "collision" in e and e["collision"] not in _VALID_COLLISION:
+        raise ValueError(f"{where}: collision {e['collision']} not in {_VALID_COLLISION}")
+    if "elevation" in e and not 0 <= e["elevation"] <= _MAX_ELEVATION:
+        raise ValueError(f"{where}: elevation {e['elevation']} out of 0..{_MAX_ELEVATION}")
+
+
+def _check_metatile_id(where: str, mt) -> None:
+    if not isinstance(mt, int) or mt < 0 or mt > _MAX_METATILE:
+        raise ValueError(
+            f"{where}: metatile id {mt!r} must be an int in 0..0x{_MAX_METATILE:X} "
+            f"(larger truncates in to_block)"
+        )

@@ -8,14 +8,22 @@ the acceptance checklists from PHASE5_PLAN.md so the target is concrete.
 """
 from __future__ import annotations
 
+import json
 import struct
+from pathlib import Path
 
 import pytest
 
 from rpg2gba.tileset_converter import layout as layout_mod
 from rpg2gba.tileset_converter import map_constants as mc
 from rpg2gba.tileset_converter.layout import TileGrid
-from rpg2gba.tileset_converter.tile_map import METATILE_ID_MASK, Metatile
+from rpg2gba.tileset_converter.tile_map import (
+    METATILE_ID_MASK,
+    Metatile,
+    TilesetChoice,
+    load_tile_map,
+    normalize_tile_id,
+)
 
 _TODO = "Phase 5: implement this section, then un-skip and flesh out the test"
 
@@ -51,13 +59,100 @@ def test_blockdata_round_trip_reader() -> None:
 
 # --- 5.1 tile_map ------------------------------------------------------------
 
-def test_tile_map_loads_and_round_trips() -> None:
-    pytest.skip(_TODO)
+def _passages(blocked_ranges: list[tuple[int, int]], n: int = 600) -> list[int]:
+    """A passages array (length n) with the given [lo,hi) ranges set blocked (15)."""
+    arr = [0] * n
+    for lo, hi in blocked_ranges:
+        for i in range(lo, hi):
+            arr[i] = 15
+    return arr
 
 
-def test_tile_map_unmapped_fails_loud() -> None:
-    """lookup() on an unmapped (tileset_id, tile_id) raises with the ids."""
-    pytest.skip(_TODO)
+def _write_slice_table(tmp_path: Path) -> tuple[Path, Path]:
+    """Self-contained tileset_map.json + passages oracle for the two slice tilesets."""
+    table = {
+        "tilesets": {
+            "19": {"primary": "gTileset_Building", "secondary": "gTileset_BrendansMaysHouse"},
+            "22": {"primary": "gTileset_General", "secondary": "gTileset_Petalburg"},
+        },
+        "buckets": {
+            "19": {"passable": 513, "blocked": 622, "void": 1},
+            "22": {"passable": 1, "blocked": 468, "void": 468},
+        },
+        # one explicit override at autotile-2 base 96 (tests normalization + precedence)
+        "tiles": {"19": {"96": {"metatile": 50, "collision": 0, "elevation": 3}}, "22": {}},
+        "stacks": {},
+    }
+    oracle = {  # autotile 1 (ids 48..95) blocked; everything else passable
+        "19": {"passages": _passages([(48, 96)]), "priorities": _passages([])},
+        "22": {"passages": _passages([(48, 96)]), "priorities": _passages([])},
+    }
+    tpath, opath = tmp_path / "tileset_map.json", tmp_path / "tilesets.json"
+    tpath.write_text(json.dumps(table), encoding="utf-8")
+    opath.write_text(json.dumps(oracle), encoding="utf-8")
+    return tpath, opath
+
+
+def test_tile_map_loads_and_explicit_precedence(tmp_path: Path) -> None:
+    tpath, opath = _write_slice_table(tmp_path)
+    tm = load_tile_map(tpath, opath)
+    assert tm.tileset_for(19) == TilesetChoice("gTileset_Building", "gTileset_BrendansMaysHouse")
+    # explicit entry wins; autotile variant 100 normalizes to base 96
+    assert normalize_tile_id(100) == 96
+    assert tm.lookup(19, 100) == Metatile(50, 0, 3)
+    assert tm.lookup(19, 96) == Metatile(50, 0, 3)
+    assert tm.void(22) == Metatile(468, 1, 0)
+
+
+def test_tile_map_bucket_fallback(tmp_path: Path) -> None:
+    tpath, opath = _write_slice_table(tmp_path)
+    tm = load_tile_map(tpath, opath)
+    # autotile 1 variant (passage 15, no explicit entry) -> blocked bucket
+    assert tm.lookup(19, 52) == Metatile(622, 1, 0)
+    # passable tiles (passage 0) -> passable bucket
+    assert tm.lookup(19, 400) == Metatile(513, 0, 3)
+    assert tm.lookup(22, 200) == Metatile(1, 0, 3)
+    # blocked autotile in the town -> blocked bucket
+    assert tm.lookup(22, 60) == Metatile(468, 1, 0)
+
+
+def test_tile_map_unmapped_fails_loud(tmp_path: Path) -> None:
+    """lookup() on an unmapped tileset raises with the ids; tile_id 0 is rejected."""
+    tpath, opath = _write_slice_table(tmp_path)
+    tm = load_tile_map(tpath, opath)
+    with pytest.raises(KeyError) as exc:
+        tm.lookup(99, 384)
+    assert "99" in str(exc.value) and "384" in str(exc.value)
+    with pytest.raises(ValueError):
+        tm.lookup(19, 0)
+
+
+def test_tile_map_validate_rejects(tmp_path: Path) -> None:
+    base = {
+        "tilesets": {
+            "19": {"primary": "gTileset_Building", "secondary": "gTileset_BrendansMaysHouse"},
+        },
+        "buckets": {"19": {"passable": 1, "blocked": 2, "void": 3}},
+        "tiles": {"19": {}},
+    }
+
+    def _load(mutate) -> None:
+        d = json.loads(json.dumps(base))
+        mutate(d)
+        p = tmp_path / "bad.json"
+        p.write_text(json.dumps(d), encoding="utf-8")
+        load_tile_map(p, None)
+
+    with pytest.raises(ValueError):  # metatile beyond the 10-bit field
+        _load(lambda d: d["tiles"]["19"].update({"384": {"metatile": 0x400}}))
+    with pytest.raises(ValueError):  # bad collision
+        _load(lambda d: d["tiles"]["19"].update({"384": {"metatile": 5, "collision": 4}}))
+    with pytest.raises(ValueError):  # tiles references an unknown tileset
+        _load(lambda d: d["tiles"].update({"77": {}}))
+    with pytest.raises(ValueError):  # bucket missing a role
+        _load(lambda d: d["buckets"]["19"].pop("void"))
+    with pytest.raises(ValueError):  # missing secondary
+        _load(lambda d: d["tilesets"]["19"].pop("secondary"))
 
 
 # --- 5.2 layout --------------------------------------------------------------
