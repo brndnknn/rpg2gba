@@ -351,14 +351,96 @@ def test_slice_smoke(map_id: int) -> None:
 
 # --- map_constants -----------------------------------------------------------
 
-def test_map_constants_idempotent_mint() -> None:
-    """mint(id) returns the same constants across runs (persisted)."""
-    pytest.skip(_TODO)
+def test_sanitize_name() -> None:
+    """Display name -> constant stem (after the MAP_ prefix), diacritics folded."""
+    assert mc.sanitize_name("Rochfale Town") == "ROCHFALE_TOWN"
+    assert mc.sanitize_name("Moki Town Player's House 1F") == "MOKI_TOWN_PLAYERS_HOUSE_1F"
 
 
-def test_map_constants_resolve_placeholder() -> None:
-    """A MAP_URANIUM_<N> for a real map resolves; an unknown N fails loud."""
-    pytest.skip(_TODO)
+def test_map_constants_idempotent_mint(tmp_path: Path) -> None:
+    """mint(id) returns the same constants on repeat + across a save/load cycle."""
+    state = tmp_path / "map_constants.json"
+    reg = mc.MapConstantRegistry(state)
+    a = reg.mint(92, "Rochfale Town")
+    assert a is reg.mint(92, "Rochfale Town")  # repeat call is stable
+    assert a.map_const == "MAP_ROCHFALE_TOWN"
+    assert a.layout_const == "LAYOUT_ROCHFALE_TOWN"
+    assert a.mapsec_const == "MAPSEC_ROCHFALE_TOWN"
+    assert a.alias_const == "MAP_URANIUM_92"
+    assert a.dir_name == "RochfaleTown"
+    reg.save()
+    reloaded = mc.MapConstantRegistry(state)
+    reloaded.load()
+    assert reloaded.get(92) == a  # persisted -> same across runs
+
+
+def test_map_constants_resolve_placeholder(tmp_path: Path) -> None:
+    """A MAP_URANIUM_<N> for a minted map resolves; an unknown N / non-placeholder
+    fails loud."""
+    reg = mc.MapConstantRegistry(tmp_path / "s.json")
+    reg.mint(92, "Rochfale Town")
+    assert reg.resolve_placeholder("MAP_URANIUM_92") == "MAP_ROCHFALE_TOWN"
+    with pytest.raises(KeyError):
+        reg.resolve_placeholder("MAP_URANIUM_999")  # not minted -> dangling warp
+    with pytest.raises(ValueError):
+        reg.resolve_placeholder("MAP_PETALBURG_CITY")  # not a Uranium placeholder
+
+
+def test_mint_collision_fails_loud(tmp_path: Path) -> None:
+    """A name clashing with vanilla or another Uranium map, or a blank name, fails
+    loud (the signal to add a map_name_overrides.json entry)."""
+    reg = mc.MapConstantRegistry(tmp_path / "s.json", vanilla_consts={"MAP_LITTLEROOT_TOWN"})
+    with pytest.raises(ValueError):
+        reg.mint(9, "Littleroot Town")  # collides with vanilla
+    reg.mint(1, "Foo Town")
+    with pytest.raises(ValueError):
+        reg.mint(2, "Foo Town")  # collides with an already-minted Uranium map
+    with pytest.raises(ValueError):
+        reg.mint(3, "")  # empty stem
+
+
+def test_alias_header_sorted_and_complete(tmp_path: Path) -> None:
+    """The alias header #defines every minted MAP_URANIUM_<N> to its canonical
+    MAP_*, in id order."""
+    reg = mc.MapConstantRegistry(tmp_path / "s.json")
+    reg.mint(49, "Moki Town Player's House 1F")
+    reg.mint(32, "Moki Town")
+    reg.mint(48, "Moki Town Player's House 2F")
+    header = tmp_path / "uranium_map_aliases.h"
+    reg.write_alias_header(header)
+    text = header.read_text(encoding="utf-8")
+    assert "#define MAP_URANIUM_32 MAP_MOKI_TOWN" in text
+    assert "#define MAP_URANIUM_48 MAP_MOKI_TOWN_PLAYERS_HOUSE_2F" in text
+    assert "#define MAP_URANIUM_49 MAP_MOKI_TOWN_PLAYERS_HOUSE_1F" in text
+    assert text.index("URANIUM_32") < text.index("URANIUM_48") < text.index("URANIUM_49")
+
+
+_MAP_INFOS = Path("output/uranium-build/map_infos.json")
+_OVERRIDES = Path("reference/map_name_overrides.json")
+
+
+@pytest.mark.skipif(not _MAP_INFOS.exists(), reason="map_infos.json not generated")
+def test_build_slice_constants(tmp_path: Path) -> None:
+    """The three slice maps mint the planned readable constants from the real
+    map_infos + overrides, and every slice warp placeholder resolves."""
+    reg = mc.build_map_constants(
+        [32, 48, 49],
+        map_infos_path=_MAP_INFOS,
+        overrides_path=_OVERRIDES,
+        fork_path=None,
+        state_path=tmp_path / "map_constants.json",
+        alias_header_path=tmp_path / "aliases.h",
+    )
+    assert reg.get(32).map_const == "MAP_MOKI_TOWN"
+    assert reg.get(49).map_const == "MAP_MOKI_TOWN_PLAYERS_HOUSE_1F"  # 1F = street door (S1)
+    assert reg.get(48).map_const == "MAP_MOKI_TOWN_PLAYERS_HOUSE_2F"  # 2F = upstairs
+    assert reg.get(49).dir_name == "MokiTownPlayersHouse1F"
+    for n in (32, 48, 49):
+        assert reg.resolve_placeholder(f"MAP_URANIUM_{n}") == reg.get(n).map_const
+    # persisted state reloads identically (idempotent)
+    again = mc.MapConstantRegistry(tmp_path / "map_constants.json")
+    again.load()
+    assert again.get(48) == reg.get(48)
 
 
 def test_alias_const_format_is_valid_identifier() -> None:

@@ -1,7 +1,16 @@
 {
   "_comment": "Source of truth for CORRECTED map identity (CLAUDE.md §4.3). Phase-5 `mint` consults `overrides` BEFORE map_infos.json, because RMXP MapInfos editor names can be stale. `overrides` = map id -> {display_name, evidence}; mint reads ONLY this map. `reviewed` records identity questions checked against the wiki that need NO override, so they are not re-litigated. `orphans` = maps with no map_infos entry, pending disposition. `phase7_confirm` = ids to verify in the §9 #3 manual playthrough. Build-agent-maintained; arbitration is spoiler-free (location names / BGM asset / connection topology only). Wiki: https://pokemon-uranium.fandom.com/wiki/",
 
-  "overrides": {},
+  "overrides": {
+    "48": {
+      "display_name": "Moki Town Player's House 2F",
+      "evidence": "Pathfinder S4 floor disambiguation. Maps 48 and 49 share the map_infos name '\\PN's house'. S1 warp trace (PATHFINDER_FINDINGS.md): map 49 has the street door to Moki Town => ground floor (1F, player spawn); map 48 is reachable only via the in-house stairs from 49 => upper floor (2F). The RMXP MapInfos `order` field (48=9, 49=10) is editor tree order, NOT floor order, and would mislabel them."
+    },
+    "49": {
+      "display_name": "Moki Town Player's House 1F",
+      "evidence": "Pathfinder S4 floor disambiguation (see map 48). Map 49 = ground floor: it owns the street door to Moki Town (map 32) and is the player spawn (URANIUM_START_MAP=49 @7,7)."
+    }
+  },
 
   "reviewed": {
     "7": {
