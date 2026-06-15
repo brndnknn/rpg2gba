@@ -16,6 +16,7 @@ import pytest
 
 from rpg2gba.tileset_converter import layout as layout_mod
 from rpg2gba.tileset_converter import map_constants as mc
+from rpg2gba.tileset_converter import metadata_wiring as mw
 from rpg2gba.tileset_converter.layout import TileGrid
 from rpg2gba.tileset_converter.tile_map import (
     METATILE_ID_MASK,
@@ -452,14 +453,162 @@ def test_alias_const_format_is_valid_identifier() -> None:
 
 # --- 5.3 metadata_wiring -----------------------------------------------------
 
-def test_object_events_placed_at_coords() -> None:
-    """Each Uranium event -> one object_event at its (x, y) with a resolved label."""
-    pytest.skip(_TODO)
+def _page(trigger: int = 0, cond: dict | None = None, cmds: list | None = None) -> dict:
+    return {
+        "trigger": trigger,
+        "condition": cond or {},
+        "graphic": {"character_name": ""},
+        "list": cmds or [],
+    }
 
 
-def test_page_dispatcher_reflects_conditions() -> None:
-    """A 2-page event's dispatcher gotos page 2 under its condition flag, else page 1."""
-    pytest.skip(_TODO)
+def _event(eid: int, x: int, y: int, pages: list[dict]) -> dict:
+    return {"id": eid, "name": f"E{eid}", "x": x, "y": y, "pages": pages}
+
+
+def _self_cond(letter: str) -> dict:
+    return {"self_switch_valid": True, "self_switch_ch": letter}
+
+
+def _sw_cond(switch_id: int) -> dict:
+    return {"switch1_valid": True, "switch1_id": switch_id}
+
+
+def _transfer(dest_uid: int, x: int, y: int) -> dict:
+    return {"code": 201, "indent": 0, "parameters": [0, dest_uid, x, y, 2, 1]}
+
+
+_SLICE = {32, 48, 49}
+
+
+def test_classify_event() -> None:
+    """The generic rule reproduces the S1 keep-list from trigger + target-in-slice."""
+    # plain NPC -> object
+    npc = _event(1, 4, 4, [_page()])
+    assert mw.classify_event(npc, _SLICE)[0] == "object"
+    # player-touch door to an in-slice map -> warp
+    door = _event(2, 10, 11, [_page(trigger=1, cmds=[_transfer(32, 28, 31)])])
+    kind, spec = mw.classify_event(door, _SLICE)
+    assert kind == "warp" and spec.dest_uid == 32 and (spec.src_x, spec.src_y) == (10, 11)
+    # door to an out-of-slice map -> skip (NO-EMIT)
+    out = _event(3, 17, 11, [_page(trigger=1, cmds=[_transfer(50, 14, 18)])])
+    assert mw.classify_event(out, _SLICE)[0] == "skip"
+    # scripted story transfer (action trigger) to in-slice -> object (keeps its .pory warp)
+    letter = _event(21, 5, 8, [_page(trigger=0, cmds=[_transfer(48, 4, 6)])])
+    assert mw.classify_event(letter, _SLICE)[0] == "object"
+
+
+def test_build_object_events_placed_at_coords() -> None:
+    """Each non-warp event -> one object_event at its (x, y) with the default gfx;
+    single-page -> a page label, self-switch multi-page -> a dispatcher label."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(49, "Moki Town Player's House 1F")
+    map_json = {
+        "map_id": 49,
+        "events": [
+            _event(1, 4, 4, [_page()]),  # single page
+            _event(7, 9, 3, [_page(), _page(cond=_self_cond("A"))]),  # self-switch -> dispatcher
+            _event(2, 10, 11, [_page(trigger=1, cmds=[_transfer(32, 28, 31)])]),  # warp, excluded
+        ],
+    }
+    objs, dispatchers = mw.build_object_events(map_json, consts, _SLICE)
+    assert len(objs) == 2  # the warp door is not an object_event
+    by_xy = {(o.x, o.y): o for o in objs}
+    assert by_xy[(4, 4)].script == "Map049_EV001_Page1"
+    assert by_xy[(4, 4)].graphics_id == mw.DEFAULT_GFX
+    assert by_xy[(9, 3)].script == "Map049_EV007_Dispatch"
+    assert len(dispatchers) == 1
+
+
+def test_page_dispatcher_self_switch() -> None:
+    """A self-switch 2-page event gets a dispatcher: goto page 2 if the flag is set,
+    else fall back to page 1 (RMXP highest-satisfiable-page wins)."""
+    consts = mc.MapConstants(48, "MAP_X", "MAP_URANIUM_48", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    event = _event(1, 2, 10, [_page(), _page(cond=_self_cond("A"))])
+    disp = mw.build_page_dispatcher(event, consts)
+    assert "if (flag(FLAG_MAP048_EVENT001_SSA))" in disp
+    assert "goto Map048_EV001_Page2" in disp
+    assert "goto Map048_EV001_Page1" in disp  # base-page fallback
+
+
+def test_page_dispatcher_deferred_on_global() -> None:
+    """A global switch/var page gate defers (None); single-page also None."""
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    global_gated = _event(1, 0, 0, [_page(), _page(cond=_sw_cond(125))])
+    assert mw.build_page_dispatcher(global_gated, consts) is None
+    assert mw.build_page_dispatcher(_event(2, 0, 0, [_page()]), consts) is None
+
+
+def test_warp_pairing() -> None:
+    """dest_warp_id points at the destination's return warp; warp-source coords are
+    returned as walkable overrides."""
+    reg = mc.MapConstantRegistry(Path("x"))
+    reg.mint(49, "Moki Town Player's House 1F")
+    reg.mint(48, "Moki Town Player's House 2F")
+    map49 = {"map_id": 49, "events": [_event(3, 12, 3, [_page(1, cmds=[_transfer(48, 4, 3)])])]}
+    map48 = {"map_id": 48, "events": [_event(2, 3, 3, [_page(1, cmds=[_transfer(49, 11, 3)])])]}
+    warp_lists = {
+        49: [mw.classify_map_events(map49, {48, 49})[1][0][1]],
+        48: [mw.classify_map_events(map48, {48, 49})[1][0][1]],
+    }
+    warps49, overrides49 = mw.build_warp_events(map49, 49, {48, 49}, reg, warp_lists)
+    assert warps49[0].dest_map == "MAP_MOKI_TOWN_PLAYERS_HOUSE_2F"
+    assert warps49[0].dest_warp_id == 0  # 48's only warp returns to 49
+    assert overrides49 == {(12, 3)}
+
+
+def test_map_json_schema() -> None:
+    """to_json_dict matches the fork schema; map_type drives town/indoor booleans."""
+    consts = mc.MapConstants(32, "MAP_MOKI_TOWN", "MAP_URANIUM_32", "LAYOUT_MOKI_TOWN",
+                             "MAPSEC_MOKI_TOWN", "MokiTown", "Moki Town")
+    town = mw.MapFile(consts, map_type="MAP_TYPE_TOWN").to_json_dict()
+    for key in ("id", "name", "layout", "music", "region_map_section", "map_type",
+                "object_events", "warp_events", "coord_events", "bg_events", "connections"):
+        assert key in town
+    assert town["id"] == "MAP_MOKI_TOWN" and town["allow_running"] is True
+    indoor = mw.MapFile(consts, map_type="MAP_TYPE_INDOOR").to_json_dict()
+    assert indoor["allow_running"] is False and indoor["show_map_name"] is False
+
+
+def test_wire_encounters_none(tmp_path: Path) -> None:
+    """No entry / missing file -> None (no encounter table)."""
+    assert mw.wire_encounters(32, tmp_path / "absent.json") is None
+    p = tmp_path / "we.json"
+    p.write_text(json.dumps({"76": {"land": []}}), encoding="utf-8")
+    assert mw.wire_encounters(32, p) is None
+    assert mw.wire_encounters(76, p) == {"land": []}
+
+
+_MAPS = Path("output/uranium-build/maps")
+_METADATA = Path("output/uranium-build/intermediate/map_metadata.json")
+
+
+@pytest.mark.skipif(
+    not (_MAPS / "Map049.json").exists() or not _METADATA.exists() or not _MAP_INFOS.exists(),
+    reason="slice map data not generated",
+)
+def test_build_slice_maps_smoke(tmp_path: Path) -> None:
+    """Real slice maps assemble: events placed, in-slice warps wired, out-of-slice
+    dropped, walkable overrides cover the warp sources."""
+    reg = mc.build_map_constants(
+        [32, 48, 49], map_infos_path=_MAP_INFOS, overrides_path=_OVERRIDES,
+        fork_path=None, state_path=tmp_path / "mc.json",
+    )
+    overrides = mw.build_slice_maps(
+        [32, 48, 49], maps_dir=_MAPS, registry=reg, metadata_path=_METADATA,
+        out_dir=tmp_path / "maps", dispatcher_dir=tmp_path / "disp",
+    )
+    # Map049: spawn floor, two in-slice warps (street door + stairs)
+    assert overrides[49] == {(10, 11), (12, 3)}
+    map49 = json.loads((tmp_path / "maps" / "MokiTownPlayersHouse1F" / "map.json").read_text())
+    assert map49["map_type"] == "MAP_TYPE_INDOOR"
+    dests = {w["dest_map"] for w in map49["warp_events"]}
+    assert dests == {"MAP_MOKI_TOWN", "MAP_MOKI_TOWN_PLAYERS_HOUSE_2F"}
+    # no object_event points outside the slice maps' scripts
+    assert all(o["script"].startswith("Map049_") for o in map49["object_events"])
+    # Moki Town is a town and drops its out-of-slice building doors
+    map32 = json.loads((tmp_path / "maps" / "MokiTown" / "map.json").read_text())
+    assert map32["map_type"] == "MAP_TYPE_TOWN"
+    assert {w["dest_map"] for w in map32["warp_events"]} == {"MAP_MOKI_TOWN_PLAYERS_HOUSE_1F"}
 
 
 # --- 5.4 connections ---------------------------------------------------------

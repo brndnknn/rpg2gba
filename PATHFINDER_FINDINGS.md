@@ -163,3 +163,49 @@ in the emitted layout**, regardless of source passage. This is *not* a `tile_map
 bug — it's a layout/wiring rule: `convert_layout` (S3) takes a walkable-override set
 (the warp coords, owned by S5) and forces those cells to collision 0. Recorded in
 the step-3 + step-5 plans.
+
+---
+
+## S5 — map.json wiring implemented (2026-06-15)
+
+`src/rpg2gba/tileset_converter/metadata_wiring.py`: `classify_event`/
+`classify_map_events`, `build_object_events`, `build_page_dispatcher`,
+`build_warp_events` + `_return_warp_index`, `wire_encounters`, `MapFile.to_json_dict`,
+and the `build_slice_maps` driver. Verified on real data by
+`scripts/pathfinder_map_wiring_preview.py` (writes `output/uranium-build/porymap/maps/<dir>/map.json`
++ `dispatch/Map0NN_dispatch.pory`). Event-split conserves: **Map032 = 43 obj + 1 warp
++ 8 skipped = 52; Map048 = 12 + 1 = 13; Map049 = 20 + 2 = 22.**
+
+**Generic warp classification reproduces the S1 keep-list with no hardcoding:** an
+event with a code-201 to an OUT-of-slice map → SKIP (drops all 8 Moki building/cave/
+trainer doors); a code-201 to an IN-slice map on a **player-touch trigger (1)** →
+`warp_event` (the object_event is dropped to avoid a double warp); else →
+`object_event` (incl. the action-triggered Letter, whose `.pory` keeps its `warp()`).
+
+**Warp pairing (dest_warp_id) = the destination's RETURN warp index** (player arrives
+on it). Arrival lands 0–2 tiles off the Uranium coord (049 street door→Moki is EXACT;
+the rest off-by-1/2) — harmless for a walkable boot.
+
+**v1 simplifications (all deliberate, revisit post-boot):**
+- **Page dispatchers DEFERRED for global gates (user decision).** Only self-switch /
+  unconditional multi-page events get a dispatcher now (5 in the slice: Map048 EV001/
+  EV005, Map032 EV014/EV015/EV033 — the Rock/sign two-pagers). Every other multi-page
+  event gates on a **global** switch/var (SW1_125, SW1_22, VAR_101…) whose `FLAG_*`/
+  `VAR_*` name is only minted when S6 converts the map → those fall back to their base
+  page (`Map{m}_EV{e}_Page1`) with a logged TODO. **Full dispatch returns after S6**
+  (and needs a story for *condition-only* switches like SW1_22 that no page body
+  references — that touches flag-registry policy, §6/§10).
+- **Graphics:** every NPC gets `OBJ_EVENT_GFX_NINJA_BOY` (RMXP `character_name`→
+  `OBJ_EVENT_GFX_*` map deferred). Expect a town of identical sprites in v1.
+- **region_map_section:** all 3 maps reuse a **vanilla** `MAPSEC_LITTLEROOT_TOWN`
+  rather than the S4-minted `MAPSEC_MOKI_TOWN*` (those aren't in the fork's
+  region_map_sections enum). **This RESOLVES the S4 open item** for the slice: don't
+  emit the minted MAPSEC; reuse a vanilla one until region-map work is done.
+- **Autorun/parallel/cutscene events (trigger 3/4)** are placed as static
+  object_events (won't auto-fire) — consistent with S7's static degrade.
+- **music = MUS_LITTLEROOT, weather = WEATHER_NONE** (BGM→MUS map deferred).
+
+**`.pory` label convention CONFIRMED from the done corpus** (`Map002.pory`):
+`Map{NNN}_EV{eid:03d}_Page{n}` (1-based page). Dispatcher uses `goto <Label>` +
+`if (flag(FLAG…))` (matches `Map006_EV002` gotos). S5 emits labels by this convention;
+the existence check against the real `.pory` is deferred to S8 (post-S6).

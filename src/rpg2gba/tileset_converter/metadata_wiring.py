@@ -7,54 +7,67 @@ Objective
     (every Uranium event placed at its (x, y) with its `script` pointing at the
     Phase 4-generated dispatcher), the WARP EVENTS, and the WILD-ENCOUNTER hookup.
 
-The interesting part — the per-page dispatcher (deterministic; YOUR job)
-    An RMXP event has multiple *pages*, and which page is active is chosen at
-    runtime by the page `condition` (switch on / variable >= N / self-switch).
-    pokeemerald has no page concept: one object_event points at one script label.
-    So you generate a small dispatcher script per multi-page event:
+The interesting part — the per-page dispatcher (deterministic; build-agent work)
+    An RMXP event has multiple *pages*, chosen at runtime by the page `condition`
+    (switch on / variable >= N / self-switch). pokeemerald has no page concept:
+    one object_event points at one script label. So we generate a small dispatcher
+    per multi-page event, gotoing the page bodies (`Map{m}_EV{e}_Page{n}`) Phase 4
+    produced. This is deterministic control flow, NOT a conversion-agent task.
 
-        Map001_npc_Dispatch::
-            goto_if_set FLAG_..., Map001_npc_Page2   @ from page-2's condition
-            goto Map001_npc_Page1
-
-    The page *bodies* (`Map001_npc_PageN`) already exist — Phase 4 produced them.
-    You wire the selection skeleton from the structured Phase 3 page conditions.
-    This was prototyped by hand in the rung-3 spike (see MEMORY.md). It is
-    deterministic control flow, NOT a conversion-agent task (CLAUDE.md §1/§11).
+PATHFINDER v1 scope (user decision 2026-06-15: "build S5 now, defer dispatchers")
+    Global FLAG_*/VAR_* names are only minted when S6 converts a map, so for the
+    slice (run before S6) we emit dispatchers ONLY for events whose pages gate on
+    self-switches (a pure deterministic name) or nothing. A multi-page event with
+    any GLOBAL switch/variable page condition falls back to its base page
+    (`Map{m}_EV{e}_Page1`) with a logged TODO — full dispatch returns once S6 has
+    minted the globals. Other v1 simplifications (all logged in PATHFINDER_FINDINGS):
+      - graphics: one default OBJ_EVENT_GFX for every NPC (RMXP gfx map deferred).
+      - region_map_section: a vanilla MAPSEC reused for all slice maps (the minted
+        MAPSEC_* aren't in the fork's region_map_sections enum yet — S4 open item).
+      - warp arrival: paired to the destination's return warp (0-2 tiles off the
+        Uranium coord, harmless); out-of-slice doors are dropped (NO-EMIT, S1).
+      - move routes / autorun cutscenes: placed static (S7 degrade).
 
 Inputs
-    MapNNN.json (events: each has id, name, x, y, pages[].condition/graphic),
-    the MapConstantRegistry, the per-map .pory block labels from Phase 4,
-    intermediate/wild_encounters.json (keyed by Uranium map id),
-    intermediate/map_metadata.json (music/weather/map_type/healing-spot).
+    MapNNN.json (events: id/name/x/y/pages[].condition/graphic/trigger/list),
+    the MapConstantRegistry, intermediate/wild_encounters.json (Uranium map id),
+    intermediate/map_metadata.json (outdoor flag -> map_type).
 Output
-    output/uranium-build/porymap/maps/<Name>/map.json
-
-Constraints
-    - Each event placed exactly once at its correct (x, y).
-    - `script` labels match the Phase 4 .pory block names EXACTLY (or the
-      dispatcher you emit, which in turn gotos them). Fail loud on a label the
-      .pory doesn't define.
-    - Encounter table present iff the map has wild slots.
-
-Acceptance
-    [ ] each event -> one object_event at the right (x, y)
-    [ ] script labels resolve to real .pory blocks (or generated dispatchers)
-    [ ] encounter table present iff wild slots exist
-    [ ] page dispatch reflects the Phase 3 page conditions (golden test)
+    output/uranium-build/porymap/maps/<Name>/map.json + per-map dispatcher .pory,
+    plus the per-map warp-source coords (S3 walkable-overrides).
 """
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .map_constants import MapConstants
+from ..conversion_agent.flag_registry import self_switch_flag_name
+from .map_constants import MapConstantRegistry, MapConstants
 
 logger = logging.getLogger(__name__)
 
-# Default elevation for placed NPCs (pokeemerald convention; refine per map later).
+# v1 defaults (all logged simplifications — see module docstring).
 DEFAULT_ELEVATION = 3
+DEFAULT_GFX = "OBJ_EVENT_GFX_NINJA_BOY"  # generic NPC; RMXP gfx mapping deferred
+DEFAULT_MUSIC = "MUS_LITTLEROOT"
+DEFAULT_WEATHER = "WEATHER_NONE"
+DEFAULT_MAPSEC = "MAPSEC_LITTLEROOT_TOWN"  # vanilla section reused (minted MAPSEC_* deferred)
+NO_SCRIPT = "0x0"
+
+TRANSFER_CODE = 201  # RMXP "Transfer Player"; params [method, dest_map, x, y, dir, fade]
+TRIGGER_PLAYER_TOUCH = 1  # RMXP trigger: a door/stairs fires on step-on
+
+
+def page_label(map_id: int, event_id: int, page_num: int) -> str:
+    """The Phase-4 .pory block label for a page body (1-based page_num)."""
+    return f"Map{int(map_id):03d}_EV{int(event_id):03d}_Page{page_num}"
+
+
+def dispatch_label(map_id: int, event_id: int) -> str:
+    """The label of the multi-page dispatcher this module emits."""
+    return f"Map{int(map_id):03d}_EV{int(event_id):03d}_Dispatch"
 
 
 @dataclass
@@ -63,21 +76,56 @@ class ObjectEvent:
 
     x: int
     y: int
-    graphics_id: str  # OBJ_EVENT_GFX_* — Q-for-later: map RMXP graphic -> gfx const
-    script: str  # the dispatcher / page-1 label in the Phase 4 .pory
+    graphics_id: str
+    script: str
     flag: str = "0"  # visibility flag (0 = always shown)
     movement_type: str = "MOVEMENT_TYPE_NONE"
     elevation: int = DEFAULT_ELEVATION
 
+    def to_dict(self) -> dict:
+        return {
+            "graphics_id": self.graphics_id,
+            "x": self.x,
+            "y": self.y,
+            "elevation": self.elevation,
+            "movement_type": self.movement_type,
+            "movement_range_x": 0,
+            "movement_range_y": 0,
+            "trainer_type": "TRAINER_TYPE_NONE",
+            "trainer_sight_or_berry_tree_id": "0",
+            "script": self.script,
+            "flag": self.flag,
+        }
+
+
+@dataclass
+class WarpSpec:
+    """A kept code-201 transfer, before cross-map dest_warp_id pairing."""
+
+    src_x: int
+    src_y: int
+    dest_uid: int  # Uranium map id of the destination
+    dest_x: int  # Uranium arrival coord (informational; pairing approximates it)
+    dest_y: int
+
 
 @dataclass
 class WarpEvent:
-    """A code-201 transfer -> a pokeemerald warp_event. dest_map is a MAP_* const."""
+    """A resolved pokeemerald warp_event. dest_map is a MAP_* const."""
 
     x: int
     y: int
     dest_map: str
     dest_warp_id: int = 0
+
+    def to_dict(self) -> dict:
+        return {
+            "x": self.x,
+            "y": self.y,
+            "elevation": 0,
+            "dest_map": self.dest_map,
+            "dest_warp_id": str(self.dest_warp_id),
+        }
 
 
 @dataclass
@@ -85,50 +133,270 @@ class MapFile:
     """The assembled map.json. Serialize with `to_json_dict()`."""
 
     consts: MapConstants
-    music: str = "MUS_LITTLEROOT"
-    weather: str = "WEATHER_NONE"
     map_type: str = "MAP_TYPE_TOWN"
+    music: str = DEFAULT_MUSIC
+    weather: str = DEFAULT_WEATHER
+    region_map_section: str = DEFAULT_MAPSEC
     object_events: list[ObjectEvent] = field(default_factory=list)
     warp_events: list[WarpEvent] = field(default_factory=list)
-    connections: list[dict] = field(default_factory=list)  # filled by connections.py (5.4)
+    connections: list[dict] | None = None  # filled by connections.py (5.4)
 
     def to_json_dict(self) -> dict:
         """Build the dict matching the fork's data/maps/<Name>/map.json schema."""
-        raise NotImplementedError("5.3: assemble the map.json dict")
+        is_town = self.map_type == "MAP_TYPE_TOWN"
+        return {
+            "id": self.consts.map_const,
+            "name": self.consts.dir_name,
+            "layout": self.consts.layout_const,
+            "music": self.music,
+            "region_map_section": self.region_map_section,
+            "requires_flash": False,
+            "weather": self.weather,
+            "map_type": self.map_type,
+            "allow_cycling": is_town,
+            "allow_escaping": False,
+            "allow_running": is_town,
+            "show_map_name": is_town,
+            "battle_scene": "MAP_BATTLE_SCENE_NORMAL",
+            "connections": self.connections,
+            "object_events": [oe.to_dict() for oe in self.object_events],
+            "warp_events": [we.to_dict() for we in self.warp_events],
+            "coord_events": [],
+            "bg_events": [],
+        }
 
 
-def build_object_events(
-    map_json: dict, pory_labels: set[str], consts: MapConstants
-) -> list[ObjectEvent]:
-    """Place every Uranium event as an object_event pointing at its script label.
+# --- event classification ----------------------------------------------------
 
-    For a multi-page event, point `script` at the dispatcher you emit (see
-    `build_page_dispatcher`); for single-page, point straight at the page label.
-    Fail loud if the target label isn't in `pory_labels`."""
-    raise NotImplementedError("5.3: events -> object_events with resolved script labels")
+def _event_transfers(event: dict) -> list[tuple[int, int, int]]:
+    """Every code-201 (dest_uid, x, y) across all of an event's pages."""
+    out = []
+    for page in event["pages"]:
+        for cmd in page.get("list", []):
+            if cmd["code"] == TRANSFER_CODE:
+                p = cmd["parameters"]
+                out.append((p[1], p[2], p[3]))
+    return out
+
+
+def classify_event(event: dict, slice_ids: set[int]) -> tuple[str, WarpSpec | str | None]:
+    """Decide how an event is realized (generic rule that reproduces the S1 keep-list):
+
+    - any code-201 to an OUT-of-slice map -> ("skip", reason): emit nothing (NO-EMIT
+      building doors + WALL cave exits — nothing references the missing maps).
+    - a code-201 to an IN-slice map on a player-touch trigger -> ("warp", WarpSpec):
+      a real door/stairs warp_event (the object_event is dropped to avoid a double
+      warp; its .pory body goes unreferenced).
+    - everything else -> ("object", None): an object_event (incl. scripted story
+      transfers like the Letter, whose .pory body keeps the warp() call)."""
+    transfers = _event_transfers(event)
+    if transfers:
+        targets = {t[0] for t in transfers}
+        if any(t not in slice_ids for t in targets):
+            return ("skip", "out-of-slice warp")
+        if event["pages"][0].get("trigger") == TRIGGER_PLAYER_TOUCH:
+            dest_uid, dx, dy = transfers[0]
+            return ("warp", WarpSpec(event["x"], event["y"], dest_uid, dx, dy))
+    return ("object", None)
+
+
+def classify_map_events(
+    map_json: dict, slice_ids: set[int]
+) -> tuple[list[dict], list[tuple[dict, WarpSpec]], list[tuple[dict, str]]]:
+    """Split a map's events (id-sorted) into object / warp / skipped buckets."""
+    objects: list[dict] = []
+    warps: list[tuple[dict, WarpSpec]] = []
+    skipped: list[tuple[dict, str]] = []
+    for event in sorted(map_json["events"], key=lambda e: e["id"]):
+        kind, payload = classify_event(event, slice_ids)
+        if kind == "warp":
+            warps.append((event, payload))  # type: ignore[arg-type]
+        elif kind == "skip":
+            skipped.append((event, payload))  # type: ignore[arg-type]
+        else:
+            objects.append(event)
+    return objects, warps, skipped
+
+
+# --- builders ----------------------------------------------------------------
+
+def _has_global_gate(condition: dict) -> bool:
+    """True if a page condition tests a global switch or variable (needs S6 names)."""
+    return bool(
+        condition.get("switch1_valid")
+        or condition.get("switch2_valid")
+        or condition.get("variable_valid")
+    )
 
 
 def build_page_dispatcher(event: dict, consts: MapConstants) -> str | None:
-    """Emit a Poryscript dispatcher for a multi-page event from its page conditions.
+    """Emit a Poryscript dispatcher for a multi-page event, or None to defer.
 
-    Returns the dispatcher script text (and its label is what object_events point
-    at), or None for a single-page event (no dispatch needed). Read each page's
-    `condition` (switch_id/switch_valid, variable_id/variable_value,
-    self_switch_ch/self_switch_valid) and emit goto_if_set / compare chains in the
-    SAME flag/var naming the Phase 4 registry used (FLAG_MAP{id}_EVENT{id}_SS{L}
-    for self switches). Highest-priority (last) satisfiable page wins, mirroring
-    RMXP's top-down page evaluation."""
-    raise NotImplementedError("5.3: generate the per-page dispatcher from page conditions")
+    Returns None for a single-page event (no dispatch needed) OR for a multi-page
+    event with any GLOBAL switch/variable page gate (deferred to S6 — caller points
+    the object_event at the base page). For self-switch / unconditional gating it
+    emits the selection: RMXP activates the highest-index satisfiable page, so we
+    test pages high->low and goto the first whose self-switch is set, falling back
+    to the base page (or an unconditional higher page that always wins)."""
+    pages = event["pages"]
+    if len(pages) <= 1:
+        return None
+    if any(_has_global_gate(p["condition"]) for p in pages):
+        return None  # deferred: global names not minted until S6
+
+    uid, eid = consts.uranium_id, event["id"]
+    guards: list[tuple[str, str]] = []
+    fallback = page_label(uid, eid, 1)
+    for idx in range(len(pages) - 1, 0, -1):  # high -> low; index 0 is the base
+        cond = pages[idx]["condition"]
+        if cond.get("self_switch_valid"):
+            flag = self_switch_flag_name(uid, eid, cond["self_switch_ch"])
+            guards.append((flag, page_label(uid, eid, idx + 1)))
+        else:
+            fallback = page_label(uid, eid, idx + 1)  # unconditional page wins outright
+            break
+
+    lines = [f"script {dispatch_label(uid, eid)} {{"]
+    for flag, dest in guards:
+        lines += [f"    if (flag({flag})) {{", f"        goto {dest}", "    }"]
+    lines += [f"    goto {fallback}", "}"]
+    return "\n".join(lines)
 
 
-def build_warp_events(map_json: dict, resolve_map: "callable") -> list[WarpEvent]:
-    """Extract code-201 transfers into warp_events. `resolve_map` turns an Uranium
-    map id into a MAP_* via the MapConstantRegistry. (Note: many warps were queued
-    by Phase 4 as unhandled; the geometry warp_event is the deterministic record.)"""
-    raise NotImplementedError("5.3: code-201 transfers -> warp_events")
+def build_object_events(
+    map_json: dict,
+    consts: MapConstants,
+    slice_ids: set[int],
+    *,
+    pory_labels: set[str] | None = None,
+) -> tuple[list[ObjectEvent], list[str]]:
+    """Place every non-warp, non-skipped event as an object_event and emit the
+    dispatchers. Returns (object_events, dispatcher_scripts). If `pory_labels` is
+    given (post-S6), fail loud when a direct page label is missing."""
+    objects, _, _ = classify_map_events(map_json, slice_ids)
+    object_events: list[ObjectEvent] = []
+    dispatchers: list[str] = []
+    for event in objects:
+        uid, eid = consts.uranium_id, event["id"]
+        dispatcher = build_page_dispatcher(event, consts)
+        if dispatcher is not None:
+            script = dispatch_label(uid, eid)
+            dispatchers.append(dispatcher)
+        else:
+            script = page_label(uid, eid, 1)
+            if len(event["pages"]) > 1:
+                logger.info(
+                    "map %d EV%03d: multi-page dispatch deferred (global gate) -> %s",
+                    uid, eid, script,
+                )
+            if pory_labels is not None and script not in pory_labels:
+                raise KeyError(
+                    f"map {uid} EV{eid:03d}: script label {script} not in the converted "
+                    f".pory (run S6 first, or the event produced no body)"
+                )
+        object_events.append(
+            ObjectEvent(x=event["x"], y=event["y"], graphics_id=DEFAULT_GFX, script=script)
+        )
+    return object_events, dispatchers
+
+
+def build_warp_events(
+    map_json: dict,
+    this_uid: int,
+    slice_ids: set[int],
+    registry: MapConstantRegistry,
+    warp_lists: dict[int, list[WarpSpec]],
+) -> tuple[list[WarpEvent], set[tuple[int, int]]]:
+    """Resolve a map's kept warps into pokeemerald warp_events + the set of
+    warp-source coords (S3 walkable-overrides). `dest_warp_id` pairs to the
+    destination's return warp (the warp there whose target is this map)."""
+    _, warps, _ = classify_map_events(map_json, slice_ids)
+    events: list[WarpEvent] = []
+    src_coords: set[tuple[int, int]] = set()
+    for _event, spec in warps:
+        dest_const = registry.get(spec.dest_uid).map_const
+        dest_warp_id = _return_warp_index(warp_lists.get(spec.dest_uid, []), this_uid)
+        events.append(WarpEvent(spec.src_x, spec.src_y, dest_const, dest_warp_id))
+        src_coords.add((spec.src_x, spec.src_y))
+    return events, src_coords
+
+
+def _return_warp_index(dest_warps: list[WarpSpec], source_uid: int) -> int:
+    """Index of the destination map's warp that returns to `source_uid` (the player
+    arrives on it). Falls back to 0 with a warning if there's no clean return."""
+    for i, spec in enumerate(dest_warps):
+        if spec.dest_uid == source_uid:
+            return i
+    logger.warning("no return warp to map %d found; defaulting dest_warp_id=0", source_uid)
+    return 0
 
 
 def wire_encounters(uranium_map_id: int, encounters_path: Path) -> dict | None:
-    """Return the pokeemerald wild-encounter entry for this map, or None if it has
-    no wild slots. Read intermediate/wild_encounters.json (keyed by Uranium id)."""
-    raise NotImplementedError("5.3: wild_encounters.json[map_id] -> map.json encounter entry")
+    """The map's wild-encounter entry (for the global wild_encounters.json), or None
+    if it has no wild slots. Read intermediate/wild_encounters.json (Uranium id)."""
+    if not encounters_path.exists():
+        return None
+    table = json.loads(encounters_path.read_text(encoding="utf-8"))
+    entry = table.get(str(uranium_map_id))
+    return entry or None
+
+
+# --- slice driver ------------------------------------------------------------
+
+def _map_type_for(uid: int, metadata_path: Path) -> str:
+    """TOWN if the map is outdoor (metadata `outdoor` flag), else INDOOR."""
+    meta = json.loads(metadata_path.read_text(encoding="utf-8")).get("maps", {})
+    entry = meta.get(str(uid)) or {}
+    return "MAP_TYPE_TOWN" if entry.get("outdoor") else "MAP_TYPE_INDOOR"
+
+
+def build_slice_maps(
+    slice_ids: list[int],
+    *,
+    maps_dir: Path,
+    registry: MapConstantRegistry,
+    metadata_path: Path,
+    out_dir: Path,
+    dispatcher_dir: Path,
+    pory_labels: set[str] | None = None,
+) -> dict[int, set[tuple[int, int]]]:
+    """Assemble map.json + dispatcher .pory for every slice map. Returns the per-map
+    warp-source coords (S3 walkable-overrides) so S8 can force those cells walkable.
+    Warp pairing needs every map's warp list first, so this is a slice-level pass."""
+    slice_set = set(slice_ids)
+    maps = {
+        uid: json.loads((maps_dir / f"Map{uid:03d}.json").read_text(encoding="utf-8"))
+        for uid in slice_ids
+    }
+    warp_lists = {
+        uid: [spec for _e, spec in classify_map_events(maps[uid], slice_set)[1]]
+        for uid in slice_ids
+    }
+
+    overrides: dict[int, set[tuple[int, int]]] = {}
+    for uid in slice_ids:
+        consts = registry.get(uid)
+        warp_events, src_coords = build_warp_events(maps[uid], uid, slice_set, registry, warp_lists)
+        object_events, dispatchers = build_object_events(
+            maps[uid], consts, slice_set, pory_labels=pory_labels
+        )
+        overrides[uid] = src_coords
+
+        map_file = MapFile(
+            consts=consts,
+            map_type=_map_type_for(uid, metadata_path),
+            object_events=object_events,
+            warp_events=warp_events,
+        )
+        map_out = out_dir / consts.dir_name / "map.json"
+        map_out.parent.mkdir(parents=True, exist_ok=True)
+        map_out.write_text(json.dumps(map_file.to_json_dict(), indent=2) + "\n", encoding="utf-8")
+        if dispatchers:
+            disp_out = dispatcher_dir / f"Map{uid:03d}_dispatch.pory"
+            disp_out.parent.mkdir(parents=True, exist_ok=True)
+            disp_out.write_text("\n\n".join(dispatchers) + "\n", encoding="utf-8")
+        logger.info(
+            "map %d (%s): %d objects, %d warps, %d dispatchers",
+            uid, consts.map_const, len(object_events), len(warp_events), len(dispatchers),
+        )
+    return overrides
