@@ -121,6 +121,14 @@ def main() -> int:
         "pre-filter matches and memo reuse are free and do NOT count toward N.",
     )
     ap.add_argument(
+        "--effort",
+        default="medium",
+        choices=["low", "medium", "high", "xhigh", "max"],
+        help="Thinking effort level passed to `claude --effort` (default: medium). "
+        "Use 'low' for fastest/cheapest runs; 'max' re-enables full extended thinking "
+        "(can produce 40K+ output tokens on large events).",
+    )
+    ap.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -155,7 +163,7 @@ def main() -> int:
     fork_path = Path(fork) if fork and Path(fork).is_dir() else None
     registry = pipeline._phase4_registry(out_dir, clean=False, fork_path=fork_path)
     usage_log = out_dir / "token_usage.jsonl"
-    backend = pipeline._phase4_backend(args.backend, args.model, usage_log_path=usage_log)
+    backend = pipeline._phase4_backend(args.backend, args.model, usage_log_path=usage_log, effort=args.effort)
     if args.limit is not None:
         backend = CappingBackend(backend, args.limit)
         logger.info("bounded run: stopping after %d LLM conversion(s) this invocation", args.limit)

@@ -196,7 +196,7 @@ def _phase4_registry(out_dir: Path, clean: bool, fork_path: Path | None):
 _DEFAULT_MODEL = "claude-sonnet-4-6"
 
 
-def _phase4_backend(name: str, model: str = _DEFAULT_MODEL, usage_log_path: Path | None = None):
+def _phase4_backend(name: str, model: str = _DEFAULT_MODEL, usage_log_path: Path | None = None, effort: str | None = None):
     """Construct the chosen conversion backend with the frozen system prompt.
 
     The system prompt = the frozen instructions (`system.md`) + the event-invariant
@@ -221,7 +221,7 @@ def _phase4_backend(name: str, model: str = _DEFAULT_MODEL, usage_log_path: Path
     if name == "claude_code":
         from rpg2gba.conversion_agent.backends.claude_code import ClaudeCodeBackend
 
-        return ClaudeCodeBackend(system_prompt, model=model, usage_log_path=usage_log_path)
+        return ClaudeCodeBackend(system_prompt, model=model, usage_log_path=usage_log_path, effort=effort)
     if name == "human":
         # Interactive hand-conversion (scripts/run_human.py). Same frozen system prompt
         # so its memo entries share the production fingerprint — work done by hand and by

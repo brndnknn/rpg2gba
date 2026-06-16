@@ -111,6 +111,7 @@ class ClaudeCodeBackend(ConversionBackend):
         timeout: float = 600.0,
         usage_log_path: Path | None = None,
         max_attempts: int = 3,
+        effort: str | None = None,
     ) -> None:
         self.system_prompt = system_prompt
         self.claude_path = claude_path
@@ -134,6 +135,7 @@ class ClaudeCodeBackend(ConversionBackend):
         self.bare = bare
         self.extra_args = extra_args or []
         self.timeout = timeout
+        self.effort = effort
 
     def _build_cmd(self) -> list[str]:
         cmd = [
@@ -152,6 +154,8 @@ class ClaudeCodeBackend(ConversionBackend):
             cmd += ["--disallowed-tools", self.disallowed_tools]
         if self.max_budget_usd is not None:
             cmd += ["--max-budget-usd", str(self.max_budget_usd)]
+        if self.effort is not None:
+            cmd += ["--effort", self.effort]
         cmd += self.extra_args
         return cmd
 
