@@ -263,6 +263,20 @@ def build_page_dispatcher(event: dict, consts: MapConstants) -> str | None:
     return "\n".join(lines)
 
 
+def _event_has_body(event: dict, consts: MapConstants, pory_labels: set[str]) -> bool:
+    """True if S6 converted any of the event's pages into a `.pory` block.
+
+    Keyed across every page (by `Map{m}_EV{e}_Page{n}`), so a command-less event —
+    a standing NPC, or a cutscene-sprite actor whose pages carry no real commands —
+    is recognized regardless of page count or gating. `pory_labels` must be the
+    *canonical* (name-normalized) definition set, since the agent's raw labels are
+    name-qualified (`..._Chyinmunk_Page1`); see `assembly.normalize_labels`."""
+    uid, eid = consts.uranium_id, event["id"]
+    return any(
+        page_label(uid, eid, n) in pory_labels for n in range(1, len(event["pages"]) + 1)
+    )
+
+
 def build_object_events(
     map_json: dict,
     consts: MapConstants,
@@ -271,13 +285,24 @@ def build_object_events(
     pory_labels: set[str] | None = None,
 ) -> tuple[list[ObjectEvent], list[str]]:
     """Place every non-warp, non-skipped event as an object_event and emit the
-    dispatchers. Returns (object_events, dispatcher_scripts). If `pory_labels` is
-    given (post-S6), fail loud when a direct page label is missing."""
+    dispatchers. Returns (object_events, dispatcher_scripts).
+
+    When `pory_labels` is given (post-S6, the canonical def set), an event S6 left
+    bodyless — a standing NPC / globally-gated cutscene actor with no real commands
+    — is wired as a STATIC object (`script "0x0"`), not a dangling page label. An
+    event with *some* converted body but whose resolved page label is missing is a
+    genuine page-body gap and fails loud (CLAUDE.md §4.5)."""
     objects, _, _ = classify_map_events(map_json, slice_ids)
     object_events: list[ObjectEvent] = []
     dispatchers: list[str] = []
     for event in objects:
         uid, eid = consts.uranium_id, event["id"]
+        if pory_labels is not None and not _event_has_body(event, consts, pory_labels):
+            logger.info("map %d EV%03d: no converted .pory body -> static object", uid, eid)
+            object_events.append(
+                ObjectEvent(x=event["x"], y=event["y"], graphics_id=DEFAULT_GFX, script=NO_SCRIPT)
+            )
+            continue
         dispatcher = build_page_dispatcher(event, consts)
         if dispatcher is not None:
             script = dispatch_label(uid, eid)
@@ -291,8 +316,9 @@ def build_object_events(
                 )
             if pory_labels is not None and script not in pory_labels:
                 raise KeyError(
-                    f"map {uid} EV{eid:03d}: script label {script} not in the converted "
-                    f".pory (run S6 first, or the event produced no body)"
+                    f"map {uid} EV{eid:03d}: resolved script label {script} not in the "
+                    f"converted .pory, yet other pages of this event were converted — "
+                    f"a page-body gap (base page empty but a later page has commands)"
                 )
         object_events.append(
             ObjectEvent(x=event["x"], y=event["y"], graphics_id=DEFAULT_GFX, script=script)

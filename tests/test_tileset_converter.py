@@ -519,6 +519,38 @@ def test_build_object_events_placed_at_coords() -> None:
     assert len(dispatchers) == 1
 
 
+def test_build_object_events_stubs_bodyless_event() -> None:
+    """With pory_labels (post-S6), an event S6 left bodyless — a command-less
+    standing NPC — is wired as a static object (script "0x0"), not a dangling page
+    label; an event with a converted body keeps its page label."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(49, "Moki Town Player's House 1F")
+    map_json = {
+        "map_id": 49,
+        "events": [
+            _event(1, 4, 4, [_page()]),   # converted -> has a body
+            _event(19, 6, 6, [_page()]),  # command-less NPC -> no body
+        ],
+    }
+    labels = {"Map049_EV001_Page1"}  # only EV001 was converted
+    objs, dispatchers = mw.build_object_events(map_json, consts, _SLICE, pory_labels=labels)
+    by_xy = {(o.x, o.y): o for o in objs}
+    assert by_xy[(4, 4)].script == "Map049_EV001_Page1"
+    assert by_xy[(6, 6)].script == mw.NO_SCRIPT  # static object, no dangling ref
+    assert dispatchers == []
+
+
+def test_build_object_events_page_gap_fails_loud() -> None:
+    """An event with a converted later page but an empty base page (the resolved
+    fallback label) is a real gap, not a command-less NPC -> fail loud."""
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    # global-gated 2-page event: dispatch is deferred -> resolves to _Page1, but
+    # only _Page2 was converted.
+    ev = _event(5, 0, 0, [_page(), _page(cond=_sw_cond(125))])
+    map_json = {"map_id": 49, "events": [ev]}
+    with pytest.raises(KeyError):
+        mw.build_object_events(map_json, consts, _SLICE, pory_labels={"Map049_EV005_Page2"})
+
+
 def test_page_dispatcher_self_switch() -> None:
     """A self-switch 2-page event gets a dispatcher: goto page 2 if the flag is set,
     else fall back to page 1 (RMXP highest-satisfiable-page wins)."""
