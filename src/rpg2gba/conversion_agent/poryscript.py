@@ -99,3 +99,29 @@ def compile_script(script: str) -> CompileResult:
     if not ok:
         logger.debug("poryscript rejected script: %s", proc.stderr.strip())
     return CompileResult(ok=ok, stdout=proc.stdout, stderr=proc.stderr)
+
+
+def compile_to_file(script: str, dest: Path) -> CompileResult:
+    """Compile a Poryscript string and write the ARM assembly output to `dest`.
+
+    Like `compile_script` but returns the compiled text via the file rather
+    than stdout (poryscript writes output to -o, not stdout). Raises only if
+    the binary is missing; returns ok=False on a compile error without raising.
+    """
+    binary = binary_path()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as td:
+        src = Path(td) / "event.pory"
+        out = Path(td) / "event.inc"
+        src.write_text(script, encoding="utf-8")
+        proc = subprocess.run(
+            [str(binary), "-i", str(src), "-o", str(out), *_config_args(binary)],
+            capture_output=True,
+            text=True,
+        )
+        ok = proc.returncode == 0
+        if ok:
+            dest.write_text(out.read_text(encoding="utf-8"), encoding="utf-8")
+        else:
+            logger.debug("poryscript error: %s", proc.stderr.strip())
+    return CompileResult(ok=ok, stdout=proc.stdout, stderr=proc.stderr)
