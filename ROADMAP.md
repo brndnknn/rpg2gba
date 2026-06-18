@@ -432,47 +432,67 @@ A rule-based converter could mechanically translate command codes 1:1, but the o
 - **Idiom matching.** A 12-command RPG Maker sequence that means "give the player an item with a fanfare" should become `giveitem ITEM_X` in Poryscript, not 12 separate calls.
 - **Edge case handling.** Events that mix dialogue with custom commands need creative restructuring.
 
-### Strategy: Single-Model Opus + Deterministic Pre-Filter (decided 2026-06-03 → 2026-06-11)
+### Strategy: Deterministic transpiler + LLM-for-the-tail (pivoted 2026-06-18)
 
-> **Historical note:** the original plan here was a staged local-first strategy
-> (Ollama bulk pass → Claude cleanup pass → API fallback). It was retired before
-> the bulk run started. The controlled Sonnet-vs-Opus calibration comparison
-> showed the dangerous error class is *compile-clean-but-wrong* output (e.g.
-> silently dropping a game variable), which a cheap first pass doesn't reduce —
-> it adds a review burden on exactly the events that matter. A local model
-> amplifies that silent-wrong risk across the ~73% of events that need real
-> judgment. On a get-it-right-once corpus, one strong model plus deterministic
-> cost levers beats a cheap-draft pipeline.
+> **Historical note (superseded).** Phase 4 was originally an LLM-driven bulk
+> run: one frozen model (`claude-opus-4-8`) converting every non-mechanical event
+> via headless Claude Code, fronted by a deterministic pre-filter, run through Pro
+> usage windows over ~3 months. That was retired at 7/199 maps. Two findings drove
+> the pivot: (1) the dangerous error class is *compile-clean-but-wrong* (silently
+> wrong item constants, mistagged dispositions) — silent and unbounded, exactly
+> what you can't review at corpus scale; (2) every cluster anyone drilled into
+> turned out to be a uniform idiom a parser reproduces **byte-for-byte identical to
+> Opus** (the pre-filter reached ~36% on that basis), and the pathfinder slice's
+> playability blockers were **all** deterministic-pipeline gaps, not LLM gaps. The
+> staged local-first idea (Ollama→Claude→API) had already been retired earlier.
 
 The decided shape:
 
-- **One model for every LLM conversion: `claude-opus-4-8`** via headless Claude
-  Code (`claude -p`, Pro OAuth). Model and prompt were frozen together at the
-  §9 #2 gate (2026-06-04); neither changes mid-run.
-- **Deterministic pre-filter first.** Seven classifiers convert the mechanical
-  ~28% of events (pure/sign dialogue, common-event calls, self-switch dialogue,
-  simple warps, trainer battles) by lookup — same compile-gate, flag minting,
-  and unhandled-queue channel as LLM output, zero spawns.
-- **Dedup levers:** the static prompt context is served as a cacheable system
-  prompt (confirmed live: `cache_read≈13.7k` tokens/spawn), and structurally
-  identical events are reinstantiated from a persistent memo instead of
-  re-spawned.
-- **Throughput (decided 2026-06-11): accept the calendar time.** The bulk run
-  executes through Pro usage windows via `scripts/run_bulk.py --timed` until
-  done. Measured reality: ~$0.195/spawn equivalent, ~22 spawns/day under
-  limit-capped windows, ~2,500 spawns remaining after the pre-filter — roughly
-  three months wall-clock, overlapped with Phase 5 build work (which is
-  deterministic and budget-free).
-  - **API escalation rejected** (user decision 2026-06-11): no API-key spend
-    for the bulk run. `AnthropicAPIBackend` was never built; the backend
-    abstraction still admits it if circumstances change.
-  - **Sonnet difficulty-routing rejected on measurement** (2026-06-11,
-    `scripts/_tmp_sonnet_tier.py`): the pre-filter already claims the
-    mechanical tier, leaving only 133 trivial events among the 2,584 LLM-bound
-    (5.1%) — about 4% calendar savings, not worth a second quality bar mid-run.
-  - The remaining cheap lever is extending the deterministic classifiers to
-    claim those ~133 trivial near-misses (saves the whole spawn, no model
-    question). Noted as optional polish, not scheduled.
+- **The conversion spine is a deterministic command→Poryscript transpiler**, built
+  by generalizing the existing page-walker (`deterministic._dialogue_body`) from
+  "bail on unknown" to "emit for every command, queue only the uninterpretable."
+  The existing classifiers become an **idiom-collapse layer** on top (render
+  recognized multi-command idioms as clean macros); they are not discarded.
+- **Flag/var naming is deterministic**, from the developer-named entries in
+  `reference/uranium_switches.json` / `uranium_variables.json` (the LLM's one
+  irreplaceable edge turned out to be ~a table lookup). `s:`-prefixed conditional
+  switches get a small interpreter.
+- **The LLM is retired as the spine; it survives as a hand-invoked tool for the
+  irreducible tail** (branch-heavy story logic, novel embedded Ruby). The frozen
+  prompt is lifted — `prompts/system.md` becomes an editable tail-tool prompt, no
+  longer a frozen bulk-run artifact. The frozen-Opus output already on disk (maps
+  001–007 + CommonEvents) is kept only as a **differential-validation oracle** for
+  the transpiler, not as product.
+- **Every emitted symbol is verified against the real fork** (the verification
+  guard, below) — this is what was missing, and the reason invented commands and
+  false "needs-engine" queuing slipped through.
+
+The full build sequence (transpiler chunks, per-slice loop, fork-index guard,
+move-route determinism) lives in **`BUILD_PLAN.md`**.
+
+### Operating model: vertical playable slices
+
+The conversion campaign is no longer a horizontal grind (finish Phase 4 for all 199
+maps, then Phase 5, …). It runs as **vertical playable slices**: one play-order
+section converted *completely* — events **and** quantized art — to a booting,
+genuinely playable result, then the playable frontier widens slice by slice. A slice
+is not "done" while it defers anything a player sees. **Guardrail:** every converter
+stays general, idempotent, and config/data-driven — *slice 2 must need data changes,
+not code changes*. This supersedes strict phase ordering for the conversion campaign;
+Phases 4/5/6 work interleaves within each slice. First slice = the pathfinder
+(Maps 49/48/32). See `BUILD_PLAN.md`.
+
+### Cross-cutting: fork-index verification guard
+
+Every "what can the engine do?" decision is checked against a **deterministic index
+of the fork's actual capabilities** (624 specials in `data/specials.inc`, 385 script
+macros in `asm/macros/event.inc`, all `include/constants/*.h`), in both directions:
+a **forward gate** fails loud at conversion time if any emitted command/special/
+constant doesn't resolve (catches invented symbols before `make modern`), and a
+**reverse gate** forbids queuing anything "needs custom C" without a fork-search
+entry proving no native analog exists (catches over-queuing — e.g. `HealPlayerParty`
+was a defined special the whole time). Native-analog ledger:
+`reference/essentials_to_emerald_map.md`.
 
 ### Architecture
 
@@ -556,20 +576,26 @@ Convert RPG Maker map layouts into Porymap-compatible format, including tileset 
 
 GBA has hard tile constraints: 8×8 pixel tiles, 16-color palettes per tile, max 16 palettes per tileset. RPG Maker uses 32×32 logical tiles built from arbitrary art with full RGB palettes. You can't just resize.
 
-### Two approaches
+### Approach: quantize Uranium's real art (decided 2026-06-18)
 
-**Approach A: Reuse pokeemerald-expansion tilesets** *(recommended for first pass)*
-- Substitute Uranium's RPG Maker tiles with the closest matching existing pokeemerald-expansion tiles (grass, path, building exterior, etc.)
-- Loses art identity but is dramatically faster
-- Maps will look like Hoenn-styled versions of Uranium's regions
-- Acceptable for proof-of-concept
+The image pipeline **quantizes Uranium's actual tilesets/sprites down to GBA format**
+(PNG 32×32 RGB → 8×8 tiles, ≤16 colors/palette, ≤16 palettes/tileset, 4bpp indexed) —
+a deterministic, idempotent, **greenfield** converter (today's `tileset_converter`
+only maps metatile *ids/structure*, not pixels). This is the reusable capability and
+the only path to an actually-Uranium-looking ROM; accept degraded fidelity on the
+first pass, with manual polish of hero assets (player/starters/gym leaders) deferred
+to Phase 8. Validated by **looking at the booted ROM**, same discipline as the rest
+of the pipeline.
 
-**Approach B: Recreate Uranium's tilesets in GBA format** *(do later)*
-- Manually reauthor each tileset
-- Significant pixel art work; weeks per major tileset
-- Save for Phase 8 polish or a v2
+Two alternatives were considered and **rejected as the primary path**: (A) substitute
+the closest existing pokeemerald tile — fast and coherent but produces Hoenn-styled,
+not-Uranium maps (dead-ends for the actual goal); (B) hand-reauthor each tileset —
+weeks per tileset, a Phase-8/v2 polish task, not automatable. The current **v1
+passability-bucket scheme** (every tileset collapsed to floor/wall + void) is *neither*
+— it's why the pathfinder slice's layout "makes no sense," and the quantizer replaces
+it. See `BUILD_PLAN.md §7`.
 
-### Tasks (Approach A)
+### Tasks
 
 **5.1 Tile mapping table**
 - Build a manual JSON map: Uranium tileset ID + tile index → pokeemerald-expansion metatile ID

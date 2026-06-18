@@ -17,7 +17,7 @@ A pipeline that converts RPG Maker XP / Pokémon Essentials fan games into playa
 There are two AI agents in this project. **You are one of them.** Do not confuse your role with the other.
 
 - **You are the build agent.** You work on rpg2gba's Python, Ruby, and C code. You read this file. You have full repo access and can run tests, refactor, and propose new features. You behave like a developer joining the project.
-- **The other agent is the conversion agent.** It is a *runtime component of rpg2gba itself* — an LLM the orchestrator invokes at runtime to translate event JSON into Poryscript. It has no awareness of the codebase. Its instructions live in `src/rpg2gba/conversion_agent/prompts/system.md`, which you maintain like any other source file.
+- **The other agent is the conversion agent.** It is a *runtime component of rpg2gba itself* — an LLM, **retired as the conversion spine (2026-06-18) and kept only as a hand-invoked tool for the irreducible tail** (branch-heavy story logic, novel embedded Ruby the deterministic transpiler can't interpret). It has no awareness of the codebase. Its prompt lives in `src/rpg2gba/conversion_agent/prompts/system.md` — **no longer frozen** (see §7) — which you maintain like any other source file.
 
 You will never run as the conversion agent. The conversion agent will never run as you. If you find yourself uncertain which role you're in, you're the build agent — the conversion agent doesn't read CLAUDE.md.
 
@@ -41,12 +41,12 @@ The user is a developer comfortable with Python, Swift, C, CLI tooling, and GBA 
 
 ### What you do NOT do
 
-- **Do not run the conversion agent yourself or simulate its outputs.** When the roadmap calls for the conversion agent to do something, that work happens at pipeline runtime, not during your editing session. You write the agent; you don't roleplay as it.
+- **Do not roleplay the conversion agent or hand-fake its outputs.** The deterministic transpiler is yours to write and run; the LLM tail tool, when invoked, runs at pipeline runtime, not during your editing session. You write both — you don't hand-author an LLM "conversion" to show what it would do.
 - **Do not modify files in `output/` directly.** Those are generated artifacts. If they're wrong, fix the converter that produced them and re-run.
 - **Do not invent pokeemerald-expansion C constants outside the flag registry.** See section 6.
 - **Do not commit anything from the Uranium source tree, or any base ROM, into this repo.** Those are external inputs. They live on disk outside the repo and are referenced by config.
 - **Do not bypass the manual review gates.** See section 9.
-- **Do not change the conversion agent's prompt template during an active bulk run.** Prompt changes happen between runs, never during. If you discover a prompt bug mid-run, log it and wait — don't hot-patch.
+- **Do not claim the engine can't do something without checking the fork.** No "needs custom C" / "no native equivalent" without a grep/read of `$RPG2GBA_POKEEMERALD` that proves it (§4.7). The fork is on disk; verifying costs seconds.
 
 ---
 
@@ -86,14 +86,14 @@ rpg2gba/
 │       │   └── encounters.py
 │       ├── rxdata_deserializer/    # Phase 3: Ruby
 │       │   └── deserialize.rb
-│       ├── conversion_agent/       # Phase 4: runtime LLM component
+│       ├── conversion_agent/       # Phase 4: transpiler + classifiers; LLM tail-only
 │       │   ├── orchestrator.py     # The driver loop
 │       │   ├── flag_registry.py    # Single source of truth for FLAG_*/VAR_* names
 │       │   ├── backends/
 │       │   │   ├── ollama.py
 │       │   │   └── claude_code.py
 │       │   └── prompts/
-│       │       ├── system.md       # The agent's frozen instruction set
+│       │       ├── system.md       # Tail-tool prompt (no longer frozen)
 │       │       └── few_shot/       # Example conversions, one .md per scenario
 │       ├── tileset_converter/      # Phase 5
 │       └── pipeline.py             # Top-level orchestration entry point
@@ -122,11 +122,11 @@ rpg2gba/
 
 These are non-negotiable. If a request seems to require breaking one, stop and ask.
 
-### 4.1 Deterministic where possible, LLM where necessary
+### 4.1 The deterministic transpiler is the spine; the LLM is for the irreducible tail
 
-PBS data conversion is deterministic. Map deserialization is deterministic. Tileset coordinate mapping is deterministic. Only event-to-Poryscript conversion uses an LLM at runtime, and only because naming and idiom recognition genuinely benefit from it.
+The whole pipeline is deterministic: PBS data, map deserialization, tileset/layout, **and event→Poryscript** (a command→Poryscript transpiler — `BUILD_PLAN.md §3`). The LLM is **not** the conversion spine; it is a hand-invoked tool for the genuinely irreducible tail (branch-heavy story logic, novel embedded Ruby), and even then its output is reviewed and verified against the fork (§4.7).
 
-When you're tempted to use an LLM for something else, the answer is almost always "write a parser instead."
+When you're tempted to reach for the LLM, the answer is almost always "write/extend the transpiler instead." The transpiler fails *loud and bounded* (an explicit unhandled queue you can read to completion); the LLM fails *silent and unbounded* (compile-clean-but-wrong). For a get-it-right-once corpus, the former wins.
 
 ### 4.2 Idempotence
 
@@ -161,6 +161,15 @@ Every module in `src/rpg2gba/pbs_converter/` has a corresponding test in `tests/
 1. A round-trip test (parse → emit → parse → diff)
 2. At least one golden-output test against a hand-curated sample
 3. An explicit edge-case test for whatever quirk Uranium does that vanilla Essentials doesn't
+
+### 4.7 Verify against the real fork (both directions)
+
+The fork (`$RPG2GBA_POKEEMERALD`) is the source of truth for what the engine can do — not your memory of it. Maintain a fork-capability index (624 specials in `data/specials.inc`, 385 macros in `asm/macros/event.inc`, all `include/constants/*.h`) and gate against it:
+
+- **Forward:** every command/special/constant the pipeline emits must resolve in the index, or fail loud at conversion time — catches invented symbols (e.g. `healparty`) before `make modern`.
+- **Reverse:** never queue anything "needs custom C" without a fork search proving no native analog exists. `HealPlayerParty` was a defined special the whole time the agent invented `healparty`. Native-analog ledger: `reference/essentials_to_emerald_map.md`.
+
+Most "engine feature" tags ship natively (cave/Flash, bridges, PC, region map, relearner, trade, rock smash); only the Nuclear type is genuinely new C.
 
 ---
 
@@ -219,8 +228,7 @@ The conversion agent's prompts are source code. Treat them with the same care.
 
 - `src/rpg2gba/conversion_agent/prompts/system.md` is the canonical instruction set
 - Few-shot examples live in `src/rpg2gba/conversion_agent/prompts/few_shot/` as individual `.md` files, one per scenario, named descriptively (`give_item_with_fanfare.md`, `branching_dialogue.md`)
-- Changes to these files require regenerating the calibration set output and confirming it still meets quality bar
-- Do not edit these files during an active conversion run
+- The prompt is **no longer frozen** (the bulk run is retired); edit it like any source file. It serves only the hand-invoked tail tool now, so changes are scoped to that tool, not a 199-map run.
 
 ---
 
@@ -236,21 +244,27 @@ and `reference/essentials_to_emerald_map.md`, but you may **never** hand-edit th
 registry's persistent state file mid-run. If the state is wrong, fix the input
 data or the registry logic — don't patch the output.
 
+**Naming is now mostly deterministic:** Uranium named most of its switches/vars
+(`reference/uranium_switches.json` / `uranium_variables.json`), so readable
+`FLAG_*`/`VAR_*` come straight from `_naming.to_constant` — no LLM. The `s:`-prefixed
+conditional switches are runtime predicates (self-switch checks, time-of-day), not
+stored flags; never mint a `FLAG_*` for them.
+
 ---
 
 ## 7. Working with Each Pipeline Phase
 
-Per-phase detail — goals, tasks, exit criteria, and the Phase 4 three-stage
-strategy (calibration → bulk → queue review) — lives in **ROADMAP.md** (Phases
-0–8, plus its "Build Agent Guidance" section). The active phase and the next
-concrete task live in **MEMORY.md → Current Phase**. Read the relevant ROADMAP
-phase before you start work in it.
+Per-phase detail — goals, tasks, exit criteria — lives in **ROADMAP.md** (Phases
+0–8). The **active build sequence** (the deterministic transpiler + the per-slice
+operating loop) lives in **`BUILD_PLAN.md`**; the active phase and next concrete task
+live in **MEMORY.md → Current Phase**. Read both before you start.
 
-One reinforcement that's too important to leave behind a pointer: **Phase 4 is
-where the build/conversion role distinction gets muddled.** You build the
-orchestrator, backends, flag registry, prompts, and unhandled-queue logic. You do
-**not** convert events yourself — the conversion agent does that at runtime. If you
-feel uncertain which role you're in, re-read §1.
+**Phase 4 was pivoted (2026-06-18):** the LLM-driven bulk run is retired. Event→
+Poryscript is now a deterministic transpiler you build and run (`BUILD_PLAN.md §3`);
+the existing classifiers become an idiom-collapse layer on top; the LLM is a
+hand-invoked tail tool only, and its prompt (`system.md`) is **no longer frozen**.
+The conversion campaign runs as **vertical playable slices**, not a horizontal grind
+— a slice isn't done until it boots and is playable, art included (§9).
 
 ---
 
@@ -287,7 +301,7 @@ Fix the failure. Do not skip, mark xfail, or comment out failing tests without e
 There are three points where you must stop and wait for the user, even if everything appears to be working:
 
 1. **End of Phase 2** — before any PBS-generated content is committed to the pokeemerald-expansion fork, the user reviews the generated C output and the unfixed-issues list
-2. **End of Phase 4 calibration** — before any bulk Ollama runs, the user approves the frozen prompt template and the calibration set output
+2. **Per-slice boot gate** — a vertical slice is not "done" until its ROM boots in mGBA and the section is genuinely playable (warps fire, NPCs sane, layout legible — *art included*, not deferred). The user walks each slice before the frontier widens. (Replaces the retired end-of-Phase-4 frozen-prompt/bulk-run gate.)
 3. **End of Phase 7** — before declaring the ROM "playable," the user does a manual playthrough of the success-criteria scenarios
 
 These gates exist because each one is a place where systematic errors propagate cheaply to fix early and expensively to fix late. Do not push past them on autopilot.
@@ -326,9 +340,9 @@ These gates exist because each one is a place where systematic errors propagate 
 The three most expensive, most repeated mistakes — internalize these; the full
 list is in ROADMAP.md "Known Pitfalls":
 
-- **Conflating the two agents.** If you're unsure whether a piece of work belongs to you or the conversion agent: code lives with you, runtime LLM calls live with the conversion agent. Always.
-- **Editing generated output to "fix" something.** Fix the converter, not its output — the output gets regenerated. (Corollary: never add silent fallbacks for unknown PBS fields; fail loud.)
-- **Hand-converting events to "show" something.** No. The conversion agent does that at runtime. Your job is to make it capable of doing it well.
+- **Claiming the engine can't do X without checking the fork.** The most expensive recent bug class — `healparty` was invented while `HealPlayerParty` existed; "engine features" were queued that ship natively. Grep `$RPG2GBA_POKEEMERALD` first, every time (§4.7).
+- **Calling a slice "done" while deferring art.** The pathfinder slice booted but was unplayable because it deferred tilesets/sprites. A slice isn't done until it's playable with real (quantized) art (§9).
+- **Editing generated output to "fix" something.** Fix the converter, not its output — the output gets regenerated. (Corollary: never add silent fallbacks for unknown fields, and never emit a symbol the fork doesn't define; fail loud.)
 
 ---
 
