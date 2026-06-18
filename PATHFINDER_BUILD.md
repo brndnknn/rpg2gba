@@ -20,7 +20,7 @@
 If the staging scripts are missing or stale, re-run staging first:
 
 ```bash
-PYTHONPATH=src python scripts/stage_slice_scripts.py --write
+python scripts/stage_slice_scripts.py --write
 ```
 
 This is safe to re-run; it regenerates `map.json` and the staged `.pory` files and
@@ -34,7 +34,7 @@ A non-zero exit means a label problem — fix before proceeding.
 ### Step 1 — dry run (read-only sanity check)
 
 ```bash
-PYTHONPATH=src python scripts/assemble_pathfinder.py --dry-run
+python scripts/assemble_pathfinder.py --dry-run
 ```
 
 Reports every file that would be written to the fork without touching anything.
@@ -47,7 +47,7 @@ Check the output for unexpected paths or missing source files. Typical output is
 ### Step 2 — live assembly
 
 ```bash
-PYTHONPATH=src python scripts/assemble_pathfinder.py
+python scripts/assemble_pathfinder.py
 ```
 
 What it does, in order:
@@ -75,7 +75,7 @@ What it does, in order:
 ### Step 3 — build
 
 ```bash
-cd $RPG2GBA_POKEEMERALD && make -j$(nproc) modern
+make -C $RPG2GBA_POKEEMERALD -j$(nproc) modern
 ```
 
 Expect 1–3 minutes. If it errors, see **Troubleshooting** below.

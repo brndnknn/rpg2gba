@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 # A top-level Poryscript block opens with ``script LABEL {`` at column 0; nested
 # braces (``if (...) {``) and string text codes (``{PLAYER}``) are always
@@ -273,6 +274,205 @@ def find_dangling_references(
     for mj in map_jsons or []:
         referenced |= map_json_script_refs(mj)
     return referenced - defined
+
+
+_WARP_CALL_RE = re.compile(r"\bwarp\(MAP_URANIUM_(\d+),\s*\d+,\s*\d+\)")
+
+
+def patch_out_of_slice_warps(pory_text: str, allowed_uranium_maps: set[int]) -> str:
+    """Replace warp() calls that target out-of-slice maps with ``return``.
+
+    CommonEvents can reference any map in the corpus; only the in-slice alias
+    header is present at build time, so unresolvable MAP_URANIUM_<N> constants
+    cause undefined-symbol link errors. Replacing with ``return`` is safe: the
+    entire CE is unreachable from slice gameplay anyway."""
+    def _repl(m: re.Match[str]) -> str:
+        if int(m.group(1)) in allowed_uranium_maps:
+            return m.group(0)
+        return "return"
+    return _WARP_CALL_RE.sub(_repl, pory_text)
+
+
+# ---------------------------------------------------------------------------
+# Undefined-symbol patches for deferred content (link-stage breaks).
+# poryscript compiles every block regardless of reachability, so an agent
+# reference to a not-yet-defined constant (a Phase-5/6 multichoice list) breaks
+# `make modern` at link even when the block is unreachable in slice gameplay.
+# ---------------------------------------------------------------------------
+
+_MULTICHOICE_RE = re.compile(r"\bmultichoice\(([^)]*)\)")
+_MULTI_CONST_RE = re.compile(r"\bMULTI_\w+\b")
+_MULTI_DEFINE_RE = re.compile(r"^#define\s+(MULTI_\w+)\b")
+
+
+def load_multi_constants(path: Path) -> set[str]:
+    """The vanilla ``MULTI_*`` list constants defined in the fork
+    (``include/constants/script_menu.h``)."""
+    return {
+        m.group(1)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if (m := _MULTI_DEFINE_RE.match(line.strip()))
+    }
+
+
+def patch_undefined_multichoice(text: str, defined_multis: set[str]) -> str:
+    """Stub ``multichoice(...)`` calls whose list constant the fork doesn't define.
+
+    The agent invents ``MULTI_*`` names for Uranium choice menus it defers to
+    Phase 5/6 (e.g. ``MULTI_DREAM_VISUALIZER`` in the dream CommonEvent). Those
+    are undefined symbols at link. Replacing the call with ``setvar(VAR_RESULT,
+    0)`` keeps the (unreachable) block linkable and deterministic — the menu is
+    Phase-6 work, not slice gameplay."""
+    def _repl(m: re.Match[str]) -> str:
+        if any(c not in defined_multis for c in _MULTI_CONST_RE.findall(m.group(1))):
+            return "setvar(VAR_RESULT, 0)"
+        return m.group(0)
+    return _MULTICHOICE_RE.sub(_repl, text)
+
+
+# ---------------------------------------------------------------------------
+# Self/temp-switch reference completeness (link-stage breaks).
+# A self-switch flag named in one event's script but belonging to a *different*,
+# bodyless event (the RMXP "set the next NPC's switch" idiom) is never minted by
+# the orchestrator, so dump_header gives it no address -> undefined at link. This
+# recovers the full referenced set from the final assembled scripts so the flag
+# header is complete regardless of which event the switch is set from.
+# ---------------------------------------------------------------------------
+
+_SELF_SWITCH_REF_RE = re.compile(r"\bFLAG_MAP(\d+)_EVENT(\d+)_SS([A-Z])\b")
+_TEMP_SWITCH_REF_RE = re.compile(r"\bFLAG_MAP(\d+)_EVENT(\d+)_TS(\w+)\b")
+
+
+def referenced_switch_keys(
+    texts: list[str],
+) -> tuple[set[tuple[int, int, str]], set[tuple[int, int, str]]]:
+    """``(self_switch_keys, temp_switch_keys)`` referenced anywhere in ``texts``,
+    each as ``(map_id, event_id, channel)`` — the args ``mint_self_switch`` /
+    ``mint_temp_switch`` take."""
+    self_keys: set[tuple[int, int, str]] = set()
+    temp_keys: set[tuple[int, int, str]] = set()
+    for t in texts:
+        for m in _SELF_SWITCH_REF_RE.finditer(t):
+            self_keys.add((int(m.group(1)), int(m.group(2)), m.group(3)))
+        for m in _TEMP_SWITCH_REF_RE.finditer(t):
+            temp_keys.add((int(m.group(1)), int(m.group(2)), m.group(3)))
+    return self_keys, temp_keys
+
+
+# ---------------------------------------------------------------------------
+# Charmap normalization — make agent/classifier dialogue representable on the GBA.
+#
+# poryscript passes string text and unknown commands straight through; the GBA
+# charmap and the script macros are only enforced later by ``arm-as``. So
+# charmap-illegal characters ("compiles per-file, breaks at link") reach the
+# build. This is the systemic source of the recurring slice-build failures: the
+# fix is one deterministic, fail-loud normalization pass over the agent output
+# instead of a growing chain of per-character ``replace()`` band-aids.
+# ---------------------------------------------------------------------------
+
+# Characters Uranium dialogue uses that have no GBA charmap glyph -> the
+# representable glyph we map each to. ``"`` is handled separately (open/close
+# toggle to typographic quotes). Anything NOT here and NOT in the charmap fails
+# loud — a new offender must be a deliberate decision, not a silent corruption.
+_CHARMAP_SUBS = {"*": "~", "[": "(", "]": ")"}
+
+_OPEN_QUOTE = "“"   # left double quotation mark (charmap B1)
+_CLOSE_QUOTE = "”"  # right double quotation mark (charmap B2)
+
+# A double-quoted string literal, escaped-quote aware: "(...)" with \" inside.
+_STRING_LITERAL_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
+_TEXT_PLACEHOLDER_RE = re.compile(r"\{[^}]*\}")  # {PLAYER}, {STR_VAR_1}, {COLOR RED}
+_TEXT_ESCAPE_RE = re.compile(r"\\[nlp]")          # \n \l \p line breaks
+# The agent's invented one-liner heal command, on its own line.
+_HEALPARTY_RE = re.compile(r"(?m)^([ \t]*)healparty\b[ \t]*$")
+_CHARMAP_GLYPH_RE = re.compile(r"^'(.+?)'\s*=")
+
+
+def load_charmap_chars(path: Path) -> set[str]:
+    """Representable single-glyph characters from pokeemerald's ``charmap.txt``.
+
+    Only single-character glyph entries (``'é' = 1B``) count as literal text
+    characters; multi-byte control names and ``\\n``/``\\l``/``\\p`` are handled
+    elsewhere. ``'\\''`` maps the apostrophe."""
+    chars: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        m = _CHARMAP_GLYPH_RE.match(line)
+        if not m:
+            continue
+        body = m.group(1)
+        if body == "\\'":
+            chars.add("'")
+        elif len(body) == 1:
+            chars.add(body)
+    return chars
+
+
+def _assert_representable(content: str, allowed: set[str], context: str) -> None:
+    probe = _TEXT_PLACEHOLDER_RE.sub("", content)
+    probe = _TEXT_ESCAPE_RE.sub("", probe).replace("\\\\", "\\")
+    for c in probe:
+        if c not in allowed:
+            raise ValueError(
+                f"unrepresentable character U+{ord(c):04X} {c!r}: no charmap glyph "
+                f"and no substitution. Add it to _CHARMAP_SUBS or fix the source. "
+                f"Line: {context.strip()!r}"
+            )
+
+
+def _normalize_string_content(content: str, allowed: set[str], context: str) -> str:
+    out: list[str] = []
+    quote_open = True
+    i, n = 0, len(content)
+    while i < n:
+        c = content[i]
+        if c == "\\" and i + 1 < n:
+            nxt = content[i + 1]
+            if nxt == '"':  # escaped quote -> typographic open/close, alternating
+                out.append(_OPEN_QUOTE if quote_open else _CLOSE_QUOTE)
+                quote_open = not quote_open
+            else:           # keep \n \l \p \\ escapes intact
+                out += [c, nxt]
+            i += 2
+            continue
+        out.append(_CHARMAP_SUBS.get(c, c))
+        i += 1
+    result = "".join(out)
+    _assert_representable(result, allowed, context)
+    return result
+
+
+def normalize_pory(text: str, allowed: set[str]) -> str:
+    """Rewrite agent/classifier ``.pory`` to be charmap- and poryscript-valid.
+
+    Two deterministic fixes before the script is handed to poryscript:
+
+    * **command alias** — the agent's invented ``healparty`` one-liner becomes the
+      real ``special(HealPlayerParty)`` (a ``def_special`` in the fork). Emitted in
+      ``special(...)`` form: poryscript splits the bare ``special HealPlayerParty``
+      into two invalid asm lines.
+    * **charmap normalization** of every double-quoted dialogue string: ``\\"`` ->
+      typographic ``“``/``”`` (open/close toggle), plus ``_CHARMAP_SUBS`` (``*`` ->
+      ``~``, ``[`` -> ``(``, ``]`` -> ``)``). Any remaining character with no
+      charmap glyph **fails loud** (CLAUDE.md §4.5).
+
+    Comment lines (``# ...``) are left untouched — poryscript strips them, and they
+    legitimately contain characters (``[``, ``"``) that never reach the ROM.
+    Idempotent: a second pass sees only already-representable glyphs."""
+    text = _HEALPARTY_RE.sub(r"\1special(HealPlayerParty)", text)
+
+    out_lines: list[str] = []
+    for line in text.splitlines():
+        if line.lstrip().startswith("#"):
+            out_lines.append(line)
+            continue
+        out_lines.append(
+            _STRING_LITERAL_RE.sub(
+                lambda m: '"' + _normalize_string_content(m.group(1), allowed, m.string) + '"',
+                line,
+            )
+        )
+    result = "\n".join(out_lines)
+    return result + "\n" if text.endswith("\n") else result
 
 
 def find_duplicate_definitions(staged_texts: list[str]) -> dict[str, int]:

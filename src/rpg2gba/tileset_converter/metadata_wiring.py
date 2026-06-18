@@ -258,8 +258,8 @@ def build_page_dispatcher(event: dict, consts: MapConstants) -> str | None:
 
     lines = [f"script {dispatch_label(uid, eid)} {{"]
     for flag, dest in guards:
-        lines += [f"    if (flag({flag})) {{", f"        goto {dest}", "    }"]
-    lines += [f"    goto {fallback}", "}"]
+        lines += [f"    if (flag({flag})) {{", f"        goto({dest})", "    }"]
+    lines += [f"    goto({fallback})", "}"]
     return "\n".join(lines)
 
 

@@ -17,7 +17,7 @@ Pass 2 (S8c) — fork assembly
       - append includes to fork data/event_scripts.s (idempotent, sentinel-guarded)
 
 Usage:
-    PYTHONPATH=src python scripts/assemble_pathfinder.py [--dry-run]
+    python scripts/assemble_pathfinder.py [--dry-run]
 
 dry-run reports what would be written without touching the fork.
 """
@@ -121,8 +121,8 @@ def run_layout_pass(
     dry_run: bool,
 ) -> None:
     logger.info("=== S8b: layout conversion ===")
+    from rpg2gba.tileset_converter.layout import append_layouts, convert_layout
     from rpg2gba.tileset_converter.tile_map import load_tile_map
-    from rpg2gba.tileset_converter.layout import convert_layout, append_layouts
 
     tile_map = load_tile_map(
         Path("reference/tileset_map.json"),
@@ -177,6 +177,15 @@ def run_fork_pass(
 ) -> None:
     logger.info("=== S8c: fork assembly ===")
 
+    from rpg2gba.tileset_converter import assembly as asm
+    # Single owner of charmap legality: rewrite \" -> typographic quotes, *->~,
+    # [->(, ]->), heal alias, fail loud on any other unrepresentable glyph.
+    allowed = asm.load_charmap_chars(fork / "charmap.txt")
+    defined_multis = asm.load_multi_constants(
+        fork / "include" / "constants" / "script_menu.h"
+    )
+    compiled_texts: list[str] = []  # for self/temp-switch reference completeness
+
     # --- Compile per-map scripts (staged .pory + optional dispatcher) ---
     disp_dir = out / "porymap" / "dispatch"
     for map_id in SLICE_MAP_IDS:
@@ -184,20 +193,31 @@ def run_fork_pass(
         map_dir_name = entry["dir_name"]
 
         pory_path = staging / "scripts" / f"Map{map_id:03d}.pory"
-        pory_text = pory_path.read_text(encoding="utf-8")
+        pory_text = asm.normalize_pory(pory_path.read_text(encoding="utf-8"), allowed)
 
         disp_path = disp_dir / f"Map{map_id:03d}_dispatch.pory"
         if disp_path.is_file():
             pory_text = pory_text.rstrip() + "\n\n" + disp_path.read_text(encoding="utf-8")
 
+        # Every pokeemerald map needs a `<Map>_MapScripts` symbol (its map-script
+        # header table). The agent emits none, so define an empty one.
+        mapscripts_label = f"{map_dir_name}_MapScripts"
+        if mapscripts_label not in pory_text:
+            pory_text = f"mapscripts {mapscripts_label} {{}}\n\n" + pory_text
+
+        compiled_texts.append(pory_text)
         dest_scripts_inc = fork / "data" / "maps" / map_dir_name / "scripts.inc"
         _compile_pory(pory_text, dest_scripts_inc, f"Map{map_id:03d}", dry_run)
 
     # --- Compile CommonEvents ---
     ce_pory = out / "scripts" / "CommonEvents.pory"
     if ce_pory.is_file():
+        ce_text = asm.normalize_pory(ce_pory.read_text(encoding="utf-8"), allowed)
+        ce_text = asm.patch_out_of_slice_warps(ce_text, set(SLICE_MAP_IDS))
+        ce_text = asm.patch_undefined_multichoice(ce_text, defined_multis)
+        compiled_texts.append(ce_text)
         dest_ce = fork / "data" / "scripts" / "CommonEvents.inc"
-        _compile_pory(ce_pory.read_text(encoding="utf-8"), dest_ce, "CommonEvents", dry_run)
+        _compile_pory(ce_text, dest_ce, "CommonEvents", dry_run)
     else:
         logger.warning("CommonEvents.pory not found — skipping")
 
@@ -259,15 +279,28 @@ def run_fork_pass(
 
     # --- Write flag registry header ---
     dest_flags = fork / "data" / "scripts" / "uranium_flags.h"
-    _emit_flags_header(dest_flags, dry_run)
+    _emit_flags_header(dest_flags, compiled_texts, dry_run)
 
     # --- Update event_scripts.s (idempotent) ---
     _update_event_scripts(fork, consts, ce_pory.is_file(), dry_run)
 
 
-def _emit_flags_header(dest: Path, dry_run: bool) -> None:
+def _emit_flags_header(dest: Path, compiled_texts: list[str], dry_run: bool) -> None:
     from rpg2gba.conversion_agent.flag_registry import FlagRegistry
+    from rpg2gba.tileset_converter import assembly as asm
     reg = FlagRegistry.load(Path("output/uranium-build/flag_state.json"))
+
+    # Mint any self/temp-switch referenced in the final assembled scripts but not
+    # registered during conversion (cross-event "set the next NPC's switch" sets
+    # whose target event is bodyless) so dump_header gives every one an address.
+    # In-memory only — flag_state.json (shared with the bulk run) is not rewritten;
+    # the header is regenerated deterministically on every assembly.
+    self_keys, temp_keys = asm.referenced_switch_keys(compiled_texts)
+    for mid, eid, ch in self_keys:
+        reg.mint_self_switch(mid, eid, ch)   # idempotent; only missing keys are added
+    for mid, eid, key in temp_keys:
+        reg.mint_temp_switch(mid, eid, key)
+
     if not dry_run:
         dest.parent.mkdir(parents=True, exist_ok=True)
         reg.dump_header(

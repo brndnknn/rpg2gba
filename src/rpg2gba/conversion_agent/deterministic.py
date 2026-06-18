@@ -140,6 +140,12 @@ _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 def format_pory_string(text: str) -> str:
     """Wrap dialogue in a poryscript double-quoted string, escaping only ``"``.
 
+    Charmap legality (the GBA has no ``"`` glyph) is *not* this function's job —
+    the single owner of charmap normalization is
+    ``tileset_converter.assembly.normalize_pory`` at staging, which rewrites the
+    escaped ``\\"`` to typographic quotes. Emitting the escaped form here keeps
+    that one source of truth (CLAUDE.md §4.3).
+
     Backslashes are intentionally *not* escaped: the text-safety guard
     (``_UNSAFE_TEXT_RE``) rejects any text containing a backslash before it
     reaches here, so none survive — and were the guard ever loosened to admit the

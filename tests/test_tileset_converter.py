@@ -558,8 +558,10 @@ def test_page_dispatcher_self_switch() -> None:
     event = _event(1, 2, 10, [_page(), _page(cond=_self_cond("A"))])
     disp = mw.build_page_dispatcher(event, consts)
     assert "if (flag(FLAG_MAP048_EVENT001_SSA))" in disp
-    assert "goto Map048_EV001_Page2" in disp
-    assert "goto Map048_EV001_Page1" in disp  # base-page fallback
+    # parenthesized goto() — poryscript splits the bare `goto Label` form into two
+    # invalid asm lines (`goto` with no arg + the label as a bad instruction).
+    assert "goto(Map048_EV001_Page2)" in disp
+    assert "goto(Map048_EV001_Page1)" in disp  # base-page fallback
 
 
 def test_page_dispatcher_deferred_on_global() -> None:

@@ -245,6 +245,109 @@ def test_duplicate_definition_from_collapsed_names():
     assert asm.find_duplicate_definitions([a]) == {}
 
 
+# --- patch_out_of_slice_warps ------------------------------------------------
+
+def test_patch_replaces_out_of_slice_warps():
+    pory = (
+        "script CommonEvent_086 {\n"
+        "    warp(MAP_URANIUM_70, 9, 8)\n"
+        "    warp(MAP_URANIUM_32, 5, 5)\n"
+        "    end\n"
+        "}\n"
+    )
+    result = asm.patch_out_of_slice_warps(pory, {32, 48, 49})
+    assert "MAP_URANIUM_70" not in result
+    assert "warp(MAP_URANIUM_32, 5, 5)" in result  # in-slice warp untouched
+    assert result.count("return") == 1
+
+
+def test_patch_is_idempotent():
+    pory = "script CommonEvent_086 {\n    warp(MAP_URANIUM_70, 9, 8)\n    end\n}\n"
+    once = asm.patch_out_of_slice_warps(pory, {32, 48, 49})
+    assert asm.patch_out_of_slice_warps(once, {32, 48, 49}) == once
+
+
+def test_patch_leaves_text_with_no_warps_unchanged():
+    pory = "script CommonEvent_005 {\n    msgbox(\"Hi\")\n    end\n}\n"
+    assert asm.patch_out_of_slice_warps(pory, {32, 48, 49}) == pory
+
+
+# --- normalize_pory (charmap legality + command alias) -----------------------
+
+# A representable set sufficient for the unit strings below: letters/digits/space,
+# the substitution *targets* (~ ( ) and the typographic quotes), basic punctuation.
+_ALLOWED = set(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 '.!?,:~()“”"
+)
+
+
+def test_normalize_double_quotes_to_typographic_pairs():
+    out = asm.normalize_pory('    msgbox("say \\"hi\\" now")\n', _ALLOWED)
+    assert "“hi”" in out            # open then close, alternating
+    assert '\\"' not in out          # no escaped straight quotes survive
+
+
+def test_normalize_char_substitutions():
+    assert "~sniffle~" in asm.normalize_pory('msgbox("*sniffle*")', _ALLOWED)
+    assert "(note)" in asm.normalize_pory('msgbox("[note]")', _ALLOWED)
+
+
+def test_normalize_healparty_alias():
+    out = asm.normalize_pory("    healparty\n", _ALLOWED)
+    assert out == "    special(HealPlayerParty)\n"
+
+
+def test_normalize_ignores_placeholders_and_breaks():
+    # {PLAYER} and \n must not be validated as literal characters.
+    asm.normalize_pory('msgbox("Hi {PLAYER}!\\nBye")', _ALLOWED)  # no raise
+
+
+def test_normalize_fails_loud_on_unrepresentable():
+    with pytest.raises(ValueError, match="U\\+007C"):  # '|' has no glyph, no sub
+        asm.normalize_pory('msgbox("a|b")', _ALLOWED)
+
+
+def test_normalize_leaves_comments_untouched():
+    line = '    # UNHANDLED: cond "$game_player.x==17" gates the sign — see unhandled[]\n'
+    assert asm.normalize_pory(line, _ALLOWED) == line
+
+
+def test_normalize_is_idempotent():
+    src = 'msgbox("a \\"quote\\" and *star* and [brackets]")\n    healparty\n'
+    once = asm.normalize_pory(src, _ALLOWED)
+    assert asm.normalize_pory(once, _ALLOWED) == once
+
+
+# --- undefined-symbol patches (multichoice + self/temp-switch refs) ----------
+
+def test_patch_undefined_multichoice_stubs_unknown():
+    text = "    multichoice(0, 0, MULTI_DREAM_VISUALIZER, TRUE)\n"
+    out = asm.patch_undefined_multichoice(text, {"MULTI_YESNO"})
+    assert "MULTI_DREAM_VISUALIZER" not in out
+    assert "setvar(VAR_RESULT, 0)" in out
+
+
+def test_patch_undefined_multichoice_keeps_defined():
+    text = "    multichoice(0, 0, MULTI_YESNO, TRUE)\n"
+    assert asm.patch_undefined_multichoice(text, {"MULTI_YESNO"}) == text
+
+
+def test_load_multi_constants(tmp_path):
+    hdr = tmp_path / "script_menu.h"
+    hdr.write_text("#define MULTI_YESNO 0\n#define MULTI_TVNO 1\n#define NOT_MULTI 2\n")
+    assert asm.load_multi_constants(hdr) == {"MULTI_YESNO", "MULTI_TVNO"}
+
+
+def test_referenced_switch_keys():
+    texts = [
+        "    setflag(FLAG_MAP049_EVENT019_SSA)\n",
+        "    if (flag(FLAG_MAP032_EVENT005_TSB)) {\n",
+    ]
+    self_keys, temp_keys = asm.referenced_switch_keys(texts)
+    assert self_keys == {(49, 19, "A")}
+    assert temp_keys == {(32, 5, "B")}
+
+
 # --- optional smoke test against the real staged slice output ----------------
 
 _OUT = Path(os.environ.get("RPG2GBA_OUTPUT", "output")) / "uranium-build"
