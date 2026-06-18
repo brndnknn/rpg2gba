@@ -15,3 +15,22 @@ dist/
 reference/scripts_dump/
 reference/maps_dump/
 reference/dat_dump/
+
+# Vendored engine (pokeemerald-expansion in engine/). Its own .gitignore keeps
+# build/ + *.gba out. Below are rpg2gba PIPELINE-generated artifacts the assembler
+# writes INTO the engine tree — regenerated, never committed. A general convention
+# for ALL Uranium maps is a BUILD_PLAN follow-up; the pathfinder slice paths are
+# listed explicitly for now. (The assembler also edits engine/data/event_scripts.s,
+# data/layouts/layouts.json, data/maps/map_groups.json in place — those are tracked
+# pristine; do not commit the assembler's edits to them. Fixing that in-place edit
+# is the same follow-up — see engine/RPG2GBA_VENDOR.md.)
+engine/data/scripts/CommonEvents.inc
+engine/data/scripts/uranium_flags.h
+engine/data/scripts/uranium_map_aliases.h
+engine/data/scripts/Map*_dispatch.pory
+engine/data/maps/MokiTown/
+engine/data/maps/MokiTownPlayersHouse1F/
+engine/data/maps/MokiTownPlayersHouse2F/
+engine/data/layouts/MokiTown/
+engine/data/layouts/MokiTownPlayersHouse1F/
+engine/data/layouts/MokiTownPlayersHouse2F/

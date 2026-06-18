@@ -44,7 +44,7 @@ The user is a developer comfortable with Python, Swift, C, CLI tooling, and GBA 
 - **Do not roleplay the conversion agent or hand-fake its outputs.** The deterministic transpiler is yours to write and run; the LLM tail tool, when invoked, runs at pipeline runtime, not during your editing session. You write both — you don't hand-author an LLM "conversion" to show what it would do.
 - **Do not modify files in `output/` directly.** Those are generated artifacts. If they're wrong, fix the converter that produced them and re-run.
 - **Do not invent pokeemerald-expansion C constants outside the flag registry.** See section 6.
-- **Do not commit anything from the Uranium source tree, or any base ROM, into this repo.** Those are external inputs. They live on disk outside the repo and are referenced by config.
+- **Do not commit the Uranium source tree, any base ROM, build artifacts, or pipeline-generated output.** The `pokeemerald-expansion` *decomp source* is the one exception — it is **vendored in `engine/`** (see `engine/RPG2GBA_VENDOR.md`); the base ROM, Uranium assets, `engine/build/`, and the assembler's generated output under `engine/` are still **never** committed (gitignored).
 - **Do not bypass the manual review gates.** See section 9.
 - **Do not claim the engine can't do something without checking the fork.** No "needs custom C" / "no native equivalent" without a grep/read of `$RPG2GBA_POKEEMERALD` that proves it (§4.7). The fork is on disk; verifying costs seconds.
 
@@ -106,15 +106,18 @@ rpg2gba/
 │   ├── essentials_to_emerald_map.md
 │   └── uranium_id_map.json     # Authoritative ID mapping table
 ├── scripts/                    # One-off utilities, debugging tools
+├── engine/                     # Vendored pokeemerald-expansion (pinned); custom C lives here
 └── output/                     # Generated artifacts; gitignored
     └── uranium-build/
 ```
 
 ### Things outside this repo you may need to read
 
-- The Uranium source tree (path configured in env var `RPG2GBA_URANIUM_SRC`)
-- The `pokeemerald-expansion` fork (path configured in env var `RPG2GBA_POKEEMERALD`)
-- Neither path's contents go into rpg2gba's git history.
+- The Uranium source tree (path configured in env var `RPG2GBA_URANIUM_SRC`) — stays external; its contents never enter git.
+
+### The vendored engine (`engine/`)
+
+The `pokeemerald-expansion` fork is **vendored** in `engine/`, pinned at upstream `21c24202` (see `engine/RPG2GBA_VENDOR.md`). Custom engine C (Phase 6, plus the slice's spawn-override/intro-skip) lives there in version control — no longer an external sibling clone. `RPG2GBA_POKEEMERALD` is the path the pipeline uses; the **cutover** to point it at `engine/` (which needs a one-time build to generate the headers the pipeline reads, and a re-assemble so the custom C compiles) is a follow-up — until then it still points at the old external clone. `engine/build/` and the assembler's generated output under `engine/` are gitignored.
 
 ---
 
@@ -218,7 +221,7 @@ def find_by_name(name: str) -> Optional[Species]: ...
 
 ### C
 
-- C code only lives in the `pokeemerald-expansion` fork, never in this repo
+- C code lives in the **vendored engine** (`engine/`, pokeemerald-expansion) — in-repo now, not an external fork. Mark custom edits with `URANIUM PATHFINDER SLICE`-style sentinel fences so they're revertable against pristine upstream
 - Follow the conventions of pokeemerald-expansion for any new code there: tabs, K&R-ish brace style, `g`-prefixed globals, `s`-prefixed statics
 - New constants go in the same headers as their kin (`include/constants/species.h`, etc.)
 
