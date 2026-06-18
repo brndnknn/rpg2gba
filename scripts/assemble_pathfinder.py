@@ -40,9 +40,11 @@ logger = logging.getLogger(__name__)
 
 SLICE_MAP_IDS = [49, 48, 32]  # order: 1F (spawn), 2F, Moki Town
 
-# S5 walkable overrides: warp-source coords forced to collision=0 so the player
-# can step onto door tiles whose source passage reads BLOCKED.
-WALKABLE_OVERRIDES: dict[int, set[tuple[int, int]]] = {
+# S5 warp overrides: warp-source coords. The layout converter stamps the
+# tileset's warp metatile (MB_NON_ANIMATED_DOOR, collision 0) at each so the
+# warp_event actually fires — a generic floor tile (MB_NORMAL) under a warp is
+# inert (S9 fix 2026-06-18). Mirrors build_slice_maps' returned src_coords.
+WARP_OVERRIDES: dict[int, set[tuple[int, int]]] = {
     49: {(10, 11), (12, 3)},
     48: {(3, 3)},
     32: {(28, 31)},
@@ -140,7 +142,7 @@ def run_layout_pass(
             tile_map,
             name=entry["dir_name"],
             layout_const=entry["layout_const"],
-            walkable_overrides=WALKABLE_OVERRIDES.get(map_id),
+            warp_overrides=WARP_OVERRIDES.get(map_id),
         )
         entries.append(layout.to_layouts_entry())
 

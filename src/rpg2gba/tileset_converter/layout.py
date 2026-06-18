@@ -184,14 +184,19 @@ def convert_layout(
     *,
     name: str,
     layout_const: str,
-    walkable_overrides: set[tuple[int, int]] | None = None,
+    warp_overrides: set[tuple[int, int]] | None = None,
 ) -> Layout:
     """Convert one Phase 3 map dict into a `Layout` (blockdata + metadata).
 
-    `walkable_overrides` (S5, from the S1 warp trace) forces the given (x, y) cells
-    to collision 0 — warp/door tiles read as blocked from their source passage but
-    must be steppable for the warp to fire."""
-    overrides = walkable_overrides or set()
+    `warp_overrides` (S5, from the S1 warp trace) are the warp/door/stairs cells.
+    Each is overwritten with the tileset's warp metatile (`tile_map.warp`) — a
+    step-on MB_NON_ANIMATED_DOOR at collision 0. This is REQUIRED for the warp to
+    work, not just cosmetic: a pokeemerald warp_event is inert unless the metatile
+    under it carries a warp metatile-behavior (the generic passable-floor bucket is
+    MB_NORMAL, so the player walks onto the door tile and nothing happens). Forcing
+    collision 0 also keeps the tile steppable (door tiles read BLOCKED from their
+    source passage)."""
+    overrides = warp_overrides or set()
 
     tiles = map_json["tiles"]
     grid = TileGrid(tiles["xsize"], tiles["ysize"], tiles["zsize"], tiles["data"])
@@ -217,9 +222,7 @@ def convert_layout(
                 void_count += 1
             metatile = collapse_column(grid, x, y, tile_map, tileset_id)
             if (x, y) in overrides:
-                metatile = Metatile(
-                    metatile.metatile_id, PASSABLE_COLLISION, PASSABLE_ELEVATION
-                )
+                metatile = tile_map.warp(tileset_id)
             blocks.append(metatile.to_block())
 
     if len(blocks) != width * height:

@@ -121,12 +121,14 @@ class TileMap:
         buckets: dict[int, Bucket] | None = None,
         passages: dict[int, list[int]] | None = None,
         priorities: dict[int, list[int]] | None = None,
+        warps: dict[int, Metatile] | None = None,
     ) -> None:
         self._tiles = tiles
         self._tilesets = tilesets
         self._buckets = buckets or {}
         self._passages = passages or {}
         self._priorities = priorities or {}
+        self._warps = warps or {}
 
     # --- resolution ---------------------------------------------------------
 
@@ -164,6 +166,27 @@ class TileMap:
         if bucket is None:
             raise KeyError(f"no bucket (hence no void metatile) for tileset {tileset_id}")
         return Metatile(bucket.void, BLOCKED_COLLISION, BLOCKED_ELEVATION)
+
+    def warp(self, tileset_id: int) -> Metatile:
+        """The warp metatile stamped at a warp/door/stairs cell for this tileset.
+
+        A pokeemerald warp_event is inert unless the metatile under it carries a
+        warp metatile-behavior (see field_control_avatar.c). The generic passable
+        bucket has MB_NORMAL, so the layout converter overlays this metatile (a
+        step-on MB_NON_ANIMATED_DOOR, collision 0) at every warp coord. Fails loud
+        if the tileset has no `warps` entry — a warp on an unconfigured tileset
+        would silently never fire."""
+        warp = self._warps.get(tileset_id)
+        if warp is None:
+            raise KeyError(
+                f"no warp metatile for tileset {tileset_id}; add a 'warps' entry to "
+                f"{DEFAULT_TILE_MAP_PATH} or the warp_event will never fire (its "
+                f"metatile would be MB_NORMAL)"
+            )
+        return warp
+
+    def has_warp(self, tileset_id: int) -> bool:
+        return tileset_id in self._warps
 
     def tileset_for(self, tileset_id: int) -> TilesetChoice:
         """The primary/secondary pokeemerald tileset for an Uranium tileset id (Q4)."""
@@ -235,13 +258,17 @@ def load_tile_map(
         int(k): Bucket(b["passable"], b["blocked"], b["void"])
         for k, b in raw.get("buckets", {}).items()
     }
+    warps = {
+        int(k): Metatile(w["metatile"], w.get("collision", 0), w.get("elevation", 0))
+        for k, w in raw.get("warps", {}).items()
+    }
 
     passages: dict[int, list[int]] = {}
     priorities: dict[int, list[int]] = {}
     if passages_path is not None and buckets:
         passages, priorities = _load_oracle(Path(passages_path), tilesets.keys())
 
-    return TileMap(tiles, tilesets, buckets, passages, priorities)
+    return TileMap(tiles, tilesets, buckets, passages, priorities, warps)
 
 
 def _load_oracle(path: Path, tileset_ids) -> tuple[dict[int, list[int]], dict[int, list[int]]]:
@@ -288,6 +315,11 @@ def _validate(raw: dict) -> None:
             if role not in b:
                 raise ValueError(f"bucket[{ts_k}] missing role {role!r}")
             _check_metatile_id(f"bucket[{ts_k}].{role}", b[role])
+
+    for ts_k, w in raw.get("warps", {}).items():
+        if ts_k not in tileset_ids:
+            raise ValueError(f"warps references tileset {ts_k} absent from 'tilesets'")
+        _validate_metatile_entry(f"warps[{ts_k}]", w)
 
 
 def _validate_metatile_entry(where: str, e: dict) -> None:

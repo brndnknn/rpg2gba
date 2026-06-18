@@ -1,5 +1,5 @@
 {
-  "__doc__": "Phase 5 §5.1 source of truth: Uranium (tileset_id, tile_id) -> pokeemerald metatile. See PATHFINDER_STEP2_TILE_MAP_PLAN.md + src/rpg2gba/tileset_converter/tile_map.py. RMXP tile_id: 0=empty; 48..383=autotiles (base=48*n); >=384 static. GBA metatile_id: 0x000..0x1FF primary, 0x200+ secondary. PATHFINDER v1 = PURE PASSABILITY BUCKETS (user decision 2026-06-15): 'tiles' is empty; every tile resolves via 'buckets' keyed on its source passages (passable vs blocked) from output/uranium-build/tilesets.json. 'buckets[ts]' = {passable, blocked, void} metatile ids harvested from vanilla maps (scripts/harvest_bucket_metatiles.py). collision is set per-cell from passages by the layout converter, not stored here; elevation policy = passable 3 / blocked 0 / void 0. Hand-mapping high-frequency tiles into 'tiles' (each overrides its bucket) is the later fidelity pass. 'stacks' (Q1 composite z0,z1,z2 override) is unused in v1.",
+  "__doc__": "Phase 5 §5.1 source of truth: Uranium (tileset_id, tile_id) -> pokeemerald metatile. See PATHFINDER_STEP2_TILE_MAP_PLAN.md + src/rpg2gba/tileset_converter/tile_map.py. RMXP tile_id: 0=empty; 48..383=autotiles (base=48*n); >=384 static. GBA metatile_id: 0x000..0x1FF primary, 0x200+ secondary. PATHFINDER v1 = PURE PASSABILITY BUCKETS (user decision 2026-06-15): 'tiles' is empty; every tile resolves via 'buckets' keyed on its source passages (passable vs blocked) from output/uranium-build/tilesets.json. 'buckets[ts]' = {passable, blocked, void} metatile ids harvested from vanilla maps (scripts/harvest_bucket_metatiles.py). collision is set per-cell from passages by the layout converter, not stored here; elevation policy = passable 3 / blocked 0 / void 0. Hand-mapping high-frequency tiles into 'tiles' (each overrides its bucket) is the later fidelity pass. 'stacks' (Q1 composite z0,z1,z2 override) is unused in v1. 'warps[ts]' = the metatile stamped at a warp/door/stairs cell (S9 fix 2026-06-18): a pokeemerald warp_event is INERT unless the metatile under it carries a warp metatile-behavior (field_control_avatar.c IsWarpMetatileBehavior). The generic passable-floor bucket has MB_NORMAL, so warps never fired. We stamp MB_NON_ANIMATED_DOOR metatiles (step-on, fires via TryStartWarpEventScript regardless of approach direction; collision 0 so the player arrives walkable on the tile): ts19 -> 529 (gTileset_BrendansMaysHouse), ts22 -> 167 (MB_NON_ANIMATED_DOOR in the shared gTileset_General primary). elevation 0 = the universal/transition elevation vanilla uses for doors. Behaviors verified vs the fork's metatile_attributes.bin; harvest with scripts/harvest_bucket_metatiles.py.",
   "tilesets": {
     "19": { "primary": "gTileset_Building", "secondary": "gTileset_BrendansMaysHouse" },
     "22": { "primary": "gTileset_General", "secondary": "gTileset_Petalburg" }
@@ -7,6 +7,10 @@
   "buckets": {
     "19": { "passable": 513, "blocked": 622, "void": 1 },
     "22": { "passable": 1, "blocked": 468, "void": 468 }
+  },
+  "warps": {
+    "19": { "metatile": 529, "collision": 0, "elevation": 0 },
+    "22": { "metatile": 167, "collision": 0, "elevation": 0 }
   },
   "tiles": {
     "19": {},

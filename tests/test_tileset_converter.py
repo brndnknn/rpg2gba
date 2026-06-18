@@ -82,6 +82,10 @@ def _write_slice_table(tmp_path: Path) -> tuple[Path, Path]:
             "19": {"passable": 513, "blocked": 622, "void": 1},
             "22": {"passable": 1, "blocked": 468, "void": 468},
         },
+        "warps": {
+            "19": {"metatile": 529, "collision": 0, "elevation": 0},
+            "22": {"metatile": 167, "collision": 0, "elevation": 0},
+        },
         # one explicit override at autotile-2 base 96 (tests normalization + precedence)
         "tiles": {"19": {"96": {"metatile": 50, "collision": 0, "elevation": 3}}, "22": {}},
         "stacks": {},
@@ -105,6 +109,12 @@ def test_tile_map_loads_and_explicit_precedence(tmp_path: Path) -> None:
     assert tm.lookup(19, 100) == Metatile(50, 0, 3)
     assert tm.lookup(19, 96) == Metatile(50, 0, 3)
     assert tm.void(22) == Metatile(468, 1, 0)
+    # warp metatiles (step-on door behavior, collision 0) are loaded per tileset
+    assert tm.warp(19) == Metatile(529, 0, 0)
+    assert tm.warp(22) == Metatile(167, 0, 0)
+    assert tm.has_warp(19) and not tm.has_warp(99)
+    with pytest.raises(KeyError):  # no warp metatile -> fail loud, not a dead warp
+        tm.warp(99)
 
 
 def test_tile_map_bucket_fallback(tmp_path: Path) -> None:
@@ -156,6 +166,10 @@ def test_tile_map_validate_rejects(tmp_path: Path) -> None:
         _load(lambda d: d["buckets"]["19"].pop("void"))
     with pytest.raises(ValueError):  # missing secondary
         _load(lambda d: d["tilesets"]["19"].pop("secondary"))
+    with pytest.raises(ValueError):  # warp metatile beyond the 10-bit field
+        _load(lambda d: d.update({"warps": {"19": {"metatile": 0x400}}}))
+    with pytest.raises(ValueError):  # warp references an unknown tileset
+        _load(lambda d: d.update({"warps": {"77": {"metatile": 5}}}))
 
 
 # --- 5.2 layout --------------------------------------------------------------
@@ -176,6 +190,7 @@ def _layout_tilemap(priorities: dict[int, int] | None = None) -> TileMap:
         buckets={7: Bucket(passable=5, blocked=6, void=7)},
         passages={7: passages},
         priorities={7: prio},
+        warps={7: Metatile(99, 0, 0)},  # the warp/door metatile stamped at warp cells
     )
 
 
@@ -246,18 +261,39 @@ def test_layout_round_trip(tmp_path: Path) -> None:
     assert (tmp_path / "layouts" / "T" / "border.bin").stat().st_size == 8
 
 
-def test_warp_walkable_override() -> None:
-    """walkable_overrides forces a blocked warp/door cell to collision 0 while
-    keeping its visual metatile."""
+def test_warp_override_stamps_warp_metatile() -> None:
+    """warp_overrides overwrite the cell with the tileset's warp metatile (the
+    door/stairs that carries a warp behavior, collision 0) — REQUIRED for the
+    warp_event to fire, not just to make the cell walkable."""
     tm = _layout_tilemap()
     g = _grid(2, 1, [384, 500])  # cell (1,0) is the blocking door tile (metatile 20)
     plain = layout_mod.convert_layout(_map_json(g), tm, name="T", layout_const="LAYOUT_T")
-    assert (plain.blocks[1] >> 10) & 0x3 == 1  # blocked without override
+    assert plain.blocks[1] & METATILE_ID_MASK == 20  # unchanged without override
+    assert (plain.blocks[1] >> 10) & 0x3 == 1        # blocked without override
     forced = layout_mod.convert_layout(
-        _map_json(g), tm, name="T", layout_const="LAYOUT_T", walkable_overrides={(1, 0)}
+        _map_json(g), tm, name="T", layout_const="LAYOUT_T", warp_overrides={(1, 0)}
     )
-    assert forced.blocks[1] & METATILE_ID_MASK == 20  # visual unchanged
-    assert (forced.blocks[1] >> 10) & 0x3 == 0  # forced walkable
+    assert forced.blocks[1] & METATILE_ID_MASK == 99  # the warp metatile (door behavior)
+    assert (forced.blocks[1] >> 10) & 0x3 == 0        # collision 0 -> steppable
+    assert (forced.blocks[1] >> 12) & 0xF == 0        # elevation 0 (door transition)
+
+
+def test_warp_override_fails_loud_without_warp_metatile() -> None:
+    """A warp cell on a tileset with no `warps` entry aborts the map — silently
+    leaving an MB_NORMAL floor there means the warp_event would never fire."""
+    tm = TileMap(
+        tiles={7: {384: Metatile(10, 0, 3)}},
+        tilesets={7: TilesetChoice("gP", "gS")},
+        buckets={7: Bucket(passable=5, blocked=6, void=7)},
+        passages={7: [0] * 600},
+        priorities={7: [0] * 600},
+    )  # no warps
+    g = _grid(1, 1, [384])
+    with pytest.raises(KeyError) as exc:
+        layout_mod.convert_layout(
+            _map_json(g), tm, name="T", layout_const="LAYOUT_T", warp_overrides={(0, 0)}
+        )
+    assert "warp metatile" in str(exc.value)
 
 
 def test_layout_fail_loud_on_unmapped_tile() -> None:
