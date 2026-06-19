@@ -10,11 +10,17 @@ Pass 2 (S8c) — fork assembly
       - CommonEvents.pory -> fork data/scripts/CommonEvents.inc
       - porymap map.json -> fork data/maps/<MapDir>/map.json
       - staged map.bin + border.bin -> fork data/layouts/<name>/
-      - upsert fork data/layouts/layouts.json
-      - add gMapGroup_Uranium to fork data/maps/map_groups.json (idempotent)
+      - write fork data/layouts/layouts.gen.json (upstream + slice; overlay, gitignored)
+      - write fork data/maps/map_groups.gen.json (upstream + gMapGroup_Uranium; overlay)
       - write fork data/scripts/uranium_map_aliases.h
       - write fork data/scripts/uranium_flags.h (flag registry dump)
-      - append includes to fork data/event_scripts.s (idempotent, sentinel-guarded)
+      - write fork data/maps/uranium_includes.inc (gitignored; pulled in by the committed
+        URANIUM PATHFINDER SLICE include-hook in data/event_scripts.s)
+
+NOTE: this no longer edits ANY tracked upstream file in place. The vendored
+event_scripts.s + map_data_rules.mk carry committed, stable include-hooks (see
+engine/RPG2GBA_VENDOR.md); all per-slice content lands in gitignored *.gen.json /
+*.inc files, so the vendored tree stays pristine.
 
 Usage:
     python scripts/assemble_pathfinder.py [--dry-run]
@@ -57,9 +63,10 @@ SELFSWITCH_BASE = 0x1100  # per-event self-switch flags
 VAR_BASE = 0x40D0         # unused game-var range (vanilla VARS_END = 0x40FF)
 TEMPSWITCH_BASE = 0x0014  # temp flags — 0x14+ are unused in the vanilla fork
 
-# Sentinel that guards the appended block in event_scripts.s (idempotent).
-_ES_SENTINEL_BEGIN = "@ BEGIN URANIUM PATHFINDER SLICE"
-_ES_SENTINEL_END = "@ END URANIUM PATHFINDER SLICE"
+# Overlay manifests read by the committed map_data_rules.mk hook (URANIUM_*) when
+# present, else the pristine upstream files. Keeps the tracked manifests untouched.
+_GEN_MAP_GROUPS = "map_groups.gen.json"
+_GEN_LAYOUTS = "layouts.gen.json"
 
 
 # ---------------------------------------------------------------------------
@@ -246,33 +253,39 @@ def run_fork_pass(
             dest = fork / "data" / "layouts" / layout_name / bin_name
             _copy(src, dest, f"{layout_name}/{bin_name}", dry_run)
 
-    # --- Upsert fork layouts.json ---
-    fork_layouts_json = fork / "data" / "layouts" / "layouts.json"
+    # --- Write layouts overlay (data/layouts/layouts.gen.json) ---
+    # Seed from the PRISTINE upstream layouts.json (the full vanilla manifest) so the
+    # tracked file is never touched; upsert the slice layouts. map_data_rules.mk reads
+    # this overlay when present (URANIUM_LAYOUTS).
+    pristine_layouts_json = fork / "data" / "layouts" / "layouts.json"
+    gen_layouts_json = fork / "data" / "layouts" / _GEN_LAYOUTS
     staging_layouts_json = staging_layouts / "layouts.json"
     if staging_layouts_json.is_file():
         from rpg2gba.tileset_converter.layout import append_layouts
         entries = json.loads(staging_layouts_json.read_text(encoding="utf-8")).get("layouts", [])
         if not dry_run:
-            append_layouts(entries, fork_layouts_json)
-            logger.info("  upserted %d layouts -> fork layouts.json", len(entries))
+            shutil.copy2(pristine_layouts_json, gen_layouts_json)  # full upstream manifest
+            append_layouts(entries, gen_layouts_json)             # + slice layouts
+            logger.info("  wrote %s (+%d slice layouts)", _GEN_LAYOUTS, len(entries))
         else:
-            logger.info("  [dry] would upsert %d layouts -> fork layouts.json", len(entries))
+            logger.info("  [dry] would write %s (+%d slice layouts)", _GEN_LAYOUTS, len(entries))
 
-    # --- Add gMapGroup_Uranium to fork map_groups.json (idempotent) ---
-    fork_mg = fork / "data" / "maps" / "map_groups.json"
-    mg = json.loads(fork_mg.read_text(encoding="utf-8"))
+    # --- Write map_groups overlay (data/maps/map_groups.gen.json) ---
+    # Seed from the PRISTINE upstream map_groups.json, append gMapGroup_Uranium. Always
+    # built fresh from pristine (deterministic; the tracked file stays byte-for-byte
+    # upstream). map_data_rules.mk reads this overlay when present (URANIUM_MAP_GROUPS).
+    pristine_mg = fork / "data" / "maps" / "map_groups.json"
+    gen_mg = fork / "data" / "maps" / _GEN_MAP_GROUPS
+    mg = json.loads(pristine_mg.read_text(encoding="utf-8"))
     uranium_group = "gMapGroup_Uranium"
     uranium_maps = [consts[str(mid)]["dir_name"] for mid in SLICE_MAP_IDS]
-    if uranium_group not in mg.get("group_order", []):
-        mg.setdefault("group_order", []).append(uranium_group)
-        mg[uranium_group] = uranium_maps
-        if not dry_run:
-            fork_mg.write_text(json.dumps(mg, indent=2) + "\n", encoding="utf-8")
-            logger.info("  added %s to fork map_groups.json", uranium_group)
-        else:
-            logger.info("  [dry] would add %s to fork map_groups.json", uranium_group)
+    mg.setdefault("group_order", []).append(uranium_group)
+    mg[uranium_group] = uranium_maps
+    if not dry_run:
+        gen_mg.write_text(json.dumps(mg, indent=2) + "\n", encoding="utf-8")
+        logger.info("  wrote %s (+%s: %d maps)", _GEN_MAP_GROUPS, uranium_group, len(uranium_maps))
     else:
-        logger.info("  %s already in map_groups.json", uranium_group)
+        logger.info("  [dry] would write %s (+%s)", _GEN_MAP_GROUPS, uranium_group)
 
     # --- Write alias header ---
     alias_src = out / "porymap" / "uranium_map_aliases.h"
@@ -283,8 +296,8 @@ def run_fork_pass(
     dest_flags = fork / "data" / "scripts" / "uranium_flags.h"
     _emit_flags_header(dest_flags, compiled_texts, dry_run)
 
-    # --- Update event_scripts.s (idempotent) ---
-    _update_event_scripts(fork, consts, ce_pory.is_file(), dry_run)
+    # --- Write the slice include list pulled in by the event_scripts.s hook ---
+    _write_event_includes(fork, consts, ce_pory.is_file(), dry_run)
 
 
 def _emit_flags_header(dest: Path, compiled_texts: list[str], dry_run: bool) -> None:
@@ -317,47 +330,38 @@ def _emit_flags_header(dest: Path, compiled_texts: list[str], dry_run: bool) -> 
         logger.info("  [dry] would write uranium_flags.h")
 
 
-def _update_event_scripts(
+def _write_event_includes(
     fork: Path,
     consts: dict,
     has_common_events: bool,
     dry_run: bool,
 ) -> None:
-    """Append a sentinel-guarded block of includes to data/event_scripts.s.
+    """Write data/maps/uranium_includes.inc — the GENERATED, gitignored list of slice
+    script includes pulled in by the committed include-hook in data/event_scripts.s.
 
-    Idempotent: replaces the existing sentinel block if present."""
-    es = fork / "data" / "event_scripts.s"
-    text = es.read_text(encoding="utf-8")
-
-    includes: list[str] = [
-        '	#include "data/scripts/uranium_map_aliases.h"',
-        '	#include "data/scripts/uranium_flags.h"',
-    ]
+    The hook itself also `#include`s uranium_map_aliases.h + uranium_flags.h; those are
+    C-preprocessor headers and must stay as `#include` lines in event_scripts.s (so the
+    CPP pass sees them), which is why they live in the committed hook, not here."""
+    includes: list[str] = []
     if has_common_events:
         includes.append('	.include "data/scripts/CommonEvents.inc"')
     for mid in SLICE_MAP_IDS:
         dir_name = consts[str(mid)]["dir_name"]
         includes.append(f'	.include "data/maps/{dir_name}/scripts.inc"')
 
-    block = (
-        _ES_SENTINEL_BEGIN + "\n"
+    text = (
+        "@ GENERATED by scripts/assemble_pathfinder.py — DO NOT EDIT, DO NOT COMMIT.\n"
+        "@ Pulled in by the URANIUM PATHFINDER SLICE include-hook in data/event_scripts.s.\n"
         + "\n".join(includes) + "\n"
-        + _ES_SENTINEL_END
     )
 
-    if _ES_SENTINEL_BEGIN in text:
-        # Replace existing block
-        start = text.index(_ES_SENTINEL_BEGIN)
-        end = text.index(_ES_SENTINEL_END) + len(_ES_SENTINEL_END)
-        new_text = text[:start] + block + text[end:]
-    else:
-        new_text = text.rstrip() + "\n" + block + "\n"
-
+    dest = fork / "data" / "maps" / "uranium_includes.inc"
     if not dry_run:
-        es.write_text(new_text, encoding="utf-8")
-        logger.info("  updated data/event_scripts.s with %d includes", len(includes))
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(text, encoding="utf-8")
+        logger.info("  wrote data/maps/uranium_includes.inc (%d includes)", len(includes))
     else:
-        logger.info("  [dry] would add %d includes to event_scripts.s", len(includes))
+        logger.info("  [dry] would write uranium_includes.inc (%d includes)", len(includes))
 
 
 # ---------------------------------------------------------------------------

@@ -20,14 +20,17 @@ reference/dat_dump/
 # build/ + *.gba out. Below are rpg2gba PIPELINE-generated artifacts the assembler
 # writes INTO the engine tree — regenerated, never committed. A general convention
 # for ALL Uranium maps is a BUILD_PLAN follow-up; the pathfinder slice paths are
-# listed explicitly for now. (The assembler also edits engine/data/event_scripts.s,
-# data/layouts/layouts.json, data/maps/map_groups.json in place — those are tracked
-# pristine; do not commit the assembler's edits to them. Fixing that in-place edit
-# is the same follow-up — see engine/RPG2GBA_VENDOR.md.)
+# listed explicitly for now. The assembler NO LONGER edits tracked upstream files in
+# place: data/event_scripts.s + map_data_rules.mk carry committed, stable include-hooks
+# and all per-slice content lands in the generated *.gen.json / *.inc files below.
+# See engine/RPG2GBA_VENDOR.md.
 engine/data/scripts/CommonEvents.inc
 engine/data/scripts/uranium_flags.h
 engine/data/scripts/uranium_map_aliases.h
 engine/data/scripts/Map*_dispatch.pory
+engine/data/maps/uranium_includes.inc
+engine/data/maps/map_groups.gen.json
+engine/data/layouts/layouts.gen.json
 engine/data/maps/MokiTown/
 engine/data/maps/MokiTownPlayersHouse1F/
 engine/data/maps/MokiTownPlayersHouse2F/

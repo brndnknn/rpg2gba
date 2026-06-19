@@ -1735,3 +1735,12 @@ EventScript_PalletTown_PlayersHouse_2F_TurnOnPC::
 	.include "data/scripts/dexnav.inc"
 	.include "data/scripts/battle_frontier.inc"
 	.include "data/scripts/apricorn_tree.inc"
+
+@ BEGIN URANIUM PATHFINDER SLICE — engine include-hook (rpg2gba; see engine/RPG2GBA_VENDOR.md).
+@ The referenced files are pipeline-GENERATED + gitignored; the assembler writes them and
+@ this hook stays committed + stable across slices. Like the new_game.c spawn redirect, it
+@ requires the assembler to have run first; a pristine vanilla build must revert this block.
+	#include "data/scripts/uranium_map_aliases.h"
+	#include "data/scripts/uranium_flags.h"
+	.include "data/maps/uranium_includes.inc"
+@ END URANIUM PATHFINDER SLICE
