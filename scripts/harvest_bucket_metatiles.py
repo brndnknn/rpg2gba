@@ -22,7 +22,7 @@ import struct
 from collections import Counter
 from pathlib import Path
 
-FORK = Path("/home/b/repos/pokeemerald-expansion")
+FORK = Path("/home/b/repos/rpg2gba/engine")
 
 # (label, layout dir, primary dir, secondary dir, the Uranium tileset it sources)
 SOURCES = [

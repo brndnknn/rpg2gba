@@ -41,7 +41,7 @@ def scan_file(path: Path, allowed: set[str]) -> list[tuple[int, str, str]]:
 
 
 def main() -> int:
-    charmap = Path("/home/b/repos/pokeemerald-expansion/charmap.txt")
+    charmap = Path("/home/b/repos/rpg2gba/engine/charmap.txt")
     allowed = load_charmap_chars(charmap)
 
     files = [Path(a) for a in sys.argv[1:]]
