@@ -376,12 +376,16 @@ end
 def shape_tileset(ts)
   return nil if ts.nil?
   {
-    'id'           => iv(ts, :@id),
-    'name'         => iv(ts, :@name),
-    'tileset_name' => iv(ts, :@tileset_name),
-    'passages'     => table_to_array(iv(ts, :@passages)),
-    'priorities'   => table_to_array(iv(ts, :@priorities)),
-    'terrain_tags' => table_to_array(iv(ts, :@terrain_tags)),
+    'id'             => iv(ts, :@id),
+    'name'           => iv(ts, :@name),
+    'tileset_name'   => iv(ts, :@tileset_name),
+    # 7-slot Array of autotile base-image names (RMXP autotile slot n is tile-id
+    # base 48*(n+1)). Empty string = unused slot. Needed to render autotiles
+    # faithfully — slot n's PNG is the template the 48 variants compose from.
+    'autotile_names' => iv(ts, :@autotile_names),
+    'passages'       => table_to_array(iv(ts, :@passages)),
+    'priorities'     => table_to_array(iv(ts, :@priorities)),
+    'terrain_tags'   => table_to_array(iv(ts, :@terrain_tags)),
   }
 end
 
