@@ -120,6 +120,40 @@ def _copy(src: Path, dest: Path, label: str, dry_run: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
+# S8a: Tileset graphics (real Uranium art)
+# ---------------------------------------------------------------------------
+
+def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
+    """Quantise each slice tileset's real Uranium art into a pokeemerald
+    PRIMARY+SECONDARY pair, write the engine fragments + tileset_map.gen.json overlay.
+
+    Must run BEFORE S8b: the layout pass's `load_tile_map` prefers the overlay this
+    writes, so map.bin then references the real Uranium metatiles instead of the
+    committed Hoenn buckets."""
+    logger.info("=== S8a: tileset graphics ===")
+    from rpg2gba.tileset_converter.graphics.build_slice_tilesets import (
+        build_slice_tilesets,
+    )
+
+    maps: list[tuple[int, dict]] = []
+    for map_id in SLICE_MAP_IDS:
+        map_json = json.loads(
+            (out / "maps" / f"Map{map_id:03d}.json").read_text(encoding="utf-8")
+        )
+        maps.append((map_id, map_json))
+
+    build_slice_tilesets(
+        maps,
+        WARP_OVERRIDES,
+        fork=fork,
+        base_tile_map=Path("reference/tileset_map.json"),
+        overlay_out=Path("reference/tileset_map.gen.json"),
+        tilesets_json=out / "tilesets.json",
+        dry_run=dry_run,
+    )
+
+
+# ---------------------------------------------------------------------------
 # S8b: Layout conversion
 # ---------------------------------------------------------------------------
 
@@ -371,6 +405,8 @@ def _write_event_includes(
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dry-run", action="store_true", help="Report without modifying the fork.")
+    ap.add_argument("--skip-graphics", action="store_true",
+                    help="Skip S8a (Uranium tilesets already emitted).")
     ap.add_argument("--skip-layout", action="store_true",
                     help="Skip S8b (layout .bin already generated).")
     args = ap.parse_args()
@@ -392,6 +428,9 @@ def main() -> int:
 
     consts_path = out / "porymap" / "map_constants.json"
     consts = json.loads(consts_path.read_text(encoding="utf-8"))
+
+    if not args.skip_graphics:
+        run_graphics_pass(out, fork, args.dry_run)
 
     if not args.skip_layout:
         run_layout_pass(out, consts, staging, args.dry_run)

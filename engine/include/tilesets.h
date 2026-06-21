@@ -61,4 +61,9 @@ extern const struct Tileset gTileset_SSAnne;
 extern const struct Tileset gTileset_SeaCottage;
 extern const struct Tileset gTileset_TrainerTower;
 
+// BEGIN URANIUM PATHFINDER SLICE — generated Tileset externs (rpg2gba)
+// uranium_externs.gen.h is pipeline-generated + gitignored (assemble_pathfinder.py S8a).
+#include "uranium_externs.gen.h"
+// END URANIUM PATHFINDER SLICE
+
 #endif //GUARD_tilesets_H

@@ -15,6 +15,9 @@ dist/
 reference/scripts_dump/
 reference/maps_dump/
 reference/dat_dump/
+# Generated real-art tile-map overlay (S8a); load_tile_map prefers it over the
+# committed tileset_map.json. Regenerated each assembly; never committed.
+reference/tileset_map.gen.json
 
 # Vendored engine (pokeemerald-expansion in engine/). Its own .gitignore keeps
 # build/ + *.gba out. Below are rpg2gba PIPELINE-generated artifacts the assembler
@@ -31,6 +34,14 @@ engine/data/scripts/Map*_dispatch.pory
 engine/data/maps/uranium_includes.inc
 engine/data/maps/map_groups.gen.json
 engine/data/layouts/layouts.gen.json
+# S8a tileset graphics: generated engine fragments (pulled in by committed sentinel
+# #include hooks in src/data/tilesets/*.h + include/tilesets.h) and the emitted art.
+engine/src/data/tilesets/uranium_graphics.gen.h
+engine/src/data/tilesets/uranium_metatiles.gen.h
+engine/src/data/tilesets/uranium_tilesets.gen.h
+engine/include/uranium_externs.gen.h
+engine/data/tilesets/primary/uranium*/
+engine/data/tilesets/secondary/uranium*/
 engine/data/maps/MokiTown/
 engine/data/maps/MokiTownPlayersHouse1F/
 engine/data/maps/MokiTownPlayersHouse2F/

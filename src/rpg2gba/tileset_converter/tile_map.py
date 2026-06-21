@@ -146,8 +146,14 @@ class TileMap:
             )
         nid = normalize_tile_id(tile_id)
         explicit = self._tiles.get(tileset_id)
-        if explicit and nid in explicit:
-            return explicit[nid]
+        if explicit:
+            # Exact tile_id wins (real-art mode keys each autotile VARIANT
+            # separately so its rendered edge/corner is faithful); fall back to the
+            # autotile-base id (bucket / Approach-A mode folds all 48 variants to base).
+            if tile_id in explicit:
+                return explicit[tile_id]
+            if nid in explicit:
+                return explicit[nid]
 
         bucket = self._buckets.get(tileset_id)
         if bucket is None:
@@ -238,8 +244,19 @@ def load_tile_map(
 
     Also loads the per-tileset `passages`/`priorities` arrays from the Phase-5-prep
     oracle (`passages_path`) for the bucket fallback. Pass `passages_path=None` to
-    skip the oracle (explicit-`tiles`-only tables, e.g. unit tests)."""
-    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    skip the oracle (explicit-`tiles`-only tables, e.g. unit tests).
+
+    Generated-overlay precedence (mirrors the engine's `*.gen.json` hooks): if a
+    sibling `<name>.gen.json` exists next to `path` (e.g. `tileset_map.gen.json`
+    written by the graphics pre-pass), it is loaded INSTEAD — that's the real-art
+    table (Uranium tilesets + per-tile metatiles). The committed `tileset_map.json`
+    is the Hoenn-bucket fallback used when no overlay is present."""
+    path = Path(path)
+    overlay = path.with_name(f"{path.stem}.gen{path.suffix}")
+    if overlay.is_file():
+        logger.info("tile map: using generated overlay %s (real-art tilesets)", overlay)
+        path = overlay
+    raw = json.loads(path.read_text(encoding="utf-8"))
     _validate(raw)
 
     tilesets = {

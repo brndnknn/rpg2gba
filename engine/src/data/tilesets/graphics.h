@@ -3048,3 +3048,8 @@ const u16 ALIGNED(4) gTilesetPalettes_General_Frlg[][16] =
 const u32 gTilesetTiles_General_Frlg[] = INCGFX_U32("data/tilesets/primary/general_frlg/tiles.png", ".4bpp.smol");
 
 #endif // IS_FRLG
+
+// BEGIN URANIUM PATHFINDER SLICE — generated tileset tiles/palettes (rpg2gba)
+// uranium_graphics.gen.h is pipeline-generated + gitignored (assemble_pathfinder.py S8a).
+#include "uranium_graphics.gen.h"
+// END URANIUM PATHFINDER SLICE

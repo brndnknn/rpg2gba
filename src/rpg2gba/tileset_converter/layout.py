@@ -156,6 +156,18 @@ def _cell_blocked(grid: TileGrid, x: int, y: int, tile_map: TileMap, tileset_id:
     return not seen_tile  # all-empty = void = blocked
 
 
+def topmost_tile_id(grid: TileGrid, x: int, y: int) -> int:
+    """The cell's *visual* RMXP tile id: the topmost non-empty layer (or 0 if the
+    column is entirely empty). This is the same tile `collapse_column` resolves for
+    the metatile, exposed raw so the graphics pre-pass can enumerate exactly the
+    tiles it must build art for."""
+    for z in range(grid.zsize - 1, -1, -1):  # top layer down
+        tid = grid.tile_at(x, y, z)
+        if tid != EMPTY_TILE:
+            return tid
+    return EMPTY_TILE
+
+
 def collapse_column(grid: TileGrid, x: int, y: int, tile_map: TileMap, tileset_id: int) -> Metatile:
     """Collapse the 3 stacked RMXP tiles at (x, y) into one pokeemerald Metatile (Q1).
 
@@ -164,14 +176,10 @@ def collapse_column(grid: TileGrid, x: int, y: int, tile_map: TileMap, tileset_i
     source-passage rule (`_cell_blocked`) — these can differ. An all-empty column
     returns the tileset's void metatile. Fails loud (via `lookup`) on an unmapped
     tile rather than emitting metatile 0."""
-    column = grid.column(x, y)  # [z0, z1, z2], bottom -> top
-    visual: Metatile | None = None
-    for tid in reversed(column):  # top layer first
-        if tid != EMPTY_TILE:
-            visual = tile_map.lookup(tileset_id, tid)
-            break
-    if visual is None:
+    tid = topmost_tile_id(grid, x, y)  # topmost non-empty (0 if all-empty)
+    if tid == EMPTY_TILE:
         return tile_map.void(tileset_id)
+    visual = tile_map.lookup(tileset_id, tid)
 
     if _cell_blocked(grid, x, y, tile_map, tileset_id):
         return Metatile(visual.metatile_id, BLOCKED_COLLISION, BLOCKED_ELEVATION)
