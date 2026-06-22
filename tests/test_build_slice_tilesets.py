@@ -13,10 +13,14 @@ from pathlib import Path
 
 from PIL import Image
 
+import numpy as np
+
 from rpg2gba.tileset_converter.graphics.build_slice_tilesets import (
     _behavior_value,
     build_slice_tilesets,
+    column_keys_for_maps,
 )
+from rpg2gba.tileset_converter.graphics.emit import MetatileImage, analyze_tileset_palettes
 
 
 class _StubRasterizer:
@@ -176,3 +180,97 @@ def test_engine_fragments(tmp_path: Path) -> None:
     assert ".isSecondary = TRUE," in structs  # the secondary half
     assert "extern const struct Tileset gTileset_Uranium5;" in externs
     assert "extern const struct Tileset gTileset_Uranium5B;" in externs
+
+
+# ---------------------------------------------------------------------------
+# Tests for column_keys_for_maps
+# ---------------------------------------------------------------------------
+
+
+def test_column_keys_for_maps_sorted_unique_nonempty() -> None:
+    """column_keys_for_maps returns sorted, deduplicated, non-empty column keys."""
+    # Two maps with identical tile data: 4 unique column keys from 8 total cells.
+    map1 = _map(5)
+    map2 = _map(5)
+    ordered = column_keys_for_maps([(1, map1), (2, map2)])
+
+    # Exactly 4 distinct keys (tiles 400-403 on z=0, one per cell).
+    assert len(ordered) == 4
+
+    # Sorted
+    assert ordered == sorted(ordered)
+
+    # All entries non-empty
+    assert all(k for k in ordered)
+
+    # Each key is a tuple of (z, tile_id) pairs
+    for k in ordered:
+        assert isinstance(k, tuple)
+        assert all(isinstance(pair, tuple) and len(pair) == 2 for pair in k)
+
+
+# ---------------------------------------------------------------------------
+# Tests for analyze_tileset_palettes
+# ---------------------------------------------------------------------------
+
+
+def _solid_rgba(r: int, g: int, b: int) -> np.ndarray:
+    """Return a 16×16 RGBA uint8 array filled with a single opaque colour."""
+    arr = np.zeros((16, 16, 4), dtype=np.uint8)
+    arr[..., 0] = r
+    arr[..., 1] = g
+    arr[..., 2] = b
+    arr[..., 3] = 255
+    return arr
+
+
+def _transparent_rgba() -> np.ndarray:
+    """Return an all-transparent 16×16 RGBA uint8 array."""
+    return np.zeros((16, 16, 4), dtype=np.uint8)
+
+
+def test_analyze_tileset_palettes_structure() -> None:
+    """analyze_tileset_palettes returns correct structure without writing files."""
+    # mt1: opaque bottom and top with distinct colours.
+    mt1 = MetatileImage(
+        bottom=_solid_rgba(200, 50, 50),
+        top=_solid_rgba(50, 200, 50),
+    )
+    # mt2: opaque bottom, fully-transparent top.
+    mt2 = MetatileImage(
+        bottom=_solid_rgba(50, 50, 200),
+        top=_transparent_rgba(),
+    )
+
+    result = analyze_tileset_palettes([mt1, mt2])
+
+    # Output length matches input.
+    assert len(result.metatiles) == 2
+
+    # Each MetatilePalette has exactly 8 quadrant slots.
+    for mt_pal in result.metatiles:
+        assert len(mt_pal.quadrants) == 8
+
+    # Every palette_index is either -1 or a valid index into result.palettes.
+    for mt_pal in result.metatiles:
+        for qp in mt_pal.quadrants:
+            assert qp.palette_index == -1 or 0 <= qp.palette_index < len(result.palettes)
+
+    # color_changes entries are ((int,int,int), (int,int,int)).
+    for mt_pal in result.metatiles:
+        for qp in mt_pal.quadrants:
+            for orig, final in qp.color_changes:
+                assert len(orig) == 3 and all(isinstance(c, int) for c in orig)
+                assert len(final) == 3 and all(isinstance(c, int) for c in final)
+
+    # mt2 top layer (slots 4-7) is all-transparent -> palette_index=-1, color_changes=[].
+    for slot_idx in range(4, 8):
+        qp = result.metatiles[1].quadrants[slot_idx]
+        assert qp.palette_index == -1, f"slot {slot_idx} should be transparent"
+        assert qp.color_changes == [], f"slot {slot_idx} should have no color changes"
+
+    # palettes entries are lists of (int, int, int) tuples.
+    for pal in result.palettes:
+        assert isinstance(pal, list)
+        for color in pal:
+            assert len(color) == 3 and all(isinstance(c, int) for c in color)

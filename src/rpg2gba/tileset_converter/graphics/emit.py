@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from rpg2gba.tileset_converter.graphics.quantize import build_quantized_tileset
+from rpg2gba.tileset_converter.graphics.quantize import QuantizeResult, build_quantized_tileset
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +77,32 @@ class EmittedTileset:
     stats: dict = field(default_factory=dict)
 
 
+@dataclass
+class QuadrantPalette:
+    """Palette info for one 8×8 quadrant slot within a metatile."""
+
+    palette_index: int  # index into PaletteAnalysis.palettes; -1 if fully transparent
+    color_changes: list[tuple[tuple[int, int, int], tuple[int, int, int]]]  # (orig_rgb8, final_rgb8)
+
+
+@dataclass
+class MetatilePalette:
+    """Per-metatile palette summary: 8 quadrant slots (0-3 = bottom, 4-7 = top),
+    plus the reassembled quantized layer images for the post-quant preview."""
+
+    quadrants: list[QuadrantPalette]  # length 8
+    quant_bottom: np.ndarray          # (16,16,4) uint8 RGBA, alpha-resolved + colour-snapped
+    quant_top: np.ndarray             # (16,16,4) uint8 RGBA (all-transparent if no overlay)
+
+
+@dataclass
+class PaletteAnalysis:
+    """Read-only palette analysis for a list of metatiles; written by no files."""
+
+    palettes: list[list[tuple[int, int, int]]]  # sub-palettes as (r,g,b) 8-bit display colours
+    metatiles: list[MetatilePalette]             # same order and length as the input metatiles
+
+
 def _quadrants(img: np.ndarray) -> list[np.ndarray]:
     """Split a (16,16,4) tile into its four 8×8 quadrants [TL, TR, BL, BR]."""
     return [
@@ -101,27 +127,22 @@ def _flip_canonical(quad: np.ndarray) -> tuple[bytes, np.ndarray, int, int]:
     return canon.tobytes(), canon, h, v
 
 
-def emit_tileset(
+def _canonicalize_and_quantize(
     metatiles: list[MetatileImage],
-    primary_dir: Path,
-    secondary_dir: Path,
-    primary_name: str,
-    secondary_name: str,
     *,
     max_palettes: int = NUM_PALS_TOTAL,
-) -> EmittedTileset:
-    """Pack ``metatiles`` (metatile id = list index) into a PRIMARY+SECONDARY pair.
+) -> tuple[list[np.ndarray], list[list[tuple[int, int, int]]], QuantizeResult]:
+    """Steps 1+2 shared core: build flip-canonical tile pool, per-metatile slot
+    mapping, and quantize the pool.
 
-    Writes ``tiles.png`` / ``palettes/NN.pal`` / ``metatiles.bin`` /
-    ``metatile_attributes.bin`` under ``primary_dir`` and ``secondary_dir``."""
+    Returns ``(unique_canon, metatile_slots, quant)`` where:
+    - ``unique_canon``: deduplicated flip-canonical 8×8 tile arrays.
+    - ``metatile_slots``: for each metatile, 8 ``(canon_idx, hflip, vflip)`` entries.
+    - ``quant``: the ``QuantizeResult`` keyed to ``unique_canon``."""
     if not metatiles:
         raise ValueError("metatiles must not be empty")
-
-    # --- Step 1: per-metatile 8 quadrants (bottom slots 0-3, top slots 4-7),
-    #     flip-canonicalised + deduped into a shared tile pool. ----------------
     canon_to_idx: dict[bytes, int] = {}
     unique_canon: list[np.ndarray] = []
-    # per metatile: list of 8 (canon_index, hflip, vflip)
     metatile_slots: list[list[tuple[int, int, int]]] = []
 
     for mt in metatiles:
@@ -140,8 +161,91 @@ def emit_tileset(
             slots.append((idx, h, v))
         metatile_slots.append(slots)
 
-    # --- Step 2: quantize the shared tile pool. -------------------------------
-    res = build_quantized_tileset(unique_canon, max_palettes=max_palettes)
+    quant = build_quantized_tileset(unique_canon, max_palettes=max_palettes)
+    return unique_canon, metatile_slots, quant
+
+
+def _apply_flip(arr: np.ndarray, h: int, v: int) -> np.ndarray:
+    """Reproduce the original quad from its flip-canonical form (flips are involutions).
+
+    Mirrors the orientation encoding in ``_flip_canonical``: h flips columns, v rows."""
+    if h:
+        arr = arr[:, ::-1]
+    if v:
+        arr = arr[::-1, :]
+    return np.ascontiguousarray(arr)
+
+
+def _reassemble_quantized(
+    slots: list[tuple[int, int, int]], quant: QuantizeResult
+) -> tuple[np.ndarray, np.ndarray]:
+    """Rebuild a metatile's quantized 16×16 bottom/top from its 8 canonical quadrant
+    slots, un-flipping each quantized 8×8 back to the metatile's own orientation.
+
+    These are the exact pixels emit packs into ``tiles.png`` for this metatile."""
+    bottom = np.zeros((16, 16, 4), dtype=np.uint8)
+    top = np.zeros((16, 16, 4), dtype=np.uint8)
+    positions = [(0, 0), (0, 8), (8, 0), (8, 8)]  # [TL, TR, BL, BR]
+    for layer, base in ((bottom, 0), (top, 4)):
+        for q, (r, c) in enumerate(positions):
+            canon_idx, h, v = slots[base + q]
+            quad = _apply_flip(np.asarray(quant.quantized[canon_idx], dtype=np.uint8), h, v)
+            layer[r : r + 8, c : c + 8] = quad
+    return bottom, top
+
+
+def analyze_tileset_palettes(metatiles: list[MetatileImage]) -> PaletteAnalysis:
+    """Return a read-only palette analysis for ``metatiles``; writes no files.
+
+    For each metatile, reports the sub-palette index and colour-change pairs for
+    each of the 8 quadrant slots (0-3 = bottom layer, 4-7 = top layer).  A fully-
+    transparent quadrant gets ``palette_index=-1`` and ``color_changes=[]``.
+
+    The void metatile (all-transparent) and any warp-copy duplicate a caller may
+    append do not affect palette assignment, so callers may omit them — the
+    returned palette indices and colours are identical either way."""
+    _, metatile_slots, quant = _canonicalize_and_quantize(metatiles)
+
+    # Convert quant.palettes (list of (<=15,3) uint8 arrays) to list[list[tuple]].
+    palettes: list[list[tuple[int, int, int]]] = [
+        [(int(row[0]), int(row[1]), int(row[2])) for row in pal]
+        for pal in quant.palettes
+    ]
+
+    mt_palettes: list[MetatilePalette] = []
+    for slots in metatile_slots:
+        quadrant_pals: list[QuadrantPalette] = []
+        for canon_idx, _h, _v in slots:
+            pi = quant.tile_palette[canon_idx]
+            cmap = quant.color_map[canon_idx]
+            quadrant_pals.append(QuadrantPalette(palette_index=pi, color_changes=cmap))
+        quant_bottom, quant_top = _reassemble_quantized(slots, quant)
+        mt_palettes.append(
+            MetatilePalette(
+                quadrants=quadrant_pals, quant_bottom=quant_bottom, quant_top=quant_top
+            )
+        )
+
+    return PaletteAnalysis(palettes=palettes, metatiles=mt_palettes)
+
+
+def emit_tileset(
+    metatiles: list[MetatileImage],
+    primary_dir: Path,
+    secondary_dir: Path,
+    primary_name: str,
+    secondary_name: str,
+    *,
+    max_palettes: int = NUM_PALS_TOTAL,
+) -> EmittedTileset:
+    """Pack ``metatiles`` (metatile id = list index) into a PRIMARY+SECONDARY pair.
+
+    Writes ``tiles.png`` / ``palettes/NN.pal`` / ``metatiles.bin`` /
+    ``metatile_attributes.bin`` under ``primary_dir`` and ``secondary_dir``."""
+    # --- Steps 1+2: flip-canonical dedup + quantize (shared with analyzer). ---
+    unique_canon, metatile_slots, res = _canonicalize_and_quantize(
+        metatiles, max_palettes=max_palettes
+    )
 
     # --- Step 2.5: post-quantization merge. ----------------------------------
     # Flip-canonical dedup (Step 1) ran on RAW RGBA, before colours were snapped

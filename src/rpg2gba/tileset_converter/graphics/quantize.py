@@ -139,6 +139,13 @@ class QuantizeResult:
     tile_palette: list[int]      # sub-palette index per input tile (-1 = empty tile)
     quantized: list[np.ndarray]  # rgba uint8, alpha-resolved + colour-remapped
     stats: dict = field(default_factory=dict)
+    # One entry per input tile (index-aligned with quantized/tile_palette).  For tile i,
+    # a list of (orig_rgb8, final_rgb8) pairs over that tile's DISTINCT original 8-bit
+    # opaque colours.  orig_rgb8 is the 8-bit RGB from the resolved tile BEFORE any
+    # to_5bit reduction; final_rgb8 is the 8-bit palette colour it snapped to (capturing
+    # both the 8→5-bit truncation and the palette snap in a single arrow).
+    # Empty / fully-transparent tiles get [].
+    color_map: list[list[tuple[tuple[int, int, int], tuple[int, int, int]]]] = field(default_factory=list)
 
 
 def _nearest(colors: np.ndarray, vocab: np.ndarray) -> np.ndarray:
@@ -255,6 +262,7 @@ def build_quantized_tileset(
     # --- Remap each tile's pixels onto its assigned palette ------------------------
     quantized: list[np.ndarray] = []
     shift_acc: list[np.ndarray] = []
+    color_map: list[list[tuple[tuple[int, int, int], tuple[int, int, int]]]] = []
     for i, t in enumerate(resolved):
         out = t.copy()
         pi = tile_palette[i]
@@ -267,6 +275,20 @@ def build_quantized_tileset(
             rgb[opaque] = new.astype(np.uint8)
             out[..., :3] = rgb
             shift_acc.append(np.abs((px >> 3) - (new >> 3)).mean(1))
+            # Capture per-tile mapping: distinct original 8-bit colours → final palette colours.
+            # orig8 is aligned 1:1 with new (both ordered by the opaque pixel mask).
+            orig8 = t[..., :3][opaque]                         # (M,3) uint8 pre-to_5bit
+            uniq8, idx = np.unique(orig8, axis=0, return_index=True)
+            finals = new[idx].astype(np.uint8)                 # representative final per distinct orig
+            color_map.append([
+                (
+                    (int(o[0]), int(o[1]), int(o[2])),
+                    (int(f[0]), int(f[1]), int(f[2])),
+                )
+                for o, f in zip(uniq8, finals)
+            ])
+        else:
+            color_map.append([])
         quantized.append(out)
 
     all_shift = np.concatenate(shift_acc) if shift_acc else np.zeros(1)
@@ -279,5 +301,9 @@ def build_quantized_tileset(
         "p95_shift_5bit": float(np.percentile(all_shift, 95)),
     }
     return QuantizeResult(
-        palettes=palettes_u8, tile_palette=tile_palette, quantized=quantized, stats=stats
+        palettes=palettes_u8,
+        tile_palette=tile_palette,
+        quantized=quantized,
+        stats=stats,
+        color_map=color_map,
     )

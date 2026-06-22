@@ -333,6 +333,31 @@ session: **add numpy**, **per-tile alpha classify**, **confirm full-town first**
   generated artifact (§7b). **Stipple/shadow path still under-exercised** (Moki Town
   shadows are few — stress a shadow-heavy map before declaring step 4 done).
 
+## 11. GBA BG-palette budget — why the cap is 13 (verified vs `engine/`, 2026-06-22)
+
+The quantizer's `max_palettes=13` (`emit.NUM_PALS_TOTAL`) is **not tunable headroom — it is a
+hard engine boundary.** A field map has 16 BG palettes; the overworld system claims them:
+
+| slot | content | tileset-usable? |
+|---|---|---|
+| 0–5 | primary tileset (`LoadPrimaryTilesetPalette`, `fieldmap.c:1057`) | in use |
+| 6–12 | secondary tileset (`LoadSecondaryTilesetPalette`, `fieldmap.c:1062`) | in use |
+| 13 | unassigned, but **excluded from weather/time blending** (`PALETTES_MAP = 0x1FFF`, `palette.h:18`; enforced `field_weather.c:672`, `overworld.c:1746/1777`) | only with a C change |
+| 14 | `STD_WINDOW_PALETTE_NUM` (text-box border) — rewritten on **every** dialogue (`menu.h:10`, `menu.c:208`) | hard conflict |
+| 15 | `DLG_WINDOW_PALETTE_NUM` (dialogue text) — rewritten on **every** dialogue (`menu.h:8`, `menu.c:207`) | hard conflict |
+
+`emit.py`'s `6` / `13` match the headers exactly. **14/15 are off-limits** (any tile using them
+flashes to window colours during NPC interactions). **13 is the only expansion candidate**, and
+only if you also widen `PALETTES_MAP` to `0x3FFF` and update the three blend sites — otherwise
+slot-13 tiles never receive weather/day-night tinting and look wrong outdoors.
+
+**Implication for dense tilesets (e.g. Moki / tileset 22):** measured 381 distinct 5-bit colours
+vs the 13×15 = **195** hardware ceiling (all 13 palettes full; mean snap 1.3/31, max 4). Even
+claiming slot 13 only lifts the ceiling to 210 — still ~half of 381 — so palette merging on dense
+outdoor tilesets is a genuine **colour-budget** constraint, not a packer inefficiency. The lever is
+the source art (fewer near-duplicate colours), not the palette count. Inspect per-tile merge loss
+with the map viewer's **Merge** overlay / **Worst palette merges** panel (`scripts/map_viewer_*`).
+
 ## 7. Throwaway analysis scripts (in `scripts/`, write to gitignored `output/`)
 
 - `downscale_compare.py` — ÷2 downscaler + original-vs-output compare.

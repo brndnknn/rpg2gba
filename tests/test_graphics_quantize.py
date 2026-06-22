@@ -312,3 +312,64 @@ def test_build_quantized_deterministic_palettes() -> None:
     assert len(r1.palettes) == len(r2.palettes)
     for p1, p2 in zip(r1.palettes, r2.palettes):
         np.testing.assert_array_equal(p1, p2)
+
+
+# ---------------------------------------------------------------------------
+# build_quantized_tileset — color_map
+# ---------------------------------------------------------------------------
+
+
+def test_color_map_length_equals_n_tiles() -> None:
+    tiles = [_solid_tile(c) for c in [(255, 0, 0), (0, 255, 0), (0, 0, 255)]]
+    result = build_quantized_tileset(tiles)
+    assert len(result.color_map) == len(tiles)
+
+
+def test_color_map_deterministic() -> None:
+    rng = np.random.default_rng(17)
+    tiles = [rng.integers(0, 256, (8, 8, 4), dtype=np.uint8) for _ in range(10)]
+    for t in tiles:
+        t[..., 3] = 255
+    r1 = build_quantized_tileset(tiles)
+    r2 = build_quantized_tileset(tiles)
+    assert r1.color_map == r2.color_map
+
+
+def test_color_map_transparent_tile_is_empty() -> None:
+    transparent = np.zeros((8, 8, 4), dtype=np.uint8)  # alpha == 0 everywhere
+    solid = _solid_tile((100, 200, 100))
+    result = build_quantized_tileset([transparent, solid])
+    assert result.color_map[0] == []
+
+
+def test_color_map_finals_in_assigned_palette() -> None:
+    tiles = [
+        _solid_tile((200, 50, 50)),
+        _solid_tile((50, 200, 50)),
+        _solid_tile((50, 50, 200)),
+    ]
+    result = build_quantized_tileset(tiles)
+    for i, (entry, pi) in enumerate(zip(result.color_map, result.tile_palette)):
+        if pi == -1:
+            assert entry == []
+            continue
+        pal_set = {tuple(int(v) for v in row) for row in result.palettes[pi]}
+        for orig, final in entry:
+            assert final in pal_set, (
+                f"tile {i}: final_rgb8 {final} not in palette {result.palettes[pi].tolist()}"
+            )
+
+
+def test_color_map_no_snap_truncation_only() -> None:
+    # A single tile with one off-grid colour: with only one tile there is no
+    # palette sharing, so the only transformation is 8->5-bit truncation.
+    # Invariant: final_rgb8 == to_5bit(orig_rgb8).
+    color = (100, 150, 200)
+    tile = _solid_tile(color)
+    result = build_quantized_tileset([tile])
+    assert len(result.color_map) == 1
+    entry = result.color_map[0]
+    assert len(entry) == 1  # single distinct colour
+    orig, final = entry[0]
+    expected = tuple(int(v) for v in to_5bit(np.array([list(color)], dtype=np.uint8))[0])
+    assert final == expected, f"expected to_5bit({color})={expected}, got {final}"

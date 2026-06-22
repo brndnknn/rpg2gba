@@ -149,6 +149,25 @@ def _void_metatile() -> MetatileImage:
     return MetatileImage(z, z.copy(), LAYER_COVERED, 0)
 
 
+def column_keys_for_maps(
+    maplist: list[tuple[int, dict]],
+) -> list[tuple[tuple[int, int], ...]]:
+    """Return sorted unique non-empty column keys across all maps in ``maplist``.
+
+    ``maplist`` is ``[(map_id, map_json), ...]``.  The stable sort gives
+    deterministic metatile-id assignment across re-runs.  Empty column keys
+    (cells that contain no tiles) are excluded."""
+    keys: set[tuple[tuple[int, int], ...]] = set()
+    for _map_id, map_json in maplist:
+        grid = _grid_of(map_json)
+        for y in range(grid.ysize):
+            for x in range(grid.xsize):
+                k = column_key(grid, x, y)
+                if k:
+                    keys.add(k)
+    return sorted(keys)
+
+
 def build_slice_tilesets(
     maps: list[tuple[int, dict]],
     warp_coords: dict[int, set[tuple[int, int]]],
@@ -193,28 +212,23 @@ def build_slice_tilesets(
         priorities = get_priorities(ts)
 
         # Enumerate all unique column keys across all maps for this tileset.
-        keys: set[tuple] = set()
-        door_keys: set[tuple] = set()
-        for map_id, map_json in maplist:
-            grid = _grid_of(map_json)
-            for y in range(grid.ysize):
-                for x in range(grid.xsize):
-                    k = column_key(grid, x, y)
-                    if k:
-                        keys.add(k)
-            for wx, wy in warp_coords.get(map_id, set()):
-                dk = column_key(grid, wx, wy)
-                if dk:
-                    door_keys.add(dk)
+        ordered = column_keys_for_maps(maplist)
 
-        if not keys:
+        if not ordered:
             raise ValueError(
                 f"tileset {ts}: no non-empty columns across maps "
                 f"{[m for m, _ in maplist]} — wrong grid order or empty maps?"
             )
 
-        # Deterministic order; sort gives stable metatile id assignment.
-        ordered = sorted(keys)
+        # Collect door (warp) column keys separately — need the MB_NON_ANIMATED_DOOR copy.
+        door_keys: set[tuple] = set()
+        for map_id, map_json in maplist:
+            grid = _grid_of(map_json)
+            for wx, wy in warp_coords.get(map_id, set()):
+                dk = column_key(grid, wx, wy)
+                if dk:
+                    door_keys.add(dk)
+
         rep_door = sorted(door_keys)[0] if door_keys else None
 
         primary_name = f"gTileset_Uranium{ts}"
