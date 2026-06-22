@@ -156,6 +156,17 @@ def _cell_blocked(grid: TileGrid, x: int, y: int, tile_map: TileMap, tileset_id:
     return not seen_tile  # all-empty = void = blocked
 
 
+def column_key(grid: TileGrid, x: int, y: int) -> tuple[tuple[int, int], ...]:
+    """The cell's non-empty stacked tiles as (z, tile_id) pairs, z ascending (bottom
+    first). Autotile ids are NOT normalized — variants must stay distinct for faithful
+    edges. This is the metatile identity in real-art mode."""
+    return tuple(
+        (z, grid.tile_at(x, y, z))
+        for z in range(grid.zsize)
+        if grid.tile_at(x, y, z) != EMPTY_TILE
+    )
+
+
 def topmost_tile_id(grid: TileGrid, x: int, y: int) -> int:
     """The cell's *visual* RMXP tile id: the topmost non-empty layer (or 0 if the
     column is entirely empty). This is the same tile `collapse_column` resolves for
@@ -171,15 +182,24 @@ def topmost_tile_id(grid: TileGrid, x: int, y: int) -> int:
 def collapse_column(grid: TileGrid, x: int, y: int, tile_map: TileMap, tileset_id: int) -> Metatile:
     """Collapse the 3 stacked RMXP tiles at (x, y) into one pokeemerald Metatile (Q1).
 
-    v1 policy: the *visual* metatile is the topmost non-empty layer resolved via
-    `tile_map.lookup`; the *collision/elevation* come from the combined
-    source-passage rule (`_cell_blocked`) — these can differ. An all-empty column
-    returns the tileset's void metatile. Fails loud (via `lookup`) on an unmapped
-    tile rather than emitting metatile 0."""
-    tid = topmost_tile_id(grid, x, y)  # topmost non-empty (0 if all-empty)
-    if tid == EMPTY_TILE:
-        return tile_map.void(tileset_id)
-    visual = tile_map.lookup(tileset_id, tid)
+    Dual-path:
+    - Real-art column mode (tile_map.has_columns): the full column stack is resolved
+      via `lookup_column`; an empty column returns the void metatile.
+    - Bucket mode (legacy, unchanged): the topmost non-empty tile is resolved via
+      `lookup`; an empty column returns the void metatile.
+
+    In both modes collision/elevation come from the combined source-passage rule
+    (`_cell_blocked`). Fails loud on an unmapped tile or column."""
+    if tile_map.has_columns(tileset_id):  # real-art column mode
+        key = column_key(grid, x, y)
+        if not key:
+            return tile_map.void(tileset_id)
+        visual = tile_map.lookup_column(tileset_id, key)
+    else:  # bucket mode, unchanged behavior
+        tid = topmost_tile_id(grid, x, y)
+        if tid == EMPTY_TILE:
+            return tile_map.void(tileset_id)
+        visual = tile_map.lookup(tileset_id, tid)
 
     if _cell_blocked(grid, x, y, tile_map, tileset_id):
         return Metatile(visual.metatile_id, BLOCKED_COLLISION, BLOCKED_ELEVATION)

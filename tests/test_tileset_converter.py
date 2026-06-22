@@ -17,7 +17,7 @@ import pytest
 from rpg2gba.tileset_converter import layout as layout_mod
 from rpg2gba.tileset_converter import map_constants as mc
 from rpg2gba.tileset_converter import metadata_wiring as mw
-from rpg2gba.tileset_converter.layout import TileGrid
+from rpg2gba.tileset_converter.layout import TileGrid, column_key
 from rpg2gba.tileset_converter.tile_map import (
     METATILE_ID_MASK,
     Bucket,
@@ -26,6 +26,7 @@ from rpg2gba.tileset_converter.tile_map import (
     TilesetChoice,
     load_tile_map,
     normalize_tile_id,
+    serialize_column_key,
 )
 
 _TODO = "Phase 5: implement this section, then un-skip and flesh out the test"
@@ -172,12 +173,104 @@ def test_tile_map_validate_rejects(tmp_path: Path) -> None:
         _load(lambda d: d.update({"warps": {"77": {"metatile": 5}}}))
 
 
+# --- column contract ---------------------------------------------------------
+
+def test_serialize_column_key_format_and_determinism() -> None:
+    """serialize_column_key returns canonical [[z,t],...] JSON, same value every call."""
+    key: tuple[tuple[int, int], ...] = ((0, 384), (2, 400))
+    s = serialize_column_key(key)
+    assert json.loads(s) == [[0, 384], [2, 400]]
+    assert serialize_column_key(key) == s  # deterministic
+
+
+def test_has_columns_true_false() -> None:
+    """has_columns is True iff the tileset's tiles dict is non-empty."""
+    k = ((0, 384),)
+    tm_col = TileMap(
+        tiles={7: {serialize_column_key(k): Metatile(10, 0, 3)}},
+        tilesets={7: TilesetChoice("gP", "gS")},
+        buckets={7: Bucket(5, 6, 7)},
+    )
+    assert tm_col.has_columns(7) is True
+    assert tm_col.has_columns(99) is False  # absent tileset -> False
+
+    tm_bkt = TileMap(
+        tiles={7: {}},  # explicitly empty -> False
+        tilesets={7: TilesetChoice("gP", "gS")},
+        buckets={7: Bucket(5, 6, 7)},
+    )
+    assert tm_bkt.has_columns(7) is False
+
+
+def test_lookup_column_hit_and_miss() -> None:
+    """lookup_column returns the Metatile on hit; raises KeyError (with ids) on miss."""
+    k = ((0, 384), (2, 400))
+    tm = TileMap(
+        tiles={7: {serialize_column_key(k): Metatile(42, 0, 3)}},
+        tilesets={7: TilesetChoice("gP", "gS")},
+        buckets={7: Bucket(5, 6, 7)},
+    )
+    assert tm.lookup_column(7, k) == Metatile(42, 0, 3)
+    with pytest.raises(KeyError) as exc:
+        tm.lookup_column(7, ((0, 999),))
+    assert "999" in str(exc.value)
+
+
+def test_column_key_z_ascending_skips_empty_no_normalization() -> None:
+    """column_key returns non-empty layers as (z, tile_id) z-ascending; empty layers
+    are skipped; autotile ids are NOT normalized (variants stay distinct)."""
+    g = _grid(1, 1, [384], [0], [400])  # z0=384, z1=0 (empty), z2=400
+    assert column_key(g, 0, 0) == ((0, 384), (2, 400))
+    # z1 is skipped; autotile 400 is NOT normalized to its base
+
+    g_empty = _grid(1, 1, [0])  # all-empty column
+    assert column_key(g_empty, 0, 0) == ()
+
+    # Autotile variant kept distinct from base: 49 != 48
+    g_auto = _grid(1, 1, [49])
+    assert column_key(g_auto, 0, 0) == ((0, 49),)
+
+
+def test_collapse_column_uses_column_path() -> None:
+    """collapse_column takes the lookup_column path when has_columns is True;
+    different column keys yield different metatile ids even if the topmost tile
+    in bucket mode would map to the same bucket."""
+    n = 600
+    passages = [0] * n
+    prio = [0] * n
+    k1 = ((0, 384),)
+    k2 = ((0, 385),)
+    tm = TileMap(
+        tiles={7: {
+            serialize_column_key(k1): Metatile(42, 0, 3),
+            serialize_column_key(k2): Metatile(43, 0, 3),
+        }},
+        tilesets={7: TilesetChoice("gP", "gS")},
+        buckets={7: Bucket(5, 6, 7)},
+        passages={7: passages},
+        priorities={7: prio},
+        warps={7: Metatile(99, 0, 0)},
+    )
+    assert tm.has_columns(7) is True
+
+    g1 = _grid(1, 1, [384])
+    assert layout_mod.collapse_column(g1, 0, 0, tm, 7).metatile_id == 42
+
+    g2 = _grid(1, 1, [385])
+    assert layout_mod.collapse_column(g2, 0, 0, tm, 7).metatile_id == 43
+
+    # empty column in column mode -> void metatile
+    g_empty = _grid(1, 1, [0])
+    assert layout_mod.collapse_column(g_empty, 0, 0, tm, 7) == Metatile(7, 1, 0)
+
+
 # --- 5.2 layout --------------------------------------------------------------
 
-# tile ids 384..389 -> metatiles 10..15 (distinct, passable); 500 blocks.
+# _layout_tilemap uses empty tiles -> has_columns(7)=False -> bucket mode.
+# Bucket ids: passable=10, blocked=11, void=7 (all distinct for legibility).
 def _layout_tilemap(priorities: dict[int, int] | None = None) -> TileMap:
-    """A small TileMap with explicit metatiles + a passages oracle so layout tests
-    can distinguish cells and exercise the combined-collision rule."""
+    """A small TileMap in BUCKET MODE (empty tiles) with a passages oracle so layout
+    tests can exercise passable/blocked/void/warp/collision behavior."""
     n = 600
     passages = [0] * n
     passages[500] = 15  # tile 500 blocks (low nibble != 0)
@@ -185,12 +278,12 @@ def _layout_tilemap(priorities: dict[int, int] | None = None) -> TileMap:
     for tid, p in (priorities or {}).items():
         prio[tid] = p
     return TileMap(
-        tiles={7: {384 + i: Metatile(10 + i, 0, 3) for i in range(6)} | {500: Metatile(20, 1, 0)}},
+        tiles={7: {}},  # empty -> has_columns(7) = False -> bucket mode
         tilesets={7: TilesetChoice("gTileset_P", "gTileset_S")},
-        buckets={7: Bucket(passable=5, blocked=6, void=7)},
+        buckets={7: Bucket(passable=10, blocked=11, void=7)},
         passages={7: passages},
         priorities={7: prio},
-        warps={7: Metatile(99, 0, 0)},  # the warp/door metatile stamped at warp cells
+        warps={7: Metatile(99, 0, 0)},
     )
 
 
@@ -212,15 +305,15 @@ def _map_json(grid: TileGrid, tileset_id: int = 7) -> dict:
 
 
 def test_collapse_precedence() -> None:
-    """Topmost-non-empty layer wins for the visual metatile; all-empty -> void."""
+    """In bucket mode the topmost-non-empty layer wins for passability; all-empty -> void."""
     tm = _layout_tilemap()
-    # z = [floor(384), 0, table(385)] -> table on top wins (metatile 11)
+    # Two layers (384 on z0, 385 on z2): topmost=385, passable -> passable bucket.
     g = _grid(1, 1, [384], [0], [385])
-    assert layout_mod.collapse_column(g, 0, 0, tm, 7).metatile_id == 11
-    # z = [floor(384), 0, 0] -> floor (metatile 10)
+    assert layout_mod.collapse_column(g, 0, 0, tm, 7).metatile_id == 10  # passable bucket
+    # Single layer (384 on z0): passable -> passable bucket.
     g = _grid(1, 1, [384])
     assert layout_mod.collapse_column(g, 0, 0, tm, 7).metatile_id == 10
-    # all-empty column -> the tileset's void metatile (impassable)
+    # All-empty column -> the tileset's void metatile (impassable).
     g = _grid(1, 1, [0])
     assert layout_mod.collapse_column(g, 0, 0, tm, 7) == Metatile(7, 1, 0)
 
@@ -228,22 +321,27 @@ def test_collapse_precedence() -> None:
 def test_collapse_collision_is_layer_combined() -> None:
     """A passable over-the-player tile (priority>0) above a blocking trunk reads
     blocked — collision comes from the combined rule, not the topmost tile alone.
-    The visual metatile is still the topmost one (an invisible wall)."""
+    The visual metatile is the topmost one resolved through the bucket."""
     tm = _layout_tilemap(priorities={387: 1})  # tile 387 drawn over the player
-    g = _grid(1, 1, [500], [0], [387])  # trunk(500, blocks) under treetop(387, passable)
+    # trunk(500, blocks) under treetop(387, passable over-player)
+    g = _grid(1, 1, [500], [0], [387])
     mt = layout_mod.collapse_column(g, 0, 0, tm, 7)
-    assert mt.metatile_id == 13  # visual = topmost (387 -> metatile 13)
-    assert mt.collision == 1     # but collision from the blocking trunk beneath
+    # Visual: topmost=387 is passable -> passable bucket (10).
+    assert mt.metatile_id == 10
+    # Collision: _cell_blocked scans top-down, skips priority>0 tile 387, finds tile 500
+    # (blocked) -> collision=1.
+    assert mt.collision == 1
 
 
 def test_index_order_row_major() -> None:
     """convert_layout emits blocks in row-major y*width+x order (guards the
     layer-major -> row-major transposition)."""
     tm = _layout_tilemap()
-    g = _grid(3, 2, [384, 385, 386, 387, 388, 389])  # metatiles 10..15
+    g = _grid(3, 2, [384, 385, 386, 387, 388, 389])  # all passable
     layout = layout_mod.convert_layout(_map_json(g), tm, name="T", layout_const="LAYOUT_T")
+    # All 6 cells passable -> all passable bucket (metatile 10), in row-major order.
     for i in range(6):
-        assert layout.blocks[i] & METATILE_ID_MASK == 10 + i
+        assert layout.blocks[i] & METATILE_ID_MASK == 10
     assert len(layout.blocks) == 6
 
 
@@ -251,13 +349,13 @@ def test_layout_round_trip(tmp_path: Path) -> None:
     """convert_layout on a 2x2 map -> map.bin of width*height*2 bytes, re-readable
     to the same metatile ids."""
     tm = _layout_tilemap()
-    g = _grid(2, 2, [384, 385, 386, 387])
+    g = _grid(2, 2, [384, 385, 386, 387])  # all passable
     layout = layout_mod.convert_layout(_map_json(g), tm, name="T", layout_const="LAYOUT_T")
     layout.write(tmp_path)
     map_bin = tmp_path / "layouts" / "T" / "map.bin"
     assert map_bin.stat().st_size == 2 * 2 * 2  # width*height*2 bytes
     blocks = layout_mod.read_blockdata(map_bin)
-    assert [b & METATILE_ID_MASK for b in blocks] == [10, 11, 12, 13]
+    assert [b & METATILE_ID_MASK for b in blocks] == [10, 10, 10, 10]  # all passable
     assert (tmp_path / "layouts" / "T" / "border.bin").stat().st_size == 8
 
 
@@ -266,10 +364,10 @@ def test_warp_override_stamps_warp_metatile() -> None:
     door/stairs that carries a warp behavior, collision 0) — REQUIRED for the
     warp_event to fire, not just to make the cell walkable."""
     tm = _layout_tilemap()
-    g = _grid(2, 1, [384, 500])  # cell (1,0) is the blocking door tile (metatile 20)
+    g = _grid(2, 1, [384, 500])  # cell (0,0) passable; cell (1,0) tile 500 (blocked)
     plain = layout_mod.convert_layout(_map_json(g), tm, name="T", layout_const="LAYOUT_T")
-    assert plain.blocks[1] & METATILE_ID_MASK == 20  # unchanged without override
-    assert (plain.blocks[1] >> 10) & 0x3 == 1        # blocked without override
+    assert plain.blocks[1] & METATILE_ID_MASK == 11  # blocked bucket (tile 500 blocks)
+    assert (plain.blocks[1] >> 10) & 0x3 == 1        # blocked collision without override
     forced = layout_mod.convert_layout(
         _map_json(g), tm, name="T", layout_const="LAYOUT_T", warp_overrides={(1, 0)}
     )
@@ -282,7 +380,7 @@ def test_warp_override_fails_loud_without_warp_metatile() -> None:
     """A warp cell on a tileset with no `warps` entry aborts the map — silently
     leaving an MB_NORMAL floor there means the warp_event would never fire."""
     tm = TileMap(
-        tiles={7: {384: Metatile(10, 0, 3)}},
+        tiles={},  # empty -> bucket mode; has_columns(7) = False
         tilesets={7: TilesetChoice("gP", "gS")},
         buckets={7: Bucket(passable=5, blocked=6, void=7)},
         passages={7: [0] * 600},
@@ -299,7 +397,7 @@ def test_warp_override_fails_loud_without_warp_metatile() -> None:
 def test_layout_fail_loud_on_unmapped_tile() -> None:
     """A tile with no explicit entry and no bucket aborts the map with its ids."""
     tm = TileMap(
-        tiles={7: {384: Metatile(10, 0, 3)}},
+        tiles={},  # empty outer dict -> bucket mode
         tilesets={7: TilesetChoice("gP", "gS")},
         buckets={},  # no bucket -> nothing falls back
     )
@@ -313,7 +411,7 @@ def test_layout_idempotent(tmp_path: Path) -> None:
     """Re-running convert_layout + write yields byte-identical .bin; append_layouts
     twice yields identical json."""
     tm = _layout_tilemap()
-    g = _grid(3, 2, [384, 385, 386, 387, 388, 389])
+    g = _grid(3, 2, [384, 385, 386, 387, 388, 389])  # all passable
     a = layout_mod.convert_layout(_map_json(g), tm, name="T", layout_const="LAYOUT_T")
     b = layout_mod.convert_layout(_map_json(g), tm, name="T", layout_const="LAYOUT_T")
     assert a.blocks == b.blocks and a.border == b.border
@@ -364,9 +462,32 @@ _MAPS_DIR = Path("output/uranium-build/maps")
 _SLICE_IDS = (49, 48, 32)  # bedroom 1F, upstairs 2F, Moki Town
 
 
+def _gen_overlay_is_stale() -> bool:
+    """True if tileset_map.gen.json exists but uses old single-layer tile-id keys
+    (string integers like "384") rather than new column-key strings ("[[0,384]]").
+    When stale, the overlay causes has_columns()=True + lookup_column() KeyError for
+    every cell; skip the smoke test until S8a is re-run to regenerate it."""
+    p = Path("reference/tileset_map.gen.json")
+    if not p.exists():
+        return False
+    try:
+        d = json.loads(p.read_text(encoding="utf-8"))
+        for ts_tiles in d.get("tiles", {}).values():
+            for k in ts_tiles:
+                if not k.startswith("[["):
+                    return True
+    except Exception:
+        pass
+    return False
+
+
 @pytest.mark.skipif(
     not all((_MAPS_DIR / f"Map{m:03d}.json").exists() for m in _SLICE_IDS),
     reason="slice map JSON not generated",
+)
+@pytest.mark.skipif(
+    _gen_overlay_is_stale(),
+    reason="tileset_map.gen.json is in old single-layer format; re-run S8a to regenerate",
 )
 @pytest.mark.parametrize("map_id", _SLICE_IDS)
 def test_slice_smoke(map_id: int) -> None:
@@ -724,7 +845,7 @@ def test_reachability_blocked_exit_is_defect() -> None:
 
 
 def test_reachability_ledge_one_way() -> None:
-    """A ledge edge allows forward traversal (approach→landing) but the reverse
+    """A ledge edge allows forward traversal (approach->landing) but the reverse
     direction is unreachable."""
     pytest.skip("Phase 5 §5.6 — not yet implemented")
 

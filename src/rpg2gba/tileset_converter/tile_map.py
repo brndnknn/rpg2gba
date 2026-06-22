@@ -100,6 +100,14 @@ class Bucket:
     void: int
 
 
+def serialize_column_key(key: tuple[tuple[int, int], ...]) -> str:
+    """Canonical, deterministic serialization of a column key, shared by the overlay
+    writer (build_slice_tilesets) and the reader (lookup_column) so keys always match.
+    `key` is the cell's non-empty stacked tiles as (z, tile_id) pairs, bottom-first
+    (z ascending)."""
+    return json.dumps([[z, t] for z, t in key], separators=(",", ":"))
+
+
 def normalize_tile_id(tile_id: int) -> int:
     """Fold an autotile variant (48..383) to its base 48*n; pass 0 and statics through.
 
@@ -116,7 +124,7 @@ class TileMap:
 
     def __init__(
         self,
-        tiles: dict[int, dict[int, Metatile]],
+        tiles: dict[int, dict[str, Metatile]],
         tilesets: dict[int, TilesetChoice],
         buckets: dict[int, Bucket] | None = None,
         passages: dict[int, list[int]] | None = None,
@@ -150,10 +158,10 @@ class TileMap:
             # Exact tile_id wins (real-art mode keys each autotile VARIANT
             # separately so its rendered edge/corner is faithful); fall back to the
             # autotile-base id (bucket / Approach-A mode folds all 48 variants to base).
-            if tile_id in explicit:
-                return explicit[tile_id]
-            if nid in explicit:
-                return explicit[nid]
+            if str(tile_id) in explicit:
+                return explicit[str(tile_id)]
+            if str(nid) in explicit:
+                return explicit[str(nid)]
 
         bucket = self._buckets.get(tileset_id)
         if bucket is None:
@@ -235,6 +243,23 @@ class TileMap:
     def has_bucket(self, tileset_id: int) -> bool:
         return tileset_id in self._buckets
 
+    def has_columns(self, tileset_id: int) -> bool:
+        """True iff this tileset has a non-empty explicit tiles table (real-art column mode)."""
+        return bool(self._tiles.get(tileset_id))
+
+    def lookup_column(self, tileset_id: int, key: tuple[tuple[int, int], ...]) -> Metatile:
+        """Resolve a full column key to its pre-rendered metatile (real-art mode). Fails
+        loud (KeyError) on a miss — every column the layout walks was enumerated by the
+        S8a pre-pass, so a miss is a real bug. Empty columns are the caller's concern
+        (handled via void())."""
+        k = serialize_column_key(key)
+        table = self._tiles.get(tileset_id, {})
+        if k in table:
+            return table[k]
+        raise KeyError(
+            f"unmapped column: tileset={tileset_id} key={key!r} (serialized {k!r})"
+        )
+
 
 def load_tile_map(
     path: Path = DEFAULT_TILE_MAP_PATH,
@@ -263,12 +288,10 @@ def load_tile_map(
         int(k): TilesetChoice(v["primary"], v["secondary"])
         for k, v in raw["tilesets"].items()
     }
-    tiles: dict[int, dict[int, Metatile]] = {}
+    tiles: dict[int, dict[str, Metatile]] = {}
     for ts_k, entries in raw["tiles"].items():
         tiles[int(ts_k)] = {
-            int(tid): Metatile(
-                e["metatile"], e.get("collision", 0), e.get("elevation", 3)
-            )
+            tid: Metatile(e["metatile"], e.get("collision", 0), e.get("elevation", 3))
             for tid, e in entries.items()
         }
     buckets = {

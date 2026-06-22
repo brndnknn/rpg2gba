@@ -1,8 +1,9 @@
 """Unit tests for the S8a graphics pre-pass (build_slice_tilesets).
 
-Exercises tile enumeration, overlay generation, behaviour resolution, and engine
-fragment emission with a stub rasterizer + synthetic maps + a fake fork tree — no
-real Uranium art or pokeemerald checkout required.
+Exercises column enumeration, two-layer priority split, overlay generation,
+behaviour resolution, and engine fragment emission with a stub rasterizer +
+synthetic maps + a fake fork tree — no real Uranium art or pokeemerald checkout
+required.
 """
 from __future__ import annotations
 
@@ -68,13 +69,19 @@ def _run(tmp_path: Path) -> tuple[Path, Path, dict]:
     base.write_text("{}", encoding="utf-8")
     overlay_out = tmp_path / "tileset_map.gen.json"
 
+    # priorities: tile 401 has priority>0 -> rendered into the top layer only,
+    # exercising the LAYER_NORMAL path; tiles 400/402/403 all stay on bottom.
+    priors = [0] * 600
+    priors[401] = 1
+
     results = build_slice_tilesets(
         [(32, _map(5))],
-        {32: {(0, 0)}},  # warp at cell (0,0) -> door tile 400
+        {32: {(0, 0)}},  # warp at cell (0,0) -> column key ((0, 400),)
         fork=fork,
         base_tile_map=base,
         overlay_out=overlay_out,
         rasterizer_for=lambda ts: _StubRasterizer(),
+        priorities_for=lambda ts: priors,
     )
     overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
     return fork, overlay_out, {"results": results, "overlay": overlay}
@@ -89,14 +96,27 @@ def test_overlay_structure(tmp_path: Path) -> None:
         "primary": "gTileset_Uranium5",
         "secondary": "gTileset_Uranium5B",
     }
-    # Every visual tile id has an explicit metatile; metatile ids are 0..3 in order.
+    # Every column key has an explicit metatile entry; 4 distinct columns.
     tiles = overlay["tiles"]["5"]
-    assert set(tiles) == {"400", "401", "402", "403"}
-    assert {int(e["metatile"]) for e in tiles.values()} == {0, 1, 2, 3}
-    # Void bucket points at the transparent metatile (the appended id-0 tile = id 4).
+    assert len(tiles) == 4
+    # Keys are serialized column-key strings ([[z,t],...]), not plain tile ids.
+    for k in tiles:
+        parsed = json.loads(k)
+        assert isinstance(parsed, list), f"expected list, got {parsed!r}"
+        assert all(
+            isinstance(pair, list) and len(pair) == 2 for pair in parsed
+        ), f"each pair must be [z,t]; got {parsed!r}"
+    # Metatile ids span 0..3 (ordered = sorted column keys -> 0-indexed).
+    assert {e["metatile"] for e in tiles.values()} == {0, 1, 2, 3}
+    # Void bucket points at metatile 4 (appended after the 4 column metatiles).
     assert overlay["buckets"]["5"]["void"] == 4
-    # Warp metatile = the representative door tile (400 -> metatile 0).
-    assert overlay["warps"]["5"] == {"metatile": 0, "collision": 0, "elevation": 0}
+    assert overlay["buckets"]["5"]["passable"] == 4
+    # Warp metatile is a SEPARATE copy at index 5 (after void), NOT the same entry
+    # as the column-key metatile for (0,0); that entry stays MB_NORMAL (behavior 0).
+    assert overlay["warps"]["5"] == {"metatile": 5, "collision": 0, "elevation": 0}
+    # Confirm the column-key entry for cell (0,0) is metatile 0 (not the warp copy).
+    col_400_key = json.dumps([[0, 400]], separators=(",", ":"))
+    assert tiles[col_400_key]["metatile"] == 0
 
 
 def test_emitted_art_files(tmp_path: Path) -> None:
@@ -110,14 +130,25 @@ def test_emitted_art_files(tmp_path: Path) -> None:
         assert (d / "palettes" / "00.pal").is_file()
         assert (d / "palettes" / "15.pal").is_file()
 
-    # 5 metatiles (4 visual + 1 void), all in primary -> 5*16 / 5*2 bytes.
-    assert (prim / "metatiles.bin").stat().st_size == 5 * 16
-    assert (prim / "metatile_attributes.bin").stat().st_size == 5 * 2
+    # 6 metatiles: 4 column + 1 void + 1 warp copy, all in primary.
+    # metatiles.bin:           6 metatiles * 8 u16 slots * 2 bytes = 96 bytes
+    # metatile_attributes.bin: 6 metatiles * 1 u16 * 2 bytes       = 12 bytes
+    assert (prim / "metatiles.bin").stat().st_size == 6 * 16
+    assert (prim / "metatile_attributes.bin").stat().st_size == 6 * 2
 
-    # Metatile 0 (door tile 400) carries MB_NON_ANIMATED_DOOR (=2) in its low byte.
-    attrs = (prim / "metatile_attributes.bin").read_bytes()
-    (mt0_attr,) = struct.unpack("<H", attrs[:2])
-    assert (mt0_attr & 0x00FF) == 2
+    attrs = struct.unpack("<6H", (prim / "metatile_attributes.bin").read_bytes())
+
+    # Metatile 5 (warp copy of column ((0,400),)) carries MB_NON_ANIMATED_DOOR (=2).
+    assert (attrs[5] & 0x00FF) == 2
+    # Metatile 0 (column ((0,400),) normal entry) has behavior 0 (MB_NORMAL).
+    assert (attrs[0] & 0x00FF) == 0
+
+    # Metatile 1 maps to column ((0,401),), tile 401 has priority>0 -> top layer only.
+    # layer_type = LAYER_NORMAL (0) -> bits 15-12 of attr = 0.
+    assert (attrs[1] >> 12) & 0xF == 0  # LAYER_NORMAL
+    # Metatile 0 maps to column ((0,400),), priority=0 -> bottom only.
+    # layer_type = LAYER_COVERED (1) -> bits 15-12 = 1.
+    assert (attrs[0] >> 12) & 0xF == 1  # LAYER_COVERED
 
 
 def test_engine_fragments(tmp_path: Path) -> None:
@@ -133,9 +164,14 @@ def test_engine_fragments(tmp_path: Path) -> None:
     )
     externs = (fork / "include" / "uranium_externs.gen.h").read_text(encoding="utf-8")
 
-    assert 'gTilesetTiles_Uranium5[] = INCGFX_U32("data/tilesets/primary/uranium5/tiles.png", ".4bpp")' in graphics
+    assert (
+        'gTilesetTiles_Uranium5[] = INCGFX_U32("data/tilesets/primary/uranium5/tiles.png"'
+        ', ".4bpp")'
+    ) in graphics
     assert "gTilesetPalettes_Uranium5B[][16]" in graphics
-    assert 'gMetatiles_Uranium5[] = INCBIN_U16("data/tilesets/primary/uranium5/metatiles.bin")' in metatiles
+    assert (
+        'gMetatiles_Uranium5[] = INCBIN_U16("data/tilesets/primary/uranium5/metatiles.bin")'
+    ) in metatiles
     assert "const struct Tileset gTileset_Uranium5 =" in structs
     assert ".isSecondary = TRUE," in structs  # the secondary half
     assert "extern const struct Tileset gTileset_Uranium5;" in externs

@@ -9,93 +9,59 @@ import pytest
 from PIL import Image
 
 from rpg2gba.tileset_converter.graphics.emit import (
+    LAYER_COVERED,
     NUM_METATILES_IN_PRIMARY,
     NUM_PALS_IN_PRIMARY,
     NUM_PALS_TOTAL,
     NUM_TILES_TOTAL,
     EmittedTileset,
+    MetatileImage,
     emit_tileset,
 )
-
-# ---------------------------------------------------------------------------
-# Stub rasterizer
-# ---------------------------------------------------------------------------
-
-
-class StubRasterizer:
-    """Returns deterministic 16×16 RGBA PIL images for test tile ids.
-
-    Tile 1  — solid red   (255, 0, 0, 255)
-    Tile 2  — solid blue  (0, 0, 255, 255)
-    Tile 3  — solid green (0, 255, 0, 255) except bottom-right quadrant transparent
-    Tile 4  — 8 distinct colours (2×2 blocks of 8 hues, all fully opaque)
-    Tile 5  — all transparent
-    Any other id — all transparent (safe fallback)
-
-    All opaque colours are chosen to be exact GBA 5-bit-expanded values so
-    quantization is lossless and palette slot lookup is unambiguous.
-    """
-
-    _COLORS = {
-        1: (255, 0, 0),
-        2: (0, 0, 255),
-        3: (0, 255, 0),
-    }
-
-    # Tile 4: 8 2×2 blocks of distinct hues (all 5-bit-safe, all opaque)
-    _T4_COLORS = [
-        (255, 0, 0),    # red
-        (0, 255, 0),    # green
-        (0, 0, 255),    # blue
-        (255, 255, 0),  # yellow
-        (255, 0, 255),  # magenta
-        (0, 255, 255),  # cyan
-        (255, 255, 255),  # white
-        (136, 136, 136),  # grey (136 = 0x88, 5-bit: 136>>3=17, expand=(17<<3)|(17>>2)=136+4=140 ≠136)
-    ]
-
-    def render(self, tile_id: int) -> Image.Image:
-        if tile_id in (1, 2, 3):
-            color = self._COLORS[tile_id]
-            img = Image.new("RGBA", (16, 16), (*color, 255))
-            if tile_id == 3:
-                # Bottom-right quadrant (x=8..15, y=8..15) transparent
-                img.paste(Image.new("RGBA", (8, 8), (0, 0, 0, 0)), (8, 8))
-            return img
-        if tile_id == 4:
-            arr = np.zeros((16, 16, 4), dtype=np.uint8)
-            # Place 8 colours in 2×4 strips of height 2, width 16
-            colors_8 = [
-                (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0),
-                (255, 0, 255), (0, 255, 255), (255, 255, 255), (248, 0, 0),
-            ]
-            for i, (r, g, b) in enumerate(colors_8):
-                arr[i * 2 : i * 2 + 2, :] = [r, g, b, 255]
-            return Image.fromarray(arr, "RGBA")
-        # Tile 5 or unknown: all transparent
-        return Image.new("RGBA", (16, 16), (0, 0, 0, 0))
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
+def solid(r: int, g: int, b: int, a: int = 255) -> np.ndarray:
+    """Return a (16,16,4) uint8 array filled with (r,g,b,a)."""
+    return np.full((16, 16, 4), [r, g, b, a], dtype=np.uint8)
+
+
+def transparent() -> np.ndarray:
+    """Return a (16,16,4) all-zero uint8 array."""
+    return np.zeros((16, 16, 4), dtype=np.uint8)
+
+
+def make_metatile(
+    bottom: np.ndarray,
+    top: np.ndarray | None = None,
+    layer_type: int = LAYER_COVERED,
+    behavior: int = 0,
+) -> MetatileImage:
+    return MetatileImage(
+        bottom=bottom,
+        top=top if top is not None else transparent(),
+        layer_type=layer_type,
+        behavior=behavior,
+    )
+
+
 def _run(
     tmp_path: Path,
-    tile_ids: list[int],
+    metatiles: list[MetatileImage],
     **kwargs,
 ) -> tuple[EmittedTileset, Path, Path]:
-    stub = StubRasterizer()
     pdir = tmp_path / "primary"
     sdir = tmp_path / "secondary"
     result = emit_tileset(
-        tile_ids, stub, pdir, sdir, "gTileset_Primary", "gTileset_Secondary", **kwargs
+        metatiles, pdir, sdir, "gTileset_Primary", "gTileset_Secondary", **kwargs
     )
     return result, pdir, sdir
 
 
-def _parse_pal(path: Path) -> list[tuple[int, int, int]]:
+def _parse_pal(path: Path) -> list[tuple[int, ...]]:
     """Parse a JASC-PAL file; return list of (R,G,B) tuples (all 16 entries)."""
     lines = path.read_text(encoding="utf-8").splitlines()
     assert lines[0] == "JASC-PAL", f"bad header in {path}"
@@ -117,7 +83,12 @@ def _parse_pal(path: Path) -> list[tuple[int, int, int]]:
 
 def test_metatiles_bin_size(tmp_path):
     """metatiles.bin must be n_metatiles_primary × 16 bytes (8 u16 per metatile)."""
-    result, pdir, sdir = _run(tmp_path, [1, 2, 3])
+    mts = [
+        make_metatile(solid(255, 0, 0)),
+        make_metatile(solid(0, 0, 255)),
+        make_metatile(solid(0, 255, 0)),
+    ]
+    result, pdir, sdir = _run(tmp_path, mts)
     n_primary = min(result.n_metatiles, NUM_METATILES_IN_PRIMARY)
     n_secondary = max(1, result.n_metatiles - NUM_METATILES_IN_PRIMARY)
     assert len((pdir / "metatiles.bin").read_bytes()) == n_primary * 16
@@ -126,7 +97,12 @@ def test_metatiles_bin_size(tmp_path):
 
 def test_metatile_attrs_size(tmp_path):
     """metatile_attributes.bin must be n_metatiles_primary × 2 bytes (1 u16 each)."""
-    result, pdir, sdir = _run(tmp_path, [1, 2, 3])
+    mts = [
+        make_metatile(solid(255, 0, 0)),
+        make_metatile(solid(0, 0, 255)),
+        make_metatile(solid(0, 255, 0)),
+    ]
+    result, pdir, sdir = _run(tmp_path, mts)
     n_primary = min(result.n_metatiles, NUM_METATILES_IN_PRIMARY)
     n_secondary = max(1, result.n_metatiles - NUM_METATILES_IN_PRIMARY)
     assert len((pdir / "metatile_attributes.bin").read_bytes()) == n_primary * 2
@@ -140,30 +116,30 @@ def test_metatile_attrs_size(tmp_path):
 
 def test_tiles_png_mode_and_width(tmp_path):
     """Primary tiles.png must be mode 'P', width 128."""
-    _, pdir, _ = _run(tmp_path, [1, 2])
+    _, pdir, _ = _run(tmp_path, [make_metatile(solid(255, 0, 0)), make_metatile(solid(0, 0, 255))])
     img = Image.open(pdir / "tiles.png")
     assert img.mode == "P"
     assert img.width == 128
 
 
 def test_tiles_png_tile0_all_zero(tmp_path):
-    """Global GBA tile 0 (transparent) occupies the top-left 8×8 region and is all-zero."""
-    _, pdir, _ = _run(tmp_path, [1, 2])
+    """GBA tile 0 (transparent) occupies the top-left 8×8 region and is all-zero."""
+    _, pdir, _ = _run(tmp_path, [make_metatile(solid(255, 0, 0)), make_metatile(solid(0, 0, 255))])
     arr = np.array(Image.open(pdir / "tiles.png"))
     assert (arr[:8, :8] == 0).all(), "tile-0 region (top-left 8×8) should be all-zero"
 
 
 def test_tiles_png_nonzero_for_opaque_tile(tmp_path):
-    """A non-transparent tile should have at least one nonzero palette index in the PNG."""
-    _, pdir, _ = _run(tmp_path, [1])
+    """A non-transparent metatile should produce at least one nonzero palette index."""
+    _, pdir, _ = _run(tmp_path, [make_metatile(solid(255, 0, 0))])
     arr = np.array(Image.open(pdir / "tiles.png"))
-    # Global tile 1 is at local position 1 → pixel region arr[0:8, 8:16]
+    # GBA tile 1 is the first non-transparent tile; it sits at pixels [0:8, 8:16]
     assert (arr[:8, 8:16] > 0).any(), "expected nonzero indices for solid-red tile"
 
 
 def test_secondary_tiles_png_valid(tmp_path):
     """Secondary tiles.png must be a valid mode-P PNG with width 128."""
-    _, _, sdir = _run(tmp_path, [1])
+    _, _, sdir = _run(tmp_path, [make_metatile(solid(255, 0, 0))])
     img = Image.open(sdir / "tiles.png")
     assert img.mode == "P"
     assert img.width == 128
@@ -176,7 +152,7 @@ def test_secondary_tiles_png_valid(tmp_path):
 
 def test_pal_format_primary(tmp_path):
     """Primary 00.pal must have the correct JASC header and exactly 16 colour lines."""
-    _, pdir, _ = _run(tmp_path, [1, 2])
+    _, pdir, _ = _run(tmp_path, [make_metatile(solid(255, 0, 0)), make_metatile(solid(0, 0, 255))])
     entries = _parse_pal(pdir / "palettes" / "00.pal")
     assert len(entries) == 16
     for r, g, b in entries:
@@ -187,14 +163,15 @@ def test_pal_format_primary(tmp_path):
 
 def test_pal_format_secondary(tmp_path):
     """Secondary 06.pal must have the correct JASC header and exactly 16 colour lines."""
-    _, _, sdir = _run(tmp_path, [1, 2])
+    _, _, sdir = _run(tmp_path, [make_metatile(solid(255, 0, 0)), make_metatile(solid(0, 0, 255))])
     entries = _parse_pal(sdir / "palettes" / "06.pal")
     assert len(entries) == 16
 
 
 def test_pal_files_exist_in_both_dirs(tmp_path):
     """Both dirs must have all 16 palette files (00.pal..15.pal)."""
-    _, pdir, sdir = _run(tmp_path, [1, 2])
+    mts = [make_metatile(solid(255, 0, 0)), make_metatile(solid(0, 0, 255))]
+    _, pdir, sdir = _run(tmp_path, mts)
     for g in range(16):
         fname = f"{g:02}.pal"
         assert (pdir / "palettes" / fname).exists(), f"primary/palettes/{fname} missing"
@@ -202,15 +179,19 @@ def test_pal_files_exist_in_both_dirs(tmp_path):
 
 
 def test_pal_real_colors_in_primary_slot(tmp_path):
-    """Palette 0 colours must appear in primary/palettes/00.pal, not secondary."""
-    result, pdir, sdir = _run(tmp_path, [1, 2, 3])
+    """Palette 0 colours must appear in primary/palettes/00.pal; secondary copy all-black."""
+    mts = [
+        make_metatile(solid(255, 0, 0)),
+        make_metatile(solid(0, 0, 255)),
+        make_metatile(solid(0, 255, 0)),
+    ]
+    result, pdir, sdir = _run(tmp_path, mts)
     if result.n_palettes == 0:
         pytest.skip("no palettes emitted")
-    # Primary slot 0 should have at least one non-black colour
     p_entries = _parse_pal(pdir / "palettes" / "00.pal")
-    has_real = any(e != (0, 0, 0) for e in p_entries)
-    assert has_real, "expected real (non-black) colours in primary/palettes/00.pal"
-    # Secondary slot 0 should be all-black (palette 0 lives in primary)
+    assert any(e != (0, 0, 0) for e in p_entries), (
+        "expected real (non-black) colours in primary/palettes/00.pal"
+    )
     s_entries = _parse_pal(sdir / "palettes" / "00.pal")
     assert all(e == (0, 0, 0) for e in s_entries), (
         "secondary/palettes/00.pal should be all-black (slot 0 belongs to primary)"
@@ -218,18 +199,15 @@ def test_pal_real_colors_in_primary_slot(tmp_path):
 
 
 def test_pal_secondary_slot_in_secondary(tmp_path):
-    """A palette that spills into slot ≥6 must appear in secondary/palettes/{g:02}.pal."""
-    # Force ≥6 palettes by using many distinct tiles
-    stub = StubRasterizer()
-    pdir = tmp_path / "primary"
-    sdir = tmp_path / "secondary"
-    # Build enough tiles to push quantizer to ≥6 palettes: use tile 4 (8-colour) +
-    # several solid-colour tiles to force separate palette groups.
-    tile_ids = [1, 2, 3, 4, 5]
-    result = emit_tileset(tile_ids, stub, pdir, sdir, "p", "s")
+    """A palette that spills into slot ≥6 must appear in the secondary palette directory."""
+    distinct_colors = [
+        (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0),
+        (255, 0, 255), (0, 255, 255), (255, 255, 255),
+    ]
+    mts = [make_metatile(solid(r, g, b)) for r, g, b in distinct_colors]
+    result, pdir, sdir = _run(tmp_path, mts)
     if result.n_palettes <= NUM_PALS_IN_PRIMARY:
         pytest.skip(f"only {result.n_palettes} palettes; need >6 to test secondary slot")
-    # At least one secondary palette file should have a real colour
     any_real = False
     for g in range(NUM_PALS_IN_PRIMARY, result.n_palettes):
         entries = _parse_pal(sdir / "palettes" / f"{g:02}.pal")
@@ -246,7 +224,12 @@ def test_pal_secondary_slot_in_secondary(tmp_path):
 
 def test_metatile_decode_bottom_slots(tmp_path):
     """Bottom layer slots (0-3) must encode valid tile indices and palette numbers."""
-    result, pdir, _ = _run(tmp_path, [1, 2, 3])
+    mts = [
+        make_metatile(solid(255, 0, 0)),
+        make_metatile(solid(0, 0, 255)),
+        make_metatile(solid(0, 255, 0)),
+    ]
+    result, pdir, _ = _run(tmp_path, mts)
     raw = (pdir / "metatiles.bin").read_bytes()
     n = min(result.n_metatiles, NUM_METATILES_IN_PRIMARY)
     for mt in range(n):
@@ -262,89 +245,212 @@ def test_metatile_decode_bottom_slots(tmp_path):
             )
 
 
-def test_metatile_top_slots_zero(tmp_path):
-    """Top layer slots (4-7) of every metatile entry must be 0x0000."""
-    result, pdir, _ = _run(tmp_path, [1, 2, 3])
+def test_metatile_top_layer_nonzero(tmp_path):
+    """A non-transparent top layer must encode at least one non-zero top slot."""
+    mt = make_metatile(bottom=solid(255, 0, 0), top=solid(0, 255, 0))
+    result, pdir, _ = _run(tmp_path, [mt])
     raw = (pdir / "metatiles.bin").read_bytes()
-    n = min(result.n_metatiles, NUM_METATILES_IN_PRIMARY)
-    for mt in range(n):
-        vals = struct.unpack_from("<8H", raw, mt * 16)
-        for slot, v in enumerate(vals[4:], start=4):
-            assert v == 0, f"metatile {mt} slot {slot} = {v:#06x}, expected 0x0000"
+    vals = struct.unpack_from("<8H", raw, 0)
+    top_tile_indices = [(v & 0x3FF) for v in vals[4:]]
+    assert any(t != 0 for t in top_tile_indices), (
+        "expected at least one non-zero top slot for a metatile with an opaque top layer"
+    )
+
+
+def test_metatile_top_layer_transparent_all_zero(tmp_path):
+    """An all-transparent top layer must encode all four top slots as tile index 0."""
+    mt = make_metatile(bottom=solid(255, 0, 0), top=transparent())
+    result, pdir, _ = _run(tmp_path, [mt])
+    raw = (pdir / "metatiles.bin").read_bytes()
+    vals = struct.unpack_from("<8H", raw, 0)
+    for slot, v in enumerate(vals[4:], start=4):
+        assert (v & 0x3FF) == 0, (
+            f"slot {slot}: expected tile index 0 for transparent top, got {v & 0x3FF}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# 5. Transparent quadrant → tile index 0
+# ---------------------------------------------------------------------------
 
 
 def test_transparent_quad_gets_tile0(tmp_path):
-    """Tile 3's bottom-right quadrant is transparent and must encode GBA tile index 0."""
-    _, pdir, _ = _run(tmp_path, [3])
+    """A transparent quadrant in the bottom layer must encode GBA tile index 0."""
+    # Solid green bottom with the BR quadrant (rows 8:16, cols 8:16) made transparent.
+    bottom = solid(0, 255, 0)
+    bottom[8:16, 8:16] = 0   # BR quadrant: all channels = 0, alpha = 0
+    mt = make_metatile(bottom=bottom)
+    _, pdir, _ = _run(tmp_path, [mt])
     raw = (pdir / "metatiles.bin").read_bytes()
-    # Metatile 0 = tile 3.  Slot order: TL=0, TR=1, BL=2, BR=3.
-    # BR quadrant of tile 3 is all-transparent → gba_tile_index must be 0.
     vals = struct.unpack_from("<8H", raw, 0)
-    br_tile_idx = vals[3] & 0x3FF
+    br_tile_idx = vals[3] & 0x3FF   # slot 3 = BR of bottom layer
     assert br_tile_idx == 0, (
         f"transparent BR quad expected tile index 0, got {br_tile_idx}"
     )
 
 
 # ---------------------------------------------------------------------------
-# 5. behaviour_overrides
+# 6. behavior
 # ---------------------------------------------------------------------------
 
 
-def test_behavior_override_low_byte(tmp_path):
-    """The low byte of a metatile's attribute must equal its behavior_overrides value."""
-    OVERRIDE_TILE = 2
-    OVERRIDE_VALUE = 0x41   # arbitrary non-zero
-    result, pdir, _ = _run(
-        tmp_path, [1, 2, 3], behavior_overrides={OVERRIDE_TILE: OVERRIDE_VALUE}
-    )
+def test_behavior_low_byte(tmp_path):
+    """The low byte of a metatile's attribute must equal its behavior value."""
+    OVERRIDE = 0x41
+    mts = [
+        make_metatile(solid(255, 0, 0), behavior=OVERRIDE),
+        make_metatile(solid(0, 0, 255)),
+    ]
+    result, pdir, _ = _run(tmp_path, mts)
     raw = (pdir / "metatile_attributes.bin").read_bytes()
     n = min(result.n_metatiles, NUM_METATILES_IN_PRIMARY)
     attrs = struct.unpack_from(f"<{n}H", raw)
-    # tile_ids=[1,2,3] → metatile 0=tile1, 1=tile2, 2=tile3
-    assert (attrs[1] & 0x00FF) == OVERRIDE_VALUE, (
-        f"expected behavior {OVERRIDE_VALUE:#04x} in attrs[1], got {attrs[1] & 0xFF:#04x}"
+    assert (attrs[0] & 0x00FF) == OVERRIDE, (
+        f"expected behavior {OVERRIDE:#04x} in attrs[0], got {attrs[0] & 0xFF:#04x}"
     )
-    # Other tiles should have default behavior 0
-    assert (attrs[0] & 0x00FF) == 0
-    assert (attrs[2] & 0x00FF) == 0
+    assert (attrs[1] & 0x00FF) == 0, "expected default behavior 0 in attrs[1]"
 
 
 def test_behavior_default_zero(tmp_path):
-    """With no overrides, all attribute low bytes must be zero."""
-    result, pdir, _ = _run(tmp_path, [1, 2])
+    """With no behavior set, all attribute low bytes must be zero."""
+    mts = [make_metatile(solid(255, 0, 0)), make_metatile(solid(0, 0, 255))]
+    result, pdir, _ = _run(tmp_path, mts)
     raw = (pdir / "metatile_attributes.bin").read_bytes()
     n = min(result.n_metatiles, NUM_METATILES_IN_PRIMARY)
     attrs = struct.unpack_from(f"<{n}H", raw)
     assert all((a & 0x00FF) == 0 for a in attrs), "expected all behaviors == 0"
 
 
-def test_layer_type_in_attr_high_nibble(tmp_path):
-    """The layer_type parameter must appear in bits 12-15 of every attribute."""
-    MY_LAYER = 2  # METATILE_LAYER_TYPE_SPLIT
-    result, pdir, _ = _run(tmp_path, [1, 2], layer_type=MY_LAYER)
+# ---------------------------------------------------------------------------
+# 7. layer_type
+# ---------------------------------------------------------------------------
+
+
+def test_layer_type_in_attr(tmp_path):
+    """A layer_type value must appear in bits 12-15 of every affected metatile attribute."""
+    MY_LAYER = 2
+    mts = [
+        make_metatile(solid(255, 0, 0), layer_type=MY_LAYER),
+        make_metatile(solid(0, 0, 255), layer_type=MY_LAYER),
+    ]
+    result, pdir, _ = _run(tmp_path, mts)
     raw = (pdir / "metatile_attributes.bin").read_bytes()
     n = min(result.n_metatiles, NUM_METATILES_IN_PRIMARY)
     attrs = struct.unpack_from(f"<{n}H", raw)
     for a in attrs:
         assert (a >> 12) & 0xF == MY_LAYER, (
-            f"expected layer_type {MY_LAYER} in bits 12-15, got {(a>>12)&0xF}"
+            f"expected layer_type {MY_LAYER} in bits 12-15, got {(a >> 12) & 0xF}"
         )
 
 
+def test_layer_type_default_covered(tmp_path):
+    """Default layer_type=LAYER_COVERED (1) must appear in bits 12-15 when not overridden."""
+    mts = [make_metatile(solid(255, 0, 0))]
+    result, pdir, _ = _run(tmp_path, mts)
+    raw = (pdir / "metatile_attributes.bin").read_bytes()
+    (attr,) = struct.unpack_from("<1H", raw)
+    assert (attr >> 12) & 0xF == LAYER_COVERED, (
+        f"expected LAYER_COVERED={LAYER_COVERED} in bits 12-15, got {(attr >> 12) & 0xF}"
+    )
+
+
 # ---------------------------------------------------------------------------
-# 6. Determinism
+# 8. Flip-aware dedup
+# ---------------------------------------------------------------------------
+
+
+def test_flip_aware_dedup(tmp_path):
+    """A quadrant and its exact horizontal mirror share one GBA tile, differing only in hflip."""
+    # Asymmetric TL quadrant: left 4 cols red, right 4 cols blue.  Its h-mirror has left
+    # blue, right red.  Both should resolve to the same canonical GBA tile, referenced with
+    # opposite hflip bits so the hardware reconstructs each orientation correctly.
+    bottom_orig = transparent()
+    bottom_orig[:8, :4] = [255, 0, 0, 255]   # TL quad left half: red
+    bottom_orig[:8, 4:8] = [0, 0, 255, 255]  # TL quad right half: blue
+
+    bottom_flip = transparent()
+    bottom_flip[:8, :4] = [0, 0, 255, 255]   # TL quad left half: blue (h-mirror)
+    bottom_flip[:8, 4:8] = [255, 0, 0, 255]  # TL quad right half: red
+
+    mt0 = make_metatile(bottom=bottom_orig)
+    mt1 = make_metatile(bottom=bottom_flip)
+
+    _, pdir, _ = _run(tmp_path, [mt0, mt1])
+    raw = (pdir / "metatiles.bin").read_bytes()
+
+    vals0 = struct.unpack_from("<8H", raw, 0)   # metatile 0
+    vals1 = struct.unpack_from("<8H", raw, 16)  # metatile 1
+
+    # Slot 0 = TL quadrant of the bottom layer for each metatile
+    tile0 = vals0[0] & 0x3FF
+    tile1 = vals1[0] & 0x3FF
+    hflip0 = (vals0[0] >> 10) & 1
+    hflip1 = (vals1[0] >> 10) & 1
+
+    assert tile0 == tile1, (
+        f"expected same GBA tile index for a quad and its h-mirror, got {tile0} vs {tile1}"
+    )
+    assert hflip0 != hflip1, (
+        f"expected opposite hflip bits for mirrored quads, got hflip0={hflip0} hflip1={hflip1}"
+    )
+
+
+def test_post_quantization_merge(tmp_path):
+    """Two tiles distinct at full RGB but identical after 5-bit quantization merge
+    into one stored GBA tile — the dedup that keeps a column-keyed tileset under the
+    1024-tile budget once ground+overlay combinations multiply."""
+    # (16,32,48) vs (18,34,50): each channel shares the same top 5 bits, so to_5bit
+    # collapses them.  Their raw bytes differ, so the Step-1 (raw) flip-canon dedup
+    # keeps them as separate canon tiles; only the post-quant merge folds them.
+    mt0 = make_metatile(bottom=solid(16, 32, 48))
+    mt1 = make_metatile(bottom=solid(18, 34, 50))
+
+    result, pdir, _ = _run(tmp_path, [mt0, mt1])
+    raw = (pdir / "metatiles.bin").read_bytes()
+    tile0 = struct.unpack_from("<H", raw, 0)[0] & 0x3FF   # mt0 bottom slot 0
+    tile1 = struct.unpack_from("<H", raw, 16)[0] & 0x3FF  # mt1 bottom slot 0
+
+    assert tile0 == tile1, f"expected a merged GBA tile, got {tile0} vs {tile1}"
+    # tile 0 (transparent) + exactly one shared opaque tile
+    assert result.n_tiles == 2, f"expected 2 tiles after merge, got {result.n_tiles}"
+
+
+def test_tile_budget_overrun_fails_loud(tmp_path, monkeypatch):
+    """A tile pool over the hardware budget raises BEFORE any artifact is written —
+    column-keying can multiply tiles, and a malformed tileset must not reach the fork."""
+    import rpg2gba.tileset_converter.graphics.emit as emit_mod
+
+    monkeypatch.setattr(emit_mod, "NUM_TILES_TOTAL", 2)
+    # Three 5-bit-distinct solid colours -> 3 opaque tiles + transparent tile 0 = 4 > 2.
+    mts = [
+        make_metatile(bottom=solid(248, 0, 0)),
+        make_metatile(bottom=solid(0, 248, 0)),
+        make_metatile(bottom=solid(0, 0, 248)),
+    ]
+    with pytest.raises(ValueError, match="exceeds"):
+        _run(tmp_path, mts)
+    assert not (tmp_path / "primary" / "tiles.png").exists(), (
+        "no artifact should be written on a budget overrun"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 9. Determinism
 # ---------------------------------------------------------------------------
 
 
 def test_determinism(tmp_path):
-    """Two independent runs with identical inputs must produce byte-identical outputs."""
-    tile_ids = [1, 2, 3]
+    """Two runs with identical MetatileImage inputs must produce byte-identical outputs."""
+    mts = [
+        make_metatile(solid(255, 0, 0)),
+        make_metatile(solid(0, 0, 255)),
+        make_metatile(solid(0, 255, 0)),
+    ]
 
     def run(d: Path) -> tuple[Path, Path]:
         pdir = d / "primary"
         sdir = d / "secondary"
-        emit_tileset(tile_ids, StubRasterizer(), pdir, sdir, "p", "s")
+        emit_tileset(mts, pdir, sdir, "p", "s")
         return pdir, sdir
 
     pdir1, sdir1 = run(tmp_path / "run1")
@@ -369,83 +475,38 @@ def test_determinism(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 7. tile_to_metatile mapping
-# ---------------------------------------------------------------------------
-
-
-def test_tile_to_metatile_dedup(tmp_path):
-    """Duplicate tile_ids must be collapsed; the returned n_metatiles must match uniques."""
-    result, _, _ = _run(tmp_path, [1, 2, 3, 1, 2])
-    assert result.n_metatiles == 3
-    assert set(result.tile_to_metatile.keys()) == {1, 2, 3}
-
-
-def test_tile_to_metatile_distinct_ids(tmp_path):
-    """tile_to_metatile values must be distinct and in range 0..n_metatiles-1."""
-    result, _, _ = _run(tmp_path, [1, 2, 3])
-    ids = list(result.tile_to_metatile.values())
-    assert len(ids) == len(set(ids)), "metatile ids are not unique"
-    assert all(0 <= i < result.n_metatiles for i in ids)
-
-
-def test_tile_to_metatile_order(tmp_path):
-    """Metatile id must equal the position of the tile_id in the first-seen order."""
-    result, _, _ = _run(tmp_path, [2, 1, 3])
-    assert result.tile_to_metatile[2] == 0
-    assert result.tile_to_metatile[1] == 1
-    assert result.tile_to_metatile[3] == 2
-
-
-# ---------------------------------------------------------------------------
-# 8. EmittedTileset fields
+# 10. EmittedTileset fields
 # ---------------------------------------------------------------------------
 
 
 def test_emitted_tileset_fields(tmp_path):
-    """EmittedTileset must carry the correct primary/secondary names and counts."""
-    result, _, _ = _run(tmp_path, [1, 2])
+    """EmittedTileset must carry the correct names, counts, and stats keys."""
+    mts = [make_metatile(solid(255, 0, 0)), make_metatile(solid(0, 0, 255))]
+    result, _, _ = _run(tmp_path, mts)
     assert result.primary_name == "gTileset_Primary"
     assert result.secondary_name == "gTileset_Secondary"
     assert result.n_metatiles == 2
-    assert result.n_tiles >= 2          # at least transparent + 1 real tile
+    assert result.n_tiles >= 2           # transparent tile 0 + at least one real tile
     assert result.n_palettes >= 1
     assert isinstance(result.stats, dict)
     assert "n_metatiles" in result.stats
     assert "n_gba_tiles" in result.stats
 
 
-def test_n_tiles_includes_transparent(tmp_path):
-    """n_tiles must be at least 1 (transparent tile 0) even for all-transparent input."""
-    result, _, _ = _run(tmp_path, [5])  # tile 5 is all-transparent
-    assert result.n_tiles >= 1
-
-
 # ---------------------------------------------------------------------------
-# 9. Edge-cases
+# 11. Edge: all-transparent metatile
 # ---------------------------------------------------------------------------
 
 
-def test_all_transparent_tile(tmp_path):
-    """An all-transparent input tile produces n_metatiles=1, n_tiles=1."""
-    result, pdir, _ = _run(tmp_path, [5])
+def test_all_transparent_metatile(tmp_path):
+    """An all-transparent metatile (both layers) → n_metatiles=1, n_tiles=1, all 8 slots tile 0."""
+    mt = make_metatile(bottom=transparent(), top=transparent())
+    result, pdir, _ = _run(tmp_path, [mt])
     assert result.n_metatiles == 1
     assert result.n_tiles == 1   # only the reserved transparent tile
-    # Metatile entry: all four bottom slots should reference tile 0 (transparent)
     raw = (pdir / "metatiles.bin").read_bytes()
     vals = struct.unpack_from("<8H", raw, 0)
-    for slot, v in enumerate(vals[:4]):
-        assert (v & 0x3FF) == 0, f"slot {slot}: expected tile index 0 for transparent tile"
-
-
-def test_identical_quads_dedup(tmp_path):
-    """Identical quadrants across different metatiles share one GBA tile entry."""
-    # Tiles 1 and 1 (same) → 1 unique metatile, 2 unique GBA tiles (0 + red)
-    result, _, _ = _run(tmp_path, [1])
-    # All 4 quads of solid-red tile are identical → should collapse to 1 unique quad
-    assert result.n_tiles == 2   # transparent + 1 red quad
-
-
-def test_large_dedup_input(tmp_path):
-    """Many repeated tile_ids must not inflate metatile or tile counts."""
-    result, _, _ = _run(tmp_path, [1, 1, 1, 2, 2, 3, 3, 3])
-    assert result.n_metatiles == 3  # only 3 unique tile_ids
+    for slot, v in enumerate(vals):
+        assert (v & 0x3FF) == 0, (
+            f"slot {slot}: expected tile index 0 for all-transparent metatile, got {v & 0x3FF}"
+        )

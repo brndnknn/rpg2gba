@@ -1,8 +1,10 @@
 """Graphics pre-pass (S8a) — build real Uranium tilesets for a slice.
 
 Ties the image pipeline (sources -> raster -> quantize -> emit) to the assembler:
-for each Uranium tileset used by the slice maps it enumerates the *topmost-visual*
-tile ids (the same tile `layout.collapse_column` resolves per cell), emits a
+for each Uranium tileset used by the slice maps it enumerates the *column keys*
+(the full z-stack of non-empty tile ids per cell) across all maps, renders each
+column to a two-layer MetatileImage via `_render_column` (tiles with RMXP priority>0
+go to the GBA top BG layer; the rest composite into the bottom layer), emits a
 dedicated pokeemerald PRIMARY+SECONDARY pair via `emit.emit_tileset`, and writes:
 
   - the GBA art under ``<fork>/data/tilesets/{primary,secondary}/uranium<ts>/``,
@@ -12,12 +14,16 @@ dedicated pokeemerald PRIMARY+SECONDARY pair via `emit.emit_tileset`, and writes
     in ``include/``), and
   - a ``reference/tileset_map.gen.json`` overlay that `tile_map.load_tile_map`
     prefers over the committed Hoenn-bucket table (so the layout pass resolves each
-    Uranium tile to its real metatile).
+    Uranium column key to its real metatile via ``lookup_column``).
 
-Each topmost-visual tile id becomes ONE single-layer metatile; autotile variants
-are kept distinct (faithful edges). One synthetic transparent tile (RMXP id 0) is
-appended as the void/border metatile. A representative door tile (the topmost tile
-at a warp coord) gets ``MB_NON_ANIMATED_DOOR`` so the stamped warp metatile fires.
+Each unique column key becomes ONE metatile (bottom + top layer split by RMXP
+priority). Autotile variants are kept distinct (faithful edges). One synthetic
+all-transparent metatile (void) is appended as the border/empty-column metatile.
+
+The warp metatile is a SEPARATE copy of the representative door column carrying
+``MB_NON_ANIMATED_DOOR``, appended after the void, so non-warp cells sharing
+that column keep ``MB_NORMAL``; the layout converter stamps the warp metatile
+only at warp coords (``tile_map.warp(tileset_id)``).
 """
 from __future__ import annotations
 
@@ -26,15 +32,25 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
-from rpg2gba.tileset_converter.layout import TileGrid, topmost_tile_id
+import numpy as np
+from PIL import Image
 
-from .emit import EmittedTileset, emit_tileset
+from rpg2gba.tileset_converter.layout import TileGrid, column_key
+from rpg2gba.tileset_converter.tile_map import serialize_column_key
+
+from .emit import (
+    LAYER_COVERED,
+    LAYER_NORMAL,
+    EmittedTileset,
+    MetatileImage,
+    emit_tileset,
+)
 from .raster import TileRasterizer
 from .sources import load_tileset_sources
 
 logger = logging.getLogger(__name__)
 
-EMPTY_TILE = 0  # RMXP empty marker; rasterises transparent -> the void metatile
+EMPTY_TILE = 0  # RMXP empty marker; column_key skips these automatically
 
 DEFAULT_BASE_TILE_MAP = Path("reference/tileset_map.json")
 DEFAULT_OVERLAY_OUT = Path("reference/tileset_map.gen.json")
@@ -86,6 +102,53 @@ def _default_rasterizer(
     return TileRasterizer(sources)
 
 
+def _load_priorities(tilesets_json: Path, ts: int) -> list[int]:
+    """Load the priorities array for tileset ``ts`` from the Phase-3 tilesets oracle."""
+    raw = json.loads(Path(tilesets_json).read_text(encoding="utf-8"))
+    entry = raw.get(str(ts))
+    if entry is None:
+        raise KeyError(f"tileset {ts} absent from {tilesets_json}")
+    return entry["priorities"]
+
+
+def _render_column(
+    key: tuple[tuple[int, int], ...],
+    rasterizer: object,
+    priorities: list[int],
+    *,
+    behavior: int = 0,
+) -> MetatileImage:
+    """Priority split: tiles with RMXP priority>0 (drawn over the player) go to the TOP
+    layer; the rest composite into the BOTTOM layer. z-ascending = bottom-first."""
+    bottom = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    top = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    has_overlay = False
+    for z, tid in key:
+        img = rasterizer.render(tid)
+        pr = priorities[tid] if 0 <= tid < len(priorities) else 0
+        if pr > 0:
+            top.alpha_composite(img)
+            has_overlay = True
+        else:
+            bottom.alpha_composite(img)
+    layer_type = LAYER_NORMAL if has_overlay else LAYER_COVERED
+    return MetatileImage(
+        np.asarray(bottom, dtype=np.uint8),
+        np.asarray(top, dtype=np.uint8),
+        layer_type,
+        behavior,
+    )
+
+
+def _void_metatile() -> MetatileImage:
+    """All-transparent metatile: the void/border placeholder.
+
+    ``buckets.void`` points here; ``collapse_column`` returns this for empty
+    columns. Being all-transparent makes mis-rendered void cells visually obvious."""
+    z = np.zeros((16, 16, 4), dtype=np.uint8)
+    return MetatileImage(z, z.copy(), LAYER_COVERED, 0)
+
+
 def build_slice_tilesets(
     maps: list[tuple[int, dict]],
     warp_coords: dict[int, set[tuple[int, int]]],
@@ -96,6 +159,7 @@ def build_slice_tilesets(
     tilesets_json: Path = DEFAULT_TILESETS_JSON,
     graphics_dir: Path | None = None,
     rasterizer_for: Callable[[int], object] | None = None,
+    priorities_for: Callable[[int], list[int]] | None = None,
     dry_run: bool = False,
 ) -> dict[int, EmittedTileset]:
     """Emit real Uranium tilesets for the slice and write the engine + overlay glue.
@@ -104,11 +168,14 @@ def build_slice_tilesets(
     Phase-3 ``tiles`` grid). `warp_coords` maps map_id -> warp source coords (the
     layout converter stamps the tileset's warp metatile there). `rasterizer_for`
     overrides tile rendering for tests; defaults to the real Uranium source pipeline.
-    Returns the per-tileset `EmittedTileset`. Writes nothing when `dry_run`."""
+    `priorities_for` overrides priority loading for tests; defaults to reading
+    tilesets.json. Returns the per-tileset `EmittedTileset`. Writes nothing when
+    `dry_run`."""
     fork = Path(fork)
     make_rast = rasterizer_for or (
         lambda ts: _default_rasterizer(ts, tilesets_json, graphics_dir)
     )
+    get_priorities = priorities_for or (lambda ts: _load_priorities(tilesets_json, ts))
 
     by_ts: dict[int, list[tuple[int, dict]]] = {}
     for map_id, map_json in maps:
@@ -122,30 +189,33 @@ def build_slice_tilesets(
     results: dict[int, EmittedTileset] = {}
 
     for ts, maplist in sorted(by_ts.items()):
-        visuals: set[int] = set()
-        door_ids: set[int] = set()
+        rast = make_rast(ts)
+        priorities = get_priorities(ts)
+
+        # Enumerate all unique column keys across all maps for this tileset.
+        keys: set[tuple] = set()
+        door_keys: set[tuple] = set()
         for map_id, map_json in maplist:
             grid = _grid_of(map_json)
             for y in range(grid.ysize):
                 for x in range(grid.xsize):
-                    tid = topmost_tile_id(grid, x, y)
-                    if tid != EMPTY_TILE:
-                        visuals.add(tid)
+                    k = column_key(grid, x, y)
+                    if k:
+                        keys.add(k)
             for wx, wy in warp_coords.get(map_id, set()):
-                door = topmost_tile_id(grid, wx, wy)
-                if door != EMPTY_TILE:
-                    door_ids.add(door)
+                dk = column_key(grid, wx, wy)
+                if dk:
+                    door_keys.add(dk)
 
-        if not visuals:
+        if not keys:
             raise ValueError(
-                f"tileset {ts}: no visual tiles across maps "
+                f"tileset {ts}: no non-empty columns across maps "
                 f"{[m for m, _ in maplist]} — wrong grid order or empty maps?"
             )
 
-        # Deterministic order; RMXP id 0 (transparent) appended as the void metatile.
-        tile_ids = sorted(visuals) + [EMPTY_TILE]
-        rep_door = min(door_ids) if door_ids else None
-        behavior_overrides = {rep_door: door_behavior} if rep_door is not None else {}
+        # Deterministic order; sort gives stable metatile id assignment.
+        ordered = sorted(keys)
+        rep_door = sorted(door_keys)[0] if door_keys else None
 
         primary_name = f"gTileset_Uranium{ts}"
         secondary_name = f"gTileset_Uranium{ts}B"
@@ -154,45 +224,57 @@ def build_slice_tilesets(
 
         if dry_run:
             logger.info(
-                "[dry] S8a tileset %d: %d visual tiles, %d door tile(s) -> "
+                "[dry] S8a tileset %d: %d columns, %d door column(s) -> "
                 "would emit %s + %s",
-                ts, len(visuals), len(door_ids), primary_name, secondary_name,
+                ts, len(keys), len(door_keys), primary_name, secondary_name,
             )
             continue
 
+        # Build metatile list: one per column key + void + optional warp copy.
+        metatile_list = [_render_column(k, rast, priorities) for k in ordered]
+
+        # The void metatile is all-transparent; buckets.void points here.
+        # collapse_column returns this for empty-column cells.
+        void_idx = len(metatile_list)
+        metatile_list.append(_void_metatile())
+
+        if rep_door is not None:
+            # The warp metatile is a SEPARATE copy of the representative door column
+            # carrying MB_NON_ANIMATED_DOOR.  Non-warp cells that share that column
+            # keep MB_NORMAL (their entry in overlay["tiles"] maps to a metatile with
+            # behavior 0).  The layout converter stamps this separate warp copy only at
+            # warp coords, so a player stepping onto a door tile triggers the warp.
+            warp_idx = len(metatile_list)
+            metatile_list.append(
+                _render_column(rep_door, rast, priorities, behavior=door_behavior)
+            )
+        else:
+            warp_idx = None
+
         emit = emit_tileset(
-            tile_ids,
-            make_rast(ts),
-            primary_dir,
-            secondary_dir,
-            primary_name,
-            secondary_name,
-            behavior_overrides=behavior_overrides,
+            metatile_list, primary_dir, secondary_dir, primary_name, secondary_name
         )
         results[ts] = emit
 
-        void_mt = emit.tile_to_metatile[EMPTY_TILE]
-        overlay["tilesets"][str(ts)] = {
-            "primary": primary_name, "secondary": secondary_name,
-        }
+        overlay["tilesets"][str(ts)] = {"primary": primary_name, "secondary": secondary_name}
+        # Column-key strings are the shared format (serialize_column_key) that
+        # lookup_column expects at layout-conversion time.
         overlay["tiles"][str(ts)] = {
-            str(tid): {"metatile": emit.tile_to_metatile[tid]} for tid in sorted(visuals)
+            serialize_column_key(k): {"metatile": i} for i, k in enumerate(ordered)
         }
-        # Fallback bucket -> transparent void (real cells hit the explicit `tiles`
-        # entry; a fall-through would render transparent and be obvious at boot).
+        # All bucket roles point at void_idx; real cells always hit the explicit
+        # tiles table so the bucket is only reached for genuinely empty fallback.
         overlay["buckets"][str(ts)] = {
-            "passable": void_mt, "blocked": void_mt, "void": void_mt,
+            "passable": void_idx, "blocked": void_idx, "void": void_idx,
         }
-        if rep_door is not None:
+        if warp_idx is not None:
             overlay["warps"][str(ts)] = {
-                "metatile": emit.tile_to_metatile[rep_door],
-                "collision": 0,
-                "elevation": 0,
+                "metatile": warp_idx, "collision": 0, "elevation": 0,
             }
         logger.info(
-            "S8a tileset %d: %d metatiles, %d GBA tiles, %d palettes "
-            "(mean shift %.2f/31)",
-            ts, emit.n_metatiles, emit.n_tiles, emit.n_palettes,
+            "S8a tileset %d: %d columns -> %d metatiles, %d GBA tiles, "
+            "%d palettes (mean shift %.2f/31)",
+            ts, len(ordered), emit.n_metatiles, emit.n_tiles, emit.n_palettes,
             emit.stats.get("mean_shift_5bit", 0.0),
         )
 
@@ -201,9 +283,7 @@ def build_slice_tilesets(
         Path(overlay_out).write_text(
             json.dumps(overlay, indent=2) + "\n", encoding="utf-8"
         )
-        logger.info(
-            "S8a: wrote %s + 4 engine tileset fragments", overlay_out
-        )
+        logger.info("S8a: wrote %s + 4 engine tileset fragments", overlay_out)
     return results
 
 
