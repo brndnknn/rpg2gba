@@ -664,6 +664,9 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch
   #toolbar label{min-height:32px}
   .btn{min-height:32px;padding:4px 10px}
   .sep{height:28px}
+  #mapnav{gap:8px;padding:6px 8px}
+  #mapnav .navchip{min-height:32px;padding:6px 12px;display:flex;align-items:center}
+  #mapnav .navsep{height:24px}
 }
 </style>
 </head>

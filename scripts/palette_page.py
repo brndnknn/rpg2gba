@@ -103,6 +103,9 @@ body{background:#1a1a1a;color:#ddd;font:12px/1.4 monospace}
   .tile-card{padding:2px}
   #modal-box{padding:10px;max-width:100%;width:96%}
   #topbar{gap:4px}
+  #mapnav{gap:8px;padding:6px 8px}
+  #mapnav .navchip{min-height:32px;padding:6px 12px;display:flex;align-items:center}
+  #mapnav .navsep{height:24px}
 }
 </style>
 </head>

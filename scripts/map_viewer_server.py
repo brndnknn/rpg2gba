@@ -76,7 +76,7 @@ li{margin:1px 0}
 .toggle{cursor:pointer;color:#888;width:12px;flex-shrink:0;user-select:none;text-align:center}
 .collapsed>ul{display:none}
 .hidden{display:none}
-@media (max-width:600px){.row{gap:5px;min-height:30px}.mid{width:42px}}
+@media (max-width:600px){.row{gap:8px;min-height:40px}.mid{width:42px}.mname{padding:6px 0}.lnk{padding:8px 6px}.toggle{min-width:24px;padding:8px 0}}
 </style></head><body>
 <header>
   <h1>Uranium Map Index</h1>
