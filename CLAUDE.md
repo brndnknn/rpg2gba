@@ -320,13 +320,14 @@ These gates exist because each one is a place where systematic errors propagate 
 - Adding tests for code that lacks them
 - Refactoring within a single module for clarity, without changing the module's public interface
 - Updating reference docs to reflect what the code actually does
+- Adding a new Python/Ruby **package** dependency — install it into the project `.venv` only (never globally: no `sudo`, no `pip install --user`, no system site-packages) and declare it in `pyproject.toml` so the env stays reproducible
 
 ### Ask before proceeding
 
 - Anything that touches `flag_registry.py`'s policy (which names are valid, how collisions are resolved)
 - Anything that changes the conversion agent's prompt structure
 - Anything that changes the schema of intermediate JSON formats
-- Adding new dependencies (Python, Ruby, or system packages)
+- Installing **system/global** packages (apt, devkitPro, global `npm`, etc.) — anything that touches the machine outside the project `.venv`
 - Modifying the `pokeemerald-expansion` fork in any way that changes baseline pokeemerald behavior
 - Any decision about Uranium content fidelity — is this feature worth replicating, can we strip it, what's the smallest viable substitute
 
