@@ -37,8 +37,13 @@ def _b64_png(png: bytes) -> str:
     return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
 
 
-def build_html_static(map_id: int) -> str:
-    """Render all used tiles/metatiles to base64 and inject as STATIC-mode config."""
+def build_config(map_id: int) -> dict:
+    """Build the STATIC-mode viewer config: map data + base64 tile/metatile images.
+
+    Shared by the map viewer (build_html_static) and the palette inspector page
+    (palette_page.build_palette_html) so both draw the exact same post-quant
+    thumbnails without re-rendering.
+    """
     data = build_map_data(map_id)
 
     # Collect distinct tile_ids used across all cells.
@@ -75,13 +80,17 @@ def build_html_static(map_id: int) -> str:
         except Exception as exc:
             print(f"    WARN: metatile {idx} render failed: {exc}")
 
-    config = {
+    return {
         "mode": "static",
         "data": data,
         "tile_images": tile_images,
         "metatile_images": metatile_images,
     }
-    config_json = json.dumps(config, separators=(",", ":"))
+
+
+def build_html_static(map_id: int) -> str:
+    """Render all used tiles/metatiles to base64 and inject as STATIC-mode config."""
+    config_json = json.dumps(build_config(map_id), separators=(",", ":"))
     return MAP_VIEWER_HTML.replace("__VIEWER_CONFIG__", config_json)
 
 
@@ -119,6 +128,8 @@ def main() -> None:
     else:
         ap.error("Provide map IDs or --all")
 
+    from palette_page import build_palette_html  # noqa: E402  (sibling scripts/ module)
+
     for map_id in map_ids:
         try:
             print(f"Processing Map{map_id:03d}...")
@@ -127,6 +138,12 @@ def main() -> None:
             out_path.write_text(html, encoding="utf-8")
             size_kb = len(html.encode("utf-8")) // 1024
             print(f"  -> {out_path}  ({size_kb} KB)")
+
+            pal_html = build_palette_html(map_id)
+            pal_path = out_dir / f"Map{map_id:03d}_palettes.html"
+            pal_path.write_text(pal_html, encoding="utf-8")
+            pal_kb = len(pal_html.encode("utf-8")) // 1024
+            print(f"  -> {pal_path}  ({pal_kb} KB)")
         except Exception as exc:
             print(f"  ERROR Map{map_id:03d}: {exc}")
             raise

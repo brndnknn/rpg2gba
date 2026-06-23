@@ -18,8 +18,15 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from rpg2gba.tileset_converter.graphics.build_slice_tilesets import _render_column, column_keys_for_maps
-from rpg2gba.tileset_converter.graphics.emit import MetatileImage, PaletteAnalysis, analyze_tileset_palettes
+from rpg2gba.tileset_converter.graphics.build_slice_tilesets import (
+    _render_column,
+    column_keys_for_maps,
+)
+from rpg2gba.tileset_converter.graphics.emit import (
+    MetatileImage,
+    PaletteAnalysis,
+    analyze_tileset_palettes,
+)
 from rpg2gba.tileset_converter.graphics.raster import TileRasterizer
 from rpg2gba.tileset_converter.graphics.sources import load_tileset_sources
 from rpg2gba.tileset_converter.layout import TileGrid, column_key
@@ -493,6 +500,58 @@ def build_map_data(map_id: int) -> dict:
             "merge_severity": merge_severity,
         })
 
+    # ---- palette_usage: inverse map palette -> tiles that use it ------------
+    # For each GBA sub-palette, list the metatiles (by colkey idx) drawing from it
+    # and which palette entries each one actually uses.  This is the data behind the
+    # palette-centric inspector page: a tile that uses only 1-2 entries while needing
+    # a colour the palette lacks shows up as low n_colors + high merge_severity.
+    #
+    # Slot indexing matches the page's swatch layout: slot 0 = transparent (index 0),
+    # so a palette colour at analysis.palettes[pi][j] is referenced as slot j+1.
+    pal_rev: list[dict[tuple[int, int, int], int]] = [
+        {rgb: j + 1 for j, rgb in enumerate(pal)} for pal in analysis.palettes
+    ]
+    # pal -> { colkey_idx -> set(slot) }
+    pal_tile_slots: list[dict[int, set[int]]] = [{} for _ in analysis.palettes]
+    for ck_idx, ck in enumerate(state.colkeys_sorted):
+        if not ck:
+            continue
+        mt_pal = analysis.metatiles[pool_key_to_idx[ck]]
+        for qp in mt_pal.quadrants:
+            pi = qp.palette_index
+            if pi == -1:
+                continue
+            rev = pal_rev[pi]
+            slot_set = pal_tile_slots[pi].setdefault(ck_idx, set())
+            for _orig, final in qp.color_changes:
+                slot = rev.get(final)
+                if slot is not None:
+                    slot_set.add(slot)
+
+    palette_usage: list[dict] = []
+    for pi, pal in enumerate(analysis.palettes):
+        tiles_for_pal = pal_tile_slots[pi]
+        used_slots: set[int] = set()
+        tiles: list[dict] = []
+        for ck_idx, slots in tiles_for_pal.items():
+            used_slots |= slots
+            sev = colkey_palettes[ck_idx]["merge_severity"]
+            tiles.append({
+                "idx": ck_idx,
+                "n_colors": len(slots),
+                "slots": sorted(slots),
+                "merge_severity": sev,
+            })
+        # Suspect-first: fewest colours, then worst merge loss.
+        tiles.sort(key=lambda t: (t["n_colors"], -t["merge_severity"]))
+        palette_usage.append({
+            "pal": pi,
+            "colors": [[r, g, b] for (r, g, b) in pal],
+            "used_slots": sorted(used_slots),
+            "n_tiles": len(tiles),
+            "tiles": tiles,
+        })
+
     return {
         "meta": {
             "map_id": map_id,
@@ -512,6 +571,7 @@ def build_map_data(map_id: int) -> dict:
         "palettes": palettes_json,
         "rmxp_tile_colors": rmxp_tile_colors,
         "colkey_palettes": colkey_palettes,
+        "palette_usage": palette_usage,
     }
 
 
@@ -542,6 +602,15 @@ body{background:#1a1a1a;color:#ddd;font:12px/1.4 monospace;display:flex;flex-dir
 .sep{width:1px;background:#555;height:20px;margin:0 2px;flex-shrink:0}
 .btn{background:#333;border:1px solid #555;color:#ddd;padding:2px 8px;cursor:pointer;font:11px monospace;border-radius:2px}
 .btn:hover{background:#444}
+/* ---- map nav strip ---- */
+#mapnav{display:none;background:#1c1c1c;border-bottom:1px solid #383838;padding:4px 8px;gap:6px;align-items:center;overflow-x:auto;white-space:nowrap;flex-shrink:0;font-size:11px}
+#mapnav.show{display:flex}
+#mapnav .navcur{color:#8cf;font-weight:bold;flex-shrink:0}
+#mapnav .navgrp{color:#777;flex-shrink:0;margin-left:2px}
+#mapnav .navchip{display:inline-block;background:#2a2a2a;border:1px solid #4a4a4a;color:#bcd;text-decoration:none;padding:1px 7px;border-radius:10px;flex-shrink:0}
+#mapnav .navchip:hover{background:#33414e;border-color:#5af;color:#cfe}
+#mapnav .navchip.home{background:#243d2e;border-color:#475}
+#mapnav .navsep{width:1px;height:16px;background:#444;flex-shrink:0;margin:0 2px}
 #main{display:flex;flex:1;min-height:0;position:relative}
 #canvas-wrap{flex:1;position:relative;overflow:hidden;background:#111}
 canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;width:100%;height:100%}
@@ -624,8 +693,10 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch
   <button class="btn" id="zoom-in">+</button>
   <button class="btn" id="zoom-fit">Fit</button>
   <div class="sep"></div>
+  <a class="btn" id="nav-palettes" href="#" style="display:none;text-decoration:none">Palettes &rarr;</a>
   <span class="lbl" id="map-title" style="color:#8cf"></span>
 </div>
+<div id="mapnav"></div>
 <div id="main">
   <div id="canvas-wrap">
     <canvas id="mapCanvas"></canvas>
@@ -1296,6 +1367,29 @@ function preloadStatic() {
   }
 }
 
+// ---- map nav strip (server mode only; populated from V.graph) --------------
+function renderMapNav() {
+  const nav = document.getElementById('mapnav');
+  if (!nav) return;
+  const g = V.graph;
+  if (V.mode !== 'server' || !g) { nav.classList.remove('show'); return; }
+  const pad = function(n){ return String(n).padStart(3,'0'); };
+  const esc = function(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+  const chip = function(id, name){
+    return '<a class="navchip" href="/map/' + id + '" title="Map' + pad(id) + '">M' + pad(id) + ' ' + esc(name) + '</a>';
+  };
+  let h = '<a class="navchip home" href="/" title="Map index">&#8962; Index</a><span class="navsep"></span>';
+  h += '<span class="navcur">Map' + pad(g.id) + ' &middot; ' + esc(g.name) + '</span>';
+  const seen = new Set([g.id]);
+  if (g.parent) { h += '<span class="navsep"></span><span class="navgrp">up</span>' + chip(g.parent.id, g.parent.name); seen.add(g.parent.id); }
+  const kids = (g.children || []).filter(function(c){ return !seen.has(c.id); });
+  if (kids.length) { h += '<span class="navsep"></span><span class="navgrp">sub</span>'; kids.forEach(function(c){ seen.add(c.id); h += chip(c.id, c.name); }); }
+  const warps = (g.warps || []).filter(function(w){ return !seen.has(w.id); });
+  if (warps.length) { h += '<span class="navsep"></span><span class="navgrp">warp&rarr;</span>'; warps.forEach(function(w){ seen.add(w.id); h += chip(w.id, w.name); }); }
+  nav.innerHTML = h;
+  nav.classList.add('show');
+}
+
 // ---- init -----------------------------------------------------------------
 (function init() {
   const m = D.meta;
@@ -1310,6 +1404,12 @@ function preloadStatic() {
   // merge-panel count: how many distinct metatiles on this map lose colour to merging
   const mergeN = (D.colkey_palettes || []).filter(function(cp) { return cp && cp.merge_severity > 0; }).length;
   document.getElementById('merge-count').textContent = '(' + mergeN + ' tiles)';
+  renderMapNav();
+  if (V.mode === 'server') {
+    const navp = document.getElementById('nav-palettes');
+    navp.href = '/palettes/' + m.map_id;
+    navp.style.display = '';
+  }
   if (V.mode === 'static') {
     preloadStatic();
   } else {
