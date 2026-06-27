@@ -82,6 +82,12 @@ class TileRasterizer:
             )
         return self._templates[slot]
 
+    def max_static_tile_id(self) -> int:
+        """Maximum valid static tile_id given the loaded atlas height."""
+        atlas = self._tileset_img()
+        rows = atlas.height // RMXP_TILE_PX
+        return STATIC_BASE + rows * TILESET_COLUMNS - 1
+
     # --- rendering ----------------------------------------------------------
 
     def render(self, tile_id: int) -> Image.Image:

@@ -28,12 +28,12 @@ from rpg2gba.tileset_converter.graphics.emit import (
     PaletteAnalysis,
     analyze_tileset_palettes,
 )
-from rpg2gba.tileset_converter.graphics.experimental_packers import (
+from rpg2gba.tileset_converter.graphics.quantize import (
     FamilyParams,
     build_quantized_tileset_family,
 )
 from rpg2gba.tileset_converter.graphics.raster import TileRasterizer
-from rpg2gba.tileset_converter.graphics.sources import load_tileset_sources
+from rpg2gba.tileset_converter.graphics.sources import STATIC_BASE, load_tileset_sources
 from rpg2gba.tileset_converter.layout import TileGrid, column_key
 from rpg2gba.tileset_converter.tile_map import serialize_column_key
 
@@ -42,13 +42,6 @@ from compare_collision import our_blocked, uranium_blocked  # noqa: E402
 
 log = logging.getLogger(__name__)
 
-# The pathfinder slice the tileset build packs together (mirrors
-# scripts/assemble_pathfinder.py SLICE_MAP_IDS).  build_slice_tilesets groups the
-# slice maps BY tileset and quantizes each tileset over only the slice maps that
-# share it, so the shipped palette for a tileset comes from exactly that pool.  The
-# viewer scopes its analysis pool to these maps (plus whichever map is being opened)
-# so palettes match the ROM — and so it never drags in a non-slice map whose tiles
-# fall outside the tileset atlas (which would crash the rasterizer).
 SLICE_MAP_IDS: list[int] = [49, 48, 32]
 
 # ---------------------------------------------------------------------------
@@ -197,25 +190,21 @@ def _ensure_tileset_analysis(
     priorities: list[int],
     map_id: int,
 ) -> tuple[PaletteAnalysis, dict[tuple, int]]:
-    """Build and cache the slice-scoped palette analysis for a tileset (idempotent).
+    """Build and cache the full-corpus palette analysis for a tileset (idempotent).
 
-    The pool is the SLICE maps (plus ``map_id`` itself) whose tileset_id matches —
-    exactly the per-tileset pool build_slice_tilesets quantizes for the shipped ROM
-    (see SLICE_MAP_IDS).  Scoping to the slice keeps palette assignment faithful and
-    avoids rendering non-slice maps that reference tiles outside the tileset atlas.
-    Opening a non-slice map analyzes that map on its own (no shipped truth exists).
+    Pool = all maps in the maps dir sharing ``tileset_id``.  This matches the pool
+    the ROM will use (per-map tilesets with a full-corpus family palette), so the
+    viewer is a faithful preview of the quantized ROM art.
     """
     maps_dir = _maps_dir()
     maplist: list[tuple[int, dict]] = []
-    for mid in sorted(set(SLICE_MAP_IDS) | {map_id}):
-        p = maps_dir / f"Map{mid:03d}.json"
-        if not p.is_file():
-            continue
+    for p in sorted(maps_dir.glob("Map*.json")):
         try:
             doc = json.loads(p.read_text(encoding="utf-8"))
         except Exception:
             continue
         if int(doc.get("tileset_id", -1)) == tileset_id:
+            mid = int(p.stem[3:])
             maplist.append((mid, doc))
 
     cache_key = frozenset(mid for mid, _ in maplist)
@@ -223,9 +212,29 @@ def _ensure_tileset_analysis(
         return _tileset_analysis_cache[cache_key]
 
     pool_keys = column_keys_for_maps(maplist)
+
+    # Filter out column keys that reference static tile ids beyond the atlas bounds.
+    # Some maps (e.g. Map094) carry garbage tile ids (1550, 4531, 8197 …) that are
+    # way outside any real tileset atlas.  Drop those keys before rendering so the
+    # fail-loud ValueError in _render_static is never reached via this pre-pass.
+    # Autotile ids (< STATIC_BASE) are always fine.
+    max_tid = raster.max_static_tile_id()
+    valid_keys = [
+        k for k in pool_keys
+        if all(tid < STATIC_BASE or tid <= max_tid for _, tid in k)
+    ]
+    dropped = len(pool_keys) - len(valid_keys)
+    if dropped:
+        log.debug(
+            "tileset %d: dropped %d out-of-bounds column key(s) (max static tile_id %d)",
+            tileset_id, dropped, max_tid,
+        )
+    pool_keys = valid_keys
+
     print(
-        f"    tileset {tileset_id}: pool of {len(maplist)} slice map(s) "
-        f"{sorted(cache_key)}, {len(pool_keys)} unique non-empty column keys"
+        f"    tileset {tileset_id}: full-corpus pool of {len(maplist)} map(s) "
+        f"{sorted(cache_key)}, {len(pool_keys)} pool keys"
+        + (f" ({dropped} dropped as out-of-bounds)" if dropped else "")
     )
 
     if not pool_keys:
