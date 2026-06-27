@@ -23,6 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from build_map_viewer import build_config  # noqa: E402
+from map_viewer_common import KNOBBAR_JS  # noqa: E402
 
 PALETTE_VIEWER_HTML = r"""<!DOCTYPE html>
 <html lang="en">
@@ -107,6 +108,12 @@ body{background:#1a1a1a;color:#ddd;font:12px/1.4 monospace}
   #mapnav .navchip{min-height:32px;padding:6px 12px;display:flex;align-items:center}
   #mapnav .navsep{height:24px}
 }
+#knobbar{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;background:#1f241f;border-bottom:1px solid #3a463a;padding:4px 8px;font-size:11px}
+#knobbar label{color:#9a9;display:flex;align-items:center;gap:3px}
+#knobbar input,#knobbar select{background:#222;color:#dfe;border:1px solid #4a5a4a;font:11px monospace;padding:2px 3px;border-radius:2px}
+#knobbar input[type=number]{width:52px}
+#knobbar #k_apply{background:#2c3a2c;border-color:#5a7a5a;color:#cfe}
+#knobbar #k_status{color:#fa0}
 </style>
 </head>
 <body>
@@ -118,6 +125,18 @@ body{background:#1a1a1a;color:#ddd;font:12px/1.4 monospace}
   <button class="btn" id="btn-collapse" onclick="toggleCollapse()">Hide empty pals</button>
 </div>
 <div id="mapnav"></div>
+<div id="knobbar">
+  <span class="lbl">Family knobs:</span>
+  <label title="Interior hue degrees in (70,170) that split the green band into sub-families. Comma-separated, e.g. 120 or 100,140. Empty = one green.">green cuts <input id="k_green" type="text" size="9" placeholder="e.g. 120"></label>
+  <label title="max(R,G,B) below this = 'dark' family">dark&lt; <input id="k_dark" type="number" min="0" max="255" step="1"></label>
+  <label title="HSV saturation below this = 'neutral' family">neutral sat&lt; <input id="k_neutral" type="number" min="0" max="1" step="0.01"></label>
+  <label title="Minimum sub-palettes guaranteed to every family">pal floor <input id="k_floor" type="number" min="1" max="13" step="1"></label>
+  <label title="How leftover palettes are handed out: by distinct-colour overflow, or weighted by how many tiles a family covers">overflow
+    <select id="k_overflow"><option value="colors">colors</option><option value="coverage">coverage</option></select></label>
+  <label title="Total sub-palette budget (engine ceiling 13)">max pals <input id="k_maxpal" type="number" min="1" max="13" step="1"></label>
+  <button class="btn" id="k_apply">Apply &amp; re-render</button>
+  <span id="k_status" class="lbl"></span>
+</div>
 <div id="content"></div>
 <div id="modal-backdrop" onclick="handleBackdropClick(event)">
   <div id="modal-box">
@@ -148,7 +167,9 @@ function getMetatileURL(idx, layer) {
     const m = (V.metatile_images || {})[String(idx)];
     return m ? m[layer] : null;
   }
-  return '/api/metatile/' + D.meta.map_id + '/' + idx + '.png?layer=' + layer;
+  // `g` = quant generation: busts the browser's immutable cache after a knob Apply.
+  const g = (V.quant && V.quant.generation) || 0;
+  return '/api/metatile/' + D.meta.map_id + '/' + idx + '.png?layer=' + layer + '&g=' + g;
 }
 
 // ---- state ----
@@ -384,10 +405,14 @@ function renderMapNav() {
   renderMapNav();
   renderAll();
 })();
+/*KNOBBAR_JS*/
 </script>
 </body>
 </html>
 """
+
+# Inject the shared knob-panel JS (server-mode only; hides itself in static exports).
+PALETTE_VIEWER_HTML = PALETTE_VIEWER_HTML.replace("/*KNOBBAR_JS*/", KNOBBAR_JS)
 
 
 def build_palette_html(map_id: int) -> str:

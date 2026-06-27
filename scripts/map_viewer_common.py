@@ -13,6 +13,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -26,6 +27,10 @@ from rpg2gba.tileset_converter.graphics.emit import (
     MetatileImage,
     PaletteAnalysis,
     analyze_tileset_palettes,
+)
+from rpg2gba.tileset_converter.graphics.experimental_packers import (
+    FamilyParams,
+    build_quantized_tileset_family,
 )
 from rpg2gba.tileset_converter.graphics.raster import TileRasterizer
 from rpg2gba.tileset_converter.graphics.sources import load_tileset_sources
@@ -117,6 +122,75 @@ _metatile_png_cache: dict[tuple[int, int, str], bytes] = {}  # (map_id, idx, lay
 _tileset_analysis_cache: dict[frozenset[int], tuple[PaletteAnalysis, dict[tuple, int]]] = {}  # pool map-id set -> (analysis, pool_key_to_idx)
 
 
+# ---------------------------------------------------------------------------
+# Live quantization knobs
+# ---------------------------------------------------------------------------
+# The "Quantized" view uses the FAMILY packer; its parameters are tunable at runtime
+# from the browser (POST /api/quantize) so the foliage/interior trade-offs can be A/B'd
+# without re-running the pipeline.  Default FamilyParams() == the family packer's stock
+# behavior.  Changing params invalidates the three quant-dependent caches (the RMXP
+# source-tile cache is param-independent and kept).  `_quant_generation` is a monotonic
+# token the client appends to post-quant image URLs to defeat the browser's immutable
+# cache after an Apply.
+_ENGINE_MAX_PALS = 13  # NUM_PALS_TOTAL — hardware/engine ceiling; knob can only lower it
+_family_params: FamilyParams = FamilyParams()
+_max_palettes: int = _ENGINE_MAX_PALS
+_quant_generation: int = 0
+
+
+def _make_quantizer():
+    """Current packer as a ``(tiles, *, max_palettes) -> QuantizeResult`` callable."""
+    return partial(build_quantized_tileset_family, params=_family_params)
+
+
+def current_quantize_state() -> tuple[FamilyParams, int]:
+    """Live (params, max_palettes) — for snapshot/rollback by the server."""
+    return _family_params, _max_palettes
+
+
+def get_quantize_params() -> dict:
+    """Current knob state for injection into the page config (seeds the UI + the
+    `generation` cache-bust token)."""
+    return {
+        "generation": _quant_generation,
+        "max_palettes": _max_palettes,
+        "dark_value": _family_params.dark_value,
+        "neutral_sat": _family_params.neutral_sat,
+        "green_cuts": list(_family_params.green_cuts),
+        "palette_floor": _family_params.palette_floor,
+        "overflow_weight": _family_params.overflow_weight,
+    }
+
+
+def set_quantize_params(params: FamilyParams, max_palettes: int) -> int:
+    """Update the live family-quant knobs, invalidate the quant-dependent caches, and
+    return the new generation token.  The RMXP source-tile cache is left intact."""
+    global _family_params, _max_palettes, _quant_generation
+    _family_params = params
+    _max_palettes = max_palettes
+    _quant_generation += 1
+    _tileset_analysis_cache.clear()
+    _map_cache.clear()
+    _metatile_png_cache.clear()
+    return _quant_generation
+
+
+def params_from_dict(d: dict) -> tuple[FamilyParams, int]:
+    """Parse + clamp a knob dict (from the Apply POST) into (FamilyParams, max_palettes)
+    so a malformed value can never crash the packer.  green_cuts are kept only if they
+    fall strictly inside the green band (70, 170)."""
+    mp = max(1, min(_ENGINE_MAX_PALS, int(d.get("max_palettes", _ENGINE_MAX_PALS))))
+    cuts = sorted({float(c) for c in d.get("green_cuts", []) if 70.0 < float(c) < 170.0})
+    params = FamilyParams(
+        dark_value=max(0, min(255, int(d.get("dark_value", 40)))),
+        neutral_sat=max(0.0, min(1.0, float(d.get("neutral_sat", 0.18)))),
+        green_cuts=tuple(cuts),
+        palette_floor=max(1, min(_ENGINE_MAX_PALS, int(d.get("palette_floor", 1)))),
+        overflow_weight=("coverage" if str(d.get("overflow_weight")) == "coverage" else "colors"),
+    )
+    return params, mp
+
+
 def _ensure_tileset_analysis(
     tileset_id: int,
     raster: TileRasterizer,
@@ -159,7 +233,9 @@ def _ensure_tileset_analysis(
         pool_key_to_idx: dict[tuple, int] = {}
     else:
         pool_metatiles = [_render_column(ck, raster, priorities) for ck in pool_keys]
-        analysis = analyze_tileset_palettes(pool_metatiles)
+        analysis = analyze_tileset_palettes(
+            pool_metatiles, max_palettes=_max_palettes, quantizer=_make_quantizer()
+        )
         pool_key_to_idx = {ck: i for i, ck in enumerate(pool_keys)}
 
     _tileset_analysis_cache[cache_key] = (analysis, pool_key_to_idx)
@@ -605,6 +681,12 @@ body{background:#1a1a1a;color:#ddd;font:12px/1.4 monospace;display:flex;flex-dir
 /* ---- map nav strip ---- */
 #mapnav{display:none;background:#1c1c1c;border-bottom:1px solid #383838;padding:4px 8px;gap:6px;align-items:center;overflow-x:auto;white-space:nowrap;flex-shrink:0;font-size:11px}
 #mapnav.show{display:flex}
+#knobbar{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;background:#1f241f;border-bottom:1px solid #3a463a;padding:4px 8px;flex-shrink:0;font-size:11px}
+#knobbar label{color:#9a9;display:flex;align-items:center;gap:3px}
+#knobbar input,#knobbar select{background:#222;color:#dfe;border:1px solid #4a5a4a;font:11px monospace;padding:2px 3px;border-radius:2px}
+#knobbar input[type=number]{width:52px}
+#knobbar #k_apply{background:#2c3a2c;border-color:#5a7a5a;color:#cfe}
+#knobbar #k_status{color:#fa0}
 #mapnav .navcur{color:#8cf;font-weight:bold;flex-shrink:0}
 #mapnav .navgrp{color:#777;flex-shrink:0;margin-left:2px}
 #mapnav .navchip{display:inline-block;background:#2a2a2a;border:1px solid #4a4a4a;color:#bcd;text-decoration:none;padding:1px 7px;border-radius:10px;flex-shrink:0}
@@ -672,6 +754,13 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch
 </head>
 <body>
 <div id="toolbar">
+  <span class="lbl">View:</span>
+  <label><input type="radio" name="view2" value="rmxp" checked> RPG Maker</label>
+  <label><input type="radio" name="view2" value="post-quant"> Quantized (family)</label>
+  <!-- Dormant: the original per-layer radios are kept intact but hidden; the 2-way
+       toggle above drives the same `currentLayer`. Unhide #layer-debug (or set its
+       display) to restore the full RMXP/L0/L1/L2/GBA/Post-Q layer inspector. -->
+  <span id="layer-debug" style="display:none">
   <span class="lbl">Layer:</span>
   <label><input type="radio" name="layer" value="rmxp" checked> RMXP</label>
   <label><input type="radio" name="layer" value="l0"> L0</label>
@@ -681,6 +770,7 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch
   <label><input type="radio" name="layer" value="gba_bottom"> GBA&#8595;</label>
   <label><input type="radio" name="layer" value="gba_top"> GBA&#8593;</label>
   <label><input type="radio" name="layer" value="post-quant"> Post-Q</label>
+  </span>
   <div class="sep"></div>
   <span class="lbl">Overlay:</span>
   <label><input type="checkbox" id="ov_collision"> Collision</label>
@@ -700,6 +790,18 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch
   <span class="lbl" id="map-title" style="color:#8cf"></span>
 </div>
 <div id="mapnav"></div>
+<div id="knobbar">
+  <span class="lbl">Family knobs:</span>
+  <label title="Interior hue degrees in (70,170) that split the green band into sub-families. Comma-separated, e.g. 120 or 100,140. Empty = one green.">green cuts <input id="k_green" type="text" size="9" placeholder="e.g. 120"></label>
+  <label title="max(R,G,B) below this = 'dark' family">dark&lt; <input id="k_dark" type="number" min="0" max="255" step="1"></label>
+  <label title="HSV saturation below this = 'neutral' family">neutral sat&lt; <input id="k_neutral" type="number" min="0" max="1" step="0.01"></label>
+  <label title="Minimum sub-palettes guaranteed to every family">pal floor <input id="k_floor" type="number" min="1" max="13" step="1"></label>
+  <label title="How leftover palettes are handed out: by distinct-colour overflow, or weighted by how many tiles a family covers">overflow
+    <select id="k_overflow"><option value="colors">colors</option><option value="coverage">coverage</option></select></label>
+  <label title="Total sub-palette budget (engine ceiling 13)">max pals <input id="k_maxpal" type="number" min="1" max="13" step="1"></label>
+  <button class="btn" id="k_apply">Apply &amp; re-render</button>
+  <span id="k_status" class="lbl"></span>
+</div>
 <div id="main">
   <div id="canvas-wrap">
     <canvas id="mapCanvas"></canvas>
@@ -741,7 +843,10 @@ function getMetatileURL(idx, layer) {
     const m = (V.metatile_images || {})[idx];
     return m ? m[layer] : null;
   }
-  return '/api/metatile/' + D.meta.map_id + '/' + idx + '.png?layer=' + layer;
+  // `g` = quant generation: bumped on every knob Apply so the post-quant PNGs (served
+  // with Cache-Control: immutable) are re-fetched instead of served stale by the browser.
+  const g = (V.quant && V.quant.generation) || 0;
+  return '/api/metatile/' + D.meta.map_id + '/' + idx + '.png?layer=' + layer + '&g=' + g;
 }
 
 // ---- lazy image cache -----------------------------------------------------
@@ -1033,6 +1138,12 @@ canvas.addEventListener('wheel', function(e) {
 document.querySelectorAll('input[name="layer"]').forEach(function(r) {
   r.addEventListener('change', function() { currentLayer = r.value; scheduleRender(); });
 });
+// 2-way RPG-Maker <-> Quantized(family) toggle: drives the same `currentLayer` as the
+// dormant per-layer radios above (values 'rmxp' / 'post-quant').
+document.querySelectorAll('input[name="view2"]').forEach(function(r) {
+  r.addEventListener('change', function() { currentLayer = r.value; scheduleRender(); });
+});
+/*KNOBBAR_JS*/
 ['collision','diff','priority','merge','events','warps'].forEach(function(name) {
   const el = document.getElementById('ov_' + name);
   el.addEventListener('change', function() { overlays[name] = el.checked; scheduleRender(); });
@@ -1424,3 +1535,55 @@ function renderMapNav() {
 </body>
 </html>
 """
+
+
+# ---------------------------------------------------------------------------
+# Shared knob-panel JS (injected into both MAP_VIEWER_HTML and PALETTE_VIEWER_HTML at
+# the `/*KNOBBAR_JS*/` token). Server mode only — the panel hides itself otherwise,
+# since live re-quantization needs the Python packer. Apply POSTs the knobs and, on
+# success, reloads: the reload re-renders the map + palette views from fresh state and
+# carries the new generation token that busts the post-quant image cache.
+# ---------------------------------------------------------------------------
+KNOBBAR_JS = r"""
+(function(){
+  var kb = document.getElementById('knobbar');
+  if (!kb) return;
+  if (V.mode !== 'server') { kb.style.display = 'none'; return; }
+  var q = V.quant || {};
+  var setv = function(id, val){ var e = document.getElementById(id); if (e != null && val != null) e.value = val; };
+  setv('k_green', (q.green_cuts || []).join(','));
+  setv('k_dark', q.dark_value);
+  setv('k_neutral', q.neutral_sat);
+  setv('k_floor', q.palette_floor);
+  setv('k_maxpal', q.max_palettes);
+  var ov = document.getElementById('k_overflow'); if (ov && q.overflow_weight) ov.value = q.overflow_weight;
+  var apply = document.getElementById('k_apply');
+  var status = document.getElementById('k_status');
+  apply.addEventListener('click', function(){
+    var greens = (document.getElementById('k_green').value || '').split(',')
+      .map(function(s){ return parseFloat(s.trim()); }).filter(function(n){ return !isNaN(n); });
+    var body = {
+      map_id: D.meta.map_id,
+      green_cuts: greens,
+      dark_value: parseInt(document.getElementById('k_dark').value, 10),
+      neutral_sat: parseFloat(document.getElementById('k_neutral').value),
+      palette_floor: parseInt(document.getElementById('k_floor').value, 10),
+      overflow_weight: document.getElementById('k_overflow').value,
+      max_palettes: parseInt(document.getElementById('k_maxpal').value, 10)
+    };
+    status.textContent = 're-quantizing…'; apply.disabled = true;
+    fetch('/api/quantize', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+      .then(function(r){ return r.text().then(function(t){ return { ok:r.ok, t:t }; }); })
+      .then(function(res){
+        if (!res.ok) {
+          var msg = res.t; try { msg = JSON.parse(res.t).error || res.t; } catch (e) {}
+          status.textContent = 'error: ' + msg; apply.disabled = false; return;
+        }
+        location.reload();  // re-render map + palettes from fresh state (new generation busts image cache)
+      })
+      .catch(function(e){ status.textContent = 'error: ' + e; apply.disabled = false; });
+  });
+})();
+"""
+
+MAP_VIEWER_HTML = MAP_VIEWER_HTML.replace("/*KNOBBAR_JS*/", KNOBBAR_JS)

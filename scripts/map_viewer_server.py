@@ -23,6 +23,7 @@ import logging
 import re
 import socket
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -33,10 +34,18 @@ from map_viewer_common import (  # noqa: E402
     MAP_VIEWER_HTML,
     _load_dotenv,
     build_map_data,
+    current_quantize_state,
+    get_quantize_params,
+    params_from_dict,
     render_metatile_png,
     render_tile_png,
+    set_quantize_params,
 )
 from palette_page import PALETTE_VIEWER_HTML  # noqa: E402
+
+# Serializes knob Applies: re-quantization mutates the shared module-level caches in
+# map_viewer_common, so two concurrent POSTs (ThreadingHTTPServer) must not interleave.
+_quant_lock = threading.Lock()
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -172,9 +181,41 @@ class _Handler(BaseHTTPRequestHandler):
             log.exception("500 for %s", self.path)
             self._send(500, "text/plain", str(exc).encode())
 
+    def do_POST(self) -> None:  # noqa: N802
+        path = urlparse(self.path).path
+        try:
+            if path == "/api/quantize":
+                self._handle_quantize()
+            else:
+                self._send(404, "text/plain", b"Not found")
+        except Exception as exc:
+            log.exception("500 POST %s", self.path)
+            self._send(500, "text/plain", str(exc).encode())
+
     # ------------------------------------------------------------------
     # Route handlers
     # ------------------------------------------------------------------
+
+    def _handle_quantize(self) -> None:
+        """Apply new family-packer knobs, eagerly re-quantize the requesting map (so a
+        bad value surfaces as a clean 400 instead of breaking the page reload), and
+        return the new generation token.  On failure the previous params are restored."""
+        length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(length) or b"{}")
+        params, max_pals = params_from_dict(body)
+        map_id = int(body.get("map_id", 0))
+        with _quant_lock:
+            prev_params, prev_max = current_quantize_state()
+            gen = set_quantize_params(params, max_pals)
+            try:
+                build_map_data(map_id)  # eager re-quant; raises ValueError on bad knobs
+            except ValueError as exc:
+                set_quantize_params(prev_params, prev_max)  # roll back; keep tool usable
+                self._send(400, "application/json",
+                           json.dumps({"error": str(exc)}).encode("utf-8"))
+                return
+        self._send(200, "application/json",
+                   json.dumps({"generation": gen}).encode("utf-8"))
 
     def _serve_index(self) -> None:
         index_json = json.dumps(build_index(), separators=(",", ":"))
@@ -183,14 +224,16 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _serve_map_page(self, map_id: int) -> None:
         data = build_map_data(map_id)
-        config = {"mode": "server", "data": data, "graph": map_relationships(map_id)}
+        config = {"mode": "server", "data": data, "graph": map_relationships(map_id),
+                  "quant": get_quantize_params()}
         config_json = json.dumps(config, separators=(",", ":"))
         html = MAP_VIEWER_HTML.replace("__VIEWER_CONFIG__", config_json)
         self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))
 
     def _serve_palette_page(self, map_id: int) -> None:
         data = build_map_data(map_id)
-        config = {"mode": "server", "data": data, "graph": map_relationships(map_id)}
+        config = {"mode": "server", "data": data, "graph": map_relationships(map_id),
+                  "quant": get_quantize_params()}
         config_json = json.dumps(config, separators=(",", ":"))
         html = PALETTE_VIEWER_HTML.replace("__VIEWER_CONFIG__", config_json)
         self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))

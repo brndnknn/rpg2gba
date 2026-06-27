@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import struct
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -82,7 +83,8 @@ class QuadrantPalette:
     """Palette info for one 8×8 quadrant slot within a metatile."""
 
     palette_index: int  # index into PaletteAnalysis.palettes; -1 if fully transparent
-    color_changes: list[tuple[tuple[int, int, int], tuple[int, int, int]]]  # (orig_rgb8, final_rgb8)
+    # each entry is (orig_rgb8, final_rgb8) for a distinct opaque source colour
+    color_changes: list[tuple[tuple[int, int, int], tuple[int, int, int]]]
 
 
 @dataclass
@@ -131,6 +133,7 @@ def _canonicalize_and_quantize(
     metatiles: list[MetatileImage],
     *,
     max_palettes: int = NUM_PALS_TOTAL,
+    quantizer: Callable[..., QuantizeResult] = build_quantized_tileset,
 ) -> tuple[list[np.ndarray], list[list[tuple[int, int, int]]], QuantizeResult]:
     """Steps 1+2 shared core: build flip-canonical tile pool, per-metatile slot
     mapping, and quantize the pool.
@@ -161,7 +164,7 @@ def _canonicalize_and_quantize(
             slots.append((idx, h, v))
         metatile_slots.append(slots)
 
-    quant = build_quantized_tileset(unique_canon, max_palettes=max_palettes)
+    quant = quantizer(unique_canon, max_palettes=max_palettes)
     return unique_canon, metatile_slots, quant
 
 
@@ -194,17 +197,27 @@ def _reassemble_quantized(
     return bottom, top
 
 
-def analyze_tileset_palettes(metatiles: list[MetatileImage]) -> PaletteAnalysis:
+def analyze_tileset_palettes(
+    metatiles: list[MetatileImage],
+    *,
+    max_palettes: int = NUM_PALS_TOTAL,
+    quantizer: Callable[..., QuantizeResult] = build_quantized_tileset,
+) -> PaletteAnalysis:
     """Return a read-only palette analysis for ``metatiles``; writes no files.
 
     For each metatile, reports the sub-palette index and colour-change pairs for
     each of the 8 quadrant slots (0-3 = bottom layer, 4-7 = top layer).  A fully-
     transparent quadrant gets ``palette_index=-1`` and ``color_changes=[]``.
 
+    ``max_palettes`` and ``quantizer`` are forwarded to the packer so callers (e.g.
+    the live map viewer) can swap in the family packer with tuned parameters.
+
     The void metatile (all-transparent) and any warp-copy duplicate a caller may
     append do not affect palette assignment, so callers may omit them — the
     returned palette indices and colours are identical either way."""
-    _, metatile_slots, quant = _canonicalize_and_quantize(metatiles)
+    _, metatile_slots, quant = _canonicalize_and_quantize(
+        metatiles, max_palettes=max_palettes, quantizer=quantizer
+    )
 
     # Convert quant.palettes (list of (<=15,3) uint8 arrays) to list[list[tuple]].
     palettes: list[list[tuple[int, int, int]]] = [
@@ -237,14 +250,22 @@ def emit_tileset(
     secondary_name: str,
     *,
     max_palettes: int = NUM_PALS_TOTAL,
+    quantizer: Callable[..., QuantizeResult] = build_quantized_tileset,
 ) -> EmittedTileset:
     """Pack ``metatiles`` (metatile id = list index) into a PRIMARY+SECONDARY pair.
 
     Writes ``tiles.png`` / ``palettes/NN.pal`` / ``metatiles.bin`` /
-    ``metatile_attributes.bin`` under ``primary_dir`` and ``secondary_dir``."""
+    ``metatile_attributes.bin`` under ``primary_dir`` and ``secondary_dir``.
+
+    ``quantizer`` selects the palette-packing strategy (default
+    ``build_quantized_tileset``); alternate packers must share its signature and
+    return a :class:`QuantizeResult`.  The metatile *ordering* is independent of the
+    quantizer, so two emissions of the same ``metatiles`` with different packers
+    produce interchangeable ``metatiles.bin`` (same ids) over different tile/palette
+    data — which is what lets a single layout drive several palette variants."""
     # --- Steps 1+2: flip-canonical dedup + quantize (shared with analyzer). ---
     unique_canon, metatile_slots, res = _canonicalize_and_quantize(
-        metatiles, max_palettes=max_palettes
+        metatiles, max_palettes=max_palettes, quantizer=quantizer
     )
 
     # --- Step 2.5: post-quantization merge. ----------------------------------

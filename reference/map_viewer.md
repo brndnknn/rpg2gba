@@ -26,6 +26,28 @@ Currently the data pool is the pathfinder slice — **maps 49, 48, 32** (plus wh
 map you open). Other maps may render but aren't guaranteed (the tileset atlas is
 quantized over the slice only; see "Scope & caveats").
 
+### Family-quant view + live knobs (server mode)
+
+The map-grid view's layer control is now a **2-way RPG Maker ↔ Quantized (family)**
+toggle. The "Quantized" side renders the **family** packer
+(`experimental_packers.build_quantized_tileset_family`) — the viewer's default
+quantizer is now family, not the production packer. The original 8-way layer radio
+(RMXP/L0/L1/L2/GBA/GBA↓/GBA↑/Post-Q) is **kept but hidden** (`#layer-debug`,
+`display:none`); unhide it to restore the full layer inspector.
+
+A **knob bar** (`#knobbar`, server mode only — it hides itself in static exports)
+exposes the family packer's `FamilyParams` live: `green cuts` (interior hue° in
+(70,170) that split the green band into sub-families), `dark<` / `neutral sat<`
+(the value/saturation cutoffs for the dark/neutral families), `pal floor`
+(min sub-palettes per family), `overflow` (colors vs coverage allocation), and
+`max pals` (≤13). **Apply** POSTs `/api/quantize` → the server re-quantizes
+(`set_quantize_params` clears the three quant-dependent caches, bumps a `generation`
+token) → the page reloads, re-rendering the map **and** both palette views under the
+new params. The `generation` token is appended to post-quant image URLs (`&g=`) to
+defeat the browser's `immutable` cache. Bad knobs (e.g. `pal floor` too high for the
+family count) return HTTP 400 and roll back, leaving the tool usable. Same knob bar
+is on the palette inspector page.
+
 ---
 
 ## Architecture (why it's split across files)
