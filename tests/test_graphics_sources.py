@@ -67,7 +67,10 @@ def test_resolves_tileset_and_autotiles(tmp_path: Path) -> None:
     assert s.autotile_for_tile(370) is not None  # slot 6 -> Flowers
 
 
-def test_missing_autotile_png_fails_loud(tmp_path: Path) -> None:
+def test_missing_autotile_png_fails_loud_on_access(tmp_path: Path) -> None:
+    """A named-but-absent autotile is fail-loud — but lazily, only when its slot
+    is actually accessed. Naming an asset no map paints (a dead reference like
+    OverWorld 'City') must not abort the tileset at load time."""
     names = ["Ghost", "", "", "", "", "", ""]  # named slot 0, but no file written
     gfx = tmp_path / "Graphics"
     _png(gfx / "Tilesets" / "Indoor(1).png")
@@ -76,8 +79,12 @@ def test_missing_autotile_png_fails_loud(tmp_path: Path) -> None:
         tj,
         {"19": {"id": 19, "tileset_name": "Indoor(1)", "autotile_names": names}},
     )
+    # Load no longer resolves autotiles eagerly: the missing PNG doesn't abort here.
+    s = src.load_tileset_sources(19, tilesets_json=tj, graphics_dir=gfx)
+    assert s.autotiles[1] is None  # an unused slot resolves to None, no error
+    # Accessing the named-but-missing slot is where it fails loud.
     with pytest.raises(FileNotFoundError, match="Ghost"):
-        src.load_tileset_sources(19, tilesets_json=tj, graphics_dir=gfx)
+        _ = s.autotiles[0]
 
 
 def test_missing_tileset_id_fails_loud(tmp_path: Path) -> None:

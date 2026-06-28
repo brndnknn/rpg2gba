@@ -24,7 +24,10 @@ orange); the two-phase packer fixed it. Validate by EYE, not the mean-shift metr
 """
 from __future__ import annotations
 
+import bisect
+import colorsys
 import logging
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -145,7 +148,9 @@ class QuantizeResult:
     # to_5bit reduction; final_rgb8 is the 8-bit palette colour it snapped to (capturing
     # both the 8→5-bit truncation and the palette snap in a single arrow).
     # Empty / fully-transparent tiles get [].
-    color_map: list[list[tuple[tuple[int, int, int], tuple[int, int, int]]]] = field(default_factory=list)
+    color_map: list[list[tuple[tuple[int, int, int], tuple[int, int, int]]]] = field(
+        default_factory=list
+    )
 
 
 def _nearest(colors: np.ndarray, vocab: np.ndarray) -> np.ndarray:
@@ -279,7 +284,7 @@ def build_quantized_tileset(
             # orig8 is aligned 1:1 with new (both ordered by the opaque pixel mask).
             orig8 = t[..., :3][opaque]                         # (M,3) uint8 pre-to_5bit
             uniq8, idx = np.unique(orig8, axis=0, return_index=True)
-            finals = new[idx].astype(np.uint8)                 # representative final per distinct orig
+            finals = new[idx].astype(np.uint8)  # representative final per distinct orig
             color_map.append([
                 (
                     (int(o[0]), int(o[1]), int(o[2])),
@@ -307,3 +312,193 @@ def build_quantized_tileset(
         stats=stats,
         color_map=color_map,
     )
+
+
+# ---------------------------------------------------------------------------
+# Family packer — the pipeline's production palette packer (since 2026-06-26)
+# ---------------------------------------------------------------------------
+# `build_quantized_tileset` packs the whole tileset in one global merge.  The family
+# packer instead partitions tiles by their dominant hue family, gives each family its
+# own slice of the palette budget (so a foliage tile never shares a sub-palette with a
+# wall tile), and packs each family with the global packer.  Validated by eye across
+# the slice maps as the better-looking default, so `build_slice_tilesets` (and the map
+# viewer) use it.  `build_quantized_tileset` is kept as the prior strategy / fallback.
+# (`build_quantized_tileset_diversity`, the other A/B alternate, stays in
+# experimental_packers.py.)
+
+_NO_VOCAB_CUT = 10**9  # global_colors high enough to disable phase-1 vocab merge
+
+
+@dataclass(frozen=True)
+class FamilyParams:
+    dark_value: int = 40          # max(r,g,b) < dark_value  → "dark"
+    neutral_sat: float = 0.18     # HSV saturation < neutral_sat → "neutral"
+    green_cuts: tuple[float, ...] = ()  # interior hue° in (70,170) splitting green into sub-bands
+    palette_floor: int = 1        # minimum palettes guaranteed to each family
+    overflow_weight: str = "colors"  # "colors"=distinct overflow; "coverage"=tile-weighted
+
+
+def _dominant_family(tile: np.ndarray, params: FamilyParams = FamilyParams()) -> str | None:
+    """Hue family of a tile's DOMINANT (most-pixels) opaque 5-bit colour.
+
+    ``None`` for a fully-transparent tile. Coarse bins: low-value -> ``dark``,
+    low-saturation -> ``neutral``, else a hue wedge (red/brown/yellow/green/cyan/
+    blue/purple). With non-empty ``params.green_cuts``, the green band [70,170) is
+    split into sub-families ``green0``, ``green1``, …"""
+    res = resolve_alpha(tile)
+    opaque = res[..., 3] == 255
+    if not opaque.any():
+        return None
+    px = to_5bit(res[..., :3][opaque])
+    colors, counts = np.unique(px, axis=0, return_counts=True)
+    r, g, b = (int(v) for v in colors[counts.argmax()])
+    if max(r, g, b) < params.dark_value:
+        return "dark"
+    h, s, _v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+    if s < params.neutral_sat:
+        return "neutral"
+    deg = h * 360
+    if deg < 15 or deg >= 345:
+        return "red"
+    if deg < 45:
+        return "brown"
+    if deg < 70:
+        return "yellow"
+    if deg < 170:
+        if not params.green_cuts:
+            return "green"
+        cuts = sorted(c for c in params.green_cuts if 70 < c < 170)
+        if not cuts:
+            return "green"
+        idx = bisect.bisect_right(cuts, deg)
+        return f"green{idx}"
+    if deg < 200:
+        return "cyan"
+    if deg < 255:
+        return "blue"
+    return "purple"
+
+
+def _pack_subset(
+    tiles: list[np.ndarray],
+    idxs: list[int],
+    budget: int,
+    offset: int,
+    palettes: list[np.ndarray],
+    tile_palette: list[int],
+    quantized: list[np.ndarray | None],
+    color_map: list,
+) -> int:
+    """Quantize ``tiles[idxs]`` into <=``budget`` palettes (no phase-1 vocab cut, so
+    the merge stays within the subset) and splice the result into the global lists at
+    palette ``offset``. Returns the next free palette offset."""
+    if not idxs or budget <= 0:
+        return offset
+    r = build_quantized_tileset(
+        [tiles[i] for i in idxs], max_palettes=budget, global_colors=_NO_VOCAB_CUT
+    )
+    for local_i, gi in enumerate(idxs):
+        lp = r.tile_palette[local_i]
+        tile_palette[gi] = -1 if lp < 0 else offset + lp
+        quantized[gi] = r.quantized[local_i]
+        color_map[gi] = r.color_map[local_i]
+    palettes.extend(r.palettes)
+    return offset + len(r.palettes)
+
+
+def _assemble(
+    tiles: list[np.ndarray],
+    palettes: list[np.ndarray],
+    tile_palette: list[int],
+    quantized: list[np.ndarray | None],
+    color_map: list,
+) -> QuantizeResult:
+    for i, q in enumerate(quantized):
+        if q is None:
+            quantized[i] = resolve_alpha(tiles[i])
+    return QuantizeResult(
+        palettes=palettes,
+        tile_palette=tile_palette,
+        quantized=quantized,  # type: ignore[arg-type]
+        color_map=color_map,
+        stats={"n_palettes": len(palettes)},
+    )
+
+
+def _allocate_by_overflow(
+    distinct: dict[str, int],
+    total: int,
+    *,
+    counts: dict[str, int] | None = None,
+    floor: int = 1,
+    mode: str = "colors",
+) -> dict[str, int]:
+    """Give every group ``floor`` palettes, then hand each remaining palette to the
+    group with the most overflow.
+
+    ``mode="colors"`` (default): overflow = ``distinct - alloc*COLORS_PER_PALETTE``;
+    identical to the original hardcoded behaviour when ``floor=1``.
+    ``mode="coverage"``: overflow = ``counts * (distinct - alloc*COLORS_PER_PALETTE)``;
+    requires ``counts``; large-coverage families win ties against high-distinct-but-rare
+    ones.
+    """
+    groups = list(distinct)
+    if len(groups) * floor > total:
+        raise ValueError(
+            f"{len(groups)} groups × floor {floor} = {len(groups) * floor} exceed {total} palettes"
+        )
+    alloc = {g: floor for g in groups}
+    for _ in range(total - len(groups) * floor):
+        if mode == "coverage":
+            assert counts is not None, "counts required for mode='coverage'"
+            g = max(groups, key=lambda g: counts[g] * (distinct[g] - alloc[g] * COLORS_PER_PALETTE))
+            if counts[g] * (distinct[g] - alloc[g] * COLORS_PER_PALETTE) <= 0:
+                break
+        else:  # "colors"
+            g = max(groups, key=lambda g: distinct[g] - alloc[g] * COLORS_PER_PALETTE)
+            if distinct[g] - alloc[g] * COLORS_PER_PALETTE <= 0:
+                break
+        alloc[g] += 1
+    return alloc
+
+
+def build_quantized_tileset_family(
+    tiles: list[np.ndarray], *, max_palettes: int = DEFAULT_MAX_PALETTES,
+    params: FamilyParams | None = None,
+) -> QuantizeResult:
+    """Partition tiles by their dominant hue family, pour the palette budget into the
+    families that overflow most, pack each family with the global packer.
+
+    The pipeline's production packer.  Pass a :class:`FamilyParams` to tune hue-bin
+    boundaries, green-band splits, per-family palette floor, and overflow weighting;
+    omitting ``params`` reproduces the stock behaviour exactly."""
+    params = params or FamilyParams()
+    n = len(tiles)
+    fam_of = [_dominant_family(t, params) for t in tiles]
+    fam_tiles: dict[str, list[int]] = defaultdict(list)
+    for i, f in enumerate(fam_of):
+        if f is not None:
+            fam_tiles[f].append(i)
+
+    fam_distinct = {
+        f: len(np.unique(
+            np.concatenate([_opaque_colors(resolve_alpha(tiles[i])) for i in idxs]), axis=0))
+        for f, idxs in fam_tiles.items()
+    }
+    fam_counts = {f: len(idxs) for f, idxs in fam_tiles.items()}
+    budget = _allocate_by_overflow(
+        fam_distinct, max_palettes,
+        counts=fam_counts,
+        floor=params.palette_floor,
+        mode=params.overflow_weight,
+    )
+
+    palettes: list[np.ndarray] = []
+    tile_palette = [-1] * n
+    quantized: list[np.ndarray | None] = [None] * n
+    color_map: list = [[] for _ in range(n)]
+    offset = 0
+    for f, idxs in fam_tiles.items():
+        offset = _pack_subset(tiles, idxs, budget[f], offset,
+                              palettes, tile_palette, quantized, color_map)
+    return _assemble(tiles, palettes, tile_palette, quantized, color_map)

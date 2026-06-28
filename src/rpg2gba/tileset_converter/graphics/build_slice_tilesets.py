@@ -45,6 +45,7 @@ from .emit import (
     MetatileImage,
     emit_tileset,
 )
+from .quantize import build_quantized_tileset_family
 from .raster import TileRasterizer
 from .sources import load_tileset_sources
 
@@ -240,7 +241,7 @@ def build_slice_tilesets(
             logger.info(
                 "[dry] S8a tileset %d: %d columns, %d door column(s) -> "
                 "would emit %s + %s",
-                ts, len(keys), len(door_keys), primary_name, secondary_name,
+                ts, len(ordered), len(door_keys), primary_name, secondary_name,
             )
             continue
 
@@ -265,8 +266,12 @@ def build_slice_tilesets(
         else:
             warp_idx = None
 
+        # Family packer is the pipeline standard (per-hue-family palette budget; see
+        # quantize.build_quantized_tileset_family) — keeps the ROM render consistent
+        # with the map viewer, which previews the same packer.
         emit = emit_tileset(
-            metatile_list, primary_dir, secondary_dir, primary_name, secondary_name
+            metatile_list, primary_dir, secondary_dir, primary_name, secondary_name,
+            quantizer=build_quantized_tileset_family,
         )
         results[ts] = emit
 

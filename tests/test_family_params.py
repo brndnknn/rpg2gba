@@ -1,4 +1,4 @@
-"""Tests for FamilyParams tunability in experimental_packers.
+"""Tests for FamilyParams tunability in the family packer (quantize.py).
 
 Verifies that:
   - Default FamilyParams reproduces original behaviour byte-for-byte.
@@ -12,13 +12,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from rpg2gba.tileset_converter.graphics.experimental_packers import (
+from rpg2gba.tileset_converter.graphics.quantize import (
     FamilyParams,
+    QuantizeResult,
     _allocate_by_overflow,
     _dominant_family,
     build_quantized_tileset_family,
 )
-from rpg2gba.tileset_converter.graphics.quantize import QuantizeResult
 
 # ---------------------------------------------------------------------------
 # Helpers

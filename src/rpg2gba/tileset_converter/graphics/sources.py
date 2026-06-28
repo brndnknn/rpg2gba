@@ -11,12 +11,21 @@ unpacked Uranium `Graphics/` tree (`Tilesets/` + `Autotiles/`).
 Fail loud (CLAUDE.md §4.5): a *named* asset that doesn't resolve to a real file
 aborts with the name. A missing PNG would otherwise silently render as blank art.
 An empty slot name is legitimate (`None`), not an error.
+
+Autotile resolution is *lazy* (per slot, on first access): RMXP tilesets routinely
+name autotile slots no map ever paints (dead references — e.g. OverWorld slot 6
+'City', whose PNG was never shipped). Resolving every name eagerly let one
+unused-but-missing asset abort the whole tileset. Resolving a slot only when it's
+accessed keeps fail-loud for autotiles a map actually uses, while never touching
+slots nothing references. The tileset atlas PNG itself is still resolved eagerly
+(every tileset needs it).
 """
 from __future__ import annotations
 
 import json
 import logging
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -50,14 +59,16 @@ def base_for_slot(slot: int) -> int:
 class TilesetSources:
     """Resolved art for one Uranium tileset.
 
-    `autotiles` is a length-7 tuple aligned to RMXP autotile slots; an entry is
-    `None` when that slot is unused (empty name in the source data)."""
+    `autotiles` is a length-7 sequence aligned to RMXP autotile slots; an entry is
+    `None` when that slot is unused (empty name in the source data). It resolves
+    each slot's PNG lazily on access (see `_LazyAutotiles`), so an unaccessed
+    slot that names a missing asset never aborts."""
 
     tileset_id: int
     name: str
     tileset_name: str
     tileset_png: Path
-    autotiles: tuple[Path | None, ...]
+    autotiles: Sequence[Path | None]
 
     def autotile_for_base(self, base: int) -> Path | None:
         """The autotile PNG for an autotile *base* id (or None for an empty slot)."""
@@ -68,6 +79,40 @@ class TilesetSources:
         if not (AUTOTILE_BASE <= tile_id < STATIC_BASE):
             raise ValueError(f"tile_id {tile_id} is not an autotile id (48..383)")
         return self.autotiles[tile_id // AUTOTILE_BASE - 1]
+
+
+class _LazyAutotiles(Sequence):
+    """Length-7 autotile view that resolves a slot's PNG only when indexed.
+
+    Backs `TilesetSources.autotiles`. Holds the slot names + the `Autotiles/` dir
+    and calls `_resolve` (fail-loud) the first time a slot is read, caching the
+    result. Empty name -> `None`. A slot that's never accessed is never resolved,
+    so naming an asset no map paints can't abort the tileset."""
+
+    __slots__ = ("_names", "_dir", "_tileset_id", "_cache")
+
+    def __init__(self, names: Sequence[str], directory: Path, tileset_id: int) -> None:
+        self._names = tuple(names)
+        self._dir = directory
+        self._tileset_id = tileset_id
+        self._cache: dict[int, Path | None] = {}
+
+    def __len__(self) -> int:
+        return len(self._names)
+
+    def __getitem__(self, slot: int) -> Path | None:
+        if slot not in self._cache:
+            name = self._names[slot]
+            self._cache[slot] = (
+                _resolve(
+                    name,
+                    self._dir,
+                    what=f"tileset {self._tileset_id} autotile slot {slot}",
+                )
+                if name
+                else None
+            )
+        return self._cache[slot]
 
 
 def default_graphics_dir() -> Path:
@@ -114,21 +159,14 @@ def load_tileset_sources(
             f"tileset {tileset_id}: expected {AUTOTILE_SLOTS} autotile_names, "
             f"got {len(names)} — re-dump tilesets.json"
         )
-    autotiles: list[Path | None] = []
-    for slot, name in enumerate(names):
-        if not name:
-            autotiles.append(None)
-            continue
-        autotiles.append(
-            _resolve(name, gfx / "Autotiles", what=f"tileset {tileset_id} autotile slot {slot}")
-        )
+    autotiles = _LazyAutotiles(names, gfx / "Autotiles", tileset_id)
 
     return TilesetSources(
         tileset_id=tileset_id,
         name=entry.get("name") or "",
         tileset_name=tileset_name,
         tileset_png=tileset_png,
-        autotiles=tuple(autotiles),
+        autotiles=autotiles,
     )
 
 

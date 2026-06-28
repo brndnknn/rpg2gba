@@ -1540,6 +1540,14 @@ function renderMapNav() {
     setTimeout(function() { canvas.width = wrap.clientWidth; canvas.height = wrap.clientHeight; fitMap(); }, 0);
   }
 })();
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'q') return;
+  if (['INPUT','TEXTAREA','SELECT'].indexOf(document.activeElement.tagName) !== -1) return;
+  const next = currentLayer === 'rmxp' ? 'post-quant' : 'rmxp';
+  currentLayer = next;
+  document.querySelectorAll('input[name="view2"]').forEach(function(r) { r.checked = r.value === next; });
+  scheduleRender();
+});
 </script>
 </body>
 </html>
