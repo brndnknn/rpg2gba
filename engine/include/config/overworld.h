@@ -99,7 +99,16 @@
 // Lighting
 #define OW_SHADOW_INTENSITY             4       // Ranges from 0 to 16, where 0 is fully transparent and 16 is black.
 #define OW_OBJECT_SUBPRIORITY           148     // The higher the value, the farther back compared to other sprites. Shadows should be behind object events.
+// BEGIN URANIUM MAP WALKER — raw display (§4.10): no day/night tint so colors render as
+// the raw quantized palette. Gated under the walker flag so normal slice builds keep DNS.
+// Revert by deleting this block and restoring the plain `#define OW_ENABLE_DNS TRUE`.
+#include "config/uranium_walker.h"
+#if URANIUM_MAP_WALKER == TRUE
+#define OW_ENABLE_DNS                   FALSE
+#else
 #define OW_ENABLE_DNS                   TRUE    // If set to TRUE, the overworld will be tinted depending on time of day.
+#endif
+// END URANIUM MAP WALKER
 
 // Object Event Shadows
 #define OW_OBJECT_VANILLA_SHADOWS      FALSE    // When FALSE, every object in the overworld has a shadow. WARNING: This means every object will take up two sprites instead of one. When TRUE, an object's shadow is only shown when jumping.

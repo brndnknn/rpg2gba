@@ -1,4 +1,5 @@
 #include "global.h"
+#include "uranium_map_walker.h"
 #include "new_game.h"
 #include "random.h"
 #include "pokemon.h"
@@ -240,19 +241,34 @@ void NewGameInitData(void)
 // Invoked from intro.c right after the copyright screen (save-block pointers + heap
 // are already up). Skips the Rayquaza intro, title screen, and Birch speech: stamps
 // a default identity (the Birch speech is the only thing that normally sets name +
-// gender), runs the stock new-game init + warp (CB2_NewGame -> NewGameInitData ->
-// WarpToTruck, itself redirected to the Uranium spawn), then clears gFieldCallback so
-// the player just fades in instead of running ExecuteTruckSequence (truck-only; it
-// rewrites InsideOfTruck metatiles and would corrupt/softlock a normal map).
-// Revert this function + the intro.c call site to restore vanilla boot.
+// gender), then runs the stock new-game init + warp (CB2_NewGame -> NewGameInitData ->
+// WarpToTruck, itself redirected to the Uranium spawn).
+//
+// The moving-truck cutscene CB2_NewGame would normally arm (ExecuteTruckSequence:
+// shaking room + locked controls) is suppressed inside CB2_NewGame itself (overworld.c,
+// same sentinel). It MUST be swapped there, not here: CB2_NewGame's DoMapLoadLoop()
+// consumes the field callback synchronously before returning, so the previous
+// `gFieldCallback = NULL` on this side was always a no-op (it ran after the truck task
+// had already been created). Revert this function + the intro.c call site +
+// the overworld.c block to restore vanilla boot.
 static const u8 sUraniumDefaultName[] = _("RED");
 
 void CB2_StartUraniumSlice(void)
 {
     gSaveBlock2Ptr->playerGender = MALE;
     StringCopy(gSaveBlock2Ptr->playerName, sUraniumDefaultName);
+    // BEGIN URANIUM MAP WALKER — mark walker active BEFORE the map load.
+    // The actual field callback is armed inside CB2_NewGame (overworld.c), because
+    // CB2_NewGame's DoMapLoadLoop() consumes gFieldCallback synchronously — setting it
+    // here after CB2_NewGame() returns is a no-op (the truck-suppression comment above
+    // documents the same trap). We only flip sWalkerActive here so the runtime gates
+    // (NPC spawn suppression, bounds-clamp collision, step-script suppression) are in
+    // effect DURING the map load, not just after it.
+#if URANIUM_MAP_WALKER == TRUE
+    UraniumWalker_Begin();
+#endif
+    // END URANIUM MAP WALKER
     CB2_NewGame();
-    gFieldCallback = NULL;
 }
 // END URANIUM PATHFINDER SLICE
 

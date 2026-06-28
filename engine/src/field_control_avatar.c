@@ -1,4 +1,5 @@
 #include "global.h"
+#include "uranium_map_walker.h"
 #include "battle_setup.h"
 #include "bike.h"
 #include "coord_event_weather.h"
@@ -681,6 +682,12 @@ static bool32 TrySetupDiveEmergeScript(void)
 
 bool8 TryStartStepBasedScript(struct MapPosition *position, u16 metatileBehavior, enum Direction direction)
 {
+    // BEGIN URANIUM MAP WALKER — suppress all step-based scripts (coord, warp, misc)
+#if URANIUM_MAP_WALKER == TRUE
+    if (UraniumWalker_IsActive())
+        return FALSE;
+#endif
+    // END URANIUM MAP WALKER
     if (TryStartCoordEventScript(position) == TRUE)
         return TRUE;
     if (TryStartWarpEventScript(position, metatileBehavior) == TRUE)

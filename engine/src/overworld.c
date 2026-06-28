@@ -1,4 +1,5 @@
 #include "global.h"
+#include "uranium_map_walker.h"
 #include "overworld.h"
 #include "battle_pyramid.h"
 #include "battle_setup.h"
@@ -1888,7 +1889,26 @@ void CB2_NewGame(void)
     if (IS_FRLG)
         gFieldCallback = FieldCB_WarpExitFadeFromBlack;
     else
-        gFieldCallback = ExecuteTruckSequence;
+    {
+        // BEGIN URANIUM PATHFINDER SLICE — suppress the moving-truck cutscene on new-game boot.
+        // The slice spawns into a normal map (Map049 Player's House 1F), not InsideOfTruck.
+        // ExecuteTruckSequence rewrites truck-only metatiles, bobs the camera (the "shake"),
+        // and LockPlayerFieldControls() (can't move). It runs synchronously inside the
+        // DoMapLoadLoop() below (state 12 -> RunFieldCallback), so swapping it here — before the
+        // load loop consumes the callback — is the only place that works; clearing gFieldCallback
+        // after CB2_NewGame() returns (new_game.c) is too late. Arm the plain warp-exit fade
+        // instead. Revert this block (restore ExecuteTruckSequence) for vanilla boot.
+        //
+        // URANIUM MAP WALKER: for the same "callback is consumed inside DoMapLoadLoop"
+        // reason, the walker's field callback MUST be armed here, not after CB2_NewGame
+        // returns. It installs the walker task + cursor + hides the player on map load.
+#if URANIUM_MAP_WALKER == TRUE
+        gFieldCallback = UraniumWalker_FieldCB_MapLoad;
+#else
+        gFieldCallback = FieldCB_WarpExitFadeFromBlack;
+#endif
+        // END URANIUM PATHFINDER SLICE
+    }
     gFieldCallback2 = NULL;
     DoMapLoadLoop(&gMain.state);
     SetFieldVBlankCallback();
@@ -2567,10 +2587,14 @@ static void InitObjectEventsLocal(void)
     InitPlayerAvatar(x, y, player->direction, gSaveBlock2Ptr->playerGender);
     SetPlayerAvatarTransitionFlags(player->transitionFlags);
     ResetInitialPlayerAvatarState();
+    // BEGIN URANIUM MAP WALKER — no NPCs; no on-warp map scripts
+#if URANIUM_MAP_WALKER != TRUE
     TrySpawnObjectEvents(0, 0);
     FollowerNPC_HandleSprite();
     UpdateFollowingPokemon();
     TryRunOnWarpIntoMapScript();
+#endif
+    // END URANIUM MAP WALKER
 }
 
 static void InitObjectEventsReturnToField(void)

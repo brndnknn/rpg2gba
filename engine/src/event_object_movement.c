@@ -1,4 +1,5 @@
 #include "global.h"
+#include "uranium_map_walker.h"
 #include "malloc.h"
 #include "battle_anim.h"
 #include "battle_pyramid.h"
@@ -2889,6 +2890,14 @@ void TrySpawnObjectEvents(s16 cameraX, s16 cameraY)
 {
     u8 i;
     u8 objectCount;
+
+    // BEGIN URANIUM MAP WALKER — no NPCs ever. Gates the in-view scroll-spawn path too
+    // (not just InitObjectEventsLocal), so NPCs don't pop in as the camera moves.
+#if URANIUM_MAP_WALKER == TRUE
+    if (UraniumWalker_IsActive())
+        return;
+#endif
+    // END URANIUM MAP WALKER
 
     if (gMapHeader.events != NULL)
     {
@@ -6509,6 +6518,20 @@ enum Collision GetCollisionAtCoords(struct ObjectEvent *objectEvent, s16 x, s16 
     if (FlagGet(OW_FLAG_NO_COLLISION))
         return COLLISION_NONE;
     #endif
+
+    // BEGIN URANIUM MAP WALKER — free movement within map bounds; clamp at edges
+#if URANIUM_MAP_WALKER == TRUE
+    if (UraniumWalker_IsActive())
+    {
+        s16 localX = x - MAP_OFFSET;
+        s16 localY = y - MAP_OFFSET;
+        if (localX < 0 || localX >= gMapHeader.mapLayout->width
+         || localY < 0 || localY >= gMapHeader.mapLayout->height)
+            return COLLISION_IMPASSABLE;
+        return COLLISION_NONE;
+    }
+#endif
+    // END URANIUM MAP WALKER
 
     objectEvent->directionOverwrite = DIR_NONE;
 
