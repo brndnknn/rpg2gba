@@ -37,6 +37,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -44,7 +46,9 @@ logger = logging.getLogger(__name__)
 # Slice config (matches PATHFINDER_SLICE_ROADMAP.md S1 decisions)
 # ---------------------------------------------------------------------------
 
-SLICE_MAP_IDS = [49, 48, 32]  # order: 1F (spawn), 2F, Moki Town
+# SLICE_MAP_IDS (the 3-map slice, boot order 1F/2F/Moki) is the single source of
+# truth in rpg2gba.tileset_converter.map_set, imported above. Phase B will set the
+# build target from a --maps selector (slice/full/id-list) via map_set.parse_map_ids.
 
 # S5 warp overrides: warp-source coords. The layout converter stamps the
 # tileset's warp metatile (MB_NON_ANIMATED_DOOR, collision 0) at each so the

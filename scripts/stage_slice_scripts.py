@@ -40,8 +40,9 @@ from rpg2gba.pipeline import _load_dotenv
 from rpg2gba.tileset_converter import assembly as asm
 from rpg2gba.tileset_converter import map_constants as mc
 from rpg2gba.tileset_converter import metadata_wiring as mw
+from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
 
-DEFAULT_SLICE = (49, 48, 32)
+DEFAULT_SLICE = tuple(SLICE_MAP_IDS)
 ALLOWED_MAPS = {49, 48, 32}
 OVERRIDES = Path("reference/map_name_overrides.json")
 

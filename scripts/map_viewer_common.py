@@ -42,8 +42,6 @@ from compare_collision import our_blocked, uranium_blocked  # noqa: E402
 
 log = logging.getLogger(__name__)
 
-SLICE_MAP_IDS: list[int] = [49, 48, 32]
-
 # ---------------------------------------------------------------------------
 # Env / path helpers
 # ---------------------------------------------------------------------------

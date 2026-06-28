@@ -16,8 +16,9 @@ from pathlib import Path
 
 from rpg2gba.pipeline import _load_dotenv
 from rpg2gba.tileset_converter import map_constants as mc
+from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
 
-SLICE_IDS = [32, 48, 49]
+SLICE_IDS = sorted(SLICE_MAP_IDS)
 MAP_INFOS = Path("output/uranium-build/map_infos.json")
 OVERRIDES = Path("reference/map_name_overrides.json")
 PORYMAP = Path("output/uranium-build/porymap")
