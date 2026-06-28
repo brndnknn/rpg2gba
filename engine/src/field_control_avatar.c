@@ -211,6 +211,16 @@ int ProcessPlayerFieldInput(struct FieldInput *input)
     if (input->heldDirection && (input->dpadDirection == playerDirection) && (TrySetUpWalkIntoSignpostScript(&position, metatileBehavior, playerDirection) == TRUE))
         return TRUE;
 
+    // BEGIN URANIUM MAP WALKER — the walker owns A/B/R/L/Start (Task_UraniumWalker);
+    // suppress every field button handler below (interaction, door-warp, start menu,
+    // select, dexnav, debug) so they can't conflict. Returning FALSE = no script
+    // consumed, so cursor movement still proceeds normally.
+#if URANIUM_MAP_WALKER == TRUE
+    if (UraniumWalker_IsActive())
+        return FALSE;
+#endif
+    // END URANIUM MAP WALKER
+
     if (input->pressedAButton && TryStartInteractionScript(&position, metatileBehavior, playerDirection) == TRUE)
         return TRUE;
 

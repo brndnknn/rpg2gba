@@ -13,12 +13,52 @@
 #include "fieldmap.h"
 #include "sprite.h"
 #include "field_weather.h"
+#include "main.h"
+#include "overworld.h"
+#include "window.h"
+#include "menu.h"
+#include "text.h"
+#include "string_util.h"
 #include "constants/weather.h"
 #include "constants/rgb.h"
+#include "constants/maps.h"
 
 #define UWALKER_CURSOR_TAG  0x4B57
 
 static bool8 sWalkerActive = FALSE;
+
+// ---------------------------------------------------------------------------
+// L-toggle debug HUD
+// ---------------------------------------------------------------------------
+
+// Window template modeled on debug.c:741 (sDebugMenuWindowTemplateMain).
+// bg=0: the field uses BG0 for overlay text windows (same as the debug menus).
+// baseBlock=1: all in-field debug overlay windows in debug.c use baseBlock=1;
+// no field tileset data occupies tile-slot 1 on BG0 — the tile allocator
+// starts there for transient text windows (16*4=64 tiles consumed, slots 1-64).
+// paletteNum=15: standard for in-field window overlays throughout the codebase.
+static const struct WindowTemplate sHudWindowTemplate = {
+	.bg          = 0,
+	.tilemapLeft = 1,
+	.tilemapTop  = 1,
+	.width       = 16,
+	.height      = 4,
+	.paletteNum  = 15,
+	.baseBlock   = 1,
+};
+
+// Pokeemerald charmap-encoded string fragments for HUD line construction.
+// 'M'=0xC7 '-'=0xAE ' '=0x00 '('=0x5C ','=0xB8 ')'=0x5D  (charmap.txt)
+static const u8 sHudTxtM[]     = _("M");
+static const u8 sHudTxtDash[]  = _("-");
+static const u8 sHudTxtSp2P[]  = _("  (");
+static const u8 sHudTxtComma[] = _(",");
+static const u8 sHudTxtClose[] = _(")");
+static const u8 sHudTxtMt[]    = _("mt ");
+
+// BSS state (zero-init at startup; sHudOn=FALSE means HUD never accessed before L press).
+static u8    sHudWindowId;  // valid only while sHudOn == TRUE
+static bool8 sHudOn;
 
 // ---------------------------------------------------------------------------
 // Cursor graphics (built into EWRAM at first map load, reused on warps)
@@ -216,13 +256,183 @@ bool8 UraniumWalker_IsActive(void)
 	return sWalkerActive;
 }
 
-// Walker task -- handles walker-specific input (A/B/R/L/Start).
-// Movement is driven by the normal field control; collision override
-// in event_object_movement.c clamps movement to map bounds.
+// ---------------------------------------------------------------------------
+// Warp follow (A) / back-stack (B)
+// ---------------------------------------------------------------------------
+
+#define UWALKER_STACK_MAX 32
+
+struct UWalkerLoc
+{
+	u8  mapGroup;
+	u8  mapNum;
+	s16 x;       // map-local tile coords (no MAP_OFFSET)
+	s16 y;
+};
+
+static EWRAM_DATA struct UWalkerLoc sBackStack[UWALKER_STACK_MAX] = {0};
+static u8    sBackDepth;     // bss
+static bool8 sWarpPending;   // bss: set after issuing a warp, cleared on next map load
+
+// Cursor map-local coords = the (hidden) player anchor's coords minus MAP_OFFSET.
+static void UraniumWalker_GetCursorCoords(s16 *x, s16 *y)
+{
+	u8 id = gPlayerAvatar.objectEventId;
+	*x = gObjectEvents[id].currentCoords.x - MAP_OFFSET;
+	*y = gObjectEvents[id].currentCoords.y - MAP_OFFSET;
+}
+
+// Index of the warp at the cursor tile, or -1.
+static s32 UraniumWalker_WarpAtCursor(void)
+{
+	s16 cx, cy;
+	u8  i;
+
+	if (gMapHeader.events == NULL)
+		return -1;
+	UraniumWalker_GetCursorCoords(&cx, &cy);
+	for (i = 0; i < gMapHeader.events->warpCount; i++)
+	{
+		if (gMapHeader.events->warps[i].x == cx && gMapHeader.events->warps[i].y == cy)
+			return i;
+	}
+	return -1;
+}
+
+static void UraniumWalker_PushBack(void)
+{
+	s16 cx, cy;
+
+	if (sBackDepth >= UWALKER_STACK_MAX)
+		return;  // stack full: drop the push rather than overwrite (cap depth)
+	UraniumWalker_GetCursorCoords(&cx, &cy);
+	sBackStack[sBackDepth].mapGroup = gSaveBlock1Ptr->location.mapGroup;
+	sBackStack[sBackDepth].mapNum   = gSaveBlock1Ptr->location.mapNum;
+	sBackStack[sBackDepth].x        = cx;
+	sBackStack[sBackDepth].y        = cy;
+	sBackDepth++;
+}
+
+// DoWarp arms gFieldCallback = FieldCB_DefaultWarpExit; override it so the walker
+// reinstalls (cursor/weather/task/player-hide) on the destination map.
+static void UraniumWalker_RearmAfterWarp(void)
+{
+	gFieldCallback = UraniumWalker_FieldCB_MapLoad;
+}
+
+// A on a warp tile: push current location, fire the warp like normal play.
+static bool8 UraniumWalker_DoWarpFollow(void)
+{
+	s32 i = UraniumWalker_WarpAtCursor();
+	const struct WarpEvent *w;
+
+	if (i < 0)
+		return FALSE;
+	w = &gMapHeader.events->warps[i];
+	UraniumWalker_PushBack();
+	SetWarpDestinationToMapWarp(w->mapGroup, w->mapNum, w->warpId);
+	DoWarp();
+	UraniumWalker_RearmAfterWarp();
+	return TRUE;
+}
+
+// B: pop the back-stack, warp to the exact tile we left (literal coords, WARP_ID_NONE).
+static bool8 UraniumWalker_DoBack(void)
+{
+	struct UWalkerLoc *loc;
+
+	if (sBackDepth == 0)
+		return FALSE;
+	sBackDepth--;
+	loc = &sBackStack[sBackDepth];
+	SetWarpDestination(loc->mapGroup, loc->mapNum, WARP_ID_NONE, (s8)loc->x, (s8)loc->y);
+	DoWarp();
+	UraniumWalker_RearmAfterWarp();
+	return TRUE;
+}
+
+// ---------------------------------------------------------------------------
+// HUD helpers: create / draw / destroy
+// ---------------------------------------------------------------------------
+
+static void UraniumWalker_CreateHud(void)
+{
+	LoadMessageBoxAndBorderGfx();
+	sHudWindowId = AddWindow(&sHudWindowTemplate);
+	DrawStdWindowFrame(sHudWindowId, FALSE);
+	PutWindowTilemap(sHudWindowId);
+	CopyWindowToVram(sHudWindowId, COPYWIN_FULL);
+}
+
+static void UraniumWalker_DestroyHud(void)
+{
+	ClearStdWindowAndFrameToTransparent(sHudWindowId, TRUE);
+	RemoveWindow(sHudWindowId);
+	sHudWindowId = WINDOW_NONE;
+}
+
+static void UraniumWalker_DrawHud(void)
+{
+	s16 cx, cy;
+	u32 metatileId;
+	u8 *p;
+
+	UraniumWalker_GetCursorCoords(&cx, &cy);
+	metatileId = MapGridGetMetatileIdAt(cx + MAP_OFFSET, cy + MAP_OFFSET);
+
+	FillWindowPixelBuffer(sHudWindowId, PIXEL_FILL(1));
+
+	// Line 1: M{group}-{num}  ({x},{y})
+	p = StringCopy(gStringVar1, sHudTxtM);
+	p = ConvertIntToDecimalStringN(p, gSaveBlock1Ptr->location.mapGroup, STR_CONV_MODE_LEFT_ALIGN, 3);
+	p = StringCopy(p, sHudTxtDash);
+	p = ConvertIntToDecimalStringN(p, gSaveBlock1Ptr->location.mapNum,   STR_CONV_MODE_LEFT_ALIGN, 3);
+	p = StringCopy(p, sHudTxtSp2P);
+	p = ConvertIntToDecimalStringN(p, (s32)cx,                           STR_CONV_MODE_LEFT_ALIGN, 3);
+	p = StringCopy(p, sHudTxtComma);
+	p = ConvertIntToDecimalStringN(p, (s32)cy,                           STR_CONV_MODE_LEFT_ALIGN, 3);
+	StringCopy(p, sHudTxtClose);
+	AddTextPrinterParameterized(sHudWindowId, FONT_SMALL, gStringVar1, 2, 2, TEXT_SKIP_DRAW, NULL);
+
+	// Line 2: mt {metatileId}
+	p = StringCopy(gStringVar2, sHudTxtMt);
+	ConvertIntToDecimalStringN(p, (s32)metatileId, STR_CONV_MODE_LEFT_ALIGN, 5);
+	AddTextPrinterParameterized(sHudWindowId, FONT_SMALL, gStringVar2, 2, 16, TEXT_SKIP_DRAW, NULL);
+
+	PutWindowTilemap(sHudWindowId);
+	CopyWindowToVram(sHudWindowId, COPYWIN_FULL);
+}
+
+// Walker task -- handles walker-specific input. Movement is driven by the normal
+// field control; collision override (event_object_movement.c) clamps to map bounds.
+// R reveal / L HUD / Start jump menu are added here in step 6.
 static void Task_UraniumWalker(u8 taskId)
 {
-	// Steps 4-6 (cursor sprite, warp A/B, R reveal, L HUD, Start menu)
-	// are added here in later phases.
+	if (sWarpPending)
+		return;  // ignore input during a warp transition until the next map loads
+
+	if (JOY_NEW(A_BUTTON))
+	{
+		if (UraniumWalker_DoWarpFollow())
+			sWarpPending = TRUE;
+	}
+	else if (JOY_NEW(B_BUTTON))
+	{
+		if (UraniumWalker_DoBack())
+			sWarpPending = TRUE;
+	}
+	else if (JOY_NEW(L_BUTTON))
+	{
+		sHudOn = !sHudOn;
+		if (sHudOn)
+			UraniumWalker_CreateHud();
+		else
+			UraniumWalker_DestroyHud();
+	}
+
+	// Redraw HUD every frame so coords + metatile stay current.
+	if (sHudOn)
+		UraniumWalker_DrawHud();
 }
 
 // Called as gFieldCallback on walker boot (replaces FieldCB_WarpExitFadeFromBlack).
@@ -230,12 +440,21 @@ void UraniumWalker_FieldCB_MapLoad(void)
 {
 	FadeInFromBlack();
 	sWalkerActive = TRUE;
+	sWarpPending = FALSE;         // new map ready: accept input again
 	SetUpFieldTasks();            // installs step machinery for smooth movement
 	UnlockPlayerFieldControls();
 	SetPlayerInvisibility(TRUE);  // cursor replaces the player sprite
-	CreateTask(Task_UraniumWalker, 80);
+	if (FindTaskIdByFunc(Task_UraniumWalker) == TASK_NONE)
+		CreateTask(Task_UraniumWalker, 80);
 	SetCurrentAndNextWeatherNoDelay(WEATHER_NONE);  // raw display: no weather overlay
 	UraniumWalker_CreateCursor();
+	// The window system is reset on every map load, so the HUD windowId is stale
+	// after any warp.  If the HUD was on, drop the stale id and reopen the window.
+	if (sHudOn)
+	{
+		sHudWindowId = WINDOW_NONE;
+		UraniumWalker_CreateHud();
+	}
 }
 
 #endif // URANIUM_MAP_WALKER == TRUE
