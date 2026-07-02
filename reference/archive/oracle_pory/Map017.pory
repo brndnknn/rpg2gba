@@ -1,0 +1,49 @@
+script Map017_EV001_Page1 {
+    lockall
+    fadescreen(FADE_TO_BLACK)
+    # UNHANDLED: command 355 pbCaveExit — see unhandled[]
+    warp(MAP_URANIUM_22, 11, 10)
+    fadescreen(FADE_FROM_BLACK)
+    releaseall
+    end
+}
+
+
+script Map017_EV002_Page1 {
+    warp(MAP_URANIUM_22, 11, 10)
+    warp(MAP_URANIUM_17, 39, 5)
+    end
+}
+
+script Map017_EV002_Page2 {
+    # UNHANDLED: command 111 — script conditional get_character(0).onEvent? — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP017_EVENT002_TSA)
+    end
+}
+
+
+script Map017_EV003_Trainer_4_Page1 {
+    trainerbattle_single(TRAINER_DREW_67, "Hoy! Small fry! Care for a battle of wits? No? Howabout a battle of Pokémon?", "...Nice job there.")
+    msgbox("In the morning, I like to bench-press my Pokémon tostay fit. As long as I keep 'em in their balls, they don'tmind.")
+    release
+    end
+}
+
+script Map017_EV004_Page1 {
+    lock
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_22, 11, 10)
+    warp(MAP_URANIUM_17, 20, 10)
+    fadescreen(FADE_FROM_BLACK)
+    release
+    end
+}
+
+script Map017_EV004_Page2 {
+    # UNHANDLED: command 111 conditional get_character(0).onEvent? — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP017_EVENT004_TSA)
+    end
+}
+

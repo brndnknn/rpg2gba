@@ -1,0 +1,59 @@
+script Map004_EV001_Page1 {
+    lockall
+    warp(MAP_URANIUM_60, 22, 45)
+    waitstate
+    releaseall
+    end
+}
+
+script Map004_EV002_Page1 {
+    lock
+    faceplayer
+    pokemart(Map004_EV002_Mart)
+    release
+    end
+}
+
+mart Map004_EV002_Mart {
+    ITEM_POKE_BALL
+    ITEM_GREAT_BALL
+    ITEM_SUPER_POTION
+    ITEM_POTION
+    ITEM_ANTIDOTE
+    ITEM_ICE_HEAL
+    ITEM_PARALYZE_HEAL
+    ITEM_REPEL
+    ITEM_ESCAPE_ROPE
+}
+
+
+script Map004_EV003_Page1 {
+    end
+}
+
+script Map004_EV003_Page2 {
+    lock
+    faceplayer
+    # UNHANDLED: command 111 conditional branch on pbNextMysteryGiftID — see unhandled[]
+    # UNHANDLED: command 655 pbReceiveMysteryGift — see unhandled[]
+    msgbox("We look forward to your next visit.")
+    release
+    end
+}
+
+
+script Map004_EV004_Page1 {
+    lock
+    faceplayer
+    msgbox("It's rather sad... there's so much stuff here, yet I can only buy eight or so different items at the register. Where's the fun in that?")
+    release
+    end
+}
+
+script Map004_EV005_Page1 {
+    lock
+    faceplayer
+    msgbox("I wrote a song about Great Balls and how excellent they are. Wanna hear it? ...No?")
+    release
+    end
+}

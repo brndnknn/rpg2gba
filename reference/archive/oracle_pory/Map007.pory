@@ -1,0 +1,256 @@
+script Map007_EV001_Page1 {
+    lock
+    msgbox("Ok, here we are. I'll follow you 'til the end, then we'll split up. I'll do my best to keep our Pokémon healed!")
+    msgbox("(Theo joined you!)")
+    # UNHANDLED: command 355 pbRegisterPartner — see unhandled[]
+    setflag(FLAG_MAP007_EVENT001_SSA)
+    release
+    end
+}
+
+script Map007_EV001_Page2 {
+    lock
+    faceplayer
+    msgbox("We should get to the exit quickly...")
+    release
+    end
+}
+
+script Map007_EV001_Page3 {
+    end
+}
+
+script Map007_EV001_Page4 {
+    end
+}
+
+
+script Map007_EV002_Page1 {
+    lockall
+    warp(MAP_URANIUM_96, 22, 5)
+    waitstate
+    releaseall
+    end
+}
+
+script Map007_EV003_Page1 {
+    lock
+    faceplayer
+    msgbox("Theo: Wait, why're you heading back? I can keep us healed.")
+    # UNHANDLED: move route — see unhandled[]
+    release
+    end
+}
+
+script Map007_EV003_Page2 {
+    lock
+    fadescreen(FADE_TO_BLACK)
+    # UNHANDLED: command 355 pbCaveExit — see unhandled[]
+    warp(MAP_URANIUM_76, 30, 8)
+    fadescreen(FADE_FROM_BLACK)
+    release
+    end
+}
+
+
+script Map007_EV004_Page1 {
+    lock
+    msgbox("Comet Cave, Rochfale City right ahead.")
+    release
+    end
+}
+
+script Map007_EV005_Page1 {
+    fadescreen(FADE_TO_BLACK)
+    # UNHANDLED: command 355 pbCaveExit — see unhandled[]
+    warp(MAP_URANIUM_142, 88, 10)
+    fadescreen(FADE_FROM_BLACK)
+    end
+}
+
+script Map007_EV005_Page2 {
+    # UNHANDLED: command 111 conditional branch on get_character(0).onEvent? (runtime check; branch body is a player move route) — see unhandled[]
+    setflag(FLAG_MAP007_EVENT005_TSA)
+    end
+}
+
+
+script Map007_EV006_Page1 {
+    lock
+    giveitem(ITEM_HP_UP, 1)
+    setflag(FLAG_MAP007_EVENT006_SSA)
+    release
+    end
+}
+
+script Map007_EV006_Page2 {
+    end
+}
+
+
+script Map007_EV007_Page1 {
+    # UNHANDLED: command 111 — player-facing-direction conditional (RGSS type 6, player faces right); no stored-state equivalent — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    end
+}
+
+
+script Map007_EV008_Page1 {
+    lock
+    # UNHANDLED: command 111 — conditional branch on player facing direction; see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    release
+    end
+}
+
+
+script Map007_EV009_Page1 {
+    # UNHANDLED: move route — see unhandled[]
+    end
+}
+
+
+script Map007_EV010_Page1 {
+    # UNHANDLED: command 111 — conditional branch on player facing direction (no stored-flag equivalent); see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    end
+}
+
+
+script Map007_EV011_Page1 {
+    lock
+    giveitem(ITEM_FULL_HEAL, 1)
+    setflag(FLAG_MAP007_EVENT011_SSA)
+    release
+    end
+}
+
+script Map007_EV011_Page2 {
+    end
+}
+
+
+script Map007_EV012_Page1 {
+    lock
+    giveitem(ITEM_POISON_BARB, 1)
+    setflag(FLAG_MAP007_EVENT012_SSA)
+    release
+    end
+}
+
+script Map007_EV012_Page2 {
+    end
+}
+
+
+script Map007_EV013_Page1 {
+    lock
+    giveitem(ITEM_TM39, 1)
+    setflag(FLAG_MAP007_EVENT013_SSA)
+    release
+    end
+}
+
+script Map007_EV013_Page2 {
+    end
+}
+
+
+script Map007_EV017_Page1 {
+    lock
+    # UNHANDLED: command 355 pbPushThisBoulder — see unhandled[]
+    release
+    end
+}
+
+
+script Map007_EV020_Trainer3_Page1 {
+    lock
+    # UNHANDLED: move route — see unhandled[]
+    # UNHANDLED: command 207 show animation — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    msgbox("Back off! These are my specimens!!")
+    # UNHANDLED: move route — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP007_EVENT019_SSA)
+    setflag(FLAG_MAP007_EVENT021_SSA)
+    setflag(FLAG_MAP007_EVENT020_SSA)
+    release
+    end
+}
+
+script Map007_EV020_Trainer3_Page2 {
+    end
+}
+
+
+script Map007_EV021_Explorer2_Page1 {
+    lock
+    faceplayer
+    # UNHANDLED: command 207 show animation 17 — see unhandled[]
+    msgbox("Ooooh, my, this one looks nearly perfectly preserved!\pThis must have been the remnants of a lava flow, carved out by the ocean...")
+    msgbox("I can see the impressions left by its fur.")
+    # UNHANDLED: move route — see unhandled[]
+    msgbox("What are you doing here?\pThis is a very important discovery in the field of paleontology, and it's mine, all mine!!")
+    msgbox("...\n...Well, okay, I did sort of follow you here.\pI tell you what: if you can beat me in a Pokémon battle, I'll let you take one of these fossils.")
+    trainerbattle_single(TRAINER_COOLTRAINER_FEMALE_INDIANA, "", "My fossils...")
+    msgbox("...Fine. You win, fair and square.\pThese fossils are of two kinds of mammal Pokémon that lived 50,000 years ago.\pThe first was known for its lightning-fast strikes,")
+    msgbox("and the second had the strength and power of a mighty glacier.")
+    # UNHANDLED: command 102 Show Choices (Hair Fossil / Tusk Fossil) + fossil item grant + receive move routes — see unhandled[]
+    msgbox("If you take that fossil to the lab in Rochfale, they have the technology to bring it back to life.\pI think I'll stay here in this cave with my fossil... forever.")
+    msgbox("Yeeeesssss, my precioussssss, we shall never again be parted...")
+    setflag(FLAG_MAP007_EVENT021_SSB)
+    release
+    end
+}
+
+script Map007_EV021_Explorer2_Page2 {
+    lock
+    faceplayer
+    msgbox("I think I'll stay here in this cave with my fossil... forever. Yeeeesssss, my precioussssss, we shall never again be parted...")
+    release
+    end
+}
+
+
+script Map007_EV022_Page1 {
+    lock
+    giveitem(ITEM_RAZOR_FANG, 1)
+    setflag(FLAG_MAP007_EVENT022_SSA)
+    release
+    end
+}
+
+script Map007_EV022_Page2 {
+    end
+}
+
+
+script Map007_EV028_Page1 {
+    # UNHANDLED: command 111 — player-facing-direction conditional branch, see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    end
+}
+
+
+script Map007_EV029_Page1 {
+    # UNHANDLED: move route — see unhandled[]
+    end
+}
+
+
+script Map007_EV030_Page1 {
+    lock
+    # UNHANDLED: command 111 — player facing-direction check; see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    release
+    end
+}
+
+
+script Map007_EV031_Page1 {
+    # UNHANDLED: command 111 — conditional on player facing direction — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    end
+}
+

@@ -1,0 +1,342 @@
+script Map049_EV001_Auntie_Page1 {
+    lock
+    faceplayer
+    msgbox("{PLAYER}, sweetie!\nToday's your big day, isn't it?")
+    msgbox("I can't help but feel glum, seeing my little one all grown up and leaving home.\nOh, if only these old bones could do more so that I could support us both!")
+    msgbox("But we both know that you're ready for this. You and that boy Theo...\nalways following in your footsteps, that one.\nYou've always been so capable,\nbut I wonder about him?\nHe is younger after all.")
+    msgbox("I'm sure his father Cameron wouldn't allow him to go unless he was sure.\nAnyway, to celebrate your big day,\nI got you a present.")
+    msgbox("Go ahead and open it!")
+    msgbox("{PLAYER} obtained the Running Shoes!")
+    setflag(FLAG_SYS_B_DASH)
+    msgbox("(The instructions on them read: \"To run, hold B. You can toggle auto-run in the Menu.\")")
+    msgbox("*sniffle*")
+    msgbox("O-oh, don't mind me, sweetie...\nI'm just an emotional old lady.\nIf only your father were here right now...\nWell, I'm sure he's proud of you too.\nAnd I'm positive you'll run into him during your adventure.")
+    msgbox("Now, I shouldn't keep you any longer.\nSay hi to that nice Professor man for me, will you?")
+    msgbox("And if you don't mind stopping by again\nafter you get your first Pokémon,\nI'd love to see it.")
+    msgbox("Good luck, sweetie!")
+    setflag(FLAG_AUNTIE_RUNNING_SHOES_GIVEN)
+    setflag(FLAG_MAP049_EVENT001_SSA)
+    release
+    end
+}
+
+script Map049_EV001_Auntie_Page2 {
+    lock
+    faceplayer
+    msgbox("If you don't mind stopping by after you get your first Pokémon, I'd love to see it.\nGood luck, sugarpie!")
+    release
+    end
+}
+
+script Map049_EV001_Auntie_Page3 {
+    lock
+    faceplayer
+    setflag(FLAG_BLACKBELT_POP_DEFEATED)
+    # UNHANDLED: command 111 script conditional pbHasSpecies?(starter) dispatch — see unhandled[]
+    clearflag(FLAG_AUNTIE_SHOW_FIRST_POKEMON_PENDING)
+    release
+    end
+}
+
+script Map049_EV001_Auntie_Page4 {
+    lock
+    faceplayer
+    setflag(FLAG_BLACKBELT_POP_DEFEATED)
+    msgbox("Hello, honey! Take a break from all that tiring adventuring?")
+    healparty
+    msgbox("Your Pokémon were healed...")
+    msgbox("It's quiet without you around, you know...")
+    random(13)
+    copyvar(VAR_THEO_FOLLOW_CHATTER, VAR_RESULT)
+    if (var(VAR_THEO_FOLLOW_CHATTER) == 0) {
+        msgbox("I've been playing your Wii tennis. It feels good to get moving.")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 1) {
+        msgbox("I joined a swim aerobics class. It meets every Tuesday.")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 2) {
+        msgbox("I asked our neighbors to help set up the internet.")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 3) {
+        msgbox("Those kids next door seem very interested in your Wii. I let them play it.")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 4) {
+        msgbox("I've been getting into indie game development. My latest project is called \"Pokémon Agate.\"")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 5) {
+        msgbox("I haven't seen that nice boy Theo around lately. I wonder where he went?")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 6) {
+        msgbox("Don't you know, I tried to talk to Cam lately, and he just gave me the cold shoulder! How rude!")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 7) {
+        msgbox("Have you heard from my nephew-- your father-- lately? Must be tough, being a ranger.")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 8) {
+        msgbox("I was thinking of getting a pet Pokémon to keep me company.")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 9) {
+        msgbox("Did you ever talk to your neighbor Cam? He's an electrician, you know. Seems to be moving up in the world.")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 10) {
+        msgbox("You know, back when I was a little girl, I was quite a looker. *sigh*")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 11) {
+        msgbox("I was watching the television, and they said your mother's name! Something about a new plant, I forget.")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 12) {
+        msgbox("Beaten any of those gym leaders yet?")
+    }
+    clearflag(FLAG_BLACKBELT_POP_DEFEATED)
+    release
+    end
+}
+
+script Map049_EV001_Auntie_Page5 {
+    lock
+    faceplayer
+    msgbox("Running off on another adventure, eh, {PLAYER}? Why don't you stay and rest up a while?")
+    healparty
+    msgbox("Your Pokémon were healed...")
+    msgbox("It's so nice to have company in the house again. Tonight, I'm making a big dinner for everyone!")
+    release
+    end
+}
+
+
+script Map049_EV002_Page1 {
+    lock
+    faceplayer
+    msgbox("I'd better say goodbye to Auntie first.")
+    # UNHANDLED: move route — see unhandled[]
+    release
+    end
+}
+
+script Map049_EV002_Page2 {
+    warp(MAP_URANIUM_32, 28, 31)
+    end
+}
+
+script Map049_EV002_Page3 {
+    lock
+    faceplayer
+    msgbox("Kellyn: Why don't you take a look at that\nletter before you leave, {PLAYER}?")
+    # UNHANDLED: move route — see unhandled[]
+    release
+    end
+}
+
+script Map049_EV002_Page4 {
+    warp(MAP_URANIUM_32, 28, 31)
+    end
+}
+
+
+script Map049_EV003_Page1 {
+    # UNHANDLED: move route — see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_48, 4, 3)
+    end
+}
+
+
+script Map049_EV004_Page1 {
+    lock
+    faceplayer
+    msgbox("It's a wide-screen TV. I like to watch it while eating dinner.")
+    release
+    end
+}
+
+script Map049_EV005_Page1 {
+    lock
+    faceplayer
+    msgbox("It's a wide-screen TV. I like to watch it while eating dinner.")
+    release
+    end
+}
+
+script Map049_EV006_Page1 {
+    lock
+    faceplayer
+    msgbox("There's a framed embroidery. \"Home is where the heart is!\" And there's a heart underneath it.")
+    release
+    end
+}
+
+script Map049_EV007_Page1 {
+    lock
+    faceplayer
+    msgbox("This cabinet is filled with antique china plates.")
+    release
+    end
+}
+
+script Map049_EV008_Page1 {
+    lock
+    faceplayer
+    msgbox("This cabinet is filled with antique china plates.")
+    release
+    end
+}
+
+script Map049_EV009_Page1 {
+    lock
+    faceplayer
+    msgbox("The fridge. Hope she won't mind if I help myself to a snack...")
+    release
+    end
+}
+
+script Map049_EV010_Page1 {
+    lock
+    faceplayer
+    msgbox("The stove and sink. It's clean because we usually order out.")
+    release
+    end
+}
+
+script Map049_EV011_Page1 {
+    lock
+    faceplayer
+    msgbox("A cup of joe is on the table. It's cold.")
+    release
+    end
+}
+
+script Map049_EV012_Page1 {
+    lock
+    faceplayer
+    msgbox("Out the window I can see Professor Bamb'o's lab. I wonder why he has an apostrophe in his name.")
+    release
+    end
+}
+
+script Map049_EV013_Page1 {
+    lock
+    faceplayer
+    msgbox("Scandalous!\nIt's Auntie's sock drawer.")
+    release
+    end
+}
+
+script Map049_EV014_Page1 {
+    lock
+    faceplayer
+    msgbox("Scandalous!\nIt's Auntie's sock drawer.")
+    release
+    end
+}
+
+script Map049_EV015_Page1 {
+    lock
+    faceplayer
+    msgbox("It's crammed full of Pokémon books.\n\"Pokémon Life\" ... \"Pokémon Evolution\" ... \"Philosophy of Pokémon\" ...")
+    release
+    end
+}
+
+script Map049_EV016_Page1 {
+    lock
+    faceplayer
+    msgbox("This bookshelf contains Auntie's guilty-pleasure reading.\n\"The Arcanine Prince: A Fiery Romance!\"")
+    release
+    end
+}
+
+script Map049_EV017_Lucille_Page1 {
+    lock
+    faceplayer
+    msgbox("...")
+    msgbox("(she doesn't respond.)")
+    msgbox("(her breathing is slow and even, as though in a deep sleep.)")
+    release
+    end
+}
+
+script Map049_EV018_Page1 {
+    lockall
+    # UNHANDLED: move route — see unhandled[]
+    # UNHANDLED: animation (command 207) — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    msgbox("Good morning {PLAYER}!")
+    msgbox("Your parents are in the other room.\nCome, let us see them.")
+    # UNHANDLED: move route — see unhandled[]
+    msgbox("Lucille...\nPoor dear...\pYour father brought her home not too long ago.\pShe hasn't woken up yet.\nIt may be some time before she recovers.\pStill... After 10 long years...\nIt's good to have the entire family together under one roof.")
+    msgbox("It's thanks to you, {PLAYER}.\nYou made our family whole again.\pI feel as though a huge weight has been lifted from my shoulders.")
+    msgbox("I'm just happy we're all together again.")
+    msgbox("...Oh! That's the oven timer!\nI baked us all some cookies.\nLet me go and get them.")
+    # UNHANDLED: move route — see unhandled[]
+    msgbox("Lucille...\pThere's no way to know how much damage the CURIE Interface did to her mind, or how long it will take to undo it.\pBut I'm willing to do whatever it takes.\nI've stepped down as Chief of the Tandor Rangers.\pLooking after her is my number one priority now.\pEventually...\nI'll see your eyes open again, Lucille.")
+    # UNHANDLED: move route — see unhandled[]
+    msgbox("I made everyone cookies!")
+    # UNHANDLED: move route — see unhandled[]
+    msgbox("Here you are!")
+    giveitem(ITEM_LAVA_COOKIE, 1)
+    msgbox("Don't eat it too quickly, now.\nIt's still fresh out of the oven.")
+    msgbox("Oh, {PLAYER}...\nA letter arrived in the mail for you.\pIt seems that since you became Champion of Tandor, you've been receiving a lot of fan mail.\pIt's on the table in the other room.\nWhy don't you open it?")
+    fadescreen(FADE_TO_BLACK)
+    setflag(FLAG_MAP049_EVENT018_SSA)
+    setflag(FLAG_MAP049_EVENT019_SSA)
+    fadescreen(FADE_FROM_BLACK)
+    releaseall
+    end
+}
+
+script Map049_EV018_Page2 {
+    end
+}
+
+
+script Map049_EV020_Page1 {
+    lock
+    faceplayer
+    if (var(VAR_TEMP_POKEMON_CHOICE) == 0) {
+        msgbox("I won't rest until a cure is found for Lucille's condition.\pBut, just standing by her side,\nable to hold her in my arms...\nThat is enough, for now.")
+        addvar(VAR_TEMP_POKEMON_CHOICE, 1)
+    } elif (var(VAR_TEMP_POKEMON_CHOICE) == 1) {
+        msgbox("Of course I'm incredibly proud of you\nfor becoming Champion of Tandor.\pYou've achieved as much as I did in my heyday as a Pokémon Ranger Cadet and then as a fully-fledged Ranger.\pHeroism runs in the family, I suppose.")
+        addvar(VAR_TEMP_POKEMON_CHOICE, 1)
+    } elif (var(VAR_TEMP_POKEMON_CHOICE) == 2) {
+        msgbox("This kind of life...\nI'd forgotten what it was like.\nI spent so many years in a hurry,\nrushing from crisis to crisis.\pAnd... if I'm being honest...\nmy age has been catching up with me.\nI'm 45 years old.\nI'm not as spry as when I was younger.\pA break from the action like this is... nice.")
+        addvar(VAR_TEMP_POKEMON_CHOICE, 1)
+    } elif (var(VAR_TEMP_POKEMON_CHOICE) >= 3) {
+        msgbox("Empirilla's not with me any more.\nIt returned to the Baykal Forest, its home.\pYou know, despite our partnership it was never truly my Pokémon. It stood by my side because of its choice. And it left because of its own choice, too.\pBut I know we'll meet again.")
+        setvar(VAR_TEMP_POKEMON_CHOICE, 0)
+    }
+    release
+    end
+}
+
+
+script Map049_EV021_Page1 {
+    lock
+    # UNHANDLED: command 355 displayNinjaLetter — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    msgbox("What did the letter say?\nIt looked so formal I didn't want to touch it.")
+    msgbox("...")
+    msgbox("Well... that's certainly vague.\nThey wouldn't call for aid unless it was something serious, though.")
+    msgbox("I wonder could it have to do with pirates?")
+    msgbox("There's a piracy problem in East Tandor.\nI know that the Rangers over there are\nhaving a hard time keeping them under control.\nMaybe they could use some help too.")
+    msgbox("The East Tandor Ranger HQ is located in Angelure Town.")
+    msgbox("It's a scenic resort area, but it's also\nknown as a haven for pirates and other riffraff.\nThe further West you sail in the Tandor Sea, the more treacherous and lawless it becomes...")
+    msgbox("But, if there's anybody that can deal with those kinds of conditions, it's you, {PLAYER}.")
+    msgbox("...Now. If you'll excuse me,\nhave to tend to Lucille.")
+    msgbox("But if you ever need to find me...\nYou'll know where I am.")
+    fadescreen(FADE_TO_BLACK)
+    setflag(FLAG_MAP049_EVENT002_SSA)
+    setflag(FLAG_MAP049_EVENT021_SSA)
+    warp(MAP_URANIUM_48, 4, 6)
+    warp(MAP_URANIUM_49, 6, 8)
+    fadescreen(FADE_FROM_BLACK)
+    msgbox("You've reached the end of this portion of the URANIUM post-game. More to come!")
+    msgbox("In the meantime, there's someone in Venesi Town who desperately needs your help...")
+    release
+    end
+}
+
+script Map049_EV021_Page2 {
+    lock
+    # UNHANDLED: command 355 displayNinjaLetter — see unhandled[]
+    msgbox("You've reached the end of this portion of the URANIUM post-game. More to come!")
+    msgbox("In the meantime, there's someone in Venesi Town who desperately needs your help...")
+    release
+    end
+}
+
+
+script Map049_EV022_HEAL_Page1 {
+    healparty
+    setflag(FLAG_DREAM_ACTIVE)
+    end
+}
+

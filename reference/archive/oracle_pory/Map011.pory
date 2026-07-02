@@ -1,0 +1,78 @@
+script Map011_EV002_Page1 {
+    lock
+    faceplayer
+    goto Map011_EV002_Subwaymenu
+}
+
+script Map011_EV002_Subwaymenu {
+    msgbox("Please choose your destination.")
+    # CHECK: 4-option destination menu needs a MULTI_SUBWAY_DESTINATIONS multichoice list defined in Phase 5 — see unhandled[]
+    multichoice(0, 0, MULTI_SUBWAY_DESTINATIONS, FALSE)
+    switch (var(VAR_RESULT)) {
+        case 0:
+            msgbox("So is this the place where you want to go?", MSGBOX_YESNO)
+            if (var(VAR_RESULT) == 1) {
+                checkitem(ITEM_TURTICKET, 1)
+                if (var(VAR_RESULT) == TRUE) {
+                    removeitem(ITEM_TURTICKET, 1)
+                    msgbox("Ok, you may go in.")
+                    fadescreen(FADE_TO_BLACK)
+                    msgbox("Next stop: Burole Town")
+                    # UNHANDLED: warp destination map needs Phase 5 resolution — see unhandled[]
+                    warp(MAP_URANIUM_6, 10, 8)
+                } else {
+                    msgbox("Sorry, but you don't have a ticket!")
+                }
+            } else {
+                goto Map011_EV002_Subwaymenu
+            }
+        case 1:
+            msgbox("So is this the place where you want to go?", MSGBOX_YESNO)
+            if (var(VAR_RESULT) == 1) {
+                checkitem(ITEM_TURTICKET, 1)
+                if (var(VAR_RESULT) == TRUE) {
+                    removeitem(ITEM_TURTICKET, 1)
+                    msgbox("Ok, you may go in.")
+                    fadescreen(FADE_TO_BLACK)
+                    msgbox("Next stop: Nowtoch City")
+                    # UNHANDLED: warp destination map needs Phase 5 resolution — see unhandled[]
+                    warp(MAP_URANIUM_45, 10, 8)
+                } else {
+                    msgbox("Sorry, but you don't have a ticket!")
+                }
+            } else {
+                goto Map011_EV002_Subwaymenu
+            }
+        case 2:
+            msgbox("So is this the place where you want to go?", MSGBOX_YESNO)
+            if (var(VAR_RESULT) == 1) {
+                checkitem(ITEM_TURTICKET, 1)
+                if (var(VAR_RESULT) == TRUE) {
+                    removeitem(ITEM_TURTICKET, 1)
+                    msgbox("Ok, you may go in.")
+                    fadescreen(FADE_TO_BLACK)
+                    msgbox("Next stop: Legen Town")
+                    # UNHANDLED: warp destination map needs Phase 5 resolution — see unhandled[]
+                    warp(MAP_URANIUM_168, 10, 8)
+                } else {
+                    msgbox("Sorry, but you don't have a ticket!")
+                }
+            } else {
+                goto Map011_EV002_Subwaymenu
+            }
+        case 3:
+            msgbox("Ok!")
+    }
+    release
+    end
+}
+
+
+script Map011_EV010_Page1 {
+    lock
+    # UNHANDLED: move route — see unhandled[]
+    warp(MAP_URANIUM_3, 13, 4)
+    release
+    end
+}
+

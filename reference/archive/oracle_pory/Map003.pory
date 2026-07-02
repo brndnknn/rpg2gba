@@ -1,0 +1,64 @@
+script Map003_EV001_Page1 {
+    lock
+    # UNHANDLED: move route — see unhandled[]
+    warp(MAP_URANIUM_11, 6, 12)
+    release
+    end
+}
+
+
+script Map003_EV002_Page1 {
+    lockall
+    warp(MAP_URANIUM_101, 61, 31)
+    waitstate
+    releaseall
+    end
+}
+
+script Map003_EV003_NPC_Page1 {
+    lock
+    faceplayer
+    msgbox("Tandor's new underground system is a modern marvel! I can't wait to ride the train!")
+    release
+    end
+}
+
+script Map003_EV004_TicketKiosk_Page1 {
+    lock
+    faceplayer
+    msgbox("Welcome to Tandor Underground Railway.\nHow can I help you?", MSGBOX_DEFAULT)
+    multichoice(0, 0, MULTI_TICKET_KIOSK, FALSE)  # CHECK: 3-option choice list — MULTI_TICKET_KIOSK constant must be defined during Phase 5; see unhandled[]
+    switch (var(VAR_RESULT)) {
+        case 0:
+            pokemart(Map003_EV004_TicketKiosk_Mart)
+        case 1:
+            msgbox("This is the Bealbeach City Train Station.\pDownstairs, you can travel to the stations in Nowtoch, Legen, and Burole.\pRiding the train requires you to have a T.U.R ticket, which you can purchase from me.")
+    }
+    release
+    end
+}
+
+mart Map003_EV004_TicketKiosk_Mart {
+    ITEM_TURTICKET
+}
+
+
+script Map003_EV005_Page1 {
+    lock
+    faceplayer
+    msgbox("It's a map of West Tandor.")
+    # UNHANDLED: command 355 pbShowMap — see unhandled[]
+    release
+    end
+}
+
+
+script Map003_EV006_Page1 {
+    lock
+    faceplayer
+    msgbox("It's a map of West Tandor.")
+    # UNHANDLED: command 355 pbShowMap — see unhandled[]
+    release
+    end
+}
+

@@ -1,0 +1,240 @@
+script Map012_EV001_Page1 {
+    lock
+    faceplayer
+    msgbox("The door is locked.\nThere's a note on it...\p\"Temporarily Closed Due To Emergency\"")
+    release
+    end
+}
+
+script Map012_EV001_Page2 {
+    # UNHANDLED: move route — door-entry animation + player walking into door — see unhandled[]
+    warp(MAP_URANIUM_98, 13, 17)
+    end
+}
+
+script Map012_EV001_Page3 {
+    # UNHANDLED: command 111 script conditional get_character(0).onEvent? (+ door-exit move routes) — see unhandled[]
+    setflag(FLAG_MAP012_EVENT001_TSA)
+    end
+}
+
+
+script Map012_EV003_Page1 {
+    # UNHANDLED: move route — see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_91, 10, 10)
+    fadescreen(FADE_FROM_BLACK)
+    end
+}
+
+script Map012_EV003_Page2 {
+    # UNHANDLED: command 111 script conditional get_character(0).onEvent? — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP012_EVENT003_TSA)
+    end
+}
+
+
+script Map012_EV004_Page1 {
+    # UNHANDLED: move route — see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_13, 8, 18)
+    fadescreen(FADE_FROM_BLACK)
+    end
+}
+
+script Map012_EV004_Page2 {
+    # UNHANDLED: command 111 script condition get_character(0).onEvent? — see unhandled[]
+    # UNHANDLED: move route (door-exit animation, inside the script-conditional branch) — see unhandled[]
+    setflag(FLAG_MAP012_EVENT004_TSA)
+    end
+}
+
+
+script Map012_EV017_Page1 {
+    lock
+    msgbox("Route 06. Do not forget to bring some Potions! It's very long!")
+    release
+    end
+}
+
+script Map012_EV018_Page1 {
+    lock
+    msgbox("Cypress Pokémon Lab")
+    release
+    end
+}
+
+script Map012_EV019_Page1 {
+    lock
+    # UNHANDLED: move route — see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_104, 4, 11)
+    release
+    end
+}
+
+script Map012_EV019_Page2 {
+    # UNHANDLED: command 111 script conditional get_character(0).onEvent? — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP012_EVENT019_TSA)
+    end
+}
+
+
+script Map012_EV020_Page1 {
+    lock
+    # UNHANDLED: move route — see unhandled[]
+    warp(MAP_URANIUM_92, 9, 12)
+    release
+    end
+}
+
+script Map012_EV020_Page2 {
+    # UNHANDLED: command 111 script conditional get_character(0).onEvent? + door-close move route — see unhandled[]
+    setflag(FLAG_MAP012_EVENT020_TSA)
+    end
+}
+
+
+script Map012_EV021_Page1 {
+    lock
+    # UNHANDLED: move route — see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_93, 9, 12)
+    fadescreen(FADE_FROM_BLACK)
+    release
+    end
+}
+
+script Map012_EV021_Page2 {
+    # UNHANDLED: conditional branch on script `get_character(0).onEvent?` — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP012_EVENT021_TSA)
+    end
+}
+
+
+script Map012_EV022_Page1 {
+    lock
+    msgbox("Welcome to Rochfale. Watch for falling boulders!")
+    release
+    end
+}
+
+script Map012_EV031_Page1 {
+    # UNHANDLED: move route — player walks down through door; see unhandled[]
+    # UNHANDLED: move route — door event animation; see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_154, 4, 8)
+    waitstate
+    end
+}
+
+script Map012_EV031_Page2 {
+    # UNHANDLED: command 111 — script conditional get_character(0).onEvent?; see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP012_EVENT031_TSA)
+    end
+}
+
+
+script Map012_EV035_Page1 {
+    lock
+    # UNHANDLED: move route — see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_130, 9, 13)
+    fadescreen(FADE_FROM_BLACK)
+    release
+    end
+}
+
+script Map012_EV035_Page2 {
+    # UNHANDLED: command 111 script condition get_character(0).onEvent? — see unhandled[]
+    # (branch body is a move route — deferred to Phase 5)
+    setflag(FLAG_MAP012_EVENT035_TSA)
+    end
+}
+
+
+script Map012_EV036_Page1 {
+    lock
+    faceplayer
+    msgbox("Much of the mountains around here are said to be impassable. However, I am determined to scale them!")
+    release
+    end
+}
+
+script Map012_EV037_Page1 {
+    lock
+    faceplayer
+    msgbox("Did you know Tandor was formed by two volcanoes? Both are dormant now, but the Regional Championship takes place over one of 'em.")
+    release
+    end
+}
+
+script Map012_EV038_Page1 {
+    lock
+    faceplayer
+    msgbox("It's amazing how the economy functions when half the population of a given region are Trainers. Trainers who don't work! How would we ever feed ourselves if we didn't have Pokémon to help?")
+    release
+    end
+}
+
+script Map012_EV039_Opera_Page1 {
+    lock
+    faceplayer
+    msgbox("When I was young, I lived in the big city. Now, I just like living here in the quiet countryside.")
+    release
+    end
+}
+
+script Map012_EV042_Opera_Page1 {
+    lock
+    faceplayer
+    msgbox("I've lived in Rochfale Town since I was a little girl. The mountains are rough to live in, true, but I'm hale and hearty as any young lass, ufufu!")
+    release
+    end
+}
+
+script Map012_EV043_Opera_Page1 {
+    lock
+    faceplayer
+    msgbox("Professor Cypress lives here in Rochfale. I hear she does all sorts of projects trying to improve communication between humans and Pokémon. That's impressive!")
+    release
+    end
+}
+
+script Map012_EV055_Trainer5_Page1 {
+    lock
+    # UNHANDLED: move route — Theo approaches the player; see unhandled[]
+    # UNHANDLED: move route — NPC 56 walks toward the player; see unhandled[]
+    msgbox("{PLAYER}! How unexpected!\pIt's good to see ya, mate, but\nunfortunately now isn't the best time...")
+    msgbox("There's been an emergency at Cypress Labs!")
+    msgbox("We're all incredibly flustered.\nSo I went out to try and do something.\pAlthough, actually... running into you now might have been the lucky break we need.")
+    msgbox("I can't explain here.\nHow about you come back with me to the lab?")
+    msgbox("I'll introduce you to Professor Cypress,\nand she'll give you the low-down on what's happened.")
+    msgbox("Follow me!")
+    fadescreen(FADE_TO_BLACK)
+    # UNHANDLED: command 201 warp target MAP_URANIUM_98 needs real map constant — see unhandled[]
+    warp(MAP_URANIUM_98, 14, 17)
+    release
+    end
+}
+
+script Map012_EV055_Trainer5_Page2 {
+    end
+}
+
+
+script Map012_EV057_Page1 {
+    lock
+    faceplayer
+    msgbox("Luuuooooooo!")
+    release
+    end
+}
+
+script Map012_EV057_Page2 {
+    end
+}

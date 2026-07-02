@@ -1,0 +1,52 @@
+script Map010_EV001_Page1 {
+    lockall
+    # UNHANDLED: move route — see unhandled[]
+    # UNHANDLED: command 207 show animation — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    msgbox("Hmm... you there!\nWhat happened to all the Pokémon that were going berserk? They calmed down!\pWhat?!\nYou fought a Terlard? Those are really dangerous!\pHmm... that may have been the problem.")
+    msgbox("When a Terlard's two heads fight with each other, it riles up other Pokémon in the area.\pThanks for bringing peace to the cave again. Now we Trainers can get through without fear.")
+    # UNHANDLED: move route — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_BLACKBELT_POP_DEFEATED)
+    clearflag(FLAG_CAVE_TERLARD_CUTSCENE_ACTIVE)
+    releaseall
+    end
+}
+
+script Map010_EV001_Page2 {
+    end
+}
+
+script Map010_EV001_Page3 {
+    healparty
+    setflag(FLAG_DREAM_ACTIVE)
+    end
+}
+
+
+script Map010_EV002_Page1 {
+    lock
+    fadescreen(FADE_TO_BLACK)
+    # UNHANDLED: command 355 pbCaveExit — see unhandled[]
+    warp(MAP_URANIUM_142, 25, 29)
+    fadescreen(FADE_FROM_BLACK)
+    release
+    end
+}
+
+
+script Map010_EV004_Page1 {
+    lock
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_96, 6, 6)
+    release
+    end
+}
+
+script Map010_EV004_Page2 {
+    # UNHANDLED: conditional branch on script condition get_character(0).onEvent? — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP010_EVENT004_TSA)
+    end
+}
+

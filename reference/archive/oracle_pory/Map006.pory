@@ -1,0 +1,105 @@
+script Map006_EV001_NPC_Page1 {
+    lock
+    faceplayer
+    msgbox("Sometimes I ask myself...\nWhat am I waiting for?\nAnd then I remember: I'm waiting for this train to arrive.\nDuh!")
+    release
+    end
+}
+
+script Map006_EV002_Page1 {
+    lock
+    faceplayer
+    goto Map006_EV002_Menu
+}
+
+script Map006_EV002_Menu {
+    msgbox("Please choose your destination.")
+    # CHECK: 4-way Show Choices -> multichoice; destination list constant MULTI_SUBWAY_DESTINATIONS must be defined (see unhandled[])
+    multichoice(0, 0, MULTI_SUBWAY_DESTINATIONS, 0)
+    switch (var(VAR_RESULT)) {
+        case 0:
+            goto Map006_EV002_Nowtoch
+        case 1:
+            goto Map006_EV002_Legen
+        case 2:
+            goto Map006_EV002_Bealbeach
+        case 3:
+            goto Map006_EV002_Nowhere
+    }
+    release
+    end
+}
+
+script Map006_EV002_Nowtoch {
+    msgbox("So is this the place where you want to go?", MSGBOX_YESNO)
+    if (var(VAR_RESULT) == 1) {
+        checkitem(ITEM_TURTICKET, 1)
+        if (var(VAR_RESULT) == TRUE) {
+            removeitem(ITEM_TURTICKET, 1)
+            msgbox("Ok, you may go in.")
+            msgbox("Next stop: Nowtoch City")
+            # UNHANDLED: command 201 warp map 45 needs Phase 5 resolution — see unhandled[]
+            warp(MAP_URANIUM_45, 10, 8)
+        } else {
+            msgbox("Sorry, but you don't have a ticket!")
+        }
+    } else {
+        goto Map006_EV002_Menu
+    }
+    release
+    end
+}
+
+script Map006_EV002_Legen {
+    msgbox("So is this the place where you want to go?", MSGBOX_YESNO)
+    if (var(VAR_RESULT) == 1) {
+        checkitem(ITEM_TURTICKET, 1)
+        if (var(VAR_RESULT) == TRUE) {
+            removeitem(ITEM_TURTICKET, 1)
+            msgbox("Ok, you may go in.")
+            msgbox("Next stop: Legen Town")
+            # UNHANDLED: command 201 warp map 168 needs Phase 5 resolution — see unhandled[]
+            warp(MAP_URANIUM_168, 10, 8)
+        } else {
+            msgbox("Sorry, but you don't have a ticket!")
+        }
+    } else {
+        goto Map006_EV002_Menu
+    }
+    release
+    end
+}
+
+script Map006_EV002_Bealbeach {
+    msgbox("So is this the place where you want to go?", MSGBOX_YESNO)
+    if (var(VAR_RESULT) == 1) {
+        checkitem(ITEM_TURTICKET, 1)
+        if (var(VAR_RESULT) == TRUE) {
+            removeitem(ITEM_TURTICKET, 1)
+            msgbox("Ok, you may go in.")
+            msgbox("Next stop: Bealbeach City")
+            # UNHANDLED: command 201 warp map 11 needs Phase 5 resolution — see unhandled[]
+            warp(MAP_URANIUM_11, 10, 8)
+        } else {
+            msgbox("Sorry, but you don't have a ticket!")
+        }
+    } else {
+        goto Map006_EV002_Menu
+    }
+    release
+    end
+}
+
+script Map006_EV002_Nowhere {
+    msgbox("Ok!")
+    release
+    end
+}
+
+
+script Map006_EV010_Page1 {
+    # UNHANDLED: move route — see unhandled[]
+    warp(MAP_URANIUM_5, 13, 4)
+    end
+}
+

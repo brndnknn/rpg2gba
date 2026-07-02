@@ -1,0 +1,123 @@
+script Map013_EV001_Receptionist_PVP_Page1 {
+    lock
+    faceplayer
+    call CommonEvent_005
+    release
+    end
+}
+
+script Map013_EV002_Page1 {
+    lockall
+    warp(MAP_URANIUM_12, 34, 43)
+    waitstate
+    releaseall
+    end
+}
+
+script Map013_EV003_Page1 {
+    lock
+    faceplayer
+    # UNHANDLED: command 355 pbPokeCenterPC — see unhandled[]
+    release
+    end
+}
+
+
+script Map013_EV004_Page1 {
+    lock
+    faceplayer
+    setflag(FLAG_BLACKBELT_POP_DEFEATED)
+    random(3)
+    copyvar(VAR_THEO_FOLLOW_CHATTER, VAR_RESULT)
+    if (var(VAR_THEO_FOLLOW_CHATTER) == 1) {
+        msgbox("Hi! I'm a nurse-in-training. I'm interning at this Pokécenter in order to learn more about Pokémon treatment.")
+        clearflag(FLAG_BLACKBELT_POP_DEFEATED)
+    } else {
+        msgbox("Make sure to take good care of your Pokémon. We can heal most injuries, but there's some things our machines can't fix.")
+    }
+    release
+    end
+}
+
+
+script Map013_EV007_Page1 {
+    lock
+    faceplayer
+    random(2)
+    copyvar(VAR_THEO_FOLLOW_CHATTER, VAR_RESULT)
+    addvar(VAR_THEO_FOLLOW_CHATTER, 1)
+    if (var(VAR_THEO_FOLLOW_CHATTER) == 2) {
+        msgbox("This town is so quiet, it's almost eerie.")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 1) {
+        msgbox("Some find solitude relaxing. Me, I just want to move on to Bealbeach city and the next Gym.")
+    }
+    release
+    end
+}
+
+
+script Map013_EV008_Page1 {
+    lockall
+    warp(MAP_URANIUM_12, 34, 43)
+    waitstate
+    releaseall
+    end
+}
+
+script Map013_EV009_Page1 {
+    lock
+    faceplayer
+    msgbox("Hello, and welcome to the Pokémon Center.\pWe restore your tired Pokémon to full health.")
+    msgbox("Would you like to rest your Pokémon?", MSGBOX_YESNO)
+    if (var(VAR_RESULT) == 1) {
+        msgbox("OK, I'll take your Pokémon for a few seconds.")
+        healparty
+        # UNHANDLED: move route — see unhandled[]
+        # UNHANDLED: command 111 Kernel.pbPokerus? conditional — see unhandled[]
+        msgbox("Thank you for waiting.\pWe've restored your Pokémon to full health.\pWe hope to see you again!")
+    } else {
+        msgbox("We hope to see you again!")
+    }
+    release
+    end
+}
+
+script Map013_EV009_Page2 {
+    lock
+    msgbox("First, you should restore your Pokémon to full health.")
+    healparty
+    # UNHANDLED: move route — see unhandled[]
+    msgbox("Your Pokémon have been healed to perfect health.\pWe hope you excel!")
+    clearflag(FLAG_DREAM_ACTIVE)
+    release
+    end
+}
+
+
+script Map013_EV010_Receptionist_TRADE_Page1 {
+    lock
+    faceplayer
+    call CommonEvent_006
+    release
+    end
+}
+
+script Map013_EV011_Page1 {
+    end
+}
+
+script Map013_EV011_Page2 {
+    # UNHANDLED: command 111 — script-condition branch `get_character(0).onEvent?` — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP013_EVENT011_TSA)
+    end
+}
+
+
+script Map013_EV012_Receptionist_TRADE_Page1 {
+    lock
+    faceplayer
+    call CommonEvent_004
+    release
+    end
+}

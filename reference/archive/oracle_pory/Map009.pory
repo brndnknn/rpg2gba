@@ -1,0 +1,15 @@
+script Map009_EV001_Page1 {
+    lockall
+    warp(MAP_URANIUM_60, 70, 22)
+    waitstate
+    releaseall
+    end
+}
+
+script Map009_EV002_Page1 {
+    lockall
+    warp(MAP_URANIUM_76, 18, 102)
+    waitstate
+    releaseall
+    end
+}

@@ -1,0 +1,91 @@
+script Map014_EV001_Page1 {
+    clearflag(FLAG_MAP014_EVENT001_SSB)
+    clearflag(FLAG_INTRO_CUTSCENE_PLAYED)
+    setflag(FLAG_INTRO_CUTSCENE_PLAYED)
+    clearflag(FLAG_MAP014_EVENT001_SSA)
+    setflag(FLAG_INTRO_CUTSCENE_PLAYED)
+    setflag(FLAG_MAP014_EVENT002_SSA)
+    end
+}
+
+script Map014_EV001_Page2 {
+    setflag(FLAG_MAP014_EVENT008_SSA)
+    # UNHANDLED: move route — see unhandled[]
+    clearflag(FLAG_MAP014_EVENT008_SSA)
+    clearflag(FLAG_MAP014_EVENT001_SSA)
+    setflag(FLAG_MAP014_EVENT003_SSA)
+    setflag(FLAG_MAP014_EVENT004_SSA)
+    setflag(FLAG_MAP014_EVENT005_SSA)
+    setflag(FLAG_MAP014_EVENT006_SSA)
+    end
+}
+
+script Map014_EV001_Page3 {
+    # UNHANDLED: command 112/111 — title-screen input loop on Input.trigger?(Input::C) — see unhandled[]
+    # UNHANDLED: command 655 — opens PokemonLoad save-select screen — see unhandled[]
+    end
+}
+
+script Map014_EV001_Page4 {
+    end
+}
+
+
+script Map014_EV002_Page1 {
+    # Cosmetic light-picture animation: an infinite loop (codes 112/413) that shows
+    # and slides picture "pic_light2". No GBA field-script equivalent.
+    # UNHANDLED: command 231 Show Picture (pic_light2) — see unhandled[]
+    # UNHANDLED: command 232 Move Picture — see unhandled[]
+    end
+}
+
+script Map014_EV002_Page2 {
+    end
+}
+
+
+script Map014_EV003_Page1 {
+    lock
+    # UNHANDLED: "press Start" picture/input animation loop (Show Picture 231, Input.trigger? polling 111, Move Picture 232, Erase Event 116) — see unhandled[]
+    release
+    end
+}
+
+script Map014_EV003_Page2 {
+    end
+}
+
+
+script Map014_EV004_Page1 {
+    # UNHANDLED: command 111 — button-input conditional (press C); runtime input check, no stored-flag equivalent — see unhandled[]
+    # Picture/screen-fade choreography (231/232/235, full-screen "Blackness" fade then erase) stripped — cosmetic, no GBA analogue
+    setflag(FLAG_MAP014_EVENT001_SSA)
+    setflag(FLAG_MAP014_EVENT003_SSA)
+    setflag(FLAG_MAP014_EVENT005_SSA)
+    setflag(FLAG_MAP014_EVENT006_SSA)
+    # UNHANDLED: command 355 Audio.bgm_stop — see unhandled[]
+    # UNHANDLED: command 655 load-screen sequence (PokemonLoadScene/PokemonLoad/pbStartLoadScreen) — see unhandled[]
+    end
+}
+
+
+script Map014_EV005_Page1 {
+    # UNHANDLED: light-flicker picture animation loop (commands 231/232) — see unhandled[]
+    end
+}
+
+script Map014_EV005_Page2 {
+    end
+}
+
+
+script Map014_EV006_Page1 {
+    # UNHANDLED: command 112/231/232 picture-animation loop — see unhandled[]
+    # UNHANDLED: command 116 Erase Event — see unhandled[]
+    end
+}
+
+script Map014_EV006_Page2 {
+    end
+}
+

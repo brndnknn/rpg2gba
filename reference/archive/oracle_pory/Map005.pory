@@ -1,0 +1,55 @@
+script Map005_EV001_Page1 {
+    # UNHANDLED: move route — see unhandled[]
+    warp(MAP_URANIUM_6, 6, 12)
+    end
+}
+
+
+script Map005_EV002_Page1 {
+    lockall
+    warp(MAP_URANIUM_60, 58, 20)
+    waitstate
+    releaseall
+    end
+}
+
+script Map005_EV003_Page1 {
+    lock
+    faceplayer
+    msgbox("Welcome to Tandor Underground Railway.\nHow can I help you?")
+    # CHECK: multichoice list MULTI_TUR_KIOSK (Buy a ticket / Information / Exit) must be defined in C — see unhandled[]
+    multichoice(0, 0, MULTI_TUR_KIOSK, FALSE)
+    switch (var(VAR_RESULT)) {
+        case 0:
+            pokemart(Map005_EV003_TicketMart)
+        case 1:
+            msgbox("This is the Burole Town Train Station.\pDownstairs, you can travel to the stations in Nowtoch, Legen, and Bealbeach.\pRiding the train requires you to have a T.U.R ticket, which you can purchase from me.")
+    }
+    release
+    end
+}
+
+mart Map005_EV003_TicketMart {
+    ITEM_TURTICKET
+}
+
+
+script Map005_EV004_Page1 {
+    lock
+    faceplayer
+    msgbox("It's a map of West Tandor.")
+    # UNHANDLED: command 355 pbShowMap — see unhandled[]
+    release
+    end
+}
+
+
+script Map005_EV005_Page1 {
+    lock
+    faceplayer
+    msgbox("It's a map of West Tandor.")
+    # UNHANDLED: command 355 pbShowMap — see unhandled[]
+    release
+    end
+}
+

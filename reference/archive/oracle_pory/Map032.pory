@@ -1,0 +1,568 @@
+script Map032_EV001_Page1 {
+    lock
+    msgbox("Moki Town\n \"Town of Fresh Beginnings\"", MSGBOX_SIGN)
+    release
+    end
+}
+
+
+script Map032_EV003_Page1 {
+    lock
+    # UNHANDLED: move route — see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_50, 14, 18)
+    fadescreen(FADE_FROM_BLACK)
+    release
+    end
+}
+
+script Map032_EV003_Page2 {
+    lock
+    # UNHANDLED: command 111 conditional branch on get_character(0).onEvent? — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP032_EVENT003_TSA)
+    release
+    end
+}
+
+
+script Map032_EV004_Page1 {
+    lock
+    msgbox("Bamb'o Pokémon Research Lab")
+    release
+    end
+}
+
+script Map032_EV005_Page1 {
+    lock
+    # UNHANDLED: move route — see unhandled[]
+    warp(MAP_URANIUM_49, 10, 9)
+    release
+    end
+}
+
+script Map032_EV005_Page2 {
+    lock
+    # UNHANDLED: command 111 conditional on get_character(0).onEvent? — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP032_EVENT005_TSA)
+    release
+    end
+}
+
+
+script Map032_EV006_Page1 {
+    lock
+    # UNHANDLED: move route — see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_64, 9, 12)
+    fadescreen(FADE_FROM_BLACK)
+    release
+    end
+}
+
+script Map032_EV006_Page2 {
+    # UNHANDLED: command 111 — script conditional get_character(0).onEvent?; see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP032_EVENT006_TSA)
+    end
+}
+
+
+script Map032_EV007_Page1 {
+    # UNHANDLED: move route — door open + player walks into the door (this event & player) — see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_65, 9, 12)
+    fadescreen(FADE_FROM_BLACK)
+    end
+}
+
+script Map032_EV007_Page2 {
+    # UNHANDLED: command 111 — script conditional get_character(0).onEvent? — see unhandled[]
+    # UNHANDLED: move route — door close animation (this event & player) — see unhandled[]
+    setflag(FLAG_MAP032_EVENT007_TSA)
+    end
+}
+
+
+script Map032_EV008_Chyinmunk_Page1 {
+    lock
+    faceplayer
+    msgbox("Chyin.. Chyin!")
+    release
+    end
+}
+
+script Map032_EV009_Trainer6_Page1 {
+    lock
+    # UNHANDLED: command 111 script condition "$game_player.x==17" gates the sign branch — see unhandled[]
+    msgbox("<--Road to Kevlar Town -- Moki Town-->")
+    msgbox("It's dangerous to go out without a Pokémon.")
+    # UNHANDLED: move route — player (-1) is pushed back — see unhandled[]
+    release
+    end
+}
+
+script Map032_EV009_Trainer6_Page2 {
+    lock
+    # UNHANDLED: command 111 script condition "$game_player.x==17" gates the sign branch — see unhandled[]
+    msgbox("<--Road to Kevlar Town -- Moki Town-->")
+    msgbox("Hey there, {PLAYER}! I want to show you\nand Theo how to catch a Pokémon.\nCan you go get him?\nHe should be in his house.")
+    # UNHANDLED: move route — player (-1) is pushed back — see unhandled[]
+    release
+    end
+}
+
+script Map032_EV009_Trainer6_Page3 {
+    lock
+    msgbox("<--Road to Kevlar Town -- Moki Town-->")
+    msgbox("Hey there, {PLAYER}!\nNow that you and Theo are here,\nit's time to begin your first lesson as a\nPokémon Trainer and a field research aid.")
+    msgbox("Wild Pokémon, as you probably already\nknow, inhabit tall grass.")
+    msgbox("But that's not the only place - you can\nalso find them in caves, in water, and even in cities if you know where to look.")
+    msgbox("Still, tall grass is going to be your\nbest bet for finding new Pokémon.")
+    msgbox("Now, I'll leave the rest to you both!\nHere, take these.")
+    setflag(FLAG_SYS_POKEDEX_GET)
+    msgbox("[{PLAYER} and Theo received a Pokédex!]")
+    msgbox("That PokéDex is an encyclopedia that will automatically update itself whenever you encounter or catch a new Pokémon.")
+    msgbox("It's very important for my research, so make sure to fill it out as much as possible!")
+    msgbox("Also, I want you to have these.")
+    giveitem(ITEM_POKE_BALL, 5)
+    msgbox("Poké Balls are necessary for\ncatching Pokémon, of course.\nWhat's that thing the kids always say?\n\"Gotta Catch 'Em All!\"")
+    msgbox("If you run out, you can pick up\nsome more at any Poké Mart.\nMoki Town doesn't have one of those...\nbut there's one in Kevlar Town on the other side of Route 01.\nSo, with that said...\nyour lesson is now over.")
+    msgbox("Oh, but you two have PokéPods, don't you?\nHere, let me input my number.")
+    msgbox("You can give me a call anytime, and I'll take a look at how your PokéDex is coming along. If you do a good job collecting many different kinds of Pokémon, I might even have special rewards for you.")
+    msgbox("With that said, I'm going back to my Lab.\nBest of luck on your journeys, both of you!")
+    msgbox("{PLAYER}, I don't care that you got the stronger starter. I'm still gonna be the best Trainer ever! I'll catch tons of Pokémon and we'll win every battle!")
+    msgbox("You just wait and see!!")
+    setvar(VAR_AUNTIE_VISIT_STAGE, 4)
+    release
+    end
+}
+
+script Map032_EV009_Trainer6_Page4 {
+    lock
+    msgbox("<--Road to Kevlar Town -- Moki Town-->")
+    release
+    end
+}
+
+
+script Map032_EV010_Chyinmunk_Page1 {
+    lock
+    faceplayer
+    msgbox("Chyin.. Chyin!")
+    release
+    end
+}
+
+script Map032_EV011_Page1 {
+    lock
+    msgbox("Route 03 ahead.")
+    release
+    end
+}
+
+script Map032_EV012_Page1 {
+    lock
+    faceplayer
+    random(3)
+    copyvar(VAR_THEO_FOLLOW_CHATTER, VAR_RESULT)
+    if (var(VAR_THEO_FOLLOW_CHATTER) == 0) {
+        msgbox("Moki Town is so nice and peaceful, and everyone knows one another. I'd much rather live here than in a big city.")
+    }
+    if (var(VAR_THEO_FOLLOW_CHATTER) == 1) {
+        msgbox("My daughter is now a Trainer, did you know? She is training her Chyinmunk in Route 01. Say hi to her if you see her.")
+    }
+    if (var(VAR_THEO_FOLLOW_CHATTER) == 2) {
+        msgbox("Today is a nice day, isn't it? Seems like it always is around here.")
+    }
+    release
+    end
+}
+
+script Map032_EV012_Page2 {
+    lock
+    faceplayer
+    msgbox("Our peaceful little town\nended up making history.\nLife is just full of surprises!")
+    release
+    end
+}
+
+
+script Map032_EV013_Page1 {
+    lock
+    faceplayer
+    random(2)
+    copyvar(VAR_THEO_FOLLOW_CHATTER, VAR_RESULT)
+    if (var(VAR_THEO_FOLLOW_CHATTER) == 0) {
+        msgbox("I wonder what kind of Pokémon lives in this pond? Probably just Magikarp...")
+    }
+    if (var(VAR_THEO_FOLLOW_CHATTER) == 1) {
+        msgbox("Professor Bamb'o has a lab in that house on the cliff. I wonder why he lives in Moki Town, of all places?")
+    }
+    release
+    end
+}
+
+script Map032_EV013_Page2 {
+    lock
+    faceplayer
+    msgbox("There's more ripples in this\nsmall pond than before.\pDid something happen in our tiny town?\nCouldn't be...")
+    release
+    end
+}
+
+
+script Map032_EV014_Rock_Page1 {
+    lock
+    # UNHANDLED: command 111 conditional on Kernel.pbRockSmash (Rock Smash field-move check) — see unhandled[]
+    # UNHANDLED: command 111 conditional on isRockSmashSoftlocked? — see unhandled[]
+    # UNHANDLED: move route — rock-smash shake animation on this event — see unhandled[]
+    msgbox("The rock takes pity on you and smashes itself.")
+    # UNHANDLED: command 355 pbEraseThisEvent — removeobject needs Phase-5 local id — see unhandled[]
+    # UNHANDLED: command 355 Kernel.pbRockSmashRandomEncounter — see unhandled[]
+    setflag(FLAG_MAP032_EVENT014_SSA)
+    release
+    end
+}
+
+script Map032_EV014_Rock_Page2 {
+    end
+}
+
+
+script Map032_EV015_Rock_Page1 {
+    lock
+    # UNHANDLED: command 111 Kernel.pbRockSmash — Rock Smash field-move check, no flag/var equivalent; see unhandled[]
+    # This event is an Essentials Rock Smash rock: smash → shake animation → erase + roll a wild encounter,
+    # with a softlock-recovery fallback. In pokeemerald this is engine-driven (metatile behavior +
+    # EventScript_RockSmash), not a per-event script. Mappable inner pieces (pbEraseThisEvent →
+    # removeobject + setflag(FLAG_MAP032_EVENT015_SSA); self-switch A → same flag) live inside
+    # untranslatable script-condition branches, so the whole page is deferred. See unhandled[].
+    release
+    end
+}
+
+script Map032_EV015_Rock_Page2 {
+    # Post-smash invisible state (event erased after self-switch A); no actions.
+    end
+}
+
+
+script Map032_EV017_Page1 {
+    lockall
+    # UNHANDLED: move route — see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_172, 10, 10)
+    releaseall
+    end
+}
+
+script Map032_EV017_Page2 {
+    # UNHANDLED: command 111 script conditional get_character(0).onEvent? — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP032_EVENT017_TSA)
+    end
+}
+
+
+script Map032_EV023_Page1 {
+    lock
+    # UNHANDLED: command 355 pbCaveEntrance — see unhandled[]
+    warp(MAP_URANIUM_33, 70, 11)
+    release
+    end
+}
+
+script Map032_EV023_Page2 {
+    lock
+    # UNHANDLED: command 111 script conditional get_character(0).onEvent? — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP032_EVENT023_TSA)
+    release
+    end
+}
+
+
+script Map032_EV027_Page1 {
+    lock
+    faceplayer
+    msgbox("Oh, {PLAYER}, you're leaving home, right? Here, have this, it'll help you on your journey. Don't eat it yourself!")
+    giveitem(ITEM_RARE_CANDY, 1)
+    setflag(FLAG_MAP032_EVENT027_SSA)
+    release
+    end
+}
+
+script Map032_EV027_Page2 {
+    lock
+    faceplayer
+    msgbox("Rare Candies make Pokémon level up. I'm not sure what they do to people, but you'd better not try and find out.")
+    release
+    end
+}
+
+script Map032_EV027_Page3 {
+    lock
+    faceplayer
+    msgbox("You climbed all the way to the top, didn't you?")
+    msgbox("Here, have this from me.\nI daresay you earned it.")
+    giveitem(ITEM_RARE_CANDY, 1)
+    setflag(FLAG_MAP032_EVENT027_SSB)
+    release
+    end
+}
+
+script Map032_EV027_Page4 {
+    lock
+    faceplayer
+    msgbox("Even though you are Champion...\nA Trainer always has a use for more Rare Candies, right?")
+    release
+    end
+}
+
+
+script Map032_EV033_Page1 {
+    lock
+    # UNHANDLED: Rock Smash rock — entire page is gated on untranslatable rock-smash
+    # script conditions (Kernel.pbRockSmash / isRockSmashSoftlocked?) and drives a
+    # rock-smash random encounter; the smash animation move route is deferred to
+    # Phase 5. Intended behavior on a successful smash: shake the rock, run a wild
+    # encounter (Kernel.pbRockSmashRandomEncounter), remove the rock
+    # (pbEraseThisEvent), and set self-switch A (setflag(FLAG_MAP032_EVENT033_SSA)).
+    # See unhandled[] for each piece.
+    release
+    end
+}
+
+script Map032_EV033_Page2 {
+    end
+}
+
+
+script Map032_EV035_Barewl_Page1 {
+    lock
+    faceplayer
+    msgbox("Chyin.. Chyin!")
+    release
+    end
+}
+
+script Map032_EV036_Page1 {
+    fadescreen(FADE_TO_BLACK)
+    # UNHANDLED: command 355 pbCaveEntrance — see unhandled[]
+    warp(MAP_URANIUM_33, 70, 11)
+    fadescreen(FADE_FROM_BLACK)
+    end
+}
+
+script Map032_EV036_Page2 {
+    # UNHANDLED: command 111 script conditional get_character(0).onEvent? — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP032_EVENT036_TSA)
+    end
+}
+
+
+script Map032_EV037_Page1 {
+    lock
+    fadescreen(FADE_TO_BLACK)
+    # UNHANDLED: command 355 pbCaveEntrance — see unhandled[]
+    warp(MAP_URANIUM_33, 70, 11)
+    fadescreen(FADE_FROM_BLACK)
+    release
+    end
+}
+
+script Map032_EV037_Page2 {
+    lock
+    # UNHANDLED: command 111 script conditional get_character(0).onEvent? guarding a move route — see unhandled[]
+    setflag(FLAG_MAP032_EVENT037_TSA)
+    release
+    end
+}
+
+
+script Map032_EV048_npc_Page1 {
+    lock
+    faceplayer
+    msgbox("I'm soooo jealous you get to\nhave your own Pokémon!\nMy mama says I gotta wait 'til I'm older.")
+    release
+    end
+}
+
+script Map032_EV048_npc_Page2 {
+    lock
+    faceplayer
+    msgbox("{PLAYER}! I saw you on TV!\nYou're my hero!")
+    release
+    end
+}
+
+script Map032_EV068_npc_Page1 {
+    lock
+    faceplayer
+    msgbox("Children grow up so fast. Not so long ago it seemed like I was one myself... be sure to have fun on your journey!")
+    release
+    end
+}
+
+script Map032_EV068_npc_Page2 {
+    lock
+    faceplayer
+    msgbox("Children grow up so fast...\nWhy, it wasn't long ago I remember you leaving town on your adventure.")
+    release
+    end
+}
+
+script Map032_EV069_NPC_Page1 {
+    lock
+    faceplayer
+    msgbox("So, you're going to be the big breadwinner now, eh {PLAYER}? I should pop by to visit your auntie now and again! Do ho ho!")
+    release
+    end
+}
+
+script Map032_EV069_NPC_Page2 {
+    lock
+    faceplayer
+    msgbox("Ehh? {PLAYER}, did I hear somethin'\nabout you becomin' Champion?\nWell I'll be darned!\nI knew you had it in ya, kid! Ohohoho!")
+    release
+    end
+}
+
+script Map032_EV070_Page1 {
+    lock
+    faceplayer
+    msgbox("Technology is incredible!\nI can now trade Pokémon with my friends across the world with the power of the Internet!")
+    release
+    end
+}
+
+script Map032_EV070_Page2 {
+    lock
+    faceplayer
+    msgbox("Technology is incredible!\nWhy, I could watch you win the Championship from a live stream on my computer!")
+    release
+    end
+}
+
+script Map032_EV071_NPC_Page1 {
+    lock
+    faceplayer
+    msgbox("Most of the Pokémon species found in Tandor are native to this region.\nBut there are some which can be found in other regions too, like Mankey and Dunsparce.")
+    release
+    end
+}
+
+script Map032_EV071_NPC_Page2 {
+    lock
+    faceplayer
+    msgbox("Professor Bamb'o was instrumental in\ndeveloping the cure for Nuclear Pokémon.\nHe may seem laid-back,\nbut that man is a true genius!")
+    release
+    end
+}
+
+script Map032_EV072_npc_Page1 {
+    lock
+    faceplayer
+    msgbox("My favorite Pokémon is Cubbug.\nIt's so cute!")
+    release
+    end
+}
+
+script Map032_EV072_npc_Page2 {
+    lock
+    faceplayer
+    msgbox("If I raise my Cubbug with love, eventually it will become an adorable Nimflora!")
+    release
+    end
+}
+
+script Map032_EV073_npc_Page1 {
+    lock
+    faceplayer
+    msgbox("I think I'd like a Birbie.\nIt's a Flying-type, so it's strong against bugs.")
+    release
+    end
+}
+
+script Map032_EV073_npc_Page2 {
+    lock
+    faceplayer
+    msgbox("If I train up my Birbie, it can become a magnificent Splendifowl!")
+    release
+    end
+}
+
+script Map032_EV074_Page1 {
+    lock
+    # UNHANDLED: move route — rival approaches the player; see unhandled[]
+    msgbox("Hey, wait up!!!")
+    # UNHANDLED: move route — rival walks up to the player; see unhandled[]
+    # UNHANDLED: command 207 show animation — see unhandled[]
+    msgbox("Where do ya think you're goin', huh?\nAre you tryin' ta get to the lab before me\pso you can get the better Pokémon?\pWell, that ain't gonna happen!\nBecause I'm gonna get the strongest one, first!\pTry to keep up, {PLAYER}!!")
+    # UNHANDLED: move route — rival (event 75) walks off; see unhandled[]
+    setflag(FLAG_MAP032_EVENT075_SSA)
+    setflag(FLAG_MAP032_EVENT074_SSA)
+    release
+    end
+}
+
+script Map032_EV074_Page2 {
+    end
+}
+
+script Map032_EV074_Page3 {
+    end
+}
+
+
+script Map032_EV078_Trainer6_Page1 {
+    lock
+    # UNHANDLED: move route — player is walked to align with the lab path — see unhandled[]
+    # UNHANDLED: move route — this event turns to face the player — see unhandled[]
+    # UNHANDLED: move route — NPC (event 79, the Professor) walks down 5 tiles to the player — see unhandled[]
+    msgbox("Ah, {PLAYER}, you made it!\nGood, good.")
+    msgbox("Why don't you follow me back to the Lab? We have a lot to discuss!")
+    # CHECK: screen-tone fade (command 223) mapped to fadescreen — see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    setflag(FLAG_MAP032_EVENT078_SSA)
+    setflag(FLAG_MAP032_EVENT079_SSA)
+    warp(MAP_URANIUM_50, 14, 7)
+    fadescreen(FADE_FROM_BLACK)
+    release
+    end
+}
+
+script Map032_EV078_Trainer6_Page2 {
+    end
+}
+
+
+script Map032_EV080_Page1 {
+    lockall
+    msgbox("Hey, wait up!!!")
+    # UNHANDLED: command 241 Play BGM (PU-Rival Theme) — see unhandled[]
+    # UNHANDLED: move route — player walked into the scene (loop positions player at y==34) — see unhandled[]
+    # UNHANDLED: move route — player faces down — see unhandled[]
+    # UNHANDLED: move route — rival (event 81) approaches the player — see unhandled[]
+    msgbox("Um... hi.\nIt's good to see you, {PLAYER}.\pGuess we came full circle, huh\nWe're back in Moki Town,\nwhere it all started...")
+    msgbox("...")
+    msgbox("Hey, I wanted to say congrats\nagain on becoming Champion.\pHahaha, you must be sick of hearing that by now.")
+    msgbox("Well, you deserve it!\nWhat you did up on that stage...\pfacing off versus Gamma Urayne...\pThere's nobody in the region more special than you.")
+    msgbox("I mean it!!")
+    msgbox("...Oh yeah, dad wanted me to tell you to come to our house when you've got a minute.")
+    msgbox("I think he has something to give you.\pSee ya there!")
+    # UNHANDLED: move route — rival (event 81) walks away — see unhandled[]
+    # UNHANDLED: command 241 Play BGM (PU-Moki Town) — see unhandled[]
+    setflag(FLAG_MAP032_EVENT081_SSA)
+    setflag(FLAG_MAP032_EVENT080_SSA)
+    releaseall
+    end
+}
+
+script Map032_EV080_Page2 {
+    end
+}
+

@@ -1,0 +1,122 @@
+script Map002_EV001_Page1 {
+    lock
+    faceplayer
+    msgbox("Hello, and welcome to the Pokémon Center.\pWe restore your tired Pokémon to full health.")
+    msgbox("Would you like to rest your Pokémon?", MSGBOX_YESNO)
+    if (var(VAR_RESULT) == 1) {
+        msgbox("OK, I'll take your Pokémon for a few seconds.")
+        healparty
+        # UNHANDLED: command 111 Kernel.pbPokerus? conditional — see unhandled[]
+        msgbox("Thank you for waiting.\pWe've restored your Pokémon to full health.\pWe hope to see you again!")
+    } else {
+        msgbox("We hope to see you again!")
+    }
+    release
+    end
+}
+
+script Map002_EV001_Page2 {
+    lock
+    faceplayer
+    msgbox("First, you should restore your Pokémon to full health.")
+    healparty
+    msgbox("Your Pokémon have been healed to perfect health.\pWe hope you excel!")
+    clearflag(FLAG_DREAM_ACTIVE)
+    release
+    end
+}
+
+
+script Map002_EV002_Page1 {
+    lockall
+    warp(MAP_URANIUM_60, 21, 20)
+    waitstate
+    releaseall
+    end
+}
+
+script Map002_EV003_Page1 {
+    lock
+    faceplayer
+    # UNHANDLED: command 355 pbPokeCenterPC — see unhandled[]
+    release
+    end
+}
+
+
+script Map002_EV004_Page1 {
+    lock
+    faceplayer
+    random(3)
+    copyvar(VAR_THEO_FOLLOW_CHATTER, VAR_RESULT)
+    if (var(VAR_THEO_FOLLOW_CHATTER) == 1) {
+        msgbox("Hey, man. No, I won't battle you, but listen. This Gym Leader? Don't take him for granted; he's much harder than Maria in Nowtoch was.")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 2) {
+        msgbox("Davern uses Ground, Water, Rock, and Dark-types. It's kind of hard to prepare for him.")
+    } else {
+        msgbox("I just got beaten soundly at the Gym. Stock up on supplies at the mart before you try it.")
+    }
+    release
+    end
+}
+
+
+script Map002_EV007_Page1 {
+    lock
+    faceplayer
+    random(2)
+    copyvar(VAR_THEO_FOLLOW_CHATTER, VAR_RESULT)
+    addvar(VAR_THEO_FOLLOW_CHATTER, 1)
+    if (var(VAR_THEO_FOLLOW_CHATTER) == 2) {
+        msgbox("I like the Pokémon Owten! Owten Owten Owten! It's so cute!")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 1) {
+        msgbox("Owten evolves at level 21 into an even fluffier flying cat owl thing!")
+    }
+    release
+    end
+}
+
+
+script Map002_EV008_Page1 {
+    lockall
+    warp(MAP_URANIUM_60, 21, 20)
+    waitstate
+    releaseall
+    end
+}
+
+script Map002_EV009_Receptionist_PVP_Page1 {
+    lock
+    faceplayer
+    call CommonEvent_005
+    release
+    end
+}
+
+script Map002_EV010_Receptionist_TRADE_Page1 {
+    lock
+    faceplayer
+    call CommonEvent_006
+    release
+    end
+}
+
+script Map002_EV011_Page1 {
+    end
+}
+
+script Map002_EV011_Page2 {
+    # UNHANDLED: command 111 — script-condition branch `get_character(0).onEvent?` — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP002_EVENT011_TSA)
+    end
+}
+
+
+script Map002_EV012_Receptionist_TRADE_Page1 {
+    lock
+    faceplayer
+    call CommonEvent_004
+    release
+    end
+}

@@ -1,0 +1,70 @@
+script Map001_EV001_Page1 {
+    lockall
+    warp(MAP_URANIUM_59, 87, 8)
+    waitstate
+    releaseall
+    end
+}
+
+script Map001_EV002_Page1 {
+    lock
+    # UNHANDLED: move route — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_60, 18, 58)
+    fadescreen(FADE_FROM_BLACK)
+    release
+    end
+}
+
+script Map001_EV002_Page2 {
+    # UNHANDLED: command 111 — conditional branch on script get_character(0).onEvent?; see unhandled[]
+    # UNHANDLED: move route(s) inside conditional — see unhandled[]
+    setflag(FLAG_MAP001_EVENT002_TSA)
+    end
+}
+
+
+script Map001_EV003_Page1 {
+    lock
+    faceplayer
+    msgbox("I know I'm a Camper, but it's so good when we get to a town after so many battles!")
+    release
+    end
+}
+
+script Map001_EV004_Page1 {
+    lock
+    faceplayer
+    msgbox("Burole is lovely. I don't know you, but I'm sure you will agree with me!")
+    release
+    end
+}
+
+script Map001_EV005_Page1 {
+    lock
+    # UNHANDLED: move route — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_60, 19, 58)
+    fadescreen(FADE_FROM_BLACK)
+    release
+    end
+}
+
+script Map001_EV005_Page2 {
+    # UNHANDLED: command 111 — script conditional get_character(0).onEvent?; see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP001_EVENT005_TSA)
+    end
+}
+
+
+script Map001_EV006_Page1 {
+    lockall
+    warp(MAP_URANIUM_59, 88, 8)
+    waitstate
+    releaseall
+    end
+}

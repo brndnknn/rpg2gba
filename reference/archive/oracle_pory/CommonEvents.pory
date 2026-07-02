@@ -1,0 +1,263 @@
+script CommonEvent_004 {
+    # STRIPPED: online (phase0: scripts 233/235/236) (strip_list.json)
+    msgbox("The Tandor Network is currently unavailable.")
+    end
+}
+
+script CommonEvent_005 {
+    # STRIPPED: online (phase0: scripts 233/235/236) (strip_list.json)
+    msgbox("The Tandor Network is currently unavailable.")
+    end
+}
+
+script CommonEvent_006 {
+    # STRIPPED: online (phase0: scripts 233/235/236) (strip_list.json)
+    msgbox("The Tandor Network is currently unavailable.")
+    end
+}
+
+script CommonEvent_010 {
+    # UNHANDLED: RACING-Main is a real-time racing minigame (per-frame button-input
+    # polling, map-camera scrolling, picture-overlay HUD, and finish detection driven
+    # by the racer event's live map coordinate). None of this maps to Poryscript
+    # field scripts — entire common event deferred. See unhandled[].
+    return
+}
+
+
+script CommonEvent_011 {
+    # UNHANDLED: RACING-Mini is a picture-based racing minigame — depends on Move
+    # Picture (232, NeedsC engine feature) plus minigame-internal variable math
+    # (character-position read, variable multiply) with no Poryscript equivalent.
+    # See unhandled[]. The constant setvars (vars 59/60) only seed this minigame's
+    # scratch coordinate state, so they are not emitted standalone.
+    return
+}
+
+
+script CommonEvent_012 {
+    lockall
+    fadescreen(FADE_TO_BLACK)
+    delay(8)
+    # UNHANDLED: conditional branch on $game_map.map_id == 71 — no Poryscript
+    #   equivalent for a current-map check; the reset warp it gates is untranslatable here — see unhandled[]
+    # Abyssal Venesi (map 71) reset path: warp(MAP_URANIUM_71, 18, 73), then a move route
+    # UNHANDLED: move route — player walks up one tile after the warp — see unhandled[]
+    # UNHANDLED: conditional branch on $game_map.map_id == 213 — see unhandled[]
+    # Nestlands (map 213) reset path: warp(MAP_URANIUM_208, 9, 10)
+    releaseall
+    end
+}
+
+
+script CommonEvent_035 {
+    msgbox("......\p......")
+    msgbox("Ah, hello {PLAYER}.\nAre you calling to evaluate your PokéDex?")
+    msgbox("I'll reward you for reaching certain milestones in your collection.", MSGBOX_YESNO)
+    if (var(VAR_RESULT) == 1) {
+        # UNHANDLED: commands 355/655 — PokéDex reward-tier evaluation (PROFREWARDS table, $Trainer.pokedexSeen/Owned, jvNextRewardPhone) drives every milestone hint and reward; unbuilt feature — see unhandled[]
+    } else {
+        msgbox("No? Ah well, then...\nUntil next time!")
+    }
+    msgbox("Click!\n......\p......")
+    return
+}
+
+
+script CommonEvent_037 {
+    if (var(VAR_GYM8_PROGRESS) == 0) {
+        setvar(VAR_GYM8_WHITE_TILES, 44)
+        setvar(VAR_GYM8_DARK_TILES, 16)
+        setvar(VAR_GYM8_PROGRESS, 1)
+        return
+    }
+    if (var(VAR_GYM8_PROGRESS) == 1) {
+        setvar(VAR_GYM8_WHITE_TILES, 57)
+        setvar(VAR_GYM8_DARK_TILES, 87)
+        setvar(VAR_GYM8_PROGRESS, 2)
+        return
+    }
+    if (var(VAR_GYM8_PROGRESS) == 2) {
+        setvar(VAR_GYM8_WHITE_TILES, 0)
+        setvar(VAR_GYM8_DARK_TILES, 0)
+        setvar(VAR_GYM8_PROGRESS, 3)
+        return
+    }
+    end
+}
+
+
+script CommonEvent_051 {
+    # UNHANDLED: command 111 — time-of-day conditional, see unhandled[]
+    return
+}
+
+
+script CommonEvent_076 {
+    # UNHANDLED: picture-based VS battle intro animation (codes 231/232/234/235) — needs custom picture engine feature; see unhandled[]
+    # UNHANDLED: command 241 play BGM "PU-TheoBattleIntro" — see unhandled[]
+    end
+}
+
+
+script CommonEvent_077 {
+    random(4)
+    copyvar(VAR_THEO_FOLLOW_CHATTER, VAR_RESULT)
+    if (var(VAR_THEO_FOLLOW_CHATTER) == 0) {
+        msgbox("...Did you hear that?\nNo, it must've just been my imagination...")
+    }
+    if (var(VAR_THEO_FOLLOW_CHATTER) == 1) {
+        msgbox("Scared, {PLAYER}?\n...Me neither!")
+    }
+    if (var(VAR_THEO_FOLLOW_CHATTER) == 2) {
+        msgbox("Davern was really hard to beat! But my Pokémon\ngave it their all.")
+    }
+    if (var(VAR_THEO_FOLLOW_CHATTER) == 3) {
+        msgbox("Your Pokémon are pretty cool... but not as cool as\nmine!")
+    }
+    release
+    end
+}
+
+
+script CommonEvent_078 {
+    msgbox("Coo!")
+    end
+}
+
+
+script CommonEvent_079 {
+    msgbox("Garlikid: Kid! Garli... kid!\p(He wants to help you find a way out of this place.)")
+    end
+}
+
+
+script CommonEvent_080 {
+    if (var(VAR_THEO_FOLLOW_PROGRESS) >= 10) {
+        msgbox("C'mon, {PLAYER}, just a little further!")
+    } else {
+        msgbox("Theo: I'm so excited about this battle!\nLet's go!")
+    }
+    return
+}
+
+
+script CommonEvent_081 {
+    random(5)
+    copyvar(VAR_THEO_FOLLOW_CHATTER, VAR_RESULT)
+    if (var(VAR_THEO_FOLLOW_CHATTER) == 0) {
+        msgbox("{PLAYER}, we should go upstairs to check on your father, Kellyn.")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 1) {
+        msgbox("I wonder if Theo is here already?")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 2) {
+        msgbox("We've made a lot of progress on finding a cure for Nuclear-infected Pokémon.")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 3) {
+        msgbox("Cameron is still alive... it's a miracle!")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 4) {
+        msgbox("Now that CURIE has shown themselves, it raises even more questions.")
+    }
+    return
+}
+
+
+script CommonEvent_082 {
+    random(5)
+    copyvar(VAR_THEO_FOLLOW_CHATTER, VAR_RESULT)
+    if (var(VAR_THEO_FOLLOW_CHATTER) == 0) {
+        msgbox("Let's see what awaits us at the end of this cave!")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 1) {
+        msgbox("So what's your favorite Pokémon\nType to use in battle?\nMine's Ghost. It's the obvious choice for an expert like me.")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 2) {
+        msgbox("Kanto and Johto have a\nproblem with Team Rocket.\nI haven't seen a Team in Tandor though...")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 3) {
+        msgbox("I start a new Pokémon team\nin every region I visit.\nI've carefully chosen and raised up every member.")
+    } elif (var(VAR_THEO_FOLLOW_CHATTER) == 4) {
+        msgbox("What type is Lanthan?\nMy sources indicate that it's at least a Steel type...")
+    }
+    return
+}
+
+
+script CommonEvent_083 {
+    lock
+    faceplayer
+    msgbox("Stick with me. I'll keep you safe.")
+    release
+    end
+}
+
+
+script CommonEvent_084 {
+    msgbox("\"Garroooough!\"")
+}
+
+
+script CommonEvent_085 {
+    msgbox("We must face Seikamater to get out!")
+}
+
+
+script CommonEvent_086 {
+    msgbox("Do you want me to use the Dream Visualizer?")
+    # CHECK: 3-way choice - multichoice list MULTI_DREAM_VISUALIZER must be defined in Phase 5; see unhandled[]
+    multichoice(0, 0, MULTI_DREAM_VISUALIZER, TRUE)
+    switch (var(VAR_RESULT)) {
+        case 0:
+            return
+        case 1:
+            # UNHANDLED: capture player map id/x/y into vars (RPG Maker Control Variables, player position) - see unhandled[]
+            warp(MAP_URANIUM_70, 9, 8)
+            # UNHANDLED: warp back to captured position via variables (dynamic map id) - see unhandled[]
+            return
+        case 2:
+            # UNHANDLED: command 355 $Trainer.bagdisabled=false - re-enable the bag, no field equivalent - see unhandled[]
+            # UNHANDLED: command 355 $Trainer.party=pbGet(28), gated on flag(FLAG_DREAM_STORY_PARTY_SWAPPED) - restore stored party, no field equivalent - see unhandled[]
+            fadescreen(FADE_FROM_BLACK)
+            clearflag(FLAG_DREAM_VISUALIZER_CONTROLS)
+            if (flag(FLAG_DREAM_STORY_PARTY_SWAPPED)) {
+                warp(MAP_URANIUM_97, 28, 59)
+            } else {
+                warp(MAP_URANIUM_204, 80, 4)
+            }
+            clearflag(FLAG_DREAM_VISUALIZER_HUD)
+            clearflag(FLAG_DREAM_VISION_STAGE_1)
+            clearflag(FLAG_DREAM_VISION_STAGE_2)
+            clearflag(FLAG_DREAM_VISION_STAGE_3)
+            clearflag(FLAG_DREAM_ACTIVE)
+            return
+    }
+    return
+}
+
+
+script CommonEvent_087 {
+    msgbox("Do you want me to use the Dream Visualizer?")
+    # UNHANDLED: command 102 — 3-option Show Choices, needs a multichoice list to set VAR_RESULT; see unhandled[]
+    switch (var(VAR_RESULT)) {
+        case 0:
+            return
+        case 1:
+            # UNHANDLED: command 122 — saves player map x/y/id to vars; see unhandled[]
+            warp(MAP_URANIUM_70, 9, 7)
+            # UNHANDLED: command 201 — warp to saved variable coordinates; see unhandled[]
+            return
+        case 2:
+            msgbox("Hold still.")
+            # UNHANDLED: move route — Fennel NPC animation; see unhandled[]
+            # UNHANDLED: command 207 — show animation 231; see unhandled[]
+            # UNHANDLED: move route — player animation; see unhandled[]
+            # UNHANDLED: command 355 $Trainer.bagdisabled=false — re-enable bag, no equivalent; see unhandled[]
+            clearflag(FLAG_DREAM_VISUALIZER_HUD)
+            warp(MAP_URANIUM_204, 80, 4)
+            clearflag(FLAG_DREAM_ACTIVE)
+            return
+    }
+    return
+}
+
+
+script CommonEvent_088 {
+    msgbox("Lava Eruption")
+    end
+}
+

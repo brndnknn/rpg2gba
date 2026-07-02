@@ -1,0 +1,561 @@
+script Map008_EV001_Page1 {
+    lock
+    # UNHANDLED: move route — door-open / entering-door animation (this event) — see unhandled[]
+    # UNHANDLED: move route — player walks up into the doorway — see unhandled[]
+    # UNHANDLED: move route — door-close animation (this event) — see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_115, 8, 10)
+    fadescreen(FADE_FROM_BLACK)
+    release
+    end
+}
+
+script Map008_EV001_Page2 {
+    # UNHANDLED: conditional branch on script `get_character(0).onEvent?` guarding the door-close animation (move routes) — see unhandled[]
+    setflag(FLAG_MAP008_EVENT001_TSA)
+    end
+}
+
+
+script Map008_EV002_Page1 {
+    # UNHANDLED: command 355 pbCaveEntrance — see unhandled[]
+    warp(MAP_URANIUM_17, 64, 11)
+    end
+}
+
+script Map008_EV002_Page2 {
+    # UNHANDLED: command 111 script conditional get_character(0).onEvent? — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP008_EVENT002_TSA)
+    end
+}
+
+
+script Map008_EV003_Trainer4_Page1 {
+    lock
+    faceplayer
+    # UNHANDLED: command 355 Kernel.pbNoticePlayer — see unhandled[]
+    trainerbattle_single(TRAINER_YOUNGSTER_CEDRIC, "Hey n00b! Wanna see my 1337 skills? Let's fight!", "...Hax!")
+    # UNHANDLED: command 355 pbPhoneRegisterBattle — see unhandled[]
+    setflag(FLAG_MAP008_EVENT003_SSA)
+    release
+    end
+}
+
+script Map008_EV003_Trainer4_Page2 {
+    lock
+    faceplayer
+    # UNHANDLED: page 2 is a Pokégear phone rematch (pbPhoneBattleCount gate, createPhoneTrainer/customTrainerBattle, pbSet on result, pbPhoneIncrement) — see unhandled[]
+    msgbox("You were tough before, but my Pokémon won't lose this time!")
+    release
+    end
+}
+
+script Map008_EV003_Trainer4_Page3 {
+    lock
+    faceplayer
+    msgbox("No way man, the guy that I got these Pokémon from\nsaid they'd be rad. And then they lose! What gives?")
+    # UNHANDLED: command 355 pbPhoneRegisterBattle — phone registration, see unhandled[]
+    release
+    end
+}
+
+
+script Map008_EV004_Trainer_5_Page1 {
+    trainerbattle_single(TRAINER_MATT_71, "The ocean holds different species of Pokémon thanfresh water. Let me show you what I caught!", "T-the ones you have are nice too...")
+    msgbox("Y'know, I hear the Gym Leader in the next city uses Pokémon from the sea. I also heard she's a pretty girl who always wears a swimsuit... hmm...")
+    release
+    end
+}
+
+script Map008_EV005_Trainer_4_Page1 {
+    trainerbattle_single(TRAINER_JOSS_70, "Yo! The beach is pretty nice, isn't it? It's very scenic,plus it has all sorts of interesting Pokémon! Let's fight!", "Nice battle, dude.")
+    msgbox("I'm actually a junior trainer for Bealbeach's gym! Rightnow, I'm training.")
+    release
+    end
+}
+
+script Map008_EV006_Trainer1_Page1 {
+    lock
+    faceplayer
+    # UNHANDLED: command 355 Kernel.pbNoticePlayer — see unhandled[]
+    clearflag(FLAG_BLACKBELT_POP_DEFEATED)
+    msgbox("I do not desire to initiate conflict. Therefore, I shall give you a choice. Would you like to battle?", MSGBOX_YESNO)
+    if (var(VAR_RESULT) == 1) {
+        msgbox("Very well, let us fight!")
+        trainerbattle_single(TRAINER_BLACKBELT_POP, "", "I have much to learn, it seems.")
+        setflag(FLAG_MAP008_EVENT006_SSA)
+        setflag(FLAG_BLACKBELT_POP_DEFEATED)
+    } else {
+        msgbox("That is fine. I will wait, should you desire to challenge me later.")
+    }
+    release
+    end
+}
+
+script Map008_EV006_Trainer1_Page2 {
+    lock
+    faceplayer
+    msgbox("The first step to avoid injuring yourself or your Pokémon is to avoid conflict. However, if you do not train your Pokémon, they will become weak. All things in moderation...")
+    release
+    end
+}
+
+
+script Map008_EV009_Stairs_Page1 {
+    # UNHANDLED: command 111 — conditional branch on player facing direction; see unhandled[]
+    # UNHANDLED: move route — player auto-walks up the stairs; see unhandled[]
+    end
+}
+
+
+script Map008_EV010_Page1 {
+    lock
+    # UNHANDLED: move route — see unhandled[]
+    release
+    end
+}
+
+
+script Map008_EV011_Page1 {
+    lock
+    # UNHANDLED: command 111 — conditional branch on player facing direction (see unhandled[])
+    # UNHANDLED: move route — see unhandled[]
+    release
+    end
+}
+
+
+script Map008_EV012_Trainer_2_Page1 {
+    trainerbattle_single(TRAINER_GORDON_72, "Hiyah! I'ma use my sweet judo skills to chop yourPokemon to bits!", "W-wha? But I'm a Black Belt! How'd I lose?")
+    msgbox("I got my belt in two years flat! I'm so skilled! It's 'causeI fight all the time... not like that other LOOZER. (But...why do I keep losing?)")
+    release
+    end
+}
+
+script Map008_EV013_Trainer_3_Page1 {
+    trainerbattle_single(TRAINER_JESSICA_74, "In the ocean, it's sink or swim. It's like that in Pokémonbattles, too!", "Glub glub!")
+    msgbox("It's awesome, living so near the beach! I can go herewhenever I want and swim! (Not to mention all thehunky guys...)")
+    release
+    end
+}
+
+script Map008_EV015_Page1 {
+    lock
+    clearflag(FLAG_THEO_RIVAL_CUTSCENE_PRIMED)
+    setflag(FLAG_THEO_RIVAL_BATTLE_IN_PROGRESS)
+    # UNHANDLED: move route — Theo (event 14) walks down toward the player — see unhandled[]
+    msgbox("Theo: Hey! Issat who I think it is? Yeah! It's {PLAYER}! So... so you survived the trip here, huh?")
+    # UNHANDLED: command 111 — item-quantity script condition ($PokemonBag.pbQuantity(PBItems::PST)>0) — see unhandled[]
+    msgbox("A-anyway, I blazed straight through Rochfale. What a boring town! An' I've been training ever since. I'm gonna beat that Gym Leader before you do, {PLAYER}! But first, I'll beat you!")
+    msgbox("Don't think I'll go easy just 'cause of Comet Cave!")
+    if (flag(FLAG_PLAYER_STARTER_CHOICE_A)) {
+        trainerbattle_single(TRAINER_RIVAL_THEO_7, "", "Gyaaah! I picked the wrong starter!")
+        msgbox("*sniffle* U-ugh... I-- I-- I don't care what happens! My Pokémon are the strongest, they were just weak from all the battling that we'd done before we fought!")
+        msgbox("A-anyway, they d-did get some experience from this battle...")
+        msgbox("I know! I'm-a challenge the Gym right now! An' I'll get ahead of you, {PLAYER}! You just see!")
+        # UNHANDLED: move route — player turns to face Theo — see unhandled[]
+        # UNHANDLED: move route — Theo (event 14) walks off down the path — see unhandled[]
+        setflag(FLAG_DEFEATED_RIVAL_THEO_BEACH)
+        clearflag(FLAG_THEO_RIVAL_BATTLE_IN_PROGRESS)
+    } elif (flag(FLAG_PLAYER_STARTER_CHOICE_C)) {
+        trainerbattle_single(TRAINER_RIVAL_THEO_9, "", "Gyaaah! I picked the wrong starter!")
+        msgbox("*sniffle* U-ugh... I-- I-- I don't care what happens! My Pokémon are the strongest, they were just weak from all the battling that we'd done before we fought!")
+        msgbox("A-anyway, they d-did get some experience from this battle...")
+        msgbox("I know! I'm-a challenge the Gym right now! An' I'll get ahead of you, {PLAYER}! You just see!")
+        # UNHANDLED: move route — player turns to face Theo — see unhandled[]
+        # UNHANDLED: move route — Theo (event 14) walks off down the path — see unhandled[]
+        setflag(FLAG_DEFEATED_RIVAL_THEO_BEACH)
+        clearflag(FLAG_THEO_RIVAL_BATTLE_IN_PROGRESS)
+    } else {
+        trainerbattle_single(TRAINER_RIVAL_THEO_8, "", "Gyaaah! I picked the wrong starter!")
+        msgbox("*sniffle* U-ugh... I-- I-- I don't care what happens! My Pokémon are the strongest, they were just weak from all the battling that we'd done before we fought!")
+        msgbox("A-anyway, they d-did get some experience from this battle...")
+        msgbox("I know! I'm-a challenge the Gym right now! An' I'll get ahead of you, {PLAYER}! You just see!")
+        # UNHANDLED: move route — player turns to face Theo — see unhandled[]
+        # UNHANDLED: move route — Theo (event 14) walks off down the path — see unhandled[]
+        setflag(FLAG_DEFEATED_RIVAL_THEO_BEACH)
+        clearflag(FLAG_THEO_RIVAL_BATTLE_IN_PROGRESS)
+    }
+    release
+    end
+}
+
+
+script Map008_EV016_Trainer1_Page1 {
+    # UNHANDLED: command 355 Kernel.pbNoticePlayer — see unhandled[]
+    trainerbattle_double(TRAINER_COOLCOUPLE_BILLY_AND_JENNY, "Ah, looks like a challenging Trainer. Ready, Billy?", "That's the end of our relationship!", "We can't have a battle against just one Pokémon.", Map008_EV016_Trainer1_Page1_Defeated)
+    end
+}
+
+script Map008_EV016_Trainer1_Page1_Defeated {
+    clearflag(FLAG_MAP008_EVENT016_SSA)
+    setflag(FLAG_MAP008_EVENT017_SSA)
+    release
+    end
+}
+
+script Map008_EV016_Trainer1_Page2 {
+    lock
+    faceplayer
+    msgbox("This idiot is such a loser.")
+    release
+    end
+}
+
+
+script Map008_EV017_Page1 {
+    lock
+    faceplayer
+    # UNHANDLED: command 355 Kernel.pbNoticePlayer — see unhandled[]
+    trainerbattle_double(TRAINER_COOLCOUPLE_BILLY_AND_JENNY, "Ah, looks like a challenging Trainer. Ready, Jenny?", "That is the end of our relationship!", "We can't have a battle against just one Pokémon.")
+    setflag(FLAG_MAP008_EVENT017_SSA)
+    setflag(FLAG_MAP008_EVENT016_SSA)
+    release
+    end
+}
+
+script Map008_EV017_Page2 {
+    lock
+    faceplayer
+    msgbox("Why you did that to me?")
+    release
+    end
+}
+
+
+script Map008_EV019_Sailor_Page1 {
+    lock
+    faceplayer
+    checkitem(ITEM_KELLYNLETTER, 1)
+    if (var(VAR_RESULT) == FALSE) {
+        # CHECK: code 111 tested $PokemonBag.pbQuantity(PBItems::KELLYNLETTER)==0 (player lacks letter) — verify checkitem / ITEM_KELLYNLETTER; see unhandled[]
+        msgbox("This ship'll take ya to the Nuclear Power Plant construction site. They're buildin' a new one on that island, ya know. But, ehh, you're only a kid. Sorry kid, but a construction site ain't a playground. Scram!")
+    } else {
+        msgbox("This ship'll take ya to the Nuclear Power Plant construction site.\p...Hey, wait a sec. Are you {PLAYER}?\pI got orders to take ya to the Power Plant.\pBut yer just a kid. What's Chief Kellyn thinkin'?")
+        # UNHANDLED: move route — see unhandled[]
+        msgbox("???: Hey, wait a sec!!")
+        # UNHANDLED: move route — see unhandled[]
+        # UNHANDLED: move route — see unhandled[]
+        # UNHANDLED: command 207 show animation — see unhandled[]
+        msgbox("{PLAYER}, are you going to the Power Plant?")
+        msgbox("I wanna come too!")
+        # UNHANDLED: move route — see unhandled[]
+        msgbox("Aw, geez, now there's TWO kids?\pI gotta radio the boss about this...")
+        msgbox("Hello? I got a situation out here on Route 7. These two kids're askin' to go to the power plant. One of 'em looks like the kid that the Rangers told us about. The other one's got crazy red hair. Kinda looks like Boss's hair, actually...")
+        msgbox("...")
+        msgbox("Huh? You serious? All right...")
+        msgbox("...... ......")
+        msgbox("The boss says I should bring you both over.\pDunno what he's thinkin', but I got orders, so hop on, both of ya.")
+        msgbox("Wahoo!\nI'm gonna see my dad!")
+        fadescreen(FADE_TO_BLACK)
+        warp(MAP_URANIUM_122, 17, 35)
+        fadescreen(FADE_FROM_BLACK)
+    }
+    release
+    end
+}
+
+script Map008_EV019_Sailor_Page2 {
+    end
+}
+
+
+script Map008_EV023_Page1 {
+    # UNHANDLED: move route — see unhandled[]
+    end
+}
+
+
+script Map008_EV027_Page1 {
+    lock
+    giveitem(ITEM_GREAT_BALL, 1)
+    setflag(FLAG_MAP008_EVENT027_SSA)
+    release
+    end
+}
+
+script Map008_EV027_Page2 {
+    end
+}
+
+
+script Map008_EV028_Page1 {
+    lock
+    faceplayer
+    msgbox("Ferry to Vinoville Town.")
+    release
+    end
+}
+
+script Map008_EV029_Page1 {
+    lock
+    giveitem(ITEM_FIRE_STONE, 1)
+    setflag(FLAG_MAP008_EVENT029_SSA)
+    release
+    end
+}
+
+script Map008_EV029_Page2 {
+    end
+}
+
+
+script Map008_EV037_postNuclearPlant_Page1 {
+    setflag(FLAG_MAP008_EVENT037_SSA)
+    end
+}
+
+script Map008_EV037_postNuclearPlant_Page2 {
+    end
+}
+
+
+script Map008_EV044_Ranger_Page1 {
+    lock
+    faceplayer
+    msgbox("I owe you one, kid. But you should be careful.I think there might be more of these things out there...")
+    release
+    end
+}
+
+script Map008_EV044_Ranger_Page2 {
+    end
+}
+
+script Map008_EV044_Ranger_Page3 {
+    end
+}
+
+script Map008_EV045_Trainer2_Page1 {
+    lock
+    msgbox("Argh! What's wrong with this Pokémon?\nMy Capture Styler doesn't work on it!")
+    msgbox("Grrrrrr!")
+    msgbox("Heeeeelp!")
+    # UNHANDLED: move route — see unhandled[]
+    clearflag(FLAG_RESCUED_RANGER_NUCLEAR_TANCOON)
+    # UNHANDLED: command 111 pbWildBattle scripted wild encounter (TANCOON Lv25) — see unhandled[]
+    setvar(VAR_RANGER_NUCLEAR_EVENT_STAGE, 2)
+    # UNHANDLED: move route — see unhandled[]
+    msgbox("*pant* *pant*\nThank you... I don't know what was wrong with that thing. It was a weird color...\pI thought it was maybe a Shiny Pokémon, but it didn't act normal either.")
+    msgbox("And my Styler couldn't calm it down at all.\pIt was really trying to attack me. I've never seen a Pokémon do that...\pI owe you one, kid. But you should be careful.")
+    msgbox("I think there might be more of these things out there...")
+    setflag(FLAG_RESCUED_RANGER_NUCLEAR_TANCOON)
+    release
+    end
+}
+
+script Map008_EV045_Trainer2_Page2 {
+    end
+}
+
+script Map008_EV045_Trainer2_Page3 {
+    end
+}
+
+
+script Map008_EV046_Page1 {
+    lock
+    setvar(VAR_RANGER_NUCLEAR_EVENT_STAGE, 3)
+    msgbox("SCREEEEEEEE!\nEEEEEEEEEE!!!")
+    clearflag(FLAG_RESCUED_RANGER_NUCLEAR_TANCOON)
+    # UNHANDLED: command 111 pbDoubleWildBattle — see unhandled[]
+    setvar(VAR_RANGER_NUCLEAR_EVENT_STAGE, 4)
+    # UNHANDLED: command 202 set event location (events 47, 48) — see unhandled[]
+    # UNHANDLED: move route — NPC 49 (Ranger) approaches player — see unhandled[]
+    # UNHANDLED: move route — player turns — see unhandled[]
+    msgbox("Oh, thank Aotius you're okay!\pI saw those Pokémon jump out at you...\pI've never seen wild Pokémon act like that.\pIt's almost like they are attacking humans on purpose!")
+    msgbox("Stick with me. I'll keep you safe.")
+    msgbox("(Ranger joined you!)")
+    setflag(FLAG_RESCUED_RANGER_NUCLEAR_TANCOON)
+    release
+    end
+}
+
+script Map008_EV046_Page2 {
+    end
+}
+
+script Map008_EV046_Page3 {
+    end
+}
+
+
+script Map008_EV050_Page1 {
+    lockall
+    # UNHANDLED: move route — see unhandled[] (Ranger NPC repositions to the player and turns to face them)
+    msgbox("???")
+    # UNHANDLED: move route — see unhandled[] (player and Ranger step into position)
+    msgbox("RRRRROOOOAAARRRR!!!!!!")
+    msgbox("W-what was that...?!")
+    setvar(VAR_RANGER_NUCLEAR_EVENT_STAGE, 5)
+    msgbox("HOLY SHINX!\nI'm outta here!")
+    # UNHANDLED: move route — see unhandled[] (Ranger flees off-screen)
+    setflag(FLAG_RESCUED_RANGER_NUCLEAR_TANCOON)
+    # UNHANDLED: command 111 scripted wild battle pbWildBattle(GYARADOS, Lv28) — see unhandled[]; the block below is the victory branch, emitted unconditionally
+    setvar(VAR_RANGER_NUCLEAR_EVENT_STAGE, 6)
+    # UNHANDLED: move route — see unhandled[] (Ranger walks back to the player)
+    msgbox("Phew...\nSorry I ran away. I've never been so scared!\pI mean, did you see the size of that thing? Those blank, soulless eyes?\pSheesh, just thinking about it now makes me shiver!")
+    msgbox("Besides, I saw how you handled those other Pokémon back on the bridge. You're clearly a very capable trainer.")
+    msgbox("Call it a hunch, but I bet that the radiation from the power plant is what caused those Pokémon to go crazy and attack.\pAnyway, it looks like this area is secure for now.\pThe boat that Kellyn said you should take is just over there.")
+    msgbox("Take care, {PLAYER}! Be safe!")
+    # UNHANDLED: move route — see unhandled[] (Ranger walks away and exits)
+    setvar(VAR_RANGER_NUCLEAR_EVENT_STAGE, 7)
+    setflag(FLAG_RANGER_NUCLEAR_TANCOON_DEPARTED)
+    clearflag(FLAG_RESCUED_RANGER_NUCLEAR_TANCOON)
+    releaseall
+    end
+}
+
+script Map008_EV050_Page2 {
+    end
+}
+
+script Map008_EV050_Page3 {
+    end
+}
+
+
+script Map008_EV053_Page1 {
+    lock
+    # UNHANDLED: move route — player door-entry walk — see unhandled[]
+    # UNHANDLED: move route — event 53 — see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_178, 9, 10)
+    fadescreen(FADE_FROM_BLACK)
+    release
+    end
+}
+
+script Map008_EV053_Page2 {
+    # UNHANDLED: command 111 — script conditional get_character(0).onEvent? — see unhandled[]
+    # UNHANDLED: move route — door-exit walk — see unhandled[]
+    setflag(FLAG_MAP008_EVENT053_TSA)
+    end
+}
+
+
+script Map008_EV054_Page1 {
+    lock
+    msgbox("Super Training Tent. Tutor: Ayumi")
+    release
+    end
+}
+
+script Map008_EV058_Page1 {
+    lock
+    faceplayer
+    msgbox("Hold on, Trainer! You see how this route is just sprawling with sand? Don't let your guard up - there's Pokémon hiding all over the place in there! You'll get jumped in the sand just like tall grass, so you might want one of these if you're in a rush!")
+    giveitem(ITEM_SUPER_REPEL, 1)
+    setflag(FLAG_MAP008_EVENT058_SSA)
+    release
+    end
+}
+
+script Map008_EV058_Page2 {
+    lock
+    faceplayer
+    msgbox("Hold on, Trainer! You see how this route is just sprawling with sand? Don't let your guard up - there's Pokémon hiding all over the place in there! You'll get jumped in the sand just like tall grass.")
+    release
+    end
+}
+
+
+script Map008_EV060_Ranger_Page1 {
+    lock
+    faceplayer
+    msgbox("About time!\nLet's do this!")
+    release
+    end
+}
+
+script Map008_EV060_Ranger_Page2 {
+    end
+}
+
+script Map008_EV062_Ranger_Page1 {
+    lock
+    faceplayer
+    msgbox("About time!\nLet's do this!")
+    release
+    end
+}
+
+script Map008_EV062_Ranger_Page2 {
+    end
+}
+
+script Map008_EV064_TheoQuest_Page1 {
+    lock
+    faceplayer
+    msgbox("Good. Now I think everybody's here.")
+    msgbox("Ready to go, {PLAYER}? We're going into the Hazard Zone. It's gonna be pretty dangerous... plus, it'll be swarming with Nuclear Pokémon. But I'm not afraid! I can handle a few Nuclears, no problem!")
+    msgbox("So, how about you? All set to head out?", MSGBOX_YESNO)
+    if (var(VAR_RESULT) == 1) {
+        msgbox("About time!\nLet's do this!")
+        msgbox("Get on the boat, all of you.\pI'll explain the mission on the way over.")
+        fadescreen(FADE_TO_BLACK)
+        # UNHANDLED: warp destination map 188 needs resolution — see unhandled[]
+        warp(MAP_URANIUM_188, 22, 9)
+        fadescreen(FADE_FROM_BLACK)
+        setvar(VAR_THEO_FOLLOW_PROGRESS, 16)
+    } else {
+        msgbox("Well, what are you waiting for?\nHurry it up! We gotta stop CURIE!")
+    }
+    release
+    end
+}
+
+script Map008_EV064_TheoQuest_Page2 {
+    end
+}
+
+
+script Map008_EV065_Page1 {
+    lock
+    # UNHANDLED: command 207 Show Animation — see unhandled[]
+    msgbox("Finally! {PLAYER}!")
+    # UNHANDLED: move route (conditional on player position) — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    msgbox("Good. Now I think everybody's here.")
+    msgbox("Ready to go, {PLAYER}? We're going into the Hazard Zone. It's gonna be pretty dangerous... plus, it'll be swarming with Nuclear Pokémon. But I'm not afraid! I can handle a few Nuclears, no problem!")
+    msgbox("So, how about you? All set to head out?", MSGBOX_YESNO)
+    if (var(VAR_RESULT) == 1) {
+        msgbox("About time!\nLet's do this!")
+        msgbox("Get on the boat, all of you.\nI'll explain the mission on the way over.")
+        setvar(VAR_THEO_FOLLOW_PROGRESS, 16)
+        fadescreen(FADE_TO_BLACK)
+        warp(MAP_URANIUM_188, 22, 9)
+    } else {
+        msgbox("Well, what are you waiting for?\nHurry it up! We gotta stop CURIE!")
+        clearflag(FLAG_MAP008_EVENT065_SSA)
+    }
+    release
+    end
+}
+
+script Map008_EV065_Page2 {
+    end
+}
+
+script Map008_EV065_Page3 {
+    end
+}
+
+
+script Map008_EV075_Page1 {
+    lock
+    # UNHANDLED: command 355 pbCaveEntrance — see unhandled[]
+    warp(MAP_URANIUM_205, 10, 3)
+    # UNHANDLED: move route — see unhandled[]
+    release
+    end
+}
+
+script Map008_EV075_Page2 {
+    # UNHANDLED: command 111 script conditional get_character(0).onEvent? — see unhandled[]
+    # UNHANDLED: move route — see unhandled[]
+    setflag(FLAG_MAP008_EVENT075_TSA)
+    end
+}
+

@@ -1,0 +1,132 @@
+script Map048_EV001_Page1 {
+    lockall
+    msgbox("{PLAYER} come downstairs, you are late!")
+    setflag(FLAG_MAP048_EVENT001_SSA)
+    releaseall
+    end
+}
+
+script Map048_EV001_Page2 {
+    end
+}
+
+
+script Map048_EV002_Page1 {
+    # UNHANDLED: move route — see unhandled[]
+    fadescreen(FADE_TO_BLACK)
+    warp(MAP_URANIUM_49, 11, 3)
+    fadescreen(FADE_FROM_BLACK)
+    end
+}
+
+
+script Map048_EV003_Page1 {
+    lock
+    faceplayer
+    msgbox("It's a Nintendo Wii U.\nBut I hear they're coming out with a new system soon.")
+    release
+    end
+}
+
+script Map048_EV004_Page1 {
+    lock
+    faceplayer
+    # UNHANDLED: command 355 pbTrainerPC — see unhandled[]
+    release
+    end
+}
+
+
+script Map048_EV005_Page1 {
+    setflag(FLAG_THEO_RIVAL_ENCOUNTER_STARTED)
+    setflag(FLAG_THEO_RIVAL_CUTSCENE_PRIMED)
+    setflag(FLAG_MAP048_EVENT005_SSA)
+    end
+}
+
+script Map048_EV005_Page2 {
+    end
+}
+
+
+script Map048_EV006_Page1 {
+    lock
+    faceplayer
+    msgbox("It's my bed.\nI don't need a nap right now.")
+    release
+    end
+}
+
+script Map048_EV007_Page1 {
+    lock
+    faceplayer
+    msgbox("It's a map of West Tandor.")
+    # UNHANDLED: command 355 pbShowMap — see unhandled[]
+    release
+    end
+}
+
+
+script Map048_EV008_Page1 {
+    lock
+    faceplayer
+    msgbox("It's a map of West Tandor.")
+    # UNHANDLED: command 355 pbShowMap — see unhandled[]
+    release
+    end
+}
+
+
+script Map048_EV009_Page1 {
+    lock
+    faceplayer
+    msgbox("It's my bed.\nI don't need a nap right now.")
+    release
+    end
+}
+
+script Map048_EV010_Page1 {
+    lock
+    faceplayer
+    msgbox("It's crammed full of books about Pokémon.")
+    msgbox("\"Me and my Owten\",\n\"Jerbolta's Big Adventure\",\n\"Quest for the Legends\".")
+    msgbox("I've read all of these many times.")
+    release
+    end
+}
+
+script Map048_EV011_Page1 {
+    lock
+    random(3)
+    copyvar(VAR_TEMP_POKEMON_CHOICE, VAR_RESULT)
+    if (var(VAR_TEMP_POKEMON_CHOICE) == 0) {
+        msgbox("There's a Pokémon Battle showing on TV.\nWhoa! One of the Pokémon just Mega Evolved!")
+    }
+    if (var(VAR_TEMP_POKEMON_CHOICE) == 1) {
+        msgbox("There's an ad for a new video game on TV.\nIt's a Pokémon battle simulation game called \"Red and Blue Version.\"")
+    }
+    if (var(VAR_TEMP_POKEMON_CHOICE) == 2) {
+        msgbox("There's a news report showing on TV.\nApparently, they're building a new Nuclear Power Plant in Tandor.")
+    }
+    msgbox("...Okay, time to go!")
+    release
+    end
+}
+
+
+script Map048_EV012_Page1 {
+    lock
+    faceplayer
+    msgbox("It's crammed full of books about Pokémon.")
+    msgbox("\"Me and my Owten\",\n\"Jerbolta's Big Adventure\",\n\"Quest for the Legends\".")
+    msgbox("I've read all of these many times.")
+    release
+    end
+}
+
+script Map048_EV013_HEAL_Page1 {
+    healparty
+    setflag(FLAG_DREAM_ACTIVE)
+    end
+}
+
