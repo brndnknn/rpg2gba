@@ -149,6 +149,18 @@ product build path, the default flips to opt-in, and the real stock-content
 removal goes through the Emerald-subtraction plan (critique target #3) with a
 linker-map ledger.
 
+## Re-walk verification (2026-07-02, post-fix ROM)
+
+Fixes 1+2 confirmed on the rebuilt 8-map ROM: doors/stairs show real art, no
+voids; lab + Theo's house land on the rug and A warps back. **Verified
+NOT-a-bug:** in the ordinary houses (49/64/65) the rug tile is inert, the exit
+warp is the tile *below* the rug and arrival is the tile *above* it — that is
+Uranium's own data (e.g. Map 49: arrive (10,9), exit event (10,11), rug
+(10,10) plain floor in the original too; the player walks down across the rug
+onto the exit tile). Lab/Theo just author their events adjacent. Stairs
+left↔left / right↔right pairing is likewise per-event faithful data. Feel
+check with a real player sprite happens at the slice gate.
+
 ## Sequencing
 
 Both fixes are converter work on `layout.py` / `tile_map.py` /
