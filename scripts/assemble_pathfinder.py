@@ -224,7 +224,29 @@ def run_fork_pass(
 ) -> None:
     logger.info("=== S8c: fork assembly ===")
 
+    from rpg2gba.conversion_agent import fork_index as fi
     from rpg2gba.tileset_converter import assembly as asm
+
+    # Staging-time forward gate (grill D4): every script staged into engine/
+    # is checked against the fork's real symbol surface (index) plus the
+    # Uranium-minted registries (D3). A violation is OUR bug — abort loud
+    # before make, never stage, never queue.
+    gate_index = fi.load_or_build()
+    gate_extras = fi.registry_extra_symbols(
+        flag_state_path=out / "flag_state.json",
+        map_constants_path=out / "porymap" / "map_constants.json",
+    )
+    def _gate(pory_text: str, label: str) -> None:
+        violations = fi.verify_script(pory_text, gate_index, extra_symbols=gate_extras)
+        if violations:
+            lines = "\n".join(
+                f"  {label}:{v.line_no}: [{v.kind}] {v.symbol} — {v.context.strip()}"
+                for v in violations
+            )
+            raise RuntimeError(
+                f"fork-index gate: {len(violations)} unresolved symbol(s) in "
+                f"{label} — this is a converter bug; nothing staged:\n{lines}"
+            )
     # Single owner of charmap legality: rewrite \" -> typographic quotes, *->~,
     # [->(, ]->), heal alias, fail loud on any other unrepresentable glyph.
     allowed = asm.load_charmap_chars(fork / "charmap.txt")
@@ -253,6 +275,7 @@ def run_fork_pass(
             pory_text = f"mapscripts {mapscripts_label} {{}}\n\n" + pory_text
 
         compiled_texts.append(pory_text)
+        _gate(pory_text, f"Map{map_id:03d}")
         dest_scripts_inc = fork / "data" / "maps" / map_dir_name / "scripts.inc"
         _compile_pory(pory_text, dest_scripts_inc, f"Map{map_id:03d}", dry_run)
 
@@ -263,6 +286,7 @@ def run_fork_pass(
         ce_text = asm.patch_out_of_slice_warps(ce_text, set(SLICE_MAP_IDS))
         ce_text = asm.patch_undefined_multichoice(ce_text, defined_multis)
         compiled_texts.append(ce_text)
+        _gate(ce_text, "CommonEvents")
         dest_ce = fork / "data" / "scripts" / "CommonEvents.inc"
         _compile_pory(ce_text, dest_ce, "CommonEvents", dry_run)
     else:
