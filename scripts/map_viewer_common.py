@@ -105,6 +105,7 @@ class _MapState:
     metatile_imgs_postquant: list[tuple[np.ndarray, np.ndarray] | None]  # aligned with metatile_imgs; None = empty col
     analysis: PaletteAnalysis             # slice-scoped palette analysis for this map's tileset
     pool_key_to_idx: dict[tuple, int]     # column key -> index into analysis.metatiles
+    quant_generation: int                 # _quant_generation the postquant fields were built at
 
 
 _map_cache: dict[int, _MapState] = {}
@@ -155,13 +156,20 @@ def get_quantize_params() -> dict:
 
 def set_quantize_params(params: FamilyParams, max_palettes: int) -> int:
     """Update the live family-quant knobs, invalidate the quant-dependent caches, and
-    return the new generation token.  The RMXP source-tile cache is left intact."""
+    return the new generation token.
+
+    The param-INDEPENDENT state is preserved: the RMXP source-tile PNG cache
+    (``_tile_png_cache``) and the whole ``_map_cache`` — including each map's warm
+    ``TileRasterizer`` and its pre-quant metatile composites — stay alive.  Only the
+    quant-DEPENDENT caches are dropped (the palette analysis and the post-quant
+    metatile PNGs).  Bumping ``_quant_generation`` marks every cached ``_MapState``
+    stale; ``_ensure_loaded`` re-runs *only* the quantize step for a map the next time
+    it's touched, so a knob change no longer rebuilds grids or re-renders tiles."""
     global _family_params, _max_palettes, _quant_generation
     _family_params = params
     _max_palettes = max_palettes
     _quant_generation += 1
     _tileset_analysis_cache.clear()
-    _map_cache.clear()
     _metatile_png_cache.clear()
     return _quant_generation
 
@@ -188,26 +196,32 @@ def _ensure_tileset_analysis(
     priorities: list[int],
     map_id: int,
 ) -> tuple[PaletteAnalysis, dict[tuple, int]]:
-    """Build and cache the full-corpus palette analysis for a tileset (idempotent).
+    """Build and cache the per-map palette analysis for a map (idempotent).
 
-    Pool = all maps in the maps dir sharing ``tileset_id``.  This matches the pool
-    the ROM will use (per-map tilesets with a full-corpus family palette), so the
-    viewer is a faithful preview of the quantized ROM art.
+    Pool = only the opened map.  This matches the ROM's per-map packing: phase5
+    feeds ``build_slice_tilesets`` a unique synthetic tileset id per map
+    (``1000 + map_id``), so each map is quantized from its own tiles alone — not
+    pooled across maps sharing a real ``tileset_id``.  Pooling per-map here makes the
+    viewer a faithful preview of the quantized ROM art (map_walker_plan §6, §5.4).
     """
     maps_dir = _maps_dir()
+    pool_map_ids = [map_id]
+
+    # Cache key is the opened map (the pool is a single map now); a warm analysis
+    # returns without reading any map JSON.  ``tileset_id`` is still an input to the
+    # rasterizer/priorities but no longer scopes the quant pool.
+    cache_key = frozenset(pool_map_ids)
+    if cache_key in _tileset_analysis_cache:
+        return _tileset_analysis_cache[cache_key]
+
     maplist: list[tuple[int, dict]] = []
-    for p in sorted(maps_dir.glob("Map*.json")):
+    for mid in pool_map_ids:
+        p = maps_dir / f"Map{mid:03d}.json"
         try:
             doc = json.loads(p.read_text(encoding="utf-8"))
         except Exception:
             continue
-        if int(doc.get("tileset_id", -1)) == tileset_id:
-            mid = int(p.stem[3:])
-            maplist.append((mid, doc))
-
-    cache_key = frozenset(mid for mid, _ in maplist)
-    if cache_key in _tileset_analysis_cache:
-        return _tileset_analysis_cache[cache_key]
+        maplist.append((mid, doc))
 
     pool_keys = column_keys_for_maps(maplist)
 
@@ -230,8 +244,8 @@ def _ensure_tileset_analysis(
     pool_keys = valid_keys
 
     print(
-        f"    tileset {tileset_id}: full-corpus pool of {len(maplist)} map(s) "
-        f"{sorted(cache_key)}, {len(pool_keys)} pool keys"
+        f"    tileset {tileset_id}: per-map pool (Map{map_id:03d}), {len(pool_keys)} "
+        f"pool keys"
         + (f" ({dropped} dropped as out-of-bounds)" if dropped else "")
     )
 
@@ -249,9 +263,42 @@ def _ensure_tileset_analysis(
     return analysis, pool_key_to_idx
 
 
+def _refresh_postquant(map_id: int, state: _MapState) -> None:
+    """Recompute only the quant-DEPENDENT fields of an already-loaded map state
+    (palette analysis + post-quant metatile pairs), reusing the param-independent
+    grid, warm rasterizer, and pre-quant metatile composites already in ``state``.
+
+    Called on first load and whenever the cached state is stale after a re-quant, so
+    a knob change re-runs the quantize step alone — not the grid load or tile renders."""
+    analysis, pool_key_to_idx = _ensure_tileset_analysis(
+        state.tileset_id, state.raster, state.priorities, map_id
+    )
+    postquant: list[tuple[np.ndarray, np.ndarray] | None] = []
+    for ck in state.colkeys_sorted:
+        if not ck:
+            postquant.append(None)
+            continue
+        pool_idx = pool_key_to_idx.get(ck)
+        if pool_idx is None:
+            raise ValueError(
+                f"Map{map_id:03d}: column key {ck!r} absent from tileset {state.tileset_id} pool — "
+                "analysis is inconsistent with this map's column keys"
+            )
+        mp = analysis.metatiles[pool_idx]
+        postquant.append((mp.quant_bottom, mp.quant_top))
+
+    state.analysis = analysis
+    state.pool_key_to_idx = pool_key_to_idx
+    state.metatile_imgs_postquant = postquant
+    state.quant_generation = _quant_generation
+
+
 def _ensure_loaded(map_id: int) -> None:
     """Load and cache all per-map rendering state (idempotent)."""
     if map_id in _map_cache:
+        state = _map_cache[map_id]
+        if state.quant_generation != _quant_generation:
+            _refresh_postquant(map_id, state)
         return
 
     maps_dir = _maps_dir()
@@ -308,25 +355,9 @@ def _ensure_loaded(map_id: int) -> None:
     n_rendered = sum(1 for m in metatile_imgs if m is not None)
     print(f"    {len(colkeys_sorted)} distinct columns, {n_rendered} metatile renders")
 
-    # Build the slice-scoped palette analysis for this tileset (matches the ROM pool).
-    analysis, pool_key_to_idx = _ensure_tileset_analysis(tileset_id, raster, priorities, map_id)
-
-    # Build post-quant metatile pairs aligned 1:1 with metatile_imgs / colkeys_sorted.
-    metatile_imgs_postquant: list[tuple[np.ndarray, np.ndarray] | None] = []
-    for ck in colkeys_sorted:
-        if not ck:
-            metatile_imgs_postquant.append(None)
-        else:
-            pool_idx = pool_key_to_idx.get(ck)
-            if pool_idx is None:
-                raise ValueError(
-                    f"Map{map_id:03d}: column key {ck!r} absent from tileset {tileset_id} pool — "
-                    "analysis is inconsistent with this map's column keys"
-                )
-            mp = analysis.metatiles[pool_idx]
-            metatile_imgs_postquant.append((mp.quant_bottom, mp.quant_top))
-
-    _map_cache[map_id] = _MapState(
+    # Param-independent state first; the quant-dependent fields (analysis, post-quant
+    # metatiles) are filled by _refresh_postquant so the same path serves a re-quant.
+    state = _MapState(
         grid=grid,
         raster=raster,
         priorities=priorities,
@@ -342,10 +373,13 @@ def _ensure_loaded(map_id: int) -> None:
         colkeys_sorted=colkeys_sorted,
         colkey_to_idx=colkey_to_idx,
         metatile_imgs=metatile_imgs,
-        metatile_imgs_postquant=metatile_imgs_postquant,
-        analysis=analysis,
-        pool_key_to_idx=pool_key_to_idx,
+        metatile_imgs_postquant=[],
+        analysis=PaletteAnalysis(palettes=[], metatiles=[]),
+        pool_key_to_idx={},
+        quant_generation=-1,  # forces the initial _refresh_postquant below
     )
+    _map_cache[map_id] = state
+    _refresh_postquant(map_id, state)
 
 
 # ---------------------------------------------------------------------------
@@ -518,16 +552,12 @@ def build_map_data(map_id: int) -> dict:
         if img is None:
             rmxp_tile_colors[str(tid)] = []
             continue
-        arr = np.array(img)  # RGBA
+        arr = np.asarray(img)  # RGBA
         visible = arr[arr[:, :, 3] > 0, :3]
-        seen_rgb: set[tuple[int, int, int]] = set()
-        unique_colors: list[list[int]] = []
-        for px in visible:
-            t = (int(px[0]), int(px[1]), int(px[2]))
-            if t not in seen_rgb:
-                seen_rgb.add(t)
-                unique_colors.append([t[0], t[1], t[2]])
-        rmxp_tile_colors[str(tid)] = unique_colors
+        # Distinct source RGBs (order-insensitive: this feeds a debug sidebar).
+        rmxp_tile_colors[str(tid)] = (
+            np.unique(visible, axis=0).tolist() if visible.size else []
+        )
 
     # colkey_palettes: per-colkey-idx summary of palette usage and color changes
     # A "merge" is a colour whose 5-bit value moved (orig>>3 != final>>3): the

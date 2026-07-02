@@ -8,6 +8,31 @@ This doc absorbs and supersedes the live content of the former root planning doc
 (`PATHFINDER_*`, `ITERATIVE_ROADMAP`, `DETERMINISTIC_EXPANSION_STRATEGY`,
 `OQ3_EMPIRICAL_PLAN`), now archived under `reference/archive/`.
 
+> **Amendments 2026-07-02** (grill session on the spine; full decision record +
+> slice census: `reference/grill_spine_2026-07-02.md`):
+> - **§5 first-cut is overturned:** transpiler v1 does NOT stub all of 209 — it
+>   emits the deterministic tier (raw `MOVEMENT_ACTION_*` + the SOFT-C rules the
+>   slice's own 91 routes need) and queues the rest; anything still stubbed must
+>   neutralize its paired 210 wait. The slice's opening cutscenes are move-route
+>   heavy; stub-all would ship a booted-but-unplayable slice.
+> - **§8 "orchestrator checkpoint/memo machinery (repurpose)" is stale:** the
+>   transpiler gets a new thin driver with no checkpoints/memo (deterministic ⇒
+>   full re-runs); only the unhandled-queue format + triage clustering are reused.
+>   `orchestrator.py`/`backends/` remain solely the hand-invoked LLM tail tool.
+> - **§4 index source pinned:** the capability index reads git-tracked *pristine*
+>   `engine/` content (never the working tree — the pipeline injects Uranium
+>   symbols into generated headers); the forward gate resolves index ∪ flag
+>   registry ∪ map-constant registry ∪ PBS outputs, and enforces at BOTH
+>   conversion time and staging. Gate failure = our bug = abort loud, never queued.
+> - **Sequencing:** walker-first was drift, not a decision. The spine is anchored
+>   to finishing the pathfinder slice (six-point done bar in the record; slice 1
+>   stays 3 maps, starter/Route 1 = slice 2). Slice 1 assembles via
+>   `assemble_pathfinder` as-is; phase5 unification is a separate post-slice unit.
+> - **Prereq before any spine code:** archive the frozen-Opus oracle out of
+>   gitignored `output/uranium-build/scripts/` (a `--clean` destroys it); it's a
+>   one-time harvest-then-retire oracle, with goldens minted from reviewed
+>   transpiler output.
+
 ---
 
 ## 1. The pivot, in one paragraph

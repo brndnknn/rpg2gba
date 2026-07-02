@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 
+import numpy as np
 from PIL import Image
 
 from .autotile import flatten_autotile
@@ -43,16 +44,12 @@ _TRANSPARENT = (0, 0, 0, 0)
 
 def downscale_2x(img: Image.Image) -> Image.Image:
     """One pixel per aligned 2x2 block (top-left phase). Lossless on 2x-upscaled
-    art; matches scripts/downscale_compare.py::downscale_2x (`a[0::2, 0::2]`)."""
-    img = img.convert("RGBA")
-    w, h = img.size
-    src = img.load()
-    out = Image.new("RGBA", (w // 2, h // 2))
-    dst = out.load()
-    for y in range(h // 2):
-        for x in range(w // 2):
-            dst[x, y] = src[2 * x, 2 * y]
-    return out
+    art; matches scripts/downscale_compare.py::downscale_2x (`a[0::2, 0::2]`).
+
+    numpy strided slice (top-left of each 2x2 block) — byte-identical to the old
+    per-pixel double loop, but vectorised."""
+    arr = np.asarray(img.convert("RGBA"))
+    return Image.fromarray(np.ascontiguousarray(arr[0::2, 0::2]), "RGBA")
 
 
 class TileRasterizer:
