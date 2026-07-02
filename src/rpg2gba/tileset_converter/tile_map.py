@@ -100,6 +100,20 @@ class Bucket:
     void: int
 
 
+@dataclass(frozen=True)
+class WarpInfo:
+    """Per-tileset warp metatiles (fix #1, walker_checkpoint2_findings.md).
+
+    ``tiles`` maps a serialized door column key (``serialize_column_key``) to the
+    MB_NON_ANIMATED_DOOR metatile that preserves that column's real art. ``fallback``
+    is the transparent door metatile used for warp coords whose column is empty or
+    out-of-atlas (or, in the legacy single-metatile table shape, for EVERY column —
+    see ``load_tile_map``)."""
+
+    tiles: dict[str, "Metatile"]
+    fallback: "Metatile | None" = None
+
+
 def serialize_column_key(key: tuple[tuple[int, int], ...]) -> str:
     """Canonical, deterministic serialization of a column key, shared by the overlay
     writer (build_slice_tilesets) and the reader (lookup_column) so keys always match.
@@ -129,7 +143,7 @@ class TileMap:
         buckets: dict[int, Bucket] | None = None,
         passages: dict[int, list[int]] | None = None,
         priorities: dict[int, list[int]] | None = None,
-        warps: dict[int, Metatile] | None = None,
+        warps: dict[int, WarpInfo] | None = None,
         atlas_max: dict[int, int] | None = None,
     ) -> None:
         self._tiles = tiles
@@ -137,7 +151,13 @@ class TileMap:
         self._buckets = buckets or {}
         self._passages = passages or {}
         self._priorities = priorities or {}
-        self._warps = warps or {}
+        # Accept a bare Metatile as shorthand for a fallback-only WarpInfo (legacy
+        # single-canned-metatile callers, e.g. older test fixtures) — same
+        # normalization load_tile_map applies when reading the old JSON shape.
+        self._warps = {
+            ts: (v if isinstance(v, WarpInfo) else WarpInfo({}, v))
+            for ts, v in (warps or {}).items()
+        }
         self._atlas_max = atlas_max or {}
 
     # --- resolution ---------------------------------------------------------
@@ -184,22 +204,53 @@ class TileMap:
         return Metatile(bucket.void, BLOCKED_COLLISION, BLOCKED_ELEVATION)
 
     def warp(self, tileset_id: int) -> Metatile:
-        """The warp metatile stamped at a warp/door/stairs cell for this tileset.
-
-        A pokeemerald warp_event is inert unless the metatile under it carries a
-        warp metatile-behavior (see field_control_avatar.c). The generic passable
-        bucket has MB_NORMAL, so the layout converter overlays this metatile (a
-        step-on MB_NON_ANIMATED_DOOR, collision 0) at every warp coord. Fails loud
-        if the tileset has no `warps` entry — a warp on an unconfigured tileset
-        would silently never fire."""
-        warp = self._warps.get(tileset_id)
-        if warp is None:
+        """Legacy single-metatile warp lookup — returns the tileset's fallback warp
+        metatile. Kept for callers that don't have a column key handy; prefer
+        `warp_for_column`. Fails loud if the tileset has no `warps` entry, or if it
+        has only per-column door copies and no fallback (that shape requires a
+        column key — a bare `warp()` call would silently pick the wrong door art)."""
+        info = self._warps.get(tileset_id)
+        if info is None:
             raise KeyError(
                 f"no warp metatile for tileset {tileset_id}; add a 'warps' entry to "
                 f"{DEFAULT_TILE_MAP_PATH} or the warp_event will never fire (its "
                 f"metatile would be MB_NORMAL)"
             )
-        return warp
+        if info.fallback is None:
+            raise KeyError(
+                f"tileset {tileset_id} has only per-column warp metatiles (no "
+                f"fallback); use warp_for_column(tileset_id, key) instead"
+            )
+        return info.fallback
+
+    def warp_for_column(
+        self, tileset_id: int, key: tuple[tuple[int, int], ...] | None
+    ) -> Metatile:
+        """The warp metatile for a specific column key (fix #1): an exact match on
+        ``key`` keeps that cell's real art with MB_NON_ANIMATED_DOOR behavior;
+        otherwise the tileset's transparent fallback door metatile is used (`key`
+        None covers empty/out-of-atlas warp cells). Fails loud (KeyError) if the
+        tileset has no `warps` entry, or if neither the column nor a fallback
+        resolves — a silent MB_NORMAL warp tile is the failure mode this must never
+        produce."""
+        info = self._warps.get(tileset_id)
+        if info is None:
+            raise KeyError(
+                f"no warp metatile(s) for tileset {tileset_id}; add a 'warps' entry "
+                f"to {DEFAULT_TILE_MAP_PATH} or the warp_event will never fire (its "
+                f"metatile would be MB_NORMAL)"
+            )
+        if key is not None:
+            k = serialize_column_key(key)
+            if k in info.tiles:
+                return info.tiles[k]
+        if info.fallback is not None:
+            return info.fallback
+        k_repr = serialize_column_key(key) if key is not None else "None"
+        raise KeyError(
+            f"no warp metatile for tileset {tileset_id} column {key!r} "
+            f"(serialized {k_repr!r}) and no fallback configured"
+        )
 
     def has_warp(self, tileset_id: int) -> bool:
         return tileset_id in self._warps
@@ -311,10 +362,7 @@ def load_tile_map(
         int(k): Bucket(b["passable"], b["blocked"], b["void"])
         for k, b in raw.get("buckets", {}).items()
     }
-    warps = {
-        int(k): Metatile(w["metatile"], w.get("collision", 0), w.get("elevation", 0))
-        for k, w in raw.get("warps", {}).items()
-    }
+    warps = {int(k): _parse_warp_entry(w) for k, w in raw.get("warps", {}).items()}
     atlas_max = {int(k): int(v) for k, v in raw.get("atlas_max", {}).items()}
 
     passages: dict[int, list[int]] = {}
@@ -323,6 +371,29 @@ def load_tile_map(
         passages, priorities = _load_oracle(Path(passages_path), tilesets.keys(), source_tilesets)
 
     return TileMap(tiles, tilesets, buckets, passages, priorities, warps, atlas_max)
+
+
+def _parse_warp_entry(w: dict) -> WarpInfo:
+    """Parse one `warps[ts]` entry into a `WarpInfo`, handling both shapes.
+
+    New shape (per-column, fix #1): ``{"tiles": {colkey: metatile_idx, ...},
+    "fallback": idx_or_None, "collision": c, "elevation": e}``. Legacy shape
+    (single canned metatile, `reference/tileset_map.json` + old overlays):
+    ``{"metatile": N, "collision": c, "elevation": e}`` — treated as a
+    fallback-only WarpInfo so `warp_for_column` returns it for ANY column,
+    matching the old behavior exactly."""
+    collision = w.get("collision", 0)
+    elevation = w.get("elevation", 0)
+    if "tiles" in w:
+        tiles = {
+            colkey: Metatile(idx, collision, elevation) for colkey, idx in w["tiles"].items()
+        }
+        fallback_idx = w.get("fallback")
+        fallback = (
+            Metatile(fallback_idx, collision, elevation) if fallback_idx is not None else None
+        )
+        return WarpInfo(tiles, fallback)
+    return WarpInfo({}, Metatile(w["metatile"], collision, elevation))
 
 
 def _load_oracle(
@@ -381,7 +452,7 @@ def _validate(raw: dict) -> None:
     for ts_k, w in raw.get("warps", {}).items():
         if ts_k not in tileset_ids:
             raise ValueError(f"warps references tileset {ts_k} absent from 'tilesets'")
-        _validate_metatile_entry(f"warps[{ts_k}]", w)
+        _validate_warp_entry(f"warps[{ts_k}]", w)
 
 
 def _validate_metatile_entry(where: str, e: dict) -> None:
@@ -392,6 +463,25 @@ def _validate_metatile_entry(where: str, e: dict) -> None:
         raise ValueError(f"{where}: collision {e['collision']} not in {_VALID_COLLISION}")
     if "elevation" in e and not 0 <= e["elevation"] <= _MAX_ELEVATION:
         raise ValueError(f"{where}: elevation {e['elevation']} out of 0..{_MAX_ELEVATION}")
+
+
+def _validate_warp_entry(where: str, w: dict) -> None:
+    """Validate one `warps[ts]` entry — new per-column shape (has 'tiles') or the
+    legacy single-metatile shape."""
+    if "tiles" in w:
+        if not isinstance(w["tiles"], dict):
+            raise ValueError(f"{where}.tiles: must be an object")
+        for colkey, idx in w["tiles"].items():
+            _check_metatile_id(f"{where}.tiles[{colkey}]", idx)
+        fallback = w.get("fallback")
+        if fallback is not None:
+            _check_metatile_id(f"{where}.fallback", fallback)
+        if "collision" in w and w["collision"] not in _VALID_COLLISION:
+            raise ValueError(f"{where}: collision {w['collision']} not in {_VALID_COLLISION}")
+        if "elevation" in w and not 0 <= w["elevation"] <= _MAX_ELEVATION:
+            raise ValueError(f"{where}: elevation {w['elevation']} out of 0..{_MAX_ELEVATION}")
+    else:
+        _validate_metatile_entry(where, w)
 
 
 def _check_metatile_id(where: str, mt) -> None:

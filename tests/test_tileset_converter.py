@@ -798,22 +798,119 @@ def test_page_dispatcher_deferred_on_global() -> None:
     assert mw.build_page_dispatcher(_event(2, 0, 0, [_page()]), consts) is None
 
 
-def test_warp_pairing() -> None:
-    """dest_warp_id points at the destination's return warp; warp-source coords are
-    returned as walkable overrides."""
+def _mint_two_maps() -> mc.MapConstantRegistry:
     reg = mc.MapConstantRegistry(Path("x"))
     reg.mint(49, "Moki Town Player's House 1F")
     reg.mint(48, "Moki Town Player's House 2F")
-    map49 = {"map_id": 49, "events": [_event(3, 12, 3, [_page(1, cmds=[_transfer(48, 4, 3)])])]}
-    map48 = {"map_id": 48, "events": [_event(2, 3, 3, [_page(1, cmds=[_transfer(49, 11, 3)])])]}
-    warp_lists = {
-        49: [mw.classify_map_events(map49, {48, 49})[1][0][1]],
-        48: [mw.classify_map_events(map48, {48, 49})[1][0][1]],
+    return reg
+
+
+def test_warp_arrival_pairing_round_trip(tmp_path: Path) -> None:
+    """Each source warp is paired to a plain-floor "arrival" warp_event emitted on
+    the destination map at Uranium's true arrival coord (the vanilla-Emerald
+    landing trick) — not the destination's own door tile. Source-warp indices are
+    stable (0..n-1); arrivals are appended after. Override coord sets carry only
+    the source-warp coords, never the arrival coords."""
+    reg = _mint_two_maps()
+    # A (49) has a door warp to B (48) landing at Uranium arrival (5, 6).
+    map_a = {
+        "map_id": 49, "width": 20, "height": 20,
+        "events": [_event(3, 12, 3, [_page(1, cmds=[_transfer(48, 5, 6)])])],
     }
-    warps49, overrides49 = mw.build_warp_events(map49, 49, {48, 49}, reg, warp_lists)
-    assert warps49[0].dest_map == "MAP_MOKI_TOWN_PLAYERS_HOUSE_2F"
-    assert warps49[0].dest_warp_id == 0  # 48's only warp returns to 49
-    assert overrides49 == {(12, 3)}
+    # B (48) has a return warp to A (49) landing at Uranium arrival (2, 3).
+    map_b = {
+        "map_id": 48, "width": 20, "height": 20,
+        "events": [_event(2, 3, 3, [_page(1, cmds=[_transfer(49, 2, 3)])])],
+    }
+    slice_set = {48, 49}
+    maps = {49: map_a, 48: map_b}
+    warp_lists = {
+        49: [spec for _e, spec in mw.classify_map_events(map_a, slice_set)[1]],
+        48: [spec for _e, spec in mw.classify_map_events(map_b, slice_set)[1]],
+    }
+    resolved = mw._resolve_all_warp_events(warp_lists, reg, maps)
+
+    warps_a, warps_b = resolved[49], resolved[48]
+    assert len(warps_a) == 2 and len(warps_b) == 2
+    # B's list: [B's own source warp, arrival for A's door at (5, 6)]
+    assert (warps_b[0].x, warps_b[0].y) == (3, 3)
+    assert (warps_b[1].x, warps_b[1].y) == (5, 6)
+    # A's source warp lands on B's arrival (index 1).
+    assert warps_a[0].dest_warp_id == 1
+    # A's list: [A's own source warp, arrival for B's return warp at (2, 3)]
+    assert (warps_a[0].x, warps_a[0].y) == (12, 3)
+    assert (warps_a[1].x, warps_a[1].y) == (2, 3)
+    # B's source warp lands on A's arrival (index 1).
+    assert warps_b[0].dest_warp_id == 1
+
+    # End-to-end via the batch driver: override coord sets are source coords only.
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir()
+    (maps_dir / "Map049.json").write_text(json.dumps(map_a), encoding="utf-8")
+    (maps_dir / "Map048.json").write_text(json.dumps(map_b), encoding="utf-8")
+    metadata_path = tmp_path / "map_metadata.json"
+    metadata_path.write_text(json.dumps({"maps": {}}), encoding="utf-8")
+    out_dir = tmp_path / "out"
+    overrides = mw.build_warps_only_maps(
+        [49, 48], maps_dir=maps_dir, registry=reg, metadata_path=metadata_path, out_dir=out_dir,
+    )
+    assert overrides[49] == {(12, 3)}
+    assert overrides[48] == {(3, 3)}
+
+
+def test_warp_arrival_dedup() -> None:
+    """Two adjacent door tiles in A targeting B at the same arrival coord share one
+    arrival warp in B; both source warps' dest_warp_id point at it."""
+    reg = _mint_two_maps()
+    map_a = {
+        "map_id": 49, "width": 20, "height": 20,
+        "events": [
+            _event(1, 10, 3, [_page(1, cmds=[_transfer(48, 5, 6)])]),
+            _event(2, 11, 3, [_page(1, cmds=[_transfer(48, 5, 6)])]),
+        ],
+    }
+    map_b = {"map_id": 48, "width": 20, "height": 20, "events": []}
+    slice_set = {48, 49}
+    maps = {49: map_a, 48: map_b}
+    warp_lists = {
+        49: [spec for _e, spec in mw.classify_map_events(map_a, slice_set)[1]],
+        48: [],
+    }
+    resolved = mw._resolve_all_warp_events(warp_lists, reg, maps)
+
+    assert len(resolved[48]) == 1  # one shared arrival, not two
+    arrival = resolved[48][0]
+    assert (arrival.x, arrival.y) == (5, 6)
+    assert resolved[49][0].dest_warp_id == 0
+    assert resolved[49][1].dest_warp_id == 0
+
+
+def test_warp_arrival_out_of_bounds_falls_back(caplog: pytest.LogCaptureFixture) -> None:
+    """Arrival coords outside the destination map's bounds -> no arrival emitted;
+    the source warp falls back to the old return-warp pairing, and a warning is
+    logged (fail loud, not silent)."""
+    reg = _mint_two_maps()
+    map_a = {
+        "map_id": 49, "width": 20, "height": 20,
+        "events": [_event(1, 10, 3, [_page(1, cmds=[_transfer(48, 99, 99)])])],
+    }
+    map_b = {
+        "map_id": 48, "width": 10, "height": 10,
+        "events": [_event(2, 3, 3, [_page(1, cmds=[_transfer(49, 5, 5)])])],
+    }
+    slice_set = {48, 49}
+    maps = {49: map_a, 48: map_b}
+    warp_lists = {
+        49: [spec for _e, spec in mw.classify_map_events(map_a, slice_set)[1]],
+        48: [spec for _e, spec in mw.classify_map_events(map_b, slice_set)[1]],
+    }
+    with caplog.at_level("WARNING"):
+        resolved = mw._resolve_all_warp_events(warp_lists, reg, maps)
+
+    assert len(resolved[48]) == 1  # no arrival for the out-of-bounds warp
+    assert len(resolved[49]) == 2  # B's warp (in-bounds) still gets its arrival
+    assert resolved[49][0].dest_warp_id == 0  # fallback: B's return warp (index 0)
+    assert "out of bounds" in caplog.text
 
 
 def test_map_json_schema() -> None:

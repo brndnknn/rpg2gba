@@ -1,4 +1,6 @@
-"""Tests for synthetic tileset id resolution in load_tile_map / _load_oracle."""
+"""Tests for synthetic tileset id resolution in load_tile_map / _load_oracle, and
+for the per-column warp metatile resolution (fix #1,
+walker_checkpoint2_findings.md)."""
 from __future__ import annotations
 
 import json
@@ -6,7 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from rpg2gba.tileset_converter.tile_map import load_tile_map
+from rpg2gba.tileset_converter.tile_map import (
+    Metatile,
+    TileMap,
+    TilesetChoice,
+    WarpInfo,
+    load_tile_map,
+)
 
 
 def _write_synth_fixtures(tmp_path: Path, synth_id: int, real_id: int) -> tuple[Path, Path]:
@@ -122,3 +130,80 @@ def test_load_tile_map_synth_missing_from_oracle_raises(tmp_path: Path) -> None:
 
     with pytest.raises(KeyError):
         load_tile_map(tpath, opath)
+
+
+# ---------------------------------------------------------------------------
+# Tests for warp_for_column / WarpInfo (fix #1, walker_checkpoint2_findings.md)
+# ---------------------------------------------------------------------------
+
+
+def _door_key() -> tuple[tuple[int, int], ...]:
+    return ((0, 400),)
+
+
+def _other_key() -> tuple[tuple[int, int], ...]:
+    return ((0, 401),)
+
+
+def test_warp_for_column_exact_match_wins() -> None:
+    """An exact column-key match returns the per-column door copy, not the
+    fallback."""
+    tm = TileMap(
+        tiles={5: {}},
+        tilesets={5: TilesetChoice("gTileset_P", "gTileset_S")},
+        warps={5: WarpInfo(tiles={'[[0,400]]': Metatile(10, 0, 0)}, fallback=Metatile(99, 0, 0))},
+    )
+    assert tm.warp_for_column(5, _door_key()) == Metatile(10, 0, 0)
+
+
+def test_warp_for_column_falls_back_on_miss() -> None:
+    """A column key with no per-column entry resolves to the fallback."""
+    tm = TileMap(
+        tiles={5: {}},
+        tilesets={5: TilesetChoice("gTileset_P", "gTileset_S")},
+        warps={5: WarpInfo(tiles={'[[0,400]]': Metatile(10, 0, 0)}, fallback=Metatile(99, 0, 0))},
+    )
+    assert tm.warp_for_column(5, _other_key()) == Metatile(99, 0, 0)
+
+
+def test_warp_for_column_none_key_uses_fallback() -> None:
+    """key=None (empty/garbage warp cell) always resolves to the fallback."""
+    tm = TileMap(
+        tiles={5: {}},
+        tilesets={5: TilesetChoice("gTileset_P", "gTileset_S")},
+        warps={5: WarpInfo(tiles={'[[0,400]]': Metatile(10, 0, 0)}, fallback=Metatile(99, 0, 0))},
+    )
+    assert tm.warp_for_column(5, None) == Metatile(99, 0, 0)
+
+
+def test_warp_for_column_legacy_shape_resolves_any_column(tmp_path: Path) -> None:
+    """Loading the OLD warps shape (a single canned metatile) via load_tile_map
+    still resolves warp_for_column for an arbitrary column key — full backward
+    compat with reference/tileset_map.json and old *.gen.json overlays."""
+    table = {
+        "tilesets": {"5": {"primary": "gTileset_P", "secondary": "gTileset_S"}},
+        "tiles": {"5": {}},
+        "warps": {"5": {"metatile": 55, "collision": 0, "elevation": 0}},
+    }
+    tpath = tmp_path / "tileset_map.json"
+    tpath.write_text(json.dumps(table), encoding="utf-8")
+
+    tm = load_tile_map(tpath, passages_path=None)
+
+    # Any column key — or None — resolves to the single legacy metatile.
+    assert tm.warp_for_column(5, _door_key()) == Metatile(55, 0, 0)
+    assert tm.warp_for_column(5, _other_key()) == Metatile(55, 0, 0)
+    assert tm.warp_for_column(5, None) == Metatile(55, 0, 0)
+    # Legacy `warp()` still works too.
+    assert tm.warp(5) == Metatile(55, 0, 0)
+
+
+def test_warp_for_column_no_warps_entry_raises() -> None:
+    """No `warps` entry at all for the tileset -> KeyError (never a silent
+    MB_NORMAL warp tile)."""
+    tm = TileMap(
+        tiles={5: {}},
+        tilesets={5: TilesetChoice("gTileset_P", "gTileset_S")},
+    )
+    with pytest.raises(KeyError):
+        tm.warp_for_column(5, _door_key())

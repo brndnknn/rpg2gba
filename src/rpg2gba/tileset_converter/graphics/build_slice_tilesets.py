@@ -20,10 +20,14 @@ Each unique column key becomes ONE metatile (bottom + top layer split by RMXP
 priority). Autotile variants are kept distinct (faithful edges). One synthetic
 all-transparent metatile (void) is appended as the border/empty-column metatile.
 
-The warp metatile is a SEPARATE copy of the representative door column carrying
-``MB_NON_ANIMATED_DOOR``, appended after the void, so non-warp cells sharing
-that column keep ``MB_NORMAL``; the layout converter stamps the warp metatile
-only at warp coords (``tile_map.warp(tileset_id)``).
+Warp cells get a per-column MB_NON_ANIMATED_DOOR copy (fix #1,
+walker_checkpoint2_findings.md): for EVERY distinct door column key used by a
+warp coord in this tileset, a SEPARATE metatile is appended carrying that
+column's real art + the door behavior, so non-warp cells sharing the same
+column key keep ``MB_NORMAL`` on their own (unmodified) metatile. One extra
+all-transparent door metatile is appended as the fallback, for warp coords
+whose column is empty or out-of-atlas. The layout converter looks up the
+right one per cell via ``tile_map.warp_for_column(tileset_id, key)``.
 """
 from __future__ import annotations
 
@@ -256,8 +260,6 @@ def build_slice_tilesets(
                 if dk and _in_atlas(dk):
                     door_keys.add(dk)
 
-        rep_door = sorted(door_keys)[0] if door_keys else None
-
         primary_name = f"gTileset_Uranium{ts}"
         secondary_name = f"gTileset_Uranium{ts}B"
         primary_dir = fork / "data" / "tilesets" / "primary" / f"uranium{ts}"
@@ -280,26 +282,26 @@ def build_slice_tilesets(
         metatile_list.append(_void_metatile())
 
         needs_warp = any(warp_coords.get(mid) for mid, _ in maplist)
-        if rep_door is not None:
-            # The warp metatile is a SEPARATE copy of the representative door column
-            # carrying MB_NON_ANIMATED_DOOR.  Non-warp cells that share that column
-            # keep MB_NORMAL (their entry in overlay["tiles"] maps to a metatile with
-            # behavior 0).  The layout converter stamps this separate warp copy only at
-            # warp coords, so a player stepping onto a door tile triggers the warp.
-            warp_idx = len(metatile_list)
-            metatile_list.append(
-                _render_column(rep_door, rast, priorities, behavior=door_behavior)
-            )
-        elif needs_warp:
-            # Warps exist but sit on empty/garbage cells (no door column to copy).
-            # Still emit a warp metatile so the warp_event fires — a transparent tile
-            # carrying MB_NON_ANIMATED_DOOR (the walker's R-overlay marks warp tiles
-            # anyway, so an invisible warp square is fine for a debug build).
-            warp_idx = len(metatile_list)
+        warp_tiles: dict[str, int] = {}
+        warp_fallback_idx: int | None = None
+        if needs_warp:
+            # One MB_NON_ANIMATED_DOOR copy PER DISTINCT door column key: non-warp
+            # cells that share a column keep MB_NORMAL on the plain overlay["tiles"]
+            # entry for that key; only the warp coord's own cell gets the door copy,
+            # so each warp keeps its own real art (fix #1).
+            for k in sorted(door_keys):
+                idx = len(metatile_list)
+                metatile_list.append(_render_column(k, rast, priorities, behavior=door_behavior))
+                warp_tiles[serialize_column_key(k)] = idx
+
+            # Fallback: warps that sit on an empty/garbage cell (no door column to
+            # copy) still need a metatile carrying the door behavior so the
+            # warp_event fires — a transparent tile (the walker's R-overlay marks
+            # warp tiles anyway, so an invisible warp square is fine for a debug
+            # build).
+            warp_fallback_idx = len(metatile_list)
             z = np.zeros((16, 16, 4), dtype=np.uint8)
             metatile_list.append(MetatileImage(z, z.copy(), LAYER_COVERED, door_behavior))
-        else:
-            warp_idx = None
 
         # Family packer is the pipeline standard (per-hue-family palette budget; see
         # quantize.build_quantized_tileset_family) — keeps the ROM render consistent
@@ -327,9 +329,12 @@ def build_slice_tilesets(
         overlay["buckets"][str(ts)] = {
             "passable": void_idx, "blocked": void_idx, "void": void_idx,
         }
-        if warp_idx is not None:
+        if needs_warp:
             overlay["warps"][str(ts)] = {
-                "metatile": warp_idx, "collision": 0, "elevation": 0,
+                "tiles": warp_tiles,
+                "fallback": warp_fallback_idx,
+                "collision": 0,
+                "elevation": 0,
             }
         logger.info(
             "S8a tileset %d: %d columns -> %d metatiles, %d GBA tiles, "

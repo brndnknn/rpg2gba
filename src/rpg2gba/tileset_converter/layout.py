@@ -222,13 +222,16 @@ def convert_layout(
     """Convert one Phase 3 map dict into a `Layout` (blockdata + metadata).
 
     `warp_overrides` (S5, from the S1 warp trace) are the warp/door/stairs cells.
-    Each is overwritten with the tileset's warp metatile (`tile_map.warp`) — a
-    step-on MB_NON_ANIMATED_DOOR at collision 0. This is REQUIRED for the warp to
-    work, not just cosmetic: a pokeemerald warp_event is inert unless the metatile
-    under it carries a warp metatile-behavior (the generic passable-floor bucket is
-    MB_NORMAL, so the player walks onto the door tile and nothing happens). Forcing
-    collision 0 also keeps the tile steppable (door tiles read BLOCKED from their
-    source passage).
+    Each cell's metatile behavior is overwritten via `tile_map.warp_for_column` —
+    MB_NON_ANIMATED_DOOR at collision 0 — while keeping that cell's own real column
+    art (fix #1, walker_checkpoint2_findings.md): an exact match on the cell's
+    column key gets a door-behavior copy of its own art; an empty/out-of-atlas
+    column falls back to the tileset's transparent door metatile. This is REQUIRED
+    for the warp to work, not just cosmetic: a pokeemerald warp_event is inert
+    unless the metatile under it carries a warp metatile-behavior (the generic
+    passable-floor bucket is MB_NORMAL, so the player walks onto the door tile and
+    nothing happens). Forcing collision 0 also keeps the tile steppable (door tiles
+    read BLOCKED from their source passage).
 
     `tileset_key`: Override the tileset id used for all TileMap lookups (per-map
     synthetic tileset packing); defaults to the map's own `tileset_id`."""
@@ -258,7 +261,10 @@ def convert_layout(
                 void_count += 1
             metatile = collapse_column(grid, x, y, tile_map, tileset_id)
             if (x, y) in overrides:
-                metatile = tile_map.warp(tileset_id)
+                key = column_key(grid, x, y) or None
+                if key is not None and not tile_map.column_in_atlas(tileset_id, key):
+                    key = None
+                metatile = tile_map.warp_for_column(tileset_id, key)
             blocks.append(metatile.to_block())
 
     if len(blocks) != width * height:

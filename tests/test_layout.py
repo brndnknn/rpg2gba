@@ -1,13 +1,15 @@
 """Tests for the tileset_key override in convert_layout."""
 from __future__ import annotations
 
-from rpg2gba.tileset_converter.layout import TileGrid, convert_layout
+from rpg2gba.tileset_converter.layout import TileGrid, column_key, convert_layout
 from rpg2gba.tileset_converter.tile_map import (
     METATILE_ID_MASK,
     Bucket,
     Metatile,
     TileMap,
     TilesetChoice,
+    WarpInfo,
+    serialize_column_key,
 )
 
 # Synthetic and real tileset ids for the per-map-packing scenario.
@@ -30,7 +32,7 @@ def _synth_tile_map() -> TileMap:
         buckets={_SYNTH: Bucket(passable=10, blocked=11, void=7)},
         passages={_SYNTH: passages},
         priorities={_SYNTH: [0] * n},
-        warps={_SYNTH: Metatile(99, 0, 0)},
+        warps={_SYNTH: WarpInfo(tiles={}, fallback=Metatile(99, 0, 0))},
     )
 
 
@@ -115,3 +117,70 @@ def test_tileset_key_warp_override_uses_synth_key(tmp_path) -> None:
     # cell (1,0) overridden by warp metatile (99, collision 0)
     assert layout.blocks[1] & METATILE_ID_MASK == 99
     assert (layout.blocks[1] >> 10) & 0x3 == 0
+
+
+def test_tileset_key_warp_override_prefers_per_column_metatile() -> None:
+    """convert_layout picks the warp metatile matching the cell's OWN column key
+    (fix #1) over the fallback, when the tileset's WarpInfo has one."""
+    g = _grid(2, 1, [384, 500])  # cell (1,0) column key is ((0, 500),)
+    door_key = column_key(g, 1, 0)
+    passages = [0] * 600
+    passages[500] = 15
+    tm = TileMap(
+        tiles={_SYNTH: {}},
+        tilesets={_SYNTH: TilesetChoice("gTileset_P", "gTileset_S")},
+        buckets={_SYNTH: Bucket(passable=10, blocked=11, void=7)},
+        passages={_SYNTH: passages},
+        priorities={_SYNTH: [0] * 600},
+        warps={
+            _SYNTH: WarpInfo(
+                tiles={serialize_column_key(door_key): Metatile(42, 0, 0)},
+                fallback=Metatile(99, 0, 0),
+            )
+        },
+    )
+
+    layout = convert_layout(
+        _map_json(g, tileset_id=_REAL),
+        tm,
+        name="T",
+        layout_const="LAYOUT_T",
+        warp_overrides={(1, 0)},
+        tileset_key=_SYNTH,
+    )
+
+    # cell (1,0)'s own column key ((0,500),) has a per-column entry (42), not the
+    # generic fallback (99).
+    assert layout.blocks[1] & METATILE_ID_MASK == 42
+    assert (layout.blocks[1] >> 10) & 0x3 == 0  # collision forced to 0
+
+
+def test_tileset_key_warp_override_falls_back_for_unmapped_column() -> None:
+    """A warp coord whose column key has no per-column entry resolves to the
+    tileset's fallback warp metatile."""
+    g = _grid(2, 1, [384, 500])
+    other_key = column_key(g, 0, 0)  # column ((0,384),) — NOT the warp cell's own
+    tm = TileMap(
+        tiles={_SYNTH: {}},
+        tilesets={_SYNTH: TilesetChoice("gTileset_P", "gTileset_S")},
+        buckets={_SYNTH: Bucket(passable=10, blocked=11, void=7)},
+        passages={_SYNTH: [0] * 600},
+        priorities={_SYNTH: [0] * 600},
+        warps={
+            _SYNTH: WarpInfo(
+                tiles={serialize_column_key(other_key): Metatile(42, 0, 0)},
+                fallback=Metatile(99, 0, 0),
+            )
+        },
+    )
+
+    layout = convert_layout(
+        _map_json(g, tileset_id=_REAL),
+        tm,
+        name="T",
+        layout_const="LAYOUT_T",
+        warp_overrides={(1, 0)},  # column ((0,500),), not registered under "tiles"
+        tileset_key=_SYNTH,
+    )
+
+    assert layout.blocks[1] & METATILE_ID_MASK == 99

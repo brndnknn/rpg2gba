@@ -145,11 +145,17 @@ def test_overlay_structure(tmp_path: Path) -> None:
     # Void bucket points at metatile 4 (appended after the 4 column metatiles).
     assert overlay["buckets"]["5"]["void"] == 4
     assert overlay["buckets"]["5"]["passable"] == 4
-    # Warp metatile is a SEPARATE copy at index 5 (after void), NOT the same entry
-    # as the column-key metatile for (0,0); that entry stays MB_NORMAL (behavior 0).
-    assert overlay["warps"]["5"] == {"metatile": 5, "collision": 0, "elevation": 0}
-    # Confirm the column-key entry for cell (0,0) is metatile 0 (not the warp copy).
+    # Warp cell (0,0) -> column ((0,400),) gets a SEPARATE per-column door copy at
+    # index 5 (after void), NOT the same entry as the plain column-key metatile for
+    # (0,0); that entry (metatile 0) stays MB_NORMAL (behavior 0). Fallback is 6.
     col_400_key = json.dumps([[0, 400]], separators=(",", ":"))
+    assert overlay["warps"]["5"] == {
+        "tiles": {col_400_key: 5},
+        "fallback": 6,
+        "collision": 0,
+        "elevation": 0,
+    }
+    # Confirm the column-key entry for cell (0,0) is metatile 0 (not the warp copy).
     assert tiles[col_400_key]["metatile"] == 0
 
 
@@ -164,16 +170,19 @@ def test_emitted_art_files(tmp_path: Path) -> None:
         assert (d / "palettes" / "00.pal").is_file()
         assert (d / "palettes" / "15.pal").is_file()
 
-    # 6 metatiles: 4 column + 1 void + 1 warp copy, all in primary.
-    # metatiles.bin:           6 metatiles * 8 u16 slots * 2 bytes = 96 bytes
-    # metatile_attributes.bin: 6 metatiles * 1 u16 * 2 bytes       = 12 bytes
-    assert (prim / "metatiles.bin").stat().st_size == 6 * 16
-    assert (prim / "metatile_attributes.bin").stat().st_size == 6 * 2
+    # 7 metatiles: 4 column + 1 void + 1 per-column door copy + 1 fallback door,
+    # all in primary.
+    # metatiles.bin:           7 metatiles * 8 u16 slots * 2 bytes = 112 bytes
+    # metatile_attributes.bin: 7 metatiles * 1 u16 * 2 bytes       = 14 bytes
+    assert (prim / "metatiles.bin").stat().st_size == 7 * 16
+    assert (prim / "metatile_attributes.bin").stat().st_size == 7 * 2
 
-    attrs = struct.unpack("<6H", (prim / "metatile_attributes.bin").read_bytes())
+    attrs = struct.unpack("<7H", (prim / "metatile_attributes.bin").read_bytes())
 
-    # Metatile 5 (warp copy of column ((0,400),)) carries MB_NON_ANIMATED_DOOR (=2).
+    # Metatile 5 (per-column door copy of column ((0,400),)) carries
+    # MB_NON_ANIMATED_DOOR (=2); metatile 6 (fallback) does too.
     assert (attrs[5] & 0x00FF) == 2
+    assert (attrs[6] & 0x00FF) == 2
     # Metatile 0 (column ((0,400),) normal entry) has behavior 0 (MB_NORMAL).
     assert (attrs[0] & 0x00FF) == 0
 
@@ -210,6 +219,120 @@ def test_engine_fragments(tmp_path: Path) -> None:
     assert ".isSecondary = TRUE," in structs  # the secondary half
     assert "extern const struct Tileset gTileset_Uranium5;" in externs
     assert "extern const struct Tileset gTileset_Uranium5B;" in externs
+
+
+# ---------------------------------------------------------------------------
+# Fix #1 (walker_checkpoint2_findings.md): per-door-column warp metatiles.
+# ---------------------------------------------------------------------------
+
+
+def _read_metatile_entries(dir_: Path, n_metatiles: int) -> list[tuple[int, ...]]:
+    """Unpack ``metatiles.bin`` into 8 raw u16 tile-entries per metatile."""
+    raw = struct.unpack(f"<{n_metatiles * 8}H", (dir_ / "metatiles.bin").read_bytes())
+    return [tuple(raw[i * 8 : i * 8 + 8]) for i in range(n_metatiles)]
+
+
+def test_two_maps_two_door_columns_each_get_own_warp_art(tmp_path: Path) -> None:
+    """Two maps sharing a tileset, each warping onto a DIFFERENT door column:
+    build_slice_tilesets mints one door-behavior metatile PER column, and each
+    door copy's tile-entries are byte-identical to the plain (MB_NORMAL) metatile
+    for that same column — i.e. it carries that column's own real art, not some
+    other column's or a generic canned tile."""
+    fork = _fake_fork(tmp_path)
+    base = tmp_path / "tileset_map.json"
+    base.write_text("{}", encoding="utf-8")
+    overlay_out = tmp_path / "tileset_map.gen.json"
+    priors = [0] * 600
+
+    map_a = _map(5)  # z0 = [400,401,402,403]; warp at (0,0) -> column ((0,400),)
+    map_b = _map(5)  # same tiles; warp at (1,0) -> column ((0,401),)
+
+    build_slice_tilesets(
+        [(10, map_a), (20, map_b)],
+        {10: {(0, 0)}, 20: {(1, 0)}},
+        fork=fork,
+        base_tile_map=base,
+        overlay_out=overlay_out,
+        rasterizer_for=lambda ts: _StubRasterizer(),
+        priorities_for=lambda ts: priors,
+    )
+
+    overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
+    tiles = overlay["tiles"]["5"]
+    warps = overlay["warps"]["5"]
+
+    col_400 = json.dumps([[0, 400]], separators=(",", ":"))
+    col_401 = json.dumps([[0, 401]], separators=(",", ":"))
+
+    # Two distinct door metatiles, one per column, plus a fallback — none of them
+    # collide with each other or with the plain column entries.
+    assert set(warps["tiles"]) == {col_400, col_401}
+    door_400_idx = warps["tiles"][col_400]
+    door_401_idx = warps["tiles"][col_401]
+    fallback_idx = warps["fallback"]
+    plain_400_idx = tiles[col_400]["metatile"]
+    plain_401_idx = tiles[col_401]["metatile"]
+    assert len({door_400_idx, door_401_idx, fallback_idx, plain_400_idx, plain_401_idx}) == 5
+
+    prim = fork / "data" / "tilesets" / "primary" / "uranium5"
+    n_metatiles = max(door_400_idx, door_401_idx, fallback_idx, plain_400_idx, plain_401_idx) + 1
+    entries = _read_metatile_entries(prim, n_metatiles)
+    attrs = struct.unpack(
+        f"<{n_metatiles}H", (prim / "metatile_attributes.bin").read_bytes()
+    )
+
+    # Each door copy's raw tile-entries (hence rendered art) match the PLAIN
+    # metatile for the SAME column — not each other, not the fallback.
+    assert entries[door_400_idx] == entries[plain_400_idx]
+    assert entries[door_401_idx] == entries[plain_401_idx]
+    assert entries[door_400_idx] != entries[door_401_idx]
+
+    # Both door copies carry MB_NON_ANIMATED_DOOR (=2); the plain entries stay
+    # MB_NORMAL (=0).
+    assert (attrs[door_400_idx] & 0x00FF) == 2
+    assert (attrs[door_401_idx] & 0x00FF) == 2
+    assert (attrs[plain_400_idx] & 0x00FF) == 0
+    assert (attrs[plain_401_idx] & 0x00FF) == 0
+
+
+def test_warp_on_empty_cell_resolves_to_transparent_fallback(tmp_path: Path) -> None:
+    """A warp sitting on an empty (all-layers-zero) cell has no door column to
+    copy — build_slice_tilesets records no per-column entry for it, and
+    convert_layout must fall back to the tileset's transparent door metatile."""
+    fork = _fake_fork(tmp_path)
+    base = tmp_path / "tileset_map.json"
+    base.write_text("{}", encoding="utf-8")
+    overlay_out = tmp_path / "tileset_map.gen.json"
+    priors = [0] * 600
+
+    m = _map(5)
+    # Warp coord (1,1) is on cell (1,1); layer 0 has tile 403 there — replace the
+    # map so (1,1) is genuinely empty across all layers.
+    m["tiles"]["data"] = [400, 401, 402, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+    build_slice_tilesets(
+        [(10, m)],
+        {10: {(1, 1)}},  # empty cell
+        fork=fork,
+        base_tile_map=base,
+        overlay_out=overlay_out,
+        rasterizer_for=lambda ts: _StubRasterizer(),
+        priorities_for=lambda ts: priors,
+    )
+
+    overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
+    warps = overlay["warps"]["5"]
+
+    # No column key was collected for the empty warp cell.
+    assert warps["tiles"] == {}
+    # A fallback metatile was still minted so the warp_event fires.
+    assert warps["fallback"] is not None
+
+    prim = fork / "data" / "tilesets" / "primary" / "uranium5"
+    attrs = struct.unpack(
+        f"<{warps['fallback'] + 1}H", (prim / "metatile_attributes.bin").read_bytes()
+    )
+    assert (attrs[warps["fallback"]] & 0x00FF) == 2  # MB_NON_ANIMATED_DOOR
 
 
 # ---------------------------------------------------------------------------

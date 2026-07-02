@@ -24,8 +24,12 @@ PATHFINDER v1 scope (user decision 2026-06-15: "build S5 now, defer dispatchers"
       - graphics: one default OBJ_EVENT_GFX for every NPC (RMXP gfx map deferred).
       - region_map_section: a vanilla MAPSEC reused for all slice maps (the minted
         MAPSEC_* aren't in the fork's region_map_sections enum yet — S4 open item).
-      - warp arrival: paired to the destination's return warp (0-2 tiles off the
-        Uranium coord, harmless); out-of-slice doors are dropped (NO-EMIT, S1).
+      - warp arrival: an extra plain-floor "arrival" warp_event is emitted on the
+        destination map at Uranium's true arrival coords, and the source warp's
+        dest_warp_id points at it (vanilla-Emerald landing trick) — exact Uranium
+        coords, not the destination's door tile. Falls back to the old
+        return-warp pairing only if the arrival coords are out of the
+        destination map's bounds. out-of-slice doors are dropped (NO-EMIT, S1).
       - move routes / autorun cutscenes: placed static (S7 degrade).
 
 Inputs
@@ -105,8 +109,8 @@ class WarpSpec:
     src_x: int
     src_y: int
     dest_uid: int  # Uranium map id of the destination
-    dest_x: int  # Uranium arrival coord (informational; pairing approximates it)
-    dest_y: int
+    dest_x: int  # Uranium arrival coord: where an extra "arrival" warp_event is
+    dest_y: int  # placed on the destination map (the vanilla-Emerald landing trick)
 
 
 @dataclass
@@ -326,27 +330,6 @@ def build_object_events(
     return object_events, dispatchers
 
 
-def build_warp_events(
-    map_json: dict,
-    this_uid: int,
-    slice_ids: set[int],
-    registry: MapConstantRegistry,
-    warp_lists: dict[int, list[WarpSpec]],
-) -> tuple[list[WarpEvent], set[tuple[int, int]]]:
-    """Resolve a map's kept warps into pokeemerald warp_events + the set of
-    warp-source coords (S3 walkable-overrides). `dest_warp_id` pairs to the
-    destination's return warp (the warp there whose target is this map)."""
-    _, warps, _ = classify_map_events(map_json, slice_ids)
-    events: list[WarpEvent] = []
-    src_coords: set[tuple[int, int]] = set()
-    for _event, spec in warps:
-        dest_const = registry.get(spec.dest_uid).map_const
-        dest_warp_id = _return_warp_index(warp_lists.get(spec.dest_uid, []), this_uid)
-        events.append(WarpEvent(spec.src_x, spec.src_y, dest_const, dest_warp_id))
-        src_coords.add((spec.src_x, spec.src_y))
-    return events, src_coords
-
-
 def _return_warp_index(dest_warps: list[WarpSpec], source_uid: int) -> int:
     """Index of the destination map's warp that returns to `source_uid` (the player
     arrives on it). Falls back to 0 with a warning if there's no clean return."""
@@ -355,6 +338,77 @@ def _return_warp_index(dest_warps: list[WarpSpec], source_uid: int) -> int:
             return i
     logger.warning("no return warp to map %d found; defaulting dest_warp_id=0", source_uid)
     return 0
+
+
+def _map_dims(map_json: dict) -> tuple[int, int]:
+    return map_json["width"], map_json["height"]
+
+
+def _resolve_all_warp_events(
+    warp_lists: dict[int, list[WarpSpec]],
+    registry: MapConstantRegistry,
+    maps: dict[int, dict],
+) -> dict[int, list[WarpEvent]]:
+    """Batch-level warp resolution (needs every map's warp list up front).
+
+    Pairing (the vanilla-Emerald landing trick): a warp from map A to map B lands
+    the player on B's warp_event index `dest_warp_id` — there is no free-coordinate
+    landing in the schema. So for every source warp A->B at Uranium arrival coords
+    (dx, dy) we emit an extra plain-floor "arrival" warp_event on B at (dx, dy) and
+    point the source warp's dest_warp_id at it. The arrival tile is plain floor
+    (MB_NORMAL), so it never step-triggers on its own. Two source warps landing on
+    the same (dx, dy) in B share one arrival (deduped by (dx, dy, source_uid)).
+
+    Source warps keep their original per-map indices 0..n-1 (stable); arrivals are
+    appended after, so source indices never shift regardless of arrival ordering.
+
+    If (dx, dy) falls outside the destination map's bounds, no arrival is emitted
+    for that warp and it falls back to the old `_return_warp_index` pairing (paired
+    to the destination's return warp) — logged loud, not silently dropped.
+
+    Returns the full per-map warp_event list (source warps first, then arrivals),
+    keyed by Uranium map id.
+    """
+    # Pass 1: source warps, stable original order/index.
+    events: dict[int, list[WarpEvent]] = {
+        uid: [WarpEvent(s.src_x, s.src_y, registry.get(s.dest_uid).map_const) for s in specs]
+        for uid, specs in warp_lists.items()
+    }
+
+    # Pass 2: append arrivals to each destination map, wiring dest_warp_id back.
+    arrival_index: dict[tuple[int, int, int], int] = {}  # (dest_uid, dx, dy, src_uid) key below
+    for src_uid, specs in warp_lists.items():
+        for i, spec in enumerate(specs):
+            dest_uid = spec.dest_uid
+            dest_map_json = maps.get(dest_uid)
+            in_bounds = False
+            if dest_map_json is not None:
+                width, height = _map_dims(dest_map_json)
+                in_bounds = 0 <= spec.dest_x < width and 0 <= spec.dest_y < height
+            if not in_bounds:
+                logger.warning(
+                    "warp %d -> %d: arrival coords (%d, %d) out of bounds for map %d; "
+                    "falling back to return-warp pairing",
+                    src_uid, dest_uid, spec.dest_x, spec.dest_y, dest_uid,
+                )
+                events[src_uid][i].dest_warp_id = _return_warp_index(
+                    warp_lists.get(dest_uid, []), src_uid
+                )
+                continue
+
+            dedup_key = (dest_uid, spec.dest_x, spec.dest_y, src_uid)
+            if dedup_key in arrival_index:
+                events[src_uid][i].dest_warp_id = arrival_index[dedup_key]
+                continue
+
+            source_const = registry.get(src_uid).map_const
+            dest_events = events.setdefault(dest_uid, [])
+            arrival_idx = len(dest_events)
+            dest_events.append(WarpEvent(spec.dest_x, spec.dest_y, source_const, i))
+            arrival_index[dedup_key] = arrival_idx
+            events[src_uid][i].dest_warp_id = arrival_idx
+
+    return events
 
 
 def wire_encounters(uranium_map_id: int, encounters_path: Path) -> dict | None:
@@ -398,11 +452,13 @@ def build_slice_maps(
         uid: [spec for _e, spec in classify_map_events(maps[uid], slice_set)[1]]
         for uid in slice_ids
     }
+    resolved = _resolve_all_warp_events(warp_lists, registry, maps)
 
     overrides: dict[int, set[tuple[int, int]]] = {}
     for uid in slice_ids:
         consts = registry.get(uid)
-        warp_events, src_coords = build_warp_events(maps[uid], uid, slice_set, registry, warp_lists)
+        warp_events = resolved.get(uid, [])
+        src_coords = {(s.src_x, s.src_y) for s in warp_lists[uid]}
         object_events, dispatchers = build_object_events(
             maps[uid], consts, slice_set, pory_labels=pory_labels
         )
@@ -453,12 +509,15 @@ def build_warps_only_maps(
         uid: [spec for _e, spec in classify_map_events(maps[uid], id_set)[1]]
         for uid in map_ids
     }
+    resolved = _resolve_all_warp_events(warp_lists, registry, maps)
 
     overrides: dict[int, set[tuple[int, int]]] = {}
     for uid in map_ids:
         consts = registry.get(uid)
-        warp_events, src_coords = build_warp_events(maps[uid], uid, id_set, registry, warp_lists)
-        overrides[uid] = src_coords
+        warp_events = resolved.get(uid, [])
+        # Only the source-warp coords are walkable overrides — arrivals are plain
+        # floor; stamping the warp metatile there would recreate the bug we fixed.
+        overrides[uid] = {(s.src_x, s.src_y) for s in warp_lists[uid]}
 
         map_file = MapFile(
             consts=consts,
