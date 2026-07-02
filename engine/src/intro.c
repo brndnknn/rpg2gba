@@ -1050,6 +1050,19 @@ static void SerialCB_CopyrightScreen(void)
 
 static u8 SetUpCopyrightScreen(void)
 {
+    // BEGIN URANIUM PATHFINDER SLICE — skip the copyright screen (boot gate, test-only).
+    // Boot straight into the slice without loading/showing gIntroCopyright or running the
+    // GameCube-multiboot handshake (both irrelevant for a standalone slice ROM). Returning 0
+    // lets the CB2_InitCopyrightScreenAfterBootup wrapper still run the one-time save-block +
+    // heap init that CB2_StartUraniumSlice (-> CB2_NewGame) relies on; CB2_NewGame resets the
+    // GPU itself, so the COPYRIGHT_INITIALIZE clears below are not needed. Force-blank the
+    // display so the single skipped frame is clean, not BIOS-boot leftover. This is the sole
+    // slice-boot hook — delete this block to restore the vanilla copyright screen + intro.
+    SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_FORCED_BLANK);
+    SetMainCallback2(CB2_StartUraniumSlice);
+    return 0;
+    // END URANIUM PATHFINDER SLICE
+
     if (IS_FRLG)
         return SetUpCopyrightScreenFrlg();
 
@@ -1104,10 +1117,6 @@ static u8 SetUpCopyrightScreen(void)
     case COPYRIGHT_START_INTRO:
         if (UpdatePaletteFade())
             break;
-        // BEGIN URANIUM PATHFINDER SLICE — skip intro/title/menu, boot straight into a new game.
-        // Restore vanilla boot by deleting this call and the `#if 0` around the original block.
-        SetMainCallback2(CB2_StartUraniumSlice);
-#if 0
 #if EXPANSION_INTRO == TRUE
         SetMainCallback2(CB2_ExpansionIntro);
         CreateTask(Task_HandleExpansionIntro, 0);
@@ -1115,8 +1124,6 @@ static u8 SetUpCopyrightScreen(void)
         CreateTask(Task_Scene1_Load, 0);
         SetMainCallback2(MainCB2_Intro);
 #endif
-#endif
-        // END URANIUM PATHFINDER SLICE
         if (gMultibootProgramStruct.gcmb_field_2 != 0)
         {
             if (gMultibootProgramStruct.gcmb_field_2 == 2)

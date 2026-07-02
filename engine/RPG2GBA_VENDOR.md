@@ -41,7 +41,9 @@ the divergences below, they assume the assembler has run before `make modern`.
 **Test-only baseline divergences — revert/gate before a real build.** Sentinel-fenced
 blocks in:
 - `src/new_game.c` — new-game spawn redirect (→ Map049) + intro-skip callback
-- `src/intro.c` — jump straight into the slice
+- `src/intro.c` — `SetUpCopyrightScreen` short-circuits: skip the copyright screen
+  (and intro/title/menu), boot straight into the slice. Sole boot hook; the old
+  `COPYRIGHT_START_INTRO` patch was reverted to pristine upstream.
 - `include/new_game.h` — prototype
 
 ## Generated output is NOT committed
