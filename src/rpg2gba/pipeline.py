@@ -370,5 +370,50 @@ def convert_common_events(backend: str, model: str, ce_ids: tuple[int, ...]) -> 
     logger.info("converted common events -> %s", out_dir / "scripts" / "CommonEvents.pory")
 
 
+@main.command()
+@click.option(
+    "--maps",
+    "maps_spec",
+    default="slice",
+    help='Map set: "slice", "full", or a comma-separated id list (e.g. 49,48,32,33).',
+)
+@click.option("--clean", is_flag=True, help="Wipe regenerable staging/overlay first.")
+@click.option("--dry-run", is_flag=True, help="Convert without writing into the fork.")
+@click.option(
+    "--keep-stock-maps",
+    is_flag=True,
+    help="Keep stock Emerald map data in the ROM (default: drop it to save ~1.1 MB).",
+)
+def phase5(maps_spec: str, clean: bool, dry_run: bool, keep_stock_maps: bool) -> None:
+    """Build the Map Walker corpus (warps-only) for a batch of Uranium maps."""
+    from rpg2gba.tileset_converter import phase5 as p5
+    from rpg2gba.tileset_converter.map_set import resolve_map_ids
+
+    _load_dotenv()
+    out_dir = Path(os.environ.get("RPG2GBA_OUTPUT", "output")) / "uranium-build"
+    maps_dir = out_dir / "maps"
+    if not maps_dir.is_dir():
+        raise click.ClickException(f"{maps_dir} not found — run `phase3` first.")
+
+    fork = os.environ.get("RPG2GBA_POKEEMERALD")
+    if not fork or not Path(fork).is_dir():
+        raise click.ClickException("RPG2GBA_POKEEMERALD is not set to a valid fork directory.")
+
+    strip = REFERENCE_DIR / "strip_list.json"
+    map_ids = resolve_map_ids(
+        maps_spec, maps_dir, strip_list=strip if strip.is_file() else None
+    )
+    logger.info("phase5: %d maps (%s)", len(map_ids), maps_spec)
+    p5.convert_all(
+        map_ids,
+        out_dir=out_dir,
+        fork=Path(fork),
+        reference_dir=REFERENCE_DIR,
+        clean=clean,
+        dry_run=dry_run,
+        drop_stock_map_data=not keep_stock_maps,
+    )
+
+
 if __name__ == "__main__":
     main()

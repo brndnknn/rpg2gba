@@ -9,6 +9,14 @@
     "49": {
       "display_name": "Moki Town Player's House 1F",
       "evidence": "Pathfinder S4 floor disambiguation (see map 48). Map 49 = ground floor: it owns the street door to Moki Town (map 32) and is the player spawn (URANIUM_START_MAP=49 @7,7)."
+    },
+    "65": {
+      "display_name": "Moki Town House 1",
+      "evidence": "Map Walker batch disambiguation. Maps 64 and 65 share the generic map_infos name 'Moki Town' (both are buildings with parent_id 32). Topology: Moki Town (map 32) has a door at (24,42) -> map 65 and a door at (43,31) -> map 64. Numbered west-to-east by door X (65 door x=24 < 64 door x=43), so map 65 = House 1. Spoiler-free positional label; refine to a specific building identity later if desired."
+    },
+    "64": {
+      "display_name": "Moki Town House 2",
+      "evidence": "Map Walker batch disambiguation (see map 65). Map 64's Moki Town door is at (43,31), east of map 65's (24,42), so map 64 = House 2."
     }
   },
 

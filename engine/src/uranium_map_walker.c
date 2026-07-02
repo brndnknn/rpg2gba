@@ -19,11 +19,20 @@
 #include "menu.h"
 #include "text.h"
 #include "string_util.h"
+// BEGIN URANIUM MAP WALKER — ListMenu API for the scrolling START menu
+#include "list_menu.h"
+// END URANIUM MAP WALKER
 #include "constants/weather.h"
 #include "constants/rgb.h"
 #include "constants/maps.h"
+// BEGIN URANIUM MAP WALKER — include generated map list for START menu
+#include "uranium_walker_maps.h"
+// END URANIUM MAP WALKER
 
 #define UWALKER_CURSOR_TAG  0x4B57
+// BEGIN URANIUM MAP WALKER — max warp overlay sprites per map (debug cap)
+#define UWALKER_OVERLAY_MAX 16
+// END URANIUM MAP WALKER
 
 static bool8 sWalkerActive = FALSE;
 
@@ -59,6 +68,34 @@ static const u8 sHudTxtMt[]    = _("mt ");
 // BSS state (zero-init at startup; sHudOn=FALSE means HUD never accessed before L press).
 static u8    sHudWindowId;  // valid only while sHudOn == TRUE
 static bool8 sHudOn;
+
+// BEGIN URANIUM MAP WALKER — START-button jump menu: window template, map list
+// baseBlock=65: after HUD's tile range (baseBlock=1, 16*4=64 tiles → slots 1-64).
+// height=2*UWALKER_MENU_ROWS tiles: a ListMenu row is half a tile-line, same
+// convention as debug.c's sDebugMenuWindowTemplateMain (height = 2 * DEBUG_MENU_HEIGHT_MAIN).
+// UWALKER_MENU_ROWS is the VISIBLE row count; the ListMenu scrolls through
+// however many of the up-to-~190 map entries don't fit (was previously sized
+// to URANIUM_WALKER_MAP_COUNT+3, which broke past ~11 entries).
+// Screen is 20 tile-rows tall, so with tilemapTop=1 the window must be <=19 tiles:
+// 9 rows (height 18, top 1) is the max that fits — identical to debug.c's menu.
+#define UWALKER_MENU_ROWS 9
+static const struct WindowTemplate sMenuWindowTemplate = {
+	.bg          = 0,
+	.tilemapLeft = 4,
+	.tilemapTop  = 1,
+	.width       = 22,   // wide enough for the id-prefixed map labels (~27 small-font chars)
+	.height      = 2 * UWALKER_MENU_ROWS,
+	.paletteNum  = 15,
+	.baseBlock   = 65,
+};
+
+struct UWalkerMapEntry { u8 mapGroup; u8 mapNum; const u8 *name; };
+static const struct UWalkerMapEntry sWalkerMapList[] = {
+#define X(mapConst, nm) { MAP_GROUP(mapConst), MAP_NUM(mapConst), nm },
+	URANIUM_WALKER_MAP_LIST(X)
+#undef X
+};
+// END URANIUM MAP WALKER
 
 // ---------------------------------------------------------------------------
 // Cursor graphics (built into EWRAM at first map load, reused on warps)
@@ -139,6 +176,26 @@ static const struct SpriteTemplate sCursorSpriteTemplate = {
 	.affineAnims = gDummySpriteAffineAnimTable,
 	.callback    = SpriteCB_UraniumCursor,
 };
+
+// BEGIN URANIUM MAP WALKER — overlay sprite template: same tiles/palette as cursor, no-op CB
+// Reuses UWALKER_CURSOR_TAG tile sheet + palette already loaded by UraniumWalker_CreateCursor.
+// Position is written each frame by UraniumWalker_UpdateOverlay; callback is a no-op.
+// AnimateSprite is called automatically by the sprite manager, so anim 1 cycles without help.
+static void SpriteCB_OverlayMarker(struct Sprite *sprite)
+{
+	(void)sprite;
+}
+
+static const struct SpriteTemplate sOverlaySpriteTemplate = {
+	.tileTag     = UWALKER_CURSOR_TAG,
+	.paletteTag  = UWALKER_CURSOR_TAG,
+	.oam         = &sCursorOam,
+	.anims       = sCursorAnimTable,
+	.images      = NULL,
+	.affineAnims = gDummySpriteAffineAnimTable,
+	.callback    = SpriteCB_OverlayMarker,
+};
+// END URANIUM MAP WALKER
 
 // ---------------------------------------------------------------------------
 // Sprite callback: pins cursor to screen centre, switches anim on warp tiles
@@ -274,6 +331,22 @@ static EWRAM_DATA struct UWalkerLoc sBackStack[UWALKER_STACK_MAX] = {0};
 static u8    sBackDepth;     // bss
 static bool8 sWarpPending;   // bss: set after issuing a warp, cleared on next map load
 
+// BEGIN URANIUM MAP WALKER — R overlay + START menu file-scope state
+static bool8 sOverlayOn;
+static u8    sOverlaySpriteIds[UWALKER_OVERLAY_MAX];
+static u8    sOverlaySpriteCount;
+static bool8 sMenuOpen;
+static u8    sMenuWindowId;
+static u8    sMenuTaskId;  // ListMenuInit's own task id; only valid while sMenuOpen == TRUE
+// Populated once per OpenMenu from sWalkerMapList; id = the array index, which
+// UraniumWalker_UpdateMenu uses directly as the sWalkerMapList lookup key when
+// ListMenu_ProcessInput reports an A-button selection. EWRAM_DATA (like sBackStack):
+// ~190 entries * 8 bytes belongs in EWRAM, not scarce IWRAM (plain .bss lands in
+// IWRAM on this linker script). Only touched while the menu is open, so EWRAM speed
+// is fine.
+static EWRAM_DATA struct ListMenuItem sMenuListItems[URANIUM_WALKER_MAP_COUNT] = {0};
+// END URANIUM MAP WALKER
+
 // Cursor map-local coords = the (hidden) player anchor's coords minus MAP_OFFSET.
 static void UraniumWalker_GetCursorCoords(s16 *x, s16 *y)
 {
@@ -351,6 +424,95 @@ static bool8 UraniumWalker_DoBack(void)
 	return TRUE;
 }
 
+// BEGIN URANIUM MAP WALKER — R-button warp overlay: create / destroy / update
+// Sprites reuse UWALKER_CURSOR_TAG tiles already loaded by UraniumWalker_CreateCursor.
+// DestroyOverlay does NOT free the tile/palette — that is the cursor's responsibility.
+// On map load the warp transition destroys all sprites; reset sOverlaySpriteCount=0
+// and call CreateOverlay (NOT DestroyOverlay) to rebuild from the cleared state.
+static void UraniumWalker_CreateOverlay(void)
+{
+	u8 i;
+	u8 count;
+
+	sOverlaySpriteCount = 0;
+	if (gMapHeader.events == NULL)
+		return;
+
+	count = gMapHeader.events->warpCount;
+	if (count > UWALKER_OVERLAY_MAX)
+		count = UWALKER_OVERLAY_MAX;
+
+	for (i = 0; i < count; i++)
+	{
+		u8 id = CreateSprite(&sOverlaySpriteTemplate, 0, 0, 0);
+		if (id < MAX_SPRITES)
+		{
+			StartSpriteAnim(&gSprites[id], 1);  // anim 1: white-flash = warp marker
+			sOverlaySpriteIds[sOverlaySpriteCount++] = id;
+		}
+	}
+}
+
+static void UraniumWalker_DestroyOverlay(void)
+{
+	u8 i;
+
+	for (i = 0; i < sOverlaySpriteCount; i++)
+	{
+		u8 id = sOverlaySpriteIds[i];
+		if (id < MAX_SPRITES)
+			DestroySprite(&gSprites[id]);
+		sOverlaySpriteIds[i] = SPRITE_NONE;
+	}
+	sOverlaySpriteCount = 0;
+}
+
+// Reposition each overlay sprite to its warp tile's screen pixel every frame.
+// Formula: screen_x = 120 + (warp_tx - cursor_tx) * 16
+//          screen_y =  80 + (warp_ty - cursor_ty) * 16
+// Sprites outside the safe OAM range [-16,256] x [-16,176] are hidden to
+// prevent the GBA from wrapping them to the opposite edge of the screen.
+static void UraniumWalker_UpdateOverlay(void)
+{
+	s16 cx, cy;
+	u8  i;
+
+	if (gMapHeader.events == NULL)
+		return;
+
+	UraniumWalker_GetCursorCoords(&cx, &cy);
+
+	for (i = 0; i < sOverlaySpriteCount; i++)
+	{
+		s16 wx, wy, sx, sy;
+		u8  id;
+
+		if (i >= gMapHeader.events->warpCount)
+			break;
+
+		wx = gMapHeader.events->warps[i].x;
+		wy = gMapHeader.events->warps[i].y;
+		sx = 120 + (wx - cx) * 16;
+		sy =  80 + (wy - cy) * 16;
+
+		id = sOverlaySpriteIds[i];
+		if (id >= MAX_SPRITES)
+			continue;
+
+		if (sx < -16 || sx > 256 || sy < -16 || sy > 176)
+		{
+			gSprites[id].invisible = TRUE;
+		}
+		else
+		{
+			gSprites[id].invisible = FALSE;
+			gSprites[id].x = sx;
+			gSprites[id].y = sy;
+		}
+	}
+}
+// END URANIUM MAP WALKER
+
 // ---------------------------------------------------------------------------
 // HUD helpers: create / draw / destroy
 // ---------------------------------------------------------------------------
@@ -403,11 +565,114 @@ static void UraniumWalker_DrawHud(void)
 	CopyWindowToVram(sHudWindowId, COPYWIN_FULL);
 }
 
-// Walker task -- handles walker-specific input. Movement is driven by the normal
+// BEGIN URANIUM MAP WALKER — START-button jump menu: close / open / update
+// CloseMenu tears down the ListMenu task + window and resets state.  It does NOT
+// unlock the player:
+//   warp path — DoWarp already locked; map-load CB calls UnlockPlayerFieldControls.
+//   cancel path — caller must call UnlockPlayerFieldControls after CloseMenu.
+static void UraniumWalker_CloseMenu(void)
+{
+	DestroyListMenuTask(sMenuTaskId, NULL, NULL);
+	sMenuTaskId = TASK_NONE;
+	ClearStdWindowAndFrameToTransparent(sMenuWindowId, TRUE);
+	RemoveWindow(sMenuWindowId);
+	sMenuWindowId = WINDOW_NONE;
+	sMenuOpen     = FALSE;
+}
+
+// Builds the scrolling ListMenu over sWalkerMapList. Field values below mirror
+// debug.c's Debug_ShowMenu (the engine's own scrolling-list idiom), except
+// fontId (FONT_SMALL, matching this window's prior small-font rendering).
+static void UraniumWalker_OpenMenu(void)
+{
+	struct ListMenuTemplate t = {0};
+	u16 i;
+
+	LoadMessageBoxAndBorderGfx();
+	sMenuWindowId = AddWindow(&sMenuWindowTemplate);
+	DrawStdWindowFrame(sMenuWindowId, FALSE);
+	LockPlayerFieldControls();
+	sMenuOpen = TRUE;
+
+	// sWalkerMapList[i].name is already a ROM COMPOUND_STRING pointer — no copy needed.
+	for (i = 0; i < URANIUM_WALKER_MAP_COUNT; i++)
+	{
+		sMenuListItems[i].name = sWalkerMapList[i].name;
+		sMenuListItems[i].id   = i;
+	}
+
+	t.items               = sMenuListItems;
+	t.moveCursorFunc       = ListMenuDefaultCursorMoveFunc;
+	t.itemPrintFunc        = NULL;
+	t.totalItems           = URANIUM_WALKER_MAP_COUNT;
+	t.maxShowed            = UWALKER_MENU_ROWS;
+	t.windowId             = sMenuWindowId;
+	t.header_X             = 0;
+	t.item_X               = 8;
+	t.cursor_X             = 0;
+	t.upText_Y             = 1;
+	t.cursorPal            = 2;
+	t.fillValue            = 1;
+	t.cursorShadowPal      = 3;
+	t.lettersSpacing       = 1;
+	t.itemVerticalPadding  = 0;
+	// L/R page-jump by maxShowed rows — makes a ~190-entry list navigable. Safe:
+	// the menu short-circuits all input while open, so L/R aren't the HUD/overlay
+	// toggles here.
+	t.scrollMultiple       = LIST_MULTIPLE_SCROLL_L_R;
+	t.fontId               = FONT_SMALL;
+	t.cursorKind           = 0;
+
+	// ListMenuInit draws the initial visible rows itself (PutWindowTilemap +
+	// CopyWindowToVram(COPYWIN_GFX)); the COPYWIN_FULL below also flushes the
+	// std-window border DrawStdWindowFrame wrote into the same window buffer.
+	sMenuTaskId = ListMenuInit(&t, 0, 0);
+	CopyWindowToVram(sMenuWindowId, COPYWIN_FULL);
+}
+
+// UpdateMenu handles all input while the menu is open.
+// D-pad up/down (scroll + wraparound) is handled internally by ListMenu_ProcessInput.
+// A: returns the selected row's id (== sWalkerMapList index) — close menu, push
+//    back-stack, warp to selected map at (0,0).
+// B: ListMenu_ProcessInput returns LIST_CANCEL directly.
+// START: not handled by ListMenu_ProcessInput, so checked explicitly here — same
+//    "cancel" behavior as B.
+static void UraniumWalker_UpdateMenu(void)
+{
+	s32 id = ListMenu_ProcessInput(sMenuTaskId);
+
+	if (id == LIST_CANCEL || JOY_NEW(START_BUTTON))
+	{
+		UraniumWalker_CloseMenu();
+		UnlockPlayerFieldControls();
+	}
+	else if (id >= 0)
+	{
+		const struct UWalkerMapEntry *entry = &sWalkerMapList[id];
+		UraniumWalker_CloseMenu();        // list task + window gone; sMenuOpen=FALSE
+		UraniumWalker_PushBack();         // back-stack records current location
+		SetWarpDestination(entry->mapGroup, entry->mapNum, WARP_ID_NONE, 0, 0);
+		DoWarp();                         // locks player; map-load CB will unlock
+		UraniumWalker_RearmAfterWarp();
+		sWarpPending = TRUE;
+	}
+	// else LIST_NOTHING_CHOSEN: nothing to do; ListMenu_ProcessInput already redrew
+	// the list internally if a D-pad scroll moved the cursor.
+}
+// END URANIUM MAP WALKER
+
+// Walker task — handles walker-specific input.  Movement is driven by the normal
 // field control; collision override (event_object_movement.c) clamps to map bounds.
-// R reveal / L HUD / Start jump menu are added here in step 6.
 static void Task_UraniumWalker(u8 taskId)
 {
+	// BEGIN URANIUM MAP WALKER — menu short-circuit: menu owns all input while open
+	if (sMenuOpen)
+	{
+		UraniumWalker_UpdateMenu();
+		return;
+	}
+	// END URANIUM MAP WALKER
+
 	if (sWarpPending)
 		return;  // ignore input during a warp transition until the next map loads
 
@@ -429,10 +694,28 @@ static void Task_UraniumWalker(u8 taskId)
 		else
 			UraniumWalker_DestroyHud();
 	}
+	// BEGIN URANIUM MAP WALKER — R: toggle warp overlay; START: open jump menu
+	else if (JOY_NEW(R_BUTTON))
+	{
+		sOverlayOn = !sOverlayOn;
+		if (sOverlayOn)
+			UraniumWalker_CreateOverlay();
+		else
+			UraniumWalker_DestroyOverlay();
+	}
+	else if (JOY_NEW(START_BUTTON))
+	{
+		UraniumWalker_OpenMenu();
+	}
+	// END URANIUM MAP WALKER
 
 	// Redraw HUD every frame so coords + metatile stay current.
 	if (sHudOn)
 		UraniumWalker_DrawHud();
+	// BEGIN URANIUM MAP WALKER — reposition overlay sprites every frame
+	if (sOverlayOn)
+		UraniumWalker_UpdateOverlay();
+	// END URANIUM MAP WALKER
 }
 
 // Called as gFieldCallback on walker boot (replaces FieldCB_WarpExitFadeFromBlack).
@@ -455,6 +738,23 @@ void UraniumWalker_FieldCB_MapLoad(void)
 		sHudWindowId = WINDOW_NONE;
 		UraniumWalker_CreateHud();
 	}
+	// BEGIN URANIUM MAP WALKER — close stale menu state + rebuild overlay for new map
+	// Window system reset on map load: stale sMenuWindowId/sMenuTaskId are gone (the
+	// map transition already wiped the window + task system), so just clear the
+	// flags — do NOT call DestroyListMenuTask/RemoveWindow here, those handles are
+	// already invalid post-warp.
+	sMenuOpen     = FALSE;
+	sMenuWindowId = WINDOW_NONE;
+	sMenuTaskId   = TASK_NONE;
+	// Warp transition destroys all sprites.  Reset the count so stale ids are never
+	// touched, then rebuild overlay sprites for the new map's warp layout.
+	// CreateCursor above has already reloaded the tile sheet + palette for UWALKER_CURSOR_TAG.
+	if (sOverlayOn)
+	{
+		sOverlaySpriteCount = 0;
+		UraniumWalker_CreateOverlay();
+	}
+	// END URANIUM MAP WALKER
 }
 
 #endif // URANIUM_MAP_WALKER == TRUE

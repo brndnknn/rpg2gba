@@ -8,9 +8,13 @@ reproducible for regression comparison.
 
 Profiles:
   * ``"slice"`` — the proven 3-map pathfinder slice (1F spawn, 2F, Moki Town).
-  * ``"full"``  — every ``MapNNN.json`` on disk, minus whole-map STRIP entries.
+  * ``"full"``  — every ``MapNNN.json`` on disk, minus whole-map STRIP entries and
+    minus the Map Walker technical exclusions (:data:`WALKER_EXCLUDED_MAP_IDS` =
+    overflow maps + empty placeholder maps).
   * a comma-separated id list (e.g. ``"49,48,32,7"``) — an explicit ad-hoc batch,
     used to validate the all-maps pipeline incrementally before the full corpus.
+    Explicit lists are NOT filtered for overflow — asking for an overflow map by id
+    is honored and fails loud at emit time (the 1024-metatile budget guard).
 """
 
 from __future__ import annotations
@@ -22,6 +26,28 @@ from pathlib import Path
 # The proven 3-map pathfinder slice, in boot order: Map 49 (Player's House 1F,
 # spawn @7,7), Map 48 (2F), Map 32 (Moki Town). Kept for reproducible slice builds.
 SLICE_MAP_IDS: list[int] = [49, 48, 32]
+
+# Maps that overflow a GBA per-tileset budget even as a dedicated per-map tileset,
+# so they can't build (map_walker_plan §5.4, decision #14). A tileset has TWO hard
+# 1024 caps (each = primary 512 + secondary 512): metatile ids AND distinct 8x8
+# tiles. Two groups, both excluded from the v1 walker "full" corpus; a metatile/tile
+# dedup or intra-map-split pass is the planned follow-up:
+#   * metatile overflow (census, >1024 metatiles)
+#   * 8x8-tile overflow (measured via the real render+quantize path, >1024 tiles)
+# Scoped to "full" only — an explicit id-list naming one is honored and fails loud
+# at emit time (the budget guard in emit_tileset).
+WALKER_OVERFLOW_MAP_IDS: frozenset[int] = frozenset(
+    {94, 101, 187, 40, 84, 117, 143, 71, 144}  # >1024 metatiles
+    | {60, 122, 128, 146, 151, 209, 213}       # >1024 8x8 tiles
+)
+
+# Blank placeholder maps: their tile grid is entirely empty (0 non-empty columns),
+# so no tileset can be built for them and there is nothing to display. Found by the
+# corpus pre-flight; excluded from the walker "full" corpus like the overflow maps.
+WALKER_EMPTY_MAP_IDS: frozenset[int] = frozenset({14, 30, 38, 55, 56})
+
+# Everything the walker "full" corpus drops (technical exclusions, not game STRIPs).
+WALKER_EXCLUDED_MAP_IDS: frozenset[int] = WALKER_OVERFLOW_MAP_IDS | WALKER_EMPTY_MAP_IDS
 
 _MAP_FILE_RE = re.compile(r"^Map(\d+)\.json$")
 
@@ -62,7 +88,8 @@ def parse_map_ids(spec: str, maps_dir: Path, *, strip_list: Path | None = None) 
     if spec == "slice":
         return list(SLICE_MAP_IDS)
     if spec == "full":
-        return discover_all_map_ids(maps_dir, strip_list=strip_list)
+        ids = discover_all_map_ids(maps_dir, strip_list=strip_list)
+        return [i for i in ids if i not in WALKER_EXCLUDED_MAP_IDS]
 
     try:
         requested = [int(tok) for tok in spec.split(",") if tok.strip()]

@@ -130,6 +130,7 @@ class TileMap:
         passages: dict[int, list[int]] | None = None,
         priorities: dict[int, list[int]] | None = None,
         warps: dict[int, Metatile] | None = None,
+        atlas_max: dict[int, int] | None = None,
     ) -> None:
         self._tiles = tiles
         self._tilesets = tilesets
@@ -137,6 +138,7 @@ class TileMap:
         self._passages = passages or {}
         self._priorities = priorities or {}
         self._warps = warps or {}
+        self._atlas_max = atlas_max or {}
 
     # --- resolution ---------------------------------------------------------
 
@@ -247,6 +249,16 @@ class TileMap:
         """True iff this tileset has a non-empty explicit tiles table (real-art column mode)."""
         return bool(self._tiles.get(tileset_id))
 
+    def column_in_atlas(self, tileset_id: int, key: tuple[tuple[int, int], ...]) -> bool:
+        """False iff the column references a static tile id past the tileset's atlas
+        bound (garbage tile). build_slice_tilesets drops such columns from the
+        tileset, so the layout converter must void them here instead of failing loud.
+        No recorded bound (legacy/bucket mode) => always in-atlas."""
+        max_tid = self._atlas_max.get(tileset_id)
+        if max_tid is None:
+            return True
+        return all(tid < STATIC_BASE or tid <= max_tid for _, tid in key)
+
     def lookup_column(self, tileset_id: int, key: tuple[tuple[int, int], ...]) -> Metatile:
         """Resolve a full column key to its pre-rendered metatile (real-art mode). Fails
         loud (KeyError) on a miss — every column the layout walks was enumerated by the
@@ -283,6 +295,7 @@ def load_tile_map(
         path = overlay
     raw = json.loads(path.read_text(encoding="utf-8"))
     _validate(raw)
+    source_tilesets = {int(k): int(v) for k, v in raw.get("source_tilesets", {}).items()}
 
     tilesets = {
         int(k): TilesetChoice(v["primary"], v["secondary"])
@@ -302,17 +315,24 @@ def load_tile_map(
         int(k): Metatile(w["metatile"], w.get("collision", 0), w.get("elevation", 0))
         for k, w in raw.get("warps", {}).items()
     }
+    atlas_max = {int(k): int(v) for k, v in raw.get("atlas_max", {}).items()}
 
     passages: dict[int, list[int]] = {}
     priorities: dict[int, list[int]] = {}
     if passages_path is not None and buckets:
-        passages, priorities = _load_oracle(Path(passages_path), tilesets.keys())
+        passages, priorities = _load_oracle(Path(passages_path), tilesets.keys(), source_tilesets)
 
-    return TileMap(tiles, tilesets, buckets, passages, priorities, warps)
+    return TileMap(tiles, tilesets, buckets, passages, priorities, warps, atlas_max)
 
 
-def _load_oracle(path: Path, tileset_ids) -> tuple[dict[int, list[int]], dict[int, list[int]]]:
-    """Read `passages`/`priorities` for the needed tilesets from tilesets.json."""
+def _load_oracle(
+    path: Path, tileset_ids, source_tilesets: dict[int, int] | None = None
+) -> tuple[dict[int, list[int]], dict[int, list[int]]]:
+    """Read `passages`/`priorities` for the needed tilesets from tilesets.json.
+
+    `source_tilesets` maps a synthetic per-map tileset id to its real RMXP id; when a
+    requested id is synthetic, the oracle is read for the REAL id but stored under the
+    synthetic key. Empty/None => identity (legacy)."""
     if not path.exists():
         raise FileNotFoundError(
             f"passages oracle {path} missing; run "
@@ -321,10 +341,12 @@ def _load_oracle(path: Path, tileset_ids) -> tuple[dict[int, list[int]], dict[in
     raw = json.loads(path.read_text(encoding="utf-8"))
     passages: dict[int, list[int]] = {}
     priorities: dict[int, list[int]] = {}
+    src = source_tilesets or {}
     for ts in tileset_ids:
-        entry = raw.get(str(ts))
+        real = src.get(ts, ts)
+        entry = raw.get(str(real))
         if entry is None:
-            raise KeyError(f"tileset {ts} absent from {path}")
+            raise KeyError(f"tileset {real} absent from {path}")
         passages[ts] = entry["passages"]
         priorities[ts] = entry["priorities"]
     return passages, priorities

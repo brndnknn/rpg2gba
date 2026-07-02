@@ -194,6 +194,10 @@ def collapse_column(grid: TileGrid, x: int, y: int, tile_map: TileMap, tileset_i
         key = column_key(grid, x, y)
         if not key:
             return tile_map.void(tileset_id)
+        # A column with an out-of-atlas garbage tile was dropped from the tileset by
+        # build_slice_tilesets; void it here too (both paths use the same predicate).
+        if not tile_map.column_in_atlas(tileset_id, key):
+            return tile_map.void(tileset_id)
         visual = tile_map.lookup_column(tileset_id, key)
     else:  # bucket mode, unchanged behavior
         tid = topmost_tile_id(grid, x, y)
@@ -213,6 +217,7 @@ def convert_layout(
     name: str,
     layout_const: str,
     warp_overrides: set[tuple[int, int]] | None = None,
+    tileset_key: int | None = None,
 ) -> Layout:
     """Convert one Phase 3 map dict into a `Layout` (blockdata + metadata).
 
@@ -223,7 +228,10 @@ def convert_layout(
     under it carries a warp metatile-behavior (the generic passable-floor bucket is
     MB_NORMAL, so the player walks onto the door tile and nothing happens). Forcing
     collision 0 also keeps the tile steppable (door tiles read BLOCKED from their
-    source passage)."""
+    source passage).
+
+    `tileset_key`: Override the tileset id used for all TileMap lookups (per-map
+    synthetic tileset packing); defaults to the map's own `tileset_id`."""
     overrides = warp_overrides or set()
 
     tiles = map_json["tiles"]
@@ -239,7 +247,7 @@ def convert_layout(
             f"{grid.xsize}x{grid.ysize}"
         )
 
-    tileset_id = map_json["tileset_id"]
+    tileset_id = tileset_key if tileset_key is not None else map_json["tileset_id"]
     choice = tile_map.tileset_for(tileset_id)
 
     blocks: list[int] = []

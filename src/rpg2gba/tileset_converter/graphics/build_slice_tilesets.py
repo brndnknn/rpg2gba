@@ -47,7 +47,7 @@ from .emit import (
 )
 from .quantize import build_quantized_tileset_family
 from .raster import TileRasterizer
-from .sources import load_tileset_sources
+from .sources import STATIC_BASE, load_tileset_sources
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +180,7 @@ def build_slice_tilesets(
     graphics_dir: Path | None = None,
     rasterizer_for: Callable[[int], object] | None = None,
     priorities_for: Callable[[int], list[int]] | None = None,
+    source_tileset_of: Callable[[int], int] | None = None,
     dry_run: bool = False,
 ) -> dict[int, EmittedTileset]:
     """Emit real Uranium tilesets for the slice and write the engine + overlay glue.
@@ -189,20 +190,23 @@ def build_slice_tilesets(
     layout converter stamps the tileset's warp metatile there). `rasterizer_for`
     overrides tile rendering for tests; defaults to the real Uranium source pipeline.
     `priorities_for` overrides priority loading for tests; defaults to reading
-    tilesets.json. Returns the per-tileset `EmittedTileset`. Writes nothing when
-    `dry_run`."""
+    tilesets.json. `source_tileset_of` maps a synthetic per-map tileset id back to its
+    real RMXP tileset id, so per-map physical tilesets still load the correct source
+    art / passages. Identity when None (the default — legacy per-RMXP-tileset behavior).
+    Returns the per-tileset `EmittedTileset`. Writes nothing when `dry_run`."""
     fork = Path(fork)
+    resolve = source_tileset_of or (lambda ts: ts)
     make_rast = rasterizer_for or (
-        lambda ts: _default_rasterizer(ts, tilesets_json, graphics_dir)
+        lambda ts: _default_rasterizer(resolve(ts), tilesets_json, graphics_dir)
     )
-    get_priorities = priorities_for or (lambda ts: _load_priorities(tilesets_json, ts))
+    get_priorities = priorities_for or (lambda ts: _load_priorities(tilesets_json, resolve(ts)))
 
     by_ts: dict[int, list[tuple[int, dict]]] = {}
     for map_id, map_json in maps:
         by_ts.setdefault(int(map_json["tileset_id"]), []).append((map_id, map_json))
 
     overlay = json.loads(Path(base_tile_map).read_text(encoding="utf-8"))
-    for key in ("tilesets", "tiles", "buckets", "warps"):
+    for key in ("tilesets", "tiles", "buckets", "warps", "atlas_max"):
         overlay.setdefault(key, {})
 
     door_behavior = _behavior_value(fork, "MB_NON_ANIMATED_DOOR")
@@ -214,6 +218,28 @@ def build_slice_tilesets(
 
         # Enumerate all unique column keys across all maps for this tileset.
         ordered = column_keys_for_maps(maplist)
+
+        # Drop column keys that reference out-of-atlas (garbage) static tile ids:
+        # some Uranium maps carry stray tile ids far outside their tileset atlas
+        # (e.g. 3408 in a 304-tile Gatehouse), which the rasterizer fails loud on.
+        # Autotile ids (< STATIC_BASE) are always valid; static ids must be in range.
+        # Dropped columns resolve to the void metatile in convert_layout, matching
+        # the map viewer's pre-render filter (map_viewer_common._ensure_tileset_analysis).
+        # A synthetic test rasterizer has no atlas bounds -> nothing to drop.
+        max_tid = rast.max_static_tile_id() if hasattr(rast, "max_static_tile_id") else None
+
+        def _in_atlas(k: tuple) -> bool:
+            if max_tid is None:
+                return True
+            return all(tid < STATIC_BASE or tid <= max_tid for _, tid in k)
+
+        garbage = len(ordered) - len([k for k in ordered if _in_atlas(k)])
+        if garbage:
+            logger.warning(
+                "tileset %d: dropped %d column key(s) with out-of-atlas tile ids "
+                "(max static id %d) -> void", ts, garbage, max_tid,
+            )
+            ordered = [k for k in ordered if _in_atlas(k)]
 
         if not ordered:
             raise ValueError(
@@ -227,7 +253,7 @@ def build_slice_tilesets(
             grid = _grid_of(map_json)
             for wx, wy in warp_coords.get(map_id, set()):
                 dk = column_key(grid, wx, wy)
-                if dk:
+                if dk and _in_atlas(dk):
                     door_keys.add(dk)
 
         rep_door = sorted(door_keys)[0] if door_keys else None
@@ -253,6 +279,7 @@ def build_slice_tilesets(
         void_idx = len(metatile_list)
         metatile_list.append(_void_metatile())
 
+        needs_warp = any(warp_coords.get(mid) for mid, _ in maplist)
         if rep_door is not None:
             # The warp metatile is a SEPARATE copy of the representative door column
             # carrying MB_NON_ANIMATED_DOOR.  Non-warp cells that share that column
@@ -263,6 +290,14 @@ def build_slice_tilesets(
             metatile_list.append(
                 _render_column(rep_door, rast, priorities, behavior=door_behavior)
             )
+        elif needs_warp:
+            # Warps exist but sit on empty/garbage cells (no door column to copy).
+            # Still emit a warp metatile so the warp_event fires — a transparent tile
+            # carrying MB_NON_ANIMATED_DOOR (the walker's R-overlay marks warp tiles
+            # anyway, so an invisible warp square is fine for a debug build).
+            warp_idx = len(metatile_list)
+            z = np.zeros((16, 16, 4), dtype=np.uint8)
+            metatile_list.append(MetatileImage(z, z.copy(), LAYER_COVERED, door_behavior))
         else:
             warp_idx = None
 
@@ -276,6 +311,12 @@ def build_slice_tilesets(
         results[ts] = emit
 
         overlay["tilesets"][str(ts)] = {"primary": primary_name, "secondary": secondary_name}
+        if source_tileset_of is not None:
+            overlay.setdefault("source_tilesets", {})[str(ts)] = source_tileset_of(ts)
+        # Record the atlas bound so convert_layout can void columns with the same
+        # out-of-atlas garbage tiles this pre-pass dropped (keeps both paths in sync).
+        if max_tid is not None:
+            overlay["atlas_max"][str(ts)] = max_tid
         # Column-key strings are the shared format (serialize_column_key) that
         # lookup_column expects at layout-conversion time.
         overlay["tiles"][str(ts)] = {

@@ -9,6 +9,8 @@ import pytest
 
 from rpg2gba.tileset_converter.map_set import (
     SLICE_MAP_IDS,
+    WALKER_EXCLUDED_MAP_IDS,
+    WALKER_OVERFLOW_MAP_IDS,
     discover_all_map_ids,
     parse_map_ids,
     resolve_map_ids,
@@ -56,6 +58,23 @@ def test_parse_slice_profile(tmp_path: Path) -> None:
 def test_parse_full_profile(tmp_path: Path) -> None:
     maps_dir = _make_maps(tmp_path, [49, 48, 32, 7])
     assert parse_map_ids("full", maps_dir) == [7, 32, 48, 49]
+
+
+def test_full_profile_excludes_walker_exclusions(tmp_path: Path) -> None:
+    excluded = sorted(WALKER_EXCLUDED_MAP_IDS)  # overflow + empty placeholders
+    maps_dir = _make_maps(tmp_path, [49, 48, 32, 7, *excluded])
+    result = parse_map_ids("full", maps_dir)
+    assert result == [7, 32, 48, 49]
+    assert not (set(result) & WALKER_EXCLUDED_MAP_IDS)
+
+
+def test_explicit_ids_still_include_excluded_maps(tmp_path: Path) -> None:
+    # An explicit id-list is honored even for an excluded map — overflow fails loud
+    # later at emit time (the 1024-metatile budget guard); this resolver never drops
+    # an explicitly-requested id.
+    overflow_id = sorted(WALKER_OVERFLOW_MAP_IDS)[0]
+    maps_dir = _make_maps(tmp_path, [49, overflow_id])
+    assert parse_map_ids(f"49,{overflow_id}", maps_dir) == [49, overflow_id]
 
 
 def test_parse_explicit_ids_preserve_order(tmp_path: Path) -> None:

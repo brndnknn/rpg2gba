@@ -330,6 +330,17 @@ def run_fork_pass(
     dest_alias = fork / "data" / "scripts" / "uranium_map_aliases.h"
     _copy(alias_src, dest_alias, "uranium_map_aliases.h", dry_run)
 
+    # --- Write walker maps header (debug jump-menu macro) ---
+    from rpg2gba.tileset_converter.map_constants import MapConstantRegistry
+    _walker_reg = MapConstantRegistry(state_path=out / "porymap" / "map_constants.json")
+    _walker_reg.load()
+    dest_walker = fork / "include" / "uranium_walker_maps.h"
+    if not dry_run:
+        _walker_reg.write_walker_maps_header(SLICE_MAP_IDS, dest_walker)
+        logger.info("  wrote uranium_walker_maps.h (%d maps)", len(SLICE_MAP_IDS))
+    else:
+        logger.info("  [dry] would write uranium_walker_maps.h")
+
     # --- Write flag registry header ---
     dest_flags = fork / "data" / "scripts" / "uranium_flags.h"
     _emit_flags_header(dest_flags, compiled_texts, dry_run)

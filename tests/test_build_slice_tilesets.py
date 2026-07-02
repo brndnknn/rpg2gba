@@ -11,9 +11,8 @@ import json
 import struct
 from pathlib import Path
 
-from PIL import Image
-
 import numpy as np
+from PIL import Image
 
 from rpg2gba.tileset_converter.graphics.build_slice_tilesets import (
     _behavior_value,
@@ -65,6 +64,37 @@ def test_behavior_value(tmp_path: Path) -> None:
     fork = _fake_fork(tmp_path)
     assert _behavior_value(fork, "MB_NORMAL") == 0
     assert _behavior_value(fork, "MB_NON_ANIMATED_DOOR") == 2
+
+
+class _BoundedRasterizer(_StubRasterizer):
+    """Stub with an atlas bound, exercising the out-of-atlas garbage-tile filter."""
+
+    def max_static_tile_id(self) -> int:
+        return 500
+
+
+def test_out_of_atlas_tiles_dropped(tmp_path: Path) -> None:
+    """A column referencing a tile id past the atlas bound is dropped (resolves to
+    void), not fatal — some Uranium maps carry garbage tile ids."""
+    fork = _fake_fork(tmp_path)
+    base = tmp_path / "tileset_map.json"
+    base.write_text("{}", encoding="utf-8")
+    overlay_out = tmp_path / "tileset_map.gen.json"
+    # z0 = [400 (ok), 9999 (garbage > 500), 401 (ok), 402 (ok)].
+    m = {
+        "tileset_id": 5, "width": 2, "height": 2,
+        "tiles": {"xsize": 2, "ysize": 2, "zsize": 3,
+                  "data": [400, 9999, 401, 402, 0, 0, 0, 0, 0, 0, 0, 0]},
+    }
+    build_slice_tilesets(
+        [(32, m)], {}, fork=fork, base_tile_map=base, overlay_out=overlay_out,
+        rasterizer_for=lambda ts: _BoundedRasterizer(),
+        priorities_for=lambda ts: [0] * 10000,
+    )
+    tiles = json.loads(overlay_out.read_text(encoding="utf-8"))["tiles"]["5"]
+    keys = {json.dumps([[0, t]], separators=(",", ":")) for t in (400, 401, 402)}
+    assert set(tiles) == keys  # the garbage (0,9999) column is absent
+    assert json.dumps([[0, 9999]], separators=(",", ":")) not in tiles
 
 
 def _run(tmp_path: Path) -> tuple[Path, Path, dict]:
@@ -180,6 +210,51 @@ def test_engine_fragments(tmp_path: Path) -> None:
     assert ".isSecondary = TRUE," in structs  # the secondary half
     assert "extern const struct Tileset gTileset_Uranium5;" in externs
     assert "extern const struct Tileset gTileset_Uranium5B;" in externs
+
+
+# ---------------------------------------------------------------------------
+# Tests for source_tileset_of (synthetic per-map tileset ids)
+# ---------------------------------------------------------------------------
+
+
+def test_source_tileset_of_per_map_tilesets(tmp_path: Path) -> None:
+    """Two maps share real tileset 5 but get distinct synthetic ids 1005/1006.
+
+    build_slice_tilesets must:
+      (a) emit two separate physical tilesets (one per synthetic id), and
+      (b) record a top-level 'source_tilesets' mapping synth->real in the overlay.
+    """
+    fork = _fake_fork(tmp_path)
+    base = tmp_path / "tileset_map.json"
+    base.write_text("{}", encoding="utf-8")
+    overlay_out = tmp_path / "tileset_map.gen.json"
+
+    priors = [0] * 600
+
+    # Two maps, both backed by real tileset 5, assigned synthetic ids 1005 and 1006.
+    map_a = _map(1005)
+    map_b = _map(1006)
+
+    results = build_slice_tilesets(
+        [(10, map_a), (20, map_b)],
+        {},
+        fork=fork,
+        base_tile_map=base,
+        overlay_out=overlay_out,
+        rasterizer_for=lambda ts: _StubRasterizer(),
+        priorities_for=lambda ts: priors,
+        source_tileset_of=lambda synth: 5,
+    )
+
+    # (a) Two separate physical tilesets emitted — one per synthetic id.
+    assert set(results.keys()) == {1005, 1006}
+
+    overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
+
+    # (b) source_tilesets maps each synth id (string key) back to real id 5.
+    assert "source_tilesets" in overlay
+    assert overlay["source_tilesets"]["1005"] == 5
+    assert overlay["source_tilesets"]["1006"] == 5
 
 
 # ---------------------------------------------------------------------------

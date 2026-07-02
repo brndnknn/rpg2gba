@@ -426,3 +426,48 @@ def build_slice_maps(
             uid, consts.map_const, len(object_events), len(warp_events), len(dispatchers),
         )
     return overrides
+
+
+def build_warps_only_maps(
+    map_ids: list[int],
+    *,
+    maps_dir: Path,
+    registry: MapConstantRegistry,
+    metadata_path: Path,
+    out_dir: Path,
+) -> dict[int, set[tuple[int, int]]]:
+    """Assemble a WARPS-ONLY map.json for every map in `map_ids` (the Map Walker
+    corpus, map_walker_plan §5.3): only warp_events, no object/coord/bg events and no
+    Poryscript dispatchers. Returns the per-map warp-source coords so the layout pass
+    can stamp the warp metatile (S3 walkable-override) at each.
+
+    Warps to maps OUTSIDE the batch are dropped (classify_event's out-of-slice "skip"
+    rule) — the walker simply can't follow them (map_walker_plan decision #10). Warp
+    pairing needs every batch map's warp list first, so this is a batch-level pass."""
+    id_set = set(map_ids)
+    maps = {
+        uid: json.loads((maps_dir / f"Map{uid:03d}.json").read_text(encoding="utf-8"))
+        for uid in map_ids
+    }
+    warp_lists = {
+        uid: [spec for _e, spec in classify_map_events(maps[uid], id_set)[1]]
+        for uid in map_ids
+    }
+
+    overrides: dict[int, set[tuple[int, int]]] = {}
+    for uid in map_ids:
+        consts = registry.get(uid)
+        warp_events, src_coords = build_warp_events(maps[uid], uid, id_set, registry, warp_lists)
+        overrides[uid] = src_coords
+
+        map_file = MapFile(
+            consts=consts,
+            map_type=_map_type_for(uid, metadata_path),
+            object_events=[],
+            warp_events=warp_events,
+        )
+        map_out = out_dir / consts.dir_name / "map.json"
+        map_out.parent.mkdir(parents=True, exist_ok=True)
+        map_out.write_text(json.dumps(map_file.to_json_dict(), indent=2) + "\n", encoding="utf-8")
+        logger.info("map %d (%s): warps-only, %d warps", uid, consts.map_const, len(warp_events))
+    return overrides

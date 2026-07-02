@@ -64,6 +64,16 @@ def sanitize_name(display_name: str) -> str:
     return to_constant("MAP", display_name).removeprefix("MAP_")
 
 
+def _sanitize_walker_label(display_name: str, max_len: int = 18) -> str:
+    """Sanitize a display name for the walker menu macro string argument.
+
+    Strips commas and double-quotes (which would break the X(...) macro arg),
+    then truncates to *max_len* characters so the label fits a menu window.
+    The apostrophe is kept (valid in a C string literal)."""
+    cleaned = display_name.replace(",", "").replace('"', "")
+    return cleaned[:max_len]
+
+
 def _pascal_dir(display_name: str) -> str:
     """PascalCase directory stem ("Moki Town Player's House 1F" ->
     "MokiTownPlayersHouse1F"): fold diacritics, drop apostrophes/periods, split on
@@ -102,13 +112,24 @@ class MapConstantRegistry:
         self._vanilla = vanilla_consts or set()
         self._by_id: dict[int, MapConstants] = {}
 
-    def mint(self, uranium_id: int, display_name: str) -> MapConstants:
+    def mint(
+        self, uranium_id: int, display_name: str, *, auto_disambiguate: bool = False
+    ) -> MapConstants:
         """Return the (stable) constants for a map id, creating them on first sight.
 
         Idempotent: a second call for the same id returns the same object. Fails
         loud if the sanitized name is empty or collides with a vanilla MAP_* or an
         already-minted Uranium map (the signal to add a map_name_overrides.json
-        entry — see Q2)."""
+        entry — see Q2).
+
+        `auto_disambiguate` (Map Walker only): instead of failing loud on a
+        collision, suffix this map's INTERNAL constant/dir with its id
+        (``MAP_COMET_CAVE`` -> ``MAP_COMET_CAVE_10``, dir ``CometCave`` ->
+        ``CometCave10``). The ``display_name`` is left untouched, so the HUD/menu
+        still read the real name. The full corpus has ~32 duplicate-name groups
+        (multi-floor caves, "(Metro)" variants, ...) — proper identity for those is
+        a Phase-5/7 fidelity job, not a prerequisite for a warps-only debug walker.
+        The strict default is kept for the real pipeline."""
         existing = self._by_id.get(uranium_id)
         if existing is not None:
             return existing
@@ -120,6 +141,15 @@ class MapConstantRegistry:
                 f"constant stem; add a reference/map_name_overrides.json entry"
             )
         map_const = MAP_CONST_FMT.format(name=stem)
+        dir_name = _pascal_dir(display_name)
+
+        # Walker: resolve a collision deterministically by suffixing with the id
+        # (maps are minted in sorted-id order, so the lowest id keeps the base name).
+        if auto_disambiguate and self._const_taken(map_const):
+            stem = f"{stem}_{uranium_id}"
+            map_const = MAP_CONST_FMT.format(name=stem)
+            dir_name = f"{dir_name}{uranium_id}"
+
         if map_const in self._vanilla:
             raise ValueError(
                 f"map {uranium_id} ({display_name!r}) -> {map_const} collides with a "
@@ -138,12 +168,18 @@ class MapConstantRegistry:
             alias_const=ALIAS_CONST_FMT.format(n=uranium_id),
             layout_const=LAYOUT_CONST_FMT.format(name=stem),
             mapsec_const=MAPSEC_CONST_FMT.format(name=stem),
-            dir_name=_pascal_dir(display_name),
+            dir_name=dir_name,
             display_name=display_name,
         )
         self._by_id[uranium_id] = constants
         logger.info("minted map %d -> %s (dir %s)", uranium_id, map_const, constants.dir_name)
         return constants
+
+    def _const_taken(self, map_const: str) -> bool:
+        """Whether `map_const` already collides with a vanilla or minted map."""
+        return map_const in self._vanilla or any(
+            m.map_const == map_const for m in self._by_id.values()
+        )
 
     def get(self, uranium_id: int) -> MapConstants:
         """The minted constants for an id (KeyError if not minted)."""
@@ -184,6 +220,47 @@ class MapConstantRegistry:
             for uid in sorted(self._by_id)
         ]
         lines += ["", "#endif // GUARD_URANIUM_MAP_ALIASES_H", ""]
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text("\n".join(lines), encoding="utf-8")
+
+    def write_walker_maps_header(self, slice_map_ids: list[int], out_path: Path) -> None:
+        """Emit the Map Walker menu macros for the debug jump-menu.
+
+        Generates two macros to ``engine/include/uranium_walker_maps.h``:
+        - ``URANIUM_WALKER_MAP_COUNT`` — number of maps in *slice_map_ids*.
+        - ``URANIUM_WALKER_MAP_LIST(X)`` — X-macro iterating the slice maps in
+          *slice_map_ids* order; each entry is
+          ``X(MAP_CONSTANT, COMPOUND_STRING("Label"))``.
+
+        The C agent's ``uranium_map_walker.c`` ``#include``s this header.
+        All maps in *slice_map_ids* must already be minted; fails loud otherwise.
+        Idempotent: same inputs produce byte-identical output."""
+        count = len(slice_map_ids)
+        x_lines: list[str] = []
+        for uid in slice_map_ids:
+            consts = self._by_id[uid]
+            # Prefix the Uranium map id so labels are unique even when two display
+            # names truncate to the same text (e.g. the player's-house floors). The
+            # id is also the handle the slice is navigated by (SLICE_MAP_IDS) and,
+            # being leftmost, is never clipped by the menu window.
+            label = f"{uid} {_sanitize_walker_label(consts.display_name, max_len=24)}"
+            # COMPOUND_STRING (not bare _()) — the label is consumed as a `const u8 *`
+            # struct field; _() alone expands to a braced byte list (only valid for a
+            # `const u8 name[]`), COMPOUND_STRING wraps it in a compound literal.
+            x_lines.append(f'    X({consts.map_const}, COMPOUND_STRING("{label}"))')
+
+        lines: list[str] = [
+            "// GENERATED by rpg2gba assembler from SLICE_MAP_IDS"
+            " (src/rpg2gba/tileset_converter/map_set.py). DO NOT EDIT.",
+            f"#define URANIUM_WALKER_MAP_COUNT {count}",
+            "#define URANIUM_WALKER_MAP_LIST(X) \\",
+        ]
+        for i, x_line in enumerate(x_lines):
+            if i < count - 1:
+                lines.append(x_line + " \\")
+            else:
+                lines.append(x_line)
+        lines.append("")  # trailing newline after the last X-line
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text("\n".join(lines), encoding="utf-8")
 
@@ -254,17 +331,21 @@ def build_map_constants(
     state_path: Path = DEFAULT_STATE_PATH,
     alias_header_path: Path | None = None,
     map_groups_path: Path | None = None,
+    auto_disambiguate: bool = False,
 ) -> MapConstantRegistry:
     """Mint constants for `map_ids` (sorted, deterministic), persist state, and
     optionally emit the alias header + map_groups.json. Used by S8 assembly and the
-    slice test."""
+    slice test.
+
+    `auto_disambiguate` (Map Walker) suffixes duplicate-name maps' internal
+    constants with their id instead of failing loud — see `MapConstantRegistry.mint`."""
     names = load_display_names(map_infos_path, overrides_path)
     registry = MapConstantRegistry(state_path, load_vanilla_map_consts(fork_path))
     registry.load()  # idempotent: reuse already-minted constants
     for uid in sorted(map_ids):
         if uid not in names:
             raise KeyError(f"map {uid} has no name in map_infos/overrides")
-        registry.mint(uid, names[uid])
+        registry.mint(uid, names[uid], auto_disambiguate=auto_disambiguate)
     registry.save()
     if alias_header_path is not None:
         registry.write_alias_header(alias_header_path)

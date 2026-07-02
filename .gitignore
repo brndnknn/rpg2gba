@@ -6,6 +6,7 @@ dist/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+scratchpad.txt 
 
 # Claude Code runtime artifacts (the tracked skills under .claude/skills/ stay).
 .claude/scheduled_tasks.lock
@@ -40,11 +41,14 @@ engine/src/data/tilesets/uranium_graphics.gen.h
 engine/src/data/tilesets/uranium_metatiles.gen.h
 engine/src/data/tilesets/uranium_tilesets.gen.h
 engine/include/uranium_externs.gen.h
+engine/include/uranium_walker_maps.h
 engine/data/tilesets/primary/uranium*/
 engine/data/tilesets/secondary/uranium*/
-engine/data/maps/MokiTown/
-engine/data/maps/MokiTownPlayersHouse1F/
-engine/data/maps/MokiTownPlayersHouse2F/
-engine/data/layouts/MokiTown/
-engine/data/layouts/MokiTownPlayersHouse1F/
-engine/data/layouts/MokiTownPlayersHouse2F/
+# Full-corpus Map Walker build: the assembler generates a per-map dir under
+# data/maps/ and data/layouts/ for every built Uranium map (~190) plus the
+# UraniumWalkerStub/ dummy for dropped stock map data. Blanket-ignore all per-map
+# dirs — the pristine STOCK dirs are already tracked, so git keeps them; this only
+# keeps the generated (Uranium + stub) dirs out of `git status` so ROM-derived
+# binaries are never accidentally committed (CLAUDE.md §2).
+engine/data/maps/*/
+engine/data/layouts/*/
