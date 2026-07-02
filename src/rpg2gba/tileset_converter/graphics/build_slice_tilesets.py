@@ -40,6 +40,11 @@ import numpy as np
 from PIL import Image
 
 from rpg2gba.tileset_converter.layout import TileGrid, column_key
+from rpg2gba.tileset_converter.terrain_tags import (
+    TerrainTagTable,
+    load_terrain_tag_map,
+    load_terrain_tags_json,
+)
 from rpg2gba.tileset_converter.tile_map import serialize_column_key
 
 from .emit import (
@@ -116,6 +121,11 @@ def _load_priorities(tilesets_json: Path, ts: int) -> list[int]:
     return entry["priorities"]
 
 
+def _load_terrain_tags(tilesets_json: Path, ts: int) -> list[int]:
+    """Load the terrain_tags array for tileset ``ts`` from the Phase-3 tilesets oracle."""
+    return load_terrain_tags_json(tilesets_json, ts)
+
+
 def _render_column(
     key: tuple[tuple[int, int], ...],
     rasterizer: object,
@@ -184,6 +194,8 @@ def build_slice_tilesets(
     graphics_dir: Path | None = None,
     rasterizer_for: Callable[[int], object] | None = None,
     priorities_for: Callable[[int], list[int]] | None = None,
+    terrain_tags_for: Callable[[int], list[int]] | None = None,
+    terrain_tag_table: TerrainTagTable | None = None,
     source_tileset_of: Callable[[int], int] | None = None,
     dry_run: bool = False,
 ) -> dict[int, EmittedTileset]:
@@ -194,9 +206,13 @@ def build_slice_tilesets(
     layout converter stamps the tileset's warp metatile there). `rasterizer_for`
     overrides tile rendering for tests; defaults to the real Uranium source pipeline.
     `priorities_for` overrides priority loading for tests; defaults to reading
-    tilesets.json. `source_tileset_of` maps a synthetic per-map tileset id back to its
-    real RMXP tileset id, so per-map physical tilesets still load the correct source
-    art / passages. Identity when None (the default — legacy per-RMXP-tileset behavior).
+    tilesets.json. `terrain_tags_for` overrides terrain-tag loading for tests;
+    defaults to reading tilesets.json (same synthetic-id resolution as priorities).
+    `terrain_tag_table` overrides the loaded terrain_tag_map.json table for tests;
+    defaults to `load_terrain_tag_map(fork)`. `source_tileset_of` maps a synthetic
+    per-map tileset id back to its real RMXP tileset id, so per-map physical
+    tilesets still load the correct source art / passages. Identity when None (the
+    default — legacy per-RMXP-tileset behavior).
     Returns the per-tileset `EmittedTileset`. Writes nothing when `dry_run`."""
     fork = Path(fork)
     resolve = source_tileset_of or (lambda ts: ts)
@@ -204,6 +220,10 @@ def build_slice_tilesets(
         lambda ts: _default_rasterizer(resolve(ts), tilesets_json, graphics_dir)
     )
     get_priorities = priorities_for or (lambda ts: _load_priorities(tilesets_json, resolve(ts)))
+    get_terrain_tags = terrain_tags_for or (
+        lambda ts: _load_terrain_tags(tilesets_json, resolve(ts))
+    )
+    terrain_table = terrain_tag_table or load_terrain_tag_map(fork)
 
     by_ts: dict[int, list[tuple[int, dict]]] = {}
     for map_id, map_json in maps:
@@ -219,6 +239,7 @@ def build_slice_tilesets(
     for ts, maplist in sorted(by_ts.items()):
         rast = make_rast(ts)
         priorities = get_priorities(ts)
+        terrain_tags = get_terrain_tags(ts)
 
         # Enumerate all unique column keys across all maps for this tileset.
         ordered = column_keys_for_maps(maplist)
@@ -274,7 +295,15 @@ def build_slice_tilesets(
             continue
 
         # Build metatile list: one per column key + void + optional warp copy.
-        metatile_list = [_render_column(k, rast, priorities) for k in ordered]
+        # Terrain-tag behavior (MB_TALL_GRASS, MB_ICE, ...) is per-column; the door
+        # copies below override it with MB_NON_ANIMATED_DOOR (door > terrain).
+        metatile_list = [
+            _render_column(
+                k, rast, priorities,
+                behavior=terrain_table.column_behavior(ts, k, terrain_tags),
+            )
+            for k in ordered
+        ]
 
         # The void metatile is all-transparent; buckets.void points here.
         # collapse_column returns this for empty-column cells.

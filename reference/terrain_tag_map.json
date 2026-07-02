@@ -1,0 +1,29 @@
+{
+  "_comment": "Maps Essentials PBTerrain tags (reference/scripts_dump/100_PBTerrain_v17.rb) to pokeemerald-expansion metatile behaviors (MB_*). Tag 0-22. Terrain tag 1 (Ledge) is handled specially via ledge_directions (see terrain_tags.py) rather than a single MB_* value.",
+  "tags": {
+    "0": {"behavior": "MB_NORMAL", "note": "Normal"},
+    "1": {"behavior": "MB_NORMAL", "note": "Ledge — special-cased via ledge_directions; MB_NORMAL is only the unmapped fallback"},
+    "2": {"behavior": "MB_TALL_GRASS", "note": "Grass"},
+    "3": {"behavior": "MB_SAND", "note": "Sand"},
+    "4": {"behavior": "MB_NORMAL", "note": "Rock: footstep sfx only"},
+    "5": {"behavior": "MB_DEEP_WATER", "note": "DeepWater"},
+    "6": {"behavior": "MB_SAND", "note": "Beach — excluded from Uranium's isWater checks, land tile"},
+    "7": {"behavior": "MB_POND_WATER", "note": "Water"},
+    "8": {"behavior": "MB_WATERFALL", "note": "Waterfall"},
+    "9": {"behavior": "MB_WATERFALL", "note": "WaterfallCrest"},
+    "10": {"behavior": "MB_LONG_GRASS", "note": "Essentials TallGrass: blocks bike, double battles"},
+    "11": {"behavior": "MB_SEAWEED", "note": "UnderwaterGrass"},
+    "12": {"behavior": "MB_ICE", "note": "Ice"},
+    "13": {"behavior": "MB_NORMAL", "note": "Neutral sentinel"},
+    "14": {"behavior": "MB_ASHGRASS", "note": "SootGrass"},
+    "15": {"behavior": "MB_NORMAL", "note": "Bridge — z-order semantics deferred"},
+    "16": {"behavior": "MB_NORMAL", "note": "Snow: footstep sfx only"},
+    "17": {"behavior": "MB_POND_WATER", "note": "StillWater"},
+    "18": {"behavior": "MB_NORMAL", "note": "Volcano: sfx only"},
+    "19": {"behavior": "MB_NORMAL", "note": "Nuclear — custom engine work deferred to Phase 6"},
+    "20": {"behavior": "MB_NORMAL", "note": "Shadow: passability overlay helper"},
+    "21": {"behavior": "MB_NORMAL", "note": "junk tag, not defined in PBTerrain, engine ignores"},
+    "22": {"behavior": "MB_NORMAL", "note": "junk tag, same"}
+  },
+  "ledge_directions": {}
+}

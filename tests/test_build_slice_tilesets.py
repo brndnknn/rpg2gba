@@ -33,15 +33,40 @@ class _StubRasterizer:
 
 
 def _fake_fork(tmp_path: Path) -> Path:
-    """A minimal fork tree: the dirs the pre-pass writes into + a behaviors enum."""
+    """A minimal fork tree: the dirs the pre-pass writes into + a behaviors enum.
+
+    Includes every MB_* name referenced by reference/terrain_tag_map.json (plus the
+    original MB_FOO/MB_NON_ANIMATED_DOOR pair, kept first so test_behavior_value's
+    numeric assertions stay unchanged) so the default terrain_tag_table load in
+    build_slice_tilesets succeeds against this fake fork."""
     fork = tmp_path / "fork"
     (fork / "src" / "data" / "tilesets").mkdir(parents=True)
     (fork / "include" / "constants").mkdir(parents=True)
     (fork / "include" / "constants" / "metatile_behaviors.h").write_text(
-        "enum {\n    MB_NORMAL,\n    MB_FOO,\n    MB_NON_ANIMATED_DOOR,\n};\n",
+        "enum {\n"
+        "    MB_NORMAL,\n"
+        "    MB_FOO,\n"
+        "    MB_NON_ANIMATED_DOOR,\n"
+        "    MB_TALL_GRASS,\n"
+        "    MB_SAND,\n"
+        "    MB_DEEP_WATER,\n"
+        "    MB_POND_WATER,\n"
+        "    MB_WATERFALL,\n"
+        "    MB_LONG_GRASS,\n"
+        "    MB_SEAWEED,\n"
+        "    MB_ICE,\n"
+        "    MB_ASHGRASS,\n"
+        "    MB_JUMP_NORTH,\n"
+        "    MB_JUMP_SOUTH,\n"
+        "    MB_JUMP_EAST,\n"
+        "    MB_JUMP_WEST,\n"
+        "};\n",
         encoding="utf-8",
     )
     return fork
+
+
+_ZERO_TERRAIN_TAGS = [0] * 10000
 
 
 def _map(tileset_id: int) -> dict:
@@ -90,6 +115,7 @@ def test_out_of_atlas_tiles_dropped(tmp_path: Path) -> None:
         [(32, m)], {}, fork=fork, base_tile_map=base, overlay_out=overlay_out,
         rasterizer_for=lambda ts: _BoundedRasterizer(),
         priorities_for=lambda ts: [0] * 10000,
+        terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
     )
     tiles = json.loads(overlay_out.read_text(encoding="utf-8"))["tiles"]["5"]
     keys = {json.dumps([[0, t]], separators=(",", ":")) for t in (400, 401, 402)}
@@ -116,6 +142,7 @@ def _run(tmp_path: Path) -> tuple[Path, Path, dict]:
         overlay_out=overlay_out,
         rasterizer_for=lambda ts: _StubRasterizer(),
         priorities_for=lambda ts: priors,
+        terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
     )
     overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
     return fork, overlay_out, {"results": results, "overlay": overlay}
@@ -255,6 +282,7 @@ def test_two_maps_two_door_columns_each_get_own_warp_art(tmp_path: Path) -> None
         overlay_out=overlay_out,
         rasterizer_for=lambda ts: _StubRasterizer(),
         priorities_for=lambda ts: priors,
+        terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
     )
 
     overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
@@ -318,6 +346,7 @@ def test_warp_on_empty_cell_resolves_to_transparent_fallback(tmp_path: Path) -> 
         overlay_out=overlay_out,
         rasterizer_for=lambda ts: _StubRasterizer(),
         priorities_for=lambda ts: priors,
+        terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
     )
 
     overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
@@ -366,6 +395,7 @@ def test_source_tileset_of_per_map_tilesets(tmp_path: Path) -> None:
         overlay_out=overlay_out,
         rasterizer_for=lambda ts: _StubRasterizer(),
         priorities_for=lambda ts: priors,
+        terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
         source_tileset_of=lambda synth: 5,
     )
 
@@ -460,6 +490,81 @@ def test_analyze_tileset_palettes_structure() -> None:
             for orig, final in qp.color_changes:
                 assert len(orig) == 3 and all(isinstance(c, int) for c in orig)
                 assert len(final) == 3 and all(isinstance(c, int) for c in final)
+
+
+# ---------------------------------------------------------------------------
+# Terrain tag -> metatile behavior wiring (terrain_tags.py integration)
+# ---------------------------------------------------------------------------
+
+
+def test_terrain_tag_behavior_wired_into_emitted_metatiles(tmp_path: Path) -> None:
+    """A synthetic tileset where tile 401's terrain tag is grass (2): the emitted
+    metatile for the column carrying tile 401 gets MB_TALL_GRASS's numeric value; a
+    plain column (tile 400, tag 0) stays MB_NORMAL (0); and a warp on the grass
+    column still gets MB_NON_ANIMATED_DOOR (door overrides terrain)."""
+    fork = _fake_fork(tmp_path)
+    base = tmp_path / "tileset_map.json"
+    base.write_text("{}", encoding="utf-8")
+    overlay_out = tmp_path / "tileset_map.gen.json"
+
+    priors = [0] * 600
+    tags = [0] * 600
+    tags[401] = 2  # grass
+
+    build_slice_tilesets(
+        [(32, _map(5))],
+        {32: {(1, 0)}},  # warp at cell (1,0) -> column ((0,401),) (grass tag)
+        fork=fork,
+        base_tile_map=base,
+        overlay_out=overlay_out,
+        rasterizer_for=lambda ts: _StubRasterizer(),
+        priorities_for=lambda ts: priors,
+        terrain_tags_for=lambda ts: tags,
+    )
+
+    overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
+    tiles = overlay["tiles"]["5"]
+    warps = overlay["warps"]["5"]
+
+    col_400 = json.dumps([[0, 400]], separators=(",", ":"))
+    col_401 = json.dumps([[0, 401]], separators=(",", ":"))
+    plain_400_idx = tiles[col_400]["metatile"]
+    plain_401_idx = tiles[col_401]["metatile"]
+    door_401_idx = warps["tiles"][col_401]
+    fallback_idx = warps["fallback"]
+
+    prim = fork / "data" / "tilesets" / "primary" / "uranium5"
+    n_metatiles = max(plain_400_idx, plain_401_idx, door_401_idx, fallback_idx) + 1
+    attrs = struct.unpack(
+        f"<{n_metatiles}H", (prim / "metatile_attributes.bin").read_bytes()
+    )
+
+    mb_tall_grass = _behavior_value(fork, "MB_TALL_GRASS")
+    mb_door = _behavior_value(fork, "MB_NON_ANIMATED_DOOR")
+
+    assert (attrs[plain_400_idx] & 0x00FF) == 0  # MB_NORMAL
+    assert (attrs[plain_401_idx] & 0x00FF) == mb_tall_grass
+    # Door copy overrides the grass terrain behavior with the door behavior.
+    assert (attrs[door_401_idx] & 0x00FF) == mb_door
+    assert (attrs[fallback_idx] & 0x00FF) == mb_door
+
+
+# ---------------------------------------------------------------------------
+# Tests for analyze_tileset_palettes (continued from above)
+# ---------------------------------------------------------------------------
+
+
+def test_analyze_tileset_palettes_transparent_slots() -> None:
+    """mt2 top layer (slots 4-7) is all-transparent -> palette_index=-1, color_changes=[]."""
+    mt1 = MetatileImage(
+        bottom=_solid_rgba(200, 50, 50),
+        top=_solid_rgba(50, 200, 50),
+    )
+    mt2 = MetatileImage(
+        bottom=_solid_rgba(50, 50, 200),
+        top=_transparent_rgba(),
+    )
+    result = analyze_tileset_palettes([mt1, mt2])
 
     # mt2 top layer (slots 4-7) is all-transparent -> palette_index=-1, color_changes=[].
     for slot_idx in range(4, 8):
