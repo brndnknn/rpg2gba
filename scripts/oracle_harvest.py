@@ -84,6 +84,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--maps", default="1,2,3,4,5,6,7")
     ap.add_argument("--show", default=None, help="print full diff for one block label")
+    ap.add_argument("--common-events", action="store_true",
+                    help="harvest CommonEvents.pory instead of maps")
     args = ap.parse_args()
     map_ids = [int(x) for x in args.maps.split(",")]
 
@@ -97,7 +99,40 @@ def main() -> int:
     clusters: Counter[str] = Counter()
     cluster_examples: dict[str, list[str]] = {}
 
-    for mid in map_ids:
+    sources: list[tuple[str, Path, str | None]] = []
+    if args.common_events:
+        from rpg2gba.conversion_agent.transpile_driver import transpile_common_events
+        ce_text, _q = transpile_common_events(OUT / "common_events.json", ctx)
+        sources.append(("CommonEvents", ORACLE_DIR / "CommonEvents.pory", ce_text))
+
+    for name, oracle_path, ours_text in sources:
+        oracle_blocks = split_blocks(oracle_path.read_text(encoding="utf-8"))
+        ours_blocks = split_blocks(ours_text or "")
+        for label in sorted(set(oracle_blocks) | set(ours_blocks)):
+            if label not in ours_blocks:
+                total["only-in-oracle"] += 1
+                clusters["block-only-in-oracle"] += 1
+                cluster_examples.setdefault("block-only-in-oracle", []).append(label)
+                continue
+            if label not in oracle_blocks:
+                total["only-in-ours"] += 1
+                clusters["block-only-in-ours"] += 1
+                cluster_examples.setdefault("block-only-in-ours", []).append(label)
+                continue
+            o_norm = normalize(oracle_blocks[label])
+            t_norm = normalize(ours_blocks[label])
+            if o_norm == t_norm:
+                total["identical"] += 1
+                continue
+            total["divergent"] += 1
+            key = classify_divergence(o_norm, t_norm)
+            clusters[key] += 1
+            cluster_examples.setdefault(key, []).append(label)
+            if args.show == label:
+                print(f"--- oracle {label}")
+                print("\n".join(difflib.unified_diff(o_norm, t_norm, lineterm="")))
+
+    for mid in map_ids if not args.common_events else []:
         oracle_path = ORACLE_DIR / f"Map{mid:03d}.pory"
         if not oracle_path.is_file():
             print(f"Map{mid:03d}: no oracle file — skipped")

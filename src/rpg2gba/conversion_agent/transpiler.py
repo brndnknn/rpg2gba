@@ -118,9 +118,10 @@ class QueueEntry:
     command_code: int
     description: str
     reason: str = "transpiler-unhandled"
+    common_event_id: int | None = None
 
     def to_json(self) -> dict:
-        return {
+        out = {
             "map_id": self.map_id,
             "event_id": self.event_id,
             "event_name": self.event_name,
@@ -130,6 +131,10 @@ class QueueEntry:
             "description": self.description,
             "reason": self.reason,
         }
+        if self.common_event_id is not None:
+            out["common_event_id"] = self.common_event_id
+            del out["map_id"]
+        return out
 
 
 # -- context ------------------------------------------------------------------
@@ -147,11 +152,12 @@ class TranspileContext:
     registry: FlagRegistry
     unhandled: list[QueueEntry] = field(default_factory=list)
 
-    # per-event cursor, set by transpile_event
+    # per-event cursor, set by transpile_event / transpile_common_event
     map_id: int = 0
     event_id: int | None = None
     event_name: str = ""
     page_no: int = 0
+    common_event_id: int | None = None
 
     def queue(self, cmd_index: int, code: int, description: str) -> str:
         """Record one unhandled command; return the in-script marker comment."""
@@ -163,6 +169,7 @@ class TranspileContext:
             line=cmd_index,
             command_code=code,
             description=description,
+            common_event_id=self.common_event_id,
         )
         self.unhandled.append(entry)
         return f"# UNHANDLED code {code}: {description}"
@@ -380,8 +387,8 @@ def condition_expr(params: list, ctx: TranspileContext) -> str | None:
 
     if ctype == 2 and len(params) >= 3:  # self-switch [2, "A", 0=ON/1=OFF]
         letter = params[1]
-        if not isinstance(letter, str):
-            return None
+        if not isinstance(letter, str) or ctx.event_id is None:
+            return None  # a self-switch has no meaning in a common event
         name = ctx.self_switch_flag(letter)
         return f"flag({name})" if params[2] == 0 else f"!flag({name})"
 
@@ -414,9 +421,16 @@ def _describe_condition(params: list) -> str:
 # (Walk codes 1–4 are handled separately — their token depends on the current
 # route speed, see _WALK_CODES/_SPEED_PREFIX.)
 _MOVE_TOKENS: dict[int, str] = {
+    # Diagonals (5–8): vanilla emerald lacks these; the EXPANSION ships them
+    # (movement.inc walk_diag_*) — the moveroute census's HARD call predated
+    # the fork check (§4.7). RMXP: 5 lower-left, 6 lower-right, 7 upper-left,
+    # 8 upper-right.
+    5: "walk_diag_southwest", 6: "walk_diag_southeast",
+    7: "walk_diag_northwest", 8: "walk_diag_northeast",
     16: "face_down", 17: "face_left", 18: "face_right", 19: "face_up",
     25: "face_player", 26: "face_away_player",
     35: "lock_facing_direction", 36: "unlock_facing_direction",
+    39: "set_fixed_priority", 40: "clear_fixed_priority",
 }
 
 # SOFT-C drops (moveroute_coverage.py dispositions): timing/physics toggles
@@ -555,7 +569,9 @@ class _PageEmitter:
             frames = params[0] if params and isinstance(params[0], int) else 1
             return [f"delay({frames})"]
         if code == EXIT_EVENT:
-            return ["end"]
+            # In a called common event, exiting means returning to the caller;
+            # `end` there would kill the whole script context.
+            return ["return" if ctx.common_event_id is not None else "end"]
         if code == ERASE_EVENT:
             if ctx.event_id is None:
                 return [ctx.queue(node.index, code, "erase event in a common event")]
@@ -572,6 +588,8 @@ class _PageEmitter:
         if code == CONTROL_SELF_SWITCH:
             if not params or not isinstance(params[0], str):
                 return [ctx.queue(node.index, code, "self-switch with bad params")]
+            if ctx.event_id is None:
+                return [ctx.queue(node.index, code, "self-switch in a common event")]
             name = ctx.self_switch_flag(params[0])
             value = params[1] if len(params) > 1 else 0
             return [f"setflag({name})" if value == 0 else f"clearflag({name})"]
@@ -802,9 +820,9 @@ class _PageEmitter:
             return [f"setflag({name})"]
 
         # pbSetSelfSwitch(18, "A", true) — set ANOTHER event's self-switch on
-        # this map (336× corpus).
+        # this map (336× corpus). Meaningless without a map (common events).
         m = _SET_SELF_SWITCH_RE.match(text)
-        if m:
+        if m and self.ctx.common_event_id is None:
             name = self.ctx.registry.mint_self_switch(
                 self.ctx.map_id, int(m.group(1)), m.group(2)
             )
@@ -856,6 +874,7 @@ def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> Transpil
     ctx.map_id = map_id
     ctx.event_id = event.get("id")
     ctx.event_name = event.get("name", "")
+    ctx.common_event_id = None
     before = len(ctx.unhandled)
 
     name = _label_name(event.get("name", ""))
@@ -878,6 +897,38 @@ def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> Transpil
         blocks.append(f"{header}script {label} {{\n{inner}\n}}")
         for m_label, tokens in movements:
             blocks.append(_render_movement(m_label, tokens))
+
+    return TranspiledEvent(
+        text="\n\n".join(blocks),
+        unhandled=ctx.unhandled[before:],
+    )
+
+
+def transpile_common_event(ce: dict, ctx: TranspileContext) -> TranspiledEvent:
+    """Transpile one common event (flat `list`, no pages, no trigger wrapper).
+
+    Self-switch semantics don't exist here (no owning event) — those commands
+    queue. The block label matches the `call CommonEvent_{id:03d}` form the
+    map-event emitters produce.
+    """
+    ce_id = int(ce.get("id", 0))
+    ctx.map_id = 0
+    ctx.event_id = None
+    ctx.event_name = ce.get("name", "")
+    ctx.common_event_id = ce_id
+    ctx.page_no = 1
+    before = len(ctx.unhandled)
+
+    label = f"CommonEvent_{ce_id:03d}"
+    body, movements = transpile_page({"list": ce.get("list", [])}, ctx, label)
+    body = body or []
+    body.append("return")  # called script — return to the caller, never `end`
+    inner = "\n".join(f"    {ln}" for ln in body)
+    name = _label_name(ce.get("name", ""))
+    header = f"# {name}\n" if name else ""
+    blocks = [f"{header}script {label} {{\n{inner}\n}}"]
+    for m_label, tokens in movements:
+        blocks.append(_render_movement(m_label, tokens))
 
     return TranspiledEvent(
         text="\n\n".join(blocks),

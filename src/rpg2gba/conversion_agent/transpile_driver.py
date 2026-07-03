@@ -123,6 +123,58 @@ def _registry_minted_names(registry: FlagRegistry) -> set[str]:
 # -- corpus run loop -------------------------------------------------------------
 
 
+def _ce_strips(strip_list_path: Path) -> dict[int, dict]:
+    """Whole-CE STRIP decisions from the source of truth (CLAUDE.md §4.3)."""
+    if not strip_list_path.is_file():
+        return {}
+    data = json.loads(strip_list_path.read_text(encoding="utf-8"))
+    return {int(e["id"]): e for e in data.get("common_events", [])}
+
+
+def transpile_common_events(
+    common_events_path: Path,
+    ctx: transpiler.TranspileContext,
+    strip_list_path: Path = Path("reference") / "strip_list.json",
+) -> tuple[str, list[dict]]:
+    """Transpile every command-carrying common event into one .pory text.
+
+    Command-less CEs (placeholders) emit nothing — a map-event `call` to one
+    would dangle, but no map event calls an empty CE (they carry no commands
+    to call from). CEs on the strip list emit their stub message instead of
+    their content (fail-loud on an expect_name mismatch — re-export
+    renumbering guard).
+    """
+    ces = json.loads(common_events_path.read_text(encoding="utf-8"))
+    strips = _ce_strips(strip_list_path)
+    texts: list[str] = []
+    queue_entries: list[dict] = []
+    for ce in ces:
+        ce_id = int(ce.get("id", 0))
+        strip = strips.get(ce_id)
+        if strip is not None:
+            if ce.get("name") != strip["expect_name"]:
+                raise RuntimeError(
+                    f"strip_list expects CE {ce_id} named {strip['expect_name']!r}, "
+                    f"found {ce.get('name')!r} — re-export renumbering? Fix the "
+                    f"strip list, don't guess."
+                )
+            stub = strip["stub_message"]
+            texts.append(
+                f"# STRIPPED: {strip['feature']} (strip_list.json)\n"
+                f"script CommonEvent_{ce_id:03d} {{\n"
+                f'    msgbox("{stub}")\n'
+                f"    return\n"
+                f"}}"
+            )
+            continue
+        if not any(cmd.get("code") for cmd in ce.get("list", [])):
+            continue
+        result = transpiler.transpile_common_event(ce, ctx)
+        texts.append(result.text)
+        queue_entries.extend(e.to_json() for e in result.unhandled)
+    return "\n\n".join(texts), queue_entries
+
+
 def transpile_corpus(
     map_ids: list[int],
     *,
@@ -131,6 +183,7 @@ def transpile_corpus(
     flag_state_path: Path,
     map_constants_path: Path,
     write: bool = True,
+    common_events: bool = True,
 ) -> dict:
     """Transpile a set of maps, gate every one, and (optionally) write output."""
     registry = (
@@ -172,11 +225,33 @@ def transpile_corpus(
         map_texts[map_id] = pory_text
         all_queue.extend(queue_entries)
 
+    ce_text: str | None = None
+    ce_path = out_dir / "common_events.json"
+    if common_events and ce_path.is_file():
+        ce_text, ce_queue = transpile_common_events(ce_path, ctx)
+        extras = fork_index.registry_extra_symbols(
+            None, map_constants_path if map_constants_path.is_file() else None
+        )
+        extras |= _registry_minted_names(registry)
+        violations = fork_index.verify_script(ce_text, index, extra_symbols=extras)
+        if violations:
+            lines = "\n".join(
+                f"  CommonEvents:{v.line_no}: [{v.kind}] {v.symbol} — {v.context.strip()}"
+                for v in violations
+            )
+            raise RuntimeError(
+                f"transpile_driver: fork-index gate violated on CommonEvents "
+                f"({len(violations)} violation(s)):\n{lines}"
+            )
+        all_queue.extend(ce_queue)
+
     if write:
         scripts_dir = out_dir / "scripts"
         scripts_dir.mkdir(parents=True, exist_ok=True)
         for map_id, text in map_texts.items():
             (scripts_dir / f"Map{map_id:03d}.pory").write_text(text, encoding="utf-8")
+        if ce_text is not None:
+            (scripts_dir / "CommonEvents.pory").write_text(ce_text, encoding="utf-8")
 
     out_dir.mkdir(parents=True, exist_ok=True)
     queue_path = out_dir / "transpile_unhandled.jsonl"
