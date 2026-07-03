@@ -53,6 +53,28 @@ def _det_queue_entry(
     }
 
 
+def _canonicalize_labels(script: str, map_id: int, event: dict) -> str:
+    """Rewrite a classifier's name-based labels to the canonical id-based form.
+
+    ``deterministic._page_label`` keys blocks by event NAME — two same-named
+    events on one map (Map002 has two "Receptionist TRADE") collide into
+    duplicate script symbols. The transpiler already emits the canonical
+    ``Map{m:03d}_EV{e:03d}_Page{n}`` (= ``metadata_wiring.page_label``); this
+    brings the classifier layer onto the same scheme without touching the
+    classifiers or their golden tests. Definition and references move
+    together (whole-text replace)."""
+    for page_no in range(1, len(event.get("pages", [])) + 1):
+        old = deterministic._page_label(map_id, event, page_no)
+        new = transpiler._page_label(map_id, event, page_no)
+        if old != new:
+            script = script.replace(old, new)
+    old_mart = f"Map{int(map_id):03d}_{deterministic._label_name(event.get('name', ''))}_Mart"
+    new_mart = f"Map{int(map_id):03d}_EV{int(event.get('id', 0)):03d}_Mart"
+    if old_mart != new_mart:
+        script = script.replace(old_mart, new_mart)
+    return script
+
+
 def transpile_map(
     map_id: int,
     map_json: dict,
@@ -70,7 +92,7 @@ def transpile_map(
     for event in map_json.get("events", []):
         det = deterministic.try_deterministic(map_id, event, det_ctx)
         if det is not None:
-            event_texts.append(det.script)
+            event_texts.append(_canonicalize_labels(det.script, map_id, event))
             queue_entries.extend(
                 _det_queue_entry(entry, map_id=map_id, event=event)
                 for entry in det.unhandled

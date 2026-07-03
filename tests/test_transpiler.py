@@ -46,6 +46,7 @@ _SWITCHES = {
 _VARIABLES = {
     "1": "Result Var",
     "2": "Other Var",
+    "102": "Random Target",
 }
 _PRESEED_MD = """\
 # Pre-seed table
@@ -336,7 +337,7 @@ def test_move_route_self_target_and_waitmovement(ctx: T.TranspileContext) -> Non
         [[cmd(T.SET_MOVE_ROUTE, [0, route]), cmd(T.WAIT_MOVE_COMPLETION)]],
         trigger=1,
     )
-    label = "Map049_npc_Page1_Move1"
+    label = "Map049_EV005_Page1_Move1"
     assert f"applymovement(5, {label})" in res.text
     assert "waitmovement(0)" in res.text
     assert f"movement {label} {{" in res.text
@@ -348,7 +349,7 @@ def test_move_route_self_target_and_waitmovement(ctx: T.TranspileContext) -> Non
 def test_move_route_player_target(ctx: T.TranspileContext) -> None:
     route = _route([{"code": 1}])
     res = run_event(ctx, [[cmd(T.SET_MOVE_ROUTE, [-1, route])]], trigger=1)
-    assert "applymovement(OBJ_EVENT_ID_PLAYER, Map049_npc_Page1_Move1)" in res.text
+    assert "applymovement(OBJ_EVENT_ID_PLAYER, Map049_EV005_Page1_Move1)" in res.text
 
 
 def test_move_route_out_of_tier_code_queues(ctx: T.TranspileContext) -> None:
@@ -398,9 +399,14 @@ def test_code_509_silently_stripped(ctx: T.TranspileContext) -> None:
 def test_stripped_codes_produce_no_output_or_queue(ctx: T.TranspileContext, code: int) -> None:
     res = run_event(ctx, [[cmd(code), cmd(T.EXIT_EVENT)]], trigger=1)
     assert res.unhandled == []
+    # trigger 1 (player-touch) with a non-empty body (the explicit EXIT_EVENT
+    # "end") now gets lock/release wrapping (no faceplayer).
     assert res.text.splitlines() == [
-        "script Map049_npc_Page1 {",
+        "# npc",
+        "script Map049_EV005_Page1 {",
+        "    lock",
         "    end",
+        "    release",
         "    end",
         "}",
     ]
@@ -556,7 +562,8 @@ def test_trigger_zero_wraps_lock_faceplayer_release(ctx: T.TranspileContext) -> 
     res = run_event(ctx, [[cmd(T.WAIT, [1])]], trigger=0)
     lines = [ln.strip() for ln in res.text.splitlines()]
     assert lines == [
-        "script Map049_npc_Page1 {",
+        "# npc",
+        "script Map049_EV005_Page1 {",
         "lock",
         "faceplayer",
         "delay(1)",
@@ -570,7 +577,8 @@ def test_trigger_zero_empty_body_no_wrapper(ctx: T.TranspileContext) -> None:
     res = run_event(ctx, [[]], trigger=0)
     lines = [ln.strip() for ln in res.text.splitlines()]
     assert lines == [
-        "script Map049_npc_Page1 {",
+        "# npc",
+        "script Map049_EV005_Page1 {",
         "end",
         "}",
     ]
@@ -579,23 +587,67 @@ def test_trigger_zero_empty_body_no_wrapper(ctx: T.TranspileContext) -> None:
 
 
 def test_nonzero_trigger_no_wrapper(ctx: T.TranspileContext) -> None:
-    res = run_event(ctx, [[cmd(T.WAIT, [1])]], trigger=2)
+    # Only triggers 3/4 (autorun/parallel) get no lock/release wrapping —
+    # triggers 1/2 now do (see test_trigger_one_wraps_lock_release_no_faceplayer).
+    res = run_event(ctx, [[cmd(T.WAIT, [1])]], trigger=3)
     assert "lock" not in res.text
     assert "faceplayer" not in res.text
     assert "release" not in res.text
 
 
+def test_trigger_one_wraps_lock_release_no_faceplayer(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.WAIT, [1])]], trigger=1)
+    lines = [ln.strip() for ln in res.text.splitlines()]
+    assert lines == [
+        "# npc",
+        "script Map049_EV005_Page1 {",
+        "lock",
+        "delay(1)",
+        "release",
+        "end",
+        "}",
+    ]
+    assert "faceplayer" not in res.text
+
+
 def test_page_label_format(ctx: T.TranspileContext) -> None:
     res = run_event(ctx, [[cmd(T.WAIT, [1])]], trigger=1, map_id=7, event_id=3, name="Guard")
-    assert "script Map007_Guard_Page1 {" in res.text
+    assert "script Map007_EV003_Page1 {" in res.text
+
+
+def test_same_name_events_produce_distinct_labels(ctx: T.TranspileContext) -> None:
+    ev1 = make_event([[cmd(T.WAIT, [1])]], trigger=1, id=1, name="Guard")
+    ev2 = make_event([[cmd(T.WAIT, [1])]], trigger=1, id=2, name="Guard")
+    r1 = T.transpile_event(7, ev1, ctx)
+    r2 = T.transpile_event(7, ev2, ctx)
+    assert "script Map007_EV001_Page1 {" in r1.text
+    assert "script Map007_EV002_Page1 {" in r2.text
 
 
 def test_movement_block_appended_after_script_block(ctx: T.TranspileContext) -> None:
     route = _route([{"code": 1}])
     res = run_event(ctx, [[cmd(T.SET_MOVE_ROUTE, [0, route])]], trigger=1)
-    script_idx = res.text.index("script Map049_npc_Page1 {")
-    movement_idx = res.text.index("movement Map049_npc_Page1_Move1 {")
+    script_idx = res.text.index("script Map049_EV005_Page1 {")
+    movement_idx = res.text.index("movement Map049_EV005_Page1_Move1 {")
     assert script_idx < movement_idx
+
+
+def test_control_variables_random_operand_with_named_variable(
+    ctx: T.TranspileContext,
+) -> None:
+    res = run_event(ctx, [[cmd(T.CONTROL_VARIABLES, [102, 102, 0, 2, 1, 2])]], trigger=1)
+    assert res.unhandled == []
+    random_idx = res.text.index("random(2)")
+    addvar_idx = res.text.index("addvar(VAR_RESULT, 1)")
+    copyvar_idx = res.text.index("copyvar(VAR_RANDOM_TARGET, VAR_RESULT)")
+    assert random_idx < addvar_idx < copyvar_idx
+
+    ctx2 = T.TranspileContext(registry=ctx.registry)
+    res2 = run_event(ctx2, [[cmd(T.CONTROL_VARIABLES, [102, 102, 0, 2, 0, 2])]], trigger=1)
+    assert res2.unhandled == []
+    assert "random(3)" in res2.text
+    assert "addvar" not in res2.text
+    assert "copyvar(VAR_RANDOM_TARGET, VAR_RESULT)" in res2.text
 
 
 # ----------------------------------------------------------------------------
@@ -658,7 +710,11 @@ def test_transpile_map049_against_real_corpus() -> None:
         for block in result.text.split("\n\n"):
             if not block.strip():
                 continue
-            assert block.startswith("script ") or block.startswith("movement "), block[:80]
+            assert (
+                block.startswith("script ")
+                or block.startswith("movement ")
+                or block.startswith("# ")
+            ), block[:80]
 
     assert total_unhandled < 40
     assert all(entry.command_code != T.MOVE_COMMAND_ROW for entry in run_ctx.unhandled)

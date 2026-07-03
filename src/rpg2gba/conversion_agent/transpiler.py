@@ -716,6 +716,21 @@ class _PageEmitter:
                     ))
                 else:
                     lines.append(f"copyvar({name}, {other})")
+            elif operand_kind == 2 and operation == 0 and len(params) >= 6:
+                # random [lo, hi] → random(count) puts 0..count-1 in
+                # VAR_RESULT; shift by lo when nonzero. (Oracle-validated
+                # idiom, Map002 EV004/EV007.)
+                lo, hi = params[4], params[5]
+                if isinstance(lo, int) and isinstance(hi, int) and hi >= lo:
+                    lines.append(f"random({hi - lo + 1})")
+                    if lo:
+                        lines.append(f"addvar(VAR_RESULT, {lo})")
+                    lines.append(f"copyvar({name}, VAR_RESULT)")
+                else:
+                    lines.append(self.ctx.queue(
+                        node.index, CONTROL_VARIABLES,
+                        f"random operand with non-int bounds {params[4:6]!r}",
+                    ))
             else:
                 lines.append(self.ctx.queue(
                     node.index, CONTROL_VARIABLES,
@@ -817,7 +832,13 @@ def _render_movement(label: str, tokens: list[str]) -> str:
 
 
 def _page_label(map_id: int, event: dict, page_no: int) -> str:
-    return f"Map{int(map_id):03d}_{_label_name(event.get('name', ''))}_Page{page_no}"
+    """The canonical page label (= ``metadata_wiring.page_label``): id-based,
+    never name-based. Two same-named events on one map (Map002 has two
+    "Receptionist TRADE" receptionists) would collide under a name label —
+    the event id is the only safe key. map.json wiring references this exact
+    form, so no ``normalize_labels`` rewrite is needed on transpiler output.
+    The human-readable name rides along as a comment (see transpile_event)."""
+    return f"Map{int(map_id):03d}_EV{int(event.get('id', 0)):03d}_Page{page_no}"
 
 
 def transpile_page(
@@ -837,17 +858,24 @@ def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> Transpil
     ctx.event_name = event.get("name", "")
     before = len(ctx.unhandled)
 
+    name = _label_name(event.get("name", ""))
     blocks: list[str] = []
     for page_no, page in enumerate(event.get("pages", []), start=1):
         ctx.page_no = page_no
         label = _page_label(map_id, event, page_no)
         body, movements = transpile_page(page, ctx, label)
-        if body and page.get("trigger") == ACTION_BUTTON_TRIGGER:
+        trigger = page.get("trigger")
+        if body and trigger == ACTION_BUTTON_TRIGGER:
             body = ["lock", "faceplayer", *body, "release"]
+        elif body and trigger in (1, 2):
+            # player-touch / event-touch cutscene: freeze the player while
+            # the script runs (validated Opus output, e.g. Map001 doormats).
+            body = ["lock", *body, "release"]
         body = body or []
         body.append("end")
         inner = "\n".join(f"    {ln}" for ln in body)
-        blocks.append(f"script {label} {{\n{inner}\n}}")
+        header = f"# {name}\n" if name and not name.startswith("EV") else ""
+        blocks.append(f"{header}script {label} {{\n{inner}\n}}")
         for m_label, tokens in movements:
             blocks.append(_render_movement(m_label, tokens))
 
