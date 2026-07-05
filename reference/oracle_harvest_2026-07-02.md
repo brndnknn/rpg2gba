@@ -63,6 +63,19 @@ the point of the exercise).
   instead of minting a Uranium duplicate. That's a `pbs_converter/items.py`
   reconcile question, not a transpiler bug — parked here so it isn't lost.
 
+  **RESOLVED 2026-07-04 — census (`reference/item_dupe_census_2026-07-04.md`):
+  the rename-dupe problem does not exist in this corpus.** The fork's
+  `include/constants/items.h` ships pre-Gen-VI back-compat enum aliases
+  (`ITEM_PARLYZ_HEAL = ITEM_PARALYZE_HEAL`, …); all 496 vanilla items Uranium
+  kept resolve to real fork items (472 modern-name, 24 via alias), and
+  `_ItemResolver` already marks them `needs_engine=False`. The real finding is
+  elsewhere: `emit_items_info` writes a full-replacement `src/data/items.h`
+  (all 607 entries, behavior fields zeroed) — dropped into the fork at Phase-7
+  V6 integration it would wipe behavior for all 496 vanilla items, not just
+  the 103 Uranium originals; the Uranium-ID numbering in `emit_constants` also
+  still needs the V6 reconcile (both flagged in items.py's own comments; blast
+  radius now documented in the census doc).
+
 ## Not harvested
 
 - **CommonEvents**: the driver has no CE pass yet (maps only). Harvest the
