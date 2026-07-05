@@ -23,7 +23,7 @@ from pathlib import Path
 
 import click
 
-from rpg2gba.conversion_agent import deterministic, fork_index, transpiler
+from rpg2gba.conversion_agent import deterministic, fork_index, hand_overrides, transpiler
 from rpg2gba.conversion_agent.flag_registry import FlagRegistry
 from rpg2gba.tileset_converter.map_set import resolve_map_ids
 
@@ -80,16 +80,32 @@ def transpile_map(
     map_json: dict,
     ctx: transpiler.TranspileContext,
     det_ctx: deterministic.Context | None,
+    overrides: dict[tuple[int, int], hand_overrides.HandOverride] | None = None,
 ) -> tuple[str, list[dict]]:
     """Transpile every event on one map; return (pory_text, queue_entries).
 
     Tries the idiom-collapse classifiers first (cheaper, hand-validated
-    output); falls back to the general command-by-command transpiler.
+    output); falls back to the general command-by-command transpiler. An
+    event keyed in ``overrides`` skips both entirely: its hand-authored text
+    is spliced in verbatim (already in the canonical label scheme — no
+    ``_canonicalize_labels`` rewrite) and it contributes zero queue entries.
+    ``overrides`` defaults to none so existing callers (``oracle_harvest.py``,
+    tests) are unaffected.
     """
+    overrides = overrides or {}
     event_texts: list[str] = []
     queue_entries: list[dict] = []
+    seen_event_ids: set[int] = set()
 
     for event in map_json.get("events", []):
+        event_id = event.get("id")
+        seen_event_ids.add(event_id)
+
+        override = overrides.get((map_id, event_id))
+        if override is not None:
+            event_texts.append(override.text)
+            continue
+
         det = deterministic.try_deterministic(map_id, event, det_ctx)
         if det is not None:
             event_texts.append(_canonicalize_labels(det.script, map_id, event))
@@ -101,6 +117,17 @@ def transpile_map(
         transpiled = transpiler.transpile_event(map_id, event, ctx)
         event_texts.append(transpiled.text)
         queue_entries.extend(e.to_json() for e in transpiled.unhandled)
+
+    stale = sorted(
+        (m, e) for (m, e) in overrides if m == map_id and e not in seen_event_ids
+    )
+    if stale:
+        names = ", ".join(f"Map{m:03d}_EV{e:03d}" for m, e in stale)
+        raise ValueError(
+            f"transpile_map: hand override(s) for {names} reference event id(s) "
+            f"not present on Map{map_id:03d} — a stale override is a bug, fix or "
+            f"remove the .pory file, don't skip it"
+        )
 
     pory_text = "\n\n".join(text for text in event_texts if text)
     return pory_text, queue_entries
@@ -184,8 +211,15 @@ def transpile_corpus(
     map_constants_path: Path,
     write: bool = True,
     common_events: bool = True,
+    overrides_dir: Path | None = None,
 ) -> dict:
-    """Transpile a set of maps, gate every one, and (optionally) write output."""
+    """Transpile a set of maps, gate every one, and (optionally) write output.
+
+    Hand overrides (``hand_overrides.load_hand_overrides``) are loaded once
+    up front and threaded into every ``transpile_map`` call; ``overrides_dir``
+    defaults to the package's ``hand_conversions/`` directory (pass a temp dir
+    in tests to avoid touching the committed set).
+    """
     registry = (
         FlagRegistry.load(flag_state_path) if flag_state_path.is_file() else FlagRegistry()
     )
@@ -198,17 +232,20 @@ def transpile_corpus(
     # pbReceiveItem as unknown-item.
     ctx.items = det_ctx.items
     index = fork_index.load_or_build()
+    overrides = hand_overrides.load_hand_overrides(overrides_dir)
 
     map_texts: dict[int, str] = {}
     all_queue: list[dict] = []
     events_total = 0
+    overridden_total = 0
 
     for map_id in map_ids:
         map_path = maps_dir / f"Map{map_id:03d}.json"
         map_json = json.loads(map_path.read_text(encoding="utf-8"))
         events_total += len(map_json.get("events", []))
+        overridden_total += sum(1 for (m, _e) in overrides if m == map_id)
 
-        pory_text, queue_entries = transpile_map(map_id, map_json, ctx, det_ctx)
+        pory_text, queue_entries = transpile_map(map_id, map_json, ctx, det_ctx, overrides)
 
         extras = fork_index.registry_extra_symbols(
             None, map_constants_path if map_constants_path.is_file() else None
@@ -267,10 +304,12 @@ def transpile_corpus(
     if write:
         registry.save(flag_state_path)
 
-    return _summarize(map_ids, events_total, all_queue)
+    return _summarize(map_ids, events_total, all_queue, overridden_total)
 
 
-def _summarize(map_ids: list[int], events_total: int, queue: list[dict]) -> dict:
+def _summarize(
+    map_ids: list[int], events_total: int, queue: list[dict], overridden_total: int = 0
+) -> dict:
     queue_by_code: dict[int, int] = {}
     for entry in queue:
         code = entry.get("command_code", 0)
@@ -286,6 +325,7 @@ def _summarize(map_ids: list[int], events_total: int, queue: list[dict]) -> dict
         "maps": len(map_ids),
         "events": events_total,
         "queued": len(queue),
+        "hand_overridden": overridden_total,
         "queue_by_code": dict(sorted(queue_by_code.items(), key=lambda kv: kv[1], reverse=True)),
         "queue_clusters": clusters,
     }
@@ -299,7 +339,10 @@ def _default_maps_dir() -> Path:
 
 
 def _print_summary(summary: dict) -> None:
-    click.echo(f"maps: {summary['maps']}  events: {summary['events']}  queued: {summary['queued']}")
+    click.echo(
+        f"maps: {summary['maps']}  events: {summary['events']}  queued: {summary['queued']}"
+        f"  hand-overridden: {summary['hand_overridden']}"
+    )
     if summary["queue_by_code"]:
         click.echo("queue by code:")
         for code, count in summary["queue_by_code"].items():

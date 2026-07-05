@@ -105,6 +105,17 @@ _SET_SELF_SWITCH_RE = re.compile(
     r'^\s*pbSetSelfSwitch\(\s*(\d+)\s*,\s*"([A-Z])"\s*,\s*(true|false)\s*\)\s*$'
 )
 
+# pbPhoneRegisterNPC(...) — Essentials phone-directory registration; the
+# system has no slice-relevant analog on the GBA. User-approved strip
+# (2026-07-05, slice1 hand-bucket review), Map032 EV9 page 3. Transpiler-local
+# addition to the 355 STRIP tier (not routed through deterministic.py's
+# _DIALOGUE_STRIP_RE — that module is out of scope for this change). Any
+# argument list is fine — the whole call is cosmetic for our purposes. Anchored
+# on the literal call-open ``(`` so a longer identifier
+# (``pbPhoneRegisterNPCFoo(...)``) does not match — "NPC(" never appears
+# inside "NPCFoo(".
+_PHONE_REGISTER_NPC_STRIP_RE = re.compile(r"^\s*(?:Kernel\.)?pbPhoneRegisterNPC\(")
+
 # Type-12 (script) condition idioms proven on the slice (grill D8/D10 read-
 # through, reference/slice1_queue_readthrough.md) — whole-string matches, same
 # discipline as the 355 idioms above: a longer expression around the call
@@ -120,6 +131,23 @@ _DOOR_ONEVENT_RE = re.compile(r"^\s*get_character\(0\)\.onEvent\?\s*$")
 # pbItemBall idiom; qty is optional (bare RARECANDY/LAVACOOKIE vs. POKeBALL,5).
 _RECEIVE_ITEM_RE = re.compile(
     r"^\s*(?:Kernel\.)?pbReceiveItem\(\s*::PBItems::(\w+)\s*(?:,\s*(\d+)\s*)?\)\s*$"
+)
+
+# Essentials defensive numeric guard: "variable is not numeric or negative"
+# (Map049 EV20 page 1, output/uranium-build/maps/Map049.json — 4 then-nodes, 0
+# else-nodes: comment lines explaining the guard, plus a 122 re-set of the
+# variable to 0). Statically FALSE on the GBA: game variables are always
+# unsigned integers, so ``pbGet(N).is_a?(Numeric)`` is always true (the first
+# disjunct, negated, is always false) and ``$game_variables[M] < 0`` is never
+# true (the second disjunct is always false) — the whole OR can never be true.
+# User-approved strip (2026-07-05, slice1 hand-bucket review): drop the
+# then-arm entirely, splice the else-arm's children in place of the branch
+# (see _emit_unsatisfiable_numeric_guard). Whole-string match — a different
+# combinator (&&), an un-negated is_a?, a different comparison (>), or any
+# extra clause all fall through to queue.
+_UNSATISFIABLE_NUMERIC_GUARD_RE = re.compile(
+    r"^\s*!\s*pbGet\(\s*\d+\s*\)\.is_a\?\(\s*Numeric\s*\)\s*"
+    r"(?:\|\|\s*\$game_variables\[\s*\d+\s*\]\s*<\s*0\s*)?$"
 )
 
 # Essentials wait-until-aligned break condition inside a code-112 loop (Map032
@@ -704,6 +732,9 @@ class _PageEmitter:
         give_item = self._emit_give_item_idiom(node)
         if give_item is not None:
             return give_item
+        guard = self._emit_unsatisfiable_numeric_guard(node)
+        if guard is not None:
+            return guard
         expr = condition_expr(node.cmd.get("parameters", []), self.ctx)
         if expr is None:
             marker = self.ctx.queue(
@@ -783,6 +814,31 @@ class _PageEmitter:
             lines += [f"    {ln}" for ln in else_lines]
         lines.append("}")
         return lines
+
+    def _emit_unsatisfiable_numeric_guard(self, node: IfNode) -> list[str] | None:
+        """``!pbGet(N).is_a?(Numeric) || $game_variables[M] < 0`` — Essentials'
+        defensive "is this numeric and non-negative" guard (Map049 EV20 page
+        1, output/uranium-build/maps/Map049.json). Both disjuncts are
+        statically false on the GBA — game variables are always unsigned
+        integers, so ``pbGet`` always returns a Numeric and a var is never
+        negative — meaning the condition itself can never be true. User-
+        approved strip (2026-07-05, slice1 hand-bucket review): drop the
+        then-arm entirely and splice the else-arm's children in directly (no
+        wrapping ``if`` — the branch could never have routed to the then-arm
+        in the first place). Returns ``None`` (falls through to the generic
+        script-condition queue, which still handles then/else counts in its
+        description) for any other combinator/comparison/extra-clause shape."""
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        if not _UNSATISFIABLE_NUMERIC_GUARD_RE.match(params[1]):
+            return None
+        breadcrumb = (
+            "# numeric guard: unsatisfiable on GBA — then-arm dropped "
+            "(slice1, 2026-07-05)"
+        )
+        else_lines = self.emit_nodes(node.otherwise) if node.otherwise else []
+        return [breadcrumb, *else_lines]
 
     def _emit_choice(self, node: ChoiceNode) -> list[str]:
         params = node.cmd.get("parameters", [])
@@ -1046,6 +1102,11 @@ class _PageEmitter:
         text = params[0] if params and isinstance(params[0], str) else ""
         if _DIALOGUE_STRIP_RE.match(text):
             return []
+
+        # pbPhoneRegisterNPC(...) — phone-directory registration, cosmetic on
+        # the GBA (see _PHONE_REGISTER_NPC_STRIP_RE). Breadcrumb, no queue.
+        if _PHONE_REGISTER_NPC_STRIP_RE.match(text):
+            return ["# phone: pbPhoneRegisterNPC stripped (slice1)"]
 
         # setTempSwitchOn("A") — set this event's temp switch (344× corpus).
         m = _SET_TEMP_SWITCH_RE.match(text)
