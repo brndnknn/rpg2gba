@@ -1,0 +1,79 @@
+# hand conversion (2026-07-05): displayNinjaLetter is a bespoke full-screen letter-card scene (reference/scripts_dump/221_Extra_Scripts.rb:457 pbDisplayLetter — mail background + card image + auto-contrast drawTextEx + custom any-button close loop) with no Poryscript analog. v1 ships the letter body as a plain msgbox chain (content preserved verbatim, card art dropped — Phase-8 candidate for a custom C letter scene). The page's code-202 Kellyn teleport is hand-emitted as setobjectxy. Everything else is the transpiler's own output for this event, copied verbatim.
+
+# Letter
+script Map049_EV021_Page1 {
+    lock
+    faceplayer
+    # displayNinjaLetter -> letter body as one scrolling msgbox (card UI dropped, v1)
+    msgbox("Honored {PLAYER},\nThere is a stirring in the wind.\lThe Gods murmur in the deep.\lA storm brews on the horizon.\lOur Village will soon be in danger.\lWithout your help, Tsukinami will fall.\l- Hinata & Kaito")
+    delay(10)
+    # code 202 [20,0,18,9,0]: teleport Kellyn (event 20) to (18,9), keep facing
+    setobjectxy(20, 18, 9)
+    delay(4)
+    applymovement(20, Map049_EV021_Page1_Move1)
+    waitmovement(0)
+    applymovement(OBJ_EVENT_ID_PLAYER, Map049_EV021_Page1_Move2)
+    waitmovement(0)
+    delay(10)
+    msgbox("What did the letter say?\nIt looked so formal I didn't want to touch it.")
+    delay(10)
+    msgbox("{PAUSE 0x18}.{PAUSE 0x18}.{PAUSE 0x18}.", MSGBOX_AUTOCLOSE)
+    msgbox("Well...{PAUSE 0x1E} that's certainly vague.\nThey wouldn't call for aid unless it was something serious, though.")
+    msgbox("I wonder could it have to do with pirates?")
+    msgbox("There's a piracy problem in East Tandor.\nI know that the Rangers over there are\nhaving a hard time keeping them under control.\nMaybe they could use some help too.")
+    msgbox("The East Tandor Ranger HQ is located in Angelure Town.")
+    msgbox("It's a scenic resort area, but it's also\nknown as a haven for pirates and other riffraff.\nThe further West you sail in the Tandor Sea, the more treacherous and lawless it becomes...")
+    delay(10)
+    msgbox("But, if there's anybody that can deal with those kinds of conditions, it's you, {PLAYER}.")
+    delay(10)
+    msgbox("...Now.{PAUSE 0x0F} If you'll excuse me,\nhave to tend to Lucille.")
+    msgbox("But if you ever need to find me...\nYou'll know where I am.")
+    delay(10)
+    fadescreen(FADE_TO_BLACK)
+    delay(20)
+    setflag(FLAG_MAP049_EVENT002_SSA)
+    setflag(FLAG_MAP049_EVENT021_SSA)
+    warp(MAP_URANIUM_48, 4, 6)
+    waitstate
+    delay(4)
+    warp(MAP_URANIUM_49, 6, 8)
+    waitstate
+    delay(10)
+    fadescreen(FADE_FROM_BLACK)
+    delay(20)
+    waitmovement(0)
+    msgbox("You've reached the end of this portion of the URANIUM post-game. More to come!")
+    msgbox("In the meantime, there's someone in Venesi Town who desperately needs your help...")
+    release
+    end
+}
+
+movement Map049_EV021_Page1_Move1 {
+    walk_left
+    walk_left
+    walk_left
+    walk_left
+    walk_left
+    walk_left
+    walk_up
+    walk_left
+    walk_left
+    walk_left
+    walk_left
+}
+
+movement Map049_EV021_Page1_Move2 {
+    face_right
+}
+
+# Letter
+script Map049_EV021_Page2 {
+    lock
+    faceplayer
+    # displayNinjaLetter -> same letter msgbox (repeat read on later visits)
+    msgbox("Honored {PLAYER},\nThere is a stirring in the wind.\lThe Gods murmur in the deep.\lA storm brews on the horizon.\lOur Village will soon be in danger.\lWithout your help, Tsukinami will fall.\l- Hinata & Kaito")
+    msgbox("You've reached the end of this portion of the URANIUM post-game. More to come!")
+    msgbox("In the meantime, there's someone in Venesi Town who desperately needs your help...")
+    release
+    end
+}
