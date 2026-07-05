@@ -126,6 +126,11 @@ Uranium-Specific Discoveries; these lines are kept only for provenance.
   golden fixture re-pinned to corrected `Pok\xE9mon`. (Encoding fact promoted to
   Discoveries; the still-live GBA-charmap downstream concern remains an Open
   Question.)
+- **`pbCallBub` emote fidelity (Phase 4 follow-up).** Resolved 2026-07-05: not an
+  emote at all — it repositions the dialogue window (floating FRLG-skinned textbox
+  near the talking event); the real "!"/"?" bubbles are code-207 Show Animation,
+  now mapped to native emote movement tokens. STRIP final; no fork analog exists.
+  Corrected rationale in `reference/uranium_script_calls.md`.
 - **Identity of species ID 201** — had no Tandor dex number in `regionals.dat`.
   Resolved 2026-05-18: "Gengar" — placeholder/Easter-egg slot. (See Discoveries.)
 - **Which `.dat` holds the species table?** Resolved 2026-05-18: `dexdata.dat`.

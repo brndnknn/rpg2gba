@@ -131,6 +131,139 @@ def _translate_text(text: str) -> str | None:
         out = pat.sub(repl, out)
     return out
 
+@dataclass(frozen=True)
+class TextTranslation:
+    """Translated dialogue for the transpiler spine (slice1 idiom bucket).
+
+    ``text`` is poryscript-safe. ``autoclose`` means the message ended in a
+    trailing ``\\wtnp[n]`` and must be emitted as ``msgbox(.., MSGBOX_AUTOCLOSE)``.
+    ``sign`` means a leading ``\\sign[..]`` was stripped and the caller wraps the
+    msgbox in the gate-validated lock/release-no-faceplayer sign idiom.
+    """
+
+    text: str
+    autoclose: bool = False
+    sign: bool = False
+
+
+# -- Extended text-code table for translate_text_codes (transpiler spine) ----
+# Approved 2026-07-05, slice1 idiom review (reference/slice1_queue_readthrough.md
+# "Idiom" bucket, item 1 — 26 slice-1 / 627 corpus occurrences). This table is
+# strictly additive: it is a *superset* of ``_TEXT_SUBS`` (reusing that tuple
+# below so ``\PN`` has exactly one pattern definition), consumed only by
+# ``translate_text_codes``. ``_translate_text``/``_TEXT_SUBS`` above are the
+# LEGACY path the frozen-Opus classifiers depend on and are never touched.
+
+# \wt[n] -> {PAUSE 0xHH}. Essentials waits n*2 ticks at its 40fps game loop;
+# GBA text runs at 60fps, so the same wall-clock pause is n*2 * (60/40) = n*3
+# GBA frames. Capped at 0xFE, the largest value that fits the one-byte pause
+# operand. First-guess formula — calibrated by eye at the slice boot gate
+# (CLAUDE.md §9). Hex format matches vanilla precedent: engine's
+# ``{PAUSE 0x0F}`` (engine/data/text/lottery_corner.inc:19).
+_WT_RE = re.compile(r"\\wt\[(\d+)\]")
+
+
+def _wt_pause_repl(m: re.Match[str]) -> str:
+    frames = min(0xFE, int(m.group(1)) * 3)
+    return f"{{PAUSE 0x{frames:02X}}}"
+
+
+# \wtnp[n] ("wait, no page" — Essentials' auto-advance-and-close code) is
+# handled as its own trailing-only step in translate_text_codes, not through
+# this substitution table: it maps to TextTranslation.autoclose, not to
+# inline text, and the corpus census says it only ever appears at the very
+# end of a message (fail loud, not silently drop, if that ever breaks).
+_WTNP_RE = re.compile(r"\\wtnp\[(\d+)\]")
+
+# \c[n] (colour) needs windowskin pixel data pokeemerald doesn't expose the
+# same way — approved DROP (strip the token, keep surrounding text).
+_COLOR_CODE_RE = re.compile(r"\\c\[[^\]]*\]")
+
+# <fs=n> / </fs> — RGSS inline font-size tags. The GBA has no arbitrary font
+# sizing in msgbox text, so the tags are dropped and their wrapped text kept.
+_FS_OPEN_RE = re.compile(r"<fs=\d+>")
+_FS_CLOSE_RE = re.compile(r"</fs>")
+
+_TextSub = tuple[re.Pattern[str], str | Callable[[re.Match[str]], str]]
+
+_TEXT_CODE_SUBS: tuple[_TextSub, ...] = (
+    (_WT_RE, _wt_pause_repl),
+    (re.compile(r"\\\."), "{PAUSE 0x0F}"),  # 15 frames — same value vanilla uses around ellipses
+    (re.compile(r"\\\|"), "{PAUSE 0x3C}"),  # 1 second at 60fps; \wt's first-guess family
+    (_COLOR_CODE_RE, ""),
+    (_FS_OPEN_RE, ""),
+    (_FS_CLOSE_RE, ""),
+    *_TEXT_SUBS,  # \PN -> {PLAYER}, the one pattern shared with the legacy path
+)
+
+
+def _translate_text_code_body(text: str) -> str | None:
+    """Two-pass substitution + safety scan over the extended code table.
+
+    Same shape as ``_translate_text``: delete every recognized code from a
+    scan copy (never substitute-then-scan, so a substitution's own braces —
+    e.g. ``{PAUSE 0x0F}`` — can't trip the guard), then apply the real
+    substitution to the text actually returned. Anything left over — an
+    unrecognized escape (``\\v[n]``, ``\\r``, ``\\g[..]``) or a stray brace in
+    the source — fails the scan and returns ``None``: fail loud, queue for the
+    LLM tail rather than silently drop (CLAUDE.md §4.5).
+    """
+    scan = text
+    for pat, _repl in _TEXT_CODE_SUBS:
+        scan = pat.sub("", scan)
+    if _UNSAFE_TEXT_RE.search(scan):
+        return None
+    out = text
+    for pat, repl in _TEXT_CODE_SUBS:
+        out = pat.sub(repl, out)
+    return out
+
+
+def translate_text_codes(raw: str) -> TextTranslation | None:
+    """Essentials control codes → pokeemerald text, for the transpiler spine.
+
+    Returns ``None`` when the text still contains a code with no approved
+    mapping (caller queues the dialogue). Approved mappings: slice1 idiom
+    review 2026-07-05 (reference/slice1_queue_readthrough.md):
+
+    1. A leading ``\\sign[..]`` is stripped and ``sign=True`` is set. A
+       ``\\sign`` that is not a leading prefix is an unknown shape -> ``None``.
+    2. A trailing ``\\wtnp[n]`` (possibly followed only by whitespace) is
+       stripped and ``autoclose=True`` is set. A non-trailing (or repeated)
+       ``\\wtnp[n]`` -> ``None`` — the corpus census says 100% are trailing;
+       fail loud rather than guess if that assumption ever breaks.
+    3. ``\\wt[n]`` -> ``{PAUSE 0xHH}``, ``\\.`` -> ``{PAUSE 0x0F}``,
+       ``\\|`` -> ``{PAUSE 0x3C}``.
+    4. ``\\c[n]`` is dropped; ``<fs=n>``/``</fs>`` tags are dropped (their
+       wrapped text is kept).
+    5. ``\\PN`` -> ``{PLAYER}``; ``\\n``/``\\l``/``\\p`` pass through verbatim.
+    6. Anything else remaining (``\\v[n]``, ``\\r``, ``\\g[..]``, a stray
+       brace, any other unrecognized escape) -> ``None``.
+    """
+    text = raw
+    sign = False
+    autoclose = False
+
+    if "\\sign[" in text:
+        m = _SIGN_PREFIX_RE.match(text)
+        if m is None:
+            return None  # \sign present but not a leading prefix -- unknown shape
+        text = text[m.end() :]
+        sign = True
+
+    if "\\wtnp[" in text:
+        matches = list(_WTNP_RE.finditer(text))
+        if len(matches) != 1 or text[matches[0].end() :].strip():
+            return None  # not exactly one trailing \wtnp -- census says 100% are
+        text = text[: matches[0].start()]
+        autoclose = True
+
+    translated = _translate_text_code_body(text)
+    if translated is None:
+        return None
+    return TextTranslation(text=translated, autoclose=autoclose, sign=sign)
+
+
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 

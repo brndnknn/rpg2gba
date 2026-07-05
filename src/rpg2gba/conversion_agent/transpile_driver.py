@@ -193,6 +193,10 @@ def transpile_corpus(
     det_ctx = deterministic.load_context(
         reference_dir=Path("reference"), intermediate_dir=out_dir / "intermediate"
     )
+    # The give-item idiom resolves PBItems:: symbols through the same Phase-2
+    # table the classifiers use; without this the transpiler queues every
+    # pbReceiveItem as unknown-item.
+    ctx.items = det_ctx.items
     index = fork_index.load_or_build()
 
     map_texts: dict[int, str] = {}

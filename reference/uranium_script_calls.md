@@ -60,11 +60,11 @@ Rules:
 
 | Signature | Count | Why it's safe to drop |
 |---|---|---|
-| `pbCallBub` | 3456 | Cosmetic speech-bubble emote: sets `$talkingEvent`/`$Bubble`/`$Numbubbles` globals an emote routine reads later (`170__PSystem_Utilities.rb`). No game state. (Emote fidelity is an open follow-up — revisit mapping to a pokeemerald field emote later.) |
+| `pbCallBub` | 3456 | **Not an emote** (corrected 2026-07-05): sets `$talkingEvent`/`$Bubble`/`$Numbubbles` so the next N messages render in a floating FRLG-skinned *dialogue box* positioned near the talking event (`170__PSystem_Utilities.rb:2506`, consumed by `pbRepositionMessageWindow`, `055__SpriteWindow.rb:194`). Never touches a character sprite — the visual "!"/"?" bubbles are code-207 Show Animation, mapped separately (transpiler emote tier). The fork has no floating-textbox feature; text renders in the standard bottom box. STRIP is final — the old "revisit as a field emote" follow-up chased a mapping that doesn't apply. |
 | `set_fog2` | 82 | Fog-layer overlay (matches code 206 "Change Fog Opacity", already tagged Strip). No GBA analogue. |
 | `XInput.vibrate` | 54 | Gamepad rumble. No GBA analogue. |
 | `pbSEPlay` | 19 | Plays a sound effect (`048_AudioPlay_v17.rb`). Audio plumbing — same disposition as Play SE (249/250); where an SE is meaningful (a door/warp), its host action reproduces it. No game state. |
-| `pbPlayCry` | 26 | Plays a Pokémon's cry (`170__PSystem_Utilities.rb`). Cosmetic audio flavor; no game state. (Possible later fidelity: pokeemerald `playmoncry` — same status as the `pbCallBub` emote follow-up.) |
+| `pbPlayCry` | 26 | Plays a Pokémon's cry (`170__PSystem_Utilities.rb`). Cosmetic audio flavor; no game state. (Possible later fidelity: pokeemerald `playmoncry`.) |
 | `$scene.spriteset.addUserSprite` | 17 | Pushes a custom sprite onto the event scene's sprite list (`061_EventScene_v17.rb`). Cosmetic visual overlay; no game state. |
 | `$game_map.need_refresh` (`=true`) | 34 | RPG Maker tile/event refresh bookkeeping; meaningless on GBA. |
 | `pbRemoveDependency2` / `Kernel.pbRemoveDependency2` / `pbAddDependency2` / `Kernel.pbAddDependency2` | 107 | Follower/dependent-NPC bookkeeping (e.g. partner trailing the player). Cosmetic for conversion; no party/state effect. |

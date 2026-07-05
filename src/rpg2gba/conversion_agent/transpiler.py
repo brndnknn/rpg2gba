@@ -36,8 +36,8 @@ from dataclasses import dataclass, field
 
 from rpg2gba.conversion_agent.deterministic import (
     _label_name,
-    _translate_text,
     format_pory_string,
+    translate_text_codes,
 )
 from rpg2gba.conversion_agent.flag_registry import FlagRegistry, RegistryError
 from rpg2gba.pbs_converter._naming import to_constant
@@ -64,6 +64,8 @@ CONTROL_SWITCHES = 121
 CONTROL_VARIABLES = 122
 CONTROL_SELF_SWITCH = 123
 TRANSFER_PLAYER = 201
+SHOW_ANIMATION = 207
+CHANGE_PLAYER_TRANSPARENCY = 208
 SET_MOVE_ROUTE = 209
 WAIT_MOVE_COMPLETION = 210
 PREPARE_TRANSITION = 221
@@ -102,6 +104,40 @@ _SET_TEMP_SWITCH_RE = re.compile(r'^\s*setTempSwitchOn\(\s*"([A-Za-z0-9]+)"\s*\)
 _SET_SELF_SWITCH_RE = re.compile(
     r'^\s*pbSetSelfSwitch\(\s*(\d+)\s*,\s*"([A-Z])"\s*,\s*(true|false)\s*\)\s*$'
 )
+
+# Type-12 (script) condition idioms proven on the slice (grill D8/D10 read-
+# through, reference/slice1_queue_readthrough.md) — whole-string matches, same
+# discipline as the 355 idioms above: a longer expression around the call
+# falls to queue.
+
+# "Player is standing on this event's tile" — fires on reverse-warp arrival
+# (door idiom, Map032 EV3/5/6/7/17/23/36/37 page 2). Any other get_character(...)
+# form (a different index, a different predicate) still queues.
+_DOOR_ONEVENT_RE = re.compile(r"^\s*get_character\(0\)\.onEvent\?\s*$")
+
+# Kernel.pbReceiveItem(::PBItems::SYMBOL[, qty]) — give-item-with-fanfare branch
+# (Map032 EV27/EV9, Map049 EV18). Same family as deterministic.classify_ground_item's
+# pbItemBall idiom; qty is optional (bare RARECANDY/LAVACOOKIE vs. POKeBALL,5).
+_RECEIVE_ITEM_RE = re.compile(
+    r"^\s*(?:Kernel\.)?pbReceiveItem\(\s*::PBItems::(\w+)\s*(?:,\s*(\d+)\s*)?\)\s*$"
+)
+
+# Essentials wait-until-aligned break condition inside a code-112 loop (Map032
+# EV74/78/80): "loop { if $game_player.AXIS CMP N; break; else move-one-step;
+# wait }". Only >= / <= are the proven shape — anything else (>, <, ==, a
+# different receiver) stays outside the tier.
+_ALIGN_BREAK_RE = re.compile(r"^\s*\$game_player\.(x|y)\s*(>=|<=)\s*(-?\d+)\s*$")
+_ALIGN_NEGATED_CMP = {">=": "<", "<=": ">"}
+_ALIGN_AXIS_VAR = {"x": "VAR_TEMP_0", "y": "VAR_TEMP_1"}
+
+# Code-207 (Show Animation) emote tier: pokeemerald ships these as movement
+# tokens, not a runtime animation call (movement.inc, verified against pristine
+# HEAD — see _emit_show_animation). Only the two emote ids proven on the slice;
+# any other animation_id (e.g. the corpus's 104/18 flourishes) still queues.
+_EMOTE_MOVEMENT_LABELS = {
+    17: "Common_Movement_ExclamationMark",  # movement.inc:8 (EM Exclamation)
+    19: "Common_Movement_QuestionMark",  # movement.inc:4 (EM Interrogation)
+}
 
 # -- queue entries ------------------------------------------------------------
 
@@ -152,10 +188,17 @@ class TranspileContext:
     registry: FlagRegistry
     unhandled: list[QueueEntry] = field(default_factory=list)
 
+    # Essentials symbol -> ITEM_* constant (deterministic.Context.items shape —
+    # populated by whoever builds the context; empty means "not wired up",
+    # same disposition as an unresolved symbol: the give-item idiom queues).
+    items: dict[str, str] = field(default_factory=dict)
+
     # per-event cursor, set by transpile_event / transpile_common_event
     map_id: int = 0
     event_id: int | None = None
     event_name: str = ""
+    event_x: int | None = None
+    event_y: int | None = None
     page_no: int = 0
     common_event_id: int | None = None
 
@@ -543,19 +586,32 @@ class _PageEmitter:
         params = cmd.get("parameters", [])
 
         if isinstance(node, TextRun):
-            translated = _translate_text(node.text.strip())
-            if translated is None:
+            result = translate_text_codes(node.text.strip())
+            if result is None:
                 return [ctx.queue(
                     node.index, SHOW_TEXT,
                     f"dialogue with untranslated control code: {node.text[:120]!r}",
                 )]
-            return [f"msgbox({format_pory_string(translated)})"]
+            text = format_pory_string(result.text)
+            if result.autoclose:
+                # MSGBOX_AUTOCLOSE (engine/asm/macros/event.inc:2094) — a trailing
+                # \wtnp[n] closes the box itself; no player input needed.
+                return [f"msgbox({text}, MSGBOX_AUTOCLOSE)"]
+            if result.sign:
+                # Gate-validated sign idiom (deterministic._sign_block /
+                # classify_sign_dialogue): lock/msgbox/release, deliberately no
+                # faceplayer and NOT MSGBOX_SIGN.
+                return ["lock", f"msgbox({text})", "release"]
+            return [f"msgbox({text})"]
 
         if isinstance(node, IfNode):
             return self._emit_if(node)
         if isinstance(node, ChoiceNode):
             return self._emit_choice(node)
         if isinstance(node, LoopNode):
+            align = self._align_loop_lines(node)
+            if align is not None:
+                return align
             return [ctx.queue(
                 node.index, LOOP,
                 f"RMXP loop with {len(node.children)} children — no v1 mapping "
@@ -602,6 +658,10 @@ class _PageEmitter:
                 f"warp(MAP_URANIUM_{params[1]}, {params[2]}, {params[3]})",
                 "waitstate",
             ]
+        if code == SHOW_ANIMATION:
+            return self._emit_show_animation(node)
+        if code == CHANGE_PLAYER_TRANSPARENCY:
+            return self._emit_player_transparency(node)
         if code == SET_MOVE_ROUTE:
             return self._emit_move_route(node)
         if code == WAIT_MOVE_COMPLETION:
@@ -638,6 +698,12 @@ class _PageEmitter:
     # -- structured emitters -------------------------------------------------
 
     def _emit_if(self, node: IfNode) -> list[str]:
+        door = self._emit_door_idiom(node)
+        if door is not None:
+            return door
+        give_item = self._emit_give_item_idiom(node)
+        if give_item is not None:
+            return give_item
         expr = condition_expr(node.cmd.get("parameters", []), self.ctx)
         if expr is None:
             marker = self.ctx.queue(
@@ -652,6 +718,69 @@ class _PageEmitter:
         if node.otherwise is not None:
             lines.append("} else {")
             lines += [f"    {ln}" for ln in self.emit_nodes(node.otherwise)]
+        lines.append("}")
+        return lines
+
+    def _emit_door_idiom(self, node: IfNode) -> list[str] | None:
+        """``get_character(0).onEvent?`` — "player is standing on this event's
+        tile" (fires on reverse-warp arrival, Map032 EV3/5/6/7/17/23/36/37 page
+        2). ``VAR_TEMP_0``/``VAR_TEMP_1`` are the fork's generic scratch vars,
+        emitted literally like ``VAR_RESULT`` elsewhere — not registry-minted.
+        Returns ``None`` (caller falls through to the generic path, which
+        queues) for any other ``get_character(...)`` form or a common event
+        (no owning event = no static tile to compare against)."""
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        if not _DOOR_ONEVENT_RE.match(params[1]):
+            return None
+        ctx = self.ctx
+        if (
+            ctx.event_id is None
+            or not isinstance(ctx.event_x, int)
+            or not isinstance(ctx.event_y, int)
+        ):
+            return None
+        lines = [
+            "getplayerxy(VAR_TEMP_0, VAR_TEMP_1)",
+            f"if (var(VAR_TEMP_0) == {ctx.event_x} && var(VAR_TEMP_1) == {ctx.event_y}) {{",
+        ]
+        lines += [f"    {ln}" for ln in self.emit_nodes(node.then)]
+        if node.otherwise:
+            lines.append("} else {")
+            lines += [f"    {ln}" for ln in self.emit_nodes(node.otherwise)]
+        lines.append("}")
+        return lines
+
+    def _emit_give_item_idiom(self, node: IfNode) -> list[str] | None:
+        """``Kernel.pbReceiveItem(::PBItems::SYMBOL[, qty])`` give-item-with-
+        fanfare branch (Map032 EV27/EV9, Map049 EV18). Resolved through
+        ``ctx.items`` — the same Essentials-symbol -> ``ITEM_*`` table
+        ``deterministic._load_item_symbols``/``load_context`` builds for the
+        mart/ground-item classifiers (reused via the context, not re-derived
+        here). Returns ``None`` (falls through to the generic script-condition
+        queue) for any other script call or an unresolved item symbol."""
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        m = _RECEIVE_ITEM_RE.match(params[1])
+        if not m:
+            return None
+        symbol, qty = m.group(1), m.group(2)
+        const = self.ctx.items.get(symbol)
+        if const is None:
+            return None  # unresolved item symbol — fall through to the queue
+        give_line = f"giveitem({const}, {qty})" if qty else f"giveitem({const})"
+        then_lines = self.emit_nodes(node.then)
+        else_lines = self.emit_nodes(node.otherwise) if node.otherwise else []
+        if not then_lines and not else_lines:
+            # Both arms empty (Map049 EV18, user-approved) — no branch at all.
+            return [give_line]
+        lines = [give_line, "if (var(VAR_RESULT) != 0) {"]
+        lines += [f"    {ln}" for ln in then_lines]
+        if else_lines:
+            lines.append("} else {")
+            lines += [f"    {ln}" for ln in else_lines]
         lines.append("}")
         return lines
 
@@ -755,6 +884,113 @@ class _PageEmitter:
                     f"operand kind {operand_kind} (random/item/actor/…) unhandled",
                 ))
         return lines
+
+    def _align_loop_lines(self, node: LoopNode) -> list[str] | None:
+        """The Essentials wait-until-aligned idiom (Map032 EV74/78/80): a 112
+        loop whose body is exactly ``if $game_player.AXIS CMP N; break;`` (no
+        else) followed by a one-step player move + wait. Collapses to a
+        poryscript ``while`` on the NEGATED break condition. Any other 112
+        loop shape returns ``None`` (caller queues, as before)."""
+        # 509 rows are the editor's per-step display duplicates of the 209
+        # route (stripped everywhere else too) — invisible to the shape match.
+        children = [
+            c for c in node.children
+            if not (isinstance(c, Leaf) and c.cmd.get("code") == MOVE_COMMAND_ROW)
+        ]
+        if len(children) != 3:
+            return None
+        if_node, move_leaf, wait_leaf = children
+
+        if not isinstance(if_node, IfNode) or if_node.otherwise:
+            return None
+        if (
+            len(if_node.then) != 1
+            or not isinstance(if_node.then[0], Leaf)
+            or if_node.then[0].cmd.get("code") != BREAK_LOOP
+        ):
+            return None
+        cond_params = if_node.cmd.get("parameters", [])
+        if len(cond_params) < 2 or cond_params[0] != 12 or not isinstance(cond_params[1], str):
+            return None
+        m = _ALIGN_BREAK_RE.match(cond_params[1])
+        if not m:
+            return None
+        axis, cmp_op, n_str = m.groups()
+
+        if not isinstance(move_leaf, Leaf) or move_leaf.cmd.get("code") != SET_MOVE_ROUTE:
+            return None
+        move_params = move_leaf.cmd.get("parameters", [])
+        if len(move_params) < 2 or move_params[0] != -1 or not isinstance(move_params[1], dict):
+            return None  # only a player-target move is the proven shape
+        tokens = route_tokens(move_params[1])
+        if tokens is None or len(tokens) != 1:
+            return None  # anything but a single-step move is outside the tier
+
+        if not isinstance(wait_leaf, Leaf) or wait_leaf.cmd.get("code") != WAIT_MOVE_COMPLETION:
+            return None
+
+        var_name = _ALIGN_AXIS_VAR[axis]
+        negated = _ALIGN_NEGATED_CMP[cmp_op]
+        return [
+            "getplayerxy(VAR_TEMP_0, VAR_TEMP_1)",
+            f"while (var({var_name}) {negated} {n_str}) {{",
+            f"    applymovement(OBJ_EVENT_ID_PLAYER, [{tokens[0]}])",
+            "    waitmovement(0)",
+            "    getplayerxy(VAR_TEMP_0, VAR_TEMP_1)",
+            "}",
+        ]
+
+    def _emit_show_animation(self, node: Node) -> list[str]:
+        """RMXP 207 (Show Animation): the emote tier only — pokeemerald ships
+        exclamation/question emotes as movement tokens
+        (``engine/data/scripts/movement.inc``), not a runtime animation call,
+        so the mapping is an ``applymovement`` + ``waitmovement`` pair, same
+        shape as a 209 move route. Any other animation id (the corpus also
+        has 104/18 flourishes with no native analog) still queues."""
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or not all(isinstance(v, int) for v in params[:2]):
+            return [self.ctx.queue(node.index, SHOW_ANIMATION, "bad 207 params")]
+        target_id, animation_id = params[0], params[1]
+        label = _EMOTE_MOVEMENT_LABELS.get(animation_id)
+        if label is None:
+            return [self.ctx.queue(
+                node.index, SHOW_ANIMATION,
+                f"show animation id {animation_id} on target {target_id} — "
+                f"no emote mapping in the v1 tier",
+            )]
+        if target_id == -1:
+            who = "OBJ_EVENT_ID_PLAYER"
+        elif target_id == 0:
+            # Self-target animation — no clean self-reference in v1 (not
+            # exercised on the slice); queue rather than guess.
+            return [self.ctx.queue(
+                node.index, SHOW_ANIMATION,
+                "show animation on self (target 0) — no v1 self-reference",
+            )]
+        else:
+            # task-4: local id = RMXP event id (same assumption _emit_move_route
+            # makes for a 209 target — pokeemerald localids map 1:1 in our
+            # porymap export).
+            who = str(target_id)
+        return [f"applymovement({who}, {label})", "waitmovement(0)"]
+
+    def _emit_player_transparency(self, node: Node) -> list[str]:
+        """RMXP 208 (Change Player Transparency) always targets the player
+        (Essentials ``$game_player.transparent = (params[0] == 0)``), unlike
+        209 which can target self/other events. ``set_invisible``/
+        ``set_visible`` are the same token spellings ``route_tokens`` already
+        emits for a 209's opacity step (42) — reused literally, not
+        reinvented."""
+        params = node.cmd.get("parameters", [])
+        if not params or params[0] not in (0, 1):
+            return [self.ctx.queue(
+                node.index, CHANGE_PLAYER_TRANSPARENCY, "bad 208 params",
+            )]
+        token = "set_invisible" if params[0] == 0 else "set_visible"
+        return [
+            f"applymovement(OBJ_EVENT_ID_PLAYER, [{token}])",
+            "waitmovement(0)",
+        ]
 
     def _emit_move_route(self, node: Node) -> list[str]:
         params = node.cmd.get("parameters", [])
@@ -874,6 +1110,8 @@ def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> Transpil
     ctx.map_id = map_id
     ctx.event_id = event.get("id")
     ctx.event_name = event.get("name", "")
+    ctx.event_x = event.get("x")
+    ctx.event_y = event.get("y")
     ctx.common_event_id = None
     before = len(ctx.unhandled)
 
@@ -915,6 +1153,8 @@ def transpile_common_event(ce: dict, ctx: TranspileContext) -> TranspiledEvent:
     ctx.map_id = 0
     ctx.event_id = None
     ctx.event_name = ce.get("name", "")
+    ctx.event_x = None
+    ctx.event_y = None
     ctx.common_event_id = ce_id
     ctx.page_no = 1
     before = len(ctx.unhandled)

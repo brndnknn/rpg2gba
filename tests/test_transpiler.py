@@ -499,12 +499,15 @@ def test_script_unknown_call_queues_with_text(ctx: T.TranspileContext) -> None:
 
 
 def test_text_with_control_code_queues(ctx: T.TranspileContext) -> None:
-    res = run_event(ctx, [[cmd(T.SHOW_TEXT, ["wait\\."])]], trigger=1)
+    # \r (deferred colour shorthand) and \v[n] (variable interpolation) are the
+    # codes still outside the approved 2026-07-05 mapping table; \. and trailing
+    # \wtnp[n] now translate (tests/test_text_codes.py, test_transpiler_idioms.py).
+    res = run_event(ctx, [[cmd(T.SHOW_TEXT, ["wait\\r for it"])]], trigger=1)
     assert len(res.unhandled) == 1
     assert res.unhandled[0].command_code == T.SHOW_TEXT
 
     ctx2 = T.TranspileContext(registry=ctx.registry)
-    res2 = run_event(ctx2, [[cmd(T.SHOW_TEXT, ["\\wtnp[24]"])]], trigger=1)
+    res2 = run_event(ctx2, [[cmd(T.SHOW_TEXT, ["Go! \\v[3]!"])]], trigger=1)
     assert len(res2.unhandled) == 1
 
 

@@ -29,6 +29,16 @@ Resolved during the read-through itself (already in the transpiler):
 
 ## Idiom — build agent extends, user reviews (D8: ≥2 occurrences)
 
+> **REVIEWED + IMPLEMENTED 2026-07-05.** All five clusters walked with the user
+> and approved (incl. `\c[n]` DROP, `{PAUSE}` calibrate-by-eye at boot gate,
+> M49 EV18 vestigial-branch strip, pbCallBub STRIP-final). Built as
+> `deterministic.translate_text_codes` + four transpiler emissions (door
+> `onEvent?`, 208 transparency, `pbReceiveItem` gift, 112 align-loops, 207
+> emote tier ids 17/19 via `reference/animation_names.json`). Slice queue
+> 186→132; remaining = native bucket, hand bucket, CE defers. Task-4
+> constraint recorded: 207 emissions target the literal RMXP event id, so
+> object-event local ids must equal RMXP event ids.
+
 | Entries | Cluster | Direction |
 |---|---|---|
 | 26× code 101 dialogue | Essentials text codes `\wt[n]`, `\.`, `\c[n]`, `\v[3]`, `\wtnp[n]`, `\fs`, `\sign` + quoted signs | grow `_translate_text`: `\wt[n]`/`\.` → `{PAUSE n}`, `\c[n]` → `{COLOR}`, `\v[n]` → buffered string; `\wtnp`/`\fs` likely drop. One mapping table, user reviews. Biggest single win (26 slice / 627 corpus). |
