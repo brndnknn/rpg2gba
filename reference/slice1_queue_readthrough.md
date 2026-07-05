@@ -34,7 +34,7 @@ Resolved during the read-through itself (already in the transpiler):
 | 26× code 101 dialogue | Essentials text codes `\wt[n]`, `\.`, `\c[n]`, `\v[3]`, `\wtnp[n]`, `\fs`, `\sign` + quoted signs | grow `_translate_text`: `\wt[n]`/`\.` → `{PAUSE n}`, `\c[n]` → `{COLOR}`, `\v[n]` → buffered string; `\wtnp`/`\fs` likely drop. One mapping table, user reviews. Biggest single win (26 slice / 627 corpus). |
 | 8× `get_character(0).onEvent?` conditionals + 10× code 208 transparent-flag (M32 EV3/5/6/7/17 + EV23/36/37) | one shared NPC-visibility pattern | investigate once, resolve ~18 entries; likely page-condition/visibility translation or strip |
 | 3× `Kernel.pbReceiveItem(...)` conditionals (M32 EV27/EV9, M49 EV18) | give-item-with-fanfare branch | same family as the validated `pbItemBall` classifier; 40× corpus |
-| 6× code 207 show-animation | emotes (exclamation bubble etc.) | pokeemerald emotes are movement tokens (`emote_exclamation_mark`); Phase-8 emote note already on file |
+| 6× code 207 show-animation | emotes (exclamation bubble etc.) | pokeemerald emotes are movement tokens (`emote_exclamation_mark`/`_question_mark`/`_heart`, movement.inc:93-95) — map emote-shaped animation ids now (supersedes novel_cluster_review.md's "Phase 8 polish" for these); only non-emote 207 animations (flourishes with no native analog) stay queued for Phase-8 |
 | 6× code 112 loops (M32 EV74/78/80) | Essentials wait-until idiom (`loop { if …; break; wait }`) | inspect the three events once; likely collapses to `waitmovement`/`delay` or a `goto` pair |
 
 ## Hand — story logic (user or LLM tail, user's discretion)
