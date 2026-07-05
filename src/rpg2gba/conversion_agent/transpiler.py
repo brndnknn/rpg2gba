@@ -64,6 +64,7 @@ CONTROL_SWITCHES = 121
 CONTROL_VARIABLES = 122
 CONTROL_SELF_SWITCH = 123
 TRANSFER_PLAYER = 201
+CHANGE_MAP_SETTINGS = 204
 SHOW_ANIMATION = 207
 CHANGE_PLAYER_TRANSPARENCY = 208
 SET_MOVE_ROUTE = 209
@@ -166,6 +167,77 @@ _EMOTE_MOVEMENT_LABELS = {
     17: "Common_Movement_ExclamationMark",  # movement.inc:8 (EM Exclamation)
     19: "Common_Movement_QuestionMark",  # movement.inc:4 (EM Interrogation)
 }
+
+# -- native bucket idioms (queue-clearing pass, 2026-07-05 slice review) ------
+# Whole-shape matches proven against the real slice corpus (Map032/048/049) —
+# same discipline as the 355/111 idioms above: a longer/different string or
+# route falls through to queue, never guessed.
+
+# Kernel.pbRockSmash — Essentials' RMXP-side rock-smash choreography (break
+# animation + erase self + Kernel.pbRockSmashRandomEncounter + self-switch A
+# on), replaced wholesale by the fork's own field-move script
+# (engine/data/scripts/field_move_scripts.inc:64 EventScript_RockSmash —
+# lockall, checkfieldmove FIELD_MOVE_ROCK_SMASH, yes/no prompt,
+# dofieldeffect FLDEFF_USE_ROCK_SMASH, removeobject VAR_LAST_TALKED, then
+# `special RockSmashWildEncounter`; every path ends in `end`/`releaseall`,
+# never returns to the caller). Proven on Map032 EV14/15/33: the conditional
+# IS the page's substantive body (nothing precedes/follows it), then-arm 14
+# nodes / else-arm 1 node (a nested isRockSmashSoftlocked? check) — both
+# dropped without being walked, so nothing inside them can leak a queue
+# entry. Corpus grep (Map033/035/066/107/118) shows this condition string
+# always pairs with the same Kernel.pbRockSmashRandomEncounter choreography,
+# so the match is shape-only, not map/event-scoped — Kernel.pbRockSmash's
+# real Ruby-side gate logic is what matters; the RMXP arms are visual
+# choreography for the same interaction regardless of map.
+_ROCK_SMASH_RE = re.compile(r"^\s*(?:Kernel\.)?pbRockSmash\s*$")
+
+# pbCaveEntrance — Essentials' cave-entry fade/step-in call (Map032 EV23/36/
+# 37 page 1; 48 corpus occurrences total, always bare — no argument list ever
+# observed, confirmed by corpus grep). Sits between a 223/106 fade-to-black
+# and the page's own 201 transfer (which already emits a native
+# `warp(...)` + `waitstate` — the GBA warp performs its own map-transition
+# fade), so this call is pre-warp RMXP choreography the native warp subsumes.
+# Breadcrumb strip, no queue.
+_CAVE_ENTRANCE_STRIP_RE = re.compile(r"^\s*(?:Kernel\.)?pbCaveEntrance\s*$")
+
+# Code-204 (Change Map Settings) subtype 1 = fog (command_204 in
+# reference/scripts_dump/041_Interpreter.rb:1257 — the params[0]==1 branch
+# sets fog_name/hue/opacity/blend_type/zoom/sx/sy). Exact params observed on
+# Map032 EV23/36/37 page 1, immediately after the native warp: a dim fog
+# overlay for the cave interior. The fork has no fog layer tied to a map
+# transition (no fog opcode in asm/macros/event.inc) and this fog belongs to
+# the same pre/post-warp RMXP choreography the native warp already subsumes.
+# Exact tuple match only — any other subtype/name/value still queues.
+_CAVE_FOG_204_PARAMS = (1, "004-Shade02", 0, 60, 0, 250, 0, 0)
+
+# pbTrainerPC — Map048 EV4, bare call (1 corpus occurrence). Fork native:
+# EventScript_PC (engine/data/scripts/pc.inc:1) — the generic non-bedroom PC
+# every other building's PC metatile resolves to
+# (engine/src/field_control_avatar.c:496 `return EventScript_PC;`). Ends the
+# script itself (goto-chains through EventScript_PCMainMenu/
+# EventScript_AccessPC to a releaseall/end or plain end — verified, never
+# returns to the caller), so `goto` is correct here, not `call`.
+_TRAINER_PC_RE = re.compile(r"^\s*(?:Kernel\.)?pbTrainerPC\s*$")
+
+# pbShowMap — Map048 EV7/8, bare call (18 corpus occurrences, all bare — no
+# argument ever observed). Fork native: `special FieldShowRegionMap`
+# (engine/data/specials.inc:274 `def_special FieldShowRegionMap,
+# waitstate=1` — the vanilla usage at engine/data/event_scripts.s:1250
+# EventScript_RegionMap confirms no explicit poryscript-level `waitstate`
+# follows the special call: `waitstate=1` makes the ASSEMBLER'S `special`
+# macro (engine/asm/macros/event.inc:293-298) auto-emit an implicit
+# waitstate; an explicit one here would double up and trip the "implicit
+# waitstate followed by waitstate" assembler warning). The page's own
+# preceding dialogue ("It's a map of West Tandor.") is left in place — only
+# the call itself is replaced, not the whole page.
+_SHOW_MAP_RE = re.compile(r"^\s*(?:Kernel\.)?pbShowMap\s*$")
+
+# $PokemonGlobal.runningShoes=true — Map049 EV1, exact literal (the `=false`
+# variant seen elsewhere in the corpus, e.g. Map137/188/195, is out of scope
+# here — still queues). Native: FLAG_SYS_B_DASH
+# (engine/include/constants/flags.h:1463, "RECEIVED Running Shoes") — the
+# vanilla b-dash unlock flag.
+_RUNNING_SHOES_ON_RE = re.compile(r"^\s*\$PokemonGlobal\.runningShoes\s*=\s*true\s*$")
 
 # -- queue entries ------------------------------------------------------------
 
@@ -572,6 +644,25 @@ def route_tokens(route: dict) -> list[str] | None:
     return tokens
 
 
+def _is_cave_step_forward_route(route: dict) -> bool:
+    """RMXP move-code 12 ("Step Forward", relative to current facing) has no
+    fork token — walk_down/up/left/right etc. are all absolute directions
+    (verified against pristine HEAD: no relative-to-facing action in
+    ``asm/macros/movement.inc``). Matches ONLY a route consisting of exactly
+    one non-terminator step, that step code 12, no repeat — the "player
+    steps off the door tile after a reverse-warp arrival" idiom (Map032
+    EV23/36/37 page 2, part of the door-onEvent idiom's then-arm; corpus-wide
+    35 occurrences, all target -1/player, all this exact one-step shape —
+    confirmed by corpus scan, never mixed with other steps). A longer route
+    that happens to contain a 12 anywhere still falls through to
+    ``route_tokens`` (queues), matching the door idiom's existing disposition
+    for anything outside this narrow shape."""
+    if route.get("repeat"):
+        return False
+    steps = [s for s in route.get("list", []) if s.get("code", 0) != 0]
+    return len(steps) == 1 and steps[0].get("code") == 12
+
+
 def _describe_route(route: dict, target: object) -> str:
     codes = [s.get("code", 0) for s in route.get("list", []) if s.get("code", 0) != 0]
     rpt = " repeat" if route.get("repeat") else ""
@@ -686,6 +777,8 @@ class _PageEmitter:
                 f"warp(MAP_URANIUM_{params[1]}, {params[2]}, {params[3]})",
                 "waitstate",
             ]
+        if code == CHANGE_MAP_SETTINGS:
+            return self._emit_change_map_settings(node)
         if code == SHOW_ANIMATION:
             return self._emit_show_animation(node)
         if code == CHANGE_PLAYER_TRANSPARENCY:
@@ -735,6 +828,9 @@ class _PageEmitter:
         guard = self._emit_unsatisfiable_numeric_guard(node)
         if guard is not None:
             return guard
+        rock_smash = self._emit_rock_smash_idiom(node)
+        if rock_smash is not None:
+            return rock_smash
         expr = condition_expr(node.cmd.get("parameters", []), self.ctx)
         if expr is None:
             marker = self.ctx.queue(
@@ -839,6 +935,29 @@ class _PageEmitter:
         )
         else_lines = self.emit_nodes(node.otherwise) if node.otherwise else []
         return [breadcrumb, *else_lines]
+
+    def _emit_rock_smash_idiom(self, node: IfNode) -> list[str] | None:
+        """``Kernel.pbRockSmash`` — see ``_ROCK_SMASH_RE`` for the fork
+        evidence (field_move_scripts.inc:64 EventScript_RockSmash). The
+        native script replaces the RMXP choreography end to end (break
+        animation, encounter roll, self-switch hide) and never returns, so
+        BOTH arms are dropped without being walked — neither is emitted, and
+        nothing inside them can produce a stray queue entry. The native
+        script requires the interacting object to be VAR_LAST_TALKED, which
+        is true for our per-page object scripts (the page is only ever
+        entered via the object's own action-button/touch trigger). Returns
+        ``None`` (falls through to the generic script-condition queue) for
+        any other script condition."""
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        if not _ROCK_SMASH_RE.match(params[1]):
+            return None
+        breadcrumb = (
+            "# rock smash: native EventScript_RockSmash supersedes RMXP "
+            "choreography (both arms dropped, slice1 2026-07-05)"
+        )
+        return [breadcrumb, "goto EventScript_RockSmash"]
 
     def _emit_choice(self, node: ChoiceNode) -> list[str]:
         params = node.cmd.get("parameters", [])
@@ -1054,6 +1173,18 @@ class _PageEmitter:
             self._last_route_ok = False
             return [self.ctx.queue(node.index, SET_MOVE_ROUTE, "malformed 209 params")]
         target, route = params[0], params[1]
+        if target == -1 and _is_cave_step_forward_route(route):
+            # code-12 (Step Forward, relative-to-facing) on the player — see
+            # module-level comment on _is_cave_step_forward_route. No token
+            # to emit (facing-relative movement has no fork equivalent), and
+            # the paired 210 must be neutralized too — same disposition as a
+            # queued route (WAIT_MOVE_COMPLETION checks _last_route_ok).
+            self._last_route_ok = False
+            return [
+                "# cave transition: player step-forward route (code 12) "
+                "dropped — no facing-relative movement token, subsumed by "
+                "native warp fade"
+            ]
         tokens = route_tokens(route)
         if tokens is None or not tokens:
             self._last_route_ok = False
@@ -1093,6 +1224,21 @@ class _PageEmitter:
             f"screen tone {tone!r} has no fadescreen mapping",
         )]
 
+    def _emit_change_map_settings(self, node: Node) -> list[str]:
+        """Code-204 (Change Map Settings) — see ``_CAVE_FOG_204_PARAMS`` for
+        the fork/corpus evidence. Only the exact cave-entrance fog tuple
+        strips; any other subtype or value queues (unchanged disposition)."""
+        params = node.cmd.get("parameters", [])
+        if tuple(params) == _CAVE_FOG_204_PARAMS:
+            return [
+                "# cave transition: fog settings (004-Shade02) dropped — "
+                "post-warp cosmetic, no GBA fog layer (code 204)"
+            ]
+        return [self.ctx.queue(
+            node.index, CHANGE_MAP_SETTINGS,
+            "command 204 outside the v1 deterministic tier",
+        )]
+
     def _emit_script_call(self, node: Node) -> list[str]:
         # v1: the STRIP set from the validated ledger produces nothing; two
         # slice-proven idioms emit deterministically; everything else queues
@@ -1107,6 +1253,26 @@ class _PageEmitter:
         # the GBA (see _PHONE_REGISTER_NPC_STRIP_RE). Breadcrumb, no queue.
         if _PHONE_REGISTER_NPC_STRIP_RE.match(text):
             return ["# phone: pbPhoneRegisterNPC stripped (slice1)"]
+
+        # pbCaveEntrance — pre-warp fade choreography subsumed by the native
+        # warp (see _CAVE_ENTRANCE_STRIP_RE). Breadcrumb, no queue.
+        if _CAVE_ENTRANCE_STRIP_RE.match(text):
+            return ["# cave transition: pbCaveEntrance subsumed by native warp fade"]
+
+        # pbTrainerPC — the generic non-bedroom PC (see _TRAINER_PC_RE);
+        # EventScript_PC ends the script itself, so `goto` (not `call`).
+        if _TRAINER_PC_RE.match(text):
+            return ["goto EventScript_PC"]
+
+        # pbShowMap — the wall/region-map special (see _SHOW_MAP_RE). Only
+        # the call is replaced; any preceding dialogue on the page stays.
+        if _SHOW_MAP_RE.match(text):
+            return ["special(FieldShowRegionMap)"]
+
+        # $PokemonGlobal.runningShoes=true — b-dash unlock (see
+        # _RUNNING_SHOES_ON_RE).
+        if _RUNNING_SHOES_ON_RE.match(text):
+            return ["setflag(FLAG_SYS_B_DASH)"]
 
         # setTempSwitchOn("A") — set this event's temp switch (344× corpus).
         m = _SET_TEMP_SWITCH_RE.match(text)
