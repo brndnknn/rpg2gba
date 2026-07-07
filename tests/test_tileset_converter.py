@@ -871,6 +871,101 @@ def test_build_object_events_visible_graphic_requires_npc_gfx() -> None:
         mw.build_object_events(map_json, consts, _SLICE, npc_gfx={})  # name unmapped
 
 
+def test_build_object_events_rock_flags_assigned_ascending() -> None:
+    """smashable_rock-traited events get FLAG_TEMP_11/12/13.. in ascending
+    event-id order, independent of the events' list order or (x, y)."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(49, "Moki Town Player's House 1F")
+    map_json = {
+        "map_id": 49,
+        "events": [
+            _event(9, 1, 1, [_page(name="HGSS_000")]),
+            _event(3, 2, 2, [_page(name="HGSS_005")]),
+            _event(5, 3, 3, [_page(name="HGSS_000")]),  # untraited
+        ],
+    }
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
+        event_traits={3: ["smashable_rock"], 9: ["smashable_rock"]},
+    )
+    by_xy = {(o.x, o.y): o for o in result.object_events}
+    assert by_xy[(2, 2)].flag == "FLAG_TEMP_11"  # EV003 (lower id) assigned first
+    assert by_xy[(1, 1)].flag == "FLAG_TEMP_12"  # EV009 second
+    assert by_xy[(3, 3)].flag == "0"  # untraited event keeps the default
+
+
+def test_build_object_events_no_traits_keeps_default_flag() -> None:
+    """event_traits=None (legacy) leaves every ObjectEvent.flag at its "0"
+    default — byte-identical to pre-trait behavior."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(49, "Moki Town Player's House 1F")
+    map_json = {
+        "map_id": 49,
+        "events": [_event(1, 4, 4, [_page(name="HGSS_000")])],
+    }
+    result = mw.build_object_events(map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture())
+    assert result.object_events[0].flag == "0"
+    assert result.object_events[0].to_dict()["flag"] == "0"
+
+
+def test_build_object_events_rock_flags_capacity_exceeded() -> None:
+    """More than 15 (FLAG_TEMP_11..FLAG_TEMP_1F) smashable_rock events on one map
+    is a fail-loud error, not silent flag reuse/overflow."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(49, "Moki Town Player's House 1F")
+    map_json = {
+        "map_id": 49,
+        "events": [_event(i, i, 0, [_page(name="HGSS_000")]) for i in range(1, 17)],
+    }
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
+            event_traits={i: ["smashable_rock"] for i in range(1, 17)},
+        )
+
+
+def test_build_object_events_unknown_trait_fails_loud() -> None:
+    """A trait string other than "smashable_rock" is forward-compat-unknown ->
+    fail loud rather than silently ignored."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(49, "Moki Town Player's House 1F")
+    map_json = {
+        "map_id": 49,
+        "events": [_event(1, 4, 4, [_page(name="HGSS_000")])],
+    }
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
+            event_traits={1: ["some_future_trait"]},
+        )
+
+
+def test_build_object_events_stale_trait_fails_loud() -> None:
+    """A traits sidecar entry for an event id that resolves to no emitted
+    object_event (nonexistent id, or dropped by boot-page classification) is a
+    stale-sidecar error, not a silent no-op."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(49, "Moki Town Player's House 1F")
+    map_json = {
+        "map_id": 49,
+        "events": [_event(1, 4, 4, [_page(name="HGSS_000")])],
+    }
+    # id 999 doesn't correspond to any event on the map at all.
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
+            event_traits={999: ["smashable_rock"]},
+        )
+    # id 2 exists on the map but is dropped (no boot-active page) -> also an error.
+    map_json_dropped = {
+        "map_id": 49,
+        "events": [
+            _event(1, 4, 4, [_page(name="HGSS_000")]),
+            _event(2, 5, 5, [_page(cond=_sw_cond(1))]),  # only page gated off at boot
+        ],
+    }
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json_dropped, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
+            event_traits={2: ["smashable_rock"]},
+        )
+
+
 def test_write_local_id_tables_pinned_shape(tmp_path: Path) -> None:
     """write_local_id_tables emits one Map{id:03d}.json per map with exactly the
     pinned {decimal-string RMXP id: int local id} shape (the local_id_remap.py

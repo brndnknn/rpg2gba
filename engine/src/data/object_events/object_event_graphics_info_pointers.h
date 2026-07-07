@@ -412,7 +412,11 @@ const struct ObjectEventGraphicsInfo *const gObjectEventGraphicsInfoPointers[NUM
     // END URANIUM PATHFINDER SLICE
     [OBJ_EVENT_GFX_BRENDAN_MACH_BIKE] =        &gObjectEventGraphicsInfo_BrendanMachBike,
     [OBJ_EVENT_GFX_BRENDAN_SURFING] =          &gObjectEventGraphicsInfo_BrendanSurfing,
-    [OBJ_EVENT_GFX_BRENDAN_FIELD_MOVE] =       &gObjectEventGraphicsInfo_BrendanFieldMove,
+    // BEGIN URANIUM PATHFINDER SLICE — field-move (rock smash etc.) pose: Uranium hero art with a
+    // 1-tick terminating anim (Uranium has no field-move pose; a looping anim here would softlock
+    // the held-movement wait in fldeff). Decls stub #defines this back to BrendanFieldMove unstaged.
+    [OBJ_EVENT_GFX_BRENDAN_FIELD_MOVE] =       &gObjectEventGraphicsInfo_UraniumPlayerFieldMove,
+    // END URANIUM PATHFINDER SLICE
     [OBJ_EVENT_GFX_QUINTY_PLUMP] =             &gObjectEventGraphicsInfo_QuintyPlump,
     [OBJ_EVENT_GFX_NINJA_BOY] =                &gObjectEventGraphicsInfo_NinjaBoy,
     [OBJ_EVENT_GFX_TWIN] =                     &gObjectEventGraphicsInfo_Twin,

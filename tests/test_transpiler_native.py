@@ -119,6 +119,20 @@ def test_rock_smash_near_miss_still_queues(ctx: T.TranspileContext) -> None:
     assert "goto(EventScript_RockSmash)" not in res.text
 
 
+def test_rock_smash_records_smashable_rock_trait(ctx: T.TranspileContext) -> None:
+    """Upstream signal for the downstream FLAG_TEMP_* respawn-flag fix
+    (porymap ships smashable rocks with a null "flag": "0", so the fix needs
+    to know which (map, event) pairs are rocks — see ctx.traits)."""
+    commands = _branch("Kernel.pbRockSmash", [cmd(T.CONTROL_SELF_SWITCH, ["A", 0])])
+    run_event(ctx, [commands], map_id=32, event_id=14)
+    assert ctx.traits == {(32, 14): {"smashable_rock"}}
+
+
+def test_non_rock_event_records_no_trait(ctx: T.TranspileContext) -> None:
+    run_event(ctx, [[cmd(T.WAIT, [1])]], map_id=32, event_id=14)
+    assert ctx.traits == {}
+
+
 # ----------------------------------------------------------------------------
 # Shape 2a — pbCaveEntrance script-call strip
 # ----------------------------------------------------------------------------

@@ -78,6 +78,22 @@ DROP_PARALLEL = "parallel"  # blank graphic, parallel trigger — map-script ter
 DROP_DOOR_SHEET = "door_sheet"  # visible graphic is a door-tile sheet (stripped)
 DROP_OPACITY0 = "opacity0"  # invisible (opacity 0) graphic, non-touch trigger
 
+# Object-event traits (upstream transpile-driver sidecar, `Map{id:03d}.traits.json`
+# — see stage_slice_scripts.py). TRAIT_SMASHABLE_ROCK is the only trait defined
+# today; any other string is a fail-loud forward-compat error (CLAUDE.md §4.5).
+TRAIT_SMASHABLE_ROCK = "smashable_rock"
+KNOWN_TRAITS = {TRAIT_SMASHABLE_ROCK}
+
+# Vanilla obstacle-flag convention (event_object_movement.c SetHideObstacleFlag /
+# GraniteCave_B2F/map.json): smashable rocks get FLAG_TEMP_11..FLAG_TEMP_1F
+# assigned sequentially per map, ascending event-id order. `removeobject` does
+# FlagSet(flagId) and respawn is gated on !FlagGet(flagId); temp flags auto-clear
+# on map re-entry (rock re-forms per visit, matching RMXP behavior) — flag "0" is
+# a null sentinel (FlagGet always FALSE) and would respawn the rock immediately.
+ROCK_FLAG_FIRST = 0x11
+ROCK_FLAG_LAST = 0x1F
+ROCK_FLAG_CAPACITY = ROCK_FLAG_LAST - ROCK_FLAG_FIRST + 1  # 15
+
 
 def page_label(map_id: int, event_id: int, page_num: int) -> str:
     """The Phase-4 .pory block label for a page body (1-based page_num)."""
@@ -408,6 +424,32 @@ def _resolve_script(
     return script, None
 
 
+def _validate_event_traits(event_traits: dict[int, list[str]], uid: int) -> None:
+    """Fail loud on any trait string outside `KNOWN_TRAITS` (forward-compat)."""
+    for eid, traits in event_traits.items():
+        for trait in traits:
+            if trait not in KNOWN_TRAITS:
+                raise ValueError(
+                    f"map {uid} EV{eid:03d}: unknown trait {trait!r} in traits "
+                    f"sidecar (known traits: {sorted(KNOWN_TRAITS)})"
+                )
+
+
+def _assign_rock_flags(event_traits: dict[int, list[str]], uid: int) -> dict[int, str]:
+    """FLAG_TEMP_11.._1F, assigned to `smashable_rock` events in ascending
+    event-id order. Raises if a map has more traited rocks than the range holds."""
+    rock_ids = sorted(eid for eid, traits in event_traits.items() if TRAIT_SMASHABLE_ROCK in traits)
+    if len(rock_ids) > ROCK_FLAG_CAPACITY:
+        raise ValueError(
+            f"map {uid}: {len(rock_ids)} smashable_rock events exceed the "
+            f"FLAG_TEMP_{ROCK_FLAG_FIRST:X}..FLAG_TEMP_{ROCK_FLAG_LAST:X} capacity "
+            f"({ROCK_FLAG_CAPACITY})"
+        )
+    return {
+        eid: f"FLAG_TEMP_{ROCK_FLAG_FIRST + i:X}" for i, eid in enumerate(rock_ids)
+    }
+
+
 def build_object_events(
     map_json: dict,
     consts: MapConstants,
@@ -415,6 +457,7 @@ def build_object_events(
     *,
     pory_labels: set[str] | None = None,
     npc_gfx: dict[str, str] | None = None,
+    event_traits: dict[int, list[str]] | None = None,
 ) -> ObjectBuildResult:
     """Place every non-warp, non-skipped event per its BOOT-STATE page (RMXP shows
     the highest-index page whose condition holds at boot; `npc_gfx.select_boot_page`).
@@ -442,10 +485,22 @@ def build_object_events(
     Every emission path resolves its script label via `_resolve_script`. Returns
     an `ObjectBuildResult`: the placed events, dispatcher bodies, the local-id
     table (RMXP event id -> 1-based `object_events` position, the id porymap
-    actually compiles), and the drop report (no silent drops)."""
+    actually compiles), and the drop report (no silent drops).
+
+    `event_traits` (event id -> trait list, from the transpile driver's
+    `Map{id:03d}.traits.json` sidecar) assigns `smashable_rock` events sequential
+    FLAG_TEMP_11.._1F visibility flags (see ROCK_FLAG_* / CLAUDE.md §4.5 — >15
+    such events, an unknown trait string, or a trait on an event id that resolves
+    to no emitted object_event all fail loud). `None` is legacy behavior: every
+    `ObjectEvent.flag` stays the "0" default."""
     objects, _, _ = classify_map_events(map_json, slice_ids)
     uid = consts.uranium_id
     result = ObjectBuildResult()
+
+    rock_flags: dict[int, str] = {}
+    if event_traits is not None:
+        _validate_event_traits(event_traits, uid)
+        rock_flags = _assign_rock_flags(event_traits, uid)
 
     def _drop(event_id: int, reason: str) -> None:
         result.drops.append((event_id, reason))
@@ -519,9 +574,21 @@ def build_object_events(
                 ObjectEvent(
                     x=event["x"], y=event["y"], graphics_id=graphics_id,
                     script=script, movement_type=movement_type,
+                    flag=rock_flags.get(eid, "0"),
                 )
             )
             result.local_id_map[str(eid)] = len(result.object_events)
+
+    if event_traits is not None:
+        emitted_ids = {int(k) for k in result.local_id_map}
+        for eid in event_traits:
+            if eid not in emitted_ids:
+                raise ValueError(
+                    f"map {uid} EV{eid:03d}: traits sidecar references this event "
+                    f"but no object event was emitted for it (stale sidecar, or "
+                    f"the event was dropped by boot-page classification — "
+                    f"re-run the transpile driver)"
+                )
 
     return result
 
@@ -648,6 +715,7 @@ def build_slice_maps(
     pory_labels: set[str] | None = None,
     npc_gfx: dict[str, str] | None = None,
     local_id_dir: Path | None = None,
+    event_traits: dict[int, dict[int, list[str]]] | None = None,
 ) -> dict[int, set[tuple[int, int]]]:
     """Assemble map.json + dispatcher .pory for every slice map. Returns the per-map
     warp-source coords (S3 walkable-overrides) so S8 can force those cells walkable.
@@ -657,7 +725,12 @@ def build_slice_maps(
     is forwarded to `build_object_events`; omit it only for callers that don't
     place any visible NPC (a visible graphic with no map raises loud). When
     `local_id_dir` is given, the per-map RMXP-id -> porymap-local-id tables are
-    also written there via `write_local_id_tables` (the pinned local-id contract)."""
+    also written there via `write_local_id_tables` (the pinned local-id contract).
+
+    `event_traits` is keyed by Uranium map id -> that map's `build_object_events`
+    `event_traits` dict (event id -> trait list; see `Map{id:03d}.traits.json`,
+    stage_slice_scripts.py). A map absent from the outer dict, or `event_traits`
+    itself being `None`, is legacy behavior for that map (all flags "0")."""
     slice_set = set(slice_ids)
     maps = {
         uid: json.loads((maps_dir / f"Map{uid:03d}.json").read_text(encoding="utf-8"))
@@ -675,8 +748,10 @@ def build_slice_maps(
         consts = registry.get(uid)
         warp_events = resolved.get(uid, [])
         src_coords = {(s.src_x, s.src_y) for s in warp_lists[uid]}
+        map_traits = event_traits.get(uid) if event_traits is not None else None
         result = build_object_events(
-            maps[uid], consts, slice_set, pory_labels=pory_labels, npc_gfx=npc_gfx
+            maps[uid], consts, slice_set, pory_labels=pory_labels, npc_gfx=npc_gfx,
+            event_traits=map_traits,
         )
         overrides[uid] = src_coords
         local_id_tables[uid] = result.local_id_map

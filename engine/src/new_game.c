@@ -51,6 +51,11 @@
 #include "constants/items.h"
 #include "difficulty.h"
 #include "follower_npc.h"
+// BEGIN URANIUM PATHFINDER SLICE — test-harness includes (rock-smash boot party)
+#include "script_pokemon_util.h"
+#include "constants/species.h"
+#include "constants/moves.h"
+// END URANIUM PATHFINDER SLICE
 
 extern const u8 EventScript_ResetAllMapFlags[];
 extern const u8 EventScript_ResetAllMapFlagsFrlg[];
@@ -269,6 +274,14 @@ void CB2_StartUraniumSlice(void)
 #endif
     // END URANIUM MAP WALKER
     CB2_NewGame();
+    // TEST HARNESS (boot-gate only, REMOVE for real progression): make rock smash
+    // usable from a fresh boot — EventScript_RockSmash gates on FLAG_BADGE03_GET +
+    // a non-egg party mon knowing MOVE_ROCK_SMASH (checkfieldmove, scrcmd.c). Must
+    // run AFTER CB2_NewGame(): NewGameInitData() zeroes the party inside it.
+    // ScriptSetMonMoveSlot also syncs PP; SetBoxMonData handles checksum/encrypt.
+    FlagSet(FLAG_BADGE03_GET);
+    ScriptGiveMon(SPECIES_GEODUDE, 5, ITEM_NONE);
+    ScriptSetMonMoveSlot(0, MOVE_ROCK_SMASH, 0);
 }
 // END URANIUM PATHFINDER SLICE
 

@@ -53,11 +53,27 @@ ALLOWED_MAPS = {49, 48, 32}
 OVERRIDES = Path("reference/map_name_overrides.json")
 
 
+def _load_event_traits(out: Path, map_id: int, pory_path: Path) -> dict[int, list[str]]:
+    """Load `Map{id:03d}.traits.json` from the same scripts dir as the .pory
+    (the transpile driver's fixed-schema sidecar — see metadata_wiring.py). No
+    sidecar is a fail-loud data-integrity error (CLAUDE.md §4.5), not a skip:
+    the driver is expected to emit one, empty or not, for every map it transpiles."""
+    traits_path = out / "scripts" / f"Map{map_id:03d}.traits.json"
+    if not traits_path.is_file():
+        raise FileNotFoundError(
+            f"{traits_path} missing (expected alongside {pory_path.name}) — "
+            f"re-run the transpile driver to regenerate the trait sidecar"
+        )
+    sidecar = json.loads(traits_path.read_text(encoding="utf-8"))
+    return {int(eid): traits for eid, traits in sidecar["events"].items()}
+
+
 def _regenerate_map_json(
     out: Path,
     pory_labels: set[str],
     npc_gfx: dict[str, str],
     local_id_dir: Path,
+    event_traits: dict[int, dict[int, list[str]]],
 ) -> None:
     """Re-run S5 wiring over the whole slice with the real converted page labels,
     so bodyless events become static objects. Warp pairing needs the full slice,
@@ -65,7 +81,9 @@ def _regenerate_map_json(
 
     `npc_gfx` (character_name -> OBJ_EVENT_GFX_*) places visible NPCs; the per-map
     RMXP-id -> compiled-local-id tables are written to `local_id_dir` for the
-    staging remap pass below."""
+    staging remap pass below. `event_traits` (Uranium map id -> event id -> trait
+    list, from the per-map `.traits.json` sidecars) assigns smashable-rock
+    visibility flags."""
     reg = mc.build_map_constants(
         list(DEFAULT_SLICE),
         map_infos_path=out / "map_infos.json",
@@ -82,6 +100,7 @@ def _regenerate_map_json(
         pory_labels=pory_labels,
         npc_gfx=npc_gfx,
         local_id_dir=local_id_dir,
+        event_traits=event_traits,
     )
 
 
@@ -121,6 +140,7 @@ def main() -> int:
     # page-label definition set the regenerated map.json must agree with ---
     normalized: dict[int, asm.NormalizeResult] = {}
     pory_labels: set[str] = set()
+    event_traits: dict[int, dict[int, list[str]]] = {}
     for map_id in DEFAULT_SLICE:
         pory_path = out / "scripts" / f"Map{map_id:03d}.pory"
         if consts.get(str(map_id)) is None or not pory_path.is_file():
@@ -128,10 +148,11 @@ def main() -> int:
         norm = asm.normalize_labels(pory_path.read_text(encoding="utf-8"))
         normalized[map_id] = norm
         pory_labels.update(asm.script_definitions(norm.text))
+        event_traits[map_id] = _load_event_traits(out, map_id, pory_path)
 
     # --- regenerate map.json with the real labels (the S5 stub hook) +
     # per-map local-id tables (RMXP id -> compiled object-event local id) ---
-    _regenerate_map_json(out, pory_labels, npc_gfx, local_id_dir)
+    _regenerate_map_json(out, pory_labels, npc_gfx, local_id_dir, event_traits)
 
     # --- pass 2: prune + report per requested map (reads the fresh map.json) ---
     staged: dict[str, str] = {}   # filename -> transformed text (for the staged-set checks)

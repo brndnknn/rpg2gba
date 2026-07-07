@@ -302,6 +302,20 @@ class TranspileContext:
     page_no: int = 0
     common_event_id: int | None = None
 
+    # Per-event traits recorded during transpile (e.g. "smashable_rock" from
+    # the rock-smash native idiom below), keyed by (map_id, event_id). The
+    # driver reads this to write the Map{id:03d}.traits.json sidecar — a
+    # fixed schema shared with a downstream consumer (metadata_wiring.py /
+    # stage_slice_scripts.py, owned by a different agent); don't rename.
+    traits: dict[tuple[int, int], set[str]] = field(default_factory=dict)
+
+    def record_trait(self, trait: str) -> None:
+        """Record a trait on the event currently being transpiled. No-op in
+        a common event (no owning event id to key by — see ``event_id``)."""
+        if self.event_id is None:
+            return
+        self.traits.setdefault((self.map_id, self.event_id), set()).add(trait)
+
     def queue(self, cmd_index: int, code: int, description: str) -> str:
         """Record one unhandled command; return the in-script marker comment."""
         entry = QueueEntry(
@@ -957,6 +971,12 @@ class _PageEmitter:
             "# rock smash: native EventScript_RockSmash supersedes RMXP "
             "choreography (both arms dropped, slice1 2026-07-05)"
         )
+        # Upstream signal for the downstream FLAG_TEMP_* respawn-flag fix
+        # (porymap ships "flag": "0" on these objects — a null sentinel that
+        # never latches, so the native removeobject respawns the rock on the
+        # next step). This is the component that KNOWS the event is a
+        # smashable rock; the driver serializes it to the trait sidecar.
+        self.ctx.record_trait("smashable_rock")
         return [breadcrumb, "goto(EventScript_RockSmash)"]
 
     def _emit_choice(self, node: ChoiceNode) -> list[str]:

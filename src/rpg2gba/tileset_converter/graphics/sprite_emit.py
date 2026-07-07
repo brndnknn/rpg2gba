@@ -165,6 +165,22 @@ _PLAYER_PICS_STEM = "hero"
 # to gObjectEventGraphicsInfo_UraniumPlayerNormal still compiles.
 _PLAYER_STUB_FALLBACK = "gObjectEventGraphicsInfo_BrendanNormal"
 
+# --- Player FIELD-MOVE variant (rock smash pose) -----------------------------
+# The engine's rock-smash flow swaps the player's gfx to
+# OBJ_EVENT_GFX_BRENDAN_FIELD_MOVE and starts anim index 0, then a held
+# movement waits until SpriteAnimEnded() (engine/src/fldeff_rocksmash.c:53-79).
+# Uranium/RMXP has no field-move pose to show, so this variant is
+# field-for-field identical to UraniumPlayerNormal (same pic table, same
+# palette tag/slot, same oam/subsprites/size) EXCEPT its `.anims` points at a
+# dedicated ONE-tick TERMINATING anim table: pointing it at
+# sAnimTable_BrendanMayNormal (or anything else that loops via ANIMCMD_JUMP)
+# would leave SpriteAnimEnded() permanently false and softlock the smash.
+_PLAYER_FIELD_MOVE_IDENT = "UraniumPlayerFieldMove"
+_PLAYER_FIELD_MOVE_ANIM_TABLE = "sUraniumAnimTable_PlayerFieldMove"
+# The vanilla field-move struct the stub #define falls back to on a fresh
+# clone, mirroring _PLAYER_STUB_FALLBACK's rationale above.
+_PLAYER_FIELD_MOVE_STUB_FALLBACK = "gObjectEventGraphicsInfo_BrendanFieldMove"
+
 _PICS_RELDIR = Path("graphics/object_events/pics/uranium")
 
 _GEN_RELPATHS: dict[str, Path] = {
@@ -530,33 +546,68 @@ def _render_pic_tables(sprites: list[ConvertedSprite], *, include_player: bool =
     return "".join(lines)
 
 
+def _render_player_struct(ident: str, anims: str) -> str:
+    """One player-variant `ObjectEventGraphicsInfo` struct -- same 32x32
+    template as the NPC struct except `.paletteTag`/`.paletteSlot`/`.anims`
+    (see module docstring's field-for-field citation) point at the player's
+    own dedicated palette, the `PALSLOT_PLAYER` slot, and `anims`. `.images`
+    always points at Normal's pic table (`sPicTable_{_PLAYER_IDENT}`) -- every
+    player variant shares the one staged hero strip, only the anim table
+    differs."""
+    lines = [
+        f"const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_{ident} = {{\n",
+        "    .tileTag = TAG_NONE,\n",
+        f"    .paletteTag = {_PLAYER_PAL_TAG},\n",
+        "    .reflectionPaletteTag = OBJ_EVENT_PAL_TAG_NONE,\n",
+        f"    .size = {_FRAME_BYTES},\n",
+        f"    .width = {GBA_FRAME_PX},\n",
+        f"    .height = {GBA_FRAME_PX},\n",
+        f"    .paletteSlot = {_PLAYER_PALETTE_SLOT},\n",
+        "    .shadowSize = SHADOW_SIZE_M,\n",
+        "    .inanimate = FALSE,\n",
+        "    .compressed = FALSE,\n",
+        "    .tracks = TRACKS_FOOT,\n",
+        "    .oam = &gObjectEventBaseOam_32x32,\n",
+        "    .subspriteTables = sOamTables_32x32,\n",
+        f"    .anims = {anims},\n",
+        f"    .images = sPicTable_{_PLAYER_IDENT},\n",
+        "    .affineAnims = gDummySpriteAffineAnimTable,\n",
+        "};\n",
+    ]
+    return "".join(lines)
+
+
 def _render_player_graphics_info() -> str:
-    """The player's `ObjectEventGraphicsInfo` -- same 32x32 template as the NPC
-    struct except `.paletteTag`/`.paletteSlot`/`.anims` (see module docstring's
-    field-for-field citation) point at the player's own dedicated palette, the
-    `PALSLOT_PLAYER` slot, and `sAnimTable_BrendanMayNormal` (the walk+run table,
-    not the NPC-only `sAnimTable_Standard`)."""
-    lines = ["\n"]
-    lines.append(
-        f"const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_{_PLAYER_IDENT} = {{\n"
-    )
-    lines.append("    .tileTag = TAG_NONE,\n")
-    lines.append(f"    .paletteTag = {_PLAYER_PAL_TAG},\n")
-    lines.append("    .reflectionPaletteTag = OBJ_EVENT_PAL_TAG_NONE,\n")
-    lines.append(f"    .size = {_FRAME_BYTES},\n")
-    lines.append(f"    .width = {GBA_FRAME_PX},\n")
-    lines.append(f"    .height = {GBA_FRAME_PX},\n")
-    lines.append(f"    .paletteSlot = {_PLAYER_PALETTE_SLOT},\n")
-    lines.append("    .shadowSize = SHADOW_SIZE_M,\n")
-    lines.append("    .inanimate = FALSE,\n")
-    lines.append("    .compressed = FALSE,\n")
-    lines.append("    .tracks = TRACKS_FOOT,\n")
-    lines.append("    .oam = &gObjectEventBaseOam_32x32,\n")
-    lines.append("    .subspriteTables = sOamTables_32x32,\n")
-    lines.append(f"    .anims = {_PLAYER_ANIM_TABLE},\n")
-    lines.append(f"    .images = sPicTable_{_PLAYER_IDENT},\n")
-    lines.append("    .affineAnims = gDummySpriteAffineAnimTable,\n")
-    lines.append("};\n")
+    """The player's normal-pose `ObjectEventGraphicsInfo`, walk+run anims
+    (`sAnimTable_BrendanMayNormal`, the walk+run table, not the NPC-only
+    `sAnimTable_Standard`)."""
+    return "\n" + _render_player_struct(_PLAYER_IDENT, _PLAYER_ANIM_TABLE)
+
+
+def _render_player_field_move_graphics_info() -> str:
+    """The player's FIELD-MOVE variant: rock smash swaps the player's gfx to
+    this struct and starts anim index 0, then waits on `SpriteAnimEnded()`
+    (`engine/src/fldeff_rocksmash.c:53-79`). Uranium/RMXP has no field-move
+    pose, so the anim is a 1-tick terminating table -- an invisible blip
+    rather than a hang -- emitted here (anim data before the struct that
+    references it) rather than reusing Normal's looping walk table, which
+    would never satisfy `SpriteAnimEnded()` and softlock the held movement."""
+    lines = [
+        "\n",
+        "// FieldMove: a 1-tick terminating anim (Uranium/RMXP has no field-move\n",
+        "// pose) so the rock-smash pose is an invisible blip; Normal's looping\n",
+        "// sAnimTable_BrendanMayNormal would never satisfy SpriteAnimEnded() and\n",
+        "// would softlock the held movement (engine/src/fldeff_rocksmash.c:53-79).\n",
+        "static const union AnimCmd sUraniumAnim_PlayerFieldMove[] = {\n",
+        "    ANIMCMD_FRAME(0, 1),\n",
+        "    ANIMCMD_END,\n",
+        "};\n",
+        "static const union AnimCmd *const sUraniumAnimTable_PlayerFieldMove[] = {\n",
+        "    sUraniumAnim_PlayerFieldMove,\n",
+        "};\n",
+        "\n",
+        _render_player_struct(_PLAYER_FIELD_MOVE_IDENT, _PLAYER_FIELD_MOVE_ANIM_TABLE),
+    ]
     return "".join(lines)
 
 
@@ -605,6 +656,7 @@ def _render_graphics_info(
         lines.append("};\n")
     if include_player:
         lines.append(_render_player_graphics_info())
+        lines.append(_render_player_field_move_graphics_info())
     return "".join(lines)
 
 
@@ -621,6 +673,10 @@ def _render_graphics_info_decls(
         lines.append(
             f"extern const struct ObjectEventGraphicsInfo "
             f"gObjectEventGraphicsInfo_{_PLAYER_IDENT};\n"
+        )
+        lines.append(
+            f"extern const struct ObjectEventGraphicsInfo "
+            f"gObjectEventGraphicsInfo_{_PLAYER_FIELD_MOVE_IDENT};\n"
         )
     return "".join(lines)
 
@@ -672,13 +728,18 @@ def write_stub_gen_files(engine_root: Path) -> None:
         "pic_tables": _STUB_HEADER,
         "graphics_info": _STUB_HEADER,
         # The tracked pointers file (owned by the lead session) references
-        # gObjectEventGraphicsInfo_UraniumPlayerNormal unconditionally, so a fresh
-        # clone with no sprites staged needs SOMETHING that name resolves to; alias
-        # it to the vanilla struct. The REAL decls output (_render_graphics_info_decls)
-        # emits the true `extern` declaration instead and never also emits this #define.
+        # gObjectEventGraphicsInfo_UraniumPlayerNormal unconditionally, and the
+        # lead's field-move pointer entry references
+        # gObjectEventGraphicsInfo_UraniumPlayerFieldMove unconditionally too, so a
+        # fresh clone with no sprites staged needs SOMETHING both names resolve to;
+        # alias each to its vanilla struct. The REAL decls output
+        # (_render_graphics_info_decls) emits the true `extern` declarations instead
+        # and never also emits these #defines.
         "graphics_info_decls": (
             _STUB_HEADER
             + f"#define gObjectEventGraphicsInfo_{_PLAYER_IDENT} {_PLAYER_STUB_FALLBACK}\n"
+            + f"#define gObjectEventGraphicsInfo_{_PLAYER_FIELD_MOVE_IDENT} "
+            + f"{_PLAYER_FIELD_MOVE_STUB_FALLBACK}\n"
         ),
         "graphics_info_pointers": _STUB_HEADER + _POINTERS_COMMENT,
         "palettes": _STUB_HEADER + _PALETTES_COMMENT,
@@ -709,7 +770,12 @@ def emit_sprites(
     entries. It deliberately gets no `OBJ_EVENT_GFX_URANIUM_*` id and no
     `gObjectEventGraphicsInfoPointers[]` entry -- the lead session repoints the
     vanilla `[OBJ_EVENT_GFX_BRENDAN_NORMAL]` entry at
-    `gObjectEventGraphicsInfo_UraniumPlayerNormal` directly.
+    `gObjectEventGraphicsInfo_UraniumPlayerNormal` directly. A second struct,
+    `gObjectEventGraphicsInfo_UraniumPlayerFieldMove`, is always emitted
+    alongside it (same pic table/palette tag, its own 1-tick terminating anim
+    table -- see `_render_player_field_move_graphics_info`) so the lead's
+    `[OBJ_EVENT_GFX_BRENDAN_FIELD_MOVE]` pointer entry has a non-softlocking
+    target for the rock-smash pose.
 
     Deterministic: sheets are processed in `name`-sorted order for palette
     packing and PNG emission, and `OBJ_EVENT_GFX_URANIUM_*` ids are assigned in

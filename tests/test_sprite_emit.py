@@ -463,6 +463,63 @@ def test_player_does_not_get_a_gfx_id_or_pointer_entry(tmp_path: Path) -> None:
     assert "#define NUM_URANIUM_OBJ_EVENT_GFX 1" in constants_text
 
 
+def test_player_field_move_graphics_info_struct_shape(tmp_path: Path) -> None:
+    """The FIELD-MOVE variant (rock-smash pose) must carry its own terminating
+    anim table, but otherwise match Normal field-for-field: same pic table,
+    same palette tag."""
+    player = _make_player([(0, 0, 0)])
+    emit_sprites([], tmp_path, player=player)
+
+    text = (tmp_path / _GEN_RELPATHS["graphics_info"]).read_text(encoding="utf-8")
+
+    assert "static const union AnimCmd sUraniumAnim_PlayerFieldMove[] = {" in text
+    assert "ANIMCMD_FRAME(0, 1)," in text
+    assert "ANIMCMD_END," in text
+    assert "static const union AnimCmd *const sUraniumAnimTable_PlayerFieldMove[] = {" in text
+    assert "sUraniumAnim_PlayerFieldMove," in text
+
+    assert (
+        "const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_UraniumPlayerFieldMove"
+        " = {" in text
+    )
+    assert ".anims = sUraniumAnimTable_PlayerFieldMove," in text
+    # field-for-field identical to Normal otherwise
+    assert ".paletteTag = OBJ_EVENT_PAL_TAG_URANIUM_PLAYER," in text
+    assert ".images = sPicTable_UraniumPlayerNormal," in text
+
+    # anim data must precede the struct that references it.
+    anim_idx = text.index("static const union AnimCmd sUraniumAnim_PlayerFieldMove[]")
+    struct_idx = text.index(
+        "const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_UraniumPlayerFieldMove"
+    )
+    assert anim_idx < struct_idx
+
+
+def test_player_field_move_absent_without_player(tmp_path: Path) -> None:
+    """NPC-only emission (no player) must emit none of the FieldMove artifacts."""
+    sprite = _make_sprite("aaa", [(0, 0, 0)])
+    emit_sprites([sprite], tmp_path)
+
+    info_text = (tmp_path / _GEN_RELPATHS["graphics_info"]).read_text(encoding="utf-8")
+    assert "FieldMove" not in info_text
+
+    decls_text = (tmp_path / _GEN_RELPATHS["graphics_info_decls"]).read_text(encoding="utf-8")
+    assert "FieldMove" not in decls_text
+
+
+def test_player_field_move_extern_decl_in_decls_file(tmp_path: Path) -> None:
+    player = _make_player([(0, 0, 0)])
+    emit_sprites([], tmp_path, player=player)
+
+    text = (tmp_path / _GEN_RELPATHS["graphics_info_decls"]).read_text(encoding="utf-8")
+    assert (
+        "extern const struct ObjectEventGraphicsInfo "
+        "gObjectEventGraphicsInfo_UraniumPlayerFieldMove;" in text
+    )
+    # The real decls output never emits the stub's #define fallback.
+    assert "#define gObjectEventGraphicsInfo_UraniumPlayerFieldMove" not in text
+
+
 def test_player_graphics_info_struct_shape(tmp_path: Path) -> None:
     player = _make_player([(0, 0, 0)])
     emit_sprites([], tmp_path, player=player)
@@ -685,11 +742,12 @@ def test_stub_writer_pins_literal_content(tmp_path: Path) -> None:
     graphics_info = (tmp_path / _GEN_RELPATHS["graphics_info"]).read_text(encoding="utf-8")
     assert graphics_info == stub_header
 
-    # The decls stub carries ONE extra line the other empty stubs don't: the
+    # The decls stub carries TWO extra lines the other empty stubs don't: the
     # tracked pointers file (owned by the lead session, outside this module)
-    # references gObjectEventGraphicsInfo_UraniumPlayerNormal unconditionally,
-    # so a fresh clone needs a name for it to resolve to even with zero sprites
-    # staged -- aliased to the vanilla Brendan struct.
+    # references gObjectEventGraphicsInfo_UraniumPlayerNormal AND
+    # gObjectEventGraphicsInfo_UraniumPlayerFieldMove unconditionally, so a
+    # fresh clone needs a name for each to resolve to even with zero sprites
+    # staged -- aliased to their vanilla structs.
     graphics_info_decls = (tmp_path / _GEN_RELPATHS["graphics_info_decls"]).read_text(
         encoding="utf-8"
     )
@@ -697,6 +755,8 @@ def test_stub_writer_pins_literal_content(tmp_path: Path) -> None:
         stub_header
         + "#define gObjectEventGraphicsInfo_UraniumPlayerNormal "
         + "gObjectEventGraphicsInfo_BrendanNormal\n"
+        + "#define gObjectEventGraphicsInfo_UraniumPlayerFieldMove "
+        + "gObjectEventGraphicsInfo_BrendanFieldMove\n"
     )
 
     graphics_info_pointers = (tmp_path / _GEN_RELPATHS["graphics_info_pointers"]).read_text(

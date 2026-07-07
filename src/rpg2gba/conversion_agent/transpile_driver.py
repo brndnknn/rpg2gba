@@ -133,6 +133,38 @@ def transpile_map(
     return pory_text, queue_entries
 
 
+# -- trait sidecar (rock-smash respawn-flag signal, task-shared contract) ------
+
+
+def _map_traits_payload(ctx: transpiler.TranspileContext, map_id: int) -> dict:
+    """Build the ``Map{id:03d}.traits.json`` sidecar payload for one map.
+
+    Fixed schema — a contract with a downstream consumer (metadata_wiring.py
+    / stage_slice_scripts.py, owned by a different agent) that assigns
+    FLAG_TEMP_* respawn flags to smashable-rock object events:
+    ``{"events": {"<event_id>": [<trait>, ...]}}``. Only events with >=1
+    trait appear; values are sorted. An empty map still returns
+    ``{"events": {}}`` — the caller always writes the sidecar.
+    """
+    events: dict[str, list[str]] = {
+        str(event_id): sorted(traits)
+        for (m, event_id), traits in ctx.traits.items()
+        if m == map_id and traits
+    }
+    return {"events": events}
+
+
+def _write_traits_sidecar(
+    scripts_dir: Path, map_id: int, ctx: transpiler.TranspileContext
+) -> None:
+    """Write ``Map{id:03d}.traits.json`` next to the map's ``.pory`` file,
+    always (even with no traits) — see ``_map_traits_payload``."""
+    path = scripts_dir / f"Map{map_id:03d}.traits.json"
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(_map_traits_payload(ctx, map_id), f, indent=2, sort_keys=True)
+        f.write("\n")
+
+
 # -- registry glue for the gate -------------------------------------------------
 
 
@@ -291,6 +323,7 @@ def transpile_corpus(
         scripts_dir.mkdir(parents=True, exist_ok=True)
         for map_id, text in map_texts.items():
             (scripts_dir / f"Map{map_id:03d}.pory").write_text(text, encoding="utf-8")
+            _write_traits_sidecar(scripts_dir, map_id, ctx)
         if ce_text is not None:
             (scripts_dir / "CommonEvents.pory").write_text(ce_text, encoding="utf-8")
 

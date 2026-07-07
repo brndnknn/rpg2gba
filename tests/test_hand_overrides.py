@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -236,3 +237,72 @@ def test_transpile_map_overrides_default_to_none_unaffected(
 
     assert queue_entries == []
     assert "Map012_EV001_Page1" in pory_text
+
+
+# ----------------------------------------------------------------------------
+# transpile_driver.transpile_corpus — trait sidecar (rock-smash upstream
+# signal; fixed-schema contract with the downstream FLAG_TEMP_* respawn-flag
+# fix in metadata_wiring.py / stage_slice_scripts.py, owned by a different
+# agent — do not change the schema here without updating that consumer too)
+# ----------------------------------------------------------------------------
+
+
+def _rock_smash_commands() -> list[dict]:
+    return [
+        cmd(transpiler.CONDITIONAL_BRANCH, [12, "Kernel.pbRockSmash"]),
+        cmd(transpiler.CONTROL_SELF_SWITCH, ["A", 0], indent=1),
+        cmd(transpiler.BRANCH_END),
+    ]
+
+
+def _run_corpus(tmp_path: Path, map_id: int, events: list[dict]) -> Path:
+    """Run transpile_corpus over one synthetic map, isolated from the real
+    committed hand-override set (an empty overrides_dir — the real
+    hand_conversions/ tree references real corpus event ids that don't exist
+    on a synthetic map and would otherwise raise a stale-override error)."""
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir(exist_ok=True)
+    out_dir = tmp_path / "out"
+    overrides_dir = tmp_path / "empty_overrides"
+    overrides_dir.mkdir(exist_ok=True)
+    (maps_dir / f"Map{map_id:03d}.json").write_text(
+        json.dumps({"map_id": map_id, "events": events}), encoding="utf-8"
+    )
+    transpile_driver.transpile_corpus(
+        [map_id],
+        maps_dir=maps_dir,
+        out_dir=out_dir,
+        flag_state_path=out_dir / "flag_state.json",
+        map_constants_path=out_dir / "porymap" / "map_constants.json",
+        common_events=False,
+        overrides_dir=overrides_dir,
+    )
+    return out_dir
+
+
+def test_transpile_corpus_writes_traits_sidecar_for_rock_smash_event(tmp_path: Path) -> None:
+    event = make_event([(0, _rock_smash_commands())], id=14, name="Rock")
+    out_dir = _run_corpus(tmp_path, 32, [event])
+
+    sidecar_path = out_dir / "scripts" / "Map032.traits.json"
+    raw = sidecar_path.read_text(encoding="utf-8")
+    assert raw.endswith("\n")
+    assert json.loads(raw) == {"events": {"14": ["smashable_rock"]}}
+
+
+def test_transpile_corpus_writes_empty_traits_sidecar_when_no_traits(tmp_path: Path) -> None:
+    event = make_event([(0, [])], id=1, name="PlainNPC")
+    out_dir = _run_corpus(tmp_path, 33, [event])
+
+    sidecar_path = out_dir / "scripts" / "Map033.traits.json"
+    assert json.loads(sidecar_path.read_text(encoding="utf-8")) == {"events": {}}
+
+
+def test_transpile_corpus_traits_sidecar_idempotent(tmp_path: Path) -> None:
+    event = make_event([(0, _rock_smash_commands())], id=14, name="Rock")
+    out_dir = _run_corpus(tmp_path, 32, [event])
+    sidecar_path = out_dir / "scripts" / "Map032.traits.json"
+    first = sidecar_path.read_bytes()
+
+    _run_corpus(tmp_path, 32, [event])
+    assert sidecar_path.read_bytes() == first
