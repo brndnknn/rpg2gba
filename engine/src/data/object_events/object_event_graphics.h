@@ -635,3 +635,7 @@ const u16 gObjectEventPic_PidgeyOld[] = INCGFX_U16("graphics/object_events/pics/
 const u16 gObjectEventPic_ClefairyOld[] = INCGFX_U16("graphics/object_events/pics/pokemon_old/clefairy.png", ".4bpp", "-mwidth 2 -mheight 2");
 
 #endif // IS_FRLG
+
+// BEGIN URANIUM PATHFINDER SLICE — generated Uranium OW sprite pics + palettes (rpg2gba; stub when none staged).
+#include "uranium_object_event_graphics.gen.h"
+// END URANIUM PATHFINDER SLICE

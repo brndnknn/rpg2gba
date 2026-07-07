@@ -4,6 +4,132 @@ Session-limit insurance: research + design state for the NPC gfx map (RMXP
 `character_name` → `OBJ_EVENT_GFX_*`), captured mid-task so a fresh session
 can resume. Delete or fold into a proper design doc once task 4 lands.
 
+## PIVOT 2026-07-05 (user decision): CONVERT the real Uranium sprites
+
+The lookalike-substitution plan below is DEMOTED to fallback. We convert the
+actual `Graphics/Characters/` sheets to GBA object-event graphics. Facts that
+drove it (lead-verified + two agent research passes, same day):
+
+- **Uranium sheets are 2× GBA scale.** Pixel-exact 2× NN upscales: all 5
+  PU mons, Rivaltheo, fk107-rocksmash (2× downscale = pixel-perfect recovery).
+  The 11 HGSS townsfolk are 2×-grid-aligned with ~2.5% of 2×2 blocks touched
+  up at high res (offset scan: (0,0) wins by 7-13×) → majority-vote downscale
+  + by-eye pass. Checker: scratchpad `check_2x.py`/`check_2x_offsets.py`.
+- **Post-downscale content fits 32×32 frames** (townsfolk ≤~21×28, mons
+  ≤~23×23; census table in the fork-mechanisms section's companion below).
+  Colors ≤15/sheet after RGB555 snap (worst Rivaltheo 19 pre-dedup).
+- **Engine additions are codegen-friendly:** append-only across ~6 files,
+  designated initializers, NO Makefile edits (preproc/scaninc auto-generate
+  gfx rules from `INCGFX_U32` lines in the C source — tools/preproc/
+  c_file.cpp:463-565, tools/scaninc/scaninc.cpp:124-159), `NUM_OBJ_EVENT_GFX`
+  bump is compile-checked. Frame spec: 9-frame strip (0 faceS, 1 faceN,
+  2 faceW, 3/4 S-walk, 5/6 N-walk, 7/8 W-walk), east = h-flip of west
+  (`sAnimTable_Standard`, object_event_anims.h:1223) → RMXP row "right" is
+  dropped (asymmetric east art mirrors; per-sheet asymmetry metric for eye
+  triage).
+- **Palette budget is the one real constraint:** 16 hardware OBJ banks shared
+  with player + field effects; the fork's tag loader allocates dynamically
+  (slot reservation code is dead in 21c24202 — no callers of
+  InitObjectEventPalettes) and overflow fails UGLY (LoadSpritePalette returns
+  0xFF → 4-bit oam.paletteNum truncation = garbage colors). Vanilla's answer:
+  ~196 NPCs share 4 palettes. Ours: pack ALL converted sprites onto ≤4 shared
+  16-color palettes (index 0 transparent) with the existing two-phase packer
+  (graphics/quantize.py), fail loud if they don't fit.
+- Follower/species dynamic palettes (`OBJ_EVENT_PAL_TAG_DYNAMIC`) are
+  species-gfx-only — NOT usable for plain NPCs (tag branch computes
+  OW_SPECIES() bits from graphicsId).
+
+**Build plan + file ownership (delegate build, lead integrates):**
+
+1. `graphics/sprites.py` — RMXP 4×4 sheet → 9× 32×32 RGBA frames at 1×:
+   cycle detect (col0==col2 → idle 0/walk 1,3; col1==col3 → idle 1/walk 0,2;
+   else warn), majority-vote 2× downscale (tie → top-left), union-bbox
+   bottom-center anchor, asymmetry metric. + `scripts/
+   preview_sprite_conversion.py` contact sheet for the by-eye gate.
+2. `graphics/sprite_emit.py` — shared-palette quantize (≤4 pals, unit =
+   sheet) + emit indexed PNGs (`engine/graphics/object_events/pics/uranium/`,
+   288×32 strips, `-mwidth 4 -mheight 4`) + 5 gitignored `.gen.h` fragments
+   (constants/NUM bump, INCGFX + pal arrays, pic tables, graphics_info,
+   pointer entries, sObjectEventSpritePalettes entries) + empty-stub writer.
+3. Committed sentinel hooks (lead): event_objects.h, object_event_graphics.h,
+   object_event_pic_tables.h, object_event_graphics_info.h,
+   object_event_graphics_info_pointers.h (inside the array braces),
+   event_object_movement.c (palette table, BEFORE the terminator). Same
+   pattern as the event_scripts.s hooks: hooks committed, content gitignored,
+   assembler always writes at least stubs.
+4. `npc_gfx.py` + `reference/npc_gfx_map.json` (SoT) + metadata_wiring rework
+   (boot-page selection, movement types, bg signs, skips, local-id table) —
+   unchanged from the design below EXCEPT table values are now generated
+   `OBJ_EVENT_GFX_URANIUM_*` constants (deterministic from sheet stem via
+   `_naming.to_constant`); the lookalike table survives only as a fallback
+   column/notes.
+5. `local_id_remap.py` — staging-pass rewrite of integer object targets
+   (applymovement/setobjectxy/addobject/removeobject) via the per-map
+   {rmxp id → local id} table from wiring (option (b) from the findings,
+   now LOCKED).
+
+## BUILD STATUS checkpoint (2026-07-05, session hit limit mid-build; /delegate)
+
+ALL UNCOMMITTED. On resume: `git status` + `pytest` first — two sub-agents may
+have landed files after this note was written.
+
+- **DONE (lead): engine include-hooks + stubs, BUILD-VERIFIED.** 6 sentinel
+  fences: event_objects.h (`NUM_OBJ_EVENT_GFX (388 + NUM_URANIUM_OBJ_EVENT_GFX)`
+  + gen include), object_event_{graphics,pic_tables,graphics_info}.h (append
+  hooks), graphics_info_pointers.h (TWO hooks: `_decls.gen.h` extern decls
+  ABOVE the array — pointers.h is included at event_object_movement.c:481
+  BEFORE graphics_info.h:487 — and `_pointers.gen.h` entries INSIDE the
+  braces), event_object_movement.c (`uranium_object_event_palettes.gen.h`
+  inside sObjectEventSpritePalettes BEFORE the PAL_TAG_NONE terminator).
+  7 stub `.gen.h` written + gitignored (root .gitignore, task-4 block).
+  **GOTCHA fixed:** hooks inside src/data/object_events/*.h must use
+  SAME-DIR quoted includes (`"uranium_x.gen.h"` not `"data/object_events/…"`)
+  — GCC quote-includes resolve against the INCLUDING file's dir, not the TU's.
+  `make -C engine -j16 modern` exit 0 with stubs.
+- **DONE (agent): `local_id_remap.py` + `tests/test_local_id_remap.py`**
+  (27 tests, ruff clean). Pinned: REMAP_COMMANDS = (applymovement, setobjectxy,
+  addobject, removeobject, turnobject) first-int-arg rewrite; string/comment
+  masked; ONE-PASS simultaneous splice (shifting tables safe; apply EXACTLY
+  ONCE to fresh transpiler output); unmapped int → warn + leave (legit for
+  never-emitted no-boot-page events); table JSON = {"<rmxp_id>": <local int>},
+  one file per map `Map{id:03d}.json`, loader `load_local_id_table`.
+- **IN FLIGHT (agents, may or may not have landed):** (1) `graphics/sprites.py`
+  + `tests/test_graphics_sprites.py` + `scripts/preview_sprite_conversion.py`
+  — spec: `ConvertedSprite{name, frames: 9×(32,32,4) uint8 RGBA GBA-order,
+  cycle: neutral02|neutral13|distinct, asymmetry, content_size}`,
+  `convert_character_sheet(path)`; alpha-binarize≥128 → cycle-detect
+  (col0==col2 → idle0/walk1,3; col1==col3 → idle1/walk0,2) → majority-vote 2×
+  downscale (tie=TL,TR,BL,BR order) → shared union-bbox anchor (bottom row 31,
+  h-centered), fail-loud >32; preview contact sheet →
+  output/sprite_conversion_preview.png (taildrop for by-eye gate).
+  (2) npc_gfx.py + reference/npc_gfx_map.json + metadata_wiring rework +
+  tests — spec in the v1-decisions/PART sections above; pinned
+  `gfx_constant_for_sheet` prefix OBJ_EVENT_GFX_URANIUM_*; boot-page rule;
+  blank tr0→bg sign, tr2/opacity-0→coord_event VAR_TEMP_0/0 elev3, tr1/3/4 +
+  doors + no-boot-page → drop report; local_id_map on returned structure +
+  `write_local_id_tables`; walker path untouched.
+- **NOT STARTED: `graphics/sprite_emit.py`** (wave 2) — shared-palette
+  quantize (unit=sheet, ≤4 pals of 15+transparent, reuse quantize.py two-phase
+  packer; RGB555 snap first) + emit indexed PNGs
+  `engine/graphics/object_events/pics/uranium/<stem>.png` as 288×32 strips
+  (9× 32×32, `INCGFX_U32(..., ".4bpp", "-mwidth 4 -mheight 4")`) + write the
+  7 gen files (constants incl. OBJ_EVENT_PAL_TAG_URANIUM_* — grep existing
+  0x11xx tags for a free range; graphics/pal arrays; pic tables
+  `overworld_ascending_frames(ptr, 4, 4)`; graphics_info structs — copy an
+  existing 32×32 walker entry verbatim for field shapes, oam
+  gObjectEventBaseOam_32x32 (VERIFY exact symbol), anims sAnimTable_Standard,
+  size = frame bytes; decls; pointer entries; palette registrations) + an
+  empty-stub writer (assemblers must call it so fresh clones build).
+- **NOT STARTED: lead integration** — wire into scripts/assemble_pathfinder.py
+  (+ phase5._assemble_fork stub-writing): sprite emit pass before make;
+  npc_gfx map param into build_slice_maps; write local-id tables; apply
+  remap ONCE at staging AFTER hand_overrides splice, BEFORE _gate/_compile;
+  then re-assemble slice, re-pin prune test (D9 — EV9 now a coord_event so
+  its hand blocks survive; **EV21 letter has NO boot page → its hand-override
+  blocks WILL prune away** — accepted, dormant until story-stage
+  materialization), rebuild ROM, taildrop preview PNG (user by-eye gate),
+  boot gate.
+
 ## Slice census (boot-active page per event, maps 49/48/32)
 
 Method: RMXP shows the HIGHEST-index page whose conditions hold; boot state =
@@ -35,8 +161,9 @@ all switches OFF, vars 0, self-switches OFF (census script:
   3 custom): v1 mapping — 0/2/3 → face direction (RMXP `direction` 2=down,
   4=left, 6=right, 8=up), 1 → wander. Custom routes deferred.
 
-## Sprite substitutions — picked BY EYE from the real sheets (lead viewed
-## every PNG in $RPG2GBA_URANIUM_SRC/Graphics/Characters/)
+## Sprite substitutions — FALLBACK ONLY as of the 2026-07-05 pivot (kept for
+## the fallback column of npc_gfx_map.json; picked BY EYE from the real
+## sheets — lead viewed every PNG in $RPG2GBA_URANIUM_SRC/Graphics/Characters/)
 
 Townsfolk (HGSS-style sheets; slice events listed):
 
@@ -163,11 +290,14 @@ vanilla so the fork-index gate accepts them):
   relying on it; if not in scope, fall back to plain archetype sprites for
   the 5 Pokémon NPCs.
 
-## v1 decisions (lead, 2026-07-05 — pending user sign-off on the sprite table)
+## v1 decisions (lead, 2026-07-05 — items 1/6 AMENDED by the pivot above;
+## user approved conversion, sprite-table sign-off moot)
 
 1. New SoT `reference/npc_gfx_map.json` (terrain_tag_map pattern):
    `character_name` → `OBJ_EVENT_GFX_*` string + note; loader validates
-   against event_objects.h, fail-loud on unmapped/unknown. Rules (not table
+   against event_objects.h + the generated uranium header, fail-loud on
+   unmapped/unknown. Values = generated `OBJ_EVENT_GFX_URANIUM_*` constants
+   (pivot); vanilla lookalikes recorded as fallback notes. Rules (not table
    rows): blank name, door sheets (`PU-doors*`, `FKdoors*`), no-boot-page →
    handled structurally.
 2. Boot-active page (census rule) decides an event's graphic + direction +
@@ -185,5 +315,7 @@ vanilla so the fork-index gate accepts them):
    with the local-id remap.
 5. `fk107-rocksmash` → OBJ_EVENT_GFX_BREAKABLE_ROCK (pairs with the native
    EventScript_RockSmash emission).
-6. Pokémon NPCs → OBJ_EVENT_GFX_SPECIES(lookalike) pending the build-verify
-   item; fallbacks in the sprite table above.
+6. [AMENDED by pivot] Pokémon NPCs → converted real Uranium OW sprites
+   (exact 2× NN recovery), same pipeline as townsfolk — no
+   OBJ_EVENT_GFX_SPECIES needed. Lookalikes in the table above are fallback
+   only.

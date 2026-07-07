@@ -338,6 +338,12 @@ def _assemble_fork(
         encoding="utf-8",
     )
 
+    # Empty NPC-sprite gen files — the committed object-event sentinel hooks
+    # #include them, so even a warps-only (no-NPC) walker build must have at
+    # least the stub forms on disk or make fails on missing includes.
+    from .graphics import sprite_emit
+    sprite_emit.write_stub_gen_files(fork)
+
     # The include list the event_scripts.s hook pulls in (no CommonEvents).
     includes = [
         f'\t.include "data/maps/{registry.get(mid).dir_name}/scripts.inc"'

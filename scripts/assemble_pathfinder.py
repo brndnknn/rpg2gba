@@ -135,9 +135,19 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
     writes, so map.bin then references the real Uranium metatiles instead of the
     committed Hoenn buckets."""
     logger.info("=== S8a: tileset graphics ===")
+    from rpg2gba.tileset_converter import sprite_pass
     from rpg2gba.tileset_converter.graphics.build_slice_tilesets import (
         build_slice_tilesets,
     )
+
+    # NPC sprite gen files first: real Uranium object-event sprites + the
+    # constants header the fork's map_events.s TU needs to resolve every
+    # OBJ_EVENT_GFX_URANIUM_* the slice map.json references. Deterministic +
+    # idempotent (also run at staging), so a double execution is harmless.
+    if not dry_run:
+        sprite_pass.run_sprite_pass(fork)
+    else:
+        logger.info("  [dry] would run NPC sprite pass -> engine gen files")
 
     maps: list[tuple[int, dict]] = []
     for map_id in SLICE_MAP_IDS:

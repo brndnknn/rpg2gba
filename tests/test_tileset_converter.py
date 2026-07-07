@@ -679,11 +679,20 @@ def test_alias_const_format_is_valid_identifier() -> None:
 
 # --- 5.3 metadata_wiring -----------------------------------------------------
 
-def _page(trigger: int = 0, cond: dict | None = None, cmds: list | None = None) -> dict:
+def _page(
+    trigger: int = 0,
+    cond: dict | None = None,
+    cmds: list | None = None,
+    name: str = "",
+    opacity: int = 255,
+    direction: int = 2,
+    move_type: int = 0,
+) -> dict:
     return {
         "trigger": trigger,
         "condition": cond or {},
-        "graphic": {"character_name": ""},
+        "graphic": {"character_name": name, "opacity": opacity, "direction": direction},
+        "move_type": move_type,
         "list": cmds or [],
     }
 
@@ -702,6 +711,17 @@ def _sw_cond(switch_id: int) -> dict:
 
 def _transfer(dest_uid: int, x: int, y: int) -> dict:
     return {"code": 201, "indent": 0, "parameters": [0, dest_uid, x, y, 2, 1]}
+
+
+def _npc_gfx_fixture() -> dict[str, str]:
+    """A minimal character_name -> OBJ_EVENT_GFX_* fixture (mirrors the shape
+    `npc_gfx.load_npc_gfx_map` returns; see tests/test_npc_gfx.py for the loader
+    itself)."""
+    return {
+        "HGSS_000": "OBJ_EVENT_GFX_URANIUM_HGSS_000",
+        "HGSS_005": "OBJ_EVENT_GFX_URANIUM_HGSS_005",
+        "PU-doors1": "OBJ_EVENT_GFX_URANIUM_PU_DOORS1",  # never looked up (door sheets drop)
+    }
 
 
 _SLICE = {32, 48, 49}
@@ -725,24 +745,31 @@ def test_classify_event() -> None:
 
 
 def test_build_object_events_placed_at_coords() -> None:
-    """Each non-warp event -> one object_event at its (x, y) with the default gfx;
-    single-page -> a page label, self-switch multi-page -> a dispatcher label."""
+    """Each visible non-warp event -> one object_event at its (x, y) with its
+    npc_gfx-mapped graphic and boot-page movement type; single-page -> a page
+    label, self-switch multi-page -> a dispatcher label; local_id_map is the
+    1-based object_events position keyed by (string) RMXP event id."""
     consts = mc.MapConstantRegistry(Path("x")).mint(49, "Moki Town Player's House 1F")
     map_json = {
         "map_id": 49,
         "events": [
-            _event(1, 4, 4, [_page()]),  # single page
-            _event(7, 9, 3, [_page(), _page(cond=_self_cond("A"))]),  # self-switch -> dispatcher
+            _event(1, 4, 4, [_page(name="HGSS_000")]),  # single page
+            _event(7, 9, 3, [  # self-switch -> dispatcher
+                _page(name="HGSS_005"), _page(cond=_self_cond("A"), name="HGSS_005"),
+            ]),
             _event(2, 10, 11, [_page(trigger=1, cmds=[_transfer(32, 28, 31)])]),  # warp, excluded
         ],
     }
-    objs, dispatchers = mw.build_object_events(map_json, consts, _SLICE)
-    assert len(objs) == 2  # the warp door is not an object_event
-    by_xy = {(o.x, o.y): o for o in objs}
+    result = mw.build_object_events(map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture())
+    assert len(result.object_events) == 2  # the warp door is not an object_event
+    by_xy = {(o.x, o.y): o for o in result.object_events}
     assert by_xy[(4, 4)].script == "Map049_EV001_Page1"
-    assert by_xy[(4, 4)].graphics_id == mw.DEFAULT_GFX
+    assert by_xy[(4, 4)].graphics_id == "OBJ_EVENT_GFX_URANIUM_HGSS_000"
+    assert by_xy[(4, 4)].movement_type == "MOVEMENT_TYPE_FACE_DOWN"  # direction=2 default
     assert by_xy[(9, 3)].script == "Map049_EV007_Dispatch"
-    assert len(dispatchers) == 1
+    assert len(result.dispatchers) == 1
+    assert result.local_id_map == {"1": 1, "7": 2}
+    assert result.drops == []
 
 
 def test_build_object_events_stubs_bodyless_event() -> None:
@@ -753,16 +780,105 @@ def test_build_object_events_stubs_bodyless_event() -> None:
     map_json = {
         "map_id": 49,
         "events": [
-            _event(1, 4, 4, [_page()]),   # converted -> has a body
-            _event(19, 6, 6, [_page()]),  # command-less NPC -> no body
+            _event(1, 4, 4, [_page(name="HGSS_000")]),   # converted -> has a body
+            _event(19, 6, 6, [_page(name="HGSS_000")]),  # command-less NPC -> no body
         ],
     }
     labels = {"Map049_EV001_Page1"}  # only EV001 was converted
-    objs, dispatchers = mw.build_object_events(map_json, consts, _SLICE, pory_labels=labels)
-    by_xy = {(o.x, o.y): o for o in objs}
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, pory_labels=labels, npc_gfx=_npc_gfx_fixture()
+    )
+    by_xy = {(o.x, o.y): o for o in result.object_events}
     assert by_xy[(4, 4)].script == "Map049_EV001_Page1"
     assert by_xy[(6, 6)].script == mw.NO_SCRIPT  # static object, no dangling ref
-    assert dispatchers == []
+    assert result.dispatchers == []
+
+
+def test_build_object_events_blank_graphic_bg_and_coord() -> None:
+    """A blank-graphic boot page becomes a bg sign (action trigger) or a coord
+    trigger (event-touch trigger); both point at the same label an object_event
+    for that event would have gotten. Neither shows up in object_events/
+    local_id_map (they aren't objects)."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(49, "Moki Town Player's House 1F")
+    map_json = {
+        "map_id": 49,
+        "events": [
+            _event(1, 4, 4, [_page(trigger=0)]),  # blank + action -> sign
+            _event(2, 5, 5, [_page(trigger=2)]),  # blank + event-touch -> coord trigger
+        ],
+    }
+    result = mw.build_object_events(map_json, consts, _SLICE)
+    assert result.object_events == [] and result.local_id_map == {}
+    assert [b.to_dict()["type"] for b in result.bg_events] == ["sign"]
+    assert (result.bg_events[0].x, result.bg_events[0].y) == (4, 4)
+    assert result.bg_events[0].script == "Map049_EV001_Page1"
+    assert [c.to_dict()["type"] for c in result.coord_events] == ["trigger"]
+    assert (result.coord_events[0].x, result.coord_events[0].y) == (5, 5)
+    assert result.coord_events[0].script == "Map049_EV002_Page1"
+
+
+def test_build_object_events_opacity0_touch_keeps_coord_event() -> None:
+    """A visible-named but opacity-0 boot page on an event-touch trigger (the
+    Map032 EV9/EV74 invisible script-host pattern) becomes a coord trigger, not a
+    dropped or placed object — its script MUST stay referenced."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(49, "Moki Town Player's House 1F")
+    map_json = {
+        "map_id": 49,
+        "events": [_event(9, 16, 42, [_page(trigger=2, name="HGSS_014", opacity=0)])],
+    }
+    result = mw.build_object_events(map_json, consts, _SLICE)
+    assert result.object_events == []
+    assert len(result.coord_events) == 1
+    assert result.coord_events[0].script == "Map049_EV009_Page1"
+    assert result.drops == []
+
+
+def test_build_object_events_drops_no_silent_defaults() -> None:
+    """no_boot_page / blank_trigger1 / autorun / parallel / door_sheet / opacity0
+    all land in the drop report, not silently in object_events."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(49, "Moki Town Player's House 1F")
+    map_json = {
+        "map_id": 49,
+        "events": [
+            _event(1, 0, 0, [_page(cond=_sw_cond(1))]),  # only page gated off at boot
+            _event(2, 1, 0, [_page(trigger=1)]),  # blank graphic, player-touch (non-warp)
+            _event(3, 2, 0, [_page(trigger=3)]),  # blank graphic, autorun
+            _event(4, 3, 0, [_page(trigger=4)]),  # blank graphic, parallel
+            _event(5, 4, 0, [_page(trigger=0, name="PU-doors1")]),  # door sheet
+            _event(6, 5, 0, [_page(trigger=0, name="HGSS_000", opacity=0)]),  # invisible, non-touch
+        ],
+    }
+    result = mw.build_object_events(map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture())
+    assert result.object_events == [] and result.bg_events == [] and result.coord_events == []
+    assert dict(result.drops) == {
+        1: mw.DROP_NO_BOOT_PAGE,
+        2: mw.DROP_BLANK_TRIGGER1,
+        3: mw.DROP_AUTORUN,
+        4: mw.DROP_PARALLEL,
+        5: mw.DROP_DOOR_SHEET,
+        6: mw.DROP_OPACITY0,
+    }
+
+
+def test_build_object_events_visible_graphic_requires_npc_gfx() -> None:
+    """A visible (named, opacity != 0) graphic with no npc_gfx map, or a name
+    absent from it, fails loud — no silent ninja-boy fallback (CLAUDE.md §4.5)."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(49, "Moki Town Player's House 1F")
+    map_json = {"map_id": 49, "events": [_event(1, 4, 4, [_page(name="HGSS_000")])]}
+    with pytest.raises(KeyError):
+        mw.build_object_events(map_json, consts, _SLICE)  # npc_gfx=None
+    with pytest.raises(KeyError):
+        mw.build_object_events(map_json, consts, _SLICE, npc_gfx={})  # name unmapped
+
+
+def test_write_local_id_tables_pinned_shape(tmp_path: Path) -> None:
+    """write_local_id_tables emits one Map{id:03d}.json per map with exactly the
+    pinned {decimal-string RMXP id: int local id} shape (the local_id_remap.py
+    contract)."""
+    out_dir = tmp_path / "local_ids"
+    mw.write_local_id_tables(out_dir, {49: {"1": 1, "7": 2}, 32: {"9": 1}})
+    assert json.loads((out_dir / "Map049.json").read_text(encoding="utf-8")) == {"1": 1, "7": 2}
+    assert json.loads((out_dir / "Map032.json").read_text(encoding="utf-8")) == {"9": 1}
 
 
 def test_build_object_events_page_gap_fails_loud() -> None:

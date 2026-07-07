@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 
 from rpg2gba.conversion_agent.deterministic import (
     _label_name,
-    format_pory_string,
+    format_pory_dialogue,
     translate_text_codes,
 )
 from rpg2gba.conversion_agent.flag_registry import FlagRegistry, RegistryError
@@ -711,7 +711,7 @@ class _PageEmitter:
                     node.index, SHOW_TEXT,
                     f"dialogue with untranslated control code: {node.text[:120]!r}",
                 )]
-            text = format_pory_string(result.text)
+            text = format_pory_dialogue(result.text)
             if result.autoclose:
                 # MSGBOX_AUTOCLOSE (engine/asm/macros/event.inc:2094) — a trailing
                 # \wtnp[n] closes the box itself; no player input needed.
@@ -957,7 +957,7 @@ class _PageEmitter:
             "# rock smash: native EventScript_RockSmash supersedes RMXP "
             "choreography (both arms dropped, slice1 2026-07-05)"
         )
-        return [breadcrumb, "goto EventScript_RockSmash"]
+        return [breadcrumb, "goto(EventScript_RockSmash)"]
 
     def _emit_choice(self, node: ChoiceNode) -> list[str]:
         params = node.cmd.get("parameters", [])
@@ -1106,10 +1106,15 @@ class _PageEmitter:
 
         var_name = _ALIGN_AXIS_VAR[axis]
         negated = _ALIGN_NEGATED_CMP[cmp_op]
+        # Inline `[token]` movement lists are NOT supported by the installed
+        # poryscript (passed through verbatim -> asm error); emit a named
+        # movement block like _emit_move_route does.
+        label = f"{self.page_label}_Move{len(self.movements) + 1}"
+        self.movements.append((label, [tokens[0]]))
         return [
             "getplayerxy(VAR_TEMP_0, VAR_TEMP_1)",
             f"while (var({var_name}) {negated} {n_str}) {{",
-            f"    applymovement(OBJ_EVENT_ID_PLAYER, [{tokens[0]}])",
+            f"    applymovement(OBJ_EVENT_ID_PLAYER, {label})",
             "    waitmovement(0)",
             "    getplayerxy(VAR_TEMP_0, VAR_TEMP_1)",
             "}",
@@ -1162,8 +1167,12 @@ class _PageEmitter:
                 node.index, CHANGE_PLAYER_TRANSPARENCY, "bad 208 params",
             )]
         token = "set_invisible" if params[0] == 0 else "set_visible"
+        # Named movement block, not an inline `[token]` list — the installed
+        # poryscript passes brackets through verbatim (asm error).
+        label = f"{self.page_label}_Move{len(self.movements) + 1}"
+        self.movements.append((label, [token]))
         return [
-            f"applymovement(OBJ_EVENT_ID_PLAYER, [{token}])",
+            f"applymovement(OBJ_EVENT_ID_PLAYER, {label})",
             "waitmovement(0)",
         ]
 
@@ -1262,7 +1271,7 @@ class _PageEmitter:
         # pbTrainerPC — the generic non-bedroom PC (see _TRAINER_PC_RE);
         # EventScript_PC ends the script itself, so `goto` (not `call`).
         if _TRAINER_PC_RE.match(text):
-            return ["goto EventScript_PC"]
+            return ["goto(EventScript_PC)"]
 
         # pbShowMap — the wall/region-map special (see _SHOW_MAP_RE). Only
         # the call is replaced; any preceding dialogue on the page stays.

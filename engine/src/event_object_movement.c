@@ -577,6 +577,10 @@ static const struct SpritePalette sObjectEventSpritePalettes[] = {
     {gObjectEventPaletteLight2,             OBJ_EVENT_PAL_TAG_LIGHT_2},
     {gObjectEventPaletteEmotes,             OBJ_EVENT_PAL_TAG_EMOTES},
     {gObjectEventPaletteNeonLight,          OBJ_EVENT_PAL_TAG_NEON_LIGHT},
+// BEGIN URANIUM PATHFINDER SLICE — generated Uranium OW sprite palette registrations; MUST precede the
+// OBJ_EVENT_PAL_TAG_NONE terminator below (rpg2gba; stub when none staged).
+#include "data/object_events/uranium_object_event_palettes.gen.h"
+// END URANIUM PATHFINDER SLICE
 #ifdef BUGFIX
     {NULL,                                  OBJ_EVENT_PAL_TAG_NONE},
 #else

@@ -423,7 +423,13 @@
 // NOTE: The maximum amount of object events has been expanded from 255 to 65535.
 // Since dynamic graphics ids still require at least 16 free values, the actual limit
 // is 65519, but even considering follower Pokémon, this should be more than enough :)
-#define NUM_OBJ_EVENT_GFX                        388
+// BEGIN URANIUM PATHFINDER SLICE — generated Uranium OW gfx include-hook (rpg2gba; see engine/RPG2GBA_VENDOR.md).
+// The assembler always writes constants/uranium_event_objects.gen.h (empty stub when no sprites are
+// staged); it defines OBJ_EVENT_GFX_URANIUM_* / OBJ_EVENT_PAL_TAG_URANIUM_* (ids from 388 up) and
+// NUM_URANIUM_OBJ_EVENT_GFX, which extends NUM_OBJ_EVENT_GFX below.
+#include "constants/uranium_event_objects.gen.h"
+#define NUM_OBJ_EVENT_GFX                        (388 + NUM_URANIUM_OBJ_EVENT_GFX)
+// END URANIUM PATHFINDER SLICE
 
 
 // These are dynamic object gfx ids.

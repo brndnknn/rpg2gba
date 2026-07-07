@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -87,15 +88,29 @@ class TerrainTagTable:
         self._normal_value = normal_value
         self._warned_ledges: set[tuple[int, int]] = set()
 
-    def effective_tag(self, tags_for_tileset: list[int], key: tuple[tuple[int, int], ...]) -> int:
+    def effective_tag(
+        self,
+        tags_for_tileset: list[int],
+        key: tuple[tuple[int, int], ...],
+        is_opaque: Callable[[int], bool] | None = None,
+    ) -> int:
         """The cell's effective terrain tag: topmost (highest z) tile in `key` whose
         tag is nonzero wins; autotile variants fall back to their base id's tag when
-        the variant's own tag is 0; 0 if every layer's tag is 0."""
+        the variant's own tag is 0; 0 if every layer's tag is 0.
+
+        `is_opaque` (tile_id -> fully-opaque?) stops the fall-through at a covering
+        tile: RMXP maps routinely flood-fill a water layer under solid land tiles
+        (tag 0), and without the stop the water tag beneath leaks up — grass and
+        hedges got reflective MB_POND_WATER (boot gate 2026-07-06). A partial/
+        decorative overlay (flowers on grass) is not opaque and still falls
+        through to the base terrain's tag."""
         # key is bottom-first (z ascending); iterate top-down for "topmost wins".
         for _z, tile_id in reversed(key):
             tag = _tag_for_tile(tags_for_tileset, tile_id)
             if tag != 0:
                 return tag
+            if is_opaque is not None and is_opaque(tile_id):
+                return 0  # solid tag-0 tile fully covers whatever lies beneath
         return 0
 
     def column_behavior(
@@ -103,12 +118,14 @@ class TerrainTagTable:
         tileset_id: int,
         key: tuple[tuple[int, int], ...],
         tags_for_tileset: list[int],
+        is_opaque: Callable[[int], bool] | None = None,
     ) -> int:
-        """The MB_* numeric value for a column: apply the topmost-nonzero-tag rule,
-        then map through the terrain table. Ledge (tag 1) needs a per-tile direction
-        override (`ledge_directions`); unmapped ledges warn once and fall back to
+        """The MB_* numeric value for a column: apply the topmost-nonzero-tag rule
+        (with the opaque-cover stop, see `effective_tag`), then map through the
+        terrain table. Ledge (tag 1) needs a per-tile direction override
+        (`ledge_directions`); unmapped ledges warn once and fall back to
         MB_NORMAL."""
-        tag = self.effective_tag(tags_for_tileset, key)
+        tag = self.effective_tag(tags_for_tileset, key, is_opaque=is_opaque)
         if tag == LEDGE_TAG:
             # Visual tile id for the ledge lookup: the topmost non-empty tile,
             # matching how `effective_tag` found the tag in the first place.

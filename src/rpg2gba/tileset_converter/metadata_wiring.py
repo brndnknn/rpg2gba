@@ -21,7 +21,9 @@ PATHFINDER v1 scope (user decision 2026-06-15: "build S5 now, defer dispatchers"
     any GLOBAL switch/variable page condition falls back to its base page
     (`Map{m}_EV{e}_Page1`) with a logged TODO — full dispatch returns once S6 has
     minted the globals. Other v1 simplifications (all logged in PATHFINDER_FINDINGS):
-      - graphics: one default OBJ_EVENT_GFX for every NPC (RMXP gfx map deferred).
+      - graphics: boot-state page selection + `reference/npc_gfx_map.json` (see
+        `npc_gfx.py`) resolve a real per-sheet OBJ_EVENT_GFX_*; a sheet with no
+        map entry fails loud rather than falling back to a generic NPC.
       - region_map_section: a vanilla MAPSEC reused for all slice maps (the minted
         MAPSEC_* aren't in the fork's region_map_sections enum yet — S4 open item).
       - warp arrival: an extra plain-floor "arrival" warp_event is emitted on the
@@ -49,19 +51,32 @@ from pathlib import Path
 
 from ..conversion_agent.flag_registry import self_switch_flag_name
 from .map_constants import MapConstantRegistry, MapConstants
+from .npc_gfx import is_door_sheet, movement_type_for, select_boot_page
 
 logger = logging.getLogger(__name__)
 
 # v1 defaults (all logged simplifications — see module docstring).
 DEFAULT_ELEVATION = 3
-DEFAULT_GFX = "OBJ_EVENT_GFX_NINJA_BOY"  # generic NPC; RMXP gfx mapping deferred
 DEFAULT_MUSIC = "MUS_LITTLEROOT"
 DEFAULT_WEATHER = "WEATHER_NONE"
 DEFAULT_MAPSEC = "MAPSEC_LITTLEROOT_TOWN"  # vanilla section reused (minted MAPSEC_* deferred)
 NO_SCRIPT = "0x0"
 
 TRANSFER_CODE = 201  # RMXP "Transfer Player"; params [method, dest_map, x, y, dir, fade]
+TRIGGER_ACTION = 0  # RMXP trigger: fires on the action button (a sign/NPC talk)
 TRIGGER_PLAYER_TOUCH = 1  # RMXP trigger: a door/stairs fires on step-on
+TRIGGER_EVENT_TOUCH = 2  # RMXP trigger: fires when the player touches the event's tile
+TRIGGER_AUTORUN = 3  # RMXP trigger: fires automatically, once, map-script territory
+TRIGGER_PARALLEL = 4  # RMXP trigger: runs continuously in the background
+
+# Drop-report reasons (metadata_wiring.build_object_events) — informational tags,
+# not an exhaustive enum; new reasons are fine as long as they're logged loud.
+DROP_NO_BOOT_PAGE = "no_boot_page"  # no page's condition holds at boot state
+DROP_BLANK_TRIGGER1 = "blank_trigger1"  # blank graphic, player-touch (non-warp)
+DROP_AUTORUN = "autorun"  # blank graphic, autorun trigger — map-script territory
+DROP_PARALLEL = "parallel"  # blank graphic, parallel trigger — map-script territory
+DROP_DOOR_SHEET = "door_sheet"  # visible graphic is a door-tile sheet (stripped)
+DROP_OPACITY0 = "opacity0"  # invisible (opacity 0) graphic, non-touch trigger
 
 
 def page_label(map_id: int, event_id: int, page_num: int) -> str:
@@ -100,6 +115,72 @@ class ObjectEvent:
             "script": self.script,
             "flag": self.flag,
         }
+
+
+@dataclass
+class BgEvent:
+    """A `sign` background event: a blank-graphic, action-trigger boot page (an
+    RMXP event whose visible body is a sign/plaque, not an object sprite)."""
+
+    x: int
+    y: int
+    script: str
+    elevation: int = 0
+    player_facing_dir: str = "BG_EVENT_PLAYER_FACING_ANY"
+    kind: str = "sign"
+
+    def to_dict(self) -> dict:
+        return {
+            "type": self.kind,
+            "x": self.x,
+            "y": self.y,
+            "elevation": self.elevation,
+            "player_facing_dir": self.player_facing_dir,
+            "script": self.script,
+        }
+
+
+@dataclass
+class CoordEvent:
+    """A `trigger` coordinate event: a blank- or invisible-graphic, event-touch
+    boot page (an invisible script host standing on a tile, e.g. the Map032 EV9
+    Pokedex-ceremony host)."""
+
+    x: int
+    y: int
+    script: str
+    elevation: int = 3
+    var: str = "VAR_TEMP_0"
+    var_value: str = "0"
+    kind: str = "trigger"
+
+    def to_dict(self) -> dict:
+        return {
+            "type": self.kind,
+            "x": self.x,
+            "y": self.y,
+            "elevation": self.elevation,
+            "var": self.var,
+            "var_value": self.var_value,
+            "script": self.script,
+        }
+
+
+@dataclass
+class ObjectBuildResult:
+    """Everything `build_object_events` produces for one map: the placed
+    objects, the dispatcher .pory bodies, the bg/coord events split out of the
+    same boot-page decision, the local-id table (RMXP event id -> 1-based
+    `object_events` position — the id porymap actually compiles), and the drop
+    report (every event that resolved to nothing, and why — CLAUDE.md §4.5, no
+    silent drops)."""
+
+    object_events: list[ObjectEvent] = field(default_factory=list)
+    dispatchers: list[str] = field(default_factory=list)
+    coord_events: list[CoordEvent] = field(default_factory=list)
+    bg_events: list[BgEvent] = field(default_factory=list)
+    local_id_map: dict[str, int] = field(default_factory=dict)
+    drops: list[tuple[int, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -143,7 +224,14 @@ class MapFile:
     region_map_section: str = DEFAULT_MAPSEC
     object_events: list[ObjectEvent] = field(default_factory=list)
     warp_events: list[WarpEvent] = field(default_factory=list)
+    coord_events: list[CoordEvent] = field(default_factory=list)
+    bg_events: list[BgEvent] = field(default_factory=list)
     connections: list[dict] | None = None  # filled by connections.py (5.4)
+    # Not part of the porymap schema (never serialized) — the RMXP event id ->
+    # 1-based object_events position table, exposed here for whatever assembles
+    # this MapFile to hand to `write_local_id_tables` (a pinned cross-module
+    # contract; see build_object_events/ObjectBuildResult).
+    local_id_map: dict[str, int] = field(default_factory=dict)
 
     def to_json_dict(self) -> dict:
         """Build the dict matching the fork's data/maps/<Name>/map.json schema."""
@@ -165,8 +253,8 @@ class MapFile:
             "connections": self.connections,
             "object_events": [oe.to_dict() for oe in self.object_events],
             "warp_events": [we.to_dict() for we in self.warp_events],
-            "coord_events": [],
-            "bg_events": [],
+            "coord_events": [ce.to_dict() for ce in self.coord_events],
+            "bg_events": [be.to_dict() for be in self.bg_events],
         }
 
 
@@ -281,53 +369,172 @@ def _event_has_body(event: dict, consts: MapConstants, pory_labels: set[str]) ->
     )
 
 
+def _resolve_script(
+    event: dict, consts: MapConstants, pory_labels: set[str] | None
+) -> tuple[str, str | None]:
+    """Resolve the .pory script label an event's converted behavior lives at
+    (dispatcher label / page-1 label / the static "0x0"), and the dispatcher body
+    to emit alongside it (or None). Shared by every emission path — object, bg
+    sign, coord trigger — so a sign or invisible trigger host points at the exact
+    same label an object_event for that event would have gotten (CLAUDE.md §4.3:
+    one label-resolution rule, not three copies of it).
+
+    When `pory_labels` is given (post-S6, the canonical def set), an event S6 left
+    bodyless — a standing NPC / globally-gated cutscene actor with no real
+    commands — resolves to the STATIC script ("0x0"), not a dangling page label.
+    An event with *some* converted body but whose resolved page label is missing
+    is a genuine page-body gap and fails loud (CLAUDE.md §4.5)."""
+    uid, eid = consts.uranium_id, event["id"]
+    if pory_labels is not None and not _event_has_body(event, consts, pory_labels):
+        logger.info("map %d EV%03d: no converted .pory body -> static script", uid, eid)
+        return NO_SCRIPT, None
+
+    dispatcher = build_page_dispatcher(event, consts)
+    if dispatcher is not None:
+        return dispatch_label(uid, eid), dispatcher
+
+    script = page_label(uid, eid, 1)
+    if len(event["pages"]) > 1:
+        logger.info(
+            "map %d EV%03d: multi-page dispatch deferred (global gate) -> %s",
+            uid, eid, script,
+        )
+    if pory_labels is not None and script not in pory_labels:
+        raise KeyError(
+            f"map {uid} EV{eid:03d}: resolved script label {script} not in the "
+            f"converted .pory, yet other pages of this event were converted — "
+            f"a page-body gap (base page empty but a later page has commands)"
+        )
+    return script, None
+
+
 def build_object_events(
     map_json: dict,
     consts: MapConstants,
     slice_ids: set[int],
     *,
     pory_labels: set[str] | None = None,
-) -> tuple[list[ObjectEvent], list[str]]:
-    """Place every non-warp, non-skipped event as an object_event and emit the
-    dispatchers. Returns (object_events, dispatcher_scripts).
+    npc_gfx: dict[str, str] | None = None,
+) -> ObjectBuildResult:
+    """Place every non-warp, non-skipped event per its BOOT-STATE page (RMXP shows
+    the highest-index page whose condition holds at boot; `npc_gfx.select_boot_page`).
 
-    When `pory_labels` is given (post-S6, the canonical def set), an event S6 left
-    bodyless — a standing NPC / globally-gated cutscene actor with no real commands
-    — is wired as a STATIC object (`script "0x0"`), not a dangling page label. An
-    event with *some* converted body but whose resolved page label is missing is a
-    genuine page-body gap and fails loud (CLAUDE.md §4.5)."""
+    - no boot-active page -> dropped (`no_boot_page`).
+    - boot page's graphic is blank (no character_name):
+        trigger 0 (action)      -> a `sign` bg_event.
+        trigger 2 (event touch) -> a `trigger` coord_event.
+        trigger 1 / 3 / 4       -> dropped (`blank_trigger1` / `autorun` /
+                                   `parallel` — autorun/parallel are future
+                                   map-script territory, not object placement).
+    - boot page has a graphic but opacity 0 (an invisible script host, e.g. the
+      Map032 EV9 Pokedex-ceremony host and EV74):
+        trigger 2 -> a `trigger` coord_event (their script MUST stay referenced
+                     so assembly pruning doesn't drop it).
+        otherwise -> dropped (`opacity0`).
+    - boot page has a visible graphic:
+        a door sheet (`npc_gfx.is_door_sheet`) -> dropped (`door_sheet`) — the
+        real door is the warp_event + tileset door tile, not this sprite.
+        otherwise -> an object_event with `graphics_id = npc_gfx[character_name]`
+                     (KeyError if `npc_gfx` is None or the name is unmapped — no
+                     silent default, CLAUDE.md §4.5) and `movement_type` from the
+                     boot page's move_type/facing (`npc_gfx.movement_type_for`).
+
+    Every emission path resolves its script label via `_resolve_script`. Returns
+    an `ObjectBuildResult`: the placed events, dispatcher bodies, the local-id
+    table (RMXP event id -> 1-based `object_events` position, the id porymap
+    actually compiles), and the drop report (no silent drops)."""
     objects, _, _ = classify_map_events(map_json, slice_ids)
-    object_events: list[ObjectEvent] = []
-    dispatchers: list[str] = []
+    uid = consts.uranium_id
+    result = ObjectBuildResult()
+
+    def _drop(event_id: int, reason: str) -> None:
+        result.drops.append((event_id, reason))
+        logger.info("map %d EV%03d: dropped (%s)", uid, event_id, reason)
+
     for event in objects:
-        uid, eid = consts.uranium_id, event["id"]
-        if pory_labels is not None and not _event_has_body(event, consts, pory_labels):
-            logger.info("map %d EV%03d: no converted .pory body -> static object", uid, eid)
-            object_events.append(
-                ObjectEvent(x=event["x"], y=event["y"], graphics_id=DEFAULT_GFX, script=NO_SCRIPT)
-            )
+        eid = event["id"]
+        page = select_boot_page(event)
+        if page is None:
+            _drop(eid, DROP_NO_BOOT_PAGE)
             continue
-        dispatcher = build_page_dispatcher(event, consts)
-        if dispatcher is not None:
-            script = dispatch_label(uid, eid)
-            dispatchers.append(dispatcher)
+
+        graphic = page.get("graphic", {})
+        name = graphic.get("character_name") or ""
+        trigger = page.get("trigger")
+        opacity = graphic.get("opacity", 255)
+
+        emit_kind: str  # "bg" | "coord" | "object"
+        if not name:
+            if trigger == TRIGGER_ACTION:
+                emit_kind = "bg"
+            elif trigger == TRIGGER_EVENT_TOUCH:
+                emit_kind = "coord"
+            elif trigger == TRIGGER_PLAYER_TOUCH:
+                _drop(eid, DROP_BLANK_TRIGGER1)
+                continue
+            elif trigger == TRIGGER_AUTORUN:
+                _drop(eid, DROP_AUTORUN)
+                continue
+            elif trigger == TRIGGER_PARALLEL:
+                _drop(eid, DROP_PARALLEL)
+                continue
+            else:
+                raise ValueError(f"map {uid} EV{eid:03d}: unknown trigger {trigger!r}")
+        elif opacity == 0:
+            if trigger == TRIGGER_EVENT_TOUCH:
+                emit_kind = "coord"
+            else:
+                _drop(eid, DROP_OPACITY0)
+                continue
+        elif is_door_sheet(name):
+            _drop(eid, DROP_DOOR_SHEET)
+            continue
         else:
-            script = page_label(uid, eid, 1)
-            if len(event["pages"]) > 1:
-                logger.info(
-                    "map %d EV%03d: multi-page dispatch deferred (global gate) -> %s",
-                    uid, eid, script,
-                )
-            if pory_labels is not None and script not in pory_labels:
+            emit_kind = "object"
+
+        script, dispatcher = _resolve_script(event, consts, pory_labels)
+        if dispatcher is not None:
+            result.dispatchers.append(dispatcher)
+
+        if emit_kind == "bg":
+            result.bg_events.append(BgEvent(x=event["x"], y=event["y"], script=script))
+        elif emit_kind == "coord":
+            result.coord_events.append(CoordEvent(x=event["x"], y=event["y"], script=script))
+        else:
+            if npc_gfx is None:
                 raise KeyError(
-                    f"map {uid} EV{eid:03d}: resolved script label {script} not in the "
-                    f"converted .pory, yet other pages of this event were converted — "
-                    f"a page-body gap (base page empty but a later page has commands)"
+                    f"map {uid} EV{eid:03d}: visible graphic {name!r} needs the npc "
+                    f"gfx map — call build_object_events(..., npc_gfx=load_npc_gfx_map"
+                    f"(...))"
                 )
-        object_events.append(
-            ObjectEvent(x=event["x"], y=event["y"], graphics_id=DEFAULT_GFX, script=script)
-        )
-    return object_events, dispatchers
+            try:
+                graphics_id = npc_gfx[name]
+            except KeyError:
+                raise KeyError(
+                    f"map {uid} EV{eid:03d}: sheet {name!r} has no reference/"
+                    f"npc_gfx_map.json entry"
+                ) from None
+            movement_type = movement_type_for(page)
+            result.object_events.append(
+                ObjectEvent(
+                    x=event["x"], y=event["y"], graphics_id=graphics_id,
+                    script=script, movement_type=movement_type,
+                )
+            )
+            result.local_id_map[str(eid)] = len(result.object_events)
+
+    return result
+
+
+def write_local_id_tables(out_dir: Path, tables: dict[int, dict[str, int]]) -> None:
+    """Write one local-id table per map: `Map{map_id:03d}.json` holding exactly
+    `{str(rmxp_event_id): 1_based_local_id}` for that map's emitted objects
+    (`ObjectBuildResult.local_id_map`). PINNED contract — another module consumes
+    this exact shape; do not deviate (CLAUDE.md §4.3)."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for map_id, table in tables.items():
+        path = out_dir / f"Map{map_id:03d}.json"
+        path.write_text(json.dumps(table, indent=2) + "\n", encoding="utf-8")
 
 
 def _return_warp_index(dest_warps: list[WarpSpec], source_uid: int) -> int:
@@ -439,10 +646,18 @@ def build_slice_maps(
     out_dir: Path,
     dispatcher_dir: Path,
     pory_labels: set[str] | None = None,
+    npc_gfx: dict[str, str] | None = None,
+    local_id_dir: Path | None = None,
 ) -> dict[int, set[tuple[int, int]]]:
     """Assemble map.json + dispatcher .pory for every slice map. Returns the per-map
     warp-source coords (S3 walkable-overrides) so S8 can force those cells walkable.
-    Warp pairing needs every map's warp list first, so this is a slice-level pass."""
+    Warp pairing needs every map's warp list first, so this is a slice-level pass.
+
+    `npc_gfx` (character_name -> OBJ_EVENT_GFX_* — see `npc_gfx.load_npc_gfx_map`)
+    is forwarded to `build_object_events`; omit it only for callers that don't
+    place any visible NPC (a visible graphic with no map raises loud). When
+    `local_id_dir` is given, the per-map RMXP-id -> porymap-local-id tables are
+    also written there via `write_local_id_tables` (the pinned local-id contract)."""
     slice_set = set(slice_ids)
     maps = {
         uid: json.loads((maps_dir / f"Map{uid:03d}.json").read_text(encoding="utf-8"))
@@ -455,32 +670,50 @@ def build_slice_maps(
     resolved = _resolve_all_warp_events(warp_lists, registry, maps)
 
     overrides: dict[int, set[tuple[int, int]]] = {}
+    local_id_tables: dict[int, dict[str, int]] = {}
     for uid in slice_ids:
         consts = registry.get(uid)
         warp_events = resolved.get(uid, [])
         src_coords = {(s.src_x, s.src_y) for s in warp_lists[uid]}
-        object_events, dispatchers = build_object_events(
-            maps[uid], consts, slice_set, pory_labels=pory_labels
+        result = build_object_events(
+            maps[uid], consts, slice_set, pory_labels=pory_labels, npc_gfx=npc_gfx
         )
         overrides[uid] = src_coords
+        local_id_tables[uid] = result.local_id_map
 
         map_file = MapFile(
             consts=consts,
             map_type=_map_type_for(uid, metadata_path),
-            object_events=object_events,
+            object_events=result.object_events,
             warp_events=warp_events,
+            coord_events=result.coord_events,
+            bg_events=result.bg_events,
+            local_id_map=result.local_id_map,
         )
         map_out = out_dir / consts.dir_name / "map.json"
         map_out.parent.mkdir(parents=True, exist_ok=True)
         map_out.write_text(json.dumps(map_file.to_json_dict(), indent=2) + "\n", encoding="utf-8")
-        if dispatchers:
-            disp_out = dispatcher_dir / f"Map{uid:03d}_dispatch.pory"
+        disp_out = dispatcher_dir / f"Map{uid:03d}_dispatch.pory"
+        if result.dispatchers:
             disp_out.parent.mkdir(parents=True, exist_ok=True)
-            disp_out.write_text("\n\n".join(dispatchers) + "\n", encoding="utf-8")
+            disp_out.write_text("\n\n".join(result.dispatchers) + "\n", encoding="utf-8")
+        elif disp_out.exists():
+            # Idempotence (CLAUDE.md §4.2): a prior run may have emitted a
+            # dispatcher for an event this run now drops (boot-page selection can
+            # reclassify a multi-page event to a bg/coord/no-emit). Remove the
+            # stale file so no consumer appends a dispatcher whose page bodies the
+            # prune has since removed (a dangling goto).
+            disp_out.unlink()
+        for drop_eid, reason in result.drops:
+            logger.info("map %d EV%03d: dropped (%s)", uid, drop_eid, reason)
         logger.info(
-            "map %d (%s): %d objects, %d warps, %d dispatchers",
-            uid, consts.map_const, len(object_events), len(warp_events), len(dispatchers),
+            "map %d (%s): %d objects, %d warps, %d coord, %d bg, %d dispatchers, %d dropped",
+            uid, consts.map_const, len(result.object_events), len(warp_events),
+            len(result.coord_events), len(result.bg_events), len(result.dispatchers),
+            len(result.drops),
         )
+    if local_id_dir is not None:
+        write_local_id_tables(local_id_dir, local_id_tables)
     return overrides
 
 

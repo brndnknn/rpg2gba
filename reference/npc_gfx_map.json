@@ -1,0 +1,92 @@
+{
+  "HGSS_000": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_000",
+    "fallback": "OBJ_EVENT_GFX_LITTLE_BOY",
+    "note": "HGSS overworld sheet: little boy"
+  },
+  "HGSS_001": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_001",
+    "fallback": "OBJ_EVENT_GFX_LITTLE_GIRL",
+    "note": "HGSS overworld sheet: little girl"
+  },
+  "HGSS_005": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_005",
+    "fallback": "OBJ_EVENT_GFX_YOUNGSTER",
+    "note": "HGSS overworld sheet: boy / youngster"
+  },
+  "HGSS_008": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_008",
+    "fallback": "OBJ_EVENT_GFX_WOMAN_1",
+    "note": "HGSS overworld sheet: young woman"
+  },
+  "HGSS_009": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_009",
+    "fallback": "OBJ_EVENT_GFX_MAN_1",
+    "note": "HGSS overworld sheet: man 1"
+  },
+  "HGSS_017": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_017",
+    "fallback": "OBJ_EVENT_GFX_WOMAN_2",
+    "note": "HGSS overworld sheet: woman (housewife-ish)"
+  },
+  "HGSS_018": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_018",
+    "fallback": "OBJ_EVENT_GFX_OLD_MAN",
+    "note": "HGSS overworld sheet: old man"
+  },
+  "HGSS_019": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_019",
+    "fallback": "OBJ_EVENT_GFX_OLD_WOMAN",
+    "note": "HGSS overworld sheet: old woman"
+  },
+  "HGSS_034": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_034",
+    "fallback": "OBJ_EVENT_GFX_FAT_MAN",
+    "note": "HGSS overworld sheet: fat man / pokefan M build"
+  },
+  "HGSS_051": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_051",
+    "fallback": "OBJ_EVENT_GFX_CAMPER",
+    "note": "HGSS overworld sheet: camper"
+  },
+  "HGSS_129": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_129",
+    "fallback": "OBJ_EVENT_GFX_OLD_WOMAN",
+    "note": "HGSS overworld sheet: old woman (alt palette)"
+  },
+  "Rivaltheo": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_RIVALTHEO",
+    "fallback": "OBJ_EVENT_GFX_RIVAL_BRENDAN_NORMAL",
+    "note": "Theo, the rival — custom sheet; boyish rival lookalike"
+  },
+  "fk107-rocksmash": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_FK107_ROCKSMASH",
+    "fallback": "OBJ_EVENT_GFX_BREAKABLE_ROCK",
+    "note": "Rock Smash boulder overlay sheet"
+  },
+  "PU-Chyinmunk": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_PU_CHYINMUNK",
+    "fallback": "OBJ_EVENT_GFX_SPECIES(PACHIRISU)",
+    "note": "Wild Pokemon NPC sheet (Chyinmunk) — Pachirisu-shaped stand-in, not a rock"
+  },
+  "PU-Orchynx": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_PU_ORCHYNX",
+    "fallback": "OBJ_EVENT_GFX_SPECIES(CHIKORITA)",
+    "note": "Wild Pokemon NPC sheet (Orchynx) — Chikorita-shaped stand-in, not a rock"
+  },
+  "PU-Raptorch": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_PU_RAPTORCH",
+    "fallback": "OBJ_EVENT_GFX_SPECIES(CHARMANDER)",
+    "note": "Wild Pokemon NPC sheet (Raptorch) — Charmander-shaped stand-in, not a rock"
+  },
+  "PU-Eletux": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_PU_ELETUX",
+    "fallback": "OBJ_EVENT_GFX_SPECIES(SHINX)",
+    "note": "Wild Pokemon NPC sheet (Eletux) — Shinx-shaped stand-in, not a rock"
+  },
+  "PU-Barewl": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_PU_BAREWL",
+    "fallback": "OBJ_EVENT_GFX_SPECIES(ARON)",
+    "note": "Wild Pokemon NPC sheet (Barewl) — Aron-shaped stand-in, not a rock"
+  }
+}

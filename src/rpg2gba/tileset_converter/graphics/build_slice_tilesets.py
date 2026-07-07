@@ -297,10 +297,25 @@ def build_slice_tilesets(
         # Build metatile list: one per column key + void + optional warp copy.
         # Terrain-tag behavior (MB_TALL_GRASS, MB_ICE, ...) is per-column; the door
         # copies below override it with MB_NON_ANIMATED_DOOR (door > terrain).
+        # A fully-opaque tag-0 tile stops the tag fall-through (RMXP water
+        # flood-fill under land must not leak MB_POND_WATER up — see
+        # terrain_tags.effective_tag).
+        opaque_cache: dict[int, bool] = {}
+
+        def _is_opaque(tile_id: int, _rast=rast, _cache=opaque_cache) -> bool:
+            hit = _cache.get(tile_id)
+            if hit is None:
+                alpha = np.asarray(_rast.render(tile_id).convert("RGBA"))[..., 3]
+                hit = bool((alpha == 255).all())
+                _cache[tile_id] = hit
+            return hit
+
         metatile_list = [
             _render_column(
                 k, rast, priorities,
-                behavior=terrain_table.column_behavior(ts, k, terrain_tags),
+                behavior=terrain_table.column_behavior(
+                    ts, k, terrain_tags, is_opaque=_is_opaque
+                ),
             )
             for k in ordered
         ]

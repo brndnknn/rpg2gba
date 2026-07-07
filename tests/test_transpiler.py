@@ -513,7 +513,7 @@ def test_text_with_control_code_queues(ctx: T.TranspileContext) -> None:
 
 def test_text_with_player_name_code(ctx: T.TranspileContext) -> None:
     res = run_event(ctx, [[cmd(T.SHOW_TEXT, ["Hi \\PN!"])]], trigger=1)
-    assert 'msgbox("Hi {PLAYER}!")' in res.text
+    assert 'msgbox(format("Hi {PLAYER}!"))' in res.text
     assert res.unhandled == []
 
 
@@ -534,8 +534,8 @@ def test_yesno_choice_emits_yesnobox_and_branches(ctx: T.TranspileContext) -> No
     res = run_event(ctx, [commands], trigger=1)
     assert "yesnobox(0, 0)" in res.text
     assert "if (var(VAR_RESULT) == 1) {" in res.text
-    assert 'msgbox("yes path")' in res.text
-    assert 'msgbox("no path")' in res.text
+    assert 'msgbox(format("yes path"))' in res.text
+    assert 'msgbox(format("no path"))' in res.text
     assert res.unhandled == []
 
 

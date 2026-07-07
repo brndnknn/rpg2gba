@@ -401,8 +401,15 @@ extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_UnusedMauvi
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_UnusedMauvilleOldMan2;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_ApricornTree;
 
+// BEGIN URANIUM PATHFINDER SLICE — extern decls for generated Uranium OW graphics-info structs (rpg2gba; stub when none staged).
+#include "uranium_object_event_graphics_info_decls.gen.h"
+// END URANIUM PATHFINDER SLICE
+
 const struct ObjectEventGraphicsInfo *const gObjectEventGraphicsInfoPointers[NUM_OBJ_EVENT_GFX] = {
-    [OBJ_EVENT_GFX_BRENDAN_NORMAL] =           &gObjectEventGraphicsInfo_BrendanNormal,
+    // BEGIN URANIUM PATHFINDER SLICE — player walk/run art: converted Uranium HERO sheets when staged;
+    // the decls stub #defines the Uranium symbol back to gObjectEventGraphicsInfo_BrendanNormal when not.
+    [OBJ_EVENT_GFX_BRENDAN_NORMAL] =           &gObjectEventGraphicsInfo_UraniumPlayerNormal,
+    // END URANIUM PATHFINDER SLICE
     [OBJ_EVENT_GFX_BRENDAN_MACH_BIKE] =        &gObjectEventGraphicsInfo_BrendanMachBike,
     [OBJ_EVENT_GFX_BRENDAN_SURFING] =          &gObjectEventGraphicsInfo_BrendanSurfing,
     [OBJ_EVENT_GFX_BRENDAN_FIELD_MOVE] =       &gObjectEventGraphicsInfo_BrendanFieldMove,
@@ -791,6 +798,9 @@ const struct ObjectEventGraphicsInfo *const gObjectEventGraphicsInfoPointers[NUM
     [OBJ_EVENT_GFX_DEOXYS_N]                 = &gObjectEventGraphicsInfo_DeoxysN,
     [OBJ_EVENT_GFX_SS_ANNE]                  = &gObjectEventGraphicsInfo_SSAnne,
 #endif // IS_FRLG
+// BEGIN URANIUM PATHFINDER SLICE — generated Uranium OW pointer entries, designated by OBJ_EVENT_GFX_URANIUM_* (rpg2gba; stub when none staged).
+#include "uranium_object_event_graphics_info_pointers.gen.h"
+// END URANIUM PATHFINDER SLICE
 };
 
 const struct ObjectEventGraphicsInfo *const gMauvilleOldManGraphicsInfoPointers[] = {

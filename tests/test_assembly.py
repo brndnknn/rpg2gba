@@ -363,8 +363,25 @@ def test_real_slice_map032_prunes_clean():
     pory = _REAL_PORY.read_text(encoding="utf-8")
     map_json = json.loads(_REAL_MAP_JSON.read_text(encoding="utf-8"))
     result = asm.prune_map_pory(pory, map_json, allowed_uranium_maps={32, 48, 49})
-    # the out-of-slice doors surfaced by the completed S6 run
-    assert {asm.block_event_id(lbl) for lbl in result.dropped} == {3, 5, 6, 7, 17, 23, 36, 37, 78}
+    # Re-pinned for the task-4 NPC-gfx wiring: boot-state page selection now only
+    # places boot-active visible NPCs (objects), signs (bg), and invisible
+    # touch-hosts (coord), so every RMXP event that renders nothing at boot is
+    # pruned — the S9 "NPC crowd" fix. The 28 dropped ids break down as:
+    #   in-slice warp (no script, warp_event handles it):        5
+    #   out-of-slice building/cave warps (classify "skip"):      3, 6, 7, 17, 23, 36, 37, 78
+    #   no boot-active page (stage-gated NPCs: Theo chase 79/80/ #
+    #     81, ceremony actors 76/77, plus furniture/others):     2, 16, 21, 24, 25, 30, 31,
+    #                                                            32, 34, 52, 53, 54, 55, 76, 77,
+    #                                                            79, 80, 81
+    #   opacity-0 spawn-invisible cutscene actor (Rivaltheo):    75
+    # EV9 + EV74 (HGSS_014, opacity-0 trigger-2) survive as coord_events, so EV9's
+    # Pokédex-ceremony hand-override blocks are KEPT (not in the dropped set).
+    assert {asm.block_event_id(lbl) for lbl in result.dropped} == {
+        2, 3, 5, 6, 7, 16, 17, 21, 23, 24, 25, 30, 31, 32, 34,
+        36, 37, 52, 53, 54, 55, 75, 76, 77, 78, 79, 80, 81,
+    }
+    # EV9's hand-override choreography survives the prune (coord_event keeps it live)
+    assert "Map032_EV009_Page3" in result.text
     # and nothing undefined is left for the assembler
     import re
 

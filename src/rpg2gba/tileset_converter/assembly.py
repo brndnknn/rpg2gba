@@ -36,6 +36,13 @@ from pathlib import Path
 # indented, so anchoring on the start of line is unambiguous. The agent emits
 # only ``script`` blocks (no ``text``/``movement``/``mart``/``raw``).
 _BLOCK_START_RE = re.compile(r"(?m)^script[ \t]+(\w+)\b")
+# Any top-level block that DEFINES a referenceable label: `script` bodies plus the
+# hand-override choreography (`movement`/`text`/`mart`). Used only by the dangling-
+# reference check, which must count a `movement Foo {}` as defining Foo (an
+# `applymovement(id, Foo)` is a reference to it). `_BLOCK_START_RE`/`script_definitions`
+# stay script-only for callers that specifically want page bodies (label
+# normalization, map.json body-existence).
+_ANY_BLOCK_START_RE = re.compile(r"(?m)^(?:script|movement|text|mart)[ \t]+(\w+)\b")
 _EVENT_ID_RE = re.compile(r"^Map\d+_EV(\d+)_")
 _URANIUM_MAP_RE = re.compile(r"\bMAP_URANIUM_(\d+)\b")
 
@@ -228,6 +235,18 @@ def script_definitions(*pory_texts: str) -> list[str]:
     return out
 
 
+def block_definitions(*pory_texts: str) -> list[str]:
+    """Every top-level block label (``script``/``movement``/``text``/``mart``)
+    defined across the fragments — a superset of `script_definitions` for the
+    dangling-reference check, so a named ``movement``/``text`` block a hand override
+    defines (and an ``applymovement``/``format`` references) is correctly seen as
+    defined, not reported as an undefined reference."""
+    out: list[str] = []
+    for text in pory_texts:
+        out.extend(_ANY_BLOCK_START_RE.findall(text))
+    return out
+
+
 def script_reference_labels(*pory_texts: str) -> set[str]:
     """Script-label-shaped tokens (``Map…_EV…``/``CommonEvent_…``) used in the text.
 
@@ -269,7 +288,7 @@ def find_dangling_references(
     ``script`` with no block (an EV074-style conversion gap), a dispatcher
     ``goto`` to a missing page, or a ``call CommonEvent_*`` with no common-event
     block."""
-    defined = set(script_definitions(*staged_texts))
+    defined = set(block_definitions(*staged_texts))
     referenced = script_reference_labels(*staged_texts)
     for mj in map_jsons or []:
         referenced |= map_json_script_refs(mj)

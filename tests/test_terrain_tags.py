@@ -74,6 +74,31 @@ def test_topmost_nonzero_tag_wins(tmp_path: Path) -> None:
     assert behavior_zero == table._tag_to_value[0]
 
 
+def test_opaque_cover_stops_tag_fallthrough(tmp_path: Path) -> None:
+    """RMXP maps flood-fill a water layer under solid land: a fully-opaque tag-0
+    tile on top must STOP the fall-through (else grass/hedges next to the pond
+    inherit reflective MB_POND_WATER — boot gate 2026-07-06). A transparent
+    overlay (flowers) still falls through to the terrain beneath."""
+    fork = _fake_fork(tmp_path)
+    table = load_terrain_tag_map(fork, REAL_TERRAIN_TAG_MAP)
+
+    tags = [0] * 500
+    tags[400] = 7  # water, on z=0
+    key = ((0, 400), (1, 401))  # tag-0 tile 401 covers the water
+
+    # Opaque cover -> MB_NORMAL, the water tag beneath must not leak up.
+    opaque = table.column_behavior(5, key, tags, is_opaque=lambda tid: tid == 401)
+    assert opaque == table._tag_to_value[0]
+
+    # Transparent overlay -> falls through to the water tag (legacy behavior).
+    transparent = table.column_behavior(5, key, tags, is_opaque=lambda tid: False)
+    assert transparent == table._tag_to_value[7]
+
+    # No predicate (legacy callers) -> unchanged fall-through.
+    legacy = table.column_behavior(5, key, tags)
+    assert legacy == table._tag_to_value[7]
+
+
 def test_autotile_variant_fallback(tmp_path: Path) -> None:
     """Variant id 50 with no own tag inherits base 48's tag."""
     fork = _fake_fork(tmp_path)

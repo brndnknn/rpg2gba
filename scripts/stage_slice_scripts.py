@@ -40,17 +40,32 @@ from rpg2gba.pipeline import _load_dotenv
 from rpg2gba.tileset_converter import assembly as asm
 from rpg2gba.tileset_converter import map_constants as mc
 from rpg2gba.tileset_converter import metadata_wiring as mw
+from rpg2gba.tileset_converter import sprite_pass
+from rpg2gba.tileset_converter.local_id_remap import (
+    load_local_id_table,
+    remap_pory_object_ids,
+)
 from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
+from rpg2gba.tileset_converter.npc_gfx import DEFAULT_NPC_GFX_MAP, load_npc_gfx_map
 
 DEFAULT_SLICE = tuple(SLICE_MAP_IDS)
 ALLOWED_MAPS = {49, 48, 32}
 OVERRIDES = Path("reference/map_name_overrides.json")
 
 
-def _regenerate_map_json(out: Path, pory_labels: set[str]) -> None:
+def _regenerate_map_json(
+    out: Path,
+    pory_labels: set[str],
+    npc_gfx: dict[str, str],
+    local_id_dir: Path,
+) -> None:
     """Re-run S5 wiring over the whole slice with the real converted page labels,
     so bodyless events become static objects. Warp pairing needs the full slice,
-    so this always covers ``DEFAULT_SLICE`` regardless of the requested subset."""
+    so this always covers ``DEFAULT_SLICE`` regardless of the requested subset.
+
+    `npc_gfx` (character_name -> OBJ_EVENT_GFX_*) places visible NPCs; the per-map
+    RMXP-id -> compiled-local-id tables are written to `local_id_dir` for the
+    staging remap pass below."""
     reg = mc.build_map_constants(
         list(DEFAULT_SLICE),
         map_infos_path=out / "map_infos.json",
@@ -65,6 +80,8 @@ def _regenerate_map_json(out: Path, pory_labels: set[str]) -> None:
         out_dir=out / "porymap" / "maps",
         dispatcher_dir=out / "porymap" / "dispatch",
         pory_labels=pory_labels,
+        npc_gfx=npc_gfx,
+        local_id_dir=local_id_dir,
     )
 
 
@@ -80,6 +97,25 @@ def main() -> int:
     out = Path(os.environ.get("RPG2GBA_OUTPUT", "output")) / "uranium-build"
     consts = json.loads((out / "porymap" / "map_constants.json").read_text(encoding="utf-8"))
     staging = out / "staging" / "scripts"
+    local_id_dir = out / "staging" / "local_ids"
+
+    fork_path = os.environ.get("RPG2GBA_POKEEMERALD")
+    if not fork_path:
+        print("RPG2GBA_POKEEMERALD not set", file=sys.stderr)
+        return 1
+    fork = Path(fork_path)
+
+    # NPC sprites first: populate engine/include/constants/uranium_event_objects.gen.h
+    # so load_npc_gfx_map can validate every OBJ_EVENT_GFX_URANIUM_* against a real
+    # #define (idempotent — assemble_pathfinder re-runs it before make).
+    sprite_pass.run_sprite_pass(fork)
+    npc_gfx = load_npc_gfx_map(
+        DEFAULT_NPC_GFX_MAP,
+        [
+            fork / "include" / "constants" / "event_objects.h",
+            fork / "include" / "constants" / "uranium_event_objects.gen.h",
+        ],
+    )
 
     # --- pass 1: normalize every slice .pory, collect the canonical (un-named)
     # page-label definition set the regenerated map.json must agree with ---
@@ -93,8 +129,9 @@ def main() -> int:
         normalized[map_id] = norm
         pory_labels.update(asm.script_definitions(norm.text))
 
-    # --- regenerate map.json with the real labels (the S5 stub hook) ---
-    _regenerate_map_json(out, pory_labels)
+    # --- regenerate map.json with the real labels (the S5 stub hook) +
+    # per-map local-id tables (RMXP id -> compiled object-event local id) ---
+    _regenerate_map_json(out, pory_labels, npc_gfx, local_id_dir)
 
     # --- pass 2: prune + report per requested map (reads the fresh map.json) ---
     staged: dict[str, str] = {}   # filename -> transformed text (for the staged-set checks)
@@ -115,17 +152,32 @@ def main() -> int:
 
         norm = normalized[map_id]
         result = asm.prune_map_pory(norm.text, map_json, allowed_uranium_maps=ALLOWED_MAPS)
-        staged[f"Map{map_id:03d}.pory"] = result.text
+
+        # Remap RMXP event ids in object-targeting commands (applymovement/
+        # setobjectxy/addobject/removeobject/turnobject) to compiled local ids.
+        # EXACTLY ONCE, on fresh (pruned) transpiler output — this is the sole
+        # application site; assemble_pathfinder must not remap again.
+        table = load_local_id_table(local_id_dir / f"Map{map_id:03d}.json")
+        remap = remap_pory_object_ids(
+            result.text, table, source_name=f"Map{map_id:03d}.pory"
+        )
+        staged[f"Map{map_id:03d}.pory"] = remap.text
 
         statics = sum(1 for o in map_json.get("object_events", []) if o.get("script") == "0x0")
         print(f"Map{map_id:03d} ({entry['dir_name']}): "
               f"normalized {len(norm.renames)} label(s), "
               f"kept {len(result.kept)}, dropped {len(result.dropped)} orphan(s), "
-              f"{statics} static object(s)")
+              f"{statics} static object(s), "
+              f"{len(remap.replacements)} local-id remap(s), "
+              f"{len(remap.warnings)} unmapped")
         for old, new in sorted(norm.renames.items()):
             print(f"    rename  {old} -> {new}")
         for label in result.dropped:
             print(f"    drop    {label}")
+        for line, command, old_id, new_id in remap.replacements:
+            print(f"    remap   line {line}: {command}({old_id}) -> {new_id}")
+        for line, command, old_id in remap.warnings:
+            print(f"    remap   WARN line {line}: {command}({old_id}) not in local-id table")
 
     # --- staged-set checks (read-only; dispatchers + CommonEvents define labels
     # the map scripts reference, so they must be in the defined set) ---

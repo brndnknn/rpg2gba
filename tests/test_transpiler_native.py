@@ -5,13 +5,13 @@ queue entries to deterministic emission where a clean, narrow mapping exists.
 Covers (see the matching module-level comment block in ``transpiler.py``,
 just above ``_ROCK_SMASH_RE``, for the fork/corpus evidence each shape cites):
 
-1. ``Kernel.pbRockSmash`` type-12 conditional -> ``goto EventScript_RockSmash``
+1. ``Kernel.pbRockSmash`` type-12 conditional -> ``goto(EventScript_RockSmash)``
    (``_ROCK_SMASH_RE`` / ``_emit_rock_smash_idiom``), both arms dropped.
 2. Cave-entrance choreography subsumed by the native warp: ``pbCaveEntrance``
    script-call strip (``_CAVE_ENTRANCE_STRIP_RE``), the code-204 fog tuple
    strip (``_CAVE_FOG_204_PARAMS`` / ``_emit_change_map_settings``), and the
    code-12 "step forward" 209 route strip (``_is_cave_step_forward_route``).
-3. ``pbTrainerPC`` -> ``goto EventScript_PC`` (``_TRAINER_PC_RE``).
+3. ``pbTrainerPC`` -> ``goto(EventScript_PC)`` (``_TRAINER_PC_RE``).
 4. ``pbShowMap`` -> ``special(FieldShowRegionMap)`` (``_SHOW_MAP_RE``).
 5. ``$PokemonGlobal.runningShoes=true`` -> ``setflag(FLAG_SYS_B_DASH)``
    (``_RUNNING_SHOES_ON_RE``).
@@ -94,7 +94,7 @@ def test_rock_smash_strips_both_arms_and_gotos_native(ctx: T.TranspileContext) -
     commands = _branch("Kernel.pbRockSmash", then_body, else_body)
     res = run_event(ctx, [commands], map_id=32, event_id=14)
     assert res.unhandled == []
-    assert "goto EventScript_RockSmash" in res.text
+    assert "goto(EventScript_RockSmash)" in res.text
     assert "# rock smash" in res.text
     # neither arm's content emits — the branch is fully superseded, not just
     # un-taken.
@@ -108,7 +108,7 @@ def test_rock_smash_bare_variant_matches(ctx: T.TranspileContext) -> None:
     commands = _branch("pbRockSmash", [cmd(T.CONTROL_SELF_SWITCH, ["A", 0])])
     res = run_event(ctx, [commands])
     assert res.unhandled == []
-    assert "goto EventScript_RockSmash" in res.text
+    assert "goto(EventScript_RockSmash)" in res.text
 
 
 def test_rock_smash_near_miss_still_queues(ctx: T.TranspileContext) -> None:
@@ -116,7 +116,7 @@ def test_rock_smash_near_miss_still_queues(ctx: T.TranspileContext) -> None:
     res = run_event(ctx, [commands])
     assert len(res.unhandled) == 1
     assert res.unhandled[0].command_code == T.CONDITIONAL_BRANCH
-    assert "goto EventScript_RockSmash" not in res.text
+    assert "goto(EventScript_RockSmash)" not in res.text
 
 
 # ----------------------------------------------------------------------------
@@ -225,14 +225,14 @@ def test_cave_step_forward_near_miss_non_player_target_still_queues(
 def test_trainer_pc_gotos_native(ctx: T.TranspileContext) -> None:
     res = run_event(ctx, [[cmd(T.SCRIPT, ["pbTrainerPC"])]])
     assert res.unhandled == []
-    assert "goto EventScript_PC" in res.text
+    assert "goto(EventScript_PC)" in res.text
 
 
 def test_trainer_pc_near_miss_still_queues(ctx: T.TranspileContext) -> None:
     res = run_event(ctx, [[cmd(T.SCRIPT, ["pbTrainerPCFoo"])]])
     assert len(res.unhandled) == 1
     assert res.unhandled[0].command_code == T.SCRIPT
-    assert "goto EventScript_PC" not in res.text
+    assert "goto(EventScript_PC)" not in res.text
 
 
 # ----------------------------------------------------------------------------

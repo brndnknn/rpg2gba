@@ -5,7 +5,7 @@ script Map049_EV021_Page1 {
     lock
     faceplayer
     # displayNinjaLetter -> letter body as one scrolling msgbox (card UI dropped, v1)
-    msgbox("Honored {PLAYER},\nThere is a stirring in the wind.\lThe Gods murmur in the deep.\lA storm brews on the horizon.\lOur Village will soon be in danger.\lWithout your help, Tsukinami will fall.\l- Hinata & Kaito")
+    msgbox(format("Honored {PLAYER},\nThere is a stirring in the wind.\lThe Gods murmur in the deep.\lA storm brews on the horizon.\lOur Village will soon be in danger.\lWithout your help, Tsukinami will fall.\l- Hinata & Kaito"))
     delay(10)
     # code 202 [20,0,18,9,0]: teleport Kellyn (event 20) to (18,9), keep facing
     setobjectxy(20, 18, 9)
@@ -15,19 +15,19 @@ script Map049_EV021_Page1 {
     applymovement(OBJ_EVENT_ID_PLAYER, Map049_EV021_Page1_Move2)
     waitmovement(0)
     delay(10)
-    msgbox("What did the letter say?\nIt looked so formal I didn't want to touch it.")
+    msgbox(format("What did the letter say? It looked so formal I didn't want to touch it."))
     delay(10)
-    msgbox("{PAUSE 0x18}.{PAUSE 0x18}.{PAUSE 0x18}.", MSGBOX_AUTOCLOSE)
-    msgbox("Well...{PAUSE 0x1E} that's certainly vague.\nThey wouldn't call for aid unless it was something serious, though.")
-    msgbox("I wonder could it have to do with pirates?")
-    msgbox("There's a piracy problem in East Tandor.\nI know that the Rangers over there are\nhaving a hard time keeping them under control.\nMaybe they could use some help too.")
-    msgbox("The East Tandor Ranger HQ is located in Angelure Town.")
-    msgbox("It's a scenic resort area, but it's also\nknown as a haven for pirates and other riffraff.\nThe further West you sail in the Tandor Sea, the more treacherous and lawless it becomes...")
+    msgbox(format("{PAUSE 0x18}.{PAUSE 0x18}.{PAUSE 0x18}."), MSGBOX_AUTOCLOSE)
+    msgbox(format("Well...{PAUSE 0x1E} that's certainly vague. They wouldn't call for aid unless it was something serious, though."))
+    msgbox(format("I wonder could it have to do with pirates?"))
+    msgbox(format("There's a piracy problem in East Tandor. I know that the Rangers over there are having a hard time keeping them under control. Maybe they could use some help too."))
+    msgbox(format("The East Tandor Ranger HQ is located in Angelure Town."))
+    msgbox(format("It's a scenic resort area, but it's also known as a haven for pirates and other riffraff. The further West you sail in the Tandor Sea, the more treacherous and lawless it becomes..."))
     delay(10)
-    msgbox("But, if there's anybody that can deal with those kinds of conditions, it's you, {PLAYER}.")
+    msgbox(format("But, if there's anybody that can deal with those kinds of conditions, it's you, {PLAYER}."))
     delay(10)
-    msgbox("...Now.{PAUSE 0x0F} If you'll excuse me,\nhave to tend to Lucille.")
-    msgbox("But if you ever need to find me...\nYou'll know where I am.")
+    msgbox(format("...Now.{PAUSE 0x0F} If you'll excuse me, have to tend to Lucille."))
+    msgbox(format("But if you ever need to find me... You'll know where I am."))
     delay(10)
     fadescreen(FADE_TO_BLACK)
     delay(20)
@@ -42,8 +42,8 @@ script Map049_EV021_Page1 {
     fadescreen(FADE_FROM_BLACK)
     delay(20)
     waitmovement(0)
-    msgbox("You've reached the end of this portion of the URANIUM post-game. More to come!")
-    msgbox("In the meantime, there's someone in Venesi Town who desperately needs your help...")
+    msgbox(format("You've reached the end of this portion of the URANIUM post-game. More to come!"))
+    msgbox(format("In the meantime, there's someone in Venesi Town who desperately needs your help..."))
     release
     end
 }
@@ -71,9 +71,9 @@ script Map049_EV021_Page2 {
     lock
     faceplayer
     # displayNinjaLetter -> same letter msgbox (repeat read on later visits)
-    msgbox("Honored {PLAYER},\nThere is a stirring in the wind.\lThe Gods murmur in the deep.\lA storm brews on the horizon.\lOur Village will soon be in danger.\lWithout your help, Tsukinami will fall.\l- Hinata & Kaito")
-    msgbox("You've reached the end of this portion of the URANIUM post-game. More to come!")
-    msgbox("In the meantime, there's someone in Venesi Town who desperately needs your help...")
+    msgbox(format("Honored {PLAYER},\nThere is a stirring in the wind.\lThe Gods murmur in the deep.\lA storm brews on the horizon.\lOur Village will soon be in danger.\lWithout your help, Tsukinami will fall.\l- Hinata & Kaito"))
+    msgbox(format("You've reached the end of this portion of the URANIUM post-game. More to come!"))
+    msgbox(format("In the meantime, there's someone in Venesi Town who desperately needs your help..."))
     release
     end
 }

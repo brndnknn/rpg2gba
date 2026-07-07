@@ -56,6 +56,35 @@ def test_format_pory_string_wraps_and_escapes_quotes() -> None:
     assert D.format_pory_string('say "hi"') == '"say \\"hi\\""'
 
 
+# ----------------------------------------------------------------------------
+# format_pory_dialogue
+# ----------------------------------------------------------------------------
+
+
+def test_format_pory_dialogue_plain_text() -> None:
+    """Plain text with no layout breaks is just wrapped in format(...)."""
+    assert D.format_pory_dialogue("plain text") == 'format("plain text")'
+
+
+def test_format_pory_dialogue_flattens_layout_breaks_to_single_space() -> None:
+    """A single \\n and a run of consecutive \\n both collapse to ONE space."""
+    assert D.format_pory_dialogue("A.\\nB.") == 'format("A. B.")'
+    assert D.format_pory_dialogue("A.\\n\\nB.") == 'format("A. B.")'
+    assert D.format_pory_dialogue("A.\\n\\n\\nB.") == 'format("A. B.")'
+
+
+def test_format_pory_dialogue_does_not_special_case_l_code() -> None:
+    """The helper flattens \\n unconditionally; it has no \\l-preservation carve-out
+    (that rule applies only to hand-override files, not this helper) — a \\l code
+    anywhere in the text passes through untouched, same as any other character."""
+    assert D.format_pory_dialogue("a\\lb") == 'format("a\\lb")'
+    assert D.format_pory_dialogue("A.\\nB.\\lC.") == 'format("A. B.\\lC.")'
+
+
+def test_format_pory_dialogue_escapes_embedded_quote() -> None:
+    assert D.format_pory_dialogue('He said "hi"') == 'format("He said \\"hi\\"")'
+
+
 def test_label_name_sanitizes_non_identifiers() -> None:
     assert D._label_name("npc") == "npc"
     assert D._label_name("Trainer(4)") == "Trainer_4"
@@ -82,7 +111,7 @@ def test_single_block_101_plus_401_continuations() -> None:
     out = D.classify_pure_dialogue(1, ev)
     assert out is not None
     assert out.count("msgbox(") == 1
-    assert 'msgbox("Hello there! How are you?")' in out
+    assert 'msgbox(format("Hello there! How are you?"))' in out
     assert out.startswith("script Map001_npc_Page1 {")
     # trigger-0 NPC gets the lock/faceplayer/release wrapper
     assert "lock" in out and "faceplayer" in out and "release" in out and "end" in out
@@ -100,8 +129,8 @@ def test_multi_page_emits_one_block_per_page() -> None:
     assert out is not None
     assert "script Map005_sign_Page1 {" in out
     assert "script Map005_sign_Page2 {" in out
-    assert 'msgbox("First page.")' in out
-    assert 'msgbox("Second page.")' in out
+    assert 'msgbox(format("First page."))' in out
+    assert 'msgbox(format("Second page."))' in out
     # exactly two blocks
     assert out.count("script Map005_sign_Page") == 2
 
@@ -123,7 +152,7 @@ def test_strip_script_calls_dropped_text_preserved(call: str) -> None:
     ev = _event(_page(_cmd(D.SCRIPT, call), _text("Welcome!")), id=4)
     out = D.classify_pure_dialogue(2, ev)
     assert out is not None
-    assert 'msgbox("Welcome!")' in out
+    assert 'msgbox(format("Welcome!"))' in out
     # the script call left no trace
     assert call not in out
     assert out.count("msgbox(") == 1
@@ -162,8 +191,8 @@ def test_wait_106_dropped_between_text_runs() -> None:
     out = D.classify_pure_dialogue(174, ev)
     assert out is not None
     assert out.count("msgbox(") == 2
-    assert 'msgbox("Baitatao: the serpent.")' in out
-    assert 'msgbox("It has not been seen since. Many wonder why.")' in out
+    assert 'msgbox(format("Baitatao: the serpent."))' in out
+    assert 'msgbox(format("It has not been seen since. Many wonder why."))' in out
     assert "106" not in out  # Wait left no trace
 
 
@@ -182,7 +211,7 @@ def test_play_se_250_and_bubble_dropped_dialogue_preserved() -> None:
     out = D.classify_pure_dialogue(31, ev)
     assert out is not None
     assert out.count("msgbox(") == 1
-    assert 'msgbox("Owten!")' in out
+    assert 'msgbox(format("Owten!"))' in out
     assert "pbCallBub" not in out
 
 
@@ -200,7 +229,7 @@ def test_wait_and_se_interleaved_with_dialogue() -> None:
     out = D.classify_pure_dialogue(84, ev)
     assert out is not None
     assert out.count("msgbox(") == 1
-    assert 'msgbox("Listen... can you hear it?")' in out
+    assert 'msgbox(format("Listen... can you hear it?"))' in out
 
 
 @pytest.mark.parametrize(
@@ -264,7 +293,8 @@ def test_essentials_control_codes_fall_through(text: str) -> None:
     [
         ("Hi \\PN!", "Hi {PLAYER}!"),  # system.md: \PN -> {PLAYER}
         ("It's \\PN's house.", "It's {PLAYER}'s house."),  # possessive
-        ("\\PN, watch out!\\nBe careful.", "{PLAYER}, watch out!\\nBe careful."),  # + safe \n
+        # \n is an RMXP layout break -> flattened to a single space by format_pory_dialogue
+        ("\\PN, watch out!\\nBe careful.", "{PLAYER}, watch out! Be careful."),
     ],
 )
 def test_player_name_substituted(text: str, expected: str) -> None:
@@ -272,7 +302,7 @@ def test_player_name_substituted(text: str, expected: str) -> None:
     ev = _event(_page(_text(text)), id=4)
     out = D.classify_pure_dialogue(1, ev)
     assert out is not None
-    assert f'msgbox("{expected}")' in out
+    assert f'msgbox(format("{expected}"))' in out
 
 
 def test_player_name_with_unprescribed_code_still_falls_through() -> None:
@@ -281,13 +311,25 @@ def test_player_name_with_unprescribed_code_still_falls_through() -> None:
     assert D.classify_pure_dialogue(1, ev) is None
 
 
-@pytest.mark.parametrize("text", ["Line one.\\nLine two.", "Wait.\\pNext.", "a\\lb"])
-def test_safe_line_breaks_pass_through(text: str) -> None:
-    """\\n / \\l / \\p line breaks are pokeemerald-safe → emitted verbatim."""
+@pytest.mark.parametrize(
+    ("text", "expected_in_out"),
+    [
+        # \n is an RMXP layout break -> flattened to a single space by
+        # format_pory_dialogue (format() re-wraps and recreates breaks itself).
+        ("Line one.\\nLine two.", "Line one. Line two."),
+        # \l / \p are pokeemerald-safe codes -> format() passes them through untouched.
+        ("Wait.\\pNext.", "Wait.\\pNext."),
+        ("a\\lb", "a\\lb"),
+    ],
+)
+def test_layout_line_breaks_flattened_safe_codes_pass_through(
+    text: str, expected_in_out: str
+) -> None:
+    """\\n is flattened to a space for format(); \\l / \\p still pass through verbatim."""
     ev = _event(_page(_text(text)), id=4)
     out = D.classify_pure_dialogue(1, ev)
     assert out is not None
-    assert text in out
+    assert expected_in_out in out
 
 
 def test_empty_page_is_bare_end_block() -> None:
@@ -309,7 +351,7 @@ def test_decorative_page_then_text_page() -> None:
     out = D.classify_pure_dialogue(3, ev)
     assert out is not None
     assert "script Map003_npc_Page1 {" in out  # bare end
-    assert 'msgbox("Hi!")' in out
+    assert 'msgbox(format("Hi!"))' in out
 
 
 # ----------------------------------------------------------------------------
@@ -336,9 +378,9 @@ def test_cc_dialogue_before_call() -> None:
     ev = _event(_page(_text("Hi there."), _cmd(D.CALL_COMMON_EVENT, 12)), id=1)
     out = D.classify_call_common_event(1, ev)
     assert out is not None
-    assert 'msgbox("Hi there.")' in out
+    assert 'msgbox(format("Hi there."))' in out
     assert "call CommonEvent_012" in out
-    assert out.index('msgbox("Hi there.")') < out.index("call CommonEvent_012")
+    assert out.index('msgbox(format("Hi there."))') < out.index("call CommonEvent_012")
 
 
 def test_cc_multiple_calls_in_order() -> None:
@@ -440,9 +482,11 @@ def test_ss_text_then_setflag() -> None:
     )
     out = D.classify_self_switch_dialogue(1, ev)
     assert out is not None
-    assert 'msgbox("Once only.")' in out
+    assert 'msgbox(format("Once only."))' in out
     assert "setflag(FLAG_MAP001_EVENT003_SSA)" in out
-    assert out.index('msgbox("Once only.")') < out.index("setflag(FLAG_MAP001_EVENT003_SSA)")
+    assert out.index('msgbox(format("Once only."))') < out.index(
+        "setflag(FLAG_MAP001_EVENT003_SSA)"
+    )
     assert "script Map001_npc_Page1 {" in out
 
 
@@ -774,7 +818,7 @@ def test_trainer_postbattle_msgbox() -> None:
     ev = _event(_FISHERMAN_PAGE1, _FISHERMAN_PAGE2, id=5, name="Fisherman_Matt")
     out = D.classify_trainer_battle(8, ev, _FISHERMAN_CTX)
     assert out is not None
-    postbattle = 'msgbox("Y\'know, the Gym Leader is tough.")'
+    postbattle = 'msgbox(format("Y\'know, the Gym Leader is tough."))'
     assert postbattle in out
     assert out.index("trainerbattle_single(") < out.index(postbattle)
 
@@ -911,7 +955,7 @@ def test_sign_basic() -> None:
     )
     out = D.classify_sign_dialogue(132, ev)
     assert out is not None
-    assert 'msgbox("Tunnel to Lanthanite Cave.")' in out
+    assert 'msgbox(format("Tunnel to Lanthanite Cave."))' in out
     assert "lock" in out
     assert "release" in out
     assert "end" in out
@@ -920,8 +964,9 @@ def test_sign_basic() -> None:
     assert "script Map132_Sign_Page1 {" in out
 
 
-def test_sign_line_break_preserved() -> None:
-    """\\n inside sign text is safe and passes through verbatim."""
+def test_sign_layout_break_flattened_for_format() -> None:
+    """\\n inside sign text is an RMXP layout break -> flattened to a single space
+    by format_pory_dialogue, not passed through verbatim."""
     ev = _event(
         _page(_cmd(D.SHOW_TEXT, r"\sign[s]Top\nBottom")),
         id=2,
@@ -929,7 +974,8 @@ def test_sign_line_break_preserved() -> None:
     )
     out = D.classify_sign_dialogue(1, ev)
     assert out is not None
-    assert r"Top\nBottom" in out
+    assert 'msgbox(format("Top Bottom"))' in out
+    assert r"Top\nBottom" not in out
 
 
 def test_sign_multi_page() -> None:
@@ -945,8 +991,8 @@ def test_sign_multi_page() -> None:
     assert "script Map010_DualSign_Page1 {" in out
     assert "script Map010_DualSign_Page2 {" in out
     assert out.count("script Map010_DualSign_Page") == 2
-    assert 'msgbox("First line.")' in out
-    assert 'msgbox("Second line.")' in out
+    assert 'msgbox(format("First line."))' in out
+    assert 'msgbox(format("Second line."))' in out
 
 
 def test_sign_bail_on_embedded_quote() -> None:
@@ -998,7 +1044,7 @@ def test_sign_no_regression_pure_dialogue() -> None:
     )
     out = D.classify_pure_dialogue(1, ev)
     assert out is not None
-    assert 'msgbox("Hello there!")' in out
+    assert 'msgbox(format("Hello there!"))' in out
     assert "faceplayer" in out
     assert "lock" in out
     assert "release" in out

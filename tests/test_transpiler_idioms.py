@@ -74,7 +74,7 @@ def test_text_wiring_plain_uses_current_baseline(ctx: T.TranspileContext) -> Non
     """Plain text (+ \\PN) is already translated by the baseline — no monkeypatch
     needed; this exercises the real wiring end to end."""
     res = run_event(ctx, [[cmd(T.SHOW_TEXT, ["Hi \\PN!"])]])
-    assert 'msgbox("Hi {PLAYER}!")' in res.text
+    assert 'msgbox(format("Hi {PLAYER}!"))' in res.text
     assert res.unhandled == []
 
 
@@ -97,7 +97,7 @@ def test_text_wiring_autoclose_emits_msgbox_autoclose(
         lambda raw: TextTranslation(text="Placeholder line.", autoclose=True),
     )
     res = run_event(ctx, [[cmd(T.SHOW_TEXT, ["placeholder"])]])
-    assert 'msgbox("Placeholder line.", MSGBOX_AUTOCLOSE)' in res.text
+    assert 'msgbox(format("Placeholder line."), MSGBOX_AUTOCLOSE)' in res.text
     assert res.unhandled == []
 
 
@@ -112,7 +112,7 @@ def test_text_wiring_sign_wraps_lock_release_no_faceplayer(
     )
     res = run_event(ctx, [[cmd(T.SHOW_TEXT, ["placeholder"])]])
     lines = [ln.strip() for ln in res.text.splitlines()]
-    idx = lines.index('msgbox("Placeholder sign text.")')
+    idx = lines.index('msgbox(format("Placeholder sign text."))')
     assert lines[idx - 1] == "lock"
     assert lines[idx + 1] == "release"
     assert "faceplayer" not in res.text
@@ -193,14 +193,16 @@ def test_door_idiom_in_common_event_queues(ctx: T.TranspileContext) -> None:
 
 def test_change_player_transparency_invisible(ctx: T.TranspileContext) -> None:
     res = run_event(ctx, [[cmd(T.CHANGE_PLAYER_TRANSPARENCY, [0])]])
-    assert "applymovement(OBJ_EVENT_ID_PLAYER, [set_invisible])" in res.text
+    assert "applymovement(OBJ_EVENT_ID_PLAYER, Map032_EV005_Page1_Move1)" in res.text
+    assert "movement Map032_EV005_Page1_Move1 {\n    set_invisible\n}" in res.text
     assert "waitmovement(0)" in res.text
     assert res.unhandled == []
 
 
 def test_change_player_transparency_visible(ctx: T.TranspileContext) -> None:
     res = run_event(ctx, [[cmd(T.CHANGE_PLAYER_TRANSPARENCY, [1])]])
-    assert "applymovement(OBJ_EVENT_ID_PLAYER, [set_visible])" in res.text
+    assert "applymovement(OBJ_EVENT_ID_PLAYER, Map032_EV005_Page1_Move1)" in res.text
+    assert "movement Map032_EV005_Page1_Move1 {\n    set_visible\n}" in res.text
     assert res.unhandled == []
 
 
@@ -255,8 +257,8 @@ def test_receive_item_then_and_else_with_quantity(ctx: T.TranspileContext) -> No
     assert "giveitem(ITEM_POKE_BALL, 5)" in res.text
     assert "if (var(VAR_RESULT) != 0) {" in res.text
     assert "} else {" in res.text
-    assert 'msgbox("placeholder success text")' in res.text
-    assert 'msgbox("placeholder failure text")' in res.text
+    assert 'msgbox(format("placeholder success text"))' in res.text
+    assert 'msgbox(format("placeholder failure text"))' in res.text
 
 
 def test_receive_item_unknown_symbol_queues(ctx: T.TranspileContext) -> None:
@@ -293,7 +295,8 @@ def test_align_loop_y_variant(ctx: T.TranspileContext) -> None:
     res = run_event(ctx, [commands])
     assert "getplayerxy(VAR_TEMP_0, VAR_TEMP_1)" in res.text
     assert "while (var(VAR_TEMP_1) < 15) {" in res.text
-    assert "applymovement(OBJ_EVENT_ID_PLAYER, [walk_down])" in res.text
+    assert "applymovement(OBJ_EVENT_ID_PLAYER, Map032_EV005_Page1_Move1)" in res.text
+    assert "movement Map032_EV005_Page1_Move1 {\n    walk_down\n}" in res.text
     assert res.unhandled == []
 
 
@@ -301,7 +304,8 @@ def test_align_loop_x_variant(ctx: T.TranspileContext) -> None:
     commands = _align_loop_commands("$game_player.x<=20", 3)  # 3 = walk right
     res = run_event(ctx, [commands])
     assert "while (var(VAR_TEMP_0) > 20) {" in res.text
-    assert "applymovement(OBJ_EVENT_ID_PLAYER, [walk_right])" in res.text
+    assert "applymovement(OBJ_EVENT_ID_PLAYER, Map032_EV005_Page1_Move1)" in res.text
+    assert "movement Map032_EV005_Page1_Move1 {\n    walk_right\n}" in res.text
     assert res.unhandled == []
 
 
@@ -379,7 +383,7 @@ def test_idiom_shapes_compile_through_real_poryscript() -> None:
         "script Test {\n"
         "    getplayerxy(VAR_TEMP_0, VAR_TEMP_1)\n"
         "    while (var(VAR_TEMP_1) < 15) {\n"
-        "        applymovement(OBJ_EVENT_ID_PLAYER, [walk_down])\n"
+        "        applymovement(OBJ_EVENT_ID_PLAYER, Test_Move1)\n"
         "        waitmovement(0)\n"
         "        getplayerxy(VAR_TEMP_0, VAR_TEMP_1)\n"
         "    }\n"
@@ -388,6 +392,10 @@ def test_idiom_shapes_compile_through_real_poryscript() -> None:
         "    applymovement(OBJ_EVENT_ID_PLAYER, Common_Movement_ExclamationMark)\n"
         "    waitmovement(0)\n"
         "    end\n"
+        "}\n"
+        "\n"
+        "movement Test_Move1 {\n"
+        "    walk_down\n"
         "}\n"
     )
     result = poryscript.compile_script(script)

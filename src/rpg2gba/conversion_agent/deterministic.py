@@ -288,6 +288,27 @@ def format_pory_string(text: str) -> str:
     return '"' + text.replace('"', '\\"') + '"'
 
 
+_LAYOUT_BREAK_RE = re.compile(r"(?:\\n)+")
+
+
+def format_pory_dialogue(text: str) -> str:
+    """Dialogue destined for a message box: a poryscript ``format("...")``
+    expression that re-wraps the text to the GBA textbox width at compile time.
+
+    Uranium's dialogue is laid out for RMXP's much wider window — single lines
+    run to ~90 chars and embedded ``\\n`` breaks land mid-box, so raw pass-through
+    overflows the viewport and a third consecutive ``\\n`` line draws OVER line
+    two (``\\l`` is the scroll code, which the source never uses). ``format()``
+    inserts correct ``\\n``/``\\l`` breaks itself but passes explicit escapes
+    through untouched (verified against the pinned binary), so the RMXP layout
+    breaks must be flattened to spaces first — they carry no meaning the re-wrap
+    doesn't recreate.
+    """
+    text = _LAYOUT_BREAK_RE.sub(" ", text)
+    text = re.sub(r" {2,}", " ", text).strip()
+    return f"format({format_pory_string(text)})"
+
+
 def _label_name(name: str) -> str:
     """A poryscript-identifier form of an event name (``"Trainer(4)"`` → ``Trainer_4``)."""
     name = name or ""
@@ -373,7 +394,7 @@ def _dialogue_body(
         if translated is None:
             unsafe = True
             return
-        body.append(f"msgbox({format_pory_string(translated)})")
+        body.append(f"msgbox({format_pory_dialogue(translated)})")
 
     for cmd in page.get("list", []):
         code = cmd.get("code", 0)
@@ -900,11 +921,11 @@ def classify_trainer_battle(
     # --- Emit ------------------------------------------------------------------
     battle_line = (
         f"trainerbattle_single({trainer_const},"
-        f" {format_pory_string(intro)}, {format_pory_string(defeat)})"
+        f" {format_pory_dialogue(intro)}, {format_pory_dialogue(defeat)})"
     )
     lines: list[str] = [battle_line]
     if post is not None:
-        lines.append(f"msgbox({format_pory_string(post)})")
+        lines.append(f"msgbox({format_pory_dialogue(post)})")
     lines += ["release", "end"]
     return _block(_page_label(map_id, event, 1), lines)
 

@@ -44,6 +44,12 @@ engine/include/uranium_externs.gen.h
 engine/include/uranium_walker_maps.h
 engine/data/tilesets/primary/uranium*/
 engine/data/tilesets/secondary/uranium*/
+# Task-4 NPC sprites: generated engine fragments (pulled in by committed sentinel
+# #include hooks in include/constants/event_objects.h, src/data/object_events/*.h,
+# and src/event_object_movement.c) and the emitted sprite sheets.
+engine/include/constants/uranium_event_objects.gen.h
+engine/src/data/object_events/uranium_*.gen.h
+engine/graphics/object_events/pics/uranium/
 # Full-corpus Map Walker build: the assembler generates a per-map dir under
 # data/maps/ and data/layouts/ for every built Uranium map (~190) plus the
 # UraniumWalkerStub/ dummy for dropped stock map data. Blanket-ignore all per-map
