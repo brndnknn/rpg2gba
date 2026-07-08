@@ -36,9 +36,11 @@ from map_viewer_common import (  # noqa: E402
     build_map_data,
     current_quantize_state,
     get_quantize_params,
+    load_issues,
     params_from_dict,
     render_metatile_png,
     render_tile_png,
+    save_issues,
     set_quantize_params,
 )
 from palette_page import PALETTE_VIEWER_HTML  # noqa: E402
@@ -55,6 +57,7 @@ _RE_PAL_PAGE = re.compile(r"^/palettes/(\d+)$")
 _RE_API_MAP = re.compile(r"^/api/map/(\d+)$")
 _RE_API_TILE = re.compile(r"^/api/tile/(\d+)/(\d+)\.png$")
 _RE_API_META = re.compile(r"^/api/metatile/(\d+)/(\d+)\.png$")
+_RE_API_ISSUES = re.compile(r"^/api/issues/(\d+)$")
 
 _CACHE_IMMUTABLE = "public, max-age=31536000, immutable"
 
@@ -172,6 +175,8 @@ class _Handler(BaseHTTPRequestHandler):
                 if layer not in ("bottom", "top", "post_bottom", "post_top"):
                     layer = "bottom"
                 self._serve_metatile(int(m.group(1)), int(m.group(2)), layer)
+            elif m := _RE_API_ISSUES.match(path):
+                self._serve_issues(int(m.group(1)))
             else:
                 self._send(404, "text/plain", b"Not found")
         except (FileNotFoundError, KeyError, IndexError) as exc:
@@ -186,6 +191,8 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/quantize":
                 self._handle_quantize()
+            elif path == "/api/issue":
+                self._handle_issue()
             else:
                 self._send(404, "text/plain", b"Not found")
         except Exception as exc:
@@ -216,6 +223,26 @@ class _Handler(BaseHTTPRequestHandler):
                 return
         self._send(200, "application/json",
                    json.dumps({"generation": gen}).encode("utf-8"))
+
+    def _handle_issue(self) -> None:
+        """Upsert or delete one flagged-cell note, persisted immediately to
+        map_viewer_issues/MapNNN.json (whole-file rewrite; the note set per map is
+        always tiny). Responds with the map's full, now-current issue set."""
+        length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(length) or b"{}")
+        map_id = int(body["map_id"])
+        key = f"{int(body['x'])},{int(body['y'])}"
+        issues = load_issues(map_id)
+        if body.get("delete"):
+            issues.pop(key, None)
+        else:
+            issues[key] = {"x": body["x"], "y": body["y"], "note": body.get("note", "")}
+        save_issues(map_id, issues)
+        self._send(200, "application/json", json.dumps(issues).encode("utf-8"))
+
+    def _serve_issues(self, map_id: int) -> None:
+        body = json.dumps(load_issues(map_id)).encode("utf-8")
+        self._send(200, "application/json", body)
 
     def _serve_index(self) -> None:
         index_json = json.dumps(build_index(), separators=(",", ":"))

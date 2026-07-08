@@ -80,6 +80,28 @@ def _tilesets_json() -> Path:
     return _output_base() / "uranium-build" / "tilesets.json"
 
 
+def _issues_path(map_id: int) -> Path:
+    d = _output_base() / "uranium-build" / "map_viewer_issues"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"Map{map_id:03d}.json"
+
+
+def load_issues(map_id: int) -> dict:
+    """This map's flagged-cell notes, keyed 'x,y' (empty dict if none saved yet)."""
+    path = _issues_path(map_id)
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def save_issues(map_id: int, issues: dict) -> None:
+    """Persist this map's flagged-cell notes, overwriting the file whole (it's
+    always tiny — a handful of entries — so a full rewrite per save/delete is fine)."""
+    _issues_path(map_id).write_text(
+        json.dumps(issues, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Per-map cache
 # ---------------------------------------------------------------------------
@@ -1406,7 +1428,18 @@ function updateSidebar() {
   document.getElementById('cell-info').innerHTML = html;
 }
 
-// ---- issue annotation -----------------------------------------------------
+// ---- issue annotation -------------------------------------------------
+// Server mode persists immediately to map_viewer_issues/MapNNN.json (one
+// upsert-or-delete POST per Save/delete click); static exports keep issues
+// in-memory only (no server to write to) and rely on Export JSON below.
+function postIssue(x, y, note, isDelete) {
+  if (V.mode !== 'server') return;
+  fetch('/api/issue', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({map_id: D.meta.map_id, x: x, y: y, note: note || '', delete: !!isDelete}),
+  }).catch(function(e) { console.error('issue save failed', e); });
+}
 document.getElementById('btn-flag').onclick = function() {
   if (!selectedCell) return;
   const area = document.getElementById('note-area');
@@ -1417,6 +1450,7 @@ document.getElementById('btn-note-save').onclick = function() {
   const note = document.getElementById('note-text').value.trim();
   const key = selectedCell.x + ',' + selectedCell.y;
   issues[key] = {x: selectedCell.x, y: selectedCell.y, note: note};
+  postIssue(selectedCell.x, selectedCell.y, note, false);
   document.getElementById('note-text').value = '';
   document.getElementById('note-area').style.display = 'none';
   updateIssueList(); updateSidebar(); scheduleRender();
@@ -1443,7 +1477,12 @@ function updateIssueList() {
       ' <span class="issue-del" onclick="deleteIssue(\'' + i.x + ',' + i.y + '\')">&#10005;</span></div>';
   }).join('');
 }
-function deleteIssue(key) { delete issues[key]; updateIssueList(); scheduleRender(); }
+function deleteIssue(key) {
+  const i = issues[key];
+  delete issues[key];
+  if (i) postIssue(i.x, i.y, '', true);
+  updateIssueList(); scheduleRender();
+}
 
 // ---- worst-merge ranking --------------------------------------------------
 let worstBuilt = false;
@@ -1560,6 +1599,11 @@ function renderMapNav() {
     const navp = document.getElementById('nav-palettes');
     navp.href = '/palettes/' + m.map_id;
     navp.style.display = '';
+    // load previously-saved notes for this map so a reload doesn't lose them
+    fetch('/api/issues/' + m.map_id).then(function(r) { return r.json(); }).then(function(saved) {
+      issues = saved || {};
+      updateIssueList(); updateSidebar(); scheduleRender();
+    }).catch(function(e) { console.error('issue load failed', e); });
   }
   if (V.mode === 'static') {
     preloadStatic();
