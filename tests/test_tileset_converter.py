@@ -92,8 +92,16 @@ def _write_slice_table(tmp_path: Path) -> tuple[Path, Path]:
         "stacks": {},
     }
     oracle = {  # autotile 1 (ids 48..95) blocked; everything else passable
-        "19": {"passages": _passages([(48, 96)]), "priorities": _passages([])},
-        "22": {"passages": _passages([(48, 96)]), "priorities": _passages([])},
+        "19": {
+            "passages": _passages([(48, 96)]),
+            "priorities": _passages([]),
+            "terrain_tags": _passages([]),
+        },
+        "22": {
+            "passages": _passages([(48, 96)]),
+            "priorities": _passages([]),
+            "terrain_tags": _passages([]),
+        },
     }
     tpath, opath = tmp_path / "tileset_map.json", tmp_path / "tilesets.json"
     tpath.write_text(json.dumps(table), encoding="utf-8")
@@ -333,6 +341,82 @@ def test_collapse_collision_is_layer_combined() -> None:
     assert mt.collision == 1
 
 
+def _terrain_tag_tilemap(
+    tags: dict[int, int],
+    priorities: dict[int, int] | None = None,
+    extra_blocked: tuple[int, ...] = (),
+) -> TileMap:
+    """Bucket-mode TileMap (same shape as `_layout_tilemap`) plus a `terrain_tags`
+    oracle — tile 500 is a blocker (passage 0x0F, tag 0/Neutral unless overridden
+    by `tags`), everything else is passable ground (passage 0, tag 0). Any tile id
+    in `extra_blocked` also gets a blocking passage (0x0F), independent of `tags`."""
+    n = 600
+    passages = [0] * n
+    passages[500] = 15  # tile 500 blocks
+    for tid in extra_blocked:
+        passages[tid] = 15
+    prio = [0] * n
+    for tid, p in (priorities or {}).items():
+        prio[tid] = p
+    tag_arr = [0] * n
+    for tid, tag in tags.items():
+        tag_arr[tid] = tag
+    return TileMap(
+        tiles={7: {}},  # empty -> bucket mode
+        tilesets={7: TilesetChoice("gTileset_P", "gTileset_S")},
+        buckets={7: Bucket(passable=10, blocked=11, void=7)},
+        passages={7: passages},
+        priorities={7: prio},
+        terrain_tags={7: tag_arr},
+        warps={7: Metatile(99, 0, 0)},
+    )
+
+
+def test_cell_blocked_shadow_over_blocker_reads_blocked() -> None:
+    """A shadow decal (tag 20, passage 0x00, priority 0) sitting above a
+    passage-0x0F blocker above ground: the shadow is skipped entirely, so the
+    blocker underneath decides -> BLOCKED. Pre-fix, the shadow's own
+    passage=0/priority=0 would have early-accepted the cell as passable before
+    the blocker was ever examined (the Moki Town 8-cell bug)."""
+    tm = _terrain_tag_tilemap({590: layout_mod.TERRAIN_TAG_SHADOW})
+    # z0=ground(400), z1=blocker(500), z2=shadow(590, drawn on top)
+    g = _grid(1, 1, [400], [500], [590])
+    assert layout_mod._cell_blocked(g, 0, 0, tm, 7) is True
+
+
+def test_cell_blocked_shadow_over_plain_ground_reads_passable() -> None:
+    """A shadow decal above plain (non-blocking) ground: skipped, ground decides
+    -> PASSABLE."""
+    tm = _terrain_tag_tilemap({590: layout_mod.TERRAIN_TAG_SHADOW})
+    g = _grid(1, 1, [400], [0], [590])  # ground, empty, shadow on top
+    assert layout_mod._cell_blocked(g, 0, 0, tm, 7) is False
+
+
+def test_cell_blocked_bridge_tile_skipped_same_as_shadow() -> None:
+    """A Bridge-tagged tile (tag 15) is skipped the same way as Shadow — even
+    though its own passage would block, off-bridge (always true here) it's
+    ignored and the tile beneath decides."""
+    tm = _terrain_tag_tilemap({595: layout_mod.TERRAIN_TAG_BRIDGE})
+    g = _grid(1, 1, [400], [0], [595])  # ground, empty, bridge deck on top
+    assert layout_mod._cell_blocked(g, 0, 0, tm, 7) is False
+    # Now make the bridge tile's OWN passage block, to prove it's really SKIPPED
+    # (ignored) and not just incidentally passable.
+    tm2 = _terrain_tag_tilemap({595: layout_mod.TERRAIN_TAG_BRIDGE}, extra_blocked=(595,))
+    assert layout_mod._cell_blocked(g, 0, 0, tm2, 7) is False
+
+
+def test_cell_blocked_shadow_only_column_is_passable_not_void() -> None:
+    """A column made up ENTIRELY of skipped (shadow) tiles must NOT fall into the
+    'all-empty = void = blocked' catch-all -> Uranium's scan falls through the
+    loop and returns passable (true), so ours must too."""
+    tm = _terrain_tag_tilemap({590: layout_mod.TERRAIN_TAG_SHADOW})
+    g = _grid(1, 1, [590])  # single shadow tile, nothing else
+    assert layout_mod._cell_blocked(g, 0, 0, tm, 7) is False
+    # Contrast: a genuinely all-empty column IS void = blocked.
+    g_empty = _grid(1, 1, [0])
+    assert layout_mod._cell_blocked(g_empty, 0, 0, tm, 7) is True
+
+
 def test_index_order_row_major() -> None:
     """convert_layout emits blocks in row-major y*width+x order (guards the
     layer-major -> row-major transposition)."""
@@ -392,6 +476,38 @@ def test_warp_override_fails_loud_without_warp_metatile() -> None:
             _map_json(g), tm, name="T", layout_const="LAYOUT_T", warp_overrides={(0, 0)}
         )
     assert "warp metatile" in str(exc.value)
+
+
+def test_blocked_cells_stamps_collision_keeps_visual_metatile() -> None:
+    """blocked_cells (fix #3) force BLOCKED_COLLISION + BLOCKED_ELEVATION but keep
+    the cell's own visual metatile id — unlike warp_overrides, which also swaps
+    the metatile id to the door art."""
+    tm = _layout_tilemap()
+    g = _grid(2, 1, [384, 384])  # both passable ground -> both bucket id 10
+    plain = layout_mod.convert_layout(_map_json(g), tm, name="T", layout_const="LAYOUT_T")
+    assert plain.blocks[1] & METATILE_ID_MASK == 10
+    assert (plain.blocks[1] >> 10) & 0x3 == 0  # passable collision
+
+    forced = layout_mod.convert_layout(
+        _map_json(g), tm, name="T", layout_const="LAYOUT_T", blocked_cells={(1, 0)}
+    )
+    assert forced.blocks[1] & METATILE_ID_MASK == 10  # same visual metatile
+    assert (forced.blocks[1] >> 10) & 0x3 == 1  # forced blocked collision
+    assert (forced.blocks[1] >> 12) & 0xF == 0  # forced blocked elevation
+    assert forced.blocks[0] == plain.blocks[0]  # untouched cell unaffected
+
+
+def test_blocked_cells_raises_on_warp_override_collision() -> None:
+    """A cell in BOTH warp_overrides and blocked_cells is a converter bug — a warp
+    must stay enterable — fail loud with the coords rather than picking a winner."""
+    tm = _layout_tilemap()
+    g = _grid(1, 1, [384])
+    with pytest.raises(ValueError) as exc:
+        layout_mod.convert_layout(
+            _map_json(g), tm, name="T", layout_const="LAYOUT_T",
+            warp_overrides={(0, 0)}, blocked_cells={(0, 0)},
+        )
+    assert "(0, 0)" in str(exc.value)
 
 
 def test_layout_fail_loud_on_unmapped_tile() -> None:
@@ -505,6 +621,57 @@ def test_slice_smoke(map_id: int) -> None:
     void_id = tm.void(data["tileset_id"]).metatile_id
     voids = sum(1 for b in layout.blocks if b & METATILE_ID_MASK == void_id)
     assert voids / len(layout.blocks) < 0.60  # not a transposed/misread grid
+
+
+_TILESETS_JSON = Path("output/uranium-build/tilesets.json")
+
+# The 8 Moki Town cells where a shadow decal (terrain tag 20) sits above a
+# passage-blocking tile — pre-fix these read PASSABLE (the shadow's own
+# passage=0/priority=0 early-accepted the cell before _cell_blocked ever reached
+# the blocker underneath); post-fix (the shadow/bridge terrain-tag skip) they
+# correctly read BLOCKED. No prior test pinned the old (buggy) passable verdict
+# for these cells — this is a new golden check, not a re-pin.
+_MOKI_SHADOW_COLLISION_CELLS = [
+    (33, 32), (42, 32), (45, 32), (48, 32), (51, 32), (52, 43), (55, 43), (61, 43),
+]
+
+
+@pytest.mark.skipif(
+    not (_MAPS_DIR / "Map032.json").exists() or not _TILESETS_JSON.exists(),
+    reason="Map032 slice data not generated",
+)
+@pytest.mark.skipif(
+    _gen_overlay_is_stale(),
+    reason="tileset_map.gen.json is in old single-layer format; re-run S8a to regenerate",
+)
+def test_real_moki_town_shadow_terrain_tag_cells_now_blocked() -> None:
+    """The 8 Moki Town shadow-over-blocker cells now read BLOCKED with the real
+    tilesets.json + Map032.json oracle (terrain-tag skip fix); the two control
+    cells nearby are unaffected."""
+    tm = load_tile_map()
+    data = json.loads((_MAPS_DIR / "Map032.json").read_text(encoding="utf-8"))
+    ts = data["tileset_id"]
+    t = data["tiles"]
+    grid = TileGrid(t["xsize"], t["ysize"], t["zsize"], t["data"])
+    for x, y in _MOKI_SHADOW_COLLISION_CELLS:
+        assert layout_mod._cell_blocked(grid, x, y, tm, ts), f"({x},{y}) expected BLOCKED"
+    # control cells: unaffected by the terrain-tag fix
+    assert layout_mod._cell_blocked(grid, 30, 32, tm, ts) is False  # passable
+    assert layout_mod._cell_blocked(grid, 34, 32, tm, ts) is True  # blocked
+
+
+@pytest.mark.skipif(
+    not (_MAPS_DIR / "Map032.json").exists(),
+    reason="Map032 slice data not generated",
+)
+def test_real_moki_town_through_block_cells() -> None:
+    """collect_through_block_cells on the real Map032 finds exactly the 6 known
+    blank-graphic/through=False obstacle cells: 3 in-field invisible obstacles
+    plus 3 out-of-slice NO-EMIT door tiles that must stay walled off (nothing will
+    ever warp there, so the tile must not read as open ground)."""
+    data = json.loads((_MAPS_DIR / "Map032.json").read_text(encoding="utf-8"))
+    cells = mw.collect_through_block_cells(data)
+    assert cells == {(38, 47), (36, 18), (63, 44), (8, 43), (8, 44), (8, 45)}
 
 
 # --- map_constants -----------------------------------------------------------
@@ -687,6 +854,7 @@ def _page(
     opacity: int = 255,
     direction: int = 2,
     move_type: int = 0,
+    through: bool = False,
 ) -> dict:
     return {
         "trigger": trigger,
@@ -694,6 +862,7 @@ def _page(
         "graphic": {"character_name": name, "opacity": opacity, "direction": direction},
         "move_type": move_type,
         "list": cmds or [],
+        "through": through,
     }
 
 
@@ -742,6 +911,55 @@ def test_classify_event() -> None:
     # scripted story transfer (action trigger) to in-slice -> object (keeps its .pory warp)
     letter = _event(21, 5, 8, [_page(trigger=0, cmds=[_transfer(48, 4, 6)])])
     assert mw.classify_event(letter, _SLICE)[0] == "object"
+
+
+# --- fix #3: through=False blank-graphic obstacle blocking --------------------
+
+def test_collect_through_block_cells_blank_and_through_false_any_trigger() -> None:
+    """A blank-graphic, through=False boot page is collected regardless of
+    trigger (action/touch/autorun/parallel all qualify — an invisible solid
+    obstacle blocks the tile no matter what its script does)."""
+    map_json = {
+        "map_id": 1,
+        "events": [
+            _event(1, 4, 4, [_page(trigger=0, through=False)]),  # action
+            _event(2, 5, 5, [_page(trigger=1, through=False)]),  # player-touch
+            _event(3, 6, 6, [_page(trigger=3, through=False)]),  # autorun
+            _event(4, 7, 7, [_page(trigger=4, through=False)]),  # parallel
+        ],
+    }
+    assert mw.collect_through_block_cells(map_json) == {(4, 4), (5, 5), (6, 6), (7, 7)}
+
+
+def test_collect_through_block_cells_through_true_not_collected() -> None:
+    """through=True (the event is a pass-through decal, e.g. a floor sign) is
+    never a blocking cell, blank graphic or not."""
+    map_json = {
+        "map_id": 1,
+        "events": [_event(1, 4, 4, [_page(trigger=0, through=True)])],
+    }
+    assert mw.collect_through_block_cells(map_json) == set()
+
+
+def test_collect_through_block_cells_graphic_bearing_event_not_collected() -> None:
+    """An event with a real graphic is excluded even if through=False — pokeemerald's
+    native object_event collision already blocks that tile (it becomes a real
+    object_event via build_object_events, not a phantom blocked_cells entry)."""
+    map_json = {
+        "map_id": 1,
+        "events": [_event(1, 4, 4, [_page(trigger=0, through=False, name="HGSS_000")])],
+    }
+    assert mw.collect_through_block_cells(map_json) == set()
+
+
+def test_collect_through_block_cells_no_boot_page_contributes_nothing() -> None:
+    """An event with no boot-active page (every page gated off at boot) doesn't
+    contribute a cell — same boot-page selection build_object_events uses."""
+    map_json = {
+        "map_id": 1,
+        "events": [_event(1, 4, 4, [_page(cond=_sw_cond(1), through=False)])],
+    }
+    assert mw.collect_through_block_cells(map_json) == set()
 
 
 def test_build_object_events_placed_at_coords() -> None:

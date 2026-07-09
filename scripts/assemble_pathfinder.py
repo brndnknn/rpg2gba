@@ -179,6 +179,7 @@ def run_layout_pass(
 ) -> None:
     logger.info("=== S8b: layout conversion ===")
     from rpg2gba.tileset_converter.layout import append_layouts, convert_layout
+    from rpg2gba.tileset_converter.metadata_wiring import collect_through_block_cells
     from rpg2gba.tileset_converter.tile_map import load_tile_map
 
     tile_map = load_tile_map(
@@ -192,12 +193,21 @@ def run_layout_pass(
         map_json_path = out / "maps" / f"Map{map_id:03d}.json"
         map_json = json.loads(map_json_path.read_text(encoding="utf-8"))
 
+        warp_overrides = WARP_OVERRIDES.get(map_id, set())
+        # A working (in-slice) door matches the same blank-graphic/through=False
+        # predicate collect_through_block_cells uses (see its docstring) — exclude
+        # the map's own warp coords so its tile stays enterable. An out-of-slice
+        # door (not in warp_overrides — NO-EMIT, classify_event's "skip") correctly
+        # stays in blocked_cells: nothing will ever warp there.
+        blocked_cells = collect_through_block_cells(map_json) - warp_overrides
+
         layout = convert_layout(
             map_json,
             tile_map,
             name=entry["dir_name"],
             layout_const=entry["layout_const"],
-            warp_overrides=WARP_OVERRIDES.get(map_id),
+            warp_overrides=warp_overrides,
+            blocked_cells=blocked_cells,
         )
         entries.append(layout.to_layouts_entry())
 

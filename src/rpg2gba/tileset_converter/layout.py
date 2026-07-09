@@ -133,22 +133,39 @@ class Layout:
         write_blockdata(self.border, out / "border.bin")
 
 
+# Uranium's playerPassable? (reference/scripts_dump/025__Game_Map_v17.rb:245-284)
+# unconditionally skips Shadow-tagged tiles (a passability-overlay helper, not real
+# geometry) and skips Bridge-tagged tiles whenever the player is off-bridge — which
+# the converted game always is (bridges are unconverted, S1). TERRAIN_TAG_* mirror
+# PBTerrain (reference/terrain_tag_map.json).
+TERRAIN_TAG_BRIDGE = 15
+TERRAIN_TAG_SHADOW = 20
+_SKIPPED_TERRAIN_TAGS = frozenset((TERRAIN_TAG_BRIDGE, TERRAIN_TAG_SHADOW))
+
+
 def _cell_blocked(grid: TileGrid, x: int, y: int, tile_map: TileMap, tileset_id: int) -> bool:
     """RMXP multi-layer passability for one cell (validated rule, mirrors
     `scripts/pathfinder_collision_preview.cell_blocked`).
 
-    Scan layers top->bottom: the first non-empty tile that blocks
-    (`passage & 0x0F != 0`) -> blocked; a non-empty tile drawn at priority 0
-    (normal layer) that does *not* block -> passable (stop, ignore tiles beneath);
-    a passable tile at priority > 0 (drawn over the player, e.g. a treetop) does
-    not decide — keep scanning down to the trunk. An all-empty column is void
-    (blocked)."""
+    Scan layers top->bottom: a tile whose terrain tag is Shadow or Bridge is
+    skipped entirely (it never decides passability, it just isn't there for this
+    purpose — matches Uranium's `playerPassable?`); otherwise the first non-empty
+    tile that blocks (`passage & 0x0F != 0`) -> blocked; a non-empty tile drawn at
+    priority 0 (normal layer) that does *not* block -> passable (stop, ignore tiles
+    beneath); a passable tile at priority > 0 (drawn over the player, e.g. a
+    treetop) does not decide — keep scanning down to the trunk. An all-empty column
+    is void (blocked)."""
     seen_tile = False
     for z in range(grid.zsize - 1, -1, -1):  # top layer down
         tid = grid.tile_at(x, y, z)
         if tid == EMPTY_TILE:
             continue
+        # Set BEFORE the tag skip: a column made up ENTIRELY of skipped (shadow/
+        # bridge) tiles must not fall into the "void = blocked" rule below — Uranium
+        # falls through its scan loop in that case and returns passable (true).
         seen_tile = True
+        if tile_map.terrain_tag(tileset_id, tid) in _SKIPPED_TERRAIN_TAGS:
+            continue
         if (tile_map.passage(tileset_id, tid) & PASSAGE_BLOCK_MASK) != 0:
             return True
         if tile_map.priority(tileset_id, tid) == 0:
@@ -217,6 +234,7 @@ def convert_layout(
     name: str,
     layout_const: str,
     warp_overrides: set[tuple[int, int]] | None = None,
+    blocked_cells: set[tuple[int, int]] | None = None,
     tileset_key: int | None = None,
 ) -> Layout:
     """Convert one Phase 3 map dict into a `Layout` (blockdata + metadata).
@@ -233,9 +251,23 @@ def convert_layout(
     nothing happens). Forcing collision 0 also keeps the tile steppable (door tiles
     read BLOCKED from their source passage).
 
+    `blocked_cells` (fix #3, RMXP blank-graphic/through=false invisible-obstacle
+    events — `metadata_wiring.collect_through_block_cells`) are cells whose visual
+    metatile is left untouched but whose collision/elevation are force-stamped
+    BLOCKED, the same way a real solid tile would read. A cell can never be in both
+    `warp_overrides` and `blocked_cells` — a warp must stay enterable — and that
+    collision is a converter bug, so it fails loud rather than picking a winner.
+
     `tileset_key`: Override the tileset id used for all TileMap lookups (per-map
     synthetic tileset packing); defaults to the map's own `tileset_id`."""
     overrides = warp_overrides or set()
+    blocked = blocked_cells or set()
+    both = overrides & blocked
+    if both:
+        raise ValueError(
+            f"layout {name}: cell(s) {sorted(both)} are both a warp_override and a "
+            "through-blocked cell — a warp must stay enterable"
+        )
 
     tiles = map_json["tiles"]
     grid = TileGrid(tiles["xsize"], tiles["ysize"], tiles["zsize"], tiles["data"])
@@ -265,6 +297,8 @@ def convert_layout(
                 if key is not None and not tile_map.column_in_atlas(tileset_id, key):
                     key = None
                 metatile = tile_map.warp_for_column(tileset_id, key)
+            elif (x, y) in blocked:
+                metatile = Metatile(metatile.metatile_id, BLOCKED_COLLISION, BLOCKED_ELEVATION)
             blocks.append(metatile.to_block())
 
     if len(blocks) != width * height:

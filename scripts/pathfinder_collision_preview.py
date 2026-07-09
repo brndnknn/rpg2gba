@@ -16,7 +16,7 @@ import json
 from collections import deque
 from pathlib import Path
 
-from rpg2gba.tileset_converter.layout import TileGrid
+from rpg2gba.tileset_converter.layout import TileGrid, _cell_blocked
 from rpg2gba.tileset_converter.tile_map import load_tile_map
 
 MAPS_DIR = Path("output/uranium-build/maps")
@@ -30,17 +30,9 @@ SLICE = {
 
 
 def cell_blocked(grid: TileGrid, tm, ts: int, x: int, y: int) -> bool:
-    seen_tile = False
-    for z in range(grid.zsize - 1, -1, -1):  # top layer down
-        tid = grid.tile_at(x, y, z)
-        if tid == 0:
-            continue
-        seen_tile = True
-        if (tm.passage(ts, tid) & 0x0F) != 0:
-            return True
-        if tm.priority(ts, tid) == 0:
-            return False
-    return not seen_tile  # all-empty = void = blocked
+    """Delegates to layout._cell_blocked (single source of truth, CLAUDE.md §4.3) —
+    also carries the terrain-tag skips (Shadow/Bridge, `layout.TERRAIN_TAG_*`)."""
+    return _cell_blocked(grid, x, y, tm, ts)
 
 
 def reachable(grid: TileGrid, blocked, start: tuple[int, int]) -> set[tuple[int, int]]:

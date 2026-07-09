@@ -15,10 +15,12 @@ import argparse
 import json
 from pathlib import Path
 
-from rpg2gba.tileset_converter.layout import TileGrid
+from rpg2gba.tileset_converter.layout import TileGrid, _cell_blocked
+from rpg2gba.tileset_converter.tile_map import TileMap
 
 SHADOW = 20
 BRIDGE = 15
+_TS = 0
 MAPS_DIR = Path("output/uranium-build/maps")
 TILESETS_JSON = Path("output/uranium-build/tilesets.json")
 DIR_BITS = {2: 1, 4: 2, 6: 4, 8: 8}  # down/left/right/up -> RMXP passage bit
@@ -48,19 +50,13 @@ def uranium_blocked(grid, passages, priorities, terrain, x, y) -> bool:
     )
 
 
-def our_blocked(grid, passages, priorities, x, y) -> bool:
-    """== layout._cell_blocked / pathfinder_collision_preview.cell_blocked."""
-    seen = False
-    for z in range(grid.zsize - 1, -1, -1):
-        tid = grid.tile_at(x, y, z)
-        if tid == 0:
-            continue
-        seen = True
-        if (passages[tid] & 0x0F) != 0:
-            return True
-        if priorities[tid] == 0:
-            return False
-    return not seen
+def our_blocked(grid, passages, priorities, terrain, x, y) -> bool:
+    """Delegates to layout._cell_blocked (single source of truth, CLAUDE.md §4.3)
+    via a minimal oracle-only TileMap; `_TS` is an arbitrary key."""
+    tm = TileMap(
+        {}, {}, passages={_TS: passages}, priorities={_TS: priorities}, terrain_tags={_TS: terrain}
+    )
+    return _cell_blocked(grid, x, y, tm, _TS)
 
 
 def main() -> None:
@@ -85,7 +81,7 @@ def main() -> None:
     for y in range(args.y0, args.y1 + 1):
         ours_row, uran_row = [], []
         for x in range(args.x0, args.x1 + 1):
-            ob = our_blocked(grid, pas, pri, x, y)
+            ob = our_blocked(grid, pas, pri, ter, x, y)
             ub = uranium_blocked(grid, pas, pri, ter, x, y)
             ours_row.append("#" if ob else ".")
             uran_row.append("#" if ub else ".")

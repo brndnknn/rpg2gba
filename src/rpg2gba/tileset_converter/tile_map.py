@@ -145,12 +145,18 @@ class TileMap:
         priorities: dict[int, list[int]] | None = None,
         warps: dict[int, WarpInfo] | None = None,
         atlas_max: dict[int, int] | None = None,
+        terrain_tags: dict[int, list[int]] | None = None,
     ) -> None:
         self._tiles = tiles
         self._tilesets = tilesets
         self._buckets = buckets or {}
         self._passages = passages or {}
         self._priorities = priorities or {}
+        # Legacy (non-oracle) construction — most unit-test fixtures build a TileMap
+        # without a tilesets.json oracle at all — leaves this empty; terrain_tag()
+        # falls back to 0 (Neutral, matching priority()'s soft-fallback style) so
+        # those fixtures keep working unchanged.
+        self._terrain_tags = terrain_tags or {}
         # Accept a bare Metatile as shorthand for a fallback-only WarpInfo (legacy
         # single-canned-metatile callers, e.g. older test fixtures) — same
         # normalization load_tile_map applies when reading the old JSON shape.
@@ -289,6 +295,18 @@ class TileMap:
             return 0
         return priorities[tile_id]
 
+    def terrain_tag(self, tileset_id: int, tile_id: int) -> int:
+        """RMXP terrain tag for a tile (0 = Neutral). Same soft-fallback semantics
+        as `priority()`: a tileset with no loaded terrain-tags array, or a tile_id
+        out of that array's range, resolves to 0 rather than raising — a tileset
+        tag of 0 (Neutral) is never itself special-cased by `_cell_blocked`, so this
+        is a safe default for callers (legacy TileMap construction, most unit-test
+        fixtures) that never loaded the tilesets.json oracle."""
+        tags = self._terrain_tags.get(tileset_id)
+        if tags is None or not 0 <= tile_id < len(tags):
+            return 0
+        return tags[tile_id]
+
     def is_passable(self, tileset_id: int, tile_id: int) -> bool:
         """True if the tile's source passage permits walking (low nibble == 0)."""
         return (self.passage(tileset_id, tile_id) & PASSAGE_BLOCK_MASK) == 0
@@ -367,10 +385,13 @@ def load_tile_map(
 
     passages: dict[int, list[int]] = {}
     priorities: dict[int, list[int]] = {}
+    terrain_tags: dict[int, list[int]] = {}
     if passages_path is not None and buckets:
-        passages, priorities = _load_oracle(Path(passages_path), tilesets.keys(), source_tilesets)
+        passages, priorities, terrain_tags = _load_oracle(
+            Path(passages_path), tilesets.keys(), source_tilesets
+        )
 
-    return TileMap(tiles, tilesets, buckets, passages, priorities, warps, atlas_max)
+    return TileMap(tiles, tilesets, buckets, passages, priorities, warps, atlas_max, terrain_tags)
 
 
 def _parse_warp_entry(w: dict) -> WarpInfo:
@@ -398,8 +419,9 @@ def _parse_warp_entry(w: dict) -> WarpInfo:
 
 def _load_oracle(
     path: Path, tileset_ids, source_tilesets: dict[int, int] | None = None
-) -> tuple[dict[int, list[int]], dict[int, list[int]]]:
-    """Read `passages`/`priorities` for the needed tilesets from tilesets.json.
+) -> tuple[dict[int, list[int]], dict[int, list[int]], dict[int, list[int]]]:
+    """Read `passages`/`priorities`/`terrain_tags` for the needed tilesets from
+    tilesets.json.
 
     `source_tilesets` maps a synthetic per-map tileset id to its real RMXP id; when a
     requested id is synthetic, the oracle is read for the REAL id but stored under the
@@ -412,6 +434,7 @@ def _load_oracle(
     raw = json.loads(path.read_text(encoding="utf-8"))
     passages: dict[int, list[int]] = {}
     priorities: dict[int, list[int]] = {}
+    terrain_tags: dict[int, list[int]] = {}
     src = source_tilesets or {}
     for ts in tileset_ids:
         real = src.get(ts, ts)
@@ -420,7 +443,8 @@ def _load_oracle(
             raise KeyError(f"tileset {real} absent from {path}")
         passages[ts] = entry["passages"]
         priorities[ts] = entry["priorities"]
-    return passages, priorities
+        terrain_tags[ts] = entry["terrain_tags"]
+    return passages, priorities, terrain_tags
 
 
 def _validate(raw: dict) -> None:

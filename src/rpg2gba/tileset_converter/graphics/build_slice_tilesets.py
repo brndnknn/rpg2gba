@@ -3,8 +3,10 @@
 Ties the image pipeline (sources -> raster -> quantize -> emit) to the assembler:
 for each Uranium tileset used by the slice maps it enumerates the *column keys*
 (the full z-stack of non-empty tile ids per cell) across all maps, renders each
-column to a two-layer MetatileImage via `_render_column` (tiles with RMXP priority>0
-go to the GBA top BG layer; the rest composite into the bottom layer), emits a
+column to a two-layer MetatileImage via `_render_column` (a tiered RMXP-priority
+split — p>=2 canopy goes to the GBA top/BG1 layer as LAYER_NORMAL, p==1 overlays
+go to the top/BG2 layer as LAYER_COVERED, p==0 always to the bottom layer; see
+`_render_column`'s docstring for the row-relative-priority rationale), emits a
 dedicated pokeemerald PRIMARY+SECONDARY pair via `emit.emit_tileset`, and writes:
 
   - the GBA art under ``<fork>/data/tilesets/{primary,secondary}/uranium<ts>/``,
@@ -133,20 +135,39 @@ def _render_column(
     *,
     behavior: int = 0,
 ) -> MetatileImage:
-    """Priority split: tiles with RMXP priority>0 (drawn over the player) go to the TOP
-    layer; the rest composite into the BOTTOM layer. z-ascending = bottom-first."""
+    """Tiered priority split, not a flat p>0 test.
+
+    RMXP priority is row-relative: a p==1 tile draws under a character standing
+    one row south of it (head overlap) but over a character standing in its own
+    row. GBA's BG1 (the LAYER_NORMAL top slot) draws over sprites unconditionally,
+    so a flat p>0 -> BG1 rule wrongly covers the player's head with p==1
+    cliff/hedge-lip/tall-grass tiles. Tiered by the highest priority present in
+    the column:
+
+      p >= 2 present -> LAYER_NORMAL (BG1); p>=2 tiles -> TOP (always-over
+        canopy); p==1 and p==0 tiles -> BOTTOM.
+      else p == 1 present -> LAYER_COVERED (BG2 top slot: under sprites, over
+        ground); p==1 tiles -> TOP; p==0 tiles -> BOTTOM.
+      else -> LAYER_COVERED; everything -> BOTTOM (unchanged, empty TOP).
+
+    z-ascending key order is preserved within each slot."""
+    pr = [priorities[tid] if 0 <= tid < len(priorities) else 0 for _, tid in key]
+    if any(p >= 2 for p in pr):
+        layer_type, top_min = LAYER_NORMAL, 2
+    elif any(p == 1 for p in pr):
+        layer_type, top_min = LAYER_COVERED, 1
+    else:
+        layer_type, top_min = LAYER_COVERED, None
+
     bottom = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
     top = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
-    has_overlay = False
-    for z, tid in key:
+    for (z, tid), p in zip(key, pr):
         img = rasterizer.render(tid)
-        pr = priorities[tid] if 0 <= tid < len(priorities) else 0
-        if pr > 0:
+        if top_min is not None and p >= top_min:
             top.alpha_composite(img)
-            has_overlay = True
         else:
             bottom.alpha_composite(img)
-    layer_type = LAYER_NORMAL if has_overlay else LAYER_COVERED
+
     return MetatileImage(
         np.asarray(bottom, dtype=np.uint8),
         np.asarray(top, dtype=np.uint8),

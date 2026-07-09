@@ -16,10 +16,16 @@ from PIL import Image
 
 from rpg2gba.tileset_converter.graphics.build_slice_tilesets import (
     _behavior_value,
+    _render_column,
     build_slice_tilesets,
     column_keys_for_maps,
 )
-from rpg2gba.tileset_converter.graphics.emit import MetatileImage, analyze_tileset_palettes
+from rpg2gba.tileset_converter.graphics.emit import (
+    LAYER_COVERED,
+    LAYER_NORMAL,
+    MetatileImage,
+    analyze_tileset_palettes,
+)
 
 
 class _StubRasterizer:
@@ -129,8 +135,8 @@ def _run(tmp_path: Path) -> tuple[Path, Path, dict]:
     base.write_text("{}", encoding="utf-8")
     overlay_out = tmp_path / "tileset_map.gen.json"
 
-    # priorities: tile 401 has priority>0 -> rendered into the top layer only,
-    # exercising the LAYER_NORMAL path; tiles 400/402/403 all stay on bottom.
+    # priorities: tile 401 has priority==1 -> rendered into the top layer only,
+    # exercising the LAYER_COVERED p==1 tier; tiles 400/402/403 all stay on bottom.
     priors = [0] * 600
     priors[401] = 1
 
@@ -213,9 +219,11 @@ def test_emitted_art_files(tmp_path: Path) -> None:
     # Metatile 0 (column ((0,400),) normal entry) has behavior 0 (MB_NORMAL).
     assert (attrs[0] & 0x00FF) == 0
 
-    # Metatile 1 maps to column ((0,401),), tile 401 has priority>0 -> top layer only.
-    # layer_type = LAYER_NORMAL (0) -> bits 15-12 of attr = 0.
-    assert (attrs[1] >> 12) & 0xF == 0  # LAYER_NORMAL
+    # Metatile 1 maps to column ((0,401),), tile 401 has priority==1 (tall-grass/lip
+    # tier, no p>=2 present) -> top layer, LAYER_COVERED (re-pinned: p==1 alone no
+    # longer promotes to LAYER_NORMAL/BG1 — see _render_column docstring).
+    # layer_type = LAYER_COVERED (1) -> bits 15-12 of attr = 1.
+    assert (attrs[1] >> 12) & 0xF == 1  # LAYER_COVERED
     # Metatile 0 maps to column ((0,400),), priority=0 -> bottom only.
     # layer_type = LAYER_COVERED (1) -> bits 15-12 = 1.
     assert (attrs[0] >> 12) & 0xF == 1  # LAYER_COVERED
@@ -435,6 +443,69 @@ def test_column_keys_for_maps_sorted_unique_nonempty() -> None:
     for k in ordered:
         assert isinstance(k, tuple)
         assert all(isinstance(pair, tuple) and len(pair) == 2 for pair in k)
+
+
+# ---------------------------------------------------------------------------
+# Tests for _render_column (tiered priority split)
+# ---------------------------------------------------------------------------
+
+
+def _stub_color(tile_id: int) -> tuple[int, int, int, int]:
+    """The exact solid RGBA color _StubRasterizer.render() produces for tile_id."""
+    return (tile_id % 256, (tile_id * 7) % 256, (tile_id * 13) % 256, 255)
+
+
+def _priors(overrides: dict[int, int]) -> list[int]:
+    p = [0] * 600
+    for tid, val in overrides.items():
+        p[tid] = val
+    return p
+
+
+def test_render_column_p0_only_stays_bottom_covered() -> None:
+    """A column with only priority-0 tiles: unchanged behavior — everything on
+    BOTTOM, TOP empty, LAYER_COVERED."""
+    key = ((0, 400),)
+    mt = _render_column(key, _StubRasterizer(), _priors({}))
+    assert mt.layer_type == LAYER_COVERED
+    assert tuple(mt.bottom[0, 0]) == _stub_color(400)
+    assert mt.top[..., 3].max() == 0  # top fully transparent
+
+
+def test_render_column_p1_alone_covered_top() -> None:
+    """A single p==1 overlay tile (no p>=2 in the column): LAYER_COVERED, the
+    overlay's pixels land in the TOP slot (BG2: under sprites, over ground) —
+    re-pinned from the old flat p>0 rule, which put this in LAYER_NORMAL/BG1."""
+    key = ((0, 401),)
+    mt = _render_column(key, _StubRasterizer(), _priors({401: 1}))
+    assert mt.layer_type == LAYER_COVERED
+    assert tuple(mt.top[0, 0]) == _stub_color(401)
+    assert mt.bottom[..., 3].max() == 0  # bottom empty (no p==0 tile present)
+
+
+def test_render_column_p2_alone_normal_top() -> None:
+    """A single p>=2 canopy tile: LAYER_NORMAL, overlay pixels in the TOP slot
+    (BG1: always over sprites)."""
+    key = ((0, 402),)
+    mt = _render_column(key, _StubRasterizer(), _priors({402: 2}))
+    assert mt.layer_type == LAYER_NORMAL
+    assert tuple(mt.top[0, 0]) == _stub_color(402)
+    assert mt.bottom[..., 3].max() == 0
+
+
+def test_render_column_mixed_ground_lip_canopy() -> None:
+    """Mixed column: ground (p0, z0) + lip (p1, z1) + canopy (p2, z2).
+
+    p2 goes to TOP alone -> LAYER_NORMAL. p0 and p1 both go to BOTTOM,
+    composited in z order (z1 last, so its opaque pixels are what's visible —
+    proves the z-ascending iteration order routed both into the same slot and
+    composited z1 over z0, not the reverse)."""
+    key = ((0, 500), (1, 501), (2, 502))
+    priorities = _priors({500: 0, 501: 1, 502: 2})
+    mt = _render_column(key, _StubRasterizer(), priorities)
+    assert mt.layer_type == LAYER_NORMAL
+    assert tuple(mt.top[0, 0]) == _stub_color(502)
+    assert tuple(mt.bottom[0, 0]) == _stub_color(501)  # z1 composited over z0
 
 
 # ---------------------------------------------------------------------------

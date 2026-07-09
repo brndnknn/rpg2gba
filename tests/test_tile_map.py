@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from rpg2gba.tileset_converter.tile_map import (
+    Bucket,
     Metatile,
     TileMap,
     TilesetChoice,
@@ -41,6 +42,7 @@ def _write_synth_fixtures(tmp_path: Path, synth_id: int, real_id: int) -> tuple[
         str(real_id): {
             "passages": passages,
             "priorities": [0] * n,
+            "terrain_tags": [0] * n,
         },
     }
     tpath = tmp_path / "tileset_map.json"
@@ -72,6 +74,60 @@ def test_load_tile_map_synthetic_id_resolves_oracle(tmp_path: Path) -> None:
     assert not tm.has_bucket(real_id)
 
 
+def test_terrain_tag_loaded_from_oracle_under_synthetic_key(tmp_path: Path) -> None:
+    """terrain_tag() reads the oracle's terrain_tags array the same way passage()/
+    priority() do — stored under the synthetic key, not the real id."""
+    synth_id = 1019
+    real_id = 19
+    tpath, opath = _write_synth_fixtures(tmp_path, synth_id, real_id)
+    # tag a tile in the oracle written by _write_synth_fixtures (real_id=19)
+    oracle = json.loads(opath.read_text(encoding="utf-8"))
+    oracle[str(real_id)]["terrain_tags"][20] = 20  # Shadow
+    opath.write_text(json.dumps(oracle), encoding="utf-8")
+
+    tm = load_tile_map(tpath, opath)
+    assert tm.terrain_tag(synth_id, 20) == 20
+    assert tm.terrain_tag(synth_id, 0) == 0  # untagged tile -> Neutral
+
+
+def test_terrain_tag_defaults_to_zero_without_oracle() -> None:
+    """A TileMap built without a terrain_tags oracle (legacy construction, most
+    unit-test fixtures) resolves every terrain_tag() to 0 (Neutral) rather than
+    raising — matches priority()'s soft-fallback style."""
+    tm = TileMap(
+        tiles={7: {}},
+        tilesets={7: TilesetChoice("gP", "gS")},
+        buckets={7: Bucket(5, 6, 7)},
+        passages={7: [0] * 10},
+        priorities={7: [0] * 10},
+        # no terrain_tags passed at all
+    )
+    assert tm.terrain_tag(7, 0) == 0
+    assert tm.terrain_tag(7, 9999) == 0  # out of range -> also 0, not IndexError
+    assert tm.terrain_tag(99, 0) == 0  # unknown tileset -> also 0, not KeyError
+
+
+def test_load_tile_map_oracle_missing_terrain_tags_fails_loud(tmp_path: Path) -> None:
+    """A tilesets.json oracle entry missing 'terrain_tags' aborts load_tile_map —
+    same fail-loud style as a missing 'passages'/'priorities' key (CLAUDE.md §4.5),
+    not a silent 0-fill."""
+    real_id = 19
+    n = 600
+    table = {
+        "tilesets": {str(real_id): {"primary": "gTileset_A", "secondary": "gTileset_B"}},
+        "buckets": {str(real_id): {"passable": 1, "blocked": 2, "void": 3}},
+        "tiles": {str(real_id): {}},
+    }
+    oracle = {str(real_id): {"passages": [0] * n, "priorities": [0] * n}}  # no terrain_tags
+    tpath = tmp_path / "tileset_map.json"
+    opath = tmp_path / "tilesets.json"
+    tpath.write_text(json.dumps(table), encoding="utf-8")
+    opath.write_text(json.dumps(oracle), encoding="utf-8")
+
+    with pytest.raises(KeyError):
+        load_tile_map(tpath, opath)
+
+
 def test_load_tile_map_no_source_tilesets_identity(tmp_path: Path) -> None:
     """Without source_tilesets, behavior is identical to legacy: oracle is read by
     the tileset id directly (backward-compat)."""
@@ -94,7 +150,7 @@ def test_load_tile_map_no_source_tilesets_identity(tmp_path: Path) -> None:
         # no source_tilesets key
     }
     oracle = {
-        str(real_id): {"passages": passages, "priorities": [0] * n},
+        str(real_id): {"passages": passages, "priorities": [0] * n, "terrain_tags": [0] * n},
     }
     tpath = tmp_path / "tileset_map.json"
     opath = tmp_path / "tilesets.json"

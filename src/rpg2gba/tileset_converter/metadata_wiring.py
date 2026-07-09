@@ -450,6 +450,51 @@ def _assign_rock_flags(event_traits: dict[int, list[str]], uid: int) -> dict[int
     }
 
 
+def collect_through_block_cells(map_json: dict) -> set[tuple[int, int]]:
+    """RMXP's blank-graphic + `through == False` invisible-obstacle idiom (fix #3):
+    cells (x, y) of events whose BOOT page has a blank graphic and `through` is
+    False, regardless of trigger. This is purely the tile-BLOCKING half of what such
+    an event is — the script/trigger behavior for the same events is unchanged,
+    already handled by `build_object_events`'s bg-sign / coord-trigger / drop
+    classification (this function adds no new classification, just a coordinate
+    set for the layout pass to stamp collision on).
+
+    Reuses `select_boot_page` and the same blank-graphic predicate
+    (`not character_name`) `build_object_events` uses, so the two can never
+    disagree about which page an event shows at boot or what counts as "blank"
+    (CLAUDE.md §4.3 — one notion of blank graphic / boot page, not two).
+
+    Events WITH a graphic are excluded even when `through` is False: pokeemerald's
+    native object_event collision already blocks that tile, so stamping it again
+    would be redundant (and such an event is placed as a real object_event, not a
+    phantom obstacle, by `build_object_events`).
+
+    A working (in-slice) warp door is ALSO blank-graphic + `through == False` at
+    boot, matching this same predicate — but its tile must stay enterable
+    (`convert_layout`'s `warp_overrides` already gives it the correct
+    walkable/warp-behavior metatile). This function does NOT special-case that: an
+    out-of-slice door (NO-EMIT, `classify_event`'s "skip") matches the identical
+    predicate and correctly SHOULD stay blocked (nothing will ever warp there, so
+    it must not read as open ground into unconverted territory) — and there is no
+    slice-independent way to tell the two apart from an event dict alone. The
+    caller is responsible for excluding real warp coords (its own `warp_overrides`
+    set) from the result before handing it to `convert_layout` as `blocked_cells`
+    (see `scripts/assemble_pathfinder.py::run_layout_pass`); `convert_layout`
+    itself still fails loud if that subtraction was missed."""
+    cells: set[tuple[int, int]] = set()
+    for event in map_json["events"]:
+        page = select_boot_page(event)
+        if page is None:
+            continue
+        name = page.get("graphic", {}).get("character_name") or ""
+        if name:
+            continue
+        if page["through"]:
+            continue
+        cells.add((event["x"], event["y"]))
+    return cells
+
+
 def build_object_events(
     map_json: dict,
     consts: MapConstants,
