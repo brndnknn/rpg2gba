@@ -222,9 +222,11 @@ def test_condition_expr_variable_constant_ops(
     assert expr == f"var(VAR_RESULT_VAR) {expected} 7"
 
 
-def test_condition_expr_variable_operand(ctx: T.TranspileContext) -> None:
+def test_condition_expr_variable_operand_queues(ctx: T.TranspileContext) -> None:
+    """`var(X) OP var(Y)` doesn't compile in poryscript (verified against the
+    real binary: "expected next token to be '{', got ')'") — queue, don't emit."""
     expr = T.condition_expr([1, 1, 1, 2, 0], ctx)
-    assert expr == "var(VAR_RESULT_VAR) == var(VAR_OTHER_VAR)"
+    assert expr is None
 
 
 def test_condition_expr_self_switch(ctx: T.TranspileContext) -> None:

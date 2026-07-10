@@ -533,12 +533,12 @@ def condition_expr(params: list, ctx: TranspileContext) -> str | None:
             if not isinstance(params[3], int):
                 return None
             rhs = str(params[3])
-        elif params[2] == 1:  # another variable
-            other = ctx.var_for_variable(params[3])
-            if other is None:
-                return None
-            rhs = f"var({other})"
         else:
+            # operand kind 1 (another variable) and others (random/item/actor/…):
+            # poryscript's `if` condition grammar takes only a literal RHS —
+            # `var(X) OP var(Y)` fails to compile (verified against the real
+            # poryscript binary: "expected next token to be '{', got ')'").
+            # Queue rather than emit invalid syntax.
             return None
         return f"var({name}) {op} {rhs}"
 

@@ -57,6 +57,7 @@ def _fake_fork(tmp_path: Path) -> Path:
         "    MB_SAND,\n"
         "    MB_DEEP_WATER,\n"
         "    MB_POND_WATER,\n"
+        "    MB_OCEAN_WATER,\n"
         "    MB_WATERFALL,\n"
         "    MB_LONG_GRASS,\n"
         "    MB_SEAWEED,\n"
