@@ -276,7 +276,19 @@
 #define VAR_UNUSED_0x40FE                                0x40FE // Unused Var
 #define VAR_UNUSED_0x40FF                                0x40FF // Unused Var
 
+// BEGIN RPG2GBA EVENT RANGE EXPANSION (see rpg2gba reference/engine_extension_surface.md §2)
+#include "config/rpg2gba.h"
+#if RPG2GBA_EXPAND_EVENT_RANGES == TRUE
+// Converter-owned var region above the vanilla vars. GetVarPointer maps any
+// id in [VARS_START, SPECIAL_VARS_START) into vars[], so growing VARS_END is
+// what makes these ids in-bounds.
+#define RPG2GBA_VARS_START                               0x4100
+#define RPG2GBA_VARS_END                                 (RPG2GBA_VARS_START + RPG2GBA_VARS_COUNT - 1)
+#define VARS_END                                         RPG2GBA_VARS_END
+#else
 #define VARS_END                                         0x40FF
+#endif
+// END RPG2GBA EVENT RANGE EXPANSION
 #define VARS_COUNT                                       (VARS_END - VARS_START + 1)
 
 #define SPECIAL_VARS_START            0x8000

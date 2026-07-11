@@ -1639,7 +1639,23 @@
 #define DAILY_FLAGS_END                             (FLAG_UNUSED_0x95F + (7 - FLAG_UNUSED_0x95F % 8))
 #define NUM_DAILY_FLAGS                             (DAILY_FLAGS_END - DAILY_FLAGS_START + 1)
 
+// BEGIN RPG2GBA EVENT RANGE EXPANSION (see rpg2gba reference/engine_extension_surface.md §2)
+#include "config/rpg2gba.h"
+#if RPG2GBA_EXPAND_EVENT_RANGES == TRUE
+// Converter-owned flag regions above the vanilla flags. Temp switches share
+// the vanilla temp-flag lifetime: ClearTempFieldEventData (src/event_data.c)
+// clears them on map transition.
+#define RPG2GBA_TEMP_FLAGS_START        (DAILY_FLAGS_END + 1)
+#define RPG2GBA_TEMP_FLAGS_END          (RPG2GBA_TEMP_FLAGS_START + RPG2GBA_TEMP_FLAGS_COUNT - 1)
+#define RPG2GBA_GLOBAL_FLAGS_START      (RPG2GBA_TEMP_FLAGS_END + 1)
+#define RPG2GBA_GLOBAL_FLAGS_END        (RPG2GBA_GLOBAL_FLAGS_START + RPG2GBA_GLOBAL_FLAGS_COUNT - 1)
+#define RPG2GBA_SELFSWITCH_FLAGS_START  (RPG2GBA_GLOBAL_FLAGS_END + 1)
+#define RPG2GBA_SELFSWITCH_FLAGS_END    (RPG2GBA_SELFSWITCH_FLAGS_START + RPG2GBA_SELFSWITCH_FLAGS_COUNT - 1)
+#define FLAGS_COUNT                     (RPG2GBA_SELFSWITCH_FLAGS_END + 1)
+#else
 #define FLAGS_COUNT (DAILY_FLAGS_END + 1)
+#endif
+// END RPG2GBA EVENT RANGE EXPANSION
 
 // Special Flags (Stored in EWRAM (sSpecialFlags), not in the SaveBlock)
 #define SPECIAL_FLAGS_START                     0x4000

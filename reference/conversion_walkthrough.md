@@ -494,18 +494,21 @@ name the corpus uses — global flags/vars, self-switches, and temp-switches —
 each grouped under a base offset:
 
 ```c
-#define RPG2GBA_FLAG_BASE       0x500   // TODO Phase 7: free flag range
-#define RPG2GBA_SELFSWITCH_BASE 0x600   // TODO Phase 7: free range
-#define RPG2GBA_TEMPSWITCH_BASE 0x700   // TODO Phase 7: TEMP (auto-reset) range
+#define RPG2GBA_FLAG_BASE       RPG2GBA_GLOBAL_FLAGS_START     // engine range constant (config/rpg2gba.h)
+#define RPG2GBA_SELFSWITCH_BASE RPG2GBA_SELFSWITCH_FLAGS_START // engine range constant (config/rpg2gba.h)
+#define RPG2GBA_TEMPSWITCH_BASE RPG2GBA_TEMP_FLAGS_START       // engine range constant (config/rpg2gba.h)
 
 #define FLAG_RECEIVED_STARTER        (RPG2GBA_FLAG_BASE + 0)
 #define FLAG_MAP012_EVENT004_SSA     (RPG2GBA_SELFSWITCH_BASE + 0)
 #define FLAG_MAP002_EVENT011_TSA     (RPG2GBA_TEMPSWITCH_BASE + 0)
 ```
 
-The base offsets are placeholders that only need to be unique to *assemble*;
-Phase 7 assigns real, free, reserved ranges (the temp range must be the engine's
-auto-reset-on-warp block so temp-switches keep their semantics).
+Since 2026-07-10 the bases are the engine's own `RPG2GBA_*_START` range
+constants (config-gated flag/var-space expansion, `reference/
+engine_extension_surface.md` §2) — resolved by cpp when `event_scripts.s`
+includes the header — with per-region capacities enforced fail-loud at dump
+time. The temp region is cleared by `ClearTempFieldEventData` on map
+transition, so temp-switches keep their auto-reset semantics.
 
 ---
 

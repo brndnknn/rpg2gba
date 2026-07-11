@@ -696,7 +696,7 @@ Bring all converted artifacts into the fork, build a complete ROM, and get it lo
 
 **7.4 Save file format check**
 - Make sure the save format change (new species, new flags) doesn't conflict with the expansion's save migration logic
-- **Flag-space expansion (the flag budget).** Uranium's ~860 self-switch flags (derived by the orchestrator, minted in `flag_registry`) plus the global switches/vars in use exceed vanilla's free saved-flag slots. Expand `FLAGS_COUNT` (grows `SaveBlock1`) and assign real, reserved base offsets via `flag_registry.dump_header(flag_base=…, var_base=…, selfswitch_base=…)`. The default bases assemble but are not runtime-correct. See `reference/flag_registry_policy.md` → "The flag budget".
+- **Flag-space expansion (the flag budget) — DONE EARLY (2026-07-10, audit F1/F2 fix).** The fork's saved flag/var ranges are expanded behind the `RPG2GBA_EXPAND_EVENT_RANGES` config gate and the assembler passes the engine's `RPG2GBA_*_START` constants (plus parsed capacities, fail-loud) to `flag_registry.dump_header`. See `reference/engine_extension_surface.md` §2 and `reference/flag_registry_policy.md` → "The flag budget". Remaining Phase 7 check: confirm capacities still fit if later slices out-mint the 2026-07-10 census.
 
 **7.5 First ROM boot**
 - Open in Delta

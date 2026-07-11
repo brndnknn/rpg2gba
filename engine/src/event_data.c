@@ -59,6 +59,12 @@ void ClearTempFieldEventData(void)
 {
     memset(&gSaveBlock1Ptr->flags[TEMP_FLAGS_START / 8], 0, TEMP_FLAGS_SIZE);
     memset(&gSaveBlock1Ptr->vars[TEMP_VARS_START - VARS_START], 0, TEMP_VARS_SIZE);
+#if RPG2GBA_EXPAND_EVENT_RANGES == TRUE
+    // BEGIN RPG2GBA EVENT RANGE EXPANSION — converted-game temp switches share
+    // the vanilla temp-flag lifetime (reset on every map transition).
+    memset(&gSaveBlock1Ptr->flags[RPG2GBA_TEMP_FLAGS_START / 8], 0, RPG2GBA_TEMP_FLAGS_COUNT / 8);
+    // END RPG2GBA EVENT RANGE EXPANSION
+#endif
     FlagClear(FLAG_SYS_ENC_UP_ITEM);
     FlagClear(FLAG_SYS_ENC_DOWN_ITEM);
     FlagClear(FLAG_SYS_USE_STRENGTH);

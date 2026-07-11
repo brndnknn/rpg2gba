@@ -33,6 +33,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -60,12 +61,18 @@ WARP_OVERRIDES: dict[int, set[tuple[int, int]]] = {
     32: {(28, 31)},
 }
 
-# Flag address layout for the pathfinder boot test (Phase 7 assigns final values).
-# These must not overlap vanilla flags (FLAGS_COUNT ≈ 0x960; TEMP_FLAGS 0x0-0x1F).
-FLAG_BASE = 0x1000        # named global flags
-SELFSWITCH_BASE = 0x1100  # per-event self-switch flags
-VAR_BASE = 0x40D0         # unused game-var range (vanilla VARS_END = 0x40FF)
-TEMPSWITCH_BASE = 0x0014  # temp flags — 0x14+ are unused in the vanilla fork
+# Flag/var address layout for the pathfinder boot test. The numeric layout now
+# lives in the ENGINE, single source of truth: include/config/rpg2gba.h defines
+# the region capacities, constants/flags.h + constants/vars.h derive the region
+# starts. These names are resolved symbolically by cpp when uranium_flags.h is
+# #included from data/event_scripts.s (after constants/flags.h / vars.h) — no
+# numeric literals here anymore (audit findings F1/F2 fix; the old hardcoded
+# bases were out-of-bounds writes / aliased live vanilla vars — see
+# reference/engine_extension_surface.md §2).
+FLAG_BASE = "RPG2GBA_GLOBAL_FLAGS_START"
+SELFSWITCH_BASE = "RPG2GBA_SELFSWITCH_FLAGS_START"
+VAR_BASE = "RPG2GBA_VARS_START"
+TEMPSWITCH_BASE = "RPG2GBA_TEMP_FLAGS_START"
 
 # Overlay manifests read by the committed map_data_rules.mk hook (URANIUM_*) when
 # present, else the pristine upstream files. Keeps the tracked manifests untouched.
@@ -387,13 +394,62 @@ def run_fork_pass(
 
     # --- Write flag registry header ---
     dest_flags = fork / "data" / "scripts" / "uranium_flags.h"
-    _emit_flags_header(dest_flags, compiled_texts, dry_run)
+    _emit_flags_header(fork, dest_flags, compiled_texts, dry_run)
 
     # --- Write the slice include list pulled in by the event_scripts.s hook ---
     _write_event_includes(fork, consts, ce_pory.is_file(), dry_run)
 
 
-def _emit_flags_header(dest: Path, compiled_texts: list[str], dry_run: bool) -> None:
+# Region-capacity #defines in include/config/rpg2gba.h, keyed to the dump_header
+# capacities dict (flag_registry.py) they gate.
+_RPG2GBA_COUNT_DEFINES = {
+    "flags": "RPG2GBA_GLOBAL_FLAGS_COUNT",
+    "vars": "RPG2GBA_VARS_COUNT",
+    "selfswitches": "RPG2GBA_SELFSWITCH_FLAGS_COUNT",
+    "tempswitches": "RPG2GBA_TEMP_FLAGS_COUNT",
+}
+_RPG2GBA_GATE_RE = re.compile(r"#define\s+RPG2GBA_EXPAND_EVENT_RANGES\s+(\S+)")
+
+
+def _load_rpg2gba_capacities(fork: Path) -> dict[str, int]:
+    """Read include/config/rpg2gba.h and return the four region capacities.
+
+    Fails loud if the fork lacks the RPG2GBA event-range expansion (missing
+    header, gate compiled out, or a missing count #define) — emitting
+    uranium_flags.h against an unexpanded engine would reintroduce the
+    out-of-bounds-write bug the expansion fixed (audit findings F1/F2; see
+    reference/engine_extension_surface.md §2).
+    """
+    header = fork / "include" / "config" / "rpg2gba.h"
+    if not header.is_file():
+        raise RuntimeError(
+            f"{header} not found — this fork lacks the RPG2GBA event-range "
+            "expansion, so uranium_flags.h cannot be emitted safely (see "
+            "reference/engine_extension_surface.md §2)."
+        )
+    text = header.read_text(encoding="utf-8")
+
+    gate = _RPG2GBA_GATE_RE.search(text)
+    if gate is None or gate.group(1) != "TRUE":
+        raise RuntimeError(
+            f"{header}: RPG2GBA_EXPAND_EVENT_RANGES is not TRUE — the event-range "
+            "expansion is compiled out, so emitting uranium_flags.h would "
+            "reintroduce the out-of-bounds-write bug it fixed (see "
+            "reference/engine_extension_surface.md §2)."
+        )
+
+    capacities: dict[str, int] = {}
+    for key, define in _RPG2GBA_COUNT_DEFINES.items():
+        m = re.search(rf"#define\s+{define}\s+(\S+)", text)
+        if m is None:
+            raise RuntimeError(f"{header}: missing #define {define}")
+        capacities[key] = int(m.group(1), 0)
+    return capacities
+
+
+def _emit_flags_header(
+    fork: Path, dest: Path, compiled_texts: list[str], dry_run: bool
+) -> None:
     from rpg2gba.conversion_agent.flag_registry import FlagRegistry
     from rpg2gba.tileset_converter import assembly as asm
     reg = FlagRegistry.load(Path("output/uranium-build/flag_state.json"))
@@ -417,6 +473,7 @@ def _emit_flags_header(dest: Path, compiled_texts: list[str], dry_run: bool) -> 
             var_base=VAR_BASE,
             selfswitch_base=SELFSWITCH_BASE,
             tempswitch_base=TEMPSWITCH_BASE,
+            capacities=_load_rpg2gba_capacities(fork),
         )
         logger.info("  wrote uranium_flags.h (%s)", dest)
     else:

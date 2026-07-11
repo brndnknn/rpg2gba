@@ -139,19 +139,51 @@ map inspector, not normal gameplay. When `TRUE`, gates (all `#if URANIUM_MAP_WAL
   instead of the truck-suppression fallback — same "callback consumed
   synchronously inside `DoMapLoadLoop`" timing constraint documented in §5).
 
-### Planned — `RPG2GBA` flag/var space expansion
+### `RPG2GBA_EXPAND_EVENT_RANGES` (`include/config/rpg2gba.h`, default `TRUE`)
 
-**Not yet implemented; pending user decision.** Fixes audit finding F1
-(`reference/native_reuse_audit_2026-07-07.md` §F1): the current registry bases
-(`FLAG_BASE = 0x1000`, `SELFSWITCH_BASE = 0x1100` in
-`scripts/assemble_pathfinder.py:64-68`) are **out-of-bounds writes** into
-`vars[]` — `GetFlagPointer` (`engine/src/event_data.c:226`) does not bounds-check
-against `FLAGS_COUNT`. The proper fix is a sentinel-fenced (then config-gated)
-expansion of `FLAGS_COUNT`/`VARS_COUNT` (`include/global.h:146,1132`) with named
-`RPG2GBA_*_START` range constants placed above the vanilla ranges, plus a
-save-block-size / sector-budget re-check. This is the **first generic
-(non-Uranium) surface entry** — every converted game needs more flag/var space
-than vanilla ships, so this generalizes past the current slice.
+**Implemented 2026-07-10.** Fixes audit findings F1 and F2
+(`reference/native_reuse_audit_2026-07-07.md`): the old registry bases
+(`FLAG_BASE = 0x1000`, `SELFSWITCH_BASE = 0x1100`) were **out-of-bounds writes**
+into `vars[]` (`GetFlagPointer` does not bounds-check against `FLAGS_COUNT`),
+`VAR_BASE = 0x40D0` aliased live vanilla vars, and temp-switch mints leaked past
+the 0x1F temp window into the rock-obstacle flag range. This is the **first
+generic (non-Uranium) surface entry** — every converted game needs more
+flag/var space than vanilla ships.
+
+When `TRUE` (all gated `#if RPG2GBA_EXPAND_EVENT_RANGES == TRUE`, markers
+`BEGIN/END RPG2GBA EVENT RANGE EXPANSION`):
+
+- `include/constants/flags.h` (at the old `FLAGS_COUNT` definition) — three
+  converter-owned flag regions above the vanilla flags, then
+  `FLAGS_COUNT = RPG2GBA_SELFSWITCH_FLAGS_END + 1` (0x1160, was 0x960):
+  - `RPG2GBA_TEMP_FLAGS_START` 0x960, count 0x180 — converted-game temp
+    switches, cleared on map transition (below)
+  - `RPG2GBA_GLOBAL_FLAGS_START` 0xAE0, count 0x180 — named global switches
+  - `RPG2GBA_SELFSWITCH_FLAGS_START` 0xC60, count 0x500 — per-event
+    self-switches
+- `include/constants/vars.h` (at the old `VARS_END`) —
+  `RPG2GBA_VARS_START` 0x4100, count 0x100, `VARS_END = RPG2GBA_VARS_END`
+  (0x41FF). Growing `VARS_END` is what makes the ids in-bounds:
+  `GetVarPointer` maps all of `[VARS_START, SPECIAL_VARS_START)` into `vars[]`.
+- `src/event_data.c` (`ClearTempFieldEventData`) — additionally memsets the
+  RPG2GBA temp-flag region on map transition, giving converted temp switches
+  the vanilla temp-flag lifetime. This fully decouples them from the
+  `FLAG_TEMP_11..1F` rock-obstacle allocator (F2).
+- `include/config/save.h` — `FREE_MYSTERY_EVENT_BUFFERS` flipped to `TRUE`
+  (reclaims 1104 SaveBlock1 bytes) to offset the growth: flags +256 bytes,
+  vars +512 bytes; `sizeof(struct SaveBlock1)` measured 15332 of 15872
+  (sector budget), enforced by `STATIC_ASSERT(SaveBlock1FreeSpace)` in
+  `src/save.c`.
+
+**Single source of truth for capacities:** the four `RPG2GBA_*_COUNT` defines
+in `include/config/rpg2gba.h`. The registry dump
+(`data/scripts/uranium_flags.h`) keys its bases off the `RPG2GBA_*_START`
+constants symbolically (resolved by cpp — `data/event_scripts.s` includes
+`constants/flags.h`/`vars.h` before the uranium hook), and
+`assemble_pathfinder.py` parses the `*_COUNT` values at assembly time to fail
+loud when mints exceed a region. Flag-region counts must stay multiples of 8
+(byte-aligned memset). Sizing census 2026-07-10: 345 temp switches, 235 global
+switches, 1132 self-switches, 119 vars corpus-wide.
 
 ---
 
@@ -256,10 +288,10 @@ surfaces something not already listed.
 
 ## 6. Verification one-liners
 
-List every fence (should match every `URANIUM` row in §1/§3 above):
+List every fence (should match every `URANIUM`/`RPG2GBA` row in §1/§2/§3 above):
 
 ```
-git -C engine grep -n URANIUM -- 'src/*' 'include/*' 'data/*' '*.mk'
+git -C engine grep -n -e URANIUM -e RPG2GBA -- 'src/*' 'include/*' 'data/*' '*.mk'
 ```
 
 Clean build after the assembler has run (real content staged):

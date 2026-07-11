@@ -8,6 +8,7 @@ spawns `claude` or hits the network (F7).
 from __future__ import annotations
 
 import json
+import sys
 import types
 from pathlib import Path
 
@@ -33,6 +34,11 @@ REFERENCE = REPO_ROOT / "reference"
 PRESEED = REFERENCE / "essentials_to_emerald_map.md"
 SWITCHES = REFERENCE / "uranium_switches.json"
 VARIABLES = REFERENCE / "uranium_variables.json"
+
+# Ensure scripts/ is importable (assemble_pathfinder is a script, not a package).
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+import assemble_pathfinder  # noqa: E402
 
 
 def _seeded() -> FlagRegistry:
@@ -191,6 +197,143 @@ def test_dump_header_temp_switch_block_and_custom_base(tmp_path: Path) -> None:
     assert "RPG2GBA_TEMPSWITCH_BASE" in text
     assert "0x800" in text  # the Phase-7 auto-reset-range hook
     assert "#define FLAG_MAP002_EVENT011_TSA (RPG2GBA_TEMPSWITCH_BASE + 0)" in text
+
+
+def test_dump_header_str_bases_emitted_verbatim(tmp_path: Path) -> None:
+    # The real fork assembly passes the engine's RPG2GBA_*_START constant names
+    # (strings) instead of numeric placeholders — they must appear verbatim, not
+    # be hex-formatted, and the mint lines still key off the RPG2GBA_*_BASE macro.
+    reg = FlagRegistry()
+    reg.propose_flag(500, "FLAG_TEST_THING")
+    out = tmp_path / "rpg2gba_flags.h"
+    reg.dump_header(
+        out,
+        flag_base="RPG2GBA_GLOBAL_FLAGS_START",
+        var_base="RPG2GBA_VARS_START",
+        selfswitch_base="RPG2GBA_SELFSWITCH_FLAGS_START",
+        tempswitch_base="RPG2GBA_TEMP_FLAGS_START",
+    )
+    text = out.read_text(encoding="utf-8")
+    assert (
+        "#define RPG2GBA_FLAG_BASE       RPG2GBA_GLOBAL_FLAGS_START   "
+        "// engine range constant (config/rpg2gba.h)"
+    ) in text
+    assert (
+        "#define RPG2GBA_VAR_BASE        RPG2GBA_VARS_START  "
+        "// engine range constant (config/rpg2gba.h)"
+    ) in text
+    assert (
+        "#define RPG2GBA_SELFSWITCH_BASE RPG2GBA_SELFSWITCH_FLAGS_START   "
+        "// engine range constant (config/rpg2gba.h)"
+    ) in text
+    assert (
+        "#define RPG2GBA_TEMPSWITCH_BASE RPG2GBA_TEMP_FLAGS_START   "
+        "// engine range constant (config/rpg2gba.h)"
+    ) in text
+    assert "#define FLAG_TEST_THING (RPG2GBA_FLAG_BASE + 0)" in text
+
+
+def test_dump_header_capacity_exceeded_raises(tmp_path: Path) -> None:
+    reg = FlagRegistry()
+    reg.propose_flag(500, "FLAG_TEST_ONE")
+    reg.propose_flag(501, "FLAG_TEST_TWO")
+    out = tmp_path / "rpg2gba_flags.h"
+    caps = {"flags": 1, "vars": 0, "selfswitches": 0, "tempswitches": 0}
+    with pytest.raises(ValueError, match="flags"):
+        reg.dump_header(out, capacities=caps)
+    with pytest.raises(ValueError, match="rpg2gba.h"):
+        reg.dump_header(out, capacities=caps)
+
+
+def test_dump_header_capacity_equal_count_ok(tmp_path: Path) -> None:
+    reg = FlagRegistry()
+    reg.propose_flag(500, "FLAG_TEST_ONE")
+    reg.propose_flag(501, "FLAG_TEST_TWO")
+    out = tmp_path / "rpg2gba_flags.h"
+    caps = {"flags": 2, "vars": 0, "selfswitches": 0, "tempswitches": 0}
+    reg.dump_header(out, capacities=caps)  # count == capacity -> OK
+    assert "#define FLAG_TEST_ONE (RPG2GBA_FLAG_BASE + 0)" in out.read_text(encoding="utf-8")
+
+
+def test_dump_header_capacities_missing_key_raises(tmp_path: Path) -> None:
+    reg = FlagRegistry()
+    out = tmp_path / "rpg2gba_flags.h"
+    with pytest.raises(ValueError, match="flags"):
+        reg.dump_header(
+            out, capacities={"vars": 0, "selfswitches": 0, "tempswitches": 0}
+        )
+
+
+# ----------------------------------------------------------------------------
+# 1b. assemble_pathfinder._load_rpg2gba_capacities
+# ----------------------------------------------------------------------------
+
+
+def test_load_rpg2gba_capacities_missing_file_raises(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="engine_extension_surface"):
+        assemble_pathfinder._load_rpg2gba_capacities(tmp_path)
+
+
+def test_load_rpg2gba_capacities_gate_false_raises(tmp_path: Path) -> None:
+    header = tmp_path / "include" / "config" / "rpg2gba.h"
+    header.parent.mkdir(parents=True)
+    header.write_text(
+        "#define RPG2GBA_EXPAND_EVENT_RANGES FALSE\n"
+        "#define RPG2GBA_TEMP_FLAGS_COUNT 0x180\n"
+        "#define RPG2GBA_GLOBAL_FLAGS_COUNT 0x180\n"
+        "#define RPG2GBA_SELFSWITCH_FLAGS_COUNT 0x500\n"
+        "#define RPG2GBA_VARS_COUNT 0x100\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="RPG2GBA_EXPAND_EVENT_RANGES"):
+        assemble_pathfinder._load_rpg2gba_capacities(tmp_path)
+
+
+def test_load_rpg2gba_capacities_missing_count_raises(tmp_path: Path) -> None:
+    header = tmp_path / "include" / "config" / "rpg2gba.h"
+    header.parent.mkdir(parents=True)
+    header.write_text(
+        "#define RPG2GBA_EXPAND_EVENT_RANGES TRUE\n"
+        "#define RPG2GBA_TEMP_FLAGS_COUNT 0x180\n"
+        "#define RPG2GBA_GLOBAL_FLAGS_COUNT 0x180\n"
+        "#define RPG2GBA_SELFSWITCH_FLAGS_COUNT 0x500\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="RPG2GBA_VARS_COUNT"):
+        assemble_pathfinder._load_rpg2gba_capacities(tmp_path)
+
+
+def test_load_rpg2gba_capacities_happy_path_parses_hex(tmp_path: Path) -> None:
+    header = tmp_path / "include" / "config" / "rpg2gba.h"
+    header.parent.mkdir(parents=True)
+    header.write_text(
+        "#define RPG2GBA_EXPAND_EVENT_RANGES TRUE\n"
+        "#define RPG2GBA_TEMP_FLAGS_COUNT       0x180  // 384\n"
+        "#define RPG2GBA_GLOBAL_FLAGS_COUNT     0x180  // 384\n"
+        "#define RPG2GBA_SELFSWITCH_FLAGS_COUNT 0x500  // 1280\n"
+        "#define RPG2GBA_VARS_COUNT             0x100  // 256\n",
+        encoding="utf-8",
+    )
+    caps = assemble_pathfinder._load_rpg2gba_capacities(tmp_path)
+    assert caps == {
+        "flags": 0x180,
+        "vars": 0x100,
+        "selfswitches": 0x500,
+        "tempswitches": 0x180,
+    }
+
+
+def test_load_rpg2gba_capacities_real_vendored_header() -> None:
+    header = REPO_ROOT / "engine" / "include" / "config" / "rpg2gba.h"
+    if not header.is_file():
+        pytest.skip("engine/include/config/rpg2gba.h not present (partial clone)")
+    caps = assemble_pathfinder._load_rpg2gba_capacities(REPO_ROOT / "engine")
+    assert caps == {
+        "flags": 0x180,
+        "vars": 0x100,
+        "selfswitches": 0x500,
+        "tempswitches": 0x180,
+    }
 
 
 # ----------------------------------------------------------------------------

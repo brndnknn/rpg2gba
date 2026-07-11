@@ -59,15 +59,21 @@ Without this the names are undefined symbols at assembly — discovered via the
 rung-3 spike (2026-06-01), which is exactly the kind of integration gap the
 poryscript compile-gate can't catch (it doesn't verify constants exist).
 
-## The flag budget (a Phase 7 task)
+## The flag budget (RESOLVED 2026-07-10 — pulled forward from Phase 7)
 
-Uranium's ~860 self-switch flags alone likely **exceed the fork's free saved-flag
-space** (a few hundred slots), before counting the global switches and vars
-actually used. So Phase 7 must **expand the fork's saved-flag space** (grow
-`FLAGS_COUNT`, which grows `SaveBlock1` and bumps save-sector sizing) and pass
-real, reserved base offsets to `dump_header(flag_base=…, var_base=…,
-selfswitch_base=…)`. The default bases are placeholders that only need to be unique
-to *assemble*, not to behave at runtime.
+Uranium's self-switch flags alone (1132 distinct by census, plus 235 global
+switches, 345 temp switches, 119 vars) **exceed the fork's free saved-flag
+space**, so the fork's saved ranges were expanded behind the
+`RPG2GBA_EXPAND_EVENT_RANGES` config gate (`engine/include/config/rpg2gba.h` —
+capacities; `constants/flags.h`/`vars.h` — derived `RPG2GBA_*_START` region
+constants; see `reference/engine_extension_surface.md` §2). The assembler now
+passes those constant *names* to `dump_header(flag_base=…, var_base=…,
+selfswitch_base=…, tempswitch_base=…)` — the emitted header references them
+symbolically — plus the parsed capacities, so a mint overflow fails loud at
+dump time. The numeric int defaults remain only for placeholder *intermediate*
+dumps; they are not fork-safe. Temp switches live in a dedicated region that
+`ClearTempFieldEventData` resets on map transition (vanilla temp-flag
+lifetime), disjoint from the `FLAG_TEMP_11..1F` rock-obstacle range.
 
 ## Hard rule for the build agent
 

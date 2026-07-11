@@ -32,7 +32,7 @@ from pathlib import Path
 
 import click
 
-from rpg2gba.pbs_converter._naming import load_fork_constants
+from rpg2gba.pbs_converter._naming import load_fork_constants, to_constant
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +77,44 @@ def temp_switch_flag_name(map_id: int, event_id: int, key: str) -> str:
     never collide: temp-switch A on event 11 of map 2 -> ``FLAG_MAP002_EVENT011_TSA``.
     """
     return f"FLAG_MAP{int(map_id):03d}_EVENT{int(event_id):03d}_TS{key.upper()}"
+
+
+def resolve_switch_flag(registry: FlagRegistry, switch_id: int) -> str | None:
+    """Resolve a Uranium switch id to a FLAG_* name, minting from the
+    developer-given label when one exists. ``None`` = unnamed or script
+    switch — caller queues/defers. Shared logic behind
+    ``transpiler.TranspileContext.flag_for_switch`` and
+    ``tileset_converter.metadata_wiring.build_page_dispatcher`` (CLAUDE.md §4.3:
+    one resolution rule, not two copies of it)."""
+    if registry.is_script_switch(switch_id):
+        return None
+    existing = registry.get_flag(switch_id)
+    if existing is not None:
+        return existing
+    label = registry.label_for_switch(switch_id)
+    if not label:
+        return None
+    try:
+        return registry.propose_flag(switch_id, to_constant("FLAG", label))
+    except RegistryError:
+        return None
+
+
+def resolve_variable_var(registry: FlagRegistry, variable_id: int) -> str | None:
+    """Resolve a Uranium variable id to a VAR_* name, minting from the
+    developer-given label when one exists. ``None`` = unnamed — caller
+    queues/defers. Mirrors ``resolve_switch_flag`` (variables have no
+    script-switch concept)."""
+    existing = registry.get_var(variable_id)
+    if existing is not None:
+        return existing
+    label = registry.label_for_var(variable_id)
+    if not label:
+        return None
+    try:
+        return registry.propose_var(variable_id, to_constant("VAR", label))
+    except RegistryError:
+        return None
 
 
 class RegistryError(RuntimeError):
@@ -339,20 +377,64 @@ class FlagRegistry:
         self,
         out_path: str | Path,
         *,
-        flag_base: int = 0x500,
-        var_base: int = 0x40D0,
-        selfswitch_base: int = 0x600,
-        tempswitch_base: int = 0x700,
+        flag_base: int | str = 0x500,
+        var_base: int | str = 0x40D0,
+        selfswitch_base: int | str = 0x600,
+        tempswitch_base: int | str = 0x700,
+        capacities: dict[str, int] | None = None,
     ) -> None:
         """Emit a C header defining every assigned flag/var/self-switch/temp-switch.
 
-        The base offsets are placeholders by default (the values only need to be
-        unique to *assemble*). Phase 7 passes real, free, reserved ranges when the
-        header drops into the fork — see reference/flag_registry_policy.md on the
-        flag-budget sizing (Uranium needs more saved flags than vanilla has free).
-        Temp-switches must land in the engine's auto-reset-on-warp TEMP range so they
-        keep their per-map-visit semantics — that's the Phase 7 ``tempswitch_base``.
+        Each base is either a numeric placeholder (intermediate dumps under
+        output/.../intermediate/ — the value only needs to be unique to *assemble*,
+        not fork-safe) or, for the real fork header, the name of one of the engine's
+        ``RPG2GBA_*_START`` range constants derived in ``include/constants/flags.h`` /
+        ``vars.h`` from ``include/config/rpg2gba.h``. An ``int`` is emitted as
+        ``0x{value:X}``; a ``str`` is emitted verbatim as the #define's value.
+
+        ``capacities``, when provided, must carry exactly the keys "flags", "vars",
+        "selfswitches", "tempswitches" — the region sizes from
+        ``include/config/rpg2gba.h``. Each section's mint count is checked against
+        its capacity before anything is written; exceeding it raises loud rather
+        than silently overflowing into the next region.
         """
+        if capacities is not None:
+            expected = {"flags", "vars", "selfswitches", "tempswitches"}
+            got = set(capacities)
+            if got != expected:
+                missing = expected - got
+                extra = got - expected
+                raise ValueError(
+                    "dump_header capacities must have exactly the keys "
+                    f"{sorted(expected)}; missing={sorted(missing)} extra={sorted(extra)}"
+                )
+            counts = {
+                "flags": len(self._switch_names),
+                "vars": len(self._var_names),
+                "selfswitches": len(self._selfswitch_names),
+                "tempswitches": len(self._tempswitch_names),
+            }
+            for section, count in counts.items():
+                cap = capacities[section]
+                if count > cap:
+                    raise ValueError(
+                        f"dump_header: {section} section has {count} minted names, "
+                        f"exceeding its capacity of {cap} — the capacity comes from "
+                        "include/config/rpg2gba.h; grow the region there, rebuild the "
+                        "engine, and re-assemble"
+                    )
+
+        def _base_literal(base: int | str) -> str:
+            return f"0x{base:X}" if isinstance(base, int) else base
+
+        def _base_comment(base: int | str) -> str:
+            if isinstance(base, int):
+                return "// placeholder — intermediate dump only, not fork-safe"
+            return "// engine range constant (config/rpg2gba.h)"
+
+        def _def_line(macro_padded: str, base: int | str, tail_pad: str) -> str:
+            return f"#define {macro_padded}{_base_literal(base)}{tail_pad}{_base_comment(base)}"
+
         out = Path(out_path)
         out.parent.mkdir(parents=True, exist_ok=True)
         lines = [
@@ -360,11 +442,10 @@ class FlagRegistry:
             "#define GUARD_RPG2GBA_FLAGS_H",
             "",
             "// Generated by rpg2gba flag_registry — do not hand-edit (CLAUDE.md §6).",
-            "// Phase 7 assigns the real base offsets when these drop into the fork.",
-            f"#define RPG2GBA_FLAG_BASE       0x{flag_base:X}   // TODO Phase 7: free flag range",
-            f"#define RPG2GBA_VAR_BASE        0x{var_base:X}  // TODO Phase 7: free var range",
-            f"#define RPG2GBA_SELFSWITCH_BASE 0x{selfswitch_base:X}   // TODO Phase 7: free range",
-            f"#define RPG2GBA_TEMPSWITCH_BASE 0x{tempswitch_base:X}   // TODO Phase 7: TEMP range",
+            _def_line("RPG2GBA_FLAG_BASE       ", flag_base, "   "),
+            _def_line("RPG2GBA_VAR_BASE        ", var_base, "  "),
+            _def_line("RPG2GBA_SELFSWITCH_BASE ", selfswitch_base, "   "),
+            _def_line("RPG2GBA_TEMPSWITCH_BASE ", tempswitch_base, "   "),
             "",
         ]
         for i, (_id, name) in enumerate(sorted(self._switch_names.items())):
