@@ -30,10 +30,13 @@ Slice note (S4 of PATHFINDER_SLICE_ROADMAP.md)
 """
 from __future__ import annotations
 
+import io
 import json
 import logging
 import os
 import re
+import subprocess
+import tarfile
 import unicodedata
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -311,15 +314,98 @@ def load_display_names(
     return names
 
 
+def _git_toplevel(path: Path) -> Path | None:
+    """The git work tree containing `path`, or None if it isn't inside one
+    (git missing, not a repo, etc.) — callers treat None as "can't use git"."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        return None
+    return Path(result.stdout.strip())
+
+
+def _load_vanilla_map_ids_pristine(fork_path: Path) -> set[str] | None:
+    """The real vanilla MAP_* set, read from git HEAD, never the working tree.
+
+    `include/constants/map_groups.h` — what `load_fork_constants` would read —
+    is itself gitignored/build-generated in pokeemerald-expansion, upstream
+    convention (`engine/include/constants/.gitignore`): it's never a committed
+    file, so there's no pristine version of it to fall back to. Once
+    `fork_path` is a slice-assembled working tree, the generated header also
+    carries OUR OWN injected Uranium `MAP_*` constants (e.g. `MAP_MOKI_TOWN`),
+    which then misreport as vanilla collisions (CLAUDE.md §4.7 spirit: verify
+    against real fork state, not a contaminated one — mirrors how
+    `conversion_agent.fork_index` reads specials/macros from git HEAD instead
+    of the working tree for the same reason).
+
+    Reconstructs the same information from what IS committed: every
+    `data/maps/<Dir>/map.json`'s `"id"` field, read in one `git archive HEAD`
+    of the fork's `data/maps/` tree (~900 vanilla map dirs; a per-file `git
+    show` loop would be hundreds of subprocess calls). Uranium map dirs are
+    excluded by construction — `data/maps/*/` is gitignored repo-root-side so
+    pipeline-generated map dirs were never committed; only the originally
+    vendored vanilla dirs are tracked.
+
+    Returns None (caller falls back to the working-tree header read) if
+    `fork_path` isn't inside a git work tree, or its `data/maps/` isn't
+    tracked at HEAD there (e.g. an external, non-vendored fork checkout)."""
+    toplevel = _git_toplevel(fork_path)
+    if toplevel is None:
+        return None
+    try:
+        rel_fork = fork_path.resolve().relative_to(toplevel.resolve())
+    except ValueError:
+        return None
+    maps_dir = (rel_fork / "data" / "maps").as_posix()
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(toplevel), "archive", "HEAD", "--", maps_dir],
+            capture_output=True, check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        return None
+    if not result.stdout:
+        return None
+    ids: set[str] = set()
+    with tarfile.open(fileobj=io.BytesIO(result.stdout)) as tf:
+        for member in tf.getmembers():
+            if not member.isfile() or not member.name.endswith("/map.json"):
+                continue
+            extracted = tf.extractfile(member)
+            if extracted is None:
+                continue
+            try:
+                data = json.loads(extracted.read().decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                continue
+            map_id = data.get("id")
+            if isinstance(map_id, str):
+                ids.add(map_id)
+    return ids or None
+
+
 def load_vanilla_map_consts(fork_path: Path | None = None) -> set[str]:
     """The fork's vanilla MAP_* set (the collision oracle). Resolves the fork from
-    `$RPG2GBA_POKEEMERALD` if `fork_path` is omitted; empty set if unreachable."""
+    `$RPG2GBA_POKEEMERALD` if `fork_path` is omitted; empty set if unreachable.
+
+    Prefers `_load_vanilla_map_ids_pristine` (git HEAD, immune to a built
+    tree's own injected Uranium constants); falls back to a plain working-tree
+    header read (`load_fork_constants`) only when git isn't usable — e.g. an
+    external fork checkout with no `.git`, or (best-effort) a repo where
+    `data/maps/` isn't tracked."""
     if fork_path is None:
         env = os.environ.get("RPG2GBA_POKEEMERALD")
         fork_path = Path(env) if env else None
     if fork_path is None:
         return set()
-    return load_fork_constants(Path(fork_path) / FORK_MAP_HEADER, "MAP")
+    fork_path = Path(fork_path)
+    pristine = _load_vanilla_map_ids_pristine(fork_path)
+    if pristine is not None:
+        return pristine
+    return load_fork_constants(fork_path / FORK_MAP_HEADER, "MAP")
 
 
 def build_map_constants(

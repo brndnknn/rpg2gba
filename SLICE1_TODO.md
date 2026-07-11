@@ -100,14 +100,7 @@ warp-metatile emission (`build_slice_tilesets` / `tile_map.WarpInfo`).
 Route 03 is on the slice-2 frontier. For slice 1, verify the east edge fails
 *cleanly* (blocked, no walk-into-void) rather than converting the connection.
 
-### 10. Test debt: 2 known MAP_MOKI_TOWN failures
-
-`test_build_slice_constants` + `test_build_slice_maps_smoke` fail whenever the
-built fork's generated `map_groups.h` contains the slice maps (mint collision
-vs a fresh mint). Known since 2026-06-19; fix the fixtures to tolerate (or
-isolate from) a built fork so the suite is green on a working tree.
-
-### 11. Remaining boot-gate walk findings
+### 10. Remaining boot-gate walk findings
 
 The user is mid-walk. Bugs #1–#7 (palette off-by-one, dialogue overflow,
 invisible rocks, pond reflections, rock debris/respawn, repeated dialogue) are
@@ -133,3 +126,24 @@ fixed. Add new findings here as they're reported.
 - **2026-07-10 — audit F1+F2** (`5fc67dbf`): flag/var ranges grown behind
   `RPG2GBA_EXPAND_EVENT_RANGES`; temp-switch region clears on map transition.
   User boot-walked.
+- **2026-07-11 — test debt: 2 known MAP_MOKI_TOWN failures**: root cause was a
+  real registry gap, not just a test-fixture issue. `map_constants.
+  load_vanilla_map_consts` read the *working tree's* generated
+  `include/constants/map_groups.h`; a **built** engine's copy already carries
+  this slice's own previously-emitted `MAP_MOKI_TOWN` etc. from a prior
+  assemble, so a fresh mint saw its own output as a false "vanilla"
+  collision. Fixed at the source: `load_vanilla_map_consts` now reads the
+  vanilla `MAP_*` set from **git HEAD** (`_load_vanilla_map_ids_pristine`,
+  one `git archive` of `data/maps/`, ~900 dirs' `map.json` `"id"` fields —
+  `map_groups.h` itself is upstream-gitignored/build-generated, never
+  committed) instead of the working tree, mirroring `fork_index`'s
+  pristine-git-read pattern. Uranium map dirs are excluded by construction
+  (`data/maps/*/` gitignored repo-root-side, never committed) — no false
+  collision, and real vanilla-collision detection still works. Applies to
+  every caller of `build_map_constants` (`assemble_pathfinder`, `phase5`,
+  `stage_slice_scripts`), not just these two tests. Also uncovered + fixed a
+  second, previously-masked bug: `test_build_slice_maps_smoke` never passed
+  `npc_gfx` to `build_slice_maps`, which real slice maps (visible NPCs)
+  require since the 2026-07-06 NPC-gfx-map landing — fixed by loading the
+  real `reference/npc_gfx_map.json` against the built fork headers, skipping
+  cleanly if either isn't present. 964 pass, 0 known failures.

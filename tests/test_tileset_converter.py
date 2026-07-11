@@ -19,6 +19,7 @@ from rpg2gba.tileset_converter import layout as layout_mod
 from rpg2gba.tileset_converter import map_constants as mc
 from rpg2gba.tileset_converter import metadata_wiring as mw
 from rpg2gba.tileset_converter.layout import TileGrid, column_key
+from rpg2gba.tileset_converter.npc_gfx import DEFAULT_NPC_GFX_MAP, load_npc_gfx_map
 from rpg2gba.tileset_converter.tile_map import (
     METATILE_ID_MASK,
     Bucket,
@@ -730,6 +731,38 @@ def test_mint_collision_fails_loud(tmp_path: Path) -> None:
         reg.mint(3, "")  # empty stem
 
 
+_ENGINE = Path("engine")
+
+
+@pytest.mark.skipif(not (_ENGINE / "data" / "maps").is_dir(), reason="engine/ not vendored")
+def test_load_vanilla_map_ids_pristine_matches_real_engine() -> None:
+    """Reads git HEAD, not the working tree: sees a real vanilla map (never
+    touched by the pipeline) but NOT a slice map that a prior real assemble
+    may have injected into the working tree's generated map_groups.h (the
+    2026-06-19 false-collision bug) -- data/maps/*/ is gitignored repo-root
+    side, so pipeline-generated map dirs were never committed."""
+    ids = mc._load_vanilla_map_ids_pristine(_ENGINE)
+    assert ids is not None
+    assert "MAP_LITTLEROOT_TOWN" in ids
+    assert "MAP_MOKI_TOWN" not in ids
+
+
+def test_load_vanilla_map_ids_pristine_none_outside_git(tmp_path: Path) -> None:
+    """A fork_path with no enclosing git repo (git itself still installed) ->
+    None, so `load_vanilla_map_consts` falls back to a working-tree read."""
+    assert mc._load_vanilla_map_ids_pristine(tmp_path) is None
+
+
+def test_load_vanilla_map_consts_falls_back_without_git(tmp_path: Path) -> None:
+    """No git repo at fork_path -> `load_vanilla_map_consts` still returns the
+    working-tree header's constants (`load_fork_constants` fallback), not an
+    empty set."""
+    header = tmp_path / mc.FORK_MAP_HEADER
+    header.parent.mkdir(parents=True)
+    header.write_text("#define MAP_FOO_TOWN 1\n", encoding="utf-8")
+    assert mc.load_vanilla_map_consts(tmp_path) == {"MAP_FOO_TOWN"}
+
+
 def test_mint_auto_disambiguate_suffixes_collisions(tmp_path: Path) -> None:
     """Walker mode: a duplicate name suffixes the INTERNAL constant/dir with the id
     (lowest id keeps the base name) while the display name is preserved."""
@@ -776,6 +809,11 @@ def test_build_slice_constants(tmp_path: Path) -> None:
         [32, 48, 49],
         map_infos_path=_MAP_INFOS,
         overrides_path=_OVERRIDES,
+        # None -> $RPG2GBA_POKEEMERALD; safe against a built engine tree
+        # because load_vanilla_map_consts reads the vanilla MAP_* set from
+        # git HEAD (map_constants._load_vanilla_map_ids_pristine), not the
+        # working tree's generated (and possibly Uranium-contaminated)
+        # map_groups.h.
         fork_path=None,
         state_path=tmp_path / "map_constants.json",
         alias_header_path=tmp_path / "aliases.h",
@@ -1505,20 +1543,30 @@ _MAPS = Path("output/uranium-build/maps")
 _METADATA = Path("output/uranium-build/intermediate/map_metadata.json")
 
 
+_URANIUM_EVENT_OBJECTS_GEN = Path("engine/include/constants/uranium_event_objects.gen.h")
+
+
 @pytest.mark.skipif(
-    not (_MAPS / "Map049.json").exists() or not _METADATA.exists() or not _MAP_INFOS.exists(),
-    reason="slice map data not generated",
+    not (_MAPS / "Map049.json").exists() or not _METADATA.exists() or not _MAP_INFOS.exists()
+    or not DEFAULT_NPC_GFX_MAP.exists() or not _URANIUM_EVENT_OBJECTS_GEN.exists(),
+    reason="slice map data / npc gfx map / built engine gen header not generated",
 )
 def test_build_slice_maps_smoke(tmp_path: Path) -> None:
     """Real slice maps assemble: events placed, in-slice warps wired, out-of-slice
     dropped, walkable overrides cover the warp sources."""
+    npc_gfx = load_npc_gfx_map(
+        DEFAULT_NPC_GFX_MAP,
+        [Path("engine/include/constants/event_objects.h"), _URANIUM_EVENT_OBJECTS_GEN],
+    )
     reg = mc.build_map_constants(
         [32, 48, 49], map_infos_path=_MAP_INFOS, overrides_path=_OVERRIDES,
+        # See test_build_slice_constants: None is safe here (git-HEAD read).
         fork_path=None, state_path=tmp_path / "mc.json",
     )
     overrides = mw.build_slice_maps(
         [32, 48, 49], maps_dir=_MAPS, registry=reg, metadata_path=_METADATA,
         out_dir=tmp_path / "maps", dispatcher_dir=tmp_path / "disp",
+        npc_gfx=npc_gfx,
     )
     # Map049: spawn floor, two in-slice warps (street door + stairs)
     assert overrides[49] == {(10, 11), (12, 3)}
