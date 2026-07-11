@@ -46,10 +46,16 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..conversion_agent.flag_registry import self_switch_flag_name
+from ..conversion_agent.flag_registry import (
+    FlagRegistry,
+    resolve_switch_flag,
+    resolve_variable_var,
+    self_switch_flag_name,
+)
 from .map_constants import MapConstantRegistry, MapConstants
 from .npc_gfx import is_door_sheet, movement_type_for, select_boot_page
 
@@ -328,45 +334,89 @@ def classify_map_events(
 
 # --- builders ----------------------------------------------------------------
 
-def _has_global_gate(condition: dict) -> bool:
-    """True if a page condition tests a global switch or variable (needs S6 names)."""
-    return bool(
-        condition.get("switch1_valid")
-        or condition.get("switch2_valid")
-        or condition.get("variable_valid")
-    )
-
-
-def build_page_dispatcher(event: dict, consts: MapConstants) -> str | None:
+def build_page_dispatcher(
+    event: dict, consts: MapConstants, flag_registry: FlagRegistry | None = None
+) -> str | None:
     """Emit a Poryscript dispatcher for a multi-page event, or None to defer.
 
-    Returns None for a single-page event (no dispatch needed) OR for a multi-page
-    event with any GLOBAL switch/variable page gate (deferred to S6 — caller points
-    the object_event at the base page). For self-switch / unconditional gating it
-    emits the selection: RMXP activates the highest-index satisfiable page, so we
-    test pages high->low and goto the first whose self-switch is set, falling back
-    to the base page (or an unconditional higher page that always wins)."""
+    Returns None for a single-page event (no dispatch needed). For a multi-page
+    event, tests pages high->low (index 0 = base page, always the fallback,
+    unchecked — RMXP activates the highest-index satisfiable page): each page's
+    condition becomes a conjunction of guard terms —
+
+      - ``switch1_valid`` / ``switch2_valid`` -> ``flag(FLAG_*)``, resolved
+        through the registry (``resolve_switch_flag``).
+      - ``variable_valid`` -> ``var(VAR_*) >= value`` (RMXP's own semantics —
+        a page is active iff ``$game_variables[id] >= value``, verified against
+        ``Game_Event#refresh`` in reference/scripts_dump).
+      - ``self_switch_valid`` -> ``flag(FLAG_MAP{m}_EVENT{e}_SS{ch})``, a pure
+        deterministic name (no registry needed to resolve it, but it's minted
+        into the registry when one is given — CLAUDE.md §4.3 fork-capability
+        gate needs it defined even if referenced only in a page condition).
+      - no condition at all -> an unconditional page: it becomes the fallback
+        label and the scan stops (a higher unconditional page always wins).
+
+    A switch/variable gate that can't be resolved to a name — no registry
+    given (``flag_registry=None``), an Essentials script-switch (``s:``), or an
+    unnamed switch/variable — defers the WHOLE event's dispatch: returns None
+    and the caller points the object_event at the base page instead (until the
+    name is mintable). This makes ``flag_registry=None`` behavior IDENTICAL to
+    the old blanket "any global gate anywhere -> defer" rule for every case the
+    old rule actually affected (pages 1..len-1; the base page's own condition,
+    index 0, was never examined for dispatch purposes either then or now)."""
     pages = event["pages"]
     if len(pages) <= 1:
         return None
-    if any(_has_global_gate(p["condition"]) for p in pages):
-        return None  # deferred: global names not minted until S6
 
     uid, eid = consts.uranium_id, event["id"]
+
+    def _resolve(resolver, switch_or_var_id: int) -> str | None:
+        """`None` (no registry, or the resolver itself can't name it) means the
+        caller must defer the WHOLE dispatch — see the docstring above."""
+        if flag_registry is None:
+            return None
+        return resolver(flag_registry, switch_or_var_id)
+
     guards: list[tuple[str, str]] = []
     fallback = page_label(uid, eid, 1)
     for idx in range(len(pages) - 1, 0, -1):  # high -> low; index 0 is the base
         cond = pages[idx]["condition"]
+        terms: list[str] = []
+
+        if cond.get("switch1_valid"):
+            flag = _resolve(resolve_switch_flag, cond["switch1_id"])
+            if flag is None:
+                return None  # deferred: no registry, script-switch, or unnamed
+            terms.append(f"flag({flag})")
+
+        if cond.get("switch2_valid"):
+            flag = _resolve(resolve_switch_flag, cond["switch2_id"])
+            if flag is None:
+                return None
+            terms.append(f"flag({flag})")
+
+        if cond.get("variable_valid"):
+            var = _resolve(resolve_variable_var, cond["variable_id"])
+            if var is None:
+                return None
+            terms.append(f"var({var}) >= {cond['variable_value']}")
+
         if cond.get("self_switch_valid"):
-            flag = self_switch_flag_name(uid, eid, cond["self_switch_ch"])
-            guards.append((flag, page_label(uid, eid, idx + 1)))
+            letter = cond["self_switch_ch"]
+            flag = self_switch_flag_name(uid, eid, letter)
+            terms.append(f"flag({flag})")
+            if flag_registry is not None:
+                flag_registry.mint_self_switch(uid, eid, letter)
+
+        if terms:
+            guards.append((" && ".join(terms), page_label(uid, eid, idx + 1)))
         else:
             fallback = page_label(uid, eid, idx + 1)  # unconditional page wins outright
             break
 
     lines = [f"script {dispatch_label(uid, eid)} {{"]
-    for flag, dest in guards:
-        lines += [f"    if (flag({flag})) {{", f"        goto({dest})", "    }"]
+    for cond_str, dest in guards:
+        lines += [f"    if ({cond_str}) {{", f"        goto({dest})", "    }"]
     lines += [f"    goto({fallback})", "}"]
     return "\n".join(lines)
 
@@ -386,7 +436,10 @@ def _event_has_body(event: dict, consts: MapConstants, pory_labels: set[str]) ->
 
 
 def _resolve_script(
-    event: dict, consts: MapConstants, pory_labels: set[str] | None
+    event: dict,
+    consts: MapConstants,
+    pory_labels: set[str] | None,
+    flag_registry: FlagRegistry | None = None,
 ) -> tuple[str, str | None]:
     """Resolve the .pory script label an event's converted behavior lives at
     (dispatcher label / page-1 label / the static "0x0"), and the dispatcher body
@@ -399,14 +452,25 @@ def _resolve_script(
     bodyless — a standing NPC / globally-gated cutscene actor with no real
     commands — resolves to the STATIC script ("0x0"), not a dangling page label.
     An event with *some* converted body but whose resolved page label is missing
-    is a genuine page-body gap and fails loud (CLAUDE.md §4.5)."""
+    is a genuine page-body gap and fails loud (CLAUDE.md §4.5). `flag_registry`,
+    when given, lets `build_page_dispatcher` resolve global switch/var page gates
+    into a real dispatcher instead of deferring (see its docstring)."""
     uid, eid = consts.uranium_id, event["id"]
     if pory_labels is not None and not _event_has_body(event, consts, pory_labels):
         logger.info("map %d EV%03d: no converted .pory body -> static script", uid, eid)
         return NO_SCRIPT, None
 
-    dispatcher = build_page_dispatcher(event, consts)
+    dispatcher = build_page_dispatcher(event, consts, flag_registry)
     if dispatcher is not None:
+        if pory_labels is not None:
+            referenced = set(re.findall(r"goto\(([^)]+)\)", dispatcher))
+            missing = referenced - pory_labels
+            if missing:
+                raise KeyError(
+                    f"map {uid} EV{eid:03d}: dispatcher references page label(s) "
+                    f"{sorted(missing)} not in the converted .pory, yet other "
+                    f"pages of this event were converted — a page-body gap"
+                )
         return dispatch_label(uid, eid), dispatcher
 
     script = page_label(uid, eid, 1)
@@ -503,6 +567,7 @@ def build_object_events(
     pory_labels: set[str] | None = None,
     npc_gfx: dict[str, str] | None = None,
     event_traits: dict[int, list[str]] | None = None,
+    flag_registry: FlagRegistry | None = None,
 ) -> ObjectBuildResult:
     """Place every non-warp, non-skipped event per its BOOT-STATE page (RMXP shows
     the highest-index page whose condition holds at boot; `npc_gfx.select_boot_page`).
@@ -537,7 +602,12 @@ def build_object_events(
     FLAG_TEMP_11.._1F visibility flags (see ROCK_FLAG_* / CLAUDE.md §4.5 — >15
     such events, an unknown trait string, or a trait on an event id that resolves
     to no emitted object_event all fail loud). `None` is legacy behavior: every
-    `ObjectEvent.flag` stays the "0" default."""
+    `ObjectEvent.flag` stays the "0" default.
+
+    `flag_registry`, when given, is forwarded to `_resolve_script` /
+    `build_page_dispatcher` so multi-page events gated on a global switch/var can
+    get a real dispatcher instead of deferring to the base page; `None` keeps
+    today's defer-on-global-gate behavior."""
     objects, _, _ = classify_map_events(map_json, slice_ids)
     uid = consts.uranium_id
     result = ObjectBuildResult()
@@ -592,7 +662,7 @@ def build_object_events(
         else:
             emit_kind = "object"
 
-        script, dispatcher = _resolve_script(event, consts, pory_labels)
+        script, dispatcher = _resolve_script(event, consts, pory_labels, flag_registry)
         if dispatcher is not None:
             result.dispatchers.append(dispatcher)
 
@@ -761,10 +831,15 @@ def build_slice_maps(
     npc_gfx: dict[str, str] | None = None,
     local_id_dir: Path | None = None,
     event_traits: dict[int, dict[int, list[str]]] | None = None,
+    flag_registry: FlagRegistry | None = None,
 ) -> dict[int, set[tuple[int, int]]]:
     """Assemble map.json + dispatcher .pory for every slice map. Returns the per-map
     warp-source coords (S3 walkable-overrides) so S8 can force those cells walkable.
     Warp pairing needs every map's warp list first, so this is a slice-level pass.
+
+    `flag_registry` (a `FlagRegistry`, distinct from `registry`'s `MapConstantRegistry`
+    above), when given, is forwarded to `build_object_events` so multi-page events
+    gated on a global switch/var get a real dispatcher instead of deferring.
 
     `npc_gfx` (character_name -> OBJ_EVENT_GFX_* — see `npc_gfx.load_npc_gfx_map`)
     is forwarded to `build_object_events`; omit it only for callers that don't
@@ -796,7 +871,7 @@ def build_slice_maps(
         map_traits = event_traits.get(uid) if event_traits is not None else None
         result = build_object_events(
             maps[uid], consts, slice_set, pory_labels=pory_labels, npc_gfx=npc_gfx,
-            event_traits=map_traits,
+            event_traits=map_traits, flag_registry=flag_registry,
         )
         overrides[uid] = src_coords
         local_id_tables[uid] = result.local_id_map

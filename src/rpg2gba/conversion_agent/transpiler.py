@@ -39,8 +39,11 @@ from rpg2gba.conversion_agent.deterministic import (
     format_pory_dialogue,
     translate_text_codes,
 )
-from rpg2gba.conversion_agent.flag_registry import FlagRegistry, RegistryError
-from rpg2gba.pbs_converter._naming import to_constant
+from rpg2gba.conversion_agent.flag_registry import (
+    FlagRegistry,
+    resolve_switch_flag,
+    resolve_variable_var,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -337,30 +340,10 @@ class TranspileContext:
         """Resolve a Uranium switch id to a FLAG_* name, minting from the
         developer-given label when one exists. ``None`` = unnamed or script
         switch → caller queues."""
-        if self.registry.is_script_switch(switch_id):
-            return None
-        existing = self.registry.get_flag(switch_id)
-        if existing is not None:
-            return existing
-        label = self.registry.label_for_switch(switch_id)
-        if not label:
-            return None
-        try:
-            return self.registry.propose_flag(switch_id, to_constant("FLAG", label))
-        except RegistryError:
-            return None
+        return resolve_switch_flag(self.registry, switch_id)
 
     def var_for_variable(self, variable_id: int) -> str | None:
-        existing = self.registry.get_var(variable_id)
-        if existing is not None:
-            return existing
-        label = self.registry.label_for_var(variable_id)
-        if not label:
-            return None
-        try:
-            return self.registry.propose_var(variable_id, to_constant("VAR", label))
-        except RegistryError:
-            return None
+        return resolve_variable_var(self.registry, variable_id)
 
     def self_switch_flag(self, letter: str) -> str:
         assert self.event_id is not None

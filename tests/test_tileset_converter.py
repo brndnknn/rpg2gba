@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from rpg2gba.conversion_agent.flag_registry import FlagRegistry
 from rpg2gba.tileset_converter import layout as layout_mod
 from rpg2gba.tileset_converter import map_constants as mc
 from rpg2gba.tileset_converter import metadata_wiring as mw
@@ -30,6 +31,11 @@ from rpg2gba.tileset_converter.tile_map import (
 )
 
 _TODO = "Phase 5: implement this section, then un-skip and flesh out the test"
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_PRESEED = _REPO_ROOT / "reference" / "essentials_to_emerald_map.md"
+_SWITCHES = _REPO_ROOT / "reference" / "uranium_switches.json"
+_VARIABLES = _REPO_ROOT / "reference" / "uranium_variables.json"
 
 
 # --- helpers that are real already (no skip needed) ---------------------------
@@ -1220,11 +1226,142 @@ def test_page_dispatcher_self_switch() -> None:
 
 
 def test_page_dispatcher_deferred_on_global() -> None:
-    """A global switch/var page gate defers (None); single-page also None."""
+    """A global switch/var page gate defers (None) when no registry is given
+    (the default); single-page also None."""
     consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
     global_gated = _event(1, 0, 0, [_page(), _page(cond=_sw_cond(125))])
     assert mw.build_page_dispatcher(global_gated, consts) is None
     assert mw.build_page_dispatcher(_event(2, 0, 0, [_page()]), consts) is None
+
+
+def _var_cond(variable_id: int, value: int = 1) -> dict:
+    return {"variable_valid": True, "variable_id": variable_id, "variable_value": value}
+
+
+def _sw_and_self_cond(switch_id: int, letter: str) -> dict:
+    return {
+        "switch1_valid": True, "switch1_id": switch_id,
+        "self_switch_valid": True, "self_switch_ch": letter,
+    }
+
+
+def test_page_dispatcher_global_gate_resolves_through_registry() -> None:
+    """The live defect this brief fixes: a global switch gate resolves through
+    the registry into a real dispatcher instead of deferring to Page1 forever
+    (Map049 EV1 'Auntie' / Map032 EV27 Rare Candy repeat-NPC bug). High->low
+    order: the guard appears before the Page1 fallback goto."""
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    reg = FlagRegistry()
+    reg.propose_flag(125, "FLAG_FINAL_EVENT")
+    event = _event(1, 0, 0, [_page(), _page(cond=_sw_cond(125))])
+    disp = mw.build_page_dispatcher(event, consts, flag_registry=reg)
+    assert disp is not None
+    assert "if (flag(FLAG_FINAL_EVENT))" in disp
+    assert "goto(Map049_EV001_Page2)" in disp
+    assert "goto(Map049_EV001_Page1)" in disp  # base-page fallback
+    assert disp.index("goto(Map049_EV001_Page2)") < disp.index("goto(Map049_EV001_Page1)")
+
+
+def test_page_dispatcher_switch_and_self_switch_conjunction() -> None:
+    """A page gated on BOTH a global switch and a self-switch emits a single
+    `if` with a `&&` conjunction, not two separate guards."""
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    reg = FlagRegistry()
+    reg.propose_flag(125, "FLAG_FINAL_EVENT")
+    event = _event(1, 0, 0, [_page(), _page(cond=_sw_and_self_cond(125, "A"))])
+    disp = mw.build_page_dispatcher(event, consts, flag_registry=reg)
+    assert disp is not None
+    assert "if (flag(FLAG_FINAL_EVENT) && flag(FLAG_MAP049_EVENT001_SSA))" in disp
+    assert disp.count("if (") == 1
+
+
+def test_page_dispatcher_variable_gate() -> None:
+    """A variable page gate emits `var(NAME) >= value` — RMXP's own semantics
+    (`Game_Event#refresh`, reference/scripts_dump/022_Game_Event_v17.rb:151-154:
+    `next if $game_variables[c.variable_id] < c.variable_value`, i.e. the page
+    holds iff the variable is >= the threshold)."""
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    reg = FlagRegistry()
+    reg.propose_var(87, "VAR_GYM8_WHITE_TILES")
+    event = _event(1, 0, 0, [_page(), _page(cond=_var_cond(87, 3))])
+    disp = mw.build_page_dispatcher(event, consts, flag_registry=reg)
+    assert disp is not None
+    assert "if (var(VAR_GYM8_WHITE_TILES) >= 3)" in disp
+
+
+def test_page_dispatcher_script_switch_defers_even_with_registry() -> None:
+    """A page gated on an Essentials script-switch (`s:...`) can never resolve
+    to a FLAG_* — the registry refuses to mint one for it — so dispatch still
+    defers even when a live registry is supplied."""
+    reg = FlagRegistry()
+    reg.pre_seed(_PRESEED, _SWITCHES, _VARIABLES)
+    assert reg.is_script_switch(1)  # switch 1 == "s:pbIsWeekday(...)" (fixture data)
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    event = _event(1, 0, 0, [_page(), _page(cond=_sw_cond(1))])
+    assert mw.build_page_dispatcher(event, consts, flag_registry=reg) is None
+
+
+def test_page_dispatcher_no_registry_global_gate_still_defers() -> None:
+    """Pin: `flag_registry=None` + a global gate -> None, identical to today's
+    behavior (both the explicit-None and default-param forms)."""
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    event = _event(1, 0, 0, [_page(), _page(cond=_sw_cond(125))])
+    assert mw.build_page_dispatcher(event, consts, flag_registry=None) is None
+    assert mw.build_page_dispatcher(event, consts) is None
+
+
+def test_page_dispatcher_mints_condition_only_self_switch() -> None:
+    """A self-switch referenced ONLY in a page condition (never in that page's
+    own command list) still gets minted into the registry by dispatch — else
+    it's missing from the emitted flags header and the fork-capability gate
+    rejects the dispatcher's own `flag(...)` reference."""
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    reg = FlagRegistry()
+    event = _event(9, 0, 0, [_page(), _page(cond=_self_cond("C"))])
+    disp = mw.build_page_dispatcher(event, consts, flag_registry=reg)
+    assert disp is not None
+    # mint_self_switch is idempotent -> re-minting the same key returns the same
+    # name dispatch already registered, proving it was minted during dispatch.
+    assert reg.mint_self_switch(49, 9, "C") == "FLAG_MAP049_EVENT009_SSC"
+
+
+def test_resolve_script_dispatcher_missing_page_label_fails_loud() -> None:
+    """A dispatcher that would `goto()` a page label absent from the converted
+    .pory is a genuine page-body gap — fail loud (mirrors the existing
+    base-page-gap check in `_resolve_script`, `test_build_object_events_page_gap_fails_loud`)."""
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    reg = FlagRegistry()
+    reg.propose_flag(125, "FLAG_FINAL_EVENT")
+    event = _event(1, 0, 0, [_page(), _page(cond=_sw_cond(125))])
+    # Page1 is in pory_labels (so the event isn't classified bodyless), but the
+    # dispatcher's guard target Page2 is missing from it.
+    with pytest.raises(KeyError):
+        mw._resolve_script(event, consts, {"Map049_EV001_Page1"}, reg)
+
+
+_OUTPUT_MAP032 = Path("output/uranium-build/maps/Map032.json")
+
+
+@pytest.mark.skipif(not _OUTPUT_MAP032.is_file(), reason="Map032.json not generated")
+def test_page_dispatcher_map032_ev27_real_data() -> None:
+    """Real-corpus sanity check for the live defect: Map032 EV27 (repeat-handout
+    NPC) dispatches Page4 (self-switch B + switch 125) before Page3 (switch 125)
+    before Page2 (self-switch A), falling back to Page1."""
+    map_json = json.loads(_OUTPUT_MAP032.read_text(encoding="utf-8"))
+    event = next(e for e in map_json["events"] if e["id"] == 27)
+    consts = mc.MapConstants(32, "MAP_X", "MAP_URANIUM_32", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    reg = FlagRegistry()
+    reg.propose_flag(125, "FLAG_FINAL_EVENT")
+    disp = mw.build_page_dispatcher(event, consts, flag_registry=reg)
+    assert disp is not None
+    p1 = disp.index("goto(Map032_EV027_Page1)")
+    p2 = disp.index("goto(Map032_EV027_Page2)")
+    p3 = disp.index("goto(Map032_EV027_Page3)")
+    p4 = disp.index("goto(Map032_EV027_Page4)")
+    assert p4 < p3 < p2 < p1
+    assert "flag(FLAG_MAP032_EVENT027_SSB)" in disp
+    assert "flag(FLAG_MAP032_EVENT027_SSA)" in disp
+    assert "flag(FLAG_FINAL_EVENT)" in disp
 
 
 def _mint_two_maps() -> mc.MapConstantRegistry:

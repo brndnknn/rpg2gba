@@ -36,6 +36,7 @@ import os
 import sys
 from pathlib import Path
 
+from rpg2gba.conversion_agent.flag_registry import FlagRegistry
 from rpg2gba.pipeline import _load_dotenv
 from rpg2gba.tileset_converter import assembly as asm
 from rpg2gba.tileset_converter import map_constants as mc
@@ -74,6 +75,7 @@ def _regenerate_map_json(
     npc_gfx: dict[str, str],
     local_id_dir: Path,
     event_traits: dict[int, dict[int, list[str]]],
+    fork: Path,
 ) -> None:
     """Re-run S5 wiring over the whole slice with the real converted page labels,
     so bodyless events become static objects. Warp pairing needs the full slice,
@@ -83,13 +85,25 @@ def _regenerate_map_json(
     RMXP-id -> compiled-local-id tables are written to `local_id_dir` for the
     staging remap pass below. `event_traits` (Uranium map id -> event id -> trait
     list, from the per-map `.traits.json` sidecars) assigns smashable-rock
-    visibility flags."""
+    visibility flags.
+
+    Loads the live flag registry (`out/flag_state.json`) and forwards it to
+    `build_slice_maps` so multi-page events gated on a global switch/var get a
+    real dispatcher (the names are deterministically resolvable through the
+    registry, not just S6-minted — see metadata_wiring.build_page_dispatcher).
+    Saves the registry back afterward — REQUIRED, not just tidy: wiring can mint
+    a self-switch (or a switch/var name it hadn't seen yet) that the downstream
+    assembler's fork-capability gate reads from this same file, and a mint that
+    isn't persisted would be silently missing at gate time. Saving is safe to do
+    unconditionally — the registry is idempotent (CLAUDE.md §4.2)."""
     reg = mc.build_map_constants(
         list(DEFAULT_SLICE),
         map_infos_path=out / "map_infos.json",
         overrides_path=OVERRIDES,
         state_path=out / "porymap" / "map_constants.json",
     )
+    flag_state_path = out / "flag_state.json"
+    flag_reg = FlagRegistry.load(flag_state_path, fork_path=fork)
     mw.build_slice_maps(
         list(DEFAULT_SLICE),
         maps_dir=out / "maps",
@@ -101,7 +115,9 @@ def _regenerate_map_json(
         npc_gfx=npc_gfx,
         local_id_dir=local_id_dir,
         event_traits=event_traits,
+        flag_registry=flag_reg,
     )
+    flag_reg.save(flag_state_path)
 
 
 def main() -> int:
@@ -152,7 +168,7 @@ def main() -> int:
 
     # --- regenerate map.json with the real labels (the S5 stub hook) +
     # per-map local-id tables (RMXP id -> compiled object-event local id) ---
-    _regenerate_map_json(out, pory_labels, npc_gfx, local_id_dir, event_traits)
+    _regenerate_map_json(out, pory_labels, npc_gfx, local_id_dir, event_traits, fork)
 
     # --- pass 2: prune + report per requested map (reads the fresh map.json) ---
     staged: dict[str, str] = {}   # filename -> transformed text (for the staged-set checks)
