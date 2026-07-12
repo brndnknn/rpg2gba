@@ -1,8 +1,11 @@
-# Map Viewer — Uranium tile/palette review tool
+# Map Viewer — Uranium tile-feedback tool
 
-A browser-based tool for eyeballing how a Uranium map converts to GBA art:
-the metatile layout, the RMXP→GBA layer collapse, and the palette quantization.
-Built for the per-slice §9 boot gate — "does this map render as real Uranium art?"
+A browser-based tool for flagging specific tiles and tile-groups on a Uranium map
+so the build agent can fix them — a per-map punch list you build by tapping cells,
+grouping them, and writing a note. Quantization/graphics-debugging (palette knobs,
+layer isolation, diff/merge overlays, the palette inspector) is still here, but
+demoted behind an **Advanced** toggle. Tile feedback is the primary job now; the
+quant machinery is secondary.
 
 **It is one tool, not two.** There are two *views* (map grid + palette inspector)
 and two *delivery modes* (live server + self-contained file), all behind one shared
@@ -10,7 +13,7 @@ core. Don't go looking for a second viewer.
 
 ---
 
-## TL;DR — just show me a map
+## TL;DR — flag a tile
 
 ```bash
 python scripts/map_viewer_server.py --port 8765
@@ -20,33 +23,74 @@ Open `http://localhost:8765/` (or `http://<hostname>:8765/` over Tailscale/LAN �
 it binds `0.0.0.0`, so your phone works too). The **landing page** is a searchable,
 location-grouped index: every map by **id + descriptive name**, type-to-filter,
 nested by RMXP parent so a town's interiors sit under it. Each row links to both
-views. One launch serves both views for every map.
+views.
 
-Currently the data pool is the pathfinder slice — **maps 49, 48, 32** (plus whatever
-map you open). Other maps may render but aren't guaranteed (the tileset atlas is
-quantized over the slice only; see "Scope & caveats").
+Open a map, **tap a tile** (tap more to add to the selection, tap again to remove),
+optionally hit **Expand similar** to grab every matching tile on the map, type a
+note, and click **Save flag**. That's the whole workflow — see "The feedback
+workflow" below for the full model.
 
-### Family-quant view + live knobs (server mode)
+The map grid defaults to the **Quantized (family)** view — the GBA render, i.e.
+what the ROM will actually show. RPG Maker is the reference view now, one radio
+click (or the `q` hotkey) away.
 
-The map-grid view's layer control is now a **2-way RPG Maker ↔ Quantized (family)**
-toggle. The "Quantized" side renders the **family** packer
-(`experimental_packers.build_quantized_tileset_family`) — the viewer's default
-quantizer is now family, not the production packer. The original 8-way layer radio
-(RMXP/L0/L1/L2/GBA/GBA↓/GBA↑/Post-Q) is **kept but hidden** (`#layer-debug`,
-`display:none`); unhide it to restore the full layer inspector.
+Each map is quantized from **its own tiles alone** (the render pool is just the map
+you open), matching the ROM's per-map tileset packing — so the grid is a faithful
+preview of the quantized ROM art. Any map with generated output under
+`output/uranium-build/maps/` will render.
 
-A **knob bar** (`#knobbar`, server mode only — it hides itself in static exports)
-exposes the family packer's `FamilyParams` live: `green cuts` (interior hue° in
-(70,170) that split the green band into sub-families), `dark<` / `neutral sat<`
-(the value/saturation cutoffs for the dark/neutral families), `pal floor`
-(min sub-palettes per family), `overflow` (colors vs coverage allocation), and
-`max pals` (≤13). **Apply** POSTs `/api/quantize` → the server re-quantizes
-(`set_quantize_params` clears the three quant-dependent caches, bumps a `generation`
-token) → the page reloads, re-rendering the map **and** both palette views under the
-new params. The `generation` token is appended to post-quant image URLs (`&g=`) to
-defeat the browser's `immutable` cache. Bad knobs (e.g. `pal floor` too high for the
-family count) return HTTP 400 and roll back, leaving the tool usable. Same knob bar
-is on the palette inspector page.
+---
+
+## The feedback workflow (core)
+
+This is what the tool is for now: building a per-map list of `{cells, note}` flags
+that the build agent reads and fixes.
+
+**Selection model:**
+
+- **Tap a cell** to toggle it into a persistent selection set — tap again to
+  remove it. Selection accumulates across taps. There is **no drag-paint and no
+  marquee** — drag still pans the canvas, two-finger still pinch-zooms, same as
+  always.
+- The **last-tapped cell** is the "focus" cell — it drives the sidebar's detail
+  readout (RMXP layers, GBA metatile, collision, events), independent of whether
+  that particular tap added or removed the cell from the selection.
+- **Expand similar** (sidebar button, disabled until there's a focus cell with a
+  real, non-void metatile) adds every cell on *this map* sharing the focused
+  cell's metatile identity (`colkey_idx`). It's additive and multi-identity — tap
+  a flower tile + Expand, tap a water tile + Expand, and both whole groups land in
+  one selection.
+- **Clear** empties the selection (disabled when already empty).
+
+**Saving a flag:**
+
+- Type a note in the textarea (placeholder: "Describe what's wrong with these
+  tiles…") and click **Save flag** (disabled until something is selected). One
+  flag covers the *whole* current selection. Schema:
+  ```json
+  {"cells": [[x, y], ...], "note": "..."}
+  ```
+  Bare prose — no category/severity field.
+- The **flag list** below shows each saved flag as `<N cells>` + its note. Click a
+  row to re-select its cells and load its note back into the textarea for editing
+  — **Save flag** then replaces it in place instead of adding a duplicate. The
+  **✕** on a row deletes it immediately.
+- Flagged cells get an orange **⚑** marker on the canvas (drawn unconditionally,
+  not gated behind Advanced), so you can see punch-list coverage while panning.
+- **Export JSON** downloads `MapNNN_feedback.json` — the current flag list as-is.
+  This is the only way to get flags out of **static mode**, which has no server to
+  persist to.
+
+**Storage:** flags persist to git-tracked `reference/map_feedback/MapNNN.json` — a
+JSON list of `{cells, note}` objects. This is deliberate: flags are hand-authored
+review data, not regenerable output, so they must survive `rm -rf output/` /
+`pipeline --clean`. Server mode writes the whole file on every Save/delete via
+`POST /api/feedback` (body `{map_id, flags}`) and loads it via
+`GET /api/feedback/<id>` on page load. The **old** location — gitignored
+`output/uranium-build/map_viewer_issues/` (one note per cell, keyed `"x,y"`, no
+grouping) — is **retired**; old files are **not** migrated, so re-flag anything you
+want kept under the new model. Static/phone mode has no server to write to, so
+flags live in memory only for the session — Export JSON before you close the tab.
 
 ---
 
@@ -57,19 +101,21 @@ map_viewer_common.py        ← shared CORE (data + rendering + map-grid templat
 ├─ build_map_data(map_id)       extract cells / metatiles / palette usage  →  dict
 ├─ render_tile_png()            one RMXP 16×16 tile  →  PNG
 ├─ render_metatile_png()        one metatile layer (bottom/top/post_*)  →  PNG
-└─ MAP_VIEWER_HTML              the map-grid VIEW (template)
+├─ load_feedback() / save_feedback()   per-map flag list  ↔  reference/map_feedback/MapNNN.json
+└─ MAP_VIEWER_HTML              the map-grid VIEW + feedback UI (template)
 
 build_map_viewer.py         ← STATIC mode  (self-contained .html, base64-inlined)
 └─ build_config(map_id)         map data + every tile/metatile as base64 PNG
 
-palette_page.py             ← second VIEW: the palette inspector
+palette_page.py             ← second VIEW: the palette inspector (Advanced-tier)
 └─ PALETTE_VIEWER_HTML          palette swatches + suspect-tile grid + colour-change popup
 
 map_graph.py                ← map RELATIONSHIPS (no rendering, pure metadata)
 ├─ build_index()                landing-page data: flat name list + parent_id forest
 └─ map_relationships(id)        per-map nav: name, parent, children, warp targets
 
-map_viewer_server.py        ← SERVER mode  (live HTTP, lazy /api/* PNG rendering)
+map_viewer_server.py        ← SERVER mode  (live HTTP, lazy /api/* PNG rendering,
+                               /api/feedback persistence)
 ```
 
 The dependency chain proves it's one system:
@@ -97,15 +143,19 @@ Routes:
 |---|---|
 | `GET /` | landing page — searchable, name + parent-tree index, links to both views |
 | `GET /map/<id>` | map-grid viewer (lazy images) |
-| `GET /palettes/<id>` | palette inspector (lazy images) |
+| `GET /palettes/<id>` | palette inspector (lazy images, Advanced-tier) |
 | `GET /api/map/<id>` | `build_map_data` JSON |
 | `GET /api/tile/<mapid>/<tid>.png` | one RMXP tile PNG |
 | `GET /api/metatile/<mapid>/<idx>.png?layer=bottom\|top\|post_bottom\|post_top` | one metatile-layer PNG |
+| `GET /api/feedback/<id>` | this map's saved flags (JSON list) |
+| `POST /api/feedback` | replace a map's whole flag list (body: `{map_id, flags}`) |
+| `POST /api/quantize` | apply live family-packer knobs (Advanced only) |
 
 Images render lazily on request and are cached (both in the browser via
 `immutable` cache headers and in a module-level cache server-side), so the first
 view of a map is a little slow, then snappy. Cross-links between the two views
-(`Palettes →` and `← Map` buttons) **only exist in server mode**.
+(`Palettes →` and `← Map` buttons) **only exist in server mode**, and flag saves
+only persist to disk in server mode.
 
 ### Static mode (offline / phone fallback)
 
@@ -129,8 +179,9 @@ You can also build just the palette page for one map:
 python scripts/palette_page.py 32 [--out path.html]
 ```
 
-Static files are larger (all images inlined) and have **no cross-view nav buttons
-and no cross-map nav strip** (those need live routes) — open the files separately.
+Static files are larger (all images inlined) and have **no cross-view nav buttons,
+no cross-map nav strip, and no flag persistence** (those need live routes/server) —
+build flags in the session and **Export JSON** before closing the tab.
 
 ---
 
@@ -165,46 +216,71 @@ Overworld N/S/E/W borders (`connections.dat`, 14 sparse edges) are intentionally
 
 A zoomable canvas of the map. Title bar = "Map Inspector".
 
-**Layer radio (what the canvas draws):**
+**View toggle (always visible, core):**
 
 | Option | Shows |
 |---|---|
-| **RMXP** | all 3 RMXP source layers composited (what RPG Maker draws) — the default |
-| **L0 / L1 / L2** | one RMXP source layer at a time |
-| **GBA** | both GBA metatile layers composited (pre-quantization) |
-| **GBA↓ / GBA↑** | the GBA bottom / top metatile layer alone |
-| **Post-Q** | the post-quantization art (palette-reduced — what the ROM actually shows) |
+| **RPG Maker** | the 3 RMXP source layers composited (what RPG Maker draws) — reference view |
+| **Quantized (family)** | the post-quantization art from the family packer — what the ROM actually shows. **Default.** |
 
-> RMXP vs GBA isolates the **layer-collapse**; GBA vs Post-Q isolates the
-> **quantization drift**. Use them to localize where a render looks wrong.
+Flip with the radio, or the `q` hotkey (ignored while a text field has focus, so
+typing a note doesn't trigger it). The original 8-way layer radio
+(RMXP/L0/L1/L2/GBA/GBA↓/GBA↑/Post-Q) still exists in the page but is
+unconditionally hidden (`#layer-debug`, inline `display:none` — a separate
+mechanism from the Advanced toggle below); unhide it by hand to restore the full
+layer inspector.
 
-**Overlay checkboxes (drawn on top):**
+**Overlays — core (always visible):** Collision (ours vs Uranium's passability),
+Events (on by default), Warps (on by default).
 
-| Overlay | Meaning |
-|---|---|
-| Collision | passability — compares our collision vs Uranium's |
-| Diff | cells where our render differs from the source |
-| Priority | RMXP priority (which tiles draw above the player) |
-| Merge | heat-map of palette-merge loss (brighter = more colour snapped away) |
-| Events | event markers (on by default) |
-| Warps | warp markers (on by default) |
+**Overlays — Advanced only:** Diff (render mismatch), Priority (RMXP draw-above-
+player priority), Merge (palette-merge-loss heat-map) — see "Advanced" below.
 
-**Zoom:** `−` / `+` / `Fit`, current factor shown (default 2×).
+**Zoom:** `−` / `+` / `Fit` buttons, mouse wheel, or two-finger pinch; current
+factor shown (default 2×).
 
-**Inspector sidebar (right):**
+**Sidebar (right):** the **Feedback** panel (see "The feedback workflow" above)
+plus a trimmed cell inspector. Tap a cell to see its RMXP layers (tile id, passage,
+priority, terrain), GBA metatile thumbnails (raw pre-quant + shipped post-quant),
+collision (ours vs Uranium's, with mismatch flagged), and any events on that cell.
+Palette detail and per-quadrant fit only appear when Advanced is on.
 
-- Click a cell → per-layer breakdown (tile id, RMXP priority, which metatile).
-- **Worst palette merges** — collapsible list of the metatiles that lost the most
-  colour to quantization; click one to jump to a cell using it.
-- **Issues** — flag the selected cell, attach a note, and **Export JSON**
-  (downloads `MapNNN_issues.json`). ⚠️ Issues live in memory only — they do **not**
-  persist across a reload; export before you close the tab.
+### Advanced (collapsed by default)
 
-`Palettes →` (server mode) jumps to this map's palette inspector.
+Click **Advanced** in the toolbar (title: "Show quantization / graphics-debug
+controls"; adds `body.adv`) to reveal the whole quantization/graphics-debug layer:
+
+- **The knob bar** — live `FamilyParams` tuning: `green cuts` (interior hue° in
+  (70,170) that split the green band into sub-families), `dark<` / `neutral sat<`
+  (value/saturation cutoffs for the dark/neutral families), `pal floor` (min
+  sub-palettes per family), `overflow` (colors vs coverage allocation), `max pals`
+  (≤13). **Apply & re-render** POSTs `/api/quantize` → the server re-quantizes
+  eagerly (so a bad knob value surfaces as an HTTP 400 and rolls back instead of
+  breaking the reload) → the page reloads, re-rendering the map **and** both
+  palette views under the new params. A monotonic `generation` token is appended
+  to post-quant image URLs (`&g=`) to defeat the browser's `immutable` cache.
+  Server mode only — it hides itself in static exports even with Advanced on.
+- **Diff** / **Priority** / **Merge** overlay checkboxes.
+- The **Palettes →** link to this map's palette inspector.
+- The **Worst palette merges** sidebar panel — a collapsible list of the metatiles
+  that lost the most colour to quantization; click one to jump to a cell using it.
+- The per-cell **Palettes** section (RMXP source colours, GBA sub-palettes, colour
+  changes) and the per-8×8-quadrant palette-fit breakdown, appended to the cell
+  inspector.
+
+Turning Advanced back off clears the Diff/Priority/Merge overlay checkboxes, so the
+canvas returns to a clean feedback view rather than leaving a stale debug overlay on.
+It does NOT reset the knobs themselves — if they're non-default, the always-visible
+"⚠ non-stock quantize" toolbar badge (see "Scope & caveats" below) stays lit even
+with Advanced collapsed, so you don't forget a render is tuned away from stock.
 
 ---
 
 ## View 2: the palette inspector (`/palettes/<id>`)
+
+Advanced-tier: reached only via the (Advanced-only) **Palettes →** link. The page
+itself has no Advanced toggle of its own — the whole thing is quant-debug content,
+so its knob bar is always visible there.
 
 Per GBA sub-palette, shows the 15 colour swatches (used vs unused, slot 0 =
 transparent) and a grid of the metatile thumbnails that draw from that palette.
@@ -237,23 +313,41 @@ python scripts/tree_debug.py --x0 33 --y0 40 --x1 43 --y1 48 --zoom 7
 ```
 
 Reach for this when a specific spot's layer stacking looks wrong and the viewer's
-GBA/Post-Q toggles aren't fine-grained enough.
+RPG Maker/Quantized toggle isn't fine-grained enough.
 
 ---
 
 ## Scope & caveats
 
-- **Slice-scoped data pool.** The palette analysis is computed over the pathfinder
-  slice (`SLICE_MAP_IDS = [49, 48, 32]`) plus the opened map, matching how
-  `build_slice_tilesets` quantizes each tileset over only the slice maps that share
-  it. Opening a non-slice map whose tiles fall outside the slice tileset atlas can
-  crash the rasterizer — expected, not a bug in the viewer.
+- **Data pool matches the shipped ROM's grouping.** The boot-gate ROM is built by
+  `scripts/assemble_pathfinder.py` (`run_graphics_pass`), which calls
+  `build_slice_tilesets(maps, ...)` with no `source_tileset_of` over `SLICE_MAP_IDS`
+  (`rpg2gba.tileset_converter.map_set`). Inside, maps are grouped by their REAL
+  `map_json["tileset_id"]` — Map048 and Map049 (Player's House 1F/2F) both carry
+  tileset 19 and are quantized together into ONE shared 13-palette budget; Map032
+  (Moki Town, tileset 22) is alone. `_ensure_tileset_analysis` replicates this
+  exactly: for a slice map, the pool is every `SLICE_MAP_IDS` member sharing the
+  opened map's real `tileset_id`, so the "Quantized (family)" view matches the ROM
+  byte-for-byte given the same inputs. (The Map Walker's phase5 build instead feeds
+  a unique synthetic tileset id per map — a different, per-map pool that is NOT what
+  the §9 boot-gate ROM compares against.) Non-slice maps have no shipped ROM truth
+  to match and self-pool (`pool_map_ids = [map_id]`) as a preview-only best effort.
 - **Reads generated artifacts** under `output/uranium-build/` (`maps/`,
-  `tilesets.json`). Re-run the graphics pipeline if those are stale; the viewer
-  doesn't regenerate them.
+  `tilesets.json`). The server re-checks a stat-only fingerprint (mtime+size) of
+  these files on every request; if a rebuild changed them since a map was last
+  loaded, it auto-reloads that map's state (and, for slice maps, invalidates its
+  pool siblings too via a bumped generation token) instead of serving stale bytes.
+  It still doesn't trigger the pipeline itself — you still have to re-run it.
+- **Non-stock quantization is flagged.** The knob bar (Advanced-only) can leave
+  `_family_params`/`_max_palettes` non-default for the life of the server. A small
+  "⚠ non-stock quantize" badge in the toolbar — always visible, not gated behind
+  Advanced — appears whenever the live knobs differ from stock, so a viewer can't
+  silently mistake a tuned render for the shipped ROM's.
 - **Needs `.env-paths`.** All three entry points call `_load_dotenv()` for
   `RPG2GBA_*` paths; run from the repo root.
 - **Zero external deps for the server** (stdlib `http.server`); the rendering core
   needs `numpy` + `Pillow` (already in the project `.venv`).
-- Output (`output/map_viewer/`, `MapNNN_issues.json`) is gitignored generated art —
-  don't commit it.
+- **Feedback flags are committed, generated output is not.** Flags live in
+  git-tracked `reference/map_feedback/MapNNN.json` — hand-authored review data,
+  commit it like any other reference doc. `output/map_viewer/` (static-mode HTML)
+  is still gitignored generated art — don't commit that.

@@ -5,12 +5,15 @@ Serves the shared MAP_VIEWER_HTML in SERVER mode with lazy tile/metatile
 rendering via /api/* endpoints.  Zero external deps — stdlib only.
 
 Routes:
-  GET /                            -> map listing
-  GET /map/<id>                    -> viewer HTML (server mode, lazy images)
-  GET /palettes/<id>               -> palette inspector HTML (server mode, lazy images)
-  GET /api/map/<id>                -> build_map_data JSON
-  GET /api/tile/<mapid>/<tid>.png  -> single RMXP tile PNG
-  GET /api/metatile/<mapid>/<idx>.png?layer=bottom|top -> metatile PNG
+  GET  /                            -> map listing
+  GET  /map/<id>                    -> viewer HTML (server mode, lazy images)
+  GET  /palettes/<id>               -> palette inspector HTML (server mode, lazy images)
+  GET  /api/map/<id>                -> build_map_data JSON
+  GET  /api/tile/<mapid>/<tid>.png  -> single RMXP tile PNG
+  GET  /api/metatile/<mapid>/<idx>.png?layer=bottom|top -> metatile PNG
+  GET  /api/feedback/<id>           -> this map's tile-feedback flags (JSON list)
+  POST /api/feedback                -> replace a map's flag list (body: {map_id, flags})
+  POST /api/quantize                -> apply family-packer knobs (Advanced only)
 
 Usage:
     python scripts/map_viewer_server.py --port 8765
@@ -36,11 +39,11 @@ from map_viewer_common import (  # noqa: E402
     build_map_data,
     current_quantize_state,
     get_quantize_params,
-    load_issues,
+    load_feedback,
     params_from_dict,
     render_metatile_png,
     render_tile_png,
-    save_issues,
+    save_feedback,
     set_quantize_params,
 )
 from palette_page import PALETTE_VIEWER_HTML  # noqa: E402
@@ -57,7 +60,7 @@ _RE_PAL_PAGE = re.compile(r"^/palettes/(\d+)$")
 _RE_API_MAP = re.compile(r"^/api/map/(\d+)$")
 _RE_API_TILE = re.compile(r"^/api/tile/(\d+)/(\d+)\.png$")
 _RE_API_META = re.compile(r"^/api/metatile/(\d+)/(\d+)\.png$")
-_RE_API_ISSUES = re.compile(r"^/api/issues/(\d+)$")
+_RE_API_FEEDBACK = re.compile(r"^/api/feedback/(\d+)$")
 
 _CACHE_IMMUTABLE = "public, max-age=31536000, immutable"
 
@@ -175,8 +178,8 @@ class _Handler(BaseHTTPRequestHandler):
                 if layer not in ("bottom", "top", "post_bottom", "post_top"):
                     layer = "bottom"
                 self._serve_metatile(int(m.group(1)), int(m.group(2)), layer)
-            elif m := _RE_API_ISSUES.match(path):
-                self._serve_issues(int(m.group(1)))
+            elif m := _RE_API_FEEDBACK.match(path):
+                self._serve_feedback(int(m.group(1)))
             else:
                 self._send(404, "text/plain", b"Not found")
         except (FileNotFoundError, KeyError, IndexError) as exc:
@@ -191,8 +194,8 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/quantize":
                 self._handle_quantize()
-            elif path == "/api/issue":
-                self._handle_issue()
+            elif path == "/api/feedback":
+                self._handle_feedback()
             else:
                 self._send(404, "text/plain", b"Not found")
         except Exception as exc:
@@ -224,24 +227,24 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(200, "application/json",
                    json.dumps({"generation": gen}).encode("utf-8"))
 
-    def _handle_issue(self) -> None:
-        """Upsert or delete one flagged-cell note, persisted immediately to
-        map_viewer_issues/MapNNN.json (whole-file rewrite; the note set per map is
-        always tiny). Responds with the map's full, now-current issue set."""
+    def _handle_feedback(self) -> None:
+        """Replace this map's whole tile-feedback flag list, persisted immediately to
+        reference/map_feedback/MapNNN.json (whole-file rewrite; the list per map is
+        always tiny). The client sends the full list on every Save/delete, so there is
+        no per-flag key to manage. Responds with the now-persisted list."""
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length) or b"{}")
         map_id = int(body["map_id"])
-        key = f"{int(body['x'])},{int(body['y'])}"
-        issues = load_issues(map_id)
-        if body.get("delete"):
-            issues.pop(key, None)
-        else:
-            issues[key] = {"x": body["x"], "y": body["y"], "note": body.get("note", "")}
-        save_issues(map_id, issues)
-        self._send(200, "application/json", json.dumps(issues).encode("utf-8"))
+        flags = body.get("flags", [])
+        if not isinstance(flags, list):
+            self._send(400, "application/json",
+                       json.dumps({"error": "flags must be a list"}).encode("utf-8"))
+            return
+        save_feedback(map_id, flags)
+        self._send(200, "application/json", json.dumps(flags).encode("utf-8"))
 
-    def _serve_issues(self, map_id: int) -> None:
-        body = json.dumps(load_issues(map_id)).encode("utf-8")
+    def _serve_feedback(self, map_id: int) -> None:
+        body = json.dumps(load_feedback(map_id)).encode("utf-8")
         self._send(200, "application/json", body)
 
     def _serve_index(self) -> None:

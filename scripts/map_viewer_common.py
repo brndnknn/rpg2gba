@@ -35,6 +35,7 @@ from rpg2gba.tileset_converter.graphics.quantize import (
 from rpg2gba.tileset_converter.graphics.raster import TileRasterizer
 from rpg2gba.tileset_converter.graphics.sources import STATIC_BASE, load_tileset_sources
 from rpg2gba.tileset_converter.layout import TileGrid, column_key
+from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
 from rpg2gba.tileset_converter.tile_map import serialize_column_key
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -80,25 +81,59 @@ def _tilesets_json() -> Path:
     return _output_base() / "uranium-build" / "tilesets.json"
 
 
-def _issues_path(map_id: int) -> Path:
-    d = _output_base() / "uranium-build" / "map_viewer_issues"
+def _file_fingerprint(path: Path) -> tuple[int, int]:
+    """(mtime_ns, size) for cheap staleness detection — stat only, no read/parse.
+    ``(-1, -1)`` if the file is missing (so a just-created or just-deleted file
+    always compares unequal to any prior fingerprint)."""
+    try:
+        st = path.stat()
+    except OSError:
+        return (-1, -1)
+    return (st.st_mtime_ns, st.st_size)
+
+
+def _slice_aware_fingerprint(map_id: int) -> tuple[tuple[int, int], ...]:
+    """Stat-only fingerprint of every on-disk input that can change *map_id*'s
+    rendered output: its own ``Map{NNN}.json``, ``tilesets.json`` and — for slice
+    maps — every ``SLICE_MAP_IDS`` sibling's ``Map{NNN}.json`` too, since a sibling
+    can join or leave this map's quantization pool without this map's own file
+    changing (see ``_ensure_tileset_analysis``). No JSON parsing here, so this is
+    cheap enough to call on every request, unlike actually resolving the pool."""
+    maps_dir = _maps_dir()
+    paths = [maps_dir / f"Map{map_id:03d}.json"]
+    if map_id in SLICE_MAP_IDS:
+        paths += [maps_dir / f"Map{m:03d}.json" for m in SLICE_MAP_IDS if m != map_id]
+    paths.append(_tilesets_json())
+    return tuple(_file_fingerprint(p) for p in paths)
+
+
+def _feedback_path(map_id: int) -> Path:
+    """Per-map tile-feedback file. Lives under version-controlled reference/ (NOT
+    gitignored output/): flags are hand-authored review data, not regenerable
+    output, so they must survive `rm -rf output/` / `pipeline --clean`."""
+    d = _repo_root() / "reference" / "map_feedback"
     d.mkdir(parents=True, exist_ok=True)
     return d / f"Map{map_id:03d}.json"
 
 
-def load_issues(map_id: int) -> dict:
-    """This map's flagged-cell notes, keyed 'x,y' (empty dict if none saved yet)."""
-    path = _issues_path(map_id)
+def load_feedback(map_id: int) -> list[dict]:
+    """This map's tile-feedback flags (empty list if none saved yet).
+
+    Schema: a list of grouped flags, each ``{"cells": [[x, y], ...], "note": str}``.
+    One flag covers a whole selection set (built by tap-to-toggle + expand-similar),
+    so a single note can span many cells / several metatile identities."""
+    path = _feedback_path(map_id)
     if not path.is_file():
-        return {}
-    return json.loads(path.read_text(encoding="utf-8"))
+        return []
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return data if isinstance(data, list) else []
 
 
-def save_issues(map_id: int, issues: dict) -> None:
-    """Persist this map's flagged-cell notes, overwriting the file whole (it's
-    always tiny — a handful of entries — so a full rewrite per save/delete is fine)."""
-    _issues_path(map_id).write_text(
-        json.dumps(issues, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+def save_feedback(map_id: int, flags: list[dict]) -> None:
+    """Persist this map's flags, overwriting the file whole (the set per map is
+    always tiny, so a full rewrite per save/delete is fine)."""
+    _feedback_path(map_id).write_text(
+        json.dumps(flags, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
 
 
@@ -128,12 +163,20 @@ class _MapState:
     analysis: PaletteAnalysis             # slice-scoped palette analysis for this map's tileset
     pool_key_to_idx: dict[tuple, int]     # column key -> index into analysis.metatiles
     quant_generation: int                 # _quant_generation the postquant fields were built at
+    input_fingerprint: tuple[tuple[int, int], ...]  # _slice_aware_fingerprint at load time
 
 
 _map_cache: dict[int, _MapState] = {}
 _tile_png_cache: dict[tuple[int, int], bytes] = {}          # (map_id, tile_id)
 _metatile_png_cache: dict[tuple[int, int, str], bytes] = {}  # (map_id, idx, layer)
-_tileset_analysis_cache: dict[frozenset[int], tuple[PaletteAnalysis, dict[tuple, int]]] = {}  # pool map-id set -> (analysis, pool_key_to_idx)
+# key: (pool map-id set, fingerprint of every pooled map's json + tilesets.json) ->
+# (analysis, pool_key_to_idx). The fingerprint half means a rebuild that changes a
+# pooled map's content invalidates the entry even if the pool's *membership*
+# (the frozenset) didn't change.
+_tileset_analysis_cache: dict[
+    tuple[frozenset[int], tuple[tuple[int, int], ...]],
+    tuple[PaletteAnalysis, dict[tuple, int]],
+] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -164,10 +207,13 @@ def current_quantize_state() -> tuple[FamilyParams, int]:
 
 def get_quantize_params() -> dict:
     """Current knob state for injection into the page config (seeds the UI + the
-    `generation` cache-bust token)."""
+    `generation` cache-bust token). `non_stock` is True when the live knobs differ
+    from stock (`FamilyParams()` defaults, `max_palettes == _ENGINE_MAX_PALS`) —
+    drives the always-visible (non-Advanced-gated) toolbar warning badge."""
     return {
         "generation": _quant_generation,
         "max_palettes": _max_palettes,
+        "non_stock": _family_params != FamilyParams() or _max_palettes != _ENGINE_MAX_PALS,
         "dark_value": _family_params.dark_value,
         "neutral_sat": _family_params.neutral_sat,
         "green_cuts": list(_family_params.green_cuts),
@@ -218,31 +264,65 @@ def _ensure_tileset_analysis(
     priorities: list[int],
     map_id: int,
 ) -> tuple[PaletteAnalysis, dict[tuple, int]]:
-    """Build and cache the per-map palette analysis for a map (idempotent).
+    """Build and cache the palette-quantization pool for a map (idempotent).
 
-    Pool = only the opened map.  This matches the ROM's per-map packing: phase5
-    feeds ``build_slice_tilesets`` a unique synthetic tileset id per map
-    (``1000 + map_id``), so each map is quantized from its own tiles alone — not
-    pooled across maps sharing a real ``tileset_id``.  Pooling per-map here makes the
-    viewer a faithful preview of the quantized ROM art (map_walker_plan §6, §5.4).
+    Pool = whatever the SHIPPED ROM quantizes together, replicated exactly. The
+    boot-gate ROM is built by ``scripts/assemble_pathfinder.py`` (``run_graphics_pass``),
+    which calls ``build_slice_tilesets(maps, ...)`` with no ``source_tileset_of``
+    over ``SLICE_MAP_IDS`` (``rpg2gba.tileset_converter.map_set``). Inside,
+    ``build_slice_tilesets`` groups maps by their REAL ``map_json["tileset_id"]``
+    (``build_slice_tilesets.py`` ~line 249-251): Map048 and Map049 (Player's House
+    1F/2F) both carry tileset 19 and are pooled into ONE shared 13-palette
+    quantization; Map032 (Moki Town, tileset 22) is alone. This function replicates
+    that grouping — for a slice map, the pool is every ``SLICE_MAP_IDS`` member
+    sharing the opened map's real ``tileset_id`` — so the "Quantized (family)" view
+    matches the ROM byte-for-byte given the same inputs.
+
+    Non-slice maps have no shipped ROM truth to match: the Map Walker's phase5
+    build feeds ``build_slice_tilesets`` a unique synthetic tileset id per map
+    (``1000 + map_id``), a per-map pool that is NOT what the §9 boot-gate ROM
+    compares against. They self-pool (``pool_map_ids = [map_id]``) as a
+    preview-only best effort, not a fidelity claim.
     """
     maps_dir = _maps_dir()
-    pool_map_ids = [map_id]
 
-    # Cache key is the opened map (the pool is a single map now); a warm analysis
-    # returns without reading any map JSON.  ``tileset_id`` is still an input to the
-    # rasterizer/priorities but no longer scopes the quant pool.
-    cache_key = frozenset(pool_map_ids)
+    if map_id in SLICE_MAP_IDS:
+        docs: dict[int, dict] = {}
+        for m in SLICE_MAP_IDS:
+            p = maps_dir / f"Map{m:03d}.json"
+            try:
+                docs[m] = json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+        if map_id not in docs:
+            raise FileNotFoundError(f"Map JSON not found: {maps_dir / f'Map{map_id:03d}.json'}")
+        opened_ts = int(docs[map_id]["tileset_id"])
+        pool_map_ids = [
+            m for m in SLICE_MAP_IDS if m in docs and int(docs[m]["tileset_id"]) == opened_ts
+        ]
+    else:
+        docs = {}
+        pool_map_ids = [map_id]
+
+    # Cache key includes a stat-only fingerprint of every pooled map's json (+
+    # tilesets.json) alongside the pool membership, so a rebuild that changes a
+    # pooled map's content invalidates the entry even when membership is unchanged
+    # (e.g. Map049 rebuilt while viewing Map048 — same {48,49} pool, new content).
+    pool_fp = tuple(_file_fingerprint(maps_dir / f"Map{m:03d}.json") for m in pool_map_ids)
+    pool_fp += (_file_fingerprint(_tilesets_json()),)
+    cache_key = (frozenset(pool_map_ids), pool_fp)
     if cache_key in _tileset_analysis_cache:
         return _tileset_analysis_cache[cache_key]
 
     maplist: list[tuple[int, dict]] = []
     for mid in pool_map_ids:
-        p = maps_dir / f"Map{mid:03d}.json"
-        try:
-            doc = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            continue
+        doc = docs.get(mid)
+        if doc is None:
+            p = maps_dir / f"Map{mid:03d}.json"
+            try:
+                doc = json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                continue
         maplist.append((mid, doc))
 
     pool_keys = column_keys_for_maps(maplist)
@@ -265,9 +345,9 @@ def _ensure_tileset_analysis(
         )
     pool_keys = valid_keys
 
+    pool_desc = "+".join(f"Map{m:03d}" for m in pool_map_ids)
     print(
-        f"    tileset {tileset_id}: per-map pool (Map{map_id:03d}), {len(pool_keys)} "
-        f"pool keys"
+        f"    tileset {tileset_id}: pool [{pool_desc}], {len(pool_keys)} pool keys"
         + (f" ({dropped} dropped as out-of-bounds)" if dropped else "")
     )
 
@@ -315,13 +395,46 @@ def _refresh_postquant(map_id: int, state: _MapState) -> None:
     state.quant_generation = _quant_generation
 
 
+def _invalidate_for_reload(map_id: int) -> None:
+    """Drop ``map_id``'s cached state and every image cache, and bump the quant
+    generation, because its on-disk inputs changed since it was loaded (a pipeline
+    rebuild while the server was running).
+
+    Clears ALL tile/metatile PNG caches and the whole tileset-analysis cache, not
+    just this map's — simplest safe invalidation (these are just in-process dict
+    caches, cheap to rebuild lazily) and it correctly handles a changed pool
+    sibling too: bumping ``_quant_generation`` marks every OTHER cached map's
+    ``_MapState`` stale as well, so the next ``_ensure_loaded`` for e.g. Map048
+    re-runs ``_refresh_postquant`` (and re-reads Map049 fresh) even though
+    Map048's own file never changed. Bumping the generation also drives the
+    client: post-quant (and now all) image URLs carry ``&g=<generation>`` to
+    defeat the browser's ``immutable`` cache after a reload."""
+    global _quant_generation
+    _map_cache.pop(map_id, None)
+    _tile_png_cache.clear()
+    _metatile_png_cache.clear()
+    _tileset_analysis_cache.clear()
+    _quant_generation += 1
+
+
 def _ensure_loaded(map_id: int) -> None:
-    """Load and cache all per-map rendering state (idempotent)."""
+    """Load and cache all per-map rendering state (idempotent).
+
+    Checks a stat-only fingerprint of the on-disk inputs (``_slice_aware_fingerprint``)
+    on every call — cheap, no JSON parsing — so a pipeline rebuild while the server
+    is running is detected and forces a full reload instead of silently continuing
+    to serve pre-rebuild bytes."""
+    current_fp = _slice_aware_fingerprint(map_id)
+
     if map_id in _map_cache:
         state = _map_cache[map_id]
-        if state.quant_generation != _quant_generation:
-            _refresh_postquant(map_id, state)
-        return
+        if state.input_fingerprint != current_fp:
+            log.info("Map%03d: on-disk inputs changed since load, reloading", map_id)
+            _invalidate_for_reload(map_id)
+        else:
+            if state.quant_generation != _quant_generation:
+                _refresh_postquant(map_id, state)
+            return
 
     maps_dir = _maps_dir()
     tilesets_json_path = _tilesets_json()
@@ -399,6 +512,7 @@ def _ensure_loaded(map_id: int) -> None:
         analysis=PaletteAnalysis(palettes=[], metatiles=[]),
         pool_key_to_idx={},
         quant_generation=-1,  # forces the initial _refresh_postquant below
+        input_fingerprint=current_fp,
     )
     _map_cache[map_id] = state
     _refresh_postquant(map_id, state)
@@ -535,7 +649,7 @@ def build_map_data(map_id: int) -> dict:
                     "priority": pri, "terrain": ter, "autotile_name": at_name,
                 })
 
-            col_ours = our_blocked(grid, state.passages, state.priorities, x, y)
+            col_ours = our_blocked(grid, state.passages, state.priorities, state.terrain_tags, x, y)
             col_ur = uranium_blocked(grid, state.passages, state.priorities, state.terrain_tags, x, y)
             pmax = max(
                 (state.priorities[tid] for tid in layers if tid > 0 and tid < len(state.priorities)),
@@ -740,7 +854,7 @@ body{background:#1a1a1a;color:#ddd;font:12px/1.4 monospace;display:flex;flex-dir
 /* ---- map nav strip ---- */
 #mapnav{display:none;background:#1c1c1c;border-bottom:1px solid #383838;padding:4px 8px;gap:6px;align-items:center;overflow-x:auto;white-space:nowrap;flex-shrink:0;font-size:11px}
 #mapnav.show{display:flex}
-#knobbar{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;background:#1f241f;border-bottom:1px solid #3a463a;padding:4px 8px;flex-shrink:0;font-size:11px}
+#knobbar{display:none;flex-wrap:wrap;gap:4px 10px;align-items:center;background:#1f241f;border-bottom:1px solid #3a463a;padding:4px 8px;flex-shrink:0;font-size:11px}
 #knobbar label{color:#9a9;display:flex;align-items:center;gap:3px}
 #knobbar input,#knobbar select{background:#222;color:#dfe;border:1px solid #4a5a4a;font:11px monospace;padding:2px 3px;border-radius:2px}
 #knobbar input[type=number]{width:52px}
@@ -758,8 +872,21 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch
 #sidebar{width:300px;background:#1e1e1e;border-left:1px solid #444;overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column;transition:transform .2s}
 #sidebar-toggle{display:none}
 #cell-info{padding:8px;flex:1;overflow-y:auto}
-#issue-panel{background:#1a1810;border-top:1px solid #554;padding:8px;flex-shrink:0}
-#merge-panel{background:#1a1018;border-top:1px solid #534;padding:6px 8px;flex-shrink:0}
+#feedback-panel{background:#1a1810;border-top:1px solid #554;padding:8px;flex-shrink:0}
+#merge-panel{background:#1a1018;border-top:1px solid #534;padding:6px 8px;flex-shrink:0;display:none}
+/* Quant/graphics-debug controls are collapsed by default; the Advanced toggle adds
+   `adv` to <body> to reveal the knob bar, the debug overlays, the palette link and
+   the worst-merges panel.  The core feedback UI is always visible. */
+#adv-controls{display:none;align-items:center;gap:4px 6px;flex-wrap:wrap}
+body.adv #adv-controls{display:flex}
+body.adv #merge-panel{display:block}
+body.adv #knobbar{display:flex}
+#btn-advanced.on{background:#3a2c3a;border-color:#7a5a7a;color:#ecf}
+/* Always-visible (not Advanced-gated) warning: the live quantization knobs differ
+   from stock (FamilyParams() defaults, max_palettes==13), so this render is NOT
+   a faithful ROM preview even with the knob bar hidden. */
+#nonstock-badge{display:none;color:#fc8;background:#3a2a10;border:1px solid #764;border-radius:3px;padding:2px 7px;font-size:11px;font-weight:bold}
+#nonstock-badge.show{display:inline-block}
 #merge-list{margin-top:4px;max-height:200px;overflow-y:auto}
 .merge-item{display:flex;align-items:center;gap:6px;background:#251820;border:1px solid #534;padding:2px 5px;margin:2px 0;font-size:11px;cursor:pointer}
 .merge-item:hover{background:#3a2433}
@@ -774,11 +901,17 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch
 .match{color:#6f6}
 .blocked{color:#f55}
 .passable{color:#5d5}
-#issue-list{margin-top:6px;max-height:150px;overflow-y:auto}
-.issue-item{background:#252018;border:1px solid #554;padding:3px 5px;margin:2px 0;font-size:11px}
-.issue-del{color:#f55;cursor:pointer;float:right}
-#note-area{display:none;margin-top:4px}
-#note-area textarea{width:100%;height:50px;background:#222;color:#eee;border:1px solid #555;font:11px monospace;padding:3px;resize:vertical}
+#flag-list{margin-top:6px;max-height:150px;overflow-y:auto}
+.flag-item{background:#252018;border:1px solid #554;padding:3px 5px;margin:2px 0;font-size:11px;cursor:pointer}
+.flag-item:hover{background:#33291a}
+.flag-item.editing{border-color:#fa0;background:#332a12}
+.flag-del{color:#f55;cursor:pointer;float:right;padding:0 2px}
+.flag-cells{color:#8cf}
+#sel-summary{margin:2px 0;font-size:11px}
+#sel-count{color:#fa0;font-weight:bold}
+#note-text{width:100%;height:50px;background:#222;color:#eee;border:1px solid #555;font:11px monospace;padding:3px;resize:vertical;margin-top:4px}
+#feedback-panel .btn{margin:2px 3px 2px 0}
+#feedback-panel .btn:disabled{opacity:.4;cursor:default}
 /* ---- palette / swatch display ---- */
 .swatch{display:inline-block;width:14px;height:14px;border:1px solid #555;vertical-align:middle;cursor:default;margin:1px;flex-shrink:0}
 .swatch-checker{background-image:repeating-conic-gradient(#777 0% 25%,#bbb 0% 50%);background-size:8px 8px}
@@ -814,8 +947,8 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch
 <body>
 <div id="toolbar">
   <span class="lbl">View:</span>
-  <label><input type="radio" name="view2" value="rmxp" checked> RPG Maker</label>
-  <label><input type="radio" name="view2" value="post-quant"> Quantized (family)</label>
+  <label><input type="radio" name="view2" value="rmxp"> RPG Maker</label>
+  <label><input type="radio" name="view2" value="post-quant" checked> Quantized (family)</label>
   <!-- Dormant: the original per-layer radios are kept intact but hidden; the 2-way
        toggle above drives the same `currentLayer`. Unhide #layer-debug (or set its
        display) to restore the full RMXP/L0/L1/L2/GBA/Post-Q layer inspector. -->
@@ -833,9 +966,6 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch
   <div class="sep"></div>
   <span class="lbl">Overlay:</span>
   <label><input type="checkbox" id="ov_collision"> Collision</label>
-  <label><input type="checkbox" id="ov_diff"> Diff</label>
-  <label><input type="checkbox" id="ov_priority"> Priority</label>
-  <label title="Heat-map cells by palette-merge loss (brighter = more colour snapped)"><input type="checkbox" id="ov_merge"> Merge</label>
   <label><input type="checkbox" id="ov_events" checked> Events</label>
   <label><input type="checkbox" id="ov_warps" checked> Warps</label>
   <div class="sep"></div>
@@ -845,7 +975,15 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch
   <button class="btn" id="zoom-in">+</button>
   <button class="btn" id="zoom-fit">Fit</button>
   <div class="sep"></div>
-  <a class="btn" id="nav-palettes" href="#" style="display:none;text-decoration:none">Palettes &rarr;</a>
+  <button class="btn" id="btn-advanced" title="Show quantization / graphics-debug controls">Advanced</button>
+  <span id="adv-controls">
+    <span class="lbl">Debug:</span>
+    <label><input type="checkbox" id="ov_diff"> Diff</label>
+    <label><input type="checkbox" id="ov_priority"> Priority</label>
+    <label title="Heat-map cells by palette-merge loss (brighter = more colour snapped)"><input type="checkbox" id="ov_merge"> Merge</label>
+    <a class="btn" id="nav-palettes" href="#" style="display:none;text-decoration:none">Palettes &rarr;</a>
+  </span>
+  <span id="nonstock-badge" title="Live quantization knobs differ from stock (FamilyParams defaults, max_palettes=13) — this render is not a faithful ROM preview. Open Advanced to inspect/reset.">&#9888; non-stock quantize</span>
   <span class="lbl" id="map-title" style="color:#8cf"></span>
 </div>
 <div id="mapnav"></div>
@@ -866,21 +1004,24 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch
     <canvas id="mapCanvas"></canvas>
   </div>
   <div id="sidebar">
-    <div id="cell-info"><span style="color:#555">Click a cell to inspect.</span></div>
+    <div id="cell-info"><span style="color:#555">Tap cells to build a selection, then add a note.</span></div>
     <div id="merge-panel">
       <div class="section-title" id="merge-head" style="cursor:pointer"><span id="merge-tri">&#9656;</span> Worst palette merges <span id="merge-count" class="lbl"></span></div>
       <div id="merge-list" style="display:none"></div>
     </div>
-    <div id="issue-panel">
-      <div class="section-title">Issues</div>
-      <button class="btn" id="btn-flag" disabled>Flag selected cell</button>
-      <button class="btn" id="btn-export">Export JSON</button>
-      <div id="note-area">
-        <textarea id="note-text" placeholder="Note about this cell..."></textarea>
-        <button class="btn" id="btn-note-save">Save</button>
-        <button class="btn" id="btn-note-cancel">Cancel</button>
+    <div id="feedback-panel">
+      <div class="section-title">Feedback</div>
+      <div id="sel-summary">No cells selected.</div>
+      <div>
+        <button class="btn" id="btn-expand" disabled title="Add every cell sharing the focused cell's metatile identity (this map)">Expand similar</button>
+        <button class="btn" id="btn-clear" disabled>Clear</button>
       </div>
-      <div id="issue-list"></div>
+      <textarea id="note-text" placeholder="Describe what's wrong with these tiles…"></textarea>
+      <div>
+        <button class="btn" id="btn-save-flag" disabled>Save flag</button>
+        <button class="btn" id="btn-export" title="Download this map's flags as JSON">Export JSON</button>
+      </div>
+      <div id="flag-list"></div>
     </div>
   </div>
 </div>
@@ -892,18 +1033,22 @@ const V = window.__VIEWER__;
 const D = V.data;
 
 // ---- mode seam: getTileURL / getMetatileURL -------------------------------
+// `g` = quant generation: bumped on every knob Apply AND on every server-detected
+// stale reload (a pipeline rebuild while the server was running — see
+// _invalidate_for_reload), so ALL image URLs (not just post-quant) carry it: every
+// PNG is served with Cache-Control: immutable, and without the token a rebuilt map
+// would keep showing pre-rebuild tiles from the browser cache after a page reload.
 function getTileURL(tileId) {
   if (!tileId) return null;
   if (V.mode === 'static') return (V.tile_images || {})[String(tileId)] || null;
-  return '/api/tile/' + D.meta.map_id + '/' + tileId + '.png';
+  const g = (V.quant && V.quant.generation) || 0;
+  return '/api/tile/' + D.meta.map_id + '/' + tileId + '.png?g=' + g;
 }
 function getMetatileURL(idx, layer) {
   if (V.mode === 'static') {
     const m = (V.metatile_images || {})[idx];
     return m ? m[layer] : null;
   }
-  // `g` = quant generation: bumped on every knob Apply so the post-quant PNGs (served
-  // with Cache-Control: immutable) are re-fetched instead of served stale by the browser.
   const g = (V.quant && V.quant.generation) || 0;
   return '/api/metatile/' + D.meta.map_id + '/' + idx + '.png?layer=' + layer + '&g=' + g;
 }
@@ -936,7 +1081,7 @@ function drawImg(url, dx, dy, cp) {
 // ---- state ----------------------------------------------------------------
 let zoom = 2;
 let panX = 0, panY = 0;
-let currentLayer = 'rmxp';
+let currentLayer = 'post-quant';   // default view = the quantized GBA render
 let overlays = {collision:false, diff:false, priority:false, merge:false, events:true, warps:true};
 // Max merge severity across this map's metatiles, for normalizing the Merge heat-map.
 let maxMergeSeverity = 1;
@@ -944,8 +1089,12 @@ let maxMergeSeverity = 1;
   const cps = D.colkey_palettes || [];
   for (const cp of cps) { if (cp && cp.merge_severity > maxMergeSeverity) maxMergeSeverity = cp.merge_severity; }
 })();
-let selectedCell = null;
-let issues = {};
+let focusCell = null;          // last-tapped cell; drives the inspector readout
+const selection = new Map();   // "x,y" -> cell object; the accumulating flag set
+let flags = [];                // saved flags: [{cells:[[x,y],...], note}]
+let flaggedCells = new Set();  // "x,y" of every cell covered by some flag (canvas markers)
+let editingIndex = null;       // index in `flags` currently being edited, or null
+let advanced = false;          // Advanced (quant/graphics-debug) controls revealed?
 let ready = false;
 
 // pointer tracking
@@ -1035,15 +1184,21 @@ function drawOverlayCell(cell, dx, dy, cp) {
     }
   }
   const ik = cell.x + ',' + cell.y;
-  if (issues[ik]) {
-    ctx.fillStyle = 'rgba(255,120,0,0.5)'; ctx.fillRect(dx, dy, cp, cp);
+  if (flaggedCells.has(ik)) {
+    ctx.fillStyle = 'rgba(255,120,0,0.45)'; ctx.fillRect(dx, dy, cp, cp);
     ctx.fillStyle = '#fa0';
     ctx.font = Math.max(8, cp-2) + 'px monospace';
     ctx.fillText('⚑', dx+1, dy+cp-1);
   }
-  if (selectedCell && selectedCell.x === cell.x && selectedCell.y === cell.y) {
-    ctx.strokeStyle = '#fff';
+  if (selection.has(ik)) {
+    ctx.fillStyle = 'rgba(90,170,255,0.35)'; ctx.fillRect(dx, dy, cp, cp);
+    ctx.strokeStyle = 'rgba(90,170,255,0.9)';
     ctx.lineWidth = Math.max(1, zoom);
+    ctx.strokeRect(dx+0.5, dy+0.5, cp-1, cp-1);
+  }
+  if (focusCell && focusCell.x === cell.x && focusCell.y === cell.y) {
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = Math.max(1.5, zoom);
     ctx.strokeRect(dx+1, dy+1, cp-2, cp-2);
   }
 }
@@ -1162,9 +1317,13 @@ canvas.addEventListener('pointerup', function(e) {
     const {x, y} = canvasToCell(ex - rect.left, ey - rect.top);
     const m = D.meta;
     if (x >= 0 && x < m.xsize && y >= 0 && y < m.ysize) {
-      selectedCell = D.cells[y * m.xsize + x];
+      const cell = D.cells[y * m.xsize + x];
+      const key = x + ',' + y;
+      if (selection.has(key)) selection.delete(key);  // toggle off
+      else selection.set(key, cell);                  // toggle on / accumulate
+      focusCell = cell;                               // last-tapped drives the readout
       updateSidebar();
-      document.getElementById('btn-flag').disabled = false;
+      updateSelectionUI();
       scheduleRender();
       // open sidebar on mobile tap
       const sb = document.getElementById('sidebar');
@@ -1207,6 +1366,24 @@ document.querySelectorAll('input[name="view2"]').forEach(function(r) {
   const el = document.getElementById('ov_' + name);
   el.addEventListener('change', function() { overlays[name] = el.checked; scheduleRender(); });
 });
+// ---- Advanced (quant / graphics-debug) toggle -----------------------------
+// Collapses the knob bar, palette link, debug overlays and worst-merges panel
+// behind one button; `body.adv` drives their CSS visibility.  Leaving Advanced
+// clears the debug overlays so the canvas returns to a clean feedback view.
+document.getElementById('btn-advanced').onclick = function() {
+  advanced = !advanced;
+  document.body.classList.toggle('adv', advanced);
+  this.classList.toggle('on', advanced);
+  if (!advanced) {
+    ['diff','priority','merge'].forEach(function(name) {
+      overlays[name] = false;
+      const el = document.getElementById('ov_' + name);
+      if (el) el.checked = false;
+    });
+  }
+  updateSidebar();  // reveal/hide the per-cell Palettes + quad-fit sections
+  scheduleRender();
+};
 document.getElementById('zoom-in').onclick = function() {
   zoom = Math.min(8, Math.round((zoom + 0.5) * 2) / 2);
   updateZoomDisplay(); scheduleRender();
@@ -1255,10 +1432,10 @@ function buildCCRows(colorChanges, showAll) {
 }
 function updateCCSection() {
   const el = document.getElementById('cc-section');
-  if (!el || !selectedCell) return;
-  const ckPal = D.colkey_palettes ? D.colkey_palettes[selectedCell.colkey_idx] : null;
+  if (!el || !focusCell) return;
+  const ckPal = D.colkey_palettes ? D.colkey_palettes[focusCell.colkey_idx] : null;
   if (!ckPal) return;
-  const ccId = 'cc_toggle_' + selectedCell.x + '_' + selectedCell.y;
+  const ccId = 'cc_toggle_' + focusCell.x + '_' + focusCell.y;
   const cb = document.getElementById(ccId);
   if (cb) showAllColorChanges = cb.checked;
   el.innerHTML = buildCCRows(ckPal.color_changes, showAllColorChanges);
@@ -1300,17 +1477,19 @@ function passageStr(p) {
 }
 
 function updateSidebar() {
-  if (!selectedCell) return;
-  const cell = selectedCell;
+  if (!focusCell) return;
+  const cell = focusCell;
   const m = D.meta;
   const ck_str = D.colkeys_list ? D.colkeys_list[cell.colkey_idx] : '';
   const attrs = D.metatile_attrs ? D.metatile_attrs[cell.colkey_idx] : null;
   const ik = cell.x + ',' + cell.y;
-  const hasIssue = !!issues[ik];
+  const covering = flags.filter(function(f){ return (f.cells||[]).some(function(c){ return c[0]===cell.x && c[1]===cell.y; }); });
   let html = '';
-  html += '<div class="section-title">Cell (' + cell.x + ', ' + cell.y + ')</div>';
+  html += '<div class="section-title">Cell (' + cell.x + ', ' + cell.y + ')' +
+    (selection.has(ik) ? ' <span style="color:#5af">&#9632; selected</span>' : '') + '</div>';
   html += '<div class="lbl">Tileset ' + m.tileset_id + ': ' + m.name + ' / ' + m.tileset_name + '</div>';
-  if (hasIssue) html += '<div style="color:#fa0">&#9873; Flagged: ' + (issues[ik].note || '') + '</div>';
+  if (covering.length) html += '<div style="color:#fa0">&#9873; In ' + covering.length + ' flag' +
+    (covering.length > 1 ? 's' : '') + ': ' + escHtml(covering.map(function(f){ return f.note || '(no note)'; }).join(' | ')) + '</div>';
 
   html += '<div class="section-title">RMXP Layers</div>';
   if (cell.layer_detail.length === 0) {
@@ -1353,7 +1532,7 @@ function updateSidebar() {
       html += '</div>';
     }
     html += '</div>';
-    html += quadFitHtml(D.colkey_palettes ? D.colkey_palettes[cell.colkey_idx] : null);
+    if (advanced) html += quadFitHtml(D.colkey_palettes ? D.colkey_palettes[cell.colkey_idx] : null);
   } else {
     html += '<div class="lbl">(void / no metatile)</div>';
   }
@@ -1373,9 +1552,9 @@ function updateSidebar() {
     }
   }
 
-  // ---- Palettes section ----
+  // ---- Palettes section (Advanced only — quant/graphics-debug detail) ----
   const ckPal = D.colkey_palettes ? D.colkey_palettes[cell.colkey_idx] : null;
-  if (ck_str && ck_str !== '[]') {
+  if (advanced && ck_str && ck_str !== '[]') {
     html += '<div class="section-title">Palettes</div>';
 
     // RMXP source colors: union of tile colors from this cell's layer_detail
@@ -1428,60 +1607,114 @@ function updateSidebar() {
   document.getElementById('cell-info').innerHTML = html;
 }
 
-// ---- issue annotation -------------------------------------------------
-// Server mode persists immediately to map_viewer_issues/MapNNN.json (one
-// upsert-or-delete POST per Save/delete click); static exports keep issues
-// in-memory only (no server to write to) and rely on Export JSON below.
-function postIssue(x, y, note, isDelete) {
+// ---- tile feedback (grouped flags) ----------------------------------------
+// A flag = {cells:[[x,y],...], note}.  One note covers a whole selection set
+// (tap-to-toggle + Expand similar), so it can span many cells / several metatile
+// identities.  Server mode persists the full list to
+// reference/map_feedback/MapNNN.json on every change (git-tracked, always tiny,
+// so a whole-list PUT is fine); static exports keep flags in memory and rely on
+// Export JSON below.
+function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function saveFeedback() {
+  recomputeFlaggedCells();
   if (V.mode !== 'server') return;
-  fetch('/api/issue', {
+  fetch('/api/feedback', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({map_id: D.meta.map_id, x: x, y: y, note: note || '', delete: !!isDelete}),
-  }).catch(function(e) { console.error('issue save failed', e); });
+    body: JSON.stringify({map_id: D.meta.map_id, flags: flags}),
+  }).catch(function(e) { console.error('feedback save failed', e); });
 }
-document.getElementById('btn-flag').onclick = function() {
-  if (!selectedCell) return;
-  const area = document.getElementById('note-area');
-  area.style.display = area.style.display === 'none' ? 'block' : 'none';
+function recomputeFlaggedCells() {
+  flaggedCells = new Set();
+  for (const f of flags) for (const c of (f.cells || [])) flaggedCells.add(c[0] + ',' + c[1]);
+}
+function selectionCells() {
+  const arr = [];
+  for (const c of selection.values()) arr.push([c.x, c.y]);
+  arr.sort(function(a, b){ return a[1] - b[1] || a[0] - b[0]; });
+  return arr;
+}
+function updateSelectionUI() {
+  const n = selection.size;
+  document.getElementById('sel-summary').innerHTML = n
+    ? '<span id="sel-count">' + n + '</span> cell' + (n > 1 ? 's' : '') + ' selected' +
+      (editingIndex !== null ? ' <span style="color:#fa0">(editing flag ' + (editingIndex + 1) + ')</span>' : '')
+    : 'No cells selected.';
+  document.getElementById('btn-clear').disabled = n === 0;
+  document.getElementById('btn-save-flag').disabled = n === 0;
+  // Expand similar needs a focused cell with a real (non-void) metatile identity.
+  const ck = focusCell ? (D.colkeys_list ? D.colkeys_list[focusCell.colkey_idx] : '') : '';
+  document.getElementById('btn-expand').disabled = !focusCell || !ck || ck === '[]';
+}
+
+document.getElementById('btn-expand').onclick = function() {
+  if (!focusCell) return;
+  const idx = focusCell.colkey_idx;
+  for (const c of D.cells) {
+    if (c.colkey_idx === idx) selection.set(c.x + ',' + c.y, c);  // additive; multi-identity accumulates
+  }
+  updateSelectionUI(); updateSidebar(); scheduleRender();
 };
-document.getElementById('btn-note-save').onclick = function() {
-  if (!selectedCell) return;
+document.getElementById('btn-clear').onclick = function() {
+  selection.clear();
+  editingIndex = null;
+  document.getElementById('note-text').value = '';
+  updateSelectionUI(); updateFlagList(); updateSidebar(); scheduleRender();
+};
+document.getElementById('btn-save-flag').onclick = function() {
+  if (selection.size === 0) return;
   const note = document.getElementById('note-text').value.trim();
-  const key = selectedCell.x + ',' + selectedCell.y;
-  issues[key] = {x: selectedCell.x, y: selectedCell.y, note: note};
-  postIssue(selectedCell.x, selectedCell.y, note, false);
+  const flag = {cells: selectionCells(), note: note};
+  if (editingIndex !== null && editingIndex < flags.length) flags[editingIndex] = flag;
+  else flags.push(flag);
+  editingIndex = null;
+  selection.clear();
   document.getElementById('note-text').value = '';
-  document.getElementById('note-area').style.display = 'none';
-  updateIssueList(); updateSidebar(); scheduleRender();
-};
-document.getElementById('btn-note-cancel').onclick = function() {
-  document.getElementById('note-area').style.display = 'none';
-  document.getElementById('note-text').value = '';
+  saveFeedback();
+  updateFlagList(); updateSelectionUI(); updateSidebar(); scheduleRender();
 };
 document.getElementById('btn-export').onclick = function() {
-  const blob = new Blob([JSON.stringify(Object.values(issues), null, 2)], {type:'application/json'});
+  const blob = new Blob([JSON.stringify(flags, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'Map' + String(D.meta.map_id).padStart(3,'0') + '_issues.json';
+  a.download = 'Map' + String(D.meta.map_id).padStart(3,'0') + '_feedback.json';
   a.click();
   URL.revokeObjectURL(url);
 };
-function updateIssueList() {
-  const el = document.getElementById('issue-list');
-  const arr = Object.values(issues);
-  if (!arr.length) { el.innerHTML = '<span class="lbl">No issues.</span>'; return; }
-  el.innerHTML = arr.map(function(i) {
-    return '<div class="issue-item">(' + i.x + ',' + i.y + ') ' + (i.note || '') +
-      ' <span class="issue-del" onclick="deleteIssue(\'' + i.x + ',' + i.y + '\')">&#10005;</span></div>';
+function updateFlagList() {
+  recomputeFlaggedCells();
+  const el = document.getElementById('flag-list');
+  if (!flags.length) { el.innerHTML = '<span class="lbl">No flags yet.</span>'; return; }
+  el.innerHTML = flags.map(function(f, i) {
+    const n = (f.cells || []).length;
+    return '<div class="flag-item' + (editingIndex === i ? ' editing' : '') + '" onclick="editFlag(' + i + ')" title="click to edit / re-select its cells">' +
+      '<span class="flag-del" onclick="event.stopPropagation();deleteFlag(' + i + ')">&#10005;</span>' +
+      '<span class="flag-cells">' + n + ' cell' + (n > 1 ? 's' : '') + '</span> ' + escHtml(f.note || '(no note)') +
+      '</div>';
   }).join('');
 }
-function deleteIssue(key) {
-  const i = issues[key];
-  delete issues[key];
-  if (i) postIssue(i.x, i.y, '', true);
-  updateIssueList(); scheduleRender();
+function editFlag(i) {
+  const f = flags[i];
+  if (!f) return;
+  selection.clear();
+  for (const c of (f.cells || [])) {
+    const cell = D.cells[c[1] * D.meta.xsize + c[0]];
+    if (cell) { selection.set(c[0] + ',' + c[1], cell); focusCell = cell; }
+  }
+  editingIndex = i;
+  document.getElementById('note-text').value = f.note || '';
+  updateFlagList(); updateSelectionUI(); updateSidebar(); scheduleRender();
+  const sb = document.getElementById('sidebar');
+  if (sb.style.position === 'fixed' || window.innerWidth <= 720) sb.classList.add('open');
+}
+function deleteFlag(i) {
+  flags.splice(i, 1);
+  if (editingIndex === i) editingIndex = null;
+  else if (editingIndex !== null && editingIndex > i) editingIndex--;
+  saveFeedback();
+  updateFlagList(); updateSelectionUI(); scheduleRender();
 }
 
 // ---- worst-merge ranking --------------------------------------------------
@@ -1511,12 +1744,12 @@ function jumpToColkey(idx) {
   let target = null;
   for (const c of D.cells) { if (c.colkey_idx === idx) { target = c; break; } }
   if (!target) return;
-  selectedCell = target;
+  focusCell = target;
   const cp = cellPx();
   panX = Math.floor(canvas.width / 2 - (target.x + 0.5) * cp);
   panY = Math.floor(canvas.height / 2 - (target.y + 0.5) * cp);
-  document.getElementById('btn-flag').disabled = false;
   updateSidebar();
+  updateSelectionUI();
   scheduleRender();
   const sb = document.getElementById('sidebar');
   if (sb.style.position === 'fixed' || window.innerWidth <= 720) sb.classList.add('open');
@@ -1590,20 +1823,25 @@ function renderMapNav() {
   document.getElementById('statusbar').textContent =
     'Map' + String(m.map_id).padStart(3,'0') + ' — ' + m.xsize + '\xd7' + m.ysize +
     ' cells, tileset ' + m.tileset_id + ' (' + m.tileset_name + ')';
-  updateIssueList();
+  updateFlagList();
+  updateSelectionUI();
   // merge-panel count: how many distinct metatiles on this map lose colour to merging
   const mergeN = (D.colkey_palettes || []).filter(function(cp) { return cp && cp.merge_severity > 0; }).length;
   document.getElementById('merge-count').textContent = '(' + mergeN + ' tiles)';
+  // always-visible warning: live quant knobs differ from stock, even with Advanced hidden
+  if (V.quant && V.quant.non_stock) {
+    document.getElementById('nonstock-badge').classList.add('show');
+  }
   renderMapNav();
   if (V.mode === 'server') {
     const navp = document.getElementById('nav-palettes');
     navp.href = '/palettes/' + m.map_id;
     navp.style.display = '';
-    // load previously-saved notes for this map so a reload doesn't lose them
-    fetch('/api/issues/' + m.map_id).then(function(r) { return r.json(); }).then(function(saved) {
-      issues = saved || {};
-      updateIssueList(); updateSidebar(); scheduleRender();
-    }).catch(function(e) { console.error('issue load failed', e); });
+    // load previously-saved flags for this map so a reload doesn't lose them
+    fetch('/api/feedback/' + m.map_id).then(function(r) { return r.json(); }).then(function(saved) {
+      flags = Array.isArray(saved) ? saved : [];
+      updateFlagList(); updateSelectionUI(); updateSidebar(); scheduleRender();
+    }).catch(function(e) { console.error('feedback load failed', e); });
   }
   if (V.mode === 'static') {
     preloadStatic();
