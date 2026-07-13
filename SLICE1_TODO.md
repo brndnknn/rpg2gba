@@ -52,15 +52,6 @@ first-guess `n*3` frames formula. Never calibrated against real hardware feel.
 While walking dialogue-heavy NPCs, judge whether pauses feel right; adjust the
 multiplier in one place if not.
 
-### 4. Moki ledge tiles unmapped (3 in-slice)
-
-`terrain_tag_map.json` `ledge_directions` ships empty; unmapped ledges warn
-and fall back to MB_NORMAL (wall-like — safe but not jumpable). Three Moki Town
-ledge tiles fire the warning every build (ts22 tiles 840/841/842); hand-map
-their jump directions by eye in the map viewer. (Six more are Route 01 =
-slice-2 frontier.) Related known residual: ~30 south-ledge cells over-block on
-Map032 vs Uranium.
-
 ### 5. Remove the new_game.c test harness — needs a decision
 
 Sentinel-fenced `TEST HARNESS` block after `CB2_NewGame()` grants
@@ -126,7 +117,9 @@ Open questions left behind by the 2026-07-12 animation build:
   shape variants render pixel-identical → 15 groups (+3 cells with a real z2
   sparkle overlay); water fragmentation adds legit edge shapes + z2 foam
   overlays. Candidate fix: collapse column-key groups whose rasterized pixels
-  are identical (viewer UX + possible metatile-count win).
+  are identical (viewer UX + possible metatile-count win). Re-reported
+  2026-07-13; the *color* half of that report was a separate real viewer bug —
+  see `PROJECT_TODO.md` #13/#14.
 
 ### 11. Remaining boot-gate walk findings
 
@@ -148,6 +141,16 @@ fixed. Add new findings here as they're reported.
 
 ## Done
 
+- **2026-07-13 — #4 Moki ledge tiles: resolved by analysis, work moved to
+  `SLICE2_TODO.md` #1**: the 3 warning tiles (ts22 840/841/842) are the
+  pond-dock front at Map032 (37–39,53); Essentials gates ledge jumps purely by
+  the tile's 4-dir passage bits (stock v17 — jump dir = movement dir, never
+  stored), and 0x0E opens only the water side → from land they're walls, so
+  the MB_NORMAL fallback is already faithful. Nothing to hand-map, and no
+  slice-1 surface to test jumps on. Jump directions are auto-derivable
+  corpus-wide from passage bits — derivation rule + ts22 inventory in
+  SLICE2_TODO #1; the ~30 south-ledge over-block residual moves there too.
+  The 3 build warnings stay (benign) until the derivation lands.
 - **2026-07-12 — tile animation (Map032 flowers + pond)**: RMXP animated
   autotiles → GBA tileset anims, deterministic pipeline end-to-end (per-column
   lcm frame rendering, frame-aware dedup with static-demotion, union-color
