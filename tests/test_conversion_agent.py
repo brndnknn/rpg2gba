@@ -31,7 +31,7 @@ from rpg2gba.conversion_agent.flag_registry import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REFERENCE = REPO_ROOT / "reference"
-PRESEED = REFERENCE / "essentials_to_emerald_map.md"
+PRESEED = REFERENCE / "guides" / "essentials_to_emerald_map.md"
 SWITCHES = REFERENCE / "uranium_switches.json"
 VARIABLES = REFERENCE / "uranium_variables.json"
 

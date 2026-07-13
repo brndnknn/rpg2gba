@@ -170,7 +170,7 @@ Every module in `src/rpg2gba/pbs_converter/` has a corresponding test in `tests/
 The fork (`$RPG2GBA_POKEEMERALD`) is the source of truth for what the engine can do — not your memory of it. Maintain a fork-capability index (624 specials in `data/specials.inc`, 385 macros in `asm/macros/event.inc`, all `include/constants/*.h`) and gate against it:
 
 - **Forward:** every command/special/constant the pipeline emits must resolve in the index, or fail loud at conversion time — catches invented symbols (e.g. `healparty`) before `make modern`.
-- **Reverse:** never queue anything "needs custom C" without a fork search proving no native analog exists. `HealPlayerParty` was a defined special the whole time the agent invented `healparty`. Native-analog ledger: `reference/essentials_to_emerald_map.md`.
+- **Reverse:** never queue anything "needs custom C" without a fork search proving no native analog exists. `HealPlayerParty` was a defined special the whole time the agent invented `healparty`. Native-analog ledger: `reference/guides/essentials_to_emerald_map.md`.
 
 Most "engine feature" tags ship natively (cave/Flash, bridges, PC, region map, relearner, trade, rock smash); only the Nuclear type is genuinely new C.
 
@@ -237,13 +237,13 @@ The conversion agent's prompts are source code. Treat them with the same care.
 
 ## 6. The Flag Registry
 
-The full policy lives in **`reference/flag_registry_policy.md`** — it's a Phase 4
+The full policy lives in **`reference/guides/flag_registry_policy.md`** — it's a Phase 4
 component, dormant during the current Phase 2. Read it when Phase 4 starts. It's
 the most common place pipelines like this go wrong, so don't wing it.
 
 **Hard rule (applies always):** Every flag/var name goes through the registry —
 never hardcode one, even one you're certain of. You may modify `flag_registry.py`
-and `reference/essentials_to_emerald_map.md`, but you may **never** hand-edit the
+and `reference/guides/essentials_to_emerald_map.md`, but you may **never** hand-edit the
 registry's persistent state file mid-run. If the state is wrong, fix the input
 data or the registry logic — don't patch the output.
 

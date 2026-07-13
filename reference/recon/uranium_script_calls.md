@@ -3,7 +3,7 @@
 > Hand-authored for the conversion agent (Phase 4 calibration, Part A1).
 > A compact disposition table for the most common **Script** commands (RPG Maker
 > codes 355/655), whose leading signatures are inventoried in
-> `reference/rgss_event_commands.md`. Uranium adds no custom command *codes* — all
+> `reference/guides/rgss_event_commands.md`. Uranium adds no custom command *codes* — all
 > of its custom behaviour rides in these `pbXxx` / `Kernel.*` / `$game_*` calls.
 >
 > This covers the highest-frequency signatures — **≈92% of the 7,925 script-call

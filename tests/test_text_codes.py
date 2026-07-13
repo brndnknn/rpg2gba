@@ -1,7 +1,7 @@
 """Tests for the extended Essentials text-code translator.
 
 Covers ``translate_text_codes`` (the transpiler-spine contract, approved
-mapping 2026-07-05 — reference/slice1_queue_readthrough.md "Idiom" bucket,
+mapping 2026-07-05 — reference/findings/slice1_queue_readthrough.md "Idiom" bucket,
 item 1) and pins down the LEGACY ``_translate_text`` path (frozen-Opus
 classifier output) is unchanged by the extension.
 

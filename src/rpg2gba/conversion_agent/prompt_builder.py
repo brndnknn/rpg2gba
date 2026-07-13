@@ -22,7 +22,7 @@ from pathlib import Path
 _PKG = Path(__file__).resolve().parent
 _PROMPTS = _PKG / "prompts"
 
-# A data row in reference/rgss_event_commands.md: `| 355 | Script | Adaptable | 12 |`.
+# A data row in reference/guides/rgss_event_commands.md: `| 355 | Script | Adaptable | 12 |`.
 _REF_ROW = re.compile(r"^\|\s*(\d+)\s*\|")
 
 
@@ -40,21 +40,21 @@ def load_few_shots(prompts_dir: Path | None = None) -> list[str]:
 
 
 def load_cheatsheet(reference_dir: Path) -> str:
-    return (reference_dir / "poryscript_cheatsheet.md").read_text(encoding="utf-8")
+    return (reference_dir / "guides" / "poryscript_cheatsheet.md").read_text(encoding="utf-8")
 
 
 def load_command_reference(reference_dir: Path) -> str:
-    return (reference_dir / "rgss_event_commands.md").read_text(encoding="utf-8")
+    return (reference_dir / "guides" / "rgss_event_commands.md").read_text(encoding="utf-8")
 
 
 def load_script_call_reference(reference_dir: Path) -> str:
     """The Uranium `pbXxx`/Kernel/`$game_*` script-call disposition table.
 
-    Stable, ~40-row chunk (see reference/uranium_script_calls.md). It tells the
+    Stable, ~40-row chunk (see reference/recon/uranium_script_calls.md). It tells the
     agent which script calls to MAP, STRIP, or queue as UNHANDLED — the real
     translation surface, since Uranium adds no custom command *codes*.
     """
-    return (reference_dir / "uranium_script_calls.md").read_text(encoding="utf-8")
+    return (reference_dir / "recon" / "uranium_script_calls.md").read_text(encoding="utf-8")
 
 
 def filter_command_reference(full_text: str, codes: set[int]) -> str:

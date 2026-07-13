@@ -6,7 +6,7 @@
 > ✓VERIFIED; ⚠RECHECK rows are proposals not yet confirmed against the fork.
 >
 > **This is NOT the agent's prompt.** The frozen conversion-agent guidance lives in
-> `reference/uranium_script_calls.md` (loaded by `prompt_builder.load_command_reference`,
+> `reference/recon/uranium_script_calls.md` (loaded by `prompt_builder.load_command_reference`,
 > part of the §9-frozen system prompt — do **not** edit mid-campaign, invariant 1).
 > The deterministic classifiers run *before* the agent, so a `DET` row here is built
 > as a classifier that **overrides** the agent's (often conservative) disposition —

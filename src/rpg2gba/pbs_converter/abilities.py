@@ -2,7 +2,7 @@
 
 Abilities have no `.dat` file of their own: Essentials' `pbCompileAbilities`
 writes them into the `PBAbilities` script section, not a binary blob. The
-ID → internal-name map comes from the `reference/ability_internal_names.json`
+ID → internal-name map comes from the `reference/uranium_data/ability_internal_names.json`
 sidecar (the dumped `PBAbilities` section); display names/descriptions come
 from the `messages.dat` sidecars.
 
@@ -127,9 +127,9 @@ def _build_resolver(id_map: IdMap, ref: Path) -> _AbilityResolver:
     )
     return _AbilityResolver(
         id_map=id_map,
-        ability_internal=_load_id_json(ref / "ability_internal_names.json"),
-        ability_names=_load_id_json(ref / "ability_names.json"),
-        ability_descs=_load_id_json(ref / "ability_descriptions.json"),
+        ability_internal=_load_id_json(ref / "uranium_data" / "ability_internal_names.json"),
+        ability_names=_load_id_json(ref / "uranium_data" / "ability_names.json"),
+        ability_descs=_load_id_json(ref / "uranium_data" / "ability_descriptions.json"),
         fork_abilities=fork_abilities,
     )
 

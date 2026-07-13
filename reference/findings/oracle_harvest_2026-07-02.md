@@ -63,7 +63,7 @@ the point of the exercise).
   instead of minting a Uranium duplicate. That's a `pbs_converter/items.py`
   reconcile question, not a transpiler bug — parked here so it isn't lost.
 
-  **RESOLVED 2026-07-04 — census (`reference/item_dupe_census_2026-07-04.md`):
+  **RESOLVED 2026-07-04 — census (`reference/findings/item_dupe_census_2026-07-04.md`):
   the rename-dupe problem does not exist in this corpus.** The fork's
   `include/constants/items.h` ships pre-Gen-VI back-compat enum aliases
   (`ITEM_PARLYZ_HEAL = ITEM_PARALYZE_HEAL`, …); all 496 vanilla items Uranium

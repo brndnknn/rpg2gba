@@ -2,7 +2,7 @@
 
 PHASE3_PLAN §3.2 / §3.3. Three derived artifacts, all from the deserialized JSON:
 
-- `reference/rgss_event_commands.md` — every RPG Maker command code Uranium uses,
+- `reference/guides/rgss_event_commands.md` — every RPG Maker command code Uranium uses,
   with an Essentials→Poryscript tag (Direct / Adaptable / NeedsC / Strip) and the
   occurrence count. Plus a list of the distinct script-call signatures seen in
   Script commands (355/655) — the real Phase 4 translation surface (E2).
@@ -203,7 +203,9 @@ def build(out_dir: Path, reference_dir: Path) -> None:
             f"Add them to command_catalog.CATALOG with a tag before proceeding."
         )
 
-    _write_command_reference(reference_dir / "rgss_event_commands.md", code_counts, sig_counts)
+    guides_dir = reference_dir / "guides"
+    guides_dir.mkdir(parents=True, exist_ok=True)
+    _write_command_reference(guides_dir / "rgss_event_commands.md", code_counts, sig_counts)
     _write_switch_var_tables(out_dir / "system.json", reference_dir)
 
 

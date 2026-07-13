@@ -1,7 +1,7 @@
 # Grill session: the missing spine (2026-07-02)
 
 **What this is:** decision record from the grill-me session on critique target #1
-(`reference/critique_2026-07-01.md`): the deterministic transpiler + fork capability
+(`reference/findings/critique_2026-07-01.md`): the deterministic transpiler + fork capability
 index — "next tasks #1/#2 since 2026-06-18, zero code." Ten decisions, resolved in
 dependency order. Slice command-census evidence in the appendix.
 
@@ -53,7 +53,7 @@ retires to the archive.
 **Hard prerequisite discovered:** the oracle lives only in gitignored
 `output/uranium-build/scripts/` — `prep_bulk_run.py --yes` or a `--clean` destroys
 it. **Archive it (e.g. `reference/archive/oracle_pory/`) before any spine work.**
-(Committing it is consistent with `reference/script_texts.json` already being
+(Committing it is consistent with `reference/uranium_data/script_texts.json` already being
 tracked.)
 
 **D7 — 209 policy for v1 = deterministic tier, not stub-all.** Emit

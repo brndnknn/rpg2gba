@@ -27,7 +27,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 def _build(uranium_data: Path, reference_dir: Path) -> tuple[list, moves._MoveResolver]:
     parsed = moves.parse(uranium_data / "moves.dat")
     moves.attach_internal_names(
-        parsed, moves._load_id_json(reference_dir / "move_internal_names.json")
+        parsed, moves._load_id_json(reference_dir / "uranium_data" / "move_internal_names.json")
     )
     resolver = moves._build_resolver(IdMap(), reference_dir)
     for m in parsed:
@@ -100,7 +100,7 @@ def test_edge_nuclear_move_needs_engine(
         pytest.skip("RPG2GBA_POKEEMERALD not set; can't validate needs_engine")
     parsed = moves.parse(uranium_data / "moves.dat")
     moves.attach_internal_names(
-        parsed, moves._load_id_json(reference_dir / "move_internal_names.json")
+        parsed, moves._load_id_json(reference_dir / "uranium_data" / "move_internal_names.json")
     )
     id_map = IdMap()
     resolver = moves._build_resolver(id_map, reference_dir)

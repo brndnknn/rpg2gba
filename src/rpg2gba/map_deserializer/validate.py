@@ -5,7 +5,7 @@ parse→emit→re-parse round-trip is impossible here. Fidelity is guarded inste
 by two cheap, strong invariants:
 
 1. **Conservation** — total maps/events/pages must equal the Phase 0 inventory
-   oracle (`reference/map_inventory.md`). A dropped event or page shows up here,
+   oracle (`reference/recon/map_inventory.md`). A dropped event or page shows up here,
    not as a soft-lock five phases later.
 2. **Schema conformance** — every container has the keys the Phase 4 contract
    (PHASE3_PLAN §E1) promises.
@@ -21,7 +21,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Inventory oracle — source: reference/map_inventory.md (Phase 0, scripts/recon_maps.rb).
+# Inventory oracle — source: reference/recon/map_inventory.md (Phase 0, scripts/recon_maps.rb).
 # If recon_maps.rb is re-run and these change, update both this constant and the
 # inventory doc (PHASE3_PLAN P3).
 ORACLE = {"maps": 199, "events": 5301, "pages": 8429}
@@ -93,7 +93,7 @@ def validate_output(out_dir: Path, *, oracle: bool = True) -> dict[str, int]:
     if oracle and totals != ORACLE:
         raise ValidationError(
             f"conservation mismatch: got {totals}, expected {ORACLE} "
-            f"(reference/map_inventory.md)"
+            f"(reference/recon/map_inventory.md)"
         )
 
     logger.info(

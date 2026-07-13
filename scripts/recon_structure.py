@@ -9,7 +9,7 @@ from collections import defaultdict
 from pathlib import Path
 
 URANIUM_SRC = Path(os.environ["RPG2GBA_URANIUM_SRC"])
-OUT = Path("reference/uranium_structure.md")
+OUT = Path("reference/recon/uranium_structure.md")
 SKIP = {".git", "__MACOSX", ".DS_Store"}
 
 

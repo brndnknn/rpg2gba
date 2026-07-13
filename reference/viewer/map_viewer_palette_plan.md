@@ -19,7 +19,7 @@ into GBA 16-color sub-palettes). The user wants, per tile:
 
 Plus a true **post-quant canvas layer** so the whole map can be viewed in real quantized
 colors (the `post-quant` toolbar option is currently stubbed but unimplemented; spec
-`reference/map_inspector_spec.md` §9 A3 anticipates this "palette-bug hunt" panel).
+`reference/viewer/map_inspector_spec.md` §9 A3 anticipates this "palette-bug hunt" panel).
 
 This serves the §9 per-slice boot/art gate and the standing "validate graphics by eye"
 norm — averaged shift metrics hide exactly the per-region color wrecks this view exposes.
@@ -95,7 +95,7 @@ Front-end `post-quant` base layer composites `post_bottom` + `post_top`.
 | `scripts/map_viewer_common.py` | backend plumbing (`_ensure_loaded`, `build_map_data`, `render_metatile_png` post layers) **and** the embedded HTML/JS UI | Task C |
 | `scripts/build_map_viewer.py` | render + inline post-quant metatile PNGs | Task D |
 | `scripts/map_viewer_server.py` | serve `post_bottom`/`post_top` via `/api/metatile` | Task D |
-| `reference/map_inspector_spec.md` | document the new panel + layer | Lead/Haiku |
+| `reference/viewer/map_inspector_spec.md` | document the new panel + layer | Lead/Haiku |
 
 Note: `map_viewer_common.py` holds **both** the Python data layer and the embedded
 HTML/JS template, so it is a single-owner file (Task C does both halves) — front-end and

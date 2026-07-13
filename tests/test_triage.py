@@ -172,7 +172,8 @@ def _write_fixtures(
     (out_dir / "common_events.json").write_text(
         json.dumps(_COMMON_EVENTS), encoding="utf-8"
     )
-    (ref_dir / "uranium_script_calls.md").write_text(
+    (ref_dir / "recon").mkdir(exist_ok=True)
+    (ref_dir / "recon" / "uranium_script_calls.md").write_text(
         _SCRIPT_CALLS_MD, encoding="utf-8"
     )
     if include_strip:
@@ -642,7 +643,8 @@ def test_malformed_jsonl_skipped(tmp_path: Path) -> None:
     (out_dir / "common_events.json").write_text(
         json.dumps(_COMMON_EVENTS), encoding="utf-8"
     )
-    (ref_dir / "uranium_script_calls.md").write_text(
+    (ref_dir / "recon").mkdir(exist_ok=True)
+    (ref_dir / "recon" / "uranium_script_calls.md").write_text(
         _SCRIPT_CALLS_MD, encoding="utf-8"
     )
 

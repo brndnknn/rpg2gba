@@ -9,7 +9,7 @@ Uranium has 20 types (Nuclear at index 18). This is a standalone dump — it is
 **not** a pipeline converter (no `run`; `types` is absent from
 `pipeline.module_order`) and touches no constant namespace. Per D7 the actual
 `gTypeEffectiveness[]` C emission is Phase 6; Phase 2 only snapshots the matrix
-to `reference/types_dump.json` to unblock that planning.
+to `reference/uranium_data/types_dump.json` to unblock that planning.
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def dump_types(uranium_src: Path, out_path: Path) -> None:
     if count * count != len(typechart):
         raise ValueError(f"types.dat: typechart length {len(typechart)} is not a perfect square")
 
-    names_by_id = _load_id_json(ref / "type_internal_names.json")
+    names_by_id = _load_id_json(ref / "uranium_data" / "type_internal_names.json")
     if len(names_by_id) != count:
         raise ValueError(
             f"types.dat: {count} types in matrix but "
@@ -95,4 +95,7 @@ if __name__ == "__main__":  # pragma: no cover
 
     _load_dotenv()
     logging.basicConfig(level=logging.INFO)
-    dump_types(Path(os.environ["RPG2GBA_URANIUM_SRC"]), _reference_dir() / "types_dump.json")
+    dump_types(
+        Path(os.environ["RPG2GBA_URANIUM_SRC"]),
+        _reference_dir() / "uranium_data" / "types_dump.json",
+    )

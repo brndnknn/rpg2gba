@@ -203,12 +203,12 @@ Build a complete inventory of what you're actually converting before writing any
 **0.1 Acquire and unpack Uranium**
 - Download the distributed game (`Pokemon_Uranium_1.3.2.zip`) and extract the zip
 - Run `scripts/extract_rgssad.py` on `Uranium.rgssad` to unpack `Data/` (maps + `.rxdata` + compiled `.dat` files); the unpacked tree lives outside the rpg2gba repo, referenced by `RPG2GBA_URANIUM_SRC`
-- Document directory layout in `reference/uranium_structure.md`
-- Note the Essentials version it's built on (Uranium is **v17** — see `reference/uranium_essentials_version.md`); this matters because the PBS format changed between versions
+- Document directory layout in `reference/recon/uranium_structure.md`
+- Note the Essentials version it's built on (Uranium is **v17** — see `reference/recon/uranium_essentials_version.md`); this matters because the PBS format changed between versions
 
 **0.2 Compiled `.dat` inventory** *(was: PBS file inventory)*
 - The distribution ships only Essentials' compiled `.dat` files, not human-readable `PBS/*.txt`
-- List every `.dat` file, identify what PBS concept it corresponds to (`reference/uranium_dat_inventory.md`)
+- List every `.dat` file, identify what PBS concept it corresponds to (`reference/recon/uranium_dat_inventory.md`)
 - Flag Uranium-specific files (`shadowmoves.dat`, `regionals.dat`, `tmpbs.dat`, etc.)
 - Identify which `.dat` holds the species table (notably absent from a `pokemon.dat`-named file) — this is a spike task before Phase 2 can start
 
@@ -225,7 +225,7 @@ Build a complete inventory of what you're actually converting before writing any
   - Online features: GTS, online battles, virtual trainers, mystery gift — **all to be stripped**, not converted
   - Pokémon speech translation flavor system — likely cosmetic, can be reduced to plain dialogue
   - Custom abilities tied to Nuclear-type Pokémon
-- Write each item up in `reference/uranium_custom_features.md` with an explicit decision: **Convert / Adapt / Strip**
+- Write each item up in `reference/recon/uranium_custom_features.md` with an explicit decision: **Convert / Adapt / Strip**
 
 **0.5 Asset inventory**
 - Total sprite count, audio file count, tileset count
@@ -305,7 +305,7 @@ PBS conversion is **Ruby + Python, occasionally LLM**. Uranium's distribution sh
 
 Before any per-record converter is written, do a deserialization spike:
 1. Add `scripts/dump_dat.rb` that loads each `.dat` with class stubs and prints its top-level Ruby class name and shape
-2. Confirm which `.dat` holds the species table (it's not named `pokemon.dat` in Uranium's distribution; see `reference/uranium_dat_inventory.md`)
+2. Confirm which `.dat` holds the species table (it's not named `pokemon.dat` in Uranium's distribution; see `reference/recon/uranium_dat_inventory.md`)
 3. Manually verify one entry round-trips correctly (e.g., load `moves.dat`, find Pound, confirm power=40)
 
 Without this spike, none of the per-record converters can be written.
@@ -389,7 +389,7 @@ Convert all `.rxdata` files into a structured, human-readable JSON format that d
 
 **3.2 Command code reference**
 - RPG Maker stores event commands as numbered codes (101 = show text, 111 = conditional branch, etc.)
-- Build a complete reference table at `reference/rgss_event_commands.md` with every code Uranium uses
+- Build a complete reference table at `reference/guides/rgss_event_commands.md` with every code Uranium uses
 - Tag each as: **Direct Poryscript equivalent / Adaptable / Needs C / Strip**
 
 **3.3 Switches and variables dump**
@@ -492,7 +492,7 @@ constant doesn't resolve (catches invented symbols before `make modern`), and a
 **reverse gate** forbids queuing anything "needs custom C" without a fork-search
 entry proving no native analog exists (catches over-queuing — e.g. `HealPlayerParty`
 was a defined special the whole time). Native-analog ledger:
-`reference/essentials_to_emerald_map.md`.
+`reference/guides/essentials_to_emerald_map.md`.
 
 ### Architecture
 
@@ -696,7 +696,7 @@ Bring all converted artifacts into the fork, build a complete ROM, and get it lo
 
 **7.4 Save file format check**
 - Make sure the save format change (new species, new flags) doesn't conflict with the expansion's save migration logic
-- **Flag-space expansion (the flag budget) — DONE EARLY (2026-07-10, audit F1/F2 fix).** The fork's saved flag/var ranges are expanded behind the `RPG2GBA_EXPAND_EVENT_RANGES` config gate and the assembler passes the engine's `RPG2GBA_*_START` constants (plus parsed capacities, fail-loud) to `flag_registry.dump_header`. See `reference/engine_extension_surface.md` §2 and `reference/flag_registry_policy.md` → "The flag budget". Remaining Phase 7 check: confirm capacities still fit if later slices out-mint the 2026-07-10 census.
+- **Flag-space expansion (the flag budget) — DONE EARLY (2026-07-10, audit F1/F2 fix).** The fork's saved flag/var ranges are expanded behind the `RPG2GBA_EXPAND_EVENT_RANGES` config gate and the assembler passes the engine's `RPG2GBA_*_START` constants (plus parsed capacities, fail-loud) to `flag_registry.dump_header`. See `reference/guides/engine_extension_surface.md` §2 and `reference/guides/flag_registry_policy.md` → "The flag budget". Remaining Phase 7 check: confirm capacities still fit if later slices out-mint the 2026-07-10 census.
 
 **7.5 First ROM boot**
 - Open in Delta

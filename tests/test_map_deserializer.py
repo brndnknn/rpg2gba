@@ -71,7 +71,7 @@ def test_command_coverage(deserialized: Path, tmp_path: Path) -> None:
     ref = tmp_path / "reference"
     ref.mkdir()
     command_catalog.build(deserialized, ref)  # raises on any uncataloged code
-    assert (ref / "rgss_event_commands.md").is_file()
+    assert (ref / "guides" / "rgss_event_commands.md").is_file()
     switches = json.loads((ref / "uranium_switches.json").read_text(encoding="utf-8"))
     variables = json.loads((ref / "uranium_variables.json").read_text(encoding="utf-8"))
     # Known named seeds from System.rxdata (sanity that the dump is populated).

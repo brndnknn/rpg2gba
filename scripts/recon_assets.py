@@ -12,7 +12,7 @@ from collections import defaultdict
 from pathlib import Path
 
 URANIUM_SRC = Path(os.environ["RPG2GBA_URANIUM_SRC"])
-OUT = Path("reference/asset_inventory.md")
+OUT = Path("reference/recon/asset_inventory.md")
 
 DIRS = [
     ("Graphics/Battlers",    "Battle sprites (front/back)"),

@@ -90,7 +90,7 @@ def _build_resolver(id_map: IdMap, ref: Path) -> _Resolver:
     )
     return _Resolver(
         id_map=id_map,
-        species_internal=_load_id_json(ref / "species_internal_names.json"),
+        species_internal=_load_id_json(ref / "uranium_data" / "species_internal_names.json"),
         fork_species=fork_species,
     )
 

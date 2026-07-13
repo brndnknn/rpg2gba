@@ -110,7 +110,7 @@ def main() -> int:
         return 0
 
     total = len(queue)
-    qr = pipeline.REFERENCE_DIR / "human_quickref.md"
+    qr = pipeline.REFERENCE_DIR / "guides" / "human_quickref.md"
     print(f"{total} easy events in your lane (easiest first).")
     print("opus = punt   quit = stop   ? = refs")
     print(f"2nd-tab cheat: {qr}\n")

@@ -6,7 +6,7 @@ Objective
     Drive the existing, viewer-proven converters (graphics / layout / map
     constants / warp wiring) over an arbitrary batch of Uranium maps and assemble
     them into the vendored engine as a **warps-only** Map Walker corpus
-    (`reference/map_walker_plan.md` §5). No Poryscript / event / NPC conversion —
+    (`reference/viewer/map_walker_plan.md` §5). No Poryscript / event / NPC conversion —
     only warp_events survive (§5.3), so the whole Phase-4 script pipeline is
     skipped.
 

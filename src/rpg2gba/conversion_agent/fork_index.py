@@ -76,7 +76,7 @@ _ENUM_BLOCK_RE = re.compile(r"\benum\b[^{;]*\{([^{}]*)\}", re.DOTALL)
 _ENUM_MEMBER_RE = re.compile(r"^\s*([A-Za-z_]\w*)")
 
 # ---------------------------------------------------------------------------
-# Poryscript builtin/keyword surface (reference/poryscript_cheatsheet.md).
+# Poryscript builtin/keyword surface (reference/guides/poryscript_cheatsheet.md).
 # Names that are both builtins and macros is fine — set union at check time.
 # ---------------------------------------------------------------------------
 

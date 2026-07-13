@@ -212,5 +212,5 @@ would cut the quantize time as a side effect.
 - Layering / column collapse: `src/rpg2gba/tileset_converter/graphics/build_slice_tilesets.py`,
   `src/rpg2gba/tileset_converter/layout.py`
 - Viewer: `scripts/map_viewer_common.py`, `scripts/map_viewer_server.py`
-- Design notes: `reference/graphics_conversion_notes.md`
+- Design notes: `reference/guides/graphics_conversion_notes.md`
 - Production per-map packing: `src/rpg2gba/tileset_converter/phase5.py` (`convert_all`)

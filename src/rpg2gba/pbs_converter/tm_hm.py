@@ -21,7 +21,7 @@ fork's `all_learnables.json` before the generator runs.
 `MOVE_*` constants are minted through the shared `to_constant` rule + IdMap, so
 they match the ones §2.2 emitted (idempotent — `IdMap.add` fails loud on a
 conflict). Species keys are the bare internal names (the all_learnables key
-form), from `reference/species_internal_names.json`.
+form), from `reference/uranium_data/species_internal_names.json`.
 """
 from __future__ import annotations
 
@@ -109,9 +109,9 @@ def _build_resolver(id_map: IdMap, ref: Path) -> _Resolver:
     )
     return _Resolver(
         id_map=id_map,
-        move_internal=_load_id_json(ref / "move_internal_names.json"),
-        move_names=_load_id_json(ref / "move_names.json"),
-        species_internal=_load_id_json(ref / "species_internal_names.json"),
+        move_internal=_load_id_json(ref / "uranium_data" / "move_internal_names.json"),
+        move_names=_load_id_json(ref / "uranium_data" / "move_names.json"),
+        species_internal=_load_id_json(ref / "uranium_data" / "species_internal_names.json"),
         fork_moves=fork_moves,
     )
 

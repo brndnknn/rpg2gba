@@ -78,7 +78,7 @@ class HumanBackend(ConversionBackend):
         output_fn: Callable[[str], None] | None = None,
     ) -> None:
         self.system_prompt = system_prompt
-        # Compact, lane-only reference (reference/human_quickref.md) shown by `?` — NOT
+        # Compact, lane-only reference (reference/guides/human_quickref.md) shown by `?` — NOT
         # the giant system prompt. Searchable inline via `?term`.
         self.quickref = quickref
         # Injectable I/O so tests drive the loop with a scripted input iterator and

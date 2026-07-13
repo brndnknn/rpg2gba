@@ -328,7 +328,7 @@ def attach_internal_names(species: list[Species | None], names_by_id: dict[int, 
 # ===========================================================================
 # C emit  (§2.1)
 #
-# Target shapes are documented in reference/pokeemerald_struct_shapes.md (P4).
+# Target shapes are documented in reference/guides/pokeemerald_struct_shapes.md (P4).
 # The expansion consumes `gSpeciesInfo[]` via designated initializers, so we
 # emit only the fields Uranium carries; everything else takes its struct
 # default. Move/ability/item constants are resolved through `_naming.to_constant`
@@ -500,17 +500,17 @@ def _build_resolver(id_map: IdMap, ref: Path) -> _Resolver:
 
     return _Resolver(
         id_map=id_map,
-        species_internal=_load_id_json(ref / "species_internal_names.json"),
-        species_names=_load_id_json(ref / "species_names.json"),
-        species_kinds=_load_id_json(ref / "species_kinds.json"),
-        species_pokedex=_load_id_json(ref / "species_pokedex.json"),
-        move_internal=_load_id_json(ref / "move_internal_names.json"),
-        move_names=_load_id_json(ref / "move_names.json"),
-        ability_internal=_load_id_json(ref / "ability_internal_names.json"),
-        ability_names=_load_id_json(ref / "ability_names.json"),
-        item_internal=_load_id_json(ref / "item_internal_names.json"),
-        item_names=_load_id_json(ref / "item_names.json"),
-        type_internal=_load_id_json(ref / "type_internal_names.json"),
+        species_internal=_load_id_json(ref / "uranium_data" / "species_internal_names.json"),
+        species_names=_load_id_json(ref / "uranium_data" / "species_names.json"),
+        species_kinds=_load_id_json(ref / "uranium_data" / "species_kinds.json"),
+        species_pokedex=_load_id_json(ref / "uranium_data" / "species_pokedex.json"),
+        move_internal=_load_id_json(ref / "uranium_data" / "move_internal_names.json"),
+        move_names=_load_id_json(ref / "uranium_data" / "move_names.json"),
+        ability_internal=_load_id_json(ref / "uranium_data" / "ability_internal_names.json"),
+        ability_names=_load_id_json(ref / "uranium_data" / "ability_names.json"),
+        item_internal=_load_id_json(ref / "uranium_data" / "item_internal_names.json"),
+        item_names=_load_id_json(ref / "uranium_data" / "item_names.json"),
+        type_internal=_load_id_json(ref / "uranium_data" / "type_internal_names.json"),
         fork_species=fork_set("include/constants/species.h", "SPECIES"),
         fork_moves=fork_set("include/constants/moves.h", "MOVE"),
         fork_abilities=fork_set("include/constants/abilities.h", "ABILITY"),
@@ -756,7 +756,9 @@ def run(uranium_src: Path, out_dir: Path, id_map: IdMap) -> None:
     )
 
     ref = _reference_dir()
-    attach_internal_names(species, _load_id_json(ref / "species_internal_names.json"))
+    attach_internal_names(
+        species, _load_id_json(ref / "uranium_data" / "species_internal_names.json")
+    )
     r = _build_resolver(id_map, ref)
 
     # Pre-mint every species constant so cross-references (evolution targets,

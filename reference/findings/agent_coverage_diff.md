@@ -14,11 +14,11 @@
 
 | Source | Role | Loaded by |
 |---|---|---|
-| `reference/rgss_event_commands.md` | 59-code table **+** a 250-row script-call signature *inventory* (names + counts, no disposition) | `load_command_reference` (codes sliced per-event) |
-| `reference/uranium_script_calls.md` | ~54-row script-call **disposition** table (MAP/STRIP/UNHANDLED) | `load_script_call_reference` (frozen system prompt) |
+| `reference/guides/rgss_event_commands.md` | 59-code table **+** a 250-row script-call signature *inventory* (names + counts, no disposition) | `load_command_reference` (codes sliced per-event) |
+| `reference/recon/uranium_script_calls.md` | ~54-row script-call **disposition** table (MAP/STRIP/UNHANDLED) | `load_script_call_reference` (frozen system prompt) |
 | `prompts/system.md` | instruction set; names `pbTrainerBattle` + the `onEvent?` trigger idiom | `load_system_prompt` |
 | `prompts/few_shot/*.md` | 5 worked examples (incl. `trainer_battle_and_unhandled.md`) | `load_few_shots` |
-| `reference/poryscript_cheatsheet.md` | target-language cheatsheet | `load_cheatsheet` |
+| `reference/guides/poryscript_cheatsheet.md` | target-language cheatsheet | `load_cheatsheet` |
 
 ## Command codes — exact match
 
@@ -119,7 +119,7 @@ python3 scripts/count_unique_commands.py
 # code-table parity
 python3 - <<'PY'
 import re; from pathlib import Path
-codes={int(m.group(1)) for ln in Path("reference/rgss_event_commands.md").read_text().splitlines()
+codes={int(m.group(1)) for ln in Path("reference/guides/rgss_event_commands.md").read_text().splitlines()
        if (m:=re.match(r"^\|\s*(\d+)\s*\|",ln))}
 print(len(codes), sorted(codes))
 PY

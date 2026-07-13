@@ -27,7 +27,7 @@ pokeemerald-expansion fork (`engine/`) needs to compile them as object events:
      RGB values).
   3. **Seven gitignored `.gen.h` fragments** under `engine/`, textually spliced
      into the committed sentinel hooks a prior session wired up (see
-     `reference/task4_npc_gfx_notes.md` "BUILD STATUS checkpoint" and the hook
+     `reference/findings/task4_npc_gfx_notes.md` "BUILD STATUS checkpoint" and the hook
      comments in each target file). Every fork symbol/macro shape used below
      was verified against the vendored fork on disk (CLAUDE.md §4.7); see the
      per-section comments for citations.

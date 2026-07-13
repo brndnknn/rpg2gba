@@ -17,9 +17,9 @@ Source (under `$RPG2GBA_URANIUM_SRC/Data/`):
     uint8  dummy           legacy contest slot, always 0
 
 Display names/descriptions are NOT in `moves.dat` — they come from the
-`messages.dat` sidecars (`reference/move_names.json`,
-`reference/move_descriptions.json`). Internal names (the id_map key) come from
-`reference/move_internal_names.json` (dumped from the `PBMoves` script section).
+`messages.dat` sidecars (`reference/uranium_data/move_names.json`,
+`reference/uranium_data/move_descriptions.json`). Internal names (the id_map key) come from
+`reference/uranium_data/move_internal_names.json` (dumped from the `PBMoves` script section).
 
 Move *effects* are deliberately NOT mapped here. Essentials function codes
 (324 distinct, range 0..361) have no formula to the fork's
@@ -236,10 +236,10 @@ def _build_resolver(id_map: IdMap, ref: Path) -> _MoveResolver:
     )
     return _MoveResolver(
         id_map=id_map,
-        move_internal=_load_id_json(ref / "move_internal_names.json"),
-        move_names=_load_id_json(ref / "move_names.json"),
-        move_descs=_load_id_json(ref / "move_descriptions.json"),
-        type_internal=_load_id_json(ref / "type_internal_names.json"),
+        move_internal=_load_id_json(ref / "uranium_data" / "move_internal_names.json"),
+        move_names=_load_id_json(ref / "uranium_data" / "move_names.json"),
+        move_descs=_load_id_json(ref / "uranium_data" / "move_descriptions.json"),
+        type_internal=_load_id_json(ref / "uranium_data" / "type_internal_names.json"),
         fork_moves=fork_moves,
     )
 
@@ -333,7 +333,7 @@ def run(uranium_src: Path, out_dir: Path, id_map: IdMap) -> None:
     """Phase 2 §2.2 entry point: parse moves and emit C tables + worklist."""
     moves = parse(uranium_src / "Data" / "moves.dat")
     ref = _reference_dir()
-    attach_internal_names(moves, _load_id_json(ref / "move_internal_names.json"))
+    attach_internal_names(moves, _load_id_json(ref / "uranium_data" / "move_internal_names.json"))
     r = _build_resolver(id_map, ref)
 
     # Pre-mint every move constant so the worklist and learnset cross-refs agree,

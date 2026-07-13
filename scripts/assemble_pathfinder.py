@@ -68,7 +68,7 @@ WARP_OVERRIDES: dict[int, set[tuple[int, int]]] = {
 # #included from data/event_scripts.s (after constants/flags.h / vars.h) — no
 # numeric literals here anymore (audit findings F1/F2 fix; the old hardcoded
 # bases were out-of-bounds writes / aliased live vanilla vars — see
-# reference/engine_extension_surface.md §2).
+# reference/guides/engine_extension_surface.md §2).
 FLAG_BASE = "RPG2GBA_GLOBAL_FLAGS_START"
 SELFSWITCH_BASE = "RPG2GBA_SELFSWITCH_FLAGS_START"
 VAR_BASE = "RPG2GBA_VARS_START"
@@ -418,14 +418,14 @@ def _load_rpg2gba_capacities(fork: Path) -> dict[str, int]:
     header, gate compiled out, or a missing count #define) — emitting
     uranium_flags.h against an unexpanded engine would reintroduce the
     out-of-bounds-write bug the expansion fixed (audit findings F1/F2; see
-    reference/engine_extension_surface.md §2).
+    reference/guides/engine_extension_surface.md §2).
     """
     header = fork / "include" / "config" / "rpg2gba.h"
     if not header.is_file():
         raise RuntimeError(
             f"{header} not found — this fork lacks the RPG2GBA event-range "
             "expansion, so uranium_flags.h cannot be emitted safely (see "
-            "reference/engine_extension_surface.md §2)."
+            "reference/guides/engine_extension_surface.md §2)."
         )
     text = header.read_text(encoding="utf-8")
 
@@ -435,7 +435,7 @@ def _load_rpg2gba_capacities(fork: Path) -> dict[str, int]:
             f"{header}: RPG2GBA_EXPAND_EVENT_RANGES is not TRUE — the event-range "
             "expansion is compiled out, so emitting uranium_flags.h would "
             "reintroduce the out-of-bounds-write bug it fixed (see "
-            "reference/engine_extension_surface.md §2)."
+            "reference/guides/engine_extension_surface.md §2)."
         )
 
     capacities: dict[str, int] = {}

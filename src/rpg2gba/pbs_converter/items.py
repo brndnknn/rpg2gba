@@ -23,10 +23,11 @@ Source (under `$RPG2GBA_URANIUM_SRC/Data/`):
     8 ITEMMACHINE   int     (move id for a TM/HM, else 0)
 
 Display name/description come from the `messages.dat` sidecars
-(`reference/item_names.json`, `reference/item_descriptions.json`), which have
+(`reference/uranium_data/item_names.json`,
+`reference/uranium_data/item_descriptions.json`), which have
 the mojibake already fixed; the dat's embedded strings are raw UTF-8 bytes we
 read past but never decode. Internal names (the id_map key + `ITEM_*` mint
-source) come from `reference/item_internal_names.json` (the `PBItems` script
+source) come from `reference/uranium_data/item_internal_names.json` (the `PBItems` script
 section).
 
 Item *behavior* (field use / battle use / hold effect / TM linkage) is NOT
@@ -228,9 +229,9 @@ def _build_resolver(id_map: IdMap, ref: Path) -> _ItemResolver:
     )
     return _ItemResolver(
         id_map=id_map,
-        item_internal=_load_id_json(ref / "item_internal_names.json"),
-        item_names=_load_id_json(ref / "item_names.json"),
-        item_descs=_load_id_json(ref / "item_descriptions.json"),
+        item_internal=_load_id_json(ref / "uranium_data" / "item_internal_names.json"),
+        item_names=_load_id_json(ref / "uranium_data" / "item_names.json"),
+        item_descs=_load_id_json(ref / "uranium_data" / "item_descriptions.json"),
         fork_items=fork_items,
     )
 
@@ -292,7 +293,7 @@ def run(uranium_src: Path, out_dir: Path, id_map: IdMap) -> None:
     """Phase 2 §2.3 entry point: parse items and emit C table + worklist."""
     items = parse(uranium_src / "Data" / "items.dat")
     ref = _reference_dir()
-    attach_internal_names(items, _load_id_json(ref / "item_internal_names.json"))
+    attach_internal_names(items, _load_id_json(ref / "uranium_data" / "item_internal_names.json"))
     r = _build_resolver(id_map, ref)
 
     inc = out_dir / "include" / "constants"

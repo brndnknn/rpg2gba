@@ -25,7 +25,7 @@ reinvention) and a handful of genuine improvement targets:
 
 | # | Severity | Finding |
 |---|---|---|
-| F1 | **CRITICAL** | **FIXED 2026-07-10** (user chose "grow engine ranges"): `RPG2GBA_EXPAND_EVENT_RANGES` config gate — see `reference/engine_extension_surface.md` §2. Original finding: flag/self-switch registry bases **write out of bounds of `flags[]` into `vars[]`** (save-block corruption), and minted `VAR_*` bases **collide with live vanilla vars** (Battle Frontier/Scott/roamer). Verified by lead. §F1 below. |
+| F1 | **CRITICAL** | **FIXED 2026-07-10** (user chose "grow engine ranges"): `RPG2GBA_EXPAND_EVENT_RANGES` config gate — see `reference/guides/engine_extension_surface.md` §2. Original finding: flag/self-switch registry bases **write out of bounds of `flags[]` into `vars[]`** (save-block corruption), and minted `VAR_*` bases **collide with live vanilla vars** (Battle Frontier/Scott/roamer). Verified by lead. §F1 below. |
 | F2 | MEDIUM | **FIXED 2026-07-10** with F1: temp-switch mints moved to the dedicated `RPG2GBA_TEMP_FLAGS_*` region, cleared on map transition by `ClearTempFieldEventData`; rock-obstacle range `FLAG_TEMP_11..1F` no longer shared. Original finding: temp-switch flags 0x20–0x32 leak past the temp-clear range (become silently persistent) and shadow vanilla `FLAG_UNUSED_0x020+`; also, rock-respawn flags (`FLAG_TEMP_11..1F`) and temp-switch mints (base 0x14+) **share the same range** — any map with >3 smashable rocks collides. §F2. |
 | F3 | MEDIUM | YES/NO choice emission is a two-step (`msgbox` + bare `yesnobox(0,0)`) instead of the native `msgbox(text, MSGBOX_YESNO)` idiom — behaviorally different (extra forced button press, wrong box position). §A2. |
 | F4 | LOW | Sign idiom knowingly skips `MSGBOX_SIGN`'s `FLAG_SAFE_FOLLOWER_MOVEMENT` handling — fine now (no followers in slice), documented so it isn't rediscovered later. §A3. |
@@ -71,7 +71,7 @@ TEMPSWITCH_BASE = 0x0014  # temp flags
 
 3. See F2 for the temp-switch range.
 
-**Status/known-ness:** `reference/flag_registry_policy.md` already says Phase 7 must grow
+**Status/known-ness:** `reference/guides/flag_registry_policy.md` already says Phase 7 must grow
 `FLAGS_COUNT` before final assignment — but these placeholder bases are **live in the booted
 slice ROM right now**, not a someday problem. Fork headers are still pristine (no expansion has
 happened).
@@ -271,7 +271,7 @@ no parallel format was invented.
 | C6 | Truck-cutscene suppression (`overworld.c CB2_NewGame`) | JUSTIFIED-CUSTOM — hardcoded upstream, no toggle; `gFieldCallback` timing constraint documented |
 | C7/C10 | Walker: NPC spawn + on-warp-script suppression | JUSTIFIED-CUSTOM with a near-miss: native `RemoveAllObjectEventsExceptPlayer` (`event_object_movement.c:1722`, dead code — zero callers) covers only the one-shot half; it cannot stop `TrySpawnObjectEvents`' continuous scroll-spawn path, which is why the gate exists |
 | C8/C9 | Walker: field-input takeover + step-script suppression | JUSTIFIED-CUSTOM — `DEBUG_OVERWORLD_MENU` gate is the only precedent and only intercepts one combo |
-| C11 | Walker: bounds-clamp collision | JUSTIFIED-CUSTOM, near-miss worth knowing: native `OW_FLAG_NO_COLLISION` (`config/overworld.h:122`) is a real noclip flag but has **no map-bounds clamp** — walking off-grid would read garbage; our version is that flag plus a clamp (gap was known at design time, `reference/map_walker_plan.md` §4.4) |
+| C11 | Walker: bounds-clamp collision | JUSTIFIED-CUSTOM, near-miss worth knowing: native `OW_FLAG_NO_COLLISION` (`config/overworld.h:122`) is a real noclip flag but has **no map-bounds clamp** — walking off-grid would read garbage; our version is that flag plus a clamp (gap was known at design time, `reference/viewer/map_walker_plan.md` §4.4) |
 | C12 | Walker: raw display (DNS off) | REUSES-NATIVE — just wires the existing `OW_ENABLE_DNS` config under our build flag |
 | C13a | Walker: invisible anchor boot | JUSTIFIED composition of native primitives (`SetPlayerInvisibility`, `SetUpFieldTasks`, `UnlockPlayerFieldControls` are all stock calls) |
 | C13b | Walker: cursor sprite | JUSTIFIED-CUSTOM — mirrors `region_map.c`'s cursor *pattern*; that code lives in a different renderer and can't be reused |

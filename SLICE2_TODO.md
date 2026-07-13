@@ -66,7 +66,7 @@ benign warnings for 840/841/842.
   (`SLICE1_TODO.md` #10).
 - **Moki Town E ↔ Route 03 seam** — `connections.dat` seams unconverted; slice
   1 only verifies the east edge fails cleanly (`SLICE1_TODO.md` #9;
-  `reference/walker_checkpoint2_findings.md`).
+  `reference/viewer/walker_checkpoint2_findings.md`).
 
 ## Done
 

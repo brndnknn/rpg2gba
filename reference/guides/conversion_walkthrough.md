@@ -145,12 +145,12 @@ Key facts about this format that drive the whole design:
 
 - **Commands are numeric codes.** `101` = show text, `123` = control self-switch,
   `201` = transfer player, `355` = a *Script* call, `0` = end of list. The full
-  table is `reference/rgss_event_commands.md` (59 codes Uranium actually uses).
+  table is `reference/guides/rgss_event_commands.md` (59 codes Uranium actually uses).
 - **Uranium adds no new command *codes*.** Almost all of its custom behaviour
   rides inside code `355` *Script* calls as Ruby strings like
   `pbReceiveItem(:POTION,1)` or `pbCallBub(...)`. So the real translation surface
   is "what do these `pbXxx` calls mean," catalogued in
-  `reference/uranium_script_calls.md` as MAP / STRIP / UNHANDLED.
+  `reference/recon/uranium_script_calls.md` as MAP / STRIP / UNHANDLED.
 - **Self-switches and temp-switches are per-event state, not global flags.**
   Code `123` sets a self-switch (A–D), persistent and local to the event.
   `setTempSwitchOn("A")` (a code-`355` script call) is a *temp*-switch — same
@@ -167,7 +167,7 @@ Here's what each step actually does, with the real code.
 ### Step 0 — Pre-seed / load the flag registry (once per run)
 
 Before any event, the registry is built. It loads hand-authored high-confidence
-mappings (`reference/essentials_to_emerald_map.md`) and the Phase 3 sidecars,
+mappings (`reference/guides/essentials_to_emerald_map.md`) and the Phase 3 sidecars,
 which it uses to (a) carry each switch's human label as context, and (b) detect
 *script-switches* (`s:`-prefixed runtime checks like `s:pbIsWeekday(...)`) that
 must **never** be minted as flags.
@@ -573,9 +573,9 @@ These don't change *what* gets produced — only how cheaply. All three are buil
 | Local backend | `src/rpg2gba/conversion_agent/backends/ollama.py` |
 | Compile gate | `src/rpg2gba/conversion_agent/poryscript.py` |
 | CLI wiring | `src/rpg2gba/pipeline.py` (`phase4`, `convert-map`, `convert-common-events`) |
-| Command-code reference | `reference/rgss_event_commands.md` |
-| Uranium script-call dispositions | `reference/uranium_script_calls.md` |
-| Registry policy (read before touching it) | `reference/flag_registry_policy.md` |
+| Command-code reference | `reference/guides/rgss_event_commands.md` |
+| Uranium script-call dispositions | `reference/recon/uranium_script_calls.md` |
+| Registry policy (read before touching it) | `reference/guides/flag_registry_policy.md` |
 
 ---
 

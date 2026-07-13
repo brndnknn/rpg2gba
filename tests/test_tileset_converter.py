@@ -34,7 +34,7 @@ from rpg2gba.tileset_converter.tile_map import (
 _TODO = "Phase 5: implement this section, then un-skip and flesh out the test"
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_PRESEED = _REPO_ROOT / "reference" / "essentials_to_emerald_map.md"
+_PRESEED = _REPO_ROOT / "reference" / "guides" / "essentials_to_emerald_map.md"
 _SWITCHES = _REPO_ROOT / "reference" / "uranium_switches.json"
 _VARIABLES = _REPO_ROOT / "reference" / "uranium_variables.json"
 

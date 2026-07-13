@@ -12,7 +12,7 @@ Open Questions. Phase 2 extracts it faithfully as a per-species extra-moves
 table and emits `uranium_tmpbs.h` in the egg-move array style (each list
 terminated by `MOVE_UNAVAILABLE`), carrying a TODO banner. `MOVE_*` constants
 resolve through the shared `to_constant`/IdMap rule (idempotent vs §2.2);
-species names key the arrays via `reference/species_internal_names.json`.
+species names key the arrays via `reference/uranium_data/species_internal_names.json`.
 """
 from __future__ import annotations
 
@@ -70,8 +70,8 @@ def _build_resolver(id_map: IdMap, ref: Path) -> _Resolver:
     )
     return _Resolver(
         id_map=id_map,
-        move_internal=_load_id_json(ref / "move_internal_names.json"),
-        move_names=_load_id_json(ref / "move_names.json"),
+        move_internal=_load_id_json(ref / "uranium_data" / "move_internal_names.json"),
+        move_names=_load_id_json(ref / "uranium_data" / "move_names.json"),
         fork_moves=fork_moves,
     )
 
@@ -111,7 +111,7 @@ def run(uranium_src: Path, out_dir: Path, id_map: IdMap) -> None:
     tmpbs = parse_indexed_u16_list(data / "tmpbs.dat", species_count)
 
     ref = _reference_dir()
-    species_internal = _load_id_json(ref / "species_internal_names.json")
+    species_internal = _load_id_json(ref / "uranium_data" / "species_internal_names.json")
     r = _build_resolver(id_map, ref)
 
     out_file = out_dir / "src" / "data" / "pokemon" / "uranium_tmpbs.h"

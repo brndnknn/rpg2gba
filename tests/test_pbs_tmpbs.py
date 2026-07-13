@@ -27,7 +27,9 @@ def _build(uranium_data: Path, reference_dir: Path):
     species = parse_dexdata(uranium_data / "dexdata.dat")
     n = len(species) - 1
     parsed = parse_indexed_u16_list(uranium_data / "tmpbs.dat", n)
-    species_internal = tmpbs._load_id_json(reference_dir / "species_internal_names.json")
+    species_internal = tmpbs._load_id_json(
+        reference_dir / "uranium_data" / "species_internal_names.json"
+    )
     r = tmpbs._build_resolver(IdMap(), reference_dir)
     text = tmpbs.emit_header(parsed, species_internal, r)
     return parsed, species_internal, r, text

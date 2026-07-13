@@ -185,7 +185,7 @@ def _phase4_registry(out_dir: Path, clean: bool, fork_path: Path | None):
         return FlagRegistry.load(state_path, fork_path=fork_path)
     reg = FlagRegistry(fork_path=fork_path)
     reg.pre_seed(
-        REFERENCE_DIR / "essentials_to_emerald_map.md",
+        REFERENCE_DIR / "guides" / "essentials_to_emerald_map.md",
         REFERENCE_DIR / "uranium_switches.json",
         REFERENCE_DIR / "uranium_variables.json",
     )
@@ -229,7 +229,7 @@ def _phase4_backend(name: str, model: str = _DEFAULT_MODEL, usage_log_path: Path
         # NOT this system prompt.
         from rpg2gba.conversion_agent.backends.human import HumanBackend
 
-        qr_path = REFERENCE_DIR / "human_quickref.md"
+        qr_path = REFERENCE_DIR / "guides" / "human_quickref.md"
         quickref = qr_path.read_text(encoding="utf-8") if qr_path.is_file() else ""
         return HumanBackend(system_prompt, quickref=quickref)
     from rpg2gba.conversion_agent.backends.ollama import OllamaBackend

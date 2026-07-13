@@ -243,11 +243,11 @@ def _build_resolver(id_map: IdMap, ref: Path) -> _Resolver:
 
     return _Resolver(
         id_map=id_map,
-        species_internal=_load_id_json(ref / "species_internal_names.json"),
-        move_internal=_load_id_json(ref / "move_internal_names.json"),
-        move_names=_load_id_json(ref / "move_names.json"),
-        item_internal=_load_id_json(ref / "item_internal_names.json"),
-        item_names=_load_id_json(ref / "item_names.json"),
+        species_internal=_load_id_json(ref / "uranium_data" / "species_internal_names.json"),
+        move_internal=_load_id_json(ref / "uranium_data" / "move_internal_names.json"),
+        move_names=_load_id_json(ref / "uranium_data" / "move_names.json"),
+        item_internal=_load_id_json(ref / "uranium_data" / "item_internal_names.json"),
+        item_names=_load_id_json(ref / "uranium_data" / "item_names.json"),
         fork_species=fork_set("include/constants/species.h", "SPECIES"),
         fork_moves=fork_set("include/constants/moves.h", "MOVE"),
         fork_items=fork_set("include/constants/items.h", "ITEM"),

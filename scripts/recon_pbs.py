@@ -13,7 +13,7 @@ from pathlib import Path
 
 URANIUM_SRC = Path(os.environ["RPG2GBA_URANIUM_SRC"])
 PBS_DIR = URANIUM_SRC / "PBS"
-OUT = Path("reference/pbs_inventory.md")
+OUT = Path("reference/recon/pbs_inventory.md")
 
 VANILLA_PBS = {
     "abilities.txt", "encounters.txt", "items.txt", "metadata.txt",

@@ -18,7 +18,7 @@ from rpg2gba.pbs_converter import types_dump
 
 pytestmark = pytest.mark.phase2
 
-# Type indices (reference/type_internal_names.json).
+# Type indices (reference/uranium_data/type_internal_names.json).
 NORMAL, FIGHTING, FLYING, GROUND, GHOST = 0, 1, 2, 4, 7
 FIRE = 10
 

@@ -3,8 +3,8 @@
 Walks every command in all 199 maps + 100 common events (no handled/unhandled
 filtering, no reference-doc trust) and splits the vocabulary into:
 
-  * REAL mappable commands  -> reference/uranium_real_commands.md
-  * excluded non-commands   -> reference/uranium_excluded_noncommands.md
+  * REAL mappable commands  -> reference/recon/uranium_real_commands.md
+  * excluded non-commands   -> reference/recon/uranium_excluded_noncommands.md
 
 A "command" is something the event DOES: a structural RMXP code (minus pure
 scaffolding/continuation) OR a script-call head that is a named engine call.
@@ -24,8 +24,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 MAPS = REPO / "output" / "uranium-build" / "maps"
 COMMON = REPO / "output" / "uranium-build" / "common_events.json"
-OUT_REAL = REPO / "reference" / "uranium_real_commands.md"
-OUT_EXCL = REPO / "reference" / "uranium_excluded_noncommands.md"
+OUT_REAL = REPO / "reference" / "recon" / "uranium_real_commands.md"
+OUT_EXCL = REPO / "reference" / "recon" / "uranium_excluded_noncommands.md"
 
 SCRIPT_CODES = {355, 655}
 CONDITIONAL = 111

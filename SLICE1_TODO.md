@@ -146,7 +146,7 @@ Every building door in Moki Town except the player's house does nothing
   per interior; then decide with the user which interiors are in slice-1
   scope vs deferred to the frontier.
 - **The mechanical process is now documented:**
-  `reference/slice_expansion_runbook.md` (2026-07-13) — map-set touchpoints
+  `reference/guides/slice_expansion_runbook.md` (2026-07-13) — map-set touchpoints
   (incl. the `ALLOWED_MAPS`/`WARP_OVERRIDES` hand-edit hazards), per-map
   prerequisites, command chain, fail-loud table, build warts.
 

@@ -43,7 +43,7 @@ from pathlib import Path
 from rpg2gba.conversion_agent.flag_registry import self_switch_flag_name
 from rpg2gba.pbs_converter._naming import to_constant
 
-# -- RMXP command codes (reference/rgss_event_commands.md) --------------------
+# -- RMXP command codes (reference/guides/rgss_event_commands.md) --------------------
 SHOW_TEXT = 101
 SHOW_TEXT_CONT = 401
 CONDITIONAL_BRANCH = 111
@@ -70,7 +70,7 @@ _DIALOGUE_PLUMBING_CODES = frozenset({WAIT, PLAY_SE})
 ACTION_BUTTON_TRIGGER = 0  # RMXP page trigger: "talk to" (the NPC case)
 
 # STRIP-classified Script (355/655) calls that carry no game state and produce no
-# output (reference/uranium_script_calls.md). Anchored at the start of the call
+# output (reference/recon/uranium_script_calls.md). Anchored at the start of the call
 # string. Extend only with calls verified STRIP in that table.
 # The identifier-terminated calls take a trailing ``\b`` so a prefix can't match
 # (``pbSEPlay`` must not claim ``pbSEPlayWhatever``); the ``need_refresh =``
@@ -147,7 +147,7 @@ class TextTranslation:
 
 
 # -- Extended text-code table for translate_text_codes (transpiler spine) ----
-# Approved 2026-07-05, slice1 idiom review (reference/slice1_queue_readthrough.md
+# Approved 2026-07-05, slice1 idiom review (reference/findings/slice1_queue_readthrough.md
 # "Idiom" bucket, item 1 — 26 slice-1 / 627 corpus occurrences). This table is
 # strictly additive: it is a *superset* of ``_TEXT_SUBS`` (reusing that tuple
 # below so ``\PN`` has exactly one pattern definition), consumed only by
@@ -224,7 +224,7 @@ def translate_text_codes(raw: str) -> TextTranslation | None:
 
     Returns ``None`` when the text still contains a code with no approved
     mapping (caller queues the dialogue). Approved mappings: slice1 idiom
-    review 2026-07-05 (reference/slice1_queue_readthrough.md):
+    review 2026-07-05 (reference/findings/slice1_queue_readthrough.md):
 
     1. A leading ``\\sign[..]`` is stripped and ``sign=True`` is set. A
        ``\\sign`` that is not a leading prefix is an unknown shape -> ``None``.
@@ -965,10 +965,11 @@ def _load_item_symbols(reference_dir: Path) -> dict[str, str]:
     constant the ground-item classifier emits is exactly the one Phase 2 defined.
     Tolerant: a missing/unreadable sidecar yields ``{}``."""
     try:
+        data_dir = reference_dir / "uranium_data"
         internal = json.loads(
-            (reference_dir / "item_internal_names.json").read_text(encoding="utf-8")
+            (data_dir / "item_internal_names.json").read_text(encoding="utf-8")
         )
-        names = json.loads((reference_dir / "item_names.json").read_text(encoding="utf-8"))
+        names = json.loads((data_dir / "item_names.json").read_text(encoding="utf-8"))
     except Exception:
         return {}
     out: dict[str, str] = {}

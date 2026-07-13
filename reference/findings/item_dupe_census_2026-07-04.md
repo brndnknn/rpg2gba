@@ -2,9 +2,9 @@
 
 > Run 2026-07-04 (Sonnet sub-agent under /delegate; alias finding spot-verified by
 > the lead against `git show HEAD:engine/include/constants/items.h`). Resolves the
-> open fidelity question parked in `reference/oracle_harvest_2026-07-02.md` §E.
+> open fidelity question parked in `reference/findings/oracle_harvest_2026-07-02.md` §E.
 
-Method: parsed `reference/item_names.json` + `item_internal_names.json` (607 items,
+Method: parsed `reference/uranium_data/item_names.json` + `item_internal_names.json` (607 items,
 id 0=NONE excluded → 607 nonzero), ran each through the *actual*
 `rpg2gba.pbs_converter._naming.to_constant("ITEM", name)` (imported live, not
 reimplemented), and compared against the fork's `ITEM_*` enum pulled from the
@@ -184,6 +184,6 @@ Uranium originals; flagging here only in case a human spots one I mis-read.
 
 The census script, raw classified JSON, and pulled fork headers lived in the
 session scratchpad (ephemeral, not preserved). Method is fully described above;
-re-derive by re-running `to_constant` over `reference/item_names.json` /
+re-derive by re-running `to_constant` over `reference/uranium_data/item_names.json` /
 `item_internal_names.json` against the pristine engine headers if the full
 103-item originals list is ever needed.

@@ -64,7 +64,7 @@ Per-file disposition after Phase 2 (§2.x). **CONVERTED** = a Phase 2 converter 
 | `trainertypes.dat` | **CONVERTED** | §2.6 → `intermediate/trainer_types.json` |
 | `encounters.dat` | **CONVERTED** | §2.7 → `intermediate/wild_encounters.json` |
 | `metadata.dat` | **CONVERTED** | §2.8 → `metadata.h` + per-map JSON |
-| `types.dat` | **CONVERTED** | §2.10 → `reference/types_dump.json` (C emit DEFER→Phase 6) |
+| `types.dat` | **CONVERTED** | §2.10 → `reference/uranium_data/types_dump.json` (C emit DEFER→Phase 6) |
 | `shadowmoves.dat` | **STRIP** | Empty array; Shadow mechanic dead (0 TPSHADOW in 331 trainers) |
 | `intl_*.dat` (9) | **STRIP** | Localization tables; English-only target |
 | `BackupSave.dat` | **STRIP** | Player save backup, not game data |

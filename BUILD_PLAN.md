@@ -9,7 +9,7 @@ This doc absorbs and supersedes the live content of the former root planning doc
 `OQ3_EMPIRICAL_PLAN`), now archived under `reference/archive/`.
 
 > **Amendments 2026-07-02** (grill session on the spine; full decision record +
-> slice census: `reference/grill_spine_2026-07-02.md`):
+> slice census: `reference/findings/grill_spine_2026-07-02.md`):
 > - **§5 first-cut is overturned:** transpiler v1 does NOT stub all of 209 — it
 >   emits the deterministic tier (raw `MOVEMENT_ACTION_*` + the SOFT-C rules the
 >   slice's own 91 routes need) and queues the rest; anything still stubbed must
@@ -172,7 +172,7 @@ conflated queue into three honest buckets:
 
 The reverse gate is curation, not full automation (knowing `pbBerryPlant` truly has
 no analog is semantic) — but the index makes each search cheap and authoritative.
-Native-analog ledger lives in `reference/essentials_to_emerald_map.md`. **Seed the
+Native-analog ledger lives in `reference/guides/essentials_to_emerald_map.md`. **Seed the
 vocabulary up front** by reading `specials.inc` + `event.inc` in full, so "no native
 equivalent" is a checkable claim — this alone retires a chunk of the standing Phase-6
 queue (most "engine feature" tags ship natively: cave/Flash, bridges, PC, region map,

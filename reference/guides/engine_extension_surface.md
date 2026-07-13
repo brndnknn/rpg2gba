@@ -35,7 +35,7 @@ instead of re-discovering hook locations by trial and error; (c) the fence
 ledger in §4 is a greppable "did every divergence survive?" check — we lost a
 fenced edit silently once (the reflection experiment, see the HISTORICAL row).
 
-Cross-reference: `reference/native_reuse_audit_2026-07-07.md` is the verdict
+Cross-reference: `reference/findings/native_reuse_audit_2026-07-07.md` is the verdict
 analysis (is each divergence justified, is there a native alternative). This
 document does not repeat that reasoning — it's the location/mechanism spec.
 All line numbers below are **as of 2026-07-07 (pin 21c24202)** and will drift;
@@ -142,7 +142,7 @@ map inspector, not normal gameplay. When `TRUE`, gates (all `#if URANIUM_MAP_WAL
 ### `RPG2GBA_EXPAND_EVENT_RANGES` (`include/config/rpg2gba.h`, default `TRUE`)
 
 **Implemented 2026-07-10.** Fixes audit findings F1 and F2
-(`reference/native_reuse_audit_2026-07-07.md`): the old registry bases
+(`reference/findings/native_reuse_audit_2026-07-07.md`): the old registry bases
 (`FLAG_BASE = 0x1000`, `SELFSWITCH_BASE = 0x1100`) were **out-of-bounds writes**
 into `vars[]` (`GetFlagPointer` does not bounds-check against `FLAGS_COUNT`),
 `VAR_BASE = 0x40D0` aliased live vanilla vars, and temp-switch mints leaked past

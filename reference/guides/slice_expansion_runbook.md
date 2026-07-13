@@ -24,7 +24,7 @@ For each candidate map id:
    --port 8765`, browse `/map/<id>`. Works pre-conversion (reads
    `output/uranium-build/maps/` + `tilesets.json` from the Phase 3 run).
    Feedback convention: flag cells in the viewer → saves to git-tracked
-   `reference/map_feedback/MapNNN.json` (per `reference/map_viewer.md`; the
+   `reference/map_feedback/MapNNN.json` (per `reference/viewer/map_viewer.md`; the
    README's "Issues panel → map_viewer_issues/" description is stale — that
    store is retired).
 2. **Check the name** — the map must have a display name in
@@ -39,7 +39,7 @@ For each candidate map id:
    first (an explicit id list is honored and fails loud at emit time).
 4. **Check for connection seams** — `connections.dat` seamless route↔town
    edges are **unconverted engine-wide** (14 exist; inventory in
-   `reference/walker_checkpoint2_findings.md` §4). If the new map joins a
+   `reference/viewer/walker_checkpoint2_findings.md` §4). If the new map joins a
    neighbor via a *connection* (not a warp), that seam will not exist in-game;
    decide up front whether that's acceptable for the slice or the seam design
    work has to land first.
@@ -119,7 +119,7 @@ For each candidate map id:
   transpiler bug or a missing native mapping, never a queue item (§4.7).
 - **Read the new queue entries to completion** (CLAUDE.md §4.1) and bucket
   them: native / idiom / hand / defer — same discipline as
-  `reference/slice1_queue_readthrough.md`.
+  `reference/findings/slice1_queue_readthrough.md`.
 
 ## 4. Stage + wire
 
@@ -173,7 +173,7 @@ make -C engine -j$(nproc) modern
   readable. Log findings in the live `SLICE*_TODO.md`; flag art cells via
   the viewer (`reference/map_feedback/`).
 - Compare viewer vs ROM with `scripts/verify_viewer_rom_match.py` when art
-  looks off (parity oracle; `reference/viewer_rom_parity_2026-07-12.md`).
+  looks off (parity oracle; `reference/viewer/viewer_rom_parity_2026-07-12.md`).
 
 ## Fail-loud quick reference
 

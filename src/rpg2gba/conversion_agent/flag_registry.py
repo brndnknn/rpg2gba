@@ -4,11 +4,11 @@ The registry assigns pokeemerald-expansion flag/var names to RPG Maker
 switch/variable IDs. It is stateful during a pipeline run and persists
 assignments across all map conversions. Every flag-name proposal from the
 conversion agent passes through here before acceptance — the agent never mints a
-name itself (CLAUDE.md §4.3, §6; reference/flag_registry_policy.md).
+name itself (CLAUDE.md §4.3, §6; reference/guides/flag_registry_policy.md).
 
 Two name sources:
   * **pre-seed** — high-confidence hand-authored mappings in
-    `reference/essentials_to_emerald_map.md`, loaded before any run.
+    `reference/guides/essentials_to_emerald_map.md`, loaded before any run.
   * **proposed** — names the conversion agent derives from event context and the
     orchestrator commits here after validation.
 

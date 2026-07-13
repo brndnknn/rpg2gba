@@ -2,7 +2,7 @@
 
 > Canonical pre-seed source for the Phase 4 flag registry
 > (`src/rpg2gba/conversion_agent/flag_registry.py`). Read
-> `reference/flag_registry_policy.md` for the policy this serves.
+> `reference/guides/flag_registry_policy.md` for the policy this serves.
 
 This file holds the **high-confidence, hand-authored** mappings from a Uranium
 `System.rxdata` switch/variable (by index) to the `FLAG_*` / `VAR_*` constant the

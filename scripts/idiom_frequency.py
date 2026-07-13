@@ -23,7 +23,7 @@ from rpg2gba.conversion_agent.lane import in_lane, real_commands
 
 REPO = Path(__file__).resolve().parent.parent
 DEFAULT_MAPS = REPO / "output" / "uranium-build" / "maps"
-CMD_TABLE = REPO / "reference" / "rgss_event_commands.md"
+CMD_TABLE = REPO / "reference" / "guides" / "rgss_event_commands.md"
 
 SCRIPT_CODES = {355, 655}
 # Continuation codes folded into the run they continue (not their own idiom token).

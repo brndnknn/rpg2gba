@@ -61,7 +61,7 @@ def _load_unhandled_table(reference_dir: Path) -> tuple[list[str], list[str]]:
     Raises FileNotFoundError when the file is absent — that is a caller
     error (the reference tree must be present).
     """
-    path = reference_dir / "uranium_script_calls.md"
+    path = reference_dir / "recon" / "uranium_script_calls.md"
     text = path.read_text(encoding="utf-8")
 
     marker = "## UNHANDLED — queue it (do not guess)"
@@ -512,7 +512,7 @@ def triage_queue(
     type=click.Path(path_type=Path),
     default="reference",
     show_default=True,
-    help="Directory containing uranium_script_calls.md and strip_list.json.",
+    help="Directory containing recon/uranium_script_calls.md and strip_list.json.",
 )
 @click.option(
     "--novel",

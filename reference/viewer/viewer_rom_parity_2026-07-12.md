@@ -181,7 +181,7 @@ cutover this is the vendored `engine/`. Confirm via the `.env` the scripts load
 (`map_viewer_server.py::_load_dotenv`) and artifact mtimes before comparing.
 
 ### 4e. Doc update
-`reference/map_viewer.md` — the (uncommitted) "Per-map data pool" caveat section is now
+`reference/viewer/map_viewer.md` — the (uncommitted) "Per-map data pool" caveat section is now
 wrong for slice maps; rewrite per §4a.
 
 ## 5. Expected outcome
@@ -197,7 +197,7 @@ wrong for slice maps; rewrite per §4a.
 ## 6. Resume checklist (if the session cut before landing)
 
 1. `git status` — look for edits to `scripts/map_viewer_common.py`,
-   `scripts/map_viewer_server.py`, `reference/map_viewer.md`, and a new
+   `scripts/map_viewer_server.py`, `reference/viewer/map_viewer.md`, and a new
    `scripts/verify_viewer_rom_match.py`. Two sub-agents owned those disjoint sets;
    either may have finished. NOTE: `map_viewer_{common,server}.py` + `map_viewer.md`
    ALSO carry the earlier uncommitted 2026-07-11 feedback-rework — do not revert.

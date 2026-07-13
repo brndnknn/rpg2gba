@@ -34,7 +34,7 @@ game breaks.
 
 Before the first run, the registry is pre-seeded with known stable mappings —
 things every Pokémon game has (received starter, beat first gym, talked to
-professor). Look at `reference/essentials_to_emerald_map.md` for the canonical
+professor). Look at `reference/guides/essentials_to_emerald_map.md` for the canonical
 list. Add new pre-seeds when you confirm a Uranium switch maps to a vanilla
 concept.
 
@@ -66,7 +66,7 @@ switches, 345 temp switches, 119 vars) **exceed the fork's free saved-flag
 space**, so the fork's saved ranges were expanded behind the
 `RPG2GBA_EXPAND_EVENT_RANGES` config gate (`engine/include/config/rpg2gba.h` —
 capacities; `constants/flags.h`/`vars.h` — derived `RPG2GBA_*_START` region
-constants; see `reference/engine_extension_surface.md` §2). The assembler now
+constants; see `reference/guides/engine_extension_surface.md` §2). The assembler now
 passes those constant *names* to `dump_header(flag_base=…, var_base=…,
 selfswitch_base=…, tempswitch_base=…)` — the emitted header references them
 symbolically — plus the parsed capacities, so a mint overflow fails loud at
@@ -78,6 +78,6 @@ lifetime), disjoint from the `FLAG_TEMP_11..1F` rock-obstacle range.
 ## Hard rule for the build agent
 
 You may modify `flag_registry.py`. You may modify
-`reference/essentials_to_emerald_map.md`. You may NOT manually edit the registry's
+`reference/guides/essentials_to_emerald_map.md`. You may NOT manually edit the registry's
 persistent state file mid-run. If the registry's state is wrong, fix the input
 data or the registry logic — don't patch the output.

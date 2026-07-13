@@ -121,7 +121,7 @@ _SET_SELF_SWITCH_RE = re.compile(
 _PHONE_REGISTER_NPC_STRIP_RE = re.compile(r"^\s*(?:Kernel\.)?pbPhoneRegisterNPC\(")
 
 # Type-12 (script) condition idioms proven on the slice (grill D8/D10 read-
-# through, reference/slice1_queue_readthrough.md) — whole-string matches, same
+# through, reference/findings/slice1_queue_readthrough.md) — whole-string matches, same
 # discipline as the 355 idioms above: a longer expression around the call
 # falls to queue.
 

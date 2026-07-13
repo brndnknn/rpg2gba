@@ -36,7 +36,8 @@ def _build(uranium_data: Path, reference_dir: Path) -> tuple[list, pokemon._Reso
         regionals_matrix=pokemon.parse_regionals(uranium_data / "regionals.dat"),
     )
     pokemon.attach_internal_names(
-        species, pokemon._load_id_json(reference_dir / "species_internal_names.json")
+        species,
+        pokemon._load_id_json(reference_dir / "uranium_data" / "species_internal_names.json"),
     )
     resolver = pokemon._build_resolver(IdMap(), reference_dir)
     for s in species:

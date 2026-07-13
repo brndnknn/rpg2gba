@@ -13,7 +13,7 @@ footprint), the unit the quantizer/packer (step 4) will consume:
                              then /2.
 
 The /2 is the validated lossless downscale (Uranium art is a 2x nearest upscale;
-`reference/graphics_conversion_notes.md`): one pixel per aligned 2x2 block,
+`reference/guides/graphics_conversion_notes.md`): one pixel per aligned 2x2 block,
 top-left phase — identical to `scripts/downscale_compare.py::downscale_2x`.
 
 Fail loud (CLAUDE.md §4.5): a static id outside the atlas, or a malformed

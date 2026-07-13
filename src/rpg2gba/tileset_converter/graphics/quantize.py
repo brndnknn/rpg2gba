@@ -4,7 +4,7 @@ Takes the step-3 16x16 RGBA tiles (their 8x8 quadrants) and reduces them to
 GBA-legal sub-tiles: every 8x8 tile references ONE sub-palette of <=15 colours
 (index 0 is transparent), a tileset uses <=N sub-palettes, and colours are 15-bit
 (BGR555). Two lossy decisions, both locked with the user
-(`reference/graphics_conversion_notes.md` §9/§10):
+(`reference/guides/graphics_conversion_notes.md` §9/§10):
 
   - **binary alpha** (GBA 4bpp has no partial alpha): per-tile classify on the
     solid-opaque-body fraction (`classify_tile`). A tile with a real opaque body

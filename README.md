@@ -62,7 +62,7 @@ emitted symbol gated against the real fork). Writes
 `output/uranium-build/scripts/Map{049,048,032}.pory` + matching `.traits.json`
 sidecars, `CommonEvents.pory`, `flag_state.json`, and `transpile_unhandled.jsonl`
 (the queue of anything it couldn't handle — expected to be non-empty; see
-`reference/slice1_queue_readthrough.md` for what's already accounted for).
+`reference/findings/slice1_queue_readthrough.md` for what's already accounted for).
 
 ### 3. Stage + wire the maps
 
@@ -122,7 +122,7 @@ the playable slice.
 
 `pytest` exercises the converters this recipe drives (some tests skip without
 `RPG2GBA_URANIUM_SRC`/`RPG2GBA_POKEEMERALD` set). Booting the ROM itself
-requires an emulator (mGBA) — see `reference/engine_extension_surface.md` for
+requires an emulator (mGBA) — see `reference/guides/engine_extension_surface.md` for
 the engine-side divergences baked into this build (spawn override, intro skip,
 player sprite, rock-smash test harness) if something looks wrong in-game.
 
@@ -132,7 +132,7 @@ A browser tool for eyeballing how a map converts to GBA art without booting the
 ROM — the metatile layout, the RMXP→GBA layer collapse, and the palette
 quantization. Needs step 1 of the ROM recipe above to have run at least once
 (reads `output/uranium-build/maps/` + `tilesets.json`; it does not regenerate
-them). Full reference: `reference/map_viewer.md`.
+them). Full reference: `reference/viewer/map_viewer.md`.
 
 ```
 .venv/bin/python scripts/map_viewer_server.py --port 8765
