@@ -107,6 +107,38 @@ def _opaque_colors(tile: np.ndarray) -> np.ndarray:
     return np.unique(to_5bit(tile[..., :3][opaque]), axis=0)
 
 
+def frame_opaque_colors(tile: np.ndarray) -> np.ndarray:
+    """Distinct 15-bit opaque colours of a RAW (not yet alpha-resolved) RGBA tile.
+
+    Convenience wrapper (`resolve_alpha` + `_opaque_colors`) for animated-tileset
+    support: callers union this across an animated quadrant's later frames to build
+    `extra_tile_colors` for `build_quantized_tileset`/`build_quantized_tileset_family`,
+    so palette packing sees every frame's colours, not just frame 0's."""
+    return _opaque_colors(resolve_alpha(tile))
+
+
+def quantize_tile_to_palette(tile: np.ndarray, palette: np.ndarray) -> np.ndarray:
+    """Alpha-resolve `tile` and remap its opaque pixels to the nearest colour in
+    `palette` (an (<=15,3) uint8 array of 8-bit display colours).
+
+    Used to quantize an animated tile's non-zero frames against the ONE palette
+    already assigned to its frame 0 (emit.py Step 2.5) — the counterpart of the
+    per-tile remap loop inside `build_quantized_tileset`, factored out so it can
+    run again per extra frame without re-deriving a palette."""
+    out = resolve_alpha(tile).copy()
+    opaque = out[..., 3] == 255
+    palette = np.asarray(palette)
+    if not opaque.any() or len(palette) == 0:
+        return out
+    px = to_5bit(out[..., :3][opaque]).astype(np.int16)
+    pal = palette.astype(np.int16)
+    new = pal[_nearest(px, pal)]
+    rgb = out[..., :3].copy()
+    rgb[opaque] = new.astype(np.uint8)
+    out[..., :3] = rgb
+    return out
+
+
 def _split_boxes(pixels: np.ndarray, k: int) -> list[np.ndarray]:
     """Median-cut (N,3) uint8 pixels into <=k boxes (population-balanced splits)."""
     pixels = to_5bit(pixels)
@@ -166,6 +198,7 @@ def build_quantized_tileset(
     weights: list[int] | None = None,
     global_colors: int | None = None,
     iterations: int = 8,
+    extra_tile_colors: dict[int, np.ndarray] | None = None,
 ) -> QuantizeResult:
     """Quantize a list of 8x8 RGBA tiles into <=`max_palettes` GBA sub-palettes.
 
@@ -193,8 +226,14 @@ def build_quantized_tileset(
          within-palette near-merge, never a cross-family snap.
 
     `weights`/`iterations` are accepted for API stability but unused (the area bias
-    `weights` carried was the original bug). Returns the sub-palettes, per-tile palette
-    index (-1 = empty tile), the remapped RGBA tiles, and loss stats."""
+    `weights` carried was the original bug). `extra_tile_colors` (index -> (M,3) 5-bit
+    colours, e.g. from `frame_opaque_colors` on an animated tile's non-zero frames)
+    are folded into that tile's colour SET for phase-1 vocabulary and phase-2 tile
+    packing ONLY — they don't change `tiles[i]`'s own remapped pixels/`quantized[i]`,
+    just widen the palette that tile is packed into so every frame is representable
+    in it (emit.py then quantizes each extra frame against that palette separately).
+    Returns the sub-palettes, per-tile palette index (-1 = empty tile), the remapped
+    RGBA tiles, and loss stats."""
     _ = (weights, iterations)  # retained for API compatibility
     resolved = [resolve_alpha(t) for t in tiles]
     n = len(tiles)
@@ -213,14 +252,23 @@ def build_quantized_tileset(
 
     if nonempty:
         # --- Phase 1: global colour vocabulary (similarity merge only) -------------
-        distinct = np.unique(np.concatenate([tile_px[i] for i in nonempty]), axis=0)
+        # Include extra-frame colours so an animated tile's whole trajectory (not
+        # just frame 0) shapes the vocabulary cut.
+        vocab_parts = [tile_px[i] for i in nonempty]
+        if extra_tile_colors:
+            vocab_parts += [c for i in nonempty if len(c := extra_tile_colors.get(i, ()))]
+        distinct = np.unique(np.concatenate(vocab_parts), axis=0)
         ng = global_colors if global_colors is not None else max_palettes * colors_per_palette
         vocab = _median_cut(distinct, ng).astype(np.int16) if len(distinct) > ng else distinct
-        # Map every tile's pixels to vocabulary indices; the tile's colour SET = bitmask.
+        # Map every tile's pixels to vocabulary indices; the tile's colour SET = bitmask
+        # (widened by any extra-frame colours so the tile's assigned palette covers them).
         tile_gidx: dict[int, np.ndarray] = {}
         tile_set: dict[int, int] = {}
         for i in nonempty:
-            gidx = _nearest(tile_px[i], vocab)
+            px = tile_px[i]
+            extra = extra_tile_colors.get(i) if extra_tile_colors else None
+            combined = px if extra is None or len(extra) == 0 else np.concatenate([px, extra])
+            gidx = _nearest(combined, vocab)
             tile_gidx[i] = gidx
             mask = 0
             for g in np.unique(gidx):
@@ -388,14 +436,23 @@ def _pack_subset(
     tile_palette: list[int],
     quantized: list[np.ndarray | None],
     color_map: list,
+    extra_tile_colors: dict[int, np.ndarray] | None = None,
 ) -> int:
     """Quantize ``tiles[idxs]`` into <=``budget`` palettes (no phase-1 vocab cut, so
     the merge stays within the subset) and splice the result into the global lists at
-    palette ``offset``. Returns the next free palette offset."""
+    palette ``offset``. Returns the next free palette offset.
+
+    ``extra_tile_colors`` is keyed by the GLOBAL tile index (same domain as ``idxs``);
+    remapped to local (subset) indices before forwarding to `build_quantized_tileset`."""
     if not idxs or budget <= 0:
         return offset
+    local_extra = (
+        {local_i: extra_tile_colors[gi] for local_i, gi in enumerate(idxs) if gi in extra_tile_colors}
+        if extra_tile_colors else None
+    )
     r = build_quantized_tileset(
-        [tiles[i] for i in idxs], max_palettes=budget, global_colors=_NO_VOCAB_CUT
+        [tiles[i] for i in idxs], max_palettes=budget, global_colors=_NO_VOCAB_CUT,
+        extra_tile_colors=local_extra,
     )
     for local_i, gi in enumerate(idxs):
         lp = r.tile_palette[local_i]
@@ -465,13 +522,17 @@ def _allocate_by_overflow(
 def build_quantized_tileset_family(
     tiles: list[np.ndarray], *, max_palettes: int = DEFAULT_MAX_PALETTES,
     params: FamilyParams | None = None,
+    extra_tile_colors: dict[int, np.ndarray] | None = None,
 ) -> QuantizeResult:
     """Partition tiles by their dominant hue family, pour the palette budget into the
     families that overflow most, pack each family with the global packer.
 
     The pipeline's production packer.  Pass a :class:`FamilyParams` to tune hue-bin
     boundaries, green-band splits, per-family palette floor, and overflow weighting;
-    omitting ``params`` reproduces the stock behaviour exactly."""
+    omitting ``params`` reproduces the stock behaviour exactly. ``extra_tile_colors``
+    (index -> extra 5-bit opaque colours, e.g. an animated tile's later frames) widens
+    that tile's family-distinct-colour count for budget allocation and is forwarded
+    into its family's `build_quantized_tileset` call so the assigned palette covers it."""
     params = params or FamilyParams()
     n = len(tiles)
     fam_of = [_dominant_family(t, params) for t in tiles]
@@ -481,8 +542,11 @@ def build_quantized_tileset_family(
             fam_tiles[f].append(i)
 
     fam_distinct = {
-        f: len(np.unique(
-            np.concatenate([_opaque_colors(resolve_alpha(tiles[i])) for i in idxs]), axis=0))
+        f: len(np.unique(np.concatenate(
+            [_opaque_colors(resolve_alpha(tiles[i])) for i in idxs]
+            + ([extra_tile_colors[i] for i in idxs if extra_tile_colors and i in extra_tile_colors]
+               if extra_tile_colors else [])
+        ), axis=0))
         for f, idxs in fam_tiles.items()
     }
     fam_counts = {f: len(idxs) for f, idxs in fam_tiles.items()}
@@ -500,5 +564,6 @@ def build_quantized_tileset_family(
     offset = 0
     for f, idxs in fam_tiles.items():
         offset = _pack_subset(tiles, idxs, budget[f], offset,
-                              palettes, tile_palette, quantized, color_map)
+                              palettes, tile_palette, quantized, color_map,
+                              extra_tile_colors=extra_tile_colors)
     return _assemble(tiles, palettes, tile_palette, quantized, color_map)

@@ -119,3 +119,67 @@ def test_autotile_empty_slot_is_transparent(tmp_path: Path) -> None:
     tile = r.render(370)  # slot 6 (empty) -> Map048's decorative base-336 case
     assert tile.size == (16, 16)
     assert tile.getpixel((8, 8)) == (0, 0, 0, 0)
+
+
+# ---------------------------------------------------------------------------
+# render(tile_id, frame=...) / frame_count_for_tile — animated autotile support
+# ---------------------------------------------------------------------------
+
+
+def _strip_png(tmp_path: Path, n_frames: int, name: str = "strip.png") -> Path:
+    """An n-frame animation strip; frame f is solid (f*10+1,)*3."""
+    img = Image.new("RGBA", (32 * n_frames, 32), (0, 0, 0, 0))
+    for f in range(n_frames):
+        v = f * 10 + 1
+        img.paste(Image.new("RGBA", (32, 32), (v, v, v, 255)), (f * 32, 0))
+    p = tmp_path / name
+    img.save(p)
+    return p
+
+
+def test_frame_count_for_tile_static_and_empty(tmp_path: Path) -> None:
+    r = TileRasterizer(_sources(tmp_path))  # atlas not touched by these ids
+    assert r.frame_count_for_tile(0) == 1        # empty marker
+    assert r.frame_count_for_tile(400) == 1       # static (>= STATIC_BASE)
+
+
+def test_frame_count_for_tile_autotile_no_source_is_1(tmp_path: Path) -> None:
+    r = TileRasterizer(_sources(tmp_path, autotiles=(None,) * 7))
+    assert r.frame_count_for_tile(48) == 1  # slot 0, no template loaded
+
+
+def test_frame_count_for_tile_animated_strip(tmp_path: Path) -> None:
+    strip = _strip_png(tmp_path, 4)
+    r = TileRasterizer(_sources(tmp_path, autotiles=(strip,) + (None,) * 6))
+    assert r.frame_count_for_tile(48) == 4  # slot 0, variant 0
+
+
+def test_render_animated_strip_frame_selects_tile(tmp_path: Path) -> None:
+    strip = _strip_png(tmp_path, 3)
+    r = TileRasterizer(_sources(tmp_path, autotiles=(strip,) + (None,) * 6))
+    for f in range(3):
+        tile = r.render(48, f)  # slot 0, variant 0
+        v = f * 10 + 1
+        assert tile.getpixel((1, 1)) == (v, v, v, 255)
+
+
+def test_render_static_tile_frame_gt_0_fails_loud(tmp_path: Path) -> None:
+    r = TileRasterizer(_sources(tmp_path))
+    with pytest.raises(ValueError, match="frame"):
+        r.render(384, 1)
+
+
+def test_render_empty_tile_frame_gt_0_fails_loud(tmp_path: Path) -> None:
+    r = TileRasterizer(_sources(tmp_path))
+    with pytest.raises(ValueError, match="frame"):
+        r.render(0, 1)
+
+
+def test_render_frame_cache_is_per_frame(tmp_path: Path) -> None:
+    strip = _strip_png(tmp_path, 2)
+    r = TileRasterizer(_sources(tmp_path, autotiles=(strip,) + (None,) * 6))
+    a0 = r.render(48, 0)
+    a1 = r.render(48, 1)
+    assert a0.tobytes() != a1.tobytes()
+    assert r.render(48, 0) is a0
+    assert r.render(48, 1) is a1

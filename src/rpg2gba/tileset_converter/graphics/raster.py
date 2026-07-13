@@ -27,7 +27,7 @@ import logging
 import numpy as np
 from PIL import Image
 
-from .autotile import flatten_autotile
+from .autotile import autotile_frame_count, flatten_autotile
 from .sources import (
     AUTOTILE_BASE,
     RMXP_TILE_PX,
@@ -62,7 +62,7 @@ class TileRasterizer:
         self._sources = sources
         self._tileset: Image.Image | None = None
         self._templates: dict[int, Image.Image | None] = {}  # slot -> template
-        self._cache: dict[int, Image.Image] = {}
+        self._cache: dict[tuple[int, int], Image.Image] = {}  # (tile_id, frame) -> tile
 
     # --- lazy source loaders ------------------------------------------------
 
@@ -87,26 +87,46 @@ class TileRasterizer:
 
     # --- rendering ----------------------------------------------------------
 
-    def render(self, tile_id: int) -> Image.Image:
-        """Render one tile_id to a 16x16 RGBA tile (cached, idempotent)."""
-        if tile_id in self._cache:
-            return self._cache[tile_id]
-        tile = self._render_uncached(tile_id)
+    def render(self, tile_id: int, frame: int = 0) -> Image.Image:
+        """Render one tile_id to a 16x16 RGBA tile (cached, idempotent).
+
+        ``frame`` selects an animation frame for an animated autotile (0 = the
+        resting frame everything else in the pipeline already assumes). A static
+        tile (or id 0) only has frame 0 — passing frame>0 for one is a caller bug
+        and fails loud rather than silently returning frame 0."""
+        key = (tile_id, frame)
+        if key in self._cache:
+            return self._cache[key]
+        tile = self._render_uncached(tile_id, frame)
         if tile.size != (NATIVE_TILE_PX, NATIVE_TILE_PX):
             raise AssertionError(
                 f"tile {tile_id}: rendered {tile.size}, expected "
                 f"{(NATIVE_TILE_PX, NATIVE_TILE_PX)}"
             )
-        self._cache[tile_id] = tile
+        self._cache[key] = tile
         return tile
 
-    def _render_uncached(self, tile_id: int) -> Image.Image:
+    def frame_count_for_tile(self, tile_id: int) -> int:
+        """Number of animation frames tile_id has (1 for empty/static/no-source-slot)."""
+        if tile_id <= 0 or tile_id >= STATIC_BASE:
+            return 1
+        slot = tile_id // AUTOTILE_BASE - 1
+        if not 0 <= slot < len(self._sources.autotiles):
+            return 1
+        path = self._sources.autotiles[slot]
+        return 1 if path is None else autotile_frame_count(path)
+
+    def _render_uncached(self, tile_id: int, frame: int = 0) -> Image.Image:
         if tile_id == 0:
+            if frame:
+                raise ValueError(f"tile 0 (empty) has no animation frame {frame}")
             return Image.new("RGBA", (NATIVE_TILE_PX, NATIVE_TILE_PX), _TRANSPARENT)
         if tile_id < 0:
             raise ValueError(f"negative tile_id {tile_id}")
         if tile_id < STATIC_BASE:
-            return self._render_autotile(tile_id)
+            return self._render_autotile(tile_id, frame)
+        if frame:
+            raise ValueError(f"static tile {tile_id} has no animation frame {frame}")
         return self._render_static(tile_id)
 
     def _render_static(self, tile_id: int) -> Image.Image:
@@ -122,16 +142,21 @@ class TileRasterizer:
         cell = atlas.crop((x, y, x + RMXP_TILE_PX, y + RMXP_TILE_PX))
         return downscale_2x(cell)
 
-    def _render_autotile(self, tile_id: int) -> Image.Image:
+    def _render_autotile(self, tile_id: int, frame: int = 0) -> Image.Image:
         slot = tile_id // AUTOTILE_BASE - 1
         variant = tile_id % AUTOTILE_BASE
         template = self._template_img(slot)
         if template is None:
             # Legitimate: a cell referencing an unused autotile slot draws nothing
             # (e.g. Map048's base-336 decorative cells over real floor).
+            if frame:
+                raise ValueError(
+                    f"tile {tile_id} -> empty autotile slot {slot} has no animation "
+                    f"frame {frame}"
+                )
             logger.debug(
                 "tile %d -> empty autotile slot %d (transparent)", tile_id, slot
             )
             return Image.new("RGBA", (NATIVE_TILE_PX, NATIVE_TILE_PX), _TRANSPARENT)
-        flat = flatten_autotile(template, variant)
+        flat = flatten_autotile(template, variant, frame=frame)
         return downscale_2x(flat)

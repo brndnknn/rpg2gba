@@ -19,6 +19,8 @@ piece index into the template's 6-col x 8-row grid of 16x16 pieces.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from PIL import Image
 
 PIECE_PX = 16          # autotile template piece size
@@ -56,27 +58,58 @@ def quad_pieces(variant: int) -> tuple[int, int, int, int]:
     return AUTOTILE_TABLE[variant >> 3][variant & 7]
 
 
-def _piece_box(piece_1based: int) -> tuple[int, int, int, int]:
-    """Frame-0 crop box for a 1-based template piece id."""
+def _piece_box(piece_1based: int, frame_offset: int = 0) -> tuple[int, int, int, int]:
+    """Crop box for a 1-based template piece id, offset by ``frame_offset`` px
+    (animated quad templates repeat the 96x128 piece grid every ``FRAME_WIDTH``
+    px; ``frame_offset = frame * FRAME_WIDTH``)."""
     pos = piece_1based - 1
     col, row = pos % TEMPLATE_COLS, pos // TEMPLATE_COLS
-    x, y = col * PIECE_PX, row * PIECE_PX
+    x, y = col * PIECE_PX + frame_offset, row * PIECE_PX
     return (x, y, x + PIECE_PX, y + PIECE_PX)
 
 
-def flatten_autotile(template: Image.Image, variant: int) -> Image.Image:
+def autotile_frame_count(path: Path) -> int:
+    """Number of animation frames in an RMXP autotile source PNG.
+
+    Display-helper only (map viewer overlay): never raises. Height ==
+    `STRIP_HEIGHT` means a horizontal strip (frames = width // 32); otherwise
+    it's a quadrant template (frames = width // 96). Any non-conforming size
+    (zero frames, or width not an exact multiple of the frame width) is
+    treated as static (1 frame) rather than an error — real Uranium data
+    contains at least one odd-sized file.
+    """
+    with Image.open(path) as img:
+        w, h = img.size
+
+    frame_width = RMXP_TILE_PX if h == STRIP_HEIGHT else FRAME_WIDTH
+    frames, remainder = divmod(w, frame_width)
+    if frames == 0 or remainder != 0:
+        return 1
+    return frames
+
+
+def flatten_autotile(template: Image.Image, variant: int, frame: int = 0) -> Image.Image:
     """Render `variant` (0..47) of an autotile `template` to a 32x32 RGBA tile.
 
-    Mirrors `bltSmallAutotile` at frame 0: a height-32 strip ignores the variant
-    and returns its 32x32 frame-0 tile; a 96x128 template assembles 4 quadrants."""
+    Mirrors `bltSmallAutotile`: a height-32 strip ignores the variant and returns
+    its ``frame``'th 32x32 tile (crop x = frame*32); a 96x128-per-frame template
+    assembles 4 quadrants, each piece crop offset by ``frame*FRAME_WIDTH`` (96px).
+    ``frame`` out of range for the template's actual width raises ``ValueError``
+    (fail loud — a caller must size ``frame`` from `autotile_frame_count`)."""
     template = template.convert("RGBA")
     w, h = template.size
 
     if h == STRIP_HEIGHT:
-        # Animation strip: frame 0 is the leading 32x32 tile; variant irrelevant.
+        # Animation strip: variant is irrelevant; frame selects the 32x32 tile.
         if w < RMXP_TILE_PX:
             raise ValueError(f"strip autotile too narrow: {w}x{h} (need >= 32 wide)")
-        return template.crop((0, 0, RMXP_TILE_PX, RMXP_TILE_PX))
+        x0 = frame * RMXP_TILE_PX
+        if frame < 0 or x0 + RMXP_TILE_PX > w:
+            raise ValueError(
+                f"strip autotile frame {frame} out of range (width {w}, "
+                f"need >= {x0 + RMXP_TILE_PX})"
+            )
+        return template.crop((x0, 0, x0 + RMXP_TILE_PX, RMXP_TILE_PX))
 
     # Standard template: must be at least one full 96x128 frame.
     if w < FRAME_WIDTH or h < TEMPLATE_ROWS * PIECE_PX:
@@ -84,9 +117,15 @@ def flatten_autotile(template: Image.Image, variant: int) -> Image.Image:
             f"autotile template {w}x{h} too small for a {FRAME_WIDTH}x"
             f"{TEMPLATE_ROWS * PIECE_PX} piece grid"
         )
+    frame_offset = frame * FRAME_WIDTH
+    if frame < 0 or frame_offset + FRAME_WIDTH > w:
+        raise ValueError(
+            f"autotile quad frame {frame} out of range (width {w}, "
+            f"need >= {frame_offset + FRAME_WIDTH})"
+        )
 
     tile = Image.new("RGBA", (RMXP_TILE_PX, RMXP_TILE_PX), (0, 0, 0, 0))
     for piece, (ox, oy) in zip(quad_pieces(variant), _QUADRANT_OFFSETS):
-        quad = template.crop(_piece_box(piece))
+        quad = template.crop(_piece_box(piece, frame_offset))
         tile.paste(quad, (ox, oy))
     return tile

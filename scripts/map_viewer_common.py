@@ -19,6 +19,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from rpg2gba.tileset_converter.graphics.autotile import autotile_frame_count
 from rpg2gba.tileset_converter.graphics.build_slice_tilesets import (
     _render_column,
     column_keys_for_maps,
@@ -150,6 +151,7 @@ class _MapState:
     passages: list[int]
     terrain_tags: list[int]
     autotile_names: list[str]
+    animated_slots: set[int]        # autotile slots (0..6) with a multi-frame source PNG
     tileset_id: int
     ts_name: str
     ts_tileset_name: str
@@ -458,7 +460,13 @@ def _ensure_loaded(map_id: int) -> None:
     terrain_tags: list[int] = ts_entry["terrain_tags"]
     autotile_names: list[str] = ts_entry["autotile_names"]
 
-    raster = TileRasterizer(load_tileset_sources(tileset_id, tilesets_json=tilesets_json_path))
+    tileset_sources = load_tileset_sources(tileset_id, tilesets_json=tilesets_json_path)
+    raster = TileRasterizer(tileset_sources)
+    animated_slots: set[int] = {
+        slot
+        for slot, path in enumerate(tileset_sources.autotiles)
+        if path is not None and autotile_frame_count(path) > 1
+    }
 
     log.info(
         "Map%03d: %dx%d cells, tileset %d (%s / %s)",
@@ -499,6 +507,7 @@ def _ensure_loaded(map_id: int) -> None:
         passages=passages,
         terrain_tags=terrain_tags,
         autotile_names=autotile_names,
+        animated_slots=animated_slots,
         tileset_id=tileset_id,
         ts_name=ts_entry.get("name", ""),
         ts_tileset_name=ts_entry.get("tileset_name", ""),
@@ -588,6 +597,11 @@ def render_metatile_png(map_id: int, idx: int, layer: str) -> bytes:
 # ---------------------------------------------------------------------------
 
 
+def _tile_is_animated(tile_id: int, animated_slots: set[int]) -> bool:
+    """True if `tile_id` is an autotile (48..383) whose slot has >1 frame."""
+    return 48 <= tile_id < 384 and (tile_id // 48 - 1) in animated_slots
+
+
 def _parse_events(events_list: list) -> list[dict]:
     result = []
     for evt in events_list:
@@ -656,7 +670,7 @@ def build_map_data(map_id: int) -> dict:
                 default=0,
             )
 
-            cells.append({
+            cell = {
                 "x": x, "y": y,
                 "layers": layers,
                 "colkey_idx": colkey_idx,
@@ -665,7 +679,10 @@ def build_map_data(map_id: int) -> dict:
                 "collision_uranium": col_ur,
                 "mismatch": col_ours != col_ur,
                 "priority_max": pmax,
-            })
+            }
+            if any(_tile_is_animated(tid, state.animated_slots) for tid in layers):
+                cell["animated"] = True
+            cells.append(cell)
 
     # ---- palette data -------------------------------------------------------
     analysis, pool_key_to_idx = state.analysis, state.pool_key_to_idx
@@ -968,6 +985,7 @@ body.adv #knobbar{display:flex}
   <label><input type="checkbox" id="ov_collision"> Collision</label>
   <label><input type="checkbox" id="ov_events" checked> Events</label>
   <label><input type="checkbox" id="ov_warps" checked> Warps</label>
+  <label title="Cells containing a multi-frame (animated) autotile — pipeline currently renders frame 0 only"><input type="checkbox" id="ov_animated"> Animated</label>
   <div class="sep"></div>
   <span class="lbl">Zoom:</span>
   <button class="btn" id="zoom-out">-</button>
@@ -1082,7 +1100,7 @@ function drawImg(url, dx, dy, cp) {
 let zoom = 2;
 let panX = 0, panY = 0;
 let currentLayer = 'post-quant';   // default view = the quantized GBA render
-let overlays = {collision:false, diff:false, priority:false, merge:false, events:true, warps:true};
+let overlays = {collision:false, diff:false, priority:false, merge:false, events:true, warps:true, animated:false};
 // Max merge severity across this map's metatiles, for normalizing the Merge heat-map.
 let maxMergeSeverity = 1;
 (function() {
@@ -1171,6 +1189,10 @@ function drawOverlayCell(cell, dx, dy, cp) {
   }
   if (overlays.priority && cell.priority_max > 0) {
     ctx.fillStyle = 'rgba(255,165,0,' + Math.min(0.85, cell.priority_max * 0.3) + ')';
+    ctx.fillRect(dx, dy, cp, cp);
+  }
+  if (overlays.animated && cell.animated) {
+    ctx.fillStyle = 'rgba(64,200,255,0.4)';
     ctx.fillRect(dx, dy, cp, cp);
   }
   if (overlays.merge) {
@@ -1362,7 +1384,7 @@ document.querySelectorAll('input[name="view2"]').forEach(function(r) {
   r.addEventListener('change', function() { currentLayer = r.value; scheduleRender(); });
 });
 /*KNOBBAR_JS*/
-['collision','diff','priority','merge','events','warps'].forEach(function(name) {
+['collision','diff','priority','merge','events','warps','animated'].forEach(function(name) {
   const el = document.getElementById('ov_' + name);
   el.addEventListener('change', function() { overlays[name] = el.checked; scheduleRender(); });
 });

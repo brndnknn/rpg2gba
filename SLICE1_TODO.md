@@ -100,7 +100,35 @@ warp-metatile emission (`build_slice_tilesets` / `tile_map.WarpInfo`).
 Route 03 is on the slice-2 frontier. For slice 1, verify the east edge fails
 *cleanly* (blocked, no walk-into-void) rather than converting the connection.
 
-### 10. Remaining boot-gate walk findings
+### 10. Tile-animation follow-ups (core feature done + user-verified — see Done)
+
+Open questions left behind by the 2026-07-12 animation build:
+
+- **Cadence fidelity.** 16 ticks/frame (~267 ms) is vanilla Emerald's water
+  cadence, adopted as a first guess and approved by eye — RMXP's actual
+  autotile speed was never measured against Uranium running in-engine. If a
+  side-by-side ever shows a mismatch, adjust the `% 16` divisor in
+  `_write_anim_fragment` (one place).
+- **Corpus generalization.** Slice 1 exercises 2 effects on 1 tileset; the
+  corpus has 69 multi-frame autotiles (up to 64 frames — `seatest.png`).
+  Untested at scale: animated tiles landing in the SECONDARY tileset (current
+  code packs them into the primary block and fails loud past 512 — fine for
+  the slice, needs a secondary-callback variant eventually), many effects per
+  tileset (DMA queue caps at 20 entries/frame), and columns hitting the
+  64-frame lcm guard.
+- **Waterfall / transparency.** ts22 slot 1 (`PU-Waterfall(transp)`, 5
+  frames) is unused by Map032 cells — the first animated+transparent autotile
+  arrives with Route 01 (slice 2). Stipple/alpha classify interaction with
+  frame quantization untested.
+- **Viewer "expand similar" over-split** (investigated 2026-07-12 — NOT a
+  viewer bug): grouping is exact `column_key` equality and autotile
+  shape-variants stay distinct; the 34 flower cells are ONE autotile whose 12
+  shape variants render pixel-identical → 15 groups (+3 cells with a real z2
+  sparkle overlay); water fragmentation adds legit edge shapes + z2 foam
+  overlays. Candidate fix: collapse column-key groups whose rasterized pixels
+  are identical (viewer UX + possible metatile-count win).
+
+### 11. Remaining boot-gate walk findings
 
 The user is mid-walk. Bugs #1–#7 (palette off-by-one, dialogue overflow,
 invisible rocks, pond reflections, rock debris/respawn, repeated dialogue) are
@@ -120,6 +148,14 @@ fixed. Add new findings here as they're reported.
 
 ## Done
 
+- **2026-07-12 — tile animation (Map032 flowers + pond)**: RMXP animated
+  autotiles → GBA tileset anims, deterministic pipeline end-to-end (per-column
+  lcm frame rendering, frame-aware dedup with static-demotion, union-color
+  quantization, contiguous per-effect tile blocks, gen'd
+  `uranium_anims.gen.h` callback via sentinel hook in
+  `engine/src/tileset_anims.c`). ts22 = pond 57×19f + flowers 4×4f,
+  997/1024 tiles. Viewer gained an "Animated" overlay. User-verified in-game.
+  Follow-ups tracked in Open #10.
 - **2026-07-11 — bug #7 repeated NPC dialogue** (`710e258c`): page dispatchers
   for global switch/var gates; Auntie + rare-candy granny advance correctly.
   User-verified on device.

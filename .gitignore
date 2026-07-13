@@ -40,6 +40,9 @@ engine/data/layouts/layouts.gen.json
 engine/src/data/tilesets/uranium_graphics.gen.h
 engine/src/data/tilesets/uranium_metatiles.gen.h
 engine/src/data/tilesets/uranium_tilesets.gen.h
+# Tileset animations: gen'd frame tables + callbacks, pulled in by the committed
+# sentinel #include hook at the bottom of src/tileset_anims.c (stub when empty).
+engine/src/data/tilesets/uranium_anims.gen.h
 engine/include/uranium_externs.gen.h
 engine/include/uranium_walker_maps.h
 engine/data/tilesets/primary/uranium*/

@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from collections.abc import Callable
 from pathlib import Path
 
@@ -128,12 +129,34 @@ def _load_terrain_tags(tilesets_json: Path, ts: int) -> list[int]:
     return load_terrain_tags_json(tilesets_json, ts)
 
 
+MAX_COLUMN_FRAMES = 64  # fail-loud guard: a column's lcm(per-tile frame counts)
+# past this is almost certainly a mismatched/garbage autotile pairing, not a real
+# animation (the slice's real cases — 19-frame pond, 4-frame flowers — are tiny).
+
+
+def column_n_frames(key: tuple[tuple[int, int], ...], rasterizer: object) -> int:
+    """lcm of every tile-in-column's animation frame count (1 if the rasterizer
+    doesn't expose `frame_count_for_tile` — e.g. the synthetic test stubs, which
+    only ever render frame 0). Fails loud past `MAX_COLUMN_FRAMES`."""
+    if not hasattr(rasterizer, "frame_count_for_tile"):
+        return 1
+    n = 1
+    for _, tid in key:
+        n = math.lcm(n, rasterizer.frame_count_for_tile(tid))
+    if n > MAX_COLUMN_FRAMES:
+        raise ValueError(
+            f"column {key}: frame-count lcm {n} exceeds the {MAX_COLUMN_FRAMES} guard"
+        )
+    return n
+
+
 def _render_column(
     key: tuple[tuple[int, int], ...],
     rasterizer: object,
     priorities: list[int],
     *,
     behavior: int = 0,
+    n_frames: int = 1,
 ) -> MetatileImage:
     """Tiered priority split, not a flat p>0 test.
 
@@ -150,7 +173,13 @@ def _render_column(
         ground); p==1 tiles -> TOP; p==0 tiles -> BOTTOM.
       else -> LAYER_COVERED; everything -> BOTTOM (unchanged, empty TOP).
 
-    z-ascending key order is preserved within each slot."""
+    z-ascending key order is preserved within each slot.
+
+    ``n_frames`` (normally `column_n_frames(key, rasterizer)`) renders the column
+    ``n_frames`` times; frame 0 becomes ``.bottom``/``.top`` as before, frames
+    1..n_frames-1 populate ``.frames`` (each tile in the column contributes its
+    OWN frame ``f % that tile's own frame count`` — a 19-frame pond tile and a
+    static bank tile in the same column both render correctly at every f)."""
     pr = [priorities[tid] if 0 <= tid < len(priorities) else 0 for _, tid in key]
     if any(p >= 2 for p in pr):
         layer_type, top_min = LAYER_NORMAL, 2
@@ -159,21 +188,25 @@ def _render_column(
     else:
         layer_type, top_min = LAYER_COVERED, None
 
-    bottom = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
-    top = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
-    for (z, tid), p in zip(key, pr):
-        img = rasterizer.render(tid)
-        if top_min is not None and p >= top_min:
-            top.alpha_composite(img)
-        else:
-            bottom.alpha_composite(img)
+    def render_frame(f: int) -> tuple[np.ndarray, np.ndarray]:
+        bottom = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+        top = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+        for (z, tid), p in zip(key, pr):
+            if f and hasattr(rasterizer, "frame_count_for_tile"):
+                tf = f % rasterizer.frame_count_for_tile(tid)
+            else:
+                tf = 0
+            img = rasterizer.render(tid) if tf == 0 else rasterizer.render(tid, tf)
+            if top_min is not None and p >= top_min:
+                top.alpha_composite(img)
+            else:
+                bottom.alpha_composite(img)
+        return np.asarray(bottom, dtype=np.uint8), np.asarray(top, dtype=np.uint8)
 
-    return MetatileImage(
-        np.asarray(bottom, dtype=np.uint8),
-        np.asarray(top, dtype=np.uint8),
-        layer_type,
-        behavior,
-    )
+    bottom0, top0 = render_frame(0)
+    frames = [render_frame(f) for f in range(1, n_frames)] if n_frames > 1 else None
+
+    return MetatileImage(bottom0, top0, layer_type, behavior, frames=frames)
 
 
 def _void_metatile() -> MetatileImage:
@@ -337,6 +370,7 @@ def build_slice_tilesets(
                 behavior=terrain_table.column_behavior(
                     ts, k, terrain_tags, is_opaque=_is_opaque
                 ),
+                n_frames=column_n_frames(k, rast),
             )
             for k in ordered
         ]
@@ -356,7 +390,12 @@ def build_slice_tilesets(
             # so each warp keeps its own real art (fix #1).
             for k in sorted(door_keys):
                 idx = len(metatile_list)
-                metatile_list.append(_render_column(k, rast, priorities, behavior=door_behavior))
+                metatile_list.append(
+                    _render_column(
+                        k, rast, priorities, behavior=door_behavior,
+                        n_frames=column_n_frames(k, rast),
+                    )
+                )
                 warp_tiles[serialize_column_key(k)] = idx
 
             # Fallback: warps that sit on an empty/garbage cell (no door column to
@@ -413,7 +452,7 @@ def build_slice_tilesets(
         Path(overlay_out).write_text(
             json.dumps(overlay, indent=2) + "\n", encoding="utf-8"
         )
-        logger.info("S8a: wrote %s + 4 engine tileset fragments", overlay_out)
+        logger.info("S8a: wrote %s + 5 engine tileset fragments", overlay_out)
     return results
 
 
@@ -424,7 +463,8 @@ _GEN_HEADER = (
 
 
 def _write_fragments(fork: Path, results: dict[int, EmittedTileset]) -> None:
-    """Write the four generated engine fragments registering every emitted tileset."""
+    """Write the five generated engine fragments registering every emitted tileset
+    (four static-art fragments + `uranium_anims.gen.h` for animated tiles)."""
     graphics: list[str] = []
     metatiles: list[str] = []
     structs: list[str] = []
@@ -459,6 +499,11 @@ def _write_fragments(fork: Path, results: dict[int, EmittedTileset]) -> None:
                 f'INCBIN_U16("{ddir}/metatile_attributes.bin");'
             )
 
+            # Only PRIMARY gets the animation callback — animated tiles are always
+            # assigned into the primary tile block (emit.py Step 3); secondary
+            # stays NULL. A tileset with no animated effects also stays NULL.
+            has_anims = is_secondary == "FALSE" and bool(results[ts].effects)
+            callback = f"InitTilesetAnim_Uranium{ts}" if has_anims else "NULL"
             structs.append(
                 f"const struct Tileset {name} = {{\n"
                 f"    .isCompressed = FALSE,\n"
@@ -467,10 +512,18 @@ def _write_fragments(fork: Path, results: dict[int, EmittedTileset]) -> None:
                 f"    .palettes = gTilesetPalettes_{stem},\n"
                 f"    .metatiles = gMetatiles_{stem},\n"
                 f"    .metatileAttributes = gMetatileAttributes_{stem},\n"
-                f"    .callback = NULL,\n"
+                f"    .callback = {callback},\n"
                 f"}};"
             )
             externs.append(f"extern const struct Tileset {name};")
+
+    # Forward-declare each tileset's InitTilesetAnim_Uranium* install fn (defined
+    # in uranium_anims.gen.h, #included into engine/src/tileset_anims.c) so the
+    # struct initializers above can reference it before that TU is linked.
+    anim_decls = [
+        f"void InitTilesetAnim_Uranium{ts}(void);"
+        for ts in sorted(results) if results[ts].effects
+    ]
 
     (fork / "src" / "data" / "tilesets" / "uranium_graphics.gen.h").write_text(
         _GEN_HEADER + "\n".join(graphics) + "\n", encoding="utf-8"
@@ -479,8 +532,81 @@ def _write_fragments(fork: Path, results: dict[int, EmittedTileset]) -> None:
         _GEN_HEADER + "\n".join(metatiles) + "\n", encoding="utf-8"
     )
     (fork / "src" / "data" / "tilesets" / "uranium_tilesets.gen.h").write_text(
-        _GEN_HEADER + "\n".join(structs) + "\n", encoding="utf-8"
+        _GEN_HEADER + "\n".join(anim_decls + [""] + structs) + "\n", encoding="utf-8"
     )
     (fork / "include" / "uranium_externs.gen.h").write_text(
         _GEN_HEADER + "\n".join(externs) + "\n", encoding="utf-8"
+    )
+    _write_anim_fragment(fork, results)
+
+
+def _anim_effect_symbol(ts: int, effect_name: str) -> str:
+    """C symbol stem for one tileset's effect, e.g. ts=22, "anim19" -> "Uranium22_Anim19"."""
+    return f"Uranium{ts}_{effect_name.capitalize()}"
+
+
+def _write_anim_fragment(fork: Path, results: dict[int, EmittedTileset]) -> None:
+    """Write ``engine/src/data/tilesets/uranium_anims.gen.h``: per-tileset animated-
+    tile frame tables + DMA queue/dispatch/install functions.
+
+    #include'd (not compiled as its own TU) into ``engine/src/tileset_anims.c``'s
+    committed URANIUM PATHFINDER SLICE sentinel hook, so the generated functions
+    can reach that file's static `AppendTilesetAnimToBuffer` / `sPrimaryTilesetAnim*`
+    state directly. Every symbol here is `static` EXCEPT `InitTilesetAnim_Uranium{ts}`
+    (the install fn a tileset's `.callback` points at from a different TU —
+    `uranium_tilesets.gen.h`/`headers.h` — so it needs external linkage).
+
+    Always written, even with zero animated tilesets (stub comment body), so the
+    engine's unconditional `#include` compiles."""
+    lines: list[str] = []
+    for ts in sorted(results):
+        emitted = results[ts]
+        if not emitted.effects:
+            continue
+        prim = f"data/tilesets/primary/uranium{ts}"
+        for eff in emitted.effects:
+            sym = _anim_effect_symbol(ts, eff.name)
+            frame_syms = [f"sTilesetAnims_{sym}_Frame{f}" for f in range(eff.n_frames)]
+            for f, fsym in enumerate(frame_syms):
+                lines.append(
+                    f'static const u16 {fsym}[] = '
+                    f'INCGFX_U16("{prim}/{eff.rel_dir}/f{f:02}.png", ".4bpp");'
+                )
+            lines.append(
+                f"static const u16 *const sTilesetAnims_{sym}[] = {{\n    "
+                + ",\n    ".join(frame_syms) + "\n};"
+            )
+            lines.append(
+                f"static void QueueAnimTiles_{sym}(u16 f)\n"
+                f"{{\n"
+                f"    u16 i = f % ARRAY_COUNT(sTilesetAnims_{sym});\n"
+                f"    AppendTilesetAnimToBuffer(sTilesetAnims_{sym}[i], "
+                f"(u16 *)(BG_VRAM + TILE_OFFSET_4BPP({eff.first_tile_index})), "
+                f"{eff.n_tiles} * TILE_SIZE_4BPP);\n"
+                f"}}"
+            )
+
+        # Spread effects across the 16-tick window (one per tick offset), same
+        # pattern as the vanilla TilesetAnim_General dispatcher.
+        dispatch_body = "\n".join(
+            f"    if (timer % 16 == {i})\n"
+            f"        QueueAnimTiles_{_anim_effect_symbol(ts, eff.name)}(timer / 16);"
+            for i, eff in enumerate(emitted.effects)
+        )
+        lines.append(
+            f"static void TilesetAnim_Uranium{ts}(u16 timer)\n{{\n{dispatch_body}\n}}"
+        )
+        counter_max = 16 * math.lcm(*(eff.n_frames for eff in emitted.effects))
+        lines.append(
+            f"void InitTilesetAnim_Uranium{ts}(void)\n"
+            f"{{\n"
+            f"    sPrimaryTilesetAnimCounter = 0;\n"
+            f"    sPrimaryTilesetAnimCounterMax = {counter_max};\n"
+            f"    sPrimaryTilesetAnimCallback = TilesetAnim_Uranium{ts};\n"
+            f"}}"
+        )
+
+    body = "\n\n".join(lines) if lines else "// no animated Uranium tilesets staged.\n"
+    (fork / "src" / "data" / "tilesets" / "uranium_anims.gen.h").write_text(
+        _GEN_HEADER + body + "\n", encoding="utf-8"
     )

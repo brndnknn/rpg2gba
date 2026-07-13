@@ -12,13 +12,16 @@ import struct
 from pathlib import Path
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from rpg2gba.tileset_converter.graphics.build_slice_tilesets import (
+    MAX_COLUMN_FRAMES,
     _behavior_value,
     _render_column,
     build_slice_tilesets,
     column_keys_for_maps,
+    column_n_frames,
 )
 from rpg2gba.tileset_converter.graphics.emit import (
     LAYER_COVERED,
@@ -253,8 +256,58 @@ def test_engine_fragments(tmp_path: Path) -> None:
     ) in metatiles
     assert "const struct Tileset gTileset_Uranium5 =" in structs
     assert ".isSecondary = TRUE," in structs  # the secondary half
+    assert ".callback = NULL," in structs  # no animated tiles in this fixture
     assert "extern const struct Tileset gTileset_Uranium5;" in externs
     assert "extern const struct Tileset gTileset_Uranium5B;" in externs
+
+    # No animated tilesets staged -> uranium_anims.gen.h is the empty-body stub
+    # (still written, so the engine's unconditional #include compiles).
+    anims = (fork / "src" / "data" / "tilesets" / "uranium_anims.gen.h").read_text(
+        encoding="utf-8"
+    )
+    assert "InitTilesetAnim_Uranium5" not in anims
+
+
+def test_engine_fragments_with_animated_effect(tmp_path: Path) -> None:
+    """A tileset whose column keys include a 3-frame animated autotile: the
+    PRIMARY struct's .callback wires to InitTilesetAnim_Uranium5, forward-declared
+    in uranium_tilesets.gen.h, and uranium_anims.gen.h carries the frame table,
+    queue fn, dispatcher, and install fn."""
+    fork = _fake_fork(tmp_path)
+    base = tmp_path / "tileset_map.json"
+    base.write_text("{}", encoding="utf-8")
+    overlay_out = tmp_path / "tileset_map.gen.json"
+    priors = [0] * 600
+
+    # z0 = [400 (static), 48 (animated, 3 frames), 401 (static), 402 (static)].
+    m = {
+        "tileset_id": 5, "width": 2, "height": 2,
+        "tiles": {"xsize": 2, "ysize": 2, "zsize": 3,
+                  "data": [400, 48, 401, 402, 0, 0, 0, 0, 0, 0, 0, 0]},
+    }
+
+    build_slice_tilesets(
+        [(32, m)], {}, fork=fork, base_tile_map=base, overlay_out=overlay_out,
+        rasterizer_for=lambda ts: _AnimatedStubRasterizer({48: 3}),
+        priorities_for=lambda ts: priors,
+        terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
+    )
+
+    structs = (fork / "src" / "data" / "tilesets" / "uranium_tilesets.gen.h").read_text(
+        encoding="utf-8"
+    )
+    assert "void InitTilesetAnim_Uranium5(void);" in structs
+    assert ".callback = InitTilesetAnim_Uranium5," in structs
+
+    anims = (fork / "src" / "data" / "tilesets" / "uranium_anims.gen.h").read_text(
+        encoding="utf-8"
+    )
+    assert 'INCGFX_U16("data/tilesets/primary/uranium5/anim/anim3/f00.png", ".4bpp")' in anims
+    assert "static void QueueAnimTiles_Uranium5_Anim3(u16 f)" in anims
+    assert "AppendTilesetAnimToBuffer(" in anims
+    assert "static void TilesetAnim_Uranium5(u16 timer)" in anims
+    assert "void InitTilesetAnim_Uranium5(void)" in anims
+    assert "sPrimaryTilesetAnimCallback = TilesetAnim_Uranium5;" in anims
 
 
 # ---------------------------------------------------------------------------
@@ -624,6 +677,80 @@ def test_terrain_tag_behavior_wired_into_emitted_metatiles(tmp_path: Path) -> No
 # ---------------------------------------------------------------------------
 # Tests for analyze_tileset_palettes (continued from above)
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Tests for column_n_frames / _render_column(n_frames=...) — animated autotiles
+# ---------------------------------------------------------------------------
+
+
+class _AnimatedStubRasterizer(_StubRasterizer):
+    """Stub whose tiles have a per-tile-id frame count; render(tid, frame) shifts
+    the stub's solid colour by `frame` so tests can tell frames apart."""
+
+    def __init__(self, counts: dict[int, int]) -> None:
+        self._counts = counts
+
+    def frame_count_for_tile(self, tile_id: int) -> int:
+        return self._counts.get(tile_id, 1)
+
+    def render(self, tile_id: int, frame: int = 0) -> Image.Image:
+        base = super().render(tile_id)
+        if frame == 0:
+            return base
+        r, g, b, a = base.getpixel((0, 0))
+        return Image.new("RGBA", (16, 16), ((r + frame) % 256, g, b, a))
+
+
+def test_column_n_frames_defaults_to_1_without_frame_count_method() -> None:
+    key = ((0, 400), (1, 401))
+    assert column_n_frames(key, _StubRasterizer()) == 1
+
+
+def test_column_n_frames_is_lcm_of_per_tile_counts() -> None:
+    key = ((0, 48), (1, 400))  # pond-like (19 frames) + static (1 frame)
+    rast = _AnimatedStubRasterizer({48: 19, 400: 1})
+    assert column_n_frames(key, rast) == 19
+
+    key2 = ((0, 48), (1, 52))  # 3-frame + 4-frame -> lcm 12 (distinct effects sharing
+    rast2 = _AnimatedStubRasterizer({48: 3, 52: 4})  # a column, well under the guard)
+    assert column_n_frames(key2, rast2) == 12
+
+
+def test_column_n_frames_guard_fails_loud() -> None:
+    key = ((0, 48), (1, 52))
+    rast = _AnimatedStubRasterizer({48: 7, 52: 11})  # lcm 77 > MAX_COLUMN_FRAMES
+    with pytest.raises(ValueError, match="exceeds"):
+        column_n_frames(key, rast)
+    assert 7 * 11 > MAX_COLUMN_FRAMES  # sanity: this really is over the guard
+
+
+def test_render_column_multi_frame_populates_frames() -> None:
+    # z-ascending compositing paints the LAST key entry on top; put the animated
+    # tile (48, 3 frames) last so its colour is what's actually visible/checked.
+    key = ((0, 401), (1, 48))  # static (below) + animated (3 frames, on top)
+    rast = _AnimatedStubRasterizer({48: 3, 401: 1})
+    mt = _render_column(key, rast, _priors({}), n_frames=3)
+
+    assert mt.frames is not None
+    assert len(mt.frames) == 2  # frames 1, 2 (frame 0 is .bottom/.top)
+
+    # Frame 0 (mt.bottom) uses the stub's frame-0 colour for tile 48 (visible,
+    # composited over static tile 401).
+    assert tuple(mt.bottom[0, 0]) == _stub_color(48)
+    # Frame 1 and frame 2 differ from frame 0 and from each other (tile 48 is
+    # animated); tile 401 (static, count 1) contributes the same pixels every
+    # frame, so only the tile-48 half of the composite should move.
+    f1_bottom, _f1_top = mt.frames[0]
+    f2_bottom, _f2_top = mt.frames[1]
+    assert not (f1_bottom == mt.bottom).all()
+    assert not (f1_bottom == f2_bottom).all()
+
+
+def test_render_column_single_frame_leaves_frames_none() -> None:
+    key = ((0, 400),)
+    mt = _render_column(key, _StubRasterizer(), _priors({}), n_frames=1)
+    assert mt.frames is None
 
 
 def test_analyze_tileset_palettes_transparent_slots() -> None:

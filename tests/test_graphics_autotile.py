@@ -63,3 +63,87 @@ def test_too_small_template_fails_loud() -> None:
     tiny = Image.new("RGBA", (48, 64), (0, 0, 0, 0))
     with pytest.raises(ValueError, match="too small"):
         at.flatten_autotile(tiny, 0)
+
+
+def test_autotile_frame_count_strip_multi_frame(tmp_path) -> None:
+    path = tmp_path / "strip4.png"
+    Image.new("RGBA", (128, 32), (0, 0, 0, 0)).save(path)
+    assert at.autotile_frame_count(path) == 4
+
+
+def test_autotile_frame_count_quad_multi_frame(tmp_path) -> None:
+    path = tmp_path / "quad8.png"
+    Image.new("RGBA", (768, 128), (0, 0, 0, 0)).save(path)
+    assert at.autotile_frame_count(path) == 8
+
+
+def test_autotile_frame_count_static_quad(tmp_path) -> None:
+    path = tmp_path / "quad1.png"
+    Image.new("RGBA", (96, 128), (0, 0, 0, 0)).save(path)
+    assert at.autotile_frame_count(path) == 1
+
+
+def test_autotile_frame_count_odd_size_is_static(tmp_path) -> None:
+    # Matches the real Uranium outlier "PU-Grassy Tiles.png" (48x64) — must not raise.
+    path = tmp_path / "odd.png"
+    Image.new("RGBA", (48, 64), (0, 0, 0, 0)).save(path)
+    assert at.autotile_frame_count(path) == 1
+
+
+# ---------------------------------------------------------------------------
+# flatten_autotile(frame=...) — animated autotile support
+# ---------------------------------------------------------------------------
+
+
+def test_flatten_strip_frame_selects_correct_tile() -> None:
+    """A 3-frame strip: frame N is the solid (N*10,N*10,N*10) tile at x=N*32."""
+    strip = Image.new("RGBA", (96, 32), (0, 0, 0, 0))
+    for f in range(3):
+        v = f * 10 + 1  # avoid 0 so frame 0 isn't accidentally "background"
+        strip.paste(Image.new("RGBA", (32, 32), (v, v, v, 255)), (f * 32, 0))
+    for f in range(3):
+        tile = at.flatten_autotile(strip, 0, frame=f)
+        v = f * 10 + 1
+        assert tile.getpixel((1, 1)) == (v, v, v, 255)
+
+
+def test_flatten_strip_frame_out_of_range_fails_loud() -> None:
+    import pytest
+
+    strip = Image.new("RGBA", (96, 32), (0, 0, 0, 0))
+    with pytest.raises(ValueError, match="out of range"):
+        at.flatten_autotile(strip, 0, frame=3)
+
+
+def test_flatten_quad_frame_offsets_piece_crops() -> None:
+    """A 2-frame quad template: frame 1's pieces are offset by FRAME_WIDTH (96px);
+    piece ids in frame 1 encode (p+100) so the readback proves the right frame's
+    pixels were sampled, not frame 0's."""
+    frames = 2
+    img = Image.new(
+        "RGBA", (at.FRAME_WIDTH * frames, at.TEMPLATE_ROWS * at.PIECE_PX), (0, 0, 0, 0)
+    )
+    for f in range(frames):
+        for row in range(at.TEMPLATE_ROWS):
+            for col in range(at.TEMPLATE_COLS):
+                p = row * at.TEMPLATE_COLS + col + 1
+                v = p + (100 if f == 1 else 0)
+                block = Image.new("RGBA", (at.PIECE_PX, at.PIECE_PX), (v, v, v, 255))
+                img.paste(block, (f * at.FRAME_WIDTH + col * at.PIECE_PX, row * at.PIECE_PX))
+
+    variant = 5
+    tile0 = at.flatten_autotile(img, variant, frame=0)
+    tile1 = at.flatten_autotile(img, variant, frame=1)
+    expected = at.quad_pieces(variant)
+    got0 = tuple(tile0.getpixel((i % 2 * 16 + 1, i // 2 * 16 + 1))[0] for i in range(4))
+    got1 = tuple(tile1.getpixel((i % 2 * 16 + 1, i // 2 * 16 + 1))[0] for i in range(4))
+    assert got0 == expected
+    assert got1 == tuple(p + 100 for p in expected)
+
+
+def test_flatten_quad_frame_out_of_range_fails_loud() -> None:
+    import pytest
+
+    template = _piece_template()  # single frame, 96 wide
+    with pytest.raises(ValueError, match="out of range"):
+        at.flatten_autotile(template, 0, frame=1)

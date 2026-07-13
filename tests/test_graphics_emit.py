@@ -18,6 +18,7 @@ from rpg2gba.tileset_converter.graphics.emit import (
     MetatileImage,
     emit_tileset,
 )
+from rpg2gba.tileset_converter.graphics.quantize import build_quantized_tileset_family
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -496,6 +497,171 @@ def test_emitted_tileset_fields(tmp_path):
 # ---------------------------------------------------------------------------
 # 11. Edge: all-transparent metatile
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# 12. Animated tiles (MetatileImage.frames) — tileset-animation support
+# ---------------------------------------------------------------------------
+
+
+def _parse_pal_colors(path: Path) -> list[tuple[int, int, int]]:
+    lines = path.read_text(encoding="utf-8").splitlines()[3:]
+    return [tuple(int(p) for p in line.split()) for line in lines]
+
+
+def test_animated_quadrant_flip_canonical_dedup(tmp_path):
+    """A quadrant and its h-mirror, animated across 2 frames: dedup identity is the
+    WHOLE animation (frame 0 + frame 1), and the mirrored metatile still folds onto
+    the same one GBA tile with opposite hflip bits, at both frames."""
+    def _quad(tl_left, tl_right):
+        arr = transparent()
+        arr[:8, :4] = tl_left
+        arr[:8, 4:8] = tl_right
+        return arr
+
+    bottom0_orig = _quad([255, 0, 0, 255], [0, 0, 255, 255])
+    bottom1_orig = _quad([0, 255, 0, 255], [255, 255, 0, 255])
+    bottom0_flip = _quad([0, 0, 255, 255], [255, 0, 0, 255])   # h-mirror of orig frame0
+    bottom1_flip = _quad([255, 255, 0, 255], [0, 255, 0, 255])  # h-mirror of orig frame1
+
+    mt0 = MetatileImage(bottom0_orig, transparent(), LAYER_COVERED, 0,
+                         frames=[(bottom1_orig, transparent())])
+    mt1 = MetatileImage(bottom0_flip, transparent(), LAYER_COVERED, 0,
+                         frames=[(bottom1_flip, transparent())])
+
+    result, pdir, _ = _run(tmp_path, [mt0, mt1])
+    raw = (pdir / "metatiles.bin").read_bytes()
+    v0 = struct.unpack_from("<H", raw, 0)[0]
+    v1 = struct.unpack_from("<H", raw, 16)[0]
+    tile0, hflip0 = v0 & 0x3FF, (v0 >> 10) & 1
+    tile1, hflip1 = v1 & 0x3FF, (v1 >> 10) & 1
+
+    assert tile0 == tile1, "the mirrored animated quadrant must dedup onto one GBA tile"
+    assert hflip0 != hflip1, "orig vs h-mirror must carry opposite hflip bits"
+    # Exactly one animated effect, exactly one animated tile (the dedup collapsed
+    # both metatiles' TL quad into a single 2-frame GBA tile).
+    assert len(result.effects) == 1
+    assert result.effects[0].n_tiles == 1
+    assert result.effects[0].n_frames == 2
+
+
+def test_animated_quadrant_static_demotion(tmp_path):
+    """A quadrant whose 'animation' frame is byte-identical to frame 0 is really
+    static — it must dedup/merge with a genuinely static tile of the same colour,
+    and mint NO animated effect."""
+    color = solid(10, 20, 30)
+    mt_fake_animated = MetatileImage(
+        color, transparent(), LAYER_COVERED, 0, frames=[(color.copy(), transparent())]
+    )
+    mt_plain_static = make_metatile(bottom=color)
+
+    result, pdir, _ = _run(tmp_path, [mt_fake_animated, mt_plain_static])
+    assert result.effects == []
+
+    raw = (pdir / "metatiles.bin").read_bytes()
+    v0 = struct.unpack_from("<H", raw, 0)[0] & 0x3FF
+    v1 = struct.unpack_from("<H", raw, 16)[0] & 0x3FF
+    assert v0 == v1, "demoted-static quadrant must merge with the plain static tile"
+
+
+def test_one_palette_covers_all_frames(tmp_path):
+    """An animated tile whose frame 1 introduces a colour absent from frame 0 (red
+    vs green — opposite hue families): the SAME assigned palette must represent
+    both, so neither frame's colour is lossily snapped to the wrong hue."""
+    mt = MetatileImage(
+        solid(248, 0, 0), transparent(), LAYER_COVERED, 0,
+        frames=[(solid(0, 248, 0), transparent())],
+    )
+    result, pdir, _ = _run(tmp_path, [mt], quantizer=build_quantized_tileset_family)
+
+    assert len(result.effects) == 1
+    eff = result.effects[0]
+    assert eff.n_frames == 2
+
+    raw = (pdir / "metatiles.bin").read_bytes()
+    v0 = struct.unpack_from("<H", raw, 0)[0]
+    palnum = (v0 >> 12) & 0xF
+    pal = _parse_pal_colors(pdir / "palettes" / f"{palnum:02}.pal")
+
+    f0 = Image.open(pdir / eff.rel_dir / "f00.png")
+    f1 = Image.open(pdir / eff.rel_dir / "f01.png")
+    idx0 = f0.getpixel((0, 0))
+    idx1 = f1.getpixel((0, 0))
+    assert idx0 != 0 and idx1 != 0, "both frames must be opaque (non-transparent index)"
+    # pal[0] is always the reserved transparent slot; a GBA tile-entry index n
+    # (1..15) maps directly to pal[n] (see emit._pal_text).
+    c0 = pal[idx0]
+    c1 = pal[idx1]
+    # 5-bit quantization tolerance: within one 5-bit step (~8) of the source colour.
+    assert abs(c0[0] - 248) <= 8 and c0[1] < 16 and c0[2] < 16, f"frame0 colour {c0} not red"
+    assert abs(c1[1] - 248) <= 8 and c1[0] < 16 and c1[2] < 16, f"frame1 colour {c1} not green"
+
+
+def test_post_quant_merge_refuses_partial_frame_match(tmp_path):
+    """Two animated tiles share an identical frame 0 but differ at frame 1 — they
+    must NOT merge into one GBA tile (a partial-frame match is not a real match)."""
+    mt0 = MetatileImage(solid(200, 0, 0), transparent(), LAYER_COVERED, 0,
+                         frames=[(solid(0, 200, 0), transparent())])
+    mt1 = MetatileImage(solid(200, 0, 0), transparent(), LAYER_COVERED, 0,
+                         frames=[(solid(0, 0, 200), transparent())])
+
+    result, pdir, _ = _run(tmp_path, [mt0, mt1])
+    raw = (pdir / "metatiles.bin").read_bytes()
+    tile0 = struct.unpack_from("<H", raw, 0)[0] & 0x3FF
+    tile1 = struct.unpack_from("<H", raw, 16)[0] & 0x3FF
+    assert tile0 != tile1, "identical frame 0 but different frame 1 must not merge"
+    assert len(result.effects) == 1
+    assert result.effects[0].n_tiles == 2
+    assert result.effects[0].n_frames == 2
+
+
+def test_contiguous_index_block_and_effect_metadata(tmp_path):
+    """Two distinct-frame-count effects each land in their own contiguous PRIMARY
+    block, starting right after reserved tile 0; static tiles are indexed after."""
+    # 3-frame effect: 2 distinct animated tiles.
+    a0 = MetatileImage(solid(250, 0, 0), transparent(), LAYER_COVERED, 0,
+                        frames=[(solid(0, 250, 0), transparent()), (solid(0, 0, 250), transparent())])
+    a1 = MetatileImage(solid(250, 10, 10), transparent(), LAYER_COVERED, 0,
+                        frames=[(solid(10, 250, 10), transparent()), (solid(10, 10, 250), transparent())])
+    # 2-frame effect: 1 distinct animated tile.
+    b0 = MetatileImage(solid(0, 0, 0), transparent(), LAYER_COVERED, 0,
+                        frames=[(solid(80, 80, 80), transparent())])
+    # A static tile, distinct colour.
+    s0 = make_metatile(bottom=solid(0, 250, 250))
+
+    result, pdir, _ = _run(tmp_path, [a0, a1, b0, s0])
+    effects_by_frames = {e.n_frames: e for e in result.effects}
+    assert set(effects_by_frames) == {3, 2}
+
+    eff3, eff2 = effects_by_frames[3], effects_by_frames[2]
+    assert eff3.n_tiles == 2
+    assert eff2.n_tiles == 1
+    # Both blocks start at/after index 1 and are contiguous + non-overlapping.
+    blocks = sorted([(eff3.first_tile_index, eff3.n_tiles), (eff2.first_tile_index, eff2.n_tiles)])
+    assert blocks[0][0] == 1
+    assert blocks[1][0] == blocks[0][0] + blocks[0][1]
+    # The static tile's GBA index comes after every animated tile.
+    last_animated = blocks[1][0] + blocks[1][1] - 1
+    raw = (pdir / "metatiles.bin").read_bytes()
+    static_tile_idx = struct.unpack_from("<H", raw, 3 * 16)[0] & 0x3FF  # metatile 3 = s0
+    assert static_tile_idx > last_animated
+
+
+def test_animated_frame0_png_matches_tiles_png_region(tmp_path):
+    """Frame 0's PNG for an effect is byte-identical to the corresponding region of
+    tiles.png (both are written from the same tile_pixels/_quant_to_indices source)."""
+    mt = MetatileImage(solid(120, 40, 200), transparent(), LAYER_COVERED, 0,
+                        frames=[(solid(40, 200, 120), transparent())])
+    result, pdir, _ = _run(tmp_path, [mt])
+    eff = result.effects[0]
+
+    tiles_png = np.array(Image.open(pdir / "tiles.png"))
+    frame0_png = np.array(Image.open(pdir / eff.rel_dir / "f00.png"))
+
+    # eff.first_tile_index's 8x8 region in the 16-tiles/row atlas.
+    row, col = eff.first_tile_index // 16, eff.first_tile_index % 16
+    region = tiles_png[row * 8 : row * 8 + 8, col * 8 : col * 8 + 8]
+    assert (region == frame0_png[:8, :8]).all()
 
 
 def test_all_transparent_metatile(tmp_path):
