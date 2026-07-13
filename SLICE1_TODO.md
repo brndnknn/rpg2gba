@@ -103,7 +103,10 @@ memory — **unverified, research before building**:
 - Suspected cause: `metadata_wiring.build_object_events` never converts the
   RMXP page movement fields — likely emits one static `movement_type` (face
   direction only) + zero `movement_range_x/y` for every NPC. Confirm what we
-  actually emit first.
+  actually emit first. **Partial correction 2026-07-13:** `npc_gfx.
+  movement_type_for` DOES exist and derives movement from the boot page's
+  move_type/facing (consumed at metadata_wiring.py:655) — research what it
+  maps move_type 1 (random) to before assuming nothing is wired.
 - RMXP source fields (per page): `move_type` (0 fixed / 1 random / 2 approach
   player / 3 custom via `move_route`), plus `move_speed`, `move_frequency`,
   and the repeating parallel/custom route case. Essentials wander is bounded
@@ -142,6 +145,10 @@ Every building door in Moki Town except the player's house does nothing
   names; per-interior tileset/palette/metatile budget check; event/NPC count
   per interior; then decide with the user which interiors are in slice-1
   scope vs deferred to the frontier.
+- **The mechanical process is now documented:**
+  `reference/slice_expansion_runbook.md` (2026-07-13) — map-set touchpoints
+  (incl. the `ALLOWED_MAPS`/`WARP_OVERRIDES` hand-edit hazards), per-map
+  prerequisites, command chain, fail-loud table, build warts.
 
 ## Accepted deferrals (not slice-1 work — listed so they aren't re-litigated)
 
