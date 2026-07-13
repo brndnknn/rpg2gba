@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import sys
+import time
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -303,12 +304,18 @@ _tileset_analysis_cache: dict[
 # without re-running the pipeline.  Default FamilyParams() == the family packer's stock
 # behavior.  Changing params invalidates the three quant-dependent caches (the RMXP
 # source-tile cache is param-independent and kept).  `_quant_generation` is a monotonic
-# token the client appends to post-quant image URLs to defeat the browser's immutable
-# cache after an Apply.
+# token the client appends to ALL image URLs to defeat the browser's immutable cache
+# after an Apply or a disk reload.  It is seeded from the clock, NOT 0: the PNGs are
+# served `immutable` with the token as the only cache-buster, so the token must never
+# repeat across process lifetimes — a constant seed made every launch (incl. the
+# source-watch self-restarts) re-serve whatever bytes the browser cached under the
+# same low generation in an earlier lifetime, forever (PROJECT_TODO #13).  Millisecond
+# resolution so per-lifetime `+= 1` bumps can't catch up to a later lifetime's seed;
+# still far below JS's 2^53 (nanoseconds would NOT survive the JSON→double round-trip).
 _ENGINE_MAX_PALS = 13  # NUM_PALS_TOTAL — hardware/engine ceiling; knob can only lower it
 _family_params: FamilyParams = FamilyParams()
 _max_palettes: int = _ENGINE_MAX_PALS
-_quant_generation: int = 0
+_quant_generation: int = int(time.time() * 1000)
 
 
 def _make_quantizer():

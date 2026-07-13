@@ -80,6 +80,43 @@ unconverted transpiler queue residue that blocks any slice that does call a
 CE. Will need the CE-context idiom/native/hand triage (same shape as the
 slice-1 event triage) once a slice pulls one in.
 
+### 13. Map viewer: launch-stale quantized colors (browser-cache bug) — FIX APPLIED, verify
+
+Root-caused 2026-07-13 (Brandon: flowers wrong colors on server launch, Apply
+& re-render fixes them): all `/api/tile|metatile` PNGs are served
+`Cache-Control: immutable, max-age=1y` with `?g=<_quant_generation>` as the
+only cache-buster, and the generation was a module global reset to 0 on every
+process start — including the hot-reload `os.execv` self-restarts — so bytes
+the browser cached under a low `g` in an earlier process lifetime re-serve
+forever on relaunch. (Packer itself proven deterministic; per-group URL
+independence explains the mixed-vintage colors.) **Fix applied** in
+`map_viewer_common.py`: `_quant_generation` seeded from the millisecond
+clock, so a generation never repeats across lifetimes. Verify on the next
+viewer walk (colors correct on first launch, no hard-reload needed), then
+move to Done.
+
+### 14. Map viewer + oracle: animated frames missing from quantization census
+
+Found during the #13 trace; identical in both viewer render paths (so it does
+NOT explain #13's symptom), but it's a real viewer↔ROM parity gap of exactly
+the class the 2026-07-12 pool-scope fix was meant to close. The viewer never
+threads animation frames into quantization: the analysis-pool build calls
+`_render_column(ck, raster, priorities)` with no `n_frames`
+(`map_viewer_common.py:474`), unlike the real pipeline
+(`build_slice_tilesets.py:373`/`:396` passes
+`n_frames=column_n_frames(...)`), so `MetatileImage.frames` is always `None`
+and `emit.py`'s `extra_tile_colors` union stays empty — animated tiles'
+frame-1+ colors never widen their assigned palette in the viewer preview,
+while the ROM's do. `scripts/verify_viewer_rom_match.py` Mode B has no
+frame handling either, so the oracle can't catch this divergence.
+
+**Fix guide:** pass `n_frames=column_n_frames(ck, raster)` in the
+`map_viewer_common.py:474` pool build (import `column_n_frames` from
+`build_slice_tilesets`); the `:610` pre-quant renders serve the RPG Maker
+reference view and shouldn't need frames — verify when building. Teach the
+oracle's viewer mode the same, then re-run Mode B on the slice to prove
+parity including animated columns.
+
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 
 - **Reflection narrow-scan** — tried and reverted 2026-07-07 (user: "not
