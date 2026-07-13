@@ -91,7 +91,57 @@ Open questions left behind by the 2026-07-12 animation build:
 
 The user is mid-walk. Bugs #1–#7 (palette off-by-one, dialogue overflow,
 invisible rocks, pond reflections, rock debris/respawn, repeated dialogue) are
-fixed. Add new findings here as they're reported.
+fixed. Add new findings here as they're reported. Reported 2026-07-13, split
+out as items #12 and #13 below: NPCs never move; only the player's house is
+enterable.
+
+### 12. NPCs don't move at all (walk finding 2026-07-13) — NEEDS RESEARCH
+
+All NPCs stand frozen; in Uranium the Moki townsfolk wander/turn. Notes from
+memory — **unverified, research before building**:
+
+- Suspected cause: `metadata_wiring.build_object_events` never converts the
+  RMXP page movement fields — likely emits one static `movement_type` (face
+  direction only) + zero `movement_range_x/y` for every NPC. Confirm what we
+  actually emit first.
+- RMXP source fields (per page): `move_type` (0 fixed / 1 random / 2 approach
+  player / 3 custom via `move_route`), plus `move_speed`, `move_frequency`,
+  and the repeating parallel/custom route case. Essentials wander is bounded
+  only by passability — no stored radius, so a GBA `movement_range_x/y` has
+  to be invented (needs a fidelity call).
+- Candidate mapping: 1 → `MOVEMENT_TYPE_WANDER_AROUND` (+ default range,
+  maybe 2×2); 0 → face-direction static (current behavior, correct for
+  fixed); 2 → no obvious native analog, check fork (§4.7 — do NOT assume);
+  3 → per-route conversion or demote to static. Speed/frequency → GBA
+  movement types encode some of this natively (check `movement_types.h`).
+- Same static-boot-page limitation as gfx applies: movement comes from
+  whichever page we classify as the boot page; page-driven movement changes
+  won't be reflected.
+- Research: census `move_type` across slice + corpus; read the fork's
+  movement-type inventory; check whether collision/through NPCs (blank-gfx
+  blockers) must stay fixed so they don't wander out of their blocking cells.
+
+### 13. Only the player's house is enterable — expand Moki interiors — NEEDS RESEARCH
+
+Every building door in Moki Town except the player's house does nothing
+(blocked). Notes from memory — **unverified, research before building**:
+
+- Expected with current scope: slice = maps 49/48/32 only; out-of-slice door
+  events are NO-EMIT and their cells deliberately stamped blocked (2026-07-09
+  fix3 note), so other doors are inert walls by design.
+- Known door destinations from the 2026-07-13 #1 investigation: Map032 EV003
+  warps to map 50 (14,18); EV023/036/037 to map 33 (70,11) (cave entrance
+  triad); EV005/006/007/017 are PU-doorsdew doors with unrecorded dests.
+  Walker-era build dirs mention MokiTownHouse1/2 + ProfessorLab as nearby
+  interiors — plausible dest maps, ids unconfirmed.
+- Work shape: widen the slice set (`SLICE_MAP_IDS` / `DEFAULT_SLICE` /
+  `ALLOWED_MAPS` in stage_slice_scripts + the assemble batch), then the full
+  per-map pipeline for each interior (transpile, tilesets/quantize, NPC gfx,
+  wiring, warp pairs). Each added map inherits the §9 bar (art included).
+- Research: enumerate ALL Map032 door events + dest map ids + MapInfos
+  names; per-interior tileset/palette/metatile budget check; event/NPC count
+  per interior; then decide with the user which interiors are in slice-1
+  scope vs deferred to the frontier.
 
 ## Accepted deferrals (not slice-1 work — listed so they aren't re-litigated)
 
