@@ -67,6 +67,18 @@ def test_script_switches_blocked() -> None:
         reg.propose_flag(1, "FLAG_WEEKDAY")
 
 
+def test_seed_labels_standalone() -> None:
+    """seed_labels alone (no preseed-map commit) loads labels + script-switch
+    ids — the half of pre_seed that stage_slice_scripts.py needs to re-run
+    after FlagRegistry.load(), since labels aren't part of to_state()."""
+    reg = FlagRegistry()
+    reg.seed_labels(SWITCHES, VARIABLES)
+    assert reg.label_for_switch(12) == 's:tsOn?("A")'
+    assert reg.is_script_switch(22)
+    assert reg.label_for_switch(22) == 's:tsOff?("A")'
+    assert reg.get_flag(2) is None  # no preseed-map commit happened
+
+
 def test_propose_and_collision() -> None:
     reg = FlagRegistry()
     assert reg.propose_flag(500, "FLAG_TEST_THING") == "FLAG_TEST_THING"

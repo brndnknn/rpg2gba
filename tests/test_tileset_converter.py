@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from rpg2gba.conversion_agent.flag_registry import FlagRegistry
+from rpg2gba.conversion_agent.flag_registry import FlagRegistry, temp_switch_flag_name
 from rpg2gba.tileset_converter import layout as layout_mod
 from rpg2gba.tileset_converter import map_constants as mc
 from rpg2gba.tileset_converter import metadata_wiring as mw
@@ -1337,6 +1337,77 @@ def test_page_dispatcher_script_switch_defers_even_with_registry() -> None:
     consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
     event = _event(1, 0, 0, [_page(), _page(cond=_sw_cond(1))])
     assert mw.build_page_dispatcher(event, consts, flag_registry=reg) is None
+
+
+def test_page_dispatcher_temp_switch_on_gate() -> None:
+    """Switch 12 = ``s:tsOn?("A")`` (Moki Town Map032 EV036 idiom, fixture data):
+    the temp-switch carve-out resolves it to a per-event temp-switch flag
+    instead of deferring the whole event to Page1."""
+    reg = FlagRegistry()
+    reg.pre_seed(_PRESEED, _SWITCHES, _VARIABLES)
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    event = _event(1, 0, 0, [_page(), _page(cond=_sw_cond(12))])
+    disp = mw.build_page_dispatcher(event, consts, flag_registry=reg)
+    assert disp is not None
+    assert "flag(FLAG_MAP049_EVENT001_TSA)" in disp
+    assert "goto(Map049_EV001_Page2)" in disp
+    assert reg.to_state()["temp_switches"]["49:1:A"] == "FLAG_MAP049_EVENT001_TSA"
+
+
+def test_page_dispatcher_temp_switch_off_gate() -> None:
+    """Switch 22 = ``s:tsOff?("A")`` (Moki Town Map032 EV003/005/006/007/017/
+    023/037 idiom, fixture data): negated guard — ``tsOff?`` is true when the
+    temp switch was never set OR was explicitly cleared, both covered by a
+    cleared GBA flag."""
+    reg = FlagRegistry()
+    reg.pre_seed(_PRESEED, _SWITCHES, _VARIABLES)
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    event = _event(3, 0, 0, [_page(), _page(cond=_sw_cond(22))])
+    disp = mw.build_page_dispatcher(event, consts, flag_registry=reg)
+    assert disp is not None
+    assert "!flag(FLAG_MAP049_EVENT003_TSA)" in disp
+
+
+def test_page_dispatcher_temp_switch_mint_converges_with_transpiler() -> None:
+    """The dispatcher-minted name is exactly `temp_switch_flag_name(uid, eid,
+    key)`, and re-minting the same key (the path the transpiler's
+    setTempSwitchOn idiom uses) converges on the identical name — idempotent,
+    not a second distinct flag."""
+    reg = FlagRegistry()
+    reg.pre_seed(_PRESEED, _SWITCHES, _VARIABLES)
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    event = _event(1, 0, 0, [_page(), _page(cond=_sw_cond(12))])
+    disp = mw.build_page_dispatcher(event, consts, flag_registry=reg)
+    assert disp is not None
+    expected = temp_switch_flag_name(49, 1, "A")
+    assert f"flag({expected})" in disp
+    assert reg.mint_temp_switch(49, 1, "A") == expected  # idempotent convergence
+
+
+def test_page_dispatcher_labelless_registry_defers_then_seed_labels_fixes(
+    tmp_path: Path,
+) -> None:
+    """Pins both the staging landmine and the seed_labels fix: a registry
+    round-tripped through to_state()/save+load loses labels by design
+    (is_script_switch survives — it IS persisted — but label_for_switch does
+    not), so the temp-switch carve-out can't fire until seed_labels reloads
+    the sidecars."""
+    reg = FlagRegistry()
+    reg.pre_seed(_PRESEED, _SWITCHES, _VARIABLES)
+    state_path = tmp_path / "flag_state.json"
+    reg.save(state_path)
+    loaded = FlagRegistry.load(state_path)
+    assert loaded.is_script_switch(12)
+    assert loaded.label_for_switch(12) is None  # labels not persisted
+
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    event = _event(1, 0, 0, [_page(), _page(cond=_sw_cond(12))])
+    assert mw.build_page_dispatcher(event, consts, flag_registry=loaded) is None
+
+    loaded.seed_labels(_SWITCHES, _VARIABLES)
+    disp = mw.build_page_dispatcher(event, consts, flag_registry=loaded)
+    assert disp is not None
+    assert "flag(FLAG_MAP049_EVENT001_TSA)" in disp
 
 
 def test_page_dispatcher_no_registry_global_gate_still_defers() -> None:

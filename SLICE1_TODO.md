@@ -7,33 +7,6 @@ deleting it. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
-### 1. Temp-switch page conditions still defer dispatch (8 Moki NPCs)
-
-The bug-#7 dispatcher fix (`710e258c`) covers self-switch / named-global-switch /
-named-variable page gates. Census (39 multi-page slice events): 31 dispatched,
-**8 still defer to Page1** — all gated on the script-switch pair
-`s:tsOff?("A")` (id 22) / `s:tsOn?("A")` (id 12): Map032 EV003/005/006/007/017/
-023/037 (tsOff) + EV036 (tsOn). These are within-visit dialogue toggles (temp
-switches reset on map exit), not repeat-item givers — cosmetic, not
-progression-breaking.
-
-**Fix sketch:** in `metadata_wiring.build_page_dispatcher`, when a page's
-switch gate resolves to a script switch, pattern-match the switch label
-(`registry.label_for_switch`) against `s:tsOn?("X")` / `s:tsOff?("X")`. These
-predicates test the *event's own* per-event temp switch — the same flags the
-transpiler's `setTempSwitchOn` idiom already mints — so emit
-`flag(temp_switch_flag_name(uid, eid, X))` (tsOn) or `!flag(...)` (tsOff) and
-`registry.mint_temp_switch(uid, eid, X)` when a registry is present (mirrors
-the self-switch minting added in bug #7). No `FLAG_*` is minted for the `s:`
-switch id itself, so the CLAUDE.md §6 rule ("never mint a FLAG_* for `s:`
-switches") stays intact — the predicate resolves against an already-legitimate
-per-event flag. Any other `s:` label still defers.
-
-**Verify first:** read the `tsOn?`/`tsOff?` helper definition in
-`reference/scripts_dump/` to confirm the predicate is scoped to the calling
-event (not a global lookup) before wiring it. Ask the user before building —
-this extends dispatcher semantics.
-
 ### 2. Auntie's queued `pbHasSpecies?(RAPTORCH)` branch (the 1 live queue entry)
 
 `transpile_unhandled.jsonl` is down to one real slice entry: Map049 EV001,
@@ -141,6 +114,30 @@ fixed. Add new findings here as they're reported.
 
 ## Done
 
+- **2026-07-13 — #1 temp-switch page dispatch: carve-out landed, premise
+  corrected — the "8 Moki NPCs" are warp doors, dispatch was moot in-game**:
+  the 8 ts-gated events (Map032 EV003/005/006/007/017 = door gfx, EV023/036/
+  037 = the blank cave-entrance triad) are NOT dialogue toggles — P1 (touch) =
+  the code-201 transfer, P2 (`s:tsOff?("A")` autorun) = `get_character(0).
+  onEvent?` arrival walk-out + `setTempSwitchOn("A")`. Both halves are subsumed
+  by the native warp conversion, and none of the 8 is emitted as an object
+  event, so page dispatch never affected gameplay. Corpus census
+  (ts_gate_census): all 324 ts-gated multi-page events corpus-wide are this
+  door pattern (5 matching switch ids 12–15/22; 136 door-gfx + 188 blank;
+  zero NPCs). Landed anyway as correctness insurance: `metadata_wiring.
+  _resolve_switch_gate_term` resolves `s:tsOn?/tsOff?("X")` labels to
+  `flag()`/`!flag()` on the event's own `mint_temp_switch` flag (verified
+  event-scoped in `022_Game_Event_v17.rb:70-86,126-134`; other `s:` labels
+  still defer; no `FLAG_*` for the `s:` id — §6 intact). Plus the REAL live
+  fix it flushed out: `FlagRegistry.load()` never restores labels, so
+  `label_for_switch` — and bug-#7's own label-mint path in
+  `resolve_switch_flag` — was dead at the staging call site; new
+  `FlagRegistry.seed_labels()` (split from `pre_seed`) is now called in
+  `stage_slice_scripts` after `load()`. Slice output byte-identical (same 15
+  dispatchers, 0 new mints — the 8 temp-switch flags were already transpiler-
+  minted) → no rebuild needed. EV036's P2 gated tsOn (id 12) not tsOff = a
+  Uranium mapper bug (choreography unreachable); moot, event not emitted.
+  1029 tests pass.
 - **2026-07-13 — #4 Moki ledge tiles: resolved by analysis, work moved to
   `SLICE2_TODO.md` #1**: the 3 warning tiles (ts22 840/841/842) are the
   pond-dock front at Map032 (37–39,53); Essentials gates ledge jumps purely by

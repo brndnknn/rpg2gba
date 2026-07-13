@@ -101,6 +101,60 @@ ROCK_FLAG_LAST = 0x1F
 ROCK_FLAG_CAPACITY = ROCK_FLAG_LAST - ROCK_FLAG_FIRST + 1  # 15
 
 
+# Uranium per-event temp-switch page-gate idiom (Game_Event#tempSwitches, see
+# reference/scripts_dump/022_Game_Event_v17.rb): a page condition switch whose
+# LABEL (not value) is `s:tsOn?("X")` / `s:tsOff?("X")` is an Essentials
+# script-switch eval'd with `self` = the specific Game_Event, i.e. "this
+# event's own temp switch X is on/off" — resolvable to a deterministic
+# per-event flag even though the switch id itself can never be minted.
+_TEMP_SWITCH_COND_RE = re.compile(r'^s:ts(On|Off)\?\(\s*"([A-Za-z0-9]+)"\s*\)\s*$')
+
+
+def _resolve_switch_gate_term(
+    flag_registry: FlagRegistry | None, switch_id: int, uid: int, eid: int
+) -> str | None:
+    """Resolve one page-condition switch id (switch1 or switch2) to a Poryscript
+    guard term, or ``None`` to tell the caller to defer the WHOLE dispatch.
+
+    Tries ``resolve_switch_flag`` first (an ordinary global switch with a
+    preseeded/proposed name) -> ``flag(FLAG_*)``.
+
+    If that returns ``None`` and the switch is an Essentials script-switch
+    (``s:``-prefixed label) whose label matches Uranium's per-event temp-switch
+    idiom (see ``_TEMP_SWITCH_COND_RE`` above), mints/reads the deterministic
+    per-event temp-switch flag instead (``flag_registry.mint_temp_switch``,
+    keyed by (map, event, key) — the same path the transpiler's
+    ``setTempSwitchOn`` idiom uses, so the two converge on one name).
+    ``tsOn?`` -> ``flag(NAME)``; ``tsOff?`` -> ``!flag(NAME)`` (``tsOff?`` is
+    true when the temp switch was never set OR was set false — a cleared GBA
+    flag covers both).
+
+    Any other script-switch label (e.g. ``s:pbIsWeekday(...)``), a missing
+    label (a ``load()``ed registry that never had ``seed_labels`` called on
+    it), or no registry at all -> ``None``.
+
+    Never mints anything for the switch id itself — ``resolve_switch_flag``
+    already refuses script-switches, and this function only ever mints the
+    per-event temp-switch key, never ``propose_flag(switch_id, ...)``
+    (CLAUDE.md §6: never hand-mint a flag for a runtime-evaluated switch)."""
+    if flag_registry is None:
+        return None
+    flag = resolve_switch_flag(flag_registry, switch_id)
+    if flag is not None:
+        return f"flag({flag})"
+    if not flag_registry.is_script_switch(switch_id):
+        return None
+    label = flag_registry.label_for_switch(switch_id)
+    if not label:
+        return None
+    m = _TEMP_SWITCH_COND_RE.match(label)
+    if not m:
+        return None
+    polarity, key = m.group(1), m.group(2)
+    name = flag_registry.mint_temp_switch(uid, eid, key)
+    return f"flag({name})" if polarity == "On" else f"!flag({name})"
+
+
 def page_label(map_id: int, event_id: int, page_num: int) -> str:
     """The Phase-4 .pory block label for a page body (1-based page_num)."""
     return f"Map{int(map_id):03d}_EV{int(event_id):03d}_Page{page_num}"
@@ -345,7 +399,12 @@ def build_page_dispatcher(
     condition becomes a conjunction of guard terms —
 
       - ``switch1_valid`` / ``switch2_valid`` -> ``flag(FLAG_*)``, resolved
-        through the registry (``resolve_switch_flag``).
+        through the registry (``resolve_switch_flag``); OR, for a script-switch
+        (``s:``) whose label matches Uranium's per-event temp-switch idiom —
+        ``s:tsOn?("X")`` / ``s:tsOff?("X")`` (``Game_Event#tempSwitches``, a
+        per-map-visit switch local to the event, not a global) — a per-event
+        temp-switch flag: ``flag(FLAG_MAP{m}_EVENT{e}_TS{X})`` for ``tsOn?``,
+        ``!flag(...)`` for ``tsOff?`` (see ``_resolve_switch_gate_term``).
       - ``variable_valid`` -> ``var(VAR_*) >= value`` (RMXP's own semantics —
         a page is active iff ``$game_variables[id] >= value``, verified against
         ``Game_Event#refresh`` in reference/scripts_dump).
@@ -357,7 +416,10 @@ def build_page_dispatcher(
         label and the scan stops (a higher unconditional page always wins).
 
     A switch/variable gate that can't be resolved to a name — no registry
-    given (``flag_registry=None``), an Essentials script-switch (``s:``), or an
+    given (``flag_registry=None``), a script-switch whose label is neither an
+    ordinary named switch nor the ``s:tsOn?``/``s:tsOff?`` temp-switch idiom
+    (e.g. ``s:pbIsWeekday(...)``), a script-switch with no label loaded (a
+    ``load()``ed registry that never had ``seed_labels`` called on it), or an
     unnamed switch/variable — defers the WHOLE event's dispatch: returns None
     and the caller points the object_event at the base page instead (until the
     name is mintable). This makes ``flag_registry=None`` behavior IDENTICAL to
@@ -384,16 +446,16 @@ def build_page_dispatcher(
         terms: list[str] = []
 
         if cond.get("switch1_valid"):
-            flag = _resolve(resolve_switch_flag, cond["switch1_id"])
-            if flag is None:
-                return None  # deferred: no registry, script-switch, or unnamed
-            terms.append(f"flag({flag})")
+            term = _resolve_switch_gate_term(flag_registry, cond["switch1_id"], uid, eid)
+            if term is None:
+                return None  # deferred: no registry, unresolvable script-switch, or unnamed
+            terms.append(term)
 
         if cond.get("switch2_valid"):
-            flag = _resolve(resolve_switch_flag, cond["switch2_id"])
-            if flag is None:
+            term = _resolve_switch_gate_term(flag_registry, cond["switch2_id"], uid, eid)
+            if term is None:
                 return None
-            terms.append(f"flag({flag})")
+            terms.append(term)
 
         if cond.get("variable_valid"):
             var = _resolve(resolve_variable_var, cond["variable_id"])

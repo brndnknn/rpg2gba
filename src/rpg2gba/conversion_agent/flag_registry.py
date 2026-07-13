@@ -284,8 +284,18 @@ class FlagRegistry:
 
     # -- pre-seed ----------------------------------------------------------
 
-    def pre_seed(self, preseed_md: Path, switches_json: Path, variables_json: Path) -> None:
-        """Populate from the sidecars (labels + script-switches) and the pre-seed map."""
+    def seed_labels(self, switches_json: Path, variables_json: Path) -> None:
+        """Load switch/variable labels and script-switch ids from the Phase 3
+        sidecars (``reference/uranium_switches.json`` / ``uranium_variables.json``).
+
+        Split out of ``pre_seed`` because ``FlagRegistry.load()`` restores mints
+        and script-switch ids (both part of ``to_state()``) but NOT labels —
+        labels are never persisted. Any pipeline stage that loads persisted
+        state and then needs ``label_for_switch``/``label_for_var`` (e.g.
+        ``tileset_converter.metadata_wiring.build_page_dispatcher``'s
+        script-switch temp-switch carve-out) must call this explicitly after
+        ``load()``, or every label lookup silently returns ``None``.
+        """
         switches: dict[str, str] = json.loads(Path(switches_json).read_text(encoding="utf-8"))
         variables: dict[str, str] = json.loads(Path(variables_json).read_text(encoding="utf-8"))
         for k, v in switches.items():
@@ -295,6 +305,10 @@ class FlagRegistry:
                 self._script_switches.add(sid)
         for k, v in variables.items():
             self._var_labels[int(k)] = v
+
+    def pre_seed(self, preseed_md: Path, switches_json: Path, variables_json: Path) -> None:
+        """Populate from the sidecars (labels + script-switches) and the pre-seed map."""
+        self.seed_labels(switches_json, variables_json)
 
         for kind, idx, constant in self._parse_preseed(Path(preseed_md)):
             if kind == "flag" and idx in self._script_switches:

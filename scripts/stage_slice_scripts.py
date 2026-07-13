@@ -52,6 +52,8 @@ from rpg2gba.tileset_converter.npc_gfx import DEFAULT_NPC_GFX_MAP, load_npc_gfx_
 DEFAULT_SLICE = tuple(SLICE_MAP_IDS)
 ALLOWED_MAPS = {49, 48, 32}
 OVERRIDES = Path("reference/map_name_overrides.json")
+SWITCHES = Path("reference/uranium_switches.json")
+VARIABLES = Path("reference/uranium_variables.json")
 
 
 def _load_event_traits(out: Path, map_id: int, pory_path: Path) -> dict[int, list[str]]:
@@ -104,6 +106,11 @@ def _regenerate_map_json(
     )
     flag_state_path = out / "flag_state.json"
     flag_reg = FlagRegistry.load(flag_state_path, fork_path=fork)
+    # load() restores mints + script-switch ids but not labels (labels aren't
+    # part of to_state()) — seed them so build_page_dispatcher's script-switch
+    # temp-switch carve-out (label_for_switch) can resolve here, not just in
+    # unit tests that pre_seed a fresh registry.
+    flag_reg.seed_labels(SWITCHES, VARIABLES)
     mw.build_slice_maps(
         list(DEFAULT_SLICE),
         maps_dir=out / "maps",
