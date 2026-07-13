@@ -185,3 +185,74 @@ def _resolve(name: str, directory: Path, *, what: str) -> Path:
     raise FileNotFoundError(
         f"{what}: asset {name!r} not found in {directory} (looked for {exact.name})"
     )
+
+
+def _resolve_or_nominal(name: str, directory: Path) -> Path:
+    """Like `_resolve`, but never raises: on failure, falls back to the nominal
+    (possibly nonexistent) `<directory>/<name>.png` path.
+
+    For fingerprinting (`tileset_source_paths`), a stable path to *stat* is more
+    useful than a fail-loud exception: a missing/unresolvable asset should just
+    stat as absent now and flip the moment it's added or renamed to match,
+    without aborting the whole fingerprint derivation."""
+    try:
+        return _resolve(name, directory, what="fingerprint")
+    except FileNotFoundError:
+        return directory / f"{name}.png"
+
+
+def tileset_source_paths(
+    tileset_id: int,
+    *,
+    tilesets_json: Path = DEFAULT_TILESETS_JSON,
+    graphics_dir: Path | None = None,
+) -> list[Path]:
+    """Every source-art file `tileset_id` depends on: the tileset sheet PNG plus
+    one path per non-empty autotile name.
+
+    For hot-reload fingerprinting, not rendering — contrast with
+    `load_tileset_sources`:
+
+    - Resolved *eagerly* (all autotile slots, not just accessed ones), since a
+      fingerprint needs every dependency up front, not lazily on first paint.
+    - Never raises. A tileset sheet or autotile name that doesn't resolve to a
+      real file (missing asset, unknown name, missing tilesets.json entry,
+      unreadable JSON, absent graphics dir) degrades to a stable *nominal* path
+      or an empty list rather than aborting — so `_file_fingerprint` reports it
+      as missing `(-1, -1)` now and flips the moment the file appears. The
+      render path (`load_tileset_sources`) still fails loud on its own for
+      actual drawing; this function exists purely so the fingerprint can react
+      to source-art edits, not to replace that fail-loud contract.
+
+    Resolution itself reuses `_resolve` (via `_resolve_or_nominal`) so the
+    case-folding rule lives in exactly one place.
+
+    Order is deterministic: the tileset sheet first, then non-empty autotile
+    names in their stored slot order (0..6) — never sorted or deduplicated, so
+    repeated calls with the same input are byte-for-byte comparable.
+    """
+    if graphics_dir is None:
+        try:
+            graphics_dir = default_graphics_dir()
+        except RuntimeError:
+            return []
+    gfx = graphics_dir
+
+    try:
+        raw = json.loads(Path(tilesets_json).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    entry = raw.get(str(tileset_id))
+    if not isinstance(entry, dict):
+        return []
+
+    paths: list[Path] = []
+    tileset_name = entry.get("tileset_name") or ""
+    if tileset_name:
+        paths.append(_resolve_or_nominal(tileset_name, gfx / "Tilesets"))
+
+    for name in entry.get("autotile_names") or []:
+        if name:
+            paths.append(_resolve_or_nominal(name, gfx / "Autotiles"))
+
+    return paths

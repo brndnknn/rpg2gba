@@ -34,7 +34,11 @@ from rpg2gba.tileset_converter.graphics.quantize import (
     build_quantized_tileset_family,
 )
 from rpg2gba.tileset_converter.graphics.raster import TileRasterizer
-from rpg2gba.tileset_converter.graphics.sources import STATIC_BASE, load_tileset_sources
+from rpg2gba.tileset_converter.graphics.sources import (
+    STATIC_BASE,
+    load_tileset_sources,
+    tileset_source_paths,
+)
 from rpg2gba.tileset_converter.layout import TileGrid, column_key
 from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
 from rpg2gba.tileset_converter.tile_map import serialize_column_key
@@ -93,19 +97,127 @@ def _file_fingerprint(path: Path) -> tuple[int, int]:
     return (st.st_mtime_ns, st.st_size)
 
 
-def _slice_aware_fingerprint(map_id: int) -> tuple[tuple[int, int], ...]:
-    """Stat-only fingerprint of every on-disk input that can change *map_id*'s
-    rendered output: its own ``Map{NNN}.json``, ``tilesets.json`` and — for slice
-    maps — every ``SLICE_MAP_IDS`` sibling's ``Map{NNN}.json`` too, since a sibling
-    can join or leave this map's quantization pool without this map's own file
-    changing (see ``_ensure_tileset_analysis``). No JSON parsing here, so this is
-    cheap enough to call on every request, unlike actually resolving the pool."""
+def _json_fingerprint(map_id: int) -> tuple[tuple[int, int], ...]:
+    """Stat-only fingerprint of the JSON inputs that can change *map_id*'s
+    rendered output at the data level: its own ``Map{NNN}.json``,
+    ``tilesets.json``, and — for slice maps — every ``SLICE_MAP_IDS`` sibling's
+    ``Map{NNN}.json`` too, since a sibling can join or leave this map's
+    quantization pool without this map's own file changing (see
+    ``_ensure_tileset_analysis``).
+
+    A superset of what ``_derive_png_paths_for_map`` itself reads (that
+    function only needs *map_id*'s own json — see its docstring for why pool
+    siblings never add a distinct tileset), but it's safe and convenient to
+    reuse this broader fingerprint as that derivation's memoization key too
+    (see ``_slice_aware_fingerprint`` below): a sibling-json change some
+    unrelated tileset never touches would just cost one extra cache-miss
+    re-derivation, not an incorrect result."""
     maps_dir = _maps_dir()
     paths = [maps_dir / f"Map{map_id:03d}.json"]
     if map_id in SLICE_MAP_IDS:
         paths += [maps_dir / f"Map{m:03d}.json" for m in SLICE_MAP_IDS if m != map_id]
     paths.append(_tilesets_json())
     return tuple(_file_fingerprint(p) for p in paths)
+
+
+# map_id -> (json_fingerprint at derivation time, derived tileset-PNG path tuple).
+# Deriving the PNG path list requires parsing map JSON + tilesets.json — too
+# expensive to redo on every request — so _slice_aware_fingerprint only re-derives
+# it when a fresh _json_fingerprint(map_id) no longer matches the cached key.
+# Never evicted: the map count is small and bounded (the corpus), and a stale
+# entry can never be served since the key comparison guards correctness, not
+# just an optimization.
+_png_paths_cache: dict[int, tuple[tuple[tuple[int, int], ...], tuple[Path, ...]]] = {}
+
+
+def _derive_png_paths_for_map(
+    map_id: int,
+    *,
+    maps_dir: Path,
+    tilesets_json_path: Path,
+    graphics_dir: Path | None = None,
+) -> tuple[Path, ...]:
+    """Pure(ish) derivation of every tileset source-PNG path *map_id*'s rendering
+    depends on: the sheet + non-empty autotile PNGs of *map_id*'s own
+    ``tileset_id``.
+
+    Only *map_id*'s own tileset is resolved — even for slice maps, deliberately
+    NOT every ``SLICE_MAP_IDS`` sibling's tileset. ``_ensure_tileset_analysis``
+    (~line 394) pools a slice sibling into *map_id*'s shared quantization only
+    when the sibling's CURRENT ``tileset_id`` is an EXACT match to *map_id*'s
+    own; every pool member therefore shares the identical ``tileset_name`` and
+    PNGs by construction, so "the pool siblings' tileset PNGs" collapses to
+    this same single tileset — there's nothing distinct left to resolve. A
+    sibling with a genuinely different ``tileset_id`` is, by definition, not
+    in the pool, so its source art has zero effect on *map_id*'s render and is
+    correctly excluded. (Sibling json *changes*, which could shift pool
+    membership, are still caught independently — ``_json_fingerprint`` watches
+    every ``SLICE_MAP_IDS`` sibling's json unconditionally, regardless of this
+    function.)
+
+    Takes explicit ``maps_dir`` / ``tilesets_json_path`` / ``graphics_dir``
+    params rather than reading the module's env-derived state directly, so
+    tests can point this at a ``tmp_path`` tree without monkeypatching global
+    state. ``graphics_dir=None`` mirrors ``load_tileset_sources``'s own default
+    (env-derived via ``default_graphics_dir()``), and — like
+    ``tileset_source_paths`` itself — degrades to no PNG entries rather than
+    raising if that env var is unset.
+
+    Degrades to ``()`` at every failure point (unreadable/malformed map JSON, a
+    missing ``tileset_id`` key, or — via ``tileset_source_paths`` — a missing
+    tilesets.json entry or unset graphics dir) rather than raising: this is
+    fingerprinting only, and an under-covering fingerprint is far better than a
+    viewer that won't start. The real load path (``_ensure_loaded`` /
+    ``load_tileset_sources``) still fails loud with a precise error."""
+    try:
+        doc = json.loads((maps_dir / f"Map{map_id:03d}.json").read_text(encoding="utf-8"))
+        tileset_id = int(doc["tileset_id"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return ()
+
+    return tuple(
+        tileset_source_paths(
+            tileset_id, tilesets_json=tilesets_json_path, graphics_dir=graphics_dir
+        )
+    )
+
+
+def _slice_aware_fingerprint(map_id: int) -> tuple[tuple[int, int] | tuple[str, int, int], ...]:
+    """Stat-only fingerprint of every on-disk input that can change *map_id*'s
+    rendered output — JSON inputs AND their tileset source-art PNGs.
+
+    Two halves, concatenated:
+
+    1. ``_json_fingerprint(map_id)``: the map's own ``Map{NNN}.json``,
+       ``tilesets.json``, and (for slice maps) every sibling's json — each a
+       ``(mtime_ns, size)`` pair.
+    2. The tileset source PNGs (sheet + autotiles) map_id's own tileset depends
+       on (see ``_derive_png_paths_for_map`` for why pool siblings never add a
+       distinct tileset here). Each entry is ``(str(path), mtime_ns, size)``:
+       the path string is included, not just the stat, so a changed PNG *path
+       set* (e.g. tilesets.json renaming an autotile) is caught even when
+       stats happen to coincide (e.g. two same-sized files).
+
+    Deriving the PNG path list needs parsing map JSON(s) + tilesets.json, so it's
+    memoized in ``_png_paths_cache`` and only recomputed when a fresh
+    ``_json_fingerprint`` no longer matches the cached key. Steady-state
+    per-request cost is then stat()-ing the JSONs (already happening) plus
+    stat()-ing the PNGs — no re-parsing — so this stays cheap enough to call on
+    every request, unlike actually resolving the tileset-analysis pool
+    (``_ensure_tileset_analysis``)."""
+    json_fp = _json_fingerprint(map_id)
+
+    cached = _png_paths_cache.get(map_id)
+    if cached is not None and cached[0] == json_fp:
+        png_paths = cached[1]
+    else:
+        png_paths = _derive_png_paths_for_map(
+            map_id, maps_dir=_maps_dir(), tilesets_json_path=_tilesets_json()
+        )
+        _png_paths_cache[map_id] = (json_fp, png_paths)
+
+    png_fp = tuple((str(p),) + _file_fingerprint(p) for p in png_paths)
+    return json_fp + png_fp
 
 
 def _feedback_path(map_id: int) -> Path:
@@ -165,7 +277,9 @@ class _MapState:
     analysis: PaletteAnalysis             # slice-scoped palette analysis for this map's tileset
     pool_key_to_idx: dict[tuple, int]     # column key -> index into analysis.metatiles
     quant_generation: int                 # _quant_generation the postquant fields were built at
-    input_fingerprint: tuple[tuple[int, int], ...]  # _slice_aware_fingerprint at load time
+    # _slice_aware_fingerprint at load time; each element is either a JSON stat
+    # pair (mtime_ns, size) or a PNG stat triple (str(path), mtime_ns, size).
+    input_fingerprint: tuple[tuple[int, int] | tuple[str, int, int], ...]
 
 
 _map_cache: dict[int, _MapState] = {}

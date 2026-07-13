@@ -21,12 +21,15 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import logging
+import os
 import re
 import socket
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -302,16 +305,148 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 # ---------------------------------------------------------------------------
+# Hot reload: watch imported source files, self-restart via os.execv on change.
+#
+# Watch set is re-derived from sys.modules on every poll rather than a
+# hardcoded file list, so it automatically covers this script, the sibling
+# scripts it imports, and whatever rpg2gba.tileset_converter.* modules it
+# actually pulled in from src/ -- and picks up modules imported lazily after
+# startup.  An edit to an unrelated converter the server never imported does
+# not trigger a restart.
+# ---------------------------------------------------------------------------
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_WATCH_EXCLUDE_PARTS = {".venv", "venv", "__pycache__"}
+_WATCH_POLL_INTERVAL = 1.0
+_WATCH_SETTLE_DELAY = 0.3
+_BIND_RETRY_ATTEMPTS = 20
+_BIND_RETRY_DELAY = 0.25
+
+
+def _watched_files(root: Path) -> list[Path]:
+    """Resolved paths of every currently-imported module's source file that
+    lives under `root`, excluding .venv/venv/__pycache__ path components.
+
+    Re-derived fresh on every poll (see module docstring above) rather than
+    cached, so lazily-imported modules join the watch set on a later cycle.
+    """
+    root = root.resolve()
+    out: list[Path] = []
+    for module in list(sys.modules.values()):
+        file = getattr(module, "__file__", None)
+        if not file:
+            continue
+        path = Path(file)
+        if path.suffix != ".py":
+            continue
+        try:
+            path = path.resolve()
+        except OSError:
+            continue
+        if _WATCH_EXCLUDE_PARTS & set(path.parts):
+            continue
+        try:
+            path.relative_to(root)
+        except ValueError:
+            continue
+        out.append(path)
+    return out
+
+
+def _snapshot(paths: list[Path]) -> dict[str, tuple[int, int]]:
+    """Map path (as str) -> (mtime_ns, size) for each path that currently
+    stats successfully.  A path that can't be stat'd (deleted, permission
+    error) is simply omitted from the result -- not recorded as a sentinel.
+    """
+    snap: dict[str, tuple[int, int]] = {}
+    for path in paths:
+        try:
+            st = path.stat()
+        except OSError:
+            continue
+        snap[str(path)] = (st.st_mtime_ns, st.st_size)
+    return snap
+
+
+def _changed_paths(
+    old: dict[str, tuple[int, int]], new: dict[str, tuple[int, int]]
+) -> list[str]:
+    """Paths (from `old`) whose stats differ in `new`, or that vanished from
+    `new` entirely.  A path present in `new` but not `old` is the watch set
+    legitimately growing (a lazy import) and is NOT reported as a change --
+    otherwise a mid-session lazy import would trigger a spurious restart.
+    """
+    changed: list[str] = []
+    for path, stats in old.items():
+        if new.get(path) != stats:
+            changed.append(path)
+    return changed
+
+
+def _watch_loop(restart_argv: list[str], root: Path) -> None:
+    """Background thread body: poll the watch set forever; on any change,
+    settle briefly (multi-file editor saves land in a burst), flush output,
+    and exec-replace this process with `restart_argv`.  Never returns.
+    """
+    snapshot = _snapshot(_watched_files(root))
+    while True:
+        time.sleep(_WATCH_POLL_INTERVAL)
+        current = _snapshot(_watched_files(root))
+        changed = _changed_paths(snapshot, current)
+        if not changed:
+            snapshot = current
+            continue
+        log.info("source change detected (%s) -- restarting", ", ".join(changed))
+        time.sleep(_WATCH_SETTLE_DELAY)
+        # Settle pass: take one more snapshot so a file mid-write during the
+        # burst is captured at its final stats.  We're restarting regardless;
+        # this only avoids logging a half-written file next cycle -- moot
+        # since we exec below, but keeps the loop's invariant honest.
+        _snapshot(_watched_files(root))
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.execv(restart_argv[0], restart_argv)
+
+
+def _create_server(host: str, port: int) -> ThreadingHTTPServer:
+    """Construct the ThreadingHTTPServer, retrying on EADDRINUSE.
+
+    After an os.execv-based restart the new process re-binds the same port;
+    the old listener closes on exec (sockets are CLOEXEC by default) and
+    allow_reuse_address is already on, but a still-shutting-down connection
+    can briefly hold the port.  Retry a few times before giving up.
+    """
+    attempt = 0
+    while True:
+        try:
+            return ThreadingHTTPServer((host, port), _Handler)
+        except OSError as exc:
+            attempt += 1
+            if exc.errno != errno.EADDRINUSE or attempt >= _BIND_RETRY_ATTEMPTS:
+                raise
+            time.sleep(_BIND_RETRY_DELAY)
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
 
 def main() -> None:
+    # Captured before argument parsing / dotenv loading can touch anything,
+    # so a later os.execv restarts with exactly how this process was invoked.
+    restart_argv = [sys.executable, str(Path(sys.argv[0]).resolve()), *sys.argv[1:]]
+
     _load_dotenv()
 
     ap = argparse.ArgumentParser(description="Uranium map viewer local server (Phase B1).")
     ap.add_argument("--port", type=int, default=8765, help="TCP port (default: 8765)")
     ap.add_argument("--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
+    ap.add_argument(
+        "--no-watch",
+        action="store_true",
+        help="Disable the source-change watcher/self-restart",
+    )
     args = ap.parse_args()
 
     hostname = socket.gethostname()
@@ -320,7 +455,15 @@ def main() -> None:
     print(f"  http://localhost:{args.port}/")
     print("  Ctrl-C to stop.")
 
-    server = ThreadingHTTPServer((args.host, args.port), _Handler)
+    if not args.no_watch:
+        watched = _watched_files(_REPO_ROOT)
+        print(f"  watching {len(watched)} source files for changes (--no-watch to disable)")
+        watch_thread = threading.Thread(
+            target=_watch_loop, args=(restart_argv, _REPO_ROOT), daemon=True
+        )
+        watch_thread.start()
+
+    server = _create_server(args.host, args.port)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
