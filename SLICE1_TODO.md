@@ -18,13 +18,6 @@ would reject it. Blocked on Uranium species constants joining the gate extras
 (Phase 7 integration); revisit then. (88 CommonEvent queue entries also remain,
 but the slice calls zero CEs — not slice-blocking.)
 
-### 3. `\wt[n]` text-pause timing — calibrate by eye
-
-`deterministic.translate_text_codes` maps `\wt[n]` → `{PAUSE 0xHH}` with a
-first-guess `n*3` frames formula. Never calibrated against real hardware feel.
-While walking dialogue-heavy NPCs, judge whether pauses feel right; adjust the
-multiplier in one place if not.
-
 ### 5. Remove the new_game.c test harness — needs a decision
 
 Sentinel-fenced `TEST HARNESS` block after `CB2_NewGame()` grants
@@ -114,6 +107,9 @@ fixed. Add new findings here as they're reported.
 
 ## Done
 
+- **2026-07-13 — #3 `\wt[n]` text-pause timing: user-approved by eye** — the
+  first-guess `n*3` frames formula in `deterministic.translate_text_codes`
+  feels right during the boot-gate walk; no multiplier change needed.
 - **2026-07-13 — #1 temp-switch page dispatch: carve-out landed, premise
   corrected — the "8 Moki NPCs" are warp doors, dispatch was moot in-game**:
   the 8 ts-gated events (Map032 EV003/005/006/007/017 = door gfx, EV023/036/
