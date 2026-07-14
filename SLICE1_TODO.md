@@ -122,6 +122,29 @@ read). Verified facts, superseding the old from-memory notes:
   build). `ObjectEvent` grows range fields; wire through
   `build_object_events`; rebuild slice + boot-walk (also confirms the 2
   existing WANDER mons actually move in-engine).
+- **Slice roster for the post-fix boot walk** (census): Map049 = 4 visible
+  NPCs, all type 0 (Auntie/Lucille/AuntieCutscene/Kellyn — correctly
+  static); Map048 = zero visible NPCs (blank-gfx triggers only); Map032 is
+  the only map that changes. Expected movers there: EV10 Chyinmunk + EV35
+  Barewl (type 1, already WANDER_AROUND — first confirm these move at all
+  in-engine), pacers EV12/48/68–73 (type 3 left/right loops), the
+  turn-in-place lookers, EV16 Bambo (type 3, speed 4 / freq 5 — the one
+  corpus outlier). The 12 "Luz" light props stay static: their route is a
+  `(41,15,0)` change-graphic flicker loop — same unsupported live-gfx-swap
+  class as #6, not a movement bug.
+- **Numbers behind the pacing call** (RGSS verified,
+  `021_Game_Character_v17.rb`): idle gate between self-moves =
+  `(40−2f)(6−f)` frames → freq 1/3/5 = 190/102/30; corpus random movers use
+  freq 1 or 3 only. Speed: page speed ×1.25, `2^s` subpx/frame over
+  128 subpx/tile → speed 3 ≈ 9.5 frames/tile (GBA walk = 16 f/tile; wander
+  pause table 32–128f ≈ freq 3). Random tick = 4/6 random step, 1/6
+  forward, 1/6 pause. Type-3 route shape census (repeat=true): flicker
+  `(41,15,0)` ×391, turn-cycle ×61, left×3/right×3 ×25, left×2/right×2 ×24,
+  right×3/left×3 ×23.
+- **Code locations:** classifier = `npc_gfx.py:135 movement_type_for`
+  (consts :36); consumption = `metadata_wiring.py:749`; hardcoded 0 ranges
+  = `ObjectEvent.to_dict` metadata_wiring.py:187-188; boot-page rule =
+  `npc_gfx.select_boot_page:114`.
 - Static-boot-page limitation stands: movement comes from the boot page;
   page-driven movement changes aren't reflected.
 
