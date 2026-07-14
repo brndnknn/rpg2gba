@@ -85,34 +85,45 @@ fixed. Add new findings here as they're reported. Reported 2026-07-13, split
 out as items #12 and #13 below: NPCs never move; only the player's house is
 enterable.
 
-### 12. NPCs don't move at all (walk finding 2026-07-13) — NEEDS RESEARCH
+### 12. NPCs don't move at all (walk finding 2026-07-13) — RESEARCHED 2026-07-13, ready to build
 
-All NPCs stand frozen; in Uranium the Moki townsfolk wander/turn. Notes from
-memory — **unverified, research before building**:
+All NPCs stand frozen; in Uranium the Moki townsfolk wander/turn. Research
+done (3 sub-agents: pipeline audit, fork inventory, corpus census + RGSS
+read). Verified facts, superseding the old from-memory notes:
 
-- Suspected cause: `metadata_wiring.build_object_events` never converts the
-  RMXP page movement fields — likely emits one static `movement_type` (face
-  direction only) + zero `movement_range_x/y` for every NPC. Confirm what we
-  actually emit first. **Partial correction 2026-07-13:** `npc_gfx.
-  movement_type_for` DOES exist and derives movement from the boot page's
-  move_type/facing (consumed at metadata_wiring.py:655) — research what it
-  maps move_type 1 (random) to before assuming nothing is wired.
-- RMXP source fields (per page): `move_type` (0 fixed / 1 random / 2 approach
-  player / 3 custom via `move_route`), plus `move_speed`, `move_frequency`,
-  and the repeating parallel/custom route case. Essentials wander is bounded
-  only by passability — no stored radius, so a GBA `movement_range_x/y` has
-  to be invented (needs a fidelity call).
-- Candidate mapping: 1 → `MOVEMENT_TYPE_WANDER_AROUND` (+ default range,
-  maybe 2×2); 0 → face-direction static (current behavior, correct for
-  fixed); 2 → no obvious native analog, check fork (§4.7 — do NOT assume);
-  3 → per-route conversion or demote to static. Speed/frequency → GBA
-  movement types encode some of this natively (check `movement_types.h`).
-- Same static-boot-page limitation as gfx applies: movement comes from
-  whichever page we classify as the boot page; page-driven movement changes
-  won't be reflected.
-- Research: census `move_type` across slice + corpus; read the fork's
-  movement-type inventory; check whether collision/through NPCs (blank-gfx
-  blockers) must stay fixed so they don't wander out of their blocking cells.
+- **Real cause: move_type 3 (custom route), not move_type 1.** `npc_gfx.
+  movement_type_for` already maps 1 → `MOVEMENT_TYPE_WANDER_AROUND` (2 Moki
+  mons carry it today) but collapses 0/2/3 → static `FACE_<dir>`. Moki's
+  visible "life" is almost all type 3: pacing walkers (EV12/48/68–73,
+  `move_left×N`/`move_right×N` loops), turn-in-place lookers, and Luz
+  flicker props. Corpus: 7342 pages type 0 / 22 type 1 / **0 type 2** /
+  1065 type 3 (1051 repeat=true; only ~400 actually translate, 240
+  turn-only, 425 no-movement props).
+- **Fork facts** (event_object_movement.c): `movement_range 0 = axis check
+  SKIPPED` (unlimited, :6598-6622) — so range doesn't need inventing for
+  type 1; Essentials random walk is passability-bounded only (RGSS
+  `move_type_random` verified: 4/6 random step, 1/6 forward, 1/6 pause) and
+  (0,0) is the faithful conversion. Native inventory: WANDER_* family,
+  LOOK_AROUND, WALK_LEFT_AND_RIGHT/UP_AND_DOWN patrols (range-respecting),
+  FACE_X_AND_Y look combos, WANDER_AROUND_SLOWER. **No approach-player
+  type exists** (exhaustive MovementType_* sweep) — moot, type 2 is unused
+  corpus-wide. Wander delays (32–128f medium table) ≈ Uranium's freq-3
+  102-frame idle gate; speeds close enough (GBA 16 f/tile vs speed-3 9.5).
+- **Blocker worry resolved:** blank-gfx through=false events are collision-
+  stamped, never emitted as objects — nothing invisible can wander.
+- **Plan:** extend `movement_type_for` → (movement_type, range_x, range_y):
+  type 3 route classifier — no-translation props → FACE (unchanged);
+  turn-only → LOOK_AROUND (or exact FACE_X_AND_Y combo from turn codes);
+  pure-horizontal loop → WALK_LEFT_AND_RIGHT + range_x from simulated route
+  excursion; pure-vertical → WALK_UP_AND_DOWN + range_y; other translating
+  routes → static + drop-report (v1). Type 1 → WANDER_AROUND (0,0). Type 2
+  → fail loud. Fidelity note for eye-check: GBA range is centered on spawn,
+  RMXP routes are one-sided (pacer left×3 spans [x-3,x]; ±2 vs ±3 call at
+  build). `ObjectEvent` grows range fields; wire through
+  `build_object_events`; rebuild slice + boot-walk (also confirms the 2
+  existing WANDER mons actually move in-engine).
+- Static-boot-page limitation stands: movement comes from the boot page;
+  page-driven movement changes aren't reflected.
 
 ### 13. Only the player's house is enterable — expand Moki interiors — NEEDS RESEARCH
 
