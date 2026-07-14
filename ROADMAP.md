@@ -648,10 +648,13 @@ Implement Uranium's Nuclear type as a real working type in the pokeemerald-expan
 - Add Nuclear type icon to the GBA UI sheet
 - Update type display logic in battle UI
 
-**6.4 Special status: Nuclear-type Pokémon take damage outside battle**
-- In Uranium, Nuclear Pokémon lose HP each step until cured
-- Implement as a field effect tied to the species/form flag
-- Tie into existing field effect tick logic in pokeemerald-expansion
+**6.4 Special status: un-cured Nuclear Pokémon disobey in battle** *(corrected
+2026-07-14 — the old "lose HP each step" claim was wrong; verified against the
+scripts dump, see `reference/guides/nuclear_type_spec.md` §0)*
+- In Uranium, an un-cured Nuclear Pokémon disobeys ~50 % of the time in battle
+  (`isNuclear? && !nuclearFree`); the EXPUNGE field move cures it
+- Implement as a per-mon `nuclearFree` save bit + a sentinel-fenced condition
+  in the fork's obedience logic, reusing the existing disobedience machinery
 
 **6.5 Nuclear-cured-form transitions**
 - Some Nuclear Pokémon have a "cured" non-Nuclear counterpart species

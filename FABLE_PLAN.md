@@ -80,15 +80,21 @@ head-heavy SE. Slice-1 bar (user call pending): ~15-row table for the 8 slice
 maps. Phase-8 lane: sequence signature tracks as MUS_URANIUM_*, one table row
 each.
 
-## Step 5 — Phase 6 + Phase 7 specs (if time remains)
+## Step 5 — Phase 6 + Phase 7 specs — DONE 2026-07-14
 
-- **Nuclear type spec:** type-chart source of truth from Uranium data, field
-  damage tick integration point, cured-form via evolution method vs form
-  change. Written so a Sonnet builder can implement against it.
-- **Phase 7 integration/reconciliation plan:** the `items.py` full-replacement
-  landmine (vanilla item behavior zeroed — flagged at items.py:284-286),
-  Uranium species constants joining the fork-gate extras (unblocks SLICE1_TODO
-  #2), save-capacity re-check against later slices' mint counts.
+- **`reference/guides/nuclear_type_spec.md`** — implementation-ready Phase 6
+  spec. Notable: ROADMAP §6.4 was WRONG (no out-of-battle HP drain exists in
+  Uranium — the field damage is plain poison; the real mechanic is 50%
+  in-battle disobedience for `isNuclear? && !nuclearFree`, cured by the
+  EXPUNGE field move — all verified in `reference/scripts_dump/`). ROADMAP
+  6.4 corrected. Type chart verified from `types_dump.json` (Nuclear: 2× vs
+  all except Steel/Nuclear ½×; takes 2× from all except Nuclear ½×); type
+  index remap Uranium→fork required (fork TYPE_NUCLEAR = 21 after STELLAR).
+- **`reference/guides/phase7_integration_plan.md`** — the debt ledger
+  (D1–D10: items.h merge-not-replace, species gfx/cries pipeline gap, fork-
+  gate extras unblocking SLICE1_TODO #2, engine cutover first, encounters/
+  trainers wiring, save-capacity, vanilla stripping, audio table, deferred
+  Phase-2 exit criteria) with order of attack and verify-first warnings.
 
 ## Standing reserve
 
