@@ -44,15 +44,64 @@ Deliverable: a short verdict per seam — SHARED-TILESET / UNIFORM-BORDER /
 GENUINELY-MIXED — and a call on whether step 2 is a real design session or a
 small mechanical fix.
 
-## Step 2 — Connections design (scope set by step 1)
+## Step 2 — Connections design — DIRECTION CHOSEN 2026-07-14 (user approved):
+## Emerald-style shared "Uranium-General" primary + per-map secondary
 
-If step 1 says "mostly shared tilesets": design = connected-component packing
-(group maps that share seams into one synth tileset family; verify tile/palette
-budgets still fit per component). If "genuinely mixed": full design session —
-options include seam-alias metatile tables, border-row re-emission, or accepting
-per-seam curated borders. Either way the output is a `reference/` design doc,
-not code. Moki Town E ↔ Route 03 is the slice-2 frontier seam, so this gates
-slice 2 regardless.
+Step-1 seam census DONE (all 14 seams enumerated with tileset pairing — 6/14
+same-tileset, 8/14 differ; even same-tileset pairs mostly bust the shared-1024
+budget). But the design direction changed after the user observed **color
+inconsistency** (same tree/cliff art quantizes to different colors per map,
+e.g. Route 02 vs Nowtoch cliffs): Emerald solves this structurally —
+`gTileset_General` is primary for 416 layouts and owns BG palettes 0–5
+game-wide; secondaries carry area art in palettes 6–12. Measured on Uranium's
+outdoor family (ts22/23/24/25/28/30): tilesets share pixel-identical rendered
+tiles (ts22∩ts24 = 688 = 30% of smaller; family dedup saves ~2 900 tiles), so
+the same architecture fits us:
+
+- **Uranium-General primary per biome family** (outdoor / cave / interior):
+  cross-tileset common tiles, ≤512, with 6 palettes computed once + pinned.
+- **Per-map secondary** with only non-General art, quantized against the
+  remaining 7 palettes (`quantize_tile_to_palette` pattern).
+- Buys: identical common art everywhere (the color complaint), seams mostly
+  render right even across DIFF-tileset pairs (border art is mostly General;
+  strip-import shrinks to secondary remnants), ~MB-scale ROM dedup, monster-
+  map relief. Supersedes the audit §6.1–6.2 plain "per-map packing +
+  border-strip import" as the step-2 design.
+- **Validation gate RUN 2026-07-14 — shared-TILE architectures FAIL the
+  budget; pinned family PALETTES survive as the color fix.** Prototype
+  results (scratchpad proto_general{,2,3}.py, outdoor family
+  ts22/23/24/25/28/30, 21 maps, 12 035 unique tiles):
+  - Cross-tileset General (top-512) DOES pack into 6 palettes with the base
+    packer (mean shift 1.29/31; round-1 "failure" was the family packer's
+    per-hue-group floor — use `build_quantized_tileset` for capped packs).
+  - BUT every tile-sharing variant starves the per-map secondary: strict
+    family General → 17/21 maps over 512 residual (median coverage 40%);
+    per-RMXP-tileset primary → Kevlar 671 / Route 01 613 / Map008 598 over;
+    per-seam-component primary → 5/8 components over even on non-monster
+    maps (Kevlar 519, Map142 658, Map145 682…). Root cause: Uranium outdoor
+    maps need ~600–1 100 map-specific tiles; Hoenn's 512/512 primary/
+    secondary split assumes art economy Uranium doesn't have. Total 1024/map
+    is the hardware-ish ceiling (10-bit tile ids), so shared blocks directly
+    cannibalize map budget.
+  - **Revised step-2 architecture:** per-map packing (audit §6.1 stands
+    after all) + **family-pinned palettes** (quantize every map in a biome
+    family against ONE pinned 13-palette set → same art renders identical
+    colors everywhere, deterministically) + border-strip import for seams
+    (strips are small; per-map budgets absorb them). Component-shared
+    primaries remain a selective optimization where they fit (Snowbank
+    pair fits today).
+  - **Test C RESULT: pinned family palettes are FEASIBLE.** The production
+    packer (`build_quantized_tileset_family`) packs the ENTIRE outdoor-family
+    union — all 12 035 unique tiles across ts22/23/24/25/28/30 — into
+    **13 palettes** (took ~15 min; fine as a once-per-family offline
+    computation; the plain global packer is too slow at this size — use the
+    family packer). Remaining acceptance = BY EYE per quantize.py's own
+    rule: render before/after previews of two maps sharing art (e.g. Route
+    02 vs Nowtoch cliffs, Moki vs Route 03 trees) under the pinned set and
+    have the user compare. Then the implementation is: compute + pin family
+    palettes once (new SoT artifact), quantize each map's tiles against
+    them via the `quantize_tile_to_palette` path instead of deriving
+    per-pack palettes.
 
 ## Step 3 — Corpus-scaling audit — DONE 2026-07-14
 

@@ -160,6 +160,15 @@ treated as an emergency escape.
 
 ## 6. What this changes (recommended actions, in order)
 
+> **SUPERSEDED IN PART 2026-07-14 (same day, user-approved direction):** items
+> 1–2 below are replaced by the **Emerald-style shared-primary design** — a
+> per-biome "Uranium-General" primary (cross-tileset common art, 6 pinned
+> palettes) + per-map secondaries (7 palettes) — which also fixes the
+> same-art-different-colors quantization inconsistency the plain per-map
+> scheme would keep. Rationale, measurements (outdoor-family tile overlap up
+> to 30% pairwise), and validation gate: `FABLE_PLAN.md` step 2. Items 3–6
+> stand unchanged.
+
 1. **Adopt per-map tileset packing for the slice pipeline before slice 2**
    (Route 01 forces it). The machinery exists (`map_set.py` synthetic ids,
    `phase5.convert_all`); the work is promoting it from walker-only to the
