@@ -163,7 +163,8 @@ Every building door in Moki Town except the player's house does nothing
 
 ## Done
 
-- **2026-07-13 — #10 viewer "expand similar" over-split fixed (viewer-only)**:
+- **2026-07-13 — #10 viewer "expand similar" over-split fixed (viewer-only),
+  user-verified by eye (one click grabs all the flowers)**:
   new `_pixel_classes` in `map_viewer_common.py` groups column keys by
   frame-aware rendered pixels (layer split + behavior + every animation
   frame; a column tripping the 64-frame lcm guard stays ungrouped rather
