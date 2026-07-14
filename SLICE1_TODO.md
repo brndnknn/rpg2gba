@@ -85,7 +85,7 @@ fixed. Add new findings here as they're reported. Reported 2026-07-13, split
 out as items #12 and #13 below: NPCs never move; only the player's house is
 enterable.
 
-### 12. NPCs don't move at all (walk finding 2026-07-13) — RESEARCHED 2026-07-13, ready to build
+### 12. NPCs don't move at all (walk finding 2026-07-13) — BUILT 2026-07-13, needs fine-tuning
 
 All NPCs stand frozen; in Uranium the Moki townsfolk wander/turn. Research
 done (3 sub-agents: pipeline audit, fork inventory, corpus census + RGSS
@@ -147,6 +147,21 @@ read). Verified facts, superseding the old from-memory notes:
   `npc_gfx.select_boot_page:114`.
 - Static-boot-page limitation stands: movement comes from the boot page;
   page-driven movement changes aren't reflected.
+- **Landed + rebuilt 2026-07-13:** `movement_spec_for` (renamed from
+  `movement_type_for`) classifies move_type 3 routes per the plan above,
+  wired through `metadata_wiring.build_object_events`
+  (`movement_range_x`/`_y` added to `ObjectEvent`); 51 npc_gfx tests + 1054
+  total pass. Staged/assembled/`make modern` clean, ROM taildropped.
+  **User boot-walk verdict: NPCs move now but need fine-tuning** — exact
+  behavior (range/timing/which routes patrol vs sit static) hasn't been
+  checked eye-to-eye against Uranium running on PC yet. **TODO before
+  calling this done:** run Uranium on PC side-by-side with the ROM on the
+  Moki roster (EV10/35 wander, EV12/48/68–73 pacers, EV16 Bambo outlier,
+  turn-in-place lookers) and compare actual movement — range width, pacing
+  cadence, which NPCs feel off — then adjust the classifier (`npc_gfx.py`
+  `_spec_for_axis`/`_look_spec_for`/the demotion cases) accordingly. Demoted
+  routes to recheck against the PC reference: Map032 EV008/48/72/73
+  (translation+turns or mixed-axis, codes `[1,2,3,4]`).
 
 ### 13. Only the player's house is enterable — expand Moki interiors — NEEDS RESEARCH
 

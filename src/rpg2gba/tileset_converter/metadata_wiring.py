@@ -57,7 +57,7 @@ from ..conversion_agent.flag_registry import (
     self_switch_flag_name,
 )
 from .map_constants import MapConstantRegistry, MapConstants
-from .npc_gfx import is_door_sheet, movement_type_for, select_boot_page
+from .npc_gfx import is_door_sheet, movement_spec_for, select_boot_page
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +175,8 @@ class ObjectEvent:
     script: str
     flag: str = "0"  # visibility flag (0 = always shown)
     movement_type: str = "MOVEMENT_TYPE_NONE"
+    movement_range_x: int = 0
+    movement_range_y: int = 0
     elevation: int = DEFAULT_ELEVATION
 
     def to_dict(self) -> dict:
@@ -184,8 +186,8 @@ class ObjectEvent:
             "y": self.y,
             "elevation": self.elevation,
             "movement_type": self.movement_type,
-            "movement_range_x": 0,
-            "movement_range_y": 0,
+            "movement_range_x": self.movement_range_x,
+            "movement_range_y": self.movement_range_y,
             "trainer_type": "TRAINER_TYPE_NONE",
             "trainer_sight_or_berry_tree_id": "0",
             "script": self.script,
@@ -651,8 +653,12 @@ def build_object_events(
         real door is the warp_event + tileset door tile, not this sprite.
         otherwise -> an object_event with `graphics_id = npc_gfx[character_name]`
                      (KeyError if `npc_gfx` is None or the name is unmapped — no
-                     silent default, CLAUDE.md §4.5) and `movement_type` from the
-                     boot page's move_type/facing (`npc_gfx.movement_type_for`).
+                     silent default, CLAUDE.md §4.5) and `movement_type`/
+                     `movement_range_x`/`movement_range_y` from the boot page's
+                     move_type/move_route (`npc_gfx.movement_spec_for`). A route
+                     `movement_spec_for` had to demote to a static facing (no
+                     native pokeemerald analog) is logged loud via
+                     `logger.warning`, never silent — the event is still placed.
 
     Every emission path resolves its script label via `_resolve_script`. Returns
     an `ObjectBuildResult`: the placed events, dispatcher bodies, the local-id
@@ -746,11 +752,17 @@ def build_object_events(
                     f"map {uid} EV{eid:03d}: sheet {name!r} has no reference/"
                     f"npc_gfx_map.json entry"
                 ) from None
-            movement_type = movement_type_for(page)
+            spec = movement_spec_for(page)
+            if spec.demoted is not None:
+                logger.warning(
+                    "map %d EV%03d: movement demoted to static facing (%s)",
+                    uid, eid, spec.demoted,
+                )
             result.object_events.append(
                 ObjectEvent(
                     x=event["x"], y=event["y"], graphics_id=graphics_id,
-                    script=script, movement_type=movement_type,
+                    script=script, movement_type=spec.movement_type,
+                    movement_range_x=spec.range_x, movement_range_y=spec.range_y,
                     flag=rock_flags.get(eid, "0"),
                 )
             )
