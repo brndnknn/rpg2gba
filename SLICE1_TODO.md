@@ -77,15 +77,14 @@ Open questions left behind by the 2026-07-12 animation build:
   frames) is unused by Map032 cells — the first animated+transparent autotile
   arrives with Route 01 (slice 2). Stipple/alpha classify interaction with
   frame quantization untested.
-- **Viewer "expand similar" over-split** (investigated 2026-07-12 — NOT a
-  viewer bug): grouping is exact `column_key` equality and autotile
-  shape-variants stay distinct; the 34 flower cells are ONE autotile whose 12
-  shape variants render pixel-identical → 15 groups (+3 cells with a real z2
-  sparkle overlay); water fragmentation adds legit edge shapes + z2 foam
-  overlays. Candidate fix: collapse column-key groups whose rasterized pixels
-  are identical (viewer UX + possible metatile-count win). Re-reported
-  2026-07-13; the *color* half of that report was a separate real viewer bug —
-  see `PROJECT_TODO.md` #13/#14.
+- **Viewer "expand similar" over-split — FIXED 2026-07-13** (see Done). The
+  build-side half (collapsing pixel-identical column keys into one metatile)
+  stays deferred deliberately: 8×8 tiles are already pixel-deduped in
+  `emit.py`, so the only win is metatile-table entries — not the tight
+  budget (that's 8×8 tiles, e.g. ts22 997/1024). Revisit only if a slice
+  nears the metatile cap; merge key would need pixels + frames + attrs, and
+  it changes ROM output (full rebuild + oracle re-verify). The *color* half
+  of the 2026-07-13 report stays separate — `PROJECT_TODO.md` #13/#14.
 
 ### 11. Remaining boot-gate walk findings
 
@@ -164,6 +163,16 @@ Every building door in Moki Town except the player's house does nothing
 
 ## Done
 
+- **2026-07-13 — #10 viewer "expand similar" over-split fixed (viewer-only)**:
+  new `_pixel_classes` in `map_viewer_common.py` groups column keys by
+  frame-aware rendered pixels (layer split + behavior + every animation
+  frame; a column tripping the 64-frame lcm guard stays ungrouped rather
+  than merging off frame 0); payload ships `pix_class` (colkey_idx → class
+  rep), `btn-expand` selects by it. Map032: 839 colkeys → 697 classes; the
+  12 flower shape-variants collapse to one 31-cell group, the 3 sparkle-
+  overlay cells correctly stay out; animated merged only with animated.
+  Pipeline/ROM output untouched. 7 tests
+  (`test_map_viewer_pixel_classes.py`); 1036 pass.
 - **2026-07-13 — #3 `\wt[n]` text-pause timing: user-approved by eye** — the
   first-guess `n*3` frames formula in `deterministic.translate_text_codes`
   feels right during the boot-gate walk; no multiplier change needed.

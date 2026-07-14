@@ -24,6 +24,7 @@ from rpg2gba.tileset_converter.graphics.autotile import autotile_frame_count
 from rpg2gba.tileset_converter.graphics.build_slice_tilesets import (
     _render_column,
     column_keys_for_maps,
+    column_n_frames,
 )
 from rpg2gba.tileset_converter.graphics.emit import (
     MetatileImage,
@@ -274,6 +275,7 @@ class _MapState:
     colkeys_sorted: list[tuple]           # stable-sorted column-key tuples
     colkey_to_idx: dict[tuple, int]       # tuple -> index in colkeys_sorted
     metatile_imgs: list[MetatileImage | None]  # indexed by colkey idx; None = empty col
+    pix_class: list[int]                  # colkey idx -> smallest colkey idx rendering pixel-identical (see _pixel_classes)
     metatile_imgs_postquant: list[tuple[np.ndarray, np.ndarray] | None]  # aligned with metatile_imgs; None = empty col
     analysis: PaletteAnalysis             # slice-scoped palette analysis for this map's tileset
     pool_key_to_idx: dict[tuple, int]     # column key -> index into analysis.metatiles
@@ -540,6 +542,49 @@ def _invalidate_for_reload(map_id: int) -> None:
     _quant_generation += 1
 
 
+def _pixel_classes(
+    colkeys_sorted: list[tuple],
+    metatile_imgs: list[MetatileImage | None],
+    raster: TileRasterizer,
+    priorities: list[int],
+) -> list[int]:
+    """Pixel-equivalence class per colkey index: ``pix_class[i]`` is the smallest
+    colkey index whose metatile renders EXACTLY like ``i``'s — same layer split,
+    behavior, frame count, and every animation frame's pixels.
+
+    ``column_key`` deliberately keeps autotile shape-variants distinct (faithful
+    edges — see layout.column_key), but many variants rasterize identically
+    (e.g. the flower autotile's 12 interior shapes), which over-splits the
+    viewer's "Expand similar" (SLICE1_TODO #10). This equivalence is a viewer
+    grouping only — the pipeline still emits one metatile per column key.
+
+    Frame-aware on purpose: an animated column never merges with a static
+    lookalike of its frame 0, and two animated columns merge only if every
+    frame matches. A column whose frame-count lcm trips the fail-loud guard
+    can't be hashed faithfully, so it stays alone in its own class."""
+    class_by_key: dict[tuple, int] = {}
+    out: list[int] = []
+    for i, ck in enumerate(colkeys_sorted):
+        mt = metatile_imgs[i]
+        if mt is None:
+            out.append(i)  # the empty column is alone in its class
+            continue
+        try:
+            n = column_n_frames(ck, raster)
+        except ValueError as e:
+            log.warning("colkey %r unhashable for pixel grouping (%s); left ungrouped", ck, e)
+            out.append(i)
+            continue
+        if n > 1:
+            mt = _render_column(ck, raster, priorities, n_frames=n)
+        parts = [mt.bottom.tobytes(), mt.top.tobytes()]
+        for fb, ft in mt.frames or []:
+            parts += [fb.tobytes(), ft.tobytes()]
+        key = (int(mt.layer_type), int(mt.behavior), n, *parts)
+        out.append(class_by_key.setdefault(key, i))
+    return out
+
+
 def _ensure_loaded(map_id: int) -> None:
     """Load and cache all per-map rendering state (idempotent).
 
@@ -617,7 +662,12 @@ def _ensure_loaded(map_id: int) -> None:
             metatile_imgs.append(_render_column(ck, raster, priorities))
 
     n_rendered = sum(1 for m in metatile_imgs if m is not None)
-    print(f"    {len(colkeys_sorted)} distinct columns, {n_rendered} metatile renders")
+    pix_class = _pixel_classes(colkeys_sorted, metatile_imgs, raster, priorities)
+    n_classes = len(set(pix_class))
+    print(
+        f"    {len(colkeys_sorted)} distinct columns, {n_rendered} metatile renders,"
+        f" {n_classes} pixel classes"
+    )
 
     # Param-independent state first; the quant-dependent fields (analysis, post-quant
     # metatiles) are filled by _refresh_postquant so the same path serves a re-quant.
@@ -638,6 +688,7 @@ def _ensure_loaded(map_id: int) -> None:
         colkeys_sorted=colkeys_sorted,
         colkey_to_idx=colkey_to_idx,
         metatile_imgs=metatile_imgs,
+        pix_class=pix_class,
         metatile_imgs_postquant=[],
         analysis=PaletteAnalysis(palettes=[], metatiles=[]),
         pool_key_to_idx={},
@@ -953,6 +1004,7 @@ def build_map_data(map_id: int) -> dict:
         },
         "colkeys_list": colkeys_list,
         "metatile_attrs": metatile_attrs,
+        "pix_class": state.pix_class,
         "cells": cells,
         "events": _parse_events(state.events_raw),
         "palettes": palettes_json,
@@ -1152,7 +1204,7 @@ body.adv #knobbar{display:flex}
       <div class="section-title">Feedback</div>
       <div id="sel-summary">No cells selected.</div>
       <div>
-        <button class="btn" id="btn-expand" disabled title="Add every cell sharing the focused cell's metatile identity (this map)">Expand similar</button>
+        <button class="btn" id="btn-expand" disabled title="Add every cell whose metatile renders pixel-identical to the focused cell's, all frames included (this map)">Expand similar</button>
         <button class="btn" id="btn-clear" disabled>Clear</button>
       </div>
       <textarea id="note-text" placeholder="Describe what's wrong with these tiles…"></textarea>
@@ -1793,9 +1845,11 @@ function updateSelectionUI() {
 
 document.getElementById('btn-expand').onclick = function() {
   if (!focusCell) return;
-  const idx = focusCell.colkey_idx;
+  // Pixel-equivalence class, not raw colkey: autotile shape-variants that render
+  // identically (e.g. the flower autotile's interior shapes) group as one.
+  const cls = D.pix_class[focusCell.colkey_idx];
   for (const c of D.cells) {
-    if (c.colkey_idx === idx) selection.set(c.x + ',' + c.y, c);  // additive; multi-identity accumulates
+    if (D.pix_class[c.colkey_idx] === cls) selection.set(c.x + ',' + c.y, c);  // additive; multi-identity accumulates
   }
   updateSelectionUI(); updateSidebar(); scheduleRender();
 };
