@@ -274,11 +274,13 @@ void CB2_StartUraniumSlice(void)
 #endif
     // END URANIUM MAP WALKER
     CB2_NewGame();
-    // TEST HARNESS (boot-gate only, REMOVE for real progression): make rock smash
-    // usable from a fresh boot — EventScript_RockSmash gates on FLAG_BADGE03_GET +
-    // a non-egg party mon knowing MOVE_ROCK_SMASH (checkfieldmove, scrcmd.c). Must
-    // run AFTER CB2_NewGame(): NewGameInitData() zeroes the party inside it.
-    // ScriptSetMonMoveSlot also syncs PP; SetBoxMonData handles checksum/encrypt.
+    // TEST HARNESS (KEPT indefinitely — user decision 2026-07-13: standing HM/
+    // field-move test rig while slices expand, expected to grow per-HM; strip only
+    // for a release ROM): make rock smash usable from a fresh boot —
+    // EventScript_RockSmash gates on FLAG_BADGE03_GET + a non-egg party mon knowing
+    // MOVE_ROCK_SMASH (checkfieldmove, scrcmd.c). Must run AFTER CB2_NewGame():
+    // NewGameInitData() zeroes the party inside it. ScriptSetMonMoveSlot also syncs
+    // PP; SetBoxMonData handles checksum/encrypt.
     FlagSet(FLAG_BADGE03_GET);
     ScriptGiveMon(SPECIES_GEODUDE, 5, ITEM_NONE);
     ScriptSetMonMoveSlot(0, MOVE_ROCK_SMASH, 0);

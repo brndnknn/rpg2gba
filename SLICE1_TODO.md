@@ -18,15 +18,6 @@ would reject it. Blocked on Uranium species constants joining the gate extras
 (Phase 7 integration); revisit then. (88 CommonEvent queue entries also remain,
 but the slice calls zero CEs — not slice-blocking.)
 
-### 5. Remove the new_game.c test harness — needs a decision
-
-Sentinel-fenced `TEST HARNESS` block after `CB2_NewGame()` grants
-FLAG_BADGE03_GET + a Geodude knowing Rock Smash so the rock-smash path is
-testable from a fresh boot. Tracked obligation: remove when real progression
-covers it — but slice 1 never grants a badge (the Pokédex ceremony gives the
-starter only). Decide with the user: keep the harness for slice 1's gate, or
-narrow it (starter-only via ceremony, drop the badge/Geodude?).
-
 ### 6. Pokédex-ceremony live sprite swaps (EV76 ball / EV77 starters)
 
 Deferred from task 4: RMXP change-graphic move-route commands on the ceremony
@@ -163,6 +154,12 @@ Every building door in Moki Town except the player's house does nothing
 
 ## Done
 
+- **2026-07-13 — #5 new_game.c test harness: user decision — KEEP
+  indefinitely** as the standing HM/field-move test rig for slice expansion
+  (new maps will need badge/move grants to exercise their HM paths; expected
+  to grow per-HM). No longer a remove-when-progression-covers-it obligation —
+  strip only for a release ROM. Ledger disposition + in-code comment updated
+  (`engine_extension_surface.md` §3, `engine/src/new_game.c:277`).
 - **2026-07-13 — #10 viewer "expand similar" over-split fixed (viewer-only),
   user-verified by eye (one click grabs all the flowers)**:
   new `_pixel_classes` in `map_viewer_common.py` groups column keys by
