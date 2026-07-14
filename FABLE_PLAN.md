@@ -68,13 +68,17 @@ arithmetically impossible, so the connections mechanism must be border-strip
 import across per-map tilesets; the step-1 eye-census now measures strip dedup
 potential, not scheme choice.
 
-## Step 4 — Audio architecture decision
+## Step 4 — Audio architecture decision — DONE 2026-07-14
 
-Everything is `# audio` comments today. OGG→m4a is not a conversion, so this is
-a decision sketch: substitution mapping to stock Emerald tracks (cheap,
-un-Uranium), MP2K sequencing of key tracks, silence-with-SFX, or hybrid.
-Deliverable: a short decision doc with the recommended slice-1 bar (SLICE1_TODO
-#7) and the corpus plan.
+Findings: **`reference/findings/audio_decision_2026-07-14.md`**. Headline:
+substitution table `reference/audio_map.json` (new SoT, fork-index-validated)
+consumed by metadata_wiring (per-map BGM replaces the MUS_LITTLEROOT hardcode)
++ transpiler (playbgm/playfanfare/playse; SKIP/unmapped → comment+report).
+Conversion/streaming rejected by arithmetic (187 MB OGG, 3 MIDIs, ~7 MB ROM
+headroom). Demand is small: ~65 distinct BGM, 11 MEs (all standard jingles),
+head-heavy SE. Slice-1 bar (user call pending): ~15-row table for the 8 slice
+maps. Phase-8 lane: sequence signature tracks as MUS_URANIUM_*, one table row
+each.
 
 ## Step 5 — Phase 6 + Phase 7 specs (if time remains)
 
