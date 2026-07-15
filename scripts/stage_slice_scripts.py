@@ -46,11 +46,11 @@ from rpg2gba.tileset_converter.local_id_remap import (
     load_local_id_table,
     remap_pory_object_ids,
 )
-from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
+from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS, WALKABLE_OVERRIDES
 from rpg2gba.tileset_converter.npc_gfx import DEFAULT_NPC_GFX_MAP, load_npc_gfx_map
 
 DEFAULT_SLICE = tuple(SLICE_MAP_IDS)
-ALLOWED_MAPS = {49, 48, 32}
+ALLOWED_MAPS = {49, 48, 32, 50, 64, 65, 172, 89}
 OVERRIDES = Path("reference/map_name_overrides.json")
 SWITCHES = Path("reference/uranium_switches.json")
 VARIABLES = Path("reference/uranium_variables.json")
@@ -123,6 +123,8 @@ def _regenerate_map_json(
         local_id_dir=local_id_dir,
         event_traits=event_traits,
         flag_registry=flag_reg,
+        tilesets_path=out / "tilesets.json",
+        walkable_overrides=WALKABLE_OVERRIDES,
     )
     flag_reg.save(flag_state_path)
 

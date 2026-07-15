@@ -38,7 +38,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
+from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS, WALKABLE_OVERRIDES
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -58,7 +58,16 @@ logger = logging.getLogger(__name__)
 WARP_OVERRIDES: dict[int, set[tuple[int, int]]] = {
     49: {(10, 11), (12, 3)},
     48: {(3, 3)},
-    32: {(28, 31)},
+    # 32: player's house (28,31) + the interior doors added by SLICE1_TODO #13:
+    # lab EV003 (17,11), house-2 EV006 (43,31), house-1 EV007 (24,42),
+    # Theo's-house EV017 (56,42). The Route-01 triad EV023/036/037 stays
+    # out-of-slice (blocked cells by design).
+    32: {(28, 31), (17, 11), (43, 31), (24, 42), (56, 42)},
+    50: {(14, 19)},           # lab exit EV001
+    64: {(9, 14)},            # house-2 exit EV003
+    65: {(9, 14)},            # house-1 exit EV003
+    172: {(10, 11), (12, 3)},  # Theo 1F: street exit EV002 + stairs up EV003
+    89: {(3, 3)},             # Theo 2F: stairs down EV002
 }
 
 # Flag/var address layout for the pathfinder boot test. The numeric layout now
@@ -215,6 +224,7 @@ def run_layout_pass(
             layout_const=entry["layout_const"],
             warp_overrides=warp_overrides,
             blocked_cells=blocked_cells,
+            unblocked_cells=WALKABLE_OVERRIDES.get(map_id, frozenset()),
         )
         entries.append(layout.to_layouts_entry())
 

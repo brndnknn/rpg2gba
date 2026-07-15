@@ -17,6 +17,18 @@
     "64": {
       "display_name": "Moki Town House 2",
       "evidence": "Map Walker batch disambiguation (see map 65). Map 64's Moki Town door is at (43,31), east of map 65's (24,42), so map 64 = House 2."
+    },
+    "50": {
+      "display_name": "Moki Town Professor Lab",
+      "evidence": "Slice-1 interior expansion (SLICE1_TODO #13, 2026-07-13). map_infos name is 'Moki Town (professor lab)' — identity correct (Moki Town door at (17,11) -> map 50; lab machine + professor NPCs), override only normalizes the parenthetical for display/constant minting."
+    },
+    "172": {
+      "display_name": "Moki Town Theo's House 1F",
+      "evidence": "Slice-1 interior expansion floor disambiguation (SLICE1_TODO #13). Maps 172 and 89 share the map_infos name 'Moki Town (Theo)'. Map 172 owns the street door from Moki Town (56,42) => ground floor; map 89 is reachable only via the in-house warp from 172 (EV3 -> 89 @4,3) => upper floor. Mirrors the 48/49 pattern (MapInfos order/parent fields are editor tree order, not floor order)."
+    },
+    "89": {
+      "display_name": "Moki Town Theo's House 2F",
+      "evidence": "Slice-1 interior expansion floor disambiguation (see map 172). Map 89 has no street door; its only exit warps back to map 172 (EV2 -> 172 @11,3)."
     }
   },
 

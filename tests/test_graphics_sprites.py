@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +10,8 @@ import pytest
 from PIL import Image
 
 from rpg2gba.tileset_converter.graphics.sprites import (
+    LARGE_PROP_FRAME_PX,
+    NUM_LARGE_PROP_FRAMES,
     NUM_PLAYER_OUTPUT_FRAMES,
     ConvertedPlayer,
     ConvertedSprite,
@@ -183,6 +186,74 @@ def test_break_prop_blank_intact_frame_raises(tmp_path: Path) -> None:
     path = _make_sheet(tmp_path, cells, cell_px, name="fk107-rocksmash")
     with pytest.raises(ValueError, match="intact"):
         convert_character_sheet(path)
+
+
+# --- large prop sheets (LARGE_PROP_SHEETS) -----------------------------------
+
+
+def test_large_prop_sheet_single_frame_64x64_content_preserved(tmp_path: Path) -> None:
+    """A LARGE_PROP_SHEETS sheet (e.g. PU-PokeballMachine) converts to ONE
+    64x64-anchored idle frame from column 0, row 0 — content too big for the
+    32x32 GBA object frame but well within 64x64 (mirrors the real sheet's
+    43x55 bbox: see test_large_prop_real_pokeball_machine_sheet_converts)."""
+    cell_px = 60
+    block = np.zeros((cell_px, cell_px, 4), dtype=np.uint8)
+    block[4:59, 8:48] = (11, 22, 33, 255)  # 55 tall x 40 wide -> doesn't fit 32x32
+    path = _make_sheet(tmp_path, {(0, 0): block}, cell_px, name="PU-PokeballMachine")
+
+    sprite = convert_character_sheet(path)
+    assert sprite.cycle == "large_prop"
+    assert sprite.frame_px == LARGE_PROP_FRAME_PX
+    assert len(sprite.frames) == NUM_LARGE_PROP_FRAMES == 1
+    frame = sprite.frames[0]
+    assert frame.shape == (LARGE_PROP_FRAME_PX, LARGE_PROP_FRAME_PX, 4)
+    assert frame.dtype == np.uint8
+    assert sprite.content_size == (40, 55)
+
+    opaque = frame[..., 3] > 0
+    assert opaque.sum() == 40 * 55
+    assert tuple(frame[opaque][0]) == (11, 22, 33, 255)  # colour survived the round trip
+
+
+def test_large_prop_blank_idle_frame_raises(tmp_path: Path) -> None:
+    cell_px = 8
+    cells = {(1, 0): _solid(cell_px, (5, 6, 7, 255))}  # row0/col0 (the idle frame) is empty
+    path = _make_sheet(tmp_path, cells, cell_px, name="PU-PokeballMachine")
+    with pytest.raises(ValueError, match="transparent"):
+        convert_character_sheet(path)
+
+
+def test_large_prop_oversize_content_raises(tmp_path: Path) -> None:
+    """Content that exceeds even the 64x64 large-prop canvas still fails loud
+    (CLAUDE.md §4.5) rather than being silently cropped."""
+    cell_px = 70
+    block = _solid(cell_px, (9, 9, 9, 255))
+    path = _make_sheet(tmp_path, {(0, 0): block}, cell_px, name="PU-PokeballMachine")
+    with pytest.raises(ValueError, match="exceeds"):
+        convert_character_sheet(path)
+
+
+def test_large_prop_real_pokeball_machine_sheet_converts() -> None:
+    """End-to-end against the real Uranium sheet (384x512 = 4x4 grid of
+    96x128 RMXP frames; downscaled cell is 48x64, content bbox 43x55 — the
+    case that raised `ValueError: content bbox 43x55 exceeds the 32x32 GBA
+    object frame` before the large-prop 64x64 path existed)."""
+    src = os.environ.get("RPG2GBA_URANIUM_SRC")
+    if not src:
+        pytest.skip("RPG2GBA_URANIUM_SRC not set")
+    path = Path(src) / "Graphics" / "Characters" / "PU-PokeballMachine.png"
+    if not path.is_file():
+        pytest.skip(f"{path} not found")
+
+    sprite = convert_character_sheet(path)
+    assert sprite.name == "PU-PokeballMachine"
+    assert sprite.cycle == "large_prop"
+    assert sprite.frame_px == LARGE_PROP_FRAME_PX
+    assert len(sprite.frames) == NUM_LARGE_PROP_FRAMES
+    frame = sprite.frames[0]
+    assert frame.shape == (LARGE_PROP_FRAME_PX, LARGE_PROP_FRAME_PX, 4)
+    assert frame[..., 3].any()
+    assert sprite.content_size == (43, 55)
 
 
 def test_cycle_detection_empty_pair_falls_back_to_distinct(

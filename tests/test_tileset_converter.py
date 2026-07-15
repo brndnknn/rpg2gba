@@ -18,6 +18,7 @@ from rpg2gba.conversion_agent.flag_registry import FlagRegistry, temp_switch_fla
 from rpg2gba.tileset_converter import layout as layout_mod
 from rpg2gba.tileset_converter import map_constants as mc
 from rpg2gba.tileset_converter import metadata_wiring as mw
+from rpg2gba.tileset_converter import npc_gfx as npc_gfx_mod
 from rpg2gba.tileset_converter.layout import TileGrid, column_key
 from rpg2gba.tileset_converter.npc_gfx import DEFAULT_NPC_GFX_MAP, load_npc_gfx_map
 from rpg2gba.tileset_converter.tile_map import (
@@ -1093,6 +1094,95 @@ def test_build_object_events_opacity0_touch_keeps_coord_event() -> None:
     assert len(result.coord_events) == 1
     assert result.coord_events[0].script == "Map049_EV009_Page1"
     assert result.drops == []
+
+
+def _moving_page(route_codes: list[int], name: str = "HGSS_000", frequency: int = 3) -> dict:
+    """A visible move_type-3 boot page with a repeating custom route."""
+    page = _page(name=name, move_type=3)
+    page["move_frequency"] = frequency
+    page["move_route"] = {
+        "repeat": True,
+        "skippable": False,
+        "list": [{"code": c, "parameters": []} for c in route_codes]
+        + [{"code": 0, "parameters": []}],
+    }
+    return page
+
+
+def _passability_fixture(
+    width: int, height: int, blocked_cells: set[tuple[int, int]] = frozenset(),
+    open_cells: set[tuple[int, int]] = frozenset(),
+) -> "npc_gfx_mod.MapPassability":
+    """All-clear ground with passage-15 z1 decorations at `blocked_cells`."""
+    layer0 = [1] * (width * height)
+    layer1 = [0] * (width * height)
+    for (x, y) in blocked_cells:
+        layer1[y * width + x] = 2
+    map_json = {
+        "tiles": {
+            "xsize": width, "ysize": height, "zsize": 3,
+            "data": layer0 + layer1 + [0] * (width * height),
+        }
+    }
+    return npc_gfx_mod.MapPassability.from_map(
+        map_json, {"passages": [0, 0, 15], "priorities": [0, 0, 0]},
+        open_cells=open_cells,
+    )
+
+
+def test_build_object_events_spawn_locked_demotes_to_static() -> None:
+    """A pacer spawned on a fully exit-blocked tile (Map032 EV012 on its
+    passage-15 decoration) never moves on PC — the wiring demotes it to a
+    static facing instead of letting it walk off and strand."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [_event(12, 1, 0, [_moving_page([2, 2, 3, 3])])],
+    }
+    passability = _passability_fixture(4, 1, blocked_cells={(1, 0)})
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(), passability=passability
+    )
+    (obj,) = result.object_events
+    assert obj.movement_type == "MOVEMENT_TYPE_FACE_DOWN"
+    assert (obj.movement_range_x, obj.movement_range_y) == (0, 0)
+
+
+def test_build_object_events_walk_sequence_blocked_path_demotes() -> None:
+    """A walk-sequence loop crossing a blocked cell would stall walking-in-place
+    in-engine (Map032 EV073's shape) -> static, loud."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    loop = [2, 4, 4, 1, 1, 3]  # left, up x2, down x2, right
+    map_json = {"map_id": 32, "events": [_event(73, 1, 2, [_moving_page(loop)])]}
+    blocked = _passability_fixture(4, 3, blocked_cells={(0, 2)})  # the left cell
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(), passability=blocked
+    )
+    assert result.object_events[0].movement_type == "MOVEMENT_TYPE_FACE_DOWN"
+
+    # the same loop with the cell converter-unblocked keeps its patrol
+    opened = _passability_fixture(4, 3, blocked_cells={(0, 2)}, open_cells={(0, 2)})
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(), passability=opened
+    )
+    obj = result.object_events[0]
+    assert obj.movement_type == "MOVEMENT_TYPE_WALK_SEQUENCE_LEFT_UP_DOWN_RIGHT"
+    assert (obj.movement_range_x, obj.movement_range_y) == (1, 2)
+
+
+def test_build_object_events_anchor_shift_applied_to_placement() -> None:
+    """A walk-sequence whose spawn sits mid-leg is placed at the loop corner the
+    engine closes the loop on (EV008's (0,-1) shift) — with or without a
+    passability oracle."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    # 3x4 ring whose spawn sits one tile below the top-left corner (EV008 shape)
+    ring = [1] * 2 + [3] * 2 + [4] * 3 + [2] * 2 + [1]
+    map_json = {"map_id": 32, "events": [_event(8, 1, 2, [_moving_page(ring, frequency=6)])]}
+    result = mw.build_object_events(map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture())
+    (obj,) = result.object_events
+    assert obj.movement_type == "MOVEMENT_TYPE_WALK_SEQUENCE_DOWN_RIGHT_UP_LEFT"
+    assert (obj.x, obj.y) == (1, 1)  # spawn (1,2) shifted to the ring's top-left corner
+    assert (obj.movement_range_x, obj.movement_range_y) == (2, 3)
 
 
 def test_build_object_events_drops_no_silent_defaults() -> None:

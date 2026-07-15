@@ -18,8 +18,14 @@ measured before frames are anchored onto the 32x32 canvas):
      inter-frame motion (the walk bounce) survives
 
 Fail loud (CLAUDE.md §4.5): a malformed sheet (bad dimensions, content that
-doesn't fit the 32x32 object frame) aborts naming the sheet — never a silent
-crop or blank substitute.
+doesn't fit the object frame — 32x32, or 64x64 for a `LARGE_PROP_SHEETS` entry)
+aborts naming the sheet — never a silent crop or blank substitute.
+
+Two sheet classes short-circuit the walk-cycle pipeline above entirely (single
+static-object sheets, not animated NPCs): `BREAK_PROP_SHEETS` (a 4-stage
+destruction sequence down column 0, still 32x32) and `LARGE_PROP_SHEETS` (one
+idle frame — column 0, row 0 — anchored onto a 64x64 canvas instead of 32x32,
+for props too big for the standard object frame; see `ConvertedSprite.frame_px`).
 """
 from __future__ import annotations
 
@@ -43,7 +49,7 @@ _ALPHA_THRESHOLD = 128      # >= this (out of 255) -> fully opaque
 # RMXP direction-code rows, top -> bottom.
 ROW_DOWN, ROW_LEFT, ROW_RIGHT, ROW_UP = 0, 1, 2, 3
 
-CycleName = Literal["neutral02", "neutral13", "distinct", "break_prop"]
+CycleName = Literal["neutral02", "neutral13", "distinct", "break_prop", "large_prop"]
 
 # Sheets that are BREAK PROPS, not walk cycles: rows top->bottom are the object's
 # destruction stages (RMXP animated them by "turning" the event), all in column 0.
@@ -54,6 +60,21 @@ CycleName = Literal["neutral02", "neutral13", "distinct", "break_prop"]
 # boot gate 2026-07-06).
 BREAK_PROP_SHEETS = frozenset({"fk107-rocksmash"})
 NUM_BREAK_PROP_FRAMES = 4
+
+# Sheets that are LARGE PROPS: a single static object (lab machine, etc) too big
+# for the 32x32 GBA object frame. The engine natively supports 64x64 object
+# events (`gObjectEventGraphicsInfo_RayquazaStill`,
+# `engine/src/data/object_events/object_event_graphics_info.h:757-773` — .size =
+# 2048, .oam = &gObjectEventBaseOam_64x64, .subspriteTables = sOamTables_64x64;
+# `sAnimTable_Inanimate` at `object_event_anims.h:1196`), so rather than reject
+# an oversize sheet these convert to ONE idle frame (column 0, row 0 — RMXP's
+# down-facing pattern) anchored onto a 64x64 canvas instead of the standard
+# 32x32 one. Downscaling still goes through the same majority-vote
+# `_downscale_2x_majority` as every other sheet (large-prop art isn't a clean
+# 2x-nearest-neighbour source either).
+LARGE_PROP_SHEETS = frozenset({"PU-PokeballMachine"})
+NUM_LARGE_PROP_FRAMES = 1
+LARGE_PROP_FRAME_PX = 64
 
 # Output frame order (sAnimTable_Standard): (source row, column role). "idle"/
 # "walkA"/"walkB" are resolved to actual columns by cycle detection.
@@ -78,10 +99,17 @@ class ConvertedSprite:
     """One converted character sheet, ready for GBA object-event emission."""
 
     name: str                      # sheet stem (e.g. "HGSS_000")
-    frames: list[np.ndarray]       # 9x (32, 32, 4) uint8 RGBA, GBA order (see _FRAME_PLAN)
+    frames: list[np.ndarray]       # frame_px x frame_px x 4 uint8 RGBA frames, GBA order
+                                    # (see _FRAME_PLAN) — 9 for a walk cycle, 4 for a break
+                                    # prop, 1 for a large prop (see `cycle`)
     cycle: CycleName
     asymmetry: float               # 0.0 == east row is an exact mirror of west
     content_size: tuple[int, int]  # union bbox (w, h) after downscale, pre-anchor padding
+    # Frame canvas size in px (square): GBA_FRAME_PX (32) for every ordinary/
+    # break-prop sheet, LARGE_PROP_FRAME_PX (64) for a LARGE_PROP_SHEETS entry.
+    # Carried on the sprite (not re-derived from `name`) so sprite_emit.py can
+    # size the OAM/subsprite table/pic macros without special-casing sheet names.
+    frame_px: int = GBA_FRAME_PX
 
 
 @dataclass
@@ -143,6 +171,26 @@ def convert_character_sheet(path: Path) -> ConvertedSprite:
     name = Path(path).stem
     arr, frame_w, frame_h = _load_and_binarize(path, name)
     cell = _cell_accessor(arr, frame_w, frame_h)
+
+    if name in LARGE_PROP_SHEETS:
+        # Single idle frame = column 0, row 0 (RMXP's down-facing pattern) —
+        # large props are static objects, not walk cycles, and don't fit the
+        # 32x32 canvas, so they get their own 64x64-anchored one-frame path.
+        native_frame = _downscale_2x_majority(cell(ROW_DOWN, 0))
+        if not native_frame[..., 3].any():
+            raise ValueError(
+                f"{name}: large-prop idle frame (row 0, col 0) is fully "
+                "transparent — the object would be invisible"
+            )
+        frames, content_size = _anchor([native_frame], name, frame_px=LARGE_PROP_FRAME_PX)
+        return ConvertedSprite(
+            name=name,
+            frames=frames,
+            cycle="large_prop",
+            asymmetry=0.0,
+            content_size=content_size,
+            frame_px=LARGE_PROP_FRAME_PX,
+        )
 
     if name in BREAK_PROP_SHEETS:
         # Break sequence = column 0, rows top->bottom (intact -> shattered).
@@ -336,12 +384,14 @@ def _asymmetry(west_frames: list[np.ndarray], east_frames: list[np.ndarray]) -> 
 
 
 def _anchor(
-    native_frames: list[np.ndarray], name: str
+    native_frames: list[np.ndarray], name: str, frame_px: int = GBA_FRAME_PX
 ) -> tuple[list[np.ndarray], tuple[int, int]]:
-    """Place all 9 frames on a shared 32x32 canvas with ONE offset: the union
-    bounding box of opaque pixels (across all frames) horizontally centered,
-    bottom row at canvas row 31. A single shared offset (rather than
-    per-frame recentering) is what preserves the walk-cycle bounce."""
+    """Place all frames on a shared `frame_px` x `frame_px` canvas (32x32 for every
+    ordinary/break-prop sheet, `LARGE_PROP_FRAME_PX` for a large prop) with ONE
+    offset: the union bounding box of opaque pixels (across all frames)
+    horizontally centered, bottom row at the canvas's last row. A single shared
+    offset (rather than per-frame recentering) is what preserves the walk-cycle
+    bounce."""
     min_x = min_y = max_x = max_y = None
     for f in native_frames:
         ys, xs = np.where(f[..., 3] > 0)
@@ -357,18 +407,18 @@ def _anchor(
         raise ValueError(f"{name}: all {len(native_frames)} output frames are fully transparent")
 
     bbox_w, bbox_h = max_x - min_x + 1, max_y - min_y + 1
-    if bbox_w > GBA_FRAME_PX or bbox_h > GBA_FRAME_PX:
+    if bbox_w > frame_px or bbox_h > frame_px:
         raise ValueError(
             f"{name}: content bbox {bbox_w}x{bbox_h} exceeds the "
-            f"{GBA_FRAME_PX}x{GBA_FRAME_PX} GBA object frame"
+            f"{frame_px}x{frame_px} GBA object frame"
         )
 
-    left = (GBA_FRAME_PX - bbox_w) // 2
-    top = GBA_FRAME_PX - bbox_h  # union bottom row lands on canvas row 31
+    left = (frame_px - bbox_w) // 2
+    top = frame_px - bbox_h  # union bottom row lands on the canvas's last row
 
     anchored = []
     for f in native_frames:
-        canvas = np.zeros((GBA_FRAME_PX, GBA_FRAME_PX, 4), dtype=np.uint8)
+        canvas = np.zeros((frame_px, frame_px, 4), dtype=np.uint8)
         canvas[top:top + bbox_h, left:left + bbox_w] = f[min_y:max_y + 1, min_x:max_x + 1]
         anchored.append(canvas)
     return anchored, (bbox_w, bbox_h)

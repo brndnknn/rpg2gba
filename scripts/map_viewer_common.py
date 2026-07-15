@@ -41,8 +41,10 @@ from rpg2gba.tileset_converter.graphics.sources import (
     load_tileset_sources,
     tileset_source_paths,
 )
+from rpg2gba.tileset_converter.graphics.sprites import convert_character_sheet
 from rpg2gba.tileset_converter.layout import TileGrid, column_key
 from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
+from rpg2gba.tileset_converter.sprite_pass import _characters_dir, _resolve_sheet
 from rpg2gba.tileset_converter.tile_map import serialize_column_key
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -288,6 +290,7 @@ class _MapState:
 _map_cache: dict[int, _MapState] = {}
 _tile_png_cache: dict[tuple[int, int], bytes] = {}          # (map_id, tile_id)
 _metatile_png_cache: dict[tuple[int, int, str], bytes] = {}  # (map_id, idx, layer)
+_npc_png_cache: dict[str, bytes] = {}                        # character_name.lower() -> PNG
 # key: (pool map-id set, fingerprint of every pooled map's json + tilesets.json) ->
 # (analysis, pool_key_to_idx). The fingerprint half means a rebuild that changes a
 # pooled map's content invalidates the entry even if the pool's *membership*
@@ -764,6 +767,25 @@ def render_metatile_png(map_id: int, idx: int, layer: str) -> bytes:
     return png
 
 
+def render_npc_png(character_name: str) -> bytes:
+    """Render one NPC's sheet to PNG bytes (cached by lowercased name).
+
+    Always frame 0 (RMXP's down-facing idle, or the intact/idle frame for a
+    break-prop/large-prop sheet) -- the viewer just needs a recognizable
+    sprite per event, not per-direction accuracy. Raises FileNotFoundError if
+    the sheet isn't under RPG2GBA_URANIUM_SRC/Graphics/Characters (fails loud;
+    the client falls back to a dot marker on a 404).
+    """
+    key = character_name.lower()
+    if key in _npc_png_cache:
+        return _npc_png_cache[key]
+    sheet_path = _resolve_sheet(_characters_dir(), character_name)
+    sprite = convert_character_sheet(sheet_path)
+    png = _arr_to_png(sprite.frames[0])
+    _npc_png_cache[key] = png
+    return png
+
+
 # ---------------------------------------------------------------------------
 # Data collection (no image bytes — used directly by the server)
 # ---------------------------------------------------------------------------
@@ -781,6 +803,8 @@ def _parse_events(events_list: list) -> list[dict]:
             any(cmd.get("code") == 201 for cmd in page.get("list", []))
             for page in evt.get("pages", [])
         )
+        pages = evt.get("pages", [])
+        character_name = pages[0].get("graphic", {}).get("character_name", "") if pages else ""
         result.append({
             "id": evt.get("id"),
             "name": evt.get("name", ""),
@@ -788,6 +812,7 @@ def _parse_events(events_list: list) -> list[dict]:
             "y": evt.get("y"),
             "npages": len(evt.get("pages", [])),
             "is_warp": is_warp,
+            "character_name": character_name or "",
         })
     return result
 
@@ -1274,6 +1299,10 @@ function getMetatileURL(idx, layer, mid) {
   const g = (V.quant && V.quant.generation) || 0;
   return '/api/metatile/' + mid + '/' + idx + '.png?layer=' + layer + '&g=' + g;
 }
+function getNpcURL(name) {
+  if (V.mode !== 'server' || !name) return null;
+  return '/api/npc/' + encodeURIComponent(name) + '.png';
+}
 
 // ---- lazy image cache -----------------------------------------------------
 const imgCache = new Map(); // url -> HTMLImageElement | 'loading' | 'err'
@@ -1298,6 +1327,30 @@ function drawImg(url, dx, dy, cp) {
   if (c === 'loading') { ctx.fillStyle = '#1c1c22'; ctx.fillRect(dx, dy, cp, cp); return; }
   if (c === 'err') return;
   ctx.drawImage(c, dx, dy, cp, cp);
+}
+// NPC sprite: bottom-center anchored on the event's tile cell (the converted
+// sheet's own frame is bottom-anchored/h-centered on its canvas -- see
+// sprites.py `_anchor` -- so scaling by cp/16, the current-zoom size of one
+// native 16px tile, and placing the frame's bottom edge on the cell's bottom
+// edge reproduces that). No background fill while loading, unlike drawImg --
+// an event cell with no sprite yet should show the fallback dot, not a box.
+// Returns true if a sprite was actually drawn.
+function drawNpcSprite(url, dx, dy, cp) {
+  if (!url) return false;
+  const c = imgCache.get(url);
+  if (!c) {
+    imgCache.set(url, 'loading');
+    const img = new Image();
+    img.onload = function() { imgCache.set(url, img); scheduleRender(); };
+    img.onerror = function() { imgCache.set(url, 'err'); };
+    img.src = url;
+    return false;
+  }
+  if (c === 'loading' || c === 'err') return false;
+  const scale = cp / 16;
+  const w = c.naturalWidth * scale, h = c.naturalHeight * scale;
+  ctx.drawImage(c, dx + (cp - w) / 2, dy + cp - h, w, h);
+  return true;
 }
 
 // ---- state ----------------------------------------------------------------
@@ -1480,8 +1533,11 @@ function renderMember(m, cp) {
       ctx.fillStyle = '#0ff';
       ctx.beginPath(); ctx.arc(dx+cp/2, dy+cp/2, dotR, 0, Math.PI*2); ctx.fill();
     } else if (!evt.is_warp && overlays.events) {
-      ctx.fillStyle = '#ff0';
-      ctx.beginPath(); ctx.arc(dx+cp/2, dy+cp/2, dotR, 0, Math.PI*2); ctx.fill();
+      const drawn = evt.character_name && drawNpcSprite(getNpcURL(evt.character_name), dx, dy, cp);
+      if (!drawn) {
+        ctx.fillStyle = '#ff0';
+        ctx.beginPath(); ctx.arc(dx+cp/2, dy+cp/2, dotR, 0, Math.PI*2); ctx.fill();
+      }
     }
     if (overlays.events && cp >= 16) {
       ctx.fillStyle = '#fff';

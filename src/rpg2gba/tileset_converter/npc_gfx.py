@@ -66,6 +66,51 @@ ROUTE_CODE_RANDOM_MOVE = 9
 # relative/random/player-relative turns folded into ROUTE_CODE_TURN_RELATIVE).
 _TURN_CODE_TO_DIR = {16: "DOWN", 17: "LEFT", 18: "RIGHT", 19: "UP"}
 
+# RMXP cardinal move codes -> direction name + unit vector (RMXP y grows DOWN,
+# matching pokeemerald map coords).
+_MOVE_CODE_TO_DIR = {1: "DOWN", 2: "LEFT", 3: "RIGHT", 4: "UP"}
+_DIR_VECTOR = {"DOWN": (0, 1), "LEFT": (-1, 0), "RIGHT": (1, 0), "UP": (0, -1)}
+
+# pokeemerald MOVEMENT_TYPE_WALK_SEQUENCE_* loop-closure quirks, transcribed from
+# the fork's MovementType_WalkSequence<Dirs>_Step1 bodies (event_object_movement.c
+# ~5178-5460): each sequence advances early from leg `index` to `index + 1` when
+# the object is back on its initial column ("x") / row ("y"). Together with the
+# shared MoveNextDirectionInSequence rules (reset to leg 0 when at leg 3 AND back
+# at the initial coords; advance a leg on COLLISION_OUTSIDE_RANGE), this is the
+# complete obstacle-free automaton `_simulate_walk_sequence` replays.
+# `tests/test_npc_gfx.py` re-derives this table from the fork source (CLAUDE.md
+# §4.7 — the C file is the source of truth, this dict is a pinned copy).
+_WALK_SEQUENCE_QUIRKS: dict[tuple[str, str, str, str], tuple[int, str]] = {
+    ("UP", "RIGHT", "LEFT", "DOWN"): (2, "x"),
+    ("RIGHT", "LEFT", "DOWN", "UP"): (1, "x"),
+    ("DOWN", "UP", "RIGHT", "LEFT"): (1, "y"),
+    ("LEFT", "DOWN", "UP", "RIGHT"): (2, "y"),
+    ("UP", "LEFT", "RIGHT", "DOWN"): (2, "x"),
+    ("LEFT", "RIGHT", "DOWN", "UP"): (1, "x"),
+    ("DOWN", "UP", "LEFT", "RIGHT"): (1, "y"),
+    ("RIGHT", "DOWN", "UP", "LEFT"): (2, "y"),
+    ("LEFT", "UP", "DOWN", "RIGHT"): (2, "y"),
+    ("UP", "DOWN", "RIGHT", "LEFT"): (1, "y"),
+    ("RIGHT", "LEFT", "UP", "DOWN"): (1, "x"),
+    ("DOWN", "RIGHT", "LEFT", "UP"): (2, "x"),
+    ("RIGHT", "UP", "DOWN", "LEFT"): (2, "y"),
+    ("UP", "DOWN", "LEFT", "RIGHT"): (1, "y"),
+    ("LEFT", "RIGHT", "UP", "DOWN"): (1, "x"),
+    ("DOWN", "LEFT", "RIGHT", "UP"): (2, "x"),
+    ("UP", "LEFT", "DOWN", "RIGHT"): (2, "y"),
+    ("DOWN", "RIGHT", "UP", "LEFT"): (2, "y"),
+    ("LEFT", "DOWN", "RIGHT", "UP"): (2, "x"),
+    ("RIGHT", "UP", "LEFT", "DOWN"): (2, "x"),
+    ("UP", "RIGHT", "DOWN", "LEFT"): (2, "y"),
+    ("DOWN", "LEFT", "UP", "RIGHT"): (2, "y"),
+    ("LEFT", "UP", "RIGHT", "DOWN"): (2, "x"),
+    ("RIGHT", "DOWN", "LEFT", "UP"): (2, "x"),
+}
+
+# RMXP directional passage bits (Game_Map#passable?): moving down/left/right/up
+# is blocked by a tile whose passage has the matching bit set.
+_RMXP_PASSAGE_BITS = {"DOWN": 0x01, "LEFT": 0x02, "RIGHT": 0x04, "UP": 0x08}
+
 # Two/three-direction FACE_* combos the fork defines
 # (engine/include/constants/event_object_movement.h), keyed by the exact
 # direction set `_look_spec_for` can produce — every non-empty proper subset
@@ -185,12 +230,29 @@ class MovementSpec:
     static facing because pokeemerald has no native movement type for it
     (CLAUDE.md §4.5 — never silent; see `movement_spec_for`'s docstring case h
     and `metadata_wiring.build_object_events`, which logs every non-`None`
-    `demoted` loud)."""
+    `demoted` loud).
+
+    Walk-sequence loops (case g2) also carry:
+
+    - `anchor_dx`/`anchor_dy` — spawn shift the caller must apply to the
+      object's placement. pokeemerald's WALK_SEQUENCE loop closes at the
+      object's INITIAL coords, which must be a corner of the loop; when the
+      RMXP spawn sits mid-leg the object is placed at the nearest loop corner
+      instead (never more than the loop's own extent, always a cell the RMXP
+      route itself walks).
+    - `path_cells` — every (dx, dy) offset FROM THE RMXP SPAWN the loop
+      visits, for callers that can check map passability: a loop crossing a
+      blocked cell would stall walking-in-place forever in-engine (RMXP
+      routes may cross such cells via `through`), so
+      `metadata_wiring.build_object_events` demotes those loud."""
 
     movement_type: str
     range_x: int = 0
     range_y: int = 0
     demoted: str | None = None
+    anchor_dx: int = 0
+    anchor_dy: int = 0
+    path_cells: tuple[tuple[int, int], ...] = ()
 
 
 def movement_spec_for(page: dict) -> MovementSpec:
@@ -270,10 +332,18 @@ def movement_spec_for(page: dict) -> MovementSpec:
        that never returns toward 0 before drifting back still counts its
        farthest excursion); `range_{x,y} = max(1, ceil(span / 2))` centers a
        symmetric pokeemerald patrol on the RMXP route's (one-sided) midpoint.
-       A WAIT code anywhere in the route means the patrol pauses at its ends
-       -> ``MOVEMENT_TYPE_WANDER_LEFT_AND_RIGHT`` / `..._UP_AND_DOWN`; no
-       waits -> continuous ``MOVEMENT_TYPE_WALK_LEFT_AND_RIGHT`` /
+       A WAIT code anywhere in the route, or `move_frequency` below 6 (RMXP
+       idle-gates EVERY route command by `(40-2f)(6-f)` frames — only freq 6
+       is gap-free), means the patrol pauses between steps ->
+       ``MOVEMENT_TYPE_WANDER_LEFT_AND_RIGHT`` / `..._UP_AND_DOWN`; freq-6
+       wait-free -> continuous ``MOVEMENT_TYPE_WALK_LEFT_AND_RIGHT`` /
        `..._UP_AND_DOWN`.
+    g2. TRANSLATION all cardinal, tracing a CLOSED four-leg loop over all
+       four directions -> the exact ``MOVEMENT_TYPE_WALK_SEQUENCE_*`` patrol,
+       validated by replaying pokeemerald's automaton (`_spec_for_loop_route`
+       — rectangle rings and out-and-back walks; may carry an `anchor_dx`/
+       `anchor_dy` spawn shift and always carries `path_cells` for the
+       caller's map-passability gate).
     h. Everything else that translates — TRANSLATION mixing both axes, a
        diagonal (5..8), toward/away-player/forward/backward/jump (10..14)
        alone or mixed with other translation codes, a net-drift loop, or
@@ -365,6 +435,10 @@ def _spec_for_custom_route(page: dict) -> MovementSpec:
             has_wait=has_wait, is_horizontal=False,
         )
 
+    spec = _spec_for_loop_route(page, translation)  # (g2), 4-leg closed loop
+    if spec is not None:
+        return spec
+
     # (h): mixed axes, diagonals, toward/away-player, forward/backward, jump.
     return _demote(page, translation, "unsupported custom-route translation code(s)")
 
@@ -393,10 +467,135 @@ def _spec_for_axis(
         )
     span = hi - lo
     magnitude = max(1, -(-span // 2))  # ceil(span / 2) via negated floor division
-    movement_type = wander_type if has_wait else walk_type
+    # RMXP gates EVERY route command behind the page's move_frequency idle timer
+    # ((40 - 2f)(6 - f) frames, 021_Game_Character_v17.rb) — only frequency 6 is
+    # gap-free. So a pacing loop pauses between steps unless freq is 6, explicit
+    # code-15 waits or not; WANDER_* (steps with random 32..128-frame pauses) is
+    # the faithful engine analog, WALK_* (continuous) only for freq-6 wait-free
+    # routes.
+    paused = has_wait or page["move_frequency"] < 6
+    movement_type = wander_type if paused else walk_type
     if is_horizontal:
         return MovementSpec(movement_type, range_x=magnitude, range_y=0)
     return MovementSpec(movement_type, range_x=0, range_y=magnitude)
+
+
+def _spec_for_loop_route(page: dict, translation: list[int]) -> MovementSpec | None:
+    """move_type 3 classification case (g2): a repeating route whose cardinal
+    moves trace a CLOSED loop of exactly four cyclic legs covering all four
+    directions -> the matching ``MOVEMENT_TYPE_WALK_SEQUENCE_<D1>_<D2>_<D3>_
+    <D4>`` patrol (rectangle rings like Map032 EV008's town-square Chyinmunk,
+    out-and-back "L" walks like EV048/EV072/EV073).
+
+    pokeemerald's walk-sequence automaton is leg-per-direction with three
+    advance rules (range boundary / per-type initial-row-or-column quirk /
+    at-anchor reset — see `_WALK_SEQUENCE_QUIRKS`), and its loop closes at the
+    object's INITIAL coords, so the candidate is only accepted when
+    `_simulate_walk_sequence` replays the automaton (obstacle-free) and the
+    traced cycle reproduces the RMXP route's cell sequence exactly, twice
+    over. The anchor must be a leg corner; when the RMXP spawn isn't one
+    (EV008 spawns one tile below its ring's top-left corner), the accepted
+    spec carries the spawn shift in `anchor_dx`/`anchor_dy`.
+
+    Returns `None` (caller falls through to the case-h demotion) when the
+    moves aren't all cardinal, the loop doesn't close, the cyclic legs aren't
+    exactly the four directions, or no rotation survives simulation.
+
+    Cadence note: walk sequences are continuous (no idle gate), so a
+    sub-frequency-6 loop loses its RMXP between-step pauses — a deliberate
+    fidelity cut in favor of the patrol shape (no paused sequence type
+    exists in the fork)."""
+    if any(c not in _MOVE_CODE_TO_DIR for c in translation):
+        return None
+    dirs_seq = [_MOVE_CODE_TO_DIR[c] for c in translation]
+
+    pos: list[tuple[int, int]] = [(0, 0)]  # pos[j] = spawn-relative after j moves
+    for d in dirs_seq:
+        dx, dy = _DIR_VECTOR[d]
+        pos.append((pos[-1][0] + dx, pos[-1][1] + dy))
+    if pos[-1] != (0, 0):
+        return None  # net drift — not a loop
+    n = len(dirs_seq)
+    pos = pos[:n]  # drop the duplicate closing spawn entry
+
+    legs: list[list] = []  # [direction, start move index]
+    for i, d in enumerate(dirs_seq):
+        if legs and legs[-1][0] == d:
+            continue
+        legs.append([d, i])
+    if len(legs) > 1 and legs[0][0] == legs[-1][0]:
+        legs.pop(0)  # cyclically the first leg is the tail of the last one
+    if len(legs) != 4 or {d for d, _ in legs} != {"DOWN", "LEFT", "RIGHT", "UP"}:
+        return None
+
+    candidates = []
+    for r in range(4):
+        k = legs[r][1]
+        anchor = pos[k]
+        seq = tuple(legs[(r + i) % 4][0] for i in range(4))
+        range_x = max(abs(p[0] - anchor[0]) for p in pos)
+        range_y = max(abs(p[1] - anchor[1]) for p in pos)
+        if range_x == 0 or range_y == 0:
+            continue  # range 0 disables the axis bound in-engine — can't close
+        expected = [pos[(k + 1 + j) % n] for j in range(2 * n)]
+        traced = _simulate_walk_sequence(
+            seq, _WALK_SEQUENCE_QUIRKS[seq], anchor, range_x, range_y, 2 * n
+        )
+        if traced == expected:
+            candidates.append((abs(anchor[0]) + abs(anchor[1]), r, seq, anchor,
+                               range_x, range_y))
+    if not candidates:
+        return None
+    _, _, seq, anchor, range_x, range_y = min(candidates)
+    return MovementSpec(
+        "MOVEMENT_TYPE_WALK_SEQUENCE_" + "_".join(seq),
+        range_x=range_x, range_y=range_y,
+        anchor_dx=anchor[0], anchor_dy=anchor[1],
+        path_cells=tuple(pos),
+    )
+
+
+def _simulate_walk_sequence(
+    seq: tuple[str, str, str, str],
+    quirk: tuple[int, str],
+    anchor: tuple[int, int],
+    range_x: int,
+    range_y: int,
+    steps: int,
+) -> list[tuple[int, int]] | None:
+    """Replay pokeemerald's walk-sequence automaton for `steps` moves on an
+    obstacle-free grid, starting at `anchor` (the object's initial coords) on
+    leg 0. Per move (MovementType_WalkSequence*_Step1 +
+    MoveNextDirectionInSequence): apply the per-type quirk (back on the
+    initial row/column at leg `quirk[0]` -> next leg), reset to leg 0 when on
+    leg 3 back at the anchor, walk the current leg's direction, advancing one
+    leg if the step would leave the centered inclusive range box (the fork
+    retries exactly once). Returns the visited cells, or `None` when the
+    automaton runs off the four-leg sequence / stalls — an inconsistent
+    candidate the caller must reject."""
+    qidx, qaxis = quirk
+    ax, ay = anchor
+    x, y = anchor
+    idx = 0
+    out: list[tuple[int, int]] = []
+    for _ in range(steps):
+        if idx == qidx and ((x == ax) if qaxis == "x" else (y == ay)):
+            idx += 1
+        if idx == 3 and (x, y) == anchor:
+            idx = 0
+        for attempt in range(2):
+            dx, dy = _DIR_VECTOR[seq[idx]]
+            nx, ny = x + dx, y + dy
+            if abs(nx - ax) <= range_x and abs(ny - ay) <= range_y:
+                break
+            idx += 1
+            if idx > 3:
+                return None
+        else:
+            return None  # both the leg and its successor leave the range box
+        x, y = nx, ny
+        out.append((x, y))
+    return out
 
 
 def _walk_axis(codes: list[int], plus_code: int, minus_code: int) -> tuple[int, int, int]:
@@ -435,7 +634,99 @@ def _demote(page: dict, offending_codes: list[int], reason: str) -> MovementSpec
     static FACE_<dir> with `demoted` set (`movement_spec_for` docstring case
     h). Never silent — see `metadata_wiring.build_object_events`."""
     codes = sorted(set(offending_codes))
-    return MovementSpec(_face_from_graphic(page), demoted=f"{reason} (codes {codes})")
+    return static_face_spec(page, f"{reason} (codes {codes})")
+
+
+def static_face_spec(page: dict, reason: str) -> MovementSpec:
+    """A static ``MOVEMENT_TYPE_FACE_<page's graphic.direction>`` spec with
+    `demoted` set. For callers that must fall a moving spec back to standing
+    for reasons the route alone can't show (`metadata_wiring.
+    build_object_events`'s map-passability gates) — always paired with a loud
+    log, never silent (CLAUDE.md §4.5)."""
+    return MovementSpec(_face_from_graphic(page), demoted=reason)
+
+
+@dataclass(frozen=True)
+class MapPassability:
+    """RMXP tile-passability oracle for one map (Game_Map#passable? semantics,
+    001x_Game_Map — the same layered scan `scripts/compare_collision.py`
+    mirrors), for the two movement questions `metadata_wiring.
+    build_object_events` must answer that the route alone can't:
+
+    - `exit_blocked(x, y)` — can an event standing at (x, y) leave its own
+      tile in ANY direction? RMXP checks the CURRENT tile's directional
+      passage bits before every step, so an event spawned on a fully blocked
+      tile (e.g. Map032 EV012 on its passage-15 decoration) never moves at
+      all on PC, whatever its route says — pokeemerald only checks the
+      DESTINATION tile, so without this demotion the object walks off its
+      spawn and can never path back.
+    - `cell_clear(x, y)` — is the cell fully passable (no directional bit on
+      any deciding layer)? Conservative gate for walk-sequence loop paths: a
+      loop crossing a non-clear cell stalls walking-in-place in-engine.
+
+    `open_cells` are converter-level collision unblocks (the same cells the
+    layout pass forces walkable, e.g. Map032's (38, 43) tree-crown cell the
+    town-square patrol ghosts through on PC) — both queries treat them as
+    fully open."""
+
+    xsize: int
+    ysize: int
+    zsize: int
+    data: tuple[int, ...]
+    passages: tuple[int, ...]
+    priorities: tuple[int, ...]
+    open_cells: frozenset[tuple[int, int]] = frozenset()
+
+    @classmethod
+    def from_map(
+        cls,
+        map_json: dict,
+        tileset: dict,
+        open_cells: set[tuple[int, int]] | frozenset[tuple[int, int]] = frozenset(),
+    ) -> "MapPassability":
+        """Build from a Phase-3 map JSON (`tiles`) + its tilesets.json entry
+        (`passages`/`priorities`)."""
+        tiles = map_json["tiles"]
+        return cls(
+            xsize=tiles["xsize"], ysize=tiles["ysize"], zsize=tiles["zsize"],
+            data=tuple(tiles["data"]),
+            passages=tuple(tileset["passages"]),
+            priorities=tuple(tileset["priorities"]),
+            open_cells=frozenset(open_cells),
+        )
+
+    def _direction_blocked(self, x: int, y: int, bit: int) -> bool:
+        """RMXP Game_Map#passable? layer scan, top layer down: a tile with the
+        direction bit (or all four bits) blocks; a priority-0 tile without
+        them decides passable; empty/undecided layers fall through."""
+        for z in reversed(range(self.zsize)):
+            tid = self.data[(z * self.ysize + y) * self.xsize + x]
+            if tid == 0:
+                continue
+            if self.passages[tid] & bit or (self.passages[tid] & 0x0F) == 0x0F:
+                return True
+            if self.priorities[tid] == 0:
+                return False
+        return False
+
+    def _in_bounds(self, x: int, y: int) -> bool:
+        return 0 <= x < self.xsize and 0 <= y < self.ysize
+
+    def exit_blocked(self, x: int, y: int) -> bool:
+        if (x, y) in self.open_cells or not self._in_bounds(x, y):
+            return False
+        return all(
+            self._direction_blocked(x, y, bit) for bit in _RMXP_PASSAGE_BITS.values()
+        )
+
+    def cell_clear(self, x: int, y: int) -> bool:
+        if not self._in_bounds(x, y):
+            return False
+        if (x, y) in self.open_cells:
+            return True
+        return not any(
+            self._direction_blocked(x, y, bit) for bit in _RMXP_PASSAGE_BITS.values()
+        )
 
 
 def is_door_sheet(character_name: str) -> bool:

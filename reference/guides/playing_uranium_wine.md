@@ -50,21 +50,18 @@ WINEPREFIX=~/.wine-uranium winetricks -q vcrun2005 vcrun6
 
 ## 5. Get the game files
 
-The Uranium source referenced by `RPG2GBA_URANIUM_SRC` in this project is the game's install directory (it should contain `Game.exe`, `Data/`, `Graphics/`, `Audio/`, etc.). Copy it somewhere convenient for actually playing, rather than running it out of the pipeline's working tree:
+The actual install directory is `~/repos/uranium-src` — it contains `Uranium.exe`, `Uranium.rgssad`, `RGSS102E.dll`, `Fonts/`, `Graphics/`, `Audio/`, etc. That's separate from `$RPG2GBA_URANIUM_SRC`, which the pipeline uses for its own data extraction and is not guaranteed to be a complete, runnable copy (it may be missing the executable or have symlinks that only resolve inside the pipeline's own directory layout) — don't use it as the play copy.
 
-```bash
-mkdir -p ~/Games
-cp -r "$RPG2GBA_URANIUM_SRC" ~/Games/PokemonUranium
-```
-
-Keeping the play copy separate avoids ever mixing pipeline-touched files with the game you're running.
+Just run the game directly out of `~/repos/uranium-src`; no separate play copy is needed.
 
 ## 6. Run it
 
 ```bash
-cd ~/Games/PokemonUranium
-WINEPREFIX=~/.wine-uranium wine Game.exe
+cd ~/repos/uranium-src
+WINEPREFIX=~/.wine-uranium wine Uranium.exe
 ```
+
+Note the executable is **`Uranium.exe`**, not `Game.exe` — a generic RPG Maker XP name doesn't apply here.
 
 If that launches into the title screen, you're done — the rest below is only for when something doesn't work.
 
@@ -82,8 +79,8 @@ cat > ~/.local/share/applications/pokemon-uranium.desktop <<'EOF'
 [Desktop Entry]
 Type=Application
 Name=Pokémon Uranium
-Exec=env WINEPREFIX=/home/YOURUSER/.wine-uranium wine /home/YOURUSER/Games/PokemonUranium/Game.exe
-Path=/home/YOURUSER/Games/PokemonUranium
+Exec=env WINEPREFIX=/home/YOURUSER/.wine-uranium wine /home/YOURUSER/repos/uranium-src/Uranium.exe
+Path=/home/YOURUSER/repos/uranium-src
 Icon=wine
 Terminal=false
 Categories=Game;
@@ -97,7 +94,7 @@ Replace `YOURUSER` with your actual username (`echo $USER` if unsure), then it'l
 ## Troubleshooting
 
 **"RGSS102E.dll could not be found"**
-The dll should already be sitting next to `Game.exe` in the game folder — if it's missing, your copy of the game files is incomplete rather than a Wine problem. Re-check `$RPG2GBA_URANIUM_SRC`.
+The dll should already be sitting next to `Uranium.exe` in `~/repos/uranium-src` — if it's missing, that tree is incomplete rather than a Wine problem.
 
 **Game launches but window is black / crashes immediately**
 Try forcing a specific Windows version in the prefix:

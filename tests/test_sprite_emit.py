@@ -23,7 +23,9 @@ from rpg2gba.tileset_converter.graphics.sprite_emit import (
 )
 from rpg2gba.tileset_converter.graphics.sprites import (
     GBA_FRAME_PX,
+    LARGE_PROP_FRAME_PX,
     NUM_BREAK_PROP_FRAMES,
+    NUM_LARGE_PROP_FRAMES,
     NUM_OUTPUT_FRAMES,
     NUM_PLAYER_OUTPUT_FRAMES,
     ConvertedPlayer,
@@ -58,6 +60,24 @@ def _make_break_prop(name: str) -> ConvertedSprite:
     return ConvertedSprite(
         name=name, frames=frames, cycle="break_prop", asymmetry=0.0,
         content_size=(1, 1),
+    )
+
+
+def _make_large_prop(
+    name: str, colors: list[tuple[int, int, int]] | None = None
+) -> ConvertedSprite:
+    """A 1-frame large-prop sprite (PU-PokeballMachine shape): one opaque pixel
+    per colour along frame row 0, same fixture convention as `_make_sprite`,
+    just a 64x64 single frame instead of 9x 32x32."""
+    colors = colors if colors is not None else [(90, 60, 30)]
+    if len(colors) > LARGE_PROP_FRAME_PX:
+        raise ValueError("fixture helper: too many colours for one 64px row")
+    frame = np.zeros((LARGE_PROP_FRAME_PX, LARGE_PROP_FRAME_PX, 4), dtype=np.uint8)
+    for i, (r, g, b) in enumerate(colors):
+        frame[0, i] = (r, g, b, 255)
+    return ConvertedSprite(
+        name=name, frames=[frame], cycle="large_prop", asymmetry=0.0,
+        content_size=(len(colors), 1), frame_px=LARGE_PROP_FRAME_PX,
     )
 
 
@@ -339,6 +359,105 @@ def test_break_prop_frame_count_validated(tmp_path: Path) -> None:
     prop.frames.append(prop.frames[0].copy())  # 5 frames — invalid for a prop
     with pytest.raises(ValueError, match="expected 4 frames"):
         emit_sprites([prop], tmp_path)
+
+
+# --- large prop emission (64x64 static object, e.g. PU-PokeballMachine) ------
+
+
+def test_large_prop_emits_64x64_oam_and_inanimate(tmp_path: Path) -> None:
+    """A large-prop sprite gets the fork's native 64x64 static-object template
+    (`gObjectEventGraphicsInfo_RayquazaStill`,
+    `object_event_graphics_info.h:757-773`): the 64x64 OAM/subsprite table,
+    `sAnimTable_Inanimate`, inanimate, no movement tracks, size/width/height
+    scaled to 64 -- and a single 64x64 strip PNG."""
+    prop = _make_large_prop("PU-PokeballMachine")
+    result = emit_sprites([prop], tmp_path)
+    ident = _c_ident("PU-PokeballMachine")
+    info = (tmp_path / _GEN_RELPATHS["graphics_info"]).read_text(encoding="utf-8")
+
+    assert f"const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_{ident} = {{" in info
+    assert ".oam = &gObjectEventBaseOam_64x64," in info
+    assert ".subspriteTables = sOamTables_64x64," in info
+    assert ".anims = sAnimTable_Inanimate," in info
+    assert ".inanimate = TRUE," in info
+    assert ".compressed = FALSE," in info
+    assert ".tracks = TRACKS_NONE," in info
+    assert ".shadowSize = SHADOW_SIZE_S," in info
+    assert f".size = {LARGE_PROP_FRAME_PX * LARGE_PROP_FRAME_PX // 2}," in info
+    assert f".width = {LARGE_PROP_FRAME_PX}," in info
+    assert f".height = {LARGE_PROP_FRAME_PX}," in info
+    assert f".images = sPicTable_{ident}," in info
+
+    png_path = tmp_path / PICS_RELDIR / f"{result.stems['PU-PokeballMachine']}.png"
+    png = Image.open(png_path)
+    assert png.size == (LARGE_PROP_FRAME_PX * NUM_LARGE_PROP_FRAMES, LARGE_PROP_FRAME_PX)
+
+
+def test_large_prop_pic_table_and_incgfx_use_8_tile_metatile(tmp_path: Path) -> None:
+    """The INCGFX_U16 metatile args and `overworld_ascending_frames` tile counts
+    scale with the frame size (8 8x8 tiles = 64px), not the 32x32-sheet default
+    of 4."""
+    prop = _make_large_prop("PU-PokeballMachine")
+    result = emit_sprites([prop], tmp_path)
+    stem = result.stems["PU-PokeballMachine"]
+    ident = _c_ident("PU-PokeballMachine")
+
+    graphics_text = (tmp_path / _GEN_RELPATHS["graphics"]).read_text(encoding="utf-8")
+    assert (
+        f'INCGFX_U16("graphics/object_events/pics/uranium/{stem}.png", ".4bpp", '
+        '"-mwidth 8 -mheight 8");' in graphics_text
+    )
+
+    pic_tables_text = (tmp_path / _GEN_RELPATHS["pic_tables"]).read_text(encoding="utf-8")
+    assert f"overworld_ascending_frames(gObjectEventPic_{ident}, 8, 8)," in pic_tables_text
+
+
+def test_large_prop_shares_npc_palette_packing(tmp_path: Path) -> None:
+    """The large prop's colours join the SAME shared <=4-palette pool as every
+    other NPC sheet — not a separate bank of its own (unlike the player)."""
+    npc = _make_sprite("aaa", [(0, 0, 0), (8, 0, 0)])
+    prop = _make_large_prop("PU-PokeballMachine", [(0, 0, 0), (8, 0, 0)])
+    result = emit_sprites([npc, prop], tmp_path)
+
+    assert len(result.palette_tags) == 1  # identical colour sets -> one shared palette
+    assert result.palette_index["aaa"] == result.palette_index["PU-PokeballMachine"]
+
+
+def test_large_prop_frame_count_validated(tmp_path: Path) -> None:
+    prop = _make_large_prop("PU-PokeballMachine")
+    prop.frames.append(prop.frames[0].copy())  # 2 frames — invalid for a large prop
+    with pytest.raises(ValueError, match="expected 1 frames"):
+        emit_sprites([prop], tmp_path)
+
+
+def test_large_prop_wrong_frame_shape_raises(tmp_path: Path) -> None:
+    bad_frame = np.zeros((GBA_FRAME_PX, GBA_FRAME_PX, 4), dtype=np.uint8)  # not 64x64
+    sprite = ConvertedSprite(
+        name="PU-PokeballMachine", frames=[bad_frame], cycle="large_prop",
+        asymmetry=0.0, content_size=(1, 1), frame_px=LARGE_PROP_FRAME_PX,
+    )
+    with pytest.raises(ValueError, match="PU-PokeballMachine"):
+        emit_sprites([sprite], tmp_path)
+
+
+def test_large_prop_alongside_break_prop_and_ordinary_sheet(tmp_path: Path) -> None:
+    """A mixed emit (ordinary walk-cycle sheet + break prop + large prop) still
+    produces one file set, and each sheet's own frame_px sizes its own strip
+    independently -- proves the 32x32 path is unaffected by a 64x64 sibling
+    sharing the same run."""
+    npc = _make_sprite("aaa", [(0, 0, 0)])
+    break_prop = _make_break_prop("fk107-rocksmash")
+    large_prop = _make_large_prop("PU-PokeballMachine")
+    result = emit_sprites([npc, break_prop, large_prop], tmp_path)
+
+    npc_png = Image.open(tmp_path / PICS_RELDIR / f"{result.stems['aaa']}.png")
+    assert npc_png.size == (GBA_FRAME_PX * NUM_OUTPUT_FRAMES, GBA_FRAME_PX)
+
+    break_png = Image.open(tmp_path / PICS_RELDIR / f"{result.stems['fk107-rocksmash']}.png")
+    assert break_png.size == (GBA_FRAME_PX * NUM_BREAK_PROP_FRAMES, GBA_FRAME_PX)
+
+    large_png = Image.open(tmp_path / PICS_RELDIR / f"{result.stems['PU-PokeballMachine']}.png")
+    assert large_png.size == (LARGE_PROP_FRAME_PX * NUM_LARGE_PROP_FRAMES, LARGE_PROP_FRAME_PX)
 
 
 def test_pic_tables_file_shape(tmp_path: Path) -> None:

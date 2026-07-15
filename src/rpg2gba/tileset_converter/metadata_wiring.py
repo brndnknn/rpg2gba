@@ -57,7 +57,13 @@ from ..conversion_agent.flag_registry import (
     self_switch_flag_name,
 )
 from .map_constants import MapConstantRegistry, MapConstants
-from .npc_gfx import is_door_sheet, movement_spec_for, select_boot_page
+from .npc_gfx import (
+    MapPassability,
+    is_door_sheet,
+    movement_spec_for,
+    select_boot_page,
+    static_face_spec,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -632,6 +638,7 @@ def build_object_events(
     npc_gfx: dict[str, str] | None = None,
     event_traits: dict[int, list[str]] | None = None,
     flag_registry: FlagRegistry | None = None,
+    passability: MapPassability | None = None,
 ) -> ObjectBuildResult:
     """Place every non-warp, non-skipped event per its BOOT-STATE page (RMXP shows
     the highest-index page whose condition holds at boot; `npc_gfx.select_boot_page`).
@@ -675,7 +682,22 @@ def build_object_events(
     `flag_registry`, when given, is forwarded to `_resolve_script` /
     `build_page_dispatcher` so multi-page events gated on a global switch/var can
     get a real dispatcher instead of deferring to the base page; `None` keeps
-    today's defer-on-global-gate behavior."""
+    today's defer-on-global-gate behavior.
+
+    `passability` (an `npc_gfx.MapPassability` for THIS map), when given,
+    gates every moving spec against the map data (both demotions log loud):
+
+    - a moving NPC whose spawn tile blocks leaving in all four directions
+      (RMXP checks the CURRENT tile before each step, so it never moves on PC
+      — pokeemerald checks only the destination, so it would walk off and
+      never path back) -> static facing;
+    - a walk-sequence loop crossing a non-clear cell (would stall
+      walking-in-place in-engine) -> static facing.
+
+    A walk-sequence spec's `anchor_dx`/`anchor_dy` spawn shift is applied to
+    the placed coords (the engine closes the loop at the object's initial
+    coords, which must be a loop corner). `None` skips the passability gates
+    (unit-test/legacy path) but still applies anchor shifts."""
     objects, _, _ = classify_map_events(map_json, slice_ids)
     uid = consts.uranium_id
     result = ObjectBuildResult()
@@ -753,14 +775,42 @@ def build_object_events(
                     f"npc_gfx_map.json entry"
                 ) from None
             spec = movement_spec_for(page)
+            if passability is not None and spec.movement_type.startswith(
+                ("MOVEMENT_TYPE_WANDER", "MOVEMENT_TYPE_WALK")
+            ):
+                if passability.exit_blocked(event["x"], event["y"]):
+                    spec = static_face_spec(
+                        page,
+                        "spawn tile blocks leaving in every direction (RMXP "
+                        "passage data) — the NPC never moves on PC either",
+                    )
+                elif spec.path_cells:
+                    blocked = [
+                        (event["x"] + dx, event["y"] + dy)
+                        for dx, dy in spec.path_cells
+                        if not passability.cell_clear(event["x"] + dx, event["y"] + dy)
+                    ]
+                    if blocked:
+                        spec = static_face_spec(
+                            page,
+                            f"walk-sequence loop crosses blocked cell(s) "
+                            f"{blocked} — would stall walking-in-place in-engine",
+                        )
             if spec.demoted is not None:
                 logger.warning(
                     "map %d EV%03d: movement demoted to static facing (%s)",
                     uid, eid, spec.demoted,
                 )
+            if (spec.anchor_dx, spec.anchor_dy) != (0, 0):
+                logger.info(
+                    "map %d EV%03d: walk-sequence anchor shifts spawn (%d,%d) -> (%d,%d)",
+                    uid, eid, event["x"], event["y"],
+                    event["x"] + spec.anchor_dx, event["y"] + spec.anchor_dy,
+                )
             result.object_events.append(
                 ObjectEvent(
-                    x=event["x"], y=event["y"], graphics_id=graphics_id,
+                    x=event["x"] + spec.anchor_dx, y=event["y"] + spec.anchor_dy,
+                    graphics_id=graphics_id,
                     script=script, movement_type=spec.movement_type,
                     movement_range_x=spec.range_x, movement_range_y=spec.range_y,
                     flag=rock_flags.get(eid, "0"),
@@ -906,6 +956,8 @@ def build_slice_maps(
     local_id_dir: Path | None = None,
     event_traits: dict[int, dict[int, list[str]]] | None = None,
     flag_registry: FlagRegistry | None = None,
+    tilesets_path: Path | None = None,
+    walkable_overrides: dict[int, frozenset[tuple[int, int]]] | None = None,
 ) -> dict[int, set[tuple[int, int]]]:
     """Assemble map.json + dispatcher .pory for every slice map. Returns the per-map
     warp-source coords (S3 walkable-overrides) so S8 can force those cells walkable.
@@ -924,8 +976,21 @@ def build_slice_maps(
     `event_traits` is keyed by Uranium map id -> that map's `build_object_events`
     `event_traits` dict (event id -> trait list; see `Map{id:03d}.traits.json`,
     stage_slice_scripts.py). A map absent from the outer dict, or `event_traits`
-    itself being `None`, is legacy behavior for that map (all flags "0")."""
+    itself being `None`, is legacy behavior for that map (all flags "0").
+
+    `tilesets_path` (the Phase-3 `tilesets.json`), when given, builds a per-map
+    `npc_gfx.MapPassability` and forwards it to `build_object_events` so moving
+    NPCs are gated against the map data (spawn-locked NPCs and stall-prone
+    walk-sequence loops demote loud — see there). `walkable_overrides` (Uranium
+    map id -> cells, normally `map_set.WALKABLE_OVERRIDES`) are the converter-
+    level collision unblocks those gates must treat as open — the SAME cells the
+    layout pass forces walkable, or the two passes would disagree (§4.3)."""
     slice_set = set(slice_ids)
+    tilesets = (
+        json.loads(tilesets_path.read_text(encoding="utf-8"))
+        if tilesets_path is not None
+        else None
+    )
     maps = {
         uid: json.loads((maps_dir / f"Map{uid:03d}.json").read_text(encoding="utf-8"))
         for uid in slice_ids
@@ -943,9 +1008,23 @@ def build_slice_maps(
         warp_events = resolved.get(uid, [])
         src_coords = {(s.src_x, s.src_y) for s in warp_lists[uid]}
         map_traits = event_traits.get(uid) if event_traits is not None else None
+        passability = None
+        if tilesets is not None:
+            tileset_id = maps[uid]["tileset_id"]
+            try:
+                tileset = tilesets[str(tileset_id)]
+            except KeyError:
+                raise KeyError(
+                    f"map {uid}: tileset {tileset_id} missing from {tilesets_path}"
+                ) from None
+            passability = MapPassability.from_map(
+                maps[uid], tileset,
+                open_cells=(walkable_overrides or {}).get(uid, frozenset()),
+            )
         result = build_object_events(
             maps[uid], consts, slice_set, pory_labels=pory_labels, npc_gfx=npc_gfx,
             event_traits=map_traits, flag_registry=flag_registry,
+            passability=passability,
         )
         overrides[uid] = src_coords
         local_id_tables[uid] = result.local_id_map

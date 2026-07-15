@@ -184,3 +184,49 @@ def test_tileset_key_warp_override_falls_back_for_unmapped_column() -> None:
     )
 
     assert layout.blocks[1] & METATILE_ID_MASK == 99
+
+
+# --- unblocked_cells (walkable overrides, map_set.WALKABLE_OVERRIDES) ----------
+
+def test_unblocked_cells_force_passable_keep_art() -> None:
+    """An unblocked cell keeps its own (blocked-bucket) art but its collision/
+    elevation are force-stamped PASSABLE — the Map032 (38,43) tree-crown case."""
+    tm = _synth_tile_map()
+    g = _grid(2, 1, [384, 500])  # tile 500 reads blocked from its passage
+
+    layout = convert_layout(
+        _map_json(g, tileset_id=_REAL),
+        tm,
+        name="T",
+        layout_const="LAYOUT_T",
+        tileset_key=_SYNTH,
+        unblocked_cells={(1, 0)},
+    )
+
+    assert layout.blocks[1] & METATILE_ID_MASK == 11  # blocked-bucket art kept
+    assert (layout.blocks[1] >> 10) & 0x3 == 0  # collision forced passable
+    assert (layout.blocks[1] >> 12) & 0xF == 3  # walkable elevation
+    # the neighbouring cell is untouched
+    assert (layout.blocks[0] >> 10) & 0x3 == 0
+
+
+def test_unblocked_cells_conflict_with_blocked_fails_loud() -> None:
+    tm = _synth_tile_map()
+    g = _grid(2, 1, [384, 500])
+    import pytest
+    with pytest.raises(ValueError, match="contradictory"):
+        convert_layout(
+            _map_json(g, tileset_id=_REAL), tm, name="T", layout_const="LAYOUT_T",
+            tileset_key=_SYNTH, blocked_cells={(1, 0)}, unblocked_cells={(1, 0)},
+        )
+
+
+def test_unblocked_cells_conflict_with_warp_fails_loud() -> None:
+    tm = _synth_tile_map()
+    g = _grid(2, 1, [384, 500])
+    import pytest
+    with pytest.raises(ValueError, match="contradictory"):
+        convert_layout(
+            _map_json(g, tileset_id=_REAL), tm, name="T", layout_const="LAYOUT_T",
+            tileset_key=_SYNTH, warp_overrides={(1, 0)}, unblocked_cells={(1, 0)},
+        )

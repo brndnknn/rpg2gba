@@ -35,12 +35,27 @@ defaults from map.json) and decide the slice-1 bar: accept stock audio, silence,
 or start a minimal BGM mapping. §9 doesn't name audio, but "genuinely playable"
 is the user's call.
 
+**Architecture decided (sketch) 2026-07-14 →
+`reference/findings/audio_decision_2026-07-14.md`:** substitution table
+`reference/audio_map.json` (fork-index-validated SoT) wired into
+metadata_wiring per-map BGM + transpiler playbgm/playfanfare/playse;
+conversion/streaming rejected by arithmetic. Slice-1 bar still the user's
+call: recommended = ~15-row table covering the 8 slice maps (vs. accept
+today's MUS_LITTLEROOT-everywhere).
+
 ### 8. Warp-class refinement
 
 Every warp cell gets MB_NON_ANIMATED_DOOR regardless of kind (door / stairs /
 mat) — deferred from Checkpoint 2. Doors don't animate open; stairs/mats behave
 like doors. Fidelity polish, low risk. Fix = per-kind behavior in the tileset
 warp-metatile emission (`build_slice_tilesets` / `tile_map.WarpInfo`).
+
+- **NEW (boot-walk 2026-07-14, H4): post-warp facing is always DOWN.** After
+  the house stairs the player should face away from the stairs (right on 2F,
+  left back on 1F — RMXP's transfer command carries an explicit arrival
+  direction we currently drop). Emerald derives exit facing from the arrival
+  metatile behavior / warp kind, so this likely lands together with the
+  per-kind behavior work; the RMXP direction is in each 201 command's params.
 
 ### 9. Moki Town east edge — the Route 03 seam
 
@@ -85,7 +100,42 @@ fixed. Add new findings here as they're reported. Reported 2026-07-13, split
 out as items #12 and #13 below: NPCs never move; only the player's house is
 enterable.
 
-### 12. NPCs don't move at all (walk finding 2026-07-13) — BUILT 2026-07-13, needs fine-tuning
+**2026-07-14 boot walk (BOOT_WALK_CHECKLIST.md + map_feedback/Map032.json),
+dispositions 2026-07-15:**
+
+- Map032 NPC movement (M5 + all four map-feedback flags) → fixed under #12
+  (fine-tune round), rebuilt + taildropped 2026-07-15, retest pending.
+- Lab Pokédex ceremony trigger + void-walk (L section) → NEW item #14.
+- H4 post-warp facing → folded into #8 (see there).
+- M6 "granny sprite wrong" → NOT a bug: the Rare-Candy giver (M32 EV027) is
+  sheet HGSS_008 in Uranium's own data, which is a *young woman in a tank
+  top*; our strip converts it faithfully. "Granny" was the checklist's label
+  (from an earlier session's shorthand), not the game's. If she looks
+  different in PC Uranium, flag again with a screenshot.
+- M17 "can't find EV005" → it's the door-sheet event at (28,31) (PU-doorsdew,
+  dropped by design, dest never wired — the known inert wall).
+- M10 emotes → nothing ambient in Moki; the only slice emote sites are inside
+  the Pokédex ceremony (anim 104 → exclamation) and Theo-chase events, so
+  M10 can only be judged during M9.
+- H3 ninja letter → user is right, it's gated on later story state (EV021's
+  boot page isn't the letter); nothing to fix for slice 1.
+- X2 audio = stock Emerald everywhere → matches decision #7, no action.
+
+### 14. Lab Pokédex ceremony: wrong trigger + reposition walks into void (boot-walk 2026-07-14)
+
+In PC Uranium the ceremony autostarts on entering the lab (game takes
+controls, auto-walks the player next to Theo, prof speaks). In the ROM the
+event only fires when the player walks up to the prof and presses A, and the
+reposition route then walks the player into a black void before the speech.
+Two suspects: (a) the ceremony host event's trigger/page classification on
+Map 50 (autorun/touch vs action — cf. the EV009 invisible-host pattern that
+became a coord_event on Map 32); (b) the hand-converted reposition route
+(`hand_conversions/Map032_EV009.pory` y<=43 clamp was written for the OLD
+Moki-side ceremony; the Map-50 doorway coords differ — walk target likely
+off-map there). User deferred this behind the Map-32 fixes; localize per the
+/debug flow before touching anything.
+
+### 12. NPCs don't move at all (walk finding 2026-07-13) — fine-tune round BUILT 2026-07-15, retest pending
 
 All NPCs stand frozen; in Uranium the Moki townsfolk wander/turn. Research
 done (3 sub-agents: pipeline audit, fork inventory, corpus census + RGSS
@@ -162,32 +212,82 @@ read). Verified facts, superseding the old from-memory notes:
   `_spec_for_axis`/`_look_spec_for`/the demotion cases) accordingly. Demoted
   routes to recheck against the PC reference: Map032 EV008/48/72/73
   (translation+turns or mixed-axis, codes `[1,2,3,4]`).
+- **Fine-tune round BUILT 2026-07-15** (user's 2026-07-14 boot walk +
+  map_feedback/Map032.json — pacers never pause; EV048/072 + the
+  town-square Chyinmunk frozen; phantom "itemball" at (31,44)). Three new
+  classifier rules in `npc_gfx.py`, all pinned by tests:
+  1. **freq-gated pacing:** RMXP idle-gates every route command by
+     `(40-2f)(6-f)` frames, so wait-free loops below freq 6 now emit
+     WANDER_LEFT_AND_RIGHT/UP_AND_DOWN (step + random 0.5–2 s pause)
+     instead of continuous WALK_* — EV012/027/068/069/070/071. Note:
+     WANDER's direction order is random within the same range (Uranium's
+     is deterministic 3-left-then-3-right) — accepted.
+  2. **4-leg closed loops → MOVEMENT_TYPE_WALK_SEQUENCE_\*** (`_spec_for_
+     loop_route` + `_simulate_walk_sequence`, a GBA-exact replay of the
+     fork's automaton — quirk table `_WALK_SEQUENCE_QUIRKS` re-derived
+     from the C source by a test): EV008 town-square ring →
+     DOWN_RIGHT_UP_LEFT rx6 ry6 with a (0,-1) spawn shift to the ring
+     corner (the engine closes the loop at the object's initial coords);
+     EV048/072 → LEFT_UP_DOWN_RIGHT rx1 ry2. Walk sequences are
+     continuous — EV048/072's freq-3 pauses are lost (no paused sequence
+     type exists in the fork); eye-judge at retest.
+  3. **map-passability gates** (`npc_gfx.MapPassability`, plumbed via
+     `build_slice_maps(tilesets_path=, walkable_overrides=)`): a mover
+     spawned on an RMXP all-exits-blocked tile demotes to static — EV012
+     stands on a passage-15 pokeball decoration and never moves on PC
+     either; this fixes the "itemball I can't pick up + NPC bumping into
+     it" report (the ball is map art the NPC's sprite covers, and its
+     dialogue works by talking to the NPC). A walk-sequence loop crossing
+     a non-clear cell demotes loud — EV073's west path is fenced off in
+     Uranium's own data, so it's static on PC too.
+  Plus **`map_set.WALKABLE_OVERRIDES = {32: {(38, 43)}}`** (user approved
+  2026-07-15): the one tree-crown cell EV008's ring crosses via RMXP
+  `through`; `convert_layout(unblocked_cells=)` forces it walkable (art
+  kept; the crown's priority-3 top layer draws over sprites) and the
+  passability gate treats it open. Side effect: the player can step onto
+  that cell (PC blocks it). NOTE: the map viewer's collision overlay
+  doesn't know about stamp-level overrides — (38,43) shows blocked in the
+  viewer but is walkable in the ROM (same known gap as warp/through-block
+  stamps).
+  1089 tests pass; full chain rerun; ROM sha1 `a107c65c` taildropped
+  2026-07-15. **Retest checklist:** pacers step-pause-step (~1–2 s);
+  Chyinmunk laps the square counterclockwise nonstop, vanishing behind
+  the big tree for a step; EV048/072 walk their L-loops (continuously —
+  acceptable?); the (31,44) NPC stands on the ball art and talks when
+  addressed.
 
-### 13. Only the player's house is enterable — expand Moki interiors — NEEDS RESEARCH
+### 13. Expand Moki interiors — BUILT 2026-07-14, needs boot-walk
 
-Every building door in Moki Town except the player's house does nothing
-(blocked). Notes from memory — **unverified, research before building**:
+Slice widened 3→8 maps; full chain (stage → assemble → `make modern`) clean
+2026-07-14, ROM taildropped. Built per
+`reference/guides/slice_expansion_runbook.md`.
 
-- Expected with current scope: slice = maps 49/48/32 only; out-of-slice door
-  events are NO-EMIT and their cells deliberately stamped blocked (2026-07-09
-  fix3 note), so other doors are inert walls by design.
-- Known door destinations from the 2026-07-13 #1 investigation: Map032 EV003
-  warps to map 50 (14,18); EV023/036/037 to map 33 (70,11) (cave entrance
-  triad); EV005/006/007/017 are PU-doorsdew doors with unrecorded dests.
-  Walker-era build dirs mention MokiTownHouse1/2 + ProfessorLab as nearby
-  interiors — plausible dest maps, ids unconfirmed.
-- Work shape: widen the slice set (`SLICE_MAP_IDS` / `DEFAULT_SLICE` /
-  `ALLOWED_MAPS` in stage_slice_scripts + the assemble batch), then the full
-  per-map pipeline for each interior (transpile, tilesets/quantize, NPC gfx,
-  wiring, warp pairs). Each added map inherits the §9 bar (art included).
-- Research: enumerate ALL Map032 door events + dest map ids + MapInfos
-  names; per-interior tileset/palette/metatile budget check; event/NPC count
-  per interior; then decide with the user which interiors are in slice-1
-  scope vs deferred to the frontier.
-- **The mechanical process is now documented:**
-  `reference/guides/slice_expansion_runbook.md` (2026-07-13) — map-set touchpoints
-  (incl. the `ALLOWED_MAPS`/`WARP_OVERRIDES` hand-edit hazards), per-map
-  prerequisites, command chain, fail-loud table, build warts.
+- **New maps:** 50 (Moki Town Professor Lab), 64 (MokiTownHouse2), 65
+  (MokiTownHouse1), 172 (Theo's House 1F), 89 (Theo's House 2F — reachable
+  only via 172's internal stairs, mirrors the 48/49 floor pattern).
+  `SLICE_MAP_IDS` / `ALLOWED_MAPS` / `WARP_OVERRIDES` all widened.
+- **Door dests resolved** (were "unrecorded"): Map032 EV003→50 (door 17,11),
+  EV006→64 (43,31), EV007→65 (24,42), EV017→172 (56,42). Interior exits
+  wired (64/65 EV003 @9,14; 172 street exit EV002 @10,11 + stairs EV003
+  @12,3).
+- **Still blocked, by design:** cave triad EV023/036/037→map 33 (Route 01,
+  slice-2 frontier) and **EV005** (door left unwired this round — inert
+  wall).
+- **Supporting work:** +11 `npc_gfx_map.json` entries (HGSS townsfolk,
+  PU-Cam, PU-Hazma, ZP-Professor2, PU-PokeballMachine); NEW `large_prop`
+  64×64 sprite class in sprites.py/sprite_emit.py (lab ball machine, 96×128
+  source, RayquazaStill-style static object); +3 `map_name_overrides`.
+- **Build facts:** mints 196 flags / 106 vars / 27 self-switches (16→27) /
+  8 temp-switches; ROM 78.88%; 1064 tests pass (npc_gfx count re-pinned
+  18→29; `test_build_slice_maps_smoke` cleared once the sprite pass
+  regenerated `uranium_event_objects.gen.h`). Map172 staging dropped 6
+  orphan pages (EV002/003/004×4 — non-emitted events).
+- **§9 boot-walk checklist:** 4 street doors warp in + exits warp back;
+  Theo 1F↔2F stairs; interior art + NPC palettes **by eye** (all converted
+  sheets share ≤4 palette banks — overflow is silent color garbage, the eye
+  is the gate); lab machine prop renders 64×64; nothing visibly missing in
+  Theo's house (the dropped orphan pages); interior NPCs sane. All
+  uncommitted — commit after the walk.
 
 ## Accepted deferrals (not slice-1 work — listed so they aren't re-litigated)
 

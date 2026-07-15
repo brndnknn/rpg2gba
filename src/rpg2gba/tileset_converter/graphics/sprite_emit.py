@@ -96,6 +96,24 @@ Fork facts this module depends on (grep/read citations, engine/ HEAD 21c24202):
     `object_event_graphics_info.h:98`) — the closest existing convention for
     "custom dedicated palette tag, not one of the shared NPC_1..4 rotation" —
     so that's what this module fills in, even though nothing reads it.
+  - A `sprites.ConvertedSprite` with `cycle == "large_prop"` (`frame_px == 64`,
+    e.g. `PU-PokeballMachine`) emits the same 32x32 template above with
+    size/width/height scaled to 64 and five fields swapped for the fork's
+    existing 64x64-static-object convention (`gObjectEventGraphicsInfo_
+    RayquazaStill`, `object_event_graphics_info.h:757-773`): `.oam =
+    &gObjectEventBaseOam_64x64`, `.subspriteTables = sOamTables_64x64` (both
+    declared `include/event_object_movement.h:116,118`), `.anims =
+    sAnimTable_Inanimate` (`object_event_anims.h:1196` — its one entry,
+    `ANIM_STAY_STILL` -> `sAnim_StayStill`, only ever requests frame 0, so a
+    ONE-frame pic table is sufficient), `.inanimate = TRUE`, `.tracks =
+    TRACKS_NONE`. The pic-table/INCGFX_U16 tile-metatile args scale with it
+    (`sprite.frame_px // 8`, i.e. 8 not 4) — verified against `gbagfx`'s
+    `-mwidth`/`-mheight` semantics (`tools/gbagfx/gfx.c`: they reorder raster
+    data into per-metatile-contiguous tile blocks; with only one frame in the
+    image, `metatilesWide == 1` and the reorder is a no-op, matching how
+    `gObjectEventPic_RayquazaStill` itself needs no such args at all — passing
+    the frame's own tile size here is simply the general form of the same
+    identity).
 
 Deviations from the wave-1 design notes (both intentional, both citation-backed
 above): `INCGFX_U16` not `INCGFX_U32`; palette DATA arrays are plain literal
@@ -126,6 +144,7 @@ from rpg2gba.tileset_converter.graphics.quantize import (
 from rpg2gba.tileset_converter.graphics.sprites import (
     GBA_FRAME_PX,
     NUM_BREAK_PROP_FRAMES,
+    NUM_LARGE_PROP_FRAMES,
     NUM_OUTPUT_FRAMES,
     NUM_PLAYER_OUTPUT_FRAMES,
     ConvertedPlayer,
@@ -271,18 +290,21 @@ def _c_ident(sheet_name: str) -> str:
 
 
 def _validate_sprite_shape(sprite: ConvertedSprite) -> None:
-    expected = (
-        NUM_BREAK_PROP_FRAMES if sprite.cycle == "break_prop" else NUM_OUTPUT_FRAMES
-    )
+    if sprite.cycle == "large_prop":
+        expected = NUM_LARGE_PROP_FRAMES
+    elif sprite.cycle == "break_prop":
+        expected = NUM_BREAK_PROP_FRAMES
+    else:
+        expected = NUM_OUTPUT_FRAMES
     if len(sprite.frames) != expected:
         raise ValueError(
             f"{sprite.name}: expected {expected} frames, got {len(sprite.frames)}"
         )
     for i, frame in enumerate(sprite.frames):
-        if frame.shape != (GBA_FRAME_PX, GBA_FRAME_PX, 4):
+        if frame.shape != (sprite.frame_px, sprite.frame_px, 4):
             raise ValueError(
                 f"{sprite.name}: frame {i} has shape {frame.shape}, expected "
-                f"({GBA_FRAME_PX}, {GBA_FRAME_PX}, 4)"
+                f"({sprite.frame_px}, {sprite.frame_px}, 4)"
             )
 
 
@@ -424,23 +446,26 @@ def _quantize_player(player: ConvertedPlayer) -> QuantizeResult:
 # --- PNG emission ----------------------------------------------------------
 
 
-def _write_sheet_png(path: Path, frames: list[np.ndarray], palette: np.ndarray) -> None:
-    """Write one sheet's quantized (32,32,4) RGBA frames (9 for characters, 4 for
-    break props) as a `32*len(frames)`x32 indexed PNG at `path`: frames laid out
-    left to right, pixels stored as palette indices (index 0 reserved/transparent,
-    1..len(palette) the sheet's actual colours in `palette` order) -- gbagfx's
-    `.4bpp` conversion reads the PNG's raw indices, not its RGB values, but the
-    embedded palette is the real 16-colour assignment so the file also previews
+def _write_sheet_png(
+    path: Path, frames: list[np.ndarray], palette: np.ndarray, frame_px: int = GBA_FRAME_PX
+) -> None:
+    """Write one sheet's quantized (frame_px,frame_px,4) RGBA frames (9 for
+    characters, 4 for break props, 1 for a large prop -- see `sprites.ConvertedSprite.
+    frame_px`) as a `frame_px*len(frames)`x`frame_px` indexed PNG at `path`: frames
+    laid out left to right, pixels stored as palette indices (index 0 reserved/
+    transparent, 1..len(palette) the sheet's actual colours in `palette` order) --
+    gbagfx's `.4bpp` conversion reads the PNG's raw indices, not its RGB values, but
+    the embedded palette is the real 16-colour assignment so the file also previews
     correctly."""
-    width = GBA_FRAME_PX * len(frames)
-    indices = np.zeros((GBA_FRAME_PX, width), dtype=np.uint8)
+    width = frame_px * len(frames)
+    indices = np.zeros((frame_px, width), dtype=np.uint8)
     for i, frame in enumerate(frames):
         opaque = frame[..., 3] == 255
         rgb = frame[..., :3]
-        frame_idx = np.zeros((GBA_FRAME_PX, GBA_FRAME_PX), dtype=np.uint8)
+        frame_idx = np.zeros((frame_px, frame_px), dtype=np.uint8)
         for slot, color in enumerate(palette):
             frame_idx[np.all(rgb == color, axis=-1) & opaque] = slot + 1
-        indices[:, i * GBA_FRAME_PX:(i + 1) * GBA_FRAME_PX] = frame_idx
+        indices[:, i * frame_px:(i + 1) * frame_px] = frame_idx
 
     img = Image.fromarray(indices, mode="P")
     pal_bytes: list[int] = [0, 0, 0]  # index 0: transparent placeholder (black)
@@ -515,9 +540,12 @@ def _render_graphics(
     for sprite in sprites:
         ident = _c_ident(sprite.name)
         stem = stems[sprite.name]
+        tiles = sprite.frame_px // 8  # metatile width/height in 8x8 tiles (4 for
+                                       # a 32x32 frame, 8 for a 64x64 large prop)
         lines.append(
             f'const u16 gObjectEventPic_{ident}[] = '
-            f'INCGFX_U16("{_PICS_RELDIR / stem}.png", ".4bpp", "-mwidth 4 -mheight 4");\n'
+            f'INCGFX_U16("{_PICS_RELDIR / stem}.png", ".4bpp", '
+            f'"-mwidth {tiles} -mheight {tiles}");\n'
         )
     if player_pal_words is not None:
         lines.append(
@@ -532,9 +560,12 @@ def _render_pic_tables(sprites: list[ConvertedSprite], *, include_player: bool =
     lines = [_GENERATED_HEADER]
     for sprite in sprites:
         ident = _c_ident(sprite.name)
+        tiles = sprite.frame_px // 8  # frame size in 8x8 tiles (4 for 32x32, 8 for 64x64)
         lines.append("\n")
         lines.append(f"static const struct SpriteFrameImage sPicTable_{ident}[] = {{\n")
-        lines.append(f"    overworld_ascending_frames(gObjectEventPic_{ident}, 4, 4),\n")
+        lines.append(
+            f"    overworld_ascending_frames(gObjectEventPic_{ident}, {tiles}, {tiles}),\n"
+        )
         lines.append("};\n")
     if include_player:
         lines.append("\n")
@@ -620,6 +651,7 @@ def _render_graphics_info(
     lines = [_GENERATED_HEADER]
     for sprite in sprites:
         ident = _c_ident(sprite.name)
+        frame_bytes = sprite.frame_px * sprite.frame_px // 2  # one 4bpp frame's byte size
         lines.append("\n")
         lines.append(
             f"const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_{ident} = {{\n"
@@ -627,11 +659,24 @@ def _render_graphics_info(
         lines.append("    .tileTag = TAG_NONE,\n")
         lines.append(f"    .paletteTag = {palette_tags[sprite.name]},\n")
         lines.append("    .reflectionPaletteTag = OBJ_EVENT_PAL_TAG_NONE,\n")
-        lines.append(f"    .size = {_FRAME_BYTES},\n")
-        lines.append(f"    .width = {GBA_FRAME_PX},\n")
-        lines.append(f"    .height = {GBA_FRAME_PX},\n")
+        lines.append(f"    .size = {frame_bytes},\n")
+        lines.append(f"    .width = {sprite.frame_px},\n")
+        lines.append(f"    .height = {sprite.frame_px},\n")
         lines.append(f"    .paletteSlot = {_PALETTE_SLOT},\n")
-        if sprite.cycle == "break_prop":
+        if sprite.cycle == "large_prop":
+            # A static 64x64 object, native engine support (RayquazaStill --
+            # object_event_graphics_info.h:757-773): the 64x64 OAM/subsprite
+            # table, sAnimTable_Inanimate (its one entry, ANIM_STAY_STILL, only
+            # ever requests frame 0 -- object_event_anims.h:1196), inanimate,
+            # no movement tracks.
+            lines.append("    .shadowSize = SHADOW_SIZE_S,\n")
+            lines.append("    .inanimate = TRUE,\n")
+            lines.append("    .compressed = FALSE,\n")
+            lines.append("    .tracks = TRACKS_NONE,\n")
+            lines.append("    .oam = &gObjectEventBaseOam_64x64,\n")
+            lines.append("    .subspriteTables = sOamTables_64x64,\n")
+            lines.append("    .anims = sAnimTable_Inanimate,\n")
+        elif sprite.cycle == "break_prop":
             # Vanilla BreakableRock semantics: rock_smash_break plays
             # ANIM_REMOVE_OBSTACLE and waits for SpriteAnimEnded — the table's
             # index 1 must be the finite sAnim_RockBreak, not Standard's
@@ -845,7 +890,7 @@ def emit_sprites(
         palette = result.palettes[pal_idx]
         frames = list(result.quantized[i])
         png_path = pics_dir / f"{stems[sprite.name]}.png"
-        _write_sheet_png(png_path, frames, palette)
+        _write_sheet_png(png_path, frames, palette, frame_px=sprite.frame_px)
         files_written.append(png_path)
 
     player_palette_out: list[tuple[int, int, int]] | None = None

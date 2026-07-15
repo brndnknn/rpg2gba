@@ -9,15 +9,19 @@ import pytest
 
 from rpg2gba.tileset_converter.metadata_wiring import ObjectEvent
 from rpg2gba.tileset_converter.npc_gfx import (
+    _WALK_SEQUENCE_QUIRKS,
+    MapPassability,
     MovementSpec,
     gfx_constant_for_sheet,
     is_door_sheet,
     load_npc_gfx_map,
     movement_spec_for,
     select_boot_page,
+    static_face_spec,
 )
 
 REAL_NPC_GFX_MAP = Path("reference/npc_gfx_map.json")
+ENGINE_MOVEMENT_C = Path("engine/src/event_object_movement.c")
 
 
 # --- gfx_constant_for_sheet ---------------------------------------------------
@@ -45,12 +49,13 @@ def _headers_for(tmp_path: Path, defines: list[str]) -> list[Path]:
 
 def test_load_npc_gfx_map_real_file_validates(tmp_path: Path) -> None:
     """The real reference/npc_gfx_map.json loads cleanly against a header that
-    defines every gfx constant it mints (18 entries)."""
+    defines every gfx constant it mints (29 entries: 18 original + 11
+    slice-1 interior expansion)."""
     raw = json.loads(REAL_NPC_GFX_MAP.read_text(encoding="utf-8"))
     gfx_names = [entry["gfx"] for entry in raw.values()]
     headers = _headers_for(tmp_path, gfx_names)
     result = load_npc_gfx_map(REAL_NPC_GFX_MAP, headers)
-    assert len(result) == 18
+    assert len(result) == 29
     assert result["HGSS_000"] == "OBJ_EVENT_GFX_URANIUM_HGSS_000"
     assert result["PU-Chyinmunk"] == "OBJ_EVENT_GFX_URANIUM_PU_CHYINMUNK"
 
@@ -167,9 +172,14 @@ def test_select_boot_page_none_when_all_gated() -> None:
 
 # --- movement_spec_for ---------------------------------------------------------
 
-def _move_page(move_type: int, direction: int = 2, route: dict | None = None) -> dict:
+def _move_page(
+    move_type: int, direction: int = 2, route: dict | None = None, frequency: int = 6
+) -> dict:
+    """Frequency defaults to 6 (RMXP's only gap-free setting) so the axis-patrol
+    pins below exercise the continuous WALK_* branch; the corpus norm is 3."""
     page = {
         "move_type": move_type,
+        "move_frequency": frequency,
         "graphic": {"character_name": "X", "direction": direction},
     }
     if route is not None:
@@ -350,6 +360,157 @@ def test_movement_spec_for_custom_missing_move_route_fails_loud() -> None:
     not "nothing to do" -- KeyError propagates (CLAUDE.md §4.5)."""
     with pytest.raises(KeyError):
         movement_spec_for(_move_page(3))
+
+
+# frequency-gated pacing (case g) --------------------------------------------
+
+def test_movement_spec_for_custom_pacer_low_frequency_wanders() -> None:
+    """Below frequency 6 RMXP idle-gates every route command ((40-2f)(6-f)
+    frames), so the Moki pacers (freq 3, no explicit waits — Map032 EV027/068/
+    070) pause ~1.7s between steps: WANDER_, not continuous WALK_."""
+    spec = movement_spec_for(_move_page(3, route=_route([3, 3, 3, 2, 2, 2]), frequency=3))
+    assert spec.movement_type == "MOVEMENT_TYPE_WANDER_LEFT_AND_RIGHT"
+    assert spec.range_x == 2
+    assert spec.range_y == 0
+
+
+def test_movement_spec_for_custom_vertical_pacer_low_frequency_wanders() -> None:
+    """The vertical twin (Map032 EV069/071 shape: up x2, down x2 at freq 3)."""
+    spec = movement_spec_for(_move_page(3, route=_route([4, 4, 1, 1]), frequency=3))
+    assert spec.movement_type == "MOVEMENT_TYPE_WANDER_UP_AND_DOWN"
+    assert spec.range_y == 1
+
+
+# walk-sequence loops (case g2) -----------------------------------------------
+
+def test_movement_spec_for_loop_out_and_back() -> None:
+    """Map032 EV048/EV072 shape: left, up x2, down x2, right — a closed
+    out-and-back loop -> the exact fork sequence type, anchored at the spawn
+    (it IS a leg corner), ranges = the loop's one-sided excursions."""
+    spec = movement_spec_for(_move_page(3, route=_route([2, 4, 4, 1, 1, 3]), frequency=3))
+    assert spec.movement_type == "MOVEMENT_TYPE_WALK_SEQUENCE_LEFT_UP_DOWN_RIGHT"
+    assert (spec.range_x, spec.range_y) == (1, 2)
+    assert (spec.anchor_dx, spec.anchor_dy) == (0, 0)
+    assert spec.demoted is None
+    assert (0, 0) in spec.path_cells and (-1, -2) in spec.path_cells
+
+
+def test_movement_spec_for_loop_ring_with_mid_leg_spawn_shifts_anchor() -> None:
+    """Map032 EV008 (town-square Chyinmunk): down x5, right x6, up x6,
+    left x6 (with through-toggle neutrals mid-leg), down x1 — cyclically a
+    7x7 counterclockwise ring whose spawn sits one tile below the top-left
+    corner. The engine closes the loop at the object's initial coords, so the
+    spec anchors at that corner: spawn shift (0, -1)."""
+    codes = [1] * 5 + [3] * 6 + [4] * 6 + [2, 2, 37, 2, 2, 38, 2, 2, 1]
+    spec = movement_spec_for(_move_page(3, route=_route(codes), frequency=6))
+    assert spec.movement_type == "MOVEMENT_TYPE_WALK_SEQUENCE_DOWN_RIGHT_UP_LEFT"
+    assert (spec.range_x, spec.range_y) == (6, 6)
+    assert (spec.anchor_dx, spec.anchor_dy) == (0, -1)
+    assert spec.demoted is None
+    assert len(set(spec.path_cells)) == 24  # the ring's 24 distinct cells
+
+
+def test_movement_spec_for_loop_corner_spawn_rectangle() -> None:
+    """A rectangle walked from its own corner needs no anchor shift."""
+    spec = movement_spec_for(_move_page(3, route=_route([1, 1, 3, 3, 4, 4, 2, 2])))
+    assert spec.movement_type == "MOVEMENT_TYPE_WALK_SEQUENCE_DOWN_RIGHT_UP_LEFT"
+    assert (spec.range_x, spec.range_y) == (2, 2)
+    assert (spec.anchor_dx, spec.anchor_dy) == (0, 0)
+
+
+def test_movement_spec_for_loop_zigzag_demotes() -> None:
+    """A closed loop of MORE than four cyclic legs (zig-zag) has no
+    walk-sequence analog -> case-h demotion, loud."""
+    spec = movement_spec_for(_move_page(3, route=_route([1, 3, 1, 3, 4, 4, 2, 2])))
+    assert spec.movement_type == "MOVEMENT_TYPE_FACE_DOWN"
+    assert spec.demoted is not None
+
+
+def test_walk_sequence_quirk_table_matches_fork_source() -> None:
+    """`_WALK_SEQUENCE_QUIRKS` is a pinned copy of the fork's per-sequence
+    loop-closure checks — re-derive every entry from the C source (CLAUDE.md
+    §4.7: the fork is the source of truth, not our memory of it)."""
+    import re
+
+    src = ENGINE_MOVEMENT_C.read_text(encoding="utf-8")
+    pattern = re.compile(
+        r"MovementType_WalkSequence([A-Za-z]+)_Step1[^{]*\{"
+        r".*?directionSequenceIndex == (\d) && objectEvent->initialCoords\.([xy])",
+        re.DOTALL,
+    )
+    derived: dict[tuple[str, ...], tuple[int, str]] = {}
+    for name, idx, axis in pattern.findall(src):
+        dirs = tuple(re.findall(r"Up|Down|Left|Right", name))
+        assert len(dirs) == 4, name
+        derived[tuple(d.upper() for d in dirs)] = (int(idx), axis)
+    assert derived == _WALK_SEQUENCE_QUIRKS
+
+
+# static_face_spec -------------------------------------------------------------
+
+def test_static_face_spec_uses_graphic_direction_and_reason() -> None:
+    spec = static_face_spec(_move_page(0, direction=8), "spawn locked")
+    assert spec == MovementSpec("MOVEMENT_TYPE_FACE_UP", demoted="spawn locked")
+
+
+# MapPassability ---------------------------------------------------------------
+
+def _passability(
+    layer0: list[int], layer1: list[int], passages: list[int],
+    priorities: list[int] | None = None, width: int = 3,
+    open_cells: set[tuple[int, int]] = frozenset(),
+) -> MapPassability:
+    height = len(layer0) // width
+    map_json = {
+        "tiles": {
+            "xsize": width, "ysize": height, "zsize": 3,
+            "data": layer0 + layer1 + [0] * len(layer0),
+        }
+    }
+    tileset = {"passages": passages, "priorities": priorities or [0] * len(passages)}
+    return MapPassability.from_map(map_json, tileset, open_cells=open_cells)
+
+
+def test_map_passability_exit_blocked_by_upper_layer_decoration() -> None:
+    """The Map032 EV012 shape: walkable ground under a passage-15 z1 tile —
+    the RMXP scan hits the decoration first, all four exits blocked."""
+    mp = _passability(
+        layer0=[1, 1, 1], layer1=[0, 2, 0],
+        passages=[0, 0, 15],
+    )
+    assert mp.exit_blocked(1, 0) is True
+    assert mp.exit_blocked(0, 0) is False
+    assert mp.cell_clear(1, 0) is False
+    assert mp.cell_clear(0, 0) is True
+
+
+def test_map_passability_priority_zero_ground_stops_scan() -> None:
+    """A priority-0 fully-passable upper tile DECIDES passable — the blocked
+    ground beneath it never gets scanned (RMXP layer rules)."""
+    mp = _passability(
+        layer0=[3, 3, 3], layer1=[0, 1, 0],
+        passages=[0, 0, 0, 15],  # tile 3 (ground) blocked, tile 1 clear
+        priorities=[0, 0, 0, 0],
+    )
+    assert mp.exit_blocked(1, 0) is False  # tile 1 decides at z1
+    assert mp.exit_blocked(0, 0) is True  # bare blocked ground
+
+
+def test_map_passability_open_cells_override() -> None:
+    """Converter-level unblocks (map_set.WALKABLE_OVERRIDES) read fully open."""
+    mp = _passability(
+        layer0=[1, 1, 1], layer1=[0, 2, 0],
+        passages=[0, 0, 15], open_cells={(1, 0)},
+    )
+    assert mp.exit_blocked(1, 0) is False
+    assert mp.cell_clear(1, 0) is True
+
+
+def test_map_passability_out_of_bounds_not_clear() -> None:
+    mp = _passability(layer0=[1], layer1=[0], passages=[0, 0], width=1)
+    assert mp.cell_clear(-1, 0) is False
+    assert mp.cell_clear(0, 5) is False
+    assert mp.exit_blocked(-1, 0) is False  # off-map spawn is a data bug, not a lock
 
 
 # ObjectEvent.to_dict --------------------------------------------------------

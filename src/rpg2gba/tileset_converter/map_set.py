@@ -7,7 +7,7 @@ Walker's Phase B needs (build all 199 maps) while keeping the 3-map slice
 reproducible for regression comparison.
 
 Profiles:
-  * ``"slice"`` — the proven 3-map pathfinder slice (1F spawn, 2F, Moki Town).
+  * ``"slice"`` — the playable slice (pathfinder 3 + the Moki Town interiors).
   * ``"full"``  — every ``MapNNN.json`` on disk, minus whole-map STRIP entries and
     minus the Map Walker technical exclusions (:data:`WALKER_EXCLUDED_MAP_IDS` =
     overflow maps + empty placeholder maps).
@@ -23,9 +23,27 @@ import json
 import re
 from pathlib import Path
 
-# The proven 3-map pathfinder slice, in boot order: Map 49 (Player's House 1F,
-# spawn @7,7), Map 48 (2F), Map 32 (Moki Town). Kept for reproducible slice builds.
-SLICE_MAP_IDS: list[int] = [49, 48, 32]
+# The playable slice, in boot order: Map 49 (Player's House 1F, spawn @7,7),
+# Map 48 (2F), Map 32 (Moki Town), plus the Moki building interiors added
+# 2026-07-13 (SLICE1_TODO #13): 50 (professor lab), 64/65 (houses),
+# 172 + 89 (Theo's house 1F/2F). Route 01 (map 33) stays on the slice-2 frontier.
+SLICE_MAP_IDS: list[int] = [49, 48, 32, 50, 64, 65, 172, 89]
+
+# Converter-level collision unblocks (user-approved fidelity calls, one entry per
+# cell): cells the emitted collision forces WALKABLE even though Uranium's tile
+# data blocks them. Consumed by BOTH sides that must agree (CLAUDE.md §4.3):
+# `layout.convert_layout(unblocked_cells=...)` (the collision byte) and
+# `metadata_wiring.build_slice_maps(walkable_overrides=...)` (the NPC-movement
+# passability gate).
+#   * Map032 (38, 43): the town-square tree-crown cell. Uranium blocks it
+#     (passage 15) and EV008's ring patrol crosses it via RMXP `through`, which
+#     pokeemerald has no per-object analog for; unblocking the one cell lets the
+#     patrol complete (the crown's priority-3 art draws over sprites, so anything
+#     crossing it disappears behind the tree, like on PC). Side effect accepted
+#     2026-07-15: the player can step onto that cell too.
+WALKABLE_OVERRIDES: dict[int, frozenset[tuple[int, int]]] = {
+    32: frozenset({(38, 43)}),
+}
 
 # Maps that overflow a GBA per-tileset budget even as a dedicated per-map tileset,
 # so they can't build (map_walker_plan §5.4, decision #14). A tileset has TWO hard

@@ -235,6 +235,7 @@ def convert_layout(
     layout_const: str,
     warp_overrides: set[tuple[int, int]] | None = None,
     blocked_cells: set[tuple[int, int]] | None = None,
+    unblocked_cells: frozenset[tuple[int, int]] | set[tuple[int, int]] | None = None,
     tileset_key: int | None = None,
 ) -> Layout:
     """Convert one Phase 3 map dict into a `Layout` (blockdata + metadata).
@@ -258,15 +259,29 @@ def convert_layout(
     `warp_overrides` and `blocked_cells` — a warp must stay enterable — and that
     collision is a converter bug, so it fails loud rather than picking a winner.
 
+    `unblocked_cells` (`map_set.WALKABLE_OVERRIDES[map]`, user-approved fidelity
+    calls) are the inverse of `blocked_cells`: the visual metatile is kept but
+    collision/elevation are force-stamped PASSABLE even though the source
+    passage reads blocked (e.g. Map032's (38, 43) tree-crown cell the
+    town-square patrol must cross). Overlap with `blocked_cells` or
+    `warp_overrides` is contradictory converter configuration and fails loud.
+
     `tileset_key`: Override the tileset id used for all TileMap lookups (per-map
     synthetic tileset packing); defaults to the map's own `tileset_id`."""
     overrides = warp_overrides or set()
     blocked = blocked_cells or set()
+    unblocked = set(unblocked_cells or set())
     both = overrides & blocked
     if both:
         raise ValueError(
             f"layout {name}: cell(s) {sorted(both)} are both a warp_override and a "
             "through-blocked cell — a warp must stay enterable"
+        )
+    contradictory = unblocked & (blocked | overrides)
+    if contradictory:
+        raise ValueError(
+            f"layout {name}: cell(s) {sorted(contradictory)} are walkable-overridden "
+            "AND through-blocked/warp-overridden — contradictory configuration"
         )
 
     tiles = map_json["tiles"]
@@ -299,6 +314,8 @@ def convert_layout(
                 metatile = tile_map.warp_for_column(tileset_id, key)
             elif (x, y) in blocked:
                 metatile = Metatile(metatile.metatile_id, BLOCKED_COLLISION, BLOCKED_ELEVATION)
+            elif (x, y) in unblocked:
+                metatile = Metatile(metatile.metatile_id, PASSABLE_COLLISION, PASSABLE_ELEVATION)
             blocks.append(metatile.to_block())
 
     if len(blocks) != width * height:

@@ -88,5 +88,60 @@
     "gfx": "OBJ_EVENT_GFX_URANIUM_PU_BAREWL",
     "fallback": "OBJ_EVENT_GFX_SPECIES(ARON)",
     "note": "Wild Pokemon NPC sheet (Barewl) — Aron-shaped stand-in, not a rock"
+  },
+  "HGSS_012": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_012",
+    "fallback": "OBJ_EVENT_GFX_MAN_2",
+    "note": "HGSS overworld sheet 012 (Moki House 1 resident) — slice-1 interior expansion"
+  },
+  "HGSS_014": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_014",
+    "fallback": "OBJ_EVENT_GFX_YOUNGSTER",
+    "note": "HGSS overworld sheet 014 (Map050 lab trainer NPC) — slice-1 interior expansion"
+  },
+  "HGSS_025": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_025",
+    "fallback": "OBJ_EVENT_GFX_SCIENTIST_1",
+    "note": "HGSS overworld sheet 025 (professor's aide) — slice-1 interior expansion"
+  },
+  "HGSS_026": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_026",
+    "fallback": "OBJ_EVENT_GFX_WOMAN_1",
+    "note": "HGSS overworld sheet 026 (LilyHazma on Map050; also Map032 EV078 cutscene gfx) — slice-1 interior expansion"
+  },
+  "HGSS_040": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_040",
+    "fallback": "OBJ_EVENT_GFX_WOMAN_2",
+    "note": "HGSS overworld sheet 040 (Moki House 2 resident) — slice-1 interior expansion"
+  },
+  "HGSS_113": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_113",
+    "fallback": "OBJ_EVENT_GFX_LITTLE_BOY",
+    "note": "HGSS overworld sheet 113 (Moki House 1 resident) — slice-1 interior expansion"
+  },
+  "HGSS_227": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_227",
+    "fallback": "OBJ_EVENT_GFX_WOMAN_5",
+    "note": "HGSS overworld sheet 227 (Moki House 2 resident) — slice-1 interior expansion"
+  },
+  "PU-Cam": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_PU_CAM",
+    "fallback": "OBJ_EVENT_GFX_WOMAN_1",
+    "note": "Custom sheet: Cam (Theo's house 1F) — slice-1 interior expansion"
+  },
+  "PU-Hazma": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_PU_HAZMA",
+    "fallback": "OBJ_EVENT_GFX_SCIENTIST_1",
+    "note": "Custom sheet: Hazma (Map050 lab) — slice-1 interior expansion"
+  },
+  "ZP- Professor2": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_ZP_PROFESSOR2",
+    "fallback": "OBJ_EVENT_GFX_PROF_BIRCH",
+    "note": "Custom sheet: Professor Bambo (Map050 lab). Non-standard 56x66 frame; content bbox 18x28 fits the 32x32 GBA frame after downscale"
+  },
+  "PU-PokeballMachine": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE",
+    "fallback": "OBJ_EVENT_GFX_POKE_BALL",
+    "note": "Custom sheet: lab starter machine (Map050 EV19). 96x128 frame, content 43x55 post-downscale — requires the 64x64 large-prop sprite class (slice-1 interior expansion); fails the standard 32x32 path by design"
   }
 }

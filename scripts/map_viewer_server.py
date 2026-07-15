@@ -46,6 +46,7 @@ from map_viewer_common import (  # noqa: E402
     load_feedback,
     params_from_dict,
     render_metatile_png,
+    render_npc_png,
     render_tile_png,
     save_feedback,
     set_quantize_params,
@@ -65,6 +66,9 @@ _RE_PAL_PAGE = re.compile(r"^/palettes/(\d+)$")
 _RE_API_MAP = re.compile(r"^/api/map/(\d+)$")
 _RE_API_TILE = re.compile(r"^/api/tile/(\d+)/(\d+)\.png$")
 _RE_API_META = re.compile(r"^/api/metatile/(\d+)/(\d+)\.png$")
+# Sheet-name charset only (no '.' or '/'): closes off path traversal via the
+# character_name URL segment before it ever reaches _resolve_sheet.
+_RE_API_NPC = re.compile(r"^/api/npc/([A-Za-z0-9_\-]+)\.png$")
 _RE_API_FEEDBACK = re.compile(r"^/api/feedback/(\d+)$")
 
 _CACHE_IMMUTABLE = "public, max-age=31536000, immutable"
@@ -185,6 +189,8 @@ class _Handler(BaseHTTPRequestHandler):
                 if layer not in ("bottom", "top", "post_bottom", "post_top"):
                     layer = "bottom"
                 self._serve_metatile(int(m.group(1)), int(m.group(2)), layer)
+            elif m := _RE_API_NPC.match(path):
+                self._serve_npc(m.group(1))
             elif m := _RE_API_FEEDBACK.match(path):
                 self._serve_feedback(int(m.group(1)))
             else:
@@ -306,6 +312,10 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _serve_metatile(self, map_id: int, idx: int, layer: str) -> None:
         png = render_metatile_png(map_id, idx, layer)
+        self._send(200, "image/png", png, cache=_CACHE_IMMUTABLE)
+
+    def _serve_npc(self, character_name: str) -> None:
+        png = render_npc_png(character_name)
         self._send(200, "image/png", png, cache=_CACHE_IMMUTABLE)
 
     # ------------------------------------------------------------------
