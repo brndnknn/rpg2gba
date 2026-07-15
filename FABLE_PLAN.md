@@ -101,6 +101,20 @@ the same architecture fits us:
     Map035 0.75→1.62) — vs the slice's shipped 0.93–0.98. Verdict: palette
     grouping at seam-component granularity is the right unit; EYE CHECK
     REQUIRED before adopting (numbers are advisory per quantize.py's rule).
+  - **Weighting experiment RUN 2026-07-14 (user asked "just to see"):
+    NEGATIVE, both strengths — do not retry naive vocab weighting.**
+    Weighted the phase-1 vocab median-cut by pixel×cell coverage
+    (scratchpad gen_weighted_preview.py; previews in the study folder):
+    linear weights → catastrophic cross-family snaps (roofs red, flowers
+    yellow, grass mint); log1p-damped → still broken (salmon cliffs,
+    yellow-striped paths, purple water fringes). Confirms the packer
+    docstring's warning that area bias was "the original bug" — starving
+    minority colors of vocab slots is inherent to weighting the SPLITS.
+    Untried-but-risky third variant (noted, deprioritized): keep production
+    splits identical, weight only each bucket's representative — within-
+    palette shifts only, but it is one step from the historical Lloyd-refit
+    bug class. Decision returns to: accept component-pinned drift (orange
+    dirt) vs per-map drift (inconsistent pink); no palette-side free lunch.
   - **Eye-check round SENT 2026-07-14 (verdict pending):** full-map
     before/after previews for Moki+R03 taildropped + in
     `output/tileset_palette_study/` (per-map LEFT vs component-pinned RIGHT
