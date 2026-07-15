@@ -44,8 +44,17 @@ Deliverable: a short verdict per seam — SHARED-TILESET / UNIFORM-BORDER /
 GENUINELY-MIXED — and a call on whether step 2 is a real design session or a
 small mechanical fix.
 
-## Step 2 — Connections design — DIRECTION CHOSEN 2026-07-14 (user approved):
-## Emerald-style shared "Uranium-General" primary + per-map secondary
+## Step 2 — DONE 2026-07-14: design decided, eye-gate PASSED
+## → **`reference/guides/connections_and_palette_families.md`** (the deliverable)
+
+Final architecture (user verdict "component pinned for sure"): per-map
+packing + palette families pinned per seam component + border-strip import.
+The doc carries the implementation sketch (slice-2 scope = Moki+R03) and the
+do-not-revisit notes (vocab weighting, shared-tileset variants). The log
+below records how we got there this session — superseded intermediate
+directions included.
+
+### (superseded working log) Emerald-style shared "Uranium-General" primary + per-map secondary
 
 Step-1 seam census DONE (all 14 seams enumerated with tileset pairing — 6/14
 same-tileset, 8/14 differ; even same-tileset pairs mostly bust the shared-1024
