@@ -90,7 +90,18 @@ the same architecture fits us:
     (strips are small; per-map budgets absorb them). Component-shared
     primaries remain a selective optimization where they fit (Snowbank
     pair fits today).
-  - **Test C RESULT: pinned family palettes are FEASIBLE.** The production
+  - **Per-seam-component repack (user retest) RUN 2026-07-14, dev maps
+    excluded: all 8 components pack into 13 palettes**, 2–34 s each (vs
+    15 min for the whole-family blob — prefer component-sized packs).
+    Measured 5-bit shift, component pack vs per-map baseline: Moki+R03
+    1.56 (bases 1.45/1.48); Kevlar+R02+Nowtoch 1.62 (1.36/0.75/1.51);
+    Rochfale+R06 1.63; Silverport+R15 1.63; Snowbank 1.18; R05+R04+R12
+    1.78; Venesi×4 1.80; Bealbeach×4 1.96 (worst). Pinning costs ~+0.1–0.5
+    mean on complex maps but up to +1.4 on simple ones (Map099 0.38→1.80,
+    Map035 0.75→1.62) — vs the slice's shipped 0.93–0.98. Verdict: palette
+    grouping at seam-component granularity is the right unit; EYE CHECK
+    REQUIRED before adopting (numbers are advisory per quantize.py's rule).
+  - Test C RESULT (whole-family blob, superseded by the above granularity): The production
     packer (`build_quantized_tileset_family`) packs the ENTIRE outdoor-family
     union — all 12 035 unique tiles across ts22/23/24/25/28/30 — into
     **13 palettes** (took ~15 min; fine as a once-per-family offline
