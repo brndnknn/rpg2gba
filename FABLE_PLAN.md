@@ -101,6 +101,17 @@ the same architecture fits us:
     Map035 0.75→1.62) — vs the slice's shipped 0.93–0.98. Verdict: palette
     grouping at seam-component granularity is the right unit; EYE CHECK
     REQUIRED before adopting (numbers are advisory per quantize.py's rule).
+  - **Eye-check round SENT 2026-07-14 (verdict pending):** full-map
+    before/after previews for Moki+R03 taildropped + in
+    `output/tileset_palette_study/` (per-map LEFT vs component-pinned RIGHT
+    + unquantized originals). Lead's read: original plateau dirt = warm tan;
+    per-map pack drifts it PINK, component pack drifts it ORANGE — neither
+    faithful, but the component version drifts BOTH maps identically (the
+    actual win: chromatically seamless seams). **Next lever if user rejects
+    both hues: cell-count WEIGHTS** — the packer treats unique tiles equally
+    (`build_quantized_tileset(weights=...)` exists, unused); large-area
+    terrain (dirt = huge area, few unique tiles) deserves palette resolution
+    proportional to coverage. Study folder README carries the full round log.
   - Test C RESULT (whole-family blob, superseded by the above granularity): The production
     packer (`build_quantized_tileset_family`) packs the ENTIRE outdoor-family
     union — all 12 035 unique tiles across ts22/23/24/25/28/30 — into
