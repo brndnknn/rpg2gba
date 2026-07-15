@@ -7,6 +7,7 @@ rendering via /api/* endpoints.  Zero external deps — stdlib only.
 Routes:
   GET  /                            -> map listing
   GET  /map/<id>                    -> viewer HTML (server mode, lazy images)
+  GET  /component/<id>              -> stitched viewer: all seam-connected maps as one canvas
   GET  /palettes/<id>               -> palette inspector HTML (server mode, lazy images)
   GET  /api/map/<id>                -> build_map_data JSON
   GET  /api/tile/<mapid>/<tid>.png  -> single RMXP tile PNG
@@ -35,7 +36,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).parent))
-from map_graph import build_index, map_relationships  # noqa: E402
+from map_graph import build_index, component_layout, map_relationships  # noqa: E402
 from map_viewer_common import (  # noqa: E402
     MAP_VIEWER_HTML,
     _load_dotenv,
@@ -59,6 +60,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
 _RE_MAP_PAGE = re.compile(r"^/map/(\d+)$")
+_RE_COMPONENT_PAGE = re.compile(r"^/component/(\d+)$")
 _RE_PAL_PAGE = re.compile(r"^/palettes/(\d+)$")
 _RE_API_MAP = re.compile(r"^/api/map/(\d+)$")
 _RE_API_TILE = re.compile(r"^/api/tile/(\d+)/(\d+)\.png$")
@@ -170,6 +172,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._serve_index()
             elif m := _RE_MAP_PAGE.match(path):
                 self._serve_map_page(int(m.group(1)))
+            elif m := _RE_COMPONENT_PAGE.match(path):
+                self._serve_component_page(int(m.group(1)))
             elif m := _RE_PAL_PAGE.match(path):
                 self._serve_palette_page(int(m.group(1)))
             elif m := _RE_API_MAP.match(path):
@@ -259,6 +263,26 @@ class _Handler(BaseHTTPRequestHandler):
         data = build_map_data(map_id)
         config = {"mode": "server", "data": data, "graph": map_relationships(map_id),
                   "quant": get_quantize_params()}
+        config_json = json.dumps(config, separators=(",", ":"))
+        html = MAP_VIEWER_HTML.replace("__VIEWER_CONFIG__", config_json)
+        self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))
+
+    def _serve_component_page(self, map_id: int) -> None:
+        """Stitched view: every seam-connected map drawn in one shared cell space.
+
+        The page ships the requested map's full data plus the component layout;
+        the client fetches the other members via /api/map/<id> as they're needed.
+        A map with no seam connections redirects to its single-map page.
+        """
+        layout = component_layout(map_id)
+        if len(layout["members"]) <= 1:
+            self.send_response(302)
+            self.send_header("Location", f"/map/{map_id}")
+            self.end_headers()
+            return
+        data = build_map_data(map_id)
+        config = {"mode": "server", "data": data, "graph": map_relationships(map_id),
+                  "quant": get_quantize_params(), "component": layout}
         config_json = json.dumps(config, separators=(",", ":"))
         html = MAP_VIEWER_HTML.replace("__VIEWER_CONFIG__", config_json)
         self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))

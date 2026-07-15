@@ -1221,7 +1221,36 @@ body.adv #knobbar{display:flex}
 <script>
 // ---- viewer config --------------------------------------------------------
 const V = window.__VIEWER__;
-const D = V.data;
+let D = V.data;
+
+// ---- members (stitched-component support) -----------------------------------
+// Every mode renders a list of members [{id, ox, oy, w, h, data, flags,
+// flaggedCells}] in one shared cell space; single-map = one member at (0,0).
+// `D` stays the ACTIVE member's dataset so all inspector/feedback code keeps
+// working unchanged; tapping a cell in another member switches the active one.
+const stitched = !!V.component;
+const members = (function() {
+  if (!stitched) {
+    return [{id: D.meta.map_id, name: D.meta.name || '', ox: 0, oy: 0,
+             w: D.meta.xsize, h: D.meta.ysize, data: D, flags: [],
+             flaggedCells: new Set()}];
+  }
+  return V.component.members.map(function(m) {
+    return {id: m.id, name: m.name, ox: m.ox, oy: m.oy, w: m.w, h: m.h,
+            data: m.id === D.meta.map_id ? D : null, flags: [],
+            flaggedCells: new Set()};
+  });
+})();
+let activeM = members.filter(function(m) { return m.id === D.meta.map_id; })[0] || members[0];
+function worldW() { return stitched ? V.component.w : D.meta.xsize; }
+function worldH() { return stitched ? V.component.h : D.meta.ysize; }
+function memberAt(wx, wy) {  // last in listing order wins (overlap rule)
+  for (let i = members.length - 1; i >= 0; i--) {
+    const m = members[i];
+    if (wx >= m.ox && wx < m.ox + m.w && wy >= m.oy && wy < m.oy + m.h) return m;
+  }
+  return null;
+}
 
 // ---- mode seam: getTileURL / getMetatileURL -------------------------------
 // `g` = quant generation: bumped on every knob Apply AND on every server-detected
@@ -1229,19 +1258,21 @@ const D = V.data;
 // _invalidate_for_reload), so ALL image URLs (not just post-quant) carry it: every
 // PNG is served with Cache-Control: immutable, and without the token a rebuilt map
 // would keep showing pre-rebuild tiles from the browser cache after a page reload.
-function getTileURL(tileId) {
+function getTileURL(tileId, mid) {
+  mid = mid || D.meta.map_id;
   if (!tileId) return null;
   if (V.mode === 'static') return (V.tile_images || {})[String(tileId)] || null;
   const g = (V.quant && V.quant.generation) || 0;
-  return '/api/tile/' + D.meta.map_id + '/' + tileId + '.png?g=' + g;
+  return '/api/tile/' + mid + '/' + tileId + '.png?g=' + g;
 }
-function getMetatileURL(idx, layer) {
+function getMetatileURL(idx, layer, mid) {
+  mid = mid || D.meta.map_id;
   if (V.mode === 'static') {
     const m = (V.metatile_images || {})[idx];
     return m ? m[layer] : null;
   }
   const g = (V.quant && V.quant.generation) || 0;
-  return '/api/metatile/' + D.meta.map_id + '/' + idx + '.png?layer=' + layer + '&g=' + g;
+  return '/api/metatile/' + mid + '/' + idx + '.png?layer=' + layer + '&g=' + g;
 }
 
 // ---- lazy image cache -----------------------------------------------------
@@ -1313,15 +1344,25 @@ function canvasToCell(cx, cy) {
   const cp = cellPx();
   return {x: Math.floor((cx - panX) / cp), y: Math.floor((cy - panY) / cp)};
 }
+const ZMIN = stitched ? 0.15 : 0.5;  // stitched components need to fit far out
 function fitMap() {
-  const m = D.meta;
-  const sx = canvas.width  / (m.xsize * 16);
-  const sy = canvas.height / (m.ysize * 16);
-  zoom = Math.max(0.5, Math.min(4, Math.min(sx, sy)));
-  panX = Math.floor((canvas.width  - m.xsize * cellPx()) / 2);
-  panY = Math.floor((canvas.height - m.ysize * cellPx()) / 2);
+  // leave a margin when seam bands exist so they aren't clipped at fit zoom
+  const pad = (!stitched && V.graph && (V.graph.connections || []).length) ? 22 : 0;
+  const sx = (canvas.width  - 2 * pad) / (worldW() * 16);
+  const sy = (canvas.height - 2 * pad) / (worldH() * 16);
+  zoom = Math.max(ZMIN, Math.min(4, Math.min(sx, sy)));
+  panX = Math.floor((canvas.width  - worldW() * cellPx()) / 2);
+  panY = Math.floor((canvas.height - worldH() * cellPx()) / 2);
   updateZoomDisplay();
   render();
+}
+function centerOnCell(m, lx, ly, minZoom) {
+  if (minZoom && zoom < minZoom) zoom = minZoom;
+  const cp = cellPx();
+  panX = Math.floor(canvas.width  / 2 - (m.ox + lx + 0.5) * cp);
+  panY = Math.floor(canvas.height / 2 - (m.oy + ly + 0.5) * cp);
+  updateZoomDisplay();
+  scheduleRender();
 }
 function updateZoomDisplay() {
   document.getElementById('zoom-val').textContent =
@@ -1329,28 +1370,29 @@ function updateZoomDisplay() {
 }
 
 // ---- rendering ------------------------------------------------------------
-function drawCellBase(cell, dx, dy, cp) {
+function drawCellBase(cell, dx, dy, cp, mid) {
   ctx.imageSmoothingEnabled = false;
   const lyr = currentLayer;
   if (lyr === 'rmxp') {
-    for (const tid of cell.layers) { if (tid) drawImg(getTileURL(tid), dx, dy, cp); }
+    for (const tid of cell.layers) { if (tid) drawImg(getTileURL(tid, mid), dx, dy, cp); }
   } else if (lyr === 'l0' || lyr === 'l1' || lyr === 'l2') {
     const tid = cell.layers[parseInt(lyr[1])];
-    if (tid) drawImg(getTileURL(tid), dx, dy, cp);
+    if (tid) drawImg(getTileURL(tid, mid), dx, dy, cp);
   } else if (lyr === 'gba') {
-    drawImg(getMetatileURL(cell.colkey_idx, 'bottom'), dx, dy, cp);
-    drawImg(getMetatileURL(cell.colkey_idx, 'top'),    dx, dy, cp);
+    drawImg(getMetatileURL(cell.colkey_idx, 'bottom', mid), dx, dy, cp);
+    drawImg(getMetatileURL(cell.colkey_idx, 'top', mid),    dx, dy, cp);
   } else if (lyr === 'gba_bottom') {
-    drawImg(getMetatileURL(cell.colkey_idx, 'bottom'), dx, dy, cp);
+    drawImg(getMetatileURL(cell.colkey_idx, 'bottom', mid), dx, dy, cp);
   } else if (lyr === 'gba_top') {
-    drawImg(getMetatileURL(cell.colkey_idx, 'top'), dx, dy, cp);
+    drawImg(getMetatileURL(cell.colkey_idx, 'top', mid), dx, dy, cp);
   } else if (lyr === 'post-quant') {
-    drawImg(getMetatileURL(cell.colkey_idx, 'post_bottom'), dx, dy, cp);
-    drawImg(getMetatileURL(cell.colkey_idx, 'post_top'),    dx, dy, cp);
+    drawImg(getMetatileURL(cell.colkey_idx, 'post_bottom', mid), dx, dy, cp);
+    drawImg(getMetatileURL(cell.colkey_idx, 'post_top', mid),    dx, dy, cp);
   }
 }
 
-function drawOverlayCell(cell, dx, dy, cp) {
+function drawOverlayCell(cell, dx, dy, cp, m) {
+  const isActive = !m || m === activeM;
   if (overlays.collision) {
     ctx.fillStyle = cell.collision_ours ? 'rgba(255,40,40,0.35)' : 'rgba(40,220,80,0.25)';
     ctx.fillRect(dx, dy, cp, cp);
@@ -1369,7 +1411,7 @@ function drawOverlayCell(cell, dx, dy, cp) {
     ctx.fillRect(dx, dy, cp, cp);
   }
   if (overlays.merge) {
-    const cpal = (D.colkey_palettes || [])[cell.colkey_idx];
+    const cpal = (((m ? m.data : D) || D).colkey_palettes || [])[cell.colkey_idx];
     const sev = cpal ? (cpal.merge_severity || 0) : 0;
     if (sev > 0) {
       // brightness scales with severity relative to this map's worst tile
@@ -1379,59 +1421,60 @@ function drawOverlayCell(cell, dx, dy, cp) {
     }
   }
   const ik = cell.x + ',' + cell.y;
-  if (flaggedCells.has(ik)) {
+  if ((m ? m.flaggedCells : flaggedCells).has(ik)) {
     ctx.fillStyle = 'rgba(255,120,0,0.45)'; ctx.fillRect(dx, dy, cp, cp);
     ctx.fillStyle = '#fa0';
     ctx.font = Math.max(8, cp-2) + 'px monospace';
     ctx.fillText('⚑', dx+1, dy+cp-1);
   }
-  if (selection.has(ik)) {
+  if (isActive && selection.has(ik)) {
     ctx.fillStyle = 'rgba(90,170,255,0.35)'; ctx.fillRect(dx, dy, cp, cp);
     ctx.strokeStyle = 'rgba(90,170,255,0.9)';
     ctx.lineWidth = Math.max(1, zoom);
     ctx.strokeRect(dx+0.5, dy+0.5, cp-1, cp-1);
   }
-  if (focusCell && focusCell.x === cell.x && focusCell.y === cell.y) {
+  if (isActive && focusCell && focusCell.x === cell.x && focusCell.y === cell.y) {
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = Math.max(1.5, zoom);
     ctx.strokeRect(dx+1, dy+1, cp-2, cp-2);
   }
 }
 
-function render() {
-  ctx.imageSmoothingEnabled = false;
-  ctx.fillStyle = '#111118';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  if (!ready) {
-    ctx.fillStyle = '#5af'; ctx.font = '14px monospace';
-    ctx.fillText('Loading…', 10, 30);
+function renderMember(m, cp) {
+  const baseX = panX + m.ox * cp, baseY = panY + m.oy * cp;
+  if (!m.data) {  // still fetching: gray placeholder with the map's name
+    ctx.fillStyle = '#20222c';
+    ctx.fillRect(baseX, baseY, m.w * cp, m.h * cp);
+    ctx.strokeStyle = '#3a3d4d'; ctx.lineWidth = 1;
+    ctx.strokeRect(baseX + 0.5, baseY + 0.5, m.w * cp - 1, m.h * cp - 1);
+    ctx.fillStyle = '#5af'; ctx.font = '13px monospace';
+    ctx.fillText('Loading Map' + String(m.id).padStart(3,'0') + '…', baseX + 8, baseY + 20);
     return;
   }
-  const cp = cellPx();
-  const m = D.meta;
-  for (let y = 0; y < m.ysize; y++) {
-    const dy = panY + y * cp;
+  const md = m.data.meta;
+  for (let y = 0; y < md.ysize; y++) {
+    const dy = baseY + y * cp;
     if (dy + cp < 0 || dy >= canvas.height) continue;
-    for (let x = 0; x < m.xsize; x++) {
-      const dx = panX + x * cp;
+    for (let x = 0; x < md.xsize; x++) {
+      const dx = baseX + x * cp;
       if (dx + cp < 0 || dx >= canvas.width) continue;
-      drawCellBase(D.cells[y * m.xsize + x], dx, dy, cp);
+      drawCellBase(m.data.cells[y * md.xsize + x], dx, dy, cp, m.id);
     }
   }
-  for (let y = 0; y < m.ysize; y++) {
-    const dy = panY + y * cp;
+  for (let y = 0; y < md.ysize; y++) {
+    const dy = baseY + y * cp;
     if (dy + cp < 0 || dy >= canvas.height) continue;
-    for (let x = 0; x < m.xsize; x++) {
-      const dx = panX + x * cp;
+    for (let x = 0; x < md.xsize; x++) {
+      const dx = baseX + x * cp;
       if (dx + cp < 0 || dx >= canvas.width) continue;
-      drawOverlayCell(D.cells[y * m.xsize + x], dx, dy, cp);
+      drawOverlayCell(m.data.cells[y * md.xsize + x], dx, dy, cp, m);
     }
   }
   const dotR = Math.max(3, Math.floor(cp / 5));
   ctx.save();
   ctx.font = Math.max(8, cp-4) + 'px monospace';
-  for (const evt of D.events) {
-    const dx = panX + evt.x * cp, dy = panY + evt.y * cp;
+  for (const evt of m.data.events) {
+    const dx = baseX + evt.x * cp, dy = baseY + evt.y * cp;
     if (dx+cp < 0 || dx >= canvas.width || dy+cp < 0 || dy >= canvas.height) continue;
     if (evt.is_warp && overlays.warps) {
       ctx.fillStyle = '#0ff';
@@ -1446,6 +1489,81 @@ function render() {
     }
   }
   ctx.restore();
+}
+
+// Seam-connection bands: thin clickable strips just OUTSIDE the connected edge
+// (single-map server mode only — in stitched mode the neighbor is drawn for real).
+function seamBands() {
+  if (stitched || V.mode !== 'server' || !V.graph || !V.graph.connections) return [];
+  const cp = cellPx();
+  const th = Math.max(14, cp * 0.55);
+  const w = D.meta.xsize, h = D.meta.ysize;
+  const out = [];
+  for (const c of V.graph.connections) {
+    let r;
+    if (c.edge === 'N')      r = {x: panX + c.band[0]*cp, y: panY - th,        w: (c.band[1]-c.band[0])*cp, h: th};
+    else if (c.edge === 'S') r = {x: panX + c.band[0]*cp, y: panY + h*cp,      w: (c.band[1]-c.band[0])*cp, h: th};
+    else if (c.edge === 'W') r = {x: panX - th,           y: panY + c.band[0]*cp, w: th, h: (c.band[1]-c.band[0])*cp};
+    else                     r = {x: panX + w*cp,         y: panY + c.band[0]*cp, w: th, h: (c.band[1]-c.band[0])*cp};
+    out.push({conn: c, rect: r});
+  }
+  return out;
+}
+
+function drawSeamBands() {
+  const arrows = {N: '⇧', S: '⇩', W: '⇦', E: '⇨'};
+  for (const b of seamBands()) {
+    const r = b.rect, c = b.conn;
+    ctx.fillStyle = 'rgba(170,110,255,0.5)';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = 'rgba(190,140,255,0.9)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+    const label = arrows[c.edge] + ' Map' + String(c.id).padStart(3,'0') + ' ' + (c.name || '');
+    ctx.fillStyle = '#dcf';
+    ctx.font = '11px monospace';
+    if (c.edge === 'N' || c.edge === 'S') {
+      if (r.w > 70) ctx.fillText(label, r.x + 4, r.y + r.h/2 + 4, r.w - 8);
+    } else {
+      ctx.save();
+      ctx.translate(r.x + r.w/2 + 4, r.y + 4);
+      ctx.rotate(Math.PI/2);
+      if (r.h > 70) ctx.fillText(label, 0, 0, r.h - 8);
+      ctx.restore();
+    }
+  }
+}
+
+function render() {
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = '#111118';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (!ready) {
+    ctx.fillStyle = '#5af'; ctx.font = '14px monospace';
+    ctx.fillText('Loading…', 10, 30);
+    return;
+  }
+  const cp = cellPx();
+  for (const m of members) renderMember(m, cp);
+  if (stitched) {
+    // member frames + name tags, active highlighted
+    ctx.save();
+    ctx.font = '12px monospace';
+    for (const m of members) {
+      const bx = panX + m.ox * cp, by = panY + m.oy * cp;
+      ctx.strokeStyle = m === activeM ? 'rgba(90,170,255,0.9)' : 'rgba(255,255,255,0.22)';
+      ctx.lineWidth = m === activeM ? 2 : 1;
+      ctx.strokeRect(bx + 0.5, by + 0.5, m.w * cp - 1, m.h * cp - 1);
+      const tag = 'M' + String(m.id).padStart(3,'0') + ' ' + (m.name || '');
+      const tw = ctx.measureText(tag).width + 8;
+      ctx.fillStyle = m === activeM ? 'rgba(30,60,100,0.85)' : 'rgba(20,20,28,0.75)';
+      ctx.fillRect(bx, by, tw, 16);
+      ctx.fillStyle = m === activeM ? '#bdf' : '#99a';
+      ctx.fillText(tag, bx + 4, by + 12);
+    }
+    ctx.restore();
+  }
+  drawSeamBands();
 }
 
 // ---- pointer events (covers mouse + touch) --------------------------------
@@ -1477,10 +1595,11 @@ canvas.addEventListener('pointermove', function(e) {
   if (pointers.size <= 1) {
     const rect = ptrRect();
     const {x, y} = canvasToCell(e.clientX - rect.left, e.clientY - rect.top);
-    const m = D.meta;
-    if (x >= 0 && x < m.xsize && y >= 0 && y < m.ysize) {
+    const hit = memberAt(x, y);
+    if (hit && hit.data) {
+      const md = hit.data.meta;
       document.getElementById('statusbar').textContent =
-        'Map' + String(m.map_id).padStart(3,'0') + ' (' + x + ', ' + y + ')  tileset ' + m.tileset_id;
+        'Map' + String(hit.id).padStart(3,'0') + ' (' + (x - hit.ox) + ', ' + (y - hit.oy) + ')  tileset ' + md.tileset_id;
     }
   }
   if (!pointers.has(e.pointerId)) return;
@@ -1493,7 +1612,7 @@ canvas.addEventListener('pointermove', function(e) {
   } else if (pointers.size === 2 && pinchRef) {
     const pts = [...pointers.values()];
     const d = ptDist(pts[0], pts[1]);
-    const newZoom = Math.max(0.5, Math.min(8, pinchRef.zoom * d / pinchRef.dist));
+    const newZoom = Math.max(ZMIN, Math.min(8, pinchRef.zoom * d / pinchRef.dist));
     const scale = (newZoom * 16) / (pinchRef.zoom * 16);
     panX = pinchRef.midX - (pinchRef.midX - pinchRef.panX) * scale;
     panY = pinchRef.midY - (pinchRef.midY - pinchRef.panY) * scale;
@@ -1509,11 +1628,33 @@ canvas.addEventListener('pointerup', function(e) {
   if (pointers.size === 0) pinchRef = null;
   if (wasTap) {
     const rect = ptrRect();
-    const {x, y} = canvasToCell(ex - rect.left, ey - rect.top);
-    const m = D.meta;
-    if (x >= 0 && x < m.xsize && y >= 0 && y < m.ysize) {
-      const cell = D.cells[y * m.xsize + x];
-      const key = x + ',' + y;
+    const px = ex - rect.left, py = ey - rect.top;
+    // seam-band click: navigate through the connection, landing at the
+    // corresponding position on the neighbor's matching edge.
+    for (const b of seamBands()) {
+      const r = b.rect;
+      if (px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h) {
+        const c = b.conn, cp = cellPx();
+        const wc = canvasToCell(px, py);  // world == local in single-map mode
+        // "outside cell" rule: step one cell past my edge, map into the
+        // neighbor's local space via the origin delta, clamp inside it.
+        let ox, oy;
+        if (c.edge === 'N')      { ox = wc.x - c.origin[0]; oy = -1        - c.origin[1]; }
+        else if (c.edge === 'S') { ox = wc.x - c.origin[0]; oy = D.meta.ysize - c.origin[1]; }
+        else if (c.edge === 'W') { ox = -1        - c.origin[0]; oy = wc.y - c.origin[1]; }
+        else                     { ox = D.meta.xsize - c.origin[0]; oy = wc.y - c.origin[1]; }
+        location.href = '/map/' + c.id + '?focus=' + ox + ',' + oy;
+        return;
+      }
+    }
+    const {x, y} = canvasToCell(px, py);
+    const hitM = memberAt(x, y);
+    if (hitM && hitM.data) {
+      if (hitM !== activeM) setActive(hitM);
+      const lx = x - hitM.ox, ly = y - hitM.oy;
+      const md = hitM.data.meta;
+      const cell = hitM.data.cells[ly * md.xsize + lx];
+      const key = lx + ',' + ly;
       if (selection.has(key)) selection.delete(key);  // toggle off
       else selection.set(key, cell);                  // toggle on / accumulate
       focusCell = cell;                               // last-tapped drives the readout
@@ -1538,7 +1679,7 @@ canvas.addEventListener('wheel', function(e) {
   const mx = e.clientX - rect.left, my = e.clientY - rect.top;
   const oldCp = cellPx();
   const step = e.deltaY < 0 ? 0.5 : -0.5;
-  const newZoom = Math.max(0.5, Math.min(8, Math.round((zoom + step) * 2) / 2));
+  const newZoom = Math.max(ZMIN, Math.min(8, Math.round((zoom + step) * 2) / 2));
   if (newZoom === zoom) return;
   const newCp = newZoom * 16;
   panX = mx - (mx - panX) * newCp / oldCp;
@@ -1823,6 +1964,35 @@ function saveFeedback() {
 function recomputeFlaggedCells() {
   flaggedCells = new Set();
   for (const f of flags) for (const c of (f.cells || [])) flaggedCells.add(c[0] + ',' + c[1]);
+  activeM.flaggedCells = flaggedCells;  // keep the member's copy in sync
+}
+
+// Switch the ACTIVE member (stitched mode): D and the feedback aliases follow,
+// the in-progress selection clears (selections never span maps), and the
+// per-map UI (title, palettes link, merge panel) rebinds.
+function setActive(m) {
+  if (m === activeM || !m.data) return;
+  activeM = m;
+  D = m.data;
+  flags = m.flags;
+  flaggedCells = m.flaggedCells;
+  selection.clear();
+  focusCell = null;
+  editingIndex = null;
+  document.getElementById('note-text').value = '';
+  maxMergeSeverity = 1;
+  for (const cp of (D.colkey_palettes || [])) { if (cp && cp.merge_severity > maxMergeSeverity) maxMergeSeverity = cp.merge_severity; }
+  worstBuilt = false;
+  const mm = D.meta;
+  document.title = 'Map Inspector — Map' + String(mm.map_id).padStart(3,'0');
+  document.getElementById('map-title').textContent =
+    (stitched ? 'Stitched · active ' : '') + 'Map' + String(mm.map_id).padStart(3,'0') + ' — ' + (mm.name || '') +
+    ' (' + mm.xsize + '\xd7' + mm.ysize + ')';
+  const navp = document.getElementById('nav-palettes');
+  if (navp) navp.href = '/palettes/' + mm.map_id;
+  const mergeN = (D.colkey_palettes || []).filter(function(cp) { return cp && cp.merge_severity > 0; }).length;
+  document.getElementById('merge-count').textContent = '(' + mergeN + ' tiles)';
+  updateFlagList(); updateSelectionUI(); updateSidebar(); scheduleRender();
 }
 function selectionCells() {
   const arr = [];
@@ -1943,8 +2113,8 @@ function jumpToColkey(idx) {
   if (!target) return;
   focusCell = target;
   const cp = cellPx();
-  panX = Math.floor(canvas.width / 2 - (target.x + 0.5) * cp);
-  panY = Math.floor(canvas.height / 2 - (target.y + 0.5) * cp);
+  panX = Math.floor(canvas.width / 2 - (activeM.ox + target.x + 0.5) * cp);
+  panY = Math.floor(canvas.height / 2 - (activeM.oy + target.y + 0.5) * cp);
   updateSidebar();
   updateSelectionUI();
   scheduleRender();
@@ -1999,23 +2169,58 @@ function renderMapNav() {
     return '<a class="navchip" href="/map/' + id + '" title="Map' + pad(id) + '">M' + pad(id) + ' ' + esc(name) + '</a>';
   };
   let h = '<a class="navchip home" href="/" title="Map index">&#8962; Index</a><span class="navsep"></span>';
-  h += '<span class="navcur">Map' + pad(g.id) + ' &middot; ' + esc(g.name) + '</span>';
+  h += '<span class="navcur">' + (stitched ? 'Stitched &middot; ' : '') + 'Map' + pad(g.id) + ' &middot; ' + esc(g.name) + '</span>';
   const seen = new Set([g.id]);
+  if (stitched) {
+    h += '<span class="navsep"></span><span class="navgrp">members</span>';
+    members.forEach(function(mem){
+      h += '<a class="navchip" href="/map/' + mem.id + '" title="open single-map view">M' + pad(mem.id) + ' ' + esc(mem.name) + '</a>';
+      seen.add(mem.id);
+    });
+    nav.innerHTML = h;
+    nav.classList.add('show');
+    return;
+  }
   if (g.parent) { h += '<span class="navsep"></span><span class="navgrp">up</span>' + chip(g.parent.id, g.parent.name); seen.add(g.parent.id); }
   const kids = (g.children || []).filter(function(c){ return !seen.has(c.id); });
   if (kids.length) { h += '<span class="navsep"></span><span class="navgrp">sub</span>'; kids.forEach(function(c){ seen.add(c.id); h += chip(c.id, c.name); }); }
   const warps = (g.warps || []).filter(function(w){ return !seen.has(w.id); });
   if (warps.length) { h += '<span class="navsep"></span><span class="navgrp">warp&rarr;</span>'; warps.forEach(function(w){ seen.add(w.id); h += chip(w.id, w.name); }); }
+  const conns = g.connections || [];
+  if (conns.length) {
+    const arrows = {N: '&#8679;', S: '&#8681;', W: '&#8678;', E: '&#8680;'};
+    h += '<span class="navsep"></span><span class="navgrp">seam&rarr;</span>';
+    conns.forEach(function(c){
+      h += '<a class="navchip" href="/map/' + c.id + '" title="seamless connection on the ' + c.edge + ' edge">' +
+           arrows[c.edge] + ' M' + pad(c.id) + ' ' + esc(c.name) + '</a>';
+    });
+    h += '<a class="navchip" href="/component/' + g.id + '" style="border-color:#86f;color:#cbf" ' +
+         'title="view all seam-connected maps as one canvas">&#8862; Stitched view</a>';
+  }
   nav.innerHTML = h;
   nav.classList.add('show');
 }
 
 // ---- init -----------------------------------------------------------------
+function loadMemberFeedback(mem) {
+  return fetch('/api/feedback/' + mem.id).then(function(r) { return r.json(); }).then(function(saved) {
+    const list = Array.isArray(saved) ? saved : [];
+    mem.flags.length = 0;
+    for (const f of list) mem.flags.push(f);   // mutate in place: aliases survive
+    mem.flaggedCells = new Set();
+    for (const f of mem.flags) for (const c of (f.cells || [])) mem.flaggedCells.add(c[0] + ',' + c[1]);
+    if (mem === activeM) { flaggedCells = mem.flaggedCells; updateFlagList(); updateSelectionUI(); updateSidebar(); }
+    scheduleRender();
+  }).catch(function(e) { console.error('feedback load failed for map ' + mem.id, e); });
+}
+
 (function init() {
   const m = D.meta;
+  activeM.flags = flags;               // alias the active member's feedback state
+  activeM.flaggedCells = flaggedCells;
   document.title = 'Map Inspector — Map' + String(m.map_id).padStart(3,'0');
   document.getElementById('map-title').textContent =
-    'Map' + String(m.map_id).padStart(3,'0') + ' — ' + (m.name || '') +
+    (stitched ? 'Stitched · active ' : '') + 'Map' + String(m.map_id).padStart(3,'0') + ' — ' + (m.name || '') +
     ' (' + m.xsize + '\xd7' + m.ysize + ')';
   document.getElementById('statusbar').textContent =
     'Map' + String(m.map_id).padStart(3,'0') + ' — ' + m.xsize + '\xd7' + m.ysize +
@@ -2034,17 +2239,40 @@ function renderMapNav() {
     const navp = document.getElementById('nav-palettes');
     navp.href = '/palettes/' + m.map_id;
     navp.style.display = '';
-    // load previously-saved flags for this map so a reload doesn't lose them
-    fetch('/api/feedback/' + m.map_id).then(function(r) { return r.json(); }).then(function(saved) {
-      flags = Array.isArray(saved) ? saved : [];
-      updateFlagList(); updateSelectionUI(); updateSidebar(); scheduleRender();
-    }).catch(function(e) { console.error('feedback load failed', e); });
+    // load previously-saved flags (every member's, so stitched view shows all ⚑)
+    for (const mem of members) loadMemberFeedback(mem);
+    // stitched: fetch the other members' datasets; they pop in as they arrive
+    for (const mem of members) {
+      if (mem.data) continue;
+      fetch('/api/map/' + mem.id).then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      }).then(function(data) {
+        mem.data = data;
+        scheduleRender();
+      }).catch(function(e) { console.error('map load failed for ' + mem.id, e); });
+    }
   }
   if (V.mode === 'static') {
     preloadStatic();
   } else {
     ready = true;
-    setTimeout(function() { canvas.width = wrap.clientWidth; canvas.height = wrap.clientHeight; fitMap(); }, 0);
+    setTimeout(function() {
+      canvas.width = wrap.clientWidth; canvas.height = wrap.clientHeight; fitMap();
+      // ?focus=x,y — center + focus a cell (seam click-throughs land here)
+      const fp = new URLSearchParams(location.search).get('focus');
+      if (fp) {
+        const parts = fp.split(',');
+        let fx = parseInt(parts[0], 10), fy = parseInt(parts[1], 10);
+        if (!isNaN(fx) && !isNaN(fy)) {
+          fx = Math.max(0, Math.min(D.meta.xsize - 1, fx));
+          fy = Math.max(0, Math.min(D.meta.ysize - 1, fy));
+          focusCell = D.cells[fy * D.meta.xsize + fx];
+          centerOnCell(activeM, fx, fy, 2);
+          updateSidebar(); updateSelectionUI();
+        }
+      }
+    }, 0);
   }
 })();
 document.addEventListener('keydown', function(e) {

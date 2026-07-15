@@ -1,14 +1,17 @@
 # ruff: noqa: E501
 """Map graph helpers for the Uranium map viewer.
 
-Provides name lookup, parent/child relationships, warp-target extraction, and
-index/tree building from the on-disk map JSON corpus.
+Provides name lookup, parent/child relationships, warp-target extraction,
+seam-connection geometry (connections.dat), and index/tree building from the
+on-disk map JSON corpus.
 
 Public API (imported by the viewer server):
     load_map_names()           -> dict[int, str]
     map_display_name(id)       -> str
     map_parent_id(id)          -> int | None
     extract_warp_targets(id)   -> list[int]
+    connections_for(id)        -> list[dict]
+    component_layout(id)       -> dict
     map_relationships(id)      -> dict
     build_index()              -> dict
 """
@@ -16,8 +19,11 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
 import sys
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 sys.path.insert(0, str(Path(__file__).parent))
 from map_viewer_common import _maps_dir, _repo_root  # noqa: E402
@@ -154,6 +160,165 @@ def extract_warp_targets(map_id: int) -> list[int]:
     return sorted(targets)
 
 
+# ---------------------------------------------------------------------------
+# Seam connections (Data/connections.dat)
+#
+# Raw entry: [id_a, edge_a, offset_a, id_b, edge_b, offset_b].  Essentials
+# (107__PField_Map.rb getMapConnections/getMapEdge) normalizes each (edge,
+# offset) to an anchor POINT in that map's cell space — N->(off,0), S->(off,h),
+# W->(0,off), E->(w,off) — and the two anchors coincide in world space.  So
+# map B's origin relative to map A is (anchorA - anchorB).
+# ---------------------------------------------------------------------------
+
+_EDGES = ("N", "S", "E", "W")
+
+
+@functools.lru_cache(maxsize=1)
+def _load_connections_raw() -> tuple[tuple, ...]:
+    """Raw connections.dat entries as tuples.
+
+    Reads the JSON cache at output/uranium-build/connections.json; if absent,
+    dumps it once from `$RPG2GBA_URANIUM_SRC/Data/connections.dat` via the
+    repo's Ruby marshal helper (writing the cache).  If neither is possible
+    the viewer degrades to no-seams with a logged warning.
+    """
+    cache = _maps_dir().parent / "connections.json"
+    if cache.is_file():
+        raw = json.loads(cache.read_text(encoding="utf-8"))
+        return tuple(tuple(e) for e in raw)
+    try:
+        import os
+
+        from map_viewer_common import _load_dotenv
+
+        _load_dotenv()
+        src = os.environ.get("RPG2GBA_URANIUM_SRC")
+        if not src:
+            raise RuntimeError("RPG2GBA_URANIUM_SRC not set")
+        from rpg2gba.pbs_converter._marshal import dump_dat, load_json
+
+        raw = load_json(dump_dat(Path(src) / "Data" / "connections.dat", cache))
+        return tuple(tuple(e) for e in raw)
+    except Exception as exc:  # degrade, don't kill the viewer
+        log.warning("connections.dat unavailable (%s); seam features disabled", exc)
+        return ()
+
+
+@functools.lru_cache(maxsize=None)
+def map_dims(map_id: int) -> tuple[int, int]:
+    """(width, height) in cells from the map JSON."""
+    doc = _load_map_json(map_id)
+    return int(doc["width"]), int(doc["height"])
+
+
+def _anchor(map_id: int, edge: str, offset: int) -> tuple[int, int]:
+    """The Essentials anchor point for (edge, offset) on map_id."""
+    w, h = map_dims(map_id)
+    if edge == "N":
+        return (offset, 0)
+    if edge == "S":
+        return (offset, h)
+    if edge == "W":
+        return (0, offset)
+    if edge == "E":
+        return (w, offset)
+    raise ValueError(f"connections.dat: unknown edge {edge!r} on map {map_id}")
+
+
+def connections_for(map_id: int) -> list[dict]:
+    """Seam connections touching map_id, with full geometry.
+
+    Each entry::
+
+        {
+          'id': other_map_id, 'name': str,
+          'edge': 'N'|'S'|'E'|'W',      # MY edge the seam sits on
+          'origin': [dx, dy],           # other map's (0,0) relative to mine
+          'band': [lo, hi],             # my-edge cell range shared with other
+                                        # (x range for N/S, y range for E/W;
+                                        #  hi is exclusive)
+        }
+    """
+    out: list[dict] = []
+    for entry in _load_connections_raw():
+        if len(entry) != 6:
+            continue
+        a, ea, oa, b, eb, ob = entry
+        for mid, me, mo, oid, oe, oo in ((a, ea, oa, b, eb, ob), (b, eb, ob, a, ea, oa)):
+            if mid != map_id or me not in _EDGES or oe not in _EDGES:
+                continue
+            try:
+                ax, ay = _anchor(mid, me, int(mo))
+                bx, by = _anchor(oid, oe, int(oo))
+                w, h = map_dims(mid)
+                ow, oh = map_dims(oid)
+            except (FileNotFoundError, json.JSONDecodeError, OSError, KeyError):
+                continue
+            dx, dy = ax - bx, ay - by
+            if me in ("N", "S"):
+                band = [max(0, dx), min(w, dx + ow)]
+            else:
+                band = [max(0, dy), min(h, dy + oh)]
+            if band[0] >= band[1]:
+                continue  # degenerate seam (no shared edge cells)
+            out.append({
+                "id": oid,
+                "name": map_display_name(oid),
+                "edge": me,
+                "origin": [dx, dy],
+                "band": band,
+            })
+    return sorted(out, key=lambda c: (c["edge"], c["id"]))
+
+
+def component_layout(map_id: int) -> dict:
+    """BFS the seam graph from map_id into one shared cell space.
+
+    Returns ``{'members': [{'id','name','ox','oy','w','h'}, ...], 'w': W,
+    'h': H, 'anchor': map_id}`` with offsets normalized so the component's
+    bounding box starts at (0, 0).  A map with no seams yields one member.
+    Inconsistent multi-path offsets (shouldn't happen with 14 seams) keep the
+    first-reached position and log a warning.
+    """
+    pos: dict[int, tuple[int, int]] = {map_id: (0, 0)}
+    queue = [map_id]
+    while queue:
+        cur = queue.pop(0)
+        cx, cy = pos[cur]
+        for conn in connections_for(cur):
+            oid = conn["id"]
+            ox, oy = cx + conn["origin"][0], cy + conn["origin"][1]
+            if oid in pos:
+                if pos[oid] != (ox, oy):
+                    log.warning(
+                        "component_layout(%d): map %d reached at %s and %s; keeping first",
+                        map_id, oid, pos[oid], (ox, oy),
+                    )
+                continue
+            pos[oid] = (ox, oy)
+            queue.append(oid)
+    min_x = min(x for x, _ in pos.values())
+    min_y = min(y for _, y in pos.values())
+    members = []
+    for mid in sorted(pos):
+        x, y = pos[mid]
+        w, h = map_dims(mid)
+        members.append({
+            "id": mid,
+            "name": map_display_name(mid),
+            "ox": x - min_x,
+            "oy": y - min_y,
+            "w": w,
+            "h": h,
+        })
+    return {
+        "members": members,
+        "w": max(m["ox"] + m["w"] for m in members),
+        "h": max(m["oy"] + m["h"] for m in members),
+        "anchor": map_id,
+    }
+
+
 def map_relationships(map_id: int) -> dict:
     """Return relationship dict for map_id.
 
@@ -164,10 +329,12 @@ def map_relationships(map_id: int) -> dict:
             'parent': {'id': int, 'name': str} | None,
             'children': [{'id': int, 'name': str}, ...],
             'warps':    [{'id': int, 'name': str}, ...],
+            'connections': [connections_for() entry, ...],
         }
 
     children = maps in the universe whose map_parent_id() == map_id, sorted by id.
     warps    = extract_warp_targets resolved to names, sorted by id.
+    connections = seam connections with geometry (see connections_for).
     """
     names = load_map_names()
     universe = _map_id_universe()
@@ -184,6 +351,7 @@ def map_relationships(map_id: int) -> dict:
         "parent": parent,
         "children": [{"id": c, "name": names.get(c, f"Map{c:03d}")} for c in children],
         "warps": [{"id": w, "name": names.get(w, f"Map{w:03d}")} for w in warp_ids],
+        "connections": connections_for(map_id),
     }
 
 
