@@ -10,6 +10,7 @@ import pytest
 from rpg2gba.tileset_converter.metadata_wiring import ObjectEvent
 from rpg2gba.tileset_converter.npc_gfx import (
     _WALK_SEQUENCE_QUIRKS,
+    MOVEMENT_TYPE_CUSTOM_ROUTE,
     MapPassability,
     MovementSpec,
     gfx_constant_for_sheet,
@@ -19,6 +20,7 @@ from rpg2gba.tileset_converter.npc_gfx import (
     select_boot_page,
     static_face_spec,
 )
+from rpg2gba.tileset_converter.route_bytecode import encode_route
 
 REAL_NPC_GFX_MAP = Path("reference/npc_gfx_map.json")
 ENGINE_MOVEMENT_C = Path("engine/src/event_object_movement.c")
@@ -206,6 +208,7 @@ def _route(codes: list[int], repeat: bool = True) -> dict:
 def test_movement_spec_for_fixed_facings(direction: int, facing: str) -> None:
     spec = movement_spec_for(_move_page(0, direction))
     assert spec == MovementSpec(f"MOVEMENT_TYPE_FACE_{facing}")
+    assert spec.route_bytecode is None  # move_type 0 is untouched by the interpreter
 
 
 def test_movement_spec_for_unknown_move_type_fails_loud() -> None:
@@ -221,7 +224,9 @@ def test_movement_spec_for_unknown_direction_fails_loud() -> None:
 # random (move_type 1) -----------------------------------------------------------
 
 def test_movement_spec_for_random_wanders() -> None:
-    assert movement_spec_for(_move_page(1, 2)) == MovementSpec("MOVEMENT_TYPE_WANDER_AROUND", 0, 0)
+    spec = movement_spec_for(_move_page(1, 2))
+    assert spec == MovementSpec("MOVEMENT_TYPE_WANDER_AROUND", 0, 0)
+    assert spec.route_bytecode is None  # move_type 1 is untouched by the interpreter
 
 
 # approach player (move_type 2) --------------------------------------------------
@@ -235,12 +240,45 @@ def test_movement_spec_for_approach_fails_loud() -> None:
 
 # custom route (move_type 3) -----------------------------------------------------
 
+# --- custom-route bytecode interpreter wiring (interpreter-first) -----------
+# `reference/guides/custom_route_interpreter.md` pipeline data path step 2:
+# `_spec_for_custom_route` tries `encode_route` before any native/static
+# classification. These pin the exact bytecode for the interpreter's core
+# encodable shapes; the demote case (below) confirms the existing fallback
+# classifier still runs, untouched, for what `encode_route` can't encode.
+
+def test_movement_spec_for_custom_route_single_axis_repeat_encodes() -> None:
+    """An encodable single-axis repeat route (left x3, right x3, freq 3) ->
+    CUSTOM_ROUTE with the exact contract bytecode: idle header 102 (freq 3),
+    the literal step opcodes, END_LOOP (repeat=true)."""
+    route = _route([2, 2, 2, 3, 3, 3], repeat=True)
+    spec = movement_spec_for(_move_page(3, route=route, frequency=3))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == (102, 2, 2, 2, 3, 3, 3, 0)
+    assert spec.route_bytecode == tuple(encode_route(route, 3))
+    assert spec.demoted is None
+
+
+def test_movement_spec_for_custom_route_through_toggle_encodes() -> None:
+    """A through-toggle route (some steps, code 37 THROUGH_ON, steps, code 38
+    THROUGH_OFF) -> CUSTOM_ROUTE; THROUGH_ON/OFF are in `encode_route`'s v1
+    scope, not dropped or demoted."""
+    route = _route([3, 3, 37, 3, 3, 38], repeat=True)
+    spec = movement_spec_for(_move_page(3, route=route, frequency=6))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == (0, 3, 3, 0x30, 3, 3, 0x31, 0)
+    assert spec.route_bytecode == tuple(encode_route(route, 6))
+    assert spec.demoted is None
+
+
 def test_movement_spec_for_custom_repeat_false_is_static() -> None:
-    """A one-shot (repeat=False) route plays once at boot, then stands — not a
-    demotion, even though the route itself translates."""
+    """RE-PINNED (interpreter-first): a one-shot (repeat=False) route still
+    encodes fine (`encode_route` emits END_STOP instead of END_LOOP), so the
+    bytecode interpreter now wins over the old static-face fallback."""
     route = _route([3, 3, 3], repeat=False)
     spec = movement_spec_for(_move_page(3, direction=6, route=route))
-    assert spec.movement_type == "MOVEMENT_TYPE_FACE_RIGHT"
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == tuple(encode_route(route, 6))
     assert spec.demoted is None
 
 
@@ -262,25 +300,38 @@ def test_movement_spec_for_custom_turn_cycle_looks_around() -> None:
 
 
 def test_movement_spec_for_custom_turn_pair_down_up() -> None:
-    spec = movement_spec_for(_move_page(3, route=_route([16, 19])))
-    assert spec.movement_type == "MOVEMENT_TYPE_FACE_DOWN_AND_UP"
+    """RE-PINNED (interpreter-first): absolute turn codes (16-19) are FACE
+    opcodes `encode_route` handles directly, so this now plays as bytecode
+    instead of the native FACE_DOWN_AND_UP combo."""
+    route = _route([16, 19])
+    spec = movement_spec_for(_move_page(3, route=route))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == tuple(encode_route(route, 6))
     assert spec.demoted is None
 
 
 def test_movement_spec_for_custom_turn_pair_left_right() -> None:
-    spec = movement_spec_for(_move_page(3, route=_route([17, 18])))
-    assert spec.movement_type == "MOVEMENT_TYPE_FACE_LEFT_AND_RIGHT"
+    """RE-PINNED (interpreter-first) — see turn_pair_down_up above."""
+    route = _route([17, 18])
+    spec = movement_spec_for(_move_page(3, route=route))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == tuple(encode_route(route, 6))
 
 
 def test_movement_spec_for_custom_single_turn_face_left() -> None:
-    """A single turn code faces its OWN direction, not `graphic.direction`."""
-    spec = movement_spec_for(_move_page(3, direction=8, route=_route([17])))
-    assert spec.movement_type == "MOVEMENT_TYPE_FACE_LEFT"
+    """RE-PINNED (interpreter-first) — a single FACE opcode still encodes."""
+    route = _route([17])
+    spec = movement_spec_for(_move_page(3, direction=8, route=route))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == tuple(encode_route(route, 6))
 
 
 def test_movement_spec_for_custom_turn_triple_down_up_left() -> None:
-    spec = movement_spec_for(_move_page(3, route=_route([16, 17, 19])))
-    assert spec.movement_type == "MOVEMENT_TYPE_FACE_DOWN_UP_AND_LEFT"
+    """RE-PINNED (interpreter-first) — see turn_pair_down_up above."""
+    route = _route([16, 17, 19])
+    spec = movement_spec_for(_move_page(3, route=route))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == tuple(encode_route(route, 6))
 
 
 def test_movement_spec_for_custom_relative_turn_looks_around() -> None:
@@ -291,18 +342,22 @@ def test_movement_spec_for_custom_relative_turn_looks_around() -> None:
 
 
 def test_movement_spec_for_custom_pacer_wide() -> None:
-    spec = movement_spec_for(_move_page(3, route=_route([2, 2, 2, 3, 3, 3])))
-    assert spec.movement_type == "MOVEMENT_TYPE_WALK_LEFT_AND_RIGHT"
-    assert spec.range_x == 2
-    assert spec.range_y == 0
+    """RE-PINNED (interpreter-first): an all-cardinal-step repeat route
+    encodes cleanly, so this now plays as bytecode instead of the native
+    WALK_LEFT_AND_RIGHT patrol."""
+    route = _route([2, 2, 2, 3, 3, 3])
+    spec = movement_spec_for(_move_page(3, route=route))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == tuple(encode_route(route, 6))
     assert spec.demoted is None
 
 
 def test_movement_spec_for_custom_pacer_narrow() -> None:
-    spec = movement_spec_for(_move_page(3, route=_route([2, 2, 3, 3])))
-    assert spec.movement_type == "MOVEMENT_TYPE_WALK_LEFT_AND_RIGHT"
-    assert spec.range_x == 1
-    assert spec.range_y == 0
+    """RE-PINNED (interpreter-first) — see pacer_wide above."""
+    route = _route([2, 2, 3, 3])
+    spec = movement_spec_for(_move_page(3, route=route))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == tuple(encode_route(route, 6))
 
 
 def test_movement_spec_for_custom_pacer_with_waits_wanders() -> None:
@@ -315,10 +370,11 @@ def test_movement_spec_for_custom_pacer_with_waits_wanders() -> None:
 
 
 def test_movement_spec_for_custom_vertical_pacer() -> None:
-    spec = movement_spec_for(_move_page(3, route=_route([1, 1, 4, 4])))
-    assert spec.movement_type == "MOVEMENT_TYPE_WALK_UP_AND_DOWN"
-    assert spec.range_x == 0
-    assert spec.range_y == 1
+    """RE-PINNED (interpreter-first) — see pacer_wide above."""
+    route = _route([1, 1, 4, 4])
+    spec = movement_spec_for(_move_page(3, route=route))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == tuple(encode_route(route, 6))
 
 
 def test_movement_spec_for_custom_random_move_loop_wanders() -> None:
@@ -329,30 +385,45 @@ def test_movement_spec_for_custom_random_move_loop_wanders() -> None:
 
 
 def test_movement_spec_for_custom_net_drift_demotes() -> None:
-    """A loop that doesn't return to its start drifts a little further every
-    pass -- can't be a bounded pokeemerald patrol -> demoted static."""
-    spec = movement_spec_for(_move_page(3, direction=4, route=_route([2, 2])))
-    assert spec.movement_type == "MOVEMENT_TYPE_FACE_LEFT"
-    assert spec.demoted is not None
-    assert "drift" in spec.demoted
+    """RE-PINNED (interpreter-first): `encode_route` doesn't care about net
+    drift — it just plays the literal step sequence on loop — so this no
+    longer demotes to a static face; it plays as bytecode. (The old
+    native-classifier drift-demotion — case g in `movement_spec_for` — is
+    still exercised via the diagonal/move-random demote tests below, which
+    `encode_route` genuinely can't encode.)"""
+    route = _route([2, 2])
+    spec = movement_spec_for(_move_page(3, direction=4, route=route))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == tuple(encode_route(route, 6))
+    assert spec.demoted is None
 
 
 def test_movement_spec_for_custom_mixed_axes_demotes() -> None:
-    spec = movement_spec_for(_move_page(3, route=_route([2, 1])))
-    assert spec.movement_type == "MOVEMENT_TYPE_FACE_DOWN"
-    assert spec.demoted is not None
+    """RE-PINNED (interpreter-first): mixed-axis cardinal steps still encode
+    fine as bytecode — no native-patrol shape restriction applies."""
+    route = _route([2, 1])
+    spec = movement_spec_for(_move_page(3, route=route))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == tuple(encode_route(route, 6))
 
 
 def test_movement_spec_for_custom_toward_player_demotes() -> None:
-    """Code 10 (toward-player) has no native pokeemerald analog."""
+    """Code 10 (toward-player) is in `encode_route`'s demote set (no engine
+    primitive in v1) -> falls through to the existing static-face fallback,
+    unchanged by the interpreter-first change."""
     spec = movement_spec_for(_move_page(3, route=_route([10])))
+    assert spec.route_bytecode is None
     assert spec.demoted is not None
 
 
 def test_movement_spec_for_custom_translation_and_turn_mixed_demotes() -> None:
-    """A route that both walks and spins has no native equivalent."""
-    spec = movement_spec_for(_move_page(3, route=_route([2, 16])))
-    assert spec.demoted is not None
+    """RE-PINNED (interpreter-first): a STEP mixed with a FACE opcode is fine
+    for the bytecode interpreter (it can walk AND spin), so this now encodes
+    instead of hitting the native classifier's case-e demotion."""
+    route = _route([2, 16])
+    spec = movement_spec_for(_move_page(3, route=route))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == tuple(encode_route(route, 6))
 
 
 def test_movement_spec_for_custom_missing_move_route_fails_loud() -> None:
@@ -365,63 +436,92 @@ def test_movement_spec_for_custom_missing_move_route_fails_loud() -> None:
 # frequency-gated pacing (case g) --------------------------------------------
 
 def test_movement_spec_for_custom_pacer_low_frequency_wanders() -> None:
-    """Below frequency 6 RMXP idle-gates every route command ((40-2f)(6-f)
-    frames), so the Moki pacers (freq 3, no explicit waits — Map032 EV027/068/
-    070) pause ~1.7s between steps: WANDER_, not continuous WALK_."""
-    spec = movement_spec_for(_move_page(3, route=_route([3, 3, 3, 2, 2, 2]), frequency=3))
-    assert spec.movement_type == "MOVEMENT_TYPE_WANDER_LEFT_AND_RIGHT"
-    assert spec.range_x == 2
-    assert spec.range_y == 0
+    """RE-PINNED (interpreter-first): `encode_route` doesn't demote on
+    frequency — it just bakes the frequency into the idle header byte — so
+    the Moki pacer shape (Map032 EV027/068/070, freq 3) now plays as
+    bytecode with the deterministic idle (102 for freq 3) instead of the old
+    native WANDER_LEFT_AND_RIGHT random-pause approximation. This is exactly
+    the pacing fix the interpreter exists for (WANDER randomizes; bytecode
+    doesn't)."""
+    route = _route([3, 3, 3, 2, 2, 2])
+    spec = movement_spec_for(_move_page(3, route=route, frequency=3))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == tuple(encode_route(route, 3))
+    assert spec.route_bytecode[0] == 102  # idle header for move_frequency 3
 
 
 def test_movement_spec_for_custom_vertical_pacer_low_frequency_wanders() -> None:
-    """The vertical twin (Map032 EV069/071 shape: up x2, down x2 at freq 3)."""
-    spec = movement_spec_for(_move_page(3, route=_route([4, 4, 1, 1]), frequency=3))
-    assert spec.movement_type == "MOVEMENT_TYPE_WANDER_UP_AND_DOWN"
-    assert spec.range_y == 1
+    """RE-PINNED (interpreter-first) — see pacer_low_frequency_wanders above
+    (Map032 EV069/071 shape: up x2, down x2 at freq 3)."""
+    route = _route([4, 4, 1, 1])
+    spec = movement_spec_for(_move_page(3, route=route, frequency=3))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == tuple(encode_route(route, 3))
 
 
 # walk-sequence loops (case g2) -----------------------------------------------
 
 def test_movement_spec_for_loop_out_and_back() -> None:
-    """Map032 EV048/EV072 shape: left, up x2, down x2, right — a closed
-    out-and-back loop -> the exact fork sequence type, anchored at the spawn
-    (it IS a leg corner), ranges = the loop's one-sided excursions."""
-    spec = movement_spec_for(_move_page(3, route=_route([2, 4, 4, 1, 1, 3]), frequency=3))
-    assert spec.movement_type == "MOVEMENT_TYPE_WALK_SEQUENCE_LEFT_UP_DOWN_RIGHT"
-    assert (spec.range_x, spec.range_y) == (1, 2)
-    assert (spec.anchor_dx, spec.anchor_dy) == (0, 0)
+    """RE-PINNED (interpreter-first): Map032 EV048/EV072 shape (left, up x2,
+    down x2, right) is an encodable multi-leg loop of all-cardinal steps, so
+    it now plays as bytecode instead of the native WALK_SEQUENCE_LEFT_UP_
+    DOWN_RIGHT approximation. Doubles as the "encodable multi-leg loop"
+    interpreter-wiring case."""
+    route = _route([2, 4, 4, 1, 1, 3], repeat=True)
+    spec = movement_spec_for(_move_page(3, route=route, frequency=3))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    expected = tuple(encode_route(route, 3))
+    assert spec.route_bytecode == expected
+    assert expected == (102, 2, 4, 4, 1, 1, 3, 0)  # idle, LEFT UP UP DOWN DOWN RIGHT, END_LOOP
     assert spec.demoted is None
-    assert (0, 0) in spec.path_cells and (-1, -2) in spec.path_cells
 
 
 def test_movement_spec_for_loop_ring_with_mid_leg_spawn_shifts_anchor() -> None:
-    """Map032 EV008 (town-square Chyinmunk): down x5, right x6, up x6,
-    left x6 (with through-toggle neutrals mid-leg), down x1 — cyclically a
-    7x7 counterclockwise ring whose spawn sits one tile below the top-left
-    corner. The engine closes the loop at the object's initial coords, so the
-    spec anchors at that corner: spawn shift (0, -1)."""
+    """RE-PINNED (interpreter-first): Map032 EV008's ring (down x5, right x6,
+    up x6, left x6 with mid-leg through-toggles, down x1) is all STEP +
+    THROUGH_ON/OFF opcodes `encode_route` handles natively, so it now plays
+    as bytecode. Doubles as the "through-toggle route" interpreter-wiring
+    case (some steps, code 37, steps, code 38)."""
     codes = [1] * 5 + [3] * 6 + [4] * 6 + [2, 2, 37, 2, 2, 38, 2, 2, 1]
-    spec = movement_spec_for(_move_page(3, route=_route(codes), frequency=6))
-    assert spec.movement_type == "MOVEMENT_TYPE_WALK_SEQUENCE_DOWN_RIGHT_UP_LEFT"
-    assert (spec.range_x, spec.range_y) == (6, 6)
-    assert (spec.anchor_dx, spec.anchor_dy) == (0, -1)
+    route = _route(codes)
+    spec = movement_spec_for(_move_page(3, route=route, frequency=6))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == tuple(encode_route(route, 6))
+    # THROUGH_ON (0x30) then THROUGH_OFF (0x31) both survive in the stream.
+    assert 0x30 in spec.route_bytecode
+    assert 0x31 in spec.route_bytecode
     assert spec.demoted is None
-    assert len(set(spec.path_cells)) == 24  # the ring's 24 distinct cells
 
 
 def test_movement_spec_for_loop_corner_spawn_rectangle() -> None:
-    """A rectangle walked from its own corner needs no anchor shift."""
-    spec = movement_spec_for(_move_page(3, route=_route([1, 1, 3, 3, 4, 4, 2, 2])))
-    assert spec.movement_type == "MOVEMENT_TYPE_WALK_SEQUENCE_DOWN_RIGHT_UP_LEFT"
-    assert (spec.range_x, spec.range_y) == (2, 2)
-    assert (spec.anchor_dx, spec.anchor_dy) == (0, 0)
+    """RE-PINNED (interpreter-first) — see loop_out_and_back above."""
+    route = _route([1, 1, 3, 3, 4, 4, 2, 2])
+    spec = movement_spec_for(_move_page(3, route=route))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == tuple(encode_route(route, 6))
 
 
 def test_movement_spec_for_loop_zigzag_demotes() -> None:
-    """A closed loop of MORE than four cyclic legs (zig-zag) has no
-    walk-sequence analog -> case-h demotion, loud."""
-    spec = movement_spec_for(_move_page(3, route=_route([1, 3, 1, 3, 4, 4, 2, 2])))
+    """RE-PINNED (interpreter-first): a zig-zag closed loop of cardinal steps
+    has no native WALK_SEQUENCE analog (old case-h demotion), but the
+    bytecode interpreter doesn't care about shape — it just replays the
+    literal step sequence — so this now plays instead of demoting. This is
+    exactly the interpreter's value-add: decorative patrol shapes the native
+    classifier can't reproduce now play faithfully."""
+    route = _route([1, 3, 1, 3, 4, 4, 2, 2])
+    spec = movement_spec_for(_move_page(3, route=route))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode == tuple(encode_route(route, 6))
+    assert spec.demoted is None
+
+
+def test_movement_spec_for_custom_diagonal_code_demotes() -> None:
+    """A DEMOTED route (diagonal code 5 is out of `encode_route`'s v1 scope)
+    -> falls through to the EXISTING native/static fallback classifier,
+    unchanged by the interpreter-first change: translation-only with no
+    cardinal/loop analog -> case-h static demotion."""
+    spec = movement_spec_for(_move_page(3, route=_route([5, 5, 5])))
+    assert spec.route_bytecode is None
     assert spec.movement_type == "MOVEMENT_TYPE_FACE_DOWN"
     assert spec.demoted is not None
 

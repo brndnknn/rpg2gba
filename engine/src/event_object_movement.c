@@ -173,6 +173,10 @@ static void VirtualObject_UpdateAnim(struct Sprite *);
 static void ApplyLevitateMovement(u8);
 static bool8 MovementType_Disguise_Callback(struct ObjectEvent *, struct Sprite *);
 static bool8 MovementType_Buried_Callback(struct ObjectEvent *, struct Sprite *);
+// BEGIN URANIUM PATHFINDER SLICE — new autonomous movement type (rpg2gba).
+static void MovementType_UraniumCustomRoute(struct Sprite *);
+static bool8 MovementType_UraniumCustomRoute_Callback(struct ObjectEvent *, struct Sprite *);
+// END URANIUM PATHFINDER SLICE
 static void CreateReflectionEffectSprites(void);
 static u8 GetObjectEventIdByLocalIdAndMapInternal(u8, u8, u8);
 static bool8 GetAvailableObjectEventId(u16, u8, u8, u8 *);
@@ -347,6 +351,9 @@ static void (*const sMovementTypeCallbacks[])(struct Sprite *) =
     [MOVEMENT_TYPE_WALK_SLOWLY_IN_PLACE_LEFT] = MovementType_WalkSlowlyInPlace,
     [MOVEMENT_TYPE_WALK_SLOWLY_IN_PLACE_RIGHT] = MovementType_WalkSlowlyInPlace,
     [MOVEMENT_TYPE_FOLLOW_PLAYER] = MovementType_FollowPlayer,
+// BEGIN URANIUM PATHFINDER SLICE — new autonomous movement type (rpg2gba).
+    [MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE] = MovementType_UraniumCustomRoute,
+// END URANIUM PATHFINDER SLICE
 };
 
 static const bool8 sMovementTypeHasRange[NUM_MOVEMENT_TYPES] = {
@@ -476,6 +483,9 @@ const u8 gInitialMovementTypeFacingDirections[NUM_MOVEMENT_TYPES] = {
     [MOVEMENT_TYPE_WALK_SLOWLY_IN_PLACE_LEFT] = DIR_WEST,
     [MOVEMENT_TYPE_WALK_SLOWLY_IN_PLACE_RIGHT] = DIR_EAST,
     [MOVEMENT_TYPE_FOLLOW_PLAYER] = DIR_SOUTH,
+// BEGIN URANIUM PATHFINDER SLICE — new autonomous movement type (rpg2gba).
+    [MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE] = DIR_SOUTH,
+// END URANIUM PATHFINDER SLICE
 };
 
 #include "data/object_events/object_event_graphics_info_pointers.h"
@@ -486,6 +496,12 @@ const u8 gInitialMovementTypeFacingDirections[NUM_MOVEMENT_TYPES] = {
 #include "data/object_events/object_event_subsprites.h"
 #include "data/object_events/object_event_graphics_info.h"
 #include "data/object_events/object_event_graphics_info_followers.h"
+
+// BEGIN URANIUM PATHFINDER SLICE — per-object custom-route bytecode table (rpg2gba).
+// Declares sUraniumRoutes[] ahead of MovementType_UraniumCustomRoute below. Gitignored;
+// stub (empty table) when no routes are staged, so a fresh clone still compiles.
+#include "data/object_events/uranium_move_routes.gen.h"
+// END URANIUM PATHFINDER SLICE
 
 static const struct SpritePalette sObjectEventSpritePalettes[] = {
     {gObjectEventPal_Npc1,                  OBJ_EVENT_PAL_TAG_NPC_1},
@@ -6117,6 +6133,179 @@ bool8 MovementType_Buried_Step0(struct ObjectEvent *objectEvent, struct Sprite *
     ClearObjectEventMovement(objectEvent, sprite);
     return FALSE;
 }
+
+// BEGIN URANIUM PATHFINDER SLICE — custom-route bytecode interpreter (rpg2gba).
+// Plays back a per-object route bytecode program (dedup'd across the slice,
+// looked up by trainerRange_berryTreeId — see MOVEMENT_TYPE_BERRY_TREE_GROWTH
+// precedent for reuse of that field). Contract: reference/guides/custom_route_interpreter.md.
+enum
+{
+    URANIUM_ROUTE_OP_END_LOOP    = 0x00,
+    URANIUM_ROUTE_OP_STEP_DOWN   = 0x01,
+    URANIUM_ROUTE_OP_STEP_LEFT   = 0x02,
+    URANIUM_ROUTE_OP_STEP_RIGHT  = 0x03,
+    URANIUM_ROUTE_OP_STEP_UP     = 0x04,
+    URANIUM_ROUTE_OP_END_STOP    = 0x0F,
+    URANIUM_ROUTE_OP_FACE_DOWN   = 0x11,
+    URANIUM_ROUTE_OP_FACE_LEFT   = 0x12,
+    URANIUM_ROUTE_OP_FACE_RIGHT  = 0x13,
+    URANIUM_ROUTE_OP_FACE_UP     = 0x14,
+    URANIUM_ROUTE_OP_WAIT        = 0x20,
+    URANIUM_ROUTE_OP_THROUGH_ON  = 0x30,
+    URANIUM_ROUTE_OP_THROUGH_OFF = 0x31,
+};
+
+enum
+{
+    URANIUM_ROUTE_STATE_INIT = 0,
+    URANIUM_ROUTE_STATE_FETCH_EXEC,
+    URANIUM_ROUTE_STATE_EXEC_WALK,
+    URANIUM_ROUTE_STATE_WAIT,
+};
+
+// data[1] (sTypeFuncId) = FSM sub-state. CRITICAL: the normal-walk movement
+// action reuses data[3]/data[4]/data[5] (sDirection/sSpeed/sTimer) as scratch
+// every frame during a step, and SetMovementDelay uses data[3]/data[7] — so the
+// ONLY sprite-data slot safe across BOTH a walk and a wait is data[6]. Pack the
+// program counter (low byte) and the through flag (bit 8) into it; re-read the
+// per-route idle from route[0] each time (no stored slot). (An earlier version
+// kept PC/through in data[4]/[5]; the walk clobbered them after one step — the
+// "NPC only steps when you talk to it" bug.) SoT: custom_route_interpreter.md.
+#define sRoutePacked data[6]
+#define URANIUM_ROUTE_PC(s)              ((s)->sRoutePacked & 0xFF)
+#define URANIUM_ROUTE_SET_PC(s, v)       ((s)->sRoutePacked = ((s)->sRoutePacked & 0x100) | ((v) & 0xFF))
+#define URANIUM_ROUTE_THROUGH(s)         ((s)->sRoutePacked & 0x100)
+#define URANIUM_ROUTE_SET_THROUGH(s, on) ((s)->sRoutePacked = (on) ? ((s)->sRoutePacked | 0x100) : ((s)->sRoutePacked & ~0x100))
+
+// RMXP move-route direction codes (1=down 2=left 3=right 4=up) -> engine DIR_*.
+static enum Direction UraniumRoute_RmxpDirToEngine(u8 rmxpDir)
+{
+    switch (rmxpDir)
+    {
+    case 1:  return DIR_SOUTH;
+    case 2:  return DIR_WEST;
+    case 3:  return DIR_EAST;
+    case 4:  return DIR_NORTH;
+    default: return DIR_SOUTH;
+    }
+}
+
+// Enter the per-command idle pause, then the WAIT state. Clamp idle to >= 1:
+// idle 0 (freq-6 routes) would make WaitForMovementDelay's pre-decrement
+// underflow into a ~65k-frame stall; a single-frame gap reads as continuous.
+// Always routing through WAIT also guarantees a per-cycle yield.
+static bool8 UraniumRoute_BeginIdle(struct Sprite *sprite, u8 idle)
+{
+    SetMovementDelay(sprite, idle == 0 ? 1 : idle);
+    sprite->sTypeFuncId = URANIUM_ROUTE_STATE_WAIT;
+    return TRUE;
+}
+
+static bool8 MovementType_UraniumCustomRoute_Callback(struct ObjectEvent *objectEvent, struct Sprite *sprite)
+{
+    const u8 *route = sUraniumRoutes[objectEvent->trainerRange_berryTreeId];
+    u8 pc;
+    u8 op;
+    enum Direction dir;
+
+    switch (sprite->sTypeFuncId)
+    {
+    case URANIUM_ROUTE_STATE_INIT:
+        ClearObjectEventMovement(objectEvent, sprite);
+        URANIUM_ROUTE_SET_PC(sprite, 1); // byte 0 is the idle header; opcodes start at byte 1
+        URANIUM_ROUTE_SET_THROUGH(sprite, FALSE);
+        sprite->sTypeFuncId = URANIUM_ROUTE_STATE_FETCH_EXEC;
+        return TRUE;
+
+    case URANIUM_ROUTE_STATE_FETCH_EXEC:
+        pc = URANIUM_ROUTE_PC(sprite);
+        op = route[pc];
+        switch (op)
+        {
+        case URANIUM_ROUTE_OP_END_LOOP:
+            URANIUM_ROUTE_SET_PC(sprite, 1);
+            return TRUE; // no time cost; loop back and re-fetch immediately
+
+        case URANIUM_ROUTE_OP_END_STOP:
+            return FALSE; // halt, hold position forever
+
+        case URANIUM_ROUTE_OP_STEP_DOWN:
+        case URANIUM_ROUTE_OP_STEP_LEFT:
+        case URANIUM_ROUTE_OP_STEP_RIGHT:
+        case URANIUM_ROUTE_OP_STEP_UP:
+            dir = UraniumRoute_RmxpDirToEngine(op);
+            URANIUM_ROUTE_SET_PC(sprite, pc + 1);
+            if (!URANIUM_ROUTE_THROUGH(sprite) && GetCollisionInDirection(objectEvent, dir) != COLLISION_NONE)
+                return UraniumRoute_BeginIdle(sprite, route[0]); // blocked: skip, idle like a step
+            ObjectEventSetSingleMovement(objectEvent, sprite, GetWalkNormalMovementAction(dir));
+            objectEvent->singleMovementActive = TRUE; // required: exec advances the walk each frame only while set (WalkBackAndForth_Step2)
+            sprite->sTypeFuncId = URANIUM_ROUTE_STATE_EXEC_WALK;
+            return TRUE;
+
+        case URANIUM_ROUTE_OP_FACE_DOWN:
+        case URANIUM_ROUTE_OP_FACE_LEFT:
+        case URANIUM_ROUTE_OP_FACE_RIGHT:
+        case URANIUM_ROUTE_OP_FACE_UP:
+            dir = UraniumRoute_RmxpDirToEngine(op - 0x10);
+            SetObjectEventDirection(objectEvent, dir);
+            URANIUM_ROUTE_SET_PC(sprite, pc + 1);
+            return UraniumRoute_BeginIdle(sprite, route[0]);
+
+        case URANIUM_ROUTE_OP_WAIT:
+            SetMovementDelay(sprite, route[pc + 1]);
+            URANIUM_ROUTE_SET_PC(sprite, pc + 2);
+            sprite->sTypeFuncId = URANIUM_ROUTE_STATE_WAIT;
+            return TRUE;
+
+        case URANIUM_ROUTE_OP_THROUGH_ON:
+            URANIUM_ROUTE_SET_THROUGH(sprite, TRUE);
+            URANIUM_ROUTE_SET_PC(sprite, pc + 1);
+            return TRUE; // no time cost
+
+        case URANIUM_ROUTE_OP_THROUGH_OFF:
+            URANIUM_ROUTE_SET_THROUGH(sprite, FALSE);
+            URANIUM_ROUTE_SET_PC(sprite, pc + 1);
+            return TRUE; // no time cost
+
+        default:
+            // Unrecognized opcode: the Python emitter (route_bytecode.py) only ever
+            // writes opcodes from the contract table, so this indicates a corrupt
+            // route. Fail safe (halt) rather than walk off the end of the array.
+            return FALSE;
+        }
+
+    case URANIUM_ROUTE_STATE_EXEC_WALK:
+        if (ObjectEventExecSingleMovementAction(objectEvent, sprite))
+        {
+            objectEvent->singleMovementActive = FALSE; // step finished; pair with the TRUE set in FETCH_EXEC
+            return UraniumRoute_BeginIdle(sprite, route[0]);
+        }
+        return FALSE;
+
+    case URANIUM_ROUTE_STATE_WAIT:
+        if (WaitForMovementDelay(sprite))
+        {
+            sprite->sTypeFuncId = URANIUM_ROUTE_STATE_FETCH_EXEC;
+            return TRUE;
+        }
+        return FALSE;
+
+    default:
+        return FALSE;
+    }
+}
+
+#undef sRoutePacked
+#undef URANIUM_ROUTE_PC
+#undef URANIUM_ROUTE_SET_PC
+#undef URANIUM_ROUTE_THROUGH
+#undef URANIUM_ROUTE_SET_THROUGH
+
+static void MovementType_UraniumCustomRoute(struct Sprite *sprite)
+{
+    UpdateObjectEventCurrentMovement(&gObjectEvents[sprite->sObjEventId], sprite, MovementType_UraniumCustomRoute_Callback);
+}
+// END URANIUM PATHFINDER SLICE
 
 bool8 MovementType_MoveInPlace_Step1(struct ObjectEvent *objectEvent, struct Sprite *sprite)
 {

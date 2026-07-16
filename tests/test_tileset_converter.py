@@ -21,6 +21,7 @@ from rpg2gba.tileset_converter import metadata_wiring as mw
 from rpg2gba.tileset_converter import npc_gfx as npc_gfx_mod
 from rpg2gba.tileset_converter.layout import TileGrid, column_key
 from rpg2gba.tileset_converter.npc_gfx import DEFAULT_NPC_GFX_MAP, load_npc_gfx_map
+from rpg2gba.tileset_converter.route_bytecode import RouteRegistry
 from rpg2gba.tileset_converter.tile_map import (
     METATILE_ID_MASK,
     Bucket,
@@ -1132,8 +1133,10 @@ def _passability_fixture(
 
 def test_build_object_events_spawn_locked_demotes_to_static() -> None:
     """A pacer spawned on a fully exit-blocked tile (Map032 EV012 on its
-    passage-15 decoration) never moves on PC — the wiring demotes it to a
-    static facing instead of letting it walk off and strand."""
+    passage-15 decoration) never moves on PC — interpreter-first sends its
+    cardinal route through CUSTOM_ROUTE, but full spawn-lock STILL demotes it
+    to a static facing (and drops the route: no route_id spent, no forced
+    DIR_SOUTH from the interpreter) instead of letting it walk off and strand."""
     consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
     map_json = {
         "map_id": 32,
@@ -1141,48 +1144,106 @@ def test_build_object_events_spawn_locked_demotes_to_static() -> None:
     }
     passability = _passability_fixture(4, 1, blocked_cells={(1, 0)})
     result = mw.build_object_events(
-        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(), passability=passability
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(), passability=passability,
+        route_registry=RouteRegistry(),
     )
     (obj,) = result.object_events
-    assert obj.movement_type == "MOVEMENT_TYPE_FACE_DOWN"
+    assert obj.movement_type.startswith("MOVEMENT_TYPE_FACE_")
+    assert obj.route_id == "0"
     assert (obj.movement_range_x, obj.movement_range_y) == (0, 0)
 
 
 def test_build_object_events_walk_sequence_blocked_path_demotes() -> None:
-    """A walk-sequence loop crossing a blocked cell would stall walking-in-place
-    in-engine (Map032 EV073's shape) -> static, loud."""
+    """A cardinal move_route is interpreter-first (CUSTOM_ROUTE): the loop
+    crossing a blocked cell (Map032 EV073's shape) is only PARTIALLY blocked
+    at spawn (not spawn-locked), so it correctly emits CUSTOM_ROUTE with an
+    assigned route id — the engine interpreter skips blocked steps at
+    runtime, unlike the old native WALK_SEQUENCE path this used to demote."""
     consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
     loop = [2, 4, 4, 1, 1, 3]  # left, up x2, down x2, right
     map_json = {"map_id": 32, "events": [_event(73, 1, 2, [_moving_page(loop)])]}
     blocked = _passability_fixture(4, 3, blocked_cells={(0, 2)})  # the left cell
+    registry = RouteRegistry()
     result = mw.build_object_events(
-        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(), passability=blocked
-    )
-    assert result.object_events[0].movement_type == "MOVEMENT_TYPE_FACE_DOWN"
-
-    # the same loop with the cell converter-unblocked keeps its patrol
-    opened = _passability_fixture(4, 3, blocked_cells={(0, 2)}, open_cells={(0, 2)})
-    result = mw.build_object_events(
-        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(), passability=opened
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(), passability=blocked,
+        route_registry=registry,
     )
     obj = result.object_events[0]
-    assert obj.movement_type == "MOVEMENT_TYPE_WALK_SEQUENCE_LEFT_UP_DOWN_RIGHT"
-    assert (obj.movement_range_x, obj.movement_range_y) == (1, 2)
+    assert obj.movement_type == mw.MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert obj.route_id != "0"
+    assert len(registry) == 1
 
 
 def test_build_object_events_anchor_shift_applied_to_placement() -> None:
-    """A walk-sequence whose spawn sits mid-leg is placed at the loop corner the
-    engine closes the loop on (EV008's (0,-1) shift) — with or without a
-    passability oracle."""
+    """A cardinal move_route is interpreter-first (CUSTOM_ROUTE), so the old
+    native WALK_SEQUENCE anchor-shift logic no longer applies: the object is
+    placed at its raw spawn coords, unshifted, with an assigned route id."""
     consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
     # 3x4 ring whose spawn sits one tile below the top-left corner (EV008 shape)
     ring = [1] * 2 + [3] * 2 + [4] * 3 + [2] * 2 + [1]
     map_json = {"map_id": 32, "events": [_event(8, 1, 2, [_moving_page(ring, frequency=6)])]}
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(), route_registry=RouteRegistry()
+    )
+    (obj,) = result.object_events
+    assert obj.movement_type == mw.MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert (obj.x, obj.y) == (1, 2)  # raw spawn coords, no anchor shift
+    assert obj.route_id != "0"
+
+
+def test_build_object_events_custom_route_assigns_route_id() -> None:
+    """A single encodable custom route gets route_id "1" and the shared
+    registry has exactly one entry."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {"map_id": 32, "events": [_event(1, 1, 1, [_moving_page([2, 2, 3, 3])])]}
+    registry = RouteRegistry()
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(), route_registry=registry
+    )
+    (obj,) = result.object_events
+    assert obj.movement_type == mw.MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert obj.route_id == "1"
+    assert len(registry) == 1
+
+
+def test_build_object_events_custom_route_dedups_identical_routes() -> None:
+    """Two objects with the SAME encodable route share one route_id — the
+    registry dedups by bytecode, not by event id."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [
+            _event(1, 1, 1, [_moving_page([2, 2, 3, 3])]),
+            _event(2, 5, 5, [_moving_page([2, 2, 3, 3])]),
+        ],
+    }
+    registry = RouteRegistry()
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(), route_registry=registry
+    )
+    ids = {obj.route_id for obj in result.object_events}
+    assert ids == {"1"}
+    assert len(registry) == 1
+
+
+def test_build_object_events_no_custom_route_route_id_zero() -> None:
+    """An event with no custom route (move_type 0, a static facing) gets the
+    default route_id "0" — no registry entry, no registry needed at all."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {"map_id": 32, "events": [_event(1, 1, 1, [_page(name="HGSS_000")])]}
     result = mw.build_object_events(map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture())
     (obj,) = result.object_events
-    assert obj.movement_type == "MOVEMENT_TYPE_WALK_SEQUENCE_DOWN_RIGHT_UP_LEFT"
-    assert (obj.x, obj.y) == (1, 1)  # spawn (1,2) shifted to the ring's top-left corner
-    assert (obj.movement_range_x, obj.movement_range_y) == (2, 3)
+    assert obj.route_id == "0"
+
+
+def test_build_object_events_custom_route_without_registry_raises() -> None:
+    """An encodable custom route with no route_registry given fails loud
+    (CLAUDE.md §4.5) instead of silently dropping the route or crashing on a
+    None deref."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {"map_id": 32, "events": [_event(1, 1, 1, [_moving_page([2, 2, 3, 3])])]}
+    with pytest.raises(ValueError):
+        mw.build_object_events(map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture())
 
 
 def test_build_object_events_drops_no_silent_defaults() -> None:
@@ -1727,7 +1788,7 @@ def test_build_slice_maps_smoke(tmp_path: Path) -> None:
     overrides = mw.build_slice_maps(
         [32, 48, 49], maps_dir=_MAPS, registry=reg, metadata_path=_METADATA,
         out_dir=tmp_path / "maps", dispatcher_dir=tmp_path / "disp",
-        npc_gfx=npc_gfx,
+        npc_gfx=npc_gfx, route_registry=RouteRegistry(),
     )
     # Map049: spawn floor, two in-slice warps (street door + stairs)
     assert overrides[49] == {(10, 11), (12, 3)}

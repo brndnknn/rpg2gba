@@ -58,12 +58,14 @@ from ..conversion_agent.flag_registry import (
 )
 from .map_constants import MapConstantRegistry, MapConstants
 from .npc_gfx import (
+    MOVEMENT_TYPE_CUSTOM_ROUTE,
     MapPassability,
     is_door_sheet,
     movement_spec_for,
     select_boot_page,
     static_face_spec,
 )
+from .route_bytecode import RouteRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +186,7 @@ class ObjectEvent:
     movement_range_x: int = 0
     movement_range_y: int = 0
     elevation: int = DEFAULT_ELEVATION
+    route_id: str = "0"  # custom-route registry id ("0" = no route)
 
     def to_dict(self) -> dict:
         return {
@@ -195,7 +198,7 @@ class ObjectEvent:
             "movement_range_x": self.movement_range_x,
             "movement_range_y": self.movement_range_y,
             "trainer_type": "TRAINER_TYPE_NONE",
-            "trainer_sight_or_berry_tree_id": "0",
+            "trainer_sight_or_berry_tree_id": self.route_id,
             "script": self.script,
             "flag": self.flag,
         }
@@ -639,6 +642,7 @@ def build_object_events(
     event_traits: dict[int, list[str]] | None = None,
     flag_registry: FlagRegistry | None = None,
     passability: MapPassability | None = None,
+    route_registry: RouteRegistry | None = None,
 ) -> ObjectBuildResult:
     """Place every non-warp, non-skipped event per its BOOT-STATE page (RMXP shows
     the highest-index page whose condition holds at boot; `npc_gfx.select_boot_page`).
@@ -697,7 +701,15 @@ def build_object_events(
     A walk-sequence spec's `anchor_dx`/`anchor_dy` spawn shift is applied to
     the placed coords (the engine closes the loop at the object's initial
     coords, which must be a loop corner). `None` skips the passability gates
-    (unit-test/legacy path) but still applies anchor shifts."""
+    (unit-test/legacy path) but still applies anchor shifts.
+
+    `route_registry` (a `route_bytecode.RouteRegistry`), when an emitted spec
+    carries `route_bytecode` (`movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE`),
+    interns the bytecode and sets the resulting 1-based id as
+    `ObjectEvent.route_id` (serialized as `trainer_sight_or_berry_tree_id`).
+    `route_registry=None` with an encodable route present raises `ValueError`
+    (fail loud — CLAUDE.md §4.5): the caller must own and share one registry
+    per slice, exactly like `flag_registry`."""
     objects, _, _ = classify_map_events(map_json, slice_ids)
     uid = consts.uranium_id
     result = ObjectBuildResult()
@@ -796,6 +808,23 @@ def build_object_events(
                             f"walk-sequence loop crosses blocked cell(s) "
                             f"{blocked} — would stall walking-in-place in-engine",
                         )
+            elif (
+                passability is not None
+                and spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+                and passability.exit_blocked(event["x"], event["y"])
+            ):
+                # A fully-locked spawn tile can't move at all (RMXP checks the
+                # CURRENT tile before every step) — demote to static, and drop
+                # the route entirely (no route_bytecode) so the interpreter
+                # doesn't force-face it DIR_SOUTH instead of the graphic's
+                # intended facing, and no route id is wasted on a mover that
+                # will never play it back. PARTIAL blocking is left alone:
+                # the engine interpreter skips blocked steps at runtime.
+                spec = static_face_spec(
+                    page,
+                    "spawn tile blocks leaving in every direction (RMXP "
+                    "passage data) — the NPC never moves on PC either",
+                )
             if spec.demoted is not None:
                 logger.warning(
                     "map %d EV%03d: movement demoted to static facing (%s)",
@@ -807,6 +836,15 @@ def build_object_events(
                     uid, eid, event["x"], event["y"],
                     event["x"] + spec.anchor_dx, event["y"] + spec.anchor_dy,
                 )
+            route_id = "0"
+            if spec.route_bytecode is not None:
+                if route_registry is None:
+                    raise ValueError(
+                        f"map {uid} EV{eid:03d}: encodable custom route but no "
+                        f"route_registry given — call build_object_events(..., "
+                        f"route_registry=RouteRegistry())"
+                    )
+                route_id = str(route_registry.intern(spec.route_bytecode))
             result.object_events.append(
                 ObjectEvent(
                     x=event["x"] + spec.anchor_dx, y=event["y"] + spec.anchor_dy,
@@ -814,6 +852,7 @@ def build_object_events(
                     script=script, movement_type=spec.movement_type,
                     movement_range_x=spec.range_x, movement_range_y=spec.range_y,
                     flag=rock_flags.get(eid, "0"),
+                    route_id=route_id,
                 )
             )
             result.local_id_map[str(eid)] = len(result.object_events)
@@ -958,10 +997,16 @@ def build_slice_maps(
     flag_registry: FlagRegistry | None = None,
     tilesets_path: Path | None = None,
     walkable_overrides: dict[int, frozenset[tuple[int, int]]] | None = None,
+    route_registry: RouteRegistry | None = None,
 ) -> dict[int, set[tuple[int, int]]]:
     """Assemble map.json + dispatcher .pory for every slice map. Returns the per-map
     warp-source coords (S3 walkable-overrides) so S8 can force those cells walkable.
     Warp pairing needs every map's warp list first, so this is a slice-level pass.
+
+    `route_registry` (a `route_bytecode.RouteRegistry`), when given, is
+    forwarded to every `build_object_events` call so custom-route movers across
+    the whole slice dedup into one shared id space (caller-owned, exactly like
+    `flag_registry` — this function never constructs one internally).
 
     `flag_registry` (a `FlagRegistry`, distinct from `registry`'s `MapConstantRegistry`
     above), when given, is forwarded to `build_object_events` so multi-page events
@@ -1024,7 +1069,7 @@ def build_slice_maps(
         result = build_object_events(
             maps[uid], consts, slice_set, pory_labels=pory_labels, npc_gfx=npc_gfx,
             event_traits=map_traits, flag_registry=flag_registry,
-            passability=passability,
+            passability=passability, route_registry=route_registry,
         )
         overrides[uid] = src_coords
         local_id_tables[uid] = result.local_id_map

@@ -85,7 +85,11 @@
 #define MOVEMENT_TYPE_WALK_SLOWLY_IN_PLACE_RIGHT       0x50
 #define MOVEMENT_TYPE_FOLLOW_PLAYER                    0x51
 #define MOVEMENT_TYPE_WANDER_AROUND_SLOWER             0x52
-#define NUM_MOVEMENT_TYPES                             0x53
+// BEGIN URANIUM PATHFINDER SLICE — new autonomous movement type: plays a per-object
+// route bytecode (reference/guides/custom_route_interpreter.md). rpg2gba.
+#define MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE              0x53
+// END URANIUM PATHFINDER SLICE
+#define NUM_MOVEMENT_TYPES                             0x54
 
 #define MOVEMENT_ACTION_FACE_DOWN                       0x0
 #define MOVEMENT_ACTION_FACE_UP                         0x1

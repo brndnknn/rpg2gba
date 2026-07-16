@@ -135,7 +135,7 @@ Moki-side ceremony; the Map-50 doorway coords differ — walk target likely
 off-map there). User deferred this behind the Map-32 fixes; localize per the
 /debug flow before touching anything.
 
-### 12. NPCs don't move at all (walk finding 2026-07-13) — fine-tune round BUILT 2026-07-15, retest pending
+### 12. NPCs don't move — ✅ USER-VERIFIED DONE 2026-07-15 (custom-route interpreter; ROM `5158b084` walked clean, "looks great, movement issue is done")
 
 All NPCs stand frozen; in Uranium the Moki townsfolk wander/turn. Research
 done (3 sub-agents: pipeline audit, fork inventory, corpus census + RGSS
@@ -255,6 +255,76 @@ read). Verified facts, superseding the old from-memory notes:
   the big tree for a step; EV048/072 walk their L-loops (continuously —
   acceptable?); the (31,44) NPC stands on the ball art and talks when
   addressed.
+- **Round 2 — CUSTOM-ROUTE INTERPRETER BUILT 2026-07-15 (supersedes the
+  native-approximation approach above for move_type-3 routes; user
+  approved the engine change).** Root insight (from the wiki+recon this
+  session): Uranium autonomous routes don't map to native `MOVEMENT_TYPE_*`
+  — WANDER randomizes (not deterministic pacing), WALK_SEQUENCE can't pause
+  or do variable legs, COMPLEX demotes to static. Corpus census: 834 custom
+  routes, 62% not natively expressible. So we added ONE new engine movement
+  type that plays a per-object route **bytecode** faithfully. Full design =
+  `reference/guides/custom_route_interpreter.md` (SoT: opcode table, FSM,
+  data channel, scope). Pieces (all landed, /delegate — lead owned contract
+  + integration seam):
+  - **Engine (sentinel fence, KEEP, `engine_extension_surface.md` §3):**
+    `MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE 0x53`, `NUM_MOVEMENT_TYPES`→0x54,
+    hand-rolled `MovementType_UraniumCustomRoute` FSM in
+    `event_object_movement.c` (BerryTreeGrowth precedent). Route id rides
+    `trainerRange_berryTreeId` (u8, same overload berries use — no struct
+    change); runtime scratch = `sprite->data[4..7]`; "through" = skip the
+    collision call (no engine field). `make modern` clean.
+  - **Python:** `route_bytecode.py` (`encode_route` RMXP→bytecode +
+    `RouteRegistry` dedup, u8-bounded fail-loud); `npc_gfx` interpreter-first
+    in `_spec_for_custom_route` (encode succeeds → CUSTOM_ROUTE spec; the
+    v1-out-of-scope codes — diagonals/random/approach/jump/relative-turns —
+    fall through to the existing native/static classifier UNCHANGED);
+    `metadata_wiring` `ObjectEvent.route_id` → map.json
+    `trainer_sight_or_berry_tree_id`, interned via a single slice-wide
+    `RouteRegistry`; `route_table_emit.py` writes the engine gen.h
+    (`uranium_move_routes.gen.h`). Fully-exit-blocked CUSTOM_ROUTE movers
+    still demote to static FACE (preserves graphic facing; interpreter would
+    else force DIR_SOUTH).
+  - **Integration (lead):** one `RouteRegistry` in `stage_slice_scripts.
+    _regenerate_map_json` feeds BOTH map.json route ids AND
+    `emit_route_table` — single instance, no cross-pass id rebuild; assemble
+    has a defensive only-if-missing stub.
+  - **Live result:** Moki Town → 9 CUSTOM_ROUTE movers, 6 deduped engine
+    routes; Chyinmunk 27-cmd through-toggle patrol intact (idle 0 = freq-6
+    continuous), freq-3 townsfolk idle 102. Full suite 1137 pass, 0 fail.
+    ROM sha1 `7b290f02` taildropped 2026-07-15. **ALL UNCOMMITTED.**
+  - **v1 scope boundary (eye-test these + the demote fallbacks):** covers
+    cardinal steps + turns + wait + through-toggle + freq pacing. NOT yet:
+    diagonals, move-random, toward/away-player, forward/backward, jump,
+    relative turns (these demote to the native/static path), and mid-route
+    speed/graphic/SE (dropped from the stream, route still plays). move_speed
+    is ignored in v1 (all steps normal-walk speed) — if pacing looks off vs
+    PC Uranium, that's the first knob (per-route speed byte). **Retest
+    checklist unchanged from round 1**, but now EVERY custom-route mover
+    should step-pause-step with the EXACT RMXP route (deterministic, not
+    WANDER-random); EV048/072 now pause too (freq-3, was continuous
+    WALK_SEQUENCE). Corpus-wide rollout beyond the slice = future work
+    (interpreter is corpus-ready; only Moki exercises it today).
+  - **BUGFIX 2026-07-15 (boot-walk: "no NPC moves until you talk to them,
+    then one step per talk").** TWO engine bugs in
+    `MovementType_UraniumCustomRoute_Callback`, both now fixed:
+    1. **(minor)** missing `objectEvent->singleMovementActive = TRUE`/`FALSE`
+       around the single-movement (every stock type sets it). Fixed first;
+       did NOT resolve the symptom → deeper bug:
+    2. **(ROOT CAUSE) sprite-data slot collision.** The FSM stored program
+       counter in `data[4]` and through-flag in `data[5]`, but the normal-walk
+       movement action (`SetSpriteDataForNormalStep`→`NpcTakeStep`) reuses
+       `data[4]`=sSpeed / `data[5]`=sTimer as its own per-frame scratch. So
+       the first step (PC=1 from INIT) ran, then the walk overwrote the PC →
+       garbage thereafter; only an interaction force-tick advanced it one step.
+       Fix: pack PC (low byte) + through (bit 8) into **`data[6]`** — the only
+       slot safe across both a walk and a wait (walk uses 3/4/5, delay uses
+       3/7) — and re-read idle from `route[0]`. Also added
+       `ClearObjectEventMovement` on INIT and clamped idle≥1 (a separate bug:
+       freq-6 routes emit idle 0, and `WaitForMovementDelay`'s pre-decrement
+       underflows 0→~65k-frame stall). Contract doc data-channel + FSM §§
+       corrected so the slot map can't be re-broken. `make modern` clean, ROM
+       sha1 `5158b084` taildropped 2026-07-15 (supersedes `66097603` /
+       `7b290f02`). Retest pending.
 
 ### 13. Expand Moki interiors — BUILT 2026-07-14, needs boot-walk
 
@@ -288,6 +358,67 @@ Slice widened 3→8 maps; full chain (stage → assemble → `make modern`) clea
   is the gate); lab machine prop renders 64×64; nothing visibly missing in
   Theo's house (the dropped orphan pages); interior NPCs sane. All
   uncommitted — commit after the walk.
+
+### 15. Theo intro cutscene missing (boot-walk 2026-07-15) — SEPARATE work unit, own session
+
+Boot-walk: Theo's intro cutscene (runs up → talks → runs ahead) entirely
+absent; no Theo anywhere on Moki Town. Root-caused 2026-07-15.
+
+**Root cause — the drop is CORRECT for boot state, not a bug in itself.**
+`select_boot_page` (`npc_gfx.py:114`) picks Theo's RMXP boot page, which the
+Uranium author drew with `opacity == 0` — Theo genuinely doesn't exist in town
+at game start. The converter drops opacity-0 events in `build_object_events`
+(`metadata_wiring.py:743-747`): opacity-0 + event-touch → reclassified to an
+invisible `coord` event (line 745); opacity-0 + action-trigger → fully dropped
+via `_drop(eid, DROP_OPACITY0)` (line 747). Confirmed against
+`output/uranium-build/maps/Map032.json`:
+- **EV075 "Theo"** (35,15), gfx `Rivaltheo`, boot page0 `opacity=0` trigger=0
+  (action) → `_drop(DROP_OPACITY0)`. Not emitted.
+- **EV009 / EV074** (intro trainers, gfx HGSS_014), boot page0 `opacity=0`
+  trigger=2 (event-touch) → become invisible coord events, not object events.
+- Ambient NPCs survive because their boot page is `opacity=255` from the start.
+
+So the missing thing is the **triggered cutscene**, not a standing NPC.
+
+**CORRECTION (logged):** an earlier roster read claimed "Theo stands at
+(35,15) at boot" — WRONG. It read the `Rivaltheo` graphic name and missed
+`opacity=0`. Theo is invisible at boot by design.
+
+**Story context (wiki-confirmed).** Moki intro = wiki step 5: after the lab
+starter test, Theo + Prof. Bamb'o run the catching tutorial at the west grass
+(Kevlar/Route-1 exit) and give Pokédex + Poké Balls. The whole ceremony cast is
+gated by **var 101 (intro/starter-ceremony progress counter; confirm the exact
+name in `reference/uranium_variables.json`)**: EV002 Theo (16,45, var101≥2/≥4),
+EV016 Bambo (15,44, var101≥1→ZP-Professor), EV075 Theo (35,15), EV076
+Chyinmunk76, EV077 Starter77, EV009/EV074 trainers, EV081 TheoChamp (switch
+125). See MEMORY "hand bucket" — `hand_conversions/Map032_EV009.pory` is the
+Pokédex-ceremony hand override (Moki-side; Map-50 lab-side is item #14).
+
+**Fix scope — medium-large, higher-uncertainty. NOT "un-drop the actor"**
+(that would wrongly park Theo in town at boot). Needs, together:
+- (a) emit Theo as a **hidden actor the cutscene reveals/spawns** (not a static
+  boot NPC);
+- (b) convert the **trigger + var101 gating** that starts the scene (per-page
+  dispatcher exists from bug-#7 work; needs trigger-type wired);
+- (c) **reveal the opacity-0 actor mid-script** — THE THORNY PART: no fork-
+  native script-callable live gfx/opacity swap (`VAR_OBJ_GFX_ID_x` resolves at
+  spawn only). Recipe = `setvar`+`removeobject`+`addobject`, same unsupported
+  class as item #6 (ceremony sprite swaps);
+- (d) **run-up / run-ahead movement** = cmd-209 `applymovement` — ALREADY
+  handled by the transpiler (`_emit_move_route`, transpiler.py:1182);
+- (e) advance story flags on exit — handled.
+
+**Represents a whole class:** every rival/intro/story cutscene corpus-wide
+works this way (actor hidden at boot, revealed + choreographed by a gated
+trigger). Do it as its own focused session, not a bolt-on to the ambient-NPC
+interpreter (which is a different subsystem: autonomous `movement_type`, no
+actor-reveal). Distinct from the ambient movement work being built 2026-07-15.
+
+**First step when the session starts** (user declined this probe for now):
+pin the exact event/page that fires the scene and how it reveals Theo (opacity
+command? page-graphic swap? spawn?) — that determines whether (c)'s spawn
+recipe is truly required. Localize per the `/debug` flow before touching code.
+Cross-ref item #14 (lab ceremony, same trigger/reveal class on Map 50).
 
 ## Accepted deferrals (not slice-1 work — listed so they aren't re-litigated)
 

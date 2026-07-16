@@ -48,6 +48,8 @@ from rpg2gba.tileset_converter.local_id_remap import (
 )
 from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS, WALKABLE_OVERRIDES
 from rpg2gba.tileset_converter.npc_gfx import DEFAULT_NPC_GFX_MAP, load_npc_gfx_map
+from rpg2gba.tileset_converter.route_bytecode import RouteRegistry
+from rpg2gba.tileset_converter.route_table_emit import emit_route_table
 
 DEFAULT_SLICE = tuple(SLICE_MAP_IDS)
 ALLOWED_MAPS = {49, 48, 32, 50, 64, 65, 172, 89}
@@ -111,6 +113,12 @@ def _regenerate_map_json(
     # temp-switch carve-out (label_for_switch) can resolve here, not just in
     # unit tests that pre_seed a fresh registry.
     flag_reg.seed_labels(SWITCHES, VARIABLES)
+    # One RouteRegistry across the whole slice: build_slice_maps interns each
+    # custom-route object's bytecode (→ its map.json trainer_sight_or_berry_tree_id
+    # route id), then emit_route_table writes the matching engine gen.h table.
+    # Single instance, two consumers — they agree by construction (no cross-pass
+    # id rebuild). See reference/guides/custom_route_interpreter.md.
+    route_reg = RouteRegistry()
     mw.build_slice_maps(
         list(DEFAULT_SLICE),
         maps_dir=out / "maps",
@@ -125,8 +133,12 @@ def _regenerate_map_json(
         flag_registry=flag_reg,
         tilesets_path=out / "tilesets.json",
         walkable_overrides=WALKABLE_OVERRIDES,
+        route_registry=route_reg,
     )
     flag_reg.save(flag_state_path)
+    # Always write (empty → stub) so the engine #include resolves even with no
+    # custom routes; keyed to the ids build_slice_maps just stamped into map.json.
+    emit_route_table(route_reg, fork)
 
 
 def main() -> int:

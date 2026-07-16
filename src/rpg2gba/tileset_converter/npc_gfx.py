@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..pbs_converter._naming import to_constant
+from .route_bytecode import encode_route
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,14 @@ MOVE_TYPE_FIXED = 0
 MOVE_TYPE_RANDOM = 1
 MOVE_TYPE_APPROACH = 2
 MOVE_TYPE_CUSTOM = 3
+
+#: pokeemerald movement type for a bytecode-interpreted Uranium custom route
+#: (`reference/guides/custom_route_interpreter.md`). `_spec_for_custom_route`
+#: assigns this, ahead of the native/static classifier below, whenever
+#: `route_bytecode.encode_route` can encode the whole move_route; routes it
+#: demotes (diagonals, move-random, toward/away-player, jump, unknown/empty)
+#: fall through to the existing classifier unchanged.
+MOVEMENT_TYPE_CUSTOM_ROUTE = "MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE"
 
 # RMXP graphic.direction values -> the facing suffix on MOVEMENT_TYPE_FACE_*.
 _DIRECTION_TO_FACING = {2: "DOWN", 4: "LEFT", 6: "RIGHT", 8: "UP"}
@@ -244,7 +253,13 @@ class MovementSpec:
       visits, for callers that can check map passability: a loop crossing a
       blocked cell would stall walking-in-place forever in-engine (RMXP
       routes may cross such cells via `through`), so
-      `metadata_wiring.build_object_events` demotes those loud."""
+      `metadata_wiring.build_object_events` demotes those loud.
+
+    `route_bytecode` is set instead of the above when `movement_type ==
+    MOVEMENT_TYPE_CUSTOM_ROUTE`: the `encode_route`-produced byte sequence
+    the engine's `MovementType_UraniumCustomRoute` interpreter plays back
+    directly (`reference/guides/custom_route_interpreter.md`). `None` for
+    every other movement type."""
 
     movement_type: str
     range_x: int = 0
@@ -253,6 +268,7 @@ class MovementSpec:
     anchor_dx: int = 0
     anchor_dy: int = 0
     path_cells: tuple[tuple[int, int], ...] = ()
+    route_bytecode: tuple[int, ...] | None = None
 
 
 def movement_spec_for(page: dict) -> MovementSpec:
@@ -285,6 +301,15 @@ def movement_spec_for(page: dict) -> MovementSpec:
       propagates if the page has no `move_route` at all — a move_type 3 page
       always carries one in the RMXP data, so a missing key means malformed
       input, not "nothing to do".
+
+    move_type 3 is INTERPRETER-FIRST: `_spec_for_custom_route` tries
+    `route_bytecode.encode_route` on the whole route before any of cases a-h
+    below; an encodable route (most cardinal steps/turns/through-toggles)
+    returns `MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE` with `route_bytecode` set,
+    played back verbatim by the engine's bytecode interpreter — no native
+    approximation needed. Cases a-h are the fallback for what `encode_route`
+    demotes (see its docstring): diagonals, move-random, toward/away-player,
+    forward/backward, jump, relative/random turns, or an unrecognized code.
 
     move_type 3 classification (checked in this order; `codes` is the route's
     command codes with the trailing code-0 sentinel entry stripped):
@@ -389,11 +414,28 @@ def _face_from_graphic(page: dict) -> str:
 
 
 def _spec_for_custom_route(page: dict) -> MovementSpec:
-    """move_type 3 classification — see `movement_spec_for`'s docstring cases
-    a-h. `page["move_route"]` (`KeyError` propagates if absent) always carries
-    ``"repeat"`` and a ``"list"`` of ``{"code": int, "parameters": [...]}``
-    entries ending in a code-0 sentinel."""
+    """move_type 3 classification. `page["move_route"]` (`KeyError` propagates
+    if absent) always carries ``"repeat"`` and a ``"list"`` of ``{"code": int,
+    "parameters": [...]}`` entries ending in a code-0 sentinel.
+
+    INTERPRETER-FIRST: before any of the native/static classification below,
+    try `route_bytecode.encode_route` on the whole route. Success (not
+    `None`) means the engine's bytecode interpreter
+    (`MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE`) can play the route verbatim —
+    deterministic pacing and arbitrary step/turn/through sequences the
+    native classifier below can't (or can only approximate) — so that wins
+    outright, no fall-through. `encode_route` returns `None` only for the v1
+    demote set (diagonals, move-random, toward/away-player, forward/
+    backward, jump, relative/random turns, unknown codes) or a route with no
+    real ops once no-op codes are dropped; only THEN do cases a-h below run,
+    completely unchanged, as the fallback for what the interpreter can't
+    encode (`reference/guides/custom_route_interpreter.md`)."""
     route = page["move_route"]
+
+    bytecode = encode_route(route, page["move_frequency"])
+    if bytecode is not None:
+        return MovementSpec(MOVEMENT_TYPE_CUSTOM_ROUTE, route_bytecode=tuple(bytecode))
+
     static_face = MovementSpec(_face_from_graphic(page))
 
     if not route["repeat"]:

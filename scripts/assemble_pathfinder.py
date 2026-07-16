@@ -162,6 +162,17 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
     # idempotent (also run at staging), so a double execution is harmless.
     if not dry_run:
         sprite_pass.run_sprite_pass(fork)
+        # Custom-route table gen.h: staging writes the real table (route ids keyed
+        # to map.json). Here just guarantee a stub exists so a fork assembled
+        # without a prior staging pass still resolves the engine #include — never
+        # clobber a real table (only-if-missing).
+        from rpg2gba.tileset_converter.route_table_emit import write_stub
+
+        route_gen = (
+            fork / "src" / "data" / "object_events" / "uranium_move_routes.gen.h"
+        )
+        if not route_gen.exists():
+            write_stub(fork)
     else:
         logger.info("  [dry] would run NPC sprite pass -> engine gen files")
 
