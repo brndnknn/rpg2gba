@@ -66,6 +66,7 @@ from .npc_gfx import (
     static_face_spec,
 )
 from .route_bytecode import RouteRegistry
+from .route_sim import simulate_route
 
 logger = logging.getLogger(__name__)
 
@@ -828,23 +829,34 @@ def build_object_events(
                             f"walk-sequence loop crosses blocked cell(s) "
                             f"{blocked} — would stall walking-in-place in-engine",
                         )
-            elif (
-                passability is not None
-                and spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
-                and passability.exit_blocked(event["x"], event["y"])
-            ):
-                # A fully-locked spawn tile can't move at all (RMXP checks the
-                # CURRENT tile before every step) — demote to static, and drop
-                # the route entirely (no route_bytecode) so the interpreter
-                # doesn't force-face it DIR_SOUTH instead of the graphic's
-                # intended facing, and no route id is wasted on a mover that
-                # will never play it back. PARTIAL blocking is left alone:
-                # the engine interpreter skips blocked steps at runtime.
-                spec = static_face_spec(
-                    page,
-                    "spawn tile blocks leaving in every direction (RMXP "
-                    "passage data) — the NPC never moves on PC either",
-                )
+            elif passability is not None and spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE:
+                # RMXP move_type_custom only advances the route index when the
+                # move actually happened (`skippable or moving? or jumping?`),
+                # and a move turns BEFORE it checks passability — so a
+                # non-skippable route blocked by static scenery stalls at that
+                # command forever, already turned toward it. Simulating the
+                # route is the only way to see this: the blocking cell is
+                # usually not the spawn tile (an `exit_blocked` spawn check
+                # only catches the sealed-in-place case), and the first move
+                # command is rarely `list[0]` (409 of 1065 corpus routes open
+                # with a change_graphic).
+                sim = simulate_route(page, event["x"], event["y"], passability)
+                if sim.stalled and not sim.moved:
+                    # Never moves on PC: a statue facing its first blocked
+                    # command. Drop the route id too — no point interning a
+                    # program that never plays, and the interpreter would
+                    # force-face it DIR_SOUTH.
+                    spec = static_face_spec(
+                        page,
+                        f"RMXP route stalls at its first executed move without "
+                        f"ever moving — blocked at {sim.stall_pos}, leaving it "
+                        f"facing {sim.stall_facing} on PC",
+                        facing=sim.stall_facing,
+                    )
+                # sim.stalled and sim.moved -> keep the route: it walks, then
+                # freezes where it stalls, which the fixed engine interpreter
+                # (collision checked before the PC advances) reproduces exactly.
+                # not sim.stalled -> keep the route.
             if spec.demoted is not None:
                 logger.warning(
                     "map %d EV%03d: movement demoted to static facing (%s)",

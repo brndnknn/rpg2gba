@@ -189,12 +189,12 @@ def _move_page(
     return page
 
 
-def _route(codes: list[int], repeat: bool = True) -> dict:
+def _route(codes: list[int], repeat: bool = True, skippable: bool = True) -> dict:
     """A `move_route` dict for `codes` in order, with the RMXP-mandated
     trailing code-0 sentinel entry appended (`movement_spec_for` strips it)."""
     return {
         "repeat": repeat,
-        "skippable": True,
+        "skippable": skippable,
         "list": [{"code": c, "parameters": []} for c in codes] + [{"code": 0, "parameters": []}],
     }
 
@@ -254,7 +254,7 @@ def test_movement_spec_for_custom_route_single_axis_repeat_encodes() -> None:
     route = _route([2, 2, 2, 3, 3, 3], repeat=True)
     spec = movement_spec_for(_move_page(3, route=route, frequency=3))
     assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
-    assert spec.route_bytecode == (102, 2, 2, 2, 3, 3, 3, 0)
+    assert spec.route_bytecode == (102, 0x01, 2, 2, 2, 3, 3, 3, 0)
     assert spec.route_bytecode == tuple(encode_route(route, 3))
     assert spec.demoted is None
 
@@ -266,7 +266,7 @@ def test_movement_spec_for_custom_route_through_toggle_encodes() -> None:
     route = _route([3, 3, 37, 3, 3, 38], repeat=True)
     spec = movement_spec_for(_move_page(3, route=route, frequency=6))
     assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
-    assert spec.route_bytecode == (0, 3, 3, 0x30, 3, 3, 0x31, 0)
+    assert spec.route_bytecode == (0, 0x01, 3, 3, 0x30, 3, 3, 0x31, 0)
     assert spec.route_bytecode == tuple(encode_route(route, 6))
     assert spec.demoted is None
 
@@ -472,7 +472,8 @@ def test_movement_spec_for_loop_out_and_back() -> None:
     assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
     expected = tuple(encode_route(route, 3))
     assert spec.route_bytecode == expected
-    assert expected == (102, 2, 4, 4, 1, 1, 3, 0)  # idle, LEFT UP UP DOWN DOWN RIGHT, END_LOOP
+    # idle, flags (skippable=0x01), LEFT UP UP DOWN DOWN RIGHT, END_LOOP
+    assert expected == (102, 0x01, 2, 4, 4, 1, 1, 3, 0)
     assert spec.demoted is None
 
 
@@ -549,8 +550,30 @@ def test_walk_sequence_quirk_table_matches_fork_source() -> None:
 # static_face_spec -------------------------------------------------------------
 
 def test_static_face_spec_uses_graphic_direction_and_reason() -> None:
+    """No `facing` override -> derives from `page["graphic"]["direction"]`, same
+    as before the parameter was added. This is the case `_demote` (custom-route
+    case-h demotions, no passability data available) relies on — it must keep
+    getting the authored graphic direction unchanged, never the simulated one."""
     spec = static_face_spec(_move_page(0, direction=8), "spawn locked")
     assert spec == MovementSpec("MOVEMENT_TYPE_FACE_UP", demoted="spawn locked")
+
+
+def test_static_face_spec_explicit_facing_overrides_graphic_direction() -> None:
+    """A caller with an RMXP route SIMULATION result (metadata_wiring, not yet
+    landed) passes `facing` explicitly to demote to the simulated stall facing
+    instead of the page's authored graphic direction — the blocked-move rule:
+    an NPC that stalls against an obstacle has already turned to face it and
+    stays turned that way, so the real on-PC facing can differ from whatever
+    direction the page happened to author."""
+    spec = static_face_spec(_move_page(0, direction=2), "blocked at spawn", facing="LEFT")
+    assert spec == MovementSpec("MOVEMENT_TYPE_FACE_LEFT", demoted="blocked at spawn")
+
+
+def test_static_face_spec_invalid_facing_fails_loud() -> None:
+    """An unrecognized facing string must raise, not silently mint a garbage
+    MOVEMENT_TYPE_FACE_SIDEWAYS constant (CLAUDE.md §4.5)."""
+    with pytest.raises(ValueError, match="facing"):
+        static_face_spec(_move_page(0, direction=2), "blocked at spawn", facing="SIDEWAYS")
 
 
 # MapPassability ---------------------------------------------------------------

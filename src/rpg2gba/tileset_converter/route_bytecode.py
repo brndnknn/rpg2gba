@@ -10,6 +10,13 @@ This module is self-contained: it does not import from or get imported by
 RMXP move-route code semantics with ``transpiler.py``'s ``route_tokens``
 (that path stays for cmd-209 script movement, which emits poryscript
 strings, not bytecode).
+
+Bytecode format v2: ``[idle, flags, op, op, ..., END]``. Byte 0 is the
+existing idle-frames header (unchanged). Byte 1 is a new ``flags`` byte:
+bit0 (``0x01``) carries the route's whole-route ``skippable`` field; all
+other bits are reserved and always emitted as 0. The opcode stream starts
+at byte 2. Interpreter PC starts at byte 2; ``END_LOOP`` jumps PC back to
+byte 2 (bumped from byte 1 in v1).
 """
 from __future__ import annotations
 
@@ -32,6 +39,10 @@ OP_WAIT = 0x20
 OP_THROUGH_ON = 0x30
 OP_THROUGH_OFF = 0x31
 OP_END_STOP = 0x0F
+
+# --- Flags byte (v2 header, contract "Bytecode format") ------------------
+
+FLAG_SKIPPABLE = 0x01
 
 # --- RMXP move_command code -> opcode / disposition ---------------------
 
@@ -109,25 +120,31 @@ def _idle_header(move_frequency: int) -> int:
 
 
 def encode_route(route: dict, move_frequency: int) -> list[int] | None:
-    """Encode an RMXP move_route dict into v1 custom-route bytecode.
+    """Encode an RMXP move_route dict into v2 custom-route bytecode.
 
     ``route`` is the RMXP move_route shape: ``{"repeat": bool,
     "skippable": bool, "list": [{"code": int, "parameters": [...]}]}``.
     ``move_frequency`` is the page's move_frequency (1-6), used for the idle
     header byte.
 
-    Returns ``[idle, op, op, ..., END]`` on success, or ``None`` if the route
-    must be DEMOTED to the native/static path: an out-of-scope command
+    Returns ``[idle, flags, op, op, ..., END]`` on success, or ``None`` if the
+    route must be DEMOTED to the native/static path: an out-of-scope command
     (diagonals, move-random, toward/away-player, forward/backward, jump,
     relative/random turns), an unrecognized code (fail-safe), or a route that
     reduces to zero real ops once no-op codes are dropped (a routeless mover
     is just a facing — not this module's job).
 
-    Raises only on a structurally broken ``route`` (e.g. missing ``"list"``);
-    malformed-but-plausible input (unknown codes, missing wait params) demotes
-    instead of raising.
+    Byte 0 is the idle header (unchanged from v1). Byte 1 is the new
+    ``flags`` byte: bit0 (``0x01``) mirrors ``route["skippable"]``, all other
+    bits reserved as 0. The opcode stream (and END_LOOP/END_STOP target)
+    starts at byte 2.
+
+    Raises only on a structurally broken ``route`` (e.g. missing ``"list"``
+    or ``"skippable"``); malformed-but-plausible input (unknown codes,
+    missing wait params) demotes instead of raising.
     """
     commands = route["list"]
+    skippable = route["skippable"]
 
     ops: list[int] = []
     for command in commands:
@@ -164,7 +181,8 @@ def encode_route(route: dict, move_frequency: int) -> list[int] | None:
         return None
 
     end = OP_END_LOOP if route.get("repeat") else OP_END_STOP
-    return [_idle_header(move_frequency)] + ops + [end]
+    flags = FLAG_SKIPPABLE if skippable else 0
+    return [_idle_header(move_frequency), flags] + ops + [end]
 
 
 # --- Route registry (dedup seam) ---------------------------------------

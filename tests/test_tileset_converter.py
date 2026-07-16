@@ -901,6 +901,7 @@ def _page(
     direction: int = 2,
     move_type: int = 0,
     through: bool = False,
+    direction_fix: bool = False,
 ) -> dict:
     return {
         "trigger": trigger,
@@ -909,6 +910,7 @@ def _page(
         "move_type": move_type,
         "list": cmds or [],
         "through": through,
+        "direction_fix": direction_fix,  # required by route_sim.simulate_route
     }
 
 
@@ -941,6 +943,8 @@ def _npc_gfx_fixture() -> dict[str, str]:
     return {
         "HGSS_000": "OBJ_EVENT_GFX_URANIUM_HGSS_000",
         "HGSS_005": "OBJ_EVENT_GFX_URANIUM_HGSS_005",
+        "HGSS_017": "OBJ_EVENT_GFX_URANIUM_HGSS_017",  # Map032 EV012, route_sim regression
+        "PU-Chyinmunk": "OBJ_EVENT_GFX_URANIUM_PU_CHYINMUNK",  # Map032 EV008
         "PU-doors1": "OBJ_EVENT_GFX_URANIUM_PU_DOORS1",  # never looked up (door sheets drop)
     }
 
@@ -1181,11 +1185,22 @@ def test_build_object_events_spawn_locked_demotes_to_static() -> None:
 
 
 def test_build_object_events_walk_sequence_blocked_path_demotes() -> None:
-    """A cardinal move_route is interpreter-first (CUSTOM_ROUTE): the loop
-    crossing a blocked cell (Map032 EV073's shape) is only PARTIALLY blocked
-    at spawn (not spawn-locked), so it correctly emits CUSTOM_ROUTE with an
-    assigned route id — the engine interpreter skips blocked steps at
-    runtime, unlike the old native WALK_SEQUENCE path this used to demote."""
+    """Map032 EV073's shape: spawn is open, but the route's FIRST move walks
+    into a sealed cell. RMXP turns before it checks passability and a
+    non-skippable route stalls on a blocked move forever, so this NPC never
+    moves on PC — it is a statue facing west. Demote to FACE_LEFT and drop
+    the route id.
+
+    This test previously asserted the opposite (CUSTOM_ROUTE kept, route id
+    assigned) on the rationale that "the engine interpreter skips blocked
+    steps at runtime". That skip was itself the bug: the interpreter advanced
+    its PC before checking collision, so a blocked step burned an opcode and
+    desynced the route. Both halves are fixed now — the spawn-only
+    `exit_blocked` gate became a real route simulation, and the interpreter
+    checks collision before committing the PC — so the old expectation
+    encoded behavior that no longer exists. Its real-data sibling,
+    `test_real_moki_town_ev073_open_spawn_first_step_blocked_demotes`, pins
+    the same NPC to the same verdict against the actual map."""
     consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
     loop = [2, 4, 4, 1, 1, 3]  # left, up x2, down x2, right
     map_json = {"map_id": 32, "events": [_event(73, 1, 2, [_moving_page(loop)])]}
@@ -1196,9 +1211,116 @@ def test_build_object_events_walk_sequence_blocked_path_demotes() -> None:
         route_registry=registry,
     )
     obj = result.object_events[0]
+    assert obj.movement_type == "MOVEMENT_TYPE_FACE_LEFT"
+    assert obj.route_id == "0"
+    assert len(registry) == 0
+
+
+_MAP032_JSON = _MAPS_DIR / "Map032.json"
+
+
+def _load_map032() -> dict:
+    """The full real Map032 (Moki Town) map JSON — tiles + events — backing the
+    route_sim regression pins below."""
+    return json.loads(_MAP032_JSON.read_text(encoding="utf-8"))
+
+
+def _real_map032_passability(data: dict) -> "npc_gfx_mod.MapPassability":
+    """The real Moki Town tile-passability oracle: the actual tilesets.json
+    passage/priority bytes for Map032's tileset, not a synthetic stand-in —
+    this is what pins the tests below to real map data rather than a
+    hand-picked scenario."""
+    tilesets = json.loads(_TILESETS_JSON.read_text(encoding="utf-8"))
+    tileset = tilesets[str(data["tileset_id"])]
+    return npc_gfx_mod.MapPassability.from_map(data, tileset)
+
+
+def _real_map032_event(data: dict, event_id: int) -> dict:
+    return next(e for e in data["events"] if e["id"] == event_id)
+
+
+_MAP032_SKIP = pytest.mark.skipif(
+    not _MAP032_JSON.exists() or not _TILESETS_JSON.exists(),
+    reason="Map032 slice data / tilesets.json not generated",
+)
+
+
+@_MAP032_SKIP
+def test_real_moki_town_ev012_spawn_sealed_demotes_facing_west() -> None:
+    """Map032 EV012 (31,44), sheet HGSS_017: the spawn tile carries a layer-1
+    decoration (tile 413, passage 0x0F) sealed in all four directions. Its
+    route [2,2,2,3,3,3,0] (move_left x3, move_right x3, skippable=false,
+    direction_fix=false, boot facing DOWN) executes move_left first: per RMXP
+    `Game_Character#move_left`, the character turns west BEFORE passability is
+    checked, and — since the spawn tile itself blocks leaving in every
+    direction — the destination is unreachable, so the very first step never
+    completes and the NPC stalls facing west forever (the west-exit woman at
+    Moki Town's edge). Expected MOVEMENT_TYPE_FACE_LEFT — NOT FACE_DOWN, which
+    is what the pre-fix code emitted by reading `graphic.direction=2` off the
+    boot page instead of simulating the route — and NOT a live route
+    (route_id "0": she never moves on PC, so no route id should be spent)."""
+    data = _load_map032()
+    passability = _real_map032_passability(data)
+    event = _real_map032_event(data, 12)
+    map_json = {"map_id": 32, "events": [event]}
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(), passability=passability,
+        route_registry=RouteRegistry(),
+    )
+    (obj,) = result.object_events
+    assert obj.movement_type == "MOVEMENT_TYPE_FACE_LEFT"
+    assert obj.route_id == "0"
+
+
+@_MAP032_SKIP
+def test_real_moki_town_ev073_open_spawn_first_step_blocked_demotes() -> None:
+    """Map032 EV073 (32,49), sheet HGSS_005: the spawn tile itself is OPEN, so
+    the OLD gate (`MapPassability.exit_blocked` on the spawn tile alone) let
+    her through as a live custom route and she walked on PC. Her first move
+    is move_left onto (31,49), which carries hedge tiles (1119/1094, passage
+    0x0F) — RMXP turns west, then finds the destination blocked, so the first
+    route command never completes and she stalls immediately, having never
+    moved. This is exactly the coverage gap `simulate_route` closes: the
+    blocking cell is the route's first destination, not the spawn tile.
+    Expected MOVEMENT_TYPE_FACE_LEFT and no route id spent (route_id "0")."""
+    data = _load_map032()
+    passability = _real_map032_passability(data)
+    event = _real_map032_event(data, 73)
+    map_json = {"map_id": 32, "events": [event]}
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(), passability=passability,
+        route_registry=RouteRegistry(),
+    )
+    (obj,) = result.object_events
+    assert obj.movement_type == "MOVEMENT_TYPE_FACE_LEFT"
+    assert obj.route_id == "0"
+
+
+@_MAP032_SKIP
+def test_real_moki_town_ev008_genuinely_mobile_keeps_custom_route() -> None:
+    """Map032 EV008, the Chyinmunk: a long cardinal route
+    ([1x5, 3x6, 4x6, 2, 2, 37, 2, 2, 38, 2, 2, 1, 0]) whose blocked legs are
+    wrapped in through_on(37)/through_off(38) toggles, so per RMXP it is
+    genuinely mobile end to end and never permanently stalls. `simulate_route`
+    must NOT over-demote it just because it shares the cardinal-route shape
+    with EV012/EV073 above — this guards against the fix regressing a real
+    mover into a statue. Expected MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE with its
+    route id intact (non-zero)."""
+    data = _load_map032()
+    passability = _real_map032_passability(data)
+    event = _real_map032_event(data, 8)
+    map_json = {"map_id": 32, "events": [event]}
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    registry = RouteRegistry()
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(), passability=passability,
+        route_registry=registry,
+    )
+    (obj,) = result.object_events
     assert obj.movement_type == mw.MOVEMENT_TYPE_CUSTOM_ROUTE
     assert obj.route_id != "0"
-    assert len(registry) == 1
 
 
 def test_build_object_events_anchor_shift_applied_to_placement() -> None:

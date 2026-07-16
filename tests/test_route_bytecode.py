@@ -4,7 +4,10 @@ SoT: reference/guides/custom_route_interpreter.md
 """
 from __future__ import annotations
 
+import pytest
+
 from rpg2gba.tileset_converter.route_bytecode import (
+    FLAG_SKIPPABLE,
     OP_END_LOOP,
     OP_END_STOP,
     OP_FACE_DOWN,
@@ -26,8 +29,8 @@ def _cmd(code: int, parameters: list | None = None) -> dict:
     return {"code": code, "parameters": parameters or []}
 
 
-def _route(codes: list[int], repeat: bool = True) -> dict:
-    return {"repeat": repeat, "skippable": True, "list": [_cmd(c) for c in codes]}
+def _route(codes: list[int], repeat: bool = True, skippable: bool = True) -> dict:
+    return {"repeat": repeat, "skippable": skippable, "list": [_cmd(c) for c in codes]}
 
 
 # --- idle header formula, all frequencies ------------------------------
@@ -72,6 +75,7 @@ def test_single_axis_loop_repeat():
     result = encode_route(route, 3)
     assert result == [
         102,
+        FLAG_SKIPPABLE,
         OP_STEP_LEFT,
         OP_STEP_LEFT,
         OP_STEP_LEFT,
@@ -98,6 +102,7 @@ def test_multi_leg_loop():
     result = encode_route(route, 6)
     assert result == [
         0,
+        FLAG_SKIPPABLE,
         OP_STEP_LEFT,
         OP_STEP_UP,
         OP_STEP_UP,
@@ -128,6 +133,7 @@ def test_through_toggle_pattern():
     result = encode_route(route, 3)
     assert result == [
         102,
+        FLAG_SKIPPABLE,
         OP_STEP_DOWN,
         OP_THROUGH_ON,
         OP_STEP_DOWN,
@@ -149,7 +155,7 @@ def test_wait_command_encodes_frames():
         "list": [_cmd(1), _cmd(15, [5])],
     }
     result = encode_route(route, 3)
-    assert result == [102, OP_STEP_DOWN, OP_WAIT, 9, OP_END_LOOP]
+    assert result == [102, FLAG_SKIPPABLE, OP_STEP_DOWN, OP_WAIT, 9, OP_END_LOOP]
 
 
 def test_wait_command_clamped_to_255():
@@ -160,7 +166,7 @@ def test_wait_command_clamped_to_255():
     }
     result = encode_route(route, 3)
     assert result[-1] == OP_END_LOOP
-    assert result[3] == 255
+    assert result[4] == 255
 
 
 def test_wait_command_missing_params_demotes():
@@ -180,6 +186,7 @@ def test_face_opcodes_all_directions():
     result = encode_route(route, 3)
     assert result == [
         102,
+        FLAG_SKIPPABLE,
         OP_FACE_DOWN,
         OP_FACE_LEFT,
         OP_FACE_RIGHT,
@@ -294,7 +301,7 @@ def test_dropped_codes_mixed_with_real_ops():
         ],
     }
     result = encode_route(route, 3)
-    assert result == [102, OP_STEP_DOWN, OP_END_LOOP]
+    assert result == [102, FLAG_SKIPPABLE, OP_STEP_DOWN, OP_END_LOOP]
 
 
 # --- terminator code 0 stops scanning ------------------------------------
@@ -307,7 +314,7 @@ def test_terminator_stops_scanning():
         "list": [_cmd(1), _cmd(2), _cmd(0), _cmd(3)],
     }
     result = encode_route(route, 3)
-    assert result == [102, OP_STEP_DOWN, OP_STEP_LEFT, OP_END_LOOP]
+    assert result == [102, FLAG_SKIPPABLE, OP_STEP_DOWN, OP_STEP_LEFT, OP_END_LOOP]
 
 
 # --- structurally broken input raises ------------------------------------
@@ -321,3 +328,48 @@ def test_missing_list_key_raises():
     except KeyError:
         raised = True
     assert raised
+
+
+def test_missing_skippable_key_raises():
+    # skippable is a required whole-route field (RMXP always emits it,
+    # corpus-verified: 1065/1065 move_type==3 routes carry the key) — a
+    # route missing it is structurally broken, not malformed-but-plausible,
+    # so this raises rather than demoting.
+    route = {"repeat": True, "list": [_cmd(1)]}
+    with pytest.raises(KeyError, match="skippable"):
+        encode_route(route, 3)
+
+
+# --- v2 flags byte (skippable) -------------------------------------------
+
+
+def test_flags_byte_set_when_skippable_true():
+    route = _route([1], skippable=True)
+    result = encode_route(route, 3)
+    assert result[1] == FLAG_SKIPPABLE
+    assert result[1] == 0x01
+
+
+def test_flags_byte_zero_when_skippable_false():
+    route = _route([1], skippable=False)
+    result = encode_route(route, 3)
+    assert result[1] == 0x00
+
+
+def test_flags_byte_only_touches_reserved_bits_zero():
+    # No bit other than bit0 may ever be set — all higher bits reserved.
+    route = _route([1], skippable=True)
+    result = encode_route(route, 3)
+    assert result[1] & ~0x01 == 0
+
+
+def test_skippable_true_vs_false_opcode_stream_identical():
+    # Only the flags byte should differ between skippable=True/False; the
+    # idle header and opcode stream must be byte-identical.
+    codes = [2, 2, 2, 3, 3, 3]
+    on = encode_route(_route(codes, skippable=True), 3)
+    off = encode_route(_route(codes, skippable=False), 3)
+    assert on[0] == off[0]
+    assert on[2:] == off[2:]
+    assert on[1] == FLAG_SKIPPABLE
+    assert off[1] == 0x00

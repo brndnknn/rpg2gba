@@ -120,6 +120,12 @@ _WALK_SEQUENCE_QUIRKS: dict[tuple[str, str, str, str], tuple[int, str]] = {
 # is blocked by a tile whose passage has the matching bit set.
 _RMXP_PASSAGE_BITS = {"DOWN": 0x01, "LEFT": 0x02, "RIGHT": 0x04, "UP": 0x08}
 
+# The direction a step's REVERSE-side check consults (021_Game_Character_v17.rb
+# `passableEx?` calls `Game_Map#passable?(new_x, new_y, 10 - d, self)` — RMXP
+# direction codes 2/4/6/8 for down/left/right/up satisfy `10 - d` = the
+# opposite code in every case: 10-2=8, 10-4=6, 10-6=4, 10-8=2).
+_REVERSE_FACING = {"DOWN": "UP", "UP": "DOWN", "LEFT": "RIGHT", "RIGHT": "LEFT"}
+
 # Two/three-direction FACE_* combos the fork defines
 # (engine/include/constants/event_object_movement.h), keyed by the exact
 # direction set `_look_spec_for` can produce — every non-empty proper subset
@@ -679,13 +685,34 @@ def _demote(page: dict, offending_codes: list[int], reason: str) -> MovementSpec
     return static_face_spec(page, f"{reason} (codes {codes})")
 
 
-def static_face_spec(page: dict, reason: str) -> MovementSpec:
-    """A static ``MOVEMENT_TYPE_FACE_<page's graphic.direction>`` spec with
-    `demoted` set. For callers that must fall a moving spec back to standing
-    for reasons the route alone can't show (`metadata_wiring.
-    build_object_events`'s map-passability gates) — always paired with a loud
-    log, never silent (CLAUDE.md §4.5)."""
-    return MovementSpec(_face_from_graphic(page), demoted=reason)
+def static_face_spec(page: dict, reason: str, facing: str | None = None) -> MovementSpec:
+    """A static ``MOVEMENT_TYPE_FACE_<dir>`` spec with `demoted` set. For
+    callers that must fall a moving spec back to standing for reasons the
+    route alone can't show (`metadata_wiring.build_object_events`'s
+    map-passability gates) — always paired with a loud log, never silent
+    (CLAUDE.md §4.5).
+
+    By default `<dir>` comes from the page's authored `graphic.direction`
+    (`_face_from_graphic`) — this is what `_demote` (case-h unrepresentable
+    custom routes, no passability data available) relies on and must keep
+    getting.
+
+    `facing` lets a caller override that with a direction derived from an
+    RMXP route SIMULATION instead of the authored graphic: RMXP's blocked-move
+    rule means an NPC that stalls against an obstacle has already turned to
+    face the blocked direction and stays turned that way, so its real
+    on-PC-arrival facing is the simulated stall facing, not whatever the page
+    happened to author as `graphic.direction`. Must be one of the
+    `_DIRECTION_TO_FACING` values (`"DOWN"`/`"LEFT"`/`"RIGHT"`/`"UP"`); any
+    other string fails loud rather than minting a garbage
+    ``MOVEMENT_TYPE_FACE_*`` constant (CLAUDE.md §4.5)."""
+    if facing is None:
+        movement = _face_from_graphic(page)
+    else:
+        if facing not in _DIRECTION_TO_FACING.values():
+            raise ValueError(f"unknown facing {facing!r}")
+        movement = f"MOVEMENT_TYPE_FACE_{facing}"
+    return MovementSpec(movement, demoted=reason)
 
 
 @dataclass(frozen=True)
@@ -769,6 +796,78 @@ class MapPassability:
         return not any(
             self._direction_blocked(x, y, bit) for bit in _RMXP_PASSAGE_BITS.values()
         )
+
+    def can_step(self, x: int, y: int, facing: str) -> bool:
+        """Can a character standing at `(x, y)` take one step `facing`?
+
+        RMXP passability is two-sided and directional, NOT an aggregate
+        "is the destination cell clear" test. `021_Game_Character_v17.rb`
+        `move_left` (and `move_down`/`move_right`/`move_up`, symmetric):
+
+            def move_left(turn_enabled = true)
+              turn_left if turn_enabled
+              if passable?(@x, @y, 4)
+                turn_left
+                @x -= 1
+                ...
+
+        `Game_Character#passable?(x, y, d)` is `passableEx?(x, y, d, false)`
+        (lines 106-117 of the same file):
+
+            def passableEx?(x, y, d, strict=false)
+              new_x = x + (d == 6 ? 1 : d == 4 ? -1 : 0)
+              new_y = y + (d == 2 ? 1 : d == 8 ? -1 : 0)
+              return false unless self.map.valid?(new_x, new_y)
+              return true if @through
+              ...
+              return false unless self.map.passable?(x, y, d, self)
+              return false unless self.map.passable?(new_x, new_y, 10 - d, self)
+
+        i.e. leaving `(x, y)` in direction `d` requires the DESTINATION to be
+        in bounds, the SOURCE tile's own directional passage bit for `d` clear
+        (`Game_Map#passable?(x, y, d, ...)`, `025__Game_Map_v17.rb` lines
+        163-243 — the same top-down layered scan `_direction_blocked` already
+        implements: a tile with the bit set, or fully sealed (`0x0F`), blocks;
+        a priority-0 tile without the bit decides passable), AND the
+        DESTINATION tile's passage bit for the REVERSE direction (`10 - d`,
+        e.g. leaving west checks the destination's EAST bit) also clear via
+        that same scan. One sentence: a step is blocked if either the tile
+        you're leaving seals its own exit in that direction, or the tile
+        you're entering seals its entry from the opposite side — never a
+        same-tile aggregate "any direction blocked" test.
+
+        `open_cells` (converter-level collision unblocks) makes a cell fully
+        open on whichever side it participates as source or destination,
+        matching `exit_blocked`/`cell_clear`.
+
+        Out of bounds: RMXP's own `valid?(new_x, new_y)` bounds check fails
+        closed (`passableEx?` returns `false`), and a character can never be
+        standing at an out-of-bounds `(x, y)` in the first place — so both
+        sides of this query treat out-of-bounds as BLOCKED (unlike
+        `exit_blocked`'s OOB-is-open convention; RMXP cannot walk off the map
+        edge)."""
+        if facing not in _RMXP_PASSAGE_BITS:
+            raise ValueError(f"unknown facing {facing!r}")
+        if not self._in_bounds(x, y):
+            return False
+        dx, dy = _DIR_VECTOR[facing]
+        nx, ny = x + dx, y + dy
+        if not self._in_bounds(nx, ny):
+            return False
+
+        source_blocked = (
+            False if (x, y) in self.open_cells
+            else self._direction_blocked(x, y, _RMXP_PASSAGE_BITS[facing])
+        )
+        if source_blocked:
+            return False
+
+        reverse_bit = _RMXP_PASSAGE_BITS[_REVERSE_FACING[facing]]
+        dest_blocked = (
+            False if (nx, ny) in self.open_cells
+            else self._direction_blocked(nx, ny, reverse_bit)
+        )
+        return not dest_blocked
 
 
 def is_door_sheet(character_name: str) -> bool:

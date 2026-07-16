@@ -6176,6 +6176,10 @@ enum
 #define URANIUM_ROUTE_SET_PC(s, v)       ((s)->sRoutePacked = ((s)->sRoutePacked & 0x100) | ((v) & 0xFF))
 #define URANIUM_ROUTE_THROUGH(s)         ((s)->sRoutePacked & 0x100)
 #define URANIUM_ROUTE_SET_THROUGH(s, on) ((s)->sRoutePacked = (on) ? ((s)->sRoutePacked | 0x100) : ((s)->sRoutePacked & ~0x100))
+// v2 bytecode: route[1] is the flags byte, bit0 = RMXP route.skippable.
+// Unlike PC/through this is immutable per-route data, not sprite scratch, so
+// it reads the route pointer, not the sprite.
+#define URANIUM_ROUTE_SKIPPABLE(route)   ((route)[1] & 0x01)
 
 // RMXP move-route direction codes (1=down 2=left 3=right 4=up) -> engine DIR_*.
 static enum Direction UraniumRoute_RmxpDirToEngine(u8 rmxpDir)
@@ -6212,7 +6216,7 @@ static bool8 MovementType_UraniumCustomRoute_Callback(struct ObjectEvent *object
     {
     case URANIUM_ROUTE_STATE_INIT:
         ClearObjectEventMovement(objectEvent, sprite);
-        URANIUM_ROUTE_SET_PC(sprite, 1); // byte 0 is the idle header; opcodes start at byte 1
+        URANIUM_ROUTE_SET_PC(sprite, 2); // byte 0 = idle header, byte 1 = flags; opcodes start at byte 2
         URANIUM_ROUTE_SET_THROUGH(sprite, FALSE);
         sprite->sTypeFuncId = URANIUM_ROUTE_STATE_FETCH_EXEC;
         return TRUE;
@@ -6223,7 +6227,7 @@ static bool8 MovementType_UraniumCustomRoute_Callback(struct ObjectEvent *object
         switch (op)
         {
         case URANIUM_ROUTE_OP_END_LOOP:
-            URANIUM_ROUTE_SET_PC(sprite, 1);
+            URANIUM_ROUTE_SET_PC(sprite, 2);
             return TRUE; // no time cost; loop back and re-fetch immediately
 
         case URANIUM_ROUTE_OP_END_STOP:
@@ -6234,9 +6238,31 @@ static bool8 MovementType_UraniumCustomRoute_Callback(struct ObjectEvent *object
         case URANIUM_ROUTE_OP_STEP_RIGHT:
         case URANIUM_ROUTE_OP_STEP_UP:
             dir = UraniumRoute_RmxpDirToEngine(op);
-            URANIUM_ROUTE_SET_PC(sprite, pc + 1);
-            if (!URANIUM_ROUTE_THROUGH(sprite) && GetCollisionInDirection(objectEvent, dir) != COLLISION_NONE)
-                return UraniumRoute_BeginIdle(sprite, route[0]); // blocked: skip, idle like a step
+            if (!URANIUM_ROUTE_THROUGH(sprite)
+                && GetCollisionInDirection(objectEvent, dir) != COLLISION_NONE)
+            {
+                if (URANIUM_ROUTE_SKIPPABLE(route))          // skippable: advance past it, idle
+                {
+                    URANIUM_ROUTE_SET_PC(sprite, pc + 1);
+                    return UraniumRoute_BeginIdle(sprite, route[0]);
+                }
+                // Non-skippable (RMXP default): DO NOT advance the PC — retry
+                // this same opcode next cycle (matches RMXP's stall-in-place,
+                // cf. MoveNextDirectionInSequence's untouched sequence index on
+                // plain collision, ~line 5165). Divergence from RMXP: real RMXP
+                // shows no animation at all while blocked (a blocked character
+                // is never `moving?`); we deliberately substitute a walk-in-place
+                // anim instead, matching pokeemerald's own idiom
+                // (WalkBackAndForth_Step2 / MoveNextDirectionInSequence) rather
+                // than freezing. Requested divergence, not a bug.
+                SetObjectEventDirection(objectEvent, dir);   // RMXP turns even when blocked
+                ObjectEventSetSingleMovement(objectEvent, sprite,
+                    GetWalkInPlaceNormalMovementAction(dir));
+                objectEvent->singleMovementActive = TRUE;
+                sprite->sTypeFuncId = URANIUM_ROUTE_STATE_EXEC_WALK;
+                return TRUE;                                  // PC NOT advanced -> retries same opcode
+            }
+            URANIUM_ROUTE_SET_PC(sprite, pc + 1);             // commit only on the success path
             ObjectEventSetSingleMovement(objectEvent, sprite, GetWalkNormalMovementAction(dir));
             objectEvent->singleMovementActive = TRUE; // required: exec advances the walk each frame only while set (WalkBackAndForth_Step2)
             sprite->sTypeFuncId = URANIUM_ROUTE_STATE_EXEC_WALK;
@@ -6300,6 +6326,7 @@ static bool8 MovementType_UraniumCustomRoute_Callback(struct ObjectEvent *object
 #undef URANIUM_ROUTE_SET_PC
 #undef URANIUM_ROUTE_THROUGH
 #undef URANIUM_ROUTE_SET_THROUGH
+#undef URANIUM_ROUTE_SKIPPABLE
 
 static void MovementType_UraniumCustomRoute(struct Sprite *sprite)
 {
