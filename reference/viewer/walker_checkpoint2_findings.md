@@ -104,6 +104,28 @@ fired. Certify triggering at the slice gate; classify warp types
 (door/stairs/edge) in the converter as a later refinement. Accepted as-is for
 slice v1.
 
+**RESOLVED 2026-07-16 — this deferral is closed, and two thirds of it was a
+misreading of the engine.** Disposition (full detail: `SLICE1_TODO.md` Done, #8):
+
+- **"stairs/holes" — no defect.** `MB_NON_ANIMATED_DOOR` *is* vanilla's own
+  choice for interior floor-to-floor stairs. Verified against real Game Freak
+  data (§4.7, not memory): `LittlerootTown_BrendansHouse_1F`'s upstairs warp
+  (8,2) → metatile `0x211` of `gTileset_BrendansMaysHouse` → attribute byte
+  `0x60` = `MB_NON_ANIMATED_DOOR`; the 2F return warp matches. We already emit
+  the right thing.
+- **"arrow warps / connections" — belongs to the connections work**, not to warp
+  classing. See §4 below and `SLICE1_TODO.md` #9.
+- **"animated doors" — real, user-accepted skip.** Uranium's doors animate as
+  *event sprites* (charset rows = opening frames cycled by move-route Turn/Wait
+  + SE), which `classify_event` discards when it turns a player-touch code-201
+  into a `WarpSpec`. Two rebuild approaches were scoped and rejected as not worth
+  the cost for pure feel; both are written up in `SLICE1_TODO.md` Done #8 so they
+  don't get re-derived.
+- **The triggering caveat is closed.** The step-on path this section flagged as
+  never-fired (`IsWarpMetatileBehavior` / `TryStartWarpEventScript`) has since
+  been exercised for real across the user's slice boot walks — warps fire on
+  step-on, both directions, on every slice door and staircase.
+
 ## 4. Seamless map connections unconverted (recon 2026-07-02)
 
 Uranium ships `Data/connections.dat` (Marshal): **14 seamless edge connections**,

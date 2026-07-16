@@ -43,23 +43,6 @@ conversion/streaming rejected by arithmetic. Slice-1 bar still the user's
 call: recommended = ~15-row table covering the 8 slice maps (vs. accept
 today's MUS_LITTLEROOT-everywhere).
 
-### 8. Warp-class refinement
-
-Every warp cell gets MB_NON_ANIMATED_DOOR regardless of kind (door / stairs /
-mat) — deferred from Checkpoint 2. Doors don't animate open; stairs/mats behave
-like doors. Fidelity polish, low risk. Fix = per-kind behavior in the tileset
-warp-metatile emission (`build_slice_tilesets` / `tile_map.WarpInfo`).
-
-**H4 (post-warp facing always DOWN) is SPLIT OUT and FIXED — user retest PASSED
-2026-07-16 (ROM `e035dac1`).** User decision: the two halves are unrelated (facing
-turned out to be a map-script concern, not a metatile-behavior one), so #8 now
-covers ONLY the per-kind behavior polish above. Facing is fixed data-only via the
-native `MAP_SCRIPT_ON_WARP_INTO_MAP_TABLE` + `turnobject` hook — no engine,
-struct, schema, or `mapjson.cpp` change. Full narrative, the two failed prior
-attempts and why they're dead, and the verified engine gotchas: MEMORY.md
-"WARP-ARRIVAL FACING" / "OPTION C". **Do not try to fix facing via metatile
-behaviors (Option A) or a `WarpEvent` field (Option B).**
-
 ### 9. Moki Town east edge — the Route 03 seam
 
 `connections.dat` seams are unconverted (Checkpoint-2 deferral); Moki Town E ↔
@@ -110,8 +93,7 @@ dispositions 2026-07-15:**
   (fine-tune round), rebuilt + taildropped 2026-07-15, retest pending.
 - Lab Pokédex ceremony trigger + void-walk (L section) → NEW item #14.
 - H4 post-warp facing → **FIXED + retest PASSED 2026-07-16** (native
-  ON_WARP_INTO_MAP_TABLE + turnobject; see #8 and MEMORY.md "OPTION C"). #8 itself
-  stays open for the per-kind warp-behavior polish only.
+  ON_WARP_INTO_MAP_TABLE + turnobject; see MEMORY.md "OPTION C" and Done #8).
 - M6 "granny sprite wrong" → NOT a bug: the Rare-Candy giver (M32 EV027) is
   sheet HGSS_008 in Uranium's own data, which is a *young woman in a tank
   top*; our strip converts it faithfully. "Granny" was the checklist's label
@@ -439,6 +421,55 @@ Cross-ref item #14 (lab ceremony, same trigger/reveal class on Map 50).
 
 ## Done
 
+- **2026-07-16 — #8 Warp-class refinement: CLOSED. Its premise was wrong; the
+  one real gap (door animation) is a user-accepted skip.** Investigated the three
+  warp classes the Checkpoint-2 deferral named
+  (`reference/viewer/walker_checkpoint2_findings.md` §3) and all three resolved
+  without a build:
+  - **Stairs/mats — already correct, nothing to fix.** `MB_NON_ANIMATED_DOOR` is
+    exactly what vanilla uses for interior floor-to-floor stairs; verified by
+    decoding real Game Freak data, not from memory:
+    `LittlerootTown_BrendansHouse_1F`'s upstairs warp (8,2) sits on metatile
+    `0x211` of `gTileset_BrendansMaysHouse`, whose byte in
+    `metatile_attributes.bin` is `0x60` = `MB_NON_ANIMATED_DOOR` (the 2F return
+    warp matches). "Stairs/mats behave like doors" was a misreading of the
+    engine, not a defect.
+  - **Map-edge arrow warps — not slice-1.** These are the unconverted
+    `connections.dat` seams (the Moki Town x=8 exits EV23/36/37 → Route 01);
+    tracked under #9 / the slice-2 connections work, not here.
+  - **Doors don't animate — REAL, but skipped (user decision 2026-07-16).**
+    Uranium's 5 Moki Town doors are genuinely animated, the RPG Maker way: a
+    player-touch event carrying a door charset (EV3 `FKdoors1`; EV5/6/7/17
+    `PU-doorsdew`) whose 4 "facing" rows are opening frames, cycled by
+    `Turn`/`Wait` move-route commands + an "Entering Door" SE, then the player
+    walks up through and it closes. `metadata_wiring.classify_event` drops all
+    of it — a player-touch event with a code-201 becomes a bare `WarpSpec` and
+    the object event (door sprite included) is discarded; today's door art is
+    just the closed door baked into the tileset column.
+  Two approaches were scoped and both rejected as not worth the cost for pure
+  feel — **if this is ever revisited, don't re-derive them:** (A) *faithful RMXP*
+  — keep the door as an object event + `coord_event` trigger and let the
+  transpiler emit the SE/frame-cycle/walk/warp it already converts; zero engine
+  change, reuses the sprite pipeline so frames get an OBJ palette bank (the door
+  sheet is a prop, cf. `BREAK_PROP_SHEETS`/`fk107-rocksmash`); open risks =
+  sprite draw order over the door tile and `coord_event` trigger semantics.
+  (B) *native Emerald door* — convert frames to BG door-anim tiles + a
+  `sDoorAnimGraphicsTable` entry per door (keyed metatile+tileset,
+  `engine/src/field_door.c:16-24, 331-338, 612-620`), gated by `MB_ANIMATED_DOOR`
+  and `TryDoorWarp` (`field_control_avatar.c:1097`, north-approach only); gives
+  the native open/walk-in/close + exit animation, but costs a C table edit per
+  door AND the frames must quantize into one of the map's existing **BG**
+  palettes (they come from a sprite sheet — real silent-colour-garbage risk).
+  Note a table entry is mandatory: `MB_ANIMATED_DOOR` with no match makes
+  `GetDoorGraphics` return NULL and the animation silently no-ops.
+- **2026-07-16 — #8/H4 post-warp facing: FIXED, user retest PASSED** (ROM
+  `e035dac1`, commit `e520c529`). Native `MAP_SCRIPT_ON_WARP_INTO_MAP_TABLE` +
+  `turnobject`, data-only — no engine, struct, schema or `mapjson.cpp` change.
+  Two earlier attempts failed and are **dead ends — do not re-attempt**: Option A
+  (`MB_*_ARROW_WARP` stamping) re-triggers structurally, Option B
+  (`arrivalDirection` on `struct WarpEvent`) broke every warp via an 8→10 byte
+  stride change. Full narrative + verified engine gotchas: MEMORY.md
+  "WARP-ARRIVAL FACING" / "OPTION C".
 - **2026-07-13 — #5 new_game.c test harness: user decision — KEEP
   indefinitely** as the standing HM/field-move test rig for slice expansion
   (new maps will need badge/move grants to exercise their HM paths; expected
