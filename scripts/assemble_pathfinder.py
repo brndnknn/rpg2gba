@@ -317,7 +317,9 @@ def run_fork_pass(
             pory_text = pory_text.rstrip() + "\n\n" + disp_path.read_text(encoding="utf-8")
 
         # Every pokeemerald map needs a `<Map>_MapScripts` symbol (its map-script
-        # header table). The agent emits none, so define an empty one.
+        # header table). Maps with an on-warp facing block (metadata_wiring
+        # .render_arrival_facing_script, appended above via the dispatcher file)
+        # bring their own; the rest get an empty one.
         mapscripts_label = f"{map_dir_name}_MapScripts"
         if mapscripts_label not in pory_text:
             pory_text = f"mapscripts {mapscripts_label} {{}}\n\n" + pory_text

@@ -924,8 +924,14 @@ def _sw_cond(switch_id: int) -> dict:
     return {"switch1_valid": True, "switch1_id": switch_id}
 
 
-def _transfer(dest_uid: int, x: int, y: int) -> dict:
-    return {"code": 201, "indent": 0, "parameters": [0, dest_uid, x, y, 2, 1]}
+def _transfer(dest_uid: int, x: int, y: int, direction: int | None = 2) -> dict:
+    """A code-201 Transfer Player command. `direction=None` produces a
+    too-short parameter list (no index 4) — the "malformed/legacy event" case
+    `_event_transfers` must distinguish from an explicit dir=0."""
+    params = [0, dest_uid, x, y]
+    if direction is not None:
+        params += [direction, 1]  # dir, fade
+    return {"code": 201, "indent": 0, "parameters": params}
 
 
 def _npc_gfx_fixture() -> dict[str, str]:
@@ -957,6 +963,27 @@ def test_classify_event() -> None:
     # scripted story transfer (action trigger) to in-slice -> object (keeps its .pory warp)
     letter = _event(21, 5, 8, [_page(trigger=0, cmds=[_transfer(48, 4, 6)])])
     assert mw.classify_event(letter, _SLICE)[0] == "object"
+
+
+def test_event_transfers_dest_dir_carried_through() -> None:
+    """_event_transfers / classify_event carry parameters[4] (dir) through into
+    the resulting WarpSpec.dest_dir, for every non-default direction value."""
+    for direction in (2, 4, 6, 8):
+        door = _event(2, 10, 11, [_page(trigger=1, cmds=[_transfer(32, 28, 31, direction)])])
+        assert mw._event_transfers(door) == [(32, 28, 31, direction)]
+        kind, spec = mw.classify_event(door, _SLICE)
+        assert kind == "warp"
+        assert spec.dest_dir == direction
+
+
+def test_event_transfers_short_param_list_dest_dir_none() -> None:
+    """A code-201 command too short to carry index 4 (a malformed/legacy event)
+    yields dest_dir is None — NOT 0 (0 is a real, distinct "retain facing" value)."""
+    door = _event(2, 10, 11, [_page(trigger=1, cmds=[_transfer(32, 28, 31, direction=None)])])
+    assert mw._event_transfers(door) == [(32, 28, 31, None)]
+    kind, spec = mw.classify_event(door, _SLICE)
+    assert kind == "warp"
+    assert spec.dest_dir is None
 
 
 # --- fix #3: through=False blank-graphic obstacle blocking --------------------
@@ -1737,6 +1764,120 @@ def test_warp_arrival_out_of_bounds_falls_back(caplog: pytest.LogCaptureFixture)
     assert len(resolved[49]) == 2  # B's warp (in-bounds) still gets its arrival
     assert resolved[49][0].dest_warp_id == 0  # fallback: B's return warp (index 0)
     assert "out of bounds" in caplog.text
+
+
+# --- post-warp arrival facing --------------------------------------------------
+
+def _spec(dest_uid: int, x: int, y: int, direction: int | None) -> mw.WarpSpec:
+    return mw.WarpSpec(src_x=0, src_y=0, dest_uid=dest_uid, dest_x=x, dest_y=y, dest_dir=direction)
+
+
+def test_compute_arrival_facings_direction_mapping() -> None:
+    """Each RMXP numpad Transfer Player direction maps to its engine DIR_*
+    constant (see `_ARRIVAL_DIR_CONST`)."""
+    maps = {48: {"width": 20, "height": 20}}
+    for direction, dir_const in (
+        (4, "DIR_WEST"), (6, "DIR_EAST"), (8, "DIR_NORTH"), (2, "DIR_SOUTH"),
+    ):
+        warp_lists = {49: [_spec(48, 5, 6, direction)]}
+        out = mw.compute_arrival_facings(warp_lists, maps)
+        assert out == {48: [mw.ArrivalFacing(5, 6, dir_const)]}
+
+
+def test_compute_arrival_facings_skips_zero_and_none() -> None:
+    """dest_dir 0 ("retain facing", engine default applies) and None
+    (malformed/legacy event) produce no arrival entry at all for that map."""
+    maps = {48: {"width": 20, "height": 20}}
+    warp_lists = {49: [_spec(48, 5, 6, 0), _spec(49, 2, 3, None)]}
+    assert mw.compute_arrival_facings(warp_lists, maps) == {}
+
+
+def test_compute_arrival_facings_unknown_direction_fails_loud() -> None:
+    """A direction outside {0, 2, 4, 6, 8} is an unrecognized RMXP transfer
+    dir — fail loud rather than silently dropping it or guessing a facing."""
+    maps = {48: {"width": 20, "height": 20}}
+    warp_lists = {49: [_spec(48, 5, 6, 5)]}
+    with pytest.raises(ValueError):
+        mw.compute_arrival_facings(warp_lists, maps)
+
+
+def test_compute_arrival_facings_same_coord_same_dir_dedups() -> None:
+    """Two warps (from different source maps) landing on the identical
+    (dest_uid, x, y) with the SAME facing collapse into exactly one table row."""
+    maps = {48: {"width": 20, "height": 20}}
+    warp_lists = {
+        49: [_spec(48, 5, 6, 4)],
+        50: [_spec(48, 5, 6, 4)],
+    }
+    out = mw.compute_arrival_facings(warp_lists, maps)
+    assert out == {48: [mw.ArrivalFacing(5, 6, "DIR_WEST")]}
+
+
+def test_compute_arrival_facings_same_coord_different_dir_fails_loud() -> None:
+    """Two warps landing on the identical coord but wanting DIFFERENT facings
+    can't be told apart by coordinate dispatch alone — fail loud rather than
+    silently picking one (which would be wrong half the time)."""
+    maps = {48: {"width": 20, "height": 20}}
+    warp_lists = {
+        49: [_spec(48, 5, 6, 4)],
+        50: [_spec(48, 5, 6, 6)],
+    }
+    with pytest.raises(ValueError):
+        mw.compute_arrival_facings(warp_lists, maps)
+
+
+def test_compute_arrival_facings_out_of_bounds_skipped() -> None:
+    """An arrival coord outside the destination map's bounds gets no arrival
+    warp_event of its own (`_resolve_all_warp_events` falls back to
+    return-warp pairing for it instead), so there's no distinct landing tile
+    to key a facing override on — skipped, not an error."""
+    maps = {48: {"width": 10, "height": 10}}
+    warp_lists = {49: [_spec(48, 99, 99, 4)]}
+    assert mw.compute_arrival_facings(warp_lists, maps) == {}
+
+
+def test_render_arrival_facing_script_empty_is_none() -> None:
+    """No facings for a map -> None (the caller leaves the empty `mapscripts`
+    stub alone rather than injecting an empty script)."""
+    consts = mc.MapConstants(48, "MAP_X", "MAP_URANIUM_48", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    assert mw.render_arrival_facing_script(consts, []) is None
+
+
+def test_render_arrival_facing_script_two_arrivals_golden() -> None:
+    """Golden-ish shape for a two-arrival map: the mapscripts block wired to
+    ON_WARP_INTO_MAP_TABLE, the getplayerxy readback, and one guarded
+    turnobject per arrival — the first branch is `if`, later ones `elif`."""
+    consts = mc.MapConstants(
+        48, "MAP_MOKI_TOWN_PLAYERS_HOUSE_2F", "MAP_URANIUM_48", "LAYOUT_X", "MAPSEC_X",
+        "MokiTownPlayersHouse2F", "Moki Town Player's House 2F",
+    )
+    facings = [
+        mw.ArrivalFacing(5, 6, "DIR_WEST"),
+        mw.ArrivalFacing(2, 3, "DIR_NORTH"),
+    ]
+    text = mw.render_arrival_facing_script(consts, facings)
+    assert text is not None
+    assert "mapscripts MokiTownPlayersHouse2F_MapScripts {" in text
+    assert "MAP_SCRIPT_ON_WARP_INTO_MAP_TABLE [" in text
+    assert f"{mw._FACING_GUARD_VAR}, 0: MokiTownPlayersHouse2F_OnWarpFacing" in text
+    assert f"getplayerxy({mw._FACING_X_VAR}, {mw._FACING_Y_VAR})" in text
+
+    # one turnobject per arrival, with the right facing constant
+    assert text.count("turnobject(LOCALID_PLAYER,") == 2
+    assert "turnobject(LOCALID_PLAYER, DIR_NORTH)" in text
+    assert "turnobject(LOCALID_PLAYER, DIR_WEST)" in text
+
+    # sorted (y, x) ascending -> (2, 3)/NORTH first, (5, 6)/WEST second; the
+    # first guard is `if`, the second `elif`, each with the matching coords.
+    if_idx = text.index(
+        f"if (var({mw._FACING_X_VAR}) == 2 && var({mw._FACING_Y_VAR}) == 3)"
+    )
+    elif_idx = text.index(
+        f"elif (var({mw._FACING_X_VAR}) == 5 && var({mw._FACING_Y_VAR}) == 6)"
+    )
+    assert if_idx < elif_idx
+    assert text.count("    if (") == 1
+    assert text.count("elif (") == 1
 
 
 def test_map_json_schema() -> None:

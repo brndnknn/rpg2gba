@@ -50,12 +50,15 @@ mat) — deferred from Checkpoint 2. Doors don't animate open; stairs/mats behav
 like doors. Fidelity polish, low risk. Fix = per-kind behavior in the tileset
 warp-metatile emission (`build_slice_tilesets` / `tile_map.WarpInfo`).
 
-- **NEW (boot-walk 2026-07-14, H4): post-warp facing is always DOWN.** After
-  the house stairs the player should face away from the stairs (right on 2F,
-  left back on 1F — RMXP's transfer command carries an explicit arrival
-  direction we currently drop). Emerald derives exit facing from the arrival
-  metatile behavior / warp kind, so this likely lands together with the
-  per-kind behavior work; the RMXP direction is in each 201 command's params.
+**H4 (post-warp facing always DOWN) is SPLIT OUT and FIXED — user retest PASSED
+2026-07-16 (ROM `e035dac1`).** User decision: the two halves are unrelated (facing
+turned out to be a map-script concern, not a metatile-behavior one), so #8 now
+covers ONLY the per-kind behavior polish above. Facing is fixed data-only via the
+native `MAP_SCRIPT_ON_WARP_INTO_MAP_TABLE` + `turnobject` hook — no engine,
+struct, schema, or `mapjson.cpp` change. Full narrative, the two failed prior
+attempts and why they're dead, and the verified engine gotchas: MEMORY.md
+"WARP-ARRIVAL FACING" / "OPTION C". **Do not try to fix facing via metatile
+behaviors (Option A) or a `WarpEvent` field (Option B).**
 
 ### 9. Moki Town east edge — the Route 03 seam
 
@@ -106,7 +109,9 @@ dispositions 2026-07-15:**
 - Map032 NPC movement (M5 + all four map-feedback flags) → fixed under #12
   (fine-tune round), rebuilt + taildropped 2026-07-15, retest pending.
 - Lab Pokédex ceremony trigger + void-walk (L section) → NEW item #14.
-- H4 post-warp facing → folded into #8 (see there).
+- H4 post-warp facing → **FIXED + retest PASSED 2026-07-16** (native
+  ON_WARP_INTO_MAP_TABLE + turnobject; see #8 and MEMORY.md "OPTION C"). #8 itself
+  stays open for the per-kind warp-behavior polish only.
 - M6 "granny sprite wrong" → NOT a bug: the Rare-Candy giver (M32 EV027) is
   sheet HGSS_008 in Uranium's own data, which is a *young woman in a tank
   top*; our strip converts it faithfully. "Granny" was the checklist's label

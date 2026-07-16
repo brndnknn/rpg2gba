@@ -77,6 +77,23 @@ DEFAULT_MAPSEC = "MAPSEC_LITTLEROOT_TOWN"  # vanilla section reused (minted MAPS
 NO_SCRIPT = "0x0"
 
 TRANSFER_CODE = 201  # RMXP "Transfer Player"; params [method, dest_map, x, y, dir, fade]
+
+# RMXP Transfer Player `dir` param -> the direction the player faces on arrival
+# (numpad convention). 0 = "retain current facing" and is deliberately absent:
+# nothing in script land can read the pre-warp facing, so a dir=0 arrival keeps
+# the engine's own `GetAdjustedInitialDirection` result (overworld.c) — which for
+# our plain-floor arrival tiles is DIR_SOUTH, the correct vanilla door
+# convention. User decision 2026-07-16; revisit only if a map visibly needs it.
+_ARRIVAL_DIR_CONST = {2: "DIR_SOUTH", 4: "DIR_WEST", 6: "DIR_EAST", 8: "DIR_NORTH"}
+
+# Scratch vars for the on-warp facing script. VAR_TEMP_1 == 0 is the vanilla
+# ON_WARP_INTO_MAP_TABLE trigger idiom (temp vars are zeroed by
+# ClearTempFieldEventData on every map transition, event_data.c); TEMP_2/3 hold
+# the getplayerxy readback. All three are scratch inside one synchronous script.
+_FACING_GUARD_VAR = "VAR_TEMP_1"
+_FACING_X_VAR = "VAR_TEMP_2"
+_FACING_Y_VAR = "VAR_TEMP_3"
+
 TRIGGER_ACTION = 0  # RMXP trigger: fires on the action button (a sign/NPC talk)
 TRIGGER_PLAYER_TOUCH = 1  # RMXP trigger: a door/stairs fires on step-on
 TRIGGER_EVENT_TOUCH = 2  # RMXP trigger: fires when the player touches the event's tile
@@ -279,6 +296,7 @@ class WarpSpec:
     dest_uid: int  # Uranium map id of the destination
     dest_x: int  # Uranium arrival coord: where an extra "arrival" warp_event is
     dest_y: int  # placed on the destination map (the vanilla-Emerald landing trick)
+    dest_dir: int | None = None  # RMXP Transfer Player `dir` param (0/2/4/6/8)
 
 
 @dataclass
@@ -347,14 +365,16 @@ class MapFile:
 
 # --- event classification ----------------------------------------------------
 
-def _event_transfers(event: dict) -> list[tuple[int, int, int]]:
-    """Every code-201 (dest_uid, x, y) across all of an event's pages."""
+def _event_transfers(event: dict) -> list[tuple[int, int, int, int | None]]:
+    """Every code-201 (dest_uid, x, y, dir) across all of an event's pages. `dir`
+    is `None` if the command's parameter list is too short to carry one (a
+    malformed/legacy event) rather than assuming 0 ("retain")."""
     out = []
     for page in event["pages"]:
         for cmd in page.get("list", []):
             if cmd["code"] == TRANSFER_CODE:
                 p = cmd["parameters"]
-                out.append((p[1], p[2], p[3]))
+                out.append((p[1], p[2], p[3], p[4] if len(p) > 4 else None))
     return out
 
 
@@ -374,8 +394,8 @@ def classify_event(event: dict, slice_ids: set[int]) -> tuple[str, WarpSpec | st
         if any(t not in slice_ids for t in targets):
             return ("skip", "out-of-slice warp")
         if event["pages"][0].get("trigger") == TRIGGER_PLAYER_TOUCH:
-            dest_uid, dx, dy = transfers[0]
-            return ("warp", WarpSpec(event["x"], event["y"], dest_uid, dx, dy))
+            dest_uid, dx, dy, ddir = transfers[0]
+            return ("warp", WarpSpec(event["x"], event["y"], dest_uid, dx, dy, ddir))
     return ("object", None)
 
 
@@ -896,6 +916,116 @@ def _map_dims(map_json: dict) -> tuple[int, int]:
     return map_json["width"], map_json["height"]
 
 
+@dataclass(frozen=True)
+class ArrivalFacing:
+    """Where the player lands, and which way Uranium says they should face."""
+
+    x: int
+    y: int
+    dir_const: str  # an engine DIR_* constant
+
+
+def compute_arrival_facings(
+    warp_lists: dict[int, list[WarpSpec]],
+    maps: dict[int, dict],
+) -> dict[int, list[ArrivalFacing]]:
+    """Per-map arrival coord -> post-warp facing, from each spec's `dest_dir`.
+
+    Realized as an ON_WARP_INTO_MAP_TABLE map script rather than arrival-tile
+    metatile behaviors: the `MB_*_ARROW_WARP` behaviors that would produce the
+    same facing natively are also *live step-triggers* (`TryArrowWarp`), and the
+    engine pairs each one's trigger direction with the direction a player
+    naturally looks right after arriving — so they re-warp on the way out. See
+    `WARP_FACING_HANDOFF.md` (git stash) for the full trace.
+
+    Skips `dest_dir` 0/None (no override -> engine default; see
+    `_ARRIVAL_DIR_CONST`) and out-of-bounds arrivals, which get no arrival
+    warp_event of their own in `_resolve_all_warp_events` and so have no distinct
+    landing tile to key on.
+
+    Fail-loud (§4.5) on an unknown non-zero direction, and on two arrivals
+    sharing one coord with different facings — coordinate dispatch cannot tell
+    those apart, and silently picking one would be wrong half the time.
+    """
+    out: dict[int, list[ArrivalFacing]] = {}
+    seen: dict[tuple[int, int, int], str] = {}
+    for src_uid, specs in warp_lists.items():
+        for spec in specs:
+            if spec.dest_dir in (0, None):
+                continue
+            dir_const = _ARRIVAL_DIR_CONST.get(spec.dest_dir)
+            if dir_const is None:
+                raise ValueError(
+                    f"map {src_uid} warp -> {spec.dest_uid}: unknown RMXP transfer "
+                    f"direction {spec.dest_dir!r} (expected one of 0/2/4/6/8)"
+                )
+            dest_map_json = maps.get(spec.dest_uid)
+            if dest_map_json is not None:
+                width, height = _map_dims(dest_map_json)
+                if not (0 <= spec.dest_x < width and 0 <= spec.dest_y < height):
+                    continue  # no arrival warp_event exists; nothing to key on
+
+            key = (spec.dest_uid, spec.dest_x, spec.dest_y)
+            existing = seen.get(key)
+            if existing is not None:
+                if existing != dir_const:
+                    raise ValueError(
+                        f"map {spec.dest_uid} arrival ({spec.dest_x}, {spec.dest_y}): "
+                        f"conflicting arrival facings {existing} vs {dir_const} — two "
+                        f"warps land on one tile wanting different directions, which "
+                        f"coordinate dispatch cannot distinguish"
+                    )
+                continue  # same coord, same facing: one table row covers both
+            seen[key] = dir_const
+            out.setdefault(spec.dest_uid, []).append(
+                ArrivalFacing(spec.dest_x, spec.dest_y, dir_const)
+            )
+    return out
+
+
+def render_arrival_facing_script(
+    consts: MapConstants, facings: list[ArrivalFacing]
+) -> str | None:
+    """The `mapscripts` + on-warp facing script for one map, as poryscript.
+
+    Uses the vanilla ON_WARP_INTO_MAP_TABLE idiom (see any Battle Frontier lobby):
+    the table fires when VAR_TEMP_1 == 0, and the script guards itself by setting
+    it. The hook runs in `InitObjectEventsLocal` (overworld.c) *after*
+    `InitPlayerAvatar` has applied the engine's default facing and well before the
+    screen fades in, so the turn is invisible.
+
+    Every command here must be non-blocking: `TryRunOnWarpIntoMapScript` uses
+    `RunScriptImmediately`, which runs the script to completion in one call.
+
+    Returns None when the map has no arrival needing an override — the caller
+    then leaves the empty `mapscripts` stub alone.
+    """
+    if not facings:
+        return None
+    label = f"{consts.dir_name}_OnWarpFacing"
+    lines = [
+        f"mapscripts {consts.dir_name}_MapScripts {{",
+        "    MAP_SCRIPT_ON_WARP_INTO_MAP_TABLE [",
+        f"        {_FACING_GUARD_VAR}, 0: {label}",
+        "    ]",
+        "}",
+        "",
+        f"script {label} {{",
+        f"    setvar({_FACING_GUARD_VAR}, 1)",
+        f"    getplayerxy({_FACING_X_VAR}, {_FACING_Y_VAR})",
+    ]
+    for i, f in enumerate(sorted(facings, key=lambda a: (a.y, a.x))):
+        kw = "if" if i == 0 else "elif"
+        lines.append(
+            f"    {kw} (var({_FACING_X_VAR}) == {f.x} "
+            f"&& var({_FACING_Y_VAR}) == {f.y}) {{"
+        )
+        lines.append(f"        turnobject(LOCALID_PLAYER, {f.dir_const})")
+        lines.append("    }")
+    lines.append("}")
+    return "\n".join(lines)
+
+
 def _resolve_all_warp_events(
     warp_lists: dict[int, list[WarpSpec]],
     registry: MapConstantRegistry,
@@ -1045,6 +1175,7 @@ def build_slice_maps(
         for uid in slice_ids
     }
     resolved = _resolve_all_warp_events(warp_lists, registry, maps)
+    arrival_facings = compute_arrival_facings(warp_lists, maps)
 
     overrides: dict[int, set[tuple[int, int]]] = {}
     local_id_tables: dict[int, dict[str, int]] = {}
@@ -1086,10 +1217,18 @@ def build_slice_maps(
         map_out = out_dir / consts.dir_name / "map.json"
         map_out.parent.mkdir(parents=True, exist_ok=True)
         map_out.write_text(json.dumps(map_file.to_json_dict(), indent=2) + "\n", encoding="utf-8")
+        # The on-warp facing block rides the dispatcher channel: the assembler
+        # appends this file before deciding whether to inject an empty
+        # `mapscripts` stub, so a real `mapscripts` block here suppresses the stub.
+        blocks = list(result.dispatchers)
+        facing_block = render_arrival_facing_script(consts, arrival_facings.get(uid, []))
+        if facing_block is not None:
+            blocks.append(facing_block)
+
         disp_out = dispatcher_dir / f"Map{uid:03d}_dispatch.pory"
-        if result.dispatchers:
+        if blocks:
             disp_out.parent.mkdir(parents=True, exist_ok=True)
-            disp_out.write_text("\n\n".join(result.dispatchers) + "\n", encoding="utf-8")
+            disp_out.write_text("\n\n".join(blocks) + "\n", encoding="utf-8")
         elif disp_out.exists():
             # Idempotence (CLAUDE.md §4.2): a prior run may have emitted a
             # dispatcher for an event this run now drops (boot-page selection can
