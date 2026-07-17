@@ -92,6 +92,24 @@ deliberate deferrals, and test-rig behavior.
 
 ---
 
+## 8. Moki story chain — ROM `762e98aa` (2026-07-17) — S
+
+The early-game event chain end to end (findings doc
+`reference/findings/moki_slice_story_chain_2026-07-16.md` §2.1 beat list; bugs
+A/B/B'/C/D fixed 2026-07-17, then the lab-intro loop + trip-tile round-2 fixes).
+Walk it in order on a fresh save.
+
+- [ ] **S1** — Auntie gives running shoes; quest log var advances (same as H2, start of chain)
+- [ ] **S2** — Theo trip tile: walking beside the fence at column 26 (the tile row just above or below the blocked fence cell at (26,12)) fires the Theo run-up scene ONCE; never refires afterward
+- [ ] **S3** — Lab intro autorun: fires as soon as you enter the lab (no talk needed), player auto-walks to position — sane path, no black void, no wall clipping
+- [ ] **S4** — Test prompt at end of intro: YES/NO box appears (labels are generic YES/NO — the custom "Yes!"/"Wait a minute..." wording is a known cosmetic loss, don't report). **Either answer ends the scene cleanly — NO refire, no wall-walk loop**
+- [ ] **S5** — Answered NO ("wait"): walk away and talk to the professor again — he re-offers the test
+- [ ] **S6** — Answered YES: aptitude test Q&A plays; starter granted matches the outcome; Pokédex granted
+- [ ] **S7** — PokéPod scene in Theo's house 1F: fires on entry after the lab visit, advances the quest chain (var 101 → 2)
+- [ ] **S8** — Ceremony at the town's west exit: trigger fires when crossing the exit path tiles (relocated to (17,42)/(16,43) — the original trigger tile was unreachable); correct NPCs are present and choreographed (professor, rival, aide + starter); no wrong-sprite actors
+- [ ] **S9** — Ceremony completes: quest log → 4, scene never refires on re-entering the area
+- [ ] **S10** — Post-chain sanity: rocks still smashable/respawn, Auntie/granny dialogue unchanged, warp facings unchanged (no regressions from the story-chain rework)
+
 ## Not implemented — do NOT report these as bugs
 
 **Known gaps, open items (tracked in SLICE1_TODO):**
