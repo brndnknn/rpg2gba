@@ -1,5 +1,6 @@
 #include "global.h"
 #include "uranium_map_walker.h"
+#include "uranium_embedded_save.h"
 #include "new_game.h"
 #include "random.h"
 #include "pokemon.h"
@@ -260,6 +261,23 @@ static const u8 sUraniumDefaultName[] = _("RED");
 
 void CB2_StartUraniumSlice(void)
 {
+    // BEGIN URANIUM EMBEDDED SAVE — boot-continue instead of always-new-game.
+    // CB2_InitCopyrightScreenAfterBootup already ran LoadGameSave(SAVE_NORMAL)
+    // before handing control here, so a valid flash save is sitting in the
+    // save blocks: continue it (lets a player keep in-game saves across
+    // launches). Otherwise, if the harness stamped a state blob into the ROM,
+    // load that and continue. Pristine ROM + empty flash falls through to the
+    // new-game boot below — the regression harness always runs that path.
+    // Walker builds keep always-new-game: the walker is a boot-chain takeover
+    // and a continued save would bypass it.
+#if URANIUM_MAP_WALKER == FALSE
+    if (gSaveFileStatus == SAVE_STATUS_OK || UraniumEmbeddedSave_TryLoad())
+    {
+        SetMainCallback2(CB2_ContinueSavedGame);
+        return;
+    }
+#endif
+    // END URANIUM EMBEDDED SAVE
     gSaveBlock2Ptr->playerGender = MALE;
     StringCopy(gSaveBlock2Ptr->playerName, sUraniumDefaultName);
     // BEGIN URANIUM MAP WALKER — mark walker active BEFORE the map load.

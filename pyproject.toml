@@ -7,6 +7,7 @@ name = "rpg2gba"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
+    "cffi>=1.16",  # required by libmgba-py (headless playtest harness)
     "click>=8.0",
     "numpy>=1.26",
     "pillow>=10.0",
