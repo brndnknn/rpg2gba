@@ -7,6 +7,7 @@ dist/
 .pytest_cache/
 .ruff_cache/
 scratchpad.txt 
+.vscode/
 
 # Claude Code runtime artifacts (the tracked skills under .claude/skills/ stay).
 .claude/scheduled_tasks.lock
