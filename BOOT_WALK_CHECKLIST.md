@@ -92,18 +92,28 @@ deliberate deferrals, and test-rig behavior.
 
 ---
 
-## 8. Moki story chain — ROM `762e98aa` (2026-07-17) — S
+## 8. Moki story chain — ROM `762e98aa` / `5dd32b10` / round-3 `c9128e58` (2026-07-17) — S
+
+> Round-3 walk (`c9128e58`): postgame Theo "Champion" misfire by the player's
+> house is GONE (EV080 base-page gate fix); S1–S5 pass. Frontier = S6 —
+> answering YES to the aptitude test.
+
+> `5dd32b10` (taildropped 2026-07-17) is `762e98aa`'s slice data relinked with
+> the committed embedded-save boot branch. One behavior note for the walk:
+> **if you save in-game, the next boot CONTINUES that save** (new, intended).
+> For a fresh start-of-chain walk, delete the ROM's save in your emulator
+> first, or just don't save mid-walk.
 
 The early-game event chain end to end (findings doc
 `reference/findings/moki_slice_story_chain_2026-07-16.md` §2.1 beat list; bugs
 A/B/B'/C/D fixed 2026-07-17, then the lab-intro loop + trip-tile round-2 fixes).
 Walk it in order on a fresh save.
 
-- [ ] **S1** — Auntie gives running shoes; quest log var advances (same as H2, start of chain)
-- [ ] **S2** — Theo trip tile: walking beside the fence at column 26 (the tile row just above or below the blocked fence cell at (26,12)) fires the Theo run-up scene ONCE; never refires afterward
-- [ ] **S3** — Lab intro autorun: fires as soon as you enter the lab (no talk needed), player auto-walks to position — sane path, no black void, no wall clipping
-- [ ] **S4** — Test prompt at end of intro: YES/NO box appears (labels are generic YES/NO — the custom "Yes!"/"Wait a minute..." wording is a known cosmetic loss, don't report). **Either answer ends the scene cleanly — NO refire, no wall-walk loop**
-- [ ] **S5** — Answered NO ("wait"): walk away and talk to the professor again — he re-offers the test
+- [X] **S1** — Auntie gives running shoes; quest log var advances (same as H2, start of chain)
+- [X] **S2** — Theo trip tile: walking beside the fence at column 26 (the tile row just above or below the blocked fence cell at (26,12)) fires the Theo run-up scene ONCE; never refires afterward
+- [X] **S3** — Lab intro autorun: fires as soon as you enter the lab (no talk needed), player auto-walks to position — sane path, no black void, no wall clipping
+- [X] **S4** — Test prompt at end of intro: YES/NO box appears (labels are generic YES/NO — the custom "Yes!"/"Wait a minute..." wording is a known cosmetic loss, don't report). **Either answer ends the scene cleanly — NO refire, no wall-walk loop**
+- [X] **S5** — Answered NO ("wait"): walk away and talk to the professor again — he re-offers the test
 - [ ] **S6** — Answered YES: aptitude test Q&A plays; starter granted matches the outcome; Pokédex granted
 - [ ] **S7** — PokéPod scene in Theo's house 1F: fires on entry after the lab visit, advances the quest chain (var 101 → 2)
 - [ ] **S8** — Ceremony at the town's west exit: trigger fires when crossing the exit path tiles (relocated to (17,42)/(16,43) — the original trigger tile was unreachable); correct NPCs are present and choreographed (professor, rival, aide + starter); no wrong-sprite actors
@@ -125,7 +135,6 @@ Walk it in order on a fresh save.
 **Engine/pipeline limits (accepted for slice 1):**
 - Boot-page static: page changes swap the SCRIPT only — NPC graphics/visibility/movement never change mid-visit
 - Pond-adjacent reflections over-eager (engine-native wide scan; narrow-scan fix rejected 2026-07-07)
-- Base page is always the dispatch fallback regardless of its own condition
 
 **Deliberate / test rig:**
 - Badge 3 + Geodude + Rock Smash at new game — standing HM test harness (kept indefinitely per #5 decision)

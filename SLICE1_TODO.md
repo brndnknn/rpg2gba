@@ -108,6 +108,20 @@ dispositions 2026-07-15:**
   boot page isn't the letter); nothing to fix for slice 1.
 - X2 audio = stock Emerald everywhere → matches decision #7, no action.
 
+**2026-07-17 story-chain walks (rounds 1–3, ROMs `59a13ba1` → `762e98aa` →
+`c9128e58`):**
+
+- Postgame Theo "Champion" scene fired at boot outside the player's house
+  (EV080 tripwire) → **FIXED round 3**: `build_page_dispatcher` never checked
+  page index 0's own condition (always the unconditional fallback); now scans
+  all pages and falls to inert `end` when none matches. Also silently fixed
+  EV078/EV081 (same class). Retest **PASSED** — scene gone.
+- Story chain **S1–S5 PASS** on `c9128e58` (shoes, Theo trip tile, lab intro
+  autorun, YES/NO prompt, NO-then-re-offer).
+- **Open frontier: S6** — answering YES to the aptitude test misbehaves
+  (details not yet gathered; next /debug session starts here, likely
+  overlapping #14's ceremony territory).
+
 ### 14. Lab Pokédex ceremony: wrong trigger + reposition walks into void (boot-walk 2026-07-14)
 
 In PC Uranium the ceremony autostarts on entering the lab (game takes

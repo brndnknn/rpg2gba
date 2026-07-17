@@ -360,3 +360,79 @@ def test_verify_script_oracle_corpus_smoke(index: fi.ForkIndex) -> None:
         f"gate output on {path} diverged from the known archived healparty bug: "
         + ", ".join(f"{v.kind}:{v.symbol}@{v.line_no}" for v in violations)
     )
+
+
+# ---------------------------------------------------------------------------
+# check_reserved_var_writes
+# ---------------------------------------------------------------------------
+
+
+def test_reserved_var_setvar_flagged() -> None:
+    text = "script Foo {\n    setvar(VAR_TEMP_F, 1)\n    end\n}"
+    violations = fi.check_reserved_var_writes(text)
+    assert [(v.symbol, v.line_no) for v in violations] == [("VAR_TEMP_F", 2)]
+
+
+def test_reserved_var_getplayerxy_both_args_flagged() -> None:
+    text = "script Foo {\n    getplayerxy(VAR_TEMP_0, VAR_TEMP_F)\n    end\n}"
+    violations = fi.check_reserved_var_writes(text)
+    assert [v.symbol for v in violations] == ["VAR_TEMP_F"]
+
+
+def test_reserved_var_getplayerxy_first_arg_flagged() -> None:
+    text = "script Foo {\n    getplayerxy(VAR_TEMP_C, VAR_TEMP_0)\n    end\n}"
+    violations = fi.check_reserved_var_writes(text)
+    assert [v.symbol for v in violations] == ["VAR_TEMP_C"]
+
+
+def test_reserved_var_all_writer_commands_flagged() -> None:
+    text = "\n".join(
+        [
+            "script Foo {",
+            "    setvar(VAR_TEMP_F, 1)",
+            "    copyvar(VAR_TEMP_C, VAR_TEMP_0)",
+            "    addvar(VAR_TEMP_F, 1)",
+            "    subvar(VAR_TEMP_C, 1)",
+            "    specialvar(VAR_TEMP_F, Special)",
+            "    end",
+            "}",
+        ]
+    )
+    violations = fi.check_reserved_var_writes(text)
+    assert len(violations) == 5
+
+
+def test_reserved_var_non_reserved_var_not_flagged() -> None:
+    text = "script Foo {\n    setvar(VAR_TEMP_0, 1)\n    end\n}"
+    violations = fi.check_reserved_var_writes(text)
+    assert violations == []
+
+
+def test_reserved_var_name_in_msgbox_string_not_flagged() -> None:
+    text = (
+        'script Foo {\n'
+        '    msgbox("setvar(VAR_TEMP_F, 1) is just flavor text")\n'
+        "    end\n"
+        "}"
+    )
+    violations = fi.check_reserved_var_writes(text)
+    assert violations == []
+
+
+def test_reserved_var_read_not_flagged() -> None:
+    text = "script Foo {\n    if (var(VAR_TEMP_F) == 0) {\n    }\n    end\n}"
+    violations = fi.check_reserved_var_writes(text)
+    assert violations == []
+
+
+def test_reserved_var_no_false_positive_on_similar_name() -> None:
+    # VAR_TEMP_F2 must not collide with the reserved VAR_TEMP_F.
+    text = "script Foo {\n    setvar(VAR_TEMP_F2, 1)\n    end\n}"
+    violations = fi.check_reserved_var_writes(text)
+    assert violations == []
+
+
+def test_reserved_var_custom_reserved_list() -> None:
+    text = "script Foo {\n    setvar(VAR_CUSTOM, 1)\n    end\n}"
+    violations = fi.check_reserved_var_writes(text, reserved=("VAR_CUSTOM",))
+    assert [v.symbol for v in violations] == ["VAR_CUSTOM"]

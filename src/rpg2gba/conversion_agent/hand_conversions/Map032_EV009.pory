@@ -59,6 +59,11 @@ script Map032_EV009_Page3 {
         applymovement(OBJ_EVENT_ID_PLAYER, Map032_EV009_Page3_MoveIntoPlace)
         waitmovement(0)
     }
+    # 76 (Chyinmunk) and 77 (starter) are flag-hidden spawns (opacity=0 in
+    # RMXP) — spawn them now so the choreography below has real objects to
+    # target; addobject spawns regardless of the visibility flag.
+    addobject(76)
+    addobject(77)
     # audio (code 241): PU-Radio_ Oak
     msgbox(format("Hey there, {PLAYER}! Now that you and Theo are here, it's time to begin your first lesson as a Pokémon Trainer and a field research aid."))
     delay(10)
@@ -202,7 +207,15 @@ script Map032_EV009_Page3 {
     applymovement(2, Map032_EV009_Page3_Move12)
     waitmovement(0)
     # audio (code 241): PU-Moki Town
-    setvar(VAR_AUNTIE_VISIT_STAGE, 4)
+    # Despawn the flag-hidden scene actors. 16 (Bamb'o) already went
+    # invisible via Move8's set_invisible step above, so this removeobject
+    # is inaudible/invisible cleanup, not a visible pop. 2 (Theo) is left on
+    # the map — he stays through scene end per RMXP, only blanking at the
+    # next map entry (ON_TRANSITION re-hides everyone then).
+    removeobject(76)
+    removeobject(77)
+    removeobject(16)
+    setvar(VAR_QUEST_LOG, 4)
     release
     end
 }

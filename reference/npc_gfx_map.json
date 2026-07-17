@@ -59,6 +59,16 @@
     "fallback": "OBJ_EVENT_GFX_RIVAL_BRENDAN_NORMAL",
     "note": "Theo, the rival — custom sheet; boyish rival lookalike"
   },
+  "Rivaltheo2": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_RIVALTHEO2",
+    "fallback": "OBJ_EVENT_GFX_RIVAL_BRENDAN_NORMAL",
+    "note": "Theo post-champion outfit (Map032 EV081 hidden actor, out-of-slice gate)"
+  },
+  "KELLYN": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_KELLYN",
+    "fallback": "OBJ_EVENT_GFX_MAN_1",
+    "note": "Kellyn (Map049 EV020 hidden actor — letter-scene setobjectxy target)"
+  },
   "fk107-rocksmash": {
     "gfx": "OBJ_EVENT_GFX_URANIUM_FK107_ROCKSMASH",
     "fallback": "OBJ_EVENT_GFX_BREAKABLE_ROCK",
@@ -138,6 +148,11 @@
     "gfx": "OBJ_EVENT_GFX_URANIUM_ZP_PROFESSOR2",
     "fallback": "OBJ_EVENT_GFX_PROF_BIRCH",
     "note": "Custom sheet: Professor Bambo (Map050 lab). Non-standard 56x66 frame; content bbox 18x28 fits the 32x32 GBA frame after downscale"
+  },
+  "ZP- Professor": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_ZP_PROFESSOR",
+    "fallback": "OBJ_EVENT_GFX_PROF_BIRCH",
+    "note": "Custom sheet: Professor Bambo outdoors (Map032 ceremony actor EV016). Same sheet family as ZP- Professor2"
   },
   "PU-PokeballMachine": {
     "gfx": "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE",

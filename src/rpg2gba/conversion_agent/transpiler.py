@@ -965,12 +965,16 @@ class _PageEmitter:
     def _emit_choice(self, node: ChoiceNode) -> list[str]:
         params = node.cmd.get("parameters", [])
         choices = params[0] if params else []
-        # v1 tier: the two-way YES/NO question via MSGBOX_YESNO. The prompt
-        # text is the preceding msgbox — poryscript's msgbox(text, MSGBOX_YESNO)
-        # form needs the text inline, so the driver-level idiom (merge with the
-        # preceding TextRun) is deferred; emitting yesnobox on VAR_RESULT keeps
-        # v1 self-contained.
-        if [str(c).upper() for c in choices] == ["YES", "NO"]:
+        # v1 tier: any two-way choice maps to the yesnobox/VAR_RESULT idiom,
+        # regardless of the choice labels — the prompt text is the preceding
+        # msgbox, and poryscript's msgbox(text, MSGBOX_YESNO) form needs the
+        # text inline, so the driver-level idiom (merge with the preceding
+        # TextRun) is deferred. Custom choice labels degrade to generic
+        # YES/NO (cosmetic, accepted v1 trade-off) — pressing B maps to the
+        # second arm, matching RMXP cancel-type 2 (the common case). Choices
+        # with 3+ texts still need a minted MULTI_* multichoice and fall
+        # through to the unhandled queue below.
+        if len(choices) == 2:
             yes_arm = next((a for a in node.arms if a[0] == 0), None)
             no_arm = next((a for a in node.arms if a[0] == 1 or a[0] is None), None)
             lines = ["yesnobox(0, 0)", "if (var(VAR_RESULT) == 1) {"]
@@ -1367,6 +1371,11 @@ def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> Transpil
             # player-touch / event-touch cutscene: freeze the player while
             # the script runs (validated Opus output, e.g. Map001 doormats).
             body = ["lock", *body, "release"]
+        elif body and trigger == 3:
+            # autorun cutscene: invoked from an ON_FRAME_TABLE map script
+            # (metadata_wiring, another agent's emitter); vanilla ON_FRAME
+            # cutscenes use lockall/releaseall, not lock/release.
+            body = ["lockall", *body, "releaseall"]
         body = body or []
         body.append("end")
         inner = "\n".join(f"    {ln}" for ln in body)

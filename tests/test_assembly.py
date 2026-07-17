@@ -362,30 +362,37 @@ _REAL_MAP_JSON = _OUT / "porymap" / "maps" / "MokiTown" / "map.json"
 def test_real_slice_map032_prunes_clean():
     pory = _REAL_PORY.read_text(encoding="utf-8")
     map_json = json.loads(_REAL_MAP_JSON.read_text(encoding="utf-8"))
-    result = asm.prune_map_pory(pory, map_json, allowed_uranium_maps={32, 48, 49})
-    # Re-pinned for the task-4 NPC-gfx wiring: boot-state page selection now only
-    # places boot-active visible NPCs (objects), signs (bg), and invisible
-    # touch-hosts (coord), so every RMXP event that renders nothing at boot is
-    # pruned — the S9 "NPC crowd" fix. The 28 dropped ids break down as:
+    result = asm.prune_map_pory(
+        pory, map_json, allowed_uranium_maps={32, 48, 49, 50, 64, 65, 172, 89}
+    )
+    # Re-pinned for the real 8-map slice (SLICE_MAP_IDS = 49/48/32/50/64/65/
+    # 172/89, corrected 2026-07-16) + the hidden-cutscene-actor model
+    # (findings §3.3/§5, 2026-07-17): choreographed-but-gated actors 2, 16,
+    # 75, 76, 77, 79, 81 are now EMITTED as flag-hidden object events (real
+    # local ids for the ceremony/Theo-chase applymovements), so their page
+    # blocks survive the prune. EV78/EV80 (Theo-chase scripts warping into
+    # the now-in-slice lab/houses) also survive — with the 3-map allowed set
+    # they were misclassified as out-of-slice and pruned; with the correct
+    # 8-map set their destination maps resolve and they stay live. The
+    # remaining dropped ids:
     #   in-slice warp (no script, warp_event handles it):        5
-    #   out-of-slice building/cave warps (classify "skip"):      3, 6, 7, 17, 23, 36, 37, 78
-    #   no boot-active page (stage-gated NPCs: Theo chase 79/80/ #
-    #     81, ceremony actors 76/77, plus furniture/others):     2, 16, 21, 24, 25, 30, 31,
-    #                                                            32, 34, 52, 53, 54, 55, 76, 77,
-    #                                                            79, 80, 81
-    #   opacity-0 spawn-invisible cutscene actor (Rivaltheo):    75
+    #   out-of-slice building/cave warps (classify "skip"):      3, 6, 7, 17, 23, 36, 37
+    #   no boot-active page, not script-choreographed:           21, 24, 25, 30, 31, 32,
+    #                                                            34, 52, 53, 54, 55
     # EV9 + EV74 (HGSS_014, opacity-0 trigger-2) survive as coord_events, so EV9's
     # Pokédex-ceremony hand-override blocks are KEPT (not in the dropped set).
     assert {asm.block_event_id(lbl) for lbl in result.dropped} == {
-        2, 3, 5, 6, 7, 16, 17, 21, 23, 24, 25, 30, 31, 32, 34,
-        36, 37, 52, 53, 54, 55, 75, 76, 77, 78, 79, 80, 81,
+        3, 5, 6, 7, 17, 21, 23, 24, 25, 30, 31, 32, 34,
+        36, 37, 52, 53, 54, 55,
     }
     # EV9's hand-override choreography survives the prune (coord_event keeps it live)
     assert "Map032_EV009_Page3" in result.text
     # and nothing undefined is left for the assembler
     import re
 
-    survivors = {int(n) for n in re.findall(r"MAP_URANIUM_(\d+)", result.text)} - {32, 48, 49}
+    survivors = {int(n) for n in re.findall(r"MAP_URANIUM_(\d+)", result.text)} - {
+        32, 48, 49, 50, 64, 65, 172, 89,
+    }
     assert survivors == set()
 
 

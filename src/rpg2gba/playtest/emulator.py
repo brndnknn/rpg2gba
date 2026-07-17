@@ -122,8 +122,18 @@ class Emulator:
         """Greedy two-axis walk with blocked-axis fallback."""
         spent = 0
         while spent < frame_budget:
+            if self.field_locked():
+                # A script owns the player (scene auto-walk, dialogue we
+                # bumped into). Don't fight it — wait, then re-path from
+                # wherever it leaves us.
+                self.run(30)
+                spent += 30
+                continue
             x, y = self.player_pos()
             if (x, y) == (tx, ty):
+                # The coord ticks before the step animation finishes; settle
+                # so a follow-up face/interact isn't eaten by the motion.
+                self.run(16)
                 return
             dx, dy = tx - x, ty - y
             axes = [("RIGHT" if dx > 0 else "LEFT") if dx else None,
@@ -131,9 +141,20 @@ class Emulator:
             if abs(dy) > abs(dx):
                 axes.reverse()
             for d in (a for a in axes if a):
-                self.run(24, [d])
-                spent += 24
-                if self.player_pos() != (x, y):
+                # Step-granular: release the key the moment the coord ticks
+                # over, so a burst can never overshoot onto a warp/trigger
+                # tile beyond the target.
+                # 40-frame cap: a turn-in-place (~8f) plus one walk step
+                # (~16f) fits with margin; a blocked direction burns the
+                # cap and falls through to the other axis.
+                moved = False
+                for _ in range(40):
+                    self.run(1, [d])
+                    spent += 1
+                    if self.player_pos() != (x, y):
+                        moved = True
+                        break
+                if moved:
                     break
             else:
                 shot = self.screenshot("walk_stuck")

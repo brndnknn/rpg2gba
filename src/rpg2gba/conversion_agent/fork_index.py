@@ -28,6 +28,7 @@ import logging
 import os
 import re
 import subprocess
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -494,6 +495,68 @@ def verify_script(
             elif ch == "}":
                 if block_stack:
                     block_stack.pop()
+
+    return violations
+
+
+# ---------------------------------------------------------------------------
+# Reserved-var write guard.
+#
+# VAR_TEMP_F is reserved as the coord-event gate var (porymap coord events
+# fire only while their var equals value; the pipeline gates every coord
+# event on VAR_TEMP_F == 0) and must NEVER be written by any emitted script.
+# VAR_TEMP_C is reserved as the ON_FRAME map-script guard var and may ONLY be
+# written by the metadata_wiring map-script emitter (a separate module), never
+# by transpiler output or hand overrides.
+#
+# This is intentionally NOT folded into verify_script(): the staging gate in
+# assemble_pathfinder also calls verify_script over already-staged files,
+# which legitimately contain the wiring emitter's own
+# `setvar(VAR_TEMP_C, 1)`. The reserved-write check only runs at the
+# transpile_driver conversion-time gate, before that legitimate write exists.
+# ---------------------------------------------------------------------------
+
+RESERVED_WRITE_VARS: tuple[str, ...] = ("VAR_TEMP_F", "VAR_TEMP_C")
+
+# First-argument writers: setvar/copyvar/addvar/subvar/specialvar all write
+# their first argument. (random() has no var argument of its own — its
+# result is captured by a following copyvar(), already covered here.)
+_RESERVED_WRITE_CALL_RE = re.compile(
+    r"\b(?:setvar|copyvar|addvar|subvar|specialvar)\(\s*([A-Za-z_]\w*)"
+)
+# getplayerxy(x_var, y_var) writes both arguments.
+_RESERVED_GETPLAYERXY_RE = re.compile(
+    r"\bgetplayerxy\(\s*([A-Za-z_]\w*)\s*,\s*([A-Za-z_]\w*)"
+)
+
+
+def check_reserved_var_writes(
+    pory_text: str, reserved: Sequence[str] = RESERVED_WRITE_VARS
+) -> list[Violation]:
+    """Flag any command that WRITES a reserved gate/guard var.
+
+    Reuses `_strip_line` (string/comment masking) so msgbox text or comments
+    that merely mention a reserved var name never false-positive. Matches
+    the reserved name as a whole written operand (regex identifiers are
+    matched in full via `\\w*`, so `VAR_TEMP_F2` never collides with
+    `VAR_TEMP_F`) — a bare read like `var(VAR_TEMP_F) == 0` never matches
+    since `var(` is not one of the writer command names.
+    """
+    reserved_set = set(reserved)
+    lines = pory_text.splitlines()
+    stripped = [_strip_line(line) for line in lines]
+
+    violations: list[Violation] = []
+    for line_no, line in enumerate(stripped, start=1):
+        raw = lines[line_no - 1]
+        for m in _RESERVED_WRITE_CALL_RE.finditer(line):
+            name = m.group(1)
+            if name in reserved_set:
+                violations.append(Violation(name, "reserved_var", line_no, raw))
+        for m in _RESERVED_GETPLAYERXY_RE.finditer(line):
+            for name in (m.group(1), m.group(2)):
+                if name in reserved_set:
+                    violations.append(Violation(name, "reserved_var", line_no, raw))
 
     return violations
 

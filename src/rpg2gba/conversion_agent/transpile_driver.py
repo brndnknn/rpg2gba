@@ -295,6 +295,19 @@ def transpile_corpus(
                 f"never a queue item:\n{lines}"
             )
 
+        reserved_hits = fork_index.check_reserved_var_writes(pory_text)
+        if reserved_hits:
+            lines = "\n".join(
+                f"  Map{map_id:03d}:{v.line_no}: {v.symbol} — {v.context.strip()}"
+                for v in reserved_hits
+            )
+            raise RuntimeError(
+                f"transpile_driver: reserved-var write on Map{map_id:03d} "
+                f"({len(reserved_hits)} violation(s)) — VAR_TEMP_F (coord-event "
+                f"gate) and VAR_TEMP_C (ON_FRAME guard) must never be written "
+                f"by transpiler output or hand overrides:\n{lines}"
+            )
+
         map_texts[map_id] = pory_text
         all_queue.extend(queue_entries)
 
@@ -315,6 +328,19 @@ def transpile_corpus(
             raise RuntimeError(
                 f"transpile_driver: fork-index gate violated on CommonEvents "
                 f"({len(violations)} violation(s)):\n{lines}"
+            )
+
+        reserved_hits = fork_index.check_reserved_var_writes(ce_text)
+        if reserved_hits:
+            lines = "\n".join(
+                f"  CommonEvents:{v.line_no}: {v.symbol} — {v.context.strip()}"
+                for v in reserved_hits
+            )
+            raise RuntimeError(
+                f"transpile_driver: reserved-var write on CommonEvents "
+                f"({len(reserved_hits)} violation(s)) — VAR_TEMP_F (coord-event "
+                f"gate) and VAR_TEMP_C (ON_FRAME guard) must never be written "
+                f"by transpiler output or hand overrides:\n{lines}"
             )
         all_queue.extend(ce_queue)
 

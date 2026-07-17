@@ -51,13 +51,14 @@ def _headers_for(tmp_path: Path, defines: list[str]) -> list[Path]:
 
 def test_load_npc_gfx_map_real_file_validates(tmp_path: Path) -> None:
     """The real reference/npc_gfx_map.json loads cleanly against a header that
-    defines every gfx constant it mints (29 entries: 18 original + 11
-    slice-1 interior expansion)."""
+    defines every gfx constant it mints. Entry count isn't pinned — the map
+    grows as new sheets are added (e.g. the "ZP- Professor" hidden-actor
+    entry, findings §3.3/§5) — only that every entry resolves."""
     raw = json.loads(REAL_NPC_GFX_MAP.read_text(encoding="utf-8"))
     gfx_names = [entry["gfx"] for entry in raw.values()]
     headers = _headers_for(tmp_path, gfx_names)
     result = load_npc_gfx_map(REAL_NPC_GFX_MAP, headers)
-    assert len(result) == 29
+    assert len(result) == len(raw)
     assert result["HGSS_000"] == "OBJ_EVENT_GFX_URANIUM_HGSS_000"
     assert result["PU-Chyinmunk"] == "OBJ_EVENT_GFX_URANIUM_PU_CHYINMUNK"
 
@@ -634,6 +635,36 @@ def test_map_passability_out_of_bounds_not_clear() -> None:
     assert mp.cell_clear(-1, 0) is False
     assert mp.cell_clear(0, 5) is False
     assert mp.exit_blocked(-1, 0) is False  # off-map spawn is a data bug, not a lock
+
+
+def test_map_passability_standable_open_tile_true() -> None:
+    """A bare-ground cell (passage 0, priority 0) is standable — this must
+    equal the layout pass's collision==0 verdict for the same cell."""
+    mp = _passability(layer0=[1, 1, 1], layer1=[0, 0, 0], passages=[0, 0])
+    assert mp.standable(0, 0) is True
+
+
+def test_map_passability_standable_sealed_top_layer_false() -> None:
+    """The Map032 EV074 shape: a passage-15 z1 decoration over open ground —
+    the first non-empty tile (top down) seals the cell, not standable."""
+    mp = _passability(layer0=[1, 1, 1], layer1=[0, 2, 0], passages=[0, 0, 15])
+    assert mp.standable(1, 0) is False
+    assert mp.standable(0, 0) is True
+
+
+def test_map_passability_standable_open_cells_override() -> None:
+    """A converter-level unblock forces standable=True even over sealed tile
+    data."""
+    mp = _passability(
+        layer0=[1, 1, 1], layer1=[0, 2, 0], passages=[0, 0, 15], open_cells={(1, 0)},
+    )
+    assert mp.standable(1, 0) is True
+
+
+def test_map_passability_standable_out_of_bounds_false() -> None:
+    mp = _passability(layer0=[1], layer1=[0], passages=[0, 0], width=1)
+    assert mp.standable(-1, 0) is False
+    assert mp.standable(0, 5) is False
 
 
 # ObjectEvent.to_dict --------------------------------------------------------

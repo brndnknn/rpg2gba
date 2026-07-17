@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from rpg2gba.conversion_agent import poryscript
 from rpg2gba.conversion_agent.flag_registry import FlagRegistry, temp_switch_flag_name
 from rpg2gba.tileset_converter import layout as layout_mod
 from rpg2gba.tileset_converter import map_constants as mc
@@ -914,8 +915,11 @@ def _page(
     }
 
 
-def _event(eid: int, x: int, y: int, pages: list[dict]) -> dict:
-    return {"id": eid, "name": f"E{eid}", "x": x, "y": y, "pages": pages}
+def _event(eid: int, x: int, y: int, pages: list[dict], name: str | None = None) -> dict:
+    return {
+        "id": eid, "name": name if name is not None else f"E{eid}",
+        "x": x, "y": y, "pages": pages,
+    }
 
 
 def _self_cond(letter: str) -> dict:
@@ -1126,6 +1130,272 @@ def test_build_object_events_opacity0_touch_keeps_coord_event() -> None:
     assert len(result.coord_events) == 1
     assert result.coord_events[0].script == "Map049_EV009_Page1"
     assert result.drops == []
+
+
+def test_coord_event_gate_is_var_temp_f_not_temp_0() -> None:
+    """findings §3.1 BUG A: VAR_TEMP_0 is the transpiler's generic getplayerxy
+    scratch register, so a second coord event on the same map would never
+    fire once the first wrote to it. The gate must be a var the transpiler
+    never writes (VAR_TEMP_F, reserved) — every CoordEvent this module
+    produces shares that gate."""
+    assert mw._COORD_GATE_VAR == "VAR_TEMP_F"
+    ce = mw.CoordEvent(x=1, y=1, script="Some_Script")
+    assert ce.var == "VAR_TEMP_F"
+    assert ce.var_value == "0"
+    assert ce.to_dict()["var"] == "VAR_TEMP_F"
+
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [
+            _event(9, 16, 42, [_page(trigger=2)]),
+            _event(74, 26, 12, [_page(trigger=2)]),
+        ],
+    }
+    result = mw.build_object_events(map_json, consts, _SLICE)
+    assert len(result.coord_events) == 2
+    assert all(c.var == "VAR_TEMP_F" for c in result.coord_events)
+
+
+def test_build_object_events_coord_standable_unchanged() -> None:
+    """A touch-trigger event on a standable tile is unaffected by passing
+    `passability` — one coord event at its own coords, same as with
+    `passability=None` (regression: the relocation gate must be a no-op for
+    the common case)."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {"map_id": 32, "events": [_event(74, 1, 1, [_page(trigger=2)])]}
+    passability = _passability_fixture(3, 3, blocked_cells=set())
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, passability=passability,
+    )
+    assert len(result.coord_events) == 1
+    assert (result.coord_events[0].x, result.coord_events[0].y) == (1, 1)
+    assert result.coord_events[0].script == "Map032_EV074_Page1"
+
+
+def test_build_object_events_coord_blocked_relocates_to_standable_neighbors() -> None:
+    """CLAUDE-mandated fix: RMXP touch triggers fire on a BUMP (walking into a
+    blocked tile), but pokeemerald coord_events only fire when the player
+    STANDS on the tile. An event sitting on a blocked tile (the Map032 EV074
+    shape: horizontal neighbors sealed, vertical neighbors open) must relocate
+    its coord event to every standable orthogonal neighbor instead of emitting
+    a dead trigger at its own (unreachable) coords."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {"map_id": 32, "events": [_event(74, 1, 1, [_page(trigger=2)])]}
+    passability = _passability_fixture(3, 3, blocked_cells={(1, 1), (0, 1), (2, 1)})
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, passability=passability,
+    )
+    by_xy = {(c.x, c.y): c for c in result.coord_events}
+    assert set(by_xy) == {(1, 0), (1, 2)}
+    assert (1, 1) not in by_xy
+    assert all(c.script == "Map032_EV074_Page1" for c in by_xy.values())
+
+
+def test_build_object_events_coord_blocked_no_standable_neighbor_raises() -> None:
+    """Zero standable orthogonal neighbors -> fail loud (CLAUDE.md §4.5), not a
+    silently dropped trigger."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {"map_id": 32, "events": [_event(74, 1, 1, [_page(trigger=2)])]}
+    passability = _passability_fixture(
+        3, 3, blocked_cells={(1, 1), (0, 1), (2, 1), (1, 0), (1, 2)}
+    )
+    with pytest.raises(ValueError, match="EV074"):
+        mw.build_object_events(map_json, consts, _SLICE, passability=passability)
+
+
+def test_build_object_events_coord_no_passability_keeps_legacy_behavior() -> None:
+    """Legacy callers that don't pass `passability` (e.g. `passability=None`)
+    keep today's behavior unchanged: one coord event at the event's own
+    coords, even where the tile would in fact be blocked."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {"map_id": 32, "events": [_event(74, 1, 1, [_page(trigger=2)])]}
+    result = mw.build_object_events(map_json, consts, _SLICE)
+    assert len(result.coord_events) == 1
+    assert (result.coord_events[0].x, result.coord_events[0].y) == (1, 1)
+
+
+# --- Trainer(N) sight-ray tripwires ------------------------------------------
+
+def test_trainer_sight_ray_through_true_all_clear() -> None:
+    """Trainer(3) facing down, through=True, all-clear map -> exactly the 3
+    tiles below the event; the event's own tile is never included."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [
+            _event(74, 5, 5, [_page(trigger=2, through=True, direction=2)], name="Trainer(3)")
+        ],
+    }
+    passability = _passability_fixture(20, 20, blocked_cells=set())
+    result = mw.build_object_events(map_json, consts, _SLICE, passability=passability)
+    by_xy = {(c.x, c.y) for c in result.coord_events}
+    assert by_xy == {(5, 6), (5, 7), (5, 8)}
+    assert (5, 5) not in by_xy
+
+
+def test_trainer_sight_ray_ev074_fence_shape() -> None:
+    """Map032 EV074 shape: Trainer(5) parked on a blocked fence tile, facing
+    down, through=True, all 5 tiles below standable -> the full 5-tile ray
+    below, nothing on the wrong (north) side of the fence, and no ValueError
+    from the bump-trigger relocation path (the ray path bypasses it)."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [
+            _event(74, 26, 12, [_page(trigger=2, through=True, direction=2)], name="Trainer(5)")
+        ],
+    }
+    passability = _passability_fixture(40, 40, blocked_cells={(26, 12)})
+    result = mw.build_object_events(map_json, consts, _SLICE, passability=passability)
+    by_xy = {(c.x, c.y) for c in result.coord_events}
+    assert by_xy == {(26, 13), (26, 14), (26, 15), (26, 16), (26, 17)}
+    assert (26, 11) not in by_xy  # wrong side of the fence
+    assert (26, 12) not in by_xy  # the event's own (blocked) tile
+
+
+def test_trainer_sight_ray_through_true_mid_ray_blocked_skipped() -> None:
+    """through=True never clips the LOS walk -- a blocked tile mid-ray is
+    simply filtered out by the standable check, and farther standable tiles
+    past it are still emitted."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [
+            _event(74, 2, 2, [_page(trigger=2, through=True, direction=2)], name="Trainer(4)")
+        ],
+    }
+    passability = _passability_fixture(20, 20, blocked_cells={(2, 4)})  # distance-2 tile
+    result = mw.build_object_events(map_json, consts, _SLICE, passability=passability)
+    by_xy = {(c.x, c.y) for c in result.coord_events}
+    assert by_xy == {(2, 3), (2, 5), (2, 6)}
+    assert (2, 4) not in by_xy
+
+
+def test_trainer_sight_ray_through_false_sealed_exit_stops_at_distance_one() -> None:
+    """through=False with the event's own tile sealed in its facing direction
+    -> only the distance-1 tile is live (Essentials' pbEventCanReachPlayer?
+    cumulative-step clip)."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [
+            _event(74, 4, 4, [_page(trigger=2, through=False, direction=2)], name="Trainer(3)")
+        ],
+    }
+    passability = _passability_fixture(20, 20, blocked_cells={(4, 4)})  # event's own tile sealed
+    result = mw.build_object_events(map_json, consts, _SLICE, passability=passability)
+    by_xy = {(c.x, c.y) for c in result.coord_events}
+    assert by_xy == {(4, 5)}
+
+
+def test_trainer_sight_ray_visible_raises() -> None:
+    """A visible (opacity 255, real graphic) Trainer(N) on a trigger-2 page is
+    a battle trainer, not a tripwire -- fail loud naming the native
+    trainer-object path rather than silently mis-converting it."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [
+            _event(
+                9, 10, 10,
+                [_page(trigger=2, name="HGSS_000", opacity=255, direction=2)],
+                name="Trainer(4)",
+            )
+        ],
+    }
+    with pytest.raises(ValueError, match="native trainer-object"):
+        mw.build_object_events(map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture())
+
+
+def test_trainer_sight_ray_name_inert_when_trigger_not_touch() -> None:
+    """Trainer(N) on a trigger-0 (action) page is inert -- Essentials' own
+    check requires trigger==2 -- so it's classified as an ordinary object,
+    no raise."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [
+            _event(
+                9, 10, 10,
+                [_page(trigger=0, name="HGSS_000", opacity=255, direction=2)],
+                name="Trainer(4)",
+            )
+        ],
+    }
+    result = mw.build_object_events(map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture())
+    assert len(result.object_events) == 1
+    assert result.drops == []
+
+
+def test_trainer_sight_ray_entirely_unstandable_raises() -> None:
+    """Every ray tile blocked -> fail loud naming the event (a tripwire that
+    can never fire is a conversion bug, not a silent drop)."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [
+            _event(74, 2, 2, [_page(trigger=2, through=True, direction=2)], name="Trainer(2)")
+        ],
+    }
+    passability = _passability_fixture(20, 20, blocked_cells={(2, 3), (2, 4)})
+    with pytest.raises(ValueError, match="EV074"):
+        mw.build_object_events(map_json, consts, _SLICE, passability=passability)
+
+
+def test_trainer_sight_ray_facing_left() -> None:
+    """Facing variety: direction=4 (left) produces a westward ray."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [
+            _event(74, 10, 10, [_page(trigger=2, through=True, direction=4)], name="Trainer(3)")
+        ],
+    }
+    passability = _passability_fixture(20, 20, blocked_cells=set())
+    result = mw.build_object_events(map_json, consts, _SLICE, passability=passability)
+    by_xy = {(c.x, c.y) for c in result.coord_events}
+    assert by_xy == {(9, 10), (8, 10), (7, 10)}
+
+
+def test_trainer_sight_ray_no_boot_page_still_emits() -> None:
+    """A Trainer(N) trigger-2 invisible event whose only page is story-gated
+    (switch-valid condition -> select_boot_page yields None, e.g. Map032
+    EV078/EV080) still emits its ray: the tripwire is invisible and its
+    dispatcher gates the body at runtime, so boot-inactivity doesn't matter."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [
+            _event(
+                78, 27, 42,
+                [_page(trigger=2, through=True, direction=2, cond=_sw_cond(55))],
+                name="Trainer(6)",
+            )
+        ],
+    }
+    passability = _passability_fixture(50, 50, blocked_cells=set())
+    result = mw.build_object_events(map_json, consts, _SLICE, passability=passability)
+    by_xy = {(c.x, c.y) for c in result.coord_events}
+    assert by_xy == {(27, 43), (27, 44), (27, 45), (27, 46), (27, 47), (27, 48)}
+    assert result.drops == []
+
+
+def test_no_boot_page_non_trainer_still_drops() -> None:
+    """Regression guard: a NON-Trainer event with no boot-active page still
+    drops with DROP_NO_BOOT_PAGE -- the tripwire carve-out is scoped to
+    Trainer(N)-named events only."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [
+            _event(78, 27, 42, [_page(trigger=2, through=True, cond=_sw_cond(55))])
+        ],
+    }
+    result = mw.build_object_events(map_json, consts, _SLICE)
+    assert result.object_events == []
+    assert result.coord_events == []
+    assert result.drops == [(78, mw.DROP_NO_BOOT_PAGE)]
 
 
 def _moving_page(route_codes: list[int], name: str = "HGSS_000", frequency: int = 3) -> dict:
@@ -1468,6 +1738,147 @@ def test_build_object_events_no_traits_keeps_default_flag() -> None:
     assert result.object_events[0].to_dict()["flag"] == "0"
 
 
+# --- hidden cutscene actors (findings §3.3/§5) --------------------------------
+
+def _actor_npc_gfx() -> dict[str, str]:
+    return dict(
+        _npc_gfx_fixture(),
+        Rivaltheo="OBJ_EVENT_GFX_URANIUM_RIVALTHEO",
+        **{"ZP- Professor": "OBJ_EVENT_GFX_URANIUM_ZP_PROFESSOR"},
+        **{"PU-Chyinmunk": "OBJ_EVENT_GFX_URANIUM_PU_CHYINMUNK"},
+    )
+
+
+def test_build_object_events_hidden_actor_basic() -> None:
+    """A required actor id with no boot-active page (Map032 EV002 'Rivaltheo'
+    shape: var101 >= 2, opacity 255) gets placed — visible graphic, static
+    facing, a visibility flag, a local id, and an ON_TRANSITION clause."""
+    reg = FlagRegistry()
+    reg.propose_var(101, "VAR_QUEST_LOG")
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    event = _event(
+        2, 16, 45,
+        [
+            _page(cond=_var_cond(101, 2), name="Rivaltheo", direction=4),
+            _page(cond=_var_cond(101, 4)),  # blank higher page
+        ],
+    )
+    map_json = {"map_id": 32, "events": [event]}
+    result = mw.build_object_events(
+        map_json, consts, {32}, npc_gfx=_actor_npc_gfx(), flag_registry=reg,
+        required_actor_ids={2},
+    )
+    assert len(result.object_events) == 1
+    obj = result.object_events[0]
+    assert (obj.x, obj.y) == (16, 45)
+    assert obj.graphics_id == "OBJ_EVENT_GFX_URANIUM_RIVALTHEO"
+    assert obj.movement_type == "MOVEMENT_TYPE_FACE_LEFT"  # direction 4
+    assert obj.flag == "FLAG_TEMP_11"
+    assert result.local_id_map["2"] == 1
+    assert any(ln == "# EV002 E2" for ln in result.transition_lines)
+    assert "setflag(FLAG_TEMP_11)" in result.transition_lines
+    joined = "\n".join(result.transition_lines)
+    assert "var(VAR_QUEST_LOG) >= 2" in joined
+    assert "var(VAR_QUEST_LOG) < 4" in joined
+    assert "clearflag(FLAG_TEMP_11)" in joined
+
+
+def test_build_object_events_hidden_actor_opacity0_never_visible() -> None:
+    """An actor whose only graphic-bearing page has opacity 0 (Map032
+    EV076/EV077 shape) never gets a `clearflag` clause — it stays
+    flag-hidden until a hand-authored script `addobject`s it."""
+    reg = FlagRegistry()
+    reg.propose_var(101, "VAR_QUEST_LOG")
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    event = _event(
+        76, 12, 44,
+        [
+            _page(cond=_var_cond(101, 2), name="PU-Chyinmunk", opacity=0, direction=4),
+            _page(cond=_var_cond(101, 4)),
+        ],
+    )
+    map_json = {"map_id": 32, "events": [event]}
+    result = mw.build_object_events(
+        map_json, consts, {32}, npc_gfx=_actor_npc_gfx(), flag_registry=reg,
+        required_actor_ids={76},
+    )
+    assert len(result.object_events) == 1
+    assert result.object_events[0].flag == "FLAG_TEMP_11"
+    assert result.transition_lines == ["# EV076 E76", "setflag(FLAG_TEMP_11)"]
+
+
+def test_build_object_events_hidden_actor_shares_flag_pool_with_rocks() -> None:
+    """Rocks and hidden actors share ONE sequential FLAG_TEMP_11.._1F pool,
+    ascending event-id order across both kinds."""
+    reg = FlagRegistry()
+    reg.propose_var(101, "VAR_QUEST_LOG")
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    actor = _event(9, 1, 1, [_page(cond=_var_cond(101, 2), name="Rivaltheo")])
+    rock = _event(5, 2, 2, [_page(name="HGSS_000")])
+    map_json = {"map_id": 32, "events": [actor, rock]}
+    result = mw.build_object_events(
+        map_json, consts, {32}, npc_gfx=_actor_npc_gfx(), flag_registry=reg,
+        required_actor_ids={9}, event_traits={5: ["smashable_rock"]},
+    )
+    by_x = {o.x: o for o in result.object_events}
+    assert by_x[2].flag == "FLAG_TEMP_11"  # EV005 (lower id) assigned first
+    assert by_x[1].flag == "FLAG_TEMP_12"  # EV009 second
+
+
+def test_build_object_events_hidden_actor_already_emitted_skipped() -> None:
+    """A required id that already has a boot-active page is left to the
+    normal emission path — not duplicated, no visibility flag spent."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    event = _event(3, 1, 1, [_page(name="HGSS_000")])  # unconditional, boot-active
+    map_json = {"map_id": 32, "events": [event]}
+    result = mw.build_object_events(
+        map_json, consts, {32}, npc_gfx=_npc_gfx_fixture(), required_actor_ids={3},
+    )
+    assert len(result.object_events) == 1
+    assert result.object_events[0].flag == "0"
+    assert result.transition_lines == []
+
+
+def test_build_object_events_hidden_actor_garbage_reference_fails_loud() -> None:
+    """A required actor id absent from the map's events entirely is a
+    garbage reference — fail loud."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {"map_id": 32, "events": []}
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json, consts, {32}, npc_gfx=_npc_gfx_fixture(), required_actor_ids={999},
+        )
+
+
+def test_build_object_events_hidden_actor_warp_target_skipped() -> None:
+    """A required actor id that resolves to a warp/skip event is left to the
+    strict local_id_remap pass, not placed as an actor: an animated-door
+    sprite's only object-command refs live in its own page block, which the
+    prune pass removes, so the pre-prune scan legitimately picks it up. If a
+    LIVE script still references it after pruning, remap fails loud."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(49, "House 1F")
+    door = _event(2, 10, 11, [_page(trigger=1, cmds=[_transfer(32, 28, 31)])])
+    map_json = {"map_id": 49, "events": [door]}
+    result = mw.build_object_events(
+        map_json, consts, {32, 49}, npc_gfx=_npc_gfx_fixture(),
+        required_actor_ids={2},
+    )
+    assert result.object_events == []
+    assert "2" not in result.local_id_map
+
+
+def test_build_object_events_object_cap_exceeded_fails_loud() -> None:
+    """More than 64 object_events on one map exceeds the fork's
+    OBJECT_EVENT_TEMPLATES_COUNT budget — fail loud."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(49, "House 1F")
+    map_json = {
+        "map_id": 49,
+        "events": [_event(i, i, 0, [_page(name="HGSS_000")]) for i in range(1, 66)],
+    }
+    with pytest.raises(ValueError):
+        mw.build_object_events(map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture())
+
+
 def test_build_object_events_rock_flags_capacity_exceeded() -> None:
     """More than 15 (FLAG_TEMP_11..FLAG_TEMP_1F) smashable_rock events on one map
     is a fail-loud error, not silent flag reuse/overflow."""
@@ -1561,6 +1972,71 @@ def test_page_dispatcher_self_switch() -> None:
     # invalid asm lines (`goto` with no arg + the label as a bad instruction).
     assert "goto(Map048_EV001_Page2)" in disp
     assert "goto(Map048_EV001_Page1)" in disp  # base-page fallback
+
+
+def test_page_dispatcher_gated_base_page_guarded() -> None:
+    """Map032 EV080 regression shape: the base page (index 0) is itself gated
+    on switch 125 (FLAG_FINAL_EVENT, postgame). The fixed dispatcher must NOT
+    treat page 0 as an unconditional fallback — it becomes a guard like any
+    other page, and since no page is unconditional, the dispatcher ends inert
+    (bare `end`), never an unguarded `goto` to the base page."""
+    consts = mc.MapConstants(32, "MAP_X", "MAP_URANIUM_32", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    reg = FlagRegistry()
+    reg.propose_flag(125, "FLAG_FINAL_EVENT")
+    event = _event(80, 0, 0, [_page(cond=_sw_cond(125)), _page(cond=_self_cond("A"))])
+    disp = mw.build_page_dispatcher(event, consts, flag_registry=reg)
+    assert disp is not None
+    assert "if (flag(FLAG_FINAL_EVENT))" in disp
+    assert "goto(Map032_EV080_Page1)" in disp
+    assert f"if (flag(FLAG_MAP032_EVENT080_SSA))" in disp
+    assert "goto(Map032_EV080_Page2)" in disp
+    # base-page goto is inside its own guard, not an unguarded fallback line.
+    lines = disp.rstrip().splitlines()
+    assert lines[-2].strip() == "end"
+    assert lines[-1].strip() == "}"
+
+
+def test_page_dispatcher_all_pages_gated_inert() -> None:
+    """Same EV080 shape: every page carries a condition, none unconditional ->
+    the dispatcher body's last statement before the closing brace is a bare
+    `end` (RMXP "no active page" == inert event), not a fallback goto."""
+    consts = mc.MapConstants(32, "MAP_X", "MAP_URANIUM_32", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    reg = FlagRegistry()
+    reg.propose_flag(125, "FLAG_FINAL_EVENT")
+    event = _event(80, 0, 0, [_page(cond=_sw_cond(125)), _page(cond=_self_cond("A"))])
+    disp = mw.build_page_dispatcher(event, consts, flag_registry=reg)
+    assert disp is not None
+    assert disp.rstrip().splitlines()[-2].strip() == "end"
+
+
+def test_page_dispatcher_single_gated_page() -> None:
+    """A single-page event whose only page carries a resolvable condition now
+    emits a guarded dispatcher (`if (...) { goto(Page1) }` then bare `end`)
+    instead of deferring to None — the single-page-unconditional shortcut only
+    applies when the lone page is unconditional."""
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    reg = FlagRegistry()
+    reg.propose_flag(125, "FLAG_FINAL_EVENT")
+    event = _event(7, 0, 0, [_page(cond=_sw_cond(125))])
+    disp = mw.build_page_dispatcher(event, consts, flag_registry=reg)
+    assert disp is not None
+    assert "if (flag(FLAG_FINAL_EVENT))" in disp
+    assert "goto(Map049_EV007_Page1)" in disp
+    assert disp.rstrip().splitlines()[-2].strip() == "end"
+
+    # A single-page event with NO condition at all still returns None (no
+    # dispatch needed).
+    assert mw.build_page_dispatcher(_event(8, 0, 0, [_page()]), consts, flag_registry=reg) is None
+
+
+def test_page_dispatcher_gated_base_page_defers_without_registry() -> None:
+    """The EV080 shape with no registry (deferral unchanged): an unresolvable
+    switch gate on the base page still defers the whole event to None, same
+    as any other unresolvable gate."""
+    consts = mc.MapConstants(32, "MAP_X", "MAP_URANIUM_32", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    event = _event(80, 0, 0, [_page(cond=_sw_cond(125)), _page(cond=_self_cond("A"))])
+    assert mw.build_page_dispatcher(event, consts, flag_registry=None) is None
+    assert mw.build_page_dispatcher(event, consts) is None
 
 
 def test_page_dispatcher_deferred_on_global() -> None:
@@ -1746,6 +2222,127 @@ def test_resolve_script_dispatcher_missing_page_label_fails_loud() -> None:
     # dispatcher's guard target Page2 is missing from it.
     with pytest.raises(KeyError):
         mw._resolve_script(event, consts, {"Map049_EV001_Page1"}, reg)
+
+
+def test_page_dispatcher_autorun_guard_target_emits_end() -> None:
+    """findings §3.2 BUG B: a page whose OWN trigger is autorun (3) must never
+    be a `goto()` target from the action-button dispatcher — `end` instead,
+    even when it's a guarded (non-fallback) page."""
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    event = _event(1, 0, 0, [_page(), _page(cond=_self_cond("A"), trigger=3)])
+    disp = mw.build_page_dispatcher(event, consts)
+    assert disp is not None
+    assert "if (flag(FLAG_MAP049_EVENT001_SSA))" in disp
+    assert "        end" in disp
+    assert "goto(Map049_EV001_Page2)" not in disp
+    assert "goto(Map049_EV001_Page1)" in disp  # base page (trigger 0) stays a real goto
+
+
+def test_page_dispatcher_autorun_fallback_emits_end() -> None:
+    """Same rule for the fallback (base) page: a trigger-3/4 base page's
+    trailing goto becomes `end` too."""
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    event = _event(1, 0, 0, [_page(trigger=3), _page(cond=_self_cond("A"))])
+    disp = mw.build_page_dispatcher(event, consts)
+    assert disp is not None
+    assert "goto(Map049_EV001_Page2)" in disp  # the guarded (trigger 0) page
+    assert disp.rstrip().splitlines()[-2].strip() == "end"
+    assert "goto(Map049_EV001_Page1)" not in disp
+
+
+def test_page_dispatcher_parallel_target_also_emits_end() -> None:
+    """Trigger 4 (parallel) is treated identically to trigger 3 (autorun)."""
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    event = _event(1, 0, 0, [_page(), _page(cond=_self_cond("A"), trigger=4)])
+    disp = mw.build_page_dispatcher(event, consts)
+    assert disp is not None
+    assert "        end" in disp
+    assert "goto(Map049_EV001_Page2)" not in disp
+
+
+def test_build_object_events_autorun_base_page_falls_back_to_end() -> None:
+    """findings §3.2 BUG B, the live defect shape: Map050 EV005 "Bambo" — a
+    visible-graphic, ungated, trigger-3 BASE page with an interactable
+    (trigger 0) higher page. The object still places (Bambo stands in the
+    lab) and stays interactable via its higher page, but the fallback (base,
+    autorun) is never itself a goto target — talking to him before the
+    self-switch fires does nothing, not re-runs the intro."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(50, "Professor Lab")
+    event = _event(
+        5, 10, 10,
+        [
+            _page(trigger=3, name="ZP- Professor2"),  # ungated autorun boot page
+            _page(cond=_self_cond("D"), name="ZP- Professor2"),  # trigger 0
+        ],
+    )
+    map_json = {"map_id": 50, "events": [event]}
+    npc_gfx = dict(_npc_gfx_fixture(), **{"ZP- Professor2": "OBJ_EVENT_GFX_URANIUM_ZP_PROFESSOR2"})
+    result = mw.build_object_events(map_json, consts, {50}, npc_gfx=npc_gfx)
+    assert len(result.object_events) == 1
+    obj = result.object_events[0]
+    assert (obj.x, obj.y) == (10, 10)
+    assert obj.graphics_id == "OBJ_EVENT_GFX_URANIUM_ZP_PROFESSOR2"
+    assert obj.script == "Map050_EV005_Dispatch"
+    assert len(result.dispatchers) == 1
+    disp = result.dispatchers[0]
+    assert "goto(Map050_EV005_Page2)" in disp  # the higher, interactable page
+    assert disp.rstrip().splitlines()[-2].strip() == "end"  # base (autorun) fallback
+
+
+def test_build_object_events_all_pages_autorun_collapses_to_null_script() -> None:
+    """When EVERY page a dispatcher could target is autorun/parallel, the
+    whole dispatcher is dead weight (nothing but `end` branches) — the
+    object gets the null script directly and no dispatcher is emitted at
+    all, matching the single-page case."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(50, "Professor Lab")
+    event = _event(
+        7, 2, 2,
+        [
+            _page(trigger=3, name="HGSS_000"),  # ungated autorun base
+            _page(cond=_self_cond("A"), name="HGSS_000", trigger=4),  # parallel guard
+        ],
+    )
+    map_json = {"map_id": 50, "events": [event]}
+    result = mw.build_object_events(map_json, consts, {50}, npc_gfx=_npc_gfx_fixture())
+    assert len(result.object_events) == 1
+    assert result.object_events[0].script == mw.NO_SCRIPT
+    assert result.dispatchers == []
+
+
+def test_build_object_events_single_page_autorun_visible_is_null_script() -> None:
+    """A single-page trigger-3 event with a visible graphic (no dispatcher at
+    all, since len(pages) == 1): also null-scripted, not page-1-scripted."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(50, "Professor Lab")
+    map_json = {
+        "map_id": 50,
+        "events": [_event(9, 1, 1, [_page(trigger=3, name="HGSS_000")])],
+    }
+    result = mw.build_object_events(
+        map_json, consts, {50}, npc_gfx=_npc_gfx_fixture(),
+    )
+    assert len(result.object_events) == 1
+    assert result.object_events[0].script == mw.NO_SCRIPT
+
+
+def test_build_object_events_interactive_page_still_goto_reachable() -> None:
+    """A visible-graphic event whose HIGHEST guarded page is ordinary
+    (trigger 0) still dispatches normally — BUG B's fix only neutralizes
+    autorun/parallel targets, not the whole event."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(50, "Professor Lab")
+    event = _event(
+        5, 10, 10,
+        [
+            _page(name="HGSS_000"),  # base, trigger 0
+            _page(cond=_self_cond("A"), name="HGSS_000"),  # trigger 0
+        ],
+    )
+    map_json = {"map_id": 50, "events": [event]}
+    result = mw.build_object_events(map_json, consts, {50}, npc_gfx=_npc_gfx_fixture())
+    assert len(result.object_events) == 1
+    assert result.object_events[0].script == "Map050_EV005_Dispatch"
+    assert len(result.dispatchers) == 1
+    assert "goto(Map050_EV005_Page2)" in result.dispatchers[0]
+    assert "goto(Map050_EV005_Page1)" in result.dispatchers[0]
 
 
 _OUTPUT_MAP032 = Path("output/uranium-build/maps/Map032.json")
@@ -2002,6 +2599,153 @@ def test_render_arrival_facing_script_two_arrivals_golden() -> None:
     assert text.count("elif (") == 1
 
 
+# --- compute_autorun_entries / render_map_scripts (findings §3.2 BUG B') -----
+
+def test_compute_autorun_entries_guard_negates_higher_page() -> None:
+    """A trigger-3 base page with a higher self-switch-gated page: the
+    autorun guard is own-terms (none) AND the negation of the higher page's
+    condition — `!flag(...)`."""
+    event = _event(1, 0, 0, [_page(trigger=3), _page(cond=_self_cond("A"))])
+    entries = mw.compute_autorun_entries([event], 50, None)
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry.event_id == 1 and entry.page_index == 0
+    assert entry.page_label == "Map050_EV001_Page1"
+    assert entry.guard == "!flag(FLAG_MAP050_EVENT001_SSA)"
+
+
+def test_compute_autorun_entries_unconditional_solo_page() -> None:
+    """A single-page trigger-3 event with no higher pages and no own
+    condition: guard is "" (always eligible)."""
+    event = _event(1, 0, 0, [_page(trigger=3)])
+    entries = mw.compute_autorun_entries([event], 50, None)
+    assert len(entries) == 1
+    assert entries[0].guard == ""
+
+
+def test_compute_autorun_entries_ungated_higher_page_skips() -> None:
+    """A higher page with NO condition at all always wins page-selection, so
+    the lower autorun page can never be active — skipped entirely, not
+    emitted with an always-false guard."""
+    event = _event(1, 0, 0, [_page(trigger=3), _page()])  # page2 unconditional
+    entries = mw.compute_autorun_entries([event], 50, None)
+    assert entries == []
+
+
+def test_compute_autorun_entries_own_condition_combines_with_negation() -> None:
+    """A gated autorun page (own condition true) with a higher self-switch
+    page: guard = own && !higher."""
+    reg = FlagRegistry()
+    reg.propose_var(101, "VAR_QUEST_LOG")
+    event = _event(
+        4, 10, 7,
+        [
+            _page(cond=_var_cond(101, 1), trigger=3),  # page0: var101 >= 1, autorun
+            _page(cond=_var_cond(101, 2)),              # page1: var101 >= 2
+            _page(cond=_self_cond("A"), trigger=3),      # page2: self-switch A, autorun
+            _page(cond=_self_cond("A")),                 # page3: self-switch A
+        ],
+    )
+    entries = mw.compute_autorun_entries([event], 172, reg)
+    by_page = {e.page_index: e for e in entries}
+    # page0 (idx0): own (var>=1) && !page1(var>=2) && !page2(switch125...) &&
+    # !page3(self A) — but page2's own trigger is autorun too, still counted
+    # as a higher-page negation target regardless of its trigger.
+    assert 0 in by_page
+    g0 = by_page[0].guard
+    assert "var(VAR_QUEST_LOG) >= 1" in g0
+    assert "var(VAR_QUEST_LOG) < 2" in g0
+    assert "!flag(FLAG_MAP172_EVENT004_SSA)" in g0
+    # page2 (idx2): own (self A) && !page3(self A) — a real self-contradiction
+    # (page3 repeats the same self-switch), i.e. never active; still computed
+    # mechanically per the spec (not our job to detect tautological deadness).
+    assert 2 in by_page
+    assert by_page[2].guard == "flag(FLAG_MAP172_EVENT004_SSA) && !flag(FLAG_MAP172_EVENT004_SSA)"
+
+
+def test_compute_autorun_entries_unresolvable_own_condition_fails_loud() -> None:
+    """An autorun page's own condition needs the registry (a variable gate)
+    but none is given — fail loud, never a silently-dropped story beat."""
+    event = _event(1, 0, 0, [_page(cond=_var_cond(101, 1), trigger=3), _page()])
+    with pytest.raises(ValueError):
+        mw.compute_autorun_entries([event], 172, None)
+
+
+def test_compute_autorun_entries_sorted_by_event_then_page() -> None:
+    """Deterministic ordering: ascending (event_id, page_index), independent
+    of the caller's list order."""
+    ev9 = _event(9, 0, 0, [_page(trigger=3)])
+    ev3 = _event(3, 0, 0, [_page(trigger=3)])
+    entries = mw.compute_autorun_entries([ev9, ev3], 50, None)
+    assert [e.event_id for e in entries] == [3, 9]
+
+
+def test_render_onframe_script_golden() -> None:
+    """Guarded entries get an `if`/`goto`; the unconditional entry (guard
+    "") gets a bare `goto`; the script always ends with setvar(VAR_TEMP_C, 1)."""
+    entries = [
+        mw.AutorunEntry(1, 0, "Map050_EV001_Page1", "flag(FLAG_X)"),
+        mw.AutorunEntry(2, 0, "Map050_EV002_Page1", ""),
+    ]
+    text = mw._render_onframe_script("MokiTown_OnFrame", entries)
+    assert text.startswith("script MokiTown_OnFrame {")
+    assert "if (flag(FLAG_X)) {" in text
+    assert "        goto(Map050_EV001_Page1)" in text
+    assert "    goto(Map050_EV002_Page1)" in text  # unconditional, no if-wrap
+    assert f"setvar({mw._ON_FRAME_GUARD_VAR}, 1)" in text
+    assert text.rstrip().endswith("}")
+
+
+@pytest.mark.skipif(
+    not poryscript.is_available(), reason="poryscript binary not installed"
+)
+def test_render_map_scripts_all_sections_compile() -> None:
+    """All three sections together (ON_TRANSITION, ON_FRAME_TABLE,
+    ON_WARP_INTO_MAP_TABLE) render as ONE mapscripts block and compile
+    through the real poryscript binary (findings §3.2/§5, single-block
+    constraint)."""
+    consts = mc.MapConstants(
+        32, "MAP_MOKI_TOWN", "MAP_URANIUM_32", "LAYOUT_X", "MAPSEC_X",
+        "MokiTown", "Moki Town",
+    )
+    facings = [mw.ArrivalFacing(5, 6, "DIR_WEST")]
+    frame_entries = [mw.AutorunEntry(74, 0, "Map032_EV074_Page1", "flag(FLAG_X)")]
+    transition_lines = [
+        "# EV016 Bambo",
+        "setflag(FLAG_TEMP_11)",
+        "if (var(VAR_QUEST_LOG) >= 1) {",
+        "    clearflag(FLAG_TEMP_11)",
+        "}",
+    ]
+    text = mw.render_map_scripts(consts, facings, frame_entries, transition_lines)
+    assert text is not None
+    assert text.count("mapscripts MokiTown_MapScripts {") == 1
+    assert "MAP_SCRIPT_ON_TRANSITION {" in text
+    assert "MAP_SCRIPT_ON_FRAME_TABLE [" in text
+    assert "MAP_SCRIPT_ON_WARP_INTO_MAP_TABLE [" in text
+    assert "script MokiTown_OnFrame {" in text
+    assert "script MokiTown_OnWarpFacing {" in text
+    result = poryscript.compile_script(text)
+    assert result.ok, result.stderr
+
+
+def test_render_map_scripts_empty_is_none() -> None:
+    consts = mc.MapConstants(32, "MAP_X", "MAP_URANIUM_32", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    assert mw.render_map_scripts(consts, [], [], []) is None
+
+
+def test_render_map_scripts_only_transition() -> None:
+    """A map with hidden actors but no warp facing / autorun still gets a
+    real mapscripts block with just ON_TRANSITION."""
+    consts = mc.MapConstants(32, "MAP_X", "MAP_URANIUM_32", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    text = mw.render_map_scripts(consts, [], [], ["setflag(FLAG_TEMP_11)"])
+    assert text is not None
+    assert "MAP_SCRIPT_ON_TRANSITION {" in text
+    assert "        setflag(FLAG_TEMP_11)" in text
+    assert "MAP_SCRIPT_ON_FRAME_TABLE" not in text
+    assert "MAP_SCRIPT_ON_WARP_INTO_MAP_TABLE" not in text
+
+
 def test_map_json_schema() -> None:
     """to_json_dict matches the fork schema; map_type drives town/indoor booleans."""
     consts = mc.MapConstants(32, "MAP_MOKI_TOWN", "MAP_URANIUM_32", "LAYOUT_MOKI_TOWN",
@@ -2048,10 +2792,18 @@ def test_build_slice_maps_smoke(tmp_path: Path) -> None:
         # See test_build_slice_constants: None is safe here (git-HEAD read).
         fork_path=None, state_path=tmp_path / "mc.json",
     )
+    # A seeded registry, matching how stage_slice_scripts.py actually calls
+    # build_slice_maps: real Moki Town corpus data has autorun (trigger=3)
+    # pages gated on switches (including the s:tsOff?/s:tsOn? per-event
+    # temp-switch idiom, e.g. Map032 EV003 page1), and compute_autorun_entries
+    # needs a live registry to resolve those guards — flag_registry=None here
+    # would fail loud (findings §3.2, by design: no silent autorun drop).
+    flag_reg = FlagRegistry()
+    flag_reg.pre_seed(_PRESEED, _SWITCHES, _VARIABLES)
     overrides = mw.build_slice_maps(
         [32, 48, 49], maps_dir=_MAPS, registry=reg, metadata_path=_METADATA,
         out_dir=tmp_path / "maps", dispatcher_dir=tmp_path / "disp",
-        npc_gfx=npc_gfx, route_registry=RouteRegistry(),
+        npc_gfx=npc_gfx, route_registry=RouteRegistry(), flag_registry=flag_reg,
     )
     # Map049: spawn floor, two in-slice warps (street door + stairs)
     assert overrides[49] == {(10, 11), (12, 3)}

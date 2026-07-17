@@ -57,6 +57,8 @@ from ..conversion_agent.flag_registry import (
     self_switch_flag_name,
 )
 from .map_constants import MapConstantRegistry, MapConstants
+from .npc_gfx import _DIR_VECTOR as _TRAINER_DIR_VECTOR
+from .npc_gfx import _DIRECTION_TO_FACING as _TRAINER_SIGHT_FACING
 from .npc_gfx import (
     MOVEMENT_TYPE_CUSTOM_ROUTE,
     MapPassability,
@@ -95,11 +97,54 @@ _FACING_GUARD_VAR = "VAR_TEMP_1"
 _FACING_X_VAR = "VAR_TEMP_2"
 _FACING_Y_VAR = "VAR_TEMP_3"
 
+# ON_FRAME_TABLE guard var: 0 while the per-visit autorun dispatch is still
+# live, set to 1 the first frame no autorun page's guard matches (see
+# `compute_autorun_entries` / `_render_onframe_script`). Written ONLY there.
+_ON_FRAME_GUARD_VAR = "VAR_TEMP_C"
+
+# Coord-event ("trigger" type) firing gate. Every coord event on a map shares
+# this one var/value pair (`CoordEvent.var`/`var_value`) — pokeemerald only
+# runs a trigger's script when var == value (ShouldTriggerScriptRun,
+# field_control_avatar.c). VAR_TEMP_0 is unusable here: it's the transpiler's
+# generic getplayerxy scratch register (transpiler.py _ALIGN_AXIS_VAR / door
+# onEvent? / align loops / every Map032_EV009.pory page), so the first coord
+# event to fire on a map poisons every other coord event on it for the rest of
+# the visit (findings §3.1 BUG A). VAR_TEMP_F is reserved instead: temp vars
+# zero on map entry, so an unwritten reserved var reads as "always eligible to
+# fire this visit" — the per-event dispatchers already do the real story
+# gating, so "always fire, let the dispatcher decide" is correct semantics.
+# The transpile-gate guard (owned elsewhere) fails loud if any emitted script
+# ever writes VAR_TEMP_F.
+_COORD_GATE_VAR = "VAR_TEMP_F"
+
 TRIGGER_ACTION = 0  # RMXP trigger: fires on the action button (a sign/NPC talk)
 TRIGGER_PLAYER_TOUCH = 1  # RMXP trigger: a door/stairs fires on step-on
 TRIGGER_EVENT_TOUCH = 2  # RMXP trigger: fires when the player touches the event's tile
 TRIGGER_AUTORUN = 3  # RMXP trigger: fires automatically, once, map-script territory
 TRIGGER_PARALLEL = 4  # RMXP trigger: runs continuously in the background
+
+# Essentials line-of-sight trainer convention: an event whose NAME matches
+# `Trainer(N)` and whose ACTIVE page is trigger-2 (event touch) gets automatic
+# line-of-sight triggering instead of an ordinary touch trigger —
+# `022_Game_Event_v17.rb:60` `pbCheckEventTriggerAfterTurning` recognizes the
+# name pattern, and `101__PField_Field.rb:2454` `pbEventCanReachPlayer?` fires
+# it when the player stands within N tiles of the event along its FACING
+# direction. If the page's trigger isn't 2, the name is inert — Essentials'
+# own check requires trigger==2, so ordinary classification applies unchanged.
+# Two corpus shapes carry this name (203 visible battle trainers / 68 invisible
+# tripwires / 8 invisible-with-battle, also tripwires):
+#   - INVISIBLE (opacity 0, or no graphic at all): a sight-ray tripwire. These
+#     are parked on their own (often impassable) tile purely as a script host;
+#     their real trigger area is the N-tile ray in front of them, so they
+#     convert to a RUN of pokeemerald coord_events painted along that ray (the
+#     native Emerald idiom — vanilla maps duplicate one script across a row of
+#     coord_events) rather than a single coord_event at the event's own tile.
+#   - VISIBLE (opacity 255): a real battle trainer. These need the native
+#     trainer-object conversion path (trainer_type + sight radius), which
+#     isn't built yet — fail loud rather than silently mis-converting one as a
+#     tripwire (none exist in the current slice; this is deliberate so
+#     slice-2 Route 01 work lands on the right architecture).
+_TRAINER_NAME_RE = re.compile(r"Trainer\((\d+)\)")
 
 # Drop-report reasons (metadata_wiring.build_object_events) — informational tags,
 # not an exhaustive enum; new reasons are fine as long as they're logged loud.
@@ -255,7 +300,7 @@ class CoordEvent:
     y: int
     script: str
     elevation: int = 3
-    var: str = "VAR_TEMP_0"
+    var: str = _COORD_GATE_VAR
     var_value: str = "0"
     kind: str = "trigger"
 
@@ -278,7 +323,9 @@ class ObjectBuildResult:
     same boot-page decision, the local-id table (RMXP event id -> 1-based
     `object_events` position — the id porymap actually compiles), and the drop
     report (every event that resolved to nothing, and why — CLAUDE.md §4.5, no
-    silent drops)."""
+    silent drops). `transition_lines` are the ON_TRANSITION visibility
+    lines for this map's hidden cutscene actors (findings §3.3/§5) — feed
+    straight into `render_map_scripts`."""
 
     object_events: list[ObjectEvent] = field(default_factory=list)
     dispatchers: list[str] = field(default_factory=list)
@@ -286,6 +333,7 @@ class ObjectBuildResult:
     bg_events: list[BgEvent] = field(default_factory=list)
     local_id_map: dict[str, int] = field(default_factory=dict)
     drops: list[tuple[int, str]] = field(default_factory=list)
+    transition_lines: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -420,98 +468,262 @@ def classify_map_events(
 
 # --- builders ----------------------------------------------------------------
 
+def _page_condition_terms(
+    cond: dict, uid: int, eid: int, flag_registry: FlagRegistry | None
+) -> list[str] | None:
+    """One page condition -> its guard terms (to be ANDed), shared by
+    `build_page_dispatcher` and `compute_autorun_entries` (and the hidden-actor
+    visibility-clause builder) — one notion of "how does a page condition
+    become Poryscript", not three copies of it (CLAUDE.md §4.3).
+
+      - ``switch1_valid`` / ``switch2_valid`` -> ``flag(FLAG_*)``, resolved
+        through the registry (``resolve_switch_flag``); OR, for a script-switch
+        (``s:``) whose label matches Uranium's per-event temp-switch idiom —
+        ``s:tsOn?("X")`` / ``s:tsOff?("X")`` — a per-event temp-switch flag
+        (see ``_resolve_switch_gate_term``).
+      - ``variable_valid`` -> ``var(VAR_*) >= value`` (RMXP's own semantics —
+        a page is active iff ``$game_variables[id] >= value``).
+      - ``self_switch_valid`` -> ``flag(FLAG_MAP{m}_EVENT{e}_SS{ch})``, a pure
+        deterministic name, minted into the registry when one is given.
+
+    Returns `[]` for an unconditional page (no gate at all) — NOT the same as
+    `None`. `None` means "can't resolve one of the gates present" (no
+    registry, an unresolvable script-switch, or an unnamed switch/var) — the
+    caller decides what unresolvable means for its own purpose (defer a whole
+    dispatch, fail loud on an autorun guard, etc.)."""
+    terms: list[str] = []
+
+    if cond.get("switch1_valid"):
+        term = _resolve_switch_gate_term(flag_registry, cond["switch1_id"], uid, eid)
+        if term is None:
+            return None
+        terms.append(term)
+
+    if cond.get("switch2_valid"):
+        term = _resolve_switch_gate_term(flag_registry, cond["switch2_id"], uid, eid)
+        if term is None:
+            return None
+        terms.append(term)
+
+    if cond.get("variable_valid"):
+        if flag_registry is None:
+            return None
+        var = resolve_variable_var(flag_registry, cond["variable_id"])
+        if var is None:
+            return None
+        terms.append(f"var({var}) >= {cond['variable_value']}")
+
+    if cond.get("self_switch_valid"):
+        letter = cond["self_switch_ch"]
+        flag = self_switch_flag_name(uid, eid, letter)
+        terms.append(f"flag({flag})")
+        if flag_registry is not None:
+            flag_registry.mint_self_switch(uid, eid, letter)
+
+    return terms
+
+
+_VAR_TERM_RE = re.compile(r"^var\((.+)\) >= (-?\d+)$")
+
+
+def _negate_term(term: str) -> str:
+    """Negate one `_page_condition_terms` guard term: ``flag(F)`` <->
+    ``!flag(F)``, ``var(X) >= n`` -> ``var(X) < n``. Fails loud on a term shape
+    this doesn't recognize rather than emitting a wrong guard."""
+    if term.startswith("!flag("):
+        return "flag(" + term[len("!flag(") :]
+    if term.startswith("flag("):
+        return "!" + term
+    m = _VAR_TERM_RE.match(term)
+    if m:
+        return f"var({m.group(1)}) < {m.group(2)}"
+    raise ValueError(f"cannot negate unrecognized guard term {term!r}")
+
+
+def _negate_terms(terms: list[str]) -> str:
+    """De Morgan negation of a conjunction of guard terms: a single term
+    negates in place; multiple terms negate to a parenthesized disjunction
+    (``!c1 || !c2``) so it composes safely inside an outer ``&&`` chain."""
+    negated = [_negate_term(t) for t in terms]
+    if len(negated) == 1:
+        return negated[0]
+    return "(" + " || ".join(negated) + ")"
+
+
+def _goto_or_end(pages: list[dict], uid: int, eid: int, page_idx: int) -> str:
+    """``goto(<page label>)``, or bare ``end`` when the target page is
+    autorun/parallel (RMXP trigger 3/4). Autorun/parallel page bodies must
+    never be reachable from the action-button interaction dispatcher
+    (findings §3.2 BUG B — an autorun body is invoked only via the
+    ON_FRAME_TABLE channel, `compute_autorun_entries` /
+    `_render_onframe_script`); talking to such an event when it's the
+    active page does nothing."""
+    if pages[page_idx].get("trigger") in (TRIGGER_AUTORUN, TRIGGER_PARALLEL):
+        return "end"
+    return f"goto({page_label(uid, eid, page_idx + 1)})"
+
+
 def build_page_dispatcher(
     event: dict, consts: MapConstants, flag_registry: FlagRegistry | None = None
 ) -> str | None:
     """Emit a Poryscript dispatcher for a multi-page event, or None to defer.
 
-    Returns None for a single-page event (no dispatch needed). For a multi-page
-    event, tests pages high->low (index 0 = base page, always the fallback,
-    unchecked — RMXP activates the highest-index satisfiable page): each page's
-    condition becomes a conjunction of guard terms —
+    Returns None for a single-page event whose page carries no condition (no
+    dispatch needed). Otherwise tests pages high->low — INCLUDING index 0: RMXP
+    activates the highest-index satisfiable page, and the base page's own
+    condition counts too (Map032 EV080: page 1 is itself gated on switch 125
+    "FINAL EVENT"; treating it as an unconditional fallback fired the postgame
+    Champion scene at boot). Each page's condition becomes a conjunction of
+    guard terms via `_page_condition_terms`; no condition at all -> an
+    unconditional page becomes the fallback and the scan stops (a higher
+    unconditional page always wins). When EVERY page is gated and none holds,
+    the dispatcher falls through to a bare ``end`` — RMXP's "no active page"
+    means the event is inert, not "run the base page anyway".
 
-      - ``switch1_valid`` / ``switch2_valid`` -> ``flag(FLAG_*)``, resolved
-        through the registry (``resolve_switch_flag``); OR, for a script-switch
-        (``s:``) whose label matches Uranium's per-event temp-switch idiom —
-        ``s:tsOn?("X")`` / ``s:tsOff?("X")`` (``Game_Event#tempSwitches``, a
-        per-map-visit switch local to the event, not a global) — a per-event
-        temp-switch flag: ``flag(FLAG_MAP{m}_EVENT{e}_TS{X})`` for ``tsOn?``,
-        ``!flag(...)`` for ``tsOff?`` (see ``_resolve_switch_gate_term``).
-      - ``variable_valid`` -> ``var(VAR_*) >= value`` (RMXP's own semantics —
-        a page is active iff ``$game_variables[id] >= value``, verified against
-        ``Game_Event#refresh`` in reference/scripts_dump).
-      - ``self_switch_valid`` -> ``flag(FLAG_MAP{m}_EVENT{e}_SS{ch})``, a pure
-        deterministic name (no registry needed to resolve it, but it's minted
-        into the registry when one is given — CLAUDE.md §4.3 fork-capability
-        gate needs it defined even if referenced only in a page condition).
-      - no condition at all -> an unconditional page: it becomes the fallback
-        label and the scan stops (a higher unconditional page always wins).
+    A switch/variable gate that can't be resolved to a name (`_page_condition_
+    terms` returns `None`) — no registry given (``flag_registry=None``), an
+    unresolvable script-switch, or an unnamed switch/variable — defers the
+    WHOLE event's dispatch: returns None and the caller points the
+    object_event at the base page instead (until the name is mintable).
 
-    A switch/variable gate that can't be resolved to a name — no registry
-    given (``flag_registry=None``), a script-switch whose label is neither an
-    ordinary named switch nor the ``s:tsOn?``/``s:tsOff?`` temp-switch idiom
-    (e.g. ``s:pbIsWeekday(...)``), a script-switch with no label loaded (a
-    ``load()``ed registry that never had ``seed_labels`` called on it), or an
-    unnamed switch/variable — defers the WHOLE event's dispatch: returns None
-    and the caller points the object_event at the base page instead (until the
-    name is mintable). This makes ``flag_registry=None`` behavior IDENTICAL to
-    the old blanket "any global gate anywhere -> defer" rule for every case the
-    old rule actually affected (pages 1..len-1; the base page's own condition,
-    index 0, was never examined for dispatch purposes either then or now)."""
+    Every ``goto()`` target (guards AND the fallback) is trigger-checked via
+    `_goto_or_end`: a page whose own trigger is autorun/parallel (3/4) is
+    never a valid action-button target and becomes a bare ``end`` instead
+    (findings §3.2 BUG B)."""
     pages = event["pages"]
-    if len(pages) <= 1:
-        return None
-
     uid, eid = consts.uranium_id, event["id"]
 
-    def _resolve(resolver, switch_or_var_id: int) -> str | None:
-        """`None` (no registry, or the resolver itself can't name it) means the
-        caller must defer the WHOLE dispatch — see the docstring above."""
-        if flag_registry is None:
-            return None
-        return resolver(flag_registry, switch_or_var_id)
-
-    guards: list[tuple[str, str]] = []
-    fallback = page_label(uid, eid, 1)
-    for idx in range(len(pages) - 1, 0, -1):  # high -> low; index 0 is the base
-        cond = pages[idx]["condition"]
-        terms: list[str] = []
-
-        if cond.get("switch1_valid"):
-            term = _resolve_switch_gate_term(flag_registry, cond["switch1_id"], uid, eid)
-            if term is None:
-                return None  # deferred: no registry, unresolvable script-switch, or unnamed
-            terms.append(term)
-
-        if cond.get("switch2_valid"):
-            term = _resolve_switch_gate_term(flag_registry, cond["switch2_id"], uid, eid)
-            if term is None:
-                return None
-            terms.append(term)
-
-        if cond.get("variable_valid"):
-            var = _resolve(resolve_variable_var, cond["variable_id"])
-            if var is None:
-                return None
-            terms.append(f"var({var}) >= {cond['variable_value']}")
-
-        if cond.get("self_switch_valid"):
-            letter = cond["self_switch_ch"]
-            flag = self_switch_flag_name(uid, eid, letter)
-            terms.append(f"flag({flag})")
-            if flag_registry is not None:
-                flag_registry.mint_self_switch(uid, eid, letter)
-
+    guards: list[tuple[str, int]] = []
+    fallback_idx: int | None = None
+    for idx in range(len(pages) - 1, -1, -1):  # high -> low, base page included
+        terms = _page_condition_terms(pages[idx]["condition"], uid, eid, flag_registry)
+        if terms is None:
+            return None  # deferred: no registry, unresolvable script-switch, or unnamed
         if terms:
-            guards.append((" && ".join(terms), page_label(uid, eid, idx + 1)))
+            guards.append((" && ".join(terms), idx))
         else:
-            fallback = page_label(uid, eid, idx + 1)  # unconditional page wins outright
+            fallback_idx = idx  # unconditional page wins outright
             break
 
+    if not guards and fallback_idx == 0 and len(pages) == 1:
+        return None  # single unconditional page: no dispatch needed
+
     lines = [f"script {dispatch_label(uid, eid)} {{"]
-    for cond_str, dest in guards:
-        lines += [f"    if ({cond_str}) {{", f"        goto({dest})", "    }"]
-    lines += [f"    goto({fallback})", "}"]
+    for cond_str, idx in guards:
+        lines += [
+            f"    if ({cond_str}) {{",
+            f"        {_goto_or_end(pages, uid, eid, idx)}",
+            "    }",
+        ]
+    if fallback_idx is not None:
+        lines += [f"    {_goto_or_end(pages, uid, eid, fallback_idx)}", "}"]
+    else:
+        # every page gated, none matched at runtime -> inert (RMXP: no active page)
+        lines += ["    end", "}"]
+    return "\n".join(lines)
+
+
+@dataclass(frozen=True)
+class AutorunEntry:
+    """One RMXP trigger=3 (autorun) page eligible to dispatch from the
+    ON_FRAME_TABLE channel: the page-body label to `goto()` and the boolean
+    guard expression reproducing RMXP's "is THIS page the active one" test.
+    `guard == ""` means unconditionally active (no own condition, no higher
+    page to negate) — see `compute_autorun_entries`."""
+
+    event_id: int
+    page_index: int  # 0-based RMXP page index
+    page_label: str
+    guard: str
+
+
+def compute_autorun_entries(
+    events: list[dict], uid: int, flag_registry: FlagRegistry | None
+) -> list[AutorunEntry]:
+    """Every trigger=3 (autorun) page across `events`, each paired with the
+    guard expression that reproduces RMXP's page-activation semantics: RMXP
+    autoruns only the highest-index page whose condition holds, so an autorun
+    page's guard is its own condition terms AND the negation of every
+    HIGHER-index page's condition on the same event (regardless of that
+    higher page's own trigger — any higher page winning page-selection
+    suppresses this one, autorun or not).
+
+    A higher page with NO condition terms at all is unconditionally
+    satisfiable, so this (lower) autorun page can never be the active page —
+    skipped (logged), not emitted with a vacuous always-false guard.
+
+    Fails loud (`ValueError`) if any needed condition term — this page's own,
+    or a higher page's (needed to negate it) — can't be resolved
+    (`_page_condition_terms` returns `None`): a story-critical autorun must
+    never be silently dropped (findings §3.2/§5).
+
+    Sorted by (event_id, page_index) ascending — deterministic, independent
+    of the caller's event dict ordering."""
+    entries: list[AutorunEntry] = []
+    for event in sorted(events, key=lambda e: e["id"]):
+        eid = event["id"]
+        pages = event["pages"]
+        for idx, page in enumerate(pages):
+            if page.get("trigger") != TRIGGER_AUTORUN:
+                continue
+            own_terms = _page_condition_terms(page["condition"], uid, eid, flag_registry)
+            if own_terms is None:
+                raise ValueError(
+                    f"map {uid} EV{eid:03d} page {idx}: autorun page's own "
+                    f"condition can't be resolved to a guard term (unnamed "
+                    f"switch/var, or an unsupported script-switch)"
+                )
+            guard_terms = list(own_terms)
+            skip = False
+            for higher_idx in range(idx + 1, len(pages)):
+                higher_terms = _page_condition_terms(
+                    pages[higher_idx]["condition"], uid, eid, flag_registry
+                )
+                if higher_terms is None:
+                    raise ValueError(
+                        f"map {uid} EV{eid:03d} page {idx}: can't resolve "
+                        f"higher page {higher_idx}'s condition to negate it "
+                        f"(needed to compute this autorun page's guard)"
+                    )
+                if not higher_terms:
+                    logger.info(
+                        "map %d EV%03d: autorun page %d never active — "
+                        "unconditional higher page %d always wins",
+                        uid, eid, idx, higher_idx,
+                    )
+                    skip = True
+                    break
+                guard_terms.append(_negate_terms(higher_terms))
+            if skip:
+                continue
+            entries.append(
+                AutorunEntry(
+                    event_id=eid, page_index=idx,
+                    page_label=page_label(uid, eid, idx + 1),
+                    guard=" && ".join(guard_terms),
+                )
+            )
+    return entries
+
+
+def _render_onframe_script(label: str, entries: list[AutorunEntry]) -> str:
+    """The ``<Dir>_OnFrame`` dispatcher body: one guarded `goto` per autorun
+    entry (unconditional entries — `guard == ""` — get a bare `goto`, no
+    `if`), then `setvar(VAR_TEMP_C, 1)` to stop per-frame dispatch for the
+    rest of the visit once nothing matches (see module docstring / findings
+    §3.2 for the per-frame termination semantics)."""
+    lines = [f"script {label} {{"]
+    for entry in entries:
+        if entry.guard:
+            lines += [
+                f"    if ({entry.guard}) {{",
+                f"        goto({entry.page_label})",
+                "    }",
+            ]
+        else:
+            lines.append(f"    goto({entry.page_label})")
+    lines.append(f"    setvar({_ON_FRAME_GUARD_VAR}, 1)")
+    lines.append("}")
     return "\n".join(lines)
 
 
@@ -593,19 +805,95 @@ def _validate_event_traits(event_traits: dict[int, list[str]], uid: int) -> None
                 )
 
 
-def _assign_rock_flags(event_traits: dict[int, list[str]], uid: int) -> dict[int, str]:
-    """FLAG_TEMP_11.._1F, assigned to `smashable_rock` events in ascending
-    event-id order. Raises if a map has more traited rocks than the range holds."""
-    rock_ids = sorted(eid for eid, traits in event_traits.items() if TRAIT_SMASHABLE_ROCK in traits)
-    if len(rock_ids) > ROCK_FLAG_CAPACITY:
+def _assign_visibility_flags(
+    rock_ids: list[int], actor_ids: list[int], uid: int
+) -> dict[int, str]:
+    """FLAG_TEMP_11.._1F, shared by `smashable_rock` events AND hidden
+    cutscene actors (findings §3.3/§5) — one sequential pool, ascending
+    event-id order across BOTH kinds (vanilla obstacle-flag convention; see
+    the ROCK_FLAG_* module comment). Raises if the map has more
+    traited/choreographed events than the range holds."""
+    all_ids = sorted(set(rock_ids) | set(actor_ids))
+    if len(all_ids) > ROCK_FLAG_CAPACITY:
         raise ValueError(
-            f"map {uid}: {len(rock_ids)} smashable_rock events exceed the "
-            f"FLAG_TEMP_{ROCK_FLAG_FIRST:X}..FLAG_TEMP_{ROCK_FLAG_LAST:X} capacity "
-            f"({ROCK_FLAG_CAPACITY})"
+            f"map {uid}: {len(all_ids)} smashable_rock/hidden-actor events "
+            f"exceed the FLAG_TEMP_{ROCK_FLAG_FIRST:X}..FLAG_TEMP_{ROCK_FLAG_LAST:X} "
+            f"capacity ({ROCK_FLAG_CAPACITY})"
         )
     return {
-        eid: f"FLAG_TEMP_{ROCK_FLAG_FIRST + i:X}" for i, eid in enumerate(rock_ids)
+        eid: f"FLAG_TEMP_{ROCK_FLAG_FIRST + i:X}" for i, eid in enumerate(all_ids)
     }
+
+
+def _visibility_transition_lines(
+    pages: list[dict],
+    uid: int,
+    eid: int,
+    name: str,
+    flag: str,
+    flag_registry: FlagRegistry | None,
+) -> tuple[list[str], bool]:
+    """ON_TRANSITION lines for one hidden cutscene actor: unconditionally hide
+    it (`setflag`), then clear the flag when RMXP's page-selection state would
+    make it visible — a page with a graphic AND `opacity > 0` whose own
+    condition holds and every higher page's does not (same highest-active-page
+    semantics as `compute_autorun_entries`). A page with a graphic but
+    `opacity == 0` never counts as visible (findings §5) — those actors stay
+    flag-hidden until a hand-authored script `addobject`s them.
+
+    Returns `(lines, always_visible)`. `always_visible` is True when some
+    visible clause has no gating at all (unconditionally satisfiable, no
+    higher page to dominate it) — the actor is visible every time it's
+    placed, so the caller should use flag "0" (never hide) instead of
+    spending a pool slot on it, and `lines` is `[]` in that case. When no
+    page ever qualifies as visible, `lines` is just the `setflag` (always
+    hidden until a script `addobject`s it) — also matching findings §5.
+
+    Fails loud (`ValueError`) on an unresolvable condition term — a
+    story-critical cutscene actor's visibility must never silently default
+    to "always hidden" or "always shown" (CLAUDE.md §4.5)."""
+    clauses: list[str] = []
+    always_visible = False
+    for i, p in enumerate(pages):
+        gname = p.get("graphic", {}).get("character_name") or ""
+        opacity = p.get("graphic", {}).get("opacity", 255)
+        if not gname or opacity <= 0:
+            continue
+        own = _page_condition_terms(p["condition"], uid, eid, flag_registry)
+        if own is None:
+            raise ValueError(
+                f"map {uid} EV{eid:03d} page {i}: visibility condition can't "
+                f"be resolved to a guard term"
+            )
+        terms = list(own)
+        dominated = False
+        for hi in range(i + 1, len(pages)):
+            higher = _page_condition_terms(pages[hi]["condition"], uid, eid, flag_registry)
+            if higher is None:
+                raise ValueError(
+                    f"map {uid} EV{eid:03d} page {i}: can't resolve higher "
+                    f"page {hi}'s condition to negate it for the visibility "
+                    f"clause"
+                )
+            if not higher:
+                dominated = True
+                break
+            terms.append(_negate_terms(higher))
+        if dominated:
+            continue
+        if not terms:
+            always_visible = True
+            break
+        clauses.append(terms[0] if len(terms) == 1 else "(" + " && ".join(terms) + ")")
+
+    if always_visible:
+        return [], True
+
+    lines = [f"# EV{eid:03d} {name}".rstrip(), f"setflag({flag})"]
+    if clauses:
+        expr = clauses[0] if len(clauses) == 1 else " || ".join(clauses)
+        lines += [f"if ({expr}) {{", f"    clearflag({flag})", "}"]
+    return lines, False
 
 
 def collect_through_block_cells(map_json: dict) -> set[tuple[int, int]]:
@@ -653,6 +941,39 @@ def collect_through_block_cells(map_json: dict) -> set[tuple[int, int]]:
     return cells
 
 
+def _trainer_sight_ray(
+    ex: int, ey: int, facing: str, n: int, through: bool,
+    passability: MapPassability | None,
+) -> list[tuple[int, int]]:
+    """Candidate tiles for a Trainer(N) sight-ray tripwire (`pbEventCanReachPlayer?`,
+    see the module comment above `_TRAINER_NAME_RE`): the N tiles from the
+    event's own tile out along `facing`, distance 1..N.
+
+    LOS clipping mirrors Essentials exactly: `through=True` never clips (all N
+    candidates are live); `through=False` clips the walk at the first blocked
+    step — distance 1 is always live (Essentials checks zero intermediate
+    steps for the adjacent tile), and distance d>1 is live only if every step
+    from the event's own tile through distance d-1 passes `can_step` (RMXP's
+    two-sided directional check). `passability is None` (legacy callers with
+    no map data to clip or filter against) skips both the LOS walk and the
+    standable filter below and returns the full unfiltered N-tile ray.
+
+    Live candidates are then filtered to `passability.standable` tiles (the
+    GBA-collision question — a tripwire can only paint a coord_event onto a
+    tile the player can actually stand on) when `passability` is given."""
+    dx, dy = _TRAINER_DIR_VECTOR[facing]
+    tiles: list[tuple[int, int]] = []
+    for d in range(1, n + 1):
+        if d >= 2 and passability is not None and not through:
+            prev_x, prev_y = ex + (d - 2) * dx, ey + (d - 2) * dy
+            if not passability.can_step(prev_x, prev_y, facing):
+                break
+        tiles.append((ex + d * dx, ey + d * dy))
+    if passability is not None:
+        tiles = [(x, y) for x, y in tiles if passability.standable(x, y)]
+    return tiles
+
+
 def build_object_events(
     map_json: dict,
     consts: MapConstants,
@@ -664,6 +985,7 @@ def build_object_events(
     flag_registry: FlagRegistry | None = None,
     passability: MapPassability | None = None,
     route_registry: RouteRegistry | None = None,
+    required_actor_ids: set[int] | None = None,
 ) -> ObjectBuildResult:
     """Place every non-warp, non-skipped event per its BOOT-STATE page (RMXP shows
     the highest-index page whose condition holds at boot; `npc_gfx.select_boot_page`).
@@ -730,15 +1052,81 @@ def build_object_events(
     `ObjectEvent.route_id` (serialized as `trainer_sight_or_berry_tree_id`).
     `route_registry=None` with an encodable route present raises `ValueError`
     (fail loud — CLAUDE.md §4.5): the caller must own and share one registry
-    per slice, exactly like `flag_registry`."""
+    per slice, exactly like `flag_registry`.
+
+    `required_actor_ids` (RMXP event ids some OTHER event's script
+    choreographs via applymovement/setobjectxy/addobject/removeobject/
+    turnobject — see `scripts/stage_slice_scripts.py`'s pory scan) are
+    emitted as hidden cutscene actors (findings §3.3/§5) for every id that
+    has NO boot-active page (would otherwise be silently absent, leaving the
+    choreography's object-command targets dangling/colliding): placed at the
+    event's (x, y) using its first graphic-bearing page, static-facing,
+    behind a sequential FLAG_TEMP_11.._1F visibility flag shared with
+    `smashable_rock` traited events (`_assign_visibility_flags`), with a
+    normal page dispatcher for interaction and a `local_id_map` entry so
+    `write_local_id_tables` covers it. An id already emitted normally (has a
+    boot-active page) is left alone. An id absent from `map_json["events"]`
+    entirely, or one that resolves to a warp/out-of-slice event, fails loud.
+    `ObjectBuildResult.transition_lines` carries the matching ON_TRANSITION
+    visibility lines for `render_map_scripts`. `None` (default) emits no
+    hidden actors — legacy behavior."""
     objects, _, _ = classify_map_events(map_json, slice_ids)
     uid = consts.uranium_id
     result = ObjectBuildResult()
+    event_by_id = {e["id"]: e for e in map_json["events"]}
+    objects_by_id = {e["id"]: e for e in objects}
 
-    rock_flags: dict[int, str] = {}
+    hidden_actor_ids: list[int] = []
+    if required_actor_ids:
+        for eid in sorted(required_actor_ids):
+            req_event = event_by_id.get(eid)
+            if req_event is None:
+                raise ValueError(
+                    f"map {uid}: required_actor_ids references event {eid} "
+                    f"absent from this map's events"
+                )
+            if eid not in objects_by_id:
+                # A warp/out-of-slice event (e.g. an animated-door sprite whose
+                # only object-command refs live in its own page block, which the
+                # prune pass removes). Not placeable — skip here; if a LIVE
+                # script still references it after pruning, the strict
+                # local_id_remap pass fails loud at staging.
+                logger.info(
+                    "map %d EV%03d: required-actor scan hit a warp/skip event; "
+                    "leaving to the strict remap pass", uid, eid,
+                )
+                continue
+            boot = select_boot_page(req_event)
+            if boot is not None:
+                # Mirror the emit-kind branch below: a required actor whose
+                # boot page yields a real object event is handled normally; a
+                # boot page the loop would DROP (opacity-0 non-touch — e.g.
+                # Map032 EV075, the invisible Theo runner — or a blank-graphic
+                # autorun/parallel page) still needs a hidden-actor placement
+                # so its choreography targets a real local id. A boot page
+                # that becomes a bg/coord event can't double as an actor —
+                # fail loud.
+                b_name = boot.get("graphic", {}).get("character_name") or ""
+                b_opacity = boot.get("graphic", {}).get("opacity", 255)
+                b_trigger = boot.get("trigger")
+                if b_name and b_opacity > 0 and not is_door_sheet(b_name):
+                    continue  # emits as a normal object below
+                if (not b_name and b_trigger in (TRIGGER_ACTION, TRIGGER_EVENT_TOUCH)) or (
+                    b_name and b_opacity == 0 and b_trigger == TRIGGER_EVENT_TOUCH
+                ):
+                    raise ValueError(
+                        f"map {uid} EV{eid:03d}: required actor's boot page emits "
+                        f"as a bg/coord event — cannot also place it as an actor"
+                    )
+            hidden_actor_ids.append(eid)
+
+    rock_ids: list[int] = []
     if event_traits is not None:
         _validate_event_traits(event_traits, uid)
-        rock_flags = _assign_rock_flags(event_traits, uid)
+        rock_ids = sorted(
+            eid for eid, traits in event_traits.items() if TRAIT_SMASHABLE_ROCK in traits
+        )
+    vis_flags = _assign_visibility_flags(rock_ids, hidden_actor_ids, uid)
 
     def _drop(event_id: int, reason: str) -> None:
         result.drops.append((event_id, reason))
@@ -748,13 +1136,60 @@ def build_object_events(
         eid = event["id"]
         page = select_boot_page(event)
         if page is None:
-            _drop(eid, DROP_NO_BOOT_PAGE)
-            continue
+            # A Trainer(N) sight-ray tripwire is invisible and exists purely
+            # as a script host — unlike a real object, it has nothing to
+            # "boot into"; its page dispatcher (built from the FULL event
+            # below via `_resolve_script`) already gates which page's body
+            # actually runs at runtime. So a tripwire whose page 1 happens to
+            # be story-gated (no page holds at boot -> `select_boot_page`
+            # returns None) must still get its ray coord events — the tiles
+            # are just as live as EV074's (whose page 1 happens to be
+            # boot-active, letting it slip through the ordinary path). Map032
+            # EV078 (ceremony's second exit column, gated on var101==2) and
+            # EV080 (a later Theo catch-up tripwire) were both silently
+            # dropped before this: pick the FIRST page that's a plausible
+            # tripwire host (trigger 2, invisible graphic) as a stand-in for
+            # ray parameters (direction/through/opacity); a non-Trainer(N)
+            # event, or a Trainer(N) event with no such page, still drops.
+            trainer_match = _TRAINER_NAME_RE.search(event.get("name") or "")
+            if trainer_match and int(trainer_match.group(1)) >= 1:
+                page = next(
+                    (
+                        p for p in event["pages"]
+                        if p.get("trigger") == TRIGGER_EVENT_TOUCH
+                        and (
+                            p.get("graphic", {}).get("opacity", 255) == 0
+                            or not p.get("graphic", {}).get("character_name")
+                        )
+                    ),
+                    None,
+                )
+            if page is None:
+                _drop(eid, DROP_NO_BOOT_PAGE)
+                continue
 
         graphic = page.get("graphic", {})
         name = graphic.get("character_name") or ""
         trigger = page.get("trigger")
         opacity = graphic.get("opacity", 255)
+
+        # Trainer(N) line-of-sight convention (see the module comment above
+        # `_TRAINER_NAME_RE`): the name is only live when the SELECTED page is
+        # trigger-2 — Essentials' own pbCheckEventTriggerAfterTurning requires
+        # that, so a Trainer(N)-named event on any other trigger is inert and
+        # falls through to ordinary classification below.
+        trainer_sight_n: int | None = None
+        if trigger == TRIGGER_EVENT_TOUCH:
+            trainer_match = _TRAINER_NAME_RE.search(event.get("name") or "")
+            if trainer_match and int(trainer_match.group(1)) >= 1:
+                trainer_sight_n = int(trainer_match.group(1))
+                if not (opacity == 0 or not name):
+                    raise ValueError(
+                        f"map {uid} EV{eid:03d} ({event.get('name', '')!r}): "
+                        f"visible Trainer({trainer_sight_n}) battle trainer needs "
+                        f"the native trainer-object conversion path (trainer_type "
+                        f"+ sight radius), which is not built yet"
+                    )
 
         emit_kind: str  # "bg" | "coord" | "object"
         if not name:
@@ -786,13 +1221,87 @@ def build_object_events(
             emit_kind = "object"
 
         script, dispatcher = _resolve_script(event, consts, pory_labels, flag_registry)
-        if dispatcher is not None:
+
+        if emit_kind == "object":
+            # BUG B (findings §3.2): a visible-graphic autorun/parallel page
+            # must never be action-button reachable — its body runs only via
+            # the ON_FRAME_TABLE channel (compute_autorun_entries). Two
+            # shapes: a dispatcher that (thanks to build_page_dispatcher's
+            # own trigger check) collapsed to nothing but `end` branches, or
+            # a bare page-1 fallback (dispatcher deferred/absent — always
+            # page index 0, see `_resolve_script`) whose page is itself
+            # trigger 3/4.
+            if dispatcher is not None:
+                if "goto(" in dispatcher:
+                    result.dispatchers.append(dispatcher)
+                else:
+                    script, dispatcher = NO_SCRIPT, None
+            elif script != NO_SCRIPT and event["pages"][0].get("trigger") in (
+                TRIGGER_AUTORUN, TRIGGER_PARALLEL,
+            ):
+                script = NO_SCRIPT
+        elif dispatcher is not None:
             result.dispatchers.append(dispatcher)
 
         if emit_kind == "bg":
             result.bg_events.append(BgEvent(x=event["x"], y=event["y"], script=script))
         elif emit_kind == "coord":
-            result.coord_events.append(CoordEvent(x=event["x"], y=event["y"], script=script))
+            # RMXP touch triggers (trigger 1 Player Touch / 2 Event Touch) fire on
+            # a BUMP — the player pressing into a blocked tile — but porymap
+            # coord_events only fire when the player STANDS on the tile (x/y/
+            # elevation match). An invisible touch-trigger event sitting on a
+            # blocked tile (e.g. Map032 EV074 on a passage-15 decoration) can
+            # never be stood on, so its coord event would be dead code on PC.
+            # When the event's own tile isn't standable, relocate the coord
+            # event to every standable orthogonal neighbor instead (same
+            # script/gate), deduped against coords already used. Trainer(N)
+            # sight tripwires never reach this branch — the ray path below
+            # handles them.
+            ex, ey = event["x"], event["y"]
+            if trainer_sight_n is not None:
+                graphic_dir = graphic.get("direction")
+                facing = _TRAINER_SIGHT_FACING.get(graphic_dir)
+                if facing is None:
+                    raise ValueError(
+                        f"map {uid} EV{eid:03d}: Trainer({trainer_sight_n}) "
+                        f"tripwire has unrecognized RMXP direction {graphic_dir!r}"
+                    )
+                through = bool(page.get("through", False))
+                ray = _trainer_sight_ray(
+                    ex, ey, facing, trainer_sight_n, through, passability
+                )
+                if not ray:
+                    raise ValueError(
+                        f"map {uid} EV{eid:03d}: Trainer({trainer_sight_n}) "
+                        f"tripwire's sight ray has no standable tile — it could "
+                        f"never fire"
+                    )
+                used = {(ce.x, ce.y) for ce in result.coord_events}
+                for tx, ty in ray:
+                    if (tx, ty) in used:
+                        continue
+                    result.coord_events.append(CoordEvent(x=tx, y=ty, script=script))
+                    used.add((tx, ty))
+            elif passability is not None and not passability.standable(ex, ey):
+                used = {(ce.x, ce.y) for ce in result.coord_events}
+                neighbors = [
+                    (nx, ny)
+                    for nx, ny in ((ex + 1, ey), (ex - 1, ey), (ex, ey + 1), (ex, ey - 1))
+                    if passability.standable(nx, ny)
+                ]
+                if not neighbors:
+                    raise ValueError(
+                        f"map {uid} EV{eid:03d}: touch trigger at ({ex}, {ey}) sits "
+                        f"on a blocked tile with no standable orthogonal neighbor — "
+                        f"bump-trigger relocation has nowhere to go"
+                    )
+                for nx, ny in neighbors:
+                    if (nx, ny) in used:
+                        continue
+                    result.coord_events.append(CoordEvent(x=nx, y=ny, script=script))
+                    used.add((nx, ny))
+            else:
+                result.coord_events.append(CoordEvent(x=ex, y=ey, script=script))
         else:
             if npc_gfx is None:
                 raise KeyError(
@@ -883,11 +1392,83 @@ def build_object_events(
                     graphics_id=graphics_id,
                     script=script, movement_type=spec.movement_type,
                     movement_range_x=spec.range_x, movement_range_y=spec.range_y,
-                    flag=rock_flags.get(eid, "0"),
+                    flag=vis_flags.get(eid, "0"),
                     route_id=route_id,
                 )
             )
             result.local_id_map[str(eid)] = len(result.object_events)
+
+    # --- hidden cutscene actors (findings §3.3/§5) ---------------------------
+    for eid in hidden_actor_ids:
+        actor_event = event_by_id[eid]
+        actor_pages = actor_event["pages"]
+        graphic_idx = next(
+            (i for i, p in enumerate(actor_pages) if p.get("graphic", {}).get("character_name")),
+            None,
+        )
+        if graphic_idx is None:
+            raise ValueError(
+                f"map {uid} EV{eid:03d}: required actor has no page with a "
+                f"character_name graphic to place it with"
+            )
+        actor_page = actor_pages[graphic_idx]
+        actor_name = actor_page["graphic"]["character_name"]
+        if npc_gfx is None:
+            raise KeyError(
+                f"map {uid} EV{eid:03d}: hidden cutscene actor {actor_name!r} "
+                f"needs the npc gfx map — call build_object_events(..., "
+                f"npc_gfx=load_npc_gfx_map(...))"
+            )
+        try:
+            actor_gfx = npc_gfx[actor_name]
+        except KeyError:
+            raise KeyError(
+                f"map {uid} EV{eid:03d}: sheet {actor_name!r} has no "
+                f"reference/npc_gfx_map.json entry"
+            ) from None
+
+        actor_spec = static_face_spec(
+            actor_page,
+            "hidden cutscene actor: choreographed by another event's "
+            "script, placed static behind a visibility flag (findings "
+            "§3.3/§5)",
+        )
+
+        actor_script, actor_dispatcher = _resolve_script(
+            actor_event, consts, pory_labels, flag_registry
+        )
+        if actor_dispatcher is not None:
+            if "goto(" in actor_dispatcher:
+                result.dispatchers.append(actor_dispatcher)
+            else:
+                actor_script, actor_dispatcher = NO_SCRIPT, None
+        elif actor_script != NO_SCRIPT and actor_pages[0].get("trigger") in (
+            TRIGGER_AUTORUN, TRIGGER_PARALLEL,
+        ):
+            actor_script = NO_SCRIPT
+
+        lines, always_visible = _visibility_transition_lines(
+            actor_pages, uid, eid, actor_event.get("name", ""),
+            vis_flags[eid], flag_registry,
+        )
+        actor_flag = "0" if always_visible else vis_flags[eid]
+        if lines:
+            result.transition_lines.extend(lines)
+
+        result.object_events.append(
+            ObjectEvent(
+                x=actor_event["x"], y=actor_event["y"], graphics_id=actor_gfx,
+                script=actor_script, movement_type=actor_spec.movement_type,
+                flag=actor_flag,
+            )
+        )
+        result.local_id_map[str(eid)] = len(result.object_events)
+
+    if len(result.object_events) > 64:
+        raise ValueError(
+            f"map {uid}: {len(result.object_events)} object_events exceeds "
+            f"the 64-slot OBJECT_EVENT_TEMPLATES_COUNT budget"
+        )
 
     if event_traits is not None:
         emitted_ids = {int(k) for k in result.local_id_map}
@@ -995,33 +1576,27 @@ def compute_arrival_facings(
     return out
 
 
-def render_arrival_facing_script(
+def _on_warp_block(
     consts: MapConstants, facings: list[ArrivalFacing]
-) -> str | None:
-    """The `mapscripts` + on-warp facing script for one map, as poryscript.
+) -> tuple[str, str] | None:
+    """The ON_WARP_INTO_MAP_TABLE entry + its facing script, shared by
+    `render_arrival_facing_script` (standalone caller/tests) and
+    `render_map_scripts` (the unified emitter). Returns
+    `(table_entry, script_text)`, or `None` for no facings.
 
-    Uses the vanilla ON_WARP_INTO_MAP_TABLE idiom (see any Battle Frontier lobby):
-    the table fires when VAR_TEMP_1 == 0, and the script guards itself by setting
-    it. The hook runs in `InitObjectEventsLocal` (overworld.c) *after*
-    `InitPlayerAvatar` has applied the engine's default facing and well before the
-    screen fades in, so the turn is invisible.
+    Uses the vanilla ON_WARP_INTO_MAP_TABLE idiom (see any Battle Frontier
+    lobby): the table fires when VAR_TEMP_1 == 0, and the script guards
+    itself by setting it. The hook runs in `InitObjectEventsLocal`
+    (overworld.c) *after* `InitPlayerAvatar` has applied the engine's default
+    facing and well before the screen fades in, so the turn is invisible.
 
     Every command here must be non-blocking: `TryRunOnWarpIntoMapScript` uses
-    `RunScriptImmediately`, which runs the script to completion in one call.
-
-    Returns None when the map has no arrival needing an override — the caller
-    then leaves the empty `mapscripts` stub alone.
-    """
+    `RunScriptImmediately`, which runs the script to completion in one call."""
     if not facings:
         return None
     label = f"{consts.dir_name}_OnWarpFacing"
+    table_entry = f"{_FACING_GUARD_VAR}, 0: {label}"
     lines = [
-        f"mapscripts {consts.dir_name}_MapScripts {{",
-        "    MAP_SCRIPT_ON_WARP_INTO_MAP_TABLE [",
-        f"        {_FACING_GUARD_VAR}, 0: {label}",
-        "    ]",
-        "}",
-        "",
         f"script {label} {{",
         f"    setvar({_FACING_GUARD_VAR}, 1)",
         f"    getplayerxy({_FACING_X_VAR}, {_FACING_Y_VAR})",
@@ -1035,7 +1610,87 @@ def render_arrival_facing_script(
         lines.append(f"        turnobject(LOCALID_PLAYER, {f.dir_const})")
         lines.append("    }")
     lines.append("}")
-    return "\n".join(lines)
+    return table_entry, "\n".join(lines)
+
+
+def render_arrival_facing_script(
+    consts: MapConstants, facings: list[ArrivalFacing]
+) -> str | None:
+    """The `mapscripts` + on-warp facing script for one map, as poryscript —
+    a thin wrapper around `_on_warp_block` kept for its own callers/tests.
+    `render_map_scripts` is the unified emitter (ON_TRANSITION +
+    ON_FRAME_TABLE + this table, whichever sections are non-empty) that
+    `build_slice_maps` actually wires up now.
+
+    Returns None when the map has no arrival needing an override — the caller
+    then leaves the empty `mapscripts` stub alone."""
+    on_warp = _on_warp_block(consts, facings)
+    if on_warp is None:
+        return None
+    table_entry, script_text = on_warp
+    return (
+        f"mapscripts {consts.dir_name}_MapScripts {{\n"
+        "    MAP_SCRIPT_ON_WARP_INTO_MAP_TABLE [\n"
+        f"        {table_entry}\n"
+        "    ]\n"
+        "}\n\n"
+        f"{script_text}"
+    )
+
+
+def render_map_scripts(
+    consts: MapConstants,
+    facings: list[ArrivalFacing],
+    frame_entries: list[AutorunEntry],
+    transition_lines: list[str],
+) -> str | None:
+    """The unified per-map `mapscripts` block: one `<Dir>_MapScripts` symbol
+    carrying whichever of ON_TRANSITION / ON_FRAME_TABLE / ON_WARP_INTO_MAP_
+    TABLE are non-empty, in that order (findings §3.2/§5) — there can be only
+    ONE mapscripts block per map, so this generalizes what
+    `render_arrival_facing_script` did for the warp-facing case alone.
+
+    - ON_TRANSITION: inlined, body = `transition_lines` (hidden cutscene
+      actor visibility — `ObjectBuildResult.transition_lines`).
+    - ON_FRAME_TABLE: one row (`VAR_TEMP_C, 0: <Dir>_OnFrame`) plus the
+      `<Dir>_OnFrame` dispatcher script, from `frame_entries`
+      (`compute_autorun_entries`).
+    - ON_WARP_INTO_MAP_TABLE: unchanged from `render_arrival_facing_script`
+      (`_on_warp_block`), byte-compatible with the existing warp-facing pins.
+
+    Returns None when all three sections are empty — the caller keeps
+    today's empty-`mapscripts`-stub behavior."""
+    sections: list[str] = []
+    scripts: list[str] = []
+
+    if transition_lines:
+        body = "\n".join(f"        {ln}" for ln in transition_lines)
+        sections.append("    MAP_SCRIPT_ON_TRANSITION {\n" + body + "\n    }")
+
+    if frame_entries:
+        onframe_label = f"{consts.dir_name}_OnFrame"
+        sections.append(
+            "    MAP_SCRIPT_ON_FRAME_TABLE [\n"
+            f"        {_ON_FRAME_GUARD_VAR}, 0: {onframe_label}\n"
+            "    ]"
+        )
+        scripts.append(_render_onframe_script(onframe_label, frame_entries))
+
+    on_warp = _on_warp_block(consts, facings)
+    if on_warp is not None:
+        table_entry, warp_script = on_warp
+        sections.append(
+            "    MAP_SCRIPT_ON_WARP_INTO_MAP_TABLE [\n"
+            f"        {table_entry}\n"
+            "    ]"
+        )
+        scripts.append(warp_script)
+
+    if not sections:
+        return None
+
+    block = f"mapscripts {consts.dir_name}_MapScripts {{\n" + "\n".join(sections) + "\n}"
+    return "\n\n".join([block] + scripts)
 
 
 def _resolve_all_warp_events(
@@ -1140,6 +1795,7 @@ def build_slice_maps(
     tilesets_path: Path | None = None,
     walkable_overrides: dict[int, frozenset[tuple[int, int]]] | None = None,
     route_registry: RouteRegistry | None = None,
+    required_actor_ids: dict[int, set[int]] | None = None,
 ) -> dict[int, set[tuple[int, int]]]:
     """Assemble map.json + dispatcher .pory for every slice map. Returns the per-map
     warp-source coords (S3 walkable-overrides) so S8 can force those cells walkable.
@@ -1171,7 +1827,13 @@ def build_slice_maps(
     walk-sequence loops demote loud — see there). `walkable_overrides` (Uranium
     map id -> cells, normally `map_set.WALKABLE_OVERRIDES`) are the converter-
     level collision unblocks those gates must treat as open — the SAME cells the
-    layout pass forces walkable, or the two passes would disagree (§4.3)."""
+    layout pass forces walkable, or the two passes would disagree (§4.3).
+
+    `required_actor_ids` (Uranium map id -> RMXP event ids some script on
+    that map choreographs — see `build_object_events`'s hidden-actor
+    parameter of the same name) is forwarded per-map; a map absent from the
+    outer dict, or the dict itself being `None`, passes `None` through
+    (legacy: no hidden actors on that map)."""
     slice_set = set(slice_ids)
     tilesets = (
         json.loads(tilesets_path.read_text(encoding="utf-8"))
@@ -1213,6 +1875,7 @@ def build_slice_maps(
             maps[uid], consts, slice_set, pory_labels=pory_labels, npc_gfx=npc_gfx,
             event_traits=map_traits, flag_registry=flag_registry,
             passability=passability, route_registry=route_registry,
+            required_actor_ids=(required_actor_ids or {}).get(uid),
         )
         overrides[uid] = src_coords
         local_id_tables[uid] = result.local_id_map
@@ -1229,13 +1892,22 @@ def build_slice_maps(
         map_out = out_dir / consts.dir_name / "map.json"
         map_out.parent.mkdir(parents=True, exist_ok=True)
         map_out.write_text(json.dumps(map_file.to_json_dict(), indent=2) + "\n", encoding="utf-8")
-        # The on-warp facing block rides the dispatcher channel: the assembler
-        # appends this file before deciding whether to inject an empty
-        # `mapscripts` stub, so a real `mapscripts` block here suppresses the stub.
+        # The unified mapscripts block rides the dispatcher channel: the
+        # assembler appends this file before deciding whether to inject an
+        # empty `mapscripts` stub, so a real `mapscripts` block here
+        # suppresses the stub.
         blocks = list(result.dispatchers)
-        facing_block = render_arrival_facing_script(consts, arrival_facings.get(uid, []))
-        if facing_block is not None:
-            blocks.append(facing_block)
+        # Autorun pages only exist for placeable object events — a door's
+        # trigger-3 animation page (the event classifies as a WarpSpec, its
+        # native warp subsumes the choreography) must not become an ON_FRAME
+        # entry referencing a page block the prune pass removes.
+        autorun_objects, _, _ = classify_map_events(maps[uid], slice_set)
+        frame_entries = compute_autorun_entries(autorun_objects, uid, flag_registry)
+        map_scripts = render_map_scripts(
+            consts, arrival_facings.get(uid, []), frame_entries, result.transition_lines,
+        )
+        if map_scripts is not None:
+            blocks.append(map_scripts)
 
         disp_out = dispatcher_dir / f"Map{uid:03d}_dispatch.pory"
         if blocks:

@@ -797,6 +797,36 @@ class MapPassability:
             self._direction_blocked(x, y, bit) for bit in _RMXP_PASSAGE_BITS.values()
         )
 
+    def standable(self, x: int, y: int) -> bool:
+        """Can a character occupy `(x, y)` at all? This is the GBA-collision
+        question (`layout._cell_blocked`'s aggregate scan), not RMXP's
+        directional `can_step`: pokeemerald collision is a single blocked/clear
+        bit per metatile, decided by the same top-down layer scan the layout
+        pass uses to build it, so `standable` must agree with it exactly
+        (`metadata_wiring.build_object_events`'s bump-trigger relocation
+        depends on that equivalence — a coord event can only be relocated onto
+        a tile the layout pass actually marks walkable).
+
+        Layers top to bottom: skip empty tiles (id 0); the first non-empty
+        tile with ANY directional passage bit set (`passage & 0x0F != 0`) means
+        blocked; the first non-empty tile at priority 0 that clears that check
+        decides passable (stop scanning); an all-empty column is void (not
+        standable). `open_cells` (converter-level collision unblocks) force a
+        cell walkable regardless of tile data."""
+        if not self._in_bounds(x, y):
+            return False
+        if (x, y) in self.open_cells:
+            return True
+        for z in reversed(range(self.zsize)):
+            tid = self.data[(z * self.ysize + y) * self.xsize + x]
+            if tid == 0:
+                continue
+            if (self.passages[tid] & 0x0F) != 0:
+                return False
+            if self.priorities[tid] == 0:
+                return True
+        return False
+
     def can_step(self, x: int, y: int, facing: str) -> bool:
         """Can a character standing at `(x, y)` take one step `facing`?
 

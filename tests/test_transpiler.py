@@ -541,6 +541,63 @@ def test_yesno_choice_emits_yesnobox_and_branches(ctx: T.TranspileContext) -> No
     assert res.unhandled == []
 
 
+def test_two_arm_choice_custom_labels_emits_yesnobox(ctx: T.TranspileContext) -> None:
+    """Any 2-way choice maps to yesnobox, regardless of the choice labels —
+    dropping custom-labeled arms is the bug that shipped a broken autorun
+    loop (arms held the self-switch deactivation writes)."""
+    commands = [
+        cmd(T.SHOW_CHOICES, [["Yes!", "Wait a minute..."], 2], indent=0),
+        cmd(T.CHOICE_WHEN, [0, "Yes!"], indent=0),
+        cmd(T.CONTROL_SELF_SWITCH, ["C", 0], indent=1),
+        cmd(T.CHOICE_WHEN, [1, "Wait a minute..."], indent=0),
+        cmd(T.CONTROL_SELF_SWITCH, ["D", 0], indent=1),
+        cmd(T.CHOICES_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=1)
+    name_c = self_switch_flag_name(49, 5, "C")
+    name_d = self_switch_flag_name(49, 5, "D")
+    assert "yesnobox(0, 0)" in res.text
+    assert f"setflag({name_c})" in res.text
+    assert f"setflag({name_d})" in res.text
+    assert res.unhandled == []
+
+
+def test_three_arm_choice_still_queued(ctx: T.TranspileContext) -> None:
+    commands = [
+        cmd(T.SHOW_CHOICES, [["A", "B", "C"], 3], indent=0),
+        cmd(T.CHOICE_WHEN, [0, "A"], indent=0),
+        cmd(T.SHOW_TEXT, ["a path"], indent=1),
+        cmd(T.CHOICE_WHEN, [1, "B"], indent=0),
+        cmd(T.SHOW_TEXT, ["b path"], indent=1),
+        cmd(T.CHOICE_WHEN, [2, "C"], indent=0),
+        cmd(T.SHOW_TEXT, ["c path"], indent=1),
+        cmd(T.CHOICES_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=1)
+    assert "yesnobox" not in res.text
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.SHOW_CHOICES
+
+
+def test_two_arm_choice_with_cancel_arm_lands_in_else(ctx: T.TranspileContext) -> None:
+    commands = [
+        cmd(T.SHOW_CHOICES, [["Yes!", "Nevermind"], 1], indent=0),
+        cmd(T.CHOICE_WHEN, [0, "Yes!"], indent=0),
+        cmd(T.SHOW_TEXT, ["yes path"], indent=1),
+        cmd(T.CHOICE_CANCEL, indent=0),
+        cmd(T.SHOW_TEXT, ["cancel path"], indent=1),
+        cmd(T.CHOICES_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=1)
+    assert "yesnobox(0, 0)" in res.text
+    assert res.unhandled == []
+    then_idx = res.text.index("if (var(VAR_RESULT) == 1) {")
+    else_idx = res.text.index("} else {")
+    yes_idx = res.text.index('msgbox(format("yes path"))')
+    cancel_idx = res.text.index('msgbox(format("cancel path"))')
+    assert then_idx < yes_idx < else_idx < cancel_idx
+
+
 # ----------------------------------------------------------------------------
 # unresolvable 111 condition
 # ----------------------------------------------------------------------------
@@ -592,12 +649,31 @@ def test_trigger_zero_empty_body_no_wrapper(ctx: T.TranspileContext) -> None:
 
 
 def test_nonzero_trigger_no_wrapper(ctx: T.TranspileContext) -> None:
-    # Only triggers 3/4 (autorun/parallel) get no lock/release wrapping —
-    # triggers 1/2 now do (see test_trigger_one_wraps_lock_release_no_faceplayer).
-    res = run_event(ctx, [[cmd(T.WAIT, [1])]], trigger=3)
+    # Only trigger 4 (parallel) gets no lock/release wrapping — triggers 1/2
+    # wrap lock/release (see test_trigger_one_wraps_lock_release_no_faceplayer)
+    # and trigger 3 (autorun) wraps lockall/releaseall (see
+    # test_trigger_three_wraps_lockall_releaseall).
+    res = run_event(ctx, [[cmd(T.WAIT, [1])]], trigger=4)
     assert "lock" not in res.text
     assert "faceplayer" not in res.text
     assert "release" not in res.text
+
+
+def test_trigger_three_wraps_lockall_releaseall(ctx: T.TranspileContext) -> None:
+    # Autorun pages (trigger 3) are invoked from an ON_FRAME_TABLE map script;
+    # vanilla ON_FRAME cutscenes use lockall/releaseall, not lock/release.
+    res = run_event(ctx, [[cmd(T.WAIT, [1])]], trigger=3)
+    lines = [ln.strip() for ln in res.text.splitlines()]
+    assert lines == [
+        "# npc",
+        "script Map049_EV005_Page1 {",
+        "lockall",
+        "delay(1)",
+        "releaseall",
+        "end",
+        "}",
+    ]
+    assert "faceplayer" not in res.text
 
 
 def test_trigger_one_wraps_lock_release_no_faceplayer(ctx: T.TranspileContext) -> None:

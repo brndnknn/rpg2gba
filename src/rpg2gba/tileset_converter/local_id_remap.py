@@ -17,12 +17,9 @@ the transpiler emits a map's ``.pory`` file, against fresh transpiler output.
 from __future__ import annotations
 
 import json
-import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
-
-logger = logging.getLogger(__name__)
 
 #: Poryscript commands whose first argument is an object local id.
 REMAP_COMMANDS: tuple[str, ...] = (
@@ -68,7 +65,9 @@ class RemapResult:
     text: str
     #: (line, command, old_id, new_id), in order of appearance.
     replacements: list[tuple[int, str, int, int]]
-    #: (line, command, old_id) for object ids absent from the table, left unchanged.
+    #: Always empty. Kept for API stability (callers that unpack it) — an
+    #: object id absent from the table now raises ValueError instead of
+    #: producing a warning entry.
     warnings: list[tuple[int, str, int]]
 
 
@@ -139,9 +138,18 @@ def remap_pory_object_ids(
     finditer pass followed by a single splice guarantees each original
     integer is read and rewritten exactly once, independent of table order.
 
-    Ids with no entry in `table` are left unchanged, recorded in
-    `RemapResult.warnings`, and logged via `logging.warning` (they can be
-    legitimately-absent objects whose scripts are unreachable).
+    Ids with no entry in `table` are a hard error: `ValueError`, immediately,
+    naming the source, line, command, offending id, and the sorted list of
+    RMXP ids present in `table`. There is no warn-and-leave path — a left-in
+    integer is not "a legitimately-absent object whose script is unreachable";
+    local ids are a dense ``1..N`` sequence, so a leftover RMXP id silently
+    collides with whatever object happens to occupy that local id (see
+    `reference/findings/moki_slice_story_chain_2026-07-16.md` §3.3). Fail
+    loud instead.
+
+    `RemapResult.warnings` is kept for API stability (callers that unpack it)
+    but is always empty — there is nothing left to warn about once unmapped
+    ids raise.
 
     Caller's responsibility (invariant): this pass must be applied exactly
     once, to fresh transpiler output. Because the table can be shifting,
@@ -162,15 +170,12 @@ def remap_pory_object_ids(
 
         new_id = table.get(str(old_id))
         if new_id is None:
-            warnings.append((line, command, old_id))
-            logger.warning(
-                "%s:%d: %s references object local id %d absent from remap table",
-                source_name,
-                line,
-                command,
-                old_id,
+            known_ids = sorted(int(k) for k in table)
+            raise ValueError(
+                f"{source_name}:{line}: {command} references object local id "
+                f"{old_id}, which is absent from the remap table. RMXP ids "
+                f"present in the table: {known_ids}"
             )
-            continue
 
         spans.append((start, end, str(new_id)))
         replacements.append((line, command, old_id, new_id))

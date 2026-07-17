@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -43,6 +44,8 @@ from rpg2gba.tileset_converter import map_constants as mc
 from rpg2gba.tileset_converter import metadata_wiring as mw
 from rpg2gba.tileset_converter import sprite_pass
 from rpg2gba.tileset_converter.local_id_remap import (
+    _COMMAND_PATTERN,
+    _mask_strings_and_comments,
     load_local_id_table,
     remap_pory_object_ids,
 )
@@ -56,6 +59,82 @@ ALLOWED_MAPS = {49, 48, 32, 50, 64, 65, 172, 89}
 OVERRIDES = Path("reference/map_name_overrides.json")
 SWITCHES = Path("reference/uranium_switches.json")
 VARIABLES = Path("reference/uranium_variables.json")
+
+# ON_FRAME dispatcher block header: `script <MapDirName>_OnFrame {` at column 0.
+_ONFRAME_HEADER_RE = re.compile(r"^script\s+(\S+_OnFrame)\s*\{")
+_FLAG_TOKEN_RE = re.compile(r"\bFLAG_[A-Z0-9_]+\b")
+_VAR_TOKEN_RE = re.compile(r"\bVAR_[A-Z0-9_]+\b")
+_GOTO_TARGET_RE = re.compile(r"\bgoto\(\s*(Map\d+_EV\d+_Page\d+)\s*\)")
+_SET_FLAG_WRITE_RE = re.compile(r"\b(?:setflag|clearflag)\(\s*(FLAG_[A-Z0-9_]+)")
+_SET_VAR_WRITE_RE = re.compile(r"\b(?:setvar|addvar|subvar|copyvar)\(\s*(VAR_[A-Z0-9_]+)")
+# The quiescence guard var the dispatcher itself writes at the end of every
+# OnFrame body (`setvar(VAR_TEMP_C, 1)`) — not a page's job to write, so it
+# never counts as a guard symbol a page must intersect.
+_QUIESCENCE_VAR = "VAR_TEMP_C"
+
+
+def _find_script_block(text: str, header_re: re.Pattern[str]) -> tuple[str, str] | None:
+    """Find the first ``script <label> {`` block matching `header_re` and return
+    ``(label, block_text)``. A Poryscript block opens at column 0 and closes at
+    the next column-0 ``}`` — nested ``if (...) { ... }`` bodies are always
+    indented, so scanning line-by-line for an unindented closing brace finds the
+    true end of the block without needing a brace counter."""
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        m = header_re.match(line)
+        if not m:
+            continue
+        label = m.group(1)
+        for j in range(i + 1, len(lines)):
+            if re.match(r"^\}\s*$", lines[j]):
+                return label, "\n".join(lines[i:j + 1])
+        # Unterminated block (shouldn't happen in well-formed .pory) — return
+        # what's left rather than silently dropping it.
+        return label, "\n".join(lines[i:])
+    return None
+
+
+def check_onframe_deactivation(
+    dispatch_text: str, map_pory_text: str, *, source_name: str
+) -> list[str]:
+    """Fail-loud guard for the ON_FRAME re-fire bug: every page a map's
+    ``<MapDirName>_OnFrame`` dispatcher can `goto` must, in its body, write at
+    least one FLAG_*/VAR_* symbol that also appears in the OnFrame guard
+    conditions — otherwise the guard never changes and the dispatcher re-fires
+    the same page every frame (infinite cutscene loop).
+
+    Returns a list of human-readable violation strings (empty = pass). Pure —
+    no I/O; callers pass in already-read dispatch/map .pory text.
+    """
+    found = _find_script_block(dispatch_text, _ONFRAME_HEADER_RE)
+    if found is None:
+        return []
+    onframe_label, onframe_block = found
+
+    guard_symbols = set(_FLAG_TOKEN_RE.findall(onframe_block))
+    guard_symbols.update(_VAR_TOKEN_RE.findall(onframe_block))
+    guard_symbols.discard(_QUIESCENCE_VAR)
+
+    violations: list[str] = []
+    for label in sorted(set(_GOTO_TARGET_RE.findall(onframe_block))):
+        body_header_re = re.compile(rf"^script\s+({re.escape(label)})\s*\{{")
+        body = _find_script_block(map_pory_text, body_header_re)
+        if body is None:
+            violations.append(
+                f"{source_name}: {onframe_label} dispatches {label}, but no "
+                f"`script {label} {{...}}` body is defined for it"
+            )
+            continue
+        _, body_block = body
+        written = set(_SET_FLAG_WRITE_RE.findall(body_block))
+        written.update(_SET_VAR_WRITE_RE.findall(body_block))
+        if not (written & guard_symbols):
+            violations.append(
+                f"{source_name}: {label} (dispatched from {onframe_label}) writes "
+                f"none of the OnFrame guard symbols {sorted(guard_symbols)} — the "
+                f"ON_FRAME page never deactivates itself and will re-fire every frame"
+            )
+    return violations
 
 
 def _load_event_traits(out: Path, map_id: int, pory_path: Path) -> dict[int, list[str]]:
@@ -73,6 +152,34 @@ def _load_event_traits(out: Path, map_id: int, pory_path: Path) -> dict[int, lis
     return {int(eid): traits for eid, traits in sidecar["events"].items()}
 
 
+def _scan_required_actor_ids(pory_text: str, map_json: dict) -> set[int]:
+    """Every RMXP event id targeted by an object-command bare-integer literal
+    (applymovement/setobjectxy/addobject/removeobject/turnobject — the same
+    `REMAP_COMMANDS`/`_COMMAND_PATTERN` `local_id_remap.py` later rewrites)
+    in `pory_text` — the transpiled choreography's OWN idea of which events
+    it drives, independent of whether metadata_wiring emitted them at boot
+    (findings §3.3/§5: these are the "hidden cutscene actor" candidates).
+
+    Must run on PRE-PRUNE, pre-remap text (the caller's normalized-but-not-
+    yet-pruned `.pory`) — the same masking helper `local_id_remap` uses so
+    string/comment contents can't be mistaken for a command argument.
+
+    Fails loud on an id that doesn't correspond to any event on the map at
+    all (a garbage reference — CLAUDE.md §4.5)."""
+    event_ids = {e["id"] for e in map_json["events"]}
+    ids: set[int] = set()
+    masked = _mask_strings_and_comments(pory_text)
+    for m in _COMMAND_PATTERN.finditer(masked):
+        candidate = int(m.group(2))
+        if candidate not in event_ids:
+            raise ValueError(
+                f"{m.group(1)}({candidate}): targets event id {candidate}, "
+                f"absent from this map's events (garbage reference)"
+            )
+        ids.add(candidate)
+    return ids
+
+
 def _regenerate_map_json(
     out: Path,
     pory_labels: set[str],
@@ -80,6 +187,7 @@ def _regenerate_map_json(
     local_id_dir: Path,
     event_traits: dict[int, dict[int, list[str]]],
     fork: Path,
+    required_actor_ids: dict[int, set[int]],
 ) -> None:
     """Re-run S5 wiring over the whole slice with the real converted page labels,
     so bodyless events become static objects. Warp pairing needs the full slice,
@@ -89,7 +197,10 @@ def _regenerate_map_json(
     RMXP-id -> compiled-local-id tables are written to `local_id_dir` for the
     staging remap pass below. `event_traits` (Uranium map id -> event id -> trait
     list, from the per-map `.traits.json` sidecars) assigns smashable-rock
-    visibility flags.
+    visibility flags. `required_actor_ids` (Uranium map id -> RMXP event ids
+    scanned pre-prune off each map's own `.pory`, `_scan_required_actor_ids`)
+    are the hidden-cutscene-actor candidates (findings §3.3/§5) forwarded to
+    `build_slice_maps`.
 
     Loads the live flag registry (`out/flag_state.json`) and forwards it to
     `build_slice_maps` so multi-page events gated on a global switch/var get a
@@ -134,6 +245,7 @@ def _regenerate_map_json(
         tilesets_path=out / "tilesets.json",
         walkable_overrides=WALKABLE_OVERRIDES,
         route_registry=route_reg,
+        required_actor_ids=required_actor_ids,
     )
     flag_reg.save(flag_state_path)
     # Always write (empty → stub) so the engine #include resolves even with no
@@ -187,13 +299,26 @@ def main() -> int:
         pory_labels.update(asm.script_definitions(norm.text))
         event_traits[map_id] = _load_event_traits(out, map_id, pory_path)
 
+    # --- scan each map's own PRE-PRUNE .pory for object-command targets (the
+    # hidden-cutscene-actor candidates — findings §3.3/§5) BEFORE the S5
+    # rewiring pass runs, since build_object_events needs the full set up
+    # front to decide which of them lack a boot-active page ---
+    required_actor_ids: dict[int, set[int]] = {}
+    for map_id, norm in normalized.items():
+        map_json_path = out / "maps" / f"Map{map_id:03d}.json"
+        map_json_raw = json.loads(map_json_path.read_text(encoding="utf-8"))
+        required_actor_ids[map_id] = _scan_required_actor_ids(norm.text, map_json_raw)
+
     # --- regenerate map.json with the real labels (the S5 stub hook) +
     # per-map local-id tables (RMXP id -> compiled object-event local id) ---
-    _regenerate_map_json(out, pory_labels, npc_gfx, local_id_dir, event_traits, fork)
+    _regenerate_map_json(
+        out, pory_labels, npc_gfx, local_id_dir, event_traits, fork, required_actor_ids,
+    )
 
     # --- pass 2: prune + report per requested map (reads the fresh map.json) ---
     staged: dict[str, str] = {}   # filename -> transformed text (for the staged-set checks)
     map_jsons: list[dict] = []
+    onframe_violations: list[str] = []
 
     for map_id in args.maps:
         entry = consts.get(str(map_id))
@@ -209,7 +334,21 @@ def main() -> int:
         map_jsons.append(map_json)
 
         norm = normalized[map_id]
-        result = asm.prune_map_pory(norm.text, map_json, allowed_uranium_maps=ALLOWED_MAPS)
+        # The dispatcher .pory (page dispatchers + the unified mapscripts
+        # block) may reference page bodies of events map.json wires nowhere —
+        # an ON_FRAME autorun entry for a blank-graphic/opacity-0 event, for
+        # example — so those events must survive the prune too.
+        live_ids = asm.live_event_ids(map_json)
+        disp_path = out / "porymap" / "dispatch" / f"Map{map_id:03d}_dispatch.pory"
+        disp_text = disp_path.read_text(encoding="utf-8") if disp_path.is_file() else None
+        if disp_text is not None:
+            for ref in asm.script_reference_labels(disp_text):
+                m = re.match(rf"Map{map_id:03d}_EV(\d+)_", ref)
+                if m:
+                    live_ids.add(int(m.group(1)))
+        result = asm.prune_orphan_blocks(
+            norm.text, live_ids, allowed_uranium_maps=ALLOWED_MAPS
+        )
 
         # Remap RMXP event ids in object-targeting commands (applymovement/
         # setobjectxy/addobject/removeobject/turnobject) to compiled local ids.
@@ -220,6 +359,18 @@ def main() -> int:
             result.text, table, source_name=f"Map{map_id:03d}.pory"
         )
         staged[f"Map{map_id:03d}.pory"] = remap.text
+
+        # ON_FRAME re-fire guard: run against the final staged text (post
+        # normalize/prune/remap, and — since it's read from out/scripts/ where
+        # transpile_driver already applied hand_conversions/ overlays, e.g.
+        # Map032_EV009.pory — post-overlay too) so a hand-authored page is
+        # checked the same as a transpiled one.
+        if disp_text is not None:
+            onframe_violations.extend(
+                check_onframe_deactivation(
+                    disp_text, remap.text, source_name=f"Map{map_id:03d}.pory"
+                )
+            )
 
         statics = sum(1 for o in map_json.get("object_events", []) if o.get("script") == "0x0")
         print(f"Map{map_id:03d} ({entry['dir_name']}): "
@@ -263,6 +414,13 @@ def main() -> int:
                 print(f"    {label}  x{n}", file=sys.stderr)
         return 1
     print("existence check: every referenced script label is defined exactly once.")
+
+    if onframe_violations:
+        raise RuntimeError(
+            f"{len(onframe_violations)} ON_FRAME deactivation violation(s):\n"
+            + "\n".join(f"    {v}" for v in onframe_violations)
+        )
+    print("onframe check: every ON_FRAME-dispatched page deactivates its own guard.")
 
     if args.write:
         staging.mkdir(parents=True, exist_ok=True)

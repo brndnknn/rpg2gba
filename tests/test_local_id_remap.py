@@ -3,7 +3,6 @@ object-local-id rewriting of already-transpiled .pory text."""
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 
 import pytest
@@ -111,17 +110,15 @@ def test_whitespace_around_paren_and_comma_tolerated() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_obj_event_id_player_untouched_no_warning(caplog: pytest.LogCaptureFixture) -> None:
+def test_obj_event_id_player_untouched_no_warning() -> None:
     table: dict[str, int] = {}
     text = "applymovement(OBJ_EVENT_ID_PLAYER, Map049_Move1)\n"
 
-    with caplog.at_level(logging.WARNING):
-        result = remap_pory_object_ids(text, table)
+    result = remap_pory_object_ids(text, table)
 
     assert result.text == text
     assert result.replacements == []
     assert result.warnings == []
-    assert caplog.records == []
 
 
 @pytest.mark.parametrize(
@@ -201,23 +198,60 @@ def test_trailing_comment_untouched() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_unmapped_id_unchanged_and_warned(caplog: pytest.LogCaptureFixture) -> None:
+def test_unmapped_id_raises() -> None:
     table: dict[str, int] = {}
     text = "applymovement(99, Move1)\n"
 
-    with caplog.at_level(logging.WARNING):
-        result = remap_pory_object_ids(text, table, source_name="Map099.pory")
+    with pytest.raises(ValueError) as excinfo:
+        remap_pory_object_ids(text, table, source_name="Map099.pory")
 
-    assert result.text == text
-    assert result.replacements == []
-    assert result.warnings == [(1, "applymovement", 99)]
-
-    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
-    assert len(warnings) == 1
-    message = warnings[0].getMessage()
+    message = str(excinfo.value)
     assert "Map099.pory" in message
     assert "applymovement" in message
     assert "99" in message
+
+
+def test_unmapped_id_error_lists_known_table_ids() -> None:
+    table = {"9": 1, "20": 3}
+    text = "applymovement(16, Move1)\n"
+
+    with pytest.raises(ValueError) as excinfo:
+        remap_pory_object_ids(text, table, source_name="Map049.pory")
+
+    message = str(excinfo.value)
+    assert "16" in message
+    assert "[9, 20]" in message
+
+
+def test_mapped_id_still_remaps_when_other_ids_unmapped() -> None:
+    """A mapped id must remap cleanly regardless of what else is in the
+    table — the raise-on-unmapped behavior only triggers for the id that is
+    actually missing."""
+    table = {"16": 2}
+    text = "applymovement(16, Move1)\n"
+
+    result = remap_pory_object_ids(text, table)
+
+    assert result.text == "applymovement(2, Move1)\n"
+    assert result.replacements == [(1, "applymovement", 16, 2)]
+    assert result.warnings == []
+
+
+def test_unmapped_id_inside_string_or_comment_does_not_raise() -> None:
+    """Ids that only appear inside a string literal or a comment are masked
+    out before the command scanner ever sees them, so an id absent from the
+    table there must not raise."""
+    table: dict[str, int] = {}
+    text = (
+        'msgbox("applymovement(99, foo) is not real")\n'
+        "# applymovement(99, foo)\n"
+    )
+
+    result = remap_pory_object_ids(text, table)
+
+    assert result.text == text
+    assert result.replacements == []
+    assert result.warnings == []
 
 
 # ---------------------------------------------------------------------------
