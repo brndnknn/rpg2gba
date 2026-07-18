@@ -242,6 +242,24 @@ _SHOW_MAP_RE = re.compile(r"^\s*(?:Kernel\.)?pbShowMap\s*$")
 # vanilla b-dash unlock flag.
 _RUNNING_SHOES_ON_RE = re.compile(r"^\s*\$PokemonGlobal\.runningShoes\s*=\s*true\s*$")
 
+# Essentials inline-choice text escape (SLICE1_TODO #17): a Show Text message
+# trailing \ch[var,ifCancel,opt1,opt2,...] (reference/scripts_dump/059_Messages.rb
+# :1218-1225, 1360-1362, 1429-1465). Split on the literal marker, not a single
+# regex over the whole payload — option text is free-form (may itself contain
+# escapes/brackets from embedded color codes) and the true end of the command
+# is "the last ']' in the message" (verified tail-only corpus shape), not the
+# first one a naive `\[.*?\]` would stop at.
+_CH_MARK = "\\ch["
+# Cosmetic color-code carriers inside option labels — stripped, never queued
+# for these two shapes specifically (same disposition as _COLOR_CODE_RE in
+# deterministic.py, applied here to \ch's own comma-split option text).
+_CH_COLOR_TAG_RE = re.compile(r"<c2=[0-9a-fA-F]+>")
+_CH_LEGACY_COLOR_RE = re.compile(r"\\c\[\d+\]")
+# After stripping the two shapes above, any surviving backslash or angle
+# bracket is an unrecognized tag — queue the whole command rather than emit
+# mystery text into a menu option.
+_CH_RESIDUAL_TAG_RE = re.compile(r"[\\<>]")
+
 # -- queue entries ------------------------------------------------------------
 
 
@@ -685,7 +703,9 @@ class _PageEmitter:
         self.ctx = ctx
         self.page_label = page_label
         self.movements: list[tuple[str, list[str]]] = []  # (label, tokens)
+        self.text_blocks: list[tuple[str, str]] = []  # (label, formatted content)
         self._last_route_ok = False  # was the most recent 209 emitted?
+        self._choice_count = 0  # running per-page \ch counter (label uniqueness)
 
     # -- leaf emitters -------------------------------------------------------
 
@@ -702,6 +722,8 @@ class _PageEmitter:
         params = cmd.get("parameters", [])
 
         if isinstance(node, TextRun):
+            if _CH_MARK in node.text:
+                return self._emit_inline_choice(node)
             result = translate_text_codes(node.text.strip())
             if result is None:
                 return [ctx.queue(
@@ -961,6 +983,123 @@ class _PageEmitter:
         # smashable rock; the driver serializes it to the trait sidecar.
         self.ctx.record_trait("smashable_rock")
         return [breadcrumb, "goto(EventScript_RockSmash)"]
+
+    def _emit_inline_choice(self, node: TextRun) -> list[str]:
+        """Essentials' inline ``\\ch[var,ifCancel,opt1,opt2,...]`` text escape
+        (SLICE1_TODO #17) — a Show Text message whose choice menu is embedded
+        in the text itself rather than a separate 102 command. Fork-native
+        ``dynmultichoice`` (asm/macros/event.inc:1932) + a ``msgbox`` for the
+        prompt. See the module-level ``_CH_MARK``/``_CH_*_RE`` comments for
+        the parsing rationale. Queues (whole command, nothing emitted) for:
+        more than one ``\\ch[`` marker, text after the closing ``]`` (must be
+        the tail), too few comma fields, a non-integer var/ifCancel, a
+        negative ifCancel (unrepresentable in a GBA u16 var), an unresolvable
+        var id, or a residual unknown tag in a label after color-code strip.
+        """
+        text = node.text
+        if text.count(_CH_MARK) != 1:
+            return [self.ctx.queue(
+                node.index, SHOW_TEXT,
+                f"inline choice: expected exactly one \\ch[...] marker, "
+                f"found {text.count(_CH_MARK)}: {text[:120]!r}",
+            )]
+        mark_idx = text.index(_CH_MARK)
+        inner_start = mark_idx + len(_CH_MARK)
+        close_idx = text.rfind("]")
+        if close_idx < inner_start:
+            return [self.ctx.queue(
+                node.index, SHOW_TEXT,
+                f"inline choice: no closing ']' for \\ch[...]: {text[:120]!r}",
+            )]
+        if text[close_idx + 1 :].strip():
+            return [self.ctx.queue(
+                node.index, SHOW_TEXT,
+                f"inline choice: trailing text after \\ch[...] block: {text[:120]!r}",
+            )]
+        prompt_text = text[:mark_idx]
+        inner = text[inner_start:close_idx]
+
+        fields = [f.strip() for f in inner.split(",")]
+        if len(fields) < 3:
+            return [self.ctx.queue(
+                node.index, SHOW_TEXT,
+                f"inline choice: too few \\ch[...] fields ({len(fields)}): {inner!r}",
+            )]
+        var_str, if_cancel_str, *option_texts = fields
+        try:
+            var_id = int(var_str)
+            if_cancel = int(if_cancel_str)
+        except ValueError:
+            return [self.ctx.queue(
+                node.index, SHOW_TEXT,
+                f"inline choice: non-integer var/ifCancel in \\ch[{inner}]",
+            )]
+        if if_cancel < 0:
+            return [self.ctx.queue(
+                node.index, SHOW_TEXT,
+                f"inline choice: negative ifCancel ({if_cancel}) is "
+                f"unrepresentable in a GBA u16 var — \\ch[{inner}]",
+            )]
+
+        options: list[str] = []
+        for opt in option_texts:
+            stripped = _CH_COLOR_TAG_RE.sub("", opt)
+            stripped = _CH_LEGACY_COLOR_RE.sub("", stripped)
+            stripped = stripped.strip()
+            if _CH_RESIDUAL_TAG_RE.search(stripped):
+                return [self.ctx.queue(
+                    node.index, SHOW_TEXT,
+                    f"inline choice: residual unknown tag in option {opt!r} "
+                    f"after color-code strip — \\ch[{inner}]",
+                )]
+            options.append(stripped)
+
+        var_name = self.ctx.var_for_variable(var_id)
+        if var_name is None:
+            return [self.ctx.queue(
+                node.index, SHOW_TEXT,
+                f"inline choice: variable {var_id} is unnamed — cannot mint a VAR_*",
+            )]
+
+        result = translate_text_codes(prompt_text.strip())
+        if result is None:
+            return [self.ctx.queue(
+                node.index, SHOW_TEXT,
+                f"dialogue with untranslated control code: {prompt_text[:120]!r}",
+            )]
+        prompt = format_pory_dialogue(result.text)
+        if result.autoclose:
+            lines = [f"msgbox({prompt}, MSGBOX_AUTOCLOSE)"]
+        elif result.sign:
+            lines = ["lock", f"msgbox({prompt})", "release"]
+        else:
+            lines = [f"msgbox({prompt})"]
+
+        self._choice_count += 1
+        choice_no = self._choice_count
+        opt_labels: list[str] = []
+        for m, opt_text in enumerate(options):
+            label = f"{self.page_label}_Choice{choice_no}_Opt{m}"
+            self.text_blocks.append((label, format_pory_dialogue(opt_text)))
+            opt_labels.append(label)
+
+        ignore_b_press = "TRUE" if if_cancel == 0 else "FALSE"
+        argv = ", ".join(opt_labels)
+        lines.append(
+            f"dynmultichoice(0, 0, {ignore_b_press}, 6, 0, "
+            f"DYN_MULTICHOICE_CB_NONE, {argv})"
+        )
+        if if_cancel == 0:
+            lines.append(f"copyvar({var_name}, VAR_RESULT)")
+        else:
+            lines += [
+                "if (var(VAR_RESULT) == MULTI_B_PRESSED) {",
+                f"    setvar({var_name}, {if_cancel - 1})",
+                "} else {",
+                f"    copyvar({var_name}, VAR_RESULT)",
+                "}",
+            ]
+        return lines
 
     def _emit_choice(self, node: ChoiceNode) -> list[str]:
         params = node.cmd.get("parameters", [])
@@ -1328,6 +1467,10 @@ def _render_movement(label: str, tokens: list[str]) -> str:
     return f"movement {label} {{\n{inner}\n}}"
 
 
+def _render_text_block(label: str, content: str) -> str:
+    return f"text {label} {{\n    {content}\n}}"
+
+
 def _page_label(map_id: int, event: dict, page_no: int) -> str:
     """The canonical page label (= ``metadata_wiring.page_label``): id-based,
     never name-based. Two same-named events on one map (Map002 has two
@@ -1340,12 +1483,13 @@ def _page_label(map_id: int, event: dict, page_no: int) -> str:
 
 def transpile_page(
     page: dict, ctx: TranspileContext, page_label: str
-) -> tuple[list[str], list[tuple[str, list[str]]]]:
-    """Body lines + movement blocks for one page. Queue entries land in ctx."""
+) -> tuple[list[str], list[tuple[str, list[str]]], list[tuple[str, str]]]:
+    """Body lines + movement blocks + text blocks for one page. Queue entries
+    land in ctx."""
     tree = parse_tree(page.get("list", []))
     emitter = _PageEmitter(ctx, page_label)
     body = emitter.emit_nodes(tree)
-    return body, emitter.movements
+    return body, emitter.movements, emitter.text_blocks
 
 
 def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> TranspiledEvent:
@@ -1363,7 +1507,7 @@ def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> Transpil
     for page_no, page in enumerate(event.get("pages", []), start=1):
         ctx.page_no = page_no
         label = _page_label(map_id, event, page_no)
-        body, movements = transpile_page(page, ctx, label)
+        body, movements, text_blocks = transpile_page(page, ctx, label)
         trigger = page.get("trigger")
         if body and trigger == ACTION_BUTTON_TRIGGER:
             body = ["lock", "faceplayer", *body, "release"]
@@ -1383,6 +1527,8 @@ def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> Transpil
         blocks.append(f"{header}script {label} {{\n{inner}\n}}")
         for m_label, tokens in movements:
             blocks.append(_render_movement(m_label, tokens))
+        for t_label, content in text_blocks:
+            blocks.append(_render_text_block(t_label, content))
 
     return TranspiledEvent(
         text="\n\n".join(blocks),
@@ -1408,7 +1554,7 @@ def transpile_common_event(ce: dict, ctx: TranspileContext) -> TranspiledEvent:
     before = len(ctx.unhandled)
 
     label = f"CommonEvent_{ce_id:03d}"
-    body, movements = transpile_page({"list": ce.get("list", [])}, ctx, label)
+    body, movements, text_blocks = transpile_page({"list": ce.get("list", [])}, ctx, label)
     body = body or []
     body.append("return")  # called script — return to the caller, never `end`
     inner = "\n".join(f"    {ln}" for ln in body)
@@ -1417,6 +1563,8 @@ def transpile_common_event(ce: dict, ctx: TranspileContext) -> TranspiledEvent:
     blocks = [f"{header}script {label} {{\n{inner}\n}}"]
     for m_label, tokens in movements:
         blocks.append(_render_movement(m_label, tokens))
+    for t_label, content in text_blocks:
+        blocks.append(_render_text_block(t_label, content))
 
     return TranspiledEvent(
         text="\n\n".join(blocks),

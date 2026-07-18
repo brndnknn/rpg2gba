@@ -43,6 +43,7 @@ from rpg2gba.tileset_converter import assembly as asm
 from rpg2gba.tileset_converter import map_constants as mc
 from rpg2gba.tileset_converter import metadata_wiring as mw
 from rpg2gba.tileset_converter import sprite_pass
+from rpg2gba.tileset_converter.hidden_actor_bracket import bracket_hidden_actor_scripts
 from rpg2gba.tileset_converter.local_id_remap import (
     _COMMAND_PATTERN,
     _mask_strings_and_comments,
@@ -178,6 +179,26 @@ def _scan_required_actor_ids(pory_text: str, map_json: dict) -> set[int]:
             )
         ids.add(candidate)
     return ids
+
+
+def hidden_actor_ids_from_map_json(map_json: dict, table: dict[str, int]) -> set[int]:
+    """RMXP event ids from `table` (the per-map local-id table
+    `local_id_remap.load_local_id_table` loads, RMXP id -> 1-based
+    `object_events` position — the same shape `metadata_wiring.
+    build_object_events` writes via `ObjectBuildResult.local_id_map`) whose
+    placed `object_events` entry carries a nonzero visibility `flag` — i.e.
+    a flag-hidden actor per `metadata_wiring._assign_visibility_flags`
+    (shared by `smashable_rock` traited events and hidden cutscene actors).
+    These are exactly the ids SLICE1_TODO #16's bracket pass must guard with
+    addobject/removeobject (see `hidden_actor_bracket`); a `flag == "0"`
+    entry spawns unconditionally and needs no bracketing."""
+    object_events = map_json.get("object_events", [])
+    hidden: set[int] = set()
+    for rmxp_id_str, local_id in table.items():
+        obj = object_events[local_id - 1]
+        if obj.get("flag", "0") != "0":
+            hidden.add(int(rmxp_id_str))
+    return hidden
 
 
 def _regenerate_map_json(
@@ -355,8 +376,18 @@ def main() -> int:
         # EXACTLY ONCE, on fresh (pruned) transpiler output — this is the sole
         # application site; assemble_pathfinder must not remap again.
         table = load_local_id_table(local_id_dir / f"Map{map_id:03d}.json")
+
+        # SLICE1_TODO #16: bracket flag-hidden cutscene actors with
+        # addobject/removeobject BEFORE the local-id remap, while script
+        # commands still target raw RMXP ids (bracket_hidden_actor_scripts
+        # matches against the same ids `table` is keyed by).
+        hidden_ids = hidden_actor_ids_from_map_json(map_json, table)
+        bracketed_text = bracket_hidden_actor_scripts(
+            result.text, hidden_ids, source_name=f"Map{map_id:03d}.pory"
+        )
+
         remap = remap_pory_object_ids(
-            result.text, table, source_name=f"Map{map_id:03d}.pory"
+            bracketed_text, table, source_name=f"Map{map_id:03d}.pory"
         )
         staged[f"Map{map_id:03d}.pory"] = remap.text
 

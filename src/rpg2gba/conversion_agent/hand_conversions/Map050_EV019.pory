@@ -1,0 +1,158 @@
+# hand conversion (2026-07-17): the starter grant + Theo counter-pick are
+# novel embedded Ruby (SLICE1_TODO #17). Base content is verbatim transpiler
+# output; deltas: pbAddPokemon per 1-based VAR_POKEMONTEST -> givemon with
+# the Emerald stand-in starters (user decision 2026-07-17, Phase-7 debt:
+# Orchynx->TREECKO, Raptorch->TORCHIC, Eletux->MUDKIP) + HAS-starter flags;
+# Theo's counter-pick (x=var151-2, wrap -1->2; pbStarterSelector(x,true) is
+# presentation-only) -> announcement msgbox. The randomizer-mode branches
+# and the rival battle are NOT converted (see comments in place).
+
+script Map050_EV019_Page1 {
+    lock
+    faceplayer
+    # UNHANDLED code 209: move route (target 19, 1 steps, codes [41]) outside the deterministic tier — paired 210 waits are neutralized
+    # randomizer-mode branch ($PokemonGlobal.randomizer) not converted —
+    # normal path only. Grant per 1-based VAR_POKEMONTEST (stand-ins):
+    switch (var(VAR_POKEMONTEST)) {
+        case 1:
+            givemon(SPECIES_TREECKO, 5)
+            setflag(FLAG_HAS_ORCHYNX)
+            msgbox(format("{PLAYER} received TREECKO!"))
+        case 2:
+            givemon(SPECIES_TORCHIC, 5)
+            setflag(FLAG_HAS_RAPTORCH)
+            msgbox(format("{PLAYER} received TORCHIC!"))
+        case 3:
+            givemon(SPECIES_MUDKIP, 5)
+            setflag(FLAG_HAS_ELETUX)
+            msgbox(format("{PLAYER} received MUDKIP!"))
+    }
+    delay(20)
+    # audio (code 241): PU-Rival Theme
+    applymovement(OBJ_EVENT_ID_PLAYER, Map050_EV019_Page1_Move1)
+    applymovement(5, Map050_EV019_Page1_Move2)
+    applymovement(20, Map050_EV019_Page1_Move3)
+    waitmovement(0)
+    delay(10)
+    msgbox(format("HEY! I'M TIRED OF WAITING!"))
+    # UNHANDLED code 209: move route (target 20, 6 steps, codes [44, 14, 15, 44, 14, 15]) outside the deterministic tier — paired 210 waits are neutralized
+    msgbox(format("{PLAYER} got their starter already! When do I get mine?"))
+    msgbox(format("I'm done analyzing your results, Theo."))
+    msgbox(format("Hmm{PAUSE 0x18}.{PAUSE 0x18}.{PAUSE 0x18}."), MSGBOX_AUTOCLOSE)
+    fadescreen(FADE_TO_BLACK)
+    delay(26)
+    # Theo's counter-pick: x = var151 - 2, wrap -1 -> 2 (rock-paper-
+    # scissors counter of the player's line); pbStarterSelector(x,true) is
+    # the presentation cutscene — announced after the fade instead.
+    delay(10)
+    fadescreen(FADE_FROM_BLACK)
+    delay(30)
+    switch (var(VAR_POKEMONTEST)) {
+        case 1:
+            msgbox(format("Theo received MUDKIP!"))
+        case 2:
+            msgbox(format("Theo received TREECKO!"))
+        case 3:
+            msgbox(format("Theo received TORCHIC!"))
+    }
+    msgbox(format("Yes!! My first Pokémon!"))
+    applymovement(20, Map050_EV019_Page1_Move4)
+    applymovement(20, Map050_EV019_Page1_Move5)
+    applymovement(OBJ_EVENT_ID_PLAYER, Map050_EV019_Page1_Move6)
+    waitmovement(0)
+    # UNHANDLED code 209: move route (target 19, 1 steps, codes [41]) outside the deterministic tier — paired 210 waits are neutralized
+    delay(20)
+    # UNHANDLED code 111: conditional on script: $PokemonGlobal.randomizer — branch (6 then / 0 else nodes) not emitted
+    applymovement(20, Common_Movement_ExclamationMark)
+    waitmovement(0)
+    delay(20)
+    applymovement(20, Map050_EV019_Page1_Move7)
+    waitmovement(0)
+    applymovement(OBJ_EVENT_ID_PLAYER, Map050_EV019_Page1_Move8)
+    waitmovement(0)
+    delay(10)
+    msgbox(format("{PLAYER}... you have a Pokémon. And now I have a Pokémon, too. You know what this means, right? We hafta battle!"))
+    msgbox(format("Oh, please, not in the Lab..."))
+    delay(10)
+    # UNHANDLED code 111: conditional on script: pbTrainerBattle(PBTrainers::RIVAL,"Theo",_I(" What? B-but I was s'posed to win!"),false,pbGet(151)+18,true,7) — branch (66 then / 55 else nodes) not emitted
+    # KNOWN GAP (SLICE1_TODO #17): the rival battle + its win/lose aftermath
+    # (66/55 nodes) need the trainer-conversion path — not built; the scene
+    # continues to the prof's meet-up dialog either way.
+    delay(20)
+    applymovement(5, Map050_EV019_Page1_Move9)
+    waitmovement(0)
+    delay(10)
+    msgbox(format("I'm going out to the entrance to Route 01 by the edge of town. Bring Theo, and I'll teach you both how to catch Pokémon."))
+    msgbox(format("See you later, {PLAYER}."))
+    delay(10)
+    applymovement(5, Map050_EV019_Page1_Move10)
+    waitmovement(0)
+    addvar(VAR_QUEST_LOG, 1)
+    setflag(FLAG_RECEIVED_STARTER)
+    release
+    end
+}
+
+movement Map050_EV019_Page1_Move1 {
+    face_down
+}
+
+movement Map050_EV019_Page1_Move2 {
+    face_down
+}
+
+movement Map050_EV019_Page1_Move3 {
+    walk_right
+    face_up
+}
+
+movement Map050_EV019_Page1_Move4 {
+    walk_up
+}
+
+movement Map050_EV019_Page1_Move5 {
+    walk_up
+}
+
+movement Map050_EV019_Page1_Move6 {
+    walk_left
+    walk_down
+    walk_down
+    face_up
+}
+
+movement Map050_EV019_Page1_Move7 {
+    walk_down
+    walk_down
+    face_left
+}
+
+movement Map050_EV019_Page1_Move8 {
+    face_right
+}
+
+movement Map050_EV019_Page1_Move9 {
+    walk_down
+    walk_down
+    walk_down
+    walk_down
+    face_up
+}
+
+movement Map050_EV019_Page1_Move10 {
+    walk_down
+    walk_down
+    walk_down
+    walk_down
+    set_invisible
+}
+
+# Machine
+script Map050_EV019_Page2 {
+    end
+}
+
+# Machine
+script Map050_EV019_Page3 {
+    end
+}

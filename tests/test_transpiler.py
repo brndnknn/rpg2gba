@@ -47,6 +47,7 @@ _VARIABLES = {
     "1": "Result Var",
     "2": "Other Var",
     "102": "Random Target",
+    "200": "Temp Move Choice",
 }
 _PRESEED_MD = """\
 # Pre-seed table
@@ -596,6 +597,100 @@ def test_two_arm_choice_with_cancel_arm_lands_in_else(ctx: T.TranspileContext) -
     yes_idx = res.text.index('msgbox(format("yes path"))')
     cancel_idx = res.text.index('msgbox(format("cancel path"))')
     assert then_idx < yes_idx < else_idx < cancel_idx
+
+
+# ----------------------------------------------------------------------------
+# inline \ch[...] choice escape (SLICE1_TODO #17)
+# ----------------------------------------------------------------------------
+
+# Real corpus text, Map050 EV005 Q1 (the aptitude test) — the registry fixture
+# names variable 200 "Temp Move Choice" (-> VAR_TEMP_MOVE_CHOICE) rather than
+# reusing variable id 2 (already claimed by "Other Var" -> VAR_OTHER_VAR
+# elsewhere in this fixture); the \ch parsing logic under test doesn't care
+# which id resolves, only that it does.
+_CH_Q1_TEXT = (
+    "When you encounter a new\\nkind of Pokémon in the wild,\\n"
+    "what is your first reaction?"
+    "\\ch[200,0,<c2=043c3aff>Attack it right away!,"
+    "\\c[4]Wait and see what it does.,"
+    "<c2=65467b14>Throw a Poké Ball at it!]"
+)
+
+
+def test_inline_choice_emits_msgbox_dynmultichoice_and_text_blocks(
+    ctx: T.TranspileContext,
+) -> None:
+    res = run_event(ctx, [[cmd(T.SHOW_TEXT, [_CH_Q1_TEXT])]], trigger=0)
+    assert res.unhandled == []
+    assert "your first reaction?" in res.text
+    assert (
+        "dynmultichoice(0, 0, TRUE, 6, 0, DYN_MULTICHOICE_CB_NONE, "
+        "Map049_EV005_Page1_Choice1_Opt0, Map049_EV005_Page1_Choice1_Opt1, "
+        "Map049_EV005_Page1_Choice1_Opt2)"
+    ) in res.text
+    assert "copyvar(VAR_TEMP_MOVE_CHOICE, VAR_RESULT)" in res.text
+    assert (
+        "text Map049_EV005_Page1_Choice1_Opt0 {\n"
+        '    format("Attack it right away!")\n}'
+    ) in res.text
+    assert (
+        "text Map049_EV005_Page1_Choice1_Opt1 {\n"
+        '    format("Wait and see what it does.")\n}'
+    ) in res.text
+    assert (
+        "text Map049_EV005_Page1_Choice1_Opt2 {\n"
+        '    format("Throw a Poké Ball at it!")\n}'
+    ) in res.text
+
+
+def test_inline_choice_positive_ifcancel_branches_on_multi_b_pressed(
+    ctx: T.TranspileContext,
+) -> None:
+    text = "Pick one?\\ch[200,3,First,Second]"
+    res = run_event(ctx, [[cmd(T.SHOW_TEXT, [text])]], trigger=0)
+    assert res.unhandled == []
+    assert (
+        "dynmultichoice(0, 0, FALSE, 6, 0, DYN_MULTICHOICE_CB_NONE, "
+        "Map049_EV005_Page1_Choice1_Opt0, Map049_EV005_Page1_Choice1_Opt1)"
+    ) in res.text
+    assert "if (var(VAR_RESULT) == MULTI_B_PRESSED) {" in res.text
+    assert "    setvar(VAR_TEMP_MOVE_CHOICE, 2)" in res.text
+    assert "} else {" in res.text
+    assert "    copyvar(VAR_TEMP_MOVE_CHOICE, VAR_RESULT)" in res.text
+
+
+def test_inline_choice_negative_ifcancel_queues(ctx: T.TranspileContext) -> None:
+    text = "Pick one?\\ch[200,-1,First,Second]"
+    res = run_event(ctx, [[cmd(T.SHOW_TEXT, [text])]], trigger=0)
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.SHOW_TEXT
+    assert "dynmultichoice" not in res.text
+
+
+def test_inline_choice_unresolvable_var_queues(ctx: T.TranspileContext) -> None:
+    text = "Pick one?\\ch[999,0,First,Second]"
+    res = run_event(ctx, [[cmd(T.SHOW_TEXT, [text])]], trigger=0)
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.SHOW_TEXT
+    assert "dynmultichoice" not in res.text
+
+
+def test_inline_choice_trailing_text_after_bracket_queues(ctx: T.TranspileContext) -> None:
+    text = "Pick one?\\ch[200,0,First,Second] extra text"
+    res = run_event(ctx, [[cmd(T.SHOW_TEXT, [text])]], trigger=0)
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.SHOW_TEXT
+    assert "dynmultichoice" not in res.text
+
+
+def test_inline_choice_residual_unknown_tag_queues(ctx: T.TranspileContext) -> None:
+    # \v[3] survives the color-code strip (<c2=...>/\c[N] only) — queue the
+    # whole command rather than emit mystery text into a menu option.
+    text = "Pick one?\\ch[200,0,First,\\v[3]Second]"
+    res = run_event(ctx, [[cmd(T.SHOW_TEXT, [text])]], trigger=0)
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.SHOW_TEXT
+    assert "dynmultichoice" not in res.text
 
 
 # ----------------------------------------------------------------------------

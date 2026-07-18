@@ -114,7 +114,7 @@ Walk it in order on a fresh save.
 - [X] **S3** — Lab intro autorun: fires as soon as you enter the lab (no talk needed), player auto-walks to position — sane path, no black void, no wall clipping
 - [X] **S4** — Test prompt at end of intro: YES/NO box appears (labels are generic YES/NO — the custom "Yes!"/"Wait a minute..." wording is a known cosmetic loss, don't report). **Either answer ends the scene cleanly — NO refire, no wall-walk loop**
 - [X] **S5** — Answered NO ("wait"): walk away and talk to the professor again — he re-offers the test
-- [ ] **S6** — Answered YES: aptitude test Q&A plays; starter granted matches the outcome; Pokédex granted
+- [ ] **S6** — Answered YES: aptitude test Q&A plays — 4 questions, each a real 3-option menu; answers steer the result; starter granted matches the outcome and is NAMED (Emerald stand-ins by decision: TREECKO/TORCHIC/MUDKIP for the Orchynx/Raptorch/Eletux lines); Theo's counter-pick announced by name. Retake path: answer NO, re-talk, YES → skips straight to the questions. *(No Pokédex here — Uranium grants it later, not in this event; rival battle intentionally still skipped — known gap.)* — retest on ROM `6e85edb3`
 - [ ] **S7** — PokéPod scene in Theo's house 1F: fires on entry after the lab visit, advances the quest chain (var 101 → 2)
 - [ ] **S8** — Ceremony at the town's west exit: trigger fires when crossing the exit path tiles (relocated to (17,42)/(16,43) — the original trigger tile was unreachable); correct NPCs are present and choreographed (professor, rival, aide + starter); no wrong-sprite actors
 - [ ] **S9** — Ceremony completes: quest log → 4, scene never refires on re-entering the area

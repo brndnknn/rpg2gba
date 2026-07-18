@@ -136,6 +136,56 @@ Moki-side ceremony; the Map-50 doorway coords differ — walk target likely
 off-map there). User deferred this behind the Map-32 fixes; localize per the
 /debug flow before touching anything.
 
+### 16. Auto-bracket flag-hidden actor spawns (promote EV074's hand fix into the pipeline)
+
+`Map032_EV074.pory` is a hand file whose ONLY delta from transpiler output is
+`addobject(75)`/`removeobject(75)` around Theo's walk-in/fade-out — on GBA a
+flag-hidden object is never spawned, so `applymovement` at it silently no-ops
+(RMXP events always exist; opacity-0 still moves). The wiring layer already
+knows every flag-hidden actor id (`_assign_visibility_flags` pool), so staging
+can bracket deterministically: `addobject(N)` before a script's first command
+referencing hidden actor N (skip if the script already addobjects it — hand
+files like EV009); `removeobject(N)` after the last reference (+ trailing
+`waitmovement(0)`) ONLY when the actor's last route ends `set_invisible`
+(fade-out) — otherwise leave spawned, ON_TRANSITION re-hides on re-entry.
+Corpus has many hidden-actor cutscenes; this kills a whole class of 2-line
+hand files. Once the pass reproduces EV074, delete that hand file.
+(2026-07-17, from the user's "why is the chase hand-converted" challenge.)
+
+**BUILT 2026-07-17** (`tileset_converter/hidden_actor_bracket.py`, wired in
+staging pre-remap; EV074 hand file deleted — pass reproduces it; latent fixes:
+M32 EV078/EV080, M49 EV018, M172 EV004 actors now spawn). ROM `6e85edb3`,
+retest pending.
+
+### 17. S6 aptitude test: `\ch` inline choices + scoring tail (boot-walk 2026-07-17)
+
+S6 walk: questions never appear; starter granted with no species. Root cause
+(NOT multi-arm code-102): the 4 quiz questions are Show Text messages carrying
+Essentials' inline `\ch[var,default,opt1,opt2,opt3]` choice escape — transpiler
+bails "dialogue with untranslated control code", dropping prompt + the
+`pbGet(151)[pbGet(2)]+=1` scoring line after each. Then the whole argmax /
+`pbStarterSelector` chain (Map050 EV005) + Theo's counter-pick (EV019) are
+unhandled 355s. Split:
+
+- **Pipeline:** transpiler learns `\ch` → `msgbox(prompt)` + `dynmultichoice`
+  (fork-native, `asm/macros/event.inc:1932`, in fork_index; strings script-side,
+  no C table) + write picked index to the `\ch` target var via registry.
+  12 sites / 5 maps corpus-wide (050 ×4, 052 ×4, 075 ×2, 046, 053).
+- **Hand tail:** EV005 scoring (RMXP array-in-a-var tally → 3 minted VAR_*s,
+  argmax as compares, 0/1 index swap) + EV019 Theo counter-pick, as
+  `hand_conversions/Map050_EV005.pory` / `Map050_EV019.pory`.
+- **User decision 2026-07-17: Emerald stand-in starters** (Treecko/Torchic/
+  Mudkip by quiz outcome; Theo gets the counter-pick) until Uranium species
+  land — log as Phase-7 debt with #2's RAPTORCH blocker.
+
+**BUILT 2026-07-17** (transpiler `_emit_inline_choice` → dynmultichoice;
+hand files `Map050_EV005.pory`/`Map050_EV019.pory`; gotcha for the future:
+poryscript can't compare two vars — argmax done as u16 subtract-and-test-sign
+via subvar, whose 2nd operand VarGets). Still open inside this item: rival
+battle 111-conditional (needs trainer conversion), randomizer branches,
+machine ball-gfx swap (#6). No Pokédex grant belongs here (S6 checklist
+corrected). ROM `6e85edb3`, retest pending.
+
 ### 12. NPCs don't move — ✅ USER-VERIFIED DONE 2026-07-15 (custom-route interpreter; ROM `5158b084` walked clean, "looks great, movement issue is done")
 
 All NPCs stand frozen; in Uranium the Moki townsfolk wander/turn. Research
