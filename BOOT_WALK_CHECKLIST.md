@@ -95,8 +95,9 @@ deliberate deferrals, and test-rig behavior.
 ## 8. Moki story chain — ROM `762e98aa` / `5dd32b10` / round-3 `c9128e58` (2026-07-17) — S
 
 > Round-3 walk (`c9128e58`): postgame Theo "Champion" misfire by the player's
-> house is GONE (EV080 base-page gate fix); S1–S5 pass. Frontier = S6 —
-> answering YES to the aptitude test.
+> house is GONE (EV080 base-page gate fix); S1–S5 pass. **S6 PASSED 2026-07-21
+> on ROM `b0b21993`** (real starters + quiz-scoring fix — see Done in
+> SLICE1_TODO.md). Frontier = S7 — the PokéPod scene in Theo's House 1F.
 
 > `5dd32b10` (taildropped 2026-07-17) is `762e98aa`'s slice data relinked with
 > the committed embedded-save boot branch. One behavior note for the walk:
@@ -114,7 +115,7 @@ Walk it in order on a fresh save.
 - [X] **S3** — Lab intro autorun: fires as soon as you enter the lab (no talk needed), player auto-walks to position — sane path, no black void, no wall clipping
 - [X] **S4** — Test prompt at end of intro: YES/NO box appears (labels are generic YES/NO — the custom "Yes!"/"Wait a minute..." wording is a known cosmetic loss, don't report). **Either answer ends the scene cleanly — NO refire, no wall-walk loop**
 - [X] **S5** — Answered NO ("wait"): walk away and talk to the professor again — he re-offers the test
-- [ ] **S6** — Answered YES: aptitude test Q&A plays — 4 questions, each a real 3-option menu; answers steer the result; starter granted matches the outcome and is NAMED (Emerald stand-ins by decision: TREECKO/TORCHIC/MUDKIP for the Orchynx/Raptorch/Eletux lines); Theo's counter-pick announced by name. Retake path: answer NO, re-talk, YES → skips straight to the questions. *(No Pokédex here — Uranium grants it later, not in this event; rival battle intentionally still skipped — known gap.)* — retest on ROM `6e85edb3`
+- [X] **S6** — Answered YES: aptitude test Q&A plays — 4 questions, each a real 3-option menu; answers steer the result (real Orchynx/Raptorch/Eletux lines, not Emerald stand-ins — species landed 2026-07-19/20); starter granted matches the outcome, is NAMED, and shows up in the START menu party. Retake path: answer NO, re-talk, YES → skips straight to the questions. **PASSED 2026-07-21 on ROM `b0b21993`** after fixing a scoring bug where the quiz always resolved to Eletux regardless of answers (argmax sign-test literal `32768` collided with the engine's `VAR_0x8000` switch-scratch var — see MEMORY.md). *(No Pokédex here — Uranium grants it later, not in this event; rival battle intentionally still skipped — known gap.)*
 - [ ] **S7** — PokéPod scene in Theo's house 1F: fires on entry after the lab visit, advances the quest chain (var 101 → 2)
 - [ ] **S8** — Ceremony at the town's west exit: trigger fires when crossing the exit path tiles (relocated to (17,42)/(16,43) — the original trigger tile was unreachable); correct NPCs are present and choreographed (professor, rival, aide + starter); no wrong-sprite actors
 - [ ] **S9** — Ceremony completes: quest log → 4, scene never refires on re-entering the area
@@ -126,7 +127,6 @@ Walk it in order on a fresh save.
 - Audio — all RMXP BGM/SFX stripped; stock Emerald or silence plays (#7)
 - Door animations — every warp behaves as a plain door; doors don't animate open, stairs/mats act like doors (#8)
 - Live sprite swaps — Pokédex ceremony ball/starters don't change graphics (#6); the 12 Luz light props don't flicker (same limitation)
-- Auntie's RAPTORCH dialogue branch — one branch of her dialogue silently absent (blocked on Uranium species constants, #2)
 - NPC movement fine-tuning — ranges/timing not yet matched eye-to-eye vs PC Uranium (#12)
 - EV005 door in Moki Town — dest never wired this round, inert wall
 - Cave entrances → Route 01/33 — slice-2 frontier, blocked by design

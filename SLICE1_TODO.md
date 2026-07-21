@@ -7,17 +7,6 @@ deleting it. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
-### 2. Auntie's queued `pbHasSpecies?(RAPTORCH)` branch (the 1 live queue entry)
-
-`transpile_unhandled.jsonl` is down to one real slice entry: Map049 EV001,
-code 111 conditional on `pbHasSpecies?(::PBSpecies::RAPTORCH)` — a branch of
-Auntie's dialogue is an `# UNHANDLED` marker. The fork ships `checkspecies`
-(asm/macros/event.inc:2541) + `DoesPlayerPartyContainSpecies`, but
-`SPECIES_RAPTORCH` isn't in the pristine fork index, so the capability gate
-would reject it. Blocked on Uranium species constants joining the gate extras
-(Phase 7 integration); revisit then. (88 CommonEvent queue entries also remain,
-but the slice calls zero CEs — not slice-blocking.)
-
 ### 6. Pokédex-ceremony live sprite swaps (EV76 ball / EV77 starters)
 
 Deferred from task 4: RMXP change-graphic move-route commands on the ceremony
@@ -156,35 +145,6 @@ hand files. Once the pass reproduces EV074, delete that hand file.
 staging pre-remap; EV074 hand file deleted — pass reproduces it; latent fixes:
 M32 EV078/EV080, M49 EV018, M172 EV004 actors now spawn). ROM `6e85edb3`,
 retest pending.
-
-### 17. S6 aptitude test: `\ch` inline choices + scoring tail (boot-walk 2026-07-17)
-
-S6 walk: questions never appear; starter granted with no species. Root cause
-(NOT multi-arm code-102): the 4 quiz questions are Show Text messages carrying
-Essentials' inline `\ch[var,default,opt1,opt2,opt3]` choice escape — transpiler
-bails "dialogue with untranslated control code", dropping prompt + the
-`pbGet(151)[pbGet(2)]+=1` scoring line after each. Then the whole argmax /
-`pbStarterSelector` chain (Map050 EV005) + Theo's counter-pick (EV019) are
-unhandled 355s. Split:
-
-- **Pipeline:** transpiler learns `\ch` → `msgbox(prompt)` + `dynmultichoice`
-  (fork-native, `asm/macros/event.inc:1932`, in fork_index; strings script-side,
-  no C table) + write picked index to the `\ch` target var via registry.
-  12 sites / 5 maps corpus-wide (050 ×4, 052 ×4, 075 ×2, 046, 053).
-- **Hand tail:** EV005 scoring (RMXP array-in-a-var tally → 3 minted VAR_*s,
-  argmax as compares, 0/1 index swap) + EV019 Theo counter-pick, as
-  `hand_conversions/Map050_EV005.pory` / `Map050_EV019.pory`.
-- **User decision 2026-07-17: Emerald stand-in starters** (Treecko/Torchic/
-  Mudkip by quiz outcome; Theo gets the counter-pick) until Uranium species
-  land — log as Phase-7 debt with #2's RAPTORCH blocker.
-
-**BUILT 2026-07-17** (transpiler `_emit_inline_choice` → dynmultichoice;
-hand files `Map050_EV005.pory`/`Map050_EV019.pory`; gotcha for the future:
-poryscript can't compare two vars — argmax done as u16 subtract-and-test-sign
-via subvar, whose 2nd operand VarGets). Still open inside this item: rival
-battle 111-conditional (needs trainer conversion), randomizer branches,
-machine ball-gfx swap (#6). No Pokédex grant belongs here (S6 checklist
-corrected). ROM `6e85edb3`, retest pending.
 
 ### 12. NPCs don't move — ✅ USER-VERIFIED DONE 2026-07-15 (custom-route interpreter; ROM `5158b084` walked clean, "looks great, movement issue is done")
 
@@ -485,6 +445,26 @@ Cross-ref item #14 (lab ceremony, same trigger/reveal class on Map 50).
 
 ## Done
 
+- **2026-07-21 — S6 aptitude test + starter species: CLOSED, boot-walk PASSED
+  on ROM `b0b21993`.** Supersedes the 2026-07-17 "#17" entry and closes #2
+  (Auntie's RAPTORCH branch). Full arc: `\ch` inline-choice transpiler support
+  + hand-tail scoring landed 2026-07-17 (ROM `6e85edb3`, Emerald stand-in
+  starters pending real species); real Orchynx/Raptorch/Eletux lines (+
+  Metalynx/Archilles/Electruxo evolutions) landed 2026-07-19/20 via
+  `STARTER_SPECIES_PLAN.md` W1-W9 (species staging emitter, battler/icon/cry
+  converters, fork gate extras — `SPECIES_RAPTORCH` etc. now pass the
+  capability gate, closing #2's blocker for real: `checkspecies(SPECIES_*)`
+  compiles clean in Map049's Auntie dialogue); two boot-walk defects fixed en
+  route (lab-NPC freeze from a missing `releaseall`, invisible party from a
+  missing `FLAG_SYS_POKEMON_GET` on `givemon`). Final bug, found in the
+  2026-07-21 walk: the quiz **always** resolved to Eletux regardless of
+  answers — the argmax sign-test literal `32768` (0x8000) fell inside the
+  engine's `SPECIAL_VARS` range, so the `compare` asm macro silently compiled
+  it as "compare against `VAR_0x8000`" (the engine's own switch-statement
+  scratch var, left holding the last question's raw answer index by the
+  quiz's per-question `switch()`) instead of the literal — fixed by using
+  32767 instead (`hand_conversions/Map050_EV005.pory`, commit `b3b1b623`).
+  User boot-walked and confirmed all four answer combos resolve correctly.
 - **2026-07-16 — #8 Warp-class refinement: CLOSED. Its premise was wrong; the
   one real gap (door animation) is a user-accepted skip.** Investigated the three
   warp classes the Checkpoint-2 deferral named

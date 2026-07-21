@@ -425,8 +425,45 @@ already proven (`Map032_EV009.pory:175` uses `FLAG_SYS_POKEDEX_GET`). Full
 4-step chain re-run (driver → stage --write → assemble → make modern),
 compiled `scripts.inc:785` carries the setflag on the grant path only; pytest
 **1320 passed / 15 skipped**. ROM CRC32 `e20f2158`, taildropped as
-`uranium-slice-e20f2158-starters-partyflag.gba`. All W7–W9 work still
-UNCOMMITTED (commit after user confirms the retest). **Transpiler-debt note:**
+`uranium-slice-e20f2158-starters-partyflag.gba`. **Transpiler-debt note:**
 consider auto-pairing `givemon`/`giveegg` emission with a one-time
 `FLAG_SYS_POKEMON_GET` set in the deterministic path so future maps don't
-re-hit this — logged as Phase-7 debt, not slice-urgent.
+re-hit this — logged as Phase-7 debt, not slice-urgent. W1-W9 committed
+`2b045012` 2026-07-21 (party-flag fix user-confirmed working before commit).
+
+## W7 gate — PASSED 2026-07-21, plan CLOSED (ROM `b0b21993`)
+
+After the W9 party-flag fix (confirmed working), the retest surfaced one more
+real bug: **the quiz always resolved to Eletux, regardless of answers.**
+
+**Root cause:** the argmax sign-test literal `32768` (0x8000) fell inside the
+engine's `SPECIAL_VARS` range (`include/constants/vars.h`:
+`SPECIAL_VARS_START 0x8000` .. `SPECIAL_VARS_END 0x8015`). The `compare` asm
+macro (`asm/macros/event.inc`) auto-selects `compare_var_to_var` vs
+`compare_var_to_value` based on whether its literal operand falls in that
+range (or the temp-var range) — so `if (var(VAR_RESULT) < 32768)` silently
+compiled to "compare `VAR_RESULT` against the value in `VAR_0x8000`", not the
+literal. `VAR_0x8000` is the vanilla engine's own switch-statement scratch
+variable (`switch`'s codegen is `copyvar VAR_0x8000, <var>; compare
+VAR_0x8000, <case>` per case) — and the quiz's per-question `Tally` call uses
+`switch (var(VAR_TEMP_MOVE_CHOICE))`, which left `VAR_0x8000` holding the
+**last question's raw 0-2 answer index** after the 4th question. Since a
+tally delta (0-4 range) is essentially never `<` a leftover 0-2 value, both
+override branches (`T4>=T5` and `T3>=T4 && T3>=T5`) skipped almost every
+time, leaving `VAR_POKEMONTEST` stuck at its hardcoded default (`2` =
+Eletux) no matter what the player picked.
+
+**Fix:** use `32767` (0x7FFF) instead of `32768` in the three sign-test
+comparisons — same subtract-and-test-sign semantics (`A>=B` ⟺ `(A-B) <=
+0x7FFF`), but 32767 sits outside both the temp-var (`0x4000`-ish) and
+special-var (`0x8000`-`0x8015`) ranges, so the macro correctly emits
+`compare_var_to_value`. `hand_conversions/Map050_EV005.pory`, commit
+`b3b1b623`. Full chain re-run clean (transpile → stage → assemble → `make
+modern`), 1320 passed/15 skipped, ROM `b0b21993` taildropped.
+
+**User boot-walked and confirmed:** the quiz now correctly resolves to
+Orchynx/Raptorch/Eletux (and evolutions) matching the player's actual
+answers. This closes `STARTER_SPECIES_PLAN.md` end to end (W1-W9) and
+`SLICE1_TODO.md` #2 (Auntie's RAPTORCH branch — `checkspecies(SPECIES_
+RAPTORCH)` compiles clean now that the species is in the gate extras).
+§9 boot-walk checklist S6 → **PASSED**.
