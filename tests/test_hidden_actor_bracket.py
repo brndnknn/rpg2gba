@@ -136,6 +136,81 @@ def test_multiple_hidden_actors_in_one_script() -> None:
     assert idx_add5 < idx_move5 < idx_add6 < idx_move6
 
 
+def test_addobject_inserted_on_each_sibling_branch() -> None:
+    """Regression (Map172 EV004): a hidden actor referenced in BOTH branches of
+    an if/else must be spawned on each path. The old pass placed one addobject
+    before the first textual reference (the `if` body), leaving the `else` (win)
+    path with a set_visible on an unspawned actor -> invisible NPC."""
+    text = (
+        "script Map999_EV009_Page1 {\n"
+        "    lockall\n"
+        "    if (flag(FLAG_X)) {\n"
+        "        applymovement(2, MoveA)\n"
+        "        waitmovement(0)\n"
+        "    } else {\n"
+        "        applymovement(2, MoveB)\n"
+        "        waitmovement(0)\n"
+        "    }\n"
+        "    msgbox(format(\"done\"))\n"
+        "    releaseall\n"
+        "    end\n"
+        "}\n"
+        "\n"
+        "movement MoveA {\n"
+        "    set_visible\n"
+        "}\n"
+        "\n"
+        "movement MoveB {\n"
+        "    set_visible\n"
+        "}\n"
+    )
+    out = bracket_hidden_actor_scripts(text, {2}, source_name="test")
+    # one addobject in each branch body — both paths spawn the actor
+    assert out.count("addobject(2)") == 2
+    lines = out.split("\n")
+    if_add = next(i for i, l in enumerate(lines) if "addobject(2)" in l)
+    if_mov = next(i for i, l in enumerate(lines) if "applymovement(2, MoveA)" in l)
+    else_add = next(i for i, l in enumerate(lines) if "addobject(2)" in l and i > if_mov)
+    else_mov = next(i for i, l in enumerate(lines) if "applymovement(2, MoveB)" in l)
+    assert if_add < if_mov < else_add < else_mov
+    # idempotent
+    assert bracket_hidden_actor_scripts(out, {2}, source_name="test") == out
+
+
+def test_straightline_after_branch_is_covered_once() -> None:
+    """Refs in both branches AND after convergence: each branch gets one, and
+    the straight-line tail (dominated by neither branch) gets exactly one more."""
+    text = (
+        "script Map999_EV010_Page1 {\n"
+        "    lockall\n"
+        "    if (flag(FLAG_X)) {\n"
+        "        applymovement(3, MoveA)\n"
+        "    } else {\n"
+        "        applymovement(3, MoveB)\n"
+        "    }\n"
+        "    applymovement(3, MoveC)\n"
+        "    waitmovement(0)\n"
+        "    releaseall\n"
+        "    end\n"
+        "}\n"
+        "\n"
+        "movement MoveA {\n"
+        "    set_visible\n"
+        "}\n"
+        "\n"
+        "movement MoveB {\n"
+        "    set_visible\n"
+        "}\n"
+        "\n"
+        "movement MoveC {\n"
+        "    walk_down\n"
+        "}\n"
+    )
+    out = bracket_hidden_actor_scripts(text, {3}, source_name="test")
+    # if-branch + else-branch + straight-line tail = 3 spawns
+    assert out.count("addobject(3)") == 3
+
+
 def test_reference_inside_string_or_comment_is_ignored() -> None:
     text = (
         "script Map999_EV007_Page1 {\n"

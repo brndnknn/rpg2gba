@@ -92,6 +92,55 @@ def _find_top_level_blocks(
     return blocks
 
 
+def _branch_paths(
+    masked_lines: list[str], start: int, end: int
+) -> dict[int, tuple[int, ...]]:
+    """For each brace-less body line of a ``script`` block, its *branch path* —
+    the tuple of enclosing branch-scope opener line indices.
+
+    A branch scope is any ``if (...) {`` / ``} else {`` / ``} elif ... {`` /
+    ``switch (...) {`` header (any line ending in ``{`` inside the block); its
+    closing column-indented ``}`` pops it. Two lines are on **sibling branches**
+    when their paths diverge — the `if` body carries the `if` opener's index,
+    the `else` body carries the `} else {` opener's index, so they never share a
+    common leaf even though they're at the same brace depth.
+
+    Only reference candidates (brace-less command lines) get an entry; the
+    header/`else`/`}` lines themselves are structural and never referenced.
+    Assumes at most one brace of each kind per line — the same well-formed-output
+    assumption `_find_top_level_blocks` already relies on.
+    """
+    stack: list[int] = []
+    paths: dict[int, tuple[int, ...]] = {}
+    for i in range(start + 1, end):
+        line = masked_lines[i].strip()
+        opens = line.count("{")
+        closes = line.count("}")
+        if opens == 0 and closes == 0:
+            paths[i] = tuple(stack)
+            continue
+        # Close first (handles ``} else {`` = pop the if-body, push the else),
+        # then open. One-brace-per-line keeps this unambiguous.
+        for _ in range(closes):
+            if stack:
+                stack.pop()
+        for _ in range(opens):
+            stack.append(i)
+    return paths
+
+
+def _dominates(add_line: int, add_path: tuple[int, ...], ref_line: int, ref_path: tuple[int, ...]) -> bool:
+    """Does an ``addobject`` at `add_line` (branch path `add_path`) execute on
+    every path reaching a reference at `ref_line` (path `ref_path`)? True iff the
+    addobject is in an enclosing-or-equal scope (`add_path` is a prefix of
+    `ref_path`) and textually precedes the reference within that scope."""
+    return (
+        add_line < ref_line
+        and len(add_path) <= len(ref_path)
+        and ref_path[: len(add_path)] == add_path
+    )
+
+
 def _movement_last_command(lines: list[str], start: int, end: int) -> str | None:
     """The last non-blank, non-comment command line (stripped) inside a
     ``movement LABEL { ... }`` block spanning `lines[start:end+1]`, or None if
@@ -151,6 +200,9 @@ def bracket_hidden_actor_scripts(
     insertions: list[tuple[int, str, str]] = []
 
     for _label, (s, e) in script_blocks.items():
+        # Branch path of each brace-less line, scoped to THIS block's braces
+        # (s = the `script … {` header, e = its column-0 `}`).
+        block_paths = _branch_paths(masked_lines, s, e)
         for eid in sorted(hidden_ids):
             matches: list[tuple[int, str]] = []
             for i in range(s, e + 1):
@@ -173,10 +225,27 @@ def bracket_hidden_actor_scripts(
                 )
 
             if not has_addobject:
-                indent = _leading_ws(lines[first_line])
-                insertions.append(
-                    (first_line, "before", f"{indent}addobject({eid})  {_BRACKET_COMMENT}")
-                )
+                # Branch-aware placement: a flag-hidden actor must be spawned on
+                # EVERY execution path that choreographs it, not just before the
+                # first textual reference. A single addobject before the first
+                # match only covers that match's branch — refs in a sibling
+                # branch (e.g. the win-path `else` of a win/lose cutscene) would
+                # applymovement/set_visible an unspawned actor (silent no-op ->
+                # actor stays invisible). Insert an addobject before the first
+                # reference on each path not already dominated by one we placed.
+                placed: list[tuple[int, tuple[int, ...]]] = []
+                for ref_line, _cmd in matches:
+                    ref_path = block_paths.get(ref_line, ())
+                    if any(
+                        _dominates(a_line, a_path, ref_line, ref_path)
+                        for a_line, a_path in placed
+                    ):
+                        continue
+                    indent = _leading_ws(lines[ref_line])
+                    insertions.append(
+                        (ref_line, "before", f"{indent}addobject({eid})  {_BRACKET_COMMENT}")
+                    )
+                    placed.append((ref_line, ref_path))
 
             if not has_removeobject:
                 last_move_label: str | None = None
