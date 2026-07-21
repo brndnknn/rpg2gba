@@ -92,11 +92,32 @@ script Map050_EV019_Page1 {
     msgbox(format("{PLAYER}... you have a Pokémon. And now I have a Pokémon, too. You know what this means, right? We hafta battle!"))
     msgbox(format("Oh, please, not in the Lab..."))
     delay(10)
-    # UNHANDLED code 111: conditional on script: pbTrainerBattle(PBTrainers::RIVAL,"Theo",_I(" What? B-but I was s'posed to win!"),false,pbGet(151)+18,true,7) — branch (66 then / 55 else nodes) not emitted
-    # KNOWN GAP (SLICE1_TODO #17): the rival battle + its win/lose aftermath
-    # (66/55 nodes) need the trainer-conversion path — not built; the scene
-    # continues to the prof's meet-up dialog either way.
+    # Rival battle (2026-07-21): the RMXP source ran
+    #   pbTrainerBattle(RIVAL,"Theo",...,party=pbGet(151)+18,canlose)
+    # inside a code-111 win/lose branch (the 66/55-node aftermath the earlier
+    # stub dropped). Mapped to trainerbattle_earlyrival + RIVAL_BATTLE_TUTORIAL
+    # — the vanilla FRLG Oak's-lab starter-rival idiom: you CAN lose, the party
+    # auto-heals afterward (covers Uranium's "I'll heal your Pokémon" beat), the
+    # trainer's win/lose reaction text is shown by the battle system, and the
+    # scene converges either way (both RMXP branches also converge to the prof's
+    # Route-01 farewell + VAR_QUEST_LOG bump below). Party by starter line:
+    # 1 Orchynx -> Theo Eletux (THEO_9); 2 Raptorch -> Theo Orchynx (THEO_10);
+    # 3 Eletux -> Theo Raptorch (THEO_11) — the rock-paper-scissors counter.
+    switch (var(VAR_POKEMONTEST)) {
+        case 1:
+            trainerbattle_earlyrival(TRAINER_THEO_9, RIVAL_BATTLE_TUTORIAL, Map050_EV019_Theo_DefeatText, Map050_EV019_Theo_VictoryText)
+        case 2:
+            trainerbattle_earlyrival(TRAINER_THEO_10, RIVAL_BATTLE_TUTORIAL, Map050_EV019_Theo_DefeatText, Map050_EV019_Theo_VictoryText)
+        case 3:
+            trainerbattle_earlyrival(TRAINER_THEO_11, RIVAL_BATTLE_TUTORIAL, Map050_EV019_Theo_DefeatText, Map050_EV019_Theo_VictoryText)
+    }
     delay(20)
+    # Theo leaves the lab. His walk-off lived inside the un-emitted battle
+    # branch, which is why his sprite used to strand next to the machine; drive
+    # him to the door and vanish before the prof's farewell.
+    applymovement(20, Map050_EV019_Theo_Exit)
+    waitmovement(0)
+    delay(10)
     applymovement(5, Map050_EV019_Page1_Move9)
     waitmovement(0)
     delay(10)
@@ -163,6 +184,25 @@ movement Map050_EV019_Page1_Move10 {
     walk_down
     walk_down
     set_invisible
+}
+
+# Rival-battle actor exit + reaction text (2026-07-21).
+movement Map050_EV019_Theo_Exit {
+    walk_down
+    walk_down
+    walk_down
+    walk_down
+    set_invisible
+}
+
+# Shown when Theo LOSES (player wins) — RMXP win-branch reaction.
+text Map050_EV019_Theo_DefeatText {
+    format("B-but... How...\pI'm s'posed to be the b-best trainer ever...")
+}
+
+# Shown when Theo WINS (player loses) — RMXP lose-branch reaction.
+text Map050_EV019_Theo_VictoryText {
+    format("Yes!! My first win! My Pokémon an' me are gonna be the best, coolest team in Tandor! I gotta go show dad!")
 }
 
 # Machine
