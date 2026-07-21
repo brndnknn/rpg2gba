@@ -300,18 +300,37 @@ script Map050_EV005_TestBody {
     # VarGet, so a VAR_* id dereferences; A-B wraps past 0x8000 iff B > A.
     # raw2 default; raw1 (T4>=T5, T4>T3 implied by the later overwrite) ->
     # swapped 0; raw0 (T3>=T4 && T3>=T5) overwrites -> swapped 1.
+    #
+    # BUG (found 2026-07-21, boot-walk always-Eletux): the sign-test literal
+    # must NOT be 32768 (0x8000). The `compare` asm macro
+    # (asm/macros/event.inc) auto-selects compare_var_to_var vs
+    # compare_var_to_value based on whether the literal falls in
+    # [SPECIAL_VARS_START, SPECIAL_VARS_END] = [0x8000, 0x8015]
+    # (include/constants/vars.h) — 32768 IS 0x8000, so `< 32768` silently
+    # compiled to "compare VAR_RESULT against the value stored in
+    # VAR_0x8000", not the literal. VAR_0x8000 is the vanilla engine's
+    # shared switch-statement scratch var (switch's own codegen does
+    # copyvar VAR_0x8000, <var>; compare VAR_0x8000, <case>) and the
+    # per-question Tally call's switch() left it holding the LAST
+    # question's raw answer index (0-2) — so every override check compared
+    # a 0-4 tally delta against a 0-2 leftover, which is essentially never
+    # "<", so both overrides skipped and VAR_POKEMONTEST stayed at its
+    # hardcoded default (2 = Eletux) regardless of answers. Fix: use 32767
+    # (0x7FFF), which is well outside both the temp-var and special-var
+    # ranges, so the macro correctly emits compare_var_to_value. Same
+    # subtract-and-test-sign semantics (A>=B <=> (A-B) <= 0x7FFF).
     setvar(VAR_POKEMONTEST, 2)
     copyvar(VAR_RESULT, VAR_TEMP_4)
     subvar(VAR_RESULT, VAR_TEMP_5)
-    if (var(VAR_RESULT) < 32768) {
+    if (var(VAR_RESULT) <= 32767) {
         setvar(VAR_POKEMONTEST, 0)
     }
     copyvar(VAR_RESULT, VAR_TEMP_3)
     subvar(VAR_RESULT, VAR_TEMP_4)
-    if (var(VAR_RESULT) < 32768) {
+    if (var(VAR_RESULT) <= 32767) {
         copyvar(VAR_RESULT, VAR_TEMP_3)
         subvar(VAR_RESULT, VAR_TEMP_5)
-        if (var(VAR_RESULT) < 32768) {
+        if (var(VAR_RESULT) <= 32767) {
             setvar(VAR_POKEMONTEST, 1)
         }
     }
