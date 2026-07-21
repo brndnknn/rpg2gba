@@ -8738,6 +8738,11 @@ Cry_Pecharunt::
 	.incbin "sound/direct_sound_samples/cries/pecharunt.bin"
 .endif
 .endif @ P_FAMILY_PECHARUNT
+@ BEGIN URANIUM PATHFINDER SLICE — generated cry sample data (rpg2gba).
+@ GENERATED + gitignored; empty stub when no species are staged. .incbin references the compiled
+@ .bin, which audio_rules.mk builds from the staged .wav via wav2agb.
+	.include "sound/uranium_cry_sound_data.inc"
+@ END URANIUM PATHFINDER SLICE
 .endif @ P_CRIES_ENABLED
 
 .if TESTING == TRUE

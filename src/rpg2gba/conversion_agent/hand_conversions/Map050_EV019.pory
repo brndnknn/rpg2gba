@@ -1,32 +1,50 @@
-# hand conversion (2026-07-17): the starter grant + Theo counter-pick are
-# novel embedded Ruby (SLICE1_TODO #17). Base content is verbatim transpiler
-# output; deltas: pbAddPokemon per 1-based VAR_POKEMONTEST -> givemon with
-# the Emerald stand-in starters (user decision 2026-07-17, Phase-7 debt:
-# Orchynx->TREECKO, Raptorch->TORCHIC, Eletux->MUDKIP) + HAS-starter flags;
-# Theo's counter-pick (x=var151-2, wrap -1->2; pbStarterSelector(x,true) is
-# presentation-only) -> announcement msgbox. The randomizer-mode branches
-# and the rival battle are NOT converted (see comments in place).
+# hand conversion (2026-07-17, species updated 2026-07-18): the starter
+# grant + Theo counter-pick are novel embedded Ruby (SLICE1_TODO #17). Base
+# content is verbatim transpiler output; deltas: pbAddPokemon per 1-based
+# VAR_POKEMONTEST -> givemon with the real starter species (SPECIES_ORCHYNX/
+# RAPTORCH/ELETUX) + HAS-starter flags; Theo's counter-pick (x=var151-2,
+# wrap -1->2; pbStarterSelector(x,true) is presentation-only) -> announcement
+# msgbox. The randomizer-mode branches and the rival battle are NOT
+# converted (see comments in place).
 
 script Map050_EV019_Page1 {
     lock
     faceplayer
     # UNHANDLED code 209: move route (target 19, 1 steps, codes [41]) outside the deterministic tier — paired 210 waits are neutralized
     # randomizer-mode branch ($PokemonGlobal.randomizer) not converted —
-    # normal path only. Grant per 1-based VAR_POKEMONTEST (stand-ins):
+    # normal path only. Grant per 1-based VAR_POKEMONTEST:
     switch (var(VAR_POKEMONTEST)) {
         case 1:
-            givemon(SPECIES_TREECKO, 5)
+            givemon(SPECIES_ORCHYNX, 5)
             setflag(FLAG_HAS_ORCHYNX)
-            msgbox(format("{PLAYER} received TREECKO!"))
+            msgbox(format("{PLAYER} received Orchynx!"))
         case 2:
-            givemon(SPECIES_TORCHIC, 5)
+            givemon(SPECIES_RAPTORCH, 5)
             setflag(FLAG_HAS_RAPTORCH)
-            msgbox(format("{PLAYER} received TORCHIC!"))
+            msgbox(format("{PLAYER} received Raptorch!"))
         case 3:
-            givemon(SPECIES_MUDKIP, 5)
+            givemon(SPECIES_ELETUX, 5)
             setflag(FLAG_HAS_ELETUX)
-            msgbox(format("{PLAYER} received MUDKIP!"))
+            msgbox(format("{PLAYER} received Eletux!"))
+        default:
+            # W8 fix B (2026-07-19): VAR_POKEMONTEST is 0 until the aptitude
+            # test finishes. Without this arm the switch matched nothing and
+            # FELL THROUGH into the whole Theo cutscene below — bumping
+            # VAR_QUEST_LOG and setting FLAG_RECEIVED_STARTER with no starter
+            # granted (sequence break). Early-out instead. Text is invented
+            # (RMXP's pre-test page had no interaction); review at boot gate.
+            msgbox(format("The machine hums softly. Three Poké Balls rest inside."))
+            release
+            end
     }
+    # W9 fix (2026-07-20): givemon (-> ScrCmd_createmon) adds the starter to
+    # gPlayerParty but never sets FLAG_SYS_POKEMON_GET, which the START-menu
+    # POKEMON option is gated on (engine/src/start_menu.c:340,359; the only
+    # setter, SetDexPokemonPokenavFlags, is // unused). Essentials' party menu
+    # is always available; Emerald gates it on this flag. Without it the mon is
+    # in the party but invisible (no menu slot) -> user saw "received X!" with
+    # no party. Reached only on the grant path (the default arm ends above).
+    setflag(FLAG_SYS_POKEMON_GET)
     delay(20)
     # audio (code 241): PU-Rival Theme
     applymovement(OBJ_EVENT_ID_PLAYER, Map050_EV019_Page1_Move1)
@@ -49,11 +67,11 @@ script Map050_EV019_Page1 {
     delay(30)
     switch (var(VAR_POKEMONTEST)) {
         case 1:
-            msgbox(format("Theo received MUDKIP!"))
+            msgbox(format("Theo received Eletux!"))
         case 2:
-            msgbox(format("Theo received TREECKO!"))
+            msgbox(format("Theo received Orchynx!"))
         case 3:
-            msgbox(format("Theo received TORCHIC!"))
+            msgbox(format("Theo received Raptorch!"))
     }
     msgbox(format("Yes!! My first Pokémon!"))
     applymovement(20, Map050_EV019_Page1_Move4)

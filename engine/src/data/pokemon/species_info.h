@@ -2,6 +2,13 @@
 #include "constants/teaching_types.h"
 #include "species_info/shared_dex_text.h"
 #include "species_info/shared_front_pic_anims.h"
+// BEGIN URANIUM PATHFINDER SLICE — generated level-up learnsets (rpg2gba).
+// GENERATED + gitignored; empty stub when no species are staged. This MUST be hooked at file
+// scope, not from inside gSpeciesInfo[] — its arrays are file-scope declarations and splicing
+// them into a designated-initializer list is invalid C. Mirrors how vanilla makes learnsets
+// visible before the array is built (src/pokemon.c includes level_up_learnsets/gen_*.h first).
+#include "uranium_learnsets.h"
+// END URANIUM PATHFINDER SLICE
 
 // Macros for ease of use.
 
@@ -246,6 +253,11 @@ const struct SpeciesInfo gSpeciesInfo[] =
         //.perfectIVCount = NUM_STATS,
     },
     */
+// BEGIN URANIUM PATHFINDER SLICE — generated custom-species entries (rpg2gba).
+// GENERATED + gitignored; empty stub when no species are staged. Bare `[SPECIES_X] = {...},`
+// entries only, no #includes of its own — same shape as the gen_N_families.h includes above.
+#include "uranium_species_info.h"
+// END URANIUM PATHFINDER SLICE
 };
 
 const struct EggData gEggDatas[EGG_ID_COUNT] =

@@ -25,6 +25,7 @@ import click
 
 from rpg2gba.conversion_agent import deterministic, fork_index, hand_overrides, transpiler
 from rpg2gba.conversion_agent.flag_registry import FlagRegistry
+from rpg2gba.pbs_converter._id_map import IdMap
 from rpg2gba.tileset_converter.map_set import resolve_map_ids
 
 logger = logging.getLogger(__name__)
@@ -165,6 +166,30 @@ def _write_traits_sidecar(
         f.write("\n")
 
 
+# -- species staging glue (W5 part B: pbHasSpecies? -> checkspecies) -----------
+
+
+def _load_species_id_map(reference_dir: Path) -> dict[str, str]:
+    """Uranium internal species name -> SPECIES_* constant, from the single
+    source of truth (CLAUDE.md §4.3) — never re-derived by string-munging."""
+    id_map = IdMap.load(reference_dir / "uranium_id_map.json")
+    return dict(id_map.by_category["species"])
+
+
+def _load_staged_species(species_manifest_path: Path) -> frozenset[str]:
+    """SPECIES_* constants for species actually staged into the fork.
+
+    Mirrors ``fork_index.registry_extra_symbols``'s species handling: a
+    missing manifest (species converter never run) yields no staged species,
+    never an error; a present-but-malformed manifest fails loud (KeyError),
+    same discipline as the gate.
+    """
+    if not species_manifest_path.is_file():
+        return frozenset()
+    manifest = json.loads(species_manifest_path.read_text(encoding="utf-8"))
+    return frozenset(entry["species_constant"] for entry in manifest["species"])
+
+
 # -- registry glue for the gate -------------------------------------------------
 
 
@@ -241,6 +266,7 @@ def transpile_corpus(
     out_dir: Path,
     flag_state_path: Path,
     map_constants_path: Path,
+    species_manifest_path: Path | None = None,
     write: bool = True,
     common_events: bool = True,
     overrides_dir: Path | None = None,
@@ -251,13 +277,26 @@ def transpile_corpus(
     up front and threaded into every ``transpile_map`` call; ``overrides_dir``
     defaults to the package's ``hand_conversions/`` directory (pass a temp dir
     in tests to avoid touching the committed set).
+
+    ``species_manifest_path`` is the species staging manifest
+    (``species_converter.stage``'s ``species_manifest.json``); it defaults to
+    ``out_dir / "species" / "species_manifest.json"`` (the layout
+    ``assemble_pathfinder.py`` stages from) and is treated as absent — no
+    species gate extras — when the file doesn't exist yet.
     """
+    if species_manifest_path is None:
+        species_manifest_path = out_dir / "species" / "species_manifest.json"
     registry = (
         FlagRegistry.load(flag_state_path) if flag_state_path.is_file() else FlagRegistry()
     )
-    ctx = transpiler.TranspileContext(registry=registry)
+    reference_dir = Path("reference")
+    ctx = transpiler.TranspileContext(
+        registry=registry,
+        species=_load_species_id_map(reference_dir),
+        staged_species=_load_staged_species(species_manifest_path),
+    )
     det_ctx = deterministic.load_context(
-        reference_dir=Path("reference"), intermediate_dir=out_dir / "intermediate"
+        reference_dir=reference_dir, intermediate_dir=out_dir / "intermediate"
     )
     # The give-item idiom resolves PBItems:: symbols through the same Phase-2
     # table the classifiers use; without this the transpiler queues every
@@ -280,7 +319,9 @@ def transpile_corpus(
         pory_text, queue_entries = transpile_map(map_id, map_json, ctx, det_ctx, overrides)
 
         extras = fork_index.registry_extra_symbols(
-            None, map_constants_path if map_constants_path.is_file() else None
+            None,
+            map_constants_path if map_constants_path.is_file() else None,
+            species_manifest_path if species_manifest_path.is_file() else None,
         )
         extras |= _registry_minted_names(registry)
         violations = fork_index.verify_script(pory_text, index, extra_symbols=extras)
@@ -316,7 +357,9 @@ def transpile_corpus(
     if common_events and ce_path.is_file():
         ce_text, ce_queue = transpile_common_events(ce_path, ctx)
         extras = fork_index.registry_extra_symbols(
-            None, map_constants_path if map_constants_path.is_file() else None
+            None,
+            map_constants_path if map_constants_path.is_file() else None,
+            species_manifest_path if species_manifest_path.is_file() else None,
         )
         extras |= _registry_minted_names(registry)
         violations = fork_index.verify_script(ce_text, index, extra_symbols=extras)

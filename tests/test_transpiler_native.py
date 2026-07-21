@@ -15,10 +15,12 @@ just above ``_ROCK_SMASH_RE``, for the fork/corpus evidence each shape cites):
 4. ``pbShowMap`` -> ``special(FieldShowRegionMap)`` (``_SHOW_MAP_RE``).
 5. ``$PokemonGlobal.runningShoes=true`` -> ``setflag(FLAG_SYS_B_DASH)``
    (``_RUNNING_SHOES_ON_RE``).
-6. ``pbHasSpecies?(::PBSpecies::X)`` — NOT implemented (SPECIES_RAPTORCH is
-   not in the pristine fork index); a regression test pins the still-queued
-   disposition so a future change doesn't silently start emitting an invented
-   constant.
+6. ``pbHasSpecies?(::PBSpecies::X)`` -> ``checkspecies(SPECIES_X)`` +
+   ``if (var(VAR_RESULT) == TRUE)`` (``_HAS_SPECIES_RE`` /
+   ``_emit_has_species_idiom``), gated through ``ctx.staged_species`` (only
+   the six staged starter species emit; any other id-mapped-but-unstaged
+   species, e.g. SPECIES_URAYNE, still queues — a regression test pins that
+   the gate can't silently widen).
 
 Builders mirror ``tests/test_transpiler_strips.py`` / ``test_transpiler_idioms.py``
 (local per file-ownership convention): an event is
@@ -298,17 +300,81 @@ def test_running_shoes_false_near_miss_still_queues(ctx: T.TranspileContext) -> 
 
 
 # ----------------------------------------------------------------------------
-# Shape 6 — pbHasSpecies?(::PBSpecies::X) — NOT implemented, still queues
+# Shape 6 — pbHasSpecies?(::PBSpecies::X) -> checkspecies(SPECIES_X)
 # ----------------------------------------------------------------------------
 
 
-def test_has_species_conditional_still_queues(ctx: T.TranspileContext) -> None:
-    """SPECIES_RAPTORCH is a Uranium-only species not in the pristine fork
-    index (engine/include/constants/species.h has no SPECIES_RAPTORCH), so
-    even though the fork ships a clean party-species check (``checkspecies``,
-    engine/asm/macros/event.inc:2541), emitting one here would need a
-    constant the conversion-time gate rejects. Left queued on purpose —
-    this test pins that disposition against an accidental future change."""
+@pytest.fixture()
+def ctx_with_starters() -> T.TranspileContext:
+    """A context with the id map + staged-species manifest populated the way
+    ``transpile_driver._load_species_id_map``/``_load_staged_species`` would,
+    for the six W5 starter-line species. URAYNE is deliberately id-mapped but
+    NOT staged — it's the regression fixture for the unstaged-species test."""
+    return T.TranspileContext(
+        registry=FlagRegistry(),
+        species={
+            "ORCHYNX": "SPECIES_ORCHYNX",
+            "METALYNX": "SPECIES_METALYNX",
+            "RAPTORCH": "SPECIES_RAPTORCH",
+            "ARCHILLES": "SPECIES_ARCHILLES",
+            "ELETUX": "SPECIES_ELETUX",
+            "ELECTRUXO": "SPECIES_ELECTRUXO",
+            "URAYNE": "SPECIES_URAYNE",
+        },
+        staged_species=frozenset({
+            "SPECIES_ORCHYNX", "SPECIES_METALYNX", "SPECIES_RAPTORCH",
+            "SPECIES_ARCHILLES", "SPECIES_ELETUX", "SPECIES_ELECTRUXO",
+        }),
+    )
+
+
+def test_has_species_conditional_emits_checkspecies(
+    ctx_with_starters: T.TranspileContext,
+) -> None:
+    """SPECIES_RAPTORCH is one of the six W5 starter-line species staged into
+    the fork by ``species_converter.stage`` (STARTER_SPECIES_PLAN.md §W5), so
+    the fork's native party-species check (``checkspecies``,
+    engine/asm/macros/event.inc:2541, ``Scrcmd_checkspecies`` ->
+    ``CheckPartyHasSpecies``, engine/src/scrcmd.c:3139) can be emitted
+    directly: a preamble ``checkspecies(...)`` command plus an ``if`` over
+    the ``VAR_RESULT`` it writes (the command-not-inline-expression shape
+    documented on ``_emit_has_species_idiom``). Closes SLICE1_TODO #2, the
+    last live queue entry (Auntie's dialogue branch, Map049 EV001)."""
+    commands = _branch(
+        "pbHasSpecies?(::PBSpecies::RAPTORCH)",
+        [cmd(T.EXIT_EVENT)],
+    )
+    res = run_event(ctx_with_starters, [commands])
+    assert res.unhandled == []
+    assert "checkspecies(SPECIES_RAPTORCH)" in res.text
+    assert "if (var(VAR_RESULT) == TRUE) {" in res.text
+
+
+def test_has_species_conditional_unstaged_species_still_queues(
+    ctx_with_starters: T.TranspileContext,
+) -> None:
+    """URAYNE resolves fine through the id map (like any of the ~166
+    ``needs_engine`` species) but was never staged into the fork by W5 — its
+    SPECIES_URAYNE constant does not exist in the fork's headers. This is
+    the important regression: an id-map hit alone must NOT be enough to
+    emit a species constant, or a future change could silently widen the
+    gate to invented symbols the fork doesn't define."""
+    commands = _branch(
+        "pbHasSpecies?(::PBSpecies::URAYNE)",
+        [cmd(T.CONTROL_SWITCHES, [185, 185, 1])],
+    )
+    res = run_event(ctx_with_starters, [commands])
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.CONDITIONAL_BRANCH
+    assert "SPECIES_URAYNE" not in res.text
+
+
+def test_has_species_conditional_no_species_wiring_still_queues(
+    ctx: T.TranspileContext,
+) -> None:
+    """The plain ``ctx`` fixture has no species/staged_species wiring at all
+    (the disposition before the driver populates them) — must still queue,
+    not raise, and must not emit a bare SPECIES_* guess."""
     commands = _branch(
         "pbHasSpecies?(::PBSpecies::RAPTORCH)",
         [cmd(T.CONTROL_SWITCHES, [185, 185, 1])],
@@ -316,3 +382,4 @@ def test_has_species_conditional_still_queues(ctx: T.TranspileContext) -> None:
     res = run_event(ctx, [commands])
     assert len(res.unhandled) == 1
     assert res.unhandled[0].command_code == T.CONDITIONAL_BRANCH
+    assert "SPECIES_RAPTORCH" not in res.text

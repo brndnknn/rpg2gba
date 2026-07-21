@@ -727,6 +727,99 @@ def _render_onframe_script(label: str, entries: list[AutorunEntry]) -> str:
     return "\n".join(lines)
 
 
+_ONFRAME_REARM_COMMENT = "# re-arm ON_FRAME dispatch (autorun guard input changed)"
+ONFRAME_REARM_LINE = f"setvar({_ON_FRAME_GUARD_VAR}, 0) {_ONFRAME_REARM_COMMENT}"
+
+_TOP_BLOCK_HEADER_RE = re.compile(r"^(script|movement|text|mapscripts)\s+(\S+)\s*\{")
+_REARM_FLAG_WRITE_RE = re.compile(r"^(\s*)(?:setflag|clearflag)\(\s*(FLAG_[A-Z0-9_]+)\s*\)")
+_REARM_VAR_WRITE_RE = re.compile(r"^(\s*)(?:setvar|addvar|subvar|copyvar)\(\s*(VAR_[A-Z0-9_]+)")
+
+
+def insert_onframe_rearms(pory_text: str, guard_flags: set[str], guard_vars: set[str]) -> str:
+    """Re-arm the per-map ON_FRAME latch (``VAR_TEMP_C``) whenever a NON-dispatched
+    script writes a symbol one of the map's autorun guards reads.
+
+    RMXP autorun (trigger=3) page conditions are re-evaluated continuously —
+    every frame, forever. Our ``<Dir>_OnFrame`` dispatcher (`_render_onframe_script`)
+    only approximates that: it dispatches once per frame until no autorun guard
+    matches, then latches ``setvar(VAR_TEMP_C, 1)`` to stop per-frame dispatch for
+    the rest of the map visit (a perf optimization RMXP doesn't need). That latch
+    goes stale the moment something the guards depend on changes outside the
+    dispatcher's own reach — e.g. an interactive NPC script that clears a flag an
+    autorun page's guard tests, expecting the autorun to reconsider itself. Without
+    a re-arm, the dispatcher never dispatches again for the rest of the visit and
+    the autorun becomes permanently unstartable (see the Map050 quiz/retake bug
+    this function fixes).
+
+    The fix: scan every top-level ``script Name { ... }`` block in `pory_text`
+    (never ``movement``/``text``/``mapscripts`` blocks, and never a block whose
+    name ends in ``_OnFrame`` — the dispatcher itself must not re-arm its own
+    latch mid-body) for a line that writes one of `guard_flags` (``setflag``/
+    ``clearflag``) or `guard_vars` (``setvar``/``addvar``/``subvar``/``copyvar``).
+    Immediately after such a line, insert ``setvar(VAR_TEMP_C, 0)`` at the same
+    indentation — unless it's already there (idempotent: applying this twice is
+    a no-op, so staging can re-run it safely).
+
+    Top-level blocks are found the same way `_find_script_block` finds them:
+    they open at column 0 and close at the next column-0 ``}`` — nested
+    ``if``/``switch`` bodies are always indented, so no brace-depth counter is
+    needed. A simple line-based scan (rather than a real parser) is safe because
+    the transpiler emits one command per line and writes are only recognized at
+    the start of a line, so a string or comment containing e.g. ``setflag(`` text
+    is never mistaken for a real write.
+    """
+    lines = pory_text.splitlines()
+    out: list[str] = []
+    i = 0
+    n = len(lines)
+    while i < n:
+        line = lines[i]
+        header = _TOP_BLOCK_HEADER_RE.match(line)
+        if not header:
+            out.append(line)
+            i += 1
+            continue
+        kind, name = header.group(1), header.group(2)
+        j = i + 1
+        while j < n and not re.match(r"^\}\s*$", lines[j]):
+            j += 1
+        block_lines = lines[i:j + 1] if j < n else lines[i:]
+        if kind != "script" or name.endswith("_OnFrame"):
+            out.extend(block_lines)
+            i = j + 1
+            continue
+        out.append(block_lines[0])
+        body = block_lines[1:]
+        k = 0
+        while k < len(body):
+            bline = body[k]
+            out.append(bline)
+            write_symbol = None
+            indent = ""
+            fm = _REARM_FLAG_WRITE_RE.match(bline)
+            if fm and fm.group(2) in guard_flags:
+                write_symbol = fm.group(2)
+                indent = fm.group(1)
+            if write_symbol is None:
+                vm = _REARM_VAR_WRITE_RE.match(bline)
+                if vm and vm.group(2) in guard_vars:
+                    write_symbol = vm.group(2)
+                    indent = vm.group(1)
+            if write_symbol is not None:
+                nxt = k + 1
+                while nxt < len(body) and body[nxt].strip() == "":
+                    nxt += 1
+                already_armed = nxt < len(body) and body[nxt].strip() == ONFRAME_REARM_LINE
+                if not already_armed:
+                    out.append(f"{indent}{ONFRAME_REARM_LINE}")
+            k += 1
+        i = j + 1
+    text = "\n".join(out)
+    if pory_text.endswith("\n"):
+        text += "\n"
+    return text
+
+
 def _event_has_body(event: dict, consts: MapConstants, pory_labels: set[str]) -> bool:
     """True if S6 converted any of the event's pages into a `.pory` block.
 

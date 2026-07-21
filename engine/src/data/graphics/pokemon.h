@@ -27503,3 +27503,10 @@ const u32 gObjectEventPic_Substitute[] = INCGFX_COMP("graphics/pokemon/question_
     const u32 gMonFrontPic_Egg[] = INCGFX_U32("graphics/pokemon/egg/anim_front.png", ".4bpp.smol");
     const u16 gMonPalette_Egg[] = INCGFX_U16("graphics/pokemon/egg/normal.pal", ".gbapal");
     const u8 gMonIcon_Egg[] = INCGFX_U8("graphics/pokemon/egg/icon.png", ".4bpp");
+
+// BEGIN URANIUM PATHFINDER SLICE — generated species graphics declarations (rpg2gba).
+// GENERATED + gitignored; empty stub when no species are staged. The referenced art lives under
+// graphics/pokemon/uranium/<name>/ and needs no Makefile rule — the tree's wildcard .4bpp.smol /
+// .gbapal pattern rules pick it up automatically.
+#include "uranium_species_graphics.h"
+// END URANIUM PATHFINDER SLICE

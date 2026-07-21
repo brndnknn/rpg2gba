@@ -54,6 +54,29 @@ engine/data/tilesets/secondary/uranium*/
 engine/include/constants/uranium_event_objects.gen.h
 engine/src/data/object_events/uranium_*.gen.h
 engine/graphics/object_events/pics/uranium/
+# Starter species conversion: generated engine overlays (pulled in by committed
+# URANIUM PATHFINDER SLICE #include/.include hooks in include/constants/{species,
+# pokedex,cries}.h, src/data/pokemon/species_info.h, src/data/graphics/pokemon.h,
+# and sound/{cry_tables,direct_sound_data}.inc) plus the emitted art and cries.
+engine/include/constants/uranium_species_constants.h
+engine/include/constants/uranium_pokedex_ids.h
+engine/include/constants/uranium_cries_enum.h
+engine/src/data/pokemon/uranium_learnsets.h
+engine/src/data/pokemon/uranium_species_info.h
+engine/src/data/graphics/uranium_species_graphics.h
+engine/sound/uranium_cry_*.inc
+engine/graphics/pokemon/uranium/
+# Cries land beside the ~1161 TRACKED vanilla cry wavs, so they can't be
+# blanket-ignored by directory or extension — each staged species is listed
+# explicitly. NOTE (Phase 7): this list does not scale to the other 160
+# needs_engine species; the scalable fix is to prefix staged cry filenames
+# with `uranium_` in species_converter/common.py and ignore that glob instead.
+engine/sound/direct_sound_samples/cries/orchynx.wav
+engine/sound/direct_sound_samples/cries/metalynx.wav
+engine/sound/direct_sound_samples/cries/raptorch.wav
+engine/sound/direct_sound_samples/cries/archilles.wav
+engine/sound/direct_sound_samples/cries/eletux.wav
+engine/sound/direct_sound_samples/cries/electruxo.wav
 # Full-corpus Map Walker build: the assembler generates a per-map dir under
 # data/maps/ and data/layouts/ for every built Uranium map (~190) plus the
 # UraniumWalkerStub/ dummy for dropped stock map data. Blanket-ignore all per-map

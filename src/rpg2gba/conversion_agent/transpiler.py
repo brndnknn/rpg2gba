@@ -194,6 +194,16 @@ _EMOTE_MOVEMENT_LABELS = {
 # choreography for the same interaction regardless of map.
 _ROCK_SMASH_RE = re.compile(r"^\s*(?:Kernel\.)?pbRockSmash\s*$")
 
+# pbHasSpecies?(::PBSpecies::NAME) — "does the party have this species"
+# (Auntie's farewell dialogue, Map049 EV001 page 3 — SLICE1_TODO #2, the last
+# live queue entry; STARTER_SPECIES_PLAN.md §W5). Corpus-verified against the
+# only 3 occurrences (Map049.json EV001 page 3, RAPTORCH/ELETUX/ORCHYNX): the
+# call is always this exact bare shape, never negated (no `!`/`unless`
+# wrapper observed anywhere in the corpus) — a negated form is not handled
+# here and falls through to the generic script-condition queue like any
+# other non-matching type-12 shape.
+_HAS_SPECIES_RE = re.compile(r"^\s*pbHasSpecies\?\(\s*::PBSpecies::([A-Za-z0-9_]+)\s*\)\s*$")
+
 # pbCaveEntrance — Essentials' cave-entry fade/step-in call (Map032 EV23/36/
 # 37 page 1; 48 corpus occurrences total, always bare — no argument list ever
 # observed, confirmed by corpus grep). Sits between a 223/106 fade-to-black
@@ -314,6 +324,21 @@ class TranspileContext:
     # same disposition as an unresolved symbol: the give-item idiom queues).
     items: dict[str, str] = field(default_factory=dict)
 
+    # Uranium internal species name -> its SPECIES_* constant, straight from
+    # reference/uranium_id_map.json's "species" table (CLAUDE.md §4.3 single
+    # source of truth — never string-munged from the name). Populated by the
+    # driver; empty means the id map isn't wired up (the pbHasSpecies? idiom
+    # queues, same disposition as an unresolved item symbol above).
+    species: dict[str, str] = field(default_factory=dict)
+
+    # SPECIES_* constants that species_converter.stage has actually staged
+    # into the fork (species_manifest.json), i.e. that the fork's headers
+    # really define. A name resolving in `species` above is NOT sufficient
+    # on its own — most of Uranium's ~166 needs_engine species are id-mapped
+    # but never staged, and emitting their constant would be an invented
+    # symbol the gate correctly rejects. Populated by the driver.
+    staged_species: frozenset[str] = field(default_factory=frozenset)
+
     # per-event cursor, set by transpile_event / transpile_common_event
     map_id: int = 0
     event_id: int | None = None
@@ -366,6 +391,18 @@ class TranspileContext:
     def self_switch_flag(self, letter: str) -> str:
         assert self.event_id is not None
         return self.registry.mint_self_switch(self.map_id, self.event_id, letter)
+
+    def staged_species_constant(self, internal_name: str) -> str | None:
+        """Resolve a Uranium species internal name to its SPECIES_* constant,
+        but ONLY if that species has actually been staged into the fork.
+        ``None`` (caller queues) for an id-map miss OR an id-map hit that
+        isn't in ``staged_species`` — the latter is the important case: a
+        species like URAYNE resolves fine through the id map but was never
+        staged, so its constant doesn't exist in the fork's headers."""
+        const = self.species.get(internal_name)
+        if const is None or const not in self.staged_species:
+            return None
+        return const
 
 
 # -- control-flow tree --------------------------------------------------------
@@ -850,6 +887,9 @@ class _PageEmitter:
         rock_smash = self._emit_rock_smash_idiom(node)
         if rock_smash is not None:
             return rock_smash
+        has_species = self._emit_has_species_idiom(node)
+        if has_species is not None:
+            return has_species
         expr = condition_expr(node.cmd.get("parameters", []), self.ctx)
         if expr is None:
             marker = self.ctx.queue(
@@ -983,6 +1023,46 @@ class _PageEmitter:
         # smashable rock; the driver serializes it to the trait sidecar.
         self.ctx.record_trait("smashable_rock")
         return [breadcrumb, "goto(EventScript_RockSmash)"]
+
+    def _emit_has_species_idiom(self, node: IfNode) -> list[str] | None:
+        """``pbHasSpecies?(::PBSpecies::NAME)`` — see ``_HAS_SPECIES_RE`` for
+        the corpus evidence (Map049 EV001 page 3, Auntie's farewell dialogue).
+        Fork-native ``checkspecies`` (engine/asm/macros/event.inc:2541,
+        ``Scrcmd_checkspecies`` -> ``CheckPartyHasSpecies``,
+        engine/src/scrcmd.c:3139) is a COMMAND that writes ``VAR_RESULT``, not
+        an inline boolean — so this emits a preamble ``checkspecies(...)``
+        call plus an ``if`` over the result, in the same style as
+        ``_emit_door_idiom``'s ``getplayerxy`` preamble (that idiom is the
+        precedent for the poryscript call syntax: a fork macro is invoked
+        exactly like any other command, ``name(args)``). Returns ``None``
+        (falls through to the generic script-condition queue) for: any other
+        type-12 script shape, a ``::PBSpecies::`` name the id map doesn't
+        know, or — the important safety gate — a species the id map DOES
+        know but the staging manifest never staged into the fork (e.g.
+        SPECIES_URAYNE: id-mapped, one of the ~166 ``needs_engine`` species,
+        but not among the six staged starters). Emitting a constant the
+        fork's headers don't actually define would be exactly the class of
+        bug the conversion-time gate exists to catch — queuing here is the
+        correct failure mode, not a workaround."""
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        m = _HAS_SPECIES_RE.match(params[1])
+        if not m:
+            return None
+        const = self.ctx.staged_species_constant(m.group(1))
+        if const is None:
+            return None
+        lines = [
+            f"checkspecies({const})",
+            "if (var(VAR_RESULT) == TRUE) {",
+        ]
+        lines += [f"    {ln}" for ln in self.emit_nodes(node.then)]
+        if node.otherwise:
+            lines.append("} else {")
+            lines += [f"    {ln}" for ln in self.emit_nodes(node.otherwise)]
+        lines.append("}")
+        return lines
 
     def _emit_inline_choice(self, node: TextRun) -> list[str]:
         """Essentials' inline ``\\ch[var,ifCancel,opt1,opt2,...]`` text escape

@@ -9,8 +9,7 @@
 # scene-local scratch vars VAR_TEMP_3/4/5 (scene never changes maps, temps
 # safe; VAR_TEMP_0/1 = transpiler scratch, VAR_TEMP_C/F reserved); argmax as
 # explicit compares; selector cutscene -> result announcement msgbox with the
-# Emerald stand-in starter names (user decision 2026-07-17, Phase-7 debt:
-# Orchynx->TREECKO, Raptorch->TORCHIC, Eletux->MUDKIP).
+# real starter names (species updated 2026-07-18).
 
 script Map050_EV005_Page1 {
     lockall
@@ -319,13 +318,13 @@ script Map050_EV005_TestBody {
     delay(10)
     fadescreen(FADE_FROM_BLACK)
     delay(30)
-    # pbStarterSelector reveal, as dialogue (stand-in names, Phase-7 debt):
+    # pbStarterSelector reveal, as dialogue:
     if (var(VAR_POKEMONTEST) == 0) {
-        msgbox(format("Based on your results, the partner best suited to you is TREECKO!"))
+        msgbox(format("Based on your results, the partner best suited to you is Orchynx!"))
     } elif (var(VAR_POKEMONTEST) == 1) {
-        msgbox(format("Based on your results, the partner best suited to you is TORCHIC!"))
+        msgbox(format("Based on your results, the partner best suited to you is Raptorch!"))
     } else {
-        msgbox(format("Based on your results, the partner best suited to you is MUDKIP!"))
+        msgbox(format("Based on your results, the partner best suited to you is Eletux!"))
     }
     # dropped 209 route (target 19, codes [44,15,41,15,41]): machine SE +
     # ball-graphic swap — cosmetic, no native per-frame gfx swap (gap #6).
@@ -335,6 +334,11 @@ script Map050_EV005_TestBody {
     msgbox(format("Go ahead and take it, {PLAYER}."))
     setflag(FLAG_MAP050_EVENT005_SSC)
     addvar(VAR_POKEMONTEST, 1)
+    # W8 fix A (2026-07-19): Page1 opens with lockall, and the accept path
+    # goto()s here, skipping Page1's shared releaseall epilogue — without
+    # this, every lab NPC stays frozen after the quiz (player controls
+    # auto-unlock at script end, script.c:268, but object freeze does not).
+    releaseall
     end
 }
 

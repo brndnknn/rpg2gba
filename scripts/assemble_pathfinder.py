@@ -260,6 +260,112 @@ def run_layout_pass(
 
 
 # ---------------------------------------------------------------------------
+# S8b2: Species staging (STARTER_SPECIES_PLAN.md §4-W6)
+# ---------------------------------------------------------------------------
+
+# Header/inc filename -> engine-relative destination directory. Mirrors the
+# mapping documented in species_converter/stage.py's module docstring
+# ("Generated files" list) and STARTER_SPECIES_PLAN.md §3's table.
+_SPECIES_HEADER_DEST_DIRS: dict[str, str] = {
+    "uranium_species_constants.h": "include/constants",
+    "uranium_pokedex_ids.h": "include/constants",
+    "uranium_cries_enum.h": "include/constants",
+    "uranium_learnsets.h": "src/data/pokemon",
+    "uranium_species_info.h": "src/data/pokemon",
+    "uranium_species_graphics.h": "src/data/graphics",
+    "uranium_cry_table_forward.inc": "sound",
+    "uranium_cry_table_reverse.inc": "sound",
+    "uranium_cry_sound_data.inc": "sound",
+}
+
+
+def run_species_pass(out: Path, fork: Path, uranium_src: Path, dry_run: bool) -> None:
+    """Convert the six STARTER_SPECIES starters + stage the overlay into the
+    fork: run the art converters (battlers/icons/cries) first so their
+    measured Y-offsets/icon-palette-index sidecars can be threaded into
+    `stage.write_all`'s `overrides=`, then emit the generated headers/incs
+    and copy everything (headers, per-species art, per-species cry wavs)
+    into `$RPG2GBA_POKEEMERALD`.
+
+    Must run BEFORE S8c (`run_fork_pass`): the poryscript capability gate
+    there reads `species_manifest.json` from the same `out/species/` path
+    this pass writes it to, so an unstaged/stale manifest would silently
+    under-gate species references.
+
+    Conversion + emission always run (writing only into `out/`, never
+    `fork/`) so a --dry-run log is a faithful preview of what WOULD be
+    copied; only the copies into `fork/` are gated by `dry_run` (via
+    `_copy`, matching every other pass in this script).
+    """
+    logger.info("=== S8b2: species staging ===")
+    from dataclasses import replace
+
+    from rpg2gba.species_converter import battlers as species_battlers
+    from rpg2gba.species_converter import common as species_common
+    from rpg2gba.species_converter import cries as species_cries
+    from rpg2gba.species_converter import icons as species_icons
+    from rpg2gba.species_converter import stage as species_stage
+
+    species_dir = out / species_common.SPECIES_OUT_SUBDIR
+    art_dir = species_dir / "art"
+    cries_dir = species_dir / "cries"
+
+    # --- Art converters first: their sidecars feed stage.write_all's overrides ---
+    battler_results = species_battlers.convert_starter_battlers(uranium_src, art_dir)
+    icon_result = species_icons.convert_starter_icons(uranium_src, fork, art_dir)
+    species_cries.convert_starter_cries(uranium_src, cries_dir)
+
+    overrides: dict[str, species_stage.SpeciesOverride] = {}
+    for r in battler_results:
+        ov = overrides.get(r.internal_name, species_stage.SpeciesOverride())
+        overrides[r.internal_name] = replace(
+            ov, front_pic_y_offset=r.front_y_offset, back_pic_y_offset=r.back_y_offset
+        )
+    for r in icon_result.species:
+        ov = overrides.get(r.spec.internal_name, species_stage.SpeciesOverride())
+        overrides[r.spec.internal_name] = replace(ov, icon_pal_index=r.icon_pal_index)
+
+    manifest = species_stage.write_all(
+        uranium_src=uranium_src,
+        engine_dir=fork,
+        out_dir=species_dir,
+        overrides=overrides,
+    )
+    logger.info("  staged %d species into the manifest", len(manifest["species"]))
+
+    # --- Copy generated headers/incs into the fork tree ---
+    for name, dest_dir in _SPECIES_HEADER_DEST_DIRS.items():
+        _copy(species_dir / name, fork / dest_dir / name, name, dry_run)
+
+    # --- Copy per-species art + cry wavs into the fork tree ---
+    for spec in species_common.STARTER_SPECIES:
+        asset_name = species_common.asset_dir_name(spec)
+        src_art_dir = art_dir / asset_name
+        dest_art_dir = fork / species_common.ENGINE_GFX_ROOT / asset_name
+        for fname in (
+            species_common.FRONT_PNG,
+            species_common.BACK_PNG,
+            species_common.NORMAL_PAL,
+            species_common.SHINY_PAL,
+            species_common.ICON_PNG,
+        ):
+            _copy(
+                src_art_dir / fname,
+                dest_art_dir / fname,
+                f"{spec.internal_name} {fname}",
+                dry_run,
+            )
+
+        wav_name = f"{asset_name}.wav"
+        _copy(
+            cries_dir / wav_name,
+            fork / species_common.ENGINE_CRY_ROOT / wav_name,
+            f"{spec.internal_name} cry",
+            dry_run,
+        )
+
+
+# ---------------------------------------------------------------------------
 # S8c: Fork assembly
 # ---------------------------------------------------------------------------
 
@@ -280,9 +386,11 @@ def run_fork_pass(
     # Uranium-minted registries (D3). A violation is OUR bug — abort loud
     # before make, never stage, never queue.
     gate_index = fi.load_or_build()
+    species_manifest_path = out / "species" / "species_manifest.json"
     gate_extras = fi.registry_extra_symbols(
         flag_state_path=out / "flag_state.json",
         map_constants_path=out / "porymap" / "map_constants.json",
+        species_manifest_path=species_manifest_path if species_manifest_path.is_file() else None,
     )
     def _gate(pory_text: str, label: str) -> None:
         violations = fi.verify_script(pory_text, gate_index, extra_symbols=gate_extras)
@@ -548,6 +656,8 @@ def main() -> int:
                     help="Skip S8a (Uranium tilesets already emitted).")
     ap.add_argument("--skip-layout", action="store_true",
                     help="Skip S8b (layout .bin already generated).")
+    ap.add_argument("--skip-species", action="store_true",
+                    help="Skip S8b2 (Uranium starter species already staged).")
     args = ap.parse_args()
 
     repo_root = Path(__file__).parent.parent
@@ -573,6 +683,17 @@ def main() -> int:
 
     if not args.skip_layout:
         run_layout_pass(out, consts, staging, args.dry_run)
+
+    if not args.skip_species:
+        uranium_src_path = os.environ.get("RPG2GBA_URANIUM_SRC")
+        if not uranium_src_path:
+            print("RPG2GBA_URANIUM_SRC not set", file=sys.stderr)
+            return 1
+        uranium_src = Path(uranium_src_path)
+        if not uranium_src.is_dir():
+            print(f"Uranium source tree not found: {uranium_src}", file=sys.stderr)
+            return 1
+        run_species_pass(out, fork, uranium_src, args.dry_run)
 
     run_fork_pass(out, fork, consts, staging, args.dry_run)
 

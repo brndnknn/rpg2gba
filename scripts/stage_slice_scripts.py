@@ -72,6 +72,12 @@ _SET_VAR_WRITE_RE = re.compile(r"\b(?:setvar|addvar|subvar|copyvar)\(\s*(VAR_[A-
 # OnFrame body (`setvar(VAR_TEMP_C, 1)`) — not a page's job to write, so it
 # never counts as a guard symbol a page must intersect.
 _QUIESCENCE_VAR = "VAR_TEMP_C"
+# The guard READS an OnFrame dispatcher's own `if (...)` conditions perform —
+# `flag(FLAG_X)` / `var(VAR_X) >= n`, exactly the `AutorunEntry.guard` text
+# `_render_onframe_script` embedded — parsed straight out of the rendered
+# dispatcher block (see `_onframe_guard_symbols`).
+_GUARD_FLAG_READ_RE = re.compile(r"\bflag\((FLAG_[A-Z0-9_]+)\)")
+_GUARD_VAR_READ_RE = re.compile(r"\bvar\((VAR_[A-Z0-9_]+)\)")
 
 
 def _find_script_block(text: str, header_re: re.Pattern[str]) -> tuple[str, str] | None:
@@ -136,6 +142,31 @@ def check_onframe_deactivation(
                 f"ON_FRAME page never deactivates itself and will re-fire every frame"
             )
     return violations
+
+
+def _onframe_guard_symbols(dispatch_text: str) -> tuple[set[str], set[str]]:
+    """The FLAG_*/VAR_* symbols a map's ``<Dir>_OnFrame`` dispatcher reads in its
+    own guard conditions (``if (flag(F) && var(V) >= n) { ... }``) — parsed
+    straight out of the rendered `AutorunEntry.guard` text embedded in the
+    dispatcher block, the same source of truth `check_onframe_deactivation`
+    already reads for the sibling re-fire check.
+
+    These are exactly the "autorun guard input" symbols
+    `metadata_wiring.insert_onframe_rearms` must watch a map's OTHER
+    (non-OnFrame) scripts for: a write to any of them means the latched
+    ``VAR_TEMP_C`` dispatch guard has gone stale and needs re-arming (the
+    ON_FRAME re-fire bug's mirror image — see `insert_onframe_rearms`'s
+    docstring). Returns ``(set(), set())`` if the map has no OnFrame
+    dispatcher block at all.
+    """
+    found = _find_script_block(dispatch_text, _ONFRAME_HEADER_RE)
+    if found is None:
+        return set(), set()
+    _, onframe_block = found
+    flags = set(_GUARD_FLAG_READ_RE.findall(onframe_block))
+    variables = set(_GUARD_VAR_READ_RE.findall(onframe_block))
+    variables.discard(_QUIESCENCE_VAR)
+    return flags, variables
 
 
 def _load_event_traits(out: Path, map_id: int, pory_path: Path) -> dict[int, list[str]]:
@@ -389,19 +420,54 @@ def main() -> int:
         remap = remap_pory_object_ids(
             bracketed_text, table, source_name=f"Map{map_id:03d}.pory"
         )
-        staged[f"Map{map_id:03d}.pory"] = remap.text
+        final_text = remap.text
+
+        # ON_FRAME re-ARM pass: RMXP autorun guards are re-evaluated every
+        # frame; our dispatcher latches VAR_TEMP_C=1 once nothing matches to
+        # stop per-frame dispatch, but a later NON-dispatched script (e.g. an
+        # interactive NPC) can write a symbol one of the map's autorun guards
+        # reads, going stale — see metadata_wiring.insert_onframe_rearms for
+        # the full rationale (the Map050 quiz/retake bug). Runs downstream of
+        # the transpile driver's VAR_TEMP_C reserved-var gate (staging, not
+        # the transpiler — the gate intentionally forbids driver/hand-file
+        # writes to VAR_TEMP_C; this insertion is the one place allowed to
+        # write it). KNOWN LIMITATION: CommonEvents.pory is not processed by
+        # this pass — a common event writing a guard input while standing on
+        # the map would still leave a stale latch. The current slice calls no
+        # CEs, so this is not yet exercised.
+        guard_flags: set[str] = set()
+        guard_vars: set[str] = set()
+        if disp_text is not None:
+            guard_flags, guard_vars = _onframe_guard_symbols(disp_text)
+            final_text = mw.insert_onframe_rearms(final_text, guard_flags, guard_vars)
+
+        staged[f"Map{map_id:03d}.pory"] = final_text
+        rearm_count = final_text.count(mw.ONFRAME_REARM_LINE)
+        if rearm_count:
+            print(f"Map{map_id:03d}: inserted {rearm_count} ON_FRAME re-arm(s)")
 
         # ON_FRAME re-fire guard: run against the final staged text (post
-        # normalize/prune/remap, and — since it's read from out/scripts/ where
-        # transpile_driver already applied hand_conversions/ overlays, e.g.
-        # Map032_EV009.pory — post-overlay too) so a hand-authored page is
-        # checked the same as a transpiled one.
+        # normalize/prune/remap/rearm, and — since it's read from out/scripts/
+        # where transpile_driver already applied hand_conversions/ overlays,
+        # e.g. Map032_EV009.pory — post-overlay too) so a hand-authored page
+        # is checked the same as a transpiled one.
         if disp_text is not None:
             onframe_violations.extend(
                 check_onframe_deactivation(
-                    disp_text, remap.text, source_name=f"Map{map_id:03d}.pory"
+                    disp_text, final_text, source_name=f"Map{map_id:03d}.pory"
                 )
             )
+            # Regression belt for the re-arm pass itself: re-applying
+            # insert_onframe_rearms to the final staged text must be a no-op
+            # (idempotence — CLAUDE.md §4.2). If it isn't, some guard-input
+            # write in the final text is missing its re-arm line.
+            reapplied = mw.insert_onframe_rearms(final_text, guard_flags, guard_vars)
+            if reapplied != final_text:
+                onframe_violations.append(
+                    f"Map{map_id:03d}.pory: ON_FRAME re-arm coverage incomplete — "
+                    f"a guard-input write ({sorted(guard_flags | guard_vars)}) is "
+                    f"missing its VAR_TEMP_C re-arm line"
+                )
 
         statics = sum(1 for o in map_json.get("object_events", []) if o.get("script") == "0x0")
         print(f"Map{map_id:03d} ({entry['dir_name']}): "

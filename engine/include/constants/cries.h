@@ -2555,6 +2555,12 @@ enum PokemonCry
 #if P_FAMILY_PECHARUNT
     CRY_PECHARUNT,
 #endif //P_FAMILY_PECHARUNT
+// BEGIN URANIUM PATHFINDER SLICE — generated cry enum entries (rpg2gba).
+// GENERATED + gitignored; empty stub when no species are staged. CRY_COUNT below IS self-sizing,
+// so no count override is needed here (unlike NATIONAL_DEX_COUNT in pokedex.h). Order must match
+// the two ordered lists in sound/cry_tables.inc.
+#include "constants/uranium_cries_enum.h"
+// END URANIUM PATHFINDER SLICE
     CRY_COUNT,
 };
 

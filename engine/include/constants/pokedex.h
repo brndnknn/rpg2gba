@@ -1080,6 +1080,21 @@ enum NationalDexOrder
     #define NATIONAL_DEX_COUNT  NATIONAL_DEX_DEOXYS
 #endif
 
+// BEGIN URANIUM PATHFINDER SLICE — generated national-dex ids + count override (rpg2gba).
+// GENERATED + gitignored; empty stub when no species are staged.
+//
+// Deliberately NOT spliced into `enum NationalDexOrder` above: data/event_scripts.s pulls this
+// header through tools/preproc, whose enum scanner cannot follow an #include inside an enum body
+// ("unterminated enum"). So staged species get plain #defines chained off the enum's last member
+// instead — `.natDexNum` takes them fine (C converts the int in the designated initializer).
+//
+// NATIONAL_DEX_COUNT is NOT self-sizing: the #elif chain above pins it to a NAMED entry, so
+// without the #undef/#define below the new ids would be silently under-counted (and
+// POKEMON_SLOTS_NUMBER with them). That matters — a species whose natDexNum exceeds the count
+// underflows dexSeen[]/dexCaught[] on send-out (src/pokedex.c ~4513, no guard).
+#include "constants/uranium_pokedex_ids.h"
+// END URANIUM PATHFINDER SLICE
+
 #define POKEMON_SLOTS_NUMBER (NATIONAL_DEX_COUNT + 1)
 
 // Hoenn Pokédex order

@@ -571,6 +571,7 @@ def check_reserved_var_writes(
 def registry_extra_symbols(
     flag_state_path: Path | None = None,
     map_constants_path: Path | None = None,
+    species_manifest_path: Path | None = None,
 ) -> set[str]:
     """Collect Uranium-minted symbols the gate should accept beyond the index.
 
@@ -579,9 +580,20 @@ def registry_extra_symbols(
     - `map_constants_path`: the map-constant registry
       (`output/uranium-build/porymap/map_constants.json`) — minted MAP_*/
       MAP_URANIUM_*/LAYOUT_*/MAPSEC_* names.
+    - `species_manifest_path`: the species staging manifest
+      (`output/uranium-build/species/species_manifest.json`, written by
+      `rpg2gba.species_converter.stage`) — SPECIES_*/NATIONAL_DEX_*/CRY_*
+      constants for the species that have actually been staged into the
+      fork. ONLY species listed here pass the gate — a Uranium species that
+      merely appears in `reference/uranium_id_map.json` (e.g. under
+      `needs_engine.species`) but hasn't been staged must still be rejected;
+      this deliberately does not widen to the full id-map species table.
 
-    Missing categories inside either file fail loud (KeyError) — a shape
-    drift there means the registry changed and this glue must follow.
+    Missing categories inside any of these files fail loud (KeyError) — a
+    shape drift there means the registry changed and this glue must follow.
+    A `None` path (the manifest hasn't been generated yet, e.g. before the
+    species converter has ever run) contributes no symbols and is not an
+    error.
     """
     extras: set[str] = set()
 
@@ -598,6 +610,12 @@ def registry_extra_symbols(
         consts = json.loads(map_constants_path.read_text(encoding="utf-8"))
         for entry in consts.values():
             for key in ("map_const", "alias_const", "layout_const", "mapsec_const"):
+                extras.add(entry[key])
+
+    if species_manifest_path is not None:
+        manifest = json.loads(species_manifest_path.read_text(encoding="utf-8"))
+        for entry in manifest["species"]:
+            for key in ("species_constant", "national_dex_constant", "cry_constant"):
                 extras.add(entry[key])
 
     return extras
@@ -648,15 +666,22 @@ def build_cmd() -> None:  # pragma: no cover - thin CLI wrapper
     default=None,
     help="Map-constant registry file (map_constants.json).",
 )
+@click.option(
+    "--species-manifest",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="Species staging manifest file (species_manifest.json).",
+)
 def check(
     files: tuple[Path, ...],
     allow_flags_file: Path | None,
     flag_state: Path | None,
     map_constants: Path | None,
+    species_manifest: Path | None,
 ) -> None:  # pragma: no cover
     """Run verify_script over one or more .pory files."""
     index = load_or_build()
-    extra_symbols = registry_extra_symbols(flag_state, map_constants)
+    extra_symbols = registry_extra_symbols(flag_state, map_constants, species_manifest)
     if allow_flags_file is not None:
         extra_symbols |= set(json.loads(allow_flags_file.read_text(encoding="utf-8")))
 
