@@ -859,12 +859,17 @@
 #define TRAINER_LEAF                        852
 #define TRAINER_BRENDAN_PLACEHOLDER         853
 #define TRAINER_MAY_PLACEHOLDER             854
+// URANIUM PATHFINDER SLICE: Moki lab rival battle (EV019). Theo's counter-pick
+// party, selected by the player's starter line (VAR_POKEMONTEST / RMXP var151).
+#define TRAINER_THEO_9                      855
+#define TRAINER_THEO_10                     856
+#define TRAINER_THEO_11                     857
 
 // NOTE: Because each Trainer uses a flag to determine when they are defeated, there is only space for 9 additional trainers before trainer flag space overflows
 //       More space can be made by shifting flags around in constants/flags.h or changing how trainer flags are handled
 //       MAX_TRAINERS_COUNT can be increased but will take up additional saveblock space
 
-#define TRAINERS_COUNT_EMERALD     855
+#define TRAINERS_COUNT_EMERALD     858
 #define MAX_TRAINERS_COUNT_EMERALD 864
 
 #if IS_FRLG

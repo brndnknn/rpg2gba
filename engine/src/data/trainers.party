@@ -16873,3 +16873,42 @@ Double Battle: No
 Kyogre
 Level: 5
 IVs: 0 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
+
+/* URANIUM PATHFINDER SLICE: Moki Town lab rival battle (Map050 EV019). Theo's
+   counter-pick starter, chosen by the player's own pick (VAR_POKEMONTEST): the
+   rival always gets the type that beats yours. Pic is a Youngster stand-in
+   until a Uranium trainer-pic pipeline exists (cosmetic, tracked in BOOT_WALK
+   S6b). party_id maps: 19->Eletux (THEO_9), 20->Orchynx (THEO_10),
+   21->Raptorch (THEO_11). */
+=== TRAINER_THEO_9 ===
+Name: Theo
+Class: Rival
+Pic: Youngster
+Gender: Male
+Music: Male
+Double Battle: No
+
+SPECIES_ELETUX
+Level: 5
+
+=== TRAINER_THEO_10 ===
+Name: Theo
+Class: Rival
+Pic: Youngster
+Gender: Male
+Music: Male
+Double Battle: No
+
+SPECIES_ORCHYNX
+Level: 5
+
+=== TRAINER_THEO_11 ===
+Name: Theo
+Class: Rival
+Pic: Youngster
+Gender: Male
+Music: Male
+Double Battle: No
+
+SPECIES_RAPTORCH
+Level: 5
