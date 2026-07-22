@@ -4184,6 +4184,14 @@ BattleScript_RivalBattleLostSkipMonRecall::
 	trainerslidein BS_ATTACKER
 	waitstate
 	printstring STRINGID_TRAINER1WINTEXT
+	@ BEGIN URANIUM PATHFINDER SLICE — earlyrival player-loss + heal-and-continue
+	@ (RIVAL_BATTLE_HEAL_AFTER without FIRST_BATTLE) is dead code in vanilla, so
+	@ this path never ran. Without waitmessage, end2 ends the battle while the
+	@ win text is still displaying and the return-to-field transition hangs on
+	@ that screen. Mirror the win path (BattleScript_LocalBattleWonReward waits
+	@ before end2). Reached only by the Moki lab rival battle (Map050 EV019).
+	waitmessage B_WAIT_TIME_LONG
+	@ END URANIUM PATHFINDER SLICE
 	jumpifbyte CMP_EQUAL, cMULTISTRING_CHOOSER, 2, BattleScript_LocalBattleLostPrintWhiteOut
 	end2
 

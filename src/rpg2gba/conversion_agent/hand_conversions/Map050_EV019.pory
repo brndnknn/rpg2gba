@@ -95,21 +95,36 @@ script Map050_EV019_Page1 {
     # Rival battle (2026-07-21): the RMXP source ran
     #   pbTrainerBattle(RIVAL,"Theo",...,party=pbGet(151)+18,canlose)
     # inside a code-111 win/lose branch (the 66/55-node aftermath the earlier
-    # stub dropped). Mapped to trainerbattle_earlyrival + RIVAL_BATTLE_TUTORIAL
-    # — the vanilla FRLG Oak's-lab starter-rival idiom: you CAN lose, the party
-    # auto-heals afterward (covers Uranium's "I'll heal your Pokémon" beat), the
-    # trainer's win/lose reaction text is shown by the battle system, and the
-    # scene converges either way (both RMXP branches also converge to the prof's
-    # Route-01 farewell + VAR_QUEST_LOG bump below). Party by starter line:
-    # 1 Orchynx -> Theo Eletux (THEO_9); 2 Raptorch -> Theo Orchynx (THEO_10);
-    # 3 Eletux -> Theo Raptorch (THEO_11) — the rock-paper-scissors counter.
+    # stub dropped). Mapped to trainerbattle_earlyrival + RIVAL_BATTLE_HEAL_AFTER
+    # — the earlyrival mode: you CAN lose (no white-out), the party auto-heals
+    # afterward (covers Uranium's "I'll heal your Pokémon" beat), the trainer's
+    # win/lose reaction text is shown by the battle system, VAR_RESULT records
+    # the outcome (read below), and the scene converges either way (both RMXP
+    # branches also converge to the prof's Route-01 farewell + VAR_QUEST_LOG
+    # bump). NOTE: do NOT use RIVAL_BATTLE_TUTORIAL here — that flag adds
+    # BATTLE_TYPE_FIRST_BATTLE (battle_setup.c:1322), the Birch-intro tutorial
+    # type where the opponent is framed as WILD and FLEES at low HP, so the
+    # player can never actually lose. HEAL_AFTER is the plain losable+heal mode.
+    # Party by starter line: 1 Orchynx -> Theo Eletux (THEO_9); 2 Raptorch ->
+    # Theo Orchynx (THEO_10); 3 Eletux -> Theo Raptorch (THEO_11).
     switch (var(VAR_POKEMONTEST)) {
         case 1:
-            trainerbattle_earlyrival(TRAINER_THEO_9, RIVAL_BATTLE_TUTORIAL, Map050_EV019_Theo_DefeatText, Map050_EV019_Theo_VictoryText)
+            trainerbattle_earlyrival(TRAINER_THEO_9, RIVAL_BATTLE_HEAL_AFTER, Map050_EV019_Theo_DefeatText, Map050_EV019_Theo_VictoryText)
         case 2:
-            trainerbattle_earlyrival(TRAINER_THEO_10, RIVAL_BATTLE_TUTORIAL, Map050_EV019_Theo_DefeatText, Map050_EV019_Theo_VictoryText)
+            trainerbattle_earlyrival(TRAINER_THEO_10, RIVAL_BATTLE_HEAL_AFTER, Map050_EV019_Theo_DefeatText, Map050_EV019_Theo_VictoryText)
         case 3:
-            trainerbattle_earlyrival(TRAINER_THEO_11, RIVAL_BATTLE_TUTORIAL, Map050_EV019_Theo_DefeatText, Map050_EV019_Theo_VictoryText)
+            trainerbattle_earlyrival(TRAINER_THEO_11, RIVAL_BATTLE_HEAL_AFTER, Map050_EV019_Theo_DefeatText, Map050_EV019_Theo_VictoryText)
+    }
+    # Record the outcome for Theo's dad scene (Map172 EV004 branches on it).
+    # The earlyrival converge dropped the RMXP win/lose branches that used to
+    # write Uranium switch 35 = FLAG_LOST_FIRST_BATTLE (ON iff the player LOST).
+    # The engine sets VAR_RESULT = TRUE when the player was defeated in an
+    # EARLY_RIVAL battle (battle_setup.c). Reproduce switch 35 here, before any
+    # msgbox/yesno can clobber VAR_RESULT.
+    if (var(VAR_RESULT) == 1) {
+        setflag(FLAG_LOST_FIRST_BATTLE)
+    } else {
+        clearflag(FLAG_LOST_FIRST_BATTLE)
     }
     delay(20)
     # Theo leaves the lab. His walk-off lived inside the un-emitted battle
