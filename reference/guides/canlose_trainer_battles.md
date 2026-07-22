@@ -94,6 +94,9 @@ Any new use of `HEAL_AFTER`-alone depends on this fix.
 
 ## Transpiler strategy (for the pipeline fix)
 
+> Full implementation design lives in `canlose_battle_pipeline_plan.md`
+> (transpiler + trainer staging, open decisions, test/sequencing plan).
+
 Target shape for a canlose `pbTrainerBattle` in a code-111 branch:
 
 ```
