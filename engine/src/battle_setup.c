@@ -1319,8 +1319,22 @@ void BattleSetup_StartTrainerBattle(void)
         }
     }
 
-    if (GetTrainerBattleMode() == TRAINER_BATTLE_EARLY_RIVAL && GetRivalBattleFlags() & RIVAL_BATTLE_TUTORIAL)
+    // BEGIN URANIUM PATHFINDER SLICE — HEAL_AFTER-only earlyrival must NOT be a FIRST_BATTLE.
+    // Upstream masks with `& RIVAL_BATTLE_TUTORIAL`, but RIVAL_BATTLE_TUTORIAL == 3 (0b11)
+    // and RIVAL_BATTLE_HEAL_AFTER == 1 (0b01), so `HEAL_AFTER & TUTORIAL` is truthy too — a
+    // plain heal-after rival battle wrongly gained BATTLE_TYPE_FIRST_BATTLE. On a LOSS that
+    // reroutes the trainer win-text print (STRINGID_TRAINER1WINTEXT) into the FRLG Oak
+    // "How disappointing" voiceover (battle_controllers.c:2658 -> PrintOakText_HowDisappointing),
+    // which runs BeginNormalPaletteFade(..., RGB_BLACK) and then waits on Oak-controller
+    // graphics/state that don't exist in a normal trainer battle — so it fades to black and
+    // never completes: the freeze on Theo's last line (Map050 EV019, Moki lab). Require the
+    // FULL TUTORIAL flag so only the real FRLG tutorial battles (RIVAL_BATTLE_TUTORIAL, where
+    // the Oak voiceover is correct) get FIRST_BATTLE. No vanilla content uses HEAL_AFTER alone
+    // (grep: only FRLG uses TUTORIAL/0), so this changes no reachable vanilla behavior.
+    if (GetTrainerBattleMode() == TRAINER_BATTLE_EARLY_RIVAL
+        && (GetRivalBattleFlags() & RIVAL_BATTLE_TUTORIAL) == RIVAL_BATTLE_TUTORIAL)
         gBattleTypeFlags |= BATTLE_TYPE_FIRST_BATTLE;
+    // END URANIUM PATHFINDER SLICE
 
     if (CurrentBattlePyramidLocation() != PYRAMID_LOCATION_NONE)
     {

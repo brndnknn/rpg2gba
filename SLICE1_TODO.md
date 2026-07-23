@@ -111,6 +111,34 @@ dispositions 2026-07-15:**
   (details not yet gathered; next /debug session starts here, likely
   overlapping #14's ceremony territory).
 
+**2026-07-22 — S6b Theo loss-path FREEZE fix (ROM `f5867449`, taildropped; retest PENDING):**
+
+- **Symptom:** after LOSING the Moki-lab rival battle (Map050 EV019), the game
+  freezes on Theo's last line as the screen begins fading to black (image still
+  visible, slightly darkened). Persisted despite the 2026-07-21 fix (`9971428e`:
+  HEAL_AFTER + `waitmessage`).
+- **Root cause:** `RIVAL_BATTLE_HEAL_AFTER` == 1 (0b01), `RIVAL_BATTLE_TUTORIAL`
+  == 3 (0b11). The upstream mask at `battle_setup.c:1322` (`GetRivalBattleFlags()
+  & RIVAL_BATTLE_TUTORIAL`) is truthy for HEAL_AFTER too, so the Theo battle
+  still got `BATTLE_TYPE_FIRST_BATTLE`. On a loss, `battle_controllers.c:2658`
+  reroutes the trainer win-text (`STRINGID_TRAINER1WINTEXT`) under FIRST_BATTLE
+  into the FRLG Oak "How disappointing" voiceover
+  (`PrintOakText_HowDisappointing` → `BeginNormalPaletteFade(..., RGB_BLACK)`),
+  which then waits on Oak-controller graphics/state absent in a normal trainer
+  battle → fades to black and hangs. The prior `waitmessage` was treating a
+  symptom (it waits on a print controller that never signals done). FRLG's
+  Oak's-lab battle works because it uses `TUTORIAL` (Oak voiceover is correct
+  there).
+- **Fix:** `battle_setup.c:1322` now requires the FULL flag —
+  `(GetRivalBattleFlags() & RIVAL_BATTLE_TUTORIAL) == RIVAL_BATTLE_TUTORIAL` —
+  so HEAL_AFTER-only earlyrival is a plain losable+heal trainer battle (no
+  FIRST_BATTLE, no Oak reroute). Fenced `URANIUM PATHFINDER SLICE`. Zero
+  reachable vanilla impact (grep: only FRLG uses earlyrival, with TUTORIAL/0;
+  nobody uses HEAL_AFTER alone). Win path unchanged (gated on `BATTLE_TYPE_
+  TRAINER`, and the win prints `TRAINER1LOSETEXT` which the reroute never
+  touched — S6b win stays as PASSED). `waitmessage` kept (correct hygiene, now
+  on a clean path). 1328 tests pass. Verified: hash `2010bbd0` → `f5867449`.
+
 ### 14. Lab Pokédex ceremony: wrong trigger + reposition walks into void (boot-walk 2026-07-14)
 
 In PC Uranium the ceremony autostarts on entering the lab (game takes
