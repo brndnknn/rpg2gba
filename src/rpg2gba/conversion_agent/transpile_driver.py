@@ -302,6 +302,11 @@ def transpile_corpus(
     # table the classifiers use; without this the transpiler queues every
     # pbReceiveItem as unknown-item.
     ctx.items = det_ctx.items
+    # The canlose trainer-battle idiom resolves (class, name, party_id) ->
+    # TRAINER_* through the same intermediate/trainers.json table the
+    # classify_trainer_battle classifier uses; without this it queues every
+    # canlose pbTrainerBattle as an unknown trainer.
+    ctx.trainers = det_ctx.trainers
     index = fork_index.load_or_build()
     overrides = hand_overrides.load_hand_overrides(overrides_dir)
 

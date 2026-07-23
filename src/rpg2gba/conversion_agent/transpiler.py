@@ -44,6 +44,7 @@ from rpg2gba.conversion_agent.flag_registry import (
     resolve_switch_flag,
     resolve_variable_var,
 )
+from rpg2gba.pbs_converter._naming import to_constant
 
 logger = logging.getLogger(__name__)
 
@@ -270,6 +271,27 @@ _CH_LEGACY_COLOR_RE = re.compile(r"\\c\[\d+\]")
 # mystery text into a menu option.
 _CH_RESIDUAL_TAG_RE = re.compile(r"[\\<>]")
 
+# -- canlose trainer battle idiom (type-12 pbTrainerBattle inside a 111) ------
+# reference/guides/canlose_battle_pipeline_plan.md "Gap A — transpiler"; proven
+# target shape: hand_conversions/Map050_EV019.pory (Theo's rival battle). A
+# code-111 branch whose script condition is a losable ``pbTrainerBattle(...)``
+# call converts to ``trainerbattle_earlyrival`` + a ``VAR_RESULT`` win/loss
+# branch instead of queuing the whole conditional. Same parsing as
+# ``deterministic.classify_trainer_battle`` (lines ~842-874) — reimplemented
+# here rather than imported, since ``deterministic.py`` is out of scope for
+# this change (private helpers there aren't meant to be shared across
+# modules).
+_CANLOSE_TRAINER_CLASS_RE = re.compile(r"(?:::)?PBTrainers::(\w+)")
+_CANLOSE_DEFEAT_TEXT_RE = re.compile(r'_I\("((?:[^"\\]|\\.)*)"\)')
+_CANLOSE_STRIP_I_RE = re.compile(r'_I\("(?:[^"\\]|\\.)*"\)')
+_CANLOSE_CALL_ARGS_RE = re.compile(r"pbTrainerBattle\((.*?)\)\s*$", re.DOTALL)
+_CANLOSE_NAME_RE = re.compile(r'"([^"]*)"')
+# Runtime party selection: ``party_id == pbGet(N) + K`` (Theo: N=151, K=18).
+# A literal integer party_id is handled separately; any other expression
+# shape falls through to the generic queue rather than being guessed
+# (CLAUDE.md §4.5).
+_CANLOSE_PBGET_PLUS_RE = re.compile(r"^pbGet\(\s*(\d+)\s*\)\s*\+\s*(\d+)$")
+
 # -- queue entries ------------------------------------------------------------
 
 
@@ -338,6 +360,13 @@ class TranspileContext:
     # but never staged, and emitting their constant would be an invented
     # symbol the gate correctly rejects. Populated by the driver.
     staged_species: frozenset[str] = field(default_factory=frozenset)
+
+    # (class_const, name, party_id) -> TRAINER_* constant, straight from
+    # deterministic.Context.trainers (intermediate/trainers.json). Populated
+    # by the driver; empty means "not wired up" — the canlose trainer-battle
+    # idiom queues on a lookup miss, same disposition as an unresolved item
+    # symbol above (CLAUDE.md §4.3: one source of truth, reused not re-derived).
+    trainers: dict[tuple[str, str, int], str] = field(default_factory=dict)
 
     # per-event cursor, set by transpile_event / transpile_common_event
     map_id: int = 0
@@ -536,6 +565,38 @@ def parse_tree(commands: list[dict]) -> list[Node]:
         return nodes
 
     return parse_block(0)
+
+
+def _first_dialogue_text(nodes: list[Node]) -> str | None:
+    """DFS for the first Show-Text run in a branch body's node tree.
+
+    Used by the canlose trainer-battle idiom to lift the trainer's win
+    reaction line out of the RMXP lost/else block (CLAUDE.md-instructed
+    VictoryText source). Recurses into nested control flow — a leading
+    setflag/breadcrumb one level down shouldn't hide dialogue further in —
+    and returns ``None`` if no ``TextRun`` exists anywhere in the subtree
+    (caller falls back to a generic line)."""
+    for n in nodes:
+        if isinstance(n, TextRun):
+            return n.text
+        if isinstance(n, IfNode):
+            found = _first_dialogue_text(n.then)
+            if found is not None:
+                return found
+            if n.otherwise:
+                found = _first_dialogue_text(n.otherwise)
+                if found is not None:
+                    return found
+        elif isinstance(n, ChoiceNode):
+            for _idx, _text, children in n.arms:
+                found = _first_dialogue_text(children)
+                if found is not None:
+                    return found
+        elif isinstance(n, LoopNode):
+            found = _first_dialogue_text(n.children)
+            if found is not None:
+                return found
+    return None
 
 
 # -- condition interpreter (111 / grill D-series "the real work") --------------
@@ -890,6 +951,9 @@ class _PageEmitter:
         has_species = self._emit_has_species_idiom(node)
         if has_species is not None:
             return has_species
+        canlose_battle = self._emit_canlose_trainer_battle_idiom(node)
+        if canlose_battle is not None:
+            return canlose_battle
         expr = condition_expr(node.cmd.get("parameters", []), self.ctx)
         if expr is None:
             marker = self.ctx.queue(
@@ -1061,6 +1125,135 @@ class _PageEmitter:
         if node.otherwise:
             lines.append("} else {")
             lines += [f"    {ln}" for ln in self.emit_nodes(node.otherwise)]
+        lines.append("}")
+        return lines
+
+    def _emit_canlose_trainer_battle_idiom(self, node: IfNode) -> list[str] | None:
+        """A losable ``pbTrainerBattle(...)`` embedded as a code-111 script
+        condition — see the module-level ``_CANLOSE_*`` comment and
+        ``reference/guides/canlose_battle_pipeline_plan.md`` for the mechanism.
+        Converts to ``trainerbattle_earlyrival`` (or a ``switch`` over one per
+        runtime party-selection value) plus a ``VAR_RESULT`` win/loss branch.
+        Returns ``None`` (falls through to the generic script-condition path,
+        which queues) for: not a script condition, not a
+        ``pbTrainerBattle(``/is a ``pbDoubleTrainerBattle``, a falsy/missing
+        ``canlose`` argument, an unparseable call, an unknown trainer class/
+        name/party combination in ``ctx.trainers``, or a party-id expression
+        that isn't a literal int or the proven ``pbGet(N)+K`` shape.
+
+        **Polarity** (get this wrong and every canlose battle plays the
+        opposite aftermath): the engine sets ``VAR_RESULT = TRUE`` when the
+        player is defeated in an EARLY_RIVAL battle (battle_setup.c), so
+        ``var(VAR_RESULT) == 1`` is the player LOSING — the RMXP ``otherwise``
+        (code-411/else) block. The poryscript ``else`` clause is therefore the
+        RMXP ``then`` block (the player WON). Confirmed against
+        ``hand_conversions/Map050_EV019.pory``, lines ~110-128.
+        """
+        ctx = self.ctx
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        call = params[1]
+        if "pbTrainerBattle(" not in call or "pbDoubleTrainerBattle" in call:
+            return None
+
+        m_class = _CANLOSE_TRAINER_CLASS_RE.search(call)
+        if not m_class:
+            return None
+        class_const = to_constant("TRAINER_CLASS", m_class.group(1))
+
+        m_name = _CANLOSE_NAME_RE.search(call)
+        if not m_name:
+            return None
+        name = m_name.group(1)
+
+        m_defeat = _CANLOSE_DEFEAT_TEXT_RE.search(call)
+        defeat_raw = m_defeat.group(1) if m_defeat else ""
+
+        # party_id/canlose: strip the _I("...") blob first so its own commas
+        # don't confuse the positional split (identical discipline to
+        # deterministic.classify_trainer_battle).
+        cleaned_call = _CANLOSE_STRIP_I_RE.sub("_I", call)
+        m_args = _CANLOSE_CALL_ARGS_RE.search(cleaned_call)
+        if not m_args:
+            return None
+        args = [a.strip() for a in m_args.group(1).split(",")]
+        # args: [class_expr, name_str, _I, doublebattle, party_id, canlose, ...]
+        if len(args) < 6:
+            return None
+        if args[5] not in ("true", "1"):
+            return None  # not canlose — the plain single-trainer classifier's turf
+        party_expr = args[4]
+
+        # -- resolve party selection: literal int, or pbGet(N)+K -----------
+        cases: list[tuple[int, str]] | None = None  # None = single-trainer path
+        var_name: str | None = None
+        trainer_const: str | None = None
+        if party_expr.isdigit():
+            party_id = int(party_expr)
+            trainer_const = ctx.trainers.get((class_const, name, party_id))
+            if trainer_const is None:
+                return None
+        else:
+            m_pbget = _CANLOSE_PBGET_PLUS_RE.match(party_expr)
+            if not m_pbget:
+                return None  # some other expression shape — don't guess
+            source_var_id, offset = int(m_pbget.group(1)), int(m_pbget.group(2))
+            var_name = ctx.var_for_variable(source_var_id)
+            if var_name is None:
+                return None
+            case_map: dict[int, str] = {}
+            for (cc, nm, pid), const in ctx.trainers.items():
+                if cc == class_const and nm == name and pid > offset:
+                    case_map[pid - offset] = const
+            if not case_map:
+                return None
+            cases = sorted(case_map.items())
+
+        # -- text slots -----------------------------------------------------
+        defeat_result = translate_text_codes(defeat_raw)
+        if defeat_result is None:
+            return None
+        victory_raw = _first_dialogue_text(node.otherwise) if node.otherwise else None
+        victory_text: str | None = None
+        if victory_raw is not None:
+            victory_result = translate_text_codes(victory_raw)
+            if victory_result is not None:
+                victory_text = victory_result.text
+        if victory_text is None:
+            # RMXP has no explicit "loss reaction" arg (plan §"Text slots"
+            # decision (b)) — a generic line when the lost-block's own
+            # dialogue can't be lifted cleanly (untranslatable code, or no
+            # Show-Text at all in that block).
+            victory_text = "Argh! I lost!"
+
+        defeat_label = f"{self.page_label}_CanloseDefeatText"
+        victory_label = f"{self.page_label}_CanloseVictoryText"
+        self.text_blocks.append((defeat_label, format_pory_dialogue(defeat_result.text)))
+        self.text_blocks.append((victory_label, format_pory_dialogue(victory_text)))
+
+        battle_lines: list[str]
+        if cases is None:
+            battle_lines = [
+                f"trainerbattle_earlyrival({trainer_const}, RIVAL_BATTLE_HEAL_AFTER, "
+                f"{defeat_label}, {victory_label})"
+            ]
+        else:
+            battle_lines = [f"switch (var({var_name})) {{"]
+            for v, const in cases:
+                battle_lines.append(f"    case {v}:")
+                battle_lines.append(
+                    f"        trainerbattle_earlyrival({const}, RIVAL_BATTLE_HEAL_AFTER, "
+                    f"{defeat_label}, {victory_label})"
+                )
+            battle_lines.append("}")
+
+        lost_body = self.emit_nodes(node.otherwise) if node.otherwise else []
+        won_body = self.emit_nodes(node.then)
+        lines = [*battle_lines, "if (var(VAR_RESULT) == 1) {"]
+        lines += [f"    {ln}" for ln in lost_body]
+        lines.append("} else {")
+        lines += [f"    {ln}" for ln in won_body]
         lines.append("}")
         return lines
 

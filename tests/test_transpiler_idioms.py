@@ -369,6 +369,155 @@ def test_show_animation_self_target_queues(ctx: T.TranspileContext) -> None:
 
 
 # ----------------------------------------------------------------------------
+# Feature 4 — canlose trainer battle idiom (type-12 pbTrainerBattle inside a
+# 111), reference/guides/canlose_battle_pipeline_plan.md "Gap A — transpiler".
+# Proven target shape: hand_conversions/Map050_EV019.pory (Theo's battle).
+# ----------------------------------------------------------------------------
+
+
+def _canlose_call(
+    trainer_class: str = "YOUNGSTER",
+    name: str = "Joey",
+    defeat_text: str = "You beat me!",
+    party_expr: str = "3",
+    canlose: str = "true",
+    double: str = "false",
+) -> str:
+    return (
+        f'pbTrainerBattle(PBTrainers::{trainer_class},"{name}",'
+        f'_I("{defeat_text}"),{double},{party_expr},{canlose})'
+    )
+
+
+def _canlose_commands(
+    call: str, then_body: list[dict], else_body: list[dict] | None = None
+) -> list[dict]:
+    cmds = [cmd(T.CONDITIONAL_BRANCH, [12, call], indent=0)]
+    cmds += [dict(c, indent=1) for c in then_body]
+    if else_body is not None:
+        cmds.append(cmd(T.ELSE_BRANCH, indent=0))
+        cmds += [dict(c, indent=1) for c in else_body]
+    cmds.append(cmd(T.BRANCH_END, indent=0))
+    return cmds
+
+
+def test_canlose_literal_party_emits_earlyrival_and_swapped_branches(
+    ctx: T.TranspileContext,
+) -> None:
+    ctx.trainers = {("TRAINER_CLASS_YOUNGSTER", "Joey", 3): "TRAINER_JOEY_1"}
+    commands = _canlose_commands(
+        _canlose_call(),
+        then_body=[cmd(T.CONTROL_SELF_SWITCH, ["A", 0])],  # RMXP then = WON
+        else_body=[cmd(T.CONTROL_SELF_SWITCH, ["B", 0])],  # RMXP otherwise = LOST
+    )
+    res = run_event(ctx, [commands], map_id=32, event_id=5)
+
+    assert (
+        "trainerbattle_earlyrival(TRAINER_JOEY_1, RIVAL_BATTLE_HEAL_AFTER, "
+        "Map032_EV005_Page1_CanloseDefeatText, "
+        "Map032_EV005_Page1_CanloseVictoryText)"
+    ) in res.text
+    assert "if (var(VAR_RESULT) == 1) {" in res.text
+
+    lines = [ln.strip() for ln in res.text.splitlines()]
+    if_idx = lines.index("if (var(VAR_RESULT) == 1) {")
+    else_idx = lines.index("} else {", if_idx)
+    end_idx = lines.index("}", else_idx)
+    lost_flag = self_switch_flag_name(32, 5, "B")
+    won_flag = self_switch_flag_name(32, 5, "A")
+    # VAR_RESULT==1 (lost) body must be the RMXP `otherwise` arm; the poryscript
+    # `else` (won) body must be the RMXP `then` arm — branches SWAP polarity.
+    assert f"setflag({lost_flag})" in lines[if_idx:else_idx]
+    assert f"setflag({won_flag})" in lines[else_idx:end_idx]
+
+    assert "text Map032_EV005_Page1_CanloseDefeatText {" in res.text
+    assert 'format("You beat me!")' in res.text
+    assert "text Map032_EV005_Page1_CanloseVictoryText {" in res.text
+    # else block had no dialogue to lift -> generic fallback line
+    assert 'format("Argh! I lost!")' in res.text
+    assert res.unhandled == []
+
+
+def test_canlose_pbget_plus_k_emits_switch_over_trainers(
+    ctx: T.TranspileContext,
+) -> None:
+    ctx.registry.propose_var(151, "VAR_POKEMONTEST")
+    ctx.trainers = {
+        ("TRAINER_CLASS_RIVAL", "Theo", 19): "TRAINER_THEO_9",
+        ("TRAINER_CLASS_RIVAL", "Theo", 20): "TRAINER_THEO_10",
+        ("TRAINER_CLASS_RIVAL", "Theo", 21): "TRAINER_THEO_11",
+    }
+    commands = _canlose_commands(
+        _canlose_call(
+            trainer_class="RIVAL",
+            name="Theo",
+            defeat_text="B-but... how...",
+            party_expr="pbGet(151)+18",
+        ),
+        then_body=[cmd(T.CONTROL_SELF_SWITCH, ["A", 0])],
+        else_body=[cmd(T.SHOW_TEXT, ["Yes!! My first win!"])],
+    )
+    res = run_event(ctx, [commands], map_id=50, event_id=19)
+
+    assert "switch (var(VAR_POKEMONTEST)) {" in res.text
+    assert (
+        "trainerbattle_earlyrival(TRAINER_THEO_9, RIVAL_BATTLE_HEAL_AFTER, "
+        "Map050_EV019_Page1_CanloseDefeatText, Map050_EV019_Page1_CanloseVictoryText)"
+        in res.text
+    )
+    assert "TRAINER_THEO_10" in res.text
+    assert "TRAINER_THEO_11" in res.text
+    assert "case 1:" in res.text
+    assert "case 2:" in res.text
+    assert "case 3:" in res.text
+    assert "if (var(VAR_RESULT) == 1) {" in res.text
+    # lifted from the RMXP otherwise (lost) block's own ShowText
+    assert 'format("Yes!! My first win!")' in res.text
+    assert res.unhandled == []
+
+
+def test_canlose_false_falls_through_to_queue(ctx: T.TranspileContext) -> None:
+    ctx.trainers = {("TRAINER_CLASS_YOUNGSTER", "Joey", 3): "TRAINER_JOEY_1"}
+    commands = _canlose_commands(_canlose_call(canlose="false"), then_body=[], else_body=[])
+    res = run_event(ctx, [commands])
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.CONDITIONAL_BRANCH
+    assert "trainerbattle_earlyrival" not in res.text
+
+
+def test_canlose_double_battle_falls_through_to_queue(ctx: T.TranspileContext) -> None:
+    ctx.trainers = {("TRAINER_CLASS_YOUNGSTER", "Joey", 3): "TRAINER_JOEY_1"}
+    call = _canlose_call() + "  # pbDoubleTrainerBattle marker"
+    commands = _canlose_commands(call, then_body=[], else_body=[])
+    res = run_event(ctx, [commands])
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.CONDITIONAL_BRANCH
+    assert "trainerbattle_earlyrival" not in res.text
+
+
+def test_canlose_unknown_trainer_falls_through_to_queue(ctx: T.TranspileContext) -> None:
+    # ctx.trainers deliberately empty -- (class, name, party) has no entry
+    commands = _canlose_commands(_canlose_call(), then_body=[], else_body=[])
+    res = run_event(ctx, [commands])
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.CONDITIONAL_BRANCH
+    assert "trainerbattle_earlyrival" not in res.text
+
+
+def test_canlose_unrecognized_party_expr_falls_through_to_queue(
+    ctx: T.TranspileContext,
+) -> None:
+    ctx.trainers = {("TRAINER_CLASS_YOUNGSTER", "Joey", 3): "TRAINER_JOEY_1"}
+    commands = _canlose_commands(
+        _canlose_call(party_expr="pbGet(151)*2"), then_body=[], else_body=[]
+    )
+    res = run_event(ctx, [commands])
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.CONDITIONAL_BRANCH
+    assert "trainerbattle_earlyrival" not in res.text
+
+
+# ----------------------------------------------------------------------------
 # real-compile smoke test (real poryscript binary; skip when absent)
 # ----------------------------------------------------------------------------
 

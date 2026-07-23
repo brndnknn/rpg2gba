@@ -1,5 +1,13 @@
 {
-  "_comment": "Whole-artifact STRIP decisions (CLAUDE.md §4.3 source of truth; design: FABLES_DECISIONS.md Suggestion 2). Layer boundary: whole CEs / whole maps / map events here; intra-event script-call strips live in the game's script-call reference table; command-code strips live in system.md. expect_name/expect_events are fail-loud assertions against re-export renumbering. `maps` = whole-map strips, honored by Phase-5 mint (the Phase-4 orchestrator reads only common_events + map_events).",
+  "_comment": "Whole-artifact STRIP decisions (CLAUDE.md §4.3 source of truth; design: FABLES_DECISIONS.md Suggestion 2). Layer boundary: whole CEs / whole maps / map events here; intra-event script-call strips live in the game's script-call reference table; command-code strips live in system.md. `static_predicates` = no-port feature *predicates* (code-111 script conditions) whose feature is not ported, so the condition is a compile-time constant; a branch conditioned exactly on the predicate emits the arm matching `value`, and the other arm is dropped as dead code (negated conditions invert). expect_name/expect_events are fail-loud assertions against re-export renumbering. `maps` = whole-map strips, honored by Phase-5 mint (the Phase-4 orchestrator reads only common_events + map_events).",
+  "static_predicates": [
+    {
+      "predicate": "$PokemonGlobal.randomizer",
+      "value": false,
+      "feature": "randomizer game mode (playthrough-wide species / moveset / type / wild-encounter shuffling; also gates nuzlocke_heal)",
+      "reason": "No-port. Fork-verified 2026-07-21 (grep of engine/ include+src+config): pokeemerald-expansion ships NO randomizer or nuzlocke run-mode and no GetRandomPokemonSpecies analog — the 'randomiz' hits are all incidental (RNG primitive, AI switch-in, lottery/contest/TV). Supporting it would be a from-scratch subsystem with zero story weight. So `$PokemonGlobal.randomizer` is statically false in this port: a code-111 conditioned on it emits the else (normal) arm; the then (randomizer) arm is dropped as dead code (it is also unfillable — no random-species primitive exists). User-approved 2026-07-21. IMPLEMENTATION PENDING: transpiler does not yet read this (EV019's two randomizer branches are handled in the Map050_EV019.pory hand file today); the future static-predicate idiom in transpiler.py should consume this entry rather than hardcoding the string."
+    }
+  ],
   "common_events": [
     {
       "id": 4,

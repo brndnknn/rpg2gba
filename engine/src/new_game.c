@@ -19,6 +19,7 @@
 #include "rtc.h"
 #include "easy_chat.h"
 #include "event_data.h"
+#include "event_object_movement.h"
 #include "money.h"
 #include "trainer_hill.h"
 #include "trainer_tower.h"
@@ -145,7 +146,24 @@ static void WarpToTruck(void)
     // Redirect the new-game start to the Uranium player's-house ground floor
     // (Map049 @ 7,7, URANIUM_START_MAP) so the slice is reachable on boot.
     // Revert this block to restore vanilla new-game behavior.
-    SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), MAP_NUM(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), WARP_ID_NONE, 7, 7);
+    //
+    // POST-QUIZ HARNESS (S6b Theo-battle repro) — ACTIVE 2026-07-22: the
+    // destination MUST be set here, before DoMapLoadLoop() runs (called from
+    // CB2_NewGame(), which calls NewGameInitData(), which calls this
+    // function) — a second SetWarpDestination+WarpIntoMap() call AFTER
+    // CB2_NewGame() returns only patches gMapHeader/location, it does not
+    // redo the field task/camera/OAM setup DoMapLoadLoop already ran for the
+    // FIRST destination, so the player visually stays on the old map with
+    // mismatched collision data and locks up. To go back to the normal
+    // player's-house spawn, swap this back to the MOKI_TOWN_PLAYERS_HOUSE_1F
+    // call below (kept commented, not deleted).
+    // SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), MAP_NUM(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), WARP_ID_NONE, 7, 7);
+    // (14,18) — just inside the entrance rug — crosses a row of "Hey, where
+    // are you going?" barrier triggers at y=16 (coord_events gated on
+    // VAR_TEMP_F==0, which is fresh-boot default) that shove the player back
+    // south. Spawn past them instead, level with Theo (13,8) two rows below
+    // the professor's row (6).
+    SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), WARP_ID_NONE, 14, 8);
     // END URANIUM PATHFINDER SLICE
     WarpIntoMap();
 }
@@ -300,8 +318,56 @@ void CB2_StartUraniumSlice(void)
     // NewGameInitData() zeroes the party inside it. ScriptSetMonMoveSlot also syncs
     // PP; SetBoxMonData handles checksum/encrypt.
     FlagSet(FLAG_BADGE03_GET);
-    ScriptGiveMon(SPECIES_GEODUDE, 5, ITEM_NONE);
-    ScriptSetMonMoveSlot(0, MOVE_ROCK_SMASH, 0);
+    // TEMPORARILY DISABLED 2026-07-21 to test the S6b rival-battle LOSS route:
+    // with only the (type-disadvantaged) starter in the party, losing to Theo
+    // is reachable. Restore both lines to bring back the rock-smash harness.
+    // ScriptGiveMon(SPECIES_GEODUDE, 5, ITEM_NONE);
+    // ScriptSetMonMoveSlot(0, MOVE_ROCK_SMASH, 0);
+
+    // ---- NEXT TEST HARNESS (post-S7 frontier) — DISABLED; uncomment to use ----
+    // Skips the whole opening chain: boot already holding Raptorch, having
+    // BEATEN Theo (won the S6b battle -> FLAG_LOST_FIRST_BATTLE clear) and
+    // finished the PokePod scene at Theo's house (VAR_QUEST_LOG = 2), with
+    // running shoes and NO Geodude. Leaves the player at the S8 frontier (the
+    // west-exit Pokedex ceremony, gated VAR_QUEST_LOG >= 2). If you enable this,
+    // keep the rock-smash rig above disabled — both seed gPlayerParty.
+    // Uranium ids mirror data/scripts/uranium_flags.h; the base macros are
+    // C-visible via constants/flags.h + constants/vars.h. Offsets: verify
+    // against uranium_flags.h if the flag registry is ever renumbered.
+    //   VAR_POKEMONTEST (var 151) = the single starter-choice var, read
+    //   everywhere downstream (incl. S8); value 2 == Raptorch.
+    // ScriptGiveMon(SPECIES_RAPTORCH, 5, ITEM_NONE);
+    // FlagSet(FLAG_SYS_POKEMON_GET);                 // party shows in START menu
+    // FlagSet(FLAG_SYS_B_DASH);                      // running shoes
+    // FlagSet(RPG2GBA_GLOBAL_FLAGS_START + 32);      // FLAG_HAS_RAPTORCH
+    // FlagSet(RPG2GBA_GLOBAL_FLAGS_START + 0);       // FLAG_RECEIVED_STARTER
+    // FlagClear(RPG2GBA_GLOBAL_FLAGS_START + 10);    // FLAG_LOST_FIRST_BATTLE (won)
+    // VarSet(RPG2GBA_VARS_START + 93, 2);            // VAR_POKEMONTEST = Raptorch
+    // VarSet(RPG2GBA_VARS_START + 53, 2);            // VAR_QUEST_LOG = 2 (S6b+S7 done)
+
+    // ---- POST-QUIZ HARNESS (S6b Theo-battle repro) — ACTIVE 2026-07-22 ----
+    // Skips the aptitude quiz (Map050_EV005) but NOT the machine/battle
+    // (Map050_EV019): quiz result is already recorded and the quiz-complete
+    // self-switch latch is set, so Map050_EV019_Dispatch routes to its real
+    // Page1 (VAR_QUEST_LOG stays 0, below its "already ran" gate). Party and
+    // FLAG_RECEIVED_STARTER/FLAG_HAS_*/FLAG_LOST_FIRST_BATTLE/FLAG_SYS_POKEMON_GET
+    // are all left at fresh-boot default (unset/empty) — EV019 sets those
+    // itself when the machine is triggered. Player lands in the lab and just
+    // has to walk up to the machine to re-trigger the starter grant + Theo's
+    // battle fresh, for a clean repro of the win-freeze bug. To go back to the
+    // rock-smash or post-S7 harnesses above, comment this block back out.
+    // The lab spawn itself is set in WarpToTruck() (must happen before
+    // DoMapLoadLoop, not after) — only flags/vars belong here.
+    VarSet(RPG2GBA_VARS_START + 93, 2);              // VAR_POKEMONTEST = Raptorch
+    FlagSet(RPG2GBA_SELFSWITCH_FLAGS_START + 18);    // quiz-complete self-switch latch (Map050_EV005_SSC)
+    // The professor (local id 2) defaults to his quiz-time spot (14,6),
+    // directly south of the machine (14,5) — the only tile from which the
+    // machine is reachable (map.json collision: the machine alcove is walled
+    // at x=13/15, so (14,6) is the sole approach). Map050_EV005_Page1_Move2
+    // normally sidesteps him to (15,6) at the end of the real quiz script;
+    // since we skip straight past the quiz, replicate that repositioning
+    // here so the machine isn't blocked.
+    TryMoveObjectEventToMapCoords(2, MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), 15, 6);
 }
 // END URANIUM PATHFINDER SLICE
 
