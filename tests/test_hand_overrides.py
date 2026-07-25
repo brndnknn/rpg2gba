@@ -9,7 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from rpg2gba.conversion_agent import hand_overrides, transpile_driver, transpiler
+from rpg2gba.conversion_agent import (
+    hand_overrides,
+    queue_evidence,
+    transpile_driver,
+    transpiler,
+)
 from rpg2gba.conversion_agent.flag_registry import FlagRegistry
 
 # ----------------------------------------------------------------------------
@@ -41,17 +46,55 @@ def ctx() -> transpiler.TranspileContext:
     return transpiler.TranspileContext(registry=FlagRegistry())
 
 
+def write_ledger(path: Path, pairs: list[tuple[int, int]]) -> Path:
+    """A triage ledger bucketing each `(map_id, event_id)` `hand` with a
+    complete evidence record — what the ROM_TEST_DEV §E1 gate demands before
+    an override file is allowed to exist."""
+    entries = [
+        queue_evidence.QueueEntry(
+            raw={"map_id": m, "event_id": e, "page": 1, "command_code": 111},
+            bucket="hand",
+            evidence=queue_evidence.SearchEvidence(
+                greps=(queue_evidence.GrepRecord(
+                    command=f'grep -rn "thing" engine/  # for Map{m:03d}/EV{e:03d}',
+                    result_summary="no matches"),),
+                decomposition_attempted="split into native primitives",
+                decomposition_failed_because="no native host for the composite",
+            ),
+        )
+        for m, e in pairs
+    ]
+    queue_evidence.save_queue_jsonl(path, entries)
+    return path
+
+
+@pytest.fixture()
+def overrides_dir(tmp_path: Path) -> Path:
+    """The hand_conversions/ stand-in. A subdir of tmp_path, not tmp_path
+    itself, so the test ledger can sit next to it without looking like a
+    stray file inside the override directory."""
+    d = tmp_path / "hand_conversions"
+    d.mkdir()
+    return d
+
+
+@pytest.fixture()
+def ledger(tmp_path: Path) -> Path:
+    """Default ledger for these tests: justifies Map007/EV004."""
+    return write_ledger(tmp_path / "ledger" / "hand_bucket_queue.jsonl", [(7, 4)])
+
+
 # ----------------------------------------------------------------------------
 # hand_overrides.load_hand_overrides
 # ----------------------------------------------------------------------------
 
 
-def test_load_valid_override_round_trips(tmp_path: Path) -> None:
+def test_load_valid_override_round_trips(overrides_dir: Path, ledger: Path) -> None:
     text = valid_override_text(7, 4)
-    path = tmp_path / "Map007_EV004.pory"
+    path = overrides_dir / "Map007_EV004.pory"
     path.write_text(text, encoding="utf-8")
 
-    overrides = hand_overrides.load_hand_overrides(tmp_path)
+    overrides = hand_overrides.load_hand_overrides(overrides_dir, ledger_path=ledger)
 
     assert set(overrides) == {(7, 4)}
     ov = overrides[(7, 4)]
@@ -61,67 +104,143 @@ def test_load_valid_override_round_trips(tmp_path: Path) -> None:
     assert ov.text == text
 
 
-def test_malformed_filename_raises(tmp_path: Path) -> None:
-    (tmp_path / "Map7_EV004.pory").write_text(valid_override_text(7, 4), encoding="utf-8")
+def test_malformed_filename_raises(overrides_dir: Path, ledger: Path) -> None:
+    (overrides_dir / "Map7_EV004.pory").write_text(valid_override_text(7, 4), encoding="utf-8")
 
     with pytest.raises(ValueError, match="malformed"):
-        hand_overrides.load_hand_overrides(tmp_path)
+        hand_overrides.load_hand_overrides(overrides_dir, ledger_path=ledger)
 
 
-def test_foreign_label_definition_raises(tmp_path: Path) -> None:
+# -- the ROM_TEST_DEV §E1 evidence gate ---------------------------------------
+
+
+def test_override_without_a_hand_bucketed_ledger_entry_raises(
+        tmp_path: Path, overrides_dir: Path) -> None:
+    """The load-bearing case: writing a file into hand_conversions/ IS the act
+    of bucketing an event `hand`, so it must be justified like one."""
+    ledger = write_ledger(tmp_path / "ledger" / "hand_bucket_queue.jsonl", [(99, 1)])
+    (overrides_dir / "Map007_EV004.pory").write_text(
+        valid_override_text(7, 4), encoding="utf-8")
+
+    with pytest.raises(queue_evidence.QueueSchemaViolation,
+                        match="no 'hand'-bucketed triage entry"):
+        hand_overrides.load_hand_overrides(overrides_dir, ledger_path=ledger)
+
+
+def test_override_whose_ledger_entry_has_a_blank_evidence_box_raises(
+        tmp_path: Path, overrides_dir: Path) -> None:
+    """A `hand` entry with an empty evidence box is a schema violation, not a
+    judgment call — the box is visibly blank when nobody looked."""
+    ledger_path = tmp_path / "ledger" / "hand_bucket_queue.jsonl"
+    ledger_path.parent.mkdir()
+    ledger_path.write_text(json.dumps({
+        "raw": {"map_id": 7, "event_id": 4, "page": 1, "command_code": 111},
+        "bucket": "hand",
+        "evidence": {"greps": [], "decomposition_attempted": "",
+                      "decomposition_failed_because": "", "legacy_unaudited": False},
+    }) + "\n", encoding="utf-8")
+    (overrides_dir / "Map007_EV004.pory").write_text(
+        valid_override_text(7, 4), encoding="utf-8")
+
+    with pytest.raises(queue_evidence.QueueSchemaViolation,
+                        match="missing required evidence"):
+        hand_overrides.load_hand_overrides(overrides_dir, ledger_path=ledger_path)
+
+
+def test_legacy_unaudited_ledger_entry_warns_but_admits_the_override(
+        tmp_path: Path, overrides_dir: Path,
+        caplog: pytest.LogCaptureFixture) -> None:
+    """The one escape hatch: a pre-schema entry that couldn't be honestly
+    backfilled stays visible as a warning rather than blocking a build."""
+    ledger_path = tmp_path / "ledger" / "hand_bucket_queue.jsonl"
+    ledger_path.parent.mkdir()
+    ledger_path.write_text(json.dumps({
+        "raw": {"map_id": 7, "event_id": 4, "page": 1, "command_code": 111},
+        "bucket": "hand",
+        "evidence": {"greps": [], "decomposition_attempted": "",
+                      "decomposition_failed_because": "", "legacy_unaudited": True},
+    }) + "\n", encoding="utf-8")
+    (overrides_dir / "Map007_EV004.pory").write_text(
+        valid_override_text(7, 4), encoding="utf-8")
+
+    with caplog.at_level("WARNING"):
+        overrides = hand_overrides.load_hand_overrides(
+            overrides_dir, ledger_path=ledger_path)
+
+    assert set(overrides) == {(7, 4)}
+    assert "legacy_unaudited" in caplog.text
+
+
+def test_missing_ledger_raises(tmp_path: Path, overrides_dir: Path) -> None:
+    (overrides_dir / "Map007_EV004.pory").write_text(
+        valid_override_text(7, 4), encoding="utf-8")
+
+    with pytest.raises(queue_evidence.QueueSchemaViolation, match="is missing"):
+        hand_overrides.load_hand_overrides(
+            tmp_path, ledger_path=tmp_path / "ledger" / "nope.jsonl")
+
+
+def test_real_hand_conversions_are_all_justified_by_the_real_ledger() -> None:
+    """Guards the committed state, not a fixture: every file actually in
+    `hand_conversions/` must have its entry in the real ledger."""
+    overrides = hand_overrides.load_hand_overrides()
+    assert overrides, "expected committed hand conversions"
+
+
+def test_foreign_label_definition_raises(overrides_dir: Path, ledger: Path) -> None:
     text = (
         _PROVENANCE
         + "script Map007_EV004_Page1 {\n    end\n}\n\n"
         + "script Map007_EV005_Page1 {\n    end\n}\n"
     )
-    (tmp_path / "Map007_EV004.pory").write_text(text, encoding="utf-8")
+    (overrides_dir / "Map007_EV004.pory").write_text(text, encoding="utf-8")
 
     with pytest.raises(ValueError, match="Map007_EV005"):
-        hand_overrides.load_hand_overrides(tmp_path)
+        hand_overrides.load_hand_overrides(overrides_dir, ledger_path=ledger)
 
 
-def test_empty_file_raises(tmp_path: Path) -> None:
-    (tmp_path / "Map007_EV004.pory").write_text("   \n", encoding="utf-8")
+def test_empty_file_raises(overrides_dir: Path, ledger: Path) -> None:
+    (overrides_dir / "Map007_EV004.pory").write_text("   \n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="empty"):
-        hand_overrides.load_hand_overrides(tmp_path)
+        hand_overrides.load_hand_overrides(overrides_dir, ledger_path=ledger)
 
 
-def test_readme_skipped(tmp_path: Path) -> None:
-    (tmp_path / "README.md").write_text("convention notes\n", encoding="utf-8")
-    (tmp_path / "Map007_EV004.pory").write_text(valid_override_text(7, 4), encoding="utf-8")
+def test_readme_skipped(overrides_dir: Path, ledger: Path) -> None:
+    (overrides_dir / "README.md").write_text("convention notes\n", encoding="utf-8")
+    (overrides_dir / "Map007_EV004.pory").write_text(valid_override_text(7, 4), encoding="utf-8")
 
-    overrides = hand_overrides.load_hand_overrides(tmp_path)
+    overrides = hand_overrides.load_hand_overrides(overrides_dir, ledger_path=ledger)
 
     assert set(overrides) == {(7, 4)}
 
 
-def test_stray_non_pory_file_raises(tmp_path: Path) -> None:
-    (tmp_path / "notes.txt").write_text("oops\n", encoding="utf-8")
+def test_stray_non_pory_file_raises(overrides_dir: Path, ledger: Path) -> None:
+    (overrides_dir / "notes.txt").write_text("oops\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="unexpected file"):
-        hand_overrides.load_hand_overrides(tmp_path)
+        hand_overrides.load_hand_overrides(overrides_dir, ledger_path=ledger)
 
 
-def test_missing_own_entry_script_raises(tmp_path: Path) -> None:
+def test_missing_own_entry_script_raises(overrides_dir: Path, ledger: Path) -> None:
     # Only a `mart` block, no `script Map007_EV004_...` entry point.
     text = _PROVENANCE + "mart Map007_EV004_Mart {\n    ITEM_POTION\n}\n"
-    (tmp_path / "Map007_EV004.pory").write_text(text, encoding="utf-8")
+    (overrides_dir / "Map007_EV004.pory").write_text(text, encoding="utf-8")
 
     with pytest.raises(ValueError, match="no 'script Map007_EV004_"):
-        hand_overrides.load_hand_overrides(tmp_path)
+        hand_overrides.load_hand_overrides(overrides_dir, ledger_path=ledger)
 
 
-def test_non_namespaced_definition_raises(tmp_path: Path) -> None:
+def test_non_namespaced_definition_raises(overrides_dir: Path, ledger: Path) -> None:
     text = (
         _PROVENANCE
         + "script Map007_EV004_Page1 {\n    end\n}\n\n"
         + "script HelperRoutine {\n    end\n}\n"
     )
-    (tmp_path / "Map007_EV004.pory").write_text(text, encoding="utf-8")
+    (overrides_dir / "Map007_EV004.pory").write_text(text, encoding="utf-8")
 
     with pytest.raises(ValueError, match="not MapNNN_EVNNN-shaped"):
-        hand_overrides.load_hand_overrides(tmp_path)
+        hand_overrides.load_hand_overrides(overrides_dir, ledger_path=ledger)
 
 
 def test_missing_dir_returns_empty(tmp_path: Path) -> None:
