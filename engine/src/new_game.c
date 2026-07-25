@@ -157,13 +157,13 @@ static void WarpToTruck(void)
     // mismatched collision data and locks up. To go back to the normal
     // player's-house spawn, swap this back to the MOKI_TOWN_PLAYERS_HOUSE_1F
     // call below (kept commented, not deleted).
-    // SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), MAP_NUM(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), WARP_ID_NONE, 7, 7);
+    SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), MAP_NUM(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), WARP_ID_NONE, 7, 7);
     // (14,18) — just inside the entrance rug — crosses a row of "Hey, where
     // are you going?" barrier triggers at y=16 (coord_events gated on
     // VAR_TEMP_F==0, which is fresh-boot default) that shove the player back
     // south. Spawn past them instead, level with Theo (13,8) two rows below
     // the professor's row (6).
-    SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), WARP_ID_NONE, 14, 8);
+    // SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), WARP_ID_NONE, 14, 8);
     // END URANIUM PATHFINDER SLICE
     WarpIntoMap();
 }

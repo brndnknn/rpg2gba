@@ -9,6 +9,7 @@ come from the same struct definitions the ROM was built from.
 """
 import subprocess
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 
 from .symbols import DEVKITARM_BIN
@@ -39,6 +40,27 @@ _PROBE_ENTRIES: dict[str, str] = {
     "sizeof_sb3": "sizeof(struct SaveBlock3)",
     "sizeof_storage": "sizeof(struct PokemonStorage)",
     "embedded_save_magic": "URANIUM_EMBEDDED_SAVE_MAGIC",
+    "vars_start": "VARS_START",
+    # -- battle mini-driver (playtest/battle.py) -----------------------------
+    # struct Pokemon (include/pokemon.h): unencrypted party-struct tail.
+    "off_pkmn_box": "offsetof(struct Pokemon, box)",
+    "off_pkmn_hp": "offsetof(struct Pokemon, hp)",
+    "off_pkmn_maxhp": "offsetof(struct Pokemon, maxHP)",
+    "off_pkmn_level": "offsetof(struct Pokemon, level)",
+    "sizeof_pkmn": "sizeof(struct Pokemon)",
+    # struct BoxPokemon (include/pokemon.h): encrypted substruct block.
+    "off_boxpkmn_personality": "offsetof(struct BoxPokemon, personality)",
+    "off_boxpkmn_otid": "offsetof(struct BoxPokemon, otId)",
+    "off_boxpkmn_secure": "offsetof(struct BoxPokemon, secure)",
+    "val_num_substruct_bytes": "NUM_SUBSTRUCT_BYTES",
+    # struct BattlePokemon (include/pokemon.h): in-battle mon copy — hp here
+    # is what turn resolution/faint checks actually read, not struct
+    # Pokemon's hp. NOTE: the header's `/*0x29*/` comment for `hp` is stale;
+    # the probed value differs (see battle.py's in-battle detection notes).
+    "off_battlepkmn_hp": "offsetof(struct BattlePokemon, hp)",
+    "sizeof_battlepkmn": "sizeof(struct BattlePokemon)",
+    # struct Main (include/main.h): gMain.callback2, for in-battle detection.
+    "off_main_callback2": "offsetof(struct Main, callback2)",
 }
 
 _PROBE_TEMPLATE = """\
@@ -46,6 +68,8 @@ _PROBE_TEMPLATE = """\
 #include "global.h"
 #include "constants/flags.h"
 #include "uranium_embedded_save.h"
+#include "pokemon.h"
+#include "main.h"
 {entries}
 """
 
@@ -79,4 +103,77 @@ def probe_offsets(engine: Path) -> dict[str, int]:
     missing = _PROBE_ENTRIES.keys() - values.keys()
     if missing:
         raise RuntimeError(f"probe compiled but symbols missing from nm: {missing}")
+    return values
+
+
+_CONSTANT_PROBE_TEMPLATE = """\
+#include <stddef.h>
+#include "global.h"
+#include "constants/flags.h"
+#include "constants/vars.h"
+#include "data/scripts/uranium_flags.h"
+{entries}
+"""
+
+
+def probe_constants(engine: Path, names: Sequence[str]) -> dict[str, int]:
+    """Resolve `names` (FLAG_*/VAR_* macros) through the real preprocessor.
+
+    Mirrors `probe_offsets`: same CFLAGS, same gcc/nm round-trip, same
+    `size - 1` encoding. Unlike `_PROBE_ENTRIES`, `names` are real
+    `FLAG_*`/`VAR_*` macros, so the declarator identifier can't be the macro
+    itself (it would itself expand) — symbols are index-mangled (`c0`, `c1`,
+    ...) and mapped back to `names` by position.
+    """
+    header = engine / "data" / "scripts" / "uranium_flags.h"
+    if not header.exists():
+        raise RuntimeError(
+            f"{header} is missing. It is a generated file, produced by "
+            "scripts/assemble_pathfinder.py (FlagRegistry.dump_header) — "
+            "run the assembler against this engine build before probing "
+            "flag/var constants."
+        )
+    gcc = DEVKITARM_BIN / "arm-none-eabi-gcc"
+    nm = DEVKITARM_BIN / "arm-none-eabi-nm"
+    mangled = [f"c{i}" for i in range(len(names))]
+    src = _CONSTANT_PROBE_TEMPLATE.format(entries="\n".join(
+        f"const char {sym}[({name}) + 1];"
+        for sym, name in zip(mangled, names)
+    ))
+    with tempfile.TemporaryDirectory() as tmp:
+        c_path = Path(tmp) / "probe.c"
+        o_path = Path(tmp) / "probe.o"
+        c_path.write_text(src, encoding="utf-8")
+        result = subprocess.run(
+            [str(gcc), "-c", *_CFLAGS,
+             "-iquote", str(engine), "-iquote", str(engine / "include"),
+             "-o", str(o_path), str(c_path)],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"probe_constants: failed to compile probe for {list(names)}:\n"
+                f"{result.stderr}"
+            )
+        out = subprocess.run(
+            [str(nm), "-S", str(o_path)],
+            capture_output=True, text=True, check=True,
+        ).stdout
+    by_symbol: dict[str, int] = {}
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) == 4 and parts[3] in mangled:
+            by_symbol[parts[3]] = int(parts[1], 16) - 1
+    values: dict[str, int] = {}
+    missing: list[str] = []
+    for sym, name in zip(mangled, names):
+        if sym in by_symbol:
+            values[name] = by_symbol[sym]
+        else:
+            missing.append(name)
+    if missing:
+        raise RuntimeError(
+            f"probe_constants: compiled but symbols missing from nm output "
+            f"for names: {missing}"
+        )
     return values
