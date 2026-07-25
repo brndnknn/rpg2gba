@@ -179,10 +179,28 @@ _WTNP_RE = re.compile(r"\\wtnp\[(\d+)\]")
 # same way — approved DROP (strip the token, keep surrounding text).
 _COLOR_CODE_RE = re.compile(r"\\c\[[^\]]*\]")
 
-# <fs=n> / </fs> — RGSS inline font-size tags. The GBA has no arbitrary font
-# sizing in msgbox text, so the tags are dropped and their wrapped text kept.
-_FS_OPEN_RE = re.compile(r"<fs=\d+>")
-_FS_CLOSE_RE = re.compile(r"</fs>")
+# Essentials' DrawTextEx rich-text tag family (reference/scripts_dump/
+# 058_DrawText.rb:385-417): <b>/<i>/<u>/<s> emphasis, <al>/<ar>/<ac> alignment,
+# <c=X>/<c2=X>/<c3=B,S> colour runs, <o=X>/<outln>/<outln2> outlines,
+# <fn=X>/<fs=X> font/size, <icon=X>, and the void <br>.
+#
+# Uranium authors used these *inline in ordinary map dialogue* (Map050's
+# aptitude test), not just in the Essentials UI screens the tags were meant
+# for. pokeemerald's msgbox has no tag interpreter, so anything left here
+# renders as its literal characters — the boot-walk defect the text corpus
+# scan found live (reference/findings/text_corpus_scan_2026-07-24.md).
+#
+# All of these are approved DROPs of the same shape as \c[n] above: the GBA
+# has no bold/colour-run/arbitrary-font rendering in msgbox text, so the tag
+# goes and its wrapped text stays. The one exception is <br>, which is not
+# decoration but a line break, and maps to the charmap-legal ``\n``.
+# ``<fs=n>``/``</fs>`` were the only two handled before this; the rest of the
+# family went through untouched.
+_DRAWTEXTEX_BR_RE = re.compile(r"<br>", re.IGNORECASE)
+_DRAWTEXTEX_TAG_RE = re.compile(
+    r"</?(?:b|i|u|s|al|ar|ac|c|c2|c3|o|outln|outln2|fn|fs|icon)(?:=[^>]*)?>",
+    re.IGNORECASE,
+)
 
 _TextSub = tuple[re.Pattern[str], str | Callable[[re.Match[str]], str]]
 
@@ -191,8 +209,8 @@ _TEXT_CODE_SUBS: tuple[_TextSub, ...] = (
     (re.compile(r"\\\."), "{PAUSE 0x0F}"),  # 15 frames — same value vanilla uses around ellipses
     (re.compile(r"\\\|"), "{PAUSE 0x3C}"),  # 1 second at 60fps; \wt's first-guess family
     (_COLOR_CODE_RE, ""),
-    (_FS_OPEN_RE, ""),
-    (_FS_CLOSE_RE, ""),
+    (_DRAWTEXTEX_BR_RE, "\\n"),
+    (_DRAWTEXTEX_TAG_RE, ""),
     *_TEXT_SUBS,  # \PN -> {PLAYER}, the one pattern shared with the legacy path
 )
 

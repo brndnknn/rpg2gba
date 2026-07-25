@@ -24,7 +24,10 @@ from rpg2gba.conversion_agent.flag_registry import FlagRegistry
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REFERENCE = REPO_ROOT / "reference"
 
-TANDOR_STUB_MSG = "The Tandor Network is currently unavailable."
+# Shortened 2026-07-25: the original "...is currently unavailable." measured
+# 232px against the 216px message box (text_validator TEXT_LINE_WIDTH), and
+# it is not format()-wrapped, so it renders exactly as written.
+TANDOR_STUB_MSG = "The Tandor Network is unavailable."
 
 
 # ---------------------------------------------------------------------------

@@ -28,7 +28,7 @@ script Map050_EV005_Page1 {
     msgbox(format("Right, right... Theo. You're just in time. Today is a very special day for both of you. It's your first day at work as Field Research Assistants at Bamb'o Pokémon Research Labs."))
     msgbox(format("Your job will have you traveling across Tandor, observing and capturing many different kinds of Pokémon to help me with my research on Pokémon Elements."))
     msgbox(format("I have three Pokémon here that will aid you on your journey."))
-    msgbox(format("Before you get your starters, though, you both will take the <b>Pokémon Trainer Aptitude Test</b>."))
+    msgbox(format("Before you get your starters, though, you both will take the Pokémon Trainer Aptitude Test."))
     delay(10)
     applymovement(20, Common_Movement_ExclamationMark)
     waitmovement(0)
@@ -41,7 +41,7 @@ script Map050_EV005_Page1 {
     msgbox(format("If you want to know more about what's on the test before we begin, you can talk to my Aide."))
     msgbox(format("Now..."))
     # audio (code 241): PU-Radio_ Oak
-    msgbox(format("{PLAYER}, are you ready to take the <b>Trainer Aptitude Test</b>?"))
+    msgbox(format("{PLAYER}, are you ready to take the Trainer Aptitude Test?"))
     yesnobox(0, 0)
     if (var(VAR_RESULT) == 1) {
         goto(Map050_EV005_TestBody)
@@ -150,7 +150,7 @@ script Map050_EV005_Page2 {
 script Map050_EV005_Page3 {
     lock
     faceplayer
-    msgbox(format("{PLAYER}, are you ready to take the <b>Trainer Aptitude Test</b>?"))
+    msgbox(format("{PLAYER}, are you ready to take the Trainer Aptitude Test?"))
     yesnobox(0, 0)
     if (var(VAR_RESULT) == 1) {
         delay(8)
@@ -281,7 +281,7 @@ script Map050_EV005_TestBody {
     call(Map050_EV005_Tally)
     delay(8)
     msgbox(format("No question about it! I'm gonna be a Pokémon Master! An' nobody's gonna stand in my way!"))
-    msgbox(format("Haha... I dig your spirit, kid! Well, that's it for the <b>Trainer Aptitude test</b>."))
+    msgbox(format("Haha... I dig your spirit, kid! Well, that's it for the Trainer Aptitude test."))
     msgbox(format("Now it's time to analyze your results.{PAUSE 0x0F}.{PAUSE 0x0F}."), MSGBOX_AUTOCLOSE)
     msgbox(format(".{PAUSE 0x24}.{PAUSE 0x24}."), MSGBOX_AUTOCLOSE)
     msgbox(format("Okay, I finished my analysis!"))

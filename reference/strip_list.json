@@ -13,19 +13,19 @@
       "id": 4,
       "expect_name": "GTS/WT",
       "feature": "online (phase0: scripts 233/235/236)",
-      "stub_message": "The Tandor Network is currently unavailable."
+      "stub_message": "The Tandor Network is unavailable."
     },
     {
       "id": 5,
       "expect_name": "VT",
       "feature": "online (phase0: scripts 233/235/236)",
-      "stub_message": "The Tandor Network is currently unavailable."
+      "stub_message": "The Tandor Network is unavailable."
     },
     {
       "id": 6,
       "expect_name": "LOBBY",
       "feature": "online (phase0: scripts 233/235/236)",
-      "stub_message": "The Tandor Network is currently unavailable."
+      "stub_message": "The Tandor Network is unavailable."
     }
   ],
   "map_events": [],

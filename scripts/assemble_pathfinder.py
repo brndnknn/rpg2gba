@@ -406,6 +406,18 @@ def run_fork_pass(
     # Single owner of charmap legality: rewrite \" -> typographic quotes, *->~,
     # [->(, ]->), heal alias, fail loud on any other unrepresentable glyph.
     allowed = asm.load_charmap_chars(fork / "charmap.txt")
+
+    # Staging-time text gate (ROM_TEST_DEV C3): the same four static rules the
+    # corpus scanner runs, applied per staged script so a defect that would
+    # render as literal `<b>` characters (or overflow the message box) in the
+    # ROM aborts here instead of surfacing in a boot walk. Sits alongside the
+    # fork-index gate above — same contract: our bug, nothing staged.
+    from rpg2gba.text_validator import TextGate
+
+    text_gate = TextGate(fork)
+    def _gate_text(pory_text: str, label: str) -> None:
+        text_gate.check(pory_text, label)
+
     defined_multis = asm.load_multi_constants(
         fork / "include" / "constants" / "script_menu.h"
     )
@@ -434,6 +446,7 @@ def run_fork_pass(
 
         compiled_texts.append(pory_text)
         _gate(pory_text, f"Map{map_id:03d}")
+        _gate_text(pory_text, f"Map{map_id:03d}")
         dest_scripts_inc = fork / "data" / "maps" / map_dir_name / "scripts.inc"
         _compile_pory(pory_text, dest_scripts_inc, f"Map{map_id:03d}", dry_run)
 
@@ -445,6 +458,7 @@ def run_fork_pass(
         ce_text = asm.patch_undefined_multichoice(ce_text, defined_multis)
         compiled_texts.append(ce_text)
         _gate(ce_text, "CommonEvents")
+        _gate_text(ce_text, "CommonEvents")
         dest_ce = fork / "data" / "scripts" / "CommonEvents.inc"
         _compile_pory(ce_text, dest_ce, "CommonEvents", dry_run)
     else:
