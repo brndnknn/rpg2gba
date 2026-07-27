@@ -3,9 +3,16 @@
 One `@moki.beat` per row of the doc's beat tables (3.1 positive, 3.2
 negative), in the doc's order, with the negative beats interleaved at the
 point in the run where they are actually testable (ROM_TEST_DEV Branch B2):
-N1 before B3, N3 before B7's Yes answer, N2 after B8 (once the player is
-back out in Map032 -- physically, that means after B10, not right after B8;
-see the module docstring note on N2 below) and before B12.
+N3 before B7's Yes answer, N2 after B8 (once the player is back out in
+Map032 -- physically, that means after B10, not right after B8; see the
+module docstring note on N2 below) and before B12.
+
+**Dropped beat (2026-07-27): N1.** The doc's §3.2 row defines it as B2's
+"companion" over the same gate, and it was implemented as a second identical
+call to `_assert_house1f_exit_blocked` — same tile, same step, same three
+assertions. It could not fail unless B2 failed first, so it cost a run's
+worth of frames and a contact-sheet tile to restate B2's result. The chapter
+doc's N1 row is superseded by this note.
 
 Every `FLAG_*`/`VAR_*`/`MAP_*` symbol is resolved by name through
 `Emulator.resolve_constant` / `Emulator.flag` / `Emulator.var` -- never a
@@ -42,7 +49,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..battle import decrypt_species, win_battle
+from ..battle import decrypt_species, in_battle, win_battle
 from ..chapter import ChapterBuilder
 from ..errors import ScenarioError
 from ..scenarios import BOOT_FRAMES
@@ -58,8 +65,16 @@ AUNTIE_INTERACT = (4, 5)
 HOUSE1F_EXIT_APPROACH = (10, 10)
 HOUSE1F_EXIT_DIRECTION = "DOWN"
 
-FENCE_TRIP_APPROACH = (26, 11)
-FENCE_TRIP_DIRECTION = "DOWN"
+# The doc's trip tile (26,12) is a WALL in the converted map, and (26,11) —
+# its northern approach — is sealed off behind that wall (no route to it from
+# anywhere the player can reach; the harness's route planner reports exactly
+# that). EV074's RMXP touch trigger is impassable, so the converter relocates
+# it to the standable neighbours below: `engine/data/maps/MokiTown/map.json`
+# carries `Map032_EV074_Dispatch` on the (26,13)..(26,17) column. Row 17 is
+# where the walk up from the house arrives, so the crossing is a westward
+# step off (27,17).
+FENCE_TRIP_APPROACH = (27, 17)
+FENCE_TRIP_DIRECTION = "LEFT"
 
 LAB_DOOR_MOKI_TOWN = (17, 11)
 BAMBO_INTERACT = (14, 7)
@@ -76,15 +91,31 @@ MACHINE_INTERACT = (14, 6)
 THEO_LAB_INTERACT = (13, 9)
 THEO_LAB_DIRECTION = "UP"
 
+# The lab exit is the gated `coord_event` at (14,19) (`Map050_EV001_Dispatch`,
+# VAR_QUEST_LOG >= 1); (14,18) directly above it is the arrival warp you land
+# on coming in from town, and it is a door-behaviour tile, so standing there
+# is safe — only a held northward walk into it would warp.
 LAB_EXIT_TRIGGER = (14, 19)
+LAB_EXIT_APPROACH = (14, 18)
+LAB_EXIT_DIRECTION = "DOWN"
 THEO_HOUSE_DOOR = (56, 42)
+# Inside Theo's 1F the doorway column carries BOTH warps back to town — the
+# door at (10,11) and the arrival tile at (10,10) directly above it (the
+# faithful Uranium "exit below / arrival above" pattern). (10,9) is the
+# nearest tile that is not itself a warp, so that's where the walk stops
+# before stepping out. Layout: row 11 is solid except (10,11).
+THEO_HOUSE_EXIT_APPROACH = (10, 9)
 
-CEREMONY_APPROACH = (17, 42)
+# Same relocation story as the fence trip tile: EV009's RMXP touch tile
+# (16,42) is impassable in the converted map, so the coord events land on the
+# standable column below it — `MokiTown/map.json` has `Map032_EV009_Dispatch`
+# at (16,43), (16,44), (16,45). The crossing is a westward step off (17,43).
+CEREMONY_APPROACH = (17, 43)
 CEREMONY_DIRECTION = "LEFT"
+CEREMONY_ROWS = (43, 45)  # the trigger column's extent, for B14's re-cross
 
 
-# -- small local helpers (chapter.py/emulator.py/battle.py are frozen for
-# this task -- everything below is built only from their public surface) ----
+# -- small local helpers, built only from the emulator's public surface ------
 
 def _at_map(emu: Emulator, map_const: str) -> bool:
     group, num = emu.map_location()
@@ -123,40 +154,124 @@ def _try_step(emu: Emulator, direction: str) -> bool:
     return moved
 
 
-def _advance_dialog(emu: Emulator, key: str, max_taps: int = 1500) -> int:
-    """`Emulator.advance_dialog`, parameterized on which button to press.
+def _wait_for_map(emu: Emulator, beat: str, map_const: str,
+                  frame_budget: int = 900) -> None:
+    """Wait out a warp (script-driven or door), then assert where we landed.
 
-    Needed because a couple of beats must make a specific yes/no choice
-    partway through an otherwise-uninterrupted locked script, and the
-    harness can't peek at "is a yesnobox showing right now" without a new
-    memory probe (out of scope -- `emulator.py`/`offsets.py` are frozen for
-    this task). Two engine facts make button choice a reliable substitute
-    for that peek, so this is still poll-driven, not frame-counted:
-
-    - Ordinary dialogue boxes advance on A or B identically throughout
-      pokeemerald (the `JOY_NEW(A_BUTTON | B_BUTTON)` pattern used pervasively
-      for text advance), so holding one button for an entire stretch of
-      plain msgboxes is safe.
-    - `yesnobox` (asm/macros/event.inc): "Pressing B is equivalent to
-      answering NO", and every yesnobox this chapter reaches is opened via
-      `ScriptMenu_YesNo` -> `DisplayYesNoMenuDefaultYes`
-      (engine/src/script_menu.c:584-594), so A commits whatever is
-      highlighted, which is always YES for these prompts.
-
-    So "hold A through this stretch" deterministically answers YES at
-    whichever yesnobox appears in it, and "hold B through this stretch"
-    deterministically answers NO, regardless of exactly how many plain
-    messages precede it.
+    `walk_to` is map-blind — it chases coordinates on whatever map the
+    player happens to be on — so any beat whose target lives on a different
+    map than the previous beat left the player on has to cross the seam
+    explicitly and confirm the crossing before it starts pathing again.
+    Deliberately does *not* drain the arrival's field lock: several beats
+    assert an autorun scene is running the instant they arrive.
     """
-    taps = 0
-    while emu.field_locked():
-        if taps >= max_taps:
-            shot = emu.screenshot("dialog_stuck")
-            raise ScenarioError(
-                f"dialogue never released field controls ({shot})")
-        emu.tap(key)
-        taps += 1
-    return taps
+    spent = 0
+    while spent < frame_budget and not _at_map(emu, map_const):
+        emu.run(10)
+        spent += 10
+    _require_map(emu, beat, map_const)
+
+
+def _cross_threshold(emu: Emulator, beat: str, approach: tuple[int, int],
+                     direction: str, dest_map: str) -> None:
+    """Step onto a transition tile from the tile beside it, then confirm the
+    map change.
+
+    Never `walk_to` a transition tile directly: `walk_to` aborts loud when a
+    step changes the map (that guard is what catches an accidental warp), so
+    a deliberate crossing has to be the step *after* the walk, not part of
+    it.
+    """
+    emu.walk_to(*approach)
+    _try_step(emu, direction)
+    _wait_for_map(emu, beat, dest_map)
+
+
+def _enter_door(emu: Emulator, beat: str, door: tuple[int, int],
+                dest_map: str, hold: int = 48) -> None:
+    """Walk into a door warp from the south, holding the D-pad.
+
+    Door warps are not step-on warps. `TryDoorWarp`
+    (`engine/src/field_control_avatar.c:1098-1112`) fires only for
+    `DIR_NORTH`, and only from the held-direction branch at :227-231 — so
+    the player must step onto the door tile *and keep holding UP*. A
+    `_try_step`-style tap arrives on the tile and stands there.
+    """
+    dx, dy = door
+    emu.walk_to(dx, dy + 1)
+    emu.run(hold, ["UP"])
+    _wait_for_map(emu, beat, dest_map)
+
+
+def _leave_theo_house(emu: Emulator, beat: str) -> None:
+    """Walk out of Theo's 1F into Map032.
+
+    Two warp tiles sit stacked in the doorway (see
+    `THEO_HOUSE_EXIT_APPROACH`), and which of them takes the step depends on
+    where the PokePod scene left the player, so this steps south until the
+    map actually changes rather than naming one of them.
+    """
+    emu.walk_to(*THEO_HOUSE_EXIT_APPROACH)
+    for _ in range(3):
+        _try_step(emu, "DOWN")
+        if _at_map(emu, "MAP_MOKI_TOWN"):
+            break
+        emu.run(20)
+    _wait_for_map(emu, beat, "MAP_MOKI_TOWN")
+
+
+def _leave_house1f(emu: Emulator, beat: str) -> None:
+    """Walk out Map049's front door into Map032.
+
+    The door at `HOUSE1F_EXIT_APPROACH` + one step DOWN is a gated
+    `coord_event` (`Map049_EV002_Dispatch`), not a plain warp: with
+    `FLAG_MUM` set by B3 it falls to the transferring page, which fades,
+    warps to Map032 (28,31) and fades back. Before B3 the same tile refuses
+    — that is what B2 asserts.
+    """
+    _cross_threshold(emu, beat, HOUSE1F_EXIT_APPROACH,
+                     HOUSE1F_EXIT_DIRECTION, "MAP_MOKI_TOWN")
+
+
+def _advance_to_battle(emu: Emulator, max_taps: int = 1500) -> int:
+    """`emu.advance_dialog()`, but stopping if a battle starts.
+
+    A script that ends in a battle gives no field-control release to stop on
+    — the A-mash would keep pressing straight through the battle's own menus
+    and resolve it by accident. Beats that own a battle need it handed over
+    still running, so this stops on either boundary.
+    """
+    return emu.advance_dialog(max_taps=max_taps, stop=lambda: in_battle(emu))
+
+
+def _settle_scenes(emu: Emulator, settle: int = 120,
+                   frame_budget: int = 12000) -> None:
+    """Advance dialogue until the field controls stay free for `settle` frames.
+
+    `advance_dialog` returns at the *first* release, which is ambiguous right
+    after a warp: the arrival fade holds the lock too, so "locked" can mean
+    "the fade is still up" and the release can land before the map's
+    ON_FRAME autorun has fired at all. Waiting for a quiet stretch instead
+    means a beat asserts against the state a scene left behind rather than
+    against a gap between two scenes.
+    """
+    spent = 0
+    while spent < frame_budget:
+        if emu.field_locked():
+            emu.tap("A")  # samples text frames on every frame it runs
+            spent += 12
+            continue
+        quiet = 0
+        while quiet < settle and not emu.field_locked():
+            emu.run(10)
+            quiet += 10
+            spent += 10
+        if quiet >= settle:
+            return
+    shot = emu.screenshot("scenes_never_settled")
+    raise ScenarioError(
+        f"field controls never stayed free for {settle} frames within "
+        f"{frame_budget} ({shot})")
 
 
 def _player_starter_species(emu: Emulator) -> int:
@@ -170,8 +285,13 @@ def _player_starter_species(emu: Emulator) -> int:
 
 
 def _assert_house1f_exit_blocked(emu: Emulator, beat: str) -> None:
-    """Shared body for B2 and N1 (doc: N1 is B2's formal negative-beat
-    companion, same gate, same assertion)."""
+    """B2's body: the exit refuses, and refusing writes nothing.
+
+    Was shared with N1, which the doc defined as B2's "formal negative-beat
+    companion, same gate, same assertion" — it called this with identical
+    arguments and so proved nothing B2 had not already proved. N1 was dropped
+    2026-07-27; the doc's §3.2 row is superseded (see the module docstring).
+    """
     if emu.flag("FLAG_SYS_B_DASH") or emu.flag("FLAG_MAP049_EVENT001_SSA"):
         raise ScenarioError(
             f"{beat} precondition failed: Auntie's flags are already set "
@@ -183,7 +303,7 @@ def _assert_house1f_exit_blocked(emu: Emulator, beat: str) -> None:
         raise ScenarioError(
             f"{beat}: leaving Map049 before talking to Auntie did not "
             f"trigger the redirect ({shot})")
-    _advance_dialog(emu, "A")
+    emu.advance_dialog("A")
     _require_map(emu, beat, "MAP_MOKI_TOWN_PLAYERS_HOUSE_1F")
     if emu.flag("FLAG_SYS_B_DASH") or emu.flag("FLAG_MAP049_EVENT001_SSA"):
         shot = emu.screenshot(f"{beat}_flags_leaked")
@@ -208,13 +328,6 @@ def b1(emu: Emulator) -> None:
 @moki.beat("B2", "Leaving 1F before talking to Auntie is blocked")
 def b2(emu: Emulator) -> None:
     _assert_house1f_exit_blocked(emu, "B2")
-
-
-# -- N1 (companion to B2; interleaved here per ROM_TEST_DEV Branch B2) ------
-
-@moki.beat("N1", "Repeat of B2's gate: refusal fires, Auntie's flags stay unset")
-def n1(emu: Emulator) -> None:
-    _assert_house1f_exit_blocked(emu, "N1")
 
 
 # -- B3 ----------------------------------------------------------------------
@@ -243,6 +356,10 @@ def b4(emu: Emulator) -> None:
         raise ScenarioError(
             "B4 precondition failed: the trip tile's self-switch is "
             "already set before the walk")
+    # The doc's beat table jumps map 49 -> 32 between B3 and B4 without a
+    # row of its own for the doorway; B3 leaves the player standing next to
+    # Auntie, so B4 owns the crossing.
+    _leave_house1f(emu, "B4")
     emu.walk_to(*FENCE_TRIP_APPROACH)
     _try_step(emu, FENCE_TRIP_DIRECTION)
     if not emu.field_locked():
@@ -250,7 +367,7 @@ def b4(emu: Emulator) -> None:
         raise ScenarioError(
             f"B4: crossing the fence-row tile did not fire Theo's cameo "
             f"scene ({shot})")
-    _advance_dialog(emu, "A")
+    emu.advance_dialog("A")
     if not emu.flag("FLAG_MAP032_EVENT074_SSA"):
         shot = emu.screenshot("b4_ssa_unset")
         raise ScenarioError(
@@ -262,8 +379,7 @@ def b4(emu: Emulator) -> None:
 
 @moki.beat("B5", "Entering the lab autoruns Bambo's intro scene")
 def b5(emu: Emulator) -> None:
-    emu.walk_to(*LAB_DOOR_MOKI_TOWN)
-    _require_map(emu, "B5", "MAP_MOKI_TOWN_PROFESSOR_LAB")
+    _enter_door(emu, "B5", LAB_DOOR_MOKI_TOWN, "MAP_MOKI_TOWN_PROFESSOR_LAB")
     if not emu.field_locked():
         shot = emu.screenshot("b5_no_autorun")
         raise ScenarioError(
@@ -278,9 +394,12 @@ def b6(emu: Emulator) -> None:
     # No player action of its own (doc: "none (scripted)") -- this beat
     # just confirms B5's autorun is still in progress (hasn't errored out
     # or released early) on its way into the yes/no prompt that N3/B7
-    # resolve. The prompt itself isn't independently observable through
-    # the harness's exposed primitives (see `_advance_dialog`'s docstring),
-    # so its appearance is confirmed structurally by N3/B7's own asserts.
+    # resolve. Which *specific* option is highlighted still isn't observable,
+    # so the prompt's identity stays confirmed structurally by N3/B7's own
+    # asserts. `emu.text_showing()` (added 2026-07-27) could tighten this to
+    # "a message box is up right now", but the lock is the safer gate: this
+    # beat can land in the gap between two of Bambo's messages, where the
+    # scene is healthy and no box is drawn.
     if not emu.field_locked():
         shot = emu.screenshot("b6_scene_ended_early")
         raise ScenarioError(
@@ -293,7 +412,7 @@ def b6(emu: Emulator) -> None:
 @moki.beat("N3", "Answering No at the aptitude-test offer re-offers cleanly")
 def n3(emu: Emulator) -> None:
     quest_log_before = emu.var("VAR_QUEST_LOG")
-    _advance_dialog(emu, "B")  # B always answers a yesnobox NO (see helper)
+    emu.advance_dialog("B")  # B always answers a yesnobox NO (see helper)
     if emu.field_locked():
         shot = emu.screenshot("n3_still_locked")
         raise ScenarioError(
@@ -319,15 +438,21 @@ def b7(emu: Emulator) -> None:
     emu.walk_to(*BAMBO_INTERACT)
     emu.face("UP")
     emu.interact()
-    _advance_dialog(emu, "A")  # commits YES at the re-offer's yesnobox
-    # SSB set -> SSD cleared by the re-offer's Yes branch re-arms the
-    # OnFrame autorun gate, which immediately re-fires straight into the
-    # quiz body (Map050_EV005_TestBody) without a further interact.
-    if not emu.field_locked():
+    emu.advance_dialog("A")  # commits YES, then rides the quiz out
+    # The Yes arm sets SSB and clears SSD, which re-arms the OnFrame gate;
+    # it re-fires into Map050_EV005_TestBody *without releasing the field
+    # controls in between*, so the single advance_dialog above carries the
+    # player through the offer AND the four questions (A commits the
+    # highlighted option at each dynmultichoice). There is therefore no
+    # moment where "the quiz is running" is observable as a lock — the
+    # evidence that it ran is the latch the quiz sets on its way out.
+    if not emu.flag("FLAG_MAP050_EVENT005_SSB"):
         shot = emu.screenshot("b7_quiz_did_not_start")
         raise ScenarioError(
-            f"B7: answering Yes did not lead into the quiz ({shot})")
-    _advance_dialog(emu, "A")
+            f"B7: answering Yes did not arm the quiz -- "
+            f"FLAG_MAP050_EVENT005_SSB is unset ({shot})")
+    if emu.field_locked():
+        emu.advance_dialog("A")
     if not emu.flag("FLAG_MAP050_EVENT005_SSC"):
         shot = emu.screenshot("b7_quiz_incomplete")
         raise ScenarioError(
@@ -349,13 +474,12 @@ def b8(emu: Emulator) -> None:
     emu.walk_to(*MACHINE_INTERACT)
     emu.face("UP")
     emu.interact()
-    _advance_dialog(emu, "A")
-    quest_log = emu.var("VAR_QUEST_LOG")
-    if quest_log != 1:
-        shot = emu.screenshot("b8_quest_log_not_1")
-        raise ScenarioError(
-            f"B8: VAR_QUEST_LOG reads {quest_log} after the Machine "
-            f"scene, expected 1 ({shot})")
+    _advance_to_battle(emu)
+    # The doc's B8 row credits this beat with `VAR_QUEST_LOG` 0->1. The write
+    # is real but lands *after* the battle, in the scene's tail
+    # (`addvar VAR_QUEST_LOG, 1`, `MokiTownProfessorLab/scripts.inc:740`,
+    # reached only from the post-battle path), so B9 asserts it. What is true
+    # here is the grant itself: `givemon` runs before the battle (:948).
     species = _player_starter_species(emu)
     species_none = emu.resolve_constant("SPECIES_NONE")
     if species == species_none:
@@ -367,17 +491,39 @@ def b8(emu: Emulator) -> None:
 
 # -- B9 ------------------------------------------------------------------
 
-@moki.beat("B9", "Talking to Theo starts the tutorial trainer battle")
+@moki.beat("B9", "The Machine scene runs straight into Theo's trainer battle")
 def b9(emu: Emulator) -> None:
-    emu.walk_to(*THEO_LAB_INTERACT)
-    emu.face(THEO_LAB_DIRECTION)
-    emu.interact()
+    # DOC CORRECTION (2026-07-27): the chapter doc's B9 row says the battle
+    # fires when you *talk to Theo* (Map050 event 20). It doesn't, in
+    # Uranium's own data or in the conversion: the `pbTrainerBattle` call
+    # lives in event **19** ("Machine") — the same script B8 triggers — and
+    # runs immediately after the starter grant, with no release of the field
+    # controls in between (`trainerbattle_earlyrival` at
+    # `MokiTownProfessorLab/scripts.inc:990`, after `givemon` at :948).
+    # Event 20's page for `VAR_QUEST_LOG >= 1` is a bare `end`, so an
+    # interact there correctly does nothing. B8 therefore stops at the
+    # battle boundary and B9 fights it.
+    if not in_battle(emu):
+        shot = emu.screenshot("b9_no_battle")
+        raise ScenarioError(
+            f"B9: the Machine scene did not run into Theo's battle ({shot})")
     win_battle(emu)
     if emu.field_locked():
         # win_battle already rides out the post-battle script via its own
         # advance_dialog(), but Theo's own leaving-the-lab line can follow
         # immediately after -- clear it the same way.
         emu.advance_dialog()
+    quest_log = emu.var("VAR_QUEST_LOG")
+    if quest_log != 1:
+        shot = emu.screenshot("b9_quest_log_not_1")
+        raise ScenarioError(
+            f"B9: VAR_QUEST_LOG reads {quest_log} after the battle and its "
+            f"tail, expected 1 ({shot})")
+    if not emu.flag("FLAG_RECEIVED_STARTER"):
+        shot = emu.screenshot("b9_no_received_starter")
+        raise ScenarioError(
+            f"B9: FLAG_RECEIVED_STARTER not set after the Machine scene's "
+            f"post-battle tail ({shot})")
 
 
 # -- B10 -----------------------------------------------------------------
@@ -389,8 +535,8 @@ def b10(emu: Emulator) -> None:
         raise ScenarioError(
             f"B10 precondition failed: VAR_QUEST_LOG reads {quest_log}, "
             f"expected >= 1")
-    emu.walk_to(*LAB_EXIT_TRIGGER)
-    _require_map(emu, "B10", "MAP_MOKI_TOWN")
+    _cross_threshold(emu, "B10", LAB_EXIT_APPROACH, LAB_EXIT_DIRECTION,
+                     "MAP_MOKI_TOWN")
 
 
 # -- N2 (after B8/B10, before B11/B12, per interleaving instructions --
@@ -410,7 +556,7 @@ def n2(emu: Emulator) -> None:
         raise ScenarioError(
             f"N2: walking to the ceremony trigger before visiting Theo's "
             f"house did not trigger the professor's redirect ({shot})")
-    _advance_dialog(emu, "A")
+    emu.advance_dialog("A")
     if _at_map(emu, "MAP_MOKI_TOWN_THEO_172"):
         shot = emu.screenshot("n2_warped")
         raise ScenarioError(
@@ -429,8 +575,7 @@ def n2(emu: Emulator) -> None:
 
 @moki.beat("B11", "Theo's house door is always open (the gate is inside)")
 def b11(emu: Emulator) -> None:
-    emu.walk_to(*THEO_HOUSE_DOOR)
-    _require_map(emu, "B11", "MAP_MOKI_TOWN_THEO_172")
+    _enter_door(emu, "B11", THEO_HOUSE_DOOR, "MAP_MOKI_TOWN_THEO_172")
 
 
 # -- B12 -----------------------------------------------------------------
@@ -442,18 +587,26 @@ def b12(emu: Emulator) -> None:
         raise ScenarioError(
             f"B12: entering Theo's 1F did not autorun the PokePod scene "
             f"({shot})")
-    _advance_dialog(emu, "A")
+    # Not `emu.advance_dialog`: on arrival the lock above may still be B11's
+    # warp fade, and the PokePod autorun fires a few frames later — the
+    # first release is not the end of the scene. See `_settle_scenes`.
+    _settle_scenes(emu)
     quest_log = emu.var("VAR_QUEST_LOG")
     if quest_log != 2:
         shot = emu.screenshot("b12_quest_log_not_2")
         raise ScenarioError(
             f"B12: VAR_QUEST_LOG reads {quest_log} after the PokePod "
             f"scene, expected 2 ({shot})")
-    if not emu.flag("FLAG_MAP172_EVENT004_SSA"):
-        shot = emu.screenshot("b12_no_ssa")
-        raise ScenarioError(
-            f"B12: FLAG_MAP172_EVENT004_SSA not set after the PokePod "
-            f"scene ({shot})")
+    # DOC CORRECTION (2026-07-27): the doc's B12 row also expects
+    # `FLAG_MAP172_EVENT004_SSA`. That self-switch is not part of this path.
+    # In Uranium's own data (`output/uranium-build/maps/Map172.json`, event 4)
+    # page 0 — the path taken after *winning* the rival battle — ends with a
+    # single control-variable command (`code 122`, var 101 -> 2) and no
+    # control-self-switch; the `code 123` A-write lives on page 2, the
+    # lost-the-battle variant that ends in a warp. The conversion mirrors
+    # that exactly (`MokiTownTheo172/scripts.inc:238` vs `:735`), so the
+    # once-only guard on this path is `VAR_QUEST_LOG >= 2` (the dispatcher's
+    # own gate), asserted above.
 
 
 # -- B13 -----------------------------------------------------------------
@@ -465,6 +618,10 @@ def b13(emu: Emulator) -> None:
         raise ScenarioError(
             f"B13 precondition failed: VAR_QUEST_LOG reads "
             f"{quest_log_before}, expected >= 2")
+    # B12 ends inside Theo's 1F; the ceremony trigger is out in Map032, and
+    # the doc's beat table changes map between the rows without a row of its
+    # own, so B13 owns the crossing (same shape as B4's).
+    _leave_theo_house(emu, "B13")
     emu.walk_to(*CEREMONY_APPROACH)
     _try_step(emu, CEREMONY_DIRECTION)
     if not emu.field_locked():
@@ -472,7 +629,7 @@ def b13(emu: Emulator) -> None:
         raise ScenarioError(
             f"B13: crossing the west-exit tiles did not start the catch "
             f"ceremony ({shot})")
-    _advance_dialog(emu, "A")
+    emu.advance_dialog("A")
     quest_log_after = emu.var("VAR_QUEST_LOG")
     if quest_log_after != 4:
         shot = emu.screenshot("b13_quest_log_not_4")
@@ -490,7 +647,13 @@ def b14(emu: Emulator) -> None:
         raise ScenarioError(
             f"B14 precondition failed: VAR_QUEST_LOG reads "
             f"{quest_log_before}, expected exactly 4")
-    emu.walk_to(*CEREMONY_APPROACH)
+    # B13's ceremony leaves the player standing *on* the trigger column
+    # ((16,43)-(16,45)), so "re-cross" is a step off it and straight back —
+    # walking to the fixed approach tile would path through the column on
+    # the way there and test the crossing from the wrong side.
+    _, py = emu.player_pos()
+    row = py if CEREMONY_ROWS[0] <= py <= CEREMONY_ROWS[1] else CEREMONY_APPROACH[1]
+    emu.walk_to(CEREMONY_APPROACH[0], row)
     _try_step(emu, CEREMONY_DIRECTION)
     if emu.field_locked():
         shot = emu.screenshot("b14_refired")

@@ -375,6 +375,24 @@ class _FakeWalkEmu:
                 return True, frames
         return False, 40
 
+    # The fake has no map grid to plan over, so it exercises exactly the
+    # degraded path a real run takes when `_plan_route` finds nothing: the
+    # bare target, walked greedily. That keeps these tests about the
+    # step-aside/oscillation/warp behaviour they were written for.
+    def _route_waypoints(self, tx: int, ty: int) -> list[tuple[int, int]]:
+        return [(tx, ty)]
+
+    # walk_to's own helpers are the code under test, so they're borrowed from
+    # the real class rather than reimplemented here (unbound, same as the
+    # walk_to call in each test).
+    def _walk_greedy(self, *args, **kwargs):
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator._walk_greedy(self, *args, **kwargs)
+
+    def _require_same_map(self, *args, **kwargs):
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator._require_same_map(self, *args, **kwargs)
+
 
 needs_mgba = pytest.mark.skipif(
     importlib.util.find_spec("mgba") is None,
@@ -461,11 +479,519 @@ def test_walk_to_frame_budget_still_authoritative_on_clear_path() -> None:
         Emulator.walk_to(emu, 100, 0, frame_budget=5)
 
 
+# -- waypoint frame settling: pure logic, no ROM needed ----------------------
+#
+# Beat boundaries land on warps and battle transitions, so the frame at that
+# instant is often mid-fade and solid black -- 5 of 19 tiles in the 2026-07-27
+# moki contact sheet were blank. `_FakeScreenEmu` stands in for the parts of
+# Emulator that `waypoint`/`_settle_frame` touch, with a scripted sequence of
+# frames, so the settling rule can be exercised without mgba running a ROM.
+
+
+class _FakeScreenEmu:
+    """Emulator stand-in whose screen becomes reviewable after `blank_for`
+    settle steps. `run()` is the only thing that advances it, exactly as a
+    real fade only progresses while the core runs."""
+
+    def __init__(self, tmp_path, blank_for: int) -> None:
+        from PIL import Image
+
+        self._blank_for = blank_for
+        self._advanced = 0
+        self.frame = 0
+        self.screenshot_dir = tmp_path
+        self.waypoints: list = []
+        self._text_frame = None
+        self._text_was_drawing = False
+        self._blank = Image.new("RGB", (240, 160), (0, 0, 0))
+        self._scene = Image.effect_noise((240, 160), 64).convert("RGB")
+
+    class _Screen:
+        def __init__(self, owner) -> None:
+            self._owner = owner
+
+        def to_pil(self):
+            o = self._owner
+            return o._blank if o._advanced < o._blank_for else o._scene
+
+    @property
+    def screen(self):
+        return self._Screen(self)
+
+    def run(self, frames: int, keys=None) -> None:
+        self._advanced += frames
+        self.frame += frames
+
+    # Borrowed from the real class (unbound), same pattern as _FakeWalkEmu:
+    # these are the code under test, not part of the stand-in.
+    def _settle_frame(self, *args, **kwargs):
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator._settle_frame(self, *args, **kwargs)
+
+    def _frame_unreviewable(self, *args, **kwargs):
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator._frame_unreviewable(self, *args, **kwargs)
+
+
+def _waypoint(emu, **kwargs):
+    from rpg2gba.playtest.emulator import Emulator
+
+    return Emulator.waypoint(emu, **kwargs)
+
+
+@needs_mgba
+def test_waypoint_waits_out_a_fade_before_capturing(tmp_path) -> None:
+    """A blank frame at the beat boundary must not become a blank sheet tile:
+    the capture advances the core until the screen has something on it."""
+    from rpg2gba.playtest.emulator import Emulator
+
+    emu = _FakeScreenEmu(tmp_path, blank_for=32)
+    wp = _waypoint(emu, beat="B5", note="entered the lab")
+    assert emu._advanced >= 32  # waited the fade out
+    assert not Emulator._frame_unreviewable(emu)
+    assert wp.note == "entered the lab"  # no blank annotation
+    from PIL import Image
+
+    assert Image.open(wp.path).getcolors(maxcolors=8) is None  # a real frame
+
+
+@needs_mgba
+def test_waypoint_does_not_wait_when_the_frame_is_already_good(tmp_path) -> None:
+    emu = _FakeScreenEmu(tmp_path, blank_for=0)
+    _waypoint(emu, beat="B3")
+    assert emu._advanced == 0
+
+
+@needs_mgba
+def test_waypoint_gives_up_and_says_so_on_a_permanently_blank_screen(tmp_path) -> None:
+    """A genuinely black screen (or a hung transition) still gets captured --
+    a waypoint is documentation, not an assertion -- but the note has to say
+    the screen really was blank, so a blank tile is never ambiguous."""
+    emu = _FakeScreenEmu(tmp_path, blank_for=10_000)
+    wp = _waypoint(emu, beat="B9", note="battle")
+    assert "screen still blank" in wp.note
+    assert emu._advanced <= 300  # bounded, not a hang
+
+
+@needs_mgba
+def test_failure_waypoint_captures_the_exact_frame(tmp_path) -> None:
+    """A failure frame is evidence: it must be the frame the beat failed on,
+    so the settling must not run the core forward past it."""
+    emu = _FakeScreenEmu(tmp_path, blank_for=32)
+    _waypoint(emu, beat="B4", name="FAILED", failed=True)
+    assert emu._advanced == 0
+
+
+# -- text-frame capture -------------------------------------------------------
+#
+# A beat only returns once its scene has been mashed to the end, so the live
+# frame at the beat boundary always shows the world *after* the event. These
+# cover the fix: the frame the sheet gets is the last one that had dialogue on
+# it (see `Emulator.note_text_frame` / `waypoint`).
+
+class _FakeTextEmu:
+    """Emulator stand-in for the dialogue path.
+
+    `script` is one `(field_locked, text_drawing, tag)` triple per sample, and
+    `tap` consumes exactly one -- the real `tap` samples every frame it runs,
+    which for these tests collapses to one sample per tap. `text_drawing` is
+    what `text_showing` reports, so a True→False pair in the script *is* the
+    falling edge `note_text_frame` captures on.
+
+    Frames are noise (so `_frame_unreviewable` passes them) carrying `tag` in
+    pixel (0,0), which is how a test says *which* frame survived to the
+    waypoint; `tag=None` is a blank frame. A 4th element sets `text_ready`,
+    defaulting to True.
+    """
+
+    def __init__(self, tmp_path, script) -> None:
+        self._script = list(script)
+        self._step = 0
+        self.frame = 0
+        self.screenshot_dir = tmp_path
+        self.waypoints: list = []
+        self._text_frame = None
+        self._text_was_drawing = False
+        self.taps = 0
+        self._advanced = 0
+
+    @property
+    def _now(self):
+        return self._script[min(self._step, len(self._script) - 1)]
+
+    def field_locked(self) -> bool:
+        return self._now[0]
+
+    def text_showing(self) -> bool:
+        return self._now[1]
+
+    def text_ready(self) -> bool:
+        now = self._now
+        return now[3] if len(now) > 3 else True
+
+    class _Screen:
+        def __init__(self, owner) -> None:
+            self._owner = owner
+
+        def to_pil(self):
+            from PIL import Image
+
+            tag = self._owner._now[2]
+            if tag is None:
+                return Image.new("RGB", (240, 160), (0, 0, 0))
+            img = Image.effect_noise((240, 160), 64).convert("RGB")
+            img.putpixel((0, 0), (tag, 0, 0))
+            return img
+
+    @property
+    def screen(self):
+        return self._Screen(self)
+
+    def run(self, frames: int, keys=None, on_frame=None) -> None:
+        self._advanced += frames
+        self.frame += frames
+        for _ in range(frames if on_frame else 0):
+            on_frame()
+
+    def tap(self, key: str, hold: int = 6, release: int = 6) -> None:
+        self.note_text_frame()  # the real tap samples every frame it runs
+        self.taps += 1
+        self._step += 1
+
+    def screenshot(self, name: str):
+        return None
+
+    # Borrowed from the real class (unbound) -- the code under test.
+    def _settle_frame(self, *a, **kw):
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator._settle_frame(self, *a, **kw)
+
+    def _frame_unreviewable(self, *a, **kw):
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator._frame_unreviewable(self, *a, **kw)
+
+    def note_text_frame(self, *a, **kw):
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator.note_text_frame(self, *a, **kw)
+
+
+def _advance(emu, **kwargs) -> int:
+    from rpg2gba.playtest.emulator import Emulator
+
+    return Emulator.advance_dialog(emu, **kwargs)
+
+
+def _tag_of(path) -> int:
+    from PIL import Image
+
+    return Image.open(path).getpixel((0, 0))[0]
+
+
+@needs_mgba
+def test_waypoint_captures_the_last_completed_message_not_the_aftermath(tmp_path) -> None:
+    """The payoff line, not the greeting and not the empty room afterwards."""
+    emu = _FakeTextEmu(tmp_path, [
+        (True, True, 11),    # "Oh, you're up!" -- still appearing
+        (True, False, 22),   # ...finished: an edge, captured
+        (True, True, 33),    # next message appearing
+        (True, False, 44),   # "You got the Running Shoes!"  <- the one to keep
+        (False, False, 99),  # scene over, beat asserts and returns
+    ])
+    assert _advance(emu) == 4
+    wp = _waypoint(emu, beat="B3", note="Auntie grants FLAG_SYS_B_DASH")
+    assert _tag_of(wp.path) == 44
+    assert wp.at_text
+    assert emu._advanced == 0  # a stored frame never advances the core
+
+
+@needs_mgba
+def test_note_text_frame_never_captures_a_half_typed_message(tmp_path) -> None:
+    """The whole point of the edge. A frame taken while the message is still
+    appearing reads "See you later, R"; only the frame the last glyph lands on
+    is worth keeping."""
+    emu = _FakeTextEmu(tmp_path, [
+        (True, True, 11),   # "See you later, R"    -- still appearing
+        (True, True, 22),   # "See you later, RE"   -- still appearing
+        (True, False, 33),  # "See you later, RED!" -- done
+        (False, False, 99),
+    ])
+    _advance(emu)
+    wp = _waypoint(emu, beat="B9")
+    assert _tag_of(wp.path) == 33
+
+
+@needs_mgba
+def test_note_text_frame_ignores_a_locked_stretch_with_no_dialogue(tmp_path) -> None:
+    """`field_locked` is also true through fades and scripted walk routes. No
+    message drawn means no edge, so nothing is captured and the waypoint falls
+    back to the live frame."""
+    emu = _FakeTextEmu(tmp_path, [
+        (True, False, 11),   # locked, but it's Theo's walk-on move route
+        (True, False, 22),
+        (False, False, 99),
+    ])
+    _advance(emu)
+    wp = _waypoint(emu, beat="B4")
+    assert _tag_of(wp.path) == 99
+    assert not wp.at_text
+
+
+@needs_mgba
+def test_note_text_frame_skips_a_message_that_finished_over_a_fade(tmp_path) -> None:
+    """A black tile with a textbox on it is no more reviewable than a plain
+    black one, so the last *usable* completed message wins."""
+    emu = _FakeTextEmu(tmp_path, [
+        (True, True, 11),
+        (True, False, 22),    # finished and reviewable -- kept
+        (True, True, 33),
+        (True, False, None),  # finished, but the screen is mid-fade
+        (False, False, 99),
+    ])
+    _advance(emu)
+    wp = _waypoint(emu, beat="B13")
+    assert _tag_of(wp.path) == 22
+
+
+@needs_mgba
+def test_note_text_frame_requires_the_page_to_be_drawn(tmp_path) -> None:
+    """`text_ready` guards the edge: a box torn down mid-draw (a script-driven
+    close rather than a message running out of characters) is not a message
+    worth showing."""
+    emu = _FakeTextEmu(tmp_path, [
+        (True, True, 11, False),
+        (True, False, 22, False),  # an edge, but nothing finished drawing
+        (False, False, 99, True),
+    ])
+    _advance(emu)
+    wp = _waypoint(emu, beat="B12")
+    assert _tag_of(wp.path) == 99
+    assert not wp.at_text
+
+
+@needs_mgba
+def test_waypoint_falls_back_to_the_live_frame_when_no_dialogue_ran(tmp_path) -> None:
+    """B14 re-crosses the ceremony tiles and must *not* fire a scene; there is
+    no text moment to catch, so the beat-boundary frame is still the right one."""
+    emu = _FakeTextEmu(tmp_path, [(False, False, 99)])
+    _advance(emu)
+    wp = _waypoint(emu, beat="B14")
+    assert _tag_of(wp.path) == 99
+    assert not wp.at_text
+
+
+@needs_mgba
+def test_failure_waypoint_ignores_a_stored_text_frame(tmp_path) -> None:
+    """A failure frame is evidence of the moment it failed -- never a nicer
+    frame salvaged from earlier in the beat."""
+    emu = _FakeTextEmu(tmp_path, [
+        (True, True, 11), (True, False, 22), (False, False, 99)])
+    _advance(emu)
+    wp = _waypoint(emu, beat="B9", name="FAILED", failed=True)
+    assert _tag_of(wp.path) == 99
+    assert not wp.at_text
+    assert emu._advanced == 0
+
+
+@needs_mgba
+def test_text_frame_does_not_carry_over_to_the_next_beat(tmp_path) -> None:
+    """Otherwise a silent beat would inherit the previous beat's dialogue and
+    the sheet would show the same tile twice."""
+    emu = _FakeTextEmu(tmp_path, [
+        (True, True, 11), (True, False, 22), (False, False, 99)])
+    _advance(emu)
+    first = _waypoint(emu, beat="B3")
+    second = _waypoint(emu, beat="B4")
+    assert _tag_of(first.path) == 22
+    assert first.at_text
+    assert _tag_of(second.path) == 99
+    assert not second.at_text
+
+
+@needs_mgba
+def test_advance_dialog_stops_on_the_stop_condition(tmp_path) -> None:
+    """A script ending in a battle never releases the field controls; without
+    the stop hook the A-mash would play the battle by accident."""
+    emu = _FakeTextEmu(tmp_path, [
+        (True, True, 11),
+        (True, True, 22),
+        (True, True, 33),  # battle has started; still locked
+    ])
+    taps = _advance(emu, stop=lambda: emu.taps >= 2)
+    assert taps == 2
+
+
+@needs_mgba
+def test_advance_dialog_fails_loud_when_the_script_never_releases(tmp_path) -> None:
+    emu = _FakeTextEmu(tmp_path, [(True, True, 11)])
+    with pytest.raises(ScenarioError, match="never released field controls"):
+        _advance(emu, max_taps=5)
+
+
+def test_caption_marks_a_text_frame() -> None:
+    """The marker matters for its absence: a beat whose doc row promises a
+    message but whose tile has no `+` never showed that message."""
+    from rpg2gba.playtest.contact_sheet import Waypoint
+
+    at_text = Waypoint(beat="B3", name="B3", note="", frame=0,
+                       path=Path("x.png"), at_text=True)
+    silent = Waypoint(beat="B14", name="B14", note="", frame=0,
+                      path=Path("x.png"))
+    assert at_text.caption == "B3 +"
+    assert silent.caption == "B14"
+
+
 needs_probe = pytest.mark.skipif(
     not (DEVKITARM_BIN / "arm-none-eabi-gcc").exists()
     or not (ENGINE / "include").exists(),
     reason="needs devkitARM toolchain and the vendored engine include tree",
 )
+
+
+needs_build = pytest.mark.skipif(
+    not (ENGINE / "pokeemerald.elf").exists()
+    or not (DEVKITARM_BIN / "arm-none-eabi-objdump").exists(),
+    reason="needs a built engine ELF and the devkitARM toolchain",
+)
+
+
+class _FakePrinterEmu:
+    """Emulator stand-in over a fake `sFirstTextPrinter` list, for `text_ready`.
+
+    `nodes` is a list of `(type, window_id, state)`; they are laid out in a
+    sparse memory at fixed addresses and chained through `off_printer_next`.
+    An empty list means the head pointer is NULL.
+    """
+
+    HEAD = 0x02030000
+    BASE = 0x02031000
+    STRIDE = 0x100
+
+    def __init__(self, offsets, nodes) -> None:
+        self.offsets = offsets
+        self._printer_list = self.HEAD
+        self._mem: dict[int, int] = {}
+        addr = self.BASE
+        self._mem[self.HEAD] = addr if nodes else 0
+        for i, (ptype, window_id, state) in enumerate(nodes):
+            nxt = addr + self.STRIDE if i + 1 < len(nodes) else 0
+            self._mem[addr + offsets["off_printer_type"]] = ptype
+            self._mem[addr + offsets["off_printer_window_id"]] = window_id
+            self._mem[addr + offsets["off_printer_state"]] = state
+            self._mem[addr + offsets["off_printer_next"]] = nxt
+            addr += self.STRIDE
+
+    def u8(self, addr: int) -> int:
+        return self._mem.get(addr, 0)
+
+    def u32(self, addr: int) -> int:
+        return self._mem.get(addr, 0)
+
+    def text_ready(self, *a, **kw):
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator.text_ready(self, *a, **kw)
+
+
+@needs_probe
+@needs_mgba
+def test_text_ready_is_true_when_the_printer_was_already_freed() -> None:
+    """The regression that dropped B2's refusal line: a one-page message hits
+    RENDER_FINISH as its last glyph lands, which frees the printer off the list
+    while the box stays up waiting for A. That is the *most* reviewable frame,
+    so an empty list must read as ready, not as busy."""
+    emu = _FakePrinterEmu(probe_offsets(ENGINE), [])
+    assert emu.text_ready() is True
+
+
+@needs_probe
+@needs_mgba
+def test_text_ready_is_false_while_glyphs_are_still_drawing() -> None:
+    o = probe_offsets(ENGINE)
+    emu = _FakePrinterEmu(o, [
+        (o["val_window_text_printer"], 0, o["val_render_state_handle_char"]),
+    ])
+    assert emu.text_ready() is False
+
+
+@needs_probe
+@needs_mgba
+def test_text_ready_is_true_for_a_page_parked_on_the_down_arrow() -> None:
+    o = probe_offsets(ENGINE)
+    for parked in ("val_render_state_wait", "val_render_state_clear",
+                   "val_render_state_scroll_start"):
+        emu = _FakePrinterEmu(o, [
+            (o["val_window_text_printer"], 0, o[parked]),
+        ])
+        assert emu.text_ready() is True, parked
+
+
+@needs_probe
+@needs_mgba
+def test_text_ready_walks_past_printers_bound_elsewhere() -> None:
+    """A sprite printer, or a window printer for a different window, must not
+    answer for window 0 -- the walk has to keep going."""
+    o = probe_offsets(ENGINE)
+    emu = _FakePrinterEmu(o, [
+        (o["val_window_text_printer"] + 1, 0, o["val_render_state_handle_char"]),
+        (o["val_window_text_printer"], 7, o["val_render_state_handle_char"]),
+        (o["val_window_text_printer"], 0, o["val_render_state_wait"]),
+    ])
+    assert emu.text_ready() is True
+
+
+@needs_build
+def test_static_ptr_recovery_lands_in_ewram() -> None:
+    """`sFirstTextPrinter` is the one part of the printer walk that can't come
+    from the headers -- it's a link-time address, so it comes out of the
+    accessor's literal pool."""
+    from rpg2gba.playtest.symbols import static_ptr_via_accessor
+
+    syms = SymbolMap(ENGINE / "pokeemerald.map")
+    addr = static_ptr_via_accessor(
+        ENGINE / "pokeemerald.elf", syms["IsTextPrinterActiveOnWindow"])
+    assert 0x02000000 <= addr < 0x02040000  # EWRAM_DATA
+
+
+@needs_build
+def test_static_ptr_recovery_fails_loud_on_the_wrong_shape() -> None:
+    """Pointed at an accessor that indexes rather than dereferences, this must
+    raise -- returning the literal would silently yield a wrong address."""
+    from rpg2gba.playtest.symbols import static_ptr_via_accessor
+
+    syms = SymbolMap(ENGINE / "pokeemerald.map")
+    with pytest.raises(ValueError, match="ldr-literal \\+ deref shape"):
+        static_ptr_via_accessor(
+            ENGINE / "pokeemerald.elf", syms["ArePlayerFieldControlsLocked"])
+
+
+@needs_probe
+def test_probed_printer_offsets_match_the_compiled_accessor() -> None:
+    """The offsets `text_ready` walks with come from the headers; the same
+    numbers are visible as immediates in `IsTextPrinterActiveOnWindow`'s own
+    code. Two independent derivations agreeing is what says the walk is
+    reading real fields and not plausible-looking garbage."""
+    import re
+
+    from rpg2gba.playtest.symbols import _disassemble
+
+    o = probe_offsets(ENGINE)
+    syms = SymbolMap(ENGINE / "pokeemerald.map")
+    asm = _disassemble(
+        ENGINE / "pokeemerald.elf", syms["IsTextPrinterActiveOnWindow"], 0x30)
+
+    # ldrb of printerTemplate.type, then of printerTemplate.windowId
+    ldrb = [int(n) for n in re.findall(r"ldrb\s+r\d+,\s*\[r\d+,\s*#(\d+)\]", asm)]
+    # ldr of nextPrinter (the #0 one is the list-head deref)
+    ldr = [int(n) for n in re.findall(r"ldr\s+r\d+,\s*\[r\d+,\s*#(\d+)\]", asm)]
+    assert o["off_printer_type"] in ldrb
+    assert o["off_printer_window_id"] in ldrb
+    assert o["off_printer_next"] in ldr
+    assert o["val_window_text_printer"] == 0  # the `cmp r2, #0` in the walk
+    # HANDLE_CHAR must be distinct from every parked state, or `text_ready`
+    # cannot tell "still typing" from "waiting on the down arrow".
+    assert o["val_render_state_handle_char"] not in (
+        o["val_render_state_wait"], o["val_render_state_clear"],
+        o["val_render_state_scroll_start"])
+    assert o["off_printer_state"] != o["off_printer_type"]
 
 
 @needs_probe

@@ -236,6 +236,48 @@ def dispatch_label(map_id: int, event_id: int) -> str:
     return f"Map{int(map_id):03d}_EV{int(event_id):03d}_Dispatch"
 
 
+def action_dispatch_label(map_id: int, event_id: int) -> str:
+    """The label of the SECONDARY, action-button dispatcher emitted for an
+    event whose primary host is a walk-on `coord_event` but which also has
+    action-trigger pages (see `CHANNEL_ACTION` / `build_object_events`)."""
+    return f"Map{int(map_id):03d}_EV{int(event_id):03d}_ActionDispatch"
+
+
+# RMXP gives every PAGE its own trigger, but a converted event reaches the
+# player through one of two pokeemerald channels, and a page is only reachable
+# on the channel that matches its trigger. Dispatching a page on the wrong
+# channel is how an action-button page ends up firing by walking over a tile
+# (Map032 EV009 page 4 printed its post-ceremony line on every crossing).
+#
+# CHANNEL_TOUCH -- a `coord_event`: fires by STANDING on the tile. Only RMXP
+#   touch pages (1 Player Touch / 2 Event Touch) belong here.
+# CHANNEL_ACTION -- an event's PRIMARY talkable host (a `bg_event` sign whose
+#   boot page is action-triggered, or an `object_event`): fires on A. Action
+#   pages (0) belong here, and touch pages are ALSO dispatched here: RMXP
+#   touch fires on bumping into the event, pokeemerald has no bump-script for
+#   a talkable host, and talking to it is the long-standing approximation
+#   (228 corpus events depend on it) -- an approximation, not a wrong channel.
+# CHANNEL_ACTION_ONLY -- the SECONDARY A-press host an otherwise walk-on event
+#   gets for its action pages (`_emit_action_host`). The approximation above
+#   must not apply here: this event already has a walk-on host that owns its
+#   touch pages, so letting A fire them too would add a trigger RMXP doesn't
+#   have (pressing A at Map032 EV009's tile would start the ceremony instead
+#   of walking into it).
+#
+# Autorun/parallel pages (3/4) belong to none of them: their channel is the
+# map's ON_FRAME_TABLE (`compute_autorun_entries`).
+CHANNEL_TOUCH = "touch"
+CHANNEL_ACTION = "action"
+CHANNEL_ACTION_ONLY = "action_only"
+_CHANNEL_TRIGGERS: dict[str, frozenset[int]] = {
+    CHANNEL_TOUCH: frozenset({TRIGGER_PLAYER_TOUCH, TRIGGER_EVENT_TOUCH}),
+    CHANNEL_ACTION: frozenset(
+        {TRIGGER_ACTION, TRIGGER_PLAYER_TOUCH, TRIGGER_EVENT_TOUCH}
+    ),
+    CHANNEL_ACTION_ONLY: frozenset({TRIGGER_ACTION}),
+}
+
+
 @dataclass
 class ObjectEvent:
     """One placed event -> a pokeemerald object_event entry in map.json."""
@@ -334,6 +376,12 @@ class ObjectBuildResult:
     local_id_map: dict[str, int] = field(default_factory=dict)
     drops: list[tuple[int, str]] = field(default_factory=list)
     transition_lines: list[str] = field(default_factory=list)
+    # Door cells of GATED doors (classify_event). They carry a coord_event
+    # instead of a warp_event, but still need the warp metatile override
+    # (MB_NON_ANIMATED_DOOR, collision 0) so the player can step into the
+    # doorway and trip the gate script — `build_slice_maps` unions these into
+    # the per-map override set it returns.
+    gated_door_cells: set[tuple[int, int]] = field(default_factory=set)
 
 
 @dataclass
@@ -427,24 +475,61 @@ def _event_transfers(event: dict) -> list[tuple[int, int, int, int | None]]:
     return out
 
 
+def _page_has_transfer(page: dict) -> bool:
+    """Does this single page carry a code-201 Transfer Player?"""
+    return any(cmd["code"] == TRANSFER_CODE for cmd in page.get("list", []))
+
+
 def classify_event(event: dict, slice_ids: set[int]) -> tuple[str, WarpSpec | str | None]:
     """Decide how an event is realized (generic rule that reproduces the S1 keep-list):
 
     - any code-201 to an OUT-of-slice map -> ("skip", reason): emit nothing (NO-EMIT
       building doors + WALL cave exits — nothing references the missing maps).
-    - a code-201 to an IN-slice map on a player-touch trigger -> ("warp", WarpSpec):
-      a real door/stairs warp_event (the object_event is dropped to avoid a double
-      warp; its .pory body goes unreferenced).
+    - a player-touch event whose pages ALL transfer to in-slice maps -> ("warp",
+      WarpSpec): a real door/stairs warp_event (the object_event is dropped to
+      avoid a double warp; its .pory body goes unreferenced).
     - everything else -> ("object", None): an object_event (incl. scripted story
-      transfers like the Letter, whose .pory body keeps the warp() call)."""
+      transfers like the Letter, whose .pory body keeps the warp() call).
+
+    **The every-touch-page requirement is load-bearing** (`reference/findings/
+    gated_door_collapse_2026-07-26.md`). A *gated door* — an event whose
+    player-touch pages don't ALL transfer — must NOT collapse into an
+    unconditional warp_event: doing so silently discards the refusal pages.
+    Uranium Map049 EV002 is the canonical case: page 0 (no condition) says
+    "I'd better say goodbye to Auntie first." and shoves the player back, page 1
+    (switch 52 `Mum`) actually transfers. Collapsing it let the player walk out
+    of the starting house before the gate, which is what playtest beat B2
+    caught. Map050 EV001 is the same shape (the lab exit, gated `VAR_QUEST_LOG
+    >= 1`). Such events fall through to ("object", None) so the normal
+    multi-page dispatcher picks the live page and that page's own .pory body
+    runs its `warp()` — RMXP semantics preserved, no warp_event to race it.
+
+    Only **player-touch** pages are considered, because only they compete for
+    the step-on behavior a warp_event would implement. An autorun/parallel page
+    reaches the player through a different channel (ON_FRAME_TABLE) and does not
+    make the door conditional: Moki Town's five house doors each pair a
+    touch-triggered transfer page with a switch-22 autorun cutscene page, and
+    they are correctly still plain warps."""
     transfers = _event_transfers(event)
     if transfers:
         targets = {t[0] for t in transfers}
         if any(t not in slice_ids for t in targets):
             return ("skip", "out-of-slice warp")
         if event["pages"][0].get("trigger") == TRIGGER_PLAYER_TOUCH:
-            dest_uid, dx, dy, ddir = transfers[0]
-            return ("warp", WarpSpec(event["x"], event["y"], dest_uid, dx, dy, ddir))
+            touch_pages = [
+                (i, p) for i, p in enumerate(event["pages"])
+                if p.get("trigger") == TRIGGER_PLAYER_TOUCH
+            ]
+            gate_pages = [i for i, p in touch_pages if not _page_has_transfer(p)]
+            if not gate_pages:
+                dest_uid, dx, dy, ddir = transfers[0]
+                return ("warp", WarpSpec(event["x"], event["y"], dest_uid, dx, dy, ddir))
+            logger.info(
+                "EV%03d at (%d, %d): gated door — player-touch pages %s carry no "
+                "transfer, so it stays an event (dispatcher + per-page warp()), "
+                "not a warp_event",
+                event["id"], event["x"], event["y"], gate_pages,
+            )
     return ("object", None)
 
 
@@ -550,21 +635,40 @@ def _negate_terms(terms: list[str]) -> str:
     return "(" + " || ".join(negated) + ")"
 
 
-def _goto_or_end(pages: list[dict], uid: int, eid: int, page_idx: int) -> str:
-    """``goto(<page label>)``, or bare ``end`` when the target page is
-    autorun/parallel (RMXP trigger 3/4). Autorun/parallel page bodies must
-    never be reachable from the action-button interaction dispatcher
-    (findings §3.2 BUG B — an autorun body is invoked only via the
-    ON_FRAME_TABLE channel, `compute_autorun_entries` /
-    `_render_onframe_script`); talking to such an event when it's the
-    active page does nothing."""
-    if pages[page_idx].get("trigger") in (TRIGGER_AUTORUN, TRIGGER_PARALLEL):
+def _goto_or_end(
+    pages: list[dict], uid: int, eid: int, page_idx: int, channel: str
+) -> str:
+    """``goto(<page label>)``, or bare ``end`` when the target page's own RMXP
+    trigger doesn't belong to `channel` (`_CHANNEL_TRIGGERS`).
+
+    Two cases this covers:
+
+    - autorun/parallel (3/4) on either channel — an autorun body is invoked
+      only through ON_FRAME_TABLE (`compute_autorun_entries` /
+      `_render_onframe_script`), so talking to (or walking onto) such an event
+      while that page is active must do nothing (findings §3.2 BUG B);
+    - an ACTION page (0) on `CHANNEL_TOUCH` — reachable in RMXP only by
+      pressing A at the event, never by walking over it. Dispatching it from
+      the `coord_event` made Map032 EV009's post-ceremony line fire on every
+      crossing of the west-exit tiles (chapter beat B14, 2026-07-27). Where
+      that page still needs an A-press host, `build_object_events` emits one
+      (`action_dispatch_label`); this side just refuses to fire it by walking.
+
+    A page silenced here is silenced for THIS channel only — RMXP page
+    selection still stops at it, exactly as it does on PC when the active page
+    has a trigger the player isn't performing."""
+    if pages[page_idx].get("trigger") not in _CHANNEL_TRIGGERS[channel]:
         return "end"
     return f"goto({page_label(uid, eid, page_idx + 1)})"
 
 
 def build_page_dispatcher(
-    event: dict, consts: MapConstants, flag_registry: FlagRegistry | None = None
+    event: dict,
+    consts: MapConstants,
+    flag_registry: FlagRegistry | None = None,
+    *,
+    channel: str = CHANNEL_ACTION,
+    label: str | None = None,
 ) -> str | None:
     """Emit a Poryscript dispatcher for a multi-page event, or None to defer.
 
@@ -587,11 +691,15 @@ def build_page_dispatcher(
     object_event at the base page instead (until the name is mintable).
 
     Every ``goto()`` target (guards AND the fallback) is trigger-checked via
-    `_goto_or_end`: a page whose own trigger is autorun/parallel (3/4) is
-    never a valid action-button target and becomes a bare ``end`` instead
-    (findings §3.2 BUG B)."""
+    `_goto_or_end` against `channel` (`CHANNEL_ACTION` by default,
+    `CHANNEL_TOUCH` for a walk-on `coord_event` host): a page whose own RMXP
+    trigger isn't reachable on this channel becomes a bare ``end``. `label`
+    overrides the emitted script label (used for the secondary action-button
+    dispatcher an otherwise walk-on event gets)."""
     pages = event["pages"]
     uid, eid = consts.uranium_id, event["id"]
+    if channel not in _CHANNEL_TRIGGERS:
+        raise ValueError(f"unknown dispatch channel {channel!r}")
 
     guards: list[tuple[str, int]] = []
     fallback_idx: int | None = None
@@ -608,15 +716,15 @@ def build_page_dispatcher(
     if not guards and fallback_idx == 0 and len(pages) == 1:
         return None  # single unconditional page: no dispatch needed
 
-    lines = [f"script {dispatch_label(uid, eid)} {{"]
+    lines = [f"script {label or dispatch_label(uid, eid)} {{"]
     for cond_str, idx in guards:
         lines += [
             f"    if ({cond_str}) {{",
-            f"        {_goto_or_end(pages, uid, eid, idx)}",
+            f"        {_goto_or_end(pages, uid, eid, idx, channel)}",
             "    }",
         ]
     if fallback_idx is not None:
-        lines += [f"    {_goto_or_end(pages, uid, eid, fallback_idx)}", "}"]
+        lines += [f"    {_goto_or_end(pages, uid, eid, fallback_idx, channel)}", "}"]
     else:
         # every page gated, none matched at runtime -> inert (RMXP: no active page)
         lines += ["    end", "}"]
@@ -839,6 +947,9 @@ def _resolve_script(
     consts: MapConstants,
     pory_labels: set[str] | None,
     flag_registry: FlagRegistry | None = None,
+    *,
+    channel: str = CHANNEL_ACTION,
+    label: str | None = None,
 ) -> tuple[str, str | None]:
     """Resolve the .pory script label an event's converted behavior lives at
     (dispatcher label / page-1 label / the static "0x0"), and the dispatcher body
@@ -853,13 +964,22 @@ def _resolve_script(
     An event with *some* converted body but whose resolved page label is missing
     is a genuine page-body gap and fails loud (CLAUDE.md §4.5). `flag_registry`,
     when given, lets `build_page_dispatcher` resolve global switch/var page gates
-    into a real dispatcher instead of deferring (see its docstring)."""
+    into a real dispatcher instead of deferring (see its docstring).
+
+    `channel` / `label` pass straight through to `build_page_dispatcher`, so
+    the walk-on host of an event resolves against `CHANNEL_TOUCH` while its
+    A-press host resolves against `CHANNEL_ACTION`. Note the no-dispatcher
+    fallback (page-1 label) is channel-independent by construction: it is only
+    reached when dispatch is deferred, and the deferred case already points
+    every host at the base page."""
     uid, eid = consts.uranium_id, event["id"]
     if pory_labels is not None and not _event_has_body(event, consts, pory_labels):
         logger.info("map %d EV%03d: no converted .pory body -> static script", uid, eid)
         return NO_SCRIPT, None
 
-    dispatcher = build_page_dispatcher(event, consts, flag_registry)
+    dispatcher = build_page_dispatcher(
+        event, consts, flag_registry, channel=channel, label=label
+    )
     if dispatcher is not None:
         if pory_labels is not None:
             referenced = set(re.findall(r"goto\(([^)]+)\)", dispatcher))
@@ -870,7 +990,7 @@ def _resolve_script(
                     f"{sorted(missing)} not in the converted .pory, yet other "
                     f"pages of this event were converted — a page-body gap"
                 )
-        return dispatch_label(uid, eid), dispatcher
+        return label or dispatch_label(uid, eid), dispatcher
 
     script = page_label(uid, eid, 1)
     if len(event["pages"]) > 1:
@@ -885,6 +1005,68 @@ def _resolve_script(
             f"a page-body gap (base page empty but a later page has commands)"
         )
     return script, None
+
+
+def _emit_action_host(
+    event: dict,
+    consts: MapConstants,
+    result: "ObjectBuildResult",
+    pory_labels: set[str] | None,
+    flag_registry: FlagRegistry | None,
+) -> None:
+    """Give an event whose host is a walk-on `coord_event` a second, A-press
+    host for its ACTION pages — a `bg_event` sign on the event's own tile.
+
+    `CHANNEL_TOUCH` silences action pages on the coord side (they must not
+    fire by walking), but in RMXP those pages ARE reachable: an action trigger
+    responds to pressing A at the event's tile whether or not the event draws
+    anything, which is how Map032 EV009's post-ceremony line is meant to be
+    read. The sign goes on the event's OWN tile even when the coord events
+    were relocated to standable neighbours — a sign is read by facing its
+    tile, so an impassable tile is the normal case for one. It dispatches on
+    `CHANNEL_ACTION_ONLY`, so it adds exactly the A-press pages and never
+    becomes a second way to fire the walk-on ones.
+
+    Emits nothing when the action-channel dispatcher has no reachable page
+    (all `end` branches), when the event has no converted body, or when some
+    other event already owns a bg_event on that tile (first writer wins; the
+    collision is logged rather than silently stacked, since only one would
+    ever fire)."""
+    uid, eid = consts.uranium_id, event["id"]
+    if not any(p.get("trigger") == TRIGGER_ACTION for p in event["pages"]):
+        return
+    script, dispatcher = _resolve_script(
+        event, consts, pory_labels, flag_registry,
+        channel=CHANNEL_ACTION_ONLY, label=action_dispatch_label(uid, eid),
+    )
+    if script == NO_SCRIPT:
+        return
+    if dispatcher is None:
+        # Dispatch deferred (unresolvable gate): the coord host already points
+        # at the base page, and a second host on the same body would double it.
+        logger.info(
+            "map %d EV%03d: action pages present but dispatch deferred — no "
+            "separate A-press host emitted", uid, eid,
+        )
+        return
+    if "goto(" not in dispatcher:
+        return  # no page is action-reachable after the channel check
+    if any((bg.x, bg.y) == (event["x"], event["y"]) for bg in result.bg_events):
+        logger.warning(
+            "map %d EV%03d: another bg_event already occupies (%d, %d) — "
+            "action-page sign not emitted (only one can fire)",
+            uid, eid, event["x"], event["y"],
+        )
+        return
+    result.dispatchers.append(dispatcher)
+    result.bg_events.append(
+        BgEvent(x=event["x"], y=event["y"], script=script)
+    )
+    logger.info(
+        "map %d EV%03d: action pages get an A-press bg_event at (%d, %d) "
+        "alongside the walk-on coord event(s)",
+        uid, eid, event["x"], event["y"],
+    )
 
 
 def _validate_event_traits(event_traits: dict[int, list[str]], uid: int) -> None:
@@ -1087,8 +1269,12 @@ def build_object_events(
     - boot page's graphic is blank (no character_name):
         trigger 0 (action)      -> a `sign` bg_event.
         trigger 2 (event touch) -> a `trigger` coord_event.
-        trigger 1 / 3 / 4       -> dropped (`blank_trigger1` / `autorun` /
-                                   `parallel` — autorun/parallel are future
+        trigger 1 (player touch) -> a `trigger` coord_event IF the event carries
+                                   a code-201 anywhere (a GATED DOOR that
+                                   classify_event refused to collapse into a
+                                   warp_event); otherwise dropped
+                                   (`blank_trigger1` — inert, no transfer).
+        trigger 3 / 4           -> dropped (`autorun` / `parallel` — future
                                    map-script territory, not object placement).
     - boot page has a graphic but opacity 0 (an invisible script host, e.g. the
       Map032 EV9 Pokedex-ceremony host and EV74):
@@ -1285,14 +1471,26 @@ def build_object_events(
                     )
 
         emit_kind: str  # "bg" | "coord" | "object"
+        gated_door = False
         if not name:
             if trigger == TRIGGER_ACTION:
                 emit_kind = "bg"
             elif trigger == TRIGGER_EVENT_TOUCH:
                 emit_kind = "coord"
             elif trigger == TRIGGER_PLAYER_TOUCH:
-                _drop(eid, DROP_BLANK_TRIGGER1)
-                continue
+                # A GATED DOOR reaches this branch only because classify_event
+                # refused to collapse it into a warp_event (some player-touch
+                # page has no code-201 — see its docstring and the findings
+                # doc). It is a real, live door: keep it as a coord_event so the
+                # dispatcher picks the page and that page's body runs its own
+                # warp(). Blank player-touch events with NO transfer anywhere
+                # are the original inert shape and still drop.
+                if _event_transfers(event):
+                    emit_kind = "coord"
+                    gated_door = True
+                else:
+                    _drop(eid, DROP_BLANK_TRIGGER1)
+                    continue
             elif trigger == TRIGGER_AUTORUN:
                 _drop(eid, DROP_AUTORUN)
                 continue
@@ -1313,7 +1511,12 @@ def build_object_events(
         else:
             emit_kind = "object"
 
-        script, dispatcher = _resolve_script(event, consts, pory_labels, flag_registry)
+        # A `coord_event` fires by walking, so it dispatches only touch pages;
+        # bg signs and object events fire on A and dispatch the action channel.
+        channel = CHANNEL_TOUCH if emit_kind == "coord" else CHANNEL_ACTION
+        script, dispatcher = _resolve_script(
+            event, consts, pory_labels, flag_registry, channel=channel
+        )
 
         if emit_kind == "object":
             # BUG B (findings §3.2): a visible-graphic autorun/parallel page
@@ -1375,6 +1578,19 @@ def build_object_events(
                         continue
                     result.coord_events.append(CoordEvent(x=tx, y=ty, script=script))
                     used.add((tx, ty))
+            elif gated_door:
+                # Do NOT relocate a gated door to its approach tile. RMXP calls
+                # the door cell impassable (you BUMP into it), but the
+                # warp-override pass forces exactly these cells walkable with
+                # the tileset's door metatile (MB_NON_ANIMATED_DOOR, collision
+                # 0) — they were warp_event cells until the gated-door fix, and
+                # `assemble_pathfinder.WARP_OVERRIDES` still lists them. So the
+                # player really does step INTO the doorway, and the gate script
+                # must fire there. Relocating to the approach tile would fire
+                # the refusal on merely walking past the door, and would leave
+                # the doorway itself silently inert.
+                result.coord_events.append(CoordEvent(x=ex, y=ey, script=script))
+                result.gated_door_cells.add((ex, ey))
             elif passability is not None and not passability.standable(ex, ey):
                 used = {(ce.x, ce.y) for ce in result.coord_events}
                 neighbors = [
@@ -1395,6 +1611,9 @@ def build_object_events(
                     used.add((nx, ny))
             else:
                 result.coord_events.append(CoordEvent(x=ex, y=ey, script=script))
+            _emit_action_host(
+                event, consts, result, pory_labels, flag_registry,
+            )
         else:
             if npc_gfx is None:
                 raise KeyError(
@@ -1970,7 +2189,10 @@ def build_slice_maps(
             passability=passability, route_registry=route_registry,
             required_actor_ids=(required_actor_ids or {}).get(uid),
         )
-        overrides[uid] = src_coords
+        # Gated doors have no warp_event but still need the door metatile +
+        # collision 0 on their cell, or the player can't step into the doorway
+        # to trip the gate script (see build_object_events' gated_door branch).
+        overrides[uid] = src_coords | result.gated_door_cells
         local_id_tables[uid] = result.local_id_map
 
         map_file = MapFile(

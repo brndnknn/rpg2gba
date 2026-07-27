@@ -973,6 +973,52 @@ def test_classify_event() -> None:
     assert mw.classify_event(letter, _SLICE)[0] == "object"
 
 
+def test_classify_event_gated_door_is_not_a_warp() -> None:
+    """A player-touch door whose OTHER player-touch pages don't transfer is a
+    GATED door and must stay an event — collapsing it into an unconditional
+    warp_event silently discards the refusal pages.
+
+    Uranium Map049 EV002's shape: page 0 (no condition) refuses with "I'd better
+    say goodbye to Auntie first.", page 1 transfers once switch 52 (`Mum`) is
+    set. Collapsing it let the player leave the starting house before the gate —
+    playtest beat B2. See reference/findings/gated_door_collapse_2026-07-26.md.
+    """
+    gated = _event(2, 10, 11, [
+        _page(trigger=1, cmds=[{"code": 101, "indent": 0, "parameters": ["nope"]}]),
+        _page(trigger=1, cond=_sw_cond(52), cmds=[_transfer(32, 28, 31)]),
+    ])
+    assert mw.classify_event(gated, _SLICE) == ("object", None)
+
+
+def test_classify_event_all_touch_pages_transfer_is_still_a_warp() -> None:
+    """The narrow rule: when every player-touch page transfers, the collapse to
+    a single warp_event is still correct (multi-page ungated door)."""
+    door = _event(2, 10, 11, [
+        _page(trigger=1, cmds=[_transfer(32, 28, 31)]),
+        _page(trigger=1, cond=_sw_cond(52), cmds=[_transfer(32, 28, 31)]),
+    ])
+    kind, spec = mw.classify_event(door, _SLICE)
+    assert kind == "warp" and (spec.src_x, spec.src_y) == (10, 11)
+
+
+def test_classify_event_autorun_page_does_not_gate_the_door() -> None:
+    """Only PLAYER-TOUCH pages compete for the step-on behavior. An autorun
+    (trigger 3) page reaches the player through ON_FRAME_TABLE instead, so it
+    must not turn a door into a gated door.
+
+    This is Moki Town's five house doors (Map032 EV003/5/6/7/17): a
+    touch-triggered transfer page plus a switch-22 autorun cutscene page. They
+    stay plain warps."""
+    door = _event(5, 28, 31, [
+        _page(trigger=1, cmds=[_transfer(49, 10, 9)]),
+        _page(trigger=3, cond=_sw_cond(22), cmds=[
+            {"code": 111, "indent": 0, "parameters": []},
+        ]),
+    ])
+    kind, spec = mw.classify_event(door, _SLICE)
+    assert kind == "warp" and spec.dest_uid == 49
+
+
 def test_event_transfers_dest_dir_carried_through() -> None:
     """_event_transfers / classify_event carry parameters[4] (dir) through into
     the resulting WarpSpec.dest_dir, for every non-default direction value."""
@@ -2039,6 +2085,108 @@ def test_page_dispatcher_gated_base_page_defers_without_registry() -> None:
     assert mw.build_page_dispatcher(event, consts) is None
 
 
+def test_page_dispatcher_touch_channel_ends_action_pages() -> None:
+    """Map032 EV009 shape (chapter beat B14, 2026-07-27): pages 0-2 are
+    event-touch, the top page is action-button. A `coord_event` fires by
+    WALKING, so on CHANNEL_TOUCH the action page must become a bare `end` —
+    dispatching it there printed its post-ceremony line on every crossing.
+    The same event on CHANNEL_ACTION still reaches that page."""
+    consts = mc.MapConstants(32, "MAP_X", "MAP_URANIUM_32", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    reg = FlagRegistry()
+    reg.propose_flag(125, "FLAG_FINAL_EVENT")
+    event = _event(9, 16, 42, [
+        _page(trigger=mw.TRIGGER_EVENT_TOUCH),
+        _page(trigger=mw.TRIGGER_ACTION, cond=_self_cond("A")),
+    ])
+
+    touch = mw.build_page_dispatcher(
+        event, consts, flag_registry=reg, channel=mw.CHANNEL_TOUCH)
+    assert "if (flag(FLAG_MAP032_EVENT009_SSA))" in touch
+    assert "goto(Map032_EV009_Page2)" not in touch  # the action page is silenced
+    assert "goto(Map032_EV009_Page1)" in touch  # touch fallback still fires
+
+    action = mw.build_page_dispatcher(
+        event, consts, flag_registry=reg, channel=mw.CHANNEL_ACTION)
+    assert "goto(Map032_EV009_Page2)" in action
+
+
+def test_page_dispatcher_touch_channel_keeps_both_touch_triggers() -> None:
+    """Player-touch (1) and event-touch (2) are both walk-on triggers, so
+    neither is silenced on CHANNEL_TOUCH — only action/autorun/parallel are."""
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    reg = FlagRegistry()
+    event = _event(2, 10, 11, [
+        _page(trigger=mw.TRIGGER_PLAYER_TOUCH),
+        _page(trigger=mw.TRIGGER_EVENT_TOUCH, cond=_self_cond("A")),
+    ])
+    disp = mw.build_page_dispatcher(
+        event, consts, flag_registry=reg, channel=mw.CHANNEL_TOUCH)
+    assert "goto(Map049_EV002_Page1)" in disp
+    assert "goto(Map049_EV002_Page2)" in disp
+
+
+def test_page_dispatcher_rejects_unknown_channel() -> None:
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    with pytest.raises(ValueError, match="unknown dispatch channel"):
+        mw.build_page_dispatcher(
+            _event(1, 0, 0, [_page(), _page(cond=_self_cond("A"))]),
+            consts, channel="bump")
+
+
+def test_action_pages_get_an_a_press_host_beside_the_coord_event() -> None:
+    """The other half of the B14 fix: silencing an action page on the walk-on
+    channel must not make it unreachable, because in RMXP you CAN press A at
+    the tile. An invisible touch host with an action page therefore emits both
+    a coord_event (touch dispatcher) and a bg_event sign on the event's own
+    tile (action dispatcher, distinct label)."""
+    consts = mc.MapConstants(32, "MAP_X", "MAP_URANIUM_32", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    reg = FlagRegistry()
+    event = _event(9, 16, 42, [
+        _page(trigger=mw.TRIGGER_EVENT_TOUCH, opacity=0, name="Rivaltheo",
+              cmds=[{"code": 101, "indent": 0, "parameters": ["hi"]}]),
+        _page(trigger=mw.TRIGGER_ACTION, cond=_self_cond("A"), opacity=0,
+              name="Rivaltheo", cmds=[{"code": 101, "indent": 0, "parameters": ["yo"]}]),
+    ], name="Trainer(6)")
+    res = mw.build_object_events({"map_id": 32, "events": [event]}, consts, _SLICE,
+                                 flag_registry=reg)
+
+    # Trainer(6) spreads its walk-on host down the sight ray; the A-press host
+    # stays on the event's own tile, which is how a sign is read.
+    assert res.coord_events
+    assert {c.script for c in res.coord_events} == {"Map032_EV009_Dispatch"}
+    assert [(b.x, b.y, b.script) for b in res.bg_events] == [
+        (16, 42, "Map032_EV009_ActionDispatch")]
+    bodies = "\n".join(res.dispatchers)
+    assert "script Map032_EV009_Dispatch" in bodies
+    assert "script Map032_EV009_ActionDispatch" in bodies
+    # the walk-on side ends on the action page; the A-press side runs it
+    touch_body = next(d for d in res.dispatchers if "_Dispatch {" in d.splitlines()[0])
+    action_body = next(d for d in res.dispatchers if "_ActionDispatch" in d)
+    assert "goto(Map032_EV009_Page2)" not in touch_body
+    assert "goto(Map032_EV009_Page2)" in action_body
+    # ...and the A-press host adds ONLY the action page: pressing A must not
+    # become a second way to fire the walk-on page (CHANNEL_ACTION_ONLY).
+    assert "goto(Map032_EV009_Page1)" in touch_body
+    assert "goto(Map032_EV009_Page1)" not in action_body
+
+
+def test_no_action_host_when_no_action_page() -> None:
+    """A pure touch event (every page walk-on) gains nothing — no bg_event,
+    no second dispatcher. Guards against the fix inflating every coord host."""
+    consts = mc.MapConstants(32, "MAP_X", "MAP_URANIUM_32", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    reg = FlagRegistry()
+    event = _event(74, 26, 12, [
+        _page(trigger=mw.TRIGGER_EVENT_TOUCH, opacity=0, name="HGSS_014",
+              cmds=[{"code": 101, "indent": 0, "parameters": ["hi"]}]),
+        _page(trigger=mw.TRIGGER_EVENT_TOUCH, cond=_self_cond("A"), opacity=0,
+              name="HGSS_014", cmds=[{"code": 101, "indent": 0, "parameters": ["yo"]}]),
+    ])
+    res = mw.build_object_events({"map_id": 32, "events": [event]}, consts, _SLICE,
+                                 flag_registry=reg)
+    assert res.coord_events and not res.bg_events
+    assert all("_ActionDispatch" not in d for d in res.dispatchers)
+
+
 def test_page_dispatcher_deferred_on_global() -> None:
     """A global switch/var page gate defers (None) when no registry is given
     (the default); single-page also None."""
@@ -2805,10 +2953,24 @@ def test_build_slice_maps_smoke(tmp_path: Path) -> None:
         out_dir=tmp_path / "maps", dispatcher_dir=tmp_path / "disp",
         npc_gfx=npc_gfx, route_registry=RouteRegistry(), flag_registry=flag_reg,
     )
-    # Map049: spawn floor, two in-slice warps (street door + stairs)
+    # Map049: spawn floor, two override cells. The stairs (12,3) is a plain
+    # warp; the street door at (10,11) is a GATED door (EV002: page 0 refuses
+    # with "say goodbye to Auntie first", page 1 transfers once switch 52 `Mum`
+    # is set) that warps from inside its own script instead of via a
+    # warp_event -- but it still needs the override so the player can step into
+    # the doorway and trip the gate. See classify_event and
+    # reference/findings/gated_door_collapse_2026-07-26.md.
     assert overrides[49] == {(10, 11), (12, 3)}
     map49 = json.loads((tmp_path / "maps" / "MokiTownPlayersHouse1F" / "map.json").read_text())
     assert map49["map_type"] == "MAP_TYPE_INDOOR"
+    # The gate is live: a coord_event sits on the door tile running EV002's
+    # dispatcher. Without this the player walks straight out (playtest B2).
+    door_coords = [
+        ce for ce in map49["coord_events"] if (ce["x"], ce["y"]) == (10, 11)
+    ]
+    assert len(door_coords) == 1, map49["coord_events"]
+    assert "Map049_EV002" in door_coords[0]["script"]
+    assert (10, 11) not in {(w["x"], w["y"]) for w in map49["warp_events"]}
     dests = {w["dest_map"] for w in map49["warp_events"]}
     assert dests == {"MAP_MOKI_TOWN", "MAP_MOKI_TOWN_PLAYERS_HOUSE_2F"}
     # no object_event points outside the slice maps' scripts

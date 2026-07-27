@@ -345,7 +345,16 @@ void CB2_StartUraniumSlice(void)
     // VarSet(RPG2GBA_VARS_START + 93, 2);            // VAR_POKEMONTEST = Raptorch
     // VarSet(RPG2GBA_VARS_START + 53, 2);            // VAR_QUEST_LOG = 2 (S6b+S7 done)
 
-    // ---- POST-QUIZ HARNESS (S6b Theo-battle repro) — ACTIVE 2026-07-22 ----
+    // ---- POST-QUIZ HARNESS (S6b Theo-battle repro) — DISABLED 2026-07-27 ----
+    // Disabled because it defeats the chapter suite's fresh-start guarantee:
+    // the latch below is read by Map050_EV005_Page1's first instruction
+    // (`goto_if_set FLAG_MAP050_EVENT005_SSB` -> straight to the quiz body),
+    // so beats B6/N3 (the aptitude offer and its No answer) were unreachable
+    // on a "new game" — the chapter run walked into the quiz with the offer
+    // never shown. The spawn override this block came with was already
+    // reverted; this is the rest of it. Uncomment to re-arm the S6b repro.
+    // NOTE the comment on the FlagSet is wrong: +18 is SSB (SSC is +19), per
+    // data/scripts/uranium_flags.h — which is exactly why it skipped the offer.
     // Skips the aptitude quiz (Map050_EV005) but NOT the machine/battle
     // (Map050_EV019): quiz result is already recorded and the quiz-complete
     // self-switch latch is set, so Map050_EV019_Dispatch routes to its real
@@ -358,8 +367,8 @@ void CB2_StartUraniumSlice(void)
     // rock-smash or post-S7 harnesses above, comment this block back out.
     // The lab spawn itself is set in WarpToTruck() (must happen before
     // DoMapLoadLoop, not after) — only flags/vars belong here.
-    VarSet(RPG2GBA_VARS_START + 93, 2);              // VAR_POKEMONTEST = Raptorch
-    FlagSet(RPG2GBA_SELFSWITCH_FLAGS_START + 18);    // quiz-complete self-switch latch (Map050_EV005_SSC)
+    // VarSet(RPG2GBA_VARS_START + 93, 2);           // VAR_POKEMONTEST = Raptorch
+    // FlagSet(RPG2GBA_SELFSWITCH_FLAGS_START + 18); // quiz-accepted latch (Map050_EV005_SSB)
     // The professor (local id 2) defaults to his quiz-time spot (14,6),
     // directly south of the machine (14,5) — the only tile from which the
     // machine is reachable (map.json collision: the machine alcove is walled
@@ -367,7 +376,7 @@ void CB2_StartUraniumSlice(void)
     // normally sidesteps him to (15,6) at the end of the real quiz script;
     // since we skip straight past the quiz, replicate that repositioning
     // here so the machine isn't blocked.
-    TryMoveObjectEventToMapCoords(2, MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), 15, 6);
+    // TryMoveObjectEventToMapCoords(2, MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), 15, 6);
 }
 // END URANIUM PATHFINDER SLICE
 

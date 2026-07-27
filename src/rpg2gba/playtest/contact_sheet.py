@@ -49,10 +49,16 @@ _FONT_CANDIDATES = (
 class Waypoint:
     """One frame worth looking at, plus what the player had just done.
 
-    `beat` names the chapter-doc row (B3, N1, ...) so a suspicious frame
+    `beat` names the chapter-doc row (B3, N2, ...) so a suspicious frame
     points straight at a doc beat, the same addressing the failure bundle
     uses. `failed` marks the frame captured at a beat failure — it gets a
     red caption so the eye lands on it first.
+
+    `at_text` records that the frame was taken while the beat's dialogue was
+    on screen rather than live at the beat boundary. It earns a marker in the
+    caption because the absence of one is the interesting case: a beat whose
+    doc row promises a message but whose tile has no `+` never showed that
+    message, and that is a defect the frame itself can't tell you about.
     """
 
     beat: str
@@ -61,10 +67,12 @@ class Waypoint:
     frame: int
     path: Path
     failed: bool = False
+    at_text: bool = False
 
     @property
     def caption(self) -> str:
-        return f"{self.beat} · {self.name}" if self.name != self.beat else self.beat
+        base = f"{self.beat} · {self.name}" if self.name != self.beat else self.beat
+        return f"{base} +" if self.at_text else base
 
 
 def _font(size: int) -> ImageFont.ImageFont:

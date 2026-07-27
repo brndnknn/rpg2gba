@@ -61,6 +61,41 @@ _PROBE_ENTRIES: dict[str, str] = {
     "sizeof_battlepkmn": "sizeof(struct BattlePokemon)",
     # struct Main (include/main.h): gMain.callback2, for in-battle detection.
     "off_main_callback2": "offsetof(struct Main, callback2)",
+    # -- walk_to's route planner (emulator.py) -------------------------------
+    # gBackupMapLayout is the grid the engine's own MapGridGetCollisionAt
+    # reads, so planning over it plans over exactly what the player can walk
+    # on -- including script-applied metatile changes a static map.bin read
+    # would miss. Its coordinates carry MAP_OFFSET; SaveBlock1.pos does not.
+    "off_backup_width": "offsetof(struct BackupMapLayout, width)",
+    "off_backup_height": "offsetof(struct BackupMapLayout, height)",
+    "off_backup_map": "offsetof(struct BackupMapLayout, map)",
+    "val_map_offset": "MAP_OFFSET",
+    # gMapHeader.events -> warps: tiles a route must not step onto, or the
+    # walk silently relocates the scenario to another map.
+    "off_mapheader_events": "offsetof(struct MapHeader, events)",
+    "off_mapevents_warpcount": "offsetof(struct MapEvents, warpCount)",
+    "off_mapevents_warps": "offsetof(struct MapEvents, warps)",
+    "off_warpevent_x": "offsetof(struct WarpEvent, x)",
+    "off_warpevent_y": "offsetof(struct WarpEvent, y)",
+    "sizeof_warpevent": "sizeof(struct WarpEvent)",
+    # -- text printer state (emulator.text_printing) -------------------------
+    # `sFirstTextPrinter`'s list, walked exactly as IsTextPrinterActiveOnWindow
+    # walks it, to answer "is the message box still typing?" -- the difference
+    # between photographing "See you later, R" and "See you later, RED!".
+    # `state` is the render state machine: HANDLE_CHAR means glyphs are still
+    # being drawn; the WAIT/CLEAR/SCROLL_START states are a fully-drawn page
+    # sitting on the down-arrow waiting for the player. NB `active` is *not*
+    # the signal -- it stays TRUE for a printer's whole life and only clears at
+    # RENDER_FINISH, when the node is freed off the list anyway.
+    "off_printer_type": "offsetof(struct TextPrinter, printerTemplate.type)",
+    "off_printer_window_id": "offsetof(struct TextPrinter, printerTemplate.windowId)",
+    "off_printer_state": "offsetof(struct TextPrinter, state)",
+    "off_printer_next": "offsetof(struct TextPrinter, nextPrinter)",
+    "val_window_text_printer": "WINDOW_TEXT_PRINTER",
+    "val_render_state_handle_char": "RENDER_STATE_HANDLE_CHAR",
+    "val_render_state_wait": "RENDER_STATE_WAIT",
+    "val_render_state_clear": "RENDER_STATE_CLEAR",
+    "val_render_state_scroll_start": "RENDER_STATE_SCROLL_START",
 }
 
 _PROBE_TEMPLATE = """\
@@ -70,6 +105,8 @@ _PROBE_TEMPLATE = """\
 #include "uranium_embedded_save.h"
 #include "pokemon.h"
 #include "main.h"
+#include "fieldmap.h"
+#include "text.h"
 {entries}
 """
 

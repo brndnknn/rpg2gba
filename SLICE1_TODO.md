@@ -7,6 +7,63 @@ deleting it. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 18. Gated doors collapse into unconditional warps — CONVERTER FIXED 2026-07-26, ROM re-run pending
+
+Found 2026-07-26 by the chapter harness (Moki beat B2: you could walk out of
+Player's House 1F without talking to Auntie). Full write-up:
+**`reference/findings/gated_door_collapse_2026-07-26.md`**.
+
+`classify_event` turned any player-touch event containing *any* code-201 into one
+unconditional `warp_event` and dropped the object_event, so multi-page doors lost
+their refusal pages silently (§4.5 violation). Map049 EV002's gate is Switch 52
+`FLAG_MUM`, set by Auntie — the Auntie side converted fine, only the door lost
+its gate.
+
+**Fixed:** collapse only when every *player-touch* page transfers (an autorun
+page must not gate a door — that distinction spares Moki Town's five house
+doors); gated doors emit a `coord_event` on their own cell, no relocation; the
+cell is unioned into the returned warp-override set so it keeps door metatile +
+collision 0. Verified in staged output: (10,11) → `Map049_EV002_Dispatch` gating
+on `FLAG_MUM`, (14,19) → `Map050_EV001_Dispatch` gating on `VAR_QUEST_LOG >= 1`
+(**this is beat B10's gate**), neither with a warp_event racing it. 1439 tests
+pass.
+
+**DONE 2026-07-27:** rebuilt (stage → assemble → `make modern`) and re-ran the
+chapter suite — **B2 passes on ROM `1066eac4`/`90757612`**, the door refuses
+until Auntie sets `FLAG_MUM`. Corpus-wide follow-up (341 events / 75 maps
+pre-narrowing, not re-measured) stays out of slice-1 scope.
+
+### 19. Per-page RMXP trigger types are ignored — FIXED 2026-07-27, chapter suite GREEN
+
+`classify_event`/`build_object_events` emit one `coord_event` per event and
+`build_page_dispatcher` selects by page *condition* only, so a page whose RMXP
+trigger differs from its siblings' fires the wrong way. Live case: Map032 EV009
+("Trainer(6)", the west-exit ceremony host) has pages 0-2 at trigger 2 (player
+touch) and **page 3 at trigger 0 (action button)**; at `VAR_QUEST_LOG >= 4` the
+converted page 4 `lock`s and prints on every walk over (16,43)-(16,45), where
+Uranium needs an A press on an opacity-0 event — effectively never.
+
+Same family as #18's gated-door fix (that was a per-page trigger distinction
+too) and the "base-page own condition ignored" deferral.
+
+**Fixed:** dispatch is now channel-aware (`metadata_wiring`). `CHANNEL_TOUCH`
+(a walk-on `coord_event`) dispatches only touch pages (1/2); `CHANNEL_ACTION`
+(an event's primary talkable host) keeps today's action + bump→talk
+approximation; `CHANNEL_ACTION_ONLY` serves the **new secondary host**: an
+event whose host is a `coord_event` but which also has action pages now emits
+a `bg_event` sign on its own tile (`Map###_EV###_ActionDispatch`), so the
+A-press pages stay reachable exactly as in RMXP without becoming a second way
+to fire the walk-on ones. `_goto_or_end` takes the channel and `end`s any page
+whose trigger it doesn't serve (the autorun/parallel rule is now a case of the
+general one).
+
+Slice 1: 4 new signs on Map032 (EV009/074/078/080) + Map050 EV002; EV009's
+walk-on dispatcher now `end`s at `VAR_QUEST_LOG >= 4` instead of printing.
+Corpus reach: of 1183 walk-on hosts, **135 events across 50 maps carry 181
+action pages** that were firing on the wrong channel. 1444 tests pass;
+**chapter suite `moki` is GREEN, all 18 beats, first attempt** (ROM
+`d6a54593`; review ROM + contact sheets under `output/playtest/review/`).
+
 ### 6. Pokédex-ceremony live sprite swaps (EV76 ball / EV77 starters)
 
 Deferred from task 4: RMXP change-graphic move-route commands on the ceremony

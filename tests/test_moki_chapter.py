@@ -42,12 +42,20 @@ def _parse_doc_beat_ids() -> list[str]:
     return ids
 
 
+# Doc rows the chapter deliberately does not implement. N1 (2026-07-27): the
+# doc defines it as B2's companion over the same gate, and it was implemented
+# as a second identical call to `_assert_house1f_exit_blocked` -- it could not
+# fail unless B2 failed first. Kept as an explicit set rather than edited out
+# of the doc parse, so "the chapter diverges from its doc here" stays a stated
+# decision the reader can see, not a silent gap.
+DROPPED_DOC_BEATS = {"N1"}
+
+
 def _expected_interleaved_order() -> list[str]:
-    """The doc's positive beats (B1..B15) and negative beats (N1..N3),
-    interleaved per ROM_TEST_DEV Branch B2 / the task brief: N1 before B3;
-    N3 before B7's Yes answer; N2 after B8 (and, since N2 requires the
-    player to already be back out in Map032, physically after B10) and
-    before B12."""
+    """The doc's positive beats (B1..B15) and negative beats (N2, N3),
+    interleaved per ROM_TEST_DEV Branch B2 / the task brief: N3 before B7's
+    Yes answer; N2 after B8 (and, since N2 requires the player to already be
+    back out in Map032, physically after B10) and before B12."""
     doc_ids = _parse_doc_beat_ids()
     positive = [b for b in doc_ids if b.startswith("B")]
     negative = [b for b in doc_ids if b.startswith("N")]
@@ -56,14 +64,12 @@ def _expected_interleaved_order() -> list[str]:
 
     order: list[str] = []
     for beat in positive:
-        if beat == "B3":
-            order.append("N1")
         if beat == "B7":
             order.append("N3")
         order.append(beat)
         if beat == "B10":
             order.append("N2")
-    return order
+    return [b for b in order if b not in DROPPED_DOC_BEATS]
 
 
 def test_doc_beat_tables_parse_to_the_expected_shape() -> None:
@@ -81,7 +87,8 @@ def test_moki_chapter_loads() -> None:
     assert isinstance(chapter, Chapter)
     assert chapter.name == "moki"
     assert chapter.doc == "reference/chapters/01-moki.md"
-    assert len(chapter.beats) == 18
+    # 15 positive + 3 negative doc rows, less the dropped ones.
+    assert len(chapter.beats) == 18 - len(DROPPED_DOC_BEATS)
 
 
 def test_moki_chapter_beat_order_matches_the_doc() -> None:
