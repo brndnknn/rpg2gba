@@ -1,4 +1,5 @@
 #include "global.h"
+#include "config/rpg2gba.h"
 #include "gba/m4a_internal.h"
 #include "sound.h"
 #include "battle.h"
@@ -561,6 +562,16 @@ void PlayBGM(u16 songNum)
     if (songNum == MUS_NONE)
         songNum = 0;
     m4aSongNumStart(songNum);
+    // BEGIN URANIUM PATHFINDER SLICE — BGM tempo scale (config/rpg2gba.h).
+    // MPlayStart resets tempoU to 0x100, so the scale has to be re-applied on
+    // every song start; the sequencer's own TEMPO events recompute tempoI from
+    // tempoD * tempoU, so the scale survives tempo changes inside a track.
+    // Only the BGM player is touched — fanfares, jingles, cries and SEs run on
+    // their own players and keep their authored tempo.
+#if RPG2GBA_BGM_TEMPO_SCALE != 256
+    m4aMPlayTempoControl(&gMPlayInfo_BGM, RPG2GBA_BGM_TEMPO_SCALE);
+#endif
+    // END URANIUM PATHFINDER SLICE
 }
 
 void PlaySE(u16 songNum)

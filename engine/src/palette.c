@@ -1,4 +1,5 @@
 #include "global.h"
+#include "config/rpg2gba.h"
 #include "palette.h"
 #include "util.h"
 #include "decompress.h"
@@ -115,7 +116,9 @@ bool32 BeginNormalPaletteFade(u32 selectedPalettes, s8 delay, u8 startY, u8 targ
     }
     else
     {
-        gPaletteFade.deltaY = 2;
+        // BEGIN URANIUM PATHFINDER SLICE — fade rate (config/rpg2gba.h).
+        gPaletteFade.deltaY = RPG2GBA_FADE_DELTA_Y;
+        // END URANIUM PATHFINDER SLICE
 
         if (delay < 0)
         {
@@ -158,7 +161,9 @@ bool32 BeginTimeOfDayPaletteFade(u32 selectedPalettes, s8 delay, u8 startY, u8 t
     if (gPaletteFade.active)
         return FALSE;
 
-    gPaletteFade.deltaY = 2;
+    // BEGIN URANIUM PATHFINDER SLICE — fade rate (config/rpg2gba.h).
+    gPaletteFade.deltaY = RPG2GBA_FADE_DELTA_Y;
+    // END URANIUM PATHFINDER SLICE
 
     if (delay < 0)
     {
@@ -471,7 +476,9 @@ void UnfadePlttBuffer(u32 selectedPalettes)
 
 void BeginFastPaletteFade(u32 submode)
 {
-    gPaletteFade.deltaY = 2;
+    // BEGIN URANIUM PATHFINDER SLICE — fade rate (config/rpg2gba.h).
+    gPaletteFade.deltaY = RPG2GBA_FADE_DELTA_Y;
+    // END URANIUM PATHFINDER SLICE
     BeginFastPaletteFadeInternal(submode);
 }
 

@@ -1,4 +1,5 @@
 #include "global.h"
+#include "config/rpg2gba.h"
 #include "uranium_map_walker.h"
 #include "uranium_embedded_save.h"
 #include "new_game.h"
@@ -106,7 +107,13 @@ static void InitPlayerTrainerId(void)
 // L=A isnt set here for some reason.
 static void SetDefaultOptions(void)
 {
+    // BEGIN URANIUM PATHFINDER SLICE — default text speed (config/rpg2gba.h).
+#if RPG2GBA_FAST_TEXT_DEFAULT == TRUE
+    gSaveBlock2Ptr->optionsTextSpeed = OPTIONS_TEXT_SPEED_FAST;
+#else
     gSaveBlock2Ptr->optionsTextSpeed = OPTIONS_TEXT_SPEED_MID;
+#endif
+    // END URANIUM PATHFINDER SLICE
     gSaveBlock2Ptr->optionsWindowFrameType = 0;
     gSaveBlock2Ptr->optionsSound = OPTIONS_SOUND_MONO;
     gSaveBlock2Ptr->optionsBattleStyle = OPTIONS_BATTLE_STYLE_SHIFT;
