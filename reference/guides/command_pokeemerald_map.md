@@ -13,6 +13,23 @@
 > e.g. the frozen table marks `pbPokeCenterPC` UNHANDLED, but it maps cleanly to a
 > native fork script, so we determinize it here without touching the frozen table.
 >
+> ---
+>
+> **AUDIT 2026-07-30 — this file is the §4.7 native-analog ledger** (`CLAUDE.md`
+> §4.7 and `BUILD_PLAN.md` §4 used to point at `essentials_to_emerald_map.md`,
+> which is the registry's flag/var pre-seed table; corrected the same day).
+> Every backtick symbol in every table below was resolved against
+> `engine/asm/macros/event.inc`, `engine/data/specials.inc` and
+> `engine/include/constants/*.h`. Results: **~34 VERIFIED, 2 MISSING, 6
+> over-claims** where a row said "needs new C" / "no analog" and a native
+> facility exists. Corrected rows are marked **[A30]** with file:line evidence.
+>
+> The audit's own lesson: rows 111–115 got confident `✓VERIFIED native` tags
+> while rows 62/75/76 got hedged `C/JUDGE` tags for features that were *equally
+> easy to grep for*. The asymmetry — not the individual errors — is the bug.
+> Nothing here may be tagged `C` again without a recorded grep, per the
+> `queue_evidence.py` rule now enforced on hand conversions.
+>
 > **Key finding (2026-06-14):** the frozen table *under-converts* — it tags as
 > "needs engine" many idioms that are **native pokeemerald-expansion features**
 > (rock smash, berry trees, cave Flash, bridges, day care, move relearner, in-game
@@ -59,7 +76,7 @@ below is what those classifiers may emit.
 | 121 | Control Switches | 246 | 246 | JUDGE | `setflag(FLAG_*)` global switch; needs registry naming (global) → Opus territory. |
 | 102/402/404 | Show Choices | 219 | 219 | JUDGE | `multichoice` + `switch(VAR_RESULT)` scaffolding is DET, but per-branch logic varies → JUDGE. |
 | 108/408 | Comment | 201 | 92 | STRIP | — |
-| 207 | Show Animation | 116 | 116 | C/JUDGE | Field animation; no clean field-script analogue. |
+| 207 | Show Animation | 116 | 116 | WIRE/JUDGE | **[A30] over-claim corrected.** `dofieldeffect` (`event.inc:1426`) + `setfieldeffectargument` (`:1432`) + `waitfieldeffect` (`:1439`), over ~40 `FLDEFF_*` constants in `include/constants/field_effects.h:4-43` (sparkle, dust, ash, emote…); `dofieldeffectsparkle` at `event.inc:2147` shows the idiom. Any RGSS animation landing on an existing `FLDEFF_*` is WIRE; only bespoke sprite animation stays C. **Split this row per-animation before costing it.** |
 | 202 | Set Event Location | 91 | 91 | WIRE | `setobjectxy(localid, …)` — needs local-id. |
 | 116 | Erase Event | 88 | 88 | WIRE | `removeobject(localid)` — needs local-id. |
 | 204 | Change Map Settings | 82 | 82 | JUDGE | Varies (often STRIP). |
@@ -67,13 +84,13 @@ below is what those classifiers may emit.
 | 115 | Exit Event Processing | 68 | 68 | DET | `return`/`end`. |
 | 206 | Change Fog Opacity | 65 | 65 | STRIP | No GBA analogue. |
 | 241/242/245/246 | BGM ops | ~90 | ~90 | DET/STRIP | `playbgm`/`fadedefaultbgm`; memorize/restore → STRIP. |
-| 314 | Recover All | 54 | 54 | DET | `healparty` (= `pbHealAll`). |
+| 314 | Recover All | 54 | 54 | DET | **[A30]** `special HealPlayerParty` — `engine/data/specials.inc:20`, impl `engine/src/script_pokemon_util.c:37`, real use `engine/data/event_scripts.s:1245`. **This row previously said `healparty`, which does not exist** (`.macro healparty` matches nothing in `event.inc`); it is the canonical invented-symbol bug, recorded in CLAUDE.md §4.7/§11, and it sat here recommending itself for all 54 occurrences. |
 | 224 | Screen Flash | 50 | 50 | DET/STRIP | Brief flash; often plumbing. |
 | 118/119 | Label / Jump to Label | 78 | 78 | DET | poryscript `label`/`goto`. |
 | 104 | Change Text Options | 35 | 35 | STRIP | — |
 | 112/413/113 | Loop / Repeat / Break | ~95 | ~95 | JUDGE | `while`/loop control (often the random-item events). |
-| 203 | Scroll Map | 33 | 33 | C/JUDGE | Camera pan — needs a special. |
-| 225 | Screen Shake | 30 | 30 | STRIP/C | No clean field analogue. |
+| 203 | Scroll Map | 33 | 33 | WIRE | **[A30] over-claim corrected — the special already exists.** `special SpawnCameraObject` (`specials.inc:298`) → `applymovement LOCALID_CAMERA, <movement>` (`LOCALID_CAMERA` = `constants/event_objects.h:511`) → `waitmovement 0` → `special RemoveCameraObject` (`:299`). Working vanilla example: `engine/data/maps/NavelRock_Top/scripts.inc:36-41,82-86`. |
+| 225 | Screen Shake | 30 | 30 | WIRE | **[A30] over-claim corrected.** `special ShakeCamera` (`specials.inc:332`), parameterised by `VAR_0x8004`–`VAR_0x8007` (vertical pan / horizontal pan / shake count / delay), then `waitstate`. Documented vanilla use: `engine/data/scripts/cave_of_origin.inc:24-34`, plus 12+ other maps. |
 | 221/222 | Transition prep/execute | 39 | 39 | STRIP | Plumbing of the warp/transition idiom. |
 | 132 | Change Battle BGM | 18 | 18 | JUDGE | `nextBattleBack`-adjacent; usually STRIP. |
 | 231/232/235/234 | Picture ops | 50 | 50 | C | Image overlays (`NeedsC` in the RGSS table). |
@@ -96,7 +113,7 @@ below is what those classifiers may emit.
 | `setTempSwitchOn/Off`, `tsOn?/tsOff?` | 345 | 345 | `setflag`/`clearflag`/`flag(FLAG_…_TS…)` | orchestrator mints; clean cases = classifier candidate |
 | `pbSetSelfSwitch` | 94 | 94 | `setflag`/`clearflag(<self-switch>)` | classifier candidate (= code 123) |
 | **`pbPokeCenterPC`** | 21 | 21 | **`goto(EventScript_PC)`** | ✓VERIFIED fork; **NEW DET win** (frozen table wrongly UNHANDLED) |
-| `pbHealAll` | 2 | 2 | `healparty` | ✓ vocabulary (= code 314) |
+| `pbHealAll` | 2 | 2 | `special HealPlayerParty` | **[A30]** was `healparty` + "✓ vocabulary" — a status derived from row 314, which was itself wrong. Two rows citing each other self-certified a nonexistent command. |
 | `pbReceiveItem` | 16 | 16 | `giveitem(ITEM_*, qty)` | DET vocab; embedded in dialogue/branches + dynamic `pbGet` forms → needs a dialogue+item classifier or → JUDGE |
 | `pbAddPokemon(Silent)` | 9 | 9 | `givemon(SPECIES_*, level)` | DET vocab (species map) |
 | `pbDeleteItem` | 8 | 8 | `removeitem(ITEM_*, qty)` | DET vocab |
@@ -116,7 +133,7 @@ below is what those classifiers may emit.
 | `pbStartTrade` | 5 | 5 | in-game trade (`ingame_trades` + trade scene special) | ⚠RECHECK exact special |
 | `pbDayCare*` | ~5 | ~5 | native day care (Route117 + day-care specials) | ✓VERIFIED native exists; ⚠RECHECK call mapping |
 | `pbReceiveMysteryGift` | (table 11) | — | `src/mystery_gift.c` native; Uranium use likely just gives items → maybe STRIP/substitute | ⚠RECHECK |
-| `pbPushThisBoulder` | 7 | 7 | Strength boulder (`MB_PUSHABLE_BOULDER` + native) | ⚠RECHECK |
+| `pbPushThisBoulder` | 7 | 7 | Strength boulder — `OBJ_EVENT_GFX_PUSHABLE_BOULDER` (`constants/event_objects.h:113`) + native `TryPushBoulder`/`PushBoulder_*` (`engine/src/field_player_avatar.c:1038-1044`) | **[A30]** MISSING symbol fixed: the row cited `MB_PUSHABLE_BOULDER`, which **does not exist** — `metatile_behaviors.h` has only `MB_STRENGTH_BUTTON` (the puzzle button). The mechanic is object-graphics-driven, not metatile-driven, so the conversion is "give the object that graphics id", not "stamp a behavior". |
 | `pbFlyAnimation` / `pbCancelVehicles` | 10 | 10 | fly/vehicle native | ⚠RECHECK |
 
 ### C — genuinely needs new fork C (per-mechanic fidelity call)
@@ -124,9 +141,10 @@ below is what those classifiers may emit.
 | Head | #ev | #opus | Why | Disposition |
 |---|---|---|---|---|
 | `nextBattleNuclearHorde` | 17 | 17 | Nuclear horde battle | Phase 6 (Nuclear track) |
-| `pbPhoneRegisterBattle/NPC/Increment` | ~28 | ~28 | Pokégear/phone rematch | C — or stub→Phase 8 |
-| `pbSlotMachine` / `pbVoltorbFlip` | 24 | 24 | Game-corner minigames | C — or stub→Phase 8 ADAPT (cf. racing) |
-| `pbLottery` / `pbSetLotteryNumber` | 4 | 4 | Lottery | C — or stub |
+| `pbPhoneRegisterBattle/NPC/Increment` | ~28 | ~28 | Native Match Call / rematch system | **[A30]** likely over-claim, C-light at worst: `ShouldTryRematchBattle`/`IsTrainerReadyForRematch`/`BattleSetup_StartRematchBattle` (`specials.inc:80-82`), `SetMatchCallRegisteredFlag` (`:508`), impl `engine/src/match_call.c`. "Register" maps almost directly; "increment" is the rematch step-counter. RECHECK before costing as C. |
+| `pbSlotMachine` | (split) | — | `playslotmachine id` (`event.inc:1297`) → `ScrCmd_playslotmachine` (`engine/src/scrcmd.c:2589`) → `PlaySlotMachine` (`engine/src/slot_machine.c:1031`) | **[A30] WIRE, not C** — fully native, used by `MauvilleCity_GameCorner/scripts.inc`. |
+| `pbVoltorbFlip` | (split) | — | none | **[A30] C stands** — `grep -rni voltorb engine/` returns **zero** hits; it is an HGSS minigame absent from Emerald. Confined to **Bealbeach City** (chapters CH19/CH37/CH51) per `chapter_atlas` census, so the blast radius is one location. |
+| `pbLottery` / `pbSetLotteryNumber` | 4 | 4 | Native Lottery Corner | **[A30] over-claim corrected — WIRE, not C.** `RetrieveLotteryNumber`/`PickLotteryCornerTicket` (`specials.inc:280-281`), `DoLotteryCornerComputerEffect`/`EndLotteryCornerComputerEffect` (`:240-241`), impl `engine/src/lottery_corner.c`. Full native flow: `engine/data/maps/LilycoveCity_DepartmentStore_1F/scripts.inc:19-31`. |
 | `pbRegisterPartner` / `pbDeregisterPartner` | 19 | 19 | Single-player tag-battle ally | ⚠RECHECK (expansion multi-battle); likely C-light |
 | `pkmn.setAbility` / `pkmn.setItem` | (table 28) | — | Mutate a chosen party mon's ability/held item | JUDGE/C (after party selection) |
 | Uranium-custom (`pbGenerateChampionship`, `setupWaitingRoom`, `openPunkBroPC`, `createPuzzle`, gym puzzle helpers, `jv*`, `nuz*`) | ~1 each | — | Story/feature-specific | per-feature §10 call (several already ADAPT/Phase-8) |

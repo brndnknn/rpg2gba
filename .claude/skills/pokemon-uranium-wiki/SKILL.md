@@ -34,22 +34,33 @@ Wiki pages follow a consistent URL pattern:
 
 ### Locations — Towns & Cities
 
-| Location | URL |
-|---|---|
-| Moki Town (start) | `/wiki/Moki_Town` |
-| Kevlar Town | `/wiki/Kevlar_Town` |
-| Nowtoch City (Gym 1) | `/wiki/Nowtoch_City` |
-| Bealbeach City (Gym 2) | `/wiki/Bealbeach_City` |
-| Vinoville Town (Gym 3) | `/wiki/Vinoville_Town` |
-| Rochfale Town (Gym 4) | `/wiki/Rochfale_Town` |
-| Legen Town | `/wiki/Legen_Town` |
-| Venesi City (Gym 5) | `/wiki/Venesi_City` |
-| Tsukinami Village (Gym 6) | `/wiki/Tsukinami_Village` |
-| Seaspray Town | `/wiki/Seaspray_Town` |
-| Snowbank Town (Gym 7) | `/wiki/Snowbank_Town` |
-| Silverport Town (Gym 8) | `/wiki/Silverport_Town` |
-| Amatree Town | `/wiki/Amatree_Town` |
-| Ara City | `/wiki/Ara_City` |
+> **Corrected 2026-07-30.** The previous version of this table was wrong on five
+> counts and had been quietly misinforming sessions: it invented *Seaspray Town*
+> and *Ara City* (neither exists in `map_infos.json`), omitted **Burole Town**
+> and its Gym entirely, and assigned Gyms to Rochfale and Silverport — two towns
+> that have **no Gym map at all** (Rochfale has `Cypress Lab`, Silverport has a
+> `Lab`). Gym numbering below now matches BOTH the walkthrough body and the RMXP
+> map tree, which agree with each other. Verified against
+> `output/uranium-build/map_infos.json` and `reference/chapters.json`.
+
+| Location | Gym | Outdoor map id | URL |
+|---|---|---|---|
+| Moki Town (start) | — | 32 | `/wiki/Moki_Town` |
+| Kevlar Town | — | 31 | `/wiki/Kevlar_Town` |
+| Nowtoch City | **Gym 1** (map 42) | 40 | `/wiki/Nowtoch_City` |
+| Burole Town | **Gym 2** (map 66) | 60 | `/wiki/Burole_Town` |
+| Rochfale Town | none — `Cypress Lab` (98) | 12 | `/wiki/Rochfale_Town` |
+| Bealbeach City | **Gym 3** (maps 102/103/124) | 101 | `/wiki/Bealbeach_City` |
+| Vinoville Town | **Gym 4** (maps 148/162) | 121 | `/wiki/Vinoville_Town` |
+| Legen Town | — | 128 | `/wiki/Legen_Town` |
+| Amatree Town | **Gym 5** (map 69) | 151 | `/wiki/Amatree_Town` |
+| Venesi City | **Gym 6** (map 147) | 144 | `/wiki/Venesi_City` |
+| Silverport Town | none — `Lab` (75) | 134 | `/wiki/Silverport_Town` |
+| Snowbank Town | **Gym 7** (maps 136/137/141/206) | 135 | `/wiki/Snowbank_Town` |
+| Tsukinami Village | **Gym 8** (map 175) | 146 | `/wiki/Tsukinami_Village` |
+
+**Does not exist** — do not look for these, they are not in the game data:
+`Seaspray Town`, `Ara City`.
 
 ### Locations — Routes
 
@@ -139,9 +150,25 @@ it unlocks.
 
 ## Usage Pattern
 
+> **How to actually fetch a page (verified 2026-07-30).** `WebFetch` returns
+> **HTTP 402** for every `pokemon-uranium.fandom.com` URL — including `api.php`
+> and `?action=raw` — and a bare `curl` gets **403** from Cloudflare. The one
+> route that works is the MediaWiki API with a browser `User-Agent`, which is
+> wrapped for you:
+>
+> ```bash
+> python scripts/fetch_uranium_wiki.py Game_Walkthrough Route_1 Moki_Town
+> python scripts/fetch_uranium_wiki.py --list
+> ```
+>
+> Pages land as raw wikitext in `output/uranium-build/wiki/<Page>.wiki`
+> (gitignored, refetchable). `WebSearch` still works and returns usable prose
+> summaries, but never the page's own section structure — use the script when
+> you need headings, tables, or ordering.
+
 When validating converter output:
 
-1. `web_fetch` the relevant wiki page (route, town, or dungeon)
+1. Fetch the relevant wiki page with `scripts/fetch_uranium_wiki.py` (route, town, or dungeon)
 2. Compare the wiki's listed Pokémon, items, trainers, and connections against
    what the converter produced
 3. For story/event logic, cross-reference with the Game Walkthrough page for

@@ -170,7 +170,7 @@ Every module in `src/rpg2gba/pbs_converter/` has a corresponding test in `tests/
 The fork (`$RPG2GBA_POKEEMERALD`) is the source of truth for what the engine can do — not your memory of it. Maintain a fork-capability index (624 specials in `data/specials.inc`, 385 macros in `asm/macros/event.inc`, all `include/constants/*.h`) and gate against it:
 
 - **Forward:** every command/special/constant the pipeline emits must resolve in the index, or fail loud at conversion time — catches invented symbols (e.g. `healparty`) before `make modern`.
-- **Reverse:** never queue anything "needs custom C" without a fork search proving no native analog exists. `HealPlayerParty` was a defined special the whole time the agent invented `healparty`. Native-analog ledger: `reference/guides/essentials_to_emerald_map.md`.
+- **Reverse:** never queue anything "needs custom C" without a fork search proving no native analog exists. `HealPlayerParty` was a defined special the whole time the agent invented `healparty`. Native-analog ledger: **`reference/guides/command_pokeemerald_map.md`** (corrected 2026-07-30 — this rule used to point at `essentials_to_emerald_map.md`, which is the flag/var *pre-seed* table for the registry, not a capability ledger; the misdirection is part of why the `healparty` claim survived so long).
 
 Most "engine feature" tags ship natively (cave/Flash, bridges, PC, region map, relearner, trade, rock smash); only the Nuclear type is genuinely new C.
 

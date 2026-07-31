@@ -45,9 +45,17 @@ load-bearing findings are inlined so you can answer without re-reading code.
   already emits it (shape 6 in `tests/test_transpiler_native.py`). It should be
   bucketed `native`, not `hand`. This is the §4.7 failure mode a third time —
   which is precisely why E1's evidence field now exists.
-- **Wiki**: fandom.com returns HTTP 402 here (research goes through WebSearch
-  snippets / mirrors); on the Moki chain alone the wiki had 3 discrepancies vs the
-  rxdata. `reference/findings/moki_slice_story_chain_2026-07-16.md` is already a
+- **Wiki**: ~~fandom.com returns HTTP 402 here (research goes through WebSearch
+  snippets / mirrors)~~ **— CORRECTED 2026-07-30. The wiki IS fully readable.**
+  `WebFetch` 402s on every `pokemon-uranium.fandom.com` URL (including `api.php`
+  and `?action=raw`) and a bare `curl` gets a Cloudflare 403, but the MediaWiki
+  API **with a browser User-Agent** returns 200. Use
+  `python scripts/fetch_uranium_wiki.py <Page>`; pages land as raw wikitext in
+  `output/uranium-build/wiki/`. This is what made the chapter atlas's
+  walkthrough-derived act/chapter structure possible
+  (`reference/chapters/00-atlas.md`). On the Moki chain alone the wiki had 3
+  discrepancies vs the rxdata, and the corpus-wide pass found 8 more — the
+  rxdata-first rule (A1:b) is unchanged and, if anything, better supported. `reference/findings/moki_slice_story_chain_2026-07-16.md` is already a
   chapter-document prototype: 12 beats, each with gate + effect, derived
   rxdata-first with the wiki as cross-check.
 - **Standing decisions on record** (2026-07-13/17): fresh-start-always as the

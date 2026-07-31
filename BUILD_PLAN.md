@@ -172,7 +172,9 @@ conflated queue into three honest buckets:
 
 The reverse gate is curation, not full automation (knowing `pbBerryPlant` truly has
 no analog is semantic) — but the index makes each search cheap and authoritative.
-Native-analog ledger lives in `reference/guides/essentials_to_emerald_map.md`. **Seed the
+Native-analog ledger lives in `reference/guides/command_pokeemerald_map.md` (corrected
+2026-07-30 — `essentials_to_emerald_map.md` is the registry's flag/var pre-seed table,
+not the capability ledger). **Seed the
 vocabulary up front** by reading `specials.inc` + `event.inc` in full, so "no native
 equivalent" is a checkable claim — this alone retires a chunk of the standing Phase-6
 queue (most "engine feature" tags ship natively: cave/Flash, bridges, PC, region map,

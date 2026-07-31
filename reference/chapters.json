@@ -1,0 +1,450 @@
+{
+  "schema": 1,
+  "_comment": [
+    "Chapter -> RMXP map-id binding: the SoT (CLAUDE.md 4.3) for what maps a",
+    "play-order unit covers. Acts are the Game_Walkthrough page's own top-level",
+    "sections; chapters are its location units (a town plus its interiors, or a",
+    "route plus its side rooms). Chapter == slice == one section-9 boot gate ==",
+    "one ROM-test scenario.",
+    "",
+    "A location visited again later is a SEPARATE chapter with visit > 1 over the",
+    "same map ids, so map ids are deliberately NOT unique across chapters.",
+    "",
+    "Wiki names and ordering come from output/uranium-build/wiki/Game_Walkthrough.wiki",
+    "(refetch: python scripts/fetch_uranium_wiki.py). Map membership is decided by",
+    "output/uranium-build/map_infos.json plus the warp graph and connections.json --",
+    "NEVER by the wiki, per ROM_TEST_DEV.md Branch A1(b). Recorded disagreements",
+    "live in reference/chapters/00-atlas.md.",
+    "",
+    "Design record: reference/findings/grill_chapter_atlas_2026-07-30.md"
+  ],
+
+  "acts": [
+    {
+      "id": "A1",
+      "title": "Moki Town -> Gym #1 (Nowtoch City)",
+      "wiki_heading": "'''Moki Town &#8594; Gym #1 (Nowtoch City)'''",
+      "chapters": ["CH01", "CH02", "CH03", "CH04", "CH05", "CH06"]
+    },
+    {
+      "id": "A2",
+      "title": "Returning to Moki Town -> Gym #2 (Burole Town)",
+      "wiki_heading": "'''Returning to Moki Town &#8594; Gym #2 (Burole Town)'''",
+      "chapters": ["CH07", "CH08", "CH09", "CH10"]
+    },
+    {
+      "id": "A3",
+      "title": "Route 4 -> Gym #3 (Bealbeach City)",
+      "wiki_heading": "'''Route 4 &#8594; Gym #3 (Bealbeach City)'''",
+      "chapters": ["CH11", "CH12", "CH13", "CH14", "CH15", "CH16", "CH17", "CH18", "CH19"]
+    },
+    {
+      "id": "A4",
+      "title": "Bealbeach City -> Gym #4 (Vinoville Town)",
+      "wiki_heading": "'''Bealbeach City &#8594;''' '''Gym #4 (Vinoville Town)'''",
+      "chapters": ["CH20", "CH21", "CH22", "CH23"]
+    },
+    {
+      "id": "A5",
+      "title": "Legen Town -> Gym #5 (Amatree Town)",
+      "wiki_heading": "'''Legen Town &#8594; Gym #5 (Amatree Town)'''",
+      "chapters": ["CH24", "CH25", "CH26", "CH27", "CH28", "CH29", "CH30"]
+    },
+    {
+      "id": "A6",
+      "title": "Route 10 -> Route 4 -> Route 12 -> Gym #6 (Venesi City)",
+      "wiki_heading": "'''Route 10 &#8594; Route 4 &#8594; Route 12 &#8594; Gym #6 (Venesi City)'''",
+      "chapters": ["CH31", "CH32", "CH33", "CH34", "CH35", "CH36"]
+    },
+    {
+      "id": "A7",
+      "title": "Labyrinth -> Silverport -> Lanthanite Cave -> Route 16 -> Gym #7 (Snowbank Town)",
+      "wiki_heading": "'''Labyrinth &#8594; Silverport &#8594; Lanthanite Cave &#8594; Route 16 &#8594; Gym #7 (Snowbank Town)'''",
+      "chapters": ["CH37", "CH38", "CH39", "CH40", "CH41", "CH42", "CH43", "CH44", "CH45"]
+    },
+    {
+      "id": "A8",
+      "title": "Return to Silverport Town -> Venesi City -> Route 14 -> Gym #8 (Tsukinami Village)",
+      "wiki_heading": "'''Return to Silverport Town → Venesi City → Route 14 → Gym #8 (Tsukinami Village)'''",
+      "chapters": ["CH46", "CH47", "CH48", "CH49"]
+    },
+    {
+      "id": "A9",
+      "title": "Nuclear Plant Omicron -> Nuclear Plant Zeta -> Victory Road -> Championship",
+      "wiki_heading": "'''Nuclear Plant Omicron → Nuclear Plant Zeta → Victory Road → Championship'''",
+      "chapters": ["CH50", "CH51", "CH52", "CH53", "CH54", "CH55", "CH56", "CH57", "CH58"]
+    },
+    {
+      "id": "A10",
+      "title": "End Game (postgame)",
+      "wiki_heading": "'''End Game'''",
+      "chapters": ["CH59"]
+    }
+  ],
+
+  "chapters": [
+    {
+      "id": "CH01", "act": "A1", "title": "Moki Town", "wiki_page": "Moki Town",
+      "visit": 1, "outdoor": 32, "maps": [32, 48, 49, 50, 64, 65, 89, 172],
+      "predecessor": null, "tier": "full", "status": "in_progress",
+      "notes": "Slice 1. Map roster matches tileset_converter/map_set.py:30 SLICE_MAP_IDS exactly. Live doc: reference/chapters/01-moki.md; open items: SLICE1_TODO.md."
+    },
+    {
+      "id": "CH02", "act": "A1", "title": "Route 1", "wiki_page": "Route 1",
+      "visit": 1, "outdoor": 33, "maps": [33, 81],
+      "predecessor": "CH01", "tier": "full", "status": "planned",
+      "notes": "Next frontier. 81 = 'Route 01 (old rod house)'; the wiki says the Old Rod is granted only after Gym 1, so the grant may be gated across an act boundary -- verify against event data before writing beats."
+    },
+    {
+      "id": "CH03", "act": "A1", "title": "Kevlar Town", "wiki_page": "Kevlar Town",
+      "visit": 1, "outdoor": 31, "maps": [31, 67, 68, 73, 19],
+      "predecessor": "CH02", "tier": "medium", "status": "planned",
+      "notes": "Map 19 'Passage Cave' is bound HERE, not to CH05: the warp graph shows it connects only to/from Kevlar (31) in both directions and never reaches Route 02 or Nowtoch. Naive parent-tree reading would have mis-assigned it. Introduces the bike (Bike Repair Shop / Bike Wheel)."
+    },
+    {
+      "id": "CH04", "act": "A1", "title": "Route 2", "wiki_page": "Route 2",
+      "visit": 1, "outdoor": 35, "maps": [35],
+      "predecessor": "CH03", "tier": "medium", "status": "planned",
+      "notes": "Seams (connections.json): 31 N<->S 35, and 35 N<->S 40. The direct Route 02 -> Nowtoch overland seam exists in data but the wiki says it is rockslide-blocked until Rock Smash, so the first pass is forced through Passage Cave."
+    },
+    {
+      "id": "CH05", "act": "A1", "title": "Passage Cave", "wiki_page": "Passage Cave",
+      "visit": 1, "outdoor": 36, "maps": [36, 37],
+      "predecessor": "CH04", "tier": "medium", "status": "planned",
+      "notes": "Traversal confirmed by warp graph: 35 -> 36 <-> 37 -> 40. First dungeon; first candidate for cave/Flash handling. In the wiki this unit is a raw <h3> tag, not a '===' heading."
+    },
+    {
+      "id": "CH06", "act": "A1", "title": "Nowtoch City", "wiki_page": "Nowtoch City",
+      "visit": 1, "outdoor": 40, "maps": [40, 41, 42, 43, 44, 45, 46, 47],
+      "predecessor": "CH05", "tier": "medium", "status": "planned",
+      "notes": "Gym 1 (map 42). First Gym, first metro/Tandor-Underground station (44, 45), and the Rock Smash grant. Novelty-promoted."
+    },
+
+    {
+      "id": "CH07", "act": "A2", "title": "Route 2 (revisit)", "wiki_page": "Route 2",
+      "visit": 2, "outdoor": 35, "maps": [35],
+      "predecessor": "CH06", "tier": "thin", "status": "planned",
+      "notes": "Rock Smash clears the rockslide; the overland 35<->40 seam becomes usable."
+    },
+    {
+      "id": "CH08", "act": "A2", "title": "Moki Town (revisit)", "wiki_page": "Moki Town",
+      "visit": 2, "outdoor": 32, "maps": [32, 48, 49, 50, 64, 65, 89, 172],
+      "predecessor": "CH07", "tier": "thin", "status": "planned",
+      "notes": "Same maps as CH01 at a later story state. First proof that the revisit-as-own-chapter model works: no new conversion, only new gate states."
+    },
+    {
+      "id": "CH09", "act": "A2", "title": "Route 3", "wiki_page": "Route 3",
+      "visit": 1, "outdoor": 59, "maps": [59, 1, 54, 177],
+      "predecessor": "CH08", "tier": "thin", "status": "planned",
+      "notes": "Reached via the Moki Town E <-> Route 03 seam (connections.json 32 E <-> 59 W) -- the seam SLICE1_TODO #9 defers and SLICE2_TODO tracks."
+    },
+    {
+      "id": "CH10", "act": "A2", "title": "Burole Town", "wiki_page": "Burole Town",
+      "visit": 1, "outdoor": 60, "maps": [60, 66, 2, 4, 29, 85, 90, 5, 6],
+      "predecessor": "CH09", "tier": "thin", "status": "planned",
+      "notes": "Gym 2 (map 66). NOTE: the wiki's own location navigation omits Burole entirely and mis-numbers later gyms; the walkthrough body and the map tree agree with each other. See atlas discrepancy list."
+    },
+
+    {
+      "id": "CH11", "act": "A3", "title": "Route 4", "wiki_page": "Route 4",
+      "visit": 1, "outdoor": 76, "maps": [76, 9],
+      "predecessor": "CH10", "tier": "thin", "status": "planned", "notes": ""
+    },
+    {
+      "id": "CH12", "act": "A3", "title": "Comet Cave", "wiki_page": "Comet Cave",
+      "visit": 1, "outdoor": 7, "maps": [7, 96, 10],
+      "predecessor": "CH11", "tier": "thin", "status": "planned", "notes": ""
+    },
+    {
+      "id": "CH13", "act": "A3", "title": "Route 5", "wiki_page": "Route 5",
+      "visit": 1, "outdoor": 142, "maps": [142, 154],
+      "predecessor": "CH12", "tier": "thin", "status": "planned",
+      "notes": "Seams: 142 S <-> 76 N, 142 E <-> 87 W."
+    },
+    {
+      "id": "CH14", "act": "A3", "title": "Rochfale Town", "wiki_page": "Rochfale Town",
+      "visit": 1, "outdoor": 12, "maps": [12, 13, 92, 93, 130, 104, 98, 91, 183],
+      "predecessor": "CH13", "tier": "thin", "status": "planned",
+      "notes": "Has NO Gym map -- it has Cypress Lab (98). The wiki navigation calling it 'Gym 4' is wrong. Seam: 12 W <-> 22 E."
+    },
+    {
+      "id": "CH15", "act": "A3", "title": "Route 6", "wiki_page": "Route 6",
+      "visit": 1, "outdoor": 22, "maps": [22, 105],
+      "predecessor": "CH14", "tier": "thin", "status": "planned", "notes": ""
+    },
+    {
+      "id": "CH16", "act": "A3", "title": "Rochfale Tunnel", "wiki_page": "Rochfale Tunnel",
+      "visit": 1, "outdoor": 17, "maps": [17],
+      "predecessor": "CH15", "tier": "thin", "status": "planned", "notes": ""
+    },
+    {
+      "id": "CH17", "act": "A3", "title": "Route 7", "wiki_page": "Route 7",
+      "visit": 1, "outdoor": 8, "maps": [8, 115, 178, 205],
+      "predecessor": "CH16", "tier": "thin", "status": "planned",
+      "notes": "Seams: 8 W <-> 117 E, 8 N <-> 101 S."
+    },
+    {
+      "id": "CH18", "act": "A3", "title": "Nuclear Plant Epsilon", "wiki_page": "Nuclear Plant Epsilon",
+      "visit": 1, "outdoor": 122, "maps": [122, 123, 125],
+      "predecessor": "CH17", "tier": "thin", "status": "planned",
+      "notes": "DATA-DERIVED, not wiki-derived: the walkthrough gives Epsilon no location heading and a sub-agent read it as never entered, but the warp graph shows 122 <-> 8 (Route 07) in BOTH directions plus 122 <-> 123 and 122 <-> 125. Bound as its own chapter off Route 07. Verify the entry gate against event data before writing beats."
+    },
+    {
+      "id": "CH19", "act": "A3", "title": "Bealbeach City", "wiki_page": "Bealbeach City",
+      "visit": 1, "outdoor": 101, "maps": [101, 102, 103, 124, 108, 58, 109, 113, 126, 156, 3, 11, 52],
+      "predecessor": "CH18", "tier": "thin", "status": "planned",
+      "notes": "Gym 3 spans three maps (102 + 103 'Gym3.1' + 124 'Gym3'). Largest interior roster in the game: department store with an elevator (58), Rangers HQ (156), metro (3, 11), resort/casino (52)."
+    },
+
+    {
+      "id": "CH20", "act": "A4", "title": "Route 7 (revisit)", "wiki_page": "Route 7",
+      "visit": 2, "outdoor": 8, "maps": [8, 115, 178, 205],
+      "predecessor": "CH19", "tier": "thin", "status": "planned", "notes": ""
+    },
+    {
+      "id": "CH21", "act": "A4", "title": "Tandor Luxury Cruise", "wiki_page": "Vinoville Lake Ferry",
+      "visit": 1, "outdoor": 155, "maps": [155],
+      "predecessor": "CH20", "tier": "medium", "status": "planned",
+      "notes": "Novelty-promoted: a scripted vehicle/ferry sequence with no obvious Emerald analog beyond the SS Tidal. Map identity confirmed by warp graph -- 155 'Route 08(Cruise)' warps only to/from 117."
+    },
+    {
+      "id": "CH22", "act": "A4", "title": "Route 8", "wiki_page": "Route 8",
+      "visit": 1, "outdoor": 117, "maps": [117, 160, 161, 163, 28],
+      "predecessor": "CH21", "tier": "thin", "status": "planned",
+      "notes": "Seam: 117 N <-> 28 S. Good Rod is granted here."
+    },
+    {
+      "id": "CH23", "act": "A4", "title": "Vinoville Town", "wiki_page": "Vinoville Town",
+      "visit": 1, "outdoor": 121, "maps": [121, 148, 162, 157, 158, 159],
+      "predecessor": "CH22", "tier": "thin", "status": "planned",
+      "notes": "Gym 4 spans 148 + 162."
+    },
+
+    {
+      "id": "CH24", "act": "A5", "title": "Legen Town", "wiki_page": "Legen Town",
+      "visit": 1, "outdoor": 128, "maps": [128, 165, 166, 167, 129, 168, 201, 20],
+      "predecessor": "CH23", "tier": "thin", "status": "planned",
+      "notes": "Three metro maps (129, 168, 201) plus a 'VR building' (20)."
+    },
+    {
+      "id": "CH25", "act": "A5", "title": "Route 11", "wiki_page": "Route 11",
+      "visit": 1, "outdoor": 18, "maps": [18, 140],
+      "predecessor": "CH24", "tier": "medium", "status": "planned",
+      "notes": "Novelty-promoted: HM04 Strength grant -- a new traversal capability that gates later revisit chapters."
+    },
+    {
+      "id": "CH26", "act": "A5", "title": "Route 5 (revisit)", "wiki_page": "Route 5",
+      "visit": 2, "outdoor": 142, "maps": [142, 154],
+      "predecessor": "CH25", "tier": "thin", "status": "planned",
+      "notes": "Optional Strength-gated side trip; the wiki presents it as an aside, not critical path."
+    },
+    {
+      "id": "CH27", "act": "A5", "title": "Route 9", "wiki_page": "Route 9",
+      "visit": 1, "outdoor": 21, "maps": [21, 25, 27],
+      "predecessor": "CH26", "tier": "thin", "status": "planned",
+      "notes": "Optional; day-care / breeding content. Off critical path."
+    },
+    {
+      "id": "CH28", "act": "A5", "title": "Burole Town (revisit)", "wiki_page": "Burole Town",
+      "visit": 2, "outdoor": 60, "maps": [60, 66, 2, 4, 29, 85, 90, 5, 6],
+      "predecessor": "CH27", "tier": "thin", "status": "planned", "notes": ""
+    },
+    {
+      "id": "CH29", "act": "A5", "title": "Route 10 / Anthell", "wiki_page": "Route 10",
+      "visit": 1, "outdoor": 143, "maps": [143, 150, 83, 173],
+      "predecessor": "CH28", "tier": "medium", "status": "planned",
+      "notes": "Novelty-promoted: a dungeon traversed twice with an item-gated wall between passes (Anthell 150 -> Anthell Deeper 83), plus an uncatchable boss battle."
+    },
+    {
+      "id": "CH30", "act": "A5", "title": "Amatree Town", "wiki_page": "Amatree Town",
+      "visit": 1, "outdoor": 151, "maps": [151, 170, 171, 69],
+      "predecessor": "CH29", "tier": "medium", "status": "planned",
+      "notes": "Novelty-promoted: Gym 5 (69), a barter economy with no currency shop, and the HM03 Surf grant -- the single largest traversal unlock in the game."
+    },
+
+    {
+      "id": "CH31", "act": "A6", "title": "Route 10 (revisit)", "wiki_page": "Route 10",
+      "visit": 2, "outdoor": 143, "maps": [143, 150, 83, 173],
+      "predecessor": "CH30", "tier": "thin", "status": "planned", "notes": "Surf shortcut."
+    },
+    {
+      "id": "CH32", "act": "A6", "title": "Route 4 (revisit)", "wiki_page": "Route 4",
+      "visit": 2, "outdoor": 76, "maps": [76, 9],
+      "predecessor": "CH31", "tier": "thin", "status": "planned", "notes": "Surf-gated shoreline."
+    },
+    {
+      "id": "CH33", "act": "A6", "title": "Comet Cave (revisit)", "wiki_page": "Comet Cave",
+      "visit": 2, "outdoor": 7, "maps": [7, 96, 10],
+      "predecessor": "CH32", "tier": "thin", "status": "planned",
+      "notes": "Surf-only back entrance into the same dungeon; the wiki's 'Fossil Sidequest cave' is not a separate map."
+    },
+    {
+      "id": "CH34", "act": "A6", "title": "Route 12", "wiki_page": "Route 12",
+      "visit": 1, "outdoor": 87, "maps": [87, 179],
+      "predecessor": "CH33", "tier": "thin", "status": "planned", "notes": ""
+    },
+    {
+      "id": "CH35", "act": "A6", "title": "Route 13", "wiki_page": "Route 13",
+      "visit": 1, "outdoor": 145, "maps": [145],
+      "predecessor": "CH34", "tier": "thin", "status": "planned",
+      "notes": "Seam: 145 S <-> 144 N."
+    },
+    {
+      "id": "CH36", "act": "A6", "title": "Venesi City", "wiki_page": "Venesi City",
+      "visit": 1, "outdoor": 144, "maps": [144, 147, 78, 97, 79],
+      "predecessor": "CH35", "tier": "thin", "status": "planned",
+      "notes": "Gym 6 (147). Seam: 144 E <-> 99 W."
+    },
+
+    {
+      "id": "CH37", "act": "A7", "title": "Bealbeach City (revisit)", "wiki_page": "Bealbeach City",
+      "visit": 2, "outdoor": 101, "maps": [101, 102, 103, 124, 108, 58, 109, 113, 126, 156, 3, 11, 52],
+      "predecessor": "CH36", "tier": "thin", "status": "planned", "notes": "Optional."
+    },
+    {
+      "id": "CH38", "act": "A7", "title": "Legen Town (revisit)", "wiki_page": "Legen Town",
+      "visit": 2, "outdoor": 128, "maps": [128, 165, 166, 167, 129, 168, 201, 20],
+      "predecessor": "CH37", "tier": "thin", "status": "planned",
+      "notes": "Optional; grants the Surfboard and Power Glove -- item-form substitutes for HM field moves, a conversion question worth an early verdict."
+    },
+    {
+      "id": "CH39", "act": "A7", "title": "Route 13 (revisit)", "wiki_page": "Route 13",
+      "visit": 2, "outdoor": 145, "maps": [145],
+      "predecessor": "CH38", "tier": "thin", "status": "planned",
+      "notes": "UNCERTAIN BINDING: the wiki calls this approach corridor 'Maskara Island', a name with no match in map_infos.json. Route 13 is a context match only -- confirm from map data before relying on it."
+    },
+    {
+      "id": "CH40", "act": "A7", "title": "The Labyrinth", "wiki_page": "The Labyrinth",
+      "visit": 1, "outdoor": 80, "maps": [80, 107],
+      "predecessor": "CH39", "tier": "medium", "status": "planned",
+      "notes": "Novelty-promoted: first underwater map (107) and the first Mega Stone. Contains a Dive-gated room that cannot be finished on this visit."
+    },
+    {
+      "id": "CH41", "act": "A7", "title": "Route 15", "wiki_page": "Route 15",
+      "visit": 1, "outdoor": 133, "maps": [133, 100, 180],
+      "predecessor": "CH40", "tier": "thin", "status": "planned",
+      "notes": "Super Rod grant. Seam: 134 S <-> 133 N."
+    },
+    {
+      "id": "CH42", "act": "A7", "title": "Silverport Town", "wiki_page": "Silverport Town",
+      "visit": 1, "outdoor": 134, "maps": [134, 24, 82, 139, 75],
+      "predecessor": "CH41", "tier": "thin", "status": "planned",
+      "notes": "Has NO Gym map -- it has a Lab (75). The wiki navigation calling it 'Gym 8' is wrong."
+    },
+    {
+      "id": "CH43", "act": "A7", "title": "Lanthanite Cave", "wiki_page": "Lanthanite Cave",
+      "visit": 1, "outdoor": 106, "maps": [106, 202],
+      "predecessor": "CH42", "tier": "thin", "status": "planned",
+      "notes": "202 'Lanthanite Core' is Waterfall-gated and not reachable on this visit."
+    },
+    {
+      "id": "CH44", "act": "A7", "title": "Route 16", "wiki_page": "Route 16",
+      "visit": 1, "outdoor": 132, "maps": [132, 88],
+      "predecessor": "CH43", "tier": "thin", "status": "planned",
+      "notes": "Ice-slide puzzles -- check whether the fork's ice metatile behaviors cover them."
+    },
+    {
+      "id": "CH45", "act": "A7", "title": "Snowbank Town", "wiki_page": "Snowbank Town",
+      "visit": 1, "outdoor": 135, "maps": [135, 26, 86, 136, 137, 141, 206, 53],
+      "predecessor": "CH44", "tier": "medium", "status": "planned",
+      "notes": "Novelty-promoted: Gym 7 spans FOUR maps (136, 137, 141, 206) as a multi-trial gauntlet, and this chapter unlocks Mega Evolution and grants HM08 Dive. Seam: 136 S <-> 135 N."
+    },
+
+    {
+      "id": "CH46", "act": "A8", "title": "Silverport Town (revisit)", "wiki_page": "Silverport Town",
+      "visit": 2, "outdoor": 134, "maps": [134, 24, 82, 139, 75],
+      "predecessor": "CH45", "tier": "thin", "status": "planned", "notes": ""
+    },
+    {
+      "id": "CH47", "act": "A8", "title": "Venesi City (revisit)", "wiki_page": "Venesi City",
+      "visit": 2, "outdoor": 144, "maps": [144, 147, 78, 97, 79],
+      "predecessor": "CH46", "tier": "thin", "status": "planned", "notes": "Dive departure point."
+    },
+    {
+      "id": "CH48", "act": "A8", "title": "Route 14", "wiki_page": "Route 14",
+      "visit": 1, "outdoor": 99, "maps": [99, 118],
+      "predecessor": "CH47", "tier": "medium", "status": "planned",
+      "notes": "Novelty-promoted: Dive-gated surface/underwater map pair (99 / 118). Seams: 144 E <-> 99 W, 146 W <-> 99 E."
+    },
+    {
+      "id": "CH49", "act": "A8", "title": "Tsukinami Village", "wiki_page": "Tsukinami Village",
+      "visit": 1, "outdoor": 146, "maps": [146, 152, 153, 175, 174, 204],
+      "predecessor": "CH48", "tier": "thin", "status": "planned",
+      "notes": "Gym 8 (175) is a dual-leader fight."
+    },
+
+    {
+      "id": "CH50", "act": "A9", "title": "Nuclear Plant Omicron", "wiki_page": "Nuclear Plant Omicron",
+      "visit": 1, "outdoor": 112, "maps": [112],
+      "predecessor": "CH49", "tier": "medium", "status": "planned",
+      "notes": "Novelty-promoted: sequential scripted battles and the HM02 Fly grant. Nuclear-type content -- the one mechanic reference/guides/nuclear_type_spec.md says is genuinely new C."
+    },
+    {
+      "id": "CH51", "act": "A9", "title": "Bealbeach City (Rangers HQ revisit)", "wiki_page": "Bealbeach City",
+      "visit": 3, "outdoor": 101, "maps": [101, 102, 103, 124, 108, 58, 109, 113, 126, 156, 3, 11, 52],
+      "predecessor": "CH50", "tier": "thin", "status": "planned", "notes": ""
+    },
+    {
+      "id": "CH52", "act": "A9", "title": "Route 8 (Nuclear) / Hazard Zone", "wiki_page": "Route 8 (Nuclear)",
+      "visit": 1, "outdoor": 187, "maps": [187, 114, 188],
+      "predecessor": "CH51", "tier": "medium", "status": "planned",
+      "notes": "Novelty-promoted. Distinct maps from CH22's Route 8 (187 vs 117) -- a hazard-zone variant of the same route, not a revisit. 'Hazard Zone' is a mechanic label with no map of that name."
+    },
+    {
+      "id": "CH53", "act": "A9", "title": "Nuclear Plant Zeta", "wiki_page": "Nuclear Plant Zeta",
+      "visit": 1, "outdoor": 189, "maps": [189, 190, 191, 192, 193],
+      "predecessor": "CH52", "tier": "medium", "status": "planned",
+      "notes": "Novelty-promoted: five-map compass-arranged complex (South/Outside/East/West/North) plus hazmat-suit gating."
+    },
+    {
+      "id": "CH54", "act": "A9", "title": "Legen Town (revisit)", "wiki_page": "Legen Town",
+      "visit": 3, "outdoor": 128, "maps": [128, 165, 166, 167, 129, 168, 201, 20],
+      "predecessor": "CH53", "tier": "thin", "status": "planned", "notes": ""
+    },
+    {
+      "id": "CH55", "act": "A9", "title": "Victory Road", "wiki_page": "Victory Road",
+      "visit": 1, "outdoor": 127, "maps": [127, 74, 203, 185, 184, 186],
+      "predecessor": "CH54", "tier": "thin", "status": "planned",
+      "notes": "Six maps: outdoor, cave, secret garden, bridge, volcano, apex."
+    },
+    {
+      "id": "CH56", "act": "A9", "title": "Championship Site", "wiki_page": "Championship Site",
+      "visit": 1, "outdoor": 181, "maps": [181, 131, 149, 200, 194, 195, 196, 197, 198],
+      "predecessor": "CH55", "tier": "medium", "status": "planned",
+      "notes": "Novelty-promoted: a randomised bracket drawn from the earlier Gym Leaders (VAR_TANDOR_CHAMPIONSHIP_LIST / _ROUND are already pre-seeded in essentials_to_emerald_map.md), across nine maps including two arenas and a flashback."
+    },
+    {
+      "id": "CH57", "act": "A9", "title": "Hall of Fame", "wiki_page": "Hall of Fame",
+      "visit": 1, "outdoor": 199, "maps": [199],
+      "predecessor": "CH56", "tier": "thin", "status": "planned", "notes": "Credits sequence."
+    },
+    {
+      "id": "CH58", "act": "A9", "title": "Moki Town (postgame)", "wiki_page": "Moki Town",
+      "visit": 3, "outdoor": 32, "maps": [32, 48, 49, 50, 64, 65, 89, 172],
+      "predecessor": "CH57", "tier": "medium", "status": "planned",
+      "notes": "Novelty-promoted only because it is where the postgame pages on slice-1 maps finally fire -- exactly the switch-125 'FINAL EVENT' grants that reference/chapters/01-moki.md section 4.2 rules out of CH01 (Lava Cookie on 49, Poke Radar on 50, HM07 Waterfall on 172). Writing this chapter validates CH01's postgame exclusions."
+    },
+
+    {
+      "id": "CH59", "act": "A10", "title": "Dream World (Sleeping Girl Sidequest)", "wiki_page": "Dream World",
+      "visit": 1, "outdoor": 70, "maps": [70, 71, 213, 208, 214, 111, 207, 217, 209, 210, 84, 212, 216],
+      "predecessor": "CH58", "tier": "medium", "status": "planned",
+      "notes": "Novelty-promoted: an entire 13-map optional subtree, the only content in the game the walkthrough reaches through a sidequest section rather than the main chain. Entry triggers in CH49."
+    }
+  ],
+
+  "unbound_maps": {
+    "_comment": "Maps in map_infos.json deliberately bound to no chapter, with the reason. Keeping this explicit makes coverage auditable: chapters + unbound must account for every map.",
+    "30": "RPG Maker tree folder node ('POKE-URANIUM') -- empty 20x15 stub, 0 events",
+    "55": "RPG Maker tree folder node ('GAME') -- empty 20x15 stub, 0 events",
+    "38": "RPG Maker tree folder node ('ETC') -- empty 20x15 stub, 0 events",
+    "56": "RPG Maker tree folder node ('MOVIES') -- empty 20x15 stub, 0 events",
+    "39": "'Test Area' -- developer scratch map, 3 events",
+    "62": "'Unknown' -- 20x60, 24 events, unreferenced by the walkthrough; needs investigation before it can be bound or stripped",
+    "51": "'Intro' -- pre-title sequence, not part of any act",
+    "57": "'Nuclear Plant' -- intro flashback plant, distinct from Epsilon/Omicron/Zeta",
+    "14": "'Title Screen'",
+    "94": "'Mapa intro'",
+    "95": "'Intro 2'"
+  }
+}
