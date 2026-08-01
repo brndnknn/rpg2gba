@@ -1027,3 +1027,76 @@ def test_aptitude_tally_is_still_one_of_a_kind() -> None:
                         if literal.search(s) or argmax.search(s):
                             sites.add((path.stem, ev["id"]))
     assert sites == {("Map050", 5)}, sites
+
+
+# ----------------------------------------------------------------------------
+# pbAddPokemon — the gift ceremony (sprite + fanfare + nickname prompt)
+# ----------------------------------------------------------------------------
+
+
+def _gift_ctx() -> T.TranspileContext:
+    ctx = T.TranspileContext(registry=FlagRegistry())
+    ctx.species = {"ORCHYNX": "SPECIES_ORCHYNX"}
+    ctx.staged_species = {"SPECIES_ORCHYNX"}
+    return ctx
+
+
+def test_add_pokemon_shows_the_species_and_offers_a_nickname() -> None:
+    """Essentials' pbAddPokemon is a ceremony, not a bare party add."""
+    ctx = _gift_ctx()
+    out = run_event(ctx, [[
+        cmd(T.SCRIPT, ["pbAddPokemon(PBSpecies::ORCHYNX,5)"]),
+    ]], trigger=3)
+    for line in (
+        "bufferspeciesname(STR_VAR_1, SPECIES_ORCHYNX)",
+        "showmonpic(SPECIES_ORCHYNX, 10, 3)",
+        "givemon(SPECIES_ORCHYNX, 5)",
+        "playfanfare(MUS_OBTAIN_ITEM)",
+        "waitfanfare",
+        "msgbox(gText_NicknameThisPokemon, MSGBOX_YESNO)",
+        "call(Common_EventScript_NameReceivedPartyMon)",
+        "hidemonpic",
+    ):
+        assert line in out.text, line
+    # The sprite must go up BEFORE the mon is handed over, and come down after.
+    assert out.text.index("showmonpic") < out.text.index("givemon(")
+    assert out.text.rindex("hidemonpic") > out.text.index("givemon(")
+    assert not out.unhandled
+
+
+def test_add_pokemon_handles_a_full_party_and_a_full_pc() -> None:
+    ctx = _gift_ctx()
+    out = run_event(ctx, [[
+        cmd(T.SCRIPT, ["pbAddPokemon(PBSpecies::ORCHYNX,5)"]),
+    ]], trigger=3)
+    # Party full -> box, with the species buffered for the "sent to PC" text.
+    assert "setvar(VAR_TEMP_TRANSFERRED_SPECIES, SPECIES_ORCHYNX)" in out.text
+    assert "call(Common_EventScript_NameReceivedBoxMon)" in out.text
+    assert "call(Common_EventScript_TransferredToPC)" in out.text
+    # Boxes full too -> vanilla's own bail-out, and the sprite comes down first.
+    assert "goto(Common_EventScript_NoMoreRoomForPokemon)" in out.text
+    cant = out.text.index("MON_CANT_GIVE")
+    assert "hidemonpic" in out.text[cant:cant + 120]
+
+
+def test_add_pokemon_silent_stays_a_bare_givemon() -> None:
+    """pbAddPokemonSilent is the form that deliberately has no ceremony."""
+    ctx = _gift_ctx()
+    out = run_event(ctx, [[
+        cmd(T.SCRIPT, ["pbAddPokemonSilent(PBSpecies::ORCHYNX,5)"]),
+    ]], trigger=3)
+    assert "givemon(SPECIES_ORCHYNX, 5)" in out.text
+    assert "setflag(FLAG_SYS_POKEMON_GET)" in out.text
+    for absent in ("showmonpic", "playfanfare", "gText_NicknameThisPokemon"):
+        assert absent not in out.text
+    assert not out.unhandled
+
+
+def test_add_pokemon_unstaged_species_still_queues() -> None:
+    """No ceremony for a species the fork doesn't define (§4.3)."""
+    ctx = _gift_ctx()
+    out = run_event(ctx, [[
+        cmd(T.SCRIPT, ["pbAddPokemon(PBSpecies::NOTSTAGED,5)"]),
+    ]], trigger=3)
+    assert "givemon" not in out.text
+    assert out.unhandled

@@ -44,6 +44,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 _SPECIALS_PATH = "engine/data/specials.inc"
 _EVENT_MACROS_PATH = "engine/asm/macros/event.inc"
+_CHARMAP_PATH = "engine/charmap.txt"
 _MOVEMENT_PATH = "engine/asm/macros/movement.inc"
 _CONSTANTS_DIR = "engine/include/constants"
 # TRUE/FALSE (used by e.g. multichoice args) live outside include/constants/.
@@ -51,7 +52,7 @@ _EXTRA_CONSTANT_HEADERS = ["engine/include/gba/defines.h"]
 
 # Bump whenever extraction logic changes — the cache is keyed on
 # (tree_hash, format), so a logic change must invalidate hash-matching caches.
-_INDEX_FORMAT = 3
+_INDEX_FORMAT = 4
 
 # def_special invocations (excludes the .macro def_special line). 623 upstream
 # + 1 rpg2gba addition (RPG2GBA_SetObjectEventGfx, the RMXP move-command 41
@@ -233,6 +234,32 @@ def _extract_asm_constants(repo_root: Path) -> set[str]:
     return names
 
 
+def _extract_charmap_constants(repo_root: Path) -> set[str]:
+    """Multi-character ALL_CAPS symbols assigned in `charmap.txt`.
+
+    The string-var placeholders scripts pass to `buffer*` commands
+    (`STR_VAR_1 = FD 02`) live only here — not in any `constants/*.h` and not
+    in `event.inc` — so without this the gate rejects `bufferspeciesname
+    STR_VAR_1, ...`, which is exactly what vanilla's own scripts do.
+
+    Deliberately restricted to names of 2+ characters: charmap.txt also
+    assigns every single letter and digit (`A = BB`), and admitting those
+    would let a bare typo'd `A` sail through the gate.
+    """
+    text = _git_show(repo_root, _CHARMAP_PATH)
+    names = {
+        m.group(1)
+        for line in text.splitlines()
+        if (m := _ASM_CONST_RE.match(line)) and len(m.group(1)) > 1
+    }
+    if "STR_VAR_1" not in names:
+        raise ValueError(
+            f"STR_VAR_1 not found among charmap symbols in {_CHARMAP_PATH} "
+            f"— extraction regex or fork file drifted"
+        )
+    return names
+
+
 def _extract_constants(repo_root: Path) -> set[str]:
     headers = [
         p for p in _git_ls_files(repo_root, _CONSTANTS_DIR) if p.endswith(".h")
@@ -242,6 +269,7 @@ def _extract_constants(repo_root: Path) -> set[str]:
     for header in headers:
         text = _git_show(repo_root, header)
         names |= _extract_constants_from_header(text)
+    names |= _extract_charmap_constants(repo_root)
     if len(names) < _CONSTANTS_FLOOR:
         raise ValueError(
             f"expected >= {_CONSTANTS_FLOOR} constants across {len(headers)} "

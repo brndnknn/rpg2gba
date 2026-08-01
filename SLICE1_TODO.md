@@ -7,6 +7,65 @@ deleting it. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 24. `pbAddPokemon` is a ceremony, not a bare `givemon` — BUILT 2026-08-01, boot-walk pending
+
+**User ask:** show the Pokémon's sprite when you actually receive it, and make
+it general for every later gift.
+
+**It was never ours to invent — we were dropping it.** Essentials'
+`pbAddPokemon` (`scripts_dump/170__PSystem_Utilities.rb:1710`) is
+*"{player} obtained {species}!"* + `\me[PU-PokemonObtained]` + `pbNicknameAndStore`
+(nickname prompt, party or box). We emitted a bare `givemon` +
+`FLAG_SYS_POKEMON_GET`, dropping a sprite, a fanfare, a message and a prompt at
+**26 call sites across 11 events**.
+
+Every piece has a native host, and vanilla's own gift flow
+(`LittlerootTown_ProfessorBirchsLab/scripts.inc:333-372` +
+`data/scripts/pc_transfer.inc`) is the same primitives in the same order, so
+this is a §4.7 restoration: `bufferspeciesname` → `showmonpic` → `givemon` →
+branch on `VAR_RESULT` (`MON_GIVEN_TO_PARTY` / `MON_GIVEN_TO_PC` /
+`MON_CANT_GIVE`) → `playfanfare MUS_OBTAIN_ITEM` + `message`/`waitmessage`/
+`waitfanfare` → `gText_NicknameThisPokemon` YES/NO →
+`Common_EventScript_GetGiftMonPartySlot` + `NameReceivedPartyMon` (or
+`NameReceivedBoxMon` + `TransferredToPC`), full party/full box handled by
+`Common_EventScript_NoMoreRoomForPokemon`.
+
+**`pbAddPokemonSilent` (6 sites) deliberately keeps the bare `givemon`** — the
+silent form is exactly the one Essentials defines as ceremony-free, so the old
+conversion was right for it and wrong for the loud one.
+
+**Fork-index gap found doing this:** `STR_VAR_1` is assigned only in
+`engine/charmap.txt` — not in any constants header, not in `event.inc` — so the
+gate rejected `bufferspeciesname STR_VAR_1, ...`, *which is what vanilla itself
+writes*. `charmap.txt` is now scanned (`_extract_charmap_constants`,
+`_INDEX_FORMAT` 3→4), restricted to 2+-character ALL_CAPS names so the file's
+single-letter assignments can't let a typo'd `A` through.
+
+**Shipped:** `lab-doorstep.gba` sha1 `d39c55d6` (pristine `26408202`). 1544
+tests; moki GREEN 17/17 first attempt with the new nickname prompt in the path.
+
+### 25. The lab machine still doesn't animate — ROOT-CAUSED, NOT FIXED
+
+Reported again 2026-08-01 after the direction-carrying fix, and the fix was
+never going to be enough. **The sheet has exactly one frame in the ROM.**
+`PU-PokeballMachine` is in `graphics/sprites.py:75 LARGE_PROP_SHEETS`, so
+`sprite_emit` gives it the fork's 64×64 static-object treatment
+(`gObjectEventGraphicsInfo_RayquazaStill` convention): `.anims =
+sAnimTable_Inanimate`, `.inanimate = TRUE`, and a **one-frame pic table**. No
+script command can show a frame that isn't in the ROM, so both the pattern
+selection *and* the direction carry are dead for this sheet.
+
+**Fix (converter-level, not transpiler):** for a large-prop sheet referenced by
+a code-41 swap, emit the RMXP frames it actually uses into the pic table and
+mint one `OBJ_EVENT_GFX_URANIUM_*` per (direction, pattern) — then the swap is
+an ordinary gfx swap to the frame-specific constant. Touches
+`graphics/sprites.py` (frame extraction), `graphics/sprite_emit.py` (one
+graphics-info entry per frame), `reference/npc_gfx_map.json` (§4.3 SoT gains
+per-frame constants), and the transpiler's code-41 resolution
+((sheet, dir, pattern) → constant instead of sheet → constant). Corpus reach is
+worth measuring first: 1115 code-41 uses across 499 events in 44 maps, but only
+the large-prop subset is affected this way.
+
 ### 23. Map050 EV005 retired onto the transpiler — BUILT 2026-08-01, boot-walk pending
 
 The last hand conversion in the lab is gone; `hand_conversions/` is down to

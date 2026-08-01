@@ -264,11 +264,25 @@ _RUBY_GUARD_RE = re.compile(
     r"^(?P<stmt>.*?)\s+if\s+\$game_variables\[\s*(?P<var>\d+)\s*\]\s*==\s*(?P<val>-?\d+)\s*$"
 )
 
-# pbAddPokemon(PBSpecies::ORCHYNX,5) — Essentials' "add to party" call. Native:
-# `givemon`. NOT the same as an encounter or a gift-with-fanfare; this is the
-# bare party add, which is what the starter grant uses.
+# pbAddPokemon / pbAddPokemonSilent (PSystem_Utilities.rb:1710,1730). The two
+# are NOT the same conversion, and the difference is the whole ceremony:
+#
+#   pbAddPokemon       -> "{player} obtained {species}!" + \me[PU-PokemonObtained]
+#                         + pbNicknameAndStore (nickname prompt, party or PC)
+#   pbAddPokemonSilent -> straight into the party/box, no message, no prompt
+#
+# Emitting a bare `givemon` for the loud form (what we did until 2026-08-01)
+# silently dropped a fanfare, a message and a nickname prompt at 26 call sites
+# across 11 events. Every piece has a native host and vanilla's own gift flow
+# uses exactly them (engine/data/maps/LittlerootTown_ProfessorBirchsLab/
+# scripts.inc:333-372 + engine/data/scripts/pc_transfer.inc), so this is a
+# native-analog restoration, not an invention (§4.7).
 _ADD_POKEMON_RE = re.compile(
     r"^\s*(?:Kernel\.)?pbAddPokemon\(\s*(?:::)?PBSpecies::([A-Za-z0-9_]+)\s*,\s*(\d+)\s*\)\s*$"
+)
+_ADD_POKEMON_SILENT_RE = re.compile(
+    r"^\s*(?:Kernel\.)?pbAddPokemonSilent\(\s*(?:::)?PBSpecies::([A-Za-z0-9_]+)"
+    r"\s*,\s*(\d+)\s*\)\s*$"
 )
 
 # $game_switches[61] = true — a direct switch write from Ruby rather than a
@@ -2198,21 +2212,19 @@ class _PageEmitter:
         so an unstaged species or unnamed switch queues instead of emitting a
         symbol the fork doesn't define (CLAUDE.md §4.3, §4.5).
         """
+        m = _ADD_POKEMON_SILENT_RE.match(text)
+        if m:
+            const = self.ctx.staged_species_constant(m.group(1))
+            if const is None:
+                return None
+            return self._emit_give_pokemon(const, int(m.group(2)), silent=True)
+
         m = _ADD_POKEMON_RE.match(text)
         if m:
             const = self.ctx.staged_species_constant(m.group(1))
             if const is None:
                 return None
-            # Essentials' party menu is always available; Emerald gates the
-            # START-menu POKEMON option on FLAG_SYS_POKEMON_GET
-            # (engine/src/start_menu.c:340,359) and givemon -> ScrCmd_createmon
-            # never sets it — its only vanilla setter,
-            # SetDexPokemonPokenavFlags, is marked unused. Without this the mon
-            # is in gPlayerParty but has no menu to appear in.
-            return [
-                f"givemon({const}, {int(m.group(2))})",
-                "setflag(FLAG_SYS_POKEMON_GET)",
-            ]
+            return self._emit_give_pokemon(const, int(m.group(2)), silent=False)
 
         m = _SWITCH_ASSIGN_RE.match(text)
         if m:
@@ -2309,6 +2321,66 @@ class _PageEmitter:
             return self._emit_starter_selector(m.group(1), m.group(2) == "true")
 
         return None
+
+    def _emit_give_pokemon(self, const: str, level: int,
+                           silent: bool) -> list[str]:
+        """Essentials' `pbAddPokemon` / `pbAddPokemonSilent`, natively.
+
+        The loud form is a whole ceremony in Essentials — the species' sprite
+        on screen, an "obtained" line over a fanfare, then the nickname prompt
+        and a box transfer if the party is full. Vanilla's own gift flow is the
+        same sequence of the same primitives, so this mirrors it:
+        `showmonpic`/`hidemonpic`, `playfanfare MUS_OBTAIN_ITEM`,
+        `Common_EventScript_GetGiftMonPartySlot` / `NameReceivedPartyMon` /
+        `NameReceivedBoxMon` / `TransferredToPC` / `NoMoreRoomForPokemon`.
+
+        `givemon` reports where the mon landed in VAR_RESULT
+        (MON_GIVEN_TO_PARTY / MON_GIVEN_TO_PC / MON_CANT_GIVE), and the box
+        path needs VAR_TEMP_TRANSFERRED_SPECIES set beforehand — vanilla sets
+        it before the `givemon`, so this does too.
+        """
+        # Essentials' party menu is always available; Emerald gates the
+        # START-menu POKEMON option on FLAG_SYS_POKEMON_GET
+        # (engine/src/start_menu.c:340,359) and givemon -> ScrCmd_createmon
+        # never sets it — its only vanilla setter, SetDexPokemonPokenavFlags,
+        # is marked unused. Without this the mon is in gPlayerParty but has no
+        # menu to appear in.
+        if silent:
+            return [f"givemon({const}, {level})", "setflag(FLAG_SYS_POKEMON_GET)"]
+
+        nickname = [
+            "msgbox(gText_NicknameThisPokemon, MSGBOX_YESNO)",
+            "if (var(VAR_RESULT) == YES) {",
+        ]
+        return [
+            "# pbAddPokemon: Essentials shows the species, plays its obtained "
+            "jingle and offers a nickname — vanilla's own gift flow, natively",
+            f"bufferspeciesname(STR_VAR_1, {const})",
+            f"setvar(VAR_TEMP_TRANSFERRED_SPECIES, {const})",
+            f"showmonpic({const}, 10, 3)",
+            f"givemon({const}, {level})",
+            "if (var(VAR_RESULT) == MON_CANT_GIVE) {",
+            "    hidemonpic",
+            "    goto(Common_EventScript_NoMoreRoomForPokemon)",
+            "}",
+            "setflag(FLAG_SYS_POKEMON_GET)",
+            "playfanfare(MUS_OBTAIN_ITEM)",
+            'message(format("{PLAYER} obtained {STR_VAR_1}!"))',
+            "waitmessage",
+            "waitfanfare",
+            "if (var(VAR_RESULT) == MON_GIVEN_TO_PARTY) {",
+            *[f"    {ln}" for ln in nickname],
+            "        call(Common_EventScript_GetGiftMonPartySlot)",
+            "        call(Common_EventScript_NameReceivedPartyMon)",
+            "    }",
+            "} else {",
+            *[f"    {ln}" for ln in nickname],
+            "        call(Common_EventScript_NameReceivedBoxMon)",
+            "    }",
+            "    call(Common_EventScript_TransferredToPC)",
+            "}",
+            "hidemonpic",
+        ]
 
     # -- array-valued game variables -----------------------------------------
 

@@ -476,3 +476,22 @@ def test_reserved_var_custom_reserved_list() -> None:
     text = "script Foo {\n    setvar(VAR_CUSTOM, 1)\n    end\n}"
     violations = fi.check_reserved_var_writes(text, reserved=("VAR_CUSTOM",))
     assert [v.symbol for v in violations] == ["VAR_CUSTOM"]
+
+
+def test_charmap_string_vars_are_indexed(index: fi.ForkIndex) -> None:
+    """`bufferspeciesname STR_VAR_1, ...` is what vanilla itself writes.
+
+    STR_VAR_1/2/3 are assigned only in engine/charmap.txt — not in any
+    constants header, not in event.inc — so before charmap was scanned the gate
+    rejected the fork's own buffer idiom (caught 2026-08-01 building the
+    pbAddPokemon gift ceremony).
+    """
+    for name in ("STR_VAR_1", "STR_VAR_2", "STR_VAR_3"):
+        assert name in index.constants
+
+
+def test_charmap_single_characters_are_not_indexed(index: fi.ForkIndex) -> None:
+    """charmap.txt also assigns every bare letter; admitting those would let a
+    typo'd single-letter symbol pass the gate."""
+    for name in ("A", "B", "Z"):
+        assert name not in index.constants
