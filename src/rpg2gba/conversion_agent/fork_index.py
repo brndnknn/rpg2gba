@@ -53,7 +53,11 @@ _EXTRA_CONSTANT_HEADERS = ["engine/include/gba/defines.h"]
 # (tree_hash, format), so a logic change must invalidate hash-matching caches.
 _INDEX_FORMAT = 3
 
-_EXPECTED_SPECIALS_DECLS = 623  # def_special invocations (excludes the .macro def_special line)
+# def_special invocations (excludes the .macro def_special line). 623 upstream
+# + 1 rpg2gba addition (RPG2GBA_SetObjectEventGfx, the RMXP move-command 41
+# live sprite swap). Bump deliberately when the fork gains a special — the
+# whole point of the pin is that drift is noticed.
+_EXPECTED_SPECIALS_DECLS = 624
 _EXPECTED_MACROS = 385
 _CONSTANTS_FLOOR = 10_000
 

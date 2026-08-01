@@ -31,7 +31,10 @@ def index() -> fi.ForkIndex:
 
 
 def test_specials_unique_count(index: fi.ForkIndex) -> None:
-    assert len(index.specials) == 620
+    # 620 upstream uniques + RPG2GBA_SetObjectEventGfx (the RMXP move-command
+    # 41 live sprite swap). Fewer than _EXPECTED_SPECIALS_DECLS: upstream
+    # declares a handful of specials twice.
+    assert len(index.specials) == 621
 
 
 def test_script_macros_count(index: fi.ForkIndex) -> None:
