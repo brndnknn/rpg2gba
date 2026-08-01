@@ -7,7 +7,7 @@ deleting it. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
-### 22. Stamped review ROMs were shadowed by save-file residue — FIXED 2026-08-01, retest pending
+### 22. Stamped review ROMs were shadowed by save-file residue — FIXED + RETEST PASSED 2026-08-01
 
 **Symptom (user, lab-doorstep ROM `a86e073c`):** the ROM should boot on the lab
 doorstep with the Auntie + Theo-cameo prerequisites done. Instead it showed a
@@ -49,7 +49,9 @@ backed by the artifacts. Extras now flow from `reference/npc_gfx_map.json`
 fixed, the real conversion built and moki went GREEN on all 17 beats.
 
 **Shipped:** `lab-doorstep.gba` sha1 `9596c8b7` (pristine `128f2edd`),
-taildropped 2026-08-01.
+taildropped 2026-08-01. **User boot-walked it the same day: correct spawn, and
+the lab scene now carries the real EV019 conversion — "it includes a lot more
+than before".** Committed `a4a97e2a`.
 
 ### 20. Chapter harness planned routes on the *previous* map's grid — FIXED 2026-07-30, moki GREEN
 
