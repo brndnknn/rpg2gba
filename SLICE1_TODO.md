@@ -7,6 +7,50 @@ deleting it. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 22. Stamped review ROMs were shadowed by save-file residue — FIXED 2026-08-01, retest pending
+
+**Symptom (user, lab-doorstep ROM `a86e073c`):** the ROM should boot on the lab
+doorstep with the Auntie + Theo-cameo prerequisites done. Instead it showed a
+spot near the player's-house exit, with **no player sprite and dead input** —
+viewport frozen.
+
+**Root cause:** `CB2_StartUraniumSlice` (`engine/src/new_game.c`) tested
+`gSaveFileStatus == SAVE_STATUS_OK || UraniumEmbeddedSave_TryLoad()` — *flash
+first*. Any leftover `.sav` on the test device therefore won the race and the
+stamped blob was never loaded, so the ROM continued an older build's save
+whose map/coords no longer line up (hence the missing player object).
+Reproduced headlessly: pairing the stamped ROM with a foreign `.sav` booted
+into the player's house at (7,7) instead of Moki Town (17,12). The ROM's
+*stamped state itself was always correct* — a fresh-flash boot passed, which is
+why this was never caught.
+
+**Fix:** swap the order — the blob wins. `TryLoad()` returns FALSE untouched
+when `magic == 0`, so a pristine ROM still continues a flash save and a player
+keeps in-game saves across launches. Consequence, by design: on a *stamped*
+ROM an in-game save is inert; every boot returns to the stamped state.
+
+**Invariant pinned:** `playtest.stamp.verify_stamped_rom` — every
+`python -m rpg2gba.playtest.stamp` now re-boots the stamped ROM **with a
+deliberately foreign `.sav` paired** and asserts map/pos/field-unlocked. A
+fresh-flash boot passes either way, so the foreign save is the whole point.
+
+**Collateral found + fixed:** the fork-index gate had no extras for the
+`OBJ_EVENT_GFX_URANIUM_*` constants the sprite pass mints into generated,
+gitignored `uranium_*.gen.h` headers, so the transpiler's code-41 live sprite
+swap (added 2026-07-31, `d5ae2e3e`) gated as an invented constant and
+`transpile_driver run --maps slice` aborted on Map050. **The whole slice was
+unbuildable, and the ROM shipped on 2026-07-31 did not contain that commit's
+Map050 conversion at all** (`scripts/Map050.pory` on disk was still dated
+07-30, and `scripts.inc` had zero `RPG2GBA_SetObjectEventGfx`) — the commit
+message's "moki chapter GREEN on transpiler-generated Map050 EV019" was not
+backed by the artifacts. Extras now flow from `reference/npc_gfx_map.json`
+(the same §4.3 SoT the transpiler resolves sheets through) in both
+`transpile_driver` and `assemble_pathfinder`; two tests pin it. With the gate
+fixed, the real conversion built and moki went GREEN on all 17 beats.
+
+**Shipped:** `lab-doorstep.gba` sha1 `9596c8b7` (pristine `128f2edd`),
+taildropped 2026-08-01.
+
 ### 20. Chapter harness planned routes on the *previous* map's grid — FIXED 2026-07-30, moki GREEN
 
 **Symptom:** moki beat B4 failed deterministically (same frame `f3464` across

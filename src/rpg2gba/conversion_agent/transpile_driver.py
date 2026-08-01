@@ -342,6 +342,9 @@ def transpile_corpus(
             None,
             map_constants_path if map_constants_path.is_file() else None,
             species_manifest_path if species_manifest_path.is_file() else None,
+            # Same table ctx.npc_gfx resolves through: the OBJ_EVENT_GFX_URANIUM_*
+            # constants live in generated, gitignored headers the index can't see.
+            _gfx_path if _gfx_path.is_file() else None,
         )
         extras |= _registry_minted_names(registry)
         violations = fork_index.verify_script(pory_text, index, extra_symbols=extras)
@@ -380,6 +383,9 @@ def transpile_corpus(
             None,
             map_constants_path if map_constants_path.is_file() else None,
             species_manifest_path if species_manifest_path.is_file() else None,
+            # Same table ctx.npc_gfx resolves through: the OBJ_EVENT_GFX_URANIUM_*
+            # constants live in generated, gitignored headers the index can't see.
+            _gfx_path if _gfx_path.is_file() else None,
         )
         extras |= _registry_minted_names(registry)
         violations = fork_index.verify_script(ce_text, index, extra_symbols=extras)

@@ -287,16 +287,26 @@ static const u8 sUraniumDefaultName[] = _("RED");
 void CB2_StartUraniumSlice(void)
 {
     // BEGIN URANIUM EMBEDDED SAVE — boot-continue instead of always-new-game.
+    // A stamped state blob wins over flash, and the order matters: it used to
+    // be the other way round, and any leftover .sav on the test device
+    // silently shadowed the stamped state (2026-08-01 boot-walk — the
+    // lab-doorstep ROM booted into the player's house from an older build's
+    // save, with the player object failing to spawn: no sprite, dead input).
+    // A stamped ROM is a review artifact and must reproduce ITS state on every
+    // boot, on any device, regardless of save-file residue. TryLoad() returns
+    // FALSE untouched when the blob is absent (magic == 0), so a pristine ROM
+    // still falls through to the flash save below and a player keeps their
+    // in-game saves across launches. Pristine ROM + empty flash falls through
+    // to the new-game boot — the regression harness always runs that path.
+    // (Consequence, by design: on a stamped ROM an in-game save is inert —
+    // the next boot returns to the stamped state, not to where you saved.)
     // CB2_InitCopyrightScreenAfterBootup already ran LoadGameSave(SAVE_NORMAL)
-    // before handing control here, so a valid flash save is sitting in the
-    // save blocks: continue it (lets a player keep in-game saves across
-    // launches). Otherwise, if the harness stamped a state blob into the ROM,
-    // load that and continue. Pristine ROM + empty flash falls through to the
-    // new-game boot below — the regression harness always runs that path.
+    // before handing control here, so a valid flash save is already sitting in
+    // the save blocks; TryLoad() overwrites it in place.
     // Walker builds keep always-new-game: the walker is a boot-chain takeover
     // and a continued save would bypass it.
 #if URANIUM_MAP_WALKER == FALSE
-    if (gSaveFileStatus == SAVE_STATUS_OK || UraniumEmbeddedSave_TryLoad())
+    if (UraniumEmbeddedSave_TryLoad() || gSaveFileStatus == SAVE_STATUS_OK)
     {
         SetMainCallback2(CB2_ContinueSavedGame);
         return;

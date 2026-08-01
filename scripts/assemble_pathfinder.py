@@ -387,10 +387,15 @@ def run_fork_pass(
     # before make, never stage, never queue.
     gate_index = fi.load_or_build()
     species_manifest_path = out / "species" / "species_manifest.json"
+    # The sprite pass's OBJ_EVENT_GFX_URANIUM_* constants land in generated,
+    # gitignored `uranium_*.gen.h` headers, so the index can never carry them;
+    # they come from the same §4.3 SoT the transpiler resolves sheets through.
+    npc_gfx_map_path = Path("reference/npc_gfx_map.json")
     gate_extras = fi.registry_extra_symbols(
         flag_state_path=out / "flag_state.json",
         map_constants_path=out / "porymap" / "map_constants.json",
         species_manifest_path=species_manifest_path if species_manifest_path.is_file() else None,
+        npc_gfx_map_path=npc_gfx_map_path if npc_gfx_map_path.is_file() else None,
     )
     def _gate(pory_text: str, label: str) -> None:
         violations = fi.verify_script(pory_text, gate_index, extra_symbols=gate_extras)

@@ -576,6 +576,7 @@ def registry_extra_symbols(
     flag_state_path: Path | None = None,
     map_constants_path: Path | None = None,
     species_manifest_path: Path | None = None,
+    npc_gfx_map_path: Path | None = None,
 ) -> set[str]:
     """Collect Uranium-minted symbols the gate should accept beyond the index.
 
@@ -592,6 +593,14 @@ def registry_extra_symbols(
       merely appears in `reference/uranium_id_map.json` (e.g. under
       `needs_engine.species`) but hasn't been staged must still be rejected;
       this deliberately does not widen to the full id-map species table.
+    - `npc_gfx_map_path`: the NPC sprite map (`reference/npc_gfx_map.json`,
+      §4.3 SoT) — the `OBJ_EVENT_GFX_URANIUM_*` constants the sprite pass
+      mints into `engine/**/uranium_*.gen.h`. Those headers are generated and
+      gitignored, so the index (built from git-tracked `engine/` source) can
+      never see them; without this the code-41 live sprite swap gates as an
+      invented constant. Only sheets that carry a `gfx` entry contribute —
+      the same table, and the same entries, the transpiler resolves through,
+      so a sheet it would queue as unmapped cannot slip past the gate here.
 
     Missing categories inside any of these files fail loud (KeyError) — a
     shape drift there means the registry changed and this glue must follow.
@@ -621,6 +630,12 @@ def registry_extra_symbols(
         for entry in manifest["species"]:
             for key in ("species_constant", "national_dex_constant", "cry_constant"):
                 extras.add(entry[key])
+
+    if npc_gfx_map_path is not None:
+        gfx_map = json.loads(npc_gfx_map_path.read_text(encoding="utf-8"))
+        for entry in gfx_map.values():
+            if isinstance(entry, dict) and entry.get("gfx"):
+                extras.add(entry["gfx"])
 
     return extras
 

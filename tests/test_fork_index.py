@@ -118,6 +118,43 @@ def test_registry_extra_symbols(tmp_path: Path) -> None:
     assert "MAP_URANIUM_49" in fi.registry_extra_symbols(map_constants_path=map_constants)
 
 
+def test_registry_extra_symbols_includes_npc_gfx(tmp_path: Path) -> None:
+    """The sprite pass's OBJ_EVENT_GFX_URANIUM_* constants must reach the gate.
+
+    They are minted into generated, gitignored `uranium_*.gen.h` headers, so
+    the index (built from git-tracked engine source) cannot contain them. When
+    they were missing here, the transpiler's code-41 live sprite swap gated as
+    an invented constant and `transpile_driver run --maps slice` aborted on
+    Map050 — the whole slice was unbuildable.
+    """
+    gfx_map = tmp_path / "npc_gfx_map.json"
+    gfx_map.write_text(
+        json.dumps(
+            {
+                "PU_POKEBALLMACHINE": {
+                    "gfx": "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE",
+                    "fallback": "OBJ_EVENT_GFX_ITEM_BALL",
+                },
+                # Stock-substituted sheets carry no `gfx`: nothing is minted for
+                # them, so they must contribute nothing here.
+                "SOME_STOCK_SHEET": {"fallback": "OBJ_EVENT_GFX_MAN_1"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    extras = fi.registry_extra_symbols(npc_gfx_map_path=gfx_map)
+    assert extras == {"OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE"}
+
+
+def test_real_npc_gfx_map_covers_the_slice_sprite_swaps() -> None:
+    """Guard against the SoT and the gate drifting apart."""
+    gfx_map = Path("reference/npc_gfx_map.json")
+    extras = fi.registry_extra_symbols(npc_gfx_map_path=gfx_map)
+    assert extras, "reference/npc_gfx_map.json minted no OBJ_EVENT_GFX_URANIUM_*"
+    assert all(n.startswith("OBJ_EVENT_GFX_URANIUM_") for n in extras)
+
+
 def test_cache_invalidated_on_format_bump(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

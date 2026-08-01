@@ -73,6 +73,68 @@ def stamp_rom(rom: Path, out: Path, emu: Emulator) -> None:
                 rom, out, file_off, len(blob))
 
 
+def _foreign_sav(engine: Path, workdir: Path) -> Path:
+    """A real, *different* saved game, for the shadowing check below.
+
+    Boots the pristine ROM to its new-game spawn (the player's house) and saves
+    there, so the resulting .sav is a legitimate flash save that disagrees with
+    any stamped scenario state.
+    """
+    from .emulator import Emulator
+    from .scenarios import BOOT_FRAMES, save_in_game
+
+    rom = workdir / ".foreign.gba"
+    shutil.copy(engine / "pokeemerald.gba", rom)
+    rom.with_suffix(".sav").unlink(missing_ok=True)
+    emu = Emulator(rom, engine)
+    emu.run(BOOT_FRAMES)
+    save_in_game(emu)
+    sav = workdir / ".foreign.sav"
+    shutil.move(rom.with_suffix(".sav"), sav)
+    rom.unlink(missing_ok=True)
+    return sav
+
+
+def verify_stamped_rom(stamped: Path, engine: Path, expected: tuple[int, int],
+                       expected_pos: tuple[int, int], boot_frames: int = 600) -> None:
+    """Assert the stamped ROM boots into its stamped state *despite* a .sav.
+
+    The invariant this pins is the one that broke on 2026-08-01: the engine's
+    boot branch preferred the flash save over the embedded blob, so any save
+    residue on the test device silently shadowed the stamped state and the ROM
+    booted somewhere else entirely. Booting with a deliberately foreign .sav
+    paired is the only way to catch that — a fresh-flash boot passes either
+    way.
+    """
+    from .emulator import Emulator
+
+    workdir = stamped.parent
+    sav = _foreign_sav(engine, workdir)
+    rom = workdir / f".{stamped.stem}.verify.gba"
+    try:
+        shutil.copy(stamped, rom)
+        shutil.copy(sav, rom.with_suffix(".sav"))
+        emu = Emulator(rom, engine)
+        emu.run(boot_frames)
+        got, got_pos = emu.map_location(), emu.player_pos()
+        if got != expected or got_pos != expected_pos:
+            raise ValueError(
+                f"stamped ROM did not boot into its stamped state: expected "
+                f"map {expected} pos {expected_pos}, got map {got} pos "
+                f"{got_pos}. A flash save is shadowing the embedded blob "
+                "(see CB2_StartUraniumSlice in engine/src/new_game.c).")
+        if emu.field_locked():
+            raise ValueError(
+                "stamped ROM booted into its state but the field is locked — "
+                "the state was captured mid-script and is not playable.")
+    finally:
+        rom.unlink(missing_ok=True)
+        rom.with_suffix(".sav").unlink(missing_ok=True)
+        sav.unlink(missing_ok=True)
+    logger.info("verified: %s boots to map %s pos %s with a foreign .sav paired",
+                stamped, expected, expected_pos)
+
+
 @click.command()
 @click.option("--rom", type=click.Path(exists=True, path_type=Path),
               default=None, help="Pristine ROM (default: <engine>/pokeemerald.gba)")
@@ -84,8 +146,11 @@ def stamp_rom(rom: Path, out: Path, emu: Emulator) -> None:
               help="Stamped ROM to write")
 @click.option("--screenshots", type=click.Path(path_type=Path), default=None,
               help="Directory for scenario screenshots")
+@click.option("--verify/--no-verify", default=True,
+              help="Re-boot the stamped ROM with a foreign .sav paired and "
+                   "assert it still lands in the stamped state")
 def main(rom: Path | None, engine: Path, scenario: str, out: Path,
-         screenshots: Path | None) -> None:
+         screenshots: Path | None, verify: bool) -> None:
     """Play SCENARIO headlessly on a scratch copy of the ROM, then write a
     stamped review ROM to OUT."""
     from .scenarios import run_scenario
@@ -100,10 +165,14 @@ def main(rom: Path | None, engine: Path, scenario: str, out: Path,
     scratch_sav.unlink(missing_ok=True)
     try:
         emu = run_scenario(scenario, scratch, engine, screenshot_dir=screenshots)
+        expected, expected_pos = emu.map_location(), emu.player_pos()
         stamp_rom(rom, out, emu)
+        del emu
     finally:
         scratch.unlink(missing_ok=True)
         scratch_sav.unlink(missing_ok=True)
+    if verify:
+        verify_stamped_rom(out, engine, expected, expected_pos)
     click.echo(f"stamped ROM: {out}")
 
 
