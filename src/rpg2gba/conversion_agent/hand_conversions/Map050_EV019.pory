@@ -75,7 +75,6 @@ script Map050_EV019_Page1 {
     }
     msgbox(format("Yes!! My first Pokémon!"))
     applymovement(20, Map050_EV019_Page1_Move4)
-    applymovement(20, Map050_EV019_Page1_Move5)
     applymovement(OBJ_EVENT_ID_PLAYER, Map050_EV019_Page1_Move6)
     waitmovement(0)
     # UNHANDLED code 209: move route (target 19, 1 steps, codes [41]) outside the deterministic tier — paired 210 waits are neutralized
@@ -160,11 +159,32 @@ movement Map050_EV019_Page1_Move3 {
     face_up
 }
 
+# Approach/retreat choreography re-derived for THIS map's geometry (2026-07-27).
+#
+# RMXP authored the whole scene as relative deltas anchored on the player's
+# approach tile, which in Uranium is (14,7) -- two south of the Machine at
+# (14,5), with Bambo at (14,6) between. Here that anchor cannot hold: the
+# converted layout blocks (13,5)/(15,5) (the machine-invi through-blockers) and
+# seals the pocket at row 4, so (14,6) is the ONLY tile the Machine can be
+# interacted from, and Bambo has stepped aside to (15,6) by then. The player is
+# therefore always one tile north of Uranium's anchor, and replaying Uranium's
+# raw deltas left Theo one short of the Machine and the two of them staggered
+# diagonally instead of side by side.
+#
+# Re-derived from P0 = (14,6), preserving the source's *intent* (Theo takes the
+# player's place at the Machine, then comes back and squares up beside them):
+#   Theo   (13,8) -walk_right-> (14,8) -up x2-> (14,6) -down x3-> (14,9) facing left
+#   Player (14,6) -left-> (13,6) -down x3-> (13,9) facing right
+# Theo's final tile is unchanged at (14,9), so Map050_EV019_Theo_Exit still
+# lines up. All eight tiles walked are collision 0 in
+# engine/data/layouts/MokiTownProfessorLab/map.bin.
+#
+# Move5 is gone: the source's two back-to-back code-209 routes on Theo with no
+# intervening 210 are an RMXP authoring artifact (last-wins there, and the
+# engine drops the second as already-in-flight), so only one ever ran on either
+# side. Move4 now carries the real two-step approach outright.
 movement Map050_EV019_Page1_Move4 {
     walk_up
-}
-
-movement Map050_EV019_Page1_Move5 {
     walk_up
 }
 
@@ -172,10 +192,12 @@ movement Map050_EV019_Page1_Move6 {
     walk_left
     walk_down
     walk_down
+    walk_down
     face_up
 }
 
 movement Map050_EV019_Page1_Move7 {
+    walk_down
     walk_down
     walk_down
     face_left
