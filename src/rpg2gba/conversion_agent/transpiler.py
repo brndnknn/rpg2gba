@@ -305,6 +305,52 @@ _RUBY_LOCAL_WRAP_RE = re.compile(
 _STARTER_SELECTOR_RE = re.compile(
     r"^\s*pbStarterSelector\(\s*([a-z_]\w*)\s*(?:,\s*(true|false)\s*)?\)\s*$"
 )
+# The player's own pick passes the variable straight through, with no Ruby
+# local in between: pbStarterSelector(pbGet(151)).
+_STARTER_SELECTOR_PBGET_RE = re.compile(
+    r"^\s*pbStarterSelector\(\s*pbGet\(\s*(\d+)\s*\)\s*(?:,\s*(true|false)\s*)?\)\s*$"
+)
+
+# -- array-valued game variables (Map050 EV005's aptitude tally) ---------------
+# Essentials lets a game variable hold a Ruby Array. Uranium uses it in exactly
+# ONE place (corpus census 2026-08-01: 1 array literal, 4 indexed bumps, 1
+# argmax — all Map050 EV005), so this is deliberately a narrow idiom rather
+# than a general array subsystem; `test_aptitude_tally_is_still_one_of_a_kind`
+# pins the count so a second site re-opens the design instead of silently
+# reusing it.
+#
+# The array becomes N scalar scratch vars. VAR_TEMP_* is right: the whole
+# lifetime is inside one scene on one map (the buckets are dead the moment the
+# argmax lands in the real variable), and the fork zeroes temps on map change.
+# VAR_TEMP_0/1 are this transpiler's own scratch (_ALIGN_AXIS_VAR); the
+# buckets take 3/4/5, the same three the (now retired) hand conversion used
+# and boot-walked. NB the registry's VAR_TEMP_MOVE_CHOICE is NOT VAR_TEMP_2 —
+# it is a minted var in the Uranium range (data/scripts/uranium_flags.h), so
+# it cannot collide with these.
+_ARRAY_BUCKET_VARS = ("VAR_TEMP_3", "VAR_TEMP_4", "VAR_TEMP_5")
+_ARRAY_LITERAL_RE = re.compile(
+    r"^\s*\$game_variables\[\s*(\d+)\s*\]\s*=\s*\[\s*([\d\s,]*?)\s*\]\s*$"
+)
+_ARRAY_INDEXED_BUMP_RE = re.compile(
+    r"^\s*pbGet\(\s*(\d+)\s*\)\[\s*pbGet\(\s*(\d+)\s*\)\s*\]\s*\+=\s*(\d+)\s*$"
+)
+_ARRAY_ARGMAX_RE = re.compile(
+    r"^\s*([a-z_]\w*)\s*=\s*pbGet\(\s*(\d+)\s*\)\.index\(\s*pbGet\(\s*(\d+)\s*\)\.max\s*\)\s*$"
+)
+_RUBY_IF_EQ_RE = re.compile(r"^\s*(?:els)?if\s+([a-z_]\w*)\s*==\s*(-?\d+)\s*$")
+_RUBY_ASSIGN_CONST_RE = re.compile(r"^\s*([a-z_]\w*)\s*=\s*(-?\d+)\s*$")
+_RUBY_END_RE = re.compile(r"^\s*end\s*$")
+_VAR_ASSIGN_LOCAL_RE = re.compile(
+    r"^\s*\$game_variables\[\s*(\d+)\s*\]\s*=\s*([a-z_]\w*)\s*$"
+)
+
+# u16 subtract-and-test-sign threshold. NOT 32768: 0x8000 is SPECIAL_VARS_START
+# (include/constants/vars.h), and the `compare` macro (asm/macros/event.inc)
+# auto-selects compare_var_to_var for a literal in that range — which silently
+# compared against VAR_0x8000, the engine's own `switch` scratch. That was the
+# 2026-07-21 always-Eletux bug; 32767 has the same semantics
+# (A>=B <=> (A-B) <= 0x7FFF) and is outside every reserved range.
+_SIGN_TEST_MAX = 32767
 
 # $PokemonGlobal.randomizer — Uranium's randomizer *mode*, a new-game option we
 # do not implement. Every code-111 gated on it picks the normal-play arm: the
@@ -647,12 +693,67 @@ class _RubyLocal:
     source_var: int
     offset: int = 0
     wrap: tuple[int, int] | None = None
+    # Set when the local is the argmax of an array-valued variable rather than
+    # plain arithmetic on a scalar one; `remap` collects the `if x==A / x=B`
+    # permutation the original applies to the winning index afterwards.
+    argmax_of: int | None = None
+    remap: dict[int, int] = field(default_factory=dict)
 
     def value_for(self, source_value: int) -> int:
         v = source_value + self.offset
         if self.wrap is not None and v == self.wrap[0]:
             return self.wrap[1]
         return v
+
+
+# -- RMXP labels (118) / jump-to-label (119) ----------------------------------
+# RMXP's intra-page goto. The fork has the same primitive (`goto`, a jump
+# inside one script context), so the conversion is a basic-block split: the
+# labelled region is hoisted into its own `script` block and both the
+# fall-through *and* every jump become `goto(<block>)`.
+#
+# The hoist is only sound when the region TERMINATES — control must never need
+# to fall back into whatever structure enclosed the label, because the hoisted
+# block has no way to return there. Two shapes qualify (corpus census
+# 2026-08-01, 51 labels / 138 jumps over 23 distinct names):
+#
+#   * the region runs to the end of the page (29 labels) — nothing follows in
+#     any enclosing scope either way;
+#   * the region ends at a same-indent code-115 Exit Event Processing
+#     (2 labels, incl. Map050 EV005's aptitude-test body) — an explicit `end`.
+#
+# The remaining 20 sit inside a choice/branch arm and fall out on a dedent;
+# hoisting those needs a continuation the fork's `goto` can't express, so they
+# queue (§4.5). Pages carrying more than one label also queue as a unit: the
+# regions nest, and chaining them correctly is a separate unit of work.
+_LABEL_SANITIZE_RE = re.compile(r"[^A-Za-z0-9]+")
+
+
+def _label_block_suffix(name: str) -> str:
+    """`Choice Made` -> `ChoiceMade`, for a Poryscript-legal block label."""
+    parts = [p for p in _LABEL_SANITIZE_RE.split(str(name)) if p]
+    return "".join(p[:1].upper() + p[1:] for p in parts) or "Label"
+
+
+def hoistable_label_region(commands: list[dict]) -> tuple[int, int] | None:
+    """The single hoistable label's ``(label_index, region_end_exclusive)``.
+
+    Returns None when the page has no label, more than one, or the one it has
+    does not terminate (see the module note above) — every such case leaves
+    the 118/119 rows to queue.
+    """
+    label_positions = [i for i, c in enumerate(commands) if c.get("code") == LABEL]
+    if len(label_positions) != 1:
+        return None
+    i = label_positions[0]
+    indent = commands[i].get("indent", 0)
+    for j in range(i + 1, len(commands)):
+        if commands[j].get("indent", 0) < indent:
+            return None  # falls out of the enclosing block — no continuation
+        if (commands[j].get("indent", 0) == indent
+                and commands[j].get("code") == EXIT_EVENT):
+            return i, j + 1  # region owns the `end`
+    return i, len(commands)  # runs to the end of the page
 
 
 def _load_starter_selector_scene(reference_dir: Path) -> dict:
@@ -862,6 +963,12 @@ _MOVE_DROP_CODES = frozenset({30, 37, 38, 43, 44})
 # _PageEmitter._emit_route_with_gfx_swaps, which splits the route around it.
 CHANGE_GRAPHIC = 41
 
+# RMXP facing (2 down / 4 left / 6 right / 8 up) -> the fork's facing action.
+# Used by the code-41 swap, whose `direction` parameter is how RMXP props
+# select a visual state on a single sheet.
+_RMXP_DIRECTION_TOKENS = {2: "face_down", 4: "face_left",
+                          6: "face_right", 8: "face_up"}
+
 # Bucket B (15 = wait N frames): emit the nearest not-longer delay_* chain.
 _DELAY_TOKENS = [(16, "delay_16"), (8, "delay_8"), (4, "delay_4"),
                  (2, "delay_2"), (1, "delay_1")]
@@ -975,6 +1082,15 @@ class _PageEmitter:
         # wrap). Only the shapes the starter-selector idiom needs; see
         # _RUBY_LOCAL_PBGET_RE and friends.
         self._ruby_locals: dict[str, _RubyLocal] = {}
+        # RMXP label name -> hoisted script block label, filled by
+        # transpile_page for the one region it could prove terminates.
+        # Anything not in here queues, both at the label and at every jump.
+        self.label_blocks: dict[str, str] = {}
+        # Uranium variable id -> the scratch vars standing in for an array
+        # value it was assigned (see _emit_array_literal).
+        self._array_vars: dict[int, list[str]] = {}
+        # Open `if x==A` remap arm: (local name, tested value, assigned value).
+        self._pending_remap: tuple[str, int, int | None] | None = None
 
     # -- leaf emitters -------------------------------------------------------
 
@@ -1031,6 +1147,20 @@ class _PageEmitter:
         if code == WAIT:
             frames = params[0] if params and isinstance(params[0], int) else 1
             return [f"delay({frames})"]
+        if code in (LABEL, JUMP_TO_LABEL):
+            # Both sides of RMXP's intra-page goto compile to the same `goto`:
+            # the label is where fall-through enters the hoisted block, the
+            # jump is where a branch enters it.
+            name = str(params[0]) if params else ""
+            block = self.label_blocks.get(name)
+            if block is None:
+                return [ctx.queue(
+                    node.index, code,
+                    f"RMXP label {name!r} was not hoistable — its region falls "
+                    f"back into an enclosing branch/choice arm, or the page has "
+                    f"more than one label (see hoistable_label_region)",
+                )]
+            return [f"goto({block})"]
         if code == EXIT_EVENT:
             # In a called common event, exiting means returning to the caller;
             # `end` there would kill the whole script context.
@@ -1911,6 +2041,33 @@ class _PageEmitter:
                 f"setvar(VAR_0x8005, {entry})",
                 "special(RPG2GBA_SetObjectEventGfx)",
             ]
+            # RMXP Change Graphic sets sheet AND (direction, pattern) together,
+            # and props use those to select a STATE: Map050's pokéball machine
+            # swaps to its own sheet twice, changing only direction/pattern, so
+            # a sheet-only conversion is a visible no-op. Direction has an exact
+            # analog — the object's facing picks the same row of the converted
+            # 4-direction sheet — so emit it as its own movement block.
+            # `pattern` (the frame within a row) has none: the fork animates
+            # frames itself and no movement action selects one. A swap that
+            # moves ONLY the pattern is therefore still a silent drop; it gets
+            # a queue entry rather than pretending (§4.5).
+            direction = params[2] if len(params) > 2 else None
+            pattern = params[3] if len(params) > 3 else None
+            face = _RMXP_DIRECTION_TOKENS.get(direction)
+            if face is not None:
+                label = f"{self.page_label}_Move{len(self.movements) + 1}"
+                self.movements.append((label, [face]))
+                lines.append(f"applymovement({who}, {label})")
+                lines.append("waitmovement(0)")
+                emitted_movement = True
+            if isinstance(pattern, int) and pattern != 0:
+                lines.append(self.ctx.queue(
+                    node.index, SET_MOVE_ROUTE,
+                    f"change-graphic on sheet {sheet!r} also selects frame "
+                    f"{pattern} within the row; the fork drives sprite frames "
+                    f"itself and no movement action picks one, so that part of "
+                    f"the state change is dropped",
+                ))
         if not flush():
             self._last_route_ok = False
             return [self.ctx.queue(
@@ -2089,11 +2246,141 @@ class _PageEmitter:
             )
             return []
 
+        # -- array-valued game variable (the aptitude tally) ------------------
+        m = _ARRAY_LITERAL_RE.match(text)
+        if m:
+            return self._emit_array_literal(int(m.group(1)), m.group(2))
+
+        m = _ARRAY_INDEXED_BUMP_RE.match(text)
+        if m:
+            return self._emit_array_bump(
+                int(m.group(1)), int(m.group(2)), int(m.group(3)))
+
+        m = _ARRAY_ARGMAX_RE.match(text)
+        if m and m.group(2) == m.group(3) and int(m.group(2)) in self._array_vars:
+            # Value lands in the local; nothing is emitted until the local is
+            # written back to a real variable (_VAR_ASSIGN_LOCAL_RE below).
+            self._ruby_locals[m.group(1)] = _RubyLocal(
+                source_var=int(m.group(2)), argmax_of=int(m.group(2)))
+            return []
+
+        m = _RUBY_ASSIGN_CONST_RE.match(text)
+        if m and self._pending_remap is not None:
+            # Body of the `if x==A / x=B` remap opened below.
+            name, value = m.group(1), int(m.group(2))
+            local = self._ruby_locals.get(name)
+            if local is not None and local.argmax_of is not None:
+                self._pending_remap = (name, self._pending_remap[1], value)
+                local.remap[self._pending_remap[1]] = value
+                return []
+
+        m = _RUBY_IF_EQ_RE.match(text)
+        if m:
+            local = self._ruby_locals.get(m.group(1))
+            if local is not None and local.argmax_of is not None:
+                # `if x==1 / x=0 / elsif x==0 / x=1 / end` is a value
+                # permutation over the argmax result, not control flow — the
+                # arms are mutually exclusive tests of the same local.
+                self._pending_remap = (m.group(1), int(m.group(2)), None)
+                return []
+
+        if _RUBY_END_RE.match(text) and self._pending_remap is not None:
+            self._pending_remap = None
+            return []
+
+        m = _VAR_ASSIGN_LOCAL_RE.match(text)
+        if m:
+            local = self._ruby_locals.get(m.group(2))
+            if local is not None and local.argmax_of is not None:
+                return self._emit_argmax(int(m.group(1)), local)
+
+        m = _STARTER_SELECTOR_PBGET_RE.match(text)
+        if m:
+            # No intervening Ruby local: the variable already holds the
+            # 0-based starter index the argmax wrote into it.
+            var_id = int(m.group(1))
+            return self._emit_starter_selector_over(
+                var_id, {i: i for i in range(len(
+                    (self.ctx.starter_scene.get("starters") or [])))},
+                theo=m.group(2) == "true")
+
         m = _STARTER_SELECTOR_RE.match(text)
         if m:
             return self._emit_starter_selector(m.group(1), m.group(2) == "true")
 
         return None
+
+    # -- array-valued game variables -----------------------------------------
+
+    def _emit_array_literal(self, var_id: int, body: str) -> list[str] | None:
+        """``$game_variables[N] = [0,0,0]`` — bind N scratch vars, seed them."""
+        try:
+            values = [int(v) for v in body.split(",") if v.strip() != ""]
+        except ValueError:
+            return None
+        if not values or len(values) > len(_ARRAY_BUCKET_VARS):
+            return None  # wider than the idiom covers — queue, don't guess
+        buckets = list(_ARRAY_BUCKET_VARS[:len(values)])
+        self._array_vars[var_id] = buckets
+        return [f"# $game_variables[{var_id}] = {values} — array-valued "
+                f"variable, one scratch var per element",
+                *(f"setvar({b}, {v})" for b, v in zip(buckets, values))]
+
+    def _emit_array_bump(self, var_id: int, index_var: int,
+                         delta: int) -> list[str] | None:
+        """``pbGet(A)[pbGet(B)] += n`` — bump the bucket B selects."""
+        buckets = self._array_vars.get(var_id)
+        if buckets is None:
+            return None
+        index_name = self.ctx.var_for_variable(index_var)
+        if index_name is None:
+            return None
+        lines = [f"switch (var({index_name})) {{"]
+        for i, bucket in enumerate(buckets):
+            lines.append(f"    case {i}:")
+            lines.append(f"        addvar({bucket}, {delta})")
+        lines.append("}")
+        return lines
+
+    def _emit_argmax(self, target_var: int, local: _RubyLocal) -> list[str] | None:
+        """``$game_variables[T] = <argmax local>`` — lowest-index-wins argmax.
+
+        Poryscript cannot compare two variables directly, so each `A >= B` is a
+        u16 subtract-and-test-sign through VAR_RESULT (subvar's second operand
+        goes through VarGet, so a VAR_* id dereferences; A-B wraps past 0x8000
+        iff B > A). Ruby's `index(max)` breaks ties toward the LOWEST index,
+        which is why the tests are `>=` and are applied last-to-first.
+        """
+        buckets = self._array_vars.get(local.argmax_of or -1)
+        target = self.ctx.var_for_variable(target_var)
+        if buckets is None or target is None:
+            return None
+        if len(buckets) != 3:
+            return None  # the >= chain below is written for exactly 3 buckets
+        remap = local.remap
+
+        def out(index: int) -> int:
+            return remap.get(index, index)
+
+        return [
+            f"# argmax over {buckets} (Ruby index(max): ties -> lowest index)"
+            + (f", then the source's {remap} remap" if remap else ""),
+            f"setvar({target}, {out(2)})",
+            f"copyvar(VAR_RESULT, {buckets[1]})",
+            f"subvar(VAR_RESULT, {buckets[2]})",
+            f"if (var(VAR_RESULT) <= {_SIGN_TEST_MAX}) {{",
+            f"    setvar({target}, {out(1)})",
+            "}",
+            f"copyvar(VAR_RESULT, {buckets[0]})",
+            f"subvar(VAR_RESULT, {buckets[1]})",
+            f"if (var(VAR_RESULT) <= {_SIGN_TEST_MAX}) {{",
+            f"    copyvar(VAR_RESULT, {buckets[0]})",
+            f"    subvar(VAR_RESULT, {buckets[2]})",
+            f"    if (var(VAR_RESULT) <= {_SIGN_TEST_MAX}) {{",
+            f"        setvar({target}, {out(0)})",
+            "    }",
+            "}",
+        ]
 
     def _emit_starter_selector(self, local_name: str, theo: bool) -> list[str] | None:
         """``pbStarterSelector(x, theo)`` — Uranium's full-screen starter reveal.
@@ -2118,7 +2405,30 @@ class _PageEmitter:
         scene = self.ctx.starter_scene
         if local is None or not scene:
             return None
-        var_name = self.ctx.var_for_variable(local.source_var)
+        starters = scene.get("starters") or []
+        if not starters:
+            return None
+        # The source variable is Uranium's 1-based selection index; the tracked
+        # arithmetic maps it onto the scene's 0-based starter index.
+        return self._emit_starter_selector_over(
+            local.source_var,
+            {v: local.value_for(v) for v in range(1, len(starters) + 1)},
+            theo=theo,
+        )
+
+    def _emit_starter_selector_over(
+        self, source_var: int, value_map: dict[int, int], theo: bool
+    ) -> list[str] | None:
+        """The reveal itself: one `switch` arm per possible source value.
+
+        `value_map` is source-variable value -> starter index, which is what
+        differs between the two call sites — Theo's pick arrives 1-based
+        through Ruby arithmetic, the player's already 0-based from the argmax.
+        """
+        scene = self.ctx.starter_scene
+        if not scene or not value_map:
+            return None
+        var_name = self.ctx.var_for_variable(source_var)
         if var_name is None:
             return None
         starters = scene.get("starters") or []
@@ -2132,11 +2442,10 @@ class _PageEmitter:
             "fadescreen(FADE_FROM_BLACK)",
             f"switch (var({var_name})) {{",
         ]
-        # The source variable is Uranium's 1-based selection index; any value
-        # in that range that maps outside the starter list means the tracked
+        # Any source value that maps outside the starter list means the tracked
         # arithmetic is wrong, so bail rather than emit a broken arm.
-        for source_value in range(1, len(starters) + 1):
-            starter = by_index.get(local.value_for(source_value))
+        for source_value, starter_index in sorted(value_map.items()):
+            starter = by_index.get(starter_index)
             if starter is None:
                 return None
             const = self.ctx.staged_species_constant(starter["internal_name"])
@@ -2189,13 +2498,41 @@ def _page_label(map_id: int, event: dict, page_no: int) -> str:
 
 def transpile_page(
     page: dict, ctx: TranspileContext, page_label: str
-) -> tuple[list[str], list[tuple[str, list[str]]], list[tuple[str, str]]]:
-    """Body lines + movement blocks + text blocks for one page. Queue entries
-    land in ctx."""
-    tree = parse_tree(page.get("list", []))
+) -> tuple[list[str], list[tuple[str, list[str]]], list[tuple[str, str]],
+           list[tuple[str, list[str]]]]:
+    """Body lines + movement blocks + text blocks + hoisted label blocks for
+    one page. Queue entries land in ctx.
+
+    The fourth element is the RMXP-label basic-block split (see
+    `hoistable_label_region`): `(block_label, body_lines)` pairs the caller
+    renders as sibling `script` blocks. They are entered by `goto` from this
+    page with its script context (and its `lock`) already live, so they take
+    the trigger's *epilogue* only — never its `lock` prologue.
+    """
+    commands = page.get("list", [])
+    region = hoistable_label_region(commands)
+    hoisted: list[tuple[str, list[str]]] = []
     emitter = _PageEmitter(ctx, page_label)
-    body = emitter.emit_nodes(tree)
-    return body, emitter.movements, emitter.text_blocks
+
+    if region is not None:
+        label_index, region_end = region
+        name = commands[label_index].get("parameters", [""])[0]
+        block_label = f"{page_label}_{_label_block_suffix(name)}"
+        emitter.label_blocks[str(name)] = block_label
+        # The region leaves the main page entirely; the label row stays put and
+        # emits the `goto` that enters it (so does every 119 jump).
+        main = commands[:label_index + 1] + commands[region_end:]
+        region_cmds = commands[label_index + 1:region_end]
+    else:
+        main, region_cmds, block_label = commands, [], ""
+
+    body = emitter.emit_nodes(parse_tree(main))
+    if region_cmds:
+        # Same emitter: movement/text blocks and the per-page choice counter
+        # stay in one namespace, so a hoisted block can't collide with the
+        # main body's labels.
+        hoisted.append((block_label, emitter.emit_nodes(parse_tree(region_cmds))))
+    return body, emitter.movements, emitter.text_blocks, hoisted
 
 
 def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> TranspiledEvent:
@@ -2213,8 +2550,14 @@ def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> Transpil
     for page_no, page in enumerate(event.get("pages", []), start=1):
         ctx.page_no = page_no
         label = _page_label(map_id, event, page_no)
-        body, movements, text_blocks = transpile_page(page, ctx, label)
+        body, movements, text_blocks, hoisted = transpile_page(page, ctx, label)
         trigger = page.get("trigger")
+        # Hoisted label blocks are entered by `goto` with the page's lock
+        # already held, so they need the epilogue but not the prologue. Without
+        # it a `goto`-ed block would end without ever releasing — the exact
+        # freeze the Map050 EV005 hand conversion had to patch by hand.
+        epilogue = {ACTION_BUTTON_TRIGGER: "release", 1: "release",
+                    2: "release", 3: "releaseall"}.get(trigger)
         if body and trigger == ACTION_BUTTON_TRIGGER:
             body = ["lock", "faceplayer", *body, "release"]
         elif body and trigger in (1, 2):
@@ -2231,6 +2574,17 @@ def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> Transpil
         inner = "\n".join(f"    {ln}" for ln in body)
         header = f"# {name}\n" if name and not name.startswith("EV") else ""
         blocks.append(f"{header}script {label} {{\n{inner}\n}}")
+        for h_label, h_body in hoisted:
+            # A region that ended on RMXP's Exit Event Processing already
+            # emitted its own `end`; the epilogue has to go BEFORE it, or the
+            # release is dead code after the terminator.
+            if h_body and h_body[-1] in ("end", "return"):
+                h_body = [*h_body[:-1], *([epilogue] if epilogue else []),
+                          h_body[-1]]
+            else:
+                h_body = [*h_body, *([epilogue] if epilogue else []), "end"]
+            h_inner = "\n".join(f"    {ln}" for ln in h_body)
+            blocks.append(f"script {h_label} {{\n{h_inner}\n}}")
         for m_label, tokens in movements:
             blocks.append(_render_movement(m_label, tokens))
         for t_label, content in text_blocks:
@@ -2260,13 +2614,22 @@ def transpile_common_event(ce: dict, ctx: TranspileContext) -> TranspiledEvent:
     before = len(ctx.unhandled)
 
     label = f"CommonEvent_{ce_id:03d}"
-    body, movements, text_blocks = transpile_page({"list": ce.get("list", [])}, ctx, label)
+    body, movements, text_blocks, hoisted = transpile_page(
+        {"list": ce.get("list", [])}, ctx, label)
     body = body or []
     body.append("return")  # called script — return to the caller, never `end`
     inner = "\n".join(f"    {ln}" for ln in body)
     name = _label_name(ce.get("name", ""))
     header = f"# {name}\n" if name else ""
     blocks = [f"{header}script {label} {{\n{inner}\n}}"]
+    for h_label, h_body in hoisted:
+        # A called script never `end`s — a hoisted region's Exit Event
+        # Processing already became `return` (EXIT_EVENT checks
+        # ctx.common_event_id), so only a fall-through region needs one added.
+        if not h_body or h_body[-1] != "return":
+            h_body = [*h_body, "return"]
+        h_inner = "\n".join(f"    {ln}" for ln in h_body)
+        blocks.append(f"script {h_label} {{\n{h_inner}\n}}")
     for m_label, tokens in movements:
         blocks.append(_render_movement(m_label, tokens))
     for t_label, content in text_blocks:

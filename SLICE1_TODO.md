@@ -7,6 +7,54 @@ deleting it. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 23. Map050 EV005 retired onto the transpiler — BUILT 2026-08-01, boot-walk pending
+
+The last hand conversion in the lab is gone; `hand_conversions/` is down to
+Map032_EV009 and Map049_EV021. Queue entries on the event: **14 → 0 on the
+quiz page** (the 8 that remain are pages 3/6/7, the Pokédex-reward pages,
+which the hand file also left queued — it was verbatim transpiler output
+there). Three transpiler features, all corpus-censused first:
+
+1. **RMXP Label (118) / Jump to Label (119)** — the intra-page goto, now a
+   basic-block hoist: the labelled region becomes its own `script` and both
+   the fall-through and every jump become `goto`. **Corpus reach: 51 labels /
+   138 jumps over 23 names.** Scoped to regions that provably TERMINATE
+   (run to page end, or end on a same-indent code-115), because a hoisted
+   block has no way to fall back into an enclosing branch/choice arm — 31 of
+   51 labels qualify; the rest queue. Pages with more than one label also
+   queue (the regions nest; chaining them is its own unit). Hoisted blocks
+   inherit the trigger's *epilogue* only — which is the general fix for the
+   freeze the hand file had to patch by hand (W8 fix A).
+2. **Array-valued game variables** — `$game_variables[N]=[0,0,0]`, the
+   indexed bump `pbGet(A)[pbGet(B)]+=1`, and the `index(max)` argmax with its
+   `if x==1 / x=0` permutation. **Corpus reach: 1 site, this event** — so
+   this is deliberately a narrow idiom, not a general array subsystem, and
+   `test_aptitude_tally_is_still_one_of_a_kind` pins the count so a second
+   site re-opens the design. The emitted argmax is byte-identical to the
+   hand version you boot-verified on 2026-07-21, 32767 sign-test included.
+3. **`pbStarterSelector(pbGet(N))`** — the player's own reveal, which takes
+   the variable directly rather than through Ruby arithmetic (0-based domain,
+   vs Theo's 1-based). Shares one emitter with the Theo form now.
+
+**Visible payoff:** your own starter reveal is no longer one line — it's the
+mon sprite plus the full 5–6-line personality read, matching Theo's.
+
+**Also fixed, and it corrects something I told you earlier:** RMXP code-41
+Change Graphic sets sheet *and* (direction, pattern), and props use those to
+pick a STATE. We only ever emitted the sheet, so Map050's pokéball machine
+swapping to its own sheet twice was a **visible no-op** — the "machine
+visibly changes" claim on 2026-08-01 was wrong. Direction has an exact analog
+(the object's facing selects the same row of the converted 4-direction
+sheet), so it now emits as facing. `pattern` — the frame within the row — has
+none, and a swap that selects one now files a queue entry instead of
+pretending. EV005's two machine swaps are direction-2 both times, so that
+animation is still a frame-only drop, now loudly recorded.
+
+**Shipped:** `lab-doorstep.gba` sha1 `4eb25ce1` (pristine `9c118fec`),
+taildropped 2026-08-01. 1538 tests pass; moki GREEN all 17 beats first
+attempt, incl. N3 (the retake path, which is what exercises the new
+label/goto hoist).
+
 ### 22. Stamped review ROMs were shadowed by save-file residue — FIXED + RETEST PASSED 2026-08-01
 
 **Symptom (user, lab-doorstep ROM `a86e073c`):** the ROM should boot on the lab

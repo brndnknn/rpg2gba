@@ -679,6 +679,25 @@ def test_change_graphic_emits_the_gfx_special(ctx: T.TranspileContext) -> None:
     assert "setvar(VAR_0x8004, 19)" in res.text
     assert "setvar(VAR_0x8005, OBJ_EVENT_GFX_URANIUM_PU_MACHINE)" in res.text
     assert "special(RPG2GBA_SetObjectEventGfx)" in res.text
+    # RMXP direction 6 = right: props use facing to pick a visual state, and the
+    # converted sheet has the same four rows, so it carries through as facing.
+    assert "face_right" in res.text
+    # ...but pattern 2 (the frame within that row) has no analog, and saying so
+    # is the point: a sheet-only swap would have been a silent no-op.
+    assert len(res.unhandled) == 1
+    assert "frame 2" in res.unhandled[0].description
+
+
+def test_change_graphic_direction_only_needs_no_frame_note(
+    ctx: T.TranspileContext,
+) -> None:
+    ctx.npc_gfx = {"PU-Machine": "OBJ_EVENT_GFX_URANIUM_PU_MACHINE"}
+    res = run_event(ctx, [[
+        cmd(T.SET_MOVE_ROUTE, [19, _route([
+            {"code": T.CHANGE_GRAPHIC, "parameters": ["PU-Machine", 0, 8, 0]},
+        ])]),
+    ]])
+    assert "face_up" in res.text
     assert res.unhandled == []
 
 
@@ -695,10 +714,13 @@ def test_change_graphic_mid_route_splits_the_movement(
         ])]),
     ]])
     gfx_at = res.text.index("special(RPG2GBA_SetObjectEventGfx)")
-    assert res.text.count("applymovement(7,") == 2
+    # Three now: the steps before, the swap's own facing, and the steps after.
+    assert res.text.count("applymovement(7,") == 3
     assert res.text.index("applymovement(7,") < gfx_at
     assert res.text.rindex("applymovement(7,") > gfx_at
-    assert res.unhandled == []
+    assert [q.description for q in res.unhandled] == [
+        res.unhandled[0].description]  # only the frame-drop note
+    assert "frame 2" in res.unhandled[0].description
 
 
 def test_change_graphic_unmapped_sheet_queues(ctx: T.TranspileContext) -> None:
@@ -816,3 +838,192 @@ def test_starter_selector_untracked_local_queues(ctx: T.TranspileContext) -> Non
     res = run_event(ctx, [[cmd(T.SCRIPT, ["pbStarterSelector(q,true)"])]])
     assert "showmonpic" not in res.text
     assert len(res.unhandled) == 1
+
+
+# ----------------------------------------------------------------------------
+# RMXP labels (118) / jump-to-label (119) — basic-block hoisting
+# ----------------------------------------------------------------------------
+
+
+def test_label_region_running_to_page_end_is_hoisted(ctx: T.TranspileContext) -> None:
+    """The fall-through and the jump both become `goto` into one block."""
+    ctx.registry.propose_flag(7, "FLAG_RETAKE")
+    out = run_event(ctx, [[
+        cmd(T.CONDITIONAL_BRANCH, [0, 7, 0]),
+        cmd(T.JUMP_TO_LABEL, ["Start"], indent=1),
+        cmd(T.BRANCH_END),
+        cmd(T.SHOW_TEXT, ["intro"]),
+        cmd(T.LABEL, ["Start"]),
+        cmd(T.SHOW_TEXT, ["body"]),
+    ]], trigger=3)
+    assert "goto(Map050_EV005_Page1_Start)" not in out.text  # not this map/event
+    assert "script Map032_EV005_Page1_Start {" in out.text
+    assert out.text.count("goto(Map032_EV005_Page1_Start)") == 2
+    # The hoisted block carries the trigger's epilogue: entered by goto with the
+    # lock already held, it would otherwise end without ever releasing.
+    body = out.text.split("script Map032_EV005_Page1_Start {")[1]
+    assert "releaseall" in body
+    assert not out.unhandled
+
+
+def test_hoisted_region_ending_in_exit_event_keeps_one_terminator(
+    ctx: T.TranspileContext,
+) -> None:
+    out = run_event(ctx, [[
+        cmd(T.SHOW_CHOICES, [["Yes", "No"]]),
+        cmd(T.CHOICE_WHEN, [0, "Yes"]),
+        cmd(T.LABEL, ["Go"], indent=1),
+        cmd(T.SHOW_TEXT, ["body"], indent=1),
+        cmd(T.EXIT_EVENT, [], indent=1),
+        cmd(T.CHOICE_WHEN, [1, "No"]),
+        cmd(T.SHOW_TEXT, ["nope"], indent=1),
+        cmd(T.CHOICES_END),
+    ]], trigger=3)
+    block = out.text.split("script Map032_EV005_Page1_Go {")[1].split("\n}")[0]
+    assert block.strip().splitlines()[-1].strip() == "end"
+    # release goes BEFORE the terminator, not after it as dead code.
+    assert block.index("releaseall") < block.rindex("end")
+    assert block.count("end") == 1
+
+
+def test_label_falling_out_of_a_choice_arm_queues(ctx: T.TranspileContext) -> None:
+    """No continuation exists for a region that dedents back into its arm."""
+    out = run_event(ctx, [[
+        cmd(T.SHOW_CHOICES, [["Yes", "No"]]),
+        cmd(T.CHOICE_WHEN, [0, "Yes"]),
+        cmd(T.LABEL, ["Go"], indent=1),
+        cmd(T.SHOW_TEXT, ["body"], indent=1),
+        cmd(T.CHOICE_WHEN, [1, "No"]),
+        cmd(T.SHOW_TEXT, ["nope"], indent=1),
+        cmd(T.CHOICES_END),
+        cmd(T.SHOW_TEXT, ["after"]),
+    ]], trigger=3)
+    assert "script Map032_EV005_Page1_Go {" not in out.text
+    assert any(q.command_code == T.LABEL for q in out.unhandled)
+
+
+def test_two_labels_on_one_page_queue_rather_than_nest(
+    ctx: T.TranspileContext,
+) -> None:
+    out = run_event(ctx, [[
+        cmd(T.LABEL, ["A"]),
+        cmd(T.SHOW_TEXT, ["a"]),
+        cmd(T.LABEL, ["B"]),
+        cmd(T.SHOW_TEXT, ["b"]),
+    ]], trigger=3)
+    assert T.hoistable_label_region([
+        cmd(T.LABEL, ["A"]), cmd(T.LABEL, ["B"])]) is None
+    assert len([q for q in out.unhandled if q.command_code == T.LABEL]) == 2
+
+
+def test_label_block_suffix_sanitizes_spaces() -> None:
+    assert T._label_block_suffix("Choice Made") == "ChoiceMade"
+    assert T._label_block_suffix("pergunta") == "Pergunta"
+
+
+# ----------------------------------------------------------------------------
+# Array-valued game variables — the Map050 EV005 aptitude tally
+# ----------------------------------------------------------------------------
+
+
+def _tally_ctx() -> T.TranspileContext:
+    reg = FlagRegistry()
+    reg.propose_var(2, "VAR_TEMP_MOVE_CHOICE")
+    reg.propose_var(151, "VAR_POKEMONTEST")
+    return T.TranspileContext(registry=reg)
+
+
+def test_array_literal_binds_one_scratch_var_per_element() -> None:
+    ctx = _tally_ctx()
+    out = run_event(ctx, [[
+        cmd(T.SCRIPT, ["$game_variables[151]=[0,0,0]"]),
+    ]], trigger=3)
+    for var in ("VAR_TEMP_3", "VAR_TEMP_4", "VAR_TEMP_5"):
+        assert f"setvar({var}, 0)" in out.text
+    assert not out.unhandled
+
+
+def test_indexed_bump_switches_on_the_index_variable() -> None:
+    ctx = _tally_ctx()
+    out = run_event(ctx, [[
+        cmd(T.SCRIPT, ["$game_variables[151]=[0,0,0]"]),
+        cmd(T.SCRIPT, ["pbGet(151)[pbGet(2)]+=1"]),
+    ]], trigger=3)
+    assert "switch (var(VAR_TEMP_MOVE_CHOICE)) {" in out.text
+    assert "addvar(VAR_TEMP_4, 1)" in out.text
+    assert not out.unhandled
+
+
+def test_bump_without_a_bound_array_queues() -> None:
+    ctx = _tally_ctx()
+    out = run_event(ctx, [[
+        cmd(T.SCRIPT, ["pbGet(151)[pbGet(2)]+=1"]),
+    ]], trigger=3)
+    assert out.unhandled
+
+
+def test_argmax_with_swap_emits_the_sign_test_chain() -> None:
+    ctx = _tally_ctx()
+    out = run_event(ctx, [[
+        cmd(T.SCRIPT, ["$game_variables[151]=[0,0,0]"]),
+        cmd(T.SCRIPT, ["x=pbGet(151).index(pbGet(151).max)"]),
+        cmd(T.SCRIPT, ["if x==1"]),
+        cmd(T.SCRIPT_CONT, ["x=0"]),
+        cmd(T.SCRIPT_CONT, ["elsif x==0"]),
+        cmd(T.SCRIPT_CONT, ["x=1"]),
+        cmd(T.SCRIPT_CONT, ["end"]),
+        cmd(T.SCRIPT_CONT, ["$game_variables[151]=x"]),
+    ]], trigger=3)
+    # Default is the LAST bucket (Ruby ties resolve to the lowest index, so the
+    # earlier buckets only win on a >= test).
+    assert "setvar(VAR_POKEMONTEST, 2)" in out.text
+    # The 0<->1 swap is applied to the emitted indices, not to a runtime var.
+    assert "setvar(VAR_POKEMONTEST, 0)" in out.text  # bucket 1 -> 0
+    assert "setvar(VAR_POKEMONTEST, 1)" in out.text  # bucket 0 -> 1
+    assert "copyvar(VAR_RESULT, VAR_TEMP_4)" in out.text
+    assert "subvar(VAR_RESULT, VAR_TEMP_5)" in out.text
+    assert not out.unhandled
+
+
+def test_argmax_sign_test_never_uses_the_special_var_literal() -> None:
+    """32768 is VAR_0x8000: `compare` would silently switch to var-vs-var.
+
+    This is the 2026-07-21 always-Eletux bug; the constant is the fix.
+    """
+    assert T._SIGN_TEST_MAX == 32767
+    ctx = _tally_ctx()
+    out = run_event(ctx, [[
+        cmd(T.SCRIPT, ["$game_variables[151]=[0,0,0]"]),
+        cmd(T.SCRIPT, ["x=pbGet(151).index(pbGet(151).max)"]),
+        cmd(T.SCRIPT, ["$game_variables[151]=x"]),
+    ]], trigger=3)
+    assert "32768" not in out.text
+    assert "32767" in out.text
+
+
+def test_aptitude_tally_is_still_one_of_a_kind() -> None:
+    """The idiom is deliberately narrow: one site in the whole corpus.
+
+    If a second one appears, the shortcuts above (three buckets, VAR_TEMP_3/4/5,
+    a hardcoded >= chain) need re-deriving rather than silently reusing.
+    """
+    import json
+    import re
+    from pathlib import Path
+
+    maps = Path("output/uranium-build/maps")
+    if not maps.is_dir():
+        pytest.skip("map JSON not generated")
+    literal = re.compile(r"\$game_variables\[\d+\]\s*=\s*\[")
+    argmax = re.compile(r"\.index\(.*\.max\)")
+    sites: set[tuple[str, int]] = set()
+    for path in maps.glob("Map*.json"):
+        for ev in json.loads(path.read_text(encoding="utf-8")).get("events", []):
+            for page in ev.get("pages", []):
+                for c in page.get("list", []):
+                    if c["code"] in (T.SCRIPT, T.SCRIPT_CONT):
+                        p = c.get("parameters") or []
+                        s = p[0] if p and isinstance(p[0], str) else ""
+                        if literal.search(s) or argmax.search(s):
+                            sites.add((path.stem, ev["id"]))
+    assert sites == {("Map050", 5)}, sites
