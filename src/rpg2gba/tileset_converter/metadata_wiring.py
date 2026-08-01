@@ -1256,6 +1256,7 @@ def build_object_events(
     *,
     pory_labels: set[str] | None = None,
     npc_gfx: dict[str, str] | None = None,
+    npc_gfx_states: dict[str, dict[tuple[int, int], str]] | None = None,
     event_traits: dict[int, list[str]] | None = None,
     flag_registry: FlagRegistry | None = None,
     passability: MapPassability | None = None,
@@ -1286,7 +1287,12 @@ def build_object_events(
         real door is the warp_event + tileset door tile, not this sprite.
         otherwise -> an object_event with `graphics_id = npc_gfx[character_name]`
                      (KeyError if `npc_gfx` is None or the name is unmapped — no
-                     silent default, CLAUDE.md §4.5) and `movement_type`/
+                     silent default, CLAUDE.md §4.5), or, for a sheet whose art
+                     is emitted state by state (`npc_gfx_states` — the 64x64
+                     large props), the constant for the boot page's own
+                     `graphic.direction`/`graphic.pattern`, so a prop authored
+                     mid-sequence boots showing that state rather than its idle
+                     one; and `movement_type`/
                      `movement_range_x`/`movement_range_y` from the boot page's
                      move_type/move_route (`npc_gfx.movement_spec_for`). A route
                      `movement_spec_for` had to demote to a static facing (no
@@ -1628,6 +1634,19 @@ def build_object_events(
                     f"map {uid} EV{eid:03d}: sheet {name!r} has no reference/"
                     f"npc_gfx_map.json entry"
                 ) from None
+            states = (npc_gfx_states or {}).get(name)
+            if states:
+                # A multi-state prop's page authors WHICH state it wears; the
+                # bare constant is only the idle one. Fail loud on a state the
+                # art has no cell for rather than booting the wrong picture.
+                boot_state = (page["graphic"]["direction"], page["graphic"]["pattern"])
+                if boot_state not in states:
+                    raise KeyError(
+                        f"map {uid} EV{eid:03d}: sheet {name!r} boots in state "
+                        f"{boot_state}, which its art has no cell for "
+                        f"(emitted states: {sorted(states)})"
+                    )
+                graphics_id = states[boot_state]
             spec = movement_spec_for(page)
             if passability is not None and spec.movement_type.startswith(
                 ("MOVEMENT_TYPE_WANDER", "MOVEMENT_TYPE_WALK")
@@ -2101,6 +2120,7 @@ def build_slice_maps(
     dispatcher_dir: Path,
     pory_labels: set[str] | None = None,
     npc_gfx: dict[str, str] | None = None,
+    npc_gfx_states: dict[str, dict[tuple[int, int], str]] | None = None,
     local_id_dir: Path | None = None,
     event_traits: dict[int, dict[int, list[str]]] | None = None,
     flag_registry: FlagRegistry | None = None,
@@ -2185,6 +2205,7 @@ def build_slice_maps(
             )
         result = build_object_events(
             maps[uid], consts, slice_set, pory_labels=pory_labels, npc_gfx=npc_gfx,
+            npc_gfx_states=npc_gfx_states,
             event_traits=map_traits, flag_registry=flag_registry,
             passability=passability, route_registry=route_registry,
             required_actor_ids=(required_actor_ids or {}).get(uid),

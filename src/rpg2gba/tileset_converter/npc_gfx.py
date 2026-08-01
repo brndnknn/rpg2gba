@@ -214,6 +214,61 @@ def load_npc_gfx_map(json_path: Path, header_paths: list[Path]) -> dict[str, str
     return result
 
 
+def load_npc_gfx_states(
+    json_path: Path, header_paths: list[Path]
+) -> dict[str, dict[tuple[int, int], str]]:
+    """The optional per-STATE half of the same map: character_name ->
+    {(RMXP direction, RMXP pattern): gfx constant}, for sheets that carry more
+    than one selectable visual state.
+
+    A "state" is what an RMXP code-41 Change Graphic selects when it names a
+    sheet the event is ALREADY wearing and moves only `direction`/`pattern` —
+    how RMXP animates a static prop. The sprite pass emits one
+    `ObjectEventGraphicsInfo` (and one `OBJ_EVENT_GFX_URANIUM_*` id) per state
+    for such a sheet, so the swap converts to an ordinary gfx swap; see
+    `graphics/sprite_emit.py`. Sheets with no ``"states"`` field are absent
+    from the returned dict entirely (not present with an empty value), so a
+    caller can tell "no states" from "state not in the art".
+
+    JSON shape: ``"states": {"2,1": "OBJ_EVENT_GFX_URANIUM_X_D2P1", ...}`` —
+    the key is ``"<direction>,<pattern>"``. Every constant is checked against
+    real ``#define``s exactly like `load_npc_gfx_map`'s (CLAUDE.md §4.7
+    forward gate), and a malformed key fails loud rather than being skipped."""
+    if not json_path.is_file():
+        raise FileNotFoundError(f"npc gfx map not found: {json_path}")
+    raw = json.loads(json_path.read_text(encoding="utf-8"))
+    defines = _collect_header_defines(header_paths)
+
+    out: dict[str, dict[tuple[int, int], str]] = {}
+    for character_name, entry in raw.items():
+        states = entry.get("states")
+        if not states:
+            continue
+        parsed: dict[tuple[int, int], str] = {}
+        for key, gfx in states.items():
+            try:
+                direction, pattern = (int(part) for part in str(key).split(","))
+            except ValueError as exc:
+                raise ValueError(
+                    f"{json_path}: entry {character_name!r} has malformed state key "
+                    f"{key!r}; expected \"<direction>,<pattern>\""
+                ) from exc
+            if direction not in _DIRECTION_TO_FACING:
+                raise ValueError(
+                    f"{json_path}: entry {character_name!r} state key {key!r} has "
+                    f"direction {direction}, not an RMXP direction code (2/4/6/8)"
+                )
+            if gfx not in defines:
+                raise ValueError(
+                    f"{json_path}: entry {character_name!r} state {key!r} gfx constant "
+                    f"{gfx!r} is not #define'd in any of "
+                    f"{[str(p) for p in header_paths]}"
+                )
+            parsed[(direction, pattern)] = gfx
+        out[character_name] = parsed
+    return out
+
+
 def select_boot_page(event: dict) -> dict | None:
     """The page RMXP displays at BOOT (all switches off, all variables 0, all
     self-switches off): the highest-index page whose condition holds, or `None`

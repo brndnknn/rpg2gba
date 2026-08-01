@@ -499,6 +499,13 @@ class TranspileContext:
     # change-graphic step queues.
     npc_gfx: dict[str, str] = field(default_factory=dict)
 
+    # RMXP character sheet name -> {(direction, pattern): OBJ_EVENT_GFX_* constant},
+    # from the same file's "states" entries (npc_gfx.load_npc_gfx_states). Only
+    # sheets that carry more than one selectable visual state appear. A code-41
+    # swap naming one of these resolves to the exact state's constant instead of
+    # the sheet's; see _emit_route_with_gfx_swaps.
+    npc_gfx_states: dict[str, dict[tuple[int, int], str]] = field(default_factory=dict)
+
     # per-event cursor, set by transpile_event / transpile_common_event
     map_id: int = 0
     event_id: int | None = None
@@ -2042,6 +2049,36 @@ class _PageEmitter:
                 )]
             params = step.get("parameters", [])
             sheet = params[0] if params and isinstance(params[0], str) else ""
+            direction = params[2] if len(params) > 2 else None
+            pattern = params[3] if len(params) > 3 else None
+
+            # RMXP Change Graphic sets sheet AND (direction, pattern) together,
+            # and props use those to select a visual STATE rather than a facing:
+            # Map050's pokéball machine swaps to its OWN sheet repeatedly,
+            # moving only direction/pattern, so a sheet-only conversion is a
+            # visible no-op. Sheets whose art the sprite pass emits state by
+            # state (`npc_gfx_states`, currently the 64x64 large props) resolve
+            # to the exact state's own OBJ_EVENT_GFX_* — one gfx swap, no
+            # facing, nothing dropped.
+            states = self.ctx.npc_gfx_states.get(sheet)
+            if states:
+                entry = states.get((direction, pattern))
+                if entry is None:
+                    self._last_route_ok = False
+                    return [self.ctx.queue(
+                        node.index, SET_MOVE_ROUTE,
+                        f"change-graphic to sheet {sheet!r} state "
+                        f"(direction {direction}, pattern {pattern}), which its "
+                        f"art has no cell for — the sheet's emitted states are "
+                        f"{sorted(states)}",
+                    )]
+                lines += [
+                    f"setvar(VAR_0x8004, {who})",
+                    f"setvar(VAR_0x8005, {entry})",
+                    "special(RPG2GBA_SetObjectEventGfx)",
+                ]
+                continue
+
             entry = self.ctx.npc_gfx.get(sheet)
             if not entry:
                 self._last_route_ok = False
@@ -2055,18 +2092,13 @@ class _PageEmitter:
                 f"setvar(VAR_0x8005, {entry})",
                 "special(RPG2GBA_SetObjectEventGfx)",
             ]
-            # RMXP Change Graphic sets sheet AND (direction, pattern) together,
-            # and props use those to select a STATE: Map050's pokéball machine
-            # swaps to its own sheet twice, changing only direction/pattern, so
-            # a sheet-only conversion is a visible no-op. Direction has an exact
-            # analog — the object's facing picks the same row of the converted
-            # 4-direction sheet — so emit it as its own movement block.
-            # `pattern` (the frame within a row) has none: the fork animates
-            # frames itself and no movement action selects one. A swap that
-            # moves ONLY the pattern is therefore still a silent drop; it gets
-            # a queue entry rather than pretending (§4.5).
-            direction = params[2] if len(params) > 2 else None
-            pattern = params[3] if len(params) > 3 else None
+            # Sheets converted as ordinary walk cycles have no per-state art:
+            # direction still has an exact analog (the object's facing picks the
+            # same row of the converted 4-direction sheet), so emit it as its own
+            # movement block. `pattern` (the frame within a row) has none — the
+            # fork animates frames itself and no movement action selects one — so
+            # a pattern-moving swap on such a sheet is a real drop and says so
+            # rather than pretending (§4.5).
             face = _RMXP_DIRECTION_TOKENS.get(direction)
             if face is not None:
                 label = f"{self.page_label}_Move{len(self.movements) + 1}"

@@ -96,6 +96,13 @@ Fork facts this module depends on (grep/read citations, engine/ HEAD 21c24202):
     `object_event_graphics_info.h:98`) — the closest existing convention for
     "custom dedicated palette tag, not one of the shared NPC_1..4 rotation" —
     so that's what this module fills in, even though nothing reads it.
+  - ``overworld_frame(ptr, width, height, frame)`` is a real macro
+    (`include/sprite.h:35`) — the indexed sibling of
+    ``overworld_ascending_frames``: a ONE-element `SpriteFrameImage[]`
+    initializer pointing at frame `frame` of a multi-frame strip
+    (`.data = (u8 *)ptr + (width * height * frame * 64)/2`). This is what lets
+    a large prop's N states share ONE pic strip while each getting its own
+    one-frame pic table (see the large-prop note below).
   - A `sprites.ConvertedSprite` with `cycle == "large_prop"` (`frame_px == 64`,
     e.g. `PU-PokeballMachine`) emits the same 32x32 template above with
     size/width/height scaled to 64 and five fields swapped for the fork's
@@ -109,11 +116,25 @@ Fork facts this module depends on (grep/read citations, engine/ HEAD 21c24202):
     TRACKS_NONE`. The pic-table/INCGFX_U16 tile-metatile args scale with it
     (`sprite.frame_px // 8`, i.e. 8 not 4) — verified against `gbagfx`'s
     `-mwidth`/`-mheight` semantics (`tools/gbagfx/gfx.c`: they reorder raster
-    data into per-metatile-contiguous tile blocks; with only one frame in the
-    image, `metatilesWide == 1` and the reorder is a no-op, matching how
-    `gObjectEventPic_RayquazaStill` itself needs no such args at all — passing
-    the frame's own tile size here is simply the general form of the same
-    identity).
+    data into per-metatile-contiguous tile blocks, which is exactly what makes
+    frame N of the strip a contiguous 2048-byte block `overworld_frame` can
+    index; on a one-frame strip `metatilesWide == 1` and the reorder is a
+    no-op, matching how `gObjectEventPic_RayquazaStill` itself needs no such
+    args at all).
+  - A large prop carries N selectable STATES (`ConvertedSprite.states`, one
+    RMXP `(direction, pattern)` per frame), because that is how RMXP animates
+    a static prop: a code-41 Change Graphic naming the same sheet with
+    different direction/pattern. `sAnimTable_Inanimate` only ever requests
+    frame 0, so a state cannot be reached by an anim index — instead each
+    state gets its OWN `ObjectEventGraphicsInfo` + its own one-frame pic table
+    (`overworld_frame(strip, 8, 8, k)`) + its own `OBJ_EVENT_GFX_URANIUM_*`
+    id, and the transpiler's code-41 becomes an ordinary gfx swap to the
+    state's constant. All states share the one strip PNG, one palette
+    assignment and one `gObjectEventPic_*` symbol. The idle state
+    (`sprites.LARGE_PROP_IDLE_STATE`, i.e. direction 2 / pattern 0) keeps the
+    sheet's BARE constant so every already-placed object_event and every
+    `reference/npc_gfx_map.json` `"gfx"` entry keeps resolving; the others are
+    suffixed `_D<direction>P<pattern>`.
 
 Deviations from the wave-1 design notes (both intentional, both citation-backed
 above): `INCGFX_U16` not `INCGFX_U32`; palette DATA arrays are plain literal
@@ -143,8 +164,8 @@ from rpg2gba.tileset_converter.graphics.quantize import (
 )
 from rpg2gba.tileset_converter.graphics.sprites import (
     GBA_FRAME_PX,
+    LARGE_PROP_IDLE_STATE,
     NUM_BREAK_PROP_FRAMES,
-    NUM_LARGE_PROP_FRAMES,
     NUM_OUTPUT_FRAMES,
     NUM_PLAYER_OUTPUT_FRAMES,
     ConvertedPlayer,
@@ -243,7 +264,16 @@ class SpriteEmitResult:
     unless noted otherwise."""
 
     gfx_constants: dict[str, str]  # sheet name -> OBJ_EVENT_GFX_URANIUM_* constant
-    gfx_ids: dict[str, int]  # sheet name -> numeric id (388 + i, sorted-by-constant-name)
+                                    # (a large prop's IDLE-state constant; see
+                                    # `state_gfx_constants` for the rest)
+    gfx_ids: dict[str, int]  # OBJ_EVENT_GFX_URANIUM_* constant -> numeric id
+                              # (388 + i, assigned in constant-name-sorted order)
+    # Large props only: sheet name -> {(direction, pattern): constant}, one entry
+    # per non-empty grid cell, ALWAYS including the idle state (whose constant is
+    # the sheet's bare one, i.e. `gfx_constants[sheet]`). Empty dict for a sheet
+    # with no selectable states. This is what the transpiler's code-41 Change
+    # Graphic resolves against.
+    state_gfx_constants: dict[str, dict[tuple[int, int], str]]
     stems: dict[str, str]  # sheet name -> filesystem-safe PNG stem (see `_stem_for_sheet`)
     palette_index: dict[str, int]  # sheet name -> assigned shared-palette index (0-based)
     palette_tags: list[str]  # OBJ_EVENT_PAL_TAG_URANIUM_* names, index-aligned to palettes
@@ -286,20 +316,94 @@ def _c_ident(sheet_name: str) -> str:
     return f"Uranium_{_symbol_suffix(sheet_name)}"
 
 
+def _state_suffix(state: tuple[int, int]) -> str:
+    """``D<direction>P<pattern>`` — the fragment appended to a large prop's
+    bare gfx constant / C identifier to name one non-idle state. RMXP
+    directions are 2/4/6/8 and patterns 0..3, so this is always `[A-Z0-9]`."""
+    direction, pattern = state
+    return f"D{direction}P{pattern}"
+
+
+@dataclass(frozen=True)
+class _EmissionUnit:
+    """One `ObjectEventGraphicsInfo` to emit: its C identifier, its
+    `OBJ_EVENT_GFX_URANIUM_*` constant, and which frame of the sheet's pic
+    strip it shows (`None` = the whole strip, via
+    `overworld_ascending_frames`, for animated walk/break sheets).
+
+    An ordinary sheet produces exactly one unit; a large prop produces one per
+    selectable state (`ConvertedSprite.states`)."""
+
+    sheet: str
+    ident: str
+    constant: str
+    frame: int | None
+
+
+def _emission_units(sprite: ConvertedSprite) -> list[_EmissionUnit]:
+    """The `ObjectEventGraphicsInfo`s one converted sheet expands into.
+
+    Non-large-prop sheets: one unit whose pic table is the whole strip — the
+    fork's anim table walks the frames itself. Large props: one unit per
+    non-empty grid cell, each pinned to that one frame, because
+    `sAnimTable_Inanimate` can only ever show frame 0 and RMXP selects a prop's
+    state by (direction, pattern) rather than by anim index. The idle state
+    keeps the sheet's bare constant/identifier (see the module docstring).
+
+    Fails loud on a large prop missing its idle state — `sprites.
+    convert_character_sheet` already guarantees it, and silently promoting some
+    other cell would rename the constant every placed object references."""
+    base_ident = _c_ident(sprite.name)
+    base_constant = gfx_constant_for_sheet(sprite.name)
+    if not sprite.states:
+        return [_EmissionUnit(sprite.name, base_ident, base_constant, None)]
+
+    if LARGE_PROP_IDLE_STATE not in sprite.states:
+        raise ValueError(
+            f"{sprite.name}: multi-state sheet has no idle state "
+            f"{LARGE_PROP_IDLE_STATE}; its bare constant {base_constant} would "
+            f"name an arbitrary state"
+        )
+    units: list[_EmissionUnit] = []
+    for frame, state in enumerate(sprite.states):
+        if state == LARGE_PROP_IDLE_STATE:
+            units.append(_EmissionUnit(sprite.name, base_ident, base_constant, frame))
+        else:
+            suffix = _state_suffix(state)
+            units.append(_EmissionUnit(
+                sprite.name, f"{base_ident}_{suffix}", f"{base_constant}_{suffix}", frame,
+            ))
+    return units
+
+
 # --- colour / palette packing --------------------------------------------
 
 
 def _validate_sprite_shape(sprite: ConvertedSprite) -> None:
     if sprite.cycle == "large_prop":
-        expected = NUM_LARGE_PROP_FRAMES
-    elif sprite.cycle == "break_prop":
-        expected = NUM_BREAK_PROP_FRAMES
+        # Variable: one frame per non-empty grid cell, index-aligned with the
+        # states that name them (an empty `states` would leave every frame
+        # unreachable, so it's a malformed sprite, not a degenerate one).
+        if not sprite.states:
+            raise ValueError(f"{sprite.name}: large prop carries no states")
+        if len(sprite.frames) != len(sprite.states):
+            raise ValueError(
+                f"{sprite.name}: {len(sprite.frames)} frames but "
+                f"{len(sprite.states)} states — they must be index-aligned"
+            )
+        if len(set(sprite.states)) != len(sprite.states):
+            raise ValueError(f"{sprite.name}: duplicate state in {sprite.states}")
     else:
-        expected = NUM_OUTPUT_FRAMES
-    if len(sprite.frames) != expected:
-        raise ValueError(
-            f"{sprite.name}: expected {expected} frames, got {len(sprite.frames)}"
-        )
+        if sprite.states:
+            raise ValueError(
+                f"{sprite.name}: only a large prop carries selectable states, but "
+                f"this {sprite.cycle} sheet declares {sprite.states}"
+            )
+        expected = NUM_BREAK_PROP_FRAMES if sprite.cycle == "break_prop" else NUM_OUTPUT_FRAMES
+        if len(sprite.frames) != expected:
+            raise ValueError(
+                f"{sprite.name}: expected {expected} frames, got {len(sprite.frames)}"
+            )
     for i, frame in enumerate(sprite.frames):
         if frame.shape != (sprite.frame_px, sprite.frame_px, 4):
             raise ValueError(
@@ -329,7 +433,10 @@ def _sheet_opaque_colors(sprite: ConvertedSprite) -> np.ndarray:
     stack = np.stack(sprite.frames, axis=0)  # (9, 32, 32, 4)
     opaque = stack[..., 3] == 255
     if not opaque.any():
-        raise ValueError(f"{sprite.name}: sheet has no opaque pixels in any of its 9 frames")
+        raise ValueError(
+            f"{sprite.name}: sheet has no opaque pixels in any of its "
+            f"{len(sprite.frames)} frames"
+        )
     return np.unique(to_5bit(stack[..., :3][opaque]), axis=0)
 
 
@@ -493,13 +600,16 @@ def _pack_bgr555(color: tuple[int, int, int]) -> int:
 
 def _render_constants(
     gfx_defines: dict[str, str],
-    num_sheets: int,
+    num_gfx: int,
     palette_tags: list[str],
     *,
     include_player: bool = False,
 ) -> str:
-    """`gfx_defines`: sheet name -> its fully-rendered `#define OBJ_EVENT_GFX_...`
-    line, already in constant-name-sorted order (insertion order of the dict).
+    """`gfx_defines`: `OBJ_EVENT_GFX_URANIUM_*` constant -> its fully-rendered
+    `#define` line, already in constant-name-sorted order (insertion order of
+    the dict). `num_gfx` is the count of those ids (one per sheet, plus one per
+    extra state on a multi-state sheet) -- it sizes the fork's id space via
+    `NUM_URANIUM_OBJ_EVENT_GFX`, so it counts CONSTANTS, not sheets.
     `include_player` appends the player's dedicated palette tag define -- no
     `OBJ_EVENT_GFX_*` id or NUM bump, the player is never a selectable gfx id."""
     lines = [
@@ -511,7 +621,7 @@ def _render_constants(
     for define in gfx_defines.values():
         lines.append(f"{define}\n")
     lines.append("\n")
-    lines.append(f"#define NUM_URANIUM_OBJ_EVENT_GFX {num_sheets}\n")
+    lines.append(f"#define NUM_URANIUM_OBJ_EVENT_GFX {num_gfx}\n")
     lines.append("\n")
     for i, tag in enumerate(palette_tags):
         lines.append(f"#define {tag} {_PAL_TAG_BASE + i:#06x}\n")
@@ -556,17 +666,35 @@ def _render_graphics(
     return "".join(lines)
 
 
-def _render_pic_tables(sprites: list[ConvertedSprite], *, include_player: bool = False) -> str:
+def _render_pic_tables(
+    sprites: list[ConvertedSprite],
+    units: dict[str, list[_EmissionUnit]],
+    *,
+    include_player: bool = False,
+) -> str:
     lines = [_GENERATED_HEADER]
     for sprite in sprites:
-        ident = _c_ident(sprite.name)
+        strip = _c_ident(sprite.name)
         tiles = sprite.frame_px // 8  # frame size in 8x8 tiles (4 for 32x32, 8 for 64x64)
-        lines.append("\n")
-        lines.append(f"static const struct SpriteFrameImage sPicTable_{ident}[] = {{\n")
-        lines.append(
-            f"    overworld_ascending_frames(gObjectEventPic_{ident}, {tiles}, {tiles}),\n"
-        )
-        lines.append("};\n")
+        for unit in units[sprite.name]:
+            lines.append("\n")
+            lines.append(
+                f"static const struct SpriteFrameImage sPicTable_{unit.ident}[] = {{\n"
+            )
+            if unit.frame is None:
+                lines.append(
+                    f"    overworld_ascending_frames(gObjectEventPic_{strip}, "
+                    f"{tiles}, {tiles}),\n"
+                )
+            else:
+                # One pinned frame of the shared strip: sAnimTable_Inanimate can
+                # only show frame 0, so a selectable state has to BE frame 0 of
+                # its own table (include/sprite.h:35).
+                lines.append(
+                    f"    overworld_frame(gObjectEventPic_{strip}, "
+                    f"{tiles}, {tiles}, {unit.frame}),\n"
+                )
+            lines.append("};\n")
     if include_player:
         lines.append("\n")
         lines.append(f"static const struct SpriteFrameImage sPicTable_{_PLAYER_IDENT}[] = {{\n")
@@ -644,76 +772,93 @@ def _render_player_field_move_graphics_info() -> str:
 
 def _render_graphics_info(
     sprites: list[ConvertedSprite],
+    units: dict[str, list[_EmissionUnit]],
     palette_tags: dict[str, str],
     *,
     include_player: bool = False,
 ) -> str:
     lines = [_GENERATED_HEADER]
     for sprite in sprites:
-        ident = _c_ident(sprite.name)
-        frame_bytes = sprite.frame_px * sprite.frame_px // 2  # one 4bpp frame's byte size
-        lines.append("\n")
-        lines.append(
-            f"const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_{ident} = {{\n"
-        )
-        lines.append("    .tileTag = TAG_NONE,\n")
-        lines.append(f"    .paletteTag = {palette_tags[sprite.name]},\n")
-        lines.append("    .reflectionPaletteTag = OBJ_EVENT_PAL_TAG_NONE,\n")
-        lines.append(f"    .size = {frame_bytes},\n")
-        lines.append(f"    .width = {sprite.frame_px},\n")
-        lines.append(f"    .height = {sprite.frame_px},\n")
-        lines.append(f"    .paletteSlot = {_PALETTE_SLOT},\n")
-        if sprite.cycle == "large_prop":
-            # A static 64x64 object, native engine support (RayquazaStill --
-            # object_event_graphics_info.h:757-773): the 64x64 OAM/subsprite
-            # table, sAnimTable_Inanimate (its one entry, ANIM_STAY_STILL, only
-            # ever requests frame 0 -- object_event_anims.h:1196), inanimate,
-            # no movement tracks.
-            lines.append("    .shadowSize = SHADOW_SIZE_S,\n")
-            lines.append("    .inanimate = TRUE,\n")
-            lines.append("    .compressed = FALSE,\n")
-            lines.append("    .tracks = TRACKS_NONE,\n")
-            lines.append("    .oam = &gObjectEventBaseOam_64x64,\n")
-            lines.append("    .subspriteTables = sOamTables_64x64,\n")
-            lines.append("    .anims = sAnimTable_Inanimate,\n")
-        elif sprite.cycle == "break_prop":
-            # Vanilla BreakableRock semantics: rock_smash_break plays
-            # ANIM_REMOVE_OBSTACLE and waits for SpriteAnimEnded — the table's
-            # index 1 must be the finite sAnim_RockBreak, not Standard's
-            # looping walk anim (which stalls the smash forever).
-            lines.append("    .shadowSize = SHADOW_SIZE_S,\n")
-            lines.append("    .inanimate = TRUE,\n")
-            lines.append("    .compressed = FALSE,\n")
-            lines.append("    .tracks = TRACKS_NONE,\n")
-            lines.append("    .oam = &gObjectEventBaseOam_32x32,\n")
-            lines.append("    .subspriteTables = sOamTables_32x32,\n")
-            lines.append("    .anims = sAnimTable_BreakableRock,\n")
-        else:
-            lines.append("    .shadowSize = SHADOW_SIZE_M,\n")
-            lines.append("    .inanimate = FALSE,\n")
-            lines.append("    .compressed = FALSE,\n")
-            lines.append("    .tracks = TRACKS_FOOT,\n")
-            lines.append("    .oam = &gObjectEventBaseOam_32x32,\n")
-            lines.append("    .subspriteTables = sOamTables_32x32,\n")
-            lines.append("    .anims = sAnimTable_Standard,\n")
-        lines.append(f"    .images = sPicTable_{ident},\n")
-        lines.append("    .affineAnims = gDummySpriteAffineAnimTable,\n")
-        lines.append("};\n")
+        for unit in units[sprite.name]:
+            lines.append(_render_npc_struct(sprite, unit, palette_tags[sprite.name]))
     if include_player:
         lines.append(_render_player_graphics_info())
         lines.append(_render_player_field_move_graphics_info())
     return "".join(lines)
 
 
+def _render_npc_struct(
+    sprite: ConvertedSprite, unit: _EmissionUnit, palette_tag: str
+) -> str:
+    """One converted sheet's (or one large-prop STATE's)
+    `ObjectEventGraphicsInfo`. `unit.ident` names both the struct and the pic
+    table it points at; everything else is a property of the sheet."""
+    ident = unit.ident
+    frame_bytes = sprite.frame_px * sprite.frame_px // 2  # one 4bpp frame's byte size
+    lines = ["\n"]
+    lines.append(
+        f"const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_{ident} = {{\n"
+    )
+    lines.append("    .tileTag = TAG_NONE,\n")
+    lines.append(f"    .paletteTag = {palette_tag},\n")
+    lines.append("    .reflectionPaletteTag = OBJ_EVENT_PAL_TAG_NONE,\n")
+    lines.append(f"    .size = {frame_bytes},\n")
+    lines.append(f"    .width = {sprite.frame_px},\n")
+    lines.append(f"    .height = {sprite.frame_px},\n")
+    lines.append(f"    .paletteSlot = {_PALETTE_SLOT},\n")
+    if sprite.cycle == "large_prop":
+        # A static 64x64 object, native engine support (RayquazaStill --
+        # object_event_graphics_info.h:757-773): the 64x64 OAM/subsprite
+        # table, sAnimTable_Inanimate (its one entry, ANIM_STAY_STILL, only
+        # ever requests frame 0 -- object_event_anims.h:1196), inanimate,
+        # no movement tracks. Each STATE is its own struct over a one-frame
+        # pic table, which is what makes frame 0 the state's own art.
+        lines.append("    .shadowSize = SHADOW_SIZE_S,\n")
+        lines.append("    .inanimate = TRUE,\n")
+        lines.append("    .compressed = FALSE,\n")
+        lines.append("    .tracks = TRACKS_NONE,\n")
+        lines.append("    .oam = &gObjectEventBaseOam_64x64,\n")
+        lines.append("    .subspriteTables = sOamTables_64x64,\n")
+        lines.append("    .anims = sAnimTable_Inanimate,\n")
+    elif sprite.cycle == "break_prop":
+        # Vanilla BreakableRock semantics: rock_smash_break plays
+        # ANIM_REMOVE_OBSTACLE and waits for SpriteAnimEnded — the table's
+        # index 1 must be the finite sAnim_RockBreak, not Standard's
+        # looping walk anim (which stalls the smash forever).
+        lines.append("    .shadowSize = SHADOW_SIZE_S,\n")
+        lines.append("    .inanimate = TRUE,\n")
+        lines.append("    .compressed = FALSE,\n")
+        lines.append("    .tracks = TRACKS_NONE,\n")
+        lines.append("    .oam = &gObjectEventBaseOam_32x32,\n")
+        lines.append("    .subspriteTables = sOamTables_32x32,\n")
+        lines.append("    .anims = sAnimTable_BreakableRock,\n")
+    else:
+        lines.append("    .shadowSize = SHADOW_SIZE_M,\n")
+        lines.append("    .inanimate = FALSE,\n")
+        lines.append("    .compressed = FALSE,\n")
+        lines.append("    .tracks = TRACKS_FOOT,\n")
+        lines.append("    .oam = &gObjectEventBaseOam_32x32,\n")
+        lines.append("    .subspriteTables = sOamTables_32x32,\n")
+        lines.append("    .anims = sAnimTable_Standard,\n")
+    lines.append(f"    .images = sPicTable_{ident},\n")
+    lines.append("    .affineAnims = gDummySpriteAffineAnimTable,\n")
+    lines.append("};\n")
+    return "".join(lines)
+
+
 def _render_graphics_info_decls(
-    sprites: list[ConvertedSprite], *, include_player: bool = False
+    sprites: list[ConvertedSprite],
+    units: dict[str, list[_EmissionUnit]],
+    *,
+    include_player: bool = False,
 ) -> str:
     lines = [_GENERATED_HEADER, _DECLS_COMMENT]
     for sprite in sprites:
-        ident = _c_ident(sprite.name)
-        lines.append(
-            f"extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_{ident};\n"
-        )
+        for unit in units[sprite.name]:
+            lines.append(
+                f"extern const struct ObjectEventGraphicsInfo "
+                f"gObjectEventGraphicsInfo_{unit.ident};\n"
+            )
     if include_player:
         lines.append(
             f"extern const struct ObjectEventGraphicsInfo "
@@ -727,7 +872,7 @@ def _render_graphics_info_decls(
 
 
 def _render_graphics_info_pointers(
-    sprites: list[ConvertedSprite], gfx_names: dict[str, str]
+    sprites: list[ConvertedSprite], units: dict[str, list[_EmissionUnit]]
 ) -> str:
     # Deliberately no player branch here: the lead session repoints the vanilla
     # [OBJ_EVENT_GFX_BRENDAN_NORMAL] pointers-array entry at
@@ -735,9 +880,10 @@ def _render_graphics_info_pointers(
     # pointers file, so this generated fragment never references the player.
     lines = [_GENERATED_HEADER, _POINTERS_COMMENT]
     for sprite in sprites:
-        ident = _c_ident(sprite.name)
-        gfx_name = gfx_names[sprite.name]
-        lines.append(f"[{gfx_name}] = &gObjectEventGraphicsInfo_{ident},\n")
+        for unit in units[sprite.name]:
+            lines.append(
+                f"[{unit.constant}] = &gObjectEventGraphicsInfo_{unit.ident},\n"
+            )
     return "".join(lines)
 
 
@@ -822,6 +968,12 @@ def emit_sprites(
     `[OBJ_EVENT_GFX_BRENDAN_FIELD_MOVE]` pointer entry has a non-softlocking
     target for the rock-smash pose.
 
+    A sheet with selectable states (a large prop -- see `_emission_units`)
+    expands into one `ObjectEventGraphicsInfo` + pic table + gfx id PER STATE,
+    all sharing the sheet's single strip PNG and palette assignment. Its idle
+    state keeps the sheet's bare constant, so callers that only know
+    "sheet -> constant" are unaffected.
+
     Deterministic: sheets are processed in `name`-sorted order for palette
     packing and PNG emission, and `OBJ_EVENT_GFX_URANIUM_*` ids are assigned in
     constant-name-sorted order (388 + i) -- same inputs always produce
@@ -840,19 +992,28 @@ def emit_sprites(
 
     ordered = sorted(sprites, key=lambda s: s.name)
     seen_names: set[str] = set()
+    units: dict[str, list[_EmissionUnit]] = {}
     gfx_constants: dict[str, str] = {}
+    state_gfx_constants: dict[str, dict[tuple[int, int], str]] = {}
+    owner_of: dict[str, str] = {}  # minted constant -> the sheet that minted it
     for sprite in ordered:
         if sprite.name in seen_names:
             raise ValueError(f"duplicate sheet name {sprite.name!r}")
         seen_names.add(sprite.name)
-        constant = gfx_constant_for_sheet(sprite.name)
-        collision = next((n for n, c in gfx_constants.items() if c == constant), None)
-        if collision is not None:
-            raise ValueError(
-                f"{sprite.name!r} and {collision!r} both normalize to gfx constant "
-                f"{constant!r}"
-            )
-        gfx_constants[sprite.name] = constant
+        units[sprite.name] = _emission_units(sprite)
+        for unit in units[sprite.name]:
+            collision = owner_of.get(unit.constant)
+            if collision is not None:
+                raise ValueError(
+                    f"{sprite.name!r} and {collision!r} both normalize to gfx "
+                    f"constant {unit.constant!r}"
+                )
+            owner_of[unit.constant] = sprite.name
+        gfx_constants[sprite.name] = gfx_constant_for_sheet(sprite.name)
+        state_gfx_constants[sprite.name] = {
+            state: unit.constant
+            for state, unit in zip(sprite.states, units[sprite.name], strict=True)
+        } if sprite.states else {}
 
     # A single 4bpp sprite can hold at most MAX_COLORS_PER_SHEET colours; reduce
     # any over-budget sheet (loudly) BEFORE packing so the per-sheet guard below
@@ -876,11 +1037,13 @@ def emit_sprites(
     # same positions — omitting the placeholder shifts every colour down one.
     pal_words = [[0x0000] + [_pack_bgr555(c) for c in pal] for pal in palettes_out]
 
-    by_constant = sorted(ordered, key=lambda s: gfx_constants[s.name])
-    gfx_ids = {s.name: FIRST_GFX_ID + i for i, s in enumerate(by_constant)}
-    gfx_defines = {
-        s.name: f"#define {gfx_constants[s.name]} {gfx_ids[s.name]}" for s in by_constant
-    }
+    # Ids span every minted constant, not just one per sheet: a large prop's
+    # states each need their own OBJ_EVENT_GFX_URANIUM_* slot, and
+    # NUM_URANIUM_OBJ_EVENT_GFX (which sizes the fork's id space) must count
+    # them all.
+    all_constants = sorted(owner_of)
+    gfx_ids = {c: FIRST_GFX_ID + i for i, c in enumerate(all_constants)}
+    gfx_defines = {c: f"#define {c} {gfx_ids[c]}" for c in all_constants}
 
     engine_root = Path(engine_root)
     pics_dir = engine_root / _PICS_RELDIR
@@ -907,19 +1070,22 @@ def emit_sprites(
 
     gen_contents = {
         "constants": _render_constants(
-            gfx_defines, len(ordered), palette_tags, include_player=player is not None
+            gfx_defines, len(all_constants), palette_tags,
+            include_player=player is not None,
         ),
         "graphics": _render_graphics(
             ordered, stems, pal_words, player_pal_words=player_pal_words
         ),
-        "pic_tables": _render_pic_tables(ordered, include_player=player is not None),
+        "pic_tables": _render_pic_tables(
+            ordered, units, include_player=player is not None
+        ),
         "graphics_info": _render_graphics_info(
-            ordered, palette_tag_of, include_player=player is not None
+            ordered, units, palette_tag_of, include_player=player is not None
         ),
         "graphics_info_decls": _render_graphics_info_decls(
-            ordered, include_player=player is not None
+            ordered, units, include_player=player is not None
         ),
-        "graphics_info_pointers": _render_graphics_info_pointers(ordered, gfx_constants),
+        "graphics_info_pointers": _render_graphics_info_pointers(ordered, units),
         "palettes": _render_palettes(palette_tags, include_player=player is not None),
     }
     for key, relpath in _GEN_RELPATHS.items():
@@ -929,13 +1095,16 @@ def emit_sprites(
         files_written.append(path)
 
     logger.debug(
-        "emit_sprites: %d sheets -> %d shared palettes, player=%s, %d files written",
-        len(ordered), n_palettes, player is not None, len(files_written),
+        "emit_sprites: %d sheets (%d gfx ids) -> %d shared palettes, player=%s, "
+        "%d files written",
+        len(ordered), len(all_constants), n_palettes, player is not None,
+        len(files_written),
     )
 
     return SpriteEmitResult(
         gfx_constants=gfx_constants,
         gfx_ids=gfx_ids,
+        state_gfx_constants=state_gfx_constants,
         stems=stems,
         palette_index=palette_index,
         palette_tags=palette_tags,

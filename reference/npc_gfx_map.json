@@ -157,6 +157,17 @@
   "PU-PokeballMachine": {
     "gfx": "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE",
     "fallback": "OBJ_EVENT_GFX_POKE_BALL",
-    "note": "Custom sheet: lab starter machine (Map050 EV19). 96x128 frame, content 43x55 post-downscale — requires the 64x64 large-prop sprite class (slice-1 interior expansion); fails the standard 32x32 path by design"
+    "note": "Custom sheet: lab starter machine (Map050 EV19). 96x128 frame, content 43x55 post-downscale — requires the 64x64 large-prop sprite class (slice-1 interior expansion); fails the standard 32x32 path by design. Multi-STATE: RMXP animates it with code-41 Change Graphic steps that keep the sheet and move only (direction, pattern), so every non-empty grid cell is emitted as its own graphics-info + gfx id (see 'states'); the idle cell (2,0) keeps the bare constant. sprite_pass cross-checks these against the real PNG's non-empty cells and fails loud on drift",
+    "states": {
+      "2,0": "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE",
+      "2,1": "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE_D2P1",
+      "2,2": "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE_D2P2",
+      "4,0": "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE_D4P0",
+      "4,1": "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE_D4P1",
+      "4,2": "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE_D4P2",
+      "6,0": "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE_D6P0",
+      "6,1": "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE_D6P1",
+      "6,2": "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE_D6P2"
+    }
   }
 }

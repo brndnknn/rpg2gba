@@ -23,9 +23,10 @@ aborts naming the sheet — never a silent crop or blank substitute.
 
 Two sheet classes short-circuit the walk-cycle pipeline above entirely (single
 static-object sheets, not animated NPCs): `BREAK_PROP_SHEETS` (a 4-stage
-destruction sequence down column 0, still 32x32) and `LARGE_PROP_SHEETS` (one
-idle frame — column 0, row 0 — anchored onto a 64x64 canvas instead of 32x32,
-for props too big for the standard object frame; see `ConvertedSprite.frame_px`).
+destruction sequence down column 0, still 32x32) and `LARGE_PROP_SHEETS` (every
+non-empty cell of the grid as its own STATE frame, anchored onto a 64x64 canvas
+instead of 32x32, for props too big for the standard object frame; see
+`ConvertedSprite.frame_px` and `ConvertedSprite.states`).
 """
 from __future__ import annotations
 
@@ -61,20 +62,35 @@ CycleName = Literal["neutral02", "neutral13", "distinct", "break_prop", "large_p
 BREAK_PROP_SHEETS = frozenset({"fk107-rocksmash"})
 NUM_BREAK_PROP_FRAMES = 4
 
-# Sheets that are LARGE PROPS: a single static object (lab machine, etc) too big
-# for the 32x32 GBA object frame. The engine natively supports 64x64 object
-# events (`gObjectEventGraphicsInfo_RayquazaStill`,
+# Sheets that are LARGE PROPS: a static object (lab machine, etc) too big for the
+# 32x32 GBA object frame. The engine natively supports 64x64 object events
+# (`gObjectEventGraphicsInfo_RayquazaStill`,
 # `engine/src/data/object_events/object_event_graphics_info.h:757-773` — .size =
 # 2048, .oam = &gObjectEventBaseOam_64x64, .subspriteTables = sOamTables_64x64;
 # `sAnimTable_Inanimate` at `object_event_anims.h:1196`), so rather than reject
-# an oversize sheet these convert to ONE idle frame (column 0, row 0 — RMXP's
-# down-facing pattern) anchored onto a 64x64 canvas instead of the standard
+# an oversize sheet these convert onto a 64x64 canvas instead of the standard
 # 32x32 one. Downscaling still goes through the same majority-vote
 # `_downscale_2x_majority` as every other sheet (large-prop art isn't a clean
 # 2x-nearest-neighbour source either).
+#
+# A large prop is not a walk cycle: RMXP animates it by SETTING its (direction,
+# pattern) — a "Change Graphic" move-route step (code 41) that names the same
+# sheet and moves only those two parameters. Each grid cell is therefore a
+# distinct visual STATE, not a walk frame, and every non-empty one is extracted
+# (`ConvertedSprite.states` records which cell each frame came from). Emitting
+# only the idle cell — what this used to do — put a single frame in the ROM, so
+# the machine in Professor Bamb'o's lab could never change state no matter what
+# the script asked for (SLICE1_TODO #25).
 LARGE_PROP_SHEETS = frozenset({"PU-PokeballMachine"})
-NUM_LARGE_PROP_FRAMES = 1
 LARGE_PROP_FRAME_PX = 64
+
+# Grid row index -> RMXP direction code, and the cell every large prop's IDLE
+# state lives at (row 0 / column 0 = facing down, pattern 0). `sprite_emit` keys
+# the sheet's bare `OBJ_EVENT_GFX_URANIUM_*` constant to this state and suffixes
+# the rest, so a sheet whose art loses its idle cell fails loud rather than
+# silently renaming the constant every placed object already references.
+_ROW_TO_DIRECTION = {ROW_DOWN: 2, ROW_LEFT: 4, ROW_RIGHT: 6, ROW_UP: 8}
+LARGE_PROP_IDLE_STATE = (2, 0)
 
 # Output frame order (sAnimTable_Standard): (source row, column role). "idle"/
 # "walkA"/"walkB" are resolved to actual columns by cycle detection.
@@ -101,7 +117,8 @@ class ConvertedSprite:
     name: str                      # sheet stem (e.g. "HGSS_000")
     frames: list[np.ndarray]       # frame_px x frame_px x 4 uint8 RGBA frames, GBA order
                                     # (see _FRAME_PLAN) — 9 for a walk cycle, 4 for a break
-                                    # prop, 1 for a large prop (see `cycle`)
+                                    # prop, one per non-empty cell for a large prop
+                                    # (see `cycle` and `states`)
     cycle: CycleName
     asymmetry: float               # 0.0 == east row is an exact mirror of west
     content_size: tuple[int, int]  # union bbox (w, h) after downscale, pre-anchor padding
@@ -110,6 +127,12 @@ class ConvertedSprite:
     # Carried on the sprite (not re-derived from `name`) so sprite_emit.py can
     # size the OAM/subsprite table/pic macros without special-casing sheet names.
     frame_px: int = GBA_FRAME_PX
+    # LARGE PROPS ONLY: the RMXP (direction, pattern) each frame was extracted
+    # from, index-aligned with `frames`. Empty for every other sheet class,
+    # whose frames are walk/break animation steps rather than selectable states.
+    # This is what lets `sprite_emit` mint one OBJ_EVENT_GFX_URANIUM_* per state
+    # so an RMXP code-41 Change Graphic can actually reach it.
+    states: tuple[tuple[int, int], ...] = ()
 
 
 @dataclass
@@ -173,16 +196,28 @@ def convert_character_sheet(path: Path) -> ConvertedSprite:
     cell = _cell_accessor(arr, frame_w, frame_h)
 
     if name in LARGE_PROP_SHEETS:
-        # Single idle frame = column 0, row 0 (RMXP's down-facing pattern) —
-        # large props are static objects, not walk cycles, and don't fit the
-        # 32x32 canvas, so they get their own 64x64-anchored one-frame path.
-        native_frame = _downscale_2x_majority(cell(ROW_DOWN, 0))
-        if not native_frame[..., 3].any():
+        # Every non-empty cell is a selectable STATE, in (direction, pattern)
+        # order — large props are static objects RMXP re-poses via code-41
+        # Change Graphic, not walk cycles, and they don't fit the 32x32 canvas,
+        # so they get their own 64x64-anchored multi-state path. All states are
+        # anchored with ONE shared offset (same rule as a walk cycle): a
+        # per-frame recentre would make the prop hop as it changed state.
+        native_frames: list[np.ndarray] = []
+        states: list[tuple[int, int]] = []
+        for row in range(GRID_SIZE):
+            for col in range(GRID_SIZE):
+                native = _downscale_2x_majority(cell(row, col))
+                if not native[..., 3].any():
+                    continue  # RMXP leaves unused cells blank; not an error
+                native_frames.append(native)
+                states.append((_ROW_TO_DIRECTION[row], col))
+        if LARGE_PROP_IDLE_STATE not in states:
             raise ValueError(
-                f"{name}: large-prop idle frame (row 0, col 0) is fully "
-                "transparent — the object would be invisible"
+                f"{name}: large-prop idle state {LARGE_PROP_IDLE_STATE} (row 0, "
+                "col 0) is fully transparent — the object would be invisible at "
+                "boot, and its bare gfx constant would name a different state"
             )
-        frames, content_size = _anchor([native_frame], name, frame_px=LARGE_PROP_FRAME_PX)
+        frames, content_size = _anchor(native_frames, name, frame_px=LARGE_PROP_FRAME_PX)
         return ConvertedSprite(
             name=name,
             frames=frames,
@@ -190,6 +225,7 @@ def convert_character_sheet(path: Path) -> ConvertedSprite:
             asymmetry=0.0,
             content_size=content_size,
             frame_px=LARGE_PROP_FRAME_PX,
+            states=tuple(states),
         )
 
     if name in BREAK_PROP_SHEETS:

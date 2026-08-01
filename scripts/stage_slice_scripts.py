@@ -51,7 +51,11 @@ from rpg2gba.tileset_converter.local_id_remap import (
     remap_pory_object_ids,
 )
 from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS, WALKABLE_OVERRIDES
-from rpg2gba.tileset_converter.npc_gfx import DEFAULT_NPC_GFX_MAP, load_npc_gfx_map
+from rpg2gba.tileset_converter.npc_gfx import (
+    DEFAULT_NPC_GFX_MAP,
+    load_npc_gfx_map,
+    load_npc_gfx_states,
+)
 from rpg2gba.tileset_converter.route_bytecode import RouteRegistry
 from rpg2gba.tileset_converter.route_table_emit import emit_route_table
 
@@ -236,6 +240,7 @@ def _regenerate_map_json(
     out: Path,
     pory_labels: set[str],
     npc_gfx: dict[str, str],
+    npc_gfx_states: dict[str, dict[tuple[int, int], str]],
     local_id_dir: Path,
     event_traits: dict[int, dict[int, list[str]]],
     fork: Path,
@@ -291,6 +296,7 @@ def _regenerate_map_json(
         dispatcher_dir=out / "porymap" / "dispatch",
         pory_labels=pory_labels,
         npc_gfx=npc_gfx,
+        npc_gfx_states=npc_gfx_states,
         local_id_dir=local_id_dir,
         event_traits=event_traits,
         flag_registry=flag_reg,
@@ -329,13 +335,14 @@ def main() -> int:
     # so load_npc_gfx_map can validate every OBJ_EVENT_GFX_URANIUM_* against a real
     # #define (idempotent — assemble_pathfinder re-runs it before make).
     sprite_pass.run_sprite_pass(fork)
-    npc_gfx = load_npc_gfx_map(
-        DEFAULT_NPC_GFX_MAP,
-        [
-            fork / "include" / "constants" / "event_objects.h",
-            fork / "include" / "constants" / "uranium_event_objects.gen.h",
-        ],
-    )
+    gfx_headers = [
+        fork / "include" / "constants" / "event_objects.h",
+        fork / "include" / "constants" / "uranium_event_objects.gen.h",
+    ]
+    npc_gfx = load_npc_gfx_map(DEFAULT_NPC_GFX_MAP, gfx_headers)
+    # Multi-state sheets (large props): the boot page's own (direction, pattern)
+    # picks which emitted state the placed object wears.
+    npc_gfx_states = load_npc_gfx_states(DEFAULT_NPC_GFX_MAP, gfx_headers)
 
     # --- pass 1: normalize every slice .pory, collect the canonical (un-named)
     # page-label definition set the regenerated map.json must agree with ---
@@ -364,7 +371,8 @@ def main() -> int:
     # --- regenerate map.json with the real labels (the S5 stub hook) +
     # per-map local-id tables (RMXP id -> compiled object-event local id) ---
     _regenerate_map_json(
-        out, pory_labels, npc_gfx, local_id_dir, event_traits, fork, required_actor_ids,
+        out, pory_labels, npc_gfx, npc_gfx_states, local_id_dir, event_traits,
+        fork, required_actor_ids,
     )
 
     # --- pass 2: prune + report per requested map (reads the fresh map.json) ---

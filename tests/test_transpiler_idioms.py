@@ -723,6 +723,87 @@ def test_change_graphic_mid_route_splits_the_movement(
     assert "frame 2" in res.unhandled[0].description
 
 
+_MACHINE_STATES = {
+    (2, 0): "OBJ_EVENT_GFX_URANIUM_PU_MACHINE",
+    (2, 1): "OBJ_EVENT_GFX_URANIUM_PU_MACHINE_D2P1",
+    (6, 2): "OBJ_EVENT_GFX_URANIUM_PU_MACHINE_D6P2",
+}
+
+
+def test_change_graphic_on_a_multi_state_sheet_swaps_to_that_state(
+    ctx: T.TranspileContext,
+) -> None:
+    """The machine in Professor Bamb'o's lab (SLICE1_TODO #25): RMXP re-poses a
+    prop by keeping the sheet and moving (direction, pattern). When the sprite
+    pass emitted one frame, the swap was a visible no-op; with per-state art the
+    swap targets the state's own constant — no facing, nothing dropped."""
+    ctx.npc_gfx = {"PU-Machine": "OBJ_EVENT_GFX_URANIUM_PU_MACHINE"}
+    ctx.npc_gfx_states = {"PU-Machine": _MACHINE_STATES}
+    res = run_event(ctx, [[
+        cmd(T.SET_MOVE_ROUTE, [19, _route([
+            {"code": T.CHANGE_GRAPHIC, "parameters": ["PU-Machine", 0, 6, 2]},
+        ])]),
+    ]])
+    assert "setvar(VAR_0x8005, OBJ_EVENT_GFX_URANIUM_PU_MACHINE_D6P2)" in res.text
+    assert "special(RPG2GBA_SetObjectEventGfx)" in res.text
+    # A state constant carries the direction, so no facing block is needed...
+    assert "face_right" not in res.text
+    # ...and the pattern is no longer a drop.
+    assert res.unhandled == []
+
+
+def test_change_graphic_to_the_idle_state_uses_the_bare_constant(
+    ctx: T.TranspileContext,
+) -> None:
+    ctx.npc_gfx = {"PU-Machine": "OBJ_EVENT_GFX_URANIUM_PU_MACHINE"}
+    ctx.npc_gfx_states = {"PU-Machine": _MACHINE_STATES}
+    res = run_event(ctx, [[
+        cmd(T.SET_MOVE_ROUTE, [19, _route([
+            {"code": T.CHANGE_GRAPHIC, "parameters": ["PU-Machine", 0, 2, 0]},
+        ])]),
+    ]])
+    assert "setvar(VAR_0x8005, OBJ_EVENT_GFX_URANIUM_PU_MACHINE)" in res.text
+    assert res.unhandled == []
+
+
+def test_change_graphic_to_a_state_with_no_art_queues(
+    ctx: T.TranspileContext,
+) -> None:
+    """A state the sheet's art has no cell for has no frame in the ROM, so it
+    must queue rather than target a constant nothing defines (§4.5)."""
+    ctx.npc_gfx = {"PU-Machine": "OBJ_EVENT_GFX_URANIUM_PU_MACHINE"}
+    ctx.npc_gfx_states = {"PU-Machine": _MACHINE_STATES}
+    res = run_event(ctx, [[
+        cmd(T.SET_MOVE_ROUTE, [19, _route([
+            {"code": T.CHANGE_GRAPHIC, "parameters": ["PU-Machine", 0, 8, 3]},
+        ])]),
+    ]])
+    assert "RPG2GBA_SetObjectEventGfx" not in res.text
+    assert len(res.unhandled) == 1
+    assert "no cell for" in res.unhandled[0].description
+
+
+def test_change_graphic_mid_route_on_a_multi_state_sheet_still_splits(
+    ctx: T.TranspileContext,
+) -> None:
+    """Only the swap's own facing block goes away — the ordinary steps either
+    side of it still become their own applymovement runs."""
+    ctx.npc_gfx = {"PU-Machine": "OBJ_EVENT_GFX_URANIUM_PU_MACHINE"}
+    ctx.npc_gfx_states = {"PU-Machine": _MACHINE_STATES}
+    res = run_event(ctx, [[
+        cmd(T.SET_MOVE_ROUTE, [19, _route([
+            {"code": 4},
+            {"code": T.CHANGE_GRAPHIC, "parameters": ["PU-Machine", 0, 6, 2]},
+            {"code": 1},
+        ])]),
+    ]])
+    gfx_at = res.text.index("special(RPG2GBA_SetObjectEventGfx)")
+    assert res.text.count("applymovement(19,") == 2
+    assert res.text.index("applymovement(19,") < gfx_at
+    assert res.text.rindex("applymovement(19,") > gfx_at
+    assert res.unhandled == []
+
+
 def test_change_graphic_unmapped_sheet_queues(ctx: T.TranspileContext) -> None:
     """An unmapped sheet must not invent a constant (CLAUDE.md §4.3)."""
     res = run_event(ctx, [[

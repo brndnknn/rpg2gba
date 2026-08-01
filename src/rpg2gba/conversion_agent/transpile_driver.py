@@ -315,12 +315,22 @@ def transpile_corpus(
     # sprite pass); an unmapped sheet queues in the transpiler either way.
     _gfx_path = reference_dir / "npc_gfx_map.json"
     if _gfx_path.is_file():
+        _gfx_raw = json.loads(_gfx_path.read_text(encoding="utf-8"))
         ctx.npc_gfx = {
             name: entry["gfx"]
-            for name, entry in json.loads(
-                _gfx_path.read_text(encoding="utf-8")
-            ).items()
+            for name, entry in _gfx_raw.items()
             if isinstance(entry, dict) and entry.get("gfx")
+        }
+        # Per-STATE constants for sheets the sprite pass emits state by state
+        # (large props); a code-41 that only moves (direction, pattern) resolves
+        # through these instead of the sheet's single constant.
+        ctx.npc_gfx_states = {
+            name: {
+                tuple(int(part) for part in key.split(",")): gfx
+                for key, gfx in entry["states"].items()
+            }
+            for name, entry in _gfx_raw.items()
+            if isinstance(entry, dict) and entry.get("states")
         }
     index = fork_index.load_or_build()
     overrides = hand_overrides.load_hand_overrides(overrides_dir)

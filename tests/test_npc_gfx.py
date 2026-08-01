@@ -16,6 +16,7 @@ from rpg2gba.tileset_converter.npc_gfx import (
     gfx_constant_for_sheet,
     is_door_sheet,
     load_npc_gfx_map,
+    load_npc_gfx_states,
     movement_spec_for,
     select_boot_page,
     static_face_spec,
@@ -109,6 +110,67 @@ def test_load_npc_gfx_map_missing_header_fails_loud(tmp_path: Path) -> None:
     )
     with pytest.raises(FileNotFoundError):
         load_npc_gfx_map(json_path, [tmp_path / "does_not_exist.h"])
+
+
+# --- load_npc_gfx_states ------------------------------------------------------
+
+def test_load_npc_gfx_states_real_file_covers_the_lab_machine(tmp_path: Path) -> None:
+    """The lab machine is the corpus's multi-state sheet: RMXP re-poses it with
+    code-41 Change Graphic steps that keep the sheet and move only (direction,
+    pattern), so each cell needs its own constant (SLICE1_TODO #25)."""
+    raw = json.loads(REAL_NPC_GFX_MAP.read_text(encoding="utf-8"))
+    names = [entry["gfx"] for entry in raw.values()]
+    for entry in raw.values():
+        names.extend((entry.get("states") or {}).values())
+    headers = _headers_for(tmp_path, names)
+
+    states = load_npc_gfx_states(REAL_NPC_GFX_MAP, headers)
+    machine = states["PU-PokeballMachine"]
+    assert machine[(2, 0)] == "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE"
+    assert machine[(6, 2)] == "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE_D6P2"
+    # Sheets with no "states" field are absent entirely, so a caller can tell
+    # "not a multi-state sheet" from "state missing from the art".
+    assert "HGSS_000" not in states
+
+
+def test_load_npc_gfx_states_unknown_constant_fails_loud(tmp_path: Path) -> None:
+    json_path = tmp_path / "npc_gfx_map.json"
+    json_path.write_text(
+        json.dumps({"Foo": {"gfx": "OBJ_EVENT_GFX_URANIUM_FOO",
+                            "states": {"2,0": "OBJ_EVENT_GFX_URANIUM_FOO",
+                                       "2,1": "OBJ_EVENT_GFX_URANIUM_FOO_D2P1"}}}),
+        encoding="utf-8",
+    )
+    headers = _headers_for(tmp_path, ["OBJ_EVENT_GFX_URANIUM_FOO"])
+    with pytest.raises(ValueError, match="not #define'd"):
+        load_npc_gfx_states(json_path, headers)
+
+
+def test_load_npc_gfx_states_malformed_key_fails_loud(tmp_path: Path) -> None:
+    json_path = tmp_path / "npc_gfx_map.json"
+    json_path.write_text(
+        json.dumps({"Foo": {"gfx": "OBJ_EVENT_GFX_URANIUM_FOO",
+                            "states": {"down": "OBJ_EVENT_GFX_URANIUM_FOO"}}}),
+        encoding="utf-8",
+    )
+    headers = _headers_for(tmp_path, ["OBJ_EVENT_GFX_URANIUM_FOO"])
+    with pytest.raises(ValueError, match="malformed state key"):
+        load_npc_gfx_states(json_path, headers)
+
+
+def test_load_npc_gfx_states_non_rmxp_direction_fails_loud(tmp_path: Path) -> None:
+    """RMXP directions are 2/4/6/8; anything else means the entry was written
+    against the wrong convention (e.g. a row index) and would silently never
+    match a real code-41."""
+    json_path = tmp_path / "npc_gfx_map.json"
+    json_path.write_text(
+        json.dumps({"Foo": {"gfx": "OBJ_EVENT_GFX_URANIUM_FOO",
+                            "states": {"0,0": "OBJ_EVENT_GFX_URANIUM_FOO"}}}),
+        encoding="utf-8",
+    )
+    headers = _headers_for(tmp_path, ["OBJ_EVENT_GFX_URANIUM_FOO"])
+    with pytest.raises(ValueError, match="not an RMXP direction code"):
+        load_npc_gfx_states(json_path, headers)
 
 
 # --- select_boot_page ---------------------------------------------------------

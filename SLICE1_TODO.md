@@ -44,27 +44,60 @@ single-letter assignments can't let a typo'd `A` through.
 **Shipped:** `lab-doorstep.gba` sha1 `d39c55d6` (pristine `26408202`). 1544
 tests; moki GREEN 17/17 first attempt with the new nickname prompt in the path.
 
-### 25. The lab machine still doesn't animate — ROOT-CAUSED, NOT FIXED
+### 25. The lab machine didn't animate — BUILT 2026-08-01, boot-walk pending
 
-Reported again 2026-08-01 after the direction-carrying fix, and the fix was
-never going to be enough. **The sheet has exactly one frame in the ROM.**
-`PU-PokeballMachine` is in `graphics/sprites.py:75 LARGE_PROP_SHEETS`, so
-`sprite_emit` gives it the fork's 64×64 static-object treatment
-(`gObjectEventGraphicsInfo_RayquazaStill` convention): `.anims =
-sAnimTable_Inanimate`, `.inanimate = TRUE`, and a **one-frame pic table**. No
-script command can show a frame that isn't in the ROM, so both the pattern
-selection *and* the direction carry are dead for this sheet.
+Reported twice; the earlier direction-carrying fix was never going to be
+enough. **The sheet had exactly one frame in the ROM.** `PU-PokeballMachine` is
+a `graphics/sprites.py` `LARGE_PROP_SHEETS` entry, so `sprite_emit` gave it the
+fork's 64×64 static-object treatment (`gObjectEventGraphicsInfo_RayquazaStill`
+convention): `.anims = sAnimTable_Inanimate`, `.inanimate = TRUE`, and a
+one-frame pic table. No script command can show a frame that isn't in the ROM,
+so both the pattern selection *and* the direction carry were dead for it.
 
-**Fix (converter-level, not transpiler):** for a large-prop sheet referenced by
-a code-41 swap, emit the RMXP frames it actually uses into the pic table and
-mint one `OBJ_EVENT_GFX_URANIUM_*` per (direction, pattern) — then the swap is
-an ordinary gfx swap to the frame-specific constant. Touches
-`graphics/sprites.py` (frame extraction), `graphics/sprite_emit.py` (one
-graphics-info entry per frame), `reference/npc_gfx_map.json` (§4.3 SoT gains
-per-frame constants), and the transpiler's code-41 resolution
-((sheet, dir, pattern) → constant instead of sheet → constant). Corpus reach is
-worth measuring first: 1115 code-41 uses across 499 events in 44 maps, but only
-the large-prop subset is affected this way.
+**A large prop is not a walk cycle — every grid cell is a selectable STATE.**
+RMXP re-poses a static prop with a code-41 Change Graphic that names the sheet
+it's already wearing and moves only `(direction, pattern)`. The conversion now
+treats those as states end to end:
+
+- `graphics/sprites.py` extracts every **non-empty** cell as its own frame,
+  recording `ConvertedSprite.states` (index-aligned `(direction, pattern)`),
+  all anchored with one shared offset so the prop doesn't hop between states.
+  The machine yields 9: directions 2/4/6 × patterns 0/1/2 (row 8 and column 3
+  are blank in the art).
+- `graphics/sprite_emit.py` emits one `ObjectEventGraphicsInfo` + one
+  `OBJ_EVENT_GFX_URANIUM_*` id per state, each over a one-frame pic table
+  (`overworld_frame(strip, 8, 8, k)`, `engine/include/sprite.h:35`) indexing
+  the sheet's **single** strip PNG and palette. `sAnimTable_Inanimate` only
+  ever shows frame 0, so a state has to *be* frame 0 of its own table. The idle
+  state (2,0) keeps the bare constant, so every already-placed object_event and
+  the existing `"gfx"` entry keep resolving; the rest are suffixed
+  `_D<dir>P<pattern>`. `NUM_URANIUM_OBJ_EVENT_GFX` now counts constants (40),
+  not sheets (32).
+- `reference/npc_gfx_map.json` (§4.3 SoT) gains a `"states"` map, cross-checked
+  against the real PNG's non-empty cells on every sprite pass
+  (`sprite_pass._check_declared_states`) — declaring a state the art lacks, or
+  emitting one the JSON never declared, fails loud.
+- The transpiler's code-41 resolves `(sheet, direction, pattern)` → that
+  state's constant; the facing block and the pattern-drop queue note are gone
+  for state sheets (nothing is dropped), and a state with no cell queues.
+  Walk-cycle sheets keep the old facing-carry behaviour unchanged.
+- `metadata_wiring.build_object_events` places a multi-state prop in its boot
+  page's own authored state, so a page authored mid-sequence (Map050 EV019 p2
+  is `(4,2)`) boots showing that, not the idle cell.
+- The fork gate (`fork_index.registry_extra_symbols`) accepts the per-state
+  constants, same as the sheet's own.
+
+All four Map050 swaps now target distinct states (`Map050.pory` D2P1 / D2P2 /
+D6P2 / D4P2). Verified by eye against a fresh-boot replay: the machine is the
+idle unit through B6/N3 and a visibly different unit after the quiz.
+
+**Corpus note:** 1115 code-41 uses across 44 maps, 30 sheets used with more
+than one `(direction, pattern)`. Only the large-prop subset is converted this
+way — ordinary NPC sheets are genuine walk cycles whose frames the fork drives
+itself, and their pattern-moving swaps still queue as before.
+
+**Shipped:** `lab-doorstep.gba` sha1 `f64db6ca` (pristine `583a431f`). 1564
+tests; moki GREEN 17/17 first attempt.
 
 ### 23. Map050 EV005 retired onto the transpiler — BUILT 2026-08-01, boot-walk pending
 

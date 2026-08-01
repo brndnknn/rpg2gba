@@ -11,7 +11,7 @@ from PIL import Image
 
 from rpg2gba.tileset_converter.graphics.sprites import (
     LARGE_PROP_FRAME_PX,
-    NUM_LARGE_PROP_FRAMES,
+    LARGE_PROP_IDLE_STATE,
     NUM_PLAYER_OUTPUT_FRAMES,
     ConvertedPlayer,
     ConvertedSprite,
@@ -192,8 +192,8 @@ def test_break_prop_blank_intact_frame_raises(tmp_path: Path) -> None:
 
 
 def test_large_prop_sheet_single_frame_64x64_content_preserved(tmp_path: Path) -> None:
-    """A LARGE_PROP_SHEETS sheet (e.g. PU-PokeballMachine) converts to ONE
-    64x64-anchored idle frame from column 0, row 0 — content too big for the
+    """A LARGE_PROP_SHEETS sheet (e.g. PU-PokeballMachine) with only its idle
+    cell filled converts to ONE 64x64-anchored frame — content too big for the
     32x32 GBA object frame but well within 64x64 (mirrors the real sheet's
     43x55 bbox: see test_large_prop_real_pokeball_machine_sheet_converts)."""
     cell_px = 60
@@ -204,7 +204,8 @@ def test_large_prop_sheet_single_frame_64x64_content_preserved(tmp_path: Path) -
     sprite = convert_character_sheet(path)
     assert sprite.cycle == "large_prop"
     assert sprite.frame_px == LARGE_PROP_FRAME_PX
-    assert len(sprite.frames) == NUM_LARGE_PROP_FRAMES == 1
+    assert len(sprite.frames) == 1
+    assert sprite.states == (LARGE_PROP_IDLE_STATE,)
     frame = sprite.frames[0]
     assert frame.shape == (LARGE_PROP_FRAME_PX, LARGE_PROP_FRAME_PX, 4)
     assert frame.dtype == np.uint8
@@ -249,11 +250,65 @@ def test_large_prop_real_pokeball_machine_sheet_converts() -> None:
     assert sprite.name == "PU-PokeballMachine"
     assert sprite.cycle == "large_prop"
     assert sprite.frame_px == LARGE_PROP_FRAME_PX
-    assert len(sprite.frames) == NUM_LARGE_PROP_FRAMES
-    frame = sprite.frames[0]
-    assert frame.shape == (LARGE_PROP_FRAME_PX, LARGE_PROP_FRAME_PX, 4)
-    assert frame[..., 3].any()
+    # Every non-empty cell is a selectable state: the machine's art fills
+    # directions 2/4/6 at patterns 0/1/2 and leaves row 8 and column 3 blank.
+    assert sprite.states == (
+        (2, 0), (2, 1), (2, 2),
+        (4, 0), (4, 1), (4, 2),
+        (6, 0), (6, 1), (6, 2),
+    )
+    assert len(sprite.frames) == len(sprite.states)
+    for frame in sprite.frames:
+        assert frame.shape == (LARGE_PROP_FRAME_PX, LARGE_PROP_FRAME_PX, 4)
+        assert frame[..., 3].any()
     assert sprite.content_size == (43, 55)
+    # The states must be visually distinct — if the extraction collapsed them
+    # the machine would still look frozen in-game, the bug this fixes.
+    distinct = {frame.tobytes() for frame in sprite.frames}
+    assert len(distinct) == len(sprite.frames)
+
+
+def test_large_prop_extracts_every_non_empty_cell_as_a_state(tmp_path: Path) -> None:
+    """RMXP animates a static prop by moving a code-41 Change Graphic's
+    (direction, pattern), so each non-empty grid cell is a state that needs its
+    own frame in the ROM. Blank cells are skipped, not emitted as empty
+    states."""
+    cell_px = 8
+    cells = {
+        (0, 0): _solid(cell_px, (10, 10, 10, 255)),   # (2, 0) idle
+        (0, 2): _solid(cell_px, (20, 20, 20, 255)),   # (2, 2)
+        (2, 1): _solid(cell_px, (30, 30, 30, 255)),   # (6, 1)
+    }
+    path = _make_sheet(tmp_path, cells, cell_px, name="PU-PokeballMachine")
+
+    sprite = convert_character_sheet(path)
+    assert sprite.states == ((2, 0), (2, 2), (6, 1))
+    assert len(sprite.frames) == 3
+    # Index-aligned with `states`, in the same order.
+    colors = [tuple(f[f[..., 3] > 0][0]) for f in sprite.frames]
+    assert colors == [(10, 10, 10, 255), (20, 20, 20, 255), (30, 30, 30, 255)]
+
+
+def test_large_prop_states_share_one_anchor(tmp_path: Path) -> None:
+    """All states are anchored with ONE shared offset (the same rule the walk
+    cycle uses): a per-frame recentre would make the prop hop as it changed
+    state."""
+    cell_px = 8
+    tall = np.zeros((cell_px, cell_px, 4), dtype=np.uint8)
+    tall[1:7, 2:6] = (1, 2, 3, 255)
+    short = np.zeros((cell_px, cell_px, 4), dtype=np.uint8)
+    short[4:7, 2:6] = (4, 5, 6, 255)  # same footprint, half the height
+    path = _make_sheet(tmp_path, {(0, 0): tall, (0, 1): short}, cell_px,
+                       name="PU-PokeballMachine")
+
+    sprite = convert_character_sheet(path)
+    assert sprite.states == ((2, 0), (2, 1))
+    # The short state keeps its own vertical extent relative to the tall one —
+    # it does NOT get pushed down to the canvas floor on its own.
+    tops = [int(np.where(f[..., 3] > 0)[0].min()) for f in sprite.frames]
+    assert tops[1] > tops[0]
+    bottoms = [int(np.where(f[..., 3] > 0)[0].max()) for f in sprite.frames]
+    assert bottoms == [bottoms[0], bottoms[0]]
 
 
 def test_cycle_detection_empty_pair_falls_back_to_distinct(

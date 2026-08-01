@@ -147,12 +147,41 @@ def test_registry_extra_symbols_includes_npc_gfx(tmp_path: Path) -> None:
     assert extras == {"OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE"}
 
 
+def test_registry_extra_symbols_includes_per_state_npc_gfx(tmp_path: Path) -> None:
+    """A multi-state sheet (large prop) mints one constant per selectable
+    (direction, pattern), and the code-41 swap targets those directly — so they
+    need to reach the gate exactly like the sheet's own constant does."""
+    gfx_map = tmp_path / "npc_gfx_map.json"
+    gfx_map.write_text(
+        json.dumps(
+            {
+                "PU-PokeballMachine": {
+                    "gfx": "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE",
+                    "states": {
+                        "2,0": "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE",
+                        "2,1": "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE_D2P1",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    extras = fi.registry_extra_symbols(npc_gfx_map_path=gfx_map)
+    assert extras == {
+        "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE",
+        "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE_D2P1",
+    }
+
+
 def test_real_npc_gfx_map_covers_the_slice_sprite_swaps() -> None:
     """Guard against the SoT and the gate drifting apart."""
     gfx_map = Path("reference/npc_gfx_map.json")
     extras = fi.registry_extra_symbols(npc_gfx_map_path=gfx_map)
     assert extras, "reference/npc_gfx_map.json minted no OBJ_EVENT_GFX_URANIUM_*"
     assert all(n.startswith("OBJ_EVENT_GFX_URANIUM_") for n in extras)
+    # The lab machine's per-state constants are in the slice's code-41 path.
+    assert "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE_D6P2" in extras
 
 
 def test_cache_invalidated_on_format_bump(

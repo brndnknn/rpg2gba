@@ -6,6 +6,7 @@ wave-2 brief."""
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -25,7 +26,7 @@ from rpg2gba.tileset_converter.graphics.sprites import (
     GBA_FRAME_PX,
     LARGE_PROP_FRAME_PX,
     NUM_BREAK_PROP_FRAMES,
-    NUM_LARGE_PROP_FRAMES,
+    LARGE_PROP_IDLE_STATE,
     NUM_OUTPUT_FRAMES,
     NUM_PLAYER_OUTPUT_FRAMES,
     ConvertedPlayer,
@@ -64,20 +65,27 @@ def _make_break_prop(name: str) -> ConvertedSprite:
 
 
 def _make_large_prop(
-    name: str, colors: list[tuple[int, int, int]] | None = None
+    name: str,
+    colors: list[tuple[int, int, int]] | None = None,
+    states: tuple[tuple[int, int], ...] = (LARGE_PROP_IDLE_STATE,),
 ) -> ConvertedSprite:
-    """A 1-frame large-prop sprite (PU-PokeballMachine shape): one opaque pixel
-    per colour along frame row 0, same fixture convention as `_make_sprite`,
-    just a 64x64 single frame instead of 9x 32x32."""
+    """A large-prop sprite (PU-PokeballMachine shape): one 64x64 frame per
+    selectable state, each with one opaque pixel per colour along frame row 0
+    (same fixture convention as `_make_sprite`). Defaults to the idle state
+    alone."""
     colors = colors if colors is not None else [(90, 60, 30)]
     if len(colors) > LARGE_PROP_FRAME_PX:
         raise ValueError("fixture helper: too many colours for one 64px row")
-    frame = np.zeros((LARGE_PROP_FRAME_PX, LARGE_PROP_FRAME_PX, 4), dtype=np.uint8)
-    for i, (r, g, b) in enumerate(colors):
-        frame[0, i] = (r, g, b, 255)
+    frames = []
+    for si in range(len(states)):
+        frame = np.zeros((LARGE_PROP_FRAME_PX, LARGE_PROP_FRAME_PX, 4), dtype=np.uint8)
+        for i, (r, g, b) in enumerate(colors):
+            frame[si, i] = (r, g, b, 255)  # distinct row per state
+        frames.append(frame)
     return ConvertedSprite(
-        name=name, frames=[frame], cycle="large_prop", asymmetry=0.0,
+        name=name, frames=frames, cycle="large_prop", asymmetry=0.0,
         content_size=(len(colors), 1), frame_px=LARGE_PROP_FRAME_PX,
+        states=states,
     )
 
 
@@ -114,7 +122,7 @@ def test_gfx_constant_matches_npc_gfx_module(tmp_path: Path) -> None:
     result = emit_sprites([sprite], tmp_path)
     assert result.gfx_constants["HGSS_000"] == gfx_constant_for_sheet("HGSS_000")
     assert result.gfx_constants["HGSS_000"] == "OBJ_EVENT_GFX_URANIUM_HGSS_000"
-    assert result.gfx_ids["HGSS_000"] == FIRST_GFX_ID
+    assert result.gfx_ids["OBJ_EVENT_GFX_URANIUM_HGSS_000"] == FIRST_GFX_ID
 
 
 # --- happy path --------------------------------------------------------------
@@ -129,8 +137,10 @@ def test_happy_path_shared_palette_two_sheets(tmp_path: Path) -> None:
     s_a = _make_sprite("aaa", [(0, 0, 0), (8, 0, 0)])
     result = emit_sprites([s_z, s_a], tmp_path)
 
-    assert result.gfx_ids["aaa"] == FIRST_GFX_ID  # "AAA" sorts before "ZZZ"
-    assert result.gfx_ids["zzz"] == FIRST_GFX_ID + 1
+    # gfx_ids is keyed by CONSTANT, not sheet — a multi-state sheet mints more
+    # than one, so the sheet name can't be the key.
+    assert result.gfx_ids["OBJ_EVENT_GFX_URANIUM_AAA"] == FIRST_GFX_ID  # "AAA" < "ZZZ"
+    assert result.gfx_ids["OBJ_EVENT_GFX_URANIUM_ZZZ"] == FIRST_GFX_ID + 1
     assert len(result.palette_tags) == 1  # both fit in one shared palette
     assert result.palette_index["aaa"] == result.palette_index["zzz"]
     assert len(result.palettes) == 1
@@ -390,7 +400,7 @@ def test_large_prop_emits_64x64_oam_and_inanimate(tmp_path: Path) -> None:
 
     png_path = tmp_path / PICS_RELDIR / f"{result.stems['PU-PokeballMachine']}.png"
     png = Image.open(png_path)
-    assert png.size == (LARGE_PROP_FRAME_PX * NUM_LARGE_PROP_FRAMES, LARGE_PROP_FRAME_PX)
+    assert png.size == (LARGE_PROP_FRAME_PX, LARGE_PROP_FRAME_PX)  # one state
 
 
 def test_large_prop_pic_table_and_incgfx_use_8_tile_metatile(tmp_path: Path) -> None:
@@ -409,7 +419,7 @@ def test_large_prop_pic_table_and_incgfx_use_8_tile_metatile(tmp_path: Path) -> 
     )
 
     pic_tables_text = (tmp_path / _GEN_RELPATHS["pic_tables"]).read_text(encoding="utf-8")
-    assert f"overworld_ascending_frames(gObjectEventPic_{ident}, 8, 8)," in pic_tables_text
+    assert f"overworld_frame(gObjectEventPic_{ident}, 8, 8, 0)," in pic_tables_text
 
 
 def test_large_prop_shares_npc_palette_packing(tmp_path: Path) -> None:
@@ -424,9 +434,11 @@ def test_large_prop_shares_npc_palette_packing(tmp_path: Path) -> None:
 
 
 def test_large_prop_frame_count_validated(tmp_path: Path) -> None:
+    """Frames and states must stay index-aligned: an extra frame is one no
+    state names, so nothing could ever select it."""
     prop = _make_large_prop("PU-PokeballMachine")
-    prop.frames.append(prop.frames[0].copy())  # 2 frames — invalid for a large prop
-    with pytest.raises(ValueError, match="expected 1 frames"):
+    prop.frames.append(prop.frames[0].copy())  # 2 frames, still 1 state
+    with pytest.raises(ValueError, match="index-aligned"):
         emit_sprites([prop], tmp_path)
 
 
@@ -435,6 +447,7 @@ def test_large_prop_wrong_frame_shape_raises(tmp_path: Path) -> None:
     sprite = ConvertedSprite(
         name="PU-PokeballMachine", frames=[bad_frame], cycle="large_prop",
         asymmetry=0.0, content_size=(1, 1), frame_px=LARGE_PROP_FRAME_PX,
+        states=(LARGE_PROP_IDLE_STATE,),
     )
     with pytest.raises(ValueError, match="PU-PokeballMachine"):
         emit_sprites([sprite], tmp_path)
@@ -457,7 +470,109 @@ def test_large_prop_alongside_break_prop_and_ordinary_sheet(tmp_path: Path) -> N
     assert break_png.size == (GBA_FRAME_PX * NUM_BREAK_PROP_FRAMES, GBA_FRAME_PX)
 
     large_png = Image.open(tmp_path / PICS_RELDIR / f"{result.stems['PU-PokeballMachine']}.png")
-    assert large_png.size == (LARGE_PROP_FRAME_PX * NUM_LARGE_PROP_FRAMES, LARGE_PROP_FRAME_PX)
+    assert large_png.size == (LARGE_PROP_FRAME_PX, LARGE_PROP_FRAME_PX)
+
+
+# --- multi-state large props (the code-41 Change Graphic target) -------------
+
+_MACHINE_STATES = ((2, 0), (2, 1), (4, 2))
+
+
+def test_multi_state_large_prop_emits_one_gfx_id_per_state(tmp_path: Path) -> None:
+    """RMXP animates a static prop by moving a code-41 Change Graphic's
+    (direction, pattern), and `sAnimTable_Inanimate` can only ever show frame 0
+    — so each state needs its OWN graphics-info + gfx id, or the swap has
+    nothing to swap to (SLICE1_TODO #25: the lab machine never animated because
+    the ROM held one frame)."""
+    prop = _make_large_prop("PU-PokeballMachine", states=_MACHINE_STATES)
+    result = emit_sprites([prop], tmp_path)
+
+    base = gfx_constant_for_sheet("PU-PokeballMachine")
+    assert result.state_gfx_constants["PU-PokeballMachine"] == {
+        (2, 0): base,                 # idle keeps the BARE constant
+        (2, 1): f"{base}_D2P1",
+        (4, 2): f"{base}_D4P2",
+    }
+    # The sheet-level constant still resolves, unchanged, for every caller that
+    # only knows "sheet -> constant".
+    assert result.gfx_constants["PU-PokeballMachine"] == base
+
+    constants = (tmp_path / _GEN_RELPATHS["constants"]).read_text(encoding="utf-8")
+    ids = {c: result.gfx_ids[c] for c in result.state_gfx_constants["PU-PokeballMachine"].values()}
+    assert len(set(ids.values())) == 3
+    for constant, gfx_id in ids.items():
+        assert f"#define {constant} {gfx_id}\n" in constants
+    # NUM_URANIUM_OBJ_EVENT_GFX sizes the fork's id space, so it counts every
+    # minted CONSTANT (3 here), not sheets (1).
+    assert "#define NUM_URANIUM_OBJ_EVENT_GFX 3\n" in constants
+
+
+def test_multi_state_large_prop_states_share_one_strip_and_palette(tmp_path: Path) -> None:
+    """All states are frames of ONE strip PNG with ONE palette assignment; only
+    their pic tables differ, each pinning its own frame via `overworld_frame`."""
+    prop = _make_large_prop("PU-PokeballMachine", states=_MACHINE_STATES)
+    result = emit_sprites([prop], tmp_path)
+    stem = result.stems["PU-PokeballMachine"]
+    base_ident = _c_ident("PU-PokeballMachine")
+
+    png = Image.open(tmp_path / PICS_RELDIR / f"{stem}.png")
+    assert png.size == (LARGE_PROP_FRAME_PX * len(_MACHINE_STATES), LARGE_PROP_FRAME_PX)
+
+    graphics = (tmp_path / _GEN_RELPATHS["graphics"]).read_text(encoding="utf-8")
+    assert graphics.count(f"const u16 gObjectEventPic_{base_ident}[]") == 1
+
+    pic_tables = (tmp_path / _GEN_RELPATHS["pic_tables"]).read_text(encoding="utf-8")
+    for frame, ident in enumerate(
+        [base_ident, f"{base_ident}_D2P1", f"{base_ident}_D4P2"]
+    ):
+        assert f"static const struct SpriteFrameImage sPicTable_{ident}[] = {{" in pic_tables
+        assert (
+            f"overworld_frame(gObjectEventPic_{base_ident}, 8, 8, {frame})," in pic_tables
+        )
+
+    info = (tmp_path / _GEN_RELPATHS["graphics_info"]).read_text(encoding="utf-8")
+    tag = f".paletteTag = {result.palette_tags[0]},"
+    assert info.count(tag) == len(_MACHINE_STATES)  # one shared palette, three structs
+
+
+def test_multi_state_large_prop_declares_and_points_every_state(tmp_path: Path) -> None:
+    """Every state gets an extern decl and a `gObjectEventGraphicsInfoPointers[]`
+    entry keyed by its own constant — without those the id resolves to NULL."""
+    prop = _make_large_prop("PU-PokeballMachine", states=_MACHINE_STATES)
+    emit_sprites([prop], tmp_path)
+    base = gfx_constant_for_sheet("PU-PokeballMachine")
+    base_ident = _c_ident("PU-PokeballMachine")
+
+    decls = (tmp_path / _GEN_RELPATHS["graphics_info_decls"]).read_text(encoding="utf-8")
+    pointers = (tmp_path / _GEN_RELPATHS["graphics_info_pointers"]).read_text(encoding="utf-8")
+    for constant, ident in (
+        (base, base_ident),
+        (f"{base}_D2P1", f"{base_ident}_D2P1"),
+        (f"{base}_D4P2", f"{base_ident}_D4P2"),
+    ):
+        assert (
+            f"extern const struct ObjectEventGraphicsInfo "
+            f"gObjectEventGraphicsInfo_{ident};\n" in decls
+        )
+        assert f"[{constant}] = &gObjectEventGraphicsInfo_{ident},\n" in pointers
+
+
+def test_multi_state_large_prop_without_idle_state_raises(tmp_path: Path) -> None:
+    """The bare constant is pinned to the idle state, and placed object_events
+    already reference it — promoting some other cell to it would silently change
+    what they show."""
+    prop = _make_large_prop("PU-PokeballMachine", states=((2, 1), (4, 2)))
+    with pytest.raises(ValueError, match="no idle state"):
+        emit_sprites([prop], tmp_path)
+
+
+def test_states_on_a_non_large_prop_sheet_raises(tmp_path: Path) -> None:
+    """A walk-cycle sheet's frames are animation steps, not selectable states;
+    declaring states on one would mint constants over the wrong frames."""
+    sprite = _make_sprite("aaa", [(0, 0, 0)])
+    bad = replace(sprite, states=(LARGE_PROP_IDLE_STATE,))
+    with pytest.raises(ValueError, match="only a large prop"):
+        emit_sprites([bad], tmp_path)
 
 
 def test_pic_tables_file_shape(tmp_path: Path) -> None:

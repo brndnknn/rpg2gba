@@ -99,6 +99,32 @@ def sheets_to_convert(gfx_map_path: Path = DEFAULT_NPC_GFX_MAP) -> list[str]:
     return sorted(names)
 
 
+def _check_declared_states(gfx_map_path: Path, sprites: list) -> None:
+    """Cross-check each sheet's declared ``"states"`` in the gfx map against the
+    states its real PNG actually yielded (`ConvertedSprite.states`).
+
+    The JSON is the single source of truth the transpiler reads (CLAUDE.md
+    §4.3); the PNG is what ends up in the ROM. If Uranium art changes — or an
+    entry is hand-edited — the two can silently disagree, and a swap would then
+    target a constant with no frame behind it. Fails loud either way (a
+    declared state the art doesn't have, or an emitted state the JSON never
+    declared, which the transpiler could never reach)."""
+    raw = json.loads(Path(gfx_map_path).read_text(encoding="utf-8"))
+    for sprite in sprites:
+        entry = raw.get(sprite.name, {})
+        declared = {
+            tuple(int(p) for p in key.split(",")) for key in (entry.get("states") or {})
+        }
+        actual = set(sprite.states)
+        if declared != actual:
+            raise ValueError(
+                f"{gfx_map_path}: sheet {sprite.name!r} declares states "
+                f"{sorted(declared)} but its PNG converts to {sorted(actual)} — "
+                f"update the 'states' entry (missing: {sorted(actual - declared)}, "
+                f"stale: {sorted(declared - actual)})"
+            )
+
+
 def run_sprite_pass(
     engine_root: Path,
     *,
@@ -124,6 +150,7 @@ def run_sprite_pass(
     chars_dir = characters_dir or _characters_dir()
 
     sprites = [convert_character_sheet(_resolve_sheet(chars_dir, name)) for name in names]
+    _check_declared_states(gfx_map_path, sprites)
     player = convert_player_sheets(
         _resolve_sheet(chars_dir, PLAYER_WALK_SHEET),
         _resolve_sheet(chars_dir, PLAYER_RUN_SHEET),
