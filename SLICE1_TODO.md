@@ -7,6 +7,78 @@ deleting it. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 20. Chapter harness planned routes on the *previous* map's grid — FIXED 2026-07-30, moki GREEN
+
+**Symptom:** moki beat B4 failed deterministically (same frame `f3464` across
+four runs) — `walk_to(27,17)`'s BFS reported *no planned route from (28,31)*
+on Map032, and the greedy fallback walked the player back through the house
+door. **The ROM was never wrong**; nothing was visible in a hand boot-walk.
+
+**Root cause:** a warp writes `SaveBlock1.location` in `ApplyCurrentWarp`
+(`engine/src/overworld.c:620`) long before it rebuilds `gBackupMapLayout` in
+the `InitMap` call inside `LoadMapFromWarp` (`overworld.c:982`).
+`_wait_for_map` polls *location*, so it returned inside that window: measured
+at the failing instant, `map_location`=(75,2) MokiTown and `player_pos`=(28,31),
+but the grid was still the house's 45×29 (→30×15). The goal (27,17) fell
+outside those bounds, so BFS returned `None`, and `_route_waypoints`' documented
+"harmless" greedy fallback stepped off (28,31) — which *is* the warp back into
+Map049. 30 frames later the grid read 87×78 and BFS found a 410-tile reachable
+set. The field lock is no signal either: `CB2_LoadMap` calls
+`UnlockPlayerFieldControls` on the way in, so controls read unlocked all
+through the window — which is why the 2026-07-27d "wait the lock out first"
+experiment changed nothing and was (correctly) reverted.
+
+**Why it regressed:** latent race, tipped by 27d's `RPG2GBA_FADE_DELTA_Y 4`.
+The fade speedup moved where the 10-frame poll lands relative to the layout
+rebuild. MEMORY.md's note that "fade constants cannot reach the BFS" was wrong
+— they reach it through *when* the grid is read, not what it contains.
+
+**Fix (harness only, no converter or engine change):** `Emulator` grew
+`_grid_dims_for_current_map` / `map_grid_loaded` / `wait_for_map_grid`, keyed
+on `gMapHeader.mapLayout`'s own dimensions plus the border margin
+(`fieldmap.c:171-174`); `walk_to` waits for the grid before planning, and
+`_map_grid` refuses a grid whose dims disagree with the current map header.
+`_plan_route` now *raises* on a goal outside the grid bounds instead of
+returning `None` — that shape is a wrong grid, not a planner blind spot, and
+degrading it to greedy is exactly what caused the damage.
+
+**Invariant pinned:** nothing asserted the grid belonged to the map the game
+reports being on. Five new tests in `tests/test_playtest.py` cover it (dims
+match/mismatch, `_map_grid` refusal, the wait's success and timeout, and the
+out-of-bounds-goal raise). 1471 tests pass; **moki is GREEN, all 17 beats,
+first attempt** on ROM `ec2fb783`.
+
+### 21. Contact-sheet tiles can now be chosen by the beat — DONE 2026-07-30
+
+The sheet's two automatic rules (last completed message, else the live frame
+at the beat boundary) can't serve a beat whose interesting moment is neither.
+`Emulator.mark_frame()` pins the current frame as that beat's tile: sticky
+(later dialogue won't silently override an explicit choice), refuses a
+blank/mid-fade frame unless `force=True`, cleared per beat by `waypoint`.
+Still one tile per beat, no runner change.
+
+**B6 rewired on the back of it.** It ran *zero* frames — asserting only that
+the field was still locked — so it proved nothing B5 hadn't and its tile was
+a duplicate of B5's; the Yes/No prompt is only reached later, inside N3's
+mash. New observable `Emulator.yesno_prompt_up()` scans `gTasks` exactly as
+`FuncIsActiveTask` does, for the handler `ScriptMenu_YesNo` installs
+(`script_menu.c:584-596`) — its lifetime *is* the prompt's, so no frame
+counting and no dependence on text speed. B6 now mashes Bambo's dialogue
+forward, stops the moment the prompt opens, asserts it opened, and pins that
+frame. **Its tile now reads "RED, are you ready to take the Trainer Aptitude
+Test?" with the YES/NO menu up.**
+
+`Task_HandleYesNoInput` is `static` and so never reaches the link map; new
+`symbols.static_fn_via_literal_pool` recovers it from `ScriptMenu_YesNo`'s
+literal pool (third sibling of the two existing accessor tricks), keeping the
+**Thumb bit** — `gTasks[i].func` stores the odd address, and comparing against
+the even one silently never matches. Deliberately not `gSpecialVar_Result ==
+0xFF`: multichoice sets that sentinel too, so it can't tell a yes/no prompt
+from one of the quiz's `dynmultichoice` questions.
+
+9 new tests; 1480 pass; chapter re-run **GREEN, all 17 beats**. Which option
+is *highlighted* is still unobservable — answers are still made by button.
+
 ### 18. Gated doors collapse into unconditional warps — CONVERTER FIXED 2026-07-26, ROM re-run pending
 
 Found 2026-07-26 by the chapter harness (Moki beat B2: you could walk out of

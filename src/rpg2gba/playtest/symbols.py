@@ -60,6 +60,39 @@ def static_addr_via_accessor(elf: Path, func_addr: int, *, span: int = 0x20) -> 
     return int(word.group(1), 16) + int(ldrb.group(1))
 
 
+def static_fn_via_literal_pool(elf: Path, func_addr: int, *, span: int = 0x40) -> int:
+    """Address of a `static` *function* referenced by a global one, read out
+    of the caller's literal pool.
+
+    Third sibling of the two accessors above, for the case where the wanted
+    symbol is code rather than data: a static task/callback handler never
+    reaches the link map, but any non-static function that installs it has to
+    materialise its address as a literal first (`ldr rN, [pc, #imm]` →
+    `CreateTask`/`FuncIsActiveTask`).
+
+    Returns the literal **as stored**, i.e. with the Thumb bit set, because
+    that is the form the value takes in memory — `gTasks[i].func` holds the
+    odd address, and a comparison against the even one silently never matches
+    (the bug class `battle._thumb_fn` exists for).
+
+    Picks the first pool word that looks like a Thumb code pointer: odd, and
+    inside the ROM image. Data literals (EWRAM/IWRAM addresses, masks) are
+    even or out of range, so the shape is unambiguous in practice — and if no
+    literal qualifies this raises rather than returning a plausible-looking
+    wrong address.
+    """
+    out = _disassemble(elf, func_addr, span)
+    for match in re.finditer(r"^\s*[0-9a-f]+:\s*([0-9a-f]{8})\s+\.word",
+                             out, re.MULTILINE):
+        value = int(match.group(1), 16)
+        if value & 1 and 0x08000000 <= value < 0x0A000000:
+            return value
+    raise ValueError(
+        f"no Thumb function pointer in the literal pool at {func_addr:#x} "
+        f"(searched {span:#x} bytes):\n{out}"
+    )
+
+
 def static_ptr_via_accessor(elf: Path, func_addr: int, *, span: int = 0x30) -> int:
     """Address of a static *pointer* read by a global accessor.
 

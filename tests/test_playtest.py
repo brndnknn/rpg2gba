@@ -382,6 +382,12 @@ class _FakeWalkEmu:
     def _route_waypoints(self, tx: int, ty: int) -> list[tuple[int, int]]:
         return [(tx, ty)]
 
+    # walk_to waits for the destination map's grid before it plans anything
+    # (see the mid-warp tests below). The fake has no grid to load, so it is
+    # always ready; the wait itself is pinned separately.
+    def wait_for_map_grid(self, frame_budget: int = 300) -> int:
+        return 0
+
     # walk_to's own helpers are the code under test, so they're borrowed from
     # the real class rather than reimplemented here (unbound, same as the
     # walk_to call in each test).
@@ -479,6 +485,138 @@ def test_walk_to_frame_budget_still_authoritative_on_clear_path() -> None:
         Emulator.walk_to(emu, 100, 0, frame_budget=5)
 
 
+# -- mid-warp map grid: the window where location lies about the grid --------
+#
+# A warp writes SaveBlock1.location (ApplyCurrentWarp, overworld.c:620) long
+# before it rebuilds gBackupMapLayout (InitMap inside LoadMapFromWarp,
+# overworld.c:982). Between the two, map_location() already reports the
+# destination while the grid still holds the map just left -- and the field
+# lock is no signal either, since CB2_LoadMap unlocks controls on the way in.
+#
+# That window cost the moki chapter beat B4 (2026-07-30): _wait_for_map
+# returned inside it, the planner read the 30x15 house grid while the player
+# stood on Moki Town's (28,31), the goal (27,17) fell outside those bounds so
+# BFS returned None, and the "harmless" greedy fallback stepped off the
+# arrival tile -- which is itself the warp back into the house. Nothing pinned
+# that the grid must belong to the map the game says it is on, so these do.
+
+_GRID_SYMBOLS = {"gBackupMapLayout": 0x3000, "gMapHeader": 0x4000}
+_GRID_OFFSETS = {
+    "off_backup_width": 0, "off_backup_height": 4, "off_backup_map": 8,
+    "off_mapheader_maplayout": 0,
+    "off_maplayout_width": 0, "off_maplayout_height": 4,
+    "val_map_offset": 7,
+}
+_LAYOUT_ADDR = 0x5000
+
+
+class _FakeGridEmu(_FakeEmu):
+    """_FakeEmu plus the handful of reads the grid-load guard makes, and a
+    `run()` that finishes the pending map load after `loads_after` frames."""
+
+    def __init__(self, layout_wh, backup_wh, loads_after: int = 0) -> None:
+        super().__init__(symbols=dict(_GRID_SYMBOLS), offsets=dict(_GRID_OFFSETS))
+        self._layout_wh = layout_wh
+        self._loads_after = loads_after
+        self.frames = 0
+        self.write_u32(_GRID_SYMBOLS["gMapHeader"], _LAYOUT_ADDR)
+        self.write_u32(_LAYOUT_ADDR, layout_wh[0])
+        self.write_u32(_LAYOUT_ADDR + 4, layout_wh[1])
+        self._set_backup(*backup_wh)
+
+    def _set_backup(self, width: int, height: int) -> None:
+        base = _GRID_SYMBOLS["gBackupMapLayout"]
+        self.write_u32(base, width)
+        self.write_u32(base + 4, height)
+        self.write_u32(base + 8, 0x2000)
+
+    def run(self, frames: int, keys=None, on_frame=None) -> None:
+        self.frames += frames
+        if self._loads_after and self.frames >= self._loads_after:
+            self._set_backup(self._layout_wh[0] + 15, self._layout_wh[1] + 14)
+
+    def map_location(self) -> tuple[int, int]:
+        return (75, 2)
+
+    def read_bytes(self, addr: int, size: int) -> bytes:
+        return b"\x00" * size
+
+    def _warp_tiles(self) -> set[tuple[int, int]]:
+        return set()
+
+    # The guard's own helpers are the code under test, so they're borrowed
+    # from the real class rather than reimplemented (unbound, same pattern as
+    # _FakeWalkEmu above).
+    def _grid_dims_for_current_map(self):
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator._grid_dims_for_current_map(self)
+
+    def map_grid_loaded(self) -> bool:
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator.map_grid_loaded(self)
+
+    def _map_grid(self):
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator._map_grid(self)
+
+
+@needs_mgba
+def test_map_grid_loaded_true_only_when_dims_match_the_map_header() -> None:
+    from rpg2gba.playtest.emulator import Emulator
+
+    # Moki Town is 72x64, so a loaded grid is 87x78 (+MAP_OFFSET_W/_H).
+    loaded = _FakeGridEmu(layout_wh=(72, 64), backup_wh=(87, 78))
+    assert Emulator.map_grid_loaded(loaded) is True
+
+    # The house it warped out of is 30x15 -> 45x29: still the old grid.
+    mid_warp = _FakeGridEmu(layout_wh=(72, 64), backup_wh=(45, 29))
+    assert Emulator.map_grid_loaded(mid_warp) is False
+
+
+@needs_mgba
+def test_map_grid_refuses_a_grid_belonging_to_another_map() -> None:
+    from rpg2gba.playtest.emulator import Emulator
+
+    emu = _FakeGridEmu(layout_wh=(72, 64), backup_wh=(45, 29))
+    with pytest.raises(ScenarioError, match="still loading"):
+        Emulator._map_grid(emu)
+
+
+@needs_mgba
+def test_wait_for_map_grid_returns_once_the_load_completes() -> None:
+    from rpg2gba.playtest.emulator import Emulator
+
+    emu = _FakeGridEmu(layout_wh=(72, 64), backup_wh=(45, 29), loads_after=30)
+    spent = Emulator.wait_for_map_grid(emu, frame_budget=300)
+    assert spent >= 30
+    assert Emulator.map_grid_loaded(emu) is True
+
+
+@needs_mgba
+def test_wait_for_map_grid_fails_loud_if_the_load_never_completes() -> None:
+    from rpg2gba.playtest.emulator import Emulator
+
+    emu = _FakeGridEmu(layout_wh=(72, 64), backup_wh=(45, 29))
+    with pytest.raises(ScenarioError, match="never finished loading"):
+        Emulator.wait_for_map_grid(emu, frame_budget=60)
+
+
+@needs_mgba
+def test_plan_route_rejects_a_goal_outside_the_grid_instead_of_degrading() -> None:
+    """B4's exact shape: the goal is off the (stale) grid entirely.
+
+    This must raise, not return None -- returning None sends
+    `_route_waypoints` down the greedy fallback, which is what walked the
+    player back through the arrival warp.
+    """
+    from rpg2gba.playtest.emulator import Emulator
+
+    # A loaded 30x15 grid; (27,17) is past its southern edge.
+    emu = _FakeGridEmu(layout_wh=(30, 15), backup_wh=(45, 29))
+    with pytest.raises(ScenarioError, match="outside the loaded map grid"):
+        Emulator._plan_route(emu, (28, 12), (27, 17))
+
+
 # -- waypoint frame settling: pure logic, no ROM needed ----------------------
 #
 # Beat boundaries land on warps and battle transitions, so the frame at that
@@ -503,8 +641,12 @@ class _FakeScreenEmu:
         self.waypoints: list = []
         self._text_frame = None
         self._text_was_drawing = False
+        self._frame_pinned = False
         self._blank = Image.new("RGB", (240, 160), (0, 0, 0))
         self._scene = Image.effect_noise((240, 160), 64).convert("RGB")
+        # Scripted text state, for the note_text_frame-vs-mark_frame tests.
+        self.text_drawing = False
+        self.text_is_ready = True
 
     class _Screen:
         def __init__(self, owner) -> None:
@@ -531,6 +673,20 @@ class _FakeScreenEmu:
     def _frame_unreviewable(self, *args, **kwargs):
         from rpg2gba.playtest.emulator import Emulator
         return Emulator._frame_unreviewable(self, *args, **kwargs)
+
+    def mark_frame(self, *args, **kwargs):
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator.mark_frame(self, *args, **kwargs)
+
+    def note_text_frame(self, *args, **kwargs):
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator.note_text_frame(self, *args, **kwargs)
+
+    def text_showing(self) -> bool:
+        return self.text_drawing
+
+    def text_ready(self) -> bool:
+        return self.text_is_ready
 
 
 def _waypoint(emu, **kwargs):
@@ -582,6 +738,71 @@ def test_failure_waypoint_captures_the_exact_frame(tmp_path) -> None:
     assert emu._advanced == 0
 
 
+# -- mark_frame: a beat choosing its own tile ---------------------------------
+#
+# The automatic rules serve beats that play dialogue and end when it does.
+# They cannot serve a beat whose moment is a menu being up, or one that ends
+# without advancing the core at all -- moki B6 asserts only that the field is
+# still locked, runs zero frames, and so photographed B5's tile over again.
+
+
+@needs_mgba
+def test_mark_frame_pins_that_frame_as_the_tile(tmp_path) -> None:
+    from PIL import Image
+
+    emu = _FakeScreenEmu(tmp_path, blank_for=0)
+    assert emu.mark_frame() is True
+    wp = _waypoint(emu, beat="B6", note="yes/no prompt")
+    assert wp.at_text is True          # a stored frame, not the live one
+    assert emu._advanced == 0          # and no settling ran past it
+    assert Image.open(wp.path).getcolors(maxcolors=8) is None
+
+
+@needs_mgba
+def test_mark_frame_refuses_a_blank_frame_unless_forced(tmp_path) -> None:
+    """Pinning skips settling, so pinning a mid-fade frame would produce
+    exactly the black tile `_settle_frame` exists to prevent -- silently."""
+    emu = _FakeScreenEmu(tmp_path, blank_for=10_000)
+    assert emu.mark_frame() is False
+    assert emu._text_frame is None     # nothing pinned; waypoint still settles
+    assert emu.mark_frame(force=True) is True
+    assert emu._text_frame is not None
+
+
+@needs_mgba
+def test_mark_frame_is_sticky_against_later_dialogue(tmp_path) -> None:
+    """Otherwise an explicit choice would survive or not depending on whether
+    more text happened to follow it, which is not a rule anyone can reason
+    about at the call site."""
+    emu = _FakeScreenEmu(tmp_path, blank_for=0)
+    emu.mark_frame()
+    pinned = emu._text_frame
+
+    # A message completes afterwards: the falling edge of text_showing.
+    emu.text_drawing = True
+    emu.note_text_frame()
+    emu.text_drawing = False
+    emu.note_text_frame()
+
+    assert emu._text_frame is pinned
+
+
+@needs_mgba
+def test_waypoint_clears_the_pin_so_it_is_per_beat(tmp_path) -> None:
+    emu = _FakeScreenEmu(tmp_path, blank_for=0)
+    emu.mark_frame()
+    _waypoint(emu, beat="B6")
+    assert emu._frame_pinned is False
+    assert emu._text_frame is None
+
+    # The next beat's dialogue capture works normally again.
+    emu.text_drawing = True
+    emu.note_text_frame()
+    emu.text_drawing = False
+    emu.note_text_frame()
+    assert emu._text_frame is not None
+
+
 # -- text-frame capture -------------------------------------------------------
 #
 # A beat only returns once its scene has been mashed to the end, so the live
@@ -612,6 +833,7 @@ class _FakeTextEmu:
         self.waypoints: list = []
         self._text_frame = None
         self._text_was_drawing = False
+        self._frame_pinned = False
         self.taps = 0
         self._advanced = 0
 
@@ -961,6 +1183,82 @@ def test_static_ptr_recovery_fails_loud_on_the_wrong_shape() -> None:
     with pytest.raises(ValueError, match="ldr-literal \\+ deref shape"):
         static_ptr_via_accessor(
             ENGINE / "pokeemerald.elf", syms["ArePlayerFieldControlsLocked"])
+
+
+@needs_build
+def test_static_fn_recovery_finds_the_yesno_task_handler() -> None:
+    """`Task_HandleYesNoInput` is static, so it never reaches the link map --
+    but `ScriptMenu_YesNo` has to materialise its address to pass it to
+    `CreateTask`, so it is in that function's literal pool. The recovered
+    value must keep its Thumb bit: `gTasks[i].func` stores the odd address,
+    and comparing against the even one silently never matches."""
+    from rpg2gba.playtest.symbols import static_fn_via_literal_pool
+
+    syms = SymbolMap(ENGINE / "pokeemerald.map")
+    addr = static_fn_via_literal_pool(
+        ENGINE / "pokeemerald.elf", syms["ScriptMenu_YesNo"])
+    assert addr & 1                       # Thumb bit preserved
+    assert 0x08000000 <= addr < 0x0A000000  # in the ROM image
+    assert "Task_HandleYesNoInput" not in open(
+        ENGINE / "pokeemerald.map", encoding="utf-8", errors="ignore").read()
+
+
+@needs_build
+def test_static_fn_recovery_fails_loud_when_no_pool_entry_qualifies() -> None:
+    """Pointed at a function whose pool holds only data addresses, this must
+    raise rather than hand back an even literal that would never match."""
+    from rpg2gba.playtest.symbols import static_fn_via_literal_pool
+
+    syms = SymbolMap(ENGINE / "pokeemerald.map")
+    with pytest.raises(ValueError, match="no Thumb function pointer"):
+        static_fn_via_literal_pool(
+            ENGINE / "pokeemerald.elf", syms["ArePlayerFieldControlsLocked"])
+
+
+_TASK_OFFSETS = {
+    "off_task_func": 0,
+    "off_task_is_active": 4,
+    "sizeof_task": 40,
+    "val_num_tasks": 16,
+}
+_YESNO_FN = 0x081F642D
+
+
+def _task_emu(slots: list[tuple[int, int]]) -> _FakeEmu:
+    """`slots` is [(isActive, func)] written into a fake gTasks array."""
+    emu = _FakeEmu(symbols={"gTasks": 0x03006C30}, offsets=dict(_TASK_OFFSETS))
+    emu._yesno_task_fn = _YESNO_FN
+    for i, (active, func) in enumerate(slots):
+        task = 0x03006C30 + i * _TASK_OFFSETS["sizeof_task"]
+        emu.write_u32(task + _TASK_OFFSETS["off_task_func"], func)
+        emu._mem.set(task + _TASK_OFFSETS["off_task_is_active"], 1, active)
+    return emu
+
+
+@needs_mgba
+def test_yesno_prompt_up_finds_the_handler_task() -> None:
+    from rpg2gba.playtest.emulator import Emulator
+
+    emu = _task_emu([(1, 0x08001111), (1, _YESNO_FN)])
+    assert Emulator.yesno_prompt_up(emu) is True
+
+
+@needs_mgba
+def test_yesno_prompt_up_ignores_an_inactive_slot() -> None:
+    """A freed task keeps its `func` -- `FuncIsActiveTask` checks `isActive`
+    first for exactly this reason, so a dismissed prompt must not read as up."""
+    from rpg2gba.playtest.emulator import Emulator
+
+    emu = _task_emu([(0, _YESNO_FN)])
+    assert Emulator.yesno_prompt_up(emu) is False
+
+
+@needs_mgba
+def test_yesno_prompt_up_false_with_other_tasks_running() -> None:
+    from rpg2gba.playtest.emulator import Emulator
+
+    emu = _task_emu([(1, 0x08001111), (1, 0x08002222)])
+    assert Emulator.yesno_prompt_up(emu) is False
 
 
 @needs_probe

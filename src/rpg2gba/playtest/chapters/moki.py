@@ -391,20 +391,34 @@ def b5(emu: Emulator) -> None:
 
 @moki.beat("B6", "B5's scene reaches the aptitude-test Yes/No prompt")
 def b6(emu: Emulator) -> None:
-    # No player action of its own (doc: "none (scripted)") -- this beat
-    # just confirms B5's autorun is still in progress (hasn't errored out
-    # or released early) on its way into the yes/no prompt that N3/B7
-    # resolve. Which *specific* option is highlighted still isn't observable,
-    # so the prompt's identity stays confirmed structurally by N3/B7's own
-    # asserts. `emu.text_showing()` (added 2026-07-27) could tighten this to
-    # "a message box is up right now", but the lock is the safer gate: this
-    # beat can land in the gap between two of Bambo's messages, where the
-    # scene is healthy and no box is drawn.
+    """Drive B5's autorun forward until the offer is actually on screen.
+
+    Until 2026-07-30 this beat ran *zero* frames -- it only asserted the
+    field was still locked -- so it proved nothing B5 hadn't, and its contact
+    sheet tile was a duplicate of B5's (the prompt is only reached later,
+    inside N3's mash). `yesno_prompt_up` makes the prompt observable, so the
+    beat can now assert its own description: mash Bambo's dialogue forward
+    and stop the moment the yes/no task exists.
+
+    Stopping there is what leaves the choice to N3/B7 -- the answer is still
+    made by button, since which option is *highlighted* remains unobservable
+    and A always commits the default YES.
+    """
     if not emu.field_locked():
         shot = emu.screenshot("b6_scene_ended_early")
         raise ScenarioError(
             f"B6: Bambo's intro scene ended before reaching the aptitude "
             f"test offer ({shot})")
+    emu.advance_dialog("A", stop=emu.yesno_prompt_up)
+    if not emu.yesno_prompt_up():
+        shot = emu.screenshot("b6_no_prompt")
+        raise ScenarioError(
+            f"B6: Bambo's intro scene released the field controls without "
+            f"ever opening the aptitude-test Yes/No prompt ({shot})")
+    # The reviewable moment is the prompt itself, which neither automatic
+    # rule picks: the beat ends with the box up, so nothing "completed" after
+    # it, and the live boundary frame is this same instant only by accident.
+    emu.mark_frame()
 
 
 # -- N3 (before B7's Yes answer, per interleaving instructions) -------------

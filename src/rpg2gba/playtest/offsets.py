@@ -70,6 +70,21 @@ _PROBE_ENTRIES: dict[str, str] = {
     "off_backup_height": "offsetof(struct BackupMapLayout, height)",
     "off_backup_map": "offsetof(struct BackupMapLayout, map)",
     "val_map_offset": "MAP_OFFSET",
+    # gMapHeader.mapLayout's own dimensions: the authority on which map the
+    # backup grid *should* be describing. A warp writes SaveBlock1.location
+    # (ApplyCurrentWarp, overworld.c:620) long before it rebuilds the grid
+    # (InitMap inside LoadMapFromWarp, overworld.c:982), so "the map changed"
+    # and "the grid changed" are separate events and must be checked apart.
+    # struct Task (include/task.h): scanned exactly as FuncIsActiveTask scans
+    # it, to answer "is a yes/no menu on screen right now?" -- the one piece
+    # of menu state the harness could never observe.
+    "off_task_func": "offsetof(struct Task, func)",
+    "off_task_is_active": "offsetof(struct Task, isActive)",
+    "sizeof_task": "sizeof(struct Task)",
+    "val_num_tasks": "NUM_TASKS",
+    "off_mapheader_maplayout": "offsetof(struct MapHeader, mapLayout)",
+    "off_maplayout_width": "offsetof(struct MapLayout, width)",
+    "off_maplayout_height": "offsetof(struct MapLayout, height)",
     # gMapHeader.events -> warps: tiles a route must not step onto, or the
     # walk silently relocates the scenario to another map.
     "off_mapheader_events": "offsetof(struct MapHeader, events)",
@@ -107,6 +122,7 @@ _PROBE_TEMPLATE = """\
 #include "main.h"
 #include "fieldmap.h"
 #include "text.h"
+#include "task.h"
 {entries}
 """
 
