@@ -3169,6 +3169,26 @@ void ObjectEventSetGraphicsIdByLocalIdAndMap(u8 localId, u8 mapNum, u8 mapGroup,
         ObjectEventSetGraphicsId(&gObjectEvents[objectEventId], graphicsId);
 }
 
+// BEGIN URANIUM PATHFINDER SLICE — script-callable live graphics swap (rpg2gba).
+// RMXP move-command 41 ("Change Graphic") repaints an event's sprite in place
+// mid-scene; it is one of the most common idioms in the converted corpus
+// (1115 uses across 499 events). Emerald resolves an object's sprite at spawn
+// only — VAR_OBJ_GFX_ID_x is read inside the spawn-template path and never
+// re-read — so there was no script-side equivalent, even though
+// ObjectEventSetGraphicsIdByLocalIdAndMap (just above) does exactly this.
+// This exposes it as a special rather than a new script opcode, so nothing in
+// the vanilla command table changes.
+//   VAR_0x8004 = local id (OBJ_EVENT_ID_PLAYER for the player)
+//   VAR_0x8005 = OBJ_EVENT_GFX_* id
+void RPG2GBA_SetObjectEventGfx(void)
+{
+    ObjectEventSetGraphicsIdByLocalIdAndMap(gSpecialVar_0x8004,
+                                           gSaveBlock1Ptr->location.mapNum,
+                                           gSaveBlock1Ptr->location.mapGroup,
+                                           gSpecialVar_0x8005);
+}
+// END URANIUM PATHFINDER SLICE
+
 void ObjectEventTurn(struct ObjectEvent *objectEvent, enum Direction direction)
 {
     SetObjectEventDirection(objectEvent, direction);

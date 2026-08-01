@@ -67,8 +67,68 @@ def save_in_game(emu: Emulator) -> None:
     emu.run(30)
 
 
+def lab_doorstep(emu: Emulator) -> None:
+    """Park the player outside the Professor's Lab, ready to walk in.
+
+    A *hand-off* scenario, not an assertion run: it drives past the setup the
+    lab scene depends on and then stops, so a human can play the whole scene
+    themselves. Stamped into a ROM, booting it drops you on the doorstep.
+
+    Chain (mirrors the moki chapter's B1-B4, minus the assertions):
+    boot -> Auntie's Running Shoes (the 1F exit is gated on her) -> out of the
+    house -> west across Map032's fence row to fire Theo's cameo -> walk to the
+    lab door tile -> in-game save.
+
+    Coordinates are the moki chapter's, imported rather than re-derived so
+    there is one place to fix if a re-walk moves them.
+    """
+    from .chapters.moki import (
+        AUNTIE_INTERACT,
+        FENCE_TRIP_APPROACH,
+        FENCE_TRIP_DIRECTION,
+        HOUSE1F_EXIT_APPROACH,
+        HOUSE1F_EXIT_DIRECTION,
+        LAB_DOOR_MOKI_TOWN,
+        _try_step,
+        _wait_for_map,
+    )
+
+    emu.run(BOOT_FRAMES)
+
+    # Auntie — the 1F exit stays blocked until she's talked to.
+    emu.walk_to(*AUNTIE_INTERACT)
+    emu.face("UP")
+    emu.interact()
+    emu.advance_dialog()
+    if not emu.flag(emu.offsets["flag_sys_b_dash"]):
+        raise ScenarioError("FLAG_SYS_B_DASH not set — Auntie's scene didn't run")
+
+    # Out of the house into Map032.
+    emu.walk_to(*HOUSE1F_EXIT_APPROACH)
+    _try_step(emu, HOUSE1F_EXIT_DIRECTION)
+    _wait_for_map(emu, "lab-doorstep", "MAP_MOKI_TOWN")
+    emu.wait_for_map_grid()
+
+    # Theo's cameo fires on a westward step off the fence row; it's an autorun
+    # conversation, so let it play out before moving on.
+    emu.walk_to(*FENCE_TRIP_APPROACH)
+    _try_step(emu, FENCE_TRIP_DIRECTION)
+    emu.advance_dialog()
+    emu.run(60)
+
+    # Stop one tile SOUTH of the lab door. Door warps need a held UP from the
+    # tile below (TryDoorWarp only fires for DIR_NORTH), so parking here means
+    # the ROM boots with the doorway one step away and nothing pre-triggered —
+    # walking in is the player's job.
+    emu.walk_to(LAB_DOOR_MOKI_TOWN[0], LAB_DOOR_MOKI_TOWN[1] + 1)
+    emu.face("UP")
+    emu.screenshot("lab_doorstep")
+    save_in_game(emu)
+
+
 SCENARIOS: dict[str, Callable[[Emulator], None]] = {
     "moki-running-shoes": moki_running_shoes,
+    "lab-doorstep": lab_doorstep,
 }
 
 

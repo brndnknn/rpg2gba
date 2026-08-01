@@ -549,3 +549,270 @@ def test_idiom_shapes_compile_through_real_poryscript() -> None:
     )
     result = poryscript.compile_script(script)
     assert result.ok, result.stderr
+
+
+# ----------------------------------------------------------------------------
+# Consecutive move routes on one actor (reference/findings/
+# hand_conversion_audit_2026-07-31.md §5.2)
+# ----------------------------------------------------------------------------
+
+
+def test_consecutive_routes_same_target_merge(ctx: T.TranspileContext) -> None:
+    """Two 209s on one actor with no 210 between them fuse into one movement.
+
+    The fork DROPS the second applymovement (the object's movement is still in
+    flight), so emitting both verbatim silently loses the second route — the
+    Map050 EV019 "Theo stops one tile short" defect.
+    """
+    res = run_event(ctx, [[
+        cmd(T.SET_MOVE_ROUTE, [20, _route([{"code": 4}])]),
+        cmd(T.SET_MOVE_ROUTE, [20, _route([{"code": 37}, {"code": 4}])]),
+        cmd(T.WAIT_MOVE_COMPLETION),
+    ]])
+    assert res.text.count("applymovement(20,") == 1
+    # code 37 (through on) is a SOFT-C drop; both walk_ups survive the fuse.
+    assert res.text.count("walk_up") == 2
+    assert res.unhandled == []
+
+
+def test_consecutive_routes_different_targets_do_not_merge(
+    ctx: T.TranspileContext,
+) -> None:
+    res = run_event(ctx, [[
+        cmd(T.SET_MOVE_ROUTE, [20, _route([{"code": 4}])]),
+        cmd(T.SET_MOVE_ROUTE, [-1, _route([{"code": 2}])]),
+        cmd(T.WAIT_MOVE_COMPLETION),
+    ]])
+    assert res.text.count("applymovement(") == 2
+    assert "applymovement(20," in res.text
+    assert "applymovement(OBJ_EVENT_ID_PLAYER," in res.text
+
+
+def test_routes_split_by_a_wait_do_not_merge(ctx: T.TranspileContext) -> None:
+    """A 210 between them means the author DID want two separate motions."""
+    res = run_event(ctx, [[
+        cmd(T.SET_MOVE_ROUTE, [20, _route([{"code": 4}])]),
+        cmd(T.WAIT_MOVE_COMPLETION),
+        cmd(T.SET_MOVE_ROUTE, [20, _route([{"code": 4}])]),
+        cmd(T.WAIT_MOVE_COMPLETION),
+    ]])
+    assert res.text.count("applymovement(20,") == 2
+
+
+# ----------------------------------------------------------------------------
+# Starter grant: randomizer collapse + guarded one-line Ruby
+# ----------------------------------------------------------------------------
+
+
+def test_randomizer_branch_emits_else_arm_only(ctx: T.TranspileContext) -> None:
+    """The normal-play arm is the RMXP else block. Emitting the then block (or
+    queuing the whole conditional, as before) loses the starter grant."""
+    res = run_event(ctx, [[
+        cmd(T.CONDITIONAL_BRANCH, [12, "$PokemonGlobal.randomizer"]),
+        cmd(T.SHOW_TEXT, ["then-arm"], indent=1),
+        cmd(411, [], indent=0),
+        cmd(T.SHOW_TEXT, ["else-arm"], indent=1),
+        cmd(412, [], indent=0),
+    ]])
+    assert "else-arm" in res.text
+    assert "then-arm" not in res.text
+    assert res.unhandled == []
+
+
+def test_guarded_add_pokemon_emits_givemon_and_menu_flag(
+    ctx: T.TranspileContext,
+) -> None:
+    ctx.species = {"ORCHYNX": "SPECIES_ORCHYNX"}
+    ctx.staged_species = frozenset({"SPECIES_ORCHYNX"})
+    ctx.registry.propose_var(151, "VAR_POKEMONTEST")
+    res = run_event(ctx, [[
+        cmd(T.SCRIPT, ["pbAddPokemon(PBSpecies::ORCHYNX,5) if $game_variables[151]==1"]),
+    ]])
+    assert "givemon(SPECIES_ORCHYNX, 5)" in res.text
+    # Emerald gates the START-menu POKEMON option on this; Essentials doesn't.
+    assert "setflag(FLAG_SYS_POKEMON_GET)" in res.text
+    assert "== 1) {" in res.text
+    assert res.unhandled == []
+
+
+def test_add_pokemon_unstaged_species_queues(ctx: T.TranspileContext) -> None:
+    """Id-mapped but never staged: emitting the constant would invent a symbol
+    the fork doesn't define (CLAUDE.md §4.7 forward gate)."""
+    ctx.species = {"URAYNE": "SPECIES_URAYNE"}
+    ctx.staged_species = frozenset()
+    res = run_event(ctx, [[cmd(T.SCRIPT, ["pbAddPokemon(PBSpecies::URAYNE,5)"])]])
+    assert "givemon" not in res.text
+    assert len(res.unhandled) == 1
+
+
+def test_guarded_switch_assignment_uses_the_registry(
+    ctx: T.TranspileContext,
+) -> None:
+    ctx.registry.propose_flag(61, "FLAG_HAS_ORCHYNX")
+    ctx.registry.propose_var(151, "VAR_POKEMONTEST")
+    res = run_event(ctx, [[
+        cmd(T.SCRIPT, ["$game_switches[61] = true if $game_variables[151]==1"]),
+    ]])
+    assert "setflag(FLAG_" in res.text
+    assert res.unhandled == []
+
+
+def test_unnamed_switch_assignment_still_queues(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.SCRIPT, ["$game_switches[9999] = true"])]])
+    assert "setflag" not in res.text
+    assert len(res.unhandled) == 1
+
+
+# ----------------------------------------------------------------------------
+# code-41 live sprite swap (RPG2GBA_SetObjectEventGfx)
+# ----------------------------------------------------------------------------
+
+
+def test_change_graphic_emits_the_gfx_special(ctx: T.TranspileContext) -> None:
+    ctx.npc_gfx = {"PU-Machine": "OBJ_EVENT_GFX_URANIUM_PU_MACHINE"}
+    res = run_event(ctx, [[
+        cmd(T.SET_MOVE_ROUTE, [19, _route([
+            {"code": T.CHANGE_GRAPHIC, "parameters": ["PU-Machine", 0, 6, 2]},
+        ])]),
+        cmd(T.WAIT_MOVE_COMPLETION),
+    ]])
+    assert "setvar(VAR_0x8004, 19)" in res.text
+    assert "setvar(VAR_0x8005, OBJ_EVENT_GFX_URANIUM_PU_MACHINE)" in res.text
+    assert "special(RPG2GBA_SetObjectEventGfx)" in res.text
+    assert res.unhandled == []
+
+
+def test_change_graphic_mid_route_splits_the_movement(
+    ctx: T.TranspileContext,
+) -> None:
+    """Steps either side of the swap stay as movement; the swap lands between."""
+    ctx.npc_gfx = {"PU-Ball": "OBJ_EVENT_GFX_URANIUM_PU_BALL"}
+    res = run_event(ctx, [[
+        cmd(T.SET_MOVE_ROUTE, [7, _route([
+            {"code": 4},
+            {"code": T.CHANGE_GRAPHIC, "parameters": ["PU-Ball", 0, 6, 2]},
+            {"code": 1},
+        ])]),
+    ]])
+    gfx_at = res.text.index("special(RPG2GBA_SetObjectEventGfx)")
+    assert res.text.count("applymovement(7,") == 2
+    assert res.text.index("applymovement(7,") < gfx_at
+    assert res.text.rindex("applymovement(7,") > gfx_at
+    assert res.unhandled == []
+
+
+def test_change_graphic_unmapped_sheet_queues(ctx: T.TranspileContext) -> None:
+    """An unmapped sheet must not invent a constant (CLAUDE.md §4.3)."""
+    res = run_event(ctx, [[
+        cmd(T.SET_MOVE_ROUTE, [19, _route([
+            {"code": T.CHANGE_GRAPHIC, "parameters": ["PU-Unknown", 0, 6, 2]},
+        ])]),
+    ]])
+    assert "RPG2GBA_SetObjectEventGfx" not in res.text
+    assert len(res.unhandled) == 1
+    assert "npc_gfx_map.json" in res.unhandled[0].description
+
+
+# ----------------------------------------------------------------------------
+# pbStarterSelector full-screen reveal
+# ----------------------------------------------------------------------------
+
+
+_SCENE = {
+    "starters": [
+        {"index": 0, "internal_name": "AAA", "reveal": "A!", "player_speech": ["a1"]},
+        {"index": 1, "internal_name": "BBB", "reveal": "B!", "player_speech": ["b1"]},
+        {"index": 2, "internal_name": "CCC", "reveal": "C!", "player_speech": ["c1"]},
+    ],
+    "theo_speech": ["t1", "t2"],
+}
+
+
+def _starter_ctx(ctx: T.TranspileContext) -> T.TranspileContext:
+    ctx.starter_scene = _SCENE
+    ctx.species = {"AAA": "SPECIES_AAA", "BBB": "SPECIES_BBB", "CCC": "SPECIES_CCC"}
+    ctx.staged_species = frozenset({"SPECIES_AAA", "SPECIES_BBB", "SPECIES_CCC"})
+    ctx.registry.propose_var(151, "VAR_POKEMONTEST")
+    return ctx
+
+
+def test_starter_selector_replays_tracked_arithmetic(
+    ctx: T.TranspileContext,
+) -> None:
+    """x = pbGet(151) - 2, wrapping -1 to 2 — the rock-paper-scissors counter
+    pick. Source value 1 must land on index 2, not index -1."""
+    _starter_ctx(ctx)
+    res = run_event(ctx, [[
+        cmd(T.SCRIPT, ["x=pbGet(151)"]),
+        cmd(T.SCRIPT_CONT, ["x-=2"]),
+        cmd(T.SCRIPT_CONT, ["x=2 if x==-1"]),
+        cmd(T.SCRIPT_CONT, ["pbStarterSelector(x,true)"]),
+    ]])
+    case1 = res.text.index("case 1:")
+    case2 = res.text.index("case 2:")
+    assert "SPECIES_CCC" in res.text[case1:case2]      # 1 - 2 = -1 -> wraps to 2
+    assert "SPECIES_AAA" in res.text[case2:]           # 2 - 2 = 0
+    assert "showmonpic" in res.text and "hidemonpic" in res.text
+    assert res.unhandled == []
+
+
+def test_starter_selector_theo_variant_uses_theo_speech(
+    ctx: T.TranspileContext,
+) -> None:
+    _starter_ctx(ctx)
+    res = run_event(ctx, [[
+        cmd(T.SCRIPT, ["x=pbGet(151)"]),
+        cmd(T.SCRIPT_CONT, ["x-=1"]),
+        cmd(T.SCRIPT_CONT, ["pbStarterSelector(x,true)"]),
+    ]])
+    assert "t1" in res.text and "t2" in res.text
+    assert "a1" not in res.text
+
+
+def test_starter_selector_arithmetic_out_of_range_queues(
+    ctx: T.TranspileContext,
+) -> None:
+    """Offset 0 over a 1-based source variable maps the last value past the end
+    of the starter list — a sign the tracked arithmetic is wrong. Emit nothing
+    rather than a switch missing an arm (CLAUDE.md §4.5)."""
+    _starter_ctx(ctx)
+    res = run_event(ctx, [[
+        cmd(T.SCRIPT, ["x=pbGet(151)"]),
+        cmd(T.SCRIPT_CONT, ["pbStarterSelector(x,true)"]),
+    ]])
+    assert "showmonpic" not in res.text
+    assert len(res.unhandled) == 1
+
+
+def test_starter_selector_player_variant_uses_per_starter_speech(
+    ctx: T.TranspileContext,
+) -> None:
+    _starter_ctx(ctx)
+    res = run_event(ctx, [[
+        cmd(T.SCRIPT, ["x=pbGet(151)"]),
+        cmd(T.SCRIPT_CONT, ["x-=1"]),
+        cmd(T.SCRIPT_CONT, ["pbStarterSelector(x)"]),
+    ]])
+    assert "a1" in res.text and "b1" in res.text and "c1" in res.text
+    assert "t1" not in res.text
+
+
+def test_starter_selector_without_scene_data_queues(
+    ctx: T.TranspileContext,
+) -> None:
+    ctx.registry.propose_var(151, "VAR_POKEMONTEST")
+    res = run_event(ctx, [[
+        cmd(T.SCRIPT, ["x=pbGet(151)"]),
+        cmd(T.SCRIPT_CONT, ["pbStarterSelector(x,true)"]),
+    ]])
+    assert "showmonpic" not in res.text
+    assert len(res.unhandled) == 1
+
+
+def test_starter_selector_untracked_local_queues(ctx: T.TranspileContext) -> None:
+    """No preceding pbGet — the argument's provenance is unknown, so guessing
+    a variable would be a silent default (CLAUDE.md §4.5)."""
+    _starter_ctx(ctx)
+    res = run_event(ctx, [[cmd(T.SCRIPT, ["pbStarterSelector(q,true)"])]])
+    assert "showmonpic" not in res.text
+    assert len(res.unhandled) == 1

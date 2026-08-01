@@ -1,0 +1,54 @@
+{
+  "_source": "reference/scripts_dump/230_StarterSelect.rb — class StarterSelectorScene (pbStartScene / theoSpeech / selection)",
+  "_note": "Uranium's pbStarterSelector(index, theo) is a full-screen presentation scene: animated background planes, three starter sprites, a scripted speech, then an animation fading out the two unchosen sprites and sliding the chosen one to centre. The GBA conversion keeps the writing and the reveal (native showmonpic/hidemonpic, the same primitives FRLG's Oak's Lab uses for its starter reveal at data/maps/PalletTown_ProfessorOaksLab_Frlg/scripts.inc:1083) and drops the animated background. Fidelity decision approved by the operator 2026-07-31 (CLAUDE.md §10).",
+  "_text_format": "Raw Essentials dialogue, passed through transpiler.translate_text_codes like any other line. The trailing \\^ (a 'do not auto-close' flow marker, not a text code) is stripped here — each line becomes its own msgbox, which reproduces the original's one-line-per-keypress pacing.",
+  "starters": [
+    {
+      "index": 0,
+      "internal_name": "ORCHYNX",
+      "reveal": "Orchynx is the best pick!",
+      "player_speech": [
+        "\\PN...",
+        "You seem to be a Trainer who likes to play it safe.",
+        "Patience and endurance are your biggest assets.",
+        "You know that the best things in life come to those who wait.",
+        "For a Defensive trainer like you..."
+      ]
+    },
+    {
+      "index": 1,
+      "internal_name": "RAPTORCH",
+      "reveal": "Raptorch is the best pick!",
+      "player_speech": [
+        "\\PN...",
+        "You seem to be a trainer who won't hesitate to go for what you want.",
+        "You prefer to overwhelm your opponents with sheer force and firepower.",
+        "The saying \"the best defense is a good offense\" is probably your mantra.",
+        "You have a burning spirit within you that never ceases!",
+        "For an Offensive trainer like you..."
+      ]
+    },
+    {
+      "index": 2,
+      "internal_name": "ELETUX",
+      "reveal": "Eletux is the best pick!",
+      "player_speech": [
+        "\\PN...",
+        "You seem to be a trainer that is capable of many different strategies.",
+        "You prefer to adapt to overcome challenges in your path.",
+        "Your philosophy is probably to just \"go with the flow\".",
+        "Your calm, rational approach will come to aid you in the future.",
+        "For a Balanced trainer like you..."
+      ]
+    }
+  ],
+  "theo_speech": [
+    "Theo...",
+    "Well, you certainly know what you want out of life.",
+    "You're impulsive, impatient, and care mostly about your own desires.",
+    "But I sense something else in you...",
+    "Could it be the seed of greatness?\\. The potential to transform yourself completely?",
+    "Or maybe it's just that you're so young, I can't tell.",
+    "Regardless...\\. For a Trainer like you..."
+  ]
+}

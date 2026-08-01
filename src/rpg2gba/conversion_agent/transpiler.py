@@ -30,9 +30,11 @@ Structure notes (verified against real Phase-3 JSON, not RMXP folklore):
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from rpg2gba.conversion_agent.deterministic import (
     _label_name,
@@ -253,6 +255,63 @@ _SHOW_MAP_RE = re.compile(r"^\s*(?:Kernel\.)?pbShowMap\s*$")
 # vanilla b-dash unlock flag.
 _RUNNING_SHOES_ON_RE = re.compile(r"^\s*\$PokemonGlobal\.runningShoes\s*=\s*true\s*$")
 
+# -- Essentials one-line Ruby guards (`<statement> if $game_variables[V]==K`) ---
+# RMXP script rows routinely carry a whole statement plus a trailing modifier-if
+# on one line; the starter grant (Map050 EV019 cmds 9-16) is the canonical case.
+# Parsed as (statement, optional guard) so each statement idiom below only has
+# to match its own bare form.
+_RUBY_GUARD_RE = re.compile(
+    r"^(?P<stmt>.*?)\s+if\s+\$game_variables\[\s*(?P<var>\d+)\s*\]\s*==\s*(?P<val>-?\d+)\s*$"
+)
+
+# pbAddPokemon(PBSpecies::ORCHYNX,5) — Essentials' "add to party" call. Native:
+# `givemon`. NOT the same as an encounter or a gift-with-fanfare; this is the
+# bare party add, which is what the starter grant uses.
+_ADD_POKEMON_RE = re.compile(
+    r"^\s*(?:Kernel\.)?pbAddPokemon\(\s*(?:::)?PBSpecies::([A-Za-z0-9_]+)\s*,\s*(\d+)\s*\)\s*$"
+)
+
+# $game_switches[61] = true — a direct switch write from Ruby rather than a
+# code-121 Control Switches command. Same registry path as _emit_control_switches
+# (never hardcode a flag name — CLAUDE.md §6).
+_SWITCH_ASSIGN_RE = re.compile(
+    r"^\s*\$game_switches\[\s*(\d+)\s*\]\s*=\s*(true|false)\s*$"
+)
+
+# Uranium's Nuzlocke-mode heal loop (`for i in $Trainer.party / i.nuzlocke_heal /
+# end`, Map050 EV019 cmds 219-221). Always immediately followed by a code-314
+# Recover All, which already emits special(HealPlayerParty) — the loop exists
+# only to bypass Uranium's own Nuzlocke restriction on that command. We have no
+# Nuzlocke mode, so the 314 alone is the whole behaviour. Breadcrumb, no queue.
+_NUZLOCKE_HEAL_STRIP_RE = re.compile(
+    r"^\s*(?:for\s+i\s+in\s+\$Trainer\.party|i\.nuzlocke_heal|end)\s*$"
+)
+
+# -- pbStarterSelector scene (Map050 EV005 player pick / EV019 Theo's pick) ----
+# Uranium's full-screen starter-reveal presentation. The speech and the reveal
+# are recovered natively (showmonpic/hidemonpic — engine/asm/macros/event.inc
+# :1002,1010, the same pair FRLG's Oak's Lab uses for its own starter reveal);
+# the animated background planes are dropped. Content lives in
+# reference/starter_selector_scene.json, never inline here (CLAUDE.md §4.3).
+#
+# The argument is a Ruby local built over the preceding script rows
+# (`x=pbGet(151)` / `x-=2` / `x=2 if x==-1`), so the three shapes below are
+# tracked into _ruby_locals and replayed per source-var value at emit time.
+_RUBY_LOCAL_PBGET_RE = re.compile(r"^\s*([a-z_]\w*)\s*=\s*pbGet\(\s*(\d+)\s*\)\s*$")
+_RUBY_LOCAL_ADDSUB_RE = re.compile(r"^\s*([a-z_]\w*)\s*(\+|-)=\s*(\d+)\s*$")
+_RUBY_LOCAL_WRAP_RE = re.compile(
+    r"^\s*([a-z_]\w*)\s*=\s*(-?\d+)\s+if\s+\1\s*==\s*(-?\d+)\s*$"
+)
+_STARTER_SELECTOR_RE = re.compile(
+    r"^\s*pbStarterSelector\(\s*([a-z_]\w*)\s*(?:,\s*(true|false)\s*)?\)\s*$"
+)
+
+# $PokemonGlobal.randomizer — Uranium's randomizer *mode*, a new-game option we
+# do not implement. Every code-111 gated on it picks the normal-play arm: the
+# RMXP `else` block. Emitting the `then` block instead would hand out random
+# species. See _emit_randomizer_branch.
+_RANDOMIZER_MODE_RE = re.compile(r"^\s*\$PokemonGlobal\.randomizer\s*$")
+
 # Essentials inline-choice text escape (SLICE1_TODO #17): a Show Text message
 # trailing \ch[var,ifCancel,opt1,opt2,...] (reference/scripts_dump/059_Messages.rb
 # :1218-1225, 1360-1362, 1429-1465). Split on the literal marker, not a single
@@ -367,6 +426,18 @@ class TranspileContext:
     # idiom queues on a lookup miss, same disposition as an unresolved item
     # symbol above (CLAUDE.md §4.3: one source of truth, reused not re-derived).
     trainers: dict[tuple[str, str, int], str] = field(default_factory=dict)
+
+    # reference/starter_selector_scene.json — the converted content of
+    # Uranium's full-screen starter-reveal scene (speech + reveal line per
+    # starter, plus Theo's variant). Populated by the driver; empty means the
+    # data file isn't wired up and the pbStarterSelector idiom queues.
+    starter_scene: dict = field(default_factory=dict)
+
+    # RMXP character sheet name -> OBJ_EVENT_GFX_* constant, from
+    # reference/npc_gfx_map.json (tileset_converter.npc_gfx owns that file).
+    # Feeds the code-41 live sprite swap; empty means "not wired up" and every
+    # change-graphic step queues.
+    npc_gfx: dict[str, str] = field(default_factory=dict)
 
     # per-event cursor, set by transpile_event / transpile_common_event
     map_id: int = 0
@@ -567,6 +638,98 @@ def parse_tree(commands: list[dict]) -> list[Node]:
     return parse_block(0)
 
 
+@dataclass
+class _RubyLocal:
+    """An integer Ruby local tracked across script rows: ``$game_variables
+    [source_var]`` plus ``offset``, with an optional ``wrap`` remap applied
+    afterwards (``x = to if x == from``)."""
+
+    source_var: int
+    offset: int = 0
+    wrap: tuple[int, int] | None = None
+
+    def value_for(self, source_value: int) -> int:
+        v = source_value + self.offset
+        if self.wrap is not None and v == self.wrap[0]:
+            return self.wrap[1]
+        return v
+
+
+def _load_starter_selector_scene(reference_dir: Path) -> dict:
+    path = reference_dir / "starter_selector_scene.json"
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _merge_consecutive_routes(nodes: list[Node]) -> list[Node]:
+    """Fuse runs of code-209 Set Move Route nodes that target the same actor
+    with no intervening Wait For Move Completion.
+
+    RMXP runs such routes as one continuous motion (each 209 replaces the
+    actor's route, and the interpreter only yields at the paired 210). The fork
+    does not: ``applymovement`` on an object whose movement is still in flight
+    is **dropped**, so the second route silently never runs and the actor stops
+    short. Map050 EV019 cmds 54 and 56 are the case that surfaced this — Theo's
+    two steps to the machine became one, and the resulting stagger was
+    misdiagnosed for weeks as a map-geometry problem.
+
+    Merging (rather than inserting a ``waitmovement`` between them) is what
+    preserves RMXP's semantics: a wait would insert a beat the author never
+    wrote, visibly stuttering every fused route in the corpus.
+
+    Only *adjacent* routes fuse — 509 editor rows are transparent (they are the
+    per-step display duplicates of the route they follow), anything else breaks
+    the run. The merged node keeps the first route's index and flags so queue
+    entries still point at the row a human would look at.
+    """
+    merged: list[Node] = []
+    for node in nodes:
+        if type(node) is not Leaf or node.cmd.get("code") != SET_MOVE_ROUTE:
+            merged.append(node)
+            continue
+
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or not isinstance(params[1], dict):
+            merged.append(node)
+            continue
+
+        # Walk back over transparent 509 rows to find the run's predecessor.
+        prev_idx = len(merged) - 1
+        while (
+            prev_idx >= 0
+            and type(merged[prev_idx]) is Leaf
+            and merged[prev_idx].cmd.get("code") == MOVE_COMMAND_ROW
+        ):
+            prev_idx -= 1
+        if prev_idx < 0:
+            merged.append(node)
+            continue
+        prev = merged[prev_idx]
+        prev_params = prev.cmd.get("parameters", [])
+        if (
+            type(prev) is not Leaf
+            or prev.cmd.get("code") != SET_MOVE_ROUTE
+            or len(prev_params) < 2
+            or not isinstance(prev_params[1], dict)
+            or prev_params[0] != params[0]
+        ):
+            merged.append(node)
+            continue
+
+        # Fuse: concatenate step lists, dropping the predecessor's terminating
+        # code-0 row so the routes read as one uninterrupted motion.
+        prev_steps = [s for s in prev_params[1].get("list", []) if s.get("code") != 0]
+        this_steps = list(params[1].get("list", []))
+        fused_route = {**prev_params[1], "list": prev_steps + this_steps}
+        fused_cmd = {
+            **prev.cmd,
+            "parameters": [prev_params[0], fused_route, *prev_params[2:]],
+        }
+        merged[prev_idx] = Leaf(cmd=fused_cmd, index=prev.index)
+    return merged
+
+
 def _first_dialogue_text(nodes: list[Node]) -> str | None:
     """DFS for the first Show-Text run in a branch body's node tree.
 
@@ -695,6 +858,10 @@ _MOVE_TOKENS: dict[int, str] = {
 # 43 blend · 44 SE (audio is a visible drop elsewhere too).
 _MOVE_DROP_CODES = frozenset({30, 37, 38, 43, 44})
 
+# Code 41 (Change Graphic) is script-level, not a movement token — handled by
+# _PageEmitter._emit_route_with_gfx_swaps, which splits the route around it.
+CHANGE_GRAPHIC = 41
+
 # Bucket B (15 = wait N frames): emit the nearest not-longer delay_* chain.
 _DELAY_TOKENS = [(16, "delay_16"), (8, "delay_8"), (4, "delay_4"),
                  (2, "delay_2"), (1, "delay_1")]
@@ -804,12 +971,16 @@ class _PageEmitter:
         self.text_blocks: list[tuple[str, str]] = []  # (label, formatted content)
         self._last_route_ok = False  # was the most recent 209 emitted?
         self._choice_count = 0  # running per-page \ch counter (label uniqueness)
+        # Ruby locals built across 355/655 rows: name -> (source_var_id, offset,
+        # wrap). Only the shapes the starter-selector idiom needs; see
+        # _RUBY_LOCAL_PBGET_RE and friends.
+        self._ruby_locals: dict[str, _RubyLocal] = {}
 
     # -- leaf emitters -------------------------------------------------------
 
     def emit_nodes(self, nodes: list[Node]) -> list[str]:
         lines: list[str] = []
-        for node in nodes:
+        for node in _merge_consecutive_routes(nodes):
             lines.extend(self.emit_node(node))
         return lines
 
@@ -954,6 +1125,9 @@ class _PageEmitter:
         canlose_battle = self._emit_canlose_trainer_battle_idiom(node)
         if canlose_battle is not None:
             return canlose_battle
+        randomizer = self._emit_randomizer_branch(node)
+        if randomizer is not None:
+            return randomizer
         expr = condition_expr(node.cmd.get("parameters", []), self.ctx)
         if expr is None:
             marker = self.ctx.queue(
@@ -969,6 +1143,34 @@ class _PageEmitter:
             lines.append("} else {")
             lines += [f"    {ln}" for ln in self.emit_nodes(node.otherwise)]
         lines.append("}")
+        return lines
+
+    def _emit_randomizer_branch(self, node: IfNode) -> list[str] | None:
+        """``if $PokemonGlobal.randomizer`` — Uranium's randomizer mode.
+
+        A new-game option we do not implement, so the mode is statically false
+        and the branch is resolved at conversion time: emit the RMXP ``else``
+        block (normal play) and drop the ``then`` block. This is a *static*
+        collapse, not a guess — there is no runtime path that turns the mode on
+        in our ROM, so keeping the conditional would emit an unreachable arm
+        plus a flag that nothing ever sets.
+
+        Critically, the else-block is where the real work lives: on Map050 EV019
+        the starter grant itself (``pbAddPokemon`` per VAR_POKEMONTEST) sits in
+        the else, so queuing this conditional whole — as the generic
+        script-condition path did — silently shipped a scene that hands out no
+        starter at all.
+
+        Returns ``None`` for any other script condition.
+        """
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        if not _RANDOMIZER_MODE_RE.match(params[1]):
+            return None
+        lines = ["# randomizer mode not implemented — normal-play arm only"]
+        if node.otherwise:
+            lines += self.emit_nodes(node.otherwise)
         return lines
 
     def _emit_door_idiom(self, node: IfNode) -> list[str] | None:
@@ -1613,14 +1815,6 @@ class _PageEmitter:
                 "dropped — no facing-relative movement token, subsumed by "
                 "native warp fade"
             ]
-        tokens = route_tokens(route)
-        if tokens is None or not tokens:
-            self._last_route_ok = False
-            return [self.ctx.queue(
-                node.index, SET_MOVE_ROUTE, _describe_route(route, target),
-            )]
-        label = f"{self.page_label}_Move{len(self.movements) + 1}"
-        self.movements.append((label, tokens))
         # RMXP target: -1 = player, 0 = this event, N = event N.
         # pokeemerald localids: OBJ_EVENT_ID_PLAYER for the player; event ids
         # map 1:1 to localids in our porymap export.
@@ -1636,8 +1830,100 @@ class _PageEmitter:
             who = str(self.ctx.event_id)
         else:
             who = str(target)
+
+        # A code-41 Change Graphic step is script-level, not a movement token,
+        # so a route carrying one is emitted as alternating applymovement runs
+        # and gfx swaps rather than a single movement block.
+        if any(step.get("code") == CHANGE_GRAPHIC for step in route.get("list", [])):
+            return self._emit_route_with_gfx_swaps(node, route, who)
+
+        tokens = route_tokens(route)
+        if tokens is None or not tokens:
+            self._last_route_ok = False
+            return [self.ctx.queue(
+                node.index, SET_MOVE_ROUTE, _describe_route(route, target),
+            )]
+        label = f"{self.page_label}_Move{len(self.movements) + 1}"
+        self.movements.append((label, tokens))
         self._last_route_ok = True
         return [f"applymovement({who}, {label})"]
+
+    def _emit_route_with_gfx_swaps(
+        self, node: Node, route: dict, who: str
+    ) -> list[str]:
+        """A move route containing RMXP code-41 Change Graphic steps.
+
+        Splits the route on its 41s: each run of ordinary steps becomes its own
+        ``applymovement`` (followed by a ``waitmovement``, so the swap lands
+        after the motion it was authored to follow, not during it), and each 41
+        becomes the ``RPG2GBA_SetObjectEventGfx`` special —
+        VAR_0x8004 = local id, VAR_0x8005 = OBJ_EVENT_GFX_*
+        (engine/src/event_object_movement.c, sentinel-fenced).
+
+        Sheet name → constant comes from ``reference/npc_gfx_map.json``, the
+        same single source of truth the sprite pass uses; an unmapped sheet
+        queues rather than inventing a constant (CLAUDE.md §4.3, §4.7).
+        """
+        lines: list[str] = []
+        pending: list[dict] = []
+        emitted_movement = False
+
+        def flush() -> bool:
+            nonlocal emitted_movement
+            if not pending:
+                return True
+            tokens = route_tokens({**route, "list": [*pending, {"code": 0}]})
+            pending.clear()
+            if tokens is None or not tokens:
+                return False
+            label = f"{self.page_label}_Move{len(self.movements) + 1}"
+            self.movements.append((label, tokens))
+            lines.append(f"applymovement({who}, {label})")
+            lines.append("waitmovement(0)")
+            emitted_movement = True
+            return True
+
+        for step in route.get("list", []):
+            if step.get("code", 0) == 0:
+                continue  # route terminator — flush() re-adds its own
+            if step.get("code") != CHANGE_GRAPHIC:
+                pending.append(step)
+                continue
+            if not flush():
+                self._last_route_ok = False
+                return [self.ctx.queue(
+                    node.index, SET_MOVE_ROUTE,
+                    _describe_route(route, who) + " — untranslatable step "
+                    "alongside a change-graphic",
+                )]
+            params = step.get("parameters", [])
+            sheet = params[0] if params and isinstance(params[0], str) else ""
+            entry = self.ctx.npc_gfx.get(sheet)
+            if not entry:
+                self._last_route_ok = False
+                return [self.ctx.queue(
+                    node.index, SET_MOVE_ROUTE,
+                    f"change-graphic to unmapped sheet {sheet!r} — add it to "
+                    f"reference/npc_gfx_map.json",
+                )]
+            lines += [
+                f"setvar(VAR_0x8004, {who})",
+                f"setvar(VAR_0x8005, {entry})",
+                "special(RPG2GBA_SetObjectEventGfx)",
+            ]
+        if not flush():
+            self._last_route_ok = False
+            return [self.ctx.queue(
+                node.index, SET_MOVE_ROUTE, _describe_route(route, who),
+            )]
+        # This emitter waits for its own movement; a following 210 would be a
+        # second wait on nothing, so it is always neutralized.
+        self._last_route_ok = False
+        if not emitted_movement and not lines:
+            return [self.ctx.queue(
+                node.index, SET_MOVE_ROUTE, _describe_route(route, who),
+            )]
+        return lines
 
     def _emit_tone(self, node: Node) -> list[str]:
         params = node.cmd.get("parameters", [])
@@ -1719,9 +2005,156 @@ class _PageEmitter:
             )
             return [f"setflag({name})" if m.group(3) == "true" else f"clearflag({name})"]
 
+        # Nuzlocke-mode heal loop — subsumed by the paired code-314 Recover All
+        # (see _NUZLOCKE_HEAL_STRIP_RE). Breadcrumb, no queue.
+        if _NUZLOCKE_HEAL_STRIP_RE.match(text):
+            return ["# nuzlocke heal loop stripped — code-314 Recover All covers it"]
+
+        # `<statement> if $game_variables[V]==K` — split the trailing modifier-if
+        # off and emit the statement inside a poryscript `if`. A guard whose
+        # variable can't be resolved queues the whole row rather than dropping
+        # the condition and running the statement unconditionally.
+        guard = _RUBY_GUARD_RE.match(text)
+        stmt_text = guard.group("stmt") if guard else text
+        body = self._emit_ruby_statement(stmt_text, node)
+        if body is not None:
+            if guard is None:
+                return body
+            var_name = self.ctx.var_for_variable(int(guard.group("var")))
+            if var_name is not None:
+                return [
+                    f"if (var({var_name}) == {int(guard.group('val'))}) {{",
+                    *[f"    {ln}" for ln in body],
+                    "}",
+                ]
+
         return [self.ctx.queue(
             node.index, SCRIPT, f"script call: {text[:120]!r}",
         )]
+
+    def _emit_ruby_statement(self, text: str, node: Node) -> list[str] | None:
+        """One bare Ruby statement from a 355/655 row, guard already stripped.
+
+        ``None`` = no idiom matched; the caller queues the original row. Every
+        arm here resolves its symbols (species, flags) through the same sources
+        of truth the rest of the pipeline uses and returns ``None`` on a miss,
+        so an unstaged species or unnamed switch queues instead of emitting a
+        symbol the fork doesn't define (CLAUDE.md §4.3, §4.5).
+        """
+        m = _ADD_POKEMON_RE.match(text)
+        if m:
+            const = self.ctx.staged_species_constant(m.group(1))
+            if const is None:
+                return None
+            # Essentials' party menu is always available; Emerald gates the
+            # START-menu POKEMON option on FLAG_SYS_POKEMON_GET
+            # (engine/src/start_menu.c:340,359) and givemon -> ScrCmd_createmon
+            # never sets it — its only vanilla setter,
+            # SetDexPokemonPokenavFlags, is marked unused. Without this the mon
+            # is in gPlayerParty but has no menu to appear in.
+            return [
+                f"givemon({const}, {int(m.group(2))})",
+                "setflag(FLAG_SYS_POKEMON_GET)",
+            ]
+
+        m = _SWITCH_ASSIGN_RE.match(text)
+        if m:
+            name = self.ctx.flag_for_switch(int(m.group(1)))
+            if name is None:
+                return None
+            return [f"setflag({name})" if m.group(2) == "true" else f"clearflag({name})"]
+
+        # -- Ruby locals feeding pbStarterSelector ---------------------------
+        # These three rows emit nothing on their own; they build the argument
+        # the selector call below consumes. Tracked, not queued.
+        m = _RUBY_LOCAL_PBGET_RE.match(text)
+        if m:
+            self._ruby_locals[m.group(1)] = _RubyLocal(source_var=int(m.group(2)))
+            return []
+
+        m = _RUBY_LOCAL_ADDSUB_RE.match(text)
+        if m and m.group(1) in self._ruby_locals:
+            local = self._ruby_locals[m.group(1)]
+            delta = int(m.group(3)) * (1 if m.group(2) == "+" else -1)
+            self._ruby_locals[m.group(1)] = _RubyLocal(
+                local.source_var, local.offset + delta, local.wrap
+            )
+            return []
+
+        m = _RUBY_LOCAL_WRAP_RE.match(text)
+        if m and m.group(1) in self._ruby_locals:
+            local = self._ruby_locals[m.group(1)]
+            self._ruby_locals[m.group(1)] = _RubyLocal(
+                local.source_var, local.offset, (int(m.group(3)), int(m.group(2)))
+            )
+            return []
+
+        m = _STARTER_SELECTOR_RE.match(text)
+        if m:
+            return self._emit_starter_selector(m.group(1), m.group(2) == "true")
+
+        return None
+
+    def _emit_starter_selector(self, local_name: str, theo: bool) -> list[str] | None:
+        """``pbStarterSelector(x, theo)`` — Uranium's full-screen starter reveal.
+
+        Emits a ``switch`` over the source variable the argument was built
+        from, one arm per possible value: the scripted speech as msgboxes, the
+        chosen starter's front sprite via native ``showmonpic``, and the reveal
+        line. The animated background is dropped (operator fidelity decision,
+        see reference/starter_selector_scene.json).
+
+        The surrounding RMXP code-223 tone commands black the screen out for
+        the scene's own viewport; the fork's ``fadescreen`` leaves the screen
+        black, which would hide the sprite box entirely — so this un-fades on
+        the way in and re-fades on the way out, leaving the caller's before/
+        after state exactly as it found it.
+
+        Returns ``None`` (caller queues the row) when the local wasn't tracked,
+        the scene data isn't wired up, the source variable is unnamed, or any
+        arm's species/text doesn't resolve — never a partial scene.
+        """
+        local = self._ruby_locals.get(local_name)
+        scene = self.ctx.starter_scene
+        if local is None or not scene:
+            return None
+        var_name = self.ctx.var_for_variable(local.source_var)
+        if var_name is None:
+            return None
+        starters = scene.get("starters") or []
+        by_index = {s["index"]: s for s in starters}
+        if not by_index:
+            return None
+
+        lines = [
+            "# pbStarterSelector: full-screen reveal — speech + native "
+            "showmonpic; animated background dropped",
+            "fadescreen(FADE_FROM_BLACK)",
+            f"switch (var({var_name})) {{",
+        ]
+        # The source variable is Uranium's 1-based selection index; any value
+        # in that range that maps outside the starter list means the tracked
+        # arithmetic is wrong, so bail rather than emit a broken arm.
+        for source_value in range(1, len(starters) + 1):
+            starter = by_index.get(local.value_for(source_value))
+            if starter is None:
+                return None
+            const = self.ctx.staged_species_constant(starter["internal_name"])
+            if const is None:
+                return None
+            speech = scene.get("theo_speech") if theo else starter.get("player_speech")
+            body = [f"showmonpic({const}, 10, 3)"]
+            for raw in [*(speech or []), starter["reveal"]]:
+                result = translate_text_codes(raw)
+                if result is None:
+                    return None
+                body.append(f"msgbox({format_pory_dialogue(result.text)})")
+            body.append("hidemonpic")
+            lines.append(f"    case {source_value}:")
+            lines += [f"        {ln}" for ln in body]
+        lines.append("}")
+        lines.append("fadescreen(FADE_TO_BLACK)")
+        return lines
 
 
 # -- event-level API -----------------------------------------------------------

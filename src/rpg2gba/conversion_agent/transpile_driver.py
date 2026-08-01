@@ -307,6 +307,21 @@ def transpile_corpus(
     # classify_trainer_battle classifier uses; without this it queues every
     # canlose pbTrainerBattle as an unknown trainer.
     ctx.trainers = det_ctx.trainers
+    # Converted content of Uranium's full-screen starter-reveal scene; the
+    # pbStarterSelector idiom queues without it (CLAUDE.md §4.3).
+    ctx.starter_scene = transpiler._load_starter_selector_scene(reference_dir)
+    # Sheet name -> OBJ_EVENT_GFX_* for the code-41 live sprite swap. Read
+    # unvalidated here (npc_gfx.load_npc_gfx_map's header check belongs to the
+    # sprite pass); an unmapped sheet queues in the transpiler either way.
+    _gfx_path = reference_dir / "npc_gfx_map.json"
+    if _gfx_path.is_file():
+        ctx.npc_gfx = {
+            name: entry["gfx"]
+            for name, entry in json.loads(
+                _gfx_path.read_text(encoding="utf-8")
+            ).items()
+            if isinstance(entry, dict) and entry.get("gfx")
+        }
     index = fork_index.load_or_build()
     overrides = hand_overrides.load_hand_overrides(overrides_dir)
 
