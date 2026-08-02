@@ -59,7 +59,10 @@ _INDEX_FORMAT = 4
 # live sprite swap). Bump deliberately when the fork gains a special — the
 # whole point of the pin is that drift is noticed.
 _EXPECTED_SPECIALS_DECLS = 624
-_EXPECTED_MACROS = 385
+# 385 upstream + 1 rpg2gba addition (setobjectgfx, the script-level wrapper
+# around RPG2GBA_SetObjectEventGfx above). Bump deliberately when the fork
+# gains a macro.
+_EXPECTED_MACROS = 386
 _CONSTANTS_FLOOR = 10_000
 
 # ---------------------------------------------------------------------------

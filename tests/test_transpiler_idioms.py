@@ -664,7 +664,7 @@ def test_unnamed_switch_assignment_still_queues(ctx: T.TranspileContext) -> None
 
 
 # ----------------------------------------------------------------------------
-# code-41 live sprite swap (RPG2GBA_SetObjectEventGfx)
+# code-41 live sprite swap (setobjectgfx / RPG2GBA_SetObjectEventGfx)
 # ----------------------------------------------------------------------------
 
 
@@ -676,9 +676,7 @@ def test_change_graphic_emits_the_gfx_special(ctx: T.TranspileContext) -> None:
         ])]),
         cmd(T.WAIT_MOVE_COMPLETION),
     ]])
-    assert "setvar(VAR_0x8004, 19)" in res.text
-    assert "setvar(VAR_0x8005, OBJ_EVENT_GFX_URANIUM_PU_MACHINE)" in res.text
-    assert "special(RPG2GBA_SetObjectEventGfx)" in res.text
+    assert "setobjectgfx(19, OBJ_EVENT_GFX_URANIUM_PU_MACHINE)" in res.text
     # RMXP direction 6 = right: props use facing to pick a visual state, and the
     # converted sheet has the same four rows, so it carries through as facing.
     assert "face_right" in res.text
@@ -713,7 +711,7 @@ def test_change_graphic_mid_route_splits_the_movement(
             {"code": 1},
         ])]),
     ]])
-    gfx_at = res.text.index("special(RPG2GBA_SetObjectEventGfx)")
+    gfx_at = res.text.index("setobjectgfx(7,")
     # Three now: the steps before, the swap's own facing, and the steps after.
     assert res.text.count("applymovement(7,") == 3
     assert res.text.index("applymovement(7,") < gfx_at
@@ -744,8 +742,7 @@ def test_change_graphic_on_a_multi_state_sheet_swaps_to_that_state(
             {"code": T.CHANGE_GRAPHIC, "parameters": ["PU-Machine", 0, 6, 2]},
         ])]),
     ]])
-    assert "setvar(VAR_0x8005, OBJ_EVENT_GFX_URANIUM_PU_MACHINE_D6P2)" in res.text
-    assert "special(RPG2GBA_SetObjectEventGfx)" in res.text
+    assert "setobjectgfx(19, OBJ_EVENT_GFX_URANIUM_PU_MACHINE_D6P2)" in res.text
     # A state constant carries the direction, so no facing block is needed...
     assert "face_right" not in res.text
     # ...and the pattern is no longer a drop.
@@ -762,18 +759,18 @@ def test_change_graphic_to_the_idle_state_uses_the_bare_constant(
             {"code": T.CHANGE_GRAPHIC, "parameters": ["PU-Machine", 0, 2, 0]},
         ])]),
     ]])
-    assert "setvar(VAR_0x8005, OBJ_EVENT_GFX_URANIUM_PU_MACHINE)" in res.text
+    assert "setobjectgfx(19, OBJ_EVENT_GFX_URANIUM_PU_MACHINE)" in res.text
     assert res.unhandled == []
 
 
 def test_gfx_swap_target_survives_the_staging_remap(
     ctx: T.TranspileContext,
 ) -> None:
-    """The emitter and the staging remap are coupled: the swap's target rides
-    in a `setvar`, so `local_id_remap` has to recognise the emitted shape or
-    the RMXP id reaches the ROM unrewritten and the special silently no-ops
-    (the machine bug, boot-walked twice). Run real output through the real
-    remap so a change to either side fails here."""
+    """The emitter and the staging remap are coupled: the swap's target is the
+    `setobjectgfx` macro call's first argument, so `local_id_remap` has to
+    recognise the emitted shape or the RMXP id reaches the ROM unrewritten and
+    the special silently no-ops (the machine bug, boot-walked twice). Run real
+    output through the real remap so a change to either side fails here."""
     from rpg2gba.tileset_converter.local_id_remap import remap_pory_object_ids
 
     ctx.npc_gfx = {"PU-Machine": "OBJ_EVENT_GFX_URANIUM_PU_MACHINE"}
@@ -787,8 +784,8 @@ def test_gfx_swap_target_survives_the_staging_remap(
 
     remapped = remap_pory_object_ids(res.text, {"19": 3}, source_name="Map050")
 
-    assert "setvar(VAR_0x8004, 3)" in remapped.text
-    assert "setvar(VAR_0x8004, 19)" not in remapped.text
+    assert "setobjectgfx(3," in remapped.text
+    assert "setobjectgfx(19," not in remapped.text
 
 
 def test_change_graphic_to_a_state_with_no_art_queues(
@@ -822,7 +819,7 @@ def test_change_graphic_mid_route_on_a_multi_state_sheet_still_splits(
             {"code": 1},
         ])]),
     ]])
-    gfx_at = res.text.index("special(RPG2GBA_SetObjectEventGfx)")
+    gfx_at = res.text.index("setobjectgfx(19,")
     assert res.text.count("applymovement(19,") == 2
     assert res.text.index("applymovement(19,") < gfx_at
     assert res.text.rindex("applymovement(19,") > gfx_at

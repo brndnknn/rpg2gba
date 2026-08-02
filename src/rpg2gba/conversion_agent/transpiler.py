@@ -2007,9 +2007,9 @@ class _PageEmitter:
         Splits the route on its 41s: each run of ordinary steps becomes its own
         ``applymovement`` (followed by a ``waitmovement``, so the swap lands
         after the motion it was authored to follow, not during it), and each 41
-        becomes the ``RPG2GBA_SetObjectEventGfx`` special —
-        VAR_0x8004 = local id, VAR_0x8005 = OBJ_EVENT_GFX_*
-        (engine/src/event_object_movement.c, sentinel-fenced).
+        becomes a ``setobjectgfx(localId, gfxId)`` call — the
+        ``asm/macros/event.inc`` macro wrapping the ``RPG2GBA_SetObjectEventGfx``
+        special (engine/src/event_object_movement.c, sentinel-fenced).
 
         Sheet name → constant comes from ``reference/npc_gfx_map.json``, the
         same single source of truth the sprite pass uses; an unmapped sheet
@@ -2072,11 +2072,7 @@ class _PageEmitter:
                         f"art has no cell for — the sheet's emitted states are "
                         f"{sorted(states)}",
                     )]
-                lines += [
-                    f"setvar(VAR_0x8004, {who})",
-                    f"setvar(VAR_0x8005, {entry})",
-                    "special(RPG2GBA_SetObjectEventGfx)",
-                ]
+                lines.append(f"setobjectgfx({who}, {entry})")
                 continue
 
             entry = self.ctx.npc_gfx.get(sheet)
@@ -2087,11 +2083,7 @@ class _PageEmitter:
                     f"change-graphic to unmapped sheet {sheet!r} — add it to "
                     f"reference/npc_gfx_map.json",
                 )]
-            lines += [
-                f"setvar(VAR_0x8004, {who})",
-                f"setvar(VAR_0x8005, {entry})",
-                "special(RPG2GBA_SetObjectEventGfx)",
-            ]
+            lines.append(f"setobjectgfx({who}, {entry})")
             # Sheets converted as ordinary walk cycles have no per-state art:
             # direction still has an exact analog (the object's facing picks the
             # same row of the converted 4-direction sheet), so emit it as its own

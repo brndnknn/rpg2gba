@@ -38,7 +38,9 @@ def test_specials_unique_count(index: fi.ForkIndex) -> None:
 
 
 def test_script_macros_count(index: fi.ForkIndex) -> None:
-    assert len(index.script_macros) == 385
+    # 385 upstream + setobjectgfx (the script-level wrapper around
+    # RPG2GBA_SetObjectEventGfx).
+    assert len(index.script_macros) == 386
 
 
 def test_movement_tokens_floor(index: fi.ForkIndex) -> None:

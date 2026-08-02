@@ -22,30 +22,31 @@ from dataclasses import dataclass
 from pathlib import Path
 
 #: Poryscript commands whose first argument is an object local id.
+#:
+#: ``setobjectgfx`` is the ``asm/macros/event.inc`` macro wrapping the
+#: RMXP code-41 Change Graphic swap (`transpiler._emit_route_with_gfx_swaps`,
+#: ``RPG2GBA_SetObjectEventGfx``, engine/src/event_object_movement.c). It
+#: takes the object local id as its first argument, same shape as every other
+#: command here, so no special-cased matching is needed for it.
 REMAP_COMMANDS: tuple[str, ...] = (
     "applymovement",
     "setobjectxy",
     "addobject",
     "removeobject",
     "turnobject",
+    "setobjectgfx",
 )
 
 _COMMAND_PATTERN = re.compile(
     r"\b(" + "|".join(re.escape(cmd) for cmd in REMAP_COMMANDS) + r")\s*\(\s*(\d+)\b"
 )
 
-#: The RMXP code-41 Change Graphic swap (`transpiler._emit_route_with_gfx_swaps`).
-#: Its target object is an *argument to a special*, not a command's first
-#: argument, so `REMAP_COMMANDS` cannot see it — and an unremapped id there is
-#: silent: `TryGetObjectEventIdByLocalIdAndMap` simply finds nothing and the
-#: swap never happens (Map050's pokéball machine, boot-walked 2026-08-01).
+#: The gfx swap's local id reaches the engine through `setobjectgfx`, never
+#: through a bare `special` call — a raw call would carry its target in a
+#: `VAR_0x8004` `setvar` this module cannot see, and an unremapped id there is
+#: silent: `TryGetObjectEventIdByLocalIdAndMap` finds nothing and the swap
+#: never happens (Map050's pokéball machine, boot-walked 2026-08-01).
 SWAP_SPECIAL = "RPG2GBA_SetObjectEventGfx"
-
-_GFX_SWAP_PATTERN = re.compile(
-    r"\bsetvar\s*\(\s*VAR_0x8004\s*,\s*(\w+)\s*\)\s*\n"
-    r"\s*setvar\s*\(\s*VAR_0x8005\s*,\s*\w+\s*\)\s*\n"
-    rf"\s*special\s*\(\s*{re.escape(SWAP_SPECIAL)}\s*\)"
-)
 _SWAP_CALL_PATTERN = re.compile(rf"\b{re.escape(SWAP_SPECIAL)}\b")
 
 
@@ -53,30 +54,25 @@ def iter_object_id_refs(masked: str) -> list[tuple[str, int, int, int]]:
     """Every object-local-id reference in `masked` text, as
     ``(command, id, start, end)`` with the span covering the id literal.
 
-    Two shapes: the `REMAP_COMMANDS` first argument, and the gfx-swap special's
-    `VAR_0x8004` operand. References that name an object symbolically
-    (`OBJ_EVENT_ID_PLAYER`) are not ids to remap and are skipped.
+    One shape: the `REMAP_COMMANDS` first argument. References that name an
+    object symbolically (`OBJ_EVENT_ID_PLAYER`) are not ids to remap and are
+    skipped.
 
-    Fails loud if the text contains a `SWAP_SPECIAL` call this module can't
-    pair with a target — that means the transpiler's emission shape drifted
-    away from the pattern above, and the failure mode of missing one is a
-    silently dead swap, not a compile error.
+    Fails loud on a bare `SWAP_SPECIAL` call: that means an emitter bypassed
+    the `setobjectgfx` macro, and its target id would go unremapped without
+    ever producing a compile error.
     """
+    calls = _SWAP_CALL_PATTERN.findall(masked)
+    if calls:
+        raise ValueError(
+            f"{len(calls)} bare {SWAP_SPECIAL} call(s) — the gfx swap must go "
+            f"through the setobjectgfx macro so its target id is remapped; a "
+            f"raw call would silently target a stale object id"
+        )
+
     refs: list[tuple[str, int, int, int]] = []
     for m in _COMMAND_PATTERN.finditer(masked):
         refs.append((m.group(1), int(m.group(2)), *m.span(2)))
-
-    swaps = list(_GFX_SWAP_PATTERN.finditer(masked))
-    calls = len(_SWAP_CALL_PATTERN.findall(masked))
-    if len(swaps) != calls:
-        raise ValueError(
-            f"{calls} {SWAP_SPECIAL} call(s) but {len(swaps)} matched "
-            f"setvar/setvar/special block(s) — the emitted shape changed and "
-            f"an unmatched swap would silently target a stale object id"
-        )
-    for m in swaps:
-        if m.group(1).isdigit():
-            refs.append((f"special({SWAP_SPECIAL})", int(m.group(1)), *m.span(1)))
 
     refs.sort(key=lambda r: r[2])
     return refs
@@ -171,9 +167,8 @@ def remap_pory_object_ids(
 
     Matches ``<command>(<integer>`` for every command in `REMAP_COMMANDS`
     (whitespace around the parenthesis/comma is tolerated, including
-    single-arg forms like ``removeobject(16)``), plus the gfx-swap special's
-    ``VAR_0x8004`` operand (`iter_object_id_refs`). Only bare integer literals
-    are touched — identifier first-arguments (``OBJ_EVENT_ID_PLAYER``,
+    single-arg forms like ``removeobject(16)``) (`iter_object_id_refs`). Only
+    bare integer literals are touched — identifier first-arguments (``OBJ_EVENT_ID_PLAYER``,
     ``LOCALID_*``, ``VAR_*``) are left alone and never produce a warning.
     Matches inside double-quoted strings or ``#`` comments are ignored (see
     `_mask_strings_and_comments`).
