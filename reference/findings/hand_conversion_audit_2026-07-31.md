@@ -160,6 +160,16 @@ It retires once §5.1 lands.
 
 ### 5.1 Expose live sprite swap (move-command 41) — tier 3
 
+> **DONE 2026-08-02.** `RPG2GBA_SetObjectEventGfx` (`engine/data/specials.inc:646`,
+> implemented in `engine/src/event_object_movement.c`), the `setobjectgfx` macro in
+> `engine/asm/macros/event.inc`, the transpiler rule
+> (`transpiler._emit_route_with_gfx_swaps`), and the sheet→constant table
+> (`reference/npc_gfx_map.json`). Verification scene converts and emits; **not yet
+> boot-walked.** Remaining, corpus-wide rather than per-item: the table covers the
+> sheets the slice uses, so the other 36 census maps' sheets are unmapped until
+> their art is converted, and a *pattern*-moving swap on an ordinary walk-cycle
+> sheet still queues by design.
+
 RMXP move-command 41 repaints an event's sprite in place mid-scene. Emerald
 resolves an object's sprite at spawn only.
 
@@ -301,9 +311,18 @@ carry a non-zero collision bit to block.
 - **Map032 EV009** — retire once §5.1 lands. The var-151 readback idiom should
   become a shared transpiler rule serving both events.
 
+> **Both DONE.** EV019 2026-08-01 (`d5ae2e3e`), EV009 2026-08-02 — seven deltas
+> into four table entries and three idioms, 35 source message units → 37 msgbox,
+> 0 queue entries. Neither is boot-walked yet.
+
 Retained in the hand bucket: **Map050 EV005** (aptitude test — genuinely
 irreducible by shape) and **Map049 EV021** (letter — endgame, deprioritised by
 the user).
+
+> **EV005 was retired anyway**, 2026-08-01 (`edbec873`) — its "irreducible by
+> shape" claim disproved by censusing the three constructs behind it (RMXP
+> label/jump hoist, array-valued vars, the shared `pbStarterSelector` emitter).
+> `hand_conversions/` now holds **Map049 EV021 only**.
 
 ---
 
