@@ -2490,16 +2490,21 @@ class _PageEmitter:
         """``pbStarterSelector(x, theo)`` — Uranium's full-screen starter reveal.
 
         Emits a ``switch`` over the source variable the argument was built
-        from, one arm per possible value: the scripted speech as msgboxes, the
-        chosen starter's front sprite via native ``showmonpic``, and the reveal
-        line. The animated background is dropped (operator fidelity decision,
-        see reference/starter_selector_scene.json).
+        from, one arm per possible value: the scripted speech as msgboxes and
+        the reveal line. The animated background is dropped (operator fidelity
+        decision, see reference/starter_selector_scene.json).
+
+        **No sprite here** (user call, 2026-08-01 boot-walk): the reveal used
+        to draw the chosen starter with ``showmonpic``, which meant the mon
+        popped up twice in the scene — once here and once in the ``pbAddPokemon``
+        gift ceremony a few lines later, which shows the same sprite and is the
+        one that also runs the nickname prompt. The ceremony keeps the sprite;
+        the reveal is speech.
 
         The surrounding RMXP code-223 tone commands black the screen out for
         the scene's own viewport; the fork's ``fadescreen`` leaves the screen
-        black, which would hide the sprite box entirely — so this un-fades on
-        the way in and re-fades on the way out, leaving the caller's before/
-        after state exactly as it found it.
+        black, so this un-fades on the way in and re-fades on the way out,
+        leaving the caller's before/after state exactly as it found it.
 
         Returns ``None`` (caller queues the row) when the local wasn't tracked,
         the scene data isn't wired up, the source variable is unnamed, or any
@@ -2541,8 +2546,8 @@ class _PageEmitter:
             return None
 
         lines = [
-            "# pbStarterSelector: full-screen reveal — speech + native "
-            "showmonpic; animated background dropped",
+            "# pbStarterSelector: full-screen reveal — speech only; the sprite "
+            "is the gift ceremony's job, animated background dropped",
             "fadescreen(FADE_FROM_BLACK)",
             f"switch (var({var_name})) {{",
         ]
@@ -2552,17 +2557,19 @@ class _PageEmitter:
             starter = by_index.get(starter_index)
             if starter is None:
                 return None
-            const = self.ctx.staged_species_constant(starter["internal_name"])
-            if const is None:
+            # The species still has to resolve even though the reveal no longer
+            # draws it: an arm naming a starter with no staged constant means
+            # the scene data and the conversion disagree, which is a broken arm
+            # whatever it shows.
+            if self.ctx.staged_species_constant(starter["internal_name"]) is None:
                 return None
             speech = scene.get("theo_speech") if theo else starter.get("player_speech")
-            body = [f"showmonpic({const}, 10, 3)"]
+            body: list[str] = []
             for raw in [*(speech or []), starter["reveal"]]:
                 result = translate_text_codes(raw)
                 if result is None:
                     return None
                 body.append(f"msgbox({format_pory_dialogue(result.text)})")
-            body.append("hidemonpic")
             lines.append(f"    case {source_value}:")
             lines += [f"        {ln}" for ln in body]
         lines.append("}")

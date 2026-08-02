@@ -44,7 +44,68 @@ single-letter assignments can't let a typo'd `A` through.
 **Shipped:** `lab-doorstep.gba` sha1 `d39c55d6` (pristine `26408202`). 1544
 tests; moki GREEN 17/17 first attempt with the new nickname prompt in the path.
 
-### 25. The lab machine didn't animate — BUILT 2026-08-01, boot-walk pending
+### 26. The machine STILL didn't animate — the swap never reached an object (BUILT 2026-08-02, boot-walk pending)
+
+**Symptom (user, lab-doorstep ROM `f64db6ca`):** #25 shipped per-state art and
+four distinct state swaps, and the machine still sat frozen through the whole
+starter scene.
+
+**Root cause — the object id was never remapped.** `staging`'s
+`local_id_remap` rewrites RMXP event ids into compiled object local ids for
+`REMAP_COMMANDS` (applymovement/setobjectxy/addobject/removeobject/turnobject).
+The gfx swap carries its target in `setvar(VAR_0x8004, <id>)`, an argument to a
+*special*, so the pattern never saw it: the compiled script asked for local id
+**19** (Map050 EV019's RMXP id) on a map whose object_events array is four
+entries long — the machine is local id **3**.
+`TryGetObjectEventIdByLocalIdAndMap` found nothing and returned, so all four
+swaps were no-ops. That failure is silent by construction — no compile error,
+no queue entry, nothing at runtime. `applymovement(19, …)` in the same routes
+*was* remapped, which is why the choreography looked fine.
+
+`local_id_remap` now recognises the swap block as a second reference shape
+(`iter_object_id_refs`, shared with `stage_slice_scripts._scan_required_actor_ids`
+so a swap-only target still gets spawned), and a `RPG2GBA_SetObjectEventGfx`
+call it can't pair with a target is a hard error — shape drift has to be loud
+here because it is invisible in the ROM.
+
+**Second, real bug underneath it (engine).** Even with the right object, the
+swap wouldn't have shown: `ObjectEventSetGraphics` repoints `sprite->images`
+but issues no tile copy — the copy comes from the sprite anim engine
+(`AnimCmd_frame`). Every swap runs inside a `lockall`, and `FreezeObjectEvents`
+sets `animPaused` on every non-player object event sprite, so `ContinueAnim`
+never reaches the next frame command and the tiles stay stale until the object
+respawns. `RPG2GBA_SetObjectEventGfx` now re-begins the sprite's anim
+(`BeginAnim` is not gated on `animPaused`), mirroring `SpawnObjectEventOnMap`.
+
+**Verified, not assumed** (scratchpad probe, method: read the machine's
+`gObjectEvents` entry every frame and compare the 2048 bytes at its sprite's
+`oam.tileNum` against each of the 9 state cells' ROM bytes — the sheet is
+uncompressed, so ROM bytes == VRAM bytes):
+
+```
+f9070 gfx=415 showing=D2P0(idle)   f9203 gfx=422 showing=D2P2
+f9071 gfx=415 showing=D2P1         f9205 gfx=422 showing=D6P2
+f9078 gfx=416 showing=D2P1        f10699 gfx=419 showing=D6P2
+f9079 gfx=416 showing=D2P2        f10700 gfx=419 showing=D4P2
+```
+
+All four scripted states now reach VRAM, one frame after the special. Eye
+check on the cropped machine region confirms it: empty dome → ball loaded →
+dispensing.
+
+**Shipped:** `lab-doorstep.gba` sha1 `36cdee71` (pristine `61edf53f`). 1571
+tests; moki GREEN 17/17 first attempt.
+
+### 27. The starter's sprite popped up twice — reveal now leaves it to the ceremony (BUILT 2026-08-02, boot-walk pending)
+
+**User call:** #24's `pbAddPokemon` ceremony (sprite + "obtained" fanfare +
+nickname prompt) is the one to keep; the `pbStarterSelector` reveal's own
+`showmonpic` a few lines earlier is redundant and fires for both the player's
+pick and Theo's. Dropped from `_emit_starter_selector_over` — the reveal is
+speech now (fade wrapper and per-arm species resolution unchanged, so an arm
+whose starter has no staged constant still refuses to emit).
+
+### 25. The lab machine didn't animate — BUILT 2026-08-01, superseded by #26
 
 Reported twice; the earlier direction-carrying fix was never going to be
 enough. **The sheet had exactly one frame in the ROM.** `PU-PokeballMachine` is

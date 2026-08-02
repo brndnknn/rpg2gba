@@ -348,3 +348,72 @@ def test_byte_preservation_except_rewritten_integers() -> None:
         "}\n"
     )
     assert result.text == expected
+
+
+# ---------------------------------------------------------------------------
+# the gfx-swap special's object operand (RMXP code-41 Change Graphic)
+# ---------------------------------------------------------------------------
+
+# The shape `transpiler._emit_route_with_gfx_swaps` emits. The target rides in
+# a `setvar`, not as a command's first argument, so the REMAP_COMMANDS pattern
+# never saw it — and an unremapped id there is silent in-game, not a compile
+# error: the special's TryGetObjectEventIdByLocalIdAndMap just finds nothing.
+_SWAP_BLOCK = (
+    "    setvar(VAR_0x8004, {who})\n"
+    "    setvar(VAR_0x8005, OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE_D2P1)\n"
+    "    special(RPG2GBA_SetObjectEventGfx)\n"
+)
+
+
+def test_gfx_swap_target_is_remapped() -> None:
+    text = _SWAP_BLOCK.format(who=19)
+
+    result = remap_pory_object_ids(text, {"19": 3})
+
+    assert "setvar(VAR_0x8004, 3)" in result.text
+    assert ("special(RPG2GBA_SetObjectEventGfx)", 19, 3) == (
+        result.replacements[0][1], result.replacements[0][2],
+        result.replacements[0][3])
+
+
+def test_gfx_swap_target_absent_from_table_raises() -> None:
+    """The failure this whole pass exists to prevent: a left-in RMXP id that
+    resolves to no object at all, so the machine never changes state."""
+    with pytest.raises(ValueError, match="19"):
+        remap_pory_object_ids(_SWAP_BLOCK.format(who=19), {"5": 2})
+
+
+def test_gfx_swap_on_the_player_is_left_alone() -> None:
+    text = _SWAP_BLOCK.format(who="OBJ_EVENT_ID_PLAYER")
+
+    result = remap_pory_object_ids(text, {"19": 3})
+
+    assert result.text == text
+    assert result.replacements == []
+
+
+def test_unpairable_gfx_swap_special_raises() -> None:
+    """Shape drift is loud. If the emitter ever stops writing the setvar pair
+    directly above the special, the ids stop being remapped — and that is
+    invisible in the ROM, so it has to fail here instead."""
+    text = "    special(RPG2GBA_SetObjectEventGfx)\n"
+
+    with pytest.raises(ValueError, match="RPG2GBA_SetObjectEventGfx"):
+        remap_pory_object_ids(text, {"19": 3})
+
+
+def test_swap_and_movement_targets_remap_together() -> None:
+    """The two shapes interleave in real routes (applymovement, swap,
+    applymovement, swap) and must both land on the same local id."""
+    text = (
+        "    applymovement(19, Move4)\n"
+        "    waitmovement(0)\n"
+        + _SWAP_BLOCK.format(who=19)
+        + "    applymovement(19, Move5)\n"
+    )
+
+    result = remap_pory_object_ids(text, {"19": 3})
+
+    assert result.text.count("(3,") == 2          # both applymovements
+    assert "setvar(VAR_0x8004, 3)" in result.text
+    assert [r[2] for r in result.replacements] == [19, 19, 19]

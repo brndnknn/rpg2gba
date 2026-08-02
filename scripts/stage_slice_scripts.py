@@ -45,8 +45,8 @@ from rpg2gba.tileset_converter import metadata_wiring as mw
 from rpg2gba.tileset_converter import sprite_pass
 from rpg2gba.tileset_converter.hidden_actor_bracket import bracket_hidden_actor_scripts
 from rpg2gba.tileset_converter.local_id_remap import (
-    _COMMAND_PATTERN,
     _mask_strings_and_comments,
+    iter_object_id_refs,
     load_local_id_table,
     remap_pory_object_ids,
 )
@@ -190,8 +190,9 @@ def _load_event_traits(out: Path, map_id: int, pory_path: Path) -> dict[int, lis
 
 def _scan_required_actor_ids(pory_text: str, map_json: dict) -> set[int]:
     """Every RMXP event id targeted by an object-command bare-integer literal
-    (applymovement/setobjectxy/addobject/removeobject/turnobject — the same
-    `REMAP_COMMANDS`/`_COMMAND_PATTERN` `local_id_remap.py` later rewrites)
+    (applymovement/setobjectxy/addobject/removeobject/turnobject, plus the
+    gfx-swap special's VAR_0x8004 operand — the same `iter_object_id_refs`
+    references `local_id_remap.py` later rewrites)
     in `pory_text` — the transpiled choreography's OWN idea of which events
     it drives, independent of whether metadata_wiring emitted them at boot
     (findings §3.3/§5: these are the "hidden cutscene actor" candidates).
@@ -205,11 +206,10 @@ def _scan_required_actor_ids(pory_text: str, map_json: dict) -> set[int]:
     event_ids = {e["id"] for e in map_json["events"]}
     ids: set[int] = set()
     masked = _mask_strings_and_comments(pory_text)
-    for m in _COMMAND_PATTERN.finditer(masked):
-        candidate = int(m.group(2))
+    for command, candidate, _start, _end in iter_object_id_refs(masked):
         if candidate not in event_ids:
             raise ValueError(
-                f"{m.group(1)}({candidate}): targets event id {candidate}, "
+                f"{command}({candidate}): targets event id {candidate}, "
                 f"absent from this map's events (garbage reference)"
             )
         ids.add(candidate)

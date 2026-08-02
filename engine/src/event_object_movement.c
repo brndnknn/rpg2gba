@@ -3180,12 +3180,33 @@ void ObjectEventSetGraphicsIdByLocalIdAndMap(u8 localId, u8 mapNum, u8 mapGroup,
 // the vanilla command table changes.
 //   VAR_0x8004 = local id (OBJ_EVENT_ID_PLAYER for the player)
 //   VAR_0x8005 = OBJ_EVENT_GFX_* id
+//
+// ObjectEventSetGraphics repoints sprite->images but never copies a frame; the
+// copy is issued from the sprite anim engine (AnimCmd_frame). Every caller of
+// this special is inside a lockall, and FreezeObjectEvents has set animPaused
+// on every non-player object event sprite, so ContinueAnim never reaches the
+// next ANIMCMD_FRAME and the new graphics stay off-screen until the object is
+// respawned. That is why the Map050 pokéball machine only ever "changed" across
+// a map reload. BeginAnim is *not* gated on animPaused, so re-beginning the
+// anim forces the copy on the next AnimateSprites pass. Mirrors what
+// SpawnObjectEventOnMap does after it sets an object's graphics.
 void RPG2GBA_SetObjectEventGfx(void)
 {
-    ObjectEventSetGraphicsIdByLocalIdAndMap(gSpecialVar_0x8004,
+    u8 objectEventId;
+    struct ObjectEvent *objectEvent;
+
+    if (TryGetObjectEventIdByLocalIdAndMap(gSpecialVar_0x8004,
                                            gSaveBlock1Ptr->location.mapNum,
                                            gSaveBlock1Ptr->location.mapGroup,
-                                           gSpecialVar_0x8005);
+                                           &objectEventId))
+        return;
+
+    objectEvent = &gObjectEvents[objectEventId];
+    ObjectEventSetGraphicsId(objectEvent, gSpecialVar_0x8005);
+    StartSpriteAnim(&gSprites[objectEvent->spriteId],
+                    objectEvent->inanimate
+                        ? ANIM_STAY_STILL
+                        : GetFaceDirectionAnimNum(objectEvent->facingDirection));
 }
 // END URANIUM PATHFINDER SLICE
 

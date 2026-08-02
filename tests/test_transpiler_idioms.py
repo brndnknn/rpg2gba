@@ -766,6 +766,31 @@ def test_change_graphic_to_the_idle_state_uses_the_bare_constant(
     assert res.unhandled == []
 
 
+def test_gfx_swap_target_survives_the_staging_remap(
+    ctx: T.TranspileContext,
+) -> None:
+    """The emitter and the staging remap are coupled: the swap's target rides
+    in a `setvar`, so `local_id_remap` has to recognise the emitted shape or
+    the RMXP id reaches the ROM unrewritten and the special silently no-ops
+    (the machine bug, boot-walked twice). Run real output through the real
+    remap so a change to either side fails here."""
+    from rpg2gba.tileset_converter.local_id_remap import remap_pory_object_ids
+
+    ctx.npc_gfx = {"PU-Machine": "OBJ_EVENT_GFX_URANIUM_PU_MACHINE"}
+    ctx.npc_gfx_states = {"PU-Machine": _MACHINE_STATES}
+    res = run_event(ctx, [[
+        cmd(T.SET_MOVE_ROUTE, [19, _route([
+            {"code": 4},
+            {"code": T.CHANGE_GRAPHIC, "parameters": ["PU-Machine", 0, 6, 2]},
+        ])]),
+    ]])
+
+    remapped = remap_pory_object_ids(res.text, {"19": 3}, source_name="Map050")
+
+    assert "setvar(VAR_0x8004, 3)" in remapped.text
+    assert "setvar(VAR_0x8004, 19)" not in remapped.text
+
+
 def test_change_graphic_to_a_state_with_no_art_queues(
     ctx: T.TranspileContext,
 ) -> None:
@@ -853,9 +878,27 @@ def test_starter_selector_replays_tracked_arithmetic(
     ]])
     case1 = res.text.index("case 1:")
     case2 = res.text.index("case 2:")
-    assert "SPECIES_CCC" in res.text[case1:case2]      # 1 - 2 = -1 -> wraps to 2
-    assert "SPECIES_AAA" in res.text[case2:]           # 2 - 2 = 0
-    assert "showmonpic" in res.text and "hidemonpic" in res.text
+    # The reveal line is what identifies the arm's starter now that the sprite
+    # is the gift ceremony's job.
+    assert "C!" in res.text[case1:case2]               # 1 - 2 = -1 -> wraps to 2
+    assert "A!" in res.text[case2:]                    # 2 - 2 = 0
+    assert res.unhandled == []
+
+
+def test_starter_selector_leaves_the_sprite_to_the_gift_ceremony(
+    ctx: T.TranspileContext,
+) -> None:
+    """The reveal is speech only. pbAddPokemon shows the same mon a few lines
+    later (with the nickname prompt), and two pop-ups for one starter is the
+    duplication the 2026-08-01 boot-walk called out."""
+    _starter_ctx(ctx)
+    res = run_event(ctx, [[
+        cmd(T.SCRIPT, ["x=pbGet(151)"]),
+        cmd(T.SCRIPT_CONT, ["x-=1"]),
+        cmd(T.SCRIPT_CONT, ["pbStarterSelector(x)"]),
+    ]])
+    assert "showmonpic" not in res.text and "hidemonpic" not in res.text
+    assert "a1" in res.text                    # the speech itself still lands
     assert res.unhandled == []
 
 
@@ -883,7 +926,7 @@ def test_starter_selector_arithmetic_out_of_range_queues(
         cmd(T.SCRIPT, ["x=pbGet(151)"]),
         cmd(T.SCRIPT_CONT, ["pbStarterSelector(x,true)"]),
     ]])
-    assert "showmonpic" not in res.text
+    assert "fadescreen" not in res.text  # the reveal's own wrapper: nothing emitted
     assert len(res.unhandled) == 1
 
 
@@ -908,7 +951,7 @@ def test_starter_selector_without_scene_data_queues(
         cmd(T.SCRIPT, ["x=pbGet(151)"]),
         cmd(T.SCRIPT_CONT, ["pbStarterSelector(x,true)"]),
     ]])
-    assert "showmonpic" not in res.text
+    assert "fadescreen" not in res.text  # the reveal's own wrapper: nothing emitted
     assert len(res.unhandled) == 1
 
 
@@ -917,7 +960,7 @@ def test_starter_selector_untracked_local_queues(ctx: T.TranspileContext) -> Non
     a variable would be a silent default (CLAUDE.md §4.5)."""
     _starter_ctx(ctx)
     res = run_event(ctx, [[cmd(T.SCRIPT, ["pbStarterSelector(q,true)"])]])
-    assert "showmonpic" not in res.text
+    assert "fadescreen" not in res.text  # the reveal's own wrapper: nothing emitted
     assert len(res.unhandled) == 1
 
 
