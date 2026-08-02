@@ -140,6 +140,22 @@ _RECEIVE_ITEM_RE = re.compile(
     r"^\s*(?:Kernel\.)?pbReceiveItem\(\s*::PBItems::(\w+)\s*(?:,\s*(\d+)\s*)?\)\s*$"
 )
 
+# "$game_player.AXIS OP LITERAL" — a one-shot position guard/boundary check
+# outside a code-112 wait loop (Map032 EV9 pages 1-3: `x==17` is a map-edge
+# sign guard that early-exits before the scene proper; EV9 page 3's
+# `y<=43` is a "walk the player into place before continuing" reposition).
+# Corpus census 2026-08-02: 24 sites across 8 maps (5 `x==`, 19 `y<=`/`y>=`),
+# so this is the same idiom wherever it appears, not an EV9-specific shape.
+# Distinct from `_ALIGN_BREAK_RE` above, which is this same comparison
+# *inside* a code-112 loop body (a step-until-aligned wait, not a guard) —
+# the two never collide because one only fires with an enclosing loop and
+# this one only fires without ``node.otherwise`` context restrictions beyond
+# the comparison itself. VAR_TEMP_0/VAR_TEMP_1 are the transpiler's own
+# generic scratch vars (`_ALIGN_AXIS_VAR`), reused rather than re-minted.
+_PLAYER_POSITION_CMP_RE = re.compile(
+    r"^\s*\$game_player\.(x|y)\s*(==|<=|>=)\s*(-?\d+)\s*$"
+)
+
 # Essentials defensive numeric guard: "variable is not numeric or negative"
 # (Map049 EV20 page 1, output/uranium-build/maps/Map049.json — 4 then-nodes, 0
 # else-nodes: comment lines explaining the guard, plus a 122 re-set of the
@@ -167,12 +183,26 @@ _ALIGN_AXIS_VAR = {"x": "VAR_TEMP_0", "y": "VAR_TEMP_1"}
 
 # Code-207 (Show Animation) emote tier: pokeemerald ships these as movement
 # tokens, not a runtime animation call (movement.inc, verified against pristine
-# HEAD — see _emit_show_animation). Only the two emote ids proven on the slice;
-# any other animation_id (e.g. the corpus's 104/18 flourishes) still queues.
+# HEAD — see _emit_show_animation). Ids resolved against
+# reference/animation_names.json (dumped from Uranium's own Animations.rxdata
+# — the source of truth for what a numeric id *is*).
 _EMOTE_MOVEMENT_LABELS = {
     17: "Common_Movement_ExclamationMark",  # movement.inc:8 (EM Exclamation)
     19: "Common_Movement_QuestionMark",  # movement.inc:4 (EM Interrogation)
+    # 104 "Rustle" — the wild-encounter grass-rustle cue (Map032 EV9's Chyinmunk
+    # reveal). No native rustle effect, but "something in the grass" reads the
+    # same as "!" over the target's head, the same substitution FRLG's own
+    # encounter tutorials use; corpus census 2026-08-02: 1 occurrence.
+    104: "Common_Movement_ExclamationMark",
 }
+
+# 207 animation ids with a *decided* drop — not a capability gap, an approved
+# fidelity call (id 18 "EM scratch", an attack-hit flourish with no overworld
+# analog in the fork; the hit itself is conveyed by the freeze-pose movement
+# route immediately after it in every corpus occurrence). Distinct from
+# _EMOTE_MOVEMENT_LABELS misses, which still queue — this id has been looked
+# at and dropped on purpose, so it gets a breadcrumb instead of a queue entry.
+_EMOTE_DROP_IDS = frozenset({18})
 
 # -- native bucket idioms (queue-clearing pass, 2026-07-05 slice review) ------
 # Whole-shape matches proven against the real slice corpus (Map032/048/049) —
@@ -254,6 +284,14 @@ _SHOW_MAP_RE = re.compile(r"^\s*(?:Kernel\.)?pbShowMap\s*$")
 # (engine/include/constants/flags.h:1463, "RECEIVED Running Shoes") — the
 # vanilla b-dash unlock flag.
 _RUNNING_SHOES_ON_RE = re.compile(r"^\s*\$PokemonGlobal\.runningShoes\s*=\s*true\s*$")
+
+# $Trainer.pokedex=true — the canonical Pokédex grant, native-analog table
+# entry (CLAUDE.md §4.7): FLAG_SYS_POKEDEX_GET is vanilla's own dex-received
+# flag (engine/include/constants/flags.h:1351) and SetUnlockedPokedexFlags is
+# a real special (engine/data/specials.inc:515) — the same pair vanilla's own
+# Birch/Oak-lab script uses. Exact literal only (the corpus has no `=false`
+# variant); anything else still queues.
+_POKEDEX_GRANT_RE = re.compile(r"^\s*\$Trainer\.pokedex\s*=\s*true\s*$")
 
 # -- Essentials one-line Ruby guards (`<statement> if $game_variables[V]==K`) ---
 # RMXP script rows routinely carry a whole statement plus a trailing modifier-if
@@ -358,6 +396,28 @@ _VAR_ASSIGN_LOCAL_RE = re.compile(
     r"^\s*\$game_variables\[\s*(\d+)\s*\]\s*=\s*([a-z_]\w*)\s*$"
 )
 
+# -- string-valued Ruby local + indexed text readback (Map032 EV9's starter
+# name-back) ---------------------------------------------------------------
+# `list=["Orchynx","Raptorch","Eletux"]` binds a plain (non-$game_variables)
+# Ruby local to an ordered string literal; `$game_variables[3]=list[x]` then
+# indexes it by the SAME local `x` already tracked by `_RUBY_LOCAL_PBGET_RE`/
+# `_RUBY_LOCAL_WRAP_RE` above (Uranium's `x=pbGet(151); x=0 if x==3`) and
+# also materialized into a real var by `_VAR_ASSIGN_LOCAL_RE`'s plain-local
+# arm (`$game_variables[1]=x`, the same `x`). Nothing is emitted for either
+# row — like the other Ruby-local trackers, they only feed a later idiom,
+# here `\v[3]` in the very next dialogue row's text
+# (`_PageEmitter._emit_value_var_text`). Corpus census 2026-08-02: this
+# string-array shape is ONE site (`list=[` never appears elsewhere), unlike
+# the `x=pbGet(151)` readback itself, which recurs — see the plain-local
+# materialize arm's own docstring.
+_STRING_LIST_LITERAL_RE = re.compile(
+    r'^\s*([a-z_]\w*)\s*=\s*\[\s*((?:"[^"]*"\s*,?\s*)*)\]\s*$'
+)
+_STRING_LIST_ITEM_RE = re.compile(r'"([^"]*)"')
+_LIST_INDEX_ASSIGN_RE = re.compile(
+    r"^\s*\$game_variables\[\s*(\d+)\s*\]\s*=\s*([a-z_]\w*)\[\s*([a-z_]\w*)\s*\]\s*$"
+)
+
 # u16 subtract-and-test-sign threshold. NOT 32768: 0x8000 is SPECIAL_VARS_START
 # (include/constants/vars.h), and the `compare` macro (asm/macros/event.inc)
 # auto-selects compare_var_to_var for a literal in that range — which silently
@@ -389,6 +449,12 @@ _CH_LEGACY_COLOR_RE = re.compile(r"\\c\[\d+\]")
 # bracket is an unrecognized tag — queue the whole command rather than emit
 # mystery text into a menu option.
 _CH_RESIDUAL_TAG_RE = re.compile(r"[\\<>]")
+
+# ``\v[N]`` game-variable text substitution — normally unrecognized (queues,
+# see translate_text_codes). _PageEmitter._emit_value_var_text resolves the
+# one shape a tracked list-index readback produces (_LIST_INDEX_ASSIGN_RE);
+# any other \v[N] still falls through and queues.
+_VALUE_VAR_RE = re.compile(r"\\v\[(\d+)\]")
 
 # -- canlose trainer battle idiom (type-12 pbTrainerBattle inside a 111) ------
 # reference/guides/canlose_battle_pipeline_plan.md "Gap A — transpiler"; proven
@@ -970,15 +1036,20 @@ _MOVE_TOKENS: dict[int, str] = {
     7: "walk_diag_northwest", 8: "walk_diag_northeast",
     16: "face_down", 17: "face_left", 18: "face_right", 19: "face_up",
     25: "face_player", 26: "face_away_player",
+    31: "restore_anim", 32: "disable_anim",
     35: "lock_facing_direction", 36: "unlock_facing_direction",
     39: "set_fixed_priority", 40: "clear_fixed_priority",
 }
 
 # SOFT-C drops (moveroute_coverage.py dispositions): timing/physics toggles
 # with no per-step GBA analog whose removal doesn't change where anyone ends
-# up. 30 frequency · 37/38 through on/off (Essentials door-walk plumbing) ·
-# 43 blend · 44 SE (audio is a visible drop elsewhere too).
-_MOVE_DROP_CODES = frozenset({30, 37, 38, 43, 44})
+# up. 30 frequency · 33/34 "step anime" on/off (RGSS's continuous-idle-
+# animation flag — Game_Character#update_move switch, Interpreter.rb —
+# no per-step fork toggle: `walk_in_place_*` plays a literal animation loop,
+# not a persistent inanimate-while-standing flag; corpus census 2026-08-02,
+# 53 routes touch 33/34) · 37/38 through on/off (Essentials door-walk
+# plumbing) · 43 blend · 44 SE (audio is a visible drop elsewhere too).
+_MOVE_DROP_CODES = frozenset({30, 33, 34, 37, 38, 43, 44})
 
 # Code 41 (Change Graphic) is script-level, not a movement token — handled by
 # _PageEmitter._emit_route_with_gfx_swaps, which splits the route around it.
@@ -1011,10 +1082,37 @@ def _delay_tokens(frames: int) -> list[str]:
     return out
 
 
+def _is_forward_backward_gesture(route: dict) -> bool:
+    """RMXP move-codes 12 ("1 Step Forward") + 13 ("1 Step Backward"), back to
+    back — a facing-relative bob with zero net displacement and unchanged
+    facing (``move_backward`` pins ``@direction_fix`` for its own step,
+    ``reference/scripts_dump/021_Game_Character_v17.rb:603-622``). Neither
+    code has an absolute-direction fork token (all ``walk_*`` actions are
+    direction-fixed, not facing-relative), so there is no way to replay the
+    *displacement* faithfully — but the source's own visible effect is just a
+    gesture, not a walk, and the fork's ``walk_in_place_*`` family gives a
+    same-tile gesture too. Matches ONLY a route consisting of exactly these
+    two non-terminator steps, in this order, no repeat (corpus census
+    2026-08-02: 2 occurrences, both this shape exactly) — anything else
+    containing a 12 or 13 still falls through to the per-step loop below
+    (queues, since neither code has an entry there either)."""
+    if route.get("repeat"):
+        return False
+    steps = [s.get("code", 0) for s in route.get("list", []) if s.get("code", 0) != 0]
+    return steps == [12, 13]
+
+
 def route_tokens(route: dict) -> list[str] | None:
     """Movement tokens for a route, or None if any step is outside the tier."""
     if route.get("repeat"):
         return None  # ambient looping route — no movement-block equivalent
+    if _is_forward_backward_gesture(route):
+        # walk_in_place_right, not a facing-aware token: the source route is
+        # itself facing-relative and this transpiler doesn't track an event's
+        # accumulated facing across a page (§10 fidelity substitution, same
+        # disposition the retired Map032_EV009 hand file used for this exact
+        # shape).
+        return ["walk_in_place_right", "walk_in_place_right"]
     tokens: list[str] = []
     speed_prefix = "walk"
     for step in route.get("list", []):
@@ -1112,6 +1210,17 @@ class _PageEmitter:
         self._array_vars: dict[int, list[str]] = {}
         # Open `if x==A` remap arm: (local name, tested value, assigned value).
         self._pending_remap: tuple[str, int, int | None] | None = None
+        # Ruby local name -> the real FLAG_*/VAR_* it was materialized into
+        # (see _emit_local_materialize). Lets a later list-index readback
+        # sharing the same local find the var it now lives in.
+        self._materialized_locals: dict[str, str] = {}
+        # Plain Ruby local name -> ordered string literal it was bound to
+        # (see _STRING_LIST_LITERAL_RE).
+        self._string_lists: dict[str, list[str]] = {}
+        # Uranium variable id -> (real var it would have held the indexed
+        # string, the ordered values) for a \v[N] text substitution
+        # (see _LIST_INDEX_ASSIGN_RE / _emit_value_var_text).
+        self._value_text_choices: dict[int, tuple[str, list[str]]] = {}
 
     # -- leaf emitters -------------------------------------------------------
 
@@ -1130,6 +1239,9 @@ class _PageEmitter:
         if isinstance(node, TextRun):
             if _CH_MARK in node.text:
                 return self._emit_inline_choice(node)
+            value_text = self._emit_value_var_text(node.text)
+            if value_text is not None:
+                return value_text
             result = translate_text_codes(node.text.strip())
             if result is None:
                 return [ctx.queue(
@@ -1261,6 +1373,9 @@ class _PageEmitter:
         door = self._emit_door_idiom(node)
         if door is not None:
             return door
+        position = self._emit_player_position_idiom(node)
+        if position is not None:
+            return position
         give_item = self._emit_give_item_idiom(node)
         if give_item is not None:
             return give_item
@@ -1347,6 +1462,32 @@ class _PageEmitter:
         lines = [
             "getplayerxy(VAR_TEMP_0, VAR_TEMP_1)",
             f"if (var(VAR_TEMP_0) == {ctx.event_x} && var(VAR_TEMP_1) == {ctx.event_y}) {{",
+        ]
+        lines += [f"    {ln}" for ln in self.emit_nodes(node.then)]
+        if node.otherwise:
+            lines.append("} else {")
+            lines += [f"    {ln}" for ln in self.emit_nodes(node.otherwise)]
+        lines.append("}")
+        return lines
+
+    def _emit_player_position_idiom(self, node: IfNode) -> list[str] | None:
+        """``$game_player.x==N`` / ``$game_player.y<=N`` / ``$game_player.y>=N``
+        — a one-shot position guard or reposition check (see
+        ``_PLAYER_POSITION_CMP_RE``). ``getplayerxy`` into the transpiler's own
+        scratch vars, then the same comparison over whichever axis. Returns
+        ``None`` (falls through to the generic script-condition queue) for any
+        other script call or comparison operator."""
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        m = _PLAYER_POSITION_CMP_RE.match(params[1])
+        if not m:
+            return None
+        axis, op, value = m.group(1), m.group(2), m.group(3)
+        var_name = _ALIGN_AXIS_VAR[axis]
+        lines = [
+            "getplayerxy(VAR_TEMP_0, VAR_TEMP_1)",
+            f"if (var({var_name}) {op} {value}) {{",
         ]
         lines += [f"    {ln}" for ln in self.emit_nodes(node.then)]
         if node.otherwise:
@@ -1897,12 +2038,16 @@ class _PageEmitter:
         exclamation/question emotes as movement tokens
         (``engine/data/scripts/movement.inc``), not a runtime animation call,
         so the mapping is an ``applymovement`` + ``waitmovement`` pair, same
-        shape as a 209 move route. Any other animation id (the corpus also
-        has 104/18 flourishes with no native analog) still queues."""
+        shape as a 209 move route. An id in ``_EMOTE_DROP_IDS`` is a decided
+        drop (breadcrumb, no queue entry); any other unmapped animation id
+        still queues."""
         params = node.cmd.get("parameters", [])
         if len(params) < 2 or not all(isinstance(v, int) for v in params[:2]):
             return [self.ctx.queue(node.index, SHOW_ANIMATION, "bad 207 params")]
         target_id, animation_id = params[0], params[1]
+        if animation_id in _EMOTE_DROP_IDS:
+            return [f"# show animation id {animation_id} on target {target_id} "
+                    f"— no OW analog, dropped (approved, v1)"]
         label = _EMOTE_MOVEMENT_LABELS.get(animation_id)
         if label is None:
             return [self.ctx.queue(
@@ -2257,6 +2402,9 @@ class _PageEmitter:
                 return None
             return [f"setflag({name})" if m.group(2) == "true" else f"clearflag({name})"]
 
+        if _POKEDEX_GRANT_RE.match(text):
+            return ["setflag(FLAG_SYS_POKEDEX_GET)", "special(SetUnlockedPokedexFlags)"]
+
         # -- Ruby locals feeding pbStarterSelector ---------------------------
         # These three rows emit nothing on their own; they build the argument
         # the selector call below consumes. Tracked, not queued.
@@ -2329,6 +2477,26 @@ class _PageEmitter:
             local = self._ruby_locals.get(m.group(2))
             if local is not None and local.argmax_of is not None:
                 return self._emit_argmax(int(m.group(1)), local)
+            if local is not None:
+                return self._emit_local_materialize(
+                    int(m.group(1)), m.group(2), local)
+
+        # -- string-valued Ruby local + indexed text readback ----------------
+        # See _STRING_LIST_LITERAL_RE's docstring. Both rows are tracked only;
+        # nothing is emitted until _emit_value_var_text sees the \v[N].
+        m = _STRING_LIST_LITERAL_RE.match(text)
+        if m:
+            self._string_lists[m.group(1)] = _STRING_LIST_ITEM_RE.findall(m.group(2))
+            return []
+
+        m = _LIST_INDEX_ASSIGN_RE.match(text)
+        if m:
+            var_id, list_name, local_name = int(m.group(1)), m.group(2), m.group(3)
+            values = self._string_lists.get(list_name)
+            target = self._materialized_locals.get(local_name)
+            if values and target is not None:
+                self._value_text_choices[var_id] = (target, values)
+                return []
 
         m = _STARTER_SELECTOR_PBGET_RE.match(text)
         if m:
@@ -2345,6 +2513,78 @@ class _PageEmitter:
             return self._emit_starter_selector(m.group(1), m.group(2) == "true")
 
         return None
+
+    def _emit_local_materialize(
+        self, target_var_id: int, local_name: str, local: _RubyLocal
+    ) -> list[str] | None:
+        """``$game_variables[N] = x`` where ``x`` is a plain (non-argmax)
+        tracked local — ``copyvar`` the source var into the real target, then
+        replay ``x``'s offset/wrap at runtime (the same arithmetic
+        ``_RubyLocal.value_for`` replays at *emit* time for
+        ``pbStarterSelector``'s switch arms, here reproduced as actual
+        instructions because the target is a real, reused var rather than a
+        one-shot switch scrutinee — Map032 EV9's ``VAR_TEMP_POKEMON_CHOICE``
+        is read by five different branches downstream). Registers the target
+        under ``local_name`` in ``_materialized_locals`` so a later
+        list-index readback (``_LIST_INDEX_ASSIGN_RE``) sharing the same
+        local can find it. Returns ``None`` (queues) if either var is
+        unnamed.
+        """
+        target = self.ctx.var_for_variable(target_var_id)
+        source = self.ctx.var_for_variable(local.source_var)
+        if target is None or source is None:
+            return None
+        lines = [f"copyvar({target}, {source})"]
+        if local.offset > 0:
+            lines.append(f"addvar({target}, {local.offset})")
+        elif local.offset < 0:
+            lines.append(f"subvar({target}, {-local.offset})")
+        if local.wrap is not None:
+            test_value, replacement = local.wrap
+            lines += [
+                f"if (var({target}) == {test_value}) {{",
+                f"    setvar({target}, {replacement})",
+                "}",
+            ]
+        self._materialized_locals[local_name] = target
+        return lines
+
+    def _emit_value_var_text(self, raw: str) -> list[str] | None:
+        """A dialogue row whose ``\\v[N]`` control code names a tracked
+        list-index readback (``_value_text_choices``, built by
+        ``_LIST_INDEX_ASSIGN_RE``) — GBA has no runtime string variable to
+        substitute at that control code the way RMXP does, so this resolves
+        it at conversion time into one ``if``-branch per possible value of
+        the real var the index was materialized into (Map032 EV9's "Go!
+        \\v[3]!" -> "Go! Orchynx!" / "Go! Raptorch!" / "Go! Eletux!", keyed
+        off the same ``VAR_TEMP_POKEMON_CHOICE`` the surrounding branches
+        already read). Returns ``None`` (falls through to the generic
+        dialogue path) unless the text carries exactly one ``\\v[N]`` and N is
+        tracked; any per-branch text that itself fails control-code
+        translation aborts the whole substitution rather than emitting a
+        partial one.
+        """
+        matches = list(_VALUE_VAR_RE.finditer(raw))
+        if len(matches) != 1:
+            return None
+        var_id = int(matches[0].group(1))
+        choice = self._value_text_choices.get(var_id)
+        if choice is None:
+            return None
+        target_var, values = choice
+        match = matches[0]
+        lines: list[str] = []
+        for index, value in enumerate(values):
+            substituted = raw[: match.start()] + value + raw[match.end() :]
+            translated = translate_text_codes(substituted.strip())
+            if translated is None:
+                return None
+            body = format_pory_dialogue(translated.text)
+            auto = ", MSGBOX_AUTOCLOSE" if translated.autoclose else ""
+            lines.append(f"if (var({target_var}) == {index}) {{")
+            lines.append(f"    msgbox({body}{auto})")
+            lines.append("}")
+        return lines
 
     def _emit_give_pokemon(self, const: str, level: int,
                            silent: bool) -> list[str]:

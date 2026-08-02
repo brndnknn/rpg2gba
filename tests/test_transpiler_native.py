@@ -216,7 +216,11 @@ def test_cave_step_forward_neutralizes_paired_210(ctx: T.TranspileContext) -> No
 def test_cave_step_forward_near_miss_extra_step_still_queues(
     ctx: T.TranspileContext,
 ) -> None:
-    route = _route([{"code": 12, "parameters": []}, {"code": 13, "parameters": []}])
+    """A step-12 route with a trailing step that is neither the cave idiom's
+    lone-12 shape nor the forward/backward gesture's exact [12, 13] pair
+    still queues (see test_forward_backward_gesture_idiom for the [12, 13]
+    case, which is now a real idiom, not a near-miss)."""
+    route = _route([{"code": 12, "parameters": []}, {"code": 1, "parameters": []}])
     res = run_event(ctx, [[cmd(T.SET_MOVE_ROUTE, [-1, route])]])
     assert len(res.unhandled) == 1
     assert res.unhandled[0].command_code == T.SET_MOVE_ROUTE

@@ -181,7 +181,13 @@ def test_real_npc_gfx_map_covers_the_slice_sprite_swaps() -> None:
     gfx_map = Path("reference/npc_gfx_map.json")
     extras = fi.registry_extra_symbols(npc_gfx_map_path=gfx_map)
     assert extras, "reference/npc_gfx_map.json minted no OBJ_EVENT_GFX_URANIUM_*"
-    assert all(n.startswith("OBJ_EVENT_GFX_URANIUM_") for n in extras)
+    # Every entry is a staged OBJ_EVENT_GFX_URANIUM_* mint EXCEPT PU-POKEBALL
+    # (Map032 EV9's thrown-ball prop), which deliberately reuses the vanilla
+    # OBJ_EVENT_GFX_POKE_BALL rather than staging a new sheet for one still
+    # pose — a real, already-#define'd constant the base fork index resolves
+    # on its own; harmless here as a redundant "extra".
+    non_staged = {n for n in extras if not n.startswith("OBJ_EVENT_GFX_URANIUM_")}
+    assert non_staged <= {"OBJ_EVENT_GFX_POKE_BALL"}
     # The lab machine's per-state constants are in the slice's code-41 path.
     assert "OBJ_EVENT_GFX_URANIUM_PU_POKEBALLMACHINE_D6P2" in extras
 

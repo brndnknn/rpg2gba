@@ -354,8 +354,11 @@ def test_show_animation_question_mark_sibling_wired(ctx: T.TranspileContext) -> 
     assert res.unhandled == []
 
 
-@pytest.mark.parametrize("animation_id", [104, 18])
+@pytest.mark.parametrize("animation_id", [999, 7])
 def test_show_animation_unmapped_ids_queue(ctx: T.TranspileContext, animation_id: int) -> None:
+    """104 ("Rustle" -> exclamation) and 18 ("EM scratch" -> decided drop) are
+    no longer in this bucket — see test_emote_anim_104_maps_to_exclamation /
+    test_emote_anim_18_drops_with_breadcrumb_not_a_queue_entry."""
     res = run_event(ctx, [[cmd(T.SHOW_ANIMATION, [76, animation_id])]])
     assert len(res.unhandled) == 1
     assert res.unhandled[0].command_code == T.SHOW_ANIMATION
@@ -1221,3 +1224,172 @@ def test_add_pokemon_unstaged_species_still_queues() -> None:
     ]], trigger=3)
     assert "givemon" not in out.text
     assert out.unhandled
+
+
+# ----------------------------------------------------------------------------
+# Map032 EV9 retirement — player-position guard, move-token additions,
+# forward/backward gesture, Pokédex grant, emote table, string readback
+# ----------------------------------------------------------------------------
+
+
+def test_player_position_x_equal_idiom(ctx: T.TranspileContext) -> None:
+    """``$game_player.x==17`` — a one-shot boundary guard with no else-arm;
+    the guarded content is a road-sign message + early exit, and anything
+    after the ``if`` still runs on the non-matching path."""
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "$game_player.x==17"], indent=0),
+        cmd(T.SHOW_TEXT, ["sign text"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+        cmd(T.SHOW_TEXT, ["after the guard"], indent=0),
+    ]
+    res = run_event(ctx, [commands])
+    assert "getplayerxy(VAR_TEMP_0, VAR_TEMP_1)" in res.text
+    assert "if (var(VAR_TEMP_0) == 17) {" in res.text
+    assert 'msgbox(format("sign text"))' in res.text
+    assert 'msgbox(format("after the guard"))' in res.text
+    assert res.unhandled == []
+
+
+def test_player_position_y_lte_idiom(ctx: T.TranspileContext) -> None:
+    """``$game_player.y<=43`` — same idiom, different axis/operator."""
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "$game_player.y<=43"], indent=0),
+        cmd(T.SHOW_TEXT, ["reposition"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands])
+    assert "if (var(VAR_TEMP_1) <= 43) {" in res.text
+    assert res.unhandled == []
+
+
+def test_player_position_other_operator_still_queues(ctx: T.TranspileContext) -> None:
+    """Anything outside ``==``/``<=``/``>=`` over ``$game_player.x``/``y``
+    falls through to the generic script-condition queue."""
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "$game_player.x<17"], indent=0),
+        cmd(T.SHOW_TEXT, ["never"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands])
+    assert "getplayerxy" not in res.text
+    assert len(res.unhandled) == 1
+
+
+def test_move_route_disable_and_restore_anim(ctx: T.TranspileContext) -> None:
+    """Codes 32/31 (``@walk_anime`` off/on) — the fork's own
+    ``disable_anim``/``restore_anim`` movement actions freeze/unfreeze the
+    walking animation, an exact analog (event_object_movement.c
+    ``MovementAction_DisableAnimation_Step0`` sets ``inanimate = TRUE``)."""
+    res = run_event(ctx, [[
+        cmd(T.SET_MOVE_ROUTE, [5, _route([{"code": 32}, {"code": 31}])]),
+    ]])
+    assert "disable_anim" in res.text
+    assert "restore_anim" in res.text
+    assert res.unhandled == []
+
+
+def test_move_route_step_anime_toggle_drops(ctx: T.TranspileContext) -> None:
+    """Codes 33/34 (``@step_anime`` on/off — continuous idle animation) have
+    no per-step fork analog and drop silently, same disposition as the other
+    SOFT-C physics toggles (30/37/38/43/44)."""
+    res = run_event(ctx, [[
+        cmd(T.SET_MOVE_ROUTE, [5, _route([{"code": 18}, {"code": 34}])]),
+    ]])
+    assert res.unhandled == []
+    # face_right (18) survives; nothing stands in for the dropped 34.
+    movement_block = res.text[res.text.index("movement "):]
+    assert "face_right" in movement_block
+
+
+def test_forward_backward_gesture_idiom(ctx: T.TranspileContext) -> None:
+    """RMXP move-codes 12 (1 Step Forward) + 13 (1 Step Backward), back to
+    back — a facing-relative, zero-net-displacement bob with no absolute-
+    direction fork token. Substitutes the fork's own same-tile gesture."""
+    res = run_event(ctx, [[
+        cmd(T.SET_MOVE_ROUTE, [5, _route([{"code": 12}, {"code": 13}])]),
+    ]])
+    assert res.unhandled == []
+    assert res.text.count("walk_in_place_right") == 2
+
+
+def test_forward_backward_gesture_only_matches_the_exact_pair(
+    ctx: T.TranspileContext,
+) -> None:
+    """A lone code 12 (or 13) mixed with anything else is still outside the
+    tier — this idiom only fires on the exact [12, 13] shape."""
+    res = run_event(ctx, [[
+        cmd(T.SET_MOVE_ROUTE, [5, _route([{"code": 12}, {"code": 1}])]),
+    ]])
+    assert len(res.unhandled) == 1
+    assert "walk_in_place_right" not in res.text
+
+
+def test_pokedex_grant_idiom(ctx: T.TranspileContext) -> None:
+    """``$Trainer.pokedex=true`` -> the canonical native-analog pair
+    (CLAUDE.md §4.7): FLAG_SYS_POKEDEX_GET + special SetUnlockedPokedexFlags,
+    the same pair vanilla's own Birch/Oak-lab script uses."""
+    res = run_event(ctx, [[cmd(T.SCRIPT, ["$Trainer.pokedex=true"])]])
+    assert "setflag(FLAG_SYS_POKEDEX_GET)" in res.text
+    assert "special(SetUnlockedPokedexFlags)" in res.text
+    assert res.unhandled == []
+
+
+def test_emote_anim_104_maps_to_exclamation(ctx: T.TranspileContext) -> None:
+    """Animation id 104 ("Rustle" per reference/animation_names.json) — the
+    wild-encounter grass-rustle cue — substitutes the exclamation emote."""
+    res = run_event(ctx, [[cmd(T.SHOW_ANIMATION, [5, 104])]])
+    assert "applymovement(5, Common_Movement_ExclamationMark)" in res.text
+    assert res.unhandled == []
+
+
+def test_emote_anim_18_drops_with_breadcrumb_not_a_queue_entry(
+    ctx: T.TranspileContext,
+) -> None:
+    """Animation id 18 ("EM scratch") is a decided drop (no OW hit-flourish
+    analog) — a comment, not an UNHANDLED queue entry."""
+    res = run_event(ctx, [[cmd(T.SHOW_ANIMATION, [5, 18])]])
+    assert res.unhandled == []
+    assert "no OW analog, dropped" in res.text
+
+
+def test_string_list_readback_resolves_v_control_code(
+    ctx: T.TranspileContext,
+) -> None:
+    """The Map032 EV9 starter name-back cluster: a string-literal local
+    indexed by the same wrap-clamped local that materializes into a real,
+    reused var — and the ``\\v[N]`` dialogue row that reads it resolves into
+    one ``if``-branch per possible value of that real var."""
+    ctx.registry.propose_var(151, "VAR_POKEMONTEST")
+    ctx.registry.propose_var(1, "VAR_TEMP_POKEMON_CHOICE")
+    res = run_event(ctx, [[
+        cmd(T.SCRIPT, ['list=["Orchynx","Raptorch","Eletux"]']),
+        cmd(T.SCRIPT_CONT, ["x=pbGet(151)"]),
+        cmd(T.SCRIPT_CONT, ["x=0 if x==3"]),
+        cmd(T.SCRIPT_CONT, ["$game_variables[1]=x"]),
+        cmd(T.SCRIPT_CONT, ["$game_variables[3]=list[x]"]),
+        cmd(T.SHOW_TEXT, ["Go! \\v[3]!"]),
+    ]])
+    assert "copyvar(VAR_TEMP_POKEMON_CHOICE, VAR_POKEMONTEST)" in res.text
+    assert "if (var(VAR_TEMP_POKEMON_CHOICE) == 3) {" in res.text
+    assert "setvar(VAR_TEMP_POKEMON_CHOICE, 0)" in res.text
+    assert 'if (var(VAR_TEMP_POKEMON_CHOICE) == 0) {\n        msgbox(format("Go! Orchynx!"))' in res.text
+    assert 'if (var(VAR_TEMP_POKEMON_CHOICE) == 1) {\n        msgbox(format("Go! Raptorch!"))' in res.text
+    assert 'if (var(VAR_TEMP_POKEMON_CHOICE) == 2) {\n        msgbox(format("Go! Eletux!"))' in res.text
+    assert res.unhandled == []
+
+
+def test_string_list_readback_without_prior_materialize_queues(
+    ctx: T.TranspileContext,
+) -> None:
+    """A list-index readback whose local was never written into a real var
+    (the plain-local materialize arm) can't resolve a text substitution:
+    both the readback row itself and the \\v[N] dialogue row that depended
+    on it queue, rather than either guessing."""
+    res = run_event(ctx, [[
+        cmd(T.SCRIPT, ['list=["Orchynx","Raptorch","Eletux"]']),
+        cmd(T.SCRIPT_CONT, ["x=pbGet(151)"]),
+        cmd(T.SCRIPT_CONT, ["$game_variables[3]=list[x]"]),
+        cmd(T.SHOW_TEXT, ["Go! \\v[3]!"]),
+    ]])
+    codes = sorted(e.command_code for e in res.unhandled)
+    assert codes == [T.SHOW_TEXT, T.SCRIPT]
