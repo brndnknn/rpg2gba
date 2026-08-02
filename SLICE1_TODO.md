@@ -44,7 +44,7 @@ single-letter assignments can't let a typo'd `A` through.
 **Shipped:** `lab-doorstep.gba` sha1 `d39c55d6` (pristine `26408202`). 1544
 tests; moki GREEN 17/17 first attempt with the new nickname prompt in the path.
 
-### 26. The machine STILL didn't animate — the swap never reached an object (BUILT 2026-08-02, boot-walk pending)
+### 26. The machine STILL didn't animate — the swap never reached an object (BOOT-WALKED 2026-08-02, PASSED)
 
 **Symptom (user, lab-doorstep ROM `f64db6ca`):** #25 shipped per-state art and
 four distinct state swaps, and the machine still sat frozen through the whole
@@ -94,9 +94,10 @@ check on the cropped machine region confirms it: empty dome → ball loaded →
 dispensing.
 
 **Shipped:** `lab-doorstep.gba` sha1 `36cdee71` (pristine `61edf53f`). 1571
-tests; moki GREEN 17/17 first attempt.
+tests; moki GREEN 17/17 first attempt. **Boot-walked 2026-08-02 — user
+passed the lab scene** (machine animates on device; single starter sprite).
 
-### 27. The starter's sprite popped up twice — reveal now leaves it to the ceremony (BUILT 2026-08-02, boot-walk pending)
+### 27. The starter's sprite popped up twice — reveal now leaves it to the ceremony (BOOT-WALKED 2026-08-02, PASSED)
 
 **User call:** #24's `pbAddPokemon` ceremony (sprite + "obtained" fanfare +
 nickname prompt) is the one to keep; the `pbStarterSelector` reveal's own
