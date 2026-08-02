@@ -154,7 +154,7 @@ static void WarpToTruck(void)
     // (Map049 @ 7,7, URANIUM_START_MAP) so the slice is reachable on boot.
     // Revert this block to restore vanilla new-game behavior.
     //
-    // POST-QUIZ HARNESS (S6b Theo-battle repro) — ACTIVE 2026-07-22: the
+    // POST-QUIZ HARNESS (starter-grant repro) — RE-ARMED 2026-08-02: the
     // destination MUST be set here, before DoMapLoadLoop() runs (called from
     // CB2_NewGame(), which calls NewGameInitData(), which calls this
     // function) — a second SetWarpDestination+WarpIntoMap() call AFTER
@@ -164,13 +164,13 @@ static void WarpToTruck(void)
     // mismatched collision data and locks up. To go back to the normal
     // player's-house spawn, swap this back to the MOKI_TOWN_PLAYERS_HOUSE_1F
     // call below (kept commented, not deleted).
-    SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), MAP_NUM(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), WARP_ID_NONE, 7, 7);
+    // SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), MAP_NUM(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), WARP_ID_NONE, 7, 7);
     // (14,18) — just inside the entrance rug — crosses a row of "Hey, where
     // are you going?" barrier triggers at y=16 (coord_events gated on
     // VAR_TEMP_F==0, which is fresh-boot default) that shove the player back
     // south. Spawn past them instead, level with Theo (13,8) two rows below
     // the professor's row (6).
-    // SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), WARP_ID_NONE, 14, 8);
+    SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), WARP_ID_NONE, 14, 8);
     // END URANIUM PATHFINDER SLICE
     WarpIntoMap();
 }
@@ -362,38 +362,48 @@ void CB2_StartUraniumSlice(void)
     // VarSet(RPG2GBA_VARS_START + 93, 2);            // VAR_POKEMONTEST = Raptorch
     // VarSet(RPG2GBA_VARS_START + 53, 2);            // VAR_QUEST_LOG = 2 (S6b+S7 done)
 
-    // ---- POST-QUIZ HARNESS (S6b Theo-battle repro) — DISABLED 2026-07-27 ----
-    // Disabled because it defeats the chapter suite's fresh-start guarantee:
-    // the latch below is read by Map050_EV005_Page1's first instruction
-    // (`goto_if_set FLAG_MAP050_EVENT005_SSB` -> straight to the quiz body),
-    // so beats B6/N3 (the aptitude offer and its No answer) were unreachable
-    // on a "new game" — the chapter run walked into the quiz with the offer
-    // never shown. The spawn override this block came with was already
-    // reverted; this is the rest of it. Uncomment to re-arm the S6b repro.
-    // NOTE the comment on the FlagSet is wrong: +18 is SSB (SSC is +19), per
-    // data/scripts/uranium_flags.h — which is exactly why it skipped the offer.
-    // Skips the aptitude quiz (Map050_EV005) but NOT the machine/battle
-    // (Map050_EV019): quiz result is already recorded and the quiz-complete
-    // self-switch latch is set, so Map050_EV019_Dispatch routes to its real
-    // Page1 (VAR_QUEST_LOG stays 0, below its "already ran" gate). Party and
-    // FLAG_RECEIVED_STARTER/FLAG_HAS_*/FLAG_LOST_FIRST_BATTLE/FLAG_SYS_POKEMON_GET
-    // are all left at fresh-boot default (unset/empty) — EV019 sets those
-    // itself when the machine is triggered. Player lands in the lab and just
-    // has to walk up to the machine to re-trigger the starter grant + Theo's
-    // battle fresh, for a clean repro of the win-freeze bug. To go back to the
-    // rock-smash or post-S7 harnesses above, comment this block back out.
+    // ---- POST-QUIZ HARNESS (starter-grant repro) — RE-ARMED 2026-08-02 ----
+    // Lands the player in the lab in the exact state the aptitude quiz leaves
+    // behind, so the starter grant is one step away: walk up to the machine.
+    //
+    // NOTE it defeats the chapter suite's fresh-start guarantee — with a quiz
+    // latch pre-set, beats B6/N3 (the aptitude offer and its No answer) are
+    // unreachable on a "new game". Comment this block back out (and revert the
+    // spawn in WarpToTruck) before running the chapter suite.
+    //
+    // Uses SSC (+19), the quiz-COMPLETE latch set at the very end of
+    // Map050_EV005_Page1 (pory line 283) — NOT SSB (+18), which the 2026-07-22
+    // version of this harness used by mistake. SSB is only the quiz-ACCEPTED
+    // latch, read by Page1's first instruction (`goto_if_set ..._SSB` -> jump
+    // straight into the quiz body), so SSB drops you INTO the quiz rather than
+    // past it. With SSC set and VAR_QUEST_LOG still 0, Map050_EV005_Dispatch
+    // falls through to Page2 (the post-quiz professor idle) and the quiz does
+    // not re-run.
+    //
+    // Does NOT skip the machine/battle (Map050_EV019): that dispatch routes to
+    // its real Page1 while VAR_QUEST_LOG stays below its "already ran" gate.
+    // Party and FLAG_RECEIVED_STARTER/FLAG_HAS_*/FLAG_LOST_FIRST_BATTLE/
+    // FLAG_SYS_POKEMON_GET stay at fresh-boot default — EV019 sets those itself
+    // when the machine is triggered.
+    //
     // The lab spawn itself is set in WarpToTruck() (must happen before
     // DoMapLoadLoop, not after) — only flags/vars belong here.
-    // VarSet(RPG2GBA_VARS_START + 93, 2);           // VAR_POKEMONTEST = Raptorch
-    // FlagSet(RPG2GBA_SELFSWITCH_FLAGS_START + 18); // quiz-accepted latch (Map050_EV005_SSB)
+    //
+    // VAR_POKEMONTEST is read POST-increment: Page1 stores the argmax result
+    // 0/1/2 and then `addvar(VAR_POKEMONTEST, 1)` (pory line 284), so the value
+    // downstream is 1=Orchynx, 2=Raptorch, 3=Eletux. 2 therefore = Raptorch,
+    // matching EV019's `if (var(VAR_POKEMONTEST) == 2)` Raptorch arm.
+    VarSet(RPG2GBA_VARS_START + 93, 2);           // VAR_POKEMONTEST = Raptorch
+    FlagSet(RPG2GBA_SELFSWITCH_FLAGS_START + 19); // quiz-complete latch (Map050_EV005_SSC)
     // The professor (local id 2) defaults to his quiz-time spot (14,6),
     // directly south of the machine (14,5) — the only tile from which the
     // machine is reachable (map.json collision: the machine alcove is walled
-    // at x=13/15, so (14,6) is the sole approach). Map050_EV005_Page1_Move2
-    // normally sidesteps him to (15,6) at the end of the real quiz script;
-    // since we skip straight past the quiz, replicate that repositioning
-    // here so the machine isn't blocked.
-    // TryMoveObjectEventToMapCoords(2, MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), 15, 6);
+    // at x=13/15, so (14,6) is the sole approach). At the end of the real quiz
+    // Map050_EV005_Page1_Move6 walks him one tile right (to 15,6) and faces him
+    // left; since we skip straight past the quiz, replicate that step-aside
+    // here so the machine isn't blocked. (Only the coords matter for reach —
+    // his facing is cosmetic and is left at the map.json default.)
+    TryMoveObjectEventToMapCoords(2, MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), 15, 6);
 }
 // END URANIUM PATHFINDER SLICE
 
