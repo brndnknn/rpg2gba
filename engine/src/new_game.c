@@ -154,7 +154,7 @@ static void WarpToTruck(void)
     // (Map049 @ 7,7, URANIUM_START_MAP) so the slice is reachable on boot.
     // Revert this block to restore vanilla new-game behavior.
     //
-    // POST-QUIZ HARNESS (starter-grant repro) — RE-ARMED 2026-08-02: the
+    // CAPTURE-TUTORIAL HARNESS — 2026-08-02: the
     // destination MUST be set here, before DoMapLoadLoop() runs (called from
     // CB2_NewGame(), which calls NewGameInitData(), which calls this
     // function) — a second SetWarpDestination+WarpIntoMap() call AFTER
@@ -165,12 +165,24 @@ static void WarpToTruck(void)
     // player's-house spawn, swap this back to the MOKI_TOWN_PLAYERS_HOUSE_1F
     // call below (kept commented, not deleted).
     // SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), MAP_NUM(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), WARP_ID_NONE, 7, 7);
-    // (14,18) — just inside the entrance rug — crosses a row of "Hey, where
-    // are you going?" barrier triggers at y=16 (coord_events gated on
-    // VAR_TEMP_F==0, which is fresh-boot default) that shove the player back
-    // south. Spawn past them instead, level with Theo (13,8) two rows below
-    // the professor's row (6).
-    SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), WARP_ID_NONE, 14, 8);
+    //
+    // Previous POST-QUIZ spawn, kept for the starter-grant repro: the lab at
+    // (14,8). (14,18) — just inside the entrance rug — crosses a row of "Hey,
+    // where are you going?" barrier triggers at y=16 (coord_events gated on
+    // VAR_TEMP_F==0, the fresh-boot default) that shove the player back south;
+    // (14,8) spawns past them, level with Theo (13,8), two rows below the
+    // professor's row (6).
+    // SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), WARP_ID_NONE, 14, 8);
+    //
+    // Moki Town (20,44), four tiles east of the capture tutorial's coord_event
+    // column. The tutorial fires from (16,43)/(16,44)/(16,45) — do NOT spawn on
+    // those. It must be approached HORIZONTALLY: x=16 is solid at y=40/41/42
+    // (verified by decoding the collision bits of data/layouts/MokiTown/map.bin,
+    // 72x64), so the "spawn north of the trigger in the same column" idea walks
+    // you into a wall. Row y=44 is passable clear across x=11..22, and (20,44)
+    // is clear of every object event on that row (Bambo 15,44 / Chyinmunk 12,44
+    // / Orchynx 13,44 / Theo 16,45). Walk west to fire.
+    SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN), MAP_NUM(MAP_MOKI_TOWN), WARP_ID_NONE, 20, 44);
     // END URANIUM PATHFINDER SLICE
     WarpIntoMap();
 }
@@ -362,14 +374,11 @@ void CB2_StartUraniumSlice(void)
     // VarSet(RPG2GBA_VARS_START + 93, 2);            // VAR_POKEMONTEST = Raptorch
     // VarSet(RPG2GBA_VARS_START + 53, 2);            // VAR_QUEST_LOG = 2 (S6b+S7 done)
 
-    // ---- POST-QUIZ HARNESS (starter-grant repro) — RE-ARMED 2026-08-02 ----
-    // Lands the player in the lab in the exact state the aptitude quiz leaves
-    // behind, so the starter grant is one step away: walk up to the machine.
-    //
-    // NOTE it defeats the chapter suite's fresh-start guarantee — with a quiz
-    // latch pre-set, beats B6/N3 (the aptitude offer and its No answer) are
-    // unreachable on a "new game". Comment this block back out (and revert the
-    // spawn in WarpToTruck) before running the chapter suite.
+    // ---- POST-QUIZ HARNESS (starter-grant repro) — DISABLED 2026-08-02 ----
+    // Superseded by the capture-tutorial harness below; kept for the next time
+    // the lab machine/battle needs a fresh repro. To re-arm: uncomment these
+    // two lines plus the TryMoveObjectEventToMapCoords, disable the block
+    // below, and point WarpToTruck() back at the lab (14,8).
     //
     // Uses SSC (+19), the quiz-COMPLETE latch set at the very end of
     // Map050_EV005_Page1 (pory line 283) — NOT SSB (+18), which the 2026-07-22
@@ -379,31 +388,58 @@ void CB2_StartUraniumSlice(void)
     // past it. With SSC set and VAR_QUEST_LOG still 0, Map050_EV005_Dispatch
     // falls through to Page2 (the post-quiz professor idle) and the quiz does
     // not re-run.
-    //
-    // Does NOT skip the machine/battle (Map050_EV019): that dispatch routes to
-    // its real Page1 while VAR_QUEST_LOG stays below its "already ran" gate.
-    // Party and FLAG_RECEIVED_STARTER/FLAG_HAS_*/FLAG_LOST_FIRST_BATTLE/
-    // FLAG_SYS_POKEMON_GET stay at fresh-boot default — EV019 sets those itself
-    // when the machine is triggered.
-    //
-    // The lab spawn itself is set in WarpToTruck() (must happen before
-    // DoMapLoadLoop, not after) — only flags/vars belong here.
-    //
-    // VAR_POKEMONTEST is read POST-increment: Page1 stores the argmax result
-    // 0/1/2 and then `addvar(VAR_POKEMONTEST, 1)` (pory line 284), so the value
-    // downstream is 1=Orchynx, 2=Raptorch, 3=Eletux. 2 therefore = Raptorch,
-    // matching EV019's `if (var(VAR_POKEMONTEST) == 2)` Raptorch arm.
-    VarSet(RPG2GBA_VARS_START + 93, 2);           // VAR_POKEMONTEST = Raptorch
-    FlagSet(RPG2GBA_SELFSWITCH_FLAGS_START + 19); // quiz-complete latch (Map050_EV005_SSC)
+    // VarSet(RPG2GBA_VARS_START + 93, 2);           // VAR_POKEMONTEST = Raptorch
+    // FlagSet(RPG2GBA_SELFSWITCH_FLAGS_START + 19); // quiz-complete latch (Map050_EV005_SSC)
     // The professor (local id 2) defaults to his quiz-time spot (14,6),
     // directly south of the machine (14,5) — the only tile from which the
     // machine is reachable (map.json collision: the machine alcove is walled
     // at x=13/15, so (14,6) is the sole approach). At the end of the real quiz
     // Map050_EV005_Page1_Move6 walks him one tile right (to 15,6) and faces him
     // left; since we skip straight past the quiz, replicate that step-aside
-    // here so the machine isn't blocked. (Only the coords matter for reach —
-    // his facing is cosmetic and is left at the map.json default.)
-    TryMoveObjectEventToMapCoords(2, MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), 15, 6);
+    // here so the machine isn't blocked.
+    // TryMoveObjectEventToMapCoords(2, MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), 15, 6);
+
+    // ---- CAPTURE-TUTORIAL HARNESS — ACTIVE 2026-08-02 ----
+    // Lands the player in Moki Town in the state left behind by BOTH the lab
+    // rival battle (Map050 EV019) and the PokePod scene at Theo's house
+    // (Map172 EV004), so the capture tutorial is the next thing available:
+    // walk west onto the coord_event column and it fires.
+    //
+    // NOTE it defeats the chapter suite's fresh-start guarantee — everything up
+    // to and including the PokePod scene is skipped. Comment this block out and
+    // revert the WarpToTruck spawn before running the suite.
+    //
+    // VAR_QUEST_LOG is the whole progression ladder for this slice, and the
+    // tutorial's dispatcher reads it as a >= chain:
+    //     >= 4  -> end (tutorial already done)
+    //     >= 2  -> Page3, the capture tutorial      <- we want exactly this
+    //     >= 1  -> Page2, "go fetch Theo" text only
+    //     else  -> Page1
+    // 0 = fresh boot, 1 = rival battle done (EV019 addvar), 2 = PokePod done
+    // (Map172 setvar), 4 = tutorial done (Map032 setvar; 3 is never written).
+    // So set exactly 2 — 3 would still work but is not a real value, and 4
+    // silently skips the tutorial forever.
+    VarSet(RPG2GBA_VARS_START + 53, 2);            // VAR_QUEST_LOG = 2 (post-PokePod)
+    // VAR_POKEMONTEST must agree with the party mon and the FLAG_HAS_* below —
+    // the tutorial reads it to pick its species text. A mismatch is cosmetic,
+    // not a soft-lock, but looks broken. 1=Orchynx, 2=Raptorch, 3=Eletux.
+    VarSet(RPG2GBA_VARS_START + 93, 2);            // VAR_POKEMONTEST = Raptorch
+    // The starter has to actually exist: FLAG_HAS_* and FLAG_SYS_POKEMON_GET are
+    // bookkeeping only, and setting them without a real mon leaves an empty
+    // party behind a party-shaped menu. EV019 normally does the givemon.
+    ScriptGiveMon(SPECIES_RAPTORCH, 5, ITEM_NONE);
+    FlagSet(FLAG_SYS_POKEMON_GET);                 // party shows in the START menu
+    FlagSet(FLAG_SYS_B_DASH);                      // running shoes (granted earlier in the chain)
+    FlagSet(RPG2GBA_GLOBAL_FLAGS_START + 0);       // FLAG_RECEIVED_STARTER
+    FlagSet(RPG2GBA_GLOBAL_FLAGS_START + 32);      // FLAG_HAS_RAPTORCH
+    FlagClear(RPG2GBA_GLOBAL_FLAGS_START + 10);    // FLAG_LOST_FIRST_BATTLE (won the rival battle)
+    // FLAG_SYS_POKEDEX_GET is deliberately NOT set — the tutorial grants it
+    // (along with 5 Poke Balls) as part of what we are here to test.
+    //
+    // No TryMoveObjectEventToMapCoords needed: Moki Town's ON_TRANSITION script
+    // clears FLAG_TEMP_11/FLAG_TEMP_14 while VAR_QUEST_LOG is in [2,4), which
+    // un-hides Theo (local 20 @16,45) and Bambo (local 21 @15,44) at their own
+    // standing spots. The tutorial addobject's its other actors itself.
 }
 // END URANIUM PATHFINDER SLICE
 
