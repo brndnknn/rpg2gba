@@ -366,6 +366,86 @@ def run_species_pass(out: Path, fork: Path, uranium_src: Path, dry_run: bool) ->
 
 
 # ---------------------------------------------------------------------------
+# S8b3: Trainer pic staging
+# ---------------------------------------------------------------------------
+
+# Header/inc filename -> engine-relative destination directory. Mirrors
+# _SPECIES_HEADER_DEST_DIRS above and trainer_converter/stage.py's module
+# docstring ("Generated files" list).
+_TRAINER_HEADER_DEST_DIRS: dict[str, str] = {
+    "uranium_trainer_front_pic_ids.h": "include/constants",
+    "uranium_trainer_back_pic_ids.h": "include/constants",
+    "uranium_trainer_graphics.h": "src/data/graphics",
+    "uranium_trainer_sprites.h": "src/data/graphics",
+    "uranium_trainer_backsprites.h": "src/data/graphics",
+}
+
+
+def run_trainer_pass(out: Path, fork: Path, uranium_src: Path, dry_run: bool) -> None:
+    """Convert the slice trainer pics (RIVAL front, PLAYER_MALE back) and
+    stage the overlay into the fork: run `trainer_converter.stage.stage_slice`
+    (always writes into `out/`, never `fork/`), then copy the generated
+    headers and per-trainer art into `$RPG2GBA_POKEEMERALD`.
+
+    Must run BEFORE S8c (`run_fork_pass`): the poryscript capability gate
+    there reads `trainer_manifest.json` from the same `out/trainers/` path
+    this pass writes it to, so an unstaged/stale manifest would silently
+    under-gate trainer-pic references.
+
+    Conversion + emission always run (writing only into `out/`, never
+    `fork/`) so a --dry-run log is a faithful preview of what WOULD be
+    copied; only the copies into `fork/` are gated by `dry_run` (via
+    `_copy`, matching every other pass in this script).
+    """
+    logger.info("=== S8b3: trainer pic staging ===")
+    from rpg2gba.trainer_converter import pics as trainer_pics
+    from rpg2gba.trainer_converter import stage as trainer_stage
+
+    trainer_dir = out / "trainers"
+    manifest_path = trainer_stage.stage_slice(uranium_src, trainer_dir)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    logger.info("  staged %d trainer pic(s) into the manifest", len(manifest["trainers"]))
+
+    # --- Copy generated headers into the fork tree ---
+    for name, dest_dir in _TRAINER_HEADER_DEST_DIRS.items():
+        _copy(trainer_dir / name, fork / dest_dir / name, name, dry_run)
+
+    # --- Copy per-trainer art into the fork tree ---
+    # stage.py bakes `graphics/trainers/uranium/<asset_dir>/<file>` engine-relative
+    # paths into its INCGFX declarations (uranium_trainer_graphics.h) and the
+    # manifest's art_files entries. A mismatch here is a silent build break
+    # (INCGFX would point at a file that was never copied), so assert
+    # agreement rather than assuming it.
+    expected_asset_dir = (
+        f"{trainer_stage.ENGINE_GFX_ROOT.as_posix()}/{trainer_stage.DEFAULT_ASSET_DIR}"
+    )
+    art_by_kind = {
+        "front": (trainer_pics.FRONT_PNG, trainer_pics.FRONT_PAL),
+        "back": (trainer_pics.BACK_PNG, trainer_pics.BACK_PAL),
+    }
+    for entry in manifest["trainers"]:
+        kind = entry["kind"]
+        if entry["asset_dir"] != expected_asset_dir:
+            raise RuntimeError(
+                f"trainer manifest asset_dir mismatch for {entry.get('internal_name')}: "
+                f"manifest says {entry['asset_dir']!r}, stage.py constants say "
+                f"{expected_asset_dir!r} — INCGFX paths and copy destinations would diverge"
+            )
+        png_name, pal_name = art_by_kind[kind]
+        for fname, art_key in ((png_name, "png"), (pal_name, "pal")):
+            src = trainer_dir / fname
+            dest_rel = entry["art_files"][art_key]
+            expected_dest_rel = f"{expected_asset_dir}/{fname}"
+            if dest_rel != expected_dest_rel:
+                raise RuntimeError(
+                    f"trainer manifest art path mismatch for {entry.get('internal_name')}: "
+                    f"manifest says {dest_rel!r}, expected {expected_dest_rel!r}"
+                )
+            dest = fork / dest_rel
+            _copy(src, dest, f"{entry.get('internal_name')} {art_key} ({kind})", dry_run)
+
+
+# ---------------------------------------------------------------------------
 # S8c: Fork assembly
 # ---------------------------------------------------------------------------
 
@@ -391,11 +471,13 @@ def run_fork_pass(
     # gitignored `uranium_*.gen.h` headers, so the index can never carry them;
     # they come from the same §4.3 SoT the transpiler resolves sheets through.
     npc_gfx_map_path = Path("reference/npc_gfx_map.json")
+    trainer_manifest_path = out / "trainers" / "trainer_manifest.json"
     gate_extras = fi.registry_extra_symbols(
         flag_state_path=out / "flag_state.json",
         map_constants_path=out / "porymap" / "map_constants.json",
         species_manifest_path=species_manifest_path if species_manifest_path.is_file() else None,
         npc_gfx_map_path=npc_gfx_map_path if npc_gfx_map_path.is_file() else None,
+        trainer_manifest_path=trainer_manifest_path if trainer_manifest_path.is_file() else None,
     )
     def _gate(pory_text: str, label: str) -> None:
         violations = fi.verify_script(pory_text, gate_index, extra_symbols=gate_extras)
@@ -677,6 +759,8 @@ def main() -> int:
                     help="Skip S8b (layout .bin already generated).")
     ap.add_argument("--skip-species", action="store_true",
                     help="Skip S8b2 (Uranium starter species already staged).")
+    ap.add_argument("--skip-trainers", action="store_true",
+                    help="Skip S8b3 (Uranium trainer pics already staged).")
     args = ap.parse_args()
 
     repo_root = Path(__file__).parent.parent
@@ -703,7 +787,7 @@ def main() -> int:
     if not args.skip_layout:
         run_layout_pass(out, consts, staging, args.dry_run)
 
-    if not args.skip_species:
+    if not args.skip_species or not args.skip_trainers:
         uranium_src_path = os.environ.get("RPG2GBA_URANIUM_SRC")
         if not uranium_src_path:
             print("RPG2GBA_URANIUM_SRC not set", file=sys.stderr)
@@ -712,7 +796,12 @@ def main() -> int:
         if not uranium_src.is_dir():
             print(f"Uranium source tree not found: {uranium_src}", file=sys.stderr)
             return 1
-        run_species_pass(out, fork, uranium_src, args.dry_run)
+
+        if not args.skip_species:
+            run_species_pass(out, fork, uranium_src, args.dry_run)
+
+        if not args.skip_trainers:
+            run_trainer_pass(out, fork, uranium_src, args.dry_run)
 
     run_fork_pass(out, fork, consts, staging, args.dry_run)
 

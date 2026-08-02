@@ -482,6 +482,11 @@ const u16 gTrainerBackPicPalette_Leaf[] = INCGFX_U16("graphics/trainers/back_pic
 const u16 gTrainerBackPicPalette_Pokedude[] = INCGFX_U16("graphics/trainers/back_pics/pokedude.png", ".gbapal");
 const u16 gTrainerBackPicPalette_OldMan[] = INCGFX_U16("graphics/trainers/back_pics/old_man.png", ".gbapal");
 
+// BEGIN URANIUM PATHFINDER SLICE — generated trainer pic INCGFX decls (rpg2gba).
+// GENERATED + gitignored; empty stub when no trainer pics are staged.
+#include "uranium_trainer_graphics.h"
+// END URANIUM PATHFINDER SLICE
+
 // The first two parameters invoke a front pic and palette by
 // calling a "TRAINER_PIC" constant (e.g. TRAINER_PIC_FRONT_HIKER), and
 // gTrainerFrontPic/gTrainerPalette pointers, (e.g "gTrainerFrontPic_Hiker" and "gTrainerPalette_Hiker").
@@ -498,6 +503,11 @@ const u16 gTrainerBackPicPalette_OldMan[] = INCGFX_U16("graphics/trainers/back_p
 
 const struct TrainerSprite gTrainerSprites[] =
 {
+// BEGIN URANIUM PATHFINDER SLICE — generated trainer front pic rows (rpg2gba).
+// GENERATED + gitignored; empty stub when no trainer pics are staged. Designated initialisers,
+// so these sit anywhere in the array body and grow it to fit.
+#include "uranium_trainer_sprites.h"
+// END URANIUM PATHFINDER SLICE
     TRAINER_SPRITE(TRAINER_PIC_FRONT_HIKER, gTrainerFrontPic_Hiker, gTrainerPalette_Hiker),
     TRAINER_SPRITE(TRAINER_PIC_FRONT_AQUA_GRUNT_M, gTrainerFrontPic_AquaGruntM, gTrainerPalette_AquaGruntM),
     TRAINER_SPRITE(TRAINER_PIC_FRONT_POKEMON_BREEDER_F, gTrainerFrontPic_PokemonBreederF, gTrainerPalette_PokemonBreederF),
@@ -734,6 +744,10 @@ const union AnimCmd *const sBackAnims_OldManPokedude[] = {
 
 const struct TrainerBacksprite gTrainerBacksprites[] =
 {
+// BEGIN URANIUM PATHFINDER SLICE — generated trainer back pic rows (rpg2gba).
+// GENERATED + gitignored; empty stub when no trainer pics are staged.
+#include "uranium_trainer_backsprites.h"
+// END URANIUM PATHFINDER SLICE
     TRAINER_BACK_SPRITE(TRAINER_PIC_BACK_BRENDAN, 4, gTrainerBackPic_Brendan, gTrainerPalette_Brendan, sBackAnims_Hoenn),
     TRAINER_BACK_SPRITE(TRAINER_PIC_BACK_MAY, 4, gTrainerBackPic_May, gTrainerPalette_May, sBackAnims_Hoenn),
     TRAINER_BACK_SPRITE(TRAINER_PIC_BACK_RED, 5, gTrainerBackPic_Red, gTrainerBackPicPalette_Red, sBackAnims_Kanto),

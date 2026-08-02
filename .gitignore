@@ -66,6 +66,16 @@ engine/src/data/pokemon/uranium_species_info.h
 engine/src/data/graphics/uranium_species_graphics.h
 engine/sound/uranium_cry_*.inc
 engine/graphics/pokemon/uranium/
+
+# Trainer battle pics (URANIUM PATHFINDER SLICE #include hooks in
+# include/constants/trainers.h and src/data/graphics/trainers.h) plus the emitted art.
+engine/include/constants/uranium_trainer_front_pic_ids.h
+engine/include/constants/uranium_trainer_back_pic_ids.h
+engine/src/data/graphics/uranium_trainer_graphics.h
+engine/src/data/graphics/uranium_trainer_sprites.h
+engine/src/data/graphics/uranium_trainer_backsprites.h
+engine/graphics/trainers/uranium/
+
 # Cries land beside the ~1161 TRACKED vanilla cry wavs, so they can't be
 # blanket-ignored by directory or extension — each staged species is listed
 # explicitly. NOTE (Phase 7): this list does not scale to the other 160

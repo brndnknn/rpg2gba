@@ -605,6 +605,7 @@ def registry_extra_symbols(
     map_constants_path: Path | None = None,
     species_manifest_path: Path | None = None,
     npc_gfx_map_path: Path | None = None,
+    trainer_manifest_path: Path | None = None,
 ) -> set[str]:
     """Collect Uranium-minted symbols the gate should accept beyond the index.
 
@@ -630,6 +631,13 @@ def registry_extra_symbols(
       constant under `states` contribute — the same table, and the same
       entries, the transpiler resolves through, so a sheet or state it would
       queue as unmapped cannot slip past the gate here.
+    - `trainer_manifest_path`: the trainer-pic staging manifest
+      (`output/uranium-build/trainers/trainer_manifest.json`, written by
+      `rpg2gba.trainer_converter.stage`) — `TRAINER_PIC_FRONT_URANIUM_*`/
+      `TRAINER_PIC_BACK_URANIUM_*` constants for the trainer pics that have
+      actually been staged. ONLY pics listed here pass the gate — mirrors the
+      species-manifest scoping discipline exactly; an unstaged trainer pic
+      constant must still be reported as a violation.
 
     Missing categories inside any of these files fail loud (KeyError) — a
     shape drift there means the registry changed and this glue must follow.
@@ -672,6 +680,14 @@ def registry_extra_symbols(
             for gfx in (entry.get("states") or {}).values():
                 if gfx:
                     extras.add(gfx)
+
+    if trainer_manifest_path is not None:
+        manifest = json.loads(trainer_manifest_path.read_text(encoding="utf-8"))
+        for entry in manifest["trainers"]:
+            if entry["kind"] == "front":
+                extras.add(entry["pic_constant"])
+            elif entry["kind"] == "back":
+                extras.add(entry["back_pic_constant"])
 
     return extras
 

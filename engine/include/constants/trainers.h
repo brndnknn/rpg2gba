@@ -187,8 +187,32 @@ enum __attribute__((packed)) TrainerPicID
     TRAINER_PIC_BACK_COUNT = (TRAINER_PIC_COUNT - TRAINER_PIC_FRONT_COUNT),
 };
 
+// BEGIN URANIUM PATHFINDER SLICE — generated trainer pic ids (rpg2gba; see engine/RPG2GBA_VENDOR.md).
+// GENERATED + gitignored; empty stubs when no trainer pics are staged.
+//
+// Deliberately NOT spliced into `enum TrainerPicID` above: data/event_scripts.s pulls this header
+// through tools/preproc, whose enum scanner cannot follow an #include inside an enum body
+// ("unterminated enum") — same limitation documented at constants/pokedex.h. So staged pics get
+// plain #defines chained off TRAINER_PIC_COUNT instead. The designated-initializer tables in
+// src/data/graphics/trainers.h take them fine and auto-grow to suit.
+#include "constants/uranium_trainer_front_pic_ids.h"
+#include "constants/uranium_trainer_back_pic_ids.h"
+// END URANIUM PATHFINDER SLICE
+
+// BEGIN URANIUM PATHFINDER SLICE — player back pic override (rpg2gba).
+// URANIUM_HAVE_PLAYER_BACK_PIC is defined by the generated header above only when the Uranium
+// protagonist back sprite is actually staged; otherwise these fall back to pristine behaviour.
+#ifdef URANIUM_HAVE_PLAYER_BACK_PIC
+#define TRAINER_BACK_PIC_PLAYER_MALE TRAINER_PIC_BACK_URANIUM_PLAYER_MALE
+#else
 #define TRAINER_BACK_PIC_PLAYER_MALE (IS_FRLG ? TRAINER_PIC_BACK_RED : TRAINER_PIC_BACK_BRENDAN)
+#endif
+#ifdef URANIUM_HAVE_PLAYER_FEMALE_BACK_PIC
+#define TRAINER_BACK_PIC_PLAYER_FEMALE TRAINER_PIC_BACK_URANIUM_PLAYER_FEMALE
+#else
 #define TRAINER_BACK_PIC_PLAYER_FEMALE (IS_FRLG ? TRAINER_PIC_BACK_LEAF : TRAINER_PIC_BACK_MAY)
+#endif
+// END URANIUM PATHFINDER SLICE
 
 #define FACILITY_CLASS_HIKER                 0x0
 #define FACILITY_CLASS_AQUA_GRUNT_M          0x1

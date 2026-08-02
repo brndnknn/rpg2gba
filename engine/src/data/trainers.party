@@ -16885,7 +16885,7 @@ IVs: 0 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
 === TRAINER_THEO_9 ===
 Name: Theo
 Class: Rival
-Pic: Youngster
+Pic: TRAINER_PIC_FRONT_URANIUM_RIVAL
 Gender: Male
 Music: Male
 Double Battle: No
@@ -16896,7 +16896,7 @@ Level: 5
 === TRAINER_THEO_10 ===
 Name: Theo
 Class: Rival
-Pic: Youngster
+Pic: TRAINER_PIC_FRONT_URANIUM_RIVAL
 Gender: Male
 Music: Male
 Double Battle: No
@@ -16907,7 +16907,7 @@ Level: 5
 === TRAINER_THEO_11 ===
 Name: Theo
 Class: Rival
-Pic: Youngster
+Pic: TRAINER_PIC_FRONT_URANIUM_RIVAL
 Gender: Male
 Music: Male
 Double Battle: No
