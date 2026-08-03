@@ -77,21 +77,27 @@ recorded in MEMORY.md:
   had already rejected). Guard: refuse to run if anything under `engine/data`
   or `engine/src` is newer than the ROM. Same class as the `.sav` residue bug
   (#22) and `BOOT_WALK_CHECKLIST` §8.
-- **`engine/src/new_game.c` currently boots a debug harness, not a fresh
-  game.** As of `d82a1453` it boots into Moki Town at (20,44) with the lab
+- ~~**`engine/src/new_game.c` currently boots a debug harness**~~ — **disabled
+  2026-08-02 (`5352fd2d`) once its walk passed; the suite has its fresh start
+  back.** Re-arm per the note above the block. Description kept because the
+  next harness will want the same coordinates and the same ladder reasoning:
+  as of `d82a1453` it booted into Moki Town at (20,44) with the lab
   rival battle and the Theo's-house PokePod scene already behind you, so the
   capture tutorial is the next thing reachable. `VAR_QUEST_LOG` is the ladder
   (0 boot, 1 rival battle, 2 PokePod, 4 tutorial done; 3 never written) and is
-  set to exactly **2** — 4 would skip the tutorial permanently. **This defeats
-  the chapter suite's fresh-start guarantee: comment the block out and revert
-  the `WarpToTruck` spawn before running the suite.** The keep-the-harness
-  decision is Done-log 2026-07-13 (#5); the block is dated and reversible.
+  set to exactly **2** — 4 would skip the tutorial permanently. Any harness
+  that pre-sets state defeats the suite's fresh-start guarantee, so the rule
+  stands for the next one: comment the block out **and** revert the
+  `WarpToTruck` spawn before running the suite. The keep-the-harness decision
+  is Done-log 2026-07-13 (#5); blocks are dated and reversible.
 - **Chapter harness + atlas exist and are the review vehicle** (`9fb29317`,
   `e4561b07`): `src/rpg2gba/playtest/` + `chapters/moki.py`, 17 beats
-  (B1–B14 plus interleaved negatives N2/N3; N1 dropped 2026-07-27 as a restatement
-  of B2), review ROM + contact sheets under `output/playtest/review/`. Last
-  GREEN 17/17 on `36cdee71` — **that predates `24adc744`/`2b31e2de`, so the
-  suite has not run since the EV009 retirement.**
+  (B1–B15 plus interleaved negatives N2/N3; N1 dropped 2026-07-27 as a restatement
+  of B2), review ROM + contact sheets under `output/playtest/review/`.
+  **GREEN 17/17, first attempt, fresh start, on ROM `b09d0e89` (2026-08-02) —
+  the first run against the retired EV009**, so B13/B14 (catch ceremony, and
+  its no-refire check) now pass on machine-generated script. Run it with
+  `python -m rpg2gba.playtest run --chapter moki --engine engine`.
 
 ### 7. Audio — everything is a `# audio` comment
 
