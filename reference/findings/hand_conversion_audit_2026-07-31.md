@@ -164,8 +164,9 @@ It retires once §5.1 lands.
 > implemented in `engine/src/event_object_movement.c`), the `setobjectgfx` macro in
 > `engine/asm/macros/event.inc`, the transpiler rule
 > (`transpiler._emit_route_with_gfx_swaps`), and the sheet→constant table
-> (`reference/npc_gfx_map.json`). Verification scene converts and emits; **not yet
-> boot-walked.** Remaining, corpus-wide rather than per-item: the table covers the
+> (`reference/npc_gfx_map.json`). **Verification scene BOOT-WALKED 2026-08-02 on
+> ROM `e0f6d30f` — PASSED** ("Theo spawns and the capture tutorial works as
+> expected"). Remaining, corpus-wide rather than per-item: the table covers the
 > sheets the slice uses, so the other 36 census maps' sheets are unmapped until
 > their art is converted, and a *pattern*-moving swap on an ordinary walk-cycle
 > sheet still queues by design.
@@ -313,7 +314,9 @@ carry a non-zero collision bit to block.
 
 > **Both DONE.** EV019 2026-08-01 (`d5ae2e3e`), EV009 2026-08-02 — seven deltas
 > into four table entries and three idioms, 35 source message units → 37 msgbox,
-> 0 queue entries. Neither is boot-walked yet.
+> 0 queue entries. **EV009 boot-walked 2026-08-02 (ROM `e0f6d30f`) — PASSED.**
+> EV019's scene rode the 2026-08-02 lab-scene pass on `36cdee71`; its restored
+> win/lose dialogue has not been read on device end to end.
 
 Retained in the hand bucket: **Map050 EV005** (aptitude test — genuinely
 irreducible by shape) and **Map049 EV021** (letter — endgame, deprioritised by

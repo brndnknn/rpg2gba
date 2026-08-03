@@ -1,397 +1,97 @@
-# Slice 1 TODO — Map 49 (Player's House 1F) ↔ 48 (2F) ↔ 32 (Moki Town)
+# Slice 1 TODO — the 8-map Moki pathfinder slice
+
+**Slice scope (SoT `tileset_converter/map_set.py` `SLICE_MAP_IDS`): 8 maps, not
+3** — **49** Player's House 1F (spawn @7,7) → **48** 2F → **32** Moki Town →
+interiors **50** Professor's Lab, **64**/**65** the two unnamed houses,
+**172**/**89** Theo's House 1F/2F. The old "49 ↔ 48 ↔ 32" title was stale from
+the 2026-07-13 interior expansion (#13); MEMORY.md corrected it 2026-07-16.
 
 Working checklist for finishing the pathfinder slice to the §9 bar (boots in
 mGBA, genuinely playable, warps/NPCs/layout/art all real). Commit updates as
-items close; move an item to **Done** with a one-line result rather than
+items close; move an item down a section with a one-line result rather than
 deleting it. Facts here are pointers — the cited code/docs stay authoritative.
+Item numbers are stable ids (MEMORY.md, SLICE2_TODO.md and the findings docs
+cite them) — never renumber; sections carry the status.
+
+**Sections:** *Open* = work still to do. *Landed — awaiting the §9 boot-walk* =
+built and green in tests/harness, not yet passed on device. *Closed* = fixed
+**and** verified. *Done* (bottom) = the older one-line closure log.
+
+**Audited 2026-08-02** against `git log`, the code, and
+`reference/findings/hand_conversion_audit_2026-07-31.md`; corrections are
+marked inline as `**Corrected <date>:**` rather than silently rewritten.
+Current suite: **1631 tests collected**.
 
 ## Open
 
-### 24. `pbAddPokemon` is a ceremony, not a bare `givemon` — BUILT 2026-08-01, boot-walk pending
+### 28. Hand-conversion audit remediation — 3 done, 3 open, 1 partial (ADDED 2026-08-02)
 
-**User ask:** show the Pokémon's sprite when you actually receive it, and make
-it general for every later gift.
+The audit that reshaped the last two weeks of work was never tracked here.
+SoT: **`reference/findings/hand_conversion_audit_2026-07-31.md`** (written
+`11dcf36f`, after a PC playthrough found three shipped defects in the Map050
+starter scene, all traceable to one under-justified hand conversion). Status of
+its §5 remediation plan, verified in code 2026-08-02:
 
-**It was never ours to invent — we were dropping it.** Essentials'
-`pbAddPokemon` (`scripts_dump/170__PSystem_Utilities.rb:1710`) is
-*"{player} obtained {species}!"* + `\me[PU-PokemonObtained]` + `pbNicknameAndStore`
-(nickname prompt, party or box). We emitted a bare `givemon` +
-`FLAG_SYS_POKEMON_GET`, dropping a sprite, a fanfare, a message and a prompt at
-**26 call sites across 11 events**.
+| § | Item | Status |
+|---|---|---|
+| 5.1 | Expose live sprite swap (move-cmd 41) | **DONE** — see #6 |
+| 5.2 | Merge back-to-back `applymovement` | **DONE** — `transpiler._merge_consecutive_routes` (`transpiler.py:853`), applied at `:1229` |
+| 5.3 | Source→emitted dialogue census as a build gate | **OPEN** — nothing counts code-101/401 against emitted `msgbox`; the 2026-07-25 `TextGate` validates tags/box width, not coverage. Must also cover `hand_conversions/`, which `hand_overrides.py:63` splices in verbatim |
+| 5.4 | Raise the hand-bucket bar; close the `legacy_unaudited` hatch | **PARTLY** — the "census the blocking construct first" bar is being applied in practice (EV009/EV005 retirements), but `queue_evidence.py:241` still only **warns** on `legacy_unaudited`; the CLAUDE.md §4.1 / `hand_conversions/` README text was never written |
+| 5.5 | Model scripted-route collision stalls (cutscene routes) | **OPEN** — `route_sim.py` is still wired only through `metadata_wiring` for page-level `move_type==3`; embedded `applymovement` routes never check collision |
+| 5.6 | Emit `MB_COUNTER` (passage bit `0x80`, masked off at `tile_map.py:50-53`) | **OPEN** — engine-native, zero custom C |
+| 5.7 | Retire the hand conversions | **DONE** — EV019 `d5ae2e3e`, EV005 `edbec873`, EV009 `2b31e2de`; `hand_conversions/` now holds **`Map049_EV021.pory` only** |
 
-Every piece has a native host, and vanilla's own gift flow
-(`LittlerootTown_ProfessorBirchsLab/scripts.inc:333-372` +
-`data/scripts/pc_transfer.inc`) is the same primitives in the same order, so
-this is a §4.7 restoration: `bufferspeciesname` → `showmonpic` → `givemon` →
-branch on `VAR_RESULT` (`MON_GIVEN_TO_PARTY` / `MON_GIVEN_TO_PC` /
-`MON_CANT_GIVE`) → `playfanfare MUS_OBTAIN_ITEM` + `message`/`waitmessage`/
-`waitfanfare` → `gText_NicknameThisPokemon` YES/NO →
-`Common_EventScript_GetGiftMonPartySlot` + `NameReceivedPartyMon` (or
-`NameReceivedBoxMon` + `TransferredToPC`), full party/full box handled by
-`Common_EventScript_NoMoreRoomForPokemon`.
+Audit §6 "still open", also untracked here:
 
-**`pbAddPokemonSilent` (6 sites) deliberately keeps the bare `givemon`** — the
-silent form is exactly the one Essentials defines as ceremony-free, so the old
-conversion was right for it and wrong for the loud one.
+- **`Map049_EV020`** — the other `legacy_unaudited: true, greps: []` ledger
+  entry, with **no file** under `hand_conversions/`. May already be moot (absent
+  from the 2026-07-24 slice dry-run). Needs the audit EV019 got, or retirement.
+- **Map050 EV005 text ratio** — 102 source strings → 60 emitted. The hand
+  bucket is retired but the ratio was never explained; it is the strongest
+  argument for §5.3.
+- **`pbStarterSelector`** — partly answered since (it is a reveal + personality
+  read; #23 emits it, #27 dropped its redundant `showmonpic`). What remains
+  unread is the Uranium source for the *cutscene* the playthrough reported at
+  this point.
+- **Harness cannot see NPCs** — nothing in `src/rpg2gba/playtest/` reads
+  `gObjectEvents` (confirmed 2026-08-02: no reference in any module), so it
+  knows the player's position and nothing about any other actor. The symbol is
+  in `engine/pokeemerald.map`; only struct offsets need probing. #26's probe
+  established the stride facts (`gObjectEvents` 0x48, `gSprites` 0x44,
+  localId@0x08, graphicsId@0x04, spriteId@0x23) — productionizing them turns
+  the whole positioning class into one assertion.
+- **Contact sheets capture the wrong frame for geometry** — the 2026-07-27
+  change lands frames on the dialogue moment; staging shows in the aftermath.
+  Partly addressed by #21's `mark_frame()`, but beats that move NPCs want both.
 
-**Fork-index gap found doing this:** `STR_VAR_1` is assigned only in
-`engine/charmap.txt` — not in any constants header, not in `event.inc` — so the
-gate rejected `bufferspeciesname STR_VAR_1, ...`, *which is what vanilla itself
-writes*. `charmap.txt` is now scanned (`_extract_charmap_constants`,
-`_INDEX_FORMAT` 3→4), restricted to 2+-character ALL_CAPS names so the file's
-single-letter assignments can't let a typo'd `A` through.
+### 30. Dev-loop debt that gates the slice review (ADDED 2026-08-02)
 
-**Shipped:** `lab-doorstep.gba` sha1 `d39c55d6` (pristine `26408202`). 1544
-tests; moki GREEN 17/17 first attempt with the new nickname prompt in the path.
+Three harness-side facts that are load-bearing for the §9 gate and were only
+recorded in MEMORY.md:
 
-### 26. The machine STILL didn't animate — the swap never reached an object (BOOT-WALKED 2026-08-02, PASSED)
-
-**Symptom (user, lab-doorstep ROM `f64db6ca`):** #25 shipped per-state art and
-four distinct state swaps, and the machine still sat frozen through the whole
-starter scene.
-
-**Root cause — the object id was never remapped.** `staging`'s
-`local_id_remap` rewrites RMXP event ids into compiled object local ids for
-`REMAP_COMMANDS` (applymovement/setobjectxy/addobject/removeobject/turnobject).
-The gfx swap carries its target in `setvar(VAR_0x8004, <id>)`, an argument to a
-*special*, so the pattern never saw it: the compiled script asked for local id
-**19** (Map050 EV019's RMXP id) on a map whose object_events array is four
-entries long — the machine is local id **3**.
-`TryGetObjectEventIdByLocalIdAndMap` found nothing and returned, so all four
-swaps were no-ops. That failure is silent by construction — no compile error,
-no queue entry, nothing at runtime. `applymovement(19, …)` in the same routes
-*was* remapped, which is why the choreography looked fine.
-
-`local_id_remap` now recognises the swap block as a second reference shape
-(`iter_object_id_refs`, shared with `stage_slice_scripts._scan_required_actor_ids`
-so a swap-only target still gets spawned), and a `RPG2GBA_SetObjectEventGfx`
-call it can't pair with a target is a hard error — shape drift has to be loud
-here because it is invisible in the ROM.
-
-**Second, real bug underneath it (engine).** Even with the right object, the
-swap wouldn't have shown: `ObjectEventSetGraphics` repoints `sprite->images`
-but issues no tile copy — the copy comes from the sprite anim engine
-(`AnimCmd_frame`). Every swap runs inside a `lockall`, and `FreezeObjectEvents`
-sets `animPaused` on every non-player object event sprite, so `ContinueAnim`
-never reaches the next frame command and the tiles stay stale until the object
-respawns. `RPG2GBA_SetObjectEventGfx` now re-begins the sprite's anim
-(`BeginAnim` is not gated on `animPaused`), mirroring `SpawnObjectEventOnMap`.
-
-**Verified, not assumed** (scratchpad probe, method: read the machine's
-`gObjectEvents` entry every frame and compare the 2048 bytes at its sprite's
-`oam.tileNum` against each of the 9 state cells' ROM bytes — the sheet is
-uncompressed, so ROM bytes == VRAM bytes):
-
-```
-f9070 gfx=415 showing=D2P0(idle)   f9203 gfx=422 showing=D2P2
-f9071 gfx=415 showing=D2P1         f9205 gfx=422 showing=D6P2
-f9078 gfx=416 showing=D2P1        f10699 gfx=419 showing=D6P2
-f9079 gfx=416 showing=D2P2        f10700 gfx=419 showing=D4P2
-```
-
-All four scripted states now reach VRAM, one frame after the special. Eye
-check on the cropped machine region confirms it: empty dome → ball loaded →
-dispensing.
-
-**Shipped:** `lab-doorstep.gba` sha1 `36cdee71` (pristine `61edf53f`). 1571
-tests; moki GREEN 17/17 first attempt. **Boot-walked 2026-08-02 — user
-passed the lab scene** (machine animates on device; single starter sprite).
-
-### 27. The starter's sprite popped up twice — reveal now leaves it to the ceremony (BOOT-WALKED 2026-08-02, PASSED)
-
-**User call:** #24's `pbAddPokemon` ceremony (sprite + "obtained" fanfare +
-nickname prompt) is the one to keep; the `pbStarterSelector` reveal's own
-`showmonpic` a few lines earlier is redundant and fires for both the player's
-pick and Theo's. Dropped from `_emit_starter_selector_over` — the reveal is
-speech now (fade wrapper and per-arm species resolution unchanged, so an arm
-whose starter has no staged constant still refuses to emit).
-
-### 25. The lab machine didn't animate — BUILT 2026-08-01, superseded by #26
-
-Reported twice; the earlier direction-carrying fix was never going to be
-enough. **The sheet had exactly one frame in the ROM.** `PU-PokeballMachine` is
-a `graphics/sprites.py` `LARGE_PROP_SHEETS` entry, so `sprite_emit` gave it the
-fork's 64×64 static-object treatment (`gObjectEventGraphicsInfo_RayquazaStill`
-convention): `.anims = sAnimTable_Inanimate`, `.inanimate = TRUE`, and a
-one-frame pic table. No script command can show a frame that isn't in the ROM,
-so both the pattern selection *and* the direction carry were dead for it.
-
-**A large prop is not a walk cycle — every grid cell is a selectable STATE.**
-RMXP re-poses a static prop with a code-41 Change Graphic that names the sheet
-it's already wearing and moves only `(direction, pattern)`. The conversion now
-treats those as states end to end:
-
-- `graphics/sprites.py` extracts every **non-empty** cell as its own frame,
-  recording `ConvertedSprite.states` (index-aligned `(direction, pattern)`),
-  all anchored with one shared offset so the prop doesn't hop between states.
-  The machine yields 9: directions 2/4/6 × patterns 0/1/2 (row 8 and column 3
-  are blank in the art).
-- `graphics/sprite_emit.py` emits one `ObjectEventGraphicsInfo` + one
-  `OBJ_EVENT_GFX_URANIUM_*` id per state, each over a one-frame pic table
-  (`overworld_frame(strip, 8, 8, k)`, `engine/include/sprite.h:35`) indexing
-  the sheet's **single** strip PNG and palette. `sAnimTable_Inanimate` only
-  ever shows frame 0, so a state has to *be* frame 0 of its own table. The idle
-  state (2,0) keeps the bare constant, so every already-placed object_event and
-  the existing `"gfx"` entry keep resolving; the rest are suffixed
-  `_D<dir>P<pattern>`. `NUM_URANIUM_OBJ_EVENT_GFX` now counts constants (40),
-  not sheets (32).
-- `reference/npc_gfx_map.json` (§4.3 SoT) gains a `"states"` map, cross-checked
-  against the real PNG's non-empty cells on every sprite pass
-  (`sprite_pass._check_declared_states`) — declaring a state the art lacks, or
-  emitting one the JSON never declared, fails loud.
-- The transpiler's code-41 resolves `(sheet, direction, pattern)` → that
-  state's constant; the facing block and the pattern-drop queue note are gone
-  for state sheets (nothing is dropped), and a state with no cell queues.
-  Walk-cycle sheets keep the old facing-carry behaviour unchanged.
-- `metadata_wiring.build_object_events` places a multi-state prop in its boot
-  page's own authored state, so a page authored mid-sequence (Map050 EV019 p2
-  is `(4,2)`) boots showing that, not the idle cell.
-- The fork gate (`fork_index.registry_extra_symbols`) accepts the per-state
-  constants, same as the sheet's own.
-
-All four Map050 swaps now target distinct states (`Map050.pory` D2P1 / D2P2 /
-D6P2 / D4P2). Verified by eye against a fresh-boot replay: the machine is the
-idle unit through B6/N3 and a visibly different unit after the quiz.
-
-**Corpus note:** 1115 code-41 uses across 44 maps, 30 sheets used with more
-than one `(direction, pattern)`. Only the large-prop subset is converted this
-way — ordinary NPC sheets are genuine walk cycles whose frames the fork drives
-itself, and their pattern-moving swaps still queue as before.
-
-**Shipped:** `lab-doorstep.gba` sha1 `f64db6ca` (pristine `583a431f`). 1564
-tests; moki GREEN 17/17 first attempt.
-
-### 23. Map050 EV005 retired onto the transpiler — BUILT 2026-08-01, boot-walk pending
-
-The last hand conversion in the lab is gone; `hand_conversions/` is down to
-Map032_EV009 and Map049_EV021. Queue entries on the event: **14 → 0 on the
-quiz page** (the 8 that remain are pages 3/6/7, the Pokédex-reward pages,
-which the hand file also left queued — it was verbatim transpiler output
-there). Three transpiler features, all corpus-censused first:
-
-1. **RMXP Label (118) / Jump to Label (119)** — the intra-page goto, now a
-   basic-block hoist: the labelled region becomes its own `script` and both
-   the fall-through and every jump become `goto`. **Corpus reach: 51 labels /
-   138 jumps over 23 names.** Scoped to regions that provably TERMINATE
-   (run to page end, or end on a same-indent code-115), because a hoisted
-   block has no way to fall back into an enclosing branch/choice arm — 31 of
-   51 labels qualify; the rest queue. Pages with more than one label also
-   queue (the regions nest; chaining them is its own unit). Hoisted blocks
-   inherit the trigger's *epilogue* only — which is the general fix for the
-   freeze the hand file had to patch by hand (W8 fix A).
-2. **Array-valued game variables** — `$game_variables[N]=[0,0,0]`, the
-   indexed bump `pbGet(A)[pbGet(B)]+=1`, and the `index(max)` argmax with its
-   `if x==1 / x=0` permutation. **Corpus reach: 1 site, this event** — so
-   this is deliberately a narrow idiom, not a general array subsystem, and
-   `test_aptitude_tally_is_still_one_of_a_kind` pins the count so a second
-   site re-opens the design. The emitted argmax is byte-identical to the
-   hand version you boot-verified on 2026-07-21, 32767 sign-test included.
-3. **`pbStarterSelector(pbGet(N))`** — the player's own reveal, which takes
-   the variable directly rather than through Ruby arithmetic (0-based domain,
-   vs Theo's 1-based). Shares one emitter with the Theo form now.
-
-**Visible payoff:** your own starter reveal is no longer one line — it's the
-mon sprite plus the full 5–6-line personality read, matching Theo's.
-
-**Also fixed, and it corrects something I told you earlier:** RMXP code-41
-Change Graphic sets sheet *and* (direction, pattern), and props use those to
-pick a STATE. We only ever emitted the sheet, so Map050's pokéball machine
-swapping to its own sheet twice was a **visible no-op** — the "machine
-visibly changes" claim on 2026-08-01 was wrong. Direction has an exact analog
-(the object's facing selects the same row of the converted 4-direction
-sheet), so it now emits as facing. `pattern` — the frame within the row — has
-none, and a swap that selects one now files a queue entry instead of
-pretending. EV005's two machine swaps are direction-2 both times, so that
-animation is still a frame-only drop, now loudly recorded.
-
-**Shipped:** `lab-doorstep.gba` sha1 `4eb25ce1` (pristine `9c118fec`),
-taildropped 2026-08-01. 1538 tests pass; moki GREEN all 17 beats first
-attempt, incl. N3 (the retake path, which is what exercises the new
-label/goto hoist).
-
-### 22. Stamped review ROMs were shadowed by save-file residue — FIXED + RETEST PASSED 2026-08-01
-
-**Symptom (user, lab-doorstep ROM `a86e073c`):** the ROM should boot on the lab
-doorstep with the Auntie + Theo-cameo prerequisites done. Instead it showed a
-spot near the player's-house exit, with **no player sprite and dead input** —
-viewport frozen.
-
-**Root cause:** `CB2_StartUraniumSlice` (`engine/src/new_game.c`) tested
-`gSaveFileStatus == SAVE_STATUS_OK || UraniumEmbeddedSave_TryLoad()` — *flash
-first*. Any leftover `.sav` on the test device therefore won the race and the
-stamped blob was never loaded, so the ROM continued an older build's save
-whose map/coords no longer line up (hence the missing player object).
-Reproduced headlessly: pairing the stamped ROM with a foreign `.sav` booted
-into the player's house at (7,7) instead of Moki Town (17,12). The ROM's
-*stamped state itself was always correct* — a fresh-flash boot passed, which is
-why this was never caught.
-
-**Fix:** swap the order — the blob wins. `TryLoad()` returns FALSE untouched
-when `magic == 0`, so a pristine ROM still continues a flash save and a player
-keeps in-game saves across launches. Consequence, by design: on a *stamped*
-ROM an in-game save is inert; every boot returns to the stamped state.
-
-**Invariant pinned:** `playtest.stamp.verify_stamped_rom` — every
-`python -m rpg2gba.playtest.stamp` now re-boots the stamped ROM **with a
-deliberately foreign `.sav` paired** and asserts map/pos/field-unlocked. A
-fresh-flash boot passes either way, so the foreign save is the whole point.
-
-**Collateral found + fixed:** the fork-index gate had no extras for the
-`OBJ_EVENT_GFX_URANIUM_*` constants the sprite pass mints into generated,
-gitignored `uranium_*.gen.h` headers, so the transpiler's code-41 live sprite
-swap (added 2026-07-31, `d5ae2e3e`) gated as an invented constant and
-`transpile_driver run --maps slice` aborted on Map050. **The whole slice was
-unbuildable, and the ROM shipped on 2026-07-31 did not contain that commit's
-Map050 conversion at all** (`scripts/Map050.pory` on disk was still dated
-07-30, and `scripts.inc` had zero `RPG2GBA_SetObjectEventGfx`) — the commit
-message's "moki chapter GREEN on transpiler-generated Map050 EV019" was not
-backed by the artifacts. Extras now flow from `reference/npc_gfx_map.json`
-(the same §4.3 SoT the transpiler resolves sheets through) in both
-`transpile_driver` and `assemble_pathfinder`; two tests pin it. With the gate
-fixed, the real conversion built and moki went GREEN on all 17 beats.
-
-**Shipped:** `lab-doorstep.gba` sha1 `9596c8b7` (pristine `128f2edd`),
-taildropped 2026-08-01. **User boot-walked it the same day: correct spawn, and
-the lab scene now carries the real EV019 conversion — "it includes a lot more
-than before".** Committed `a4a97e2a`.
-
-### 20. Chapter harness planned routes on the *previous* map's grid — FIXED 2026-07-30, moki GREEN
-
-**Symptom:** moki beat B4 failed deterministically (same frame `f3464` across
-four runs) — `walk_to(27,17)`'s BFS reported *no planned route from (28,31)*
-on Map032, and the greedy fallback walked the player back through the house
-door. **The ROM was never wrong**; nothing was visible in a hand boot-walk.
-
-**Root cause:** a warp writes `SaveBlock1.location` in `ApplyCurrentWarp`
-(`engine/src/overworld.c:620`) long before it rebuilds `gBackupMapLayout` in
-the `InitMap` call inside `LoadMapFromWarp` (`overworld.c:982`).
-`_wait_for_map` polls *location*, so it returned inside that window: measured
-at the failing instant, `map_location`=(75,2) MokiTown and `player_pos`=(28,31),
-but the grid was still the house's 45×29 (→30×15). The goal (27,17) fell
-outside those bounds, so BFS returned `None`, and `_route_waypoints`' documented
-"harmless" greedy fallback stepped off (28,31) — which *is* the warp back into
-Map049. 30 frames later the grid read 87×78 and BFS found a 410-tile reachable
-set. The field lock is no signal either: `CB2_LoadMap` calls
-`UnlockPlayerFieldControls` on the way in, so controls read unlocked all
-through the window — which is why the 2026-07-27d "wait the lock out first"
-experiment changed nothing and was (correctly) reverted.
-
-**Why it regressed:** latent race, tipped by 27d's `RPG2GBA_FADE_DELTA_Y 4`.
-The fade speedup moved where the 10-frame poll lands relative to the layout
-rebuild. MEMORY.md's note that "fade constants cannot reach the BFS" was wrong
-— they reach it through *when* the grid is read, not what it contains.
-
-**Fix (harness only, no converter or engine change):** `Emulator` grew
-`_grid_dims_for_current_map` / `map_grid_loaded` / `wait_for_map_grid`, keyed
-on `gMapHeader.mapLayout`'s own dimensions plus the border margin
-(`fieldmap.c:171-174`); `walk_to` waits for the grid before planning, and
-`_map_grid` refuses a grid whose dims disagree with the current map header.
-`_plan_route` now *raises* on a goal outside the grid bounds instead of
-returning `None` — that shape is a wrong grid, not a planner blind spot, and
-degrading it to greedy is exactly what caused the damage.
-
-**Invariant pinned:** nothing asserted the grid belonged to the map the game
-reports being on. Five new tests in `tests/test_playtest.py` cover it (dims
-match/mismatch, `_map_grid` refusal, the wait's success and timeout, and the
-out-of-bounds-goal raise). 1471 tests pass; **moki is GREEN, all 17 beats,
-first attempt** on ROM `ec2fb783`.
-
-### 21. Contact-sheet tiles can now be chosen by the beat — DONE 2026-07-30
-
-The sheet's two automatic rules (last completed message, else the live frame
-at the beat boundary) can't serve a beat whose interesting moment is neither.
-`Emulator.mark_frame()` pins the current frame as that beat's tile: sticky
-(later dialogue won't silently override an explicit choice), refuses a
-blank/mid-fade frame unless `force=True`, cleared per beat by `waypoint`.
-Still one tile per beat, no runner change.
-
-**B6 rewired on the back of it.** It ran *zero* frames — asserting only that
-the field was still locked — so it proved nothing B5 hadn't and its tile was
-a duplicate of B5's; the Yes/No prompt is only reached later, inside N3's
-mash. New observable `Emulator.yesno_prompt_up()` scans `gTasks` exactly as
-`FuncIsActiveTask` does, for the handler `ScriptMenu_YesNo` installs
-(`script_menu.c:584-596`) — its lifetime *is* the prompt's, so no frame
-counting and no dependence on text speed. B6 now mashes Bambo's dialogue
-forward, stops the moment the prompt opens, asserts it opened, and pins that
-frame. **Its tile now reads "RED, are you ready to take the Trainer Aptitude
-Test?" with the YES/NO menu up.**
-
-`Task_HandleYesNoInput` is `static` and so never reaches the link map; new
-`symbols.static_fn_via_literal_pool` recovers it from `ScriptMenu_YesNo`'s
-literal pool (third sibling of the two existing accessor tricks), keeping the
-**Thumb bit** — `gTasks[i].func` stores the odd address, and comparing against
-the even one silently never matches. Deliberately not `gSpecialVar_Result ==
-0xFF`: multichoice sets that sentinel too, so it can't tell a yes/no prompt
-from one of the quiz's `dynmultichoice` questions.
-
-9 new tests; 1480 pass; chapter re-run **GREEN, all 17 beats**. Which option
-is *highlighted* is still unobservable — answers are still made by button.
-
-### 18. Gated doors collapse into unconditional warps — CONVERTER FIXED 2026-07-26, ROM re-run pending
-
-Found 2026-07-26 by the chapter harness (Moki beat B2: you could walk out of
-Player's House 1F without talking to Auntie). Full write-up:
-**`reference/findings/gated_door_collapse_2026-07-26.md`**.
-
-`classify_event` turned any player-touch event containing *any* code-201 into one
-unconditional `warp_event` and dropped the object_event, so multi-page doors lost
-their refusal pages silently (§4.5 violation). Map049 EV002's gate is Switch 52
-`FLAG_MUM`, set by Auntie — the Auntie side converted fine, only the door lost
-its gate.
-
-**Fixed:** collapse only when every *player-touch* page transfers (an autorun
-page must not gate a door — that distinction spares Moki Town's five house
-doors); gated doors emit a `coord_event` on their own cell, no relocation; the
-cell is unioned into the returned warp-override set so it keeps door metatile +
-collision 0. Verified in staged output: (10,11) → `Map049_EV002_Dispatch` gating
-on `FLAG_MUM`, (14,19) → `Map050_EV001_Dispatch` gating on `VAR_QUEST_LOG >= 1`
-(**this is beat B10's gate**), neither with a warp_event racing it. 1439 tests
-pass.
-
-**DONE 2026-07-27:** rebuilt (stage → assemble → `make modern`) and re-ran the
-chapter suite — **B2 passes on ROM `1066eac4`/`90757612`**, the door refuses
-until Auntie sets `FLAG_MUM`. Corpus-wide follow-up (341 events / 75 maps
-pre-narrowing, not re-measured) stays out of slice-1 scope.
-
-### 19. Per-page RMXP trigger types are ignored — FIXED 2026-07-27, chapter suite GREEN
-
-`classify_event`/`build_object_events` emit one `coord_event` per event and
-`build_page_dispatcher` selects by page *condition* only, so a page whose RMXP
-trigger differs from its siblings' fires the wrong way. Live case: Map032 EV009
-("Trainer(6)", the west-exit ceremony host) has pages 0-2 at trigger 2 (player
-touch) and **page 3 at trigger 0 (action button)**; at `VAR_QUEST_LOG >= 4` the
-converted page 4 `lock`s and prints on every walk over (16,43)-(16,45), where
-Uranium needs an A press on an opacity-0 event — effectively never.
-
-Same family as #18's gated-door fix (that was a per-page trigger distinction
-too) and the "base-page own condition ignored" deferral.
-
-**Fixed:** dispatch is now channel-aware (`metadata_wiring`). `CHANNEL_TOUCH`
-(a walk-on `coord_event`) dispatches only touch pages (1/2); `CHANNEL_ACTION`
-(an event's primary talkable host) keeps today's action + bump→talk
-approximation; `CHANNEL_ACTION_ONLY` serves the **new secondary host**: an
-event whose host is a `coord_event` but which also has action pages now emits
-a `bg_event` sign on its own tile (`Map###_EV###_ActionDispatch`), so the
-A-press pages stay reachable exactly as in RMXP without becoming a second way
-to fire the walk-on ones. `_goto_or_end` takes the channel and `end`s any page
-whose trigger it doesn't serve (the autorun/parallel rule is now a case of the
-general one).
-
-Slice 1: 4 new signs on Map032 (EV009/074/078/080) + Map050 EV002; EV009's
-walk-on dispatcher now `end`s at `VAR_QUEST_LOG >= 4` instead of printing.
-Corpus reach: of 1183 walk-on hosts, **135 events across 50 maps carry 181
-action pages** that were firing on the wrong channel. 1444 tests pass;
-**chapter suite `moki` is GREEN, all 18 beats, first attempt** (ROM
-`d6a54593`; review ROM + contact sheets under `output/playtest/review/`).
-
-### 6. Pokédex-ceremony live sprite swaps (EV76 ball / EV77 starters)
-
-Deferred from task 4: RMXP change-graphic move-route commands on the ceremony
-events have no fork-native script-callable gfx swap (`VAR_OBJ_GFX_ID_x`
-resolves at spawn only). Recipe if wanted: `setvar` + `removeobject` +
-`addobject`. General limitation behind it: page-driven sprite changes aren't
-reflected — object gfx is the static boot page's. Judge in-game whether the
-ceremony reads acceptably without it.
+- **No ROM-vs-staged-source freshness guard.** The runner enforces
+  ROM-vs-blob provenance by sha256 but nothing checks the binary against
+  staging. It has already bitten twice (2026-07-25 harness run on a 45-min-old
+  binary; 2026-07-30 three days of runs against `1d1dde30`, a build the user
+  had already rejected). Guard: refuse to run if anything under `engine/data`
+  or `engine/src` is newer than the ROM. Same class as the `.sav` residue bug
+  (#22) and `BOOT_WALK_CHECKLIST` §8.
+- **`engine/src/new_game.c` currently boots a debug harness, not a fresh
+  game.** As of `d82a1453` it boots into Moki Town at (20,44) with the lab
+  rival battle and the Theo's-house PokePod scene already behind you, so the
+  capture tutorial is the next thing reachable. `VAR_QUEST_LOG` is the ladder
+  (0 boot, 1 rival battle, 2 PokePod, 4 tutorial done; 3 never written) and is
+  set to exactly **2** — 4 would skip the tutorial permanently. **This defeats
+  the chapter suite's fresh-start guarantee: comment the block out and revert
+  the `WarpToTruck` spawn before running the suite.** The keep-the-harness
+  decision is Done-log 2026-07-13 (#5); the block is dated and reversible.
+- **Chapter harness + atlas exist and are the review vehicle** (`9fb29317`,
+  `e4561b07`): `src/rpg2gba/playtest/` + `chapters/moki.py`, 17 beats
+  (B1–B14 plus interleaved negatives N2/N3; N1 dropped 2026-07-27 as a restatement
+  of B2), review ROM + contact sheets under `output/playtest/review/`. Last
+  GREEN 17/17 on `36cdee71` — **that predates `24adc744`/`2b31e2de`, so the
+  suite has not run since the EV009 retirement.**
 
 ### 7. Audio — everything is a `# audio` comment
 
@@ -456,7 +156,9 @@ enterable.
 dispositions 2026-07-15:**
 
 - Map032 NPC movement (M5 + all four map-feedback flags) → fixed under #12
-  (fine-tune round), rebuilt + taildropped 2026-07-15, retest pending.
+  (fine-tune round), rebuilt + taildropped 2026-07-15. **Corrected 2026-08-02:
+  not pending** — superseded the same day by #12's custom-route interpreter,
+  which the user walked clean on ROM `5158b084` ("movement issue is done").
 - Lab Pokédex ceremony trigger + void-walk (L section) → NEW item #14.
 - H4 post-warp facing → **FIXED + retest PASSED 2026-07-16** (native
   ON_WARP_INTO_MAP_TABLE + turnobject; see MEMORY.md "OPTION C" and Done #8).
@@ -484,11 +186,15 @@ dispositions 2026-07-15:**
   EV078/EV081 (same class). Retest **PASSED** — scene gone.
 - Story chain **S1–S5 PASS** on `c9128e58` (shoes, Theo trip tile, lab intro
   autorun, YES/NO prompt, NO-then-re-offer).
-- **Open frontier: S6** — answering YES to the aptitude test misbehaves
-  (details not yet gathered; next /debug session starts here, likely
-  overlapping #14's ceremony territory).
+- ~~**Open frontier: S6**~~ — **CLOSED 2026-07-21, boot-walk PASSED on ROM
+  `b0b21993`** (aptitude quiz + real starter species; the always-Eletux argmax
+  bug was the `32768`/`VAR_0x8000` literal collision, `b3b1b623`). See the Done
+  log's 2026-07-21 entry. The frontier moved to S6b, then to the lab scene
+  (#24–#27), which passed 2026-08-02.
 
-**2026-07-22 — S6b Theo loss-path FREEZE fix (ROM `f5867449`, taildropped; retest PENDING):**
+**2026-07-22 — S6b Theo loss-path FREEZE fix (ROM `f5867449`, taildropped).
+Corrected 2026-08-02: NOT pending — the user boot-walked both the win and the
+loss path and it was committed as `e84b8d0a`; S6b → PASSED.**
 
 - **Symptom:** after LOSING the Moki-lab rival battle (Map050 EV019), the game
   freezes on Theo's last line as the screen begins fading to black (image still
@@ -516,6 +222,46 @@ dispositions 2026-07-15:**
   touched — S6b win stays as PASSED). `waitmessage` kept (correct hygiene, now
   on a clean path). 1328 tests pass. Verified: hash `2010bbd0` → `f5867449`.
 
+### 13. Expand Moki interiors — BUILT 2026-07-14; maps 64/65/89 still unwalked
+
+Slice widened 3→8 maps; full chain (stage → assemble → `make modern`) clean
+2026-07-14, ROM taildropped. Built per
+`reference/guides/slice_expansion_runbook.md`.
+
+- **New maps:** 50 (Moki Town Professor Lab), 64 (MokiTownHouse2), 65
+  (MokiTownHouse1), 172 (Theo's House 1F), 89 (Theo's House 2F — reachable
+  only via 172's internal stairs, mirrors the 48/49 floor pattern).
+  `SLICE_MAP_IDS` / `ALLOWED_MAPS` / `WARP_OVERRIDES` all widened.
+- **Door dests resolved** (were "unrecorded"): Map032 EV003→50 (door 17,11),
+  EV006→64 (43,31), EV007→65 (24,42), EV017→172 (56,42). Interior exits
+  wired (64/65 EV003 @9,14; 172 street exit EV002 @10,11 + stairs EV003
+  @12,3).
+- **Still blocked, by design:** cave triad EV023/036/037→map 33 (Route 01,
+  slice-2 frontier) and **EV005** (door left unwired this round — inert
+  wall).
+- **Supporting work:** +11 `npc_gfx_map.json` entries (HGSS townsfolk,
+  PU-Cam, PU-Hazma, ZP-Professor2, PU-PokeballMachine); NEW `large_prop`
+  64×64 sprite class in sprites.py/sprite_emit.py (lab ball machine, 96×128
+  source, RayquazaStill-style static object); +3 `map_name_overrides`.
+- **Build facts:** mints 196 flags / 106 vars / 27 self-switches (16→27) /
+  8 temp-switches; ROM 78.88%; 1064 tests pass (npc_gfx count re-pinned
+  18→29; `test_build_slice_maps_smoke` cleared once the sprite pass
+  regenerated `uranium_event_objects.gen.h`). Map172 staging dropped 6
+  orphan pages (EV002/003/004×4 — non-emitted events).
+- **§9 boot-walk checklist:** 4 street doors warp in + exits warp back;
+  Theo 1F↔2F stairs; interior art + NPC palettes **by eye** (all converted
+  sheets share ≤4 palette banks — overflow is silent color garbage, the eye
+  is the gate); lab machine prop renders 64×64; nothing visibly missing in
+  Theo's house (the dropped orphan pages); interior NPCs sane. All
+  uncommitted — commit after the walk.
+
+**Corrected 2026-08-02 — partly walked, and long since committed.** Map050 has
+been walked repeatedly (07-17 story chain, 07-21 quiz, 08-01, 08-02 lab scene);
+Map172 is exercised by the PokePod scene the `new_game.c` harness now boots
+past (#30). **Still unwalked by eye:** houses **64/65**, **Map089** (Theo's 2F),
+and the interior-palette check on all five. Everything here is committed
+(the "all uncommitted" note was true only on 2026-07-14).
+
 ### 14. Lab Pokédex ceremony: wrong trigger + reposition walks into void (boot-walk 2026-07-14)
 
 In PC Uranium the ceremony autostarts on entering the lab (game takes
@@ -530,7 +276,618 @@ Moki-side ceremony; the Map-50 doorway coords differ — walk target likely
 off-map there). User deferred this behind the Map-32 fixes; localize per the
 /debug flow before touching anything.
 
-### 16. Auto-bracket flag-hidden actor spawns (promote EV074's hand fix into the pipeline)
+**Corrected 2026-08-02 — both suspects have moved; re-localize before working
+this.** (a) is largely addressed: `build_page_dispatcher` gained page-0
+condition scanning (07-17) and **channel-aware dispatch** (#19, 07-27), and the
+07-17 walk recorded **S3 "lab intro autorun" PASS**. (b)'s premise is gone —
+`hand_conversions/Map032_EV009.pory` was **retired 2026-08-02** (`2b31e2de`);
+the `y<=43` clamp is now a transpiler idiom (`getplayerxy` + `compare`,
+censused at 24 sites over 8 maps) and the Moki-side ceremony is fully
+machine-generated. What is *not* re-verified is the original symptom on a
+current ROM. **Next step: re-run the lab entry on the newest build and confirm
+whether this item still reproduces at all** — it may already be closed by
+#19 + the EV009/EV005/EV019 retirements.
+
+### 15. Theo intro cutscene missing (boot-walk 2026-07-15) — SEPARATE work unit, own session
+
+Boot-walk: Theo's intro cutscene (runs up → talks → runs ahead) entirely
+absent; no Theo anywhere on Moki Town. Root-caused 2026-07-15.
+
+**Root cause — the drop is CORRECT for boot state, not a bug in itself.**
+`select_boot_page` (`npc_gfx.py:114`) picks Theo's RMXP boot page, which the
+Uranium author drew with `opacity == 0` — Theo genuinely doesn't exist in town
+at game start. The converter drops opacity-0 events in `build_object_events`
+(`metadata_wiring.py:743-747`): opacity-0 + event-touch → reclassified to an
+invisible `coord` event (line 745); opacity-0 + action-trigger → fully dropped
+via `_drop(eid, DROP_OPACITY0)` (line 747). Confirmed against
+`output/uranium-build/maps/Map032.json`:
+- **EV075 "Theo"** (35,15), gfx `Rivaltheo`, boot page0 `opacity=0` trigger=0
+  (action) → `_drop(DROP_OPACITY0)`. Not emitted.
+- **EV009 / EV074** (intro trainers, gfx HGSS_014), boot page0 `opacity=0`
+  trigger=2 (event-touch) → become invisible coord events, not object events.
+- Ambient NPCs survive because their boot page is `opacity=255` from the start.
+
+So the missing thing is the **triggered cutscene**, not a standing NPC.
+
+**CORRECTION (logged):** an earlier roster read claimed "Theo stands at
+(35,15) at boot" — WRONG. It read the `Rivaltheo` graphic name and missed
+`opacity=0`. Theo is invisible at boot by design.
+
+**Story context (wiki-confirmed).** Moki intro = wiki step 5: after the lab
+starter test, Theo + Prof. Bamb'o run the catching tutorial at the west grass
+(Kevlar/Route-1 exit) and give Pokédex + Poké Balls. The whole ceremony cast is
+gated by **var 101 (intro/starter-ceremony progress counter; confirm the exact
+name in `reference/uranium_variables.json`)**: EV002 Theo (16,45, var101≥2/≥4),
+EV016 Bambo (15,44, var101≥1→ZP-Professor), EV075 Theo (35,15), EV076
+Chyinmunk76, EV077 Starter77, EV009/EV074 trainers, EV081 TheoChamp (switch
+125). See MEMORY "hand bucket" — `hand_conversions/Map032_EV009.pory` is the
+Pokédex-ceremony hand override (Moki-side; Map-50 lab-side is item #14).
+**Corrected 2026-08-02:** that hand file no longer exists — EV009 was retired
+onto the transpiler (`2b31e2de`); `hand_conversions/` holds `Map049_EV021.pory`
+only.
+
+**Fix scope — medium-large, higher-uncertainty. NOT "un-drop the actor"**
+(that would wrongly park Theo in town at boot). Needs, together:
+- (a) emit Theo as a **hidden actor the cutscene reveals/spawns** (not a static
+  boot NPC);
+- (b) convert the **trigger + var101 gating** that starts the scene (per-page
+  dispatcher exists from bug-#7 work; needs trigger-type wired);
+- (c) **reveal the opacity-0 actor mid-script** — ~~THE THORNY PART: no fork-
+  native script-callable live gfx/opacity swap~~ **SOLVED 2026-07-17 / 2026-08-02,
+  two ways:** the spawn/despawn half is automated by
+  `tileset_converter/hidden_actor_bracket.py` (#16 — `addobject`/`removeobject`
+  bracketing around a hidden actor's first/last reference, made branch-aware in
+  `2aeaa46a` specifically for the S7 Theo reveal), and the live *repaint* half is
+  now native: `setobjectgfx` → `RPG2GBA_SetObjectEventGfx` (#6). The
+  `VAR_OBJ_GFX_ID_x` "spawn only" claim is no longer the constraint;
+- (d) **run-up / run-ahead movement** = cmd-209 `applymovement` — ALREADY
+  handled by the transpiler (`_emit_move_route`, transpiler.py:1182);
+- (e) advance story flags on exit — handled.
+
+**Represents a whole class:** every rival/intro/story cutscene corpus-wide
+works this way (actor hidden at boot, revealed + choreographed by a gated
+trigger). Do it as its own focused session, not a bolt-on to the ambient-NPC
+interpreter (which is a different subsystem: autonomous `movement_type`, no
+actor-reveal). Distinct from the ambient movement work being built 2026-07-15.
+
+**First step when the session starts** (user declined this probe for now):
+pin the exact event/page that fires the scene and how it reveals Theo (opacity
+command? page-graphic swap? spawn?) — that determines whether (c)'s spawn
+recipe is truly required. Localize per the `/debug` flow before touching code.
+Cross-ref item #14 (lab ceremony, same trigger/reveal class on Map 50).
+
+**Status re-read 2026-08-02:** (a), (c), (d) and (e) all have machinery now,
+and the 07-17 walk recorded **S2 "Theo trip tile" PASS**, so the class is no
+longer blocked — this item is now mostly a *verification* task: walk the intro
+on a current ROM and record which beats are actually missing. The chapter
+suite's B-beats cover the trip tile and the ceremony re-cross (B13/B14) but not
+the run-up/run-ahead choreography by eye.
+
+## Landed — awaiting the §9 boot-walk
+
+### 29. Battle trainer sprites come from Uranium — BUILT 2026-08-02, boot-walk pending (ADDED 2026-08-02)
+
+`bbc20ee2`, untracked here. Theo wore a Youngster's face and the player threw
+from Brendan's back; both are converted now via a new corpus-general
+`src/rpg2gba/trainer_converter/` (front pics crop to opaque bbox → uniform
+scale into 64×64 → 15-colour quantize; back pics take a **union** bbox across
+all four frames so one crop window preserves inter-frame motion, then stack
+into the engine's vertical 64×256 sheet). Three source-art facts worth keeping:
+
+- **Back strips are 4 frames, not 5.** Uranium's own Ruby contradicts itself
+  (`090__PokeBattle_Scene.rb:1334` computes `numframes=width/height`, `:2131`
+  hardcodes `/5`); the art's opaque columns align to 4 equal cells in all ten
+  files. Four maps cleanly onto the engine's Hoenn table.
+- **Front pics aren't uniformly 160×160** — 98 are, 28 are 128×128, three are
+  one-offs up to 240×270; 38 of 129 blow the 15-colour 4bpp budget, so the
+  quantizer reduces rather than failing loud (a deliberate §4.5 exception).
+- **Pic ids are `#define`s chained off `TRAINER_PIC_COUNT`**, included after the
+  enum's closing brace — `tools/preproc`'s enum scanner can't follow a nested
+  `#include` (the same wall `constants/pokedex.h` documents).
+- The player back pic gets its own `sBackAnims_Uranium`: stock
+  `sBackAnims_Hoenn`'s idle slot is `sAnim_GeneralFrame3` because vanilla
+  sheets put idle at frame 3; ours are idle-first, so the stock table froze the
+  sprite on the throw pose.
+
+This closes the "Theo's battle sprite is a stock Youngster stand-in" cosmetic
+gap flagged during the 2026-07-21 S6b work. Verify by eye in the Theo battle.
+
+### 24. `pbAddPokemon` is a ceremony, not a bare `givemon` — BUILT 2026-08-01, walked in the 2026-08-02 lab pass
+
+**User ask:** show the Pokémon's sprite when you actually receive it, and make
+it general for every later gift.
+
+**It was never ours to invent — we were dropping it.** Essentials'
+`pbAddPokemon` (`scripts_dump/170__PSystem_Utilities.rb:1710`) is
+*"{player} obtained {species}!"* + `\me[PU-PokemonObtained]` + `pbNicknameAndStore`
+(nickname prompt, party or box). We emitted a bare `givemon` +
+`FLAG_SYS_POKEMON_GET`, dropping a sprite, a fanfare, a message and a prompt at
+**26 call sites across 11 events**.
+
+Every piece has a native host, and vanilla's own gift flow
+(`LittlerootTown_ProfessorBirchsLab/scripts.inc:333-372` +
+`data/scripts/pc_transfer.inc`) is the same primitives in the same order, so
+this is a §4.7 restoration: `bufferspeciesname` → `showmonpic` → `givemon` →
+branch on `VAR_RESULT` (`MON_GIVEN_TO_PARTY` / `MON_GIVEN_TO_PC` /
+`MON_CANT_GIVE`) → `playfanfare MUS_OBTAIN_ITEM` + `message`/`waitmessage`/
+`waitfanfare` → `gText_NicknameThisPokemon` YES/NO →
+`Common_EventScript_GetGiftMonPartySlot` + `NameReceivedPartyMon` (or
+`NameReceivedBoxMon` + `TransferredToPC`), full party/full box handled by
+`Common_EventScript_NoMoreRoomForPokemon`.
+
+**`pbAddPokemonSilent` (6 sites) deliberately keeps the bare `givemon`** — the
+silent form is exactly the one Essentials defines as ceremony-free, so the old
+conversion was right for it and wrong for the loud one.
+
+**Fork-index gap found doing this:** `STR_VAR_1` is assigned only in
+`engine/charmap.txt` — not in any constants header, not in `event.inc` — so the
+gate rejected `bufferspeciesname STR_VAR_1, ...`, *which is what vanilla itself
+writes*. `charmap.txt` is now scanned (`_extract_charmap_constants`,
+`_INDEX_FORMAT` 3→4), restricted to 2+-character ALL_CAPS names so the file's
+single-letter assignments can't let a typo'd `A` through.
+
+**Shipped:** `lab-doorstep.gba` sha1 `d39c55d6` (pristine `26408202`). 1544
+tests; moki GREEN 17/17 first attempt with the new nickname prompt in the path.
+
+**Status corrected 2026-08-02:** this shipped inside `36cdee71`, the ROM the
+user boot-walked and passed on 2026-08-02 — the lab scene was reported right on
+device with **the starter sprite showing once** (that single sprite *is* this
+ceremony, after #27 removed the duplicate). Not separately verified: the
+nickname prompt's box/PC arms (`MON_GIVEN_TO_PC` / `MON_CANT_GIVE`), which need
+a full party to reach.
+
+### 23. Map050 EV005 retired onto the transpiler — BUILT 2026-08-01, quiz path walked 2026-08-02
+
+The last hand conversion in the lab is gone; `hand_conversions/` is down to
+Map032_EV009 and Map049_EV021 (**corrected 2026-08-02: `Map049_EV021.pory`
+only** — EV009 retired in `2b31e2de`, see #31). Queue entries on the event: **14 → 0 on the
+quiz page** (the 8 that remain are pages 3/6/7, the Pokédex-reward pages,
+which the hand file also left queued — it was verbatim transpiler output
+there). Three transpiler features, all corpus-censused first:
+
+1. **RMXP Label (118) / Jump to Label (119)** — the intra-page goto, now a
+   basic-block hoist: the labelled region becomes its own `script` and both
+   the fall-through and every jump become `goto`. **Corpus reach: 51 labels /
+   138 jumps over 23 names.** Scoped to regions that provably TERMINATE
+   (run to page end, or end on a same-indent code-115), because a hoisted
+   block has no way to fall back into an enclosing branch/choice arm — 31 of
+   51 labels qualify; the rest queue. Pages with more than one label also
+   queue (the regions nest; chaining them is its own unit). Hoisted blocks
+   inherit the trigger's *epilogue* only — which is the general fix for the
+   freeze the hand file had to patch by hand (W8 fix A).
+2. **Array-valued game variables** — `$game_variables[N]=[0,0,0]`, the
+   indexed bump `pbGet(A)[pbGet(B)]+=1`, and the `index(max)` argmax with its
+   `if x==1 / x=0` permutation. **Corpus reach: 1 site, this event** — so
+   this is deliberately a narrow idiom, not a general array subsystem, and
+   `test_aptitude_tally_is_still_one_of_a_kind` pins the count so a second
+   site re-opens the design. The emitted argmax is byte-identical to the
+   hand version you boot-verified on 2026-07-21, 32767 sign-test included.
+3. **`pbStarterSelector(pbGet(N))`** — the player's own reveal, which takes
+   the variable directly rather than through Ruby arithmetic (0-based domain,
+   vs Theo's 1-based). Shares one emitter with the Theo form now.
+
+**Visible payoff:** your own starter reveal is no longer one line — it's the
+mon sprite plus the full 5–6-line personality read, matching Theo's.
+
+**SUPERSEDED 2026-08-01/08-02 — read #25 and #26 instead.** The paragraph below
+was right that the sheet-only emit made the swaps a visible no-op, and wrong
+about the remedy: `pattern` is **not** analog-less. For a large prop every grid
+cell is a selectable STATE, and #25 emits one `OBJ_EVENT_GFX_URANIUM_*` per
+`(direction, pattern)` cell — nothing is dropped and nothing queues for a state
+sheet. The "direction emits as facing, pattern queues" behaviour it describes
+survives only for ordinary **walk-cycle** sheets. #26 then found the swap was
+still reaching nobody (unremapped local id) plus an engine-side missing tile
+copy. Kept for the record:
+
+**Also fixed, and it corrects something I told you earlier:** RMXP code-41
+Change Graphic sets sheet *and* (direction, pattern), and props use those to
+pick a STATE. We only ever emitted the sheet, so Map050's pokéball machine
+swapping to its own sheet twice was a **visible no-op** — the "machine
+visibly changes" claim on 2026-08-01 was wrong. Direction has an exact analog
+(the object's facing selects the same row of the converted 4-direction
+sheet), so it now emits as facing. `pattern` — the frame within the row — has
+none, and a swap that selects one now files a queue entry instead of
+pretending. EV005's two machine swaps are direction-2 both times, so that
+animation is still a frame-only drop, now loudly recorded.
+
+**Shipped:** `lab-doorstep.gba` sha1 `4eb25ce1` (pristine `9c118fec`),
+taildropped 2026-08-01. 1538 tests pass; moki GREEN all 17 beats first
+attempt, incl. N3 (the retake path, which is what exercises the new
+label/goto hoist).
+
+## Closed — fixed and verified (kept for the record)
+
+### 31. EV009 retired + the gfx swap got a macro — BOOT-WALKED 2026-08-02, PASSED
+
+**User verdict (2026-08-02, ROM `e0f6d30f`): "Theo spawns and the capture
+tutorial works as expected."** That is the whole Moki-side Pokédex/capture
+ceremony running on device from fully machine-generated script — 331 hand
+lines retired, `getplayerxy` guards, the emote/move-code table entries and the
+`\v[3]` branch expansion all behaving. Build provenance: `engine/pokeemerald.gba`
+sha1 `e0f6d30f`, built 14:35 after HEAD `ea0f6dfe` (14:06), with nothing under
+`engine/data` or `engine/src` newer than the binary — so the walked ROM
+genuinely carried this conversion (the check #30 wants automated).
+
+Boot state was the `d82a1453` capture-tutorial harness, which un-hides the
+ceremony cast at `VAR_QUEST_LOG == 2`; "Theo spawns" therefore confirms the
+cast's placement and reveal, **not** the fresh-start intro run-up (still #15).
+
+
+
+Two commits nothing here tracked, both off the audit (#28):
+
+- **`24adc744` — `setobjectgfx localId, gfxId`**, the first custom macro in
+  `engine/asm/macros/event.inc` (sentinel-fenced), wrapping
+  `RPG2GBA_SetObjectEventGfx`. The swap's target is now a command's first
+  argument like every other object command, so `local_id_remap` drops the
+  multi-line `setvar/setvar/special` regex #26 had to add and just lists the
+  macro in `REMAP_COMMANDS`. The drift guard flipped direction: a **bare**
+  `RPG2GBA_SetObjectEventGfx` call now raises. **Gotcha for every future macro:
+  `fork_index` extracts from `git show HEAD:`, never the worktree — so
+  `_EXPECTED_MACROS` (385→386) makes the suite red until the engine file is
+  committed.**
+- **`2b31e2de` — Map032 EV009 (the Pokédex/capture ceremony) retired onto the
+  transpiler.** The audit's seven "deltas" became four table entries and three
+  idioms: `$game_player.x==17`/`y<=43` → `getplayerxy` + `compare` (censused:
+  24 sites, 8 maps), `$Trainer.pokedex=true` → `FLAG_SYS_POKEDEX_GET` +
+  `SetUnlockedPokedexFlags`, animation 104 → exclamation emote / 18 → a
+  *decided* drop with a breadcrumb, move codes 31/32 → `restore_anim`/
+  `disable_anim` and 33/34 → drop, the `[12,13]` bob → `walk_in_place_right`.
+  New general shape: **`\v[N]` string substitution has no GBA runtime analog**,
+  so a tracked list-index readback expands at conversion time into one branch
+  per value. Text parity 35 source message units → 37 msgbox, **0 queue
+  entries**.
+
+**Open decision for the user (§10 fidelity):** `PU-POKEBALL` reuses vanilla
+`OBJ_EVENT_GFX_POKE_BALL` rather than staging a sheet for one still pose.
+
+**Not rebuilt, not boot-walked, and the chapter suite has not run since.** The
+ball throw is the audit's own §5.1 verification scene and still needs a device
+pass. 1615 tests at the time; 1631 collected now.
+
+### 6. Pokédex-ceremony live sprite swaps (EV76 ball / EV77 starters) — BOOT-WALKED 2026-08-02, PASSED
+
+**Closed by the same walk as #31** (ROM `e0f6d30f`): the capture tutorial is the
+scene whose EV76 ball and EV77 starter swaps this item is about, and it "works
+as expected" on device. The audit's §5.1 verification scene — the ball actually
+appearing during the throw instead of a wild sprite standing there through the
+full shake/drop sound sequence — is therefore satisfied. Flag it again if the
+ball itself was missing and the rest merely read fine.
+
+
+
+**Its premise is dead. Corrected 2026-08-02: the fork DOES have a
+script-callable gfx swap now — we added one.** The original text (kept below)
+said there was no native path and proposed `setvar`+`removeobject`+`addobject`;
+that was true of pristine upstream and stopped being true with audit §5.1:
+
+- `RPG2GBA_SetObjectEventGfx` (`engine/data/specials.inc`, implemented in
+  `engine/src/event_object_movement.c` over the pre-existing
+  `ObjectEventSetGraphicsIdByLocalIdAndMap`), plus the `setobjectgfx` macro
+  (#31) — additive, sentinel-fenced, no baseline behaviour change.
+- Transpiler rule for move-command 41 + the sheet→constant table in
+  `reference/npc_gfx_map.json` (§4.3 SoT), fork-gate extras flowing from it.
+- **Census the feature serves: 1,115 occurrences across 499 events in 44 maps**
+  (Map071 244, Map212 131, Map052 80, Map040 74) — previously all dropped as
+  `# UNHANDLED code 209 ... codes [41]`.
+- EV76's ball and EV77's starters are exactly the audit's verification scene and
+  now convert (EV009 retirement, #31). **PU-POKEBALL reuses vanilla
+  `OBJ_EVENT_GFX_POKE_BALL`** — a §10 fidelity substitution flagged to the user.
+
+**What is still true:** (a) boot-page object gfx remains static, so *page-driven*
+sprite changes still aren't reflected; (b) the **ambient** path is untouched —
+`route_bytecode` v1 drops mid-route graphic changes, which is why Moki's 12
+"Luz" flicker props (`(41,15,0)` loops) stay static (#12); (c) corpus-wide the
+sheet table only covers slice art, and a *pattern*-moving swap on an ordinary
+walk-cycle sheet still queues by design (state sheets don't — #25).
+
+**Remaining work here is a device pass**, not a build: watch the ball actually
+appear during the throw.
+
+<details><summary>Original 2026-07-xx text (premise now false)</summary>
+
+Deferred from task 4: RMXP change-graphic move-route commands on the ceremony
+events have no fork-native script-callable gfx swap (`VAR_OBJ_GFX_ID_x`
+resolves at spawn only). Recipe if wanted: `setvar` + `removeobject` +
+`addobject`. General limitation behind it: page-driven sprite changes aren't
+reflected — object gfx is the static boot page's. Judge in-game whether the
+ceremony reads acceptably without it.
+
+</details>
+
+### 27. The starter's sprite popped up twice — reveal now leaves it to the ceremony (BOOT-WALKED 2026-08-02, PASSED)
+
+**User call:** #24's `pbAddPokemon` ceremony (sprite + "obtained" fanfare +
+nickname prompt) is the one to keep; the `pbStarterSelector` reveal's own
+`showmonpic` a few lines earlier is redundant and fires for both the player's
+pick and Theo's. Dropped from `_emit_starter_selector_over` — the reveal is
+speech now (fade wrapper and per-arm species resolution unchanged, so an arm
+whose starter has no staged constant still refuses to emit).
+
+### 26. The machine STILL didn't animate — the swap never reached an object (BOOT-WALKED 2026-08-02, PASSED)
+
+**Symptom (user, lab-doorstep ROM `f64db6ca`):** #25 shipped per-state art and
+four distinct state swaps, and the machine still sat frozen through the whole
+starter scene.
+
+**Root cause — the object id was never remapped.** `staging`'s
+`local_id_remap` rewrites RMXP event ids into compiled object local ids for
+`REMAP_COMMANDS` (applymovement/setobjectxy/addobject/removeobject/turnobject).
+The gfx swap carries its target in `setvar(VAR_0x8004, <id>)`, an argument to a
+*special*, so the pattern never saw it: the compiled script asked for local id
+**19** (Map050 EV019's RMXP id) on a map whose object_events array is four
+entries long — the machine is local id **3**.
+`TryGetObjectEventIdByLocalIdAndMap` found nothing and returned, so all four
+swaps were no-ops. That failure is silent by construction — no compile error,
+no queue entry, nothing at runtime. `applymovement(19, …)` in the same routes
+*was* remapped, which is why the choreography looked fine.
+
+`local_id_remap` now recognises the swap block as a second reference shape
+(`iter_object_id_refs`, shared with `stage_slice_scripts._scan_required_actor_ids`
+so a swap-only target still gets spawned), and a `RPG2GBA_SetObjectEventGfx`
+call it can't pair with a target is a hard error — shape drift has to be loud
+here because it is invisible in the ROM.
+
+**Second, real bug underneath it (engine).** Even with the right object, the
+swap wouldn't have shown: `ObjectEventSetGraphics` repoints `sprite->images`
+but issues no tile copy — the copy comes from the sprite anim engine
+(`AnimCmd_frame`). Every swap runs inside a `lockall`, and `FreezeObjectEvents`
+sets `animPaused` on every non-player object event sprite, so `ContinueAnim`
+never reaches the next frame command and the tiles stay stale until the object
+respawns. `RPG2GBA_SetObjectEventGfx` now re-begins the sprite's anim
+(`BeginAnim` is not gated on `animPaused`), mirroring `SpawnObjectEventOnMap`.
+
+**Verified, not assumed** (scratchpad probe, method: read the machine's
+`gObjectEvents` entry every frame and compare the 2048 bytes at its sprite's
+`oam.tileNum` against each of the 9 state cells' ROM bytes — the sheet is
+uncompressed, so ROM bytes == VRAM bytes):
+
+```
+f9070 gfx=415 showing=D2P0(idle)   f9203 gfx=422 showing=D2P2
+f9071 gfx=415 showing=D2P1         f9205 gfx=422 showing=D6P2
+f9078 gfx=416 showing=D2P1        f10699 gfx=419 showing=D6P2
+f9079 gfx=416 showing=D2P2        f10700 gfx=419 showing=D4P2
+```
+
+All four scripted states now reach VRAM, one frame after the special. Eye
+check on the cropped machine region confirms it: empty dome → ball loaded →
+dispensing.
+
+**Shipped:** `lab-doorstep.gba` sha1 `36cdee71` (pristine `61edf53f`). 1571
+tests; moki GREEN 17/17 first attempt. **Boot-walked 2026-08-02 — user
+passed the lab scene** (machine animates on device; single starter sprite).
+
+### 25. The lab machine didn't animate — BUILT 2026-08-01, superseded by #26
+
+Reported twice; the earlier direction-carrying fix was never going to be
+enough. **The sheet had exactly one frame in the ROM.** `PU-PokeballMachine` is
+a `graphics/sprites.py` `LARGE_PROP_SHEETS` entry, so `sprite_emit` gave it the
+fork's 64×64 static-object treatment (`gObjectEventGraphicsInfo_RayquazaStill`
+convention): `.anims = sAnimTable_Inanimate`, `.inanimate = TRUE`, and a
+one-frame pic table. No script command can show a frame that isn't in the ROM,
+so both the pattern selection *and* the direction carry were dead for it.
+
+**A large prop is not a walk cycle — every grid cell is a selectable STATE.**
+RMXP re-poses a static prop with a code-41 Change Graphic that names the sheet
+it's already wearing and moves only `(direction, pattern)`. The conversion now
+treats those as states end to end:
+
+- `graphics/sprites.py` extracts every **non-empty** cell as its own frame,
+  recording `ConvertedSprite.states` (index-aligned `(direction, pattern)`),
+  all anchored with one shared offset so the prop doesn't hop between states.
+  The machine yields 9: directions 2/4/6 × patterns 0/1/2 (row 8 and column 3
+  are blank in the art).
+- `graphics/sprite_emit.py` emits one `ObjectEventGraphicsInfo` + one
+  `OBJ_EVENT_GFX_URANIUM_*` id per state, each over a one-frame pic table
+  (`overworld_frame(strip, 8, 8, k)`, `engine/include/sprite.h:35`) indexing
+  the sheet's **single** strip PNG and palette. `sAnimTable_Inanimate` only
+  ever shows frame 0, so a state has to *be* frame 0 of its own table. The idle
+  state (2,0) keeps the bare constant, so every already-placed object_event and
+  the existing `"gfx"` entry keep resolving; the rest are suffixed
+  `_D<dir>P<pattern>`. `NUM_URANIUM_OBJ_EVENT_GFX` now counts constants (40),
+  not sheets (32).
+- `reference/npc_gfx_map.json` (§4.3 SoT) gains a `"states"` map, cross-checked
+  against the real PNG's non-empty cells on every sprite pass
+  (`sprite_pass._check_declared_states`) — declaring a state the art lacks, or
+  emitting one the JSON never declared, fails loud.
+- The transpiler's code-41 resolves `(sheet, direction, pattern)` → that
+  state's constant; the facing block and the pattern-drop queue note are gone
+  for state sheets (nothing is dropped), and a state with no cell queues.
+  Walk-cycle sheets keep the old facing-carry behaviour unchanged.
+- `metadata_wiring.build_object_events` places a multi-state prop in its boot
+  page's own authored state, so a page authored mid-sequence (Map050 EV019 p2
+  is `(4,2)`) boots showing that, not the idle cell.
+- The fork gate (`fork_index.registry_extra_symbols`) accepts the per-state
+  constants, same as the sheet's own.
+
+All four Map050 swaps now target distinct states (`Map050.pory` D2P1 / D2P2 /
+D6P2 / D4P2). Verified by eye against a fresh-boot replay: the machine is the
+idle unit through B6/N3 and a visibly different unit after the quiz.
+
+**Corpus note:** 1115 code-41 uses across 44 maps, 30 sheets used with more
+than one `(direction, pattern)`. Only the large-prop subset is converted this
+way — ordinary NPC sheets are genuine walk cycles whose frames the fork drives
+itself, and their pattern-moving swaps still queue as before.
+
+**Shipped:** `lab-doorstep.gba` sha1 `f64db6ca` (pristine `583a431f`). 1564
+tests; moki GREEN 17/17 first attempt.
+
+### 22. Stamped review ROMs were shadowed by save-file residue — FIXED + RETEST PASSED 2026-08-01
+
+**Symptom (user, lab-doorstep ROM `a86e073c`):** the ROM should boot on the lab
+doorstep with the Auntie + Theo-cameo prerequisites done. Instead it showed a
+spot near the player's-house exit, with **no player sprite and dead input** —
+viewport frozen.
+
+**Root cause:** `CB2_StartUraniumSlice` (`engine/src/new_game.c`) tested
+`gSaveFileStatus == SAVE_STATUS_OK || UraniumEmbeddedSave_TryLoad()` — *flash
+first*. Any leftover `.sav` on the test device therefore won the race and the
+stamped blob was never loaded, so the ROM continued an older build's save
+whose map/coords no longer line up (hence the missing player object).
+Reproduced headlessly: pairing the stamped ROM with a foreign `.sav` booted
+into the player's house at (7,7) instead of Moki Town (17,12). The ROM's
+*stamped state itself was always correct* — a fresh-flash boot passed, which is
+why this was never caught.
+
+**Fix:** swap the order — the blob wins. `TryLoad()` returns FALSE untouched
+when `magic == 0`, so a pristine ROM still continues a flash save and a player
+keeps in-game saves across launches. Consequence, by design: on a *stamped*
+ROM an in-game save is inert; every boot returns to the stamped state.
+
+**Invariant pinned:** `playtest.stamp.verify_stamped_rom` — every
+`python -m rpg2gba.playtest.stamp` now re-boots the stamped ROM **with a
+deliberately foreign `.sav` paired** and asserts map/pos/field-unlocked. A
+fresh-flash boot passes either way, so the foreign save is the whole point.
+
+**Collateral found + fixed:** the fork-index gate had no extras for the
+`OBJ_EVENT_GFX_URANIUM_*` constants the sprite pass mints into generated,
+gitignored `uranium_*.gen.h` headers, so the transpiler's code-41 live sprite
+swap (added 2026-07-31, `d5ae2e3e`) gated as an invented constant and
+`transpile_driver run --maps slice` aborted on Map050. **The whole slice was
+unbuildable, and the ROM shipped on 2026-07-31 did not contain that commit's
+Map050 conversion at all** (`scripts/Map050.pory` on disk was still dated
+07-30, and `scripts.inc` had zero `RPG2GBA_SetObjectEventGfx`) — the commit
+message's "moki chapter GREEN on transpiler-generated Map050 EV019" was not
+backed by the artifacts. Extras now flow from `reference/npc_gfx_map.json`
+(the same §4.3 SoT the transpiler resolves sheets through) in both
+`transpile_driver` and `assemble_pathfinder`; two tests pin it. With the gate
+fixed, the real conversion built and moki went GREEN on all 17 beats.
+
+**Shipped:** `lab-doorstep.gba` sha1 `9596c8b7` (pristine `128f2edd`),
+taildropped 2026-08-01. **User boot-walked it the same day: correct spawn, and
+the lab scene now carries the real EV019 conversion — "it includes a lot more
+than before".** Committed `a4a97e2a`.
+
+### 21. Contact-sheet tiles can now be chosen by the beat — DONE 2026-07-30
+
+The sheet's two automatic rules (last completed message, else the live frame
+at the beat boundary) can't serve a beat whose interesting moment is neither.
+`Emulator.mark_frame()` pins the current frame as that beat's tile: sticky
+(later dialogue won't silently override an explicit choice), refuses a
+blank/mid-fade frame unless `force=True`, cleared per beat by `waypoint`.
+Still one tile per beat, no runner change.
+
+**B6 rewired on the back of it.** It ran *zero* frames — asserting only that
+the field was still locked — so it proved nothing B5 hadn't and its tile was
+a duplicate of B5's; the Yes/No prompt is only reached later, inside N3's
+mash. New observable `Emulator.yesno_prompt_up()` scans `gTasks` exactly as
+`FuncIsActiveTask` does, for the handler `ScriptMenu_YesNo` installs
+(`script_menu.c:584-596`) — its lifetime *is* the prompt's, so no frame
+counting and no dependence on text speed. B6 now mashes Bambo's dialogue
+forward, stops the moment the prompt opens, asserts it opened, and pins that
+frame. **Its tile now reads "RED, are you ready to take the Trainer Aptitude
+Test?" with the YES/NO menu up.**
+
+`Task_HandleYesNoInput` is `static` and so never reaches the link map; new
+`symbols.static_fn_via_literal_pool` recovers it from `ScriptMenu_YesNo`'s
+literal pool (third sibling of the two existing accessor tricks), keeping the
+**Thumb bit** — `gTasks[i].func` stores the odd address, and comparing against
+the even one silently never matches. Deliberately not `gSpecialVar_Result ==
+0xFF`: multichoice sets that sentinel too, so it can't tell a yes/no prompt
+from one of the quiz's `dynmultichoice` questions.
+
+9 new tests; 1480 pass; chapter re-run **GREEN, all 17 beats**. Which option
+is *highlighted* is still unobservable — answers are still made by button.
+
+### 20. Chapter harness planned routes on the *previous* map's grid — FIXED 2026-07-30, moki GREEN
+
+**Symptom:** moki beat B4 failed deterministically (same frame `f3464` across
+four runs) — `walk_to(27,17)`'s BFS reported *no planned route from (28,31)*
+on Map032, and the greedy fallback walked the player back through the house
+door. **The ROM was never wrong**; nothing was visible in a hand boot-walk.
+
+**Root cause:** a warp writes `SaveBlock1.location` in `ApplyCurrentWarp`
+(`engine/src/overworld.c:620`) long before it rebuilds `gBackupMapLayout` in
+the `InitMap` call inside `LoadMapFromWarp` (`overworld.c:982`).
+`_wait_for_map` polls *location*, so it returned inside that window: measured
+at the failing instant, `map_location`=(75,2) MokiTown and `player_pos`=(28,31),
+but the grid was still the house's 45×29 (→30×15). The goal (27,17) fell
+outside those bounds, so BFS returned `None`, and `_route_waypoints`' documented
+"harmless" greedy fallback stepped off (28,31) — which *is* the warp back into
+Map049. 30 frames later the grid read 87×78 and BFS found a 410-tile reachable
+set. The field lock is no signal either: `CB2_LoadMap` calls
+`UnlockPlayerFieldControls` on the way in, so controls read unlocked all
+through the window — which is why the 2026-07-27d "wait the lock out first"
+experiment changed nothing and was (correctly) reverted.
+
+**Why it regressed:** latent race, tipped by 27d's `RPG2GBA_FADE_DELTA_Y 4`.
+The fade speedup moved where the 10-frame poll lands relative to the layout
+rebuild. MEMORY.md's note that "fade constants cannot reach the BFS" was wrong
+— they reach it through *when* the grid is read, not what it contains.
+
+**Fix (harness only, no converter or engine change):** `Emulator` grew
+`_grid_dims_for_current_map` / `map_grid_loaded` / `wait_for_map_grid`, keyed
+on `gMapHeader.mapLayout`'s own dimensions plus the border margin
+(`fieldmap.c:171-174`); `walk_to` waits for the grid before planning, and
+`_map_grid` refuses a grid whose dims disagree with the current map header.
+`_plan_route` now *raises* on a goal outside the grid bounds instead of
+returning `None` — that shape is a wrong grid, not a planner blind spot, and
+degrading it to greedy is exactly what caused the damage.
+
+**Invariant pinned:** nothing asserted the grid belonged to the map the game
+reports being on. Five new tests in `tests/test_playtest.py` cover it (dims
+match/mismatch, `_map_grid` refusal, the wait's success and timeout, and the
+out-of-bounds-goal raise). 1471 tests pass; **moki is GREEN, all 17 beats,
+first attempt** on ROM `ec2fb783`.
+
+### 19. Per-page RMXP trigger types are ignored — FIXED 2026-07-27, chapter suite GREEN
+
+`classify_event`/`build_object_events` emit one `coord_event` per event and
+`build_page_dispatcher` selects by page *condition* only, so a page whose RMXP
+trigger differs from its siblings' fires the wrong way. Live case: Map032 EV009
+("Trainer(6)", the west-exit ceremony host) has pages 0-2 at trigger 2 (player
+touch) and **page 3 at trigger 0 (action button)**; at `VAR_QUEST_LOG >= 4` the
+converted page 4 `lock`s and prints on every walk over (16,43)-(16,45), where
+Uranium needs an A press on an opacity-0 event — effectively never.
+
+Same family as #18's gated-door fix (that was a per-page trigger distinction
+too) and the "base-page own condition ignored" deferral.
+
+**Fixed:** dispatch is now channel-aware (`metadata_wiring`). `CHANNEL_TOUCH`
+(a walk-on `coord_event`) dispatches only touch pages (1/2); `CHANNEL_ACTION`
+(an event's primary talkable host) keeps today's action + bump→talk
+approximation; `CHANNEL_ACTION_ONLY` serves the **new secondary host**: an
+event whose host is a `coord_event` but which also has action pages now emits
+a `bg_event` sign on its own tile (`Map###_EV###_ActionDispatch`), so the
+A-press pages stay reachable exactly as in RMXP without becoming a second way
+to fire the walk-on ones. `_goto_or_end` takes the channel and `end`s any page
+whose trigger it doesn't serve (the autorun/parallel rule is now a case of the
+general one).
+
+Slice 1: 4 new signs on Map032 (EV009/074/078/080) + Map050 EV002; EV009's
+walk-on dispatcher now `end`s at `VAR_QUEST_LOG >= 4` instead of printing.
+Corpus reach: of 1183 walk-on hosts, **135 events across 50 maps carry 181
+action pages** that were firing on the wrong channel. 1444 tests pass;
+**chapter suite `moki` is GREEN, all 18 beats, first attempt** (ROM
+`d6a54593`; review ROM + contact sheets under `output/playtest/review/`).
+
+### 18. Gated doors collapse into unconditional warps — FIXED 2026-07-26, B2 GREEN 2026-07-27
+
+Found 2026-07-26 by the chapter harness (Moki beat B2: you could walk out of
+Player's House 1F without talking to Auntie). Full write-up:
+**`reference/findings/gated_door_collapse_2026-07-26.md`**.
+
+`classify_event` turned any player-touch event containing *any* code-201 into one
+unconditional `warp_event` and dropped the object_event, so multi-page doors lost
+their refusal pages silently (§4.5 violation). Map049 EV002's gate is Switch 52
+`FLAG_MUM`, set by Auntie — the Auntie side converted fine, only the door lost
+its gate.
+
+**Fixed:** collapse only when every *player-touch* page transfers (an autorun
+page must not gate a door — that distinction spares Moki Town's five house
+doors); gated doors emit a `coord_event` on their own cell, no relocation; the
+cell is unioned into the returned warp-override set so it keeps door metatile +
+collision 0. Verified in staged output: (10,11) → `Map049_EV002_Dispatch` gating
+on `FLAG_MUM`, (14,19) → `Map050_EV001_Dispatch` gating on `VAR_QUEST_LOG >= 1`
+(**this is beat B10's gate**), neither with a warp_event racing it. 1439 tests
+pass.
+
+**DONE 2026-07-27:** rebuilt (stage → assemble → `make modern`) and re-ran the
+chapter suite — **B2 passes on ROM `1066eac4`/`90757612`**, the door refuses
+until Auntie sets `FLAG_MUM`. Corpus-wide follow-up (341 events / 75 maps
+pre-narrowing, not re-measured) stays out of slice-1 scope.
+
+### 16. Auto-bracket flag-hidden actor spawns — BUILT 2026-07-17, exercised by every walk since
 
 `Map032_EV074.pory` is a hand file whose ONLY delta from transpiler output is
 `addobject(75)`/`removeobject(75)` around Theo's walk-in/fade-out — on GBA a
@@ -550,6 +907,13 @@ hand files. Once the pass reproduces EV074, delete that hand file.
 staging pre-remap; EV074 hand file deleted — pass reproduces it; latent fixes:
 M32 EV078/EV080, M49 EV018, M172 EV004 actors now spawn). ROM `6e85edb3`,
 retest pending.
+
+**Corrected 2026-08-02 — not pending.** The pass was extended to be
+branch-aware in `2aeaa46a` (2026-07-21) specifically so the S7 Theo reveal put
+its `addobject` on the right side of a branch, and the user passed that walk;
+every ROM since rides it, and the moki chapter suite's actor-bearing beats have
+been GREEN 17/17 through `36cdee71`. It is also the (a)/(c) machinery #15
+assumed didn't exist.
 
 ### 12. NPCs don't move — ✅ USER-VERIFIED DONE 2026-07-15 (custom-route interpreter; ROM `5158b084` walked clean, "looks great, movement issue is done")
 
@@ -597,7 +961,11 @@ read). Verified facts, superseding the old from-memory notes:
   turn-in-place lookers, EV16 Bambo (type 3, speed 4 / freq 5 — the one
   corpus outlier). The 12 "Luz" light props stay static: their route is a
   `(41,15,0)` change-graphic flicker loop — same unsupported live-gfx-swap
-  class as #6, not a movement bug.
+  class as #6, not a movement bug. **Corrected 2026-08-02: #6 shipped, but this
+  is still static** — the swap is exposed to *scripts* (`setobjectgfx`), while
+  an ambient page route runs through `route_bytecode`, whose v1 stream drops
+  mid-route graphic changes. Reviving the flicker means a bytecode opcode for
+  code-41, not a re-read of #6.
 - **Numbers behind the pacing call** (RGSS verified,
   `021_Game_Character_v17.rb`): idle gate between self-moves =
   `(40−2f)(6−f)` frames → freq 1/3/5 = 190/102/30; corpus random movers use
@@ -740,101 +1108,9 @@ read). Verified facts, superseding the old from-memory notes:
        underflows 0→~65k-frame stall). Contract doc data-channel + FSM §§
        corrected so the slot map can't be re-broken. `make modern` clean, ROM
        sha1 `5158b084` taildropped 2026-07-15 (supersedes `66097603` /
-       `7b290f02`). Retest pending.
-
-### 13. Expand Moki interiors — BUILT 2026-07-14, needs boot-walk
-
-Slice widened 3→8 maps; full chain (stage → assemble → `make modern`) clean
-2026-07-14, ROM taildropped. Built per
-`reference/guides/slice_expansion_runbook.md`.
-
-- **New maps:** 50 (Moki Town Professor Lab), 64 (MokiTownHouse2), 65
-  (MokiTownHouse1), 172 (Theo's House 1F), 89 (Theo's House 2F — reachable
-  only via 172's internal stairs, mirrors the 48/49 floor pattern).
-  `SLICE_MAP_IDS` / `ALLOWED_MAPS` / `WARP_OVERRIDES` all widened.
-- **Door dests resolved** (were "unrecorded"): Map032 EV003→50 (door 17,11),
-  EV006→64 (43,31), EV007→65 (24,42), EV017→172 (56,42). Interior exits
-  wired (64/65 EV003 @9,14; 172 street exit EV002 @10,11 + stairs EV003
-  @12,3).
-- **Still blocked, by design:** cave triad EV023/036/037→map 33 (Route 01,
-  slice-2 frontier) and **EV005** (door left unwired this round — inert
-  wall).
-- **Supporting work:** +11 `npc_gfx_map.json` entries (HGSS townsfolk,
-  PU-Cam, PU-Hazma, ZP-Professor2, PU-PokeballMachine); NEW `large_prop`
-  64×64 sprite class in sprites.py/sprite_emit.py (lab ball machine, 96×128
-  source, RayquazaStill-style static object); +3 `map_name_overrides`.
-- **Build facts:** mints 196 flags / 106 vars / 27 self-switches (16→27) /
-  8 temp-switches; ROM 78.88%; 1064 tests pass (npc_gfx count re-pinned
-  18→29; `test_build_slice_maps_smoke` cleared once the sprite pass
-  regenerated `uranium_event_objects.gen.h`). Map172 staging dropped 6
-  orphan pages (EV002/003/004×4 — non-emitted events).
-- **§9 boot-walk checklist:** 4 street doors warp in + exits warp back;
-  Theo 1F↔2F stairs; interior art + NPC palettes **by eye** (all converted
-  sheets share ≤4 palette banks — overflow is silent color garbage, the eye
-  is the gate); lab machine prop renders 64×64; nothing visibly missing in
-  Theo's house (the dropped orphan pages); interior NPCs sane. All
-  uncommitted — commit after the walk.
-
-### 15. Theo intro cutscene missing (boot-walk 2026-07-15) — SEPARATE work unit, own session
-
-Boot-walk: Theo's intro cutscene (runs up → talks → runs ahead) entirely
-absent; no Theo anywhere on Moki Town. Root-caused 2026-07-15.
-
-**Root cause — the drop is CORRECT for boot state, not a bug in itself.**
-`select_boot_page` (`npc_gfx.py:114`) picks Theo's RMXP boot page, which the
-Uranium author drew with `opacity == 0` — Theo genuinely doesn't exist in town
-at game start. The converter drops opacity-0 events in `build_object_events`
-(`metadata_wiring.py:743-747`): opacity-0 + event-touch → reclassified to an
-invisible `coord` event (line 745); opacity-0 + action-trigger → fully dropped
-via `_drop(eid, DROP_OPACITY0)` (line 747). Confirmed against
-`output/uranium-build/maps/Map032.json`:
-- **EV075 "Theo"** (35,15), gfx `Rivaltheo`, boot page0 `opacity=0` trigger=0
-  (action) → `_drop(DROP_OPACITY0)`. Not emitted.
-- **EV009 / EV074** (intro trainers, gfx HGSS_014), boot page0 `opacity=0`
-  trigger=2 (event-touch) → become invisible coord events, not object events.
-- Ambient NPCs survive because their boot page is `opacity=255` from the start.
-
-So the missing thing is the **triggered cutscene**, not a standing NPC.
-
-**CORRECTION (logged):** an earlier roster read claimed "Theo stands at
-(35,15) at boot" — WRONG. It read the `Rivaltheo` graphic name and missed
-`opacity=0`. Theo is invisible at boot by design.
-
-**Story context (wiki-confirmed).** Moki intro = wiki step 5: after the lab
-starter test, Theo + Prof. Bamb'o run the catching tutorial at the west grass
-(Kevlar/Route-1 exit) and give Pokédex + Poké Balls. The whole ceremony cast is
-gated by **var 101 (intro/starter-ceremony progress counter; confirm the exact
-name in `reference/uranium_variables.json`)**: EV002 Theo (16,45, var101≥2/≥4),
-EV016 Bambo (15,44, var101≥1→ZP-Professor), EV075 Theo (35,15), EV076
-Chyinmunk76, EV077 Starter77, EV009/EV074 trainers, EV081 TheoChamp (switch
-125). See MEMORY "hand bucket" — `hand_conversions/Map032_EV009.pory` is the
-Pokédex-ceremony hand override (Moki-side; Map-50 lab-side is item #14).
-
-**Fix scope — medium-large, higher-uncertainty. NOT "un-drop the actor"**
-(that would wrongly park Theo in town at boot). Needs, together:
-- (a) emit Theo as a **hidden actor the cutscene reveals/spawns** (not a static
-  boot NPC);
-- (b) convert the **trigger + var101 gating** that starts the scene (per-page
-  dispatcher exists from bug-#7 work; needs trigger-type wired);
-- (c) **reveal the opacity-0 actor mid-script** — THE THORNY PART: no fork-
-  native script-callable live gfx/opacity swap (`VAR_OBJ_GFX_ID_x` resolves at
-  spawn only). Recipe = `setvar`+`removeobject`+`addobject`, same unsupported
-  class as item #6 (ceremony sprite swaps);
-- (d) **run-up / run-ahead movement** = cmd-209 `applymovement` — ALREADY
-  handled by the transpiler (`_emit_move_route`, transpiler.py:1182);
-- (e) advance story flags on exit — handled.
-
-**Represents a whole class:** every rival/intro/story cutscene corpus-wide
-works this way (actor hidden at boot, revealed + choreographed by a gated
-trigger). Do it as its own focused session, not a bolt-on to the ambient-NPC
-interpreter (which is a different subsystem: autonomous `movement_type`, no
-actor-reveal). Distinct from the ambient movement work being built 2026-07-15.
-
-**First step when the session starts** (user declined this probe for now):
-pin the exact event/page that fires the scene and how it reveals Theo (opacity
-command? page-graphic swap? spawn?) — that determines whether (c)'s spawn
-recipe is truly required. Localize per the `/debug` flow before touching code.
-Cross-ref item #14 (lab ceremony, same trigger/reveal class on Map 50).
+       `7b290f02`). Retest pending. **Corrected 2026-08-02: this is the ROM the
+       user walked clean** — "looks great, movement issue is done" (see the item
+       heading); nothing here is pending.
 
 ## Accepted deferrals (not slice-1 work — listed so they aren't re-litigated)
 
@@ -845,10 +1121,15 @@ Cross-ref item #14 (lab ceremony, same trigger/reveal class on Map 50).
 - **`displayNinjaLetter` card UI** — letter renders as a scrolling msgbox;
   bespoke scene is a Phase-8 custom-C candidate.
 - **88 CommonEvent queue entries** — slice calls zero CEs.
-- **Base-page own condition ignored by dispatchers** — Page1 is always the
-  fallback; sprite is static anyway (see bug-#7 notes in MEMORY).
+- ~~**Base-page own condition ignored by dispatchers**~~ — **no longer a
+  deferral: FIXED 2026-07-17** (round 3 of the story-chain walks).
+  `build_page_dispatcher` now scans *all* pages including index 0 and falls to
+  an inert `end` when none matches; that is what killed the postgame Theo
+  "Champion" boot tripwire (EV080) and silently fixed EV078/EV081. The static-
+  sprite half of the note still stands (boot-page gfx). Kept here only so the
+  old "always the fallback" claim isn't cited again — see #11 and #19.
 
-## Done
+## Done — earlier closures (one-line log)
 
 - **2026-07-21 — S6 aptitude test + starter species: CLOSED, boot-walk PASSED
   on ROM `b0b21993`.** Supersedes the 2026-07-17 "#17" entry and closes #2
@@ -924,7 +1205,9 @@ Cross-ref item #14 (lab ceremony, same trigger/reveal class on Map 50).
   (new maps will need badge/move grants to exercise their HM paths; expected
   to grow per-HM). No longer a remove-when-progression-covers-it obligation —
   strip only for a release ROM. Ledger disposition + in-code comment updated
-  (`engine_extension_surface.md` §3, `engine/src/new_game.c:277`).
+  (`engine_extension_surface.md` §3, `engine/src/new_game.c:277`). **Its
+  current state — a boot straight to the capture tutorial, which defeats the
+  chapter suite's fresh start — is tracked in #30.**
 - **2026-07-13 — #10 viewer "expand similar" over-split fixed (viewer-only),
   user-verified by eye (one click grabs all the flowers)**:
   new `_pixel_classes` in `map_viewer_common.py` groups column keys by
