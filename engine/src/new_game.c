@@ -164,7 +164,7 @@ static void WarpToTruck(void)
     // mismatched collision data and locks up. To go back to the normal
     // player's-house spawn, swap this back to the MOKI_TOWN_PLAYERS_HOUSE_1F
     // call below (kept commented, not deleted).
-    // SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), MAP_NUM(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), WARP_ID_NONE, 7, 7);
+    SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), MAP_NUM(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), WARP_ID_NONE, 7, 7);
     //
     // Previous POST-QUIZ spawn, kept for the starter-grant repro: the lab at
     // (14,8). (14,18) — just inside the entrance rug — crosses a row of "Hey,
@@ -182,7 +182,9 @@ static void WarpToTruck(void)
     // you into a wall. Row y=44 is passable clear across x=11..22, and (20,44)
     // is clear of every object event on that row (Bambo 15,44 / Chyinmunk 12,44
     // / Orchynx 13,44 / Theo 16,45). Walk west to fire.
-    SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN), MAP_NUM(MAP_MOKI_TOWN), WARP_ID_NONE, 20, 44);
+    // DISABLED 2026-08-02 with the harness block below, to restore the chapter
+    // suite's fresh start. Uncomment (and the block below) to re-arm.
+    // SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN), MAP_NUM(MAP_MOKI_TOWN), WARP_ID_NONE, 20, 44);
     // END URANIUM PATHFINDER SLICE
     WarpIntoMap();
 }
@@ -399,7 +401,11 @@ void CB2_StartUraniumSlice(void)
     // here so the machine isn't blocked.
     // TryMoveObjectEventToMapCoords(2, MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), 15, 6);
 
-    // ---- CAPTURE-TUTORIAL HARNESS — ACTIVE 2026-08-02 ----
+    // ---- CAPTURE-TUTORIAL HARNESS — DISABLED 2026-08-02 (boot-walk PASSED) ----
+    // Re-arm by uncommenting the VarSet/ScriptGiveMon/FlagSet lines below AND
+    // the Moki (20,44) SetWarpDestination in WarpToTruck(). Disabled so the
+    // chapter suite gets its fresh start back; the walk this harness was built
+    // for passed on ROM e0f6d30f (SLICE1_TODO #31).
     // Lands the player in Moki Town in the state left behind by BOTH the lab
     // rival battle (Map050 EV019) and the PokePod scene at Theo's house
     // (Map172 EV004), so the capture tutorial is the next thing available:
@@ -419,20 +425,20 @@ void CB2_StartUraniumSlice(void)
     // (Map172 setvar), 4 = tutorial done (Map032 setvar; 3 is never written).
     // So set exactly 2 — 3 would still work but is not a real value, and 4
     // silently skips the tutorial forever.
-    VarSet(RPG2GBA_VARS_START + 53, 2);            // VAR_QUEST_LOG = 2 (post-PokePod)
+    // VarSet(RPG2GBA_VARS_START + 53, 2);            // VAR_QUEST_LOG = 2 (post-PokePod)
     // VAR_POKEMONTEST must agree with the party mon and the FLAG_HAS_* below —
     // the tutorial reads it to pick its species text. A mismatch is cosmetic,
     // not a soft-lock, but looks broken. 1=Orchynx, 2=Raptorch, 3=Eletux.
-    VarSet(RPG2GBA_VARS_START + 93, 2);            // VAR_POKEMONTEST = Raptorch
+    // VarSet(RPG2GBA_VARS_START + 93, 2);            // VAR_POKEMONTEST = Raptorch
     // The starter has to actually exist: FLAG_HAS_* and FLAG_SYS_POKEMON_GET are
     // bookkeeping only, and setting them without a real mon leaves an empty
     // party behind a party-shaped menu. EV019 normally does the givemon.
-    ScriptGiveMon(SPECIES_RAPTORCH, 5, ITEM_NONE);
-    FlagSet(FLAG_SYS_POKEMON_GET);                 // party shows in the START menu
-    FlagSet(FLAG_SYS_B_DASH);                      // running shoes (granted earlier in the chain)
-    FlagSet(RPG2GBA_GLOBAL_FLAGS_START + 0);       // FLAG_RECEIVED_STARTER
-    FlagSet(RPG2GBA_GLOBAL_FLAGS_START + 32);      // FLAG_HAS_RAPTORCH
-    FlagClear(RPG2GBA_GLOBAL_FLAGS_START + 10);    // FLAG_LOST_FIRST_BATTLE (won the rival battle)
+    // ScriptGiveMon(SPECIES_RAPTORCH, 5, ITEM_NONE);
+    // FlagSet(FLAG_SYS_POKEMON_GET);                 // party shows in the START menu
+    // FlagSet(FLAG_SYS_B_DASH);                      // running shoes (granted earlier in the chain)
+    // FlagSet(RPG2GBA_GLOBAL_FLAGS_START + 0);       // FLAG_RECEIVED_STARTER
+    // FlagSet(RPG2GBA_GLOBAL_FLAGS_START + 32);      // FLAG_HAS_RAPTORCH
+    // FlagClear(RPG2GBA_GLOBAL_FLAGS_START + 10);    // FLAG_LOST_FIRST_BATTLE (won the rival battle)
     // FLAG_SYS_POKEDEX_GET is deliberately NOT set — the tutorial grants it
     // (along with 5 Poke Balls) as part of what we are here to test.
     //
