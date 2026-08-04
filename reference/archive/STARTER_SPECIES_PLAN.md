@@ -1,3 +1,5 @@
+**SUPERSEDED 2026-08-04 — closed (W1–W9, S6 PASSED). High durable value for Phase 7 (160 more species) — pointer added from `reference/guides/phase7_integration_plan.md` D2. Archived, not live.**
+
 # Starter Species Conversion Plan — real Orchynx/Raptorch/Eletux for the S6 quiz
 
 **Date:** 2026-07-18 · **Status:** PLANNED (user-approved scope, implementation not started)

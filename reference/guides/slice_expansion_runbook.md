@@ -1,7 +1,9 @@
 # Slice Expansion Runbook — adding new maps to the playable slice
 
 **What this is:** the mechanical, step-by-step process for widening the playable
-slice (currently Uranium maps 49/48/32) to new maps. The *philosophy* of the
+slice (slice 1 = 8 maps, `SLICE_MAP_IDS` in `tileset_converter/map_set.py:30`;
+passed its boot-walk gate 2026-08-04 — this runbook is what slice 2, Route 01,
+uses next) to new maps. The *philosophy* of the
 per-slice loop (SELECT → EVENTS → ART → WIRE → BUILD → BOOT → FIX → RECORD)
 lives in `BUILD_PLAN.md` §2 — this doc is the concrete file-and-command layer
 under it. The §9 boot gate (CLAUDE.md) applies to every map added: a widened

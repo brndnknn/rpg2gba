@@ -1,3 +1,5 @@
+**SUPERSEDED 2026-08-04 — both deferrals shipped (`808966cd`, warp fidelity: per-column door art + Uranium arrival coords). Note the map roster below (33) is stale — current `SLICE_MAP_IDS` has 89, not 33 (roster changed after this doc was written, not a doc error). Archived, not live.**
+
 # Walker Checkpoint 2 sign-off — certification + deferred findings (2026-07-02)
 
 User boot-walked the 8-map batch ROM (49, 48, 32, 33, 50, 64, 65, 172) and the

@@ -1,7 +1,9 @@
+**SUPERSEDED 2026-08-04 — fixes shipped; promoted content lives in `reference/chapters/01-moki.md`. Archived, not live.**
+
 # Moki-Town slice: story chain + event-trigger bugs
 
 **Date:** 2026-07-16
-**Status:** research complete, **no fix implemented yet** — awaiting user instruction.
+**Status:** research complete, **no fix implemented yet** — awaiting user instruction. **[Stale — fixes shipped; see stamp above.]**
 **Trigger:** boot-walk report — "the Theo event never triggers; the Pokédex one triggers
 when I talk to the professor and it causes the player to walk through the back wall into
 the void."

@@ -232,3 +232,119 @@ is needed (unlike traits, whose producer is the transpiler). Path, all inside
 
 The registry is the shared seam: one id assignment, two consumers (map.json
 `trainer_sight_or_berry_tree_id` + gen.h `sUraniumRoutes[]`). Lead-owned.
+
+---
+
+## RMXP blocked-move semantics (verified, shipped)
+
+**Provenance:** extracted 2026-08-04 from `RMXP_MOVEMENT_FIX_PLAN.md` (slice-1
+document, about to be archived) before archiving. Re-verified against the
+shipped code at extraction time — this section states what shipped, corrects
+one wrong claim from the plan doc, and preserves the corpus measurements that
+constrain any future work on route/collision handling.
+
+### The verified RMXP contract
+
+Source: `reference/scripts_dump/021_Game_Character_v17.rb` (Essentials v17;
+confirmed no later script overrides NPC movement — `180_Pathfinder.rb` reopens
+`move_type_custom` but is gated behind `$game_map.recalculate_paths`, default
+`false`).
+
+- `move_down/left/right/up(turn_enabled=true)` (lines 440-482) **turn first,
+  then check `passable?`**. If blocked: the character has *already turned*,
+  does not move, and only `check_event_trigger_touch` runs. It stays turned.
+- `move_type_custom` (lines 325-432) advances the route index only on
+  `if @move_route.skippable or moving? or jumping?` (line 363). With
+  `skippable == false` (the RMXP default, `005_RGSS2Compatibility.rb:483-493`)
+  a blocked move **stalls at the same index forever** and retries every tick.
+- `turnGeneric` (lines 670-679) is wrapped `unless @direction_fix` — an event
+  with `direction_fix == true` does **not** turn on a blocked move; it keeps
+  its authored `graphic.direction`.
+- A blocked character is never `moving?`, so real RMXP never animates it. The
+  shipped GBA interpreter deliberately diverges here (see "Blocked-step
+  semantics" above): it plays a walk-in-place animation while stalled,
+  matching pokeemerald's own native idiom (`MovementType_WalkBackAndForth_Step2`,
+  `MoveNextDirectionInSequence`) instead of RMXP's silent freeze.
+
+**The authoring idiom this creates:** RMXP authors routinely give a decorative
+NPC a move route and let scenery box it in. The net effect on PC is a statue
+facing the direction of its first blocked command. This pattern recurs across
+the whole corpus, not just Moki Town — treat any `MOVEMENT_TYPE_CUSTOM_ROUTE`
+NPC in a future slice as a candidate for the same demotion check.
+
+### CORRECTION — the plan doc's collision rule was wrong
+
+`RMXP_MOVEMENT_FIX_PLAN.md` §1 described the blocking check as a same-tile
+`passability.cell_clear(target)` test — **this is wrong** and was never
+shipped. The real RMXP `passableEx?` (`021_Game_Character_v17.rb` lines
+106-117) is **two-sided**: a step from `(x,y)` facing `d` is blocked if EITHER
+the source tile seals its own exit in direction `d`, OR the destination tile
+seals its entry from the opposite side (`10 - d`). It is never a single-tile
+aggregate "any direction blocked" test.
+
+The shipped implementation reflects the correct two-sided rule:
+`MapPassability.can_step(x, y, facing)` in
+`src/rpg2gba/tileset_converter/npc_gfx.py:885-935`, consumed by the route
+simulator (`route_sim.py:157`: `if through or passability.can_step(cur_x,
+cur_y, direction):`). `cell_clear` still exists on the same class
+(`npc_gfx.py:846`) but is a *different*, narrower query — used only to gate
+the native WANDER/WALK `path_cells` branch in `metadata_wiring.py` (a
+same-tile "is this cell fully open" check for pokeemerald's own movement
+types, which have no bytecode and don't need the two-sided RMXP rule). Do not
+reuse `cell_clear` for STEP-opcode blocking logic — that's what produced the
+wrong rule in the plan doc. `can_step` is the one two-sided oracle for RMXP
+step semantics; `cell_clear` is not a substitute for it.
+
+### What shipped (verified 2026-08-04)
+
+- **Simulator:** `src/rpg2gba/tileset_converter/route_sim.py` —
+  `simulate_route(page, x, y, passability) -> RouteSim`. Faithfully replays
+  turn-then-check, `direction_fix` turn suppression, `skippable` skip-vs-stall,
+  through toggles, and cycle detection (visited-state set keyed on
+  `(index, x, y, facing, through)`, hard step budget 4096, fails loud on
+  overrun per CLAUDE.md §4.5). Commands it can't safely characterize
+  (diagonals, move-random, toward/away-player, forward/backward, jump,
+  relative/random turns — codes 5-14, 20-26) return an immediate "no verdict,
+  keep the route" result rather than guessing.
+- **Demotion gate:** `src/rpg2gba/tileset_converter/metadata_wiring.py:1721-1748`
+  — for `MOVEMENT_TYPE_CUSTOM_ROUTE` specs, calls `simulate_route` and demotes
+  to a static `MOVEMENT_TYPE_FACE_<dir>` (via `static_face_spec(..., facing=
+  sim.stall_facing)`, dropping the route id) only when `sim.stalled and not
+  sim.moved` — i.e. it stalls on its very first executed move without ever
+  displacing. A route that walks then stalls later is left live (the fixed
+  runtime interpreter reproduces "walks, then freezes there" exactly). A route
+  that never stalls is left live. This replaces the plan doc's originally
+  proposed `exit_blocked(spawn)`-only check, which only caught the
+  sealed-in-place case and missed routes blocked partway through (see EV073 in
+  the plan doc's bug table).
+- **Engine collision-before-PC fix:** `engine/src/event_object_movement.c`,
+  the `URANIUM_ROUTE_OP_STEP_*` case (~6277-6316 as of this extraction). The
+  `GetCollisionInDirection` check runs BEFORE `URANIUM_ROUTE_SET_PC` commits
+  the advance. On a non-skippable block: `SetObjectEventDirection` turns the
+  sprite, `GetWalkInPlaceNormalMovementAction` plays the walk-in-place anim,
+  the PC is **not** advanced — so the same STEP opcode is re-fetched and
+  retried next cycle. On a skippable block: `URANIUM_ROUTE_SET_PC(sprite, pc +
+  1)` advances past it same as a clean idle tick. This mirrors vanilla
+  `MoveNextDirectionInSequence` and `MovementType_WalkBackAndForth_Step2`,
+  which substitute the movement action on collision without touching their
+  own sequence index.
+
+### Corpus measurements (constrain any future route/collision work)
+
+All counts from `output/uranium-build/maps/Map*.json`, page-level
+`move_type == 3` (Custom) routes, **1065 total**:
+
+- `skippable`: **False = 1036, True = 29**. Skip-on-block is a small minority
+  — most blocked routes stall, they don't skip.
+- `direction_fix`: **False = 670, True = 395 (37%)**. These 395 must NOT be
+  re-faced by a blocked move — a naive "face the first route command" fix
+  breaks over a third of the corpus. The simulator applies the
+  `direction_fix` rule internally, so callers never special-case it.
+- Most common first opcode across all 1065 routes: **41 (change_graphic), 409
+  occurrences** — not a movement command. The corollary: "the first move
+  command" can only be determined by real simulation, never by indexing
+  `list[0]`.
+
+These numbers are why `simulate_route` exists as a real interpreter rather
+than a heuristic — a peek at the first list element is wrong 38% of the time
+(409/1065), and ignoring `direction_fix` breaks 37% of routes that do stall.

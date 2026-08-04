@@ -1,3 +1,5 @@
+**SUPERSEDED 2026-08-04 — slice 1 passed its §9 gate; pure point-in-time snapshot, no forward action items. Archived, not live.**
+
 # Slice-1 queue read-through (2026-07-02)
 
 **What this is:** the grill-D10 #4 obligation — the transpiler queue for the

@@ -86,8 +86,8 @@
     {
       "id": "CH01", "act": "A1", "title": "Moki Town", "wiki_page": "Moki Town",
       "visit": 1, "outdoor": 32, "maps": [32, 48, 49, 50, 64, 65, 89, 172],
-      "predecessor": null, "tier": "full", "status": "in_progress",
-      "notes": "Slice 1. Map roster matches tileset_converter/map_set.py:30 SLICE_MAP_IDS exactly. Live doc: reference/chapters/01-moki.md; open items: SLICE1_TODO.md."
+      "predecessor": null, "tier": "full", "status": "built",
+      "notes": "Slice 1. Map roster matches tileset_converter/map_set.py:30 SLICE_MAP_IDS exactly. Passed its §9 boot-walk gate 2026-08-04 (moki chapter suite GREEN 17/17). Live doc: reference/chapters/01-moki.md; SLICE1_TODO.md is retired to reference/archive/, open items migrated to PROJECT_TODO.md/SLICE2_TODO.md/ROM_TEST_DEV.md."
     },
     {
       "id": "CH02", "act": "A1", "title": "Route 1", "wiki_page": "Route 1",

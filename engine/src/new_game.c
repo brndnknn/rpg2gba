@@ -349,103 +349,13 @@ void CB2_StartUraniumSlice(void)
     // NewGameInitData() zeroes the party inside it. ScriptSetMonMoveSlot also syncs
     // PP; SetBoxMonData handles checksum/encrypt.
     FlagSet(FLAG_BADGE03_GET);
-    // TEMPORARILY DISABLED 2026-07-21 to test the S6b rival-battle LOSS route:
-    // with only the (type-disadvantaged) starter in the party, losing to Theo
-    // is reachable. Restore both lines to bring back the rock-smash harness.
-    // ScriptGiveMon(SPECIES_GEODUDE, 5, ITEM_NONE);
-    // ScriptSetMonMoveSlot(0, MOVE_ROCK_SMASH, 0);
-
-    // ---- NEXT TEST HARNESS (post-S7 frontier) — DISABLED; uncomment to use ----
-    // Skips the whole opening chain: boot already holding Raptorch, having
-    // BEATEN Theo (won the S6b battle -> FLAG_LOST_FIRST_BATTLE clear) and
-    // finished the PokePod scene at Theo's house (VAR_QUEST_LOG = 2), with
-    // running shoes and NO Geodude. Leaves the player at the S8 frontier (the
-    // west-exit Pokedex ceremony, gated VAR_QUEST_LOG >= 2). If you enable this,
-    // keep the rock-smash rig above disabled — both seed gPlayerParty.
-    // Uranium ids mirror data/scripts/uranium_flags.h; the base macros are
-    // C-visible via constants/flags.h + constants/vars.h. Offsets: verify
-    // against uranium_flags.h if the flag registry is ever renumbered.
-    //   VAR_POKEMONTEST (var 151) = the single starter-choice var, read
-    //   everywhere downstream (incl. S8); value 2 == Raptorch.
-    // ScriptGiveMon(SPECIES_RAPTORCH, 5, ITEM_NONE);
-    // FlagSet(FLAG_SYS_POKEMON_GET);                 // party shows in START menu
-    // FlagSet(FLAG_SYS_B_DASH);                      // running shoes
-    // FlagSet(RPG2GBA_GLOBAL_FLAGS_START + 32);      // FLAG_HAS_RAPTORCH
-    // FlagSet(RPG2GBA_GLOBAL_FLAGS_START + 0);       // FLAG_RECEIVED_STARTER
-    // FlagClear(RPG2GBA_GLOBAL_FLAGS_START + 10);    // FLAG_LOST_FIRST_BATTLE (won)
-    // VarSet(RPG2GBA_VARS_START + 93, 2);            // VAR_POKEMONTEST = Raptorch
-    // VarSet(RPG2GBA_VARS_START + 53, 2);            // VAR_QUEST_LOG = 2 (S6b+S7 done)
-
-    // ---- POST-QUIZ HARNESS (starter-grant repro) — DISABLED 2026-08-02 ----
-    // Superseded by the capture-tutorial harness below; kept for the next time
-    // the lab machine/battle needs a fresh repro. To re-arm: uncomment these
-    // two lines plus the TryMoveObjectEventToMapCoords, disable the block
-    // below, and point WarpToTruck() back at the lab (14,8).
-    //
-    // Uses SSC (+19), the quiz-COMPLETE latch set at the very end of
-    // Map050_EV005_Page1 (pory line 283) — NOT SSB (+18), which the 2026-07-22
-    // version of this harness used by mistake. SSB is only the quiz-ACCEPTED
-    // latch, read by Page1's first instruction (`goto_if_set ..._SSB` -> jump
-    // straight into the quiz body), so SSB drops you INTO the quiz rather than
-    // past it. With SSC set and VAR_QUEST_LOG still 0, Map050_EV005_Dispatch
-    // falls through to Page2 (the post-quiz professor idle) and the quiz does
-    // not re-run.
-    // VarSet(RPG2GBA_VARS_START + 93, 2);           // VAR_POKEMONTEST = Raptorch
-    // FlagSet(RPG2GBA_SELFSWITCH_FLAGS_START + 19); // quiz-complete latch (Map050_EV005_SSC)
-    // The professor (local id 2) defaults to his quiz-time spot (14,6),
-    // directly south of the machine (14,5) — the only tile from which the
-    // machine is reachable (map.json collision: the machine alcove is walled
-    // at x=13/15, so (14,6) is the sole approach). At the end of the real quiz
-    // Map050_EV005_Page1_Move6 walks him one tile right (to 15,6) and faces him
-    // left; since we skip straight past the quiz, replicate that step-aside
-    // here so the machine isn't blocked.
-    // TryMoveObjectEventToMapCoords(2, MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), 15, 6);
-
-    // ---- CAPTURE-TUTORIAL HARNESS — DISABLED 2026-08-02 (boot-walk PASSED) ----
-    // Re-arm by uncommenting the VarSet/ScriptGiveMon/FlagSet lines below AND
-    // the Moki (20,44) SetWarpDestination in WarpToTruck(). Disabled so the
-    // chapter suite gets its fresh start back; the walk this harness was built
-    // for passed on ROM e0f6d30f (SLICE1_TODO #31).
-    // Lands the player in Moki Town in the state left behind by BOTH the lab
-    // rival battle (Map050 EV019) and the PokePod scene at Theo's house
-    // (Map172 EV004), so the capture tutorial is the next thing available:
-    // walk west onto the coord_event column and it fires.
-    //
-    // NOTE it defeats the chapter suite's fresh-start guarantee — everything up
-    // to and including the PokePod scene is skipped. Comment this block out and
-    // revert the WarpToTruck spawn before running the suite.
-    //
-    // VAR_QUEST_LOG is the whole progression ladder for this slice, and the
-    // tutorial's dispatcher reads it as a >= chain:
-    //     >= 4  -> end (tutorial already done)
-    //     >= 2  -> Page3, the capture tutorial      <- we want exactly this
-    //     >= 1  -> Page2, "go fetch Theo" text only
-    //     else  -> Page1
-    // 0 = fresh boot, 1 = rival battle done (EV019 addvar), 2 = PokePod done
-    // (Map172 setvar), 4 = tutorial done (Map032 setvar; 3 is never written).
-    // So set exactly 2 — 3 would still work but is not a real value, and 4
-    // silently skips the tutorial forever.
-    // VarSet(RPG2GBA_VARS_START + 53, 2);            // VAR_QUEST_LOG = 2 (post-PokePod)
-    // VAR_POKEMONTEST must agree with the party mon and the FLAG_HAS_* below —
-    // the tutorial reads it to pick its species text. A mismatch is cosmetic,
-    // not a soft-lock, but looks broken. 1=Orchynx, 2=Raptorch, 3=Eletux.
-    // VarSet(RPG2GBA_VARS_START + 93, 2);            // VAR_POKEMONTEST = Raptorch
-    // The starter has to actually exist: FLAG_HAS_* and FLAG_SYS_POKEMON_GET are
-    // bookkeeping only, and setting them without a real mon leaves an empty
-    // party behind a party-shaped menu. EV019 normally does the givemon.
-    // ScriptGiveMon(SPECIES_RAPTORCH, 5, ITEM_NONE);
-    // FlagSet(FLAG_SYS_POKEMON_GET);                 // party shows in the START menu
-    // FlagSet(FLAG_SYS_B_DASH);                      // running shoes (granted earlier in the chain)
-    // FlagSet(RPG2GBA_GLOBAL_FLAGS_START + 0);       // FLAG_RECEIVED_STARTER
-    // FlagSet(RPG2GBA_GLOBAL_FLAGS_START + 32);      // FLAG_HAS_RAPTORCH
-    // FlagClear(RPG2GBA_GLOBAL_FLAGS_START + 10);    // FLAG_LOST_FIRST_BATTLE (won the rival battle)
-    // FLAG_SYS_POKEDEX_GET is deliberately NOT set — the tutorial grants it
-    // (along with 5 Poke Balls) as part of what we are here to test.
-    //
-    // No TryMoveObjectEventToMapCoords needed: Moki Town's ON_TRANSITION script
-    // clears FLAG_TEMP_11/FLAG_TEMP_14 while VAR_QUEST_LOG is in [2,4), which
-    // un-hides Theo (local 20 @16,45) and Bambo (local 21 @15,44) at their own
-    // standing spots. The tutorial addobject's its other actors itself.
+    // The disabled harness blocks that used to follow (rock-smash companion
+    // mon, NEXT TEST HARNESS, POST-QUIZ HARNESS, CAPTURE-TUTORIAL HARNESS)
+    // were deleted 2026-08-04 once slice 1 passed its §9 gate — the re-arm
+    // recipe (VAR_QUEST_LOG ladder, which flags/vars each rung needs, the
+    // WarpToTruck spawn swap) is preserved in `ROM_TEST_DEV.md` under
+    // "new_game.c debug-harness re-arm technique" if a future slice needs a
+    // mid-chapter test boot again.
 }
 // END URANIUM PATHFINDER SLICE
 

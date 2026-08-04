@@ -162,6 +162,24 @@ Updated ROADMAP.md (removed wrong "team open-sourced it" claim, restructured Pha
 Conclusions that still matter live in MEMORY.md's Decisions Made or
 Uranium-Specific Discoveries; these lines are kept only for provenance.
 
+- **Gated doors collapse into unconditional warps.** Root-caused and fixed
+  2026-07-26 (`reference/findings/gated_door_collapse_2026-07-26.md` §5,
+  tracked as `SLICE1_TODO.md` #18); "ROM rebuild / B2 re-run pending" closed
+  2026-08-03 — B2 confirmed green 17/17 on the rebuilt ROM. Fix: collapse to
+  a `warp_event` only when every player-touch page transfers; gated doors
+  emit a `coord_event` on their own cell with no relocation;
+  `ObjectBuildResult.gated_door_cells` unions into `build_slice_maps`'s
+  override set, kept in sync with `assemble_pathfinder.WARP_OVERRIDES`
+  (still a hand-maintained duplicate — see `PROJECT_TODO.md` #25 for closing
+  that gap for real).
+- **Automated headless playtest harness — feasibility → built + shipped.**
+  Feasibility study done 2026-07-17
+  (`reference/findings/mgba_automation_feasibility_2026-07-17.md`), verdict
+  feasible via `libmgba-py`; all 4 spikes passed same day; productionized
+  same day as `src/rpg2gba/playtest/` (emulator/symbols/offsets/scenarios/
+  stamp), user-confirmed working on-device 2026-07-17, committed. No longer
+  an open question — the harness is live and runs the chapter suite (moki
+  17/17 green as of the slice-1 gate pass, 2026-08-04).
 - **messages.dat sidecars double-encoded (mojibake).** Resolved 2026-05-20. Root
   cause: `messages.dat` strings are raw **UTF-8 bytes tagged ASCII-8BIT**
   (`Pok\xC3\xA9mon`, `SWIMMER\xE2\x99\x80`=♀); the old `dump_messages.rb` ran

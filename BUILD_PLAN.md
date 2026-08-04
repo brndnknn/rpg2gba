@@ -194,31 +194,37 @@ script.
 
 ---
 
-## 6. Active slice: pathfinder (Maps 49 / 48 / 32)
+## 6. Slice 1 (pathfinder) — PASSED, historical; active slice is now slice 2
 
-**Work unit.** Map 49 = Player's House 1F (spawn @7,7) ↔ Map 48 = 2F ↔ Map 32 = Moki
-Town. This is the game start (new-game spawns at 49), already wired through S1–S9; the
-remaining gaps are exactly the art + the systematic fixes the slice exists to surface.
-(Full S1–S9 history: `reference/memory-archive.md`.)
+**Slice 1 passed its §9 boot-walk gate 2026-08-04** (8 maps — 49/48/32/50/64/65/172/89,
+not the original 3; see `MEMORY.md` Current Phase). The S9 diagnosis below is the
+*early* 3-map-scope draft, kept for its root-cause history — both "OPEN" items it
+lists were long since fixed (NPC gfx: `reference/guides/event_conversion_model.md`
+§4 RMXP-construct table; tile substitution: the real per-tile image pipeline
+shipped, §7). Full S1–S9 narrative: `reference/memory-archive.md`.
 
-**S9 boot diagnosis — 3 root-cause classes:**
+**Active slice is now slice 2** (Route 01) — see `SLICE2_TODO.md`, blocked on
+promoting per-map tileset packing into `assemble_pathfinder.py` (`SLICE2_TODO.md`
+#4) before Route 01 conversion can start.
+
+<details>
+<summary>Original S9 boot diagnosis (3 root-cause classes, historical)</summary>
+
 1. **Warps don't fire — FIXED (converter level).** pokeemerald gates warps on
    `IsWarpMetatileBehavior`; the v1 bucket layout gave warp tiles a plain floor
    metatile (`MB_NORMAL`), so nothing fired. Fix: a per-tileset `warps` metatile in
    `tileset_map.json` + `TileMap.warp()` + `convert_layout` stamps it at each warp
    coord. Chosen `MB_NON_ANIMATED_DOOR` step-on doors — **ts19→metatile 529**,
-   **ts22→metatile 167**. (Needs re-assemble + rebuild + boot to confirm in-game.)
-2. **Crowd of identical NPCs — OPEN.** `metadata_wiring.build_object_events` emits
-   *every* non-warp event as a solid `OBJ_EVENT_GFX_NINJA_BOY` with no check for an
-   RMXP graphic (invisible script triggers become solid NPCs) and no real gfx map.
-   Fix: skip/invisible+non-blocking for graphic-less events; build the RMXP
-   `character_name` → `OBJ_EVENT_GFX_*` map.
-3. **Layout "makes no sense" — OPEN (by-design v1).** The passability-bucket scheme
-   collapses each tileset to two metatiles (floor/wall +void): no doors, furniture,
-   stairs, structure. The real fix is the image pipeline (§7) — actual per-tile
-   substitution.
+   **ts22→metatile 167**.
+2. **Crowd of identical NPCs — FIXED.** `metadata_wiring.build_object_events` used to
+   emit *every* non-warp event as a solid `OBJ_EVENT_GFX_NINJA_BOY` with no check for
+   an RMXP graphic. Fixed via the RMXP `character_name` → `OBJ_EVENT_GFX_*` map
+   (`reference/npc_gfx_map.json`, `tileset_converter/npc_gfx.py`).
+3. **Layout "makes no sense" — FIXED.** The passability-bucket scheme used to
+   collapse each tileset to two metatiles (floor/wall+void). Real per-tile
+   substitution shipped (§7's image pipeline).
 
-Recommended order: warps (done) → NPC visibility+gfx → real tile substitution.
+</details>
 
 ---
 

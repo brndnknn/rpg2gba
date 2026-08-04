@@ -1,3 +1,5 @@
+**SUPERSEDED 2026-08-04 — slice 1 PASSED its §9 boot-walk gate. Every open item that outlives the slice migrated to `PROJECT_TODO.md` / `SLICE2_TODO.md` / `ROM_TEST_DEV.md`; durable engine landmines promoted to `reference/guides/engine_gotchas.md`. ~90 code/doc citations of `SLICE1_TODO #N` are not repointed individually — item numbers are stable since this file moved rather than deleted (see `reference/archive/README.md`). Archived, not live.**
+
 # Slice 1 TODO — the 8-map Moki pathfinder slice
 
 **Slice scope (SoT `tileset_converter/map_set.py` `SLICE_MAP_IDS`): 8 maps, not

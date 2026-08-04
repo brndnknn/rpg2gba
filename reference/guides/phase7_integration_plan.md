@@ -44,6 +44,13 @@ audit each Phase-2 emitter for replace-vs-extend before staging.
 
 ### D2 — species graphics/cries/dex data have NO pipeline (gap found by the
 scaling audit)
+
+**See also:** `STARTER_SPECIES_PLAN.md` (archived, `reference/archive/`) — the 3
+starters (Orchynx/Raptorch/Eletux) already did a slice-sized version of this
+work for the S6 quiz; its landmines carry forward to the other ~160 species:
+`NATIONAL_DEX_NONE` save-corruption trap, fenced-overlay-hook pattern,
+`.4bpp.smol`, the wav2agb cry pipeline, joint front+back palette quantization.
+
 Nothing converts Uranium's battler sprites, icons, footprints, or cries;
 Phase-2 species data alone gives invisible/silent mons. New converter needed
 (pattern exists: `graphics/sprites.py` handles 2×-scale detection and

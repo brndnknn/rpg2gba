@@ -1,7 +1,9 @@
+**SUPERSEDED 2026-08-04 — rebuilt and boot-walked since (slice 1 §9 gate passed). §4's open mechanism question migrated live to `PROJECT_TODO.md` #26. Archived, not live.**
+
 # Map050 starter scene — actor positioning drift (2026-07-27)
 
 **Status:** fix applied in source, **not yet rebuilt or boot-walked**. One question
-left open, to be settled by a PC playthrough of the chapter (checklist in §5).
+left open, to be settled by a PC playthrough of the chapter (checklist in §5). **[Stale status line — rebuilt+walked since; see stamp above.]**
 
 **Scope:** Map050 (Professor's Lab), the starter-selection + rival-challenge scene.
 Source events: `EV005` "Bambo" page 0 (autorun intro) and `EV019` "Machine" page 0

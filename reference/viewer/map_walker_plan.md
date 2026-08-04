@@ -1,6 +1,6 @@
 # Map Walker — Design & Build Plan
 
-**Status:** Proposed (awaiting build greenlight)
+**Status:** Built, shipped, merged (see `MEMORY.md` Decisions Made / Uranium-Specific Discoveries for the build narrative)
 **Author:** build agent
 **Date:** 2026-06-27
 

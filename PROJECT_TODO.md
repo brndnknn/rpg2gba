@@ -117,15 +117,211 @@ reference view and shouldn't need frames — verify when building. Teach the
 oracle's viewer mode the same, then re-run Mode B on the slice to prove
 parity including animated columns.
 
+### 15. Source→emitted dialogue census as a build-time gate
+
+Nothing compares source event text (code-101/401) to emitted script text
+(`msgbox` + text blocks). Need a corpus-wide count-and-ratio check that fails
+loud past a threshold, modeling code-401 continuation lines merging into one
+`msgbox` (not a strict 1:1 demand). Measured baselines from the audit: Map032
+EV009 38→37 (complete), Map049 EV021 18→16 (fine, 401 merges), Map050 EV005
+102→60 (unexplained, see #19), Map050 EV019 37→18 (the loss that triggered
+the whole audit, since fixed). Must also cover hand-conversion files —
+`hand_overrides.py:63` splices them in verbatim and skips every existing
+coverage mechanism; its `_validate` only checks label-collision namespace
+hygiene, not content. Migrated from SLICE1_TODO #28 §5.3 / hand-conversion
+audit §5.3, 2026-08-04.
+
+### 16. Close the `legacy_unaudited` escape hatch — still only warns
+
+`load_queue_jsonl` raises on a `hand` queue entry with a blank evidence box,
+but only **warns** when `legacy_unaudited: true` — verified still true at
+`queue_evidence.py:241`. That flag was meant to mark an audit backlog and
+became a permanent exemption; it let an unjustified hand conversion
+(Map050 EV019) ship three real defects into the ROM before anyone caught it
+(see `reference/findings/hand_conversion_audit_2026-07-31.md`). Fix: make
+`legacy_unaudited` raise like a blank evidence box, then audit or retire
+every remaining user of the flag (see #19 for the one still outstanding).
+Also still undone: document the "hand conversion never amortizes" rule in
+CLAUDE.md §4.1 and in a `hand_conversions/` README. Migrated from
+SLICE1_TODO #28 §5.4 / hand-conversion audit §5.4, 2026-08-04.
+
+### 17. Model scripted-route collision stalls for cutscene (`applymovement`) routes
+
+RMXP stalls a move route when its destination tile is blocked/occupied and
+Uranium leans on that idiom ("walk N tiles, stop when you bump into
+someone") — e.g. Map050 EV005 page 0 marches the player `move_up`×10. On
+GBA, `route_sim.py` and `MovementType_UraniumCustomRoute_Callback` only
+model this for page-level ambient routes (`move_type == 3`); embedded
+cutscene routes compile to vanilla `applymovement`, whose `walk_*` actions
+never check collision (`InitNpcForMovement`,
+`engine/src/event_object_movement.c:7287-7305`, path verified present).
+Consequence: any such scripted route can land a different tile on GBA than
+in RMXP, corpus-wide, silently. Extending `route_sim` to cutscene routes
+also enables a build-time, no-emulator diff of RMXP-simulated vs
+Emerald-simulated actor endpoints — see #26 for the specific instance this
+would have caught. Migrated from SLICE1_TODO #28 §5.5 / hand-conversion
+audit §5.5 / `reference/findings/lab_starter_scene_positioning_2026-07-27.md`
+§6.1, 2026-08-04.
+
+### 18. Emit `MB_COUNTER` for RMXP counter-passage tiles
+
+`tileset_converter/tile_map.py:50-53` masks RMXP passages with `0x0F` and
+discards the high bits as "non-collision flags" (path/lines verified
+current). The counter bit is `0x80`; nothing emits `MB_COUNTER` anywhere in
+the corpus, so counter-reach (talking over a counter to the tile beyond it)
+is lost everywhere it appears. The engine supports it natively, zero custom
+C: `MetatileBehavior_IsCounter` (`engine/src/metatile_behavior.c:490`,
+verified present) is consumed by `GetInteractedObjectEventScript`
+(`engine/src/field_control_avatar.c:400-409`, verified present), which looks
+one tile beyond a counter for the object event to interact with. Note
+collision is not derived from the behavior — a counter metatile must also
+carry a non-zero collision bit to actually block. Migrated from
+SLICE1_TODO #28 §5.6 / hand-conversion audit §5.6, 2026-08-04.
+
+### 19. Hand-conversion audit backlog — three unresolved items (non-harness)
+
+From `reference/findings/hand_conversion_audit_2026-07-31.md` §6 "Still
+open" (harness items excluded — another agent tracks those):
+
+- **Map049 EV020** is the other `legacy_unaudited: true, greps: []` ledger
+  entry in `hand_bucket_queue.jsonl`. It has a ledger line but **no file**
+  under `src/rpg2gba/conversion_agent/hand_conversions/` (verified absent
+  2026-08-04). Never discussed or audited the way EV019 was. Needs the same
+  audit treatment, or retirement if it turns out moot (SLICE1_TODO #28 notes
+  it may be absent from the 2026-07-24 slice dry-run).
+- **Map050 EV005 text ratio is unexplained.** 102 source strings → 60
+  emitted. The hand-bucket retirement of EV005 (#23-era work) is otherwise
+  justified, but this ratio was never accounted for — multi-page branching
+  may explain it, or may not. Strongest existing argument for #15's build
+  gate.
+- **`pbStarterSelector` cutscene never read.** The EV019 header calls it
+  "presentation-only" and substitutes a text box; nobody has opened the
+  Uranium source for it. A PC playthrough reported an unconverted cutscene
+  at this point in the lab scene. Read it in `RPG2GBA_URANIUM_SRC` and
+  confirm or correct the substitution.
+
+Migrated from hand-conversion audit §6, 2026-08-04.
+
+### 20. Map050 EV026 — dead lab PC, one-line fix, never boot-walked
+
+Real, unreported bug found while compiling `SLICE1_EVENTS.md` (§11.11), not
+from a device walk. The lab PC's `pbPokeCenterPC` call sits inside an
+unhandled code-111 character-facing conditional, so it was never emitted —
+the event compiles to a bg event whose body is just `lock`/`release`/`end`.
+Interacting with the PC does nothing. Map048 EV004's PC works because its
+call isn't wrapped in a conditional. Fix: emit `goto(EventScript_PC)` for
+this event, same as Map048 EV004 (`data/scripts/pc.inc`, vanilla). One line,
+needs a build and a boot-walk to confirm. Migrated from
+`SLICE1_EVENTS.md` §11.11, 2026-08-04.
+
+### 21. No freshness guard: ROM under test vs currently staged source
+
+The playtest runner enforces ROM-vs-seed-blob provenance (sha256) but has no
+check that the ROM binary is newer than staged source. Has bitten twice: a
+2026-07-25 harness run against a 45-minute-stale binary, and 2026-07-30 three
+days of runs against a build (`1d1dde30`) the user had already rejected.
+Same hazard class as the `.sav` residue bug and `BOOT_WALK_CHECKLIST.md` §8.
+Guard: refuse to run if anything under `engine/data` or `engine/src` is
+newer than the built ROM. Migrated from SLICE1_TODO #30 / also flagged in
+`reference/findings/gated_door_collapse_2026-07-26.md` §6, 2026-08-04.
+
+### 22. Audio — open user decision, ROM currently plays stock Emerald music
+
+The transpiler comments out every RMXP audio command; no Uranium BGM/SFX
+convert. The ROM currently plays whatever stock Emerald default falls out
+of `map.json` (e.g. Littleroot's theme). Architecture already sketched in
+`reference/findings/audio_decision_2026-07-14.md`: a fork-index-validated
+substitution table `reference/audio_map.json`, wired into `metadata_wiring`
+per-map BGM plus transpiler `playbgm`/`playfanfare`/`playse` — real
+conversion/streaming was rejected by arithmetic (ROM budget). What's
+outstanding is the user's call on the bar: accept stock audio as-is,
+silence, or build the ~15-row substitution table (recommended). Not
+slice-specific — applies to every future slice until decided. Migrated from
+SLICE1_TODO #7, 2026-08-04.
+
+### 23. Tile-animation follow-ups — untested beyond the slice's 2 effects
+
+Core animation feature is done and user-verified (2026-07-12 build), but
+three follow-ups were never checked:
+
+- **Cadence fidelity.** 16 ticks/frame (~267 ms) is vanilla Emerald's water
+  cadence, adopted as a first guess and approved by eye. RMXP's actual
+  autotile speed in Uranium was never measured against it. Adjustable via
+  the `% 16` divisor in `_write_anim_fragment` if a side-by-side ever shows
+  a mismatch.
+- **Corpus generalization untested.** Slice 1 exercises 2 effects on 1
+  tileset; the corpus has 69 multi-frame autotiles (up to 64 frames,
+  `seatest.png`). Untested: animated tiles landing in the SECONDARY tileset
+  (current code packs into the primary block, fails loud past 512 — fine
+  for the slice, needs a secondary-callback variant eventually), many
+  effects per tileset (DMA queue caps at 20 entries/frame), and columns
+  hitting the 64-frame lcm guard.
+- **Waterfall / transparency untested.** ts22 slot 1 (`PU-Waterfall(transp)`,
+  5 frames) is unused by the slice's Map032 cells — the first
+  animated+transparent autotile arrives with Route 01 (slice 2). Stipple/
+  alpha classify interaction with frame quantization is unverified.
+
+Migrated from SLICE1_TODO #10, 2026-08-04.
+
+### 24. PU-POKEBALL content-fidelity sign-off outstanding
+
+`PU-POKEBALL` (the thrown-ball sprite in the capture-tutorial ball-throw
+scene, Map032 EV009 P3/EV76) currently reuses the vanilla
+`OBJ_EVENT_GFX_POKE_BALL` graphic rather than staging Uranium's own
+still-pose sheet. This is a CLAUDE.md §10 content-fidelity substitution
+call, not a bug — the scene itself boot-walked and passed 2026-08-02
+(ROM `e0f6d30f`). The user's explicit sign-off on the substitution (accept
+vanilla ball vs. convert Uranium's sheet) is still outstanding. Migrated
+from SLICE1_TODO #23, 2026-08-04.
+
+### 25. `assemble_pathfinder.WARP_OVERRIDES` is a hand-maintained duplicate
+
+`scripts/assemble_pathfinder.py:58` defines a hand-written `WARP_OVERRIDES:
+dict[int, set[tuple[int, int]]]` that must agree with what
+`metadata_wiring.build_slice_maps` (`src/rpg2gba/tileset_converter/
+metadata_wiring.py:2257`) computes for gated-door and warp-override cells —
+a source-of-truth duplication that violates CLAUDE.md §4.3 ("one source of
+truth per concept"). They happen to agree today (the gated-door fix's item
+(4), `ObjectBuildResult.gated_door_cells`, is what keeps them agreeing) but
+nothing enforces it, so a future reconciliation could silently re-diverge
+and quietly re-break doors. Fix: derive `WARP_OVERRIDES` from
+`build_slice_maps`'s computed set instead of hand-listing it. Migrated from
+`reference/findings/gated_door_collapse_2026-07-26.md` §7, 2026-08-04.
+
+### 26. Lab starter scene: what puts Uranium's own player on (14,7)? — unresolved, plus a fidelity call riding on the answer
+
+`reference/findings/lab_starter_scene_positioning_2026-07-27.md` §4 poses an
+open mechanism question, subsequently shown to rest on a retracted
+argument (`reference/findings/hand_conversion_audit_2026-07-31.md` §3.3 —
+the doc's own Through-ON evidence, read correctly, proves Theo ends at
+(14,6), not (14,7); the "Uranium's anchor is (14,7)" claim doesn't survive).
+What's left genuinely unresolved even after the retraction: nothing in the
+reachable data (map collision, tileset counter bits, nearby events) explains
+what mechanism would put Uranium's own player somewhere other than our
+computed (14,6) anchor at the machine — the doc ruled out a counter tile
+and a proxy event and found Bambo (EV005) vacates the spot, but never
+identified a positive mechanism. Separately, and regardless of how the
+mechanism question resolves: if a device playthrough of *original* Uranium
+shows the same tile relationship, then whichever positioning our current
+conversion produces should be a deliberate CLAUDE.md §10 content-fidelity
+decision ("does our version look better than the original, and is that
+okay") rather than an accident of which bug got fixed first. Needs a PC (or
+emulator) playthrough of stock Uranium's lab scene to settle. Migrated from
+`reference/findings/lab_starter_scene_positioning_2026-07-27.md` §4,
+2026-08-04.
+
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 
 - **Reflection narrow-scan** — tried and reverted 2026-07-07 (user: "not
   actually a fix"). Do not re-apply; if pond reflections get revisited it
   needs a different approach than narrowing the engine scan box.
-- **new_game.c test harness** (grants FLAG_BADGE03_GET + a Rock-Smash Geodude
-  on fresh boot) — tracked as a to-remove-when-real-progression-covers-it
-  obligation, currently live pending the slice-1 decision in
-  `SLICE1_TODO.md` #5.
+- **new_game.c test harness** — `SLICE1_TODO.md` #5 decision landed (`4b8ca7ce`):
+  **keep `FlagSet(FLAG_BADGE03_GET)` indefinitely** (user decision, standing rig,
+  not a to-remove obligation). Its Rock-Smash-Geodude companion lines were
+  separately disabled 2026-07-21 (rock smash not walkable on current builds) and
+  are dead code alongside 3 other DISABLED harness blocks in the same function —
+  see Group C cleanup, `reference/guides/engine_gotchas.md` is not the home for
+  this, `ROM_TEST_DEV.md`'s "new_game.c debug-harness re-arm technique" section is.
 
 ## Done
 

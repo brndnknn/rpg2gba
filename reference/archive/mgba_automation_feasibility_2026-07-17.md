@@ -1,3 +1,5 @@
+**SUPERSEDED 2026-08-04 — superseded by the shipped harness, `src/rpg2gba/playtest/`. History only.**
+
 # Feasibility: automated ROM playtesting via headless mGBA
 
 *2026-07-17 — feasibility study only, nothing implemented. Requested scenario:

@@ -1,3 +1,5 @@
+**SUPERSEDED 2026-08-04 — slice 1 done (8 finished maps). §1 (event model) and §12 (Emerald-constructs table) promoted verbatim-as-general-guide to `reference/guides/event_conversion_model.md`; the §11.11 unreported bug (Map050_EV026 dead lab PC) migrated to `PROJECT_TODO.md` #20. §11 per-event debug history stays here as slice-1 history. Archived, not live.**
+
 # Slice 1 event inventory
 
 Every RMXP event on the eight slice-1 maps (`tileset_converter/map_set.py`

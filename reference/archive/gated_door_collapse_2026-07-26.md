@@ -1,8 +1,10 @@
+**SUPERSEDED 2026-08-04 — ROM rebuilt, B2 confirmed green 17/17. The `WARP_OVERRIDES` hand-maintained-duplicate leftover (§7) migrated live to `PROJECT_TODO.md` #25. Archived, not live.**
+
 # Gated doors collapse into unconditional warps (`classify_event`)
 
 **Found:** 2026-07-26, by the chapter playtest harness failing Moki beat **B2**.
 **Status:** **FIXED 2026-07-26** (converter + tests + re-staged). ROM rebuild and
-a B2 re-run still pending — see §7.
+a B2 re-run still pending — see §7. **[Stale — both done since; see stamp above.]**
 **Owner file:** `src/rpg2gba/tileset_converter/metadata_wiring.py` (`classify_event`).
 
 ---

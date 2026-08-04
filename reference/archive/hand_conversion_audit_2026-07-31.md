@@ -1,8 +1,10 @@
+**SUPERSEDED 2026-08-04 — §6 "Still open" 5 items migrated live: 3 to `PROJECT_TODO.md` #19, 2 (harness can't see NPCs / contact sheets wrong frame) to `ROM_TEST_DEV.md`. Archived, not live.**
+
 # Hand-conversion audit and remediation plan (2026-07-31)
 
 **Status:** audit complete, nothing remediated yet. Triggered by a PC playthrough
 of the Moki lab chapter that found three defects our ROM shipped and nothing in
-the pipeline flagged.
+the pipeline flagged. **[Stale — remediated since; see stamp above.]**
 
 **Scope:** every entry in `reference/findings/hand_bucket_queue.jsonl` and every
 file in `src/rpg2gba/conversion_agent/hand_conversions/`, plus the corpus-wide

@@ -1,3 +1,5 @@
+**SUPERSEDED 2026-08-04 — fix shipped and verified. Its §1 collision rule was WRONG (a single-tile `cell_clear` test); the correct two-sided rule plus the verified corpus measurements are extracted into `reference/guides/custom_route_interpreter.md` ("RMXP blocked-move semantics" section) before archiving. Archived, not live.**
+
 # Fix: RMXP blocked-move semantics (NPC movement, Moki Town boot-walk)
 
 ## Context

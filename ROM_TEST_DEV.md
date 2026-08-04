@@ -778,3 +778,221 @@ unanswered above, recommending both.
   slice-1 entry.
 
 Items 1 and 2 have no open design questions in them and are the natural start.
+
+---
+
+# Migrated from slice-1 docs — 2026-08-04 (appended by build agent)
+
+Slice 1 passed its §9 boot-walk gate; its tracking docs are being retired. This
+section pulls forward the harness-related open items that were trapped in
+those docs before archival, per this doc's own convention of prose entries +
+progress-table extension. Provenance is noted per item. The
+ROM-vs-staged-source freshness guard (also part of SLICE1_TODO #30) is *not*
+here — it is not harness-specific (it's a build/staging check) and is
+migrating to PROJECT_TODO.md instead.
+
+## Harness cannot see NPCs (migrated from `hand_conversion_audit_2026-07-31.md` §6, 2026-08-04)
+
+**Verified 2026-08-04, still true.** `grep -rn "gObjectEvents"
+src/rpg2gba/playtest/` returns zero hits — no module in the harness (`emulator.py`,
+`runner.py`, `battle.py`, `contact_sheet.py`, `offsets.py`, `symbols.py`,
+`chapters/`) has ever read the array. The harness knows the player's position
+(`sb1`-derived accessors in `emulator.py`) and nothing about any other actor.
+This is exactly the bug class the manual boot walks kept catching by eye —
+Map050 EV019's positioning defect (`hand_conversion_audit_2026-07-31.md` §3.2:
+Theo landed a tile off from where the source event puts him) would have been a
+one-line assertion instead of a device pass, had this existed.
+
+`OBJECT_EVENTS_COUNT` = 16, symbol is in the linker map
+(`engine/pokeemerald.map:5142`). SLICE1_TODO #28's probe (item #26 in that
+doc) already established the struct facts needed to build the accessor —
+**not re-verified against the current binary in this pass, carry forward as
+probed-not-yet-productionized**:
+
+- `gObjectEvents` stride 0x48
+- `gSprites` stride 0x44
+- `localId` at `+0x08`
+- `graphicsId` at `+0x04`
+- `spriteId` at `+0x23`
+
+Building this is: probe/confirm those offsets are still current in
+`offsets.py`, add an `Emulator` accessor analogous to `var()`/`sb1` that walks
+`gObjectEvents` by local id and cross-references `gSprites[spriteId]` for
+screen position/facing, then a chapter beat can assert e.g. "Theo and the
+player are orthogonally adjacent and facing each other" instead of relying on
+a screenshot. No design questions open here — it's C3-shaped (a new
+primitive), same tier as `var()` was before item 1 landed.
+
+## Contact sheets capture the wrong frame for geometry (migrated from `hand_conversion_audit_2026-07-31.md` §6, 2026-08-04)
+
+**Verified 2026-08-04 against `src/rpg2gba/playtest/emulator.py` and
+`contact_sheet.py`.** `Emulator.waypoint()` (`emulator.py:262-316`) picks the
+tile by this priority: an explicit `mark_frame()` pin wins; otherwise, if any
+dialogue was seen during the beat, the frame captured by `note_text_frame()`
+at the **falling edge of `text_showing`** (the last glyph landing, i.e. the
+final message of the scene) is used and the emulator is *not advanced*;
+otherwise the live frame at the beat boundary (after `_settle_frame()`) is
+used. This is right for text — the payoff line, not the greeting — and wrong
+for positioning, because the dialogue-moment frame is captured **before** any
+post-dialogue movement in the same beat, and the live-frame fallback is
+captured **after** the whole beat (including NPC movement) has already
+resolved. Neither rule lands on the moment mid-movement where a staging bug
+like the Theo-tile-off-by-one defect (§3.2 of the audit) would be visible.
+
+**Current partial mitigation:** `mark_frame()` (`emulator.py:232-260`, SLICE1_TODO
+item #21, landed 2026-07-30) lets a beat pin an explicit frame, sticky against
+later dialogue overwriting it. This is available today; it has not been used
+to add a second capture for beats that move NPCs.
+
+**What would need to change:** beats that move NPCs (choreographed
+cutscenes — the Theo battle stand-off, the capture-tutorial reveal, any
+`applymovement`-heavy scene) want **two** waypoints per beat, not one: the
+existing end-of-beat tile, plus a `mark_frame()` call inserted right after the
+movement resolves and before any subsequent dialogue starts drawing. That's a
+per-beat authoring change (call `mark_frame()` at the right point in the beat
+script, then let `waypoint()` run as normal so both frames land on the
+sheet — `Waypoint` already supports multiple entries per beat name via
+`emu.waypoint()`'s own beat-boundary call plus mid-beat calls), not a change
+to the capture-priority logic itself. No new primitive needed; this is
+authoring debt in `playtest/chapters/moki.py` (and future chapter modules),
+now flagged as convention rather than a one-off.
+
+## Dev-loop debt specific to the harness (migrated from `SLICE1_TODO.md` #30, 2026-08-04)
+
+`SLICE1_TODO.md` #30 ("Dev-loop debt that gates the slice review") bundles
+three facts; the ROM-vs-staged-source freshness guard is migrating to
+PROJECT_TODO.md by a different agent (it's a build/staging concern, not
+harness code) and is deliberately **not** duplicated here. The other two are
+harness-specific and land here:
+
+- **The chapter harness + atlas are the review vehicle and work end to end.**
+  `src/rpg2gba/playtest/` + `chapters/moki.py`: 17 beats (B1–B15 plus
+  interleaved negatives N2/N3 — N1 was dropped 2026-07-27 as a restatement of
+  B2), review ROM + contact sheets under `output/playtest/review/`. Last
+  recorded run: **GREEN 17/17, first attempt, fresh start, on ROM `b09d0e89`
+  (2026-08-02)** — the first run against the retired Map032 EV009 hand
+  conversion, so beats B13/B14 (catch ceremony + no-refire check) passed on
+  fully machine-generated script. Invocation: `python -m rpg2gba.playtest run
+  --chapter moki --engine engine`.
+- **`engine/src/new_game.c` debug-harness re-arm technique** — see the
+  dedicated section below; the disabled blocks in that file are the mechanism,
+  and the technique needs to survive their eventual deletion.
+
+## `new_game.c` debug-harness re-arm technique (migrated from `SLICE1_TODO.md` #31 + read against `engine/src/new_game.c`, 2026-08-04)
+
+The capture-tutorial harness was disabled 2026-08-02 (`5352fd2d`) once its
+boot-walk passed on ROM `e0f6d30f`, so the chapter suite gets its fresh start
+back (`CB2_StartUraniumSlice` boots a real new game again). `new_game.c`
+currently carries **four** disabled/commented-out harness blocks inside
+`CB2_StartUraniumSlice` (`engine/src/new_game.c:301-450`), read in full
+2026-08-04:
+
+1. `engine/src/new_game.c:352-356` — the rock-smash-companion lines
+   (`ScriptGiveMon(SPECIES_GEODUDE, ...)` / `ScriptSetMonMoveSlot(...)`),
+   disabled 2026-07-21 to force the S6b rival-battle loss path reachable
+   (only the type-disadvantaged starter in the party).
+2. `engine/src/new_game.c:358-377` — "NEXT TEST HARNESS (post-S7 frontier)":
+   boots holding Raptorch, having beaten Theo, PokePod scene done
+   (`VAR_QUEST_LOG = 2`), running shoes, no Geodude.
+3. `engine/src/new_game.c:379-402` — "POST-QUIZ HARNESS (starter-grant
+   repro)": boots just past the aptitude quiz via the quiz-complete
+   self-switch latch (SSC, `+19` — **not** SSB `+18`, which is only the
+   quiz-*accepted* latch and drops you back into the quiz).
+4. `engine/src/new_game.c:404-449` — "CAPTURE-TUTORIAL HARNESS", the one that
+   was actually boot-walked and passed (ROM `e0f6d30f`, SLICE1_TODO #31).
+
+**The durable content worth keeping is block 4's `VAR_QUEST_LOG` ladder**
+(comment at `new_game.c:418-427`), quoted exactly:
+
+> `VAR_QUEST_LOG` is the whole progression ladder for this slice, and the
+> tutorial's dispatcher reads it as a `>=` chain:
+> - `>= 4` → end (tutorial already done)
+> - `>= 2` → Page3, the capture tutorial
+> - `>= 1` → Page2, "go fetch Theo" text only
+> - else → Page1
+>
+> `0` = fresh boot, `1` = rival battle done (EV019 `addvar`), `2` = PokePod
+> done (Map172 `setvar`), `4` = tutorial done (Map032 `setvar`; `3` is never
+> written).
+
+**How a future harness re-arms a mid-chapter start** (the general recipe, read
+directly off block 4, `new_game.c:404-449`):
+
+1. Set the ladder variable: `VarSet(RPG2GBA_VARS_START + 53, N)` where `N` is
+   the target rung above (`VAR_QUEST_LOG` = `RPG2GBA_VARS_START + 53`).
+2. If the rung implies the player already has a starter, it has to be made
+   real, not just flagged — bookkeeping flags alone leave an empty party
+   behind a party-shaped menu:
+   - `VarSet(RPG2GBA_VARS_START + 93, species_index)` —
+     `VAR_POKEMONTEST` = `RPG2GBA_VARS_START + 93`; `1` = Orchynx, `2` =
+     Raptorch, `3` = Eletux. Must agree with the actual mon and the
+     `FLAG_HAS_*` below, or the tutorial's species text mismatches
+     (cosmetic, not a soft-lock, but looks broken).
+   - `ScriptGiveMon(SPECIES_x, 5, ITEM_NONE)` to actually populate
+     `gPlayerParty`.
+   - `FlagSet(FLAG_SYS_POKEMON_GET)` (party shows in the START menu),
+     `FlagSet(RPG2GBA_GLOBAL_FLAGS_START + 0)` (`FLAG_RECEIVED_STARTER`),
+     `FlagSet(RPG2GBA_GLOBAL_FLAGS_START + 32)` (`FLAG_HAS_RAPTORCH`, or the
+     species-matched equivalent).
+3. Clear/set battle-outcome flags the rung implies:
+   `FlagClear(RPG2GBA_GLOBAL_FLAGS_START + 10)` (`FLAG_LOST_FIRST_BATTLE`) if
+   the rung is past a *won* rival battle.
+4. Leave whatever the target beat is supposed to grant **unset** —
+   e.g. block 4 deliberately does *not* set `FLAG_SYS_POKEDEX_GET`, because
+   the capture tutorial grants it (plus 5 Poké Balls) as part of what the
+   harness exists to test.
+5. Redirect the spawn: swap the active `SetWarpDestination(...)` call in
+   `WarpToTruck()` (`engine/src/new_game.c:150-188`) to the map/coords the
+   rung lands on. The default (uncommented) spawn is
+   `SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F),
+   MAP_NUM(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), WARP_ID_NONE, 7, 7)`
+   (`new_game.c:167`); block 4's target is the commented-out
+   `SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN), MAP_NUM(MAP_MOKI_TOWN),
+   WARP_ID_NONE, 20, 44)` (`new_game.c:187`). Only one `SetWarpDestination`
+   call may be active at a time.
+6. Actor visibility usually does not need manual `TryMoveObjectEventToMapCoords`
+   calls if the destination map's own `ON_TRANSITION` script already un-hides
+   the right actors for that `VAR_QUEST_LOG` range (block 4's comment: Moki
+   Town's transition script clears `FLAG_TEMP_11`/`FLAG_TEMP_14` while
+   `VAR_QUEST_LOG` is in `[2,4)`, un-hiding Theo and Bambo at their standing
+   spots) — check the destination map's transition script before adding one.
+   Block 3 (POST-QUIZ HARNESS) needed one anyway, for an NPC whose position
+   the skipped scene would otherwise have left wrong:
+   `TryMoveObjectEventToMapCoords(2, MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB),
+   MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), 15, 6)`.
+7. **Whatever block is armed must be disabled again, and the spawn reverted to
+   the vanilla player's-house target, before running the chapter suite** — an
+   armed harness defeats the suite's fresh-start guarantee by construction.
+
+This whole recipe is scoped to disappear from `new_game.c` once the dead
+blocks are deleted; this entry is what preserves the technique afterward. The
+natural next home for it, if/when it's needed again, is a harness-side
+"seed to rung N" helper in `src/rpg2gba/playtest/` built on the embedded-save
+stamping machinery (Branch D of the grill session above) rather than another
+commented-out C block — that would also make it available to the Python
+runner directly instead of requiring an engine rebuild per rung.
+
+## P2 blocking decisions — already clearly stated, left as-is (checked 2026-08-04)
+
+Re-checked per the migration task: P2 (encounter time-of-day, progress table
+above) is blocked on two decisions, and both are already stated in one place —
+§0 "Correction: day/night encounters ARE native. Our converter drops them."
+above (search this file for "Open decision for you"). Restating only as an
+index, not a rewrite:
+
+1. **Evening-bucket choice** — Essentials has Morning/Day/Night; the engine's
+   default `GEN_LATEST` timing wants four buckets including Evening. Options
+   given: (a) fold Evening into Night, (b) fold Evening into Day, (c) set
+   `OW_TIMES_OF_DAY` to `GEN_2` or `GEN_4` (no Evening bucket at all) — the
+   build agent's lean is (c) with `GEN_4` if nothing else in the build depends
+   on Evening, else (a).
+2. **The global engine-config change** — turning `OW_TIME_OF_DAY_ENCOUNTERS`
+   on (currently `FALSE` by default, `engine/include/config/overworld.h:95`)
+   affects every map's encounter table, not just Uranium map id 22 (the one
+   map in the whole corpus that actually uses a time-of-day table) — every
+   other map's single table becomes its fallback bucket. Correct behavior,
+   but flagged rather than done per CLAUDE.md §10 (engine-behavior-changing
+   config is an ask-first item).
+
+No change to P2's status in the progress table — still blocked, nothing to
+promote to `done`.

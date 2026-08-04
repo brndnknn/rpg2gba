@@ -24,3 +24,22 @@ only here, it's history.
 | `PHASE4_PLAN.md` / `PHASE4_CALIBRATION_PLAN.md` / `PHASE4_DEDUP_PLAN.md` / `PHASE4_DETERMINISTIC_PLAN.md` | Phase 4 LLM-pipeline plans | superseded by the pivot; transpiler plan in `BUILD_PLAN.md` |
 | `PHASE5_PLAN.md` | Phase 5 layout/tileset plan | ROADMAP §Phase 5 (quantize) + `BUILD_PLAN.md §7` |
 | `FABLES_OBSERVATION.md` / `FABLES_IMPLEMENTATION.md` / `FABLES_DECISIONS.md` | the FABLES critique walkthrough + queue (all phases done) | MEMORY → Decisions Made (the FABLES decisions are recorded there) |
+
+**2026-08-04 — slice 1 (pathfinder) retirement, its §9 boot-walk gate PASSED:**
+
+| Archived doc | Was | Live content now in |
+|---|---|---|
+| `SLICE1_TODO.md` | slice-1 tracking ledger, 1299 lines, ~90 citation sites repo-wide (unrepointed — item numbers stable, file moved not deleted) | `PROJECT_TODO.md` #15-26, `SLICE2_TODO.md` #3, `ROM_TEST_DEV.md` harness section, `reference/guides/engine_gotchas.md` |
+| `SLICE1_EVENTS.md` | 131-event inventory for the 8 slice-1 maps | `reference/guides/event_conversion_model.md` (§1/§12 promoted); §11.11 bug → `PROJECT_TODO.md` #20 |
+| `SLICE1_FINAL_BOOT_WALK.md` | the §9 gate certificate itself | stays as the passed certificate; "Not implemented" ledger repointed in-place |
+| `BOOT_WALK_CHECKLIST.md` | earlier boot-walk checklist, already superseded before this pass | history only |
+| `STARTER_SPECIES_PLAN.md` | Orchynx/Raptorch/Eletux conversion plan (closed, W1-W9/S6 passed) | `reference/guides/phase7_integration_plan.md` D2 (pointer added, high value for remaining ~160 species) |
+| `STARTER_QUIZ_ANSWERS.md` | S6 aptitude quiz answer key | none needed — closed, kept as a human-readable cheat sheet |
+| `RMXP_MOVEMENT_FIX_PLAN.md` | RMXP blocked-move semantics fix plan | `reference/guides/custom_route_interpreter.md` ("RMXP blocked-move semantics" section; corrects its wrong §1 collision rule) |
+| `moki_slice_story_chain_2026-07-16.md` | Moki story-chain + event-trigger bug research | `reference/chapters/01-moki.md` |
+| `lab_starter_scene_positioning_2026-07-27.md` | Map050 starter-scene actor positioning drift | `PROJECT_TODO.md` #26 (the one surviving open question) |
+| `gated_door_collapse_2026-07-26.md` | gated-doors-collapse-into-warps root cause + fix | `PROJECT_TODO.md` #25 (the `WARP_OVERRIDES` duplicate leftover) |
+| `hand_conversion_audit_2026-07-31.md` | hand-conversion audit + remediation plan | `PROJECT_TODO.md` #19 (3 items) + `ROM_TEST_DEV.md` (2 harness items) |
+| `slice1_queue_readthrough.md` | point-in-time transpiler-queue read-through | history only, no forward action items |
+| `walker_checkpoint2_findings.md` | checkpoint-2 sign-off + 2 deferrals | both deferrals shipped (`808966cd`); history only |
+| `mgba_automation_feasibility_2026-07-17.md` | headless-mGBA feasibility study | `src/rpg2gba/playtest/` (the shipped harness) |
