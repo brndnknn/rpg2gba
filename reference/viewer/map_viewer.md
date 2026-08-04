@@ -77,9 +77,13 @@ that the build agent reads and fixes.
   **✕** on a row deletes it immediately.
 - Flagged cells get an orange **⚑** marker on the canvas (drawn unconditionally,
   not gated behind Advanced), so you can see punch-list coverage while panning.
-- **Export JSON** downloads `MapNNN_feedback.json` — the current flag list as-is.
-  This is the only way to get flags out of **static mode**, which has no server to
-  persist to.
+- **Export JSON** writes `MapNNN_feedback.json` — the current flag list as-is. In
+  **server mode** it POSTs to `/api/feedback/export` and the *server* writes the file
+  to `output/map_feedback/` on the machine running it (not a browser download — the
+  viewer is usually driven from a phone, and the file is only useful next to the rest
+  of the pipeline output); the written path is echoed under the button. In **static
+  mode** there's no server to write to, so it falls back to a browser download — the
+  only way to get flags out of static mode.
 
 **Storage:** flags persist to git-tracked `reference/map_feedback/MapNNN.json` — a
 JSON list of `{cells, note}` objects. This is deliberate: flags are hand-authored

@@ -233,6 +233,25 @@ def _feedback_path(map_id: int) -> Path:
     return d / f"Map{map_id:03d}.json"
 
 
+def _export_path(map_id: int) -> Path:
+    """Where the viewer's "Export JSON" button drops a snapshot, server-side.
+
+    Distinct from _feedback_path(): that's the live, version-controlled review data;
+    this is a regenerable dump, so it lands under output/ per CLAUDE.md §4.4."""
+    d = _output_base() / "map_feedback"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"Map{map_id:03d}_feedback.json"
+
+
+def export_feedback(map_id: int, flags: list[dict]) -> Path:
+    """Write a flag-list snapshot to output/map_feedback/ and return the path."""
+    path = _export_path(map_id)
+    path.write_text(
+        json.dumps(flags, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    return path
+
+
 def load_feedback(map_id: int) -> list[dict]:
     """This map's tile-feedback flags (empty list if none saved yet).
 
@@ -1235,8 +1254,9 @@ body.adv #knobbar{display:flex}
       <textarea id="note-text" placeholder="Describe what's wrong with these tiles…"></textarea>
       <div>
         <button class="btn" id="btn-save-flag" disabled>Save flag</button>
-        <button class="btn" id="btn-export" title="Download this map's flags as JSON">Export JSON</button>
+        <button class="btn" id="btn-export" title="Write this map's flags as JSON (server mode: saved on the server, under output/map_feedback/)">Export JSON</button>
       </div>
+      <div id="export-status" class="lbl"></div>
       <div id="flag-list"></div>
     </div>
   </div>
@@ -2097,14 +2117,43 @@ document.getElementById('btn-save-flag').onclick = function() {
   saveFeedback();
   updateFlagList(); updateSelectionUI(); updateSidebar(); scheduleRender();
 };
+// Export writes SERVER-SIDE in server mode (output/map_feedback/MapNNN_feedback.json):
+// the viewer is normally driven from a phone, and the file is only useful on the
+// machine holding the rest of the pipeline output.  Static exports have no server to
+// write to, so they keep the browser download.
+function setExportStatus(msg, bad) {
+  const el = document.getElementById('export-status');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.style.color = bad ? '#f66' : '';
+}
 document.getElementById('btn-export').onclick = function() {
+  const name = 'Map' + String(D.meta.map_id).padStart(3,'0') + '_feedback.json';
+  if (V.mode === 'server') {
+    setExportStatus('Exporting…');
+    fetch('/api/feedback/export', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({map_id: D.meta.map_id, flags: flags}),
+    }).then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function(j) {
+      setExportStatus('Saved ' + j.count + ' flag' + (j.count === 1 ? '' : 's') + ' → ' + j.path);
+    }).catch(function(e) {
+      console.error('export failed', e);
+      setExportStatus('Export failed: ' + e.message, true);
+    });
+    return;
+  }
   const blob = new Blob([JSON.stringify(flags, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'Map' + String(D.meta.map_id).padStart(3,'0') + '_feedback.json';
+  a.download = name;
   a.click();
   URL.revokeObjectURL(url);
+  setExportStatus('Downloaded ' + name);
 };
 function updateFlagList() {
   recomputeFlaggedCells();

@@ -14,6 +14,7 @@ Routes:
   GET  /api/metatile/<mapid>/<idx>.png?layer=bottom|top -> metatile PNG
   GET  /api/feedback/<id>           -> this map's tile-feedback flags (JSON list)
   POST /api/feedback                -> replace a map's flag list (body: {map_id, flags})
+  POST /api/feedback/export         -> write a flag snapshot to output/map_feedback/ (server-side)
   POST /api/quantize                -> apply family-packer knobs (Advanced only)
 
 Usage:
@@ -42,6 +43,7 @@ from map_viewer_common import (  # noqa: E402
     _load_dotenv,
     build_map_data,
     current_quantize_state,
+    export_feedback,
     get_quantize_params,
     load_feedback,
     params_from_dict,
@@ -209,6 +211,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._handle_quantize()
             elif path == "/api/feedback":
                 self._handle_feedback()
+            elif path == "/api/feedback/export":
+                self._handle_feedback_export()
             else:
                 self._send(404, "text/plain", b"Not found")
         except Exception as exc:
@@ -255,6 +259,24 @@ class _Handler(BaseHTTPRequestHandler):
             return
         save_feedback(map_id, flags)
         self._send(200, "application/json", json.dumps(flags).encode("utf-8"))
+
+    def _handle_feedback_export(self) -> None:
+        """Dump this map's flag list to output/map_feedback/MapNNN_feedback.json on the
+        machine running the server — the viewer is usually driven from a phone, and the
+        export is only useful next to the rest of the pipeline's output. Responds with
+        the written path so the page can show where it landed."""
+        length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(length) or b"{}")
+        map_id = int(body["map_id"])
+        flags = body.get("flags", [])
+        if not isinstance(flags, list):
+            self._send(400, "application/json",
+                       json.dumps({"error": "flags must be a list"}).encode("utf-8"))
+            return
+        path = export_feedback(map_id, flags)
+        log.info("exported %d flag(s) for Map%03d -> %s", len(flags), map_id, path)
+        self._send(200, "application/json",
+                   json.dumps({"path": str(path), "count": len(flags)}).encode("utf-8"))
 
     def _serve_feedback(self, map_id: int) -> None:
         body = json.dumps(load_feedback(map_id)).encode("utf-8")
