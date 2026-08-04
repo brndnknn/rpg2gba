@@ -425,3 +425,34 @@ def test_transpile_corpus_traits_sidecar_idempotent(tmp_path: Path) -> None:
 
     _run_corpus(tmp_path, 32, [event])
     assert sidecar_path.read_bytes() == first
+
+
+def test_transpile_corpus_resolves_switch_names_from_scratch(tmp_path: Path) -> None:
+    """Regression: transpile_corpus must resolve a named Uranium switch to its
+    deterministic FLAG_* on a completely FRESH run (no pre-existing
+    flag_state.json) — it must not depend on some OTHER script (e.g.
+    stage_slice_scripts.py's dispatcher pass) having already seeded labels
+    and minted the name into a persisted state file first.
+
+    Caught by a real incident: a from-scratch flag_state.json (after a
+    legitimate wipe/reseed) sent a switch this test also exercises — real
+    switch id 2, "Got Pokemon" in reference/uranium_switches.json — through
+    the queue as "unnamed", even though its name is fully deterministic from
+    that same static reference file. The fix is `transpile_corpus` calling
+    `registry.seed_labels(...)` itself, mirroring what
+    `stage_slice_scripts.py` already does — CLAUDE.md §4.2: a from-scratch
+    run must reproduce identical results, not depend on accumulated state a
+    different script happened to build up first."""
+    branch = [
+        cmd(transpiler.CONDITIONAL_BRANCH, [0, 2, 0]),
+        cmd(transpiler.SHOW_TEXT, ["Nice!"], indent=1),
+        cmd(transpiler.BRANCH_END),
+    ]
+    event = make_event([(0, branch)], id=1, name="SwitchCheck")
+    out_dir = _run_corpus(tmp_path, 34, [event])
+
+    pory_text = (out_dir / "scripts" / "Map034.pory").read_text(encoding="utf-8")
+    assert "flag(FLAG_GOT_POKEMON)" in pory_text
+
+    state = json.loads((out_dir / "flag_state.json").read_text(encoding="utf-8"))
+    assert state["switches"]["2"] == "FLAG_GOT_POKEMON"

@@ -199,7 +199,7 @@ def _registry_minted_names(registry: FlagRegistry) -> set[str]:
     mid-run is visible before anything is saved back to disk."""
     state = registry.to_state()
     names: set[str] = set()
-    for category in ("switches", "variables", "self_switches", "temp_switches"):
+    for category in ("switches", "variables", "self_switches", "temp_switches", "hide_flags"):
         names |= set(state[category].values())
     return names
 
@@ -290,6 +290,19 @@ def transpile_corpus(
         FlagRegistry.load(flag_state_path) if flag_state_path.is_file() else FlagRegistry()
     )
     reference_dir = Path("reference")
+    # Labels are never part of to_state()/load() (flag_registry.py's
+    # seed_labels docstring), so a freshly loaded/created registry has none
+    # until re-seeded here — without this, every switch/var this pass is the
+    # FIRST to touch (not already committed by an earlier stage_slice_scripts.py
+    # dispatcher pass) resolves to None and queues as "unnamed", even though
+    # its name is fully deterministic from the same static sidecar
+    # stage_slice_scripts.py reads. Mirrors that module's identical call —
+    # CLAUDE.md §4.2: a from-scratch run must resolve the same names, not
+    # depend on accumulated state from a different script having run first.
+    registry.seed_labels(
+        reference_dir / "uranium_switches.json",
+        reference_dir / "uranium_variables.json",
+    )
     ctx = transpiler.TranspileContext(
         registry=registry,
         species=_load_species_id_map(reference_dir),

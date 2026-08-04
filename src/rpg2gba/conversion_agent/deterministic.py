@@ -97,18 +97,47 @@ _DIALOGUE_STRIP_RE = re.compile(
 # ``system.md`` states verbatim go here, so the deterministic output provably
 # matches what the frozen agent is told to emit. Currently just the player-name
 # placeholder (system.md "Dialogue": ``\PN`` → ``{PLAYER}``). Applied in flush().
-_TEXT_SUBS: tuple[tuple[re.Pattern[str], str], ...] = ((re.compile(r"\\PN"), "{PLAYER}"),)
+# Uranium's corpus writes this code in BOTH cases — 404 ``\PN`` plus 38 ``\pn``
+# (13 maps: Map032/050/052/069/076/121/135/137/143/148/150/155/163) — so the
+# match is deliberately case-insensitive; a case-sensitive match let ``\pn``
+# fall through untranslated into emitted Poryscript, and pokeemerald's charmap
+# then ate the leading ``\p`` as its own paragraph-break control code
+# (engine/charmap.txt: ``'\p' = FB``), silently dropping the player-name and
+# printing the stray "n" (found live: "n, you're leaving home..." should read
+# "Oh, {PLAYER}, you're leaving home..."). The trailing ``\b`` is required
+# once the match goes case-insensitive: without it, ``\\PN`` also matches the
+# first two letters of e.g. ``\pNext`` (lowercase ``p`` + word-initial ``N``),
+# which is not the player-name code at all. Corpus census confirms real
+# ``\pn``/``\PN`` occurrences are never immediately followed by a word
+# character (always punctuation/space/end-of-string), so ``\b`` costs nothing
+# on real data and closes the false-positive window.
+_TEXT_SUBS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\\PN\b", re.IGNORECASE), "{PLAYER}"),
+)
 
 # After the prescribed substitutions are removed, dialogue is deterministically
 # translatable only if its remaining control codes are the pokeemerald-safe line
-# breaks ``\n`` / ``\l`` / ``\p`` (which poryscript emits verbatim). Any other
-# backslash code is Essentials-specific and needs the agent's judgement to
-# translate — ``\sign[..]`` (sign window → MSGBOX_SIGN, not yet prescribed),
-# ``\g[m,f]`` (gender branch), colour/pause (``\.``) codes — so the event falls
-# through to the LLM. Braces are unsafe too (poryscript placeholders), which is why
-# the ``\PN`` → ``{PLAYER}`` substitution is applied *after* this scan, never
-# before. The lookahead is case-sensitive: ``\p`` (paragraph) is safe.
-_UNSAFE_TEXT_RE = re.compile(r"\\(?![nlp])|[{}]")
+# breaks ``\n`` / ``\l`` (which poryscript emits verbatim). Any other backslash
+# code is Essentials-specific and needs the agent's judgement to translate —
+# ``\sign[..]`` (sign window → MSGBOX_SIGN, not yet prescribed), ``\g[m,f]``
+# (gender branch), colour/pause (``\.``) codes — so the event falls through to
+# the LLM. Braces are unsafe too (poryscript placeholders), which is why the
+# ``\PN``/``\pn`` → ``{PLAYER}`` substitution is applied *after* this scan,
+# never before.
+#
+# ``\p`` (pokeemerald's paragraph-break control code, charmap.txt ``'\p' =
+# FB``) is deliberately NOT in the safe set, unlike ``\n``/``\l``. A full
+# corpus census of every deserialized map (output/uranium-build/maps/*.json,
+# 2026-08-04) found 442 backslash-p occurrences and every single one was the
+# player-name code (404 ``\PN`` + 38 ``\pn``) — zero were a genuine standalone
+# paragraph break. Since ``_TEXT_SUBS`` already deletes the player-name codes
+# from this scan copy before this regex runs, any ``\p`` still present here is
+# never the player-name code — the false negative that let ``\pn`` slip past
+# this exact guard case-sensitively before. Treating it as unsafe (queue for
+# the LLM tail) is strictly correct for the observed corpus; if Uranium is
+# ever found to use a genuine ``\p`` paragraph break, add it back as its own
+# prescribed substitution rather than reopening this lookahead.
+_UNSAFE_TEXT_RE = re.compile(r"\\(?![nl])|[{}]")
 
 # Matches a leading \sign[...] control code anchored at the start of dialogue text.
 _SIGN_PREFIX_RE = re.compile(r"^\\sign\[[^\]]*\]")
@@ -254,9 +283,11 @@ def translate_text_codes(raw: str) -> TextTranslation | None:
        ``\\|`` -> ``{PAUSE 0x3C}``.
     4. ``\\c[n]`` is dropped; ``<fs=n>``/``</fs>`` tags are dropped (their
        wrapped text is kept).
-    5. ``\\PN`` -> ``{PLAYER}``; ``\\n``/``\\l``/``\\p`` pass through verbatim.
+    5. ``\\PN``/``\\pn`` (case-insensitive) -> ``{PLAYER}``; ``\\n``/``\\l``
+       pass through verbatim.
     6. Anything else remaining (``\\v[n]``, ``\\r``, ``\\g[..]``, a stray
-       brace, any other unrecognized escape) -> ``None``.
+       brace, a ``\\p`` that isn't the player-name code, any other
+       unrecognized escape) -> ``None``.
     """
     text = raw
     sign = False
@@ -299,9 +330,9 @@ def format_pory_string(text: str) -> str:
 
     Backslashes are intentionally *not* escaped: the text-safety guard
     (``_UNSAFE_TEXT_RE``) rejects any text containing a backslash before it
-    reaches here, so none survive — and were the guard ever loosened to admit the
-    pokeemerald-safe ``\\n``/``\\l``/``\\p`` breaks, those must pass through, not
-    be doubled.
+    reaches here, so none survive — and were the guard ever loosened to admit
+    another pokeemerald-safe break (it currently allows ``\\n``/``\\l``
+    through), that must pass through, not be doubled.
     """
     return '"' + text.replace('"', '\\"') + '"'
 

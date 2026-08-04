@@ -32,7 +32,7 @@ _TOKEN_RE = re.compile(r"\b(?:FLAG|VAR)_[A-Z0-9_]+\b")
 
 def _registry_names(state: dict) -> set[str]:
     names: set[str] = set()
-    for block in ("switches", "variables", "self_switches", "temp_switches"):
+    for block in ("switches", "variables", "self_switches", "temp_switches", "hide_flags"):
         names |= set(state.get(block, {}).values())
     return names
 

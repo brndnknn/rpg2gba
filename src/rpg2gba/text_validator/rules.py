@@ -43,17 +43,29 @@ class TextIssue:
 # --- Rule 1: unconverted Essentials/RGSS backslash markup -------------------
 #
 # Same safe/unsafe boundary as the transpiler's own pre-emission guard
-# (conversion_agent/deterministic.py, ``_UNSAFE_TEXT_RE``): ``\n``/``\l``/``\p``
-# are the only backslash sequences pokeemerald's own charmap defines
-# (charmap.txt: ``'\l' = FA``, ``'\p' = FB``, ``'\n' = FE``) and the only ones
-# poryscript emits verbatim; everything else backslash-prefixed is an
-# Essentials escape (``\c[n]``, ``\v[n]``, ``\wt[n]``, ``\g[m,f]``, ``\sign[...]``,
-# a stray ``\PN`` that slipped past translation, ...) that should never reach
-# an emitted string — the transpiler's own translate_text_codes either
-# converts or queues these (see deterministic.py); if one shows up here, it
-# reached the ROM some other way (e.g. a hand-authored msgbox that bypassed
-# translation) and that is a real corpus bug.
-_UNSAFE_BACKSLASH_RE = re.compile(r"\\(?![nlp])\S*?(?=\\|\s|$)")
+# (conversion_agent/deterministic.py, ``_UNSAFE_TEXT_RE``): ``\n``/``\l`` are
+# the only backslash sequences treated as safe pass-through. pokeemerald's own
+# charmap also defines ``\p`` (charmap.txt: ``'\l' = FA``, ``'\p'  = FB``,
+# ``'\n' = FE``), but ``\p`` is deliberately excluded from the safe set here —
+# a full census of every deserialized map (output/uranium-build/maps/*.json,
+# 2026-08-04) found 442 backslash-p occurrences, and every one was the
+# player-name code (404 ``\PN`` + 38 ``\pn``, case varying), zero were a
+# genuine paragraph break. A stray ``\pn`` that slipped past translation
+# case-sensitively is exactly the bug this rule exists to catch (found live:
+# a message rendered "n, you're leaving home..." instead of "Oh, {PLAYER},
+# you're leaving home..." because pokeemerald's charmap ate the ``\p`` as its
+# own paragraph-break control code and printed the stray "n"). Everything
+# else backslash-prefixed is an Essentials escape (``\c[n]``, ``\v[n]``,
+# ``\wt[n]``, ``\g[m,f]``, ``\sign[...]``, an untranslated ``\PN``/``\pn``,
+# ...) that should never reach an emitted string — the transpiler's own
+# translate_text_codes either converts or queues these (see
+# deterministic.py); if one shows up here, it reached the ROM some other way
+# (e.g. a hand-authored msgbox that bypassed translation) and that is a real
+# corpus bug. If Uranium is ever found to use a genuine ``\p`` paragraph
+# break, add a prescribed substitution for it in deterministic.py and widen
+# both this regex and ``_UNSAFE_TEXT_RE`` together, keeping their safe/unsafe
+# boundary identical.
+_UNSAFE_BACKSLASH_RE = re.compile(r"\\(?![nl])\S*?(?=\\|\s|$)")
 
 
 def check_markup(s: ExtractedString) -> list[TextIssue]:

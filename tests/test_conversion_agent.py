@@ -25,6 +25,7 @@ from rpg2gba.conversion_agent.backends import (
 from rpg2gba.conversion_agent.flag_registry import (
     FlagRegistry,
     RegistryError,
+    hide_flag_name,
     self_switch_flag_name,
     temp_switch_flag_name,
 )
@@ -161,6 +162,70 @@ def test_dump_header_self_switch_block_and_custom_bases(tmp_path: Path) -> None:
     assert "RPG2GBA_SELFSWITCH_BASE" in text
     assert "0x20" in text and "0x100" in text  # the Phase-7 base hooks
     assert "#define FLAG_MAP031_EVENT048_SSA (RPG2GBA_SELFSWITCH_BASE + 0)" in text
+
+
+def test_mint_hide_flag_deterministic_and_idempotent() -> None:
+    reg = FlagRegistry()
+    name = reg.mint_hide_flag(50, 20)
+    assert name == "FLAG_HIDE_MAP050_EV020" == hide_flag_name(50, 20)
+    assert reg.mint_hide_flag(50, 20) == name  # idempotent on the same key
+    assert reg.mint_hide_flag(50, 21) != name  # distinct event
+    assert reg.mint_hide_flag(49, 20) != name  # distinct map
+
+
+def test_mint_hide_flag_collision_with_global_flag() -> None:
+    reg = FlagRegistry()
+    reg.mint_hide_flag(50, 20)
+    with pytest.raises(RegistryError):
+        reg.propose_flag(900, "FLAG_HIDE_MAP050_EV020")
+
+
+def test_hide_flag_distinct_from_self_and_temp_switch() -> None:
+    # Same (map, event) key, three different idioms — all three must coexist.
+    reg = FlagRegistry()
+    ss = reg.mint_self_switch(50, 20, "A")
+    ts = reg.mint_temp_switch(50, 20, "A")
+    hf = reg.mint_hide_flag(50, 20)
+    assert ss == "FLAG_MAP050_EVENT020_SSA"
+    assert ts == "FLAG_MAP050_EVENT020_TSA"
+    assert hf == "FLAG_HIDE_MAP050_EV020"
+    reg.check_integrity()
+
+
+def test_hide_flag_state_roundtrip(tmp_path: Path) -> None:
+    reg = _seeded()
+    reg.mint_hide_flag(50, 20)
+    state_path = tmp_path / "flag_state.json"
+    reg.save(state_path)
+    reloaded = FlagRegistry.load(state_path)
+    assert reloaded.mint_hide_flag(50, 20) == "FLAG_HIDE_MAP050_EV020"
+    reloaded.check_integrity()
+
+
+def test_dump_header_hide_flag_shares_selfswitch_region(tmp_path: Path) -> None:
+    """Hide flags have no dedicated engine region (would need an engine
+    config change out of this module's scope) — they're addressed right
+    after the self-switches in the SAME RPG2GBA_SELFSWITCH_BASE region."""
+    reg = _seeded()
+    reg.mint_self_switch(31, 48, "A")
+    reg.mint_hide_flag(50, 20)
+    out = tmp_path / "rpg2gba_flags.h"
+    reg.dump_header(out, selfswitch_base=0x100)
+    text = out.read_text(encoding="utf-8")
+    assert "#define FLAG_MAP031_EVENT048_SSA (RPG2GBA_SELFSWITCH_BASE + 0)" in text
+    assert "#define FLAG_HIDE_MAP050_EV020 (RPG2GBA_SELFSWITCH_BASE + 1)" in text
+
+
+def test_dump_header_capacities_fold_hide_flags_into_selfswitches(tmp_path: Path) -> None:
+    reg = FlagRegistry()
+    reg.mint_self_switch(31, 48, "A")
+    reg.mint_hide_flag(50, 20)
+    out = tmp_path / "rpg2gba_flags.h"
+    capacities = {"flags": 10, "vars": 10, "selfswitches": 2, "tempswitches": 10}
+    reg.dump_header(out, capacities=capacities)  # 1 selfswitch + 1 hideflag == 2, OK
+    capacities["selfswitches"] = 1
+    with pytest.raises(ValueError):
+        reg.dump_header(out, capacities=capacities)
 
 
 def test_mint_temp_switch_deterministic_and_idempotent() -> None:

@@ -51,6 +51,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..conversion_agent.flag_registry import (
+    TERMINAL_HIDE_FLAG_PLACEHOLDER,
     FlagRegistry,
     resolve_switch_flag,
     resolve_variable_var,
@@ -156,10 +157,17 @@ DROP_DOOR_SHEET = "door_sheet"  # visible graphic is a door-tile sheet (stripped
 DROP_OPACITY0 = "opacity0"  # invisible (opacity 0) graphic, non-touch trigger
 
 # Object-event traits (upstream transpile-driver sidecar, `Map{id:03d}.traits.json`
-# — see stage_slice_scripts.py). TRAIT_SMASHABLE_ROCK is the only trait defined
-# today; any other string is a fail-loud forward-compat error (CLAUDE.md §4.5).
+# — see stage_slice_scripts.py). Any string outside KNOWN_TRAITS is a fail-loud
+# forward-compat error (CLAUDE.md §4.5).
 TRAIT_SMASHABLE_ROCK = "smashable_rock"
-KNOWN_TRAITS = {TRAIT_SMASHABLE_ROCK}
+# A move route that ends in a permanent opacity-0 hide (transpiler.py
+# `_insert_terminal_hide_removeobject`) — the transpiler emits `removeobject`
+# and a matching `setflag`; this trait tells us which object template needs
+# the SAME flag (`FlagRegistry.mint_hide_flag`) instead of the "0" null
+# sentinel, or the respawn gate (`TrySpawnObjectEvents`) brings the NPC back
+# on the next step (the Map050 boot-walk regression).
+TRAIT_TERMINAL_HIDE = "terminal_hide"
+KNOWN_TRAITS = {TRAIT_SMASHABLE_ROCK, TRAIT_TERMINAL_HIDE}
 
 # Vanilla obstacle-flag convention (event_object_movement.c SetHideObstacleFlag /
 # GraniteCave_B2F/map.json): smashable rocks get FLAG_TEMP_11..FLAG_TEMP_1F
@@ -1406,12 +1414,53 @@ def build_object_events(
             hidden_actor_ids.append(eid)
 
     rock_ids: list[int] = []
+    hide_ids: list[int] = []
     if event_traits is not None:
         _validate_event_traits(event_traits, uid)
         rock_ids = sorted(
             eid for eid, traits in event_traits.items() if TRAIT_SMASHABLE_ROCK in traits
         )
+        hide_ids = sorted(
+            eid for eid, traits in event_traits.items() if TRAIT_TERMINAL_HIDE in traits
+        )
+        both = sorted(set(rock_ids) & set(hide_ids))
+        if both:
+            raise ValueError(
+                f"map {uid}: event(s) {both} carry both {TRAIT_SMASHABLE_ROCK!r} and "
+                f"{TRAIT_TERMINAL_HIDE!r} traits — an object template has only one "
+                f"'flag' field, so an event cannot be both"
+            )
     vis_flags = _assign_visibility_flags(rock_ids, hidden_actor_ids, uid)
+
+    # One flag per template, never two (CLAUDE.md §4.3): a terminal_hide event
+    # that's ALSO a rock or a required hidden actor already has a real flag
+    # from the pool above — it must REUSE that flag, not get a second one.
+    # Only an event that would otherwise carry the "0" null sentinel (a plain
+    # object with no other visibility mechanism — e.g. Map050 EV020 "Theo")
+    # needs a freshly minted FLAG_HIDE_*.
+    hide_only_ids = sorted(set(hide_ids) - set(vis_flags))
+    hide_flags: dict[int, str] = {}
+    if hide_only_ids:
+        if flag_registry is None:
+            raise ValueError(
+                f"map {uid}: terminal_hide event(s) {hide_only_ids} need a "
+                f"flag_registry to mint FLAG_HIDE_* — call build_object_events(..., "
+                f"flag_registry=FlagRegistry(...))"
+            )
+        hide_flags = {eid: flag_registry.mint_hide_flag(uid, eid) for eid in hide_only_ids}
+
+    overlap = set(hide_flags) & set(vis_flags)
+    if overlap:
+        raise ValueError(
+            f"map {uid}: event(s) {sorted(overlap)} ended up with BOTH a "
+            f"minted hide flag and a pool visibility flag — one flag per "
+            f"template, never two (this indicates a bug in the assignment "
+            f"rule above, not bad input)"
+        )
+    # The single merged source of truth for "what flag does this event's
+    # template carry" — used everywhere a flag is written (both placement
+    # loops below) and by resolve_terminal_hide_setflags downstream.
+    template_flags: dict[int, str] = {**vis_flags, **hide_flags}
 
     def _drop(event_id: int, reason: str) -> None:
         result.drops.append((event_id, reason))
@@ -1723,7 +1772,7 @@ def build_object_events(
                     graphics_id=graphics_id,
                     script=script, movement_type=spec.movement_type,
                     movement_range_x=spec.range_x, movement_range_y=spec.range_y,
-                    flag=vis_flags.get(eid, "0"),
+                    flag=template_flags.get(eid, "0"),
                     route_id=route_id,
                 )
             )
@@ -1811,8 +1860,103 @@ def build_object_events(
                     f"the event was dropped by boot-page classification — "
                     f"re-run the transpile driver)"
                 )
+        # A terminal_hide event's transpiled script emits a `setflag` that
+        # MUST latch a real flag — a "0" template flag here would make
+        # resolve_terminal_hide_setflags either fail loud downstream or (if
+        # this check didn't exist) leave a silent no-op setflag in the staged
+        # script (CLAUDE.md §4.5). Catch it here, at the map/event that
+        # caused it, rather than in the staging pass's more generic error.
+        for eid in hide_ids:
+            local_id = result.local_id_map.get(str(eid))
+            if local_id is None:
+                continue  # already reported as a stale sidecar reference above
+            flag = result.object_events[local_id - 1].flag
+            if flag == "0":
+                raise ValueError(
+                    f"map {uid} EV{eid:03d}: terminal_hide event resolved to "
+                    f"the null flag \"0\" — its transpiled setflag would be a "
+                    f"no-op; something upstream (e.g. an always-visible "
+                    f"hidden-actor classification) discarded its flag"
+                )
 
     return result
+
+
+_TERMINAL_HIDE_SETFLAG_LINE = f"setflag({TERMINAL_HIDE_FLAG_PLACEHOLDER})"
+_REMOVEOBJECT_RE = re.compile(r"^(\s*)removeobject\((\d+)\)\s*$")
+
+
+def resolve_terminal_hide_setflags(
+    pory_text: str,
+    map_json: dict,
+    table: dict[str, int],
+    *,
+    source_name: str,
+) -> str:
+    """Substitute transpiler.py's ``setflag(__TERMINAL_HIDE_FLAG__)`` terminal-
+    hide placeholder for the real per-event template flag now that
+    ``build_object_events`` has decided it.
+
+    The transpiler can't name the flag at transpile time (whether a hidden
+    event needs a freshly-minted ``FLAG_HIDE_*`` or must REUSE an existing
+    rock/hidden-actor ``FLAG_TEMP_*`` depends on the whole map's
+    ``_assign_visibility_flags`` pool, computed here) — this is the ONE place
+    (CLAUDE.md §4.3) that resolves it, using the SAME ``map_json``/``table``
+    ``hidden_actor_ids_from_map_json`` reads. Must run BEFORE
+    ``remap_pory_object_ids`` (matches ``bracket_hidden_actor_scripts``'s
+    convention) — the following ``removeobject(<id>)`` line still carries the
+    raw RMXP id, which is what ``table`` is keyed by.
+
+    Fails loud (CLAUDE.md §4.5 — no silent no-op) if:
+      * a placeholder line isn't immediately followed by ``removeobject(<id>)``
+        — a transpiler invariant, not user data;
+      * the target id has no ``table`` entry (dropped/pruned event — stale
+        placeholder);
+      * the resolved template flag is ``"0"`` — ``build_object_events`` should
+        already have refused to emit this (its own terminal_hide/"0" check),
+        so reaching this is a belt-and-suspenders catch of a mismatch between
+        the map.json this call was given and the script it's resolving.
+    """
+    object_events = map_json.get("object_events", [])
+    lines = pory_text.splitlines()
+    out_lines: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.strip() != _TERMINAL_HIDE_SETFLAG_LINE:
+            out_lines.append(line)
+            i += 1
+            continue
+        if i + 1 >= len(lines):
+            raise ValueError(
+                f"{source_name}: terminal-hide setflag placeholder at line "
+                f"{i + 1} has no following line"
+            )
+        m = _REMOVEOBJECT_RE.match(lines[i + 1])
+        if not m:
+            raise ValueError(
+                f"{source_name}: terminal-hide setflag placeholder at line "
+                f"{i + 1} is not immediately followed by removeobject(<id>) "
+                f"— transpiler invariant violated"
+            )
+        rmxp_id = m.group(2)
+        local_id = table.get(rmxp_id)
+        if local_id is None:
+            raise ValueError(
+                f"{source_name}: terminal-hide target event {rmxp_id} has no "
+                f"local-id table entry (dropped/pruned?) — stale placeholder"
+            )
+        flag = object_events[local_id - 1].get("flag", "0")
+        if flag == "0":
+            raise ValueError(
+                f"{source_name}: terminal-hide target event {rmxp_id} "
+                f'resolved to the null flag "0" — the setflag would be a '
+                f"no-op (CLAUDE.md §4.5)"
+            )
+        indent = line[: len(line) - len(line.lstrip())]
+        out_lines.append(f"{indent}setflag({flag})")
+        i += 1
+    return "\n".join(out_lines)
 
 
 def write_local_id_tables(out_dir: Path, tables: dict[int, dict[str, int]]) -> None:

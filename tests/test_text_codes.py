@@ -31,10 +31,38 @@ def test_player_name_code_still_works() -> None:
     assert out.sign is False
 
 
-def test_line_breaks_pass_through_verbatim() -> None:
-    out = D.translate_text_codes("First line\\nSecond\\lThird\\pFourth")
+def test_player_name_code_lowercase_also_works() -> None:
+    """Corpus census: Uranium writes this code in both cases (404 \\PN + 38
+    \\pn across 13 maps). The match is case-insensitive so lowercase \\pn
+    doesn't fall through and get eaten by pokeemerald's own \\p paragraph
+    control code at ROM build time."""
+    out = D.translate_text_codes("Oh, \\pn, you're leaving home...")
     assert out is not None
-    assert out.text == "First line\\nSecond\\lThird\\pFourth"
+    assert out.text == "Oh, {PLAYER}, you're leaving home..."
+    assert out.autoclose is False
+    assert out.sign is False
+
+
+def test_player_name_code_mixed_case_also_works() -> None:
+    out = D.translate_text_codes("Hi \\Pn, welcome!")
+    assert out is not None
+    assert out.text == "Hi {PLAYER}, welcome!"
+
+
+def test_line_breaks_pass_through_verbatim() -> None:
+    out = D.translate_text_codes("First line\\nSecond\\lThird")
+    assert out is not None
+    assert out.text == "First line\\nSecond\\lThird"
+
+
+def test_bare_paragraph_code_queues() -> None:
+    """A \\p that survives the player-name-code strip is NOT the pokeemerald
+    paragraph break as far as this transpiler is concerned -- corpus census
+    (output/uranium-build/maps/*.json, 2026-08-04) found 442 backslash-p
+    occurrences and 100% were the player-name code (\\PN/\\pn); zero were a
+    genuine standalone paragraph break. Treat any leftover \\p as unhandled
+    and queue for the LLM tail rather than silently pass it through."""
+    assert D.translate_text_codes("Third\\pFourth") is None
 
 
 # ----------------------------------------------------------------------------
@@ -192,6 +220,12 @@ def test_stray_brace_in_source_queues() -> None:
 
 def test_legacy_translate_text_player_name_unchanged() -> None:
     assert D._translate_text("Hi \\PN!") == "Hi {PLAYER}!"
+
+
+def test_legacy_translate_text_player_name_lowercase_also_works() -> None:
+    """_TEXT_SUBS is shared between the legacy and extended paths (deterministic.py
+    _TEXT_CODE_SUBS splices it in), so the case-insensitivity fix covers both."""
+    assert D._translate_text("Hi \\pn!") == "Hi {PLAYER}!"
 
 
 def test_legacy_translate_text_dot_code_still_queues() -> None:

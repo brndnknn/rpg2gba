@@ -1,1 +1,11 @@
-[]
+[
+  {
+    "cells": [
+      [
+        45,
+        34
+      ]
+    ],
+    "note": "the text for the rare candy NPC has a mistake. it should say 'Oh, {PLAYER_NAME}, you're leaving home...' but in the ROM the text starts 'n, you're leaving home...'"
+  }
+]

@@ -654,7 +654,9 @@ def registry_extra_symbols(
         state = json.loads(flag_state_path.read_text(encoding="utf-8"))
         # NOTE: "script_switches" is a list of s:-predicate ids (never minted
         # as flags — CLAUDE.md §6), so it contributes no symbols here.
-        for category in ("switches", "variables", "self_switches", "temp_switches"):
+        for category in (
+            "switches", "variables", "self_switches", "temp_switches", "hide_flags",
+        ):
             for name in state[category].values():
                 if isinstance(name, str) and name:
                     extras.add(name)

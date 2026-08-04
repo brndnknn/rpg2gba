@@ -317,19 +317,29 @@ def test_player_name_with_unprescribed_code_still_falls_through() -> None:
         # \n is an RMXP layout break -> flattened to a single space by
         # format_pory_dialogue (format() re-wraps and recreates breaks itself).
         ("Line one.\\nLine two.", "Line one. Line two."),
-        # \l / \p are pokeemerald-safe codes -> format() passes them through untouched.
-        ("Wait.\\pNext.", "Wait.\\pNext."),
+        # \l is a pokeemerald-safe code -> format() passes it through untouched.
         ("a\\lb", "a\\lb"),
     ],
 )
 def test_layout_line_breaks_flattened_safe_codes_pass_through(
     text: str, expected_in_out: str
 ) -> None:
-    """\\n is flattened to a space for format(); \\l / \\p still pass through verbatim."""
+    """\\n is flattened to a space for format(); \\l still passes through verbatim."""
     ev = _event(_page(_text(text)), id=4)
     out = D.classify_pure_dialogue(1, ev)
     assert out is not None
     assert expected_in_out in out
+
+
+def test_bare_paragraph_code_falls_through() -> None:
+    """\\p is deliberately NOT in the safe set (unlike \\n/\\l): a corpus census
+    (output/uranium-build/maps/*.json, 2026-08-04) found every backslash-p
+    occurrence in the corpus was the player-name code (\\PN/\\pn, 442 total,
+    404+38); zero were a genuine standalone paragraph break. A bare \\p that
+    survives the player-name-code strip is unhandled and bails the event
+    rather than being silently passed through."""
+    ev = _event(_page(_text("Wait.\\pNext.")), id=4)
+    assert D.classify_pure_dialogue(1, ev) is None
 
 
 def test_empty_page_is_bare_end_block() -> None:

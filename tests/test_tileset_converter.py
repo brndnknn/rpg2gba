@@ -15,7 +15,11 @@ from pathlib import Path
 import pytest
 
 from rpg2gba.conversion_agent import poryscript
-from rpg2gba.conversion_agent.flag_registry import FlagRegistry, temp_switch_flag_name
+from rpg2gba.conversion_agent.flag_registry import (
+    TERMINAL_HIDE_FLAG_PLACEHOLDER,
+    FlagRegistry,
+    temp_switch_flag_name,
+)
 from rpg2gba.tileset_converter import layout as layout_mod
 from rpg2gba.tileset_converter import map_constants as mc
 from rpg2gba.tileset_converter import metadata_wiring as mw
@@ -1769,6 +1773,163 @@ def test_build_object_events_rock_flags_assigned_ascending() -> None:
     assert by_xy[(2, 2)].flag == "FLAG_TEMP_11"  # EV003 (lower id) assigned first
     assert by_xy[(1, 1)].flag == "FLAG_TEMP_12"  # EV009 second
     assert by_xy[(3, 3)].flag == "0"  # untraited event keeps the default
+
+
+def test_build_object_events_terminal_hide_gets_minted_flag() -> None:
+    """A terminal_hide-traited event gets its object template's "flag" set to
+    the registry-minted FLAG_HIDE_* — not the FLAG_TEMP_* rock/actor pool
+    (that auto-clears on map re-entry and would respawn the NPC visible at
+    its start tile on the next visit, unlike the RMXP source where the
+    post-ceremony page has a blank graphic)."""
+    reg = FlagRegistry()
+    consts = mc.MapConstantRegistry(Path("x")).mint(50, "Moki Town Professor Lab")
+    map_json = {
+        "map_id": 50,
+        "events": [
+            _event(20, 14, 16, [_page(name="Rivaltheo")]),
+            _event(3, 2, 2, [_page(name="HGSS_005")]),  # untraited, keeps "0"
+        ],
+    }
+    result = mw.build_object_events(
+        map_json, consts, {50}, npc_gfx=_actor_npc_gfx(), flag_registry=reg,
+        event_traits={20: ["terminal_hide"]},
+    )
+    by_xy = {(o.x, o.y): o for o in result.object_events}
+    assert by_xy[(14, 16)].flag == "FLAG_HIDE_MAP050_EV020"
+    assert by_xy[(2, 2)].flag == "0"
+    assert reg.mint_hide_flag(50, 20) == "FLAG_HIDE_MAP050_EV020"  # same name, idempotent
+
+
+def test_build_object_events_terminal_hide_without_registry_fails_loud() -> None:
+    """A terminal_hide trait with no flag_registry given can't mint a name —
+    fail loud rather than silently falling back to the "0" null sentinel."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(50, "Moki Town Professor Lab")
+    map_json = {"map_id": 50, "events": [_event(20, 14, 16, [_page(name="Rivaltheo")])]}
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json, consts, {50}, npc_gfx=_actor_npc_gfx(),
+            event_traits={20: ["terminal_hide"]},
+        )
+
+
+def test_build_object_events_terminal_hide_and_rock_traits_fail_loud() -> None:
+    """A template has only one "flag" field — an event carrying both
+    smashable_rock and terminal_hide traits must fail loud, not silently
+    pick one."""
+    reg = FlagRegistry()
+    consts = mc.MapConstantRegistry(Path("x")).mint(50, "Moki Town Professor Lab")
+    map_json = {"map_id": 50, "events": [_event(20, 14, 16, [_page(name="HGSS_000")])]}
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json, consts, {50}, npc_gfx=_npc_gfx_fixture(), flag_registry=reg,
+            event_traits={20: ["smashable_rock", "terminal_hide"]},
+        )
+
+
+def test_build_object_events_terminal_hide_hidden_actor_reuses_pool_flag() -> None:
+    """One flag per template, never two: a terminal_hide event that's ALSO a
+    required hidden actor already gets a real FLAG_TEMP_* from the shared
+    rock/actor pool (Map032 EV002/EV016/EV075-77 shape) — it must REUSE that
+    flag, not get a second FLAG_HIDE_* minted. Regression for the corrected
+    rule: the earlier implementation minted a FLAG_HIDE_* for every
+    terminal_hide id unconditionally, leaving dead symbols in the registry
+    that no template actually carried."""
+    reg = FlagRegistry()
+    reg.propose_var(101, "VAR_QUEST_LOG")
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    actor = _event(2, 16, 45, [_page(cond=_var_cond(101, 2), name="Rivaltheo")])
+    map_json = {"map_id": 32, "events": [actor]}
+    result = mw.build_object_events(
+        map_json, consts, {32}, npc_gfx=_actor_npc_gfx(), flag_registry=reg,
+        required_actor_ids={2}, event_traits={2: ["terminal_hide"]},
+    )
+    assert len(result.object_events) == 1
+    obj = result.object_events[0]
+    assert obj.flag == "FLAG_TEMP_11"  # the pool flag — reused, not replaced
+    # No FLAG_HIDE_* was minted for this event: the registry's hide_flags
+    # dict stays empty.
+    assert reg.to_state()["hide_flags"] == {}
+
+
+def test_build_object_events_terminal_hide_rock_reuses_pool_flag() -> None:
+    """Same reuse rule for the smashable_rock branch of the shared pool: a
+    terminal_hide + smashable_rock combination is rejected up front (a
+    template has one flag field), but a terminal_hide event that shares a
+    MAP with rock events (not the same event) and happens to land in the
+    pool via hidden-actor status still reuses cleanly — this pins that
+    hide_only_ids is computed as a SET DIFFERENCE against the pool, not
+    against rock_ids alone."""
+    reg = FlagRegistry()
+    reg.propose_var(101, "VAR_QUEST_LOG")
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    actor = _event(9, 1, 1, [_page(cond=_var_cond(101, 2), name="Rivaltheo")])
+    rock = _event(5, 2, 2, [_page(name="HGSS_000")])
+    map_json = {"map_id": 32, "events": [actor, rock]}
+    result = mw.build_object_events(
+        map_json, consts, {32}, npc_gfx=_actor_npc_gfx(), flag_registry=reg,
+        required_actor_ids={9}, event_traits={5: ["smashable_rock"], 9: ["terminal_hide"]},
+    )
+    by_x = {o.x: o for o in result.object_events}
+    assert by_x[2].flag == "FLAG_TEMP_11"  # EV005 (lower id) assigned first
+    assert by_x[1].flag == "FLAG_TEMP_12"  # EV009 second — reused, not replaced
+    assert reg.to_state()["hide_flags"] == {}
+
+
+# --- resolve_terminal_hide_setflags -------------------------------------------
+
+_PLACEHOLDER_LINE = f"setflag({TERMINAL_HIDE_FLAG_PLACEHOLDER})"
+
+
+def test_resolve_terminal_hide_setflags_substitutes_minted_flag() -> None:
+    pory = (
+        "script Map050_EV019_Page1 {\n"
+        "    applymovement(20, Map050_EV019_Page1_Move1)\n"
+        "    waitmovement(0)\n"
+        f"    {_PLACEHOLDER_LINE}\n"
+        "    removeobject(20)\n"
+        "}\n"
+    )
+    map_json = {"object_events": [{"flag": "FLAG_HIDE_MAP050_EV020"}]}
+    table = {"20": 1}
+    out = mw.resolve_terminal_hide_setflags(pory, map_json, table, source_name="test")
+    assert "setflag(FLAG_HIDE_MAP050_EV020)" in out
+    assert TERMINAL_HIDE_FLAG_PLACEHOLDER not in out
+
+
+def test_resolve_terminal_hide_setflags_substitutes_reused_pool_flag() -> None:
+    """The resolver doesn't care WHERE the flag came from — a reused
+    FLAG_TEMP_* substitutes exactly the same way as a minted FLAG_HIDE_*."""
+    pory = f"    {_PLACEHOLDER_LINE}\n    removeobject(2)\n"
+    map_json = {"object_events": [{"flag": "FLAG_TEMP_11"}]}
+    table = {"2": 1}
+    out = mw.resolve_terminal_hide_setflags(pory, map_json, table, source_name="test")
+    assert out == "    setflag(FLAG_TEMP_11)\n    removeobject(2)"
+
+
+def test_resolve_terminal_hide_setflags_no_placeholder_is_noop() -> None:
+    pory = "script Foo {\n    msgbox(format(\"hi\"))\n}\n"
+    out = mw.resolve_terminal_hide_setflags(pory, {"object_events": []}, {}, source_name="test")
+    assert out == "\n".join(pory.splitlines())
+
+
+def test_resolve_terminal_hide_setflags_missing_removeobject_fails_loud() -> None:
+    pory = f"    {_PLACEHOLDER_LINE}\n    msgbox(format(\"oops\"))\n"
+    with pytest.raises(ValueError):
+        mw.resolve_terminal_hide_setflags(pory, {"object_events": []}, {}, source_name="test")
+
+
+def test_resolve_terminal_hide_setflags_stale_id_fails_loud() -> None:
+    pory = f"    {_PLACEHOLDER_LINE}\n    removeobject(99)\n"
+    with pytest.raises(ValueError):
+        mw.resolve_terminal_hide_setflags(pory, {"object_events": []}, {}, source_name="test")
+
+
+def test_resolve_terminal_hide_setflags_null_flag_fails_loud() -> None:
+    pory = f"    {_PLACEHOLDER_LINE}\n    removeobject(2)\n"
+    map_json = {"object_events": [{"flag": "0"}]}
+    table = {"2": 1}
+    with pytest.raises(ValueError):
+        mw.resolve_terminal_hide_setflags(pory, map_json, table, source_name="test")
 
 
 def test_build_object_events_no_traits_keeps_default_flag() -> None:

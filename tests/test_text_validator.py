@@ -82,7 +82,28 @@ def test_markup_flags_var_and_wait_codes():
 
 
 def test_markup_allows_safe_breaks():
-    assert check_markup(_s("Line one\\nLine two\\lscrolled\\pnew page")) == []
+    assert check_markup(_s("Line one\\nLine two\\lscrolled")) == []
+
+
+def test_markup_flags_bare_paragraph_code():
+    """\\p is no longer treated as an automatically-safe break: a corpus
+    census (output/uranium-build/maps/*.json, 2026-08-04) found every
+    backslash-p occurrence in the corpus was the player-name code (\\PN/\\pn);
+    a bare \\p that isn't that code is unhandled and must be flagged, not
+    silently allowed through -- this is the same regression class as the
+    \\pn player-name bug this rule exists to catch."""
+    issues = check_markup(_s("Line one\\pnew page"))
+    assert len(issues) == 1
+    assert issues[0].rule_id == RULE_MARKUP
+
+
+def test_markup_flags_untranslated_lowercase_player_name_code():
+    """A stray untranslated \\pn reaching an emitted string (e.g. a
+    hand-authored msgbox that bypassed translate_text_codes) is exactly the
+    corpus bug this rule exists to catch."""
+    issues = check_markup(_s("Oh, \\pn, you're leaving home..."))
+    assert len(issues) == 1
+    assert issues[0].rule_id == RULE_MARKUP
 
 
 def test_markup_empty_string_no_issues():

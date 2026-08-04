@@ -42,6 +42,7 @@ from rpg2gba.conversion_agent.deterministic import (
     translate_text_codes,
 )
 from rpg2gba.conversion_agent.flag_registry import (
+    TERMINAL_HIDE_FLAG_PLACEHOLDER,
     FlagRegistry,
     resolve_switch_flag,
     resolve_variable_var,
@@ -2839,6 +2840,105 @@ def _page_label(map_id: int, event: dict, page_no: int) -> str:
     return f"Map{int(map_id):03d}_EV{int(event.get('id', 0)):03d}_Page{page_no}"
 
 
+_APPLYMOVEMENT_RE = re.compile(
+    r"^(?P<indent>\s*)applymovement\((?P<who>[^,]+), (?P<label>[^)]+)\)\s*$"
+)
+
+
+def _insert_terminal_hide_removeobject(
+    body: list[str], movements: list[tuple[str, list[str]]], ctx: TranspileContext
+) -> list[str]:
+    """Free the collision cell a permanently-hidden NPC leaves behind.
+
+    A 209 move route ending in ``set_invisible`` (RGSS Change Opacity to 0)
+    only clears the sprite's render flag — pokeemerald's
+    ``GetObjectObjectCollidesWith`` (engine/src/event_object_movement.c)
+    never checks ``invisible``, only ``active`` and coordinates, so the
+    object stays solid forever (Map050 EV020 "Theo" after the starter
+    ceremony: (14,16) permanently blocked). If nothing LATER in this same
+    emitted body restores that target's visibility (the transient
+    hide/reveal idiom used elsewhere, e.g. Map032/Map049), the hide is
+    terminal — emit ``removeobject`` once the movement finishes, matching
+    the disposition this transpiler already gives RGSS Erase Event (214).
+
+    ``RemoveObjectEventByLocalIdAndMap`` (engine/src/event_object_movement.c)
+    both deactivates the object AND ``FlagSet``s the flag off its TEMPLATE —
+    the respawn gate every camera update re-checks
+    (``TrySpawnObjectEvents``'s ``!FlagGet(template->flagId)``). Porymap
+    ships every template with ``"flag": "0"`` (the null sentinel,
+    ``FlagGet`` always FALSE), so without a real persistent flag the very
+    next step respawns the NPC visible at its start tile — the script never
+    re-runs, only the object comes back (the Map050 boot-walk regression).
+
+    So this pass ALSO emits ``setflag(<PLACEHOLDER>)`` immediately before
+    ``removeobject`` and records a ``terminal_hide`` trait on the HIDDEN
+    event (keyed by (map_id, the hidden event's RMXP id) — not the scripting
+    event, which may differ, e.g. the professor's script hides Theo).
+
+    The placeholder, not a real flag name: which flag ultimately belongs here
+    depends on the WHOLE map's rock/hidden-actor visibility-flag pool
+    (``metadata_wiring._assign_visibility_flags``), decided downstream during
+    staging — an event that already gets a real flag from that pool must
+    REUSE it (one flag per template, never two), and only an event that would
+    otherwise carry ``"0"`` gets a freshly minted ``FLAG_HIDE_*``. This
+    module can't see that decision at transpile time, so it can't name the
+    flag — ``metadata_wiring.resolve_terminal_hide_setflags`` (called from
+    ``stage_slice_scripts.py`` once ``build_object_events`` has decided every
+    template's flag) substitutes the placeholder for the real name
+    (CLAUDE.md §4.3: metadata_wiring owns this decision alone).
+    """
+    tokens_by_label = dict(movements)
+    lines = list(body)
+    i = 0
+    while i < len(lines):
+        m = _APPLYMOVEMENT_RE.match(lines[i])
+        if m is None:
+            i += 1
+            continue
+        who, label = m.group("who"), m.group("label")
+        tokens = tokens_by_label.get(label)
+        if who == "OBJ_EVENT_ID_PLAYER" or not tokens or tokens[-1] != "set_invisible":
+            i += 1
+            continue
+        restored = False
+        for later in lines[i + 1:]:
+            m2 = _APPLYMOVEMENT_RE.match(later)
+            if m2 is None or m2.group("who") != who:
+                continue
+            later_tokens = tokens_by_label.get(m2.group("label"))
+            if later_tokens and "set_visible" in later_tokens:
+                restored = True
+                break
+        if restored:
+            i += 1
+            continue
+        # who is always OBJ_EVENT_ID_PLAYER (excluded above) or a bare RMXP
+        # event id (_emit_show_animation / _emit_move_route never emit any
+        # other form) — the HIDDEN event, which may differ from the
+        # scripting ctx.event_id (e.g. the professor's script hides Theo).
+        target_event_id = int(who)
+        ctx.traits.setdefault((ctx.map_id, target_event_id), set()).add("terminal_hide")
+        setflag_line = f"setflag({TERMINAL_HIDE_FLAG_PLACEHOLDER})"
+        indent = m.group("indent")
+        insert_at = i + 1
+        if insert_at < len(lines) and lines[insert_at].strip() == "waitmovement(0)":
+            insert_at += 1
+            extra = [f"{indent}{setflag_line}", f"{indent}removeobject({who})"]
+        else:
+            # No paired 210 wait was emitted (its RGSS command was
+            # skipped/queued/absent) — synthesize the wait so the hide's
+            # movement plays out before the object is torn down, rather than
+            # despawning it mid-walk.
+            extra = [
+                f"{indent}waitmovement(0)",
+                f"{indent}{setflag_line}",
+                f"{indent}removeobject({who})",
+            ]
+        lines[insert_at:insert_at] = extra
+        i = insert_at + len(extra)
+    return lines
+
+
 def transpile_page(
     page: dict, ctx: TranspileContext, page_label: str
 ) -> tuple[list[str], list[tuple[str, list[str]]], list[tuple[str, str]],
@@ -2870,11 +2970,14 @@ def transpile_page(
         main, region_cmds, block_label = commands, [], ""
 
     body = emitter.emit_nodes(parse_tree(main))
+    body = _insert_terminal_hide_removeobject(body, emitter.movements, ctx)
     if region_cmds:
         # Same emitter: movement/text blocks and the per-page choice counter
         # stay in one namespace, so a hoisted block can't collide with the
         # main body's labels.
-        hoisted.append((block_label, emitter.emit_nodes(parse_tree(region_cmds))))
+        hoisted_body = emitter.emit_nodes(parse_tree(region_cmds))
+        hoisted_body = _insert_terminal_hide_removeobject(hoisted_body, emitter.movements, ctx)
+        hoisted.append((block_label, hoisted_body))
     return body, emitter.movements, emitter.text_blocks, hoisted
 
 

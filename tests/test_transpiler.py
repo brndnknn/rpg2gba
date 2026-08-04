@@ -388,6 +388,117 @@ def test_route_wait_step_expands_to_delay_chain() -> None:
 
 
 # ----------------------------------------------------------------------------
+# emitters — terminal hide -> removeobject (Map050 EV020 ghost-collision fix)
+# ----------------------------------------------------------------------------
+
+
+def test_terminal_hide_emits_removeobject_after_waitmovement(
+    ctx: T.TranspileContext,
+) -> None:
+    """A route ending in opacity 0 with no later restore is a permanent
+    hide — the object must be despawned or it leaves a solid, invisible
+    ghost blocking its tile (root cause of the Map050 EV020 stuck tile)."""
+    route = _route([{"code": 1}, {"code": 42, "parameters": [0]}])
+    res = run_event(
+        ctx,
+        [[cmd(T.SET_MOVE_ROUTE, [20, route]), cmd(T.WAIT_MOVE_COMPLETION)]],
+        trigger=1,
+    )
+    lines = [ln.strip() for ln in res.text.splitlines()]
+    label = "Map049_EV005_Page1_Move1"
+    i = lines.index(f"applymovement(20, {label})")
+    assert lines[i + 1] == "waitmovement(0)"
+    assert lines[i + 2] == f"setflag({T.TERMINAL_HIDE_FLAG_PLACEHOLDER})"
+    assert lines[i + 3] == "removeobject(20)"
+    assert res.unhandled == []
+
+
+def test_terminal_hide_records_trait_keyed_by_hidden_event_not_scripting_event(
+    ctx: T.TranspileContext,
+) -> None:
+    """Regression: after the Map050 starter ceremony, Theo/the professor
+    reappeared on the player's first step because the object TEMPLATE's flag
+    was the "0" null sentinel — TrySpawnObjectEvents' `!FlagGet(flagId)`
+    respawn gate always passed. The fix records a `terminal_hide` trait
+    keyed by (map, the HIDDEN event's id) — event 20 here — even though the
+    scripting event (which run_event defaults to id 5) is a different event.
+
+    The transpiler does NOT mint a flag itself — which flag belongs here (a
+    fresh FLAG_HIDE_* vs. an existing rock/hidden-actor FLAG_TEMP_* it must
+    reuse) is a decision only metadata_wiring.build_object_events can make,
+    downstream, once the whole map's visibility-flag pool is known. So the
+    emitted `setflag` names the shared placeholder token, resolved later by
+    metadata_wiring.resolve_terminal_hide_setflags during staging."""
+    route = _route([{"code": 1}, {"code": 42, "parameters": [0]}])
+    res = run_event(
+        ctx,
+        [[cmd(T.SET_MOVE_ROUTE, [20, route]), cmd(T.WAIT_MOVE_COMPLETION)]],
+        trigger=1,
+        map_id=50,
+        event_id=5,
+    )
+    assert ctx.traits == {(50, 20): {"terminal_hide"}}
+    assert f"setflag({T.TERMINAL_HIDE_FLAG_PLACEHOLDER})" in res.text
+    # The transpiler never mints anything for this idiom — no hide_flags
+    # entries should appear in the registry state at all.
+    assert ctx.registry.to_state()["hide_flags"] == {}
+
+
+def test_terminal_hide_synthesizes_waitmovement_if_missing(
+    ctx: T.TranspileContext,
+) -> None:
+    """If the paired 210 (Wait For Move Completion) wasn't emitted, the
+    removeobject pass must still not fire mid-walk — it synthesizes the
+    wait rather than despawning the object before its movement plays out."""
+    route = _route([{"code": 1}, {"code": 42, "parameters": [0]}])
+    res = run_event(ctx, [[cmd(T.SET_MOVE_ROUTE, [20, route])]], trigger=1)
+    lines = [ln.strip() for ln in res.text.splitlines()]
+    label = "Map049_EV005_Page1_Move1"
+    i = lines.index(f"applymovement(20, {label})")
+    assert lines[i + 1] == "waitmovement(0)"
+    assert lines[i + 2] == f"setflag({T.TERMINAL_HIDE_FLAG_PLACEHOLDER})"
+    assert lines[i + 3] == "removeobject(20)"
+
+
+def test_hide_reveal_idiom_does_not_emit_removeobject(ctx: T.TranspileContext) -> None:
+    """A transient hide (opacity 0) followed later in the same page by a
+    restore (opacity 255) for the same target is the Map032/Map049 idiom —
+    must be left alone, no removeobject."""
+    hide_route = _route([{"code": 1}, {"code": 42, "parameters": [0]}])
+    reveal_route = _route([{"code": 42, "parameters": [255]}])
+    res = run_event(
+        ctx,
+        [[
+            cmd(T.SET_MOVE_ROUTE, [20, hide_route]),
+            cmd(T.WAIT_MOVE_COMPLETION),
+            cmd(T.SET_MOVE_ROUTE, [20, reveal_route]),
+            cmd(T.WAIT_MOVE_COMPLETION),
+        ]],
+        trigger=1,
+    )
+    assert "removeobject" not in res.text
+    assert "setflag" not in res.text
+    assert ctx.traits == {}
+
+
+def test_terminal_hide_of_player_never_emits_removeobject(
+    ctx: T.TranspileContext,
+) -> None:
+    """The player is never a valid removeobject target, even if a route
+    hides them with no later restore."""
+    route = _route([{"code": 1}, {"code": 42, "parameters": [0]}])
+    res = run_event(
+        ctx,
+        [[cmd(T.SET_MOVE_ROUTE, [-1, route]), cmd(T.WAIT_MOVE_COMPLETION)]],
+        trigger=1,
+    )
+    assert "removeobject" not in res.text
+    assert "setflag" not in res.text
+    assert "set_invisible" in res.text
+    assert ctx.traits == {}
+
+
+# ----------------------------------------------------------------------------
 # stripped codes
 # ----------------------------------------------------------------------------
 

@@ -425,8 +425,17 @@ def main() -> int:
             result.text, hidden_ids, source_name=f"Map{map_id:03d}.pory"
         )
 
+        # Resolve the transpiler's terminal-hide setflag placeholder to the
+        # real per-event flag build_object_events just decided (a fresh
+        # FLAG_HIDE_* or a reused rock/hidden-actor FLAG_TEMP_*) — BEFORE the
+        # local-id remap, same as the hidden-actor bracket pass above: both
+        # still need the raw RMXP ids `table` is keyed by.
+        resolved_text = mw.resolve_terminal_hide_setflags(
+            bracketed_text, map_json, table, source_name=f"Map{map_id:03d}.pory"
+        )
+
         remap = remap_pory_object_ids(
-            bracketed_text, table, source_name=f"Map{map_id:03d}.pory"
+            resolved_text, table, source_name=f"Map{map_id:03d}.pory"
         )
         final_text = remap.text
 

@@ -52,6 +52,20 @@ _FORK_VAR_HEADER = Path("include/constants/vars.h")
 # vanilla names still can't be clobbered.
 _RESERVED_FLOOR = {"FLAG_SYS_GAME_CLEAR", "FLAG_SYS_POKEMON_GET", "VAR_FACING"}
 
+# Terminal-hide setflag placeholder (transpiler.py's
+# `_insert_terminal_hide_removeobject`). The transpiler cannot name the real
+# flag at transpile time: whether a hidden event needs a freshly-minted
+# FLAG_HIDE_* or must REUSE an existing rock/hidden-actor FLAG_TEMP_* is a
+# decision that depends on the WHOLE map's visibility-flag pool assignment
+# (`metadata_wiring._assign_visibility_flags`), computed downstream during
+# staging (CLAUDE.md §4.3: one source of truth, and it isn't this module).
+# So the transpiler emits `setflag(<this placeholder>)` and
+# `metadata_wiring.resolve_terminal_hide_setflags` (called from
+# stage_slice_scripts.py, after `build_object_events` has decided every
+# template's flag) substitutes the real name. NOT a valid FLAG_ name — never
+# passed to `_validate`/`propose_flag`/etc, purely a text anchor.
+TERMINAL_HIDE_FLAG_PLACEHOLDER = "__TERMINAL_HIDE_FLAG__"
+
 _PRESEED_ROW = re.compile(
     r"^\|\s*(flag|var)\s*\|\s*(\d+)\s*\|\s*(.*?)\s*\|\s*([A-Z][A-Z0-9_]*)\s*\|"
 )
@@ -65,6 +79,23 @@ def self_switch_flag_name(map_id: int, event_id: int, letter: str) -> str:
     self-switch A on event 48 of map 31 -> ``FLAG_MAP031_EVENT048_SSA``.
     """
     return f"FLAG_MAP{int(map_id):03d}_EVENT{int(event_id):03d}_SS{letter.upper()}"
+
+
+def hide_flag_name(map_id: int, event_id: int) -> str:
+    """Deterministic per-event terminal-hide flag name (must match transpiler.py
+    and tileset_converter/metadata_wiring.py — both mint through
+    ``FlagRegistry.mint_hide_flag`` so they agree on the identical name).
+
+    A move route that ends in RGSS Change-Opacity-0 with no later restore is a
+    PERMANENT hide (``transpiler._insert_terminal_hide_removeobject``): the
+    transpiler emits ``removeobject`` so the object stops blocking its tile,
+    but ``RemoveObjectEventByLocalIdAndMap`` sets the object TEMPLATE's flag —
+    which must be a persistent flag, not a ``FLAG_TEMP_*`` (those auto-clear on
+    map re-entry and would respawn the NPC visible at its start tile on the
+    next visit — CLAUDE.md's smashable-rock trap, deliberately NOT reused
+    here). Hide flag on event 20 of map 50 -> ``FLAG_HIDE_MAP050_EV020``.
+    """
+    return f"FLAG_HIDE_MAP{int(map_id):03d}_EV{int(event_id):03d}"
 
 
 def temp_switch_flag_name(map_id: int, event_id: int, key: str) -> str:
@@ -131,7 +162,10 @@ class FlagRegistry:
         self._selfswitch_names: dict[tuple[int, int, str], str] = {}
         # Per-event temp-switch flags (Uranium setTempSwitchOn), keyed the same way.
         self._tempswitch_names: dict[tuple[int, int, str], str] = {}
-        # Reverse index name -> ("flag"|"var"|"selfswitch"|"tempswitch", id_or_key).
+        # Per-event terminal-hide flags (removeobject after a permanent
+        # opacity-0 route), keyed by (map_id, event_id).
+        self._hideflag_names: dict[tuple[int, int], str] = {}
+        # Reverse index name -> ("flag"|"var"|"selfswitch"|"tempswitch"|"hideflag", id_or_key).
         self._used: dict[str, tuple[str, object]] = {}
         self._sources: dict[str, str] = {}  # name -> "preseed" | "proposed"
         self._script_switches: set[int] = set()
@@ -252,6 +286,44 @@ class FlagRegistry:
         self._sources[name] = "tempswitch"
         return name
 
+    def mint_hide_flag(self, map_id: int, event_id: int) -> str:
+        """Register the deterministic per-event terminal-hide flag (idempotent).
+
+        Mirrors ``mint_self_switch``/``mint_temp_switch`` but backs the
+        terminal-hide idiom (``transpiler._insert_terminal_hide_removeobject``):
+        a persistent flag written onto the object template's ``"flag"`` field
+        so pokeemerald's ``TrySpawnObjectEvents`` respawn gate
+        (``!FlagGet(template->flagId)``) stays latched shut across camera
+        updates/re-entries instead of respawning the NPC at its template
+        coordinates.
+
+        Only called from ``metadata_wiring.build_object_events`` — and only
+        for a hidden event whose template would OTHERWISE carry the ``"0"``
+        null-sentinel flag. An event that already has a real flag from the
+        rock/hidden-actor visibility pool (``_assign_visibility_flags``) must
+        REUSE that flag instead (one flag per template, never two); the
+        transpiler never calls this directly, since it can't know which case
+        applies until the whole map's flag-pool assignment is decided here
+        (see ``TERMINAL_HIDE_FLAG_PLACEHOLDER`` and
+        ``resolve_terminal_hide_setflags``). Keyed by (map, event); re-minting
+        the same key returns the existing name.
+        """
+        key = (int(map_id), int(event_id))
+        existing = self._hideflag_names.get(key)
+        if existing is not None:
+            return existing
+        name = hide_flag_name(*key)
+        self._validate("flag", name)
+        prior = self._used.get(name)
+        if prior is not None:
+            raise RegistryError(
+                f"hide-flag name {name!r} collides with an existing {prior[0]} assignment"
+            )
+        self._hideflag_names[key] = name
+        self._used[name] = ("hideflag", key)
+        self._sources[name] = "hideflag"
+        return name
+
     # -- internals ---------------------------------------------------------
 
     def _validate(self, kind: str, name: str) -> None:
@@ -352,6 +424,10 @@ class FlagRegistry:
                 f"{m}:{e}:{key}": name
                 for (m, e, key), name in sorted(self._tempswitch_names.items())
             },
+            "hide_flags": {
+                f"{m}:{e}": name
+                for (m, e), name in sorted(self._hideflag_names.items())
+            },
             "source": dict(sorted(self._sources.items())),
             "script_switches": sorted(self._script_switches),
         }
@@ -383,6 +459,12 @@ class FlagRegistry:
             reg._tempswitch_names[tkey] = v
             reg._used[v] = ("tempswitch", tkey)
             reg._sources[v] = state["source"].get(v, "tempswitch")
+        for k, v in state.get("hide_flags", {}).items():
+            m, e = k.split(":")
+            hkey = (int(m), int(e))
+            reg._hideflag_names[hkey] = v
+            reg._used[v] = ("hideflag", hkey)
+            reg._sources[v] = state["source"].get(v, "hideflag")
         return reg
 
     # -- header emit -------------------------------------------------------
@@ -411,6 +493,17 @@ class FlagRegistry:
         ``include/config/rpg2gba.h``. Each section's mint count is checked against
         its capacity before anything is written; exceeding it raises loud rather
         than silently overflowing into the next region.
+
+        Hide flags (``mint_hide_flag``) have no dedicated region of their own —
+        adding one would mean a new ``RPG2GBA_HIDEFLAG_*`` range in
+        ``include/config/rpg2gba.h`` plus a matching call-site change in
+        ``scripts/assemble_pathfinder.py``, both outside this module. They are
+        persistent per-event flags exactly like self-switches (never
+        auto-cleared — CLAUDE.md's smashable-rock TEMP-flag trap is the reason
+        NOT to put them in the temp-switch region), so they're addressed in the
+        SAME ``RPG2GBA_SELFSWITCH_BASE`` region, indexed immediately after the
+        self-switches. The self-switch region has ample slack (1280 slots,
+        engine default) for this.
         """
         if capacities is not None:
             expected = {"flags", "vars", "selfswitches", "tempswitches"}
@@ -425,7 +518,7 @@ class FlagRegistry:
             counts = {
                 "flags": len(self._switch_names),
                 "vars": len(self._var_names),
-                "selfswitches": len(self._selfswitch_names),
+                "selfswitches": len(self._selfswitch_names) + len(self._hideflag_names),
                 "tempswitches": len(self._tempswitch_names),
             }
             for section, count in counts.items():
@@ -471,15 +564,20 @@ class FlagRegistry:
         for i, (_key, name) in enumerate(sorted(self._selfswitch_names.items())):
             lines.append(f"#define {name} (RPG2GBA_SELFSWITCH_BASE + {i})")
         lines.append("")
+        selfswitch_count = len(self._selfswitch_names)
+        for i, (_key, name) in enumerate(sorted(self._hideflag_names.items())):
+            lines.append(f"#define {name} (RPG2GBA_SELFSWITCH_BASE + {selfswitch_count + i})")
+        lines.append("")
         for i, (_key, name) in enumerate(sorted(self._tempswitch_names.items())):
             lines.append(f"#define {name} (RPG2GBA_TEMPSWITCH_BASE + {i})")
         lines += ["", "#endif // GUARD_RPG2GBA_FLAGS_H", ""]
         out.write_text("\n".join(lines), encoding="utf-8")
         logger.info(
-            "dumped %d flags + %d vars + %d self-switches + %d temp-switches -> %s",
+            "dumped %d flags + %d vars + %d self-switches + %d hide-flags + %d temp-switches -> %s",
             len(self._switch_names),
             len(self._var_names),
             len(self._selfswitch_names),
+            len(self._hideflag_names),
             len(self._tempswitch_names),
             out,
         )
@@ -511,6 +609,11 @@ class FlagRegistry:
             if name in seen:
                 raise RegistryError(f"duplicate name {name!r}")
             seen[name] = ("tempswitch", key)
+        for key, name in self._hideflag_names.items():
+            self._validate("flag", name)
+            if name in seen:
+                raise RegistryError(f"duplicate name {name!r}")
+            seen[name] = ("hideflag", key)
 
 
 @click.group()

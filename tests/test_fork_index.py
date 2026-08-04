@@ -79,6 +79,7 @@ def test_registry_extra_symbols(tmp_path: Path) -> None:
                 "variables": {"1": "VAR_TEMP_POKEMON_CHOICE"},
                 "self_switches": {"7:1:A": "FLAG_MAP007_EVENT001_SSA"},
                 "temp_switches": {"1:2:A": "FLAG_MAP001_EVENT002_TSA"},
+                "hide_flags": {"50:20": "FLAG_HIDE_MAP050_EV020"},
                 "script_switches": [1, 4, 8],
                 "source": {"FLAG_RECEIVED_STARTER": "proposed"},
             }
@@ -109,6 +110,7 @@ def test_registry_extra_symbols(tmp_path: Path) -> None:
         "VAR_TEMP_POKEMON_CHOICE",
         "FLAG_MAP007_EVENT001_SSA",
         "FLAG_MAP001_EVENT002_TSA",
+        "FLAG_HIDE_MAP050_EV020",
         "MAP_MOKI_TOWN_PLAYERS_HOUSE_1F",
         "MAP_URANIUM_49",
         "LAYOUT_MOKI_TOWN_PLAYERS_HOUSE_1F",
