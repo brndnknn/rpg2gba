@@ -13,7 +13,7 @@ Objective
 Per-map packing (the key §5.4 decision)
     Pooling metatiles per RMXP tileset overflows the 1024 budget for 19/38
     tilesets at full corpus, so each map gets its OWN physical tileset. The enabler
-    is a synthetic per-map tileset id (`_synth_id` = 1000 + map_id) fed to
+    is a synthetic per-map tileset id (`map_set.synth_tileset_id` = 1000 + map_id) fed to
     `build_slice_tilesets`, whose group-by-`tileset_id` loop then yields one tileset
     per map with no loop rewrite. The synth id resolves back to the real RMXP
     tileset (for source art / passages) via the `source_tilesets` overlay key;
@@ -40,14 +40,15 @@ import shutil
 import subprocess
 from pathlib import Path
 
+# Synthetic per-map tileset id scheme (single source of truth: map_set.py — see
+# its docstring for the full rationale). Kept as a module-level alias here to
+# minimize churn at the call sites below.
+from rpg2gba.tileset_converter.map_set import synth_tileset_id as _synth_id
+
 logger = logging.getLogger(__name__)
 
 # Output tree (under output/uranium-build/, set by the caller / pipeline).
 PORYMAP_SUBDIR = "porymap"
-
-# Synthetic per-map tileset ids live above the real RMXP range (0..60) so they
-# never collide; one physical tileset per map (§5.4).
-_SYNTH_BASE = 1000
 
 _URANIUM_GROUP = "gMapGroup_Uranium"
 _GEN_MAP_GROUPS = "map_groups.gen.json"
@@ -56,11 +57,6 @@ _GEN_LAYOUTS = "layouts.gen.json"
 # Shared tiny dummy layout the stock Emerald maps are repointed at when dropping
 # stock map data (§5.5). Never rendered — the walker only shows Uranium maps.
 _STUB_LAYOUT_DIR = "UraniumWalkerStub"
-
-
-def _synth_id(map_id: int) -> int:
-    """The synthetic tileset id that gives `map_id` its own physical tileset."""
-    return _SYNTH_BASE + map_id
 
 
 def _copy(src: Path, dst: Path) -> None:

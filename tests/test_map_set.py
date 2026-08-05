@@ -14,6 +14,7 @@ from rpg2gba.tileset_converter.map_set import (
     discover_all_map_ids,
     parse_map_ids,
     resolve_map_ids,
+    synth_tileset_id,
 )
 
 
@@ -97,3 +98,26 @@ def test_parse_garbage_fails_loud(tmp_path: Path) -> None:
 def test_resolve_alias_matches_parse(tmp_path: Path) -> None:
     maps_dir = _make_maps(tmp_path, [49, 48, 32])
     assert resolve_map_ids("full", maps_dir) == parse_map_ids("full", maps_dir)
+
+
+# --- synth_tileset_id (§9 slice-2 blocker: per-map physical tilesets) --------
+
+def test_synth_tileset_id_numbering() -> None:
+    # 1000 base is load-bearing (walker's emitted assets / cached overlay depend
+    # on the exact scheme) -- pin the numbers, not just "some offset".
+    assert synth_tileset_id(0) == 1000
+    assert synth_tileset_id(32) == 1032
+    assert synth_tileset_id(33) == 1033
+
+
+def test_synth_tileset_id_never_collides_with_real_rmxp_range() -> None:
+    # Real RMXP tileset ids are 0..60; every synthetic id must sit above that.
+    for map_id in range(0, 300):
+        assert synth_tileset_id(map_id) > 60
+
+
+def test_synth_tileset_id_disambiguates_maps_sharing_an_rmxp_tileset() -> None:
+    # Map032 (Moki Town) and Map033 (Route 01) share RMXP tileset 22 and, pooled,
+    # overflow both 1024 hard caps (1607 metatiles / 1611 tiles) -- the whole
+    # point of the synthetic scheme is that their synth ids differ.
+    assert synth_tileset_id(32) != synth_tileset_id(33)

@@ -38,7 +38,11 @@ import shutil
 import sys
 from pathlib import Path
 
-from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS, WALKABLE_OVERRIDES
+from rpg2gba.tileset_converter.map_set import (
+    SLICE_MAP_IDS,
+    WALKABLE_OVERRIDES,
+    synth_tileset_id,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -176,12 +180,25 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
     else:
         logger.info("  [dry] would run NPC sprite pass -> engine gen files")
 
+    # Per-map synthetic tileset ids (map_set.synth_tileset_id): pooling metatiles
+    # per RMXP tileset overflows the GBA's 1024 hard caps once two maps share an
+    # RMXP tileset id (e.g. Map032 union Map033 on RMXP tileset 22 -> 1607
+    # metatiles / 1611 tiles). Giving each map its own synthetic tileset_id makes
+    # build_slice_tilesets' group-by-tileset_id loop yield one physical tileset
+    # per map; source_tileset_of resolves the synthetic id back to the real RMXP
+    # id for source art / passages / priorities / terrain tags (mirrors phase5's
+    # walker path — phase5.py convert_all step 3).
     maps: list[tuple[int, dict]] = []
+    synth_to_real: dict[int, int] = {}
     for map_id in SLICE_MAP_IDS:
         map_json = json.loads(
             (out / "maps" / f"Map{map_id:03d}.json").read_text(encoding="utf-8")
         )
-        maps.append((map_id, map_json))
+        synth = synth_tileset_id(map_id)
+        synth_to_real[synth] = int(map_json["tileset_id"])
+        synth_json = dict(map_json)  # shallow: only the top-level tileset_id changes
+        synth_json["tileset_id"] = synth
+        maps.append((map_id, synth_json))
 
     build_slice_tilesets(
         maps,
@@ -190,6 +207,7 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
         base_tile_map=Path("reference/tileset_map.json"),
         overlay_out=Path("reference/tileset_map.gen.json"),
         tilesets_json=out / "tilesets.json",
+        source_tileset_of=lambda s: synth_to_real[s],
         dry_run=dry_run,
     )
 
@@ -203,7 +221,10 @@ def run_layout_pass(
     consts: dict,
     staging: Path,
     dry_run: bool,
-) -> None:
+) -> list[dict]:
+    """Returns this batch's layout entries (`Layout.to_layouts_entry()` dicts) so
+    `run_fork_pass` can append exactly this batch to the fork overlay, rather than
+    re-reading the cumulative staging layouts.json (see `run_fork_pass` docstring)."""
     logger.info("=== S8b: layout conversion ===")
     from rpg2gba.tileset_converter.layout import append_layouts, convert_layout
     from rpg2gba.tileset_converter.metadata_wiring import collect_through_block_cells
@@ -236,6 +257,7 @@ def run_layout_pass(
             warp_overrides=warp_overrides,
             blocked_cells=blocked_cells,
             unblocked_cells=WALKABLE_OVERRIDES.get(map_id, frozenset()),
+            tileset_key=synth_tileset_id(map_id),
         )
         entries.append(layout.to_layouts_entry())
 
@@ -257,6 +279,8 @@ def run_layout_pass(
         logger.info("  upserted %d layouts -> %s", len(entries), layouts_json)
     else:
         logger.info("  [dry] would upsert %d layouts -> %s", len(entries), layouts_json)
+
+    return entries
 
 
 # ---------------------------------------------------------------------------
@@ -449,13 +473,62 @@ def run_trainer_pass(out: Path, fork: Path, uranium_src: Path, dry_run: bool) ->
 # S8c: Fork assembly
 # ---------------------------------------------------------------------------
 
+def _resolve_batch_layout_entries(
+    consts: dict,
+    map_ids: list[int],
+    batch_layouts: list[dict] | None,
+    staging_layouts_json: Path,
+) -> list[dict]:
+    """The layout entries to append to the fork's layouts overlay for THIS run.
+
+    `batch_layouts` (from `run_layout_pass`) is the normal path: use it directly.
+    When it's None (S8b was skipped via --skip-layout), fall back to the
+    cumulative `staging/layouts/layouts.json` — but filtered down to exactly
+    `map_ids`, never used wholesale. With per-map synthetic tileset ids
+    (`map_set.synth_tileset_id`), the un-filtered cumulative file is a link-time
+    bomb: any prior run with a different SLICE_MAP_IDS leaves layout entries
+    referencing gTileset_Uranium<synth> symbols this run never emits, producing
+    undefined-symbol errors at link. Fails loud if a needed entry is missing.
+    """
+    if batch_layouts is not None:
+        return batch_layouts
+
+    if not staging_layouts_json.is_file():
+        raise FileNotFoundError(
+            f"S8b layout output missing: {staging_layouts_json}\n"
+            "Run assemble_pathfinder.py without --skip-layout first."
+        )
+    cumulative = json.loads(staging_layouts_json.read_text(encoding="utf-8")).get("layouts", [])
+    by_layout_const = {e["id"]: e for e in cumulative}
+    expected_ids = [consts[str(mid)]["layout_const"] for mid in map_ids]
+    missing = [lid for lid in expected_ids if lid not in by_layout_const]
+    if missing:
+        raise KeyError(
+            f"layout entries missing from {staging_layouts_json} for the current "
+            f"map set: {sorted(missing)}\n"
+            "Run assemble_pathfinder.py without --skip-layout first."
+        )
+    return [by_layout_const[lid] for lid in expected_ids]
+
+
 def run_fork_pass(
     out: Path,
     fork: Path,
     consts: dict,
     staging: Path,
     dry_run: bool,
+    batch_layouts: list[dict] | None = None,
 ) -> None:
+    """`batch_layouts` is THIS batch's layout entries, normally threaded straight
+    from `run_layout_pass`'s return value. When None (S8b was skipped via
+    --skip-layout, so this run never produced its own batch), the cumulative
+    `staging/layouts/layouts.json` is filtered down to just the current
+    SLICE_MAP_IDS' entries — never used wholesale. Per-map synthetic tileset ids
+    (map_set.synth_tileset_id) make the un-filtered cumulative file a link-time
+    bomb: any prior run with a different map set leaves layout entries
+    referencing gTileset_Uranium<synth> symbols this run never emits, producing
+    undefined-symbol errors at link (mirrors phase5.py's `_assemble_fork`
+    comment on `batch_layouts`)."""
     logger.info("=== S8c: fork assembly ===")
 
     from rpg2gba.conversion_agent import fork_index as fi
@@ -581,15 +654,18 @@ def run_fork_pass(
     pristine_layouts_json = fork / "data" / "layouts" / "layouts.json"
     gen_layouts_json = fork / "data" / "layouts" / _GEN_LAYOUTS
     staging_layouts_json = staging_layouts / "layouts.json"
-    if staging_layouts_json.is_file():
-        from rpg2gba.tileset_converter.layout import append_layouts
-        entries = json.loads(staging_layouts_json.read_text(encoding="utf-8")).get("layouts", [])
-        if not dry_run:
-            shutil.copy2(pristine_layouts_json, gen_layouts_json)  # full upstream manifest
-            append_layouts(entries, gen_layouts_json)             # + slice layouts
-            logger.info("  wrote %s (+%d slice layouts)", _GEN_LAYOUTS, len(entries))
-        else:
-            logger.info("  [dry] would write %s (+%d slice layouts)", _GEN_LAYOUTS, len(entries))
+
+    entries = _resolve_batch_layout_entries(
+        consts, SLICE_MAP_IDS, batch_layouts, staging_layouts_json,
+    )
+
+    from rpg2gba.tileset_converter.layout import append_layouts
+    if not dry_run:
+        shutil.copy2(pristine_layouts_json, gen_layouts_json)  # full upstream manifest
+        append_layouts(entries, gen_layouts_json)             # + slice layouts
+        logger.info("  wrote %s (+%d slice layouts)", _GEN_LAYOUTS, len(entries))
+    else:
+        logger.info("  [dry] would write %s (+%d slice layouts)", _GEN_LAYOUTS, len(entries))
 
     # --- Write map_groups overlay (data/maps/map_groups.gen.json) ---
     # Seed from the PRISTINE upstream map_groups.json, append gMapGroup_Uranium. Always
@@ -784,8 +860,9 @@ def main() -> int:
     if not args.skip_graphics:
         run_graphics_pass(out, fork, args.dry_run)
 
+    batch_layouts: list[dict] | None = None
     if not args.skip_layout:
-        run_layout_pass(out, consts, staging, args.dry_run)
+        batch_layouts = run_layout_pass(out, consts, staging, args.dry_run)
 
     if not args.skip_species or not args.skip_trainers:
         uranium_src_path = os.environ.get("RPG2GBA_URANIUM_SRC")
@@ -803,7 +880,7 @@ def main() -> int:
         if not args.skip_trainers:
             run_trainer_pass(out, fork, uranium_src, args.dry_run)
 
-    run_fork_pass(out, fork, consts, staging, args.dry_run)
+    run_fork_pass(out, fork, consts, staging, args.dry_run, batch_layouts=batch_layouts)
 
     if args.dry_run:
         logger.info("=== dry-run complete, no files written ===")

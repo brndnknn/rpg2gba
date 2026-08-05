@@ -67,6 +67,30 @@ WALKER_EMPTY_MAP_IDS: frozenset[int] = frozenset({14, 30, 38, 55, 56})
 # Everything the walker "full" corpus drops (technical exclusions, not game STRIPs).
 WALKER_EXCLUDED_MAP_IDS: frozenset[int] = WALKER_OVERFLOW_MAP_IDS | WALKER_EMPTY_MAP_IDS
 
+# Synthetic per-map tileset ids live above the real RMXP range (0..60) so they
+# never collide; one physical tileset per map (map_walker_plan §5.4, decision
+# #14). Pooling metatiles per RMXP tileset overflows the 1024 hard cap for many
+# tilesets at full corpus (and, at slice-2 scope, unions Map032 with Map033 into
+# 1607 metatiles / 1611 tiles — over BOTH GBA 1024 caps), so every map gets its
+# own physical tileset via this id. `build_slice_tilesets` groups by
+# `map_json["tileset_id"]`, so overwriting a map's top-level `tileset_id` with
+# its synthetic id yields exactly one tileset per map with no change to that
+# function. The synth id resolves back to the real RMXP tileset (for source art
+# / passages / priorities / terrain tags) via the `source_tilesets` overlay key
+# (`source_tileset_of=`); `convert_layout` looks up the same synth key via
+# `tileset_key=`. Do NOT change this numbering — the walker's emitted assets
+# and any cached tileset_map.gen.json overlay depend on the exact scheme.
+_SYNTH_BASE = 1000
+
+
+def synth_tileset_id(map_id: int) -> int:
+    """The synthetic tileset id that gives `map_id` its own physical tileset.
+
+    Real RMXP tileset ids are 0..60, so 1000+map_id can never collide.
+    """
+    return _SYNTH_BASE + map_id
+
+
 _MAP_FILE_RE = re.compile(r"^Map(\d+)\.json$")
 
 
