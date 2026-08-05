@@ -113,30 +113,34 @@ both GBA 1024 caps. It doesn't fail gradually; it fails on the very next
 slice. Per-map packing (already proven on the walker path) fits 171/194
 non-empty maps individually and is the documented fallback.
 
-**Verified current state (2026-08-04), still pending promotion:**
-- `scripts/assemble_pathfinder.py` (`~line 186`, S8a) calls
-  `build_slice_tilesets(maps, WARP_OVERRIDES, fork=fork, ...)` **without**
-  `source_tileset_of` — so it uses the default identity mapping, i.e. still
-  legacy per-RMXP-tileset union packing.
-- `src/rpg2gba/tileset_converter/graphics/build_slice_tilesets.py`
-  (`build_slice_tilesets`, ~line 240) already groups maps `by_ts` keyed on
-  `map_json["tileset_id"]` (the RMXP id) — confirms the union scheme is
-  still live there. The function does accept a `source_tileset_of` param
-  ("maps a synthetic per-map tileset id back to its real RMXP tileset id...
-  Identity when None — the default, legacy per-RMXP-tileset behavior"), so
-  the machinery for per-map synthetic ids exists and is wired for callers
-  that pass it — `assemble_pathfinder.py` is not one of them yet.
-- `src/rpg2gba/tileset_converter/map_set.py` has no per-map-synthetic-id
-  promotion logic visible at the module level beyond `SLICE_MAP_IDS` /
-  `WALKER_OVERFLOW_MAP_IDS` — the walker path (`phase5.convert_all`) is the
-  only place synthetic per-map ids are actually exercised today.
+**Code landed 2026-08-05 — build verification still outstanding.** What's in:
+- `map_set.py` now owns the scheme: `synth_tileset_id(map_id)` = `1000 +
+  map_id` (single source of truth). `phase5.py` dropped its private
+  `_synth_id` and imports it, so walker and slice paths share one numbering.
+- `scripts/assemble_pathfinder.py` S8a (`run_graphics_pass`) rewrites each
+  map's top-level `tileset_id` to its synthetic id (shallow copy — the
+  on-disk `MapNNN.json` is never mutated) and passes
+  `source_tileset_of=` so `build_slice_tilesets`' group-by-`tileset_id`
+  loop yields one physical tileset per map. S8b (`run_layout_pass`) passes
+  the matching `tileset_key=` to `convert_layout`.
+- Staging hygiene (the audit's "shared-mutable-staging wart"): `run_layout_pass`
+  now *returns* this batch's layout entries and `run_fork_pass` takes them via
+  `batch_layouts=`. The old code appended the **cumulative**
+  `staging/layouts/layouts.json` wholesale, which under per-map synth ids is a
+  link-time bomb — a prior run with a different `SLICE_MAP_IDS` leaves entries
+  referencing `gTileset_Uranium<synth>` symbols this run never emits.
+  `_resolve_batch_layout_entries` now filters the cumulative file down to the
+  current map set on the `--skip-layout` path, and fails loud when an entry is
+  missing.
+- Tests: `tests/test_assemble_pathfinder_tileset_packing.py` (new) +
+  `synth_tileset_id` cases in `tests/test_map_set.py`. Full suite green
+  (1654 passed / 16 skipped). These cover the **wiring**; they cannot prove
+  the tile budget holds.
 
-**Work:** promote per-map synthetic-id packing from the walker-only path
-into `assemble_pathfinder.py`'s S8a call (pass `source_tileset_of`, wire the
-synthetic ids the same way the walker does), including the warp/tile_map
-overlay and staging hygiene (audit calls out "the known shared-mutable-staging
-wart"). This gates Route 01 outright — do not attempt Route 01 conversion
-before this lands.
+**Remaining before Route 01:** `SLICE_MAP_IDS` is still the 8-map slice-1 set
+(`map_set.py:30`) — Map033 has never been through this path, so the exact
+overflow the change exists to prevent is unexercised end-to-end. Add 33 and do
+a full assemble+build to close the item.
 
 **Done looks like:** `assemble_pathfinder.py` S8a packs Map032 and Map033
 (and any other Route 01 maps) as independent per-map tilesets; a full
