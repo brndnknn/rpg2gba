@@ -1,10 +1,17 @@
-# Slice 2 TODO — Route 01 frontier (map set TBD)
+# CH02 TODO — Route 1 (maps 33, 81)
 
-Working checklist for slice 2, seeded 2026-07-13 before the slice's map set is
-finalized (frontier per slice-1 deferrals: Route 01, plus the Moki Town E ↔
-Route 03 seam). Same conventions as `SLICE1_TODO.md`: commit updates as items
-close; move an item to **Done** with a one-line result rather than deleting
-it. Facts here are pointers — the cited code/docs stay authoritative.
+Live work checklist for chapter CH02 (Route 1), the current build frontier.
+The chapter's spec, story beats and coverage targets live in
+`reference/chapters/02-route-1.md`; the corpus-wide plan is
+`reference/chapters/00-atlas.md`. This file tracks only *work items*, not
+design. Same conventions as `reference/archive/SLICE1_TODO.md`: commit
+updates as items close; move an item to **Done** with a one-line result
+rather than deleting it. Facts here are pointers — the cited code/docs stay
+authoritative.
+
+History: seeded 2026-07-13 as `SLICE2_TODO.md`; renamed 2026-08-05 when
+planning reoriented from slices to chapters (same unit of work, per atlas
+§1).
 
 ## Open
 
@@ -56,52 +63,23 @@ Map032's ~30 south-ledge over-block cells (the SLICE1 #4 residual) — they
 should become jumpable in-game. Until this lands, slice-1 builds keep firing 3
 benign warnings for 840/841/842.
 
-### 2. Inherited slice-2 frontier deferrals (pointers — details live where cited)
+### 2. Inherited CH02 frontier deferrals (pointers — details live where cited)
 
 - **Route 01 waterfall/transparency animated autotile** — first
   animated+transparent autotile in the frontier; stipple/alpha classify ×
-  frame quantization untested (`SLICE1_TODO.md` #10).
+  frame quantization untested (`reference/archive/SLICE1_TODO.md` #10).
 - **Secondary-tileset animation support** — animated tiles currently must fit
   the primary block; needs a secondary-callback variant if Route 01 overflows
-  (`SLICE1_TODO.md` #10).
-- **Moki Town E ↔ Route 03 seam** — `connections.dat` seams unconverted; slice
-  1 only verifies the east edge fails cleanly (`SLICE1_TODO.md` #9;
-  `reference/viewer/walker_checkpoint2_findings.md`).
+  (`reference/archive/SLICE1_TODO.md` #10).
+- **Moki Town E ↔ Route 03 seam** — moved to `PROJECT_TODO.md` #27, see item 3
+  below.
 
-### 3. Moki Town east seam → Route 03: connections + border-strip import
+### 3. Moki Town east seam → Route 03 — MOVED OUT 2026-08-05
 
-Migrated from SLICE1_TODO #9, 2026-08-04 (SLICE1_TODO.md retiring). Slice 1
-only proved the seam fails *cleanly* (blocked, no walk-into-void); slice 2
-must actually convert it — Moki Town↔Route 03 (`[32,E,26, 59,W,0]`) is the
-first of 14 `connections.dat` seams and the one directly on the frontier.
-
-Architecture decided in `reference/guides/connections_and_palette_families.md`
-(2026-07-14, user-approved by eye) — three parts:
-
-1. **Per-map tileset packing** must land first (see #4 below) — shared
-   per-RMXP tilesets are arithmetically impossible for this seam (Map032 ∪
-   Map033 on ts22 = 1607 metatiles / 1611 tiles, over both 1024 caps).
-2. **Palette families pinned per seam component** — Moki+R03 is one of 8
-   `connections.dat` components; quantize both maps' tile union against ONE
-   pinned palette set (new SoT artifact `reference/palette_families.gen.json`
-   or per-component files) so seam colors match exactly. Consumer:
-   `build_slice_tilesets` (`src/rpg2gba/tileset_converter/graphics/build_slice_tilesets.py`)
-   quantizes member maps against the pinned set instead of deriving per-pack.
-3. **Border-strip import** — emit the neighbor's visible border strip (≤ ~8
-   metatiles deep past the seam) into each map's own tileset as extra
-   columns, so the engine's native `connections` renderer (porymap
-   `map.json` direction/offset/map schema) draws real neighbor art instead of
-   VRAM garbage ("tileset bleed"). Exact sampling mechanism (map.json border
-   block vs neighbor's real map data) needs a fork read of `fieldmap.c`
-   connection handling before coding (§4.7) — not yet done.
-
-**Also open, not yet resolved:** RMXP offset-sign → GBA offset-convention
-worked example (Kevlar N offset 11 vs Moki E offset 26) — verify in-ROM at
-the boot gate, per the design doc's own open note.
-
-**Done looks like:** Map032 emits a real `connections` entry to Map033 (and
-vice versa) in map.json; crossing the seam in mGBA shows continuous art with
-no palette snap and no garbage strip; collision at the boundary is sane.
+Moved to `PROJECT_TODO.md` #27: Route 03 is CH09 (Act 2), not CH02, so under
+the chapter model the seam is off-frontier (seven chapters past CH02). Full
+detail copied verbatim there. Stays prerequisite-chained on item 4 (per-map
+tileset packing).
 
 ### 4. Promote per-map tileset packing into the slice/assembler path (BLOCKING — must land before Route 01)
 

@@ -8,6 +8,11 @@ This doc absorbs and supersedes the live content of the former root planning doc
 (`PATHFINDER_*`, `ITERATIVE_ROADMAP`, `DETERMINISTIC_EXPANSION_STRATEGY`,
 `OQ3_EMPIRICAL_PLAN`), now archived under `reference/archive/`.
 
+**Companion doc for section selection:** `reference/chapters/00-atlas.md` is the
+corpus-wide chapter plan (59 chapters across 10 acts); `reference/chapters.json` is
+its §4.3 source-of-truth binding (map membership, gates, tiers). §2 below points
+into the chapter chain for SELECT.
+
 > **Amendments 2026-07-02** (grill session on the spine; full decision record +
 > slice census: `reference/findings/grill_spine_2026-07-02.md`):
 > - **§5 first-cut is overturned:** transpiler v1 does NOT stub all of 209 — it
@@ -54,31 +59,39 @@ pipeline gaps, not LLM gaps. A transpiler trades the LLM's silent-wrong risk for
 
 ---
 
-## 2. Operating model: vertical playable slices
+## 2. Operating model: vertical playable chapters
 
-We build the pipeline in **vertical slices**, not horizontal phases. A slice = *every
-artifact a player touches in one play-order section, converted for real, booting and
-playable* — events **and** quantized art. Then we **widen the playable frontier** one
-trustworthy slice at a time.
+We build the pipeline in **vertical chapters**, not horizontal phases. A chapter
+(`reference/chapters/00-atlas.md` §1: **chapter ≡ slice ≡ one §9 boot gate ≡ one
+ROM-test scenario**) = *every artifact a player touches in one play-order section,
+converted for real, booting and playable* — events **and** quantized art. Then we
+**widen the playable frontier** one trustworthy chapter at a time.
 
 This is the structural fix for "did a bunch of work, found out it was wrong." The
 pathfinder slice booted but came back unplayable precisely because it *deferred the
 load-bearing parts* (bucket tilesets, no real sprites). "Done" is not allowed to
 exclude what a player sees.
 
-**The guardrail that keeps a slice from degrading into hand-finishing one area:**
+**The guardrail that keeps a chapter from degrading into hand-finishing one area:**
 every converter stays **general, idempotent, config/data-driven.** The mechanical
-test — *slice 2 must need data/config changes, not code changes.* Hold that bar and
-slices build the pipeline; drop it and they become a content grind.
+test — *the next chapter must need data/config changes, not code changes.* Hold that
+bar and chapters build the pipeline; drop it and they become a content grind.
 
-### Per-slice loop (checklist)
+The loop itself is unchanged from the old per-slice loop — only how sections are
+*chosen, named and documented* changed. SELECT is no longer a judgement call made at
+the start of each iteration: the next chapter comes from the atlas chapter chain
+(`reference/chapters/00-atlas.md` §3) and its bound map set
+(`reference/chapters.json`), in order.
+
+### Per-chapter loop (checklist)
 ```
-SLICE N
- 1. SELECT the play-order section (maps + their warps/connections).
- 2. EVENTS — run the deterministic transpiler over the section's events.
+CHAPTER N / CHnn
+ 1. SELECT the next chapter from the atlas chapter chain (00-atlas.md §3) and its
+      bound map set (reference/chapters.json) — not an ad hoc pick.
+ 2. EVENTS — run the deterministic transpiler over the chapter's events.
       • everything mechanical → Poryscript; uninterpretable script-calls → queue.
       • differential-test against the frozen-Opus oracle where it overlaps.
- 3. ART — quantize the section's real tilesets + sprites to GBA 4bpp.
+ 3. ART — quantize the chapter's real tilesets + sprites to GBA 4bpp.
  4. WIRE — map constants, layouts (collision + warp metatiles), object events,
       encounters, connections.
  5. BUILD — assemble into the fork; `make modern` must exit 0.
@@ -86,7 +99,7 @@ SLICE N
  7. FIX — cluster any systematic defect; fix the *converter*, re-run. Never hand-edit
       output.
  8. RECORD — MEMORY Current Phase + Decisions; commit one logical unit.
- → widen the frontier: SLICE N+1.
+ → widen the frontier: next chapter in the chain.
 ```
 
 ---
@@ -118,7 +131,7 @@ are polish.
      (switch / variable / `s:`-script); choices (102/402–404) → choice blocks; loops
      (112/113) → `while`; labels/jumps (118/119) → `goto`.
    - **move routes (209)** → `applymovement` — see §5. **First cut: stub-and-queue**
-     so we reach a booting slice fast; resolve second.
+     so we reach a booting chapter fast; resolve second.
    - **script calls (355/655)** → the idiom library (re-homed classifiers); unknown
      `pbXXX` → fail-loud queue (never silently dropped).
    - **flag/var naming** → deterministic from `reference/uranium_switches.json` /
@@ -188,24 +201,27 @@ relearner, trade, rock smash — only the Nuclear type is genuinely new C).
 **raw macro determinism 24%, potential 65% after 5 SOFT-C rules, irreducible HARD
 tail 35%.** So in the transpiler: emit direct `MOVEMENT_ACTION_*` where deterministic,
 apply the SOFT-C rules for the param-deterministic middle, and **stub-and-queue** the
-hard tail. First cut stubs *all* of 209 to reach a booting slice; the 24%→65% work is
+hard tail. First cut stubs *all* of 209 to reach a booting chapter; the 24%→65% work is
 the second pass. Re-bucketing edit point = the `CANDIDATE` dict + `SOFT_C` set in that
 script.
 
 ---
 
-## 6. Slice 1 (pathfinder) — PASSED, historical; active slice is now slice 2
+## 6. CH01 (Moki Town, pathfinder) — PASSED, historical; active chapter is now CH02
 
-**Slice 1 passed its §9 boot-walk gate 2026-08-04** (8 maps — 49/48/32/50/64/65/172/89,
-not the original 3; see `MEMORY.md` Current Phase). The S9 diagnosis below is the
-*early* 3-map-scope draft, kept for its root-cause history — both "OPEN" items it
-lists were long since fixed (NPC gfx: `reference/guides/event_conversion_model.md`
-§4 RMXP-construct table; tile substitution: the real per-tile image pipeline
-shipped, §7). Full S1–S9 narrative: `reference/memory-archive.md`.
+**CH01 (Moki Town, the pathfinder slice, 8 maps — 49/48/32/50/64/65/172/89) passed
+its §9 boot-walk gate 2026-08-04** (not the original 3; see `MEMORY.md` Current
+Phase). The S9 diagnosis below is the *early* 3-map-scope draft, kept for its
+root-cause history — both "OPEN" items it lists were long since fixed (NPC gfx:
+`reference/guides/event_conversion_model.md` §4 RMXP-construct table; tile
+substitution: the real per-tile image pipeline shipped, §7). Full S1–S9 narrative:
+`reference/memory-archive.md`.
 
-**Active slice is now slice 2** (Route 01) — see `SLICE2_TODO.md`, blocked on
-promoting per-map tileset packing into `assemble_pathfinder.py` (`SLICE2_TODO.md`
-#4) before Route 01 conversion can start.
+**Active chapter is now CH02** (Route 1, maps 33 and 81) — see `CH02_TODO.md`
+(replaces `SLICE2_TODO.md`), blocked on promoting per-map tileset packing into
+`assemble_pathfinder.py` (`CH02_TODO.md` #4) before CH02 conversion can start.
+Chapter spec and beat chain: `reference/chapters/02-route-1.md`; whole chain:
+`reference/chapters/00-atlas.md`.
 
 <details>
 <summary>Original S9 boot diagnosis (3 root-cause classes, historical)</summary>

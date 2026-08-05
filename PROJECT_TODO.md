@@ -1,10 +1,12 @@
-# Project TODO — cross-cutting, post-slice loose ends
+# Project TODO — cross-cutting, cross-chapter loose ends
 
 Working checklist for things that are **not** phase-plan items (→ `ROADMAP.md`)
-and **not** scoped to the pathfinder slice (→ `SLICE1_TODO.md`), but keep
-getting deferred across sessions and need a home so they don't get lost.
-Commit updates as items close; move to **Done** with a one-line result rather
-than deleting. Facts here are pointers — the cited code/docs stay authoritative.
+and **not** scoped to the active chapter (→ `CH02_TODO.md`, the current
+frontier checklist), but keep getting deferred across sessions and need a
+home so they don't get lost. Retired chapter checklists live in
+`reference/archive/` (e.g. `reference/archive/SLICE1_TODO.md`). Commit
+updates as items close; move to **Done** with a one-line result rather than
+deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
@@ -309,6 +311,51 @@ okay") rather than an accident of which bug got fixed first. Needs a PC (or
 emulator) playthrough of stock Uranium's lab scene to settle. Migrated from
 `reference/findings/lab_starter_scene_positioning_2026-07-27.md` §4,
 2026-08-04.
+
+### 27. Moki Town east seam → Route 03: connections + border-strip import
+
+Was `SLICE2_TODO.md` #3, moved here 2026-08-05 during the slice→chapter
+reorientation: under the chapter model Route 03 is **CH09, in Act 2** — seven
+chapters past the current frontier — so the Moki↔Route 03 seam is not CH02
+work. It stays prerequisite-chained on per-map tileset packing
+(`CH02_TODO.md` #4), and it should resurface when CH09 is planned, or earlier
+if a CH01/CH02 boot-walk shows the east map edge needs real neighbour art.
+This is the first of 14 `connections.dat` seams, and no seam anywhere in the
+corpus is converted yet, so this item is the whole seams feature, not just
+one map pair.
+
+Originally migrated from SLICE1_TODO #9, 2026-08-04. CH01 only proved the seam
+fails *cleanly* (blocked, no walk-into-void); converting it for real is this
+item — Moki Town↔Route 03 (`[32,E,26, 59,W,0]`) is the first of 14
+`connections.dat` seams and the nearest one to the frontier.
+
+Architecture decided in `reference/guides/connections_and_palette_families.md`
+(2026-07-14, user-approved by eye) — three parts:
+
+1. **Per-map tileset packing** must land first (`CH02_TODO.md` #4) — shared
+   per-RMXP tilesets are arithmetically impossible for this seam (Map032 ∪
+   Map033 on ts22 = 1607 metatiles / 1611 tiles, over both 1024 caps).
+2. **Palette families pinned per seam component** — Moki+R03 is one of 8
+   `connections.dat` components; quantize both maps' tile union against ONE
+   pinned palette set (new SoT artifact `reference/palette_families.gen.json`
+   or per-component files) so seam colors match exactly. Consumer:
+   `build_slice_tilesets` (`src/rpg2gba/tileset_converter/graphics/build_slice_tilesets.py`)
+   quantizes member maps against the pinned set instead of deriving per-pack.
+3. **Border-strip import** — emit the neighbor's visible border strip (≤ ~8
+   metatiles deep past the seam) into each map's own tileset as extra
+   columns, so the engine's native `connections` renderer (porymap
+   `map.json` direction/offset/map schema) draws real neighbor art instead of
+   VRAM garbage ("tileset bleed"). Exact sampling mechanism (map.json border
+   block vs neighbor's real map data) needs a fork read of `fieldmap.c`
+   connection handling before coding (§4.7) — not yet done.
+
+**Also open, not yet resolved:** RMXP offset-sign → GBA offset-convention
+worked example (Kevlar N offset 11 vs Moki E offset 26) — verify in-ROM at
+the boot gate, per the design doc's own open note.
+
+**Done looks like:** Map032 emits a real `connections` entry to Map033 (and
+vice versa) in map.json; crossing the seam in mGBA shows continuous art with
+no palette snap and no garbage strip; collision at the boundary is sane.
 
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 

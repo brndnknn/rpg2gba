@@ -6,7 +6,9 @@ per `ROM_TEST_DEV.md` Branch A (rxdata-first, wiki cross-check only). Tier
 spec a chapter test scenario gets written from — it is not itself a test, and
 it carries no narrative content (house style: gates and effects only, per
 Branch A2). **Not yet converted or boot-walked**; §6 records expected work,
-not observed defects.
+not observed defects. CH02 is the current build frontier. The live work
+checklist is `CH02_TODO.md`, at the repo root — this document owns the spec,
+beats, and coverage targets; `CH02_TODO.md` owns work items.
 
 **Method note:** every beat, gate, item grant, encounter table, and warp below
 was read directly out of `output/uranium-build/maps/Map033.json` and
@@ -410,6 +412,14 @@ registration). See §7.
   rule may want to double-check which chapter actually earned CH01's
   existing `full` tier promotion credit for rock smash / cave entry-exit,
   since by this reading it should trace to CH01, not CH02.
+- **Three CH02 work items are tracked in `CH02_TODO.md`, not here:**
+  auto-deriving ledge jump directions from RMXP passage bits (item 1);
+  Route 01's animated/transparent autotile plus secondary-tileset animation
+  support (item 2); and, blocking — must land before conversion starts —
+  promoting per-map tileset packing into `assemble_pathfinder.py` (item 4).
+- **The Moki Town ↔ Route 03 seam has moved to `PROJECT_TODO.md`** — Route 03
+  is CH09 (Act 2), not part of this chapter, so the seam is off-frontier
+  under the chapter model.
 
 ---
 

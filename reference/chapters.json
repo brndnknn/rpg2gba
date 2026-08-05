@@ -87,13 +87,13 @@
       "id": "CH01", "act": "A1", "title": "Moki Town", "wiki_page": "Moki Town",
       "visit": 1, "outdoor": 32, "maps": [32, 48, 49, 50, 64, 65, 89, 172],
       "predecessor": null, "tier": "full", "status": "built",
-      "notes": "Slice 1. Map roster matches tileset_converter/map_set.py:30 SLICE_MAP_IDS exactly. Passed its §9 boot-walk gate 2026-08-04 (moki chapter suite GREEN 17/17). Live doc: reference/chapters/01-moki.md; SLICE1_TODO.md is retired to reference/archive/, open items migrated to PROJECT_TODO.md/SLICE2_TODO.md/ROM_TEST_DEV.md."
+      "notes": "The pathfinder slice (chapters replaced slices as the work unit 2026-08-05; same unit, same gate). Map roster matches tileset_converter/map_set.py:30 SLICE_MAP_IDS exactly. Passed its §9 boot-walk gate 2026-08-04 (moki chapter suite GREEN 17/17). Live doc: reference/chapters/01-moki.md; SLICE1_TODO.md is retired to reference/archive/, open items migrated to PROJECT_TODO.md/CH02_TODO.md/ROM_TEST_DEV.md."
     },
     {
       "id": "CH02", "act": "A1", "title": "Route 1", "wiki_page": "Route 1",
       "visit": 1, "outdoor": 33, "maps": [33, 81],
       "predecessor": "CH01", "tier": "full", "status": "planned",
-      "notes": "Next frontier. 81 = 'Route 01 (old rod house)'; the wiki says the Old Rod is granted only after Gym 1, so the grant may be gated across an act boundary -- verify against event data before writing beats."
+      "notes": "Active frontier. Spec reference/chapters/02-route-1.md; work checklist CH02_TODO.md (blocked on #4, per-map tileset packing). 81 = 'Route 01 (old rod house)'; the act-boundary worry is resolved -- the Old Rod is a forward, same-act, cross-chapter gate (item sits in CH02, locked on VAR_BATTLE_VAR01 which only CH06/Map042 writes), see 02-route-1.md §7."
     },
     {
       "id": "CH03", "act": "A1", "title": "Kevlar Town", "wiki_page": "Kevlar Town",
@@ -136,7 +136,7 @@
       "id": "CH09", "act": "A2", "title": "Route 3", "wiki_page": "Route 3",
       "visit": 1, "outdoor": 59, "maps": [59, 1, 54, 177],
       "predecessor": "CH08", "tier": "thin", "status": "planned",
-      "notes": "Reached via the Moki Town E <-> Route 03 seam (connections.json 32 E <-> 59 W) -- the seam SLICE1_TODO #9 defers and SLICE2_TODO tracks."
+      "notes": "Reached via the Moki Town E <-> Route 03 seam (connections.json 32 E <-> 59 W). CH01 only proved the seam fails cleanly (SLICE1_TODO #9); converting it -- the first of 14 connections.dat seams -- is PROJECT_TODO.md #27, off-frontier because this chapter is 7 chapters past CH02."
     },
     {
       "id": "CH10", "act": "A2", "title": "Burole Town", "wiki_page": "Burole Town",

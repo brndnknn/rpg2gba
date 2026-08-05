@@ -146,6 +146,7 @@ Every converter must be safely re-runnable from scratch. If running it twice pro
 | Tile substitution table | `reference/tileset_map.json` |
 | Whole-artifact STRIP decisions (CE ids / whole maps / map events) | `reference/strip_list.json` |
 | Corrected map identity / display name (overrides `MapInfos`) | `reference/map_name_overrides.json` |
+| Act / chapter chain, tiers, map membership | `reference/chapters.json` (prose half: `reference/chapters/00-atlas.md`) |
 
 Anything else that *uses* these reads from the source of truth. Nothing else *creates* them.
 
@@ -258,16 +259,22 @@ stored flags; never mint a `FLAG_*` for them.
 ## 7. Working with Each Pipeline Phase
 
 Per-phase detail — goals, tasks, exit criteria — lives in **ROADMAP.md** (Phases
-0–8). The **active build sequence** (the deterministic transpiler + the per-slice
-operating loop) lives in **`BUILD_PLAN.md`**; the active phase and next concrete task
-live in **MEMORY.md → Current Phase**. Read both before you start.
+0–8). The **active build sequence** (the deterministic transpiler + the per-chapter
+operating loop) lives in **`BUILD_PLAN.md`**; the corpus-wide chapter plan lives in
+**`reference/chapters/00-atlas.md`** (bound by `reference/chapters.json`, one document
+per chapter beside it); the active phase and next concrete task live in
+**MEMORY.md → Current Phase**. Read all three before you start.
 
 **Phase 4 was pivoted (2026-06-18):** the LLM-driven bulk run is retired. Event→
 Poryscript is now a deterministic transpiler you build and run (`BUILD_PLAN.md §3`);
 the existing classifiers become an idiom-collapse layer on top; the LLM is a
 hand-invoked tail tool only, and its prompt (`system.md`) is **no longer frozen**.
-The conversion campaign runs as **vertical playable slices**, not a horizontal grind
-— a slice isn't done until it boots and is playable, art included (§9).
+The conversion campaign runs as **vertical playable chapters**, not a horizontal grind
+— a chapter isn't done until it boots and is playable, art included (§9). Chapters
+replaced ad-hoc "slices" as the unit of work (2026-08-05); the identity is
+**chapter ≡ slice ≡ one §9 boot gate ≡ one ROM-test scenario** (`00-atlas.md` §1), so
+the loop didn't change, only how sections are chosen and named. "Slice" survives in
+code identifiers (`SLICE_MAP_IDS`) — deliberately not renamed.
 
 ---
 
@@ -304,7 +311,7 @@ Fix the failure. Do not skip, mark xfail, or comment out failing tests without e
 There are three points where you must stop and wait for the user, even if everything appears to be working:
 
 1. **End of Phase 2** — before any PBS-generated content is committed to the pokeemerald-expansion fork, the user reviews the generated C output and the unfixed-issues list
-2. **Per-slice boot gate** — a vertical slice is not "done" until its ROM boots in mGBA and the section is genuinely playable (warps fire, NPCs sane, layout legible — *art included*, not deferred). The user walks each slice before the frontier widens. (Replaces the retired end-of-Phase-4 frozen-prompt/bulk-run gate.)
+2. **Per-chapter boot gate** — a chapter is not "done" until its ROM boots in mGBA and the section is genuinely playable (warps fire, NPCs sane, layout legible — *art included*, not deferred). The user walks each chapter before the frontier widens. (Replaces the retired end-of-Phase-4 frozen-prompt/bulk-run gate.)
 3. **End of Phase 7** — before declaring the ROM "playable," the user does a manual playthrough of the success-criteria scenarios
 
 These gates exist because each one is a place where systematic errors propagate cheaply to fix early and expensively to fix late. Do not push past them on autopilot.
@@ -345,7 +352,7 @@ The three most expensive, most repeated mistakes — internalize these; the full
 list is in ROADMAP.md "Known Pitfalls":
 
 - **Claiming the engine can't do X without checking the fork.** The most expensive recent bug class — `healparty` was invented while `HealPlayerParty` existed; "engine features" were queued that ship natively. Grep `$RPG2GBA_POKEEMERALD` first, every time (§4.7).
-- **Calling a slice "done" while deferring art.** The pathfinder slice booted but was unplayable because it deferred tilesets/sprites. A slice isn't done until it's playable with real (quantized) art (§9).
+- **Calling a chapter "done" while deferring art.** The pathfinder slice (CH01) booted but was unplayable because it deferred tilesets/sprites. A chapter isn't done until it's playable with real (quantized) art (§9).
 - **Editing generated output to "fix" something.** Fix the converter, not its output — the output gets regenerated. (Corollary: never add silent fallbacks for unknown fields, and never emit a symbol the fork doesn't define; fail loud.)
 
 ---

@@ -13,6 +13,16 @@ tier that decays with distance from the build frontier.
 3. *What does a ROM test for this section assert?* → each chapter document's
    beat table, which `src/rpg2gba/playtest/chapters/` mirrors beat-for-beat.
 
+**How this document relates to the work checklist.** This atlas and each
+chapter document (`NN-slug.md`) are the **plan and spec** — map rosters, story
+beats, coverage targets. They do not track task status. The active chapter's
+live **work checklist** is a root-level `CHnn_TODO.md` (currently
+`CH02_TODO.md`) — open items, in-progress notes, done log. Once that chapter's
+§9 boot gate passes, its TODO is archived to `reference/archive/` rather than
+deleted, as happened with the slice-1 checklist, now at
+`reference/archive/SLICE1_TODO.md`. Cross-cutting work not scoped to any one
+chapter lives in `PROJECT_TODO.md`.
+
 **Sources, and which one wins.** Act and chapter *identity, naming and ordering*
 come from the wiki's `Game_Walkthrough` page. Chapter *map membership, counts and
 gates* come from the converted rxdata and **always win on conflict**
@@ -79,8 +89,8 @@ Tier legend: **F** full, **M** medium, **T** thin. Status is from the binding.
 
 | # | Chapter | Act | Tier | Maps | Trainers | Items | Notes |
 |---|---|---|:-:|--:|--:|--:|---|
-| CH01 | Moki Town | A1 | F | 8 | 1 | 7 | **slice 1, in progress** — `01-moki.md` |
-| CH02 | Route 1 | A1 | F | 2 | 9 | 7 | **next frontier** |
+| CH01 | Moki Town | A1 | F | 8 | 1 | 7 | **§9 boot-walk gate passed 2026-08-04** — `01-moki.md` |
+| CH02 | Route 1 | A1 | F | 2 | 9 | 7 | **next frontier** — `02-route-1.md` (spec), `CH02_TODO.md` (work checklist) |
 | CH03 | Kevlar Town | A1 | M | 5 | 5 | 5 | bike; map 19 bound here, see §6 |
 | CH04 | Route 2 | A1 | M | 1 | 4 | 3 | rockslide gate |
 | CH05 | Passage Cave | A1 | M | 2 | 3 | 5 | first dungeon |
@@ -214,10 +224,10 @@ data wins.**
 Honest limits, so nothing here is over-trusted:
 
 1. **Conversion-readiness is unmeasured for 195 of 199 maps.** The transpiler's
-   unhandled queue only covers staged maps — slice 1 — so the census reports
+   unhandled queue only covers staged maps — CH01 — so the census reports
    `unhandled: null` (not `0`) elsewhere. A corpus survey currently **aborts**:
    `transpile_driver run --maps full --dry-run` fails the fork-index gate on
-   Map008 because Uranium `TRAINER_*` constants are only staged for slice 1.
+   Map008 because Uranium `TRAINER_*` constants are only staged for CH01.
    Until a gate-tolerant survey mode exists, "what needs conversion work" is
    answered per chapter only after that chapter is staged. *This is the single
    highest-value follow-up in the plan.*

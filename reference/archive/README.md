@@ -29,7 +29,7 @@ only here, it's history.
 
 | Archived doc | Was | Live content now in |
 |---|---|---|
-| `SLICE1_TODO.md` | slice-1 tracking ledger, 1299 lines, ~90 citation sites repo-wide (unrepointed — item numbers stable, file moved not deleted) | `PROJECT_TODO.md` #15-26, `SLICE2_TODO.md` #3, `ROM_TEST_DEV.md` harness section, `reference/guides/engine_gotchas.md` |
+| `SLICE1_TODO.md` | slice-1 tracking ledger, 1299 lines, ~90 citation sites repo-wide (unrepointed — item numbers stable, file moved not deleted) | `PROJECT_TODO.md` #15-26 + #27 (ex-`SLICE2_TODO.md` #3), `CH02_TODO.md` (née `SLICE2_TODO.md`, renamed 2026-08-05), `ROM_TEST_DEV.md` harness section, `reference/guides/engine_gotchas.md` |
 | `SLICE1_EVENTS.md` | 131-event inventory for the 8 slice-1 maps | `reference/guides/event_conversion_model.md` (§1/§12 promoted); §11.11 bug → `PROJECT_TODO.md` #20 |
 | `SLICE1_FINAL_BOOT_WALK.md` | the §9 gate certificate itself | stays as the passed certificate; "Not implemented" ledger repointed in-place |
 | `BOOT_WALK_CHECKLIST.md` | earlier boot-walk checklist, already superseded before this pass | history only |

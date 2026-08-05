@@ -1,5 +1,5 @@
 """Tests for `scripts/assemble_pathfinder.py`'s per-map synthetic tileset-id
-packing (SLICE2_TODO #4).
+packing (CH02_TODO #4).
 
 The walker path (`phase5.py convert_all` step 3-4) already solved the "two maps
 sharing an RMXP tileset id overflow the 1024-metatile/tile budget" problem by
