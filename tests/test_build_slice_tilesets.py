@@ -719,10 +719,20 @@ def test_column_n_frames_is_lcm_of_per_tile_counts() -> None:
 
 def test_column_n_frames_guard_fails_loud() -> None:
     key = ((0, 48), (1, 52))
-    rast = _AnimatedStubRasterizer({48: 7, 52: 11})  # lcm 77 > MAX_COLUMN_FRAMES
+    rast = _AnimatedStubRasterizer({48: 11, 52: 13})  # lcm 143 > MAX_COLUMN_FRAMES
     with pytest.raises(ValueError, match="exceeds"):
         column_n_frames(key, rast)
-    assert 7 * 11 > MAX_COLUMN_FRAMES  # sanity: this really is over the guard
+    assert 11 * 13 > MAX_COLUMN_FRAMES  # sanity: this really is over the guard
+
+
+def test_column_n_frames_allows_the_route01_pond_over_waterfall_lcm() -> None:
+    # CH02/Route 01: the 19-frame pond composited over the 5-frame transparent
+    # waterfall needs lcm 95 real frames. Both animate inside the same 8x8
+    # quadrants once composited, so the lcm is genuine, not a garbage pairing —
+    # the guard was raised to 128 for exactly this column (ts22 tiles 68/124).
+    key = ((0, 384), (1, 68), (2, 124))
+    rast = _AnimatedStubRasterizer({384: 1, 68: 19, 124: 5})
+    assert column_n_frames(key, rast) == 95
 
 
 def test_render_column_multi_frame_populates_frames() -> None:

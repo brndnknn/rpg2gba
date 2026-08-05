@@ -64,14 +64,21 @@ WARP_OVERRIDES: dict[int, set[tuple[int, int]]] = {
     48: {(3, 3)},
     # 32: player's house (28,31) + the interior doors added by SLICE1_TODO #13:
     # lab EV003 (17,11), house-2 EV006 (43,31), house-1 EV007 (24,42),
-    # Theo's-house EV017 (56,42). The Route-01 triad EV023/036/037 stays
-    # out-of-slice (blocked cells by design).
-    32: {(28, 31), (17, 11), (43, 31), (24, 42), (56, 42)},
+    # Theo's-house EV017 (56,42) + the Route-01 triad EV023/036/037 at the east
+    # edge (8,44)/(8,45)/(8,43), live since CH02 put Map033 in the slice — these
+    # were deliberately blocked cells while Route 01 was out of scope, and they
+    # are the ONLY way out of Moki Town onto the route.
+    32: {(28, 31), (17, 11), (43, 31), (24, 42), (56, 42), (8, 43), (8, 44), (8, 45)},
     50: {(14, 19)},           # lab exit EV001
     64: {(9, 14)},            # house-2 exit EV003
     65: {(9, 14)},            # house-1 exit EV003
     172: {(10, 11), (12, 3)},  # Theo 1F: street exit EV002 + stairs up EV003
     89: {(3, 3)},             # Theo 2F: stairs down EV002
+    # CH02 (2026-08-05). 33: the west-edge triad back to Moki Town
+    # EV023/024/022 (70,11)/(70,12)/(70,13) + the old-rod-house door EV027
+    # (39,18). 81: the house exit EV003 (9,14).
+    33: {(70, 11), (70, 12), (70, 13), (39, 18)},
+    81: {(9, 14)},
 }
 
 # Flag/var address layout for the pathfinder boot test. The numeric layout now
@@ -402,6 +409,13 @@ _TRAINER_HEADER_DEST_DIRS: dict[str, str] = {
     "uranium_trainer_graphics.h": "src/data/graphics",
     "uranium_trainer_sprites.h": "src/data/graphics",
     "uranium_trainer_backsprites.h": "src/data/graphics",
+    # Trainer battle data (2026-08-05). The .party fragment lands under include/
+    # rather than src/data/ on purpose: trainer_rules.mk pipes trainers.party
+    # through `$(CPP) $(CPPFLAGS) -traditional-cpp -` on STDIN, so there is no
+    # current-file directory and only `-iquote include` resolves the hook's
+    # `#include "data/uranium_trainer_party.inc"`.
+    "uranium_trainer_ids.h": "include/constants",
+    "uranium_trainer_party.inc": "include/data",
 }
 
 
@@ -440,15 +454,20 @@ def run_trainer_pass(out: Path, fork: Path, uranium_src: Path, dry_run: bool) ->
     # manifest's art_files entries. A mismatch here is a silent build break
     # (INCGFX would point at a file that was never copied), so assert
     # agreement rather than assuming it.
-    expected_asset_dir = (
-        f"{trainer_stage.ENGINE_GFX_ROOT.as_posix()}/{trainer_stage.DEFAULT_ASSET_DIR}"
-    )
+    # One asset dir PER staged pic since 2026-08-05 (CH02 staged 7 trainer-class
+    # sprites alongside the original RIVAL/PLAYER_MALE pair) — the old single
+    # flat `slice1` dir silently collided once more than one pic existed.
     art_by_kind = {
         "front": (trainer_pics.FRONT_PNG, trainer_pics.FRONT_PAL),
         "back": (trainer_pics.BACK_PNG, trainer_pics.BACK_PAL),
     }
     for entry in manifest["trainers"]:
         kind = entry["kind"]
+        if kind not in art_by_kind:
+            continue  # "battle" entries are party data; they carry no art_files
+        expected_asset_dir = (
+            f"{trainer_stage.ENGINE_GFX_ROOT.as_posix()}/{entry['internal_name'].lower()}"
+        )
         if entry["asset_dir"] != expected_asset_dir:
             raise RuntimeError(
                 f"trainer manifest asset_dir mismatch for {entry.get('internal_name')}: "
@@ -457,7 +476,7 @@ def run_trainer_pass(out: Path, fork: Path, uranium_src: Path, dry_run: bool) ->
             )
         png_name, pal_name = art_by_kind[kind]
         for fname, art_key in ((png_name, "png"), (pal_name, "pal")):
-            src = trainer_dir / fname
+            src = trainer_dir / entry["internal_name"].lower() / fname
             dest_rel = entry["art_files"][art_key]
             expected_dest_rel = f"{expected_asset_dir}/{fname}"
             if dest_rel != expected_dest_rel:

@@ -26,8 +26,9 @@ from pathlib import Path
 # The playable slice, in boot order: Map 49 (Player's House 1F, spawn @7,7),
 # Map 48 (2F), Map 32 (Moki Town), plus the Moki building interiors added
 # 2026-07-13 (SLICE1_TODO #13): 50 (professor lab), 64/65 (houses),
-# 172 + 89 (Theo's house 1F/2F). Route 01 (map 33) stays on the slice-2 frontier.
-SLICE_MAP_IDS: list[int] = [49, 48, 32, 50, 64, 65, 172, 89]
+# 172 + 89 (Theo's house 1F/2F), then CH02 (Route 1, added 2026-08-05): 33
+# (Route 01) + 81 (Route 01 old rod house).
+SLICE_MAP_IDS: list[int] = [49, 48, 32, 50, 64, 65, 172, 89, 33, 81]
 
 # Converter-level collision unblocks (user-approved fidelity calls, one entry per
 # cell): cells the emitted collision forces WALKABLE even though Uranium's tile

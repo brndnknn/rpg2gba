@@ -123,6 +123,53 @@ def test_shiny_geometry_near_identical_passes() -> None:
     assert 0.0 < divergence < battlers.SHINY_GEOMETRY_MAX_DIVERGENCE
 
 
+# --- 3b. Edge tests: shiny registration (rigid-translation correction) ------
+
+
+def test_register_shiny_aligns_rigid_translation() -> None:
+    """A synthetic pair whose shiny is a known rigid (+3, -2) px translation
+    of the normal (same shape, same silhouette, just shifted -- the OWTEN
+    035/035s case) must register and report zero residual divergence, not
+    fail loud."""
+    normal = _solid_square(80, box=(20, 20, 20, 20))
+    shiny = _solid_square(80, box=(23, 18, 20, 20))  # normal shifted by (+3, -2)
+
+    aligned, divergence, offset = battlers._register_shiny(normal, shiny, "SYNTHETIC")
+
+    assert offset == (3, -2)
+    assert divergence == pytest.approx(0.0)
+    assert np.array_equal(battlers._opaque_mask(aligned), battlers._opaque_mask(normal))
+
+
+def test_register_shiny_identity_is_untouched_fast_path() -> None:
+    """An already-registered pair must come back as the SAME array object,
+    at offset (0, 0), with no search performed -- the fast path this
+    function must not regress for the six starters (see
+    `test_orchynx_golden_output`'s pinned hashes, unchanged by this
+    function's addition)."""
+    normal = _solid_square(80, box=(10, 10, 20, 20))
+    shiny = _solid_square(80, box=(10, 10, 20, 20))
+
+    aligned, divergence, offset = battlers._register_shiny(normal, shiny, "SYNTHETIC")
+
+    assert aligned is shiny
+    assert offset == (0, 0)
+    assert divergence == 0.0
+
+
+def test_register_shiny_genuinely_different_still_fails_loud() -> None:
+    """A synthetic pair that is NOT a registration-fixable shift -- e.g. a
+    totally different silhouette -- must still raise, even though a
+    translation search runs first. The error must report the best offset
+    found and its residual divergence so a real mismatch is distinguishable
+    from an out-of-range shift."""
+    normal = _solid_square(80, box=(10, 10, 20, 20))
+    shiny = _solid_square(80, box=(50, 50, 8, 30))  # disjoint, different shape
+
+    with pytest.raises(ValueError, match=r"[Bb]est integer translation"):
+        battlers._register_shiny(normal, shiny, "SYNTHETIC")
+
+
 # --- 4. Structural assertions over all six starters -------------------------
 
 

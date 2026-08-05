@@ -65,12 +65,15 @@ benign warnings for 840/841/842.
 
 ### 2. Inherited CH02 frontier deferrals (pointers — details live where cited)
 
-- **Route 01 waterfall/transparency animated autotile** — first
-  animated+transparent autotile in the frontier; stipple/alpha classify ×
-  frame quantization untested (`reference/archive/SLICE1_TODO.md` #10).
-- **Secondary-tileset animation support** — animated tiles currently must fit
-  the primary block; needs a secondary-callback variant if Route 01 overflows
-  (`reference/archive/SLICE1_TODO.md` #10).
+- ~~**Route 01 waterfall/transparency animated autotile**~~ — **RESOLVED
+  2026-08-05, see item 5.** ts1033 emits 4 effects (12x4f, 39x5f, 72x19f,
+  8x95f), 131 animated tiles, 74.1 KiB frame art. The transparent waterfall
+  quantized without a stipple/alpha incident; no eye-gate anomaly *yet* — it
+  has still never been looked at in motion on hardware (§9 walk owes it).
+- **Secondary-tileset animation support** — still open, but NOT a CH02 blocker:
+  ts1033's 131 animated tiles sit well inside the 512-tile PRIMARY partition.
+  The secondary-callback variant is only forced when ts28's maps enter the
+  frontier (543 animated tiles) (`reference/archive/SLICE1_TODO.md` #10).
 - **Moki Town E ↔ Route 03 seam** — moved to `PROJECT_TODO.md` #27, see item 3
   below.
 
@@ -81,50 +84,197 @@ the chapter model the seam is off-frontier (seven chapters past CH02). Full
 detail copied verbatim there. Stays prerequisite-chained on item 4 (per-map
 tileset packing).
 
-### 4. Promote per-map tileset packing into the slice/assembler path (BLOCKING — must land before Route 01)
+### 9. Trainer pacing lost — 5 of Route 01's 9 trainers stand still
 
-From `reference/findings/corpus_scaling_audit_2026-07-14.md` §1/§6 item 1,
-2026-08-04. **Blocking finding:** the current slice scheme unions tiles
-*per RMXP tileset*, and that scheme is dead the moment Route 01 (Map033)
-joins Map032 on ts22 — union = 1607 metatiles / 1611 prequant tiles, over
-both GBA 1024 caps. It doesn't fail gradually; it fails on the very next
-slice. Per-map packing (already proven on the walker path) fits 171/194
-non-empty maps individually and is the documented fallback.
+User-ruled 2026-08-05 (accepted as debt, not a defect). A pokeemerald
+`object_event` stores a trainer's SIGHT RADIUS and this project's custom
+Uranium ROUTE ID in the *same* field (`trainer_sight_or_berry_tree_id` →
+`trainerRange_berryTreeId`; sight read at `engine/src/trainer_see.c:643-655`,
+route read at `engine/src/event_object_movement.c:6251`). One object cannot
+have both. `metadata_wiring.build_object_events` therefore forces every visible
+Trainer(N) to `static_face_spec(...)` facing its RMXP spawn direction and
+spends the field on the sight radius. Map033 EV030/035/039/053/103 carry RMXP
+`move_type == 3` custom routes that are consequently dropped — they pace in
+Uranium, they stand in the ROM. `ObjectEvent.__post_init__` fails loud if the
+two ever get combined.
 
-**Code landed 2026-08-05 — build verification still outstanding.** What's in:
-- `map_set.py` now owns the scheme: `synth_tileset_id(map_id)` = `1000 +
-  map_id` (single source of truth). `phase5.py` dropped its private
-  `_synth_id` and imports it, so walker and slice paths share one numbering.
-- `scripts/assemble_pathfinder.py` S8a (`run_graphics_pass`) rewrites each
-  map's top-level `tileset_id` to its synthetic id (shallow copy — the
-  on-disk `MapNNN.json` is never mutated) and passes
-  `source_tileset_of=` so `build_slice_tilesets`' group-by-`tileset_id`
-  loop yields one physical tileset per map. S8b (`run_layout_pass`) passes
-  the matching `tileset_key=` to `convert_layout`.
-- Staging hygiene (the audit's "shared-mutable-staging wart"): `run_layout_pass`
-  now *returns* this batch's layout entries and `run_fork_pass` takes them via
-  `batch_layouts=`. The old code appended the **cumulative**
-  `staging/layouts/layouts.json` wholesale, which under per-map synth ids is a
-  link-time bomb — a prior run with a different `SLICE_MAP_IDS` leaves entries
-  referencing `gTileset_Uranium<synth>` symbols this run never emits.
-  `_resolve_batch_layout_entries` now filters the cumulative file down to the
-  current map set on the `--skip-layout` path, and fails loud when an entry is
-  missing.
-- Tests: `tests/test_assemble_pathfinder_tileset_packing.py` (new) +
-  `synth_tileset_id` cases in `tests/test_map_set.py`. Full suite green
-  (1654 passed / 16 skipped). These cover the **wiring**; they cannot prove
-  the tile budget holds.
+Revisit paths, cheapest first: (a) fit each dropped route to a vanilla
+`MOVEMENT_TYPE_WALK_SEQUENCE_*` / `WANDER` pattern, which doesn't use the
+contested field; (b) move the Uranium route id into a side table in engine C so
+a trainer can pace *and* see. Not frontier-blocking either way.
 
-**Remaining before Route 01:** `SLICE_MAP_IDS` is still the 8-map slice-1 set
-(`map_set.py:30`) — Map033 has never been through this path, so the exact
-overflow the change exists to prevent is unexercised end-to-end. Add 33 and do
-a full assemble+build to close the item.
+### 10. Phone/rematch trainers don't battle — Map033 EV039, EV053
 
-**Done looks like:** `assemble_pathfinder.py` S8a packs Map032 and Map033
-(and any other Route 01 maps) as independent per-map tilesets; a full
-assemble+build with both maps in `SLICE_MAP_IDS` passes the 1024 tile/
-metatile budget guards without a WALKER_OVERFLOW-style manual exclusion.
+User-ruled 2026-08-05 (accepted for this ROM). Essentials' phone-trainer idiom
+buries `pbTrainerBattle(...)` inside a code-111 conditional behind a
+`pbTrainerIntro` / `Kernel.pbNoticePlayer` preamble, with rematch pages built on
+`createPhoneTrainer` / `customTrainerBattle` / `pbPhoneRegisterBattle`. No
+classifier collapses that shape, so no `trainerbattle_single` is generated and
+the fork-index gate sees nothing to gate. The two events convert to ordinary
+NPCs that talk but never battle; their commands sit in the loud transpiler
+queue where they belong.
+
+Both trainers' parties ARE already staged (`TRAINER_BRANDON_16`,
+`TRAINER_RICHEY_3` in `common.SLICE_TRAINER_BATTLES`), so this is purely a
+transpiler-side gap. The guard that keeps it honest:
+`build_object_events`' `trainer_battle_event_ids` — an event with no generated
+`trainerbattle` call is emitted with `TRAINER_TYPE_NONE`, never as a dead
+sight-trigger. The idiom recurs across the corpus, so the classifier is worth
+writing before a route-heavy chapter.
+
+### 11. Uranium-original moves silently absent from staged learnsets
+
+`species_converter.stage.emit_learnsets` now gates every level-up move against
+the fork's real `MOVE_*` constants and DROPS the entry when the fork has no
+such move (loud warning + a `dropped_learnset_moves` record in
+`species_manifest.json`). This chapter dropped 3 entries, all `MOVE_METAL_WHIP`
+(Uranium move id 562): BAREWL @29, DEAREWL @29, GARAREWL @31. Nothing is
+invented and nothing is silent, but those three Pokémon are missing a
+level-up move until Uranium's move set is staged into the engine — a much
+larger unit than any chapter needs.
+
+### 12. Map033 EV028 "Luz" stripped — revisit if an additive-glow path exists
+
+User-ruled 2026-08-05 (strip, with a reference to revisit). An RMXP ambient
+lighting event: one page, trigger 0, empty command list, graphic `light` = a
+soft alpha-gradient yellow glow circle. GBA 4bpp has no additive blend and a
+smooth gradient bands badly at 15 colours. Recorded in
+`reference/strip_list.json`'s `map_events` (with an `expect_name` renumbering
+guard); `build_object_events` now honours that list and drops the event before
+any graphics lookup, so its sheet needs no `npc_gfx_map.json` entry.
+
+This is the FIRST live entry in `map_events` — the deterministic path never read
+that array before (only the retired LLM orchestrator did), so the plumbing
+landed with it.
 
 ## Done
 
-(nothing yet)
+### 4. Promote per-map tileset packing into the slice/assembler path — DONE 2026-08-05
+
+Code landed 2026-08-05; **budget verified end-to-end the same day** with 33 and
+81 in `SLICE_MAP_IDS`. Real emit numbers, per-map tilesets, all under the two
+1024 caps:
+
+| tileset | columns | metatiles | GBA tiles | palettes |
+|---|---|---|---|---|
+| 1032 (Moki Town) | 839 | 845 | 997 | 13 |
+| 1033 (Route 01) | 1016 | **1017** | 795 | 13 |
+
+Against the 1607 metatiles / 1611 tiles the old per-RMXP-tileset union produced
+for the same two maps. **Map033 clears the metatile cap by 7** — the next map
+that shares ts22 art at this density will not fit, so intra-map splitting is a
+live corpus concern, not a distant one. S8b wrote all 10 layouts (Route01 =
+4187 blocks, Route01OldRodHouse = 300).
+
+### 5. Route 01's trainer battles have no engine-side trainers — DONE 2026-08-05
+
+A real trainer-emission stage now exists; no engine file is hand-edited any
+more. What landed:
+
+- `trainer_converter/battles.py` (new) reads the Phase-2 intermediate JSON
+  (`intermediate/trainers.json` + `trainer_types.json`) — never Phase 2's
+  emitter — and emits a `TRAINER_*` id chain off the pristine fork anchor
+  `TRAINER_MAY_PLACEHOLDER` plus a `.party`-DSL fragment for `trainerproc`.
+  Class / gender / music / pic all resolve through the LIVE fork headers and
+  fail loud rather than inventing a constant (§4.7): Uranium's own minted
+  `TRAINER_CLASS_BUGCATCHER` is not the fork's `TRAINER_CLASS_BUG_CATCHER`,
+  so the candidate is derived from the display name via the same transform
+  `trainerproc`'s `fprint_constant` uses.
+- `common.SLICE_TRAINER_BATTLES` pins 12 trainers (Route 1's 9 + Theo's 3
+  counter-picks), append-only — fork ids are positional.
+- The 3 hand-written `TRAINER_THEO_9/10/11` blocks in
+  `engine/include/constants/opponents.h` and `engine/src/data/trainers.party`
+  are RETIRED; both files now carry committed, stable `#include` hooks at
+  gitignored generated files. Theo comes out of the generator like everyone
+  else — and the generated parties are NOT byte-identical to the hand ones:
+  they carry Uranium's real IVs (10) and happiness (70) where the hand blocks
+  silently took trainerproc's IV-31 default. A deliberate difficulty change.
+- **Capacity bump (user-authorized):** `TRAINERS_COUNT_EMERALD` 858 → 1189 and
+  `MAX_TRAINERS_COUNT_EMERALD` 864 → 1280, sized for the whole corpus (854
+  vanilla + Uranium's 331) rather than per chapter, in a sentinel fence that
+  writes down the saveblock consequence — **existing saves do not survive
+  this**, and that cost is the same for +9 as for +400, which is why it is
+  paid once.
+- The fork-index gate learned the manifest's new `kind: "battle"` entries
+  (`fork_index.registry_extra_symbols`), and `transpile_driver.transpile_corpus`
+  now actually PASSES the trainer manifest to that gate — it never did, which
+  is why Map033 kept failing the gate after the trainers were staged.
+- Trainer OBJECTS: `metadata_wiring` gained the native trainer-object path
+  (`trainer_type` + sight radius). See Open items 9 and 10 for the two
+  fidelity limits it carries.
+
+Result: Map033 clears the fork-index gate, 7 of its 9 trainers battle on
+sight, and the CH02 ROM builds.
+
+### 6. `WARP_OVERRIDES` has no entries for maps 33 / 81 — DONE 2026-08-05
+
+Entries added to `scripts/assemble_pathfinder.py`: Map033 gets its west-edge
+triad back to Moki Town (EV023/024/022 at (70,11)/(70,12)/(70,13)) plus the
+old-rod-house door EV027 (39,18); Map081 gets its house exit EV003 (9,14).
+Map032's Route-01 triad EV023/036/037 at (8,43)/(8,44)/(8,45) went live in the
+same edit — they were deliberately blocked cells while Route 01 was out of
+scope, and they are the ONLY way out of Moki Town onto the route.
+
+The hand-maintained duplication itself is NOT resolved — `WARP_OVERRIDES` is
+still a copy of what `build_slice_maps` already returns as `src_coords`, and a
+missing entry still fails silent (inert door, no error). Killing the duplicate
+stays open as `PROJECT_TODO.md` #25.
+
+### 7. Animated-column frame guard blocked Route 01 — FIXED 2026-08-05
+
+S8a died on Map033 with `column ((0, 384), (1, 68), (2, 124)): frame-count lcm
+95 exceeds the 64 guard` — ts22's 19-frame `PU-Pond(route1-2)` composited over
+the 5-frame `PU-Waterfall(transp)`, 3 such columns in the map (exactly the
+"ts22×3" the corpus-scaling audit predicted 2026-07-14 §3).
+
+The lcm is **genuine, not a garbage pairing**: both autotiles animate inside the
+same 8x8 quadrants once composited, so no per-tile split avoids it — rendering
+the column at 95 frames is the correct answer. Fix, per the audit's own
+recommendation (§5 item 5):
+
+- `MAX_COLUMN_FRAMES` 64 → **128** (`graphics/build_slice_tilesets.py:132`).
+- New **`MAX_ANIM_ROM_BYTES` = 128 KiB per tileset** (`graphics/emit.py`) — the
+  guard that actually binds, since frame count costs ROM (`n_tiles * n_frames *
+  32 B`) while VRAM is already bounded by the PRIMARY-partition check. Emits an
+  INFO line per tileset with the effect breakdown and KiB.
+- Measured: ts1032 = 61 animated tiles / 2 effects / 34.3 KiB; ts1033 = 131
+  animated tiles / 4 effects / 74.1 KiB. Both far under the ceiling.
+- Tests: guard-failure case re-pinned to lcm 143, plus a new test asserting the
+  real pond-over-waterfall column resolves to 95.
+
+**Not verified:** the 95-frame cadence has never been seen running. Engine
+`counterMax = 16 * lcm(effect frame counts)`, so ts1033 cycles over
+`16 * lcm(4,5,19,95) = 6080` ticks — watch the pond/waterfall in the §9 walk
+for a visible period beat or DMA-queue starvation (the 20-entry buffer now
+carries 4 effects for this tileset).
+
+### 13. Three emitter bugs the first CH02 build surfaced — FIXED 2026-08-05
+
+None of these could appear before CH02 widened the staged sets; all three are
+converter fixes, not engine edits.
+
+- **Trainer pic C symbols collided with vanilla.** `stage.py` named them
+  `gTrainerFrontPic_<PascalIdent>`, which is fine for `RIVAL`/`PLAYER_MALE` and
+  fatal for `FISHERMAN`/`YOUNGSTER`/`LASS` — vanilla owns those exact symbols.
+  Now namespaced `gTrainerFrontPic_Uranium<Ident>` (and the palette / back-pic
+  counterparts), matching the existing `TRAINER_PIC_FRONT_URANIUM_*` /
+  `OBJ_EVENT_GFX_URANIUM_*` infix convention.
+- **Learnsets emitted moves the fork doesn't define** — see Open item 11 for
+  the policy and the 3 dropped entries.
+- **Non-ASCII species text emitted `\xE9` escapes.** `escape_c_string` hex-
+  escapes every non-ASCII codepoint, which is right for other Phase-2 tables
+  and wrong here: pokeemerald's `tools/preproc` re-encodes string literals
+  against `charmap.txt` and expects the literal UTF-8 character in source
+  (vanilla `species_info/gen_3_families.h` embeds a raw `é`; `charmap.txt:26`
+  maps it to byte `1B`). `stage.py` now passes charmap-defined characters
+  through raw and fails loud, naming species and codepoint, on one the charmap
+  has no entry for. Affected: CUBBUG, DEAREWL, FARTOG — all `é` in "Pokémon".
+
+### 8. `--dry-run` transpile clobbered the corpus queue file — FIXED 2026-08-05
+
+`transpile_driver.transpile_corpus` wrote `transpile_unhandled.jsonl` outside
+the `if write:` gate, and a run rewrites that file wholesale from only the maps
+it was given. A `--dry-run --maps 81` therefore erased every other map's queue
+history, which the chapter census reads to distinguish "transpiles clean" (0)
+from "never transpiled" (None) — `tests/test_chapter_atlas.py` caught it. The
+write now sits inside the gate with the `.pory` and the registry.

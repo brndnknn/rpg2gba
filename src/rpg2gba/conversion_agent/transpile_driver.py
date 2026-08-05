@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from pathlib import Path
 
 import click
@@ -76,6 +77,44 @@ def _canonicalize_labels(script: str, map_id: int, event: dict) -> str:
     return script
 
 
+_SCRIPT_LABEL_RE = re.compile(r"^script\s+(\S+)\s*\{", re.MULTILINE)
+
+
+def _defined_script_labels(pory_text: str) -> set[str]:
+    """Every top-level ``script <label> {`` block label defined in `pory_text`."""
+    return set(_SCRIPT_LABEL_RE.findall(pory_text))
+
+
+def _record_collapsed_pages(
+    map_id: int, event: dict, canonical_script: str, ctx: transpiler.TranspileContext
+) -> None:
+    """Mark an event the idiom-collapse classifier (``deterministic.
+    try_deterministic``) claimed as ``collapsed_pages`` when it folded a
+    multi-page event into a single block that defines SOME but not ALL of the
+    event's canonical page labels (e.g. the trainer-battle classifier folding
+    a line-of-sight trainer's pre-battle and post-battle pages into one
+    ``trainerbattle_single(...)`` block — only page 1 is emitted, on
+    purpose). ``metadata_wiring._resolve_script`` reads this trait to skip
+    building a dispatcher for such an event, instead resolving straight to
+    the page-1 label.
+
+    Not recorded when every page label is defined (a full, ordinary
+    classifier conversion — no gap to explain) or when only one page exists
+    (nothing to collapse).
+    """
+    pages = event.get("pages", [])
+    if len(pages) < 2:
+        return
+    expected = {
+        transpiler._page_label(map_id, event, page_no)
+        for page_no in range(1, len(pages) + 1)
+    }
+    defined = _defined_script_labels(canonical_script) & expected
+    if defined and defined != expected:
+        eid = event.get("id")
+        ctx.traits.setdefault((map_id, eid), set()).add("collapsed_pages")
+
+
 def transpile_map(
     map_id: int,
     map_json: dict,
@@ -109,11 +148,13 @@ def transpile_map(
 
         det = deterministic.try_deterministic(map_id, event, det_ctx)
         if det is not None:
-            event_texts.append(_canonicalize_labels(det.script, map_id, event))
+            canonical_script = _canonicalize_labels(det.script, map_id, event)
+            event_texts.append(canonical_script)
             queue_entries.extend(
                 _det_queue_entry(entry, map_id=map_id, event=event)
                 for entry in det.unhandled
             )
+            _record_collapsed_pages(map_id, event, canonical_script, ctx)
             continue
         transpiled = transpiler.transpile_event(map_id, event, ctx)
         event_texts.append(transpiled.text)
@@ -267,6 +308,7 @@ def transpile_corpus(
     flag_state_path: Path,
     map_constants_path: Path,
     species_manifest_path: Path | None = None,
+    trainer_manifest_path: Path | None = None,
     write: bool = True,
     common_events: bool = True,
     overrides_dir: Path | None = None,
@@ -283,9 +325,18 @@ def transpile_corpus(
     ``out_dir / "species" / "species_manifest.json"`` (the layout
     ``assemble_pathfinder.py`` stages from) and is treated as absent — no
     species gate extras — when the file doesn't exist yet.
+
+    ``trainer_manifest_path`` is the trainer staging manifest
+    (``trainer_converter.stage``'s ``trainer_manifest.json``); same defaulting
+    and same absent-is-not-an-error rule. It contributes the staged
+    ``TRAINER_PIC_*`` pic constants and the staged ``TRAINER_*`` battle id
+    constants — without it every ``trainerbattle_single`` the transpiler emits
+    gates as an invented constant.
     """
     if species_manifest_path is None:
         species_manifest_path = out_dir / "species" / "species_manifest.json"
+    if trainer_manifest_path is None:
+        trainer_manifest_path = out_dir / "trainers" / "trainer_manifest.json"
     registry = (
         FlagRegistry.load(flag_state_path) if flag_state_path.is_file() else FlagRegistry()
     )
@@ -368,6 +419,7 @@ def transpile_corpus(
             # Same table ctx.npc_gfx resolves through: the OBJ_EVENT_GFX_URANIUM_*
             # constants live in generated, gitignored headers the index can't see.
             _gfx_path if _gfx_path.is_file() else None,
+            trainer_manifest_path if trainer_manifest_path.is_file() else None,
         )
         extras |= _registry_minted_names(registry)
         violations = fork_index.verify_script(pory_text, index, extra_symbols=extras)
@@ -409,6 +461,7 @@ def transpile_corpus(
             # Same table ctx.npc_gfx resolves through: the OBJ_EVENT_GFX_URANIUM_*
             # constants live in generated, gitignored headers the index can't see.
             _gfx_path if _gfx_path.is_file() else None,
+            trainer_manifest_path if trainer_manifest_path.is_file() else None,
         )
         extras |= _registry_minted_names(registry)
         violations = fork_index.verify_script(ce_text, index, extra_symbols=extras)
@@ -445,14 +498,18 @@ def transpile_corpus(
         if ce_text is not None:
             (scripts_dir / "CommonEvents.pory").write_text(ce_text, encoding="utf-8")
 
-    out_dir.mkdir(parents=True, exist_ok=True)
-    queue_path = out_dir / "transpile_unhandled.jsonl"
-    queue_lines = [json.dumps(entry) for entry in all_queue]
-    queue_path.write_text(
-        "".join(f"{line}\n" for line in queue_lines), encoding="utf-8"
-    )
-
     if write:
+        # The queue file is corpus-scoped state (the chapter census reads it to
+        # tell "transpiles clean" from "never transpiled"), and a run rewrites it
+        # wholesale from just the maps it was given — so a --dry-run that wrote it
+        # would silently erase every other map's queue history. Keep it inside the
+        # write gate with the .pory and the registry (2026-08-05).
+        out_dir.mkdir(parents=True, exist_ok=True)
+        queue_path = out_dir / "transpile_unhandled.jsonl"
+        queue_lines = [json.dumps(entry) for entry in all_queue]
+        queue_path.write_text(
+            "".join(f"{line}\n" for line in queue_lines), encoding="utf-8"
+        )
         registry.save(flag_state_path)
 
     return _summarize(map_ids, events_total, all_queue, overridden_total)

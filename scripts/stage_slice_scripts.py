@@ -60,7 +60,7 @@ from rpg2gba.tileset_converter.route_bytecode import RouteRegistry
 from rpg2gba.tileset_converter.route_table_emit import emit_route_table
 
 DEFAULT_SLICE = tuple(SLICE_MAP_IDS)
-ALLOWED_MAPS = {49, 48, 32, 50, 64, 65, 172, 89}
+ALLOWED_MAPS = {49, 48, 32, 50, 64, 65, 172, 89, 33, 81}
 OVERRIDES = Path("reference/map_name_overrides.json")
 SWITCHES = Path("reference/uranium_switches.json")
 VARIABLES = Path("reference/uranium_variables.json")
@@ -245,6 +245,7 @@ def _regenerate_map_json(
     event_traits: dict[int, dict[int, list[str]]],
     fork: Path,
     required_actor_ids: dict[int, set[int]],
+    trainer_battle_event_ids: dict[int, set[int]],
 ) -> None:
     """Re-run S5 wiring over the whole slice with the real converted page labels,
     so bodyless events become static objects. Warp pairing needs the full slice,
@@ -257,7 +258,11 @@ def _regenerate_map_json(
     visibility flags. `required_actor_ids` (Uranium map id -> RMXP event ids
     scanned pre-prune off each map's own `.pory`, `_scan_required_actor_ids`)
     are the hidden-cutscene-actor candidates (findings §3.3/§5) forwarded to
-    `build_slice_maps`.
+    `build_slice_maps`. `trainer_battle_event_ids` (Uranium map id -> event
+    ids whose generated Poryscript carries a `trainerbattle_*` call, scanned
+    off each map's own normalized-but-not-yet-pruned `.pory` text via
+    `metadata_wiring.trainer_battle_event_ids`) gates the visible Trainer(N)
+    -> sight-trainer conversion path (see `build_object_events`).
 
     Loads the live flag registry (`out/flag_state.json`) and forwards it to
     `build_slice_maps` so multi-page events gated on a global switch/var get a
@@ -304,6 +309,7 @@ def _regenerate_map_json(
         walkable_overrides=WALKABLE_OVERRIDES,
         route_registry=route_reg,
         required_actor_ids=required_actor_ids,
+        trainer_battle_event_ids=trainer_battle_event_ids,
     )
     flag_reg.save(flag_state_path)
     # Always write (empty → stub) so the engine #include resolves even with no
@@ -358,6 +364,15 @@ def main() -> int:
         pory_labels.update(asm.script_definitions(norm.text))
         event_traits[map_id] = _load_event_traits(out, map_id, pory_path)
 
+    # Which of each map's Trainer(N) events actually generated a
+    # `trainerbattle_*` call — the guard build_object_events needs to decide
+    # a visible Trainer(N) is a real sight trainer, not a dead trigger (some
+    # battles, e.g. the phone-trainer idiom, aren't transpiled yet).
+    trainer_battle_event_ids: dict[int, set[int]] = {
+        map_id: mw.trainer_battle_event_ids(norm.text, map_id)
+        for map_id, norm in normalized.items()
+    }
+
     # --- scan each map's own PRE-PRUNE .pory for object-command targets (the
     # hidden-cutscene-actor candidates — findings §3.3/§5) BEFORE the S5
     # rewiring pass runs, since build_object_events needs the full set up
@@ -372,7 +387,7 @@ def main() -> int:
     # per-map local-id tables (RMXP id -> compiled object-event local id) ---
     _regenerate_map_json(
         out, pory_labels, npc_gfx, npc_gfx_states, local_id_dir, event_traits,
-        fork, required_actor_ids,
+        fork, required_actor_ids, trainer_battle_event_ids,
     )
 
     # --- pass 2: prune + report per requested map (reads the fresh map.json) ---

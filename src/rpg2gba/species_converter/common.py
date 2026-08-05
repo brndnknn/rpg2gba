@@ -54,8 +54,13 @@ class SpeciesSpec:
         return f"NATIONAL_DEX_{self.internal_name}"
 
 
-# The six starter-line species, in fork-append order. Order is load-bearing:
-# fork ids are assigned by position, so never reorder this list — append only.
+# Originally just the six starter-line species; the name STARTER_SPECIES is
+# now a misnomer (kept anyway — a rename would have to reach into
+# trainer_converter, which this unit does not own; see the Route-1 comment
+# below) but the *contents* are now "starters + whatever the built chapters'
+# trainers and encounters need". Order is load-bearing: fork ids are
+# assigned by position, so this list is append-only — never reorder or
+# insert; add new species at the end.
 STARTER_SPECIES: tuple[SpeciesSpec, ...] = (
     SpeciesSpec(1, "ORCHYNX"),
     SpeciesSpec(2, "METALYNX"),
@@ -63,6 +68,42 @@ STARTER_SPECIES: tuple[SpeciesSpec, ...] = (
     SpeciesSpec(4, "ARCHILLES"),
     SpeciesSpec(5, "ELETUX"),
     SpeciesSpec(6, "ELECTRUXO"),
+    # --- Route 1 trainer-party species (2026-08-05) -------------------------
+    # FARTOG, BIRBIE, BAREWL, CUBBUG, CHYINMUNK, TONEMY, OWTEN are the seven
+    # species Route 1's trainer parties actually use. Each one evolves
+    # (single- or two-stage), and `stage.build_staged_species` fails loud on
+    # a staged species whose evolution target isn't itself staged (a
+    # dangling reference) — so every intermediate/final evolution stage is
+    # appended alongside its pre-evolution rather than left dangling:
+    #   CHYINMUNK -> KINETMUNK
+    #   BIRBIE -> AVEDEN -> SPLENDIFOWL
+    #   CUBBUG -> CUBBLFLY -> NIMFLORA
+    #   BAREWL -> DEAREWL -> GARAREWL
+    #   TONEMY -> TOFURANG
+    #   FARTOG -> FOLEROG -> BLUBELROG
+    #   OWTEN -> ESHOUTEN
+    # All evolutions here are EVO_LEVEL (method 4), matching what
+    # `build_staged_species` already handles for the starters. Verified: no
+    # Nuclear-typed species in this set, and every referenced ability
+    # resolves to a real fork ABILITY_* constant (no invented constants).
+    SpeciesSpec(7, "CHYINMUNK"),
+    SpeciesSpec(8, "KINETMUNK"),
+    SpeciesSpec(9, "BIRBIE"),
+    SpeciesSpec(10, "AVEDEN"),
+    SpeciesSpec(11, "SPLENDIFOWL"),
+    SpeciesSpec(12, "CUBBUG"),
+    SpeciesSpec(13, "CUBBLFLY"),
+    SpeciesSpec(14, "NIMFLORA"),
+    SpeciesSpec(15, "BAREWL"),
+    SpeciesSpec(16, "DEAREWL"),
+    SpeciesSpec(17, "GARAREWL"),
+    SpeciesSpec(20, "TONEMY"),
+    SpeciesSpec(21, "TOFURANG"),
+    SpeciesSpec(24, "FARTOG"),
+    SpeciesSpec(25, "FOLEROG"),
+    SpeciesSpec(26, "BLUBELROG"),
+    SpeciesSpec(35, "OWTEN"),
+    SpeciesSpec(36, "ESHOUTEN"),
 )
 
 

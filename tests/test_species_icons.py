@@ -49,6 +49,36 @@ EXPECTED_ICON_PAL_INDEX = {
     "ARCHILLES": 1,
     "ELETUX": 3,
     "ELECTRUXO": 3,
+    # Pinned 2026-08-05 against the same real Uranium assets + vendored
+    # engine icon palettes, for the Route-1 trainer-party species (+ their
+    # evolution-chain closure, see common.py's STARTER_SPECIES comment).
+    # Computed via convert_species_icon, then spot-checked by eye against a
+    # rendered contact sheet (icons.write_contact_sheet) for BIRBIE, FOLEROG,
+    # NIMFLORA, OWTEN, and CUBBUG: each chosen palette preserves the
+    # sprite's actual colour family (BIRBIE's navy/black -> pal4's dark
+    # blues, OWTEN's brown/tan -> pal2's warm browns, CUBBUG's pink -> pal0,
+    # FOLEROG's blue -> pal3, NIMFLORA's green/pink -> pal5) rather than
+    # snapping to an unrelated hue -- no palette here reads as a mismatch to
+    # the eye, just the expected loss of saturation/brightness range that
+    # comes from only 6 shared palettes covering the whole cast.
+    "CHYINMUNK": 2,
+    "KINETMUNK": 2,
+    "BIRBIE": 4,
+    "AVEDEN": 4,
+    "SPLENDIFOWL": 4,
+    "CUBBUG": 0,
+    "CUBBLFLY": 1,
+    "NIMFLORA": 5,
+    "BAREWL": 2,
+    "DEAREWL": 0,
+    "GARAREWL": 5,
+    "TONEMY": 2,
+    "TOFURANG": 0,
+    "FARTOG": 0,
+    "FOLEROG": 3,
+    "BLUBELROG": 3,
+    "OWTEN": 2,
+    "ESHOUTEN": 1,
 }
 
 

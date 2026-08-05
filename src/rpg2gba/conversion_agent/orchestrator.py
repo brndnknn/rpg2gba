@@ -831,6 +831,56 @@ class Orchestrator:
             )
 
 
+def _parse_map_event_strip_entry(entry: object) -> tuple[int, int, str | None]:
+    """One `map_events` entry -> (map_id, event_id, expect_name).
+
+    Accepts either shape (see reference/strip_list.json's `_comment`):
+      - a bare 2-element `[map_id, event_id]` pair (back-compat, no reference
+        note attached);
+      - an object `{"map_id": ..., "event_id": ..., "expect_name": ..., ...}`
+        (the richer shape — mirrors the fail-loud renumbering guard the
+        `common_events` entries already carry via their own `expect_name`).
+
+    Fails loud (`ValueError`) on anything else — this is hand-authored project
+    data, not tolerated malformed input (CLAUDE.md §4.5)."""
+    if isinstance(entry, dict):
+        if "map_id" not in entry or "event_id" not in entry:
+            raise ValueError(
+                f"malformed strip_list.json map_events entry {entry!r}: object "
+                f"shape requires both 'map_id' and 'event_id'"
+            )
+        return int(entry["map_id"]), int(entry["event_id"]), entry.get("expect_name")
+    if isinstance(entry, (list, tuple)) and len(entry) == 2:
+        m, e = entry
+        return int(m), int(e), None
+    raise ValueError(
+        f"malformed strip_list.json map_events entry {entry!r}: expected a "
+        f"2-element [map_id, event_id] pair or an object with both 'map_id' "
+        f"and 'event_id' keys"
+    )
+
+
+def load_map_event_strips(reference_dir: Path) -> dict[tuple[int, int], str | None]:
+    """Parse reference/strip_list.json's `map_events` -> {(map_id, event_id):
+    expect_name}. The shared parser for the two accepted entry shapes
+    (`_parse_map_event_strip_entry`) — `_load_strip_list` below and
+    `tileset_converter.metadata_wiring` (the module that actually enforces the
+    drop) both call this instead of each re-implementing the schema (CLAUDE.md
+    §4.3: one source of truth, not two copies of the parsing logic). A missing
+    file is not an error — an empty result, same convention as
+    `_load_strip_list`."""
+    path = reference_dir / "strip_list.json"
+    if not path.is_file():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {
+        (m, e): expect_name
+        for m, e, expect_name in (
+            _parse_map_event_strip_entry(entry) for entry in data.get("map_events", [])
+        )
+    }
+
+
 def _load_strip_list(reference_dir: Path) -> tuple[dict[int, dict], set[tuple[int, int]]]:
     """Load reference/strip_list.json → (CE id → entry, set of (map_id, event_id)).
 
@@ -843,7 +893,7 @@ def _load_strip_list(reference_dir: Path) -> tuple[dict[int, dict], set[tuple[in
         return {}, set()
     data = json.loads(path.read_text(encoding="utf-8"))
     ces = {int(entry["id"]): entry for entry in data.get("common_events", [])}
-    map_events = {(int(m), int(e)) for m, e in data.get("map_events", [])}
+    map_events = set(load_map_event_strips(reference_dir).keys())
     if ces or map_events:
         logger.info(
             "strip list: %d common event(s), %d map event(s)", len(ces), len(map_events)

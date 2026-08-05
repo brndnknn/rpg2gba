@@ -88,8 +88,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from rpg2gba.pbs_converter import pokemon
-from rpg2gba.pbs_converter._c_emit import escape_c_string, generated_banner, wrap_header
+from rpg2gba.pbs_converter._c_emit import generated_banner, wrap_header
 from rpg2gba.pbs_converter._id_map import IdMap
+from rpg2gba.pbs_converter._naming import load_fork_constants
 from rpg2gba.species_converter import common
 from rpg2gba.species_converter.common import STARTER_SPECIES, SpeciesSpec, gfx_ident
 
@@ -212,8 +213,6 @@ def assert_fork_constants_exist(engine_dir: Path, constants: set[str], header_re
     Used to verify the six starters' vanilla ability constants are real,
     rather than assuming it (CLAUDE.md §4.7).
     """
-    from rpg2gba.pbs_converter._naming import load_fork_constants
-
     known = load_fork_constants(engine_dir / header_rel, prefix)
     if not known:
         raise ValueError(f"{engine_dir / header_rel}: no {prefix}_* constants found — fork missing/unreadable")
@@ -382,6 +381,98 @@ def emit_pokedex_ids(staged: list[StagedSpecies], anchor: str) -> str:
     return wrap_header("GUARD_URANIUM_POKEDEX_IDS_H", "\n".join(lines), banner=banner)
 
 
+def load_fork_moves(engine_dir: Path) -> set[str]:
+    """Real `MOVE_*` constants the fork defines (CLAUDE.md §4.7, forward direction).
+
+    Uranium's level-up learnsets reference Uranium-original signature moves
+    (e.g. `MOVE_METAL_WHIP`) that the fork has never had staged — staging
+    Uranium's move set is out of scope here. `emit_learnsets` gates every
+    emitted move against this set and drops (loudly) any that don't resolve,
+    rather than emitting an undefined symbol.
+    """
+    return load_fork_constants(engine_dir / "include" / "constants" / "moves.h", "MOVE")
+
+
+# --- Engine charset (charmap.txt) --------------------------------------------
+#
+# `escape_c_string` (the Phase-2 shared helper) hex-escapes every non-ASCII
+# codepoint as `\xNN`, which is correct for `pbs_converter`'s own text tables
+# but WRONG here: pokeemerald-expansion's `tools/preproc` re-encodes C string
+# literals against `charmap.txt` at build time, and it expects the *literal*
+# UTF-8 character in the source, not a `\x` escape (confirmed against vanilla
+# `engine/src/data/pokemon/species_info/gen_3_families.h`, which embeds raw
+# "Pokémon" — literal é, not `\xE9`). A `\xE9` byte is not a valid C escape at
+# all outside very specific contexts, which is exactly the
+# "unknown escape '\x'" error this fixes.
+_CHARMAP_LINE_RE = re.compile(r"^'((?:\\.|[^'\\])+)'\s*=\s*[0-9A-Fa-f]{2}\b")
+
+# Structural characters that must stay standard C escapes regardless of
+# charmap — mirrors `_c_emit.escape_c_string`'s `_ESCAPES` table.
+_ENGINE_TEXT_ESCAPES: dict[str, str] = {
+    "\\": "\\\\",
+    '"': '\\"',
+    "\n": "\\n",
+    "\r": "\\r",
+    "\t": "\\t",
+    "\0": "\\0",
+}
+
+
+def load_charmap_chars(engine_dir: Path) -> frozenset[str]:
+    """Literal single characters `charmap.txt` maps to a game glyph.
+
+    Parses lines like `'é'         = 1B`. Multi-char tokens (`'\\n'`, `'\\l'`,
+    `'\\p'` — in-text control codes, not literal characters) are skipped
+    except for the one genuine escaped-literal entry, `'\\''` (a literal
+    apostrophe). ASCII 0x20-0x7E is never consulted against this set — it's
+    always valid — so this only matters for non-ASCII text.
+    """
+    path = engine_dir / "charmap.txt"
+    text = path.read_text(encoding="utf-8")
+    chars: set[str] = set()
+    for line in text.splitlines():
+        m = _CHARMAP_LINE_RE.match(line)
+        if not m:
+            continue
+        token = m.group(1)
+        if token == "\\'":
+            chars.add("'")
+            continue
+        if token.startswith("\\"):
+            continue  # in-text control token (\n, \l, \p, ...), not a literal char
+        if len(token) == 1:
+            chars.add(token)
+    return frozenset(chars)
+
+
+def emit_engine_text(s: str, charmap_chars: frozenset[str], *, species: str, field: str) -> str:
+    """Escape `s` for embedding in a C string literal `tools/preproc` will
+    re-encode via `charmap.txt`.
+
+    ASCII printable chars and the standard C escapes pass through/escape as
+    usual. Non-ASCII characters are emitted literally (UTF-8) if `charmap.txt`
+    defines a glyph for them — matching the vanilla convention — and fail
+    loud, naming the species/field/character, if it doesn't (no silent drop,
+    no invented substitute; CLAUDE.md §4.5).
+    """
+    out: list[str] = []
+    for ch in s:
+        if ch in _ENGINE_TEXT_ESCAPES:
+            out.append(_ENGINE_TEXT_ESCAPES[ch])
+            continue
+        cp = ord(ch)
+        if 0x20 <= cp <= 0x7E:
+            out.append(ch)
+        elif ch in charmap_chars:
+            out.append(ch)
+        else:
+            raise ValueError(
+                f"{species}: {field} contains {ch!r} (U+{cp:04X}) with no entry in "
+                "charmap.txt — no game-charset representation; cannot emit"
+            )
+    return "".join(out)
+
+
 def _learnset_symbol(spec: SpeciesSpec) -> str:
     return f"sUraniumLevelUpLearnset_{spec.internal_name}"
 
@@ -398,31 +489,88 @@ _MOVE_SUBSTITUTIONS: dict[int, str] = {
     568: "MOVE_FIRE_FANG",  # FLAMEIMPACT
 }
 
+# `categoryName` is a hardware-fixed `u8[13]` slot (12 visible chars + NUL —
+# see `CATEGORY_NAME_MAX_LEN`); Uranium's own `species_kinds.json` text isn't
+# authored against that limit and can exceed it. Rather than silently
+# truncating (which would non-deterministically depend on whichever string
+# happens to overflow) or hard-failing the whole staging pass over display
+# text, overflowing names get an explicit, table-driven substitution here —
+# same pattern as `_MOVE_SUBSTITUTIONS` above. Report new entries to the user
+# when adding them; this is a mechanical fit-to-hardware-limit call, not a
+# judgment on Uranium content fidelity, but the exact wording is still worth
+# a second pair of eyes. Found staging Route-1 species (2026-08-05):
+# SPLENDIFOWL's kind text "Paradise Bird" (13 chars) -> "ParadiseBird" (12,
+# space dropped rather than a letter, to keep both words legible).
+_CATEGORY_NAME_OVERRIDES: dict[str, str] = {
+    "SPLENDIFOWL": "ParadiseBird",
+}
 
-def emit_learnsets(staged: list[StagedSpecies], r: pokemon._Resolver) -> str:
+
+def emit_learnsets(
+    staged: list[StagedSpecies], r: pokemon._Resolver, fork_moves: set[str]
+) -> tuple[str, list[dict]]:
+    """Emit the six/24 `LevelUpMove` arrays, gated against `fork_moves`.
+
+    Uranium learnsets reference Uranium-original moves the fork has never
+    staged (e.g. `MOVE_METAL_WHIP`). Emitting an undefined `MOVE_*` symbol
+    fails the build; per CLAUDE.md §4.5/§4.7, drop that one level-up entry
+    loudly (warn + return it in the second element for the manifest) rather
+    than emit it or invent a substitute. A species whose whole learnset drops
+    still emits a valid (empty, `LEVEL_UP_END`-terminated) array — same shape
+    the empty-selection no-op path already produces.
+    """
     banner = generated_banner("attacksRS.dat", GENERATOR, timestamp=False)
     if not staged:
-        return banner + _no_op_note()
+        return banner + _no_op_note(), []
     blocks: list[str] = []
+    dropped: list[dict] = []
     for s in staged:
-        rows = [
-            f"    LEVEL_UP_MOVE({lvl:>3}, {_MOVE_SUBSTITUTIONS.get(mv, r.move_constant(mv))}),"
-            for lvl, mv in s.record.level_up_moves
-        ]
+        rows: list[str] = []
+        for lvl, mv in s.record.level_up_moves:
+            const = _MOVE_SUBSTITUTIONS.get(mv, r.move_constant(mv))
+            if fork_moves and const not in fork_moves:
+                logger.warning(
+                    "%s: dropping level-up move %s at level %d — undefined in the fork's moves.h",
+                    s.spec.internal_name,
+                    const,
+                    lvl,
+                )
+                dropped.append(
+                    {
+                        "species": s.spec.internal_name,
+                        "species_constant": s.spec.constant,
+                        "level": lvl,
+                        "move_constant": const,
+                        "uranium_move_id": mv,
+                    }
+                )
+                continue
+            rows.append(f"    LEVEL_UP_MOVE({lvl:>3}, {const}),")
         body = "\n".join(rows)
         blocks.append(
             f"static const struct LevelUpMove {_learnset_symbol(s.spec)}[] = {{\n"
             + (body + "\n" if body else "")
             + "    LEVEL_UP_END\n};"
         )
-    return banner + "\n" + "\n\n".join(blocks) + "\n"
+    if dropped:
+        affected = {d["species"] for d in dropped}
+        logger.warning(
+            "dropped %d level-up move entr%s across %d species (undefined in fork moves.h) — "
+            "see species_manifest.json's dropped_learnset_moves",
+            len(dropped),
+            "y" if len(dropped) == 1 else "ies",
+            len(affected),
+        )
+    return banner + "\n" + "\n\n".join(blocks) + "\n", dropped
 
 
 def _gfx_symbol(kind: str, spec: SpeciesSpec) -> str:
     return f"{kind}_{gfx_ident(spec)}"
 
 
-def emit_species_info(staged: list[StagedSpecies], r: pokemon._Resolver) -> str:
+def emit_species_info(
+    staged: list[StagedSpecies], r: pokemon._Resolver, charmap_chars: frozenset[str]
+) -> str:
     """Bare `[SPECIES_X] = {...},` entries only — no `#include`s.
 
     Matches the vanilla `species_info/gen_N_families.h` convention: this
@@ -499,18 +647,23 @@ def emit_species_info(staged: list[StagedSpecies], r: pokemon._Resolver) -> str:
         lines.append(f"        .height = {rec.height_dm},")
         lines.append(f"        .weight = {rec.weight_hg},")
 
-        lines.append(f'        .speciesName = _("{escape_c_string(r.name(rec.id))}"),')
+        name = emit_engine_text(r.name(rec.id), charmap_chars, species=spec.internal_name, field="speciesName")
+        lines.append(f'        .speciesName = _("{name}"),')
         kind = r.kind(rec.id)
+        kind = _CATEGORY_NAME_OVERRIDES.get(spec.internal_name, kind)
         if len(kind) > CATEGORY_NAME_MAX_LEN:
             raise ValueError(
                 f"{spec.internal_name}: categoryName {kind!r} is {len(kind)} chars, "
-                f"exceeds u8[13] limit of {CATEGORY_NAME_MAX_LEN}"
+                f"exceeds u8[13] limit of {CATEGORY_NAME_MAX_LEN} "
+                "-- add an entry to _CATEGORY_NAME_OVERRIDES"
             )
         if kind:
-            lines.append(f'        .categoryName = _("{escape_c_string(kind)}"),')
+            kind_text = emit_engine_text(kind, charmap_chars, species=spec.internal_name, field="categoryName")
+            lines.append(f'        .categoryName = _("{kind_text}"),')
         dex = r.dex(rec.id)
         if dex:
-            lines.append(f'        .description = COMPOUND_STRING("{escape_c_string(dex)}"),')
+            dex_text = emit_engine_text(dex, charmap_chars, species=spec.internal_name, field="description")
+            lines.append(f'        .description = COMPOUND_STRING("{dex_text}"),')
 
         lines.append(f"        .cryId = {spec.cry_constant},")
         lines.append(f"        .natDexNum = {spec.dex_constant},")
@@ -624,6 +777,7 @@ def emit_cry_sound_data(staged: list[StagedSpecies]) -> str:
 def build_manifest(
     staged: list[StagedSpecies],
     pristine_species_egg: int,
+    dropped_learnset_moves: list[dict] | None = None,
 ) -> dict:
     new_egg = pristine_species_egg + len(staged)
     records = []
@@ -667,6 +821,11 @@ def build_manifest(
         "pristine_species_egg": pristine_species_egg,
         "new_species_egg": new_egg,
         "species": records,
+        # Level-up moves dropped because the fork's moves.h doesn't define
+        # them (Uranium-original signature moves; staging Uranium's move set
+        # is out of scope — CLAUDE.md §4.7 forward-direction gate). Each
+        # entry: species/species_constant/level/move_constant/uranium_move_id.
+        "dropped_learnset_moves": dropped_learnset_moves or [],
     }
 
 
@@ -705,6 +864,8 @@ def write_all(
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     pristine_egg, anchor = read_pristine_species_egg(engine_dir)
+    fork_moves = load_fork_moves(engine_dir)
+    charmap_chars = load_charmap_chars(engine_dir)
 
     if selected:
         reference_dir = _reference_dir()
@@ -730,15 +891,16 @@ def write_all(
         out_dir / "uranium_pokedex_ids.h",
         emit_pokedex_ids(staged, common.PRISTINE_NATIONAL_DEX_ANCHOR),
     )
-    _write(out_dir / "uranium_learnsets.h", emit_learnsets(staged, resolver))
-    _write(out_dir / "uranium_species_info.h", emit_species_info(staged, resolver))
+    learnsets_text, dropped_moves = emit_learnsets(staged, resolver, fork_moves)
+    _write(out_dir / "uranium_learnsets.h", learnsets_text)
+    _write(out_dir / "uranium_species_info.h", emit_species_info(staged, resolver, charmap_chars))
     _write(out_dir / "uranium_species_graphics.h", emit_graphics(staged))
     _write(out_dir / "uranium_cries_enum.h", emit_cries_enum(staged))
     _write(out_dir / "uranium_cry_table_forward.inc", emit_cry_table_forward(staged))
     _write(out_dir / "uranium_cry_table_reverse.inc", emit_cry_table_reverse(staged))
     _write(out_dir / "uranium_cry_sound_data.inc", emit_cry_sound_data(staged))
 
-    manifest = build_manifest(staged, pristine_egg)
+    manifest = build_manifest(staged, pristine_egg, dropped_moves)
     (out_dir / common.MANIFEST_NAME).write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )

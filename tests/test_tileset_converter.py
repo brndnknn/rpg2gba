@@ -1339,23 +1339,106 @@ def test_trainer_sight_ray_through_false_sealed_exit_stops_at_distance_one() -> 
     assert by_xy == {(4, 5)}
 
 
-def test_trainer_sight_ray_visible_raises() -> None:
-    """A visible (opacity 255, real graphic) Trainer(N) on a trigger-2 page is
-    a battle trainer, not a tripwire -- fail loud naming the native
-    trainer-object path rather than silently mis-converting it."""
+def test_visible_trainer_converts_to_sight_trainer() -> None:
+    """A visible Trainer(3) event (move_type 0) whose id IS in
+    trainer_battle_event_ids converts to a real sight trainer:
+    TRAINER_TYPE_NORMAL, sight radius "3", and movement forced static with
+    the facing derived from the page's graphic direction."""
     consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
     map_json = {
         "map_id": 32,
         "events": [
             _event(
                 9, 10, 10,
-                [_page(trigger=2, name="HGSS_000", opacity=255, direction=2)],
-                name="Trainer(4)",
+                [_page(trigger=2, name="HGSS_000", opacity=255, direction=2, move_type=0)],
+                name="Trainer(3)",
             )
         ],
     }
-    with pytest.raises(ValueError, match="native trainer-object"):
-        mw.build_object_events(map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture())
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
+        trainer_battle_event_ids={9},
+    )
+    assert len(result.object_events) == 1
+    obj = result.object_events[0]
+    assert obj.trainer_type == "TRAINER_TYPE_NORMAL"
+    assert obj.route_id == "3"
+    assert obj.movement_type == "MOVEMENT_TYPE_FACE_DOWN"
+
+
+def test_visible_trainer_custom_route_forced_static_no_route_interned() -> None:
+    """A visible Trainer(5) event with move_type 3 (custom route) still
+    converts to a static sight trainer -- movement is forced static BEFORE
+    the custom-route classifier ever inspects the route, so nothing is
+    interned into a RouteRegistry and no field collision is possible."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [
+            _event(
+                10, 10, 10,
+                [_page(trigger=2, name="HGSS_000", opacity=255, direction=4, move_type=3)],
+                name="Trainer(5)",
+            )
+        ],
+    }
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
+        trainer_battle_event_ids={10},
+    )
+    assert len(result.object_events) == 1
+    obj = result.object_events[0]
+    assert obj.trainer_type == "TRAINER_TYPE_NORMAL"
+    assert obj.route_id == "5"
+    assert obj.movement_type == "MOVEMENT_TYPE_FACE_LEFT"
+
+
+def test_visible_trainer_absent_from_battle_ids_falls_back_to_npc() -> None:
+    """A visible Trainer(3) event whose id is absent from (a given, non-None)
+    trainer_battle_event_ids converts as an ordinary NPC instead -- no
+    trainerbattle call was generated for it, so it must not become a dead
+    sight trigger."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [
+            _event(
+                9, 10, 10,
+                [_page(trigger=2, name="HGSS_000", opacity=255, direction=2, move_type=0)],
+                name="Trainer(3)",
+            )
+        ],
+    }
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
+        trainer_battle_event_ids=set(),
+    )
+    assert len(result.object_events) == 1
+    obj = result.object_events[0]
+    assert obj.trainer_type == "TRAINER_TYPE_NONE"
+    assert obj.route_id == "0"
+
+
+def test_invisible_tripwire_unaffected_by_trainer_battle_event_ids() -> None:
+    """Regression guard: an invisible Trainer(N) tripwire's ray-of-
+    coord_events conversion is unchanged by the new guard parameter (even an
+    empty set, which would demote a VISIBLE trainer, must not touch the
+    tripwire path)."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [
+            _event(74, 5, 5, [_page(trigger=2, through=True, direction=2)], name="Trainer(3)")
+        ],
+    }
+    passability = _passability_fixture(20, 20, blocked_cells=set())
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, passability=passability,
+        trainer_battle_event_ids=set(),
+    )
+    by_xy = {(c.x, c.y) for c in result.coord_events}
+    assert by_xy == {(5, 6), (5, 7), (5, 8)}
+    assert result.object_events == []
 
 
 def test_trainer_sight_ray_name_inert_when_trigger_not_touch() -> None:
@@ -1406,6 +1489,54 @@ def test_trainer_sight_ray_facing_left() -> None:
     result = mw.build_object_events(map_json, consts, _SLICE, passability=passability)
     by_xy = {(c.x, c.y) for c in result.coord_events}
     assert by_xy == {(9, 10), (8, 10), (7, 10)}
+
+
+def test_object_event_rejects_trainer_type_with_custom_route_movement() -> None:
+    """ObjectEvent fails loud on the one field-collision shape that must never
+    reach map.json: a nonzero trainer_type sharing trainer_sight_or_berry_
+    tree_id with MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE."""
+    with pytest.raises(ValueError, match="collides"):
+        mw.ObjectEvent(
+            x=1, y=1, graphics_id="OBJ_EVENT_GFX_URANIUM_HGSS_000", script="0x0",
+            movement_type=mw.MOVEMENT_TYPE_CUSTOM_ROUTE,
+            trainer_type="TRAINER_TYPE_NORMAL",
+        )
+
+
+# --- trainer_battle_event_ids helper -----------------------------------------
+
+def test_trainer_battle_event_ids_finds_ids_with_trainerbattle_call() -> None:
+    text = (
+        'script Map033_EV009_Page1 {\n'
+        '    lock\n'
+        '    trainerbattle_single(TRAINER_YOUNGSTER_BEN, "", "You win.")\n'
+        '    release\n'
+        '}\n'
+        '\n'
+        'script Map033_EV010_Page1 {\n'
+        '    msgbox("Hi there.")\n'
+        '}\n'
+    )
+    assert mw.trainer_battle_event_ids(text, 33) == {9}
+
+
+def test_trainer_battle_event_ids_ignores_other_maps_and_nested_braces() -> None:
+    """A trainerbattle call nested inside an `if` block still counts (brace-
+    depth tracking, not a naive first-column-0-close scan); a map id that
+    doesn't match the block's own Map### prefix is excluded."""
+    text = (
+        'script Map033_EV041_Page2 {\n'
+        '    if (flag(FLAG_X)) {\n'
+        '        trainerbattle_double(TRAINER_A, TRAINER_B, "", "...")\n'
+        '    }\n'
+        '}\n'
+        '\n'
+        'script Map034_EV009_Page1 {\n'
+        '    trainerbattle_single(TRAINER_C, "", "...")\n'
+        '}\n'
+    )
+    assert mw.trainer_battle_event_ids(text, 33) == {41}
+    assert mw.trainer_battle_event_ids(text, 34) == {9}
 
 
 def test_trainer_sight_ray_no_boot_page_still_emits() -> None:
@@ -1740,6 +1871,69 @@ def test_build_object_events_drops_no_silent_defaults() -> None:
         5: mw.DROP_DOOR_SHEET,
         6: mw.DROP_OPACITY0,
     }
+
+
+def test_build_object_events_stripped_event_dropped_before_gfx_lookup() -> None:
+    """An event id present in `stripped_event_ids` is dropped via DROP_STRIPPED
+    BEFORE any npc_gfx lookup — its sheet name ("light", unmapped in
+    _npc_gfx_fixture) must never raise KeyError, proving the strip check runs
+    first (CLAUDE.md §4.3/§4.5: a stripped event's art never needs a
+    reference/npc_gfx_map.json entry)."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {
+        "map_id": 33,
+        "events": [
+            _event(28, 4, 4, [_page(name="light")], name="Luz"),
+            _event(1, 5, 5, [_page(name="HGSS_000")]),
+        ],
+    }
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
+        stripped_event_ids={28: "Luz"},
+    )
+    assert dict(result.drops)[28] == mw.DROP_STRIPPED
+    assert len(result.object_events) == 1  # only event 1 survives
+
+
+def test_build_object_events_stripped_expect_name_mismatch_fails_loud() -> None:
+    """A strip_list entry naming an event mismatched against the actual event
+    name fails loud — the re-export renumbering guard (CLAUDE.md §4.5)."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {
+        "map_id": 33,
+        "events": [_event(28, 4, 4, [_page(name="light")], name="NotLuz")],
+    }
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
+            stripped_event_ids={28: "Luz"},
+        )
+
+
+def test_build_object_events_stripped_event_ids_none_is_legacy_noop() -> None:
+    """`stripped_event_ids=None` (the default) is a no-op — an event that
+    WOULD be strippable elsewhere still converts normally when no strip data
+    is threaded in for this call."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(49, "Moki Town Player's House 1F")
+    map_json = {"map_id": 49, "events": [_event(1, 4, 4, [_page(name="HGSS_000")])]}
+    result = mw.build_object_events(map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture())
+    assert result.drops == []
+    assert len(result.object_events) == 1
+
+
+def test_load_stripped_event_ids_groups_by_map(tmp_path: Path) -> None:
+    """load_stripped_event_ids groups the flat orchestrator parse by map id
+    into the {map_id: {event_id: expect_name}} shape build_slice_maps threads
+    to build_object_events."""
+    data = {
+        "map_events": [
+            [3, 5],
+            {"map_id": 33, "event_id": 28, "expect_name": "Luz"},
+        ]
+    }
+    (tmp_path / "strip_list.json").write_text(json.dumps(data), encoding="utf-8")
+    result = mw.load_stripped_event_ids(tmp_path)
+    assert result == {3: {5: None}, 33: {28: "Luz"}}
 
 
 def test_build_object_events_visible_graphic_requires_npc_gfx() -> None:
@@ -2146,6 +2340,58 @@ def test_build_object_events_stale_trait_fails_loud() -> None:
         )
 
 
+def test_build_object_events_collapsed_pages_resolves_page1_no_dispatcher() -> None:
+    """The `collapsed_pages` trait (idiom-collapse classifier folded a
+    multi-page event into a single block, e.g. a trainer-battle classifier
+    folding pre-/post-battle pages together) makes `build_object_events`
+    resolve straight to the page-1 label and build no dispatcher for the
+    event — even though page 2's global switch gate would otherwise demand
+    one, and even though page 2's label was never converted."""
+    reg = FlagRegistry()
+    reg.propose_flag(125, "FLAG_FINAL_EVENT")
+    consts = mc.MapConstantRegistry(Path("x")).mint(49, "Moki Town Player's House 1F")
+    map_json = {
+        "map_id": 49,
+        "events": [
+            _event(1, 4, 4, [_page(name="HGSS_000"), _page(name="HGSS_000", cond=_sw_cond(125))]),
+        ],
+    }
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
+        pory_labels={"Map049_EV001_Page1"}, flag_registry=reg,
+        event_traits={1: ["collapsed_pages"]},
+    )
+    assert len(result.object_events) == 1
+    assert result.object_events[0].script == "Map049_EV001_Page1"
+    assert not any("Map049_EV001_Dispatch" in d for d in result.dispatchers)
+
+
+def test_build_object_events_missing_collapsed_trait_still_fails_loud() -> None:
+    """Regression guard: the SAME event/pory_labels shape as the test above,
+    but WITHOUT the collapsed_pages trait, must still hit the ordinary
+    page-body-gap fail-loud check — the trait, not proximity, is what
+    licenses skipping the dispatcher."""
+    reg = FlagRegistry()
+    reg.propose_flag(125, "FLAG_FINAL_EVENT")
+    consts = mc.MapConstantRegistry(Path("x")).mint(49, "Moki Town Player's House 1F")
+    map_json = {
+        "map_id": 49,
+        "events": [
+            _event(1, 4, 4, [_page(name="HGSS_000"), _page(name="HGSS_000", cond=_sw_cond(125))]),
+        ],
+    }
+    with pytest.raises(KeyError):
+        mw.build_object_events(
+            map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
+            pory_labels={"Map049_EV001_Page1"}, flag_registry=reg,
+        )
+
+
+def test_validate_event_traits_accepts_collapsed_pages() -> None:
+    """`_validate_event_traits` accepts the new trait string (KNOWN_TRAITS)."""
+    mw._validate_event_traits({1: [mw.TRAIT_COLLAPSED_PAGES]}, uid=49)  # no raise
+
+
 def test_write_local_id_tables_pinned_shape(tmp_path: Path) -> None:
     """write_local_id_tables emits one Map{id:03d}.json per map with exactly the
     pinned {decimal-string RMXP id: int local id} shape (the local_id_remap.py
@@ -2531,6 +2777,33 @@ def test_resolve_script_dispatcher_missing_page_label_fails_loud() -> None:
     # dispatcher's guard target Page2 is missing from it.
     with pytest.raises(KeyError):
         mw._resolve_script(event, consts, {"Map049_EV001_Page1"}, reg)
+
+
+def test_resolve_script_collapsed_resolves_to_page1_no_dispatcher() -> None:
+    """A `collapsed=True` event (the idiom-collapse classifier folded both
+    pages into one block, per TRAIT_COLLAPSED_PAGES) resolves straight to the
+    page-1 label with no dispatcher built — even though page 2's condition
+    would otherwise force a real dispatcher."""
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    reg = FlagRegistry()
+    reg.propose_flag(125, "FLAG_FINAL_EVENT")
+    event = _event(1, 0, 0, [_page(), _page(cond=_sw_cond(125))])
+    script, dispatcher = mw._resolve_script(
+        event, consts, {"Map049_EV001_Page1"}, reg, collapsed=True,
+    )
+    assert script == "Map049_EV001_Page1"
+    assert dispatcher is None
+
+
+def test_resolve_script_collapsed_without_page1_body_fails_loud() -> None:
+    """`collapsed=True` does not launder a genuine gap: if page 1 itself never
+    made it into the converted .pory (only page 2 did, so the event isn't
+    classified bodyless), that's still a real bug."""
+    consts = mc.MapConstants(49, "MAP_X", "MAP_URANIUM_49", "LAYOUT_X", "MAPSEC_X", "X", "X")
+    reg = FlagRegistry()
+    event = _event(1, 0, 0, [_page(), _page(cond=_sw_cond(125))])
+    with pytest.raises(KeyError):
+        mw._resolve_script(event, consts, {"Map049_EV001_Page2"}, reg, collapsed=True)
 
 
 def test_page_dispatcher_autorun_guard_target_emits_end() -> None:

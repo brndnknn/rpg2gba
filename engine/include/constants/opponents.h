@@ -859,18 +859,33 @@
 #define TRAINER_LEAF                        852
 #define TRAINER_BRENDAN_PLACEHOLDER         853
 #define TRAINER_MAY_PLACEHOLDER             854
-// URANIUM PATHFINDER SLICE: Moki lab rival battle (EV019). Theo's counter-pick
-// party, selected by the player's starter line (VAR_POKEMONTEST / RMXP var151).
-#define TRAINER_THEO_9                      855
-#define TRAINER_THEO_10                     856
-#define TRAINER_THEO_11                     857
+// BEGIN URANIUM PATHFINDER SLICE — generated trainer ids (rpg2gba; see engine/RPG2GBA_VENDOR.md).
+// The included file is pipeline-GENERATED + gitignored; the assembler writes it and this hook
+// stays committed + stable across chapters. When no trainers are staged the generated file is an
+// empty stub, URANIUM_TRAINERS_LAST falls back below. Replaced the hand-written TRAINER_THEO_9/10/11
+// block on 2026-08-05 — Theo is now generated from Uranium trainers.dat ids 9/10/11 like every
+// other trainer, so his ids moved off 855-857 (nothing references the raw numbers).
+#include "constants/uranium_trainer_ids.h"
+#ifndef URANIUM_TRAINERS_LAST
+#define URANIUM_TRAINERS_LAST TRAINER_MAY_PLACEHOLDER
+#endif
+// END URANIUM PATHFINDER SLICE
 
 // NOTE: Because each Trainer uses a flag to determine when they are defeated, there is only space for 9 additional trainers before trainer flag space overflows
 //       More space can be made by shifting flags around in constants/flags.h or changing how trainer flags are handled
 //       MAX_TRAINERS_COUNT can be increased but will take up additional saveblock space
 
-#define TRAINERS_COUNT_EMERALD     858
-#define MAX_TRAINERS_COUNT_EMERALD 864
+// URANIUM PATHFINDER SLICE: corpus-sized trainer provisioning (2026-08-05, user-authorized).
+// Vanilla was 858/864 — 6 free slots, and CH02 alone needs 9. Uranium ships 331 trainers
+// (output/uranium-build/intermediate/trainers.json), so both counts are raised ONCE to cover the
+// whole corpus rather than per chapter: 854 vanilla + 331 Uranium = 1185, rounded up.
+//   TRAINERS_COUNT     sizes gTrainers[] (src/data.c) — every trainer id must be below it.
+//   MAX_TRAINERS_COUNT sizes the trainer-defeated flag block (flags.h TRAINER_FLAGS_START 0x500).
+// Raising MAX shifts SYSTEM_FLAGS and everything after it, which grows SaveBlock1.flags[] and
+// moves every saveblock member past it — EXISTING SAVES DO NOT SURVIVE THIS. That cost is the
+// same for +9 as for +400, which is why it is paid once here.
+#define TRAINERS_COUNT_EMERALD     1189
+#define MAX_TRAINERS_COUNT_EMERALD 1280
 
 #if IS_FRLG
 #define TRAINERS_COUNT                      TRAINERS_COUNT_FRLG

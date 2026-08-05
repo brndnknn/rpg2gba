@@ -173,5 +173,40 @@
   "PU-POKEBALL": {
     "gfx": "OBJ_EVENT_GFX_POKE_BALL",
     "note": "Thrown Poke Ball prop (Map032 EV9's catch demo, code-41 swap on event 76) — native ball graphic reused rather than staging a new sheet for a single still pose; same fallback PU-PokeballMachine already uses."
+  },
+  "HGSS_003": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_003",
+    "fallback": "OBJ_EVENT_GFX_YOUNGSTER",
+    "note": "HGSS overworld sheet 003 (Map033 EV010 Trainer(4)) — chapter-2 Route 1 expansion. Boy, navy cap, red shirt, tan pants; standard 4x4 walk sheet"
+  },
+  "HGSS_004": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_004",
+    "fallback": "OBJ_EVENT_GFX_CAMPER",
+    "note": "HGSS overworld sheet 004 (Map033 EV030 Trainer(5)) — chapter-2 Route 1 expansion. Boy, tan bucket hat, olive vest; standard 4x4 walk sheet"
+  },
+  "HGSS_007": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_007",
+    "fallback": "OBJ_EVENT_GFX_LASS",
+    "note": "HGSS overworld sheet 007 (Map033 EV103 Trainer(3)) — chapter-2 Route 1 expansion. Girl, brown wavy hair, teal top; standard 4x4 walk sheet"
+  },
+  "HGSS_046": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_046",
+    "fallback": "OBJ_EVENT_GFX_BUG_CATCHER",
+    "note": "HGSS overworld sheet 046 (Map033 EV035 Trainer(2)) — chapter-2 Route 1 expansion. Boy, dark green cap, blue/orange vest; standard 4x4 walk sheet"
+  },
+  "HGSS_114": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_114",
+    "fallback": "OBJ_EVENT_GFX_GIRL_2",
+    "note": "HGSS overworld sheet 114 (Map081 EV002) — chapter-2 Route 1 expansion. Girl, brown hair with yellow bow, pink top, blue skirt; standard 4x4 walk sheet"
+  },
+  "HGSS_115": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_115",
+    "fallback": "OBJ_EVENT_GFX_SWIMMER_M",
+    "note": "HGSS overworld sheet 115 (Map033 EV053 Trainer(5)) — chapter-2 Route 1 expansion. Boy, round blue hair/cap, tan shirt; standard 4x4 walk sheet"
+  },
+  "berrytreeORANBERRY": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_BERRYTREEORANBERRY",
+    "fallback": "OBJ_EVENT_GFX_BERRY_TREE",
+    "note": "Oran Berry plant prop (Map033 EV100/EV102 BerryPlant, pbPickBerry/pbBerryPlant scripts) — chapter-2 Route 1 expansion. 128x256 sheet: green sprout row + 3 rows of an orange bush/creature-shaped growth stage. Boots at (dir=8,pattern=0) only, no code-41 graphic swaps seen on these pages — plain sheet entry, no states needed"
   }
 }

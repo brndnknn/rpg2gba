@@ -47,6 +47,17 @@ NUM_PALS_TOTAL: int = 13
 NUM_TILES_TOTAL: int = 1024
 NUM_METATILES_TOTAL: int = 1024
 
+# Fail-loud ceiling on a single tileset's animation frame art, in ROM bytes.
+# Animated tiles cost VRAM once (n_tiles) but ROM per frame: an effect stores
+# n_tiles * n_frames * TILE_SIZE_4BPP(32) bytes of .4bpp art. The frame-count
+# guard in build_slice_tilesets.py bounds the *period*; this bounds the thing
+# that actually runs out. 128 KiB per tileset is deliberately generous next to
+# the ~7 MB of ROM headroom the corpus-scaling audit measured (2026-07-14 §5
+# item 5 asked for exactly this per-column ROM-cost accounting); Route 01's
+# 95-frame pond+waterfall effect is the first case that needs the room.
+MAX_ANIM_ROM_BYTES: int = 128 * 1024
+TILE_SIZE_4BPP: int = 32
+
 # METATILE_LAYER_TYPE_* (engine/include/global.fieldmap.h)
 LAYER_NORMAL: int = 0   # tile-layers -> middle + top BG (top above the player)
 LAYER_COVERED: int = 1  # tile-layers -> bottom + middle BG (both below the player)
@@ -465,6 +476,29 @@ def emit_tileset(
             f"{next_idx - 1}) exceed the {NUM_TILES_IN_PRIMARY}-tile PRIMARY "
             "partition — an animated effect must stay entirely in PRIMARY for "
             "the engine's DMA block copy"
+        )
+
+    # ROM-cost accounting for the frame art (see MAX_ANIM_ROM_BYTES). VRAM cost is
+    # already bounded by the PRIMARY check above — this is the per-frame ROM the
+    # INCGFX_U16 frame tables pull in, which is what a long-period effect actually
+    # spends.
+    anim_rom_bytes = sum(eff.n_tiles * eff.n_frames * TILE_SIZE_4BPP for eff in effects)
+    if effects:
+        logger.info(
+            "%s: %d animated tile(s) in %d effect(s) [%s] -> %.1f KiB frame art",
+            primary_name,
+            next_idx - 1,
+            len(effects),
+            ", ".join(f"{eff.n_tiles}x{eff.n_frames}f" for eff in effects),
+            anim_rom_bytes / 1024,
+        )
+    if anim_rom_bytes > MAX_ANIM_ROM_BYTES:
+        raise ValueError(
+            f"{primary_name}: animation frame art is {anim_rom_bytes} bytes "
+            f"({anim_rom_bytes / 1024:.1f} KiB), over the {MAX_ANIM_ROM_BYTES}-byte "
+            f"per-tileset budget — effects: "
+            + ", ".join(f"{eff.name}={eff.n_tiles} tiles x {eff.n_frames} frames"
+                        for eff in effects)
         )
     for m in static_merged:
         merged_gba_list[m] = next_idx

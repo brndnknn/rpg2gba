@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from rpg2gba.conversion_agent import (
+    deterministic,
     hand_overrides,
     queue_evidence,
     transpile_driver,
@@ -356,6 +357,109 @@ def test_transpile_map_overrides_default_to_none_unaffected(
 
     assert queue_entries == []
     assert "Map012_EV001_Page1" in pory_text
+
+
+# ----------------------------------------------------------------------------
+# transpile_driver.transpile_map — collapsed_pages trait recording (the
+# metadata_wiring._resolve_script page-body-gap fix: an idiom-collapse
+# classifier match that emits only SOME of an event's canonical page labels
+# on purpose gets flagged so metadata_wiring skips dispatcher generation
+# instead of KeyError-ing on the "missing" pages).
+# ----------------------------------------------------------------------------
+
+
+_FISHERMAN_BATTLE_ARG = (
+    'pbTrainerBattle(PBTrainers::FISHERMAN,"Matt",'
+    '_I("T-the ones you have are nice too..."),false,0,false,0)'
+)
+
+
+def _fisherman_event(event_id: int) -> dict:
+    """A 2-page trainer-battle-classifier event (mirrors
+    test_deterministic.py's fixture): page 1 carries the pbTrainerBattle
+    branch, page 2 is the post-battle chat page — classify_trainer_battle
+    folds both into a single Page1 block, so page 2's label is never
+    emitted."""
+    page1 = {
+        "trigger": 0,
+        "list": [
+            cmd(transpiler.COMMENT, ["Type: FISHERMAN"]),
+            cmd(transpiler.COMMENT, ["Name: Matt"]),
+            cmd(transpiler.SCRIPT, ["pbTrainerIntro(:FISHERMAN)"]),
+            cmd(transpiler.SCRIPT, ["pbCallBub(2)"]),
+            cmd(transpiler.SHOW_TEXT, ["The ocean holds different species!"]),
+            cmd(transpiler.CONDITIONAL_BRANCH, [12, _FISHERMAN_BATTLE_ARG]),
+            cmd(transpiler.CONTROL_SELF_SWITCH, ["A", 0], indent=1),
+            cmd(transpiler.SCRIPT, ["pbTrainerEnd"]),
+        ],
+    }
+    page2 = {
+        "trigger": 0,
+        "list": [
+            cmd(transpiler.SCRIPT, ["pbCallBub(2)"]),
+            cmd(transpiler.SHOW_TEXT, ["Y'know, the Gym Leader is tough."]),
+        ],
+    }
+    return {"id": event_id, "name": "Fisherman_Matt", "x": 0, "y": 0, "pages": [page1, page2]}
+
+
+def _fisherman_det_ctx() -> deterministic.Context:
+    return deterministic.Context(
+        trainers={("TRAINER_CLASS_FISHERMAN", "Matt", 0): "TRAINER_BRANDON_16"}
+    )
+
+
+def test_transpile_map_records_collapsed_pages_for_classifier_gap(
+    ctx: transpiler.TranspileContext,
+) -> None:
+    """The trainer-battle classifier claims the event and emits only
+    Map012_EV005_Page1 (page 2's label never appears) -> the driver records
+    the collapsed_pages trait for it."""
+    map_id = 12
+    event = _fisherman_event(5)
+    map_json = {"map_id": map_id, "events": [event]}
+
+    pory_text, _queue = transpile_driver.transpile_map(
+        map_id, map_json, ctx, _fisherman_det_ctx()
+    )
+
+    assert "Map012_EV005_Page1" in pory_text
+    assert "Map012_EV005_Page2" not in pory_text
+    assert ctx.traits[(map_id, 5)] == {"collapsed_pages"}
+
+
+def test_transpile_map_no_collapsed_trait_when_all_pages_emitted(
+    ctx: transpiler.TranspileContext,
+) -> None:
+    """Control case: a classifier (pure-dialogue) that emits a block for
+    EVERY page of a multi-page event records no collapsed_pages trait —
+    only a genuine label gap earns the trait."""
+    map_id = 12
+    event = {
+        "id": 6,
+        "name": "prof",
+        "x": 0, "y": 0,
+        "pages": [
+            {
+                "trigger": 0,
+                "list": [
+                    cmd(transpiler.SCRIPT, ["pbCallBub(2)"]),
+                    cmd(transpiler.SHOW_TEXT, ["Welcome to the lab!"]),
+                ],
+            },
+            {
+                "trigger": 0,
+                "list": [cmd(transpiler.SHOW_TEXT, ["See you around."])],
+            },
+        ],
+    }
+    map_json = {"map_id": map_id, "events": [event]}
+
+    pory_text, _queue = transpile_driver.transpile_map(map_id, map_json, ctx, None)
+
+    assert "Map012_EV006_Page1" in pory_text
+    assert "Map012_EV006_Page2" in pory_text
+    assert (map_id, 6) not in ctx.traits
 
 
 # ----------------------------------------------------------------------------

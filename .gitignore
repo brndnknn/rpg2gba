@@ -71,6 +71,8 @@ engine/graphics/pokemon/uranium/
 # include/constants/trainers.h and src/data/graphics/trainers.h) plus the emitted art.
 engine/include/constants/uranium_trainer_front_pic_ids.h
 engine/include/constants/uranium_trainer_back_pic_ids.h
+engine/include/constants/uranium_trainer_ids.h
+engine/include/data/uranium_trainer_party.inc
 engine/src/data/graphics/uranium_trainer_graphics.h
 engine/src/data/graphics/uranium_trainer_sprites.h
 engine/src/data/graphics/uranium_trainer_backsprites.h
@@ -87,6 +89,26 @@ engine/sound/direct_sound_samples/cries/raptorch.wav
 engine/sound/direct_sound_samples/cries/archilles.wav
 engine/sound/direct_sound_samples/cries/eletux.wav
 engine/sound/direct_sound_samples/cries/electruxo.wav
+# CH02 (2026-08-05): Route 1's trainer parties dragged in 7 more species, and
+# evolution-chain closure dragged in 11 more behind them.
+engine/sound/direct_sound_samples/cries/chyinmunk.wav
+engine/sound/direct_sound_samples/cries/kinetmunk.wav
+engine/sound/direct_sound_samples/cries/birbie.wav
+engine/sound/direct_sound_samples/cries/aveden.wav
+engine/sound/direct_sound_samples/cries/splendifowl.wav
+engine/sound/direct_sound_samples/cries/cubbug.wav
+engine/sound/direct_sound_samples/cries/cubblfly.wav
+engine/sound/direct_sound_samples/cries/nimflora.wav
+engine/sound/direct_sound_samples/cries/barewl.wav
+engine/sound/direct_sound_samples/cries/dearewl.wav
+engine/sound/direct_sound_samples/cries/gararewl.wav
+engine/sound/direct_sound_samples/cries/tonemy.wav
+engine/sound/direct_sound_samples/cries/tofurang.wav
+engine/sound/direct_sound_samples/cries/fartog.wav
+engine/sound/direct_sound_samples/cries/folerog.wav
+engine/sound/direct_sound_samples/cries/blubelrog.wav
+engine/sound/direct_sound_samples/cries/owten.wav
+engine/sound/direct_sound_samples/cries/eshouten.wav
 # Full-corpus Map Walker build: the assembler generates a per-map dir under
 # data/maps/ and data/layouts/ for every built Uranium map (~190) plus the
 # UraniumWalkerStub/ dummy for dropped stock map data. Blanket-ignore all per-map

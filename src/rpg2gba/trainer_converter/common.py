@@ -56,9 +56,64 @@ class TrainerPicSpec:
 # --- Slice-1 selection -------------------------------------------------------
 # The rest of this package is corpus-general (works for any trainer id); this
 # tuple is deliberately the only place a specific id is pinned.
+#
+# Entries 3..9 (the seven Route-1 trainer *classes*) were appended for the
+# trainer-battle slice (W6): Uranium keys its trainer-class sprites by
+# trainer-TYPE id (trainertypes.dat's own `id` field), not by an NPC map
+# sprite id, so `trainer_id` here is that trainer-type id — verified present
+# in `trainer_types.json` and cross-checked against the real
+# `Graphics/Characters/trainer<NNN>.png` files before pinning (battles.py
+# staging asserts this at runtime too). `internal_name` matches the class
+# identifiers `battles._CLASS_PIC_INTERNAL_NAME` maps real
+# `TRAINER_CLASS_*` constants onto.
 SLICE_TRAINER_PICS: tuple[TrainerPicSpec, ...] = (
     TrainerPicSpec(86, "RIVAL"),
     TrainerPicSpec(0, "PLAYER_MALE"),
+    TrainerPicSpec(6, "FISHERMAN"),
+    TrainerPicSpec(3, "YOUNGSTER"),
+    TrainerPicSpec(12, "BUGCATCHER"),
+    TrainerPicSpec(84, "SCHOOLKID"),
+    TrainerPicSpec(32, "TRIATHLETE_MALERUNNER"),
+    TrainerPicSpec(38, "EXPERT_FEMALE"),
+    TrainerPicSpec(2, "LASS"),
+)
+
+#: internal_name values in `SLICE_TRAINER_PICS` that additionally get a player
+#: BACK pic conversion (a ball-throw filmstrip), not just a front pic. Every
+#: other entry (NPC trainer classes, the rival) is front-only.
+PLAYER_BACK_PIC_NAMES: frozenset[str] = frozenset({"PLAYER_MALE", "PLAYER_FEMALE"})
+
+# --- Trainer id allocation anchor --------------------------------------------
+# Last vanilla trainer id (pokeemerald-expansion @ pinned rev, engine/RPG2GBA_
+# VENDOR.md) before ANY Uranium/pathfinder trainer -- generated TRAINER_* battle
+# ids chain off this. `battles.read_pristine_trainer_anchor` re-derives it from
+# `include/constants/opponents.h` and fails loud on drift; duplicated here only
+# so callers can construct fixtures without reading the fork.
+PRISTINE_TRAINER_ANCHOR = "TRAINER_MAY_PLACEHOLDER"
+PRISTINE_TRAINER_MAY_PLACEHOLDER = 854
+
+# --- Trainer battle selection (W6) -------------------------------------------
+# Trainer identity keys, exactly as minted by
+# `pbs_converter.trainers._Resolver.trainer_constant` into
+# `output/uranium-build/intermediate/trainers.json` (dict key == the desired
+# final engine `TRAINER_*` constant name). Order is load-bearing: fork trainer
+# ids are assigned by position off `PRISTINE_TRAINER_ANCHOR` -- append-only,
+# never reorder or remove an entry. Route 1's nine trainers plus the three
+# existing (currently hand-written, see `engine/include/constants/
+# opponents.h` lines 862-866) Theo counter-pick entries.
+SLICE_TRAINER_BATTLES: tuple[str, ...] = (
+    "TRAINER_MARKO_19",
+    "TRAINER_BOB_20",
+    "TRAINER_FLOOD_2",
+    "TRAINER_TATH_1",
+    "TRAINER_BRANDON_18",
+    "TRAINER_BRANDON_16",
+    "TRAINER_GERTHA_17",
+    "TRAINER_LYNETTE_246",
+    "TRAINER_RICHEY_3",
+    "TRAINER_THEO_9",
+    "TRAINER_THEO_10",
+    "TRAINER_THEO_11",
 )
 
 
@@ -98,6 +153,10 @@ __all__ = [
     "BACK_PIC_FRAMES",
     "TrainerPicSpec",
     "SLICE_TRAINER_PICS",
+    "PLAYER_BACK_PIC_NAMES",
+    "PRISTINE_TRAINER_ANCHOR",
+    "PRISTINE_TRAINER_MAY_PLACEHOLDER",
+    "SLICE_TRAINER_BATTLES",
     "uranium_trainer_front",
     "uranium_trainer_back",
     "resolve_case",

@@ -53,7 +53,7 @@ def _fixture() -> tuple[list[tuple], list, _StubRaster, list[int]]:
         21: [GREEN, YELLOW],  # animated; frame 0 == tile 20's pixels
         22: [GREEN, CYAN],    # animated; frame 0 matches 21, frame 1 differs
         23: [GREEN, YELLOW],  # animated; every frame matches 21
-        30: [RED] * 65,       # frame-count lcm past the fail-loud guard (64)
+        30: [RED] * 129,      # frame-count lcm past the fail-loud guard (128)
     })
     priorities = [0] * 400
     priorities[13] = 2
@@ -115,7 +115,7 @@ def test_empty_column_is_alone() -> None:
 
 
 def test_frame_guard_column_stays_ungrouped() -> None:
-    # lcm 65 > MAX_COLUMN_FRAMES: unhashable, must NOT fold into the static RED
+    # lcm 129 > MAX_COLUMN_FRAMES: unhashable, must NOT fold into the static RED
     # class off its frame-0 pixels.
     colkeys, imgs, raster, priorities = _fixture()
     pc = _pixel_classes(colkeys, imgs, raster, priorities)

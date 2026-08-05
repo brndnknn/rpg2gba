@@ -129,9 +129,15 @@ def _load_terrain_tags(tilesets_json: Path, ts: int) -> list[int]:
     return load_terrain_tags_json(tilesets_json, ts)
 
 
-MAX_COLUMN_FRAMES = 64  # fail-loud guard: a column's lcm(per-tile frame counts)
+MAX_COLUMN_FRAMES = 128  # fail-loud guard: a column's lcm(per-tile frame counts)
 # past this is almost certainly a mismatched/garbage autotile pairing, not a real
-# animation (the slice's real cases — 19-frame pond, 4-frame flowers — are tiny).
+# animation. Raised from 64 -> 128 on 2026-08-05 (CH02/Route 01): a column that
+# composites the 19-frame pond over the 5-frame transparent waterfall genuinely
+# needs lcm 95 frames — the two animated layers land in the SAME 8x8 quadrants
+# once composited, so no per-tile split can avoid the lcm (corpus_scaling_audit
+# 2026-07-14 §3 predicted exactly this: 55 columns corpus-wide, all lcm 95).
+# The real cost ceiling is ROM bytes, not frame count — see MAX_ANIM_ROM_BYTES
+# in graphics/emit.py, which is the guard that actually binds.
 
 
 def column_n_frames(key: tuple[tuple[int, int], ...], rasterizer: object) -> int:
