@@ -136,6 +136,12 @@ class AttemptResult:
     last_snapshot: Snapshot | None = None
     screenshot_dir: Path | None = None
     waypoints: list[Waypoint] = field(default_factory=list)
+    # The attempt's working ROM copy. It outlives the attempt on purpose:
+    # `final_emulator` is still running on it, and stamping the green review
+    # ROM drives that emulator through an in-game save, which needs its .sav
+    # to actually land on disk. `run_chapter` deletes it once every consumer
+    # is done.
+    scratch_rom: Path | None = None
 
     @property
     def failed_beat(self) -> BeatOutcome | None:
@@ -241,7 +247,8 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
                 emu.waypoint(beat.name, "FAILED", note=beat.description, failed=True)
                 return AttemptResult(passed=False, beats=beats_out, pristine_rom=rom,
                                       final_emulator=emu, last_snapshot=last_snapshot,
-                                      screenshot_dir=shots, waypoints=list(emu.waypoints))
+                                      screenshot_dir=shots, waypoints=list(emu.waypoints),
+                                      scratch_rom=scratch)
 
             logger.info("[%s] beat %s passed", chapter.name, beat.name)
             beats_out.append(BeatOutcome(beat.name, beat.description, "pass"))
@@ -249,15 +256,38 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
 
             idx = chapter.index_of(beat.name)
             if idx + 1 < len(chapter.beats):
-                last_snapshot = _snapshot(emu, chapter.beats[idx + 1].name)
-                persist_seed_blob(blobs_dir, chapter.name, rom, last_snapshot, emu)
+                # Some beats legitimately end mid-scene with the field still
+                # locked (moki B5 hands its running autorun to B6). Capturing a
+                # seed there is not possible and would not be worth having: the
+                # capture needs the engine's own save path to populate
+                # SaveBlock1's party/object-event mirrors, and a state you
+                # cannot save is a state that boots with a dead player object.
+                # Skip the boundary rather than persist an unbootable seed —
+                # `seeds` then simply does not offer that beat.
+                if emu.field_locked():
+                    logger.info("[%s] no seed for %s: field still locked at the "
+                                "end of %s (mid-scene boundary)",
+                                chapter.name, chapter.beats[idx + 1].name, beat.name)
+                else:
+                    last_snapshot = _snapshot(emu, chapter.beats[idx + 1].name)
+                    persist_seed_blob(blobs_dir, chapter.name, rom, last_snapshot, emu)
 
         return AttemptResult(passed=True, beats=beats_out, pristine_rom=rom,
                               final_emulator=emu, last_snapshot=last_snapshot,
-                              screenshot_dir=shots, waypoints=list(emu.waypoints))
-    finally:
-        scratch.unlink(missing_ok=True)
-        scratch.with_suffix(".sav").unlink(missing_ok=True)
+                              screenshot_dir=shots, waypoints=list(emu.waypoints),
+                              scratch_rom=scratch)
+    except BaseException:
+        # No AttemptResult escapes on this path, so nobody downstream can clean
+        # up after us.
+        _discard_scratch(scratch)
+        raise
+
+
+def _discard_scratch(scratch: Path | None) -> None:
+    if scratch is None:
+        return
+    scratch.unlink(missing_ok=True)
+    scratch.with_suffix(".sav").unlink(missing_ok=True)
 
 
 # -- repro bundle (G3a) / flake log (F3) / green stamp (G3b) ------------------
@@ -419,5 +449,6 @@ def run_chapter(chapter: Chapter, rom: Path, engine: Path, *,
     for attempt in attempts:
         if attempt.screenshot_dir and attempt.screenshot_dir.exists():
             shutil.rmtree(attempt.screenshot_dir)
+        _discard_scratch(attempt.scratch_rom)
 
     return result

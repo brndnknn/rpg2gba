@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 import click
 
+from .offsets import OBJEVENT_ACTIVE_BIT_MASK, OBJEVENT_ACTIVE_BYTE_OFFSET
 from .scenarios import SCENARIOS
 
 if TYPE_CHECKING:  # runtime import is lazy so blob utils work without bindings
@@ -34,15 +35,50 @@ _BLOCKS = ("sb1", "sb2", "sb3", "storage")
 
 
 def dump_save_blocks(emu: Emulator) -> dict[str, bytes]:
-    """Read the four live save blocks out of emulator RAM."""
-    ptrs = {
-        "sb1": emu.u32(emu.symbols["gSaveBlock1Ptr"]),
-        "sb2": emu.u32(emu.symbols["gSaveBlock2Ptr"]),
-        "sb3": emu.u32(emu.symbols["gSaveBlock3Ptr"]),
-        "storage": emu.u32(emu.symbols["gPokemonStoragePtr"]),
-    }
-    return {name: emu.read_bytes(ptrs[name], emu.offsets[f"sizeof_{name}"])
-            for name in _BLOCKS}
+    """Read the four live save blocks out of emulator RAM.
+
+    `SaveBlock1.playerParty`, `playerPartyCount` and `objectEvents` are
+    *mirrors* the engine only populates inside its real save routine
+    (`CopyPartyAndObjectsToSave`, engine/src/load_save.c:242, via
+    `SavePlayerParty`/`SaveObjectEvents`) -- mid-scenario they're stale or
+    all-zero. A blob built from a straight RAM read therefore boots with the
+    right map/coords but a player object that was never spawned: no sprite,
+    dead input (the 2026-08-07 bug this fixes). So before reading, this
+    performs a real in-game save to force the mirrors current, then rewinds
+    to a snapshot taken beforehand -- the caller may be mid-scenario, and
+    this must hand back an emulator byte-identical to the one it was given.
+
+    `restore_state` rewinds the core (CPU/RAM/PPU) but not the host
+    filesystem, so the flash write `save_in_game` triggers leaves a real
+    `.sav` next to `emu.rom` even after the rewind. This function's only
+    advertised effect is its return value, so if nothing was already saved
+    there, the `.sav` it caused is removed too -- a `.sav` that predates this
+    call (a scenario's own closing save, say) is left untouched.
+    """
+    from .scenarios import save_in_game
+
+    if emu.field_locked():
+        raise ValueError(
+            "dump_save_blocks: field controls are locked -- this state was "
+            "captured mid-script, so it can't be run through a real in-game "
+            "save and isn't a valid seed blob candidate")
+    sav = emu.rom.with_suffix(".sav")
+    had_sav = sav.exists()
+    snapshot = emu.snapshot_state()
+    try:
+        save_in_game(emu)
+        ptrs = {
+            "sb1": emu.u32(emu.symbols["gSaveBlock1Ptr"]),
+            "sb2": emu.u32(emu.symbols["gSaveBlock2Ptr"]),
+            "sb3": emu.u32(emu.symbols["gSaveBlock3Ptr"]),
+            "storage": emu.u32(emu.symbols["gPokemonStoragePtr"]),
+        }
+        return {name: emu.read_bytes(ptrs[name], emu.offsets[f"sizeof_{name}"])
+                for name in _BLOCKS}
+    finally:
+        emu.restore_state(snapshot)
+        if not had_sav:
+            sav.unlink(missing_ok=True)
 
 
 def build_blob(offsets: dict[str, int], blocks: dict[str, bytes]) -> bytes:
@@ -95,6 +131,48 @@ def _foreign_sav(engine: Path, workdir: Path) -> Path:
     return sav
 
 
+def _verify_player_object_alive(emu: Emulator, expected_pos: tuple[int, int]) -> None:
+    """Assert `gPlayerAvatar`/`gObjectEvents` actually spawned the player.
+
+    Pins the exact failure class `dump_save_blocks` now fixes: a blob whose
+    SaveBlock1 object-event mirror was never synced boots with the right
+    map/pos (SaveBlock1 says so) but `gObjectEvents[0]` never comes alive --
+    no sprite, no D-pad input, `currentCoords` at (0,0). The map/pos checks
+    above can't see that; this can.
+    """
+    o = emu.offsets
+    avatar = emu.symbols["gPlayerAvatar"]
+    flags = emu.u8(avatar + o["off_playeravatar_flags"])
+    object_event_id = emu.u8(avatar + o["off_playeravatar_objecteventid"])
+    if flags == 0:
+        raise ValueError(
+            "stamped ROM's player object never spawned: gPlayerAvatar.flags "
+            "== 0 -- the seed blob's SaveBlock1 object-event mirror was "
+            "never synced before stamping (see CopyPartyAndObjectsToSave, "
+            "engine/src/load_save.c:242, and stamp.dump_save_blocks)")
+    base = emu.symbols["gObjectEvents"] + object_event_id * o["sizeof_objevent"]
+    active = emu.u8(base + OBJEVENT_ACTIVE_BYTE_OFFSET) & OBJEVENT_ACTIVE_BIT_MASK
+    if not active:
+        raise ValueError(
+            f"stamped ROM's player object event (id {object_event_id}) is "
+            "not active -- the seed blob's SaveBlock1 object-event mirror "
+            "was never synced before stamping (see "
+            "CopyPartyAndObjectsToSave, engine/src/load_save.c:242, and "
+            "stamp.dump_save_blocks)")
+    coords_addr = base + o["off_objevent_currentcoords"]
+    got_coords = (emu.u16(coords_addr), emu.u16(coords_addr + 2))
+    map_offset = o["val_map_offset"]
+    expected_coords = (expected_pos[0] + map_offset, expected_pos[1] + map_offset)
+    if got_coords != expected_coords:
+        raise ValueError(
+            f"stamped ROM's player object event coords {got_coords} don't "
+            f"match the expected {expected_coords} (SaveBlock1 pos "
+            f"{expected_pos} + MAP_OFFSET {map_offset}) -- the seed blob's "
+            "object-event mirror was synced from a different position than "
+            "SaveBlock1's, or is stale (see CopyPartyAndObjectsToSave, "
+            "engine/src/load_save.c:242, and stamp.dump_save_blocks)")
+
+
 def verify_stamped_rom(stamped: Path, engine: Path, expected: tuple[int, int],
                        expected_pos: tuple[int, int], boot_frames: int = 600) -> None:
     """Assert the stamped ROM boots into its stamped state *despite* a .sav.
@@ -105,6 +183,11 @@ def verify_stamped_rom(stamped: Path, engine: Path, expected: tuple[int, int],
     booted somewhere else entirely. Booting with a deliberately foreign .sav
     paired is the only way to catch that — a fresh-flash boot passes either
     way.
+
+    Also pins the 2026-08-07 bug: map/pos alone say nothing about whether the
+    player *object* actually came back alive (see
+    `_verify_player_object_alive` and `dump_save_blocks`), which is precisely
+    how a ROM with a dead player passed this check before.
     """
     from .emulator import Emulator
 
@@ -127,6 +210,7 @@ def verify_stamped_rom(stamped: Path, engine: Path, expected: tuple[int, int],
             raise ValueError(
                 "stamped ROM booted into its state but the field is locked — "
                 "the state was captured mid-script and is not playable.")
+        _verify_player_object_alive(emu, expected_pos)
     finally:
         rom.unlink(missing_ok=True)
         rom.with_suffix(".sav").unlink(missing_ok=True)

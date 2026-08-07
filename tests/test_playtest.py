@@ -162,6 +162,162 @@ def test_build_blob_rejects_wrong_size() -> None:
         build_blob(offsets, blocks)
 
 
+# -- dump_save_blocks / _verify_player_object_alive: save-mirror sync fix ----
+#
+# The bug (2026-08-07): SaveBlock1's playerParty/objectEvents mirrors are only
+# populated by the engine's own save routine (CopyPartyAndObjectsToSave), so
+# a straight RAM read mid-scenario captured a stale/zeroed player object --
+# the stamped ROM booted into the right map/pos but with no player sprite and
+# dead input. `dump_save_blocks` now forces a real in-game save first (behind
+# a snapshot/restore so the caller's emulator is untouched), and
+# `verify_stamped_rom` now checks the player object actually came back alive,
+# not just that SaveBlock1's map/pos are right (which is exactly what let the
+# original bug ship). These fakes model the same u8/u16/u32 memory access
+# `_FakeEmu` already stands in for elsewhere in this file, plus the extra
+# snapshot/restore/field_locked surface `dump_save_blocks` needs.
+
+class _FakeDumpEmu(_FakeEmu):
+    """_FakeEmu plus dump_save_blocks's snapshot/restore/field_locked/
+    read_bytes/rom surface, so its save-sync-then-rewind sequence can be
+    exercised without mgba."""
+
+    def __init__(self, locked: bool = False, rom: Path | None = None) -> None:
+        super().__init__(
+            symbols={"gSaveBlock1Ptr": 0x100, "gSaveBlock2Ptr": 0x104,
+                     "gSaveBlock3Ptr": 0x108, "gPokemonStoragePtr": 0x10C},
+            offsets={"sizeof_sb1": 4, "sizeof_sb2": 4, "sizeof_sb3": 4,
+                     "sizeof_storage": 4},
+        )
+        self._locked = locked
+        # dump_save_blocks only stats/unlinks this path (had_sav/cleanup); a
+        # path that need not exist is fine -- nothing here writes through it.
+        self.rom = rom if rom is not None else Path("/nonexistent/fake.gba")
+        self.snapshot_calls = 0
+        self.restore_calls: list[bytes] = []
+        self.write_u32(0x100, 0x2000)
+        self.write_u32(0x104, 0x2010)
+        self.write_u32(0x108, 0x2020)
+        self.write_u32(0x10C, 0x2030)
+
+    def field_locked(self) -> bool:
+        return self._locked
+
+    def read_bytes(self, addr: int, size: int) -> bytes:
+        return bytes([addr & 0xFF]) * size
+
+    def snapshot_state(self) -> bytes:
+        self.snapshot_calls += 1
+        return b"SNAPSHOT"
+
+    def restore_state(self, state: bytes) -> None:
+        self.restore_calls.append(state)
+
+
+def test_dump_save_blocks_saves_then_restores_the_snapshot(monkeypatch) -> None:
+    from rpg2gba.playtest import stamp
+
+    emu = _FakeDumpEmu()
+    save_calls = []
+    monkeypatch.setattr("rpg2gba.playtest.scenarios.save_in_game",
+                         lambda e: save_calls.append(e))
+
+    blocks = stamp.dump_save_blocks(emu)
+
+    assert save_calls == [emu]  # the real save ran
+    assert emu.snapshot_calls == 1
+    assert emu.restore_calls == [b"SNAPSHOT"]  # and the caller's emu was rewound
+    assert set(blocks) == {"sb1", "sb2", "sb3", "storage"}
+    assert all(len(v) == 4 for v in blocks.values())
+
+
+def test_dump_save_blocks_restores_the_snapshot_even_if_the_save_fails(monkeypatch) -> None:
+    from rpg2gba.playtest import stamp
+
+    emu = _FakeDumpEmu()
+
+    def boom(e: object) -> None:
+        raise ScenarioError("save failed")
+
+    monkeypatch.setattr("rpg2gba.playtest.scenarios.save_in_game", boom)
+
+    with pytest.raises(ScenarioError, match="save failed"):
+        stamp.dump_save_blocks(emu)
+    assert emu.restore_calls == [b"SNAPSHOT"]  # rewound despite the failure
+
+
+def test_dump_save_blocks_raises_when_field_locked(monkeypatch) -> None:
+    from rpg2gba.playtest import stamp
+
+    emu = _FakeDumpEmu(locked=True)
+    save_calls = []
+    monkeypatch.setattr("rpg2gba.playtest.scenarios.save_in_game",
+                         lambda e: save_calls.append(e))
+
+    with pytest.raises(ValueError, match="field controls are locked"):
+        stamp.dump_save_blocks(emu)
+    assert save_calls == []          # never attempted a save mid-script
+    assert emu.snapshot_calls == 0   # never even took a snapshot
+
+
+_OBJEVENT_TEST_OFFSETS = {
+    "off_playeravatar_flags": 0,
+    "off_playeravatar_objecteventid": 5,
+    "sizeof_objevent": 0x24,
+    "off_objevent_currentcoords": 0x10,
+    "val_map_offset": 7,
+}
+
+
+def _obj_alive_emu() -> _FakeEmu:
+    return _FakeEmu(symbols={"gPlayerAvatar": 0x1000, "gObjectEvents": 0x2000},
+                    offsets=dict(_OBJEVENT_TEST_OFFSETS))
+
+
+def test_verify_player_object_alive_passes_on_a_real_spawn() -> None:
+    from rpg2gba.playtest.stamp import _verify_player_object_alive
+
+    emu = _obj_alive_emu()
+    emu._mem.set(0x1000 + 0, 1, 0x21)  # gPlayerAvatar.flags != 0
+    emu._mem.set(0x1000 + 5, 1, 0)     # gPlayerAvatar.objectEventId == 0
+    emu._mem.set(0x2000 + 0, 1, 0xC1)  # gObjectEvents[0].active bit set
+    emu.write_u16(0x2000 + 0x10, 11)   # currentCoords == expected_pos + MAP_OFFSET
+    emu.write_u16(0x2000 + 0x12, 12)
+
+    _verify_player_object_alive(emu, expected_pos=(4, 5))  # must not raise
+
+
+def test_verify_player_object_alive_raises_when_avatar_flags_zero() -> None:
+    """The exact shape of the original bug: SaveBlock1's mirror was never
+    synced, so gPlayerAvatar never got initialized on boot."""
+    from rpg2gba.playtest.stamp import _verify_player_object_alive
+
+    emu = _obj_alive_emu()  # all-zero memory: flags == 0
+    with pytest.raises(ValueError, match="never spawned"):
+        _verify_player_object_alive(emu, expected_pos=(4, 5))
+
+
+def test_verify_player_object_alive_raises_when_object_event_inactive() -> None:
+    from rpg2gba.playtest.stamp import _verify_player_object_alive
+
+    emu = _obj_alive_emu()
+    emu._mem.set(0x1000 + 0, 1, 0x21)  # avatar looks initialized...
+    # ...but gObjectEvents[0].active is left unset.
+    with pytest.raises(ValueError, match="not active"):
+        _verify_player_object_alive(emu, expected_pos=(4, 5))
+
+
+def test_verify_player_object_alive_raises_on_coord_mismatch() -> None:
+    from rpg2gba.playtest.stamp import _verify_player_object_alive
+
+    emu = _obj_alive_emu()
+    emu._mem.set(0x1000 + 0, 1, 0x21)
+    emu._mem.set(0x2000 + 0, 1, 0xC1)
+    emu.write_u16(0x2000 + 0x10, 99)  # wildly wrong coords
+    emu.write_u16(0x2000 + 0x12, 99)
+    with pytest.raises(ValueError, match="coords"):
+        _verify_player_object_alive(emu, expected_pos=(4, 5))
+
+
 # -- battle mini-driver: pure logic, no ROM needed -----------------------------
 
 def test_substruct0_offset_matches_engine_permutation_table() -> None:
@@ -1330,6 +1486,220 @@ def test_probe_offsets_resolves_battle_struct_fields() -> None:
     assert values["sizeof_battlepkmn"] > values["off_battlepkmn_hp"]
 
 
+# -- START-menu introspection: menu-position-driven save_in_game -------------
+#
+# 2026-08 bug: save_in_game drove the START menu with hardcoded DOWN x2 taps,
+# a row offset only correct without a party (no POKEMON row). scenarios.py now
+# reads the engine's own live menu-action array/cursor back out of memory
+# instead of assuming a layout. `_wait_for_start_menu` and
+# `_select_start_menu_row` are pure poll/tap/verify logic over addresses
+# passed in directly, so they're testable against a fake with no ELF, no
+# devkitARM, and no mgba -- `_start_menu_state_addrs` (nm) and
+# `_menu_action_save_index` (source parse) are the only pieces that touch the
+# real engine build, covered separately below (needs_build).
+
+class _FakeMenuEmu:
+    """Stand-in for the handful of primitives save_in_game's menu navigation
+    touches: run()/u8()/read_bytes()/field_locked()/tap()/screenshot().
+
+    `count_addr`/`cursor_addr`/`actions_addr` are arbitrary fake addresses
+    sharing one sparse byte store. `tap("UP"/"DOWN")` mutates the cursor byte
+    directly, mirroring `HandleStartMenuInput`'s `Menu_MoveCursor`.
+    `settle_after` frames stalls the count going nonzero/locked, to model
+    `InitStartMenuStep` mid-build.
+    """
+
+    def __init__(self, actions: list[int], initial_cursor: int = 0,
+                 settle_after: int = 0) -> None:
+        self.actions_addr = 0x1000
+        self.count_addr = 0x2000
+        self.cursor_addr = 0x3000
+        self._mem: dict[int, int] = {}
+        self._actions = list(actions)
+        self._cursor = initial_cursor
+        self._settle_after = settle_after
+        self._frame = 0
+        self._locked = True
+        self.taps: list[str] = []
+        self.screenshots: list[str] = []
+        self._sync()
+
+    def _sync(self) -> None:
+        for i, a in enumerate(self._actions):
+            self._mem[self.actions_addr + i] = a
+        self._mem[self.count_addr] = len(self._actions)
+        self._mem[self.cursor_addr] = self._cursor
+
+    def run(self, frames: int, keys=None, on_frame=None) -> None:
+        self._frame += frames
+        if self._frame >= self._settle_after:
+            self._sync()
+        else:
+            self._mem[self.count_addr] = 0
+
+    def u8(self, addr: int) -> int:
+        return self._mem.get(addr, 0)
+
+    def read_bytes(self, addr: int, size: int) -> bytes:
+        return bytes(self._mem.get(addr + i, 0) for i in range(size))
+
+    def field_locked(self) -> bool:
+        return self._locked
+
+    def tap(self, key: str, hold: int = 6, release: int = 6) -> None:
+        self.taps.append(key)
+        n = len(self._actions)
+        if n == 0:
+            return
+        if key == "DOWN":
+            self._cursor = (self._cursor + 1) % n
+        elif key == "UP":
+            self._cursor = (self._cursor - 1) % n
+        self._sync()
+
+    def screenshot(self, name: str):
+        self.screenshots.append(name)
+        return None
+
+
+# actions mirror BuildNormalStartMenu's order (see start_menu.c): POKEDEX is
+# flag-gated so it's omitted here, matching a player with dex+party+navless.
+_NO_PARTY_ACTIONS = [2, 4, 5, 6, 7]      # BAG PLAYER SAVE OPTION EXIT
+_WITH_PARTY_ACTIONS = [1, 2, 4, 5, 6, 7]  # POKEMON BAG PLAYER SAVE OPTION EXIT
+_MENU_ACTION_SAVE = 5
+
+
+def _wait_for_start_menu(emu):
+    from rpg2gba.playtest.scenarios import _wait_for_start_menu as fn
+    return fn(emu, emu.actions_addr, emu.count_addr, emu.cursor_addr)
+
+
+def _select_start_menu_row(emu, actions, cursor, target):
+    from rpg2gba.playtest.scenarios import _select_start_menu_row as fn
+    return fn(emu, actions, cursor, emu.cursor_addr, target)
+
+
+def test_wait_for_start_menu_reads_the_settled_row_list_and_cursor() -> None:
+    emu = _FakeMenuEmu(_WITH_PARTY_ACTIONS, initial_cursor=2)
+    actions, cursor = _wait_for_start_menu(emu)
+    assert actions == _WITH_PARTY_ACTIONS
+    assert cursor == 2
+
+
+def test_wait_for_start_menu_waits_out_a_mid_build_read() -> None:
+    """A read while `sNumStartMenuActions` is still 0 (InitStartMenuStep
+    hasn't reached BuildStartMenuActions yet) must not be mistaken for a
+    settled empty menu."""
+    emu = _FakeMenuEmu(_NO_PARTY_ACTIONS, settle_after=20)
+    actions, _ = _wait_for_start_menu(emu)
+    assert actions == _NO_PARTY_ACTIONS
+
+
+def test_wait_for_start_menu_fails_loud_if_it_never_settles() -> None:
+    from rpg2gba.playtest.scenarios import _wait_for_start_menu as fn
+
+    emu = _FakeMenuEmu(_NO_PARTY_ACTIONS, settle_after=10**9)
+    with pytest.raises(ScenarioError, match="never settled"):
+        fn(emu, emu.actions_addr, emu.count_addr, emu.cursor_addr)
+    assert emu.screenshots == ["save_menu_not_up"]
+
+
+def test_select_start_menu_row_navigates_without_the_pokemon_row() -> None:
+    """SAVE sits at index 2 in the no-party layout -- the pre-fix hardcoded
+    DOWN x2 happened to be correct here, which is exactly why the bug hid."""
+    emu = _FakeMenuEmu(_NO_PARTY_ACTIONS, initial_cursor=0)
+    _select_start_menu_row(emu, _NO_PARTY_ACTIONS, 0, _MENU_ACTION_SAVE)
+    assert emu.taps == ["DOWN", "DOWN"]
+    assert emu.u8(emu.cursor_addr) == 2
+
+
+def test_select_start_menu_row_navigates_with_the_pokemon_row() -> None:
+    """SAVE shifts to index 3 once POKEMON is present -- DOWN x2 would land
+    on BAG here, which is the exact regression this rewrite fixes."""
+    emu = _FakeMenuEmu(_WITH_PARTY_ACTIONS, initial_cursor=0)
+    _select_start_menu_row(emu, _WITH_PARTY_ACTIONS, 0, _MENU_ACTION_SAVE)
+    assert emu.taps == ["DOWN", "DOWN", "DOWN"]
+    assert emu.u8(emu.cursor_addr) == 3
+
+
+def test_select_start_menu_row_moves_up_when_cursor_starts_past_the_target() -> None:
+    emu = _FakeMenuEmu(_WITH_PARTY_ACTIONS, initial_cursor=5)  # starts on EXIT
+    _select_start_menu_row(emu, _WITH_PARTY_ACTIONS, 5, _MENU_ACTION_SAVE)
+    assert emu.taps == ["UP", "UP"]
+    assert emu.u8(emu.cursor_addr) == 3
+
+
+def test_select_start_menu_row_already_on_target_taps_nothing() -> None:
+    emu = _FakeMenuEmu(_WITH_PARTY_ACTIONS, initial_cursor=3)
+    _select_start_menu_row(emu, _WITH_PARTY_ACTIONS, 3, _MENU_ACTION_SAVE)
+    assert emu.taps == []
+    assert emu.u8(emu.cursor_addr) == 3
+
+
+def test_select_start_menu_row_fails_loud_when_save_is_absent() -> None:
+    """Menu with no SAVE row at all (shouldn't happen in practice, but the
+    fail-loud path must name the row it wanted and what it actually saw)."""
+    no_save_actions = [2, 4, 6, 7]  # BAG PLAYER OPTION EXIT, no SAVE
+    emu = _FakeMenuEmu(no_save_actions, initial_cursor=0)
+    with pytest.raises(ScenarioError, match="no SAVE row"):
+        _select_start_menu_row(emu, no_save_actions, 0, _MENU_ACTION_SAVE)
+    assert emu.taps == []  # never blindly navigated
+    assert emu.screenshots == ["save_menu_no_save_row"]
+
+
+def test_select_start_menu_row_fails_loud_on_cursor_mismatch() -> None:
+    """If the engine's cursor doesn't land where arithmetic predicted (a
+    wrap, or a real engine change), this must not silently press A on the
+    wrong row."""
+    from rpg2gba.playtest.scenarios import _select_start_menu_row as fn
+
+    emu = _FakeMenuEmu(_WITH_PARTY_ACTIONS, initial_cursor=0)
+    # Sabotage: DOWN taps land somewhere unexpected (simulate a menu that
+    # wrapped instead of clamped).
+    emu.tap = lambda key, hold=6, release=6: emu.taps.append(key)  # cursor never moves
+    with pytest.raises(ScenarioError, match="cursor mismatch|expected"):
+        fn(emu, _WITH_PARTY_ACTIONS, 0, emu.cursor_addr, _MENU_ACTION_SAVE)
+    assert emu.screenshots == ["save_menu_cursor_mismatch"]
+
+
+@needs_build
+def test_menu_action_save_index_matches_the_vendored_enum() -> None:
+    """The parsed index must be a real column in the enum, not a guess --
+    cross-checked against the game's own `MENU_ACTION_*` ordinals rather than
+    hardcoding "5" a second time in the test."""
+    from rpg2gba.playtest.scenarios import _menu_action_save_index
+
+    idx = _menu_action_save_index(ENGINE)
+    assert isinstance(idx, int)
+    assert idx >= 0
+    # MENU_ACTION_POKEDEX=0 is always first; SAVE must come after the
+    # identity/party rows and before OPTION/EXIT, matching BuildNormalStartMenu.
+    assert 0 < idx < 8
+
+
+@needs_build
+def test_start_menu_state_addrs_resolve_from_the_real_elf() -> None:
+    """The static symbols must actually be present in `nm`'s output on this
+    build -- if a future build strips local symbols, this is where that
+    shows up, not a mysterious KeyError deep in save_in_game."""
+    from rpg2gba.playtest.scenarios import _nm_static_addr
+
+    elf = ENGINE / "pokeemerald.elf"
+    for name in ("sCurrentStartMenuActions", "sNumStartMenuActions",
+                 "sStartMenuCursorPos"):
+        addr = _nm_static_addr(elf, name)
+        assert 0x02000000 <= addr < 0x02040000  # EWRAM_DATA
+
+
+@needs_build
+def test_nm_static_addr_fails_loud_on_unknown_symbol() -> None:
+    from rpg2gba.playtest.scenarios import _nm_static_addr
+    from rpg2gba.playtest.errors import ScenarioError as SE
+
+    with pytest.raises(SE, match="not found"):
+        _nm_static_addr(ENGINE / "pokeemerald.elf", "sTotallyMadeUpSymbol")
+
+
 # -- end-to-end (opt-in) ------------------------------------------------------
 
 e2e = pytest.mark.skipif(
@@ -1345,7 +1715,7 @@ e2e = pytest.mark.skipif(
 def test_moki_running_shoes_scenario_and_stamp(tmp_path: Path) -> None:
     from rpg2gba.playtest.emulator import Emulator
     from rpg2gba.playtest.scenarios import run_scenario
-    from rpg2gba.playtest.stamp import stamp_rom
+    from rpg2gba.playtest.stamp import _verify_player_object_alive, stamp_rom
 
     rom = tmp_path / "slice.gba"
     shutil.copy(ENGINE / "pokeemerald.gba", rom)
@@ -1356,6 +1726,13 @@ def test_moki_running_shoes_scenario_and_stamp(tmp_path: Path) -> None:
     assert emu.flag(b_dash)
     assert rom.with_suffix(".sav").exists()
 
+    # save_in_game (2026-08 rewrite) no longer taps blindly after the save
+    # completes -- it polls field_locked() itself and only returns once the
+    # engine has genuinely released control, so there is nothing left here to
+    # re-trigger Auntie's dialogue (the old trailing A/B taps did, since the
+    # player never stepped away from her before saving).
+    assert not emu.field_locked()
+
     stamped = tmp_path / "stamped.gba"
     stamp_rom(rom, stamped, emu)
 
@@ -1364,6 +1741,8 @@ def test_moki_running_shoes_scenario_and_stamp(tmp_path: Path) -> None:
     boot.run(900)
     assert boot.flag(b_dash)
     assert boot.player_pos() == emu.player_pos()
+    # The 2026-08-07 bug: map/pos alone can't see a dead player object.
+    _verify_player_object_alive(boot, expected_pos=boot.player_pos())
 
     # pristine ROM, no .sav: still boots a new game (regression path)
     pristine = tmp_path / "pristine.gba"
@@ -1384,3 +1763,88 @@ def test_moki_running_shoes_scenario_and_stamp(tmp_path: Path) -> None:
     cont = Emulator(pristine, ENGINE)
     cont.run(900)
     assert cont.flag(b_dash)
+
+
+@e2e
+def test_snapshot_state_round_trip_restores_player_position(tmp_path: Path) -> None:
+    """The primitive dump_save_blocks is built on: a real emulator's state
+    must actually rewind, not merely accept the call."""
+    from rpg2gba.playtest.emulator import Emulator
+    from rpg2gba.playtest.scenarios import BOOT_FRAMES
+
+    rom = tmp_path / "snap.gba"
+    shutil.copy(ENGINE / "pokeemerald.gba", rom)
+    emu = Emulator(rom, ENGINE)
+    emu.run(BOOT_FRAMES)
+    emu.walk_to(9, 7)
+    before = emu.player_pos(), emu.map_location()
+
+    state = emu.snapshot_state()
+    emu.walk_to(7, 9)
+    assert emu.player_pos() != before[0]  # sanity: the walk really moved us
+
+    emu.restore_state(state)
+    assert (emu.player_pos(), emu.map_location()) == before
+
+
+@e2e
+def test_dump_save_blocks_raises_on_a_genuinely_locked_field(tmp_path: Path) -> None:
+    """Mid-dialogue (not the post-save quirk worked around above): this must
+    refuse rather than capture a mirror that can't legitimately be synced."""
+    from rpg2gba.playtest.emulator import Emulator
+    from rpg2gba.playtest.scenarios import BOOT_FRAMES
+    from rpg2gba.playtest.stamp import dump_save_blocks
+
+    rom = tmp_path / "locked.gba"
+    shutil.copy(ENGINE / "pokeemerald.gba", rom)
+    emu = Emulator(rom, ENGINE)
+    emu.run(BOOT_FRAMES)
+    emu.walk_to(4, 5)
+    emu.face("UP")
+    emu.interact()  # mid-dialogue: field is genuinely locked
+    assert emu.field_locked()
+
+    with pytest.raises(ValueError, match="field controls are locked"):
+        dump_save_blocks(emu)
+
+
+@e2e
+def test_verify_stamped_rom_catches_an_unsynced_blob(tmp_path: Path) -> None:
+    """Regression test for the bug itself: a blob built the *old* way (a
+    straight RAM read, no save-sync) must fail verification now, where it
+    used to silently pass -- map/pos matched; the dead player object did
+    not get checked."""
+    from rpg2gba.playtest.emulator import Emulator
+    from rpg2gba.playtest.scenarios import BOOT_FRAMES
+    from rpg2gba.playtest.stamp import ROM_BASE, _BLOCKS, build_blob, verify_stamped_rom
+
+    rom = tmp_path / "oldbug.gba"
+    shutil.copy(ENGINE / "pokeemerald.gba", rom)
+    emu = Emulator(rom, ENGINE)
+    emu.run(BOOT_FRAMES)
+    emu.walk_to(4, 5)
+    emu.face("UP")
+    emu.interact()
+    emu.advance_dialog()
+    expected, expected_pos = emu.map_location(), emu.player_pos()
+
+    # the pre-fix dump_save_blocks: raw RAM read, no save-sync at all.
+    ptrs = {
+        "sb1": emu.u32(emu.symbols["gSaveBlock1Ptr"]),
+        "sb2": emu.u32(emu.symbols["gSaveBlock2Ptr"]),
+        "sb3": emu.u32(emu.symbols["gSaveBlock3Ptr"]),
+        "storage": emu.u32(emu.symbols["gPokemonStoragePtr"]),
+    }
+    blocks = {name: emu.read_bytes(ptrs[name], emu.offsets[f"sizeof_{name}"])
+              for name in _BLOCKS}
+    blob = build_blob(emu.offsets, blocks)
+
+    pristine = ENGINE / "pokeemerald.gba"
+    stamped = tmp_path / "oldbug_stamped.gba"
+    file_off = emu.symbols["gUraniumEmbeddedSave"] - ROM_BASE
+    data = bytearray(pristine.read_bytes())
+    data[file_off : file_off + len(blob)] = blob
+    stamped.write_bytes(data)
+
+    with pytest.raises(ValueError, match="never spawned"):
+        verify_stamped_rom(stamped, ENGINE, expected, expected_pos)

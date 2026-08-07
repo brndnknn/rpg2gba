@@ -162,6 +162,27 @@ class Emulator:
     def read_bytes(self, addr: int, size: int) -> bytes:
         return bytes(self.core.memory.u8[addr : addr + size])
 
+    def snapshot_state(self) -> bytes:
+        """Serialize the whole core (CPU, RAM, PPU, ...) for a later
+        `restore_state`.
+
+        Exists so a caller can run the engine's own routines (e.g. an
+        in-game save, see `stamp.dump_save_blocks`) mid-scenario and then
+        rewind, without the caller's live emulator ending up perturbed by
+        it. Cost is a full-state copy (~400KB), not a ROM reboot.
+        """
+        raw = self.core.save_raw_state()
+        if raw is None:
+            raise ScenarioError("core.save_raw_state() returned no state")
+        return bytes(raw)
+
+    def restore_state(self, state: bytes) -> None:
+        """Rewind the core to a `snapshot_state()` capture."""
+        if not self.core.load_raw_state(state):
+            raise ScenarioError(
+                "core.load_raw_state() failed to restore a snapshot "
+                f"({len(state)} bytes)")
+
     def screenshot(self, name: str) -> Path | None:
         if self.screenshot_dir is None:
             return None

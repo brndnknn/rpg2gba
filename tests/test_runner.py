@@ -32,7 +32,25 @@ BLOB_FILE_OFFSET = 0x100  # gUraniumEmbeddedSave - ROM_BASE, must fit ROM_SIZE
 class FakeEmulator:
     """Stand-in for `Emulator` exposing exactly what `runner.py` and
     `stamp.py`'s pure functions read: symbols/offsets, u32/read_bytes, and
-    player_pos/map_location/screenshot. No mgba dependency."""
+    player_pos/map_location/screenshot. No mgba dependency.
+
+    Also exposes `field_locked`/`tap`/`snapshot_state`/`restore_state`, the
+    surface `stamp.dump_save_blocks` added (2026-08-07) to force a real save
+    before reading the save-block mirrors -- see that function's docstring.
+    `tap` is a bare-bones stand-in (no scripts, no menus to navigate) that
+    just advances frames and, on an "A" press, drops a `.sav` file.
+
+    `scenarios.save_in_game` itself (2026-08) reads the START menu's live
+    row list/cursor back out of the real engine build (`nm` on the ELF,
+    `start_menu.c`'s action enum) -- plumbing this fake `engine` path (always
+    `tmp_path / "engine"`, never a real build) has no artifacts for. The
+    `_stub_save_in_game` fixture below stands in a trivial equivalent for
+    these tests, which are about the beat-running/stamping framework, not
+    START-menu navigation (covered by test_playtest.py's unit tests and the
+    RPG2GBA_PLAYTEST=1 chapter suite) -- it still calls `tap("A")`, so this
+    class's own "A" -> drop a `.sav` file behavior, which is what
+    `dump_save_blocks`/`stamp_rom` actually depend on here, keeps running.
+    """
 
     def __init__(self, rom: Path, engine: Path, screenshot_dir: Path | None = None):
         self.rom = rom
@@ -55,8 +73,10 @@ class FakeEmulator:
         self._pos = (0, 0)
         self._map = (0, 0)
         self.waypoints: list = []
+        self._locked = False
 
-    def run(self, frames: int, keys: list[str] | None = None) -> None:
+    def run(self, frames: int, keys: list[str] | None = None,
+            on_frame=None) -> None:
         self.frame += frames
         # Give each boot a slightly different "position" so snapshots taken
         # at different frames are distinguishable in tests if needed.
@@ -73,6 +93,27 @@ class FakeEmulator:
 
     def map_location(self) -> tuple[int, int]:
         return self._map
+
+    def field_locked(self) -> bool:
+        return self._locked
+
+    def tap(self, key: str, hold: int = 6, release: int = 6) -> None:
+        self.run(hold + release)
+        if key == "A":
+            # Stands in for the engine's asynchronous flash write completing
+            # -- real scenarios.save_in_game just polls for this file.
+            self.rom.with_suffix(".sav").touch()
+
+    def snapshot_state(self) -> dict:
+        return {"frame": self.frame, "pos": self._pos, "map": self._map,
+                "mem": dict(self._mem), "locked": self._locked}
+
+    def restore_state(self, state: dict) -> None:
+        self.frame = state["frame"]
+        self._pos = state["pos"]
+        self._map = state["map"]
+        self._mem = dict(state["mem"])
+        self._locked = state["locked"]
 
     def screenshot(self, name: str) -> Path | None:
         if self.screenshot_dir is None:
@@ -118,6 +159,17 @@ def make_chapter(name: str, beat_specs: list[tuple[str, "callable"]]) -> Chapter
 
 def ok(emu) -> None:
     pass
+
+
+@pytest.fixture(autouse=True)
+def _stub_save_in_game(monkeypatch):
+    """See FakeEmulator's docstring: real `save_in_game` now needs a real
+    engine build to navigate the START menu, which this fake harness never
+    has. Patched the same way `test_playtest.py`'s stamp tests already patch
+    this exact seam (`rpg2gba.playtest.scenarios.save_in_game`)."""
+    from rpg2gba.playtest import scenarios
+
+    monkeypatch.setattr(scenarios, "save_in_game", lambda emu: emu.tap("A"))
 
 
 # -- ordering -------------------------------------------------------------------

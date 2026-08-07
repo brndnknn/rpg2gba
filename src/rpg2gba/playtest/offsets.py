@@ -111,7 +111,32 @@ _PROBE_ENTRIES: dict[str, str] = {
     "val_render_state_wait": "RENDER_STATE_WAIT",
     "val_render_state_clear": "RENDER_STATE_CLEAR",
     "val_render_state_scroll_start": "RENDER_STATE_SCROLL_START",
+    # -- player-object liveness (stamp.verify_stamped_rom) -------------------
+    # struct ObjectEvent (global.fieldmap.h): a stamped seed blob only counts
+    # if the object event it revives is actually alive on boot -- see
+    # dump_save_blocks's docstring for why the mirror can go stale. `active`
+    # is the *first* bitfield in the struct (`u32 active:1; ...`, byte 0 of a
+    # 4-byte little-endian bitfield unit) so GCC refuses `offsetof` on it
+    # (bitfields aren't addressable); there's nothing to probe. It is not
+    # hardcoded blind, though -- verified empirically against a pristine
+    # new-game boot: gObjectEvents[0]'s first byte read 0xc1 (0b1100_0001),
+    # bit 0 set, matching the engine's own `active` state for a spawned
+    # player. If a future engine change ever reorders the bitfield, that
+    # assertion (not this constant) is what will catch it.
+    "off_objevent_currentcoords": "offsetof(struct ObjectEvent, currentCoords)",
+    "off_objevent_graphicsid": "offsetof(struct ObjectEvent, graphicsId)",
+    "off_objevent_spriteid": "offsetof(struct ObjectEvent, spriteId)",
+    "sizeof_objevent": "sizeof(struct ObjectEvent)",
+    "off_playeravatar_flags": "offsetof(struct PlayerAvatar, flags)",
+    "off_playeravatar_objecteventid": "offsetof(struct PlayerAvatar, objectEventId)",
+    "off_playeravatar_spriteid": "offsetof(struct PlayerAvatar, spriteId)",
 }
+
+# `active`'s containing byte and bit, within a `struct ObjectEvent` -- see the
+# comment on the probe table above for why this can't come from `offsetof`.
+# Empirically verified (2026-08-07) against a pristine new-game boot.
+OBJEVENT_ACTIVE_BYTE_OFFSET = 0
+OBJEVENT_ACTIVE_BIT_MASK = 0x1
 
 _PROBE_TEMPLATE = """\
 #include <stddef.h>
