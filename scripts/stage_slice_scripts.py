@@ -37,6 +37,7 @@ import re
 import sys
 from pathlib import Path
 
+from rpg2gba.conversion_agent import fork_index
 from rpg2gba.conversion_agent.flag_registry import FlagRegistry
 from rpg2gba.pipeline import _load_dotenv
 from rpg2gba.tileset_converter import assembly as asm
@@ -188,6 +189,23 @@ def _load_event_traits(out: Path, map_id: int, pory_path: Path) -> dict[int, lis
     return {int(eid): traits for eid, traits in sidecar["events"].items()}
 
 
+def _load_template_fields(out: Path, map_id: int, pory_path: Path) -> dict[int, dict]:
+    """Load `Map{id:03d}.template_fields.json` from the same scripts dir as the
+    .pory (the transpile driver's native item-ball/berry-tree sidecar — see
+    metadata_wiring.py's `TF_KIND_ITEM_BALL`/`TF_KIND_BERRY_TREE`). No sidecar
+    is a fail-loud data-integrity error (CLAUDE.md §4.5), not a skip — mirrors
+    `_load_event_traits` exactly: the driver is expected to emit one, empty or
+    not, for every map it transpiles."""
+    fields_path = out / "scripts" / f"Map{map_id:03d}.template_fields.json"
+    if not fields_path.is_file():
+        raise FileNotFoundError(
+            f"{fields_path} missing (expected alongside {pory_path.name}) — "
+            f"re-run the transpile driver to regenerate the template-fields sidecar"
+        )
+    sidecar = json.loads(fields_path.read_text(encoding="utf-8"))
+    return {int(eid): payload for eid, payload in sidecar["events"].items()}
+
+
 def _scan_required_actor_ids(pory_text: str, map_json: dict) -> set[int]:
     """Every RMXP event id targeted by an object-command bare-integer literal
     (applymovement/setobjectxy/addobject/removeobject/turnobject, plus the
@@ -246,6 +264,7 @@ def _regenerate_map_json(
     fork: Path,
     required_actor_ids: dict[int, set[int]],
     trainer_battle_event_ids: dict[int, set[int]],
+    template_fields: dict[int, dict[int, dict]],
 ) -> None:
     """Re-run S5 wiring over the whole slice with the real converted page labels,
     so bodyless events become static objects. Warp pairing needs the full slice,
@@ -263,6 +282,17 @@ def _regenerate_map_json(
     off each map's own normalized-but-not-yet-pruned `.pory` text via
     `metadata_wiring.trainer_battle_event_ids`) gates the visible Trainer(N)
     -> sight-trainer conversion path (see `build_object_events`).
+
+    `template_fields` (Uranium map id -> event id -> `{"kind": "item_ball"|
+    "berry_tree", ...}`, from the per-map `.template_fields.json` sidecars —
+    CLAUDE.md §4.7: item balls/berry plants convert to the fork's NATIVE
+    object-event systems, not transpiled Ruby) is forwarded to
+    `build_slice_maps` verbatim; it assigns berry-tree save-slot ids ONCE
+    across the whole dict (see `metadata_wiring.assign_berry_tree_ids`). Every
+    `item`/`berry_item` ITEM_* constant in it is checked against the real
+    fork's symbol table (`fork_index.load_or_build().constants`, CLAUDE.md
+    §4.7 forward check) — reused here rather than re-implemented, exactly
+    like the reverse-gate index every other staging pass already builds on.
 
     Loads the live flag registry (`out/flag_state.json`) and forwards it to
     `build_slice_maps` so multi-page events gated on a global switch/var get a
@@ -292,6 +322,12 @@ def _regenerate_map_json(
     # Single instance, two consumers — they agree by construction (no cross-pass
     # id rebuild). See reference/guides/custom_route_interpreter.md.
     route_reg = RouteRegistry()
+    # The gate reads the fork's REAL symbol table (git HEAD of the vendored
+    # engine/, not the RPG2GBA_POKEEMERALD `fork` path above — that's a
+    # separate legacy pointer used elsewhere for the pre-cutover external
+    # clone, see CLAUDE.md §3 "The vendored engine"). Same index every other
+    # forward-check call site in this codebase builds on.
+    fork_constants = fork_index.load_or_build().constants
     mw.build_slice_maps(
         list(DEFAULT_SLICE),
         maps_dir=out / "maps",
@@ -310,6 +346,8 @@ def _regenerate_map_json(
         route_registry=route_reg,
         required_actor_ids=required_actor_ids,
         trainer_battle_event_ids=trainer_battle_event_ids,
+        template_fields=template_fields,
+        fork_constants=fork_constants,
     )
     flag_reg.save(flag_state_path)
     # Always write (empty → stub) so the engine #include resolves even with no
@@ -355,6 +393,7 @@ def main() -> int:
     normalized: dict[int, asm.NormalizeResult] = {}
     pory_labels: set[str] = set()
     event_traits: dict[int, dict[int, list[str]]] = {}
+    template_fields: dict[int, dict[int, dict]] = {}
     for map_id in DEFAULT_SLICE:
         pory_path = out / "scripts" / f"Map{map_id:03d}.pory"
         if consts.get(str(map_id)) is None or not pory_path.is_file():
@@ -363,6 +402,7 @@ def main() -> int:
         normalized[map_id] = norm
         pory_labels.update(asm.script_definitions(norm.text))
         event_traits[map_id] = _load_event_traits(out, map_id, pory_path)
+        template_fields[map_id] = _load_template_fields(out, map_id, pory_path)
 
     # Which of each map's Trainer(N) events actually generated a
     # `trainerbattle_*` call — the guard build_object_events needs to decide
@@ -387,7 +427,7 @@ def main() -> int:
     # per-map local-id tables (RMXP id -> compiled object-event local id) ---
     _regenerate_map_json(
         out, pory_labels, npc_gfx, npc_gfx_states, local_id_dir, event_traits,
-        fork, required_actor_ids, trainer_battle_event_ids,
+        fork, required_actor_ids, trainer_battle_event_ids, template_fields,
     )
 
     # --- pass 2: prune + report per requested map (reads the fresh map.json) ---

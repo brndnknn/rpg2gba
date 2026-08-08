@@ -679,13 +679,16 @@ def test_real_moki_town_shadow_terrain_tag_cells_now_blocked() -> None:
     reason="Map032 slice data not generated",
 )
 def test_real_moki_town_through_block_cells() -> None:
-    """collect_through_block_cells on the real Map032 finds exactly the 6 known
-    blank-graphic/through=False obstacle cells: 3 in-field invisible obstacles
-    plus 3 out-of-slice NO-EMIT door tiles that must stay walled off (nothing will
-    ever warp there, so the tile must not read as open ground)."""
+    """collect_through_block_cells on the real Map032 now contributes NO
+    cells (fix A): the 6 tiles a previous version of this test expected
+    blocked — 3 in-field blank-graphic script hosts plus 3 blank-graphic
+    out-of-slice NO-EMIT doors — are all blank-graphic events, and RMXP's
+    real passableEx? rule (021_Game_Character_v17.rb:118-124) never blocks
+    the PLAYER on a blank-graphic event, regardless of `through` or trigger.
+    The previous expectation encoded the inverted premise this fix corrects."""
     data = json.loads((_MAPS_DIR / "Map032.json").read_text(encoding="utf-8"))
     cells = mw.collect_through_block_cells(data)
-    assert cells == {(38, 47), (36, 18), (63, 44), (8, 43), (8, 44), (8, 45)}
+    assert cells == set()
 
 
 # --- map_constants -----------------------------------------------------------
@@ -1044,12 +1047,15 @@ def test_event_transfers_short_param_list_dest_dir_none() -> None:
     assert spec.dest_dir is None
 
 
-# --- fix #3: through=False blank-graphic obstacle blocking --------------------
+# --- fix A: RMXP's real player-passability rule (blank graphic never blocks) --
 
-def test_collect_through_block_cells_blank_and_through_false_any_trigger() -> None:
-    """A blank-graphic, through=False boot page is collected regardless of
-    trigger (action/touch/autorun/parallel all qualify — an invisible solid
-    obstacle blocks the tile no matter what its script does)."""
+def test_collect_through_block_cells_blank_and_through_false_never_blocks_any_trigger() -> None:
+    """A blank-graphic, through=False boot page contributes NO cell, regardless
+    of trigger (action/touch/autorun/parallel) — RMXP's passableEx? (021_
+    Game_Character_v17.rb:118-124) blocks the PLAYER only on a NON-blank
+    event.character_name; blank never blocks, `through` or trigger aside.
+    This is the exact shoreline-cancel-surf shape (Map033 EV143-EV147,
+    (43,11)-(47,11)): blank graphic, through=False, trigger=1 (player touch)."""
     map_json = {
         "map_id": 1,
         "events": [
@@ -1059,7 +1065,7 @@ def test_collect_through_block_cells_blank_and_through_false_any_trigger() -> No
             _event(4, 7, 7, [_page(trigger=4, through=False)]),  # parallel
         ],
     }
-    assert mw.collect_through_block_cells(map_json) == {(4, 4), (5, 5), (6, 6), (7, 7)}
+    assert mw.collect_through_block_cells(map_json) == set()
 
 
 def test_collect_through_block_cells_through_true_not_collected() -> None:
@@ -1073,14 +1079,23 @@ def test_collect_through_block_cells_through_true_not_collected() -> None:
 
 
 def test_collect_through_block_cells_graphic_bearing_event_not_collected() -> None:
-    """An event with a real graphic is excluded even if through=False — pokeemerald's
-    native object_event collision already blocks that tile (it becomes a real
-    object_event via build_object_events, not a phantom blocked_cells entry)."""
+    """A non-blank-graphic, through=False event is excluded from THIS
+    function's cell set — but it still blocks the player, via a different
+    mechanism: build_object_events places it as a real object_event, and
+    pokeemerald's native object_event collision blocks that tile on its own
+    (per the same RMXP rule: a non-blank event DOES block the player).
+    Stamping a manual blocked_cells entry here too would be redundant, not
+    additionally correct."""
     map_json = {
         "map_id": 1,
         "events": [_event(1, 4, 4, [_page(trigger=0, through=False, name="HGSS_000")])],
     }
     assert mw.collect_through_block_cells(map_json) == set()
+    consts = mc.MapConstantRegistry(Path("x")).mint(1, "Test Map")
+    result = mw.build_object_events(
+        map_json, consts, {1}, npc_gfx=_npc_gfx_fixture(),
+    )
+    assert (result.object_events[0].x, result.object_events[0].y) == (4, 4)
 
 
 def test_collect_through_block_cells_no_boot_page_contributes_nothing() -> None:
@@ -2067,6 +2082,118 @@ def test_build_object_events_terminal_hide_rock_reuses_pool_flag() -> None:
     assert by_x[2].flag == "FLAG_TEMP_11"  # EV005 (lower id) assigned first
     assert by_x[1].flag == "FLAG_TEMP_12"  # EV009 second — reused, not replaced
     assert reg.to_state()["hide_flags"] == {}
+
+
+# --- fix B: general self-switch-hide idiom -------------------------------------
+
+def _ss_cmd(letter: str, value: int = 0) -> dict:
+    """A code-123 RMXP "Control Self Switch" command. value=0 is ON."""
+    return {"code": 123, "indent": 0, "parameters": [letter, value]}
+
+
+def test_build_object_events_self_switch_hide_gets_self_switch_flag() -> None:
+    """The item-ball idiom (Map033 EV002/EV003/EV025/EV050 shape, and the real
+    Map021 EV017 fixture it's modeled on): page 1 is visible and sets self
+    switch A ON; page 2, gated purely on self switch A, is blank. The object
+    template's flag must be the SAME self-switch flag the transpiled script
+    already sets (`setflag(FLAG_MAP033_EVENT002_SSA)`), not the "0" null
+    sentinel — otherwise the sprite never despawns after the item is taken."""
+    reg = FlagRegistry()
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    ball = _event(2, 50, 7, [
+        _page(name="PU-POKEBALL", cmds=[_ss_cmd("A")]),
+        _page(cond=_self_cond("A"), name=""),
+    ])
+    map_json = {"map_id": 33, "events": [ball]}
+    result = mw.build_object_events(
+        map_json, consts, {33}, npc_gfx=_npc_gfx_fixture() | {"PU-POKEBALL": "OBJ_EVENT_GFX_ITEM_BALL"},
+        flag_registry=reg,
+    )
+    assert result.object_events[0].flag == "FLAG_MAP033_EVENT002_SSA"
+    assert reg.mint_self_switch(33, 2, "A") == "FLAG_MAP033_EVENT002_SSA"  # idempotent
+
+
+def test_build_object_events_self_switch_hide_no_match_keeps_default_flag() -> None:
+    """An event that doesn't match the idiom shape keeps the "0" default:
+    here, page 1 sets self switch A, but page 2 (gated on self switch A) has
+    a REAL graphic — not a hide, a costume change — so the rule must not
+    fire."""
+    reg = FlagRegistry()
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    costume = _event(9, 3, 3, [
+        _page(name="HGSS_000", cmds=[_ss_cmd("A")]),
+        _page(cond=_self_cond("A"), name="HGSS_005"),
+    ])
+    map_json = {"map_id": 33, "events": [costume]}
+    result = mw.build_object_events(
+        map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(), flag_registry=reg,
+    )
+    assert result.object_events[0].flag == "0"
+
+
+def test_build_object_events_self_switch_hide_no_self_switch_command_keeps_default() -> None:
+    """A page gated purely on self switch A with a blank graphic, but whose
+    boot page's script never actually sets self switch A ON, does not match
+    — nothing will ever flip that self switch, so reusing its flag would just
+    be a permanently-false, always-visible sentinel; "0" is the honest
+    default."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    event = _event(9, 3, 3, [
+        _page(name="HGSS_000"),  # no self-switch command at all
+        _page(cond=_self_cond("A"), name=""),
+    ])
+    map_json = {"map_id": 33, "events": [event]}
+    result = mw.build_object_events(
+        map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(),
+    )
+    assert result.object_events[0].flag == "0"
+
+
+def test_build_object_events_self_switch_hide_ambiguous_multiple_letters_fails_loud() -> None:
+    """Boot page sets self switches A and B ON; two DIFFERENT blank,
+    purely-self-switch-gated pages each qualify (one for A, one for B) —
+    which one actually despawns the sprite can't be resolved from the event
+    alone. Fail loud rather than guessing."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    event = _event(9, 3, 3, [
+        _page(name="HGSS_000", cmds=[_ss_cmd("A"), _ss_cmd("B")]),
+        _page(cond=_self_cond("A"), name=""),
+        _page(cond=_self_cond("B"), name=""),
+    ])
+    map_json = {"map_id": 33, "events": [event]}
+    with pytest.raises(ValueError):
+        mw.build_object_events(map_json, consts, {33}, npc_gfx=_npc_gfx_fixture())
+
+
+def test_build_object_events_self_switch_hide_yields_to_rock_trait() -> None:
+    """An event that independently matches BOTH the smashable_rock trait AND
+    the auto-detected self-switch-hide idiom gets ONE flag, and it's the
+    trait-assigned one: an object template has a single 'flag' field, and the
+    trait comes from an explicit upstream classification whose emitted script
+    already references that exact flag, whereas the self-switch rule only
+    infers intent from page shape. Explicit beats inferred — overwriting here
+    would desynchronise the script from its template.
+
+    Real case this pins: Uranium smashable rocks genuinely have the
+    self-switch-hide shape (smash once, flip self switch A, blank page 2) —
+    map 32 events 14/15/33. This used to raise, which aborted the whole slice
+    build; yielding reproduces exactly the flag those events carried before
+    the self-switch rule existed."""
+    reg = FlagRegistry()
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    event = _event(9, 3, 3, [
+        _page(name="HGSS_000", cmds=[_ss_cmd("A")]),
+        _page(cond=_self_cond("A"), name=""),
+    ])
+    map_json = {"map_id": 33, "events": [event]}
+    result = mw.build_object_events(
+        map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(), flag_registry=reg,
+        event_traits={9: ["smashable_rock"]},
+    )
+    (obj,) = result.object_events
+    # The rock pool's flag, NOT a FLAG_MAP033_EVENT009_SSA self-switch flag.
+    assert obj.flag.startswith("FLAG_TEMP_")
+    assert "SSA" not in obj.flag
 
 
 # --- resolve_terminal_hide_setflags -------------------------------------------
@@ -3065,6 +3192,301 @@ def test_warp_arrival_out_of_bounds_falls_back(caplog: pytest.LogCaptureFixture)
     assert len(resolved[49]) == 2  # B's warp (in-bounds) still gets its arrival
     assert resolved[49][0].dest_warp_id == 0  # fallback: B's return warp (index 0)
     assert "out of bounds" in caplog.text
+
+
+# --- native item ball / berry tree templates (template_fields sidecar) -------
+
+def _item_ball_tf(item: str = "ITEM_POTION", amount: int = 1) -> dict:
+    return {"kind": mw.TF_KIND_ITEM_BALL, "item": item, "amount": amount}
+
+
+def _berry_tree_tf(berry_item: str | None = "ITEM_ORAN_BERRY", planted: bool = True) -> dict:
+    return {"kind": mw.TF_KIND_BERRY_TREE, "berry_item": berry_item, "planted": planted}
+
+
+def _self_switch_item_ball_pages(name: str = "HGSS_000") -> list[dict]:
+    """Boot page gives the item + sets self switch A; page 2 is blank and
+    purely self-switch-A-gated — the exact Map033 item-ball shape
+    `_terminal_self_switch_hide_flags` detects (see its docstring)."""
+    return [
+        _page(name=name, cmds=[{"code": 123, "indent": 0, "parameters": ["A", 0]}]),
+        _page(name="", cond=_self_cond("A")),
+    ]
+
+
+def test_build_object_events_item_ball_fields() -> None:
+    """A kind="item_ball" template gets the fixed native fields: graphics_id,
+    script, route_id=item constant, movement_range_x=amount — and keeps the
+    hide flag `_terminal_self_switch_hide_flags` already assigns it."""
+    reg = FlagRegistry()
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {
+        "map_id": 33,
+        "events": [_event(2, 5, 5, _self_switch_item_ball_pages())],
+    }
+    result = mw.build_object_events(
+        map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(), flag_registry=reg,
+        template_fields={2: _item_ball_tf("ITEM_POTION", 3)},
+    )
+    (obj,) = result.object_events
+    assert obj.graphics_id == mw.ITEM_BALL_GFX
+    assert obj.script == mw.ITEM_BALL_SCRIPT
+    assert obj.route_id == "ITEM_POTION"
+    assert obj.movement_range_x == 3
+    assert obj.flag == mw.self_switch_flag_name(33, 2, "A")
+    assert obj.flag != "0"
+
+
+def test_build_object_events_item_ball_null_flag_fails_loud() -> None:
+    """An item_ball event that resolves to the "0" null flag is a fail-loud
+    error — STD_FIND_ITEM's last-talked-object flag write would be a no-op
+    and the ball would respawn forever."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {
+        "map_id": 33,
+        "events": [_event(2, 5, 5, [_page(name="HGSS_000")])],  # no hide idiom -> flag "0"
+    }
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(),
+            template_fields={2: _item_ball_tf()},
+        )
+
+
+def test_build_object_events_berry_tree_planted() -> None:
+    """A planted kind="berry_tree" template gets the fixed native fields:
+    graphics_id, script, movement_type, and its assigned save-slot route_id;
+    flag stays "0" (vanilla convention — visibility isn't flag-driven for
+    berry trees, growth state lives in the save array instead)."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {"map_id": 33, "events": [_event(100, 7, 7, [_page(name="HGSS_000")])]}
+    result = mw.build_object_events(
+        map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(),
+        template_fields={100: _berry_tree_tf("ITEM_ORAN_BERRY", True)},
+        berry_tree_ids={100: 90},
+    )
+    (obj,) = result.object_events
+    assert obj.graphics_id == mw.BERRY_TREE_GFX
+    assert obj.script == mw.BERRY_TREE_SCRIPT
+    assert obj.movement_type == mw.BERRY_TREE_MOVEMENT_TYPE
+    assert obj.route_id == "90"
+    assert obj.flag == "0"
+
+
+def test_build_object_events_berry_tree_bare_soil() -> None:
+    """A bare-soil berry_tree template (`berry_item=null`) still emits the
+    same native object shape — only the sidecar's own berry_item/planted
+    fields (consumed by the initial-save-state converter, not this module)
+    differ from the planted case."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {"map_id": 33, "events": [_event(101, 8, 8, [_page(name="HGSS_000")])]}
+    result = mw.build_object_events(
+        map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(),
+        template_fields={101: _berry_tree_tf(None, False)},
+        berry_tree_ids={101: 91},
+    )
+    (obj,) = result.object_events
+    assert obj.graphics_id == mw.BERRY_TREE_GFX
+    assert obj.route_id == "91"
+
+
+def test_build_object_events_berry_tree_blank_graphic_still_emits_object() -> None:
+    """Regression for the real Map033 EV101 shape: a bare-soil berry patch has
+    NO Uranium sprite at all (blank character_name, single unconditional
+    action-trigger page) — ordinary classification would read that as a
+    `bg_event` sign (or drop it), never an `object_event`. A template_fields
+    entry must win BEFORE that blank-graphic classification runs, since the
+    native berry tree system needs a real object_event to host its
+    growth-stage sprite (BERRY_STAGE_NO_BERRY renders the bare-soil look
+    natively — no RMXP sprite needed)."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {
+        "map_id": 33,
+        "events": [_event(101, 43, 11, [_page(trigger=mw.TRIGGER_ACTION, name="")])],
+    }
+    result = mw.build_object_events(
+        map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(),
+        template_fields={101: _berry_tree_tf(None, False)},
+        berry_tree_ids={101: 91},
+    )
+    assert result.bg_events == []
+    assert result.coord_events == []
+    (obj,) = result.object_events
+    assert obj.graphics_id == mw.BERRY_TREE_GFX
+    assert obj.script == mw.BERRY_TREE_SCRIPT
+    assert obj.route_id == "91"
+
+
+def test_build_object_events_berry_tree_self_switch_shape_stays_flag_zero() -> None:
+    """Regression for the real Map033 EV100/EV102 shape: a planted berry tree
+    whose boot page gives the berry once and sets self switch A, with page 2
+    self-switch-A-gated and blank — the EXACT item_ball hide idiom, but on a
+    berry event. `_terminal_self_switch_hide_flags` legitimately detects this
+    (it's shape-only, not kind-aware), but the match must NOT leak into the
+    berry tree's `flag` field — a native tree's pick/growth state lives in
+    its save slot, not a visibility flag, and hiding it on this flag would
+    make the tree vanish for reasons unrelated to its actual growth stage."""
+    reg = FlagRegistry()
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {
+        "map_id": 33,
+        "events": [_event(100, 43, 3, _self_switch_item_ball_pages("berrytreeORANBERRY"))],
+    }
+    result = mw.build_object_events(
+        map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(), flag_registry=reg,
+        template_fields={100: _berry_tree_tf()},
+        berry_tree_ids={100: 90},
+    )
+    (obj,) = result.object_events
+    assert obj.flag == "0"
+    # The self-switch-hide idiom DID match (sanity: proves this is testing
+    # the leak, not a vacuous case where the idiom never matched at all).
+    assert reg.mint_self_switch(33, 100, "A") == mw.self_switch_flag_name(33, 100, "A")
+
+
+def test_assign_berry_tree_ids_deterministic_map_then_event_order() -> None:
+    """Ids are assigned ascending by (map_id, event_id), independent of the
+    outer/inner dict's insertion order — and are STABLE across two separate
+    calls with the same input (CLAUDE.md §4.2 idempotence)."""
+    template_fields = {
+        48: {5: _berry_tree_tf()},
+        32: {200: _berry_tree_tf(), 10: _berry_tree_tf()},
+    }
+    ids_a = mw.assign_berry_tree_ids(template_fields)
+    ids_b = mw.assign_berry_tree_ids(template_fields)
+    assert ids_a == ids_b
+    assert ids_a[(32, 10)] == mw.BERRY_TREE_ID_FIRST
+    assert ids_a[(32, 200)] == mw.BERRY_TREE_ID_FIRST + 1
+    assert ids_a[(48, 5)] == mw.BERRY_TREE_ID_FIRST + 2
+
+
+def test_assign_berry_tree_ids_capacity_exceeded_fails_loud() -> None:
+    """More than BERRY_TREE_ID_CAPACITY berry_tree sidecar entries across the
+    slice is a fail-loud error, not silent id reuse/overflow."""
+    template_fields = {
+        1: {i: _berry_tree_tf() for i in range(mw.BERRY_TREE_ID_CAPACITY + 1)},
+    }
+    with pytest.raises(ValueError):
+        mw.assign_berry_tree_ids(template_fields)
+
+
+def test_build_object_events_berry_tree_missing_id_fails_loud() -> None:
+    """A berry_tree template entry with no matching berry_tree_ids assignment
+    is a caller-error fail-loud, not a silent route_id "0"."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {"map_id": 33, "events": [_event(100, 7, 7, [_page(name="HGSS_000")])]}
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(),
+            template_fields={100: _berry_tree_tf()},
+        )
+
+
+def test_build_object_events_template_fields_unknown_kind_fails_loud() -> None:
+    """A template_fields kind other than item_ball/berry_tree is forward-compat
+    unknown -> fail loud."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {"map_id": 33, "events": [_event(1, 4, 4, [_page(name="HGSS_000")])]}
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(),
+            template_fields={1: {"kind": "some_future_kind"}},
+        )
+
+
+def test_build_object_events_template_fields_missing_key_fails_loud() -> None:
+    """A payload missing a required key for its kind fails loud."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {"map_id": 33, "events": [_event(1, 4, 4, [_page(name="HGSS_000")])]}
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(),
+            template_fields={1: {"kind": mw.TF_KIND_ITEM_BALL, "item": "ITEM_POTION"}},
+        )
+
+
+def test_build_object_events_template_fields_amount_zero_fails_loud() -> None:
+    """item_ball 'amount' must be >= 1."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {"map_id": 33, "events": [_event(1, 4, 4, [_page(name="HGSS_000")])]}
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(),
+            template_fields={1: _item_ball_tf(amount=0)},
+        )
+
+
+def test_build_object_events_template_fields_nonexistent_fork_constant_fails_loud() -> None:
+    """An `item` naming a symbol absent from the fork's real constant table
+    (CLAUDE.md §4.7 forward check) fails loud — a sidecar value is never
+    proof it's real (e.g. reference/uranium_id_map.json is known to carry
+    ITEM_*_BERRY constants that don't exist in the fork)."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {"map_id": 33, "events": [_event(1, 4, 4, [_page(name="HGSS_000")])]}
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(),
+            template_fields={1: _item_ball_tf(item="ITEM_TOTALLY_MADE_UP")},
+            fork_constants={"ITEM_POTION"},  # real-fork stand-in that excludes the bogus name
+        )
+
+
+def test_build_object_events_template_fields_fork_constants_none_skips_check() -> None:
+    """`fork_constants=None` (legacy/unit-test path) skips the fork check but
+    still validates shape."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {"map_id": 33, "events": [_event(1, 4, 4, _self_switch_item_ball_pages())]}
+    reg = FlagRegistry()
+    result = mw.build_object_events(
+        map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(), flag_registry=reg,
+        template_fields={1: _item_ball_tf(item="ITEM_TOTALLY_MADE_UP")},
+        fork_constants=None,
+    )
+    (obj,) = result.object_events
+    assert obj.route_id == "ITEM_TOTALLY_MADE_UP"
+
+
+def test_build_object_events_template_fields_stale_reference_fails_loud() -> None:
+    """A template_fields sidecar entry for an event id that resolves to no
+    emitted object_event is a stale-sidecar error."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {"map_id": 33, "events": [_event(1, 4, 4, [_page(name="HGSS_000")])]}
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(),
+            template_fields={999: _item_ball_tf()},
+        )
+
+
+def test_build_object_events_template_fields_route_id_ownership_conflict_custom_route() -> None:
+    """An event with BOTH an encodable custom movement route AND a
+    template_fields claim on trainer_sight_or_berry_tree_id fails loud — one
+    field, one producer."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {
+        "map_id": 32,
+        "events": [_event(1, 1, 1, [_moving_page([2, 2, 3, 3])])],
+    }
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
+            route_registry=RouteRegistry(),
+            template_fields={1: _item_ball_tf()},
+        )
+
+
+def test_build_object_events_template_fields_none_is_legacy_noop() -> None:
+    """`template_fields=None` (default) is a no-op preserving current
+    ordinary-NPC behavior for an event that would otherwise match a kind
+    shape — nothing about it is special-cased without an explicit sidecar."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {"map_id": 33, "events": [_event(2, 5, 5, [_page(name="HGSS_000")])]}
+    result = mw.build_object_events(
+        map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(), template_fields=None,
+    )
+    (obj,) = result.object_events
+    assert obj.graphics_id == "OBJ_EVENT_GFX_URANIUM_HGSS_000"
+    assert obj.route_id == "0"
 
 
 # --- post-warp arrival facing --------------------------------------------------

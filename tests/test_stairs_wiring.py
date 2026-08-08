@@ -110,14 +110,18 @@ def test_collect_through_block_cells_excludes_stair_event() -> None:
     assert mw.collect_through_block_cells(map_json) == set()
 
 
-def test_collect_through_block_cells_blocks_real_obstacle_not_stair() -> None:
-    """A real invisible-obstacle event (blank graphic, through=false, no
-    stair script shape) alongside a stair event: only the obstacle's cell is
-    blocked, the stair cell is not."""
+def test_collect_through_block_cells_no_blank_event_blocks_regardless_of_stair() -> None:
+    """A blank-graphic, through=false event that ISN'T a stair (no stair
+    script shape) alongside a real stair event: neither contributes a cell.
+    Before fix A this test pinned the (buggy) claim that the non-stair
+    "obstacle" blocked the player; RMXP's real passableEx? rule
+    (021_Game_Character_v17.rb:118-124) never blocks the player on a
+    blank-graphic event, stair-shaped or not — so both are excluded, for the
+    same reason, not two different reasons."""
     obstacle = _event(1, 4, 4, [_page(trigger=0, through=False)])  # no stair shape
     stair = _event(2, 57, 9, [_stair_page([6, 7])])
     map_json = {"map_id": 49, "events": [obstacle, stair]}
-    assert mw.collect_through_block_cells(map_json) == {(4, 4)}
+    assert mw.collect_through_block_cells(map_json) == set()
 
 
 # --- collect_stair_behavior_cells ---------------------------------------------

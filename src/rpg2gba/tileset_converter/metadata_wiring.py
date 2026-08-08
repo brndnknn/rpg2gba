@@ -189,6 +189,54 @@ TRAIT_TERMINAL_HIDE = "terminal_hide"
 TRAIT_COLLAPSED_PAGES = "collapsed_pages"
 KNOWN_TRAITS = {TRAIT_SMASHABLE_ROCK, TRAIT_TERMINAL_HIDE, TRAIT_COLLAPSED_PAGES}
 
+
+# --- native item ball / berry tree templates (upstream transpile-driver sidecar,
+# `Map{id:03d}.template_fields.json` — see stage_slice_scripts.py) ------------
+#
+# CLAUDE.md §4.7: item balls and berry plants convert to the fork's NATIVE
+# object-event systems (engine/src/item_ball.c, engine/data/scripts/
+# berry_tree.inc) instead of transpiled Ruby — the engine already implements
+# both, so hand-transpiling their Ruby would be reinventing a system that
+# already exists. `kind: "item_ball"` / `kind: "berry_tree"` are the only two
+# discriminators; any other value is a forward-compat fail-loud error, exactly
+# like `KNOWN_TRAITS` above.
+TF_KIND_ITEM_BALL = "item_ball"
+TF_KIND_BERRY_TREE = "berry_tree"
+KNOWN_TEMPLATE_KINDS = {TF_KIND_ITEM_BALL, TF_KIND_BERRY_TREE}
+
+# engine/include/constants/event_objects.h (verified 2026-08-08: OBJ_EVENT_GFX_
+# ITEM_BALL=59, OBJ_EVENT_GFX_BERRY_TREE=60). Fixed engine constants, not
+# per-event data — never needs a fork_index lookup, unlike `item`/`berry_item`
+# below (per-event data straight from the sidecar).
+ITEM_BALL_GFX = "OBJ_EVENT_GFX_ITEM_BALL"
+BERRY_TREE_GFX = "OBJ_EVENT_GFX_BERRY_TREE"
+# engine/include/constants/event_object_movement.h:17.
+BERRY_TREE_MOVEMENT_TYPE = "MOVEMENT_TYPE_BERRY_TREE_GROWTH"
+# engine/data/scripts/item_ball_scripts.inc:1 / engine/data/scripts/berry_tree.inc:1
+# — native asm labels, not #define constants, so they're outside fork_index's
+# constants table (which only extracts #define/enum symbols) and are instead
+# verified by direct inspection of the vendored engine source.
+ITEM_BALL_SCRIPT = "Common_EventScript_FindItem"
+BERRY_TREE_SCRIPT = "BerryTreeScript"
+
+# Uranium-minted berry tree ids are RAW INTEGERS (as strings), not named
+# BERRY_TREE_* fork #defines. Vanilla names its ids for readability
+# (engine/include/constants/berry.h), but this pipeline already puts raw
+# integer strings in the very same `trainer_sight_or_berry_tree_id` field for
+# a sight trainer's radius (`trainer_route_id`, a plain `str(N)`) and for a
+# custom movement route (`RouteRegistry.intern`'s 1-based id) — so a raw int
+# needs no fork-side symbol at all, and consuming it here needs NO engine-side
+# change. `BERRY_TREE_ID_FIRST` starts past the fork's own named range
+# (1..89, berry.h) so a Uranium tree can never collide with a vanilla Hoenn
+# tree's save-slot if those maps are still compiled into the ROM alongside the
+# converted ones. `BERRY_TREES_COUNT` mirrors engine/include/constants/
+# berry.h:148 (`gSaveBlock1Ptr->berryTrees[BERRY_TREES_COUNT]`,
+# engine/include/global.h:1134) — the hard cap shared by vanilla AND Uranium
+# trees, since it's one save array for the whole ROM.
+BERRY_TREE_ID_FIRST = 90
+BERRY_TREES_COUNT = 128
+BERRY_TREE_ID_CAPACITY = BERRY_TREES_COUNT - BERRY_TREE_ID_FIRST  # 38
+
 # Vanilla obstacle-flag convention (event_object_movement.c SetHideObstacleFlag /
 # GraniteCave_B2F/map.json): smashable rocks get FLAG_TEMP_11..FLAG_TEMP_1F
 # assigned sequentially per map, ascending event-id order. `removeobject` does
@@ -1180,6 +1228,106 @@ def _validate_event_traits(event_traits: dict[int, list[str]], uid: int) -> None
                 )
 
 
+def _validate_template_fields(
+    template_fields: dict[int, dict], uid: int, fork_constants: set[str] | None
+) -> None:
+    """Fail loud (CLAUDE.md §4.5) on a `template_fields` sidecar entry that's
+    malformed, or that names an `item`/`berry_item` ITEM_* constant the fork
+    doesn't actually define.
+
+    `fork_constants`, when given (the `fork_index.ForkIndex.constants` set —
+    see `build_object_events`'s docstring), gates every `item`/`berry_item`
+    value against the REAL fork (CLAUDE.md §4.7 forward check):
+    `reference/uranium_id_map.json` is known to carry at least five
+    `ITEM_*_BERRY` constants that don't exist in the fork, so a name arriving
+    via the sidecar is never treated as proof it's real. `None` skips the
+    fork check (unit-test/legacy path) but still validates shape."""
+    for eid, payload in template_fields.items():
+        kind = payload.get("kind")
+        if kind not in KNOWN_TEMPLATE_KINDS:
+            raise ValueError(
+                f"map {uid} EV{eid:03d}: unknown template_fields kind {kind!r} "
+                f"(known kinds: {sorted(KNOWN_TEMPLATE_KINDS)})"
+            )
+        if kind == TF_KIND_ITEM_BALL:
+            item = payload.get("item")
+            amount = payload.get("amount")
+            if not isinstance(item, str) or not item:
+                raise ValueError(
+                    f"map {uid} EV{eid:03d}: item_ball missing/invalid 'item' "
+                    f"(expected a non-empty ITEM_* constant string)"
+                )
+            if not isinstance(amount, int) or isinstance(amount, bool) or amount < 1:
+                raise ValueError(
+                    f"map {uid} EV{eid:03d}: item_ball 'amount' must be an int "
+                    f">= 1, got {amount!r}"
+                )
+            if fork_constants is not None and item not in fork_constants:
+                raise ValueError(
+                    f"map {uid} EV{eid:03d}: item_ball item {item!r} is not a "
+                    f"real fork ITEM_* constant (engine/include/constants/items.h)"
+                )
+        elif kind == TF_KIND_BERRY_TREE:
+            if "berry_item" not in payload:
+                raise ValueError(
+                    f"map {uid} EV{eid:03d}: berry_tree missing 'berry_item' key"
+                )
+            berry_item = payload["berry_item"]
+            planted = payload.get("planted")
+            if not isinstance(planted, bool):
+                raise ValueError(
+                    f"map {uid} EV{eid:03d}: berry_tree 'planted' must be a "
+                    f"bool, got {planted!r}"
+                )
+            if berry_item is not None:
+                if not isinstance(berry_item, str) or not berry_item:
+                    raise ValueError(
+                        f"map {uid} EV{eid:03d}: berry_tree 'berry_item' must "
+                        f"be a non-empty ITEM_*_BERRY constant string, or null"
+                    )
+                if fork_constants is not None and berry_item not in fork_constants:
+                    raise ValueError(
+                        f"map {uid} EV{eid:03d}: berry_tree berry_item "
+                        f"{berry_item!r} is not a real fork ITEM_*_BERRY "
+                        f"constant (engine/include/constants/items.h)"
+                    )
+
+
+def assign_berry_tree_ids(
+    template_fields: dict[int, dict[int, dict]],
+) -> dict[tuple[int, int], int]:
+    """Deterministic, STABLE save-slot ids for every `kind="berry_tree"` sidecar
+    entry across the WHOLE slice (`build_slice_maps`' outer `template_fields`
+    dict: Uranium map id -> event id -> payload).
+
+    One shared save array backs every berry tree in the ROM
+    (`gSaveBlock1Ptr->berryTrees[BERRY_TREES_COUNT]`, engine/include/
+    global.h:1134), so ids must be globally unique and assigned in a fixed
+    order independent of whatever order the caller's dicts happen to iterate
+    in — sorted ascending by `(map_id, event_id)`, mirroring this module's
+    other budget-pool assignments (`_assign_visibility_flags`). Re-running
+    with the SAME template_fields input always produces the SAME ids
+    (CLAUDE.md §4.2 idempotence).
+
+    Fails loud (CLAUDE.md §4.5) if the count exceeds `BERRY_TREE_ID_CAPACITY`
+    (the reserved `BERRY_TREE_ID_FIRST..BERRY_TREES_COUNT-1` band — see its
+    module comment for why the band starts past the fork's own named ids)."""
+    pairs = sorted(
+        (uid, eid)
+        for uid, events in template_fields.items()
+        for eid, payload in events.items()
+        if payload.get("kind") == TF_KIND_BERRY_TREE
+    )
+    if len(pairs) > BERRY_TREE_ID_CAPACITY:
+        raise ValueError(
+            f"{len(pairs)} berry_tree template_fields entries exceed the "
+            f"reserved id band {BERRY_TREE_ID_FIRST}..{BERRY_TREES_COUNT - 1} "
+            f"capacity ({BERRY_TREE_ID_CAPACITY}) — engine/include/constants/"
+            f"berry.h BERRY_TREES_COUNT={BERRY_TREES_COUNT}"
+        )
+    return {pair: BERRY_TREE_ID_FIRST + i for i, pair in enumerate(pairs)}
+
+
 def _assign_visibility_flags(
     rock_ids: list[int], actor_ids: list[int], uid: int
 ) -> dict[int, str]:
@@ -1271,48 +1419,159 @@ def _visibility_transition_lines(
     return lines, False
 
 
+# Code-123 RMXP "Control Self Switch" command (mirrors
+# conversion_agent.transpiler.CONTROL_SELF_SWITCH's literal — kept as a local
+# constant rather than an import so this module doesn't reach across into the
+# transpiler for a single value). Parameters are `[letter: str, value: int]`;
+# value 0 means ON.
+_CONTROL_SELF_SWITCH_CODE = 123
+_SELF_SWITCH_ON = 0
+
+
+def _self_switch_letters_set_on(page: dict) -> set[str]:
+    """Letters this page's raw RMXP command `list` turns ON via a direct
+    code-123 "Control Self Switch" command, found anywhere in the list.
+    Nesting/indent doesn't matter — this is a conservative "could this page
+    set it" scan, not a control-flow simulation (a switch set inside an `if`
+    branch still counts; the branch condition isn't evaluated)."""
+    letters: set[str] = set()
+    for cmd in page.get("list", []):
+        if cmd.get("code") != _CONTROL_SELF_SWITCH_CODE:
+            continue
+        params = cmd.get("parameters") or []
+        if len(params) < 2 or not isinstance(params[0], str):
+            continue
+        if params[1] == _SELF_SWITCH_ON:
+            letters.add(params[0])
+    return letters
+
+
+def _terminal_self_switch_hide_flags(
+    objects: list[dict], uid: int, flag_registry: FlagRegistry | None
+) -> dict[int, str]:
+    """General "event hides itself via self switch" idiom (fix B, boot-walk
+    finding — Map033 item balls EV002/EV003/EV025/EV050: page 1 gives an item
+    and sets self switch A; page 2, gated purely on self switch A, has a
+    blank graphic). Once the boot page's script runs, RMXP's page selection
+    (highest-index page whose condition holds) permanently shows that blank
+    page instead of the sprite. pokeemerald has no "become blank" template
+    state — the object must instead DESPAWN, via the SAME self-switch flag
+    the transpiled script already sets (`_page_condition_terms` /
+    `self_switch_flag_name` / `FlagRegistry.mint_self_switch`) at exactly the
+    right moment — reusing it is free; minting a second flag would be both
+    wasteful and wrong (the script never sets a second flag to clear).
+
+    Matches an event when:
+      * its BOOT page (`select_boot_page`) sets some self-switch letter(s)
+        ON via a direct code-123 command (`_self_switch_letters_set_on`);
+      * exactly one OTHER page is gated PURELY on one of those letters (no
+        switch1/switch2/variable gate alongside it) AND has a blank graphic.
+
+    Returns `{event_id: flag_name}` only for events that match unambiguously;
+    every other event is left for the caller's "0" default — this function
+    never assigns "0" itself.
+
+    Fails loud (`ValueError`, CLAUDE.md §4.5) when more than one page (or
+    more than one distinct letter) qualifies as a blank, purely
+    self-switch-gated terminal page for the same event: which page really
+    despawns the object can't be resolved from the event alone, and
+    guessing risks despawning the wrong thing or missing the real one."""
+    result: dict[int, str] = {}
+    for event in objects:
+        eid = event["id"]
+        boot = select_boot_page(event)
+        if boot is None:
+            continue
+        onset_letters = _self_switch_letters_set_on(boot)
+        if not onset_letters:
+            continue
+        matches: list[tuple[dict, str]] = []
+        for page in event["pages"]:
+            if page is boot:
+                continue
+            cond = page["condition"]
+            if not cond.get("self_switch_valid"):
+                continue
+            if cond.get("switch1_valid") or cond.get("switch2_valid") or cond.get("variable_valid"):
+                continue  # not a PURE self-switch gate
+            letter = cond.get("self_switch_ch")
+            if letter not in onset_letters:
+                continue
+            name = page.get("graphic", {}).get("character_name") or ""
+            if name:
+                continue  # a visible terminal page is a real state change, not a hide
+            matches.append((page, letter))
+        if not matches:
+            continue
+        distinct_letters = {letter for _, letter in matches}
+        if len(matches) > 1 or len(distinct_letters) > 1:
+            raise ValueError(
+                f"map {uid} EV{eid:03d}: boot page sets self-switch(es) "
+                f"{sorted(onset_letters)} ON and {len(matches)} other "
+                f"page(s) (letters {sorted(distinct_letters)}) each qualify "
+                f"as a blank, purely self-switch-gated terminal page — "
+                f"ambiguous which one despawns this object; resolve by hand"
+            )
+        _, letter = matches[0]
+        flag = self_switch_flag_name(uid, eid, letter)
+        if flag_registry is not None:
+            flag_registry.mint_self_switch(uid, eid, letter)
+        result[eid] = flag
+    return result
+
+
 def collect_through_block_cells(map_json: dict) -> set[tuple[int, int]]:
-    """RMXP's blank-graphic + `through == False` invisible-obstacle idiom (fix #3):
-    cells (x, y) of events whose BOOT page has a blank graphic and `through` is
-    False, regardless of trigger. This is purely the tile-BLOCKING half of what such
-    an event is — the script/trigger behavior for the same events is unchanged,
-    already handled by `build_object_events`'s bg-sign / coord-trigger / drop
-    classification (this function adds no new classification, just a coordinate
-    set for the layout pass to stamp collision on).
+    """RMXP's real player-passability rule for events (fix A, boot-walk
+    finding — Route 1's shoreline cancel-surf triggers Map033 EV143-EV147
+    reading as solid walls, (43,11)-(47,11)): `Game_Character#passableEx?`
+    (`reference/scripts_dump/021_Game_Character_v17.rb:118-124`) checks, for
+    each event on the destination tile with `through == False`::
+
+        return false if self != $game_player || event.character_name != ""
+
+    For the PLAYER (`self == $game_player`), the left operand is always
+    false, so the clause collapses to `event.character_name != ""` — the
+    OTHER event blocks the player only when it has a NON-BLANK graphic. A
+    blank-graphic event — through or not — NEVER blocks the player; that
+    branch only matters when `self` is another NPC event doing ITS OWN
+    passability check, which is irrelevant here (this function's whole
+    purpose is the PLAYER-collision cell set baked into the static layout,
+    consumed as `blocked_cells` by `layout.convert_layout`,
+    `layout.py:366-367`). Blank-graphic + `through == False` is in fact the
+    canonical Essentials way to place a touch-trigger with ZERO player
+    collision (a script host, not an obstacle) — the previous version of
+    this function had the rule backwards and blocked every one of them.
+
+    A non-blank-graphic event with `through == False` DOES block the player
+    per the same rule — but it's already placed as a real `object_event` by
+    `build_object_events` (bg-sign / coord-trigger / drop classification
+    doesn't apply to it; it gets an actual sprite), and pokeemerald's native
+    object_event collision blocks that tile on its own. Stamping it again
+    here would be redundant, so it's still excluded — same as before the fix,
+    just no longer the load-bearing half of the rule.
+
+    Net effect: this function no longer contributes any cells from ordinary
+    RMXP event blocking (neither branch above adds one) — RMXP genuinely
+    never uses a blank invisible sprite to block the player; every case that
+    LOOKED like it did (working warp doors, out-of-slice NO-EMIT doors, the
+    Map033 EV101 empty berry-soil patch) was this same inverted premise, not
+    a real RMXP mechanic. The Map033 EV101 case is a KNOWN, ACCEPTED
+    regression for now — a genuinely solid empty berry-soil patch that reads
+    passable until a separate wave converts Uranium berry plants to native
+    pokeemerald berry trees (real object-event collision restores there).
+    Deliberately NOT special-cased here.
 
     Reuses `select_boot_page` and the same blank-graphic predicate
     (`not character_name`) `build_object_events` uses, so the two can never
-    disagree about which page an event shows at boot or what counts as "blank"
-    (CLAUDE.md §4.3 — one notion of blank graphic / boot page, not two).
+    disagree about which page an event shows at boot or what counts as
+    "blank" (CLAUDE.md §4.3 — one notion of blank graphic / boot page).
 
-    Events WITH a graphic are excluded even when `through` is False: pokeemerald's
-    native object_event collision already blocks that tile, so stamping it again
-    would be redundant (and such an event is placed as a real object_event, not a
-    phantom obstacle, by `build_object_events`).
-
-    A working (in-slice) warp door is ALSO blank-graphic + `through == False` at
-    boot, matching this same predicate — but its tile must stay enterable
-    (`convert_layout`'s `warp_overrides` already gives it the correct
-    walkable/warp-behavior metatile). This function does NOT special-case that: an
-    out-of-slice door (NO-EMIT, `classify_event`'s "skip") matches the identical
-    predicate and correctly SHOULD stay blocked (nothing will ever warp there, so
-    it must not read as open ground into unconverted territory) — and there is no
-    slice-independent way to tell the two apart from an event dict alone. The
-    caller is responsible for excluding real warp coords (its own `warp_overrides`
-    set) from the result before handing it to `convert_layout` as `blocked_cells`
-    (see `scripts/assemble_pathfinder.py::run_layout_pass`); `convert_layout`
-    itself still fails loud if that subtraction was missed.
-
-    Diagonal-stair events (`stairs.stair_event_ids`) are excluded here too, even
-    though they match the same blank-graphic/through=false predicate. In RMXP
-    the stair cell is solid ON PURPOSE — the player bumps into it and a script
-    force-moves them diagonally. Under the approved fix (CLAUDE.md-adjacent
-    decision, see `stairs.py`) that script is dropped entirely in favor of the
-    engine's native sideways-stairs metatile behavior, which only redirects a
-    step on a PASSABLE tile — so treating a stair event as an invisible
-    obstacle here would force the cell BLOCKED and re-create the exact
-    shipped-ROM bug this function exists to help fix (Route 1's staircases
-    reading as solid walls, Map033 (57,9)/(57,10)/(57,11))."""
+    Diagonal-stair events (`stairs.stair_event_ids`) are excluded up front
+    too, for symmetry with `build_object_events` (which also skips them via
+    `DROP_STAIR`) even though, under the corrected rule, they would never
+    have contributed a cell anyway — kept so this function's exclusion set
+    still lines up 1:1 with `build_object_events`'s, not because removing it
+    would change behavior."""
     stair_ids = stair_event_ids(map_json)
     cells: set[tuple[int, int]] = set()
     for event in map_json["events"]:
@@ -1321,12 +1580,14 @@ def collect_through_block_cells(map_json: dict) -> set[tuple[int, int]]:
         page = select_boot_page(event)
         if page is None:
             continue
-        name = page.get("graphic", {}).get("character_name") or ""
-        if name:
-            continue
         if page["through"]:
             continue
-        cells.add((event["x"], event["y"]))
+        name = page.get("graphic", {}).get("character_name") or ""
+        if not name:
+            continue  # blank graphic: never blocks the player (see docstring)
+        # Non-blank + through=False DOES block the player, but it's already
+        # a real object_event with native collision elsewhere — no cell added.
+        continue
     return cells
 
 
@@ -1448,6 +1709,9 @@ def build_object_events(
     required_actor_ids: set[int] | None = None,
     trainer_battle_event_ids: set[int] | None = None,
     stripped_event_ids: dict[int, str | None] | None = None,
+    template_fields: dict[int, dict] | None = None,
+    berry_tree_ids: dict[int, int] | None = None,
+    fork_constants: set[str] | None = None,
 ) -> ObjectBuildResult:
     """Place every non-warp, non-skipped event per its BOOT-STATE page (RMXP shows
     the highest-index page whose condition holds at boot; `npc_gfx.select_boot_page`).
@@ -1570,7 +1834,47 @@ def build_object_events(
     means no strips for this call, matching `event_traits`' legacy
     semantics — this function never reaches for the reference file itself;
     `build_slice_maps` is where a caller that passes nothing still gets
-    `reference/strip_list.json` honored (see its docstring)."""
+    `reference/strip_list.json` honored (see its docstring).
+
+    `template_fields` (event id -> `{"kind": "item_ball"|"berry_tree", ...}`,
+    from the transpile driver's `Map{id:03d}.template_fields.json` sidecar —
+    see the module comment above `TF_KIND_ITEM_BALL`) converts an event
+    STRAIGHT to a native pokeemerald object template instead of the ordinary
+    NPC/trainer/movement resolution path: an `item_ball` gets
+    `graphics_id=OBJ_EVENT_GFX_ITEM_BALL`, `script=Common_EventScript_
+    FindItem`, `route_id` = the sidecar's ITEM_* constant, `movement_range_x`
+    = its amount, and the SAME hide flag `_terminal_self_switch_hide_flags`
+    already assigns it (STD_FIND_ITEM sets the last-talked object's own `flag`
+    on pickup — reusing it is the whole point; a resolved "0" flag is a
+    fail-loud error, since the ball would then respawn forever). A
+    `berry_tree` gets `graphics_id=OBJ_EVENT_GFX_BERRY_TREE`,
+    `script=BerryTreeScript`, `movement_type=MOVEMENT_TYPE_BERRY_TREE_GROWTH`,
+    `route_id` = its `berry_tree_ids[event_id]` save-slot id (see
+    `assign_berry_tree_ids` — must be precomputed over the WHOLE slice's
+    template_fields and passed in via `berry_tree_ids`; a berry_tree entry
+    with no matching `berry_tree_ids` entry is a fail-loud caller error, not
+    silently skipped), and `flag="0"` ALWAYS — never the shared
+    `template_flags` pool, even when the event's own RMXP shape happens to
+    also match the self-switch-hide idiom (real corpus case: Map033
+    EV100/EV102 give their berry once, then self-switch to a blank page —
+    exactly the item_ball shape, but on a berry event). A native tree's
+    pick/growth state lives entirely in its save slot, never in the object
+    template's visibility flag (vanilla convention — every berry tree in
+    engine/data/maps/Route102/map.json carries `"flag": "0"`).
+
+    A template event whose boot page ALSO independently resolves a
+    `trainer_sight_or_berry_tree_id` claim — a visible battle Trainer(N)'s
+    sight radius, or an encodable custom movement route — fails loud: an
+    object template has only one such field (mirrors `ObjectEvent`'s
+    docstring / `__post_init__` guard). `fork_constants` (the `fork_index.
+    ForkIndex.constants` set), when given, gates every sidecar `item`/
+    `berry_item` value against the real fork (CLAUDE.md §4.7) — `None` skips
+    that specific check (unit-test/legacy path). Unknown kind, a malformed
+    payload, or a stale sidecar reference (an id with no emitted object
+    event) all fail loud (`_validate_template_fields`, and the stale-check
+    mirroring `event_traits`' below). `template_fields=None` (default) is a
+    legacy no-op — no template events, matching every other sidecar
+    parameter's convention here."""
     objects, _, _ = classify_map_events(map_json, slice_ids)
     uid = consts.uranium_id
     result = ObjectBuildResult()
@@ -1653,6 +1957,8 @@ def build_object_events(
                 f"{TRAIT_TERMINAL_HIDE!r} traits — an object template has only one "
                 f"'flag' field, so an event cannot be both"
             )
+    if template_fields is not None:
+        _validate_template_fields(template_fields, uid, fork_constants)
     vis_flags = _assign_visibility_flags(rock_ids, hidden_actor_ids, uid)
 
     # One flag per template, never two (CLAUDE.md §4.3): a terminal_hide event
@@ -1680,10 +1986,53 @@ def build_object_events(
             f"template, never two (this indicates a bug in the assignment "
             f"rule above, not bad input)"
         )
+
+    # General self-switch-hide idiom (fix B — see
+    # `_terminal_self_switch_hide_flags`'s docstring): auto-detected purely
+    # from event shape, independent of `event_traits`. An object template has
+    # only one 'flag' field, so when this rule matches an event that ALREADY
+    # has a flag from the rock/hidden-actor pool or a `terminal_hide` trait,
+    # exactly one source must win.
+    #
+    # PRECEDENCE: the trait-driven sources win; this rule yields.
+    #
+    # Those flags come from an EXPLICIT upstream classification (the
+    # transpiler recorded a trait for this event, and the emitted script is
+    # written against that specific flag — a smashable rock's `removeobject`
+    # / FLAG_TEMP_* pool entry, say). This rule, by contrast, INFERS intent
+    # from page shape alone. Explicit beats inferred: overriding a flag the
+    # emitted script already references would desynchronise script and
+    # template, which is strictly worse than declining to add one.
+    #
+    # This is a real overlap, not a pathological one — Uranium smashable
+    # rocks legitimately have the self-switch-hide shape (smash once, flip
+    # self switch A, blank page 2), e.g. map 32 events 14/15/33. Yielding
+    # here reproduces exactly the behaviour those events had before this
+    # rule existed. The only fidelity difference is respawn semantics
+    # (vanilla FLAG_TEMP_* rocks return on map reload; Uranium's self switch
+    # is permanent) — tracked as a separate question, deliberately NOT
+    # resolved by silently swapping the flag out from under the script.
+    selfswitch_hide_flags = _terminal_self_switch_hide_flags(objects, uid, flag_registry)
+    already_flagged = set(vis_flags) | set(hide_flags)
+    yielded = sorted(set(selfswitch_hide_flags) & already_flagged)
+    if yielded:
+        logger.info(
+            "map %d: event(s) %s match the self-switch-hide idiom but already "
+            "carry a smashable_rock/hidden-actor/terminal_hide template flag — "
+            "keeping the trait-assigned flag (explicit beats inferred)",
+            uid,
+            yielded,
+        )
+        selfswitch_hide_flags = {
+            eid: flag
+            for eid, flag in selfswitch_hide_flags.items()
+            if eid not in already_flagged
+        }
+
     # The single merged source of truth for "what flag does this event's
     # template carry" — used everywhere a flag is written (both placement
     # loops below) and by resolve_terminal_hide_setflags downstream.
-    template_flags: dict[int, str] = {**vis_flags, **hide_flags}
+    template_flags: dict[int, str] = {**vis_flags, **hide_flags, **selfswitch_hide_flags}
 
     def _drop(event_id: int, reason: str) -> None:
         result.drops.append((event_id, reason))
@@ -1744,6 +2093,103 @@ def build_object_events(
         name = graphic.get("character_name") or ""
         trigger = page.get("trigger")
         opacity = graphic.get("opacity", 255)
+
+        # Native item-ball/berry-tree template (CLAUDE.md §4.7 — converts to
+        # the fork's native systems, not transpiled Ruby). Intercepted HERE,
+        # before the blank-graphic/opacity/door-sheet classification below,
+        # because a bare-soil berry patch (`kind="berry_tree"`,
+        # `berry_item=null`) has NO Uranium sprite at all — RMXP shows
+        # nothing where there's no tree, but the native berry tree system
+        # still needs a REAL object_event to host its growth-stage sprite
+        # states (BERRY_STAGE_NO_BERRY renders as bare soil natively). Letting
+        # ordinary classification run first would drop such an event as a
+        # blank-graphic `bg`/`coord`/no-boot-page case (Map033 EV101 — see
+        # `collect_through_block_cells`'s docstring for the earlier, now
+        # superseded "known accepted regression" note about this exact
+        # event). So a template_fields entry always wins, unconditionally.
+        tf_payload = (template_fields or {}).get(eid)
+        if tf_payload is not None:
+            tf_kind = tf_payload["kind"]
+            route_claim_conflicts: list[str] = []
+            if trigger == TRIGGER_EVENT_TOUCH:
+                trainer_match = _TRAINER_NAME_RE.search(event.get("name") or "")
+                if (
+                    trainer_match and int(trainer_match.group(1)) >= 1
+                    and opacity != 0 and name
+                    and (trainer_battle_event_ids is None or eid in trainer_battle_event_ids)
+                ):
+                    route_claim_conflicts.append(
+                        f"visible Trainer({trainer_match.group(1)}) sight radius"
+                    )
+            probe_spec = movement_spec_for(page)
+            if probe_spec.route_bytecode is not None:
+                route_claim_conflicts.append("custom movement route (route_bytecode)")
+            if route_claim_conflicts:
+                raise ValueError(
+                    f"map {uid} EV{eid:03d}: trainer_sight_or_berry_tree_id "
+                    f"claimed by BOTH template_fields kind={tf_kind!r} AND "
+                    f"{', '.join(route_claim_conflicts)} — an object template "
+                    f"has only one such field"
+                )
+            if tf_kind == TF_KIND_ITEM_BALL:
+                flag = template_flags.get(eid, "0")
+                if flag == "0":
+                    raise ValueError(
+                        f"map {uid} EV{eid:03d}: item_ball resolved to the "
+                        f"null flag \"0\" — STD_FIND_ITEM's last-talked-object "
+                        f"flag write would be a no-op and the ball would "
+                        f"respawn forever"
+                    )
+                result.object_events.append(
+                    ObjectEvent(
+                        x=event["x"], y=event["y"],
+                        graphics_id=ITEM_BALL_GFX,
+                        script=ITEM_BALL_SCRIPT,
+                        flag=flag,
+                        movement_range_x=tf_payload["amount"],
+                        route_id=tf_payload["item"],
+                    )
+                )
+            elif tf_kind == TF_KIND_BERRY_TREE:
+                bid = (berry_tree_ids or {}).get(eid)
+                if bid is None:
+                    raise ValueError(
+                        f"map {uid} EV{eid:03d}: berry_tree template_fields "
+                        f"entry has no assigned save-slot id — precompute one "
+                        f"via assign_berry_tree_ids(...) over the WHOLE "
+                        f"slice's template_fields and pass berry_tree_ids="
+                    )
+                # ALWAYS "0", never `template_flags.get(eid, ...)`: unlike an
+                # item_ball (which genuinely needs STD_FIND_ITEM's
+                # last-talked-object flag write to despawn on pickup),
+                # a berry tree's growth/pick state lives entirely in its
+                # save-slot (`route_id`, the `berryTrees[]` entry) — the
+                # object template stays permanently visible (vanilla
+                # convention: engine/data/maps/Route102/map.json's berry
+                # trees all carry `"flag": "0"`). Some Uranium berry-plant
+                # events ALSO happen to match the self-switch-hide idiom
+                # (`_terminal_self_switch_hide_flags` — real corpus shape:
+                # Map033 EV100/EV102 give the berry once, then self-switch
+                # to a blank page) — that pool match must NOT leak into this
+                # field, or the native tree would vanish on a flag that has
+                # nothing to do with its growth stage.
+                result.object_events.append(
+                    ObjectEvent(
+                        x=event["x"], y=event["y"],
+                        graphics_id=BERRY_TREE_GFX,
+                        script=BERRY_TREE_SCRIPT,
+                        flag="0",
+                        movement_type=BERRY_TREE_MOVEMENT_TYPE,
+                        route_id=str(bid),
+                    )
+                )
+            else:
+                raise ValueError(
+                    f"map {uid} EV{eid:03d}: unknown template_fields kind "
+                    f"{tf_kind!r} (known kinds: {sorted(KNOWN_TEMPLATE_KINDS)})"
+                )
+            result.local_id_map[str(eid)] = len(result.object_events)
+            continue
 
         # Trainer(N) line-of-sight convention (see the module comment above
         # `_TRAINER_NAME_RE`): the name is only live when the SELECTED page is
@@ -2171,6 +2617,17 @@ def build_object_events(
                     f"hidden-actor classification) discarded its flag"
                 )
 
+    if template_fields is not None:
+        emitted_ids = {int(k) for k in result.local_id_map}
+        for eid in template_fields:
+            if eid not in emitted_ids:
+                raise ValueError(
+                    f"map {uid} EV{eid:03d}: template_fields sidecar references "
+                    f"this event but no object event was emitted for it (stale "
+                    f"sidecar, or the event was dropped/reclassified by "
+                    f"boot-page classification — re-run the transpile driver)"
+                )
+
     return result
 
 
@@ -2566,6 +3023,8 @@ def build_slice_maps(
     required_actor_ids: dict[int, set[int]] | None = None,
     trainer_battle_event_ids: dict[int, set[int]] | None = None,
     stripped_event_ids: dict[int, dict[int, str | None]] | None = None,
+    template_fields: dict[int, dict[int, dict]] | None = None,
+    fork_constants: set[str] | None = None,
 ) -> dict[int, set[tuple[int, int]]]:
     """Assemble map.json + dispatcher .pory for every slice map. Returns the per-map
     warp-source coords (S3 walkable-overrides) so S8 can force those cells walkable.
@@ -2623,10 +3082,26 @@ def build_slice_maps(
     whole-artifact strips, so a caller that simply doesn't know about this
     parameter yet must still get it honored, not silently skip it. Pass `{}`
     explicitly to opt out (e.g. an isolated unit test building a map.json
-    with no reference-file dependencies)."""
+    with no reference-file dependencies).
+
+    `template_fields` (Uranium map id -> that map's `build_object_events`
+    `template_fields` dict — event id -> `{"kind": "item_ball"|"berry_tree",
+    ...}`, from `Map{id:03d}.template_fields.json`) is forwarded per-map,
+    matching `event_traits`' legacy convention: a map absent from the outer
+    dict, or the dict itself being `None`, is legacy behavior for that map
+    (no template events). `berry_tree` ids are assigned ONCE up front, across
+    the WHOLE outer dict (`assign_berry_tree_ids` — see its docstring for why
+    a per-map assignment wouldn't be globally unique), then each map's slice
+    of the result is forwarded to its own `build_object_events` call.
+    `fork_constants` (the `fork_index.ForkIndex.constants` set), when given,
+    is forwarded unchanged to every `build_object_events` call for the
+    `item`/`berry_item` forward check (CLAUDE.md §4.7)."""
     if stripped_event_ids is None:
         stripped_event_ids = load_stripped_event_ids()
     slice_set = set(slice_ids)
+    berry_tree_ids = (
+        assign_berry_tree_ids(template_fields) if template_fields is not None else {}
+    )
     tilesets = (
         json.loads(tilesets_path.read_text(encoding="utf-8"))
         if tilesets_path is not None
@@ -2650,6 +3125,12 @@ def build_slice_maps(
         warp_events = resolved.get(uid, [])
         src_coords = {(s.src_x, s.src_y) for s in warp_lists[uid]}
         map_traits = event_traits.get(uid) if event_traits is not None else None
+        map_template_fields = (
+            template_fields.get(uid) if template_fields is not None else None
+        )
+        map_berry_ids = {
+            eid: bid for (buid, eid), bid in berry_tree_ids.items() if buid == uid
+        }
         passability = None
         if tilesets is not None:
             tileset_id = maps[uid]["tileset_id"]
@@ -2671,6 +3152,9 @@ def build_slice_maps(
             required_actor_ids=(required_actor_ids or {}).get(uid),
             trainer_battle_event_ids=(trainer_battle_event_ids or {}).get(uid),
             stripped_event_ids=stripped_event_ids.get(uid),
+            template_fields=map_template_fields,
+            berry_tree_ids=map_berry_ids,
+            fork_constants=fork_constants,
         )
         # Gated doors have no warp_event but still need the door metatile +
         # collision 0 on their cell, or the player can't step into the doorway

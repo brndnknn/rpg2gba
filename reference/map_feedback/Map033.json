@@ -2,18 +2,64 @@
   {
     "cells": [
       [
-        57,
-        9
+        43,
+        11
       ],
       [
-        57,
-        10
+        44,
+        11
       ],
       [
-        57,
+        45,
+        11
+      ],
+      [
+        46,
+        11
+      ],
+      [
+        47,
         11
       ]
     ],
-    "note": "These tiles are blocked. I don't understand why stairs would be blocked like this."
+    "note": "These tiles are impassable"
+  },
+  {
+    "cells": [
+      [
+        29,
+        7
+      ],
+      [
+        50,
+        7
+      ],
+      [
+        12,
+        9
+      ],
+      [
+        31,
+        30
+      ]
+    ],
+    "note": "The items on these tiles exist and when the player takes them they are added to the players bag but the pokeball sprite stays on the tile and the tile remains impassable"
+  },
+  {
+    "cells": [
+      [
+        62,
+        34
+      ],
+      [
+        62,
+        35
+      ],
+      [
+        62,
+        36
+      ]
+    ],
+    "note": "Okay so for these berries, the two on the outside spawn with sprites that show fully grown berries. When you press a the sprite changes to half grown. The middle spot doesn’t have a sprite but is impassable. The two on the outside remain impassable after you try to collect the berries and the sprite changes. If you walk to an area that puts these tiles out of the viewport they reset to the starting state. Also at no point does interacting with them result in berries being added to the players bag"
   }
 ]

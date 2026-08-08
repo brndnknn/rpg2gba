@@ -531,6 +531,101 @@ def test_transpile_corpus_traits_sidecar_idempotent(tmp_path: Path) -> None:
     assert sidecar_path.read_bytes() == first
 
 
+# ----------------------------------------------------------------------------
+# template_fields sidecar — item balls / berry trees (rpg2gba wave
+# 2026-08-08). Mirrors the traits-sidecar tests above: fixed schema, a
+# contract with a downstream consumer (metadata_wiring.py, owned by a
+# different agent). Uses the real reference/uranium_id_map.json and the real
+# fork index (same discipline the rock-smash sidecar tests above already
+# rely on for EventScript_RockSmash).
+# ----------------------------------------------------------------------------
+
+
+def _item_ball_commands(call: str = "Kernel.pbItemBall(::PBItems::POTION)") -> list[dict]:
+    return [
+        cmd(transpiler.CONDITIONAL_BRANCH, [12, call]),
+        cmd(transpiler.CONTROL_SELF_SWITCH, ["A", 0], indent=1),
+        cmd(transpiler.BRANCH_END),
+    ]
+
+
+def _berry_pregrown_commands(symbol: str = "ORANBERRY", qty: int = 2) -> list[dict]:
+    return [
+        cmd(transpiler.CONDITIONAL_BRANCH, [12, f"pbPickBerry(PBItems::{symbol},{qty})"]),
+        cmd(transpiler.CONTROL_SELF_SWITCH, ["A", 0], indent=1),
+        cmd(transpiler.BRANCH_END),
+    ]
+
+
+def _berry_soil_commands() -> list[dict]:
+    return [cmd(transpiler.SCRIPT, ["pbBerryPlant"])]
+
+
+def test_transpile_corpus_writes_template_fields_sidecar_for_item_ball(tmp_path: Path) -> None:
+    event = make_event(
+        [(0, _item_ball_commands()), (0, [])], id=2, name="EV002",
+    )
+    out_dir = _run_corpus(tmp_path, 33, [event])
+
+    sidecar_path = out_dir / "scripts" / "Map033.template_fields.json"
+    raw = sidecar_path.read_text(encoding="utf-8")
+    assert raw.endswith("\n")
+    assert json.loads(raw) == {
+        "events": {"2": {"kind": "item_ball", "item": "ITEM_POTION", "amount": 1}}
+    }
+    # No command-level lowering: an item ball claimed by the native detector
+    # never reaches the general transpiler or classify_ground_item, so its
+    # .pory text is empty and no giveitem/setflag body is emitted.
+    pory_text = (out_dir / "scripts" / "Map033.pory").read_text(encoding="utf-8")
+    assert "giveitem" not in pory_text
+    assert "EV002" not in pory_text
+    queue_raw = (out_dir / "transpile_unhandled.jsonl").read_text(encoding="utf-8")
+    assert queue_raw == ""
+
+
+def test_transpile_corpus_writes_template_fields_sidecar_for_berry_trees(
+    tmp_path: Path,
+) -> None:
+    pregrown = make_event(
+        [(0, _berry_pregrown_commands()), (0, _berry_soil_commands())],
+        id=100, name="BerryPlant",
+    )
+    bare_soil = make_event([(0, _berry_soil_commands())], id=101, name="BerryPlant")
+    out_dir = _run_corpus(tmp_path, 33, [pregrown, bare_soil])
+
+    sidecar_path = out_dir / "scripts" / "Map033.template_fields.json"
+    assert json.loads(sidecar_path.read_text(encoding="utf-8")) == {
+        "events": {
+            "100": {"kind": "berry_tree", "berry_item": "ITEM_ORAN_BERRY", "planted": True},
+            "101": {"kind": "berry_tree", "berry_item": None, "planted": False},
+        }
+    }
+    queue_raw = (out_dir / "transpile_unhandled.jsonl").read_text(encoding="utf-8")
+    assert queue_raw == ""
+
+
+def test_transpile_corpus_writes_empty_template_fields_sidecar_when_no_matches(
+    tmp_path: Path,
+) -> None:
+    event = make_event([(0, [])], id=1, name="PlainNPC")
+    out_dir = _run_corpus(tmp_path, 33, [event])
+
+    sidecar_path = out_dir / "scripts" / "Map033.template_fields.json"
+    assert json.loads(sidecar_path.read_text(encoding="utf-8")) == {"events": {}}
+
+
+def test_transpile_corpus_template_fields_sidecar_idempotent(tmp_path: Path) -> None:
+    event = make_event(
+        [(0, _item_ball_commands()), (0, [])], id=2, name="EV002",
+    )
+    out_dir = _run_corpus(tmp_path, 33, [event])
+    sidecar_path = out_dir / "scripts" / "Map033.template_fields.json"
+    first = sidecar_path.read_bytes()
+
+    _run_corpus(tmp_path, 33, [event])
+    assert sidecar_path.read_bytes() == first
+
+
 def test_transpile_corpus_resolves_switch_names_from_scratch(tmp_path: Path) -> None:
     """Regression: transpile_corpus must resolve a named Uranium switch to its
     deterministic FLAG_* on a completely FRESH run (no pre-existing
@@ -560,3 +655,182 @@ def test_transpile_corpus_resolves_switch_names_from_scratch(tmp_path: Path) -> 
 
     state = json.loads((out_dir / "flag_state.json").read_text(encoding="utf-8"))
     assert state["switches"]["2"] == "FLAG_GOT_POKEMON"
+
+
+# ----------------------------------------------------------------------------
+# transpile_unhandled.jsonl merge — a partial run must not truncate the
+# corpus-wide queue file (rpg2gba wave 2026-08-08, CLAUDE.md §4.2). See
+# transpile_driver._merge_queue / _load_existing_queue / _queue_sort_key.
+# ----------------------------------------------------------------------------
+
+
+def _unhandled_script_commands(text: str) -> list[dict]:
+    """A code-355 script-call row the transpiler has no idiom for — reliably
+    queues as unhandled (mirrors the real corpus's ``pbCaveExit``-style
+    rows)."""
+    return [cmd(transpiler.SCRIPT, [text])]
+
+
+def _run_corpus_in(
+    maps_dir: Path,
+    out_dir: Path,
+    overrides_dir: Path,
+    map_id: int,
+    events: list[dict],
+) -> dict:
+    """Like ``_run_corpus`` but reuses caller-supplied dirs across multiple
+    calls, so a second call can exercise a partial re-run against the first
+    call's on-disk state."""
+    (maps_dir / f"Map{map_id:03d}.json").write_text(
+        json.dumps({"map_id": map_id, "events": events}), encoding="utf-8"
+    )
+    return transpile_driver.transpile_corpus(
+        [map_id],
+        maps_dir=maps_dir,
+        out_dir=out_dir,
+        flag_state_path=out_dir / "flag_state.json",
+        map_constants_path=out_dir / "porymap" / "map_constants.json",
+        common_events=False,
+        overrides_dir=overrides_dir,
+    )
+
+
+def _queue_entries(out_dir: Path) -> list[dict]:
+    raw = (out_dir / "transpile_unhandled.jsonl").read_text(encoding="utf-8")
+    return [json.loads(line) for line in raw.splitlines() if line.strip()]
+
+
+def test_transpile_corpus_queue_partial_run_preserves_other_maps_entries(
+    tmp_path: Path,
+) -> None:
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir()
+    out_dir = tmp_path / "out"
+    overrides_dir = tmp_path / "empty_overrides"
+    overrides_dir.mkdir()
+
+    ev32 = make_event(
+        [(0, _unhandled_script_commands("pbSomeUnknownCall32"))], id=1, name="EV1"
+    )
+    ev33 = make_event(
+        [(0, _unhandled_script_commands("pbSomeUnknownCall33"))], id=1, name="EV1"
+    )
+    _run_corpus_in(maps_dir, out_dir, overrides_dir, 32, [ev32])
+    _run_corpus_in(maps_dir, out_dir, overrides_dir, 33, [ev33])
+
+    entries = _queue_entries(out_dir)
+    assert {e["map_id"] for e in entries} == {32, 33}
+
+    # Re-run ONLY map 33 — map 32's entries must survive untouched.
+    _run_corpus_in(maps_dir, out_dir, overrides_dir, 33, [ev33])
+    entries = _queue_entries(out_dir)
+    assert {e["map_id"] for e in entries} == {32, 33}
+    assert sum(1 for e in entries if e["map_id"] == 32) == 1
+    assert sum(1 for e in entries if e["map_id"] == 33) == 1
+
+
+def test_transpile_corpus_queue_rerun_replaces_not_duplicates(tmp_path: Path) -> None:
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir()
+    out_dir = tmp_path / "out"
+    overrides_dir = tmp_path / "empty_overrides"
+    overrides_dir.mkdir()
+
+    event = make_event(
+        [(0, _unhandled_script_commands("pbSomeUnknownCall"))], id=1, name="EV1"
+    )
+    _run_corpus_in(maps_dir, out_dir, overrides_dir, 33, [event])
+    _run_corpus_in(maps_dir, out_dir, overrides_dir, 33, [event])
+
+    entries = _queue_entries(out_dir)
+    assert len(entries) == 1
+    assert entries[0]["map_id"] == 33
+
+
+def test_transpile_corpus_queue_full_run_byte_identical(tmp_path: Path) -> None:
+    """Two full-corpus runs from identical inputs must write byte-identical
+    queue files (CLAUDE.md §4.2)."""
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir()
+    overrides_dir = tmp_path / "empty_overrides"
+    overrides_dir.mkdir()
+    ev32 = make_event(
+        [(0, _unhandled_script_commands("pbSomeUnknownCall32"))], id=1, name="EV1"
+    )
+    ev33 = make_event(
+        [(0, _unhandled_script_commands("pbSomeUnknownCall33"))], id=1, name="EV1"
+    )
+    (maps_dir / "Map032.json").write_text(
+        json.dumps({"map_id": 32, "events": [ev32]}), encoding="utf-8"
+    )
+    (maps_dir / "Map033.json").write_text(
+        json.dumps({"map_id": 33, "events": [ev33]}), encoding="utf-8"
+    )
+
+    def _run(out_dir: Path) -> bytes:
+        transpile_driver.transpile_corpus(
+            [32, 33],
+            maps_dir=maps_dir,
+            out_dir=out_dir,
+            flag_state_path=out_dir / "flag_state.json",
+            map_constants_path=out_dir / "porymap" / "map_constants.json",
+            common_events=False,
+            overrides_dir=overrides_dir,
+        )
+        return (out_dir / "transpile_unhandled.jsonl").read_bytes()
+
+    first = _run(tmp_path / "out1")
+    second = _run(tmp_path / "out2")
+    assert first == second
+    assert first != b""
+
+
+def test_transpile_corpus_queue_malformed_existing_file_fails_loud(
+    tmp_path: Path,
+) -> None:
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir()
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    overrides_dir = tmp_path / "empty_overrides"
+    overrides_dir.mkdir()
+    (out_dir / "transpile_unhandled.jsonl").write_text(
+        "not valid json\n", encoding="utf-8"
+    )
+    event = make_event([(0, [])], id=1, name="EV1")
+
+    with pytest.raises(ValueError, match="not valid JSON"):
+        _run_corpus_in(maps_dir, out_dir, overrides_dir, 33, [event])
+
+
+def test_transpile_corpus_queue_preserves_null_map_id_entries_on_partial_run(
+    tmp_path: Path,
+) -> None:
+    """Common-event-sourced rows (``map_id`` omitted, see ``QueueEntry.
+    to_json``) must survive a run that doesn't touch common events at all
+    (``common_events=False``, as every test in this module uses)."""
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir()
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    overrides_dir = tmp_path / "empty_overrides"
+    overrides_dir.mkdir()
+    ce_entry = {
+        "event_id": None,
+        "event_name": "SomeCommonEvent",
+        "page": 1,
+        "line": 0,
+        "command_code": 355,
+        "description": "script call: 'pbSomethingUnknown'",
+        "reason": "transpiler-unhandled",
+        "common_event_id": 10,
+    }
+    (out_dir / "transpile_unhandled.jsonl").write_text(
+        json.dumps(ce_entry) + "\n", encoding="utf-8"
+    )
+    event = make_event([(0, [])], id=1, name="EV1")
+
+    _run_corpus_in(maps_dir, out_dir, overrides_dir, 33, [event])
+
+    entries = _queue_entries(out_dir)
+    assert entries == [ce_entry]

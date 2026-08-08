@@ -167,6 +167,15 @@ def transpile_map(
             event_texts.append(override.text)
             continue
 
+        if transpiler.resolve_native_object_template(map_id, event, ctx):
+            # Item ball / berry tree: the native object-template fields (see
+            # Map{id:03d}.template_fields.json) are the whole story — no
+            # .pory block, no queue entry, same disposition as the
+            # diagonal-stair skip above. Recognized BEFORE the classifiers
+            # so deterministic.classify_ground_item (which already lowers
+            # bare pbItemBall to giveitem/setflag) never sees these events.
+            continue
+
         det = deterministic.try_deterministic(map_id, event, det_ctx)
         if det is not None:
             canonical_script = _canonicalize_labels(det.script, map_id, event)
@@ -235,6 +244,38 @@ def _write_traits_sidecar(
         f.write("\n")
 
 
+# -- native object-template sidecar (item balls / berry trees) ----------------
+
+
+def _map_template_fields_payload(ctx: transpiler.TranspileContext, map_id: int) -> dict:
+    """Build the ``Map{id:03d}.template_fields.json`` sidecar payload for one
+    map. Fixed schema — a contract with a downstream consumer
+    (metadata_wiring.py, owned by a different agent) that turns each row
+    into pokeemerald object-template fields: ``{"events": {"<event_id>":
+    {"kind": ..., ...}}}``. Written unconditionally, even when empty (the
+    consumer treats a missing file as fail-loud, same as the traits
+    sidecar)."""
+    events: dict[str, dict] = {
+        str(event_id): payload
+        for (m, event_id), payload in ctx.template_fields.items()
+        if m == map_id
+    }
+    return {"events": events}
+
+
+def _write_template_fields_sidecar(
+    scripts_dir: Path, map_id: int, ctx: transpiler.TranspileContext
+) -> None:
+    """Write ``Map{id:03d}.template_fields.json`` next to the map's ``.pory``
+    file, always (even with no matches) — see ``_map_template_fields_payload``.
+    ``sort_keys=True`` + a trailing newline for byte-identical re-runs
+    (CLAUDE.md §4.2 idempotence)."""
+    path = scripts_dir / f"Map{map_id:03d}.template_fields.json"
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(_map_template_fields_payload(ctx, map_id), f, indent=2, sort_keys=True)
+        f.write("\n")
+
+
 # -- species staging glue (W5 part B: pbHasSpecies? -> checkspecies) -----------
 
 
@@ -243,6 +284,15 @@ def _load_species_id_map(reference_dir: Path) -> dict[str, str]:
     source of truth (CLAUDE.md §4.3) — never re-derived by string-munging."""
     id_map = IdMap.load(reference_dir / "uranium_id_map.json")
     return dict(id_map.by_category["species"])
+
+
+def _load_item_id_map(reference_dir: Path) -> dict[str, str]:
+    """Uranium internal item/berry symbol -> ITEM_* constant, from the same
+    single source of truth (CLAUDE.md §4.3), for the item-ball/berry-tree
+    native object-template idioms only (see ``TranspileContext.item_id_map``
+    docstring — the generic give-item idiom uses a different table)."""
+    id_map = IdMap.load(reference_dir / "uranium_id_map.json")
+    return dict(id_map.by_category["items"])
 
 
 def _load_staged_species(species_manifest_path: Path) -> frozenset[str]:
@@ -271,6 +321,87 @@ def _registry_minted_names(registry: FlagRegistry) -> set[str]:
     for category in ("switches", "variables", "self_switches", "temp_switches", "hide_flags"):
         names |= set(state[category].values())
     return names
+
+
+# -- transpile_unhandled.jsonl merge (corpus-wide aggregate, CLAUDE.md §4.2) ---
+
+
+def _load_existing_queue(queue_path: Path) -> list[dict]:
+    """Read the existing ``transpile_unhandled.jsonl``, one JSON object per
+    line, tolerating a not-yet-existing file (first run).
+
+    Fails loud (CLAUDE.md §4.5) on a malformed line instead of silently
+    starting fresh — silently starting fresh is exactly the truncation bug
+    this merge exists to prevent, and a corrupt file is a signal something
+    already went wrong, not a green light to discard the rest of the corpus.
+    """
+    if not queue_path.is_file():
+        return []
+    entries: list[dict] = []
+    for line_no, line in enumerate(queue_path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"transpile_driver: {queue_path} line {line_no} is not valid "
+                f"JSON ({exc}) — refusing to silently start fresh (that would "
+                f"be the same data-loss bug this merge exists to prevent); fix "
+                f"or remove the bad line by hand and re-run"
+            ) from exc
+    return entries
+
+
+def _queue_bucket(entry: dict) -> int | None:
+    """The unit of replacement for a partial run: a map id, or ``None`` for
+    common-event entries. ``QueueEntry.to_json`` (transpiler.py) omits
+    ``map_id`` entirely for common-event rows in favor of
+    ``common_event_id``, since a common event isn't owned by any one map —
+    so those rows collapse into a single ``None`` bucket that a run only
+    touches when it actually recomputed common events this pass."""
+    return entry.get("map_id")
+
+
+def _queue_sort_key(entry: dict) -> tuple:
+    """Deterministic, stable ordering independent of insertion order
+    (CLAUDE.md §4.2) — a partial re-run that changes nothing semantically
+    must not reshuffle unrelated lines. Grouped by map_id first (``None`` /
+    common-event rows sort after every real map), then by common_event_id
+    (a common-event row's equivalent of map_id), then event_id, then the
+    record's own position fields (page, line, command_code), with
+    description as a last-resort tiebreak for the rare case two rows are
+    identical through command_code but differ in text."""
+    map_id = entry.get("map_id")
+    common_event_id = entry.get("common_event_id")
+    event_id = entry.get("event_id")
+    return (
+        map_id is None,
+        map_id if map_id is not None else 0,
+        common_event_id is None,
+        common_event_id if common_event_id is not None else 0,
+        event_id is None,
+        event_id if event_id is not None else 0,
+        entry.get("page", 0),
+        entry.get("line", 0),
+        entry.get("command_code", 0),
+        str(entry.get("description", "")),
+    )
+
+
+def _merge_queue(
+    queue_path: Path, touched_buckets: set[int | None], new_entries: list[dict]
+) -> list[dict]:
+    """Merge this run's queue entries into the existing on-disk file,
+    replacing only the buckets (maps, or the common-events bucket) this run
+    actually touched — every other map's entries survive untouched
+    (CLAUDE.md §4.2). ``new_entries`` must already be limited to
+    ``touched_buckets``; callers only pass what this run computed."""
+    existing = _load_existing_queue(queue_path)
+    preserved = [e for e in existing if _queue_bucket(e) not in touched_buckets]
+    merged = preserved + new_entries
+    merged.sort(key=_queue_sort_key)
+    return merged
 
 
 # -- corpus run loop -------------------------------------------------------------
@@ -386,6 +517,7 @@ def transpile_corpus(
         registry=registry,
         species=_load_species_id_map(reference_dir),
         staged_species=_load_staged_species(species_manifest_path),
+        item_id_map=_load_item_id_map(reference_dir),
     )
     det_ctx = deterministic.load_context(
         reference_dir=reference_dir, intermediate_dir=out_dir / "intermediate"
@@ -425,6 +557,11 @@ def transpile_corpus(
             if isinstance(entry, dict) and entry.get("states")
         }
     index = fork_index.load_or_build()
+    # Forward check (CLAUDE.md §4.7) for resolve_native_object_template: the
+    # id map is known to name ITEM_*_BERRY constants the fork doesn't
+    # define (ACAI/HAFLI/GUARA/CUPU/BACU) — reuse the same ForkIndex the
+    # gate below builds rather than a second symbol-resolution pass.
+    ctx.fork_item_constants = frozenset(index.constants)
     overrides = hand_overrides.load_hand_overrides(overrides_dir)
 
     map_texts: dict[int, str] = {}
@@ -523,18 +660,34 @@ def transpile_corpus(
         for map_id, text in map_texts.items():
             (scripts_dir / f"Map{map_id:03d}.pory").write_text(text, encoding="utf-8")
             _write_traits_sidecar(scripts_dir, map_id, ctx)
+            _write_template_fields_sidecar(scripts_dir, map_id, ctx)
         if ce_text is not None:
             (scripts_dir / "CommonEvents.pory").write_text(ce_text, encoding="utf-8")
 
     if write:
         # The queue file is corpus-scoped state (the chapter census reads it to
-        # tell "transpiles clean" from "never transpiled"), and a run rewrites it
-        # wholesale from just the maps it was given — so a --dry-run that wrote it
-        # would silently erase every other map's queue history. Keep it inside the
-        # write gate with the .pory and the registry (2026-08-05).
+        # tell "transpiles clean" from "never transpiled"), and a --dry-run that
+        # wrote it would silently erase every other map's queue history. Keep it
+        # inside the write gate with the .pory and the registry (2026-08-05).
+        #
+        # A run only ever computes entries for the maps it was given (plus
+        # common events, if it recomputed those this pass) — it must NOT
+        # clobber every other map's entries just because it wasn't asked to
+        # touch them (CLAUDE.md §4.2). _merge_queue replaces only the
+        # touched buckets and preserves the rest of the on-disk file.
         out_dir.mkdir(parents=True, exist_ok=True)
         queue_path = out_dir / "transpile_unhandled.jsonl"
-        queue_lines = [json.dumps(entry) for entry in all_queue]
+        touched_buckets: set[int | None] = set(map_ids)
+        if ce_text is not None:
+            # Common events aren't scoped to the requested maps — every run
+            # that processes them recomputes the WHOLE common_events.json,
+            # so the None bucket is safe to replace wholesale exactly when
+            # this run actually did that (ce_text is not None); otherwise
+            # (common_events=False, or no common_events.json yet) the prior
+            # common-event entries are left untouched.
+            touched_buckets.add(None)
+        merged_queue = _merge_queue(queue_path, touched_buckets, all_queue)
+        queue_lines = [json.dumps(entry) for entry in merged_queue]
         queue_path.write_text(
             "".join(f"{line}\n" for line in queue_lines), encoding="utf-8"
         )
