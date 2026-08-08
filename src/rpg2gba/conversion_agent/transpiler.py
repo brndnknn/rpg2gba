@@ -589,6 +589,17 @@ class TranspileContext:
     # stage_slice_scripts.py, owned by a different agent); don't rename.
     traits: dict[tuple[int, int], set[str]] = field(default_factory=dict)
 
+    # Events dropped whole by ``transpile_driver.transpile_map`` before ever
+    # reaching a classifier or this transpiler (currently: diagonal-stair
+    # "player touch" events superseded by the tileset layer's native
+    # MB_SIDEWAYS_STAIRS_* metatile behavior — see
+    # ``rpg2gba.tileset_converter.stairs``). These contribute NO .pory block
+    # and NO unhandled-queue entry, but CLAUDE.md §4.5 forbids a silent drop,
+    # so the driver records one row per skipped event here instead — visible
+    # to ``transpile_corpus``'s summary the same way ``traits``/queue entries
+    # are visible. Each row: {"map_id", "event_id", "event_name", "reason"}.
+    skipped_stair_events: list[dict] = field(default_factory=list)
+
     def record_trait(self, trait: str) -> None:
         """Record a trait on the event currently being transpiled. No-op in
         a common event (no owning event id to key by — see ``event_id``)."""

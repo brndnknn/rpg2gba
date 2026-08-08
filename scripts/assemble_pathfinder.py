@@ -195,8 +195,11 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
     # per map; source_tileset_of resolves the synthetic id back to the real RMXP
     # id for source art / passages / priorities / terrain tags (mirrors phase5's
     # walker path — phase5.py convert_all step 3).
+    from rpg2gba.tileset_converter.metadata_wiring import collect_stair_behavior_cells
+
     maps: list[tuple[int, dict]] = []
     synth_to_real: dict[int, int] = {}
+    stair_cells: dict[int, dict[tuple[int, int], str]] = {}
     for map_id in SLICE_MAP_IDS:
         map_json = json.loads(
             (out / "maps" / f"Map{map_id:03d}.json").read_text(encoding="utf-8")
@@ -206,6 +209,7 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
         synth_json = dict(map_json)  # shallow: only the top-level tileset_id changes
         synth_json["tileset_id"] = synth
         maps.append((map_id, synth_json))
+        stair_cells[map_id] = collect_stair_behavior_cells(map_json)
 
     build_slice_tilesets(
         maps,
@@ -215,6 +219,7 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
         overlay_out=Path("reference/tileset_map.gen.json"),
         tilesets_json=out / "tilesets.json",
         source_tileset_of=lambda s: synth_to_real[s],
+        stair_cells=stair_cells,
         dry_run=dry_run,
     )
 
@@ -234,7 +239,10 @@ def run_layout_pass(
     re-reading the cumulative staging layouts.json (see `run_fork_pass` docstring)."""
     logger.info("=== S8b: layout conversion ===")
     from rpg2gba.tileset_converter.layout import append_layouts, convert_layout
-    from rpg2gba.tileset_converter.metadata_wiring import collect_through_block_cells
+    from rpg2gba.tileset_converter.metadata_wiring import (
+        collect_stair_behavior_cells,
+        collect_through_block_cells,
+    )
     from rpg2gba.tileset_converter.tile_map import load_tile_map
 
     tile_map = load_tile_map(
@@ -265,6 +273,7 @@ def run_layout_pass(
             blocked_cells=blocked_cells,
             unblocked_cells=WALKABLE_OVERRIDES.get(map_id, frozenset()),
             tileset_key=synth_tileset_id(map_id),
+            behavior_overrides=collect_stair_behavior_cells(map_json),
         )
         entries.append(layout.to_layouts_entry())
 

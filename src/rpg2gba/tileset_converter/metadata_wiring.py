@@ -71,6 +71,7 @@ from .npc_gfx import (
 )
 from .route_bytecode import RouteRegistry
 from .route_sim import simulate_route
+from .stairs import StairSide, stair_cell_sides, stair_event_ids
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +162,7 @@ DROP_PARALLEL = "parallel"  # blank graphic, parallel trigger — map-script ter
 DROP_DOOR_SHEET = "door_sheet"  # visible graphic is a door-tile sheet (stripped)
 DROP_OPACITY0 = "opacity0"  # invisible (opacity 0) graphic, non-touch trigger
 DROP_STRIPPED = "stripped"  # explicit reference/strip_list.json map_events entry (CLAUDE.md §4.3)
+DROP_STAIR = "stair"  # diagonal-stair event — native metatile behavior replaces the script
 
 # Object-event traits (upstream transpile-driver sidecar, `Map{id:03d}.traits.json`
 # — see stage_slice_scripts.py). Any string outside KNOWN_TRAITS is a fail-loud
@@ -1299,9 +1301,23 @@ def collect_through_block_cells(map_json: dict) -> set[tuple[int, int]]:
     caller is responsible for excluding real warp coords (its own `warp_overrides`
     set) from the result before handing it to `convert_layout` as `blocked_cells`
     (see `scripts/assemble_pathfinder.py::run_layout_pass`); `convert_layout`
-    itself still fails loud if that subtraction was missed."""
+    itself still fails loud if that subtraction was missed.
+
+    Diagonal-stair events (`stairs.stair_event_ids`) are excluded here too, even
+    though they match the same blank-graphic/through=false predicate. In RMXP
+    the stair cell is solid ON PURPOSE — the player bumps into it and a script
+    force-moves them diagonally. Under the approved fix (CLAUDE.md-adjacent
+    decision, see `stairs.py`) that script is dropped entirely in favor of the
+    engine's native sideways-stairs metatile behavior, which only redirects a
+    step on a PASSABLE tile — so treating a stair event as an invisible
+    obstacle here would force the cell BLOCKED and re-create the exact
+    shipped-ROM bug this function exists to help fix (Route 1's staircases
+    reading as solid walls, Map033 (57,9)/(57,10)/(57,11))."""
+    stair_ids = stair_event_ids(map_json)
     cells: set[tuple[int, int]] = set()
     for event in map_json["events"]:
+        if event["id"] in stair_ids:
+            continue
         page = select_boot_page(event)
         if page is None:
             continue
@@ -1312,6 +1328,30 @@ def collect_through_block_cells(map_json: dict) -> set[tuple[int, int]]:
             continue
         cells.add((event["x"], event["y"]))
     return cells
+
+
+# Stair behavior-override kind strings (layout.convert_layout's
+# `behavior_overrides` parameter — see its docstring) — kept in ONE place so
+# no call site inlines the "stairs_left"/"stairs_right" literals (CLAUDE.md
+# §4.3). Distinct from `stairs.BEHAVIOR_BY_SIDE`, which maps to the engine's
+# MB_* metatile-behavior constant names, not these KIND keys.
+_STAIR_KIND_BY_SIDE: dict[StairSide, str] = {
+    StairSide.LEFT: "stairs_left",
+    StairSide.RIGHT: "stairs_right",
+}
+
+
+def collect_stair_behavior_cells(map_json: dict) -> dict[tuple[int, int], str]:
+    """{(x, y): "stairs_left" | "stairs_right"} for every diagonal-stair cell on
+    this map (`stairs.stair_cell_sides`) — the `behavior_overrides` input
+    `layout.convert_layout` stamps with the native sideways-stairs metatile
+    behavior and forces passable. Logs the per-map stair-cell count at INFO
+    (a conversion fact worth having in build logs, like every other
+    drop/placement summary in this module)."""
+    sides = stair_cell_sides(map_json)
+    map_id = map_json.get("map_id")
+    logger.info("map %s: %d diagonal-stair cell(s) found", map_id, len(sides))
+    return {xy: _STAIR_KIND_BY_SIDE[side] for xy, side in sides.items()}
 
 
 def _trainer_sight_ray(
@@ -1536,6 +1576,17 @@ def build_object_events(
     result = ObjectBuildResult()
     event_by_id = {e["id"]: e for e in map_json["events"]}
     objects_by_id = {e["id"]: e for e in objects}
+    # Diagonal-stair events (see `collect_through_block_cells`'s docstring)
+    # have no dialogue and no interaction under the native sideways-stairs
+    # path — they're pure geometry now, so they must not become object_events
+    # / bg_events / coord_events. Skipped BEFORE the placement loop below, the
+    # same way a `continue` for any other drop reason works: `local_id_map`
+    # only ever gets an entry from an actual `result.object_events.append`
+    # call, so an event that never reaches that call simply never occupies a
+    # slot — it does not shift or renumber any OTHER event's local id (the
+    # RMXP-id -> 1-based-position table this module hands to
+    # `write_local_id_tables`).
+    stair_ids = stair_event_ids(map_json)
 
     hidden_actor_ids: list[int] = []
     if required_actor_ids:
@@ -1640,6 +1691,9 @@ def build_object_events(
 
     for event in objects:
         eid = event["id"]
+        if eid in stair_ids:
+            _drop(eid, DROP_STAIR)
+            continue
         if stripped_event_ids is not None and eid in stripped_event_ids:
             expect_name = stripped_event_ids[eid]
             actual_name = event.get("name")

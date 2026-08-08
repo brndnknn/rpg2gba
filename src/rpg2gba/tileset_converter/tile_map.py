@@ -60,6 +60,11 @@ BLOCKED_ELEVATION = 0
 # optional in the schema, but a tile with no explicit entry needs a bucket.
 _SCHEMA = ("tilesets", "tiles")
 
+# Allowed "behavior_overrides" kinds (§stairs fix). One place to extend later —
+# e.g. "waterfall", "ice" — when the engine's other player-touch behaviors get
+# native support here.
+BEHAVIOR_KINDS = frozenset({"stairs_left", "stairs_right"})
+
 _MAX_METATILE = METATILE_ID_MASK  # 0x3FF — anything larger truncates in to_block
 _VALID_COLLISION = {0, 1, 2, 3}
 _MAX_ELEVATION = 0xF
@@ -146,6 +151,7 @@ class TileMap:
         warps: dict[int, WarpInfo] | None = None,
         atlas_max: dict[int, int] | None = None,
         terrain_tags: dict[int, list[int]] | None = None,
+        behavior_overrides: dict[int, dict[str, WarpInfo]] | None = None,
     ) -> None:
         self._tiles = tiles
         self._tilesets = tilesets
@@ -165,6 +171,15 @@ class TileMap:
             for ts, v in (warps or {}).items()
         }
         self._atlas_max = atlas_max or {}
+        # Per-tileset, per-kind behavior overrides (stairs fix). Same shape/
+        # normalization as `_warps`: a bare Metatile is fallback-only shorthand.
+        self._behavior_overrides: dict[int, dict[str, WarpInfo]] = {
+            ts: {
+                kind: (v if isinstance(v, WarpInfo) else WarpInfo({}, v))
+                for kind, v in by_kind.items()
+            }
+            for ts, by_kind in (behavior_overrides or {}).items()
+        }
 
     # --- resolution ---------------------------------------------------------
 
@@ -260,6 +275,43 @@ class TileMap:
 
     def has_warp(self, tileset_id: int) -> bool:
         return tileset_id in self._warps
+
+    def has_behavior_override(self, tileset_id: int, kind: str) -> bool:
+        return kind in self._behavior_overrides.get(tileset_id, {})
+
+    def behavior_for_column(
+        self, tileset_id: int, kind: str, key: tuple[tuple[int, int], ...] | None
+    ) -> Metatile:
+        """The behavior-stamped metatile for a specific column key (stairs fix,
+        mirrors `warp_for_column`): an exact match on ``key`` keeps that cell's real
+        art with the requested behavior (e.g. MB_SIDEWAYS_STAIRS_LEFT_SIDE);
+        otherwise the tileset/kind's fallback metatile is used (`key` None covers
+        empty/out-of-atlas cells). Always PASSABLE_COLLISION/PASSABLE_ELEVATION —
+        the engine's sideways-stairs redirect never fires on a blocked tile. Fails
+        loud (KeyError) if the tileset has no `behavior_overrides[kind]` entry, or
+        if neither the column nor a fallback resolves — a silent MB_NORMAL stair
+        tile is exactly the failure mode this must prevent."""
+        by_kind = self._behavior_overrides.get(tileset_id)
+        info = by_kind.get(kind) if by_kind else None
+        if info is None:
+            raise KeyError(
+                f"no behavior_override metatile(s) for tileset {tileset_id} kind "
+                f"{kind!r}; add a 'behavior_overrides' entry to "
+                f"{DEFAULT_TILE_MAP_PATH} or the stair cell will render MB_NORMAL"
+            )
+        if key is not None:
+            k = serialize_column_key(key)
+            if k in info.tiles:
+                t = info.tiles[k]
+                return Metatile(t.metatile_id, PASSABLE_COLLISION, PASSABLE_ELEVATION)
+        if info.fallback is not None:
+            f = info.fallback
+            return Metatile(f.metatile_id, PASSABLE_COLLISION, PASSABLE_ELEVATION)
+        k_repr = serialize_column_key(key) if key is not None else "None"
+        raise KeyError(
+            f"no behavior_override metatile for tileset {tileset_id} kind {kind!r} "
+            f"column {key!r} (serialized {k_repr!r}) and no fallback configured"
+        )
 
     def tileset_for(self, tileset_id: int) -> TilesetChoice:
         """The primary/secondary pokeemerald tileset for an Uranium tileset id (Q4)."""
@@ -382,6 +434,10 @@ def load_tile_map(
     }
     warps = {int(k): _parse_warp_entry(w) for k, w in raw.get("warps", {}).items()}
     atlas_max = {int(k): int(v) for k, v in raw.get("atlas_max", {}).items()}
+    behavior_overrides = {
+        int(ts_k): {kind: _parse_warp_entry(w) for kind, w in by_kind.items()}
+        for ts_k, by_kind in raw.get("behavior_overrides", {}).items()
+    }
 
     passages: dict[int, list[int]] = {}
     priorities: dict[int, list[int]] = {}
@@ -391,7 +447,10 @@ def load_tile_map(
             Path(passages_path), tilesets.keys(), source_tilesets
         )
 
-    return TileMap(tiles, tilesets, buckets, passages, priorities, warps, atlas_max, terrain_tags)
+    return TileMap(
+        tiles, tilesets, buckets, passages, priorities, warps, atlas_max, terrain_tags,
+        behavior_overrides,
+    )
 
 
 def _parse_warp_entry(w: dict) -> WarpInfo:
@@ -477,6 +536,21 @@ def _validate(raw: dict) -> None:
         if ts_k not in tileset_ids:
             raise ValueError(f"warps references tileset {ts_k} absent from 'tilesets'")
         _validate_warp_entry(f"warps[{ts_k}]", w)
+
+    for ts_k, by_kind in raw.get("behavior_overrides", {}).items():
+        if ts_k not in tileset_ids:
+            raise ValueError(
+                f"behavior_overrides references tileset {ts_k} absent from 'tilesets'"
+            )
+        if not isinstance(by_kind, dict):
+            raise ValueError(f"behavior_overrides[{ts_k}]: must be an object")
+        for kind, w in by_kind.items():
+            if kind not in BEHAVIOR_KINDS:
+                raise ValueError(
+                    f"behavior_overrides[{ts_k}]: unknown kind {kind!r}, must be one "
+                    f"of {sorted(BEHAVIOR_KINDS)}"
+                )
+            _validate_warp_entry(f"behavior_overrides[{ts_k}][{kind}]", w)
 
 
 def _validate_metatile_entry(where: str, e: dict) -> None:

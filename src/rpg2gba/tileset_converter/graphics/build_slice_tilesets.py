@@ -30,6 +30,14 @@ column key keep ``MB_NORMAL`` on their own (unmodified) metatile. One extra
 all-transparent door metatile is appended as the fallback, for warp coords
 whose column is empty or out-of-atlas. The layout converter looks up the
 right one per cell via ``tile_map.warp_for_column(tileset_id, key)``.
+
+Diagonal-stair cells (the ``stair_cells`` parameter, RMXP's "player touch"
+staircase idiom — see ``tileset_converter.stairs``) get the identical
+treatment, but keyed by (column key, KIND) since a stair needs one of two
+native sideways-stairs behaviors: one metatile per distinct (column, kind)
+pair, plus one transparent fallback metatile per kind actually used. Written
+to the overlay's ``behavior_overrides`` section; looked up via
+``tile_map.behavior_for_column(tileset_id, kind, key)``.
 """
 from __future__ import annotations
 
@@ -43,6 +51,7 @@ import numpy as np
 from PIL import Image
 
 from rpg2gba.tileset_converter.layout import TileGrid, column_key
+from rpg2gba.tileset_converter.stairs import BEHAVIOR_BY_SIDE, StairSide
 from rpg2gba.tileset_converter.terrain_tags import (
     TerrainTagTable,
     load_terrain_tag_map,
@@ -68,6 +77,21 @@ EMPTY_TILE = 0  # RMXP empty marker; column_key skips these automatically
 DEFAULT_BASE_TILE_MAP = Path("reference/tileset_map.json")
 DEFAULT_OVERLAY_OUT = Path("reference/tileset_map.gen.json")
 DEFAULT_TILESETS_JSON = Path("output/uranium-build/tilesets.json")
+
+# Stair behavior-override KIND string (metadata_wiring.collect_stair_behavior_cells'
+# output, layout.convert_layout's `behavior_overrides` input, tile_map.BEHAVIOR_KINDS)
+# -> the engine MB_* constant name to resolve via `_behavior_value`. Derived from
+# `stairs.BEHAVIOR_BY_SIDE`, not hardcoded, so this module and metadata_wiring's
+# private `_STAIR_KIND_BY_SIDE` can never drift out of sync with the detector.
+_STAIR_KIND_TO_MB_NAME: dict[str, str] = {
+    "stairs_left": BEHAVIOR_BY_SIDE[StairSide.LEFT],
+    "stairs_right": BEHAVIOR_BY_SIDE[StairSide.RIGHT],
+}
+
+# Sentinel marking a column key that some NON-stair cell also uses, so its metatile
+# must keep its terrain behavior and the stair cells need a behavior-stamped copy.
+# Not a real kind — never written to the overlay.
+_NON_STAIR_USER = "\x00non-stair"
 
 
 def _behavior_value(fork: Path, name: str) -> int:
@@ -257,6 +281,7 @@ def build_slice_tilesets(
     terrain_tags_for: Callable[[int], list[int]] | None = None,
     terrain_tag_table: TerrainTagTable | None = None,
     source_tileset_of: Callable[[int], int] | None = None,
+    stair_cells: dict[int, dict[tuple[int, int], str]] | None = None,
     dry_run: bool = False,
 ) -> dict[int, EmittedTileset]:
     """Emit real Uranium tilesets for the slice and write the engine + overlay glue.
@@ -273,6 +298,18 @@ def build_slice_tilesets(
     per-map tileset id back to its real RMXP tileset id, so per-map physical
     tilesets still load the correct source art / passages. Identity when None (the
     default — legacy per-RMXP-tileset behavior).
+
+    `stair_cells` maps map_id -> {(x, y): kind} (`metadata_wiring.
+    collect_stair_behavior_cells`'s output; kind is "stairs_left"/"stairs_right").
+    Exactly the door pattern (see module docstring), but keyed by KIND as well as
+    column: for every distinct (column key, kind) pair used by a stair cell in this
+    tileset, a SEPARATE metatile is minted carrying that column's real art + the
+    native sideways-stairs behavior for that kind, so non-stair cells sharing the
+    same column key keep their own (unmodified) metatile. One transparent fallback
+    metatile is appended per KIND actually used, for stair coords whose column is
+    empty or out-of-atlas. `None`/no stair cells emits no "behavior_overrides"
+    overlay entry for the tileset (the default no-op path). The layout converter
+    looks up the right one per cell via `tile_map.behavior_for_column`.
     Returns the per-tileset `EmittedTileset`. Writes nothing when `dry_run`."""
     fork = Path(fork)
     resolve = source_tileset_of or (lambda ts: ts)
@@ -290,10 +327,18 @@ def build_slice_tilesets(
         by_ts.setdefault(int(map_json["tileset_id"]), []).append((map_id, map_json))
 
     overlay = json.loads(Path(base_tile_map).read_text(encoding="utf-8"))
-    for key in ("tilesets", "tiles", "buckets", "warps", "atlas_max"):
+    for key in ("tilesets", "tiles", "buckets", "warps", "atlas_max", "behavior_overrides"):
         overlay.setdefault(key, {})
 
     door_behavior = _behavior_value(fork, "MB_NON_ANIMATED_DOOR")
+    # Resolved once, regardless of whether any tileset actually has a stair cell —
+    # mirrors `door_behavior` above. Fails loud (via `_behavior_value`) if the fork's
+    # metatile_behaviors.h ever drops one of these two MB_* names.
+    stair_behavior_by_kind: dict[str, int] = {
+        kind: _behavior_value(fork, mb_name)
+        for kind, mb_name in _STAIR_KIND_TO_MB_NAME.items()
+    }
+    stair_cells = stair_cells or {}
     results: dict[int, EmittedTileset] = {}
 
     for ts, maplist in sorted(by_ts.items()):
@@ -341,6 +386,52 @@ def build_slice_tilesets(
                 if dk and _in_atlas(dk):
                     door_keys.add(dk)
 
+        # Collect stair (behavior-override) column keys, per KIND — same pattern as
+        # door_keys, but a stair cell needs one of TWO behaviors (sideways-stairs
+        # left/right), not one, so the key is (column key, kind).
+        stair_keys: set[tuple[tuple, str]] = set()
+        # Kinds that actually have a stair cell on an empty/out-of-atlas column, and
+        # therefore genuinely need a transparent fallback metatile. Emitting one
+        # unconditionally (the way the warp path does) costs a metatile per kind for
+        # nothing, and tileset 1033 has no metatile to spare — Map033 lands on 1024
+        # of 1024 exactly.
+        stair_needs_fallback: set[str] = set()
+        # Which cells use each stair column, and which of those are stair cells:
+        # a column used ONLY by stair cells of a single kind needs no copy at all —
+        # its own metatile can carry the sideways-stairs behavior directly, since no
+        # non-stair cell is relying on that metatile's terrain behavior. That matters
+        # for more than tidiness: Map033's 7 stair columns are each used by exactly
+        # one cell, and minting copies pushes tileset 1033 to 1029 metatiles, past
+        # the hard 1024 cap.
+        stair_users: dict[tuple, set[str]] = {}
+        for map_id, map_json in maplist:
+            grid = _grid_of(map_json)
+            cells = stair_cells.get(map_id, {})
+            for (sx, sy), kind in cells.items():
+                sk = column_key(grid, sx, sy)
+                if sk and _in_atlas(sk):
+                    stair_keys.add((sk, kind))
+                    stair_users.setdefault(sk, set()).add(kind)
+                else:
+                    stair_needs_fallback.add(kind)
+            for y in range(grid.ysize):
+                for x in range(grid.xsize):
+                    k = column_key(grid, x, y)
+                    if not k:
+                        continue
+                    if (x, y) in cells:
+                        continue
+                    # a non-stair user pins this column's terrain behavior
+                    stair_users.setdefault(k, set()).add(_NON_STAIR_USER)
+
+        # column key -> the one kind whose behavior its own metatile may carry.
+        stair_inline: dict[tuple, str] = {
+            k: next(iter(kinds))
+            for k, kinds in stair_users.items()
+            if len(kinds) == 1 and _NON_STAIR_USER not in kinds
+        }
+        stair_keys = {(k, kind) for k, kind in stair_keys if k not in stair_inline}
+
         primary_name = f"gTileset_Uranium{ts}"
         secondary_name = f"gTileset_Uranium{ts}B"
         primary_dir = fork / "data" / "tilesets" / "primary" / f"uranium{ts}"
@@ -348,9 +439,10 @@ def build_slice_tilesets(
 
         if dry_run:
             logger.info(
-                "[dry] S8a tileset %d: %d columns, %d door column(s) -> "
-                "would emit %s + %s",
-                ts, len(ordered), len(door_keys), primary_name, secondary_name,
+                "[dry] S8a tileset %d: %d columns, %d door column(s), "
+                "%d stair column(s) -> would emit %s + %s",
+                ts, len(ordered), len(door_keys), len(stair_keys),
+                primary_name, secondary_name,
             )
             continue
 
@@ -370,16 +462,29 @@ def build_slice_tilesets(
                 _cache[tile_id] = hit
             return hit
 
+        def _column_behavior(k: tuple) -> int:
+            """The stairs behavior when this column is used only by stair cells of one
+            kind (no copy needed), else its terrain behavior."""
+            kind = stair_inline.get(k)
+            if kind is not None:
+                return stair_behavior_by_kind[kind]
+            return terrain_table.column_behavior(ts, k, terrain_tags, is_opaque=_is_opaque)
+
         metatile_list = [
             _render_column(
                 k, rast, priorities,
-                behavior=terrain_table.column_behavior(
-                    ts, k, terrain_tags, is_opaque=_is_opaque
-                ),
+                behavior=_column_behavior(k),
                 n_frames=column_n_frames(k, rast),
             )
             for k in ordered
         ]
+        # Inlined stair columns resolve to their own metatile — the overlay still
+        # needs the entry so `behavior_for_column` finds it instead of failing loud.
+        stair_inline_idx: dict[str, dict[str, int]] = {}
+        for i, k in enumerate(ordered):
+            kind = stair_inline.get(k)
+            if kind is not None:
+                stair_inline_idx.setdefault(kind, {})[serialize_column_key(k)] = i
 
         # The void metatile is all-transparent; buckets.void points here.
         # collapse_column returns this for empty-column cells.
@@ -412,6 +517,44 @@ def build_slice_tilesets(
             warp_fallback_idx = len(metatile_list)
             z = np.zeros((16, 16, 4), dtype=np.uint8)
             metatile_list.append(MetatileImage(z, z.copy(), LAYER_COVERED, door_behavior))
+
+        # One behavior-stamped copy PER DISTINCT (column key, kind) pair (stairs
+        # fix, mirrors the door-copy loop above): a cell sharing its column with a
+        # non-stair cell keeps MB_NORMAL/terrain on the plain overlay["tiles"] entry;
+        # only the stair cell's own cell gets the behavior copy, so it keeps its own
+        # real art. Grouped by kind because each kind (left/right) needs its own
+        # fallback metatile — mixing them into one fallback would give a stair on an
+        # empty/garbage cell the wrong axis.
+        stair_tiles_by_kind: dict[str, dict[str, int]] = {
+            kind: dict(tiles) for kind, tiles in stair_inline_idx.items()
+        }
+        for sk, kind in sorted(stair_keys):
+            idx = len(metatile_list)
+            metatile_list.append(
+                _render_column(
+                    sk, rast, priorities, behavior=stair_behavior_by_kind[kind],
+                    n_frames=column_n_frames(sk, rast),
+                )
+            )
+            stair_tiles_by_kind.setdefault(kind, {})[serialize_column_key(sk)] = idx
+
+        stair_fallback_by_kind: dict[str, int] = {}
+        for kind in sorted(stair_needs_fallback):
+            idx = len(metatile_list)
+            z = np.zeros((16, 16, 4), dtype=np.uint8)
+            metatile_list.append(
+                MetatileImage(z, z.copy(), LAYER_COVERED, stair_behavior_by_kind[kind])
+            )
+            stair_fallback_by_kind[kind] = idx
+
+        # Inlined stair columns reuse their own metatile, so they cost nothing; only
+        # the copies and fallbacks add to the tileset's metatile budget.
+        n_stair_inlined = sum(len(v) for v in stair_inline_idx.values())
+        n_stair_metatiles = (
+            sum(len(v) for v in stair_tiles_by_kind.values())
+            - n_stair_inlined
+            + len(stair_fallback_by_kind)
+        )
 
         # Family packer is the pipeline standard (per-hue-family palette budget; see
         # quantize.build_quantized_tileset_family) — keeps the ROM render consistent
@@ -446,11 +589,27 @@ def build_slice_tilesets(
                 "collision": 0,
                 "elevation": 0,
             }
+        # A kind can appear with tiles but no fallback (every stair cell resolved to
+        # real column art — the common case, and the one that keeps 1033 inside its
+        # metatile budget) or with a fallback but no tiles. `fallback: null` parses
+        # fine; `behavior_for_column` still fails loud if neither resolves.
+        stair_kinds = sorted(set(stair_tiles_by_kind) | set(stair_fallback_by_kind))
+        if stair_kinds:
+            overlay["behavior_overrides"][str(ts)] = {
+                kind: {
+                    "tiles": stair_tiles_by_kind.get(kind, {}),
+                    "fallback": stair_fallback_by_kind.get(kind),
+                    "collision": 0,
+                    "elevation": 0,
+                }
+                for kind in stair_kinds
+            }
         logger.info(
             "S8a tileset %d: %d columns -> %d metatiles, %d GBA tiles, "
-            "%d palettes (mean shift %.2f/31)",
+            "%d palettes (mean shift %.2f/31), %d stair metatile(s) "
+            "[+%d inlined at no cost]",
             ts, len(ordered), emit.n_metatiles, emit.n_tiles, emit.n_palettes,
-            emit.stats.get("mean_shift_5bit", 0.0),
+            emit.stats.get("mean_shift_5bit", 0.0), n_stair_metatiles, n_stair_inlined,
         )
 
     if not dry_run:

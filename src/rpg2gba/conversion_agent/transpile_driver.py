@@ -27,6 +27,7 @@ import click
 from rpg2gba.conversion_agent import deterministic, fork_index, hand_overrides, transpiler
 from rpg2gba.conversion_agent.flag_registry import FlagRegistry
 from rpg2gba.pbs_converter._id_map import IdMap
+from rpg2gba.tileset_converter import stairs
 from rpg2gba.tileset_converter.map_set import resolve_map_ids
 
 logger = logging.getLogger(__name__)
@@ -136,10 +137,30 @@ def transpile_map(
     event_texts: list[str] = []
     queue_entries: list[dict] = []
     seen_event_ids: set[int] = set()
+    # Diagonal-stair "player touch" events (RGSS 111 facing-conditional +
+    # forced diagonal move route): the fork's native MB_SIDEWAYS_STAIRS_*
+    # metatile behavior performs the step with no script at all (the
+    # approved fix — see rpg2gba.tileset_converter.stairs). Detected once per
+    # map from the shape of the event, never re-implemented here.
+    stair_ids = stairs.stair_event_ids(map_json)
+    stairs_skipped = 0
 
     for event in map_json.get("events", []):
         event_id = event.get("id")
         seen_event_ids.add(event_id)
+
+        if event_id in stair_ids:
+            # No .pory block, no queue entry — the tileset layer now owns
+            # this cell's behavior entirely. Not silent: logged below and
+            # recorded on ctx for the corpus-run summary (CLAUDE.md §4.5).
+            stairs_skipped += 1
+            ctx.skipped_stair_events.append({
+                "map_id": map_id,
+                "event_id": event_id,
+                "event_name": event.get("name", ""),
+                "reason": "native-sideways-stairs",
+            })
+            continue
 
         override = overrides.get((map_id, event_id))
         if override is not None:
@@ -159,6 +180,13 @@ def transpile_map(
         transpiled = transpiler.transpile_event(map_id, event, ctx)
         event_texts.append(transpiled.text)
         queue_entries.extend(e.to_json() for e in transpiled.unhandled)
+
+    if stairs_skipped:
+        logger.info(
+            "Map%03d: skipped %d diagonal-stair event(s) (native-sideways-stairs, "
+            "see tileset_converter.stairs)",
+            map_id, stairs_skipped,
+        )
 
     stale = sorted(
         (m, e) for (m, e) in overrides if m == map_id and e not in seen_event_ids
@@ -512,11 +540,17 @@ def transpile_corpus(
         )
         registry.save(flag_state_path)
 
-    return _summarize(map_ids, events_total, all_queue, overridden_total)
+    return _summarize(
+        map_ids, events_total, all_queue, overridden_total, len(ctx.skipped_stair_events)
+    )
 
 
 def _summarize(
-    map_ids: list[int], events_total: int, queue: list[dict], overridden_total: int = 0
+    map_ids: list[int],
+    events_total: int,
+    queue: list[dict],
+    overridden_total: int = 0,
+    stairs_skipped_total: int = 0,
 ) -> dict:
     queue_by_code: dict[int, int] = {}
     for entry in queue:
@@ -534,6 +568,7 @@ def _summarize(
         "events": events_total,
         "queued": len(queue),
         "hand_overridden": overridden_total,
+        "stairs_skipped": stairs_skipped_total,
         "queue_by_code": dict(sorted(queue_by_code.items(), key=lambda kv: kv[1], reverse=True)),
         "queue_clusters": clusters,
     }
@@ -550,6 +585,7 @@ def _print_summary(summary: dict) -> None:
     click.echo(
         f"maps: {summary['maps']}  events: {summary['events']}  queued: {summary['queued']}"
         f"  hand-overridden: {summary['hand_overridden']}"
+        f"  stairs-skipped: {summary['stairs_skipped']}"
     )
     if summary["queue_by_code"]:
         click.echo("queue by code:")

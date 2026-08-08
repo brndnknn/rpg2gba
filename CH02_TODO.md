@@ -248,6 +248,59 @@ recommendation (§5 item 5):
 for a visible period beat or DMA-queue starvation (the 20-entry buffer now
 carries 4 effects for this tileset).
 
+### 14. Route 01's diagonal staircases were solid walls — FIXED 2026-08-07
+
+**Symptom** (boot-walk of ROM `9a868d8d`, `reference/map_feedback/Map033.json`):
+Map033 cells (57,9)/(57,10)/(57,11) blocked; they render as stairs.
+
+**Root cause — not a collision bug; the cells are solid in RMXP too.** Uranium
+builds diagonal staircases from stacked `trigger=1` (player-touch), `through=false`
+events: the player bumps the solid tile and the event's script reads the player's
+facing and force-moves them one tile diagonally (Through ON → diagonal move →
+Through OFF). We never implemented that: the transpiler has no handler for the
+code-111 character-facing conditional, so all three events became empty stubs and
+queued as unhandled, while `collect_through_block_cells` (correctly, given what it
+could see) stamped the cells BLOCKED as invisible obstacles. Net: a wall.
+
+**Fix — native engine feature, no script and no custom C** (user decision; the
+alternative was transpiling the facing-conditional into a coord event). The fork
+ships sideways stairs: `MB_SIDEWAYS_STAIRS_{LEFT,RIGHT}_SIDE`
+(`engine/include/constants/metatile_behaviors.h:78-83`, implemented in
+`GetSidewaysStairsCollision`, `engine/src/event_object_movement.c:6681`). On a
+passable tile the engine redirects the player's east/west step into a diagonal
+step by itself. Mapping, derived from a full census of all **228 stair events
+across 28 maps** (total — 9 combos, no leftovers): diagonal axis NW/SE →
+`RIGHT_SIDE` (123 events), NE/SW → `LEFT_SIDE` (105). We emit only the two plain
+variants; the `_TOP`/`_BOTTOM` variants seal the ends of an Emerald-style diagonal
+run, and Uranium seals its runs with real wall tiles instead.
+
+New `tileset_converter/stairs.py` detects the shape and classifies the axis
+(fail-loud on a mixed-axis event; the 7 corpus events that look similar but carry
+no diagonal move are deliberately excluded and still transpile as before).
+`metadata_wiring` excludes stair events from through-blocking and from object-event
+emission (local ids unaffected — a skipped event never takes a slot) and exposes
+`collect_stair_behavior_cells`. `tile_map`/`layout` generalize the warp override
+into a per-kind **behavior override** (`behavior_overrides` overlay section,
+`behavior_for_column`, `convert_layout(behavior_overrides=…)`), always emitted
+PASSABLE — the engine's redirect never fires on a blocked tile. The transpiler
+skips these events with reason `native-sideways-stairs`, counted in the run
+summary rather than dropped silently.
+
+**Metatile budget, the one real snag.** Minting a behavior-stamped copy per stair
+column pushed tileset 1033 to 1029, past the hard 1024 cap. Two honest savings,
+no cap raise: the per-kind transparent fallback is now emitted only when a stair
+cell actually sits on an empty/out-of-atlas column, and — the real win — a column
+used *only* by stair cells of one kind carries the stairs behavior on its **own**
+metatile instead of a copy. All 7 of Map033's stair columns are single-use, so
+they cost zero. **ts1033 = 1022/1024.** Note the margin: 2 metatiles. Map033 was
+already the tightest tileset in the corpus, and the durable fix is the audit's
+pixel-identity collapse / intra-map split (`corpus_scaling_audit_2026-07-14.md`
+§7), not more shaving.
+
+Suite 1805 pass / 19 skipped. ROM `42d1a4b4` built clean and taildropped
+2026-08-07; **§9 retest pending** — walk the x=57 staircase both ways, and the
+second Map033 run at (52,41)/(52,42)/(53,43)/(53,44).
+
 ### 13. Three emitter bugs the first CH02 build surfaced — FIXED 2026-08-05
 
 None of these could appear before CH02 widened the staged sets; all three are

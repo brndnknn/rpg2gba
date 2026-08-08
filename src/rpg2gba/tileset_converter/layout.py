@@ -237,6 +237,7 @@ def convert_layout(
     blocked_cells: set[tuple[int, int]] | None = None,
     unblocked_cells: frozenset[tuple[int, int]] | set[tuple[int, int]] | None = None,
     tileset_key: int | None = None,
+    behavior_overrides: dict[tuple[int, int], str] | None = None,
 ) -> Layout:
     """Convert one Phase 3 map dict into a `Layout` (blockdata + metadata).
 
@@ -267,10 +268,34 @@ def convert_layout(
     `warp_overrides` is contradictory converter configuration and fails loud.
 
     `tileset_key`: Override the tileset id used for all TileMap lookups (per-map
-    synthetic tileset packing); defaults to the map's own `tileset_id`."""
+    synthetic tileset packing); defaults to the map's own `tileset_id`.
+
+    `behavior_overrides` (stairs fix) maps a cell to a behavior KIND string
+    ("stairs_left"/"stairs_right"). RPG Maker XP builds diagonal staircases out of
+    solid "player touch" trigger tiles + a force-move script; pokeemerald-expansion
+    has NATIVE sideways-stairs support instead — MB_SIDEWAYS_STAIRS_LEFT_SIDE /
+    MB_SIDEWAYS_STAIRS_RIGHT_SIDE (engine/include/constants/metatile_behaviors.h)
+    redirect an east/west step into a diagonal one, but ONLY on a passable tile (the
+    engine's own vanilla-collision check blocks the step before the stair logic runs
+    otherwise). Each such cell's metatile is resolved via
+    `tile_map.behavior_for_column` — the same column-key-exact-match-else-fallback
+    resolution warps use — so the cell keeps its own real stair art. Collision is
+    ALWAYS force-stamped PASSABLE for these cells even though the source RMXP
+    passage reads blocked (the stair tiles are solid in Uranium because the script,
+    not tile geometry, did the moving) — see the loop below.
+
+    A cell may not be in both `behavior_overrides` and `warp_overrides` (a cell is
+    either a door or a staircase, never both), and may not be in both
+    `behavior_overrides` and `blocked_cells` (the RMXP stair events are
+    through=false invisible-obstacle events that `metadata_wiring.
+    collect_through_block_cells` would otherwise also mark blocked, re-creating the
+    original solid-stairs bug — this check is the backstop that makes that
+    regression loud). Overlap with `unblocked_cells` is redundant, not
+    contradictory (both force passable), and is allowed; the behavior stamp wins."""
     overrides = warp_overrides or set()
     blocked = blocked_cells or set()
     unblocked = set(unblocked_cells or set())
+    behaviors = behavior_overrides or {}
     both = overrides & blocked
     if both:
         raise ValueError(
@@ -282,6 +307,22 @@ def convert_layout(
         raise ValueError(
             f"layout {name}: cell(s) {sorted(contradictory)} are walkable-overridden "
             "AND through-blocked/warp-overridden — contradictory configuration"
+        )
+    behavior_cells = set(behaviors)
+    behavior_warp_conflict = behavior_cells & overrides
+    if behavior_warp_conflict:
+        raise ValueError(
+            f"layout {name}: cell(s) {sorted(behavior_warp_conflict)} are both a "
+            "behavior_override and a warp_override — a cell is either a door or a "
+            "staircase, never both"
+        )
+    behavior_blocked_conflict = behavior_cells & blocked
+    if behavior_blocked_conflict:
+        raise ValueError(
+            f"layout {name}: cell(s) {sorted(behavior_blocked_conflict)} are both a "
+            "behavior_override and a through-blocked cell — a stair cell must stay "
+            "passable (metadata_wiring.collect_through_block_cells should have "
+            "excluded them)"
         )
 
     tiles = map_json["tiles"]
@@ -312,6 +353,16 @@ def convert_layout(
                 if key is not None and not tile_map.column_in_atlas(tileset_id, key):
                     key = None
                 metatile = tile_map.warp_for_column(tileset_id, key)
+            elif (x, y) in behaviors:
+                # Behavior stamp wins over unblocked_cells (redundant, not
+                # contradictory) and is always passable — see docstring: the
+                # source RMXP passage reads blocked here (stair tiles are solid
+                # in Uranium; the script did the moving, not tile geometry), but
+                # the engine's sideways-stairs redirect requires a passable tile.
+                key = column_key(grid, x, y) or None
+                if key is not None and not tile_map.column_in_atlas(tileset_id, key):
+                    key = None
+                metatile = tile_map.behavior_for_column(tileset_id, behaviors[(x, y)], key)
             elif (x, y) in blocked:
                 metatile = Metatile(metatile.metatile_id, BLOCKED_COLLISION, BLOCKED_ELEVATION)
             elif (x, y) in unblocked:
