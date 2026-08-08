@@ -36,6 +36,9 @@ engine/data/scripts/Map*_dispatch.pory
 engine/data/maps/uranium_includes.inc
 engine/data/maps/map_groups.gen.json
 engine/data/layouts/layouts.gen.json
+# S8d: pre-planted berry-tree seed table (pulled in by the committed URANIUM
+# PATHFINDER SLICE include-hook right after ClearBerryTrees() in src/new_game.c).
+engine/data/scripts/uranium_berry_trees.h
 # S8a tileset graphics: generated engine fragments (pulled in by committed sentinel
 # #include hooks in src/data/tilesets/*.h + include/tilesets.h) and the emitted art.
 engine/src/data/tilesets/uranium_graphics.gen.h
