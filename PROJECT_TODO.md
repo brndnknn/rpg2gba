@@ -457,3 +457,19 @@ plus top-level `data/*.s` / `data/*.inc`, excluding `data/maps/**` and
 `data/layouts/**`. Including the generated trees inflated the count from 4924 to
 23290 — a useful smell if anyone re-widens it.
 `test_engine_defined_labels_excludes_generated_per_map_scripts_inc` pins it.
+
+**The false alarm was not harmless — it silently skipped staging.** `main()`'s
+`--write` block (`stage_slice_scripts.py:602-606`) sits *after* the existence
+check's `return 1` (`:592`), so a failing check writes **no** `.pory` to
+`output/uranium-build/staging/scripts/` at all. `assemble_pathfinder` then runs
+off whatever `.pory` a previous run left there while happily picking up fresh
+map.json/layout data from its own path. Every CH02 build since berry trees
+landed was therefore a mixed build: current map data, stale scripts. Caught
+2026-08-09 when ROM `5d4a7622` (built through the failing gate) and `360e8506`
+(built after the fix) differed by 160 bytes from a change that touches no
+emitted content; `360e8506` reproduces byte-identically across repeat runs, so
+the pipeline is idempotent and `5d4a7622` was the anomaly. Fixing the check
+closed this by making the gate pass, but the ordering is still a trap — a
+genuine future failure would skip the writes the same way. Worth making the
+write unconditional (or the failure an exception) so a red gate can never leave
+a half-staged tree behind; not done here.
