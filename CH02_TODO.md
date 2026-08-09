@@ -149,6 +149,60 @@ landed with it.
 
 ## Done
 
+### 15. Wild encounters never reached the ROM — DONE 2026-08-09
+
+Encounter tables were fully converted since Phase 2 but nothing emitted them
+into the engine, so `GetCurrentMapWildMonHeaderId` (`engine/src/wild_encounter.c:379-404`)
+found no row and returned `HEADER_NONE` — every grass step a silent no-op.
+Grass tiles were never the problem: Map033 already carried **MB_TALL_GRASS on
+34 columns / 137 cells** (verified by running the real `terrain_tags.column_behavior`
+over the map's live column set; behavior packed at `graphics/emit.py:532-534`).
+MB_LONG_GRASS is 0 cells and that is correct — ts22 puts tag 10 on exactly one
+tile (860) and Uranium never places it on Route 1.
+
+What landed:
+
+- `tileset_converter/wild_encounters.py` (new) — intermediate → fork-shaped
+  entries + `upsert_encounters`. Slot counts are read live from the fork's own
+  `fields[].encounter_rates` lengths, never hardcoded; short *and* long lists
+  fail loud (no padding — padding a table is a silent lie). Species gate: every
+  slot's `SPECIES_*` must be in the known set, else fail loud.
+- Fishing needed real reshaping: our intermediate carries three rod lists,
+  the fork wants one flat 10-slot array with rod membership declared once in
+  the group's `groups` block. Flattened at the fork's declared indices.
+- `assemble_pathfinder.py` pass **S8b4** (`:507-597`), `--skip-encounters`,
+  after species staging (needs `species_manifest.json`). Named S8b4 because
+  S8b3 was already the trainer-pic pass.
+- Dead `metadata_wiring.wire_encounters()` retired — it had sat uncalled since
+  it was written, which is why the gap survived this long.
+
+**Overlay, not in-place** (user call 2026-08-09): the pass writes a gitignored
+`engine/src/data/wild_encounters.gen.json` and `engine/Makefile` picks it via
+`URANIUM_WILD_ENCOUNTERS := $(or $(wildcard …gen.json),…json)`, mirroring the
+existing `layouts.gen.json` / `map_groups.gen.json` hooks. The fork's generator
+tool took an optional `sys.argv[1]` input path to make this possible. Both
+engine edits are `URANIUM PATHFINDER SLICE`-fenced; with no overlay on disk the
+build is bit-for-bit pristine. The committed `wild_encounters.json` is never
+touched — asserted in tests and confirmed by `git status` after a live run.
+
+Shipped: assembler wrote **2 entries** (map 33 Route 1, map 32 Moki Town —
+Moki had a table all along and was never wired). `make modern` clean, EWRAM
+86.79% / IWRAM 86.99% / ROM 27.13 MB. Generated header carries
+`gRoute01_{Land,Water,Fishing}Mons` + both `gWildMonHeaders` rows ahead of the
+sentinel. Suite **1880 passed / 19 skipped**. moki chapter green 17/17, walk
+ROM `79811361` taildropped — **§9 boot-walk retest pending**.
+
+Two accepted limits, both recorded rather than papered over:
+
+- **Fishing `encounter_rate` = 20, a policy default.** The fork wants a scalar;
+  Uranium's rod densities are `0` on all 52 maps because Essentials doesn't
+  gate fishing by density, so there is no fact to recover and a faithful 0
+  would mean "never bites". 20 is the fork's own modal value.
+- **Time-of-day tables dropped.** Map 33 really does have morning/day/night
+  land tables (densities 25 each) plus cave 10 and bug-contest 25; they go to
+  `uranium_extra` because the plain `land` table exists and wins. Matches the
+  atlas's known day/night gap (`00-atlas.md:175`) — see PROJECT_TODO #28.
+
 ### 4. Promote per-map tileset packing into the slice/assembler path — DONE 2026-08-05
 
 Code landed 2026-08-05; **budget verified end-to-end the same day** with 33 and

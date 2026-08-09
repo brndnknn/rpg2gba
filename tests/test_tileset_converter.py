@@ -3763,15 +3763,6 @@ def test_map_json_schema() -> None:
     assert indoor["allow_running"] is False and indoor["show_map_name"] is False
 
 
-def test_wire_encounters_none(tmp_path: Path) -> None:
-    """No entry / missing file -> None (no encounter table)."""
-    assert mw.wire_encounters(32, tmp_path / "absent.json") is None
-    p = tmp_path / "we.json"
-    p.write_text(json.dumps({"76": {"land": []}}), encoding="utf-8")
-    assert mw.wire_encounters(32, p) is None
-    assert mw.wire_encounters(76, p) == {"land": []}
-
-
 _MAPS = Path("output/uranium-build/maps")
 _METADATA = Path("output/uranium-build/intermediate/map_metadata.json")
 

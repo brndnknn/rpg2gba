@@ -357,6 +357,39 @@ the boot gate, per the design doc's own open note.
 vice versa) in map.json; crossing the seam in mGBA shows continuous art with
 no palette snap and no garbage strip; collision at the boundary is sane.
 
+### 28. Time-of-day + Uranium-only encounter tables are dropped corpus-wide
+
+The encounter emitter (`tileset_converter/wild_encounters.py`, landed 2026-08-09,
+CH02_TODO #15) fills the fork's four native fields and drops everything else
+into `uranium_extra`, unemitted. Uranium's 13 `EncounterType` slots include
+four the fork has no host for at all (Cave, HeadbuttLow/High, BugContest) and
+three that it *does* support but we don't wire: LandMorning / LandDay /
+LandNight.
+
+The time-of-day three are the tractable half. The fork already supports them —
+`OW_TIME_OF_DAY_ENCOUNTERS` (`engine/include/config/overworld.h:95`, currently
+FALSE) plus time-suffixed `base_label`s, with `OW_TIME_OF_DAY_FALLBACK`
+(`:97`) and `OW_TIME_OF_DAY_DISABLE_FALLBACK` (`:96`) governing what happens
+when a slot is empty. Today every map emits only the `TIME_MORNING` fallback
+slot, which is also what vanilla does, so nothing is *broken* — it's fidelity
+loss, silent unless you know to look.
+
+Not frontier-urgent but not free either: `_LAND_SOURCES`
+(`pbs_converter/encounters.py:57`) already prefers a plain `land` table when
+one exists, so a map with BOTH plain and time-split tables (Route 1 is one —
+densities `[25,10,10,0,0,0,0,0,0,25,25,25,25]`) silently uses the plain one and
+the variants never surface. Turning the config on without auditing that
+precedence would change behavior on maps nobody has walked.
+
+**Care about it when:** a chapter's spec calls out a mon that only appears at
+one time of day, or a cave chapter lands (Cave has no fork host at all and is
+currently folded into `land_mons` as a fallback source).
+
+**Done looks like:** a decision on whether Uranium's time-split tables are
+worth `OW_TIME_OF_DAY_ENCOUNTERS = TRUE` corpus-wide; if yes, emitter support
+for suffixed base_labels + a documented precedence rule between plain and
+split tables. Also cross-referenced by `00-atlas.md:175`.
+
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 
 - **Reflection narrow-scan** — tried and reverted 2026-07-07 (user: "not

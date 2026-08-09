@@ -250,8 +250,13 @@ AUTO_GEN_TARGETS += $(DATA_SRC_SUBDIR)/wild_encounters.h
 MISC_TOOL_DIR := $(TOOLS_DIR)/misc
 AUTO_GEN_TARGETS +=  $(INCLUDE_DIRS)/constants/script_commands.h
 
-$(DATA_SRC_SUBDIR)/wild_encounters.h: $(DATA_SRC_SUBDIR)/wild_encounters.json $(WILD_ENCOUNTERS_TOOL_DIR)/wild_encounters_to_header.py $(INCLUDE_DIRS)/config/overworld.h $(INCLUDE_DIRS)/config/dexnav.h
-	python3 $(WILD_ENCOUNTERS_TOOL_DIR)/wild_encounters_to_header.py
+# URANIUM PATHFINDER SLICE: prefer the assembler-generated overlay when present,
+# mirroring the layouts.gen.json / map_groups.gen.json hooks in map_data_rules.mk.
+# With no overlay on disk this resolves to the committed file = pristine behavior.
+URANIUM_WILD_ENCOUNTERS := $(or $(wildcard $(DATA_SRC_SUBDIR)/wild_encounters.gen.json),$(DATA_SRC_SUBDIR)/wild_encounters.json)
+
+$(DATA_SRC_SUBDIR)/wild_encounters.h: $(URANIUM_WILD_ENCOUNTERS) $(WILD_ENCOUNTERS_TOOL_DIR)/wild_encounters_to_header.py $(INCLUDE_DIRS)/config/overworld.h $(INCLUDE_DIRS)/config/dexnav.h
+	python3 $(WILD_ENCOUNTERS_TOOL_DIR)/wild_encounters_to_header.py $(URANIUM_WILD_ENCOUNTERS)
 
 $(INCLUDE_DIRS)/constants/script_commands.h: $(MISC_TOOL_DIR)/make_scr_cmd_constants.py $(DATA_ASM_SUBDIR)/script_cmd_table.inc
 	python3  $(MISC_TOOL_DIR)/make_scr_cmd_constants.py

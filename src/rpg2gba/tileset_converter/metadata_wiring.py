@@ -2984,16 +2984,6 @@ def _resolve_all_warp_events(
     return events
 
 
-def wire_encounters(uranium_map_id: int, encounters_path: Path) -> dict | None:
-    """The map's wild-encounter entry (for the global wild_encounters.json), or None
-    if it has no wild slots. Read intermediate/wild_encounters.json (Uranium id)."""
-    if not encounters_path.exists():
-        return None
-    table = json.loads(encounters_path.read_text(encoding="utf-8"))
-    entry = table.get(str(uranium_map_id))
-    return entry or None
-
-
 # --- slice driver ------------------------------------------------------------
 
 def _map_type_for(uid: int, metadata_path: Path) -> str:

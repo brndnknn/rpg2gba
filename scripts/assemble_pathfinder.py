@@ -17,6 +17,14 @@ Pass 2 (S8c) — fork assembly
       - write fork data/maps/uranium_includes.inc (gitignored; pulled in by the committed
         URANIUM PATHFINDER SLICE include-hook in data/event_scripts.s)
 
+Pass 2.5 (S8b4) — wild encounter table staging
+    Upsert the slice's converted wild-encounter tables (Phase 2 output,
+    intermediate/wild_encounters.json) into an overlay of the fork's
+    src/data/wild_encounters.json (gWildMonHeaders group), keyed by MAP_* --
+    an overlay like layouts/map_groups (src/data/wild_encounters.gen.json,
+    gitignored; see run_encounters_pass docstring for the URANIUM_WILD_ENCOUNTERS
+    hook in engine/Makefile that selects it over the committed file).
+
 Pass 3 (S8d) — berry tree seed table
     Emit fork data/scripts/uranium_berry_trees.h (gitignored): the pre-planted
     berry-tree save-slot table consumed by new_game.c's NewGameInitData, right
@@ -503,6 +511,105 @@ def run_trainer_pass(out: Path, fork: Path, uranium_src: Path, dry_run: bool) ->
 
 
 # ---------------------------------------------------------------------------
+# S8b4: Wild encounter table staging
+# ---------------------------------------------------------------------------
+
+def run_encounters_pass(out: Path, fork: Path, consts: dict, dry_run: bool) -> None:
+    """Stage the slice's wild-encounter tables into an overlay of the fork's
+    `gWildMonHeaders` group so `GetCurrentMapWildMonHeaderId`
+    (engine/src/wild_encounter.c:379-404) finds a row for each slice map instead
+    of returning `HEADER_NONE` and silently suppressing all encounters -- the
+    bug this pass fixes. Encounter DATA is already fully converted
+    (`output/uranium-build/intermediate/wild_encounters.json`,
+    `pbs_converter/encounters.py`); this pass is purely the missing wiring step.
+
+    Writes `src/data/wild_encounters.gen.json` (gitignored), never the committed
+    `src/data/wild_encounters.json` -- mirrors the `layouts.gen.json` /
+    `map_groups.gen.json` overlay pattern `run_fork_pass` already uses.
+    `engine/Makefile`'s `URANIUM_WILD_ENCOUNTERS` var (near line 253) prefers the
+    `.gen.json` overlay when present, falling back to the committed file when
+    absent, so a repo with no overlay on disk builds pristine upstream behavior.
+    `wild_encounters.py.upsert_encounters` always reads the committed file fresh
+    as its base (never a prior overlay), so repeated runs are idempotent and
+    never dirty tracked vendored source.
+
+    Named S8b4 (not S8b3 -- that label is already `run_trainer_pass`). Placed
+    AFTER the species/trainer staging block in `main()`: the known-species
+    union it builds needs `species/species_manifest.json`, which only exists
+    once S8b2 (`run_species_pass`) has run (this run or a prior one -- fails
+    loud, matching `run_fork_pass`'s species-manifest gate, if the manifest is
+    absent rather than silently forcing S8b2 to run). It does not need to run
+    after `run_fork_pass` (S8c) or `run_berry_tree_pass` (S8d) since it writes
+    to a different fork target (`src/data/wild_encounters.json`) that no other
+    pass touches; running it before S8c/S8d keeps all "mutate the fork tree"
+    passes grouped together ahead of the final assembly step, matching the
+    existing S8b2/S8b3/S8c/S8d ordering.
+
+    `consts` is the already-loaded `map_constants.json` dict (`main()` reads it
+    once, before any pass runs) -- the map-id -> MAP_* mapping this pass needs
+    is read straight from it (`consts[str(mid)]["map_const"]`), never re-minted
+    (CLAUDE.md §4.3: `map_constants.py`'s registry is the one place that mints
+    `MAP_*` names).
+
+    The known-species set is the union of:
+      - Uranium species staged by S8b2 (`species/species_manifest.json`'s
+        `species_constant` field per entry -- ONLY species actually staged,
+        mirroring `fork_index.registry_extra_symbols`' species-manifest scoping
+        discipline: a species merely named in `reference/uranium_id_map.json`
+        but never staged must still be rejected)
+      - vanilla species the fork already defines, read via the fork capability
+        index (`conversion_agent.fork_index`, CLAUDE.md §4.7) rather than a new
+        header parser -- `ForkIndex.constants` already aggregates every
+        `#define`/enum member across `engine/include/constants/*.h` (species.h
+        included), filtered here to the `SPECIES_` prefix.
+    """
+    logger.info("=== S8b4: encounter staging ===")
+    from rpg2gba.conversion_agent import fork_index as fi
+    from rpg2gba.tileset_converter import wild_encounters as we
+
+    species_manifest_path = out / "species" / "species_manifest.json"
+    if not species_manifest_path.is_file():
+        raise FileNotFoundError(
+            f"{species_manifest_path} missing -- run the species pass (S8b2) "
+            "first; the known-species union for encounter validation needs "
+            "its manifest"
+        )
+    manifest = json.loads(species_manifest_path.read_text(encoding="utf-8"))
+    known_species: set[str] = {entry["species_constant"] for entry in manifest["species"]}
+
+    gate_index = fi.load_or_build()
+    known_species |= {c for c in gate_index.constants if c.startswith("SPECIES_")}
+
+    encounters_path = out / "intermediate" / "wild_encounters.json"
+    map_consts = {mid: consts[str(mid)]["map_const"] for mid in SLICE_MAP_IDS}
+    fork_encounters_path = fork / "src" / "data" / "wild_encounters.json"
+    gen_encounters_path = we.overlay_path(fork_encounters_path)
+
+    entries = we.build_encounter_entries(
+        encounters_path,
+        SLICE_MAP_IDS,
+        map_consts,
+        known_species,
+        fork_encounters_path=fork_encounters_path,
+    )
+    staged_ids = {e.uranium_map_id for e in entries}
+    skipped = [mid for mid in SLICE_MAP_IDS if mid not in staged_ids]
+
+    if not dry_run:
+        written = we.upsert_encounters(fork_encounters_path, entries, out_path=gen_encounters_path)
+        logger.info(
+            "  wrote %s (+%d slice encounter entries)", gen_encounters_path.name, written
+        )
+    else:
+        logger.info(
+            "  [dry] would write %s (+%d slice encounter entries)",
+            gen_encounters_path.name, len(entries),
+        )
+    if skipped:
+        logger.info("  no encounter table for map id(s): %s", skipped)
+
+
+# ---------------------------------------------------------------------------
 # S8c: Fork assembly
 # ---------------------------------------------------------------------------
 
@@ -963,6 +1070,8 @@ def main() -> int:
                     help="Skip S8b2 (Uranium starter species already staged).")
     ap.add_argument("--skip-trainers", action="store_true",
                     help="Skip S8b3 (Uranium trainer pics already staged).")
+    ap.add_argument("--skip-encounters", action="store_true",
+                    help="Skip S8b4 (wild encounter tables already staged).")
     args = ap.parse_args()
 
     repo_root = Path(__file__).parent.parent
@@ -1005,6 +1114,9 @@ def main() -> int:
 
         if not args.skip_trainers:
             run_trainer_pass(out, fork, uranium_src, args.dry_run)
+
+    if not args.skip_encounters:
+        run_encounters_pass(out, fork, consts, args.dry_run)
 
     run_fork_pass(out, fork, consts, staging, args.dry_run, batch_layouts=batch_layouts)
     run_berry_tree_pass(out, fork, args.dry_run)
