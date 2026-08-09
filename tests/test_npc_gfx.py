@@ -404,6 +404,30 @@ def test_movement_spec_for_custom_relative_turn_looks_around() -> None:
     assert spec.movement_type == "MOVEMENT_TYPE_LOOK_AROUND"
 
 
+# allow_custom_route=False (metadata_wiring's battle-trainer call site) ------
+
+def test_movement_spec_for_allow_custom_route_false_skips_interpreter() -> None:
+    """`allow_custom_route=False` skips the `encode_route` attempt entirely,
+    even for a route that would otherwise encode cleanly -- classification
+    falls straight to the native `_spec_for_axis` pacer (case g), same
+    outcome as if `encode_route` itself had returned `None`."""
+    route = _route([2, 2, 2, 3, 3, 3])
+    spec = movement_spec_for(_move_page(3, route=route), allow_custom_route=False)
+    assert spec.movement_type == "MOVEMENT_TYPE_WALK_LEFT_AND_RIGHT"
+    assert spec.route_bytecode is None
+    assert spec.demoted is None
+
+
+def test_movement_spec_for_allow_custom_route_default_true_unchanged() -> None:
+    """No keyword argument -> today's interpreter-first behavior, unchanged:
+    the same route as above still encodes to
+    MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE when the caller doesn't opt out."""
+    route = _route([2, 2, 2, 3, 3, 3])
+    spec = movement_spec_for(_move_page(3, route=route))
+    assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert spec.route_bytecode is not None
+
+
 def test_movement_spec_for_custom_pacer_wide() -> None:
     """RE-PINNED (interpreter-first): an all-cardinal-step repeat route
     encodes cleanly, so this now plays as bytecode instead of the native

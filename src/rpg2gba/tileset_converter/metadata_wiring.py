@@ -153,6 +153,44 @@ TRIGGER_PARALLEL = 4  # RMXP trigger: runs continuously in the background
 #     trainer with no battle at the end is a dead trigger engine-side).
 _TRAINER_NAME_RE = re.compile(r"Trainer\((\d+)\)")
 
+# Movement types a battle trainer (visible Trainer(N)) may keep. Only
+# MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE genuinely collides with
+# trainer_sight_or_berry_tree_id — both are backed by the same object_event
+# template field (sUraniumRoutes vs the sight radius
+# trainer_see.c GetTrainerApproachDistance needs). Every vanilla autonomous
+# movement type reads the independent movementRangeX/movementRangeY fields
+# instead (engine/src/event_object_movement.c:1627-1628 range copy vs :1631
+# trainer-range copy), and trainer_see.c's GetTrainerApproachDistance
+# (engine/src/trainer_see.c:643-655) reads the trainer's LIVE
+# facingDirection/currentCoords every frame — it never assumes a trainer is
+# static. WANDER_* is denied by deliberate product policy, not an engine
+# limit: a random walk could drift a sight trainer into a chokepoint or off
+# its intended sightline. Default-deny — anything not explicitly allowed
+# falls through to the WANDER-style demotion below.
+_TRAINER_MOVEMENT_ALLOWED_EXACT = frozenset({
+    "MOVEMENT_TYPE_LOOK_AROUND",
+    "MOVEMENT_TYPE_WALK_UP_AND_DOWN",
+    "MOVEMENT_TYPE_WALK_DOWN_AND_UP",
+    "MOVEMENT_TYPE_WALK_LEFT_AND_RIGHT",
+    "MOVEMENT_TYPE_WALK_RIGHT_AND_LEFT",
+})
+_TRAINER_MOVEMENT_ALLOWED_PREFIXES = (
+    "MOVEMENT_TYPE_FACE_",
+    "MOVEMENT_TYPE_WALK_SEQUENCE_",
+)
+
+
+def _trainer_movement_allowed(movement_type: str) -> bool:
+    """True iff a battle trainer may keep `movement_type` unchanged rather
+    than being demoted to a static facing. Default-deny: anything not on the
+    allow-list (including MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE and any
+    MOVEMENT_TYPE_WANDER_*) is refused. See the allow-list comment above for
+    the engine facts behind this."""
+    if movement_type in _TRAINER_MOVEMENT_ALLOWED_EXACT:
+        return True
+    return movement_type.startswith(_TRAINER_MOVEMENT_ALLOWED_PREFIXES)
+
+
 # Drop-report reasons (metadata_wiring.build_object_events) — informational tags,
 # not an exhaustive enum; new reasons are fine as long as they're logged loud.
 DROP_NO_BOOT_PAGE = "no_boot_page"  # no page's condition holds at boot state
@@ -2386,10 +2424,25 @@ def build_object_events(
                 graphics_id = states[boot_state]
 
             # Visible Trainer(N) battle trainer (see the module comment above
-            # `_TRAINER_NAME_RE` and `ObjectEvent`'s docstring): movement is
-            # forced static because trainer_sight_or_berry_tree_id is needed
-            # for the sight radius, and that field can't also carry a custom
-            # route (ObjectEvent.__post_init__'s field-collision guard).
+            # `_TRAINER_NAME_RE` and `ObjectEvent`'s docstring): only
+            # MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE genuinely collides with
+            # trainer_sight_or_berry_tree_id (both are backed by that one
+            # object_event template field — ObjectEvent.__post_init__'s
+            # collision guard). Every vanilla movement type is safe to keep:
+            # LOOK_AROUND / the FACE_* turn-cycle family / WALK_UP_AND_DOWN /
+            # WALK_LEFT_AND_RIGHT / WALK_SEQUENCE_* all read the independent
+            # movementRangeX/movementRangeY fields, never
+            # trainer_sight_or_berry_tree_id (event_object_movement.c
+            # :1627-1628 range copy vs :1631 trainer-range copy), and
+            # trainer_see.c's GetTrainerApproachDistance (trainer_see.c
+            # :643-655) reads the trainer's LIVE facingDirection/currentCoords
+            # every frame — it makes no assumption the trainer is static. So a
+            # battle trainer keeps `movement_spec_for`'s normal classification
+            # and is only demoted to a static facing when that classification
+            # lands on the one colliding type (`_trainer_movement_allowed`
+            # below), or on any WANDER_* type (deliberate policy — a random
+            # walk could drift a sight trainer into a chokepoint or off its
+            # intended sightline, not an engine limit).
             trainer_type = "TRAINER_TYPE_NONE"
             trainer_route_id: str | None = None
             if visible_trainer_n is not None:
@@ -2406,17 +2459,52 @@ def build_object_events(
                             f"battle trainer has unrecognized RMXP direction "
                             f"{graphic_dir!r}"
                         )
-                    spec = static_face_spec(
-                        page,
-                        f"visible Trainer({visible_trainer_n}) battle trainer: "
-                        f"movement forced static because "
-                        f"trainer_sight_or_berry_tree_id must carry the sight "
-                        f"radius (trainer_see.c GetTrainerApproachDistance), "
-                        f"which collides with the custom-route use of the same "
-                        f"field (event_object_movement.c sUraniumRoutes) if this "
-                        f"object also moved on a custom route",
-                        facing=facing,
-                    )
+                    # allow_custom_route=False: the interpreter's route id and
+                    # the trainer's sight radius are the same object_event
+                    # template field, so a trainer can never keep
+                    # MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE regardless of whether
+                    # encode_route could play the route verbatim. Skipping the
+                    # interpreter attempt up front routes plain cardinal-step/
+                    # turn routes straight to the native approximation
+                    # classifiers (_spec_for_axis / _spec_for_loop_route /
+                    # _look_spec_for) instead of losing the whole route to a
+                    # frozen statue — a trainer trades exact route fidelity
+                    # (waits, speed/frequency pacing, exact throw distance)
+                    # for keeping its sight radius; a lossy native pace beats
+                    # a static face. The allow-list vet below still applies
+                    # as the safety net (catches WANDER by policy and
+                    # anything else not on the list); CUSTOM_ROUTE should
+                    # never appear on this path anymore.
+                    spec = movement_spec_for(page, allow_custom_route=False)
+                    if not _trainer_movement_allowed(spec.movement_type):
+                        if spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE:
+                            reason = (
+                                f"visible Trainer({visible_trainer_n}) battle "
+                                f"trainer: movement demoted to static because "
+                                f"{MOVEMENT_TYPE_CUSTOM_ROUTE!r} collides with "
+                                f"trainer_sight_or_berry_tree_id (both are "
+                                f"backed by the same object_event template "
+                                f"field — sUraniumRoutes vs the sight radius "
+                                f"trainer_see.c GetTrainerApproachDistance "
+                                f"needs)"
+                            )
+                        elif spec.movement_type.startswith("MOVEMENT_TYPE_WANDER"):
+                            reason = (
+                                f"visible Trainer({visible_trainer_n}) battle "
+                                f"trainer: movement demoted to static because "
+                                f"{spec.movement_type!r} is refused by policy, "
+                                f"not an engine restriction — a random walk "
+                                f"could drift a sight trainer into a "
+                                f"chokepoint or off its intended sightline"
+                            )
+                        else:
+                            reason = (
+                                f"visible Trainer({visible_trainer_n}) battle "
+                                f"trainer: movement demoted to static because "
+                                f"{spec.movement_type!r} is not on the battle-"
+                                f"trainer movement allow-list"
+                            )
+                        spec = static_face_spec(page, reason, facing=facing)
                     trainer_type = "TRAINER_TYPE_NORMAL"
                     trainer_route_id = str(visible_trainer_n)
                 else:

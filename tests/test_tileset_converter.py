@@ -1381,31 +1381,177 @@ def test_visible_trainer_converts_to_sight_trainer() -> None:
     assert obj.movement_type == "MOVEMENT_TYPE_FACE_DOWN"
 
 
-def test_visible_trainer_custom_route_forced_static_no_route_interned() -> None:
-    """A visible Trainer(5) event with move_type 3 (custom route) still
-    converts to a static sight trainer -- movement is forced static BEFORE
-    the custom-route classifier ever inspects the route, so nothing is
-    interned into a RouteRegistry and no field collision is possible."""
-    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+def _trainer_route_page(
+    route_codes: list[int], direction: int = 2, frequency: int = 6,
+) -> dict:
+    """A visible battle-trainer move_type-3 boot page with a repeating
+    custom route built from bare (no-parameter) commands -- matches
+    `_moving_page`'s shape but keeps `direction` selectable (the demote
+    fallback facing). Since `metadata_wiring` now calls `movement_spec_for`
+    with `allow_custom_route=False` for battle trainers, these codes never
+    hit `encode_route` at all -- no bare-wait trick needed to reach the
+    native classifier; this is the route shape as RMXP actually authors it."""
+    page = _page(
+        trigger=2, name="HGSS_000", opacity=255, direction=direction, move_type=3,
+    )
+    page["move_frequency"] = frequency
+    page["move_route"] = {
+        "repeat": True,
+        "skippable": False,
+        "list": [{"code": c, "parameters": []} for c in route_codes]
+        + [{"code": 0, "parameters": []}],
+    }
+    return page
+
+
+def _trainer_route_page_with_params(
+    entries: list[tuple[int, list[int]]], direction: int = 2, frequency: int = 6,
+) -> dict:
+    """Same as `_trainer_route_page`, but for a route whose commands carry
+    real parameters (e.g. an explicit wait duration) instead of the bare
+    ``[]`` every `_trainer_route_page` code carries."""
+    page = _page(
+        trigger=2, name="HGSS_000", opacity=255, direction=direction, move_type=3,
+    )
+    page["move_frequency"] = frequency
+    page["move_route"] = {
+        "repeat": True,
+        "skippable": False,
+        "list": [{"code": c, "parameters": p} for c, p in entries]
+        + [{"code": 0, "parameters": []}],
+    }
+    return page
+
+
+def _run_battle_trainer(eid: int, trainer_n: int, page: dict) -> mw.ObjectEvent:
+    consts = mc.MapConstantRegistry(Path("x")).mint(1, "Route 1")
     map_json = {
-        "map_id": 32,
-        "events": [
-            _event(
-                10, 10, 10,
-                [_page(trigger=2, name="HGSS_000", opacity=255, direction=4, move_type=3)],
-                name="Trainer(5)",
-            )
-        ],
+        "map_id": 1,
+        "events": [_event(eid, 10, 10, [page], name=f"Trainer({trainer_n})")],
     }
     result = mw.build_object_events(
-        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
-        trainer_battle_event_ids={10},
+        map_json, consts, {1}, npc_gfx=_npc_gfx_fixture(),
+        trainer_battle_event_ids={eid}, route_registry=RouteRegistry(),
     )
-    assert len(result.object_events) == 1
-    obj = result.object_events[0]
+    (obj,) = result.object_events
+    return obj
+
+
+def test_visible_trainer_ev030_turn_cycle_look_around() -> None:
+    """Real Route-1 EV030 shape: a repeating move_route of four turn-in-place
+    commands cycling DOWN, RIGHT, UP, LEFT. With `allow_custom_route=False`
+    the interpreter attempt is skipped entirely (no bare-wait trick needed --
+    real RMXP-authored codes, no parameters improvised), so classification
+    goes straight to `_look_spec_for`: all four directions turned ->
+    MOVEMENT_TYPE_LOOK_AROUND, which is on the battle-trainer allow-list ->
+    kept, not demoted."""
+    page = _trainer_route_page([16, 18, 19, 17])
+    obj = _run_battle_trainer(30, 30, page)
+    assert obj.movement_type == "MOVEMENT_TYPE_LOOK_AROUND"
+    assert obj.movement_range_x == 0
+    assert obj.movement_range_y == 0
     assert obj.trainer_type == "TRAINER_TYPE_NORMAL"
-    assert obj.route_id == "5"
-    assert obj.movement_type == "MOVEMENT_TYPE_FACE_LEFT"
+    assert obj.route_id == "30"
+
+
+def test_visible_trainer_ev103_turn_cycle_look_around() -> None:
+    """Same shape as EV030 (real Route-1 EV103 pins the same turn-cycle
+    pattern on a different event/trainer number) -- MOVEMENT_TYPE_LOOK_AROUND,
+    kept."""
+    page = _trainer_route_page([16, 18, 19, 17])
+    obj = _run_battle_trainer(103, 103, page)
+    assert obj.movement_type == "MOVEMENT_TYPE_LOOK_AROUND"
+    assert obj.trainer_type == "TRAINER_TYPE_NORMAL"
+    assert obj.route_id == "103"
+
+
+def test_visible_trainer_ev039_turn_pair_right_down() -> None:
+    """Real Route-1 EV039 shape: turn RIGHT then turn DOWN, repeat=True.
+    `_look_spec_for` maps the two-direction set {RIGHT, DOWN} through
+    `_TURN_COMBO_TO_MOVEMENT_TYPE` to MOVEMENT_TYPE_FACE_DOWN_AND_RIGHT -- a
+    MOVEMENT_TYPE_FACE_* type, on the allow-list, kept."""
+    page = _trainer_route_page([18, 16])
+    obj = _run_battle_trainer(39, 39, page)
+    assert obj.movement_type == "MOVEMENT_TYPE_FACE_DOWN_AND_RIGHT"
+    assert obj.trainer_type == "TRAINER_TYPE_NORMAL"
+    assert obj.route_id == "39"
+
+
+def test_visible_trainer_ev053_wait_turn_down_wait_turn_left() -> None:
+    """Real Route-1 EV053 shape: wait 20 frames, turn DOWN, wait 20 frames,
+    turn LEFT, repeat=True. Turn-only (wait codes don't join `translation`
+    or `turns`), direction set {DOWN, LEFT} ->
+    MOVEMENT_TYPE_FACE_DOWN_AND_LEFT via `_TURN_COMBO_TO_MOVEMENT_TYPE` --
+    kept."""
+    page = _trainer_route_page_with_params(
+        [(15, [20]), (16, []), (15, [20]), (17, [])]
+    )
+    obj = _run_battle_trainer(53, 53, page)
+    assert obj.movement_type == "MOVEMENT_TYPE_FACE_DOWN_AND_LEFT"
+    assert obj.trainer_type == "TRAINER_TYPE_NORMAL"
+    assert obj.route_id == "53"
+
+
+def test_visible_trainer_ev035_vertical_pacer_walks() -> None:
+    """Real Route-1 EV035 shape -- the one trainer that must genuinely pace:
+    four MOVE_DOWN then four MOVE_UP, repeat=True. Before the
+    `allow_custom_route` fix this pure cardinal-step route was claimed
+    outright by `encode_route` (INTERPRETER-FIRST) as
+    MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE before `_spec_for_axis` ever ran, and
+    since that type is genuinely denied to battle trainers (field collision
+    with trainer_sight_or_berry_tree_id) the trainer demoted all the way to
+    a frozen statue. With `allow_custom_route=False` the interpreter attempt
+    is skipped, so classification reaches `_spec_for_axis` (case g): net
+    drift 0, span 4 (spawn to +4 down, back to 0), `range_y =
+    ceil(4/2) = 2`; no WAIT code and move_frequency == 6 (gap-free) ->
+    `paused = False` -> the continuous MOVEMENT_TYPE_WALK_UP_AND_DOWN
+    variant, verified empirically against `_spec_for_axis`, not assumed.
+    MOVEMENT_TYPE_WALK_UP_AND_DOWN is on the battle-trainer allow-list ->
+    kept, with its real pacing range."""
+    page = _trainer_route_page([1, 1, 1, 1, 4, 4, 4, 4])
+    obj = _run_battle_trainer(35, 35, page)
+    assert obj.movement_type == "MOVEMENT_TYPE_WALK_UP_AND_DOWN"
+    assert obj.movement_range_x == 0
+    assert obj.movement_range_y == 2
+    assert obj.trainer_type == "TRAINER_TYPE_NORMAL"
+    assert obj.route_id == "35"
+
+
+def test_ordinary_npc_vertical_pacer_route_still_uses_custom_route_interpreter() -> None:
+    """Regression guard for the `allow_custom_route` default: an ORDINARY
+    (non-trainer) NPC with the exact same EV035 four-down/four-up route
+    still gets the higher-fidelity MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE
+    interpreter playback and still interns a route id -- only the
+    battle-trainer call site passes `allow_custom_route=False`; every other
+    caller (`movement_spec_for(page)` with no keyword) is unchanged."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    map_json = {"map_id": 32, "events": [_event(1, 1, 1, [_moving_page([1, 1, 1, 1, 4, 4, 4, 4])])]}
+    registry = RouteRegistry()
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(), route_registry=registry,
+    )
+    (obj,) = result.object_events
+    assert obj.movement_type == mw.MOVEMENT_TYPE_CUSTOM_ROUTE
+    assert obj.route_id != "0"
+    assert len(registry) == 1
+
+
+def test_visible_trainer_wander_demoted_to_static_by_policy() -> None:
+    """A battle trainer whose page classifies as MOVEMENT_TYPE_WANDER_AROUND
+    (RMXP move_type 1, random) is demoted to a static facing matching its
+    RMXP spawn direction, and the demote reason names this as a deliberate
+    policy choice -- not an engine restriction."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    page = _page(trigger=2, name="HGSS_000", opacity=255, direction=6, move_type=1)
+    map_json = {"map_id": 32, "events": [_event(21, 10, 10, [page], name="Trainer(8)")]}
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
+        trainer_battle_event_ids={21},
+    )
+    (obj,) = result.object_events
+    assert obj.movement_type == "MOVEMENT_TYPE_FACE_RIGHT"  # graphic.direction=6
+    assert obj.trainer_type == "TRAINER_TYPE_NORMAL"
+    assert obj.route_id == "8"
 
 
 def test_visible_trainer_absent_from_battle_ids_falls_back_to_npc() -> None:

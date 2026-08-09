@@ -332,7 +332,7 @@ class MovementSpec:
     route_bytecode: tuple[int, ...] | None = None
 
 
-def movement_spec_for(page: dict) -> MovementSpec:
+def movement_spec_for(page: dict, *, allow_custom_route: bool = True) -> MovementSpec:
     """The pokeemerald movement (`MOVEMENT_TYPE_*` + `movement_range_x`/`_y`)
     for a page's RMXP `move_type`, recovering the patrol/look/pace behavior
     Uranium actually encodes in move_type 3 repeating `move_route`s instead of
@@ -443,7 +443,21 @@ def movement_spec_for(page: dict) -> MovementSpec:
 
     Fails loud (`ValueError`) on an unknown `move_type` or an unknown
     `graphic.direction` in any facing branch — no silent default movement
-    (CLAUDE.md §4.5)."""
+    (CLAUDE.md §4.5).
+
+    `allow_custom_route` (keyword-only, default `True` — no existing caller's
+    behavior changes) gates whether move_type 3's INTERPRETER-FIRST
+    `encode_route` attempt runs at all. `False` skips that attempt entirely
+    and goes straight to the native/static classification (cases a-h) —
+    exactly the path already taken when `encode_route` itself returns `None`.
+    This exists for callers that structurally cannot use
+    `MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE` even though the interpreter could
+    encode the route (`metadata_wiring.build_object_events`'s battle-trainer
+    branch: that movement type rides the same object_event template field as
+    the trainer's sight radius). The native approximation this falls back to
+    is lossy relative to the RMXP route — it can lose waits, speed/frequency
+    pacing, and exact throw distance — but for a caller that has ruled out
+    the interpreter that trade-off is accepted; see the call site."""
     move_type = page["move_type"]
 
     if move_type == MOVE_TYPE_FIXED:
@@ -461,7 +475,7 @@ def movement_spec_for(page: dict) -> MovementSpec:
     if move_type != MOVE_TYPE_CUSTOM:
         raise ValueError(f"unknown RMXP move_type {move_type!r}")
 
-    return _spec_for_custom_route(page)
+    return _spec_for_custom_route(page, allow_custom_route=allow_custom_route)
 
 
 def _face_from_graphic(page: dict) -> str:
@@ -474,14 +488,18 @@ def _face_from_graphic(page: dict) -> str:
     return f"MOVEMENT_TYPE_FACE_{facing}"
 
 
-def _spec_for_custom_route(page: dict) -> MovementSpec:
+def _spec_for_custom_route(page: dict, *, allow_custom_route: bool = True) -> MovementSpec:
     """move_type 3 classification. `page["move_route"]` (`KeyError` propagates
     if absent) always carries ``"repeat"`` and a ``"list"`` of ``{"code": int,
     "parameters": [...]}`` entries ending in a code-0 sentinel.
 
     INTERPRETER-FIRST: before any of the native/static classification below,
-    try `route_bytecode.encode_route` on the whole route. Success (not
-    `None`) means the engine's bytecode interpreter
+    try `route_bytecode.encode_route` on the whole route — unless
+    `allow_custom_route` is `False`, in which case this attempt is skipped
+    entirely and classification proceeds straight to cases a-h below, exactly
+    as if `encode_route` had returned `None` (see `movement_spec_for`'s
+    docstring for why a caller would pass `False`). When the attempt does
+    run: success (not `None`) means the engine's bytecode interpreter
     (`MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE`) can play the route verbatim —
     deterministic pacing and arbitrary step/turn/through sequences the
     native classifier below can't (or can only approximate) — so that wins
@@ -493,7 +511,7 @@ def _spec_for_custom_route(page: dict) -> MovementSpec:
     encode (`reference/guides/custom_route_interpreter.md`)."""
     route = page["move_route"]
 
-    bytecode = encode_route(route, page["move_frequency"])
+    bytecode = encode_route(route, page["move_frequency"]) if allow_custom_route else None
     if bytecode is not None:
         return MovementSpec(MOVEMENT_TYPE_CUSTOM_ROUTE, route_bytecode=tuple(bytecode))
 

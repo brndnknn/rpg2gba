@@ -84,25 +84,6 @@ the chapter model the seam is off-frontier (seven chapters past CH02). Full
 detail copied verbatim there. Stays prerequisite-chained on item 4 (per-map
 tileset packing).
 
-### 9. Trainer pacing lost — 5 of Route 01's 9 trainers stand still
-
-User-ruled 2026-08-05 (accepted as debt, not a defect). A pokeemerald
-`object_event` stores a trainer's SIGHT RADIUS and this project's custom
-Uranium ROUTE ID in the *same* field (`trainer_sight_or_berry_tree_id` →
-`trainerRange_berryTreeId`; sight read at `engine/src/trainer_see.c:643-655`,
-route read at `engine/src/event_object_movement.c:6251`). One object cannot
-have both. `metadata_wiring.build_object_events` therefore forces every visible
-Trainer(N) to `static_face_spec(...)` facing its RMXP spawn direction and
-spends the field on the sight radius. Map033 EV030/035/039/053/103 carry RMXP
-`move_type == 3` custom routes that are consequently dropped — they pace in
-Uranium, they stand in the ROM. `ObjectEvent.__post_init__` fails loud if the
-two ever get combined.
-
-Revisit paths, cheapest first: (a) fit each dropped route to a vanilla
-`MOVEMENT_TYPE_WALK_SEQUENCE_*` / `WANDER` pattern, which doesn't use the
-contested field; (b) move the Uranium route id into a side table in engine C so
-a trainer can pace *and* see. Not frontier-blocking either way.
-
 ### 10. Phone/rematch trainers don't battle — Map033 EV039, EV053
 
 User-ruled 2026-08-05 (accepted for this ROM). Essentials' phone-trainer idiom
@@ -148,6 +129,50 @@ that array before (only the retired LLM orchestrator did), so the plumbing
 landed with it.
 
 ## Done
+
+### 9. Trainer pacing lost — 5 of Route 01's 9 trainers stand still — FIXED 2026-08-09
+
+The 2026-08-05 framing was over-broad. Only `MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE`
+actually collides with `trainer_sight_or_berry_tree_id`; every *vanilla*
+autonomous movement type reads the independent `movementRangeX/movementRangeY`
+template fields (`engine/src/event_object_movement.c:1627-1628` range copy vs
+`:1631` trainer-range copy), and `GetTrainerApproachDistance`
+(`engine/src/trainer_see.c:643-655`) reads the trainer's LIVE
+`facingDirection`/`currentCoords` every frame — nothing in the engine assumes a
+trainer is static. So a battle trainer can pace *and* see; it just can't run the
+bytecode interpreter. Path (b) (engine side table) was not needed.
+
+Two changes. `npc_gfx.movement_spec_for(page, *, allow_custom_route=True)`
+threads into `_spec_for_custom_route`; `False` skips the INTERPRETER-FIRST
+`encode_route` attempt entirely and falls straight to the native classifiers
+(`_spec_for_axis` / `_spec_for_loop_route` / `_look_spec_for`), exactly the path
+already taken when `encode_route` returns `None`. Default is unchanged, so no
+existing caller moved. `metadata_wiring.build_object_events`' battle-trainer
+branch then calls `movement_spec_for(page, allow_custom_route=False)` instead of
+going straight to `static_face_spec`, and vets the result against a new
+default-deny allow-list (`_TRAINER_MOVEMENT_ALLOWED_EXACT` /
+`_TRAINER_MOVEMENT_ALLOWED_PREFIXES`, `_trainer_movement_allowed`).
+
+**The `allow_custom_route=False` skip is the whole fix.** Without it the branch
+still demotes: plain cardinal-step and face-direction routes encode cleanly, so
+they reach `MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE` — the one denied type — and
+never touch the native classifiers at all. A first pass that only added the
+allow-list looked green on contrived test pages and changed nothing on the real
+data.
+
+`MOVEMENT_TYPE_WANDER_*` is denied for trainers by **policy, not engine limit**
+(a random walk can drift a sight trainer into a chokepoint or off its
+sightline); the reason string says so. `ObjectEvent.__post_init__`'s collision
+guard stays as the last line of defence.
+
+Shipped in ROM `5d4a7622` (Map033): EV030 + EV103 (turn-cycle D,R,U,L) →
+`MOVEMENT_TYPE_LOOK_AROUND`; EV035 (4×down, 4×up) →
+`MOVEMENT_TYPE_WALK_UP_AND_DOWN` with `movement_range_y=2` (net drift 0, span 4,
+`ceil(4/2)`). EV039/EV053 were never on this path — they are #10's phone
+trainers, not battle trainers, so they already kept full-fidelity
+`URANIUM_CUSTOM_ROUTE` routes. Fidelity accepted as lossy for trainers: waits,
+speed/frequency pacing and exact throw distance do not survive the native
+approximation. Awaiting its §9 boot-walk.
 
 ### 15. Wild encounters never reached the ROM — DONE 2026-08-09
 

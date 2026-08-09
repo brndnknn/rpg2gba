@@ -413,3 +413,27 @@ split tables. Also cross-referenced by `00-atlas.md:175`.
   `sys.modules` each 1 s poll, so converter modules are covered; `--no-watch`
   opt-out). Browser still needs a manual F5 after restart, as scoped.
   Live-verified end-to-end; +33 tests.
+
+### 29. `stage_slice_scripts` existence check is blind to engine-defined labels
+
+Found 2026-08-09 while rebuilding CH02. `stage_slice_scripts.py --write` exits
+1 with `FAIL: 2 undefined script reference(s): BerryTreeScript,
+Common_EventScript_FindItem`. Both labels are real and vanilla —
+`engine/data/scripts/berry_tree.inc:1` and
+`engine/data/scripts/item_ball_scripts.inc:1` — but the dangling-reference check
+(`stage_slice_scripts.py:560-585`, `asm.find_dangling_references`) builds its
+defined-set from staged `.pory` text plus the dispatchers and CommonEvents only.
+Any map.json object script pointing at an engine-provided label therefore reads
+as dangling by construction.
+
+Pre-existing, not caused by the trainer-pacing change: the already-shipped
+`engine/data/maps/Route01/map.json` carries 10 such references, so every CH02
+build since berry trees and item balls landed has exited 1 here. Not a build
+blocker — `assemble_pathfinder` and `make modern` are separate steps with their
+own fork-index gate — but it is a **loud check that is now routinely ignored**,
+which is exactly how a real dangling reference gets waved through.
+
+Fix: feed the check an engine-defined label set (scan `engine/data/scripts/*.inc`
+for `^Label::`, the same way the fork-capability index is built per CLAUDE.md
+§4.7) and only report labels defined in neither place. Do not special-case these
+two by name.
