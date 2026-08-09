@@ -225,6 +225,82 @@ def test_dangling_reference_common_event_resolves_with_ce_file():
     assert asm.find_dangling_references([map_pory, ce]) == set()
 
 
+_ENGINE_ROOT = Path(__file__).resolve().parents[1] / "engine"
+
+
+def test_engine_defined_labels_finds_known_vanilla_scripts():
+    labels = asm.engine_defined_labels(_ENGINE_ROOT)
+    assert len(labels) > 1000
+    assert "BerryTreeScript" in labels
+    assert "Common_EventScript_FindItem" in labels
+
+
+def test_engine_defined_labels_raises_on_missing_root(tmp_path):
+    with pytest.raises(ValueError, match="not found"):
+        asm.engine_defined_labels(tmp_path / "no-such-engine")
+
+
+def test_engine_defined_labels_raises_on_implausibly_small_scan(tmp_path):
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "tiny.inc").write_text(
+        "OneScript::\n    end\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="expected thousands"):
+        asm.engine_defined_labels(tmp_path)
+
+
+def test_engine_defined_labels_excludes_generated_per_map_scripts_inc(tmp_path):
+    # engine/data/maps/<Map>/scripts.inc is PIPELINE-GENERATED (assembled from OUR
+    # staged .pory, blanket-gitignored at .gitignore:124) — it must never vouch for
+    # a label, or a stale leftover from a previous build could paper over a script
+    # the current staging no longer emits. Only data/scripts/**/*.inc (and the
+    # top-level data/*.s / data/*.inc) are genuinely vendored, non-generated source.
+    scripts_dir = tmp_path / "data" / "scripts"
+    scripts_dir.mkdir(parents=True)
+    # Pad past the fail-loud floor with real vendored-shaped labels.
+    padding = "\n".join(f"PaddingScript{i}::\n    end\n" for i in range(150))
+    (scripts_dir / "vanilla.inc").write_text(
+        f"VanillaScript::\n    end\n{padding}", encoding="utf-8"
+    )
+    maps_dir = tmp_path / "data" / "maps" / "SomeMap"
+    maps_dir.mkdir(parents=True)
+    (maps_dir / "scripts.inc").write_text(
+        "GeneratedOnlyScript::\n    end\n", encoding="utf-8"
+    )
+
+    labels = asm.engine_defined_labels(tmp_path)
+    assert "VanillaScript" in labels
+    assert "GeneratedOnlyScript" not in labels
+
+
+def test_dangling_reference_engine_label_not_reported():
+    # A map.json object script pointing at a real, vanilla engine label (never
+    # staged by us) is not a dangling reference once engine_defined is supplied.
+    mj = {"object_events": [{"script": "BerryTreeScript"}]}
+    assert asm.find_dangling_references([""], [mj]) == {"BerryTreeScript"}
+    assert asm.find_dangling_references(
+        [""], [mj], engine_defined={"BerryTreeScript", "Common_EventScript_FindItem"}
+    ) == set()
+
+
+def test_dangling_reference_engine_defined_none_matches_default_behavior():
+    mj = {"object_events": [{"script": "Map032_EV002_Page1"}]}
+    assert (
+        asm.find_dangling_references([""], [mj])
+        == asm.find_dangling_references([""], [mj], engine_defined=None)
+        == {"Map032_EV002_Page1"}
+    )
+
+
+def test_dangling_reference_still_catches_genuinely_undefined_label():
+    # A label defined in neither the staged text nor the (fake) engine set must
+    # still be reported — the engine_defined union must not swallow real breaks.
+    mj = {"object_events": [{"script": "TotallyMadeUpScript"}]}
+    assert asm.find_dangling_references(
+        [""], [mj], engine_defined={"BerryTreeScript"}
+    ) == {"TotallyMadeUpScript"}
+
+
 def test_static_object_sentinel_is_not_a_reference():
     # An object_event S5 stubbed to a static object (no .pory body) carries the
     # "0x0" sentinel, not a label -> it must not register as a dangling reference.

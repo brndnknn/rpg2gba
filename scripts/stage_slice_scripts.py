@@ -568,13 +568,21 @@ def main() -> int:
         aux_texts.append(ce.read_text(encoding="utf-8"))
 
     all_texts = list(staged.values()) + aux_texts
-    dangling = asm.find_dangling_references(all_texts, map_jsons)
+    # `fork` (RPG2GBA_POKEEMERALD) is the vendored engine/ root — sprite_pass and
+    # emit_route_table above already write into it as engine_root. Reuse it here
+    # so a map.json/dispatcher reference to a vanilla engine script (BerryTreeScript,
+    # Common_EventScript_FindItem, ...) isn't reported as dangling just because WE
+    # never staged a block for it (PROJECT_TODO #29).
+    engine_defined = asm.engine_defined_labels(fork)
+    dangling = asm.find_dangling_references(all_texts, map_jsons, engine_defined=engine_defined)
     duplicates = asm.find_duplicate_definitions(all_texts)
 
     print()
     if dangling or duplicates:
         if dangling:
-            print(f"FAIL: {len(dangling)} undefined script reference(s):", file=sys.stderr)
+            print(f"FAIL: {len(dangling)} undefined script reference(s) "
+                  f"(defined nowhere — neither staged scripts nor the engine):",
+                  file=sys.stderr)
             for ref in sorted(dangling):
                 print(f"    {ref}", file=sys.stderr)
         if duplicates:

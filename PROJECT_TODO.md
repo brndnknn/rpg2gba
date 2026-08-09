@@ -437,3 +437,23 @@ Fix: feed the check an engine-defined label set (scan `engine/data/scripts/*.inc
 for `^Label::`, the same way the fork-capability index is built per CLAUDE.md
 §4.7) and only report labels defined in neither place. Do not special-case these
 two by name.
+
+**FIXED 2026-08-09.** New `assembly.engine_defined_labels(engine_root)` harvests
+`^Label::` (double-colon only — a scan of every script reference in the vendored
+tree found zero targeting a single-colon label, which the engine uses for text
+and movement bodies) and `find_dangling_references` grew an `engine_defined`
+parameter unioned into the defined-set, defaulting to `None` so no other caller
+moved. `stage_slice_scripts` passes it using the engine root it already had.
+4924 labels; fail-loud floor at 100, because a silently-empty scan would restore
+the exact false-negative the function exists to kill. Exits 0 now.
+
+**The scan scope is the load-bearing part.** The obvious glob `data/**/*.inc`
+also matches `engine/data/maps/<Map>/scripts.inc` — per-map output assembled from
+*our own* staged `.pory`, blanket-gitignored at `.gitignore:124`. Trusting that
+would let a stale artifact from a previous build vouch for a label the current
+staging no longer emits, which is a worse failure than the one being fixed: a
+dropped script would pass the gate. Scope is therefore `data/scripts/**/*.inc`
+plus top-level `data/*.s` / `data/*.inc`, excluding `data/maps/**` and
+`data/layouts/**`. Including the generated trees inflated the count from 4924 to
+23290 — a useful smell if anyone re-widens it.
+`test_engine_defined_labels_excludes_generated_per_map_scripts_inc` pins it.
