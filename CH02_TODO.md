@@ -84,25 +84,6 @@ the chapter model the seam is off-frontier (seven chapters past CH02). Full
 detail copied verbatim there. Stays prerequisite-chained on item 4 (per-map
 tileset packing).
 
-### 10. Phone/rematch trainers don't battle — Map033 EV039, EV053
-
-User-ruled 2026-08-05 (accepted for this ROM). Essentials' phone-trainer idiom
-buries `pbTrainerBattle(...)` inside a code-111 conditional behind a
-`pbTrainerIntro` / `Kernel.pbNoticePlayer` preamble, with rematch pages built on
-`createPhoneTrainer` / `customTrainerBattle` / `pbPhoneRegisterBattle`. No
-classifier collapses that shape, so no `trainerbattle_single` is generated and
-the fork-index gate sees nothing to gate. The two events convert to ordinary
-NPCs that talk but never battle; their commands sit in the loud transpiler
-queue where they belong.
-
-Both trainers' parties ARE already staged (`TRAINER_BRANDON_16`,
-`TRAINER_RICHEY_3` in `common.SLICE_TRAINER_BATTLES`), so this is purely a
-transpiler-side gap. The guard that keeps it honest:
-`build_object_events`' `trainer_battle_event_ids` — an event with no generated
-`trainerbattle` call is emitted with `TRAINER_TYPE_NONE`, never as a dead
-sight-trigger. The idiom recurs across the corpus, so the classifier is worth
-writing before a route-heavy chapter.
-
 ### 11. Uranium-original moves silently absent from staged learnsets
 
 `species_converter.stage.emit_learnsets` now gates every level-up move against
@@ -129,6 +110,66 @@ that array before (only the retired LLM orchestrator did), so the plumbing
 landed with it.
 
 ## Done
+
+### 10. Phone/rematch trainers don't battle — Map033 EV039, EV053 — DONE 2026-08-10
+
+Was user-ruled accepted debt 2026-08-05; closed instead by writing the
+classifier and wiring the native rematch system. Essentials' phone-trainer
+idiom buries `pbTrainerBattle(...)` in a code-111 conditional behind a
+`pbTrainerIntro` / `Kernel.pbNoticePlayer` preamble, with rematch pages built
+on `createPhoneTrainer` / `customTrainerBattle` / `pbPhoneRegisterBattle`.
+**Classifier 10** (`conversion_agent/deterministic.py`) collapses it against
+the verified real JSON of EV039 (Brandon) / EV053 (Richey): page 0 →
+`trainerbattle_single` + `register_matchcall` (`asm/macros/event.inc`), page 1
+→ an `IsTrainerReadyForRematch`-gated rematch. Page conditions were verified in
+the corpus, not taken from the prose description handed to the classifier's
+author — the rematch page keys off self-switch **B**, the idle page off **A**;
+the classifier bails fail-loud on any structural deviation.
+
+Engine side is native, no custom C: new assembler pass **S8b5**
+(`assemble_pathfinder.run_rematch_pass`, `trainer_converter/rematch.py`) mints
+`REMATCH_URANIUM_*` enum members + `gRematchTable` rows and installs them as
+gitignored `.gen.h` fragments behind committed sentinel hooks. Rows are gated
+against `trainer_manifest.json`, so a row can never name a `TRAINER_*` the fork
+won't define, and all fork facts (`MAX_REMATCH_ENTRIES`,
+`TRAINER_REGISTERED_FLAGS_START`, the vanilla member list) are read from the
+fork at run time per §4.7.
+
+**Two constraints worth carrying forward:**
+
+1. **Capacity is 2, and CH02 consumed all of it.** `capacity =
+   min(saveblock_headroom, registered_flag_headroom)` = `min(22, 2)` — the
+   binding limit is free `FLAG_REGISTERED_*` numbers past the vanilla block,
+   not `MAX_REMATCH_ENTRIES`. The next chapter with a phone trainer needs that
+   flag block widened first; the pass fails loud rather than overrunning it.
+2. **Generated enum members cannot be `#include`d inside an `enum { … }`.**
+   The first build of this work died on every assembly unit with
+   `data/mystery_gift.s:104: error: unterminated enum from included file
+   include/constants/rematches.h:0`. Cause: `.s` files run through cpp *before*
+   `tools/preproc`, and cpp's enter/leave-file line markers (`# 1 "…" 1`) carry
+   trailing flags that `AsmFile::ParseLineSkipInEnum`
+   (`engine/tools/preproc/asm_file.cpp:789`) cannot parse — it only handles a
+   bare `# <n> "<file>"`. The error names the *including* header at line 0, so
+   it points nowhere useful. Fix without touching the vendored tool: the
+   `#include` moved **above** the enum and defines an object-like macro
+   (`URANIUM_REMATCH_MEMBERS`, `rematch.MEMBERS_MACRO`) expanded on a single
+   line inside the enum body — a macro expansion emits no line markers. C files
+   were never affected (different preproc path), which is why `battle_setup.c`'s
+   rows hook needed no change. **Any future generated-enum-member hook must use
+   the macro shape.** `parse_rematch_members` skips the macro line so the
+   vanilla-baseline index math stays idempotent across re-runs.
+
+Ordering guarantee is unchanged and still load-bearing: members must land above
+`REMATCH_WALLY_VR` or `IsRematchForbidden` rejects every id
+>= `REMATCH_ELITE_FOUR_ENTRIES` and the rematch silently never fires.
+`test_committed_engine_hooks_are_present_and_correctly_placed` pins
+include < enum < macro < WALLY.
+
+Shipped in ROM `fe4c75e2` (`output/uranium-build/uranium-ch02-fe4c75e2-phone-rematch.gba`,
+taildropped 2026-08-10) — **§9 boot-walk pending**: both trainers should battle
+on sight, offer Match Call registration on defeat, and be rematchable.
+Suite 1934 passed / 19 skipped; `make modern` clean (EWRAM 86.79%, IWRAM 86.99%,
+ROM 27.13/32 MB).
 
 ### 9. Trainer pacing lost — 5 of Route 01's 9 trainers stand still — FIXED 2026-08-09
 

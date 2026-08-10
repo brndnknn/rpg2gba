@@ -25,6 +25,12 @@ Pass 2.5 (S8b4) — wild encounter table staging
     gitignored; see run_encounters_pass docstring for the URANIUM_WILD_ENCOUNTERS
     hook in engine/Makefile that selects it over the committed file).
 
+Pass 2.6 (S8b5) — PokePod rematch table staging
+    Detect phone-rematch events (pbPhoneRegisterBattle) across the build set and
+    emit the REMATCH_* enum members + gRematchTable rows they need, then install
+    them as gitignored .gen.h fragments behind committed #include hooks in
+    include/constants/rematches.h and src/battle_setup.c (see run_rematch_pass).
+
 Pass 3 (S8d) — berry tree seed table
     Emit fork data/scripts/uranium_berry_trees.h (gitignored): the pre-planted
     berry-tree save-slot table consumed by new_game.c's NewGameInitData, right
@@ -610,6 +616,105 @@ def run_encounters_pass(out: Path, fork: Path, consts: dict, dry_run: bool) -> N
 
 
 # ---------------------------------------------------------------------------
+# S8b5: PokePod rematch table staging
+# ---------------------------------------------------------------------------
+
+def run_rematch_pass(out: Path, fork: Path, consts: dict, dry_run: bool) -> None:
+    """Stage the `gRematchTable` data behind Uranium's PokePod phone rematches.
+
+    Detects phone-rematch events structurally (`pbPhoneRegisterBattle` in a map
+    event's script) across `SLICE_MAP_IDS`, resolves each to its staged
+    `TRAINER_*` constant, and emits the two C fragments the engine needs: the
+    `REMATCH_*` enum members and the `gRematchTable` rows
+    (`rpg2gba.trainer_converter.rematch`). Fork facts (enum members,
+    `MAX_REMATCH_ENTRIES`, `TRAINER_REGISTERED_FLAGS_START` headroom) are read
+    from `fork` at run time, never pinned (CLAUDE.md §4.7).
+
+    Unlike S8b4's wild encounters there is no Makefile-wildcard injection path:
+    `gRematchTable` (`src/battle_setup.c`) and the `REMATCH_*` enum
+    (`include/constants/rematches.h`) are hand-written C in committed vendored
+    source, with no generator tool and no data file for a `$(or $(wildcard …))`
+    hook to swap. So the fragments are installed the other sanctioned way — the
+    `constants/event_objects.h` -> `uranium_event_objects.gen.h` precedent: two
+    committed `URANIUM PATHFINDER SLICE` `#include` hooks pull in gitignored
+    generated headers, which this pass writes into `out/trainers/rematch/` and
+    then copies into the fork. Both are always written (comment-only stubs when
+    no phone-rematch trainers are staged), so a build never sees a missing
+    include.
+
+    The enum fragment MUST land above `REMATCH_WALLY_VR` — `IsRematchForbidden`
+    rejects every id >= `REMATCH_ELITE_FOUR_ENTRIES`. That ordering lives in the
+    committed hook's position, not here.
+
+    Must run AFTER S8b3 (`run_trainer_pass`): it gates every rematch row
+    against `out/trainers/trainer_manifest.json`'s staged battle trainers, so
+    a row can never name a `TRAINER_*` the fork won't define.
+
+    `consts` is the already-loaded `map_constants.json` dict — the map-id ->
+    `MAP_*` mapping is read straight from it, never re-minted (CLAUDE.md §4.3).
+    """
+    logger.info("=== S8b5: rematch table staging ===")
+    from rpg2gba.trainer_converter import battles as tb
+    from rpg2gba.trainer_converter import rematch as rm
+
+    trainer_manifest_path = out / "trainers" / "trainer_manifest.json"
+    if not trainer_manifest_path.is_file():
+        raise FileNotFoundError(
+            f"{trainer_manifest_path} missing -- run the trainer pass (S8b3) first; the "
+            "rematch rows are gated against its staged battle trainers"
+        )
+    staged_keys = rm.load_staged_battle_trainer_keys(trainer_manifest_path)
+    trainers = tb.load_trainers_json(out / "intermediate")
+
+    facts = rm.load_fork_facts(fork)
+    events = rm.detect_over_maps(out / "maps", SLICE_MAP_IDS)
+    map_consts = {mid: consts[str(mid)]["map_const"] for mid in SLICE_MAP_IDS}
+    entries = rm.build_rematch_entries(events, trainers, map_consts, staged_keys, facts)
+
+    logger.info(
+        "  %d phone-rematch trainer(s); fork capacity %d (saveblock %d, registered-flag %d)",
+        len(entries), facts.capacity, facts.saveblock_headroom, facts.registered_flag_headroom,
+    )
+    for e in entries:
+        logger.info(
+            "    map %d EV%03d %s -> %s @ %s",
+            e.uranium_map_id, e.event_id, e.trainer_key, e.rematch_const, e.map_const,
+        )
+
+    dest = out / "trainers" / "rematch"
+    _write(dest / "uranium_rematches.gen.h", rm.emit_rematch_enum(entries),
+           "rematch enum members", dry_run)
+    _write(dest / "uranium_rematch_table.gen.h", rm.emit_rematch_table(entries),
+           "gRematchTable rows", dry_run)
+    _write(
+        dest / "rematch_manifest.json",
+        json.dumps(
+            {
+                "version": 1,
+                "generator": rm.GENERATOR,
+                "insert_before": rm.INSERT_BEFORE_MEMBER,
+                "rematches": rm.build_rematch_manifest_records(entries),
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n",
+        "rematch manifest",
+        dry_run,
+    )
+    _copy(
+        dest / "uranium_rematches.gen.h",
+        fork / "include" / "constants" / "uranium_rematches.gen.h",
+        "rematch enum members", dry_run,
+    )
+    _copy(
+        dest / "uranium_rematch_table.gen.h",
+        fork / "src" / "data" / "uranium_rematch_table.gen.h",
+        "gRematchTable rows", dry_run,
+    )
+
+
+# ---------------------------------------------------------------------------
 # S8c: Fork assembly
 # ---------------------------------------------------------------------------
 
@@ -1072,6 +1177,8 @@ def main() -> int:
                     help="Skip S8b3 (Uranium trainer pics already staged).")
     ap.add_argument("--skip-encounters", action="store_true",
                     help="Skip S8b4 (wild encounter tables already staged).")
+    ap.add_argument("--skip-rematches", action="store_true",
+                    help="Skip S8b5 (PokePod rematch table already staged).")
     args = ap.parse_args()
 
     repo_root = Path(__file__).parent.parent
@@ -1117,6 +1224,9 @@ def main() -> int:
 
     if not args.skip_encounters:
         run_encounters_pass(out, fork, consts, args.dry_run)
+
+    if not args.skip_rematches:
+        run_rematch_pass(out, fork, consts, args.dry_run)
 
     run_fork_pass(out, fork, consts, staging, args.dry_run, batch_layouts=batch_layouts)
     run_berry_tree_pass(out, fork, args.dry_run)

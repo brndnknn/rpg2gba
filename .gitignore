@@ -60,6 +60,10 @@ engine/data/tilesets/secondary/uranium*/
 engine/include/constants/uranium_event_objects.gen.h
 engine/src/data/object_events/uranium_*.gen.h
 engine/graphics/object_events/pics/uranium/
+# PokePod phone rematches (S8b5): generated engine fragments, pulled in by committed
+# sentinel #include hooks in include/constants/rematches.h and src/battle_setup.c.
+engine/include/constants/uranium_rematches.gen.h
+engine/src/data/uranium_rematch_table.gen.h
 # Starter species conversion: generated engine overlays (pulled in by committed
 # URANIUM PATHFINDER SLICE #include/.include hooks in include/constants/{species,
 # pokedex,cries}.h, src/data/pokemon/species_info.h, src/data/graphics/pokemon.h,

@@ -232,6 +232,12 @@ const struct RematchTrainer gRematchTable[REMATCH_TABLE_ENTRIES] =
     [REMATCH_GLACIA] = REMATCH(TRAINER_GLACIA, TRAINER_GLACIA, TRAINER_GLACIA, TRAINER_GLACIA, TRAINER_GLACIA, MAP_EVER_GRANDE_CITY),
     [REMATCH_DRAKE] = REMATCH(TRAINER_DRAKE, TRAINER_DRAKE, TRAINER_DRAKE, TRAINER_DRAKE, TRAINER_DRAKE, MAP_EVER_GRANDE_CITY),
     [REMATCH_WALLACE] = REMATCH(TRAINER_WALLACE, TRAINER_WALLACE, TRAINER_WALLACE, TRAINER_WALLACE, TRAINER_WALLACE, MAP_EVER_GRANDE_CITY),
+// BEGIN URANIUM PATHFINDER SLICE — generated PokePod rematch rows include-hook (rpg2gba; see engine/RPG2GBA_VENDOR.md).
+// The assembler always writes data/uranium_rematch_table.gen.h (comment-only stub when no phone-rematch
+// trainers are staged). Rows are [REMATCH_URANIUM_*] designated initializers, so position inside this
+// initializer is irrelevant; the enum ordering hook in constants/rematches.h is what matters.
+#include "data/uranium_rematch_table.gen.h"
+// END URANIUM PATHFINDER SLICE
 };
 
 #define tState data[0]
