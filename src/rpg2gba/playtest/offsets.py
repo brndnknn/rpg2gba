@@ -85,6 +85,17 @@ _PROBE_ENTRIES: dict[str, str] = {
     "off_mapheader_maplayout": "offsetof(struct MapHeader, mapLayout)",
     "off_maplayout_width": "offsetof(struct MapLayout, width)",
     "off_maplayout_height": "offsetof(struct MapLayout, height)",
+    # `_plan_route`'s grass-aware cost (emulator.py): the same pointer chain
+    # `GetAttributeByMetatileIdAndMapLayout` (engine/src/fieldmap.c) walks to
+    # turn a `gBackupMapLayout` block's packed metatile id into a behavior
+    # byte -- primary/secondary `struct Tileset`, each tileset's
+    # `metatileAttributes` array, and `isFrlg` (Uranium's converter emits the
+    # non-FRLG/Emerald attribute format, but this is read live rather than
+    # assumed, so it stays correct if that ever changes).
+    "off_maplayout_primarytileset": "offsetof(struct MapLayout, primaryTileset)",
+    "off_maplayout_secondarytileset": "offsetof(struct MapLayout, secondaryTileset)",
+    "off_maplayout_isfrlg": "offsetof(struct MapLayout, isFrlg)",
+    "off_tileset_metatileattributes": "offsetof(struct Tileset, metatileAttributes)",
     # gMapHeader.events -> warps: tiles a route must not step onto, or the
     # walk silently relocates the scenario to another map.
     "off_mapheader_events": "offsetof(struct MapHeader, events)",
@@ -130,7 +141,57 @@ _PROBE_ENTRIES: dict[str, str] = {
     "off_playeravatar_flags": "offsetof(struct PlayerAvatar, flags)",
     "off_playeravatar_objecteventid": "offsetof(struct PlayerAvatar, objectEventId)",
     "off_playeravatar_spriteid": "offsetof(struct PlayerAvatar, spriteId)",
+    # -- object-event observability (emulator.object_events, ROM_TEST_DEV.md
+    # "Harness cannot see NPCs") -------------------------------------------
+    # struct ObjectEvent (global.fieldmap.h:249-312): non-bitfield fields are
+    # probed directly. `localId` (0x08) is the object's *compiled* local id
+    # (its 1-based position in the map JSON's object_events array after
+    # tileset_converter/local_id_remap.py's remap), not necessarily the RMXP
+    # event id.
+    "off_objevent_localid": "offsetof(struct ObjectEvent, localId)",
+    "off_objevent_movementtype": "offsetof(struct ObjectEvent, movementType)",
+    # A sight trainer's own live sight range -- the exact `range` value
+    # `GetTrainerApproachDistance`'s per-direction functions bound the
+    # approach distance to (engine/src/trainer_see.c:636-660); route1.py's
+    # `_sight_lane_tiles` reads this live rather than assuming a fixed scan
+    # depth for every trainer.
+    "off_objevent_trainerrange_berrytreeid":
+        "offsetof(struct ObjectEvent, trainerRange_berryTreeId)",
+    # Anchor used only to sanity-check OBJEVENT_FACING_BYTE_OFFSET below: the
+    # header comments mark facingDirection/movementDirection/range as a single
+    # 2-byte block at 0x18-0x19 (global.fieldmap.h:293-299), immediately
+    # followed by fieldEffectSpriteId at 0x1A (global.fieldmap.h:300). If a
+    # future engine change grows that block, this probed value moves and the
+    # hardcoded facing offset below is what will look wrong.
+    "off_objevent_fieldeffectspriteid": "offsetof(struct ObjectEvent, fieldEffectSpriteId)",
+    # OBJECT_EVENTS_COUNT (constants/global.h:93): size of gObjectEvents[].
+    "val_object_events_count": "OBJECT_EVENTS_COUNT",
+    # Direction enum (constants/global.h:205-209) as stored in
+    # ObjectEvent.facingDirection. Probed rather than hardcoded so a renumber
+    # upstream fails loud instead of silently mis-decoding facing.
+    "val_dir_south": "DIR_SOUTH",
+    "val_dir_north": "DIR_NORTH",
+    "val_dir_west": "DIR_WEST",
+    "val_dir_east": "DIR_EAST",
 }
+
+# `facingDirection`/`movementDirection` (global.fieldmap.h:293-294) are a
+# packed `u16 facingDirection:4; u16 movementDirection:4;` bitfield, so (like
+# `active` above) GCC refuses `offsetof` on the field itself. The header's own
+# byte-offset comments pin the containing byte at 0x18, with
+# facingDirection declared first -- and ARM/GCC little-endian bitfield
+# allocation packs the first-declared field into the low bits of the unit --
+# so facingDirection is the low nibble of byte 0x18, movementDirection the
+# high nibble. This is the same offset the wider pokeemerald-devtools/RAM-watch
+# community has used against this struct for years. Cross-checked here via
+# `off_objevent_fieldeffectspriteid`: that field is explicitly commented
+# 0x1A, two bytes after 0x18, exactly matching "facingDirection +
+# movementDirection + rangeX/rangeY all fit in bytes 0x18-0x19" -- if a future
+# engine change disagrees, `probe_offsets`'s anchor value will no longer be
+# `OBJEVENT_FACING_BYTE_OFFSET + 2` and callers should treat that as a sign
+# this constant needs re-deriving.
+OBJEVENT_FACING_BYTE_OFFSET = 0x18
+OBJEVENT_FACING_MASK = 0x0F
 
 # `active`'s containing byte and bit, within a `struct ObjectEvent` -- see the
 # comment on the probe table above for why this can't come from `offsetof`.
@@ -190,6 +251,8 @@ _CONSTANT_PROBE_TEMPLATE = """\
 #include "constants/flags.h"
 #include "constants/vars.h"
 #include "data/scripts/uranium_flags.h"
+#include "fieldmap.h"
+#include "constants/metatile_behaviors.h"
 {entries}
 """
 

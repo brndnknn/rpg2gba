@@ -269,8 +269,22 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
                                 "end of %s (mid-scene boundary)",
                                 chapter.name, chapter.beats[idx + 1].name, beat.name)
                 else:
-                    last_snapshot = _snapshot(emu, chapter.beats[idx + 1].name)
-                    persist_seed_blob(blobs_dir, chapter.name, rom, last_snapshot, emu)
+                    # The snapshot is bookkeeping (persisting a seed blob for
+                    # a later --from-beat run), not the thing under test --
+                    # a failure here (e.g. save_in_game catching the beat's
+                    # last action, a door warp, still mid-transition) must
+                    # not take the whole run down. Degrade the same way a
+                    # mid-scene lock already does: log it, skip the seed,
+                    # keep going. Broad on purpose (mirrors the beat-failure
+                    # catch above) -- this is bookkeeping, not the test.
+                    try:
+                        last_snapshot = _snapshot(emu, chapter.beats[idx + 1].name)
+                        persist_seed_blob(blobs_dir, chapter.name, rom, last_snapshot, emu)
+                    except Exception as exc:  # noqa: BLE001 - snapshot bookkeeping, not the beat under test
+                        logger.warning(
+                            "[%s] no seed for %s: snapshot failed at the end "
+                            "of %s: %s", chapter.name,
+                            chapter.beats[idx + 1].name, beat.name, exc)
 
         return AttemptResult(passed=True, beats=beats_out, pristine_rom=rom,
                               final_emulator=emu, last_snapshot=last_snapshot,

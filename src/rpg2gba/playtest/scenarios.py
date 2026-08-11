@@ -71,6 +71,21 @@ _START_MENU_OPEN_BUDGET = 180   # frames: generous margin over InitStartMenuStep
 _START_MENU_SETTLE_STEP = 4
 _FIELD_RETURN_BUDGET = 1800     # frames: generous margin over the save flow's own SE/message timers
 
+# `save_in_game` can run right after a beat's last action was a door warp
+# (route1 N1) -- `field_locked()` alone under-reports readiness there (see
+# `Emulator.overworld_input_ready`'s docstring): it reads False while
+# `gMain.callback2` is still mid-transition, and a START pressed in that
+# window is silently dropped by the engine, not merely delayed. So this is
+# waited out explicitly, bounded, before the first tap.
+_OVERWORLD_READY_BUDGET = 300   # frames: generous margin over a door-warp's fade/load chain
+
+# A START tap that lands one frame before `overworld_input_ready()` itself
+# flips true (a race the poll step can't close to zero) is still dropped.
+# Rather than one shot at `_START_MENU_OPEN_BUDGET`, retap over up to this
+# many bounded attempts -- still fails loud (not an unbounded wait, not a
+# silent skip) once they're exhausted.
+_START_TAP_ATTEMPTS = 3
+
 _MENU_ACTION_ENUM_RE = re.compile(r"enum\s*\{([^}]*?)\}", re.DOTALL)
 
 
@@ -168,6 +183,24 @@ def _wait_for_start_menu(emu: Emulator, actions_addr: int, count_addr: int,
     )
 
 
+def _wait_for_overworld_input_ready(emu: Emulator,
+                                    budget: int = _OVERWORLD_READY_BUDGET) -> None:
+    """Wait until `emu.overworld_input_ready()` -- a START pressed before
+    this is simply never seen by the engine (see that method's docstring).
+    """
+    spent = 0
+    while spent < budget:
+        if emu.overworld_input_ready():
+            return
+        emu.run(_START_MENU_SETTLE_STEP)
+        spent += _START_MENU_SETTLE_STEP
+    shot = emu.screenshot("save_overworld_not_ready")
+    raise ScenarioError(
+        f"overworld never regained field input (gMain.callback2 != "
+        f"CB2_Overworld) within {budget} frames ({shot})"
+    )
+
+
 def _select_start_menu_row(emu: Emulator, actions: list[int], cursor: int,
                            cursor_addr: int, target_action: int) -> None:
     """Move the already-open START menu's cursor onto `target_action`'s row
@@ -220,8 +253,25 @@ def save_in_game(emu: Emulator) -> None:
     actions_addr, count_addr, cursor_addr = _start_menu_state_addrs(emu)
     save_action = _menu_action_save_index(emu.engine)
 
-    emu.tap("START")
-    actions, cursor = _wait_for_start_menu(emu, actions_addr, count_addr, cursor_addr)
+    # A beat can hand off here mid-transition (a door-warp's last step) --
+    # wait for the engine to genuinely be reading field input first, not
+    # just `not field_locked()` (see `overworld_input_ready`'s docstring).
+    _wait_for_overworld_input_ready(emu)
+
+    actions: list[int] | None = None
+    cursor = 0
+    for attempt in range(1, _START_TAP_ATTEMPTS + 1):
+        emu.tap("START")
+        try:
+            actions, cursor = _wait_for_start_menu(emu, actions_addr, count_addr, cursor_addr)
+            break
+        except ScenarioError:
+            if attempt == _START_TAP_ATTEMPTS:
+                raise
+            logger.warning(
+                "save_in_game: START menu did not open on attempt %d/%d, "
+                "retapping", attempt, _START_TAP_ATTEMPTS)
+    assert actions is not None  # the loop above either sets it or raises
     _select_start_menu_row(emu, actions, cursor, cursor_addr, save_action)
     emu.tap("A")  # select SAVE
 
