@@ -411,6 +411,48 @@ unwired header can't ship broken the day it gets hooked up.
 budget table, and a deliberately overlong description in any emitter fails the
 suite rather than reaching a ROM.
 
+### 31. Give the Pokédex Uranium's real Tandor regional dex
+
+**User decision 2026-08-11: wanted, not deferred.** The current dex is
+National mode with the staged Uranium species grafted onto the end of the
+vanilla national list, past `NATIONAL_DEX_PECHARUNT`. That was the minimum fix
+to stop caught species being invisible (#see 2026-08-11b, `f3af5820`) and was
+taken as an explicit stopgap. Uranium's own dex is the **Tandor regional dex**,
+and that's what the ROM should show: Tandor numbering, Tandor ordering, no
+vanilla species interleaved.
+
+**The source data is already parsed.** `pbs_converter/pokemon.py:259
+parse_regionals` reads `Data/regionals.dat` and returns
+`out[0][species_id]` = the Tandor dex number for that species (0 = no entry);
+Uranium has exactly one regional dex, 202 species-slots including the ID-0
+placeholder. Nothing currently consumes it.
+
+**The engine lever** is `RegionalToNationalOrder` (`src/pokemon.c:5261`), which
+indexes `sHoennToNationalOrder` (`src/pokemon.c:392`, sized
+`HOENN_DEX_COUNT - 1`); `CreatePokedexList` walks `i < REGIONAL_DEX_COUNT` and
+maps through it (`src/pokedex.c:2194-2218`), and `NationalToRegionalOrder`
+(`:5222`) is the inverse. So a Tandor dex means generating a
+Tandor→national order table plus its count, in place of the Hoenn one, behind
+the usual sentinel-fenced generated-header hook.
+
+**Open questions to settle before building it:**
+- Whether to keep National mode available at all as a second dex mode (vanilla
+  species are still in the ROM and catchable in principle), or make Tandor the
+  only dex and revert the `special(EnableNationalPokedex)` from the grant at
+  `transpiler.py:2634`. Reverting it is only safe once regional covers every
+  staged species — otherwise this bug returns.
+- The dex UI names the mode "HOENN" in several strings and uses
+  `gPokedexBgHoenn_Pal` vs `gPokedexBgNational_Pal` (`src/pokedex.c:2154`);
+  decide whether to retheme or leave the vanilla labels.
+- Only 24 species are staged today, so a full Tandor table will have holes
+  until the species set grows. Needs a rule for unstaged entries — most likely
+  the same fail-loud-or-omit choice the rest of the pipeline makes, not a
+  silent gap.
+
+**Done looks like:** the in-game dex lists Tandor species in Tandor order with
+Tandor numbers, generated from `regionals.dat` rather than hand-authored, and
+a caught species appears at its real Uranium dex number.
+
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 
 - **Reflection narrow-scan** — tried and reverted 2026-07-07 (user: "not
