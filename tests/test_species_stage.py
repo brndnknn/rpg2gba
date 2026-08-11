@@ -414,14 +414,15 @@ def test_species_info_emits_literal_accented_char_not_hex_escape(engine_dir: Pat
     (engine/src/data/pokemon/species_info/gen_3_families.h embeds Pokémon
     literally, not \\xE9)."""
     charmap_chars = stage.load_charmap_chars(engine_dir)
+    charmap = stage.load_charmap(engine_dir / "charmap.txt")
     resolver = _make_resolver(species_pokedex={1: "A wild Pokémon appears."})
     record = _make_species()
     spec = SpeciesSpec(1, "TESTMON")
     staged = [_make_staged(spec, record)]
 
-    text = stage.emit_species_info(staged, resolver, charmap_chars)
+    text = stage.emit_species_info(staged, resolver, charmap_chars, charmap)
 
-    assert '.description = COMPOUND_STRING("A wild Pokémon appears."),' in text
+    assert '"A wild Pokémon appears."),' in text
     assert "\\xE9" not in text
     assert "\\x" not in text
 

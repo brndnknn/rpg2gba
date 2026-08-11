@@ -21,7 +21,10 @@
         .weight = 69,
         .speciesName = _("Orchynx"),
         .categoryName = _("KITTEN"),
-        .description = COMPOUND_STRING("Metal plates underneath its fur protect it from harm. It replenishes its energy by basking in the sun's rays."),
+        .description = COMPOUND_STRING(
+            "Metal plates underneath its fur protect it\n"
+            "from harm. It replenishes its energy by\n"
+            "basking in the sun's rays."),
         .cryId = CRY_ORCHYNX,
         .natDexNum = NATIONAL_DEX_ORCHYNX,
         .frontPic = gMonFrontPic_Orchynx,
@@ -63,7 +66,10 @@
         .weight = 1250,
         .speciesName = _("Metalynx"),
         .categoryName = _("ARMORED"),
-        .description = COMPOUND_STRING("METALYNX stalk their prey in packs. Their brutally sharp tail blades are their main weapon."),
+        .description = COMPOUND_STRING(
+            "METALYNX stalk their prey in packs. Their\n"
+            "brutally sharp tail blades are their main\n"
+            "weapon."),
         .cryId = CRY_METALYNX,
         .natDexNum = NATIONAL_DEX_METALYNX,
         .frontPic = gMonFrontPic_Metalynx,

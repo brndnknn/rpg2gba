@@ -93,6 +93,13 @@ from rpg2gba.pbs_converter._id_map import IdMap
 from rpg2gba.pbs_converter._naming import load_fork_constants
 from rpg2gba.species_converter import common
 from rpg2gba.species_converter.common import STARTER_SPECIES, SpeciesSpec, gfx_ident
+from rpg2gba.text_validator.engine_metrics import (
+    DEX_DESCRIPTION_MAX_LINES,
+    DEX_DESCRIPTION_WIDTH_PX,
+    Charmap,
+    load_charmap,
+    wrap_to_width,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -569,7 +576,8 @@ def _gfx_symbol(kind: str, spec: SpeciesSpec) -> str:
 
 
 def emit_species_info(
-    staged: list[StagedSpecies], r: pokemon._Resolver, charmap_chars: frozenset[str]
+    staged: list[StagedSpecies], r: pokemon._Resolver, charmap_chars: frozenset[str],
+    charmap: Charmap,
 ) -> str:
     """Bare `[SPECIES_X] = {...},` entries only — no `#include`s.
 
@@ -662,8 +670,27 @@ def emit_species_info(
             lines.append(f'        .categoryName = _("{kind_text}"),')
         dex = r.dex(rec.id)
         if dex:
-            dex_text = emit_engine_text(dex, charmap_chars, species=spec.internal_name, field="description")
-            lines.append(f'        .description = COMPOUND_STRING("{dex_text}"),')
+            # Wrap BEFORE escaping: the wrap is measured in rendered glyph
+            # pixels, and C-level escapes (\", \\) are not rendered. Nothing
+            # in the engine wraps a data-table string, so an unbroken entry
+            # draws on one line -- and the Pokedex centres on the widest line,
+            # so it lands mostly off-screen. See engine_metrics.wrap_to_width.
+            dex_lines = wrap_to_width(
+                dex, charmap,
+                width_px=DEX_DESCRIPTION_WIDTH_PX,
+                max_lines=DEX_DESCRIPTION_MAX_LINES,
+                label=f"{spec.internal_name}: description",
+            )
+            escaped = [
+                emit_engine_text(ln, charmap_chars, species=spec.internal_name,
+                                 field="description")
+                for ln in dex_lines
+            ]
+            lines.append("        .description = COMPOUND_STRING(")
+            for i, ln in enumerate(escaped):
+                tail = '"),' if i == len(escaped) - 1 else '"'
+                sep = "" if i == len(escaped) - 1 else "\\n"
+                lines.append(f'            "{ln}{sep}{tail}')
 
         lines.append(f"        .cryId = {spec.cry_constant},")
         lines.append(f"        .natDexNum = {spec.dex_constant},")
@@ -866,6 +893,7 @@ def write_all(
     pristine_egg, anchor = read_pristine_species_egg(engine_dir)
     fork_moves = load_fork_moves(engine_dir)
     charmap_chars = load_charmap_chars(engine_dir)
+    charmap = load_charmap(engine_dir / "charmap.txt")
 
     if selected:
         reference_dir = _reference_dir()
@@ -893,7 +921,8 @@ def write_all(
     )
     learnsets_text, dropped_moves = emit_learnsets(staged, resolver, fork_moves)
     _write(out_dir / "uranium_learnsets.h", learnsets_text)
-    _write(out_dir / "uranium_species_info.h", emit_species_info(staged, resolver, charmap_chars))
+    _write(out_dir / "uranium_species_info.h",
+           emit_species_info(staged, resolver, charmap_chars, charmap))
     _write(out_dir / "uranium_species_graphics.h", emit_graphics(staged))
     _write(out_dir / "uranium_cries_enum.h", emit_cries_enum(staged))
     _write(out_dir / "uranium_cry_table_forward.inc", emit_cry_table_forward(staged))
