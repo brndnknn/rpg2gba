@@ -157,14 +157,34 @@ def test_ev039_brandon_matches_and_emits_both_blocks() -> None:
     out = D.classify_phone_rematch_trainer_battle(33, ev, _BRANDON_CTX)
     assert out is not None
     assert "script Map033_Trainer_5_Page1 {" in out
+    assert "script Map033_Trainer_5_Page1_RegisterMatchCall {" in out
     assert "script Map033_Trainer_5_Page2 {" in out
-    assert "trainerbattle_single(TRAINER_BRANDON_16," in out
+    assert (
+        "trainerbattle_single(TRAINER_BRANDON_16,"
+        in out
+    )
+    assert "Map033_Trainer_5_Page1_RegisterMatchCall)" in out
+    assert "special(PlayerFaceTrainerAfterBattle)" in out
+    assert "waitmovement(0)" in out
     assert "register_matchcall(TRAINER_BRANDON_16)" in out
     assert "specialvar(VAR_RESULT, IsTrainerReadyForRematch)" in out
     assert "if (var(VAR_RESULT) == FALSE) {" in out
     assert "trainerbattle_rematch(TRAINER_BRANDON_16," in out
     assert out.index("trainerbattle_single(") < out.index("register_matchcall(")
     assert out.index("specialvar(") < out.index("trainerbattle_rematch(")
+
+    # register_matchcall must NOT be a trailing top-level command directly
+    # after trainerbattle_single's own block closes -- it must live inside
+    # the separate continue-script block, reached only via the 4th arg.
+    page1_block = out.split("script Map033_Trainer_5_Page1 {", 1)[1].split(
+        "\n}\n", 1
+    )[0]
+    assert "register_matchcall" not in page1_block
+
+    # the four-argument trainerbattle_single form is used: trainer, intro,
+    # defeat text, and the continue-script label as the 4th argument.
+    battle_line = next(ln for ln in out.splitlines() if "trainerbattle_single(" in ln)
+    assert battle_line.rstrip().endswith("Map033_Trainer_5_Page1_RegisterMatchCall)")
 
 
 def test_ev039_golden_output() -> None:
@@ -173,7 +193,14 @@ def test_ev039_golden_output() -> None:
     expected = (
         "script Map033_Trainer_5_Page1 {\n"
         '    trainerbattle_single(TRAINER_BRANDON_16, format("Water Pokémon are the best."), '
-        'format("Erh... Other types are good as well..."))\n'
+        'format("Erh... Other types are good as well..."), '
+        "Map033_Trainer_5_Page1_RegisterMatchCall)\n"
+        "    release\n"
+        "    end\n"
+        "}\n\n"
+        "script Map033_Trainer_5_Page1_RegisterMatchCall {\n"
+        "    special(PlayerFaceTrainerAfterBattle)\n"
+        "    waitmovement(0)\n"
         "    register_matchcall(TRAINER_BRANDON_16)\n"
         "    release\n"
         "    end\n"

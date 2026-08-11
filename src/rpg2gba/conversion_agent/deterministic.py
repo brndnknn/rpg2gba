@@ -1014,16 +1014,24 @@ def classify_trainer_battle(
 # JSON, not that description; a page-condition letter that doesn't match is a
 # structural deviation and bails per the fail-loud rule below.
 #
-# WHAT'S EMITTED: two blocks — page 1 (this event's Page1 label) becomes a
-# normal pokeemerald sight trainer, ``trainerbattle_single`` followed by
-# ``register_matchcall`` (asm/macros/event.inc:2150) to natively register the
-# trainer for the PokeNav Match Call rematch system, replacing the
-# hand-rolled ``pbPhoneRegisterBattle`` yes/no prompt. Page 2 (this event's
+# WHAT'S EMITTED: three blocks — page 1 (this event's Page1 label) becomes a
+# normal pokeemerald sight trainer, ``trainerbattle_single`` using the
+# four-argument continue-script form (a ``<Page1 label>_RegisterMatchCall``
+# block) instead of a trailing top-level ``register_matchcall``: on a genuine
+# first win, control never falls through past ``trainerbattle_single`` (a win
+# runs ``EventScript_EndTrainerBattle`` / ``gotobeatenscript``, which does not
+# reach the next top-level command), so a trailing ``register_matchcall``
+# would be dead code. The continue-script block runs
+# ``special(PlayerFaceTrainerAfterBattle)`` + ``waitmovement(0)`` (mirroring
+# engine/data/maps/Route102/scripts.inc:20-41) then
+# ``register_matchcall`` (asm/macros/event.inc:2150) unconditionally — no
+# ``FLAG_HAS_MATCH_CALL`` gate, since this pipeline never grants that flag and
+# gating would reintroduce the same dead-code bug. Page 2 (this event's
 # Page2 label) becomes an ``IsTrainerReadyForRematch``-gated
 # ``trainerbattle_rematch`` (asm/macros/event.inc:823), replacing the
 # hand-rolled ``pbPhoneBattleCount``/``createPhoneTrainer``/
-# ``customTrainerBattle`` rematch. Both symbols and the special
-# (``data/specials.inc:81``) were confirmed present in the vendored
+# ``customTrainerBattle`` rematch. All symbols and the special
+# (``data/specials.inc:538``) were confirmed present in the vendored
 # ``engine/`` before use (CLAUDE.md §4.7).
 #
 # Page 3 (the original event's third RGSS page, self-switch A idle/re-offer)
@@ -1421,11 +1429,37 @@ def classify_phone_rematch_trainer_battle(
         return None
 
     # ---- emit -------------------------------------------------------------
+    # ``register_matchcall`` as a trailing top-level command after
+    # ``trainerbattle_single`` is structurally unreachable on a genuine first
+    # win: a fresh win runs EventScript_EndTrainerBattle (gotobeatenscript),
+    # which never falls through to the command after the trainerbattle_single
+    # line. Only the four-argument ``trainerbattle_single`` continue-script
+    # form (TRAINER_BATTLE_CONTINUE_SCRIPT) is reachable post-battle — see
+    # engine/data/maps/Route102/scripts.inc:20-41 for the vanilla shape this
+    # mirrors. Two deliberate deviations from that vanilla shape:
+    #   1. No ``goto_if_set FLAG_HAS_MATCH_CALL`` gate — this pipeline has no
+    #      equivalent flag grant wired up, so gating would make registration
+    #      dead code again (the exact bug this fixes). Register unconditionally.
+    #   2. ``special(PlayerFaceTrainerAfterBattle)`` + ``waitmovement(0)`` are
+    #      kept (verified present: engine/data/specials.inc:538 and the
+    #      ``special``/``waitmovement`` macros in engine/asm/macros/event.inc)
+    #      so the post-battle scene still looks right.
+    register_label = _page_label(map_id, event, 1) + "_RegisterMatchCall"
     battle_block = _block(
         _page_label(map_id, event, 1),
         [
             f"trainerbattle_single({trainer_const},"
-            f" {format_pory_dialogue(intro)}, {format_pory_dialogue(defeat)})",
+            f" {format_pory_dialogue(intro)}, {format_pory_dialogue(defeat)},"
+            f" {register_label})",
+            "release",
+            "end",
+        ],
+    )
+    register_block = _block(
+        register_label,
+        [
+            "special(PlayerFaceTrainerAfterBattle)",
+            "waitmovement(0)",
             f"register_matchcall({trainer_const})",
             "release",
             "end",
@@ -1445,7 +1479,7 @@ def classify_phone_rematch_trainer_battle(
             "end",
         ],
     )
-    return "\n\n".join([battle_block, rematch_block])
+    return "\n\n".join([battle_block, register_block, rematch_block])
 
 
 # -- context + dispatcher -----------------------------------------------------
