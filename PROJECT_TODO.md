@@ -390,6 +390,27 @@ worth `OW_TIME_OF_DAY_ENCOUNTERS = TRUE` corpus-wide; if yes, emitter support
 for suffixed base_labels + a documented precedence rule between plain and
 split tables. Also cross-referenced by `00-atlas.md:175`.
 
+### 30. `text_validator` never scans generated C data headers
+
+`extraction.py:95` `_CORPUS_GLOBS` covers only `scripts/*.pory`,
+`staging/scripts/*.pory` and `porymap/dispatch/*.pory`. Generated data headers
+— `species/uranium_species_info.h`, `src/data/items.h`, `src/data/moves_info.h`
+— are never read, so the whole `.description` overlong/unwrapped class went
+undetected until it was seen on a device (2026-08-11 boot walk). The module
+already owns the right primitive (`measure_line_width_px`) and a line-width
+rule; only the corpus is too narrow.
+
+Note the rule needs a per-field budget to be useful here, not the single
+`MSGBOX_WIDTH_PX`: a Pokédex entry is 224px × 4 lines (see
+`DEX_DESCRIPTION_WIDTH_PX`), a bag item description is a much narrower window,
+and dialogue is the message box. Wrapping itself is solved for staged species
+(`wrap_to_width`); this item is about *detection* across every emitter, so an
+unwired header can't ship broken the day it gets hooked up.
+
+**Done looks like:** the validator reads generated headers with a field →
+budget table, and a deliberately overlong description in any emitter fails the
+suite rather than reaching a ROM.
+
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 
 - **Reflection narrow-scan** — tried and reverted 2026-07-07 (user: "not
