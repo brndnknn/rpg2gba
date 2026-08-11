@@ -292,6 +292,17 @@ _RUNNING_SHOES_ON_RE = re.compile(r"^\s*\$PokemonGlobal\.runningShoes\s*=\s*true
 # a real special (engine/data/specials.inc:515) — the same pair vanilla's own
 # Birch/Oak-lab script uses. Exact literal only (the corpus has no `=false`
 # variant); anything else still queues.
+#
+# `EnableNationalPokedex` (specials.inc:518) is ours to add on top, and is not
+# optional for this corpus: Uranium species are chained past
+# NATIONAL_DEX_PECHARUNT and have no regional dex number, but a dex without
+# national mode is pinned to DEX_MODE_HOENN (pokedex.c:2031) and
+# CreatePokedexList then enumerates only `i < REGIONAL_DEX_COUNT`, mapping
+# outward via RegionalToNationalOrder (pokedex.c:2194-2218). Every Uranium
+# species would be caught-but-invisible. Setting FLAG_SYS_NATIONAL_DEX alone
+# is NOT sufficient — IsNationalPokedexEnabled also requires
+# pokedex.nationalMagic == 0xDA and VAR_NATIONAL_DEX == 0x302
+# (event_data.c:101), which only the special sets.
 _POKEDEX_GRANT_RE = re.compile(r"^\s*\$Trainer\.pokedex\s*=\s*true\s*$")
 
 # -- Essentials one-line Ruby guards (`<statement> if $game_variables[V]==K`) ---
@@ -2631,7 +2642,11 @@ class _PageEmitter:
             return [f"setflag({name})" if m.group(2) == "true" else f"clearflag({name})"]
 
         if _POKEDEX_GRANT_RE.match(text):
-            return ["setflag(FLAG_SYS_POKEDEX_GET)", "special(SetUnlockedPokedexFlags)"]
+            return [
+                "setflag(FLAG_SYS_POKEDEX_GET)",
+                "special(SetUnlockedPokedexFlags)",
+                "special(EnableNationalPokedex)",
+            ]
 
         # -- Ruby locals feeding pbStarterSelector ---------------------------
         # These three rows emit nothing on their own; they build the argument
