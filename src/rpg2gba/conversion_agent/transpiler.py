@@ -39,6 +39,7 @@ from pathlib import Path
 from rpg2gba.conversion_agent.deterministic import (
     _label_name,
     format_pory_dialogue,
+    join_text_lines,
     translate_text_codes,
 )
 from rpg2gba.conversion_agent.flag_registry import (
@@ -952,7 +953,7 @@ def parse_tree(commands: list[dict]) -> list[Node]:
                     p = commands[pos].get("parameters", [])
                     parts.append(p[0] if p else "")
                     pos += 1
-                nodes.append(TextRun(cmd, idx, text="".join(str(s) for s in parts)))
+                nodes.append(TextRun(cmd, idx, text=join_text_lines([str(s) for s in parts])))
             elif code == CONDITIONAL_BRANCH:
                 pos += 1
                 then = parse_block(indent + 1)

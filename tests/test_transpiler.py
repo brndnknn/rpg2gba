@@ -190,6 +190,21 @@ def test_parse_tree_text_continuations_merge() -> None:
     assert nodes[0].text == "Hello there! How are you?"
 
 
+def test_parse_tree_text_continuations_merge_no_leading_spaces() -> None:
+    """Realistic corpus-shaped data: continuations carry NO leading space (unlike
+    the fixture above, which hand-wrote them and so passed for the wrong reason --
+    the naive "".join assumption this pins is false for ~1320 corpus cases).
+    Modeled on the real shipped Map033 event 34 Trainer(4) line."""
+    commands = [
+        cmd(T.SHOW_TEXT, ["Oh! Hey! I just got a new Pokémon and I want to"], indent=0),
+        cmd(T.SHOW_TEXT_CONT, ["see how it fares!"], indent=0),
+    ]
+    nodes = T.parse_tree(commands)
+    assert len(nodes) == 1
+    assert isinstance(nodes[0], T.TextRun)
+    assert "want to see how it fares!" in nodes[0].text
+
+
 def test_parse_tree_blank_rows_disappear() -> None:
     commands = [
         cmd(T.WAIT, [1], indent=0),

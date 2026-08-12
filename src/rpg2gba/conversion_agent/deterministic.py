@@ -320,6 +320,65 @@ _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # -- string + label helpers ---------------------------------------------------
 
 
+def join_text_lines(parts: list[str]) -> str:
+    """Join RGSS 101 (Show Text) + 401 (Show Text continuation) fragments.
+
+    RMXP's message window wraps dialogue at its own (wide) window width, and
+    each visual line is stored as a separate string -- the 101 command holds
+    the first line, each following 401 holds one more. The naive
+    ``"".join(parts)`` this replaced assumed every continuation fragment
+    carried its own leading space from the source, i.e. that the author wrote
+    ``"Hello,"`` + ``" world!"``. That assumption is false for most of the
+    corpus: a census of all 199 converted maps found 3127 total 401
+    continuations, of which only 9 begin with a space and 1798 follow a
+    fragment that already ends with one. The remaining 1320 are "glue" cases
+    where neither side has a space -- the wrap simply landed mid-sentence --
+    and blind concatenation welds two words together. A real shipped example
+    (Map033 event 34, ``Trainer(4)`` at cell (36,8)) joined ``'...and I want
+    to'`` + ``'see how it fares!'`` into ``"...I want tosee how it fares!"``.
+
+    This helper inserts exactly one space at each fragment boundary unless
+    doing so would be wrong:
+
+    - Either side of the boundary is empty (nothing to join).
+    - The accumulated text already ends in whitespace, or the next fragment
+      already begins with whitespace -- the space is already there; adding
+      another would double it (1798 + 9 corpus cases).
+    - The accumulated text ends with the literal two-character escape
+      ``\\n`` (a layout break the RGSS export stores verbatim).
+      ``format_pory_dialogue`` flattens those to spaces downstream, so no
+      extra space is needed here (90 corpus cases).
+    - The accumulated text ends with a word-internal hyphen -- a hyphen
+      immediately preceded by an alphanumeric character, e.g. ``'Two
+      strong-'`` + ``'looking trainers'`` -> ``"strong-looking trainers"``.
+      This is distinct from a hyphen used as punctuation (an em-dash-style
+      break, preceded by another dash or by whitespace, as in ``'That noise
+      just now --'`` or ``'waiting for a strong opponent -'``), which *does*
+      take a space.
+
+    Fragments are accumulated left-to-right and each boundary is decided
+    against the running accumulated string (not just the immediately
+    preceding fragment), so an empty fragment in the middle of the list
+    can't hide a real boundary.
+    """
+    result = ""
+    for nxt in parts:
+        if not result or not nxt:
+            result += nxt
+            continue
+        if result[-1].isspace() or nxt[0].isspace():
+            result += nxt
+            continue
+        if result.endswith("\\n"):
+            result += nxt
+            continue
+        if result.endswith("-") and len(result) >= 2 and result[-2].isalnum():
+            result += nxt
+            continue
+        result += " " + nxt
+    return result
+
+
 def format_pory_string(text: str) -> str:
     """Wrap dialogue in a poryscript double-quoted string, escaping only ``"``.
 
@@ -431,7 +490,7 @@ def _dialogue_body(
 
     def flush() -> None:
         nonlocal buf, unsafe
-        text = "".join(buf).strip()
+        text = join_text_lines(buf).strip()
         buf = []
         if not text:
             return
@@ -938,7 +997,7 @@ def classify_trainer_battle(
             intro_parts.append(params[0] if params else "")
         elif code != SHOW_TEXT_CONT:
             in_intro = False
-    intro_raw = "".join(intro_parts).strip()
+    intro_raw = join_text_lines(intro_parts).strip()
 
     # --- Collect post-battle text from page-2 Show-Text run -------------------
     post_parts: list[str] = []
@@ -953,7 +1012,7 @@ def classify_trainer_battle(
             post_parts.append(params[0] if params else "")
         elif code != SHOW_TEXT_CONT:
             in_post = False
-    post_raw = "".join(post_parts).strip()
+    post_raw = join_text_lines(post_parts).strip()
 
     # --- Translate texts -------------------------------------------------------
     intro = _translate_text(intro_raw)
@@ -1161,7 +1220,7 @@ def classify_phone_rematch_trainer_battle(
             idx += 1
         else:
             break
-    intro_raw = "".join(intro_parts).strip()
+    intro_raw = join_text_lines(intro_parts).strip()
 
     c = _at(cmds0, idx)
     if c is None or c.get("code") != CONDITIONAL_BRANCH:
@@ -1313,7 +1372,7 @@ def classify_phone_rematch_trainer_battle(
             idx += 1
         else:
             break
-    re_intro_raw = "".join(re_intro_parts).strip()
+    re_intro_raw = join_text_lines(re_intro_parts).strip()
 
     c = _at(cmds1, idx)
     if c is None or c.get("code") != SCRIPT:
