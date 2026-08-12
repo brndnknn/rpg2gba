@@ -1,5 +1,10 @@
 # CH02 TODO — Route 1 (maps 33, 81)
 
+**RETIRED 2026-08-12 — CH02 passed its §9 boot-walk gate.** Still-open items
+migrated to `PROJECT_TODO.md` #32–#36 (#1→#33, #2→#34, #11→#35, #12→#36, plus the
+new #32 priority-1 refinement). Kept for the Done ledger and the detail the
+migrated entries point back to.
+
 Live work checklist for chapter CH02 (Route 1), the current build frontier.
 The chapter's spec, story beats and coverage targets live in
 `reference/chapters/02-route-1.md`; the corpus-wide plan is
@@ -110,6 +115,49 @@ that array before (only the retired LLM orchestrator did), so the plumbing
 landed with it.
 
 ## Done
+
+### 16. Player walked OVER Route 01's tree tops — FIXED 2026-08-12
+
+Boot-walk feedback (`reference/map_feedback/Map033.json`, 4 cells: (63,8),
+(15,12), (17,15), (18,19)) — all four are RMXP tile **556**, a small-tree canopy
+at priority 1 over a passable grass base. The player drew on top of it.
+
+Not a collision or art bug. `graphics/build_slice_tilesets._render_column`'s
+priority tier sent every p==1 column to `LAYER_COVERED` (both tile layers under
+sprites). That rule came from `0fd3a2c5` (Map032 boot gate) and fixed the
+opposite failure — a flat `p>0 -> LAYER_NORMAL` rule let cliff/hedge-lip tiles
+cover the head of a player standing one row south. Both are real: **RMXP p==1 is
+row-relative** (draws over a character in its own row, under one a row south) and
+the GBA has no row-relative slot, so a metatile must pick one case.
+
+The discriminator is the column's own passability, and Uranium's art is
+consistent about it: two-cell-tall trees and hedges put a *passable* p1 canopy
+cell over a *solid* p0 body cell (`Map032` (14,17) hedge 1108 p1/pass0 over 1116
+p0/pass15; `Map033` (17,15) tree 556 over a blocked trunk). So:
+
+- passable p==1 column → `LAYER_NORMAL` (player walks behind the canopy)
+- blocked p==1 column → `LAYER_COVERED` (unchanged; protects the head of the row
+  south, which is the only way that art is ever seen)
+
+`layout._cell_blocked`'s rule moved into a new pure `layout.column_blocked(column,
+*, passages, priorities, terrain_tags)` (`_cell_blocked` is now a thin wrapper),
+so one implementation serves both the collision path and the renderer, and the
+decision stays a function of the column key — **no per-cell metatile copies, no
+budget change** (`top_min` is 1 in both p1 branches, so the bottom/top art split
+is byte-identical; only the layer_type nibble moves). `build_slice_tilesets` grew
+a `passages_for` hook beside `priorities_for`/`terrain_tags_for`.
+
+Flips: Map033 10 of 30 max-p1 cells → NORMAL (incl. all four reported), Map032 52
+of 105. Suite 2048 passed / 19 skipped. ROM `68ba5268`, EWRAM 86.79% / IWRAM
+86.99% / ROM 27.13 MB — unmoved, as predicted. moki 17/17 and route1 29/29 green
+first attempt on that build; walk ROM taildropped at the CH01-end seed.
+
+**Known, accepted:** 5 cells in this build are wrong the other way — a passable
+p1 cell whose south neighbour is *also* passable (Map033 (11,18)(13,18)(8,36)
+(10,36), the big stump's shoulder tiles, + Map032 (14,41)) now occlude the head of
+a player standing south. Corpus-wide that case is 6531 of 9554 flips, concentrated
+in four crop-field maps → `PROJECT_TODO.md` #32, due before those maps enter a
+chapter.
 
 ### 10. Phone/rematch trainers don't battle — Map033 EV039, EV053 — DONE 2026-08-10
 

@@ -92,8 +92,8 @@
     {
       "id": "CH02", "act": "A1", "title": "Route 1", "wiki_page": "Route 1",
       "visit": 1, "outdoor": 33, "maps": [33, 81],
-      "predecessor": "CH01", "tier": "full", "status": "planned",
-      "notes": "Active frontier. Spec reference/chapters/02-route-1.md; work checklist CH02_TODO.md (blocked on #4, per-map tileset packing). 81 = 'Route 01 (old rod house)'; the act-boundary worry is resolved -- the Old Rod is a forward, same-act, cross-chapter gate (item sits in CH02, locked on VAR_BATTLE_VAR01 which only CH06/Map042 writes), see 02-route-1.md §7."
+      "predecessor": "CH01", "tier": "full", "status": "built",
+      "notes": "Passed its §9 boot-walk gate 2026-08-12 (route1 chapter suite GREEN 29/29, ROM 68ba5268). Spec reference/chapters/02-route-1.md; CH02_TODO.md is retired to reference/archive/, open items migrated to PROJECT_TODO.md #32-#36. 81 = 'Route 01 (old rod house)'; the act-boundary worry is resolved -- the Old Rod is a forward, same-act, cross-chapter gate (item sits in CH02, locked on VAR_BATTLE_VAR01 which only CH06/Map042 writes), see 02-route-1.md §7."
     },
     {
       "id": "CH03", "act": "A1", "title": "Kevlar Town", "wiki_page": "Kevlar Town",

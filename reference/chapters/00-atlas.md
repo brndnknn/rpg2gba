@@ -90,7 +90,7 @@ Tier legend: **F** full, **M** medium, **T** thin. Status is from the binding.
 | # | Chapter | Act | Tier | Maps | Trainers | Items | Notes |
 |---|---|---|:-:|--:|--:|--:|---|
 | CH01 | Moki Town | A1 | F | 8 | 1 | 7 | **§9 boot-walk gate passed 2026-08-04** — `01-moki.md` |
-| CH02 | Route 1 | A1 | F | 2 | 9 | 7 | **next frontier** — `02-route-1.md` (spec), `CH02_TODO.md` (work checklist) |
+| CH02 | Route 1 | A1 | F | 2 | 9 | 7 | **built** — §9 gate passed 2026-08-12, suite 29/29; `02-route-1.md` (spec), `reference/archive/CH02_TODO.md` (retired checklist) |
 | CH03 | Kevlar Town | A1 | M | 5 | 5 | 5 | bike; map 19 bound here, see §6 |
 | CH04 | Route 2 | A1 | M | 1 | 4 | 3 | rockslide gate |
 | CH05 | Passage Cave | A1 | M | 2 | 3 | 5 | first dungeon |
