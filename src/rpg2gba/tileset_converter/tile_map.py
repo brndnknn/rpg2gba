@@ -363,6 +363,22 @@ class TileMap:
         """True if the tile's source passage permits walking (low nibble == 0)."""
         return (self.passage(tileset_id, tile_id) & PASSAGE_BLOCK_MASK) == 0
 
+    # --- raw-array accessors (column-level counterparts to the per-tile ones
+    # above) -- used by `layout.column_blocked` via `layout._cell_blocked`, which
+    # resolves a whole column at once instead of one (tileset_id, tile_id) pair. ---
+
+    def passages_for(self, tileset_id: int) -> list[int] | None:
+        """Raw passages array for a tileset, or None if never loaded. See `passage()`."""
+        return self._passages.get(tileset_id)
+
+    def priorities_for(self, tileset_id: int) -> list[int] | None:
+        """Raw priorities array for a tileset, or None. See `priority()`."""
+        return self._priorities.get(tileset_id)
+
+    def terrain_tags_for(self, tileset_id: int) -> list[int] | None:
+        """Raw terrain_tags array for a tileset, or None. See `terrain_tag()`."""
+        return self._terrain_tags.get(tileset_id)
+
     def has_bucket(self, tileset_id: int) -> bool:
         return tileset_id in self._buckets
 

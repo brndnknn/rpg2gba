@@ -50,7 +50,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from rpg2gba.tileset_converter.layout import TileGrid, column_key
+from rpg2gba.tileset_converter.layout import TileGrid, column_blocked, column_key
 from rpg2gba.tileset_converter.stairs import BEHAVIOR_BY_SIDE, StairSide
 from rpg2gba.tileset_converter.terrain_tags import (
     TerrainTagTable,
@@ -148,6 +148,15 @@ def _load_priorities(tilesets_json: Path, ts: int) -> list[int]:
     return entry["priorities"]
 
 
+def _load_passages(tilesets_json: Path, ts: int) -> list[int]:
+    """Load the passages array for tileset ``ts`` from the Phase-3 tilesets oracle."""
+    raw = json.loads(Path(tilesets_json).read_text(encoding="utf-8"))
+    entry = raw.get(str(ts))
+    if entry is None:
+        raise KeyError(f"tileset {ts} absent from {tilesets_json}")
+    return entry["passages"]
+
+
 def _load_terrain_tags(tilesets_json: Path, ts: int) -> list[int]:
     """Load the terrain_tags array for tileset ``ts`` from the Phase-3 tilesets oracle."""
     return load_terrain_tags_json(tilesets_json, ts)
@@ -184,6 +193,8 @@ def _render_column(
     key: tuple[tuple[int, int], ...],
     rasterizer: object,
     priorities: list[int],
+    passages: list[int] | None = None,
+    terrain_tags: list[int] | None = None,
     *,
     behavior: int = 0,
     n_frames: int = 1,
@@ -192,16 +203,34 @@ def _render_column(
 
     RMXP priority is row-relative: a p==1 tile draws under a character standing
     one row south of it (head overlap) but over a character standing in its own
-    row. GBA's BG1 (the LAYER_NORMAL top slot) draws over sprites unconditionally,
-    so a flat p>0 -> BG1 rule wrongly covers the player's head with p==1
-    cliff/hedge-lip/tall-grass tiles. Tiered by the highest priority present in
-    the column:
+    row. GBA's BG1 (the LAYER_NORMAL top slot) draws over sprites unconditionally
+    and BG2 (LAYER_COVERED's top slot) draws under sprites unconditionally — the
+    GBA has no per-row-relative equivalent, so a p==1 column must pick ONE of the
+    two RMXP cases to honor:
+
+      - a p==1 column the player can STAND ON (e.g. a two-cell-tall tree/hedge's
+        passable canopy cell sitting over a passable trunk/base cell) — the
+        stand-on case is the one that matters, since the player is meant to walk
+        BEHIND the canopy -> LAYER_NORMAL (BG1, draws over the player).
+      - a p==1 column that is BLOCKED (a solid cliff-lip/hedge-lip tile, only
+        ever seen from the row south of it, protecting that row's player's head)
+        -> LAYER_COVERED (BG2, draws under the player) — preserves the earlier
+        fix for that case.
+
+    This is decided by the column's own source passability (`column_blocked`),
+    so it's a pure function of the column key — no per-cell metatile copies, no
+    change to the tile/metatile budget.
+
+    Tiered by the highest priority present in the column:
 
       p >= 2 present -> LAYER_NORMAL (BG1); p>=2 tiles -> TOP (always-over
         canopy); p==1 and p==0 tiles -> BOTTOM.
-      else p == 1 present -> LAYER_COVERED (BG2 top slot: under sprites, over
-        ground); p==1 tiles -> TOP; p==0 tiles -> BOTTOM.
+      else p == 1 present -> LAYER_NORMAL if the column is passable, else
+        LAYER_COVERED (see above); p==1 tiles -> TOP; p==0 tiles -> BOTTOM.
       else -> LAYER_COVERED; everything -> BOTTOM (unchanged, empty TOP).
+
+    ``top_min`` stays 1 in BOTH p==1 cases — only ``layer_type`` differs; the
+    bottom/top tile split (and therefore the metatile count) is unchanged.
 
     z-ascending key order is preserved within each slot.
 
@@ -214,7 +243,15 @@ def _render_column(
     if any(p >= 2 for p in pr):
         layer_type, top_min = LAYER_NORMAL, 2
     elif any(p == 1 for p in pr):
-        layer_type, top_min = LAYER_COVERED, 1
+        if passages is None:
+            raise ValueError(
+                "_render_column: column has a p==1 tile but no `passages` array "
+                "was given to decide LAYER_NORMAL vs LAYER_COVERED"
+            )
+        blocked = column_blocked(
+            key, passages=passages, priorities=priorities, terrain_tags=terrain_tags
+        )
+        layer_type, top_min = (LAYER_COVERED if blocked else LAYER_NORMAL), 1
     else:
         layer_type, top_min = LAYER_COVERED, None
 
@@ -278,6 +315,7 @@ def build_slice_tilesets(
     graphics_dir: Path | None = None,
     rasterizer_for: Callable[[int], object] | None = None,
     priorities_for: Callable[[int], list[int]] | None = None,
+    passages_for: Callable[[int], list[int]] | None = None,
     terrain_tags_for: Callable[[int], list[int]] | None = None,
     terrain_tag_table: TerrainTagTable | None = None,
     source_tileset_of: Callable[[int], int] | None = None,
@@ -291,7 +329,10 @@ def build_slice_tilesets(
     layout converter stamps the tileset's warp metatile there). `rasterizer_for`
     overrides tile rendering for tests; defaults to the real Uranium source pipeline.
     `priorities_for` overrides priority loading for tests; defaults to reading
-    tilesets.json. `terrain_tags_for` overrides terrain-tag loading for tests;
+    tilesets.json. `passages_for` overrides passage loading for tests (needed by
+    `_render_column`'s p==1 LAYER_NORMAL/LAYER_COVERED decision); defaults to
+    reading tilesets.json (same synthetic-id resolution as priorities).
+    `terrain_tags_for` overrides terrain-tag loading for tests;
     defaults to reading tilesets.json (same synthetic-id resolution as priorities).
     `terrain_tag_table` overrides the loaded terrain_tag_map.json table for tests;
     defaults to `load_terrain_tag_map(fork)`. `source_tileset_of` maps a synthetic
@@ -317,6 +358,7 @@ def build_slice_tilesets(
         lambda ts: _default_rasterizer(resolve(ts), tilesets_json, graphics_dir)
     )
     get_priorities = priorities_for or (lambda ts: _load_priorities(tilesets_json, resolve(ts)))
+    get_passages = passages_for or (lambda ts: _load_passages(tilesets_json, resolve(ts)))
     get_terrain_tags = terrain_tags_for or (
         lambda ts: _load_terrain_tags(tilesets_json, resolve(ts))
     )
@@ -344,6 +386,7 @@ def build_slice_tilesets(
     for ts, maplist in sorted(by_ts.items()):
         rast = make_rast(ts)
         priorities = get_priorities(ts)
+        passages = get_passages(ts)
         terrain_tags = get_terrain_tags(ts)
 
         # Enumerate all unique column keys across all maps for this tileset.
@@ -472,7 +515,7 @@ def build_slice_tilesets(
 
         metatile_list = [
             _render_column(
-                k, rast, priorities,
+                k, rast, priorities, passages, terrain_tags,
                 behavior=_column_behavior(k),
                 n_frames=column_n_frames(k, rast),
             )
@@ -503,7 +546,7 @@ def build_slice_tilesets(
                 idx = len(metatile_list)
                 metatile_list.append(
                     _render_column(
-                        k, rast, priorities, behavior=door_behavior,
+                        k, rast, priorities, passages, terrain_tags, behavior=door_behavior,
                         n_frames=column_n_frames(k, rast),
                     )
                 )
@@ -532,7 +575,8 @@ def build_slice_tilesets(
             idx = len(metatile_list)
             metatile_list.append(
                 _render_column(
-                    sk, rast, priorities, behavior=stair_behavior_by_kind[kind],
+                    sk, rast, priorities, passages, terrain_tags,
+                    behavior=stair_behavior_by_kind[kind],
                     n_frames=column_n_frames(sk, rast),
                 )
             )

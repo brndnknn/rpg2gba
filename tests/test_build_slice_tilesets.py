@@ -142,9 +142,14 @@ def _run(tmp_path: Path) -> tuple[Path, Path, dict]:
     overlay_out = tmp_path / "tileset_map.gen.json"
 
     # priorities: tile 401 has priority==1 -> rendered into the top layer only,
-    # exercising the LAYER_COVERED p==1 tier; tiles 400/402/403 all stay on bottom.
+    # exercising the p==1 tier; tiles 400/402/403 all stay on bottom. Column
+    # ((0,401),) is tile 401 ALONE (no base tile beneath it — see `_map`), and
+    # `passages` leaves it fully passable -> column_blocked reads passable ->
+    # LAYER_NORMAL (re-pinned 2026-08-12: a passable p==1 column is the
+    # stand-on-canopy case, see _render_column docstring).
     priors = [0] * 600
     priors[401] = 1
+    passages = [0] * 600
 
     results = build_slice_tilesets(
         [(32, _map(5))],
@@ -154,6 +159,7 @@ def _run(tmp_path: Path) -> tuple[Path, Path, dict]:
         overlay_out=overlay_out,
         rasterizer_for=lambda ts: _StubRasterizer(),
         priorities_for=lambda ts: priors,
+        passages_for=lambda ts: passages,
         terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
     )
     overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
@@ -225,11 +231,11 @@ def test_emitted_art_files(tmp_path: Path) -> None:
     # Metatile 0 (column ((0,400),) normal entry) has behavior 0 (MB_NORMAL).
     assert (attrs[0] & 0x00FF) == 0
 
-    # Metatile 1 maps to column ((0,401),), tile 401 has priority==1 (tall-grass/lip
-    # tier, no p>=2 present) -> top layer, LAYER_COVERED (re-pinned: p==1 alone no
-    # longer promotes to LAYER_NORMAL/BG1 — see _render_column docstring).
-    # layer_type = LAYER_COVERED (1) -> bits 15-12 of attr = 1.
-    assert (attrs[1] >> 12) & 0xF == 1  # LAYER_COVERED
+    # Metatile 1 maps to column ((0,401),), tile 401 alone (no base tile), priority
+    # ==1, passages all-passable -> column_blocked reads passable -> LAYER_NORMAL
+    # (the stand-on-canopy case; see _render_column docstring).
+    # layer_type = LAYER_NORMAL (0) -> bits 15-12 of attr = 0.
+    assert (attrs[1] >> 12) & 0xF == 0  # LAYER_NORMAL
     # Metatile 0 maps to column ((0,400),), priority=0 -> bottom only.
     # layer_type = LAYER_COVERED (1) -> bits 15-12 = 1.
     assert (attrs[0] >> 12) & 0xF == 1  # LAYER_COVERED
@@ -528,15 +534,34 @@ def test_render_column_p0_only_stays_bottom_covered() -> None:
     assert mt.top[..., 3].max() == 0  # top fully transparent
 
 
-def test_render_column_p1_alone_covered_top() -> None:
-    """A single p==1 overlay tile (no p>=2 in the column): LAYER_COVERED, the
-    overlay's pixels land in the TOP slot (BG2: under sprites, over ground) —
-    re-pinned from the old flat p>0 rule, which put this in LAYER_NORMAL/BG1."""
-    key = ((0, 401),)
-    mt = _render_column(key, _StubRasterizer(), _priors({401: 1}))
+def test_render_column_p1_over_passable_base_normal_top() -> None:
+    """A p==1 overlay tile over a PASSABLE base tile (passage 0, priority 0) —
+    the two-cell-tall tree/hedge canopy-over-trunk case: the player is meant to
+    walk BEHIND the canopy -> LAYER_NORMAL (re-pinned 2026-08-12 from the old
+    flat-tiered rule, which put every p==1 column in LAYER_COVERED regardless of
+    passability and drew the player on top of tree canopies). p1 tile still
+    lands in the TOP slot (`top_min` stays 1 in both p==1 cases)."""
+    key = ((0, 400), (1, 401))
+    priorities = _priors({401: 1})
+    passages = _priors({})  # all passable, including 400 and 401
+    mt = _render_column(key, _StubRasterizer(), priorities, passages)
+    assert mt.layer_type == LAYER_NORMAL
+    assert tuple(mt.top[0, 0]) == _stub_color(401)
+    assert tuple(mt.bottom[0, 0]) == _stub_color(400)
+
+
+def test_render_column_p1_over_blocking_base_covered_top() -> None:
+    """A p==1 overlay tile over a BLOCKING base tile (passage 0x0F) — a solid
+    cliff/hedge-lip only ever approached from the row south of it: stays
+    LAYER_COVERED (protects that row's player's head — the fix this tier
+    originally shipped for). p1 tile still lands in the TOP slot."""
+    key = ((0, 400), (1, 401))
+    priorities = _priors({401: 1})
+    passages = _priors({400: 0x0F})
+    mt = _render_column(key, _StubRasterizer(), priorities, passages)
     assert mt.layer_type == LAYER_COVERED
     assert tuple(mt.top[0, 0]) == _stub_color(401)
-    assert mt.bottom[..., 3].max() == 0  # bottom empty (no p==0 tile present)
+    assert tuple(mt.bottom[0, 0]) == _stub_color(400)
 
 
 def test_render_column_p2_alone_normal_top() -> None:

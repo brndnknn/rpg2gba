@@ -1,1 +1,23 @@
-[]
+[
+  {
+    "cells": [
+      [
+        63,
+        8
+      ],
+      [
+        15,
+        12
+      ],
+      [
+        17,
+        15
+      ],
+      [
+        18,
+        19
+      ]
+    ],
+    "note": "In these tiles the player should appear to go behind the tree top but instead the player walks over it"
+  }
+]

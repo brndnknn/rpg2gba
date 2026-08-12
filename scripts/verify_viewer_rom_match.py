@@ -145,6 +145,7 @@ def _reconstruct_tileset(
 
     rast = bst._default_rasterizer(ts, tilesets_json, None)
     priorities = bst._load_priorities(tilesets_json, ts)
+    passages = bst._load_passages(tilesets_json, ts)
     terrain_tags = bst._load_terrain_tags(tilesets_json, ts)
 
     ordered = bst.column_keys_for_maps(maplist)
@@ -183,7 +184,7 @@ def _reconstruct_tileset(
 
     metatile_list = [
         bst._render_column(
-            k, rast, priorities,
+            k, rast, priorities, passages, terrain_tags,
             behavior=terrain_table.column_behavior(ts, k, terrain_tags, is_opaque=_is_opaque),
         )
         for k in ordered
@@ -198,7 +199,9 @@ def _reconstruct_tileset(
         door_behavior = bst._behavior_value(fork, "MB_NON_ANIMATED_DOOR")
         for k in sorted(door_keys):
             idx = len(metatile_list)
-            metatile_list.append(bst._render_column(k, rast, priorities, behavior=door_behavior))
+            metatile_list.append(
+                bst._render_column(k, rast, priorities, passages, terrain_tags, behavior=door_behavior)
+            )
             warp_tiles[serialize_column_key(k)] = idx
         warp_fallback_idx = len(metatile_list)
         z = np.zeros((16, 16, 4), dtype=np.uint8)

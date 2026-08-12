@@ -39,6 +39,7 @@ from __future__ import annotations
 import json
 import logging
 import struct
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -143,34 +144,80 @@ TERRAIN_TAG_SHADOW = 20
 _SKIPPED_TERRAIN_TAGS = frozenset((TERRAIN_TAG_BRIDGE, TERRAIN_TAG_SHADOW))
 
 
-def _cell_blocked(grid: TileGrid, x: int, y: int, tile_map: TileMap, tileset_id: int) -> bool:
-    """RMXP multi-layer passability for one cell (validated rule, mirrors
-    `scripts/pathfinder_collision_preview.cell_blocked`).
+def _passage_lookup(passages: Sequence[int] | None, tile_id: int) -> int:
+    """Fail-loud analog of `TileMap.passage()`: a missing array or an out-of-range
+    tile_id raises — a passage value decides real gameplay collision, so silently
+    defaulting it is dangerous (unlike priority/terrain_tag below)."""
+    if passages is None or not 0 <= tile_id < len(passages):
+        length = 0 if passages is None else len(passages)
+        raise KeyError(f"tile_id {tile_id} out of range for passages array (len {length})")
+    return passages[tile_id]
 
-    Scan layers top->bottom: a tile whose terrain tag is Shadow or Bridge is
-    skipped entirely (it never decides passability, it just isn't there for this
-    purpose — matches Uranium's `playerPassable?`); otherwise the first non-empty
-    tile that blocks (`passage & 0x0F != 0`) -> blocked; a non-empty tile drawn at
-    priority 0 (normal layer) that does *not* block -> passable (stop, ignore tiles
-    beneath); a passable tile at priority > 0 (drawn over the player, e.g. a
-    treetop) does not decide — keep scanning down to the trunk. An all-empty column
-    is void (blocked)."""
+
+def _soft_lookup(array: Sequence[int] | None, tile_id: int) -> int:
+    """Soft-fallback analog of `TileMap.priority()`/`.terrain_tag()`: a missing
+    array or an out-of-range tile_id resolves to 0 (normal-layer priority /
+    Neutral terrain tag) rather than raising."""
+    if array is None or not 0 <= tile_id < len(array):
+        return 0
+    return array[tile_id]
+
+
+def column_blocked(
+    column: Iterable[tuple[int, int]],
+    *,
+    passages: Sequence[int],
+    priorities: Sequence[int] | None = None,
+    terrain_tags: Sequence[int] | None = None,
+) -> bool:
+    """RMXP multi-layer passability (validated rule, mirrors
+    `scripts/pathfinder_collision_preview.cell_blocked`), given a bare column
+    instead of a grid cell — the one place this rule lives; `_cell_blocked` below
+    is a thin `TileGrid`-cell wrapper over this.
+
+    `column` is the cell's non-empty stacked tiles as `(z, tile_id)` pairs, z
+    ASCENDING (bottom first) — the same shape `column_key` returns, with empty
+    tiles already dropped by the caller. The scan itself runs top layer down, so
+    this iterates `column` in reverse.
+
+    `passages`/`priorities`/`terrain_tags` are raw arrays indexed directly by
+    tile_id, already resolved to one tileset (the caller picks which). Their
+    missing/out-of-range behavior mirrors the per-tile `TileMap` accessors:
+    `passages` fails loud (`KeyError`) — a passage value decides real gameplay
+    collision, so a wrong default is dangerous; `priorities`/`terrain_tags`
+    soft-fallback to 0, same as `TileMap.priority()`/`.terrain_tag()`.
+
+    Rule: a tile whose terrain tag is Shadow or Bridge is skipped entirely (it
+    never decides passability, it just isn't there for this purpose — matches
+    Uranium's `playerPassable?`); otherwise the first non-empty tile that blocks
+    (`passage & 0x0F != 0`) -> blocked; a tile drawn at priority 0 (normal layer)
+    that does *not* block -> passable (stop, ignore tiles beneath); a passable
+    tile at priority > 0 (drawn over the player, e.g. a treetop) does not decide
+    — keep scanning down to the trunk. An all-empty column is void (blocked)."""
     seen_tile = False
-    for z in range(grid.zsize - 1, -1, -1):  # top layer down
-        tid = grid.tile_at(x, y, z)
-        if tid == EMPTY_TILE:
-            continue
+    for _z, tid in reversed(tuple(column)):  # top layer down
         # Set BEFORE the tag skip: a column made up ENTIRELY of skipped (shadow/
         # bridge) tiles must not fall into the "void = blocked" rule below — Uranium
         # falls through its scan loop in that case and returns passable (true).
         seen_tile = True
-        if tile_map.terrain_tag(tileset_id, tid) in _SKIPPED_TERRAIN_TAGS:
+        if _soft_lookup(terrain_tags, tid) in _SKIPPED_TERRAIN_TAGS:
             continue
-        if (tile_map.passage(tileset_id, tid) & PASSAGE_BLOCK_MASK) != 0:
+        if (_passage_lookup(passages, tid) & PASSAGE_BLOCK_MASK) != 0:
             return True
-        if tile_map.priority(tileset_id, tid) == 0:
+        if _soft_lookup(priorities, tid) == 0:
             return False
     return not seen_tile  # all-empty = void = blocked
+
+
+def _cell_blocked(grid: TileGrid, x: int, y: int, tile_map: TileMap, tileset_id: int) -> bool:
+    """RMXP multi-layer passability for one cell — thin wrapper over
+    `column_blocked` (see its docstring for the rule itself)."""
+    return column_blocked(
+        column_key(grid, x, y),
+        passages=tile_map.passages_for(tileset_id),
+        priorities=tile_map.priorities_for(tileset_id),
+        terrain_tags=tile_map.terrain_tags_for(tileset_id),
+    )
 
 
 def column_key(grid: TileGrid, x: int, y: int) -> tuple[tuple[int, int], ...]:

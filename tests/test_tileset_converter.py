@@ -431,6 +431,87 @@ def test_cell_blocked_shadow_only_column_is_passable_not_void() -> None:
     assert layout_mod._cell_blocked(g_empty, 0, 0, tm, 7) is True
 
 
+# ---------------------------------------------------------------------------
+# Tests for column_blocked — the bare-column rule `_cell_blocked` now wraps.
+# Exercised directly against raw passages/priorities/terrain_tags arrays (the
+# shape `build_slice_tilesets._render_column` uses), pulled off a TileMap via
+# the new `passages_for`/`priorities_for`/`terrain_tags_for` accessors so the
+# fixtures stay shared with the `_cell_blocked` tests above.
+# ---------------------------------------------------------------------------
+
+
+def _arrays(tm: TileMap, tileset_id: int = 7) -> tuple[list[int], list[int], list[int]]:
+    return tm.passages_for(tileset_id), tm.priorities_for(tileset_id), tm.terrain_tags_for(tileset_id)
+
+
+def test_column_blocked_shadow_tag_skipped_blocker_beneath_decides() -> None:
+    tm = _terrain_tag_tilemap({590: layout_mod.TERRAIN_TAG_SHADOW})
+    g = _grid(1, 1, [400], [500], [590])  # ground, blocker, shadow on top
+    passages, priorities, terrain_tags = _arrays(tm)
+    key = column_key(g, 0, 0)
+    assert layout_mod.column_blocked(
+        key, passages=passages, priorities=priorities, terrain_tags=terrain_tags
+    ) is True
+
+
+def test_column_blocked_bridge_tag_skipped_even_when_own_passage_blocks() -> None:
+    tm = _terrain_tag_tilemap(
+        {595: layout_mod.TERRAIN_TAG_BRIDGE}, extra_blocked=(595,)
+    )
+    g = _grid(1, 1, [400], [0], [595])  # ground, empty, bridge deck (blocking) on top
+    passages, priorities, terrain_tags = _arrays(tm)
+    key = column_key(g, 0, 0)
+    assert layout_mod.column_blocked(
+        key, passages=passages, priorities=priorities, terrain_tags=terrain_tags
+    ) is False
+
+
+def test_column_blocked_all_shadow_column_is_passable() -> None:
+    """Matches `_cell_blocked`'s contrast test: an all-skipped column falls
+    through the scan loop -> passable, not void."""
+    tm = _terrain_tag_tilemap({590: layout_mod.TERRAIN_TAG_SHADOW})
+    g = _grid(1, 1, [590])
+    passages, priorities, terrain_tags = _arrays(tm)
+    key = column_key(g, 0, 0)
+    assert layout_mod.column_blocked(
+        key, passages=passages, priorities=priorities, terrain_tags=terrain_tags
+    ) is False
+
+
+def test_column_blocked_priority_over_zero_does_not_decide() -> None:
+    """A passable tile at priority > 0 (drawn over the player) never decides —
+    the blocker beneath it keeps scanning down and wins."""
+    tm = _layout_tilemap(priorities={387: 1})  # tile 387 drawn over the player
+    g = _grid(1, 1, [500], [0], [387])  # trunk(500, blocks) under treetop(387, passable)
+    passages, priorities, terrain_tags = _arrays(tm)
+    key = column_key(g, 0, 0)
+    assert layout_mod.column_blocked(
+        key, passages=passages, priorities=priorities, terrain_tags=terrain_tags
+    ) is True
+
+
+def test_column_blocked_empty_column_is_void_blocked() -> None:
+    assert layout_mod.column_blocked((), passages=[0] * 10) is True
+
+
+def test_column_blocked_out_of_range_tile_id_soft_fallback() -> None:
+    """priority/terrain_tag out-of-range ids soft-fallback to 0 (Neutral/normal),
+    matching `TileMap.priority()`/`.terrain_tag()`; a tiny passages array covering
+    only the tile actually used keeps the passage lookup in range."""
+    key = ((0, 9000),)  # tile id far past any real priorities/terrain_tags array
+    assert layout_mod.column_blocked(
+        key, passages=[0] * 10000, priorities=[0] * 10, terrain_tags=[0] * 10
+    ) is False  # priority defaults to 0 -> decides passable
+
+
+def test_column_blocked_out_of_range_passage_id_fails_loud() -> None:
+    """Unlike priority/terrain_tag, an out-of-range passages id is NOT soft --
+    a passage value decides real collision, so it raises rather than guessing."""
+    key = ((0, 9000),)
+    with pytest.raises(KeyError):
+        layout_mod.column_blocked(key, passages=[0] * 10)
+
+
 def test_index_order_row_major() -> None:
     """convert_layout emits blocks in row-major y*width+x order (guards the
     layer-major -> row-major transposition)."""

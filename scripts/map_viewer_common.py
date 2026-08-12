@@ -410,6 +410,8 @@ def _ensure_tileset_analysis(
     raster: TileRasterizer,
     priorities: list[int],
     map_id: int,
+    passages: list[int],
+    terrain_tags: list[int],
 ) -> tuple[PaletteAnalysis, dict[tuple, int]]:
     """Build and cache the palette-quantization pool for a map (idempotent).
 
@@ -502,7 +504,9 @@ def _ensure_tileset_analysis(
         analysis: PaletteAnalysis = PaletteAnalysis(palettes=[], metatiles=[])
         pool_key_to_idx: dict[tuple, int] = {}
     else:
-        pool_metatiles = [_render_column(ck, raster, priorities) for ck in pool_keys]
+        pool_metatiles = [
+            _render_column(ck, raster, priorities, passages, terrain_tags) for ck in pool_keys
+        ]
         analysis = analyze_tileset_palettes(
             pool_metatiles, max_palettes=_max_palettes, quantizer=_make_quantizer()
         )
@@ -520,7 +524,8 @@ def _refresh_postquant(map_id: int, state: _MapState) -> None:
     Called on first load and whenever the cached state is stale after a re-quant, so
     a knob change re-runs the quantize step alone — not the grid load or tile renders."""
     analysis, pool_key_to_idx = _ensure_tileset_analysis(
-        state.tileset_id, state.raster, state.priorities, map_id
+        state.tileset_id, state.raster, state.priorities, map_id,
+        state.passages, state.terrain_tags,
     )
     postquant: list[tuple[np.ndarray, np.ndarray] | None] = []
     for ck in state.colkeys_sorted:
@@ -569,6 +574,8 @@ def _pixel_classes(
     metatile_imgs: list[MetatileImage | None],
     raster: TileRasterizer,
     priorities: list[int],
+    passages: list[int] | None = None,
+    terrain_tags: list[int] | None = None,
 ) -> list[int]:
     """Pixel-equivalence class per colkey index: ``pix_class[i]`` is the smallest
     colkey index whose metatile renders EXACTLY like ``i``'s — same layer split,
@@ -598,7 +605,7 @@ def _pixel_classes(
             out.append(i)
             continue
         if n > 1:
-            mt = _render_column(ck, raster, priorities, n_frames=n)
+            mt = _render_column(ck, raster, priorities, passages, terrain_tags, n_frames=n)
         parts = [mt.bottom.tobytes(), mt.top.tobytes()]
         for fb, ft in mt.frames or []:
             parts += [fb.tobytes(), ft.tobytes()]
@@ -681,10 +688,12 @@ def _ensure_loaded(map_id: int) -> None:
         if not ck:
             metatile_imgs.append(None)  # empty column -> transparent
         else:
-            metatile_imgs.append(_render_column(ck, raster, priorities))
+            metatile_imgs.append(_render_column(ck, raster, priorities, passages, terrain_tags))
 
     n_rendered = sum(1 for m in metatile_imgs if m is not None)
-    pix_class = _pixel_classes(colkeys_sorted, metatile_imgs, raster, priorities)
+    pix_class = _pixel_classes(
+        colkeys_sorted, metatile_imgs, raster, priorities, passages, terrain_tags
+    )
     n_classes = len(set(pix_class))
     print(
         f"    {len(colkeys_sorted)} distinct columns, {n_rendered} metatile renders,"
