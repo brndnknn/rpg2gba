@@ -20,6 +20,9 @@ reference/dat_dump/
 # Generated real-art tile-map overlay (S8a); load_tile_map prefers it over the
 # committed tileset_map.json. Regenerated each assembly; never committed.
 reference/tileset_map.gen.json
+# Per-map viewer feedback punch-lists. Transient review scratch — a flag exists
+# only until the build agent fixes it, so there's no value in versioning them.
+reference/map_feedback/
 
 # Vendored engine (pokeemerald-expansion in engine/). Its own .gitignore keeps
 # build/ + *.gba out. Below are rpg2gba PIPELINE-generated artifacts the assembler

@@ -85,10 +85,11 @@ that the build agent reads and fixes.
   mode** there's no server to write to, so it falls back to a browser download — the
   only way to get flags out of static mode.
 
-**Storage:** flags persist to git-tracked `reference/map_feedback/MapNNN.json` — a
-JSON list of `{cells, note}` objects. This is deliberate: flags are hand-authored
-review data, not regenerable output, so they must survive `rm -rf output/` /
-`pipeline --clean`. Server mode writes the whole file on every Save/delete via
+**Storage:** flags persist to `reference/map_feedback/MapNNN.json` — a JSON list of
+`{cells, note}` objects. The directory lives under `reference/` (not `output/`) so
+flags survive `rm -rf output/` / `pipeline --clean`, but it is **gitignored**
+(2026-08-12, user call): a flag exists only until the build agent fixes it, so the
+history has no value. Server mode writes the whole file on every Save/delete via
 `POST /api/feedback` (body `{map_id, flags}`) and loads it via
 `GET /api/feedback/<id>` on page load. The **old** location — gitignored
 `output/uranium-build/map_viewer_issues/` (one note per cell, keyed `"x,y"`, no
@@ -351,7 +352,7 @@ RPG Maker/Quantized toggle isn't fine-grained enough.
   `RPG2GBA_*` paths; run from the repo root.
 - **Zero external deps for the server** (stdlib `http.server`); the rendering core
   needs `numpy` + `Pillow` (already in the project `.venv`).
-- **Feedback flags are committed, generated output is not.** Flags live in
-  git-tracked `reference/map_feedback/MapNNN.json` — hand-authored review data,
-  commit it like any other reference doc. `output/map_viewer/` (static-mode HTML)
-  is still gitignored generated art — don't commit that.
+- **Nothing the viewer writes is committed.** Flags live in gitignored
+  `reference/map_feedback/MapNNN.json` (under `reference/` only so they outlive
+  `rm -rf output/`); `output/map_viewer/` (static-mode HTML) is gitignored
+  generated art.

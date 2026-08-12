@@ -11,7 +11,7 @@ Hand-authored docs and derived data the build agent and humans read. Organized 2
 | `viewer/` | Map viewer + map walker tooling docs |
 | `findings/` | Dated session findings, censuses, audits |
 | `archive/` | Retired plans and historical records — paths inside are left as they were written |
-| `map_feedback/` | Per-map issue JSONs written by the map viewer's feedback UI |
+| `map_feedback/` | Per-map issue JSONs written by the map viewer's feedback UI (gitignored — transient review scratch) |
 | `scripts_dump/` | Verbatim Uranium Ruby scripts (gitignored — never committed) |
 
 New files: match the category above; only SoT JSONs and memory files belong at top level.

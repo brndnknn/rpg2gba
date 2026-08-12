@@ -2032,7 +2032,7 @@ function updateSidebar() {
 // A flag = {cells:[[x,y],...], note}.  One note covers a whole selection set
 // (tap-to-toggle + Expand similar), so it can span many cells / several metatile
 // identities.  Server mode persists the full list to
-// reference/map_feedback/MapNNN.json on every change (git-tracked, always tiny,
+// reference/map_feedback/MapNNN.json on every change (gitignored, always tiny,
 // so a whole-list PUT is fine); static exports keep flags in memory and rely on
 // Export JSON below.
 function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
