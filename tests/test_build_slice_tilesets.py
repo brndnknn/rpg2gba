@@ -70,6 +70,8 @@ def _fake_fork(tmp_path: Path) -> Path:
         "    MB_JUMP_SOUTH,\n"
         "    MB_JUMP_EAST,\n"
         "    MB_JUMP_WEST,\n"
+        "    MB_SIDEWAYS_STAIRS_RIGHT_SIDE,\n"
+        "    MB_SIDEWAYS_STAIRS_LEFT_SIDE,\n"
         "};\n",
         encoding="utf-8",
     )
@@ -140,9 +142,14 @@ def _run(tmp_path: Path) -> tuple[Path, Path, dict]:
     overlay_out = tmp_path / "tileset_map.gen.json"
 
     # priorities: tile 401 has priority==1 -> rendered into the top layer only,
-    # exercising the LAYER_COVERED p==1 tier; tiles 400/402/403 all stay on bottom.
+    # exercising the p==1 tier; tiles 400/402/403 all stay on bottom. Column
+    # ((0,401),) is tile 401 ALONE (no base tile beneath it — see `_map`), and
+    # `passages` leaves it fully passable -> column_blocked reads passable ->
+    # LAYER_NORMAL (re-pinned 2026-08-12: a passable p==1 column is the
+    # stand-on-canopy case, see _render_column docstring).
     priors = [0] * 600
     priors[401] = 1
+    passages = [0] * 600
 
     results = build_slice_tilesets(
         [(32, _map(5))],
@@ -152,6 +159,7 @@ def _run(tmp_path: Path) -> tuple[Path, Path, dict]:
         overlay_out=overlay_out,
         rasterizer_for=lambda ts: _StubRasterizer(),
         priorities_for=lambda ts: priors,
+        passages_for=lambda ts: passages,
         terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
     )
     overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
@@ -223,11 +231,11 @@ def test_emitted_art_files(tmp_path: Path) -> None:
     # Metatile 0 (column ((0,400),) normal entry) has behavior 0 (MB_NORMAL).
     assert (attrs[0] & 0x00FF) == 0
 
-    # Metatile 1 maps to column ((0,401),), tile 401 has priority==1 (tall-grass/lip
-    # tier, no p>=2 present) -> top layer, LAYER_COVERED (re-pinned: p==1 alone no
-    # longer promotes to LAYER_NORMAL/BG1 — see _render_column docstring).
-    # layer_type = LAYER_COVERED (1) -> bits 15-12 of attr = 1.
-    assert (attrs[1] >> 12) & 0xF == 1  # LAYER_COVERED
+    # Metatile 1 maps to column ((0,401),), tile 401 alone (no base tile), priority
+    # ==1, passages all-passable -> column_blocked reads passable -> LAYER_NORMAL
+    # (the stand-on-canopy case; see _render_column docstring).
+    # layer_type = LAYER_NORMAL (0) -> bits 15-12 of attr = 0.
+    assert (attrs[1] >> 12) & 0xF == 0  # LAYER_NORMAL
     # Metatile 0 maps to column ((0,400),), priority=0 -> bottom only.
     # layer_type = LAYER_COVERED (1) -> bits 15-12 = 1.
     assert (attrs[0] >> 12) & 0xF == 1  # LAYER_COVERED
@@ -526,15 +534,34 @@ def test_render_column_p0_only_stays_bottom_covered() -> None:
     assert mt.top[..., 3].max() == 0  # top fully transparent
 
 
-def test_render_column_p1_alone_covered_top() -> None:
-    """A single p==1 overlay tile (no p>=2 in the column): LAYER_COVERED, the
-    overlay's pixels land in the TOP slot (BG2: under sprites, over ground) —
-    re-pinned from the old flat p>0 rule, which put this in LAYER_NORMAL/BG1."""
-    key = ((0, 401),)
-    mt = _render_column(key, _StubRasterizer(), _priors({401: 1}))
+def test_render_column_p1_over_passable_base_normal_top() -> None:
+    """A p==1 overlay tile over a PASSABLE base tile (passage 0, priority 0) —
+    the two-cell-tall tree/hedge canopy-over-trunk case: the player is meant to
+    walk BEHIND the canopy -> LAYER_NORMAL (re-pinned 2026-08-12 from the old
+    flat-tiered rule, which put every p==1 column in LAYER_COVERED regardless of
+    passability and drew the player on top of tree canopies). p1 tile still
+    lands in the TOP slot (`top_min` stays 1 in both p==1 cases)."""
+    key = ((0, 400), (1, 401))
+    priorities = _priors({401: 1})
+    passages = _priors({})  # all passable, including 400 and 401
+    mt = _render_column(key, _StubRasterizer(), priorities, passages)
+    assert mt.layer_type == LAYER_NORMAL
+    assert tuple(mt.top[0, 0]) == _stub_color(401)
+    assert tuple(mt.bottom[0, 0]) == _stub_color(400)
+
+
+def test_render_column_p1_over_blocking_base_covered_top() -> None:
+    """A p==1 overlay tile over a BLOCKING base tile (passage 0x0F) — a solid
+    cliff/hedge-lip only ever approached from the row south of it: stays
+    LAYER_COVERED (protects that row's player's head — the fix this tier
+    originally shipped for). p1 tile still lands in the TOP slot."""
+    key = ((0, 400), (1, 401))
+    priorities = _priors({401: 1})
+    passages = _priors({400: 0x0F})
+    mt = _render_column(key, _StubRasterizer(), priorities, passages)
     assert mt.layer_type == LAYER_COVERED
     assert tuple(mt.top[0, 0]) == _stub_color(401)
-    assert mt.bottom[..., 3].max() == 0  # bottom empty (no p==0 tile present)
+    assert tuple(mt.bottom[0, 0]) == _stub_color(400)
 
 
 def test_render_column_p2_alone_normal_top() -> None:
@@ -719,10 +746,20 @@ def test_column_n_frames_is_lcm_of_per_tile_counts() -> None:
 
 def test_column_n_frames_guard_fails_loud() -> None:
     key = ((0, 48), (1, 52))
-    rast = _AnimatedStubRasterizer({48: 7, 52: 11})  # lcm 77 > MAX_COLUMN_FRAMES
+    rast = _AnimatedStubRasterizer({48: 11, 52: 13})  # lcm 143 > MAX_COLUMN_FRAMES
     with pytest.raises(ValueError, match="exceeds"):
         column_n_frames(key, rast)
-    assert 7 * 11 > MAX_COLUMN_FRAMES  # sanity: this really is over the guard
+    assert 11 * 13 > MAX_COLUMN_FRAMES  # sanity: this really is over the guard
+
+
+def test_column_n_frames_allows_the_route01_pond_over_waterfall_lcm() -> None:
+    # CH02/Route 01: the 19-frame pond composited over the 5-frame transparent
+    # waterfall needs lcm 95 real frames. Both animate inside the same 8x8
+    # quadrants once composited, so the lcm is genuine, not a garbage pairing —
+    # the guard was raised to 128 for exactly this column (ts22 tiles 68/124).
+    key = ((0, 384), (1, 68), (2, 124))
+    rast = _AnimatedStubRasterizer({384: 1, 68: 19, 124: 5})
+    assert column_n_frames(key, rast) == 95
 
 
 def test_render_column_multi_frame_populates_frames() -> None:
@@ -776,3 +813,337 @@ def test_analyze_tileset_palettes_transparent_slots() -> None:
         assert isinstance(pal, list)
         for color in pal:
             assert len(color) == 3 and all(isinstance(c, int) for c in color)
+
+
+# ---------------------------------------------------------------------------
+# Stairs fix: native sideways-stairs behavior_overrides (stair_cells=)
+# ---------------------------------------------------------------------------
+
+
+def test_stair_cell_gets_extra_metatile_with_correct_behavior(tmp_path: Path) -> None:
+    """A stair cell on a column that NO non-stair cell uses mints no extra metatile
+    at all — the column's own metatile carries the sideways-stairs MB_* value, and
+    the overlay points at that same index. Copying would waste a metatile, and
+    tileset 1033 has none to waste."""
+    fork = _fake_fork(tmp_path)
+    base = tmp_path / "tileset_map.json"
+    base.write_text("{}", encoding="utf-8")
+    overlay_out = tmp_path / "tileset_map.gen.json"
+    priors = [0] * 600
+
+    build_slice_tilesets(
+        [(32, _map(5))],
+        {},
+        fork=fork,
+        base_tile_map=base,
+        overlay_out=overlay_out,
+        rasterizer_for=lambda ts: _StubRasterizer(),
+        priorities_for=lambda ts: priors,
+        terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
+        stair_cells={32: {(0, 0): "stairs_left"}},
+    )
+
+    overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
+    tiles = overlay["tiles"]["5"]
+    bo = overlay["behavior_overrides"]["5"]["stairs_left"]
+
+    col_400 = json.dumps([[0, 400]], separators=(",", ":"))
+    assert set(bo["tiles"]) == {col_400}
+    stair_idx = bo["tiles"][col_400]
+    # inlined: the overlay entry IS the column's own metatile, no copy
+    assert stair_idx == tiles[col_400]["metatile"]
+    # Every stair cell here resolved to real column art, so no transparent fallback
+    # metatile is minted — an unreferenced one is pure budget waste.
+    assert bo["fallback"] is None
+
+    prim = fork / "data" / "tilesets" / "primary" / "uranium5"
+    raw = (prim / "metatile_attributes.bin").read_bytes()
+    (attr,) = struct.unpack_from("<H", raw, stair_idx * 2)
+    mb_left = _behavior_value(fork, "MB_SIDEWAYS_STAIRS_LEFT_SIDE")
+    assert (attr & 0x00FF) == mb_left
+
+
+def test_stair_column_shared_with_non_stair_cell_gets_a_copy(tmp_path: Path) -> None:
+    """When a NON-stair cell uses the same column, that column's metatile must keep
+    its terrain behavior, so the stair cell gets a behavior-stamped copy instead."""
+    fork = _fake_fork(tmp_path)
+    base = tmp_path / "tileset_map.json"
+    base.write_text("{}", encoding="utf-8")
+    overlay_out = tmp_path / "tileset_map.gen.json"
+    priors = [0] * 600
+
+    # 2x1 map: both cells carry tile 400, but only (0,0) is a stair cell.
+    m = {
+        "tileset_id": 5, "width": 2, "height": 1,
+        "tiles": {"xsize": 2, "ysize": 1, "zsize": 3, "data": [400, 400, 0, 0, 0, 0]},
+    }
+
+    build_slice_tilesets(
+        [(32, m)],
+        {},
+        fork=fork,
+        base_tile_map=base,
+        overlay_out=overlay_out,
+        rasterizer_for=lambda ts: _StubRasterizer(),
+        priorities_for=lambda ts: priors,
+        terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
+        stair_cells={32: {(0, 0): "stairs_left"}},
+    )
+
+    overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
+    col_400 = json.dumps([[0, 400]], separators=(",", ":"))
+    stair_idx = overlay["behavior_overrides"]["5"]["stairs_left"]["tiles"][col_400]
+    plain_idx = overlay["tiles"]["5"][col_400]["metatile"]
+    assert stair_idx != plain_idx
+
+    prim = fork / "data" / "tilesets" / "primary" / "uranium5"
+    n = max(stair_idx, plain_idx) + 1
+    attrs = struct.unpack(f"<{n}H", (prim / "metatile_attributes.bin").read_bytes())
+    assert (attrs[stair_idx] & 0x00FF) == _behavior_value(
+        fork, "MB_SIDEWAYS_STAIRS_LEFT_SIDE"
+    )
+    assert (attrs[plain_idx] & 0x00FF) == 0  # MB_NORMAL, untouched
+
+
+def test_stair_fallback_minted_only_for_empty_column(tmp_path: Path) -> None:
+    """A stair cell whose column is empty has no art to copy, so it DOES mint the
+    transparent fallback metatile for its kind — the case the unconditional
+    fallback used to cover for everyone."""
+    fork = _fake_fork(tmp_path)
+    base = tmp_path / "tileset_map.json"
+    base.write_text("{}", encoding="utf-8")
+    overlay_out = tmp_path / "tileset_map.gen.json"
+    priors = [0] * 600
+
+    # 2x1 map: cell (0,0) carries tile 400, cell (1,0) is an empty column.
+    m = {
+        "tileset_id": 5, "width": 2, "height": 1,
+        "tiles": {"xsize": 2, "ysize": 1, "zsize": 3, "data": [400, 0, 0, 0, 0, 0]},
+    }
+
+    build_slice_tilesets(
+        [(32, m)],
+        {},
+        fork=fork,
+        base_tile_map=base,
+        overlay_out=overlay_out,
+        rasterizer_for=lambda ts: _StubRasterizer(),
+        priorities_for=lambda ts: priors,
+        terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
+        stair_cells={32: {(1, 0): "stairs_left"}},
+    )
+
+    overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
+    bo = overlay["behavior_overrides"]["5"]["stairs_left"]
+    assert bo["tiles"] == {}
+    fallback_idx = bo["fallback"]
+    assert fallback_idx is not None
+
+    prim = fork / "data" / "tilesets" / "primary" / "uranium5"
+    attrs = struct.unpack(
+        f"<{fallback_idx + 1}H", (prim / "metatile_attributes.bin").read_bytes()
+    )
+    assert (attrs[fallback_idx] & 0x00FF) == _behavior_value(
+        fork, "MB_SIDEWAYS_STAIRS_LEFT_SIDE"
+    )
+
+
+def test_stair_cells_sharing_column_and_kind_share_one_metatile(tmp_path: Path) -> None:
+    """Two stair cells with the SAME column key and the SAME kind get exactly one
+    shared metatile, not one each."""
+    fork = _fake_fork(tmp_path)
+    base = tmp_path / "tileset_map.json"
+    base.write_text("{}", encoding="utf-8")
+    overlay_out = tmp_path / "tileset_map.gen.json"
+    priors = [0] * 600
+
+    # 2x1 map: both cells carry tile 400 -> identical column key ((0, 400),).
+    m = {
+        "tileset_id": 5, "width": 2, "height": 1,
+        "tiles": {"xsize": 2, "ysize": 1, "zsize": 3, "data": [400, 400, 0, 0, 0, 0]},
+    }
+
+    build_slice_tilesets(
+        [(32, m)],
+        {},
+        fork=fork,
+        base_tile_map=base,
+        overlay_out=overlay_out,
+        rasterizer_for=lambda ts: _StubRasterizer(),
+        priorities_for=lambda ts: priors,
+        terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
+        stair_cells={32: {(0, 0): "stairs_left", (1, 0): "stairs_left"}},
+    )
+
+    overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
+    bo = overlay["behavior_overrides"]["5"]["stairs_left"]
+    assert len(bo["tiles"]) == 1
+
+
+def test_stair_same_column_both_kinds_gets_two_distinct_metatiles(tmp_path: Path) -> None:
+    """The SAME column key used by a "stairs_left" cell and a "stairs_right" cell
+    gets TWO distinct metatiles — one per kind, since each kind needs its own
+    engine behavior stamp."""
+    fork = _fake_fork(tmp_path)
+    base = tmp_path / "tileset_map.json"
+    base.write_text("{}", encoding="utf-8")
+    overlay_out = tmp_path / "tileset_map.gen.json"
+    priors = [0] * 600
+
+    m = {
+        "tileset_id": 5, "width": 2, "height": 1,
+        "tiles": {"xsize": 2, "ysize": 1, "zsize": 3, "data": [400, 400, 0, 0, 0, 0]},
+    }
+
+    build_slice_tilesets(
+        [(32, m)],
+        {},
+        fork=fork,
+        base_tile_map=base,
+        overlay_out=overlay_out,
+        rasterizer_for=lambda ts: _StubRasterizer(),
+        priorities_for=lambda ts: priors,
+        terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
+        stair_cells={32: {(0, 0): "stairs_left", (1, 0): "stairs_right"}},
+    )
+
+    overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
+    col_400 = json.dumps([[0, 400]], separators=(",", ":"))
+    left_idx = overlay["behavior_overrides"]["5"]["stairs_left"]["tiles"][col_400]
+    right_idx = overlay["behavior_overrides"]["5"]["stairs_right"]["tiles"][col_400]
+    assert left_idx != right_idx
+
+    prim = fork / "data" / "tilesets" / "primary" / "uranium5"
+    raw = (prim / "metatile_attributes.bin").read_bytes()
+    attrs = struct.unpack(f"<{len(raw) // 2}H", raw)
+    mb_left = _behavior_value(fork, "MB_SIDEWAYS_STAIRS_LEFT_SIDE")
+    mb_right = _behavior_value(fork, "MB_SIDEWAYS_STAIRS_RIGHT_SIDE")
+    assert (attrs[left_idx] & 0x00FF) == mb_left
+    assert (attrs[right_idx] & 0x00FF) == mb_right
+
+
+def test_behavior_overrides_overlay_round_trips_through_load_tile_map(
+    tmp_path: Path,
+) -> None:
+    """The overlay's "behavior_overrides" section round-trips through
+    `tile_map.load_tile_map` + `TileMap.behavior_for_column` — the documented shape
+    (`{"tiles": {colkey: idx}, "fallback": idx}` per tileset per kind)."""
+    from rpg2gba.tileset_converter.tile_map import load_tile_map, serialize_column_key
+
+    fork = _fake_fork(tmp_path)
+    base = tmp_path / "tileset_map.json"
+    base.write_text("{}", encoding="utf-8")
+    overlay_out = tmp_path / "tileset_map.gen.json"
+    priors = [0] * 600
+
+    build_slice_tilesets(
+        [(32, _map(5))],
+        {},
+        fork=fork,
+        base_tile_map=base,
+        overlay_out=overlay_out,
+        rasterizer_for=lambda ts: _StubRasterizer(),
+        priorities_for=lambda ts: priors,
+        terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
+        stair_cells={32: {(0, 0): "stairs_left"}},
+    )
+
+    overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
+    key = ((0, 400),)
+    expected_idx = overlay["behavior_overrides"]["5"]["stairs_left"]["tiles"][
+        serialize_column_key(key)
+    ]
+
+    tile_map = load_tile_map(overlay_out, passages_path=None)
+    assert tile_map.has_behavior_override(5, "stairs_left")
+    mt = tile_map.behavior_for_column(5, "stairs_left", key)
+    assert mt.metatile_id == expected_idx
+    # behavior_for_column always forces passable, per its docstring.
+    assert mt.collision == 0  # PASSABLE_COLLISION
+    assert mt.elevation == 3  # PASSABLE_ELEVATION
+
+    # No stair cell here needed a fallback, so none was minted — and an unmapped
+    # column must then fail loud rather than silently render MB_NORMAL.
+    assert overlay["behavior_overrides"]["5"]["stairs_left"]["fallback"] is None
+    with pytest.raises(KeyError):
+        tile_map.behavior_for_column(5, "stairs_left", None)
+
+
+def test_no_stair_cells_emits_no_behavior_overrides_entry(tmp_path: Path) -> None:
+    """`stair_cells` omitted (the default None): no "behavior_overrides" entry for
+    the tileset, and the emitted art is unchanged from the pre-stairs-fix baseline
+    (regression pin for the default path — reuses `_run`'s door/warp fixture, whose
+    metatile count `test_emitted_art_files` already pins at 7)."""
+    fork, _, ctx = _run(tmp_path)
+    overlay = ctx["overlay"]
+    assert overlay.get("behavior_overrides", {}) == {}
+
+    prim = fork / "data" / "tilesets" / "primary" / "uranium5"
+    assert (prim / "metatiles.bin").stat().st_size == 7 * 16
+    assert (prim / "metatile_attributes.bin").stat().st_size == 7 * 2
+
+
+def test_stair_cell_layout_block_passable_despite_blocked_source_passage(
+    tmp_path: Path,
+) -> None:
+    """End-to-end-ish: a stair cell's emitted layout block reads PASSABLE collision
+    even though its source column's passage bits read fully blocked — the whole
+    point of the fix (RMXP's stair tile is solid on purpose; the native engine
+    behavior only redirects a step on a passable tile)."""
+    from rpg2gba.tileset_converter.layout import convert_layout
+    from rpg2gba.tileset_converter.tile_map import (
+        COLLISION_SHIFT,
+        load_tile_map,
+    )
+
+    fork = _fake_fork(tmp_path)
+    base = tmp_path / "tileset_map.json"
+    base.write_text("{}", encoding="utf-8")
+    overlay_out = tmp_path / "tileset_map.gen.json"
+    priors = [0] * 600
+
+    # 2x1 map: both cells carry tile 400. (0,0) gets the stair override; (1,0)
+    # doesn't, so it stays subject to the plain source-passage blocked check.
+    m = {
+        "tileset_id": 5, "width": 2, "height": 1,
+        "tiles": {"xsize": 2, "ysize": 1, "zsize": 3, "data": [400, 400, 0, 0, 0, 0]},
+    }
+
+    build_slice_tilesets(
+        [(32, m)],
+        {},
+        fork=fork,
+        base_tile_map=base,
+        overlay_out=overlay_out,
+        rasterizer_for=lambda ts: _StubRasterizer(),
+        priorities_for=lambda ts: priors,
+        terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
+        stair_cells={32: {(0, 0): "stairs_left"}},
+    )
+
+    # A tilesets.json oracle where tile 400's passage is fully blocked (all 4
+    # directional bits set) — the source RMXP truth the stair fix must override.
+    passages = [0] * 600
+    passages[400] = 0x0F
+    tilesets_json = tmp_path / "tilesets.json"
+    tilesets_json.write_text(
+        json.dumps({"5": {"passages": passages, "priorities": priors, "terrain_tags": [0] * 600}}),
+        encoding="utf-8",
+    )
+
+    tile_map = load_tile_map(overlay_out, tilesets_json)
+
+    layout = convert_layout(
+        m,
+        tile_map,
+        name="Test",
+        layout_const="LAYOUT_TEST",
+        tileset_key=5,
+        behavior_overrides={(0, 0): "stairs_left"},
+    )
+
+    def _collision_at(x: int, y: int) -> int:
+        return (layout.blocks[y * m["width"] + x] >> COLLISION_SHIFT) & 0x3
+
+    assert _collision_at(0, 0) == 0  # PASSABLE — stair override wins
+    assert _collision_at(1, 0) == 1  # BLOCKED — plain cell, same tile, no override

@@ -1,5 +1,6 @@
 import json
 import re
+import sys  # URANIUM PATHFINDER SLICE: optional input-path argument (see main)
 
 class Config:
     def __init__(self, config_file_name, rtc_constants_file_name, encounters_json_data):
@@ -268,7 +269,11 @@ def ConvertToHeaderFile(json_data):
         assembler.WriteEncounters()
 
 def main():
-    with open('src/data/wild_encounters.json', 'r') as json_file:
+    # URANIUM PATHFINDER SLICE: accept an optional input path so the build can be
+    # pointed at a generated overlay (wild_encounters.gen.json) instead of the
+    # committed vendored file. No argument => pristine upstream behavior.
+    input_path = sys.argv[1] if len(sys.argv) > 1 else 'src/data/wild_encounters.json'
+    with open(input_path, 'r') as json_file:
         json_data = json.load(json_file)
         ConvertToHeaderFile(json_data)
         

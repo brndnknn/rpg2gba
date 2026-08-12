@@ -387,3 +387,191 @@ def test_has_species_conditional_no_species_wiring_still_queues(
     assert len(res.unhandled) == 1
     assert res.unhandled[0].command_code == T.CONDITIONAL_BRANCH
     assert "SPECIES_RAPTORCH" not in res.text
+
+
+# ----------------------------------------------------------------------------
+# Native object-template idioms — item balls / berry trees (rpg2gba wave
+# 2026-08-08). These are EVENT-level detectors that run in transpile_driver.
+# transpile_map BEFORE both the classifiers and transpile_event, so they are
+# exercised directly here (T.detect_item_ball / T.detect_berry_tree /
+# T.resolve_native_object_template) rather than through run_event.
+# ----------------------------------------------------------------------------
+
+
+def _item_ball_event(call: str, *, id: int = 2, name: str = "EV002") -> dict:
+    page1 = [
+        cmd(T.CONDITIONAL_BRANCH, [12, call]),
+        cmd(T.CONTROL_SELF_SWITCH, ["A", 0], indent=1),
+        cmd(0, indent=1),
+        cmd(T.ELSE_BRANCH, indent=1),
+        cmd(0, indent=2),
+        cmd(T.BRANCH_END, indent=1),
+        cmd(0),
+    ]
+    page2 = [cmd(0)]
+    return make_event([page1, page2], id=id, name=name)
+
+
+def test_detect_item_ball_bare_defaults_to_amount_one() -> None:
+    event = _item_ball_event("Kernel.pbItemBall(::PBItems::POTION)")
+    assert T.detect_item_ball(event) == ("POTION", 1)
+
+
+def test_detect_item_ball_explicit_quantity() -> None:
+    event = _item_ball_event("Kernel.pbItemBall(::PBItems::POTION, 3)")
+    assert T.detect_item_ball(event) == ("POTION", 3)
+
+
+def test_detect_item_ball_no_kernel_prefix_still_matches() -> None:
+    event = _item_ball_event("pbItemBall(::PBItems::ANTIDOTE)")
+    assert T.detect_item_ball(event) == ("ANTIDOTE", 1)
+
+
+def test_detect_item_ball_absent_returns_none() -> None:
+    event = make_event([[cmd(T.SHOW_TEXT, ["hi"])]])
+    assert T.detect_item_ball(event) is None
+
+
+def _berry_tree_pregrown_event(*, symbol: str = "ORANBERRY", qty: int = 2) -> dict:
+    page1 = [
+        cmd(T.CONDITIONAL_BRANCH, [12, f"pbPickBerry(PBItems::{symbol},{qty})"]),
+        cmd(T.CONTROL_SELF_SWITCH, ["A", 0], indent=1),
+        cmd(0, indent=1),
+        cmd(T.BRANCH_END),
+        cmd(0),
+    ]
+    page2 = [cmd(T.SCRIPT, ["pbBerryPlant"]), cmd(0)]
+    return make_event([page1, page2], id=100, name="BerryPlant")
+
+
+def _berry_tree_bare_soil_event() -> dict:
+    return make_event([[cmd(T.SCRIPT, ["pbBerryPlant"]), cmd(0)]], id=101, name="BerryPlant")
+
+
+def _berry_tree_three_page_event(*, symbol: str = "HAFLIBERRY", qty: int = 3) -> dict:
+    """Map117's 3-page variant: soil page, tree page, soil page again."""
+    soil = [cmd(T.SCRIPT, ["pbBerryPlant"]), cmd(0)]
+    tree = [
+        cmd(T.CONDITIONAL_BRANCH, [12, f"pbPickBerry(PBItems::{symbol},{qty})"]),
+        cmd(T.CONTROL_SELF_SWITCH, ["A", 0], indent=1),
+        cmd(0, indent=1),
+        cmd(T.BRANCH_END),
+        cmd(0),
+    ]
+    return make_event([soil, tree, soil], id=108, name="BerryPlant")
+
+
+def test_detect_berry_tree_pregrown_kind() -> None:
+    event = _berry_tree_pregrown_event()
+    assert T.detect_berry_tree(event) == ("ORANBERRY", True)
+
+
+def test_detect_berry_tree_bare_soil_kind() -> None:
+    event = _berry_tree_bare_soil_event()
+    assert T.detect_berry_tree(event) == (None, False)
+
+
+def test_detect_berry_tree_three_page_map117_variant() -> None:
+    event = _berry_tree_three_page_event()
+    assert T.detect_berry_tree(event) == ("HAFLIBERRY", True)
+
+
+def test_detect_berry_tree_absent_returns_none() -> None:
+    event = make_event([[cmd(T.SHOW_TEXT, ["hi"])]])
+    assert T.detect_berry_tree(event) is None
+
+
+def test_detect_berry_tree_ignores_graphic_reuse_false_positives() -> None:
+    """Four corpus events reuse berry-tree sprites for unrelated purposes
+    (credits trigger, settings menu, door sign, puzzle NPC). Detection keys
+    only on the pbBerryPlant/pbPickBerry calls, so an event carrying the
+    berry-tree graphic but a DIFFERENT script call must not be claimed."""
+    event = make_event([[cmd(T.SCRIPT, ["pbPhoneRegisterNPC(1)"]), cmd(0)]], id=12, name="npc")
+    event["pages"][0]["graphic"] = {"character_name": "berrytreeORANBERRY"}
+    assert T.detect_berry_tree(event) is None
+
+
+def test_detect_berry_tree_ignores_map143_harvest_node() -> None:
+    """Map143's cooldown harvest nodes call pbReceiveItem + pbSetEventTime,
+    never pbBerryPlant/pbPickBerry — a different mechanic, stays unhandled."""
+    page = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "Kernel.pbReceiveItem(::PBItems::GUARABERRY, 2)"]),
+        cmd(T.SCRIPT, ["pbSetEventTime"], indent=1),
+        cmd(0, indent=1),
+        cmd(T.BRANCH_END),
+        cmd(0),
+    ]
+    event = make_event([page], id=43, name="Guara Berry")
+    assert T.detect_berry_tree(event) is None
+    assert T.detect_item_ball(event) is None
+
+
+def _resolve_ctx() -> T.TranspileContext:
+    from pathlib import Path
+
+    from rpg2gba.conversion_agent import fork_index
+    from rpg2gba.pbs_converter._id_map import IdMap
+
+    id_map = IdMap.load(Path("reference") / "uranium_id_map.json")
+    index = fork_index.load_or_build()
+    return T.TranspileContext(
+        registry=FlagRegistry(),
+        item_id_map=dict(id_map.by_category["items"]),
+        fork_item_constants=frozenset(index.constants),
+    )
+
+
+def test_resolve_native_object_template_item_ball() -> None:
+    ctx = _resolve_ctx()
+    event = _item_ball_event("Kernel.pbItemBall(::PBItems::POTION)", id=2, name="EV002")
+    claimed = T.resolve_native_object_template(33, event, ctx)
+    assert claimed is True
+    assert ctx.template_fields[(33, 2)] == {
+        "kind": "item_ball", "item": "ITEM_POTION", "amount": 1,
+    }
+
+
+def test_resolve_native_object_template_berry_tree_pregrown() -> None:
+    ctx = _resolve_ctx()
+    event = _berry_tree_pregrown_event()
+    claimed = T.resolve_native_object_template(33, event, ctx)
+    assert claimed is True
+    assert ctx.template_fields[(33, 100)] == {
+        "kind": "berry_tree", "berry_item": "ITEM_ORAN_BERRY", "planted": True,
+    }
+
+
+def test_resolve_native_object_template_berry_tree_bare_soil() -> None:
+    ctx = _resolve_ctx()
+    event = _berry_tree_bare_soil_event()
+    claimed = T.resolve_native_object_template(33, event, ctx)
+    assert claimed is True
+    assert ctx.template_fields[(33, 101)] == {
+        "kind": "berry_tree", "berry_item": None, "planted": False,
+    }
+
+
+def test_resolve_native_object_template_unclaimed_returns_false() -> None:
+    ctx = _resolve_ctx()
+    event = make_event([[cmd(T.SHOW_TEXT, ["hi"])]])
+    assert T.resolve_native_object_template(33, event, ctx) is False
+    assert ctx.template_fields == {}
+
+
+def test_resolve_native_object_template_missing_fork_constant_fails_loud() -> None:
+    """HAFLI has an id-map entry (ITEM_HAFLI_BERRY) but the fork does not
+    define that constant — must raise, never silently drop the event or
+    emit an invented symbol."""
+    ctx = _resolve_ctx()
+    event = _berry_tree_three_page_event(symbol="HAFLIBERRY")
+    with pytest.raises(ValueError, match="ITEM_HAFLI_BERRY"):
+        T.resolve_native_object_template(117, event, ctx)
+
+
+def test_resolve_native_object_template_unmapped_symbol_fails_loud() -> None:
+    """A symbol with no id-map entry at all must also raise, not queue or
+    silently drop."""
+    ctx = _resolve_ctx()
+    event = _item_ball_event("Kernel.pbItemBall(::PBItems::TOTALLYMADEUPITEM)")
+    with pytest.raises(ValueError, match="TOTALLYMADEUPITEM"):
+        T.resolve_native_object_template(33, event, ctx)

@@ -16874,43 +16874,17 @@ Kyogre
 Level: 5
 IVs: 0 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
 
-/* URANIUM PATHFINDER SLICE: Moki Town lab rival battle (Map050 EV019). Theo's
-   counter-pick starter, chosen by the player's own pick (VAR_POKEMONTEST): the
-   rival always gets the starter WEAK to yours, so the player holds the type
-   advantage (winning is the expected outcome; losing means deliberately
-   throwing the battle). Pic is a Youngster stand-in until a Uranium trainer-pic
-   pipeline exists (cosmetic, tracked in BOOT_WALK S6b). party_id maps:
-   19->Eletux (THEO_9, vs player Orchynx), 20->Orchynx (THEO_10, vs player
-   Raptorch), 21->Raptorch (THEO_11, vs player Eletux). */
-=== TRAINER_THEO_9 ===
-Name: Theo
-Class: Rival
-Pic: TRAINER_PIC_FRONT_URANIUM_RIVAL
-Gender: Male
-Music: Male
-Double Battle: No
+/* BEGIN URANIUM PATHFINDER SLICE — generated trainer parties (rpg2gba; see
+   engine/RPG2GBA_VENDOR.md). The included file is pipeline-GENERATED + gitignored;
+   this hook stays committed + stable across chapters. It lives under include/ because
+   trainer_rules.mk pipes this file through `$(CPP) $(CPPFLAGS) -traditional-cpp -` on
+   STDIN, so there is no current-file directory and only `-iquote include` resolves.
 
-SPECIES_ELETUX
-Level: 5
-
-=== TRAINER_THEO_10 ===
-Name: Theo
-Class: Rival
-Pic: TRAINER_PIC_FRONT_URANIUM_RIVAL
-Gender: Male
-Music: Male
-Double Battle: No
-
-SPECIES_ORCHYNX
-Level: 5
-
-=== TRAINER_THEO_11 ===
-Name: Theo
-Class: Rival
-Pic: TRAINER_PIC_FRONT_URANIUM_RIVAL
-Gender: Male
-Music: Male
-Double Battle: No
-
-SPECIES_RAPTORCH
-Level: 5
+   The three hand-written TRAINER_THEO_9/10/11 blocks that used to live here were
+   retired 2026-08-05: Theo is Uranium trainers.dat ids 9/10/11 and now comes out of
+   the generator like every other trainer. The generated parties are NOT byte-identical
+   to the hand ones — they carry Uranium's real IVs (10) and happiness (70), where the
+   hand blocks silently took trainerproc's IV-31 default. That is a real difficulty
+   change, taken deliberately as the fidelity upgrade. */
+#include "data/uranium_trainer_party.inc"
+/* END URANIUM PATHFINDER SLICE */

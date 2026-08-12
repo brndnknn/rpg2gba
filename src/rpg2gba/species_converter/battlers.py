@@ -224,6 +224,104 @@ def _check_shiny_geometry(normal: np.ndarray, shiny: np.ndarray, label: str) -> 
     return divergence
 
 
+# --- Shiny registration (rigid-translation correction) -----------------------
+
+#: Bounded search radius (pixels, each axis) for `_register_shiny`'s integer
+#: translation search. Cheap at these sizes (80x80 / 160x160): (2*8+1)^2 =
+#: 289 candidate offsets, each one `_geometry_divergence` call over a small
+#: boolean array.
+SHINY_REGISTRATION_MAX_SHIFT = 8
+
+
+def _translate(arr: np.ndarray, dx: int, dy: int) -> np.ndarray:
+    """Shift `arr` by `dx` columns and `dy` rows (positive = right/down),
+    zero-filling whatever shifts in from outside the frame. Shape-preserving
+    -- unlike `np.roll`, content that shifts past an edge is dropped, not
+    wrapped, which is the correct behaviour for image content."""
+    out = np.zeros_like(arr)
+    h, w = arr.shape[:2]
+    src_x0, src_x1 = max(0, -dx), min(w, w - dx)
+    src_y0, src_y1 = max(0, -dy), min(h, h - dy)
+    if src_x1 <= src_x0 or src_y1 <= src_y0:
+        return out
+    dst_x0, dst_x1 = max(0, dx), min(w, w + dx)
+    dst_y0, dst_y1 = max(0, dy), min(h, h + dy)
+    out[dst_y0:dst_y1, dst_x0:dst_x1] = arr[src_y0:src_y1, src_x0:src_x1]
+    return out
+
+
+def _register_shiny(
+    normal: np.ndarray,
+    shiny: np.ndarray,
+    label: str,
+    *,
+    max_shift: int = SHINY_REGISTRATION_MAX_SHIFT,
+) -> tuple[np.ndarray, float, tuple[int, int]]:
+    """Align `shiny` to `normal` by integer pixel translation before running
+    the geometry gate, so a shiny source that's merely shifted a few pixels
+    from its normal counterpart (first found on OWTEN: `035s.png` vs
+    `035.png` -- identical opaque pixel count, 1505 both, offset by exactly
+    (+2, +2)) registers and passes instead of being rejected as a mismatched
+    pose. This does NOT weaken `SHINY_GEOMETRY_MAX_DIVERGENCE` -- a
+    genuinely different shiny (wrong pose, wrong species) still fails loud,
+    now reporting the best offset the search found and its residual
+    divergence, so the two failure cases (real mismatch vs. an
+    out-of-range shift) are distinguishable.
+
+    The identity offset (0, 0) is checked FIRST and is the fast path: an
+    already-registered pair is returned as the SAME array object with zero
+    extra work, so this is a pure no-op add for every species that doesn't
+    need it (verified: byte-identical emitted art for the six starters
+    before/after this function existed).
+
+    Search is a small bounded grid over `dx, dy` in
+    `[-max_shift, max_shift]` (289 candidates at the default radius) --
+    deliberately simple per the brief, no cross-correlation or subpixel
+    fitting.
+
+    Returns `(aligned_shiny, divergence, (dx, dy))` where `(dx, dy)` is the
+    offset FROM normal TO shiny (i.e. shiny's silhouette sits at normal's
+    position + `(dx, dy)`; aligning means translating shiny by `(-dx, -dy)`).
+    """
+    base_divergence = _geometry_divergence(normal, shiny)
+    if base_divergence <= SHINY_GEOMETRY_MAX_DIVERGENCE:
+        return shiny, base_divergence, (0, 0)
+
+    best_offset = (0, 0)
+    best_divergence = base_divergence
+    best_shifted = shiny
+    for dy in range(-max_shift, max_shift + 1):
+        for dx in range(-max_shift, max_shift + 1):
+            if dx == 0 and dy == 0:
+                continue
+            shifted = _translate(shiny, -dx, -dy)
+            divergence = _geometry_divergence(normal, shifted)
+            if divergence < best_divergence:
+                best_divergence = divergence
+                best_offset = (dx, dy)
+                best_shifted = shifted
+
+    if best_divergence > SHINY_GEOMETRY_MAX_DIVERGENCE:
+        raise ValueError(
+            f"{label}: shiny art geometry diverges {base_divergence:.1%} from the "
+            f"normal art at zero offset (threshold {SHINY_GEOMETRY_MAX_DIVERGENCE:.0%}). "
+            f"Best integer translation found within +/-{max_shift}px is {best_offset} "
+            f"with residual divergence {best_divergence:.1%}, still over threshold -- "
+            f"this isn't a simple registration offset, refusing to build a shiny "
+            f"palette by pixel-position sampling against mismatched silhouettes."
+        )
+
+    logger.info(
+        "%s: shiny art required registration offset %s to pass the geometry gate "
+        "(divergence %.1f%% -> %.1f%%)",
+        label,
+        best_offset,
+        base_divergence * 100,
+        best_divergence * 100,
+    )
+    return best_shifted, best_divergence, best_offset
+
+
 # --- Fit to the 64x64 canvas -------------------------------------------------
 
 
@@ -485,8 +583,12 @@ def convert_species_battler(
     shiny_front_raw = _extract_front_last_frame(shiny_front_path, f"{label} shiny front")
     shiny_back_raw = _extract_back(shiny_back_path, f"{label} shiny back")
 
-    front_divergence = _check_shiny_geometry(normal_front_raw, shiny_front_raw, f"{label} front")
-    back_divergence = _check_shiny_geometry(normal_back_raw, shiny_back_raw, f"{label} back")
+    shiny_front_raw, front_divergence, _front_offset = _register_shiny(
+        normal_front_raw, shiny_front_raw, f"{label} front"
+    )
+    shiny_back_raw, back_divergence, _back_offset = _register_shiny(
+        normal_back_raw, shiny_back_raw, f"{label} back"
+    )
 
     front_canvas, front_plan = _fit_to_canvas(normal_front_raw, BATTLER_SIZE, f"{label} front")
     back_canvas, back_plan = _fit_to_canvas(normal_back_raw, BATTLER_SIZE, f"{label} back")
@@ -640,6 +742,7 @@ __all__ = [
     "FitPlan",
     "SIDECAR_NAME",
     "SHINY_GEOMETRY_MAX_DIVERGENCE",
+    "SHINY_REGISTRATION_MAX_SHIFT",
     "CONTACT_SHEET_SCALE",
     "convert_species_battler",
     "convert_starter_battlers",

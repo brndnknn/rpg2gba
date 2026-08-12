@@ -214,6 +214,14 @@ def convert_all(
     ]
     synth_to_real: dict[int, int] = {}
     synth_maps: list[tuple[int, dict]] = []
+    # Stair (native sideways-stairs behavior) cells per map, keyed by the same
+    # map_id/map_json pairing warp_overrides uses — computed once here and reused
+    # by both build_slice_tilesets (the tileset pass, below) and convert_layout
+    # (step 4), so the two can never disagree about which cells need the behavior
+    # (a disagreement makes tile_map.behavior_for_column fail loud).
+    stair_cells: dict[int, dict[tuple[int, int], str]] = {
+        mid: mw.collect_stair_behavior_cells(map_json) for mid, map_json in maps
+    }
     for mid, map_json in maps:
         synth = _synth_id(mid)
         synth_to_real[synth] = int(map_json["tileset_id"])
@@ -229,6 +237,7 @@ def convert_all(
         overlay_out=overlay_out,
         tilesets_json=out_dir / "tilesets.json",
         source_tileset_of=lambda s: synth_to_real[s],
+        stair_cells=stair_cells,
         dry_run=dry_run,
     )
 
@@ -244,6 +253,7 @@ def convert_all(
             layout_const=consts.layout_const,
             warp_overrides=warp_overrides.get(mid),
             tileset_key=_synth_id(mid),
+            behavior_overrides=stair_cells.get(mid),
         )
         entries.append(layout.to_layouts_entry())
         if not dry_run:

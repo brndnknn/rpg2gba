@@ -6,9 +6,11 @@ per `ROM_TEST_DEV.md` Branch A (rxdata-first, wiki cross-check only). Tier
 spec a chapter test scenario gets written from — it is not itself a test, and
 it carries no narrative content (house style: gates and effects only, per
 Branch A2). **Not yet converted or boot-walked**; §6 records expected work,
-not observed defects. CH02 is the current build frontier. The live work
-checklist is `CH02_TODO.md`, at the repo root — this document owns the spec,
-beats, and coverage targets; `CH02_TODO.md` owns work items.
+not observed defects. **CH02 was built and passed its §9 boot-walk gate
+2026-08-12** (route1 suite 29/29, ROM `68ba5268`); the work checklist is retired
+to `reference/archive/CH02_TODO.md` and its still-open items moved to
+`PROJECT_TODO.md` #32–#36. This document still owns the spec, beats, and
+coverage targets.
 
 **Method note:** every beat, gate, item grant, encounter table, and warp below
 was read directly out of `output/uranium-build/maps/Map033.json` and

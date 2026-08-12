@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import pytest
 
+from rpg2gba.conversion_agent import transpile_driver
 from rpg2gba.conversion_agent import transpiler as T
 from rpg2gba.conversion_agent.flag_registry import FlagRegistry, self_switch_flag_name
 
@@ -157,3 +158,95 @@ def test_phone_register_npc_near_miss_still_queues(ctx: T.TranspileContext) -> N
     assert res.unhandled[0].command_code == T.SCRIPT
     assert "pbPhoneRegisterNPCFoo" in res.unhandled[0].description
     assert "# phone" not in res.text
+
+
+# ----------------------------------------------------------------------------
+# Rule 3 — diagonal-stair "player touch" events skipped at the map level
+# (transpile_driver.transpile_map, native MB_SIDEWAYS_STAIRS_* replacement;
+# see rpg2gba.tileset_converter.stairs for the detector these skips defer to)
+# ----------------------------------------------------------------------------
+
+
+def _stair_move_route(move_code: int) -> dict:
+    return {"repeat": False, "list": [{"code": move_code, "parameters": []}, {"code": 0}]}
+
+
+def _stair_page_cmds(move_code: int = 6) -> list[dict]:
+    """111 facing-conditional (kind=6, character=-1=player) whose then-arm
+    force-moves the player diagonally via a 209 move route — the exact shape
+    ``tileset_converter.stairs.detect_stair_cells`` matches."""
+    return [
+        cmd(T.CONDITIONAL_BRANCH, [6, -1, 0], indent=0),
+        cmd(T.SET_MOVE_ROUTE, [-1, _stair_move_route(move_code)], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+
+
+def _lookalike_page_cmds() -> list[dict]:
+    """Same trigger + 111 facing-conditional shape as a stair event, but the
+    then-arm has no diagonal move route at all — the detector's ``_classify``
+    sees an empty code set and excludes it (not a stair). Must keep
+    transpiling/queuing exactly as before this change."""
+    return [
+        cmd(T.CONDITIONAL_BRANCH, [6, -1, 0], indent=0),
+        cmd(T.CONTROL_SELF_SWITCH, ["A", 0], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+
+
+def test_stair_event_produces_no_block_and_no_queue_entry(
+    ctx: T.TranspileContext,
+) -> None:
+    map_json = {
+        "map_id": 33,
+        "events": [make_event([_stair_page_cmds()], trigger=1, id=2, name="Stair")],
+    }
+    pory_text, queue_entries = transpile_driver.transpile_map(33, map_json, ctx, None)
+    assert pory_text == ""
+    assert queue_entries == []
+    assert ctx.skipped_stair_events == [
+        {"map_id": 33, "event_id": 2, "event_name": "Stair", "reason": "native-sideways-stairs"}
+    ]
+
+
+def test_stair_event_alongside_ordinary_event_only_ordinary_emits(
+    ctx: T.TranspileContext,
+) -> None:
+    plain = make_event([[]], trigger=1, id=1, name="PlainNPC")
+    stair = make_event([_stair_page_cmds(move_code=7)], trigger=1, id=2, name="Stair")
+    map_json = {"map_id": 33, "events": [plain, stair]}
+
+    pory_text, queue_entries = transpile_driver.transpile_map(33, map_json, ctx, None)
+
+    assert queue_entries == []
+    assert "PlainNPC" in pory_text
+    assert "script Map033_EV001_Page1" in pory_text
+    assert "EV002" not in pory_text  # the stair event contributes no block at all
+    assert len(ctx.skipped_stair_events) == 1
+    assert ctx.skipped_stair_events[0]["event_id"] == 2
+
+
+def test_lookalike_facing_event_without_diagonal_move_still_queues(
+    ctx: T.TranspileContext,
+) -> None:
+    """A trigger-1 + 111(kind=6) event with no diagonal move route in its
+    then-arm is not a stair (the detector's own scoping) — it must keep
+    falling through to the generic queue, unaffected by this change."""
+    lookalike = make_event([_lookalike_page_cmds()], trigger=1, id=3, name="Lookalike")
+    map_json = {"map_id": 33, "events": [lookalike]}
+
+    pory_text, queue_entries = transpile_driver.transpile_map(33, map_json, ctx, None)
+
+    assert ctx.skipped_stair_events == []
+    assert len(queue_entries) == 1
+    assert queue_entries[0]["command_code"] == T.CONDITIONAL_BRANCH
+    assert "character-facing" in queue_entries[0]["description"]
+
+
+def test_stairs_skipped_count_surfaces_in_run_summary() -> None:
+    """The skip is reported, not silent: ``_summarize`` carries a distinct
+    ``stairs_skipped`` count separate from the unhandled queue."""
+    summary = transpile_driver._summarize(
+        map_ids=[33], events_total=5, queue=[], overridden_total=0, stairs_skipped_total=3
+    )
+    assert summary["stairs_skipped"] == 3

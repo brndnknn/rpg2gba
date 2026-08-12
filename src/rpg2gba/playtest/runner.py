@@ -97,11 +97,11 @@ def _snapshot(emu: "Emulator", beat_name: str) -> Snapshot:
                      map_location=emu.map_location(), blocks=dump_save_blocks(emu))
 
 
-def _hash_file(path: Path) -> str:
+def hash_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _write_blob_to_rom(rom: Path, out: Path, blob: bytes, file_offset: int) -> None:
+def write_blob_to_rom(rom: Path, out: Path, blob: bytes, file_offset: int) -> None:
     """Patch `blob` into a copy of `rom` at `file_offset`. `rom` must have a
     zero-filled blob region there (mirrors `stamp.stamp_rom`'s check, but
     works from a stored `Snapshot`'s blob rather than a live `Emulator`)."""
@@ -136,6 +136,12 @@ class AttemptResult:
     last_snapshot: Snapshot | None = None
     screenshot_dir: Path | None = None
     waypoints: list[Waypoint] = field(default_factory=list)
+    # The attempt's working ROM copy. It outlives the attempt on purpose:
+    # `final_emulator` is still running on it, and stamping the green review
+    # ROM drives that emulator through an in-game save, which needs its .sav
+    # to actually land on disk. `run_chapter` deletes it once every consumer
+    # is done.
+    scratch_rom: Path | None = None
 
     @property
     def failed_beat(self) -> BeatOutcome | None:
@@ -155,37 +161,39 @@ class ChapterRunResult:
 
 # -- blob provenance (D1b / D2a) ---------------------------------------------
 
-def _blob_paths(blobs_dir: Path, chapter: str, beat: str) -> tuple[Path, Path]:
+def blob_paths(blobs_dir: Path, chapter: str, beat: str) -> tuple[Path, Path]:
     chapter_dir = blobs_dir / chapter
     return chapter_dir / f"{beat}.blob", chapter_dir / f"{beat}.json"
 
-def _persist_seed_blob(blobs_dir: Path, chapter: str, rom: Path,
-                        snapshot: Snapshot, emu: "Emulator") -> None:
+def persist_seed_blob(blobs_dir: Path, chapter: str, rom: Path,
+                       snapshot: Snapshot, emu: "Emulator") -> None:
     """Record `snapshot` as the seed for `snapshot.beat`, tagged with the
     ROM's hash so a later `--from-beat` run can refuse a stale blob."""
-    blob_path, meta_path = _blob_paths(blobs_dir, chapter, snapshot.beat)
+    blob_path, meta_path = blob_paths(blobs_dir, chapter, snapshot.beat)
     blob_path.parent.mkdir(parents=True, exist_ok=True)
     blob = build_blob(emu.offsets, snapshot.blocks)
     blob_path.write_bytes(blob)
     meta = {
         "chapter": chapter,
         "seeds_beat": snapshot.beat,
-        "rom_sha256": _hash_file(rom),
+        "rom_sha256": hash_file(rom),
         "blob_offset": emu.symbols["gUraniumEmbeddedSave"],
         "created": datetime.now(timezone.utc).isoformat(),
+        "player_pos": list(snapshot.player_pos),
+        "map_location": list(snapshot.map_location),
     }
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 
-def _load_seed(blobs_dir: Path, chapter: str, beat: str, rom: Path) -> tuple[bytes, int]:
-    blob_path, meta_path = _blob_paths(blobs_dir, chapter, beat)
+def load_seed(blobs_dir: Path, chapter: str, beat: str, rom: Path) -> tuple[bytes, int]:
+    blob_path, meta_path = blob_paths(blobs_dir, chapter, beat)
     if not blob_path.exists() or not meta_path.exists():
         raise RunnerError(
             f"no seed blob for chapter {chapter!r} beat {beat!r} at {blob_path} "
             "— run the chapter green from the start at least once on this "
             "build before using --from-beat")
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    current_hash = _hash_file(rom)
+    current_hash = hash_file(rom)
     if meta["rom_sha256"] != current_hash:
         raise RunnerError(
             f"seed blob for chapter {chapter!r} beat {beat!r} was captured "
@@ -206,10 +214,10 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
     scratch.parent.mkdir(parents=True, exist_ok=True)
 
     if start_idx > 0:
-        blob, file_offset = _load_seed(blobs_dir, chapter.name, from_beat, rom)  # type: ignore[arg-type]
+        blob, file_offset = load_seed(blobs_dir, chapter.name, from_beat, rom)  # type: ignore[arg-type]
         shutil.copy(rom, scratch)
         scratch.with_suffix(".sav").unlink(missing_ok=True)
-        _write_blob_to_rom(scratch, scratch, blob, file_offset)
+        write_blob_to_rom(scratch, scratch, blob, file_offset)
         boot_frames = SEEDED_BOOT_FRAMES
     else:
         shutil.copy(rom, scratch)
@@ -239,7 +247,8 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
                 emu.waypoint(beat.name, "FAILED", note=beat.description, failed=True)
                 return AttemptResult(passed=False, beats=beats_out, pristine_rom=rom,
                                       final_emulator=emu, last_snapshot=last_snapshot,
-                                      screenshot_dir=shots, waypoints=list(emu.waypoints))
+                                      screenshot_dir=shots, waypoints=list(emu.waypoints),
+                                      scratch_rom=scratch)
 
             logger.info("[%s] beat %s passed", chapter.name, beat.name)
             beats_out.append(BeatOutcome(beat.name, beat.description, "pass"))
@@ -247,15 +256,52 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
 
             idx = chapter.index_of(beat.name)
             if idx + 1 < len(chapter.beats):
-                last_snapshot = _snapshot(emu, chapter.beats[idx + 1].name)
-                _persist_seed_blob(blobs_dir, chapter.name, rom, last_snapshot, emu)
+                # Some beats legitimately end mid-scene with the field still
+                # locked (moki B5 hands its running autorun to B6). Capturing a
+                # seed there is not possible and would not be worth having: the
+                # capture needs the engine's own save path to populate
+                # SaveBlock1's party/object-event mirrors, and a state you
+                # cannot save is a state that boots with a dead player object.
+                # Skip the boundary rather than persist an unbootable seed —
+                # `seeds` then simply does not offer that beat.
+                if emu.field_locked():
+                    logger.info("[%s] no seed for %s: field still locked at the "
+                                "end of %s (mid-scene boundary)",
+                                chapter.name, chapter.beats[idx + 1].name, beat.name)
+                else:
+                    # The snapshot is bookkeeping (persisting a seed blob for
+                    # a later --from-beat run), not the thing under test --
+                    # a failure here (e.g. save_in_game catching the beat's
+                    # last action, a door warp, still mid-transition) must
+                    # not take the whole run down. Degrade the same way a
+                    # mid-scene lock already does: log it, skip the seed,
+                    # keep going. Broad on purpose (mirrors the beat-failure
+                    # catch above) -- this is bookkeeping, not the test.
+                    try:
+                        last_snapshot = _snapshot(emu, chapter.beats[idx + 1].name)
+                        persist_seed_blob(blobs_dir, chapter.name, rom, last_snapshot, emu)
+                    except Exception as exc:  # noqa: BLE001 - snapshot bookkeeping, not the beat under test
+                        logger.warning(
+                            "[%s] no seed for %s: snapshot failed at the end "
+                            "of %s: %s", chapter.name,
+                            chapter.beats[idx + 1].name, beat.name, exc)
 
         return AttemptResult(passed=True, beats=beats_out, pristine_rom=rom,
                               final_emulator=emu, last_snapshot=last_snapshot,
-                              screenshot_dir=shots, waypoints=list(emu.waypoints))
-    finally:
-        scratch.unlink(missing_ok=True)
-        scratch.with_suffix(".sav").unlink(missing_ok=True)
+                              screenshot_dir=shots, waypoints=list(emu.waypoints),
+                              scratch_rom=scratch)
+    except BaseException:
+        # No AttemptResult escapes on this path, so nobody downstream can clean
+        # up after us.
+        _discard_scratch(scratch)
+        raise
+
+
+def _discard_scratch(scratch: Path | None) -> None:
+    if scratch is None:
+        return
+    scratch.unlink(missing_ok=True)
+    scratch.with_suffix(".sav").unlink(missing_ok=True)
 
 
 # -- repro bundle (G3a) / flake log (F3) / green stamp (G3b) ------------------
@@ -293,8 +339,8 @@ def _build_bundle(chapter: Chapter, attempt: AttemptResult, output_root: Path) -
                 blob = build_blob(attempt.final_emulator.offsets, snap.blocks)
                 file_offset = (attempt.final_emulator.symbols["gUraniumEmbeddedSave"]
                                - ROM_BASE)
-                _write_blob_to_rom(attempt.pristine_rom, bundle_dir / "pre_beat.gba",
-                                    blob, file_offset)
+                write_blob_to_rom(attempt.pristine_rom, bundle_dir / "pre_beat.gba",
+                                   blob, file_offset)
             except RunnerError as exc:
                 logger.warning("could not stamp pre-beat ROM for bundle: %s", exc)
 
@@ -331,6 +377,21 @@ def _stamp_green(chapter: Chapter, rom: Path, attempt: AttemptResult,
     out.unlink(missing_ok=True)
     stamp_rom(rom, out, attempt.final_emulator)
     logger.info("[%s] green review ROM: %s", chapter.name, out)
+
+    emu = attempt.final_emulator
+    if emu is not None:
+        meta = {
+            "chapter": chapter.name,
+            "kind": "chapter-complete",
+            "rom_sha256": hash_file(rom),
+            "blob_offset": emu.symbols["gUraniumEmbeddedSave"],
+            "player_pos": list(emu.player_pos()),
+            "map_location": list(emu.map_location()),
+            "created": datetime.now(timezone.utc).isoformat(),
+        }
+        meta_path = out.with_suffix(".json")
+        meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
     return out
 
 
@@ -352,7 +413,7 @@ def run_chapter(chapter: Chapter, rom: Path, engine: Path, *,
     """Run `chapter` beat by beat and return a structured result.
 
     `from_beat`: seed from a blob captured after the prior beat of *this
-    exact build* (see `_load_seed`); `None` (the default, and the only mode
+    exact build* (see `load_seed`); `None` (the default, and the only mode
     the gate/CI wrapper should use) always plays from a new game.
     `rerun_on_failure`: F3's auto-rerun-once flake classification.
     """
@@ -402,5 +463,6 @@ def run_chapter(chapter: Chapter, rom: Path, engine: Path, *,
     for attempt in attempts:
         if attempt.screenshot_dir and attempt.screenshot_dir.exists():
             shutil.rmtree(attempt.screenshot_dir)
+        _discard_scratch(attempt.scratch_rom)
 
     return result

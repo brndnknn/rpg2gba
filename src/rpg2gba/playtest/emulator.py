@@ -5,15 +5,23 @@ tape — poll game state (coords, field-controls lock) and act on it, with
 frame-budget timeouts that fail loud with a screenshot. That keeps scenarios
 robust against text-length, timing, and converter changes.
 """
+import heapq
 import logging
 import struct
-from collections import deque
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from .contact_sheet import Waypoint
 from .errors import ScenarioError
-from .offsets import probe_constants, probe_offsets
+from .offsets import (
+    OBJEVENT_ACTIVE_BIT_MASK,
+    OBJEVENT_ACTIVE_BYTE_OFFSET,
+    OBJEVENT_FACING_BYTE_OFFSET,
+    OBJEVENT_FACING_MASK,
+    probe_constants,
+    probe_offsets,
+)
 from .symbols import (
     SymbolMap,
     static_addr_via_accessor,
@@ -65,6 +73,197 @@ _SETTLE_STEP = 4
 # moves on its own within a second or two).
 _MAX_REPLANS = 4
 _REPLAN_WAIT = 60
+
+# `walk_to(..., resolve_interruptions=True)`'s cap on how many times it will
+# call `resolve_interruption()` and retry before giving up -- a walk that
+# keeps getting re-interrupted after being resolved is a real bug (e.g. a
+# trainer whose battle never actually ends), and must fail loud rather than
+# spin forever.
+_MAX_INTERRUPTION_RESOLUTIONS = 3
+
+# `_walk_greedy`'s grace period for a mid-walk lock that might be a
+# self-resolving scene -- an autorun cameo that plays out with no input and
+# releases the field on its own (moki.py B4: crossing the fence-row tile
+# fires Theo's cameo, then the walk continues) -- rather than one that will
+# never clear without help (a msgbox waiting on a button the walk isn't
+# pressing, a sight trainer's approach-and-battle). Long enough to outlast
+# any scripted cameo on the roster; short enough that the input-blocked case
+# still fails fast as `WalkInterrupted` instead of degrading back into the
+# old slow frame-budget-exhaustion death.
+_INTERRUPT_GRACE = 300  # 5s
+
+# `resolve_interruption()`'s post-resolution settle budgets: how long to
+# wait for the overworld to actually be back (field unlocked AND
+# `gBackupMapLayout` loaded and consistent with `map_location()`) after
+# winning a battle or clearing a dialogue, before treating "not back yet" as
+# a bug rather than an ordinary transition. A battle-end fade back to the
+# field is worth several seconds, not the couple of frames
+# `wait_for_map_grid`'s own 300-frame default assumes for an ordinary warp --
+# resuming `walk_to` before it finishes reads `gBackupMapLayout` still
+# holding the battle's own stub grid (30x30, `map_location` (0,0)), and
+# `_plan_route` then refuses the target with a "wrong map" message that
+# points at the wrong layer (2026-08-11 route1 B4 regression: the ambush
+# resolved and the battle was won correctly, but the resumed walk landed one
+# frame into that still-settling transition).
+_BATTLE_SETTLE_BUDGET = 600  # 10s
+_DIALOGUE_SETTLE_BUDGET = 300  # 5s
+
+# `_plan_route`'s cost for entering a tall-grass (`MB_TALL_GRASS`) tile, vs.
+# 1 for ordinary ground -- Dijkstra prefers clear tiles when a reasonable
+# detour exists, but still crosses grass rather than take an absurd one (a
+# route entirely walled by grass, or a target that IS grass -- B4's cells,
+# Flood standing in a field -- must still be reachable, see `_plan_route`'s
+# own docstring on that point).
+#
+# Chosen from the encounter math, not guessed: at Route 1's observed 25%
+# per-step encounter rate, the expected number of *plain* tiles between two
+# encounters is 1/0.25 = 4 -- i.e. a 4-tile detour costs roughly the same in
+# real walk time as the encounter (absorb battle, settle, resume) a grass
+# tile has a 1-in-4 chance of costing instead. Pricing grass at 1 (base) + 4
+# (that expected-detour-equivalent) = 5 means the planner will happily take
+# up to a ~4-tile-longer clear route to dodge one grass cell, but won't
+# wander 20 tiles out of its way just to avoid a single cell it could have
+# crossed for the price of walking it once. This is a general-purpose
+# constant (not a Route 1-specific tuning), so it deliberately isn't derived
+# from Route 1's own encounter table -- 25% is pokeemerald's stock land
+# encounter rate and a reasonable default for any map.
+_GRASS_TRAVERSAL_COST = 5
+
+
+class WalkInterrupted(ScenarioError):
+    """A `walk_to` was cut short because the field went from unlocked to
+    locked mid-walk -- a sight/patrol trainer ambush, or any other script
+    that grabs the player -- rather than the walk simply running out of
+    frame budget.
+
+    Raised only when the walk *began* unlocked (see `_walk_greedy`'s
+    `start_locked`); a walk that begins already locked (a beat that starts
+    mid-scene, e.g. `moki.py` B5 handing a running autorun to B6) keeps
+    today's wait-it-out behaviour unchanged.
+
+    A caller that doesn't opt into `resolve_interruptions=True` still gets a
+    clear, specific failure here instead of the old generic "frame budget
+    exhausted" -- this subclasses `ScenarioError`, so nothing that already
+    catches `ScenarioError` needs to change.
+    """
+
+    def __init__(self, target: tuple[int, int], stopped_at: tuple[int, int],
+                 battle: bool) -> None:
+        self.target = target
+        self.stopped_at = stopped_at
+        self.battle = battle
+        kind = "a battle" if battle else "a locked-field scene"
+        super().__init__(
+            f"walk_to{target} interrupted by {kind} at {stopped_at}"
+        )
+
+
+@dataclass(frozen=True)
+class ObjectEventState:
+    """One decoded `gObjectEvents` slot (ROM_TEST_DEV.md "Harness cannot see
+    NPCs").
+
+    `local_id` is the object's *compiled* local id -- its 1-based position in
+    the map JSON's `object_events` array after
+    `tileset_converter/local_id_remap.py`'s per-map remap -- not necessarily
+    the RMXP event id the source map used; scripts and this accessor both
+    address objects by the compiled id. `x`/`y` are map-relative coordinates,
+    de-biased by `MAP_OFFSET` the same way `player_pos()` reads
+    `SaveBlock1.pos` un-biased (the engine's `currentCoords` carries the
+    `+MAP_OFFSET` grid bias `player_pos()` never sees; see `stamp.py`'s
+    `_verify_player_object_alive` for the same conversion done in reverse).
+    """
+
+    local_id: int
+    active: bool
+    x: int
+    y: int
+    facing: str
+    graphics_id: int
+    movement_type: int
+    #: `ObjectEvent.trainerRange_berryTreeId` -- for a sight/patrol trainer,
+    #: its own live sight range (see `_read_object_event_slot`'s note on why
+    #: this defaults to 0 rather than failing on offset tables that predate
+    #: it). Meaningless for non-trainer objects (item balls, NPCs); callers
+    #: that care (route1.py's `_sight_lane_tiles`) only read it for objects
+    #: they already know are trainers.
+    trainer_range: int = 0
+
+
+#: Maps each cardinal `DIR_*` probe key (offsets.py) to the facing string
+#: `ObjectEventState.facing` reports.
+_FACING_OFFSET_KEYS: dict[str, str] = {
+    "val_dir_south": "DOWN",
+    "val_dir_north": "UP",
+    "val_dir_west": "LEFT",
+    "val_dir_east": "RIGHT",
+}
+
+
+def _decode_facing(raw: int, offsets: dict) -> str:
+    for offset_key, name in _FACING_OFFSET_KEYS.items():
+        if raw == offsets[offset_key]:
+            return name
+    raise ScenarioError(
+        f"object event facingDirection {raw} is not one of the known "
+        f"cardinal DIR_* values (DOWN={offsets['val_dir_south']}, "
+        f"UP={offsets['val_dir_north']}, LEFT={offsets['val_dir_west']}, "
+        f"RIGHT={offsets['val_dir_east']})"
+    )
+
+
+def _read_object_event_slot(emu, base: int) -> ObjectEventState | None:
+    """Decode one `gObjectEvents` slot starting at `base`, or None if the
+    slot isn't active.
+
+    Module-level and duck-typed on `emu` (needs only `.offsets` and
+    `.u8`/`.u16`) so it is testable against a fake memory store with no mgba
+    dependency, the same shape `battle.py`'s pure functions use.
+    """
+    o = emu.offsets
+    active = emu.u8(base + OBJEVENT_ACTIVE_BYTE_OFFSET) & OBJEVENT_ACTIVE_BIT_MASK
+    if not active:
+        return None
+    map_offset = o["val_map_offset"]
+    coords_addr = base + o["off_objevent_currentcoords"]
+    facing_raw = emu.u8(base + OBJEVENT_FACING_BYTE_OFFSET) & OBJEVENT_FACING_MASK
+    try:
+        trainer_range = emu.u8(base + o["off_objevent_trainerrange_berrytreeid"])
+    except KeyError:
+        # Degrades to 0 on an offsets table that predates this field
+        # (test_object_events.py's fake) -- same fail-soft shape this
+        # module already uses for fakes missing a newer primitive.
+        trainer_range = 0
+    return ObjectEventState(
+        local_id=emu.u8(base + o["off_objevent_localid"]),
+        active=True,
+        x=emu.u16(coords_addr) - map_offset,
+        y=emu.u16(coords_addr + 2) - map_offset,
+        facing=_decode_facing(facing_raw, o),
+        graphics_id=emu.u16(base + o["off_objevent_graphicsid"]),
+        movement_type=emu.u8(base + o["off_objevent_movementtype"]),
+        trainer_range=trainer_range,
+    )
+
+
+def _collision_walkable(blocks: Sequence[int], width: int, off: int,
+                        map_w: int, map_h: int, x: int, y: int) -> bool:
+    """Whether `(x, y)` (map-relative) is collision-0 on an already-fetched
+    `gBackupMapLayout` grid -- the single implementation `Emulator.
+    tile_walkable` (a one-off public query) and `_plan_route`'s internal
+    `walkable()` closure (called once per Dijkstra node, with the grid
+    already cached) both call, so the bit-twiddling and bounds semantics
+    exist in exactly one place. Module-level rather than a method: neither
+    caller needs `self` for this, and `_plan_route` calling it directly
+    (instead of through `self.tile_walkable`) avoids re-running `_map_grid`
+    -- a full grid parse -- on every single search-node expansion.
+
+    Coordinates outside `(map_w, map_h)` (the map's own dimensions, not
+    `_map_grid`'s border-padded frame) read as not walkable, never raise.
+    """
+    if not (0 <= x < map_w and 0 <= y < map_h):
+        return False
+    return (blocks[(x + off) + width * (y + off)] >> 10) & 0x3 == 0
 
 
 class Emulator:
@@ -161,6 +360,27 @@ class Emulator:
 
     def read_bytes(self, addr: int, size: int) -> bytes:
         return bytes(self.core.memory.u8[addr : addr + size])
+
+    def snapshot_state(self) -> bytes:
+        """Serialize the whole core (CPU, RAM, PPU, ...) for a later
+        `restore_state`.
+
+        Exists so a caller can run the engine's own routines (e.g. an
+        in-game save, see `stamp.dump_save_blocks`) mid-scenario and then
+        rewind, without the caller's live emulator ending up perturbed by
+        it. Cost is a full-state copy (~400KB), not a ROM reboot.
+        """
+        raw = self.core.save_raw_state()
+        if raw is None:
+            raise ScenarioError("core.save_raw_state() returned no state")
+        return bytes(raw)
+
+    def restore_state(self, state: bytes) -> None:
+        """Rewind the core to a `snapshot_state()` capture."""
+        if not self.core.load_raw_state(state):
+            raise ScenarioError(
+                "core.load_raw_state() failed to restore a snapshot "
+                f"({len(state)} bytes)")
 
     def screenshot(self, name: str) -> Path | None:
         if self.screenshot_dir is None:
@@ -329,6 +549,61 @@ class Emulator:
         base = self.sb1 + self.offsets["off_sb1_location"]
         return self.u8(base), self.u8(base + 1)
 
+    def object_events(self) -> list[ObjectEventState]:
+        """Every ACTIVE slot in `gObjectEvents` (`OBJECT_EVENTS_COUNT`
+        slots, probed via `val_object_events_count`)."""
+        base = self.symbols["gObjectEvents"]
+        stride = self.offsets["sizeof_objevent"]
+        count = self.offsets["val_object_events_count"]
+        events = []
+        for i in range(count):
+            ev = _read_object_event_slot(self, base + i * stride)
+            if ev is not None:
+                events.append(ev)
+        return events
+
+    def object_event(self, local_id: int) -> ObjectEventState:
+        """The active object event whose (compiled) local id is `local_id`.
+
+        Raises `ScenarioError` naming the local ids that ARE active when
+        `local_id` isn't among them -- the harness has no other way to see
+        NPCs, so a caller debugging "which id is Theo again" needs that list
+        on the spot, not a bare KeyError.
+        """
+        events = self.object_events()
+        for ev in events:
+            if ev.local_id == local_id:
+                return ev
+        present = sorted(ev.local_id for ev in events)
+        raise ScenarioError(
+            f"no active object event with local id {local_id} -- active "
+            f"local ids present: {present}"
+        )
+
+    def observe_object_event(self, local_id: int, frames: int, *,
+                             sample_every: int = 4) -> list[ObjectEventState]:
+        """Step `frames` frames, sampling `local_id`'s state every
+        `sample_every` frames.
+
+        The primitive a "does this NPC actually pace/patrol?" assertion is
+        built on: run a beat's worth of frames and inspect the trajectory,
+        rather than polling once before/after. Sampling is counted from this
+        call's own first frame (1-indexed), not the emulator's absolute frame
+        counter, so the cadence is the same regardless of when in a scenario
+        it's called.
+        """
+        samples: list[ObjectEventState] = []
+        counter = 0
+
+        def _sample() -> None:
+            nonlocal counter
+            counter += 1
+            if counter % sample_every == 0:
+                samples.append(self.object_event(local_id))
+
+        self.run(frames, on_frame=_sample)
+        return samples
+
     def resolve_constant(self, name: str) -> int:
         """Resolve one `FLAG_*`/`VAR_*` (or any C macro) name to its value.
 
@@ -376,6 +651,37 @@ class Emulator:
     def field_locked(self) -> bool:
         """True while a script/dialogue holds the overworld controls."""
         return self.u8(self._lock_addr) != 0
+
+    def overworld_input_ready(self) -> bool:
+        """True once the main loop is genuinely back on the overworld and
+        processing field input -- not merely `not field_locked()`.
+
+        Field input (including START) is only ever read by `DoCB1_Overworld`,
+        and `CB1_Overworld` only calls it while `gMain.callback2 ==
+        CB2_Overworld` (`engine/src/overworld.c:1641-1645`):
+
+            void CB1_Overworld(void)
+            {
+                if (gMain.callback2 == CB2_Overworld)
+                    DoCB1_Overworld(gMain.newKeys, gMain.heldKeys);
+            }
+
+        `field_locked()` alone is not the same gate: `CB2_LoadMap` calls
+        `UnlockPlayerFieldControls()` on its way into the destination map
+        (`overworld.c:1953`, well before the map is playable -- see
+        `map_grid_loaded`'s docstring for the same "grid vs. map" gap), so
+        the lock can read False for a stretch of a door-warp/fade transition
+        during which `gMain.callback2` is still some intermediate load/fade
+        callback, not `CB2_Overworld` -- a START press in that window never
+        reaches `ProcessPlayerFieldInput` at all and is silently dropped.
+
+        Follows `battle.py`'s `in_battle` pattern: `gMain.callback2` read via
+        `off_main_callback2`, compared against the callback's own (thumb-
+        tagged) function address.
+        """
+        o = self.offsets
+        callback2 = self.u32(self.symbols["gMain"] + o["off_main_callback2"])
+        return callback2 == (self.symbols["CB2_Overworld"] | 1)
 
     def yesno_prompt_up(self) -> bool:
         """True while a `yesnobox` prompt is on screen awaiting an answer.
@@ -619,15 +925,166 @@ class Emulator:
             for i in range(count)
         }
 
+    def _player_object_slot(self) -> int:
+        """The `gObjectEvents` slot index (`gPlayerAvatar.objectEventId`) the
+        player's own object occupies -- same accessor `stamp.py`'s
+        `_verify_player_object_alive` uses. Not necessarily equal to that
+        slot's `localId` field, and never assume slot 0: this is the only
+        correct way to identify "the player" among active object events."""
+        o = self.offsets
+        avatar = self.symbols["gPlayerAvatar"]
+        return self.u8(avatar + o["off_playeravatar_objecteventid"])
+
+    def _occupied_object_tiles(self, goal: tuple[int, int]) -> set[tuple[int, int]]:
+        """Map-relative tiles held by active object events, for `_plan_route`
+        to treat as blocked.
+
+        Excludes the player's own slot (identified via
+        `_player_object_slot`, not by assuming a fixed index) and the goal
+        tile itself -- a scenario very often walks *to* an NPC, and the
+        route must still be planned onto that tile.
+
+        One table read per call (no per-BFS-node cost, `_plan_route` calls
+        this once). Degrades to an empty set -- terrain-only planning -- on
+        any failure reading the table, rather than raising: this is a
+        planning optimisation, never something that can fail a scenario.
+        """
+        try:
+            player_slot = self._player_object_slot()
+            base = self.symbols["gObjectEvents"]
+            stride = self.offsets["sizeof_objevent"]
+            count = self.offsets["val_object_events_count"]
+            occupied: set[tuple[int, int]] = set()
+            for i in range(count):
+                if i == player_slot:
+                    continue
+                ev = _read_object_event_slot(self, base + i * stride)
+                if ev is None:
+                    continue
+                tile = (ev.x, ev.y)
+                if tile != goal:
+                    occupied.add(tile)
+            return occupied
+        except Exception:
+            logger.info(
+                "_plan_route: failed to read object events, degrading to "
+                "terrain-only planning", exc_info=True)
+            return set()
+
+    def _grass_cost_context(self) -> dict | None:
+        """Everything `_plan_route` needs to price a tile's grass cost,
+        fetched once per call rather than per BFS/Dijkstra node: the current
+        map's primary/secondary tileset `metatileAttributes` pointers, the
+        `isFrlg` attribute-format flag, and the resolved `MB_TALL_GRASS`/
+        `NUM_METATILES_IN_PRIMARY`/mask constants.
+
+        Mirrors the real engine's own `GetAttributeByMetatileIdAndMapLayout`
+        (`engine/src/fieldmap.c`) pointer chain: `gMapHeader.mapLayout` ->
+        `primaryTileset`/`secondaryTileset` -> each tileset's
+        `metatileAttributes` (one packed `u16` per metatile, masked by
+        `METATILE_ATTR_BEHAVIOR_MASK[_FRLG]` for the behavior byte). Reading
+        `isFrlg` live rather than assuming Emerald format keeps this correct
+        for any map, not just Route 1's.
+
+        Degrades to `None` -- grass costs nothing, same as before this
+        primitive existed -- on any failure resolving the pointer chain or
+        constants, the same fail-soft shape `_occupied_object_tiles` uses:
+        this is a path-preference optimisation, never something that can
+        fail a scenario outright.
+        """
+        try:
+            o = self.offsets
+            layout = self.u32(self.symbols["gMapHeader"] + o["off_mapheader_maplayout"])
+            is_frlg = self.u8(layout + o["off_maplayout_isfrlg"])
+            primary = self.u32(layout + o["off_maplayout_primarytileset"])
+            secondary = self.u32(layout + o["off_maplayout_secondarytileset"])
+            primary_attrs = self.u32(primary + o["off_tileset_metatileattributes"])
+            secondary_attrs = self.u32(secondary + o["off_tileset_metatileattributes"])
+            consts = self.resolve_constants((
+                "MB_TALL_GRASS", "NUM_METATILES_IN_PRIMARY",
+                "METATILE_ATTR_BEHAVIOR_MASK", "METATILE_ATTR_BEHAVIOR_MASK_FRLG",
+                "MAPGRID_METATILE_ID_MASK",
+            ))
+            return {
+                "primary_attrs": primary_attrs,
+                "secondary_attrs": secondary_attrs,
+                "num_primary": consts["NUM_METATILES_IN_PRIMARY"],
+                "behavior_mask": (consts["METATILE_ATTR_BEHAVIOR_MASK_FRLG"]
+                                  if is_frlg else consts["METATILE_ATTR_BEHAVIOR_MASK"]),
+                "mb_tall_grass": consts["MB_TALL_GRASS"],
+                "metatile_id_mask": consts["MAPGRID_METATILE_ID_MASK"],
+            }
+        except Exception:
+            logger.info(
+                "_plan_route: failed to resolve the grass-behavior pointer "
+                "chain, degrading to flat tile costs", exc_info=True)
+            return None
+
+    def tile_walkable(self, x: int, y: int) -> bool:
+        """Whether `(x, y)` (map-relative) is collision-0 walkable terrain
+        on the current map's live grid -- the same collision check
+        `_plan_route` searches over, exposed as a one-off public query for
+        callers that need to test a single tile without going through the
+        whole route-planning machinery (e.g. route1.py's
+        `_sight_lane_tiles`, picking a trainer's approach tile).
+
+        Ignores warp/object-event exclusions -- those are `_plan_route`-
+        specific routing concerns, not part of "is this tile walkable
+        terrain" -- and, unlike `_plan_route`, never raises on an
+        out-of-bounds coordinate; it simply reads as not walkable, since a
+        caller probing a single tile has no route to fail.
+
+        Shares its bit-twiddling with `_plan_route`'s internal `walkable()`
+        via the module-level `_collision_walkable` -- see that function's
+        docstring for why `_plan_route` doesn't call this method directly
+        (it would re-run `_map_grid` per search node).
+        """
+        width, height, blocks = self._map_grid()
+        off = self.offsets["val_map_offset"]
+        map_w, map_h = width - (off * 2 + 1), height - off * 2
+        return _collision_walkable(blocks, width, off, map_w, map_h, x, y)
+
     def _plan_route(self, start: tuple[int, int],
                     goal: tuple[int, int]) -> list[tuple[int, int]] | None:
-        """Shortest walkable route between two map-relative tiles, or None.
+        """Least-cost walkable route between two map-relative tiles, or
+        None.
 
-        Breadth-first over collision-0 tiles, avoiding warp tiles other than
-        the goal. Elevation is deliberately not modelled — mismatched-
-        elevation edges (cliff rims) would be planned through; a leg that
-        hits one gets locally stuck and re-planned, and ultimately fails
-        loud, which is the same outcome as any other impassable route.
+        Dijkstra (uniform-cost search) over collision-0 tiles, avoiding warp
+        tiles other than the goal and tiles held by active object events
+        (NPCs, item balls, solid Rock events on Route 1) other than the
+        player's own object and the goal tile (see
+        `_occupied_object_tiles`). Elevation is deliberately not modelled —
+        mismatched-elevation edges (cliff rims) would be planned through; a
+        leg that hits one gets locally stuck and re-planned, and ultimately
+        fails loud, which is the same outcome as any other impassable
+        route.
+
+        Tall grass (`MB_TALL_GRASS`, via `_grass_cost_context`) costs
+        `_GRASS_TRAVERSAL_COST` instead of the usual 1, so a route prefers a
+        reasonable clear detour over a field but still crosses it when
+        that's the only way through -- including when grass IS the
+        destination (B4 deliberately walks onto grass cells; Flood himself
+        stands in one). Cost only ever biases which route is chosen among
+        walkable ones; it is never a reachability gate -- the plain BFS
+        reachability semantics (a tile is either walkable or it isn't) are
+        unchanged, just the tie-breaking among walkable routes. If the
+        behavior pointer chain can't be resolved, every tile costs 1 and
+        this is exactly the old plain-BFS behaviour.
+
+        Object events are a snapshot taken once per call, not re-read per
+        search node: a patrolling NPC can make a planned route stale the
+        moment it steps, which is exactly what `walk_to`'s stuck/step-aside
+        retry and re-plan loop exists to absorb -- this is an optimisation
+        to avoid the common body-block case, not a replacement for that
+        recovery path.
+
+        Also not modelled: sideways staircases (`GetSidewaysStairsCollision`
+        in `engine/src/event_object_movement.c`,
+        `GetRightSideStairsDirection` in `engine/src/field_player_avatar.c`),
+        where the engine turns an EAST/WEST press into a diagonal move. This
+        search is 4-neighbour, so a destination reachable only across such a
+        staircase is unroutable here and must be stepped manually by the
+        scenario.
 
         A goal outside the grid's own bounds is not an unroutable target but
         a wrong grid, and raises — see `_route_waypoints`.
@@ -641,29 +1098,68 @@ class Emulator:
                 f"({map_w}x{map_h}, map_location={self.map_location()}) — "
                 "wrong map, or the grid belongs to another one")
         avoid = self._warp_tiles() - {goal}
+        occupied = self._occupied_object_tiles(goal)
+        # `_grass_cost_context` is undefined on the lightweight `_plan_route`
+        # test fakes that predate this primitive (`test_plan_route_objects.
+        # py`'s `_FakeRouteEmu`) -- degrade to flat costs for those, same
+        # AttributeError-degrade shape `_walk_greedy` uses for `_in_battle`.
+        try:
+            grass_ctx = self._grass_cost_context()
+        except AttributeError:
+            grass_ctx = None
+        grass_cache: dict[tuple[int, int], bool] = {}
 
         def walkable(x: int, y: int) -> bool:
-            if not (0 <= x < map_w and 0 <= y < map_h) or (x, y) in avoid:
+            if (x, y) in avoid or (x, y) in occupied:
                 return False
-            return (blocks[(x + off) + width * (y + off)] >> 10) & 0x3 == 0
+            return _collision_walkable(blocks, width, off, map_w, map_h, x, y)
 
-        seen: dict[tuple[int, int], tuple[int, int] | None] = {start: None}
-        queue = deque([start])
-        while queue:
-            cur = queue.popleft()
+        def is_grass(x: int, y: int) -> bool:
+            if grass_ctx is None:
+                return False
+            key = (x, y)
+            cached = grass_cache.get(key)
+            if cached is not None:
+                return cached
+            metatile_id = (blocks[(x + off) + width * (y + off)]
+                            & grass_ctx["metatile_id_mask"])
+            if metatile_id < grass_ctx["num_primary"]:
+                addr = grass_ctx["primary_attrs"] + metatile_id * 2
+            else:
+                addr = (grass_ctx["secondary_attrs"]
+                        + (metatile_id - grass_ctx["num_primary"]) * 2)
+            behavior = self.u16(addr) & grass_ctx["behavior_mask"]
+            result = behavior == grass_ctx["mb_tall_grass"]
+            grass_cache[key] = result
+            return result
+
+        def step_cost(x: int, y: int) -> int:
+            return _GRASS_TRAVERSAL_COST if is_grass(x, y) else 1
+
+        dist: dict[tuple[int, int], int] = {start: 0}
+        prev: dict[tuple[int, int], tuple[int, int] | None] = {start: None}
+        heap: list[tuple[int, tuple[int, int]]] = [(0, start)]
+        while heap:
+            d, cur = heapq.heappop(heap)
+            if d > dist[cur]:
+                continue  # a cheaper path to `cur` was already settled
             if cur == goal:
                 path = []
                 node: tuple[int, int] | None = cur
                 while node is not None:
                     path.append(node)
-                    node = seen[node]
+                    node = prev[node]
                 return path[::-1]
             cx, cy = cur
             for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
                 nxt = (cx + dx, cy + dy)
-                if nxt not in seen and walkable(*nxt):
-                    seen[nxt] = cur
-                    queue.append(nxt)
+                if not walkable(*nxt):
+                    continue
+                nd = d + step_cost(*nxt)
+                if nd < dist.get(nxt, float("inf")):
+                    dist[nxt] = nd
+                    prev[nxt] = cur
+                    heapq.heappush(heap, (nd, nxt))
         return None
 
     def _route_waypoints(self, tx: int, ty: int) -> list[tuple[int, int]]:
@@ -696,7 +1192,8 @@ class Emulator:
         return corners + [(tx, ty)]
 
     def walk_to(self, tx: int, ty: int, frame_budget: int = 3000,
-                max_sidesteps: int = 8) -> None:
+                max_sidesteps: int = 8, *,
+                resolve_interruptions: bool = False) -> None:
         """Walk to `(tx, ty)` on the current map, planning around walls.
 
         The route comes from the engine's own collision grid
@@ -711,31 +1208,143 @@ class Emulator:
         that has just crossed a warp reaches here while `gBackupMapLayout`
         still holds the map it left (`map_grid_loaded`), and planning in that
         window silently walks back through the arrival warp.
+
+        A sight/patrol trainer can ambush a route that crosses its cone at
+        any point, on any map, in any chapter — the walk goes from unlocked
+        to locked mid-route and `WalkInterrupted` is raised (see
+        `_walk_greedy`). By default that propagates to the caller, same as
+        any other `ScenarioError`. Pass `resolve_interruptions=True` to have
+        this method resolve the interruption itself (`resolve_interruption`)
+        and resume walking toward the original target, up to
+        `_MAX_INTERRUPTION_RESOLUTIONS` times before failing loud — so a
+        pathological repeat-interrupt case still can't hang the scenario.
+
+        Each retry below passes the SAME `frame_budget` the caller gave this
+        `walk_to` call — never a value decremented or otherwise carried over
+        from a previous attempt. A resumed walk is a brand-new
+        `_walk_to_once` call and gets a brand-new, fully fresh budget every
+        time; the retry COUNT (`_MAX_INTERRUPTION_RESOLUTIONS`) is what
+        bounds the loop, not a shrinking per-attempt allowance.
+        """
+        if not resolve_interruptions:
+            _walk_to_once(self, tx, ty, frame_budget, max_sidesteps)
+            return
+        for attempt in range(_MAX_INTERRUPTION_RESOLUTIONS):
+            try:
+                _walk_to_once(self, tx, ty, frame_budget, max_sidesteps)
+                return
+            except WalkInterrupted as exc:
+                logger.info(
+                    "walk_to(%d,%d): interrupted by %s at %s, resolving "
+                    "(attempt %d/%d)", tx, ty,
+                    "a battle" if exc.battle else "a locked-field scene",
+                    exc.stopped_at, attempt + 1, _MAX_INTERRUPTION_RESOLUTIONS)
+                self.resolve_interruption()
+        raise ScenarioError(
+            f"walk_to({tx},{ty}) was still getting interrupted after "
+            f"{_MAX_INTERRUPTION_RESOLUTIONS} resolve_interruption() attempts")
+
+    def _in_battle(self) -> bool:
+        """Whether a battle is currently running (`battle.in_battle`).
+
+        Imported lazily -- same discipline as `battle.py`'s own lazy
+        `Emulator` import under `TYPE_CHECKING` -- so this module stays
+        importable without pulling in `battle.py` at load time.
+        """
+        from . import battle
+        return battle.in_battle(self)
+
+    def is_trainer_battle(self) -> bool:
+        """Whether the in-progress battle is a trainer battle, as opposed
+        to a wild encounter -- `gBattleTypeFlags & BATTLE_TYPE_TRAINER`
+        (`include/constants/battle.h`), read the same late-bound way as
+        every other engine fact in this file: the global resolved via
+        `symbols`, the bit resolved via `resolve_constant` (a probe
+        compile), never a hardcoded address or literal.
+
+        A caller (e.g. `route1.py`'s B4, which must fight off an incidental
+        trainer ambush but hand a wild encounter back untouched -- that's
+        its actual objective) needs this the instant `WalkInterrupted`
+        reports `battle=True`, so it fails loud rather than reading garbage
+        if called with no battle running: the flag is only meaningful while
+        `BattleMainCB2` owns the main loop.
+        """
+        if not self._in_battle():
+            raise ScenarioError(
+                "is_trainer_battle() called while no battle is in progress")
+        flags = self.u32(self.symbols["gBattleTypeFlags"])
+        trainer_bit = self.resolve_constant("BATTLE_TYPE_TRAINER")
+        return bool(flags & trainer_bit)
+
+    def resolve_interruption(self, *, dialogue_max_taps: int = 1500,
+                             battle_settle_budget: int = _BATTLE_SETTLE_BUDGET,
+                             dialogue_settle_budget: int = _DIALOGUE_SETTLE_BUDGET,
+                             ) -> str:
+        """Resolve whatever currently has the player interrupted, and report
+        what it was: `"battle"`, `"dialogue"`, or `"none"` if neither is
+        actually in progress.
+
+        A battle in progress is won with `battle.win_battle` (the existing
+        battle helper); a merely-locked field (a scene, an ambush's
+        approach-and-battle intro) is mashed through with `advance_dialog`
+        until it releases. Fails loud if the field is still locked after
+        `dialogue_max_taps` -- an interruption this can't clear is a real
+        bug, not something to paper over with a bigger budget.
+
+        Either path can hand control back mid-transition -- a battle-end
+        fade, or a dialogue release that was itself a warp/scene change --
+        so both settle on the same post-condition before returning:
+        `_wait_for_overworld_return` (field unlocked AND the map grid
+        loaded and consistent with `map_location()`). Without that, the
+        caller (typically `walk_to(resolve_interruptions=True)`, resuming
+        toward its original target) can resume one frame into the wrong
+        scene and get a confusing "wrong map" error out of `_plan_route`
+        instead of the real, settling-took-too-long one raised here.
+        """
+        if self._in_battle():
+            from . import battle
+            battle.win_battle(self)
+            self._wait_for_overworld_return(battle_settle_budget)
+            return "battle"
+        if self.field_locked():
+            self.advance_dialog(max_taps=dialogue_max_taps)
+            if self.field_locked():
+                shot = self.screenshot("resolve_interruption_stuck")
+                raise ScenarioError(
+                    "resolve_interruption: field still locked after "
+                    f"{dialogue_max_taps} dialogue taps ({shot})")
+            self._wait_for_overworld_return(dialogue_settle_budget)
+            return "dialogue"
+        return "none"
+
+    def _wait_for_overworld_return(self, budget: int) -> None:
+        """Wait until the overworld is genuinely back: field unlocked AND
+        the map grid loaded and consistent with `map_location()`
+        (`map_grid_loaded`, the same check `walk_to` itself waits on before
+        planning a route).
+
+        Fails loud, naming the layer that's actually stuck (`field_locked`,
+        `map_grid_loaded`, `map_location`) -- the alternative is silence
+        here and a `ScenarioError` from `_plan_route` a moment later,
+        correctly-worded but pointing at the wrong layer (see
+        `resolve_interruption`'s docstring).
         """
         spent = 0
-        spent += self.wait_for_map_grid()
-        start_map = self.map_location()
-        reason = f"walk_to({tx},{ty}) made no progress"
-        for _ in range(_MAX_REPLANS):
-            stuck = False
-            for wx, wy in self._route_waypoints(tx, ty):
-                arrived, used, why = self._walk_greedy(
-                    wx, wy, frame_budget - spent, max_sidesteps, start_map)
-                spent += used
-                if not arrived:
-                    stuck, reason = True, why
-                    break
-            if not stuck:
+        while spent < budget:
+            if not self.field_locked() and self.map_grid_loaded():
                 return
-            if spent + _REPLAN_WAIT >= frame_budget:
-                break
-            self.run(_REPLAN_WAIT)
-            spent += _REPLAN_WAIT
-        shot = self.screenshot("walk_stuck")
-        raise ScenarioError(f"{reason} ({shot})")
+            self.run(10)
+            spent += 10
+        shot = self.screenshot("resolve_interruption_overworld_not_back")
+        raise ScenarioError(
+            f"resolve_interruption: the overworld did not return within "
+            f"{budget} frames after resolving (field_locked="
+            f"{self.field_locked()}, map_grid_loaded={self.map_grid_loaded()}, "
+            f"map_location={self.map_location()}) ({shot})")
 
     def _walk_greedy(self, tx: int, ty: int, frame_budget: int,
                      max_sidesteps: int, start_map: tuple[int, int],
+                     *, start_locked: bool = False,
                      ) -> tuple[bool, int, str]:
         """Greedy two-axis walk with blocked-axis fallback and step-aside
         retry.
@@ -752,9 +1361,46 @@ class Emulator:
         Returns `(arrived, frames_spent, reason)`. A stuck leg is *reported*,
         not raised — `walk_to` owns the decision to re-plan or give up, and
         raises with this `reason` so the two stuck shapes (impassable target
-        vs. plain budget timeout) still read distinctly. The one case this
-        raises itself is a changed map identity: the scenario is already on
-        the wrong map, and re-planning would compound it.
+        vs. plain budget timeout) still read distinctly. Two cases raise
+        directly instead: a changed map identity (the scenario is already on
+        the wrong map, and re-planning would compound it), and an ambush --
+        see `start_locked` below.
+
+        `start_locked` is whatever `field_locked()` read at the *start* of
+        the whole `walk_to` call (not this leg) -- passed through unchanged
+        across every leg and replan of one `walk_to`. If the field was
+        already locked when the walk began, a lock seen here is nothing new
+        and today's behaviour is preserved exactly: wait, then re-path from
+        wherever the script leaves us.
+
+        If the field started unlocked, a lock appearing here needs one more
+        distinction: is it a *self-resolving* scene (a scripted autorun/
+        cameo -- e.g. `moki.py` B4's Theo trigger -- that plays out with no
+        input and releases the field on its own), or one that will never
+        clear without help (a battle, or a msgbox waiting on a button the
+        walk isn't pressing -- a sight trainer's approach-and-battle)? A
+        battle raises `WalkInterrupted` immediately -- waiting is pointless.
+        Anything else gets `_INTERRUPT_GRACE` frames to release on its own;
+        if it does, the walk just continues toward the target, same as
+        today. Only once the grace expires with the field still locked does
+        this raise `WalkInterrupted`, so `resolve_interruption` can advance
+        the dialogue it's stuck on.
+
+        A wild encounter is a separate case again: it sets **no script
+        lock at all** (2026-08-11 route1 B4 regression -- `field_locked()`
+        stayed False through an entire wild battle, so the old lock-gated
+        detection never fired, and the walk either burned its whole frame
+        budget pressing into the battle screen or eventually re-planned
+        against the battle scene's own stub map grid). So `_in_battle()` is
+        polled on its own too, independently of `locked`, once per outer
+        iteration -- each spans up to `_walk_step`'s own 40-frame cap, so
+        this is a poll roughly every 40 frames rather than every single
+        emulated one (cheap either way -- one u32 read -- but this avoids
+        threading a battle check into `_walk_step`'s tight per-frame loop),
+        while still catching a wild encounter within one step's latency.
+        Gated on `start_locked` the same as the lock path: a battle that's
+        part of an already-running scene the walk expected going in is not
+        a new interruption.
         """
         spent = 0
         sidestep_count = 0
@@ -762,18 +1408,106 @@ class Emulator:
         perp_toggle = 0
 
         while spent < frame_budget:
-            if self.field_locked():
-                # A script owns the player (scene auto-walk, dialogue we
-                # bumped into). Don't fight it — wait, then re-path from
-                # wherever it leaves us.
-                self.run(30)
-                spent += 30
+            if not start_locked:
+                # A wild encounter: no script, no lock, just a battle. Catch
+                # it here rather than only inside the `locked` branch below,
+                # which a lock-free battle never enters. `_in_battle` is
+                # undefined on the lightweight `walk_to` test fakes that
+                # predate this poll (`test_playtest.py`'s `_FakeWalkEmu`,
+                # which never sets a lock either) -- degrade to "not
+                # battling" for those rather than erroring, the same
+                # fake-degradation shape `_occupied_object_tiles` already
+                # uses elsewhere in this file.
+                try:
+                    battling = self._in_battle()
+                except AttributeError:
+                    battling = False
+                if battling:
+                    raise WalkInterrupted((tx, ty), self.player_pos(), True)
+            locked = self.field_locked()
+            if locked:
+                if start_locked:
+                    # A script owns the player (scene auto-walk, dialogue we
+                    # bumped into) and the walk already expected that going
+                    # in. Don't fight it — wait, then re-path from wherever
+                    # it leaves us. EXCEPT a battle: `start_locked` meant
+                    # "some scene already owned the player when this walk
+                    # began," never "and it is therefore fine to wait
+                    # through a battle with zero button presses" — nothing
+                    # ever submits a move in that case, so the scene can
+                    # never complete on its own, and this loop used to just
+                    # spend the whole `frame_budget` re-running `self.run
+                    # (30)` before failing with a bare "frame budget
+                    # exhausted" (2026-08-11 route1 B4 regression: a
+                    # trainer's notice sequence was already mid-flight —
+                    # locked but not yet `_in_battle()` — when a resumed
+                    # `_walk_absorbing` retry issued a fresh `walk_to` call,
+                    # so THAT call's own `start_locked` read True and this
+                    # branch swallowed the battle it turned into). Same
+                    # fake-degradation shape as the `not start_locked` poll
+                    # above.
+                    try:
+                        battling = self._in_battle()
+                    except AttributeError:
+                        battling = False
+                    if battling:
+                        raise WalkInterrupted(
+                            (tx, ty), self.player_pos(), True)
+                    self.run(30)
+                    spent += 30
+                    continue
+                if self._in_battle():
+                    raise WalkInterrupted(
+                        (tx, ty), self.player_pos(), True)
+                # Unknown yet whether this is a self-resolving cameo or a
+                # scene that's actually waiting on input/a battle. Give it
+                # `_INTERRUPT_GRACE` to release on its own before treating
+                # it as a real interruption.
+                grace_spent = 0
+                while grace_spent < _INTERRUPT_GRACE and self.field_locked():
+                    if self._in_battle():
+                        raise WalkInterrupted(
+                            (tx, ty), self.player_pos(), True)
+                    self.run(30)
+                    grace_spent += 30
+                    spent += 30
+                if self.field_locked():
+                    raise WalkInterrupted(
+                        (tx, ty), self.player_pos(), self._in_battle())
+                # Released within the grace -- a self-resolving scene, same
+                # as moki.py B4's cameo. Resume walking toward the target.
                 continue
             x, y = self.player_pos()
             if (x, y) == (tx, ty):
                 # The coord ticks before the step animation finishes; settle
                 # so a follow-up face/interact isn't eaten by the motion.
                 self.run(16)
+                # 2026-08-11 route1 B15 regression: a wild encounter rolled
+                # by this very last step can declare itself (lock and/or
+                # `_in_battle()`) partway through the settle above, not
+                # before it -- `field_locked()` read False at the top of
+                # THIS iteration (that's how we got into this branch at
+                # all), so nothing upstream ever saw an interruption. This
+                # used to return `True` unconditionally regardless of what
+                # the settle revealed, so a caller's very next action (e.g.
+                # `_collect_item`'s `face()`/`interact()`) pressed A into an
+                # already-arriving wild battle transition it had no way to
+                # know about: `interact()` saw `field_locked()` and assumed
+                # its own script had started, `advance_dialog()` then mashed
+                # blind through someone else's battle, and the item's flag
+                # never got set. Re-check post-settle and raise the same way
+                # every other interruption in this function does, so
+                # `walk_to(resolve_interruptions=True)`/`_walk_absorbing`
+                # get to apply their existing wild/trainer policy instead of
+                # the caller finding out several actions later. Degrades
+                # like the `not start_locked` poll above for fakes that
+                # don't implement `_in_battle`.
+                try:
+                    battling = self._in_battle()
+                except AttributeError:
+                    battling = False
+                if battling or self.field_locked():
+                    raise WalkInterrupted((tx, ty), self.player_pos(), battling)
                 return True, spent + 16, ""
             dx, dy = tx - x, ty - y
             axes = [("RIGHT" if dx > 0 else "LEFT") if dx else None,
@@ -897,3 +1631,46 @@ class Emulator:
             taps += 1
         self.note_text_frame()
         return taps
+
+
+def _walk_to_once(emu: "Emulator", tx: int, ty: int, frame_budget: int,
+                  max_sidesteps: int) -> None:
+    """The body of `Emulator.walk_to`, without interruption resolution -- a
+    single attempt that either arrives, raises `WalkInterrupted`, or fails
+    loud with a stuck/budget diagnosis.
+
+    Module-level (not a method) so `walk_to`'s `resolve_interruptions=True`
+    loop can retry it directly, and so unit tests exercising `walk_to`
+    against a bare fake object (no real `Emulator` instance -- see
+    `tests/test_playtest.py`'s `_FakeWalkEmu` and
+    `tests/test_walk_interruption.py`) don't need that fake to define a
+    `_walk_to_once` method of its own -- there is nothing here `walk_to`
+    itself doesn't already call directly.
+    """
+    spent = 0
+    spent += emu.wait_for_map_grid()
+    start_map = emu.map_location()
+    # Captured once, for the whole walk (not per-leg): only a transition
+    # from unlocked-at-start to locked-during-the-walk is an ambush. A walk
+    # that begins already locked (a beat continuing a running scene) must
+    # keep today's wait-it-out behaviour unchanged.
+    start_locked = emu.field_locked()
+    reason = f"walk_to({tx},{ty}) made no progress"
+    for _ in range(_MAX_REPLANS):
+        stuck = False
+        for wx, wy in emu._route_waypoints(tx, ty):
+            arrived, used, why = emu._walk_greedy(
+                wx, wy, frame_budget - spent, max_sidesteps, start_map,
+                start_locked=start_locked)
+            spent += used
+            if not arrived:
+                stuck, reason = True, why
+                break
+        if not stuck:
+            return
+        if spent + _REPLAN_WAIT >= frame_budget:
+            break
+        emu.run(_REPLAN_WAIT)
+        spent += _REPLAN_WAIT
+    shot = emu.screenshot("walk_stuck")
+    raise ScenarioError(f"{reason} ({shot})")

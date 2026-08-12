@@ -357,6 +357,199 @@ the boot gate, per the design doc's own open note.
 vice versa) in map.json; crossing the seam in mGBA shows continuous art with
 no palette snap and no garbage strip; collision at the boundary is sane.
 
+### 28. Time-of-day + Uranium-only encounter tables are dropped corpus-wide
+
+The encounter emitter (`tileset_converter/wild_encounters.py`, landed 2026-08-09,
+CH02_TODO #15) fills the fork's four native fields and drops everything else
+into `uranium_extra`, unemitted. Uranium's 13 `EncounterType` slots include
+four the fork has no host for at all (Cave, HeadbuttLow/High, BugContest) and
+three that it *does* support but we don't wire: LandMorning / LandDay /
+LandNight.
+
+The time-of-day three are the tractable half. The fork already supports them —
+`OW_TIME_OF_DAY_ENCOUNTERS` (`engine/include/config/overworld.h:95`, currently
+FALSE) plus time-suffixed `base_label`s, with `OW_TIME_OF_DAY_FALLBACK`
+(`:97`) and `OW_TIME_OF_DAY_DISABLE_FALLBACK` (`:96`) governing what happens
+when a slot is empty. Today every map emits only the `TIME_MORNING` fallback
+slot, which is also what vanilla does, so nothing is *broken* — it's fidelity
+loss, silent unless you know to look.
+
+Not frontier-urgent but not free either: `_LAND_SOURCES`
+(`pbs_converter/encounters.py:57`) already prefers a plain `land` table when
+one exists, so a map with BOTH plain and time-split tables (Route 1 is one —
+densities `[25,10,10,0,0,0,0,0,0,25,25,25,25]`) silently uses the plain one and
+the variants never surface. Turning the config on without auditing that
+precedence would change behavior on maps nobody has walked.
+
+**Care about it when:** a chapter's spec calls out a mon that only appears at
+one time of day, or a cave chapter lands (Cave has no fork host at all and is
+currently folded into `land_mons` as a fallback source).
+
+**Done looks like:** a decision on whether Uranium's time-split tables are
+worth `OW_TIME_OF_DAY_ENCOUNTERS = TRUE` corpus-wide; if yes, emitter support
+for suffixed base_labels + a documented precedence rule between plain and
+split tables. Also cross-referenced by `00-atlas.md:175`.
+
+### 30. `text_validator` never scans generated C data headers
+
+`extraction.py:95` `_CORPUS_GLOBS` covers only `scripts/*.pory`,
+`staging/scripts/*.pory` and `porymap/dispatch/*.pory`. Generated data headers
+— `species/uranium_species_info.h`, `src/data/items.h`, `src/data/moves_info.h`
+— are never read, so the whole `.description` overlong/unwrapped class went
+undetected until it was seen on a device (2026-08-11 boot walk). The module
+already owns the right primitive (`measure_line_width_px`) and a line-width
+rule; only the corpus is too narrow.
+
+Note the rule needs a per-field budget to be useful here, not the single
+`MSGBOX_WIDTH_PX`: a Pokédex entry is 224px × 4 lines (see
+`DEX_DESCRIPTION_WIDTH_PX`), a bag item description is a much narrower window,
+and dialogue is the message box. Wrapping itself is solved for staged species
+(`wrap_to_width`); this item is about *detection* across every emitter, so an
+unwired header can't ship broken the day it gets hooked up.
+
+**Done looks like:** the validator reads generated headers with a field →
+budget table, and a deliberately overlong description in any emitter fails the
+suite rather than reaching a ROM.
+
+### 31. Give the Pokédex Uranium's real Tandor regional dex
+
+**User decision 2026-08-11: wanted, not deferred.** The current dex is
+National mode with the staged Uranium species grafted onto the end of the
+vanilla national list, past `NATIONAL_DEX_PECHARUNT`. That was the minimum fix
+to stop caught species being invisible (#see 2026-08-11b, `f3af5820`) and was
+taken as an explicit stopgap. Uranium's own dex is the **Tandor regional dex**,
+and that's what the ROM should show: Tandor numbering, Tandor ordering, no
+vanilla species interleaved.
+
+**The source data is already parsed.** `pbs_converter/pokemon.py:259
+parse_regionals` reads `Data/regionals.dat` and returns
+`out[0][species_id]` = the Tandor dex number for that species (0 = no entry);
+Uranium has exactly one regional dex, 202 species-slots including the ID-0
+placeholder. Nothing currently consumes it.
+
+**The engine lever** is `RegionalToNationalOrder` (`src/pokemon.c:5261`), which
+indexes `sHoennToNationalOrder` (`src/pokemon.c:392`, sized
+`HOENN_DEX_COUNT - 1`); `CreatePokedexList` walks `i < REGIONAL_DEX_COUNT` and
+maps through it (`src/pokedex.c:2194-2218`), and `NationalToRegionalOrder`
+(`:5222`) is the inverse. So a Tandor dex means generating a
+Tandor→national order table plus its count, in place of the Hoenn one, behind
+the usual sentinel-fenced generated-header hook.
+
+**Open questions to settle before building it:**
+- Whether to keep National mode available at all as a second dex mode (vanilla
+  species are still in the ROM and catchable in principle), or make Tandor the
+  only dex and revert the `special(EnableNationalPokedex)` from the grant at
+  `transpiler.py:2634`. Reverting it is only safe once regional covers every
+  staged species — otherwise this bug returns.
+- The dex UI names the mode "HOENN" in several strings and uses
+  `gPokedexBgHoenn_Pal` vs `gPokedexBgNational_Pal` (`src/pokedex.c:2154`);
+  decide whether to retheme or leave the vanilla labels.
+- Only 24 species are staged today, so a full Tandor table will have holes
+  until the species set grows. Needs a rule for unstaged entries — most likely
+  the same fail-loud-or-omit choice the rest of the pipeline makes, not a
+  silent gap.
+
+**Done looks like:** the in-game dex lists Tandor species in Tandor order with
+Tandor numbers, generated from `regionals.dat` rather than hand-authored, and
+a caught species appears at its real Uranium dex number.
+
+### 32. Priority-1 layer rule needs a south-neighbour refinement before the crop-field maps
+
+**Shipped 2026-08-12 (CH02 tree-tops fix, see CH02_TODO #16): a p==1 column now
+gets `LAYER_NORMAL` when the column is passable, `LAYER_COVERED` when blocked.**
+That honours the stand-on half of RMXP's row-relative p==1 (walk behind the tree
+canopy) and keeps the stand-south half (head not covered by a cliff/hedge lip)
+wherever the art is solid. It is a pure function of the column key, so metatile
+budgets are untouched.
+
+**Where it is knowingly wrong:** a *passable* p==1 cell whose SOUTH neighbour is
+also passable. The player can stand south of it, and their head is then occluded
+by art RMXP would have drawn under them. Corpus census (all 199 maps,
+`layout.column_blocked` rule):
+
+```
+flipped to LAYER_NORMAL   9554 cells over 142 maps
+of which south-passable   6531 (68.4%)
+Map187 1961 · Map117 1868 · Map163 1366 · Map121 815 · Map028 273 · rest <60 each
+worst tiles: ts30/ts50 463 + 471 = 11 902 of the 6531 cells' p1 tiles
+```
+
+Tiles 463/471 are **tall wheat/crop field** art — big walkable fields where every
+cell is passable, so the south neighbour always is too, and the art is full-tile
+height. Under the shipped rule the player's head is buried in wheat on every step
+through those four maps. In CH01+CH02 the same defect touches only 5 cells (the
+Map033 stump shoulders + one Map032 bush) and was accepted for the CH02 gate.
+
+**The refinement** is "flip only if the south neighbour is blocked" — exact RMXP
+for every reachable state. That is *cell* context, not column context, so a column
+used both ways in one map needs a per-cell metatile copy. Budget matters: ts1033
+ships with 2 spare metatiles. Do the copy-cost census before committing to it.
+
+**Due:** before Map117 / Map187 / Map163 / Map121 / Map028 enter a chapter (all
+Act 2+). Not urgent for the current frontier.
+
+### 33. Auto-derive ledge jump directions from RMXP passage bits
+
+*Migrated from `CH02_TODO.md` #1 on the CH02 gate pass 2026-08-12; unchanged and
+still open. Full derivation table + ts22 inventory: `reference/archive/CH02_TODO.md` #1.*
+
+Ledge directionality is fully recoverable from data already deserialized —
+Essentials never stores a jump direction, so the tile's 4-dir passage bits are
+the whole story (sole clear bit = the jump direction; 0x0F = pure wall). Rule:
+0x08→`MB_JUMP_SOUTH`, 0x01→`MB_JUMP_NORTH`, 0x02→`MB_JUMP_EAST`,
+0x04→`MB_JUMP_WEST`; 0 clear bits → `MB_NORMAL` silently; ≥2 → warn +
+`MB_NORMAL`. The empty `ledge_directions` override in
+`reference/terrain_tag_map.json` stays as an escape hatch and wins over the
+derivation — do not grow it.
+
+**Where:** `tileset_converter/terrain_tags.py` `column_behavior`, deriving when
+the override table misses. Tests in `tests/test_terrain_tags.py`: one per
+direction + blocker + ambiguous + override-wins. **Verify:** Route 01's six
+warning tiles resolve without hand entries, and Map032's ~30 south-ledge
+over-block cells become jumpable in-game. Until it lands, builds keep firing 3
+benign warnings for ts22 tiles 840/841/842 (the Moki pond-dock front, where
+`MB_NORMAL` and `MB_JUMP_NORTH` behave identically anyway).
+
+### 34. Secondary-tileset animation support
+
+*Migrated from `CH02_TODO.md` #2 on the CH02 gate pass 2026-08-12.*
+
+Still open, still not blocking: animated tiles currently must fit the 512-tile
+PRIMARY partition. ts1033 (Route 01) sits well inside it at 131 animated tiles.
+The secondary-callback variant is only forced when ts28's maps reach the
+frontier (543 animated tiles). Detail: `reference/archive/SLICE1_TODO.md` #10.
+
+Related, and owed to a §9 walk rather than a code change: Route 01's transparent
+waterfall autotile quantized cleanly and has passed a still-frame eye gate, but
+has **never been looked at in motion on hardware**.
+
+### 35. Uranium-original moves silently absent from staged learnsets
+
+*Migrated from `CH02_TODO.md` #11 on the CH02 gate pass 2026-08-12; user-ruled
+accepted debt, not a defect.*
+
+`species_converter.stage.emit_learnsets` gates every level-up move against the
+fork's real `MOVE_*` constants and DROPS the entry when the fork has no such
+move (loud warning + a `dropped_learnset_moves` record in
+`species_manifest.json`). CH02 dropped 3 entries, all `MOVE_METAL_WHIP` (Uranium
+move id 562): BAREWL @29, DEAREWL @29, GARAREWL @31. Nothing invented, nothing
+silent — those three Pokémon are simply missing a level-up move until Uranium's
+move set is staged into the engine, a much larger unit than any chapter needs.
+
+### 36. Map033 EV028 "Luz" stripped — revisit if an additive-glow path exists
+
+*Migrated from `CH02_TODO.md` #12 on the CH02 gate pass 2026-08-12; user-ruled
+strip 2026-08-05, recorded here so the reference survives.*
+
+An RMXP ambient-lighting event: one page, trigger 0, empty command list, graphic
+`light` = a soft alpha-gradient yellow glow circle. GBA 4bpp has no additive
+blend and a smooth gradient bands badly at 15 colours. Recorded in
+`reference/strip_list.json`'s `map_events` (with an `expect_name` renumbering
+guard); `build_object_events` honours that list and drops the event before any
+graphics lookup, so its sheet needs no `npc_gfx_map.json` entry. This is the
+first live entry in `map_events` — the deterministic path never read that array
+before (only the retired LLM orchestrator did), so the plumbing landed with it.
+
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 
 - **Reflection narrow-scan** — tried and reverted 2026-07-07 (user: "not
@@ -380,3 +573,63 @@ no palette snap and no garbage strip; collision at the boundary is sane.
   `sys.modules` each 1 s poll, so converter modules are covered; `--no-watch`
   opt-out). Browser still needs a manual F5 after restart, as scoped.
   Live-verified end-to-end; +33 tests.
+
+### 29. `stage_slice_scripts` existence check is blind to engine-defined labels
+
+Found 2026-08-09 while rebuilding CH02. `stage_slice_scripts.py --write` exits
+1 with `FAIL: 2 undefined script reference(s): BerryTreeScript,
+Common_EventScript_FindItem`. Both labels are real and vanilla —
+`engine/data/scripts/berry_tree.inc:1` and
+`engine/data/scripts/item_ball_scripts.inc:1` — but the dangling-reference check
+(`stage_slice_scripts.py:560-585`, `asm.find_dangling_references`) builds its
+defined-set from staged `.pory` text plus the dispatchers and CommonEvents only.
+Any map.json object script pointing at an engine-provided label therefore reads
+as dangling by construction.
+
+Pre-existing, not caused by the trainer-pacing change: the already-shipped
+`engine/data/maps/Route01/map.json` carries 10 such references, so every CH02
+build since berry trees and item balls landed has exited 1 here. Not a build
+blocker — `assemble_pathfinder` and `make modern` are separate steps with their
+own fork-index gate — but it is a **loud check that is now routinely ignored**,
+which is exactly how a real dangling reference gets waved through.
+
+Fix: feed the check an engine-defined label set (scan `engine/data/scripts/*.inc`
+for `^Label::`, the same way the fork-capability index is built per CLAUDE.md
+§4.7) and only report labels defined in neither place. Do not special-case these
+two by name.
+
+**FIXED 2026-08-09.** New `assembly.engine_defined_labels(engine_root)` harvests
+`^Label::` (double-colon only — a scan of every script reference in the vendored
+tree found zero targeting a single-colon label, which the engine uses for text
+and movement bodies) and `find_dangling_references` grew an `engine_defined`
+parameter unioned into the defined-set, defaulting to `None` so no other caller
+moved. `stage_slice_scripts` passes it using the engine root it already had.
+4924 labels; fail-loud floor at 100, because a silently-empty scan would restore
+the exact false-negative the function exists to kill. Exits 0 now.
+
+**The scan scope is the load-bearing part.** The obvious glob `data/**/*.inc`
+also matches `engine/data/maps/<Map>/scripts.inc` — per-map output assembled from
+*our own* staged `.pory`, blanket-gitignored at `.gitignore:124`. Trusting that
+would let a stale artifact from a previous build vouch for a label the current
+staging no longer emits, which is a worse failure than the one being fixed: a
+dropped script would pass the gate. Scope is therefore `data/scripts/**/*.inc`
+plus top-level `data/*.s` / `data/*.inc`, excluding `data/maps/**` and
+`data/layouts/**`. Including the generated trees inflated the count from 4924 to
+23290 — a useful smell if anyone re-widens it.
+`test_engine_defined_labels_excludes_generated_per_map_scripts_inc` pins it.
+
+**The false alarm was not harmless — it silently skipped staging.** `main()`'s
+`--write` block (`stage_slice_scripts.py:602-606`) sits *after* the existence
+check's `return 1` (`:592`), so a failing check writes **no** `.pory` to
+`output/uranium-build/staging/scripts/` at all. `assemble_pathfinder` then runs
+off whatever `.pory` a previous run left there while happily picking up fresh
+map.json/layout data from its own path. Every CH02 build since berry trees
+landed was therefore a mixed build: current map data, stale scripts. Caught
+2026-08-09 when ROM `5d4a7622` (built through the failing gate) and `360e8506`
+(built after the fix) differed by 160 bytes from a change that touches no
+emitted content; `360e8506` reproduces byte-identically across repeat runs, so
+the pipeline is idempotent and `5d4a7622` was the anomaly. Fixing the check
+closed this by making the gate pass, but the ordering is still a trap — a
+genuine future failure would skip the writes the same way. Worth making the
+write unconditional (or the failure an exception) so a red gate can never leave
+a half-staged tree behind; not done here.

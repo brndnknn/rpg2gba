@@ -39,6 +39,7 @@ from __future__ import annotations
 import json
 import logging
 import struct
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -143,34 +144,80 @@ TERRAIN_TAG_SHADOW = 20
 _SKIPPED_TERRAIN_TAGS = frozenset((TERRAIN_TAG_BRIDGE, TERRAIN_TAG_SHADOW))
 
 
-def _cell_blocked(grid: TileGrid, x: int, y: int, tile_map: TileMap, tileset_id: int) -> bool:
-    """RMXP multi-layer passability for one cell (validated rule, mirrors
-    `scripts/pathfinder_collision_preview.cell_blocked`).
+def _passage_lookup(passages: Sequence[int] | None, tile_id: int) -> int:
+    """Fail-loud analog of `TileMap.passage()`: a missing array or an out-of-range
+    tile_id raises — a passage value decides real gameplay collision, so silently
+    defaulting it is dangerous (unlike priority/terrain_tag below)."""
+    if passages is None or not 0 <= tile_id < len(passages):
+        length = 0 if passages is None else len(passages)
+        raise KeyError(f"tile_id {tile_id} out of range for passages array (len {length})")
+    return passages[tile_id]
 
-    Scan layers top->bottom: a tile whose terrain tag is Shadow or Bridge is
-    skipped entirely (it never decides passability, it just isn't there for this
-    purpose — matches Uranium's `playerPassable?`); otherwise the first non-empty
-    tile that blocks (`passage & 0x0F != 0`) -> blocked; a non-empty tile drawn at
-    priority 0 (normal layer) that does *not* block -> passable (stop, ignore tiles
-    beneath); a passable tile at priority > 0 (drawn over the player, e.g. a
-    treetop) does not decide — keep scanning down to the trunk. An all-empty column
-    is void (blocked)."""
+
+def _soft_lookup(array: Sequence[int] | None, tile_id: int) -> int:
+    """Soft-fallback analog of `TileMap.priority()`/`.terrain_tag()`: a missing
+    array or an out-of-range tile_id resolves to 0 (normal-layer priority /
+    Neutral terrain tag) rather than raising."""
+    if array is None or not 0 <= tile_id < len(array):
+        return 0
+    return array[tile_id]
+
+
+def column_blocked(
+    column: Iterable[tuple[int, int]],
+    *,
+    passages: Sequence[int],
+    priorities: Sequence[int] | None = None,
+    terrain_tags: Sequence[int] | None = None,
+) -> bool:
+    """RMXP multi-layer passability (validated rule, mirrors
+    `scripts/pathfinder_collision_preview.cell_blocked`), given a bare column
+    instead of a grid cell — the one place this rule lives; `_cell_blocked` below
+    is a thin `TileGrid`-cell wrapper over this.
+
+    `column` is the cell's non-empty stacked tiles as `(z, tile_id)` pairs, z
+    ASCENDING (bottom first) — the same shape `column_key` returns, with empty
+    tiles already dropped by the caller. The scan itself runs top layer down, so
+    this iterates `column` in reverse.
+
+    `passages`/`priorities`/`terrain_tags` are raw arrays indexed directly by
+    tile_id, already resolved to one tileset (the caller picks which). Their
+    missing/out-of-range behavior mirrors the per-tile `TileMap` accessors:
+    `passages` fails loud (`KeyError`) — a passage value decides real gameplay
+    collision, so a wrong default is dangerous; `priorities`/`terrain_tags`
+    soft-fallback to 0, same as `TileMap.priority()`/`.terrain_tag()`.
+
+    Rule: a tile whose terrain tag is Shadow or Bridge is skipped entirely (it
+    never decides passability, it just isn't there for this purpose — matches
+    Uranium's `playerPassable?`); otherwise the first non-empty tile that blocks
+    (`passage & 0x0F != 0`) -> blocked; a tile drawn at priority 0 (normal layer)
+    that does *not* block -> passable (stop, ignore tiles beneath); a passable
+    tile at priority > 0 (drawn over the player, e.g. a treetop) does not decide
+    — keep scanning down to the trunk. An all-empty column is void (blocked)."""
     seen_tile = False
-    for z in range(grid.zsize - 1, -1, -1):  # top layer down
-        tid = grid.tile_at(x, y, z)
-        if tid == EMPTY_TILE:
-            continue
+    for _z, tid in reversed(tuple(column)):  # top layer down
         # Set BEFORE the tag skip: a column made up ENTIRELY of skipped (shadow/
         # bridge) tiles must not fall into the "void = blocked" rule below — Uranium
         # falls through its scan loop in that case and returns passable (true).
         seen_tile = True
-        if tile_map.terrain_tag(tileset_id, tid) in _SKIPPED_TERRAIN_TAGS:
+        if _soft_lookup(terrain_tags, tid) in _SKIPPED_TERRAIN_TAGS:
             continue
-        if (tile_map.passage(tileset_id, tid) & PASSAGE_BLOCK_MASK) != 0:
+        if (_passage_lookup(passages, tid) & PASSAGE_BLOCK_MASK) != 0:
             return True
-        if tile_map.priority(tileset_id, tid) == 0:
+        if _soft_lookup(priorities, tid) == 0:
             return False
     return not seen_tile  # all-empty = void = blocked
+
+
+def _cell_blocked(grid: TileGrid, x: int, y: int, tile_map: TileMap, tileset_id: int) -> bool:
+    """RMXP multi-layer passability for one cell — thin wrapper over
+    `column_blocked` (see its docstring for the rule itself)."""
+    return column_blocked(
+        column_key(grid, x, y),
+        passages=tile_map.passages_for(tileset_id),
+        priorities=tile_map.priorities_for(tileset_id),
+        terrain_tags=tile_map.terrain_tags_for(tileset_id),
+    )
 
 
 def column_key(grid: TileGrid, x: int, y: int) -> tuple[tuple[int, int], ...]:
@@ -237,6 +284,7 @@ def convert_layout(
     blocked_cells: set[tuple[int, int]] | None = None,
     unblocked_cells: frozenset[tuple[int, int]] | set[tuple[int, int]] | None = None,
     tileset_key: int | None = None,
+    behavior_overrides: dict[tuple[int, int], str] | None = None,
 ) -> Layout:
     """Convert one Phase 3 map dict into a `Layout` (blockdata + metadata).
 
@@ -267,10 +315,34 @@ def convert_layout(
     `warp_overrides` is contradictory converter configuration and fails loud.
 
     `tileset_key`: Override the tileset id used for all TileMap lookups (per-map
-    synthetic tileset packing); defaults to the map's own `tileset_id`."""
+    synthetic tileset packing); defaults to the map's own `tileset_id`.
+
+    `behavior_overrides` (stairs fix) maps a cell to a behavior KIND string
+    ("stairs_left"/"stairs_right"). RPG Maker XP builds diagonal staircases out of
+    solid "player touch" trigger tiles + a force-move script; pokeemerald-expansion
+    has NATIVE sideways-stairs support instead — MB_SIDEWAYS_STAIRS_LEFT_SIDE /
+    MB_SIDEWAYS_STAIRS_RIGHT_SIDE (engine/include/constants/metatile_behaviors.h)
+    redirect an east/west step into a diagonal one, but ONLY on a passable tile (the
+    engine's own vanilla-collision check blocks the step before the stair logic runs
+    otherwise). Each such cell's metatile is resolved via
+    `tile_map.behavior_for_column` — the same column-key-exact-match-else-fallback
+    resolution warps use — so the cell keeps its own real stair art. Collision is
+    ALWAYS force-stamped PASSABLE for these cells even though the source RMXP
+    passage reads blocked (the stair tiles are solid in Uranium because the script,
+    not tile geometry, did the moving) — see the loop below.
+
+    A cell may not be in both `behavior_overrides` and `warp_overrides` (a cell is
+    either a door or a staircase, never both), and may not be in both
+    `behavior_overrides` and `blocked_cells` (the RMXP stair events are
+    through=false invisible-obstacle events that `metadata_wiring.
+    collect_through_block_cells` would otherwise also mark blocked, re-creating the
+    original solid-stairs bug — this check is the backstop that makes that
+    regression loud). Overlap with `unblocked_cells` is redundant, not
+    contradictory (both force passable), and is allowed; the behavior stamp wins."""
     overrides = warp_overrides or set()
     blocked = blocked_cells or set()
     unblocked = set(unblocked_cells or set())
+    behaviors = behavior_overrides or {}
     both = overrides & blocked
     if both:
         raise ValueError(
@@ -282,6 +354,22 @@ def convert_layout(
         raise ValueError(
             f"layout {name}: cell(s) {sorted(contradictory)} are walkable-overridden "
             "AND through-blocked/warp-overridden — contradictory configuration"
+        )
+    behavior_cells = set(behaviors)
+    behavior_warp_conflict = behavior_cells & overrides
+    if behavior_warp_conflict:
+        raise ValueError(
+            f"layout {name}: cell(s) {sorted(behavior_warp_conflict)} are both a "
+            "behavior_override and a warp_override — a cell is either a door or a "
+            "staircase, never both"
+        )
+    behavior_blocked_conflict = behavior_cells & blocked
+    if behavior_blocked_conflict:
+        raise ValueError(
+            f"layout {name}: cell(s) {sorted(behavior_blocked_conflict)} are both a "
+            "behavior_override and a through-blocked cell — a stair cell must stay "
+            "passable (metadata_wiring.collect_through_block_cells should have "
+            "excluded them)"
         )
 
     tiles = map_json["tiles"]
@@ -312,6 +400,16 @@ def convert_layout(
                 if key is not None and not tile_map.column_in_atlas(tileset_id, key):
                     key = None
                 metatile = tile_map.warp_for_column(tileset_id, key)
+            elif (x, y) in behaviors:
+                # Behavior stamp wins over unblocked_cells (redundant, not
+                # contradictory) and is always passable — see docstring: the
+                # source RMXP passage reads blocked here (stair tiles are solid
+                # in Uranium; the script did the moving, not tile geometry), but
+                # the engine's sideways-stairs redirect requires a passable tile.
+                key = column_key(grid, x, y) or None
+                if key is not None and not tile_map.column_in_atlas(tileset_id, key):
+                    key = None
+                metatile = tile_map.behavior_for_column(tileset_id, behaviors[(x, y)], key)
             elif (x, y) in blocked:
                 metatile = Metatile(metatile.metatile_id, BLOCKED_COLLISION, BLOCKED_ELEVATION)
             elif (x, y) in unblocked:

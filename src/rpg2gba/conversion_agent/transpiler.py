@@ -39,6 +39,7 @@ from pathlib import Path
 from rpg2gba.conversion_agent.deterministic import (
     _label_name,
     format_pory_dialogue,
+    join_text_lines,
     translate_text_codes,
 )
 from rpg2gba.conversion_agent.flag_registry import (
@@ -292,6 +293,17 @@ _RUNNING_SHOES_ON_RE = re.compile(r"^\s*\$PokemonGlobal\.runningShoes\s*=\s*true
 # a real special (engine/data/specials.inc:515) — the same pair vanilla's own
 # Birch/Oak-lab script uses. Exact literal only (the corpus has no `=false`
 # variant); anything else still queues.
+#
+# `EnableNationalPokedex` (specials.inc:518) is ours to add on top, and is not
+# optional for this corpus: Uranium species are chained past
+# NATIONAL_DEX_PECHARUNT and have no regional dex number, but a dex without
+# national mode is pinned to DEX_MODE_HOENN (pokedex.c:2031) and
+# CreatePokedexList then enumerates only `i < REGIONAL_DEX_COUNT`, mapping
+# outward via RegionalToNationalOrder (pokedex.c:2194-2218). Every Uranium
+# species would be caught-but-invisible. Setting FLAG_SYS_NATIONAL_DEX alone
+# is NOT sufficient — IsNationalPokedexEnabled also requires
+# pokedex.nationalMagic == 0xDA and VAR_NATIONAL_DEX == 0x302
+# (event_data.c:101), which only the special sets.
 _POKEDEX_GRANT_RE = re.compile(r"^\s*\$Trainer\.pokedex\s*=\s*true\s*$")
 
 # -- Essentials one-line Ruby guards (`<statement> if $game_variables[V]==K`) ---
@@ -478,6 +490,187 @@ _CANLOSE_NAME_RE = re.compile(r'"([^"]*)"')
 # (CLAUDE.md §4.5).
 _CANLOSE_PBGET_PLUS_RE = re.compile(r"^pbGet\(\s*(\d+)\s*\)\s*\+\s*(\d+)$")
 
+# -- native object-template idioms (item balls, berry trees) -----------------
+# rpg2gba wave 2026-08-08: item balls and berry plants are converted to the
+# fork's NATIVE object-event systems (Common_EventScript_FindItem /
+# GetItemBallIdAndAmountFromTemplate — engine/src/item_ball.c — and
+# BerryTreeScript / MOVEMENT_TYPE_BERRY_TREE_GROWTH — engine/src/berry.c)
+# instead of being lowered command-by-command. Detection here is EVENT-level
+# (scans every page's raw commands, not the parsed control-flow tree) and
+# runs in ``transpile_driver.transpile_map`` BEFORE both the idiom-collapse
+# classifiers (``deterministic.classify_ground_item`` already lowers bare
+# pbItemBall to giveitem/setflag) and the general per-command transpiler — a
+# claimed event contributes NO .pory text and NO queue entry (same
+# disposition as the diagonal-stair skip in transpile_driver.py), only a
+# ``Map{id:03d}.template_fields.json`` sidecar row a different agent's
+# consumer turns into object-template fields.
+#
+# ``::PBItems::`` and bare ``PBItems::`` both occur in the corpus (see the
+# pbPokemonMart classifier's identical tolerance in deterministic.py); the
+# optional amount only appears on the item-ball call, never on pbPickBerry's
+# quantity argument (that quantity is Uranium's per-pick RNG range, not the
+# planted item — the object template doesn't carry it).
+_ITEM_BALL_CALL_RE = re.compile(
+    r"^\s*(?:Kernel\.)?pbItemBall\(\s*(?:::)?PBItems::(\w+)\s*(?:,\s*(\d+)\s*)?\)\s*$"
+)
+_BERRY_PLANT_CALL_RE = re.compile(r"^\s*pbBerryPlant\s*$")
+_PICK_BERRY_CALL_RE = re.compile(
+    r"^\s*(?:Kernel\.)?pbPickBerry\(\s*(?:::)?PBItems::(\w+)\s*,\s*\d+\s*\)\s*$"
+)
+
+
+def _script_condition_text(cmd: dict) -> str | None:
+    """The literal Ruby text of a code-111 script-type (params[0]==12)
+    condition, or ``None`` if ``cmd`` isn't one."""
+    if cmd.get("code") != CONDITIONAL_BRANCH:
+        return None
+    params = cmd.get("parameters", [])
+    if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+        return None
+    return params[1]
+
+
+def _script_call_text(cmd: dict) -> str | None:
+    """The literal Ruby text of a code-355/655 script-call row, or ``None``."""
+    if cmd.get("code") not in (SCRIPT, SCRIPT_CONT):
+        return None
+    params = cmd.get("parameters", [])
+    if not params or not isinstance(params[0], str):
+        return None
+    return params[0]
+
+
+def detect_item_ball(event: dict) -> tuple[str, int] | None:
+    """Scan every page's raw commands for a ``pbItemBall(::PBItems::X[, N])``
+    script condition (code 111). Returns ``(uranium_item_symbol, amount)``,
+    amount defaulting to 1 when the call carries no explicit quantity, or
+    ``None`` if the event doesn't contain the call at all."""
+    for page in event.get("pages", []):
+        for cmd in page.get("list", []):
+            text = _script_condition_text(cmd)
+            if text is None:
+                continue
+            m = _ITEM_BALL_CALL_RE.match(text)
+            if m:
+                amount = int(m.group(2)) if m.group(2) else 1
+                return m.group(1), amount
+    return None
+
+
+def detect_berry_tree(event: dict) -> tuple[str | None, bool] | None:
+    """Scan every page's raw commands for ``pbBerryPlant`` (code 355) and/or
+    ``pbPickBerry(PBItems::X, n)`` (code 111).
+
+    Keys ONLY on these two calls, never on the event's graphic name — a
+    corpus census found four events that reuse berry-tree sprites for
+    unrelated purposes (a credits trigger, a settings menu, a door sign, a
+    puzzle NPC), and Map143's cooldown harvest nodes reuse a berry-adjacent
+    graphic too but call ``pbReceiveItem``/``pbSetEventTime``, never these.
+
+    Returns ``None`` when neither call appears (not a berry-plant event at
+    all — caller falls through to the classifiers / general transpiler).
+    Otherwise returns ``(uranium_berry_symbol_or_None, planted)``:
+    ``pbPickBerry`` present -> the pre-grown 2-/3-page kind, ``planted=True``,
+    symbol from the call; ``pbPickBerry`` absent (bare-soil 1-page kind) ->
+    ``(None, False)``. The 3-page Map117 variant (soil page duplicated
+    before and after the tree page) needs no special case: scanning every
+    page for both calls finds them regardless of how many soil pages flank
+    the tree page.
+    """
+    has_plant = False
+    berry_symbol: str | None = None
+    for page in event.get("pages", []):
+        for cmd in page.get("list", []):
+            script_text = _script_call_text(cmd)
+            if script_text is not None and _BERRY_PLANT_CALL_RE.match(script_text):
+                has_plant = True
+                continue
+            cond_text = _script_condition_text(cmd)
+            if cond_text is not None:
+                m = _PICK_BERRY_CALL_RE.match(cond_text)
+                if m:
+                    berry_symbol = m.group(1)
+    if not has_plant and berry_symbol is None:
+        return None
+    return berry_symbol, berry_symbol is not None
+
+
+def _resolve_fork_item(
+    ctx: "TranspileContext", uranium_symbol: str, *, map_id: int, event_id: int | None, kind: str
+) -> str:
+    """Uranium item symbol -> verified fork ``ITEM_*`` constant (CLAUDE.md
+    §4.3 single source of truth: ``reference/uranium_id_map.json``'s
+    ``items`` table, via ``ctx.item_id_map``; §4.7 forward check: the
+    resolved constant must actually exist in the fork's headers, via
+    ``ctx.fork_item_constants`` — the id map is known to name ITEM_*_BERRY
+    constants (ACAI/HAFLI/GUARA/CUPU/BACU) the fork does not define. Fails
+    loud on either miss — never silently drops the event or guesses a
+    substitute; a substitution decision is a project-lead call (CLAUDE.md
+    §10), not this function's to make."""
+    where = f"Map{map_id:03d} EV{event_id!r}"
+    const = ctx.item_id_map.get(uranium_symbol)
+    if const is None:
+        raise ValueError(
+            f"transpiler: {where} ({kind}) references Uranium item "
+            f"{uranium_symbol!r}, which has no entry in "
+            f"reference/uranium_id_map.json's items table — fix the id map, "
+            f"don't guess a constant."
+        )
+    if const not in ctx.fork_item_constants:
+        raise ValueError(
+            f"transpiler: {where} ({kind}) — Uranium item {uranium_symbol!r} "
+            f"maps to {const}, which does not exist in "
+            f"engine/include/constants/items.h. A substitution decision is "
+            f"required from the project lead before this item/berry can "
+            f"convert (CLAUDE.md §10) — this is not a bug to silently work "
+            f"around."
+        )
+    return const
+
+
+def resolve_native_object_template(map_id: int, event: dict, ctx: "TranspileContext") -> bool:
+    """Detect the item-ball / berry-tree idioms on ``event`` and, on a match,
+    record its ``Map{id:03d}.template_fields.json`` payload on ``ctx``.
+
+    Returns ``True`` when the event was claimed — the caller (``transpile_
+    driver.transpile_map``) must emit NO ``.pory`` text and NO queue entry
+    for it, exactly like the diagonal-stair skip; the native object-template
+    fields are the whole story for these events. Returns ``False`` when
+    neither idiom matched, so the caller proceeds to the idiom-collapse
+    classifiers / general transpiler as usual.
+    """
+    event_id = event.get("id")
+
+    item_ball = detect_item_ball(event)
+    if item_ball is not None:
+        symbol, amount = item_ball
+        const = _resolve_fork_item(
+            ctx, symbol, map_id=map_id, event_id=event_id, kind="item_ball"
+        )
+        ctx.record_template_fields(
+            map_id, event_id, {"kind": "item_ball", "item": const, "amount": amount},
+        )
+        return True
+
+    berry = detect_berry_tree(event)
+    if berry is not None:
+        berry_symbol, planted = berry
+        berry_const = (
+            _resolve_fork_item(
+                ctx, berry_symbol, map_id=map_id, event_id=event_id, kind="berry_tree"
+            )
+            if berry_symbol is not None
+            else None
+        )
+        ctx.record_template_fields(
+            map_id, event_id,
+            {"kind": "berry_tree", "berry_item": berry_const, "planted": planted},
+        )
+        return True
+
+    return False
+
+
 # -- queue entries ------------------------------------------------------------
 
 
@@ -589,12 +782,58 @@ class TranspileContext:
     # stage_slice_scripts.py, owned by a different agent); don't rename.
     traits: dict[tuple[int, int], set[str]] = field(default_factory=dict)
 
+    # Uranium internal item/berry symbol -> ITEM_* constant, from
+    # reference/uranium_id_map.json's "items" table (CLAUDE.md §4.3). Used
+    # ONLY by resolve_native_object_template (item ball / berry tree) — the
+    # generic give-item idiom (pbReceiveItem) resolves through ``items``
+    # above instead, a different Phase-2-derived table; the two are kept
+    # separate on purpose (see resolve_native_object_template's docstring).
+    # Populated by the driver; empty means every item-ball/berry-tree event
+    # fails loud on lookup (a wiring bug, not corpus data).
+    item_id_map: dict[str, str] = field(default_factory=dict)
+
+    # Fork ITEM_* constants that actually exist (engine/include/constants/
+    # items.h, via the fork-capability index — CLAUDE.md §4.7 forward
+    # check). Populated by the driver from the same ForkIndex the
+    # conversion-time gate already builds; empty means every item-ball/
+    # berry-tree resolution fails loud (again, a wiring bug, not corpus
+    # data — the driver always has a real index by the time it calls in).
+    fork_item_constants: frozenset[str] = field(default_factory=frozenset)
+
+    # Per-event native object-template description, keyed by (map_id,
+    # event_id) — the Map{id:03d}.template_fields.json sidecar payload (see
+    # resolve_native_object_template). Fixed schema, a contract with a
+    # downstream consumer (metadata_wiring.py, owned by a different agent);
+    # don't rename or reshape without updating that consumer too.
+    template_fields: dict[tuple[int, int], dict] = field(default_factory=dict)
+
+    # Events dropped whole by ``transpile_driver.transpile_map`` before ever
+    # reaching a classifier or this transpiler (currently: diagonal-stair
+    # "player touch" events superseded by the tileset layer's native
+    # MB_SIDEWAYS_STAIRS_* metatile behavior — see
+    # ``rpg2gba.tileset_converter.stairs``). These contribute NO .pory block
+    # and NO unhandled-queue entry, but CLAUDE.md §4.5 forbids a silent drop,
+    # so the driver records one row per skipped event here instead — visible
+    # to ``transpile_corpus``'s summary the same way ``traits``/queue entries
+    # are visible. Each row: {"map_id", "event_id", "event_name", "reason"}.
+    skipped_stair_events: list[dict] = field(default_factory=list)
+
     def record_trait(self, trait: str) -> None:
         """Record a trait on the event currently being transpiled. No-op in
         a common event (no owning event id to key by — see ``event_id``)."""
         if self.event_id is None:
             return
         self.traits.setdefault((self.map_id, self.event_id), set()).add(trait)
+
+    def record_template_fields(self, map_id: int, event_id: int | None, payload: dict) -> None:
+        """Record the native object-template payload for one event, keyed
+        explicitly by ``(map_id, event_id)`` rather than the cursor fields
+        (``self.map_id``/``self.event_id``) — ``resolve_native_object_
+        template`` runs BEFORE ``transpile_event`` sets those, from
+        ``transpile_driver.transpile_map``'s per-event loop."""
+        if event_id is None:
+            return
+        self.template_fields[(map_id, event_id)] = payload
 
     def queue(self, cmd_index: int, code: int, description: str) -> str:
         """Record one unhandled command; return the in-script marker comment."""
@@ -714,7 +953,7 @@ def parse_tree(commands: list[dict]) -> list[Node]:
                     p = commands[pos].get("parameters", [])
                     parts.append(p[0] if p else "")
                     pos += 1
-                nodes.append(TextRun(cmd, idx, text="".join(str(s) for s in parts)))
+                nodes.append(TextRun(cmd, idx, text=join_text_lines([str(s) for s in parts])))
             elif code == CONDITIONAL_BRANCH:
                 pos += 1
                 then = parse_block(indent + 1)
@@ -2404,7 +2643,11 @@ class _PageEmitter:
             return [f"setflag({name})" if m.group(2) == "true" else f"clearflag({name})"]
 
         if _POKEDEX_GRANT_RE.match(text):
-            return ["setflag(FLAG_SYS_POKEDEX_GET)", "special(SetUnlockedPokedexFlags)"]
+            return [
+                "setflag(FLAG_SYS_POKEDEX_GET)",
+                "special(SetUnlockedPokedexFlags)",
+                "special(EnableNationalPokedex)",
+            ]
 
         # -- Ruby locals feeding pbStarterSelector ---------------------------
         # These three rows emit nothing on their own; they build the argument

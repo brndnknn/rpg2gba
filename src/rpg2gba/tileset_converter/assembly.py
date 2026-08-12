@@ -276,19 +276,96 @@ def map_json_script_refs(map_json: dict) -> set[str]:
     return refs
 
 
+#: Global assembler script label, pokeemerald convention: ``Label::`` at column 0.
+#: The single-colon form (``Label:``) is used throughout the engine tree too, but
+#: only for non-script bodies (``_Text_*`` strings, movement data) — a scan of
+#: every ``map.json``/``.pory`` script reference in the whole vendored engine tree
+#: found zero that target a single-colon label, so only ``::`` labels count as
+#: engine-defined *script* entry points.
+_ENGINE_LABEL_RE = re.compile(r"(?m)^(\w+)::")
+
+#: Engine source globs that carry script labels reachable from a ``map.json``
+#: ``script`` field or a ``.pory`` ``call``/``goto`` — event scripts, common
+#: events, item ball / berry tree / etc. behavior scripts: ``data/scripts/**/*.inc``
+#: plus the top-level ``data/*.s`` / ``data/*.inc`` (e.g. ``data/event_scripts.s``).
+#: Deliberately does NOT use a recursive ``data/**/*.inc`` — that would also match
+#: ``engine/data/maps/<Map>/scripts.inc``, which is per-map PIPELINE-GENERATED
+#: output (assembled from OUR staged ``.pory``, blanket-gitignored at
+#: ``.gitignore:124``), not vendored engine source. Trusting it here would let a
+#: stale leftover from a previous build vouch for a label the current staging no
+#: longer emits — exactly the false-negative this function exists to kill. Also
+#: excludes ``engine/data/layouts/**`` (same per-map generated-output shape,
+#: ``.gitignore:125``) and ``engine/build/`` (generated, gitignored — CLAUDE.md §4.4).
+_ENGINE_LABEL_GLOBS = ("data/scripts/**/*.inc", "data/*.s", "data/*.inc")
+
+
+def engine_defined_labels(engine_root: Path) -> set[str]:
+    """Script labels the vendored engine itself already defines.
+
+    Scans ``engine_root`` (the vendored ``pokeemerald-expansion`` fork, e.g.
+    ``engine/``) for ``Label::``-style global script labels under
+    ``_ENGINE_LABEL_GLOBS`` (vendored script sources only — see that constant
+    for why the per-map generated trees are excluded) — the same
+    convention-based approach as
+    the fork-capability index (CLAUDE.md §4.7), but for script labels rather
+    than specials/macros/constants. A ``map.json`` or ``.pory`` reference to one
+    of these is legitimate even though nothing WE staged defines it — vanilla
+    engine scripts like ``BerryTreeScript`` or ``Common_EventScript_FindItem``
+    are never re-emitted by the pipeline, only pointed at.
+
+    Fails loud (CLAUDE.md §4.5) if ``engine_root`` doesn't exist, or if the scan
+    turns up an implausibly small label count — the real fork defines labels in
+    the thousands, so a near-empty result means the scan (or the path) is
+    broken, and silently returning an empty set would restore exactly the
+    false-negative this function exists to kill."""
+    engine_root = Path(engine_root)
+    if not engine_root.is_dir():
+        raise ValueError(f"engine_defined_labels: engine root not found: {engine_root}")
+
+    labels: set[str] = set()
+    for pattern in _ENGINE_LABEL_GLOBS:
+        for path in engine_root.glob(pattern):
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError as exc:
+                raise ValueError(
+                    f"engine_defined_labels: {path} is not valid UTF-8: {exc}"
+                ) from exc
+            labels.update(_ENGINE_LABEL_RE.findall(text))
+
+    if len(labels) < 100:
+        raise ValueError(
+            f"engine_defined_labels: only found {len(labels)} label(s) under "
+            f"{engine_root} (data/**/*.inc, data/*.s) — expected thousands; the "
+            f"scan or engine_root is almost certainly broken"
+        )
+    return labels
+
+
 def find_dangling_references(
     staged_texts: list[str],
     map_jsons: list[dict] | None = None,
+    engine_defined: set[str] | None = None,
 ) -> set[str]:
     """Script labels referenced anywhere in the staged set but never defined.
 
     The staged set is the full collection of ``.pory`` that assemble together —
-    normalized + pruned map scripts, dispatchers, and ``CommonEvents.pory``. A
-    non-empty result is an undefined-reference build break: a ``map.json``
-    ``script`` with no block (an EV074-style conversion gap), a dispatcher
-    ``goto`` to a missing page, or a ``call CommonEvent_*`` with no common-event
-    block."""
+    normalized + pruned map scripts, dispatchers, and ``CommonEvents.pory``. Those
+    are labels WE generate this run. ``engine_defined`` (see
+    ``engine_defined_labels``) is the complementary set the vendored engine
+    already provides on disk — vanilla scripts like ``BerryTreeScript`` that a
+    ``map.json`` object legitimately points at without the pipeline ever
+    emitting a block for them. A label absent from *both* sets is a real
+    undefined-reference build break: a ``map.json`` ``script`` with no block (an
+    EV074-style conversion gap), a dispatcher ``goto`` to a missing page, or a
+    ``call CommonEvent_*`` with no common-event block. ``engine_defined``
+    defaults to ``None`` (no engine labels considered defined), matching prior
+    behavior for callers that don't pass it."""
     defined = set(block_definitions(*staged_texts))
+    if engine_defined:
+        defined |= engine_defined
     referenced = script_reference_labels(*staged_texts)
     for mj in map_jsons or []:
         referenced |= map_json_script_refs(mj)

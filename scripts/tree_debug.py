@@ -123,8 +123,10 @@ def main() -> None:
     doc = json.loads((MAPS_DIR / f"Map{args.map:03d}.json").read_text(encoding="utf-8"))
     t = doc["tiles"]
     grid = TileGrid(t["xsize"], t["ysize"], t["zsize"], t["data"])
-    priorities = json.loads(TILESETS_JSON.read_text(encoding="utf-8"))[
-        str(args.tileset)]["priorities"]
+    ts_entry = json.loads(TILESETS_JSON.read_text(encoding="utf-8"))[str(args.tileset)]
+    priorities = ts_entry["priorities"]
+    passages = ts_entry["passages"]
+    terrain_tags = ts_entry["terrain_tags"]
     raster = TileRasterizer(load_tileset_sources(args.tileset))
 
     def rmxp_layer(z):
@@ -139,12 +141,16 @@ def main() -> None:
 
     def gba(which):
         def g(x, y):
-            mt = _render_column(column_key(grid, x, y), raster, priorities)
+            mt = _render_column(
+                column_key(grid, x, y), raster, priorities, passages, terrain_tags
+            )
             return _pil(mt.bottom if which == "bottom" else mt.top)
         return g
 
     def gba_comp(x, y):
-        mt = _render_column(column_key(grid, x, y), raster, priorities)
+        mt = _render_column(
+            column_key(grid, x, y), raster, priorities, passages, terrain_tags
+        )
         return _composite([_pil(mt.bottom), _pil(mt.top)])
 
     bbox = (args.x0, args.y0, args.x1, args.y1)

@@ -640,7 +640,10 @@ def registry_extra_symbols(
       `TRAINER_PIC_BACK_URANIUM_*` constants for the trainer pics that have
       actually been staged. ONLY pics listed here pass the gate — mirrors the
       species-manifest scoping discipline exactly; an unstaged trainer pic
-      constant must still be reported as a violation.
+      constant must still be reported as a violation. Since 2026-08-05 the same
+      manifest also carries `kind: "battle"` entries — the staged trainer battle
+      data — contributing each staged trainer's `TRAINER_*` id constant under the
+      identical rule: a trainer with no emitted party can never be battled.
 
     Missing categories inside any of these files fail loud (KeyError) — a
     shape drift there means the registry changed and this glue must follow.
@@ -689,10 +692,21 @@ def registry_extra_symbols(
     if trainer_manifest_path is not None:
         manifest = json.loads(trainer_manifest_path.read_text(encoding="utf-8"))
         for entry in manifest["trainers"]:
-            if entry["kind"] == "front":
+            kind = entry["kind"]
+            if kind == "front":
                 extras.add(entry["pic_constant"])
-            elif entry["kind"] == "back":
+            elif kind == "back":
                 extras.add(entry["back_pic_constant"])
+            elif kind == "battle":
+                # Staged trainer battle data (constants + parties, 2026-08-05).
+                # Same scoping rule as the pics above and as the species manifest:
+                # only a trainer whose party actually got emitted may be battled.
+                extras.add(entry["trainer_constant"])
+            else:
+                raise ValueError(
+                    f"trainer manifest has unknown entry kind {kind!r} — the manifest "
+                    "schema changed and this gate glue must follow it"
+                )
 
     return extras
 

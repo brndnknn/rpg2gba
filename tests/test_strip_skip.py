@@ -223,6 +223,54 @@ def test_load_strip_list_parsing(tmp_path: Path) -> None:
     assert (3, 5) in map_events
 
 
+def test_load_strip_list_both_map_event_shapes_parse_to_same_set(tmp_path: Path) -> None:
+    """A bare [map_id, event_id] pair and an object {"map_id", "event_id", ...}
+    both resolve to the same (map_id, event_id) set (CLAUDE.md §4.3: the two
+    shapes are interchangeable for the orchestrator's purposes)."""
+    data = {
+        "map_events": [
+            [3, 5],
+            {"map_id": 33, "event_id": 28, "expect_name": "Luz", "reason": "no-port"},
+        ]
+    }
+    (tmp_path / "strip_list.json").write_text(json.dumps(data), encoding="utf-8")
+
+    _ces, map_events = orch._load_strip_list(tmp_path)
+
+    assert map_events == {(3, 5), (33, 28)}
+
+
+def test_load_map_event_strips_carries_expect_name(tmp_path: Path) -> None:
+    """load_map_event_strips (the richer parse consumed by metadata_wiring)
+    returns expect_name for the object shape and None for the bare-pair shape."""
+    data = {
+        "map_events": [
+            [3, 5],
+            {"map_id": 33, "event_id": 28, "expect_name": "Luz"},
+        ]
+    }
+    (tmp_path / "strip_list.json").write_text(json.dumps(data), encoding="utf-8")
+
+    result = orch.load_map_event_strips(tmp_path)
+
+    assert result == {(3, 5): None, (33, 28): "Luz"}
+
+
+def test_load_strip_list_malformed_map_event_entry_fails_loud(tmp_path: Path) -> None:
+    """An entry that is neither a 2-element pair nor an object carrying both
+    'map_id' and 'event_id' fails loud (CLAUDE.md §4.5) instead of being
+    silently skipped or crashing with an obscure unpack error."""
+    data = {"map_events": [{"map_id": 33}]}  # missing event_id
+    (tmp_path / "strip_list.json").write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(ValueError):
+        orch._load_strip_list(tmp_path)
+
+    data2 = {"map_events": [[33, 28, 99]]}  # 3-element, not 2
+    (tmp_path / "strip_list.json").write_text(json.dumps(data2), encoding="utf-8")
+    with pytest.raises(ValueError):
+        orch._load_strip_list(tmp_path)
+
+
 # ---------------------------------------------------------------------------
 # Test 7: Ledger idempotence
 # ---------------------------------------------------------------------------

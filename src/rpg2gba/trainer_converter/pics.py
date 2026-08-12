@@ -61,6 +61,7 @@ from rpg2gba.tileset_converter.graphics.quantize import build_quantized_tileset
 from rpg2gba.tileset_converter.graphics.sprites import _binarize_alpha
 from rpg2gba.trainer_converter.common import (
     BACK_PIC_FRAMES,
+    PLAYER_BACK_PIC_NAMES,
     SLICE_TRAINER_PICS,
     TRAINER_MAX_COLORS,
     TRAINER_PIC_SIZE,
@@ -423,37 +424,58 @@ def build_contact_sheet(
 
 def convert_slice_trainer_pics(
     uranium_src: Path, out_dir: Path
-) -> tuple[FrontPicResult, BackPicResult]:
-    """Convert `SLICE_TRAINER_PICS` (front pic for RIVAL, back pic for
-    PLAYER_MALE -- see `common.py`) and write the `trainer_pics.json`
-    sidecar. Key order in the JSON is stable (`sort_keys=True`) so re-runs
-    are byte-identical."""
-    front_spec, back_spec = SLICE_TRAINER_PICS
+) -> tuple[list[FrontPicResult], list[BackPicResult]]:
+    """Convert every `SLICE_TRAINER_PICS` entry's front pic, plus a back pic
+    for entries named in `common.PLAYER_BACK_PIC_NAMES` (currently
+    PLAYER_MALE), and write the `trainer_pics.json` sidecar.
+
+    Originally slice-1 (RIVAL front + PLAYER_MALE back) only; generalized for
+    W6 when the seven Route-1 trainer-class fronts were appended to
+    `SLICE_TRAINER_PICS` -- vanilla pairs every player identity with both a
+    front AND back pic (`TRAINER_PIC_FRONT_BRENDAN`/`_BACK_BRENDAN` etc, see
+    `include/constants/trainers.h`), so PLAYER_MALE now gets a front
+    conversion too, not just its historical back-only treatment.
+
+    Key order in the JSON is stable (`sort_keys=True`) so re-runs are
+    byte-identical. Each spec gets its own `out_dir/<internal_name lower>/`
+    subdirectory -- with 9 pinned specs sharing one flat `out_dir`,
+    `convert_front_pic`/`convert_back_pic` would otherwise all collide on the
+    same `front.png`/`back.png` filenames.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    front_result = convert_front_pic(uranium_src, front_spec, out_dir)
-    back_result = convert_back_pic(uranium_src, back_spec, out_dir)
+    front_results: list[FrontPicResult] = []
+    back_results: list[BackPicResult] = []
+    sidecar_fronts: dict[str, object] = {}
+    sidecar_backs: dict[str, object] = {}
 
-    sidecar = {
-        "front": {
-            "constant": front_spec.pic_constant,
+    for spec in SLICE_TRAINER_PICS:
+        spec_dir = out_dir / spec.internal_name.lower()
+        front_result = convert_front_pic(uranium_src, spec, spec_dir)
+        front_results.append(front_result)
+        sidecar_fronts[spec.internal_name] = {
+            "constant": spec.pic_constant,
             "trainer_id": front_result.trainer_id,
             "internal_name": front_result.internal_name,
             "output": front_result.to_json_dict(),
-        },
-        "back": {
-            "constant": back_spec.back_pic_constant,
-            "trainer_id": back_result.trainer_id,
-            "internal_name": back_result.internal_name,
-            "output": back_result.to_json_dict(),
-        },
-    }
+        }
+        if spec.internal_name in PLAYER_BACK_PIC_NAMES:
+            back_result = convert_back_pic(uranium_src, spec, spec_dir)
+            back_results.append(back_result)
+            sidecar_backs[spec.internal_name] = {
+                "constant": spec.back_pic_constant,
+                "trainer_id": back_result.trainer_id,
+                "internal_name": back_result.internal_name,
+                "output": back_result.to_json_dict(),
+            }
+
+    sidecar = {"fronts": sidecar_fronts, "backs": sidecar_backs}
     sidecar_path = out_dir / SIDECAR_NAME
     sidecar_path.write_text(
         json.dumps(sidecar, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
 
-    return front_result, back_result
+    return front_results, back_results
 
 
 __all__ = [

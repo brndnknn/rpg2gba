@@ -17,6 +17,25 @@ Pass 2 (S8c) — fork assembly
       - write fork data/maps/uranium_includes.inc (gitignored; pulled in by the committed
         URANIUM PATHFINDER SLICE include-hook in data/event_scripts.s)
 
+Pass 2.5 (S8b4) — wild encounter table staging
+    Upsert the slice's converted wild-encounter tables (Phase 2 output,
+    intermediate/wild_encounters.json) into an overlay of the fork's
+    src/data/wild_encounters.json (gWildMonHeaders group), keyed by MAP_* --
+    an overlay like layouts/map_groups (src/data/wild_encounters.gen.json,
+    gitignored; see run_encounters_pass docstring for the URANIUM_WILD_ENCOUNTERS
+    hook in engine/Makefile that selects it over the committed file).
+
+Pass 2.6 (S8b5) — PokePod rematch table staging
+    Detect phone-rematch events (pbPhoneRegisterBattle) across the build set and
+    emit the REMATCH_* enum members + gRematchTable rows they need, then install
+    them as gitignored .gen.h fragments behind committed #include hooks in
+    include/constants/rematches.h and src/battle_setup.c (see run_rematch_pass).
+
+Pass 3 (S8d) — berry tree seed table
+    Emit fork data/scripts/uranium_berry_trees.h (gitignored): the pre-planted
+    berry-tree save-slot table consumed by new_game.c's NewGameInitData, right
+    after ClearBerryTrees().
+
 NOTE: this no longer edits ANY tracked upstream file in place. The vendored
 event_scripts.s + map_data_rules.mk carry committed, stable include-hooks (see
 engine/RPG2GBA_VENDOR.md); all per-slice content lands in gitignored *.gen.json /
@@ -64,14 +83,21 @@ WARP_OVERRIDES: dict[int, set[tuple[int, int]]] = {
     48: {(3, 3)},
     # 32: player's house (28,31) + the interior doors added by SLICE1_TODO #13:
     # lab EV003 (17,11), house-2 EV006 (43,31), house-1 EV007 (24,42),
-    # Theo's-house EV017 (56,42). The Route-01 triad EV023/036/037 stays
-    # out-of-slice (blocked cells by design).
-    32: {(28, 31), (17, 11), (43, 31), (24, 42), (56, 42)},
+    # Theo's-house EV017 (56,42) + the Route-01 triad EV023/036/037 at the east
+    # edge (8,44)/(8,45)/(8,43), live since CH02 put Map033 in the slice — these
+    # were deliberately blocked cells while Route 01 was out of scope, and they
+    # are the ONLY way out of Moki Town onto the route.
+    32: {(28, 31), (17, 11), (43, 31), (24, 42), (56, 42), (8, 43), (8, 44), (8, 45)},
     50: {(14, 19)},           # lab exit EV001
     64: {(9, 14)},            # house-2 exit EV003
     65: {(9, 14)},            # house-1 exit EV003
     172: {(10, 11), (12, 3)},  # Theo 1F: street exit EV002 + stairs up EV003
     89: {(3, 3)},             # Theo 2F: stairs down EV002
+    # CH02 (2026-08-05). 33: the west-edge triad back to Moki Town
+    # EV023/024/022 (70,11)/(70,12)/(70,13) + the old-rod-house door EV027
+    # (39,18). 81: the house exit EV003 (9,14).
+    33: {(70, 11), (70, 12), (70, 13), (39, 18)},
+    81: {(9, 14)},
 }
 
 # Flag/var address layout for the pathfinder boot test. The numeric layout now
@@ -188,8 +214,11 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
     # per map; source_tileset_of resolves the synthetic id back to the real RMXP
     # id for source art / passages / priorities / terrain tags (mirrors phase5's
     # walker path — phase5.py convert_all step 3).
+    from rpg2gba.tileset_converter.metadata_wiring import collect_stair_behavior_cells
+
     maps: list[tuple[int, dict]] = []
     synth_to_real: dict[int, int] = {}
+    stair_cells: dict[int, dict[tuple[int, int], str]] = {}
     for map_id in SLICE_MAP_IDS:
         map_json = json.loads(
             (out / "maps" / f"Map{map_id:03d}.json").read_text(encoding="utf-8")
@@ -199,6 +228,7 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
         synth_json = dict(map_json)  # shallow: only the top-level tileset_id changes
         synth_json["tileset_id"] = synth
         maps.append((map_id, synth_json))
+        stair_cells[map_id] = collect_stair_behavior_cells(map_json)
 
     build_slice_tilesets(
         maps,
@@ -208,6 +238,7 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
         overlay_out=Path("reference/tileset_map.gen.json"),
         tilesets_json=out / "tilesets.json",
         source_tileset_of=lambda s: synth_to_real[s],
+        stair_cells=stair_cells,
         dry_run=dry_run,
     )
 
@@ -227,7 +258,10 @@ def run_layout_pass(
     re-reading the cumulative staging layouts.json (see `run_fork_pass` docstring)."""
     logger.info("=== S8b: layout conversion ===")
     from rpg2gba.tileset_converter.layout import append_layouts, convert_layout
-    from rpg2gba.tileset_converter.metadata_wiring import collect_through_block_cells
+    from rpg2gba.tileset_converter.metadata_wiring import (
+        collect_stair_behavior_cells,
+        collect_through_block_cells,
+    )
     from rpg2gba.tileset_converter.tile_map import load_tile_map
 
     tile_map = load_tile_map(
@@ -258,6 +292,7 @@ def run_layout_pass(
             blocked_cells=blocked_cells,
             unblocked_cells=WALKABLE_OVERRIDES.get(map_id, frozenset()),
             tileset_key=synth_tileset_id(map_id),
+            behavior_overrides=collect_stair_behavior_cells(map_json),
         )
         entries.append(layout.to_layouts_entry())
 
@@ -402,6 +437,13 @@ _TRAINER_HEADER_DEST_DIRS: dict[str, str] = {
     "uranium_trainer_graphics.h": "src/data/graphics",
     "uranium_trainer_sprites.h": "src/data/graphics",
     "uranium_trainer_backsprites.h": "src/data/graphics",
+    # Trainer battle data (2026-08-05). The .party fragment lands under include/
+    # rather than src/data/ on purpose: trainer_rules.mk pipes trainers.party
+    # through `$(CPP) $(CPPFLAGS) -traditional-cpp -` on STDIN, so there is no
+    # current-file directory and only `-iquote include` resolves the hook's
+    # `#include "data/uranium_trainer_party.inc"`.
+    "uranium_trainer_ids.h": "include/constants",
+    "uranium_trainer_party.inc": "include/data",
 }
 
 
@@ -440,15 +482,20 @@ def run_trainer_pass(out: Path, fork: Path, uranium_src: Path, dry_run: bool) ->
     # manifest's art_files entries. A mismatch here is a silent build break
     # (INCGFX would point at a file that was never copied), so assert
     # agreement rather than assuming it.
-    expected_asset_dir = (
-        f"{trainer_stage.ENGINE_GFX_ROOT.as_posix()}/{trainer_stage.DEFAULT_ASSET_DIR}"
-    )
+    # One asset dir PER staged pic since 2026-08-05 (CH02 staged 7 trainer-class
+    # sprites alongside the original RIVAL/PLAYER_MALE pair) — the old single
+    # flat `slice1` dir silently collided once more than one pic existed.
     art_by_kind = {
         "front": (trainer_pics.FRONT_PNG, trainer_pics.FRONT_PAL),
         "back": (trainer_pics.BACK_PNG, trainer_pics.BACK_PAL),
     }
     for entry in manifest["trainers"]:
         kind = entry["kind"]
+        if kind not in art_by_kind:
+            continue  # "battle" entries are party data; they carry no art_files
+        expected_asset_dir = (
+            f"{trainer_stage.ENGINE_GFX_ROOT.as_posix()}/{entry['internal_name'].lower()}"
+        )
         if entry["asset_dir"] != expected_asset_dir:
             raise RuntimeError(
                 f"trainer manifest asset_dir mismatch for {entry.get('internal_name')}: "
@@ -457,7 +504,7 @@ def run_trainer_pass(out: Path, fork: Path, uranium_src: Path, dry_run: bool) ->
             )
         png_name, pal_name = art_by_kind[kind]
         for fname, art_key in ((png_name, "png"), (pal_name, "pal")):
-            src = trainer_dir / fname
+            src = trainer_dir / entry["internal_name"].lower() / fname
             dest_rel = entry["art_files"][art_key]
             expected_dest_rel = f"{expected_asset_dir}/{fname}"
             if dest_rel != expected_dest_rel:
@@ -467,6 +514,204 @@ def run_trainer_pass(out: Path, fork: Path, uranium_src: Path, dry_run: bool) ->
                 )
             dest = fork / dest_rel
             _copy(src, dest, f"{entry.get('internal_name')} {art_key} ({kind})", dry_run)
+
+
+# ---------------------------------------------------------------------------
+# S8b4: Wild encounter table staging
+# ---------------------------------------------------------------------------
+
+def run_encounters_pass(out: Path, fork: Path, consts: dict, dry_run: bool) -> None:
+    """Stage the slice's wild-encounter tables into an overlay of the fork's
+    `gWildMonHeaders` group so `GetCurrentMapWildMonHeaderId`
+    (engine/src/wild_encounter.c:379-404) finds a row for each slice map instead
+    of returning `HEADER_NONE` and silently suppressing all encounters -- the
+    bug this pass fixes. Encounter DATA is already fully converted
+    (`output/uranium-build/intermediate/wild_encounters.json`,
+    `pbs_converter/encounters.py`); this pass is purely the missing wiring step.
+
+    Writes `src/data/wild_encounters.gen.json` (gitignored), never the committed
+    `src/data/wild_encounters.json` -- mirrors the `layouts.gen.json` /
+    `map_groups.gen.json` overlay pattern `run_fork_pass` already uses.
+    `engine/Makefile`'s `URANIUM_WILD_ENCOUNTERS` var (near line 253) prefers the
+    `.gen.json` overlay when present, falling back to the committed file when
+    absent, so a repo with no overlay on disk builds pristine upstream behavior.
+    `wild_encounters.py.upsert_encounters` always reads the committed file fresh
+    as its base (never a prior overlay), so repeated runs are idempotent and
+    never dirty tracked vendored source.
+
+    Named S8b4 (not S8b3 -- that label is already `run_trainer_pass`). Placed
+    AFTER the species/trainer staging block in `main()`: the known-species
+    union it builds needs `species/species_manifest.json`, which only exists
+    once S8b2 (`run_species_pass`) has run (this run or a prior one -- fails
+    loud, matching `run_fork_pass`'s species-manifest gate, if the manifest is
+    absent rather than silently forcing S8b2 to run). It does not need to run
+    after `run_fork_pass` (S8c) or `run_berry_tree_pass` (S8d) since it writes
+    to a different fork target (`src/data/wild_encounters.json`) that no other
+    pass touches; running it before S8c/S8d keeps all "mutate the fork tree"
+    passes grouped together ahead of the final assembly step, matching the
+    existing S8b2/S8b3/S8c/S8d ordering.
+
+    `consts` is the already-loaded `map_constants.json` dict (`main()` reads it
+    once, before any pass runs) -- the map-id -> MAP_* mapping this pass needs
+    is read straight from it (`consts[str(mid)]["map_const"]`), never re-minted
+    (CLAUDE.md §4.3: `map_constants.py`'s registry is the one place that mints
+    `MAP_*` names).
+
+    The known-species set is the union of:
+      - Uranium species staged by S8b2 (`species/species_manifest.json`'s
+        `species_constant` field per entry -- ONLY species actually staged,
+        mirroring `fork_index.registry_extra_symbols`' species-manifest scoping
+        discipline: a species merely named in `reference/uranium_id_map.json`
+        but never staged must still be rejected)
+      - vanilla species the fork already defines, read via the fork capability
+        index (`conversion_agent.fork_index`, CLAUDE.md §4.7) rather than a new
+        header parser -- `ForkIndex.constants` already aggregates every
+        `#define`/enum member across `engine/include/constants/*.h` (species.h
+        included), filtered here to the `SPECIES_` prefix.
+    """
+    logger.info("=== S8b4: encounter staging ===")
+    from rpg2gba.conversion_agent import fork_index as fi
+    from rpg2gba.tileset_converter import wild_encounters as we
+
+    species_manifest_path = out / "species" / "species_manifest.json"
+    if not species_manifest_path.is_file():
+        raise FileNotFoundError(
+            f"{species_manifest_path} missing -- run the species pass (S8b2) "
+            "first; the known-species union for encounter validation needs "
+            "its manifest"
+        )
+    manifest = json.loads(species_manifest_path.read_text(encoding="utf-8"))
+    known_species: set[str] = {entry["species_constant"] for entry in manifest["species"]}
+
+    gate_index = fi.load_or_build()
+    known_species |= {c for c in gate_index.constants if c.startswith("SPECIES_")}
+
+    encounters_path = out / "intermediate" / "wild_encounters.json"
+    map_consts = {mid: consts[str(mid)]["map_const"] for mid in SLICE_MAP_IDS}
+    fork_encounters_path = fork / "src" / "data" / "wild_encounters.json"
+    gen_encounters_path = we.overlay_path(fork_encounters_path)
+
+    entries = we.build_encounter_entries(
+        encounters_path,
+        SLICE_MAP_IDS,
+        map_consts,
+        known_species,
+        fork_encounters_path=fork_encounters_path,
+    )
+    staged_ids = {e.uranium_map_id for e in entries}
+    skipped = [mid for mid in SLICE_MAP_IDS if mid not in staged_ids]
+
+    if not dry_run:
+        written = we.upsert_encounters(fork_encounters_path, entries, out_path=gen_encounters_path)
+        logger.info(
+            "  wrote %s (+%d slice encounter entries)", gen_encounters_path.name, written
+        )
+    else:
+        logger.info(
+            "  [dry] would write %s (+%d slice encounter entries)",
+            gen_encounters_path.name, len(entries),
+        )
+    if skipped:
+        logger.info("  no encounter table for map id(s): %s", skipped)
+
+
+# ---------------------------------------------------------------------------
+# S8b5: PokePod rematch table staging
+# ---------------------------------------------------------------------------
+
+def run_rematch_pass(out: Path, fork: Path, consts: dict, dry_run: bool) -> None:
+    """Stage the `gRematchTable` data behind Uranium's PokePod phone rematches.
+
+    Detects phone-rematch events structurally (`pbPhoneRegisterBattle` in a map
+    event's script) across `SLICE_MAP_IDS`, resolves each to its staged
+    `TRAINER_*` constant, and emits the two C fragments the engine needs: the
+    `REMATCH_*` enum members and the `gRematchTable` rows
+    (`rpg2gba.trainer_converter.rematch`). Fork facts (enum members,
+    `MAX_REMATCH_ENTRIES`, `TRAINER_REGISTERED_FLAGS_START` headroom) are read
+    from `fork` at run time, never pinned (CLAUDE.md §4.7).
+
+    Unlike S8b4's wild encounters there is no Makefile-wildcard injection path:
+    `gRematchTable` (`src/battle_setup.c`) and the `REMATCH_*` enum
+    (`include/constants/rematches.h`) are hand-written C in committed vendored
+    source, with no generator tool and no data file for a `$(or $(wildcard …))`
+    hook to swap. So the fragments are installed the other sanctioned way — the
+    `constants/event_objects.h` -> `uranium_event_objects.gen.h` precedent: two
+    committed `URANIUM PATHFINDER SLICE` `#include` hooks pull in gitignored
+    generated headers, which this pass writes into `out/trainers/rematch/` and
+    then copies into the fork. Both are always written (comment-only stubs when
+    no phone-rematch trainers are staged), so a build never sees a missing
+    include.
+
+    The enum fragment MUST land above `REMATCH_WALLY_VR` — `IsRematchForbidden`
+    rejects every id >= `REMATCH_ELITE_FOUR_ENTRIES`. That ordering lives in the
+    committed hook's position, not here.
+
+    Must run AFTER S8b3 (`run_trainer_pass`): it gates every rematch row
+    against `out/trainers/trainer_manifest.json`'s staged battle trainers, so
+    a row can never name a `TRAINER_*` the fork won't define.
+
+    `consts` is the already-loaded `map_constants.json` dict — the map-id ->
+    `MAP_*` mapping is read straight from it, never re-minted (CLAUDE.md §4.3).
+    """
+    logger.info("=== S8b5: rematch table staging ===")
+    from rpg2gba.trainer_converter import battles as tb
+    from rpg2gba.trainer_converter import rematch as rm
+
+    trainer_manifest_path = out / "trainers" / "trainer_manifest.json"
+    if not trainer_manifest_path.is_file():
+        raise FileNotFoundError(
+            f"{trainer_manifest_path} missing -- run the trainer pass (S8b3) first; the "
+            "rematch rows are gated against its staged battle trainers"
+        )
+    staged_keys = rm.load_staged_battle_trainer_keys(trainer_manifest_path)
+    trainers = tb.load_trainers_json(out / "intermediate")
+
+    facts = rm.load_fork_facts(fork)
+    events = rm.detect_over_maps(out / "maps", SLICE_MAP_IDS)
+    map_consts = {mid: consts[str(mid)]["map_const"] for mid in SLICE_MAP_IDS}
+    entries = rm.build_rematch_entries(events, trainers, map_consts, staged_keys, facts)
+
+    logger.info(
+        "  %d phone-rematch trainer(s); fork capacity %d (saveblock %d, registered-flag %d)",
+        len(entries), facts.capacity, facts.saveblock_headroom, facts.registered_flag_headroom,
+    )
+    for e in entries:
+        logger.info(
+            "    map %d EV%03d %s -> %s @ %s",
+            e.uranium_map_id, e.event_id, e.trainer_key, e.rematch_const, e.map_const,
+        )
+
+    dest = out / "trainers" / "rematch"
+    _write(dest / "uranium_rematches.gen.h", rm.emit_rematch_enum(entries),
+           "rematch enum members", dry_run)
+    _write(dest / "uranium_rematch_table.gen.h", rm.emit_rematch_table(entries),
+           "gRematchTable rows", dry_run)
+    _write(
+        dest / "rematch_manifest.json",
+        json.dumps(
+            {
+                "version": 1,
+                "generator": rm.GENERATOR,
+                "insert_before": rm.INSERT_BEFORE_MEMBER,
+                "rematches": rm.build_rematch_manifest_records(entries),
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n",
+        "rematch manifest",
+        dry_run,
+    )
+    _copy(
+        dest / "uranium_rematches.gen.h",
+        fork / "include" / "constants" / "uranium_rematches.gen.h",
+        "rematch enum members", dry_run,
+    )
+    _copy(
+        dest / "uranium_rematch_table.gen.h",
+        fork / "src" / "data" / "uranium_rematch_table.gen.h",
+        "gRematchTable rows", dry_run,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -823,6 +1068,99 @@ def _write_event_includes(
 
 
 # ---------------------------------------------------------------------------
+# S8d: Berry tree seed table
+# ---------------------------------------------------------------------------
+
+def run_berry_tree_pass(out: Path, fork: Path, dry_run: bool) -> None:
+    """Emit data/scripts/uranium_berry_trees.h: the pre-planted berry-tree
+    seed table consumed by new_game.c's NewGameInitData, right after
+    `ClearBerryTrees()` (BEGIN URANIUM PATHFINDER SLICE fence).
+
+    Reads the same `Map{id:03d}.template_fields.json` sidecars
+    `stage_slice_scripts._load_template_fields` already validates (`kind ==
+    "berry_tree"` entries carry `berry_item`/`planted`) for every
+    `SLICE_MAP_IDS` map, and calls the EXISTING
+    `metadata_wiring.assign_berry_tree_ids` to get the SAME save-slot ids the
+    object-event `trainer_sight_or_berry_tree_id` field already carries —
+    never reimplemented, never hardcoded (CLAUDE.md §4.3).
+
+    Only `planted: true` rows are emitted; bare-soil `planted: false` patches
+    boot empty, which is correct (nothing to seed). `planted: true` with a
+    null `berry_item` is a contradictory sidecar and fails loud. Every
+    emitted `ITEM_*_BERRY` constant is checked against the fork's own symbol
+    index (`fork_index.load_or_build`) before being written — §4.7 forward
+    gate; `reference/uranium_id_map.json` is known to assert `ITEM_*_BERRY`
+    constants the fork does not define, so a constant reaching this pass is
+    not proof it is real.
+
+    Deterministic: rows sorted by tree id (§4.2)."""
+    logger.info("=== S8d: berry tree seed table ===")
+    from rpg2gba.conversion_agent import fork_index as fi
+    from rpg2gba.tileset_converter.metadata_wiring import assign_berry_tree_ids
+
+    template_fields: dict[int, dict[int, dict]] = {}
+    for map_id in SLICE_MAP_IDS:
+        fields_path = out / "scripts" / f"Map{map_id:03d}.template_fields.json"
+        if not fields_path.is_file():
+            raise FileNotFoundError(
+                f"{fields_path} missing — re-run the transpile driver to "
+                "regenerate the template-fields sidecar"
+            )
+        sidecar = json.loads(fields_path.read_text(encoding="utf-8"))
+        template_fields[map_id] = {
+            int(eid): payload for eid, payload in sidecar["events"].items()
+        }
+
+    tree_ids = assign_berry_tree_ids(template_fields)  # {(map_id, event_id): tree_id}
+
+    gate_index = fi.load_or_build()
+
+    rows: list[tuple[int, str]] = []
+    for (map_id, event_id), tree_id in tree_ids.items():
+        payload = template_fields[map_id][event_id]
+        if not payload.get("planted", False):
+            continue  # bare soil — nothing to seed
+        berry_item = payload.get("berry_item")
+        if berry_item is None:
+            raise ValueError(
+                f"Map{map_id:03d} event {event_id} (berry tree id {tree_id}): "
+                "planted=true but berry_item is null — contradictory sidecar"
+            )
+        if berry_item not in gate_index.constants:
+            raise ValueError(
+                f"Map{map_id:03d} event {event_id} (berry tree id {tree_id}): "
+                f"{berry_item} not found in the fork's constants index "
+                "(engine/include/constants) — reference/uranium_id_map.json "
+                "is known to assert ITEM_*_BERRY constants the fork does not "
+                "define; this is a converter/reference-data bug, not "
+                "something to default around"
+            )
+        rows.append((tree_id, berry_item))
+
+    rows.sort(key=lambda r: r[0])
+
+    lines = [
+        "// GENERATED by rpg2gba assembler (assemble_pathfinder.py run_berry_tree_pass)",
+        "// from Map{id:03d}.template_fields.json via metadata_wiring.assign_berry_tree_ids.",
+        "// DO NOT EDIT, DO NOT COMMIT.",
+        f"#define URANIUM_BERRY_TREE_SEED_COUNT {len(rows)}",
+    ]
+    if rows:
+        lines.append("#define URANIUM_BERRY_TREE_SEED_LIST(X) \\")
+        for i, (tree_id, berry_item) in enumerate(rows):
+            suffix = " \\" if i < len(rows) - 1 else ""
+            lines.append(f"    X({tree_id}, {berry_item}){suffix}")
+    else:
+        lines.append("#define URANIUM_BERRY_TREE_SEED_LIST(X)")
+    lines.append("")
+
+    dest = fork / "data" / "scripts" / "uranium_berry_trees.h"
+    text = "\n".join(lines)
+    _write(dest, text, "uranium_berry_trees.h", dry_run)
+    logger.info("  %d pre-planted berry tree(s)", len(rows))
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -837,6 +1175,10 @@ def main() -> int:
                     help="Skip S8b2 (Uranium starter species already staged).")
     ap.add_argument("--skip-trainers", action="store_true",
                     help="Skip S8b3 (Uranium trainer pics already staged).")
+    ap.add_argument("--skip-encounters", action="store_true",
+                    help="Skip S8b4 (wild encounter tables already staged).")
+    ap.add_argument("--skip-rematches", action="store_true",
+                    help="Skip S8b5 (PokePod rematch table already staged).")
     args = ap.parse_args()
 
     repo_root = Path(__file__).parent.parent
@@ -880,7 +1222,14 @@ def main() -> int:
         if not args.skip_trainers:
             run_trainer_pass(out, fork, uranium_src, args.dry_run)
 
+    if not args.skip_encounters:
+        run_encounters_pass(out, fork, consts, args.dry_run)
+
+    if not args.skip_rematches:
+        run_rematch_pass(out, fork, consts, args.dry_run)
+
     run_fork_pass(out, fork, consts, staging, args.dry_run, batch_layouts=batch_layouts)
+    run_berry_tree_pass(out, fork, args.dry_run)
 
     if args.dry_run:
         logger.info("=== dry-run complete, no files written ===")

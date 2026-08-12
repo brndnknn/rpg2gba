@@ -36,6 +36,12 @@ engine/data/scripts/Map*_dispatch.pory
 engine/data/maps/uranium_includes.inc
 engine/data/maps/map_groups.gen.json
 engine/data/layouts/layouts.gen.json
+# S8b4: encounter-table overlay (picked up by the URANIUM_WILD_ENCOUNTERS hook
+# in engine/Makefile; absent => the committed wild_encounters.json is used).
+engine/src/data/wild_encounters.gen.json
+# S8d: pre-planted berry-tree seed table (pulled in by the committed URANIUM
+# PATHFINDER SLICE include-hook right after ClearBerryTrees() in src/new_game.c).
+engine/data/scripts/uranium_berry_trees.h
 # S8a tileset graphics: generated engine fragments (pulled in by committed sentinel
 # #include hooks in src/data/tilesets/*.h + include/tilesets.h) and the emitted art.
 engine/src/data/tilesets/uranium_graphics.gen.h
@@ -54,6 +60,10 @@ engine/data/tilesets/secondary/uranium*/
 engine/include/constants/uranium_event_objects.gen.h
 engine/src/data/object_events/uranium_*.gen.h
 engine/graphics/object_events/pics/uranium/
+# PokePod phone rematches (S8b5): generated engine fragments, pulled in by committed
+# sentinel #include hooks in include/constants/rematches.h and src/battle_setup.c.
+engine/include/constants/uranium_rematches.gen.h
+engine/src/data/uranium_rematch_table.gen.h
 # Starter species conversion: generated engine overlays (pulled in by committed
 # URANIUM PATHFINDER SLICE #include/.include hooks in include/constants/{species,
 # pokedex,cries}.h, src/data/pokemon/species_info.h, src/data/graphics/pokemon.h,
@@ -71,6 +81,8 @@ engine/graphics/pokemon/uranium/
 # include/constants/trainers.h and src/data/graphics/trainers.h) plus the emitted art.
 engine/include/constants/uranium_trainer_front_pic_ids.h
 engine/include/constants/uranium_trainer_back_pic_ids.h
+engine/include/constants/uranium_trainer_ids.h
+engine/include/data/uranium_trainer_party.inc
 engine/src/data/graphics/uranium_trainer_graphics.h
 engine/src/data/graphics/uranium_trainer_sprites.h
 engine/src/data/graphics/uranium_trainer_backsprites.h
@@ -87,6 +99,26 @@ engine/sound/direct_sound_samples/cries/raptorch.wav
 engine/sound/direct_sound_samples/cries/archilles.wav
 engine/sound/direct_sound_samples/cries/eletux.wav
 engine/sound/direct_sound_samples/cries/electruxo.wav
+# CH02 (2026-08-05): Route 1's trainer parties dragged in 7 more species, and
+# evolution-chain closure dragged in 11 more behind them.
+engine/sound/direct_sound_samples/cries/chyinmunk.wav
+engine/sound/direct_sound_samples/cries/kinetmunk.wav
+engine/sound/direct_sound_samples/cries/birbie.wav
+engine/sound/direct_sound_samples/cries/aveden.wav
+engine/sound/direct_sound_samples/cries/splendifowl.wav
+engine/sound/direct_sound_samples/cries/cubbug.wav
+engine/sound/direct_sound_samples/cries/cubblfly.wav
+engine/sound/direct_sound_samples/cries/nimflora.wav
+engine/sound/direct_sound_samples/cries/barewl.wav
+engine/sound/direct_sound_samples/cries/dearewl.wav
+engine/sound/direct_sound_samples/cries/gararewl.wav
+engine/sound/direct_sound_samples/cries/tonemy.wav
+engine/sound/direct_sound_samples/cries/tofurang.wav
+engine/sound/direct_sound_samples/cries/fartog.wav
+engine/sound/direct_sound_samples/cries/folerog.wav
+engine/sound/direct_sound_samples/cries/blubelrog.wav
+engine/sound/direct_sound_samples/cries/owten.wav
+engine/sound/direct_sound_samples/cries/eshouten.wav
 # Full-corpus Map Walker build: the assembler generates a per-map dir under
 # data/maps/ and data/layouts/ for every built Uranium map (~190) plus the
 # UraniumWalkerStub/ dummy for dropped stock map data. Blanket-ignore all per-map

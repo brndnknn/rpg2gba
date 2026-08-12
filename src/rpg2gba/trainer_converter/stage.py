@@ -1,10 +1,12 @@
-"""Trainer-pic staging emitter -- C-emitter counterpart to `pics.py`.
+"""Trainer-pic + trainer-battle staging emitter -- C/`.party`-DSL emitter
+counterpart to `pics.py` (pics) and `battles.py` (battle data).
 
-Consumes `pics.convert_slice_trainer_pics` output (a `FrontPicResult` for the
-Uranium NPC front pic, a `BackPicResult` for the Uranium player back pic --
-see `common.SLICE_TRAINER_PICS`) and emits a set of *generated overlay* C
-fragments plus a machine-readable manifest under
-`<out>/uranium-build/trainers/`.
+Consumes `pics.convert_slice_trainer_pics` output (a `FrontPicResult` per
+`common.SLICE_TRAINER_PICS` entry, a `BackPicResult` for each player back-pic
+identity) and `battles.build_staged_battles` output (a `StagedTrainerBattle`
+per `common.SLICE_TRAINER_BATTLES` entry), and emits a set of *generated
+overlay* C fragments + a `.party`-DSL fragment plus a machine-readable
+manifest under `<out>/uranium-build/trainers/`.
 
 This module does not touch anything under `engine/`. A later unit stages
 these files into the vendored fork behind committed
@@ -47,7 +49,26 @@ Generated files (all under the trainer staging dir, see `write_all`):
                                        palette, pointing at engine-relative
                                        paths under
                                        `graphics/trainers/uranium/<asset_dir>/`.
-                                       Also emits the dedicated
+                                       Every declared symbol is namespaced
+                                       `gTrainerFrontPic_Uranium<Ident>` /
+                                       `gTrainerPalette_Uranium<Ident>` /
+                                       `gTrainerBackPic_Uranium<Ident>` /
+                                       `gTrainerBackPicPalette_Uranium<Ident>`
+                                       (see `StagedFrontPic.ident` /
+                                       `StagedBackPic.ident`) -- vanilla
+                                       Emerald already defines
+                                       `gTrainerFrontPic_Fisherman`,
+                                       `_Youngster`, `_Lass`, etc. for its own
+                                       trainer classes, and Uranium stages
+                                       trainer-CLASS sprites under the same
+                                       bare class names, so an unprefixed
+                                       ident collides head-on. The `Uranium`
+                                       infix matches this codebase's existing
+                                       collision-namespacing convention
+                                       (`OBJ_EVENT_GFX_URANIUM_*`,
+                                       `TRAINER_PIC_FRONT_URANIUM_*` /
+                                       `TRAINER_PIC_BACK_URANIUM_*` in
+                                       `common.py`). Also emits the dedicated
                                        `sBackAnims_Uranium` animation table
                                        (plus its two `AnimCmd` tables)
                                        whenever at least one back pic is
@@ -60,10 +81,23 @@ Generated files (all under the trainer staging dir, see `write_all`):
   uranium_trainer_backsprites.h    -- `TRAINER_BACK_SPRITE(...)` rows.
                                        Destined for injection inside the
                                        `gTrainerBacksprites[]` array body.
-  trainer_manifest.json            -- flat per-pic record tying constants to
-                                       asset paths and emitted C symbol
-                                       names; consumed by the fork-capability
-                                       gate and by other converter units.
+  uranium_trainer_ids.h            -- `TRAINER_*` id `#define` chain off
+                                       `TRAINER_MAY_PLACEHOLDER` (see
+                                       `battles.emit_trainer_ids`). Destined
+                                       for `#include` in
+                                       `include/constants/opponents.h` right
+                                       after the `TRAINER_MAY_PLACEHOLDER`
+                                       line.
+  uranium_trainer_party.inc        -- `.party`-DSL trainer battle blocks
+                                       (`tools/trainerproc` input, NOT C --
+                                       see `battles.emit_party_fragment`).
+                                       Destined for `#include` at the end of
+                                       `src/data/trainers.party`.
+  trainer_manifest.json            -- flat per-pic/per-battle record tying
+                                       constants to asset paths and emitted C
+                                       symbol names; consumed by the
+                                       fork-capability gate and by other
+                                       converter units.
 
 **Verified indexing invariant (CLAUDE.md §4.7):** `gTrainerBacksprites[]` and
 `gTrainerSprites[]` are BOTH designated-initializer arrays keyed by the
@@ -95,11 +129,15 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from rpg2gba.pbs_converter._c_emit import generated_banner
-from rpg2gba.trainer_converter import pics
+from rpg2gba.pbs_converter._naming import load_fork_constants
+from rpg2gba.trainer_converter import battles as battles_mod
+from rpg2gba.trainer_converter import common, pics
+from rpg2gba.trainer_converter.battles import StagedTrainerBattle
 from rpg2gba.trainer_converter.common import TrainerPicSpec
 
 logger = logging.getLogger(__name__)
@@ -182,6 +220,12 @@ def _pascal_ident(internal_name: str) -> str:
 
     Matches the vanilla fork's `gTrainerFrontPic_<Ident>` naming convention
     (e.g. `gTrainerFrontPic_AquaGruntM`) -- PascalCase, no separators.
+
+    Callers use this to build the *unprefixed* PascalCase suffix; see
+    `StagedFrontPic.ident` / `StagedBackPic.ident` for the `Uranium`-prefixed
+    form actually used in emitted symbol names (namespacing against vanilla
+    trainer-class collisions -- `gTrainerFrontPic_Fisherman` etc. already
+    exist in the fork).
     """
     parts = [p for p in internal_name.replace("'", "").split("_") if p]
     return "".join(p[:1].upper() + p[1:].lower() for p in parts) or "Trainer"
@@ -189,14 +233,21 @@ def _pascal_ident(internal_name: str) -> str:
 
 @dataclass(frozen=True)
 class StagedFrontPic:
-    """One front pic ready to emit."""
+    """One front pic ready to emit.
+
+    `asset_dir` is the engine-relative art subdirectory under
+    `ENGINE_GFX_ROOT` this pic's files live in; `None` falls back to
+    `DEFAULT_ASSET_DIR` (slice-1's original flat single-directory layout, kept
+    as the default so existing single-pic callers are unaffected).
+    """
 
     spec: TrainerPicSpec
     result: pics.FrontPicResult
+    asset_dir: str | None = None
 
     @property
     def ident(self) -> str:
-        return _pascal_ident(self.spec.internal_name)
+        return f"Uranium{_pascal_ident(self.spec.internal_name)}"
 
     @property
     def front_symbol(self) -> str:
@@ -206,17 +257,22 @@ class StagedFrontPic:
     def palette_symbol(self) -> str:
         return f"gTrainerPalette_{self.ident}"
 
+    @property
+    def effective_asset_dir(self) -> str:
+        return self.asset_dir if self.asset_dir is not None else DEFAULT_ASSET_DIR
+
 
 @dataclass(frozen=True)
 class StagedBackPic:
-    """One back pic ready to emit."""
+    """One back pic ready to emit. See `StagedFrontPic.asset_dir`."""
 
     spec: TrainerPicSpec
     result: pics.BackPicResult
+    asset_dir: str | None = None
 
     @property
     def ident(self) -> str:
-        return _pascal_ident(self.spec.internal_name)
+        return f"Uranium{_pascal_ident(self.spec.internal_name)}"
 
     @property
     def back_symbol(self) -> str:
@@ -225,6 +281,10 @@ class StagedBackPic:
     @property
     def palette_symbol(self) -> str:
         return f"gTrainerBackPicPalette_{self.ident}"
+
+    @property
+    def effective_asset_dir(self) -> str:
+        return self.asset_dir if self.asset_dir is not None else DEFAULT_ASSET_DIR
 
 
 # ===========================================================================
@@ -328,21 +388,24 @@ def emit_back_pic_ids(backs: list[StagedBackPic]) -> str:
     return body
 
 
-def emit_graphics(fronts: list[StagedFrontPic], backs: list[StagedBackPic], asset_dir: str) -> str:
+def emit_graphics(fronts: list[StagedFrontPic], backs: list[StagedBackPic]) -> str:
     """`uranium_trainer_graphics.h`: `INCGFX_*` declarations.
 
     Front pics are 64x64 compressed 4bpp (`INCGFX_U32(...) .4bpp.smol`,
     matching every vanilla `gTrainerFrontPic_*`). Back pics are the
     uncompressed vertical 64x256 4-frame sheet (`INCGFX_U8(...) .4bpp`,
     matching every vanilla `gTrainerBackPic_*`). Both palettes are plain
-    `.gbapal` (`INCGFX_U16`).
+    `.gbapal` (`INCGFX_U16`). Each entry's `effective_asset_dir` gives its own
+    art subdirectory -- multiple staged pics never share one flat directory.
     """
-    banner = generated_banner("SLICE_TRAINER_PICS asset layout (common.py)", GENERATOR, timestamp=False)
+    banner = generated_banner(
+        "SLICE_TRAINER_PICS asset layout (common.py)", GENERATOR, timestamp=False
+    )
     if not fronts and not backs:
         return banner + _no_op_note()
-    d = f"{ENGINE_GFX_ROOT.as_posix()}/{asset_dir}"
     lines: list[str] = []
     for f in fronts:
+        d = f"{ENGINE_GFX_ROOT.as_posix()}/{f.effective_asset_dir}"
         lines.append(
             f'const u32 {f.front_symbol}[] = INCGFX_U32("{d}/{pics.FRONT_PNG}", ".4bpp.smol");'
         )
@@ -351,6 +414,7 @@ def emit_graphics(fronts: list[StagedFrontPic], backs: list[StagedBackPic], asse
         )
         lines.append("")
     for b in backs:
+        d = f"{ENGINE_GFX_ROOT.as_posix()}/{b.effective_asset_dir}"
         lines.append(f'const u8 {b.back_symbol}[] = INCGFX_U8("{d}/{pics.BACK_PNG}", ".4bpp");')
         lines.append(
             f'const u16 {b.palette_symbol}[] = INCGFX_U16("{d}/{pics.BACK_PAL}", ".gbapal");'
@@ -401,11 +465,11 @@ def emit_backsprites(backs: list[StagedBackPic]) -> str:
 def build_manifest(
     fronts: list[StagedFrontPic],
     backs: list[StagedBackPic],
-    asset_dir: str,
+    battles: list[StagedTrainerBattle] = (),
 ) -> dict:
     records: list[dict] = []
-    d = f"{ENGINE_GFX_ROOT.as_posix()}/{asset_dir}"
     for f in fronts:
+        d = f"{ENGINE_GFX_ROOT.as_posix()}/{f.effective_asset_dir}"
         records.append(
             {
                 "kind": "front",
@@ -426,6 +490,7 @@ def build_manifest(
             }
         )
     for b in backs:
+        d = f"{ENGINE_GFX_ROOT.as_posix()}/{b.effective_asset_dir}"
         records.append(
             {
                 "kind": "back",
@@ -447,6 +512,7 @@ def build_manifest(
                 "back_sprite_y_offset": BACK_SPRITE_Y_OFFSET,
             }
         )
+    records.extend(battles_mod.build_battle_manifest_records(list(battles)))
     return {
         "version": MANIFEST_VERSION,
         "generator": GENERATOR,
@@ -464,9 +530,10 @@ def write_all(
     out_dir: Path,
     fronts: list[StagedFrontPic] | tuple[StagedFrontPic, ...] = (),
     backs: list[StagedBackPic] | tuple[StagedBackPic, ...] = (),
-    asset_dir: str = DEFAULT_ASSET_DIR,
+    battles: list[StagedTrainerBattle] | tuple[StagedTrainerBattle, ...] = (),
+    trainer_anchor: str = common.PRISTINE_TRAINER_ANCHOR,
 ) -> dict:
-    """Emit the full overlay set + manifest for the given staged pics.
+    """Emit the full overlay set + manifest for the given staged pics/battles.
 
     `out_dir` is the trainer staging directory itself (typically
     `$RPG2GBA_OUTPUT/uranium-build/trainers`); this function writes directly
@@ -476,47 +543,140 @@ def write_all(
     """
     fronts = list(fronts)
     backs = list(backs)
+    battles = list(battles)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     _write(out_dir / "uranium_trainer_front_pic_ids.h", emit_front_pic_ids(fronts))
     _write(out_dir / "uranium_trainer_back_pic_ids.h", emit_back_pic_ids(backs))
-    _write(out_dir / "uranium_trainer_graphics.h", emit_graphics(fronts, backs, asset_dir))
+    _write(out_dir / "uranium_trainer_graphics.h", emit_graphics(fronts, backs))
     _write(out_dir / "uranium_trainer_sprites.h", emit_sprites(fronts))
     _write(out_dir / "uranium_trainer_backsprites.h", emit_backsprites(backs))
+    _write(out_dir / "uranium_trainer_ids.h", battles_mod.emit_trainer_ids(battles, trainer_anchor))
+    _write(out_dir / "uranium_trainer_party.inc", battles_mod.emit_party_fragment(battles))
 
-    manifest = build_manifest(fronts, backs, asset_dir)
+    manifest = build_manifest(fronts, backs, battles)
     (out_dir / MANIFEST_NAME).write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
 
     logger.info(
-        "staged %d Uranium trainer front pic(s), %d back pic(s)", len(fronts), len(backs)
+        "staged %d Uranium trainer front pic(s), %d back pic(s), %d battle(s)",
+        len(fronts), len(backs), len(battles),
     )
     return manifest
 
 
-def stage_slice(uranium_src: Path, out_dir: Path | None = None) -> Path:
+def stage_slice(
+    uranium_src: Path, out_dir: Path | None = None, engine_dir: Path | None = None
+) -> Path:
     """Convenience wrapper: convert `common.SLICE_TRAINER_PICS`' art via
-    `pics.convert_slice_trainer_pics`, then emit the overlay + manifest.
+    `pics.convert_slice_trainer_pics`, resolve `common.SLICE_TRAINER_BATTLES`
+    via `battles.build_staged_battles`, then emit the overlay + manifest.
 
     Writes ONLY under `out_dir` (default
-    `output/uranium-build/trainers/`) -- never into `engine/`. Returns the
-    manifest path.
+    `output/uranium-build/trainers/`) -- never into `engine/`. `engine_dir`
+    defaults to `$RPG2GBA_POKEEMERALD` (mirrors
+    `pbs_converter.trainers._build_resolver`'s own env-var convention) so
+    this keeps its original 2-positional-argument call shape for existing
+    callers (`scripts/assemble_pathfinder.py`). Returns the manifest path.
+
+    If any of `SLICE_TRAINER_BATTLES` can't be staged (e.g. a party species
+    hasn't been converted yet), battle staging is SKIPPED with a logged
+    warning rather than aborting pic staging -- the pics half of this slice
+    stands on its own. Callers that need battle failures to be fatal should
+    call `battles.build_staged_battles` directly.
     """
     if out_dir is None:
         out_dir = Path("output") / "uranium-build" / "trainers"
+    if engine_dir is None:
+        env = os.environ.get("RPG2GBA_POKEEMERALD")
+        engine_dir = Path(env) if env else None
 
-    front_spec, back_spec = pics.SLICE_TRAINER_PICS
-    front_result, back_result = pics.convert_slice_trainer_pics(uranium_src, out_dir)
+    front_results, back_results = pics.convert_slice_trainer_pics(uranium_src, out_dir)
+    front_by_name = {r.internal_name: r for r in front_results}
+    back_by_name = {r.internal_name: r for r in back_results}
+    fronts = [
+        StagedFrontPic(
+            spec=spec,
+            result=front_by_name[spec.internal_name],
+            asset_dir=spec.internal_name.lower(),
+        )
+        for spec in pics.SLICE_TRAINER_PICS
+    ]
+    backs = [
+        StagedBackPic(
+            spec=spec,
+            result=back_by_name[spec.internal_name],
+            asset_dir=spec.internal_name.lower(),
+        )
+        for spec in pics.SLICE_TRAINER_PICS
+        if spec.internal_name in back_by_name
+    ]
 
-    manifest = write_all(
-        out_dir=out_dir,
-        fronts=[StagedFrontPic(spec=front_spec, result=front_result)],
-        backs=[StagedBackPic(spec=back_spec, result=back_result)],
-    )
+    staged_battles: list[StagedTrainerBattle] = []
+    if engine_dir is not None:
+        try:
+            staged_battles = stage_battles(
+                uranium_src=uranium_src, engine_dir=engine_dir, out_dir=out_dir
+            )
+        except (ValueError, FileNotFoundError, KeyError) as e:
+            logger.warning("trainer battle staging skipped: %s", e)
+    else:
+        logger.warning(
+            "trainer battle staging skipped: RPG2GBA_POKEEMERALD not set and no engine_dir given"
+        )
+
+    manifest = write_all(out_dir=out_dir, fronts=fronts, backs=backs, battles=staged_battles)
     manifest_path = out_dir / MANIFEST_NAME
     logger.info("trainer slice staged: %s", manifest_path)
     return manifest_path
+
+
+def stage_battles(
+    *,
+    uranium_src: Path,
+    engine_dir: Path,
+    out_dir: Path,
+    selected: tuple[str, ...] = common.SLICE_TRAINER_BATTLES,
+) -> list[StagedTrainerBattle]:
+    """Resolve `selected` trainer battle keys against the Phase-2 intermediate
+    JSON + the live fork + the staged species/pic manifests. Raises
+    `ValueError` (never silently drops a trainer) if any selected key can't
+    be fully resolved -- see `battles.build_staged_battles`.
+
+    `uranium_src` is unused directly (kept for signature symmetry with the
+    rest of this module's staging entry points) -- all data comes from
+    already-emitted Phase-2 intermediate JSON under `out_dir`'s sibling
+    `intermediate/` directory, never re-parsed from Uranium's `.dat` files.
+    """
+    del uranium_src  # see docstring
+    intermediate_dir = out_dir.parent / "intermediate"
+    trainers = battles_mod.load_trainers_json(intermediate_dir)
+    trainer_types = battles_mod.load_trainer_types_json(intermediate_dir)
+
+    anchor_value = battles_mod.read_pristine_trainer_anchor(engine_dir)
+
+    species_manifest_path = out_dir.parent / "species" / "species_manifest.json"
+    staged_species = battles_mod.load_species_manifest_constants(species_manifest_path)
+    staged_pic_names = {spec.internal_name for spec in pics.SLICE_TRAINER_PICS}
+
+    trainers_h = engine_dir / "include" / "constants" / "trainers.h"
+    return battles_mod.build_staged_battles(
+        selected,
+        trainers,
+        trainer_types,
+        anchor_value,
+        fork_classes=load_fork_constants(trainers_h, "TRAINER_CLASS"),
+        fork_genders=load_fork_constants(trainers_h, "TRAINER_GENDER"),
+        fork_music=load_fork_constants(trainers_h, "TRAINER_ENCOUNTER_MUSIC"),
+        fork_species=load_fork_constants(
+            engine_dir / "include" / "constants" / "species.h", "SPECIES"
+        ),
+        fork_moves=load_fork_constants(engine_dir / "include" / "constants" / "moves.h", "MOVE"),
+        fork_items=load_fork_constants(engine_dir / "include" / "constants" / "items.h", "ITEM"),
+        staged_species=staged_species,
+        staged_pic_internal_names=staged_pic_names,
+    )
 
 
 def _write(path: Path, content: str) -> None:
@@ -541,4 +701,6 @@ __all__ = [
     "build_manifest",
     "write_all",
     "stage_slice",
+    "stage_battles",
+    "StagedTrainerBattle",
 ]

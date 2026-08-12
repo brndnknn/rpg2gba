@@ -225,3 +225,68 @@ def measure_line_width_px(text: str, charmap: Charmap) -> int:
         width += charmap.glyph_width_px(text[i])
         i += 1
     return width
+
+
+# --- Wrapping data-table text into explicit lines -----------------------------
+#
+# Nothing in pokeemerald auto-wraps a data-table string. `.description` fields
+# render exactly as authored, so the line breaks must be baked in as literal
+# `\n` at emit time or the whole entry draws on one line.
+#
+# For the Pokedex info screen that failure is not a graceful overflow: the
+# entry is centred by `GetStringCenterAlignXOffset(FONT_NORMAL, description,
+# DISPLAY_WIDTH)` (`src/pokedex.c:4225`), and `GetStringWidth` returns the
+# *widest line* -- which for an unbroken string is the entire text. A 160-char
+# entry measures ~835px against a 240px screen, so the centring offset goes
+# steeply negative and the text starts far off the left edge.
+#
+# The budgets below are derived from vanilla, not from window geometry: across
+# all 1315 `.description` entries in `engine/src/data/pokemon/species_info/`,
+# no line exceeds 224px and no entry exceeds 4 lines. Vanilla is correct by
+# construction, so matching it is safer than re-deriving the usable window
+# width from the tilemap.
+DEX_DESCRIPTION_WIDTH_PX = 224
+DEX_DESCRIPTION_MAX_LINES = 4
+
+
+def wrap_to_width(text: str, charmap: Charmap, *, width_px: int,
+                  max_lines: int | None = None, label: str = "text") -> list[str]:
+    """Greedily wrap `text` into lines no wider than `width_px`, measured in
+    real glyph pixels rather than characters (the font is variable-width, so a
+    character count is not a width).
+
+    Breaks on existing whitespace only -- it never hyphenates or splits a word.
+    Fails loud rather than overflowing (CLAUDE.md §4.5): a single unbreakable
+    token wider than `width_px` cannot be wrapped by any algorithm, and text
+    that needs more than `max_lines` lines would be silently clipped by the
+    engine, so both raise instead of returning something that renders wrong.
+    """
+    words = text.split()
+    if not words:
+        return []
+
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        word_px = measure_line_width_px(word, charmap)
+        if word_px > width_px:
+            raise ValueError(
+                f"{label}: the word {word!r} alone measures {word_px}px, wider "
+                f"than the {width_px}px line budget -- no wrap point exists"
+            )
+        candidate = f"{current} {word}" if current else word
+        if measure_line_width_px(candidate, charmap) <= width_px:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+
+    if max_lines is not None and len(lines) > max_lines:
+        raise ValueError(
+            f"{label}: text wraps to {len(lines)} lines at {width_px}px, "
+            f"exceeds the {max_lines}-line budget -- the engine would clip it. "
+            f"Text: {text!r}"
+        )
+    return lines

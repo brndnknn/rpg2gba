@@ -1,5 +1,5 @@
 {
-  "_comment": "Whole-artifact STRIP decisions (CLAUDE.md §4.3 source of truth; design: FABLES_DECISIONS.md Suggestion 2). Layer boundary: whole CEs / whole maps / map events here; intra-event script-call strips live in the game's script-call reference table; command-code strips live in system.md. `static_predicates` = no-port feature *predicates* (code-111 script conditions) whose feature is not ported, so the condition is a compile-time constant; a branch conditioned exactly on the predicate emits the arm matching `value`, and the other arm is dropped as dead code (negated conditions invert). expect_name/expect_events are fail-loud assertions against re-export renumbering. `maps` = whole-map strips, honored by Phase-5 mint (the Phase-4 orchestrator reads only common_events + map_events).",
+  "_comment": "Whole-artifact STRIP decisions (CLAUDE.md §4.3 source of truth; design: FABLES_DECISIONS.md Suggestion 2). Layer boundary: whole CEs / whole maps / map events here; intra-event script-call strips live in the game's script-call reference table; command-code strips live in system.md. `static_predicates` = no-port feature *predicates* (code-111 script conditions) whose feature is not ported, so the condition is a compile-time constant; a branch conditioned exactly on the predicate emits the arm matching `value`, and the other arm is dropped as dead code (negated conditions invert). expect_name/expect_events are fail-loud assertions against re-export renumbering. `maps` = whole-map strips, honored by Phase-5 mint (the Phase-4 orchestrator reads only common_events + map_events). `map_events` entries accept EITHER shape: a bare 2-element `[map_id, event_id]` pair (back-compat, no reference note), or an object `{\"map_id\", \"event_id\", \"expect_name\", \"feature\", \"reason\"}` mirroring the `common_events` discipline — `expect_name` is the fail-loud renumbering guard, `feature`/`reason` record what the event was and why it's gone (and what would have to change to revisit it). Both shapes parse to the same (map_id, event_id) set; see `conversion_agent.orchestrator.load_map_event_strips` / `_parse_map_event_strip_entry`. Enforced by `tileset_converter.metadata_wiring.build_object_events` (drops before any graphics lookup) as well as the Phase-4 orchestrator.",
   "static_predicates": [
     {
       "predicate": "$PokemonGlobal.randomizer",
@@ -28,7 +28,15 @@
       "stub_message": "The Tandor Network is unavailable."
     }
   ],
-  "map_events": [],
+  "map_events": [
+    {
+      "map_id": 33,
+      "event_id": 28,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "No-port. Single page, trigger 0, empty command list, graphic `light` — one cell of an 800x800 sheet holding a soft alpha-gradient yellow glow circle. RMXP composites these as ADDITIVE light overlays; GBA 4bpp object graphics have no analogue — quantizing a smooth alpha gradient to 15 colours bands badly, and there is no additive blend mode. Carries no script and no gameplay, so it is dropped rather than faked. User-ruled 2026-08-05. Revisit only if the engine gains a real additive-glow blend path or a large-prop quantized-art substitute worth the art budget."
+    }
+  ],
   "maps": [
     {
       "id": 999,

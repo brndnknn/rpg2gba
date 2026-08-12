@@ -85,6 +85,57 @@ def test_format_pory_dialogue_escapes_embedded_quote() -> None:
     assert D.format_pory_dialogue('He said "hi"') == 'format("He said \\"hi\\"")'
 
 
+# ----------------------------------------------------------------------------
+# join_text_lines
+# ----------------------------------------------------------------------------
+
+
+def test_join_text_lines_glue_case_inserts_space() -> None:
+    """Neither fragment carries a boundary space -- the naive join welds words."""
+    result = D.join_text_lines(["...I want to", "see how it fares!"])
+    assert "want to see how" in result
+    assert "tosee" not in result
+
+
+def test_join_text_lines_leading_space_already_present() -> None:
+    result = D.join_text_lines(["Leave them with us,", " they will grow stronger!"])
+    assert result == "Leave them with us, they will grow stronger!"
+    assert "  " not in result
+
+
+def test_join_text_lines_trailing_space_already_present() -> None:
+    result = D.join_text_lines(["Hello there! ", "How are you?"])
+    assert result == "Hello there! How are you?"
+    assert "  " not in result
+
+
+def test_join_text_lines_word_internal_hyphen_stays_tight() -> None:
+    result = D.join_text_lines(["Two strong-", "looking trainers"])
+    assert result == "Two strong-looking trainers"
+
+
+def test_join_text_lines_punctuation_dash_takes_space() -> None:
+    result = D.join_text_lines(["That noise just now --", "Was that the Hazard Suit?"])
+    assert result == "That noise just now -- Was that the Hazard Suit?"
+
+
+def test_join_text_lines_literal_layout_break_tail_no_extra_space() -> None:
+    """A trailing literal backslash-n (RGSS layout break) needs no extra space --
+    format_pory_dialogue flattens it to a space downstream already."""
+    parts = ["...while working!\\n", "I even get paid for that."]
+    assert "\\n" in parts[0]  # sanity: literal backslash + n, not a real newline
+    result = D.join_text_lines(parts)
+    assert result == "...while working!\\nI even get paid for that."
+
+
+def test_join_text_lines_single_element() -> None:
+    assert D.join_text_lines(["solo"]) == "solo"
+
+
+def test_join_text_lines_empty_list() -> None:
+    assert D.join_text_lines([]) == ""
+
+
 def test_label_name_sanitizes_non_identifiers() -> None:
     assert D._label_name("npc") == "npc"
     assert D._label_name("Trainer(4)") == "Trainer_4"

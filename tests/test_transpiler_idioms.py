@@ -1334,6 +1334,18 @@ def test_pokedex_grant_idiom(ctx: T.TranspileContext) -> None:
     assert res.unhandled == []
 
 
+def test_pokedex_grant_enables_national_mode(ctx: T.TranspileContext) -> None:
+    """The grant must also enable National mode, or every Uranium species is
+    caught-but-invisible: they are chained past NATIONAL_DEX_PECHARUNT with no
+    regional number, and a Hoenn-mode dex enumerates only the regional range
+    (`pokedex.c` CreatePokedexList). Setting FLAG_SYS_NATIONAL_DEX by hand
+    would not do it -- IsNationalPokedexEnabled also checks nationalMagic and
+    VAR_NATIONAL_DEX, which only the special writes."""
+    res = run_event(ctx, [[cmd(T.SCRIPT, ["$Trainer.pokedex=true"])]])
+    assert "special(EnableNationalPokedex)" in res.text
+    assert res.unhandled == []
+
+
 def test_emote_anim_104_maps_to_exclamation(ctx: T.TranspileContext) -> None:
     """Animation id 104 ("Rustle" per reference/animation_names.json) — the
     wild-encounter grass-rustle cue — substitutes the exclamation emote."""

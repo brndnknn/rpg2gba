@@ -263,3 +263,164 @@ def test_warp_for_column_no_warps_entry_raises() -> None:
     )
     with pytest.raises(KeyError):
         tm.warp_for_column(5, _door_key())
+
+
+# ---------------------------------------------------------------------------
+# Tests for behavior_overrides / behavior_for_column (native sideways-stairs fix)
+# ---------------------------------------------------------------------------
+
+
+def _stair_key() -> tuple[tuple[int, int], ...]:
+    return ((0, 700),)
+
+
+def test_behavior_for_column_exact_match_wins() -> None:
+    tm = TileMap(
+        tiles={5: {}},
+        tilesets={5: TilesetChoice("gTileset_P", "gTileset_S")},
+        behavior_overrides={
+            5: {
+                "stairs_left": WarpInfo(
+                    tiles={'[[0,700]]': Metatile(20, 1, 0)}, fallback=Metatile(88, 1, 0)
+                )
+            }
+        },
+    )
+    result = tm.behavior_for_column(5, "stairs_left", _stair_key())
+    assert result.metatile_id == 20
+    # Always forced passable regardless of the source entry's own collision/elevation.
+    assert result.collision == 0
+    assert result.elevation == 3
+
+
+def test_behavior_for_column_falls_back_on_miss() -> None:
+    tm = TileMap(
+        tiles={5: {}},
+        tilesets={5: TilesetChoice("gTileset_P", "gTileset_S")},
+        behavior_overrides={
+            5: {
+                "stairs_right": WarpInfo(
+                    tiles={'[[0,700]]': Metatile(20, 1, 0)}, fallback=Metatile(88, 1, 0)
+                )
+            }
+        },
+    )
+    result = tm.behavior_for_column(5, "stairs_right", _other_key())
+    assert result.metatile_id == 88
+    assert result.collision == 0
+    assert result.elevation == 3
+
+
+def test_behavior_for_column_none_key_uses_fallback() -> None:
+    tm = TileMap(
+        tiles={5: {}},
+        tilesets={5: TilesetChoice("gTileset_P", "gTileset_S")},
+        behavior_overrides={
+            5: {"stairs_left": WarpInfo(tiles={}, fallback=Metatile(88, 1, 0))}
+        },
+    )
+    result = tm.behavior_for_column(5, "stairs_left", None)
+    assert result.metatile_id == 88
+    assert result.collision == 0
+
+
+def test_behavior_for_column_missing_tileset_raises() -> None:
+    tm = TileMap(
+        tiles={5: {}},
+        tilesets={5: TilesetChoice("gTileset_P", "gTileset_S")},
+    )
+    with pytest.raises(KeyError):
+        tm.behavior_for_column(5, "stairs_left", _stair_key())
+
+
+def test_behavior_for_column_missing_kind_raises() -> None:
+    tm = TileMap(
+        tiles={5: {}},
+        tilesets={5: TilesetChoice("gTileset_P", "gTileset_S")},
+        behavior_overrides={5: {"stairs_left": WarpInfo(tiles={}, fallback=Metatile(88))}},
+    )
+    with pytest.raises(KeyError):
+        tm.behavior_for_column(5, "stairs_right", _stair_key())
+
+
+def test_behavior_for_column_no_column_no_fallback_raises() -> None:
+    tm = TileMap(
+        tiles={5: {}},
+        tilesets={5: TilesetChoice("gTileset_P", "gTileset_S")},
+        behavior_overrides={
+            5: {"stairs_left": WarpInfo(tiles={'[[0,700]]': Metatile(20, 0, 0)}, fallback=None)}
+        },
+    )
+    with pytest.raises(KeyError):
+        tm.behavior_for_column(5, "stairs_left", _other_key())
+
+
+def test_has_behavior_override() -> None:
+    tm = TileMap(
+        tiles={5: {}},
+        tilesets={5: TilesetChoice("gTileset_P", "gTileset_S")},
+        behavior_overrides={5: {"stairs_left": WarpInfo(tiles={}, fallback=Metatile(88))}},
+    )
+    assert tm.has_behavior_override(5, "stairs_left")
+    assert not tm.has_behavior_override(5, "stairs_right")
+    assert not tm.has_behavior_override(6, "stairs_left")
+
+
+def test_load_tile_map_behavior_overrides_section(tmp_path: Path) -> None:
+    """load_tile_map parses a 'behavior_overrides' section additively — 'warps'
+    keeps working unchanged alongside it."""
+    table = {
+        "tilesets": {"5": {"primary": "gTileset_P", "secondary": "gTileset_S"}},
+        "tiles": {"5": {}},
+        "warps": {"5": {"metatile": 55, "collision": 0, "elevation": 0}},
+        "behavior_overrides": {
+            "5": {
+                "stairs_left": {
+                    "tiles": {"[[0,700]]": 20},
+                    "fallback": 88,
+                },
+                "stairs_right": {"metatile": 89, "collision": 0, "elevation": 0},
+            }
+        },
+    }
+    tpath = tmp_path / "tileset_map.json"
+    tpath.write_text(json.dumps(table), encoding="utf-8")
+
+    tm = load_tile_map(tpath, passages_path=None)
+
+    assert tm.behavior_for_column(5, "stairs_left", _stair_key()).metatile_id == 20
+    assert tm.behavior_for_column(5, "stairs_left", _other_key()).metatile_id == 88
+    # legacy single-metatile shape for stairs_right resolves for any column too
+    assert tm.behavior_for_column(5, "stairs_right", _stair_key()).metatile_id == 89
+    # warps untouched
+    assert tm.warp(5) == Metatile(55, 0, 0)
+
+
+def test_load_tile_map_behavior_overrides_unknown_tileset_raises(tmp_path: Path) -> None:
+    table = {
+        "tilesets": {"5": {"primary": "gTileset_P", "secondary": "gTileset_S"}},
+        "tiles": {"5": {}},
+        "behavior_overrides": {
+            "6": {"stairs_left": {"metatile": 20, "collision": 0, "elevation": 0}}
+        },
+    }
+    tpath = tmp_path / "tileset_map.json"
+    tpath.write_text(json.dumps(table), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="behavior_overrides"):
+        load_tile_map(tpath, passages_path=None)
+
+
+def test_load_tile_map_behavior_overrides_unknown_kind_raises(tmp_path: Path) -> None:
+    table = {
+        "tilesets": {"5": {"primary": "gTileset_P", "secondary": "gTileset_S"}},
+        "tiles": {"5": {}},
+        "behavior_overrides": {
+            "5": {"waterfall": {"metatile": 20, "collision": 0, "elevation": 0}}
+        },
+    }
+    tpath = tmp_path / "tileset_map.json"
+    tpath.write_text(json.dumps(table), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unknown kind"):
+        load_tile_map(tpath, passages_path=None)

@@ -26,6 +26,21 @@ from rpg2gba.chapter_atlas.census import (
 OUT_DIR = Path("output/uranium-build")
 
 
+def _untranspiled_map_id() -> int | None:
+    """Lowest corpus map id that has never been through the transpiler (no
+    `scripts/MapNNN.pory`). Derived rather than pinned: any map named here
+    stops being untranspiled the moment its chapter reaches the frontier."""
+    scripts = OUT_DIR / "scripts"
+    for path in sorted((OUT_DIR / "maps").glob("Map*.json")):
+        map_id = int(path.stem.removeprefix("Map"))
+        if not (scripts / f"Map{map_id:03d}.pory").is_file():
+            return map_id
+    return None
+
+
+UNTRANSPILED_MAP_ID = _untranspiled_map_id() if (OUT_DIR / "maps").is_dir() else None
+
+
 def _write(tmp_path: Path, payload: dict) -> Path:
     path = tmp_path / "chapters.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
@@ -191,14 +206,17 @@ def test_predecessor_chain_is_unbroken_after_the_first_chapter() -> None:
             f"{chapter.predecessor!r} as predecessor")
 
 
-def test_chapter_one_matches_the_slice_map_set() -> None:
+def test_built_chapters_match_the_slice_map_set() -> None:
     # reference/chapters.json is meant to become the SoT that map_set derives
     # from; until that cutover lands, this test pins them together so the two
-    # lists cannot drift silently.
+    # lists cannot drift silently. SLICE_MAP_IDS is the *cumulative* build set:
+    # every chapter up to and including the frontier one (CH01 + CH02 since
+    # 2026-08-05), not just the newest.
     from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
 
     binding = load_binding()
-    assert sorted(binding.chapter("CH01").maps) == sorted(SLICE_MAP_IDS)
+    built = binding.chapter("CH01").maps + binding.chapter("CH02").maps
+    assert sorted(built) == sorted(SLICE_MAP_IDS)
 
 
 def test_bound_and_unbound_maps_account_for_the_whole_corpus() -> None:
@@ -246,12 +264,15 @@ def test_census_normalises_the_kernel_prefix() -> None:
     assert not [h for h in moki.script_heads if h.startswith("Kernel.")]
 
 
-@pytest.mark.skipif(not (OUT_DIR / "maps").is_dir(),
-                    reason="no converted corpus on disk")
+@pytest.mark.skipif(UNTRANSPILED_MAP_ID is None,
+                    reason="no converted corpus on disk, or every map transpiled")
 def test_census_reports_unstaged_queue_as_none_not_zero() -> None:
     # A zero would read as "transpiles clean"; the truth is "never transpiled".
-    route1 = census_for_maps([33], out_dir=OUT_DIR)
-    assert route1.maps[0].unhandled is None
+    # Pinned on a map id no build has ever transpiled — deliberately NOT a
+    # frontier map: this used to name Route 01 (33), which stopped being a
+    # never-transpiled map the day CH02 converted it (2026-08-05).
+    unstaged = census_for_maps([UNTRANSPILED_MAP_ID], out_dir=OUT_DIR)
+    assert unstaged.maps[0].unhandled is None
 
     moki = census_for_maps([50], out_dir=OUT_DIR)
     assert moki.maps[0].unhandled is not None

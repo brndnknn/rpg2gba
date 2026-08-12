@@ -58,6 +58,7 @@ COMMENT = 108
 COMMENT_CONT = 408
 WAIT = 106  # RMXP "Wait N frames" — pure pacing, no GBA equivalent
 PLAY_SE = 250  # RMXP "Play SE" — a sound effect; cosmetic plumbing in a dialogue
+EXIT_EVENT_PROCESSING = 115  # RMXP "Exit Event Processing" (rgss_event_commands.md:27)
 
 # Native RMXP commands that carry no game state and produce no Poryscript in a
 # dialogue context. Frozen-Opus drops both (FABLES gate G2, 2026-06-12: Map174 ev9
@@ -319,6 +320,65 @@ _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # -- string + label helpers ---------------------------------------------------
 
 
+def join_text_lines(parts: list[str]) -> str:
+    """Join RGSS 101 (Show Text) + 401 (Show Text continuation) fragments.
+
+    RMXP's message window wraps dialogue at its own (wide) window width, and
+    each visual line is stored as a separate string -- the 101 command holds
+    the first line, each following 401 holds one more. The naive
+    ``"".join(parts)`` this replaced assumed every continuation fragment
+    carried its own leading space from the source, i.e. that the author wrote
+    ``"Hello,"`` + ``" world!"``. That assumption is false for most of the
+    corpus: a census of all 199 converted maps found 3127 total 401
+    continuations, of which only 9 begin with a space and 1798 follow a
+    fragment that already ends with one. The remaining 1320 are "glue" cases
+    where neither side has a space -- the wrap simply landed mid-sentence --
+    and blind concatenation welds two words together. A real shipped example
+    (Map033 event 34, ``Trainer(4)`` at cell (36,8)) joined ``'...and I want
+    to'`` + ``'see how it fares!'`` into ``"...I want tosee how it fares!"``.
+
+    This helper inserts exactly one space at each fragment boundary unless
+    doing so would be wrong:
+
+    - Either side of the boundary is empty (nothing to join).
+    - The accumulated text already ends in whitespace, or the next fragment
+      already begins with whitespace -- the space is already there; adding
+      another would double it (1798 + 9 corpus cases).
+    - The accumulated text ends with the literal two-character escape
+      ``\\n`` (a layout break the RGSS export stores verbatim).
+      ``format_pory_dialogue`` flattens those to spaces downstream, so no
+      extra space is needed here (90 corpus cases).
+    - The accumulated text ends with a word-internal hyphen -- a hyphen
+      immediately preceded by an alphanumeric character, e.g. ``'Two
+      strong-'`` + ``'looking trainers'`` -> ``"strong-looking trainers"``.
+      This is distinct from a hyphen used as punctuation (an em-dash-style
+      break, preceded by another dash or by whitespace, as in ``'That noise
+      just now --'`` or ``'waiting for a strong opponent -'``), which *does*
+      take a space.
+
+    Fragments are accumulated left-to-right and each boundary is decided
+    against the running accumulated string (not just the immediately
+    preceding fragment), so an empty fragment in the middle of the list
+    can't hide a real boundary.
+    """
+    result = ""
+    for nxt in parts:
+        if not result or not nxt:
+            result += nxt
+            continue
+        if result[-1].isspace() or nxt[0].isspace():
+            result += nxt
+            continue
+        if result.endswith("\\n"):
+            result += nxt
+            continue
+        if result.endswith("-") and len(result) >= 2 and result[-2].isalnum():
+            result += nxt
+            continue
+        result += " " + nxt
+    return result
+
+
 def format_pory_string(text: str) -> str:
     """Wrap dialogue in a poryscript double-quoted string, escaping only ``"``.
 
@@ -430,7 +490,7 @@ def _dialogue_body(
 
     def flush() -> None:
         nonlocal buf, unsafe
-        text = "".join(buf).strip()
+        text = join_text_lines(buf).strip()
         buf = []
         if not text:
             return
@@ -937,7 +997,7 @@ def classify_trainer_battle(
             intro_parts.append(params[0] if params else "")
         elif code != SHOW_TEXT_CONT:
             in_intro = False
-    intro_raw = "".join(intro_parts).strip()
+    intro_raw = join_text_lines(intro_parts).strip()
 
     # --- Collect post-battle text from page-2 Show-Text run -------------------
     post_parts: list[str] = []
@@ -952,7 +1012,7 @@ def classify_trainer_battle(
             post_parts.append(params[0] if params else "")
         elif code != SHOW_TEXT_CONT:
             in_post = False
-    post_raw = "".join(post_parts).strip()
+    post_raw = join_text_lines(post_parts).strip()
 
     # --- Translate texts -------------------------------------------------------
     intro = _translate_text(intro_raw)
@@ -977,6 +1037,508 @@ def classify_trainer_battle(
         lines.append(f"msgbox({format_pory_dialogue(post)})")
     lines += ["release", "end"]
     return _block(_page_label(map_id, event, 1), lines)
+
+
+# -- Classifier 10: PokePod Phone-Rematch Trainer -----------------------------
+#
+# Verified against Map033 EV039 (FISHERMAN "Brandon") and EV053 (YOUNGSTER
+# "Richey") in output/uranium-build/maps/Map033.json (2026-08-10). A 3-page
+# sight trainer offering phone registration on defeat, then a phone rematch:
+#
+#   Page 0 (default page, no self-switch condition, trigger 2/touch): the
+#     first battle. pbTrainerIntro -> pbNoticePlayer -> optional pbCallBub ->
+#     intro Show-Text -> a code-111 script conditional on
+#     ``pbTrainerBattle(PBTrainers::X,"Name",_I("defeat"),false,0,false,0)``
+#     whose then-branch is ``pbPhoneRegisterBattle(...)`` (split 355+655
+#     because the ``_I("...")`` literal itself spans the boundary) followed by
+#     self-switch A ON; then, after the branch, ``pbTrainerEnd``.
+#   Page 1 (self-switch B set): the phone rematch. A code-111 conditional on
+#     ``pbPhoneBattleCount(PBTrainers::X,"Name")>=1`` gates pbTrainerIntro,
+#     optional pbCallBub, a rematch intro Show-Text, then three separate
+#     Ruby statements (``trainer = createPhoneTrainer(...)``,
+#     ``result = customTrainerBattle(trainer, "defeat")``,
+#     ``pbSet(1, result == BR_WIN ? 0 : 1)`` — each its own full line, coded
+#     355 then 655/655, NOT a continued literal), a nested code-111 on
+#     ``$game_variables[1]==0`` (win) whose body does pbPhoneIncrement + the
+#     self-switch A-on/B-off flip + pbTrainerEnd, and unconditionally (after
+#     the nested branch closes) a code-115 Exit Event Processing.
+#   Page 2 (self-switch A set, no B): idle post-battle dialogue that re-offers
+#     phone registration. NOT converted here — see below.
+#
+# NOTE on a text/letter mismatch: an earlier description of this idiom given
+# to this classifier's author claimed the rematch page's condition was
+# "self-switch A set (B not set)". The real corpus data above says otherwise
+# — the rematch page (page 1) requires self-switch B, and the idle page
+# (page 2) requires self-switch A. This classifier matches the verified real
+# JSON, not that description; a page-condition letter that doesn't match is a
+# structural deviation and bails per the fail-loud rule below.
+#
+# WHAT'S EMITTED: three blocks — page 1 (this event's Page1 label) becomes a
+# normal pokeemerald sight trainer, ``trainerbattle_single`` using the
+# four-argument continue-script form (a ``<Page1 label>_RegisterMatchCall``
+# block) instead of a trailing top-level ``register_matchcall``: on a genuine
+# first win, control never falls through past ``trainerbattle_single`` (a win
+# runs ``EventScript_EndTrainerBattle`` / ``gotobeatenscript``, which does not
+# reach the next top-level command), so a trailing ``register_matchcall``
+# would be dead code. The continue-script block runs
+# ``special(PlayerFaceTrainerAfterBattle)`` + ``waitmovement(0)`` (mirroring
+# engine/data/maps/Route102/scripts.inc:20-41) then
+# ``register_matchcall`` (asm/macros/event.inc:2150) unconditionally — no
+# ``FLAG_HAS_MATCH_CALL`` gate, since this pipeline never grants that flag and
+# gating would reintroduce the same dead-code bug. Page 2 (this event's
+# Page2 label) becomes an ``IsTrainerReadyForRematch``-gated
+# ``trainerbattle_rematch`` (asm/macros/event.inc:823), replacing the
+# hand-rolled ``pbPhoneBattleCount``/``createPhoneTrainer``/
+# ``customTrainerBattle`` rematch. All symbols and the special
+# (``data/specials.inc:538``) were confirmed present in the vendored
+# ``engine/`` before use (CLAUDE.md §4.7).
+#
+# Page 3 (the original event's third RGSS page, self-switch A idle/re-offer)
+# is deliberately NOT emitted. This event ends up defining only 2 of its 3
+# canonical page labels — exactly the ``collapsed_pages`` shape
+# ``transpile_driver._record_collapsed_pages`` already expects (the existing
+# 2-page ``classify_trainer_battle`` above does the same thing, folding page 2
+# into page 1's block and leaving no page-2 label at all). Native Match Call
+# registration and the rematch table (owned by a separate rematch-table-
+# generator workstream) supersede this event's self-switch state machine
+# entirely, so nothing needs to reach page 3's idle re-offer text.
+#
+# FAILS LOUD (returns None, no widening) on: not exactly 3 pages; page 0's
+# condition checking a self-switch, or its trigger not 2; page 1's condition
+# not self-switch B, or page 2's not self-switch A; a double battle
+# (``pbDoubleTrainerBattle``); a ``canlose`` argument that isn't
+# ``false``/``0`` (that's ``_emit_canlose_trainer_battle_idiom``'s turf, not
+# this one's); a trainer class/name/party-id combination this classifier
+# can't resolve in ``ctx.trainers``; untranslatable dialogue (an Essentials
+# control code with no prescribed mapping); or ANY command, ordering, or
+# content mismatch against the exact shape above — including a mismatched
+# trainer class/name between the ``pbTrainerIntro``, ``pbTrainerBattle``,
+# ``pbPhoneRegisterBattle``, ``pbPhoneBattleCount``, and
+# ``createPhoneTrainer`` calls.
+
+_PHONE_TRAINER_INTRO_RE = re.compile(r"^pbTrainerIntro\(:(\w+)\)$")
+_PHONE_NOTICE_PLAYER = "Kernel.pbNoticePlayer(get_character(0))"
+_PHONE_CALLBUB_RE = re.compile(r"^pbCallBub\(\d+\)$")
+_PHONE_TRAINER_END = "pbTrainerEnd"
+_PHONE_REGISTER_BATTLE_RE = re.compile(
+    r'^pbPhoneRegisterBattle\(_I\("(?:[^"\\]|\\.)*"\),'
+    r'get_character\(0\),(?:::)?PBTrainers::(\w+),"([^"]*)",\d+\)$'
+)
+_PHONE_BATTLE_COUNT_RE = re.compile(
+    r'^pbPhoneBattleCount\((?:::)?PBTrainers::(\w+),"([^"]*)"\)>=1$'
+)
+_PHONE_CREATE_TRAINER_RE = re.compile(
+    r'^trainer\s*=\s*createPhoneTrainer\((?:::)?PBTrainers::(\w+),"([^"]*)",\d+\)$'
+)
+_PHONE_CUSTOM_BATTLE_RE = re.compile(
+    r'^result\s*=\s*customTrainerBattle\(trainer,\s*"((?:[^"\\]|\\.)*)"\)$'
+)
+_PHONE_SET_RESULT = "pbSet(1, result == BR_WIN ? 0 : 1)"
+_PHONE_WIN_CHECK = "$game_variables[1]==0"
+_PHONE_INCREMENT_RE = re.compile(
+    r'^pbPhoneIncrement\((?:::)?PBTrainers::(\w+),"([^"]*)",\d+\)$'
+)
+_PHONE_TRAINER_BATTLE_CLASS_RE = re.compile(r"(?:::)?PBTrainers::(\w+)")
+_PHONE_TRAINER_BATTLE_DEFEAT_RE = re.compile(r'_I\("((?:[^"\\]|\\.)*)"\)')
+_PHONE_TRAINER_BATTLE_STRIP_I_RE = re.compile(r'_I\("(?:[^"\\]|\\.)*"\)')
+_PHONE_TRAINER_BATTLE_INNER_RE = re.compile(r"pbTrainerBattle\((.*?)\)\s*$", re.DOTALL)
+_PHONE_TRAINER_BATTLE_NAME_RE = re.compile(r'"([^"]*)"')
+
+
+def classify_phone_rematch_trainer_battle(
+    map_id: int, event: dict, ctx: "Context | None" = None
+) -> str | None:
+    """The PokePod phone-rematch idiom — see the module-level comment above.
+
+    Returns ``None`` (falls through to the LLM) on any structural deviation
+    from the verified Map033 EV039/EV053 shape.
+    """
+    pages = event.get("pages", [])
+    if len(pages) != 3:
+        return None
+    page0, page1, page2 = pages
+
+    cond0 = page0.get("condition", {})
+    if cond0.get("self_switch_valid"):
+        return None
+    if page0.get("trigger") != 2:
+        return None
+
+    cond1 = page1.get("condition", {})
+    if not cond1.get("self_switch_valid") or cond1.get("self_switch_ch") != "B":
+        return None
+
+    cond2 = page2.get("condition", {})
+    if not cond2.get("self_switch_valid") or cond2.get("self_switch_ch") != "A":
+        return None
+
+    if ctx is None:
+        return None
+
+    # ---- walk page 0: the first battle -----------------------------------
+    cmds0 = [c for c in page0.get("list", []) if c.get("code") not in (COMMENT, COMMENT_CONT)]
+
+    def _at(cmds: list[dict], i: int) -> dict | None:
+        return cmds[i] if 0 <= i < len(cmds) else None
+
+    idx = 0
+    c = _at(cmds0, idx)
+    if c is None or c.get("code") != SCRIPT:
+        return None
+    p = c.get("parameters", [""])
+    m_intro = _PHONE_TRAINER_INTRO_RE.match(p[0] if p else "")
+    if not m_intro:
+        return None
+    class_sym = m_intro.group(1)
+    idx += 1
+
+    c = _at(cmds0, idx)
+    if c is None or c.get("code") != SCRIPT:
+        return None
+    p = c.get("parameters", [""])
+    if (p[0] if p else "") != _PHONE_NOTICE_PLAYER:
+        return None
+    idx += 1
+
+    c = _at(cmds0, idx)
+    if c is not None and c.get("code") == SCRIPT:
+        p = c.get("parameters", [""])
+        if _PHONE_CALLBUB_RE.match(p[0] if p else ""):
+            idx += 1
+
+    c = _at(cmds0, idx)
+    if c is None or c.get("code") != SHOW_TEXT:
+        return None
+    p = c.get("parameters", [""])
+    intro_parts = [p[0] if p else ""]
+    idx += 1
+    while True:
+        c = _at(cmds0, idx)
+        if c is not None and c.get("code") == SHOW_TEXT_CONT:
+            p = c.get("parameters", [""])
+            intro_parts.append(p[0] if p else "")
+            idx += 1
+        else:
+            break
+    intro_raw = join_text_lines(intro_parts).strip()
+
+    c = _at(cmds0, idx)
+    if c is None or c.get("code") != CONDITIONAL_BRANCH:
+        return None
+    b_params = c.get("parameters", [])
+    if len(b_params) < 2 or b_params[0] != 12 or not isinstance(b_params[1], str):
+        return None
+    call = b_params[1]
+    if "pbTrainerBattle(" not in call or "pbDoubleTrainerBattle" in call:
+        return None
+    idx += 1
+
+    c = _at(cmds0, idx)
+    if c is None or c.get("code") != SCRIPT:
+        return None
+    p = c.get("parameters", [""])
+    reg_first = p[0] if p else ""
+    idx += 1
+    c = _at(cmds0, idx)
+    if c is None or c.get("code") != SCRIPT_CONT:
+        return None
+    p = c.get("parameters", [""])
+    reg_second = p[0] if p else ""
+    idx += 1
+    m_reg = _PHONE_REGISTER_BATTLE_RE.match(reg_first + reg_second)
+    if not m_reg:
+        return None
+    if m_reg.group(1) != class_sym:
+        return None
+
+    c = _at(cmds0, idx)
+    if c is None or c.get("code") != CONTROL_SELF_SWITCH:
+        return None
+    p = c.get("parameters", [])
+    if not p or p[0] != "A" or (len(p) > 1 and p[1] != 0):
+        return None
+    idx += 1
+
+    while True:
+        c = _at(cmds0, idx)
+        if c is not None and c.get("code") == 0:
+            idx += 1
+        else:
+            break
+
+    c = _at(cmds0, idx)
+    if c is None or c.get("code") != BRANCH_END:
+        return None
+    idx += 1
+
+    c = _at(cmds0, idx)
+    if c is None or c.get("code") != SCRIPT:
+        return None
+    p = c.get("parameters", [""])
+    if (p[0] if p else "") != _PHONE_TRAINER_END:
+        return None
+    idx += 1
+
+    while True:
+        c = _at(cmds0, idx)
+        if c is not None and c.get("code") == 0:
+            idx += 1
+        else:
+            break
+    if idx != len(cmds0):
+        return None  # trailing junk on page 0 — deviation, fail loud
+
+    # ---- parse the pbTrainerBattle(...) call itself ----------------------
+    m_class = _PHONE_TRAINER_BATTLE_CLASS_RE.search(call)
+    if not m_class or m_class.group(1) != class_sym:
+        return None
+    class_const = to_constant("TRAINER_CLASS", class_sym)
+
+    m_defeat = _PHONE_TRAINER_BATTLE_DEFEAT_RE.search(call)
+    defeat_raw = m_defeat.group(1) if m_defeat else ""
+
+    cleaned_call = _PHONE_TRAINER_BATTLE_STRIP_I_RE.sub("_I", call)
+    m_inner = _PHONE_TRAINER_BATTLE_INNER_RE.search(cleaned_call)
+    if not m_inner:
+        return None
+    args = [a.strip() for a in m_inner.group(1).split(",")]
+    if len(args) < 6:
+        return None
+    if args[5] not in ("false", "0"):
+        return None  # canlose battle — _emit_canlose_trainer_battle_idiom's turf
+    party_id = 0
+    if args[4].isdigit():
+        party_id = int(args[4])
+
+    m_name = _PHONE_TRAINER_BATTLE_NAME_RE.search(call)
+    if not m_name:
+        return None
+    name = m_name.group(1)
+    if name != m_reg.group(2):
+        return None
+
+    trainer_const = ctx.trainers.get((class_const, name, party_id))
+    if trainer_const is None:
+        return None
+
+    intro = _translate_text(intro_raw)
+    if intro is None:
+        return None
+    defeat = _translate_text(defeat_raw)
+    if defeat is None:
+        return None
+
+    # ---- walk page 1: the phone rematch ----------------------------------
+    cmds1 = [c for c in page1.get("list", []) if c.get("code") not in (COMMENT, COMMENT_CONT)]
+    idx = 0
+
+    c = _at(cmds1, idx)
+    if c is None or c.get("code") != CONDITIONAL_BRANCH:
+        return None
+    b_params = c.get("parameters", [])
+    if len(b_params) < 2 or b_params[0] != 12 or not isinstance(b_params[1], str):
+        return None
+    m_count = _PHONE_BATTLE_COUNT_RE.match(b_params[1])
+    if not m_count or m_count.group(1) != class_sym or m_count.group(2) != name:
+        return None
+    idx += 1
+
+    c = _at(cmds1, idx)
+    if c is None or c.get("code") != SCRIPT:
+        return None
+    p = c.get("parameters", [""])
+    m_intro2 = _PHONE_TRAINER_INTRO_RE.match(p[0] if p else "")
+    if not m_intro2 or m_intro2.group(1) != class_sym:
+        return None
+    idx += 1
+
+    c = _at(cmds1, idx)
+    if c is not None and c.get("code") in (SCRIPT, SCRIPT_CONT):
+        p = c.get("parameters", [""])
+        if _PHONE_CALLBUB_RE.match(p[0] if p else ""):
+            idx += 1
+
+    c = _at(cmds1, idx)
+    if c is None or c.get("code") != SHOW_TEXT:
+        return None
+    p = c.get("parameters", [""])
+    re_intro_parts = [p[0] if p else ""]
+    idx += 1
+    while True:
+        c = _at(cmds1, idx)
+        if c is not None and c.get("code") == SHOW_TEXT_CONT:
+            p = c.get("parameters", [""])
+            re_intro_parts.append(p[0] if p else "")
+            idx += 1
+        else:
+            break
+    re_intro_raw = join_text_lines(re_intro_parts).strip()
+
+    c = _at(cmds1, idx)
+    if c is None or c.get("code") != SCRIPT:
+        return None
+    p = c.get("parameters", [""])
+    m_create = _PHONE_CREATE_TRAINER_RE.match(p[0] if p else "")
+    if not m_create or m_create.group(1) != class_sym or m_create.group(2) != name:
+        return None
+    idx += 1
+
+    c = _at(cmds1, idx)
+    if c is None or c.get("code") != SCRIPT_CONT:
+        return None
+    p = c.get("parameters", [""])
+    m_custom = _PHONE_CUSTOM_BATTLE_RE.match(p[0] if p else "")
+    if not m_custom:
+        return None
+    re_defeat_raw = m_custom.group(1)
+    idx += 1
+
+    c = _at(cmds1, idx)
+    if c is None or c.get("code") != SCRIPT_CONT:
+        return None
+    p = c.get("parameters", [""])
+    if (p[0] if p else "") != _PHONE_SET_RESULT:
+        return None
+    idx += 1
+
+    c = _at(cmds1, idx)
+    if c is None or c.get("code") != CONDITIONAL_BRANCH:
+        return None
+    b_params = c.get("parameters", [])
+    if len(b_params) < 2 or b_params[0] != 12 or b_params[1] != _PHONE_WIN_CHECK:
+        return None
+    idx += 1
+
+    c = _at(cmds1, idx)
+    if c is None or c.get("code") != SCRIPT:
+        return None
+    p = c.get("parameters", [""])
+    m_inc = _PHONE_INCREMENT_RE.match(p[0] if p else "")
+    if not m_inc or m_inc.group(1) != class_sym or m_inc.group(2) != name:
+        return None
+    idx += 1
+
+    c = _at(cmds1, idx)
+    if c is None or c.get("code") != CONTROL_SELF_SWITCH:
+        return None
+    p = c.get("parameters", [])
+    if not p or p[0] != "A" or (len(p) > 1 and p[1] != 0):
+        return None
+    idx += 1
+
+    c = _at(cmds1, idx)
+    if c is None or c.get("code") != CONTROL_SELF_SWITCH:
+        return None
+    p = c.get("parameters", [])
+    if not p or p[0] != "B" or len(p) < 2 or p[1] == 0:
+        return None
+    idx += 1
+
+    c = _at(cmds1, idx)
+    if c is None or c.get("code") != SCRIPT:
+        return None
+    p = c.get("parameters", [""])
+    if (p[0] if p else "") != _PHONE_TRAINER_END:
+        return None
+    idx += 1
+
+    while True:
+        c = _at(cmds1, idx)
+        if c is not None and c.get("code") == 0:
+            idx += 1
+        else:
+            break
+
+    c = _at(cmds1, idx)
+    if c is None or c.get("code") != BRANCH_END:
+        return None
+    idx += 1  # closes the inner ($game_variables[1]==0) branch
+
+    c = _at(cmds1, idx)
+    if c is None or c.get("code") != EXIT_EVENT_PROCESSING:
+        return None
+    idx += 1
+
+    while True:
+        c = _at(cmds1, idx)
+        if c is not None and c.get("code") == 0:
+            idx += 1
+        else:
+            break
+
+    c = _at(cmds1, idx)
+    if c is None or c.get("code") != BRANCH_END:
+        return None
+    idx += 1  # closes the outer (pbPhoneBattleCount>=1) branch
+
+    while True:
+        c = _at(cmds1, idx)
+        if c is not None and c.get("code") == 0:
+            idx += 1
+        else:
+            break
+    if idx != len(cmds1):
+        return None  # trailing junk on page 1 — deviation, fail loud
+
+    re_intro = _translate_text(re_intro_raw)
+    if re_intro is None:
+        return None
+    re_defeat = _translate_text(re_defeat_raw)
+    if re_defeat is None:
+        return None
+
+    # ---- emit -------------------------------------------------------------
+    # ``register_matchcall`` as a trailing top-level command after
+    # ``trainerbattle_single`` is structurally unreachable on a genuine first
+    # win: a fresh win runs EventScript_EndTrainerBattle (gotobeatenscript),
+    # which never falls through to the command after the trainerbattle_single
+    # line. Only the four-argument ``trainerbattle_single`` continue-script
+    # form (TRAINER_BATTLE_CONTINUE_SCRIPT) is reachable post-battle — see
+    # engine/data/maps/Route102/scripts.inc:20-41 for the vanilla shape this
+    # mirrors. Two deliberate deviations from that vanilla shape:
+    #   1. No ``goto_if_set FLAG_HAS_MATCH_CALL`` gate — this pipeline has no
+    #      equivalent flag grant wired up, so gating would make registration
+    #      dead code again (the exact bug this fixes). Register unconditionally.
+    #   2. ``special(PlayerFaceTrainerAfterBattle)`` + ``waitmovement(0)`` are
+    #      kept (verified present: engine/data/specials.inc:538 and the
+    #      ``special``/``waitmovement`` macros in engine/asm/macros/event.inc)
+    #      so the post-battle scene still looks right.
+    register_label = _page_label(map_id, event, 1) + "_RegisterMatchCall"
+    battle_block = _block(
+        _page_label(map_id, event, 1),
+        [
+            f"trainerbattle_single({trainer_const},"
+            f" {format_pory_dialogue(intro)}, {format_pory_dialogue(defeat)},"
+            f" {register_label})",
+            "release",
+            "end",
+        ],
+    )
+    register_block = _block(
+        register_label,
+        [
+            "special(PlayerFaceTrainerAfterBattle)",
+            "waitmovement(0)",
+            f"register_matchcall({trainer_const})",
+            "release",
+            "end",
+        ],
+    )
+    rematch_block = _block(
+        _page_label(map_id, event, 2),
+        [
+            "specialvar(VAR_RESULT, IsTrainerReadyForRematch)",
+            "if (var(VAR_RESULT) == FALSE) {",
+            "    release",
+            "    end",
+            "}",
+            f"trainerbattle_rematch({trainer_const},"
+            f" {format_pory_dialogue(re_intro)}, {format_pory_dialogue(re_defeat)})",
+            "release",
+            "end",
+        ],
+    )
+    return "\n\n".join([battle_block, register_block, rematch_block])
 
 
 # -- context + dispatcher -----------------------------------------------------
@@ -1058,6 +1620,7 @@ _CLASSIFIERS: list[
     classify_pokemart,  # Classifier 9
     classify_simple_warp,  # Classifier 4
     classify_trainer_battle,  # Classifier 6
+    classify_phone_rematch_trainer_battle,  # Classifier 10
 ]
 
 
