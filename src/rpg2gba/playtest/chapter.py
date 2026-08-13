@@ -56,12 +56,26 @@ BeatFn = Callable[["Emulator"], None]
 
 
 @dataclass(frozen=True)
+class BeatLocation:
+    """Where a beat is supposed to be triggered, for a debug map viewer to
+    draw a marker against -- purely descriptive metadata, never consulted by
+    the beat's own `run` body."""
+
+    map_constant: str          # a MAP_* constant string, exactly as the
+                                # chapter code already spells it
+    x: int
+    y: int
+    label: str | None = None   # short human note, e.g. "mart door"
+
+
+@dataclass(frozen=True)
 class Beat:
     """One row of a chapter doc's beat table."""
 
     name: str
     description: str
     run: BeatFn
+    locations: tuple[BeatLocation, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -106,7 +120,8 @@ def _prefix_beat(owner: str, beat: Beat) -> Beat:
     if ":" in beat.name:
         return beat
     return Beat(name=f"{owner}:{beat.name}",
-                description=f"[{owner}] {beat.description}", run=beat.run)
+                description=f"[{owner}] {beat.description}", run=beat.run,
+                locations=beat.locations)
 
 
 @dataclass
@@ -118,12 +133,45 @@ class ChapterBuilder:
     predecessor: str | None = None
     _beats: list[Beat] = field(default_factory=list)
 
-    def beat(self, name: str, description: str) -> Callable[[BeatFn], BeatFn]:
+    def beat(self, name: str, description: str, *,
+             map_constant: str | None = None,
+             at: tuple[int, int] | None = None,
+             locations: tuple[BeatLocation, ...] | None = None,
+             ) -> Callable[[BeatFn], BeatFn]:
+        """Register a beat, optionally declaring where it triggers.
+
+        Two mutually exclusive ways to declare location:
+
+        - Shorthand, a single point: pass both `map_constant=` and `at=`.
+        - Multi-point: pass `locations=` (a tuple of `BeatLocation`).
+
+        Passing both forms, or only one half of the shorthand pair, fails
+        loud -- an ambiguous or incomplete declaration is worse than none.
+        """
         if any(b.name == name for b in self._beats):
             raise ValueError(f"duplicate beat {name!r} in chapter {self.name!r}")
 
+        shorthand_given = map_constant is not None or at is not None
+        if shorthand_given and locations is not None:
+            raise ValueError(
+                f"beat {name!r}: pass either map_constant=/at= or "
+                f"locations=, not both")
+        if shorthand_given and (map_constant is None or at is None):
+            raise ValueError(
+                f"beat {name!r}: map_constant= and at= must be given "
+                f"together")
+
+        if locations is not None:
+            resolved_locations = locations
+        elif shorthand_given:
+            x, y = at
+            resolved_locations = (BeatLocation(map_constant, x, y),)
+        else:
+            resolved_locations = ()
+
         def decorate(fn: BeatFn) -> BeatFn:
-            self._beats.append(Beat(name=name, description=description, run=fn))
+            self._beats.append(Beat(name=name, description=description,
+                                    run=fn, locations=resolved_locations))
             return fn
 
         return decorate

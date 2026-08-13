@@ -13,6 +13,8 @@ Routes:
   GET  /api/tile/<mapid>/<tid>.png  -> single RMXP tile PNG
   GET  /api/metatile/<mapid>/<idx>.png?layer=bottom|top -> metatile PNG
   GET  /api/feedback/<id>           -> this map's tile-feedback flags (JSON list)
+  GET  /api/event/<mapid>/<eventid> -> per-event debug record (map_viewer_events.event_detail)
+  GET  /api/beats/<mapid>           -> scenario beat markers for this map (map_viewer_events.beat_markers)
   POST /api/feedback                -> replace a map's flag list (body: {map_id, flags})
   POST /api/feedback/export         -> write a flag snapshot to output/map_feedback/ (server-side)
   POST /api/quantize                -> apply family-packer knobs (Advanced only)
@@ -55,6 +57,18 @@ from map_viewer_common import (  # noqa: E402
 )
 from palette_page import PALETTE_VIEWER_HTML  # noqa: E402
 
+# map_viewer_events is a sibling module owned by another agent; it may not
+# exist on disk yet or may be mid-edit.  Import it defensively so a missing
+# or broken module never takes down the whole viewer -- only the two routes
+# that depend on it (/api/event, /api/beats) degrade, as a clean 503.
+try:
+    import map_viewer_events  # noqa: E402
+except Exception as _exc:  # noqa: BLE001 - any import-time failure is fine here
+    map_viewer_events = None
+    _MAP_VIEWER_EVENTS_ERROR = str(_exc)
+else:
+    _MAP_VIEWER_EVENTS_ERROR = None
+
 # Serializes knob Applies: re-quantization mutates the shared module-level caches in
 # map_viewer_common, so two concurrent POSTs (ThreadingHTTPServer) must not interleave.
 _quant_lock = threading.Lock()
@@ -72,6 +86,10 @@ _RE_API_META = re.compile(r"^/api/metatile/(\d+)/(\d+)\.png$")
 # character_name URL segment before it ever reaches _resolve_sheet.
 _RE_API_NPC = re.compile(r"^/api/npc/([A-Za-z0-9_\-]+)\.png$")
 _RE_API_FEEDBACK = re.compile(r"^/api/feedback/(\d+)$")
+# Segments captured loosely (not \d+) so a non-integer id falls through to our
+# own 400 JSON response instead of the generic 404 catch-all.
+_RE_API_EVENT = re.compile(r"^/api/event/([^/]+)/([^/]+)$")
+_RE_API_BEATS = re.compile(r"^/api/beats/([^/]+)$")
 
 _CACHE_IMMUTABLE = "public, max-age=31536000, immutable"
 
@@ -195,6 +213,10 @@ class _Handler(BaseHTTPRequestHandler):
                 self._serve_npc(m.group(1))
             elif m := _RE_API_FEEDBACK.match(path):
                 self._serve_feedback(int(m.group(1)))
+            elif m := _RE_API_EVENT.match(path):
+                self._serve_event(m.group(1), m.group(2))
+            elif m := _RE_API_BEATS.match(path):
+                self._serve_beats(m.group(1))
             else:
                 self._send(404, "text/plain", b"Not found")
         except (FileNotFoundError, KeyError, IndexError) as exc:
@@ -280,6 +302,47 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _serve_feedback(self, map_id: int) -> None:
         body = json.dumps(load_feedback(map_id)).encode("utf-8")
+        self._send(200, "application/json", body)
+
+    def _serve_event(self, map_id_str: str, event_id_str: str) -> None:
+        """Per-event debug record from map_viewer_events.  Bad integers are a
+        400, an unknown event is a clean 404, and the module being missing/
+        broken is a 503 -- none of these should look like a server crash."""
+        try:
+            map_id = int(map_id_str)
+            event_id = int(event_id_str)
+        except ValueError:
+            self._send(400, "application/json",
+                       json.dumps({"error": "map_id and event_id must be integers"}).encode("utf-8"))
+            return
+        if map_viewer_events is None:
+            self._send(503, "application/json",
+                       json.dumps({"error": f"map_viewer_events unavailable: {_MAP_VIEWER_EVENTS_ERROR}"}).encode("utf-8"))
+            return
+        try:
+            data = map_viewer_events.event_detail(map_id, event_id)
+        except KeyError as exc:
+            self._send(404, "application/json",
+                       json.dumps({"error": str(exc)}).encode("utf-8"))
+            return
+        body = json.dumps(data, separators=(",", ":")).encode("utf-8")
+        self._send(200, "application/json", body)
+
+    def _serve_beats(self, map_id_str: str) -> None:
+        """Scenario beat markers for a map from map_viewer_events.  Reads
+        playtest run artifacts that change between runs -- never cached."""
+        try:
+            map_id = int(map_id_str)
+        except ValueError:
+            self._send(400, "application/json",
+                       json.dumps({"error": "map_id must be an integer"}).encode("utf-8"))
+            return
+        if map_viewer_events is None:
+            self._send(503, "application/json",
+                       json.dumps({"error": f"map_viewer_events unavailable: {_MAP_VIEWER_EVENTS_ERROR}"}).encode("utf-8"))
+            return
+        data = map_viewer_events.beat_markers(map_id)
+        body = json.dumps(data, separators=(",", ":")).encode("utf-8")
         self._send(200, "application/json", body)
 
     def _serve_index(self) -> None:

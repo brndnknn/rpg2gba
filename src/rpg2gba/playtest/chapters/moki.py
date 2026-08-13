@@ -50,7 +50,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ..battle import decrypt_species, in_battle, win_battle
-from ..chapter import ChapterBuilder
+from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
 from ..scenarios import BOOT_FRAMES
 
@@ -325,14 +325,17 @@ def b1(emu: Emulator) -> None:
 
 # -- B2 --------------------------------------------------------------------
 
-@moki.beat("B2", "Leaving 1F before talking to Auntie is blocked")
+@moki.beat("B2", "Leaving 1F before talking to Auntie is blocked",
+           map_constant="MAP_MOKI_TOWN_PLAYERS_HOUSE_1F",
+           at=HOUSE1F_EXIT_APPROACH)
 def b2(emu: Emulator) -> None:
     _assert_house1f_exit_blocked(emu, "B2")
 
 
 # -- B3 ----------------------------------------------------------------------
 
-@moki.beat("B3", "Auntie grants FLAG_SYS_B_DASH; her gift-once flag is set")
+@moki.beat("B3", "Auntie grants FLAG_SYS_B_DASH; her gift-once flag is set",
+           map_constant="MAP_MOKI_TOWN_PLAYERS_HOUSE_1F", at=AUNTIE_INTERACT)
 def b3(emu: Emulator) -> None:
     emu.walk_to(*AUNTIE_INTERACT)
     emu.face("UP")
@@ -350,7 +353,8 @@ def b3(emu: Emulator) -> None:
 
 # -- B4 ------------------------------------------------------------------
 
-@moki.beat("B4", "Crossing Map032's fence-row tile fires Theo's cameo, once")
+@moki.beat("B4", "Crossing Map032's fence-row tile fires Theo's cameo, once",
+           map_constant="MAP_MOKI_TOWN", at=FENCE_TRIP_APPROACH)
 def b4(emu: Emulator) -> None:
     if emu.flag("FLAG_MAP032_EVENT074_SSA"):
         raise ScenarioError(
@@ -377,7 +381,8 @@ def b4(emu: Emulator) -> None:
 
 # -- B5 ------------------------------------------------------------------
 
-@moki.beat("B5", "Entering the lab autoruns Bambo's intro scene")
+@moki.beat("B5", "Entering the lab autoruns Bambo's intro scene",
+           map_constant="MAP_MOKI_TOWN", at=LAB_DOOR_MOKI_TOWN)
 def b5(emu: Emulator) -> None:
     _enter_door(emu, "B5", LAB_DOOR_MOKI_TOWN, "MAP_MOKI_TOWN_PROFESSOR_LAB")
     if not emu.field_locked():
@@ -447,7 +452,8 @@ def n3(emu: Emulator) -> None:
 
 # -- B7 ------------------------------------------------------------------
 
-@moki.beat("B7", "Re-offer + Yes answer plays the 4-question quiz")
+@moki.beat("B7", "Re-offer + Yes answer plays the 4-question quiz",
+           map_constant="MAP_MOKI_TOWN_PROFESSOR_LAB", at=BAMBO_INTERACT)
 def b7(emu: Emulator) -> None:
     emu.walk_to(*BAMBO_INTERACT)
     emu.face("UP")
@@ -483,7 +489,8 @@ def b7(emu: Emulator) -> None:
 
 # -- B8 ------------------------------------------------------------------
 
-@moki.beat("B8", "Interacting with the Machine grants the starter")
+@moki.beat("B8", "Interacting with the Machine grants the starter",
+           map_constant="MAP_MOKI_TOWN_PROFESSOR_LAB", at=MACHINE_INTERACT)
 def b8(emu: Emulator) -> None:
     emu.walk_to(*MACHINE_INTERACT)
     emu.face("UP")
@@ -542,7 +549,8 @@ def b9(emu: Emulator) -> None:
 
 # -- B10 -----------------------------------------------------------------
 
-@moki.beat("B10", "The lab exit warp unlocks once VAR_QUEST_LOG >= 1")
+@moki.beat("B10", "The lab exit warp unlocks once VAR_QUEST_LOG >= 1",
+           map_constant="MAP_MOKI_TOWN_PROFESSOR_LAB", at=LAB_EXIT_APPROACH)
 def b10(emu: Emulator) -> None:
     quest_log = emu.var("VAR_QUEST_LOG")
     if quest_log < 1:
@@ -556,7 +564,8 @@ def b10(emu: Emulator) -> None:
 # -- N2 (after B8/B10, before B11/B12, per interleaving instructions --
 # physically requires being back out in Map032, which only B10 provides) --
 
-@moki.beat("N2", "Skipping Theo's house: the pre-Theo redirect writes no state")
+@moki.beat("N2", "Skipping Theo's house: the pre-Theo redirect writes no state",
+           map_constant="MAP_MOKI_TOWN", at=CEREMONY_APPROACH)
 def n2(emu: Emulator) -> None:
     quest_log_before = emu.var("VAR_QUEST_LOG")
     if quest_log_before != 1:
@@ -587,7 +596,8 @@ def n2(emu: Emulator) -> None:
 
 # -- B11 -----------------------------------------------------------------
 
-@moki.beat("B11", "Theo's house door is always open (the gate is inside)")
+@moki.beat("B11", "Theo's house door is always open (the gate is inside)",
+           map_constant="MAP_MOKI_TOWN", at=THEO_HOUSE_DOOR)
 def b11(emu: Emulator) -> None:
     _enter_door(emu, "B11", THEO_HOUSE_DOOR, "MAP_MOKI_TOWN_THEOS_HOUSE_1F")
 
@@ -625,7 +635,8 @@ def b12(emu: Emulator) -> None:
 
 # -- B13 -----------------------------------------------------------------
 
-@moki.beat("B13", "Crossing the west-exit tiles plays the catch ceremony")
+@moki.beat("B13", "Crossing the west-exit tiles plays the catch ceremony",
+           map_constant="MAP_MOKI_TOWN", at=CEREMONY_APPROACH)
 def b13(emu: Emulator) -> None:
     quest_log_before = emu.var("VAR_QUEST_LOG")
     if quest_log_before < 2:
@@ -654,7 +665,8 @@ def b13(emu: Emulator) -> None:
 
 # -- B14 -----------------------------------------------------------------
 
-@moki.beat("B14", "Re-crossing the ceremony tiles does not refire the scene")
+@moki.beat("B14", "Re-crossing the ceremony tiles does not refire the scene",
+           map_constant="MAP_MOKI_TOWN", at=CEREMONY_APPROACH)
 def b14(emu: Emulator) -> None:
     quest_log_before = emu.var("VAR_QUEST_LOG")
     if quest_log_before != 4:

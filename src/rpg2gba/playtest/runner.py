@@ -97,6 +97,20 @@ def _snapshot(emu: "Emulator", beat_name: str) -> Snapshot:
                      map_location=emu.map_location(), blocks=dump_save_blocks(emu))
 
 
+def _loc(emu: "Emulator") -> dict[str, object]:
+    """One player_pos()/map_location() read, shaped for `ObservedBeat`."""
+    map_group, map_num = emu.map_location()
+    return {"map_group": map_group, "map_num": map_num,
+            "player_pos": list(emu.player_pos())}
+
+
+def _loc_from_snapshot(snap: Snapshot) -> dict[str, object]:
+    """Same shape as `_loc`, from a `Snapshot` already taken -- avoids a
+    redundant player_pos()/map_location() read at the boot boundary."""
+    return {"map_group": snap.map_location[0], "map_num": snap.map_location[1],
+            "player_pos": list(snap.player_pos)}
+
+
 def hash_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -125,6 +139,19 @@ class BeatOutcome:
     traceback: str | None = None
 
 
+@dataclass(frozen=True)
+class ObservedBeat:
+    """Where the player actually was at one beat's boundaries, for the debug
+    map viewer (observed-vs-intended overlay). `enter`/`exit` are dicts
+    shaped `{"map_group": int, "map_num": int, "player_pos": [x, y]}`, or
+    `None` for `exit` when the beat raised."""
+
+    beat: str
+    status: str  # "pass" | "fail"
+    enter: dict[str, object] | None
+    exit: dict[str, object] | None
+
+
 @dataclass
 class AttemptResult:
     """One full playthrough attempt (new-game or seeded)."""
@@ -136,6 +163,7 @@ class AttemptResult:
     last_snapshot: Snapshot | None = None
     screenshot_dir: Path | None = None
     waypoints: list[Waypoint] = field(default_factory=list)
+    observed_beats: list[ObservedBeat] = field(default_factory=list)
     # The attempt's working ROM copy. It outlives the attempt on purpose:
     # `final_emulator` is still running on it, and stamping the green review
     # ROM drives that emulator through an in-game save, which needs its .sav
@@ -233,9 +261,15 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
         # The frame the run starts on is itself worth an eye: a wrong spawn
         # map or a botched intro-skip shows up here before any beat runs.
         emu.waypoint("boot", note="seeded" if start_idx > 0 else "new game")
+        observed: list[ObservedBeat] = []
+        # Nothing moves between beats, so each beat's entry location is
+        # exactly the previous beat's exit -- one location read per beat
+        # boundary, not a second pass over the beat list.
+        pending_enter = _loc_from_snapshot(last_snapshot)
 
         for beat in chapter.beats[start_idx:]:
             logger.info("[%s] beat %s starting: %s", chapter.name, beat.name, beat.description)
+            enter = pending_enter
             try:
                 beat.run(emu)
             except Exception as exc:  # noqa: BLE001 - beat failures are data, not bugs here
@@ -244,14 +278,17 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
                 logger.error("[%s] beat %s FAILED: %s", chapter.name, beat.name, exc)
                 beats_out.append(BeatOutcome(beat.name, beat.description, "fail",
                                               error=str(exc), traceback=tb_text))
+                observed.append(ObservedBeat(beat.name, "fail", enter, None))
                 emu.waypoint(beat.name, "FAILED", note=beat.description, failed=True)
                 return AttemptResult(passed=False, beats=beats_out, pristine_rom=rom,
                                       final_emulator=emu, last_snapshot=last_snapshot,
                                       screenshot_dir=shots, waypoints=list(emu.waypoints),
-                                      scratch_rom=scratch)
+                                      observed_beats=observed, scratch_rom=scratch)
 
             logger.info("[%s] beat %s passed", chapter.name, beat.name)
             beats_out.append(BeatOutcome(beat.name, beat.description, "pass"))
+            pending_enter = _loc(emu)
+            observed.append(ObservedBeat(beat.name, "pass", enter, pending_enter))
             emu.waypoint(beat.name, note=beat.description)
 
             idx = chapter.index_of(beat.name)
@@ -289,7 +326,7 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
         return AttemptResult(passed=True, beats=beats_out, pristine_rom=rom,
                               final_emulator=emu, last_snapshot=last_snapshot,
                               screenshot_dir=shots, waypoints=list(emu.waypoints),
-                              scratch_rom=scratch)
+                              observed_beats=observed, scratch_rom=scratch)
     except BaseException:
         # No AttemptResult escapes on this path, so nobody downstream can clean
         # up after us.
@@ -403,6 +440,77 @@ def _classify(attempts: list[AttemptResult]) -> str:
     return "fail"
 
 
+# -- observed-beats file (debug map viewer input) -----------------------------
+
+def build_observed_beats_record(chapter: Chapter, attempts: list[AttemptResult],
+                                 verdict: str, from_beat: str | None,
+                                 rom_sha256: str | None,
+                                 generated_at: str | None = None) -> dict:
+    """Build the `output/playtest/observed_beats/<chapter>.json` payload.
+
+    Walks `chapter.beats` in doc order so the file always lists every beat,
+    even ones never reached this run. Location data comes from the *final*
+    attempt (`attempts[-1]` -- the one `_classify` and the rest of
+    `run_chapter` already treat as authoritative), so a flake's two attempts
+    don't produce duplicate/conflicting entries: the beat that failed on
+    attempt 1 but passed on attempt 2 is reported once, tagged "flake"
+    rather than a plain "pass", since that instability is the point of a
+    flake verdict. Beats before `from_beat`'s start index, or after a beat
+    that failed with no rerun-and-pass, are "skipped" with null locations.
+    """
+    final_attempt = attempts[-1]
+    by_name = {ob.beat: ob for ob in final_attempt.observed_beats}
+
+    flaky_beat = None
+    if verdict == "flake":
+        first_failed = attempts[0].failed_beat
+        flaky_beat = first_failed.name if first_failed is not None else None
+
+    beats: list[dict] = []
+    for beat in chapter.beats:
+        observed = by_name.get(beat.name)
+        if observed is None:
+            beats.append({"beat": beat.name, "status": "skipped",
+                           "enter": None, "exit": None})
+            continue
+        status = "flake" if beat.name == flaky_beat else observed.status
+        beats.append({"beat": beat.name, "status": status,
+                       "enter": observed.enter, "exit": observed.exit})
+
+    return {
+        "version": 1,
+        "chapter": chapter.name,
+        "rom_sha256": rom_sha256,
+        "generated_at": generated_at or datetime.now(timezone.utc).isoformat(),
+        "from_beat": from_beat,
+        "beats": beats,
+    }
+
+
+def _write_observed_beats(output_root: Path, chapter: Chapter,
+                           attempts: list[AttemptResult], verdict: str,
+                           from_beat: str | None, rom: Path) -> None:
+    """Write the observed-beats file. Never raises -- this is debug-viewer
+    bookkeeping, not the scenario under test, and a write failure here must
+    not mask (or replace) the real run result."""
+    try:
+        rom_sha256 = hash_file(rom)
+    except OSError as exc:
+        logger.warning("[%s] could not hash rom for observed-beats file: %s",
+                        chapter.name, exc)
+        rom_sha256 = None
+    try:
+        record = build_observed_beats_record(chapter, attempts, verdict,
+                                              from_beat, rom_sha256)
+        out_dir = output_root / "observed_beats"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"{chapter.name}.json"
+        out_path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+    except Exception:  # noqa: BLE001 - bookkeeping, never the scenario error
+        logger.exception("[%s] failed to write observed-beats file",
+                          chapter.name)
+
+
 # -- entry point --------------------------------------------------------------
 
 def run_chapter(chapter: Chapter, rom: Path, engine: Path, *,
@@ -440,23 +548,29 @@ def run_chapter(chapter: Chapter, rom: Path, engine: Path, *,
     verdict = _classify(attempts)
     result = ChapterRunResult(chapter=chapter.name, verdict=verdict, attempts=attempts)
 
-    if verdict == "pass":
-        result.stamped_rom = _stamp_green(chapter, rom, attempts[-1], output_root)
-    elif verdict == "flake":
-        result.flake_log = _log_flake(chapter, attempts[0], output_root)
-    else:
-        result.bundle_dir = _build_bundle(chapter, attempts[-1], output_root)
+    try:
+        if verdict == "pass":
+            result.stamped_rom = _stamp_green(chapter, rom, attempts[-1], output_root)
+        elif verdict == "flake":
+            result.flake_log = _log_flake(chapter, attempts[0], output_root)
+        else:
+            result.bundle_dir = _build_bundle(chapter, attempts[-1], output_root)
 
-    # §2 contact sheet, from whichever attempt the verdict rests on: a red
-    # run's sheet ships inside its repro bundle (ending on the failing
-    # frame), a green run's sits beside the review ROM as the by-eye
-    # artifact that replaces the boot walk.
-    sheet_dir = result.bundle_dir or (output_root / "review")
-    sheet_dir.mkdir(parents=True, exist_ok=True)
-    for stale in sorted(sheet_dir.glob(f"{chapter.name}-sheet*.png")):
-        stale.unlink()
-    result.contact_sheet = build_contact_sheet(
-        attempts[-1].waypoints, sheet_dir, chapter=chapter.name, verdict=verdict)
+        # §2 contact sheet, from whichever attempt the verdict rests on: a red
+        # run's sheet ships inside its repro bundle (ending on the failing
+        # frame), a green run's sits beside the review ROM as the by-eye
+        # artifact that replaces the boot walk.
+        sheet_dir = result.bundle_dir or (output_root / "review")
+        sheet_dir.mkdir(parents=True, exist_ok=True)
+        for stale in sorted(sheet_dir.glob(f"{chapter.name}-sheet*.png")):
+            stale.unlink()
+        result.contact_sheet = build_contact_sheet(
+            attempts[-1].waypoints, sheet_dir, chapter=chapter.name, verdict=verdict)
+    finally:
+        # Written even on a failing run (that's when it's most useful) and
+        # even if the bundle/contact-sheet steps above raise -- this is the
+        # debug map viewer's input, not the scenario result itself.
+        _write_observed_beats(output_root, chapter, attempts, verdict, from_beat, rom)
 
     # Temp per-attempt screenshot dirs are either copied into the bundle
     # already or unneeded (pass/flake) — clean them up either way.

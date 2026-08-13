@@ -887,6 +887,167 @@ def _is_trainer_strip(p: object) -> bool:
     )
 
 
+@dataclass(frozen=True)
+class _ParsedTrainerCall:
+    """Fields recovered from a single embedded ``pbTrainerBattle(...)`` call
+    string. Internal to this module — shared by both trainer-battle
+    classifiers and by the public :func:`extract_trainer_reference`.
+    """
+
+    trainer_class_constant: str
+    class_symbol: str
+    display_name: str
+    party_id: int
+    defeat_raw: str
+    args: list[str]
+
+
+def _parse_trainer_battle_call(call: str) -> "_ParsedTrainerCall | None":
+    """Regex-extract trainer identity out of a ``pbTrainerBattle(...)`` call.
+
+    ``call`` is the raw Ruby text of the call, e.g.
+    ``pbTrainerBattle(PBTrainers::YOUNGSTER,"Richey",_I("..."),false,0,false,0)``.
+    Returns ``None`` if the text doesn't parse as a trainer-battle call at
+    all (no ``PBTrainers::`` class, no closing ``pbTrainerBattle(...)``, or
+    no quoted name). Does NOT touch ``Context`` — callers do the
+    ``ctx.trainers`` lookup themselves.
+    """
+    m_class = re.search(r"(?:::)?PBTrainers::(\w+)", call)
+    if not m_class:
+        return None
+    class_sym = m_class.group(1)
+    class_const = to_constant("TRAINER_CLASS", class_sym)
+
+    # defeat text (inside _I("..."))
+    m_defeat = re.search(r'_I\("((?:[^"\\]|\\.)*)"\)', call)
+    defeat_raw = m_defeat.group(1) if m_defeat else ""
+
+    # party_id: strip the _I("...") blob first so its commas don't confuse split
+    cleaned_call = re.sub(r'_I\("(?:[^"\\]|\\.)*"\)', "_I", call)
+    m_inner = re.search(r"pbTrainerBattle\((.*?)\)\s*$", cleaned_call, re.DOTALL)
+    if not m_inner:
+        return None
+    args = [a.strip() for a in m_inner.group(1).split(",")]
+    # args: [class_expr, name_str, _I, canlose, party_id, ...]
+    party_id = 0
+    if len(args) >= 5 and args[4].isdigit():
+        party_id = int(args[4])
+
+    # trainer name (first quoted string in the call)
+    m_name = re.search(r'"([^"]*)"', call)
+    if not m_name:
+        return None
+    name = m_name.group(1)
+
+    return _ParsedTrainerCall(
+        trainer_class_constant=class_const,
+        class_symbol=class_sym,
+        display_name=name,
+        party_id=party_id,
+        defeat_raw=defeat_raw,
+        args=args,
+    )
+
+
+@dataclass(frozen=True)
+class TrainerReference:
+    """Structured identity of a trainer-battle map event, for tools (e.g. the
+    debug map-viewer) that need "which named trainer is this NPC?" without
+    duplicating the regex/lookup logic that lives in the classifiers below.
+    """
+
+    trainer_constant: str | None  # TRAINER_* const; None if unresolved in ctx.trainers
+    trainer_class_constant: str
+    display_name: str
+    party_id: int
+    kind: str  # "sight" (classify_trainer_battle) or "rematch" (phone-rematch idiom)
+
+
+def extract_trainer_reference(event: dict, ctx: "Context") -> "TrainerReference | None":
+    """Lenient trainer-identity extraction for the debug map-viewer.
+
+    Scans ``event``'s pages for a ``pbTrainerBattle(...)`` call embedded in a
+    code-12 (Script) conditional-branch condition — the shape both
+    :func:`classify_trainer_battle` and
+    :func:`classify_phone_rematch_trainer_battle` match on — and, if found,
+    parses it with :func:`_parse_trainer_battle_call` and looks the triple up
+    in ``ctx.trainers``.
+
+    Unlike the classifiers, this function does NOT validate full page/command
+    structure (self-switches, exact command-code allowlists, etc.) — it only
+    needs enough to identify the trainer, not enough to safely emit
+    Poryscript. It is safe to call on any event dict, including malformed or
+    non-trainer ones: returns ``None`` rather than raising. An unresolved
+    ``ctx.trainers`` lookup does not fail the whole call — ``trainer_constant``
+    is simply ``None`` — so callers can still report class/name/party_id for
+    an event the classifiers themselves would reject.
+    """
+    pages = event.get("pages")
+    if not isinstance(pages, list) or not pages:
+        return None
+
+    # A phone-rematch event additionally carries a pbPhoneRegisterBattle(...)
+    # or createPhoneTrainer(...) call somewhere in its pages; an ordinary
+    # sight trainer does not.
+    is_rematch = False
+    for page in pages:
+        if not isinstance(page, dict):
+            continue
+        for cmd in page.get("list", []):
+            if not isinstance(cmd, dict):
+                continue
+            if cmd.get("code") not in (SCRIPT, SCRIPT_CONT):
+                continue
+            p = cmd.get("parameters", [])
+            text = p[0] if p and isinstance(p[0], str) else ""
+            if "pbPhoneRegisterBattle(" in text or "createPhoneTrainer(" in text:
+                is_rematch = True
+                break
+        if is_rematch:
+            break
+
+    call: str | None = None
+    for page in pages:
+        if not isinstance(page, dict):
+            continue
+        for cmd in page.get("list", []):
+            if not isinstance(cmd, dict):
+                continue
+            if cmd.get("code") != CONDITIONAL_BRANCH:
+                continue
+            params = cmd.get("parameters", [])
+            if len(params) < 2 or params[0] != 12:
+                continue
+            candidate = params[1]
+            if not isinstance(candidate, str):
+                continue
+            if "pbTrainerBattle(" not in candidate or "pbDoubleTrainerBattle" in candidate:
+                continue
+            call = candidate
+            break
+        if call is not None:
+            break
+
+    if call is None:
+        return None
+
+    parsed = _parse_trainer_battle_call(call)
+    if parsed is None:
+        return None
+
+    trainer_const = ctx.trainers.get(
+        (parsed.trainer_class_constant, parsed.display_name, parsed.party_id)
+    )
+
+    return TrainerReference(
+        trainer_constant=trainer_const,
+        trainer_class_constant=parsed.trainer_class_constant,
+        display_name=parsed.display_name,
+        party_id=parsed.party_id,
+        kind="rematch" if is_rematch else "sight",
+    )
+
+
 def classify_trainer_battle(
     map_id: int, event: dict, ctx: "Context | None" = None
 ) -> str | None:
@@ -956,33 +1117,13 @@ def classify_trainer_battle(
                 return None
 
     # --- Parse the trainer call ------------------------------------------------
-    # class symbol
-    m_class = re.search(r"(?:::)?PBTrainers::(\w+)", call)
-    if not m_class:
+    parsed = _parse_trainer_battle_call(call)
+    if parsed is None:
         return None
-    sym = m_class.group(1)
-    class_const = to_constant("TRAINER_CLASS", sym)
-
-    # defeat text (inside _I("..."))
-    m_defeat = re.search(r'_I\("((?:[^"\\]|\\.)*)"\)', call)
-    defeat_raw = m_defeat.group(1) if m_defeat else ""
-
-    # party_id: strip the _I("...") blob first so its commas don't confuse split
-    cleaned_call = re.sub(r'_I\("(?:[^"\\]|\\.)*"\)', "_I", call)
-    m_inner = re.search(r"pbTrainerBattle\((.*?)\)\s*$", cleaned_call, re.DOTALL)
-    if not m_inner:
-        return None
-    args = [a.strip() for a in m_inner.group(1).split(",")]
-    # args: [class_expr, name_str, _I, canlose, party_id, ...]
-    party_id = 0
-    if len(args) >= 5 and args[4].isdigit():
-        party_id = int(args[4])
-
-    # trainer name (first quoted string in the call)
-    m_name = re.search(r'"([^"]*)"', call)
-    if not m_name:
-        return None
-    name = m_name.group(1)
+    class_const = parsed.trainer_class_constant
+    name = parsed.display_name
+    party_id = parsed.party_id
+    defeat_raw = parsed.defeat_raw
 
     # --- Lookup in context -----------------------------------------------------
     if ctx is None:
@@ -1145,11 +1286,6 @@ _PHONE_WIN_CHECK = "$game_variables[1]==0"
 _PHONE_INCREMENT_RE = re.compile(
     r'^pbPhoneIncrement\((?:::)?PBTrainers::(\w+),"([^"]*)",\d+\)$'
 )
-_PHONE_TRAINER_BATTLE_CLASS_RE = re.compile(r"(?:::)?PBTrainers::(\w+)")
-_PHONE_TRAINER_BATTLE_DEFEAT_RE = re.compile(r'_I\("((?:[^"\\]|\\.)*)"\)')
-_PHONE_TRAINER_BATTLE_STRIP_I_RE = re.compile(r'_I\("(?:[^"\\]|\\.)*"\)')
-_PHONE_TRAINER_BATTLE_INNER_RE = re.compile(r"pbTrainerBattle\((.*?)\)\s*$", re.DOTALL)
-_PHONE_TRAINER_BATTLE_NAME_RE = re.compile(r'"([^"]*)"')
 
 
 def classify_phone_rematch_trainer_battle(
@@ -1296,31 +1432,20 @@ def classify_phone_rematch_trainer_battle(
         return None  # trailing junk on page 0 — deviation, fail loud
 
     # ---- parse the pbTrainerBattle(...) call itself ----------------------
-    m_class = _PHONE_TRAINER_BATTLE_CLASS_RE.search(call)
-    if not m_class or m_class.group(1) != class_sym:
+    parsed = _parse_trainer_battle_call(call)
+    if parsed is None or parsed.class_symbol != class_sym:
         return None
-    class_const = to_constant("TRAINER_CLASS", class_sym)
+    class_const = parsed.trainer_class_constant
+    defeat_raw = parsed.defeat_raw
+    args = parsed.args
 
-    m_defeat = _PHONE_TRAINER_BATTLE_DEFEAT_RE.search(call)
-    defeat_raw = m_defeat.group(1) if m_defeat else ""
-
-    cleaned_call = _PHONE_TRAINER_BATTLE_STRIP_I_RE.sub("_I", call)
-    m_inner = _PHONE_TRAINER_BATTLE_INNER_RE.search(cleaned_call)
-    if not m_inner:
-        return None
-    args = [a.strip() for a in m_inner.group(1).split(",")]
     if len(args) < 6:
         return None
     if args[5] not in ("false", "0"):
         return None  # canlose battle — _emit_canlose_trainer_battle_idiom's turf
-    party_id = 0
-    if args[4].isdigit():
-        party_id = int(args[4])
+    party_id = parsed.party_id
 
-    m_name = _PHONE_TRAINER_BATTLE_NAME_RE.search(call)
-    if not m_name:
-        return None
-    name = m_name.group(1)
+    name = parsed.display_name
     if name != m_reg.group(2):
         return None
 

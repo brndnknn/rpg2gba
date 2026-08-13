@@ -845,6 +845,26 @@ def _parse_events(events_list: list) -> list[dict]:
     return result
 
 
+def _build_events_payload(map_id: int, events_list: list) -> list[dict]:
+    """Route the event list through the EVENTS-mode enrichment layer
+    (``map_viewer_events.enrich_events`` — trainer/item identity, kind
+    classification, ...), falling back to the bare ``_parse_events`` shape if
+    that layer raises, so the GRAPHICS mode never goes dark because of an
+    EVENTS-mode bug. Imported lazily (not at module top) to avoid a circular
+    import: ``map_viewer_events`` itself imports this module at ITS top
+    level, to reuse the path/cache helpers below."""
+    try:
+        import map_viewer_events
+
+        return map_viewer_events.enrich_events(map_id, events_list)
+    except Exception:
+        log.exception(
+            "map_viewer_events.enrich_events failed for map %s; falling back to _parse_events",
+            map_id,
+        )
+        return _parse_events(events_list)
+
+
 def build_map_data(map_id: int) -> dict:
     """Return all per-map data WITHOUT inline image bytes.
 
@@ -1059,7 +1079,7 @@ def build_map_data(map_id: int) -> dict:
         "metatile_attrs": metatile_attrs,
         "pix_class": state.pix_class,
         "cells": cells,
-        "events": _parse_events(state.events_raw),
+        "events": _build_events_payload(map_id, state.events_raw),
         "palettes": palettes_json,
         "rmxp_tile_colors": rmxp_tile_colors,
         "colkey_palettes": colkey_palettes,
@@ -1130,6 +1150,45 @@ body.adv #knobbar{display:flex}
    a faithful ROM preview even with the knob bar hidden. */
 #nonstock-badge{display:none;color:#fc8;background:#3a2a10;border:1px solid #764;border-radius:3px;padding:2px 7px;font-size:11px;font-weight:bold}
 #nonstock-badge.show{display:inline-block}
+/* ---- mode switch (Graphics | Events) ---- */
+#mode-switch{display:flex;border:1px solid #555;border-radius:3px;overflow:hidden;flex-shrink:0}
+#mode-switch button{background:#2a2a2a;border:none;color:#aaa;padding:3px 10px;cursor:pointer;font:11px monospace}
+#mode-switch button.on{background:#2c3a4a;color:#9cf}
+#mode-switch button+button{border-left:1px solid #555}
+/* graphics-debug chrome (quantize view radios, Advanced + its panel, knobbar,
+   non-stock badge) is Graphics-mode only; the event chrome is Events-mode only.
+   One renderer either way -- this is purely which toolbar/sidebar bits show. */
+body.mode-events #graphics-chrome{display:none}
+body.mode-graphics #events-chrome{display:none}
+body.mode-events #knobbar{display:none !important}
+body.mode-events #adv-controls{display:none !important}
+body.mode-events #merge-panel{display:none !important}
+body.mode-events #nonstock-badge{display:none !important}
+#events-chrome{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center}
+#legend{display:none;flex-wrap:wrap;gap:4px 10px;align-items:center;background:#1c2020;border-bottom:1px solid #333;padding:3px 8px;font-size:10px;flex-shrink:0}
+body.mode-events #legend.show{display:flex}
+.legend-sw{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:3px;vertical-align:middle}
+.legend-shape{display:inline-block;width:9px;height:9px;margin-right:3px;vertical-align:middle}
+#events-static-note{display:none;color:#fc8;background:#3a2a10;border:1px solid #764;border-radius:3px;padding:3px 7px;font-size:11px;margin:4px 0}
+body.mode-events.static-mode #events-static-note{display:block}
+/* ---- event/beat sidebar sections: Events mode only ---- */
+#event-inspector,#beat-panel{display:none}
+body.mode-events #event-inspector{display:block}
+body.mode-events #beat-panel{display:block}
+#event-inspector{padding:8px;border-top:1px solid #333}
+#beat-panel{padding:8px;border-top:1px solid #333}
+.evt-kind-badge{display:inline-block;padding:0 5px;border-radius:8px;font-size:10px;font-weight:bold;color:#111}
+.evt-cond-badge{display:inline-block;color:#fc0;font-weight:bold;margin-left:4px}
+.evt-staged-yes{color:#6f6;font-weight:bold}
+.evt-staged-no{color:#f66;font-weight:bold}
+.beat-row{padding:3px 4px;margin:2px 0;font-size:11px;cursor:pointer;border-left:3px solid #555;background:#1a1a22}
+.beat-row:hover{background:#242433}
+.beat-chapter{color:#8cf;font-weight:bold;font-size:10px;text-transform:uppercase;margin:6px 0 2px}
+.beat-status-pass{border-left-color:#2ca02c}
+.beat-status-fail{border-left-color:#d55e00}
+.beat-status-flake{border-left-color:#cc79a7}
+.beat-status-skipped{border-left-color:#888}
+.evt-cmd-block{background:#151515;border:1px solid #333;padding:4px;margin-top:3px;max-height:160px;overflow-y:auto;font-size:10px;white-space:pre-wrap}
 #merge-list{margin-top:4px;max-height:200px;overflow-y:auto}
 .merge-item{display:flex;align-items:center;gap:6px;background:#251820;border:1px solid #534;padding:2px 5px;margin:2px 0;font-size:11px;cursor:pointer}
 .merge-item:hover{background:#3a2433}
@@ -1184,11 +1243,20 @@ body.adv #knobbar{display:flex}
   #mapnav{gap:8px;padding:6px 8px}
   #mapnav .navchip{min-height:32px;padding:6px 12px;display:flex;align-items:center}
   #mapnav .navsep{height:24px}
+  #mode-switch button{min-height:32px;padding:4px 12px}
+  #legend{font-size:9px;padding:4px 6px}
+  #events-chrome select{min-height:30px}
 }
 </style>
 </head>
 <body>
 <div id="toolbar">
+  <span id="mode-switch" title="Graphics: quantization/tileset debugging. Events: event, trainer and beat debugging. Shortcut: e">
+    <button type="button" id="mode-btn-graphics" class="on">Graphics</button>
+    <button type="button" id="mode-btn-events">Events</button>
+  </span>
+  <div class="sep"></div>
+  <span id="graphics-chrome">
   <span class="lbl">View:</span>
   <label><input type="radio" name="view2" value="rmxp"> RPG Maker</label>
   <label><input type="radio" name="view2" value="post-quant" checked> Quantized (family)</label>
@@ -1213,12 +1281,6 @@ body.adv #knobbar{display:flex}
   <label><input type="checkbox" id="ov_warps" checked> Warps</label>
   <label title="Cells containing a multi-frame (animated) autotile — pipeline currently renders frame 0 only"><input type="checkbox" id="ov_animated"> Animated</label>
   <div class="sep"></div>
-  <span class="lbl">Zoom:</span>
-  <button class="btn" id="zoom-out">-</button>
-  <span id="zoom-val" style="min-width:28px;text-align:center">2x</span>
-  <button class="btn" id="zoom-in">+</button>
-  <button class="btn" id="zoom-fit">Fit</button>
-  <div class="sep"></div>
   <button class="btn" id="btn-advanced" title="Show quantization / graphics-debug controls">Advanced</button>
   <span id="adv-controls">
     <span class="lbl">Debug:</span>
@@ -1228,8 +1290,28 @@ body.adv #knobbar{display:flex}
     <a class="btn" id="nav-palettes" href="#" style="display:none;text-decoration:none">Palettes &rarr;</a>
   </span>
   <span id="nonstock-badge" title="Live quantization knobs differ from stock (FamilyParams defaults, max_palettes=13) — this render is not a faithful ROM preview. Open Advanced to inspect/reset.">&#9888; non-stock quantize</span>
+  </span>
+  <span id="events-chrome">
+    <span class="lbl">Show:</span>
+    <select id="evt-filter" title="Filter which event kinds are drawn/listed">
+      <option value="all">All</option>
+      <option value="trainer">Trainers</option>
+      <option value="item">Items</option>
+      <option value="warp">Warps</option>
+      <option value="conditional">Conditional-only</option>
+    </select>
+    <label><input type="checkbox" id="ov_beats" checked> Beats</label>
+    <label><input type="checkbox" id="ov_dim" checked> Dim map</label>
+  </span>
+  <div class="sep"></div>
+  <span class="lbl">Zoom:</span>
+  <button class="btn" id="zoom-out">-</button>
+  <span id="zoom-val" style="min-width:28px;text-align:center">2x</span>
+  <button class="btn" id="zoom-in">+</button>
+  <button class="btn" id="zoom-fit">Fit</button>
   <span class="lbl" id="map-title" style="color:#8cf"></span>
 </div>
+<div id="legend"></div>
 <div id="mapnav"></div>
 <div id="knobbar">
   <span class="lbl">Family knobs:</span>
@@ -1249,6 +1331,16 @@ body.adv #knobbar{display:flex}
   </div>
   <div id="sidebar">
     <div id="cell-info"><span style="color:#555">Tap cells to build a selection, then add a note.</span></div>
+    <div id="event-inspector">
+      <div class="section-title">Event Inspector</div>
+      <div id="events-static-note">Static build: per-event detail and beat markers need the live server. Showing summary data only.</div>
+      <div id="event-inspector-body"><span class="lbl">Tap a cell with an event marker to inspect it.</span></div>
+    </div>
+    <div id="beat-panel">
+      <div class="section-title" id="beat-head" style="cursor:pointer"><span id="beat-tri">&#9662;</span> Beats <span id="beat-count" class="lbl"></span></div>
+      <div id="beat-notes" class="lbl"></div>
+      <div id="beat-list"><span class="lbl">Loading…</span></div>
+    </div>
     <div id="merge-panel">
       <div class="section-title" id="merge-head" style="cursor:pointer"><span id="merge-tri">&#9656;</span> Worst palette merges <span id="merge-count" class="lbl"></span></div>
       <div id="merge-list" style="display:none"></div>
@@ -1333,6 +1425,51 @@ function getNpcURL(name) {
   return '/api/npc/' + encodeURIComponent(name) + '.png';
 }
 
+// ---- Events-mode data fetch (server mode only; static falls back to the
+// summary `events[]` already embedded in each member's dataset) -----------
+function loadBeats(m) {
+  if (V.mode !== 'server' || !m || beatsByMember.get(m.id) === 'loading') return;
+  beatsByMember.set(m.id, 'loading');
+  fetch('/api/beats/' + m.id).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(data) {
+    beatsByMember.set(m.id, data);
+    if (m === activeM) { renderBeatPanel(); scheduleRender(); }
+  }).catch(function(e) {
+    console.error('beats load failed for map ' + m.id, e);
+    beatsByMember.set(m.id, 'error');
+    if (m === activeM) renderBeatPanel();
+  });
+}
+function loadEventDetail(mapId, eventId) {
+  const body = document.getElementById('event-inspector-body');
+  body.innerHTML = '<span class="lbl">Loading…</span>';
+  if (V.mode !== 'server') {
+    const m = memberById(mapId);
+    const evt = m && m.data ? m.data.events.filter(function(e){ return e.id === eventId; })[0] : null;
+    body.innerHTML = evt ? renderEventSummaryOnly(evt) : '<span class="lbl">Event not found.</span>';
+    return;
+  }
+  fetch('/api/event/' + mapId + '/' + eventId).then(function(r) {
+    return r.json().then(function(j) { return {ok: r.ok, status: r.status, body: j}; });
+  }).then(function(res) {
+    if (!res.ok) {
+      body.innerHTML = '<div class="mismatch">' + (res.status === 404 ? 'Unknown event.' :
+        'Event detail unavailable (HTTP ' + res.status + '): ' + escHtml((res.body && res.body.error) || '')) + '</div>';
+      return;
+    }
+    body.innerHTML = renderEventDetail(res.body);
+  }).catch(function(e) {
+    console.error('event detail failed', e);
+    body.innerHTML = '<div class="mismatch">Event detail fetch failed: ' + escHtml(e.message) + '</div>';
+  });
+}
+function memberById(id) {
+  for (const m of members) if (m.id === id) return m;
+  return null;
+}
+
 // ---- lazy image cache -----------------------------------------------------
 const imgCache = new Map(); // url -> HTMLImageElement | 'loading' | 'err'
 let renderPending = false;
@@ -1400,6 +1537,33 @@ let flaggedCells = new Set();  // "x,y" of every cell covered by some flag (canv
 let editingIndex = null;       // index in `flags` currently being edited, or null
 let advanced = false;          // Advanced (quant/graphics-debug) controls revealed?
 let ready = false;
+
+// ---- Events mode state -----------------------------------------------------
+// `viewMode`: 'graphics' (default, unchanged behaviour) or 'events' (event/
+// trainer/beat debugging). One renderer either way -- everything below just
+// gates what the shared render/tap paths do.
+let viewMode = 'graphics';
+let eventFilter = 'all';       // all | trainer | item | warp | conditional
+let showBeats = true;
+let dimBase = true;
+const KIND_COLORS = {
+  warp: '#33e6ff', trainer: '#ff4444', item: '#ffcc00', npc: '#66ff66',
+  sign: '#8888ff', autorun: '#ff66ff', parallel: '#55ccff', other: '#999999',
+};
+const KIND_LABELS = {
+  warp: 'Warp', trainer: 'Trainer', item: 'Item', npc: 'NPC',
+  sign: 'Sign', autorun: 'Autorun', parallel: 'Parallel', other: 'Other',
+};
+// Okabe-Ito colourblind-safe hues, one shape per status so colour is never
+// the only signal (pass=circle, fail=square, flake=triangle, skipped=diamond-outline).
+const STATUS_STYLE = {
+  pass:    {color: '#2ca02c', shape: 'circle'},
+  fail:    {color: '#d55e00', shape: 'square'},
+  flake:   {color: '#cc79a7', shape: 'triangle'},
+  skipped: {color: '#888888', shape: 'diamond'},
+};
+let beatsByMember = new Map();   // member id -> {declared, observed, notes} | 'loading' | 'error'
+let focusEvent = null;           // event summary object last tapped, drives the inspector fetch
 
 // pointer tracking
 const pointers = new Map(); // pointerId -> {x,y}
@@ -1543,6 +1707,10 @@ function renderMember(m, cp) {
       drawCellBase(m.data.cells[y * md.xsize + x], dx, dy, cp, m.id);
     }
   }
+  if (viewMode === 'events' && dimBase) {
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(baseX, baseY, md.xsize * cp, md.ysize * cp);
+  }
   for (let y = 0; y < md.ysize; y++) {
     const dy = baseY + y * cp;
     if (dy + cp < 0 || dy >= canvas.height) continue;
@@ -1558,6 +1726,37 @@ function renderMember(m, cp) {
   for (const evt of m.data.events) {
     const dx = baseX + evt.x * cp, dy = baseY + evt.y * cp;
     if (dx+cp < 0 || dx >= canvas.width || dy+cp < 0 || dy >= canvas.height) continue;
+    if (viewMode === 'events') {
+      if (!eventPassesFilter(evt)) continue;
+      const kind = evt.kind || 'other';
+      const ringColor = KIND_COLORS[kind] || KIND_COLORS.other;
+      const drawn = evt.character_name && drawNpcSprite(getNpcURL(evt.character_name), dx, dy, cp);
+      // kind-coloured ring: under/around the sprite (or standing in for it).
+      ctx.strokeStyle = ringColor;
+      ctx.lineWidth = Math.max(1.5, zoom * 0.6);
+      const r = drawn ? dotR + Math.max(2, cp * 0.08) : dotR;
+      ctx.beginPath(); ctx.arc(dx+cp/2, dy+cp/2, r, 0, Math.PI*2); ctx.stroke();
+      if (!drawn) {
+        ctx.fillStyle = ringColor;
+        ctx.beginPath(); ctx.arc(dx+cp/2, dy+cp/2, dotR*0.7, 0, Math.PI*2); ctx.fill();
+      }
+      if (evt.has_conditions) {
+        ctx.fillStyle = '#ffcc00';
+        ctx.beginPath(); ctx.arc(dx+cp-4, dy+4, Math.max(2, cp*0.06), 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#332900'; ctx.lineWidth = 1; ctx.stroke();
+      }
+      // label-gate zoom: mush at tiny zoom, so require real screen room; trainers
+      // (the most-debugged kind) get a slightly lower bar so they read first.
+      const labelGate = kind === 'trainer' ? 20 : 26;
+      if (cp >= labelGate) {
+        const label = (evt.label || evt.name || '').slice(0, kind === 'trainer' ? 10 : 6);
+        ctx.font = (kind === 'trainer' ? 'bold ' : '') + Math.max(8, Math.min(cp-4, 12)) + 'px monospace';
+        ctx.fillStyle = '#000'; ctx.fillText(label, dx+2, dy+cp-1);
+        ctx.fillStyle = kind === 'trainer' ? '#fff' : '#ddd'; ctx.fillText(label, dx+1, dy+cp-2);
+        ctx.font = Math.max(8, cp-4) + 'px monospace';
+      }
+      continue;
+    }
     if (evt.is_warp && overlays.warps) {
       ctx.fillStyle = '#0ff';
       ctx.beginPath(); ctx.arc(dx+cp/2, dy+cp/2, dotR, 0, Math.PI*2); ctx.fill();
@@ -1573,6 +1772,74 @@ function renderMember(m, cp) {
       ctx.fillText(evt.name.slice(0,4), dx+1, dy+cp-2);
     }
   }
+  ctx.restore();
+  if (viewMode === 'events' && showBeats) drawBeatMarkers(m, cp, baseX, baseY);
+}
+
+// ---- Events mode: beat markers (declared = star, observed = status-shaped
+// dot; a connecting line between them is the whole declared-vs-actual point).
+function starPath(cx, cy, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const rad = i % 2 === 0 ? r : r * 0.45;
+    const ang = -Math.PI/2 + i * Math.PI/5;
+    const px = cx + rad * Math.cos(ang), py = cy + rad * Math.sin(ang);
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+function statusShapePath(cx, cy, r, shape) {
+  ctx.beginPath();
+  if (shape === 'circle') { ctx.arc(cx, cy, r, 0, Math.PI*2); }
+  else if (shape === 'square') { ctx.rect(cx-r, cy-r, r*2, r*2); }
+  else if (shape === 'triangle') { ctx.moveTo(cx, cy-r); ctx.lineTo(cx+r, cy+r); ctx.lineTo(cx-r, cy+r); ctx.closePath(); }
+  else { ctx.moveTo(cx, cy-r); ctx.lineTo(cx+r, cy); ctx.lineTo(cx, cy+r); ctx.lineTo(cx-r, cy); ctx.closePath(); }  // diamond
+}
+function drawBeatMarkers(m, cp, baseX, baseY) {
+  const data = beatsByMember.get(m.id);
+  if (!data || data === 'loading' || data === 'error') return;
+  const declared = data.declared || [];
+  const observed = data.observed || [];
+  const byKey = new Map();
+  function bucket(k) { if (!byKey.has(k)) byKey.set(k, {declared: [], observed: []}); return byKey.get(k); }
+  declared.forEach(function(b) { bucket(beatKey(b)).declared.push(b); });
+  observed.forEach(function(b) { bucket(beatKey(b)).observed.push(b); });
+  ctx.save();
+  ctx.font = Math.max(8, Math.min(cp-4, 11)) + 'px monospace';
+  for (const [key, g] of byKey) {
+    if (g.declared.length && g.observed.length) {
+      const d0 = g.declared[0], o0 = g.observed[0];
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.setLineDash([3,3]); ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(baseX + d0.x*cp + cp/2, baseY + d0.y*cp + cp/2);
+      ctx.lineTo(baseX + o0.x*cp + cp/2, baseY + o0.y*cp + cp/2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+  const r = Math.max(4, cp * 0.22);
+  declared.forEach(function(b, i) {
+    const cx = baseX + b.x*cp + cp/2, cy = baseY + b.y*cp + cp/2;
+    starPath(cx, cy, r);
+    ctx.fillStyle = '#ffe066'; ctx.fill();
+    ctx.strokeStyle = '#7a5c00'; ctx.lineWidth = 1.5; ctx.stroke();
+    if (cp >= 20) {
+      ctx.fillStyle = '#000'; ctx.fillText('B' + i, cx+r+1, cy+3);
+      ctx.fillStyle = '#ffe066'; ctx.fillText('B' + i, cx+r, cy+2);
+    }
+  });
+  observed.forEach(function(b, i) {
+    const st = STATUS_STYLE[b.status] || STATUS_STYLE.skipped;
+    const cx = baseX + b.x*cp + cp/2, cy = baseY + b.y*cp + cp/2;
+    statusShapePath(cx, cy, r*0.65, st.shape);
+    if (b.status === 'skipped') { ctx.strokeStyle = st.color; ctx.lineWidth = 1.5; ctx.stroke(); }
+    else { ctx.fillStyle = st.color; ctx.fill(); ctx.strokeStyle = '#111'; ctx.lineWidth = 1; ctx.stroke(); }
+    if (cp >= 20) {
+      ctx.fillStyle = '#000'; ctx.fillText('N' + i, cx+r*0.65+1, cy+3);
+      ctx.fillStyle = st.color; ctx.fillText('N' + i, cx+r*0.65, cy+2);
+    }
+  });
   ctx.restore();
 }
 
@@ -1745,6 +2012,18 @@ canvas.addEventListener('pointerup', function(e) {
       focusCell = cell;                               // last-tapped drives the readout
       updateSidebar();
       updateSelectionUI();
+      // Events mode: tapping a cell selects it AS TODAY (above) AND, if an
+      // event occupies that cell, also loads it into the inspector below --
+      // cell-selection and event-inspection are additive, never a fork.
+      if (viewMode === 'events') {
+        const evtsHere = (hitM.data.events || []).filter(function(ev) {
+          return ev.x === lx && ev.y === ly && eventPassesFilter(ev);
+        });
+        if (evtsHere.length) {
+          focusEvent = evtsHere[0];
+          loadEventDetail(hitM.id, focusEvent.id);
+        }
+      }
       scheduleRender();
       // open sidebar on mobile tap
       const sb = document.getElementById('sidebar');
@@ -1787,6 +2066,52 @@ document.querySelectorAll('input[name="view2"]').forEach(function(r) {
   const el = document.getElementById('ov_' + name);
   el.addEventListener('change', function() { overlays[name] = el.checked; scheduleRender(); });
 });
+
+// ---- mode switch (Graphics | Events) --------------------------------------
+// `viewMode` gates behaviour in the ONE shared renderer/tap-handler above; it
+// never forks the render path. Persisted to localStorage and to `?mode=` so a
+// shared link opens in the same mode; the existing `?g=` cache-buster (image
+// URLs only, never the page URL) is untouched.
+function applyModeUI() {
+  document.body.classList.toggle('mode-events', viewMode === 'events');
+  document.body.classList.toggle('mode-graphics', viewMode === 'graphics');
+  document.body.classList.toggle('static-mode', V.mode === 'static');
+  document.getElementById('mode-btn-graphics').classList.toggle('on', viewMode === 'graphics');
+  document.getElementById('mode-btn-events').classList.toggle('on', viewMode === 'events');
+  renderLegend();
+  if (viewMode === 'events') {
+    if (V.mode === 'server') loadBeats(activeM);
+    renderBeatPanel();
+  }
+}
+function setMode(next) {
+  if (next !== 'events' && next !== 'graphics') return;
+  viewMode = next;
+  try { localStorage.setItem('mv_mode', viewMode); } catch (e) {}
+  const params = new URLSearchParams(location.search);
+  if (viewMode === 'graphics') params.delete('mode'); else params.set('mode', viewMode);
+  const qs = params.toString();
+  history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+  applyModeUI();
+  scheduleRender();
+}
+document.getElementById('mode-btn-graphics').onclick = function() { setMode('graphics'); };
+document.getElementById('mode-btn-events').onclick = function() { setMode('events'); };
+document.getElementById('evt-filter').addEventListener('change', function(e) {
+  eventFilter = e.target.value;
+  renderBeatPanel();  // no beat/kind coupling today (beats carry no kind) but
+                       // keep the redraw so anything filter-dependent stays in sync
+  scheduleRender();
+});
+document.getElementById('ov_beats').addEventListener('change', function(e) { showBeats = e.target.checked; scheduleRender(); });
+document.getElementById('ov_dim').addEventListener('change', function(e) { dimBase = e.target.checked; scheduleRender(); });
+document.getElementById('beat-head').onclick = function() {
+  const list = document.getElementById('beat-list');
+  const open = list.style.display !== 'none';
+  list.style.display = open ? 'none' : 'block';
+  document.getElementById('beat-tri').innerHTML = open ? '&#9656;' : '&#9662;';
+};
+
 // ---- Advanced (quant / graphics-debug) toggle -----------------------------
 // Collapses the knob bar, palette link, debug overlays and worst-merges panel
 // behind one button; `body.adv` drives their CSS visibility.  Leaving Advanced
@@ -1897,6 +2222,174 @@ function passageStr(p) {
   return '0x' + p.toString(16).padStart(2,'0') + ' (' + (dirs.join(',') || 'open') + ')';
 }
 
+// ---- Events-mode: event inspector + beat panel rendering -------------------
+function kindBadgeHtml(kind) {
+  const c = KIND_COLORS[kind] || KIND_COLORS.other;
+  const l = KIND_LABELS[kind] || kind;
+  return '<span class="evt-kind-badge" style="background:' + c + '">' + escHtml(l) + '</span>';
+}
+function conditionHtml(label, cond) {
+  if (!cond) return '';
+  if ('valid' in cond && cond.valid === false && !('value' in cond)) return '';
+  if (cond.ch !== undefined) {  // self-switch
+    if (!cond.valid) return '';
+    return '<div><span class="lbl">' + label + '</span> <span class="val">' + escHtml(cond.ch) + '</span></div>';
+  }
+  if (!cond.valid) return '';
+  let v = '<span class="val">' + escHtml(cond.name || ('#' + cond.id)) + '</span>';
+  if (cond.value !== undefined) v += ' == ' + cond.value;
+  return '<div><span class="lbl">' + label + '</span> ' + v + '</div>';
+}
+function renderEventSummaryOnly(ev) {
+  let h = '';
+  h += '<div><span class="lbl">id</span> <span class="val">' + ev.id + '</span> ' + kindBadgeHtml(ev.kind) + '</div>';
+  h += '<div><span class="lbl">label</span> <span class="val">' + escHtml(ev.label || ev.name) + '</span></div>';
+  h += '<div><span class="lbl">rmxp name</span> <span class="val">' + escHtml(ev.name) + '</span></div>';
+  h += '<div><span class="lbl">pos</span> <span class="val">(' + ev.x + ', ' + ev.y + ')</span></div>';
+  if (ev.trigger) h += '<div><span class="lbl">trigger</span> <span class="val">' + escHtml(ev.trigger.name) + '</span></div>';
+  if (ev.has_conditions) h += '<div class="mismatch">&#9888; page-gated (switch/variable)</div>';
+  if (ev.trainer) {
+    h += '<div class="section-title" style="margin-top:8px">Trainer</div>';
+    h += '<div><span class="lbl">constant</span> <span class="val">' + escHtml(ev.trainer.trainer_constant || '') + '</span></div>';
+    h += '<div><span class="lbl">class</span> <span class="val">' + escHtml(ev.trainer.class_name || '') + '</span> ' +
+      '<span class="lbl">kind</span> <span class="val">' + escHtml(ev.trainer.kind || '') + '</span></div>';
+  }
+  return h;
+}
+function pagesHtml(pages) {
+  if (!pages || !pages.length) return '<div class="lbl">(no pages)</div>';
+  let h = '';
+  for (const p of pages) {
+    h += '<div class="layer-row" style="flex-direction:column;align-items:stretch">';
+    h += '<div><span class="lbl">page ' + p.page + '</span> <span class="val">' + escHtml(p.trigger.name) + '</span>';
+    if (p.priority_type) h += ' <span class="lbl">above-player</span>';
+    h += '</div>';
+    const c = p.condition || {};
+    h += conditionHtml('switch1', c.switch1);
+    h += conditionHtml('switch2', c.switch2);
+    h += conditionHtml('self-switch', c.self_switch);
+    h += conditionHtml('variable', c.variable);
+    if (p.graphic && p.graphic.character_name) h += '<div><span class="lbl">graphic</span> <span class="val">' + escHtml(p.graphic.character_name) + '</span></div>';
+    h += '<div><span class="lbl">move</span> <span class="val">' + escHtml(String(p.move_type)) + '</span> ' +
+      '<span class="lbl">through</span> <span class="val">' + escHtml(String(p.through)) + '</span></div>';
+    if (p.dialogue) h += '<div><span class="lbl">says</span> <span class="val">' + escHtml(p.dialogue) + '</span></div>';
+    const cmdId = 'cmds_' + p.page + '_' + Math.random().toString(36).slice(2, 7);
+    h += '<div><span class="lbl" style="cursor:pointer" onclick="var b=document.getElementById(\'' + cmdId +
+      '\');b.style.display=b.style.display===\'none\'?\'block\':\'none\';">&#9656; ' + (p.commands || []).length + ' commands</span></div>';
+    h += '<div id="' + cmdId + '" class="evt-cmd-block" style="display:none">' +
+      escHtml(JSON.stringify(p.commands || [], null, 1)) + '</div>';
+    h += '</div>';
+  }
+  return h;
+}
+function renderEventDetail(ev) {
+  let h = '';
+  h += '<div><span class="lbl">id</span> <span class="val">' + ev.id + '</span> ' + kindBadgeHtml(ev.kind) + '</div>';
+  h += '<div><span class="lbl">label</span> <span class="val">' + escHtml(ev.label || ev.name) + '</span></div>';
+  h += '<div><span class="lbl">rmxp name</span> <span class="val">' + escHtml(ev.name) + '</span></div>';
+  h += '<div><span class="lbl">pos</span> <span class="val">(' + ev.x + ', ' + ev.y + ')</span> ' +
+    '<span class="lbl">pages</span> <span class="val">' + ev.npages + '</span></div>';
+  if (ev.trigger) h += '<div><span class="lbl">trigger</span> <span class="val">' + escHtml(ev.trigger.name) + '</span></div>';
+  if (ev.warp) {
+    h += '<div class="section-title" style="margin-top:8px">Warp destination</div>';
+    h += '<div><span class="lbl">map</span> <span class="val">' + escHtml(String(ev.warp.map_id !== undefined ? ev.warp.map_id : JSON.stringify(ev.warp))) + '</span>';
+    if (ev.warp.x !== undefined) h += ' <span class="lbl">at</span> <span class="val">(' + ev.warp.x + ', ' + ev.warp.y + ')</span>';
+    h += '</div>';
+  }
+  if (ev.trainer) {
+    const t = ev.trainer;
+    h += '<div class="section-title" style="margin-top:8px">Trainer</div>';
+    h += '<div><span class="lbl">constant</span> <span class="val">' + escHtml(t.trainer_constant || '') + '</span></div>';
+    h += '<div><span class="lbl">display</span> <span class="val">' + escHtml(t.display_name || '') + '</span> ' +
+      '<span class="lbl">class</span> <span class="val">' + escHtml(t.class_name || t.trainer_class_constant || '') + '</span></div>';
+    h += '<div><span class="lbl">kind</span> <span class="val">' + escHtml(t.kind || '') + '</span> ' +
+      '<span class="' + (t.staged ? 'evt-staged-yes' : 'evt-staged-no') + '">' + (t.staged ? 'in ROM' : 'not staged') + '</span></div>';
+    if (t.party && t.party.length) {
+      h += '<div class="lbl" style="margin-top:3px">party</div>';
+      for (const p of t.party) h += '<div class="val">&middot; ' + escHtml(p.species || '') + ' Lv' + (p.level !== undefined ? p.level : '?') + '</div>';
+    }
+    if (t.items && t.items.length) h += '<div class="lbl">items</div><div class="val">' + escHtml(t.items.join(', ')) + '</div>';
+  }
+  h += '<div class="section-title" style="margin-top:8px">Pages</div>';
+  h += pagesHtml(ev.pages);
+  if (ev.notes && ev.notes.length) {
+    h += '<div class="section-title" style="margin-top:8px">Notes</div>';
+    for (const n of ev.notes) h += '<div class="lbl">' + escHtml(n) + '</div>';
+  }
+  return h;
+}
+function eventPassesFilter(ev) {
+  if (eventFilter === 'all') return true;
+  if (eventFilter === 'conditional') return !!ev.has_conditions;
+  return ev.kind === eventFilter;
+}
+function beatKey(b) { return b.chapter + '::' + b.beat; }
+function renderLegend() {
+  const el = document.getElementById('legend');
+  if (!el) return;
+  let h = '<span class="lbl">kind:</span>';
+  for (const k of Object.keys(KIND_COLORS)) {
+    h += '<span><span class="legend-sw" style="background:' + KIND_COLORS[k] + '"></span>' + KIND_LABELS[k] + '</span>';
+  }
+  h += '<span class="lbl" style="margin-left:8px">beats:</span>';
+  h += '<span>&#9733; declared</span>';
+  for (const s of Object.keys(STATUS_STYLE)) {
+    h += '<span><span class="legend-sw" style="background:' + STATUS_STYLE[s].color + ';border-radius:2px"></span>' + s + '</span>';
+  }
+  el.innerHTML = h;
+  el.classList.toggle('show', viewMode === 'events');
+}
+function renderBeatPanel() {
+  const listEl = document.getElementById('beat-list');
+  const notesEl = document.getElementById('beat-notes');
+  const countEl = document.getElementById('beat-count');
+  if (!listEl) return;
+  const data = beatsByMember.get(activeM.id);
+  if (V.mode !== 'server') {
+    listEl.innerHTML = '<span class="lbl">Beats need the live server.</span>';
+    notesEl.textContent = '';
+    countEl.textContent = '';
+    return;
+  }
+  if (!data || data === 'loading') { listEl.innerHTML = '<span class="lbl">Loading…</span>'; notesEl.textContent = ''; return; }
+  if (data === 'error') { listEl.innerHTML = '<span class="mismatch">Failed to load beats.</span>'; notesEl.textContent = ''; return; }
+  const declared = data.declared || [];
+  const observed = data.observed || [];
+  countEl.textContent = '(' + declared.length + ' declared, ' + observed.length + ' observed)';
+  notesEl.innerHTML = (data.notes || []).map(function(n) { return escHtml(n); }).join('<br>');
+  const byChapter = new Map();
+  function bucket(chapter) {
+    if (!byChapter.has(chapter)) byChapter.set(chapter, {declared: [], observed: []});
+    return byChapter.get(chapter);
+  }
+  declared.forEach(function(b) { bucket(b.chapter).declared.push(b); });
+  observed.forEach(function(b) { bucket(b.chapter).observed.push(b); });
+  let h = '';
+  if (!byChapter.size) h = '<span class="lbl">No beats declared for this map.</span>';
+  for (const [chapter, g] of byChapter) {
+    h += '<div class="beat-chapter">' + escHtml(chapter) + '</div>';
+    g.declared.forEach(function(b, i) {
+      h += '<div class="beat-row" onclick="focusBeat(' + JSON.stringify(chapter) + ',' + JSON.stringify(b.beat) + ',\'declared\',' + i + ')">' +
+        '&#9733; <b>' + escHtml(b.beat) + '</b> ' + escHtml(b.description || '') + '</div>';
+    });
+    g.observed.forEach(function(b, i) {
+      const cls = 'beat-status-' + (b.status || 'skipped');
+      h += '<div class="beat-row ' + cls + '" onclick="focusBeat(' + JSON.stringify(chapter) + ',' + JSON.stringify(b.beat) + ',\'observed\',' + i + ')">' +
+        (STATUS_STYLE[b.status] ? '&#9679;' : '&#9671;') + ' <b>' + escHtml(b.beat) + '</b> ' + escHtml(b.status || '') + ' (' + escHtml(b.phase || '') + ')</div>';
+    });
+  }
+  listEl.innerHTML = h;
+}
+function focusBeat(chapter, beatName, which, idx) {
+  const data = beatsByMember.get(activeM.id);
+  if (!data) return;
+  const list = which === 'declared' ? (data.declared || []) : (data.observed || []);
+  const matches = list.filter(function(b) { return b.chapter === chapter && b.beat === beatName; });
+  const b = matches[idx] || matches[0];
+  if (!b || b.x === undefined || b.y === undefined) return;
+  centerOnCell(activeM, b.x, b.y, 3);
+}
+
 function updateSidebar() {
   if (!focusCell) return;
   const cell = focusCell;
@@ -1968,8 +2461,11 @@ function updateSidebar() {
   if (evtsHere.length > 0) {
     html += '<div class="section-title">Events</div>';
     for (const ev of evtsHere) {
-      html += '<div><span class="lbl">' + ev.id + ': </span><span class="val">' + ev.name + '</span>';
-      html += ' <span class="lbl">(' + ev.npages + 'p' + (ev.is_warp ? ', warp' : '') + ')</span></div>';
+      html += '<div><span class="lbl">' + ev.id + ': </span><span class="val">' + escHtml(ev.label || ev.name) + '</span>';
+      html += ' <span class="lbl">(' + ev.npages + 'p' + (ev.is_warp ? ', warp' : '') + ')</span>';
+      if (ev.kind) html += ' ' + kindBadgeHtml(ev.kind);
+      if (ev.has_conditions) html += '<span class="evt-cond-badge" title="page-gated on a switch/variable">&#9888;gated</span>';
+      html += '</div>';
     }
   }
 
@@ -2077,6 +2573,10 @@ function setActive(m) {
   if (navp) navp.href = '/palettes/' + mm.map_id;
   const mergeN = (D.colkey_palettes || []).filter(function(cp) { return cp && cp.merge_severity > 0; }).length;
   document.getElementById('merge-count').textContent = '(' + mergeN + ' tiles)';
+  focusEvent = null;
+  document.getElementById('event-inspector-body').innerHTML = '<span class="lbl">Tap a cell with an event marker to inspect it.</span>';
+  if (viewMode === 'events' && V.mode === 'server') loadBeats(m);
+  renderBeatPanel();
   updateFlagList(); updateSelectionUI(); updateSidebar(); scheduleRender();
 }
 function selectionCells() {
@@ -2328,6 +2828,14 @@ function loadMemberFeedback(mem) {
   }).catch(function(e) { console.error('feedback load failed for map ' + mem.id, e); });
 }
 
+(function initModeFromURL() {
+  const qp = new URLSearchParams(location.search).get('mode');
+  let m = null;
+  if (qp === 'events' || qp === 'graphics') m = qp;
+  if (!m) { try { m = localStorage.getItem('mv_mode'); } catch (e) {} }
+  viewMode = (m === 'events') ? 'events' : 'graphics';
+  applyModeUI();
+})();
 (function init() {
   const m = D.meta;
   activeM.flags = flags;               // alias the active member's feedback state
@@ -2390,12 +2898,17 @@ function loadMemberFeedback(mem) {
   }
 })();
 document.addEventListener('keydown', function(e) {
-  if (e.key !== 'q') return;
   if (['INPUT','TEXTAREA','SELECT'].indexOf(document.activeElement.tagName) !== -1) return;
-  const next = currentLayer === 'rmxp' ? 'post-quant' : 'rmxp';
-  currentLayer = next;
-  document.querySelectorAll('input[name="view2"]').forEach(function(r) { r.checked = r.value === next; });
-  scheduleRender();
+  if (e.key === 'q') {
+    const next = currentLayer === 'rmxp' ? 'post-quant' : 'rmxp';
+    currentLayer = next;
+    document.querySelectorAll('input[name="view2"]').forEach(function(r) { r.checked = r.value === next; });
+    scheduleRender();
+    return;
+  }
+  if (e.key === 'e') {  // toggle Graphics <-> Events mode; see #mode-switch
+    setMode(viewMode === 'events' ? 'graphics' : 'events');
+  }
 });
 </script>
 </body>

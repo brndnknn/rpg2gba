@@ -108,7 +108,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ..battle import in_battle, read_enemy_party, win_battle
-from ..chapter import ChapterBuilder
+from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
 
 logger = logging.getLogger(__name__)
@@ -1096,7 +1096,8 @@ def _rock_smash_refused(emu: Emulator, beat: str, local_id: int,
 
 # -- B1 ------------------------------------------------------------------
 
-@route1.beat("B1", "Crossing Moki Town's east passage lands on Route 1 near (70,11)")
+@route1.beat("B1", "Crossing Moki Town's east passage lands on Route 1 near (70,11)",
+             map_constant="MAP_MOKI_TOWN", at=ROUTE1_ENTRY_APPROACH)
 def b1(emu: Emulator) -> None:
     _cross_threshold(emu, "B1", ROUTE1_ENTRY_APPROACH, ROUTE1_ENTRY_DIRECTION,
                      "MAP_ROUTE_01")
@@ -1105,7 +1106,11 @@ def b1(emu: Emulator) -> None:
 
 # -- B2 ------------------------------------------------------------------
 
-@route1.beat("B2", "The x=57 sideways staircase is walkable both directions (CH02_TODO #14 regression)")
+@route1.beat("B2", "The x=57 sideways staircase is walkable both directions (CH02_TODO #14 regression)",
+             locations=(
+                 BeatLocation("MAP_ROUTE_01", STAIR1_EAST_APPROACH[0], STAIR1_EAST_APPROACH[1], "east approach"),
+                 BeatLocation("MAP_ROUTE_01", STAIR1_WEST_APPROACH[0], STAIR1_WEST_APPROACH[1], "west approach"),
+             ))
 def b2(emu: Emulator) -> None:
     # The approach walks are pure navigation (absorb both kinds of
     # incidental traffic); the staircase crossing itself uses `_try_step`,
@@ -1170,7 +1175,11 @@ def b3(emu: Emulator) -> None:
 
 # -- B4 ------------------------------------------------------------------
 
-@route1.beat("B4", "Wild grass produces a Chyinmunk/Birbie/Cubbug encounter (CH02_TODO #15 regression)")
+@route1.beat("B4", "Wild grass produces a Chyinmunk/Birbie/Cubbug encounter (CH02_TODO #15 regression)",
+             locations=(
+                 BeatLocation("MAP_ROUTE_01", GRASS_CELL_A[0], GRASS_CELL_A[1], "grass cell A"),
+                 BeatLocation("MAP_ROUTE_01", GRASS_CELL_B[0], GRASS_CELL_B[1], "grass cell B"),
+             ))
 def b4(emu: Emulator) -> None:
     # This route (30,7)/(31,7) crosses Tath's (EV034) sight cone at (36,8)
     # (see this module's TRAINER_TATH) -- an ambush here is a real,
@@ -1238,12 +1247,14 @@ def b6(emu: Emulator) -> None:
     _battle_trainer(emu, "B6", TRAINER_BOB)
 
 
-@route1.beat("B7", "Flood (BUGCATCHER, patrol) battles once, trainer flag latches")
+@route1.beat("B7", "Flood (BUGCATCHER, patrol) battles once, trainer flag latches",
+             map_constant="MAP_ROUTE_01", at=TRAINER_FLOOD.xy)
 def b7(emu: Emulator) -> None:
     _battle_trainer(emu, "B7", TRAINER_FLOOD)
 
 
-@route1.beat("B8", "Tath (SCHOOLKID, sight) battles once, trainer flag latches")
+@route1.beat("B8", "Tath (SCHOOLKID, sight) battles once, trainer flag latches",
+             map_constant="MAP_ROUTE_01", at=TRAINER_TATH.xy)
 def b8(emu: Emulator) -> None:
     _battle_trainer(emu, "B8", TRAINER_TATH)
 
@@ -1258,7 +1269,8 @@ def b10(emu: Emulator) -> None:
     _battle_trainer(emu, "B10", TRAINER_GERTHA)
 
 
-@route1.beat("B11", "Lynette (LASS, patrol) battles once, trainer flag latches")
+@route1.beat("B11", "Lynette (LASS, patrol) battles once, trainer flag latches",
+             map_constant="MAP_ROUTE_01", at=TRAINER_LYNETTE.xy)
 def b11(emu: Emulator) -> None:
     _battle_trainer(emu, "B11", TRAINER_LYNETTE)
 
@@ -1273,7 +1285,8 @@ def b12(emu: Emulator) -> None:
                     registered_flag=BRANDON_PHONE_REGISTERED_FLAG)
 
 
-@route1.beat("B13", "Richey the phone trainer battles and registers Match Call")
+@route1.beat("B13", "Richey the phone trainer battles and registers Match Call",
+             map_constant="MAP_ROUTE_01", at=TRAINER_RICHEY.xy)
 def b13(emu: Emulator) -> None:
     _battle_trainer(emu, "B13", TRAINER_RICHEY,
                     registered_flag=RICHEY_REGISTERED_FLAG)
@@ -1282,7 +1295,13 @@ def b13(emu: Emulator) -> None:
 # -- B14 -----------------------------------------------------------------
 
 @route1.beat("B14", "Trainer pacing survives: Flood and Lynette turn in place "
-                    "(CH02_TODO #9 LOOK_AROUND regression)")
+                    "(CH02_TODO #9 LOOK_AROUND regression)",
+             locations=(
+                 BeatLocation("MAP_ROUTE_01", OLD_ROD_DOOR[0], OLD_ROD_DOOR[1], "old rod house door"),
+                 BeatLocation("MAP_ROUTE_01_OLD_ROD_HOUSE", OLD_ROD_HOUSE_EXIT_APPROACH[0], OLD_ROD_HOUSE_EXIT_APPROACH[1], "old rod house exit"),
+                 BeatLocation("MAP_ROUTE_01", TRAINER_FLOOD.xy[0], TRAINER_FLOOD.xy[1], "Flood"),
+                 BeatLocation("MAP_ROUTE_01", TRAINER_LYNETTE.xy[0], TRAINER_LYNETTE.xy[1], "Lynette"),
+             ))
 def b14(emu: Emulator) -> None:
     # 2026-08-15 regression: B14 used to read `object_event(local_id)`
     # straight off wherever B13 (Richey) left the player. `TrySpawnObjectEvents`
@@ -1377,7 +1396,13 @@ def b14(emu: Emulator) -> None:
 # -- B15/B15b/B15c ---------------------------------------------------------
 
 @route1.beat("B15", "The 4 reachable ground items grant on first pickup, "
-                    "not on re-touch")
+                    "not on re-touch",
+             locations=tuple(
+                 BeatLocation("MAP_ROUTE_01", item_xy[0], item_xy[1], f"item ball (event {event_id})")
+                 for event_id, item_xy, _approach, _facing in (
+                     ITEM_POTION_A, ITEM_POTION_B, ITEM_ANTIDOTE_A, ITEM_ANTIDOTE_B,
+                 )
+             ))
 def b15(emu: Emulator) -> None:
     for event_id, _item_xy, approach, facing in (
         ITEM_POTION_A, ITEM_POTION_B, ITEM_ANTIDOTE_A, ITEM_ANTIDOTE_B,
@@ -1407,7 +1432,12 @@ def b15c(emu: Emulator) -> None:
 # -- B16 -----------------------------------------------------------------
 
 @route1.beat("B16", "The old rod house door opens; the brother NPC and sign both "
-                    "open/close dialogue cleanly")
+                    "open/close dialogue cleanly",
+             locations=(
+                 BeatLocation("MAP_ROUTE_01", OLD_ROD_DOOR[0], OLD_ROD_DOOR[1], "old rod house door"),
+                 BeatLocation("MAP_ROUTE_01_OLD_ROD_HOUSE", OLD_ROD_ARRIVAL[0], OLD_ROD_ARRIVAL[1], "arrival"),
+                 BeatLocation("MAP_ROUTE_01_OLD_ROD_HOUSE", SIGN_INTERACT[0], SIGN_INTERACT[1], "sign"),
+             ))
 def b16(emu: Emulator) -> None:
     _enter_door(emu, "B16", OLD_ROD_DOOR, "MAP_ROUTE_01_OLD_ROD_HOUSE")
     _assert_near(emu, "B16", OLD_ROD_ARRIVAL)
@@ -1437,7 +1467,11 @@ def b16(emu: Emulator) -> None:
 # -- N1 (folded: fisherman refusal, then the exit back to Map033) -----------
 
 @route1.beat("N1", "Before Gym 1 (VAR_BATTLE_VAR01 < 5), the fisherman only redirects "
-                   "-- no Old Rod, no state written -- then exit the house")
+                   "-- no Old Rod, no state written -- then exit the house",
+             locations=(
+                 BeatLocation("MAP_ROUTE_01_OLD_ROD_HOUSE", FISHERMAN_INTERACT[0], FISHERMAN_INTERACT[1], "fisherman"),
+                 BeatLocation("MAP_ROUTE_01_OLD_ROD_HOUSE", OLD_ROD_HOUSE_EXIT_APPROACH[0], OLD_ROD_HOUSE_EXIT_APPROACH[1], "exit approach"),
+             ))
 def n1(emu: Emulator) -> None:
     battle_var = emu.var("VAR_BATTLE_VAR01")
     if battle_var >= 5:
@@ -1476,7 +1510,11 @@ def n1(emu: Emulator) -> None:
 # -- N2 ------------------------------------------------------------------
 
 @route1.beat("N2", "Rock Smash is unobtainable this chapter: 2 of the 6 boulders "
-                   "refuse to erase and keep blocking movement")
+                   "refuse to erase and keep blocking movement",
+             locations=(
+                 BeatLocation("MAP_ROUTE_01", ROCK_EV036[1][0], ROCK_EV036[1][1], "boulder EV036"),
+                 BeatLocation("MAP_ROUTE_01", ROCK_EV038[1][0], ROCK_EV038[1][1], "boulder EV038"),
+             ))
 def n2(emu: Emulator) -> None:
     _rock_smash_refused(emu, "N2", *ROCK_EV036)
     _rock_smash_refused(emu, "N2", *ROCK_EV038)
@@ -1485,7 +1523,11 @@ def n2(emu: Emulator) -> None:
 # -- B17 -----------------------------------------------------------------
 
 @route1.beat("B17", "The north boundary is reachable up to the edge; the crossing "
-                    "itself now belongs to CH03 (kevlar:B1)")
+                    "itself now belongs to CH03 (kevlar:B1)",
+             locations=(
+                 BeatLocation("MAP_ROUTE_01", NORTH_EXIT_APPROACH_A[0], NORTH_EXIT_APPROACH_A[1], "approach A"),
+                 BeatLocation("MAP_ROUTE_01", NORTH_EXIT_APPROACH_B[0], NORTH_EXIT_APPROACH_B[1], "approach B"),
+             ))
 def b17(emu: Emulator) -> None:
     # REVISED 2026-08-12, exactly as the original note below anticipated: CH03
     # put Kevlar Town (map 31) in SLICE_MAP_IDS and wired Route 01's half of

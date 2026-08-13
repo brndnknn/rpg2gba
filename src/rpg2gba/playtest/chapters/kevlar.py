@@ -113,7 +113,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..chapter import ChapterBuilder
+from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
 
 if TYPE_CHECKING:  # runtime import is lazy so the registry works without bindings
@@ -337,7 +337,8 @@ def _flag_ssa(map_num: int, event_id: int, letter: str = "A") -> str:
 
 # -- B1 ------------------------------------------------------------------
 
-@kevlar.beat("B1", "Crossing Route 1's north seam lands in Kevlar Town")
+@kevlar.beat("B1", "Crossing Route 1's north seam lands in Kevlar Town",
+             map_constant="MAP_ROUTE_01", at=KEVLAR_ENTRY_APPROACH)
 def b1(emu: Emulator) -> None:
     _cross_threshold(emu, "B1", KEVLAR_ENTRY_APPROACH, KEVLAR_ENTRY_DIRECTION,
                      "MAP_KEVLAR_TOWN")
@@ -346,7 +347,8 @@ def b1(emu: Emulator) -> None:
 # -- B2 ------------------------------------------------------------------
 
 @kevlar.beat("B2", "NurseTut's walkthrough runs and sets FLAG_NURSE_TUTORIAL "
-                   "(warps the player straight into the Center)")
+                   "(warps the player straight into the Center)",
+             map_constant="MAP_KEVLAR_TOWN", at=NURSE_TUT_APPROACH)
 def b2(emu: Emulator) -> None:
     if emu.flag("FLAG_NURSE_TUTORIAL"):
         raise ScenarioError(
@@ -371,7 +373,8 @@ def b2(emu: Emulator) -> None:
 # -- N3 (NurseTut re-talk) --------------------------------------------------
 
 @kevlar.beat("N3", "Re-talking NurseTut (Map068's NurseTut2, local id 10) is "
-                   "the no-op page")
+                   "the no-op page",
+             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=(8, 18))
 def n3(emu: Emulator) -> None:
     # NurseTut2 (Map068 local id 10, (8,17)) is the object that survives
     # into the Center; `Map068_EV016_Dispatch` with FLAG_NURSE_TUTORIAL set
@@ -393,7 +396,11 @@ def n3(emu: Emulator) -> None:
 # -- B3 ------------------------------------------------------------------
 
 @kevlar.beat("B3", "The physical Center door (independent of NurseTut's "
-                   "auto-warp) opens and returns")
+                   "auto-warp) opens and returns",
+             locations=(
+                 BeatLocation("MAP_KEVLAR_TOWN_POKEMON_CENTER", CENTER_EXIT_APPROACH[0], CENTER_EXIT_APPROACH[1], "center exit"),
+                 BeatLocation("MAP_KEVLAR_TOWN", CENTER_DOOR[0], CENTER_DOOR[1], "center door"),
+             ))
 def b3(emu: Emulator) -> None:
     # B2 already stands the player inside Map068 via NurseTut's own warp;
     # this beat exercises the ORDINARY door as its own mechanism -- exit
@@ -407,7 +414,8 @@ def b3(emu: Emulator) -> None:
 
 @kevlar.beat("B4", "The healing counter's Yes/No heal restores a damaged party "
                    "(healing-location metadata has no test surface -- see "
-                   "module docstring finding 7, B6 folded in here)")
+                   "module docstring finding 7, B6 folded in here)",
+             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=HEAL_COUNTER_APPROACH)
 def b4(emu: Emulator) -> None:
     emu.walk_to(*HEAL_COUNTER_APPROACH)
     emu.face(HEAL_COUNTER_FACING)
@@ -426,7 +434,8 @@ def b4(emu: Emulator) -> None:
 
 # -- B7 ------------------------------------------------------------------
 
-@kevlar.beat("B7", "Item ball at (17,7) grants an Antidote once")
+@kevlar.beat("B7", "Item ball at (17,7) grants an Antidote once",
+             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=CENTER_ITEM_BALL_APPROACH)
 def b7(emu: Emulator) -> None:
     ssa = _flag_ssa(68, CENTER_ITEM_BALL_EVENT_ID)
     if emu.flag(ssa):
@@ -446,7 +455,8 @@ def b7(emu: Emulator) -> None:
 @kevlar.beat("N1", "Re-touching the item ball does not re-grant the Antidote "
                    "(CH03_TODO.md #9: the ball is a deliberately one-time "
                    "repurposed self-switch, not the native repeatable "
-                   "template)")
+                   "template)",
+             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=CENTER_ITEM_BALL_APPROACH)
 def n1(emu: Emulator) -> None:
     ssa = _flag_ssa(68, CENTER_ITEM_BALL_EVENT_ID)
     emu.face(CENTER_ITEM_BALL_FACING)
@@ -486,7 +496,10 @@ def b5(emu: Emulator) -> None:
 
 @kevlar.beat("B8", "Mawuli's facility battle: win, and the offer repeats "
                    "(module finding 1: no `trainerbattle*` command exists "
-                   "in the compiled script -- expected to fail)")
+                   "in the compiled script -- expected to fail)",
+             locations=(BeatLocation("MAP_KEVLAR_TOWN_POKEMON_CENTER",
+                                     MAWULI_APPROACH[0], MAWULI_APPROACH[1],
+                                     "approach anchor (patrols, live position may differ)"),))
 def b8(emu: Emulator) -> None:
     from ..battle import in_battle, win_battle
 
@@ -511,7 +524,8 @@ def b8(emu: Emulator) -> None:
 # -- B10 -----------------------------------------------------------------
 
 @kevlar.beat("B10", "Mart door opens; the pokemart menu opens at the "
-                    "counter sign")
+                    "counter sign",
+             map_constant="MAP_KEVLAR_TOWN", at=MART_DOOR)
 def b10(emu: Emulator) -> None:
     _enter_door(emu, "B10", MART_DOOR, "MAP_KEVLAR_TOWN_POKEMART")
     _assert_near(emu, "B10", MART_ARRIVAL)
@@ -521,7 +535,8 @@ def b10(emu: Emulator) -> None:
 
 @kevlar.beat("B11", "Buying an item at the counter drives the native "
                     "pokemart menu to completion (no money/bag primitive "
-                    "on Emulator -- see module docstring)")
+                    "on Emulator -- see module docstring)",
+             map_constant="MAP_KEVLAR_TOWN_POKEMART", at=MART_COUNTER_APPROACH)
 def b11(emu: Emulator) -> None:
     emu.walk_to(*MART_COUNTER_APPROACH)
     emu.face("UP")
@@ -548,7 +563,8 @@ def b11(emu: Emulator) -> None:
 
 @kevlar.beat("B12", "Deliveryman's no-gift branch does not crash "
                     "(`Map067_EV009_Page1` is a bare `end` -- it is "
-                    "literally inert, not just gift-less)")
+                    "literally inert, not just gift-less)",
+             map_constant="MAP_KEVLAR_TOWN_POKEMART", at=DELIVERYMAN_APPROACH)
 def b12(emu: Emulator) -> None:
     emu.walk_to(*DELIVERYMAN_APPROACH)
     emu.face("UP")
@@ -564,7 +580,11 @@ def b12(emu: Emulator) -> None:
 # -- B6 (renumbered B13 in the approved list -- berry plants) --------------
 
 @kevlar.beat("B13", "Picking a Map031 berry plant works (native "
-                    "BerryTreeScript)")
+                    "BerryTreeScript)",
+             locations=(
+                 BeatLocation("MAP_KEVLAR_TOWN_POKEMART", 10, 9, "mart exit"),
+                 BeatLocation("MAP_KEVLAR_TOWN", BERRY_PLANT_APPROACH[0], BERRY_PLANT_APPROACH[1], "berry plant"),
+             ))
 def b13(emu: Emulator) -> None:
     _cross_threshold(emu, "B13", (10, 9), "DOWN", "MAP_KEVLAR_TOWN")
     emu.walk_to(*BERRY_PLANT_APPROACH)
@@ -580,7 +600,11 @@ def b13(emu: Emulator) -> None:
 
 @kevlar.beat("B14", "Berry Boutique door opens; the NPC's dialogue sets its "
                     "self-switch (no berry/Sprinklotad grant exists in the "
-                    "compiled script -- module finding 6, expected)")
+                    "compiled script -- module finding 6, expected)",
+             locations=(
+                 BeatLocation("MAP_KEVLAR_TOWN", BOUTIQUE_DOOR[0], BOUTIQUE_DOOR[1], "boutique door"),
+                 BeatLocation("MAP_KEVLAR_TOWN_BUILDINGS", BOUTIQUE_NPC_APPROACH[0], BOUTIQUE_NPC_APPROACH[1], "boutique NPC"),
+             ))
 def b14(emu: Emulator) -> None:
     _enter_door(emu, "B14", BOUTIQUE_DOOR, "MAP_KEVLAR_TOWN_BUILDINGS")
     _assert_near(emu, "B14", BOUTIQUE_ARRIVAL)
@@ -602,7 +626,11 @@ def b14(emu: Emulator) -> None:
 @kevlar.beat("B15", "Bike Repair Shop refuses with no Bike Wheel held -- no "
                     "yes/no, no Bicycle grant exists in the compiled script "
                     "at all (the source of a Bike Wheel this chapter was "
-                    "already flagged unresolved, spec §7)")
+                    "already flagged unresolved, spec §7)",
+             locations=(
+                 BeatLocation("MAP_KEVLAR_TOWN", BIKE_SHOP_DOOR[0], BIKE_SHOP_DOOR[1], "bike shop door"),
+                 BeatLocation("MAP_KEVLAR_TOWN_BUILDINGS", BIKE_SHOP_NPC_APPROACH[0], BIKE_SHOP_NPC_APPROACH[1], "bike shop NPC"),
+             ))
 def b15(emu: Emulator) -> None:
     _enter_door(emu, "B15", BIKE_SHOP_DOOR, "MAP_KEVLAR_TOWN_BUILDINGS")
     _assert_near(emu, "B15", BIKE_SHOP_ARRIVAL)
@@ -618,7 +646,13 @@ def b15(emu: Emulator) -> None:
 # -- B16 -----------------------------------------------------------------
 
 @kevlar.beat("B16", "Both flavor houses (Maury's apartment, the couple's "
-                    "house) warp in and back out cleanly")
+                    "house) warp in and back out cleanly",
+             locations=(
+                 BeatLocation("MAP_KEVLAR_TOWN", MAURY_DOOR[0], MAURY_DOOR[1], "Maury door"),
+                 BeatLocation("MAP_KEVLAR_TOWN_BUILDINGS", 24, 13, "Maury exit approach"),
+                 BeatLocation("MAP_KEVLAR_TOWN", COUPLE_DOOR[0], COUPLE_DOOR[1], "couple door"),
+                 BeatLocation("MAP_KEVLAR_TOWN_BUILDINGS", 64, 13, "couple exit approach"),
+             ))
 def b16(emu: Emulator) -> None:
     _enter_door(emu, "B16", MAURY_DOOR, "MAP_KEVLAR_TOWN_BUILDINGS")
     _assert_near(emu, "B16", MAURY_ARRIVAL)
@@ -705,7 +739,8 @@ def n2(emu: Emulator) -> None:
 # -- B18 -----------------------------------------------------------------
 
 @kevlar.beat("B18", "Cry Boy: idle page only (FLAG_HAS_STRENGTH is never "
-                    "set corpus-wide); FLAG_SIDEQUEST_CRY_BOY stays unset")
+                    "set corpus-wide); FLAG_SIDEQUEST_CRY_BOY stays unset",
+             map_constant="MAP_KEVLAR_TOWN", at=CRY_BOY_APPROACH)
 def b18(emu: Emulator) -> None:
     if emu.flag("FLAG_SIDEQUEST_CRY_BOY"):
         raise ScenarioError(
@@ -723,7 +758,8 @@ def b18(emu: Emulator) -> None:
 
 # -- B19 -----------------------------------------------------------------
 
-@kevlar.beat("B19", "The cave door opens; arrival near (11,29)")
+@kevlar.beat("B19", "The cave door opens; arrival near (11,29)",
+             map_constant="MAP_KEVLAR_TOWN", at=CAVE_DOOR)
 def b19(emu: Emulator) -> None:
     _enter_door(emu, "B19", CAVE_DOOR, "MAP_PASSAGE_CAVE_GROTT_HOLE")
     _assert_near(emu, "B19", CAVE_ARRIVAL)
@@ -733,7 +769,11 @@ def b19(emu: Emulator) -> None:
 
 @kevlar.beat("B20", "Pushing each boulder one tile (module finding 2: none "
                     "of the 3 boulders have push movement wired -- every "
-                    "push is expected to fail as a bump, not a move)")
+                    "push is expected to fail as a bump, not a move)",
+             locations=tuple(
+                 BeatLocation("MAP_PASSAGE_CAVE_GROTT_HOLE", bx, by, f"boulder (local id {local_id})")
+                 for local_id, (bx, by) in BOULDERS
+             ))
 def b20(emu: Emulator) -> None:
     for local_id, xy in BOULDERS:
         before = emu.object_event(local_id)
@@ -826,7 +866,8 @@ def b23(emu: Emulator) -> None:
 
 # -- B24 -----------------------------------------------------------------
 
-@kevlar.beat("B24", "The cave exit warps back to Map031 (13,7)")
+@kevlar.beat("B24", "The cave exit warps back to Map031 (13,7)",
+             map_constant="MAP_PASSAGE_CAVE_GROTT_HOLE", at=CAVE_EXIT_APPROACH)
 def b24(emu: Emulator) -> None:
     _cross_threshold(emu, "B24", CAVE_EXIT_APPROACH, "DOWN", "MAP_KEVLAR_TOWN")
     _assert_near(emu, "B24", CAVE_DOOR)
@@ -846,7 +887,8 @@ def n6(emu: Emulator) -> None:
 # -- B25 -----------------------------------------------------------------
 
 @kevlar.beat("B25", "The north edge (toward unbuilt Route 2) is a clean "
-                    "impassable wall -- no void, no crash")
+                    "impassable wall -- no void, no crash",
+             map_constant="MAP_KEVLAR_TOWN", at=NORTH_EDGE_APPROACH)
 def b25(emu: Emulator) -> None:
     # `KevlarTown/map.json`'s `connections` is `null` -- no seam is wired
     # (CH03_TODO.md decision #3). Approach well clear of the door/berry
