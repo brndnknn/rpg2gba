@@ -50,6 +50,7 @@ from rpg2gba.tileset_converter.local_id_remap import (
     iter_object_id_refs,
     load_local_id_table,
     remap_pory_object_ids,
+    strip_unemitted_door_movements,
 )
 from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS, WALKABLE_OVERRIDES
 from rpg2gba.tileset_converter.npc_gfx import (
@@ -61,7 +62,11 @@ from rpg2gba.tileset_converter.route_bytecode import RouteRegistry
 from rpg2gba.tileset_converter.route_table_emit import emit_route_table
 
 DEFAULT_SLICE = tuple(SLICE_MAP_IDS)
-ALLOWED_MAPS = {49, 48, 32, 50, 64, 65, 172, 89, 33, 81}
+# Derived, never hand-listed: a second literal here has been the documented
+# hazard of every map addition (miss it and the new maps' warps are pruned as
+# out-of-slice, so the doors go inert with no error). map_set.SLICE_MAP_IDS is
+# the single source of truth.
+ALLOWED_MAPS = set(SLICE_MAP_IDS)
 OVERRIDES = Path("reference/map_name_overrides.json")
 SWITCHES = Path("reference/uranium_switches.json")
 VARIABLES = Path("reference/uranium_variables.json")
@@ -309,6 +314,15 @@ def _regenerate_map_json(
         overrides_path=OVERRIDES,
         state_path=out / "porymap" / "map_constants.json",
     )
+    # Rewrite the MAP_URANIUM_<N> alias header from the state we just minted.
+    # It is DERIVED from the registry, so it must be regenerated wherever the
+    # registry can change — otherwise a re-mint (a map_name_overrides.json edit
+    # picked up by mint's drift check) leaves the alias pointing at the old
+    # constant while map_groups.h defines only the new one, and the build dies
+    # in the assembler with a bare "undefined map (check for typos)". Writing
+    # it only from the Map Walker path, as before, made the real pipeline
+    # depend on when a debug build last ran.
+    reg.write_alias_header(out / "porymap" / "uranium_map_aliases.h")
     flag_state_path = out / "flag_state.json"
     flag_reg = FlagRegistry.load(flag_state_path, fork_path=fork)
     # load() restores mints + script-switch ids but not labels (labels aren't
@@ -489,8 +503,25 @@ def main() -> int:
             bracketed_text, map_json, table, source_name=f"Map{map_id:03d}.pory"
         )
 
+        # Drop door-animation applymovement/waitmovement pairs targeting an
+        # RMXP event the pipeline converted to a warp (no compiled object
+        # local id) instead of an object_event — see
+        # local_id_remap.strip_unemitted_door_movements for why this is a
+        # drop, not a rewrite. Must run BEFORE the local-id remap, same as
+        # the two passes above: it still needs the raw RMXP ids `table` is
+        # keyed by, and it must see any door ids the remap would otherwise
+        # hard-fail on.
+        raw_map_json_path = out / "maps" / f"Map{map_id:03d}.json"
+        raw_map_json = json.loads(raw_map_json_path.read_text(encoding="utf-8"))
+        door_strip = strip_unemitted_door_movements(
+            resolved_text, raw_map_json, table, source_name=f"Map{map_id:03d}.pory"
+        )
+        for line, command, target_id in door_strip.dropped:
+            print(f"    door    line {line}: dropped {command}(...) targeting "
+                  f"unemitted door event {target_id}")
+
         remap = remap_pory_object_ids(
-            resolved_text, table, source_name=f"Map{map_id:03d}.pory"
+            door_strip.text, table, source_name=f"Map{map_id:03d}.pory"
         )
         final_text = remap.text
 
@@ -546,6 +577,7 @@ def main() -> int:
               f"normalized {len(norm.renames)} label(s), "
               f"kept {len(result.kept)}, dropped {len(result.dropped)} orphan(s), "
               f"{statics} static object(s), "
+              f"{len(door_strip.dropped)} door-movement drop(s), "
               f"{len(remap.replacements)} local-id remap(s), "
               f"{len(remap.warnings)} unmapped")
         for old, new in sorted(norm.renames.items()):

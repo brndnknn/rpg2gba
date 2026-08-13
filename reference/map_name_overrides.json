@@ -29,6 +29,22 @@
     "89": {
       "display_name": "Moki Town Theo's House 2F",
       "evidence": "Slice-1 interior expansion floor disambiguation (see map 172). Map 89 has no street door; its only exit warps back to map 172 (EV2 -> 172 @11,3)."
+    },
+    "67": {
+      "display_name": "Kevlar Town Pokemart",
+      "evidence": "CH03 scope pass (2026-08-12). map_infos name is 'Kevlar Town(Pokemart)' — identity correct (map 31 door at (37,14) -> map 67; pbPokemonMart at EV1), override only normalizes the parenthetical for display/constant minting. Same treatment as map 50."
+    },
+    "68": {
+      "display_name": "Kevlar Town Pokemon Center",
+      "evidence": "CH03 scope pass (2026-08-12). map_infos name is 'Kevlar Town(Pokemon Center)' — identity correct (map 31 door at (20,12) -> map 68; pbSetPokemonCenter at the counter EV1), override only normalizes the parenthetical."
+    },
+    "73": {
+      "display_name": "Kevlar Town Buildings",
+      "evidence": "CH03 scope pass (2026-08-12), user-approved. map_infos names map 73 'Kevlar Town', colliding with map 31 (the outdoor hub). Map 73 is one physical map holding four separate interiors: map 31's four doors land at four distinct x-regions inside it (x~5 bike repair shop, x~24 an apartment, x~44 berry boutique, x~64 a house). No single building name is correct, so the label is the collective. Not split into four maps — map 73 is one map and we have no map-splitting pass."
+    },
+    "19": {
+      "display_name": "Passage Cave Grott-Hole",
+      "evidence": "CH03 scope pass (2026-08-12), user-approved; SUPERSEDES this map's former `reviewed` verdict, which called it the Kevlar->Nowtoch through-cave. Two independent refutations: (a) warp trace — map 19's only code-201 command anywhere is EV7 (11,30) -> map 31 (13,7), the same tile its entrance sits on, and no warp in the corpus reaches map 19 from any map but 31, so it cannot be a through-route; the real through-cave is maps 36/37 via the map31<->map35 connection seam. (b) The wiki's own Passage Cave page carries a 'Grott-Hole' subsection stating the grott-hole does not connect to the through cave; its nav infobox (north=Nowtoch City, south=Route 2) describes maps 36/37 only. Name also disambiguates the engine dir from maps 36/37, which keep the plain 'Passage Cave' label."
     }
   },
 
@@ -50,8 +66,8 @@
     },
     "19": {
       "map_infos_name": "Passage Cave",
-      "verdict": "CORRECT — no override",
-      "evidence": "Hangs off map 31 (Kevlar Town). Wiki: Passage Cave = the Kevlar Town -> Nowtoch City dungeon (the Route 2 rockslide alternative). Label matches topology; same shared cave BGM as Comet Cave."
+      "verdict": "SUPERSEDED 2026-08-12 — see `overrides` entry for map 19",
+      "evidence": "WRONG, kept as a record of the mistake. This verdict read map 19 as the Kevlar -> Nowtoch through-cave; the warp trace and the wiki's Grott-Hole subsection both say map 19 is an isolated offshoot that dead-ends back into map 31, and the through-cave is maps 36/37. Full reasoning in the override entry. Original text: 'Hangs off map 31 (Kevlar Town). Wiki: Passage Cave = the Kevlar Town -> Nowtoch City dungeon (the Route 2 rockslide alternative). Label matches topology; same shared cave BGM as Comet Cave.'"
     },
     "36": {
       "map_infos_name": "Passage Cave",

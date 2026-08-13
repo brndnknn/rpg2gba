@@ -98,7 +98,7 @@
     {
       "id": "CH03", "act": "A1", "title": "Kevlar Town", "wiki_page": "Kevlar Town",
       "visit": 1, "outdoor": 31, "maps": [31, 67, 68, 73, 19],
-      "predecessor": "CH02", "tier": "medium", "status": "planned",
+      "predecessor": "CH02", "tier": "medium", "status": "in_progress",
       "notes": "Map 19 'Passage Cave' is bound HERE, not to CH05: the warp graph shows it connects only to/from Kevlar (31) in both directions and never reaches Route 02 or Nowtoch. Naive parent-tree reading would have mis-assigned it. Introduces the bike (Bike Repair Shop / Bike Wheel)."
     },
     {

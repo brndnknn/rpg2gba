@@ -210,12 +210,20 @@ def test_built_chapters_match_the_slice_map_set() -> None:
     # reference/chapters.json is meant to become the SoT that map_set derives
     # from; until that cutover lands, this test pins them together so the two
     # lists cannot drift silently. SLICE_MAP_IDS is the *cumulative* build set:
-    # every chapter up to and including the frontier one (CH01 + CH02 since
-    # 2026-08-05), not just the newest.
+    # every chapter up to and including the frontier one, not just the newest.
+    # Derived from status rather than a hand-listed chapter pair (which went
+    # stale the moment CH03 entered the build set): a chapter's maps belong in
+    # SLICE_MAP_IDS once it is `in_progress` — it has to build before it can
+    # pass its §9 gate and become `built`.
     from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
 
     binding = load_binding()
-    built = binding.chapter("CH01").maps + binding.chapter("CH02").maps
+    built = [
+        map_id
+        for chapter in binding.chapters
+        if chapter.status in ("built", "in_progress")
+        for map_id in chapter.maps
+    ]
     assert sorted(built) == sorted(SLICE_MAP_IDS)
 
 

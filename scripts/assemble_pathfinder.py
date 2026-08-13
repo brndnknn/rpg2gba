@@ -96,8 +96,28 @@ WARP_OVERRIDES: dict[int, set[tuple[int, int]]] = {
     # CH02 (2026-08-05). 33: the west-edge triad back to Moki Town
     # EV023/024/022 (70,11)/(70,12)/(70,13) + the old-rod-house door EV027
     # (39,18). 81: the house exit EV003 (9,14).
-    33: {(70, 11), (70, 12), (70, 13), (39, 18)},
+    # CH03 (2026-08-12) added the NORTH pair EV045/EV046 (15,5)/(16,5) -> map31
+    # (15,42)/(16,42): Route 01's half of the Route-01<->Kevlar seam. These were
+    # deliberately absent while Kevlar was out of scope (an unstamped warp tile
+    # is inert, which is what kept the frontier closed), and are the ONLY way
+    # north out of Route 01.
+    33: {(70, 11), (70, 12), (70, 13), (39, 18), (15, 5), (16, 5)},
     81: {(9, 14)},
+    # CH03 (2026-08-12). 31: the four doors into the shared building strip
+    # (map73) EV012 (23,28) bike shop / EV013 (37,28) apartment / EV004 (35,6)
+    # berry boutique / EV041 (32,28) house, the Mart EV002 (37,14), the Center
+    # EV003 (20,12), the cave EV034 (13,7), and the south pair back to Route 01
+    # EV023/EV035 (15,43)/(16,43). Map031 EV049 ("NurseTut") also carries a
+    # code-201, but it is a PERSON who transfers the player mid-scene, not a
+    # door tile — deliberately not listed, or her tile would grow a door.
+    31: {
+        (37, 14), (20, 12), (35, 6), (23, 28), (37, 28), (32, 28),
+        (13, 7), (15, 43), (16, 43),
+    },
+    67: {(10, 11)},                      # mart exit EV002
+    68: {(7, 19), (8, 19)},              # center exit, two tiles EV002/EV008
+    73: {(5, 12), (24, 13), (44, 13), (64, 13)},  # the strip's four exits
+    19: {(11, 30)},                      # cave exit EV007 -> map31 (13,7)
 }
 
 # Flag/var address layout for the pathfinder boot test. The numeric layout now
