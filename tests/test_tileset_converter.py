@@ -9,6 +9,7 @@ the acceptance checklists from PHASE5_PLAN.md so the target is concrete.
 from __future__ import annotations
 
 import json
+import logging
 import struct
 from pathlib import Path
 
@@ -870,6 +871,79 @@ def test_mint_auto_disambiguate_suffixes_collisions(tmp_path: Path) -> None:
     # a vanilla collision is disambiguated too, not fatal, under the flag
     v = reg.mint(9, "Littleroot Town", auto_disambiguate=True)
     assert v.map_const == "MAP_LITTLEROOT_TOWN_9"
+
+
+def test_mint_redetects_display_name_drift(caplog) -> None:
+    """A display_name change for an already-minted id (typically a
+    map_name_overrides.json edit landing after the first mint) re-mints the id
+    from the NEW display name, replacing the stale entry, and logs a WARNING."""
+    reg = mc.MapConstantRegistry(Path("x"))
+    first = reg.mint(19, "Passage Cave")
+    assert first.map_const == "MAP_PASSAGE_CAVE"
+    assert first.dir_name == "PassageCave"
+
+    caplog.set_level(logging.WARNING)
+    second = reg.mint(19, "Passage Cave Grott-Hole")
+    assert second is not first
+    assert second.map_const == "MAP_PASSAGE_CAVE_GROTT_HOLE"
+    assert second.dir_name == "PassageCaveGrottHole"
+    assert second.display_name == "Passage Cave Grott-Hole"
+    assert reg.get(19) == second
+    assert any("identity drift" in r.message for r in caplog.records)
+    # the freed old constant no longer blocks a later map from claiming it
+    reclaimed = reg.mint(20, "Passage Cave")
+    assert reclaimed.map_const == "MAP_PASSAGE_CAVE"
+
+
+def test_mint_unchanged_display_name_is_silent_noop(caplog) -> None:
+    """Re-minting with the SAME display name is the idempotent no-op path: same
+    object back, no WARNING logged."""
+    reg = mc.MapConstantRegistry(Path("x"))
+    first = reg.mint(92, "Rochfale Town")
+    caplog.set_level(logging.WARNING)
+    second = reg.mint(92, "Rochfale Town")
+    assert second is first
+    assert not any("identity drift" in r.message for r in caplog.records)
+
+
+def test_mint_drift_collision_fails_loud() -> None:
+    """A re-mint whose new identity collides with another already-minted map (or
+    vanilla) fails loud exactly like a fresh mint -- the stale entry is left
+    intact, not silently dropped."""
+    reg = mc.MapConstantRegistry(Path("x"), vanilla_consts={"MAP_LITTLEROOT_TOWN"})
+    reg.mint(19, "Passage Cave")
+    reg.mint(20, "Kevlar Town")
+    with pytest.raises(ValueError):
+        reg.mint(19, "Kevlar Town")  # would collide with map 20's identity
+    # the stale entry for 19 must still be there, untouched by the failed re-mint
+    assert reg.get(19).map_const == "MAP_PASSAGE_CAVE"
+
+    reg2 = mc.MapConstantRegistry(Path("x"), vanilla_consts={"MAP_LITTLEROOT_TOWN"})
+    reg2.mint(19, "Passage Cave")
+    with pytest.raises(ValueError):
+        reg2.mint(19, "Littleroot Town")  # would collide with vanilla
+    assert reg2.get(19).map_const == "MAP_PASSAGE_CAVE"
+
+
+def test_mint_drift_idempotent_across_reruns(tmp_path: Path, caplog) -> None:
+    """The drift re-mint itself is idempotent: running the same (new)
+    display_name a second time is silent, and save/load round-trips the new
+    identity, not the stale one."""
+    state = tmp_path / "map_constants.json"
+    reg = mc.MapConstantRegistry(state)
+    reg.mint(19, "Passage Cave")
+    reg.mint(19, "Passage Cave Grott-Hole")
+    reg.save()
+
+    reloaded = mc.MapConstantRegistry(state)
+    reloaded.load()
+    assert reloaded.get(19).map_const == "MAP_PASSAGE_CAVE_GROTT_HOLE"
+
+    caplog.set_level(logging.WARNING)
+    caplog.clear()
+    again = reloaded.mint(19, "Passage Cave Grott-Hole")
+    assert again.map_const == "MAP_PASSAGE_CAVE_GROTT_HOLE"
+    assert not any("identity drift" in r.message for r in caplog.records)
 
 
 def test_alias_header_sorted_and_complete(tmp_path: Path) -> None:
@@ -3909,6 +3983,45 @@ def test_compute_autorun_entries_sorted_by_event_then_page() -> None:
     ev3 = _event(3, 0, 0, [_page(trigger=3)])
     entries = mw.compute_autorun_entries([ev9, ev3], 50, None)
     assert [e.event_id for e in entries] == [3, 9]
+
+
+def test_compute_autorun_entries_self_deactivation_negates_unguarded_body_write() -> None:
+    """Map031 EV049 page2's real shape: an autorun page gated on a switch
+    unrelated to what its own body writes (the `seenStorageCreator` split
+    355/655 idiom -> FLAG_SYS_PC_LANETTE). Without a negation of that write in
+    the guard, the ON_FRAME dispatcher can never stop re-dispatching the page
+    once it fires (`stage_slice_scripts.check_onframe_deactivation`) — the
+    guard must gain `!flag(FLAG_SYS_PC_LANETTE)`."""
+    reg = FlagRegistry()
+    reg.propose_flag(126, "FLAG_NURSE_TUTORIAL")
+    reg.propose_flag(55, "FLAG_DEFEATED_GYM1_LEADER")
+    body = [
+        {"code": 355, "indent": 0, "parameters": ["$PokemonGlobal.seenStorageCreator="]},
+        {"code": 655, "indent": 0, "parameters": ["true"]},
+    ]
+    event = _event(49, 0, 0, [
+        _page(),
+        _page(cond=_sw_cond(126)),
+        _page(cond=_sw_cond(55), trigger=3, cmds=body),
+    ])
+    entries = mw.compute_autorun_entries([event], 31, reg)
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry.page_index == 2
+    assert "!flag(FLAG_SYS_PC_LANETTE)" in entry.guard
+
+
+def test_compute_autorun_entries_body_write_already_in_guard_untouched() -> None:
+    """The common case — the page's own switch-write IS the guard flag
+    (e.g. a self-deactivating trigger-3 page that flips its own gate switch
+    off/on) — must NOT get a redundant/contradictory negation appended."""
+    reg = FlagRegistry()
+    reg.propose_flag(55, "FLAG_SOME_GATE")
+    body = [{"code": 121, "indent": 0, "parameters": [55, 55, 0]}]  # switch 55 ON
+    event = _event(1, 0, 0, [_page(cond=_sw_cond(55), trigger=3, cmds=body)])
+    entries = mw.compute_autorun_entries([event], 31, reg)
+    assert len(entries) == 1
+    assert entries[0].guard == "flag(FLAG_SOME_GATE)"
 
 
 def test_render_onframe_script_golden() -> None:

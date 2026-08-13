@@ -339,6 +339,71 @@ def test_warp_variable_target_queues(ctx: T.TranspileContext) -> None:
     assert res.unhandled[0].command_code == T.TRANSFER_PLAYER
 
 
+def test_warp_unconditional_state_write_after_is_hoisted(ctx: T.TranspileContext) -> None:
+    # RMXP keeps running after Transfer Player; the fork's warp halts the
+    # script (ScrCmd_warp/DoWarp), so a same-level unconditional switch
+    # write after the transfer must move ahead of the warp instead of
+    # becoming dead code (the NurseTut FLAG_NURSE_TUTORIAL bug).
+    res = run_event(
+        ctx,
+        [[
+            cmd(T.TRANSFER_PLAYER, [0, 32, 28, 31, 0, 1]),
+            cmd(T.CONTROL_SWITCHES, [1, 1, 0]),
+        ]],
+        trigger=1,
+    )
+    lines = [ln.strip() for ln in res.text.splitlines()]
+    assert lines.index("setflag(FLAG_GOT_STARTER)") < lines.index(
+        "warp(MAP_URANIUM_32, 28, 31)"
+    )
+    assert not res.unhandled
+
+
+def test_warp_state_write_inside_conditional_after_is_not_hoisted(
+    ctx: T.TranspileContext,
+) -> None:
+    # A write nested in a branch after the warp must NOT be hoisted — its
+    # guard may not hold — and must surface as a queue entry, not be
+    # silently emitted as dead code.
+    res = run_event(
+        ctx,
+        [[
+            cmd(T.TRANSFER_PLAYER, [0, 32, 28, 31, 0, 1]),
+            cmd(T.CONDITIONAL_BRANCH, [0, 1, 0], indent=0),
+            cmd(T.CONTROL_SWITCHES, [1, 1, 0], indent=1),
+            cmd(T.BRANCH_END, indent=0),
+        ]],
+        trigger=1,
+    )
+    assert "setflag(FLAG_GOT_STARTER)" not in res.text
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.CONDITIONAL_BRANCH
+    assert "follows a Transfer Player warp" in res.unhandled[0].description
+
+
+def test_warp_dialogue_after_is_queued_not_emitted(ctx: T.TranspileContext) -> None:
+    res = run_event(
+        ctx,
+        [[
+            cmd(T.TRANSFER_PLAYER, [0, 32, 28, 31, 0, 1]),
+            cmd(T.SHOW_TEXT, ["unreachable"]),
+        ]],
+        trigger=1,
+    )
+    assert "msgbox" not in res.text
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.SHOW_TEXT
+    assert "follows a Transfer Player warp" in res.unhandled[0].description
+
+
+def test_warp_with_nothing_after_is_unchanged(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.TRANSFER_PLAYER, [0, 32, 28, 31, 0, 1])]], trigger=1)
+    lines = res.text.splitlines()
+    assert "    warp(MAP_URANIUM_32, 28, 31)" in lines
+    assert "    waitstate" in lines
+    assert not res.unhandled
+
+
 # ----------------------------------------------------------------------------
 # emitters — move routes (209/210)
 # ----------------------------------------------------------------------------
@@ -563,7 +628,7 @@ def test_erase_event_emits_removeobject(ctx: T.TranspileContext) -> None:
 
 def test_call_common_event_zero_padded(ctx: T.TranspileContext) -> None:
     res = run_event(ctx, [[cmd(T.CALL_COMMON_EVENT, [7])]], trigger=1)
-    assert "call CommonEvent_007" in res.text
+    assert "call(CommonEvent_007)" in res.text
 
 
 def test_prepare_and_execute_transition(ctx: T.TranspileContext) -> None:

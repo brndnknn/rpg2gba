@@ -304,6 +304,67 @@ def test_running_shoes_false_near_miss_still_queues(ctx: T.TranspileContext) -> 
 
 
 # ----------------------------------------------------------------------------
+# Shape 7 — $PokemonGlobal.seenStorageCreator=true -> setflag(FLAG_SYS_PC_LANETTE)
+# (Map031 EV049 page0's single-row form, and the split-across-355/655 form
+# Map031 EV049 page2 / Map042 EV003 actually use — see
+# _SEEN_STORAGE_CREATOR_RE / _SEEN_STORAGE_CREATOR_OPEN_RE.)
+# ----------------------------------------------------------------------------
+
+
+def test_seen_storage_creator_single_row_sets_flag(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.SCRIPT, ["$PokemonGlobal.seenStorageCreator=true"])]])
+    assert res.unhandled == []
+    assert "setflag(FLAG_SYS_PC_LANETTE)" in res.text
+
+
+def test_seen_storage_creator_split_row_sets_flag(ctx: T.TranspileContext) -> None:
+    """The real corpus shape (Map031 EV049 page2, Map042 EV003 page0): the
+    RGSS script editor wraps the assignment across a 355 opener with no
+    value and a 655 continuation carrying just ``true``."""
+    res = run_event(
+        ctx,
+        [[
+            cmd(T.SCRIPT, ["$PokemonGlobal.seenStorageCreator="]),
+            cmd(T.SCRIPT_CONT, ["true"]),
+        ]],
+    )
+    assert res.unhandled == []
+    assert "setflag(FLAG_SYS_PC_LANETTE)" in res.text
+
+
+def test_seen_storage_creator_split_row_false_queues_both_rows() -> None:
+    ctx = T.TranspileContext(registry=FlagRegistry())
+    res = run_event(
+        ctx,
+        [[
+            cmd(T.SCRIPT, ["$PokemonGlobal.seenStorageCreator="]),
+            cmd(T.SCRIPT_CONT, ["false"]),
+        ]],
+    )
+    assert len(res.unhandled) == 2
+    assert all(e.command_code == T.SCRIPT for e in res.unhandled)
+    assert "setflag(FLAG_SYS_PC_LANETTE)" not in res.text
+
+
+def test_seen_storage_creator_open_without_continuation_queues_next_row_normally(
+    ctx: T.TranspileContext,
+) -> None:
+    """A bare opener followed by an unrelated script call: the pending state
+    must not leak into swallowing an unrelated row's text."""
+    res = run_event(
+        ctx,
+        [[
+            cmd(T.SCRIPT, ["$PokemonGlobal.seenStorageCreator="]),
+            cmd(T.SCRIPT, ["$PokemonGlobal.someOtherFlag=true"]),
+        ]],
+    )
+    assert "setflag(FLAG_SYS_PC_LANETTE)" not in res.text
+    # the "opener" queues (paired with the mismatched next row), and the
+    # unrelated second row queues on its own merits too.
+    assert len(res.unhandled) == 2
+
+
+# ----------------------------------------------------------------------------
 # Shape 6 — pbHasSpecies?(::PBSpecies::X) -> checkspecies(SPECIES_X)
 # ----------------------------------------------------------------------------
 

@@ -120,10 +120,19 @@ class MapConstantRegistry:
     ) -> MapConstants:
         """Return the (stable) constants for a map id, creating them on first sight.
 
-        Idempotent: a second call for the same id returns the same object. Fails
-        loud if the sanitized name is empty or collides with a vanilla MAP_* or an
-        already-minted Uranium map (the signal to add a map_name_overrides.json
-        entry — see Q2).
+        Idempotent: a second call with the SAME resulting identity returns the
+        existing object untouched, no log. Fails loud if the sanitized name is
+        empty or collides with a vanilla MAP_* or an already-minted Uranium map
+        (the signal to add a map_name_overrides.json entry — see Q2).
+
+        DRIFT: if this id already has persisted state but `display_name` now
+        implies a different identity (typically a map_name_overrides.json edit
+        landing after the id was first minted, e.g. by the Map Walker's
+        auto_disambiguate run), the id is RE-MINTED from the current
+        display_name — replacing the stale entry, freeing the old constant for
+        reuse, and logging at WARNING (CLAUDE.md §4.3: overrides are the source
+        of truth, not whatever got persisted first). The re-mint is
+        collision-checked exactly like a fresh mint.
 
         `auto_disambiguate` (Map Walker only): instead of failing loud on a
         collision, suffix this map's INTERNAL constant/dir with its id
@@ -132,10 +141,10 @@ class MapConstantRegistry:
         still read the real name. The full corpus has ~32 duplicate-name groups
         (multi-floor caves, "(Metro)" variants, ...) — proper identity for those is
         a Phase-5/7 fidelity job, not a prerequisite for a warps-only debug walker.
-        The strict default is kept for the real pipeline."""
+        The strict default is kept for the real pipeline. A walker-suffixed
+        identity is NOT drift on its own — re-deriving the same suffix from the
+        same display_name is the idempotent no-op path below."""
         existing = self._by_id.get(uranium_id)
-        if existing is not None:
-            return existing
 
         stem = sanitize_name(display_name)
         if not stem:
@@ -143,45 +152,78 @@ class MapConstantRegistry:
                 f"map {uranium_id}: display name {display_name!r} yields an empty "
                 f"constant stem; add a reference/map_name_overrides.json entry"
             )
-        map_const = MAP_CONST_FMT.format(name=stem)
-        dir_name = _pascal_dir(display_name)
+        candidate_const = MAP_CONST_FMT.format(name=stem)
+        candidate_dir = _pascal_dir(display_name)
 
         # Walker: resolve a collision deterministically by suffixing with the id
-        # (maps are minted in sorted-id order, so the lowest id keeps the base name).
-        if auto_disambiguate and self._const_taken(map_const):
+        # (maps are minted in sorted-id order, so the lowest id keeps the base
+        # name). `exclude_id` so this id's OWN prior entry never blocks its own
+        # re-derivation (that's not a collision, it's the same map).
+        if auto_disambiguate and self._const_taken(candidate_const, exclude_id=uranium_id):
             stem = f"{stem}_{uranium_id}"
-            map_const = MAP_CONST_FMT.format(name=stem)
-            dir_name = f"{dir_name}{uranium_id}"
+            candidate_const = MAP_CONST_FMT.format(name=stem)
+            candidate_dir = f"{candidate_dir}{uranium_id}"
 
-        if map_const in self._vanilla:
+        if (
+            existing is not None
+            and existing.map_const == candidate_const
+            and existing.dir_name == candidate_dir
+        ):
+            return existing  # identity unchanged -> idempotent no-op, no log
+
+        if candidate_const in self._vanilla:
             raise ValueError(
-                f"map {uranium_id} ({display_name!r}) -> {map_const} collides with a "
-                f"vanilla pokeemerald MAP_*; add a map_name_overrides.json entry"
+                f"map {uranium_id} ({display_name!r}) -> {candidate_const} collides "
+                f"with a vanilla pokeemerald MAP_*; add a map_name_overrides.json entry"
             )
-        clash = next((uid for uid, m in self._by_id.items() if m.map_const == map_const), None)
+        clash = next(
+            (
+                uid
+                for uid, m in self._by_id.items()
+                if uid != uranium_id and m.map_const == candidate_const
+            ),
+            None,
+        )
         if clash is not None:
             raise ValueError(
-                f"map {uranium_id} ({display_name!r}) -> {map_const} collides with "
-                f"already-minted map {clash}; add a map_name_overrides.json entry"
+                f"map {uranium_id} ({display_name!r}) -> {candidate_const} collides "
+                f"with already-minted map {clash}; add a map_name_overrides.json entry"
             )
 
         constants = MapConstants(
             uranium_id=uranium_id,
-            map_const=map_const,
+            map_const=candidate_const,
             alias_const=ALIAS_CONST_FMT.format(n=uranium_id),
             layout_const=LAYOUT_CONST_FMT.format(name=stem),
             mapsec_const=MAPSEC_CONST_FMT.format(name=stem),
-            dir_name=dir_name,
+            dir_name=candidate_dir,
             display_name=display_name,
         )
         self._by_id[uranium_id] = constants
-        logger.info("minted map %d -> %s (dir %s)", uranium_id, map_const, constants.dir_name)
+        if existing is not None:
+            logger.warning(
+                "map %d identity drift: %s (dir %s) -> %s (dir %s); display name "
+                "now %r (was %r) — re-minted from current display name "
+                "(likely a map_name_overrides.json edit)",
+                uranium_id,
+                existing.map_const,
+                existing.dir_name,
+                constants.map_const,
+                constants.dir_name,
+                display_name,
+                existing.display_name,
+            )
+        else:
+            logger.info(
+                "minted map %d -> %s (dir %s)", uranium_id, candidate_const, candidate_dir
+            )
         return constants
 
-    def _const_taken(self, map_const: str) -> bool:
-        """Whether `map_const` already collides with a vanilla or minted map."""
+    def _const_taken(self, map_const: str, *, exclude_id: int | None = None) -> bool:
+        """Whether `map_const` already collides with a vanilla or minted map
+        (other than `exclude_id` itself, when re-deriving that id's own identity)."""
         return map_const in self._vanilla or any(
-            m.map_const == map_const for m in self._by_id.values()
+            uid != exclude_id and m.map_const == map_const for uid, m in self._by_id.items()
         )
 
     def get(self, uranium_id: int) -> MapConstants:

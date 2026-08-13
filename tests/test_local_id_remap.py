@@ -11,6 +11,7 @@ from rpg2gba.tileset_converter.local_id_remap import (
     REMAP_COMMANDS,
     load_local_id_table,
     remap_pory_object_ids,
+    strip_unemitted_door_movements,
 )
 
 # ---------------------------------------------------------------------------
@@ -398,6 +399,137 @@ def test_bare_swap_special_call_raises() -> None:
     )
     with pytest.raises(ValueError, match="setobjectgfx macro"):
         remap_pory_object_ids(text, {"19": 3})
+
+
+# ---------------------------------------------------------------------------
+# strip_unemitted_door_movements
+# ---------------------------------------------------------------------------
+
+
+def _raw_map_json(events: list[dict]) -> dict:
+    return {"events": events}
+
+
+def _door_event(event_id: int, name: str = "door") -> dict:
+    """A minimal raw-RMXP event with a code-201 (Transfer Player) command on
+    its only page — the signature `strip_unemitted_door_movements` looks for."""
+    return {
+        "id": event_id,
+        "name": name,
+        "x": 0,
+        "y": 0,
+        "pages": [{"list": [{"code": 201, "parameters": []}]}],
+    }
+
+
+def _plain_event(event_id: int, name: str = "npc") -> dict:
+    """A minimal raw-RMXP event with no code-201 on any page."""
+    return {
+        "id": event_id,
+        "name": name,
+        "x": 0,
+        "y": 0,
+        "pages": [{"list": [{"code": 101, "parameters": []}]}],
+    }
+
+
+def test_door_applymovement_and_waitmovement_pair_dropped() -> None:
+    map_json = _raw_map_json([_door_event(3)])
+    table: dict[str, int] = {}
+    text = (
+        "lock\n"
+        "applymovement(3, Common_Movement_OpenDoor)\n"
+        "waitmovement(0)\n"
+        "release\n"
+    )
+
+    result = strip_unemitted_door_movements(text, map_json, table, source_name="Map031.pory")
+
+    assert result.text == "lock\nrelease\n"
+    assert result.dropped == [
+        (2, "applymovement", 3),
+        (3, "waitmovement", 3),
+    ]
+
+    # And the stripped text now remaps (and compiles) cleanly.
+    remap = remap_pory_object_ids(result.text, table, source_name="Map031.pory")
+    assert remap.text == result.text
+
+
+def test_applymovement_on_non_door_unemitted_event_still_raises() -> None:
+    """A normal (non-door) event absent from the table is not this pass's
+    business — it must still reach remap_pory_object_ids and hard-fail."""
+    map_json = _raw_map_json([_plain_event(3)])
+    table: dict[str, int] = {}
+    text = "applymovement(3, Move1)\nwaitmovement(0)\n"
+
+    result = strip_unemitted_door_movements(text, map_json, table, source_name="Map031.pory")
+
+    assert result.text == text
+    assert result.dropped == []
+
+    with pytest.raises(ValueError, match="3"):
+        remap_pory_object_ids(result.text, table, source_name="Map031.pory")
+
+
+def test_emitted_object_references_untouched_and_still_remap() -> None:
+    """A door id that IS in the table (a door somehow emitted as an object
+    event) is left alone by the strip pass and remaps normally."""
+    map_json = _raw_map_json([_door_event(3)])
+    table = {"3": 1}
+    text = "applymovement(3, Move1)\nwaitmovement(0)\n"
+
+    result = strip_unemitted_door_movements(text, map_json, table, source_name="Map031.pory")
+
+    assert result.text == text
+    assert result.dropped == []
+
+    remap = remap_pory_object_ids(result.text, table, source_name="Map031.pory")
+    assert remap.text == "applymovement(1, Move1)\nwaitmovement(0)\n"
+
+
+def test_door_applymovement_without_waitmovement_drops_only_that_line() -> None:
+    map_json = _raw_map_json([_door_event(3)])
+    table: dict[str, int] = {}
+    text = (
+        "applymovement(3, Common_Movement_OpenDoor)\n"
+        "setobjectxy(3, 5, 5)\n"
+    )
+
+    result = strip_unemitted_door_movements(text, map_json, table, source_name="Map031.pory")
+
+    # The applymovement line is dropped; the following setobjectxy line is a
+    # separate door reference (also unemitted) so it is dropped too, but on
+    # its own, not paired with the applymovement.
+    assert result.text == ""
+    assert result.dropped == [
+        (1, "applymovement", 3),
+        (2, "setobjectxy", 3),
+    ]
+
+
+def test_door_applymovement_not_followed_by_waitmovement_leaves_other_line() -> None:
+    """The pairing only fires when the very next non-blank line is a bare
+    waitmovement(0); anything else is left alone."""
+    map_json = _raw_map_json([_door_event(3)])
+    table: dict[str, int] = {}
+    text = "applymovement(3, Common_Movement_OpenDoor)\nmsgbox(\"hi\")\n"
+
+    result = strip_unemitted_door_movements(text, map_json, table, source_name="Map031.pory")
+
+    assert result.text == "msgbox(\"hi\")\n"
+    assert result.dropped == [(1, "applymovement", 3)]
+
+
+def test_no_door_references_is_a_no_op() -> None:
+    map_json = _raw_map_json([_door_event(3)])
+    table = {"16": 2}
+    text = "applymovement(16, Move1)\nwaitmovement(0)\n"
+
+    result = strip_unemitted_door_movements(text, map_json, table, source_name="Map031.pory")
+
+    assert result.text == text
+    assert result.dropped == []
 
 
 def test_swap_and_movement_targets_remap_together() -> None:

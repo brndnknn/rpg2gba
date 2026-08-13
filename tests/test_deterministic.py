@@ -425,7 +425,7 @@ def test_cc_single_call_no_dialogue() -> None:
     ev = _event(_page(_cmd(D.CALL_COMMON_EVENT, 5)), id=1, name="npc")
     out = D.classify_call_common_event(1, ev)
     assert out is not None
-    assert out.count("call CommonEvent_005") == 1
+    assert out.count("call(CommonEvent_005)") == 1
     assert "msgbox(" not in out
     assert "lock" in out
     assert "faceplayer" in out
@@ -440,8 +440,8 @@ def test_cc_dialogue_before_call() -> None:
     out = D.classify_call_common_event(1, ev)
     assert out is not None
     assert 'msgbox(format("Hi there."))' in out
-    assert "call CommonEvent_012" in out
-    assert out.index('msgbox(format("Hi there."))') < out.index("call CommonEvent_012")
+    assert "call(CommonEvent_012)" in out
+    assert out.index('msgbox(format("Hi there."))') < out.index("call(CommonEvent_012)")
 
 
 def test_cc_multiple_calls_in_order() -> None:
@@ -451,9 +451,9 @@ def test_cc_multiple_calls_in_order() -> None:
     )
     out = D.classify_call_common_event(1, ev)
     assert out is not None
-    assert "call CommonEvent_003" in out
-    assert "call CommonEvent_007" in out
-    assert out.index("call CommonEvent_003") < out.index("call CommonEvent_007")
+    assert "call(CommonEvent_003)" in out
+    assert "call(CommonEvent_007)" in out
+    assert out.index("call(CommonEvent_003)") < out.index("call(CommonEvent_007)")
 
 
 def test_cc_call_id_zero_returns_none() -> None:
@@ -491,7 +491,7 @@ def test_cc_strip_script_call_preserved() -> None:
     )
     out = D.classify_call_common_event(1, ev)
     assert out is not None
-    assert "call CommonEvent_009" in out
+    assert "call(CommonEvent_009)" in out
     assert "pbCallBub" not in out
 
 

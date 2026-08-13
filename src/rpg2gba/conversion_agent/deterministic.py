@@ -520,7 +520,14 @@ def _dialogue_body(
             ce_id = params[0] if params else 0
             if not isinstance(ce_id, int) or ce_id <= 0:
                 return None
-            body.append(f"call CommonEvent_{ce_id:03d}")
+            # Parenthesised call form. Poryscript has no bare `call Label`
+            # keyword (unlike `goto Label`): written that way it parses as two
+            # separate bare commands and passes BOTH through, emitting `call`
+            # with no operand followed by a stray `CommonEvent_004` line, which
+            # the assembler rejects ("Missing value for required parameter
+            # `destination'" + "bad instruction"). `call(Label)` is the
+            # command-with-args form every other emitted command uses.
+            body.append(f"call(CommonEvent_{ce_id:03d})")
         elif code == CONTROL_SELF_SWITCH and allow_self_switch:
             flush()
             if not params or not isinstance(params[0], str):
@@ -620,7 +627,7 @@ def classify_call_common_event(
         body = _dialogue_body(page, map_id=map_id, event_id=event["id"], allow_call=True)
         if body is None:
             return None
-        if any(line.startswith("call CommonEvent_") for line in body):
+        if any(line.startswith("call(CommonEvent_") for line in body):
             saw_call = True
         blocks.append(_talk_block(_page_label(map_id, event, i), body))
     if not saw_call:

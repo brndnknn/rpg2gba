@@ -17,9 +17,12 @@ the transpiler emits a map's ``.pory`` file, against fresh transpiler output.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 #: Poryscript commands whose first argument is an object local id.
 #:
@@ -225,3 +228,147 @@ def remap_pory_object_ids(
         text = text[:start] + new_text + text[end:]
 
     return RemapResult(text=text, replacements=replacements, warnings=warnings)
+
+
+#: RMXP "Transfer Player" event-command code (mirrors
+#: `metadata_wiring.TRANSFER_CODE`) — the signature of a door/warp event.
+TRANSFER_CODE = 201
+
+
+@dataclass
+class DoorMovementStripResult:
+    """Result of `strip_unemitted_door_movements`."""
+
+    text: str
+    #: (line, command, target_rmxp_id), one entry per dropped command line,
+    #: in order of appearance in the ORIGINAL (pre-strip) text.
+    dropped: list[tuple[int, str, int]]
+
+
+def _door_event_ids(map_json_raw: dict) -> set[int]:
+    """RMXP ids of every `map_json_raw["events"]` entry with a code-201
+    (RMXP "Transfer Player") command on at least one page — the signature of
+    a warp-wired door event.
+
+    Deliberately graphic-name-blind: `npc_gfx.is_door_sheet`'s `PU-doors`/
+    `FKdoors` prefix match misses doors like Map031's `door2`, so identity is
+    read from the event's own commands instead. Expects the RAW deserialized
+    RMXP map JSON (``output/.../maps/Map{id:03d}.json``, ``events`` as a list
+    of ``{id, name, x, y, pages}`` with each page's ``list`` carrying
+    ``{code, ...}`` command dicts) — NOT the compiled porymap ``map.json``
+    (``object_events``-shaped), which no longer carries page command codes.
+    """
+    ids: set[int] = set()
+    for event in map_json_raw.get("events", []):
+        if event is None:
+            continue
+        for page in event.get("pages", []):
+            if any(cmd.get("code") == TRANSFER_CODE for cmd in page.get("list", [])):
+                ids.add(event["id"])
+                break
+    return ids
+
+
+def strip_unemitted_door_movements(
+    pory_text: str,
+    map_json_raw: dict,
+    table: dict[str, int],
+    *,
+    source_name: str = "?",
+) -> DoorMovementStripResult:
+    """Drop door-animation movement commands whose target has no compiled
+    object-event local id, instead of letting `remap_pory_object_ids`
+    hard-fail on them.
+
+    In RMXP a door is an event: it carries a door sprite, and its own script
+    plays a little open/close animation on itself
+    (``applymovement(<door id>, ...)`` + ``waitmovement(0)``) immediately
+    before the code-201 command that actually transfers the player. Our
+    pipeline converts such an event into a **warp**
+    (`tileset_converter.metadata_wiring`), not an `object_events` entry — a
+    door has no compiled local id, so any `REMAP_COMMANDS` reference to it can
+    never be remapped.
+
+    Historically this never surfaced: those `applymovement` calls only ever
+    appeared inside the door event's OWN script block, and
+    `assembly.prune_orphan_blocks` deletes that block (map.json wires no live
+    dispatcher label for a pure-warp event) before the remap ever runs.
+    Chapter 3 introduces the first case of a DIFFERENT, surviving event
+    animating a door on someone else's behalf (Map031 EV049 walks the player
+    to the Pokémon Center and opens its door) — that reference lives in a
+    block the prune keeps, so it reaches the remap with no local id to
+    resolve to.
+
+    This narrows the remap's failure surface; it does not eliminate it. An id
+    absent from `table` is dropped ONLY when `map_json_raw` shows it belongs
+    to an event with a code-201 command on at least one page (`_door_event_ids`
+    — i.e. provably a door, never inferred from the graphic name). Anything
+    else absent from `table` is left untouched here and still reaches
+    `remap_pory_object_ids`, which raises on it exactly as before — this pass
+    does not weaken that guard.
+
+    Known upgrade path: pokeemerald-expansion does have native door
+    animation (``opendoor``/``closedoor``/``waitdooranim``,
+    ``engine/asm/macros/event.inc:1549-1563``), but it is driven by a
+    tileset's own door-animation graphic keyed to an animated door metatile.
+    Our warp cells are stamped ``MB_NON_ANIMATED_DOOR``, so wiring the native
+    path is an art/tileset job (giving the door metatile its animation), not
+    something this script-level pass can substitute — hence dropping the
+    command rather than rewriting it to the native macros.
+
+    Pairing: when the dropped command is `applymovement(<id>, ...)`, the
+    next non-blank line is also inspected, and dropped with it if it is
+    exactly a bare ``waitmovement(0)`` (the pairing `_emit_route_with_gfx_swaps`
+    / the transpiler always emits). Any other shape (no following
+    `waitmovement`, or the id reached via a different `REMAP_COMMANDS` entry)
+    drops only the one matched line.
+    """
+    door_ids = _door_event_ids(map_json_raw)
+    masked = _mask_strings_and_comments(pory_text)
+
+    lines = pory_text.split("\n")
+    masked_lines = masked.split("\n")
+
+    drop_idxs: set[int] = set()
+    dropped: list[tuple[int, str, int]] = []
+
+    for command, target_id, start, _end in iter_object_id_refs(masked):
+        if str(target_id) in table:
+            continue
+        if target_id not in door_ids:
+            continue
+
+        line_idx = pory_text.count("\n", 0, start)
+        if line_idx in drop_idxs:
+            continue
+
+        drop_idxs.add(line_idx)
+        dropped.append((line_idx + 1, command, target_id))
+        logger.info(
+            "%s:%d: dropping %s(%d, ...) — targets door event %d, which the "
+            "pipeline converted to a warp and has no compiled object-event "
+            "local id",
+            source_name, line_idx + 1, command, target_id, target_id,
+        )
+
+        if command != "applymovement":
+            continue
+
+        next_idx = line_idx + 1
+        while next_idx < len(lines) and lines[next_idx].strip() == "":
+            next_idx += 1
+        if next_idx < len(lines) and masked_lines[next_idx].strip() == "waitmovement(0)":
+            drop_idxs.add(next_idx)
+            dropped.append((next_idx + 1, "waitmovement", target_id))
+            logger.info(
+                "%s:%d: dropping paired waitmovement(0) for the dropped "
+                "applymovement(%d, ...) above",
+                source_name, next_idx + 1, target_id,
+            )
+
+    if not drop_idxs:
+        return DoorMovementStripResult(text=pory_text, dropped=[])
+
+    kept_lines = [line for idx, line in enumerate(lines) if idx not in drop_idxs]
+    dropped.sort(key=lambda d: d[0])
+    return DoorMovementStripResult(text="\n".join(kept_lines), dropped=dropped)

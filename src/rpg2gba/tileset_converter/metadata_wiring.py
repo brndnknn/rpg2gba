@@ -890,6 +890,64 @@ class AutorunEntry:
     guard: str
 
 
+def _page_body_written_flags(
+    page: dict, flag_registry: FlagRegistry | None
+) -> list[str]:
+    """FLAG_* names this page's raw command list writes to ON (`setflag`
+    targets only — a page that only ever `clearflag`s something never
+    self-deactivates by writing it), scanned flat across the whole page
+    regardless of branch nesting.
+
+    Advisory only, for `compute_autorun_entries`' self-deactivation guard
+    (below) — NOT a control-flow simulation and not a replacement for the
+    transpiler, which remains the sole source of truth for what actually
+    emits. Two write shapes recognized, matching what the deterministic
+    transpiler itself converts to `setflag`:
+
+    - code-121 Control Switches, value 0 (ON), resolved through the same
+      `resolve_switch_flag` the condition-term reader uses;
+    - the `$PokemonGlobal.seenStorageCreator=true` idiom (code 355, or split
+      across a 355 opener + 655 "true" continuation) -> `FLAG_SYS_PC_LANETTE`
+      (see transpiler.py's `_SEEN_STORAGE_CREATOR_RE` /
+      `_SEEN_STORAGE_CREATOR_OPEN_RE` — kept in sync by hand; a page that
+      writes some OTHER flag via a script idiom the transpiler knows about
+      but this scanner doesn't is simply not detected here, which only means
+      no deactivation guard gets added for it — safe-missing, not wrong).
+    """
+    from ..conversion_agent.transpiler import (
+        _SEEN_STORAGE_CREATOR_OPEN_RE,
+        _SEEN_STORAGE_CREATOR_RE,
+    )
+
+    written: list[str] = []
+    cmds = page.get("list", [])
+    for i, cmd in enumerate(cmds):
+        code = cmd.get("code")
+        params = cmd.get("parameters", [])
+        if code == 121 and len(params) >= 3 and flag_registry is not None:
+            start, end, value = params[0], params[1], params[2]
+            if value == 0:
+                for switch_id in range(start, end + 1):
+                    name = resolve_switch_flag(flag_registry, switch_id)
+                    if name is not None:
+                        written.append(name)
+        elif code in (355, 655) and params and isinstance(params[0], str):
+            text = params[0]
+            if _SEEN_STORAGE_CREATOR_RE.match(text):
+                written.append("FLAG_SYS_PC_LANETTE")
+            elif _SEEN_STORAGE_CREATOR_OPEN_RE.match(text):
+                nxt = cmds[i + 1] if i + 1 < len(cmds) else None
+                nxt_params = nxt.get("parameters", []) if nxt else []
+                if (
+                    nxt is not None
+                    and nxt.get("code") == 655
+                    and nxt_params
+                    and str(nxt_params[0]).strip() == "true"
+                ):
+                    written.append("FLAG_SYS_PC_LANETTE")
+    return written
+
+
 def compute_autorun_entries(
     events: list[dict], uid: int, flag_registry: FlagRegistry | None
 ) -> list[AutorunEntry]:
@@ -949,6 +1007,21 @@ def compute_autorun_entries(
                 guard_terms.append(_negate_terms(higher_terms))
             if skip:
                 continue
+            # Self-deactivation: if the page's own body writes a FLAG_* ON
+            # and that flag doesn't already appear anywhere in the guard
+            # (own condition or a negated higher page's), the page would
+            # never stop being dispatched by ON_FRAME once it fires — add
+            # the negation of what it writes so it composes with the
+            # existing conjunction (see `_page_body_written_flags`). Narrow
+            # by construction: a page whose guard ALREADY tests a symbol it
+            # writes (the common case — the write IS the guard flag) is
+            # left untouched, matching CLAUDE.md's fail-loud-not-guessed
+            # discipline; this only fills the gap where the write is some
+            # OTHER flag the guard never looks at (findings: Map031 EV049
+            # page 2, FLAG_SYS_PC_LANETTE vs. guard FLAG_DEFEATED_GYM1_LEADER).
+            for written in dict.fromkeys(_page_body_written_flags(page, flag_registry)):
+                if f"flag({written})" not in " ".join(guard_terms):
+                    guard_terms.append(f"!flag({written})")
             entries.append(
                 AutorunEntry(
                     event_id=eid, page_index=idx,
@@ -1556,6 +1629,60 @@ def _terminal_self_switch_hide_flags(
             flag_registry.mint_self_switch(uid, eid, letter)
         result[eid] = flag
     return result
+
+
+def _ungated_item_ball_flag(
+    event: dict, uid: int, flag_registry: FlagRegistry | None
+) -> str | None:
+    """Rescue flag for an item ball whose boot page sets a self switch ON that
+    NO page ever reads — the shape `_terminal_self_switch_hide_flags` declines
+    because there is no blank terminal page to prove intent.
+
+    Corpus-wide this is a single event: **map 68 EV018**, the Antidote on the
+    Kevlar Town Pokémon Center floor. A census of all 279 `pbItemBall` events
+    (2026-08-12) found 242 with the standard two-page idiom and 37 without;
+    36 of those 37 are the visible `PU-Coral` harvest nodes on the underwater
+    maps 107/118, which are repeatable gathering spots by design. Map 68
+    EV018 is the only invisible one, the only one in a Pokémon Center, and
+    the only ball of any kind in any Pokémon Center — an authoring slip that
+    shipped: its tile is passable and reachable, so on PC the player can farm
+    Antidotes from an invisible tile forever.
+
+    **User ruling 2026-08-12: convert it one-time.** The native
+    `STD_FIND_ITEM` template has no repeatable mode, so "faithful" would mean
+    forcing the event back off the native path into a bespoke script — new
+    machinery for one shipped bug. Reusing the self-switch flag the event
+    already sets is exactly what the standard idiom does; only the page that
+    reads it is missing.
+
+    Deliberately narrow, and deliberately NOT folded into
+    `_terminal_self_switch_hide_flags`: that rule is general over every
+    object, and "sets a self switch nothing reads" is a perfectly ordinary
+    NPC bookkeeping shape. Widening it there would despawn NPCs after a
+    single conversation. This applies only where the caller has already
+    classified the event as a native item-ball template, where despawn-on-
+    collect is the mechanic rather than a guess.
+
+    Returns the flag name, or None when the event sets no self switch at all
+    (the caller then fails loud). Fails loud itself when the boot page sets
+    more than one letter — which letter represents "collected" can't be
+    resolved from the event alone."""
+    boot = select_boot_page(event)
+    if boot is None:
+        return None
+    letters = _self_switch_letters_set_on(boot)
+    if not letters:
+        return None
+    if len(letters) > 1:
+        raise ValueError(
+            f"map {uid} EV{event['id']:03d}: item_ball boot page sets "
+            f"self-switches {sorted(letters)} ON and no page reads any of "
+            f"them — ambiguous which one means 'collected'; resolve by hand"
+        )
+    letter = next(iter(letters))
+    if flag_registry is not None:
+        flag_registry.mint_self_switch(uid, event["id"], letter)
+    return self_switch_flag_name(uid, event["id"], letter)
 
 
 def collect_through_block_cells(map_json: dict) -> set[tuple[int, int]]:
@@ -2171,6 +2298,12 @@ def build_object_events(
                 )
             if tf_kind == TF_KIND_ITEM_BALL:
                 flag = template_flags.get(eid, "0")
+                if flag == "0":
+                    # Last resort before failing: an item ball whose boot page
+                    # sets a self switch nothing reads (map 68 EV018 — see
+                    # `_ungated_item_ball_flag`). Reuses that switch's flag
+                    # rather than minting a second one.
+                    flag = _ungated_item_ball_flag(event, uid, flag_registry) or "0"
                 if flag == "0":
                     raise ValueError(
                         f"map {uid} EV{eid:03d}: item_ball resolved to the "

@@ -287,6 +287,36 @@ _SHOW_MAP_RE = re.compile(r"^\s*(?:Kernel\.)?pbShowMap\s*$")
 # vanilla b-dash unlock flag.
 _RUNNING_SHOES_ON_RE = re.compile(r"^\s*\$PokemonGlobal\.runningShoes\s*=\s*true\s*$")
 
+# $PokemonGlobal.seenStorageCreator=true — Essentials' "have you met Bill/the
+# PC's creator yet" flag; until set, script_menu.c prints the anonymous "SOMEONE'S
+# PC" label instead of "LANETTE'S PC" for every PC interaction (see
+# engine/src/script_menu.c:751, gated on FLAG_SYS_PC_LANETTE,
+# engine/include/constants/flags.h:1438) — the exact mechanic Essentials models.
+# Corpus census 2026-08-12 (output/uranium-build/maps/*.json): 3 occurrences,
+# all `=true`, no `=false` anywhere — Map031 EV49 page0 (single-row
+# "...seenStorageCreator=true"), Map031 EV49 page2 and Map042 EV3 page0 (both
+# split across a 355 "...seenStorageCreator=" row and a same-indent 655 "true"
+# continuation — RGSS wraps the assignment at the script-editor's line width,
+# not a multi-statement blob; see _SEEN_STORAGE_CREATOR_OPEN_RE below for the
+# split half). `=false` is not in the corpus, so no clearflag arm exists yet —
+# a hypothetical `=false` still falls through to queue rather than guessing.
+_SEEN_STORAGE_CREATOR_RE = re.compile(
+    r"^\s*\$PokemonGlobal\.seenStorageCreator\s*=\s*true\s*$"
+)
+
+# The split-assignment opener half of the idiom above — a bare trailing `=`
+# with the value (`true`/`false`) on the next physical 655 row. Handled
+# statefully in ``_emit_script_call`` (mirrors the ``_ruby_locals``
+# build-across-rows pattern already used for the starter-selector idiom):
+# this row emits nothing and remembers it saw the opener; the immediately
+# following script-call row (skipping only stripped comment rows, which
+# never reach ``_emit_script_call``) completes it. Only ``true`` completes to
+# ``setflag``; anything else (including ``false``) queues both rows rather
+# than guessing.
+_SEEN_STORAGE_CREATOR_OPEN_RE = re.compile(
+    r"^\s*\$PokemonGlobal\.seenStorageCreator\s*=\s*$"
+)
+
 # $Trainer.pokedex=true — the canonical Pokédex grant, native-analog table
 # entry (CLAUDE.md §4.7): FLAG_SYS_POKEDEX_GET is vanilla's own dex-received
 # flag (engine/include/constants/flags.h:1351) and SetUnlockedPokedexFlags is
@@ -1158,6 +1188,31 @@ def _merge_consecutive_routes(nodes: list[Node]) -> list[Node]:
     return merged
 
 
+def _is_real_warp_leaf(node: Node) -> bool:
+    """True for a Transfer Player leaf that emit_node actually turns into a
+    native ``warp(...)``/``waitstate`` pair (mode-0, literal x/y/map) — the
+    variable-target form (mode 1) queues instead and never halts the fork's
+    script, so it doesn't trigger post-warp hoist/queue handling."""
+    if type(node) is not Leaf or node.cmd.get("code") != TRANSFER_PLAYER:
+        return False
+    params = node.cmd.get("parameters", [])
+    return (
+        len(params) >= 4
+        and params[0] == 0
+        and all(isinstance(v, int) for v in params[1:4])
+    )
+
+
+def _is_state_write_leaf(node: Node) -> bool:
+    """True for an unconditional control-switch/variable/self-switch leaf —
+    the only commands safe to hoist across a warp (CLAUDE.md §... post-warp
+    dead-code rule): no player input is accepted between the write and the
+    warp, and the write doesn't depend on anything the warp changes."""
+    return type(node) is Leaf and node.cmd.get("code") in (
+        CONTROL_SWITCHES, CONTROL_VARIABLES, CONTROL_SELF_SWITCH,
+    )
+
+
 def _first_dialogue_text(nodes: list[Node]) -> str | None:
     """DFS for the first Show-Text run in a branch body's node tree.
 
@@ -1441,6 +1496,11 @@ class _PageEmitter:
         # wrap). Only the shapes the starter-selector idiom needs; see
         # _RUBY_LOCAL_PBGET_RE and friends.
         self._ruby_locals: dict[str, _RubyLocal] = {}
+        # Set to the opener row's cmd index when a
+        # "$PokemonGlobal.seenStorageCreator=" row (no value yet) was just
+        # seen; consumed by the immediately following script-call row (see
+        # _SEEN_STORAGE_CREATOR_OPEN_RE).
+        self._pending_storage_creator_open: int | None = None
         # RMXP label name -> hoisted script block label, filled by
         # transpile_page for the one region it could prove terminates.
         # Anything not in here queues, both at the label and at every jump.
@@ -1465,9 +1525,50 @@ class _PageEmitter:
     # -- leaf emitters -------------------------------------------------------
 
     def emit_nodes(self, nodes: list[Node]) -> list[str]:
-        lines: list[str] = []
-        for node in _merge_consecutive_routes(nodes):
+        nodes = _merge_consecutive_routes(nodes)
+        warp_pos = next(
+            (i for i, node in enumerate(nodes) if _is_real_warp_leaf(node)), None
+        )
+        if warp_pos is None:
+            lines: list[str] = []
+            for node in nodes:
+                lines.extend(self.emit_node(node))
+            return lines
+
+        # RMXP keeps running an event's command list after a Transfer Player;
+        # pokeemerald's `warp` halts the script (ScrCmd_warp returns TRUE,
+        # DoWarp tears down the context on map change). Everything the RMXP
+        # page put after the transfer is therefore dead code on the fork —
+        # except unconditional state writes at this same nesting level,
+        # which are unobservable to reorder across the warp (no input is
+        # accepted between the two, and the write doesn't depend on
+        # anything the warp changes), so those get hoisted above it instead
+        # of silently dropped.
+        lines = []
+        for node in nodes[:warp_pos]:
             lines.extend(self.emit_node(node))
+
+        hoisted: list[str] = []
+        tail: list[str] = []
+        for node in nodes[warp_pos + 1:]:
+            if _is_state_write_leaf(node):
+                hoisted.extend(self.emit_node(node))
+            else:
+                tail.append(self.ctx.queue(
+                    node.index, node.cmd.get("code", 0),
+                    "command follows a Transfer Player warp: pokeemerald "
+                    "halts the script at the warp (ScrCmd_warp/DoWarp), "
+                    "unlike RMXP which keeps running the page — unreachable",
+                ))
+
+        if hoisted:
+            lines.append(
+                "# hoisted above the warp: RMXP continues after a transfer, "
+                "pokeemerald does not"
+            )
+            lines.extend(hoisted)
+        lines.extend(self.emit_node(nodes[warp_pos]))
+        lines.extend(tail)
         return lines
 
     def emit_node(self, node: Node) -> list[str]:
@@ -1546,7 +1647,10 @@ class _PageEmitter:
             ce_id = params[0] if params else 0
             if not isinstance(ce_id, int) or ce_id <= 0:
                 return [ctx.queue(node.index, code, "call common event with bad id")]
-            return [f"call CommonEvent_{ce_id:03d}"]
+            # `call(Label)`, never bare `call Label` — poryscript has no bare
+            # call keyword and would emit two broken lines. See the identical
+            # note in deterministic.py's CALL_COMMON_EVENT branch.
+            return [f"call(CommonEvent_{ce_id:03d})"]
         if code == CONTROL_SWITCHES:
             return self._emit_control_switches(node)
         if code == CONTROL_VARIABLES:
@@ -2540,7 +2644,42 @@ class _PageEmitter:
         from rpg2gba.conversion_agent.deterministic import _DIALOGUE_STRIP_RE
         params = node.cmd.get("parameters", [])
         text = params[0] if params and isinstance(params[0], str) else ""
+
+        # Completing a pending "$PokemonGlobal.seenStorageCreator=" opener
+        # (see _SEEN_STORAGE_CREATOR_OPEN_RE) — checked first, before any
+        # other idiom, since the completing row is a bare "true"/"false" that
+        # matches nothing else. Only "true" resolves; anything else queues
+        # BOTH the opener and this row rather than guessing at "false".
+        if self._pending_storage_creator_open is not None:
+            opener_index = self._pending_storage_creator_open
+            self._pending_storage_creator_open = None
+            if text.strip() == "true":
+                return ["setflag(FLAG_SYS_PC_LANETTE)"]
+            return [
+                self.ctx.queue(
+                    opener_index, SCRIPT,
+                    "script call: '$PokemonGlobal.seenStorageCreator=' "
+                    "(split assignment)",
+                ),
+                self.ctx.queue(
+                    node.index, SCRIPT,
+                    f"seenStorageCreator continuation not 'true': {text[:120]!r}",
+                ),
+            ]
+
         if _DIALOGUE_STRIP_RE.match(text):
+            return []
+
+        # $PokemonGlobal.seenStorageCreator=true, single-row form (see
+        # _SEEN_STORAGE_CREATOR_RE) — Map031 EV49 page0.
+        if _SEEN_STORAGE_CREATOR_RE.match(text):
+            return ["setflag(FLAG_SYS_PC_LANETTE)"]
+
+        # $PokemonGlobal.seenStorageCreator=, split-row opener (see
+        # _SEEN_STORAGE_CREATOR_OPEN_RE) — remember it and emit nothing yet;
+        # completed above on the next script-call row.
+        if _SEEN_STORAGE_CREATOR_OPEN_RE.match(text):
+            self._pending_storage_creator_open = node.index
             return []
 
         # pbPhoneRegisterNPC(...) — phone-directory registration, cosmetic on
