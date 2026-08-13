@@ -35,6 +35,41 @@
       "expect_name": "Luz",
       "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
       "reason": "No-port. Single page, trigger 0, empty command list, graphic `light` — one cell of an 800x800 sheet holding a soft alpha-gradient yellow glow circle. RMXP composites these as ADDITIVE light overlays; GBA 4bpp object graphics have no analogue — quantizing a smooth alpha gradient to 15 colours bands badly, and there is no additive blend mode. Carries no script and no gameplay, so it is dropped rather than faked. User-ruled 2026-08-05. Revisit only if the engine gains a real additive-glow blend path or a large-prop quantized-art substitute worth the art budget."
+    },
+    {
+      "map_id": 31, "event_id": 11, "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "Same event class and same disposition as map 33 EV028 above — the user's 2026-08-05 no-port ruling, applied to CH03's seven Kevlar Town lamp glows (2026-08-12). Each is byte-identical in shape to the Route-01 one: single page, trigger 0, one command, graphic `light`. The sprite pass fails loud on them (`light: content bbox 46x45 exceeds the 32x32 GBA object frame`), which is the same 800x800 sheet the ruling describes."
+    },
+    {
+      "map_id": 31, "event_id": 17, "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 31 EV011."
+    },
+    {
+      "map_id": 31, "event_id": 28, "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 31 EV011."
+    },
+    {
+      "map_id": 31, "event_id": 29, "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 31 EV011."
+    },
+    {
+      "map_id": 31, "event_id": 30, "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 31 EV011."
+    },
+    {
+      "map_id": 31, "event_id": 32, "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 31 EV011."
+    },
+    {
+      "map_id": 31, "event_id": 33, "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 31 EV011."
     }
   ],
   "maps": [

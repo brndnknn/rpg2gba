@@ -208,5 +208,110 @@
     "gfx": "OBJ_EVENT_GFX_URANIUM_BERRYTREEORANBERRY",
     "fallback": "OBJ_EVENT_GFX_BERRY_TREE",
     "note": "Oran Berry plant prop (Map033 EV100/EV102 BerryPlant, pbPickBerry/pbBerryPlant scripts) — chapter-2 Route 1 expansion. 128x256 sheet: green sprout row + 3 rows of an orange bush/creature-shaped growth stage. Boots at (dir=8,pattern=0) only, no code-41 graphic swaps seen on these pages — plain sheet entry, no states needed"
+  },
+  "HGSS_016": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_016",
+    "fallback": "OBJ_EVENT_GFX_LITTLE_BOY",
+    "note": "HGSS overworld sheet 016 (Map031 EV048 npc, Map073 EV001) — chapter-3 Kevlar Town expansion. Bald toddler, tan skin, white shirt; standard 4x4 walk sheet"
+  },
+  "HGSS_023": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_023",
+    "fallback": "OBJ_EVENT_GFX_LASS",
+    "note": "HGSS overworld sheet 023 (Map067 EV001, Map073 EV003) — chapter-3 Kevlar Town expansion. Girl, brown wavy hair, red/orange top; standard 4x4 walk sheet"
+  },
+  "HGSS_024": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_024",
+    "fallback": "OBJ_EVENT_GFX_GIRL_3",
+    "note": "HGSS overworld sheet 024 (Map073 EV006) — chapter-3 Kevlar Town expansion. Girl, dark bushy hair, red top, teal skirt; standard 4x4 walk sheet"
+  },
+  "HGSS_027": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_027",
+    "fallback": "OBJ_EVENT_GFX_WOMAN_1",
+    "note": "HGSS overworld sheet 027 (Map068 EV014) — chapter-3 Kevlar Town expansion. Woman, dark purple hair, white blouse; standard 4x4 walk sheet"
+  },
+  "HGSS_028": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_028",
+    "fallback": "OBJ_EVENT_GFX_WOMAN_5",
+    "note": "HGSS overworld sheet 028 (Map073 EV010) — chapter-3 Kevlar Town expansion. Woman, pink/white sun hat, dark hair, pink dress; standard 4x4 walk sheet"
+  },
+  "HGSS_033": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_033",
+    "fallback": "OBJ_EVENT_GFX_GIRL_2",
+    "note": "HGSS overworld sheet 033 (Map073 EV008) — chapter-3 Kevlar Town expansion. Girl, dark grey/black poofy hair, purple top; standard 4x4 walk sheet"
+  },
+  "HGSS_038": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_038",
+    "fallback": "OBJ_EVENT_GFX_GIRL_1",
+    "note": "HGSS overworld sheet 038 (Map031 EV039 npc) — chapter-3 Kevlar Town expansion. Girl, brown hair with yellow headband, pink dress; standard 4x4 walk sheet"
+  },
+  "HGSS_039": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_039",
+    "fallback": "OBJ_EVENT_GFX_HIKER",
+    "note": "HGSS overworld sheet 039 (Map031 EV014) — chapter-3 Kevlar Town expansion. Man, wide-brim tan/olive hat and robe/poncho; standard 4x4 walk sheet"
+  },
+  "HGSS_045": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_045",
+    "fallback": "OBJ_EVENT_GFX_CAMPER",
+    "note": "HGSS overworld sheet 045 (Map068 EV010) — chapter-3 Kevlar Town expansion. Man, green camo cap, olive outfit; standard 4x4 walk sheet"
+  },
+  "HGSS_056": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_056",
+    "fallback": "OBJ_EVENT_GFX_MG_DELIVERYMAN",
+    "note": "HGSS overworld sheet 056 (Map031 EV050 Compensation Man, Map067 EV009 Deliveryman) — chapter-3 Kevlar Town expansion. Man, dark green beret, green jacket; standard 4x4 walk sheet"
+  },
+  "HGSS_126": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_126",
+    "fallback": "OBJ_EVENT_GFX_BALDING_MAN",
+    "note": "HGSS overworld sheet 126 (Map067 EV004) — chapter-3 Kevlar Town expansion. Bald man, pale green shirt; standard 4x4 walk sheet"
+  },
+  "HGSS_134": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_134",
+    "fallback": "OBJ_EVENT_GFX_CABLE_CLUB_RECEPTIONIST",
+    "note": "HGSS overworld sheet 134 (Map068 EV009/EV011/EV013 Receptionist TRADE/PVP) — chapter-3 Kevlar Town expansion. Woman, brown bob hair, white headband, pink top; standard 4x4 walk sheet"
+  },
+  "HGSS_135": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_135",
+    "fallback": "OBJ_EVENT_GFX_NURSE",
+    "note": "HGSS overworld sheet 135 (Map031 EV049 NurseTut, Map068 EV001/EV016/EV017 NurseTut/NurseTut2) — chapter-3 Kevlar Town expansion. Woman, navy/purple bob hair, white headband, pink top; standard 4x4 walk sheet"
+  },
+  "HGSS_179": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_179",
+    "fallback": "OBJ_EVENT_GFX_RICH_BOY",
+    "note": "HGSS overworld sheet 179 (Map019 EV004/EV005 Trainer(4), EV006 Richboy) — chapter-3 Kevlar Town expansion. Person, green/yellow spiky hair, red headband, dark jacket; standard 4x4 walk sheet"
+  },
+  "HGSS_185": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_185",
+    "fallback": "OBJ_EVENT_GFX_BIKER",
+    "note": "HGSS overworld sheet 185 (Map068 EV004) — chapter-3 Kevlar Town expansion. Man, brown hair, dark jacket, shown crouched on a motorbike in the walk-cycle rows; standard 4x4 walk sheet"
+  },
+  "HGSS_267": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_267",
+    "fallback": "OBJ_EVENT_GFX_PUSHABLE_BOULDER",
+    "note": "HGSS overworld sheet 267 (Map031 EV001/EV037 Boulder, Map019 EV001/EV002/EV003 Boulder — all call pbPushThisBoulder) — chapter-3 Kevlar Town expansion. 128x128 sheet, grey round boulder icon in each cell; PROP, not a walking NPC despite the HGSS_* name — pushable-boulder puzzle piece"
+  },
+  "PU-Owten": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_PU_OWTEN",
+    "fallback": "OBJ_EVENT_GFX_SPECIES(GROWLITHE)",
+    "note": "Wild Pokemon NPC sheet (Owten, Map031 EV009) — chapter-3 Kevlar Town expansion. Growlithe-shaped stand-in, not a rock"
+  },
+  "berrytreePECHABERRY": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_BERRYTREEPECHABERRY",
+    "fallback": "OBJ_EVENT_GFX_BERRY_TREE",
+    "note": "Pecha Berry plant prop (Map031 EV042 BerryPlant) — chapter-3 Kevlar Town expansion. 128x256 sheet: green sprout row + 3 rows of a pink-blossomed bush growth stage, same family as berrytreeORANBERRY. No code-41 graphic swaps seen on this page — plain sheet entry, no states needed. PROP, not a walking NPC"
+  },
+  "door2": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_DOOR2",
+    "fallback": "OBJ_EVENT_GFX_SIGN",
+    "note": "Decorative window/shutter prop (Map031 EV002/EV003/EV004, two RMXP pages each — self-switch A toggles between an open and closed look, no code-41 swap within a page) — chapter-3 Kevlar Town expansion. 192x256 sheet: 4 rows of a blue-paned shop window in varying open states. No sprite in the fork resembles a window; SIGN picked as the nearest generic static-scenery placeholder. PROP, not a walking NPC, no states needed (page selection already covers the two looks)"
+  },
+  "pokeballs on left": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_POKEBALLS_ON_LEFT",
+    "fallback": "OBJ_EVENT_GFX_POKE_BALL",
+    "note": "Decorative Poke Ball stack prop (Map068 EV005 'left pokéballs', 6 RMXP pages — no code-41 swap within any single page, the pages themselves are the animation frames) — chapter-3 Kevlar Town expansion. 128x256 sheet: rows of stacked ball icons in varying glow states. PROP, not a walking NPC"
+  },
+  "pokeballs on right": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_POKEBALLS_ON_RIGHT",
+    "fallback": "OBJ_EVENT_GFX_POKE_BALL",
+    "note": "Decorative Poke Ball stack prop (Map068 EV006 'right pokéballs', 6 RMXP pages — no code-41 swap within any single page, the pages themselves are the animation frames) — chapter-3 Kevlar Town expansion. 128x256 sheet: rows of stacked ball icons in varying glow states, mirrored layout from 'pokeballs on left'. PROP, not a walking NPC"
   }
 }

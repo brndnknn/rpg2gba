@@ -550,6 +550,50 @@ graphics lookup, so its sheet needs no `npc_gfx_map.json` entry. This is the
 first live entry in `map_events` — the deterministic path never read that array
 before (only the retired LLM orchestrator did), so the plumbing landed with it.
 
+### 37. No sweep for engine map dirs orphaned by a past rename
+
+*Found 2026-08-12 during the CH03 build; the drift half is fixed, the debris half
+is not — see `CH03_TODO.md` #7/#14.*
+
+`MapConstantRegistry.mint()` now re-mints on identity drift, so a
+`map_name_overrides.json` edit is no longer silently ignored. Nothing, however,
+cleans up what a rename leaves behind: `engine/data/maps/<OldName>/` and
+`engine/data/layouts/<OldName>/` survive with a `map.json` naming a layout
+constant that no longer exists.
+
+That is **fatal, not cosmetic**. `mapjson` refuses such a dir ("Failed to find
+matching layout for LAYOUT_X"), therefore never writes its `connections.inc`, and
+make then dies with `No rule to make target
+'data/maps/<OldName>/connections.inc'` — an error naming neither the rename nor
+the stale directory. Two orphans (`MokiTownTheo`, `MokiTownTheo172`, from maps
+172/89's rename to `MokiTownTheosHouse1F/2F`) had been sitting in the tree
+undetected until a full mapjson pass finally touched them.
+
+Wanted: the assembler compares engine map dirs against the layout manifest it
+just generated and fails loud (or cleans) on any whose layout constant is
+absent. Cheap — a scratch version of exactly this check found both orphans in
+one pass, and confirmed there are no others today.
+
+### 38. Common-event calls had never assembled (fixed) — but nothing gates the syntax
+
+*Fixed 2026-08-12 (`CH03_TODO.md` #12); logged here because the class of bug is
+corpus-wide, not CH03-specific.*
+
+The transpiler emitted `call CommonEvent_004`. Poryscript has a bare `goto Label`
+keyword but no bare `call Label`, so that parsed as two bare commands and
+assembled into `call` (no operand) plus a stray `CommonEvent_004` instruction.
+Every common-event call the pipeline has ever emitted was broken; it went
+unnoticed only because CH01/CH02 call no common events, and map68 is the first
+map that does.
+
+The fix is one character class at two emit sites. What is still missing is a
+**gate**: the fork-capability index validates specials/macros/constants the
+pipeline emits, but nothing validates that emitted *Poryscript* is syntactically
+what we think it is — a command that silently degrades into two bare commands
+passes every check we have until the assembler chokes 20 minutes into a build.
+Worth a cheap post-transpile lint over emitted `.pory` (known command names,
+parenthesised argument forms).
+
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 
 - **Reflection narrow-scan** — tried and reverted 2026-07-07 (user: "not
