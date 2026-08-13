@@ -1484,9 +1484,35 @@ def n2(emu: Emulator) -> None:
 
 # -- B17 -----------------------------------------------------------------
 
-@route1.beat("B17", "The north boundary is reachable up to the edge; do NOT cross "
-                    "-- Kevlar Town (map 31) is not in SLICE_MAP_IDS")
+@route1.beat("B17", "The north boundary is reachable up to the edge; the crossing "
+                    "itself now belongs to CH03 (kevlar:B1)")
 def b17(emu: Emulator) -> None:
+    # REVISED 2026-08-12, exactly as the original note below anticipated: CH03
+    # put Kevlar Town (map 31) in SLICE_MAP_IDS and wired Route 01's half of
+    # the seam (EV045/EV046 at (15,5)/(16,5)) into `WARP_OVERRIDES`, so the
+    # boundary tiles are live warps now, not blocked terrain.
+    #
+    # This beat therefore stops one tile short and asserts only what is still
+    # CH02's business: the approach tiles are reachable and the player is
+    # still on Route 01 when the chapter ends. Stepping across is
+    # `kevlar:B1`, and leaving it there keeps the chapter chain's end-state
+    # contract intact -- CH03 starts its own run from Route 01, not from
+    # inside Kevlar.
+    _walk_absorbing(emu, "B17", *NORTH_EXIT_APPROACH_A,
+                    absorb_wild=True, absorb_trainer=True)
+    _walk_absorbing(emu, "B17", *NORTH_EXIT_APPROACH_B,
+                    absorb_wild=True, absorb_trainer=True)
+    _require_map(emu, "B17", "MAP_ROUTE_01")
+
+
+def _b17_retired_wall_assertion(emu: Emulator) -> None:
+    """The pre-CH03 body of B17, kept for the record (never registered).
+
+    While Kevlar Town was unbuilt, (15,5)/(16,5) read as BLOCKED on the
+    compiled collision grid because no `WARP_OVERRIDES` entry stamped them --
+    "inert until wired", the same shape as moki.py's leftover cave doors. The
+    beat asserted the player could NOT step north, which is precisely what
+    CH03 changed."""
     # `reference/chapters/02-route-1.md` names (15,5)/(16,5) as the crossing
     # tiles into Kevlar Town (CH03). Kevlar Town is not in
     # `src/rpg2gba/tileset_converter/map_set.py`'s `SLICE_MAP_IDS`, so it is

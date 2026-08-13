@@ -172,7 +172,7 @@ def test_no_hardcoded_flag_or_var_ids_via_runtime_source() -> None:
         "MAP_MOKI_TOWN",
         "MAP_MOKI_TOWN_PLAYERS_HOUSE_1F",
         "MAP_MOKI_TOWN_PROFESSOR_LAB",
-        "MAP_MOKI_TOWN_THEO_172",
+        "MAP_MOKI_TOWN_THEOS_HOUSE_1F",
     ],
 )
 def test_map_constants_used_are_symbol_names_not_literals(map_const: str) -> None:

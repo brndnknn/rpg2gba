@@ -571,7 +571,7 @@ def n2(emu: Emulator) -> None:
             f"N2: walking to the ceremony trigger before visiting Theo's "
             f"house did not trigger the professor's redirect ({shot})")
     emu.advance_dialog("A")
-    if _at_map(emu, "MAP_MOKI_TOWN_THEO_172"):
+    if _at_map(emu, "MAP_MOKI_TOWN_THEOS_HOUSE_1F"):
         shot = emu.screenshot("n2_warped")
         raise ScenarioError(
             f"N2: the redirect should not warp into Theo's house, but "
@@ -589,7 +589,7 @@ def n2(emu: Emulator) -> None:
 
 @moki.beat("B11", "Theo's house door is always open (the gate is inside)")
 def b11(emu: Emulator) -> None:
-    _enter_door(emu, "B11", THEO_HOUSE_DOOR, "MAP_MOKI_TOWN_THEO_172")
+    _enter_door(emu, "B11", THEO_HOUSE_DOOR, "MAP_MOKI_TOWN_THEOS_HOUSE_1F")
 
 
 # -- B12 -----------------------------------------------------------------
