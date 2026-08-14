@@ -265,7 +265,17 @@ _CAVE_FOG_204_PARAMS = (1, "004-Shade02", 0, 60, 0, 250, 0, 0)
 # script itself (goto-chains through EventScript_PCMainMenu/
 # EventScript_AccessPC to a releaseall/end or plain end — verified, never
 # returns to the caller), so `goto` is correct here, not `call`.
-_TRAINER_PC_RE = re.compile(r"^\s*(?:Kernel\.)?pbTrainerPC\s*$")
+#
+# pbPokeCenterPC — Map068 EV7, same bare-call shape (Kevlar Town Center PC).
+# Uranium gives the Center's PC a distinct Essentials method name, but
+# pokeemerald has no separate "Center PC" script: vanilla PCs everywhere
+# (bedroom, mart, Center) resolve to this same EventScript_PC
+# (field_control_avatar.c:496 dispatches on metatile behavior alone, not
+# location) — same idiom, same native target. 2026-08-14: this was previously
+# a raw UNHANDLED-code-355 queue entry despite CH03_TODO.md's own recon
+# already flagging the pbTrainerPC/pbPokeCenterPC pair as a "classifier
+# near-miss."
+_TRAINER_PC_RE = re.compile(r"^\s*(?:Kernel\.)?(?:pbTrainerPC|pbPokeCenterPC)\s*$")
 
 # pbShowMap — Map048 EV7/8, bare call (18 corpus occurrences, all bare — no
 # argument ever observed). Fork native: `special FieldShowRegionMap`
@@ -474,6 +484,18 @@ _SIGN_TEST_MAX = 32767
 # RMXP `else` block. Emitting the `then` block instead would hand out random
 # species. See _emit_randomizer_branch.
 _RANDOMIZER_MODE_RE = re.compile(r"^\s*\$PokemonGlobal\.randomizer\s*$")
+
+# Kernel.pbPokerus? — the Pokerus infection check. Deferred to CH18 (Nuclear
+# Plant Epsilon, its home chapter — reference/chapters.json), so no Pokemon in
+# our ROM is ever infected and the check is statically false, same collapse
+# as _RANDOMIZER_MODE_RE below. See _emit_pokerus_branch. CH03_TODO.md
+# decision #4 update (2026-08-14): Map068_EV001_Page1's healing-counter YES
+# branch gates on this, and the RMXP else arm (not the then arm) carries the
+# scene's actual closing content (the nurse's return-facing movement plus the
+# "restored to full health"/"we hope to see you again" messages) — dropping
+# the whole conditional, as the generic script-condition path does, silently
+# truncated the healing scene (playtest missed it; see kevlar.py's B4 note).
+_POKERUS_CHECK_RE = re.compile(r"^\s*Kernel\.pbPokerus\?\s*$")
 
 # Essentials inline-choice text escape (SLICE1_TODO #17): a Show Text message
 # trailing \ch[var,ifCancel,opt1,opt2,...] (reference/scripts_dump/059_Messages.rb
@@ -1738,6 +1760,9 @@ class _PageEmitter:
         randomizer = self._emit_randomizer_branch(node)
         if randomizer is not None:
             return randomizer
+        pokerus = self._emit_pokerus_branch(node)
+        if pokerus is not None:
+            return pokerus
         expr = condition_expr(node.cmd.get("parameters", []), self.ctx)
         if expr is None:
             marker = self.ctx.queue(
@@ -1779,6 +1804,33 @@ class _PageEmitter:
         if not _RANDOMIZER_MODE_RE.match(params[1]):
             return None
         lines = ["# randomizer mode not implemented — normal-play arm only"]
+        if node.otherwise:
+            lines += self.emit_nodes(node.otherwise)
+        return lines
+
+    def _emit_pokerus_branch(self, node: IfNode) -> list[str] | None:
+        """``if Kernel.pbPokerus?`` — Pokerus is deferred to CH18 (Nuclear
+        Plant Epsilon), so no Pokemon in this ROM is ever infected and the
+        check is statically false: emit the RMXP ``else`` block (the ordinary
+        "not infected" outcome) and drop the ``then`` block (Pokerus-specific
+        flavor text). Same static collapse as ``_emit_randomizer_branch``.
+
+        Critically, the else-block carries content that is NOT Pokerus-
+        specific — on Map068 EV001 it's the healing counter's return-facing
+        movement and closing "thank you"/"restored to full health" messages,
+        present in the else arm only. Queuing the whole conditional (the
+        generic script-condition path) drops that shared tail along with the
+        Pokerus text, silently truncating the scene.
+
+        Returns ``None`` for any other script condition.
+        """
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        if not _POKERUS_CHECK_RE.match(params[1]):
+            return None
+        lines = ["# Pokerus not implemented (deferred to CH18) — "
+                  "not-infected arm only"]
         if node.otherwise:
             lines += self.emit_nodes(node.otherwise)
         return lines

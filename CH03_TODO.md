@@ -55,6 +55,21 @@ of truth for what the chapter *is* remains the spec doc. Shape:
    blocker NPC is authored. B25 asserts the edge is sane, not that it warps.
 4. **Pokérus check and Mystery Gift** = no-op analogs. Dialogue survives, the
    mechanic does not exist.
+   - **Update 2026-08-14:** the `Map068_EV001_Page1` healing counter's YES
+     branch drops its whole `pbPokerus?` conditional (`UNHANDLED code 111`),
+     and that conditional turns out to wrap the *entire* rest of the scene --
+     not just Pokérus-specific dialogue, but the nurse's return-facing
+     movement and the two closing messages ("healed to perfect health" /
+     "we hope you excel") that both branches presumably share. Dropping the
+     branch entirely (not just no-opping the Pokérus check inside it) is a
+     stopgap: it silently truncates the healing scene, which real playthrough
+     testing caught (playtest's B4 beat did not -- it has no assertion on
+     final message text, the return movement, or `FLAG_STARTING_OVER`, so a
+     script that releases control early reads as a clean pass). Pokérus
+     itself is deferred to CH18 (Nuclear Plant Epsilon, its home chapter --
+     see `reference/chapters.json`); when it's implemented there, come back
+     and re-emit Page1's full completion sequence with a proper no-op stand-in
+     for the Pokérus branch instead of dropping the conditional wholesale.
 
 ## Current status (2026-08-13, end of the first build session)
 

@@ -86,8 +86,9 @@ counter's ball-sprite display, 2 writes).
 | B1 | 31 | CH02 predecessor | cross south boundary | Arrive on Map031 via (15,43)/(16,43); no state write — entry point |
 | B2 | 31 | none | talk "NurseTut" (EV49) | Walkthrough scene; ends with sw126 set; re-talk is the no-op page |
 | B3 | 31→68 | none | enter Center door (20,12) | Warp to Map068 (8,18) |
-| B4 | 68 | none | talk counter NPC (EV1) | `pbSetPokemonCenter`; Yes/No heal; var43=party length; if `pbPokerus?`, sw3 set |
+| B4 | 68 | none | talk counter NPC (EV1) | `pbSetPokemonCenter`; Yes/No heal; var43=party length; `pbPokerus?` statically false (deferred to CH18) — not-infected arm always plays: counter NPC returns to face DOWN, "restored to full health"/"we hope to see you again" close |
 | B5 | 68 | none | talk PC-tour NPC (EV15) | Tour scene; ends with `pbReceiveItem(ORANBERRY,5)` (in a code-111/type-12 conditional) + self-switches 16/17 |
+| B26 | 68 | none | use the PC (EV7, bg_event sign, (10,13)) | `pbPokeCenterPC` -> native `EventScript_PC`; boots and returns control (no box-UI navigation primitive — see `pokecenter.use_pc`) |
 | B6 | 68 | none | touch item-ball tile (EV18) | `pbItemBall(ANTIDOTE)` once (self-switch gate) |
 | B7 | 68 | none | talk Mawuli (EV14) | `pbTrainerBattle(RICHBOY,"Mawuli",...)`; win/lose, in-scene heal + re-offer — a facility loop, not one-time |
 | B8 | 31→67 | none | enter Mart door (37,14) | Warp to Map067; `pbPokemonMart([...])` at EV1; "Deliveryman" (EV9) checks `pbNextMysteryGiftID>0` |

@@ -11,7 +11,8 @@ just above ``_ROCK_SMASH_RE``, for the fork/corpus evidence each shape cites):
    script-call strip (``_CAVE_ENTRANCE_STRIP_RE``), the code-204 fog tuple
    strip (``_CAVE_FOG_204_PARAMS`` / ``_emit_change_map_settings``), and the
    code-12 "step forward" 209 route strip (``_is_cave_step_forward_route``).
-3. ``pbTrainerPC`` -> ``goto(EventScript_PC)`` (``_TRAINER_PC_RE``).
+3. ``pbTrainerPC`` / ``pbPokeCenterPC`` -> ``goto(EventScript_PC)``
+   (``_TRAINER_PC_RE``) — pokeemerald has one PC script for every location.
 4. ``pbShowMap`` -> ``special(FieldShowRegionMap)`` (``_SHOW_MAP_RE``).
 5. ``$PokemonGlobal.runningShoes=true`` -> ``setflag(FLAG_SYS_B_DASH)``
    (``_RUNNING_SHOES_ON_RE``).
@@ -250,6 +251,22 @@ def test_trainer_pc_gotos_native(ctx: T.TranspileContext) -> None:
 
 def test_trainer_pc_near_miss_still_queues(ctx: T.TranspileContext) -> None:
     res = run_event(ctx, [[cmd(T.SCRIPT, ["pbTrainerPCFoo"])]])
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.SCRIPT
+    assert "goto(EventScript_PC)" not in res.text
+
+
+def test_pokecenter_pc_gotos_native(ctx: T.TranspileContext) -> None:
+    """Map068 EV7 (Kevlar Town Center) -- pokeemerald has no separate
+    Center-PC script, so this resolves to the same EventScript_PC as
+    pbTrainerPC."""
+    res = run_event(ctx, [[cmd(T.SCRIPT, ["pbPokeCenterPC"])]])
+    assert res.unhandled == []
+    assert "goto(EventScript_PC)" in res.text
+
+
+def test_pokecenter_pc_near_miss_still_queues(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.SCRIPT, ["pbPokeCenterPCFoo"])]])
     assert len(res.unhandled) == 1
     assert res.unhandled[0].command_code == T.SCRIPT
     assert "goto(EventScript_PC)" not in res.text

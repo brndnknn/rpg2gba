@@ -115,6 +115,7 @@ from typing import TYPE_CHECKING
 
 from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
+from ..pokecenter import heal_at_counter, use_pc
 
 if TYPE_CHECKING:  # runtime import is lazy so the registry works without bindings
     from ..emulator import Emulator
@@ -156,6 +157,16 @@ CENTER_EXIT_APPROACH = (8, 18)
 HEAL_COUNTER_LOCAL = 1
 HEAL_COUNTER_APPROACH = (8, 13)
 HEAL_COUNTER_FACING = "UP"
+
+# B26: the PC, EV007 at (10,13) -- a bg_event sign (no character_name/tile_id,
+# same "no object event" shape as the mart counter/deliveryman signs, see
+# B10's docstring), not a compiled object; no local id, so no facing-based
+# assertion is possible here the way heal_at_counter uses one. (10,13) is
+# collision-blocked (the PC itself, decoded from
+# engine/data/layouts/KevlarTownPokemonCenter/map.bin); the approach is one
+# tile south.
+PC_APPROACH = (10, 14)
+PC_FACING = "UP"
 
 # B7: item ball, map68 local id 9, (17,7), MOVEMENT_TYPE_NONE.
 CENTER_ITEM_BALL_EVENT_ID = 18  # RMXP id, for the FLAG_MAP068_EVENT018_SSA name
@@ -431,16 +442,11 @@ def b3(emu: Emulator) -> None:
 # -- B4 ------------------------------------------------------------------
 
 @kevlar.beat("B4", "The healing counter's Yes/No heal restores a damaged party "
-                   "(healing-location metadata has no test surface -- see "
-                   "module docstring finding 7, B6 folded in here)",
+                   "and the full scene plays out to its close (healing-"
+                   "location metadata has no test surface -- see module "
+                   "docstring finding 7, B6 folded in here)",
              map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=HEAL_COUNTER_APPROACH)
 def b4(emu: Emulator) -> None:
-    emu.walk_to(*HEAL_COUNTER_APPROACH)
-    emu.face(HEAL_COUNTER_FACING)
-    emu.interact()
-    emu.advance_dialog("A")  # commits YES at the yesnobox
-    if emu.field_locked():
-        emu.advance_dialog()
     # `special HealPlayerParty` is a real, native call
     # (`Map068_EV001_Page1_2`) -- this only confirms the flow completes
     # cleanly and returns control; the harness has no party-HP read to
@@ -448,6 +454,26 @@ def b4(emu: Emulator) -> None:
     # "damaged party" precondition can't be set up or verified here either.
     # This is the mechanism check the spec's own §6.1 already treats as
     # native/pre-existing (HealPlayerParty existed since CH01).
+    #
+    # 2026-08-14: this used to only check field_locked(), which is exactly
+    # what missed the scene's dropped completion tail (the `Kernel.
+    # pbPokerus?` conditional ate the return-facing movement + closing
+    # messages along with the Pokerus-only text -- CH03_TODO.md). Now via
+    # heal_at_counter(), which also checks the counter NPC turned back.
+    heal_at_counter(emu, HEAL_COUNTER_APPROACH, HEAL_COUNTER_FACING,
+                     counter_local_id=HEAL_COUNTER_LOCAL, beat="B4")
+
+
+# -- B26 -----------------------------------------------------------------
+
+@kevlar.beat("B26", "The Center's PC boots through the native EventScript_PC "
+                    "chain and returns control cleanly (2026-08-14: this was "
+                    "previously an UNHANDLED-code-355 queue entry -- "
+                    "pbPokeCenterPC never converted at all, see "
+                    "CH03_TODO.md's classifier-near-miss recon note)",
+             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=PC_APPROACH)
+def b26(emu: Emulator) -> None:
+    use_pc(emu, PC_APPROACH, PC_FACING, beat="B26")
 
 
 # -- B7 ------------------------------------------------------------------

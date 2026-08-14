@@ -622,6 +622,23 @@ def test_randomizer_branch_emits_else_arm_only(ctx: T.TranspileContext) -> None:
     assert res.unhandled == []
 
 
+def test_pokerus_branch_emits_else_arm_only(ctx: T.TranspileContext) -> None:
+    """Pokerus is deferred to CH18; the not-infected arm is the RMXP else
+    block. On Map068 EV001 that else block carries the healing counter's
+    return-facing movement and closing dialogue, not just Pokerus-specific
+    text -- queuing the whole conditional silently truncated the scene."""
+    res = run_event(ctx, [[
+        cmd(T.CONDITIONAL_BRANCH, [12, "Kernel.pbPokerus?"]),
+        cmd(T.SHOW_TEXT, ["may be infected"], indent=1),
+        cmd(411, [], indent=0),
+        cmd(T.SHOW_TEXT, ["restored to full health"], indent=1),
+        cmd(412, [], indent=0),
+    ]])
+    assert "restored to full health" in res.text
+    assert "may be infected" not in res.text
+    assert res.unhandled == []
+
+
 def test_guarded_add_pokemon_emits_givemon_and_menu_flag(
     ctx: T.TranspileContext,
 ) -> None:

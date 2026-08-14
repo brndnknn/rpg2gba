@@ -187,7 +187,7 @@
       "id": "CH18", "act": "A3", "title": "Nuclear Plant Epsilon", "wiki_page": "Nuclear Plant Epsilon",
       "visit": 1, "outdoor": 122, "maps": [122, 123, 125],
       "predecessor": "CH17", "tier": "thin", "status": "planned",
-      "notes": "DATA-DERIVED, not wiki-derived: the walkthrough gives Epsilon no location heading and a sub-agent read it as never entered, but the warp graph shows 122 <-> 8 (Route 07) in BOTH directions plus 122 <-> 123 and 122 <-> 125. Bound as its own chapter off Route 07. Verify the entry gate against event data before writing beats."
+      "notes": "DATA-DERIVED, not wiki-derived: the walkthrough gives Epsilon no location heading and a sub-agent read it as never entered, but the warp graph shows 122 <-> 8 (Route 07) in BOTH directions plus 122 <-> 123 and 122 <-> 125. Bound as its own chapter off Route 07. Verify the entry gate against event data before writing beats. DEFERRED WORK: this is the chapter where Pokerus gets implemented (source of the Nuclear-type mechanic). When it lands, revisit CH03_TODO.md decision #4 and Map068_EV001_Page1's dropped `pbPokerus?` branch (`UNHANDLED code 111` in output/uranium-build/scripts/Map068.pory) -- the transpiler currently drops the whole conditional, including the shared post-heal return-movement and closing dialogue that both branches apparently share."
     },
     {
       "id": "CH19", "act": "A3", "title": "Bealbeach City", "wiki_page": "Bealbeach City",
