@@ -1632,6 +1632,54 @@ class Emulator:
         self.note_text_frame()
         return taps
 
+    def settle_field(self, *, quiet_frames: int = 60, max_rounds: int = 8,
+                     key: str = "A") -> int:
+        """Drain every script queued on the field, not just the first one,
+        and return once the field has stayed released for `quiet_frames`.
+
+        `advance_dialog` returns the instant one script releases, which is the
+        wrong post-condition after a map entry: a converted map's OnFrame
+        dispatcher tests its autorun guards in sequence, so one page setting
+        its own guard flag on release is exactly what arms the *next* page.
+        Map068 (Kevlar Town's Center) does this on arrival -- EV012's page 2
+        runs, sets FLAG_MAP068_EVENT012_TSA, releases, and the following frame
+        the dispatcher falls through to EV015's page 1. A beat that drained
+        once walked away mid-chain and handed the lock to whichever beat came
+        next, which read it as its own interaction misbehaving.
+
+        Also handles the no-msgbox case `advance_dialog` cannot describe on
+        its own: EV012's page 2 is `lockall` / `applymovement` / `setflag` /
+        `releaseall` with no text in it at all, so there is nothing to advance
+        and the release is purely time-based. Tapping through it is harmless
+        (the taps land on no textbox) but the *waiting* is what matters.
+
+        Returns the number of scripts drained. Fails loud once `max_rounds`
+        iterations are spent -- an unbounded loop here would hang the suite
+        instead of naming the map that never went quiet. Note that budget
+        counts rounds of *either* kind: a drain and a quiet check that gets
+        cut short by a re-lock each cost one, so a chain of N autoruns spends
+        up to 2N of it, not N.
+        """
+        drained = 0
+        for _ in range(max_rounds):
+            if self.field_locked():
+                self.advance_dialog(key=key)
+                drained += 1
+                continue
+            quiet = 0
+            while quiet < quiet_frames:
+                self.run(10)
+                quiet += 10
+                if self.field_locked():
+                    break
+            else:
+                return drained
+        shot = self.screenshot("settle_field_never_quiet")
+        raise ScenarioError(
+            f"settle_field: the field was still starting scripts after "
+            f"{max_rounds} drains (map_location={self.map_location()}) "
+            f"({shot})")
+
 
 def _walk_to_once(emu: "Emulator", tx: int, ty: int, frame_budget: int,
                   max_sidesteps: int) -> None:

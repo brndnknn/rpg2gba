@@ -361,8 +361,12 @@ def b2(emu: Emulator) -> None:
     # dialogue release.
     emu.advance_dialog(stop=lambda: _at_map(emu, "MAP_KEVLAR_TOWN_POKEMON_CENTER"))
     _wait_for_map(emu, "B2", "MAP_KEVLAR_TOWN_POKEMON_CENTER")
-    if emu.field_locked():
-        emu.advance_dialog()
+    # Arriving in the Center arms a *chain* of dispatcher autoruns, not one
+    # script: EV012 page 2 (a silent lockall/applymovement/setflag/releaseall,
+    # no msgbox to advance) releases, and its own guard flag then lets the
+    # dispatcher fall through to EV015 page 1 on the next frame. Draining once
+    # left the tail of that chain for N3 to trip over.
+    emu.settle_field()
     if not emu.flag("FLAG_NURSE_TUTORIAL"):
         shot = emu.screenshot("b2_no_tutorial_flag")
         raise ScenarioError(

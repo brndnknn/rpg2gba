@@ -1205,6 +1205,108 @@ def test_advance_dialog_fails_loud_when_the_script_never_releases(tmp_path) -> N
         _advance(emu, max_taps=5)
 
 
+# -- settle_field: draining every queued script, not just the first ----------
+#
+# advance_dialog returns the instant one script releases the field, which is
+# wrong right after a map entry when a converted map's OnFrame dispatcher
+# chains straight into the next page's script (Map068/Kevlar Town Center:
+# EV012 page 2 releases, which is exactly what arms EV015 page 1 the very
+# next frame). settle_field exists to keep draining until the field has
+# genuinely gone quiet. `_FakeSettleEmu` fakes field_locked/advance_dialog/
+# run/screenshot/map_location directly (settle_field calls its own
+# advance_dialog, not the real dialogue-mashing loop, so there is nothing to
+# gain from routing through `_FakeTextEmu`'s script-of-text-frames shape
+# here) so the round-counting and re-lock behaviour can be driven precisely.
+
+class _FakeSettleEmu:
+    """Stand-in for the handful of primitives `Emulator.settle_field` calls.
+
+    `start_locked` is the field state settle_field first observes.
+    `advance_dialog` always simulates a completed drain by unlocking the
+    field, UNLESS `never_unlocks` is set (models a field that keeps
+    re-arming itself forever, for the max_rounds-exceeded case). `relock_at`
+    is a set of *global* `run()` call numbers (1-based) at which the field
+    re-locks itself mid-quiet-window, one-shot per number -- this is what
+    lets a test simulate a chained script arming again partway through the
+    quiet wait.
+    """
+
+    def __init__(self, start_locked: bool, relock_at: set[int] = frozenset(),
+                 never_unlocks: bool = False) -> None:
+        self._locked = start_locked
+        self._relock_at = set(relock_at)
+        self._never_unlocks = never_unlocks
+        self.advance_dialog_calls: list[str] = []
+        self.run_calls = 0
+        self.run_frames_total = 0
+        self.screenshot_calls: list[str] = []
+
+    def field_locked(self) -> bool:
+        return self._locked
+
+    def advance_dialog(self, key: str = "A") -> int:
+        self.advance_dialog_calls.append(key)
+        if not self._never_unlocks:
+            self._locked = False
+        return 1
+
+    def run(self, frames: int, keys=None, on_frame=None) -> None:
+        self.run_calls += 1
+        self.run_frames_total += frames
+        if self.run_calls in self._relock_at:
+            self._locked = True
+
+    def screenshot(self, name: str):
+        self.screenshot_calls.append(name)
+        return None
+
+    def map_location(self) -> tuple[int, int]:
+        return (68, 0)
+
+
+def _settle(emu, **kwargs) -> int:
+    from rpg2gba.playtest.emulator import Emulator
+
+    return Emulator.settle_field(emu, **kwargs)
+
+
+@needs_mgba
+def test_settle_field_already_quiet_drains_nothing() -> None:
+    emu = _FakeSettleEmu(start_locked=False)
+    assert _settle(emu, quiet_frames=60) == 0
+    assert emu.advance_dialog_calls == []          # never tapped
+    assert emu.run_frames_total == 60               # still polled quiet
+
+
+@needs_mgba
+def test_settle_field_drains_one_script_then_confirms_quiet() -> None:
+    emu = _FakeSettleEmu(start_locked=True)
+    assert _settle(emu, quiet_frames=60) == 1
+    assert emu.advance_dialog_calls == ["A"]
+    # polled the field to quiet afterward, in 10-frame steps up to quiet_frames
+    assert emu.run_frames_total == 60
+
+
+@needs_mgba
+def test_settle_field_drains_again_when_a_chained_script_relocks_mid_quiet() -> None:
+    """The Map068 bug this method exists to fix: the field goes quiet for a
+    couple of steps, then a chained page grabs it again before quiet_frames
+    elapses. settle_field must go back to draining rather than declaring
+    victory, and the second drain must show up in the return count."""
+    emu = _FakeSettleEmu(start_locked=True, relock_at={2})  # relock on 2nd poll
+    assert _settle(emu, quiet_frames=60) == 2
+    assert emu.advance_dialog_calls == ["A", "A"]
+
+
+@needs_mgba
+def test_settle_field_raises_after_max_rounds_and_names_the_map() -> None:
+    emu = _FakeSettleEmu(start_locked=True, never_unlocks=True)
+    with pytest.raises(ScenarioError, match=r"map_location=\(68, 0\)"):
+        _settle(emu, quiet_frames=60, max_rounds=3)
+    assert len(emu.advance_dialog_calls) == 3       # one drain per round
+    assert emu.screenshot_calls == ["settle_field_never_quiet"]
+
+
 def test_caption_marks_a_text_frame() -> None:
     """The marker matters for its absence: a beat whose doc row promises a
     message but whose tile has no `+` never showed that message."""
