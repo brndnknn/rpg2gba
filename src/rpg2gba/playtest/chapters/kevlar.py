@@ -173,10 +173,20 @@ CENTER_ITEM_BALL_EVENT_ID = 18  # RMXP id, for the FLAG_MAP068_EVENT018_SSA name
 CENTER_ITEM_BALL_APPROACH = (17, 8)
 CENTER_ITEM_BALL_FACING = "UP"
 
-# B8: Mawuli, map68 local id 8, (2,16), FACE_RIGHT -> approach from the east.
+# B8: Mawuli, map68 local id 8, (2,16), FACE_RIGHT. (3,16), the tile
+# immediately east of her, LOOKS like the natural approach (facing her own
+# facing direction) but is collision-blocked -- decoded directly off
+# engine/data/layouts/KevlarTownPokemonCenter/map.bin, and confirmed
+# unreachable by the harness's own _plan_route (2026-08-14, see
+# .claude/skills/boot-walk-harness/SKILL.md Phase 2 item 5). (2,15), the
+# tile directly north of her, is clear; approaching from there is also the
+# room's only real route in (the SW corner is walled off from the middle,
+# reachable only via the north corridor then down the west wall -- verified
+# by the same Dijkstra call, matches output/map_feedback/Map068_feedback.json's
+# hand-drawn path exactly).
 MAWULI_LOCAL = 8
-MAWULI_APPROACH = (3, 16)
-MAWULI_FACING = "LEFT"
+MAWULI_APPROACH = (2, 15)
+MAWULI_FACING = "DOWN"
 
 # B10: Mart door + interior. The shop counter is a `bg_event` sign (ANY
 # facing) at (10,8), not an object event -- `Map067_EV003_Page1` ->
@@ -541,13 +551,24 @@ def b5(emu: Emulator) -> None:
 @kevlar.beat("B8", "Mawuli's facility battle: win, and the offer repeats "
                    "(module finding 1: no `trainerbattle*` command exists "
                    "in the compiled script -- expected to fail)",
-             locations=(BeatLocation("MAP_KEVLAR_TOWN_POKEMON_CENTER",
-                                     MAWULI_APPROACH[0], MAWULI_APPROACH[1],
-                                     "approach anchor (patrols, live position may differ)"),))
+             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=MAWULI_APPROACH)
 def b8(emu: Emulator) -> None:
     from ..battle import in_battle, win_battle
 
-    _approach_patrol_npc(emu, "B8", MAWULI_LOCAL, MAWULI_FACING)
+    # Mawuli's compiled movement_type is MOVEMENT_TYPE_FACE_RIGHT (a static
+    # NPC), not MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE -- she doesn't need
+    # _approach_patrol_npc's live-position tracking, and using it was
+    # actively wrong: that helper reads her gObjectEvents slot BEFORE
+    # walking anywhere, but pokeemerald only keeps an NPC's slot active
+    # while the player is within roughly one screen of it
+    # (TrySpawnObjectEvents/RemoveObjectEventsOutsideView,
+    # engine/src/event_object_movement.c:2909-2951) -- B8 runs right after
+    # B5/N1/B7 leave the player across the room by the item ball, so
+    # Mawuli's slot isn't spawned yet and the live read failed before a
+    # single step was taken (2026-08-14 finding).
+    emu.walk_to(*MAWULI_APPROACH)
+    emu.face(MAWULI_FACING)
+    emu.interact()
     emu.advance_dialog("A")  # commits YES at "Wanna fight?"
     if not in_battle(emu):
         shot = emu.screenshot("b8_no_battle")
@@ -558,7 +579,9 @@ def b8(emu: Emulator) -> None:
     win_battle(emu)
     # Re-offer: talk again, expect the SAME offer (no state latch anywhere
     # in the script -- it's a facility loop, not a one-time flag).
-    _approach_patrol_npc(emu, "B8", MAWULI_LOCAL, MAWULI_FACING)
+    emu.walk_to(*MAWULI_APPROACH)
+    emu.face(MAWULI_FACING)
+    emu.interact()
     if not emu.field_locked():
         shot = emu.screenshot("b8_no_reoffer")
         raise ScenarioError(f"B8: Mawuli did not re-offer after a win ({shot})")

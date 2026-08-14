@@ -93,6 +93,22 @@ this area after every later fix.
    the movement resolves, plus the normal end-of-beat capture. The default
    capture rule lands on the dialogue frame or the fully-settled frame —
    neither shows a mid-cutscene positioning bug.
+5. **A hardcoded APPROACH constant can be dead code with a valid-looking
+   name.** `kevlar.py`'s B8 (2026-08-14) declared `MAWULI_APPROACH = (3, 16)`
+   but every actual call routed through `_approach_patrol_npc`, which
+   computes its own approach from the NPC's *live* position and never
+   touches the constant — so nothing ever exercised it. The constant turned
+   out to be a genuinely collision-blocked tile (verified against
+   `_plan_route`'s own Dijkstra, not eyeballed) — `walk_to` degrades a
+   `None` route to "bare target, greedy walker tries anyway"
+   (`_route_waypoints`), so the failure surfaced as a misleading
+   step-aside-exhausted "stuck" error near the target, not an immediate
+   "target unreachable." Same root cause, either way it's caught: pick the
+   approach helper that matches the NPC's real `movement_type` (a static
+   `MOVEMENT_TYPE_FACE_*` NPC wants a plain `walk_to`/`face`/`interact`, not
+   the patrol-position tracker built for `MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE`)
+   so every declared coordinate is actually on the path a beat walks, not
+   sitting unused beside a helper that silently recomputes its own.
 
 Only after the chapter runs green do you have seeds.
 
