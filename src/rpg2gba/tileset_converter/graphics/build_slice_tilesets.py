@@ -511,7 +511,8 @@ def build_slice_tilesets(
             kind = stair_inline.get(k)
             if kind is not None:
                 return stair_behavior_by_kind[kind]
-            return terrain_table.column_behavior(ts, k, terrain_tags, is_opaque=_is_opaque)
+            return terrain_table.column_behavior(
+                ts, k, terrain_tags, is_opaque=_is_opaque, passages_for_tileset=passages)
 
         metatile_list = [
             _render_column(

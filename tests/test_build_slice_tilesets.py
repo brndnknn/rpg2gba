@@ -72,6 +72,7 @@ def _fake_fork(tmp_path: Path) -> Path:
         "    MB_JUMP_WEST,\n"
         "    MB_SIDEWAYS_STAIRS_RIGHT_SIDE,\n"
         "    MB_SIDEWAYS_STAIRS_LEFT_SIDE,\n"
+        "    MB_COUNTER,\n"
         "};\n",
         encoding="utf-8",
     )

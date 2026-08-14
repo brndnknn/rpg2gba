@@ -31,6 +31,16 @@ STATIC_BASE = 384  # ids >= 384 are static tiles (no autotile base fallback)
 
 LEDGE_TAG = 1
 
+#: RMXP tileset-editor "Counter" checkbox -- high bit of the passage byte,
+#: independent of the low-nibble collision bits `tile_map.PASSAGE_BLOCK_MASK`
+#: reads. Marks a tile (a shop/service desk) whose blocked cell still lets the
+#: player interact with whatever object stands one tile further past it --
+#: pokeemerald's native analog is MB_COUNTER (see
+#: engine/src/field_control_avatar.c's counter reach-over check). Only applies
+#: to tag-0 columns: a counter desk carries no wild-encounter/ledge/water
+#: terrain of its own, so it never competes with an explicit terrain tag.
+COUNTER_PASSAGE_BIT = 0x80
+
 _LEDGE_DIR_TO_MB = {
     "north": "MB_JUMP_NORTH",
     "south": "MB_JUMP_SOUTH",
@@ -82,10 +92,12 @@ class TerrainTagTable:
         tag_to_behavior_value: dict[int, int],
         ledge_directions: dict[tuple[int, int], int],
         normal_value: int,
+        counter_value: int,
     ) -> None:
         self._tag_to_value = tag_to_behavior_value
         self._ledge_directions = ledge_directions
         self._normal_value = normal_value
+        self._counter_value = counter_value
         self._warned_ledges: set[tuple[int, int]] = set()
 
     def effective_tag(
@@ -119,13 +131,21 @@ class TerrainTagTable:
         key: tuple[tuple[int, int], ...],
         tags_for_tileset: list[int],
         is_opaque: Callable[[int], bool] | None = None,
+        passages_for_tileset: list[int] | None = None,
     ) -> int:
         """The MB_* numeric value for a column: apply the topmost-nonzero-tag rule
         (with the opaque-cover stop, see `effective_tag`), then map through the
         terrain table. Ledge (tag 1) needs a per-tile direction override
         (`ledge_directions`); unmapped ledges warn once and fall back to
-        MB_NORMAL."""
+        MB_NORMAL. A tag-0 column whose topmost tile carries the RMXP Counter
+        passage bit (`COUNTER_PASSAGE_BIT`, requires `passages_for_tileset`)
+        maps to MB_COUNTER instead of MB_NORMAL."""
         tag = self.effective_tag(tags_for_tileset, key, is_opaque=is_opaque)
+        if tag == 0 and passages_for_tileset is not None:
+            tile_id = _topmost_nonempty(key)
+            if (0 <= tile_id < len(passages_for_tileset)
+                    and passages_for_tileset[tile_id] & COUNTER_PASSAGE_BIT):
+                return self._counter_value
         if tag == LEDGE_TAG:
             # Visual tile id for the ledge lookup: the topmost non-empty tile,
             # matching how `effective_tag` found the tag in the first place.
@@ -195,7 +215,8 @@ def load_terrain_tag_map(
             ledge_directions[(int(ts_str), int(tile_str))] = _behavior_value(fork, mb_name)
 
     normal_value = _behavior_value(fork, "MB_NORMAL")
-    return TerrainTagTable(tag_to_value, ledge_directions, normal_value)
+    counter_value = _behavior_value(fork, "MB_COUNTER")
+    return TerrainTagTable(tag_to_value, ledge_directions, normal_value, counter_value)
 
 
 def load_terrain_tags_json(tilesets_json: Path, ts: int) -> list[int]:

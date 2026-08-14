@@ -39,6 +39,7 @@ def _fake_fork(tmp_path: Path) -> Path:
         "    MB_JUMP_SOUTH,\n"
         "    MB_JUMP_EAST,\n"
         "    MB_JUMP_WEST,\n"
+        "    MB_COUNTER,\n"
         "};\n",
         encoding="utf-8",
     )
@@ -73,6 +74,36 @@ def test_topmost_nonzero_tag_wins(tmp_path: Path) -> None:
     key = ((0, 400), (2, 401))
     behavior_zero = table.column_behavior(5, key, tags_zero)
     assert behavior_zero == table._tag_to_value[0]
+
+
+def test_counter_passage_bit_maps_to_mb_counter(tmp_path: Path) -> None:
+    """A tag-0 column whose topmost tile carries the RMXP Counter passage bit
+    (0x80 -- the tileset-editor "Counter" checkbox, used for shop/service
+    desks) maps to MB_COUNTER, not MB_NORMAL -- confirmed against Kevlar
+    Town's Center healing counter (Uranium tileset 42, tile 436, passage
+    0x8F: fully blocked + Counter)."""
+    fork = _fake_fork(tmp_path)
+    table = load_terrain_tag_map(fork, REAL_TERRAIN_TAG_MAP)
+
+    tags = [0] * 500
+    passages = [0] * 500
+    passages[436] = 0x8F  # blocked in all 4 directions + Counter bit
+
+    key = ((1, 436),)
+    behavior = table.column_behavior(42, key, tags, passages_for_tileset=passages)
+    assert behavior == table._counter_value
+
+    # No passages array supplied -> unchanged MB_NORMAL fallback (existing
+    # callers that never pass passages_for_tileset must not regress).
+    behavior_no_passages = table.column_behavior(42, key, tags)
+    assert behavior_no_passages == table._tag_to_value[0]
+
+    # A tile with a real terrain tag is never reinterpreted as a counter,
+    # even if its passage byte happens to carry the Counter bit.
+    tags[436] = 2  # grass
+    behavior_tagged = table.column_behavior(
+        42, key, tags, passages_for_tileset=passages)
+    assert behavior_tagged == table._tag_to_value[2]
 
 
 def test_opaque_cover_stops_tag_fallthrough(tmp_path: Path) -> None:

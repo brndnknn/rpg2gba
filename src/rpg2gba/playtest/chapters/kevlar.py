@@ -136,15 +136,25 @@ NURSE_TUT_XY = (21, 13)
 NURSE_TUT_APPROACH = (21, 14)
 NURSE_TUT_FACING = "UP"
 
+# B2: the walkthrough doesn't end at the Center's ordinary warp-in tile --
+# NurseTut walks the player through healing/PC downstairs, then upstairs to
+# explain the connection functions, and control is handed back there.
+NURSE_TUT_WALKTHROUGH_END = (7, 5)
+
 # B3: the physical Center door, independent of NurseTut's own auto-warp.
+# EV008 (the door-warp trigger tile, `warp(MAP_URANIUM_31, 20, 12)`) sits at
+# (8,19) -- the map's south edge on a 20x20 grid, so the approach has to be
+# one tile north of it and the crossing step DOWN onto it, not off the grid.
 CENTER_DOOR = (20, 12)
 CENTER_ARRIVAL = (8, 18)
-CENTER_EXIT_APPROACH = (8, 20)
 CENTER_EXIT_TILE = (8, 19)
+CENTER_EXIT_APPROACH = (8, 18)
 
-# B4: the healing counter, map68 local id 1, (8,11), FACE_DOWN.
+# B4: the healing counter, map68 local id 1, (8,11), FACE_DOWN. (8,12) is the
+# counter tile itself -- collision-blocked (a reach-over interact tile, like
+# a PC/mart counter), not a standing tile. The approach is one further south.
 HEAL_COUNTER_LOCAL = 1
-HEAL_COUNTER_APPROACH = (8, 12)
+HEAL_COUNTER_APPROACH = (8, 13)
 HEAL_COUNTER_FACING = "UP"
 
 # B7: item ball, map68 local id 9, (17,7), MOVEMENT_TYPE_NONE.
@@ -365,13 +375,17 @@ def b2(emu: Emulator) -> None:
     # script: EV012 page 2 (a silent lockall/applymovement/setflag/releaseall,
     # no msgbox to advance) releases, and its own guard flag then lets the
     # dispatcher fall through to EV015 page 1 on the next frame. Draining once
-    # left the tail of that chain for N3 to trip over.
+    # left the tail of that chain for N3 to trip over. That chain is the
+    # walkthrough itself: NurseTut walks the player through healing/the PC
+    # downstairs (landing at the warp-in tile above is only the entry beat),
+    # then upstairs to explain the connection functions, and control is
+    # handed back there -- not at the warp-in tile.
     emu.settle_field()
     if not emu.flag("FLAG_NURSE_TUTORIAL"):
         shot = emu.screenshot("b2_no_tutorial_flag")
         raise ScenarioError(
             f"B2: FLAG_NURSE_TUTORIAL not set after the walkthrough ({shot})")
-    _assert_near(emu, "B2", CENTER_ARRIVAL)
+    _assert_near(emu, "B2", NURSE_TUT_WALKTHROUGH_END)
 
 
 # -- N3 (NurseTut re-talk) --------------------------------------------------
@@ -409,7 +423,7 @@ def b3(emu: Emulator) -> None:
     # B2 already stands the player inside Map068 via NurseTut's own warp;
     # this beat exercises the ORDINARY door as its own mechanism -- exit
     # back to Map031 first, then re-enter via (20,12).
-    _cross_threshold(emu, "B3", CENTER_EXIT_APPROACH, "UP", "MAP_KEVLAR_TOWN")
+    _cross_threshold(emu, "B3", CENTER_EXIT_APPROACH, "DOWN", "MAP_KEVLAR_TOWN")
     _enter_door(emu, "B3", CENTER_DOOR, "MAP_KEVLAR_TOWN_POKEMON_CENTER")
     _assert_near(emu, "B3", CENTER_ARRIVAL)
 
