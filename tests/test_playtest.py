@@ -641,6 +641,128 @@ def test_walk_to_frame_budget_still_authoritative_on_clear_path() -> None:
         Emulator.walk_to(emu, 100, 0, frame_budget=5)
 
 
+# -- money / bag primitives: pure logic against a fake save block ------------
+#
+# `money`/`set_money`/`bag_item_quantity`/`item_price` only touch
+# self.sb1/self.sb2 (both plain `u32` pointer reads) and offset/symbol
+# reads through them -- no live core needed. `_FakeMoneyEmu` adds the
+# `sb1`/`sb2` properties (defined on the real `Emulator` class, so a bare
+# `_FakeEmu` doesn't have them) on top of `_FakeEmu`'s memory store, same
+# "_FakeEmu plus the extra bit this primitive needs" shape as
+# `_FakeDumpEmu`/`_FakeGridEmu` elsewhere in this file. Exercised unbound
+# against the fake, same `@needs_mgba` gate as the `walk_to` tests above
+# (importing `emulator.py` still needs the mgba bindings even though these
+# tests never touch a real core).
+
+class _FakeMoneyEmu(_FakeEmu):
+    @property
+    def sb1(self) -> int:
+        return self.u32(self.symbols["gSaveBlock1Ptr"])
+
+    @property
+    def sb2(self) -> int:
+        return self.u32(self.symbols["gSaveBlock2Ptr"])
+
+    # `money`/`set_money`/`bag_item_quantity` call `self._encryption_key()`
+    # (a "private" helper on the real `Emulator`, not exposed through any
+    # public primitive `_FakeEmu` already stands in for) -- mirror it here
+    # rather than reimplementing money/bag decryption a second time in the
+    # test itself.
+    def _encryption_key(self) -> int:
+        return self.u32(self.sb2 + self.offsets["off_sb2_encryptionkey"])
+
+
+_MONEY_OFFSETS = {
+    "off_sb1_money": 0x490,
+    "off_sb2_encryptionkey": 0xAC,
+    "off_sb1_bag": 0x560,
+    "off_bag_items": 0,
+    "off_bag_keyitems": 120,
+    "off_bag_pokeballs": 240,
+    "off_bag_tmshms": 304,
+    "off_bag_berries": 560,
+    "off_itemslot_itemid": 0,
+    "off_itemslot_quantity": 2,
+    "sizeof_itemslot": 4,
+    "val_bag_items_count": 30,
+    "val_bag_keyitems_count": 30,
+    "val_bag_pokeballs_count": 16,
+    "val_bag_tmhm_count": 64,
+    "val_bag_berries_count": 46,
+    "off_iteminfo_price": 0,
+    "sizeof_iteminfo": 44,
+}
+
+
+def _money_emu(**constants: int) -> _FakeMoneyEmu:
+    emu = _FakeMoneyEmu(
+        symbols={"gSaveBlock1Ptr": 0x02000000, "gSaveBlock2Ptr": 0x02000010,
+                 "gItemsInfo": 0x08100000},
+        offsets=dict(_MONEY_OFFSETS),
+        constants=constants,
+    )
+    # gSaveBlock1Ptr/gSaveBlock2Ptr are themselves pointers -- write the
+    # pointed-to addresses in, same two-hop shape `sb1`/`sb2` read on the
+    # real ROM.
+    emu.write_u32(emu.symbols["gSaveBlock1Ptr"], 0x03000000)
+    emu.write_u32(emu.symbols["gSaveBlock2Ptr"], 0x03001000)
+    return emu
+
+
+@needs_mgba
+def test_money_round_trips_through_the_encryption_key() -> None:
+    from rpg2gba.playtest.emulator import Emulator
+
+    emu = _money_emu()
+    key_addr = emu.sb2 + emu.offsets["off_sb2_encryptionkey"]
+    emu.write_u32(key_addr, 0xDEADBEEF)
+
+    Emulator.set_money(emu, 3000)
+    assert Emulator.money(emu) == 3000
+    # The raw stored word must actually be XOR'd -- money() would still
+    # read 3000 back through a bug that skipped encryption entirely if the
+    # key happened to be 0, so also check the raw word isn't plaintext.
+    money_addr = emu.sb1 + emu.offsets["off_sb1_money"]
+    assert emu.u32(money_addr) == (3000 ^ 0xDEADBEEF)
+
+
+@needs_mgba
+def test_bag_item_quantity_reads_a_matching_slot_and_decrypts_it() -> None:
+    from rpg2gba.playtest.emulator import Emulator
+
+    emu = _money_emu(ITEM_POKE_BALL=1)
+    key_addr = emu.sb2 + emu.offsets["off_sb2_encryptionkey"]
+    emu.write_u32(key_addr, 0x1234ABCD)
+    pokeballs_base = (emu.sb1 + emu.offsets["off_sb1_bag"]
+                       + emu.offsets["off_bag_pokeballs"])
+    slot = pokeballs_base + 2 * emu.offsets["sizeof_itemslot"]  # slot index 2
+    emu.write_u16(slot + emu.offsets["off_itemslot_itemid"], 1)  # ITEM_POKE_BALL
+    emu.write_u16(slot + emu.offsets["off_itemslot_quantity"],
+                  7 ^ (0x1234ABCD & 0xFFFF))
+
+    assert Emulator.bag_item_quantity(emu, "ITEM_POKE_BALL") == 7
+
+
+@needs_mgba
+def test_bag_item_quantity_is_zero_with_no_matching_slot() -> None:
+    from rpg2gba.playtest.emulator import Emulator
+
+    emu = _money_emu(ITEM_ANTIDOTE=13)
+    assert Emulator.bag_item_quantity(emu, "ITEM_ANTIDOTE") == 0
+
+
+@needs_mgba
+def test_item_price_reads_gitemsinfo_at_the_right_stride() -> None:
+    from rpg2gba.playtest.emulator import Emulator
+
+    emu = _money_emu(ITEM_POKE_BALL=2)
+    addr = (emu.symbols["gItemsInfo"] + 2 * emu.offsets["sizeof_iteminfo"]
+            + emu.offsets["off_iteminfo_price"])
+    emu.write_u32(addr, 200)
+
+    assert Emulator.item_price(emu, "ITEM_POKE_BALL") == 200
+
+
 # -- mid-warp map grid: the window where location lies about the grid --------
 #
 # A warp writes SaveBlock1.location (ApplyCurrentWarp, overworld.c:620) long

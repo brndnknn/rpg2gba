@@ -71,32 +71,29 @@ of truth for what the chapter *is* remains the spec doc. Shape:
      and re-emit Page1's full completion sequence with a proper no-op stand-in
      for the Pokérus branch instead of dropping the conditional wholesale.
 
-## Current status (2026-08-13, end of the first build session)
+## Current status (2026-08-16)
 
-**ROM `4a9dc830` builds clean** (27.36/32 MB, EWRAM 86.8%, IWRAM 87.0%);
-**2068 tests pass**, 19 skipped. Nothing is committed yet — the whole session is
-in the working tree.
+**ROM `49f7420f` builds clean** (27.36/32 MB, EWRAM 86.8%, IWRAM 87.0%);
+**2119 tests pass**, 19 skipped. Everything through the script-call joiner is
+committed on `ch03-kevlar`.
 
-**Chapter suite `kevlar`:** predecessors green — moki 17/17 and route1 29/29 on
-this build, so none of the six converter fixes below regressed CH01/CH02. Of
-CH03's own beats, **B1 and B2 pass**; the run halts at **N3**, whose walk into
-the Center is interrupted by a locked-field autorun (`OnFrame` dispatches
-Map068 EV012 page 2 while `FLAG_MAP068_EVENT012_TSA` is unset). That is
-probably beat authoring — the scene needs absorbing, the way route1's
-`_walk_absorbing` does — **but it carries a fidelity question first**: the
-guard is a *temp* switch, so the scene re-fires on every entry to the Pokémon
-Center. Check the RMXP page before deciding whether that is faithful.
+**Chapter suite `kevlar`:** predecessors green (moki + route1 replayed), and
+CH03 now runs **B1, B2, N3, B3, B4, B26, B7, N1, B5, B8, B10 all green** — the
+N3 halt described in the previous status is long resolved. The run reaches
+**B11** (Mart purchase), which fails on a harness gap, not a converter bug: the
+shop opens with the right stock and the player has ₽36, so the purchase is
+refused and the beat's A-mash never escapes the menu. See #18.
 
-**The chapter is NOT converted yet.** The 81-entry unhandled queue is
-untouched (#4 below): no trainer battles (verified — zero `trainerbattle` in
-any CH03 `scripts.inc`), no boulder pushing, no `givemon` for the Magikarp, no
-`giveitem` for the PC tour or Berry Boutique. Beats covering those are written
-against the real designed behaviour and will legitimately fail until the queue
-is worked. A green build is not a converted chapter.
+**The chapter is still NOT fully converted**, but the queue is no longer
+untouched: **56 entries across the five maps** (was 87 before the joiner —
+map73 34→11, map67 11→3). Still missing: boulder pushing, `givemon` for the
+Magikarp, `giveitem` for the PC tour and Berry Boutique. Beats covering those
+are written against the real designed behaviour and legitimately fail until
+the queue is worked. A green build is not a converted chapter.
 
-**Six converter bugs fixed this session** (#7, #10, #11, #12, #13, #15) plus a
-build-set wiring miss (#16). Every one was found by the build or the harness,
-not by a boot walk.
+**Eight converter bugs fixed** (#7, #10, #11, #12, #13, #15, #17, plus Mawuli's
+facility battle) and a build-set wiring miss (#16). Every one was found by the
+build or the harness, not by a boot walk.
 
 ## Open
 
@@ -124,6 +121,83 @@ that already passed their gates.
 **CH01 and CH02 both passed §9 with this bug live.** Their beats simply never
 asserted a post-warp state write. Worth a targeted re-check of those chapters'
 post-warp tails now that the queue makes them visible.
+
+### 17. The Mart counter did nothing on A — FIXED 2026-08-16
+
+Talking to the Poké Mart counter produced no dialogue and no menu. Two
+independent things had to line up for it to look like a total no-op.
+
+**The clerk's script was a stub.** `Map067_EV001_Page1` compiled to
+`lock / faceplayer / setflag(FLAG_MENU_ON_EVENT) / clearflag / release / end`
+— its `pbPokemonMart([...])` had become eight `# UNHANDLED code 355` comments.
+RMXP stores a Script command as a code-355 row plus one code-655 row per
+continuation line, and the transpiler matched every row independently, so a
+call the script editor wrapped could never match an idiom. `classify_pokemart`
+in `deterministic.py` does join rows correctly, but it bails on any command
+that is not 355/655/comment, and this page carries two code-121 switch rows
+(switch 185, the `FLAG_MENU_ON_EVENT` pair) — so the event fell through to the
+transpiler. Map067 EV003 has no 121 rows, which is why the neighbouring sign
+converted fine and the two sat side by side, one working, one not.
+
+**`MB_COUNTER` then hid the damage.** The working `pokemart` lives on EV003, a
+`bg_event` sign ON the counter tile (10,8). Standing at (10,9) facing up, that
+tile has no object event, so the counter reach-over
+(`field_control_avatar.c:400-409`) looks one tile further to (10,7) and finds
+the clerk — the stub. `GetInteractionScript` tries object events before
+background events, so the good script was permanently shadowed. #10's
+`MB_COUNTER` work is correct and generic; the Mart's layout is simply inverted
+from the Center's (working script near, broken stub far), so the same fix that
+helped one exposed the other.
+
+Fixed by `_merge_script_call_rows` in the transpiler, which fuses a run of 355
++ 655 leaves edge-to-edge and matches idioms against the joined text, plus a
+transpiler-side `pbPokemonMart` idiom sharing `deterministic.py`'s regexes.
+**The merge is conditional** — it only absorbs a continuation while the
+accumulated text is still mid-expression (unbalanced bracket, or a bare
+trailing `=`). That guard is load-bearing: consecutive script rows are usually
+separate COMPLETE Ruby statements (the pbStarterSelector arithmetic chain is a
+run of them) and joining those edge-to-edge concatenates working code into
+garbage. Corpus queue 377→346, CH03 87→56.
+
+The clerk's real stock is 7 items including Paralyze Heal; the sign's list has
+only 6. Pointing the NPC at the sign's mart block would have shipped the wrong
+stock — worth remembering if a similar shadowed-counter case turns up.
+
+### 18. B11 cannot complete a Mart purchase — FIXED 2026-08-16
+
+Not a converter bug — a harness gap. `Emulator` had no money or bag-quantity
+primitive, so B11 granted itself nothing, hit "You don't have enough money" at
+₽36, and its A-mash bounced around the item list until it gave up.
+
+Added `money()`/`set_money()`/`bag_item_quantity()`/`item_price()`. Emerald
+XOR-obfuscates both money and bag quantities against
+`gSaveBlock2Ptr->encryptionKey`, so a raw read returns garbage; the primitives
+mirror `money.c`'s Get/SetMoney and `item.c`'s `BagPocket_GetSlotDataGeneric`.
+`bag_item_quantity` reads `gSaveBlock1Ptr->bag` directly rather than through
+the `gBagPockets` runtime view, so it does not depend on
+`SetBagItemsPointers` having run this boot, and scans all five pockets by item
+id (`AddBagItem` only ever files an item in its one designated pocket).
+
+B11 now grants money, buys, and asserts money down by exactly the price and
+bag up by exactly 1. It stops mashing on the observed money delta rather than
+a fixed tap count — a real engine signal, and precisely what the original
+fixed-count mash got wrong. Exit is by B, not A: `shop.c`'s state machine
+treats B as non-committal everywhere after the purchase, while A would
+re-trigger BUY.
+
+**N4 is now registered and passing** — it was only ever deferred for the
+missing primitive, and it needs no money granted at all.
+
+### 19. B13's berry-plant approach never leaves the Mart — OPEN
+
+Newly reachable, pre-existing, and unrelated to #18: B13 assumes stepping DOWN
+from the Mart counter tile at (10,9) crosses straight out through the arrival
+tile, but the player never moves and the beat fails asserting
+`MAP_KEVLAR_TOWN` while still reading group=75 num=11. Nothing after the old
+B11 had ever executed, so this beat has been dead code the whole time — its
+geometry has never once been exercised. Suspect the same class as B10's own
+missing exit hop, which needed an explicit `_cross_threshold` off the Center
+before walking anywhere.
 
 ### 16. Route 01's half of the seam was never wired — FIXED 2026-08-13
 

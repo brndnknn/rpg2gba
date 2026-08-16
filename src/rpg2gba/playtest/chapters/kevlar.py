@@ -79,13 +79,17 @@ to pass. Where the compiled script has literally no code path that could
 ever satisfy the assertion, that is stated in the beat's own comment so the
 failure reads as a finding, not a mystery.
 
-**No money/bag-quantity primitive exists on `Emulator`** (no
-`off_sb1_money` is probed, no bag-slot reader). B11 (Mart purchase) and N4
-(insufficient-money refusal) cannot assert "money down / bag up" with the
-current harness surface -- B11 drives a real purchase through the native
-`pokemart` menu and asserts the shop opens and returns cleanly to the
-overworld (the only observable proxy available); N4 is DEFERRED, not
-registered -- see the bottom of this module.
+**Money/bag-quantity primitives now exist on `Emulator`**
+(`money`/`set_money`/`bag_item_quantity`/`item_price`, all XOR-decrypted
+against `gSaveBlock2Ptr->encryptionKey` exactly as `money.c`/`item.c` do --
+see their docstrings). B11 (Mart purchase) grants enough money for
+`MART_FIRST_ITEM` (confirmed via `item_price`, not assumed), drives a real
+purchase through the native `pokemart` menu, and asserts money went down
+by exactly the price and the bag quantity went up by one, then that
+control returns to the overworld. N4 (insufficient-money refusal) is
+registered too: with money forced below any stock item's price, it asserts
+the purchase is refused and money/bag are unchanged, both immediately
+after the refusal and after the mart is exited.
 
 **Local ids are not RMXP event ids** (see route1.py's module docstring for
 the general rule). Tables read from `output/uranium-build/staging/
@@ -196,6 +200,13 @@ MART_DOOR = (37, 14)
 MART_ARRIVAL = (10, 10)
 MART_COUNTER_APPROACH = (10, 9)
 DELIVERYMAN_APPROACH = (5, 10)
+
+# B11/N4: the mart's stock list (`engine/data/maps/KevlarTownPokemart/
+# scripts.inc`, cross-checked against `output/uranium-build/scripts/
+# Map067.pory`) puts ITEM_POKE_BALL first -- BuyMenu's ListMenu and the
+# root ShopMenu both default their cursor to slot 0, so this is the item a
+# plain A-commit buys with no cursor movement.
+MART_FIRST_ITEM = "ITEM_POKE_BALL"
 
 # B13: Map031 berry plants, native BerryTreeScript, local ids 10-14,
 # (32,5)/(33,10)/(34,10)/(35,10)/(36,10).
@@ -613,29 +624,119 @@ def b10(emu: Emulator) -> None:
 # -- B11 -----------------------------------------------------------------
 
 @kevlar.beat("B11", "Buying an item at the counter drives the native "
-                    "pokemart menu to completion (no money/bag primitive "
-                    "on Emulator -- see module docstring)",
+                    "pokemart menu to a real purchase: money down, bag up "
+                    "(Emulator.money/set_money/bag_item_quantity/"
+                    "item_price)",
              map_constant="MAP_KEVLAR_TOWN_POKEMART", at=MART_COUNTER_APPROACH)
 def b11(emu: Emulator) -> None:
+    price = emu.item_price(MART_FIRST_ITEM)
+    emu.set_money(price + 1000)  # afford it with headroom, no clamp math needed
+    money_before = emu.money()
+    bag_before = emu.bag_item_quantity(MART_FIRST_ITEM)
+
     emu.walk_to(*MART_COUNTER_APPROACH)
     emu.face("UP")
     emu.interact()
     if not emu.field_locked():
         shot = emu.screenshot("b11_shop_did_not_open")
         raise ScenarioError(f"B11: the mart counter did not open a script ({shot})")
-    # Mash through: BuyMenu list -> pick slot 0 (POKE_BALL) -> confirm
-    # default quantity -> confirm purchase -> decline further shopping ->
-    # exit. Every step here is an A-commit-default the same way
-    # `battle.py`'s move-select relies on default cursor position 0.
-    emu.advance_dialog("A", max_taps=400)
+
+    # Root ShopMenu (BUY is slot 0) -> BuyMenu item list (POKE_BALL is
+    # slot 0) -> "how many? " quantity dialog (default qty 1) -> "that'll
+    # be <price>, right?" Yes/No (default YES) -- every one of these is an
+    # A-commit-default, same reliability battle.py's move-select leans on
+    # for its own default-cursor-0 menus. The stop condition is a real
+    # engine signal (money actually debited, shop.c's BuyMenuSubtractMoney)
+    # rather than a fixed tap count -- a fixed count is what left the
+    # original version of this beat stuck bouncing on an insufficient-funds
+    # refusal forever (see N4, which now exercises that refusal on
+    # purpose).
+    taps = 0
+    while emu.money() == money_before:
+        if taps >= 60:
+            shot = emu.screenshot("b11_purchase_never_landed")
+            raise ScenarioError(
+                f"B11: money never decreased after {taps} A-taps -- the "
+                f"purchase never landed ({shot})")
+        emu.tap("A")
+        taps += 1
+
+    # Money moved, so the purchase itself is done -- but the item list, the
+    # ListMenu underneath it, the "anything else?" message, and the root
+    # ShopMenu all still hold the field. Every one of those treats B as
+    # either an ordinary dismiss or a cancel/quit, never "buy again"
+    # (unlike A, which would re-select BUY or re-attempt the purchase) --
+    # advance_dialog's own docstring documents the same "hold one button
+    # for a whole stretch" reliability for B, just answering NO at a
+    # yesno instead of dismissing text; here there is no more yesno to
+    # answer, so holding B all the way out is safe.
+    emu.advance_dialog("B", max_taps=60)
     if emu.field_locked():
         shot = emu.screenshot("b11_shop_stuck")
         raise ScenarioError(
-            f"B11: the mart flow never returned control after mashing "
-            f"through a purchase ({shot})")
+            f"B11: the mart flow never returned control after the "
+            f"purchase completed ({shot})")
+
+    money_after = emu.money()
+    bag_after = emu.bag_item_quantity(MART_FIRST_ITEM)
+    if money_after != money_before - price:
+        shot = emu.screenshot("b11_money_mismatch")
+        raise ScenarioError(
+            f"B11: money after purchase is {money_after}, expected "
+            f"{money_before - price} ({money_before} - price {price}) "
+            f"({shot})")
+    if bag_after != bag_before + 1:
+        shot = emu.screenshot("b11_bag_mismatch")
+        raise ScenarioError(
+            f"B11: {MART_FIRST_ITEM} quantity is {bag_after}, expected "
+            f"{bag_before + 1} ({shot})")
 
 
-# -- N4 (mart, insufficient money) -- DEFERRED, see bottom of module --------
+# -- N4 --------------------------------------------------------------------
+
+@kevlar.beat("N4", "Mart purchase refused with insufficient money -- money "
+                    "and bag stay untouched, and the mart still returns "
+                    "control cleanly",
+             map_constant="MAP_KEVLAR_TOWN_POKEMART", at=MART_COUNTER_APPROACH)
+def n4(emu: Emulator) -> None:
+    emu.set_money(50)  # well under any stock item's price
+    money_before = emu.money()
+    bag_before = emu.bag_item_quantity(MART_FIRST_ITEM)
+
+    emu.walk_to(*MART_COUNTER_APPROACH)
+    emu.face("UP")
+    emu.interact()
+    if not emu.field_locked():
+        shot = emu.screenshot("n4_shop_did_not_open")
+        raise ScenarioError(f"N4: the mart counter did not open a script ({shot})")
+
+    # Root ShopMenu (A -> BUY) -> item list (A -> select slot 0) ->
+    # `!IsEnoughMoney` fires immediately (shop.c's Task_BuyMenu, before the
+    # quantity dialog even opens) and bounces straight back to the item
+    # list with nothing charged -- this IS B11's original bug, reproduced
+    # here on purpose as the expected refusal. A handful of A-taps is
+    # enough to reach and dismiss that one refusal message.
+    for _ in range(6):
+        emu.tap("A")
+    if emu.money() != money_before or emu.bag_item_quantity(MART_FIRST_ITEM) != bag_before:
+        shot = emu.screenshot("n4_charged_anyway")
+        raise ScenarioError(
+            f"N4: money/bag moved despite insufficient funds (money "
+            f"{money_before}->{emu.money()}, bag "
+            f"{bag_before}->{emu.bag_item_quantity(MART_FIRST_ITEM)}) "
+            f"({shot})")
+
+    # Same B-mash exit as B11 -- LIST_CANCEL, the "anything else?" message,
+    # then MENU_B_PRESSED on the root ShopMenu.
+    emu.advance_dialog("B", max_taps=60)
+    if emu.field_locked():
+        shot = emu.screenshot("n4_stuck")
+        raise ScenarioError(
+            f"N4: the mart never returned control after the refusal ({shot})")
+    if emu.money() != money_before or emu.bag_item_quantity(MART_FIRST_ITEM) != bag_before:
+        shot = emu.screenshot("n4_charged_on_exit")
+        raise ScenarioError(
+            f"N4: money/bag moved while exiting after a refusal ({shot})")
 
 
 # -- B12 -----------------------------------------------------------------
@@ -997,16 +1098,6 @@ def b25(emu: Emulator) -> None:
 # whichever future chapter/patch closes the gap, restore the
 # `@kevlar.beat(...)` decorator at that point.
 
-# N4: Mart purchase refused when broke. No money read/write primitive
-# exists on `Emulator` (no `off_sb1_money` is probed) -- there is no way to
-# either force the precondition (player has too little money) or read the
-# result (money unchanged, refusal message shown) without adding a new
-# offset, which is out of this module's scope.
-def n4(emu: Emulator) -> None:
-    raise NotImplementedError(
-        "N4 needs Emulator.money-equivalent read/write; not available")
-
-
 # Bike Wheel -> Bicycle. The wheel's only source corpus-wide is Route 4
 # (CH11, Act 3, per the wiki and spec §5 #3) -- unreachable from CH03. Kept
 # for CH11 to pick up once Route 4's grant exists.
@@ -1015,9 +1106,9 @@ def b15_bike_wheel_deferred(emu: Emulator) -> None:
     emu.face(BIKE_SHOP_NPC_FACING)
     emu.interact()
     emu.advance_dialog()
-    # Would assert: Bike Wheel deleted, BICYCLE granted -- no bag primitive
-    # exists on Emulator either, so this also needs that surface added
-    # before it can do more than confirm the dialogue closes.
+    # Would assert: Bike Wheel deleted, BICYCLE granted -- `Emulator.
+    # bag_item_quantity` exists now (B11/N4, this module), so the only
+    # thing still blocking this is reachability, not a missing primitive.
 
 
 # Cry Boy sidequest accept (page2, FLAG_HAS_STRENGTH-gated). sw86 is written
@@ -1057,7 +1148,6 @@ def b23_post_gym5_deferred(emu: Emulator) -> None:
 
 
 DEFERRED_BEATS = (
-    ("N4", "Mart purchase refused with insufficient money", n4),
     ("B15b", "Bike Wheel -> Bicycle grant", b15_bike_wheel_deferred),
     ("B18b", "Cry Boy sidequest accept", b18_cry_boy_accept_deferred),
     ("B26", "Compensation Man's Luxi gift", compensation_man_deferred),
@@ -1083,9 +1173,11 @@ VAR_CONSTANTS: tuple[str, ...] = ("VAR_HA_MAGIKARP",)
 
 SPECIES_CONSTANTS: tuple[str, ...] = ("SPECIES_NONE", "SPECIES_MAGIKARP")
 
+ITEM_CONSTANTS: tuple[str, ...] = (MART_FIRST_ITEM,)
+
 ALL_CONSTANTS: tuple[str, ...] = (
     MAP_CONSTANTS + FLAG_CONSTANTS + VAR_CONSTANTS + SPECIES_CONSTANTS
-    + ("PARTY_SIZE",)
+    + ITEM_CONSTANTS + ("PARTY_SIZE",)
 )
 
 CHAPTER = kevlar.build()

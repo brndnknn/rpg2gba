@@ -29,6 +29,35 @@ _PROBE_ENTRIES: dict[str, str] = {
     "off_sb1_location": "offsetof(struct SaveBlock1, location)",
     "off_sb1_flags": "offsetof(struct SaveBlock1, flags)",
     "off_sb1_vars": "offsetof(struct SaveBlock1, vars)",
+    # -- money / bag (emulator.money, emulator.bag_item_quantity) -----------
+    # Both `money.c`'s GetMoney/SetMoney and `item.c`'s
+    # BagPocket_Get/SetSlotDataGeneric XOR their stored value against
+    # `gSaveBlock2Ptr->encryptionKey` -- a raw read of either field is
+    # garbage without undoing that. `struct Bag`/`struct ItemSlot` are
+    # declared in global.h alongside SaveBlock1 (item.h only forward-
+    # declares gBagPockets, the runtime pointer-view over the same storage;
+    # this reads gSaveBlock1Ptr->bag directly instead, one fewer pointer
+    # hop and no dependency on SetBagItemsPointers having run).
+    "off_sb1_money": "offsetof(struct SaveBlock1, money)",
+    "off_sb1_bag": "offsetof(struct SaveBlock1, bag)",
+    "off_sb2_encryptionkey": "offsetof(struct SaveBlock2, encryptionKey)",
+    "off_bag_items": "offsetof(struct Bag, items)",
+    "off_bag_keyitems": "offsetof(struct Bag, keyItems)",
+    "off_bag_pokeballs": "offsetof(struct Bag, pokeBalls)",
+    "off_bag_tmshms": "offsetof(struct Bag, TMsHMs)",
+    "off_bag_berries": "offsetof(struct Bag, berries)",
+    "off_itemslot_itemid": "offsetof(struct ItemSlot, itemId)",
+    "off_itemslot_quantity": "offsetof(struct ItemSlot, quantity)",
+    "sizeof_itemslot": "sizeof(struct ItemSlot)",
+    "val_bag_items_count": "BAG_ITEMS_COUNT",
+    "val_bag_keyitems_count": "BAG_KEYITEMS_COUNT",
+    "val_bag_pokeballs_count": "BAG_POKEBALLS_COUNT",
+    "val_bag_tmhm_count": "BAG_TMHM_COUNT",
+    "val_bag_berries_count": "BAG_BERRIES_COUNT",
+    # `gItemsInfo` (item.c) is a plain `const` ROM table, not save-state --
+    # readable directly, no encryption, no runtime pointer needed.
+    "off_iteminfo_price": "offsetof(struct ItemInfo, price)",
+    "sizeof_iteminfo": "sizeof(struct ItemInfo)",
     "flag_sys_b_dash": "FLAG_SYS_B_DASH",
     "off_es_sb1": "offsetof(struct UraniumEmbeddedSave, sb1)",
     "off_es_sb2": "offsetof(struct UraniumEmbeddedSave, sb2)",
@@ -209,6 +238,7 @@ _PROBE_TEMPLATE = """\
 #include "fieldmap.h"
 #include "text.h"
 #include "task.h"
+#include "item.h"
 {entries}
 """
 

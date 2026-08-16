@@ -358,6 +358,10 @@ class Emulator:
         # arity TypeError. `raw_write` (:68) passes segment=-1 properly.
         self.core.memory.u16.raw_write(addr, value)
 
+    def write_u32(self, addr: int, value: int) -> None:
+        # Same `raw_write` arity fix as `write_u16`, for `set_money`.
+        self.core.memory.u32.raw_write(addr, value)
+
     def read_bytes(self, addr: int, size: int) -> bytes:
         return bytes(self.core.memory.u8[addr : addr + size])
 
@@ -541,6 +545,10 @@ class Emulator:
     def sb1(self) -> int:
         return self.u32(self.symbols["gSaveBlock1Ptr"])
 
+    @property
+    def sb2(self) -> int:
+        return self.u32(self.symbols["gSaveBlock2Ptr"])
+
     def player_pos(self) -> tuple[int, int]:
         base = self.sb1 + self.offsets["off_sb1_pos"]
         return self.core.memory.u16[base], self.core.memory.u16[base + 2]
@@ -647,6 +655,91 @@ class Emulator:
             )
         addr = self.sb1 + self.offsets["off_sb1_vars"] + (var_id - vars_start) * 2
         return self.core.memory.u16[addr]
+
+    def _encryption_key(self) -> int:
+        """`gSaveBlock2Ptr->encryptionKey` -- both `money.c`'s GetMoney/
+        SetMoney and `item.c`'s BagPocket_Get/SetSlotDataGeneric XOR their
+        stored value against this before/after touching save state (see
+        `money`/`set_money`/`bag_item_quantity`). Read fresh every call
+        rather than cached -- nothing in this harness ever changes the key
+        mid-scenario, but there is no primitive here that assumes it can't."""
+        return self.u32(self.sb2 + self.offsets["off_sb2_encryptionkey"])
+
+    def money(self) -> int:
+        """The player's current money, decrypted exactly as `GetMoney`
+        (`engine/src/money.c`) does: `SaveBlock1.money` is stored XOR'd
+        against `gSaveBlock2Ptr->encryptionKey`, never plaintext -- a raw
+        `u32` read here would be garbage."""
+        raw = self.u32(self.sb1 + self.offsets["off_sb1_money"])
+        return raw ^ self._encryption_key()
+
+    def set_money(self, amount: int) -> None:
+        """Write the player's money, encrypting it exactly as `SetMoney`
+        (`engine/src/money.c`) does. Unlike `AddMoney`/`RemoveMoney`, this
+        does not clamp to `MAX_MONEY` -- it is the same raw primitive those
+        two are built on, so a caller that wants a scenario-only grant well
+        past `MAX_MONEY` is not stopped by this call (it may still be
+        stopped by whatever the game itself does with an out-of-range
+        value, which is not this primitive's concern)."""
+        addr = self.sb1 + self.offsets["off_sb1_money"]
+        self.write_u32(addr, amount ^ self._encryption_key())
+
+    #: `struct Bag`'s five pockets (`engine/include/global.h`), as
+    #: (offset-into-Bag key, slot-count key) pairs for `bag_item_quantity`
+    #: to scan. `POCKET_DUMMY` (PC storage, `gSaveBlock1Ptr->pcItems`) is
+    #: deliberately absent -- it isn't part of `struct Bag` and its
+    #: quantities aren't encrypted (`BagPocket_GetSlotDataPC`), a different
+    #: primitive this module doesn't need yet.
+    _BAG_POCKETS: tuple[tuple[str, str], ...] = (
+        ("off_bag_items", "val_bag_items_count"),
+        ("off_bag_keyitems", "val_bag_keyitems_count"),
+        ("off_bag_pokeballs", "val_bag_pokeballs_count"),
+        ("off_bag_tmshms", "val_bag_tmhm_count"),
+        ("off_bag_berries", "val_bag_berries_count"),
+    )
+
+    def bag_item_quantity(self, item: str | int) -> int:
+        """Total quantity of `item` (an `ITEM_*` constant name, or its
+        already-resolved id) held in the bag -- mirrors
+        `CountTotalItemQuantityInBag` (`engine/src/item.c`), reading
+        `gSaveBlock1Ptr->bag` directly rather than through the
+        `gBagPockets` runtime pointer view (same storage, one fewer
+        indirection, and no dependency on `SetBagItemsPointers` having run
+        this boot).
+
+        Scans every pocket rather than resolving `item`'s own pocket via
+        `GetItemPocket` first: `AddBagItem` only ever places an item in
+        the one pocket its type maps to, so summing matches across all
+        five pockets gives the same answer as looking the pocket up, with
+        one fewer primitive to add. Quantities are stored XOR'd against
+        the save's encryption key, same as money (`BagPocket_
+        GetSlotDataGeneric`, `engine/src/item.c`) -- the raw `u16` is not
+        the count.
+        """
+        item_id = self.resolve_constant(item) if isinstance(item, str) else item
+        o = self.offsets
+        key = self._encryption_key() & 0xFFFF
+        bag_base = self.sb1 + o["off_sb1_bag"]
+        stride = o["sizeof_itemslot"]
+        total = 0
+        for off_key, count_key in Emulator._BAG_POCKETS:
+            pocket_base = bag_base + o[off_key]
+            for i in range(o[count_key]):
+                slot = pocket_base + i * stride
+                if self.u16(slot + o["off_itemslot_itemid"]) != item_id:
+                    continue
+                total += self.u16(slot + o["off_itemslot_quantity"]) ^ key
+        return total
+
+    def item_price(self, item: str | int) -> int:
+        """`GetItemPrice` (`engine/src/item.c`): `gItemsInfo[item].price`.
+        `gItemsInfo` is a plain `const` ROM table, not save state -- no
+        encryption, no pointer indirection through a save block."""
+        item_id = self.resolve_constant(item) if isinstance(item, str) else item
+        o = self.offsets
+        addr = (self.symbols["gItemsInfo"] + item_id * o["sizeof_iteminfo"]
+                + o["off_iteminfo_price"])
+        return self.u32(addr)
 
     def field_locked(self) -> bool:
         """True while a script/dialogue holds the overworld controls."""
