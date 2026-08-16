@@ -521,6 +521,113 @@ def test_canlose_unrecognized_party_expr_falls_through_to_queue(
 
 
 # ----------------------------------------------------------------------------
+# Feature 4b — facility trainer battle idiom (plain 5-arg, non-canlose
+# pbTrainerBattle inside a 111), CH03's Mawuli (Map068_EV014_Page1).
+# ----------------------------------------------------------------------------
+
+
+def _facility_call(
+    trainer_class: str = "RICHBOY",
+    name: str = "Mawuli",
+    defeat_text: str = "See? We keep losing!",
+    canlose: str = "false",
+    party_expr: str = "0",
+) -> str:
+    return (
+        f'pbTrainerBattle(PBTrainers::{trainer_class},"{name}",'
+        f'_I("{defeat_text}"),{canlose},{party_expr})'
+    )
+
+
+def _facility_commands(
+    call: str, then_body: list[dict], else_body: list[dict] | None = None
+) -> list[dict]:
+    cmds = [cmd(T.CONDITIONAL_BRANCH, [12, call], indent=0)]
+    cmds += [dict(c, indent=1) for c in then_body]
+    if else_body is not None:
+        cmds.append(cmd(T.ELSE_BRANCH, indent=0))
+        cmds += [dict(c, indent=1) for c in else_body]
+    cmds.append(cmd(T.BRANCH_END, indent=0))
+    return cmds
+
+
+def test_facility_battle_emits_no_intro_and_clears_flag(ctx: T.TranspileContext) -> None:
+    ctx.trainers = {("TRAINER_CLASS_RICHBOY", "Mawuli", 0): "TRAINER_MAWULI_90"}
+    commands = _facility_commands(
+        _facility_call(),
+        then_body=[cmd(T.SHOW_TEXT, ["Thanks! Now they're fighting fit!"])],
+        else_body=[],
+    )
+    res = run_event(ctx, [commands], map_id=68, event_id=14)
+
+    assert (
+        "trainerbattle_no_intro(TRAINER_MAWULI_90, "
+        "Map068_EV014_Page1_FacilityLoseText)"
+    ) in res.text
+    assert "cleartrainerflag(TRAINER_MAWULI_90)" in res.text
+    assert 'format("Thanks! Now they\'re fighting fit!")' in res.text
+    assert "text Map068_EV014_Page1_FacilityLoseText {" in res.text
+    assert 'format("See? We keep losing!")' in res.text
+    assert res.unhandled == []
+
+
+def test_facility_battle_nonempty_otherwise_falls_through_to_queue(
+    ctx: T.TranspileContext,
+) -> None:
+    ctx.trainers = {("TRAINER_CLASS_RICHBOY", "Mawuli", 0): "TRAINER_MAWULI_90"}
+    commands = _facility_commands(
+        _facility_call(),
+        then_body=[],
+        else_body=[cmd(T.SHOW_TEXT, ["Argh!"])],
+    )
+    res = run_event(ctx, [commands], map_id=68, event_id=14)
+    assert len(res.unhandled) == 1
+    assert "trainerbattle_no_intro" not in res.text
+
+
+def test_facility_battle_canlose_true_falls_through_to_queue(
+    ctx: T.TranspileContext,
+) -> None:
+    ctx.trainers = {("TRAINER_CLASS_RICHBOY", "Mawuli", 0): "TRAINER_MAWULI_90"}
+    commands = _facility_commands(
+        _facility_call(canlose="true"), then_body=[], else_body=[]
+    )
+    res = run_event(ctx, [commands], map_id=68, event_id=14)
+    assert len(res.unhandled) == 1
+    assert "trainerbattle_no_intro" not in res.text
+
+
+def test_facility_battle_self_switch_in_win_body_falls_through_to_queue(
+    ctx: T.TranspileContext,
+) -> None:
+    """Map019 EV6 ("Richard") shape: identical inner call, but the win-body
+    flips a self-switch to retire the page -- a one-time sight trainer, not
+    a repeatable facility. Must not fire (see the idiom's own docstring)."""
+    ctx.trainers = {("TRAINER_CLASS_RICHBOY", "Mawuli", 0): "TRAINER_MAWULI_90"}
+    commands = _facility_commands(
+        _facility_call(),
+        then_body=[
+            cmd(T.SHOW_TEXT, ["Aaaaargh!"]),
+            cmd(T.CONTROL_SELF_SWITCH, ["A", 0]),
+        ],
+        else_body=[],
+    )
+    res = run_event(ctx, [commands], map_id=68, event_id=14)
+    assert len(res.unhandled) == 1
+    assert "trainerbattle_no_intro" not in res.text
+
+
+def test_facility_battle_unknown_trainer_falls_through_to_queue(
+    ctx: T.TranspileContext,
+) -> None:
+    # ctx.trainers deliberately empty -- (class, name, party) has no entry
+    commands = _facility_commands(_facility_call(), then_body=[], else_body=[])
+    res = run_event(ctx, [commands], map_id=68, event_id=14)
+    assert len(res.unhandled) == 1
+    assert "trainerbattle_no_intro" not in res.text
+
+
+# ----------------------------------------------------------------------------
 # real-compile smoke test (real poryscript binary; skip when absent)
 # ----------------------------------------------------------------------------
 

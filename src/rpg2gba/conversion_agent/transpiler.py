@@ -1063,6 +1063,31 @@ def parse_tree(commands: list[dict]) -> list[Node]:
     return parse_block(0)
 
 
+def _tree_writes_self_switch(nodes: list[Node]) -> bool:
+    """True if any node in ``nodes``, recursively, is a raw code-123 Control
+    Self Switch command. Used by ``_emit_facility_trainer_battle_idiom`` to
+    tell a repeatable facility win-body (plain dialogue) apart from a
+    one-time sight trainer's win-body (dialogue + a self-switch flip so the
+    page never re-triggers) — the two idioms share an identical inner
+    code-111/pbTrainerBattle shape and only differ here."""
+    for n in nodes:
+        if n.cmd.get("code") == CONTROL_SELF_SWITCH:
+            return True
+        if isinstance(n, IfNode):
+            if _tree_writes_self_switch(n.then):
+                return True
+            if n.otherwise and _tree_writes_self_switch(n.otherwise):
+                return True
+        elif isinstance(n, ChoiceNode):
+            for _, _, children in n.arms:
+                if _tree_writes_self_switch(children):
+                    return True
+        elif isinstance(n, LoopNode):
+            if _tree_writes_self_switch(n.children):
+                return True
+    return False
+
+
 @dataclass
 class _RubyLocal:
     """An integer Ruby local tracked across script rows: ``$game_variables
@@ -1757,6 +1782,9 @@ class _PageEmitter:
         canlose_battle = self._emit_canlose_trainer_battle_idiom(node)
         if canlose_battle is not None:
             return canlose_battle
+        facility_battle = self._emit_facility_trainer_battle_idiom(node)
+        if facility_battle is not None:
+            return facility_battle
         randomizer = self._emit_randomizer_branch(node)
         if randomizer is not None:
             return randomizer
@@ -2145,6 +2173,114 @@ class _PageEmitter:
         lines.append("} else {")
         lines += [f"    {ln}" for ln in won_body]
         lines.append("}")
+        return lines
+
+    def _emit_facility_trainer_battle_idiom(self, node: IfNode) -> list[str] | None:
+        """A repeatable, non-canlose ``pbTrainerBattle(...)`` embedded as a
+        code-111 script condition inside a Yes/No offer — CH03's Mawuli
+        (``Map068_EV014_Page1``: single always-active page, no self-switch
+        gate, ``pbTrainerBattle(PBTrainers::RICHBOY,"Mawuli",_I("..."),
+        false,0)``). Distinct from ``_emit_canlose_trainer_battle_idiom``'s
+        call shape — that one is a 6+-arg
+        ``[class,name,_I,doublebattle,party_id,canlose,...]`` form; this is
+        the plain 5-arg ``[class,name,_I,canlose,party_id]`` form
+        ``deterministic._parse_trainer_battle_call`` already models for the
+        route-trainer classifier. Since ``canlose`` is false here, a loss
+        blacks the player out to the last Pokémon Center exactly like
+        vanilla ``trainerbattle_single`` — the RMXP ``otherwise`` (code-412)
+        branch is therefore unreachable and must be empty; a non-empty one
+        means this isn't the facility idiom and we bail to the generic
+        queue rather than guess.
+
+        The offer text ("Wanna fight?") and the accept line ("OK, here we
+        come!") are ordinary sibling ``Show Text`` nodes emitted by the
+        normal node walk before this ``IfNode`` runs — so the battle line
+        uses ``trainerbattle_no_intro`` (NULL intro, ``asm/macros/
+        event.inc:828``) rather than duplicating a greeting.
+        ``cleartrainerflag`` follows the win so the facility stays
+        repeatable — nothing here is a native sight trainer, but leaving the
+        engine's own "already defeated" bookkeeping stale would be a latent
+        trap for any future feature (trainer card, match call) that reads
+        it.
+
+        Returns ``None`` (falls through to the generic script-condition
+        queue) for: not a script condition, not a
+        ``pbTrainerBattle(``/is a ``pbDoubleTrainerBattle``, fewer than 5
+        parsed args, a canlose arg that isn't ``false``/``0``, a
+        non-digit party id, an unparseable class/name/defeat text, an
+        unknown trainer in ``ctx.trainers``, a non-empty ``otherwise``, or a
+        win-body that itself writes a self-switch.
+
+        That last guard is load-bearing, not defensive filler: Map019 EV6
+        ("Richard") wraps this exact same inner shape — 5-arg call,
+        canlose=false, empty ``otherwise`` — inside an outer sw94 pre/post-
+        Gym-5 branch, but its win-body sets self-switch A to flip the page to
+        a permanently idle one, i.e. a one-time sight trainer, not a
+        repeatable facility. Without this check the fork-index gate catches
+        the mistake anyway (Richard's trainer ids aren't staged), but it
+        would catch it as an unstaged-constant error instead of what it
+        actually is: this idiom firing on the wrong shape.
+        """
+        ctx = self.ctx
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        call = params[1]
+        if "pbTrainerBattle(" not in call or "pbDoubleTrainerBattle" in call:
+            return None
+        if node.otherwise:
+            return None
+        if _tree_writes_self_switch(node.then):
+            return None
+
+        m_class = _CANLOSE_TRAINER_CLASS_RE.search(call)
+        if not m_class:
+            return None
+        class_const = to_constant("TRAINER_CLASS", m_class.group(1))
+
+        m_name = _CANLOSE_NAME_RE.search(call)
+        if not m_name:
+            return None
+        name = m_name.group(1)
+
+        m_defeat = _CANLOSE_DEFEAT_TEXT_RE.search(call)
+        defeat_raw = m_defeat.group(1) if m_defeat else ""
+
+        cleaned_call = _CANLOSE_STRIP_I_RE.sub("_I", call)
+        m_args = _CANLOSE_CALL_ARGS_RE.search(cleaned_call)
+        if not m_args:
+            return None
+        args = [a.strip() for a in m_args.group(1).split(",")]
+        # args: [class_expr, name_str, _I, canlose, party_id] — the plain
+        # 5-arg form; distinct from the canlose idiom's 6+-arg layout above
+        # (which also has a "false" token at index 3 -- the doublebattle
+        # flag, not canlose -- so an exact-length check is required to avoid
+        # misreading that shape as this one; a >= check let a 6-arg canlose
+        # call with doublebattle=false alias into this idiom).
+        if len(args) != 5:
+            return None
+        if args[3] not in ("false", "0"):
+            return None  # canlose battle — the earlyrival idiom's turf
+        if not args[4].isdigit():
+            return None
+        party_id = int(args[4])
+
+        trainer_const = ctx.trainers.get((class_const, name, party_id))
+        if trainer_const is None:
+            return None
+
+        defeat_result = translate_text_codes(defeat_raw)
+        if defeat_result is None:
+            return None
+
+        lose_label = f"{self.page_label}_FacilityLoseText"
+        self.text_blocks.append((lose_label, format_pory_dialogue(defeat_result.text)))
+
+        lines = [
+            f"trainerbattle_no_intro({trainer_const}, {lose_label})",
+            f"cleartrainerflag({trainer_const})",
+        ]
+        lines += self.emit_nodes(node.then)
         return lines
 
     def _emit_inline_choice(self, node: TextRun) -> list[str]:

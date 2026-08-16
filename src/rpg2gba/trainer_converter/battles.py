@@ -72,6 +72,7 @@ _CLASS_PIC_INTERNAL_NAME: dict[str, str] = {
     "TRAINER_CLASS_EXPERT": "EXPERT_FEMALE",
     "TRAINER_CLASS_LASS": "LASS",
     "TRAINER_CLASS_RIVAL": "RIVAL",
+    "TRAINER_CLASS_RICH_BOY": "RICHBOY",
 }
 
 #: Real `TRAINER_CLASS_*` constant -> real `TRAINER_ENCOUNTER_MUSIC_*`
@@ -85,6 +86,10 @@ _CLASS_ENCOUNTER_MUSIC: dict[str, str] = {
     "TRAINER_CLASS_EXPERT": "TRAINER_ENCOUNTER_MUSIC_INTENSE",
     "TRAINER_CLASS_LASS": "TRAINER_ENCOUNTER_MUSIC_FEMALE",
     "TRAINER_CLASS_RIVAL": "TRAINER_ENCOUNTER_MUSIC_MALE",
+    # Vanilla's own TRAINER_CLASS_RICH_BOY entries all use this
+    # (engine/src/data/trainers.h, e.g. TRAINER_WINSTON_1) — not guessed from
+    # the generic Male bucket.
+    "TRAINER_CLASS_RICH_BOY": "TRAINER_ENCOUNTER_MUSIC_RICH",
 }
 
 _TRAINER_ANCHOR_RE_TMPL = r"^#define\s+{anchor}\s+(\d+)\s*$"

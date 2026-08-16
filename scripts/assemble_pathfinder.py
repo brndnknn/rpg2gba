@@ -496,6 +496,21 @@ def run_trainer_pass(out: Path, fork: Path, uranium_src: Path, dry_run: bool) ->
     for name, dest_dir in _TRAINER_HEADER_DEST_DIRS.items():
         _copy(trainer_dir / name, fork / dest_dir / name, name, dry_run)
 
+    # trainer_rules.mk's `%.h: %.party $(TRAINERPROC)` rule only lists
+    # trainers.party itself as a prerequisite -- it doesn't know
+    # trainers.party #includes uranium_trainer_party.inc, so copying a
+    # changed .inc above leaves src/data/trainers.h stale (make sees
+    # trainers.party's own mtime unchanged and skips TRAINERPROC). A newly
+    # staged battle then compiles with a trainer id `gTrainers[]` has no
+    # entry for -- not a build error, a runtime "OPPONENT NEEDS A VALID
+    # NAME" assert (2026-08-15 finding, Mawuli/CH03). Touch trainers.party
+    # so its mtime always wins and make regenerates trainers.h.
+    if not dry_run:
+        trainers_party = fork / "src" / "data" / "trainers.party"
+        if trainers_party.is_file():
+            trainers_party.touch()
+            logger.info("  touched %s (force trainers.h regen)", trainers_party)
+
     # --- Copy per-trainer art into the fork tree ---
     # stage.py bakes `graphics/trainers/uranium/<asset_dir>/<file>` engine-relative
     # paths into its INCGFX declarations (uranium_trainer_graphics.h) and the

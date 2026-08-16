@@ -76,6 +76,11 @@ SLICE_TRAINER_PICS: tuple[TrainerPicSpec, ...] = (
     TrainerPicSpec(32, "TRIATHLETE_MALERUNNER"),
     TrainerPicSpec(38, "EXPERT_FEMALE"),
     TrainerPicSpec(2, "LASS"),
+    # CH03 (Kevlar Town): Mawuli, TRAINER_CLASS_RICH_BOY. trainer_id 14 is
+    # trainertypes.dat's own id for RICHBOY, verified against a real
+    # Graphics/Characters/trainer014.png before pinning (battles.py staging
+    # asserts this at runtime too).
+    TrainerPicSpec(14, "RICHBOY"),
 )
 
 #: internal_name values in `SLICE_TRAINER_PICS` that additionally get a player
@@ -114,6 +119,9 @@ SLICE_TRAINER_BATTLES: tuple[str, ...] = (
     "TRAINER_THEO_9",
     "TRAINER_THEO_10",
     "TRAINER_THEO_11",
+    # CH03 (Kevlar Town): Mawuli's repeatable Pokémon Center facility battle
+    # (transpiler._emit_facility_trainer_battle_idiom).
+    "TRAINER_MAWULI_90",
 )
 
 

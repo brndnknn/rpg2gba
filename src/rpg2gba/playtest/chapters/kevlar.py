@@ -549,8 +549,10 @@ def b5(emu: Emulator) -> None:
 # -- B8 ------------------------------------------------------------------
 
 @kevlar.beat("B8", "Mawuli's facility battle: win, and the offer repeats "
-                   "(module finding 1: no `trainerbattle*` command exists "
-                   "in the compiled script -- expected to fail)",
+                   "(transpiler._emit_facility_trainer_battle_idiom, "
+                   "2026-08-15 -- converts the code-111-wrapped "
+                   "pbTrainerBattle to trainerbattle_no_intro + "
+                   "cleartrainerflag so the facility stays repeatable)",
              map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=MAWULI_APPROACH)
 def b8(emu: Emulator) -> None:
     from ..battle import in_battle, win_battle
@@ -569,13 +571,18 @@ def b8(emu: Emulator) -> None:
     emu.walk_to(*MAWULI_APPROACH)
     emu.face(MAWULI_FACING)
     emu.interact()
-    emu.advance_dialog("A")  # commits YES at "Wanna fight?"
+    # commits YES at "Wanna fight?"; must stop the mash the instant the
+    # battle starts (route1.py's `_advance_to_battle` pattern) -- without
+    # `stop=`, advance_dialog keeps holding A THROUGH the whole battle
+    # (yesnobox/msgbox both advance on A) and only returns once it resolves
+    # on its own, so the in_battle() check below reads False even on a
+    # genuine win (2026-08-15 finding).
+    emu.advance_dialog("A", stop=lambda: in_battle(emu))
     if not in_battle(emu):
         shot = emu.screenshot("b8_no_battle")
         raise ScenarioError(
-            f"B8: accepting Mawuli's offer did not start a battle -- no "
-            f"trainerbattle* command exists in Map068_EV014_Page1, see "
-            f"module docstring finding 1 ({shot})")
+            f"B8: accepting Mawuli's offer did not start a battle "
+            f"({shot})")
     win_battle(emu)
     # Re-offer: talk again, expect the SAME offer (no state latch anywhere
     # in the script -- it's a facility loop, not a one-time flag).
@@ -594,6 +601,11 @@ def b8(emu: Emulator) -> None:
                     "counter sign",
              map_constant="MAP_KEVLAR_TOWN", at=MART_DOOR)
 def b10(emu: Emulator) -> None:
+    # B8 ends with the player still inside the Pokémon Center -- there is no
+    # B9 in this scenario (renumbered away from the spec's raw sequence, see
+    # module docstring), so this beat must leave the Center itself before
+    # walking to MART_DOOR, exactly like B3's own entry/exit pair.
+    _cross_threshold(emu, "B10", CENTER_EXIT_APPROACH, "DOWN", "MAP_KEVLAR_TOWN")
     _enter_door(emu, "B10", MART_DOOR, "MAP_KEVLAR_TOWN_POKEMART")
     _assert_near(emu, "B10", MART_ARRIVAL)
 
