@@ -222,10 +222,17 @@ BOUTIQUE_NPC_APPROACH = (46, 9)
 BOUTIQUE_NPC_FACING = "UP"
 
 # B15: Bike Repair Shop door + NPC, map73 local id 1, (5,7), FACE_DOWN.
+# The NPC stands behind a solid counter run: decoding collision out of
+# `data/layouts/KevlarTownBuildings/map.bin` (70x15, bits 10-11) shows
+# y=8 and y=9 blocked across x=0..6, so the tile directly below the NPC
+# cannot be stood on and an UP-facing approach is impossible -- and unlike
+# the Mart, no MB_COUNTER reach-over helps, because the tile you would
+# reach from is itself wall. The customer side is the corridor to the
+# NPC's right, so talk from (6,7) facing LEFT.
 BIKE_SHOP_DOOR = (23, 28)
 BIKE_SHOP_ARRIVAL = (5, 11)
-BIKE_SHOP_NPC_APPROACH = (5, 8)
-BIKE_SHOP_NPC_FACING = "UP"
+BIKE_SHOP_NPC_APPROACH = (6, 7)
+BIKE_SHOP_NPC_FACING = "LEFT"
 
 # B16: the two flavor houses.
 MAURY_DOOR = (37, 28)
@@ -762,11 +769,20 @@ def b12(emu: Emulator) -> None:
 @kevlar.beat("B13", "Picking a Map031 berry plant works (native "
                     "BerryTreeScript)",
              locations=(
-                 BeatLocation("MAP_KEVLAR_TOWN_POKEMART", 10, 9, "mart exit"),
+                 BeatLocation("MAP_KEVLAR_TOWN_POKEMART", MART_ARRIVAL[0],
+                              MART_ARRIVAL[1], "mart exit"),
                  BeatLocation("MAP_KEVLAR_TOWN", BERRY_PLANT_APPROACH[0], BERRY_PLANT_APPROACH[1], "berry plant"),
              ))
 def b13(emu: Emulator) -> None:
-    _cross_threshold(emu, "B13", (10, 9), "DOWN", "MAP_KEVLAR_TOWN")
+    # Cross from MART_ARRIVAL, not MART_COUNTER_APPROACH: the mart's exit
+    # mat is (10,11) and the arrival tile (10,10) sits between it and the
+    # counter, so a single step DOWN from (10,9) only reaches the arrival
+    # tile and no warp fires. Same shape as the Center, whose
+    # CENTER_EXIT_APPROACH is likewise its arrival tile with the mats a row
+    # below (`KevlarTownPokemonCenter/map.json`: arrival (8,18), mats
+    # (7,19)/(8,19)). This beat had never run before 2026-08-16 -- the old
+    # B11 hung ahead of it -- so the mistake was invisible.
+    _cross_threshold(emu, "B13", MART_ARRIVAL, "DOWN", "MAP_KEVLAR_TOWN")
     emu.walk_to(*BERRY_PLANT_APPROACH)
     emu.face(BERRY_PLANT_FACING)
     emu.interact()
@@ -799,6 +815,13 @@ def b14(emu: Emulator) -> None:
     if not emu.flag(ssa):
         shot = emu.screenshot("b14_no_ssa")
         raise ScenarioError(f"B14: {ssa} not set after talking ({shot})")
+    # Leave the Boutique: B15 walks straight to a door on MAP_KEVLAR_TOWN
+    # and needs to start outdoors, and B16 already pairs its own entry with
+    # an exit rather than leaning on the next beat. Cross from the arrival
+    # tile (44,12) -- the exit mat is (44,13), one row below, the same
+    # arrival-above/mat-below shape as the Mart and the Center
+    # (`KevlarTownBuildings/map.json`).
+    _cross_threshold(emu, "B14", BOUTIQUE_ARRIVAL, "DOWN", "MAP_KEVLAR_TOWN")
 
 
 # -- B15 -----------------------------------------------------------------
@@ -821,6 +844,9 @@ def b15(emu: Emulator) -> None:
     if emu.field_locked():
         shot = emu.screenshot("b15_stuck")
         raise ScenarioError(f"B15: the Bike Shop dialogue did not close cleanly ({shot})")
+    # Leave the shop, same reason B14 does: B16 starts by walking to a door
+    # on MAP_KEVLAR_TOWN. Arrival (5,11), exit mat (5,12).
+    _cross_threshold(emu, "B15", BIKE_SHOP_ARRIVAL, "DOWN", "MAP_KEVLAR_TOWN")
 
 
 # -- B16 -----------------------------------------------------------------
@@ -829,19 +855,26 @@ def b15(emu: Emulator) -> None:
                     "house) warp in and back out cleanly",
              locations=(
                  BeatLocation("MAP_KEVLAR_TOWN", MAURY_DOOR[0], MAURY_DOOR[1], "Maury door"),
-                 BeatLocation("MAP_KEVLAR_TOWN_BUILDINGS", 24, 13, "Maury exit approach"),
+                 BeatLocation("MAP_KEVLAR_TOWN_BUILDINGS", MAURY_ARRIVAL[0],
+                              MAURY_ARRIVAL[1], "Maury exit approach"),
                  BeatLocation("MAP_KEVLAR_TOWN", COUPLE_DOOR[0], COUPLE_DOOR[1], "couple door"),
-                 BeatLocation("MAP_KEVLAR_TOWN_BUILDINGS", 64, 13, "couple exit approach"),
+                 BeatLocation("MAP_KEVLAR_TOWN_BUILDINGS", COUPLE_ARRIVAL[0],
+                              COUPLE_ARRIVAL[1], "couple exit approach"),
              ))
 def b16(emu: Emulator) -> None:
+    # Cross from the ARRIVAL tiles, not the exit mats one row below them
+    # (24,13)/(64,13). `_cross_threshold` walks to its approach tile first,
+    # and walking onto a mat trips the warp mid-route -- `walk_to` then
+    # fails with "interrupted by a locked-field scene" on the very tile it
+    # was heading for. The approach must be the tile you step FROM.
     _enter_door(emu, "B16", MAURY_DOOR, "MAP_KEVLAR_TOWN_BUILDINGS")
     _assert_near(emu, "B16", MAURY_ARRIVAL)
-    _cross_threshold(emu, "B16", (24, 13), "DOWN", "MAP_KEVLAR_TOWN")
+    _cross_threshold(emu, "B16", MAURY_ARRIVAL, "DOWN", "MAP_KEVLAR_TOWN")
     _assert_near(emu, "B16", MAURY_DOOR)
 
     _enter_door(emu, "B16", COUPLE_DOOR, "MAP_KEVLAR_TOWN_BUILDINGS")
     _assert_near(emu, "B16", COUPLE_ARRIVAL)
-    _cross_threshold(emu, "B16", (64, 13), "DOWN", "MAP_KEVLAR_TOWN")
+    _cross_threshold(emu, "B16", COUPLE_ARRIVAL, "DOWN", "MAP_KEVLAR_TOWN")
     _assert_near(emu, "B16", COUPLE_DOOR)
 
 
