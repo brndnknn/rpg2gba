@@ -1235,6 +1235,90 @@ def _merge_consecutive_routes(nodes: list[Node]) -> list[Node]:
     return merged
 
 
+_SCRIPT_ROW_TRAILING_ASSIGN_RE = re.compile(r"(?<![=!<>])=\s*$")
+
+
+def _script_row_leaves_expression_open(text: str) -> bool:
+    """True when ``text`` (a 355/655 row, or the join of a run of them so
+    far) ends mid-expression — an unbalanced bracket/paren/brace, or a bare
+    trailing ``=`` (the split-assignment opener shape, e.g.
+    ``$PokemonGlobal.seenStorageCreator=``). Used by
+    ``_merge_script_call_rows`` to tell "RMXP wrapped this one call across
+    several editor rows" apart from "the scripter wrote several complete
+    statements, one per row" — both shapes reuse the same 355/655 codes, and
+    only the former is safe to concatenate with no separator."""
+    depth = 0
+    for ch in text:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+    if depth > 0:
+        return True
+    return bool(_SCRIPT_ROW_TRAILING_ASSIGN_RE.search(text))
+
+
+def _merge_script_call_rows(nodes: list[Node]) -> list[Node]:
+    """Fuse a run of one code-355 Script leaf plus immediately-following
+    code-655 continuation leaves into a single logical node, when the
+    accumulated text is still an open expression (see
+    ``_script_row_leaves_expression_open``).
+
+    RMXP's script editor wraps a single logical line at the box's character
+    width, mid-token — so a call like ``pbPokemonMart([...])`` that overruns
+    the box lands as a 355 row followed by several 655 rows that are each an
+    exact substring of the original text, split with nothing lost or added.
+    Concatenating them edge-to-edge (no separator) reconstructs the original
+    source; that's what lets ``_emit_script_call`` match an idiom against the
+    joined text instead of failing on each fragment independently (the
+    Kevlar Town Poké Mart bug: eight ``PBItems::`` continuation rows, each
+    queued on its own instead of the one native mart call they spell out
+    together).
+
+    This is deliberately NOT "join every consecutive 355/655 run" — several
+    idioms (the pbStarterSelector Ruby-locals build-up, the argmax
+    if/elsif/end remap chain) rely on 355/655 rows that are genuinely
+    separate complete Ruby statements the scripter wrote one per line, not
+    wrap fragments of one call; joining those with no separator would
+    concatenate distinct statements into unparseable garbage and silently
+    break the row-by-row state machines built for them. The two shapes are
+    told apart by whether the text so far is still "open" mid-expression.
+
+    Only adjacent Leaf nodes merge — a comment row or any structural node
+    (IfNode/ChoiceNode/LoopNode) between two script-call rows breaks the run
+    (see the ``$PokemonGlobal.seenStorageCreator=`` pending-opener machinery
+    in ``_emit_script_call``, which still covers exactly that non-adjacent
+    case). The merged node keeps the first row's index, so a queue entry for
+    an unmatched joined call still points at the row a human would look at.
+    """
+    merged: list[Node] = []
+    for node in nodes:
+        if (
+            type(node) is Leaf
+            and node.cmd.get("code") == SCRIPT_CONT
+            and merged
+            and type(merged[-1]) is Leaf
+            and merged[-1].cmd.get("code") in (SCRIPT, SCRIPT_CONT)
+        ):
+            prev = merged[-1]
+            prev_params = prev.cmd.get("parameters", [])
+            prev_text = (
+                prev_params[0]
+                if prev_params and isinstance(prev_params[0], str) else ""
+            )
+            if _script_row_leaves_expression_open(prev_text):
+                params = node.cmd.get("parameters", [])
+                text = params[0] if params and isinstance(params[0], str) else ""
+                fused_cmd = {
+                    **prev.cmd,
+                    "parameters": [prev_text + text, *prev_params[1:]],
+                }
+                merged[-1] = Leaf(cmd=fused_cmd, index=prev.index)
+                continue
+        merged.append(node)
+    return merged
+
+
 def _is_real_warp_leaf(node: Node) -> bool:
     """True for a Transfer Player leaf that emit_node actually turns into a
     native ``warp(...)``/``waitstate`` pair (mode-0, literal x/y/map) — the
@@ -1537,6 +1621,11 @@ class _PageEmitter:
         self.page_label = page_label
         self.movements: list[tuple[str, list[str]]] = []  # (label, tokens)
         self.text_blocks: list[tuple[str, str]] = []  # (label, formatted content)
+        # Fully-rendered auxiliary blocks (e.g. a `mart { ... }` list) an
+        # idiom needs to emit alongside the page's script block. Unlike
+        # movements/text_blocks these are pre-rendered strings, appended
+        # verbatim by the caller (see _emit_script_call's pbPokemonMart arm).
+        self.aux_blocks: list[str] = []
         self._last_route_ok = False  # was the most recent 209 emitted?
         self._choice_count = 0  # running per-page \ch counter (label uniqueness)
         # Ruby locals built across 355/655 rows: name -> (source_var_id, offset,
@@ -1573,6 +1662,7 @@ class _PageEmitter:
 
     def emit_nodes(self, nodes: list[Node]) -> list[str]:
         nodes = _merge_consecutive_routes(nodes)
+        nodes = _merge_script_call_rows(nodes)
         warp_pos = next(
             (i for i, node in enumerate(nodes) if _is_real_warp_leaf(node)), None
         )
@@ -2829,7 +2919,11 @@ class _PageEmitter:
         # v1: the STRIP set from the validated ledger produces nothing; two
         # slice-proven idioms emit deterministically; everything else queues
         # (the idiom library grows per grill D8 on queue evidence).
-        from rpg2gba.conversion_agent.deterministic import _DIALOGUE_STRIP_RE
+        from rpg2gba.conversion_agent.deterministic import (
+            _DIALOGUE_STRIP_RE,
+            _PBPOKEMART_ITEM_RE,
+            _PBPOKEMART_LIST_RE,
+        )
         params = node.cmd.get("parameters", [])
         text = params[0] if params and isinstance(params[0], str) else ""
 
@@ -2916,6 +3010,29 @@ class _PageEmitter:
         # (see _NUZLOCKE_HEAL_STRIP_RE). Breadcrumb, no queue.
         if _NUZLOCKE_HEAL_STRIP_RE.match(text):
             return ["# nuzlocke heal loop stripped — code-314 Recover All covers it"]
+
+        # pbPokemonMart([item, ...]) — the joined multi-row shop call (see
+        # _merge_script_call_rows). Mirrors classify_pokemart's native
+        # pokemart(<label>)/mart{...} shape, but bare: unlike the classifier
+        # (which builds a whole standalone page), this idiom emits into a
+        # page the caller's normal trigger handling already wraps in
+        # lock/faceplayer/release, so no ceremony here. Every item symbol
+        # must resolve through ctx.items or the whole call falls through to
+        # the queue — never a partial mart list (CLAUDE.md §4.5).
+        m = _PBPOKEMART_LIST_RE.search(text)
+        if m:
+            consts: list[str] = []
+            for sym in _PBPOKEMART_ITEM_RE.findall(m.group(1)):
+                const = self.ctx.items.get(sym)
+                if const is None:
+                    consts = []
+                    break
+                consts.append(const)
+            if consts:
+                mart_label = f"{self.page_label}_Mart"
+                mart_inner = "\n".join(f"    {const}" for const in consts)
+                self.aux_blocks.append(f"mart {mart_label} {{\n{mart_inner}\n}}")
+                return [f"pokemart({mart_label})"]
 
         # `<statement> if $game_variables[V]==K` — split the trailing modifier-if
         # off and emit the statement inside a poryscript `if`. A guard whose
@@ -3512,15 +3629,19 @@ def _insert_terminal_hide_removeobject(
 def transpile_page(
     page: dict, ctx: TranspileContext, page_label: str
 ) -> tuple[list[str], list[tuple[str, list[str]]], list[tuple[str, str]],
-           list[tuple[str, list[str]]]]:
-    """Body lines + movement blocks + text blocks + hoisted label blocks for
-    one page. Queue entries land in ctx.
+           list[tuple[str, list[str]]], list[str]]:
+    """Body lines + movement blocks + text blocks + hoisted label blocks +
+    auxiliary blocks for one page. Queue entries land in ctx.
 
     The fourth element is the RMXP-label basic-block split (see
     `hoistable_label_region`): `(block_label, body_lines)` pairs the caller
     renders as sibling `script` blocks. They are entered by `goto` from this
     page with its script context (and its `lock`) already live, so they take
     the trigger's *epilogue* only — never its `lock` prologue.
+
+    The fifth element is `emitter.aux_blocks` — fully-rendered sibling blocks
+    (e.g. a `mart { ... }` list) an idiom needed alongside the page's script
+    block; the caller appends them to its output verbatim.
     """
     commands = page.get("list", [])
     region = hoistable_label_region(commands)
@@ -3548,7 +3669,7 @@ def transpile_page(
         hoisted_body = emitter.emit_nodes(parse_tree(region_cmds))
         hoisted_body = _insert_terminal_hide_removeobject(hoisted_body, emitter.movements, ctx)
         hoisted.append((block_label, hoisted_body))
-    return body, emitter.movements, emitter.text_blocks, hoisted
+    return body, emitter.movements, emitter.text_blocks, hoisted, emitter.aux_blocks
 
 
 def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> TranspiledEvent:
@@ -3566,7 +3687,7 @@ def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> Transpil
     for page_no, page in enumerate(event.get("pages", []), start=1):
         ctx.page_no = page_no
         label = _page_label(map_id, event, page_no)
-        body, movements, text_blocks, hoisted = transpile_page(page, ctx, label)
+        body, movements, text_blocks, hoisted, aux_blocks = transpile_page(page, ctx, label)
         trigger = page.get("trigger")
         # Hoisted label blocks are entered by `goto` with the page's lock
         # already held, so they need the epilogue but not the prologue. Without
@@ -3605,6 +3726,7 @@ def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> Transpil
             blocks.append(_render_movement(m_label, tokens))
         for t_label, content in text_blocks:
             blocks.append(_render_text_block(t_label, content))
+        blocks.extend(aux_blocks)
 
     return TranspiledEvent(
         text="\n\n".join(blocks),
@@ -3630,7 +3752,7 @@ def transpile_common_event(ce: dict, ctx: TranspileContext) -> TranspiledEvent:
     before = len(ctx.unhandled)
 
     label = f"CommonEvent_{ce_id:03d}"
-    body, movements, text_blocks, hoisted = transpile_page(
+    body, movements, text_blocks, hoisted, aux_blocks = transpile_page(
         {"list": ce.get("list", [])}, ctx, label)
     body = body or []
     body.append("return")  # called script — return to the caller, never `end`
@@ -3650,6 +3772,7 @@ def transpile_common_event(ce: dict, ctx: TranspileContext) -> TranspiledEvent:
         blocks.append(_render_movement(m_label, tokens))
     for t_label, content in text_blocks:
         blocks.append(_render_text_block(t_label, content))
+    blocks.extend(aux_blocks)
 
     return TranspiledEvent(
         text="\n\n".join(blocks),

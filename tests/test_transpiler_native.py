@@ -349,7 +349,13 @@ def test_seen_storage_creator_split_row_sets_flag(ctx: T.TranspileContext) -> No
     assert "setflag(FLAG_SYS_PC_LANETTE)" in res.text
 
 
-def test_seen_storage_creator_split_row_false_queues_both_rows() -> None:
+def test_seen_storage_creator_split_row_false_queues_the_joined_call() -> None:
+    """`= false` is not the `= true` the flag models, so it must still queue --
+    but `_merge_script_call_rows` now fuses the adjacent opener and its
+    continuation (the opener's trailing `=` leaves the expression open) before
+    `_emit_script_call` sees either, so it queues ONCE for the one logical
+    statement rather than once per physical row. The stateful pending-opener
+    path this used to exercise now only covers a NON-adjacent split."""
     ctx = T.TranspileContext(registry=FlagRegistry())
     res = run_event(
         ctx,
@@ -358,7 +364,7 @@ def test_seen_storage_creator_split_row_false_queues_both_rows() -> None:
             cmd(T.SCRIPT_CONT, ["false"]),
         ]],
     )
-    assert len(res.unhandled) == 2
+    assert len(res.unhandled) == 1
     assert all(e.command_code == T.SCRIPT for e in res.unhandled)
     assert "setflag(FLAG_SYS_PC_LANETTE)" not in res.text
 

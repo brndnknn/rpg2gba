@@ -1529,3 +1529,116 @@ def test_string_list_readback_without_prior_materialize_queues(
     ]])
     codes = sorted(e.command_code for e in res.unhandled)
     assert codes == [T.SHOW_TEXT, T.SCRIPT]
+
+
+# ----------------------------------------------------------------------------
+# Feature 5 — script-call row joiner + pbPokemonMart idiom (Kevlar Town's
+# Poké Mart clerk, Map067 EV001: pbPokemonMart([...]) wrapped across a 355
+# and several 655 continuation rows, bracketed by unrelated code-121 switch
+# rows classify_pokemart bails on).
+# ----------------------------------------------------------------------------
+
+
+def _mart_ctx() -> T.TranspileContext:
+    ctx = T.TranspileContext(registry=FlagRegistry())
+    ctx.registry.propose_flag(185, "FLAG_TEMP_MART_OPEN")
+    ctx.items = {
+        "POKeBALL": "ITEM_POKE_BALL",
+        "POTION": "ITEM_POTION",
+        "ANTIDOTE": "ITEM_ANTIDOTE",
+        "ICEHEAL": "ITEM_ICE_HEAL",
+        "PARLYZHEAL": "ITEM_PARALYZE_HEAL",
+        "REPEL": "ITEM_REPEL",
+        "ESCAPEROPE": "ITEM_ESCAPE_ROPE",
+    }
+    return ctx
+
+
+def _mart_commands() -> list[dict]:
+    # The real Map067 EV001 page-0 shape: a switch flip, the wrapped mart
+    # call, another switch flip — classify_pokemart bails on the 121 rows,
+    # so this has to be the transpiler's job.
+    return [
+        cmd(T.CONTROL_SWITCHES, [185, 185, 0]),
+        cmd(T.SCRIPT, ["pbPokemonMart(["]),
+        cmd(T.SCRIPT_CONT, ["PBItems::POKeBALL,"]),
+        cmd(T.SCRIPT_CONT, ["PBItems::POTION,"]),
+        cmd(T.SCRIPT_CONT, ["PBItems::ANTIDOTE,"]),
+        cmd(T.SCRIPT_CONT, ["PBItems::ICEHEAL,"]),
+        cmd(T.SCRIPT_CONT, ["PBItems::PARLYZHEAL,"]),
+        cmd(T.SCRIPT_CONT, ["PBItems::REPEL,"]),
+        cmd(T.SCRIPT_CONT, ["PBItems::ESCAPEROPE])"]),
+        cmd(T.CONTROL_SWITCHES, [185, 185, 1]),
+    ]
+
+
+def test_wrapped_pokemart_call_emits_native_shop_and_mart_block() -> None:
+    ctx = _mart_ctx()
+    res = run_event(
+        ctx, [_mart_commands()], trigger=T.ACTION_BUTTON_TRIGGER, map_id=67, event_id=1,
+    )
+    assert "pokemart(Map067_EV001_Page1_Mart)" in res.text
+    assert (
+        "mart Map067_EV001_Page1_Mart {\n"
+        "    ITEM_POKE_BALL\n"
+        "    ITEM_POTION\n"
+        "    ITEM_ANTIDOTE\n"
+        "    ITEM_ICE_HEAL\n"
+        "    ITEM_PARALYZE_HEAL\n"
+        "    ITEM_REPEL\n"
+        "    ITEM_ESCAPE_ROPE\n"
+        "}"
+    ) in res.text
+    assert "UNHANDLED" not in res.text
+    assert res.unhandled == []
+
+
+def test_wrapped_pokemart_unresolved_item_falls_through_to_queue() -> None:
+    """One symbol (POTION) missing from ctx.items — no partial mart list, no
+    pokemart( line; the whole joined call queues instead of guessing."""
+    ctx = _mart_ctx()
+    ctx.items = {k: v for k, v in ctx.items.items() if k != "POTION"}
+    res = run_event(
+        ctx, [_mart_commands()], trigger=T.ACTION_BUTTON_TRIGGER, map_id=67, event_id=1,
+    )
+    assert "pokemart(" not in res.text
+    assert "mart Map067_EV001_Page1_Mart" not in res.text
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.SCRIPT
+
+
+def test_unmatched_wrapped_script_call_queues_once_not_per_row(
+    ctx: T.TranspileContext,
+) -> None:
+    """A multi-row call that matches no idiom at all — the joiner still fuses
+    the run, so it queues ONE entry for the whole logical call, not one per
+    physical 355/655 row (the pre-joiner noise this feature replaces)."""
+    res = run_event(ctx, [[
+        cmd(T.SCRIPT, ["pbSomeUnknownCall(["]),
+        cmd(T.SCRIPT_CONT, ["1,"]),
+        cmd(T.SCRIPT_CONT, ["2,"]),
+        cmd(T.SCRIPT_CONT, ["3])"]),
+    ]])
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.SCRIPT
+    assert "pbSomeUnknownCall([1,2,3])" in res.unhandled[0].description
+
+
+def test_wrapped_call_does_not_merge_across_a_structural_boundary(
+    ctx: T.TranspileContext,
+) -> None:
+    """A 355 row, then an `if`, then a 655 row at the *same* indent as the
+    355 must not fuse into one call — the `if` sits between them in the
+    node list, breaking the run."""
+    ctx.items = _mart_ctx().items
+    res = run_event(ctx, [[
+        cmd(T.SCRIPT, ["pbPokemonMart(["]),
+        cmd(T.CONDITIONAL_BRANCH, [0, 1, 0], indent=0),
+        cmd(T.SHOW_TEXT, ["Hi!"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+        cmd(T.SCRIPT_CONT, ["PBItems::POKeBALL])"], indent=0),
+    ]])
+    assert "pokemart(" not in res.text
+    # Both halves of the never-joined call queue on their own.
+    script_entries = [e for e in res.unhandled if e.command_code == T.SCRIPT]
+    assert len(script_entries) == 2
