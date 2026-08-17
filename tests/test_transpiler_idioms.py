@@ -1350,6 +1350,39 @@ def test_add_pokemon_unstaged_species_still_queues() -> None:
     assert out.unhandled
 
 
+def test_add_pokemon_vanilla_species_needs_no_staging() -> None:
+    """Map031 EV014: pbAddPokemon(PBSpecies::MAGIKARP,100). MAGIKARP is a
+    vanilla reuse (id-mapped, but NOT one of the ~166 `needs_engine` species)
+    — SPECIES_MAGIKARP already exists in the fork's headers, so it must
+    convert even though species_converter.stage never staged it (staging is
+    only for custom/reworked species)."""
+    ctx = T.TranspileContext(registry=FlagRegistry())
+    ctx.species = {"MAGIKARP": "SPECIES_MAGIKARP"}
+    ctx.staged_species = frozenset()  # never staged — and correctly so
+    ctx.vanilla_species = frozenset({"SPECIES_MAGIKARP"})
+    out = run_event(ctx, [[
+        cmd(T.SCRIPT, ["pbAddPokemon(PBSpecies::MAGIKARP,100)"]),
+    ]], trigger=3)
+    assert "givemon(SPECIES_MAGIKARP, 100)" in out.text
+    assert "setflag(FLAG_SYS_POKEMON_GET)" in out.text
+    assert not out.unhandled
+
+
+def test_add_pokemon_needs_engine_species_not_rescued_by_id_map_alone() -> None:
+    """A `needs_engine` species (id-mapped, but NOT staged and NOT in
+    vanilla_species) must still queue — the whitelist only rescues true
+    vanilla reuses, never a fakemon species_converter.stage hasn't staged."""
+    ctx = T.TranspileContext(registry=FlagRegistry())
+    ctx.species = {"URAYNE": "SPECIES_URAYNE"}
+    ctx.staged_species = frozenset()
+    ctx.vanilla_species = frozenset({"SPECIES_MAGIKARP"})  # URAYNE absent
+    out = run_event(ctx, [[
+        cmd(T.SCRIPT, ["pbAddPokemon(PBSpecies::URAYNE,5)"]),
+    ]], trigger=3)
+    assert "givemon" not in out.text
+    assert out.unhandled
+
+
 # ----------------------------------------------------------------------------
 # Map032 EV9 retirement — player-position guard, move-token additions,
 # forward/backward gesture, Pokédex grant, emote table, string readback

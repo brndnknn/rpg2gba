@@ -787,10 +787,24 @@ class TranspileContext:
     # SPECIES_* constants that species_converter.stage has actually staged
     # into the fork (species_manifest.json), i.e. that the fork's headers
     # really define. A name resolving in `species` above is NOT sufficient
-    # on its own — most of Uranium's ~166 needs_engine species are id-mapped
-    # but never staged, and emitting their constant would be an invented
-    # symbol the gate correctly rejects. Populated by the driver.
+    # on its own for a `needs_engine` species (see ``needs_engine_species``
+    # below) — most of Uranium's ~166 needs_engine species are id-mapped but
+    # never staged, and emitting their constant would be an invented symbol
+    # the gate correctly rejects. Populated by the driver.
     staged_species: frozenset[str] = field(default_factory=frozenset)
+
+    # SPECIES_* constants for Uranium species that are vanilla reuses (e.g.
+    # MAGIKARP) rather than one of the ~166 custom/reworked `needs_engine`
+    # species — straight from reference/uranium_id_map.json's full species
+    # table MINUS its ``needs_engine.species`` list (CLAUDE.md §4.3 single
+    # source of truth). A vanilla species's constant already exists in
+    # engine/include/constants/species.h with no staging step, so
+    # ``staged_species_constant`` passes it through regardless of
+    # ``staged_species``. This is a WHITELIST, not a blacklist: the default
+    # (empty, id map not wired) means nothing is presumed vanilla and every
+    # species must clear ``staged_species`` instead — the same fail-loud
+    # default as before this field existed. Populated by the driver.
+    vanilla_species: frozenset[str] = field(default_factory=frozenset)
 
     # (class_const, name, party_id) -> TRAINER_* constant, straight from
     # deterministic.Context.trainers (intermediate/trainers.json). Populated
@@ -919,15 +933,20 @@ class TranspileContext:
 
     def staged_species_constant(self, internal_name: str) -> str | None:
         """Resolve a Uranium species internal name to its SPECIES_* constant,
-        but ONLY if that species has actually been staged into the fork.
-        ``None`` (caller queues) for an id-map miss OR an id-map hit that
-        isn't in ``staged_species`` — the latter is the important case: a
-        species like URAYNE resolves fine through the id map but was never
-        staged, so its constant doesn't exist in the fork's headers."""
+        but ONLY if the fork's headers actually define it. ``None`` (caller
+        queues) for an id-map miss, or for an id-map hit that is neither
+        staged nor a known vanilla reuse — the important case: a species like
+        URAYNE resolves fine through the id map but was never staged, so its
+        constant doesn't exist in the fork's headers. A species in
+        ``vanilla_species`` (e.g. MAGIKARP) is a vanilla reuse — its constant
+        already ships in the fork with no staging step, so it passes
+        regardless of ``staged_species``."""
         const = self.species.get(internal_name)
-        if const is None or const not in self.staged_species:
+        if const is None:
             return None
-        return const
+        if const in self.staged_species or const in self.vanilla_species:
+            return const
+        return None
 
 
 # -- control-flow tree --------------------------------------------------------

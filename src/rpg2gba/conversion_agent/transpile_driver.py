@@ -286,6 +286,21 @@ def _load_species_id_map(reference_dir: Path) -> dict[str, str]:
     return dict(id_map.by_category["species"])
 
 
+def _load_vanilla_species(reference_dir: Path) -> frozenset[str]:
+    """SPECIES_* constants for Uranium species that are vanilla reuses (e.g.
+    MAGIKARP), i.e. the id map's full species table minus its
+    ``needs_engine.species`` list (CLAUDE.md §4.3 single source of truth).
+    These already ship in the fork's headers with no
+    ``species_converter.stage`` step — see
+    ``TranspileContext.staged_species_constant``."""
+    id_map = IdMap.load(reference_dir / "uranium_id_map.json")
+    needs_engine = set(id_map.needs_engine["species"])
+    return frozenset(
+        const for const in id_map.by_category["species"].values()
+        if const not in needs_engine
+    )
+
+
 def _load_item_id_map(reference_dir: Path) -> dict[str, str]:
     """Uranium internal item/berry symbol -> ITEM_* constant, from the same
     single source of truth (CLAUDE.md §4.3), for the item-ball/berry-tree
@@ -517,6 +532,7 @@ def transpile_corpus(
         registry=registry,
         species=_load_species_id_map(reference_dir),
         staged_species=_load_staged_species(species_manifest_path),
+        vanilla_species=_load_vanilla_species(reference_dir),
         item_id_map=_load_item_id_map(reference_dir),
     )
     det_ctx = deterministic.load_context(
