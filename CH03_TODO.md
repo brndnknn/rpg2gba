@@ -78,11 +78,12 @@ of truth for what the chapter *is* remains the spec doc. Shape:
 committed on `ch03-kevlar`.
 
 **Chapter suite `kevlar`:** predecessors green (moki + route1 replayed), and
-CH03 now runs **B1, B2, N3, B3, B4, B26, B7, N1, B5, B8, B10 all green** — the
-N3 halt described in the previous status is long resolved. The run reaches
-**B11** (Mart purchase), which fails on a harness gap, not a converter bug: the
-shop opens with the right stock and the player has ₽36, so the purchase is
-refused and the beat's A-mash never escapes the menu. See #18.
+CH03 is now **green through B16** on a clean full run — B1, B2, N3, B3, B4,
+B26, B7, N1, B5, B8, B10, B11, N4, B12, B13, B14, B15, B16. The run halts at
+**B17**, and that halt is honest: the Magikarp page has no `givemon` in the
+compiled script, so the party-add cannot succeed. Beyond it, **B19–B24 are
+unreachable in a real playthrough** because unconverted boulder pushing seals
+the cave (#20) — the single highest-value queue item left for this chapter.
 
 **The chapter is still NOT fully converted**, but the queue is no longer
 untouched: **56 entries across the five maps** (was 87 before the joiner —
@@ -188,16 +189,78 @@ re-trigger BUY.
 **N4 is now registered and passing** — it was only ever deferred for the
 missing primitive, and it needs no money granted at all.
 
-### 19. B13's berry-plant approach never leaves the Mart — OPEN
+### 20. The cave is sealed: `pbPushThisBoulder` is unconverted — OPEN
 
-Newly reachable, pre-existing, and unrelated to #18: B13 assumes stepping DOWN
-from the Mart counter tile at (10,9) crosses straight out through the arrival
-tile, but the player never moves and the beat fails asserting
-`MAP_KEVLAR_TOWN` while still reading group=75 num=11. Nothing after the old
-B11 had ever executed, so this beat has been dead code the whole time — its
-geometry has never once been exercised. Suspect the same class as B10's own
-missing exit hop, which needed an explicit `_cross_threshold` off the Center
-before walking anywhere.
+**This is the chapter's biggest remaining gap, and it is a conversion gap,
+not a beat bug.** Two boulders on the *outdoor* Kevlar Town map —
+`Map031_EV001_Page1` at (10,16) and `Map031_EV037_Page1` at (12,16) — compile
+to bare `lock`/`release`/`end`, because their only content is a
+`pbPushThisBoulder` script call still sitting in the unhandled queue (5
+occurrences across the build set). Together they seal the only corridor to
+the cave door at (13,7).
+
+Confirmed two ways: a BFS over `KevlarTown/map.bin` reaches the door with
+*either* boulder tile excluded but not with both, and the live `walk_to` A*
+planner refuses the route once it reaches the corridor mouth.
+
+Consequence: **B19–B24 are unreachable in a real playthrough** — the cave
+door, all three boulder pushes, Bikers Lou and Joe, Richard, and the cave
+exit. That is six beats and the whole Grott Hole section of the chapter
+blocked behind one unconverted idiom. Converting `pbPushThisBoulder` is the
+highest-value queue item left for CH03.
+
+One open uncertainty inside the cave, untestable until it opens: Richard's
+south-approach tile (22,8) is collision-blocked at his spawn, but he patrols
+and `_approach_patrol_npc` reads his live position, so it may never bite.
+
+### 21. The Magikarp joke has no repeat guard — OPEN
+
+`Map031_EV014_Page1_Joke` increments `VAR_HA_MAGIKARP` on every "No" answer
+with no flag check anywhere in the compiled page — verified live going 1→2 on
+a re-talk. N2 fails honestly on this. Related to the same page's missing
+`givemon` (B17). Both are queue work, not beat authoring.
+
+### 19. B13's berry-plant approach never leaves the Mart — FIXED 2026-08-16
+
+Widened once it was clear B13 was not alone: with B11 finally completing,
+**every beat from B13 on was executing for the first time**, and seven of them
+carried latent geometry bugs. All fixed (commits `e0d1a4cf`, `db586a92`); the
+suite is now green through **B16** on a clean full run.
+
+**The arrival/mat rule, which explains most of them.** Uranium interiors put
+the arrival tile one row *above* the exit mat. `_cross_threshold` walks to its
+approach tile before stepping, so the approach must be the tile you step
+*from* — the arrival, never the mat. B13 crossed from the Mart's counter
+approach (10,9), one tile too high, so its step landed on the arrival (10,10)
+and fired no warp. B16 crossed from the mats themselves, so `walk_to` stepped
+onto the warp mid-route and failed with "interrupted by a locked-field scene"
+on the tile it was heading for.
+
+**Missing exits.** B14 entered the Berry Boutique and never left, so B15 began
+indoors while walking to an outdoor door; B15 had the same gap for B16. Both
+now exit at their own end, matching B16's already self-contained shape.
+
+**Impossible approaches.** B15 tried to talk to the Bike Shop NPC from
+directly below, but the counter run blocks y=8 and y=9 across x=0..6 — and no
+`MB_COUNTER` reach-over helps, because the tile it would reach from is itself
+wall; talk from (6,7) facing LEFT. B18's approach tile and both of Cry Boy's
+vertical neighbours are blocked; only the tile west of him is open. B25's
+north-edge approach was a tree, and the obvious correction was worse — locally
+open but inside a 39-tile pocket disconnected from the walkable region, which
+`walk_to`'s planner rightly refused. The real northernmost walkable row is
+y=0.
+
+**B17** asked for the Magikarp NPC's live position from across the map;
+`gObjectEvents` is camera-bound, so the lookup raised rather than returning a
+stale position. It now stages into the NPC's neighbourhood first.
+
+**Method worth reusing:** decode collision straight out of
+`engine/data/layouts/<Map>/map.bin` (dimensions in `layouts.gen.json`,
+little-endian u16 per cell, collision in bits 10-11) and print an ASCII map
+before trusting any coordinate. Every one of these was found that way in
+seconds. And note the seed trap: `--from-beat X` restores the blob captured at
+X's entry, so after changing beat X-1 you must rerun from X-1 or earlier or
+you replay the old behaviour.
 
 ### 16. Route 01's half of the seam was never wired — FIXED 2026-08-13
 
