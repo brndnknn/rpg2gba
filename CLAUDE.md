@@ -117,7 +117,9 @@ rpg2gba/
 
 ### The vendored engine (`engine/`)
 
-The `pokeemerald-expansion` fork is **vendored** in `engine/`, pinned at upstream `21c24202` (see `engine/RPG2GBA_VENDOR.md`). Custom engine C (Phase 6, plus the slice's spawn-override/intro-skip) lives there in version control — no longer an external sibling clone. `RPG2GBA_POKEEMERALD` is the path the pipeline uses; the **cutover** to point it at `engine/` (which needs a one-time build to generate the headers the pipeline reads, and a re-assemble so the custom C compiles) is a follow-up — until then it still points at the old external clone. `engine/build/` and the assembler's generated output under `engine/` are gitignored.
+The `pokeemerald-expansion` fork is **vendored** in `engine/`, pinned at upstream `21c24202` (see `engine/RPG2GBA_VENDOR.md`). Custom engine C (Phase 6, plus the slice's spawn-override/intro-skip) lives there in version control — no longer an external sibling clone. `RPG2GBA_POKEEMERALD` is the path the pipeline uses, and the **cutover is DONE** (2026-06-19): it points at `engine/`, this repo's vendored tree. There is no longer any external sibling clone in the build path — if you find yourself reading `/home/b/repos/pokeemerald-expansion` or any other outside checkout, you are on the wrong tree; it is pristine upstream and lacks every custom header the pipeline needs. `engine/build/` and the assembler's generated output under `engine/` are gitignored.
+
+**Never set `RPG2GBA_*` yourself — not inline, not exported, not in a subshell.** The tracked `.env-paths` file at the repo root holds the correct values and the pipeline loads it at startup. Shell env *wins* over that file, so an inline override silently redirects the build at a tree that cannot work. This has burned a full session: an agent exported the stale clone path, hit the pristine tree's missing `include/config/rpg2gba.h`, and reported a fabricated "the fork lacks the event-range extension" blocker. The header has been committed at `engine/include/config/rpg2gba.h` since `5fc67dbf`. Run the pipeline commands bare and let it resolve its own paths.
 
 ---
 
@@ -361,10 +363,13 @@ list is in ROADMAP.md "Known Pitfalls":
 
 ### Environment variables
 
+All of these live in the tracked `.env-paths` at the repo root and are already
+correct. Read them from there; **never override them on a command line** (§3).
+
 | Variable | Purpose |
 |---|---|
-| `RPG2GBA_URANIUM_SRC` | Path to the Uranium source tree on disk |
-| `RPG2GBA_POKEEMERALD` | Path to the pokeemerald-expansion fork |
+| `RPG2GBA_URANIUM_SRC` | Uranium source tree — `/home/b/repos/uranium-src/_unpacked` (note the `_unpacked` suffix; the parent dir is incomplete and looks broken if you check it by mistake) |
+| `RPG2GBA_POKEEMERALD` | The vendored engine — `engine/` in this repo, never an external clone |
 | `RPG2GBA_OUTPUT` | Output directory (defaults to `./output`) |
 | `OLLAMA_HOST` | Ollama server on the Ubuntu desktop (accessed over Tailscale) |
 
