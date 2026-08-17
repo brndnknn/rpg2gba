@@ -715,3 +715,65 @@ the same return trip: *"After getting HM04 in Legen Town, come back and speak to
 the boy crying just outside of the entrance of the Poké Mart"*
 (`Kevlar_Town.wiki:30`). CH03's B18 correctly observes only the pre-Strength
 idle page today.
+
+### 40. Commands stranded after a `Transfer Player` warp — 176 rows, two unrelated classes
+
+*Filed 2026-08-17 after CH03's queue triage. The single queue signature —
+"command follows a Transfer Player warp: pokeemerald halts the script at the
+warp (ScrCmd_warp/DoWarp), unlike RMXP which keeps running the page" — covers
+two problems with nothing in common. Do not size them as one job.*
+
+RMXP keeps executing an event page after code 201; pokeemerald halts the script
+at the warp. Anything after the transfer is therefore unreachable in the port,
+and the transpiler queues it instead of dropping it silently (correct — §4.5).
+
+**Distribution:** map172 **132**, map32 13, map31 12, map33 11, map49 3, map81 2,
+map48/50/89 1 each. 176 total, over 9 maps. That shape is the whole story: one
+map is a real problem, the rest are choreography.
+
+#### 40a. The cosmetic tail — 44 rows, everything except map172's cutscene
+
+31× code 223 `CHANGE_TONE`, 11× code 204 `CHANGE_MAP_SETTINGS`, 2× code 241
+`PLAY_BGM`.
+
+**The 223s cost nothing.** Every one observed is `Tone rgba [0,0,0,0]` over ~6
+frames — *neutral*, i.e. the fade back **in** that closes a fade-out/fade-in pair
+around the transfer. The transpiler already strips the opening half as subsumed
+by the native warp (`transpiler.py:242-249`, the `pbCaveEntrance` note: "the GBA
+warp performs its own map-transition fade"). This is the same argument from the
+other side. Stripping them is a no-op that quiets ~2/3 of this signature.
+
+The 204s are fog (subtype 1 — e.g. `"004-Shade02"`, opacity 60, zoom 250): a
+real but minor visual loss with precedent for accepting it (the Map033 "Luz"
+ambient-light strip, `CH02_TODO` #11/#12). The 241s are destination BGM, largely
+moot while audio is still substitution-based with slice maps on `MUS_LITTLEROOT`
+(the per-map `reference/audio_map.json` wiring from
+`audio_decision_2026-07-14.md` was never built).
+
+**Action:** strip 223-to-neutral after a warp as a recognized breadcrumb, and
+rule on fog/BGM as accepted debt. Cheap, and it stops this signature from
+looking like 176 rows of lost logic.
+
+#### 40b. Map172's Theo cutscene — 131 rows, genuinely dropped, due CH58
+
+**131 of map172's 132 rows belong to one event: `EV4 'Theo'` page 3.** The codes
+are real content, not choreography: 40× 101 `SHOW_TEXT`, 19× 106 `WAIT`, 14× 355
+`SCRIPT`, 9× 209 `MOVE_ROUTE`, 4× 223, 2× 202 `SET_EVENT_LOCATION`, 2× 207, 1×
+111 `COND_BRANCH`, and 1 nested 201 `TRANSFER`. (The 34× 509 rows are the
+editor's per-step display duplicates of the 209s — `transpiler.py:95` — not
+independent logic.) A whole cutscene sits after the page's warp.
+
+**Not near-term.** Page 3's condition is `switch1_id 125, switch1_valid true` —
+switch 125 is the "FINAL EVENT" **postgame** gate. `chapters.json` already names
+this exact case: CH58 (Moki Town postgame, A9) is "where the postgame pages on
+slice-1 maps finally fire ... the switch-125 'FINAL EVENT' grants that
+01-moki.md §4.2 rules out of CH01 (Lava Cookie on 49, Poke Radar on 50, **HM07
+Waterfall on 172**)". So this is CH58 work, and **CH08's visit-2 return to
+map172 is unaffected** — page 3 cannot fire there.
+
+**This one needs a structural fix, not a strip.** The content has to run at the
+destination, since the source page cannot continue past its own warp: split the
+tail into a script that fires on arrival (a map-script `ON_TRANSITION`/
+`ON_FRAME` on the destination, gated so it runs once), rather than trying to
+keep executing at the source. Worth designing when CH58 is written — and worth
+checking then whether any other page-3-style postgame page hides the same shape.
