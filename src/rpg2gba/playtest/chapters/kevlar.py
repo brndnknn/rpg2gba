@@ -72,6 +72,26 @@ what the transpiler actually emitted):
    fields (no offset is probed for it). B6 has no engine-side effect and no
    harness-side read to test it with -- folded into B4's comment, not
    registered as its own beat (same shape as moki.py's dropped N1).
+8. **(2026-08-16) The cave door is unreachable on foot.** Two more
+   `OBJ_EVENT_GFX_URANIUM_HGSS_267` boulders live on the OUTDOOR map
+   (`Map031_EV001_Page1` at (10,16), `Map031_EV037_Page1` at (12,16) --
+   local ids 1 and 7, both bare `lock`/`release`/`end`, same as every other
+   boulder in the corpus) and jointly seal the only corridor south of the
+   cave door at (13,7). Decoded from `engine/data/layouts/KevlarTown/map.bin`
+   (BFS reachable with either tile excluded alone, unreachable with both
+   excluded) and confirmed live -- the real emulator's own `walk_to` planner
+   also reports no route once it reaches the corridor's mouth. B19 is
+   written to try the door anyway and fails honestly; B20 through B24/N6
+   can never be reached for real as a consequence (their own geometry was
+   still checked statically and is not itself buggy -- see B19's comment).
+9. **The Magikarp joke's VAR_HA_MAGIKARP increment has no repeat guard.**
+   `Map031_EV014_Page1_Joke` increments unconditionally on every NO answer,
+   not just the first -- N2 (originally written expecting a one-time grant,
+   mirroring B7/N1's item-ball shape) fails for real: VAR_HA_MAGIKARP goes
+   1->2 on a re-talk. There is no flag check anywhere in the compiled page
+   to gate a second increment. GENUINE, not a beat bug -- N2 is left
+   asserting the no-repeat behavior the design obviously intended, and
+   failing honestly against the script that doesn't provide it.
 
 Every item/mon-grant/battle assertion below is still written and still
 checked for real -- per the task brief, an honest RED beats a beat weakened
@@ -242,11 +262,30 @@ COUPLE_ARRIVAL = (64, 12)
 
 # B17/N2: Magikarp, map31 local id 6, (29,20), CUSTOM_ROUTE (patrols).
 MAGIKARP_LOCAL = 6
+# B16 leaves the player at COUPLE_DOOR (32,28), well outside the camera's
+# object-event spawn radius around (29,20) -- `emu.object_event(6)` raised
+# "no active object event with local id 6" the first time B17 ran (2026-08-16
+# finding; TrySpawnObjectEvents/RemoveObjectEventsOutsideView only keep an
+# NPC's slot live within roughly one screen of the player,
+# engine/src/event_object_movement.c:2909-2951, same mechanism B8's own
+# comment cites). Column x=29 is open collision the whole way from y=20 to
+# y=28 (decoded from `engine/data/layouts/KevlarTown/map.bin`, 50x50,
+# collision bits 10-11) -- (29,23) is a plain walk_to waypoint straight up
+# that column, close enough to Magikarp's spawn to force her object event to
+# spawn before `_approach_patrol_npc` reads her live position.
+MAGIKARP_STAGING = (29, 23)
 
-# B18: Cry Boy, map31 local id 3, (39,16), FACE_RIGHT -> approach from the
-# east.
-CRY_BOY_APPROACH = (40, 16)
-CRY_BOY_FACING = "LEFT"
+# B18: Cry Boy, map31 local id 3, (39,16), FACE_RIGHT. The originally-written
+# approach (40,16), east of him, is itself collision-blocked (decoded from
+# `engine/data/layouts/KevlarTown/map.bin`, 50x50, bits 10-11) -- so is
+# (39,15) north and (39,17) south. Only (38,16), one tile west, is open;
+# his own facing direction doesn't gate interact() the way a sight trainer
+# would (module docstring: no native sight trainers in this chapter), so
+# approaching from his blind side is fine. 2026-08-16: B18 had never run
+# before (dead code past the old-B11 hang) -- this beat's approach tile was
+# never checked against real collision.
+CRY_BOY_APPROACH = (38, 16)
+CRY_BOY_FACING = "RIGHT"
 
 # B19: the cave door, map31 (13,7) -> map19 (11,29).
 CAVE_DOOR = (13, 7)
@@ -270,8 +309,25 @@ RICHARD_LOCAL = 6
 # B25: the north edge. `KevlarTown/map.json`'s `connections` is `null` --
 # no seam is wired (CH03_TODO.md decision #3: "clean impassable wall").
 # Approach column chosen well clear of every other event on the north side
-# of the map (the NurseTut/Center cluster sits at x=17-21).
-NORTH_EDGE_APPROACH = (25, 1)
+# of the map (the NurseTut/Center cluster sits at x=17-21). The originally
+# written column, x=25, is itself collision-blocked terrain (a tree). x=24
+# LOOKS open at y=0-2 (same `map.bin` decode) but is a red herring: a 4-way
+# flood fill from it (`engine/data/layouts/KevlarTown/map.bin`, 50x50, bits
+# 10-11) reaches only 39 tiles total, none of them anywhere near the couple's
+# house/berry-plant area a real playthrough arrives from -- it's a sealed
+# decorative pocket (walled off on every side), not part of the map's one
+# connected walkable region (570 tiles). `walk_to`'s own A* planner agrees
+# live ("no planned route from (32, 28)"), then its greedy fallback wanders
+# into a building doorway trying anyway. x=27-29 at y=0-2 flood-fills into
+# the SAME component as the couple's/Maury's doors and is equally clear of
+# the door/berry clusters. y=0 -- not y=1 -- is the map's actual
+# northernmost walkable row: from (28,1) a single step UP legitimately
+# lands on (28,0) (still on-map, not a crossing) before the real boundary
+# bites one step further; confirmed live -- stepping UP from (28,0) leaves
+# the player at (28,0) unmoved, while the same probe from (28,1) reads as
+# "crossed". The approach has to be the last walkable tile, same principle
+# as every arrival/mat pair elsewhere in this chapter.
+NORTH_EDGE_APPROACH = (28, 0)
 
 
 # -- small local helpers, copied+adapted from route1.py/moki.py -------------
@@ -889,6 +945,7 @@ def b17(emu: Emulator) -> None:
         raise ScenarioError(
             f"B17 precondition failed: VAR_HA_MAGIKARP reads {var_before}, "
             f"expected 0")
+    emu.walk_to(*MAGIKARP_STAGING)  # get within camera range so her object event spawns
     _approach_patrol_npc(emu, "B17", MAGIKARP_LOCAL, "UP")
     emu.advance_dialog("A", stop=emu.yesno_prompt_up)
     if not emu.yesno_prompt_up():
@@ -931,7 +988,9 @@ def b17(emu: Emulator) -> None:
 # -- N2 (Magikarp not granted twice) ----------------------------------------
 
 @kevlar.beat("N2", "Re-talking the Magikarp NPC does not re-increment "
-                   "VAR_HA_MAGIKARP")
+                   "VAR_HA_MAGIKARP (2026-08-16 finding 9: GENUINE failure "
+                   "-- Map031_EV014_Page1_Joke has no repeat guard at all, "
+                   "see module docstring)")
 def n2(emu: Emulator) -> None:
     var_before = emu.var("VAR_HA_MAGIKARP")
     _approach_patrol_npc(emu, "N2", MAGIKARP_LOCAL, "UP")
@@ -971,9 +1030,34 @@ def b18(emu: Emulator) -> None:
 
 # -- B19 -----------------------------------------------------------------
 
-@kevlar.beat("B19", "The cave door opens; arrival near (11,29)",
+@kevlar.beat("B19", "The cave door opens; arrival near (11,29) (2026-08-16 "
+                    "finding 8: genuinely unreachable in this build -- two "
+                    "immovable boulders on the OUTDOOR map seal the only "
+                    "corridor to the door, see module docstring)",
              map_constant="MAP_KEVLAR_TOWN", at=CAVE_DOOR)
 def b19(emu: Emulator) -> None:
+    # GENUINE finding, not a beat bug -- do not weaken. `KevlarTown/map.json`
+    # has two more `OBJ_EVENT_GFX_URANIUM_HGSS_267` boulder objects besides
+    # the 3 already known inside the cave (module finding 2): map31 local
+    # id 1 at (10,16) (`Map031_EV001_Page1`) and local id 7 at (12,16)
+    # (`Map031_EV037_Page1`), both bare `lock`/`release`/`end` -- no push
+    # movement, same as every other boulder in this corpus. They sit in the
+    # narrow corridor immediately south of the cave door: decoding
+    # `engine/data/layouts/KevlarTown/map.bin` (50x50, bits 10-11) and BFSing
+    # from anywhere on the map to (13,8) shows the route is open with EITHER
+    # boulder tile excluded alone, but closed with BOTH excluded together --
+    # i.e. the two of them jointly seal the only path through, not a
+    # decorative near-miss. The live emulator agrees: `walk_to`'s own A*
+    # planner (`_plan_route`) returns no route once the walk reaches the
+    # corridor's south mouth, exactly matching the static BFS. CAVE_DOOR is
+    # therefore unreachable on foot in this build -- this beat is written to
+    # try anyway and fail honestly, and B20 through B24/N6 (walked here from
+    # kevlar.py's driver only by forcing continuation past this failure) can
+    # never be reached for real either, for the same reason. B20-B24/N6's
+    # own approach coordinates were still verified statically against the
+    # compiled cave map/collision data and check out (see their own
+    # comments) -- this is the one and only blocker, not a chain of
+    # unrelated bugs.
     _enter_door(emu, "B19", CAVE_DOOR, "MAP_PASSAGE_CAVE_GROTT_HOLE")
     _assert_near(emu, "B19", CAVE_ARRIVAL)
 
@@ -982,7 +1066,10 @@ def b19(emu: Emulator) -> None:
 
 @kevlar.beat("B20", "Pushing each boulder one tile (module finding 2: none "
                     "of the 3 boulders have push movement wired -- every "
-                    "push is expected to fail as a bump, not a move)",
+                    "push is expected to fail as a bump, not a move; "
+                    "finding 8: this beat can never actually be reached in "
+                    "this build -- B19's own door is sealed -- but its "
+                    "coordinates were verified statically and are correct)",
              locations=tuple(
                  BeatLocation("MAP_PASSAGE_CAVE_GROTT_HOLE", bx, by, f"boulder (local id {local_id})")
                  for local_id, (bx, by) in BOULDERS
@@ -1020,7 +1107,8 @@ def b20(emu: Emulator) -> None:
 
 @kevlar.beat("B21", "Biker Lou (EV4): approach and interact (module finding "
                     "1: no trainerbattle* command exists -- expected to "
-                    "produce dialogue only, no battle)")
+                    "produce dialogue only, no battle; finding 8: also "
+                    "unreachable for real, same as B20)")
 def b21(emu: Emulator) -> None:
     from ..battle import in_battle
 
@@ -1037,7 +1125,8 @@ def b21(emu: Emulator) -> None:
 
 
 @kevlar.beat("B22", "Biker Joe (EV5): approach and interact (module finding "
-                    "1: same gap as Lou)")
+                    "1: same gap as Lou; finding 8: also unreachable for "
+                    "real)")
 def b22(emu: Emulator) -> None:
     from ..battle import in_battle, win_battle
 
@@ -1055,7 +1144,15 @@ def b22(emu: Emulator) -> None:
 @kevlar.beat("B23", "Richard (EV6): approach and interact; expect "
                     "FLAG_SIDEQUEST_CRYBOY_END to be set (module finding 1: "
                     "no trainerbattle* AND no setflag of this name exists "
-                    "in Map019_EV006_Page1 -- expected to fail on both)")
+                    "in Map019_EV006_Page1 -- expected to fail on both; "
+                    "finding 8: also unreachable for real. NOTE: static "
+                    "collision decode also shows (22,8), one tile south of "
+                    "Richard's (22,7) spawn, is itself blocked -- "
+                    "_approach_patrol_npc reads his LIVE position each "
+                    "attempt, so whether this ever bites depends on where "
+                    "his patrol route puts him; not verified live because "
+                    "the cave can't be reached, left as an open question, "
+                    "not silently assumed fine)")
 def b23(emu: Emulator) -> None:
     from ..battle import in_battle, win_battle
 
@@ -1079,7 +1176,10 @@ def b23(emu: Emulator) -> None:
 
 # -- B24 -----------------------------------------------------------------
 
-@kevlar.beat("B24", "The cave exit warps back to Map031 (13,7)",
+@kevlar.beat("B24", "The cave exit warps back to Map031 (13,7) (finding 8: "
+                    "also unreachable for real -- its own geometry is "
+                    "statically correct, matching the arrival/mat warp-pair "
+                    "shape already verified elsewhere in this chapter)",
              map_constant="MAP_PASSAGE_CAVE_GROTT_HOLE", at=CAVE_EXIT_APPROACH)
 def b24(emu: Emulator) -> None:
     _cross_threshold(emu, "B24", CAVE_EXIT_APPROACH, "DOWN", "MAP_KEVLAR_TOWN")
