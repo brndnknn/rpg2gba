@@ -31,10 +31,12 @@ Kevlar's south boundary.
 Covers: arriving from Route 1; the first Poké Mart and first Pokémon Center
 (guided PC/healing tutorial, a repeatable in-Center trainer battle); a shared
 building strip holding a Bike Repair Shop, a Berry Boutique, and two flavor
-houses; a joke NPC that gives away a Magikarp; an NPC ("Cry Boy") whose
-help-request is gated behind a flag this chapter's data never sets true; a
-small, self-contained boulder-puzzle cave (three Biker trainers) that enters
-and exits at the same town coordinate; and the north edge, the chapter's exit
+houses; a joke NPC who hands over a Magikarp once you have refused his joke a
+hundred times; an NPC ("Cry Boy") whose help-request needs Strength and so
+stays on its idle page all chapter; a small, self-contained boulder-puzzle cave
+(three Biker trainers) that enters and exits at the same town coordinate —
+**Strength-gated, and therefore NOT reachable in this chapter** (§7.1); and the
+north edge, the chapter's exit
 toward Route 2 (CH04). No `VAR_QUEST_LOG` write occurs anywhere in this
 chapter (zero `code 122` commands touch variable 101 across all 5 maps).
 
@@ -94,10 +96,10 @@ counter's ball-sprite display, 2 writes).
 | B8 | 31→67 | none | enter Mart door (37,14) | Warp to Map067; `pbPokemonMart([...])` at EV1; "Deliveryman" (EV9) checks `pbNextMysteryGiftID>0` |
 | B9 | 31→73 | none | enter Berry Boutique door (35,6) | Warp to Map073 (44,12); EV6 grants Bacu Berry (+3 more on continuation lines census misses, §4.2), + Sprinklotad if unheld |
 | B10 | 73 | none | talk Bike Repair NPC (EV1) | If `BIKEWHEEL` qty>0: wheel deleted, `BICYCLE` granted. **No Bike Wheel source in this chapter** — §5 #3, §7 |
-| B11 | 31 | none | talk "EV014" (29,20) | Joke dialogue; `pbAddPokemon(MAGIKARP,100)`; var200 0→1 (re-talk guard) |
-| B12 | 31 | sw86 `FLAG_HAS_STRENGTH` | talk "Cry Boy" (EV7) | Page0 (ungated) idle only; page1 (sets sw99) needs sw86 true. **Sw86 written exactly once corpus-wide** (Map140/Route11, sets it 0/off) — reachability unresolved, §7 |
-| B13 | 31→19 | none | enter cave door (13,7) | Warp to Map019 (11,29); 3 "Boulder" push events; sight Bikers Lou (EV4)/Joe (EV5); Richard (EV6) sets sw100 after 1 of 2 branches (sw94-gated postgame variant, out of scope) |
-| B14 | 19→31 | none | walk exit tile (11,30) | Warp to Map031 (13,7) — only warp target anywhere in Map019 |
+| B11 | 31 | none | talk "EV014" (29,20) | Joke dialogue; the "No" branch increments var200, **except at var200==99, where it fires `pbAddPokemon(MAGIKARP,100)`** — a hundred refusals earn the Magikarp. The increment is the mechanism, not a missing re-talk guard (§7.1) |
+| B12 | 31 | Strength | talk "Cry Boy" (EV7) | Page0 (ungated) idle only; page1 (sets sw99) needs sw86. **Sw86 written exactly once corpus-wide, on Map140/Route 11 — which is exactly where HM04 is granted.** Not an anomaly: this is a post-Strength return-trip sidequest, out of chapter (§7.1) |
+| B13 | 31→19 | **Strength (HM04, CH25)** | enter cave door (13,7) | **NOT REACHABLE THIS CHAPTER** — the outdoor boulders sealing the corridor need Strength (§7.1). When it opens: warp to Map019 (11,29); 3 "Boulder" push events; sight Bikers Lou (EV4)/Joe (EV5); Richard (EV6) sets sw100 after 1 of 2 branches (sw94-gated postgame variant, out of scope) |
+| B14 | 19→31 | **Strength (HM04, CH25)** | walk exit tile (11,30) | Warp to Map031 (13,7) — only warp target anywhere in Map019. Same gate as B13 |
 | B15 | 31→35 | none | walk off north edge | Seam crossing into Map035 "Route 02" — chapter exit, out of scope |
 
 ## 4. Coverage targets
@@ -237,6 +239,33 @@ Verdicts owned by `reference/guides/command_pokeemerald_map.md`.
 - Tileset/art budget not assessed this pass.
 
 ## 7. Open items for the lead
+
+### 7.1 RESOLVED 2026-08-17 — the cave is Strength-gated, and out of chapter
+
+This spec originally carried the Grott-Hole (Map019) as in-chapter content and
+recorded sw86's single corpus-wide write as an unresolved anomaly. Both are now
+settled, and they are the same fact.
+
+`pbPushThisBoulder` (`reference/scripts_dump/101__PField_Field.rb:2850`) pushes
+only `if $PokemonMap.strengthUsed`, else returns false. **HM04 Strength is
+granted in CH25 (Route 11)** (`00-atlas.md` line 116) — and Route 11 (Map140) is
+exactly where sw86 `FLAG_HAS_STRENGTH` gets its one write. The wiki states the
+gate outright: *"you will need HM04 (Strength) to move the boulder blocking your
+path and to explore the cave"*, and *"After getting HM04 in Legen Town, come back
+and speak to the boy crying just outside of the entrance of the Poké Mart"*
+(`Kevlar_Town.wiki:28,30`; `Passage_Cave.wiki:10` concurs).
+
+So the cave **and** the Cry Boy sidequest are one **post-Strength return trip**.
+Beats B19–B24 in `playtest/chapters/kevlar.py` are deferred, not failing, and the
+boulder conversion moved to `PROJECT_TODO.md` #39, due in CH25. **Map019 stays in
+`SLICE_MAP_IDS`** (user call) so the cave is built and art-checked ahead of time.
+
+Also resolved here: the Magikarp joke's var200 increment is a **counter to 99**,
+not a missing re-talk guard (`CH03_TODO.md` #21).
+
+**Both of these were first written up as converter defects.** The shared error was
+reading compiled output as evidence about the design, without checking the
+Essentials function or the wiki. Check the source mechanic before filing a gap.
 
 - **Map73 name/engine dir** (§2): proposed `Kevlar Town Buildings` /
   `KevlarTownBuildings` / `MAP_KEVLAR_TOWN_BUILDINGS`, provisional — evidence

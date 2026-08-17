@@ -79,26 +79,40 @@ what the transpiler actually emitted):
    fields (no offset is probed for it). B6 has no engine-side effect and no
    harness-side read to test it with -- folded into B4's comment, not
    registered as its own beat (same shape as moki.py's dropped N1).
-8. **(2026-08-16) The cave door is unreachable on foot.** Two more
-   `OBJ_EVENT_GFX_URANIUM_HGSS_267` boulders live on the OUTDOOR map
-   (`Map031_EV001_Page1` at (10,16), `Map031_EV037_Page1` at (12,16) --
-   local ids 1 and 7, both bare `lock`/`release`/`end`, same as every other
-   boulder in the corpus) and jointly seal the only corridor south of the
-   cave door at (13,7). Decoded from `engine/data/layouts/KevlarTown/map.bin`
-   (BFS reachable with either tile excluded alone, unreachable with both
-   excluded) and confirmed live -- the real emulator's own `walk_to` planner
-   also reports no route once it reaches the corridor's mouth. B19 is
-   written to try the door anyway and fails honestly; B20 through B24/N6
-   can never be reached for real as a consequence (their own geometry was
-   still checked statically and is not itself buggy -- see B19's comment).
-9. **The Magikarp joke's VAR_HA_MAGIKARP increment has no repeat guard.**
-   `Map031_EV014_Page1_Joke` increments unconditionally on every NO answer,
-   not just the first -- N2 (originally written expecting a one-time grant,
-   mirroring B7/N1's item-ball shape) fails for real: VAR_HA_MAGIKARP goes
-   1->2 on a re-talk. There is no flag check anywhere in the compiled page
-   to gate a second increment. GENUINE, not a beat bug -- N2 is left
-   asserting the no-repeat behavior the design obviously intended, and
-   failing honestly against the script that doesn't provide it.
+8. **(2026-08-17) The cave (Grott-Hole) is post-Strength return-trip
+   content, not CH03 -- deferred, not a converter gap.** `pbPushThisBoulder`
+   (`reference/scripts_dump/101__PField_Field.rb`) is gated on
+   `$PokemonMap.strengthUsed`: it returns false and does nothing until the
+   player has activated the Strength field move, so every boulder sealing
+   this cave -- the 3 inside it (finding 2) and the 2 more on the OUTDOOR
+   map (`Map031_EV001_Page1` at (10,16), `Map031_EV037_Page1` at (12,16),
+   local ids 1 and 7, jointly sealing the only corridor south of the cave
+   door at (13,7), decoded from `engine/data/layouts/KevlarTown/map.bin` and
+   confirmed live via `walk_to`'s own planner reporting no route) -- is
+   CORRECTLY immovable this chapter. That is the game's design working, not
+   a defect. `output/uranium-build/wiki/Kevlar_Town.wiki` line 28 ("you will
+   need HM04 (Strength) to move the boulder blocking your path") and line
+   30 ("After getting HM04 in Legen Town, come back...") and
+   `output/uranium-build/wiki/Passage_Cave.wiki` line 10 both confirm this
+   cave is written as explicit return-trip content. HM04 Strength is
+   granted in CH25 (Route 11, `reference/chapters/00-atlas.md` line 116) --
+   22 chapters after this one. B19 through B24 (the door, the 3 boulders,
+   Lou/Joe/Richard) are therefore DEFERRED, not registered on this chapter
+   (see `DEFERRED_BEATS` below) -- their geometry was still checked
+   statically and is not itself buggy; restore them once a chapter reaches
+   this cave post-Strength. `pbPushThisBoulder` itself remains unconverted
+   (5 queue entries, finding 2) -- but converting it would NOT unblock these
+   beats; the gate is Strength possession, not the converter.
+9. **WITHDRAWN 2026-08-17 -- the VAR_HA_MAGIKARP increment is the mechanism,
+   not a missing repeat guard.** This finding read the unconditional increment
+   as a converter gap, by analogy with B7/N1's one-time item ball. Wrong
+   analogy: `Map031_EV014_Page1_Joke`'s NO branch increments *except* at
+   `var(VAR_HA_MAGIKARP) == 99`, where it hands over a level-100 Magikarp
+   instead. A hundred refusals earn the joke mon, so the counter has to
+   accumulate -- a repeat guard would break the gift outright. Faithful to the
+   original: code 111, variable 200, operand 99, comparison ==. N2 now asserts
+   accumulation; see finding 3 for why the `givemon` was missing when this was
+   written (`CH03_TODO.md` #21).
 
 Every item/mon-grant/battle assertion below is still written and still
 checked for real -- per the task brief, an honest RED beats a beat weakened
@@ -1063,55 +1077,48 @@ def b18(emu: Emulator) -> None:
             f"expected FLAG_HAS_STRENGTH to gate this off ({shot})")
 
 
-# -- B19 -----------------------------------------------------------------
+# -- B19 (DEFERRED to CH25 -- see DEFERRED_BEATS) -------------------------
 
-@kevlar.beat("B19", "The cave door opens; arrival near (11,29) (2026-08-16 "
-                    "finding 8: genuinely unreachable in this build -- two "
-                    "immovable boulders on the OUTDOOR map seal the only "
-                    "corridor to the door, see module docstring)",
-             map_constant="MAP_KEVLAR_TOWN", at=CAVE_DOOR)
 def b19(emu: Emulator) -> None:
-    # GENUINE finding, not a beat bug -- do not weaken. `KevlarTown/map.json`
-    # has two more `OBJ_EVENT_GFX_URANIUM_HGSS_267` boulder objects besides
-    # the 3 already known inside the cave (module finding 2): map31 local
-    # id 1 at (10,16) (`Map031_EV001_Page1`) and local id 7 at (12,16)
-    # (`Map031_EV037_Page1`), both bare `lock`/`release`/`end` -- no push
-    # movement, same as every other boulder in this corpus. They sit in the
-    # narrow corridor immediately south of the cave door: decoding
-    # `engine/data/layouts/KevlarTown/map.bin` (50x50, bits 10-11) and BFSing
-    # from anywhere on the map to (13,8) shows the route is open with EITHER
-    # boulder tile excluded alone, but closed with BOTH excluded together --
-    # i.e. the two of them jointly seal the only path through, not a
-    # decorative near-miss. The live emulator agrees: `walk_to`'s own A*
-    # planner (`_plan_route`) returns no route once the walk reaches the
-    # corridor's south mouth, exactly matching the static BFS. CAVE_DOOR is
-    # therefore unreachable on foot in this build -- this beat is written to
-    # try anyway and fail honestly, and B20 through B24/N6 (walked here from
-    # kevlar.py's driver only by forcing continuation past this failure) can
-    # never be reached for real either, for the same reason. B20-B24/N6's
-    # own approach coordinates were still verified statically against the
-    # compiled cave map/collision data and check out (see their own
-    # comments) -- this is the one and only blocker, not a chain of
-    # unrelated bugs.
+    """The cave door; arrival near (11,29).
+
+    DEFERRED, not a beat bug -- `KevlarTown/map.json` has two more
+    `OBJ_EVENT_GFX_URANIUM_HGSS_267` boulder objects besides the 3 already
+    known inside the cave (module finding 2): map31 local id 1 at (10,16)
+    (`Map031_EV001_Page1`) and local id 7 at (12,16) (`Map031_EV037_Page1`),
+    both bare `lock`/`release`/`end` -- no push movement, same as every
+    other boulder in this corpus. They sit in the narrow corridor
+    immediately south of the cave door: decoding
+    `engine/data/layouts/KevlarTown/map.bin` (50x50, bits 10-11) and BFSing
+    from anywhere on the map to (13,8) shows the route is open with EITHER
+    boulder tile excluded alone, but closed with BOTH excluded together --
+    i.e. the two of them jointly seal the only path through. This is
+    CORRECT per module finding 8: `pbPushThisBoulder` is gated on
+    `$PokemonMap.strengthUsed`, and HM04 Strength doesn't arrive until CH25
+    -- the boulders are supposed to be immovable here. CAVE_DOOR is
+    therefore unreachable on foot until then; B20 through B24/N6 are
+    deferred alongside this beat for the same reason. Their own approach
+    coordinates were still verified statically against the compiled cave
+    map/collision data and check out (see their own comments) -- restore
+    all of them together once Strength is obtainable.
+    """
     _enter_door(emu, "B19", CAVE_DOOR, "MAP_PASSAGE_CAVE_GROTT_HOLE")
     _assert_near(emu, "B19", CAVE_ARRIVAL)
 
 
-# -- B20 -----------------------------------------------------------------
+# -- B20 (DEFERRED to CH25 -- see DEFERRED_BEATS) -------------------------
 
-@kevlar.beat("B20", "Pushing each boulder one tile (module finding 2: none "
-                    "of the 3 boulders have push movement wired -- every "
-                    "push is expected to fail as a bump, not a move; "
-                    "finding 8: this beat can never actually be reached in "
-                    "this build -- B19's own door is sealed -- but its "
-                    "coordinates were verified statically and are correct)",
-             locations=tuple(
-                 BeatLocation("MAP_PASSAGE_CAVE_GROTT_HOLE", bx, by, f"boulder (local id {local_id})")
-                 for local_id, (bx, by) in BOULDERS
-             ))
 def b20(emu: Emulator) -> None:
+    """Pushing each boulder one tile.
+
+    Module finding 2: none of the 3 boulders have push movement wired --
+    every push is expected to fail as a bump, not a move -- a genuine
+    converter gap, kept as a real assertion. Finding 8: this beat can never
+    actually be reached until HM04 Strength is obtainable (CH25) -- B19's
+    own door is sealed until then -- but its coordinates were verified
+    statically and are correct.
+    """
     for local_id, xy in BOULDERS:
-        before = emu.object_event(local_id)
         bx, by = xy
         # Approach from the north and push DOWN -- the boulders sit close
         # together (10,14)/(8,15)/(10,12); (bx, by-1) is walkable for all 3
@@ -1138,13 +1145,15 @@ def b20(emu: Emulator) -> None:
 # B20, which already asserts non-movement for all 3; no separate N5 beat.
 
 
-# -- B21/B22/B23 -----------------------------------------------------------
+# -- B21/B22/B23 (DEFERRED to CH25 -- see DEFERRED_BEATS) ------------------
 
-@kevlar.beat("B21", "Biker Lou (EV4): approach and interact (module finding "
-                    "1: no trainerbattle* command exists -- expected to "
-                    "produce dialogue only, no battle; finding 8: also "
-                    "unreachable for real, same as B20)")
 def b21(emu: Emulator) -> None:
+    """Biker Lou (EV4): approach and interact.
+
+    Module finding 1: no trainerbattle* command exists -- expected to
+    produce dialogue only, no battle. Finding 8: also unreachable until
+    HM04 Strength (CH25), same as B20.
+    """
     from ..battle import in_battle
 
     _approach_patrol_npc(emu, "B21", LOU_LOCAL, "UP")
@@ -1159,10 +1168,12 @@ def b21(emu: Emulator) -> None:
     win_battle(emu)
 
 
-@kevlar.beat("B22", "Biker Joe (EV5): approach and interact (module finding "
-                    "1: same gap as Lou; finding 8: also unreachable for "
-                    "real)")
 def b22(emu: Emulator) -> None:
+    """Biker Joe (EV5): approach and interact.
+
+    Module finding 1: same gap as Lou. Finding 8: also unreachable until
+    HM04 Strength (CH25).
+    """
     from ..battle import in_battle, win_battle
 
     _approach_patrol_npc(emu, "B22", JOE_LOCAL, "UP")
@@ -1176,19 +1187,19 @@ def b22(emu: Emulator) -> None:
     win_battle(emu)
 
 
-@kevlar.beat("B23", "Richard (EV6): approach and interact; expect "
-                    "FLAG_SIDEQUEST_CRYBOY_END to be set (module finding 1: "
-                    "no trainerbattle* AND no setflag of this name exists "
-                    "in Map019_EV006_Page1 -- expected to fail on both; "
-                    "finding 8: also unreachable for real. NOTE: static "
-                    "collision decode also shows (22,8), one tile south of "
-                    "Richard's (22,7) spawn, is itself blocked -- "
-                    "_approach_patrol_npc reads his LIVE position each "
-                    "attempt, so whether this ever bites depends on where "
-                    "his patrol route puts him; not verified live because "
-                    "the cave can't be reached, left as an open question, "
-                    "not silently assumed fine)")
 def b23(emu: Emulator) -> None:
+    """Richard (EV6): approach and interact; expect
+    FLAG_SIDEQUEST_CRYBOY_END to be set.
+
+    Module finding 1: no trainerbattle* AND no setflag of this name exists
+    in Map019_EV006_Page1 -- expected to fail on both. Finding 8: also
+    unreachable until HM04 Strength (CH25). NOTE: static collision decode
+    also shows (22,8), one tile south of Richard's (22,7) spawn, is itself
+    blocked -- `_approach_patrol_npc` reads his LIVE position each attempt,
+    so whether this ever bites depends on where his patrol route puts him;
+    not verified live because the cave can't be reached pre-Strength, left
+    as an open question, not silently assumed fine.
+    """
     from ..battle import in_battle, win_battle
 
     if emu.flag("FLAG_SIDEQUEST_CRYBOY_END"):
@@ -1209,14 +1220,15 @@ def b23(emu: Emulator) -> None:
             f"finding 1 ({shot})")
 
 
-# -- B24 -----------------------------------------------------------------
+# -- B24 (DEFERRED to CH25 -- see DEFERRED_BEATS) --------------------------
 
-@kevlar.beat("B24", "The cave exit warps back to Map031 (13,7) (finding 8: "
-                    "also unreachable for real -- its own geometry is "
-                    "statically correct, matching the arrival/mat warp-pair "
-                    "shape already verified elsewhere in this chapter)",
-             map_constant="MAP_PASSAGE_CAVE_GROTT_HOLE", at=CAVE_EXIT_APPROACH)
 def b24(emu: Emulator) -> None:
+    """The cave exit warps back to Map031 (13,7).
+
+    Finding 8: also unreachable until HM04 Strength (CH25) -- its own
+    geometry is statically correct, matching the arrival/mat warp-pair
+    shape already verified elsewhere in this chapter.
+    """
     _cross_threshold(emu, "B24", CAVE_EXIT_APPROACH, "DOWN", "MAP_KEVLAR_TOWN")
     _assert_near(emu, "B24", CAVE_DOOR)
 
@@ -1315,11 +1327,34 @@ def b23_post_gym5_deferred(emu: Emulator) -> None:
     )
 
 
+# B19-B24: the Grott-Hole cave. Needs HM04 Strength, which does not arrive
+# until CH25 (Route 11, `reference/chapters/00-atlas.md` line 116) --
+# `pbPushThisBoulder` (`reference/scripts_dump/101__PField_Field.rb`) is
+# gated on `$PokemonMap.strengthUsed` and does nothing until then, so every
+# boulder sealing this cave is CORRECTLY immovable in CH03 -- this is the
+# game's design working, not a converter gap (module docstring finding 8;
+# confirmed against `output/uranium-build/wiki/Kevlar_Town.wiki` lines
+# 28/30 and `Passage_Cave.wiki` line 10, both of which describe this as
+# return-trip content reached only after fetching HM04 in Legen Town).
+# Restore all 6 together once a chapter reaches this cave post-Strength.
 DEFERRED_BEATS = (
     ("B15b", "Bike Wheel -> Bicycle grant", b15_bike_wheel_deferred),
     ("B18b", "Cry Boy sidequest accept", b18_cry_boy_accept_deferred),
     ("B26", "Compensation Man's Luxi gift", compensation_man_deferred),
     ("B23b", "Richard's post-Gym-5 team", b23_post_gym5_deferred),
+    ("B19", "The cave door opens; arrival near (11,29) -- needs HM04 "
+            "Strength (CH25) to reach past the boulder-sealed corridor",
+     b19),
+    ("B20", "Pushing each boulder one tile -- needs HM04 Strength (CH25); "
+            "the boulders are correctly immovable without it", b20),
+    ("B21", "Biker Lou battles -- needs HM04 Strength (CH25) to reach the "
+            "cave at all", b21),
+    ("B22", "Biker Joe battles -- needs HM04 Strength (CH25) to reach the "
+            "cave at all", b22),
+    ("B23", "Richard battles and sets FLAG_SIDEQUEST_CRYBOY_END -- needs "
+            "HM04 Strength (CH25) to reach the cave at all", b23),
+    ("B24", "The cave exit warps back to Map031 -- needs HM04 Strength "
+            "(CH25) to reach the cave at all", b24),
 )
 
 # -- symbol lint surface ------------------------------------------------------

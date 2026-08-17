@@ -677,3 +677,41 @@ closed this by making the gate pass, but the ordering is still a trap — a
 genuine future failure would skip the writes the same way. Worth making the
 write unconditional (or the failure an exception) so a red gate can never leave
 a half-staged tree behind; not done here.
+
+### 39. `pbPushThisBoulder` is unconverted — due in CH25, the chapter that grants Strength
+
+*Reclassified out of `CH03_TODO.md` #20 on 2026-08-17, where it had been logged
+as Kevlar Town's biggest blocker. It never blocked CH03.*
+
+`pbPushThisBoulder` (`reference/scripts_dump/101__PField_Field.rb:2850`) pushes
+only `if $PokemonMap.strengthUsed`, and returns false otherwise — the standard
+series mechanic. So an unpushable boulder in a pre-Strength chapter is the
+design working, and converting this function would not have changed any beat's
+outcome in CH03.
+
+**Due in CH25 (Route 11)** — the chapter that *grants* HM04 (`00-atlas.md`
+line 116), not the chapter before it. It should land alongside the mechanic it
+enables, where a beat can actually exercise a push; shipping it earlier means
+committing an unverifiable conversion.
+
+**Scope when it comes up** — 5 queue entries, plus the content they gate:
+
+| Map | Entries | What |
+|---|---|---|
+| 19 (Passage Cave Grott-Hole) | 17 (all of them) | 3 boulders + the Biker encounters: 3 `pbTrainerIntro(:BIKER)`, 3 `Kernel.pbNoticePlayer`, 3 `pbTrainerEnd`, 4 `pbTrainerBattle` conditionals (Lou/Joe/Richard), 1 warp back to map31 |
+| 31 (Kevlar Town) | 2 of 17 | the two outdoor boulders, `EV001` (10,16) and `EV037` (12,16) |
+
+Map019 **stays in `SLICE_MAP_IDS` now** (user call, 2026-08-17) so the cave is
+built and art-checked well before Strength arrives — only its beats are
+deferred.
+
+**Implementation note already settled:** the push is **object-driven** —
+`OBJ_EVENT_GFX_PUSHABLE_BOULDER`, **not** `MB_PUSHABLE_BOULDER`
+(`reference/chapters/03-kevlar-town.md` §6.1 — "corrected in the ledger, do not
+re-invert").
+
+The same CH25 work unblocks the **Cry Boy sidequest** in Kevlar Town, which is
+the same return trip: *"After getting HM04 in Legen Town, come back and speak to
+the boy crying just outside of the entrance of the Poké Mart"*
+(`Kevlar_Town.wiki:30`). CH03's B18 correctly observes only the pre-Strength
+idle page today.

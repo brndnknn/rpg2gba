@@ -83,10 +83,13 @@ CH03 runs **51 pass / 1 fail** on a clean full run — green through **B18**,
 halting at **B19**. The old B16 ceiling is gone, and the halt is now the
 boulder wall (#20) rather than anything about the Magikarp.
 
-B19's failure is the honest, expected one: `walk_to(13,8) frame budget
-exhausted` — the pathfinder cannot reach the cave door because the corridor
-is sealed. It is the same blocker as #20, surfacing as a walk timeout rather
-than a script error.
+B19's `walk_to(13,8) frame budget exhausted` is the pathfinder meeting a wall
+the game intends: the cave is Strength-gated and Strength arrives in CH25. See
+#20 — B19–B24 are now **deferred**, not failing, so the suite's real state is
+green across everything CH03 can reach.
+
+**B19–B24 remain unreachable, and that is correct.** The Grott-Hole is
+return-trip content. Nothing about it blocks this chapter's §9 gate.
 
 **The Magikarp halt was a beat bug, not a converter bug** — see #21, closed.
 `givemon` had been missing because a vanilla reuse like Magikarp could never
@@ -99,10 +102,23 @@ map68 7, map67 3) — down 1 from 56, the Magikarp entry. Counted from
 map-less records are common-event scoped, not CH03, and the 15-map slice total
 is 345.
 
-**B19–B24 remain unreachable in a real playthrough** because unconverted
-boulder pushing seals the cave (#20) — now unambiguously the highest-value
-queue item left for this chapter. Still also missing: `giveitem` for the PC
-tour and Berry Boutique. A green build is not a converted chapter.
+**19 of the 55 entries are return-trip work that moves to CH25** (#20):
+**all 17 of map19** — 3 boulders, plus the Grott-Hole's Biker encounters
+(3 `pbTrainerIntro(:BIKER)`, 3 `Kernel.pbNoticePlayer`, 3 `pbTrainerEnd`,
+4 `pbTrainerBattle` conditionals for Lou/Joe/Richard, 1 warp back to map31)
+— and **2 of map31's 17**, the two outdoor boulders.
+
+**That leaves 36 genuinely open for CH03**, and map31's remaining 15 are the
+interesting ones: **12 are "command follows a Transfer Player warp"** (a
+single structural idiom — pokeemerald halts the script at the warp, so
+whatever followed is dropped), 2 are character-facing conditionals, and 1 is
+`pbAddPokemon(PBSpecies::LUXI, 5)`. That last one is the vanilla-species fix
+behaving correctly: LUXI is a `needs_engine` species and still queues, exactly
+as the `b33a8449` tests pin.
+
+The 12-entry warp idiom is now the largest single cluster of real CH03 work.
+Still also open: `giveitem` for the PC tour and Berry Boutique. A green build
+is not a converted chapter — but the chapter's own reachable surface is green.
 
 **Eight converter bugs fixed** (#7, #10, #11, #12, #13, #15, #17, plus Mawuli's
 facility battle) and a build-set wiring miss (#16). Every one was found by the
@@ -201,19 +217,52 @@ re-trigger BUY.
 **N4 is now registered and passing** — it was only ever deferred for the
 missing primitive, and it needs no money granted at all.
 
-### 20. The cave is sealed: `pbPushThisBoulder` is unconverted — OPEN
+### 20. The cave is sealed — NOT A CH03 BLOCKER, reclassified 2026-08-17
 
-**This is the chapter's biggest remaining gap, and it is a conversion gap,
-not a beat bug.** Two boulders on the *outdoor* Kevlar Town map —
-`Map031_EV001_Page1` at (10,16) and `Map031_EV037_Page1` at (12,16) — compile
-to bare `lock`/`release`/`end`, because their only content is a
-`pbPushThisBoulder` script call still sitting in the unhandled queue (5
-occurrences across the build set). Together they seal the only corridor to
-the cave door at (13,7).
+**The seal is the game design working, not a conversion gap.** Reclassified
+after the user pushed back on the obvious question — boulders are Strength-gated
+in every Pokémon game, so why would Uranium differ? It doesn't.
 
-Confirmed two ways: a BFS over `KevlarTown/map.bin` reaches the door with
-*either* boulder tile excluded but not with both, and the live `walk_to` A*
-planner refuses the route once it reaches the corridor mouth.
+`pbPushThisBoulder` (`reference/scripts_dump/101__PField_Field.rb:2850`) is:
+
+```ruby
+def pbPushThisBoulder #JV
+  if $PokemonMap.strengthUsed
+    pbPushThisEvent
+    return true
+  end
+  return false
+end
+```
+
+No Strength, no push. **HM04 is granted in CH25 (Route 11)** (`00-atlas.md`
+line 116), so the player cannot move these boulders during CH03 under any
+circumstances. Corroborated by the wiki: *"you will need HM04 (Strength) to
+move the boulder blocking your path and to explore the cave"* and *"After
+getting HM04 in Legen Town, come back and speak to the boy crying just outside
+of the entrance of the Poké Mart"* (`Kevlar_Town.wiki:28,30`;
+`Passage_Cave.wiki:10` agrees). The Grott-Hole and the Cry Boy sidequest are
+one **return-trip** unit, not CH03 content.
+
+The BFS and `walk_to` evidence in the original write-up was correct and is
+still correct — it just measured the intended wall. Signal that was misread at
+the time: sw86 `FLAG_HAS_STRENGTH` is written exactly once corpus-wide, on
+**Map140/Route 11** — precisely where Strength is granted. That was the answer,
+recorded in the spec as an anomaly.
+
+**Consequences.** B19–B24 are deferred, not failing (CH02's rock-chokepoint
+precedent). Map019 **stays in `SLICE_MAP_IDS`** (user call) so the cave is
+already built and art-checked when Strength lands. B18 needs no change — it
+observes the pre-Strength idle page and passes.
+
+**The conversion work itself is still real** and moves to `PROJECT_TODO.md`:
+`pbPushThisBoulder` is genuinely unconverted (5 queue entries, map31 EV001/EV037
+and map19 EV001/EV002/EV003), and is due **in CH25**, the chapter that grants
+Strength — not the chapter before it (user call: it should land with the
+mechanic it enables, where a beat can actually exercise it).
+
+Sibling misdiagnosis: #21, same session, same root shape — a beat written
+against output and mistaken for a statement about the design.
 
 Consequence: **B19–B24 are unreachable in a real playthrough** — the cave
 door, all three boulder pushes, Bikers Lou and Joe, Richard, and the cave
