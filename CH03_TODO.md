@@ -71,26 +71,38 @@ of truth for what the chapter *is* remains the spec doc. Shape:
      and re-emit Page1's full completion sequence with a proper no-op stand-in
      for the Pokérus branch instead of dropping the conditional wholesale.
 
-## Current status (2026-08-16)
+## Current status (2026-08-17)
 
-**ROM `49f7420f` builds clean** (27.36/32 MB, EWRAM 86.8%, IWRAM 87.0%);
-**2119 tests pass**, 19 skipped. Everything through the script-call joiner is
-committed on `ch03-kevlar`.
+**ROM sha256 `2c63e8f6` builds clean** (32 MB image, ROM 81.54% full) — the
+first build since the engine-cutover doc correction (`247d6b64`), produced by
+the full pipeline exiting 0 end to end on `engine/`: transpile → stage →
+assemble → `make modern`.
 
 **Chapter suite `kevlar`:** predecessors green (moki + route1 replayed), and
-CH03 is now **green through B16** on a clean full run — B1, B2, N3, B3, B4,
-B26, B7, N1, B5, B8, B10, B11, N4, B12, B13, B14, B15, B16. The run halts at
-**B17**, and that halt is honest: the Magikarp page has no `givemon` in the
-compiled script, so the party-add cannot succeed. Beyond it, **B19–B24 are
-unreachable in a real playthrough** because unconverted boulder pushing seals
-the cave (#20) — the single highest-value queue item left for this chapter.
+CH03 runs **51 pass / 1 fail** on a clean full run — green through **B18**,
+halting at **B19**. The old B16 ceiling is gone, and the halt is now the
+boulder wall (#20) rather than anything about the Magikarp.
 
-**The chapter is still NOT fully converted**, but the queue is no longer
-untouched: **56 entries across the five maps** (was 87 before the joiner —
-map73 34→11, map67 11→3). Still missing: boulder pushing, `givemon` for the
-Magikarp, `giveitem` for the PC tour and Berry Boutique. Beats covering those
-are written against the real designed behaviour and legitimately fail until
-the queue is worked. A green build is not a converted chapter.
+B19's failure is the honest, expected one: `walk_to(13,8) frame budget
+exhausted` — the pathfinder cannot reach the cave door because the corridor
+is sealed. It is the same blocker as #20, surfacing as a walk timeout rather
+than a script error.
+
+**The Magikarp halt was a beat bug, not a converter bug** — see #21, closed.
+`givemon` had been missing because a vanilla reuse like Magikarp could never
+clear the staging gate; `b33a8449` fixed that and the full gift flow now
+compiles. B17/N2 were rewritten against the real 99-refusal design.
+
+**The queue is 55 entries across the five maps** (map31 17, map19 17, map73 11,
+map68 7, map67 3) — down 1 from 56, the Magikarp entry. Counted from
+`output/uranium-build/transpile_unhandled.jsonl`; note the file's other 88
+map-less records are common-event scoped, not CH03, and the 15-map slice total
+is 345.
+
+**B19–B24 remain unreachable in a real playthrough** because unconverted
+boulder pushing seals the cave (#20) — now unambiguously the highest-value
+queue item left for this chapter. Still also missing: `giveitem` for the PC
+tour and Berry Boutique. A green build is not a converted chapter.
 
 **Eight converter bugs fixed** (#7, #10, #11, #12, #13, #15, #17, plus Mawuli's
 facility battle) and a build-set wiring miss (#16). Every one was found by the
@@ -213,12 +225,30 @@ One open uncertainty inside the cave, untestable until it opens: Richard's
 south-approach tile (22,8) is collision-blocked at his spawn, but he patrols
 and `_approach_patrol_npc` reads his live position, so it may never bite.
 
-### 21. The Magikarp joke has no repeat guard — OPEN
+### 21. The Magikarp joke has no repeat guard — NOT A DEFECT, closed 2026-08-17
 
-`Map031_EV014_Page1_Joke` increments `VAR_HA_MAGIKARP` on every "No" answer
-with no flag check anywhere in the compiled page — verified live going 1→2 on
-a re-talk. N2 fails honestly on this. Related to the same page's missing
-`givemon` (B17). Both are queue work, not beat authoring.
+Withdrawn: the increment *is* the mechanism, and a repeat guard would break the
+gift outright. `Map031_EV014_Page1_Joke` gates its `givemon` behind
+`VAR_HA_MAGIKARP == 99`, so the counter has to accumulate — the gag is that the
+player refuses the joke 100 times, and the hundredth refusal pays out a level-100
+Magikarp. Confirmed faithful against the raw event: **code 111, variable 200,
+operand 99, comparison `==`**. Going 1→2 on a re-talk is the feature working.
+
+This item and B17 were both written on 2026-08-16 against pre-fix output, where
+the page really did emit no `givemon` — module finding 3 in `kevlar.py` said so.
+That was a symptom of the staging gate, not of the page: `staged_species_constant`
+demanded every `SPECIES_*` appear in `species_manifest.json`, but staging only
+ever covers the ~166 custom/reworked `needs_engine` species, so a vanilla reuse
+like Magikarp could never pass. Fixed in `b33a8449`; the full vanilla gift flow
+now compiles.
+
+Both beats were rewritten against the real design (user call, 2026-08-17): **B17**
+seeds `VAR_HA_MAGIKARP` to 98 via a new `emulator.set_var`, refuses once to reach
+99 with no gift, then refuses again and asserts the Magikarp lands in
+`gPlayerParty`. **N2** is inverted — it now asserts repeated refusals *do*
+accumulate the counter. The 100-refusal loop was considered and rejected as
+suite-time cost for no added coverage; nothing in the page is state-dependent
+past the compare.
 
 ### 19. B13's berry-plant approach never leaves the Mart — FIXED 2026-08-16
 

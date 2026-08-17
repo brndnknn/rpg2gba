@@ -656,6 +656,23 @@ class Emulator:
         addr = self.sb1 + self.offsets["off_sb1_vars"] + (var_id - vars_start) * 2
         return self.core.memory.u16[addr]
 
+    def set_var(self, var: str | int, value: int) -> None:
+        """Write a VAR_* value at the same address `var()` reads. Vars are
+        NOT encrypted (unlike money/bag, which XOR against the save's
+        encryption key -- see `_encryption_key`) -- a plain u16 write is
+        correct here."""
+        var_id = self.resolve_constant(var) if isinstance(var, str) else var
+        vars_start = self.offsets["vars_start"]
+        special_vars_start = self.resolve_constant("SPECIAL_VARS_START")
+        if not (vars_start <= var_id < special_vars_start):
+            raise ScenarioError(
+                f"var id {var_id} is outside the stored-vars range "
+                f"[{vars_start}, {special_vars_start}) — special/temp vars "
+                "aren't writable via a flat offset"
+            )
+        addr = self.sb1 + self.offsets["off_sb1_vars"] + (var_id - vars_start) * 2
+        self.write_u16(addr, value)
+
     def _encryption_key(self) -> int:
         """`gSaveBlock2Ptr->encryptionKey` -- both `money.c`'s GetMoney/
         SetMoney and `item.c`'s BagPocket_Get/SetSlotDataGeneric XOR their

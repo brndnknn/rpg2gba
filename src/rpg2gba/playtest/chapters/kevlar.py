@@ -47,10 +47,17 @@ what the transpiler actually emitted):
    *intended* graphic; the compiled events use plain
    `OBJ_EVENT_GFX_URANIUM_HGSS_267` with `MOVEMENT_TYPE_FACE_DOWN`, an
    ordinary static solid object, not the pushable one).
-3. **The Magikarp gift never calls `givemon`.** `Map031_EV014_Page1_Joke`
-   only increments `VAR_HA_MAGIKARP` on the "No" branch (`VAR_RESULT != 1`)
-   -- there is no `givemon`/party-add anywhere in the script. `VAR_HA_MAGIKARP`
-   0->1 itself is real and does fire on that branch.
+3. **UPDATE (2026-08-17): the earlier "never calls `givemon`" reading was
+   of pre-fix output and is obsolete.** A transpiler fix landed and the
+   compiled `Map031_EV014_Page1_Joke` (`output/uranium-build/scripts/
+   Map031.pory` lines 646-688) now has the full vanilla gift flow. The real
+   design: the "No" branch (`VAR_RESULT != 1`) normally just `addvar`s
+   `VAR_HA_MAGIKARP` by 1 -- EXCEPT when the var already reads 99, in which
+   case that same "No" branch instead runs the full gift (`bufferspeciesname`
+   / `showmonpic` / `givemon(SPECIES_MAGIKARP, 100)` / fanfare / nickname
+   prompt / PC-overflow branch) and does NOT increment the var further. So
+   the gag is that the player must refuse the joke 100 times (0->99 via
+   refusals, then the 100th refusal triggers the gift).
 4. **The PC-tour "NPC" is not an NPC interaction at all.** `Map068_EV015_Page1`
    (the tour cutscene: `addobject 10`, dialogue, `setflag` on
    EVENT015/016/017_SSA) is invoked from
@@ -936,36 +943,10 @@ def b16(emu: Emulator) -> None:
 
 # -- B17 -----------------------------------------------------------------
 
-@kevlar.beat("B17", "Magikarp NPC: VAR_HA_MAGIKARP 0->1 on the joke's No "
-                    "branch (no `givemon` exists in the compiled script -- "
-                    "module finding 3, the party-add is expected to fail)")
-def b17(emu: Emulator) -> None:
-    var_before = emu.var("VAR_HA_MAGIKARP")
-    if var_before != 0:
-        raise ScenarioError(
-            f"B17 precondition failed: VAR_HA_MAGIKARP reads {var_before}, "
-            f"expected 0")
-    emu.walk_to(*MAGIKARP_STAGING)  # get within camera range so her object event spawns
-    _approach_patrol_npc(emu, "B17", MAGIKARP_LOCAL, "UP")
-    emu.advance_dialog("A", stop=emu.yesno_prompt_up)
-    if not emu.yesno_prompt_up():
-        shot = emu.screenshot("b17_no_prompt")
-        raise ScenarioError(f"B17: no yes/no prompt appeared ({shot})")
-    # `Map031_EV014_Page1_Joke`: VAR_RESULT != 1 (i.e. answering NO) is the
-    # branch that increments VAR_HA_MAGIKARP -- answering YES only shows a
-    # short line and releases. B answers NO.
-    emu.advance_dialog("B")
-    var_after = emu.var("VAR_HA_MAGIKARP")
-    if var_after != 1:
-        shot = emu.screenshot("b17_var_not_incremented")
-        raise ScenarioError(
-            f"B17: VAR_HA_MAGIKARP reads {var_after} after the joke, "
-            f"expected 1 ({shot})")
+def _party_has_magikarp(emu: Emulator) -> bool:
     species_none = emu.resolve_constant("SPECIES_NONE")
     o = emu.offsets
-    box_addr = emu.symbols["gPlayerParty"] + o["off_pkmn_box"]
     from ..battle import decrypt_species
-    found_magikarp = False
     magikarp_id = emu.resolve_constant("SPECIES_MAGIKARP")
     party_size = emu.resolve_constant("PARTY_SIZE")
     mon_size = o["sizeof_pkmn"]
@@ -973,39 +954,93 @@ def b17(emu: Emulator) -> None:
         addr = emu.symbols["gPlayerParty"] + slot * mon_size + o["off_pkmn_box"]
         species = decrypt_species(emu, addr)
         if species == magikarp_id:
-            found_magikarp = True
-            break
+            return True
         if species == species_none:
             break
-    if not found_magikarp:
+    return False
+
+
+def _refuse_joke(emu: Emulator, beat: str) -> None:
+    emu.walk_to(*MAGIKARP_STAGING)  # get within camera range so her object event spawns
+    _approach_patrol_npc(emu, beat, MAGIKARP_LOCAL, "UP")
+    emu.advance_dialog("A", stop=emu.yesno_prompt_up)
+    if not emu.yesno_prompt_up():
+        shot = emu.screenshot(f"{beat.lower()}_no_prompt")
+        raise ScenarioError(f"{beat}: no yes/no prompt appeared ({shot})")
+    # `Map031_EV014_Page1_Joke`: VAR_RESULT != 1 (i.e. answering NO) is the
+    # branch that either increments VAR_HA_MAGIKARP or, once it already
+    # reads 99, runs the gift flow instead. B answers NO.
+    emu.advance_dialog("B")
+    if emu.field_locked():
+        emu.advance_dialog()
+
+
+@kevlar.beat("B17", "Magikarp NPC seeded to 98 refusals: the 99th refusal "
+                    "increments VAR_HA_MAGIKARP to 99 with no gift yet; the "
+                    "100th refusal (var already 99) fires the full "
+                    "givemon/fanfare/nickname gift flow -- module finding 3")
+def b17(emu: Emulator) -> None:
+    emu.set_var("VAR_HA_MAGIKARP", 98)
+    var_before = emu.var("VAR_HA_MAGIKARP")
+    if var_before != 98:
+        raise ScenarioError(
+            f"B17 precondition failed: VAR_HA_MAGIKARP reads {var_before} "
+            f"after seeding to 98")
+
+    _refuse_joke(emu, "B17")
+    var_after_first = emu.var("VAR_HA_MAGIKARP")
+    if var_after_first != 99:
+        shot = emu.screenshot("b17_var_not_99")
+        raise ScenarioError(
+            f"B17: VAR_HA_MAGIKARP reads {var_after_first} after the first "
+            f"refusal, expected 99 ({shot})")
+    if _party_has_magikarp(emu):
+        shot = emu.screenshot("b17_magikarp_too_early")
+        raise ScenarioError(
+            f"B17: a Magikarp is already in gPlayerParty at "
+            f"VAR_HA_MAGIKARP == 99, before the 100th refusal fires the "
+            f"gift ({shot})")
+
+    _refuse_joke(emu, "B17")
+    if not _party_has_magikarp(emu):
         shot = emu.screenshot("b17_no_magikarp")
         raise ScenarioError(
-            f"B17: no Magikarp found in gPlayerParty after the joke -- "
-            f"no `givemon` command exists in Map031_EV014_Page1_Joke, see "
-            f"module docstring finding 3 ({shot})")
+            f"B17: no Magikarp found in gPlayerParty after refusing at "
+            f"VAR_HA_MAGIKARP == 99 -- the gift branch of "
+            f"Map031_EV014_Page1_Joke did not fire, see module docstring "
+            f"finding 3 ({shot})")
 
 
 # -- N2 (Magikarp not granted twice) ----------------------------------------
 
-@kevlar.beat("N2", "Re-talking the Magikarp NPC does not re-increment "
-                   "VAR_HA_MAGIKARP (2026-08-16 finding 9: GENUINE failure "
-                   "-- Map031_EV014_Page1_Joke has no repeat guard at all, "
-                   "see module docstring)")
+@kevlar.beat("N2", "Repeated refusals DO accumulate VAR_HA_MAGIKARP -- the "
+                   "increment on each 'No' answer is the mechanism (100 "
+                   "refusals earn the joke Magikarp), not a bug. Seeds its "
+                   "own baseline of 0 so it's independent of B17's seeded "
+                   "state/ordering.")
 def n2(emu: Emulator) -> None:
+    emu.set_var("VAR_HA_MAGIKARP", 0)
     var_before = emu.var("VAR_HA_MAGIKARP")
-    _approach_patrol_npc(emu, "N2", MAGIKARP_LOCAL, "UP")
-    emu.advance_dialog("A", stop=emu.yesno_prompt_up)
-    if emu.yesno_prompt_up():
-        emu.advance_dialog("B")
-    if emu.field_locked():
-        emu.advance_dialog()
-    var_after = emu.var("VAR_HA_MAGIKARP")
-    if var_after != var_before:
-        shot = emu.screenshot("n2_var_changed")
+    if var_before != 0:
         raise ScenarioError(
-            f"N2: VAR_HA_MAGIKARP changed from {var_before} to {var_after} "
-            f"on a re-talk -- the joke should be repeatable text only, not "
-            f"a repeatable increment ({shot})")
+            f"N2 precondition failed: VAR_HA_MAGIKARP reads {var_before} "
+            f"after seeding to 0")
+
+    _refuse_joke(emu, "N2")
+    var_after_first = emu.var("VAR_HA_MAGIKARP")
+    if var_after_first != var_before + 1:
+        shot = emu.screenshot("n2_var_not_incremented_1")
+        raise ScenarioError(
+            f"N2: VAR_HA_MAGIKARP reads {var_after_first} after the first "
+            f"refusal, expected {var_before + 1} ({shot})")
+
+    _refuse_joke(emu, "N2")
+    var_after_second = emu.var("VAR_HA_MAGIKARP")
+    if var_after_second != var_before + 2:
+        shot = emu.screenshot("n2_var_not_incremented_2")
+        raise ScenarioError(
+            f"N2: VAR_HA_MAGIKARP reads {var_after_second} after the second "
+            f"refusal, expected {var_before + 2} ({shot})")
 
 
 # -- B18 -----------------------------------------------------------------
