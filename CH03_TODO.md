@@ -558,6 +558,52 @@ Deliberately not fixed as part of #24, which was a docs-only change. The spec
 doc's §4.2 now records the zero-`giveitem` reality so it stops asserting
 grants that do not happen.
 
+### 26. The Cry Boy chain is live content, and one unemitted body breaks it
+
+Two findings from tracing the chain 2026-08-18. They point in opposite
+directions and both were previously recorded wrong.
+
+**(a) The chain is not dead — the "sw86 is never true" reading was a bug in
+our own notes.** §7 of the spec, and the comment on
+`b18_cry_boy_accept_deferred` in `kevlar.py`, both claimed sw86 is written
+"to 0/off" and concluded the sidequest is unreachable corpus-wide. RGSS
+code-121's third parameter is `0 = ON, 1 = OFF` — which is how our transpiler
+already reads it (`transpiler.py:2558` emits `setflag` when `value == 0`).
+`Map140.json` EV16 page 0 carries `121 [86, 86, 0]`, so **sw86 is set ON**.
+This is a real return-trip sidequest that opens at the Strength chapter.
+Corrected in both files; `B18b` is now *deferred*, not *unreachable*.
+
+**Worth auditing:** anywhere else we concluded "switch never set true" may
+have made the same inversion. A corpus-wide re-read of code-121 writes under
+the correct convention is cheap and would catch the rest.
+
+**(b) `Map019.pory` EV6 emits an empty battle, so the chain cannot close.**
+`Map019_EV006_Page1` (`output/uranium-build/scripts/Map019.pory:82-111`)
+emits the intro dialogue and the sw94 if/else skeleton, but **both branch
+bodies are empty except comments** — `pbTrainerIntro`, `pbNoticePlayer`, both
+`pbTrainerBattle` calls and `pbTrainerEnd` are all `# UNHANDLED`, logged in
+`transpile_unhandled.jsonl` for `map_id:19, event_id:6`.
+
+The damage is downstream of the missing battle: the self-switch-A set and the
+`121 [100,100,0]` write were **nested inside those branch bodies**, so
+`FLAG_SIDEQUEST_CRYBOY_END` is never set by any emitted script. Consequences:
+
+- `Map019_dispatch.pory` already gates EV4/EV5 (the two blocker trainers) on
+  `FLAG_SIDEQUEST_CRYBOY_END` — those dispatch branches are **currently
+  unreachable in the build**, so the blockers would never retire.
+- `Map073` EV5 reads sw99 and sw100 across three pages; its later states are
+  equally stranded.
+
+Note the shape: sw94 gates only *which of two near-identical*
+`pbTrainerBattle` calls fires (a battle-variant argument), and **both branches
+converge** on the same self-switch + sw100 writes. So a fix does not need to
+model the sw94 distinction to unblock the chain.
+
+Not CH03-blocking (the cave is Strength-gated anyway, #20), but it is the
+concrete example of why an unemitted conditional body is worse than an
+unemitted leaf command: **state writes hide inside branch bodies, and the
+queue entry names the branch, not the writes lost with it.**
+
 ## Done
 
 ### 1. Map identity overrides for maps 73 and 19 — DONE 2026-08-12

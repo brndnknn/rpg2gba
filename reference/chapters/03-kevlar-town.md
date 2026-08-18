@@ -86,7 +86,7 @@ continuity) is:
 | B9 | B14 | Berry Boutique door + NPC | active — **spec's berry/Sprinklotad grant is wrong**: no `giveitem` exists in the compiled script |
 | B10 | B15 / B15b | Bike Repair NPC refusal (B15, active); Bicycle grant (B15b, **deferred to CH11** — Bike Wheel's only source is Route 4) | split |
 | B11 | B17 / N2 | Magikarp joke, 100-refusal gift (B17); refusal-accumulation check (N2, harness-only) | active |
-| B12 | B18 / B18b | Cry Boy idle page (B18, active); sidequest accept (B18b, **deferred, unreachable corpus-wide** — sw86 is never written true anywhere in the corpus) | split |
+| B12 | B18 / B18b | Cry Boy idle page (B18, active); sidequest accept (B18b, **deferred to the Strength chapter** — sw86 is set ON once, on Map140/Route 11; see §7 correction) | split |
 | B13 | B19 / B20 / B21 / B22 / B23 | Cave door; 3 boulder pushes; Lou/Joe/Richard battles | **DEFERRED to CH25** (Strength-gated, §7.1) |
 | B14 | B24 | Cave exit warp back to Map031 | **DEFERRED to CH25** |
 | B15 | B25 | North edge, impassable wall | active |
@@ -132,7 +132,7 @@ counter's ball-sprite display, 2 writes).
 | B15 | 73 | none | talk Bike Repair NPC (EV1) | No yes/no, no `BICYCLE` grant in the compiled script at all — old spec B10. (Bike Wheel → Bicycle grant, spec's original premise, is `B15b`, **deferred to CH11** — Bike Wheel's only source is Route 4 — §5 #3, §7) |
 | B16 | 31→73 | none | enter Maury's apartment (37,28) / the couple's house (32,28) | Warp in and back out cleanly — **never assigned a beat number in this document's original table**; see §4.4 |
 | B17 | 31 | none | talk "EV014" (29,20) | Joke dialogue; the "No" branch increments var200, **except at var200==99, where it fires `pbAddPokemon(MAGIKARP,100)`** — a hundred refusals earn the Magikarp. The increment is the mechanism, not a missing re-talk guard (§7.1) — old spec B11 |
-| B18 | 31 | Strength | talk "Cry Boy" (EV7) | Page0 (ungated) idle only; page1 (sets sw99) needs sw86. **Sw86 written exactly once corpus-wide, on Map140/Route 11 — which is exactly where HM04 is granted.** Not an anomaly: this is a post-Strength return-trip sidequest, out of chapter (§7.1) — old spec B12. (Page1 accept branch is `B18b`, **deferred, unreachable corpus-wide**) |
+| B18 | 31 | Strength | talk "Cry Boy" (EV7) | Page0 (ungated) idle only; page1 (sets sw99) needs sw86. **Sw86 written exactly once corpus-wide, on Map140/Route 11 — which is exactly where HM04 is granted.** Not an anomaly: this is a post-Strength return-trip sidequest, out of chapter (§7.1) — old spec B12. (Page1 accept branch is `B18b`, **deferred to the Strength chapter** — sw86 is set ON there, §7 correction) |
 | B19–B23 | 31→19 | **Strength (HM04, CH25)** | enter cave door (13,7) | **NOT REACHABLE THIS CHAPTER** — the outdoor boulders sealing the corridor need Strength (§7.1). When it opens: warp to Map019 (11,29); 3 "Boulder" push events (B20); sight Bikers Lou (B21, EV4)/Joe (B22, EV5); Richard (B23, EV6) sets sw100 after 1 of 2 branches (sw94-gated postgame variant, out of scope) — old spec B13 |
 | B24 | 19→31 | **Strength (HM04, CH25)** | walk exit tile (11,30) | Warp to Map031 (13,7) — only warp target anywhere in Map019. Same gate as B19–B23 — old spec B14 |
 | B25 | 31→35 | none | walk off north edge | Seam crossing into Map035 "Route 02" — chapter exit, out of scope — old spec B15 |
@@ -314,7 +314,14 @@ Essentials function or the wiki. Check the source mechanic before filing a gap.
   through-cave, contradicted by my warp trace and the wiki (§5 #2) — I did
   not edit that file; flagging for its owner.
 - **Cry Boy → Richboy reachability** (B18/B18b, §3): sw86 gates the offer and
-  is written exactly once corpus-wide (Map140/Route11 CH25), to **0/off**.
+  is written exactly once corpus-wide (Map140/Route11 CH25), to **ON**.
+  **CORRECTED 2026-08-18:** this entry previously read "to 0/off" and
+  concluded the chain was dead corpus-wide. That misread RGSS's code-121
+  convention — parameter 3 is `0 = ON, 1 = OFF`, which is exactly how our own
+  transpiler treats it (`transpiler.py:2558`: `setflag` when `value == 0`).
+  Map140 EV16 page 0 carries `121 [86, 86, 0]`, i.e. **sw86 is turned ON**.
+  The Cry Boy chain is therefore a real, completable return-trip sidequest,
+  not dead content — it opens once Strength is obtained.
   Checked via a full-corpus scan of `code-121` writes to switch86 plus
   `common_events.json`; doesn't rule out a grant in raw embedded Ruby text
   outside those two command shapes.

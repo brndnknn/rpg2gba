@@ -1292,9 +1292,12 @@ def b15_bike_wheel_deferred(emu: Emulator) -> None:
 
 
 # Cry Boy sidequest accept (page2, FLAG_HAS_STRENGTH-gated). sw86 is written
-# exactly once corpus-wide (Map140/Route11, CH25), to 0/off -- never true
-# anywhere in the corpus, so this branch is unreachable in any chapter as
-# currently converted, not just this one.
+# exactly once corpus-wide (Map140/Route11, CH25) -- and it is written ON.
+# CORRECTED 2026-08-18: this comment used to read "to 0/off -- never true
+# anywhere in the corpus". RGSS code-121's third parameter is 0 = ON, which
+# is how our own transpiler reads it (transpiler.py:2558 emits setflag when
+# value == 0). So this is a genuine return-trip sidequest that opens at the
+# Strength chapter, not dead content -- deferred, not unreachable.
 def b18_cry_boy_accept_deferred(emu: Emulator) -> None:
     emu.walk_to(*CRY_BOY_APPROACH)
     emu.face(CRY_BOY_FACING)
