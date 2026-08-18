@@ -520,6 +520,44 @@ doc="reference/chapters/03-kevlar-town.md", predecessor="route1")`. No
 registration anywhere else — `chapter_names()` auto-discovers the module.
 Full suite on green = moki 17 + route1 29 + kevlar's own.
 
+### 25. Every item grant in the chapter compiles to nothing
+
+Surfaced 2026-08-18 while reconciling the spec's numbering (#24). The spec's
+§4.2 item-grant table lists five grants; **`grep -c 'giveitem\|finditem'` over
+`output/uranium-build/scripts/Map031.pory`, `Map068.pory` and `Map073.pory`
+returns 0 for all three.** Nothing in this chapter gives the player an item.
+
+| Item | Map / event | Spec's claimed source |
+|---|---|---|
+| 5× Oran Berry | 68 / EV15 (PC-tour) | `pbReceiveItem(ORANBERRY,5)` in a code-111/type-12 conditional |
+| Antidote | 68 / EV18 (item ball) | `pbItemBall(ANTIDOTE)` |
+| Bacu/Guara/Cupu/Acai Berry | 73 / EV6 pg0 | `pbReceiveItem`, some on code-655 continuation lines |
+| Sprinklotad | 73 / EV3 + EV6 pg1 | `pbReceiveItem`, gated on not-held |
+| Bicycle | 73 / EV1 | `BIKEWHEEL` consumed → `BICYCLE` (out of chapter anyway, → CH11) |
+
+The suite does not catch this: **B5, B7 and B14 all assert self-switches, not
+inventory** (`kevlar.py:574` region for B7 — it checks `_flag_ssa(68, …)` and
+nothing else), so all three pass over a missing grant. B7's own docstring
+already says "grants an Antidote once", which the compiled script does not do.
+
+Unknown which layer is at fault, and that is the first thing to establish:
+
+1. **Is the source data there?** Check the deserialized map JSON for the
+   `pbReceiveItem`/`pbItemBall` calls. If absent, the spec's §4.2 was written
+   off the wiki rather than the data and the fix is documentation only.
+2. **If present, it is a transpiler gap** — most likely the same code-355/655
+   continuation-row shape that hid `pbPokemonMart` in #17, since the spec
+   itself notes three of the Boutique berries live on continuation lines.
+   Confirm whether these commands sit in the unhandled queue or were silently
+   dropped; **silently dropped is a §4.5 violation and the more serious
+   finding.**
+3. Then extend the beats to assert **inventory**, not just the self-switch —
+   `Emulator.bag_item_quantity` already exists (added 2026-08-16 for B11).
+
+Deliberately not fixed as part of #24, which was a docs-only change. The spec
+doc's §4.2 now records the zero-`giveitem` reality so it stops asserting
+grants that do not happen.
+
 ## Done
 
 ### 1. Map identity overrides for maps 73 and 19 — DONE 2026-08-12
