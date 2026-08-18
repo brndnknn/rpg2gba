@@ -12165,6 +12165,90 @@ const struct ItemInfo gItemsInfo[] =
         .iconPalette = gItemIconPalette_EnigmaBerry,
     },
 
+// URANIUM PATHFINDER SLICE: Uranium-original berries. Functionally identical
+// to their vanilla status-cure twins (same holdEffect/battleUsage/effect,
+// pocket 5, price 20); only name/pluralName/description/icon differ.
+    [ITEM_ACAI_BERRY] =
+    {
+        .name = ITEM_NAME("Acai Berry"),
+        .pluralName = ITEM_PLURAL_NAME("Acai Berries"),
+        .price = (I_BERRY_PRICE >= GEN_8) ? 80 : 20,
+        .holdEffect = HOLD_EFFECT_CURE_PAR,
+        .description = COMPOUND_STRING(
+            "It may be used or\n"
+            "held by a Pokémon to\n"
+            "recover from paralysis."),
+        .pocket = POCKET_BERRIES,
+        .type = ITEM_USE_PARTY_MENU,
+        .fieldUseFunc = ItemUseOutOfBattle_Medicine,
+        .battleUsage = EFFECT_ITEM_CURE_STATUS,
+        .effect = gItemEffect_ParalyzeHeal,
+        .flingPower = 10,
+        .iconPic = gItemIcon_AcaiBerry,
+        .iconPalette = gItemIconPalette_AcaiBerry,
+    },
+
+    [ITEM_BACU_BERRY] =
+    {
+        .name = ITEM_NAME("Bacu Berry"),
+        .pluralName = ITEM_PLURAL_NAME("Bacu Berries"),
+        .price = (I_BERRY_PRICE >= GEN_8) ? 80 : 20,
+        .holdEffect = HOLD_EFFECT_CURE_SLP,
+        .description = COMPOUND_STRING(
+            "It may be used or\n"
+            "held by a Pokémon to\n"
+            "recover from sleep."),
+        .pocket = POCKET_BERRIES,
+        .type = ITEM_USE_PARTY_MENU,
+        .fieldUseFunc = ItemUseOutOfBattle_Medicine,
+        .battleUsage = EFFECT_ITEM_CURE_STATUS,
+        .effect = gItemEffect_Awakening,
+        .flingPower = 10,
+        .iconPic = gItemIcon_BacuBerry,
+        .iconPalette = gItemIconPalette_BacuBerry,
+    },
+
+    [ITEM_CUPU_BERRY] =
+    {
+        .name = ITEM_NAME("Cupu Berry"),
+        .pluralName = ITEM_PLURAL_NAME("Cupu Berries"),
+        .price = (I_BERRY_PRICE >= GEN_8) ? 80 : 20,
+        .holdEffect = HOLD_EFFECT_CURE_BRN,
+        .description = COMPOUND_STRING(
+            "It may be used or\n"
+            "held by a Pokémon to\n"
+            "recover from a burn."),
+        .pocket = POCKET_BERRIES,
+        .type = ITEM_USE_PARTY_MENU,
+        .fieldUseFunc = ItemUseOutOfBattle_Medicine,
+        .battleUsage = EFFECT_ITEM_CURE_STATUS,
+        .effect = gItemEffect_BurnHeal,
+        .flingPower = 10,
+        .iconPic = gItemIcon_CupuBerry,
+        .iconPalette = gItemIconPalette_CupuBerry,
+    },
+
+    [ITEM_GUARA_BERRY] =
+    {
+        .name = ITEM_NAME("Guara Berry"),
+        .pluralName = ITEM_PLURAL_NAME("Guara Berries"),
+        .price = (I_BERRY_PRICE >= GEN_8) ? 80 : 20,
+        .holdEffect = HOLD_EFFECT_CURE_FRZ,
+        .description = COMPOUND_STRING(
+            "It may be used or\n"
+            "held by a Pokémon\n"
+            "to defrost it."),
+        .pocket = POCKET_BERRIES,
+        .type = ITEM_USE_PARTY_MENU,
+        .fieldUseFunc = ItemUseOutOfBattle_Medicine,
+        .battleUsage = EFFECT_ITEM_CURE_STATUS,
+        .effect = gItemEffect_IceHeal,
+        .flingPower = 10,
+        .iconPic = gItemIcon_GuaraBerry,
+        .iconPalette = gItemIconPalette_GuaraBerry,
+    },
+// END URANIUM PATHFINDER SLICE
+
 // TMs/HMs. They don't have a set flingPower, as that's handled by GetFlingPowerFromItemId.
 
     [ITEM_TM_FOCUS_PUNCH] =
@@ -15828,6 +15912,28 @@ const struct ItemInfo gItemsInfo[] =
         .iconPic = gItemIcon_PokeshiDoll,
         .iconPalette = gItemIconPalette_PokeshiDoll,
     },
+
+// URANIUM PATHFINDER SLICE: Uranium-original key item. Item only this pass —
+// no watering mechanic is wired up (fieldUseFunc is the same "cannot use
+// from the bag" stub used by other unimplemented key items, e.g.
+// ITEM_EXP_CHARM above); the watering-can behaviour is deliberately
+// unimplemented and left for a future pass.
+    [ITEM_SPRINKLOTAD] =
+    {
+        .name = ITEM_NAME("Sprinklotad"),
+        .price = 0,
+        .importance = 1,
+        .description = COMPOUND_STRING(
+            "A watering can\n"
+            "shaped like a Lotad.\n"
+            "Promotes Berry growth."),
+        .pocket = POCKET_KEY_ITEMS,
+        .type = ITEM_USE_BAG_MENU,
+        .fieldUseFunc = ItemUseOutOfBattle_CannotUse,
+        .iconPic = gItemIcon_Sprinklotad,
+        .iconPalette = gItemIconPalette_Sprinklotad,
+    },
+// END URANIUM PATHFINDER SLICE
 };
 
 #undef ITEM_NAME

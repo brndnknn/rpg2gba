@@ -74,6 +74,13 @@ const u32 gBerryPic_Rowap[] = INCGFX_U32("graphics/berries/rowap.png", ".4bpp.sm
 const u32 gBerryPic_Kee[] = INCGFX_U32("graphics/berries/kee.png", ".4bpp.smol");
 const u32 gBerryPic_Maranga[] = INCGFX_U32("graphics/berries/maranga.png", ".4bpp.smol");
 
+// URANIUM PATHFINDER SLICE: Uranium-original berries
+const u32 gBerryPic_Acai[] = INCGFX_U32("graphics/berries/acai.png", ".4bpp.smol");
+const u32 gBerryPic_Bacu[] = INCGFX_U32("graphics/berries/bacu.png", ".4bpp.smol");
+const u32 gBerryPic_Cupu[] = INCGFX_U32("graphics/berries/cupu.png", ".4bpp.smol");
+const u32 gBerryPic_Guara[] = INCGFX_U32("graphics/berries/guara.png", ".4bpp.smol");
+// END URANIUM PATHFINDER SLICE
+
 const u16 gBerryPalette_Cheri[] = INCGFX_U16("graphics/berries/cheri.png", ".gbapal");
 const u16 gBerryPalette_Chesto[] = INCGFX_U16("graphics/berries/chesto.png", ".gbapal");
 const u16 gBerryPalette_Pecha[] = INCGFX_U16("graphics/berries/pecha.png", ".gbapal");
@@ -141,3 +148,10 @@ const u16 gBerryPalette_Jaboca[] = INCGFX_U16("graphics/berries/jaboca.png", ".g
 const u16 gBerryPalette_Rowap[] = INCGFX_U16("graphics/berries/rowap.png", ".gbapal");
 const u16 gBerryPalette_Kee[] = INCGFX_U16("graphics/berries/kee.png", ".gbapal");
 const u16 gBerryPalette_Maranga[] = INCGFX_U16("graphics/berries/maranga.png", ".gbapal");
+
+// URANIUM PATHFINDER SLICE: Uranium-original berries
+const u16 gBerryPalette_Acai[] = INCGFX_U16("graphics/berries/acai.png", ".gbapal");
+const u16 gBerryPalette_Bacu[] = INCGFX_U16("graphics/berries/bacu.png", ".gbapal");
+const u16 gBerryPalette_Cupu[] = INCGFX_U16("graphics/berries/cupu.png", ".gbapal");
+const u16 gBerryPalette_Guara[] = INCGFX_U16("graphics/berries/guara.png", ".gbapal");
+// END URANIUM PATHFINDER SLICE

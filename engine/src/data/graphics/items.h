@@ -1716,6 +1716,20 @@ const u16 gItemIconPalette_KeeBerry[] = INCGFX_U16("graphics/items/icon_palettes
 const u32 gItemIcon_MarangaBerry[] = INCGFX_U32("graphics/items/icons/maranga_berry.png", ".4bpp.smol");
 const u16 gItemIconPalette_MarangaBerry[] = INCGFX_U16("graphics/items/icon_palettes/maranga_berry.pal", ".gbapal");
 
+// URANIUM PATHFINDER SLICE: Uranium-original berries
+const u32 gItemIcon_AcaiBerry[] = INCGFX_U32("graphics/items/icons/acai_berry.png", ".4bpp.smol");
+const u16 gItemIconPalette_AcaiBerry[] = INCGFX_U16("graphics/items/icon_palettes/acai_berry.pal", ".gbapal");
+
+const u32 gItemIcon_BacuBerry[] = INCGFX_U32("graphics/items/icons/bacu_berry.png", ".4bpp.smol");
+const u16 gItemIconPalette_BacuBerry[] = INCGFX_U16("graphics/items/icon_palettes/bacu_berry.pal", ".gbapal");
+
+const u32 gItemIcon_CupuBerry[] = INCGFX_U32("graphics/items/icons/cupu_berry.png", ".4bpp.smol");
+const u16 gItemIconPalette_CupuBerry[] = INCGFX_U16("graphics/items/icon_palettes/cupu_berry.pal", ".gbapal");
+
+const u32 gItemIcon_GuaraBerry[] = INCGFX_U32("graphics/items/icons/guara_berry.png", ".4bpp.smol");
+const u16 gItemIconPalette_GuaraBerry[] = INCGFX_U16("graphics/items/icon_palettes/guara_berry.pal", ".gbapal");
+// END URANIUM PATHFINDER SLICE
+
 // TMs/HMs
 
 const u32 gItemIcon_TM[] = INCGFX_U32("graphics/items/icons/tm.png", ".4bpp.smol");
@@ -1844,6 +1858,11 @@ const u16 gItemIconPalette_TownMap[] = INCGFX_U16("graphics/items/icon_palettes/
 
 const u32 gItemIcon_VsSeeker[] = INCGFX_U32("graphics/items/icons/vs_seeker.png", ".4bpp.smol");
 const u16 gItemIconPalette_VsSeeker[] = INCGFX_U16("graphics/items/icon_palettes/vs_seeker.pal", ".gbapal");
+
+// URANIUM PATHFINDER SLICE: Uranium-original key item
+const u32 gItemIcon_Sprinklotad[] = INCGFX_U32("graphics/items/icons/sprinklotad.png", ".4bpp.smol");
+const u16 gItemIconPalette_Sprinklotad[] = INCGFX_U16("graphics/items/icon_palettes/sprinklotad.pal", ".gbapal");
+// END URANIUM PATHFINDER SLICE
 
 const u32 gItemIcon_TMCase[] = INCGFX_U32("graphics/items/icons/tm_case.png", ".4bpp.smol");
 const u16 gItemIconPalette_TMCase[] = INCGFX_U16("graphics/items/icon_palettes/tm_case.pal", ".gbapal");

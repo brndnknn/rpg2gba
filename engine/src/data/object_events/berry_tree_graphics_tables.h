@@ -701,6 +701,18 @@ const struct SpriteFrameImage *const gBerryTreePicTablePointers[] = {
     [ITEM_KEE_BERRY - FIRST_BERRY_INDEX]              = sPicTable_PechaBerryTree,
     [ITEM_MARANGA_BERRY - FIRST_BERRY_INDEX]          = sPicTable_OccaBerryTree,
     [ITEM_ENIGMA_BERRY_E_READER - FIRST_BERRY_INDEX]  = sPicTable_DurinBerryTree,
+    // URANIUM PATHFINDER SLICE: Uranium-original berries. This table is
+    // indexed by berry index (FIRST_BERRY_INDEX..LAST_BERRY_INDEX), so every
+    // berry needs an entry or the array desynchronises even if the berry is
+    // never planted. Corpus verification found no Uranium map plants any of
+    // these four (every planted berry tree in the game is Oran or Pecha), so
+    // no new tree art was requested; point these at the existing Oran tree
+    // graphics as an inert placeholder.
+    [ITEM_ACAI_BERRY - FIRST_BERRY_INDEX]             = sPicTable_OranBerryTree,
+    [ITEM_BACU_BERRY - FIRST_BERRY_INDEX]             = sPicTable_OranBerryTree,
+    [ITEM_CUPU_BERRY - FIRST_BERRY_INDEX]             = sPicTable_OranBerryTree,
+    [ITEM_GUARA_BERRY - FIRST_BERRY_INDEX]            = sPicTable_OranBerryTree,
+    // END URANIUM PATHFINDER SLICE
 };
 
 const u8 *const gBerryTreePaletteSlotTablePointers[] = {
@@ -772,5 +784,13 @@ const u8 *const gBerryTreePaletteSlotTablePointers[] = {
     [ITEM_KEE_BERRY - FIRST_BERRY_INDEX] = gBerryTreePaletteSlotTable_Pecha,
     [ITEM_MARANGA_BERRY - FIRST_BERRY_INDEX] = gBerryTreePaletteSlotTable_Occa,
     [ITEM_ENIGMA_BERRY_E_READER - FIRST_BERRY_INDEX] = gBerryTreePaletteSlotTable_Durin,
+    // URANIUM PATHFINDER SLICE: see gBerryTreePicTablePointers above — same
+    // reasoning (never planted in the corpus; Oran placeholder keeps the
+    // array in sync with the widened berry range).
+    [ITEM_ACAI_BERRY - FIRST_BERRY_INDEX] = gBerryTreePaletteSlotTable_Oran,
+    [ITEM_BACU_BERRY - FIRST_BERRY_INDEX] = gBerryTreePaletteSlotTable_Oran,
+    [ITEM_CUPU_BERRY - FIRST_BERRY_INDEX] = gBerryTreePaletteSlotTable_Oran,
+    [ITEM_GUARA_BERRY - FIRST_BERRY_INDEX] = gBerryTreePaletteSlotTable_Oran,
+    // END URANIUM PATHFINDER SLICE
 };
 

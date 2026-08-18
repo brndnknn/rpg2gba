@@ -384,6 +384,12 @@ static const struct TilesPal sBerryPicTable[] =
     [ITEM_TO_BERRY(ITEM_KEE_BERRY)    - 1]          = {gBerryPic_Kee, gBerryPalette_Kee},
     [ITEM_TO_BERRY(ITEM_MARANGA_BERRY)- 1]          = {gBerryPic_Maranga, gBerryPalette_Maranga},
     [ITEM_TO_BERRY(ITEM_ENIGMA_BERRY_E_READER) - 1] = {gBerryPic_Enigma, gBerryPalette_Enigma},
+    // URANIUM PATHFINDER SLICE: Uranium-original berries
+    [ITEM_TO_BERRY(ITEM_ACAI_BERRY)  - 1]           = {gBerryPic_Acai,  gBerryPalette_Acai},
+    [ITEM_TO_BERRY(ITEM_BACU_BERRY)  - 1]           = {gBerryPic_Bacu,  gBerryPalette_Bacu},
+    [ITEM_TO_BERRY(ITEM_CUPU_BERRY)  - 1]           = {gBerryPic_Cupu,  gBerryPalette_Cupu},
+    [ITEM_TO_BERRY(ITEM_GUARA_BERRY) - 1]           = {gBerryPic_Guara, gBerryPalette_Guara},
+    // END URANIUM PATHFINDER SLICE
 };
 
 const struct CompressedSpriteSheet gBerryCheckCircleSpriteSheet =
