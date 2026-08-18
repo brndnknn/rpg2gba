@@ -135,11 +135,26 @@ _PHONE_REGISTER_NPC_STRIP_RE = re.compile(r"^\s*(?:Kernel\.)?pbPhoneRegisterNPC\
 # form (a different index, a different predicate) still queues.
 _DOOR_ONEVENT_RE = re.compile(r"^\s*get_character\(0\)\.onEvent\?\s*$")
 
-# Kernel.pbReceiveItem(::PBItems::SYMBOL[, qty]) — give-item-with-fanfare branch
-# (Map032 EV27/EV9, Map049 EV18). Same family as deterministic.classify_ground_item's
-# pbItemBall idiom; qty is optional (bare RARECANDY/LAVACOOKIE vs. POKeBALL,5).
+# Kernel.pbReceiveItem(::PBItems::SYMBOL[, qty[, _I("Display Name")]]) —
+# give-item-with-fanfare call (Map032 EV27/EV9, Map049 EV18, Map068 EV15,
+# Map073 EV6). Same family as deterministic.classify_ground_item's pbItemBall
+# idiom; qty is optional (bare RARECANDY/LAVACOOKIE vs. POKeBALL,5), and so is
+# a trailing ``_I("...")`` display-name argument used only for Essentials'
+# own on-screen message (Map068 EV15 cmd 83:
+# ``pbReceiveItem(::PBItems::ORANBERRY,5,_I("Oran Berries"))``) — dropped,
+# since giveitem's own STD_OBTAIN_ITEM message already names the item
+# (engine/asm/macros/event.inc:2118-2126). The ``::`` module-scope prefix is
+# corpus-inconsistent (Map073 EV6 cmds 5-7 write bare ``PBItems::X``, cmd 8
+# and Map073's second event write ``::PBItems::X``) so it's optional here,
+# matching ``_ITEMBALL_RE``'s ``(?:::)?`` in deterministic.py. Whole-string
+# match only (mirrors every other 355/111 idiom in this module): a guard
+# modifier (``... if pbGetPokemon(1).species == N``, the mega-stone grants),
+# a bare ``:SYMBOL`` literal, or a dynamic argument (``pbGet(1)``,
+# ``getVariable()``) all still fall through to the queue rather than being
+# guessed at.
 _RECEIVE_ITEM_RE = re.compile(
-    r"^\s*(?:Kernel\.)?pbReceiveItem\(\s*::PBItems::(\w+)\s*(?:,\s*(\d+)\s*)?\)\s*$"
+    r"^\s*(?:Kernel\.)?pbReceiveItem\(\s*(?:::)?PBItems::(\w+)\s*"
+    r"(?:,\s*(\d+)\s*(?:,\s*_I\(\s*\"[^\"]*\"\s*\)\s*)?)?\)\s*$"
 )
 
 # "$game_player.AXIS OP LITERAL" — a one-shot position guard/boundary check
@@ -2029,14 +2044,41 @@ class _PageEmitter:
         lines.append("}")
         return lines
 
+    def _give_item_const(self, symbol: str) -> str | None:
+        """Uranium ``PBItems`` symbol -> verified fork ``ITEM_*`` constant for
+        the pbReceiveItem give-item idiom (both the shape-B bare-statement
+        form in ``_emit_ruby_statement`` and the shape-C type-12-condition
+        form below). Resolved through ``ctx.items`` — the same Essentials-
+        symbol -> ``ITEM_*`` table ``deterministic._load_item_symbols``/
+        ``load_context`` builds for the mart/ground-item classifiers (reused
+        via the context, not re-derived here, CLAUDE.md §4.3).
+
+        When ``ctx.fork_item_constants`` is wired (non-empty — the driver
+        always populates it for a real run from the same ForkIndex the
+        conversion-time gate uses, transpile_driver.py:580), the resolved
+        constant must also actually exist in the fork's headers (§4.7 forward
+        check) or this returns ``None`` just like an unmapped symbol. This
+        matters: ``ctx.items`` is known to name ITEM_*_BERRY constants
+        (ACAI/BACU/CUPU/GUARA, and ITEM_SPRINKLOTAD) the fork does NOT
+        define (confirmed absent from engine/include/constants/items.h,
+        2026-08-18) — emitting them would trip the driver's post-transpile
+        fork-index gate as a hard crash instead of a queue entry. An empty
+        ``fork_item_constants`` means "not wired up" (unit tests that only
+        set ``ctx.items``) and skips this second check, same disposition as
+        every other "not wired" default on this context."""
+        const = self.ctx.items.get(symbol)
+        if const is None:
+            return None
+        if self.ctx.fork_item_constants and const not in self.ctx.fork_item_constants:
+            return None
+        return const
+
     def _emit_give_item_idiom(self, node: IfNode) -> list[str] | None:
         """``Kernel.pbReceiveItem(::PBItems::SYMBOL[, qty])`` give-item-with-
-        fanfare branch (Map032 EV27/EV9, Map049 EV18). Resolved through
-        ``ctx.items`` — the same Essentials-symbol -> ``ITEM_*`` table
-        ``deterministic._load_item_symbols``/``load_context`` builds for the
-        mart/ground-item classifiers (reused via the context, not re-derived
-        here). Returns ``None`` (falls through to the generic script-condition
-        queue) for any other script call or an unresolved item symbol."""
+        fanfare branch (Map032 EV27/EV9, Map049 EV18, Map068 EV15). Resolved
+        via ``_give_item_const`` above. Returns ``None`` (falls through to the
+        generic script-condition queue) for any other script call or an
+        unresolved/un-forked item symbol."""
         params = node.cmd.get("parameters", [])
         if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
             return None
@@ -2044,7 +2086,7 @@ class _PageEmitter:
         if not m:
             return None
         symbol, qty = m.group(1), m.group(2)
-        const = self.ctx.items.get(symbol)
+        const = self._give_item_const(symbol)
         if const is None:
             return None  # unresolved item symbol — fall through to the queue
         give_line = f"giveitem({const}, {qty})" if qty else f"giveitem({const})"
@@ -3084,6 +3126,24 @@ class _PageEmitter:
         so an unstaged species or unnamed switch queues instead of emitting a
         symbol the fork doesn't define (CLAUDE.md §4.3, §4.5).
         """
+        # Kernel.pbReceiveItem(::PBItems::SYMBOL[, qty[, _I("...")]]) as a
+        # bare complete statement (see _RECEIVE_ITEM_RE) — the shape-B item
+        # grant (Map073 EV6 cmds 5-8: four separate berry grants, each its
+        # own complete call; _merge_script_call_rows leaves them unfused
+        # since each is a balanced expression, not a mid-expression wrap
+        # fragment). Resolved via _give_item_const, the same helper
+        # _emit_give_item_idiom uses for the type-12 condition shape —
+        # CLAUDE.md §4.3, one source of truth, not re-derived here. An
+        # unresolved-or-un-forked symbol returns None so the caller queues
+        # the row instead of guessing/inventing a constant (§4.5, §4.7).
+        m = _RECEIVE_ITEM_RE.match(text)
+        if m:
+            symbol, qty = m.group(1), m.group(2)
+            const = self._give_item_const(symbol)
+            if const is None:
+                return None  # unresolved item symbol — fall through to the queue
+            return [f"giveitem({const}, {qty})" if qty else f"giveitem({const})"]
+
         m = _ADD_POKEMON_SILENT_RE.match(text)
         if m:
             const = self.ctx.staged_species_constant(m.group(1))

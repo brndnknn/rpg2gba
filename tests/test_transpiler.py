@@ -1054,6 +1054,154 @@ def test_queue_entry_shape_and_to_json(ctx: T.TranspileContext) -> None:
 
 
 # ----------------------------------------------------------------------------
+# pbReceiveItem (shape B: bare 355/655 statement, shape C: type-12 condition)
+# ----------------------------------------------------------------------------
+
+
+def test_receive_item_bare_call_no_qty(ctx: T.TranspileContext) -> None:
+    ctx.items = {"RARECANDY": "ITEM_RARE_CANDY"}
+    res = run_event(
+        ctx, [[cmd(T.SCRIPT, ["Kernel.pbReceiveItem(::PBItems::RARECANDY)"])]], trigger=1
+    )
+    assert res.unhandled == []
+    assert "giveitem(ITEM_RARE_CANDY)" in res.text
+
+
+def test_receive_item_bare_call_with_qty(ctx: T.TranspileContext) -> None:
+    ctx.items = {"ANTIDOTE": "ITEM_ANTIDOTE"}
+    res = run_event(
+        ctx, [[cmd(T.SCRIPT, ["Kernel.pbReceiveItem(::PBItems::ANTIDOTE, 5)"])]], trigger=1
+    )
+    assert res.unhandled == []
+    assert "giveitem(ITEM_ANTIDOTE, 5)" in res.text
+
+
+def test_receive_item_bare_call_with_qty_and_display_name(ctx: T.TranspileContext) -> None:
+    # The trailing _I("...") display string has no Emerald equivalent —
+    # STD_OBTAIN_ITEM already names the item — and is dropped, not queued.
+    ctx.items = {"ORANBERRY": "ITEM_ORAN_BERRY"}
+    res = run_event(
+        ctx,
+        [[cmd(T.SCRIPT, ['Kernel.pbReceiveItem(::PBItems::ORANBERRY,5,_I("Oran Berries"))'])]],
+        trigger=1,
+    )
+    assert res.unhandled == []
+    assert "giveitem(ITEM_ORAN_BERRY, 5)" in res.text
+    assert "Oran Berries" not in res.text
+
+
+def test_receive_item_bare_call_no_module_scope_prefix(ctx: T.TranspileContext) -> None:
+    # The leading `::` before PBItems is corpus-inconsistent (Map073 EV6).
+    ctx.items = {"BACUBERRY": "ITEM_BACU_BERRY"}
+    res = run_event(
+        ctx, [[cmd(T.SCRIPT, ["Kernel.pbReceiveItem(PBItems::BACUBERRY)"])]], trigger=1
+    )
+    assert res.unhandled == []
+    assert "giveitem(ITEM_BACU_BERRY)" in res.text
+
+
+def test_receive_item_bare_call_unmapped_item_queues(ctx: T.TranspileContext) -> None:
+    ctx.items = {}
+    res = run_event(
+        ctx, [[cmd(T.SCRIPT, ["Kernel.pbReceiveItem(::PBItems::NOSUCHITEM)"])]], trigger=1
+    )
+    assert len(res.unhandled) == 1
+    assert "giveitem" not in res.text
+    assert "ITEM_" not in res.text
+
+
+def test_receive_item_bare_call_unforked_constant_queues(ctx: T.TranspileContext) -> None:
+    # ctx.items resolves the symbol, but the resulting constant does not
+    # exist in the fork's own headers (the real BACUBERRY case,
+    # output/uranium-build/maps/Map073.json EV6) — must queue, never emit an
+    # invented symbol (CLAUDE.md §4.7 forward check).
+    ctx.items = {"BACUBERRY": "ITEM_BACU_BERRY"}
+    ctx.fork_item_constants = frozenset({"ITEM_POTION", "ITEM_ORAN_BERRY"})
+    res = run_event(
+        ctx, [[cmd(T.SCRIPT, ["Kernel.pbReceiveItem(PBItems::BACUBERRY)"])]], trigger=1
+    )
+    assert len(res.unhandled) == 1
+    assert "giveitem" not in res.text
+    assert "ITEM_BACU_BERRY" not in res.text
+
+
+def test_receive_item_map073_ev6_four_consecutive_grants_stay_separate(
+    ctx: T.TranspileContext,
+) -> None:
+    # output/uranium-build/maps/Map073.json event 6 page 0, commands 5-8: one
+    # code-355 row plus three code-655 rows, each its own complete statement
+    # (not continuation fragments of one call) — _merge_script_call_rows must
+    # not fuse them.
+    ctx.items = {
+        "BACUBERRY": "ITEM_BACU_BERRY",
+        "GUARABERRY": "ITEM_GUARA_BERRY",
+        "CUPUBERRY": "ITEM_CUPU_BERRY",
+        "ACAIBERRY": "ITEM_ACAI_BERRY",
+    }
+    commands = [
+        cmd(T.SCRIPT, ["Kernel.pbReceiveItem(PBItems::BACUBERRY)"]),
+        cmd(T.SCRIPT_CONT, ["Kernel.pbReceiveItem(PBItems::GUARABERRY)"]),
+        cmd(T.SCRIPT_CONT, ["Kernel.pbReceiveItem(PBItems::CUPUBERRY)"]),
+        cmd(T.SCRIPT_CONT, ["Kernel.pbReceiveItem(PBItems::ACAIBERRY)"]),
+    ]
+    res = run_event(ctx, [commands], trigger=1)
+    assert res.unhandled == []
+    assert res.text.count("giveitem(") == 4
+    for const in ("ITEM_BACU_BERRY", "ITEM_GUARA_BERRY", "ITEM_CUPU_BERRY", "ITEM_ACAI_BERRY"):
+        assert f"giveitem({const})" in res.text
+
+
+def test_receive_item_type12_condition_empty_then_body(ctx: T.TranspileContext) -> None:
+    # output/uranium-build/maps/Map068.json event 15 page 0 command 83 — a
+    # pure side-effect wrapper (empty then/else), exactly faithful as a bare
+    # giveitem with no branch.
+    ctx.items = {"ORANBERRY": "ITEM_ORAN_BERRY"}
+    commands = [
+        cmd(
+            T.CONDITIONAL_BRANCH,
+            [12, 'Kernel.pbReceiveItem(::PBItems::ORANBERRY,5,_I("Oran Berries"))'],
+            indent=0,
+        ),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=1)
+    assert res.unhandled == []
+    assert "giveitem(ITEM_ORAN_BERRY, 5)" in res.text
+    assert "VAR_RESULT" not in res.text
+
+
+def test_receive_item_type12_condition_nonempty_then_body_branches_on_result(
+    ctx: T.TranspileContext,
+) -> None:
+    # A non-empty then-body is the success path — pbReceiveItem's boolean
+    # return is exactly giveitem's VAR_RESULT (engine/asm/macros/event.inc:
+    # 2118-2126: TRUE on success, FALSE if the bag has no room), so this is
+    # expressible natively rather than queued.
+    ctx.items = {"NUGGET": "ITEM_NUGGET"}
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "Kernel.pbReceiveItem(::PBItems::NUGGET)"], indent=0),
+        cmd(T.SHOW_TEXT, ["Thanks!"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=1)
+    assert res.unhandled == []
+    assert "giveitem(ITEM_NUGGET)" in res.text
+    assert "if (var(VAR_RESULT) != 0) {" in res.text
+    assert "Thanks!" in res.text
+
+
+def test_receive_item_type12_condition_unmapped_item_queues(ctx: T.TranspileContext) -> None:
+    ctx.items = {}
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "Kernel.pbReceiveItem(::PBItems::NOSUCHITEM)"], indent=0),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=1)
+    assert len(res.unhandled) == 1
+    assert "giveitem" not in res.text
+
+
+# ----------------------------------------------------------------------------
 # real-corpus integration smoke test
 # ----------------------------------------------------------------------------
 
