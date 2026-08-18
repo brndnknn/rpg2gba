@@ -167,7 +167,7 @@ No other trainer events in the 5-map roster. `[auto]`
 | 73 | Sprinklotad | EV3 / EV6 pg1 (2 offers, 1 NPC) | only if not held | **No — `B14` confirms zero `giveitem` in the compiled script** |
 | 73 | Bacu/Guara/Cupu/Acai Berry | EV6 pg0 | none | **No — `B14` confirms zero `giveitem` in the compiled script**; only Bacu Berry is census-visible, rest are on `code-655` continuation lines |
 | 68 | 5× Oran Berry | EV15 (PC tour NPC) | tour completion | **No — `B5` confirms zero `giveitem` in the compiled script** |
-| 68 | Antidote (item ball) | EV18 | standard item-ball gate | Event reachable (B7), but **no `giveitem`/`finditem` in the compiled script** — B7 asserts only the one-time self-switch, not the item |
+| 68 | Antidote (item ball) | EV18 | standard item-ball gate | **Yes — converted, closed** (`CH03_TODO.md` #9). Ships via the object-event *template* path (`ITEM_ANTIDOTE` in `Map068.template_fields.json`), not a Poryscript `giveitem`, so a `.pory` grep will never see it. B7 asserting the self-switch is correct for this path |
 
 `item_grants` counts raw `code-126` (none exist here) plus script calls whose
 **first line** starts `pbReceiveItem`/`pbItemBall`. The Bicycle grant
