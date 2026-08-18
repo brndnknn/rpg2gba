@@ -568,15 +568,63 @@ same lesson as #26(b).
 that hands the player anything. Fixing it is a general transpiler change, not
 a CH03 patch.
 
+**DONE 2026-08-18 for the chapter's berries.** Shapes B and C both emit
+`giveitem` now (`transpiler.py`, commit `43aa482e`); the four Uranium berries
+and Sprinklotad were added to the engine as real items (commit `67fd0435`).
+Verified through the whole chain, not just the transpiler:
+
+- `Map073.pory:109-112` — four separate `giveitem` calls, unfused.
+- `engine/data/maps/KevlarTownBuildings/scripts.inc:37-43` — assembled.
+- `engine/data/maps/KevlarTownPokemonCenter/scripts.inc:407` —
+  `giveitem ITEM_ORAN_BERRY, 5`, the tour grant that started this.
+- ROM `6ec17ab3` builds clean (EWRAM 86.79%, IWRAM 86.99%, ROM 81.55%).
+- CH03 unhandled queue **56 → 50**.
+
 Remaining work:
 
-1. Emit a native item grant for shapes B and C. **In progress 2026-08-18.**
+1. **Sprinklotad's grant is still queued behind a different idiom.** Both
+   offers sit inside `$PokemonBag.pbQuantity(PBItems::SPRINKLOTAD)==0`
+   (`Map073.pory:30` and `:122`) — a bag-quantity conditional, not a grant.
+   The item now exists, so only the `code-111` test needs converting; Emerald
+   has native bag-quantity checks, so verify one against the fork (§4.7)
+   rather than assuming. Small, general, and it unblocks 1-then and 4-then
+   branch bodies here alone.
 2. Shape C with a *non-empty* then-body needs a faithful success-path
-   mapping or an explicit queue — do not approximate it.
+   mapping or an explicit queue — do not approximate it. 60 of 150 shape-C
+   sites corpus-wide still queue, most on items the fork lacks (see #27).
 3. Extend the beats to assert **inventory**, not just the self-switch —
    `Emulator.bag_item_quantity` already exists (added 2026-08-16 for B11).
-   B5/B7/B14 all currently pass over a missing grant because they only check
-   flags; B7's docstring claims an Antidote it never verifies.
+   B5/B14 currently pass over a grant that used to do nothing; B7's docstring
+   claims an Antidote it never verifies. **Beats that assert a flag instead of
+   the effect are how this survived two boot walks.**
+
+### 27. 111 items the id map names and the fork does not define
+
+Surfaced by #25 and only partly addressed by it. `reference/uranium_id_map.json`
+maps 607 Uranium items to `ITEM_*` constants; **111 of them do not exist in
+`engine/include/constants/items.h`** — the id map already precomputed the list
+in its own `needs_engine.items`. Five were fixed in #25 (the four berries plus
+Sprinklotad); **106 remain**, including Uranium-original held items, mega
+stones, key items and mail.
+
+Every one of them is an item grant, mart entry or held item that will fail the
+§4.7 forward gate and queue when its map is converted. They surface chapter by
+chapter, which is the slow way to find 106 of anything.
+
+Compounding it: **Phase 2's item converter output never reaches the engine.**
+`pbs_converter/items.py` emits both `include/constants/items.h` and a
+`gItemsInfo[]` table into `output/uranium-build/`, and nothing includes or
+copies them into `engine/`. Compare the flags and map-alias hooks
+(`engine/data/event_scripts.s:1743`, `map_events.s:27`) — there is no items
+equivalent, so that output is currently a dead end.
+
+Doing this properly is a Phase-2→engine integration, not 106 hand edits. It
+also needs a decision the berries dodged: those five were vanilla-equivalent,
+so their data could be copied from a twin. An original held item or mega stone
+has no twin and needs real hold-effect data from Uranium's `item_field_codes`
+worklist (`items.py:308-321`, already generated and unread).
+
+Not chapter-blocking. Belongs in `PROJECT_TODO.md` when someone plans it.
 
 ### 26. The Cry Boy chain is live content, and one unemitted body breaks it
 
