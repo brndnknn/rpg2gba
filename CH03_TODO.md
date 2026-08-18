@@ -673,6 +673,21 @@ PAST renames — the assembler should detect engine map dirs whose layout consta
 is absent from the generated manifest and fail loud or clean them. Belongs in
 `PROJECT_TODO.md`.
 
+### 24. Spec doc vs harness beat numbering reconciled — DONE 2026-08-18
+
+The spec (`reference/chapters/03-kevlar-town.md`) and `kevlar.py` had drifted
+onto different B-numbers for the same beats — e.g. the spec's B13/B14 meant
+the cave-door beats, while `kevlar.py`'s registered B13 is the berry-plant
+beat (`kevlar.py:844`, "renumbered B13 in the approved list"). This already
+caused one wasted investigation reading "halts at B13" against the wrong
+numbering. `kevlar.py` is the source of truth (its numbering is the
+2026-08-12 user-approved list); the spec doc has been renumbered to match,
+with the full old→new mapping recorded in a table near the top of the spec's
+§3. One unresolved item surfaced by the reconciliation: `kevlar.py`'s
+`DEFERRED_BEATS` tuple labels the Compensation Man Luxi gift "B26", colliding
+with the active, registered Center-PC beat of the same name — flagged in the
+mapping table, not silently resolved.
+
 ### 7. Stale minted map identities silently ignored overrides — FIXED 2026-08-12
 
 Found because #1's overrides had no effect: the assembler happily emitted

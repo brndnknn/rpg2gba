@@ -65,6 +65,36 @@ Kevlar↔Nowtoch through-cave is maps 36/37, via the map31↔35 seam). See §5.
 
 ## 3. Story beat chain
 
+**Beat numbering: `src/rpg2gba/playtest/chapters/kevlar.py` is the source of
+truth.** Its numbering was user-approved (`CH03_TODO.md`, 2026-08-12) and
+diverges from this document's original numbering wherever the approved list
+renumbered a beat. The table below uses the harness's canonical numbers; the
+mapping to this document's original numbers (preserved for git-history
+continuity) is:
+
+| Old spec # | Canonical # | Description | Status |
+|---|---|---|---|
+| B1 | B1 | Cross Route 1 → Kevlar south boundary | active |
+| B2 | B2 | Talk NurseTut, walkthrough | active |
+| B3 | B3 | Enter Center door | active |
+| B4 | B4 | Heal counter (heal + `pbSetPokemonCenter` metadata — no test surface) | active |
+| B5 | B5 | PC-tour NPC autorun | active — **spec's Oran Berry grant is wrong**: no `giveitem` exists in the compiled script (harness finding 5) |
+| B26 | B26 | Use the Center PC | active, number unchanged |
+| B6 | B7 | Item-ball touch → Antidote | active |
+| B7 | B8 | Talk Mawuli, facility battle | active |
+| B8 | B10 / B11 / N4 / B12 | Mart door entry (B10); purchase (B11); insufficient-money refusal (N4, harness-only); Deliveryman no-gift (B12) | active, split into 3 harness beats |
+| B9 | B14 | Berry Boutique door + NPC | active — **spec's berry/Sprinklotad grant is wrong**: no `giveitem` exists in the compiled script |
+| B10 | B15 / B15b | Bike Repair NPC refusal (B15, active); Bicycle grant (B15b, **deferred to CH11** — Bike Wheel's only source is Route 4) | split |
+| B11 | B17 / N2 | Magikarp joke, 100-refusal gift (B17); refusal-accumulation check (N2, harness-only) | active |
+| B12 | B18 / B18b | Cry Boy idle page (B18, active); sidequest accept (B18b, **deferred, unreachable corpus-wide** — sw86 is never written true anywhere in the corpus) | split |
+| B13 | B19 / B20 / B21 / B22 / B23 | Cave door; 3 boulder pushes; Lou/Joe/Richard battles | **DEFERRED to CH25** (Strength-gated, §7.1) |
+| B14 | B24 | Cave exit warp back to Map031 | **DEFERRED to CH25** |
+| B15 | B25 | North edge, impassable wall | active |
+| *(none)* | B13 | Pick a Map031 berry plant (native `BerryTreeScript`) — never assigned a beat number in this document's original §3 table, only mentioned in prose (§5 #5) | active — spec gap |
+| *(none)* | B16 | The two flavor houses (Maury's apartment, the couple's house) — listed in §4.4 as non-chapter-relevant warps, never assigned a §3 beat number | active — spec gap |
+| *(none)* | N1 / N3 / N6 | Negative-path checks (item-ball re-touch, NurseTut re-talk, "no warp targets an unbuilt map" statement) | harness-only, no spec counterpart |
+| *(none)* | "B26" (`DEFERRED_BEATS`) | **Naming collision — needs a human decision.** `kevlar.py`'s `DEFERRED_BEATS` tuple also labels the Compensation Man Luxi gift "B26", colliding with the active, registered Center-PC beat above (`kevlar.py:574` vs `kevlar.py:1343`). Corresponds to this document's §7 "Compensation Man" open item (sw130, never written anywhere in the corpus). | conflict, unresolved |
+
 No `VAR_QUEST_LOG` write exists here. The local spine runs through two
 switches and one one-shot variable:
 
@@ -89,18 +119,23 @@ counter's ball-sprite display, 2 writes).
 | B2 | 31 | none | talk "NurseTut" (EV49) | Walkthrough scene; ends with sw126 set; re-talk is the no-op page |
 | B3 | 31→68 | none | enter Center door (20,12) | Warp to Map068 (8,18) |
 | B4 | 68 | none | talk counter NPC (EV1) | `pbSetPokemonCenter`; Yes/No heal; var43=party length; `pbPokerus?` statically false (deferred to CH18) — not-infected arm always plays: counter NPC returns to face DOWN, "restored to full health"/"we hope to see you again" close |
-| B5 | 68 | none | talk PC-tour NPC (EV15) | Tour scene; ends with `pbReceiveItem(ORANBERRY,5)` (in a code-111/type-12 conditional) + self-switches 16/17 |
+| B5 | 68 | none | talk PC-tour NPC (EV15) | Tour scene; self-switches 15/16/17 set. Spec originally read `pbReceiveItem(ORANBERRY,5)` here — **wrong**: `grep giveitem` over the compiled script is zero hits (harness finding 5) |
 | B26 | 68 | none | use the PC (EV7, bg_event sign, (10,13)) | `pbPokeCenterPC` -> native `EventScript_PC`; boots and returns control (no box-UI navigation primitive — see `pokecenter.use_pc`) |
-| B6 | 68 | none | touch item-ball tile (EV18) | `pbItemBall(ANTIDOTE)` once (self-switch gate) |
-| B7 | 68 | none | talk Mawuli (EV14) | `pbTrainerBattle(RICHBOY,"Mawuli",...)`; win/lose, in-scene heal + re-offer — a facility loop, not one-time |
-| B8 | 31→67 | none | enter Mart door (37,14) | Warp to Map067; `pbPokemonMart([...])` at EV1; "Deliveryman" (EV9) checks `pbNextMysteryGiftID>0` |
-| B9 | 31→73 | none | enter Berry Boutique door (35,6) | Warp to Map073 (44,12); EV6 grants Bacu Berry (+3 more on continuation lines census misses, §4.2), + Sprinklotad if unheld |
-| B10 | 73 | none | talk Bike Repair NPC (EV1) | If `BIKEWHEEL` qty>0: wheel deleted, `BICYCLE` granted. **No Bike Wheel source in this chapter** — §5 #3, §7 |
-| B11 | 31 | none | talk "EV014" (29,20) | Joke dialogue; the "No" branch increments var200, **except at var200==99, where it fires `pbAddPokemon(MAGIKARP,100)`** — a hundred refusals earn the Magikarp. The increment is the mechanism, not a missing re-talk guard (§7.1) |
-| B12 | 31 | Strength | talk "Cry Boy" (EV7) | Page0 (ungated) idle only; page1 (sets sw99) needs sw86. **Sw86 written exactly once corpus-wide, on Map140/Route 11 — which is exactly where HM04 is granted.** Not an anomaly: this is a post-Strength return-trip sidequest, out of chapter (§7.1) |
-| B13 | 31→19 | **Strength (HM04, CH25)** | enter cave door (13,7) | **NOT REACHABLE THIS CHAPTER** — the outdoor boulders sealing the corridor need Strength (§7.1). When it opens: warp to Map019 (11,29); 3 "Boulder" push events; sight Bikers Lou (EV4)/Joe (EV5); Richard (EV6) sets sw100 after 1 of 2 branches (sw94-gated postgame variant, out of scope) |
-| B14 | 19→31 | **Strength (HM04, CH25)** | walk exit tile (11,30) | Warp to Map031 (13,7) — only warp target anywhere in Map019. Same gate as B13 |
-| B15 | 31→35 | none | walk off north edge | Seam crossing into Map035 "Route 02" — chapter exit, out of scope |
+| B7 | 68 | none | touch item-ball tile (EV18) | `pbItemBall(ANTIDOTE)` once (self-switch gate) — old spec B6 |
+| B8 | 68 | none | talk Mawuli (EV14) | `pbTrainerBattle(RICHBOY,"Mawuli",...)`; win/lose, in-scene heal + re-offer — a facility loop, not one-time — old spec B7 |
+| B10 | 31→67 | none | enter Mart door (37,14) | Warp to Map067; `pbPokemonMart([...])` at EV1 (a `bg_event` sign, not an object event) — old spec B8, split further below |
+| B11 | 67 | none | buy at the counter | Native `pokemart` purchase: money down by the item's price, bag quantity up by one — no old spec counterpart (split from old spec B8) |
+| N4 | 67 | none | buy with insufficient money | Purchase refused, money/bag unchanged, mart still returns control — harness-only, no old spec counterpart |
+| B12 | 67 | none | "Deliveryman" (EV9) | Checks `pbNextMysteryGiftID>0`; the compiled no-gift branch is a bare `end` — old spec B8 |
+| B13 | 31 | none | pick a Map031 berry plant (any of local ids 10–14) | Native `BerryTreeScript` — **never assigned a beat number in this document's original table**; see §5 #5 |
+| B14 | 31→73 | none | enter Berry Boutique door (35,6) | Warp to Map073 (44,12); EV6's dialogue sets its self-switch. Spec originally read a Bacu/Guara/Cupu/Acai Berry + Sprinklotad grant here — **wrong**: `grep giveitem` over the compiled script is zero hits — old spec B9 |
+| B15 | 73 | none | talk Bike Repair NPC (EV1) | No yes/no, no `BICYCLE` grant in the compiled script at all — old spec B10. (Bike Wheel → Bicycle grant, spec's original premise, is `B15b`, **deferred to CH11** — Bike Wheel's only source is Route 4 — §5 #3, §7) |
+| B16 | 31→73 | none | enter Maury's apartment (37,28) / the couple's house (32,28) | Warp in and back out cleanly — **never assigned a beat number in this document's original table**; see §4.4 |
+| B17 | 31 | none | talk "EV014" (29,20) | Joke dialogue; the "No" branch increments var200, **except at var200==99, where it fires `pbAddPokemon(MAGIKARP,100)`** — a hundred refusals earn the Magikarp. The increment is the mechanism, not a missing re-talk guard (§7.1) — old spec B11 |
+| B18 | 31 | Strength | talk "Cry Boy" (EV7) | Page0 (ungated) idle only; page1 (sets sw99) needs sw86. **Sw86 written exactly once corpus-wide, on Map140/Route 11 — which is exactly where HM04 is granted.** Not an anomaly: this is a post-Strength return-trip sidequest, out of chapter (§7.1) — old spec B12. (Page1 accept branch is `B18b`, **deferred, unreachable corpus-wide**) |
+| B19–B23 | 31→19 | **Strength (HM04, CH25)** | enter cave door (13,7) | **NOT REACHABLE THIS CHAPTER** — the outdoor boulders sealing the corridor need Strength (§7.1). When it opens: warp to Map019 (11,29); 3 "Boulder" push events (B20); sight Bikers Lou (B21, EV4)/Joe (B22, EV5); Richard (B23, EV6) sets sw100 after 1 of 2 branches (sw94-gated postgame variant, out of scope) — old spec B13 |
+| B24 | 19→31 | **Strength (HM04, CH25)** | walk exit tile (11,30) | Warp to Map031 (13,7) — only warp target anywhere in Map019. Same gate as B19–B23 — old spec B14 |
+| B25 | 31→35 | none | walk off north edge | Seam crossing into Map035 "Route 02" — chapter exit, out of scope — old spec B15 |
 
 ## 4. Coverage targets
 
@@ -115,10 +150,10 @@ Census totals: `trainer_battles=5`, `item_grants=5`, `switch_writes=21`,
 
 | Map | Event | Trigger | In-chapter reachable? | Notes |
 |---|---|---|---|---|
-| 19 | "Trainer(4)" / Lou (EV4) | event touch (sight) | Yes (B13) | BIKER class |
-| 19 | "Trainer(4)" / Joe (EV5) | event touch (sight) | Yes (B13) | BIKER class |
-| 19 | "Richboy" / Richard (EV6) | event touch (sight) | Yes (B13) | BIKER; **2 calls** in one page, branched on sw94 — same NPC, harder post-Gym-5 team; census counts both |
-| 68 | "EV014" / Mawuli (EV14) | action button | Yes (B7) | RICHBOY; repeatable facility battle |
+| 19 | "Trainer(4)" / Lou (EV4) | event touch (sight) | **No — DEFERRED to CH25** (B21) | BIKER class |
+| 19 | "Trainer(4)" / Joe (EV5) | event touch (sight) | **No — DEFERRED to CH25** (B22) | BIKER class |
+| 19 | "Richboy" / Richard (EV6) | event touch (sight) | **No — DEFERRED to CH25** (B23) | BIKER; **2 calls** in one page, branched on sw94 — same NPC, harder post-Gym-5 team; census counts both |
+| 68 | "EV014" / Mawuli (EV14) | action button | Yes (B8) | RICHBOY; repeatable facility battle |
 
 No other trainer events in the 5-map roster. `[auto]`
 
@@ -128,11 +163,11 @@ No other trainer events in the 5-map roster. `[auto]`
 
 | Map | Item | Event | Gate | In-chapter? |
 |---|---|---|---|---|
-| 73 | Bicycle | EV1 "Bike Repair Shop" | must hold `BIKEWHEEL` (consumed) | **Unclear** — no source this chapter; wiki says Route 4 (§5 #3) |
-| 73 | Sprinklotad | EV3 / EV6 pg1 (2 offers, 1 NPC) | only if not held | Yes (B9) |
-| 73 | Bacu/Guara/Cupu/Acai Berry | EV6 pg0 | none | Yes (B9) — only Bacu Berry is census-visible; rest are on `code-655` continuation lines |
-| 68 | 5× Oran Berry | EV15 (PC tour NPC) | tour completion | Yes (B5) |
-| 68 | Antidote (item ball) | EV18 | standard item-ball gate | Yes (B6) |
+| 73 | Bicycle | EV1 "Bike Repair Shop" | must hold `BIKEWHEEL` (consumed) | **Unclear** — no source this chapter; wiki says Route 4 (§5 #3). `B15` (talk) confirms no grant exists in the compiled script; the grant itself is `B15b`, deferred to CH11 |
+| 73 | Sprinklotad | EV3 / EV6 pg1 (2 offers, 1 NPC) | only if not held | **No — `B14` confirms zero `giveitem` in the compiled script** |
+| 73 | Bacu/Guara/Cupu/Acai Berry | EV6 pg0 | none | **No — `B14` confirms zero `giveitem` in the compiled script**; only Bacu Berry is census-visible, rest are on `code-655` continuation lines |
+| 68 | 5× Oran Berry | EV15 (PC tour NPC) | tour completion | **No — `B5` confirms zero `giveitem` in the compiled script** |
+| 68 | Antidote (item ball) | EV18 | standard item-ball gate | Event reachable (B7), but **no `giveitem`/`finditem` in the compiled script** — B7 asserts only the one-time self-switch, not the item |
 
 `item_grants` counts raw `code-126` (none exist here) plus script calls whose
 **first line** starts `pbReceiveItem`/`pbItemBall`. The Bicycle grant
@@ -151,15 +186,15 @@ has no entries for ids 31/67/68/73/19. `[auto]`
 | Map | Warp | Destination | Chapter-relevant? |
 |---|---|---|---|
 | 31 | South doors (15,43)/(16,43) | Map033 (Route 01, CH02) | Yes — entry boundary (B1) |
-| 31 (seam) | North edge | Map035 "Route 02" (CH04) | Yes — exit boundary (B15) |
-| 31 | Cave door (13,7) | Map019 (11,29) | Yes (B13) |
-| 19 | Exit (11,30) | Map031 (13,7) | Yes (B14) — only warp target anywhere in Map019 |
-| 31 | Buildings — Maury's apartment (37,28) | Map073 (24,12) | No — Maury's state never advances this chapter |
-| 31 | Buildings — couple's house (32,28) | Map073 (64,12) | No — flavor interior |
+| 31 (seam) | North edge | Map035 "Route 02" (CH04) | Yes — exit boundary (B25) |
+| 31 | Cave door (13,7) | Map019 (11,29) | **DEFERRED to CH25** (B19) |
+| 19 | Exit (11,30) | Map031 (13,7) | **DEFERRED to CH25** (B24) — only warp target anywhere in Map019 |
+| 31 | Buildings — Maury's apartment (37,28) | Map073 (24,12) | No — Maury's state never advances this chapter (checked, no beat number: B16) |
+| 31 | Buildings — couple's house (32,28) | Map073 (64,12) | No — flavor interior (checked, no beat number: B16) |
 
 The remaining 7 `code-201` commands (mart door + return, Center door ×2 +
 returns, Berry-Boutique door + return, Bike-Shop door + return) are routine
-interior connectors, all chapter-relevant (B3/B8/B9/B10) — 13 `code-201`
+interior connectors, all chapter-relevant (B3/B10/B14/B15) — 13 `code-201`
 commands total plus the 1 seam, matching a manual count. No warp in this
 roster targets a map outside `{31, 33, 35, 67, 68, 73, 19}`. `[auto]`
 
@@ -181,9 +216,9 @@ Checked against `Kevlar_Town.wiki` and `Passage_Cave.wiki`.
    Flagged for the atlas owner in §7; not changed here.
 3. `Kevlar_Town.wiki` Bicycle Shop: the Bike Wheel "can be found on Route 4"
    (CH11, Act 3). No map in this chapter grants one (no `pbReceiveItem`/
-   `code-126` of `BIKEWHEEL` anywhere in the roster). If current, B10 is
+   `code-126` of `BIKEWHEEL` anywhere in the roster). If current, B15/B15b is
    **not completable during a CH03 visit-1 playthrough** — only the shop
-   logic exists here. See §7.
+   logic exists here (B15). See §7.
 4. Wiki gives Mawuli 3× Chyinmunk lv.4, repeatable grinding. Data agrees on
    the repeatable mechanic (EV14 heals + re-offers, no state advance); team
    composition lives in PBS trainer data, outside this document's scope.
@@ -231,7 +266,7 @@ Verdicts owned by `reference/guides/command_pokeemerald_map.md`.
   `SLICE_MAP_IDS = [49,48,32,50,64,65,172,89]`, so `unhandled` is `null`.
 - Map73 and map19 both need `map_name_overrides.json` entries before
   Phase-5 mint (name/engine-dir collisions — details in §7).
-- The Cry Boy → Richboy chain (sw99/100) and the Bike Wheel grant (B10) both
+- The Cry Boy → Richboy chain (sw99/100) and the Bike Wheel grant (B15b) both
   look unreachable within this chapter's own data (details in §7).
 - The Berry Boutique's `pbPokemonMart([...])` (EV3/EV6) is a second, distinct
   item-list shop call, same special as the Poké Mart (map67) — no engine
@@ -278,12 +313,12 @@ Essentials function or the wiki. Check the source mechanic before filing a gap.
   `map_name_overrides.json` "reviewed" entry for map19 describes it as the
   through-cave, contradicted by my warp trace and the wiki (§5 #2) — I did
   not edit that file; flagging for its owner.
-- **Cry Boy → Richboy reachability** (B12, §3): sw86 gates the offer and is
-  written exactly once corpus-wide (Map140/Route11 CH25), to **0/off**.
+- **Cry Boy → Richboy reachability** (B18/B18b, §3): sw86 gates the offer and
+  is written exactly once corpus-wide (Map140/Route11 CH25), to **0/off**.
   Checked via a full-corpus scan of `code-121` writes to switch86 plus
   `common_events.json`; doesn't rule out a grant in raw embedded Ruby text
   outside those two command shapes.
-- **Bike Wheel source** (B10, §5 #3): absent from this chapter; wiki says
+- **Bike Wheel source** (B15/B15b, §5 #3): absent from this chapter; wiki says
   Route 4, but the Boutique's own item list shows version-dependent content
   ("As of 1.0… as of 1.2.6…"), so that claim may be stale. Needs a
   corpus-wide `pbReceiveItem(...BIKEWHEEL...)` search before
