@@ -126,6 +126,42 @@ build or the harness, not by a boot walk.
 
 ## Open
 
+### 22. Warp-arrival facing landed everyone facing DOWN — FIXED IN TREE, VERIFICATION PENDING 2026-08-18
+
+Reported for the Kevlar Town entry, Poké Mart, Poké Center and flower shop
+(other Kevlar buildings were fine): warping in faced the player DOWN instead
+of away from the return warp. Root cause: `GetAdjustedInitialDirection`
+(`engine/src/overworld.c:1060-1087`) defaults to `DIR_SOUTH` unless the
+landing tile's metatile behavior says otherwise, and arrival tiles are
+deliberately plain floor. The existing correction mechanism
+(`compute_arrival_facings`) had been skipping every RMXP `dest_dir` of 0/None
+("retain current facing") since 2026-07-16 — all four broken destinations had
+`dest_dir == 0`; the working buildings had `dest_dir == 8`. That 2026-07-16
+call is now superseded.
+
+Fix (in the working tree on `ch03-kevlar`, **not yet committed**):
+`compute_arrival_facings` now resolves dest_dir 0/None via a new
+`_derive_retain_facing` — single non-blocked, non-warp-source neighbour of the
+source warp cell ⇒ face away from it — behind a new hand-override tier,
+`reference/warp_facing_overrides.json` (1 entry: Route 1's 3-tile warp stack
+into Moki Town, a real corridor where derivation is genuinely ambiguous). All
+6 broken warps now derive `DIR_NORTH`. Files: `metadata_wiring.py`, new
+`reference/warp_facing_overrides.json`, `tests/test_tileset_converter.py`, new
+`tests/test_warp_facing_invariant.py` (corpus-wide, chapter-agnostic, plus a
+hard regression pin on the 5 Kevlar arrival coords). Full suite green: 2144
+passed / 19 skipped / 0 failed.
+
+Side finding, left as-is: maps 49/172 (Moki stairwell) have a Uranium-authored
+arrival facing into a wall (`dest_dir=4`); reproduced faithfully, pinned in
+`test_uranium_authored_wall_facers_are_pinned`, needs a user fidelity call
+(reproduce vs override) — see MEMORY.md Open Questions.
+
+**STILL OPEN: the ROM has NOT been rebuilt or verified on device.** Also,
+**this fix CANNOT be exercised on the map-walker build** —
+`InitObjectEventsLocal` guards `TryRunOnWarpIntoMapScript()` behind
+`#if URANIUM_MAP_WALKER != TRUE` (`overworld.c:2590-2597`) — verification must
+happen on a real playtest ROM.
+
 ### 15. Everything after a `warp` was dead code — FIXED 2026-08-13
 
 RMXP's interpreter keeps running an event page after a `code-201` Transfer
