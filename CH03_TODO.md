@@ -71,62 +71,64 @@ of truth for what the chapter *is* remains the spec doc. Shape:
      and re-emit Page1's full completion sequence with a proper no-op stand-in
      for the Pokérus branch instead of dropping the conditional wholesale.
 
-## Current status (2026-08-17)
+## Current status (2026-08-19)
 
-**ROM sha256 `2c63e8f6` builds clean** (32 MB image, ROM 81.54% full) — the
-first build since the engine-cutover doc correction (`247d6b64`), produced by
-the full pipeline exiting 0 end to end on `engine/`: transpile → stage →
-assemble → `make modern`.
+**ROM sha256 `c3e75d4f` is the chapter-complete build** — produced by the full
+pipeline exiting 0 end to end on `engine/` (transpile → stage → assemble →
+`make modern`), stamped at `output/playtest/review/kevlar-complete.json`
+(2026-08-19T17:13Z) with the review ROM, six contact sheets and
+`output/playtest/walk/kevlar-B1.gba` beside it.
 
-**Chapter suite `kevlar`:** predecessors green (moki + route1 replayed), and
-CH03 runs **51 pass / 1 fail** on a clean full run — green through **B18**,
-halting at **B19**. The old B16 ceiling is gone, and the halt is now the
-boulder wall (#20) rather than anything about the Magikarp.
+**Chapter suite `kevlar`: 60 beats, 60 pass, 0 fail**, predecessors replayed
+green, chapter-complete stamp green. Full `pytest -q`: 2190 passed, 19 skipped,
+0 failed. B19–B24 remain **deferred, not failing** — the Grott-Hole is sealed by
+Strength-gated boulders and Strength arrives in CH25 (#20 / `PROJECT_TODO.md`
+#39). That is the game working, not a converter gap.
 
-B19's `walk_to(13,8) frame budget exhausted` is the pathfinder meeting a wall
-the game intends: the cave is Strength-gated and Strength arrives in CH25. See
-#20 — B19–B24 are now **deferred**, not failing, so the suite's real state is
-green across everything CH03 can reach.
+**The queue is 38 entries across the five maps** (map19 17, map31 14, map73 4,
+map68 2, map67 1), down from 50 after the 2026-08-19 triage (`4da46a2e`).
+Counted from `output/uranium-build/transpile_unhandled.jsonl`; the file's
+map-less records are common-event scoped, not CH03.
 
-**B19–B24 remain unreachable, and that is correct.** The Grott-Hole is
-return-trip content. Nothing about it blocks this chapter's §9 gate.
+**None of the 38 is CH03 work.** The triage found the 50 split three ways and
+nine real items, all nine now converted:
 
-**The Magikarp halt was a beat bug, not a converter bug** — see #21, closed.
-`givemon` had been missing because a vanilla reuse like Magikarp could never
-clear the staging gate; `b33a8449` fixed that and the full gift flow now
-compiles. B17/N2 were rewritten against the real 99-refusal design.
+- **19 → CH25** — all 17 of map19 (3 boulders + the Biker encounters) and 2 of
+  map31 (the outdoor boulders). `PROJECT_TODO.md` #39.
+- **7 placeholder-warp bookkeeping** — the Phase-5 alias header already resolves
+  them (`uranium_map_aliases.h` defines `MAP_URANIUM_31`).
+- **13 post-warp presentation commands** — stranded after a Transfer Player
+  warp, and the compiled map header supplies what they would have set.
+  `PROJECT_TODO.md` #40. B31 proves the BGM half in the running ROM (reads
+  `gMPlayInfo_BGM.songHeader` through `gSongTable` and compares against the
+  destination map's own `music` key); the 9 `CHANGE_TONE` fades are **still
+  unasserted and deliberately not claimed**.
+- **The nine real ones, converted 2026-08-19** — player-facing conditionals,
+  bag-quantity conditionals, `pbDeleteItem`, party-length reads, the 3-option
+  starter choice, `\b`/`\C[n]` colour codes, and the nuzlocke / Mystery Gift
+  unsatisfiable guards (user-approved strips). Plus the Luxi family staged
+  (fork ids 1597–1599) so Map031 EV050's gift converts.
 
-**The queue is 55 entries across the five maps** (map31 17, map19 17, map73 11,
-map68 7, map67 3) — down 1 from 56, the Magikarp entry. Counted from
-`output/uranium-build/transpile_unhandled.jsonl`; note the file's other 88
-map-less records are common-event scoped, not CH03, and the 15-map slice total
-is 345.
+**Item grants work end to end** (#25): shapes B and C emit `giveitem`, the four
+Uranium berries and Sprinklotad exist as engine items, and Sprinklotad's
+bag-quantity gate converted in the same 2026-08-19 pass.
 
-**19 of the 55 entries are return-trip work that moves to CH25** (#20):
-**all 17 of map19** — 3 boulders, plus the Grott-Hole's Biker encounters
-(3 `pbTrainerIntro(:BIKER)`, 3 `Kernel.pbNoticePlayer`, 3 `pbTrainerEnd`,
-4 `pbTrainerBattle` conditionals for Lou/Joe/Richard, 1 warp back to map31)
-— and **2 of map31's 17**, the two outdoor boulders.
+**Warp-arrival facing is verified in the ROM, not just in metadata** (#22):
+B27/B28/B30/B32 drive the real `ON_WARP_INTO_MAP_TABLE` script, with
+expectations late-bound off this build's own staged slice.
 
-**That leaves 36 genuinely open for CH03**, and map31's remaining 15 are the
-interesting ones: **12 are "command follows a Transfer Player warp"** (a
-single structural idiom — pokeemerald halts the script at the warp, so
-whatever followed is dropped), 2 are character-facing conditionals, and 1 is
-`pbAddPokemon(PBSpecies::LUXI, 5)`. That last one is the vanilla-species fix
-behaving correctly: LUXI is a `needs_engine` species and still queues, exactly
-as the `b33a8449` tests pin.
+**Nine converter bugs fixed** (#7, #10, #11, #12, #13, #15, #17, #25, plus
+Mawuli's facility battle) and a build-set wiring miss (#16). Every one was found
+by the build or the harness, not by a boot walk.
 
-The 12-entry warp idiom is now the largest single cluster of real CH03 work.
-Still also open: `giveitem` for the PC tour and Berry Boutique. A green build
-is not a converted chapter — but the chapter's own reachable surface is green.
-
-**Eight converter bugs fixed** (#7, #10, #11, #12, #13, #15, #17, plus Mawuli's
-facility battle) and a build-set wiring miss (#16). Every one was found by the
-build or the harness, not by a boot walk.
+**Remaining before the §9 gate: the boot walk itself.** Nothing in this file is
+a build-side blocker. Carryovers that CH03 surfaced but does not own are filed
+in `PROJECT_TODO.md` (#39, #40, #41, #42); on gate pass this file archives to
+`reference/archive/CH03_TODO.md`.
 
 ## Open
 
-### 22. Warp-arrival facing landed everyone facing DOWN — FIXED IN TREE, VERIFICATION PENDING 2026-08-18
+### 22. Warp-arrival facing landed everyone facing DOWN — FIXED + ROM-VERIFIED 2026-08-19
 
 Reported for the Kevlar Town entry, Poké Mart, Poké Center and flower shop
 (other Kevlar buildings were fine): warping in faced the player DOWN instead
@@ -156,11 +158,23 @@ arrival facing into a wall (`dest_dir=4`); reproduced faithfully, pinned in
 `test_uranium_authored_wall_facers_are_pinned`, needs a user fidelity call
 (reproduce vs override) — see MEMORY.md Open Questions.
 
-**STILL OPEN: the ROM has NOT been rebuilt or verified on device.** Also,
-**this fix CANNOT be exercised on the map-walker build** —
-`InitObjectEventsLocal` guards `TryRunOnWarpIntoMapScript()` behind
-`#if URANIUM_MAP_WALKER != TRUE` (`overworld.c:2590-2597`) — verification must
-happen on a real playtest ROM.
+Committed on `ch03-kevlar` (`61140331`). **Closed 2026-08-19:** the fix was
+pinned only at the metadata layer, so B27/B28/B30/B32 now drive the real
+`ON_WARP_INTO_MAP_TABLE` script in the running playtest ROM — the expectation is
+computed by running `compute_arrival_facings` over this build's staged slice at
+beat runtime, so a converter change that shifts a facing fails the beat instead
+of leaving a stale literal green. Note for anyone re-checking this: it **cannot**
+be exercised on the map-walker build — `InitObjectEventsLocal` guards
+`TryRunOnWarpIntoMapScript()` behind `#if URANIUM_MAP_WALKER != TRUE`
+(`overworld.c:2590-2597`).
+
+The dispatch does an **exact** compare against `getplayerxy` with no tolerance,
+falling through to the engine's `DIR_SOUTH` default on any miss — an
+`_assert_near` tolerance of 1 masked landing one tile off while these beats were
+being written. Keep the assertions exact.
+
+**Still a user call:** maps 49/172's Uranium-authored wall-facer (below) is
+reproduced faithfully and pinned; it is a fidelity decision, not a bug.
 
 ### 15. Everything after a `warp` was dead code — FIXED 2026-08-13
 
@@ -582,21 +596,26 @@ Verified through the whole chain, not just the transpiler:
 
 Remaining work:
 
-1. **Sprinklotad's grant is still queued behind a different idiom.** Both
-   offers sit inside `$PokemonBag.pbQuantity(PBItems::SPRINKLOTAD)==0`
-   (`Map073.pory:30` and `:122`) — a bag-quantity conditional, not a grant.
-   The item now exists, so only the `code-111` test needs converting; Emerald
-   has native bag-quantity checks, so verify one against the fork (§4.7)
-   rather than assuming. Small, general, and it unblocks 1-then and 4-then
-   branch bodies here alone.
-2. Shape C with a *non-empty* then-body needs a faithful success-path
+1. ~~Sprinklotad's grant is still queued behind a different idiom.~~
+   **DONE 2026-08-19** (`4da46a2e`): bag-quantity conditionals convert to
+   `checkitem` + `VAR_RESULT` (verified against `engine/`, §4.7), with the
+   `>0` / `==0` inversion handled explicitly. Both `Map073.pory` offers now
+   emit, and their then-bodies with them.
+2. **Shape C with a *non-empty* then-body** needs a faithful success-path
    mapping or an explicit queue — do not approximate it. 60 of 150 shape-C
    sites corpus-wide still queue, most on items the fork lacks (see #27).
-3. Extend the beats to assert **inventory**, not just the self-switch —
-   `Emulator.bag_item_quantity` already exists (added 2026-08-16 for B11).
-   B5/B14 currently pass over a grant that used to do nothing; B7's docstring
-   claims an Antidote it never verifies. **Beats that assert a flag instead of
-   the effect are how this survived two boot walks.**
+   **Not CH03 work** — filed as `PROJECT_TODO.md` #42.
+3. **Extend the beats to assert inventory, not just the self-switch — STILL
+   OPEN, and the one honest gap left in the chapter's coverage.**
+   `Emulator.bag_item_quantity` exists (added 2026-08-16 for B11/N4) and is
+   used *only* by the Mart beats. B5 (Center tour, 5× Oran Berry) and B14
+   (Boutique, four berries + Sprinklotad) still assert self-switches only, and
+   their comments still carry the pre-fix findings 5/6 ("no grant exists in
+   the compiled script") — corrected in `kevlar.py` 2026-08-19, but the
+   assertions were not upgraded. B7's docstring claims an Antidote it never
+   verifies. **Beats that assert a flag instead of the effect are how this
+   survived two boot walks** — the boot walk can confirm the bag by eye, but
+   the regression floor is still missing.
 
 ### 27. 111 items the id map names and the fork does not define
 

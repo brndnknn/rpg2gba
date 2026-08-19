@@ -777,3 +777,55 @@ tail into a script that fires on arrival (a map-script `ON_TRANSITION`/
 `ON_FRAME` on the destination, gated so it runs once), rather than trying to
 keep executing at the source. Worth designing when CH58 is written — and worth
 checking then whether any other page-3-style postgame page hides the same shape.
+
+### 41. 106 items the id map names and the fork does not define — plus Phase 2's item output is a dead end
+
+*Filed 2026-08-19 out of `CH03_TODO.md` #27, where it was surfaced by CH03's
+item-grant fix. Not chapter-blocking; it will keep surfacing one chapter at a
+time until it is done properly.*
+
+`reference/uranium_id_map.json` maps 607 Uranium items to `ITEM_*` constants and
+already precomputes the shortfall in its own `needs_engine.items`: **111 of them
+do not exist in `engine/include/constants/items.h`.** Five were added by hand for
+CH03 (the four Uranium berries + Sprinklotad, `67fd0435`); **106 remain**,
+including Uranium-original held items, mega stones, key items and mail.
+
+Every one is an item grant, mart entry or held item that will fail the §4.7
+forward gate and queue when its map is converted.
+
+**The compounding half is the real finding: Phase 2's item converter output never
+reaches the engine.** `pbs_converter/items.py` emits both
+`include/constants/items.h` and a `gItemsInfo[]` table into
+`output/uranium-build/`, and **nothing includes or copies them into `engine/`**.
+Compare the flags and map-alias hooks (`engine/data/event_scripts.s:1743`,
+`map_events.s:27`) — there is no items equivalent, so that output is currently
+written and discarded.
+
+**Scope it as a Phase-2→engine integration, not 106 hand edits.** It also needs a
+decision the five berries dodged: those were vanilla-equivalent, so their data
+could be copied from a twin. An original held item or mega stone has no twin and
+needs real hold-effect data from Uranium's `item_field_codes` worklist
+(`items.py:308-321`, already generated and never read).
+
+### 42. Shape-C item grants with a non-empty then-body — 60 of 150 sites still queue
+
+*Filed 2026-08-19 out of `CH03_TODO.md` #25 item 2, which is otherwise closed.*
+
+Uranium grants items three ways. Shape C is the awkward one: a `code-111`
+type-12 conditional whose **test expression is the grant itself**, because
+`Kernel.pbReceiveItem` returns whether the item was accepted, and the then-body
+is the success path. 152 sites / 56 maps corpus-wide.
+
+`43aa482e` handles the common case — an **empty** then-body, i.e. a pure
+side-effect wrapper — by emitting `giveitem`. **60 sites with a non-empty
+then-body still queue**, most of them on items the fork does not define (#41),
+which is why the two want planning together.
+
+Do **not** approximate the success path. Emerald's `giveitem` already sets
+`VAR_RESULT`, so the faithful mapping is plausible and cheap to verify against
+`engine/` (§4.7) — but the bag-full / refusal semantics have to be checked
+before a then-body is wired to it, not assumed.
+
+Worth remembering why this class was invisible for so long: **the queue entry
+names the conditional, not the grant hiding inside its test expression** — the
+same lesson as `CH03_TODO.md` #26(b).

@@ -67,12 +67,17 @@ what the transpiler actually emitted):
    NurseTut2 object at (8,17), local id 10, the sprite that *does* exist to
    talk to) is a bare `end`. So B5 is folded into B3's arrival, not a
    separate `talk` beat -- see B5's own comment.
-5. **No Oran Berry grant anywhere in the Center's scripts** (`grep giveitem`
-   over the whole compiled file: zero hits) -- the tour's only observable
-   effect is the 3 self-switch flags + `VAR_TEMP_C`.
-6. **No Bacu/Guara/Cupu/Acai Berry or Sprinklotad grant in the Boutique's
-   script either** -- `Map073_EV006_Page1` is 2 messages + one self-switch
-   set, no `giveitem`.
+5. **(Corrected 2026-08-19; was "no Oran Berry grant exists".)** The grant
+   was missing because the transpiler dropped every `pbReceiveItem` shape;
+   `43aa482e` fixed it. `KevlarTownPokemonCenter/scripts.inc:407` now carries
+   `giveitem ITEM_ORAN_BERRY, 5`. B5 still asserts only the 3 self-switches +
+   `VAR_TEMP_C` -- upgrading it to a `bag_item_quantity` read is CH03_TODO #25
+   item 3.
+6. **(Corrected 2026-08-19; was "no Boutique grant either".)** `Map073.pory:
+   109-112` emits four separate unfused `giveitem` calls, assembled at
+   `KevlarTownBuildings/scripts.inc:37-43`, and Sprinklotad's bag-quantity
+   gate converted in `4da46a2e`. B14's assertions were likewise not upgraded
+   -- same CH03_TODO #25 item 3.
 7. **No healing-location/respawn metadata write anywhere** -- `grep
    -i respawn` over the Center's whole compiled output: zero hits. There is
    also no `Emulator` primitive for reading `SaveBlock1`'s last-heal-location
@@ -794,9 +799,10 @@ def b5(emu: Emulator) -> None:
             raise ScenarioError(
                 f"B5: {ssa} not set after arrival -- the tour autorun did "
                 f"not complete ({shot})")
-    # No `giveitem`/Oran Berry call exists in the compiled script (finding
-    # 5) -- there is nothing further to assert; a bag read doesn't exist on
-    # `Emulator` even if the grant did.
+    # The tour's `giveitem ITEM_ORAN_BERRY, 5` DOES exist now (finding 5,
+    # corrected 2026-08-19) and `Emulator.bag_item_quantity` can read it.
+    # This beat has not been upgraded to assert the bag -- CH03_TODO #25
+    # item 3.
 
 
 # -- B8 ------------------------------------------------------------------
@@ -1052,8 +1058,8 @@ def b13(emu: Emulator) -> None:
 # -- B14 -----------------------------------------------------------------
 
 @kevlar.beat("B14", "Berry Boutique door opens; the NPC's dialogue sets its "
-                    "self-switch (no berry/Sprinklotad grant exists in the "
-                    "compiled script -- module finding 6, expected)",
+                    "self-switch (the four berry `giveitem`s now emit -- "
+                    "module finding 6; bag not yet asserted, CH03_TODO #25)",
              locations=(
                  BeatLocation("MAP_KEVLAR_TOWN", BOUTIQUE_DOOR[0], BOUTIQUE_DOOR[1], "boutique door"),
                  BeatLocation("MAP_KEVLAR_TOWN_BUILDINGS", BOUTIQUE_NPC_APPROACH[0], BOUTIQUE_NPC_APPROACH[1], "boutique NPC"),
