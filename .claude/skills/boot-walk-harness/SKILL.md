@@ -86,14 +86,32 @@ this area after every later fix.
    shows a refusal page, a negative beat asserting no state advanced.
 2. Beats in `src/rpg2gba/playtest/chapters/<ch>.py`, ids matching the doc's
    rows so a failure names a doc row.
-3. Late-bind every symbol — flag/var ids, coords, species — from the build's
+3. **Insert each beat where the playthrough already puts the player — do not
+   append to the end.** A chapter is one continuous run, so registration
+   order is playthrough order and **ids are labels, not ordering** (B26 runs
+   between B4 and B7 on purpose). Put a new beat immediately after the beat
+   that already produces the state it needs, so it asserts with zero or
+   trivial movement. Appending it instead makes it re-navigate across the map
+   to a tile an earlier beat already stood on — and `at=` will NOT rescue
+   you: it is map-viewer metadata and does not move the player, so a beat in
+   the wrong place silently inherits the previous beat's position and fails
+   later as a misleading `walk_to` "stuck" error near the target. Two traps
+   that follow (both cost a red chapter run on 2026-08-19, CH03 B27–B33):
+   `ON_WARP_INTO_MAP` compares `getplayerxy` EXACTLY and falls through to
+   `DIR_SOUTH` on a miss, so landing one tile off breaks an arrival-facing
+   check and an `_assert_near` tolerance hides it; and the LAST registered
+   beat sets the chapter's end state, which must leave field controls
+   released or the chapter-complete stamp fails
+   (`stamp.dump_save_blocks` refuses a mid-script state) and takes the walk
+   ROM with it.
+4. Late-bind every symbol — flag/var ids, coords, species — from the build's
    own artifacts. A hardcoded flag number is a regression bomb the next time
    the registry renumbers.
-4. Beats that move NPCs want **two** waypoints: `mark_frame()` right after
+5. Beats that move NPCs want **two** waypoints: `mark_frame()` right after
    the movement resolves, plus the normal end-of-beat capture. The default
    capture rule lands on the dialogue frame or the fully-settled frame —
    neither shows a mid-cutscene positioning bug.
-5. **A hardcoded APPROACH constant can be dead code with a valid-looking
+6. **A hardcoded APPROACH constant can be dead code with a valid-looking
    name.** `kevlar.py`'s B8 (2026-08-14) declared `MAWULI_APPROACH = (3, 16)`
    but every actual call routed through `_approach_patrol_npc`, which
    computes its own approach from the NPC's *live* position and never

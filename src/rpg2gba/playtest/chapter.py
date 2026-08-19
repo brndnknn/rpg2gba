@@ -147,6 +147,34 @@ class ChapterBuilder:
 
         Passing both forms, or only one half of the shorthand pair, fails
         loud -- an ambiguous or incomplete declaration is worse than none.
+
+        **`at=` is descriptive metadata, not a command.** It records where the
+        beat triggers so the debug map viewer can place it; it does NOT move
+        the player. A beat runs from wherever the PREVIOUS beat left off, so
+        one whose declared `at=` disagrees with that inherited position does
+        not error -- it silently starts somewhere else and fails later, often
+        as a misleading pathfinding "stuck" error near the target.
+
+        **Registration order is playthrough order.** A chapter's beats are one
+        continuous run, so position in this file is position in time, and beat
+        *ids are labels, not ordering* (B26 deliberately runs between B4 and
+        B7). Insert a new beat at the point where the state it needs already
+        exists -- immediately after the beat that produces it -- rather than
+        appending it to the end and navigating back. Appending is what makes a
+        beat re-cross the map to reach a tile an earlier beat already stood on.
+
+        Two consequences worth knowing before you add one (both cost a full
+        red chapter run on 2026-08-19, see B27-B33):
+
+        - `ON_WARP_INTO_MAP` dispatch compares against `getplayerxy` EXACTLY,
+          with no tolerance, and falls through to the engine's `DIR_SOUTH`
+          default on a miss. Landing one tile off is enough to break an
+          arrival-facing assertion, and an `_assert_near` tolerance will hide
+          it.
+        - The LAST registered beat decides the chapter's end state, and it must
+          leave field controls released. A beat that ends mid-script breaks the
+          chapter-complete stamp (`stamp.dump_save_blocks` refuses a locked
+          state as a seed candidate), taking the walk ROM with it.
         """
         if any(b.name == name for b in self._beats):
             raise ValueError(f"duplicate beat {name!r} in chapter {self.name!r}")
