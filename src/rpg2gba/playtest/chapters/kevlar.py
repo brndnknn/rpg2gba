@@ -461,6 +461,124 @@ def _flag_ssa(map_num: int, event_id: int, letter: str = "A") -> str:
     return f"FLAG_MAP{map_num:03d}_EVENT{event_id:03d}_SS{letter}"
 
 
+# -- B27/B28/B30/B32 (warp-arrival facing) + B29/B31/B33 (post-warp BGM) --
+# regression floor. Two defect classes that were reasoned about but never
+# asserted in-ROM (2026-08-19 task): (1) `compute_arrival_facings`'s
+# `_derive_retain_facing` fix (`tileset_converter/metadata_wiring.py`,
+# `reference/warp_facing_overrides.json`) for the CH03 "RMXP retain-facing"
+# bug -- tests/test_warp_facing_invariant.py pins the fix at the metadata
+# layer, but nothing before this drove the real ON_WARP_INTO_MAP_TABLE
+# script in the running ROM. (2) the transpiler's per-map dropped-command
+# queue: every Transfer Player warp on Map031 strands the commands RMXP
+# kept running across it (pokeemerald halts the script at the warp,
+# ScrCmd_warp/DoWarp) -- 9 CHANGE_TONE (code 223) + 2 CHANGE_MAP_SETTINGS
+# (204) + 1 PLAY_BGM (241), all destination-side presentation. The lead's
+# call was that nothing is actually lost because pokeemerald derives
+# destination BGM from the MAP HEADER natively rather than the event page --
+# UNVERIFIED until now.
+#
+# Both are checked with facts read live off THIS build's own artifacts
+# (`compute_arrival_facings` run over the staged slice for facing;
+# `engine/data/maps/<Dir>/map.json`'s own "music" key for BGM), never a
+# hardcoded DIR_*/MUS_* literal -- boot-walk-harness SKILL.md Phase 2 rule 3.
+#
+# Each of the 6 new beats below is placed physically right after the
+# existing beat that already stands the player on the exact arrival tile
+# being checked (B1/B10/B3/B14) -- no beat here re-navigates across the map.
+# The first version of this work did (a `walk_to` clear across Kevlar Town
+# to re-trigger the Route 1 seam), and in full-chapter order that landed the
+# player one tile off the compiled ON_WARP_INTO_MAP_TABLE dispatch's exact
+# coordinate match (a `_assert_near` tolerance of 1 let it slide through as
+# "close enough" while the dispatch script itself does an exact compare and
+# fell through with no `turnobject`, defaulting to the engine's own
+# DIR_SOUTH) -- a harness navigation bug, not a converter defect (2026-08-19
+# finding, confirmed by an isolated `--from-beat B27` run passing outright).
+# Piggybacking on an already-standing position removes the failure mode
+# entirely instead of tightening the tolerance around it.
+
+#: engine DIR_* -> the harness's own facing-string convention
+#: (`_decode_facing`/`ObjectEventState.facing`, `emulator.py`), same mapping
+#: `_FACING_OFFSET_KEYS` there encodes in the other direction.
+_DIR_CONST_TO_FACING: dict[str, str] = {
+    "DIR_NORTH": "UP", "DIR_SOUTH": "DOWN", "DIR_EAST": "RIGHT", "DIR_WEST": "LEFT",
+}
+
+
+def _expected_arrival_facing(dest_uid: int, x: int, y: int) -> str:
+    """The harness facing string this build's OWN pipeline assigns to a real
+    warp arrival -- runs `compute_arrival_facings` over the staged slice
+    (`output/uranium-build/maps/*.json` + `tilesets.json` +
+    `reference/warp_facing_overrides.json`, the exact inputs `build_slice_
+    maps` feeds it), not a literal `"UP"` -- so a future registry/converter
+    change that shifts the derived direction fails this beat instead of
+    leaving it silently green."""
+    import json
+    import os
+    from pathlib import Path
+
+    from ...tileset_converter import metadata_wiring as mw
+    from ...tileset_converter.map_set import SLICE_MAP_IDS
+
+    out = Path(os.environ.get("RPG2GBA_OUTPUT", "output")) / "uranium-build"
+    maps_dir = out / "maps"
+    slice_set = set(SLICE_MAP_IDS)
+    maps = {
+        uid: json.loads((maps_dir / f"Map{uid:03d}.json").read_text(encoding="utf-8"))
+        for uid in SLICE_MAP_IDS
+    }
+    warp_lists = {
+        uid: [spec for _event, spec in mw.classify_map_events(maps[uid], slice_set)[1]]
+        for uid in SLICE_MAP_IDS
+    }
+    tilesets = json.loads((out / "tilesets.json").read_text(encoding="utf-8"))
+    facings = mw.compute_arrival_facings(warp_lists, maps, tilesets=tilesets)
+
+    for f in facings.get(dest_uid, []):
+        if (f.x, f.y) == (x, y):
+            return _DIR_CONST_TO_FACING[f.dir_const]
+    raise ScenarioError(
+        f"_expected_arrival_facing: map {dest_uid} arrival ({x},{y}) has no "
+        f"row in compute_arrival_facings' own output -- nothing to compare "
+        f"the live ROM facing against")
+
+
+def _assert_player_facing(emu: Emulator, beat: str, expected: str) -> None:
+    localid_player = emu.resolve_constant("LOCALID_PLAYER")
+    actual = emu.object_event(localid_player).facing
+    if actual != expected:
+        shot = emu.screenshot(f"{beat.lower()}_wrong_facing")
+        raise ScenarioError(
+            f"{beat}: player facing {actual}, expected {expected} (derived "
+            f"live from compute_arrival_facings over this build's own "
+            f"staged output) ({shot})")
+
+
+def _expected_bgm_song_id(emu: Emulator, engine_map_dir: str) -> int:
+    """The MUS_* id THIS build's own compiled map header
+    (`engine/data/maps/<engine_map_dir>/map.json`'s `"music"` key -- the
+    porymap source `make modern` actually compiles from) declares for this
+    map, resolved through the same `resolve_constant` gcc probe every other
+    symbol here goes through -- never a hardcoded MUS_* literal."""
+    import json
+
+    map_json = emu.engine / "data" / "maps" / engine_map_dir / "map.json"
+    music = json.loads(map_json.read_text(encoding="utf-8"))["music"]
+    return emu.resolve_constant(music)
+
+
+def _assert_bgm(emu: Emulator, beat: str, engine_map_dir: str) -> None:
+    expected = _expected_bgm_song_id(emu, engine_map_dir)
+    actual = emu.bgm_song_id()
+    if actual != expected:
+        shot = emu.screenshot(f"{beat.lower()}_wrong_bgm")
+        raise ScenarioError(
+            f"{beat}: gMPlayInfo_BGM is playing song id {actual}, expected "
+            f"{expected} (engine/data/maps/{engine_map_dir}/map.json's own "
+            f"\"music\" key) -- the dropped post-warp PLAY_BGM/CHANGE_TONE "
+            f"commands were NOT structurally covered by the map header "
+            f"after all ({shot})")
+
+
 # -- B1 ------------------------------------------------------------------
 
 @kevlar.beat("B1", "Crossing Route 1's north seam lands in Kevlar Town",
@@ -468,6 +586,23 @@ def _flag_ssa(map_num: int, event_id: int, letter: str = "A") -> str:
 def b1(emu: Emulator) -> None:
     _cross_threshold(emu, "B1", KEVLAR_ENTRY_APPROACH, KEVLAR_ENTRY_DIRECTION,
                      "MAP_KEVLAR_TOWN")
+
+
+# -- B27 (placed right after B1 -- see the block comment above _flag_ssa) --
+
+@kevlar.beat("B27", "Crossing Route 1 -> Kevlar Town (B1's own warp) lands "
+                    "the player facing away from the return warp "
+                    "(warp-facing fix, task 2026-08-19) -- checked against "
+                    "the live ROM, not just the unit-level metadata test",
+             map_constant="MAP_KEVLAR_TOWN", at=(16, 42))
+def b27(emu: Emulator) -> None:
+    # No navigation of its own: B1's own crossing (KEVLAR_ENTRY_APPROACH,
+    # direction UP -- warp src (16,5) on MAP_ROUTE_01) is the exact warp
+    # being checked, and it just ran. Re-walking here to "re-trigger" it was
+    # the earlier version's bug (see the block comment above _flag_ssa).
+    _assert_near(emu, "B27", (16, 42), tolerance=0)
+    expected = _expected_arrival_facing(31, 16, 42)
+    _assert_player_facing(emu, "B27", expected)
 
 
 # -- B2 ------------------------------------------------------------------
@@ -542,6 +677,29 @@ def b3(emu: Emulator) -> None:
     _cross_threshold(emu, "B3", CENTER_EXIT_APPROACH, "DOWN", "MAP_KEVLAR_TOWN")
     _enter_door(emu, "B3", CENTER_DOOR, "MAP_KEVLAR_TOWN_POKEMON_CENTER")
     _assert_near(emu, "B3", CENTER_ARRIVAL)
+
+
+# -- B30/B31 (placed right after B3 -- see the block comment above _flag_ssa) -
+
+@kevlar.beat("B30", "Entering the Poke Center via the physical door (B3's "
+                    "own warp) lands the player facing away from the "
+                    "return warp (warp-facing fix, task 2026-08-19)",
+             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=CENTER_ARRIVAL)
+def b30(emu: Emulator) -> None:
+    # No navigation: B3 already stands the player at CENTER_ARRIVAL via the
+    # exact warp under test.
+    expected = _expected_arrival_facing(68, *CENTER_ARRIVAL)
+    _assert_player_facing(emu, "B30", expected)
+
+
+@kevlar.beat("B31", "Arriving at the Poke Center plays the map's own BGM -- "
+                    "this is the ONE literal dropped PLAY_BGM instance in "
+                    "the chapter (Map031_EV049_NurseTut, code 241), so this "
+                    "beat is the direct test of the lead's claim, not just "
+                    "a structural analogy (task 2026-08-19)",
+             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=CENTER_ARRIVAL)
+def b31(emu: Emulator) -> None:
+    _assert_bgm(emu, "B31", "KevlarTownPokemonCenter")
 
 
 # -- B4 ------------------------------------------------------------------
@@ -703,6 +861,28 @@ def b10(emu: Emulator) -> None:
     _cross_threshold(emu, "B10", CENTER_EXIT_APPROACH, "DOWN", "MAP_KEVLAR_TOWN")
     _enter_door(emu, "B10", MART_DOOR, "MAP_KEVLAR_TOWN_POKEMART")
     _assert_near(emu, "B10", MART_ARRIVAL)
+
+
+# -- B28/B29 (placed right after B10 -- see the block comment above _flag_ssa) -
+
+@kevlar.beat("B28", "Entering the Poke Mart (B10's own warp) lands the "
+                    "player facing away from the return warp (warp-facing "
+                    "fix, task 2026-08-19)",
+             map_constant="MAP_KEVLAR_TOWN_POKEMART", at=MART_ARRIVAL)
+def b28(emu: Emulator) -> None:
+    # No navigation: B10 already stands the player at MART_ARRIVAL via the
+    # exact warp under test.
+    expected = _expected_arrival_facing(67, *MART_ARRIVAL)
+    _assert_player_facing(emu, "B28", expected)
+
+
+@kevlar.beat("B29", "Arriving at the Poke Mart plays the map's own BGM -- "
+                    "checks the lead's structural-coverage claim for the "
+                    "dropped post-warp presentation commands (task "
+                    "2026-08-19)",
+             map_constant="MAP_KEVLAR_TOWN_POKEMART", at=MART_ARRIVAL)
+def b29(emu: Emulator) -> None:
+    _assert_bgm(emu, "B29", "KevlarTownPokemart")
 
 
 # -- B11 -----------------------------------------------------------------
@@ -899,6 +1079,33 @@ def b14(emu: Emulator) -> None:
     # arrival-above/mat-below shape as the Mart and the Center
     # (`KevlarTownBuildings/map.json`).
     _cross_threshold(emu, "B14", BOUTIQUE_ARRIVAL, "DOWN", "MAP_KEVLAR_TOWN")
+
+
+# -- B32/B33 (placed right after B14 -- see the block comment above _flag_ssa) -
+
+@kevlar.beat("B32", "Entering the Berry Boutique (the 'flower shop') lands "
+                    "the player facing away from the return warp "
+                    "(warp-facing fix, task 2026-08-19)",
+             map_constant="MAP_KEVLAR_TOWN", at=BOUTIQUE_DOOR)
+def b32(emu: Emulator) -> None:
+    # B14 just crossed back out and left the player standing exactly on
+    # BOUTIQUE_DOOR (its own arrival tile on this side) -- a trivial
+    # re-entry, not a cross-map walk (see the block comment above
+    # _flag_ssa for why that distinction matters).
+    _enter_door(emu, "B32", BOUTIQUE_DOOR, "MAP_KEVLAR_TOWN_BUILDINGS")
+    _assert_near(emu, "B32", BOUTIQUE_ARRIVAL)
+    expected = _expected_arrival_facing(73, *BOUTIQUE_ARRIVAL)
+    _assert_player_facing(emu, "B32", expected)
+
+
+@kevlar.beat("B33", "Arriving at the Berry Boutique plays the map's own "
+                    "BGM (task 2026-08-19)",
+             map_constant="MAP_KEVLAR_TOWN_BUILDINGS", at=BOUTIQUE_ARRIVAL)
+def b33(emu: Emulator) -> None:
+    _assert_bgm(emu, "B33", "KevlarTownBuildings")
+    # Unlike B29/B31 (which hand off to a same-map beat next), B15 needs
+    # MAP_KEVLAR_TOWN -- leave the same way B14 already does.
+    _cross_threshold(emu, "B33", BOUTIQUE_ARRIVAL, "DOWN", "MAP_KEVLAR_TOWN")
 
 
 # -- B15 -----------------------------------------------------------------
@@ -1381,9 +1588,18 @@ SPECIES_CONSTANTS: tuple[str, ...] = ("SPECIES_NONE", "SPECIES_MAGIKARP")
 
 ITEM_CONSTANTS: tuple[str, ...] = (MART_FIRST_ITEM,)
 
+#: B27-B33 (warp-arrival facing / post-warp BGM regression floor, task
+#: 2026-08-19): `LOCALID_PLAYER` for `_assert_player_facing`, "LAST_
+#: PHONEME_SONG" for `Emulator.bgm_song_id`'s table bound, and every MUS_*
+#: this build's own `engine/data/maps/*/map.json` currently declares for
+#: the 3 checked buildings (all MUS_LITTLEROOT today -- a placeholder, not
+#: assumed permanent, which is exactly why `_expected_bgm_song_id` reads it
+#: fresh each run rather than hardcoding it here too).
+MISC_CONSTANTS: tuple[str, ...] = ("LOCALID_PLAYER", "LAST_PHONEME_SONG", "MUS_LITTLEROOT")
+
 ALL_CONSTANTS: tuple[str, ...] = (
     MAP_CONSTANTS + FLAG_CONSTANTS + VAR_CONSTANTS + SPECIES_CONSTANTS
-    + ITEM_CONSTANTS + ("PARTY_SIZE",)
+    + ITEM_CONSTANTS + MISC_CONSTANTS + ("PARTY_SIZE",)
 )
 
 CHAPTER = kevlar.build()

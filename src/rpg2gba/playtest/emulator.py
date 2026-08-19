@@ -758,6 +758,43 @@ class Emulator:
                 + o["off_iteminfo_price"])
         return self.u32(addr)
 
+    #: `struct Song` (`engine/include/gba/m4a_internal.h`): a `SongHeader *`
+    #: pointer followed by two `u16`s (`ms`/`me`) -- 4 + 2 + 2 = 8 bytes/entry,
+    #: confirmed against that header rather than assumed.
+    _SIZEOF_SONG = 8
+
+    def bgm_song_id(self) -> int:
+        """The `MUS_*` id of the song currently playing on the BGM music
+        player (`gMPlayInfo_BGM`, `engine/include/gba/m4a_internal.h`'s
+        `struct MusicPlayerInfo` -- `songHeader` is that struct's first
+        field, so no offset lookup is needed to read it).
+
+        `gSongTable` (same header: `extern const struct Song gSongTable[]`)
+        is indexed by `MUS_*` id directly -- each `struct Song` is a
+        `SongHeader *` followed by two `u16`s, confirmed against the struct
+        definition rather than assumed a stride. This walks the table
+        looking for the entry whose `header` pointer matches
+        `gMPlayInfo_BGM->songHeader`, rather than trusting a caller-supplied
+        id, so a `MUS_*` name can be verified against what is actually
+        playing instead of just what was requested.
+
+        Bounded by `LAST_PHONEME_SONG + 1` (`include/constants/songs.h`) --
+        the last real id the table is defined over. Fails loud (CLAUDE.md
+        §4.5) on a `songHeader` that matches no table entry, rather than
+        returning a sentinel a caller could mistake for a real id.
+        """
+        header = self.u32(self.symbols["gMPlayInfo_BGM"])
+        table = self.symbols["gSongTable"]
+        count = self.resolve_constant("LAST_PHONEME_SONG") + 1
+        for song_id in range(count):
+            if self.u32(table + song_id * self._SIZEOF_SONG) == header:
+                return song_id
+        raise ScenarioError(
+            f"bgm_song_id: gMPlayInfo_BGM.songHeader ({header:#010x}) "
+            f"matches no entry in gSongTable[0:{count}] -- no MUS_* id "
+            f"resolves to the song actually playing"
+        )
+
     def field_locked(self) -> bool:
         """True while a script/dialogue holds the overworld controls."""
         return self.u8(self._lock_addr) != 0

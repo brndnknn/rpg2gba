@@ -283,6 +283,8 @@ _CONSTANT_PROBE_TEMPLATE = """\
 #include "data/scripts/uranium_flags.h"
 #include "fieldmap.h"
 #include "constants/metatile_behaviors.h"
+#include "constants/event_objects.h"
+#include "constants/songs.h"
 {entries}
 """
 
