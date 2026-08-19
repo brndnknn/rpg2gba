@@ -1065,6 +1065,12 @@ enum __attribute__((packed)) Item
     ITEM_SPRINKLOTAD = 878,
     // END URANIUM PATHFINDER SLICE
 
+    // URANIUM PATHFINDER SLICE: Uranium-original key item, traded for a
+    // Bicycle at the map 73 event. Placed after ITEM_SPRINKLOTAD, outside the
+    // berry run, for the same reason.
+    ITEM_BIKE_WHEEL = 879,
+    // END URANIUM PATHFINDER SLICE
+
     ITEMS_COUNT,
     ITEM_FIELD_ARROW = ITEMS_COUNT,
 };

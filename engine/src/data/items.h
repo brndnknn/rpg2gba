@@ -15933,6 +15933,27 @@ const struct ItemInfo gItemsInfo[] =
         .iconPic = gItemIcon_Sprinklotad,
         .iconPalette = gItemIconPalette_Sprinklotad,
     },
+
+// URANIUM PATHFINDER SLICE: Uranium-original key item, traded for a Bicycle
+// at the map 73 event (BIKEWHEEL id 523, item_use/battle_use both 0 in
+// item_field_codes.json -- inert, same as Sprinklotad). No dedicated art was
+// sourced for this pass; iconPic/iconPalette deliberately reuse ITEM_BICYCLE's
+// icon as a placeholder (the wheel is part of the bike it becomes).
+    [ITEM_BIKE_WHEEL] =
+    {
+        .name = ITEM_NAME("Bike Wheel"),
+        .price = 0,
+        .importance = 1,
+        .description = COMPOUND_STRING(
+            "This bike wheel can\n"
+            "be used to fix a\n"
+            "bicycle."),
+        .pocket = POCKET_KEY_ITEMS,
+        .type = ITEM_USE_BAG_MENU,
+        .fieldUseFunc = ItemUseOutOfBattle_CannotUse,
+        .iconPic = gItemIcon_Bicycle,
+        .iconPalette = gItemIconPalette_Bicycle,
+    },
 // END URANIUM PATHFINDER SLICE
 };
 

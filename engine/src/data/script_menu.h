@@ -1093,6 +1093,14 @@ static const struct MenuAction MultichoiceList_Exit[] =
     {gText_Exit},
 };
 
+// BEGIN URANIUM PATHFINDER SLICE — rpg2gba custom multichoice (see engine/RPG2GBA_VENDOR.md).
+static const struct MenuAction MultichoiceList_UraniumStarterPick[] = {
+    { COMPOUND_STRING("Orchynx") },
+    { COMPOUND_STRING("Raptorch") },
+    { COMPOUND_STRING("Eletux") },
+};
+// END URANIUM PATHFINDER SLICE
+
 struct MultichoiceListStruct
 {
     const struct MenuAction *list;
@@ -1260,6 +1268,9 @@ static const struct MultichoiceListStruct sMultichoiceLists[] =
     [MULTI_HOF_VICTORIES_QUIT]                         = MULTICHOICE(sMultichoiceList_HOF_Victories_Quit),
     [MULTI_EGGS_VICTORIES_QUIT]                        = MULTICHOICE(sMultichoiceList_Eggs_Victories_Quit),
     [MULTI_HOF_EGGS_VICTORIES_QUIT]                    = MULTICHOICE(sMultichoiceList_HOF_Eggs_Victories_Quit),
+    // BEGIN URANIUM PATHFINDER SLICE — rpg2gba custom multichoice (see engine/RPG2GBA_VENDOR.md).
+    [MULTI_URANIUM_STARTER_PICK]                       = MULTICHOICE(MultichoiceList_UraniumStarterPick),
+    // END URANIUM PATHFINDER SLICE
 };
 
 const u8 *const gStdStrings[] =
