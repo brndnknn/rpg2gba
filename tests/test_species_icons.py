@@ -79,6 +79,17 @@ EXPECTED_ICON_PAL_INDEX = {
     "BLUBELROG": 3,
     "OWTEN": 2,
     "ESHOUTEN": 1,
+    # Pinned 2026-08-19 against the same real Uranium assets + vendored
+    # engine icon palettes, for the Luxi evolution family (LUXI/LUXOR/
+    # LUXELONG, staged for an NPC item-grant conversion). All three chose
+    # pal3; spot-checked by eye via icons.write_contact_sheet
+    # (output/uranium-build/species/art/icon_contact_sheet.png) -- pal3
+    # keeps the family's dark-green/gold colouring recognisable (olive body,
+    # gold trim) even though six shared palettes force some saturation loss,
+    # same as every other entry in this table.
+    "LUXI": 3,
+    "LUXOR": 3,
+    "LUXELONG": 3,
 }
 
 

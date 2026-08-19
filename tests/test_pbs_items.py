@@ -101,3 +101,26 @@ def test_edge_uranium_item_needs_engine(
     for it in parsed:
         resolver.constant(it.id)
     assert id_map.needs_engine["items"], "expected some Uranium-original items"
+
+
+def test_edge_bike_wheel_resolves_against_fork(
+    uranium_data: Path, reference_dir: Path, fork_path: Path | None
+) -> None:
+    """BIKEWHEEL (id 523) -> ITEM_BIKE_WHEEL, now staged in the fork (map 73
+    bike-wheel-for-Bicycle trade, section 4.7 forward gate)."""
+    if fork_path is None:
+        pytest.skip("RPG2GBA_POKEEMERALD not set; can't validate against the fork")
+    parsed, resolver = _build(uranium_data, reference_dir)
+    bike_wheel = _by_internal(parsed, "BIKEWHEEL")
+    assert resolver.constant(bike_wheel.id) == "ITEM_BIKE_WHEEL"
+    assert bike_wheel.pocket == items._KEY_ITEMS_POCKET
+    assert bike_wheel.price == 0
+    assert "ITEM_BIKE_WHEEL" not in resolver.id_map.needs_engine["items"], (
+        "ITEM_BIKE_WHEEL should now be defined in the fork's constants/items.h"
+    )
+
+    c_text = items.emit_items_info(parsed, resolver)
+    entry = _entry(c_text, "ITEM_BIKE_WHEEL")
+    assert '.name = ITEM_NAME("Bike Wheel"),' in entry
+    assert ".importance = 1," in entry
+    assert ".pocket = POCKET_KEY_ITEMS," in entry

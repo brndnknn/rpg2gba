@@ -118,9 +118,21 @@ DEFAULT_ICON_PAL_INDEX = 0
 #: `.categoryName` is `u8[13]` — 12 visible chars + NUL terminator.
 CATEGORY_NAME_MAX_LEN = 12
 
-#: Evolution method index for "Level" in `evolutions.dat` (see pokemon.py's
-#: `_EVONAMES`); the only method the six starters use.
+#: Evolution method indices in `evolutions.dat` (see pokemon.py's `_EVONAMES`).
+#: Level (4) is what the six starters + Route-1 chains use. Happiness (1) and
+#: Item (7) were added for the Luxi family (2026-08-19) — see
+#: `build_staged_species` for how each maps onto the fork's evolution shape.
+#: Every other method index still fails loud.
+_EVO_METHOD_HAPPINESS = 1
 _EVO_METHOD_LEVEL = 4
+_EVO_METHOD_ITEM = 7
+
+#: Fork friendship-evolution threshold macro (src/pokemon.c) — resolves to 160
+#: or 220 depending on P_FRIENDSHIP_EVO_THRESHOLD. Every vanilla friendship
+#: evolution in the fork's species_info tables references this symbolic macro
+#: rather than a literal, so staged species do the same instead of picking
+#: between Essentials' conventional 220 and the fork's own Gen-8 160.
+_FRIENDSHIP_CONDITION = "CONDITIONS({IF_MIN_FRIENDSHIP, FRIENDSHIP_EVO_THRESHOLD})"
 
 
 @dataclass(frozen=True)
@@ -144,6 +156,13 @@ class StagedSpecies:
     front_pic_y_offset: int
     back_pic_y_offset: int
     icon_pal_index: int
+    #: "EVO_LEVEL" or "EVO_ITEM"; None when evolution_target_fork_id is None.
+    evolution_kind: str | None = None
+    #: ITEM_* fork constant; only set when evolution_kind == "EVO_ITEM".
+    evolution_item_constant: str | None = None
+    #: Extra `CONDITIONS({...})` fragment appended to the EVOLUTION() tuple;
+    #: only set for happiness evolutions (EVO_LEVEL + IF_MIN_FRIENDSHIP).
+    evolution_condition: str | None = None
 
 
 # ===========================================================================
@@ -289,12 +308,34 @@ def build_staged_species(
     records: list[pokemon.Species],
     pristine_species_egg: int,
     overrides: dict[str, SpeciesOverride] | None = None,
+    resolver: pokemon._Resolver | None = None,
 ) -> list[StagedSpecies]:
     """Assign fork-append ids and resolve evolution targets within the selection.
 
     Fork ids are assigned by position starting at `pristine_species_egg`
     (append-only — never renumber). An evolution whose target isn't itself in
     the selection is a dangling reference and fails loud.
+
+    Three Uranium evolution methods are understood, each mapped onto a real
+    fork evolution shape copied from a vanilla precedent (never invented):
+
+      * Level (4)     -> `EVO_LEVEL` with the Uranium param as the level.
+      * Happiness (1) -> `EVO_LEVEL` with param 0 plus
+                          `CONDITIONS({IF_MIN_FRIENDSHIP, FRIENDSHIP_EVO_THRESHOLD})`,
+                          matching every vanilla friendship evolution in
+                          engine/src/data/pokemon/species_info/ (e.g. Golbat,
+                          Togepi->Togetic) — this expansion version has no
+                          separate EVO_FRIENDSHIP method.
+      * Item (7)      -> `EVO_ITEM` with the item resolved via `resolver`
+                          (the same `item_constant` path pbs_converter uses)
+                          and checked against the fork's own
+                          include/constants/items.h; an item that doesn't
+                          resolve to a real fork ITEM_* fails loud rather than
+                          being substituted. `resolver` must be supplied when
+                          any staged species uses Item evolution.
+
+    Every other method index fails loud exactly as before — no permissive
+    default.
     """
     overrides = overrides or {}
     by_uranium_id = {spec.uranium_id: spec for spec in selected_specs}
@@ -306,22 +347,51 @@ def build_staged_species(
     for spec, rec in zip(selected_specs, records):
         target_fork_id: int | None = None
         evo_level: int | None = None
+        evo_kind: str | None = None
+        evo_item_constant: str | None = None
+        evo_condition: str | None = None
         if rec.evolutions:
             if len(rec.evolutions) > 1:
                 raise ValueError(f"{spec.internal_name}: expected at most one evolution, got {rec.evolutions}")
             method_idx, param, target_uid = rec.evolutions[0]
-            if method_idx != _EVO_METHOD_LEVEL:
-                raise ValueError(
-                    f"{spec.internal_name}: expected EVO_LEVEL (method {_EVO_METHOD_LEVEL}), "
-                    f"got method {method_idx} — W1 only handles the starters' known level evolutions"
-                )
             if target_uid not in by_uranium_id:
                 raise ValueError(
                     f"{spec.internal_name}: evolution targets uranium_id {target_uid}, which is not "
                     "in the selected species — dangling reference"
                 )
             target_fork_id = fork_id_by_uranium_id[target_uid]
-            evo_level = param
+
+            if method_idx == _EVO_METHOD_LEVEL:
+                evo_kind = "EVO_LEVEL"
+                evo_level = param
+            elif method_idx == _EVO_METHOD_HAPPINESS:
+                evo_kind = "EVO_LEVEL"
+                evo_level = 0
+                evo_condition = _FRIENDSHIP_CONDITION
+            elif method_idx == _EVO_METHOD_ITEM:
+                if resolver is None:
+                    raise ValueError(
+                        f"{spec.internal_name}: Item evolution (method {_EVO_METHOD_ITEM}) requires a "
+                        "resolver to look up the ITEM_* constant, but none was passed to "
+                        "build_staged_species"
+                    )
+                evo_kind = "EVO_ITEM"
+                evo_item_constant = resolver.item_constant(param)
+                if resolver.fork_items and evo_item_constant not in resolver.fork_items:
+                    raise ValueError(
+                        f"{spec.internal_name}: evolution item resolves to {evo_item_constant}, which "
+                        "is not defined in the fork's include/constants/items.h — refusing to "
+                        "substitute a different item"
+                    )
+            else:
+                method_name = (
+                    pokemon._EVONAMES[method_idx] if method_idx < len(pokemon._EVONAMES) else f"#{method_idx}"
+                )
+                raise ValueError(
+                    f"{spec.internal_name}: unsupported evolution method {method_idx} ({method_name}) — "
+                    f"only Level ({_EVO_METHOD_LEVEL}), Happiness ({_EVO_METHOD_HAPPINESS}), and "
+                    f"Item ({_EVO_METHOD_ITEM}) are handled"
+                )
 
         override = overrides.get(spec.internal_name)
         staged.append(
@@ -334,6 +404,9 @@ def build_staged_species(
                 front_pic_y_offset=_pick(override and override.front_pic_y_offset, DEFAULT_FRONT_PIC_Y_OFFSET),
                 back_pic_y_offset=_pick(override and override.back_pic_y_offset, DEFAULT_BACK_PIC_Y_OFFSET),
                 icon_pal_index=_pick(override and override.icon_pal_index, DEFAULT_ICON_PAL_INDEX),
+                evolution_kind=evo_kind,
+                evolution_item_constant=evo_item_constant,
+                evolution_condition=evo_condition,
             )
         )
     return staged
@@ -711,9 +784,15 @@ def emit_species_info(
 
         if s.evolution_target_fork_id is not None:
             target_const = f"SPECIES_{_internal_name_for_fork_id(staged, s.evolution_target_fork_id)}"
-            lines.append(
-                f"        .evolutions = EVOLUTION({{EVO_LEVEL, {s.evolution_level}, {target_const}}}),"
-            )
+            if s.evolution_kind == "EVO_ITEM":
+                fields = [s.evolution_kind, s.evolution_item_constant or "", target_const]
+            elif s.evolution_kind == "EVO_LEVEL":
+                fields = [s.evolution_kind, str(s.evolution_level), target_const]
+            else:
+                raise ValueError(f"{spec.internal_name}: staged with unknown evolution_kind {s.evolution_kind!r}")
+            if s.evolution_condition:
+                fields.append(s.evolution_condition)
+            lines.append(f"        .evolutions = EVOLUTION({{{', '.join(fields)}}}),")
 
         lines.append("    },")
         entries.append("\n".join(lines))
@@ -839,7 +918,10 @@ def build_manifest(
                 "back_pic_y_offset": s.back_pic_y_offset,
                 "icon_pal_index": s.icon_pal_index,
                 "evolves_to_species_constant": f"SPECIES_{target_name}" if target_name else None,
+                "evolution_kind": s.evolution_kind,
                 "evolution_level": s.evolution_level,
+                "evolution_item_constant": s.evolution_item_constant,
+                "evolution_condition": s.evolution_condition,
             }
         )
     return {
@@ -908,7 +990,7 @@ def write_all(
             "include/constants/pokedex.h",
             "NATIONAL_DEX",
         )
-        staged = build_staged_species(selected, records, pristine_egg, overrides)
+        staged = build_staged_species(selected, records, pristine_egg, overrides, resolver=resolver)
         assert_no_gfx_symbol_collisions(engine_dir, staged)
     else:
         resolver = None

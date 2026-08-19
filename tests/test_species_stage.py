@@ -37,6 +37,9 @@ def _make_resolver(
     species_names: dict[int, str] | None = None,
     species_kinds: dict[int, str] | None = None,
     species_pokedex: dict[int, str] | None = None,
+    item_internal: dict[int, str] | None = None,
+    item_names: dict[int, str] | None = None,
+    fork_items: set[str] | None = None,
 ) -> pokemon._Resolver:
     """Minimal `_Resolver` for unit-level tests that don't need real Uranium
     data or a real fork checkout — just enough dicts for the fields exercised."""
@@ -50,13 +53,13 @@ def _make_resolver(
         move_names={},
         ability_internal={},
         ability_names={},
-        item_internal={},
-        item_names={},
+        item_internal=item_internal or {},
+        item_names=item_names or {},
         type_internal={0: "NORMAL"},
         fork_species=set(),
         fork_moves=set(),
         fork_abilities=set(),
-        fork_items=set(),
+        fork_items=fork_items if fork_items is not None else set(),
     )
 
 
@@ -433,3 +436,105 @@ def test_unrepresentable_char_fails_loud(engine_dir: Path) -> None:
     charmap_chars = stage.load_charmap_chars(engine_dir)
     with pytest.raises(ValueError, match=r"TESTMON.*description.*U\+2603"):
         stage.emit_engine_text("A snowman: ☃", charmap_chars, species="TESTMON", field="description")
+
+
+# ===========================================================================
+# Luxi family (2026-08-19) — Happiness (method 1) and Item (method 7)
+# evolutions, previously unsupported by build_staged_species.
+# ===========================================================================
+
+
+def test_happiness_evolution_emits_min_friendship_condition() -> None:
+    """Uranium evolution method 1 (Happiness) is staged as EVO_LEVEL with
+    param 0 plus CONDITIONS({IF_MIN_FRIENDSHIP, FRIENDSHIP_EVO_THRESHOLD}),
+    matching every vanilla friendship evolution in the fork's
+    species_info/*.h (e.g. Golbat -> Crobat) — there is no separate
+    EVO_FRIENDSHIP method in this expansion version."""
+    pre = SpeciesSpec(1, "PREMON")
+    post = SpeciesSpec(2, "POSTMON")
+    pre_rec = _make_species(id=1, internal_name="PREMON", evolutions=[(1, 0, 2)])
+    post_rec = _make_species(id=2, internal_name="POSTMON")
+
+    staged = stage.build_staged_species((pre, post), [pre_rec, post_rec], pristine_species_egg=100)
+
+    assert staged[0].evolution_kind == "EVO_LEVEL"
+    assert staged[0].evolution_level == 0
+    assert staged[0].evolution_condition == "CONDITIONS({IF_MIN_FRIENDSHIP, FRIENDSHIP_EVO_THRESHOLD})"
+    assert staged[0].evolution_target_fork_id == staged[1].fork_id
+    assert staged[0].evolution_item_constant is None
+
+
+def test_item_evolution_emits_evo_item_with_resolved_constant(engine_dir: Path) -> None:
+    """Uranium evolution method 7 (Item) is staged as EVO_ITEM with the item
+    resolved through the same `_Resolver.item_constant` path pbs_converter
+    uses (never a hand-rolled mapping), matching the vanilla EVO_ITEM shape
+    (e.g. Togetic -> Togekiss via ITEM_SHINY_STONE)."""
+    pre = SpeciesSpec(1, "PREMON")
+    post = SpeciesSpec(2, "POSTMON")
+    pre_rec = _make_species(id=1, internal_name="PREMON", evolutions=[(7, 18, 2)])
+    post_rec = _make_species(id=2, internal_name="POSTMON")
+    resolver = _make_resolver(
+        item_internal={18: "SHINYSTONE"},
+        item_names={18: "Shiny Stone"},
+        fork_items={"ITEM_SHINY_STONE"},
+    )
+
+    staged = stage.build_staged_species(
+        (pre, post), [pre_rec, post_rec], pristine_species_egg=100, resolver=resolver
+    )
+
+    assert staged[0].evolution_kind == "EVO_ITEM"
+    assert staged[0].evolution_item_constant == "ITEM_SHINY_STONE"
+    assert staged[0].evolution_level is None
+    assert staged[0].evolution_condition is None
+
+    charmap_chars = stage.load_charmap_chars(engine_dir)
+    charmap = stage.load_charmap(engine_dir / "charmap.txt")
+    text = stage.emit_species_info(staged, resolver, charmap_chars, charmap)
+    assert ".evolutions = EVOLUTION({EVO_ITEM, ITEM_SHINY_STONE, SPECIES_POSTMON})," in text
+
+
+def test_item_evolution_unresolved_fork_item_fails_loud() -> None:
+    """An item id that resolves to a constant absent from the fork's
+    include/constants/items.h fails loud instead of being substituted
+    (CLAUDE.md §4.7 forward-direction gate)."""
+    pre = SpeciesSpec(1, "PREMON")
+    post = SpeciesSpec(2, "POSTMON")
+    pre_rec = _make_species(id=1, internal_name="PREMON", evolutions=[(7, 99, 2)])
+    post_rec = _make_species(id=2, internal_name="POSTMON")
+    resolver = _make_resolver(
+        item_internal={99: "MADEUPSTONE"},
+        item_names={99: "Made Up Stone"},
+        fork_items={"ITEM_SHINY_STONE"},  # deliberately missing ITEM_MADE_UP_STONE
+    )
+
+    with pytest.raises(ValueError, match="not defined in the fork"):
+        stage.build_staged_species(
+            (pre, post), [pre_rec, post_rec], pristine_species_egg=100, resolver=resolver
+        )
+
+
+def test_item_evolution_without_resolver_fails_loud() -> None:
+    """Item evolution needs a resolver to look up the ITEM_* constant; a
+    missing resolver fails loud rather than silently skipping the item
+    lookup or defaulting to something."""
+    pre = SpeciesSpec(1, "PREMON")
+    post = SpeciesSpec(2, "POSTMON")
+    pre_rec = _make_species(id=1, internal_name="PREMON", evolutions=[(7, 18, 2)])
+    post_rec = _make_species(id=2, internal_name="POSTMON")
+
+    with pytest.raises(ValueError, match="requires a resolver"):
+        stage.build_staged_species((pre, post), [pre_rec, post_rec], pristine_species_egg=100)
+
+
+def test_unsupported_evolution_method_still_fails_loud() -> None:
+    """Every Uranium evolution method other than Level/Happiness/Item still
+    fails loud exactly as before — no permissive default was added."""
+    pre = SpeciesSpec(1, "PREMON")
+    post = SpeciesSpec(2, "POSTMON")
+    # Method 5 = "Trade" in _EVONAMES; not one of the three handled methods.
+    pre_rec = _make_species(id=1, internal_name="PREMON", evolutions=[(5, 0, 2)])
+    post_rec = _make_species(id=2, internal_name="POSTMON")
+
+    with pytest.raises(ValueError, match="unsupported evolution method 5"):
+        stage.build_staged_species((pre, post), [pre_rec, post_rec], pristine_species_egg=100)

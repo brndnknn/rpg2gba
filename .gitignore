@@ -122,6 +122,9 @@ engine/sound/direct_sound_samples/cries/folerog.wav
 engine/sound/direct_sound_samples/cries/blubelrog.wav
 engine/sound/direct_sound_samples/cries/owten.wav
 engine/sound/direct_sound_samples/cries/eshouten.wav
+engine/sound/direct_sound_samples/cries/luxi.wav
+engine/sound/direct_sound_samples/cries/luxor.wav
+engine/sound/direct_sound_samples/cries/luxelong.wav
 # Full-corpus Map Walker build: the assembler generates a per-map dir under
 # data/maps/ and data/layouts/ for every built Uranium map (~190) plus the
 # UraniumWalkerStub/ dummy for dropped stock map data. Blanket-ignore all per-map

@@ -157,6 +157,18 @@ _RECEIVE_ITEM_RE = re.compile(
     r"(?:,\s*(\d+)\s*(?:,\s*_I\(\s*\"[^\"]*\"\s*\)\s*)?)?\)\s*$"
 )
 
+# The consuming counterpart: `$PokemonBag.pbDeleteItem(PBItems::SYMBOL)`.
+# Surfaced 2026-08-19 once the BIKEWHEEL bag-quantity branch started emitting —
+# it sits inside that branch's then-arm (Map073 EV001 cmd 9), so it was hidden
+# behind the dropped conditional until then. Without it the player is handed the
+# Bicycle but keeps the spent wheel as a dead Key Item. Same narrow discipline as
+# _RECEIVE_ITEM_RE: a bare complete call with a literal symbol only — a dynamic
+# argument or a guard modifier still falls through to the queue.
+_DELETE_ITEM_RE = re.compile(
+    r"^\s*\$PokemonBag\.pbDeleteItem\(\s*(?:::)?PBItems::(\w+)\s*"
+    r"(?:,\s*(\d+)\s*)?\)\s*$"
+)
+
 # "$game_player.AXIS OP LITERAL" — a one-shot position guard/boundary check
 # outside a code-112 wait loop (Map032 EV9 pages 1-3: `x==17` is a map-edge
 # sign guard that early-exits before the scene proper; EV9 page 3's
@@ -253,6 +265,46 @@ _ROCK_SMASH_RE = re.compile(r"^\s*(?:Kernel\.)?pbRockSmash\s*$")
 # here and falls through to the generic script-condition queue like any
 # other non-matching type-12 shape.
 _HAS_SPECIES_RE = re.compile(r"^\s*pbHasSpecies\?\(\s*::PBSpecies::([A-Za-z0-9_]+)\s*\)\s*$")
+
+# Character-facing conditional (RMXP condition kind 6: `[6, character_id,
+# direction]`), player-only. Real occurrence: Map031 EV049 "NurseTut" page 1,
+# commands 5 and 42 (output/uranium-build/maps/Map031.json), both
+# `[6, -1, 8]` — "is the player facing up?" gates a re-ask of the same
+# question. Character id -1 is always the player in RMXP; any other id is an
+# NPC local-id lookup that is deliberately out of scope (no established
+# RMXP-local-id -> fork-local-id mapping exists yet) and must keep queueing,
+# not be guessed at. RMXP direction constants 2/4/6/8 (down/left/right/up)
+# map onto the fork's DIR_SOUTH/DIR_WEST/DIR_EAST/DIR_NORTH
+# (engine/include/constants/global.h:205-209); any other direction value
+# falls through to the queue.
+_RMXP_DIRECTION_TO_DIR_CONST = {
+    2: "DIR_SOUTH",
+    4: "DIR_WEST",
+    6: "DIR_EAST",
+    8: "DIR_NORTH",
+}
+
+# $PokemonBag.pbQuantity(PBItems::SYMBOL) <op> 0 — a bag has-item/lacks-item
+# guard (Map073 EV1 page 1 cmd 4 `...BIKEWHEEL)>0`; EV3 page 1 cmd 0 and EV6
+# page 2 cmd 2, both `...SPRINKLOTAD)==0`, output/uranium-build/maps/
+# Map073.json). Only the two comparison shapes actually observed in the
+# corpus are handled: `>0` (player HAS at least one) and `==0` (player LACKS
+# it entirely) — any other operator or non-zero RHS falls through to the
+# generic script-condition queue rather than being guessed at.
+_BAG_QUANTITY_CMP_RE = re.compile(
+    r"^\s*\$PokemonBag\.pbQuantity\(\s*(?:::)?PBItems::([A-Za-z0-9_]+)\s*\)\s*(>|==)\s*0\s*$"
+)
+
+# $PokemonGlobal.nuzlocke==true — Nuzlocke mode is not ported (user-approved
+# strip, 2026-08-19), so the guard is statically false: Map068 EV015 page 1
+# cmd 16 (output/uranium-build/maps/Map068.json), 2 then-nodes / 0 else-nodes.
+_NUZLOCKE_MODE_GUARD_RE = re.compile(r"^\s*\$PokemonGlobal\.nuzlocke\s*==\s*true\s*$")
+
+# pbNextMysteryGiftID>0 — the Mystery Gift subsystem is not ported (user-
+# approved strip, 2026-08-19), so the guard is statically false: Map067 EV009
+# "Deliveryman" page 2 cmd 0 (output/uranium-build/maps/Map067.json), 4
+# then-nodes / 1 else-node.
+_MYSTERY_GIFT_ID_GUARD_RE = re.compile(r"^\s*pbNextMysteryGiftID\s*>\s*0\s*$")
 
 # pbCaveEntrance — Essentials' cave-entry fade/step-in call (Map032 EV23/36/
 # 37 page 1; 48 corpus occurrences total, always bare — no argument list ever
@@ -464,6 +516,18 @@ _VAR_ASSIGN_LOCAL_RE = re.compile(
     r"^\s*\$game_variables\[\s*(\d+)\s*\]\s*=\s*([a-z_]\w*)\s*$"
 )
 
+# ``$game_variables[N]=$Trainer.party.length`` (Map068 EV001 page1 cmd14 /
+# page2 cmd8, both var 43). Fork-native ``CalculatePlayerPartyCount``
+# (engine/data/specials.inc:154, engine/src/pokemon.c:3495) returns the
+# player's party count; ``specialvar`` (engine/asm/macros/event.inc:303)
+# writes a special's return value into a script variable in one command —
+# no scratch var needed. The RMXP var must resolve through the registry
+# (CLAUDE.md §6); an unnamed variable returns None so the row keeps queueing
+# rather than inventing/reusing a scratch VAR_TEMP_* for a real RMXP var.
+_PARTY_LENGTH_ASSIGN_RE = re.compile(
+    r"^\s*\$game_variables\[\s*(\d+)\s*\]\s*=\s*\$Trainer\.party\.length\s*$"
+)
+
 # -- string-valued Ruby local + indexed text readback (Map032 EV9's starter
 # name-back) ---------------------------------------------------------------
 # `list=["Orchynx","Raptorch","Eletux"]` binds a plain (non-$game_variables)
@@ -535,6 +599,26 @@ _CH_RESIDUAL_TAG_RE = re.compile(r"[\\<>]")
 # one shape a tracked list-index readback produces (_LIST_INDEX_ASSIGN_RE);
 # any other \v[N] still falls through and queues.
 _VALUE_VAR_RE = re.compile(r"\\v\[(\d+)\]")
+
+# ``\b``/``\B`` — Essentials' message pre-processor expands this to a whole-
+# line blue text-colour tag (PScreen_Message.rb-family gsub:
+# ``text.gsub!(/\\[Bb]/,"<c2=6546675A>")``), the counterpart to ``\r``'s red
+# ``<c2=043C675A>``. It carries no mechanical meaning — purely cosmetic tint.
+# Design decision 2026-08-19: drop the code rather than reproduce the colour
+# (pokeemerald's message boxes render in a themed palette; an inline mid-
+# dialogue colour swap would look out of place for a whole-line tint that
+# never varies). Stripped specifically — every OTHER untranslated control
+# code must keep queueing (CLAUDE.md §4.5); this is not a general "unknown
+# backslash code" strip.
+_BLUE_TEXT_CODE_RE = re.compile(r"\\[bB]")
+
+# RMXP's own colour-change code, `\C[n]` (n = a palette slot; `\C[0]` resets).
+# Uranium uses it to highlight item/place names mid-sentence, e.g. Map073 EV001
+# cmd 18: `bring me a \C[3]Bike wheel\C[0] I can fix an old bicycle`. Same
+# disposition and same reasoning as _BLUE_TEXT_CODE_RE above (2026-08-19):
+# purely a tint, no mechanical meaning, dropped rather than reproduced. Also
+# stripped specifically — `\r`, `\v[n]` and every other code keep queueing.
+_COLOUR_TEXT_CODE_RE = re.compile(r"\\C\[\d+\]")
 
 # -- canlose trainer battle idiom (type-12 pbTrainerBattle inside a 111) ------
 # reference/guides/canlose_battle_pipeline_plan.md "Gap A — transpiler"; proven
@@ -1754,7 +1838,8 @@ class _PageEmitter:
             value_text = self._emit_value_var_text(node.text)
             if value_text is not None:
                 return value_text
-            result = translate_text_codes(node.text.strip())
+            text_source = _COLOUR_TEXT_CODE_RE.sub("", _BLUE_TEXT_CODE_RE.sub("", node.text))
+            result = translate_text_codes(text_source.strip())
             if result is None:
                 return [ctx.queue(
                     node.index, SHOW_TEXT,
@@ -1891,12 +1976,24 @@ class _PageEmitter:
         position = self._emit_player_position_idiom(node)
         if position is not None:
             return position
+        facing = self._emit_player_facing_idiom(node)
+        if facing is not None:
+            return facing
         give_item = self._emit_give_item_idiom(node)
         if give_item is not None:
             return give_item
+        bag_quantity = self._emit_bag_quantity_idiom(node)
+        if bag_quantity is not None:
+            return bag_quantity
         guard = self._emit_unsatisfiable_numeric_guard(node)
         if guard is not None:
             return guard
+        nuzlocke_mode = self._emit_nuzlocke_mode_strip(node)
+        if nuzlocke_mode is not None:
+            return nuzlocke_mode
+        mystery_gift = self._emit_mystery_gift_id_strip(node)
+        if mystery_gift is not None:
+            return mystery_gift
         rock_smash = self._emit_rock_smash_idiom(node)
         if rock_smash is not None:
             return rock_smash
@@ -2044,6 +2141,46 @@ class _PageEmitter:
         lines.append("}")
         return lines
 
+    def _emit_player_facing_idiom(self, node: IfNode) -> list[str] | None:
+        """RMXP condition kind 6 (character-facing), player-only — see
+        ``_RMXP_DIRECTION_TO_DIR_CONST`` for the corpus evidence (Map031
+        EV049 "NurseTut" page 1, commands 5/42, both ``[6, -1, 8]``). This is
+        a COMMAND-then-branch idiom like ``_emit_has_species_idiom`` above,
+        not a pure expression: the fork has no inline "am I facing N" boolean,
+        only the special ``GetPlayerFacingDirection``
+        (engine/data/specials.inc:309, engine/src/field_player_avatar.c:1524)
+        which must be read into a variable first via ``specialvar`` before it
+        can be compared. ``VAR_TEMP_0`` is the transpiler's own generic
+        scratch var (same one ``_emit_player_position_idiom`` uses for
+        ``getplayerxy`` — reused, not re-minted, since its lifetime never
+        crosses this one branch).
+
+        Returns ``None`` (falls through to the generic script-condition
+        queue) for: any condition kind other than 6, a character id other
+        than -1 (the player) — NPC local-id resolution is deliberately out of
+        scope, there is no established RMXP-local-id -> fork-local-id mapping
+        to guess at — or a direction value that is not one of the four
+        cardinal RMXP constants (2/4/6/8)."""
+        params = node.cmd.get("parameters", [])
+        if len(params) < 3 or params[0] != 6:
+            return None
+        character_id, direction = params[1], params[2]
+        if character_id != -1:
+            return None  # NPC local-id mapping is out of scope — keep queueing
+        dir_const = _RMXP_DIRECTION_TO_DIR_CONST.get(direction)
+        if dir_const is None:
+            return None
+        lines = [
+            "specialvar(VAR_TEMP_0, GetPlayerFacingDirection)",
+            f"if (var(VAR_TEMP_0) == {dir_const}) {{",
+        ]
+        lines += [f"    {ln}" for ln in self.emit_nodes(node.then)]
+        if node.otherwise is not None:
+            lines.append("} else {")
+            lines += [f"    {ln}" for ln in self.emit_nodes(node.otherwise)]
+        lines.append("}")
+        return lines
+
     def _give_item_const(self, symbol: str) -> str | None:
         """Uranium ``PBItems`` symbol -> verified fork ``ITEM_*`` constant for
         the pbReceiveItem give-item idiom (both the shape-B bare-statement
@@ -2103,6 +2240,53 @@ class _PageEmitter:
         lines.append("}")
         return lines
 
+    def _emit_bag_quantity_idiom(self, node: IfNode) -> list[str] | None:
+        """``$PokemonBag.pbQuantity(PBItems::SYMBOL) <op> 0`` — a bag
+        has-item/lacks-item guard (see ``_BAG_QUANTITY_CMP_RE`` for the
+        corpus evidence, Map073 EV1/EV3/EV6). Fork-native ``checkitem``
+        (engine/asm/macros/event.inc:588, ``SCR_OP_CHECKITEM``) is a COMMAND
+        that writes ``VAR_RESULT`` to TRUE if the player has at least
+        ``quantity`` (default 1) of the item, FALSE otherwise — so this emits
+        a preamble ``checkitem(...)`` call plus an ``if`` over the result,
+        same shape as ``_emit_has_species_idiom``'s ``checkspecies`` preamble.
+
+        **Polarity** (get this wrong and a shop hands out free items
+        forever): ``>0`` means "player HAS at least one" — the RMXP then-arm
+        is the checkitem-TRUE arm. ``==0`` means "player LACKS it entirely" —
+        the RMXP then-arm is the checkitem-FALSE arm. Any other operator or
+        non-zero RHS is not one of the two shapes actually observed in the
+        corpus and is not handled.
+
+        The item symbol is resolved via ``_give_item_const`` (both the
+        Essentials-symbol -> ``ITEM_*`` lookup and the fork-header forward
+        check, CLAUDE.md §4.7) — an unresolved or un-forked symbol returns
+        ``None`` here too, same disposition as ``_emit_give_item_idiom``.
+
+        Returns ``None`` (falls through to the generic script-condition
+        queue) for: any other script call/comparison shape, or an
+        unresolved/un-forked item symbol."""
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        m = _BAG_QUANTITY_CMP_RE.match(params[1])
+        if not m:
+            return None
+        symbol, op = m.group(1), m.group(2)
+        const = self._give_item_const(symbol)
+        if const is None:
+            return None  # unresolved/un-forked item symbol — fall through to the queue
+        result_literal = "TRUE" if op == ">" else "FALSE"
+        lines = [
+            f"checkitem({const})",
+            f"if (var(VAR_RESULT) == {result_literal}) {{",
+        ]
+        lines += [f"    {ln}" for ln in self.emit_nodes(node.then)]
+        if node.otherwise is not None:
+            lines.append("} else {")
+            lines += [f"    {ln}" for ln in self.emit_nodes(node.otherwise)]
+        lines.append("}")
+        return lines
+
     def _emit_unsatisfiable_numeric_guard(self, node: IfNode) -> list[str] | None:
         """``!pbGet(N).is_a?(Numeric) || $game_variables[M] < 0`` — Essentials'
         defensive "is this numeric and non-negative" guard (Map049 EV20 page
@@ -2124,6 +2308,51 @@ class _PageEmitter:
         breadcrumb = (
             "# numeric guard: unsatisfiable on GBA — then-arm dropped "
             "(slice1, 2026-07-05)"
+        )
+        else_lines = self.emit_nodes(node.otherwise) if node.otherwise else []
+        return [breadcrumb, *else_lines]
+
+    def _emit_nuzlocke_mode_strip(self, node: IfNode) -> list[str] | None:
+        """``$PokemonGlobal.nuzlocke==true`` — Nuzlocke mode is not ported
+        (user-approved strip, 2026-08-19). Statically false on the GBA (no
+        runtime path ever sets it), so exactly like
+        ``_emit_unsatisfiable_numeric_guard`` above: drop the then-arm
+        entirely and splice the else-arm's children in directly (no wrapping
+        ``if`` — the branch could never have routed to the then-arm in the
+        first place). Real occurrence: Map068 EV015 page 1 cmd 16
+        (output/uranium-build/maps/Map068.json), 2 then-nodes / 0 else-nodes.
+        Returns ``None`` (falls through to the generic script-condition
+        queue) for any other script condition."""
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        if not _NUZLOCKE_MODE_GUARD_RE.match(params[1]):
+            return None
+        breadcrumb = (
+            "# nuzlocke mode: not ported, unsatisfiable on GBA — then-arm "
+            "dropped (user-approved strip, 2026-08-19)"
+        )
+        else_lines = self.emit_nodes(node.otherwise) if node.otherwise else []
+        return [breadcrumb, *else_lines]
+
+    def _emit_mystery_gift_id_strip(self, node: IfNode) -> list[str] | None:
+        """``pbNextMysteryGiftID>0`` — the Mystery Gift subsystem is not
+        ported (user-approved strip, 2026-08-19). Statically false on the GBA
+        (no runtime path ever sets it), same static collapse as
+        ``_emit_nuzlocke_mode_strip``/``_emit_unsatisfiable_numeric_guard``:
+        drop the then-arm entirely and splice the else-arm's children in
+        directly. Real occurrence: Map067 EV009 "Deliveryman" page 2 cmd 0
+        (output/uranium-build/maps/Map067.json), 4 then-nodes / 1 else-node.
+        Returns ``None`` (falls through to the generic script-condition
+        queue) for any other script condition."""
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        if not _MYSTERY_GIFT_ID_GUARD_RE.match(params[1]):
+            return None
+        breadcrumb = (
+            "# mystery gift: not ported, unsatisfiable on GBA — then-arm "
+            "dropped (user-approved strip, 2026-08-19)"
         )
         else_lines = self.emit_nodes(node.otherwise) if node.otherwise else []
         return [breadcrumb, *else_lines]
@@ -2511,7 +2740,8 @@ class _PageEmitter:
                 f"inline choice: variable {var_id} is unnamed — cannot mint a VAR_*",
             )]
 
-        result = translate_text_codes(prompt_text.strip())
+        prompt_source = _COLOUR_TEXT_CODE_RE.sub("", _BLUE_TEXT_CODE_RE.sub("", prompt_text))
+        result = translate_text_codes(prompt_source.strip())
         if result is None:
             return [self.ctx.queue(
                 node.index, SHOW_TEXT,
@@ -2551,7 +2781,52 @@ class _PageEmitter:
             ]
         return lines
 
+    def _emit_starter_pick_choice_idiom(self, node: ChoiceNode) -> list[str] | None:
+        """The three-option starter-pick menu (Map068 EV003 page 1 cmd 3,
+        output/uranium-build/maps/Map068.json — ``['Orchynx', 'Raptorch',
+        'Eletux']``, no cancel arm). ``_emit_choice`` below only natively
+        handles 2-way choices via ``yesnobox``; a 3+-option menu needs a
+        minted ``MULTI_*`` multichoice list, which is a per-menu engine-side
+        asset (``engine/include/constants/script_menu.h`` /
+        ``engine/src/data/script_menu.h``) — trusting an unminted constant
+        would compile-clean-but-wrong (CLAUDE.md §4.1). ``MULTI_URANIUM_STARTER_PICK``
+        is that minted list for exactly this menu (option order Orchynx/
+        Raptorch/Eletux at indices 0/1/2, per the concurrent engine-side
+        change) — deliberately keyed on the exact label tuple, not on "any
+        3-option choice," so no other 3+-option menu can silently pick up a
+        constant that was never minted for it.
+
+        Returns ``None`` (falls through to ``_emit_choice``'s generic
+        2-way/queue handling) for: any label list other than exactly
+        ``['Orchynx', 'Raptorch', 'Eletux']``, a cancel arm present (this
+        menu has none — a cancel arm would mean a different shape we have not
+        verified against the minted list), or arm indices that are not
+        exactly ``{0, 1, 2}``."""
+        params = node.cmd.get("parameters", [])
+        choices = params[0] if params else []
+        if list(choices) != ["Orchynx", "Raptorch", "Eletux"]:
+            return None
+        arm_children: dict[int, list[Node]] = {}
+        for choice_idx, _text, children in node.arms:
+            if choice_idx is None:
+                return None  # cancel arm present — not this menu's verified shape
+            arm_children[choice_idx] = children
+        if set(arm_children) != {0, 1, 2}:
+            return None
+        lines = [
+            "multichoice(0, 0, MULTI_URANIUM_STARTER_PICK, TRUE)",
+            "switch (var(VAR_RESULT)) {",
+        ]
+        for i in range(3):
+            lines.append(f"    case {i}:")
+            lines += [f"        {ln}" for ln in self.emit_nodes(arm_children[i])]
+        lines.append("}")
+        return lines
+
     def _emit_choice(self, node: ChoiceNode) -> list[str]:
+        starter_pick = self._emit_starter_pick_choice_idiom(node)
+        if starter_pick is not None:
+            return starter_pick
         params = node.cmd.get("parameters", [])
         choices = params[0] if params else []
         # v1 tier: any two-way choice maps to the yesnobox/VAR_RESULT idiom,
@@ -3144,6 +3419,18 @@ class _PageEmitter:
                 return None  # unresolved item symbol — fall through to the queue
             return [f"giveitem({const}, {qty})" if qty else f"giveitem({const})"]
 
+        # `removeitem itemId:req, quantity=1` (engine/asm/macros/event.inc:572),
+        # so a bare one-argument call is the correct emission for the default
+        # single-item delete. Same _give_item_const resolution and the same
+        # fail-loud disposition as the grant above.
+        m = _DELETE_ITEM_RE.match(text)
+        if m:
+            symbol, qty = m.group(1), m.group(2)
+            const = self._give_item_const(symbol)
+            if const is None:
+                return None  # unresolved item symbol — fall through to the queue
+            return [f"removeitem({const}, {qty})" if qty else f"removeitem({const})"]
+
         m = _ADD_POKEMON_SILENT_RE.match(text)
         if m:
             const = self.ctx.staged_species_constant(m.group(1))
@@ -3278,6 +3565,14 @@ class _PageEmitter:
         m = _STARTER_SELECTOR_RE.match(text)
         if m:
             return self._emit_starter_selector(m.group(1), m.group(2) == "true")
+
+        # $game_variables[N]=$Trainer.party.length (see _PARTY_LENGTH_ASSIGN_RE).
+        m = _PARTY_LENGTH_ASSIGN_RE.match(text)
+        if m:
+            var_name = self.ctx.var_for_variable(int(m.group(1)))
+            if var_name is None:
+                return None  # unnamed RMXP variable — fall through to the queue
+            return [f"specialvar({var_name}, CalculatePlayerPartyCount)"]
 
         return None
 

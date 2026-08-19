@@ -687,6 +687,40 @@ def test_script_unknown_call_queues_with_text(ctx: T.TranspileContext) -> None:
     assert "pbItemBall" in res.unhandled[0].description
 
 
+def test_party_length_assignment_emits_specialvar(ctx: T.TranspileContext) -> None:
+    # "Random Target" (variable 102) is pre-seeded by the registry fixture ->
+    # VAR_RANDOM_TARGET (Map068 EV001 shape, real var is 43 but any registry-
+    # resolved id exercises the idiom identically).
+    res = run_event(
+        ctx,
+        [[cmd(T.SCRIPT, ["$game_variables[102]=$Trainer.party.length"])]],
+        trigger=1,
+    )
+    assert res.unhandled == []
+    assert "specialvar(VAR_RANDOM_TARGET, CalculatePlayerPartyCount)" in res.text
+
+
+def test_party_length_assignment_queues_when_variable_unresolved(
+    ctx: T.TranspileContext,
+) -> None:
+    # Variable 44 is genuinely unnamed in reference/uranium_variables.json, so
+    # var_for_variable(44) returns None and the row must keep queueing rather
+    # than emit a scratch/invented VAR_* (CLAUDE.md §4.5/§6).
+    #
+    # Deliberately NOT variable 43 (the real corpus id at Map068 EV001): 43 is
+    # labelled "Reserved - Pokemon Count" upstream and resolves to
+    # VAR_RESERVED_POKEMON_COUNT once the registry is seeded, so using it here
+    # would assert the opposite of production behaviour (2026-08-19).
+    res = run_event(
+        ctx,
+        [[cmd(T.SCRIPT, ["$game_variables[44]=$Trainer.party.length"])]],
+        trigger=1,
+    )
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.SCRIPT
+    assert "specialvar" not in res.text
+
+
 # ----------------------------------------------------------------------------
 # dialogue text
 # ----------------------------------------------------------------------------
@@ -709,6 +743,40 @@ def test_text_with_player_name_code(ctx: T.TranspileContext) -> None:
     res = run_event(ctx, [[cmd(T.SHOW_TEXT, ["Hi \\PN!"])]], trigger=1)
     assert 'msgbox(format("Hi {PLAYER}!"))' in res.text
     assert res.unhandled == []
+
+
+def test_blue_text_code_stripped_lowercase_and_uppercase(
+    ctx: T.TranspileContext,
+) -> None:
+    # \b/\B is Essentials' whole-line blue-tint colour code (gsub to
+    # <c2=6546675A>, mirroring \r's red <c2=043C675A>) — no gameplay meaning,
+    # so it's dropped rather than reproduced (design decision 2026-08-19, see
+    # _BLUE_TEXT_CODE_RE). Real occurrence: Map067 EV009 "Deliveryman" page 2.
+    res = run_event(
+        ctx, [[cmd(T.SHOW_TEXT, ["\\bWe look forward to your next visit."])]],
+        trigger=1,
+    )
+    assert res.unhandled == []
+    assert 'msgbox(format("We look forward to your next visit."))' in res.text
+
+    ctx2 = T.TranspileContext(registry=ctx.registry)
+    res2 = run_event(
+        ctx2, [[cmd(T.SHOW_TEXT, ["\\BHello there!"])]], trigger=1,
+    )
+    assert res2.unhandled == []
+    assert 'msgbox(format("Hello there!"))' in res2.text
+
+
+def test_other_control_code_still_queues_alongside_blue(
+    ctx: T.TranspileContext,
+) -> None:
+    # \b is handled specifically, not as a general "strip unknown backslash
+    # codes" change — \r right after it must still queue the whole line.
+    res = run_event(
+        ctx, [[cmd(T.SHOW_TEXT, ["\\bwait\\r for it"])]], trigger=1,
+    )
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.SHOW_TEXT
 
 
 # ----------------------------------------------------------------------------
@@ -1202,6 +1270,243 @@ def test_receive_item_type12_condition_unmapped_item_queues(ctx: T.TranspileCont
 
 
 # ----------------------------------------------------------------------------
+# player-facing conditional (RMXP condition kind 6, character id -1)
+# ----------------------------------------------------------------------------
+
+
+def test_player_facing_up_emits_specialvar_and_branches(ctx: T.TranspileContext) -> None:
+    # Map031 EV049 "NurseTut" page 1, cmds 5/42: [6, -1, 8].
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [6, -1, 8], indent=0),
+        cmd(T.SHOW_TEXT, ["facing up"], indent=1),
+        cmd(T.ELSE_BRANCH, indent=0),
+        cmd(T.SHOW_TEXT, ["not facing up"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], map_id=31, event_id=49, trigger=0)
+    assert res.unhandled == []
+    assert "specialvar(VAR_TEMP_0, GetPlayerFacingDirection)" in res.text
+    assert "if (var(VAR_TEMP_0) == DIR_NORTH) {" in res.text
+    assert "facing up" in res.text
+    assert "not facing up" in res.text
+
+
+@pytest.mark.parametrize(
+    "direction,dir_const",
+    [(2, "DIR_SOUTH"), (4, "DIR_WEST"), (6, "DIR_EAST")],
+)
+def test_player_facing_other_cardinal_directions(
+    ctx: T.TranspileContext, direction: int, dir_const: str
+) -> None:
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [6, -1, direction], indent=0),
+        cmd(T.SHOW_TEXT, ["facing"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], map_id=31, event_id=49, trigger=0)
+    assert res.unhandled == []
+    assert f"if (var(VAR_TEMP_0) == {dir_const}) {{" in res.text
+
+
+def test_player_facing_non_player_character_id_still_queues(ctx: T.TranspileContext) -> None:
+    # Same direction, but an NPC local id instead of the player (-1) — no
+    # established RMXP-local-id -> fork-local-id mapping, must not be guessed at.
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [6, 3, 8], indent=0),
+        cmd(T.SHOW_TEXT, ["facing"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=0)
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.CONDITIONAL_BRANCH
+    assert "specialvar" not in res.text
+    assert "GetPlayerFacingDirection" not in res.text
+
+
+def test_player_facing_unmapped_direction_still_queues(ctx: T.TranspileContext) -> None:
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [6, -1, 1], indent=0),  # 1 is not a cardinal RMXP direction
+        cmd(T.SHOW_TEXT, ["facing"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=0)
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.CONDITIONAL_BRANCH
+    assert "specialvar" not in res.text
+
+
+# ----------------------------------------------------------------------------
+# bag item-quantity conditional ($PokemonBag.pbQuantity(...) <op> 0)
+# ----------------------------------------------------------------------------
+
+
+def test_bag_quantity_greater_than_zero_has_item(ctx: T.TranspileContext) -> None:
+    # Map073 EV1 page 1 cmd 4: ...BIKEWHEEL)>0
+    ctx.items = {"BIKEWHEEL": "ITEM_BIKE_WHEEL"}
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "$PokemonBag.pbQuantity(PBItems::BIKEWHEEL)>0"], indent=0),
+        cmd(T.SHOW_TEXT, ["has wheel"], indent=1),
+        cmd(T.ELSE_BRANCH, indent=0),
+        cmd(T.SHOW_TEXT, ["no wheel"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], map_id=73, event_id=1, trigger=0)
+    assert res.unhandled == []
+    assert "checkitem(ITEM_BIKE_WHEEL)" in res.text
+    assert "if (var(VAR_RESULT) == TRUE) {" in res.text
+    assert "has wheel" in res.text
+    assert "no wheel" in res.text
+
+
+def test_bag_quantity_equals_zero_lacks_item(ctx: T.TranspileContext) -> None:
+    # Map073 EV3 page 1 cmd 0 / EV6 page 2 cmd 2: ...SPRINKLOTAD)==0
+    ctx.items = {"SPRINKLOTAD": "ITEM_SPRINKLOTAD"}
+    ctx.fork_item_constants = frozenset({"ITEM_SPRINKLOTAD"})
+    commands = [
+        cmd(
+            T.CONDITIONAL_BRANCH,
+            [12, "$PokemonBag.pbQuantity(PBItems::SPRINKLOTAD)==0"],
+            indent=0,
+        ),
+        cmd(T.SHOW_TEXT, ["lacks it"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], map_id=73, event_id=3, trigger=0)
+    assert res.unhandled == []
+    assert "checkitem(ITEM_SPRINKLOTAD)" in res.text
+    assert "if (var(VAR_RESULT) == FALSE) {" in res.text
+    assert "lacks it" in res.text
+
+
+def test_bag_quantity_unresolvable_item_symbol_still_queues(ctx: T.TranspileContext) -> None:
+    ctx.items = {}
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "$PokemonBag.pbQuantity(PBItems::NOSUCHITEM)>0"], indent=0),
+        cmd(T.SHOW_TEXT, ["has it"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=0)
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.CONDITIONAL_BRANCH
+    assert "checkitem" not in res.text
+
+
+def test_bag_quantity_unforked_constant_still_queues(ctx: T.TranspileContext) -> None:
+    # ctx.items resolves the symbol, but the constant does not exist in the
+    # fork's own headers (CLAUDE.md §4.7 forward check).
+    ctx.items = {"BACUBERRY": "ITEM_BACU_BERRY"}
+    ctx.fork_item_constants = frozenset({"ITEM_POTION"})
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "$PokemonBag.pbQuantity(PBItems::BACUBERRY)>0"], indent=0),
+        cmd(T.SHOW_TEXT, ["has it"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=0)
+    assert len(res.unhandled) == 1
+    assert "checkitem" not in res.text
+    assert "ITEM_BACU_BERRY" not in res.text
+
+
+def test_bag_quantity_wrong_operator_still_queues(ctx: T.TranspileContext) -> None:
+    ctx.items = {"BIKEWHEEL": "ITEM_BIKE_WHEEL"}
+    commands = [
+        cmd(
+            T.CONDITIONAL_BRANCH,
+            [12, "$PokemonBag.pbQuantity(PBItems::BIKEWHEEL)>=1"],
+            indent=0,
+        ),
+        cmd(T.SHOW_TEXT, ["has it"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=0)
+    assert len(res.unhandled) == 1
+    assert "checkitem" not in res.text
+
+
+# ----------------------------------------------------------------------------
+# three-option starter-pick choice menu (multichoice)
+# ----------------------------------------------------------------------------
+
+
+def _starter_pick_commands() -> list[dict]:
+    # Map068 EV003 page 1 cmd 3: ['Orchynx', 'Raptorch', 'Eletux'], no cancel arm.
+    return [
+        cmd(T.SHOW_CHOICES, [["Orchynx", "Raptorch", "Eletux"], 0], indent=0),
+        cmd(T.CHOICE_WHEN, [0, "Orchynx"], indent=0),
+        cmd(T.SHOW_TEXT, ["orchynx path"], indent=1),
+        cmd(T.CHOICE_WHEN, [1, "Raptorch"], indent=0),
+        cmd(T.SHOW_TEXT, ["raptorch path"], indent=1),
+        cmd(T.CHOICE_WHEN, [2, "Eletux"], indent=0),
+        cmd(T.SHOW_TEXT, ["eletux path"], indent=1),
+        cmd(T.CHOICES_END, indent=0),
+    ]
+
+
+def test_starter_pick_choice_emits_multichoice_and_switch(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [_starter_pick_commands()], map_id=68, event_id=3, trigger=0)
+    assert res.unhandled == []
+    assert "multichoice(0, 0, MULTI_URANIUM_STARTER_PICK, TRUE)" in res.text
+    assert "switch (var(VAR_RESULT)) {" in res.text
+    assert "    case 0:" in res.text
+    assert "    case 1:" in res.text
+    assert "    case 2:" in res.text
+    assert "orchynx path" in res.text
+    assert "raptorch path" in res.text
+    assert "eletux path" in res.text
+    case0_idx = res.text.index("case 0:")
+    case1_idx = res.text.index("case 1:")
+    case2_idx = res.text.index("case 2:")
+    orchynx_idx = res.text.index("orchynx path")
+    raptorch_idx = res.text.index("raptorch path")
+    eletux_idx = res.text.index("eletux path")
+    assert case0_idx < orchynx_idx < case1_idx < raptorch_idx < case2_idx < eletux_idx
+
+
+def test_starter_pick_choice_with_cancel_arm_falls_through_to_queue(
+    ctx: T.TranspileContext,
+) -> None:
+    # Same labels, but a cancel arm present — not the verified shape, must
+    # not silently reference the minted constant.
+    commands = [
+        cmd(T.SHOW_CHOICES, [["Orchynx", "Raptorch", "Eletux"], 3], indent=0),
+        cmd(T.CHOICE_WHEN, [0, "Orchynx"], indent=0),
+        cmd(T.SHOW_TEXT, ["orchynx path"], indent=1),
+        cmd(T.CHOICE_WHEN, [1, "Raptorch"], indent=0),
+        cmd(T.SHOW_TEXT, ["raptorch path"], indent=1),
+        cmd(T.CHOICE_WHEN, [2, "Eletux"], indent=0),
+        cmd(T.SHOW_TEXT, ["eletux path"], indent=1),
+        cmd(T.CHOICE_CANCEL, indent=0),
+        cmd(T.SHOW_TEXT, ["cancel path"], indent=1),
+        cmd(T.CHOICES_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], map_id=68, event_id=3, trigger=0)
+    assert "MULTI_URANIUM_STARTER_PICK" not in res.text
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.SHOW_CHOICES
+
+
+def test_different_three_option_labels_do_not_get_starter_multichoice(
+    ctx: T.TranspileContext,
+) -> None:
+    # Different labels — must keep queueing like every other 3+-option menu,
+    # not silently reuse the starter-pick constant.
+    commands = [
+        cmd(T.SHOW_CHOICES, [["A", "B", "C"], 3], indent=0),
+        cmd(T.CHOICE_WHEN, [0, "A"], indent=0),
+        cmd(T.SHOW_TEXT, ["a path"], indent=1),
+        cmd(T.CHOICE_WHEN, [1, "B"], indent=0),
+        cmd(T.SHOW_TEXT, ["b path"], indent=1),
+        cmd(T.CHOICE_WHEN, [2, "C"], indent=0),
+        cmd(T.SHOW_TEXT, ["c path"], indent=1),
+        cmd(T.CHOICES_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=0)
+    assert "MULTI_URANIUM_STARTER_PICK" not in res.text
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.SHOW_CHOICES
+
+
+# ----------------------------------------------------------------------------
 # real-corpus integration smoke test
 # ----------------------------------------------------------------------------
 
@@ -1233,3 +1538,68 @@ def test_transpile_map049_against_real_corpus() -> None:
 
     assert total_unhandled < 40
     assert all(entry.command_code != T.MOVE_COMMAND_ROW for entry in run_ctx.unhandled)
+
+
+# ----------------------------------------------------------------------------
+# pbDeleteItem (the consuming counterpart to pbReceiveItem)
+# ----------------------------------------------------------------------------
+
+
+def test_delete_item_bare_call_no_qty(ctx: T.TranspileContext) -> None:
+    # Real occurrence: Map073 EV001 cmd 9, inside the BIKEWHEEL trade's
+    # then-arm — consumes the wheel that the same branch trades for a Bicycle.
+    ctx.items = {"BIKEWHEEL": "ITEM_BIKE_WHEEL"}
+    res = run_event(
+        ctx,
+        [[cmd(T.SCRIPT, ["$PokemonBag.pbDeleteItem(PBItems::BIKEWHEEL)"])]],
+        trigger=1,
+    )
+    assert res.unhandled == []
+    assert "removeitem(ITEM_BIKE_WHEEL)" in res.text
+
+
+def test_delete_item_bare_call_with_qty(ctx: T.TranspileContext) -> None:
+    ctx.items = {"ANTIDOTE": "ITEM_ANTIDOTE"}
+    res = run_event(
+        ctx,
+        [[cmd(T.SCRIPT, ["$PokemonBag.pbDeleteItem(::PBItems::ANTIDOTE, 3)"])]],
+        trigger=1,
+    )
+    assert res.unhandled == []
+    assert "removeitem(ITEM_ANTIDOTE, 3)" in res.text
+
+
+def test_delete_item_unresolved_symbol_still_queues(ctx: T.TranspileContext) -> None:
+    # No ctx.items entry — must queue rather than invent an ITEM_* (§4.5/§4.7).
+    res = run_event(
+        ctx,
+        [[cmd(T.SCRIPT, ["$PokemonBag.pbDeleteItem(PBItems::NOSUCHITEM)"])]],
+        trigger=1,
+    )
+    assert len(res.unhandled) == 1
+    assert "removeitem" not in res.text
+
+
+def test_colour_text_code_stripped(ctx: T.TranspileContext) -> None:
+    # RMXP's \C[n] palette-slot colour code; \C[0] resets. Uranium uses it to
+    # highlight an item name mid-sentence (Map073 EV001 cmd 18). Same
+    # disposition as \b — a tint with no mechanical meaning (2026-08-19).
+    res = run_event(
+        ctx,
+        [[cmd(T.SHOW_TEXT, ["bring me a \\C[3]Bike wheel\\C[0] I can fix it"])]],
+        trigger=1,
+    )
+    assert res.unhandled == []
+    assert "\\C[" not in res.text
+    assert "Bike wheel" in res.text
+
+
+def test_colour_text_code_does_not_swallow_other_codes(
+    ctx: T.TranspileContext,
+) -> None:
+    # \r must keep queueing — stripping \C[n] is specific, not a general
+    # "unknown backslash code" strip (CLAUDE.md §4.5).
+    res = run_event(
+        ctx, [[cmd(T.SHOW_TEXT, ["\\C[3]Red \\r text"])]], trigger=1,
+    )
+    assert len(res.unhandled) == 1

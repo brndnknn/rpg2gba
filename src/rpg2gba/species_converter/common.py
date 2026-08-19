@@ -104,6 +104,26 @@ STARTER_SPECIES: tuple[SpeciesSpec, ...] = (
     SpeciesSpec(26, "BLUBELROG"),
     SpeciesSpec(35, "OWTEN"),
     SpeciesSpec(36, "ESHOUTEN"),
+    # --- Luxi evolution family (2026-08-19), NPC gift item -------------------
+    # `pbAddPokemon(PBSpecies::LUXI,5)` is an NPC item grant that needs this
+    # family staged. TYPE_DRAGON/TYPE_FAIRY, no Nuclear typing. Abilities all
+    # resolve to real fork ABILITY_* constants (ABILITY_SUPER_LUCK,
+    # ABILITY_NONE, hidden ABILITY_REGENERATOR) — verified against
+    # engine/include/constants/abilities.h.
+    #   LUXI -> LUXOR: evolutions.dat method 1 (Happiness), emitted as
+    #     EVO_LEVEL + CONDITIONS({IF_MIN_FRIENDSHIP, FRIENDSHIP_EVO_THRESHOLD}),
+    #     matching every vanilla friendship evolution in
+    #     engine/src/data/pokemon/species_info/ (this expansion has no
+    #     separate EVO_FRIENDSHIP method).
+    #   LUXOR -> LUXELONG: evolutions.dat method 7 (Item), param 18, which
+    #     resolves via reference/uranium_data/item_internal_names.json ->
+    #     SHINYSTONE -> reference/uranium_id_map.json -> ITEM_SHINY_STONE,
+    #     confirmed present in engine/include/constants/items.h. Emitted as
+    #     EVO_ITEM, matching e.g. Togetic -> Togekiss.
+    # See stage.build_staged_species for the emission logic.
+    SpeciesSpec(176, "LUXI"),
+    SpeciesSpec(177, "LUXOR"),
+    SpeciesSpec(178, "LUXELONG"),
 )
 
 

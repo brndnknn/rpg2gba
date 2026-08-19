@@ -12,6 +12,15 @@ slice1 hand-bucket review) added to the deterministic transpiler:
   phone system has no slice-relevant analog; the call is dropped with a
   breadcrumb comment.
 
+Also covers the two 2026-08-19 user-approved strips (subsystems not being
+ported, so the guard condition is statically false and the then-arm is dead
+code):
+
+* Rule 4 — ``$PokemonGlobal.nuzlocke==true`` (``_NUZLOCKE_MODE_GUARD_RE`` /
+  ``_emit_nuzlocke_mode_strip``): Map068 EV015 page 1 cmd 16.
+* Rule 5 — ``pbNextMysteryGiftID>0`` (``_MYSTERY_GIFT_ID_GUARD_RE`` /
+  ``_emit_mystery_gift_id_strip``): Map067 EV009 "Deliveryman" page 2 cmd 0.
+
 Event/page shape mirrors ``tests/test_transpiler.py``: an event is
 ``{id, name, x, y, pages:[...]}`` and each page is ``{trigger, list, ...}``
 with ``list`` a sequence of ``{code, indent, parameters}`` commands. Builders
@@ -241,6 +250,80 @@ def test_lookalike_facing_event_without_diagonal_move_still_queues(
     assert len(queue_entries) == 1
     assert queue_entries[0]["command_code"] == T.CONDITIONAL_BRANCH
     assert "character-facing" in queue_entries[0]["description"]
+
+
+# ----------------------------------------------------------------------------
+# Rule 4 — $PokemonGlobal.nuzlocke==true strip (user-approved 2026-08-19)
+# ----------------------------------------------------------------------------
+
+
+def test_nuzlocke_mode_guard_drops_then_arm_no_else(ctx: T.TranspileContext) -> None:
+    # Map068 EV015 page 1 cmd 16: 2 then-nodes / 0 else-nodes.
+    commands = _guard_commands(
+        "$PokemonGlobal.nuzlocke==true",
+        then_body=[
+            cmd(T.SHOW_TEXT, ["Nuzlocke text A"]),
+            cmd(T.SHOW_TEXT, ["Nuzlocke text B"]),
+        ],
+    )
+    res = run_event(ctx, [commands], map_id=68, event_id=15)
+    assert res.unhandled == []
+    assert "# nuzlocke mode: not ported" in res.text
+    assert "2026-08-19" in res.text
+    assert "Nuzlocke text A" not in res.text
+    assert "Nuzlocke text B" not in res.text
+    assert "if (" not in res.text
+    assert "} else {" not in res.text
+
+
+def test_nuzlocke_mode_guard_near_miss_still_queues(ctx: T.TranspileContext) -> None:
+    commands = _guard_commands(
+        "$PokemonGlobal.nuzlocke==false",
+        then_body=[cmd(T.SHOW_TEXT, ["text"])],
+    )
+    res = run_event(ctx, [commands], map_id=68, event_id=15)
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.CONDITIONAL_BRANCH
+    assert "# nuzlocke" not in res.text
+
+
+# ----------------------------------------------------------------------------
+# Rule 5 — pbNextMysteryGiftID>0 strip (user-approved 2026-08-19)
+# ----------------------------------------------------------------------------
+
+
+def test_mystery_gift_id_guard_drops_then_splices_else(ctx: T.TranspileContext) -> None:
+    # Map067 EV009 "Deliveryman" page 2 cmd 0: 4 then-nodes / 1 else-node.
+    commands = _guard_commands(
+        "pbNextMysteryGiftID>0",
+        then_body=[
+            cmd(T.SHOW_TEXT, ["gift A"]),
+            cmd(T.SHOW_TEXT, ["gift B"]),
+            cmd(T.SHOW_TEXT, ["gift C"]),
+            cmd(T.SHOW_TEXT, ["gift D"]),
+        ],
+        else_body=[cmd(T.SHOW_TEXT, ["no gift"])],
+    )
+    res = run_event(ctx, [commands], map_id=67, event_id=9)
+    assert res.unhandled == []
+    assert "# mystery gift: not ported" in res.text
+    assert "2026-08-19" in res.text
+    assert "gift A" not in res.text
+    assert "gift D" not in res.text
+    assert "no gift" in res.text
+    assert "if (" not in res.text
+    assert "} else {" not in res.text
+
+
+def test_mystery_gift_id_guard_near_miss_still_queues(ctx: T.TranspileContext) -> None:
+    commands = _guard_commands(
+        "pbNextMysteryGiftID>=0",
+        then_body=[cmd(T.SHOW_TEXT, ["text"])],
+    )
+    res = run_event(ctx, [commands], map_id=67, event_id=9)
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.CONDITIONAL_BRANCH
+    assert "# mystery gift" not in res.text
 
 
 def test_stairs_skipped_count_surfaces_in_run_summary() -> None:
