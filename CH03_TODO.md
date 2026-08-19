@@ -109,9 +109,12 @@ nine real items, all nine now converted:
   unsatisfiable guards (user-approved strips). Plus the Luxi family staged
   (fork ids 1597–1599) so Map031 EV050's gift converts.
 
-**Item grants work end to end** (#25): shapes B and C emit `giveitem`, the four
-Uranium berries and Sprinklotad exist as engine items, and Sprinklotad's
-bag-quantity gate converted in the same 2026-08-19 pass.
+**Item grants work end to end and the beats now assert the bag** (#25): shapes
+B and C emit `giveitem`, the four Uranium berries and Sprinklotad exist as
+engine items, Sprinklotad's bag-quantity gate converted in the same 2026-08-19
+pass, and B5/B7/N1/B14 read `bag_item_quantity` rather than trusting a
+self-switch. Sprinklotad's own grant is the one thing still unasserted — no
+registered beat drives the second interaction it hides behind (#25 item 3).
 
 **Warp-arrival facing is verified in the ROM, not just in metadata** (#22):
 B27/B28/B30/B32 drive the real `ON_WARP_INTO_MAP_TABLE` script, with
@@ -122,7 +125,8 @@ Mawuli's facility battle) and a build-set wiring miss (#16). Every one was found
 by the build or the harness, not by a boot walk.
 
 **Remaining before the §9 gate: the boot walk itself.** Nothing in this file is
-a build-side blocker. Carryovers that CH03 surfaced but does not own are filed
+a build-side blocker, and the chapter's coverage no longer has a
+flag-instead-of-effect hole in it. Carryovers that CH03 surfaced but does not own are filed
 in `PROJECT_TODO.md` (#39, #40, #41, #42); on gate pass this file archives to
 `reference/archive/CH03_TODO.md`.
 
@@ -605,17 +609,26 @@ Remaining work:
    mapping or an explicit queue — do not approximate it. 60 of 150 shape-C
    sites corpus-wide still queue, most on items the fork lacks (see #27).
    **Not CH03 work** — filed as `PROJECT_TODO.md` #42.
-3. **Extend the beats to assert inventory, not just the self-switch — STILL
-   OPEN, and the one honest gap left in the chapter's coverage.**
-   `Emulator.bag_item_quantity` exists (added 2026-08-16 for B11/N4) and is
-   used *only* by the Mart beats. B5 (Center tour, 5× Oran Berry) and B14
-   (Boutique, four berries + Sprinklotad) still assert self-switches only, and
-   their comments still carry the pre-fix findings 5/6 ("no grant exists in
-   the compiled script") — corrected in `kevlar.py` 2026-08-19, but the
-   assertions were not upgraded. B7's docstring claims an Antidote it never
-   verifies. **Beats that assert a flag instead of the effect are how this
-   survived two boot walks** — the boot walk can confirm the bag by eye, but
-   the regression floor is still missing.
+3. ~~Extend the beats to assert inventory, not just the self-switch.~~
+   **DONE 2026-08-19.** Four beats now read the bag through
+   `Emulator.bag_item_quantity` instead of trusting a flag:
+
+   | Beat | Now asserts |
+   |---|---|
+   | B5 | bag holds **exactly** 5× `ITEM_ORAN_BERRY` (post-hoc — the tour ran during B2's warp, so there is no "before" to diff; nothing else in the build set grants one, so an exact total is the honest pin) |
+   | B7 | `ITEM_ANTIDOTE` **+1** across the pickup (delta, because the Kevlar Mart also stocks Antidotes) |
+   | N1 | `ITEM_ANTIDOTE` **unchanged** on a re-touch — the "no second Antidote" claim is about the bag; the retained self-switch is only the mechanism |
+   | B14 | **+1 of each** of the four berries, checked separately and reported together (a joiner regression would drop three specific items, and *which* three is the diagnostic) |
+
+   Verified on ROM `c3e75d4f` (the stamped chapter-complete build, unchanged —
+   these are assertions, not conversion changes): PASS from B7 through B25,
+   then a full clean chapter run.
+
+   **Still unasserted: Sprinklotad.** Both offers (`Map073_EV003_Page1`,
+   `Map073_EV006_Page2`) sit behind a `checkitem`/not-held gate on a *second*
+   interaction that no registered beat drives. The item exists and the grant
+   emits; nothing walks it. Adding that beat means extending the user-approved
+   beat list, so it is a scope call, not a fix.
 
 ### 27. 111 items the id map names and the fork does not define
 

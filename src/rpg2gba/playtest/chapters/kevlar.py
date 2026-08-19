@@ -69,15 +69,17 @@ what the transpiler actually emitted):
    separate `talk` beat -- see B5's own comment.
 5. **(Corrected 2026-08-19; was "no Oran Berry grant exists".)** The grant
    was missing because the transpiler dropped every `pbReceiveItem` shape;
-   `43aa482e` fixed it. `KevlarTownPokemonCenter/scripts.inc:407` now carries
-   `giveitem ITEM_ORAN_BERRY, 5`. B5 still asserts only the 3 self-switches +
-   `VAR_TEMP_C` -- upgrading it to a `bag_item_quantity` read is CH03_TODO #25
-   item 3.
+   `43aa482e` fixed it, and `KevlarTownPokemonCenter/scripts.inc` now carries
+   `giveitem ITEM_ORAN_BERRY, 5`. **B5 asserts the bag holds exactly 5**, not
+   just the tour's self-switches.
 6. **(Corrected 2026-08-19; was "no Boutique grant either".)** `Map073.pory:
-   109-112` emits four separate unfused `giveitem` calls, assembled at
-   `KevlarTownBuildings/scripts.inc:37-43`, and Sprinklotad's bag-quantity
-   gate converted in `4da46a2e`. B14's assertions were likewise not upgraded
-   -- same CH03_TODO #25 item 3.
+   123-126` emits four separate unfused `giveitem` calls, and Sprinklotad's
+   bag-quantity gate converted in `4da46a2e`. **B14 asserts +1 of each of the
+   four berries.**
+   *Still unasserted:* Sprinklotad itself. Both of its offers
+   (`Map073_EV003_Page1`, `Map073_EV006_Page2`) sit behind a
+   `checkitem`/not-held gate on a second interaction that no registered beat
+   drives -- the item emits, nothing walks it.
 7. **No healing-location/respawn metadata write anywhere** -- `grep
    -i respawn` over the Center's whole compiled output: zero hits. There is
    also no `Emulator` primitive for reading `SaveBlock1`'s last-heal-location
@@ -222,6 +224,19 @@ PC_FACING = "UP"
 CENTER_ITEM_BALL_EVENT_ID = 18  # RMXP id, for the FLAG_MAP068_EVENT018_SSA name
 CENTER_ITEM_BALL_APPROACH = (17, 8)
 CENTER_ITEM_BALL_FACING = "UP"
+# B7/N1: what the ball actually hands over. Item balls carry their item in
+# the object event's template, not in any emitted `giveitem` -- read from
+# `output/uranium-build/Map068.template_fields.json`, which is why a
+# `grep giveitem` over the compiled script finds nothing here (finding 5's
+# original mistake, CH03_TODO.md #25 shape A).
+CENTER_ITEM_BALL_ITEM = "ITEM_ANTIDOTE"
+
+# B5: the PC-tour autorun's grant, `KevlarTownPokemonCenter/scripts.inc`
+# -> `giveitem ITEM_ORAN_BERRY, 5` (Map068.pory:283). Nothing else in the
+# build set grants an Oran Berry, so the expected quantity is exact, not a
+# floor.
+CENTER_TOUR_ITEM = "ITEM_ORAN_BERRY"
+CENTER_TOUR_ITEM_QUANTITY = 5
 
 # B8: Mawuli, map68 local id 8, (2,16), FACE_RIGHT. (3,16), the tile
 # immediately east of her, LOOKS like the natural approach (facing her own
@@ -266,6 +281,17 @@ BOUTIQUE_DOOR = (35, 6)
 BOUTIQUE_ARRIVAL = (44, 12)
 BOUTIQUE_NPC_APPROACH = (46, 9)
 BOUTIQUE_NPC_FACING = "UP"
+# B14: the free samples, one each, emitted as four separate unfused
+# `giveitem` calls (`Map073.pory:123-126` -> `KevlarTownBuildings/
+# scripts.inc`). Four distinct items rather than 4x one item -- the
+# `_merge_script_call_rows` joiner must keep them apart, so asserting all
+# four separately is also what pins that.
+BOUTIQUE_SAMPLE_ITEMS = (
+    "ITEM_BACU_BERRY",
+    "ITEM_GUARA_BERRY",
+    "ITEM_CUPU_BERRY",
+    "ITEM_ACAI_BERRY",
+)
 
 # B15: Bike Repair Shop door + NPC, map73 local id 1, (5,7), FACE_DOWN.
 # The NPC stands behind a solid counter run: decoding collision out of
@@ -753,6 +779,10 @@ def b7(emu: Emulator) -> None:
     if emu.flag(ssa):
         raise ScenarioError(
             f"B7 precondition failed: {ssa} already set before the pickup")
+    # Bag delta, not an absolute count: the Kevlar Mart stocks Antidotes
+    # too (`KevlarTownPokemart/scripts.inc`), so a later beat could legally
+    # change the total. Only this pickup's own +1 is under test here.
+    bag_before = emu.bag_item_quantity(CENTER_ITEM_BALL_ITEM)
     emu.walk_to(*CENTER_ITEM_BALL_APPROACH)
     emu.face(CENTER_ITEM_BALL_FACING)
     emu.interact()
@@ -760,6 +790,13 @@ def b7(emu: Emulator) -> None:
     if not emu.flag(ssa):
         shot = emu.screenshot("b7_not_granted")
         raise ScenarioError(f"B7: {ssa} not set after the pickup ({shot})")
+    bag_after = emu.bag_item_quantity(CENTER_ITEM_BALL_ITEM)
+    if bag_after != bag_before + 1:
+        shot = emu.screenshot("b7_bag_unchanged")
+        raise ScenarioError(
+            f"B7: {CENTER_ITEM_BALL_ITEM} {bag_before}->{bag_after}, expected "
+            f"+1 -- the self-switch is set but the item never reached the bag "
+            f"({shot})")
 
 
 # -- N1 ------------------------------------------------------------------
@@ -771,6 +808,7 @@ def b7(emu: Emulator) -> None:
              map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=CENTER_ITEM_BALL_APPROACH)
 def n1(emu: Emulator) -> None:
     ssa = _flag_ssa(68, CENTER_ITEM_BALL_EVENT_ID)
+    bag_before = emu.bag_item_quantity(CENTER_ITEM_BALL_ITEM)
     emu.face(CENTER_ITEM_BALL_FACING)
     emu.tap("A")
     emu.run(30)
@@ -779,13 +817,22 @@ def n1(emu: Emulator) -> None:
     if not emu.flag(ssa):
         shot = emu.screenshot("n1_flag_lost")
         raise ScenarioError(f"N1: {ssa} cleared after a re-touch ({shot})")
+    # The point of the beat: "no second Antidote" is a claim about the bag.
+    # A retained self-switch is only the mechanism we expect to enforce it.
+    bag_after = emu.bag_item_quantity(CENTER_ITEM_BALL_ITEM)
+    if bag_after != bag_before:
+        shot = emu.screenshot("n1_regranted")
+        raise ScenarioError(
+            f"N1: {CENTER_ITEM_BALL_ITEM} {bag_before}->{bag_after} on a "
+            f"re-touch -- the ball re-granted ({shot})")
 
 
 # -- B5 --------------------------------------------------------------------
 
 @kevlar.beat("B5", "The PC-tour scene autoruns on Center arrival (NOT an NPC "
-                   "talk -- see module docstring finding 4) and sets its 3 "
-                   "self-switches; no item is actually granted (finding 5)")
+                   "talk -- see module docstring finding 4), sets its 3 "
+                   "self-switches AND leaves 5 Oran Berries in the bag "
+                   "(finding 5, corrected 2026-08-19)")
 def b5(emu: Emulator) -> None:
     # B2's own warp already carried this scene to completion (Map068's
     # MAP_SCRIPT_ON_TRANSITION fires `Map068_EV015_Page1` the instant the
@@ -799,10 +846,18 @@ def b5(emu: Emulator) -> None:
             raise ScenarioError(
                 f"B5: {ssa} not set after arrival -- the tour autorun did "
                 f"not complete ({shot})")
-    # The tour's `giveitem ITEM_ORAN_BERRY, 5` DOES exist now (finding 5,
-    # corrected 2026-08-19) and `Emulator.bag_item_quantity` can read it.
-    # This beat has not been upgraded to assert the bag -- CH03_TODO #25
-    # item 3.
+    # The grant itself. Asserted as an exact total rather than a delta
+    # because the scene already ran during B2's warp -- there is no
+    # "before" to read from here -- and because nothing else in the build
+    # set grants an Oran Berry, so any other number is a real defect and
+    # should say so loudly.
+    held = emu.bag_item_quantity(CENTER_TOUR_ITEM)
+    if held != CENTER_TOUR_ITEM_QUANTITY:
+        shot = emu.screenshot("b5_bag_wrong")
+        raise ScenarioError(
+            f"B5: bag holds {held}x {CENTER_TOUR_ITEM}, expected "
+            f"{CENTER_TOUR_ITEM_QUANTITY} -- the tour's self-switches are "
+            f"set but its `giveitem` did not land ({shot})")
 
 
 # -- B8 ------------------------------------------------------------------
@@ -1057,9 +1112,9 @@ def b13(emu: Emulator) -> None:
 
 # -- B14 -----------------------------------------------------------------
 
-@kevlar.beat("B14", "Berry Boutique door opens; the NPC's dialogue sets its "
-                    "self-switch (the four berry `giveitem`s now emit -- "
-                    "module finding 6; bag not yet asserted, CH03_TODO #25)",
+@kevlar.beat("B14", "Berry Boutique door opens; the NPC hands over one each "
+                    "of the four Uranium berries and sets its self-switch "
+                    "(module finding 6, corrected 2026-08-19)",
              locations=(
                  BeatLocation("MAP_KEVLAR_TOWN", BOUTIQUE_DOOR[0], BOUTIQUE_DOOR[1], "boutique door"),
                  BeatLocation("MAP_KEVLAR_TOWN_BUILDINGS", BOUTIQUE_NPC_APPROACH[0], BOUTIQUE_NPC_APPROACH[1], "boutique NPC"),
@@ -1071,6 +1126,7 @@ def b14(emu: Emulator) -> None:
     if emu.flag(ssa):
         raise ScenarioError(
             f"B14 precondition failed: {ssa} already set before talking")
+    before = {item: emu.bag_item_quantity(item) for item in BOUTIQUE_SAMPLE_ITEMS}
     emu.walk_to(*BOUTIQUE_NPC_APPROACH)
     emu.face(BOUTIQUE_NPC_FACING)
     emu.interact()
@@ -1078,6 +1134,20 @@ def b14(emu: Emulator) -> None:
     if not emu.flag(ssa):
         shot = emu.screenshot("b14_no_ssa")
         raise ScenarioError(f"B14: {ssa} not set after talking ({shot})")
+    # Each berry checked separately, and all four reported at once rather
+    # than failing on the first: a joiner regression that fuses the four
+    # `giveitem` rows would drop three specific items, and which three is
+    # the diagnostic.
+    missing = [
+        f"{item} {before[item]}->{emu.bag_item_quantity(item)}"
+        for item in BOUTIQUE_SAMPLE_ITEMS
+        if emu.bag_item_quantity(item) != before[item] + 1
+    ]
+    if missing:
+        shot = emu.screenshot("b14_berries_missing")
+        raise ScenarioError(
+            f"B14: expected +1 of each free sample, got {', '.join(missing)} "
+            f"({shot})")
     # Leave the Boutique: B15 walks straight to a door on MAP_KEVLAR_TOWN
     # and needs to start outdoors, and B16 already pairs its own entry with
     # an exit rather than leaning on the next beat. Cross from the arrival
