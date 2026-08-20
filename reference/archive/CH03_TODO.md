@@ -1,5 +1,13 @@
 # CH03 TODO — Kevlar Town (maps 31, 67, 68, 73, 19)
 
+**RETIRED 2026-08-19 — CH03 passed its §9 boot-walk gate** (kevlar chapter
+suite GREEN 60/60, ROM `c3e75d4f`). Carryovers were already migrated to
+`PROJECT_TODO.md` #39-#42 ahead of the gate (see "Current status" below); the
+one remaining loose end is Sprinklotad's own grant, unasserted because no
+registered beat drives its second interaction (#25 item 3) — a scope call,
+not a defect, left here rather than filed as its own item. Kept for the Done
+ledger and the detail the migrated entries point back to.
+
 Live work checklist for chapter CH03 (Kevlar Town), the current build
 frontier. The chapter's spec, story beats and coverage targets live in
 `reference/chapters/03-kevlar-town.md`; the corpus-wide plan is
@@ -145,7 +153,7 @@ deliberately plain floor. The existing correction mechanism
 `dest_dir == 0`; the working buildings had `dest_dir == 8`. That 2026-07-16
 call is now superseded.
 
-Fix (in the working tree on `ch03-kevlar`, **not yet committed**):
+Fix (committed as `61140331`, see below):
 `compute_arrival_facings` now resolves dest_dir 0/None via a new
 `_derive_retain_facing` — single non-blocked, non-warp-source neighbour of the
 source warp cell ⇒ face away from it — behind a new hand-override tier,

@@ -98,8 +98,8 @@
     {
       "id": "CH03", "act": "A1", "title": "Kevlar Town", "wiki_page": "Kevlar Town",
       "visit": 1, "outdoor": 31, "maps": [31, 67, 68, 73, 19],
-      "predecessor": "CH02", "tier": "medium", "status": "in_progress",
-      "notes": "Map 19 'Passage Cave' is bound HERE, not to CH05: the warp graph shows it connects only to/from Kevlar (31) in both directions and never reaches Route 02 or Nowtoch. Naive parent-tree reading would have mis-assigned it. Introduces the bike (Bike Repair Shop / Bike Wheel)."
+      "predecessor": "CH02", "tier": "medium", "status": "built",
+      "notes": "Passed its §9 boot-walk gate 2026-08-19 (kevlar chapter suite GREEN 60/60, ROM c3e75d4f). Spec reference/chapters/03-kevlar-town.md; CH03_TODO.md is retired to reference/archive/, carryovers already migrated to PROJECT_TODO.md #39-#42. Map 19 'Passage Cave' is bound HERE, not to CH05: the warp graph shows it connects only to/from Kevlar (31) in both directions and never reaches Route 02 or Nowtoch. Naive parent-tree reading would have mis-assigned it. Introduces the bike (Bike Repair Shop / Bike Wheel). B19-B24 (Grott-Hole cave interior) are deferred by design, not failing -- Strength-gated, HM04 arrives in CH25."
     },
     {
       "id": "CH04", "act": "A1", "title": "Route 2", "wiki_page": "Route 2",
