@@ -107,6 +107,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .. import assertions
 from ..battle import in_battle, read_enemy_party, win_battle
 from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
@@ -278,49 +279,24 @@ NORTH_EXIT_TILE_B = (16, 5)  # for B17's failure message only; never stepped on
 
 
 # -- small local helpers, copied+adapted from chapters/moki.py --------------
-# (moki.py's own docstring: "deliberately not yet factored into a shared
-# module" -- do not import from it, copy the idiom.)
-
-def _at_map(emu: Emulator, map_const: str) -> bool:
-    group, num = emu.map_location()
-    return (group, num) == (
-        emu.resolve_constant(f"MAP_GROUP({map_const})"),
-        emu.resolve_constant(f"MAP_NUM({map_const})"),
-    )
-
-
-def _require_map(emu: Emulator, beat: str, map_const: str) -> None:
-    if _at_map(emu, map_const):
-        return
-    group, num = emu.map_location()
-    shot = emu.screenshot(f"{beat}_wrong_map")
-    raise ScenarioError(
-        f"{beat}: expected map {map_const} but map_location() reads "
-        f"group={group} num={num} ({shot})"
-    )
-
-
-def _try_step(emu: Emulator, direction: str) -> bool:
-    """Attempt exactly one step without `walk_to`'s retry-until-arrived loop
-    -- see moki.py's identical helper for the full rationale."""
-    before = emu.player_pos()
-    moved = False
-    for _ in range(40):
-        emu.run(1, [direction])
-        if emu.player_pos() != before:
-            moved = True
-            break
-    emu.run(16)
-    return moved
-
-
-def _wait_for_map(emu: Emulator, beat: str, map_const: str,
-                  frame_budget: int = 900) -> None:
-    spent = 0
-    while spent < frame_budget and not _at_map(emu, map_const):
-        emu.run(10)
-        spent += 10
-    _require_map(emu, beat, map_const)
+# `_at_map`/`_require_map`/`_try_step`/`_wait_for_map` used to be copied here
+# (moki.py's own docstring used to say "deliberately not yet factored into a
+# shared module" -- that call is superseded) -- promoted to `assertions.py`
+# 2026-08-20 (finding H). Aliased under their original names so every call
+# site below is unchanged.
+#
+# `_cross_threshold`/`_enter_door` stay LOCAL, deliberately NOT promoted:
+# they differ from moki.py's/kevlar.py's byte-identical copies by routing
+# navigation through `_walk_absorbing` (defined further below) instead of a
+# plain `emu.walk_to` -- Route 1 has 137 grass cells and up to 9 trainer
+# sight cones, so a bare `walk_to` call here would raise on the first
+# incidental battle it crosses. That is Route 1's own stricter requirement;
+# see `assertions.py`'s module docstring for why it was not forced onto
+# `assertions.cross_threshold`/`enter_door` instead.
+_at_map = assertions.at_map
+_require_map = assertions.require_map
+_try_step = assertions.try_step
+_wait_for_map = assertions.wait_for_map
 
 
 def _cross_threshold(emu: Emulator, beat: str, approach: tuple[int, int],
@@ -340,20 +316,11 @@ def _enter_door(emu: Emulator, beat: str, door: tuple[int, int],
     _wait_for_map(emu, beat, dest_map)
 
 
-def _advance_to_battle(emu: Emulator, max_taps: int = 1500) -> int:
-    """`emu.advance_dialog()`, but stopping if a battle starts (see moki.py)."""
-    return emu.advance_dialog(max_taps=max_taps, stop=lambda: in_battle(emu))
-
-
-def _assert_near(emu: Emulator, beat: str, expected: tuple[int, int],
-                 tolerance: int = 1) -> None:
-    x, y = emu.player_pos()
-    ex, ey = expected
-    if abs(x - ex) > tolerance or abs(y - ey) > tolerance:
-        shot = emu.screenshot(f"{beat}_wrong_landing")
-        raise ScenarioError(
-            f"{beat}: landed at ({x},{y}), expected near {expected} "
-            f"(tolerance {tolerance}) ({shot})")
+# Promoted to `assertions.py` 2026-08-20 (byte-identical to `moki.py`'s own
+# copy of `_advance_to_battle`, and to `kevlar.py`'s own copy of
+# `_assert_near`, at the time).
+_advance_to_battle = assertions.advance_to_battle
+_assert_near = assertions.assert_near
 
 
 # -- new local helpers, specific to Route 1's mechanics ----------------------
@@ -593,7 +560,11 @@ def _approach_moving_npc(emu: Emulator, beat: str, local_id: int,
 
 
 def _flag_ssa(event_id: int, letter: str = "A") -> str:
-    return f"FLAG_MAP033_EVENT{event_id:03d}_SS{letter}"
+    """This module's events are all on Map033 -- a thin wrapper over the
+    general `assertions.flag_ssa(map_num, event_id, letter)` (promoted from
+    `kevlar.py` 2026-08-20), not a second implementation. Same output as
+    before: `FLAG_MAP033_EVENT<id>_SS<letter>`."""
+    return assertions.flag_ssa(33, event_id, letter)
 
 
 def _trainer_defeat_flag(trainer_const: str) -> str:

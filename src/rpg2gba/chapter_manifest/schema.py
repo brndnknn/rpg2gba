@@ -1,0 +1,370 @@
+"""Row and disposition types — the contract the generator and checker share.
+
+Everything in this module is pure data plus the handful of rules that must have
+exactly one implementation, because both halves of the manifest ask them:
+
+* which effect tags forbid a ``cosmetic`` disposition (Q11),
+* when a row owes a source citation (Q5),
+* when a row cannot be dispositioned at all (Q2iii),
+* how a row's content is hashed so a stored decision is invalidated when the
+  content underneath it changes (Q6.1).
+
+Keeping these here rather than in the checker is deliberate. A rule that lives
+only in the checker can be forgotten by the renderer, and the two then disagree
+about what the operator approved.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from dataclasses import asdict, dataclass, fields
+from typing import Any, Literal
+
+# --- effect vocabulary -----------------------------------------------------
+#
+# Derived tags, not RGSS command codes. Most of these do not exist as numeric
+# codes at all: `giveitem`, `givemon`, `trainerbattle`, `shop`, `heal` and `pc`
+# are embedded Ruby inside code-355/655 Script commands, or inside a code-111
+# conditional whose params[0] == 12 (script-typed). See census.py's note that
+# the corpus contains not one code-301 Battle Processing command.
+#
+# `move_route`, `bgm`, `se`, `money`, `wild_battle` and `common_event` are here
+# because CH03's late growth (B27-B33) was warp-arrival *facing* and *BGM*: a
+# vocabulary without them would not have prompted the very beats whose omission
+# motivated the manifest.
+EFFECT_TAGS: frozenset[str] = frozenset({
+    "giveitem",
+    "givemon",
+    "trainerbattle",
+    "wild_battle",
+    "warp",
+    "switch_write",
+    "var_write",
+    "self_switch_write",
+    "shop",
+    "heal",
+    "pc",
+    "money",
+    "common_event",
+    "text",
+    "choice",
+    "move_route",
+    "bgm",
+    "se",
+    "graphic",
+})
+
+# A row may be `cosmetic` only if its entire effect set is non-state-writing.
+# `self_switch_write` is deliberately state-writing: a dialogue NPC that sets a
+# self-switch is changing its own future behaviour, which is state, not decor.
+COSMETIC_SAFE_TAGS: frozenset[str] = frozenset({
+    "text",
+    "choice",
+    "move_route",
+    "bgm",
+    "se",
+    "graphic",
+})
+
+STATE_WRITING_TAGS: frozenset[str] = EFFECT_TAGS - COSMETIC_SAFE_TAGS
+
+Verdict = Literal["beat", "deferred", "cosmetic", "unreachable"]
+_VERDICTS: frozenset[str] = frozenset({"beat", "deferred", "cosmetic", "unreachable"})
+
+# Verdicts whose argument is mandatory. `cosmetic` takes none; `beat` names the
+# beat, `deferred` the capability that unblocks it, `unreachable` the reason.
+_ARGUMENT_REQUIRED: frozenset[str] = frozenset({"beat", "deferred", "unreachable"})
+
+_BEAT_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+
+
+class DispositionError(ValueError):
+    """A disposition string is malformed, or breaks a rule in this module."""
+
+
+# --- rows ------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PageCondition:
+    """An event page's appearance condition, in human terms.
+
+    The raw RMXP values are a polarity trap — code-123 self-switch value ``0``
+    means **ON** — and a prose misread of exactly that inverted a live sidequest
+    into "dead content" once already. `describe` is what the review rendering
+    shows; nothing downstream should re-derive meaning from the raw fields.
+    """
+
+    switch1_id: int | None = None
+    switch1_name: str | None = None
+    switch2_id: int | None = None
+    switch2_name: str | None = None
+    variable_id: int | None = None
+    variable_name: str | None = None
+    variable_min: int | None = None
+    self_switch_ch: str | None = None
+
+    @property
+    def is_unconditional(self) -> bool:
+        return not self.clauses()
+
+    def clauses(self) -> list[str]:
+        out: list[str] = []
+        if self.switch1_id is not None:
+            out.append(f"switch {self._switch(self.switch1_id, self.switch1_name)} is ON")
+        if self.switch2_id is not None:
+            out.append(f"switch {self._switch(self.switch2_id, self.switch2_name)} is ON")
+        if self.variable_id is not None:
+            name = self._switch(self.variable_id, self.variable_name)
+            out.append(f"variable {name} >= {self.variable_min}")
+        if self.self_switch_ch is not None:
+            out.append(f"self-switch {self.self_switch_ch} is ON")
+        return out
+
+    def describe(self) -> str:
+        clauses = self.clauses()
+        return " and ".join(clauses) if clauses else "always"
+
+    @staticmethod
+    def _switch(ident: int, name: str | None) -> str:
+        return f"{ident} ({name})" if name else str(ident)
+
+
+@dataclass(frozen=True)
+class SeamRef:
+    """One side of an overland connection, as `connections.json` records it.
+
+    Seams are not events, so an event-only manifest cannot see them — and CH04's
+    entire chapter identity is two of them. Every outdoor route boundary in the
+    corpus is invisible without this row kind.
+    """
+
+    map_id: int
+    direction: str
+    offset: int
+    other_map_id: int
+    other_direction: str
+    other_offset: int
+
+
+@dataclass(frozen=True)
+class ManifestRow:
+    """One generated row: an event page, or an overland seam.
+
+    Pure derivation from `output/uranium-build/`. Nothing here is authored, and
+    re-running the generator must reproduce it byte for byte.
+    """
+
+    row_id: str
+    kind: Literal["page", "seam"]
+    map_id: int
+    content_hash: str
+    effects: tuple[str, ...] = ()
+    # Every script head found on the page, verbatim — recognized or not. The
+    # manifest carries all of them because head recognition is open-ended: a
+    # novel `pbSomething` absent from MECHANIC_BY_HEAD would otherwise produce
+    # an untagged row that reads as cosmetic and gets waved through.
+    script_heads: tuple[str, ...] = ()
+    unrecognized_heads: tuple[str, ...] = ()
+    # Command codes present on the page that the extractor has no rule for.
+    # `_census_one_map` recognizes 10 of the 59 codes in use and has no fallback
+    # bucket, so 49 codes are invisible to it today; this is that bucket.
+    other_codes: tuple[int, ...] = ()
+    # Capabilities the row needs before it can be asserted (`rock_smash`,
+    # `strength`, ...), from script content. Reachability-derived requirements
+    # are a second source and are not populated yet.
+    requires: tuple[str, ...] = ()
+    # Count of `transpile_unhandled.jsonl` entries joining to this row. A page
+    # with unhandled queue entries may not be dispositioned `cosmetic`: that is
+    # the free check for a dead conversion with no beat written at all.
+    unhandled: int = 0
+    # Whether the page carries a code-111 conditional with params[0] == 12, i.e.
+    # a branch whose behaviour lives in Ruby rather than in structure.
+    script_typed_conditions: int = 0
+
+    event_id: int | None = None
+    event_name: str | None = None
+    page_idx: int | None = None
+    condition: PageCondition | None = None
+    trigger: str | None = None
+    seam: SeamRef | None = None
+
+    @property
+    def is_dispositionable(self) -> bool:
+        """False when a human must classify something before deciding.
+
+        Fail loud (CLAUDE.md §4.5): an unrecognized head or command code is
+        undispositionable, not untagged. Six of eleven heads were unrecognized
+        on the very first map tested, so this arm is the common case early on.
+        """
+        return not self.unrecognized_heads and not self.other_codes
+
+    @property
+    def may_be_cosmetic(self) -> bool:
+        if self.kind == "seam":
+            return False
+        if self.unhandled:
+            return False
+        if not self.is_dispositionable:
+            return False
+        return not (set(self.effects) & STATE_WRITING_TAGS)
+
+    @property
+    def needs_citation(self) -> bool:
+        """Rows whose effect the manifest's structure does not determine.
+
+        The trigger is mechanical on purpose. "Cite when the effect is
+        non-obvious" fails by construction, because the author who misreads a
+        design is the author who believes it is obvious.
+        """
+        return bool(self.unrecognized_heads) or self.script_typed_conditions > 0
+
+    def blocking_tags(self) -> tuple[str, ...]:
+        """The state-writing tags that forbid a `cosmetic` disposition."""
+        return tuple(sorted(set(self.effects) & STATE_WRITING_TAGS))
+
+
+# --- dispositions ----------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Disposition:
+    """One authored decision about one row.
+
+    Hand-edited and committed. The generator joins it by `row_id` and never
+    writes to it, so re-running the generator cannot clobber a decision.
+    """
+
+    row_id: str
+    verdict: Verdict
+    argument: str | None = None
+    # RMXP path plus the Essentials script or wiki page. Required whenever the
+    # row's citation trigger fires.
+    source: str | None = None
+    # The row's `content_hash` at the time this decision was affirmed. On
+    # mismatch the decision is invalidated and must be re-affirmed: detecting a
+    # row's *disappearance* is the easy case, a row whose contents change
+    # underneath a standing decision is the dangerous one.
+    affirmed_hash: str | None = None
+    note: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.verdict not in _VERDICTS:
+            raise DispositionError(
+                f"{self.row_id}: unknown verdict {self.verdict!r}; "
+                f"expected one of {sorted(_VERDICTS)}"
+            )
+        if self.verdict in _ARGUMENT_REQUIRED and not self.argument:
+            raise DispositionError(
+                f"{self.row_id}: verdict {self.verdict!r} requires an argument, e.g. "
+                f"{_EXAMPLE_BY_VERDICT[self.verdict]}"
+            )
+        if self.verdict == "cosmetic" and self.argument:
+            raise DispositionError(
+                f"{self.row_id}: verdict 'cosmetic' takes no argument, got {self.argument!r}"
+            )
+        if self.verdict == "beat" and not _BEAT_NAME.match(self.argument or ""):
+            raise DispositionError(
+                f"{self.row_id}: {self.argument!r} is not a beat name; beat ids are "
+                "labels like 'B12' or 'N3'"
+            )
+
+    @property
+    def spec(self) -> str:
+        """The compact ``verdict:argument`` form used in the authored file."""
+        return self.verdict if self.argument is None else f"{self.verdict}:{self.argument}"
+
+    @classmethod
+    def parse(cls, row_id: str, spec: str, **rest: Any) -> Disposition:
+        """Parse ``beat:B12`` / ``deferred:rock_smash`` / ``cosmetic``."""
+        verdict, _, argument = spec.partition(":")
+        verdict = verdict.strip()
+        argument = argument.strip()
+        if verdict not in _VERDICTS:
+            raise DispositionError(
+                f"{row_id}: unknown verdict {verdict!r} in {spec!r}; "
+                f"expected one of {sorted(_VERDICTS)}"
+            )
+        return cls(row_id=row_id, verdict=verdict, argument=argument or None, **rest)  # type: ignore[arg-type]
+
+
+_EXAMPLE_BY_VERDICT = {
+    "beat": "beat:B12",
+    "deferred": "deferred:rock_smash",
+    "unreachable": "unreachable:dev-only flag sw130, never set in the corpus",
+}
+
+
+# --- hashing ---------------------------------------------------------------
+
+
+def content_hash(payload: Any) -> str:
+    """Stable hash of a row's underlying content.
+
+    Canonical JSON with sorted keys, so the hash tracks *meaning* rather than
+    the deserializer's key ordering. Truncated to 16 hex characters: this
+    guards against drift, not against an adversary.
+    """
+    blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
+# --- row serialization -----------------------------------------------------
+#
+# The round trip lives here rather than in the generator because the checker
+# and the renderer read what the generator wrote, and a loader that tolerates
+# missing keys quietly re-introduces the drift the manifest exists to kill: add
+# a field to `ManifestRow`, the generator writes it, a lenient reader defaults
+# it away, and the rules then evaluate on a row that is not the row on disk.
+# Both directions are strict, so that failure is a loud one.
+
+
+def row_to_dict(row: ManifestRow) -> dict[str, Any]:
+    """Plain-JSON form of a row. Nested dataclasses recurse; tuples become lists."""
+    return asdict(row)
+
+
+def row_from_dict(data: dict[str, Any]) -> ManifestRow:
+    """Rebuild a row, rejecting any key set that is not exactly the row's fields."""
+    expected = {f.name for f in fields(ManifestRow)}
+    got = set(data)
+    if missing := expected - got:
+        raise ValueError(
+            f"manifest row {data.get('row_id', '<no row_id>')!r} is missing "
+            f"{sorted(missing)}; regenerate the manifest rather than patching it"
+        )
+    if unknown := got - expected:
+        raise ValueError(
+            f"manifest row {data.get('row_id', '<no row_id>')!r} carries unknown "
+            f"{sorted(unknown)}; the file was written by a newer schema"
+        )
+
+    condition = data["condition"]
+    seam = data["seam"]
+    return ManifestRow(
+        **{
+            **data,
+            "effects": tuple(data["effects"]),
+            "script_heads": tuple(data["script_heads"]),
+            "unrecognized_heads": tuple(data["unrecognized_heads"]),
+            "other_codes": tuple(data["other_codes"]),
+            "requires": tuple(data["requires"]),
+            "condition": PageCondition(**condition) if condition is not None else None,
+            "seam": SeamRef(**seam) if seam is not None else None,
+        }
+    )
+
+
+def page_row_id(map_id: int, event_id: int, page_idx: int) -> str:
+    return f"map{map_id:03d}/ev{event_id:03d}/p{page_idx}"
+
+
+def seam_row_id(map_id: int, direction: str, other_map_id: int) -> str:
+    """Seam rows are keyed from the crossing map's side.
+
+    A seam appears once per map it touches, so a chapter owning only one side
+    still gets a row it must disposition, and the two sides can be
+    dispositioned differently (one crossed in this chapter, one not).
+    """
+    return f"map{map_id:03d}/seam/{direction.upper()}/map{other_map_id:03d}"

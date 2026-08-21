@@ -12,6 +12,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..text_validator.engine_metrics import load_charmap
 from .contact_sheet import Waypoint
 from .errors import ScenarioError
 from .offsets import (
@@ -212,6 +213,211 @@ def _decode_facing(raw: int, offsets: dict) -> str:
     )
 
 
+#: Control bytes (`include/constants/characters.h`), read out of the
+#: TextPrinter's source buffer alongside literal glyph bytes.
+_EOS = 0xFF
+_CHAR_NEWLINE = 0xFE
+_PLACEHOLDER_BEGIN = 0xFD
+_EXT_CTRL_CODE_BEGIN = 0xFC
+_CHAR_PROMPT_CLEAR = 0xFB  # waits for a button press, then clears -- page break
+_CHAR_PROMPT_SCROLL = 0xFA  # waits for a button press, then scrolls -- line break
+
+#: `EXT_CTRL_CODE_*` (characters.h) -> operand byte count, read directly out
+#: of `RenderText`'s switch (`engine/src/text.c:1379-1535`): every opcode not
+#: listed here is one this module has not verified an operand length for, and
+#: decoding must fail loud rather than guess a length and silently desync the
+#: rest of the string (CLAUDE.md §4.5).
+_EXT_CTRL_OPERAND_LEN: dict[int, int] = {
+    0x01: 1,  # COLOR
+    0x02: 1,  # HIGHLIGHT
+    0x03: 1,  # SHADOW
+    0x04: 3,  # COLOR_HIGHLIGHT_SHADOW
+    0x05: 1,  # PALETTE
+    0x06: 1,  # FONT
+    0x07: 0,  # RESET_FONT
+    0x08: 1,  # PAUSE
+    0x09: 0,  # PAUSE_UNTIL_PRESS
+    0x0A: 0,  # WAIT_SE
+    0x0B: 2,  # PLAY_BGM
+    0x0C: 1,  # ESCAPE -- selects an extended-page glyph; that glyph isn't
+              # rendered (this decoder only knows the first 256 charmap
+              # bytes, matching engine_metrics), so the operand is consumed
+              # and contributes no character, same as any other control code.
+    0x0D: 1,  # SHIFT_RIGHT
+    0x0E: 1,  # SHIFT_DOWN
+    0x0F: 0,  # FILL_WINDOW
+    0x10: 2,  # PLAY_SE
+    0x11: 1,  # CLEAR
+    0x12: 1,  # SKIP
+    0x13: 1,  # CLEAR_TO
+    0x14: 1,  # MIN_LETTER_SPACING
+    0x15: 0,  # JPN
+    0x16: 0,  # ENG
+    0x17: 0,  # PAUSE_MUSIC
+    0x18: 0,  # RESUME_MUSIC
+    0x19: 1,  # SPEAKER
+    0x1A: 1,  # ACCENT
+    0x1B: 1,  # BACKGROUND
+    0x1C: 3,  # TEXT_COLORS
+}
+
+#: `PLACEHOLDER_ID_*` (characters.h) -> a stable, comparable rendering for a
+#: beat's expected-string literal. Field messages have already had these
+#: resolved to real glyphs by `StringExpandPlaceholders` before printing
+#: (`ShowFieldMessage`, field_message_box.c) -- reaching this table at all
+#: means either a non-field-message printer (battle text etc., read via
+#: `Emulator.active_printer_texts`) or an unresolved placeholder bug. An id
+#: absent from this table renders as `{PLACEHOLDER_0x..}` rather than being
+#: dropped, so an unrecognized placeholder is visible in the decoded string
+#: instead of silently vanishing.
+_PLACEHOLDER_TOKENS: dict[int, str] = {
+    0x00: "{UNKNOWN}",
+    0x01: "{PLAYER}",
+    0x02: "{STR_VAR_1}",
+    0x03: "{STR_VAR_2}",
+    0x04: "{STR_VAR_3}",
+    0x05: "{KUN}",
+    0x06: "{RIVAL}",
+    0x07: "{VERSION}",
+    0x08: "{AQUA}",
+    0x09: "{MAGMA}",
+    0x0A: "{ARCHIE}",
+    0x0B: "{MAXIE}",
+    0x0C: "{KYOGRE}",
+    0x0D: "{GROUDON}",
+    0x0E: "{REGION}",
+}
+
+#: Cap on how many bytes `decode_text_bytes` will scan looking for `_EOS`
+#: (`playtest/offsets.py`'s probe-first philosophy stops at struct layout;
+#: this is a plain safety bound, not engine-derived) -- comfortably above
+#: `gStringVar4`'s own 0x3E8-byte backing (`include/string_util.h`) is
+#: unnecessary since no field message can legitimately exceed that buffer,
+#: but this cap exists to stop a torn/garbage pointer from being read as an
+#: unbounded string, not to match the buffer size exactly.
+TEXT_DECODE_CAP = 512
+
+
+def decode_text_bytes(data: bytes, byte_to_char: dict[int, str]) -> str:
+    """Decode one pokeemerald source string out of already-fetched `data`.
+
+    Pure and memory-free -- callers fetch a bounded byte range first (see
+    `Emulator.current_field_message_text`) and hand it here, which is what
+    makes this unit-testable without an emulator (`tests/test_playtest_text_
+    read.py`).
+
+    Terminates at `_EOS` (0xFF); raises `ScenarioError` if `data` runs out
+    first (the bounded-read cap was hit with no terminator -- a torn pointer,
+    not a real string). Control bytes render as stable, comparable tokens
+    rather than being silently dropped, so a beat's expected-string assertion
+    has something deterministic to compare against:
+
+    - `_CHAR_NEWLINE` (0xFE) -> literal ``\\n`` (two characters: backslash,
+      "n" -- matching Poryscript's own source-level escape, not an actual
+      newline byte, so a decoded string reads the same as the `.pory` text
+      an author would have written).
+    - `_CHAR_PROMPT_SCROLL` (0xFA, "waits for a button press and scrolls") ->
+      literal ``\\l``.
+    - `_CHAR_PROMPT_CLEAR` (0xFB, "waits for a button press and clears") ->
+      literal ``\\p``.
+    - `_EXT_CTRL_CODE_BEGIN` (0xFC) -> zero-width; the opcode and its operand
+      bytes are consumed and contribute nothing to the decoded string
+      (matches `GetStringWidth`'s own zero-width treatment of these,
+      `text_validator/engine_metrics.py`). An opcode absent from
+      `_EXT_CTRL_OPERAND_LEN` raises rather than guessing an operand length.
+    - `_PLACEHOLDER_BEGIN` (0xFD) -> a `{TOKEN}` string from
+      `_PLACEHOLDER_TOKENS` (`{PLAYER}` etc.), or `{PLACEHOLDER_0x..}` for an
+      id this module doesn't recognize.
+
+    Any other byte absent from `byte_to_char` raises -- an unmapped glyph is
+    reported, never silently dropped or substituted.
+    """
+    out: list[str] = []
+    i = 0
+    n = len(data)
+    while True:
+        if i >= n:
+            raise ScenarioError(
+                f"text decode: no EOS (0xFF) found within {n} bytes -- "
+                "either raise the cap or this pointer is not a real string"
+            )
+        b = data[i]
+        if b == _EOS:
+            return "".join(out)
+        if b == _CHAR_NEWLINE:
+            out.append("\\n")
+            i += 1
+            continue
+        if b == _CHAR_PROMPT_SCROLL:
+            out.append("\\l")
+            i += 1
+            continue
+        if b == _CHAR_PROMPT_CLEAR:
+            out.append("\\p")
+            i += 1
+            continue
+        if b == _EXT_CTRL_CODE_BEGIN:
+            if i + 1 >= n:
+                raise ScenarioError(
+                    f"text decode: EXT_CTRL_CODE_BEGIN at offset {i} has no "
+                    "opcode byte before the cap"
+                )
+            opcode = data[i + 1]
+            operand_len = _EXT_CTRL_OPERAND_LEN.get(opcode)
+            if operand_len is None:
+                raise ScenarioError(
+                    f"text decode: unrecognized EXT_CTRL_CODE_BEGIN opcode "
+                    f"{opcode:#04x} at offset {i} -- operand length unknown, "
+                    "refusing to guess"
+                )
+            i += 2 + operand_len
+            continue
+        if b == _PLACEHOLDER_BEGIN:
+            if i + 1 >= n:
+                raise ScenarioError(
+                    f"text decode: PLACEHOLDER_BEGIN at offset {i} has no "
+                    "id byte before the cap"
+                )
+            pid = data[i + 1]
+            out.append(_PLACEHOLDER_TOKENS.get(pid, f"{{PLACEHOLDER_{pid:#04x}}}"))
+            i += 2
+            continue
+        char = byte_to_char.get(b)
+        if char is None:
+            raise ScenarioError(
+                f"text decode: byte {b:#04x} at offset {i} has no charmap "
+                "entry -- unmapped glyph"
+            )
+        out.append(char)
+        i += 1
+
+
+def _invert_charmap_english_first(char_to_byte: dict[str, int]) -> dict[int, str]:
+    """Build byte -> literal-char from `engine_metrics.Charmap.char_to_byte`.
+
+    Cannot be a blind `dict` inversion: `engine/charmap.txt` reuses the same
+    byte range for more than one glyph set (the Latin table, then a `@
+    Hiragana` section starting partway through the file that maps different
+    characters onto the same bytes, e.g. byte 0x01 is both 'À' and 'あ').
+    `load_charmap` parses the whole file, so `char_to_byte` legitimately holds
+    both -- correct for the forward (char -> byte) direction
+    `engine_metrics` needs, wrong for reverse decoding if taken blind (dict
+    inversion keeps whichever key was inserted *last*, i.e. the Japanese
+    entry, for a shared byte).
+
+    This build's ROM prints English (`ENG`, not `JPN` -- see
+    `_EXT_CTRL_OPERAND_LEN`), so the Latin section, which appears first in
+    the file, is what's on screen. Iterating `char_to_byte` in (insertion)
+    file order and keeping only the *first* char seen per byte recovers
+    exactly that section.
+    """
+    byte_to_char: dict[int, str] = {}
+    for char, byte in char_to_byte.items():
+        if byte not in byte_to_char:
+            byte_to_char[byte] = char
+    return byte_to_char
+
+
 def _read_object_event_slot(emu, base: int) -> ObjectEventState | None:
     """Decode one `gObjectEvents` slot starting at `base`, or None if the
     slot isn't active.
@@ -304,6 +510,15 @@ class Emulator:
         self._yesno_task_fn = static_fn_via_literal_pool(
             engine / "pokeemerald.elf",
             self.symbols["ScriptMenu_YesNo"],
+        )
+        # Text-content decode (Emulator.current_field_message_text,
+        # active_printer_texts) -- reuses text_validator.engine_metrics'
+        # charmap.txt parser (one source of truth for the char<->byte table,
+        # CLAUDE.md §4.3) rather than a second parser, then locally inverts
+        # it; see `_invert_charmap_english_first` for why that inversion
+        # can't be a blind dict-reverse.
+        self._byte_to_char = _invert_charmap_english_first(
+            load_charmap(engine / "charmap.txt").char_to_byte
         )
         self._text_frame: "object | None" = None
         self._text_was_drawing = False
@@ -913,6 +1128,106 @@ class Emulator:
                         != o["val_render_state_handle_char"])
             node = self.u32(node + o["off_printer_next"])
         return True
+
+    def current_field_message_text(self) -> str | None:
+        """The field message box's (window 0) full decoded source text, or
+        `None` while no message box is up.
+
+        Reads `gStringVar4` (`include/string_util.h`), not the printer's own
+        `currentChar` -- deliberately, and not what
+        `PLAYTEST_AUTHORING_IMPROVEMENT.md` §4.1 literally suggested.
+        `ShowFieldMessage` (`field_message_box.c`) expands placeholders into
+        `gStringVar4` once, before any printer exists, and printing only
+        *reads* that buffer -- it never mutates it, only the printer's
+        cursor into it. Two problems with `currentChar` instead, both fatal
+        for this method's job:
+
+        - It moves. `text.c`'s `RenderText` advances `currentChar` a byte (or
+          control code) at a time as it draws, so by the time a page is
+          fully drawn -- the moment worth reading -- `currentChar` points
+          at whatever is left to print (the next page, or past-the-end),
+          never at byte 0 of what's on screen.
+        - It can not exist. `text_ready()`'s own docstring: a *final* page's
+          printer is freed at `RENDER_FINISH`, right as the box "stays up
+          ... holding the finished text" -- the single most reviewable
+          frame there is, and precisely the frame with no printer node left
+          to walk to.
+
+        `gStringVar4` has neither problem: it is written once per message
+        (all pages, already placeholder-expanded) and stays valid for as
+        long as the box stays up, independent of printer lifecycle. This
+        also means a multi-page message decodes in full regardless of which
+        page is currently on screen -- useful for "which of several
+        responses did the player get" (the CH04 self-switch A/B rematch
+        case this primitive exists for), not just the page in front of you.
+
+        Bounded read: fetches at most `TEXT_DECODE_CAP` bytes and raises
+        (via `decode_text_bytes`) if no terminator turns up in that span,
+        rather than following the pointer for an unbounded distance.
+        """
+        if self.u8(self._msgbox_addr) == 0:
+            return None
+        addr = self.symbols["gStringVar4"]
+        data = self.read_bytes(addr, TEXT_DECODE_CAP)
+        return decode_text_bytes(data, self._byte_to_char)
+
+    def active_printer_texts(self) -> dict[int, str]:
+        """`window_id -> decoded text` for every live `WINDOW_TEXT_PRINTER`
+        node on `sFirstTextPrinter`, covering windows besides the field
+        message box (battle text, signposts, menus -- anything with its own
+        printer).
+
+        Unlike `current_field_message_text`, this reads each printer's own
+        `currentChar` -- there is no equivalent of `gStringVar4` known to be
+        stable for every window, so this is the best available source, and
+        it is the **remaining** text from the printer's current read
+        position onward, not the whole message from its start (see
+        `current_field_message_text`'s docstring for why that distinction
+        matters). For window 0 prefer `current_field_message_text`; this
+        method exists for the other windows, and for enumerating everything
+        that's live at once.
+
+        Same 16-node cap as `text_ready` -- guards a torn-pointer cycle, not
+        a real list length -- and the same bounded per-string read.
+        """
+        o = self.offsets
+        node = self.u32(self._printer_list)
+        result: dict[int, str] = {}
+        for _ in range(16):
+            if node == 0:
+                break
+            if self.u8(node + o["off_printer_type"]) == o["val_window_text_printer"]:
+                window_id = self.u8(node + o["off_printer_window_id"])
+                char_ptr = self.u32(node + o["off_printer_currentchar"])
+                data = self.read_bytes(char_ptr, TEXT_DECODE_CAP)
+                result[window_id] = decode_text_bytes(data, self._byte_to_char)
+            node = self.u32(node + o["off_printer_next"])
+        return result
+
+    def assert_text_contains(self, expected: str, *, exact: bool = False) -> None:
+        """Assert the field message box currently shows `expected`.
+
+        `exact=False` (default) checks substring containment -- the common
+        case, since a checked phrase is usually shorter than its surrounding
+        sentence. `exact=True` requires the whole decoded message (all
+        pages) to equal `expected`.
+
+        Raises `ScenarioError` printing both `expected` and the actual
+        decoded text on failure -- PLAYTEST_AUTHORING_IMPROVEMENT.md's
+        complaint about a beat failure that doesn't show what actually
+        happened costing a full debug cycle applies just as much here as it
+        did to the proxy-oracle findings that document is about.
+        """
+        actual = self.current_field_message_text()
+        ok = actual is not None and (
+            actual == expected if exact else expected in actual
+        )
+        if not ok:
+            verb = "equal" if exact else "contain"
+            raise ScenarioError(
+                f"expected field message text to {verb} {expected!r}; "
+                f"actual text was {actual!r}"
+            )
 
     # -- primitives ---------------------------------------------------------
 

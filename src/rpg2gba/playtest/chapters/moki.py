@@ -49,7 +49,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..battle import decrypt_species, in_battle, win_battle
+from .. import assertions
+from ..battle import in_battle, win_battle
 from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
 from ..scenarios import BOOT_FRAMES
@@ -116,91 +117,18 @@ CEREMONY_ROWS = (43, 45)  # the trigger column's extent, for B14's re-cross
 
 
 # -- small local helpers, built only from the emulator's public surface ------
-
-def _at_map(emu: Emulator, map_const: str) -> bool:
-    group, num = emu.map_location()
-    return (group, num) == (
-        emu.resolve_constant(f"MAP_GROUP({map_const})"),
-        emu.resolve_constant(f"MAP_NUM({map_const})"),
-    )
-
-
-def _require_map(emu: Emulator, beat: str, map_const: str) -> None:
-    if _at_map(emu, map_const):
-        return
-    group, num = emu.map_location()
-    shot = emu.screenshot(f"{beat}_wrong_map")
-    raise ScenarioError(
-        f"{beat}: expected map {map_const} but map_location() reads "
-        f"group={group} num={num} ({shot})"
-    )
-
-
-def _try_step(emu: Emulator, direction: str) -> bool:
-    """Attempt exactly one step, without `walk_to`'s retry-until-arrived
-    loop -- for beats where a *successful* step should trigger a
-    redirect/refusal (the player gets pushed back) rather than actually
-    settling on the target tile. Mirrors `walk_to`'s own per-step budget
-    (40 frames to detect a coord change, then a 16-frame settle) so the
-    two primitives behave consistently."""
-    before = emu.player_pos()
-    moved = False
-    for _ in range(40):
-        emu.run(1, [direction])
-        if emu.player_pos() != before:
-            moved = True
-            break
-    emu.run(16)
-    return moved
-
-
-def _wait_for_map(emu: Emulator, beat: str, map_const: str,
-                  frame_budget: int = 900) -> None:
-    """Wait out a warp (script-driven or door), then assert where we landed.
-
-    `walk_to` is map-blind — it chases coordinates on whatever map the
-    player happens to be on — so any beat whose target lives on a different
-    map than the previous beat left the player on has to cross the seam
-    explicitly and confirm the crossing before it starts pathing again.
-    Deliberately does *not* drain the arrival's field lock: several beats
-    assert an autorun scene is running the instant they arrive.
-    """
-    spent = 0
-    while spent < frame_budget and not _at_map(emu, map_const):
-        emu.run(10)
-        spent += 10
-    _require_map(emu, beat, map_const)
-
-
-def _cross_threshold(emu: Emulator, beat: str, approach: tuple[int, int],
-                     direction: str, dest_map: str) -> None:
-    """Step onto a transition tile from the tile beside it, then confirm the
-    map change.
-
-    Never `walk_to` a transition tile directly: `walk_to` aborts loud when a
-    step changes the map (that guard is what catches an accidental warp), so
-    a deliberate crossing has to be the step *after* the walk, not part of
-    it.
-    """
-    emu.walk_to(*approach)
-    _try_step(emu, direction)
-    _wait_for_map(emu, beat, dest_map)
-
-
-def _enter_door(emu: Emulator, beat: str, door: tuple[int, int],
-                dest_map: str, hold: int = 48) -> None:
-    """Walk into a door warp from the south, holding the D-pad.
-
-    Door warps are not step-on warps. `TryDoorWarp`
-    (`engine/src/field_control_avatar.c:1098-1112`) fires only for
-    `DIR_NORTH`, and only from the held-direction branch at :227-231 — so
-    the player must step onto the door tile *and keep holding UP*. A
-    `_try_step`-style tap arrives on the tile and stands there.
-    """
-    dx, dy = door
-    emu.walk_to(dx, dy + 1)
-    emu.run(hold, ["UP"])
-    _wait_for_map(emu, beat, dest_map)
+#
+# `_at_map`/`_require_map`/`_try_step`/`_wait_for_map`/`_cross_threshold`/
+# `_enter_door` used to be defined here (byte-identical to `kevlar.py`'s
+# copies, and `route1.py`'s except for its own `_walk_absorbing` navigation)
+# -- promoted to `assertions.py` 2026-08-20 (finding H). Aliased under their
+# original names so every call site below is unchanged.
+_at_map = assertions.at_map
+_require_map = assertions.require_map
+_try_step = assertions.try_step
+_wait_for_map = assertions.wait_for_map
+_cross_threshold = assertions.cross_threshold
+_enter_door = assertions.enter_door
 
 
 def _leave_theo_house(emu: Emulator, beat: str) -> None:
@@ -233,15 +161,9 @@ def _leave_house1f(emu: Emulator, beat: str) -> None:
                      HOUSE1F_EXIT_DIRECTION, "MAP_MOKI_TOWN")
 
 
-def _advance_to_battle(emu: Emulator, max_taps: int = 1500) -> int:
-    """`emu.advance_dialog()`, but stopping if a battle starts.
-
-    A script that ends in a battle gives no field-control release to stop on
-    — the A-mash would keep pressing straight through the battle's own menus
-    and resolve it by accident. Beats that own a battle need it handed over
-    still running, so this stops on either boundary.
-    """
-    return emu.advance_dialog(max_taps=max_taps, stop=lambda: in_battle(emu))
+# Promoted to `assertions.py` 2026-08-20 (byte-identical to `route1.py`'s
+# own copy at the time).
+_advance_to_battle = assertions.advance_to_battle
 
 
 def _settle_scenes(emu: Emulator, settle: int = 120,
@@ -274,14 +196,12 @@ def _settle_scenes(emu: Emulator, settle: int = 120,
         f"{frame_budget} ({shot})")
 
 
-def _player_starter_species(emu: Emulator) -> int:
-    """Decode slot 0 of `gPlayerParty` the same way `battle.py` decodes
-    `gEnemyParty` -- both are `struct Pokemon`, and the offsets battle.py
-    already probes (`off_pkmn_box`, box-substruct fields) are struct-generic,
-    not enemy-party-specific."""
-    o = emu.offsets
-    box_addr = emu.symbols["gPlayerParty"] + o["off_pkmn_box"]
-    return decrypt_species(emu, box_addr)
+# Promoted to `assertions.py` 2026-08-20, unified with `kevlar.py`'s
+# `_party_has_magikarp` under `assertions.read_party_species` /
+# `assertions.party_has_species` -- this slot-0-only read (no SPECIES_NONE
+# early return) is kept as its own function there since B8 below relies on
+# it being able to return SPECIES_NONE itself.
+_player_starter_species = assertions.player_starter_species
 
 
 def _assert_house1f_exit_blocked(emu: Emulator, beat: str) -> None:
