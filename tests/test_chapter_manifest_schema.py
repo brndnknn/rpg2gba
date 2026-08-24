@@ -122,6 +122,24 @@ def test_unhandled_queue_entries_forbid_cosmetic() -> None:
     assert not row.may_be_cosmetic
 
 
+@pytest.mark.parametrize("tag", ["control_flow", "erase_event", "temp_switch_write"])
+def test_new_state_writing_tags_forbid_cosmetic(tag: str) -> None:
+    row = ManifestRow(
+        row_id="x", kind="page", map_id=1, content_hash="0", effects=("text", tag),
+    )
+    assert not row.may_be_cosmetic
+    assert tag in row.blocking_tags()
+
+
+@pytest.mark.parametrize("tag", ["bubble_ui", "animation", "screen_fx"])
+def test_new_cosmetic_safe_tags_permit_cosmetic(tag: str) -> None:
+    row = ManifestRow(
+        row_id="x", kind="page", map_id=1, content_hash="0", effects=("text", tag),
+    )
+    assert row.may_be_cosmetic
+    assert row.blocking_tags() == ()
+
+
 def test_seam_row_is_never_cosmetic() -> None:
     assert not _seam_row().may_be_cosmetic
 

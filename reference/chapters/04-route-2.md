@@ -82,6 +82,50 @@ map's only real gate — the rockslide — plus entry/exit, not from any write.
 | B6 | 35 | the rockslide | try to continue north through (19–22, 28–29) | **Blocked** — 5 "Rock" events (ids 14–18, graphic `fk107-rocksmash`) are each impassable until individually cleared via `Kernel.pbRockSmash`, unavailable this chapter (Rock Smash is a CH06 grant). No route north exists on visit 1 |
 | B7 | 35 → 36 | none | walk onto the cave-entrance tile (20,33) | id 1 "EV001" pg0: `pbCaveEntrance`, then `code 201` warp to Map036 (17,39) — hands off to CH05 |
 
+### 3.1 Manifest reconciliation (2026-08-22)
+
+The B1–B7 table above was authored 2026-07-31, before the generated manifest
+existed. It is now bound to `reference/manifests/CH04.manifest.json` (42 rows)
+and `reference/manifests/CH04.dispositions.json`. The manifest is the approval
+object; this table is the prose rendering of it, not a second source of truth.
+
+| Beat | Manifest row(s) |
+|---|---|
+| B1 | `map035/seam/S/map031` |
+| B2 | `map035/ev003/p0` |
+| B3 | `map035/ev009/p0` |
+| B4 | `map035/ev012/p0` |
+| B5 | `map035/ev013/p0` |
+| B6 | `map035/ev014/p0`, `map035/ev017/p0` — **only these two**, see below |
+| B7 | `map035/ev001/p0` |
+
+**Four beats the prose table missed**, surfaced by enumerating every event
+page rather than the ones a reader thought to write down:
+
+| Beat | Row | Why it is a beat |
+|---|---|---|
+| B8 | `map035/ev001/p1` | Autorun arrival staging, gated on the runtime predicate `s:tsOff?("A")`; `setTempSwitchOn` makes it once-per-visit. Re-evaluates page conditions, so it can gate later behaviour in the same visit. |
+| B9 | `map035/ev002/p0` | The "Old entrance to Nowtoch City." sign. §3 already identified its `FLAG_MENU_ON_EVENT` bracket as a menu lock rather than a story gate, but a switch write is a switch write — the row cannot be dispositioned cosmetic. |
+| B10 | `map035/ev003/p1` | Larrie's self-switch B page: the phone rematch offer. |
+| B11 | `map035/ev003/p2` | Larrie's self-switch A page: defeated re-talk. |
+
+**B6 is two rows, not five.** The five Rock events split on reachability, and
+the split changes their verdicts:
+
+- **Rocks 14 (20,28) and 17 (19,29)** are outer boulders with an open face.
+  The player can stand adjacent on visit 1 and press A. `Kernel.pbRockSmash`'s
+  false branch is empty, so the observable outcome is that nothing happens —
+  that is what B6 asserts. Dispositioned `deferred:rock_smash`.
+- **Rocks 15 (21,29), 16 (22,28) and 18 (21,28)** are interior: BFS over the
+  tileset passage bytes finds no adjacent walkable tile in the south-reachable
+  region while their neighbours stand. The player cannot attempt them at all,
+  so they are `unreachable:boxed_in_by_outer_rocks`, not deferrals. Recording
+  them as deferred would have put three rows in the Rock Smash backlog that no
+  player can reach with Rock Smash in hand until 14/17 clear first.
+
+Everything north of the rock line — events 19–26, and the `35 N<->S 40` seam —
+is `unreachable:` for this chapter and belongs to CH07.
+
 ## 4. Coverage targets
 
 Enumerated from `Map035.json` and `wild_encounters.json`. All four
@@ -204,17 +248,33 @@ consistent with staying `medium`.
 
 ## 7. Open items for the lead
 
-- **NE-quadrant reachability (§4.1/§4.2) is an inference, not a directly
-  measured fact** — no passability grid exists to confirm the rock cluster
-  (ids 14–18) is the *only* path north. Rests on the sign text (id 13), the
-  CH07 revisit note, and wiki corroboration (§5#1). Settled by a
-  passability-grid read, if the pipeline ever exposes one.
 - **Switch 22**, gating id 1 "EV001" page 1 (an autorun player-nudge before
   `setTempSwitchOn("A")`), has no name in `flag_state.json`; purpose beyond
   "skip if mid-interaction" unconfirmed. A corpus-wide switch audit would
   settle it.
 - **Engine dir/porymap constant for map 35** are proposed (`Route2` /
   `MAP_ROUTE_2`) but unassigned — no naming pass has run for this map yet.
+
+### RESOLVED
+
+- **NE-quadrant reachability — MEASURED 2026-08-22, inference confirmed.**
+  A passability grid was built from `tilesets.json["22"].passages` joined with
+  Map035's tile layers, and BFS'd from the south-accessible region with the
+  five Rock events solid (`through=false`). Result: every event the doc had
+  called "beyond the gate" (ids 19–26) and the `35 N<->S 40` seam are
+  genuinely unreachable, and the rock cluster is the only path north. §4.1 and
+  §4.2's reachability column is now measured fact, not inference.
+- **Rockslide contradiction — ADJUDICATED 2026-08-22.** Event 19's
+  rock-clearing page is engine-ungated (no switch, variable or self-switch
+  condition), which had been read as contradicting the wiki-sourced claim that
+  Route 2 stays blocked until Rock Smash. Both are true: the gate is
+  *geometric*, not conditional. Event 19's event-touch tile is unreachable
+  from the south while the rocks stand, so the cutscene can only fire after
+  the Passage Cave → Nowtoch detour brings the player back down from the
+  north. CH04's gate is real and CH07's revisit stands. Closes
+  `PLAYTEST_AUTHORING_IMPROVEMENT.md` §7.2.
+- **Rock reachability is not uniform** — rocks 14 and 17 are attemptable on
+  visit 1, rocks 15, 16 and 18 are not. See §3.1.
 
 ---
 

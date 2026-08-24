@@ -1,10 +1,11 @@
-"""CLI for the chapter manifest checker/reviewer.
+"""CLI for the chapter manifest generator/checker/reviewer.
 
+    python -m rpg2gba.chapter_manifest generate --chapter CH04
     python -m rpg2gba.chapter_manifest check --chapter CH04
     python -m rpg2gba.chapter_manifest review --chapter CH04
 
-Both subcommands resolve the generated manifest and the authored
-disposition file by convention:
+`generate` writes the manifest; `check` and `review` resolve the generated
+manifest and the authored disposition file by convention:
 
     reference/manifests/<chapter>.manifest.json       (generator.py output)
     reference/manifests/<chapter>.dispositions.json    (dispositions.py)
@@ -23,11 +24,14 @@ import click
 
 from . import checker
 from .dispositions import disposition_path, load_dispositions
+from .generator import generate_chapter_manifest, write_manifest
 from .schema import ManifestRow, row_from_dict
 
 logger = logging.getLogger(__name__)
 
 MANIFESTS_DIR = Path("reference") / "manifests"
+DEFAULT_BUILD_DIR = Path("output") / "uranium-build"
+DEFAULT_CHAPTERS_PATH = Path("reference") / "chapters.json"
 
 
 def _manifest_path(chapter: str) -> Path:
@@ -58,6 +62,34 @@ def load_manifest(path: Path) -> list[ManifestRow]:
 @click.group()
 def cli() -> None:
     """rpg2gba chapter manifest checker/reviewer (see PLAYTEST_AUTHORING_IMPROVEMENT.md Q1/Q6)."""
+
+
+@cli.command("generate")
+@click.option("--chapter", required=True, help="Chapter id, e.g. CH04.")
+@click.option("--manifest", type=click.Path(path_type=Path), default=None,
+              help="Manifest output path (default: reference/manifests/<chapter>.manifest.json)")
+@click.option("--build-dir", type=click.Path(exists=True, path_type=Path),
+              default=DEFAULT_BUILD_DIR,
+              help="Converted-map build directory (default: output/uranium-build)")
+@click.option("--chapters", "chapters_path", type=click.Path(exists=True, path_type=Path),
+              default=DEFAULT_CHAPTERS_PATH,
+              help="Chapter/map chain JSON (default: reference/chapters.json)")
+def generate_cmd(chapter: str, manifest: Path | None, build_dir: Path,
+                  chapters_path: Path) -> None:
+    """Generate a chapter's manifest from converted map data."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    manifest_file = manifest or _manifest_path(chapter)
+    manifest_file.parent.mkdir(parents=True, exist_ok=True)
+
+    rows = generate_chapter_manifest(chapter, build_dir=build_dir, chapters_path=chapters_path)
+    write_manifest(rows, manifest_file)
+
+    undispositionable = sum(1 for row in rows if not row.is_dispositionable)
+    needs_citation = sum(1 for row in rows if row.needs_citation)
+    click.echo(f"wrote {manifest_file}: {len(rows)} rows, "
+               f"{undispositionable} undispositionable, {needs_citation} need citation")
+    sys.exit(0)
 
 
 @cli.command("check")

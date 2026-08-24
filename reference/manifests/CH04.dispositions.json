@@ -1,0 +1,230 @@
+{
+  "map035/ev001/p0": {
+    "disposition": "beat:B7",
+    "affirmed_hash": "8ae8dc6fc7187d42",
+    "note": "Cave-entrance warp to Map036 (17,39); hands off to CH05."
+  },
+  "map035/ev001/p1": {
+    "disposition": "beat:B8",
+    "affirmed_hash": "4a55df2ccabd01ae",
+    "source": "output/uranium-build/maps/Map035.json ev001/p1; reference/scripts_dump/022_Game_Event_v17.rb:78 setTempSwitchOn; reference/scripts_dump/101__PField_Field.rb:2929",
+    "note": "Autorun arrival staging, gated on runtime predicate s:tsOff?(\"A\"); setTempSwitchOn makes it once-per-visit. Not in doc's B1-B7."
+  },
+  "map035/ev002/p0": {
+    "disposition": "beat:B9",
+    "affirmed_hash": "f7f92d12826eb774",
+    "note": "'Old entrance to Nowtoch City.' sign. FLAG_MENU_ON_EVENT (switch 185) bracket is a menu lock, not a story gate; it is the map's entire switch_writes=2. Not in doc's B1-B7."
+  },
+  "map035/ev003/p0": {
+    "disposition": "beat:B2",
+    "affirmed_hash": "650350eb92526788",
+    "source": "output/uranium-build/maps/Map035.json ev003/p0; reference/scripts_dump/170__PSystem_Utilities.rb:2506 pbCallBub; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
+    "note": "Hiker Larrie, event-touch trainer battle + phone rematch registration."
+  },
+  "map035/ev003/p1": {
+    "disposition": "beat:B10",
+    "affirmed_hash": "92d7e23932364588",
+    "source": "output/uranium-build/maps/Map035.json ev003/p1; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
+    "note": "Post-battle self-switch B page: phone rematch offer. Carries control_flow."
+  },
+  "map035/ev003/p2": {
+    "disposition": "beat:B11",
+    "affirmed_hash": "2674fa4cf6f7ec6f",
+    "source": "output/uranium-build/maps/Map035.json ev003/p2; reference/scripts_dump/170__PSystem_Utilities.rb:2506 pbCallBub",
+    "note": "Self-switch A page: defeated-trainer re-talk. Carries control_flow."
+  },
+  "map035/ev008/p0": {
+    "disposition": "cosmetic",
+    "affirmed_hash": "a2fab855b4a49405",
+    "note": "Sign, no commands with effects."
+  },
+  "map035/ev009/p0": {
+    "disposition": "beat:B3",
+    "affirmed_hash": "b6aa5186777853c4",
+    "source": "output/uranium-build/maps/Map035.json ev009/p0; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
+    "note": "Potion item ball at (16,42), one-shot via self-switch A."
+  },
+  "map035/ev009/p1": {
+    "disposition": "cosmetic",
+    "affirmed_hash": "6c2d90d22489cb2a",
+    "note": "Spent item-ball page, no effects."
+  },
+  "map035/ev011/p0": {
+    "disposition": "cosmetic",
+    "affirmed_hash": "b3fa3c7dbc0bd7e3",
+    "note": "Barewl flavour NPC; bubble_ui/se/text only, all cosmetic-safe."
+  },
+  "map035/ev012/p0": {
+    "disposition": "beat:B4",
+    "affirmed_hash": "ae0a8a600fc0fce2",
+    "source": "output/uranium-build/maps/Map035.json ev012/p0; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
+    "note": "Youngster Timothy, event-touch trainer battle."
+  },
+  "map035/ev012/p1": {
+    "disposition": "cosmetic",
+    "affirmed_hash": "8f8b22ab37d3dfa7",
+    "note": "Defeated re-talk, bubble_ui/text only."
+  },
+  "map035/ev013/p0": {
+    "disposition": "beat:B5",
+    "affirmed_hash": "32790d1077074743",
+    "note": "Passage Cave hint sign at (10,30). Text-only, so cosmetic-eligible, but it is the in-fiction signpost for the B6 gate and the doc registers it."
+  },
+  "map035/ev014/p0": {
+    "disposition": "deferred:rock_smash",
+    "affirmed_hash": "a6b3c424daf6d99e",
+    "source": "output/uranium-build/maps/Map035.json ev014/p0; output/uranium-build/wiki/Route_2.wiki",
+    "note": "Rock at (20,28). Outer boulder with an open south face: the player CAN stand adjacent and press A on visit 1. pbRockSmash's false branch is empty, so the observable outcome is that nothing happens. Half of B6. Rock Smash is a CH06 grant; CH07 revisits."
+  },
+  "map035/ev014/p1": {
+    "disposition": "deferred:rock_smash",
+    "affirmed_hash": "6c2d90d22489cb2a",
+    "note": "Cleared state of rock 14; only reachable once Rock Smash exists."
+  },
+  "map035/ev015/p0": {
+    "disposition": "unreachable:boxed_in_by_outer_rocks",
+    "affirmed_hash": "a6b3c424daf6d99e",
+    "source": "output/uranium-build/maps/Map035.json ev015/p0; output/uranium-build/wiki/Route_2.wiki",
+    "note": "Rock at (21,29). No adjacent walkable tile in the south-reachable region on visit 1 - boxed in by rocks 14/16/18 and the tile wall. The player cannot even attempt it, so this is not a deferral."
+  },
+  "map035/ev015/p1": {
+    "disposition": "unreachable:boxed_in_by_outer_rocks",
+    "affirmed_hash": "6c2d90d22489cb2a",
+    "note": "Cleared state of an unreachable rock."
+  },
+  "map035/ev016/p0": {
+    "disposition": "unreachable:boxed_in_by_outer_rocks",
+    "affirmed_hash": "a6b3c424daf6d99e",
+    "source": "output/uranium-build/maps/Map035.json ev016/p0; output/uranium-build/wiki/Route_2.wiki",
+    "note": "Rock at (22,28), east interior. No adjacent walkable tile on visit 1."
+  },
+  "map035/ev016/p1": {
+    "disposition": "unreachable:boxed_in_by_outer_rocks",
+    "affirmed_hash": "6c2d90d22489cb2a",
+    "note": "Cleared state of an unreachable rock."
+  },
+  "map035/ev017/p0": {
+    "disposition": "deferred:rock_smash",
+    "affirmed_hash": "a6b3c424daf6d99e",
+    "source": "output/uranium-build/maps/Map035.json ev017/p0; output/uranium-build/wiki/Route_2.wiki",
+    "note": "Rock at (19,29). Outer boulder, west/south faces open: attemptable on visit 1. The other half of B6."
+  },
+  "map035/ev017/p1": {
+    "disposition": "deferred:rock_smash",
+    "affirmed_hash": "6c2d90d22489cb2a",
+    "note": "Cleared state of rock 17; only reachable once Rock Smash exists."
+  },
+  "map035/ev018/p0": {
+    "disposition": "unreachable:boxed_in_by_outer_rocks",
+    "affirmed_hash": "a6b3c424daf6d99e",
+    "source": "output/uranium-build/maps/Map035.json ev018/p0; output/uranium-build/wiki/Route_2.wiki",
+    "note": "Rock at (21,28), centre. Sealed by its neighbours on visit 1."
+  },
+  "map035/ev018/p1": {
+    "disposition": "unreachable:boxed_in_by_outer_rocks",
+    "affirmed_hash": "6c2d90d22489cb2a",
+    "note": "Cleared state of an unreachable rock."
+  },
+  "map035/ev019/p0": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "3f6b007a8e3824c6",
+    "source": "output/uranium-build/maps/Map035.json ev019/p0; output/uranium-build/wiki/Route_2.wiki",
+    "note": "Ranger cutscene at (25,26) that bulk-clears rocks 14-18 via pbSetSelfSwitch. Page condition is engine-ungated, but the trigger tile is unreachable from the south while the rocks are solid - the gate is geometric. Adjudicates PLAYTEST_AUTHORING_IMPROVEMENT.md 7.2."
+  },
+  "map035/ev019/p1": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "6c2d90d22489cb2a",
+    "note": "Spent cutscene page."
+  },
+  "map035/ev020/p0": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "b839a92a9862d52e",
+    "note": "Ranger. Present at map load (unconditional page 0) but geometrically unreachable on visit 1."
+  },
+  "map035/ev020/p1": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "6c2d90d22489cb2a",
+    "note": "Spent page."
+  },
+  "map035/ev021/p0": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "3d66615cac286230",
+    "note": "Barewl, cutscene cast; present but unreachable."
+  },
+  "map035/ev021/p1": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "6c2d90d22489cb2a",
+    "note": "Spent page."
+  },
+  "map035/ev022/p0": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "eb9e2504323668de",
+    "note": "Mankey, cutscene cast; present but unreachable."
+  },
+  "map035/ev022/p1": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "6c2d90d22489cb2a",
+    "note": "Spent page."
+  },
+  "map035/ev023/p0": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "7d07e6a19a2ae734",
+    "source": "output/uranium-build/maps/Map035.json ev023/p0; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
+    "note": "Bird Keeper Brent at (26,9), north of the gate."
+  },
+  "map035/ev023/p1": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "d3f390414b122502",
+    "source": "output/uranium-build/maps/Map035.json ev023/p1; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
+    "note": "Brent phone-rematch page."
+  },
+  "map035/ev023/p2": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "b53c8c53e3d12b35",
+    "source": "output/uranium-build/maps/Map035.json ev023/p2; reference/scripts_dump/170__PSystem_Utilities.rb:2506 pbCallBub",
+    "note": "Brent defeated re-talk page."
+  },
+  "map035/ev024/p0": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "6180e6ba8464da79",
+    "source": "output/uranium-build/maps/Map035.json ev024/p0; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
+    "note": "Hiker Chuck at (29,23), north of the gate."
+  },
+  "map035/ev024/p1": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "a994955ac0934178",
+    "note": "Chuck defeated re-talk page."
+  },
+  "map035/ev025/p0": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "2129f89e44535124",
+    "source": "output/uranium-build/maps/Map035.json ev025/p0; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
+    "note": "Super Potion item ball at (30,10), north of the gate."
+  },
+  "map035/ev025/p1": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "6c2d90d22489cb2a",
+    "note": "Spent item-ball page."
+  },
+  "map035/ev026/p0": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "18bc167c4b7aa5d5",
+    "source": "output/uranium-build/maps/Map035.json ev026/p0; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
+    "note": "TM78 Captivate item ball at (29,29). East of the rock cluster but separated from the south pocket by a mountain wall segment; BFS confirms the doc's 'beyond the gate' call."
+  },
+  "map035/ev026/p1": {
+    "disposition": "unreachable:north_of_rockslide_gate",
+    "affirmed_hash": "6c2d90d22489cb2a",
+    "note": "Spent item-ball page."
+  },
+  "map035/seam/N/map040": {
+    "disposition": "unreachable:rockslide_blocks_north_seam",
+    "affirmed_hash": "d93b684022ff4828",
+    "note": "Overland seam 35 N<->S 40 to Nowtoch City. Walkable in principle, but row y=0 is not in the south-reachable set while the rocks are solid. Becomes usable in CH07."
+  },
+  "map035/seam/S/map031": {
+    "disposition": "beat:B1",
+    "affirmed_hash": "125372b734127799",
+    "note": "Arrival seam from Kevlar Town; connections.json [31,'N',11,35,'S',0]."
+  }
+}

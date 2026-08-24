@@ -1096,7 +1096,7 @@ Run before CH04 authoring starts, as Q9(a) prescribes. Second calibration case a
 42x57 tiles, **21 events, 40 event pages** (map 32: 72x64, 52 events, 90 pages). Event ids 4-7 and 10 do not
 exist — gaps in RMXP numbering, not omissions.
 
-### 7.2 The rockslide contradiction — unadjudicated, and a live Q5 instance
+### 7.2 The rockslide contradiction — ADJUDICATED 2026-08-22, and a live Q5 instance
 
 **Event 19 is labelled `Trainer(4)` but contains no `pbTrainerBattle` call.** It is a cutscene that runs
 `for i in 14..18: pbSetSelfSwitch(i, "A", true)` — force-setting the smashed-state self-switch on all five
@@ -1109,6 +1109,36 @@ is *"rockslide-blocked until Rock Smash, so the first pass is forced through Pas
 Both cannot be true, and the answer decides whether CH04 has **any** Rock Smash deferrals. **Not adopted —
 this is one agent's read of a Ruby loop and the trigger conditions need checking.** Flagged for adjudication
 before CH04 authoring.
+
+**ADJUDICATED 2026-08-22 — both claims are true; the gate is geometric, not conditional.**
+
+The read above is literally correct: event 19's page 0 carries no condition at all
+(`switch1_valid`, `switch2_valid`, `variable_valid`, `self_switch_valid` are all false), and it does
+bulk-clear the rockslide. What the read missed is that **an ungated page still cannot run if the player
+cannot reach its trigger tile.** Event 19 is `event_touch` at (25,26), north of the rock line at
+x19-22, y28-29.
+
+A passability grid was built from `tilesets.json["22"].passages` joined with Map035's tile layers and
+BFS'd from the south-accessible region with the five Rock events solid (`through=false`). Event 19's
+own tile is impassable and none of its neighbours are in the reachable set. Neither are events 20-26,
+nor row y=0 — the `35 N<->S 40` seam. The player's only egress on visit 1 is the Passage Cave warp at
+(20,33), exactly as the wiki describes.
+
+So the wiki note in `chapters.json` is correct as an outcome, CH04's rockslide gate is real, CH07's
+revisit stands, and the Rock Smash deferrals are real. **No condition flag was ever needed because the
+terrain does the gating.**
+
+One correction to CH04's own beat table falls out of the same grid: the five rocks are **not**
+uniformly attemptable. Rocks 14 (20,28) and 17 (19,29) have an open south face and can be pressed on
+visit 1 — `Kernel.pbRockSmash`'s false branch is empty, so nothing observable happens, which is what
+the B6 beat asserts. Rocks 15, 16 and 18 are boxed in by their neighbours and cannot be attempted at
+all, so they are `unreachable:`, not deferrals. Recording all five as deferred would have put three
+unreachable rows into the Rock Smash backlog.
+
+**Note what this demonstrates, part two.** The Q5 citation trigger fired on the right row, and the
+citation was still not sufficient — the script *was* read correctly. What settled it was leaving the
+event data entirely and computing reachability from the tile passage bytes. A citation proves what a
+script says; it does not prove the script can run.
 
 **Note what this demonstrates.** The Q5 citation trigger (unrecognized script head; script-typed conditional)
 **fires on this row**, and it fired *before a single beat was authored*, on the first chapter run under the
@@ -1124,7 +1154,7 @@ design — was live and waiting in CH04's own notes.
 | Scripted wild battles | 0 | — |
 | Item balls (`pbItemBall`) | 3 | 9, 25, 26 |
 | Item grants (`pbReceiveItem`) | 0 | — |
-| Rock Smash rocks | 5 | 14-18 (but see §7.2) |
+| Rock Smash rocks | 5 | 14-18 — 14/17 attemptable on visit 1, 15/16/18 unreachable (§7.2, adjudicated) |
 | Boulders / Cut / Surf / Flash | 0 | — |
 | Mart / heal / PC | 0 | — |
 | Choices (code 102) | 0 | — |

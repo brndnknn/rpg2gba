@@ -142,6 +142,116 @@ def test_unrecognized_command_code_lands_in_other_codes(tmp_path: Path) -> None:
     assert row.is_dispositionable is False
 
 
+def test_assignment_head_uses_rhs_not_lhs(tmp_path: Path) -> None:
+    """`trainer = createPhoneTrainer(...)` yields head `createPhoneTrainer`,
+    not the bogus `trainer` (the assigned local variable name)."""
+    events = [{
+        "id": 3, "name": "Hiker", "x": 0, "y": 0,
+        "pages": [_page([_cmd(
+            355, ['trainer = createPhoneTrainer(PBTrainers::HIKER,"Larrie",0)'])])],
+    }]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 35, events)
+
+    rows = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+
+    row = rows[0]
+    assert row.script_heads == ("createPhoneTrainer",)
+    assert row.unrecognized_heads == ()
+    assert row.is_dispositionable is True
+
+
+def test_plain_call_head_still_recognized(tmp_path: Path) -> None:
+    """A plain (non-assignment) call line is unaffected by the assignment fix."""
+    events = [{
+        "id": 1, "name": "Heal", "x": 0, "y": 0,
+        "pages": [_page([_cmd(355, ["pbHealAll(1,2)"])])],
+    }]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 16, events)
+
+    rows = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+
+    row = rows[0]
+    assert row.script_heads == ("pbHealAll",)
+    assert row.effects == ("heal",)
+
+
+@pytest.mark.parametrize(
+    "head, call, expected_effects",
+    [
+        ("pbSetSelfSwitch", "pbSetSelfSwitch(1,2,'A',true)", ("self_switch_write",)),
+        ("pbCallBub", "pbCallBub(1,'hi')", ("bubble_ui",)),
+        ("pbEraseThisEvent", "pbEraseThisEvent", ("erase_event",)),
+        ("setTempSwitchOn", "setTempSwitchOn(1)", ("temp_switch_write",)),
+        ("get_character", "get_character(-1)", ()),
+    ],
+)
+def test_newly_recognized_heads_produce_expected_effects(
+    tmp_path: Path, head: str, call: str, expected_effects: tuple[str, ...]
+) -> None:
+    events = [{
+        "id": 1, "name": "X", "x": 0, "y": 0,
+        "pages": [_page([_cmd(355, [call])])],
+    }]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 17, events)
+
+    rows = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+
+    row = rows[0]
+    assert row.script_heads == (head,)
+    assert row.unrecognized_heads == (), f"{head} should be recognized via MECHANIC_BY_HEAD"
+    assert row.effects == expected_effects
+
+
+@pytest.mark.parametrize("code", [106, 108, 413])
+def test_newly_ignored_codes_do_not_land_in_other_codes(tmp_path: Path, code: int) -> None:
+    events = [{
+        "id": 1, "name": "X", "x": 0, "y": 0,
+        "pages": [_page([_cmd(code, [])])],
+    }]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 18, events)
+
+    rows = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+
+    row = rows[0]
+    assert row.other_codes == ()
+    assert row.effects == ()
+
+
+@pytest.mark.parametrize(
+    "code, expected_tag",
+    [(204, "graphic"), (208, "graphic"), (207, "animation"), (223, "screen_fx")],
+)
+def test_newly_mapped_codes_produce_expected_tag(
+    tmp_path: Path, code: int, expected_tag: str
+) -> None:
+    events = [{
+        "id": 1, "name": "X", "x": 0, "y": 0,
+        "pages": [_page([_cmd(code, [])])],
+    }]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 19, events)
+
+    rows = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+
+    row = rows[0]
+    assert row.other_codes == ()
+    assert row.effects == (expected_tag,)
+
+
+@pytest.mark.parametrize("code", [112, 113, 115])
+def test_control_flow_codes_block_cosmetic(tmp_path: Path, code: int) -> None:
+    events = [{
+        "id": 1, "name": "X", "x": 0, "y": 0,
+        "pages": [_page([_cmd(101, ["hi"]), _cmd(code, [])])],
+    }]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 20, events)
+
+    rows = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+
+    row = rows[0]
+    assert "control_flow" in row.effects
+    assert row.may_be_cosmetic is False
+
+
 def test_state_writing_tag_blocks_cosmetic(tmp_path: Path) -> None:
     """A `pbReceiveItem` giveitem row cannot be dispositioned cosmetic."""
     events = [{
@@ -415,13 +525,16 @@ def test_map32_recognized_and_unrecognized_heads_match_document() -> None:
         all_unrecognized.update(row.unrecognized_heads)
         all_recognized.update(h for h in row.script_heads if h not in row.unrecognized_heads)
 
+    # `isRockSmashSoftlocked` remains unrecognized: it is not one of the six
+    # gaps the CH04 resolution closed (2026-08-22).
     expected_unrecognized = {
-        "pbCallBub", "get_character", "setTempSwitchOn",
-        "pbEraseThisEvent", "isRockSmashSoftlocked", "pbSetSelfSwitch",
+        "isRockSmashSoftlocked",
     }
     expected_recognized = {
         "pbRockSmashRandomEncounter", "pbReceiveItem", "pbRockSmash",
         "pbCaveEntrance", "pbPhoneRegisterNPC",
+        "pbCallBub", "get_character", "setTempSwitchOn",
+        "pbEraseThisEvent", "pbSetSelfSwitch",
     }
     assert expected_unrecognized <= all_unrecognized
     assert expected_recognized <= all_recognized

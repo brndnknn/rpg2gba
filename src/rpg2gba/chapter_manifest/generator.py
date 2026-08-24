@@ -86,13 +86,25 @@ _CODE_EFFECT: dict[int, str] = {
     117: "common_event",
     322: "graphic",
     323: "graphic",
+    204: "graphic",  # Change Map Settings — panorama/fog, cosmetic-safe like 322/323
+    208: "graphic",  # Change Transparent Flag
+    207: "animation",  # Show Animation
+    223: "screen_fx",  # Change Screen Color Tone
+    # Loop (112) / Break Loop (113) / Exit Event Processing (115): not
+    # cosmetic-safe. 115 in particular terminates the remainder of a page's
+    # command list, so a page carrying it cannot honestly be called decoration
+    # — see schema.py's comment on COSMETIC_SAFE_TAGS.
+    112: "control_flow",
+    113: "control_flow",
+    115: "control_flow",
 }
 
 # Codes that participate in extraction but never produce an effect tag or an
-# `other_codes` entry by themselves: the list terminator, the branch-opening
-# triplet (111/411/412 — handled specially for script-typed conditions), and
-# 509 (ignored duplicate of 209, per the brief).
-_CODE_IGNORED: frozenset[int] = frozenset({0, 509})
+# `other_codes` entry by themselves: the list terminator, 509 (ignored
+# duplicate of 209, per the brief), 106 (Wait), 108 (Comment), and 413 (Repeat
+# Above / loop terminator — same treatment as 412, the branch terminator: both
+# are structural closers with no independent meaning of their own).
+_CODE_IGNORED: frozenset[int] = frozenset({0, 509, 106, 108, 413})
 _CODE_BRANCH: frozenset[int] = frozenset({111, 411, 412})
 
 # Script-call head -> effect tag, for the Ruby half of extraction. Distinct
@@ -113,6 +125,11 @@ _HEAD_EFFECT: dict[str, str] = {
     "pbPokeCenterPC": "pc",
     "pbTrainerPC": "pc",
     "pbSetSelfSwitch": "self_switch_write",
+    "pbCallBub": "bubble_ui",
+    "pbEraseThisEvent": "erase_event",
+    "setTempSwitchOn": "temp_switch_write",
+    # `get_character` is a read-only character resolver (-1=player, 0=self,
+    # else event id) — deliberately absent here: it carries no effect tag.
 }
 
 # Script-call head -> required capability, for `ManifestRow.requires`.

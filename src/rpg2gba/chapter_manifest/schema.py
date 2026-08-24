@@ -53,11 +53,26 @@ EFFECT_TAGS: frozenset[str] = frozenset({
     "bgm",
     "se",
     "graphic",
+    "bubble_ui",
+    "animation",
+    "screen_fx",
+    "erase_event",
+    "temp_switch_write",
+    "control_flow",
 })
 
 # A row may be `cosmetic` only if its entire effect set is non-state-writing.
 # `self_switch_write` is deliberately state-writing: a dialogue NPC that sets a
 # self-switch is changing its own future behaviour, which is state, not decor.
+#
+# `erase_event` and `temp_switch_write` are state-writing for the same reason:
+# `pbEraseThisEvent` calls `$PokemonMap.addErasedEvent` specifically so the
+# erase survives a save/load, and `setTempSwitchOn` re-evaluates page
+# conditions within the same visit even though it does not survive a map
+# reload. `control_flow` is state-writing because `Exit Event Processing`
+# (code 115) terminates the remainder of a page's command list — a page
+# carrying it cannot honestly be called decoration, regardless of what
+# commands precede it.
 COSMETIC_SAFE_TAGS: frozenset[str] = frozenset({
     "text",
     "choice",
@@ -65,6 +80,9 @@ COSMETIC_SAFE_TAGS: frozenset[str] = frozenset({
     "bgm",
     "se",
     "graphic",
+    "bubble_ui",
+    "animation",
+    "screen_fx",
 })
 
 STATE_WRITING_TAGS: frozenset[str] = EFFECT_TAGS - COSMETIC_SAFE_TAGS
