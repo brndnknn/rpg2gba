@@ -503,8 +503,13 @@ construction and fail loud if the fork lacks one. Suite 2358 passed / 19
 skipped. Derived directions reproduce the archive's hand-verified ts22
 inventory exactly (0x07/0x0B/0x0D/0x0E -> S/W/E/N), and map 35's 16 tag-1
 cells all derive `MB_JUMP_SOUTH` with zero ambiguity. **Caveat:** no ROM has
-been built with this yet — emission is verified only at the next chapter
-build. `reference/archive/PATHFINDER_FINDINGS.md:106` mislabels tiles 840-842
+been built with this yet, **and CH04 will not clear it** (user, 2026-08-25):
+map 35's 16 tag-1 cells all sit on the far side of the rockslide, which is
+geometrically impassable until Rock Smash arrives, so CH04 *builds* the derived
+ledges but cannot reach them — the boot-walk gate will pass without any ledge
+ever being jumped. First real hardware proof therefore waits on the chapter that
+opens the rockslide; do not read CH04's green gate as validating this item, and
+do not register a CH04 beat for it. `reference/archive/PATHFINDER_FINDINGS.md:106` mislabels tiles 840-842
 (0x0E) as a south ledge; it is north. Left unedited as archived history.
 
 Ledge directionality is fully recoverable from data already deserialized —
@@ -878,3 +883,63 @@ cosmetic. The sweep is mechanical — cross-reference trigger against
 disposition, flag action-trigger rows dispositioned `cosmetic` — and the
 checker cannot catch it, since `cosmetic` on a state-free row is legal by
 construction.
+
+**The sweep was run 2026-08-25; results and remediation are §44.** It could not
+be mechanical after all — CH01–CH03 have no manifest to cross-reference.
+
+### 44. CH01/CH03 flavor interiors shipped untested — DEFERRED to the end of Act 1
+
+*Filed 2026-08-25 from the §43(b) re-sweep of CH01–CH03 under the new
+observability rule. **Deferred by the operator until the first chapter group
+(Act 1, CH01–CH06) is complete** — do not action before CH06's §9 gate passes.*
+
+**Deferral rationale.** Neither chapter is the frontier, both already hold a
+passed §9 gate, and Act 2 opens with revisit chapters that re-enter this exact
+content — CH08 is Moki Town (revisit), the first test of the revisit model, and
+is the natural place CH01's interiors get walked again. Doing the remediation
+then folds it into work already scheduled instead of reopening two closed gates
+mid-Act-1.
+
+**The sweep could not be mechanical.** §43(b) assumed a trigger-vs-disposition
+cross-reference. There is nothing to cross-reference: `reference/manifests/`
+holds only `CH04.*` — CH01–CH03 predate the manifest system and have **no
+manifest and no dispositions file**. The assessment was made against the prose
+specs and the playtest scenarios instead. Corollary worth carrying: the checker
+is structurally blind to every pre-CH04 chapter, so any future corpus-wide
+disposition rule change has the same hole.
+
+**Findings — 12 rows would flip to `beat:`, 3 need a human ruling, 0 are
+incidentally covered by the existing scenarios.**
+
+- **CH02 is clean.** Its beat table already treats flavor NPCs as first-class
+  beats regardless of state writes (B3 Chyinmunk sprite, B4 hint NPC, B34
+  brother NPC, B35 sign) — exactly the rows the old rule would have discarded.
+  Nothing to do. Not a coincidence worth ignoring: the author's instinct was
+  the new rule two chapters early.
+- **CH01 — 8 flips.** `01-moki.md` labels Map064, Map065 and Map089 "Flavor
+  interior, no chain beats", and `moki.py` never enters any of them. Map064:
+  ev001/p0 and ev002/p0 (talk-trigger dialogue NPCs), plus the Chyinmunk
+  (`pbCallBub` emote + cry SE + line — literally the Barewl pattern §43(b)
+  flipped). Map065: ev001/p0, ev002/p0. Map089: EV003, EV004, EV005, EV006,
+  EV007 (all talk-trigger flavor lines). The `p1` twins of the Map064/065 NPCs
+  stay cosmetic — switch-125-gated postgame, unreachable in-chapter.
+- **CH03 — 4 flips.** `kevlar.py`'s B16 does door-in/door-out warp checks on
+  Maury's apartment and the couple's house and never talks to anyone inside.
+  Map073: EV005/p0 (Maury, "have you gotten my wallet back?"), EV010 and EV011
+  (the couple), and **EV008, a boutique-interior NPC absent from the beat table
+  entirely**.
+- **Needs a human ruling before beats are written, because it sets the count:**
+  Map089 EV002 (touch-trigger, `code 209/509` picture display, no text — cannot
+  tell from codes whether the player observes anything) and Maury's EV005 pages
+  1 and 2 (self-switch-gated variants whose in-chapter reachability is unclear).
+
+**Remediation when it comes due:** ~5 new beats in `moki.py` (three interiors,
+collapsing the postgame-gated twins) and ~3–5 in `kevlar.py` (Map073's
+interiors), same shape as CH04's B12–B14 — enter, talk, assert the box opens and
+closes. Update `01-moki.md` / `03-kevlar-town.md` beat tables to match; the
+"flavor interior, no chain beats" labels are what caused this and should go.
+
+**Caveat on provenance:** the row list is a sub-agent's judgment read of the
+deserialized event data, not a row-by-row human verification. Re-confirm each
+row against `output/uranium-build/maps/Map0{64,65,73,89}.json` when the work is
+picked up.
