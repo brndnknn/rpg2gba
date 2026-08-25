@@ -1190,16 +1190,22 @@ def classify_trainer_battle(
 # -- Classifier 10: PokePod Phone-Rematch Trainer -----------------------------
 #
 # Verified against Map033 EV039 (FISHERMAN "Brandon") and EV053 (YOUNGSTER
-# "Richey") in output/uranium-build/maps/Map033.json (2026-08-10). A 3-page
+# "Richey") in output/uranium-build/maps/Map033.json (2026-08-10), and against
+# Map035 event 3 (HIKER "Larrie") and event 23 (BIRDKEEPER "Brent") in
+# output/uranium-build/maps/Map035.json (2026-08-25, chapter CH04). A 3-page
 # sight trainer offering phone registration on defeat, then a phone rematch:
 #
 #   Page 0 (default page, no self-switch condition, trigger 2/touch): the
 #     first battle. pbTrainerIntro -> pbNoticePlayer -> optional pbCallBub ->
 #     intro Show-Text -> a code-111 script conditional on
 #     ``pbTrainerBattle(PBTrainers::X,"Name",_I("defeat"),false,0,false,0)``
-#     whose then-branch is ``pbPhoneRegisterBattle(...)`` (split 355+655
-#     because the ``_I("...")`` literal itself spans the boundary) followed by
-#     self-switch A ON; then, after the branch, ``pbTrainerEnd``.
+#     whose then-branch is ``pbPhoneRegisterBattle(...)`` followed by
+#     self-switch A ON; then, after the branch, ``pbTrainerEnd``. The
+#     ``pbPhoneRegisterBattle(...)`` call is a single code-355 command on
+#     Map035 (the ``_I("...")`` literal fits on one RGSS line) but split
+#     355+655 on Map033 (the literal spans the line boundary there). Both are
+#     the same call, authored differently — matched on joined content via
+#     ``_join_script_run``, not on how many commands it took to write it.
 #   Page 1 (self-switch B set): the phone rematch. A code-111 conditional on
 #     ``pbPhoneBattleCount(PBTrainers::X,"Name")>=1`` gates pbTrainerIntro,
 #     optional pbCallBub, a rematch intro Show-Text, then three separate
@@ -1211,7 +1217,19 @@ def classify_trainer_battle(
 #     self-switch A-on/B-off flip + pbTrainerEnd, and unconditionally (after
 #     the nested branch closes) a code-115 Exit Event Processing.
 #   Page 2 (self-switch A set, no B): idle post-battle dialogue that re-offers
-#     phone registration. NOT converted here — see below.
+#     phone registration — a code-111 conditional on the same
+#     ``pbPhoneBattleCount(...)>=1`` check gating optional pbCallBub, a
+#     Show-Text run (the idle line), the same ``pbPhoneRegisterBattle(...)``
+#     call (single 355 or split 355+655, same as page 0), then a code-115
+#     Exit Event Processing and BRANCH_END with no explicit else; the same
+#     three commands (pbCallBub, Show-Text, pbPhoneRegisterBattle) repeat
+#     unconditionally right after, at the outer indent, as the shape's
+#     fallback for the (in practice unreachable, since self-switch A implies
+#     ``pbPhoneBattleCount>=1``) case where the count check is false. Both
+#     copies of the idle Show-Text must match verbatim, and both
+#     ``pbPhoneRegisterBattle`` calls must resolve to the same trainer, or
+#     this bails (fail-loud list below). See below for what happens to this
+#     text.
 #
 # NOTE on a text/letter mismatch: an earlier description of this idiom given
 # to this classifier's author claimed the rematch page's condition was
@@ -1242,14 +1260,25 @@ def classify_trainer_battle(
 # ``engine/`` before use (CLAUDE.md §4.7).
 #
 # Page 3 (the original event's third RGSS page, self-switch A idle/re-offer)
-# is deliberately NOT emitted. This event ends up defining only 2 of its 3
-# canonical page labels — exactly the ``collapsed_pages`` shape
-# ``transpile_driver._record_collapsed_pages`` already expects (the existing
-# 2-page ``classify_trainer_battle`` above does the same thing, folding page 2
-# into page 1's block and leaving no page-2 label at all). Native Match Call
-# registration and the rematch table (owned by a separate rematch-table-
-# generator workstream) supersede this event's self-switch state machine
-# entirely, so nothing needs to reach page 3's idle re-offer text.
+# still defines no page-3 label of its own — this event still ends up
+# defining only 2 of its 3 canonical page labels, the ``collapsed_pages``
+# shape ``transpile_driver._record_collapsed_pages`` expects (mirroring the
+# 2-page ``classify_trainer_battle`` above, which folds its own page 2 into
+# page 1's block the same way). Native Match Call registration and the
+# rematch table (owned by a separate rematch-table-generator workstream)
+# still supersede this event's self-switch state machine as *bookkeeping*.
+# But CH04's operator-approved beat list requires B11 — talking to a
+# defeated phone-rematch trainer (Larrie) must still show the idle line
+# ("Watch your step! In caves, Pokemon can jump out from anywhere") — so
+# page 3's text can no longer be silently dropped. It is carried natively
+# instead of being re-emitted as its own page: extracted from page 3's
+# Show-Text run (both copies, asserted identical — see above) and folded
+# into Page2's ``IsTrainerReadyForRematch``-false arm as a plain ``msgbox``,
+# mirroring vanilla's own post-battle-idle shape
+# (``engine/data/maps/Route102/scripts.inc:20-41``,
+# ``Route102_EventScript_Calvin``'s ``Route102_Text_CalvinPostBattle``
+# msgbox once a trainer is beaten but not yet rematch-ready). No page-3 label
+# is emitted; the text just moves into Page2's existing branch.
 #
 # FAILS LOUD (returns None, no widening) on: not exactly 3 pages; page 0's
 # condition checking a self-switch, or its trigger not 2; page 1's condition
@@ -1258,9 +1287,11 @@ def classify_trainer_battle(
 # ``false``/``0`` (that's ``_emit_canlose_trainer_battle_idiom``'s turf, not
 # this one's); a trainer class/name/party-id combination this classifier
 # can't resolve in ``ctx.trainers``; untranslatable dialogue (an Essentials
-# control code with no prescribed mapping); or ANY command, ordering, or
-# content mismatch against the exact shape above — including a mismatched
-# trainer class/name between the ``pbTrainerIntro``, ``pbTrainerBattle``,
+# control code with no prescribed mapping); page 3's shape not matching the
+# duplicated if/(no-else)-then-unconditional idle block described above, or
+# its two Show-Text copies disagreeing; or ANY command, ordering, or content
+# mismatch against the exact shape above — including a mismatched trainer
+# class/name between the ``pbTrainerIntro``, ``pbTrainerBattle``,
 # ``pbPhoneRegisterBattle``, ``pbPhoneBattleCount``, and
 # ``createPhoneTrainer`` calls.
 
@@ -1286,6 +1317,142 @@ _PHONE_WIN_CHECK = "$game_variables[1]==0"
 _PHONE_INCREMENT_RE = re.compile(
     r'^pbPhoneIncrement\((?:::)?PBTrainers::(\w+),"([^"]*)",\d+\)$'
 )
+
+
+def _join_script_run(cmds: list[dict], idx: int) -> tuple[str, int] | None:
+    """Join a code-355 SCRIPT command with any immediately-following code-655
+    SCRIPT_CONT commands into one logical script line.
+
+    Uranium's ``_I("...")`` string literals can legally split at any RGSS
+    line boundary within a single Script editor box — some events keep a
+    call on one line (355 only), others wrap it across one or more
+    continuations (355 then 655, 655, ...). Both are the exact same call,
+    just authored differently; classifiers should match on the joined
+    *content*, never on how many commands it took to write it. Returns
+    ``(joined_text, next_idx)``, or ``None`` if ``cmds[idx]`` isn't a SCRIPT
+    command at all.
+    """
+    c = cmds[idx] if 0 <= idx < len(cmds) else None
+    if c is None or c.get("code") != SCRIPT:
+        return None
+    p = c.get("parameters", [""])
+    text = p[0] if p else ""
+    idx += 1
+    while True:
+        c = cmds[idx] if 0 <= idx < len(cmds) else None
+        if c is not None and c.get("code") == SCRIPT_CONT:
+            p = c.get("parameters", [""])
+            text += p[0] if p else ""
+            idx += 1
+        else:
+            break
+    return text, idx
+
+
+def _parse_phone_idle_page(
+    cmds2: list[dict], class_sym: str, name: str
+) -> str | None:
+    """Walk RGSS page 3 (self-switch A idle/re-offer, python var ``page2``)
+    and return its idle Show-Text, or ``None`` on any deviation.
+
+    Expected shape (see module comment): a code-111 conditional on
+    ``pbPhoneBattleCount(...)>=1`` gating [optional pbCallBub, a Show-Text
+    run, ``pbPhoneRegisterBattle(...)``, EXIT_EVENT_PROCESSING], then
+    BRANCH_END with no else, then the same three commands again
+    unconditionally. Both Show-Text copies must agree and both
+    ``pbPhoneRegisterBattle`` calls must resolve to ``class_sym``/``name``.
+    """
+
+    def _at(i: int) -> dict | None:
+        return cmds2[i] if 0 <= i < len(cmds2) else None
+
+    def _walk_branch(idx: int) -> tuple[str, int] | None:
+        """Parse [optional pbCallBub, Show-Text run, pbPhoneRegisterBattle]
+        starting at ``idx``; returns (idle_raw, next_idx) or None."""
+        c = _at(idx)
+        if c is not None and c.get("code") == SCRIPT:
+            p = c.get("parameters", [""])
+            if _PHONE_CALLBUB_RE.match(p[0] if p else ""):
+                idx += 1
+
+        c = _at(idx)
+        if c is None or c.get("code") != SHOW_TEXT:
+            return None
+        p = c.get("parameters", [""])
+        parts = [p[0] if p else ""]
+        idx += 1
+        while True:
+            c = _at(idx)
+            if c is not None and c.get("code") == SHOW_TEXT_CONT:
+                p = c.get("parameters", [""])
+                parts.append(p[0] if p else "")
+                idx += 1
+            else:
+                break
+        idle_raw = join_text_lines(parts).strip()
+
+        joined = _join_script_run(cmds2, idx)
+        if joined is None:
+            return None
+        reg_text, idx = joined
+        m_reg = _PHONE_REGISTER_BATTLE_RE.match(reg_text)
+        if not m_reg or m_reg.group(1) != class_sym or m_reg.group(2) != name:
+            return None
+
+        return idle_raw, idx
+
+    idx = 0
+    c = _at(idx)
+    if c is None or c.get("code") != CONDITIONAL_BRANCH:
+        return None
+    b_params = c.get("parameters", [])
+    if len(b_params) < 2 or b_params[0] != 12 or not isinstance(b_params[1], str):
+        return None
+    m_count = _PHONE_BATTLE_COUNT_RE.match(b_params[1])
+    if not m_count or m_count.group(1) != class_sym or m_count.group(2) != name:
+        return None
+    idx += 1
+
+    result = _walk_branch(idx)
+    if result is None:
+        return None
+    idle_a, idx = result
+
+    c = _at(idx)
+    if c is None or c.get("code") != EXIT_EVENT_PROCESSING:
+        return None
+    idx += 1
+
+    while True:
+        c = _at(idx)
+        if c is not None and c.get("code") == 0:
+            idx += 1
+        else:
+            break
+
+    c = _at(idx)
+    if c is None or c.get("code") != BRANCH_END:
+        return None
+    idx += 1
+
+    result = _walk_branch(idx)
+    if result is None:
+        return None
+    idle_b, idx = result
+
+    while True:
+        c = _at(idx)
+        if c is not None and c.get("code") == 0:
+            idx += 1
+        else:
+            break
+    if idx != len(cmds2):
+        return None  # trailing junk on page 3 — deviation, fail loud
+
+    if idle_a != idle_b:
+        return None  # the two idle copies disagree — deviation, fail loud
+
+    return idle_a
 
 
 def classify_phone_rematch_trainer_battle(
@@ -1376,19 +1543,11 @@ def classify_phone_rematch_trainer_battle(
         return None
     idx += 1
 
-    c = _at(cmds0, idx)
-    if c is None or c.get("code") != SCRIPT:
+    joined = _join_script_run(cmds0, idx)
+    if joined is None:
         return None
-    p = c.get("parameters", [""])
-    reg_first = p[0] if p else ""
-    idx += 1
-    c = _at(cmds0, idx)
-    if c is None or c.get("code") != SCRIPT_CONT:
-        return None
-    p = c.get("parameters", [""])
-    reg_second = p[0] if p else ""
-    idx += 1
-    m_reg = _PHONE_REGISTER_BATTLE_RE.match(reg_first + reg_second)
+    reg_text, idx = joined
+    m_reg = _PHONE_REGISTER_BATTLE_RE.match(reg_text)
     if not m_reg:
         return None
     if m_reg.group(1) != class_sym:
@@ -1619,6 +1778,15 @@ def classify_phone_rematch_trainer_battle(
     if re_defeat is None:
         return None
 
+    # ---- walk page 2: the idle re-offer (B11) -----------------------------
+    cmds2 = [c for c in page2.get("list", []) if c.get("code") not in (COMMENT, COMMENT_CONT)]
+    idle_raw = _parse_phone_idle_page(cmds2, class_sym, name)
+    if idle_raw is None:
+        return None
+    idle = _translate_text(idle_raw)
+    if idle is None:
+        return None
+
     # ---- emit -------------------------------------------------------------
     # ``register_matchcall`` as a trailing top-level command after
     # ``trainerbattle_single`` is structurally unreachable on a genuine first
@@ -1635,6 +1803,11 @@ def classify_phone_rematch_trainer_battle(
     #      kept (verified present: engine/data/specials.inc:538 and the
     #      ``special``/``waitmovement`` macros in engine/asm/macros/event.inc)
     #      so the post-battle scene still looks right.
+    # Page2's ``IsTrainerReadyForRematch``-false arm now shows B11's idle line
+    # via a plain ``msgbox`` before releasing, instead of silently
+    # release/end-ing — this is not a deviation from vanilla, it mirrors
+    # ``Route102_EventScript_Calvin``'s own idle ``msgbox`` in exactly the
+    # same not-yet-rematch-ready branch (Route102/scripts.inc:27).
     register_label = _page_label(map_id, event, 1) + "_RegisterMatchCall"
     battle_block = _block(
         _page_label(map_id, event, 1),
@@ -1661,6 +1834,7 @@ def classify_phone_rematch_trainer_battle(
         [
             "specialvar(VAR_RESULT, IsTrainerReadyForRematch)",
             "if (var(VAR_RESULT) == FALSE) {",
+            f"    msgbox({format_pory_dialogue(idle)})",
             "    release",
             "    end",
             "}",
