@@ -80,7 +80,32 @@ map's only real gate — the rockslide — plus entry/exit, not from any write.
 | B4 | 35 | none | reach (18,47) | id 12 "Trainer(3)" (event-touch) fires `pbTrainerBattle(YOUNGSTER,"Timothy",…)` |
 | B5 | 35 | none | read id 13 "EV013" @(10,30) | Show Text: "In the event of a roadblock, Nowtoch City may be reached through Passage Cave." — in-fiction hint for B6, no state change |
 | B6 | 35 | the rockslide | try to continue north through (19–22, 28–29) | **Blocked** — 5 "Rock" events (ids 14–18, graphic `fk107-rocksmash`) are each impassable until individually cleared via `Kernel.pbRockSmash`, unavailable this chapter (Rock Smash is a CH06 grant). No route north exists on visit 1 |
-| B7 | 35 → 36 | none | walk onto the cave-entrance tile (20,33) | id 1 "EV001" pg0: `pbCaveEntrance`, then `code 201` warp to Map036 (17,39) — hands off to CH05 |
+| B7 | 35 | none | walk up to the tile adjacent to the cave entrance (20,33) | the approach tile is reachable, and (20,33) itself reads **BLOCKED** — the crossing into Passage Cave is deferred to CH05. See the frontier note below |
+
+**B7 is a frontier beat, not a warp beat (operator decision, 2026-08-25).**
+Map 036 is CH05's and is not in `SLICE_MAP_IDS` this chapter, and the pipeline
+drops any `code 201` whose destination is out of slice —
+`metadata_wiring.classify_event` returns `("skip", "out-of-slice warp")`, so id 1
+"EV001" emits no `warp_event` and no object, and `assembly.prune_orphan_blocks`
+removes its `.pory` body. The cave-mouth tile therefore compiles as blocked
+terrain. This is documented frontier behaviour, not a defect
+(`reference/guides/slice_expansion_runbook.md` §5), and it is the same shape CH02
+used for its own unstaged exit: `playtest/chapters/route1.py` B17 walks to the
+approach tiles, asserts the boundary reads BLOCKED, and defers the crossing to
+the chapter that stages the destination. The three alternatives — pulling map 36
+into CH04, or stubbing it — were both rejected as absorbing CH05's scope. Retire
+this assertion when CH05 stages map 36; `WARP_OVERRIDES[35]` gets its (20,33)
+entry then, not now (listing it earlier stamps a door with no warp behind it).
+
+**B8 falls with B7.** `classify_event`'s skip is decided per *event*, not per
+page (`_event_transfers` scans every page, and one out-of-slice `code 201`
+skips the whole event), so id 1 "EV001" page 1 — the once-per-visit
+`s:tsOff?("A")` autorun that B8 asserts — is not emitted either. B8 is
+therefore unwalkable on this chapter for the same reason B7 is, and both
+return when CH05 stages map 36. Their manifest rows (`map035/ev001/p0`,
+`map035/ev001/p1`) keep their `beat:` dispositions — the disposition records
+what the source page *is*, not whether this chapter's slice happens to emit
+it — but neither is a CH04 boot-gate assertion.
 
 ### 3.1 Manifest reconciliation (2026-08-22)
 
