@@ -53,13 +53,22 @@ Two independent capacity limits (both fail loud, never truncate)
    sizes `gSaveBlock1Ptr->trainerRematches[]`; vanilla uses
    `REMATCH_TABLE_ENTRIES == 78`, leaving 22. Growing past it moves the
    saveblock layout and invalidates saves — forbidden.
-2. **Registered-flag space.** The `TRAINER_REGISTERED_FLAGS_START` (0x15C)
-   block is 78 flags long, ending at 0x1A9. Only `FLAG_UNUSED_0x1AA` and
-   `FLAG_UNUSED_0x1AB` follow before `FLAG_DEFEATED_DEOXYS` (0x1AC), so the
-   real headroom is **2 entries**, not 22. Entry 3 would make
-   `TRAINER_REGISTERED_FLAGS_START + 80` alias `FLAG_DEFEATED_DEOXYS`.
-   `registered_flag_headroom` derives this from the fork rather than pinning
-   it; CH02's two phone trainers fit exactly, the corpus will not.
+2. **Registered-flag space.** *Relocated 2026-08-25 (user-authorized).*
+   `TRAINER_REGISTERED_FLAGS_START` used to be the literal 0x15C, running 78
+   flags to 0x1A9 with only `FLAG_UNUSED_0x1AA`/`0x1AB` free before
+   `FLAG_DEFEATED_DEOXYS` (0x1AC) — a real headroom of **2 entries**, not 22.
+   CH02's two phone trainers consumed exactly those two, and CH04's Larrie and
+   Brent would have aliased `FLAG_DEFEATED_DEOXYS`. No run of
+   `MAX_REMATCH_ENTRIES` (100) contiguous free flags existed anywhere below
+   `FLAGS_COUNT`, so the block moved to its own converter-owned region,
+   `RPG2GBA_TRAINER_REGISTERED_FLAGS_*` (128 flags, `config/rpg2gba.h`), and
+   `TRAINER_REGISTERED_FLAGS_START` is now an alias for its base. Vanilla's
+   `FLAG_REGISTERED_* = START + REMATCH_*` derivation is untouched, so
+   `battle_setup.c` needed no change; `MAX_REMATCH_ENTRIES` was deliberately
+   NOT grown (that moves the saveblock and invalidates every save and seed
+   blob). Headroom is now **50** (128 - 78), so the saveblock's 22 is the
+   binding limit again. `registered_flag_headroom` still derives all of this
+   from the fork rather than pinning it, and still handles the legacy layout.
 
 Enum insertion point (important — NOT at the end)
 --------------------------------------------------
@@ -92,8 +101,10 @@ this unit deliberately does not make.
 """
 from __future__ import annotations
 
+import ast
 import json
 import logging
+import operator
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -137,9 +148,32 @@ _ENUM_BODY_RE = re.compile(r"enum\s*\{(.*?)\}\s*;", re.DOTALL)
 _ENUM_MEMBER_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*(?:=[^,]*)?,?\s*$")
 _FLAG_DEFINE_RE = re.compile(r"^#define\s+(FLAG_\w+)\s+(0[xX][0-9A-Fa-f]+|\d+)\s*(?://.*)?$")
 _MAX_REMATCH_RE = re.compile(r"^#define\s+MAX_REMATCH_ENTRIES\s+(\d+)", re.MULTILINE)
-_REGISTERED_START_RE = re.compile(
-    r"^#define\s+TRAINER_REGISTERED_FLAGS_START\s+(0[xX][0-9A-Fa-f]+|\d+)", re.MULTILINE
+
+#: Name of the dedicated flag region `TRAINER_REGISTERED_FLAGS_START` aliases
+#: after the 2026-08-25 relocation (`engine/include/constants/flags.h`).
+_DEDICATED_REGION_START = "RPG2GBA_TRAINER_REGISTERED_FLAGS_START"
+_DEDICATED_REGION_COUNT = "RPG2GBA_TRAINER_REGISTERED_FLAGS_COUNT"
+
+_EVENT_RANGE_GATE_RE = re.compile(
+    r"^#define\s+RPG2GBA_EXPAND_EVENT_RANGES\s+(\w+)", re.MULTILINE
 )
+#: The one `#if/#else/#endif` this module understands — see
+#: `_collect_macro_defines`. Not a general preprocessor.
+_EVENT_RANGE_BLOCK_RE = re.compile(
+    r"#if\s+RPG2GBA_EXPAND_EVENT_RANGES\s*==\s*TRUE\s*\n(.*?)\n#else\s*\n(.*?)\n#endif",
+    re.DOTALL,
+)
+#: Object-like `#define NAME <expr>` lines (function-like macros, i.e. a name
+#: immediately followed by `(`, are excluded).
+_DEFINE_LINE_RE = re.compile(r"^#define\s+([A-Za-z_]\w*)(?!\()\s+(.+)$")
+
+#: Binary operators the macro resolver understands. Anything else in a
+#: `#define` expression fails loud rather than silently mis-evaluating.
+_ALLOWED_BINOPS: dict[type, object] = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mod: operator.mod,
+}
 
 
 # ===========================================================================
@@ -213,22 +247,188 @@ def parse_max_rematch_entries(engine_dir: Path) -> int:
     return int(m.group(1))
 
 
+def _collect_defines(text: str) -> dict[str, str]:
+    """Object-like `#define NAME <expr>` pairs from one header's text, raw
+    right-hand sides (comment-stripped, unparsed). Function-like macros are
+    skipped; this module only resolves scalar constants.
+    """
+    defines: dict[str, str] = {}
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line.startswith("#define"):
+            continue
+        m = _DEFINE_LINE_RE.match(line)
+        if m is None:
+            continue
+        name, expr = m.group(1), re.sub(r"//.*$", "", m.group(2)).strip()
+        if not expr:
+            continue
+        defines[name] = expr
+    return defines
+
+
+def _event_range_gate(config_text: str, config_path: Path) -> bool:
+    m = _EVENT_RANGE_GATE_RE.search(config_text)
+    if m is None:
+        raise ValueError(
+            f"{config_path}: `#define RPG2GBA_EXPAND_EVENT_RANGES <TRUE|FALSE>` not found"
+        )
+    return m.group(1) == "TRUE"
+
+
+def _splice_event_range_block(flags_text: str, flags_path: Path, gate_true: bool) -> str:
+    """Resolve the one `#if RPG2GBA_EXPAND_EVENT_RANGES == TRUE / #else / #endif`
+    block in `constants/flags.h` down to whichever branch the gate selects, so
+    `_collect_defines` sees exactly one definition per macro name. This is
+    deliberately not a general preprocessor — it understands only this block.
+    """
+    m = _EVENT_RANGE_BLOCK_RE.search(flags_text)
+    if m is None:
+        raise ValueError(
+            f"{flags_path}: `#if RPG2GBA_EXPAND_EVENT_RANGES == TRUE ... #else ... "
+            "#endif` block not found — fork header has drifted"
+        )
+    chosen = m.group(1) if gate_true else m.group(2)
+    return flags_text[: m.start()] + chosen + flags_text[m.end() :]
+
+
+def _collect_macro_defines(engine_dir: Path) -> dict[str, str]:
+    """All resolvable `#define` constants from `constants/flags.h`,
+    `config/rpg2gba.h`, and the two headers `flags.h` depends on for its own
+    macro chain (`constants/opponents.h` for `MAX_TRAINERS_COUNT`,
+    `constants/trainers.h`), with the `RPG2GBA_EXPAND_EVENT_RANGES`
+    conditional block in `flags.h` collapsed to the branch the gate actually
+    selects.
+
+    Other `#if/#else` pairs in these headers (e.g. `IS_FRLG` in
+    `opponents.h`) are NOT specially handled — this module is not a general
+    preprocessor (see `_splice_event_range_block`). `_collect_defines` simply
+    takes every `#define` line in file order, so a later branch's definition
+    of the same name overwrites an earlier one; every one of these fork
+    headers writes its non-FRLG branch second, which happens to match this
+    build (`IS_FRLG 0`, `constants/global.h`). If the fork's header ordering
+    or gate convention ever changes, this needs a real per-block gate exactly
+    like `RPG2GBA_EXPAND_EVENT_RANGES` got.
+    """
+    flags_path = engine_dir / "include" / "constants" / "flags.h"
+    config_path = engine_dir / "include" / "config" / "rpg2gba.h"
+    opponents_path = engine_dir / "include" / "constants" / "opponents.h"
+    trainers_path = engine_dir / "include" / "constants" / "trainers.h"
+    flags_text = flags_path.read_text(encoding="utf-8")
+    config_text = config_path.read_text(encoding="utf-8")
+    opponents_text = opponents_path.read_text(encoding="utf-8")
+    trainers_text = trainers_path.read_text(encoding="utf-8")
+
+    gate_true = _event_range_gate(config_text, config_path)
+    effective_flags_text = _splice_event_range_block(flags_text, flags_path, gate_true)
+
+    defines = _collect_defines(config_text)
+    defines.update(_collect_defines(trainers_text))
+    defines.update(_collect_defines(opponents_text))
+    defines.update(_collect_defines(effective_flags_text))
+    return defines
+
+
+def _resolve_macro(name: str, defines: Mapping[str, str], cache: dict[str, int]) -> int:
+    """Resolve a `#define` to an integer by recursively evaluating its
+    right-hand side. Supports only: integer literals (decimal/hex),
+    identifiers (looked up in `defines`), parentheses, and `+ - %`. Uses
+    `ast.parse` plus an explicit node allow-list — never `eval()`.
+    """
+    return _resolve_macro_inner(name, defines, cache, frozenset())
+
+
+def _resolve_macro_inner(
+    name: str, defines: Mapping[str, str], cache: dict[str, int], stack: frozenset[str]
+) -> int:
+    if name in cache:
+        return cache[name]
+    if name in stack:
+        chain = " -> ".join((*stack, name))
+        raise ValueError(f"macro {name!r} is circularly defined ({chain})")
+    if name not in defines:
+        raise ValueError(f"macro {name!r} not found among collected #define statements")
+
+    expr = defines[name]
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError as exc:
+        raise ValueError(f"macro {name!r}: cannot parse expression {expr!r}: {exc}") from exc
+
+    next_stack = stack | {name}
+
+    def _eval(node: ast.AST) -> int:
+        if isinstance(node, ast.Expression):
+            return _eval(node.body)
+        if isinstance(node, ast.Constant) and isinstance(node.value, int):
+            return node.value
+        if isinstance(node, ast.Name):
+            return _resolve_macro_inner(node.id, defines, cache, next_stack)
+        if isinstance(node, ast.BinOp) and type(node.op) in _ALLOWED_BINOPS:
+            return _ALLOWED_BINOPS[type(node.op)](_eval(node.left), _eval(node.right))
+        raise ValueError(
+            f"macro {name!r}: unsupported expression {expr!r} "
+            f"(only int literals, identifiers, parens, + - % are allowed)"
+        )
+
+    value = _eval(tree)
+    cache[name] = value
+    return value
+
+
 def registered_flag_headroom(engine_dir: Path, vanilla_entries: int) -> tuple[int, int]:
     """`(TRAINER_REGISTERED_FLAGS_START, free flag numbers after the block)`.
 
-    The vanilla registered block occupies `START .. START + vanilla_entries - 1`.
-    Headroom is the distance from the first number past it to the first *used*
-    flag number at or above it. `FLAG_UNUSED_*` defines are excluded from
-    "used" — they exist precisely to name reservable gaps (0x1AA/0x1AB in the
-    pinned fork), which is where appended rematch entries land.
+    `TRAINER_REGISTERED_FLAGS_START` is resolved via `_resolve_macro`, which
+    transparently handles both the pre-2026-08-25 bare numeric literal
+    (`0x15C`) and the post-relocation alias to
+    `RPG2GBA_TRAINER_REGISTERED_FLAGS_START` — no special-casing on which
+    literal form the fork currently uses.
+
+    Two layouts are distinguished by where the resolved start actually lands:
+
+    * **Relocated (current fork).** `TRAINER_REGISTERED_FLAGS_START` resolves
+      to the same value as the dedicated `RPG2GBA_TRAINER_REGISTERED_FLAGS_START`
+      region (`config/rpg2gba.h` + `constants/flags.h`). Headroom is simply
+      `RPG2GBA_TRAINER_REGISTERED_FLAGS_COUNT - vanilla_entries`: by
+      construction nothing else lives in that region, so there is no "first
+      used flag above it" to scan for.
+    * **Legacy.** The vanilla registered block occupies
+      `START .. START + vanilla_entries - 1` inside the ordinary vanilla flag
+      space. Headroom is the distance from the first number past it to the
+      first *used* flag number at or above it. `FLAG_UNUSED_*` defines are
+      excluded from "used" — they exist precisely to name reservable gaps
+      (0x1AA/0x1AB in the pre-relocation fork), which is where appended
+      rematch entries land.
     """
     path = engine_dir / "include" / "constants" / "flags.h"
-    text = path.read_text(encoding="utf-8")
-    m = _REGISTERED_START_RE.search(text)
-    if m is None:
-        raise ValueError(f"{path}: `#define TRAINER_REGISTERED_FLAGS_START <N>` not found")
-    start = int(m.group(1), 0)
+    defines = _collect_macro_defines(engine_dir)
+    cache: dict[str, int] = {}
+    start = _resolve_macro("TRAINER_REGISTERED_FLAGS_START", defines, cache)
 
+    dedicated_start = None
+    if _DEDICATED_REGION_START in defines:
+        dedicated_start = _resolve_macro(_DEDICATED_REGION_START, defines, cache)
+
+    if dedicated_start is not None and dedicated_start == start:
+        if _DEDICATED_REGION_COUNT not in defines:
+            raise ValueError(
+                f"{path}: TRAINER_REGISTERED_FLAGS_START resolves into the dedicated "
+                f"{_DEDICATED_REGION_START} region, but {_DEDICATED_REGION_COUNT} is not "
+                "defined in config/rpg2gba.h — cannot size the region's headroom"
+            )
+        capacity = _resolve_macro(_DEDICATED_REGION_COUNT, defines, cache)
+        headroom = capacity - vanilla_entries
+        if headroom < 0:
+            raise ValueError(
+                f"{path}: dedicated region {_DEDICATED_REGION_START} has capacity "
+                f"{capacity} but the vanilla block already has {vanilla_entries} entries "
+                "— negative headroom"
+            )
+        return start, headroom
+
+    # Legacy layout: unchanged from before the relocation.
+    text = path.read_text(encoding="utf-8")
     first_free = start + vanilla_entries
     occupied: list[int] = []
     for line in text.splitlines():

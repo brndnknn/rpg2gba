@@ -388,7 +388,25 @@
 // Most are used implicitly by adding their REMATCH_* id to TRAINER_REGISTERED_FLAGS_START.
 // Some Match Call entries (like those for gym leaders, Wally, and all non-trainer NPCs like Prof. Birch)
 // have their own separate flag that needs to be set to be enabled; see src/pokenav_match_call_data.c
-#define TRAINER_REGISTERED_FLAGS_START       0x15C
+// URANIUM PATHFINDER SLICE: relocate the registered-flag block (2026-08-25, user-authorized).
+// Was a literal 0x15C, running 78 flags to 0x1A9 with only FLAG_UNUSED_0x1AA/0x1AB (2 flags)
+// free before FLAG_DEFEATED_DEOXYS at 0x1AC. CH02's two phone trainers used that headroom
+// exactly; CH04 needs two more, which would alias FLAG_DEFEATED_DEOXYS. No run of
+// MAX_REMATCH_ENTRIES(100) contiguous free flag numbers exists anywhere below FLAGS_COUNT in
+// the vanilla layout (verified: scripts/free_flags.py over every #define in this file plus
+// opponents.h/trainers.h/config/rpg2gba.h) — growing MAX_REMATCH_ENTRIES is separately
+// forbidden (rpg2gba/src/trainer_converter/rematch.py docstring), so the fix is a new
+// dedicated region (RPG2GBA_TRAINER_REGISTERED_FLAGS_*, defined below with the other
+// rpg2gba.h-configured regions), not a MAX_REMATCH_ENTRIES bump and not a squeeze into the
+// existing RPG2GBA self-switch reserve (that capacity belongs to the flag registry, not this
+// pass — see reference/guides/flag_registry_policy.md). This define becomes a pure alias to
+// the new base; every `FLAG_REGISTERED_*` below still derives as
+// `TRAINER_REGISTERED_FLAGS_START + REMATCH_*` exactly as before, so vanilla derivation and
+// `battle_setup.c` are untouched. Growing FLAGS_COUNT moves everything after
+// SaveBlock1.flags[] — EXISTING SAVES DO NOT SURVIVE THIS — the same cost already paid once
+// for the CH02 trainer-count bump above (constants/opponents.h), paid again here rather than
+// left unresolved for the corpus.
+#define TRAINER_REGISTERED_FLAGS_START       RPG2GBA_TRAINER_REGISTERED_FLAGS_START // was 0x15C
 #define FLAG_REGISTERED_ROSE                 (TRAINER_REGISTERED_FLAGS_START + REMATCH_ROSE)
 #define FLAG_REGISTERED_ANDRES               (TRAINER_REGISTERED_FLAGS_START + REMATCH_ANDRES)
 #define FLAG_REGISTERED_DUSTY                (TRAINER_REGISTERED_FLAGS_START + REMATCH_DUSTY)
@@ -1651,8 +1669,22 @@
 #define RPG2GBA_GLOBAL_FLAGS_END        (RPG2GBA_GLOBAL_FLAGS_START + RPG2GBA_GLOBAL_FLAGS_COUNT - 1)
 #define RPG2GBA_SELFSWITCH_FLAGS_START  (RPG2GBA_GLOBAL_FLAGS_END + 1)
 #define RPG2GBA_SELFSWITCH_FLAGS_END    (RPG2GBA_SELFSWITCH_FLAGS_START + RPG2GBA_SELFSWITCH_FLAGS_COUNT - 1)
-#define FLAGS_COUNT                     (RPG2GBA_SELFSWITCH_FLAGS_END + 1)
+// URANIUM PATHFINDER SLICE: registered-flag block relocation (2026-08-25, user-authorized).
+// Fourth converter-owned region, same shape as the three above. TRAINER_REGISTERED_FLAGS_START
+// (constants/flags.h, just below FLAG_MET_FRONTIER_SWIMMER_MOVE_TUTOR) now aliases this base
+// instead of the literal 0x15C — see the comment there for why (no 100-flag run existed below
+// FLAGS_COUNT in the vanilla layout; MAX_REMATCH_ENTRIES=100 is the ceiling this region must
+// clear, per rpg2gba/src/trainer_converter/rematch.py). 128 rather than exactly 100 to stay
+// byte-aligned (this file's own convention, see RPG2GBA_*_COUNT above) and leave slack so a
+// second relocation isn't needed for the rest of the corpus.
+#define RPG2GBA_TRAINER_REGISTERED_FLAGS_START (RPG2GBA_SELFSWITCH_FLAGS_END + 1)
+#define RPG2GBA_TRAINER_REGISTERED_FLAGS_END   (RPG2GBA_TRAINER_REGISTERED_FLAGS_START + RPG2GBA_TRAINER_REGISTERED_FLAGS_COUNT - 1)
+#define FLAGS_COUNT                     (RPG2GBA_TRAINER_REGISTERED_FLAGS_END + 1)
 #else
+// Legacy fallback so TRAINER_REGISTERED_FLAGS_START (above) still resolves if event-range
+// expansion is ever turned off; RPG2GBA_EXPAND_EVENT_RANGES is TRUE for every build this
+// pipeline produces today, so this branch is not exercised.
+#define RPG2GBA_TRAINER_REGISTERED_FLAGS_START 0x15C
 #define FLAGS_COUNT (DAILY_FLAGS_END + 1)
 #endif
 // END RPG2GBA EVENT RANGE EXPANSION

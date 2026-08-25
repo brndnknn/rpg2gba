@@ -148,12 +148,18 @@ def _entries(map033, trainers, map_consts, staged, facts) -> list[rm.RematchEntr
 def test_fork_facts_match_the_pinned_engine(facts: rm.ForkRematchFacts) -> None:
     assert facts.vanilla_entries == 78
     assert facts.max_rematch_entries == 100
-    assert facts.registered_flags_start == 0x15C
+    # Relocated 2026-08-25: TRAINER_REGISTERED_FLAGS_START is no longer the
+    # literal 0x15C but an alias for RPG2GBA_TRAINER_REGISTERED_FLAGS_START,
+    # the fourth converter-owned region. It resolves through the macro chain
+    # (config/rpg2gba.h counts + SYSTEM_FLAGS, which itself rides on this
+    # fork's bumped MAX_TRAINERS_COUNT) — pinned here against `cpp` output.
+    assert facts.registered_flags_start == 0x1300
     assert facts.saveblock_headroom == 22
-    # Only FLAG_UNUSED_0x1AA / 0x1AB sit between the vanilla registered block
-    # and FLAG_DEFEATED_DEOXYS (0x1AC): the real limit is 2, not 22.
-    assert facts.registered_flag_headroom == 2
-    assert facts.capacity == 2
+    # The block now owns a dedicated 128-flag region, so headroom is the
+    # region's own capacity minus the vanilla entries — nothing else lives
+    # there to collide with. The saveblock is the binding limit again.
+    assert facts.registered_flag_headroom == 0x80 - 78  # 50
+    assert facts.capacity == 22
     assert rm.INSERT_BEFORE_MEMBER in facts.members
     assert rm.SENTINEL_MEMBER not in facts.members
 
@@ -228,12 +234,15 @@ def test_golden_flag_names_and_values(map033, trainers, map_consts, staged, fact
     entries = _entries(map033, trainers, map_consts, staged, facts)
     wally_index = facts.members.index(rm.INSERT_BEFORE_MEMBER)
     assert [(e.registered_flag_name, e.registered_flag_value) for e in entries] == [
-        ("FLAG_REGISTERED_URANIUM_BRANDON_16", 0x15C + wally_index),
-        ("FLAG_REGISTERED_URANIUM_RICHEY_3", 0x15C + wally_index + 1),
+        ("FLAG_REGISTERED_URANIUM_BRANDON_16", 0x1300 + wally_index),
+        ("FLAG_REGISTERED_URANIUM_RICHEY_3", 0x1300 + wally_index + 1),
     ]
-    # The two entries land exactly on the fork's two free registered-flag
-    # numbers once the vanilla specials shift up by 2.
-    assert [0x15C + facts.vanilla_entries, 0x15C + facts.vanilla_entries + 1] == [0x1AA, 0x1AB]
+    # Post-relocation the entries no longer squeeze into two stray FLAG_UNUSED
+    # numbers before FLAG_DEFEATED_DEOXYS; they land inside the dedicated
+    # region, which must still contain them with room to spare.
+    region_end = 0x1300 + 0x80 - 1
+    assert all(e.registered_flag_value <= region_end for e in entries)
+    assert 0x1300 + facts.vanilla_entries + len(entries) - 1 <= region_end
 
 
 def test_manifest_records(map033, trainers, map_consts, staged, facts) -> None:
@@ -308,17 +317,38 @@ def test_over_capacity_raises_rather_than_truncating(trainers, map_consts, stage
     assert len(ok) == 22
 
 
-def test_real_fork_capacity_rejects_a_third_entry(map033, trainers, map_consts, staged, facts) -> None:
+def test_real_fork_capacity_rejects_one_past_the_ceiling(
+    map033, trainers, map_consts, staged, facts
+) -> None:
+    """One entry past `facts.capacity` fails loud rather than truncating.
+
+    The ceiling moved when the registered-flag block was relocated
+    (2026-08-25): flag space is no longer the binding limit (50 free), the
+    saveblock is (MAX_REMATCH_ENTRIES 100 - 78 vanilla = 22). This test is
+    written against `facts.capacity` rather than a pinned number so it keeps
+    testing *the ceiling* rather than a particular value of it.
+    """
     events = rm.detect_phone_rematch_events(map033, 33)
     extra = dict(trainers)
-    extra["TRAINER_THIRD_99"] = {"id": 99, "trainer_class": "TRAINER_CLASS_LASS", "name": "Third"}
-    events.append(
-        rm.PhoneRematchEvent(33, 77, "EV077", "LASS", "Third")
-    )
-    with pytest.raises(ValueError, match=r"3 Uranium rematch entries requested but only 2"):
-        rm.build_rematch_entries(
-            events, extra, map_consts, set(staged) | {"TRAINER_THIRD_99"}, facts
-        )
+    staged_keys = set(staged)
+    # Pad up to capacity + 1 with distinct synthetic phone trainers.
+    for i in range(facts.capacity + 1 - len(events)):
+        key = f"TRAINER_FILLER{i}_{900 + i}"
+        extra[key] = {
+            "id": 900 + i,
+            "trainer_class": "TRAINER_CLASS_LASS",
+            "name": f"Filler{i}",
+        }
+        staged_keys.add(key)
+        events.append(rm.PhoneRematchEvent(33, 70 + i, f"EV{70 + i:03d}", "LASS", f"Filler{i}"))
+
+    assert len(events) == facts.capacity + 1
+    with pytest.raises(
+        ValueError,
+        match=rf"{facts.capacity + 1} Uranium rematch entries requested "
+        rf"but only {facts.capacity}",
+    ):
+        rm.build_rematch_entries(events, extra, map_consts, staged_keys, facts)
 
 
 def test_unstaged_trainer_raises(map033, trainers, map_consts, facts) -> None:
