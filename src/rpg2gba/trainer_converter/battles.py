@@ -73,6 +73,7 @@ _CLASS_PIC_INTERNAL_NAME: dict[str, str] = {
     "TRAINER_CLASS_LASS": "LASS",
     "TRAINER_CLASS_RIVAL": "RIVAL",
     "TRAINER_CLASS_RICH_BOY": "RICHBOY",
+    "TRAINER_CLASS_HIKER": "HIKER",
 }
 
 #: Real `TRAINER_CLASS_*` constant -> real `TRAINER_ENCOUNTER_MUSIC_*`
@@ -90,6 +91,11 @@ _CLASS_ENCOUNTER_MUSIC: dict[str, str] = {
     # (engine/src/data/trainers.h, e.g. TRAINER_WINSTON_1) — not guessed from
     # the generic Male bucket.
     "TRAINER_CLASS_RICH_BOY": "TRAINER_ENCOUNTER_MUSIC_RICH",
+    # Vanilla's own Hikers use it (engine/src/data/trainers.h TRAINER_SAWYER_1),
+    # and the constant's own comment says so
+    # (include/constants/trainers.h:569, "Used for Hikers, Ruin Maniacs,
+    # Kindlers, and Fishermen") -- which is also why FISHERMAN above maps here.
+    "TRAINER_CLASS_HIKER": "TRAINER_ENCOUNTER_MUSIC_HIKER",
 }
 
 _TRAINER_ANCHOR_RE_TMPL = r"^#define\s+{anchor}\s+(\d+)\s*$"
