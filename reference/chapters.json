@@ -104,7 +104,7 @@
     {
       "id": "CH04", "act": "A1", "title": "Route 2", "wiki_page": "Route 2",
       "visit": 1, "outdoor": 35, "maps": [35],
-      "predecessor": "CH03", "tier": "medium", "status": "planned",
+      "predecessor": "CH03", "tier": "medium", "status": "in_progress",
       "notes": "Seams (connections.json): 31 N<->S 35, and 35 N<->S 40. The direct Route 02 -> Nowtoch overland seam exists in data but the wiki says it is rockslide-blocked until Rock Smash, so the first pass is forced through Passage Cave."
     },
     {

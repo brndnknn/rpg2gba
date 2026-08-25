@@ -14,10 +14,11 @@ object is a joined manifest + disposition file rather than a prose beat table.
 
 ## Approved scope
 
-**Not yet approved.** Under the Q6 decision the object the user approves is
-the joined manifest + dispositions, before build work — the same
-approval-order rule CH02 and CH03 followed, with a different artifact. See
-"Open — blocking approval" below.
+**APPROVED 2026-08-25** by the operator. Under the Q6 decision the approved
+object is the joined manifest + dispositions, approved before build work —
+the same approval-order rule CH02 and CH03 followed, with a different
+artifact. `chapters.json` CH04 status advanced `planned` -> `in_progress`;
+it advances to `built` at the §9 gate.
 
 - Manifest: `reference/manifests/CH04.manifest.json` — 42 rows (40 event
   pages + both overland seams), generated, never hand-edited.
@@ -55,16 +56,16 @@ approval-order rule CH02 and CH03 followed, with a different artifact. See
   computed over the raw page dict before tag derivation, so no existing
   affirmation is invalidated.
 
-## Open — blocking approval
+## Approval — closed
 
-- [ ] **Author all 42 dispositions.** Every row needs a verdict
+- [x] **Author all 42 dispositions.** Every row needs a verdict
       (`beat:` / `cosmetic` / `deferred:rock_smash` / `unreachable:`) plus an
       `affirmed_hash`. 18 rows trip the citation trigger and additionally need
       a `source:`.
 - [x] **Reconcile `04-route-2.md` §3** — B1–B7 bound to generated row ids;
       B8–B15 now stated in the same action/effect form rather than merely
       acknowledged in an explainer table.
-- [ ] **Re-affirm the operator walk-through of B8–B15** (added 2026-08-25 from
+- [x] **Re-affirm the operator walk-through of B8–B15** (added 2026-08-25 from
       the operator's read of the beat list). Four gaps, one rule change:
       - B15 wild encounters in the grass corridor — the beat list had no
         encounter check at all. **Structural:** the manifest enumerates event
@@ -85,7 +86,8 @@ approval-order rule CH02 and CH03 followed, with a different artifact. See
       Checker is clean after the change: `0 error(s), 4 warning(s), 42 rows`
       (the 4 are the pre-existing `capability_model_unenforced` warnings on
       the deferred rock rows).
-- [ ] **User approval** of the joined manifest + dispositions.
+- [x] **User approval** of the joined manifest + dispositions — given
+      2026-08-25. Build work is unblocked.
 
 ## Open — blocks the §9 gate, not authoring
 
@@ -127,6 +129,12 @@ approval-order rule CH02 and CH03 followed, with a different artifact. See
       confirmed; settle it when the map actually converts. (b) Nothing has
       been *emitted* yet — map 35 is not in `SLICE_MAP_IDS`, so the ROM-side
       check that these become real one-way drops is build work, post-approval.
+      **(c) CH04 cannot verify them at all** (user, 2026-08-25): all 16 cells
+      lie beyond the rockslide, which is impassable until Rock Smash, so the
+      chapter emits the derived ledges but no walk can reach one. Do not
+      register a beat for them and do not read CH04's gate as proof the
+      derivation is right on hardware — that waits on the rockslide-opening
+      chapter. Recorded corpus-wide at `PROJECT_TODO.md` §33.
       Note `reference/archive/PATHFINDER_FINDINGS.md:106` calls tiles 840-842
       (passage 0x0E) a *south* ledge; that prose is wrong (0x0E -> north) and
       was left unedited as archived history.
