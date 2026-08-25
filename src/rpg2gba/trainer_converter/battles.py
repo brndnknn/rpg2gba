@@ -74,6 +74,7 @@ _CLASS_PIC_INTERNAL_NAME: dict[str, str] = {
     "TRAINER_CLASS_RIVAL": "RIVAL",
     "TRAINER_CLASS_RICH_BOY": "RICHBOY",
     "TRAINER_CLASS_HIKER": "HIKER",
+    "TRAINER_CLASS_BIRD_KEEPER": "BIRDKEEPER",
 }
 
 #: Real `TRAINER_CLASS_*` constant -> real `TRAINER_ENCOUNTER_MUSIC_*`
@@ -96,6 +97,9 @@ _CLASS_ENCOUNTER_MUSIC: dict[str, str] = {
     # (include/constants/trainers.h:569, "Used for Hikers, Ruin Maniacs,
     # Kindlers, and Fishermen") -- which is also why FISHERMAN above maps here.
     "TRAINER_CLASS_HIKER": "TRAINER_ENCOUNTER_MUSIC_HIKER",
+    # Vanilla's own Bird Keepers use it (engine/src/data/trainers.h line
+    # 523) -- not the generic Male bucket.
+    "TRAINER_CLASS_BIRD_KEEPER": "TRAINER_ENCOUNTER_MUSIC_COOL",
 }
 
 _TRAINER_ANCHOR_RE_TMPL = r"^#define\s+{anchor}\s+(\d+)\s*$"
