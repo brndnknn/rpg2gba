@@ -488,10 +488,24 @@ ships with 2 spare metatiles. Do the copy-cost census before committing to it.
 **Due:** before Map117 / Map187 / Map163 / Map121 / Map028 enter a chapter (all
 Act 2+). Not urgent for the current frontier.
 
-### 33. Auto-derive ledge jump directions from RMXP passage bits
+### 33. Auto-derive ledge jump directions from RMXP passage bits — DONE 2026-08-24
 
-*Migrated from `CH02_TODO.md` #1 on the CH02 gate pass 2026-08-12; unchanged and
-still open. Full derivation table + ts22 inventory: `reference/archive/CH02_TODO.md` #1.*
+*Migrated from `CH02_TODO.md` #1 on the CH02 gate pass 2026-08-12. **Closed
+2026-08-24** during CH04's approval wait. Full derivation table + ts22
+inventory: `reference/archive/CH02_TODO.md` #1.*
+
+**Resolution.** `terrain_tags.column_behavior` derives the direction from the
+passage byte's low nibble; `ledge_directions` stays empty and is now purely an
+escape hatch. Sole clear bit -> `MB_JUMP_*` (0x08 south / 0x01 north / 0x02
+east / 0x04 west); 0x0F is a plain wall, silent; >=2 clear bits warns once and
+falls back to `MB_NORMAL`. The four `MB_JUMP_*` values resolve once at
+construction and fail loud if the fork lacks one. Suite 2358 passed / 19
+skipped. Derived directions reproduce the archive's hand-verified ts22
+inventory exactly (0x07/0x0B/0x0D/0x0E -> S/W/E/N), and map 35's 16 tag-1
+cells all derive `MB_JUMP_SOUTH` with zero ambiguity. **Caveat:** no ROM has
+been built with this yet — emission is verified only at the next chapter
+build. `reference/archive/PATHFINDER_FINDINGS.md:106` mislabels tiles 840-842
+(0x0E) as a south ledge; it is north. Left unedited as archived history.
 
 Ledge directionality is fully recoverable from data already deserialized —
 Essentials never stores a jump direction, so the tile's 4-dir passage bits are

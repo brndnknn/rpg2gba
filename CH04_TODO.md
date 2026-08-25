@@ -68,19 +68,47 @@ approval-order rule CH02 and CH03 followed, with a different artifact. See
 
 ## Open — blocks the §9 gate, not authoring
 
-- [ ] **Ledge directions are unmapped globally.** `ledge_directions` is empty
-      in `reference/terrain_tag_map.json`, so unmapped ledges fall back to
-      `MB_NORMAL` in `stairs.py`. Map 35 has **12 ledge cells** that will
-      convert to plain floor instead of one-way drops. Converter defect — fix
-      the converter, not the output.
-- [ ] **Runtime text-content primitive does not exist.** Map 35 events 3 and
-      23 are multi-page phone-rematch dialogue, exactly the multi-response case
-      Q4 says needs a runtime assertion.
-- [ ] **Map 35 was never staged through the transpiler** — `unhandled: null`
-      in the readiness tracker; it was not one of the 8 slice-1 maps
-      (`04-route-2.md` §6.3).
-- [ ] **Engine map directory / porymap constant unassigned** — `Route2` /
-      `MAP_ROUTE_2` proposed in `04-route-2.md` §2, not yet bound.
+- [ ] **Route 2's two battle trainers are unstaged, and they hard-block the
+      transpiler.** `transpile_driver run --maps 35 --dry-run` does not reach
+      the unhandled queue at all — the fork-index gate raises first, on two
+      undefined constants: `TRAINER_TIMOTHY_247` (Map035:100) and
+      `TRAINER_CHUCK_279` (Map035:482), both `trainerbattle_single`.
+      `reference/uranium_id_map.json` names both (:1976, :1723); the engine
+      defines neither. Not a transpiler bug despite the gate's wording — the
+      gate resolves `TRAINER_*` through the staging manifest
+      (`output/uranium-build/trainers/trainer_manifest.json`,
+      `transpile_driver.py:512`), which is generated from
+      `common.SLICE_TRAINER_BATTLES` (`trainer_converter/common.py:109`).
+      That tuple is **append-only and order-load-bearing** (fork ids are
+      assigned by position off `PRISTINE_TRAINER_ANCHOR`), currently 13
+      entries ending in CH03's `TRAINER_MAWULI_90`. CH04's build step must
+      append the two Route 2 trainers *in that order* and re-run trainer
+      staging. Deliberately NOT done yet: it is build work, and the Q6 rule
+      puts approval first. **Consequence: the map-35 unhandled queue cannot
+      be read until this is done**, so `unhandled: null` in the readiness
+      tracker stays null through approval.
+
+- [x] **Ledge directions are unmapped globally — CONVERTER FIXED, emission
+      unverified.** `terrain_tags.column_behavior` now derives the jump
+      direction from the RMXP passage byte's low nibble instead of falling
+      back to `MB_NORMAL`, closing `PROJECT_TODO.md` §33. Precedence:
+      `ledge_directions` override wins; else sole clear bit -> `MB_JUMP_*`
+      (0x08 south / 0x01 north / 0x02 east / 0x04 west, the opposite-side
+      `10 - d` rule); 0x0F is a plain wall and stays silent; >=2 clear bits
+      warns once and falls back. No hand table needed, and
+      `reference/terrain_tag_map.json` was left empty by design. Suite 2358
+      passed / 19 skipped. **Against real data, map 35's ledges all resolve:
+      16 tag-1 cells, tiles 557/565/572 (passage 0x07) -> `MB_JUMP_SOUTH`,
+      zero ambiguous** — matching the hand-verified ts22 inventory in
+      `reference/archive/CH02_TODO.md`. Two caveats: (a) this item previously
+      said **12** ledge cells and the direct count says **16** — the count
+      above ignores `effective_tag`'s opaque-cover stop, so neither figure is
+      confirmed; settle it when the map actually converts. (b) Nothing has
+      been *emitted* yet — map 35 is not in `SLICE_MAP_IDS`, so the ROM-side
+      check that these become real one-way drops is build work, post-approval.
+      Note `reference/archive/PATHFINDER_FINDINGS.md:106` calls tiles 840-842
+      (passage 0x0E) a *south* ledge; that prose is wrong (0x0E -> north) and
+      was left unedited as archived history.
 
 ## Carried, not blocking
 
