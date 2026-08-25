@@ -91,8 +91,20 @@ it advances to `built` at the §9 gate.
 
 ## Open — blocks the §9 gate, not authoring
 
-- [ ] **Route 2's two battle trainers are unstaged, and they hard-block the
-      transpiler.** `transpile_driver run --maps 35 --dry-run` does not reach
+- [x] **Route 2's two battle trainers are unstaged, and they hard-block the
+      transpiler.** DONE 2026-08-25 — and it was four trainers, not two.
+      Timothy and Chuck were appended as described below; Larrie (ev003) and
+      Brent (ev023) had to be appended too. Those two never tripped the gate
+      because the transpiler was *queueing* their battles rather than emitting
+      them: their `pbTrainerBattle` sits inside a code-111 conditional on the
+      phone-trainer path. Brent brought `TRAINER_CLASS_BIRD_KEEPER`, the
+      second new class this chapter (`TRAINER_ENCOUNTER_MUSIC_COOL`, what
+      vanilla's own Bird Keepers use); Chuck brought `TRAINER_CLASS_HIKER`.
+      17 battles now stage. Larrie's party needed no new species — MANKEY is
+      vanilla, BAREWL came with CH02. Original note follows.
+
+- [ ] ~~**Route 2's two battle trainers are unstaged, and they hard-block the
+      transpiler.**~~ (superseded, kept for the reasoning) `transpile_driver run --maps 35 --dry-run` does not reach
       the unhandled queue at all — the fork-index gate raises first, on two
       undefined constants: `TRAINER_TIMOTHY_247` (Map035:100) and
       `TRAINER_CHUCK_279` (Map035:482), both `trainerbattle_single`.
@@ -138,6 +150,63 @@ it advances to `built` at the §9 gate.
       Note `reference/archive/PATHFINDER_FINDINGS.md:106` calls tiles 840-842
       (passage 0x0E) a *south* ledge; that prose is wrong (0x0E -> north) and
       was left unedited as archived history.
+
+## Open — found during the build
+
+- [ ] **CH04 has no entrance until map connections exist.** Map 31 has ten
+      warp events and not one goes to map 35: the only link is the borderless
+      seam `[31,'N',11,35,'S',0]` in `connections.json`. Connections are
+      unimplemented — `tileset_converter/connections.py` is still the §5.4
+      assignment stub and `porymap/maps/Route02/map.json` emits
+      `"connections": null` — so Route 2 is unreachable in the ROM. There is
+      no warp to fake it with, unlike the CH02->CH03 boundary, which had real
+      transfer events on both sides. 14 seams exist corpus-wide; two involve
+      map 35, and the north one (`[35,'N',0,40,'S',15]`, to CH06's Nowtoch)
+      must stay omitted under the frontier rule. In progress.
+
+- [ ] **The rematch registered-flag block overflowed, as `rematch.py`
+      predicted.** Vanilla derives a rematch's registered flag as
+      `TRAINER_REGISTERED_FLAGS_START + rematchTableId`; the block ends at
+      0x1A9 with only 0x1AA/0x1AB free before `FLAG_DEFEATED_DEOXYS`. CH02's
+      two phone trainers took exactly those two, and CH04's Larrie and Brent
+      need two more, so `assemble_pathfinder`'s S8b5 pass fails loud rather
+      than truncating. Operator's call 2026-08-25: relocate the block to a
+      base with >=100 contiguous free flags, so vanilla's own
+      `FLAG_REGISTERED_*` defines keep deriving correctly and `battle_setup.c`
+      needs no change. `MAX_REMATCH_ENTRIES` is deliberately NOT grown — that
+      moves the saveblock and invalidates every save and seed blob. In
+      progress.
+
+- [ ] **The phone-rematch classifier bails on a one-command difference.**
+      `deterministic.classify_phone_rematch_trainer_battle` expects
+      `pbPhoneRegisterBattle(...)` split across code 355 + code 655, because
+      on map 33 the `_I("...")` literal spans the RGSS command boundary. Map
+      35's events 3 and 23 carry the same call as a single code-355 command,
+      and the classifier is atomic over all three pages, so one mismatch drops
+      the whole event to the queue — 14 of map 35's 20 queued rows. The fix is
+      to match on content rather than command-code count. In progress.
+
+- [ ] **B11 was going to be dropped by design.** The phone classifier
+      deliberately discards RGSS page 2 (the defeated re-talk) on the argument
+      that native match-call bookkeeping supersedes the self-switch state
+      machine. CH04's approved beat list has that page as B11, so the idle
+      line is being re-emitted the way vanilla does it — a post-battle
+      `msgbox` branch off `trainerbattle_single`'s continue-script label,
+      mirroring `Route102_EventScript_Calvin`.
+
+- [ ] **`kevlar.py` B25 asserts the Kevlar<->Route 2 seam is BLOCKED.** True
+      today, false the moment connections land. Flip it when the seam works;
+      it is CH03's file, so it is a deliberate cross-chapter edit, not drift.
+
+- [ ] **B10 has no harness path.** `route2.py` registers 13 of 15 beats. B8 is
+      unwalkable for the B7 reason above. B10 (Larrie's rematch offer) needs a
+      PokeNav/Match-Call driver and a self-switch setter, neither of which the
+      emulator harness has. Both are recorded in `DEFERRED_BEATS` rather than
+      quietly dropped.
+
+- [ ] **Several `route2.py` coordinates are inferred, not decoded** — the
+      Kevlar-side approach column for B1, and B15's two grass cells. Flagged
+      in that file's docstring; settle them on the first real suite run.
 
 ## Carried, not blocking
 
