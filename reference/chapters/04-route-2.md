@@ -98,16 +98,48 @@ object; this table is the prose rendering of it, not a second source of truth.
 | B5 | `map035/ev013/p0` |
 | B6 | `map035/ev014/p0`, `map035/ev017/p0` — **only these two**, see below |
 | B7 | `map035/ev001/p0` |
+| B8 | `map035/ev001/p1` |
+| B9 | `map035/ev002/p0` |
+| B10 | `map035/ev003/p1` |
+| B11 | `map035/ev003/p2` |
+| B12 | `map035/ev009/p1` |
+| B13 | `map035/ev011/p0` |
+| B14 | `map035/ev012/p1` |
+| B15 | *(none - encounter table, not an event page)* |
 
-**Four beats the prose table missed**, surfaced by enumerating every event
-page rather than the ones a reader thought to write down:
+**Eight further beats**, surfaced by enumerating every event page rather than
+the ones a reader thought to write down, plus one non-event beat the manifest
+cannot see. These are stated in the same action/effect form as B1-B7 so they
+are walkable at the boot gate rather than merely acknowledged:
 
-| Beat | Row | Why it is a beat |
-|---|---|---|
-| B8 | `map035/ev001/p1` | Autorun arrival staging, gated on the runtime predicate `s:tsOff?("A")`; `setTempSwitchOn` makes it once-per-visit. Re-evaluates page conditions, so it can gate later behaviour in the same visit. |
-| B9 | `map035/ev002/p0` | The "Old entrance to Nowtoch City." sign. §3 already identified its `FLAG_MENU_ON_EVENT` bracket as a menu lock rather than a story gate, but a switch write is a switch write — the row cannot be dispositioned cosmetic. |
-| B10 | `map035/ev003/p1` | Larrie's self-switch B page: the phone rematch offer. |
-| B11 | `map035/ev003/p2` | Larrie's self-switch A page: defeated re-talk. |
+| Beat | Map | Gate | Player action (test) | Expected effect (observable) |
+|---|---|---|---|---|
+| B8 | 35 | none | arrive on Map035 on a fresh visit, then take a second step | id 1 "EV001" pg1 autorun fires exactly once - gated on the runtime predicate `s:tsOff?("A")`, made once-per-visit by `setTempSwitchOn`. No player-visible message; it re-evaluates page conditions, so it can gate later behaviour in the same visit. Assert it does not re-fire |
+| B9 | 35 | none | face (19,34) from the cave-entrance approach and press A | id 2 "EV002" shows the `\sign[sign1]` sign frame: "Old entrance to Nowtoch City." No player-visible state change - the `FLAG_MENU_ON_EVENT` (switch 185) bracket is a menu lock, not a story gate, but a switch write is a switch write, so the row cannot be dispositioned cosmetic |
+| B10 | 35 | after B2, self-switch B set (and A clear) | talk to Larrie @(18,36) | id 3 pg1: "So you have returned for a rematch?..." - the phone rematch offer. Page precedence caveat: pg2 (self-switch A) outranks pg1, so this page is only reachable through the phone-rematch path that clears A |
+| B11 | 35 | after B2, self-switch A set | talk to Larrie @(18,36) | id 3 pg2: "Watch your step! In caves, Pokemon can jump out from anywhere" - defeated re-talk |
+| B12 | 35 | after B3, self-switch A set | walk back onto (16,42) and press A | id 9 pg1: the ball is gone and nothing happens - no second Potion. This is the one-shot assertion for B3 |
+| B13 | 35 | none | talk to the Barewl @(17,36), directly west of Larrie | id 11: `pbCallBub(2)` emote bubble, then cry SE `015Cry`, then text "Bare! Bar!". Writes no state, but has three independently breakable observables |
+| B14 | 35 | after B4, self-switch A set | talk to Timothy @(18,47) | id 12 pg1: "Someone tougher than me? Impossible!" - defeated re-talk, the counterpart to B11 |
+| B15 | 35 | none | walk in tall grass anywhere in the corridor south of the rockslide | a wild battle starts. Species drawn from `land_mons` (Chyinmunk, Birbie, Cubbug, Barewl, Mankey, Owten), levels 3-5, encounter rate 25 (§4.3). **No manifest row** - see below |
+
+**B15 has no manifest row, by construction.** The manifest enumerates event
+pages and overland seams; an encounter table is neither, so no generated row
+can ever represent it. Any beat class that is not an event page is invisible
+to the approval object - the reason B15 was absent from this document until
+2026-08-25. Encounter tables, connection-only seams and tileset behaviour all
+have to be added to the beat list by hand.
+
+**B12-B14 were reclassified from `cosmetic` on 2026-08-25.** The rule that had
+been applied was *does this page write state?*; ev011/p0, ev012/p1 and
+ev009/p1 write none and so fell out of the beat list. That rule is wrong: it
+made Larrie's defeated re-talk a beat (B11, because it rides on
+`pbPhoneRegisterBattle` state) while Timothy's identical-in-kind re-talk was
+cosmetic. The rule is now *is there anything a player can press A on and
+observe?* - `cosmetic` means decoration with no trigger, not "writes no
+state". Only id 8 "Sign" @(19,33) survives as reachable-and-cosmetic on this
+map: despite the name it has an empty command list and no graphic, and is not
+the sign by the cave entrance (that is id 2, B9).
 
 **B6 is two rows, not five.** The five Rock events split on reachability, and
 the split changes their verdicts:
@@ -160,7 +192,7 @@ All 3 `Kernel.pbItemBall` calls on the map are listed (matches census
 
 | Map | Table | Contents | In-chapter reachable? |
 |---|---|---|---|
-| 35 | `land_mons` (rate 25) | 12-entry table: Chyinmunk, Birbie, Cubbug, Barewl, Mankey, Owten, all lv3–5 | Yes — the whole grass corridor south of the gate |
+| 35 | `land_mons` (rate 25) | 12-entry table: Chyinmunk, Birbie, Cubbug, Barewl, Mankey, Owten, all lv3–5 | Yes — B15, the whole grass corridor south of the gate |
 
 `wild_encounters.json`'s `maps["35"]` has only the `land_mons` key — no
 `water_mons`/`fishing_mons` table exists for this map. `[auto]` The rock

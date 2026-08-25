@@ -36,7 +36,7 @@
   "map035/ev008/p0": {
     "disposition": "cosmetic",
     "affirmed_hash": "a2fab855b4a49405",
-    "note": "Sign, no commands with effects."
+    "note": "Sign @(19,33) - empty command list, no graphic, nothing to observe on press. Despite the name this is NOT the sign by the cave entrance; that is ev002 (B9) @(19,34). The only reachable cosmetic row left on this map after the 2026-08-25 re-sweep."
   },
   "map035/ev009/p0": {
     "disposition": "beat:B3",
@@ -45,14 +45,14 @@
     "note": "Potion item ball at (16,42), one-shot via self-switch A."
   },
   "map035/ev009/p1": {
-    "disposition": "cosmetic",
+    "disposition": "beat:B12",
     "affirmed_hash": "6c2d90d22489cb2a",
-    "note": "Spent item-ball page, no effects."
+    "note": "Potion ball's post-collection page (self-switch A). Writes no state, but the observable is that the ball is gone and grants no second Potion - the one-shot assertion for B3. Reclassified from cosmetic 2026-08-25: cosmetic means no trigger to press, not merely no state write."
   },
   "map035/ev011/p0": {
-    "disposition": "cosmetic",
+    "disposition": "beat:B13",
     "affirmed_hash": "b3fa3c7dbc0bd7e3",
-    "note": "Barewl flavour NPC; bubble_ui/se/text only, all cosmetic-safe."
+    "note": "Barewl flavour NPC @(17,36), west of Larrie. Action-trigger: pbCallBub(2) emote, cry SE 015Cry, text 'Bare! Bar!'. Writes no state but has three independently breakable observables. Reclassified from cosmetic 2026-08-25."
   },
   "map035/ev012/p0": {
     "disposition": "beat:B4",
@@ -61,9 +61,9 @@
     "note": "Youngster Timothy, event-touch trainer battle."
   },
   "map035/ev012/p1": {
-    "disposition": "cosmetic",
+    "disposition": "beat:B14",
     "affirmed_hash": "8f8b22ab37d3dfa7",
-    "note": "Defeated re-talk, bubble_ui/text only."
+    "note": "Timothy's defeated re-talk (self-switch A): 'Someone tougher than me? Impossible!'. Identical in kind to Larrie's B11, which was already a beat only because it rides on pbPhoneRegisterBattle state. Reclassified from cosmetic 2026-08-25."
   },
   "map035/ev013/p0": {
     "disposition": "beat:B5",

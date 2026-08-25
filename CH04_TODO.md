@@ -61,9 +61,30 @@ approval-order rule CH02 and CH03 followed, with a different artifact. See
       (`beat:` / `cosmetic` / `deferred:rock_smash` / `unreachable:`) plus an
       `affirmed_hash`. 18 rows trip the citation trigger and additionally need
       a `source:`.
-- [ ] **Reconcile `04-route-2.md` §3** — its hand-authored B1–B7 beat table
-      predates the manifest and must map onto generated row ids, the way CH03
-      reconciled its spec numbering against `kevlar.py`'s canonical numbers.
+- [x] **Reconcile `04-route-2.md` §3** — B1–B7 bound to generated row ids;
+      B8–B15 now stated in the same action/effect form rather than merely
+      acknowledged in an explainer table.
+- [ ] **Re-affirm the operator walk-through of B8–B15** (added 2026-08-25 from
+      the operator's read of the beat list). Four gaps, one rule change:
+      - B15 wild encounters in the grass corridor — the beat list had no
+        encounter check at all. **Structural:** the manifest enumerates event
+        pages and seams, so an encounter table can never be a row. Any
+        non-event beat class is invisible to the approval object and must be
+        added by hand.
+      - B9 the real sign @(19,34) (ev002) — was identified as a beat but had
+        no player action / expected effect, so it was not walkable. Note id 8
+        "Sign" @(19,33) is an empty page and is *not* the sign by the cave.
+      - B13 the Barewl @(17,36) beside Larrie, and B14 Timothy's defeated
+        re-talk — both were `cosmetic`, both have observable behaviour.
+      - **Disposition rule changed:** `cosmetic` now means *no trigger to
+        press*, not *writes no state*. The old rule made Larrie's re-talk a
+        beat (B11, via `pbPhoneRegisterBattle`) while Timothy's identical
+        re-talk was cosmetic. Re-swept all 42 rows; ev009/p1, ev011/p0 and
+        ev012/p1 were reclassified to `beat:`, and id 8 is the only reachable
+        cosmetic row left on map 35.
+      Checker is clean after the change: `0 error(s), 4 warning(s), 42 rows`
+      (the 4 are the pre-existing `capability_model_unenforced` warnings on
+      the deferred rock rows).
 - [ ] **User approval** of the joined manifest + dispositions.
 
 ## Open — blocks the §9 gate, not authoring

@@ -843,3 +843,38 @@ before a then-body is wired to it, not assumed.
 Worth remembering why this class was invisible for so long: **the queue entry
 names the conditional, not the grant hiding inside its test expression** — the
 same lesson as `CH03_TODO.md` #26(b).
+
+### 43. Beat classes the manifest cannot see, and the `cosmetic` rule
+
+*Filed 2026-08-25 out of the operator's read of CH04's beat list, which found
+four gaps in a chapter that had already been fully dispositioned.*
+
+Two findings, both corpus-wide, both structural rather than CH04-specific.
+
+**(a) The manifest enumerates event pages and overland seams — nothing else.**
+An encounter table is neither, so no generated row can ever represent one.
+CH04 had no beat covering "walk in the tall grass, get a wild battle" because
+nothing in the approval object could prompt for it. The same hole applies to
+any beat class that is not an event page: encounter tables, tileset behaviour
+(counters, ledges, water), connection-only seams, field-move surfaces. Either
+the generator grows non-page row kinds, or every chapter doc needs a
+hand-authored "beats with no manifest row" section that a reviewer is
+required to fill. Decide which before the next chapter is authored — CH04 got
+its B15 by hand (`04-route-2.md` §3.1).
+
+**(b) `cosmetic` was being decided on state writes, not observability.**
+The rule actually applied was *does this page write state?* That made Larrie's
+defeated re-talk a beat (it rides on `pbPhoneRegisterBattle`) while Timothy's
+identical-in-kind re-talk was `cosmetic`, and it dropped a talk-triggered NPC
+with an emote bubble, a cry SE and a line of dialogue. None of those write
+state; all three break independently. The rule is now *is there anything a
+player can press A on and observe?* — `cosmetic` means decoration with no
+trigger.
+
+CH04 was re-swept under (b): `ev009/p1`, `ev011/p0`, `ev012/p1` became
+`beat:B12`/`B13`/`B14`. **CH01–CH03 have not been re-swept** and passed their
+§9 gates under the old rule, so each may be carrying interactive rows filed as
+cosmetic. The sweep is mechanical — cross-reference trigger against
+disposition, flag action-trigger rows dispositioned `cosmetic` — and the
+checker cannot catch it, since `cosmetic` on a state-free row is legal by
+construction.
