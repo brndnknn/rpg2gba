@@ -41,6 +41,7 @@ from rpg2gba.conversion_agent import fork_index
 from rpg2gba.conversion_agent.flag_registry import FlagRegistry
 from rpg2gba.pipeline import _load_dotenv
 from rpg2gba.tileset_converter import assembly as asm
+from rpg2gba.tileset_converter import connections as conn
 from rpg2gba.tileset_converter import map_constants as mc
 from rpg2gba.tileset_converter import metadata_wiring as mw
 from rpg2gba.tileset_converter import sprite_pass
@@ -342,6 +343,16 @@ def _regenerate_map_json(
     # clone, see CLAUDE.md §3 "The vendored engine"). Same index every other
     # forward-check call site in this codebase builds on.
     fork_constants = fork_index.load_or_build().constants
+    # Overland seams (§5.4). The frontier rule lives inside
+    # build_slice_connections: a seam emits only when BOTH endpoints are in the
+    # build set, so a seam pointing at an unstaged map (Route 2's north edge to
+    # CH06's Nowtoch) stays closed until that chapter stages its map. Computed
+    # over DEFAULT_SLICE, matching the id list handed to build_slice_maps below.
+    slice_connections = conn.build_slice_connections(
+        out / "connections.json",
+        DEFAULT_SLICE,
+        lambda uid: reg.get(uid).map_const,
+    )
     mw.build_slice_maps(
         list(DEFAULT_SLICE),
         maps_dir=out / "maps",
@@ -362,6 +373,7 @@ def _regenerate_map_json(
         trainer_battle_event_ids=trainer_battle_event_ids,
         template_fields=template_fields,
         fork_constants=fork_constants,
+        connections=slice_connections,
     )
     flag_reg.save(flag_state_path)
     # Always write (empty → stub) so the engine #include resolves even with no

@@ -3412,6 +3412,7 @@ def build_slice_maps(
     template_fields: dict[int, dict[int, dict]] | None = None,
     fork_constants: set[str] | None = None,
     warp_facing_overrides: dict[tuple[int, int, int], str] | None = None,
+    connections: dict[int, list[dict]] | None = None,
 ) -> dict[int, set[tuple[int, int]]]:
     """Assemble map.json + dispatcher .pory for every slice map. Returns the per-map
     warp-source coords (S3 walkable-overrides) so S8 can force those cells walkable.
@@ -3421,6 +3422,13 @@ def build_slice_maps(
     forwarded to every `build_object_events` call so custom-route movers across
     the whole slice dedup into one shared id space (caller-owned, exactly like
     `flag_registry` — this function never constructs one internally).
+
+    `connections` (Uranium map id -> that map's `map.json` `connections` array,
+    from `connections.build_slice_connections`) is likewise caller-owned: the
+    frontier rule needs the caller's build set, and `connections.json` is the
+    caller's input path. A map absent from the dict gets `None` — the
+    `MapFile.connections` default, which serializes as `"connections": null`
+    exactly as an unconnected map should.
 
     `flag_registry` (a `FlagRegistry`, distinct from `registry`'s `MapConstantRegistry`
     above), when given, is forwarded to `build_object_events` so multi-page events
@@ -3568,6 +3576,7 @@ def build_slice_maps(
             coord_events=result.coord_events,
             bg_events=result.bg_events,
             local_id_map=result.local_id_map,
+            connections=(connections or {}).get(uid),
         )
         map_out = out_dir / consts.dir_name / "map.json"
         map_out.parent.mkdir(parents=True, exist_ok=True)
