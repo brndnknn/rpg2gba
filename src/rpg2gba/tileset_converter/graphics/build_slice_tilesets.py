@@ -88,6 +88,19 @@ _STAIR_KIND_TO_MB_NAME: dict[str, str] = {
     "stairs_right": BEHAVIOR_BY_SIDE[StairSide.RIGHT],
 }
 
+# Arrow-warp behavior-override KIND string (seam_warps.json fix —
+# tile_map.BEHAVIOR_KINDS' arrow_warp_* kinds, tileset_converter.seam_warps.
+# behavior_kind) -> the engine MB_*_ARROW_WARP constant name. Same generic
+# "stair_cells" mechanism as _STAIR_KIND_TO_MB_NAME above — a seam warp cell
+# is just another behavior-override kind, merged into the same `stair_cells`
+# dict by the caller (see scripts/assemble_pathfinder.py).
+_ARROW_KIND_TO_MB_NAME: dict[str, str] = {
+    "arrow_warp_up": "MB_NORTH_ARROW_WARP",
+    "arrow_warp_down": "MB_SOUTH_ARROW_WARP",
+    "arrow_warp_left": "MB_WEST_ARROW_WARP",
+    "arrow_warp_right": "MB_EAST_ARROW_WARP",
+}
+
 # Sentinel marking a column key that some NON-stair cell also uses, so its metatile
 # must keep its terrain behavior and the stair cells need a behavior-stamped copy.
 # Not a real kind — never written to the overlay.
@@ -341,16 +354,20 @@ def build_slice_tilesets(
     default — legacy per-RMXP-tileset behavior).
 
     `stair_cells` maps map_id -> {(x, y): kind} (`metadata_wiring.
-    collect_stair_behavior_cells`'s output; kind is "stairs_left"/"stairs_right").
-    Exactly the door pattern (see module docstring), but keyed by KIND as well as
-    column: for every distinct (column key, kind) pair used by a stair cell in this
-    tileset, a SEPARATE metatile is minted carrying that column's real art + the
-    native sideways-stairs behavior for that kind, so non-stair cells sharing the
-    same column key keep their own (unmodified) metatile. One transparent fallback
-    metatile is appended per KIND actually used, for stair coords whose column is
-    empty or out-of-atlas. `None`/no stair cells emits no "behavior_overrides"
-    overlay entry for the tileset (the default no-op path). The layout converter
-    looks up the right one per cell via `tile_map.behavior_for_column`.
+    collect_stair_behavior_cells`'s output for "stairs_left"/"stairs_right";
+    callers may merge in `tileset_converter.seam_warps.behavior_cells_for`'s
+    "arrow_warp_up"/"down"/"left"/"right" kinds too — any `tile_map.
+    BEHAVIOR_KINDS` string works, this parameter is kind-generic despite the
+    name). Exactly the door pattern (see module docstring), but keyed by KIND
+    as well as column: for every distinct (column key, kind) pair used by a
+    behavior cell in this tileset, a SEPARATE metatile is minted carrying that
+    column's real art + the native behavior for that kind (sideways stairs or
+    an arrow warp), so cells sharing the same column key but no behavior keep
+    their own (unmodified) metatile. One transparent fallback metatile is
+    appended per KIND actually used, for cells whose column is empty or
+    out-of-atlas. `None`/no cells emits no "behavior_overrides" overlay entry
+    for the tileset (the default no-op path). The layout converter looks up
+    the right one per cell via `tile_map.behavior_for_column`.
     Returns the per-tileset `EmittedTileset`. Writes nothing when `dry_run`."""
     fork = Path(fork)
     resolve = source_tileset_of or (lambda ts: ts)
@@ -378,7 +395,7 @@ def build_slice_tilesets(
     # metatile_behaviors.h ever drops one of these two MB_* names.
     stair_behavior_by_kind: dict[str, int] = {
         kind: _behavior_value(fork, mb_name)
-        for kind, mb_name in _STAIR_KIND_TO_MB_NAME.items()
+        for kind, mb_name in {**_STAIR_KIND_TO_MB_NAME, **_ARROW_KIND_TO_MB_NAME}.items()
     }
     stair_cells = stair_cells or {}
     results: dict[int, EmittedTileset] = {}

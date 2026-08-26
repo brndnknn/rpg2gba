@@ -63,7 +63,18 @@ _SCHEMA = ("tilesets", "tiles")
 # Allowed "behavior_overrides" kinds (§stairs fix). One place to extend later —
 # e.g. "waterfall", "ice" — when the engine's other player-touch behaviors get
 # native support here.
-BEHAVIOR_KINDS = frozenset({"stairs_left", "stairs_right"})
+#
+# arrow_warp_{up,down,left,right} (seam_warps.json fix): a synthetic two-cell
+# ARROW-WARP pair that REPLACES a pokeemerald map CONNECTION when the two maps'
+# tileset union can't fit the 1024 8x8-tile cap (see reference/seam_warps.json
+# + tileset_converter/seam_warps.py). Direction names the MB_*_ARROW_WARP the
+# cell carries (up->MB_NORTH_ARROW_WARP, down->MB_SOUTH_ARROW_WARP,
+# left->MB_WEST_ARROW_WARP, right->MB_EAST_ARROW_WARP) — see
+# graphics/build_slice_tilesets.py's _ARROW_KIND_TO_MB_NAME.
+BEHAVIOR_KINDS = frozenset({
+    "stairs_left", "stairs_right",
+    "arrow_warp_up", "arrow_warp_down", "arrow_warp_left", "arrow_warp_right",
+})
 
 _MAX_METATILE = METATILE_ID_MASK  # 0x3FF — anything larger truncates in to_block
 _VALID_COLLISION = {0, 1, 2, 3}

@@ -187,10 +187,20 @@ def build_connections(
     rows: list[ConnectionRow],
     map_ids: set[int],
     resolve_map_const: Callable[[int], str],
+    suppress_pairs: frozenset[frozenset[int]] = frozenset(),
 ) -> dict[str, list[Connection]]:
     """Build pokeemerald connections for every row whose BOTH endpoints are in
     *map_ids* (the frontier rule — a seam to an unstaged map is omitted and
     logged at INFO, never dangled).
+
+    `suppress_pairs` (`tileset_converter.seam_warps.suppressed_pairs()` —
+    reference/seam_warps.json's map-connection-tile-budget substitution) is a
+    set of unordered map-id pairs whose real connections.json row must be
+    OMITTED because a synthetic arrow-warp pair replaces it instead (the ROM
+    must not both scroll-stitch and warp at the same edge). Fails loud if a
+    declared pair has no matching row at all — that means seam_warps.json and
+    connections.json disagree about whether the seam even exists, which is a
+    contradictory declaration, not a no-op.
 
     Returns `{MAP_* const: [Connection, ...]}`. `resolve_map_const(uid)` must
     raise (KeyError/ValueError) for an unminted id — that failure propagates
@@ -201,8 +211,26 @@ def build_connections(
     the same input are byte-identical (idempotence, rule 5)."""
     _check_duplicates(rows)
 
+    if suppress_pairs:
+        row_pairs = {row.pair_key for row in rows}
+        undeclared = suppress_pairs - row_pairs
+        if undeclared:
+            raise ValueError(
+                "seam_warps.json declares an arrow-warp replacement for map "
+                f"pair(s) {[sorted(p) for p in undeclared]}, but connections.json "
+                "has no row for them — nothing to suppress (contradictory "
+                "declaration between the two source-of-truth files)"
+            )
+
     result: dict[str, list[Connection]] = {}
     for row in rows:
+        if row.pair_key in suppress_pairs:
+            logger.info(
+                "suppressing connection row %s: superseded by a seam_warps.json "
+                "arrow-warp pair",
+                (row.map_a, row.edge_a, row.offset_a, row.map_b, row.edge_b, row.offset_b),
+            )
+            continue
         missing = [m for m in (row.map_a, row.map_b) if m not in map_ids]
         if missing:
             logger.info(
@@ -272,17 +300,21 @@ def build_slice_connections(
     connections_path: Path,
     map_ids: list[int] | set[int],
     resolve_map_const: Callable[[int], str],
+    suppress_pairs: frozenset[frozenset[int]] = frozenset(),
 ) -> dict[int, list[dict]]:
     """Top-level entry point: load `connections.json`, apply the frontier rule
     against *map_ids*, verify bidirectional consistency, and return
     `{uranium_map_id: connections_json(...)}` — ONLY for maps that ended up
     with at least one emitted connection (a map with none is simply absent;
     callers should `.get(uid)` and treat a miss as "no connections", the
-    `MapFile.connections` default). Fails loud (via `build_connections`'
-    duplicate/malformed/unresolvable checks, or an internal consistency
-    AssertionError) rather than emit a partial or wrong result."""
+    `MapFile.connections` default). `suppress_pairs` is forwarded verbatim to
+    `build_connections` — see its docstring (seam_warps.json's connection
+    suppression). Fails loud (via `build_connections`'
+    duplicate/malformed/unresolvable/contradictory-suppression checks, or an
+    internal consistency AssertionError) rather than emit a partial or wrong
+    result."""
     rows = load_connections(connections_path)
-    by_const = build_connections(rows, set(map_ids), resolve_map_const)
+    by_const = build_connections(rows, set(map_ids), resolve_map_const, suppress_pairs)
 
     problems = check_bidirectional(by_const)
     if problems:

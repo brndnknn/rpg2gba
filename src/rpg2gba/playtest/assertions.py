@@ -162,6 +162,39 @@ def enter_door(emu: Emulator, beat: str, door: tuple[int, int],
     wait_for_map(emu, beat, dest_map)
 
 
+_ARROW_APPROACH_DELTA = {"UP": (0, 1), "DOWN": (0, -1),
+                         "LEFT": (1, 0), "RIGHT": (-1, 0)}
+
+
+def cross_arrow_warp(emu: Emulator, beat: str, tile: tuple[int, int],
+                     direction: str, dest_map: str, hold: int = 48) -> None:
+    """Cross a map-edge ARROW warp (`MB_*_ARROW_WARP`), holding the D-pad.
+
+    Arrow warps are not step-on warps and not door warps. `TryArrowWarp`
+    (`engine/src/field_control_avatar.c`) fires only when the player is
+    STANDING ON the arrow tile with `input->heldDirection` latched and
+    `dpadDirection` equal to the arrow's direction -- and `heldDirection`
+    only latches at `T_TILE_CENTER`/`T_NOT_MOVING`. So, exactly like
+    `enter_door`, a `try_step`-style tap arrives on the tile, releases, and
+    stands there forever. The player must step onto the tile and KEEP
+    holding.
+
+    Approach is computed from `direction` so the final held step is the one
+    that lands on the arrow tile -- never `walk_to` the arrow tile itself,
+    for `cross_threshold`'s reason (`walk_to` aborts loud when a step
+    changes the map, which is the guard that catches accidental warps).
+    """
+    if direction not in _ARROW_APPROACH_DELTA:
+        raise ScenarioError(
+            f"{beat}: cross_arrow_warp got direction {direction!r}, "
+            f"expected one of {sorted(_ARROW_APPROACH_DELTA)}")
+    tx, ty = tile
+    dx, dy = _ARROW_APPROACH_DELTA[direction]
+    emu.walk_to(tx + dx, ty + dy)
+    emu.run(hold, [direction])
+    wait_for_map(emu, beat, dest_map)
+
+
 def assert_near(emu: Emulator, beat: str, expected: tuple[int, int],
                  tolerance: int = 1) -> None:
     """Byte-identical in `route1.py` and `kevlar.py` at promotion time."""

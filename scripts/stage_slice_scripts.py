@@ -61,6 +61,12 @@ from rpg2gba.tileset_converter.npc_gfx import (
 )
 from rpg2gba.tileset_converter.route_bytecode import RouteRegistry
 from rpg2gba.tileset_converter.route_table_emit import emit_route_table
+from rpg2gba.tileset_converter.seam_warps import (
+    load_seam_warps,
+    seams_for_slice,
+    suppressed_pairs,
+    warp_pairs_for,
+)
 
 DEFAULT_SLICE = tuple(SLICE_MAP_IDS)
 # Derived, never hand-listed: a second literal here has been the documented
@@ -348,10 +354,25 @@ def _regenerate_map_json(
     # build set, so a seam pointing at an unstaged map (Route 2's north edge to
     # CH06's Nowtoch) stays closed until that chapter stages its map. Computed
     # over DEFAULT_SLICE, matching the id list handed to build_slice_maps below.
+    # seam_warps.json (CLAUDE.md §4.3): a seam here REPLACES its connections.json
+    # row with a synthetic direction-gated arrow-warp pair (tileset-budget
+    # fidelity substitution). Frontier rule mirrors connections' own: only
+    # seams whose BOTH endpoints are in this build's map set apply.
+    slice_seams = seams_for_slice(load_seam_warps(), set(DEFAULT_SLICE))
+    seam_suppress = suppressed_pairs(slice_seams)
+    extra_warps: dict[int, list[mw.WarpSpec]] = {}
+    for map_a, xa, ya, map_b, xb, yb in warp_pairs_for(slice_seams):
+        extra_warps.setdefault(map_a, []).append(
+            mw.WarpSpec(src_x=xa, src_y=ya, dest_uid=map_b, dest_x=xb, dest_y=yb, direct_pair=True)
+        )
+        extra_warps.setdefault(map_b, []).append(
+            mw.WarpSpec(src_x=xb, src_y=yb, dest_uid=map_a, dest_x=xa, dest_y=ya, direct_pair=True)
+        )
     slice_connections = conn.build_slice_connections(
         out / "connections.json",
         DEFAULT_SLICE,
         lambda uid: reg.get(uid).map_const,
+        seam_suppress,
     )
     mw.build_slice_maps(
         list(DEFAULT_SLICE),
@@ -374,6 +395,7 @@ def _regenerate_map_json(
         template_fields=template_fields,
         fork_constants=fork_constants,
         connections=slice_connections,
+        extra_warps=extra_warps,
     )
     flag_reg.save(flag_state_path)
     # Always write (empty → stub) so the engine #include resolves even with no

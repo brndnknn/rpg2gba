@@ -542,6 +542,13 @@ class WarpSpec:
     dest_x: int  # Uranium arrival coord: where an extra "arrival" warp_event is
     dest_y: int  # placed on the destination map (the vanilla-Emerald landing trick)
     dest_dir: int | None = None  # RMXP Transfer Player `dir` param (0/2/4/6/8)
+    # seam_warps.json fix: True for a synthetic direction-gated arrow-warp cell
+    # whose (dest_x, dest_y) is the RECIPROCAL seam warp's own src coord on the
+    # destination map, not an arrival landing spot — `_resolve_all_warp_events`
+    # must pair it directly to that warp's own index instead of minting an
+    # extra "arrival" warp_event (the two arrow-warp tiles already point at
+    # each other; see `tileset_converter.seam_warps`).
+    direct_pair: bool = False
 
 
 @dataclass
@@ -3335,6 +3342,13 @@ def _resolve_all_warp_events(
     for that warp and it falls back to the old `_return_warp_index` pairing (paired
     to the destination's return warp) — logged loud, not silently dropped.
 
+    A `spec.direct_pair` seam warp (`tileset_converter.seam_warps`) skips both
+    the arrival-minting AND the out-of-bounds fallback: its (dest_x, dest_y) is
+    the RECIPROCAL seam warp's own src coord on `dest_uid`, so dest_warp_id is
+    resolved directly to that spec's own index in `warp_lists[dest_uid]`. Fails
+    loud if no such reciprocal spec exists — a direct_pair spec with no partner
+    is a caller bug (the seam_warps loader always mints them in pairs).
+
     Returns the full per-map warp_event list (source warps first, then arrivals),
     keyed by Uranium map id.
     """
@@ -3349,6 +3363,27 @@ def _resolve_all_warp_events(
     for src_uid, specs in warp_lists.items():
         for i, spec in enumerate(specs):
             dest_uid = spec.dest_uid
+
+            if spec.direct_pair:
+                dest_specs = warp_lists.get(dest_uid, [])
+                partner = next(
+                    (
+                        j for j, ds in enumerate(dest_specs)
+                        if ds.direct_pair and ds.dest_uid == src_uid
+                        and (ds.src_x, ds.src_y) == (spec.dest_x, spec.dest_y)
+                    ),
+                    None,
+                )
+                if partner is None:
+                    raise ValueError(
+                        f"seam warp {src_uid}:({spec.src_x},{spec.src_y}) -> "
+                        f"{dest_uid}:({spec.dest_x},{spec.dest_y}) has direct_pair=True "
+                        "but no reciprocal direct_pair warp was found at that coord "
+                        f"on map {dest_uid} — seam_warps.json pairing bug"
+                    )
+                events[src_uid][i].dest_warp_id = partner
+                continue
+
             dest_map_json = maps.get(dest_uid)
             in_bounds = False
             if dest_map_json is not None:
@@ -3413,6 +3448,7 @@ def build_slice_maps(
     fork_constants: set[str] | None = None,
     warp_facing_overrides: dict[tuple[int, int, int], str] | None = None,
     connections: dict[int, list[dict]] | None = None,
+    extra_warps: dict[int, list["WarpSpec"]] | None = None,
 ) -> dict[int, set[tuple[int, int]]]:
     """Assemble map.json + dispatcher .pory for every slice map. Returns the per-map
     warp-source coords (S3 walkable-overrides) so S8 can force those cells walkable.
@@ -3499,7 +3535,19 @@ def build_slice_maps(
     `stripped_event_ids`'s None-means-auto-load convention above. Pass `{}`
     explicitly to opt out (e.g. a test building a partial slice whose `maps`
     happens to include a map an override entry targets, but not the specific
-    warp that entry is about — see `test_build_slice_maps_smoke`)."""
+    warp that entry is about — see `test_build_slice_maps_smoke`).
+
+    `extra_warps` (Uranium map id -> extra `WarpSpec`s to inject, normally
+    `direct_pair=True` seam warps from `tileset_converter.seam_warps` —
+    reference/seam_warps.json's map-connection-tile-budget substitution) are
+    merged in ONLY for `_resolve_all_warp_events` pairing/resolution — they
+    are NOT real code-201 events, so they're excluded from `src_coords`
+    (the warp-source-cell override set this function returns; a seam warp's
+    cell is force-passable via `behavior_overrides`, not the door-metatile
+    `warp_overrides` path — see `tile_map.BEHAVIOR_KINDS`'s arrow_warp_*
+    kinds) and from `compute_arrival_facings` (arrow warps carry their own
+    direction gating; no ON_WARP_INTO_MAP_TABLE facing entry is needed or
+    wanted for them). `None` (the default) injects nothing."""
     if stripped_event_ids is None:
         stripped_event_ids = load_stripped_event_ids()
     slice_set = set(slice_ids)
@@ -3519,7 +3567,14 @@ def build_slice_maps(
         uid: [spec for _e, spec in classify_map_events(maps[uid], slice_set)[1]]
         for uid in slice_ids
     }
-    resolved = _resolve_all_warp_events(warp_lists, registry, maps)
+    # `_resolve_all_warp_events` needs the extra (seam-warp) specs merged in to
+    # pair them; `src_coords`/`compute_arrival_facings` below use `warp_lists`
+    # (the real-event-only lists), never this merged view.
+    resolve_warp_lists = {
+        uid: warp_lists[uid] + (extra_warps or {}).get(uid, [])
+        for uid in slice_ids
+    }
+    resolved = _resolve_all_warp_events(resolve_warp_lists, registry, maps)
     arrival_facings = compute_arrival_facings(
         warp_lists, maps, tilesets=tilesets, overrides=warp_facing_overrides,
     )

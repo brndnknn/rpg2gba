@@ -17,29 +17,49 @@ should now do) -- flagged here because it's exactly the kind of cross-chapter
 regression this predecessor chain would otherwise hide; not fixed in this
 file, since B25 belongs to `kevlar.py`, not this module.
 
-**B1's approach column is now VERIFIED against real collision data**
-(2026-08-26). `engine/src/fieldmap.c`'s `SetPositionFromConnection`/
-`IsPosInConnectingMap` give the real formula for a NORTH connection: crossing
-map031's north edge at local x transfers to map035 local x = (map031 x) -
-offset, with offset=11 from `connections.json`.
+**The Kevlar <-> Route 2 seam is an ARROW-WARP PAIR, not a connection**
+(2026-08-26). It was authored as a pokeemerald `connections` scroll-stitch,
+and that is how the chapter first built -- but connected maps must share a
+tileset pair, and these two cannot: their union needs 1028 distinct 8x8
+tiles against a hard 1024 cap. Both cheap levers were measured and are
+exhausted (tile dedup already runs twice in `emit.py`, ~2 tiles left;
+pruning the 7 unreferenced metatiles frees 0 tiles, because every tile they
+touch is shared with a referenced metatile). The seam therefore renders
+garbage border metatiles as a connection -- visible in the first build's
+`kevlar:B25`/`B1` contact-sheet frames as checkerboarded tiles and solid
+orange blocks. User call: substitute a warp (`reference/seam_warps.json`).
 
-The originally derived column, x=29, was WRONG and the ROM said so: it
-translates to map035 x=18, which falls inside the blocked collision run
-(columns 14-19) on Route 02's southmost row (row 56, decoded from
-`engine/data/layouts/Route02/map.bin`). pokeemerald fills Kevlar's north
-border strip from those Route 02 rows, so the step north was refused and the
-player never left map031 -- the first real build of this chapter failed B1
-with `expected map MAP_ROUTE_02 but map_location() reads group=75 num=10`
-(= MAP_KEVLAR_TOWN). The old note's guess that x=29 was "low-risk" because
-B25 confirmed x=28 was exactly the unverified reasoning it warned about:
-B25 only ever tested Kevlar's OWN edge, which was never the blocked side.
+Mechanism: `MB_NORTH_ARROW_WARP` on Kevlar (31,0)/(32,0), `MB_SOUTH_ARROW_WARP`
+on Route 2 (20,56)/(21,56), paired reciprocally. Arrow warps are
+direction-gated (`IsArrowWarpMetatileBehavior`, `field_control_avatar.c`):
+they fire only while the player STANDS ON the tile holding the matching
+direction, so an arriving player does not instantly bounce back and the two
+warps can point straight at each other with no arrival tiles. Expect a
+screen fade -- no warp in this engine is fade-free (`WarpFadeOutScreen` is
+on every path), so the seamless walk Uranium has is not reproducible here.
 
-x=31 is the verified replacement: Kevlar row 0 x=31 is passable, and it
-translates to map035 x=20, which is in Route 02 row 56's open run (20-25,
-27, 30-41; blocked: 14-19, 26, 28-29). It also clears Kevlar's own blocked
-cells at x=25/26. The downstream beats (B2/B3/B4 ...) address map035 in
-absolute local coordinates and do NOT depend on the arrival column, so this
-change is scoped to B1.
+**B1 crosses at x=32, not x=31.** Both are real arrow cells, but the arrival
+matters: `SetPlayerCoordsFromWarp` places the player EXACTLY on the
+destination warp's tile, and Route 02 (20,55) -- straight north of the x=31
+crossing's landing at (20,56) -- is BLOCKED, while (21,55) is open. Crossing
+on x=32 lands at (21,56) and can walk straight on into the route. The
+crossing goes through `assertions.cross_arrow_warp`, which walks to (32,1)
+and then HOLDS UP: an arrow warp needs `heldDirection` latched while the
+player stands on the tile, so a `try_step`-style tap arrives and just stands
+there. The first build after the warp substitution failed B1 in exactly that
+way (`expected MAP_ROUTE_02 but map_location() reads group=75 num=10`)
+because it still used `cross_threshold`; `enter_door` already carried the
+same held-D-pad lesson for door warps.
+
+History worth keeping, because it cost a build: the originally authored
+column x=29 was wrong under the old connection mechanism too -- it mapped
+(offset 11) to map035 x=18, inside row 56's blocked run 14-19, so the step
+was refused and B1 failed with `expected MAP_ROUTE_02 but map_location()
+reads group=75 num=10` (= MAP_KEVLAR_TOWN). The note that called x=29
+"low-risk because B25 confirmed x=28" was exactly the unverified reasoning
+it warned about: B25 only ever tested Kevlar's OWN edge, never the blocked
+side. Downstream beats (B2/B3/B4 ...) address map035 in absolute local
+coordinates and do NOT depend on the arrival column.
 
 **`MAP_ROUTE_02` is the assigned constant** (resolved 2026-08-26). This module
 was authored against the proposed name `MAP_ROUTE_2` (`04-route-2.md` §7,
@@ -191,7 +211,7 @@ MAP_CONST = "MAP_ROUTE_02"  # assigned; zero-padded per MAP_ROUTE_01 -- see docs
 # B1: Kevlar Town's north seam -> Route 2's south edge. Derived, not
 # confirmed live -- see module docstring for the SetPositionFromConnection
 # formula and why x=29 was picked.
-KEVLAR_SEAM_APPROACH = (31, 0)  # verified 2026-08-26; -> map035 x=20 (see docstring)
+KEVLAR_SEAM_ARROW = (32, 0)  # the MB_NORTH_ARROW_WARP tile -> map035 (21,56)
 KEVLAR_SEAM_DIRECTION = "UP"
 
 # B2/B10/B11: Hiker Larrie, Map035 event id 3 "Trainer(5)", (18,36),
@@ -301,6 +321,7 @@ _require_map = assertions.require_map
 _try_step = assertions.try_step
 _wait_for_map = assertions.wait_for_map
 _cross_threshold = assertions.cross_threshold
+_cross_arrow_warp = assertions.cross_arrow_warp
 _advance_to_battle = assertions.advance_to_battle
 _flag_ssa = assertions.flag_ssa
 
@@ -441,10 +462,10 @@ def _settle_post_battle_script(emu: Emulator, beat: str, flag: str,
 
 @route2.beat("B1", "Crossing Kevlar Town's north seam lands on Route 2's "
                    "south edge",
-             map_constant="MAP_KEVLAR_TOWN", at=KEVLAR_SEAM_APPROACH)
+             map_constant="MAP_KEVLAR_TOWN", at=KEVLAR_SEAM_ARROW)
 def b1(emu: Emulator) -> None:
-    _cross_threshold(emu, "B1", KEVLAR_SEAM_APPROACH, KEVLAR_SEAM_DIRECTION,
-                     MAP_CONST)
+    _cross_arrow_warp(emu, "B1", KEVLAR_SEAM_ARROW, KEVLAR_SEAM_DIRECTION,
+                      MAP_CONST)
 
 
 # -- B2 ------------------------------------------------------------------

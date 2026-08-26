@@ -235,6 +235,17 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
     # id for source art / passages / priorities / terrain tags (mirrors phase5's
     # walker path — phase5.py convert_all step 3).
     from rpg2gba.tileset_converter.metadata_wiring import collect_stair_behavior_cells
+    from rpg2gba.tileset_converter.seam_warps import (
+        behavior_cells_for,
+        load_seam_warps,
+        seams_for_slice,
+    )
+
+    # seam_warps.json (CLAUDE.md §4.3): synthetic arrow-warp cells get behavior
+    # overrides through the SAME kind-generic mechanism as diagonal stairs —
+    # merged straight into `stair_cells` (see build_slice_tilesets' docstring).
+    slice_seams = seams_for_slice(load_seam_warps(), set(SLICE_MAP_IDS))
+    seam_behavior_cells = behavior_cells_for(slice_seams)
 
     maps: list[tuple[int, dict]] = []
     synth_to_real: dict[int, int] = {}
@@ -248,7 +259,10 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
         synth_json = dict(map_json)  # shallow: only the top-level tileset_id changes
         synth_json["tileset_id"] = synth
         maps.append((map_id, synth_json))
-        stair_cells[map_id] = collect_stair_behavior_cells(map_json)
+        stair_cells[map_id] = {
+            **collect_stair_behavior_cells(map_json),
+            **seam_behavior_cells.get(map_id, {}),
+        }
 
     build_slice_tilesets(
         maps,
@@ -282,12 +296,23 @@ def run_layout_pass(
         collect_stair_behavior_cells,
         collect_through_block_cells,
     )
+    from rpg2gba.tileset_converter.seam_warps import (
+        behavior_cells_for,
+        load_seam_warps,
+        seams_for_slice,
+    )
     from rpg2gba.tileset_converter.tile_map import load_tile_map
 
     tile_map = load_tile_map(
         Path("reference/tileset_map.json"),
         out / "tilesets.json",
     )
+
+    # seam_warps.json (CLAUDE.md §4.3): same merge as run_graphics_pass — the
+    # arrow-warp cells go through convert_layout's `behavior_overrides` param,
+    # the exact mechanism collect_stair_behavior_cells already feeds.
+    slice_seams = seams_for_slice(load_seam_warps(), set(SLICE_MAP_IDS))
+    seam_behavior_cells = behavior_cells_for(slice_seams)
 
     entries: list[dict] = []
     for map_id in SLICE_MAP_IDS:
@@ -312,7 +337,10 @@ def run_layout_pass(
             blocked_cells=blocked_cells,
             unblocked_cells=WALKABLE_OVERRIDES.get(map_id, frozenset()),
             tileset_key=synth_tileset_id(map_id),
-            behavior_overrides=collect_stair_behavior_cells(map_json),
+            behavior_overrides={
+                **collect_stair_behavior_cells(map_json),
+                **seam_behavior_cells.get(map_id, {}),
+            },
         )
         entries.append(layout.to_layouts_entry())
 

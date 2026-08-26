@@ -1404,9 +1404,17 @@ def n6(emu: Emulator) -> None:
                     "impassable wall -- no void, no crash",
              map_constant="MAP_KEVLAR_TOWN", at=NORTH_EDGE_APPROACH)
 def b25(emu: Emulator) -> None:
-    # `KevlarTown/map.json`'s `connections` is `null` -- no seam is wired
-    # (CH03_TODO.md decision #3). Approach well clear of the door/berry
-    # cluster and confirm stepping further north does not move the player.
+    # `KevlarTown/map.json`'s `connections` is `null` -- but as of 2026-08-26
+    # that is no longer because nothing is wired (the old CH03_TODO.md
+    # decision #3 reason). Route 2 IS built and reachable; the seam is an
+    # arrow-warp pair at (31,0)/(32,0) (`reference/seam_warps.json`), chosen
+    # over a connection because the two maps cannot share a tileset. This
+    # beat stands on x=28, which is NOT one of those two cells, so the north
+    # edge is still a genuine wall here and the assertion below still holds
+    # unchanged -- it is now "the edge is blocked EXCEPT at the two warp
+    # cells", not "there is no way north at all". CH04_TODO.md #7 expected
+    # this beat to need flipping when the seam landed; it does not, because
+    # it never tested a seam column. Do NOT move it onto x=31/32.
     emu.walk_to(*NORTH_EDGE_APPROACH)
     before = emu.player_pos()
     if _try_step(emu, "UP"):
