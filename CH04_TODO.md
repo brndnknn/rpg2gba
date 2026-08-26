@@ -153,7 +153,7 @@ it advances to `built` at the §9 gate.
 
 ## Open — found during the build
 
-- [ ] **CH04 has no entrance until map connections exist.** Map 31 has ten
+- [x] **CH04 has no entrance until map connections exist.** DONE 2026-08-26 Map 31 has ten
       warp events and not one goes to map 35: the only link is the borderless
       seam `[31,'N',11,35,'S',0]` in `connections.json`. Connections are
       unimplemented — `tileset_converter/connections.py` is still the §5.4
@@ -164,7 +164,7 @@ it advances to `built` at the §9 gate.
       map 35, and the north one (`[35,'N',0,40,'S',15]`, to CH06's Nowtoch)
       must stay omitted under the frontier rule. In progress.
 
-- [ ] **The rematch registered-flag block overflowed, as `rematch.py`
+- [x] **The rematch registered-flag block overflowed, as `rematch.py`
       predicted.** Vanilla derives a rematch's registered flag as
       `TRAINER_REGISTERED_FLAGS_START + rematchTableId`; the block ends at
       0x1A9 with only 0x1AA/0x1AB free before `FLAG_DEFEATED_DEOXYS`. CH02's
@@ -177,7 +177,7 @@ it advances to `built` at the §9 gate.
       moves the saveblock and invalidates every save and seed blob. In
       progress.
 
-- [ ] **The phone-rematch classifier bails on a one-command difference.**
+- [x] **The phone-rematch classifier bails on a one-command difference.**
       `deterministic.classify_phone_rematch_trainer_battle` expects
       `pbPhoneRegisterBattle(...)` split across code 355 + code 655, because
       on map 33 the `_I("...")` literal spans the RGSS command boundary. Map
@@ -186,7 +186,7 @@ it advances to `built` at the §9 gate.
       the whole event to the queue — 14 of map 35's 20 queued rows. The fix is
       to match on content rather than command-code count. In progress.
 
-- [ ] **B11 was going to be dropped by design.** The phone classifier
+- [x] **B11 was going to be dropped by design.** The phone classifier
       deliberately discards RGSS page 2 (the defeated re-talk) on the argument
       that native match-call bookkeeping supersedes the self-switch state
       machine. CH04's approved beat list has that page as B11, so the idle
@@ -227,3 +227,38 @@ it advances to `built` at the §9 gate.
 - [ ] **Poké Radar catch-table entries** (Dunsparce, Tofurang) appear on the
       Route 2 wiki page but are absent from `wild_encounters.json`
       (`04-route-2.md` §5). Data gap, unresolved.
+
+## First real build + suite run — 2026-08-26
+
+The chapter was built and the scenario suite run against a live ROM for the
+first time. Pipeline: `transpile_driver run --maps slice` -> `stage_slice_scripts
+--write` -> `assemble_pathfinder` -> `make modern` (exit 0). Python suite
+**2358 passed, 19 skipped**.
+
+**ROM `ec7401d4`** (first build of this chapter was `dcf6d603`, superseded by
+the self-switch fix below). Suite tally: **62/73 run, 61 passed, 1 failed,
+0 hung, 11 not run.** Every CH01-CH03 regression beat still passes, so the
+connections work did not disturb the earlier chapters.
+
+Settled by the run:
+
+- **B1's approach column is decoded, not inferred.** The authored x=29 was
+  wrong: it translates (offset 11) to map035 x=18, inside the blocked
+  collision run 14-19 on Route 02's south row 56, so the step north was
+  refused and the player never left map031. x=31 -> map035 x=20 is passable on
+  both sides and B1 now passes. `route2.py`'s docstring carries the evidence.
+  Note this is NOT a converter bug: the connection is correctly wired both
+  ways (offset +/-11), correct group, correct overlap.
+- **The connection itself is proven live** — the seam crosses in the ROM,
+  which is the thing `connections.py` was written for.
+
+Still open after the run:
+
+- [ ] **B2 fails: `FLAG_MAP035_EVENT003_SSA` is not set after Larrie's win.**
+      The phone-rematch idiom consumed RMXP's `code 123 ["A",0]` as a
+      structural predicate and emitted nothing for it. A `setflag` was added to
+      the continue-script block and is **confirmed present** in the staged
+      `Map035.pory`, but the freshly built ROM still reports the flag unset —
+      so the emission is necessary but not sufficient, and the live cause is
+      still open. B2 gates B3/B4/B5/B6/B7/B9/B11/B12/B13/B14/B15, which is why
+      11 beats read NOT_RUN.

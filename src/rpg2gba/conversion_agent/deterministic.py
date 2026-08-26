@@ -1819,12 +1819,14 @@ def classify_phone_rematch_trainer_battle(
             "end",
         ],
     )
+    ssa_flag = self_switch_flag_name(map_id, event["id"], "A")
     register_block = _block(
         register_label,
         [
             "special(PlayerFaceTrainerAfterBattle)",
             "waitmovement(0)",
             f"register_matchcall({trainer_const})",
+            f"setflag({ssa_flag})",
             "release",
             "end",
         ],

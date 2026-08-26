@@ -246,6 +246,7 @@ def test_ev039_brandon_matches_and_emits_both_blocks() -> None:
     assert "special(PlayerFaceTrainerAfterBattle)" in out
     assert "waitmovement(0)" in out
     assert "register_matchcall(TRAINER_BRANDON_16)" in out
+    assert "setflag(FLAG_MAP033_EVENT039_SSA)" in out
     assert "specialvar(VAR_RESULT, IsTrainerReadyForRematch)" in out
     assert "if (var(VAR_RESULT) == FALSE) {" in out
     assert "trainerbattle_rematch(TRAINER_BRANDON_16," in out
@@ -281,6 +282,7 @@ def test_ev039_golden_output() -> None:
         "    special(PlayerFaceTrainerAfterBattle)\n"
         "    waitmovement(0)\n"
         "    register_matchcall(TRAINER_BRANDON_16)\n"
+        "    setflag(FLAG_MAP033_EVENT039_SSA)\n"
         "    release\n"
         "    end\n"
         "}\n\n"

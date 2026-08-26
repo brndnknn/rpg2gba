@@ -17,27 +17,37 @@ should now do) -- flagged here because it's exactly the kind of cross-chapter
 regression this predecessor chain would otherwise hide; not fixed in this
 file, since B25 belongs to `kevlar.py`, not this module.
 
-**B1's approach column is a derived best-effort, not a verified one.**
-`engine/src/fieldmap.c`'s `SetPositionFromConnection`/`IsPosInConnectingMap`
-give the real formula for a NORTH connection: crossing map031's north edge
-at local x transfers to map035 local x = (map031 x) - offset. With offset=11
-from `connections.json`, landing near Route 2's own southern event cluster
-(Larrie at x=18, the item ball at x=16 -- see B2/B3) means a Kevlar-side
-column of x=29 lands at map035 x=18. Kevlar's own B25 already confirmed x=28
-is open, walkable terrain at Kevlar's north edge (not a building/tree), so
-x=29 -- one column over -- is a low-risk pick, but it has **not** been
-confirmed against real collision data for either map (Map035's own layout
-isn't built yet, and Map031's collision at x=29 specifically, as opposed to
-x=28, was never separately checked). Verify live once map 35's layout is
-actually staged and boot-walkable; adjust if the crossing lands somewhere
-unwalkable or off the intended corridor.
+**B1's approach column is now VERIFIED against real collision data**
+(2026-08-26). `engine/src/fieldmap.c`'s `SetPositionFromConnection`/
+`IsPosInConnectingMap` give the real formula for a NORTH connection: crossing
+map031's north edge at local x transfers to map035 local x = (map031 x) -
+offset, with offset=11 from `connections.json`.
 
-**`MAP_ROUTE_2` is a proposed, unassigned constant** (`04-route-2.md` §7:
-"Engine dir/porymap constant for map 35 are proposed (`Route2`/
-`MAP_ROUTE_2`) but unassigned -- no naming pass has run for this map yet.").
-Used throughout this module as the best-available name; if the naming pass
-lands on something else, every `map_constant="MAP_ROUTE_2"` call site below
-needs a mechanical rename, not a redesign.
+The originally derived column, x=29, was WRONG and the ROM said so: it
+translates to map035 x=18, which falls inside the blocked collision run
+(columns 14-19) on Route 02's southmost row (row 56, decoded from
+`engine/data/layouts/Route02/map.bin`). pokeemerald fills Kevlar's north
+border strip from those Route 02 rows, so the step north was refused and the
+player never left map031 -- the first real build of this chapter failed B1
+with `expected map MAP_ROUTE_02 but map_location() reads group=75 num=10`
+(= MAP_KEVLAR_TOWN). The old note's guess that x=29 was "low-risk" because
+B25 confirmed x=28 was exactly the unverified reasoning it warned about:
+B25 only ever tested Kevlar's OWN edge, which was never the blocked side.
+
+x=31 is the verified replacement: Kevlar row 0 x=31 is passable, and it
+translates to map035 x=20, which is in Route 02 row 56's open run (20-25,
+27, 30-41; blocked: 14-19, 26, 28-29). It also clears Kevlar's own blocked
+cells at x=25/26. The downstream beats (B2/B3/B4 ...) address map035 in
+absolute local coordinates and do NOT depend on the arrival column, so this
+change is scoped to B1.
+
+**`MAP_ROUTE_02` is the assigned constant** (resolved 2026-08-26). This module
+was authored against the proposed name `MAP_ROUTE_2` (`04-route-2.md` §7,
+before any naming pass had run); the assembler's real emission follows the
+zero-padded `MAP_ROUTE_01` precedent, so the constant is `MAP_ROUTE_02`
+(`engine/include/constants/map_groups.h`). The anticipated mechanical rename
+is done -- B1's `probe_constants` failed loud on the placeholder, exactly as
+this note predicted, rather than silently resolving to the wrong map.
 
 **Local ids are unknown for map 35** -- `output/uranium-build/staging/
 local_ids/Map035.json` does not exist yet (map 35 has never been through the
@@ -174,14 +184,14 @@ if TYPE_CHECKING:  # runtime import is lazy so the registry works without bindin
 route2 = ChapterBuilder("route2", doc="reference/chapters/04-route-2.md",
                         predecessor="kevlar")
 
-MAP_CONST = "MAP_ROUTE_2"  # proposed/unassigned -- see module docstring
+MAP_CONST = "MAP_ROUTE_02"  # assigned; zero-padded per MAP_ROUTE_01 -- see docstring
 
 # -- coordinates / ids (see module docstring for provenance) -----------------
 
 # B1: Kevlar Town's north seam -> Route 2's south edge. Derived, not
 # confirmed live -- see module docstring for the SetPositionFromConnection
 # formula and why x=29 was picked.
-KEVLAR_SEAM_APPROACH = (29, 0)
+KEVLAR_SEAM_APPROACH = (31, 0)  # verified 2026-08-26; -> map035 x=20 (see docstring)
 KEVLAR_SEAM_DIRECTION = "UP"
 
 # B2/B10/B11: Hiker Larrie, Map035 event id 3 "Trainer(5)", (18,36),
@@ -382,6 +392,51 @@ def _press_a(emu: Emulator, beat: str, approach: tuple[int, int],
     emu.interact()
 
 
+def _settle_post_battle_script(emu: Emulator, beat: str, flag: str,
+                               budget: int = 1800) -> None:
+    """Drain a trainer's POST-battle script to completion, then return.
+
+    Route 1's trainer beats can check their end-state flag the instant
+    `win_battle` returns, because the flag they read is the engine's own
+    `TRAINER_FLAGS_*` bit -- set inside the battle, before any script runs.
+    Route 2's beats read an RPG-Maker self-switch flag instead
+    (`FLAG_MAP035_EVENT*_SS{A,B}`, this module's stated convention), and
+    that flag is written by the *continue script* the `trainerbattle_single`
+    hands off to, which does not begin until the battle's own teardown is
+    finished. Checking straight after `win_battle` therefore samples the
+    flag before the writer has run.
+
+    `if emu.field_locked(): emu.advance_dialog()` -- what B2/B4 did before
+    2026-08-26 -- is not enough either, and for a reason `kevlar.py` already
+    recorded once (its B4 comment, 2026-08-14: "this used to only check
+    field_locked(), which is exactly what missed the scene's dropped
+    completion tail"). Immediately after a battle ends the field lock can
+    still read False for the frames before the continue script asserts it,
+    so the single guarded call can skip the drain entirely and fall through
+    to the assertion with the script yet to run.
+
+    So: loop. Win anything that re-enters battle, mash anything that locks
+    the field, and otherwise let frames pass, until the flag appears or the
+    budget is spent. Returning early on the flag keeps the common case fast;
+    the caller still owns the assertion, so a genuinely unwritten flag fails
+    exactly as loudly as before -- this only removes the race, it never
+    weakens the check.
+    """
+    spent = 0
+    while spent < budget:
+        if emu.flag(flag):
+            return
+        if in_battle(emu):
+            win_battle(emu)
+        elif emu.field_locked():
+            emu.advance_dialog()
+        else:
+            emu.run(10)
+        spent += 10
+    logger.info("%s: post-battle script did not set %s within %d frames",
+                beat, flag, budget)
+
+
 # -- B1 ------------------------------------------------------------------
 
 @route2.beat("B1", "Crossing Kevlar Town's north seam lands on Route 2's "
@@ -405,8 +460,7 @@ def b2(emu: Emulator) -> None:
             f"B2 precondition failed: {ssa_a} already set before the fight")
     _trigger_trainer(emu, "B2", LARRIE_APPROACH, LARRIE_FACING)
     win_battle(emu)
-    if emu.field_locked():
-        emu.advance_dialog()
+    _settle_post_battle_script(emu, "B2", ssa_a)
     if not emu.flag(ssa_a):
         shot = emu.screenshot("b2_no_ssa")
         raise ScenarioError(
@@ -452,8 +506,7 @@ def b4(emu: Emulator) -> None:
             f"B4 precondition failed: {ssa_a} already set before the fight")
     _trigger_trainer(emu, "B4", TIMOTHY_APPROACH, TIMOTHY_FACING)
     party = win_battle(emu)
-    if emu.field_locked():
-        emu.advance_dialog()
+    _settle_post_battle_script(emu, "B4", ssa_a)
     if not emu.flag(ssa_a):
         shot = emu.screenshot("b4_no_ssa")
         raise ScenarioError(f"B4: {ssa_a} not set after the win ({shot})")
