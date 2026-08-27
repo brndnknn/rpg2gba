@@ -472,6 +472,33 @@ def _collision_walkable(blocks: Sequence[int], width: int, off: int,
     return (blocks[(x + off) + width * (y + off)] >> 10) & 0x3 == 0
 
 
+def _unwrap_message(text: str) -> str:
+    """Collapse a decoded field message's line breaks so a substring check
+    can span them.
+
+    `decode_text` deliberately renders the break control codes as the
+    LITERAL two-character sequences ``\\n`` (0xFE), ``\\l`` (0xFA) and
+    ``\\p`` (0xFB) so a decoded string reads the same as the `.pory` source
+    it came from. That is the right call for reading a failure message, but
+    it means a raw `in` test compares across the break: CH04's B5 asserted
+    "Nowtoch City" against a box reading "...roadblock, Nowtoch\\nCity may
+    be reached..." and could never match, because the engine wrapped the
+    line between the two words. The sign text was correct the whole time.
+
+    Where the break falls is a *typesetting* detail -- it moves whenever the
+    string, the font, or the box width changes -- so it must not be part of
+    what a beat asserts. Breaks become single spaces and runs of whitespace
+    collapse, on both sides of the comparison.
+
+    Only the substring path normalizes. `exact=True` still compares the
+    decoded text verbatim, breaks included, for the rare beat that means to
+    pin the exact typesetting.
+    """
+    for code in ("\\n", "\\l", "\\p"):
+        text = text.replace(code, " ")
+    return " ".join(text.split())
+
+
 class Emulator:
     """One headless core for one ROM, wired to one engine build's artifacts."""
 
@@ -1164,12 +1191,44 @@ class Emulator:
         Bounded read: fetches at most `TEXT_DECODE_CAP` bytes and raises
         (via `decode_text_bytes`) if no terminator turns up in that span,
         rather than following the pointer for an unbounded distance.
+
+        **This does NOT gate on `sFieldMessageBoxMode` (`_msgbox_addr`), and
+        must not** -- that byte answers "is a draw task still running", not
+        "is a box on screen". `Task_DrawFieldMessage` clears it to
+        FIELD_MESSAGE_BOX_HIDDEN the moment `RunTextPrintersRetIsActive`
+        goes false, while the window stays drawn holding the finished text;
+        `text_showing`'s own docstring says exactly this, and gating on it
+        here contradicted that. Measured on ROM `b246127d` (2026-08-27),
+        Route 2's B9 sign: mode reads 2 for frames 6-18, then 0 from frame
+        24 through 240 with the box plainly on screen the whole time, while
+        `gStringVar4` holds the correct text for all 240 frames. The gate
+        made the read a race against message LENGTH -- B5's two-line sign
+        (which ends on a `\l` pause, so its draw task never finishes) passed
+        for the same reason B9's one-liner failed, which is luck, not a
+        check.
+
+        Freshness comes from `clear_field_message` instead: `interact` wipes
+        the buffer before pressing A, and `advance_dialog` wipes it once the
+        script releases, so text found here provably belongs to the action
+        that just ran rather than to whatever spoke last.
         """
-        if self.u8(self._msgbox_addr) == 0:
-            return None
         addr = self.symbols["gStringVar4"]
         data = self.read_bytes(addr, TEXT_DECODE_CAP)
-        return decode_text_bytes(data, self._byte_to_char)
+        text = decode_text_bytes(data, self._byte_to_char)
+        return text or None
+
+    def clear_field_message(self) -> None:
+        """Wipe `gStringVar4` so a later `current_field_message_text` can
+        only return text some later action actually produced.
+
+        `gStringVar4` is written once per message and then left alone -- it
+        stays valid long after its box is dismissed, which is what makes it
+        the right buffer to READ (see `current_field_message_text`) and the
+        reason a read needs an explicit freshness discipline rather than a
+        liveness flag. Writing the terminator (0xFF) at byte 0 decodes as
+        the empty string, which that method reports as `None`.
+        """
+        self.write_u16(self.symbols["gStringVar4"], 0xFFFF)
 
     def active_printer_texts(self) -> dict[int, str]:
         """`window_id -> decoded text` for every live `WINDOW_TEXT_PRINTER`
@@ -1204,6 +1263,34 @@ class Emulator:
             node = self.u32(node + o["off_printer_next"])
         return result
 
+    def wait_for_field_message(self, frame_budget: int = 180) -> str | None:
+        """The field message box's decoded text, waiting up to `frame_budget`
+        frames for a box to appear if none is up yet.
+
+        `interact()` returns as soon as a script has taken the field controls
+        (30 frames), which is NOT the same instant its first `msgbox` has
+        rendered -- how long the gap is depends on what the script does
+        first. Route 2's B9 sign (`Map035_EV002_Page1`) is the case that
+        exposed this: its converted script runs `lock / faceplayer /
+        setflag(FLAG_MENU_ON_EVENT) / lock` before `msgbox`, where B5's
+        otherwise-identical sign (`Map035_EV013_Page1`) runs just `lock /
+        faceplayer`. Sampling the box once, as `assert_text_contains` used
+        to, failed B9 with `actual text was None` while the script was still
+        working -- a false failure that says nothing about the content it
+        was meant to check.
+
+        Returns immediately when a box is already up, so beats that assert
+        against an open box are unaffected; returns `None` if the budget
+        runs out, leaving the caller to fail loud with its own diagnosis.
+        """
+        text = self.current_field_message_text()
+        spent = 0
+        while text is None and spent < frame_budget:
+            self.run(6)
+            spent += 6
+            text = self.current_field_message_text()
+        return text
+
     def assert_text_contains(self, expected: str, *, exact: bool = False) -> None:
         """Assert the field message box currently shows `expected`.
 
@@ -1218,10 +1305,12 @@ class Emulator:
         happened costing a full debug cycle applies just as much here as it
         did to the proxy-oracle findings that document is about.
         """
-        actual = self.current_field_message_text()
-        ok = actual is not None and (
-            actual == expected if exact else expected in actual
-        )
+        actual = self.wait_for_field_message()
+        if exact:
+            ok = actual == expected
+        else:
+            ok = (actual is not None
+                  and _unwrap_message(expected) in _unwrap_message(actual))
         if not ok:
             verb = "equal" if exact else "contain"
             raise ScenarioError(
@@ -1738,6 +1827,31 @@ class Emulator:
         trainer_bit = self.resolve_constant("BATTLE_TYPE_TRAINER")
         return bool(flags & trainer_bit)
 
+    def opponent_trainer_id(self) -> int:
+        """Which trainer the in-progress battle is against --
+        `gTrainerBattleParameter.params.opponentA` (include/battle_setup.h),
+        the same field `SetMapVarsToTrainerA` writes and `GetTrainerFlag`
+        reads, so this is the engine's own answer rather than an inference
+        from the enemy roster.
+
+        `is_trainer_battle()` answers "is this a trainer battle"; it cannot
+        answer "*which* trainer", and that gap cost CH04 three sessions:
+        route2's `_trigger_trainer` walked the player from the map's south
+        seam toward Hiker Larrie at (18,36), Youngster Timothy's event-touch
+        page fired en route at (18,47), and the beat won Timothy while
+        asserting Larrie's end state. Both guards passed the whole time --
+        a trainer battle really had started.
+
+        Fails loud with no battle running, for the same reason
+        `is_trainer_battle` does: the parameter block is only meaningful
+        while a battle owns the main loop.
+        """
+        if not self._in_battle():
+            raise ScenarioError(
+                "opponent_trainer_id() called while no battle is in progress")
+        return self.u16(self.symbols["gTrainerBattleParameter"]
+                        + self.offsets["off_tbp_opponenta"])
+
     def resolve_interruption(self, *, dialogue_max_taps: int = 1500,
                              battle_settle_budget: int = _BATTLE_SETTLE_BUDGET,
                              dialogue_settle_budget: int = _DIALOGUE_SETTLE_BUDGET,
@@ -2043,11 +2157,40 @@ class Emulator:
                 f"walk_to({tx},{ty}) {how} changed map from "
                 f"{start_map} to {here_map} — aborting ({shot})")
 
-    def interact(self) -> None:
-        """Press A; fail if no script picks up the field controls."""
+    def interact(self, frame_budget: int = 30) -> None:
+        """Press A; fail if no script picks up the field controls.
+
+        Polls for the lock every frame rather than sampling once at the end
+        of the window. A script that locks, does its work and releases
+        entirely inside the budget is a *successful* interaction, but a
+        single sample taken after the fact sees an unlocked field and cannot
+        tell it apart from an A press that hit nothing.
+
+        That false negative is not hypothetical: CH04's B11 (re-talking a
+        defeated phone-rematch trainer) reported "interaction did not start
+        a script" on ROM `b246127d` while the engine was in fact running
+        `gotopostbattlescript` into a `register_matchcall` block -- headless,
+        no msgbox, done well inside 30 frames. The harness blamed itself for
+        what was really a converter bug (the trainer's post-defeat page was
+        emitted but never dispatched to), and the misleading error is the
+        reason that took a full debug cycle to find.
+
+        A message that appeared counts as evidence too: `clear_field_message`
+        wipes the buffer first, so text found afterwards can only have come
+        from this interaction.
+
+        The full budget is still spent either way -- callers rely on
+        `interact` doubling as a settle, so this changes the VERDICT, not
+        the timing.
+        """
+        self.clear_field_message()
         self.tap("A")
-        self.run(30)
-        if not self.field_locked():
+        picked_up = False
+        for _ in range(frame_budget):
+            self.run(1)
+            if self.field_locked() or self.current_field_message_text() is not None:
+                picked_up = True
+        if not picked_up:
             shot = self.screenshot("interact_noop")
             raise ScenarioError(f"interaction did not start a script ({shot})")
 
@@ -2092,6 +2235,9 @@ class Emulator:
             self.tap(key)  # samples text frames on every frame it runs
             taps += 1
         self.note_text_frame()
+        # The script is done talking: drop its text so the next assertion
+        # cannot pass on this one's leftovers (see `clear_field_message`).
+        self.clear_field_message()
         return taps
 
     def settle_field(self, *, quiet_frames: int = 60, max_rounds: int = 8,

@@ -88,6 +88,13 @@ _PROBE_ENTRIES: dict[str, str] = {
     # the probed value differs (see battle.py's in-battle detection notes).
     "off_battlepkmn_hp": "offsetof(struct BattlePokemon, hp)",
     "sizeof_battlepkmn": "sizeof(struct BattlePokemon)",
+    # TrainerBattleParameter (include/battle_setup.h): which trainer the
+    # in-progress battle actually belongs to. `_trigger_trainer` asserted
+    # only that *a* trainer battle had started, which let a Timothy win
+    # masquerade as a Larrie failure for three sessions (CH04 B2). This is
+    # the same field `SetMapVarsToTrainerA`/`GetTrainerFlag` read, so it
+    # identifies the opponent by the engine's own bookkeeping.
+    "off_tbp_opponenta": "offsetof(TrainerBattleParameter, params.opponentA)",
     # struct Main (include/main.h): gMain.callback2, for in-battle detection.
     "off_main_callback2": "offsetof(struct Main, callback2)",
     # -- walk_to's route planner (emulator.py) -------------------------------
@@ -249,6 +256,7 @@ _PROBE_TEMPLATE = """\
 #include "text.h"
 #include "task.h"
 #include "item.h"
+#include "battle_setup.h"
 {entries}
 """
 
@@ -294,6 +302,7 @@ _CONSTANT_PROBE_TEMPLATE = """\
 #include "fieldmap.h"
 #include "constants/metatile_behaviors.h"
 #include "constants/event_objects.h"
+#include "constants/event_object_movement.h"
 #include "constants/songs.h"
 {entries}
 """
