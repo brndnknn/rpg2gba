@@ -104,8 +104,8 @@
     {
       "id": "CH04", "act": "A1", "title": "Route 2", "wiki_page": "Route 2",
       "visit": 1, "outdoor": 35, "maps": [35],
-      "predecessor": "CH03", "tier": "medium", "status": "in_progress",
-      "notes": "Seams (connections.json): 31 N<->S 35, and 35 N<->S 40. The direct Route 02 -> Nowtoch overland seam exists in data but the wiki says it is rockslide-blocked until Rock Smash, so the first pass is forced through Passage Cave."
+      "predecessor": "CH03", "tier": "medium", "status": "built",
+      "notes": "Passed its §9 boot-walk gate 2026-08-27 (route2 chapter suite GREEN 74/74, ROM 5953e98f -- the first build in which a defeated phone trainer speaks its idle line; B11/Larrie and route1:N5/Richey both pass). Pilot chapter for the generated manifest (reference/manifests/CH04.manifest.json + CH04.dispositions.json, 42 rows). Spec reference/chapters/04-route-2.md; CH04_TODO.md is retired to reference/archive/, carryovers migrated to PROJECT_TODO.md #47-#52. connections.py landed this chapter, so the Kevlar<->Route 2 seam (31 N<->S 35) crosses live. The direct Route 02 -> Nowtoch overland seam (35 N<->S 40) exists in data but is rockslide-blocked until Rock Smash (CH07 revisit), so the first pass is forced through Passage Cave; the 16 derived ledge cells, B8 and B10 all lie beyond the rockslide and are DEFERRED_BEATS, not failures."
     },
     {
       "id": "CH05", "act": "A1", "title": "Passage Cave", "wiki_page": "Passage Cave",

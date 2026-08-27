@@ -1,5 +1,17 @@
 # CH04 TODO — Route 2 (map 35)
 
+**RETIRED 2026-08-27 — CH04 passed its §9 boot-walk gate** (route2 chapter
+suite GREEN 74/74, ROM `5953e98f` — the first build in which a defeated phone
+trainer speaks its idle line; B11/Larrie and `route1:N5`/Richey both pass).
+Carryovers migrated to `PROJECT_TODO.md` #47–#52 (the stale `kevlar.py` B25
+seam assertion, the B10/B15 harness gaps, the Q3/Q7 checker items, the map-32
+`isRockSmashSoftlocked` head, the Q5.1 citation experiment, and the Poké Radar
+catch-table gap). The phone-rematch root cause is `PROJECT_TODO.md` §45/§46,
+now closed and confirmed in play. B8, B10 and the 16 derived ledge cells lie
+beyond the rockslide and are `DEFERRED_BEATS`, not failures — they wait on the
+Rock Smash grant (CH06) and the CH07 revisit. Kept for the Done ledger and the
+detail the migrated entries point back to.
+
 Live work checklist for chapter CH04 (Route 2), the current build frontier.
 The chapter's spec, story beats and coverage targets live in
 `reference/chapters/04-route-2.md`; the corpus-wide plan is

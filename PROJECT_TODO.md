@@ -613,6 +613,63 @@ passes every check we have until the assembler chokes 20 minutes into a build.
 Worth a cheap post-transpile lint over emitted `.pory` (known command names,
 parenthesised argument forms).
 
+### 47. `kevlar.py` B25 asserts the Kevlar↔Route 2 seam is BLOCKED — now stale
+
+Migrated from `CH04_TODO.md` on the CH04 §9 gate pass (2026-08-27).
+`src/rpg2gba/playtest/chapters/kevlar.py` B25 was written when Route 2 had no
+entrance; `connections.py` landed in CH04 and the seam now crosses live (CH04
+B1 walks it). B25 still passes only because it asserts the *south row 56*
+collision run, not the seam itself — confirm that reading, then flip the beat
+to assert a working crossing. It is CH03's file, so this is a deliberate
+cross-chapter edit, not drift.
+
+### 48. CH04 residual harness gaps — B10 and B15
+
+Migrated from `CH04_TODO.md`. `route2.py` registers 13 of 15 beats.
+- **B10** (Larrie's rematch *offer*) needs a PokeNav/Match-Call driver and a
+  self-switch setter the emulator harness does not have; recorded in
+  `DEFERRED_BEATS`, not dropped. Same driver would unblock the wider
+  match-call rematch surface.
+- **B15's two grass cells** are inferred coordinates, not decoded from the map;
+  flagged in `route2.py`'s docstring. Settle on the next Route 2 build.
+  (B1's Kevlar-side approach column was decoded to x=31 during the 2026-08-26
+  run — that half is closed.)
+
+### 49. Playtest checker: capability model (Q3) and rule-set versioning (Q7) still absent
+
+Migrated from `CH04_TODO.md` "Carried, not blocking".
+- **Q3 capability model** is unbuilt, so `checker.py` rule 7
+  (`deferred_no_granting_chapter`) cannot enforce CH04's 5 `rock_smash`
+  deferrals — they pass on a `capability_model_unenforced` warning. Operator
+  decision 2026-08-22: accept warnings for now. CH06 is the grant chapter per
+  `reference/chapters.json`; enforcement matters most once CH06/CH07 land.
+- **Q7 rule-set versioning** is designed but absent from `checker.py` — no
+  rule-set version field, so no gate stamp records one and no lag report can
+  be generated. (`reference/playtest_rule_versions.json`, added 2026-08-27,
+  versions the *playtest harness* beats, not the manifest checker.)
+
+### 50. `isRockSmashSoftlocked` is an unrecognized script head on map 32
+
+Migrated from `CH04_TODO.md`. Last unrecognized head in CH01's map-32 fixture;
+out of CH04's scope but filed so it is not rediscovered. Rule it (or its
+containing page) when CH01's interiors or the Rock Smash grant chapter is next
+touched.
+
+### 51. Q5.1 citation-verification experiment — run across CH04 + CH05
+
+Migrated from `CH04_TODO.md`. A blind second-agent pass over citation-triggered
+disposition rows only, scoped to run on CH04 and CH05; kept as standing
+practice if it catches at least one silent pass across both chapters. CH04's
+pass is done; the decision waits on CH05.
+
+### 52. Route 2 Poké Radar catch-table entries missing from `wild_encounters.json`
+
+Migrated from `CH04_TODO.md` (`reference/chapters/04-route-2.md` §5, item 3).
+The Route 2 wiki page lists a Poké Radar division (Dunsparce, Tofurang) that is
+absent from `wild_encounters.json`. Data gap, unresolved — Poké Radar is not an
+engine feature the pipeline models yet, so this is a "when Radar lands" note,
+not a CH04 miss.
+
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 
 - **Reflection narrow-scan** — tried and reverted 2026-07-07 (user: "not
@@ -887,10 +944,13 @@ construction.
 **The sweep was run 2026-08-25; results and remediation are §44.** It could not
 be mechanical after all — CH01–CH03 have no manifest to cross-reference.
 
-### 45. Defeated Larrie faces you and says nothing — ROOT-CAUSED AND FIXED 2026-08-27
+### 45. Defeated Larrie faces you and says nothing — ROOT-CAUSED, FIXED, AND CONFIRMED IN PLAY 2026-08-27
 
-**RESOLVED (2026-08-27), pending a boot walk to confirm in play.** The cause
-is the engine's re-talk resume address, and it makes the symptom exact.
+**CLOSED (2026-08-27).** Confirmed in play by CH04's §9 boot walk: route2
+chapter suite GREEN 74/74 on ROM `5953e98f`, the first run in which a defeated
+phone trainer speaks its idle line — B11 (Larrie) and `route1:N5` (Richey)
+both pass. The cause is the engine's re-talk resume address, and it makes the
+symptom exact.
 
 On a re-talk the engine runs its own scaffolding,
 `EventScript_TryDoNormalTrainerBattle` (`engine/data/scripts/trainer_battle.inc:9-21`):
@@ -1060,7 +1120,7 @@ for its class.
 visible, because CH04's B11 is the first beat in the corpus that re-talks a
 defeated trainer at all.
 
-### 46. Phone-rematch trainers' `Page2` was dead code — FIXED 2026-08-27, then RE-FIXED the same day (see §45)
+### 46. Phone-rematch trainers' `Page2` was dead code — FIXED 2026-08-27, then RE-FIXED the same day (see §45); CLOSED, confirmed in play by CH04's §9 walk (ROM `5953e98f`)
 
 *Filed and fixed the same day. **The fix recorded below was half right and did
 not work**: the collapsed-pages dead end it diagnosed was real, but it moved
