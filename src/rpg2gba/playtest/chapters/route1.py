@@ -1265,7 +1265,14 @@ def b13(emu: Emulator) -> None:
 
 #: Richey's post-defeat idle line (`Map033_EV053_Page2`'s
 #: `IsTrainerReadyForRematch`-false arm). Not a spec beat -- see N5.
-RICHEY_IDLE_TEXT = "someday I'll battle you again"
+# Apostrophe-free on purpose: Uranium's text uses U+2019 (`I’ll`), and
+# `assert_text_contains` unwraps line breaks but does NOT normalize
+# punctuation, so a straight ASCII `'` never matches. Every other text
+# assertion in this module sidesteps the same trap by picking a substring
+# without one. (Observed 2026-08-27 on ROM `5953e98f`: the beat found
+# "Well, someday I’ll battle you again, and\nthen we’ll see who’s laughing!"
+# and failed only on the quote character.)
+RICHEY_IDLE_TEXT = "battle you again, and"
 #: Richey's compiled local id -- his 1-based index in Route01's
 #: `object_events` (`Map033_EV053_Page1` at (17,9)), the id `gObjectEvents`
 #: is addressed by. NOT his RMXP event id 53; see `FLOOD_LOCAL_ID`.

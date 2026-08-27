@@ -252,6 +252,10 @@ LARRIE_XY = (18, 36)
 TRAINER_LARRIE_CONST = "TRAINER_LARRIE_4"
 LARRIE_APPROACH = (18, 37)
 LARRIE_FACING = "UP"
+# Larrie's compiled local id, for the beats that talk to him AFTER B2 has
+# moved him off (18,36). See `_press_a_live` for the measurement and why the
+# template cell is wrong for those beats but right for B2 itself.
+LARRIE_LOCAL_ID = 1
 
 # B3/B12: the Potion item ball, Map035 event id 9 "EV009", (16,42),
 # Action button (manifest map035/ev009 p0 and p1 are both `trigger:
@@ -310,6 +314,13 @@ TIMOTHY_EVENT_ID = 12
 TIMOTHY_XY = (18, 47)
 TIMOTHY_APPROACH = (19, 47)
 TIMOTHY_FACING = "LEFT"
+# Timothy's compiled local id, for B14's re-talk. Like Larrie, his
+# event-touch battle walks him toward the player and he keeps the moved
+# position: template (18,47), but measured at (20,47) with the player at
+# (21,47) immediately after B4 (probe on ROM `5953e98f`, 2026-08-27:
+# `local_id=4 xy=(20,47) gfx=394`). B4 itself is unaffected -- it triggers
+# the touch at the template, before he moves.
+TIMOTHY_LOCAL_ID = 4
 # Confirmed real per CH04_TODO.md's open blocking-constants item and
 # `reference/uranium_id_map.json:1976` -- NOT yet staged into
 # `trainer_converter/common.py`'s `SLICE_TRAINER_BATTLES` tuple or the
@@ -555,6 +566,54 @@ def _press_a(emu: Emulator, beat: str, approach: tuple[int, int],
     emu.interact()
 
 
+_DIR_VECTOR: dict[str, tuple[int, int]] = {
+    "DOWN": (0, 1), "UP": (0, -1), "LEFT": (-1, 0), "RIGHT": (1, 0),
+}
+
+
+def _press_a_live(emu: Emulator, beat: str, local_id: int, facing: str,
+                  max_attempts: int = 3) -> None:
+    """Press A on an NPC that has MOVED OFF its template, reading its live
+    `gObjectEvents` position instead of trusting the template cell.
+
+    This module's stated convention is template coordinates and no local ids
+    (see the module docstring), and that convention is right for every event
+    that stays put. Larrie does not: he is an event-touch trainer, and
+    triggering his battle walks him toward the player, after which
+    `TryOverrideTemplateCoordsForObjectEvent` keeps the moved position. His
+    template is (18,36); after B2 he is measured at **(18,39)**, three tiles
+    south (probe on ROM `5953e98f`, 2026-08-27: `local_id=1 xy=(18,39)
+    gfx=415`). B2 is unaffected because it runs BEFORE the move — the touch
+    fires at the template, which is exactly where he still is.
+
+    That (18,39) reading has a history worth not repeating: it was measured
+    on 2026-08-27 and written off as a harness object-decode fault, which is
+    part of how B11 stayed misdiagnosed for a debug cycle. It is real. The
+    harness was walking to (18,37) — adjacent to a tile Larrie had already
+    left — and pressing A at empty ground.
+
+    `facing` is the direction the PLAYER faces toward the NPC, as everywhere
+    else in this module, so the approach tile is one step back along that
+    vector. Retries on `interact()`'s own failure rather than a bespoke
+    position check, the same way route1.py's `_approach_moving_npc` does.
+    """
+    dx, dy = _DIR_VECTOR[facing]
+    for _ in range(max_attempts):
+        ev = emu.object_event(local_id)
+        _walk_absorbing(emu, beat, ev.x - dx, ev.y - dy,
+                        absorb_wild=True, absorb_trainer=True)
+        emu.face(facing)
+        try:
+            emu.interact()
+            return
+        except ScenarioError:
+            continue
+    shot = emu.screenshot(f"{beat}_live_no_interact")
+    raise ScenarioError(
+        f"{beat}: could not interact with local id {local_id} after "
+        f"{max_attempts} attempts reading its live position ({shot})")
+
+
 def _settle_post_battle_script(emu: Emulator, beat: str, flag: str,
                                budget: int = 1800) -> None:
     """Drain a trainer's POST-battle script to completion, then return.
@@ -671,6 +730,31 @@ def b4(emu: Emulator) -> None:
     logger.info("B4: TRAINER_TIMOTHY_247 resolves to %d; enemy party at "
                 "battle start: %s", timothy_const,
                 [(m.species, m.level) for m in party])
+
+
+# -- B14 (registered HERE, not with the other §3.1 beats: registration
+# order is PLAYTHROUGH order, and the moment to re-talk a trainer is
+# while the player is still standing in front of him. Talking to
+# Timothy from the end of the chapter meant a 10-tile walk back to a
+# trainer who had despawned -- he is outside the object spawn window
+# from anywhere north of the rockslide, so `gObjectEvents` had no
+# entry to read. Measured 2026-08-27 on ROM `5953e98f`.) ------------
+@route2.beat("B14", "After B4, Timothy's defeated re-talk shows the "
+                    "'impossible' line (spec §3.1 B14 / manifest "
+                    "map035/ev012/p1)",
+             map_constant=MAP_CONST, at=TIMOTHY_APPROACH)
+def b14(emu: Emulator) -> None:
+    defeat_flag = _trainer_defeat_flag(TRAINER_TIMOTHY_CONST)
+    if not emu.flag(defeat_flag):
+        raise ScenarioError(
+            f"B14 precondition failed: {defeat_flag} not set -- B4 must run "
+            f"first")
+    _press_a_live(emu, "B14", TIMOTHY_LOCAL_ID, TIMOTHY_FACING)
+    emu.assert_text_contains("Someone tougher than me? Impossible!")
+    emu.advance_dialog()
+    if emu.field_locked():
+        shot = emu.screenshot("b14_stuck")
+        raise ScenarioError(f"B14: Timothy's re-talk did not close cleanly ({shot})")
 
 
 # -- B2 ------------------------------------------------------------------
@@ -901,7 +985,7 @@ def b10_phone_rematch_deferred(emu: Emulator) -> None:
     Larrie the same way B11 does, expect the rematch offer text rather than
     the plain defeated re-talk.
     """
-    _press_a(emu, "B10", LARRIE_APPROACH, LARRIE_FACING)
+    _press_a_live(emu, "B10", LARRIE_LOCAL_ID, LARRIE_FACING)
     emu.assert_text_contains(
         "So you have returned for a rematch? Let me show you my moves!")
     if in_battle(emu):
@@ -920,7 +1004,7 @@ def b11(emu: Emulator) -> None:
     if not emu.flag(ssa_a):
         raise ScenarioError(
             f"B11 precondition failed: {ssa_a} not set -- B2 must run first")
-    _press_a(emu, "B11", LARRIE_APPROACH, LARRIE_FACING)
+    _press_a_live(emu, "B11", LARRIE_LOCAL_ID, LARRIE_FACING)
     emu.assert_text_contains(
         "Watch your step! In caves, Pokémon can jump out from anywhere!")
     emu.advance_dialog()
@@ -972,26 +1056,6 @@ def b13(emu: Emulator) -> None:
     if emu.field_locked():
         shot = emu.screenshot("b13_stuck")
         raise ScenarioError(f"B13: the Barewl's dialogue did not close cleanly ({shot})")
-
-
-# -- B14 -----------------------------------------------------------------
-
-@route2.beat("B14", "After B4, Timothy's defeated re-talk shows the "
-                    "'impossible' line (spec §3.1 B14 / manifest "
-                    "map035/ev012/p1)",
-             map_constant=MAP_CONST, at=TIMOTHY_APPROACH)
-def b14(emu: Emulator) -> None:
-    defeat_flag = _trainer_defeat_flag(TRAINER_TIMOTHY_CONST)
-    if not emu.flag(defeat_flag):
-        raise ScenarioError(
-            f"B14 precondition failed: {defeat_flag} not set -- B4 must run "
-            f"first")
-    _press_a(emu, "B14", TIMOTHY_APPROACH, TIMOTHY_FACING)
-    emu.assert_text_contains("Someone tougher than me? Impossible!")
-    emu.advance_dialog()
-    if emu.field_locked():
-        shot = emu.screenshot("b14_stuck")
-        raise ScenarioError(f"B14: Timothy's re-talk did not close cleanly ({shot})")
 
 
 # -- B15 -----------------------------------------------------------------
