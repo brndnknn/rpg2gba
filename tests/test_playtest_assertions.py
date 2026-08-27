@@ -364,7 +364,10 @@ def test_beat_counts_unchanged_after_the_assertions_refactor() -> None:
     grep count over-counts (see the task brief this test was written for)."""
     from rpg2gba.playtest.chapter import load_chapter
 
-    expected = {"moki": 17, "route1": 30, "kevlar": 60}
+    # route1 went 30 -> 31 on 2026-08-27: N5 (re-talking defeated Richey) was
+    # registered once the silent-`Page2` bug it guards was fixed. kevlar
+    # chains route1 as its predecessor, so it carries the same +1.
+    expected = {"moki": 17, "route1": 31, "kevlar": 61}
     for name, count in expected.items():
         chapter = load_chapter(name)
         assert len(chapter.beats) == count, f"{name}: beat count drifted"

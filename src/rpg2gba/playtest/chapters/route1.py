@@ -1272,22 +1272,31 @@ RICHEY_IDLE_TEXT = "someday I'll battle you again"
 RICHEY_LOCAL_ID = 21
 
 
-# DEFERRED, not registered -- see the docstring's "why this is not
-# registered yet" section. Same written-but-unregistered shape as
-# `DEFERRED_ROCK_GATED` and route2.py's `b8_autorun_deferred`.
-def n5_richey_retalk_deferred(emu: Emulator) -> None:
+@route1.beat("N5", "Re-talking defeated Richey reaches Page2 and prints his idle "
+                   "line (PROJECT_TODO #45 regression)",
+             map_constant="MAP_ROUTE_01", at=TRAINER_RICHEY.xy)
+def n5_richey_retalk(emu: Emulator) -> None:
     """The regression beat for a bug that shipped through CH02's own gate.
 
     `deterministic`'s phone-rematch classifier emits three blocks per phone
     trainer: the `trainerbattle_single` page, a `_RegisterMatchCall`
     continue-script, and a `Page2` steady state carrying the rematch check
-    and this idle line. Until 2026-08-27 nothing ever referenced `Page2`:
-    `transpile_driver._record_collapsed_pages` marked the event
-    `collapsed_pages`, and `metadata_wiring._resolve_script` read that trait
-    as "resolve straight to the page-1 label, build no dispatcher", so the
-    object event pointed only at the battle script. Re-talking a defeated
-    phone trainer therefore re-ran the headless match-call registrar and the
-    NPC said nothing at all.
+    and this idle line. Until 2026-08-27 nothing reachable ever referenced
+    `Page2`, in two successive ways. First `transpile_driver.
+    _record_collapsed_pages` marked the event `collapsed_pages` and
+    `metadata_wiring._resolve_script` read that trait as "resolve straight to
+    the page-1 label, build no dispatcher", so the object event pointed only
+    at the battle script (fixed 065e9c04). That fix then put the route to
+    `Page2` inside the four-argument continue-script -- which the engine runs
+    exactly once, via `gotobeatenscript`, on the return from a won battle. On
+    a RE-talk the engine instead resumes at `sTrainerBattleEndScript`, the
+    byte after the packed trainerbattle command (`TrainerBattleLoadArgs`,
+    engine/src/battle_setup.c:1058), i.e. Page1's next line -- which was
+    `release`/`end`. So `Page2` stayed unreachable in every state and the NPC
+    turned to face the player (the engine's own `lock`/`faceplayer` in
+    `EventScript_TryDoNormalTrainerBattle`) and then said nothing at all.
+    Page1 now falls through to `goto(Page2)` instead, which is where vanilla
+    puts it.
 
     It went unnoticed because no beat in the corpus re-talked a defeated
     phone trainer -- B13 above battles Richey, checks his registered flag,
@@ -1302,26 +1311,17 @@ def n5_richey_retalk_deferred(emu: Emulator) -> None:
     runs in the chapter that already shipped the bug, and it fails loudly if
     the dispatcher stops being wired.
 
-    **Why this is not registered yet (2026-08-27).** It cannot currently
-    reach its subject, for a reason that has nothing to do with the fix it
-    guards. After B13's battle, Richey's object event is at (17,11), not his
-    template's (17,9) -- a sight trainer walks toward the player during
-    `PlayerFaceApproachingTrainer` and `TryOverrideTemplateCoordsForObjectEvent`
-    writes that live position back. His slot then reports `active`, a live
-    `spriteId`, and the right `graphicsId`, yet nothing is drawn on the tile
-    and an A press from ALL FOUR adjacent tiles starts no script at all --
-    verified directly against the beat's own `pre_beat.gba` on ROM
-    `b07a02f8` (three consecutive presses, `FLAG_MAP033_EVENT053_SSA` and
-    Richey's `TRAINER_FLAGS_START` bit both already set, no lock, no text).
-    Something makes a defeated sight trainer who moved off his template
-    non-interactable; that is its own investigation and it is NOT what this
-    beat is for.
-
-    Larrie (CH04 B11) is an EVENT-TOUCH trainer, not a sight trainer, so he
-    never runs the approach that moves Richey -- which is why B11 is the
-    live test of the `Page2` wiring and this beat is deferred rather than
-    fixed in place. Register it once the interactability question is
-    answered; the assertions below are correct as written.
+    **On the "Richey is non-interactable" theory, now retired.** This beat was
+    written but left unregistered on 2026-08-27 because an A press from all
+    four tiles adjacent to Richey appeared to start no script at all, on ROM
+    `b07a02f8`. That measurement was wrong twice over: `interact()` sampled
+    the field lock once, 30 frames after the press, so a script that locked
+    and released inside the window read as a no-op (fixed 3315df3a), and the
+    operator then walked the same ROM by hand and found Richey plainly
+    interactable -- he turns to face you, exactly as the silent-`Page2` bug
+    above predicts. His moving off his template to (17,11) is real and is why
+    this beat uses `_approach_moving_npc`, but it never made him
+    unreachable.
     """
     # `_approach_moving_npc`, not `_assert_no_second_battle`: the latter
     # walks the sight LANE and stops wherever the lane walk ends, which for

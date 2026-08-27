@@ -1821,19 +1821,37 @@ def classify_phone_rematch_trainer_battle(
     # breaks sight-trainer detection outright (regressed route1:B13/Richey
     # when a dispatcher wrapper was tried here). Routing a defeated trainer
     # to Page2 on re-talk therefore CANNOT be done by pointing the
-    # object_event anywhere but Page1; it has to happen one hop later,
-    # inside the four-argument continue-script itself (this block), which
-    # the engine reaches via `gotopostbattlescript` and NOT through the
-    # object_event's own script pointer. So `register_label`'s block leads
-    # with a flag check: flag clear (first win) falls through and registers
-    # as before; flag set (any later re-talk, including the plain
-    # `EventScript_NoNormalTrainerBattle` re-talk path) jumps straight to
-    # Page2 without re-running registration. Mirrors vanilla's own
-    # `trainerbattle_single`/post-battle-script split
-    # (engine/data/maps/Route102/scripts.inc `Route102_EventScript_Calvin`
-    # / `Route102_EventScript_CalvinPostBattle`) — the branch just lives
-    # inside the continue-script's body rather than gating whether it's
-    # entered at all.
+    # object_event anywhere but Page1 — it has to be the command that
+    # FOLLOWS the `trainerbattle_single` line, which is where the engine
+    # actually resumes on a re-talk:
+    #
+    #   EventScript_TryDoNormalTrainerBattle (engine/data/scripts/
+    #   trainer_battle.inc:9-21) locks, faceplayers, then reads GetTrainerFlag
+    #   and — flag already set — falls to EventScript_NoNormalTrainerBattle's
+    #   `gotopostbattlescript`. That resolves via
+    #   BattleSetup_GetScriptAddrAfterBattle (battle_setup.c:1574) to
+    #   `sTrainerBattleEndScript`, which TrainerBattleLoadArgs
+    #   (battle_setup.c:1058) sets to `(u8 *)data + sizeof(TrainerBattleParameter)`
+    #   — the byte immediately AFTER the packed trainerbattle command, i.e.
+    #   the next line of THIS block.
+    #
+    # The four-argument continue-script is a different pointer with a
+    # different consumer: `battleScriptRetAddrA`, reached only by
+    # `gotobeatenscript` / BattleSetup_GetTrainerPostBattleScript
+    # (scrcmd.c:2478, battle_setup.c:1582), which fires exactly once, on the
+    # return from a won battle. Putting the re-talk branch in there — as this
+    # classifier did between 065e9c04 and this change — makes Page2
+    # unreachable in every state: the block runs once, with the flag still
+    # clear, and never again. In play that reads as an NPC who turns to face
+    # you (the engine's own `lock`/`faceplayer` above) and then says nothing,
+    # forever, on any tile. Measured on Larrie (map35/ev3) and Richey
+    # (map33/ev53).
+    #
+    # So the split mirrors vanilla exactly: the fall-through after
+    # `trainerbattle_single` is the re-talk path, and the 4th argument is the
+    # one-shot post-victory path (engine/data/maps/Route102/scripts.inc
+    # `Route102_EventScript_Calvin` vs
+    # `Route102_EventScript_CalvinRegisterMatchCallAfterBattle`).
     register_label = _page_label(map_id, event, 1) + "_RegisterMatchCall"
     battle_block = _block(
         _page_label(map_id, event, 1),
@@ -1841,17 +1859,18 @@ def classify_phone_rematch_trainer_battle(
             f"trainerbattle_single({trainer_const},"
             f" {format_pory_dialogue(intro)}, {format_pory_dialogue(defeat)},"
             f" {register_label})",
-            "release",
-            "end",
+            f"goto({_page_label(map_id, event, 2)})",
         ],
     )
     ssa_flag = self_switch_flag_name(map_id, event["id"], "A")
+    # No flag check leading this block: it is the one-shot post-victory
+    # script (see above), so it can only ever run with `ssa_flag` clear. The
+    # `setflag` stays — `metadata_wiring` mints and reads the same
+    # self-switch for page conditions, so the event's own page state must
+    # still advance.
     register_block = _block(
         register_label,
         [
-            f"if (flag({ssa_flag})) {{",
-            f"    goto({_page_label(map_id, event, 2)})",
-            "}",
             "special(PlayerFaceTrainerAfterBattle)",
             "waitmovement(0)",
             f"register_matchcall({trainer_const})",
@@ -1881,9 +1900,9 @@ def classify_phone_rematch_trainer_battle(
     # `metadata_wiring._resolve_script`'s `collapsed` branch points the
     # object_event straight at Page1 and builds no dispatcher, which is
     # exactly right here: a dispatcher wrapping Page1 would break sight
-    # detection (see the comment on `register_block` above). Routing to
-    # Page2 on re-talk is handled entirely inside `register_block`'s own
-    # flag check instead — nothing needs to route the object_event itself.
+    # detection (see the comment on `battle_block` above). Routing to Page2
+    # on re-talk is handled by Page1's own `goto` fall-through instead —
+    # nothing needs to route the object_event itself.
     return "\n\n".join([battle_block, register_block, rematch_block])
 
 

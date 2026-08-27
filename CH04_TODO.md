@@ -192,7 +192,11 @@ it advances to `built` at the §9 gate.
       machine. CH04's approved beat list has that page as B11, so the idle
       line is being re-emitted the way vanilla does it — a post-battle
       `msgbox` branch off `trainerbattle_single`'s continue-script label,
-      mirroring `Route102_EventScript_Calvin`.
+      mirroring `Route102_EventScript_Calvin`. **Update 2026-08-27:** the
+      first attempt at this (`PROJECT_TODO.md` §46) put that branch on the
+      wrong pointer and left it silently unreachable; see the §45 resolution
+      under "Second build + suite session" below for the corrected fix and
+      its unverified-in-play status.
 
 - [ ] **`kevlar.py` B25 asserts the Kevlar<->Route 2 seam is BLOCKED.** True
       today, false the moment connections land. Flip it when the seam works;
@@ -289,10 +293,56 @@ objects on the same map report their templates exactly). "The trainer is not
 rendered" was also wrong — Larrie is visible in the B11 contact-sheet frame.
 Elevation stays ruled out. B12-B15 cannot be reached until B11 passes.
 
-Fixed along the way but **not yet observable in play** (it needs §45 first):
-the phone-rematch trainers' `Page2` steady-state block was dead code on all
-four staged phone trainers, two of them Route 1's — `PROJECT_TODO.md` §46.
-CH02 passed its §9 gate with two silent NPCs in it.
+Fixed along the way but **not yet observable in play** (it needed §45 first,
+see the resolution below): the phone-rematch trainers' `Page2` steady-state
+block was dead code on all four staged phone trainers, two of them Route 1's
+— `PROJECT_TODO.md` §46. CH02 passed its §9 gate with two silent NPCs in it.
+§46's own fix turned out to be misdirected (branch placed on the wrong
+pointer) and is corrected as part of §45's fix, below.
+
+**§45 resolved, same day.** The harness-fault theory above was half right.
+`interact()`'s stale field-lock sample (fixed in `3315df3a`) did explain the
+false "did not start a script" report, but the real defect was in the
+emitted script, confirmed by the operator's own hand-walk of Larrie and of
+Richey (map 33 event 53, Route 1, on a save the harness never touched,
+defeated in a different playthrough). On a re-talk the engine's own
+`EventScript_TryDoNormalTrainerBattle` (`engine/data/scripts/trainer_battle.inc:9-21`)
+does `lock`/`faceplayer` — the observed turn-to-face — then sees
+`GetTrainerFlag` already set and falls to
+`EventScript_NoNormalTrainerBattle`'s `gotopostbattlescript`, which resolves
+through `BattleSetup_GetScriptAddrAfterBattle` (`engine/src/battle_setup.c:1574`)
+to `sTrainerBattleEndScript` — set by `TrainerBattleLoadArgs`
+(`engine/src/battle_setup.c:1058`) to the byte immediately after the packed
+`trainerbattle` command, i.e. Page1's next line. §46's fix had put the
+`Page2` branch inside `trainerbattle_single`'s four-argument continue-script
+instead, which is a different pointer (`battleScriptRetAddrA`, consumed once
+by `gotobeatenscript`/`BattleSetup_GetTrainerPostBattleScript` on the
+battle-won return — `engine/src/scrcmd.c:2478` / `engine/src/battle_setup.c:1582`)
+— so that branch ran exactly once, with the self-switch still clear, and was
+unreachable on every later re-talk. `Page2` (the idle line) was dead in every
+state; Page1 fell straight to `release`/`end`. That is the whole
+"lock, faceplayer, silence" symptom, on both Larrie and Richey.
+
+Fix landed in `classify_phone_rematch_trainer_battle`
+(`src/rpg2gba/conversion_agent/deterministic.py`): Page1 now emits
+`trainerbattle_single(...)` followed directly by `goto(<Page2 label>)` at the
+fall-through position — matching vanilla's own
+`Route102_EventScript_Calvin` (`engine/data/maps/Route102/scripts.inc`),
+which does `trainerbattle_single`, `specialvar VAR_RESULT,
+ShouldTryRematchBattle`, then its post-battle `msgbox` in sequence. The
+four-argument continue-script keeps only its original one-shot post-victory
+registration job; the now-dead self-switch check inside it was removed. The
+`setflag` itself stays, since `metadata_wiring` still reads that self-switch
+for page conditions. Route 1's matching regression beat, `N5` (re-talking
+defeated Richey), was written earlier but deliberately left unregistered
+pending this fix — it is now registered in
+`src/rpg2gba/playtest/chapters/route1.py`.
+
+Python suite is green at 2380 passed / 19 skipped with the fix in.
+**Status: fixed but unverified in play.** Nothing has been rebuilt or
+boot-walked since this landed — B11 is not yet confirmed on hardware, and
+CH04's §9 gate still needs a fresh ROM rebuild and an operator walk before it
+can close.
 
 ## First real build + suite run — 2026-08-26
 

@@ -887,7 +887,54 @@ construction.
 **The sweep was run 2026-08-25; results and remediation are §44.** It could not
 be mechanical after all — CH01–CH03 have no manifest to cross-reference.
 
-### 45. Defeated Larrie faces you and says nothing — CH04's gate blocker
+### 45. Defeated Larrie faces you and says nothing — ROOT-CAUSED AND FIXED 2026-08-27
+
+**RESOLVED (2026-08-27), pending a boot walk to confirm in play.** The cause
+is the engine's re-talk resume address, and it makes the symptom exact.
+
+On a re-talk the engine runs its own scaffolding,
+`EventScript_TryDoNormalTrainerBattle` (`engine/data/scripts/trainer_battle.inc:9-21`):
+`lock`, `faceplayer` — *this is the turn-to-face the operator sees* — then
+`GetTrainerFlag`, already set, so it falls to `EventScript_NoNormalTrainerBattle`'s
+`gotopostbattlescript`. That resolves through `BattleSetup_GetScriptAddrAfterBattle`
+(`engine/src/battle_setup.c:1574`) to `sTrainerBattleEndScript`, which
+`TrainerBattleLoadArgs` (`battle_setup.c:1058`) sets to
+`(u8 *)data + sizeof(TrainerBattleParameter)` — **the byte immediately after
+the packed trainerbattle command, i.e. the next line of the calling script.**
+
+§46 put the route to `Page2` in `trainerbattle_single`'s FOUR-ARGUMENT
+continue-script instead. That is a different pointer, `battleScriptRetAddrA`,
+consumed only by `gotobeatenscript` / `BattleSetup_GetTrainerPostBattleScript`
+(`scrcmd.c:2478`, `battle_setup.c:1582`), which fires **exactly once**, on the
+return from a won battle. So the branch ran once, with the self-switch still
+clear, and never again — `Page2` was unreachable in every state, and Page1's
+next line was `release`/`end`. Lock, faceplayer, silence. Permanently, on any
+tile, for both trainers.
+
+Vanilla puts the re-talk continuation in the fall-through, not the 4th
+argument (`Route102_EventScript_Calvin`: `trainerbattle_single`, then
+`specialvar ShouldTryRematchBattle`, then the post-battle msgbox). The
+classifier now does the same: Page1 is `trainerbattle_single(...)` followed by
+`goto(Page2)`, and the 4th argument keeps only the one-shot registration (its
+now-dead self-switch check is dropped; the `setflag` stays, because
+`metadata_wiring` reads that self-switch for page conditions).
+
+**Fix:** `deterministic.classify_phone_rematch_trainer_battle`. Regression
+tests: `tests/test_phone_rematch_classifier.py::test_larrie_page1_falls_through_to_page2_after_trainerbattle`
+and the ev039 golden. In-play guard: `route1:N5`, now registered (below).
+
+**The two-datum key.** The operator supplied both: position is irrelevant
+(sight-approach or direct interaction, same result), and **Richey exhibits it
+too**, on a save the harness never touched, beaten by a different playthrough.
+That killed the harness explanation and the tile explanation together, and
+left the one thing Larrie and Richey share and Timothy doesn't — the phone
+shape. The engine read followed in minutes.
+
+*The original filing and its refuted claims are kept below, unedited.*
+
+---
+
+*Original filing — superseded by the resolution above:*
 
 *Filed 2026-08-27 from CH04's suite run on ROM `b07a02f8`; **substantially
 corrected the same day by the operator's own boot walk of that ROM**, which
@@ -1013,10 +1060,17 @@ for its class.
 visible, because CH04's B11 is the first beat in the corpus that re-talks a
 defeated trainer at all.
 
-### 46. Phone-rematch trainers' `Page2` was dead code — FIXED 2026-08-27, unobservable until §45
+### 46. Phone-rematch trainers' `Page2` was dead code — FIXED 2026-08-27, then RE-FIXED the same day (see §45)
 
-*Filed and fixed the same day; kept open only because it cannot be verified
-in play until §45 is resolved.*
+*Filed and fixed the same day. **The fix recorded below was half right and did
+not work**: the collapsed-pages dead end it diagnosed was real, but it moved
+the branch into `trainerbattle_single`'s four-argument continue-script, which
+the engine runs exactly once — on the return from a won battle — and never on
+a re-talk. `Page2` stayed unreachable, and §45's silent NPC is what that looks
+like in play. §45 carries the engine citations and the corrected fix
+(the branch belongs in Page1's fall-through, where vanilla puts it). Read §45
+first; the text below is the superseded reasoning, kept because it was
+confidently argued and the next reader deserves to know where it went wrong.*
 
 `deterministic`'s phone-rematch classifier emits three blocks per phone
 trainer: the `trainerbattle_single` page, a `_RegisterMatchCall`
