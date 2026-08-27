@@ -228,6 +228,66 @@ it advances to `built` at the §9 gate.
       Route 2 wiki page but are absent from `wild_encounters.json`
       (`04-route-2.md` §5). Data gap, unresolved.
 
+## Second build + suite session — 2026-08-27
+
+Four ROMs today: `b246127d` (rebuild of the stale tree — HEAD's seam/tileset
+commit landed 13 minutes after the 08-26 build, so that run was against stale
+data), `c5d8124b` (a converter fix that was WRONG, see below), `b07a02f8`
+(the corrected fix, current). Python suite **2380 passed, 19 skipped**.
+
+**Best tally: 69/73 run, 68 passed, 1 failed, 0 hung, 4 not run.** B11 is the
+only failure; B12-B15 are gated behind it.
+
+Went green this session:
+
+- **B2 passes.** The 08-26 harness fixes (beat order B4->B3->B2, the
+  `opponent_trainer_id` identity assert, corrected item-ball/rock/grass
+  coordinates) were correct — they had simply never been run. B4, B3, B5, B6
+  all pass with them.
+- **B7 was asserting a wall that never existed.** EV001's pages are
+  blank-graphic, and RMXP's real player rule (`passableEx?`, quoted in
+  `metadata_wiring.collect_through_block_cells`) collapses for the PLAYER to
+  `character_name != ""` — a blank-graphic event never blocks the player.
+  EV001 is a player-touch warp HOST, not a wall: in Uranium you step onto the
+  tile and the warp fires under you. Dropping the event correctly leaves a
+  walkable, inert tile. The beat now asserts walkable + no warp fires + real
+  terrain stops the walk at (20,31); Route 02 has no north connection at all
+  (`connections: null`; Uranium's own seam row points at map 40 "Luz", never
+  at map 36). **No converter change was needed.**
+- **B9 was a harness bug, not a sign bug.** `current_field_message_text`
+  gated on `sFieldMessageBoxMode`, which `Task_DrawFieldMessage` clears the
+  instant the last glyph is drawn while the box stays up holding the text.
+  That made every text assertion a race against message LENGTH: B5's
+  two-line sign (ending on a `\l` pause, draw task never finishes) passed
+  where B9's one-liner failed. Measured: mode reads 2 for frames 6-18, then 0
+  through frame 240, with `gStringVar4` correct the whole time. The reader
+  now uses `gStringVar4` with an explicit freshness discipline
+  (`clear_field_message` before an action, and after `advance_dialog`).
+
+Also fixed, both harness-side and both found by this chapter:
+
+- **`route1:B14` was flaky and truncated two full runs.** It watched for a
+  facing change over 240 frames, but `MOVEMENT_TYPE_LOOK_AROUND` turns on an
+  RNG timer — it failed on Lynette in one attempt and Flood in the next on
+  the same ROM. Now reads `ObjectEvent.movementType` directly.
+- **`interact()` could report a false "did not start a script."** It sampled
+  the field lock once, 30 frames after the press, so a script that locked,
+  ran and released inside the window looked like an A press that hit nothing.
+  It polls across the window now (same total frames — the verdict changed,
+  not the timing). This is what disguised B11 as a harness error for a cycle.
+
+**B11 is the live blocker and it is NOT a CH04-specific bug** — see
+`PROJECT_TODO.md` §45. A defeated trainer cannot be re-talked anywhere in
+this build: pressing A starts no script, and the object is not rendered,
+verified on Larrie AND on Route 1's Richey from all four adjacent tiles.
+Elevation is ruled out. It predates every change made today (B11 failed the
+same way on `ec7401d4`). B12-B15 cannot be reached until it is fixed.
+
+Fixed along the way but **not yet observable in play** (it needs §45 first):
+the phone-rematch trainers' `Page2` steady-state block was dead code on all
+four staged phone trainers, two of them Route 1's — `PROJECT_TODO.md` §46.
+CH02 passed its §9 gate with two silent NPCs in it.
+
 ## First real build + suite run — 2026-08-26
 
 The chapter was built and the scenario suite run against a live ROM for the

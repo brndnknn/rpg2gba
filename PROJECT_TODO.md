@@ -887,6 +887,121 @@ construction.
 **The sweep was run 2026-08-25; results and remediation are §44.** It could not
 be mechanical after all — CH01–CH03 have no manifest to cross-reference.
 
+### 45. A defeated trainer cannot be re-talked — blocks CH04's gate
+
+*Filed 2026-08-27 from CH04's suite run on ROM `b07a02f8`. **This is the live
+blocker for CH04's §9 gate**: B11 fails on it, and B12-B15 are gated behind
+B11, so the chapter cannot go green until it is resolved. Not caused by any
+of that session's changes — B11 failed with this exact symptom on the
+session's first ROM (`ec7401d4`), before any of them.*
+
+**Symptom.** Pressing A at a defeated trainer starts no script at all: no
+field lock, no message, indefinitely. `Emulator.interact()` reports
+"interaction did not start a script", which is accurate — nothing runs.
+
+**Measured on two trainers, two maps, driven directly from each beat's own
+`pre_beat.gba` rather than through a beat** (so the beats' own navigation is
+not a variable):
+
+| trainer | map | local id | template | `gObjectEvents` reports | rendered? | A press |
+|---|---|---|---|---|---|---|
+| Larrie | 35 / MAP_ROUTE_02 | 1 | (18,36) | (18,39), active, valid `spriteId` | NO | nothing, 120 frames |
+| Richey | 33 / MAP_ROUTE_01 | 21 | (17,9) | (17,11), active, `spriteId=6` | NO | nothing, from ALL FOUR adjacent tiles, 3 presses |
+
+In both cases the trainer's `TRAINER_FLAGS_START + <trainer>` defeat flag and
+the event's `FLAG_MAP{n}_EVENT{e}_SSA` are both already set, and the object
+event's script points at a block whose first command is `trainerbattle_single`.
+
+**What is ruled out.**
+
+- **Elevation.** `ObjectEventDoesElevationMatch` is the only z-condition in
+  the lookup path and `ELEVATION_TRANSITION` (0) is a wildcard. Larrie's
+  object `elevation` is 3 (`metadata_wiring.DEFAULT_ELEVATION`), and the
+  staged terrain elevation is 3 at his template (18,36), at his reported
+  (18,39), AND at the player's (18,40). 3 == 3 == 3; the check cannot trip.
+- **`TryOverrideTemplateCoordsForObjectEvent` moving them.** Despite the
+  name it assigns only `objectEventTemplate->movementType`. It never writes
+  x/y or elevation. The coordinate-writing function
+  (`OverrideTemplateCoordsForObjectEvent`) is not called from `trainer_see.c`.
+- **The harness's object decode being broken in general.** Static objects on
+  the same maps report their template coordinates EXACTLY (Route 02's Barewl
+  at (17,36); Route 01's item balls at (13,19) and (12,9); the rock-smash
+  rocks). Only the two defeated trainers disagree with their templates.
+- **The interaction lookup's other conditions.** `GetObjectEventIdByPosition`
+  checks `active`, tile match, and elevation only — no `invisible`,
+  `inanimate`, held-movement, or `berryTreeId` gate exists on that path.
+
+**The contradiction that has to be explained.** The engine's lookup should
+succeed: the harness reads the object as `active` at a tile directly adjacent
+to the player, with matching elevation, and the player verified facing it
+(`object_event(LOCALID_PLAYER).facing == "UP"`). Yet no script runs AND the
+sprite is not drawn on that tile — a screenshot at the moment of the press
+shows empty ground above the player, with the only nearby sprite being the
+Barewl at its own template. So either the reported `currentCoords` are stale
+(the object is really somewhere else, and the harness reads a field that no
+longer tracks it) or the object has been effectively removed while still
+flagged `active`. Neither offset is `MAP_OFFSET`, and the two deltas differ
+(+3 y for Larrie, +2 y for Richey), so it is not a constant bias error.
+
+**Next step when this is picked up.** Compare the compiled script bytes and
+the live `struct ObjectEvent` field-by-field for a defeated APPROACH trainer
+(Larrie/Richey) against one that is interactable — Kevlar's Mawuli, a
+facility trainer emitted as `trainerbattle_no_intro` who never walks, whose
+repeat-interaction beat (kevlar B8) passes. The differing field is the
+answer. `Script_HasNoEffect` (this fork probes a script for observable
+effects before locking the player) is worth checking on that path too: it is
+a plausible mechanism for "A press does nothing" that would not show up as a
+lookup failure at all. Probe scripts from the session are throwaway but the
+technique is in `reference/` terms simple: construct `Emulator(pre_beat.gba,
+engine)`, `run(SEEDED_BOOT_FRAMES)`, then read `object_events()` directly.
+
+**Blast radius.** Player-visible in every chapter that has a trainer: you
+cannot talk to any trainer you have beaten, and at least two of them stop
+rendering. CH01-CH03 all passed their §9 gates with this present, because no
+beat in those chapters ever re-talked a defeated trainer — the first beat in
+the corpus that does is CH04's B11, which is how it surfaced. Related: the
+route1 regression beat written for §46 below (`n5_richey_retalk_deferred`)
+is written but NOT registered for exactly this reason, and should be
+registered as part of closing this item.
+
+### 46. Phone-rematch trainers' `Page2` was dead code — FIXED 2026-08-27, unobservable until §45
+
+*Filed and fixed the same day; kept open only because it cannot be verified
+in play until §45 is resolved.*
+
+`deterministic`'s phone-rematch classifier emits three blocks per phone
+trainer: the `trainerbattle_single` page, a `_RegisterMatchCall`
+continue-script, and a `Page2` steady state carrying the
+`IsTrainerReadyForRematch` branch and the post-defeat idle line. Nothing ever
+referenced `Page2`: `transpile_driver._record_collapsed_pages` marked the
+event `collapsed_pages`, and `metadata_wiring._resolve_script` read that
+trait as "resolve to the page-1 label, build no dispatcher". Re-talking a
+defeated phone trainer therefore re-ran the headless match-call registrar and
+the NPC said nothing.
+
+Four events corpus-wide: map33/ev39 (Brandon), map33/ev53 (Richey),
+map35/ev3 (Larrie), map35/ev23 (Brent). **Two are Route 1's, so CH02 passed
+its §9 gate on 2026-08-12 with two silent NPCs in it.** Map050/ev19 (Theo)
+was unaffected — it gets a real `_Dispatch` — which is what localises the
+bug to the `collapsed_pages` rematch-trainer shape rather than to multi-page
+trainers generally.
+
+**Fix:** the `_RegisterMatchCall` block now leads with a check on the SSA
+flag it already sets and jumps to `Page2` when set. That is where vanilla
+puts it (`Route102_EventScript_Calvin`'s 4th `trainerbattle_single`
+argument runs both after the battle and on every later re-talk via
+`gotopostbattlescript`).
+
+**A dispatcher wrapping the trainer script is NOT an option — do not retry
+it.** It was tried first and broke sight-trainer detection outright:
+`GetTrainerFlagFromScriptPointer` (`engine/src/battle_setup.c:1232`) casts
+the object event's RAW SCRIPT BYTES at a fixed offset to read the opponent
+id, so the object's script must have `trainerbattle_*` as its literal first
+command. Wrapping it made the engine read garbage as a trainer id;
+`route1:B13` (Richey's first battle, previously green) failed immediately on
+the live suite. The comment recording this now lives at the classifier's
+post-battle-script construction.
+
 ### 44. CH01/CH03 flavor interiors shipped untested — DEFERRED to the end of Act 1
 
 *Filed 2026-08-25 from the §43(b) re-sweep of CH01–CH03 under the new
