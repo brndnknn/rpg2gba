@@ -1263,6 +1263,83 @@ def b13(emu: Emulator) -> None:
                     registered_flag=RICHEY_REGISTERED_FLAG)
 
 
+#: Richey's post-defeat idle line (`Map033_EV053_Page2`'s
+#: `IsTrainerReadyForRematch`-false arm). Not a spec beat -- see N5.
+RICHEY_IDLE_TEXT = "someday I'll battle you again"
+#: Richey's compiled local id -- his 1-based index in Route01's
+#: `object_events` (`Map033_EV053_Page1` at (17,9)), the id `gObjectEvents`
+#: is addressed by. NOT his RMXP event id 53; see `FLOOD_LOCAL_ID`.
+RICHEY_LOCAL_ID = 21
+
+
+# DEFERRED, not registered -- see the docstring's "why this is not
+# registered yet" section. Same written-but-unregistered shape as
+# `DEFERRED_ROCK_GATED` and route2.py's `b8_autorun_deferred`.
+def n5_richey_retalk_deferred(emu: Emulator) -> None:
+    """The regression beat for a bug that shipped through CH02's own gate.
+
+    `deterministic`'s phone-rematch classifier emits three blocks per phone
+    trainer: the `trainerbattle_single` page, a `_RegisterMatchCall`
+    continue-script, and a `Page2` steady state carrying the rematch check
+    and this idle line. Until 2026-08-27 nothing ever referenced `Page2`:
+    `transpile_driver._record_collapsed_pages` marked the event
+    `collapsed_pages`, and `metadata_wiring._resolve_script` read that trait
+    as "resolve straight to the page-1 label, build no dispatcher", so the
+    object event pointed only at the battle script. Re-talking a defeated
+    phone trainer therefore re-ran the headless match-call registrar and the
+    NPC said nothing at all.
+
+    It went unnoticed because no beat in the corpus re-talked a defeated
+    phone trainer -- B13 above battles Richey, checks his registered flag,
+    and walks away. The bug was found on Route 2's Larrie (CH04 B11, the
+    first beat that does re-talk one) and the audit that followed found the
+    same dead `Page2` on all four staged phone trainers: map33/ev39
+    (Brandon), map33/ev53 (Richey), map35/ev3 (Larrie), map35/ev23 (Brent).
+    Two of those are Route 1's, so CH02 passed its §9 gate on 2026-08-12
+    with two silent NPCs in it.
+
+    This beat exists so that can't happen quietly again: it is cheap, it
+    runs in the chapter that already shipped the bug, and it fails loudly if
+    the dispatcher stops being wired.
+
+    **Why this is not registered yet (2026-08-27).** It cannot currently
+    reach its subject, for a reason that has nothing to do with the fix it
+    guards. After B13's battle, Richey's object event is at (17,11), not his
+    template's (17,9) -- a sight trainer walks toward the player during
+    `PlayerFaceApproachingTrainer` and `TryOverrideTemplateCoordsForObjectEvent`
+    writes that live position back. His slot then reports `active`, a live
+    `spriteId`, and the right `graphicsId`, yet nothing is drawn on the tile
+    and an A press from ALL FOUR adjacent tiles starts no script at all --
+    verified directly against the beat's own `pre_beat.gba` on ROM
+    `b07a02f8` (three consecutive presses, `FLAG_MAP033_EVENT053_SSA` and
+    Richey's `TRAINER_FLAGS_START` bit both already set, no lock, no text).
+    Something makes a defeated sight trainer who moved off his template
+    non-interactable; that is its own investigation and it is NOT what this
+    beat is for.
+
+    Larrie (CH04 B11) is an EVENT-TOUCH trainer, not a sight trainer, so he
+    never runs the approach that moves Richey -- which is why B11 is the
+    live test of the `Page2` wiring and this beat is deferred rather than
+    fixed in place. Register it once the interactability question is
+    answered; the assertions below are correct as written.
+    """
+    # `_approach_moving_npc`, not `_assert_no_second_battle`: the latter
+    # walks the sight LANE and stops wherever the lane walk ends, which for
+    # Richey left the player short of him with nothing to face (observed
+    # 2026-08-27 on ROM `b07a02f8` -- "interaction did not start a script",
+    # player alone on the path in `interact_noop_f52214.png`). This helper
+    # reads his LIVE `gObjectEvents` position instead, stands one tile below
+    # him, faces UP, and retries on interact failure -- the same primitive
+    # B16 uses for the patrolling brother.
+    _approach_moving_npc(emu, "N5", RICHEY_LOCAL_ID, "UP")
+    emu.assert_text_contains(RICHEY_IDLE_TEXT)
+    emu.advance_dialog()
+    if emu.field_locked():
+        shot = emu.screenshot("n5_stuck")
+        raise ScenarioError(
+            f"N5: Richey's idle dialogue did not close cleanly ({shot})")
+
+
 # -- B14 -----------------------------------------------------------------
 
 @route1.beat("B14", "Trainer pacing survives: Flood and Lynette turn in place "
@@ -1342,19 +1419,34 @@ def b14(emu: Emulator) -> None:
     _cross_threshold(emu, "B14", OLD_ROD_HOUSE_EXIT_APPROACH, "DOWN",
                      "MAP_ROUTE_01")
 
+    # What this beat is FOR is that the compiled movement type survived
+    # conversion (CH02_TODO #9), and that is a property of the object event,
+    # not of any particular 4 seconds of it. Watching for a facing change
+    # was a proxy for it and a flaky one: `MOVEMENT_TYPE_LOOK_AROUND` turns
+    # on `MovementType_LookAround`'s own RNG timer
+    # (`engine/src/event_object_movement.c`), so a run where the timer
+    # simply hasn't fired inside the window is indistinguishable from lost
+    # pacing. Observed 2026-08-27: this raised on Lynette in one attempt and
+    # on Flood in the next, on the SAME ROM (`b246127d`) that had passed it
+    # minutes earlier -- the flake truncated two consecutive full-suite runs
+    # at beat 25 of 73 and was blocking the CH04 gate, not catching anything.
+    # Reading `ObjectEvent.movementType` asserts the same regression
+    # directly and deterministically; the map round-trip above is what makes
+    # it meaningful, since a defeated sight trainer's template is frozen to
+    # `FACE_<dir>` until the map reloads.
+    look_around = emu.resolve_constant("MOVEMENT_TYPE_LOOK_AROUND")
     for trainer, local_id, label in (
         (TRAINER_FLOOD, FLOOD_LOCAL_ID, "Flood"),
         (TRAINER_LYNETTE, LYNETTE_LOCAL_ID, "Lynette"),
     ):
         _assert_no_second_battle(emu, "B14", trainer.xy, trainer.facing)
-        samples = emu.observe_object_event(local_id, 240, sample_every=4)
-        facings = {s.facing for s in samples}
-        if len(facings) < 2:
-            shot = emu.screenshot(f"b14_{label.lower()}_static")
+        actual = emu.object_event(local_id).movement_type
+        if actual != look_around:
+            shot = emu.screenshot(f"b14_{label.lower()}_movement_type")
             raise ScenarioError(
-                f"B14: {label} (local id {local_id}) never changed facing "
-                f"over the observation window -- LOOK_AROUND pacing lost "
-                f"({shot})")
+                f"B14: {label} (local id {local_id}) has movement type "
+                f"{actual}, expected MOVEMENT_TYPE_LOOK_AROUND "
+                f"({look_around}) -- pacing lost ({shot})")
 
     # The WALK_UP_AND_DOWN half of CH02_TODO #9 is NOT covered this chapter:
     # its only subject on Route 1 is EV035 Brandon (triathlete), who is

@@ -126,15 +126,35 @@ per page -- `_event_transfers` scans every page of an event, and a single
 out-of-slice `code 201` anywhere in it returns `("skip", "out-of-slice
 warp")` for the WHOLE event. EV001 therefore emits nothing at all this
 chapter: not page 0 (the warp itself, `pbCaveEntrance` + `code 201` to
-Map036), and not page 1 (the once-per-visit `s:tsOff?("A")` autorun,
-gated on switch 22 and closed off by `setTempSwitchOn("A")`). The cave-mouth
-tile at (20,33) therefore compiles as ordinary BLOCKED terrain -- ONE thing
-is still testable (the player can reach the approach tile and the tile
-itself refuses to be crossed) and it is registered as B7 below, in the exact
-shape route1.py's B17 used for its own then-unstaged Route1->Kevlar seam:
-reach the approach, assert the boundary itself does not move the player, and
-say in plain language that the real crossing is deferred to whichever
-chapter stages map 36 (CH05). B8 (the autorun) has NO live subject at all --
+Map036, and not page 1 (the once-per-visit `s:tsOff?("A")` autorun,
+gated on switch 22 and closed off by `setTempSwitchOn("A")`).
+
+The cave-mouth tile at (20,33) is therefore WALKABLE and inert -- **not**
+blocked. This beat asserted BLOCKED until 2026-08-27 and failed on the first
+two live ROMs (`ec7401d4`, `b246127d`) for the whole time; the assertion, not
+the build, was wrong. Two decoded facts settle it. (1) The tile was never
+blocked by terrain: (20,34)/(20,33)/(20,32) all carry collision 0 /
+MB_NORMAL in the staged layout. (2) EV001 never blocked it either -- both
+pages carry `character_name == ""`, and RMXP's real player-passability rule
+(`Game_Character#passableEx?`, quoted at length in
+`metadata_wiring.collect_through_block_cells`) collapses for the PLAYER to
+`event.character_name != ""`, so a blank-graphic event never blocks the
+player whatever its `through`. EV001 is a player-touch warp HOST (page 0,
+trigger 1), not a wall: in Uranium you step onto the tile and the warp fires
+under your feet. Dropping the event therefore correctly leaves a walkable,
+inert tile -- there is no lost collision to restore, and the converter needs
+no change. This is the same inverted premise `collect_through_block_cells`
+already had to correct once for Route 1's shoreline events; it survived here
+in the beat's own assertion.
+
+What B7 tests instead: step onto the mouth, assert no warp fires (still on
+MAP_ROUTE_02), step once more north onto open (20,32), and assert real
+terrain at (20,31) (metatile 214, collision 1) stops the walk. Route02 has
+no north edge connection at all (`connections: null`) -- Uranium's own seam
+row from map 35 north points at map 40 ("Luz"), never at Passage Cave -- so
+walking north cannot reach unstaged data no matter what; the player gets two
+tiles of cave-mouth art and a wall. The real crossing into Passage Cave
+belongs to whichever chapter stages map 36 (CH05). B8 (the autorun) has NO live subject at all --
 nothing compiles for it this chapter -- so it is written but never
 registered, in the same unregistered-deferred-beat shape kevlar.py uses for
 its Strength-gated cave content (`b19`-`b24`, `DEFERRED_BEATS`); see
@@ -222,15 +242,47 @@ KEVLAR_SEAM_DIRECTION = "UP"
 # 2 are `trigger: 0` (Action button), unlike page 0's `trigger: 2`.
 LARRIE_EVENT_ID = 3
 LARRIE_XY = (18, 36)
+# Larrie keeps self-switch flags (unlike Timothy below) because his THREE
+# pages need them: page 1 is gated on self-switch B, page 2 on self-switch A
+# (verified in the rxdata, 2026-08-26). One native trainer flag cannot select
+# between two distinct follow-up pages, so `classify_phone_rematch_trainer_
+# battle`'s `register_block` emits a `setflag` -- a deliberate divergence from
+# the vanilla idiom, not an oversight. The native flag is still the honest
+# answer to "was he beaten", which is what `_trigger_trainer` checks.
+TRAINER_LARRIE_CONST = "TRAINER_LARRIE_4"
 LARRIE_APPROACH = (18, 37)
 LARRIE_FACING = "UP"
 
-# B3/B12: the Potion item ball, Map035 event id 9 "EV009", (16,42), graphic
-# direction 2 (down) -> approach one tile south, facing UP, Action button.
+# B3/B12: the Potion item ball, Map035 event id 9 "EV009", (16,42),
+# Action button (manifest map035/ev009 p0 and p1 are both `trigger:
+# "action"`, so this is press-A-from-adjacent, not walk-onto -- the spec's
+# "walk onto (16,42)" prose in `04-route-2.md` B3/B12 is loose).
+#
+# Approach is (16,41), NORTH of the ball, facing DOWN. It used to be
+# (16,43) facing UP, derived from the event's graphic direction 2 (down)
+# by the same "approach from the side the sprite faces" rule that is right
+# for the trainers above -- and that rule does not apply to an item ball,
+# whose graphic direction is just which way the ball is drawn. (16,43) is
+# solid terrain: it is the north edge of the wall spanning x=16-20, y=42-45
+# (`engine/data/layouts/Route02/map.bin`, collision bits 10-11), so no
+# route to it can exist. `_plan_route` said so correctly, `walk_to` fell
+# back to greedy pathing, and greedy walked the direct line from Timothy's
+# tile -- whose first two steps (18,47)/(18,46) are MB_TALL_GRASS -- into
+# encounter after encounter until `_walk_absorbing` hit its cap. The 12
+# absorbed wild battles were the symptom; the impossible target was the
+# cause. B3 had never actually run before 2026-08-26 (B2 was registered
+# ahead of it and failed first), so this was latent, not a regression.
+#
+# (17,42) facing LEFT is equally valid on paper -- same 17-tile route from
+# (18,47), same 2 grass tiles crossed, neither is a warp tile. (16,41)
+# wins on robustness: it sits on a corridor with two open neighbours,
+# while (17,42) is a dead-end spur whose only exit is the tile the walker
+# arrived from, which is the worst shape for the greedy fallback's
+# step-aside retry if anything does go wrong.
 ITEM_BALL_EVENT_ID = 9
 ITEM_BALL_XY = (16, 42)
-ITEM_BALL_APPROACH = (16, 43)
-ITEM_BALL_FACING = "UP"
+ITEM_BALL_APPROACH = (16, 41)
+ITEM_BALL_FACING = "DOWN"
 ITEM_BALL_ITEM = "ITEM_POTION"
 
 # B4/B14: Youngster Timothy, Map035 event id 12 "Trainer(3)", (18,47),
@@ -238,6 +290,22 @@ ITEM_BALL_ITEM = "ITEM_POTION"
 # one tile east, facing LEFT. Page 0 is `trigger: 2` (event-touch, the
 # fight); page 1 (self-switch A) is `trigger: 0` (Action button, the
 # defeated re-talk).
+#
+# Timothy has NO self-switch flag, and that is correct (2026-08-26). His
+# page 1 condition is self-switch A and nothing else -- i.e. exactly "have
+# you beaten him" -- so the transpiler collapses it into the engine's own
+# `TRAINER_FLAGS_START + <trainer>` bit and emits the stock vanilla shape:
+#
+#     trainerbattle_single TRAINER_TIMOTHY_247, Text_Intro, Text_Defeated
+#     msgbox Text_PostBattle, MSGBOX_AUTOCLOSE
+#     end
+#
+# which is byte-for-byte `Route103_EventScript_Daisy` (and Andrew, Marcos,
+# Rhett, Pete, Isabelle) in the vendored engine. The trailing msgbox is NOT
+# dead code: it is the re-talk line, reached via `gotopostbattlescript` once
+# the trainer flag is set -- that is what B14 asserts. So there is no
+# `FLAG_MAP035_EVENT012_SSA` to read, and these beats read the native flag,
+# the same way route1.py's trainer beats always have.
 TIMOTHY_EVENT_ID = 12
 TIMOTHY_XY = (18, 47)
 TIMOTHY_APPROACH = (19, 47)
@@ -262,19 +330,53 @@ SIGN_ROADBLOCK_TEXT = ("In the event of a roadblock, Nowtoch City\n"
 # 04-route-2.md §3.1: "Rocks 14 (20,28) and 17 (19,29) are outer boulders
 # with an open face... Rocks 15/16/18 are interior: ... unreachable:
 # boxed_in_by_outer_rocks" -- the manifest itself scopes B6 to exactly these
-# two rows). Both graphic direction 2 (down) -> approach one tile south,
-# facing UP, Action button.
+# two rows).
+#
+# BOTH rocks are approached from (19,28), the open face the spec means, and
+# the facing differs per rock: rock 14 (20,28) is EAST of it, rock 17
+# (19,29) is SOUTH of it. The old constants applied the same "graphic
+# direction 2 (down) -> approach one tile south, facing UP" rule the
+# trainers use, and neither result was standable:
+#
+#   * ROCK_14_APPROACH was (20,29), which is a SEALED POCKET -- rock 14
+#     north, rock 17 west, rock 15 (21,29) east, blocked terrain (20,30)
+#     south. Terrain-only pathing routes into it straight through a rock;
+#     `_plan_route` excludes object-occupied tiles and so correctly found
+#     no route at all. The only way to stand there is to smash a rock,
+#     which is the exact thing this beat exists to prove you cannot do this
+#     chapter -- the target contradicted the beat's own premise.
+#   * ROCK_17_APPROACH was (19,30), plain blocked terrain, and it has no
+#     walkable unoccupied 4-neighbour whatsoever.
+#
+# Verified against `engine/data/layouts/Route02/map.bin` (collision bits
+# 10-11) plus `engine/data/maps/Route02/map.json` object occupancy: (19,28)
+# is collision 0, unoccupied, and 14 tiles from B5's end at (15,31).
 ROCK_14_XY = (20, 28)
-ROCK_14_APPROACH = (20, 29)
+ROCK_14_APPROACH = (19, 28)
+ROCK_14_FACING = "RIGHT"
 ROCK_17_XY = (19, 29)
-ROCK_17_APPROACH = (19, 30)
+ROCK_17_APPROACH = (19, 28)
+ROCK_17_FACING = "DOWN"
 
-# B7: the cave-mouth tile, Map035 event id 1 "EV001", (20,33), graphic
-# direction 2 (down) -> approach one tile south, facing UP. See module
-# docstring: the whole event is dropped (out-of-slice warp), so this tile
-# reads as ordinary blocked terrain this chapter.
+# B7: the cave-mouth tile, Map035 event id 1 "EV001", (20,33). The whole
+# event is dropped this chapter (out-of-slice warp), and the tile underneath
+# is WALKABLE -- decoded 2026-08-27 from the staged layout: (20,34)/(20,33)/
+# (20,32) are all collision 0 / MB_NORMAL. EV001 never contributed collision
+# to lose: both its pages carry `character_name == ""`, and RMXP's real
+# player rule (`Game_Character#passableEx?`, quoted in
+# `metadata_wiring.collect_through_block_cells`) collapses for the player to
+# `event.character_name != ""` -- a blank-graphic event NEVER blocks the
+# player, `through` or not. In Uranium you walk ONTO this tile and page 0's
+# trigger 1 (player touch) fires the warp under your feet. With the event
+# dropped, the tile stays walkable and nothing fires, which is faithful.
+# The player is stopped two tiles north by real terrain at (20,31), and
+# Route02 has no north edge connection at all (`connections: null`; Uranium's
+# own seam row points at map 40 "Luz", not Passage Cave/map 36).
 CAVE_MOUTH_XY = (20, 33)
 CAVE_MOUTH_APPROACH = (20, 34)
+# First real collision north of the cave mouth (metatile 214, collision 1).
+CAVE_MOUTH_NORTH_WALL_XY = (20, 31)
+CAVE_MOUTH_NORTH_OPEN_XY = (20, 32)
 
 # B9: the "Old entrance to Nowtoch City" sign, Map035 event id 2 "EV002",
 # (19,34), graphic direction 2 (down) -> approach one tile south, facing UP,
@@ -294,11 +396,28 @@ BAREWL_APPROACH = (17, 37)
 BAREWL_FACING = "UP"
 BAREWL_TEXT = "Bare! Bar!"
 
-# B15: land_mons wild encounters -- UNVERIFIED cell choice, see module
-# docstring. `wild_encounters.json` maps["35"]["land_mons"]: rate 25,
-# 12-entry table (dedupes to 6 species), levels 3-5.
-GRASS_CELL_A = (18, 40)
-GRASS_CELL_B = (19, 40)
+# B15: land_mons wild encounters. `wild_encounters.json`
+# maps["35"]["land_mons"]: rate 25, 12-entry table (dedupes to 6 species),
+# levels 3-5.
+#
+# These cells are now DECODED, not guessed (2026-08-26), which retires the
+# module docstring's "unverified best-effort guess" warning for B15. The
+# tileset attribute data the docstring said did not exist for map 35 does
+# exist: `engine/data/tilesets/{primary,secondary}/uranium1035/
+# metatile_attributes.bin`, read against `Route02/map.bin` exactly the way
+# route1.py's cells were picked -- metatile id = block & 0x03FF, ids >= 512
+# index the secondary set, behavior = attr & 0x00FF, MB_TALL_GRASS = 2.
+#
+# The docstring's guess was wrong on both counts, and it said so itself.
+# (18,40)/(19,40) decode to behavior 0 -- not grass at all, so B15 could
+# only ever have timed out -- and (18,40) additionally sits inside Larrie's
+# 5-tile sight cone (see the B4 ordering note), so the shuffle would have
+# re-triggered him. Map 35's real reachable grass is 17 tiles in a band at
+# y=46..52, south of the rockslide, which is where the spec said to look.
+# (19,49)/(19,50) are adjacent, both grass, and each has 4 grass
+# neighbours, so a step in any direction stays in the encounter zone.
+GRASS_CELL_A = (19, 49)
+GRASS_CELL_B = (19, 50)
 LAND_MONS_SPECIES = (
     "SPECIES_CHYINMUNK", "SPECIES_BIRBIE", "SPECIES_CUBBUG",
     "SPECIES_BAREWL", "SPECIES_MANKEY", "SPECIES_OWTEN",
@@ -372,8 +491,17 @@ def _walk_absorbing(emu: Emulator, beat: str, tx: int, ty: int, *,
         f"battles walking toward {(tx, ty)} without reaching it ({shot})")
 
 
+def _trainer_defeat_flag(trainer_const: str) -> str:
+    """The engine's own defeat flag for a native `trainerbattle_single`
+    trainer -- `TRAINER_FLAGS_START + <const>`, set inside the battle before
+    any script runs. Same helper route1.py has carried since CH02; route 2
+    reached for `FLAG_MAP035_EVENT*_SSA` instead and that is what made every
+    trainer beat in this chapter unpassable (see Timothy's comment above)."""
+    return f"TRAINER_FLAGS_START + {trainer_const}"
+
+
 def _trigger_trainer(emu: Emulator, beat: str, approach: tuple[int, int],
-                     facing: str) -> None:
+                     facing: str, trainer_const: str) -> None:
     """Approach a static, solid trainer NPC and get its battle started,
     tolerating either compiled trigger mechanism -- see module docstring
     ("Trainer battle triggers are RPG Maker Event Touch..."). Tries a bump
@@ -401,6 +529,20 @@ def _trigger_trainer(emu: Emulator, beat: str, approach: tuple[int, int],
             f"{beat}: a battle started at {approach} but it isn't a trainer "
             f"battle -- an incidental wild encounter beat this beat to the "
             f"trigger ({shot})")
+    # "A trainer battle started" was the only guard here until 2026-08-26,
+    # and it is not enough: B2 used to walk from the south seam to Larrie at
+    # (18,36) straight through Timothy's event-touch tile at (18,47), win
+    # TIMOTHY, and then assert Larrie's end state. Both guards passed every
+    # time -- a trainer battle really had started -- so the failure read as a
+    # converter bug for three sessions. Assert WHICH trainer.
+    expected = emu.resolve_constant(trainer_const)
+    actual = emu.opponent_trainer_id()
+    if actual != expected:
+        shot = emu.screenshot(f"{beat}_wrong_trainer")
+        raise ScenarioError(
+            f"{beat}: a trainer battle started at {approach}, but against "
+            f"trainer id {actual}, not {trainer_const} ({expected}) -- "
+            f"another trainer's event-touch page fired en route ({shot})")
 
 
 def _press_a(emu: Emulator, beat: str, approach: tuple[int, int],
@@ -468,6 +610,69 @@ def b1(emu: Emulator) -> None:
                       MAP_CONST)
 
 
+# -- B4 ------------------------------------------------------------------
+# The registration order below is B4 -> B2 -> B3 -- Timothy, then Larrie,
+# then the item ball. The ids are labels, not ordering: registration order
+# is PLAYTHROUGH order (boot-walk-harness skill, Phase 2), and it is set by
+# what the map forces, not by the beat numbers and not by y-coordinate.
+#
+# Going south to north from B1's seam arrival at (20,56) the player meets
+# Timothy (18,47) first. Larrie (18,36) comes next even though the item
+# ball (16,42) is physically nearer, because Larrie is a
+# TRAINER_TYPE_NORMAL object with `trainer_sight_or_berry_tree_id: 5` and
+# MOVEMENT_TYPE_FACE_DOWN (`engine/data/maps/Route02/map.json`): he sees
+# the whole of column x=18 from y=37 down to y=41. The wall spanning
+# x=16-20, y=42-45 means EVERY route from the south to the item ball
+# crosses column 18 somewhere in y=37..41 -- i.e. inside the cone. There is
+# no ordering in which the item ball comes first; the map does not offer
+# one.
+#
+# Two ordering bugs have now been paid for here, both of them the same
+# mistake -- assuming a beat's walk goes where its coordinates suggest:
+#   * B2 first: its walk to Larrie crossed Timothy's event-touch tile at
+#     (18,47) and fought HIM, then asserted Larrie's end state. That is
+#     CH04's long-running "B2 never sets its self-switch" failure, and it
+#     is why `_trigger_trainer` now asserts WHICH trainer it got.
+#   * B3 before B2 (2026-08-26): the walk to the item ball crossed
+#     Larrie's sight cone at (18,40), so Larrie fought and WON-flagged
+#     himself mid-walk, and B2's precondition then found
+#     FLAG_MAP035_EVENT003_SSA already set.
+# Before reordering these beats again, check sight cones and event-touch
+# tiles along the actual planned route, not just the endpoints.
+
+@route2.beat("B4", "Youngster Timothy's event-touch battle fires and is "
+                   "won; self-switch A latches the defeated state (spec §3 "
+                   "B4 / manifest map035/ev012/p0)",
+             map_constant=MAP_CONST, at=TIMOTHY_APPROACH)
+def b4(emu: Emulator) -> None:
+    defeat_flag = _trainer_defeat_flag(TRAINER_TIMOTHY_CONST)
+    if emu.flag(defeat_flag):
+        raise ScenarioError(
+            f"B4 precondition failed: {defeat_flag} already set before the "
+            f"fight")
+    _trigger_trainer(emu, "B4", TIMOTHY_APPROACH, TIMOTHY_FACING,
+                     TRAINER_TIMOTHY_CONST)
+    party = win_battle(emu)
+    # No `_settle_post_battle_script` here, and none is needed: the native
+    # trainer flag is set inside the battle, before any script runs (the
+    # reason route1.py's trainer beats can read it the instant `win_battle`
+    # returns). The settle helper exists for Larrie's self-switch, which IS
+    # written by a post-battle continue script.
+    if not emu.flag(defeat_flag):
+        shot = emu.screenshot("b4_not_defeated")
+        raise ScenarioError(
+            f"B4: {defeat_flag} not set after the win ({shot})")
+    timothy_const = emu.resolve_constant(TRAINER_TIMOTHY_CONST)
+    # `resolve_constant` alone confirms the symbol exists in the built ROM
+    # (the fork-index gate this chapter's own TODO says currently blocks
+    # transpiling map 35 at all) -- logged, not asserted against the enemy
+    # roster read at battle start, since this chapter has no independent
+    # source for Timothy's actual mon roster to cross-check against.
+    logger.info("B4: TRAINER_TIMOTHY_247 resolves to %d; enemy party at "
+                "battle start: %s", timothy_const,
+                [(m.species, m.level) for m in party])
+
+
 # -- B2 ------------------------------------------------------------------
 
 @route2.beat("B2", "Hiker Larrie's event-touch battle fires and is won; "
@@ -479,7 +684,8 @@ def b2(emu: Emulator) -> None:
     if emu.flag(ssa_a):
         raise ScenarioError(
             f"B2 precondition failed: {ssa_a} already set before the fight")
-    _trigger_trainer(emu, "B2", LARRIE_APPROACH, LARRIE_FACING)
+    _trigger_trainer(emu, "B2", LARRIE_APPROACH, LARRIE_FACING,
+                     TRAINER_LARRIE_CONST)
     win_battle(emu)
     _settle_post_battle_script(emu, "B2", ssa_a)
     if not emu.flag(ssa_a):
@@ -514,34 +720,6 @@ def b3(emu: Emulator) -> None:
             f"({shot})")
 
 
-# -- B4 ------------------------------------------------------------------
-
-@route2.beat("B4", "Youngster Timothy's event-touch battle fires and is "
-                   "won; self-switch A latches the defeated state (spec §3 "
-                   "B4 / manifest map035/ev012/p0)",
-             map_constant=MAP_CONST, at=TIMOTHY_APPROACH)
-def b4(emu: Emulator) -> None:
-    ssa_a = _flag_ssa(35, TIMOTHY_EVENT_ID, "A")
-    if emu.flag(ssa_a):
-        raise ScenarioError(
-            f"B4 precondition failed: {ssa_a} already set before the fight")
-    _trigger_trainer(emu, "B4", TIMOTHY_APPROACH, TIMOTHY_FACING)
-    party = win_battle(emu)
-    _settle_post_battle_script(emu, "B4", ssa_a)
-    if not emu.flag(ssa_a):
-        shot = emu.screenshot("b4_no_ssa")
-        raise ScenarioError(f"B4: {ssa_a} not set after the win ({shot})")
-    timothy_const = emu.resolve_constant(TRAINER_TIMOTHY_CONST)
-    # `resolve_constant` alone confirms the symbol exists in the built ROM
-    # (the fork-index gate this chapter's own TODO says currently blocks
-    # transpiling map 35 at all) -- logged, not asserted against the enemy
-    # roster read at battle start, since this chapter has no independent
-    # source for Timothy's actual mon roster to cross-check against.
-    logger.info("B4: TRAINER_TIMOTHY_247 resolves to %d; enemy party at "
-                "battle start: %s", timothy_const,
-                [(m.species, m.level) for m in party])
-
-
 # -- B5 ------------------------------------------------------------------
 
 @route2.beat("B5", "Reading the roadblock hint sign shows the Passage Cave "
@@ -567,14 +745,18 @@ def b5(emu: Emulator) -> None:
                  BeatLocation(MAP_CONST, ROCK_17_XY[0], ROCK_17_XY[1], "rock 17"),
              ))
 def b6(emu: Emulator) -> None:
-    for label, xy, approach in (
-        ("rock14", ROCK_14_XY, ROCK_14_APPROACH),
-        ("rock17", ROCK_17_XY, ROCK_17_APPROACH),
+    # The facing is per-rock, not a constant "UP": both rocks are reached
+    # from the same tile (19,28), with rock 14 to its east and rock 17 to
+    # its south. See the ROCK_* constants for why no south-of-the-rock
+    # approach exists for either one.
+    for label, xy, approach, facing in (
+        ("rock14", ROCK_14_XY, ROCK_14_APPROACH, ROCK_14_FACING),
+        ("rock17", ROCK_17_XY, ROCK_17_APPROACH, ROCK_17_FACING),
     ):
         _walk_absorbing(emu, "B6", *approach, absorb_wild=True, absorb_trainer=True)
-        emu.face("UP")
+        emu.face(facing)
         before = emu.player_pos()
-        if _try_step(emu, "UP"):
+        if _try_step(emu, facing):
             shot = emu.screenshot(f"b6_{label}_not_blocking")
             raise ScenarioError(
                 f"B6: stepping toward the rock at {xy} moved the player -- "
@@ -600,28 +782,45 @@ def b6(emu: Emulator) -> None:
 
 # -- B7 ------------------------------------------------------------------
 
-@route2.beat("B7", "The cave-mouth tile is reachable up to the approach, "
-                   "but the whole event (id 1 'EV001', both pages) is "
-                   "dropped this chapter -- its only code-201 warp targets "
-                   "unstaged Map036, and `metadata_wiring.classify_event` "
-                   "skips the WHOLE event on any out-of-slice warp, not "
-                   "just that page. The tile reads as ordinary blocked "
-                   "terrain; the real crossing into Passage Cave belongs "
-                   "to whichever chapter stages map 36 (CH05) -- mirrors "
-                   "route1.py's own B17 for its then-unstaged Kevlar seam",
+@route2.beat("B7", "The cave-mouth tile is walkable and inert this chapter: "
+                   "the whole event (id 1 'EV001', both pages) is dropped -- "
+                   "its only code-201 warp targets unstaged Map036, and "
+                   "`metadata_wiring.classify_event` skips the WHOLE event on "
+                   "any out-of-slice warp. EV001's pages are blank-graphic, so "
+                   "it never blocked the player in RMXP either (it is a "
+                   "player-touch warp host, not a wall) -- the player steps "
+                   "onto it, no warp fires, and real terrain stops them two "
+                   "tiles north. The crossing into Passage Cave belongs to "
+                   "whichever chapter stages map 36 (CH05)",
              map_constant=MAP_CONST, at=CAVE_MOUTH_APPROACH)
 def b7(emu: Emulator) -> None:
     _walk_absorbing(emu, "B7", *CAVE_MOUTH_APPROACH,
                     absorb_wild=True, absorb_trainer=True)
+    # Walking to (20,32) necessarily crosses the cave mouth at (20,33): the
+    # column is the only way in (x=19 is solid from y=34 north, x=21 has no
+    # clean run past y=29). `_walk_absorbing` is the retry-until-arrived
+    # primitive -- `try_step` overshoots here, since its 16-frame settle is a
+    # full extra tile of buffered input.
+    _walk_absorbing(emu, "B7", *CAVE_MOUTH_NORTH_OPEN_XY,
+                    absorb_wild=True, absorb_trainer=True)
+    if emu.player_pos() != CAVE_MOUTH_NORTH_OPEN_XY:
+        shot = emu.screenshot("b7_north_pos")
+        raise ScenarioError(
+            f"B7: expected to stand at {CAVE_MOUTH_NORTH_OPEN_XY} after "
+            f"crossing the cave mouth {CAVE_MOUTH_XY}, got "
+            f"{emu.player_pos()} ({shot})")
+    # The dropped event is inert: crossing it fired no warp.
+    _require_map(emu, "B7", MAP_CONST)
+
+    # Real terrain stops the walk north one tile later.
     before = emu.player_pos()
     emu.face("UP")
     if _try_step(emu, "UP"):
-        shot = emu.screenshot("b7_crossed")
+        shot = emu.screenshot("b7_wall_crossed")
         raise ScenarioError(
-            f"B7: stepping UP from {CAVE_MOUTH_APPROACH} toward "
-            f"{CAVE_MOUTH_XY} moved the player -- this would cross into "
-            f"unstaged Map036 data; the cave mouth should still read "
-            f"BLOCKED on this build ({shot})")
+            f"B7: stepping UP from {CAVE_MOUTH_NORTH_OPEN_XY} toward "
+            f"{CAVE_MOUTH_NORTH_WALL_XY} moved the player -- that tile "
+            f"decodes collision 1 and must stop the walk north ({shot})")
     if emu.player_pos() != before:
         shot = emu.screenshot("b7_drifted")
         raise ScenarioError(f"B7: player position changed anyway ({shot})")
@@ -782,10 +981,11 @@ def b13(emu: Emulator) -> None:
                     "map035/ev012/p1)",
              map_constant=MAP_CONST, at=TIMOTHY_APPROACH)
 def b14(emu: Emulator) -> None:
-    ssa_a = _flag_ssa(35, TIMOTHY_EVENT_ID, "A")
-    if not emu.flag(ssa_a):
+    defeat_flag = _trainer_defeat_flag(TRAINER_TIMOTHY_CONST)
+    if not emu.flag(defeat_flag):
         raise ScenarioError(
-            f"B14 precondition failed: {ssa_a} not set -- B4 must run first")
+            f"B14 precondition failed: {defeat_flag} not set -- B4 must run "
+            f"first")
     _press_a(emu, "B14", TIMOTHY_APPROACH, TIMOTHY_FACING)
     emu.assert_text_contains("Someone tougher than me? Impossible!")
     emu.advance_dialog()
@@ -878,14 +1078,17 @@ FLAG_CONSTANTS: tuple[str, ...] = (
     _flag_ssa(35, LARRIE_EVENT_ID, "A"),
     _flag_ssa(35, LARRIE_EVENT_ID, "B"),
     _flag_ssa(35, ITEM_BALL_EVENT_ID, "A"),
-    _flag_ssa(35, TIMOTHY_EVENT_ID, "A"),
+    # NOT _flag_ssa(35, TIMOTHY_EVENT_ID, "A") -- see Timothy's constant
+    # comment: that flag correctly does not exist, and listing it here made
+    # the lint demand a symbol the converter is right not to emit.
 )
 
 SPECIES_CONSTANTS: tuple[str, ...] = LAND_MONS_SPECIES
 
 ITEM_CONSTANTS: tuple[str, ...] = (ITEM_BALL_ITEM,)
 
-TRAINER_CONSTANTS: tuple[str, ...] = (TRAINER_TIMOTHY_CONST,)
+TRAINER_CONSTANTS: tuple[str, ...] = (TRAINER_TIMOTHY_CONST,
+                                      TRAINER_LARRIE_CONST)
 
 ALL_CONSTANTS: tuple[str, ...] = (
     MAP_CONSTANTS + FLAG_CONSTANTS + SPECIES_CONSTANTS + ITEM_CONSTANTS
