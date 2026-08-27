@@ -887,7 +887,7 @@ construction.
 **The sweep was run 2026-08-25; results and remediation are §44.** It could not
 be mechanical after all — CH01–CH03 have no manifest to cross-reference.
 
-### 45. Larrie's re-talk shows the phone registration, not his line — and the harness misread it as "no script"
+### 45. Defeated Larrie faces you and says nothing — CH04's gate blocker
 
 *Filed 2026-08-27 from CH04's suite run on ROM `b07a02f8`; **substantially
 corrected the same day by the operator's own boot walk of that ROM**, which
@@ -899,26 +899,34 @@ the next reader should not re-derive them from the same evidence.*
 B12-B15 are gated behind B11.
 
 **What actually happens in game (operator boot walk, ROM `b07a02f8`).**
-Re-talking defeated Larrie: he **turns to face the player**, and a message
-appears saying the player **registered him in the phone**. He does NOT say
-his post-defeat idle line ("Watch your step! In caves, Pokémon can jump out
-from anywhere!"). A defeated trainer on the same walk **did** re-talk
-normally *(which trainer — Route 2's Timothy or Route 1's Richey — is
-unconfirmed; see the open question at the end of this item, it changes the
-scope)*.
+Re-talking defeated Larrie: he **turns to face the player, and NO text box
+appears at all.** The script starts — the `faceplayer` is visible — and then
+produces nothing. (The match-call registration message DOES appear, correctly,
+immediately after the battle itself; an earlier revision of this item
+mis-recorded that as happening on re-talk. It does not.)
 
-**So the real defect is the branch, not the interaction.** The post-battle
-continue-script runs on re-talk exactly as designed (`faceplayer` fires, a
-message prints). It is taking the REGISTRATION arm instead of the `Page2`
-arm, so `goto_if_set FLAG_MAP035_EVENT003_SSA, ...Page2` is not being taken
-at the moment the player talks. Two candidates, both cheap to check and
-neither yet checked: the flag genuinely is not set at that point in a real
-playthrough (the harness read it as set in its own seeded state, which is
-not the same thing), or `register_matchcall` re-runs and re-prints its
-message on a path that reaches the registration arm regardless. Note the
-message the operator saw is the *expected* text for the registration arm
-(`Registered HIKER Larrie in the POKéNAV.` appears in the B2 contact-sheet
-frame), so this is the wrong ARM being taken, not corrupted output.
+**Youngster Timothy, same map, re-talks correctly** and shows his line. He is
+the plain vanilla shape — `trainerbattle_single` with a trailing msgbox, no
+phone registration and no rematch branch. **No PHONE trainer is verified in
+play**, so §46's fix is unproven for its whole class; Route 1's Richey was
+not walked.
+
+**Leading hypothesis: the branch works and the defect is one level deeper.**
+`Page2` runs `specialvar(VAR_RESULT, IsTrainerReadyForRematch)` and takes the
+idle-line msgbox ONLY on `VAR_RESULT == FALSE`; otherwise it falls into
+`trainerbattle_rematch`. If that special returns anything but FALSE and no
+rematch is actually available, the rematch command does nothing visible and
+the script ends — which is precisely "faces you, no text". That would mean
+the `goto_if_set ...SSA -> Page2` fix from §46 IS working and the bug is the
+rematch arm. Under investigation; if it holds, the fix is to gate or drop the
+rematch arm rather than to touch the dispatch again.
+
+**The harness is NOT the primary defect, and the operator's argument is the
+reason.** A mispositioned harness cannot explain a human standing in the
+correct tile, facing the trainer, and getting no box. The harness's
+coordinate discrepancy (below) may still be real and may still be why
+`interact()` reported "no script started", but it is a SECOND, lesser
+problem — do not let it absorb this item.
 
 **REFUTED — do not carry these forward.** Both came from harness
 observations and both are wrong:
@@ -934,41 +942,72 @@ observations and both are wrong:
    same sprite as the B2 frame) and in play. That claim came from
    misidentifying a distant sprite in a probe screenshot as the Barewl.
 
-**Still unexplained, and now the harness-side question.** The harness reads
-`object_event(1)` for Larrie as `(18,39)` while his template is `(18,36)`,
-and `object_event(21)` for Richey as `(17,11)` against a template of
-`(17,9)`. Static objects on the same maps (the Barewl at (17,36), the item
-balls, the rocks) report their templates exactly, so the decode is right for
-those. Given the trainers ARE rendered and DO respond in play, the likely
-reading is now that these coordinates are wrong or stale and the harness is
-standing in the wrong place, which would explain the "no script" report
-directly. That makes it a `playtest/emulator.py` object-decode question —
-`off_objevent_currentcoords` and whether a trainer that has run an approach
-sequence keeps its live position in the field the harness reads — not an
-engine bug. **Elevation remains ruled out** (object elevation 3; staged
-terrain elevation 3 at template, at the reported tile, and at the player's
-tile; the only z-check is `ObjectEventDoesElevationMatch`, and 0 is a
-wildcard), as does `TryOverrideTemplateCoordsForObjectEvent` moving them (it
-assigns only `movementType`, never coordinates, despite its name).
+**Still open, secondary: the harness's object-coordinate read.** It places
+Larrie at `(18,39)` against a template of `(18,36)`, and Richey at `(17,11)`
+against `(17,9)`, while static objects on the same maps (the Barewl at
+(17,36), the item balls, the rocks) report their templates exactly. Since the
+trainers are rendered and DO respond in play, these coordinates look wrong or
+stale, which would explain `interact()`'s "no script started" report from a
+seeded state. That is an `emulator.py` object-decode question —
+`off_objevent_currentcoords`, and whether a trainer that has run an approach
+sequence keeps its live position in the field the harness reads. **Elevation
+remains ruled out** (object elevation 3; staged terrain elevation 3 at the
+template, at the reported tile, and at the player's tile; the only z-check is
+`ObjectEventDoesElevationMatch` and 0 is a wildcard), as does
+`TryOverrideTemplateCoordsForObjectEvent` moving them (it assigns only
+`movementType`, never coordinates, despite its name).
+
+**Eliminated 2026-08-27 (checked, do not re-check).**
+
+- **The emission is correct.** The assembled chain in
+  `engine/data/maps/Route02/scripts.inc` is complete and well-formed:
+  `goto_if_set FLAG_MAP035_EVENT003_SSA` -> a label that `goto`s
+  `Map035_EV003_Page2`; `Page2` itself has the `specialvar VAR_RESULT,
+  IsTrainerReadyForRematch`, the `compare`/`goto_if_eq`, the msgbox arm and
+  the `trainerbattle_rematch` arm, all present. Not a dropped command, not a
+  mis-wired label, not a bad goto.
+- **`IsTrainerReadyForRematch` is a real special** (`data/specials.inc:81`)
+  and is FALSE-safe for a trainer absent from the rematch table
+  (`TrainerIdToRematchTableId` -> -1 -> FALSE). Larrie IS in the table
+  (`uranium_rematch_table.gen.h`, `REMATCH_URANIUM_LARRIE_4`, five identical
+  stages — the generator emitted no real rematch variants). Richey likewise.
+- **Neither `Page2` arm is silent by design.** FALSE prints the idle msgbox;
+  TRUE runs `PlayTrainerEncounterMusic` / `ShowTrainerIntroSpeech` /
+  `waitmessage` / `waitbuttonpress` / `BattleSetup_StartRematchBattle`, i.e.
+  visible text and a battle. "Faces you, then nothing" matches neither arm,
+  so the original rematch-arm hypothesis is **REFUTED**.
+- **In the harness's seeded state the script does not start at all from the
+  beat's authored tile.** Pressing A at (18,37) facing UP leaves the field
+  unlocked and `gSpecialVar_Result` untouched across 120 frames. That
+  corroborates the coordinate discrepancy (Larrie is not at his template
+  (18,36) in that state) but does NOT explain the in-play symptom, where the
+  script demonstrably starts.
+
+**The open contradiction.** In real play the script starts (the trainer
+faces the player) and then prints nothing. In every seeded state reachable
+from the harness, the script does not start at all. Both observations are
+solid; they cannot both be explained by "the harness stands in the wrong
+tile" alone, because in play the human stands in the right one. The next
+datum needed is **where Larrie is standing when the player talks to him** —
+his own tile relative to where he stood before the battle — and whether a
+second consecutive talk behaves differently. Asked of the operator
+2026-08-27; do not guess it.
 
 **Next steps, in order.**
-1. Resolve the open question below — it decides whether §46's fix works for
-   phone trainers generally and Larrie is special, or whether no phone
-   trainer re-talks correctly.
-2. Check the flag branch in a real playthrough, not a seeded state: read
-   `FLAG_MAP035_EVENT003_SSA` at the moment of a re-talk.
-3. Fix the harness object-coordinate read, then re-point B11 at the live
-   position. B11 asserting the idle line stays the correct assertion.
+1. Confirm or refute the `IsTrainerReadyForRematch` hypothesis above — read
+   what the special returns for a trainer with no available rematch, and
+   whether `trainerbattle_rematch` is silently inert in that case.
+2. If confirmed, decide what the idle path should be. The rematch arm is
+   currently unreachable content anyway: nothing in this pipeline makes a
+   rematch "ready", and B10 (the rematch offer) is already deferred for want
+   of a Match Call driver.
+3. Separately, fix the harness object-coordinate read and re-point B11 at the
+   live position. B11 asserting the idle line stays the correct assertion.
 
-**Open question that changes the scope of this item.** The operator's walk
-had one trainer re-talk correctly and named it "Richey", but the two
-trainers on the CH04 walk route are Timothy (Youngster, plain vanilla
-`trainerbattle_single` + trailing msgbox, no phone registration) and Larrie.
-Richey is Route 1's phone trainer, reachable only by walking back south. If
-the working trainer was **Richey**, then a phone trainer's re-talk works and
-Larrie is a narrow one-off. If it was **Timothy**, then no phone trainer is
-known to re-talk correctly and §46's fix is unverified in play for its whole
-class. Confirm before acting on step 2.
+**Resolved 2026-08-27:** the trainer that re-talked correctly on the walk was
+**Timothy**, not Richey — confirmed by the operator. So no phone trainer's
+re-talk has been observed working, and §46's fix remains unverified in play
+for its class.
 
 **Blast radius.** CH01-CH03 all passed their §9 gates without this being
 visible, because CH04's B11 is the first beat in the corpus that re-talks a
