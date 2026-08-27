@@ -39,12 +39,15 @@ import hashlib
 import json
 import logging
 import shutil
+import signal
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from . import rules as playtest_rules
 from .chapter import Chapter
 from .contact_sheet import Waypoint, build_contact_sheet
 from .stamp import ROM_BASE, build_blob, dump_save_blocks
@@ -57,6 +60,19 @@ logger = logging.getLogger(__name__)
 BOOT_FRAMES = 600          # new-game intro-skip, matches scenarios.py
 SEEDED_BOOT_FRAMES = 900   # continue-from-embedded-save, matches test_playtest.py
 
+# Q10: a per-beat wall-clock backstop. Per-primitive frame budgets
+# (`walk_to`, `wait_for_map_grid`, ...) are the first line of defense against
+# a hang; this is the top-level "something never returned control at all"
+# backstop that CH03's B11 needed (finding E) -- without it, a hung beat
+# doesn't fail, it just never ends, and the runner never gets a chance to
+# mark anything behind it `not_run`.
+#
+# No per-beat override exists yet: `Beat` (chapter.py) is owned by another
+# agent this session and has no budget field to read. If a beat genuinely
+# needs a different budget, `chapter.py` needs a `hang_budget_s: int | None`
+# field on `Beat` -- report that need rather than adding it here.
+DEFAULT_BEAT_TIMEOUT_S = 120
+
 EmulatorFactory = Callable[[Path, Path, "Path | None"], "Emulator"]
 
 
@@ -66,6 +82,41 @@ class RunnerError(RuntimeError):
     Distinct from a beat failure (`ScenarioError`, caught and recorded as a
     `BeatOutcome`): this is a usage error that aborts the run outright.
     """
+
+
+class BeatHangError(RuntimeError):
+    """A beat exceeded its wall-clock hang budget (Q10).
+
+    Distinct from an assertion failure so the outcome status and tally can
+    tell "the game did something wrong" apart from "the harness never got
+    an answer" -- CH03's B11 was the latter, and it read identically to
+    silence until this existed.
+    """
+
+
+@contextmanager
+def _beat_timeout(seconds: int, beat_name: str):
+    """Raise `BeatHangError` if the wrapped block doesn't return within
+    `seconds`. Uses `SIGALRM`, so it only fires when control returns to the
+    Python interpreter -- sufficient for the hangs this backstop targets
+    (a harness-side loop that never re-checks its own frame budget), and a
+    no-op (beat still runs, just untimed) on a platform without `SIGALRM`
+    rather than a silent skip that pretends to be a real budget."""
+    if not hasattr(signal, "SIGALRM"):
+        yield
+        return
+
+    def _on_alarm(signum: int, frame: object) -> None:
+        raise BeatHangError(
+            f"beat {beat_name!r} exceeded its {seconds}s hang budget")
+
+    previous = signal.signal(signal.SIGALRM, _on_alarm)
+    signal.alarm(seconds)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
 
 
 def _default_emulator_factory(rom: Path, engine: Path,
@@ -132,11 +183,26 @@ def write_blob_to_rom(rom: Path, out: Path, blob: bytes, file_offset: int) -> No
 
 @dataclass
 class BeatOutcome:
+    """One beat's result.
+
+    `status` is `"not_run"` for every beat until it actually executes
+    (Q10/finding E) -- the runner pre-populates every beat in the chapter
+    with `"not_run"` before the attempt starts, so a chapter that stops
+    early reports the beats behind the stopping point explicitly rather
+    than the silence that hid CH03's B13-B18/B25 behind a hung B11.
+
+    `rule_version` is the rule-set version (`rules.py`) this beat was
+    evaluated under: the running chapter's own version for its own beats,
+    or the owning ancestor chapter's last recorded version for a replayed
+    predecessor beat (Q7.3) -- see `rules.effective_rule_version`.
+    """
+
     name: str
     description: str
-    status: str  # "pass" | "fail"
+    status: str  # "not_run" | "pass" | "fail" | "hang"
     error: str | None = None
     traceback: str | None = None
+    rule_version: int | None = None
 
 
 @dataclass(frozen=True)
@@ -144,10 +210,10 @@ class ObservedBeat:
     """Where the player actually was at one beat's boundaries, for the debug
     map viewer (observed-vs-intended overlay). `enter`/`exit` are dicts
     shaped `{"map_group": int, "map_num": int, "player_pos": [x, y]}`, or
-    `None` for `exit` when the beat raised."""
+    `None` for `exit` when the beat raised or hung."""
 
     beat: str
-    status: str  # "pass" | "fail"
+    status: str  # "pass" | "fail" | "hang"
     enter: dict[str, object] | None
     exit: dict[str, object] | None
 
@@ -173,7 +239,40 @@ class AttemptResult:
 
     @property
     def failed_beat(self) -> BeatOutcome | None:
-        return next((b for b in self.beats if b.status == "fail"), None)
+        """The beat that stopped this attempt, whether it raised (`"fail"`)
+        or exceeded its hang budget (`"hang"`) -- both stop the run the same
+        way and both want a repro bundle."""
+        return next((b for b in self.beats if b.status in ("fail", "hang")), None)
+
+
+@dataclass(frozen=True)
+class BeatTally:
+    """Generated from a `BeatOutcome` list -- never hand-assembled (§5.8:
+    the old "N/N" figure was prose nothing checked). `total` is the number
+    of beats this attempt covered (the whole chapter from a new game, or the
+    tail from `--from-beat`'s start index onward)."""
+
+    total: int
+    run: int
+    passed: int
+    failed: int
+    hung: int
+    not_run: int
+
+    def render(self) -> str:
+        return (f"{self.run}/{self.total} run, {self.passed} passed, "
+                f"{self.failed} failed, {self.hung} hung, "
+                f"{self.not_run} not run")
+
+
+def compute_tally(beats: list[BeatOutcome]) -> BeatTally:
+    total = len(beats)
+    passed = sum(1 for b in beats if b.status == "pass")
+    failed = sum(1 for b in beats if b.status == "fail")
+    hung = sum(1 for b in beats if b.status == "hang")
+    not_run = sum(1 for b in beats if b.status == "not_run")
+    return BeatTally(total=total, run=total - not_run, passed=passed,
+                      failed=failed, hung=hung, not_run=not_run)
 
 
 @dataclass
@@ -185,6 +284,12 @@ class ChapterRunResult:
     bundle_dir: Path | None = None
     flake_log: Path | None = None
     contact_sheet: list[Path] = field(default_factory=list)
+    tally: BeatTally | None = None
+    # The rule-set version (rules.py) this run recorded as passed under --
+    # only set on a full (from_beat=None), verdict="pass" run; a seeded
+    # partial run never re-verifies the chapter's earlier beats, so it must
+    # never advance the recorded version (Q7.3).
+    rule_set_version: int | None = None
 
 
 # -- blob provenance (D1b / D2a) ---------------------------------------------
@@ -236,7 +341,12 @@ def load_seed(blobs_dir: Path, chapter: str, beat: str, rom: Path) -> tuple[byte
 
 def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
                   from_beat: str | None, output_root: Path,
-                  emulator_factory: EmulatorFactory, blobs_dir: Path) -> AttemptResult:
+                  emulator_factory: EmulatorFactory, blobs_dir: Path,
+                  beat_timeout_s: int = DEFAULT_BEAT_TIMEOUT_S,
+                  running_rule_version: int = playtest_rules.CURRENT_VERSION,
+                  recorded_rule_versions: dict[str, int] | None = None,
+                  ) -> AttemptResult:
+    recorded_rule_versions = recorded_rule_versions or {}
     start_idx = chapter.index_of(from_beat) if from_beat else 0
     scratch = output_root / f".{rom.stem}.{chapter.name}.attempt{attempt_no}.scratch.gba"
     scratch.parent.mkdir(parents=True, exist_ok=True)
@@ -267,17 +377,43 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
         # boundary, not a second pass over the beat list.
         pending_enter = _loc_from_snapshot(last_snapshot)
 
-        for beat in chapter.beats[start_idx:]:
+        # Q10/finding E: every beat this attempt covers gets a "not_run"
+        # outcome up front, in doc order. If the run stops early (fail or
+        # hang), everything from that point on stays "not_run" instead of
+        # silently missing from the report -- that silence is exactly what
+        # let CH03 B13-B18/B25 hide behind B11's hang for two gate passes.
+        beats_out.extend(
+            BeatOutcome(
+                b.name, b.description, "not_run",
+                rule_version=playtest_rules.effective_rule_version(
+                    chapter.name, b.name, running_rule_version,
+                    recorded_rule_versions))
+            for b in chapter.beats[start_idx:])
+
+        for i, beat in enumerate(chapter.beats[start_idx:]):
+            outcome = beats_out[i]
             logger.info("[%s] beat %s starting: %s", chapter.name, beat.name, beat.description)
             enter = pending_enter
             try:
-                beat.run(emu)
+                with _beat_timeout(beat_timeout_s, beat.name):
+                    beat.run(emu)
+            except BeatHangError as exc:
+                logger.error("[%s] beat %s HUNG: %s", chapter.name, beat.name, exc)
+                outcome.status = "hang"
+                outcome.error = str(exc)
+                observed.append(ObservedBeat(beat.name, "hang", enter, None))
+                emu.waypoint(beat.name, "HANG", note=beat.description, failed=True)
+                return AttemptResult(passed=False, beats=beats_out, pristine_rom=rom,
+                                      final_emulator=emu, last_snapshot=last_snapshot,
+                                      screenshot_dir=shots, waypoints=list(emu.waypoints),
+                                      observed_beats=observed, scratch_rom=scratch)
             except Exception as exc:  # noqa: BLE001 - beat failures are data, not bugs here
                 import traceback as _tb
                 tb_text = _tb.format_exc()
                 logger.error("[%s] beat %s FAILED: %s", chapter.name, beat.name, exc)
-                beats_out.append(BeatOutcome(beat.name, beat.description, "fail",
-                                              error=str(exc), traceback=tb_text))
+                outcome.status = "fail"
+                outcome.error = str(exc)
+                outcome.traceback = tb_text
                 observed.append(ObservedBeat(beat.name, "fail", enter, None))
                 emu.waypoint(beat.name, "FAILED", note=beat.description, failed=True)
                 return AttemptResult(passed=False, beats=beats_out, pristine_rom=rom,
@@ -286,7 +422,7 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
                                       observed_beats=observed, scratch_rom=scratch)
 
             logger.info("[%s] beat %s passed", chapter.name, beat.name)
-            beats_out.append(BeatOutcome(beat.name, beat.description, "pass"))
+            outcome.status = "pass"
             pending_enter = _loc(emu)
             observed.append(ObservedBeat(beat.name, "pass", enter, pending_enter))
             emu.waypoint(beat.name, note=beat.description)
@@ -405,7 +541,8 @@ def _log_flake(chapter: Chapter, first_attempt: AttemptResult, output_root: Path
 
 
 def _stamp_green(chapter: Chapter, rom: Path, attempt: AttemptResult,
-                  output_root: Path) -> Path:
+                  output_root: Path,
+                  rule_set_version: int | None = None) -> Path:
     from .stamp import stamp_rom
 
     review_dir = output_root / "review"
@@ -426,6 +563,13 @@ def _stamp_green(chapter: Chapter, rom: Path, attempt: AttemptResult,
             "map_location": list(emu.map_location()),
             "created": datetime.now(timezone.utc).isoformat(),
         }
+        # Q7.3: the rule-set version this run passed under, written into the
+        # gate stamp by the runner and only the runner -- never hand-edited.
+        # `None` (a seeded --from-beat run) means "not recorded here": a
+        # partial run never re-verifies the chapter's earlier beats, so it
+        # must not claim a rule-set version for the whole chapter.
+        if rule_set_version is not None:
+            meta["rule_set_version"] = rule_set_version
         meta_path = out.with_suffix(".json")
         meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
@@ -438,6 +582,19 @@ def _classify(attempts: list[AttemptResult]) -> str:
     if len(attempts) > 1 and attempts[1].passed:
         return "flake"
     return "fail"
+
+
+def _assert_no_false_pass(chapter_name: str, verdict: str, tally: BeatTally) -> None:
+    """A passing verdict must never coexist with an un-executed beat
+    (Q10/finding E). Should be unreachable given `_classify`/`_run_attempt`'s
+    own logic -- a stopped attempt is never `passed=True` -- but it is cheap
+    to check and exactly the kind of silent drift this whole document is
+    about closing off."""
+    if verdict == "pass" and tally.not_run > 0:
+        raise RunnerError(
+            f"chapter {chapter_name!r} verdict computed as 'pass' with "
+            f"{tally.not_run} beat(s) still 'not_run' -- refusing to "
+            "report a false pass")
 
 
 # -- observed-beats file (debug map viewer input) -----------------------------
@@ -517,23 +674,33 @@ def run_chapter(chapter: Chapter, rom: Path, engine: Path, *,
                  from_beat: str | None = None,
                  output_root: Path | None = None,
                  emulator_factory: EmulatorFactory | None = None,
-                 rerun_on_failure: bool = True) -> ChapterRunResult:
+                 rerun_on_failure: bool = True,
+                 beat_timeout_s: int = DEFAULT_BEAT_TIMEOUT_S,
+                 rule_versions_path: Path = playtest_rules.DEFAULT_RECORDED_VERSIONS_PATH,
+                 ) -> ChapterRunResult:
     """Run `chapter` beat by beat and return a structured result.
 
     `from_beat`: seed from a blob captured after the prior beat of *this
     exact build* (see `load_seed`); `None` (the default, and the only mode
     the gate/CI wrapper should use) always plays from a new game.
     `rerun_on_failure`: F3's auto-rerun-once flake classification.
+    `beat_timeout_s`: Q10's per-beat hang budget (wall-clock).
+    `rule_versions_path`: where each chapter's last-recorded green rule-set
+    version lives (Q7.3) -- read to pin replayed ancestor beats to their own
+    chapter's version, and written (only on a full, `from_beat=None`, pass
+    verdict) to advance this chapter's own recorded version.
     """
     output_root = output_root or Path("output") / "playtest"
     blobs_dir = output_root / "blobs"
     emulator_factory = emulator_factory or _default_emulator_factory
+    recorded_rule_versions = playtest_rules.load_recorded_versions(rule_versions_path)
 
     attempts: list[AttemptResult] = []
     attempts.append(_run_attempt(
         chapter, rom, engine, attempt_no=1, from_beat=from_beat,
         output_root=output_root, emulator_factory=emulator_factory,
-        blobs_dir=blobs_dir))
+        blobs_dir=blobs_dir, beat_timeout_s=beat_timeout_s,
+        recorded_rule_versions=recorded_rule_versions))
 
     if not attempts[0].passed and rerun_on_failure:
         failing = attempts[0].failed_beat
@@ -543,14 +710,28 @@ def run_chapter(chapter: Chapter, rom: Path, engine: Path, *,
         attempts.append(_run_attempt(
             chapter, rom, engine, attempt_no=2, from_beat=from_beat,
             output_root=output_root, emulator_factory=emulator_factory,
-            blobs_dir=blobs_dir))
+            blobs_dir=blobs_dir, beat_timeout_s=beat_timeout_s,
+            recorded_rule_versions=recorded_rule_versions))
 
     verdict = _classify(attempts)
     result = ChapterRunResult(chapter=chapter.name, verdict=verdict, attempts=attempts)
+    result.tally = compute_tally(attempts[-1].beats)
+    _assert_no_false_pass(chapter.name, verdict, result.tally)
 
     try:
         if verdict == "pass":
-            result.stamped_rom = _stamp_green(chapter, rom, attempts[-1], output_root)
+            # Only a full, un-seeded run re-verifies every beat (including
+            # replayed ancestors), so only it may advance the recorded
+            # rule-set version (Q7.3) -- a `--from-beat` iteration run stamps
+            # a review ROM but never claims to have re-checked the chapter.
+            rule_set_version = playtest_rules.CURRENT_VERSION if from_beat is None else None
+            result.stamped_rom = _stamp_green(
+                chapter, rom, attempts[-1], output_root,
+                rule_set_version=rule_set_version)
+            if rule_set_version is not None:
+                playtest_rules.record_chapter_version(
+                    rule_versions_path, chapter.name, rule_set_version)
+                result.rule_set_version = rule_set_version
         elif verdict == "flake":
             result.flake_log = _log_flake(chapter, attempts[0], output_root)
         else:

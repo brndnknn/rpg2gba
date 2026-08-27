@@ -107,6 +107,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .. import assertions
 from ..battle import in_battle, read_enemy_party, win_battle
 from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
@@ -278,49 +279,24 @@ NORTH_EXIT_TILE_B = (16, 5)  # for B17's failure message only; never stepped on
 
 
 # -- small local helpers, copied+adapted from chapters/moki.py --------------
-# (moki.py's own docstring: "deliberately not yet factored into a shared
-# module" -- do not import from it, copy the idiom.)
-
-def _at_map(emu: Emulator, map_const: str) -> bool:
-    group, num = emu.map_location()
-    return (group, num) == (
-        emu.resolve_constant(f"MAP_GROUP({map_const})"),
-        emu.resolve_constant(f"MAP_NUM({map_const})"),
-    )
-
-
-def _require_map(emu: Emulator, beat: str, map_const: str) -> None:
-    if _at_map(emu, map_const):
-        return
-    group, num = emu.map_location()
-    shot = emu.screenshot(f"{beat}_wrong_map")
-    raise ScenarioError(
-        f"{beat}: expected map {map_const} but map_location() reads "
-        f"group={group} num={num} ({shot})"
-    )
-
-
-def _try_step(emu: Emulator, direction: str) -> bool:
-    """Attempt exactly one step without `walk_to`'s retry-until-arrived loop
-    -- see moki.py's identical helper for the full rationale."""
-    before = emu.player_pos()
-    moved = False
-    for _ in range(40):
-        emu.run(1, [direction])
-        if emu.player_pos() != before:
-            moved = True
-            break
-    emu.run(16)
-    return moved
-
-
-def _wait_for_map(emu: Emulator, beat: str, map_const: str,
-                  frame_budget: int = 900) -> None:
-    spent = 0
-    while spent < frame_budget and not _at_map(emu, map_const):
-        emu.run(10)
-        spent += 10
-    _require_map(emu, beat, map_const)
+# `_at_map`/`_require_map`/`_try_step`/`_wait_for_map` used to be copied here
+# (moki.py's own docstring used to say "deliberately not yet factored into a
+# shared module" -- that call is superseded) -- promoted to `assertions.py`
+# 2026-08-20 (finding H). Aliased under their original names so every call
+# site below is unchanged.
+#
+# `_cross_threshold`/`_enter_door` stay LOCAL, deliberately NOT promoted:
+# they differ from moki.py's/kevlar.py's byte-identical copies by routing
+# navigation through `_walk_absorbing` (defined further below) instead of a
+# plain `emu.walk_to` -- Route 1 has 137 grass cells and up to 9 trainer
+# sight cones, so a bare `walk_to` call here would raise on the first
+# incidental battle it crosses. That is Route 1's own stricter requirement;
+# see `assertions.py`'s module docstring for why it was not forced onto
+# `assertions.cross_threshold`/`enter_door` instead.
+_at_map = assertions.at_map
+_require_map = assertions.require_map
+_try_step = assertions.try_step
+_wait_for_map = assertions.wait_for_map
 
 
 def _cross_threshold(emu: Emulator, beat: str, approach: tuple[int, int],
@@ -340,20 +316,11 @@ def _enter_door(emu: Emulator, beat: str, door: tuple[int, int],
     _wait_for_map(emu, beat, dest_map)
 
 
-def _advance_to_battle(emu: Emulator, max_taps: int = 1500) -> int:
-    """`emu.advance_dialog()`, but stopping if a battle starts (see moki.py)."""
-    return emu.advance_dialog(max_taps=max_taps, stop=lambda: in_battle(emu))
-
-
-def _assert_near(emu: Emulator, beat: str, expected: tuple[int, int],
-                 tolerance: int = 1) -> None:
-    x, y = emu.player_pos()
-    ex, ey = expected
-    if abs(x - ex) > tolerance or abs(y - ey) > tolerance:
-        shot = emu.screenshot(f"{beat}_wrong_landing")
-        raise ScenarioError(
-            f"{beat}: landed at ({x},{y}), expected near {expected} "
-            f"(tolerance {tolerance}) ({shot})")
+# Promoted to `assertions.py` 2026-08-20 (byte-identical to `moki.py`'s own
+# copy of `_advance_to_battle`, and to `kevlar.py`'s own copy of
+# `_assert_near`, at the time).
+_advance_to_battle = assertions.advance_to_battle
+_assert_near = assertions.assert_near
 
 
 # -- new local helpers, specific to Route 1's mechanics ----------------------
@@ -593,7 +560,11 @@ def _approach_moving_npc(emu: Emulator, beat: str, local_id: int,
 
 
 def _flag_ssa(event_id: int, letter: str = "A") -> str:
-    return f"FLAG_MAP033_EVENT{event_id:03d}_SS{letter}"
+    """This module's events are all on Map033 -- a thin wrapper over the
+    general `assertions.flag_ssa(map_num, event_id, letter)` (promoted from
+    `kevlar.py` 2026-08-20), not a second implementation. Same output as
+    before: `FLAG_MAP033_EVENT<id>_SS<letter>`."""
+    return assertions.flag_ssa(33, event_id, letter)
 
 
 def _trainer_defeat_flag(trainer_const: str) -> str:
@@ -1292,6 +1263,90 @@ def b13(emu: Emulator) -> None:
                     registered_flag=RICHEY_REGISTERED_FLAG)
 
 
+#: Richey's post-defeat idle line (`Map033_EV053_Page2`'s
+#: `IsTrainerReadyForRematch`-false arm). Not a spec beat -- see N5.
+# Apostrophe-free on purpose: Uranium's text uses U+2019 (`I’ll`), and
+# `assert_text_contains` unwraps line breaks but does NOT normalize
+# punctuation, so a straight ASCII `'` never matches. Every other text
+# assertion in this module sidesteps the same trap by picking a substring
+# without one. (Observed 2026-08-27 on ROM `5953e98f`: the beat found
+# "Well, someday I’ll battle you again, and\nthen we’ll see who’s laughing!"
+# and failed only on the quote character.)
+RICHEY_IDLE_TEXT = "battle you again, and"
+#: Richey's compiled local id -- his 1-based index in Route01's
+#: `object_events` (`Map033_EV053_Page1` at (17,9)), the id `gObjectEvents`
+#: is addressed by. NOT his RMXP event id 53; see `FLOOD_LOCAL_ID`.
+RICHEY_LOCAL_ID = 21
+
+
+@route1.beat("N5", "Re-talking defeated Richey reaches Page2 and prints his idle "
+                   "line (PROJECT_TODO #45 regression)",
+             map_constant="MAP_ROUTE_01", at=TRAINER_RICHEY.xy)
+def n5_richey_retalk(emu: Emulator) -> None:
+    """The regression beat for a bug that shipped through CH02's own gate.
+
+    `deterministic`'s phone-rematch classifier emits three blocks per phone
+    trainer: the `trainerbattle_single` page, a `_RegisterMatchCall`
+    continue-script, and a `Page2` steady state carrying the rematch check
+    and this idle line. Until 2026-08-27 nothing reachable ever referenced
+    `Page2`, in two successive ways. First `transpile_driver.
+    _record_collapsed_pages` marked the event `collapsed_pages` and
+    `metadata_wiring._resolve_script` read that trait as "resolve straight to
+    the page-1 label, build no dispatcher", so the object event pointed only
+    at the battle script (fixed 065e9c04). That fix then put the route to
+    `Page2` inside the four-argument continue-script -- which the engine runs
+    exactly once, via `gotobeatenscript`, on the return from a won battle. On
+    a RE-talk the engine instead resumes at `sTrainerBattleEndScript`, the
+    byte after the packed trainerbattle command (`TrainerBattleLoadArgs`,
+    engine/src/battle_setup.c:1058), i.e. Page1's next line -- which was
+    `release`/`end`. So `Page2` stayed unreachable in every state and the NPC
+    turned to face the player (the engine's own `lock`/`faceplayer` in
+    `EventScript_TryDoNormalTrainerBattle`) and then said nothing at all.
+    Page1 now falls through to `goto(Page2)` instead, which is where vanilla
+    puts it.
+
+    It went unnoticed because no beat in the corpus re-talked a defeated
+    phone trainer -- B13 above battles Richey, checks his registered flag,
+    and walks away. The bug was found on Route 2's Larrie (CH04 B11, the
+    first beat that does re-talk one) and the audit that followed found the
+    same dead `Page2` on all four staged phone trainers: map33/ev39
+    (Brandon), map33/ev53 (Richey), map35/ev3 (Larrie), map35/ev23 (Brent).
+    Two of those are Route 1's, so CH02 passed its §9 gate on 2026-08-12
+    with two silent NPCs in it.
+
+    This beat exists so that can't happen quietly again: it is cheap, it
+    runs in the chapter that already shipped the bug, and it fails loudly if
+    the dispatcher stops being wired.
+
+    **On the "Richey is non-interactable" theory, now retired.** This beat was
+    written but left unregistered on 2026-08-27 because an A press from all
+    four tiles adjacent to Richey appeared to start no script at all, on ROM
+    `b07a02f8`. That measurement was wrong twice over: `interact()` sampled
+    the field lock once, 30 frames after the press, so a script that locked
+    and released inside the window read as a no-op (fixed 3315df3a), and the
+    operator then walked the same ROM by hand and found Richey plainly
+    interactable -- he turns to face you, exactly as the silent-`Page2` bug
+    above predicts. His moving off his template to (17,11) is real and is why
+    this beat uses `_approach_moving_npc`, but it never made him
+    unreachable.
+    """
+    # `_approach_moving_npc`, not `_assert_no_second_battle`: the latter
+    # walks the sight LANE and stops wherever the lane walk ends, which for
+    # Richey left the player short of him with nothing to face (observed
+    # 2026-08-27 on ROM `b07a02f8` -- "interaction did not start a script",
+    # player alone on the path in `interact_noop_f52214.png`). This helper
+    # reads his LIVE `gObjectEvents` position instead, stands one tile below
+    # him, faces UP, and retries on interact failure -- the same primitive
+    # B16 uses for the patrolling brother.
+    _approach_moving_npc(emu, "N5", RICHEY_LOCAL_ID, "UP")
+    emu.assert_text_contains(RICHEY_IDLE_TEXT)
+    emu.advance_dialog()
+    if emu.field_locked():
+        shot = emu.screenshot("n5_stuck")
+        raise ScenarioError(
+            f"N5: Richey's idle dialogue did not close cleanly ({shot})")
+
+
 # -- B14 -----------------------------------------------------------------
 
 @route1.beat("B14", "Trainer pacing survives: Flood and Lynette turn in place "
@@ -1371,19 +1426,34 @@ def b14(emu: Emulator) -> None:
     _cross_threshold(emu, "B14", OLD_ROD_HOUSE_EXIT_APPROACH, "DOWN",
                      "MAP_ROUTE_01")
 
+    # What this beat is FOR is that the compiled movement type survived
+    # conversion (CH02_TODO #9), and that is a property of the object event,
+    # not of any particular 4 seconds of it. Watching for a facing change
+    # was a proxy for it and a flaky one: `MOVEMENT_TYPE_LOOK_AROUND` turns
+    # on `MovementType_LookAround`'s own RNG timer
+    # (`engine/src/event_object_movement.c`), so a run where the timer
+    # simply hasn't fired inside the window is indistinguishable from lost
+    # pacing. Observed 2026-08-27: this raised on Lynette in one attempt and
+    # on Flood in the next, on the SAME ROM (`b246127d`) that had passed it
+    # minutes earlier -- the flake truncated two consecutive full-suite runs
+    # at beat 25 of 73 and was blocking the CH04 gate, not catching anything.
+    # Reading `ObjectEvent.movementType` asserts the same regression
+    # directly and deterministically; the map round-trip above is what makes
+    # it meaningful, since a defeated sight trainer's template is frozen to
+    # `FACE_<dir>` until the map reloads.
+    look_around = emu.resolve_constant("MOVEMENT_TYPE_LOOK_AROUND")
     for trainer, local_id, label in (
         (TRAINER_FLOOD, FLOOD_LOCAL_ID, "Flood"),
         (TRAINER_LYNETTE, LYNETTE_LOCAL_ID, "Lynette"),
     ):
         _assert_no_second_battle(emu, "B14", trainer.xy, trainer.facing)
-        samples = emu.observe_object_event(local_id, 240, sample_every=4)
-        facings = {s.facing for s in samples}
-        if len(facings) < 2:
-            shot = emu.screenshot(f"b14_{label.lower()}_static")
+        actual = emu.object_event(local_id).movement_type
+        if actual != look_around:
+            shot = emu.screenshot(f"b14_{label.lower()}_movement_type")
             raise ScenarioError(
-                f"B14: {label} (local id {local_id}) never changed facing "
-                f"over the observation window -- LOOK_AROUND pacing lost "
-                f"({shot})")
+                f"B14: {label} (local id {local_id}) has movement type "
+                f"{actual}, expected MOVEMENT_TYPE_LOOK_AROUND "
+                f"({look_around}) -- pacing lost ({shot})")
 
     # The WALK_UP_AND_DOWN half of CH02_TODO #9 is NOT covered this chapter:
     # its only subject on Route 1 is EV035 Brandon (triathlete), who is

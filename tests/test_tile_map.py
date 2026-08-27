@@ -424,3 +424,37 @@ def test_load_tile_map_behavior_overrides_unknown_kind_raises(tmp_path: Path) ->
 
     with pytest.raises(ValueError, match="unknown kind"):
         load_tile_map(tpath, passages_path=None)
+
+
+def test_behavior_kinds_include_arrow_warp_directions() -> None:
+    """seam_warps.json fix: the four arrow-warp directions are valid behavior
+    kinds alongside the two stair kinds (tile_map.BEHAVIOR_KINDS)."""
+    from rpg2gba.tileset_converter.tile_map import BEHAVIOR_KINDS
+
+    assert BEHAVIOR_KINDS == {
+        "stairs_left", "stairs_right",
+        "arrow_warp_up", "arrow_warp_down", "arrow_warp_left", "arrow_warp_right",
+    }
+
+
+def test_load_tile_map_arrow_warp_behavior_override_round_trips(tmp_path: Path) -> None:
+    """An 'arrow_warp_up' behavior_overrides entry parses and resolves exactly
+    like a stairs entry — the mechanism is kind-generic."""
+    table = {
+        "tilesets": {"5": {"primary": "gTileset_P", "secondary": "gTileset_S"}},
+        "tiles": {"5": {}},
+        "behavior_overrides": {
+            "5": {"arrow_warp_up": {"tiles": {"[[0,700]]": 20}, "fallback": 88}}
+        },
+    }
+    tpath = tmp_path / "tileset_map.json"
+    tpath.write_text(json.dumps(table), encoding="utf-8")
+
+    tm = load_tile_map(tpath, passages_path=None)
+
+    assert tm.behavior_for_column(5, "arrow_warp_up", _stair_key()).metatile_id == 20
+    assert tm.behavior_for_column(5, "arrow_warp_up", _other_key()).metatile_id == 88
+    # Always forced passable, same as stairs.
+    result = tm.behavior_for_column(5, "arrow_warp_up", _stair_key())
+    assert result.collision == 0
+    assert result.elevation == 3

@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 
 from rpg2gba.pipeline import _load_dotenv
+from rpg2gba.tileset_converter import connections as conn
 from rpg2gba.tileset_converter import map_constants as mc
 from rpg2gba.tileset_converter import metadata_wiring as mw
 from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
@@ -24,6 +25,7 @@ META = Path("output/uranium-build/intermediate/map_metadata.json")
 MAP_INFOS = Path("output/uranium-build/map_infos.json")
 OVERRIDES = Path("reference/map_name_overrides.json")
 PORYMAP = Path("output/uranium-build/porymap")
+CONNECTIONS = Path("output/uranium-build/connections.json")
 
 
 def main() -> None:
@@ -32,9 +34,17 @@ def main() -> None:
         SLICE_IDS, map_infos_path=MAP_INFOS, overrides_path=OVERRIDES,
         state_path=PORYMAP / "map_constants.json",
     )
+    # This writes into the same porymap/maps tree the real staging pass uses,
+    # so it must wire connections identically — otherwise running the preview
+    # silently reverts every seam to `"connections": null` in the artifact the
+    # assembler then copies into the fork.
+    slice_connections = conn.build_slice_connections(
+        CONNECTIONS, SLICE_IDS, lambda uid: reg.get(uid).map_const,
+    )
     overrides = mw.build_slice_maps(
         SLICE_IDS, maps_dir=MAPS, registry=reg, metadata_path=META,
         out_dir=PORYMAP / "maps", dispatcher_dir=PORYMAP / "dispatch",
+        connections=slice_connections,
     )
 
     for uid in SLICE_IDS:

@@ -6,6 +6,7 @@
     python -m rpg2gba.playtest walk --chapter moki --at-beat B7
     python -m rpg2gba.playtest walk --chapter moki --at-end
     python -m rpg2gba.playtest seeds --chapter moki
+    python -m rpg2gba.playtest rules-lag
 
 This is the iteration-loop consumer of `runner.run_chapter`; the gate/CI
 consumer is the thin pytest wrapper in `tests/test_runner.py`. Both drive the
@@ -21,7 +22,8 @@ from pathlib import Path
 import click
 
 from .chapter import chapter_names, load_chapter
-from .runner import RunnerError, run_chapter
+from .runner import DEFAULT_BEAT_TIMEOUT_S, RunnerError, run_chapter
+from . import rules as playtest_rules
 from . import walk
 
 logger = logging.getLogger(__name__)
@@ -60,8 +62,11 @@ def list_chapters() -> None:
               help="Output root for artifacts (default: output/playtest)")
 @click.option("--no-rerun", is_flag=True,
               help="Disable the F3 auto-rerun-once flake check.")
+@click.option("--beat-timeout", type=int, default=DEFAULT_BEAT_TIMEOUT_S,
+              help="Per-beat wall-clock hang budget in seconds (Q10). "
+                   f"Default: {DEFAULT_BEAT_TIMEOUT_S}.")
 def run(chapter: str, from_beat: str | None, rom: Path | None, engine: Path,
-        output: Path | None, no_rerun: bool) -> None:
+        output: Path | None, no_rerun: bool, beat_timeout: int) -> None:
     """Run one chapter's beats headlessly; report pass/flake/fail."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     rom = rom or engine / "pokeemerald.gba"
@@ -70,7 +75,8 @@ def run(chapter: str, from_beat: str | None, rom: Path | None, engine: Path,
     try:
         chap = load_chapter(chapter)
         result = run_chapter(chap, rom, engine, from_beat=from_beat,
-                              output_root=output, rerun_on_failure=not no_rerun)
+                              output_root=output, rerun_on_failure=not no_rerun,
+                              beat_timeout_s=beat_timeout)
     except (KeyError, RunnerError) as exc:
         click.echo(f"error: {exc}", err=True)
         sys.exit(2)
@@ -78,10 +84,18 @@ def run(chapter: str, from_beat: str | None, rom: Path | None, engine: Path,
     click.echo(f"chapter {result.chapter}: {result.verdict.upper()}")
     for attempt_no, attempt in enumerate(result.attempts, start=1):
         for beat in attempt.beats:
-            marker = "PASS" if beat.status == "pass" else "FAIL"
+            marker = {"pass": "PASS", "fail": "FAIL", "hang": "HANG",
+                      "not_run": "NOT_RUN"}[beat.status]
             click.echo(f"  attempt {attempt_no} [{marker}] {beat.name}: {beat.description}")
             if beat.error:
                 click.echo(f"      {beat.error}")
+
+    if result.tally:
+        # Generated from the outcomes, never hand-assembled (§5.8): this is
+        # the number that replaces the old hand-written "60/60" prose.
+        click.echo(f"tally: {result.tally.render()}")
+    if result.rule_set_version is not None:
+        click.echo(f"rule-set version recorded: v{result.rule_set_version}")
 
     if result.stamped_rom:
         click.echo(f"green review ROM: {result.stamped_rom}")
@@ -195,6 +209,23 @@ def seeds_cmd(chapter: str, rom: Path | None, engine: Path,
                    f"player_pos={seed.player_pos}  created={seed.created}")
 
     sys.exit(0)
+
+
+@cli.command("rules-lag")
+def rules_lag() -> None:
+    """Print the generated lag report (Q7.3): which chapters have not been
+    re-verified against which rules added since they last gated green.
+
+    Generated from `reference/playtest_rule_versions.json` -- written only
+    by the runner (`run` above, on a full green run) -- and the live rule
+    set in `rules.py`. This is Q7's ledger; nothing else maintains it.
+    """
+    reports = playtest_rules.lag_reports()
+    if not reports:
+        click.echo("no chapter has ever recorded a rule-set version yet")
+        return
+    for report in reports:
+        click.echo(report.render())
 
 
 if __name__ == "__main__":

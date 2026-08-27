@@ -1114,6 +1114,7 @@ class _FakeTextEmu:
         self._frame_pinned = False
         self.taps = 0
         self._advanced = 0
+        self.cleared = 0
 
     @property
     def _now(self):
@@ -1160,6 +1161,13 @@ class _FakeTextEmu:
 
     def screenshot(self, name: str):
         return None
+
+    def clear_field_message(self) -> None:
+        """`advance_dialog` wipes `gStringVar4` once the script releases, so
+        a later assertion can't pass on the previous message's leftovers.
+        This fake has no text buffer to wipe -- it scripts `text_showing`
+        directly -- so this only has to exist and count."""
+        self.cleared += 1
 
     # Borrowed from the real class (unbound) -- the code under test.
     def _settle_frame(self, *a, **kw):

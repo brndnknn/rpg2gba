@@ -165,6 +165,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .. import assertions
 from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
 from ..pokecenter import heal_at_counter, use_pc
@@ -383,73 +384,19 @@ NORTH_EDGE_APPROACH = (28, 0)
 
 
 # -- small local helpers, copied+adapted from route1.py/moki.py -------------
-# (route1.py's own docstring: "deliberately not yet factored into a shared
-# module" -- do not import from it, copy the idiom.)
-
-def _at_map(emu: Emulator, map_const: str) -> bool:
-    group, num = emu.map_location()
-    return (group, num) == (
-        emu.resolve_constant(f"MAP_GROUP({map_const})"),
-        emu.resolve_constant(f"MAP_NUM({map_const})"),
-    )
-
-
-def _require_map(emu: Emulator, beat: str, map_const: str) -> None:
-    if _at_map(emu, map_const):
-        return
-    group, num = emu.map_location()
-    shot = emu.screenshot(f"{beat}_wrong_map")
-    raise ScenarioError(
-        f"{beat}: expected map {map_const} but map_location() reads "
-        f"group={group} num={num} ({shot})"
-    )
-
-
-def _try_step(emu: Emulator, direction: str) -> bool:
-    before = emu.player_pos()
-    moved = False
-    for _ in range(40):
-        emu.run(1, [direction])
-        if emu.player_pos() != before:
-            moved = True
-            break
-    emu.run(16)
-    return moved
-
-
-def _wait_for_map(emu: Emulator, beat: str, map_const: str,
-                  frame_budget: int = 900) -> None:
-    spent = 0
-    while spent < frame_budget and not _at_map(emu, map_const):
-        emu.run(10)
-        spent += 10
-    _require_map(emu, beat, map_const)
-
-
-def _cross_threshold(emu: Emulator, beat: str, approach: tuple[int, int],
-                     direction: str, dest_map: str) -> None:
-    emu.walk_to(*approach)
-    _try_step(emu, direction)
-    _wait_for_map(emu, beat, dest_map)
-
-
-def _enter_door(emu: Emulator, beat: str, door: tuple[int, int],
-                dest_map: str, hold: int = 48) -> None:
-    dx, dy = door
-    emu.walk_to(dx, dy + 1)
-    emu.run(hold, ["UP"])
-    _wait_for_map(emu, beat, dest_map)
-
-
-def _assert_near(emu: Emulator, beat: str, expected: tuple[int, int],
-                 tolerance: int = 1) -> None:
-    x, y = emu.player_pos()
-    ex, ey = expected
-    if abs(x - ex) > tolerance or abs(y - ey) > tolerance:
-        shot = emu.screenshot(f"{beat}_wrong_landing")
-        raise ScenarioError(
-            f"{beat}: landed at ({x},{y}), expected near {expected} "
-            f"(tolerance {tolerance}) ({shot})")
+# `_at_map`/`_require_map`/`_try_step`/`_wait_for_map`/`_cross_threshold`/
+# `_enter_door`/`_assert_near` used to be copied here (route1.py's own
+# docstring used to say "deliberately not yet factored into a shared module"
+# -- that call is superseded) -- promoted to `assertions.py` 2026-08-20
+# (finding H). Aliased under their original names so every call site below
+# is unchanged.
+_at_map = assertions.at_map
+_require_map = assertions.require_map
+_try_step = assertions.try_step
+_wait_for_map = assertions.wait_for_map
+_cross_threshold = assertions.cross_threshold
+_enter_door = assertions.enter_door
+_assert_near = assertions.assert_near
 
 
 _DIR_VECTOR: dict[str, tuple[int, int]] = {
@@ -488,8 +435,10 @@ def _approach_patrol_npc(emu: Emulator, beat: str, local_id: int,
         f"{local_id}) after {max_attempts} attempts ({shot})")
 
 
-def _flag_ssa(map_num: int, event_id: int, letter: str = "A") -> str:
-    return f"FLAG_MAP{map_num:03d}_EVENT{event_id:03d}_SS{letter}"
+# Promoted to `assertions.py` 2026-08-20 (this was the general two-argument
+# form; route1.py's near-duplicate is now a thin wrapper over the same
+# function -- see assertions.flag_ssa's docstring).
+_flag_ssa = assertions.flag_ssa
 
 
 # -- B27/B28/B30/B32 (warp-arrival facing) + B29/B31/B33 (post-warp BGM) --
@@ -527,87 +476,17 @@ def _flag_ssa(map_num: int, event_id: int, letter: str = "A") -> str:
 # Piggybacking on an already-standing position removes the failure mode
 # entirely instead of tightening the tolerance around it.
 
-#: engine DIR_* -> the harness's own facing-string convention
-#: (`_decode_facing`/`ObjectEventState.facing`, `emulator.py`), same mapping
-#: `_FACING_OFFSET_KEYS` there encodes in the other direction.
-_DIR_CONST_TO_FACING: dict[str, str] = {
-    "DIR_NORTH": "UP", "DIR_SOUTH": "DOWN", "DIR_EAST": "RIGHT", "DIR_WEST": "LEFT",
-}
-
-
-def _expected_arrival_facing(dest_uid: int, x: int, y: int) -> str:
-    """The harness facing string this build's OWN pipeline assigns to a real
-    warp arrival -- runs `compute_arrival_facings` over the staged slice
-    (`output/uranium-build/maps/*.json` + `tilesets.json` +
-    `reference/warp_facing_overrides.json`, the exact inputs `build_slice_
-    maps` feeds it), not a literal `"UP"` -- so a future registry/converter
-    change that shifts the derived direction fails this beat instead of
-    leaving it silently green."""
-    import json
-    import os
-    from pathlib import Path
-
-    from ...tileset_converter import metadata_wiring as mw
-    from ...tileset_converter.map_set import SLICE_MAP_IDS
-
-    out = Path(os.environ.get("RPG2GBA_OUTPUT", "output")) / "uranium-build"
-    maps_dir = out / "maps"
-    slice_set = set(SLICE_MAP_IDS)
-    maps = {
-        uid: json.loads((maps_dir / f"Map{uid:03d}.json").read_text(encoding="utf-8"))
-        for uid in SLICE_MAP_IDS
-    }
-    warp_lists = {
-        uid: [spec for _event, spec in mw.classify_map_events(maps[uid], slice_set)[1]]
-        for uid in SLICE_MAP_IDS
-    }
-    tilesets = json.loads((out / "tilesets.json").read_text(encoding="utf-8"))
-    facings = mw.compute_arrival_facings(warp_lists, maps, tilesets=tilesets)
-
-    for f in facings.get(dest_uid, []):
-        if (f.x, f.y) == (x, y):
-            return _DIR_CONST_TO_FACING[f.dir_const]
-    raise ScenarioError(
-        f"_expected_arrival_facing: map {dest_uid} arrival ({x},{y}) has no "
-        f"row in compute_arrival_facings' own output -- nothing to compare "
-        f"the live ROM facing against")
-
-
-def _assert_player_facing(emu: Emulator, beat: str, expected: str) -> None:
-    localid_player = emu.resolve_constant("LOCALID_PLAYER")
-    actual = emu.object_event(localid_player).facing
-    if actual != expected:
-        shot = emu.screenshot(f"{beat.lower()}_wrong_facing")
-        raise ScenarioError(
-            f"{beat}: player facing {actual}, expected {expected} (derived "
-            f"live from compute_arrival_facings over this build's own "
-            f"staged output) ({shot})")
-
-
-def _expected_bgm_song_id(emu: Emulator, engine_map_dir: str) -> int:
-    """The MUS_* id THIS build's own compiled map header
-    (`engine/data/maps/<engine_map_dir>/map.json`'s `"music"` key -- the
-    porymap source `make modern` actually compiles from) declares for this
-    map, resolved through the same `resolve_constant` gcc probe every other
-    symbol here goes through -- never a hardcoded MUS_* literal."""
-    import json
-
-    map_json = emu.engine / "data" / "maps" / engine_map_dir / "map.json"
-    music = json.loads(map_json.read_text(encoding="utf-8"))["music"]
-    return emu.resolve_constant(music)
-
-
-def _assert_bgm(emu: Emulator, beat: str, engine_map_dir: str) -> None:
-    expected = _expected_bgm_song_id(emu, engine_map_dir)
-    actual = emu.bgm_song_id()
-    if actual != expected:
-        shot = emu.screenshot(f"{beat.lower()}_wrong_bgm")
-        raise ScenarioError(
-            f"{beat}: gMPlayInfo_BGM is playing song id {actual}, expected "
-            f"{expected} (engine/data/maps/{engine_map_dir}/map.json's own "
-            f"\"music\" key) -- the dropped post-warp PLAY_BGM/CHANGE_TONE "
-            f"commands were NOT structurally covered by the map header "
-            f"after all ({shot})")
+# `_DIR_CONST_TO_FACING`/`_expected_arrival_facing`/`_assert_player_facing`/
+# `_expected_bgm_song_id`/`_assert_bgm` used to be defined here -- promoted
+# to `assertions.py` verbatim 2026-08-20 (finding H's flagship case: this is
+# the class CH01/CH02 were stale against precisely because it lived only
+# here). Aliased under their original names so every call site below is
+# unchanged.
+_DIR_CONST_TO_FACING = assertions._DIR_CONST_TO_FACING
+_expected_arrival_facing = assertions.expected_arrival_facing
+_assert_player_facing = assertions.assert_player_facing
+_expected_bgm_song_id = assertions.expected_bgm_song_id
+_assert_bgm = assertions.assert_bgm
 
 
 # -- B1 ------------------------------------------------------------------
@@ -1240,21 +1119,13 @@ def b16(emu: Emulator) -> None:
 
 # -- B17 -----------------------------------------------------------------
 
+# Promoted to `assertions.py` 2026-08-20, unified with `moki.py`'s
+# `_player_starter_species` under `assertions.read_party_species` /
+# `assertions.party_has_species` -- generalized from a hardcoded
+# SPECIES_MAGIKARP lookup to an explicit species-id parameter, same scan.
 def _party_has_magikarp(emu: Emulator) -> bool:
-    species_none = emu.resolve_constant("SPECIES_NONE")
-    o = emu.offsets
-    from ..battle import decrypt_species
     magikarp_id = emu.resolve_constant("SPECIES_MAGIKARP")
-    party_size = emu.resolve_constant("PARTY_SIZE")
-    mon_size = o["sizeof_pkmn"]
-    for slot in range(party_size):
-        addr = emu.symbols["gPlayerParty"] + slot * mon_size + o["off_pkmn_box"]
-        species = decrypt_species(emu, addr)
-        if species == magikarp_id:
-            return True
-        if species == species_none:
-            break
-    return False
+    return assertions.party_has_species(emu, magikarp_id)
 
 
 def _refuse_joke(emu: Emulator, beat: str) -> None:
@@ -1533,9 +1404,17 @@ def n6(emu: Emulator) -> None:
                     "impassable wall -- no void, no crash",
              map_constant="MAP_KEVLAR_TOWN", at=NORTH_EDGE_APPROACH)
 def b25(emu: Emulator) -> None:
-    # `KevlarTown/map.json`'s `connections` is `null` -- no seam is wired
-    # (CH03_TODO.md decision #3). Approach well clear of the door/berry
-    # cluster and confirm stepping further north does not move the player.
+    # `KevlarTown/map.json`'s `connections` is `null` -- but as of 2026-08-26
+    # that is no longer because nothing is wired (the old CH03_TODO.md
+    # decision #3 reason). Route 2 IS built and reachable; the seam is an
+    # arrow-warp pair at (31,0)/(32,0) (`reference/seam_warps.json`), chosen
+    # over a connection because the two maps cannot share a tileset. This
+    # beat stands on x=28, which is NOT one of those two cells, so the north
+    # edge is still a genuine wall here and the assertion below still holds
+    # unchanged -- it is now "the edge is blocked EXCEPT at the two warp
+    # cells", not "there is no way north at all". CH04_TODO.md #7 expected
+    # this beat to need flipping when the seam landed; it does not, because
+    # it never tested a seam column. Do NOT move it onto x=31/32.
     emu.walk_to(*NORTH_EDGE_APPROACH)
     before = emu.player_pos()
     if _try_step(emu, "UP"):

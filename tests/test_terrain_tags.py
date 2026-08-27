@@ -182,17 +182,22 @@ def test_ledge_with_direction_entry(tmp_path: Path) -> None:
 def test_ledge_without_direction_entry_warns_once_and_falls_back(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A ledge with no ledge_directions entry logs a warning naming tileset+tile id
-    (deduped across repeated cells with the same tile id) and returns MB_NORMAL."""
+    """A ledge with no ledge_directions entry and a genuinely ambiguous passage
+    byte (>=2 clear bits, so derivation can't pick a direction) logs a warning
+    naming tileset+tile id (deduped across repeated cells with the same tile
+    id) and returns MB_NORMAL."""
     fork = _fake_fork(tmp_path)
     table = load_terrain_tag_map(fork, REAL_TERRAIN_TAG_MAP)
 
     tags = [0] * 500
     tags[400] = 1  # ledge, no direction entry
+    passages = [0x0F] * 500
+    passages[400] = 0x03  # blocked right+up only -> down+left both clear -> ambiguous
 
     with caplog.at_level(logging.WARNING):
-        b1 = table.column_behavior(5, ((0, 400),), tags)
-        b2 = table.column_behavior(5, ((0, 400),), tags)  # same (tileset, tile) again
+        b1 = table.column_behavior(5, ((0, 400),), tags, passages_for_tileset=passages)
+        b2 = table.column_behavior(  # same (tileset, tile) again
+            5, ((0, 400),), tags, passages_for_tileset=passages)
 
     assert b1 == table._normal_value
     assert b2 == table._normal_value
@@ -201,6 +206,97 @@ def test_ledge_without_direction_entry_warns_once_and_falls_back(
     assert len(warnings) == 1
     assert "5" in warnings[0].getMessage()
     assert "400" in warnings[0].getMessage()
+
+
+def test_ledge_without_direction_entry_or_passages_warns_once_and_falls_back(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A ledge with no ledge_directions entry and no passage data at all can't
+    be derived either -> warn once and fall back to MB_NORMAL."""
+    fork = _fake_fork(tmp_path)
+    table = load_terrain_tag_map(fork, REAL_TERRAIN_TAG_MAP)
+
+    tags = [0] * 500
+    tags[400] = 1  # ledge, no direction entry, no passages supplied
+
+    with caplog.at_level(logging.WARNING):
+        behavior = table.column_behavior(5, ((0, 400),), tags)
+
+    assert behavior == table._normal_value
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+
+
+@pytest.mark.parametrize(
+    ("passage", "mb_name"),
+    [
+        (0x0E, "MB_JUMP_NORTH"),  # clear bit 0x01 (down) -> enter from north
+        (0x0D, "MB_JUMP_EAST"),   # clear bit 0x02 (left) -> enter from east
+        (0x0B, "MB_JUMP_WEST"),   # clear bit 0x04 (right) -> enter from west
+        (0x07, "MB_JUMP_SOUTH"),  # clear bit 0x08 (up) -> enter from south
+    ],
+)
+def test_ledge_derives_direction_from_passage_byte(
+    tmp_path: Path, passage: int, mb_name: str
+) -> None:
+    """A ledge with no override but a passage byte with exactly one clear bit
+    derives the matching MB_JUMP_* direction."""
+    fork = _fake_fork(tmp_path)
+    table = load_terrain_tag_map(fork, REAL_TERRAIN_TAG_MAP)
+
+    from rpg2gba.tileset_converter.terrain_tags import _behavior_value
+
+    tags = [0] * 500
+    tags[400] = 1  # ledge
+    passages = [0x0F] * 500
+    passages[400] = passage
+
+    behavior = table.column_behavior(5, ((0, 400),), tags, passages_for_tileset=passages)
+    assert behavior == _behavior_value(fork, mb_name)
+
+
+def test_ledge_all_blocked_passage_is_silent_wall(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """passage 0x0F (all four sides blocked) is a pure wall, not a ledge -- falls
+    back to MB_NORMAL with NO warning (section 33 is explicit this is silent)."""
+    fork = _fake_fork(tmp_path)
+    table = load_terrain_tag_map(fork, REAL_TERRAIN_TAG_MAP)
+
+    tags = [0] * 500
+    tags[400] = 1  # ledge
+    passages = [0] * 500
+    passages[400] = 0x0F  # fully blocked
+
+    with caplog.at_level(logging.WARNING):
+        behavior = table.column_behavior(5, ((0, 400),), tags, passages_for_tileset=passages)
+
+    assert behavior == table._normal_value
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 0
+
+
+def test_ledge_override_wins_over_derivation(tmp_path: Path) -> None:
+    """A ledge_directions override wins even when the passage byte would
+    derive to a different direction."""
+    fork = _fake_fork(tmp_path)
+    ledge_map = tmp_path / "terrain_tag_map.json"
+    raw = json.loads(REAL_TERRAIN_TAG_MAP.read_text(encoding="utf-8"))
+    raw["ledge_directions"] = {"5": {"400": "south"}}
+    ledge_map.write_text(json.dumps(raw), encoding="utf-8")
+
+    table = load_terrain_tag_map(fork, ledge_map)
+
+    tags = [0] * 500
+    tags[400] = 1  # ledge
+    passages = [0x0F] * 500
+    passages[400] = 0x0E  # would derive to MB_JUMP_NORTH if not overridden
+
+    behavior = table.column_behavior(5, ((0, 400),), tags, passages_for_tileset=passages)
+
+    from rpg2gba.tileset_converter.terrain_tags import _behavior_value
+
+    assert behavior == _behavior_value(fork, "MB_JUMP_SOUTH")
 
 
 def test_unknown_tag_raises(tmp_path: Path) -> None:

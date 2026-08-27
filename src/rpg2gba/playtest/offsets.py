@@ -88,6 +88,13 @@ _PROBE_ENTRIES: dict[str, str] = {
     # the probed value differs (see battle.py's in-battle detection notes).
     "off_battlepkmn_hp": "offsetof(struct BattlePokemon, hp)",
     "sizeof_battlepkmn": "sizeof(struct BattlePokemon)",
+    # TrainerBattleParameter (include/battle_setup.h): which trainer the
+    # in-progress battle actually belongs to. `_trigger_trainer` asserted
+    # only that *a* trainer battle had started, which let a Timothy win
+    # masquerade as a Larrie failure for three sessions (CH04 B2). This is
+    # the same field `SetMapVarsToTrainerA`/`GetTrainerFlag` read, so it
+    # identifies the opponent by the engine's own bookkeeping.
+    "off_tbp_opponenta": "offsetof(TrainerBattleParameter, params.opponentA)",
     # struct Main (include/main.h): gMain.callback2, for in-battle detection.
     "off_main_callback2": "offsetof(struct Main, callback2)",
     # -- walk_to's route planner (emulator.py) -------------------------------
@@ -146,6 +153,16 @@ _PROBE_ENTRIES: dict[str, str] = {
     "off_printer_window_id": "offsetof(struct TextPrinter, printerTemplate.windowId)",
     "off_printer_state": "offsetof(struct TextPrinter, state)",
     "off_printer_next": "offsetof(struct TextPrinter, nextPrinter)",
+    # `currentChar` (emulator.active_printer_texts): the printer's live read
+    # cursor into its source string. NB this is a *moving* pointer -- text.c's
+    # RenderText advances it one byte (or one control-code) at a time as it
+    # draws, so reading it mid-print or once parked gives whatever is left to
+    # draw from that point on, never the string's start once any of it has
+    # been consumed. `emulator.current_field_message_text` reads the field
+    # message box's stable `gStringVar4` source buffer instead, precisely to
+    # get the full string from byte 0 regardless of print progress -- see
+    # that method's docstring.
+    "off_printer_currentchar": "offsetof(struct TextPrinter, printerTemplate.currentChar)",
     "val_window_text_printer": "WINDOW_TEXT_PRINTER",
     "val_render_state_handle_char": "RENDER_STATE_HANDLE_CHAR",
     "val_render_state_wait": "RENDER_STATE_WAIT",
@@ -239,6 +256,7 @@ _PROBE_TEMPLATE = """\
 #include "text.h"
 #include "task.h"
 #include "item.h"
+#include "battle_setup.h"
 {entries}
 """
 
@@ -284,6 +302,7 @@ _CONSTANT_PROBE_TEMPLATE = """\
 #include "fieldmap.h"
 #include "constants/metatile_behaviors.h"
 #include "constants/event_objects.h"
+#include "constants/event_object_movement.h"
 #include "constants/songs.h"
 {entries}
 """

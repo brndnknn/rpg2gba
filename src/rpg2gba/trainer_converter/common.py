@@ -81,6 +81,14 @@ SLICE_TRAINER_PICS: tuple[TrainerPicSpec, ...] = (
     # Graphics/Characters/trainer014.png before pinning (battles.py staging
     # asserts this at runtime too).
     TrainerPicSpec(14, "RICHBOY"),
+    # CH04 (Route 2): Chuck, TRAINER_CLASS_HIKER. trainer_id 4 is
+    # trainertypes.dat's own id for HIKER (intermediate/trainer_types.json),
+    # verified against a real Graphics/Characters/trainer004.png before
+    # pinning. Timothy needs no new entry -- YOUNGSTER is already staged.
+    TrainerPicSpec(4, "HIKER"),
+    # Also CH04: Brent, TRAINER_CLASS_BIRD_KEEPER. trainertypes.dat id 42,
+    # display name "BIRD KEEPER", real Graphics/Characters/trainer042.png.
+    TrainerPicSpec(42, "BIRDKEEPER"),
 )
 
 #: internal_name values in `SLICE_TRAINER_PICS` that additionally get a player
@@ -122,6 +130,18 @@ SLICE_TRAINER_BATTLES: tuple[str, ...] = (
     # CH03 (Kevlar Town): Mawuli's repeatable Pokémon Center facility battle
     # (transpiler._emit_facility_trainer_battle_idiom).
     "TRAINER_MAWULI_90",
+    # CH04 (Route 2): the chapter's two overworld battle trainers, in map
+    # event order -- Timothy (Map035:100) then Chuck (Map035:482), both
+    # `trainerbattle_single`. Order is the append rule, not a preference.
+    "TRAINER_TIMOTHY_247",
+    "TRAINER_CHUCK_279",
+    # Also CH04: the map's two PHONE trainers, whose battles sit inside a
+    # `pbTrainerBattle` conditional the transpiler had queued rather than
+    # emitted -- they need staging the moment that idiom emits. Larrie is a
+    # chapter beat (B2); Brent is north of the rockslide and unreachable this
+    # visit, but his event still emits, so his id still has to resolve.
+    "TRAINER_LARRIE_4",
+    "TRAINER_BRENT_278",
 )
 
 

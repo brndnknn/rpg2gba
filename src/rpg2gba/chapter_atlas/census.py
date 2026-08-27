@@ -46,6 +46,15 @@ CODE_SCRIPT_CONT = 655
 
 _SCRIPT_HEAD = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_.]*)")
 
+# A bare local-variable assignment at the start of a script block, e.g.
+# `trainer = createPhoneTrainer(...)`. Matched narrowly: a single identifier
+# (no dots — a dotted LHS is a method/attribute chain, not a local var) then
+# `=` not immediately followed by another `=` (so `==` comparisons and `+=`/
+# `-=`/etc. compound assignment don't match — the char before `=` must be the
+# identifier or whitespace, never an operator character). When it matches, the
+# head belongs to the right-hand side, not the assigned name.
+_ASSIGNMENT_LHS = re.compile(r"^\s*[A-Za-z_][A-Za-z0-9_]*\s*=(?!=)\s*")
+
 # Conditional-branch parameter[0] discriminator for "condition is a Ruby
 # expression"; the expression itself is parameter[1]. This matters more than it
 # looks: EVERY trainer battle in Uranium is a code-111/type-12 branch wrapping
@@ -112,6 +121,12 @@ MECHANIC_BY_HEAD: dict[str, str] = {
     "pbAddPokemon": "gift pokemon",
     "pbHasSpecies": "party species check",
     "displayNinjaLetter": "bespoke letter UI",
+    "createPhoneTrainer": "phone / rematch",
+    "pbSetSelfSwitch": "self-switch write",
+    "get_character": "character reference resolver (no-op)",
+    "pbCallBub": "speech bubble UI",
+    "pbEraseThisEvent": "event erase (persistent)",
+    "setTempSwitchOn": "temp switch write (page re-eval)",
 }
 
 
@@ -219,8 +234,17 @@ def _script_head(text: str) -> str | None:
     Uranium's authors call the same helper both bare and `Kernel.`-qualified
     (`pbItemBall` and `Kernel.pbItemBall` both occur), so without normalising
     the prefix one mechanic shows up as two unrelated heads.
+
+    A line that opens with a local-variable assignment (`trainer =
+    createPhoneTrainer(...)`) has the head on its right-hand side, not its
+    left: the assigned name is stripped first so the call underneath it is
+    what gets recognized.
     """
-    match = _SCRIPT_HEAD.match(text or "")
+    text = text or ""
+    assignment = _ASSIGNMENT_LHS.match(text)
+    if assignment:
+        text = text[assignment.end():]
+    match = _SCRIPT_HEAD.match(text)
     if not match:
         return None
     head = match.group(1)

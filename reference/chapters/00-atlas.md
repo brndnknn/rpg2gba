@@ -91,8 +91,8 @@ Tier legend: **F** full, **M** medium, **T** thin. Status is from the binding.
 |---|---|---|:-:|--:|--:|--:|---|
 | CH01 | Moki Town | A1 | F | 8 | 1 | 7 | **§9 boot-walk gate passed 2026-08-04** — `01-moki.md` |
 | CH02 | Route 1 | A1 | F | 2 | 9 | 7 | **built** — §9 gate passed 2026-08-12, suite 29/29; `02-route-1.md` (spec), `reference/archive/CH02_TODO.md` (retired checklist) |
-| CH03 | Kevlar Town | A1 | M | 5 | 5 | 5 | bike; map 19 bound here, see §6 |
-| CH04 | Route 2 | A1 | M | 1 | 4 | 3 | rockslide gate |
+| CH03 | Kevlar Town | A1 | M | 5 | 5 | 5 | **built** — §9 gate passed 2026-08-19, suite 60/60; bike; map 19 bound here, see §6 |
+| CH04 | Route 2 | A1 | M | 1 | 4 | 3 | **built** — §9 gate passed 2026-08-27, suite 74/74; rockslide gate; `04-route-2.md` (spec), `reference/archive/CH04_TODO.md` (retired) |
 | CH05 | Passage Cave | A1 | M | 2 | 3 | 5 | first dungeon |
 | CH06 | Nowtoch City | A1 | M | 8 | 6 | 11 | **Gym 1**, first metro, Rock Smash |
 | CH07 | Route 2 (revisit) | A2 | T | 1 | 4 | 3 | overland seam opens |

@@ -73,6 +73,10 @@ def _fake_fork(tmp_path: Path) -> Path:
         "    MB_SIDEWAYS_STAIRS_RIGHT_SIDE,\n"
         "    MB_SIDEWAYS_STAIRS_LEFT_SIDE,\n"
         "    MB_COUNTER,\n"
+        "    MB_NORTH_ARROW_WARP,\n"
+        "    MB_SOUTH_ARROW_WARP,\n"
+        "    MB_EAST_ARROW_WARP,\n"
+        "    MB_WEST_ARROW_WARP,\n"
         "};\n",
         encoding="utf-8",
     )
@@ -1148,3 +1152,76 @@ def test_stair_cell_layout_block_passable_despite_blocked_source_passage(
 
     assert _collision_at(0, 0) == 0  # PASSABLE — stair override wins
     assert _collision_at(1, 0) == 1  # BLOCKED — plain cell, same tile, no override
+
+
+# ---------------------------------------------------------------------------
+# Seam warps fix: arrow-warp behavior_overrides kinds (reuses stair_cells=)
+# ---------------------------------------------------------------------------
+
+
+def test_arrow_warp_cell_gets_metatile_with_correct_behavior(tmp_path: Path) -> None:
+    """An `arrow_warp_up` behavior cell (seam_warps.json substitution) resolves
+    through the exact same kind-generic `stair_cells=`/`behavior_overrides`
+    mechanism stairs use — inlined here since no non-arrow cell shares the
+    column — and its emitted metatile carries MB_NORTH_ARROW_WARP."""
+    fork = _fake_fork(tmp_path)
+    base = tmp_path / "tileset_map.json"
+    base.write_text("{}", encoding="utf-8")
+    overlay_out = tmp_path / "tileset_map.gen.json"
+    priors = [0] * 600
+
+    build_slice_tilesets(
+        [(32, _map(5))],
+        {},
+        fork=fork,
+        base_tile_map=base,
+        overlay_out=overlay_out,
+        rasterizer_for=lambda ts: _StubRasterizer(),
+        priorities_for=lambda ts: priors,
+        terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
+        stair_cells={32: {(0, 0): "arrow_warp_up"}},
+    )
+
+    overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
+    tiles = overlay["tiles"]["5"]
+    bo = overlay["behavior_overrides"]["5"]["arrow_warp_up"]
+
+    col_400 = json.dumps([[0, 400]], separators=(",", ":"))
+    assert set(bo["tiles"]) == {col_400}
+    arrow_idx = bo["tiles"][col_400]
+    assert arrow_idx == tiles[col_400]["metatile"]  # inlined, no copy
+    assert bo["fallback"] is None
+
+    prim = fork / "data" / "tilesets" / "primary" / "uranium5"
+    raw = (prim / "metatile_attributes.bin").read_bytes()
+    (attr,) = struct.unpack_from("<H", raw, arrow_idx * 2)
+    assert (attr & 0x00FF) == _behavior_value(fork, "MB_NORTH_ARROW_WARP")
+
+
+def test_arrow_warp_and_stair_kinds_coexist(tmp_path: Path) -> None:
+    """A tileset with both a stair cell and a seam arrow-warp cell in the same
+    build_slice_tilesets call emits both kinds' behavior_overrides entries —
+    the merge in scripts/assemble_pathfinder.py (stair_cells + seam_warps'
+    behavior_cells_for) is exactly this: one dict, multiple kinds."""
+    fork = _fake_fork(tmp_path)
+    base = tmp_path / "tileset_map.json"
+    base.write_text("{}", encoding="utf-8")
+    overlay_out = tmp_path / "tileset_map.gen.json"
+    priors = [0] * 600
+
+    # 2x2 map (see _map(5)): (0,0)=400 stairs, (1,1)=403 arrow warp.
+    build_slice_tilesets(
+        [(32, _map(5))],
+        {},
+        fork=fork,
+        base_tile_map=base,
+        overlay_out=overlay_out,
+        rasterizer_for=lambda ts: _StubRasterizer(),
+        priorities_for=lambda ts: priors,
+        terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
+        stair_cells={32: {(0, 0): "stairs_left", (1, 1): "arrow_warp_down"}},
+    )
+
+    overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
+    bo = overlay["behavior_overrides"]["5"]
+    assert set(bo) == {"stairs_left", "arrow_warp_down"}

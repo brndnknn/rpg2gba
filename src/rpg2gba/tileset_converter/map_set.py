@@ -29,8 +29,11 @@ from pathlib import Path
 # 172 + 89 (Theo's house 1F/2F), then CH02 (Route 1, added 2026-08-05): 33
 # (Route 01) + 81 (Route 01 old rod house), then CH03 (Kevlar Town, added
 # 2026-08-12): 31 (the town), 67 (Poke Mart), 68 (Pokemon Center), 73 (the
-# shared building strip), 19 (the Grott-Hole boulder cave).
-SLICE_MAP_IDS: list[int] = [49, 48, 32, 50, 64, 65, 172, 89, 33, 81, 31, 67, 68, 73, 19]
+# shared building strip), 19 (the Grott-Hole boulder cave), then CH04 (Route
+# 2, added 2026-08-25): 35, the whole chapter in one map.
+SLICE_MAP_IDS: list[int] = [
+    49, 48, 32, 50, 64, 65, 172, 89, 33, 81, 31, 67, 68, 73, 19, 35,
+]
 
 # Converter-level collision unblocks (user-approved fidelity calls, one entry per
 # cell): cells the emitted collision forces WALKABLE even though Uranium's tile

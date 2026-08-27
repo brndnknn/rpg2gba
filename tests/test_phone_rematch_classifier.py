@@ -43,8 +43,33 @@ def _event(*pages: dict, id: int = 1, name: str = "npc") -> dict:
     return {"id": id, "name": name, "x": 0, "y": 0, "pages": list(pages)}
 
 
+def _register_call_cmds(
+    *, class_sym: str, name: str, reg_text: str, reg_maxbattles: int, split: bool
+) -> list[dict]:
+    """The ``pbPhoneRegisterBattle(...)`` call, in either of its two verified
+    on-disk forms: a single code-355 command (Map035 Larrie/Brent -- the
+    ``_I("...")`` literal fits on one RGSS line), or split across a
+    code-355 + code-655 continuation (Map033 Brandon/Richey -- the literal
+    spans the line boundary). Both must classify identically once joined."""
+    call = f'pbPhoneRegisterBattle(_I("{reg_text}"),get_character(0),PBTrainers::{class_sym},"{name}",{reg_maxbattles})'
+    if not split:
+        return [_cmd(D.SCRIPT, call)]
+    # Split the literal itself across the 355/655 boundary, mirroring the
+    # real Map033 corpus data (the split happens mid-string, not at a call
+    # boundary).
+    mid = len(reg_text) // 2
+    head, tail = reg_text[:mid], reg_text[mid:]
+    return [
+        _cmd(D.SCRIPT, f'pbPhoneRegisterBattle(_I("{head}'),
+        _cmd(
+            D.SCRIPT_CONT,
+            f'{tail}"),get_character(0),PBTrainers::{class_sym},"{name}",{reg_maxbattles})',
+        ),
+    ]
+
+
 def _battle_page(*, class_sym: str, name: str, battle_text: str, defeat_text: str,
-                  reg_text: str, reg_maxbattles: int = 2) -> dict:
+                  reg_text: str, reg_maxbattles: int = 2, split_register: bool = True) -> dict:
     """Page 0: the default/no-self-switch-condition sight-trainer page."""
     return {
         "trigger": 2,
@@ -61,10 +86,9 @@ def _battle_page(*, class_sym: str, name: str, battle_text: str, defeat_text: st
                 f'pbTrainerBattle(PBTrainers::{class_sym},"{name}",'
                 f'_I("{defeat_text}"),false,0,false,0)',
             ),
-            _cmd(D.SCRIPT, f'pbPhoneRegisterBattle(_I("{reg_text}'),
-            _cmd(
-                D.SCRIPT_CONT,
-                f'"),get_character(0),PBTrainers::{class_sym},"{name}",{reg_maxbattles})',
+            *_register_call_cmds(
+                class_sym=class_sym, name=name, reg_text=reg_text,
+                reg_maxbattles=reg_maxbattles, split=split_register,
             ),
             _cmd(D.CONTROL_SELF_SWITCH, "A", 0),
             _cmd(0),
@@ -100,13 +124,37 @@ def _rematch_page(*, class_sym: str, name: str, rematch_text: str, defeat_text: 
     }
 
 
-def _idle_page(*, idle_text: str) -> dict:
-    """Page 2 (self-switch A set, no B): idle re-offer -- content unchecked,
-    never emitted (collapsed_pages), only its page condition matters."""
+def _idle_page(*, class_sym: str, name: str, idle_text: str, reg_text: str,
+                reg_maxbattles: int = 2, split_register: bool = True) -> dict:
+    """Page 2 (self-switch A set, no B): idle re-offer -- verified real shape
+    (Map033 EV039/EV053, Map035 events 3/23): a code-111 gate on
+    ``pbPhoneBattleCount(...)>=1`` around [optional pbCallBub, the idle
+    Show-Text, ``pbPhoneRegisterBattle(...)``, EXIT_EVENT_PROCESSING], a
+    BRANCH_END with no else, then the exact same three commands again
+    unconditionally (the corpus's own -- structurally unreachable in
+    practice, since self-switch A implies the count check -- fallback)."""
+
+    def _branch_body() -> list[dict]:
+        return [
+            _cmd(D.SCRIPT, "pbCallBub(2)"),
+            _text(idle_text),
+            *_register_call_cmds(
+                class_sym=class_sym, name=name, reg_text=reg_text,
+                reg_maxbattles=reg_maxbattles, split=split_register,
+            ),
+        ]
+
     return {
         "trigger": 0,
         "condition": {"self_switch_valid": True, "self_switch_ch": "A"},
-        "list": [_text(idle_text)],
+        "list": [
+            _cmd(D.CONDITIONAL_BRANCH, 12, f'pbPhoneBattleCount(PBTrainers::{class_sym},"{name}")>=1'),
+            *_branch_body(),
+            _cmd(D.EXIT_EVENT_PROCESSING),
+            _cmd(0),
+            _cmd(D.BRANCH_END),
+            *_branch_body(),
+        ],
     }
 
 
@@ -117,6 +165,7 @@ _BRANDON = dict(
     defeat_text="Erh... Other types are good as well...",
     reg_text="I need some more water Pokémon...\nHook me up on PokePod if you want to battle again!",
     idle_text="This place is perfect for fishing!",
+    split_register=True,  # verified real shape: Map033 splits 355+655
 )
 
 _RICHEY = dict(
@@ -126,6 +175,32 @@ _RICHEY = dict(
     defeat_text="Oh, crackers! I lost!",
     reg_text="Hey, you're pretty good! Wanna trade PokePod numbers?\nI'll win against you next time!",
     idle_text="Well, someday I'll battle you again, and then we'll see who's laughing!",
+    split_register=True,
+)
+
+# Map035 CH04 -- HIKER Larrie (event 3) and BIRDKEEPER Brent (event 23):
+# a single code-355 ``pbPhoneRegisterBattle(...)`` command (the ``_I("...")``
+# literal fits on one RGSS line), not the split 355+655 form Map033 uses.
+# This is the exact shape that used to bail the classifier entirely.
+_LARRIE = dict(
+    class_sym="HIKER", name="Larrie",
+    battle_text="Hey, kid! Are you tough enough to make it through this cave?",
+    rematch_text="So you have returned for a rematch? Let me show you my moves!",
+    defeat_text="Looks like you're tough all right.",
+    reg_text="Hmm, you're pretty good it seems. Trade PokePod numbers with me, "
+              "and I'll call you whenever I find a rare Pokémon.",
+    idle_text="Watch your step! In caves, Pokémon can jump out from anywhere!",
+    split_register=False,  # verified real shape: Map035 is a single 355
+)
+
+_BRENT = dict(
+    class_sym="BIRDKEEPER", name="Brent",
+    battle_text="Fly to the sky, my beautiful Bird Pokémon!",
+    rematch_text="Behold! My birds are bolder than before!",
+    defeat_text="You clipped our wings...",
+    reg_text="I can tell you have a soaring spirit. Want to trade PokéPod numbers?",
+    idle_text="Is Owten a bird? I can't tell...",
+    split_register=False,
 )
 
 
@@ -133,13 +208,17 @@ def _make_event(spec: dict, *, id: int, name: str = "Trainer(5)") -> dict:
     page0 = _battle_page(
         class_sym=spec["class_sym"], name=spec["name"],
         battle_text=spec["battle_text"], defeat_text=spec["defeat_text"],
-        reg_text=spec["reg_text"],
+        reg_text=spec["reg_text"], split_register=spec["split_register"],
     )
     page1 = _rematch_page(
         class_sym=spec["class_sym"], name=spec["name"],
         rematch_text=spec["rematch_text"], defeat_text=spec["defeat_text"],
     )
-    page2 = _idle_page(idle_text=spec["idle_text"])
+    page2 = _idle_page(
+        class_sym=spec["class_sym"], name=spec["name"],
+        idle_text=spec["idle_text"], reg_text=spec["reg_text"],
+        split_register=spec["split_register"],
+    )
     return _event(page0, page1, page2, id=id, name=name)
 
 
@@ -167,6 +246,7 @@ def test_ev039_brandon_matches_and_emits_both_blocks() -> None:
     assert "special(PlayerFaceTrainerAfterBattle)" in out
     assert "waitmovement(0)" in out
     assert "register_matchcall(TRAINER_BRANDON_16)" in out
+    assert "setflag(FLAG_MAP033_EVENT039_SSA)" in out
     assert "specialvar(VAR_RESULT, IsTrainerReadyForRematch)" in out
     assert "if (var(VAR_RESULT) == FALSE) {" in out
     assert "trainerbattle_rematch(TRAINER_BRANDON_16," in out
@@ -195,19 +275,20 @@ def test_ev039_golden_output() -> None:
         '    trainerbattle_single(TRAINER_BRANDON_16, format("Water Pokémon are the best."), '
         'format("Erh... Other types are good as well..."), '
         "Map033_Trainer_5_Page1_RegisterMatchCall)\n"
-        "    release\n"
-        "    end\n"
+        "    goto(Map033_Trainer_5_Page2)\n"
         "}\n\n"
         "script Map033_Trainer_5_Page1_RegisterMatchCall {\n"
         "    special(PlayerFaceTrainerAfterBattle)\n"
         "    waitmovement(0)\n"
         "    register_matchcall(TRAINER_BRANDON_16)\n"
+        "    setflag(FLAG_MAP033_EVENT039_SSA)\n"
         "    release\n"
         "    end\n"
         "}\n\n"
         "script Map033_Trainer_5_Page2 {\n"
         "    specialvar(VAR_RESULT, IsTrainerReadyForRematch)\n"
         "    if (var(VAR_RESULT) == FALSE) {\n"
+        '        msgbox(format("This place is perfect for fishing!"))\n'
         "        release\n"
         "        end\n"
         "    }\n"
@@ -219,6 +300,58 @@ def test_ev039_golden_output() -> None:
         "}"
     )
     assert out == expected
+
+
+# ----------------------------------------------------------------------------
+# re-talk routing — Map035 EV003 (Larrie): the fix for the silent-NPC bug
+# (B11), WITHOUT a dispatcher (a dispatcher would break sight-trainer
+# detection -- GetTrainerFlagFromScriptPointer reads the object_event's raw
+# script bytes as a trainerbattle opcode; see the comment on `battle_block`
+# in deterministic.py).
+# ----------------------------------------------------------------------------
+
+
+def test_larrie_page1_falls_through_to_page2_after_trainerbattle() -> None:
+    """The re-talk route to Page2 must be Page1's FALL-THROUGH -- the command
+    immediately after `trainerbattle_single` -- not the four-argument
+    continue-script.
+
+    On a re-talk the engine's own scaffolding
+    (`EventScript_TryDoNormalTrainerBattle`, engine/data/scripts/
+    trainer_battle.inc:9-21) locks, faceplayers, sees the trainer flag set and
+    runs `gotopostbattlescript`, which resolves to `sTrainerBattleEndScript` --
+    set by `TrainerBattleLoadArgs` (engine/src/battle_setup.c:1058) to the byte
+    after the packed trainerbattle command, i.e. Page1's next line. The
+    four-argument script is a different pointer (`battleScriptRetAddrA`),
+    reached only by `gotobeatenscript` once, on the return from a won battle.
+
+    Putting the branch in the four-argument script (065e9c04) therefore left
+    Page2 unreachable in every state, and Larrie and Richey turned to face the
+    player and said nothing, permanently. Keep the goto here."""
+    ev = _make_event(_LARRIE, id=3)
+    out = D.classify_phone_rematch_trainer_battle(35, ev, D.Context(
+        trainers={("TRAINER_CLASS_HIKER", "Larrie", 0): "TRAINER_LARRIE_4"}
+    ))
+    assert out is not None
+    assert "script Map035_Trainer_5_Page1 {" in out
+    assert "trainerbattle_single(TRAINER_LARRIE_4," in out
+    # the goto is the very next line after trainerbattle_single, and Page1
+    # has no silent release/end exit for a re-talk to land on.
+    page1 = out.split("}\n\n", 1)[0]
+    assert page1.rstrip().endswith("    goto(Map035_Trainer_5_Page2)")
+    assert "release" not in page1
+    # the one-shot post-victory script registers unconditionally: it can only
+    # ever run with the self-switch clear, so a flag check there is dead code.
+    assert (
+        "script Map035_Trainer_5_Page1_RegisterMatchCall {\n"
+        "    special(PlayerFaceTrainerAfterBattle)"
+    ) in out
+    # the self-switch still advances -- metadata_wiring reads it for page
+    # conditions.
+    assert "setflag(FLAG_MAP035_EVENT003_SSA)" in out
+    # no dispatcher block, and Page1's own script pointer is untouched --
+    # the object_event must keep pointing straight at trainerbattle_single.
+    assert "Dispatch" not in out
 
 
 # ----------------------------------------------------------------------------

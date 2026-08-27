@@ -488,10 +488,29 @@ ships with 2 spare metatiles. Do the copy-cost census before committing to it.
 **Due:** before Map117 / Map187 / Map163 / Map121 / Map028 enter a chapter (all
 Act 2+). Not urgent for the current frontier.
 
-### 33. Auto-derive ledge jump directions from RMXP passage bits
+### 33. Auto-derive ledge jump directions from RMXP passage bits — DONE 2026-08-24
 
-*Migrated from `CH02_TODO.md` #1 on the CH02 gate pass 2026-08-12; unchanged and
-still open. Full derivation table + ts22 inventory: `reference/archive/CH02_TODO.md` #1.*
+*Migrated from `CH02_TODO.md` #1 on the CH02 gate pass 2026-08-12. **Closed
+2026-08-24** during CH04's approval wait. Full derivation table + ts22
+inventory: `reference/archive/CH02_TODO.md` #1.*
+
+**Resolution.** `terrain_tags.column_behavior` derives the direction from the
+passage byte's low nibble; `ledge_directions` stays empty and is now purely an
+escape hatch. Sole clear bit -> `MB_JUMP_*` (0x08 south / 0x01 north / 0x02
+east / 0x04 west); 0x0F is a plain wall, silent; >=2 clear bits warns once and
+falls back to `MB_NORMAL`. The four `MB_JUMP_*` values resolve once at
+construction and fail loud if the fork lacks one. Suite 2358 passed / 19
+skipped. Derived directions reproduce the archive's hand-verified ts22
+inventory exactly (0x07/0x0B/0x0D/0x0E -> S/W/E/N), and map 35's 16 tag-1
+cells all derive `MB_JUMP_SOUTH` with zero ambiguity. **Caveat:** no ROM has
+been built with this yet, **and CH04 will not clear it** (user, 2026-08-25):
+map 35's 16 tag-1 cells all sit on the far side of the rockslide, which is
+geometrically impassable until Rock Smash arrives, so CH04 *builds* the derived
+ledges but cannot reach them — the boot-walk gate will pass without any ledge
+ever being jumped. First real hardware proof therefore waits on the chapter that
+opens the rockslide; do not read CH04's green gate as validating this item, and
+do not register a CH04 beat for it. `reference/archive/PATHFINDER_FINDINGS.md:106` mislabels tiles 840-842
+(0x0E) as a south ledge; it is north. Left unedited as archived history.
 
 Ledge directionality is fully recoverable from data already deserialized —
 Essentials never stores a jump direction, so the tile's 4-dir passage bits are
@@ -593,6 +612,63 @@ what we think it is — a command that silently degrades into two bare commands
 passes every check we have until the assembler chokes 20 minutes into a build.
 Worth a cheap post-transpile lint over emitted `.pory` (known command names,
 parenthesised argument forms).
+
+### 47. `kevlar.py` B25 asserts the Kevlar↔Route 2 seam is BLOCKED — now stale
+
+Migrated from `CH04_TODO.md` on the CH04 §9 gate pass (2026-08-27).
+`src/rpg2gba/playtest/chapters/kevlar.py` B25 was written when Route 2 had no
+entrance; `connections.py` landed in CH04 and the seam now crosses live (CH04
+B1 walks it). B25 still passes only because it asserts the *south row 56*
+collision run, not the seam itself — confirm that reading, then flip the beat
+to assert a working crossing. It is CH03's file, so this is a deliberate
+cross-chapter edit, not drift.
+
+### 48. CH04 residual harness gaps — B10 and B15
+
+Migrated from `CH04_TODO.md`. `route2.py` registers 13 of 15 beats.
+- **B10** (Larrie's rematch *offer*) needs a PokeNav/Match-Call driver and a
+  self-switch setter the emulator harness does not have; recorded in
+  `DEFERRED_BEATS`, not dropped. Same driver would unblock the wider
+  match-call rematch surface.
+- **B15's two grass cells** are inferred coordinates, not decoded from the map;
+  flagged in `route2.py`'s docstring. Settle on the next Route 2 build.
+  (B1's Kevlar-side approach column was decoded to x=31 during the 2026-08-26
+  run — that half is closed.)
+
+### 49. Playtest checker: capability model (Q3) and rule-set versioning (Q7) still absent
+
+Migrated from `CH04_TODO.md` "Carried, not blocking".
+- **Q3 capability model** is unbuilt, so `checker.py` rule 7
+  (`deferred_no_granting_chapter`) cannot enforce CH04's 5 `rock_smash`
+  deferrals — they pass on a `capability_model_unenforced` warning. Operator
+  decision 2026-08-22: accept warnings for now. CH06 is the grant chapter per
+  `reference/chapters.json`; enforcement matters most once CH06/CH07 land.
+- **Q7 rule-set versioning** is designed but absent from `checker.py` — no
+  rule-set version field, so no gate stamp records one and no lag report can
+  be generated. (`reference/playtest_rule_versions.json`, added 2026-08-27,
+  versions the *playtest harness* beats, not the manifest checker.)
+
+### 50. `isRockSmashSoftlocked` is an unrecognized script head on map 32
+
+Migrated from `CH04_TODO.md`. Last unrecognized head in CH01's map-32 fixture;
+out of CH04's scope but filed so it is not rediscovered. Rule it (or its
+containing page) when CH01's interiors or the Rock Smash grant chapter is next
+touched.
+
+### 51. Q5.1 citation-verification experiment — run across CH04 + CH05
+
+Migrated from `CH04_TODO.md`. A blind second-agent pass over citation-triggered
+disposition rows only, scoped to run on CH04 and CH05; kept as standing
+practice if it catches at least one silent pass across both chapters. CH04's
+pass is done; the decision waits on CH05.
+
+### 52. Route 2 Poké Radar catch-table entries missing from `wild_encounters.json`
+
+Migrated from `CH04_TODO.md` (`reference/chapters/04-route-2.md` §5, item 3).
+The Route 2 wiki page lists a Poké Radar division (Dunsparce, Tofurang) that is
+absent from `wild_encounters.json`. Data gap, unresolved — Poké Radar is not an
+engine feature the pipeline models yet, so this is a "when Radar lands" note,
+not a CH04 miss.
 
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 
@@ -829,3 +905,319 @@ before a then-body is wired to it, not assumed.
 Worth remembering why this class was invisible for so long: **the queue entry
 names the conditional, not the grant hiding inside its test expression** — the
 same lesson as `CH03_TODO.md` #26(b).
+
+### 43. Beat classes the manifest cannot see, and the `cosmetic` rule
+
+*Filed 2026-08-25 out of the operator's read of CH04's beat list, which found
+four gaps in a chapter that had already been fully dispositioned.*
+
+Two findings, both corpus-wide, both structural rather than CH04-specific.
+
+**(a) The manifest enumerates event pages and overland seams — nothing else.**
+An encounter table is neither, so no generated row can ever represent one.
+CH04 had no beat covering "walk in the tall grass, get a wild battle" because
+nothing in the approval object could prompt for it. The same hole applies to
+any beat class that is not an event page: encounter tables, tileset behaviour
+(counters, ledges, water), connection-only seams, field-move surfaces. Either
+the generator grows non-page row kinds, or every chapter doc needs a
+hand-authored "beats with no manifest row" section that a reviewer is
+required to fill. Decide which before the next chapter is authored — CH04 got
+its B15 by hand (`04-route-2.md` §3.1).
+
+**(b) `cosmetic` was being decided on state writes, not observability.**
+The rule actually applied was *does this page write state?* That made Larrie's
+defeated re-talk a beat (it rides on `pbPhoneRegisterBattle`) while Timothy's
+identical-in-kind re-talk was `cosmetic`, and it dropped a talk-triggered NPC
+with an emote bubble, a cry SE and a line of dialogue. None of those write
+state; all three break independently. The rule is now *is there anything a
+player can press A on and observe?* — `cosmetic` means decoration with no
+trigger.
+
+CH04 was re-swept under (b): `ev009/p1`, `ev011/p0`, `ev012/p1` became
+`beat:B12`/`B13`/`B14`. **CH01–CH03 have not been re-swept** and passed their
+§9 gates under the old rule, so each may be carrying interactive rows filed as
+cosmetic. The sweep is mechanical — cross-reference trigger against
+disposition, flag action-trigger rows dispositioned `cosmetic` — and the
+checker cannot catch it, since `cosmetic` on a state-free row is legal by
+construction.
+
+**The sweep was run 2026-08-25; results and remediation are §44.** It could not
+be mechanical after all — CH01–CH03 have no manifest to cross-reference.
+
+### 45. Defeated Larrie faces you and says nothing — ROOT-CAUSED, FIXED, AND CONFIRMED IN PLAY 2026-08-27
+
+**CLOSED (2026-08-27).** Confirmed in play by CH04's §9 boot walk: route2
+chapter suite GREEN 74/74 on ROM `5953e98f`, the first run in which a defeated
+phone trainer speaks its idle line — B11 (Larrie) and `route1:N5` (Richey)
+both pass. The cause is the engine's re-talk resume address, and it makes the
+symptom exact.
+
+On a re-talk the engine runs its own scaffolding,
+`EventScript_TryDoNormalTrainerBattle` (`engine/data/scripts/trainer_battle.inc:9-21`):
+`lock`, `faceplayer` — *this is the turn-to-face the operator sees* — then
+`GetTrainerFlag`, already set, so it falls to `EventScript_NoNormalTrainerBattle`'s
+`gotopostbattlescript`. That resolves through `BattleSetup_GetScriptAddrAfterBattle`
+(`engine/src/battle_setup.c:1574`) to `sTrainerBattleEndScript`, which
+`TrainerBattleLoadArgs` (`battle_setup.c:1058`) sets to
+`(u8 *)data + sizeof(TrainerBattleParameter)` — **the byte immediately after
+the packed trainerbattle command, i.e. the next line of the calling script.**
+
+§46 put the route to `Page2` in `trainerbattle_single`'s FOUR-ARGUMENT
+continue-script instead. That is a different pointer, `battleScriptRetAddrA`,
+consumed only by `gotobeatenscript` / `BattleSetup_GetTrainerPostBattleScript`
+(`scrcmd.c:2478`, `battle_setup.c:1582`), which fires **exactly once**, on the
+return from a won battle. So the branch ran once, with the self-switch still
+clear, and never again — `Page2` was unreachable in every state, and Page1's
+next line was `release`/`end`. Lock, faceplayer, silence. Permanently, on any
+tile, for both trainers.
+
+Vanilla puts the re-talk continuation in the fall-through, not the 4th
+argument (`Route102_EventScript_Calvin`: `trainerbattle_single`, then
+`specialvar ShouldTryRematchBattle`, then the post-battle msgbox). The
+classifier now does the same: Page1 is `trainerbattle_single(...)` followed by
+`goto(Page2)`, and the 4th argument keeps only the one-shot registration (its
+now-dead self-switch check is dropped; the `setflag` stays, because
+`metadata_wiring` reads that self-switch for page conditions).
+
+**Fix:** `deterministic.classify_phone_rematch_trainer_battle`. Regression
+tests: `tests/test_phone_rematch_classifier.py::test_larrie_page1_falls_through_to_page2_after_trainerbattle`
+and the ev039 golden. In-play guard: `route1:N5`, now registered (below).
+
+**The two-datum key.** The operator supplied both: position is irrelevant
+(sight-approach or direct interaction, same result), and **Richey exhibits it
+too**, on a save the harness never touched, beaten by a different playthrough.
+That killed the harness explanation and the tile explanation together, and
+left the one thing Larrie and Richey share and Timothy doesn't — the phone
+shape. The engine read followed in minutes.
+
+*The original filing and its refuted claims are kept below, unedited.*
+
+---
+
+*Original filing — superseded by the resolution above:*
+
+*Filed 2026-08-27 from CH04's suite run on ROM `b07a02f8`; **substantially
+corrected the same day by the operator's own boot walk of that ROM**, which
+refuted the original diagnosis. The corrected version is below; the refuted
+claims are kept explicitly, because two of them were confidently wrong and
+the next reader should not re-derive them from the same evidence.*
+
+**This is the live blocker for CH04's §9 gate**: B11 fails on it, and
+B12-B15 are gated behind B11.
+
+**What actually happens in game (operator boot walk, ROM `b07a02f8`).**
+Re-talking defeated Larrie: he **turns to face the player, and NO text box
+appears at all.** The script starts — the `faceplayer` is visible — and then
+produces nothing. (The match-call registration message DOES appear, correctly,
+immediately after the battle itself; an earlier revision of this item
+mis-recorded that as happening on re-talk. It does not.)
+
+**Youngster Timothy, same map, re-talks correctly** and shows his line. He is
+the plain vanilla shape — `trainerbattle_single` with a trailing msgbox, no
+phone registration and no rematch branch. **No PHONE trainer is verified in
+play**, so §46's fix is unproven for its whole class; Route 1's Richey was
+not walked.
+
+**Leading hypothesis: the branch works and the defect is one level deeper.**
+`Page2` runs `specialvar(VAR_RESULT, IsTrainerReadyForRematch)` and takes the
+idle-line msgbox ONLY on `VAR_RESULT == FALSE`; otherwise it falls into
+`trainerbattle_rematch`. If that special returns anything but FALSE and no
+rematch is actually available, the rematch command does nothing visible and
+the script ends — which is precisely "faces you, no text". That would mean
+the `goto_if_set ...SSA -> Page2` fix from §46 IS working and the bug is the
+rematch arm. Under investigation; if it holds, the fix is to gate or drop the
+rematch arm rather than to touch the dispatch again.
+
+**The harness is NOT the primary defect, and the operator's argument is the
+reason.** A mispositioned harness cannot explain a human standing in the
+correct tile, facing the trainer, and getting no box. The harness's
+coordinate discrepancy (below) may still be real and may still be why
+`interact()` reported "no script started", but it is a SECOND, lesser
+problem — do not let it absorb this item.
+
+**REFUTED — do not carry these forward.** Both came from harness
+observations and both are wrong:
+
+1. ~~"A defeated trainer cannot be re-talked anywhere in this build; pressing
+   A starts no script at all."~~ False. A script demonstrably runs — the
+   trainer faces the player and prints a message. The harness's
+   `interact()` reporting "did not start a script", reproduced by driving
+   the emulator directly from `pre_beat.gba`, is a **harness** failure to
+   reach or detect the interaction, not the game's behavior.
+2. ~~"The trainer is not rendered."~~ False. Larrie is plainly visible in the
+   B11 contact-sheet frame (`route2-sheet-6.png`, the yellow-hatted Hiker,
+   same sprite as the B2 frame) and in play. That claim came from
+   misidentifying a distant sprite in a probe screenshot as the Barewl.
+
+**Still open, secondary: the harness's object-coordinate read.** It places
+Larrie at `(18,39)` against a template of `(18,36)`, and Richey at `(17,11)`
+against `(17,9)`, while static objects on the same maps (the Barewl at
+(17,36), the item balls, the rocks) report their templates exactly. Since the
+trainers are rendered and DO respond in play, these coordinates look wrong or
+stale, which would explain `interact()`'s "no script started" report from a
+seeded state. That is an `emulator.py` object-decode question —
+`off_objevent_currentcoords`, and whether a trainer that has run an approach
+sequence keeps its live position in the field the harness reads. **Elevation
+remains ruled out** (object elevation 3; staged terrain elevation 3 at the
+template, at the reported tile, and at the player's tile; the only z-check is
+`ObjectEventDoesElevationMatch` and 0 is a wildcard), as does
+`TryOverrideTemplateCoordsForObjectEvent` moving them (it assigns only
+`movementType`, never coordinates, despite its name).
+
+**Eliminated 2026-08-27 (checked, do not re-check).**
+
+- **The emission is correct.** The assembled chain in
+  `engine/data/maps/Route02/scripts.inc` is complete and well-formed:
+  `goto_if_set FLAG_MAP035_EVENT003_SSA` -> a label that `goto`s
+  `Map035_EV003_Page2`; `Page2` itself has the `specialvar VAR_RESULT,
+  IsTrainerReadyForRematch`, the `compare`/`goto_if_eq`, the msgbox arm and
+  the `trainerbattle_rematch` arm, all present. Not a dropped command, not a
+  mis-wired label, not a bad goto.
+- **`IsTrainerReadyForRematch` is a real special** (`data/specials.inc:81`)
+  and is FALSE-safe for a trainer absent from the rematch table
+  (`TrainerIdToRematchTableId` -> -1 -> FALSE). Larrie IS in the table
+  (`uranium_rematch_table.gen.h`, `REMATCH_URANIUM_LARRIE_4`, five identical
+  stages — the generator emitted no real rematch variants). Richey likewise.
+- **Neither `Page2` arm is silent by design.** FALSE prints the idle msgbox;
+  TRUE runs `PlayTrainerEncounterMusic` / `ShowTrainerIntroSpeech` /
+  `waitmessage` / `waitbuttonpress` / `BattleSetup_StartRematchBattle`, i.e.
+  visible text and a battle. "Faces you, then nothing" matches neither arm,
+  so the original rematch-arm hypothesis is **REFUTED**.
+- **In the harness's seeded state the script does not start at all from the
+  beat's authored tile.** Pressing A at (18,37) facing UP leaves the field
+  unlocked and `gSpecialVar_Result` untouched across 120 frames. That
+  corroborates the coordinate discrepancy (Larrie is not at his template
+  (18,36) in that state) but does NOT explain the in-play symptom, where the
+  script demonstrably starts.
+
+**The open contradiction.** In real play the script starts (the trainer
+faces the player) and then prints nothing. In every seeded state reachable
+from the harness, the script does not start at all. Both observations are
+solid; they cannot both be explained by "the harness stands in the wrong
+tile" alone, because in play the human stands in the right one. The next
+datum needed is **where Larrie is standing when the player talks to him** —
+his own tile relative to where he stood before the battle — and whether a
+second consecutive talk behaves differently. Asked of the operator
+2026-08-27; do not guess it.
+
+**Next steps, in order.**
+1. Confirm or refute the `IsTrainerReadyForRematch` hypothesis above — read
+   what the special returns for a trainer with no available rematch, and
+   whether `trainerbattle_rematch` is silently inert in that case.
+2. If confirmed, decide what the idle path should be. The rematch arm is
+   currently unreachable content anyway: nothing in this pipeline makes a
+   rematch "ready", and B10 (the rematch offer) is already deferred for want
+   of a Match Call driver.
+3. Separately, fix the harness object-coordinate read and re-point B11 at the
+   live position. B11 asserting the idle line stays the correct assertion.
+
+**Resolved 2026-08-27:** the trainer that re-talked correctly on the walk was
+**Timothy**, not Richey — confirmed by the operator. So no phone trainer's
+re-talk has been observed working, and §46's fix remains unverified in play
+for its class.
+
+**Blast radius.** CH01-CH03 all passed their §9 gates without this being
+visible, because CH04's B11 is the first beat in the corpus that re-talks a
+defeated trainer at all.
+
+### 46. Phone-rematch trainers' `Page2` was dead code — FIXED 2026-08-27, then RE-FIXED the same day (see §45); CLOSED, confirmed in play by CH04's §9 walk (ROM `5953e98f`)
+
+*Filed and fixed the same day. **The fix recorded below was half right and did
+not work**: the collapsed-pages dead end it diagnosed was real, but it moved
+the branch into `trainerbattle_single`'s four-argument continue-script, which
+the engine runs exactly once — on the return from a won battle — and never on
+a re-talk. `Page2` stayed unreachable, and §45's silent NPC is what that looks
+like in play. §45 carries the engine citations and the corrected fix
+(the branch belongs in Page1's fall-through, where vanilla puts it). Read §45
+first; the text below is the superseded reasoning, kept because it was
+confidently argued and the next reader deserves to know where it went wrong.*
+
+`deterministic`'s phone-rematch classifier emits three blocks per phone
+trainer: the `trainerbattle_single` page, a `_RegisterMatchCall`
+continue-script, and a `Page2` steady state carrying the
+`IsTrainerReadyForRematch` branch and the post-defeat idle line. Nothing ever
+referenced `Page2`: `transpile_driver._record_collapsed_pages` marked the
+event `collapsed_pages`, and `metadata_wiring._resolve_script` read that
+trait as "resolve to the page-1 label, build no dispatcher". Re-talking a
+defeated phone trainer therefore re-ran the headless match-call registrar and
+the NPC said nothing.
+
+Four events corpus-wide: map33/ev39 (Brandon), map33/ev53 (Richey),
+map35/ev3 (Larrie), map35/ev23 (Brent). **Two are Route 1's, so CH02 passed
+its §9 gate on 2026-08-12 with two silent NPCs in it.** Map050/ev19 (Theo)
+was unaffected — it gets a real `_Dispatch` — which is what localises the
+bug to the `collapsed_pages` rematch-trainer shape rather than to multi-page
+trainers generally.
+
+**Fix:** the `_RegisterMatchCall` block now leads with a check on the SSA
+flag it already sets and jumps to `Page2` when set. That is where vanilla
+puts it (`Route102_EventScript_Calvin`'s 4th `trainerbattle_single`
+argument runs both after the battle and on every later re-talk via
+`gotopostbattlescript`).
+
+**A dispatcher wrapping the trainer script is NOT an option — do not retry
+it.** It was tried first and broke sight-trainer detection outright:
+`GetTrainerFlagFromScriptPointer` (`engine/src/battle_setup.c:1232`) casts
+the object event's RAW SCRIPT BYTES at a fixed offset to read the opponent
+id, so the object's script must have `trainerbattle_*` as its literal first
+command. Wrapping it made the engine read garbage as a trainer id;
+`route1:B13` (Richey's first battle, previously green) failed immediately on
+the live suite. The comment recording this now lives at the classifier's
+post-battle-script construction.
+
+### 44. CH01/CH03 flavor interiors shipped untested — DEFERRED to the end of Act 1
+
+*Filed 2026-08-25 from the §43(b) re-sweep of CH01–CH03 under the new
+observability rule. **Deferred by the operator until the first chapter group
+(Act 1, CH01–CH06) is complete** — do not action before CH06's §9 gate passes.*
+
+**Deferral rationale.** Neither chapter is the frontier, both already hold a
+passed §9 gate, and Act 2 opens with revisit chapters that re-enter this exact
+content — CH08 is Moki Town (revisit), the first test of the revisit model, and
+is the natural place CH01's interiors get walked again. Doing the remediation
+then folds it into work already scheduled instead of reopening two closed gates
+mid-Act-1.
+
+**The sweep could not be mechanical.** §43(b) assumed a trigger-vs-disposition
+cross-reference. There is nothing to cross-reference: `reference/manifests/`
+holds only `CH04.*` — CH01–CH03 predate the manifest system and have **no
+manifest and no dispositions file**. The assessment was made against the prose
+specs and the playtest scenarios instead. Corollary worth carrying: the checker
+is structurally blind to every pre-CH04 chapter, so any future corpus-wide
+disposition rule change has the same hole.
+
+**Findings — 12 rows would flip to `beat:`, 3 need a human ruling, 0 are
+incidentally covered by the existing scenarios.**
+
+- **CH02 is clean.** Its beat table already treats flavor NPCs as first-class
+  beats regardless of state writes (B3 Chyinmunk sprite, B4 hint NPC, B34
+  brother NPC, B35 sign) — exactly the rows the old rule would have discarded.
+  Nothing to do. Not a coincidence worth ignoring: the author's instinct was
+  the new rule two chapters early.
+- **CH01 — 8 flips.** `01-moki.md` labels Map064, Map065 and Map089 "Flavor
+  interior, no chain beats", and `moki.py` never enters any of them. Map064:
+  ev001/p0 and ev002/p0 (talk-trigger dialogue NPCs), plus the Chyinmunk
+  (`pbCallBub` emote + cry SE + line — literally the Barewl pattern §43(b)
+  flipped). Map065: ev001/p0, ev002/p0. Map089: EV003, EV004, EV005, EV006,
+  EV007 (all talk-trigger flavor lines). The `p1` twins of the Map064/065 NPCs
+  stay cosmetic — switch-125-gated postgame, unreachable in-chapter.
+- **CH03 — 4 flips.** `kevlar.py`'s B16 does door-in/door-out warp checks on
+  Maury's apartment and the couple's house and never talks to anyone inside.
+  Map073: EV005/p0 (Maury, "have you gotten my wallet back?"), EV010 and EV011
+  (the couple), and **EV008, a boutique-interior NPC absent from the beat table
+  entirely**.
+- **Needs a human ruling before beats are written, because it sets the count:**
+  Map089 EV002 (touch-trigger, `code 209/509` picture display, no text — cannot
+  tell from codes whether the player observes anything) and Maury's EV005 pages
+  1 and 2 (self-switch-gated variants whose in-chapter reachability is unclear).
+
+**Remediation when it comes due:** ~5 new beats in `moki.py` (three interiors,
+collapsing the postgame-gated twins) and ~3–5 in `kevlar.py` (Map073's
+interiors), same shape as CH04's B12–B14 — enter, talk, assert the box opens and
+closes. Update `01-moki.md` / `03-kevlar-town.md` beat tables to match; the
+"flavor interior, no chain beats" labels are what caused this and should go.
+
+**Caveat on provenance:** the row list is a sub-agent's judgment read of the
+deserialized event data, not a row-by-row human verification. Re-confirm each
+row against `output/uranium-build/maps/Map0{64,65,73,89}.json` when the work is
+picked up.
