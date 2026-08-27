@@ -276,12 +276,18 @@ Also fixed, both harness-side and both found by this chapter:
   It polls across the window now (same total frames — the verdict changed,
   not the timing). This is what disguised B11 as a harness error for a cycle.
 
-**B11 is the live blocker and it is NOT a CH04-specific bug** — see
-`PROJECT_TODO.md` §45. A defeated trainer cannot be re-talked anywhere in
-this build: pressing A starts no script, and the object is not rendered,
-verified on Larrie AND on Route 1's Richey from all four adjacent tiles.
-Elevation is ruled out. It predates every change made today (B11 failed the
-same way on `ec7401d4`). B12-B15 cannot be reached until it is fixed.
+**B11 is the live blocker** — see `PROJECT_TODO.md` §45, and note that the
+first diagnosis of it was WRONG and was corrected the same day by the
+operator's boot walk of `b07a02f8`. In game, re-talking defeated Larrie DOES
+run a script: he turns to face the player and prints the match-call
+registration message. He never says his idle line, because the continue
+script takes the registration arm instead of the
+`goto_if_set FLAG_MAP035_EVENT003_SSA → Page2` arm. The harness's "did not
+start a script" is a harness fault, most likely its object-coordinate read
+(it places Larrie at (18,39) against a template of (18,36) while static
+objects on the same map report their templates exactly). "The trainer is not
+rendered" was also wrong — Larrie is visible in the B11 contact-sheet frame.
+Elevation stays ruled out. B12-B15 cannot be reached until B11 passes.
 
 Fixed along the way but **not yet observable in play** (it needs §45 first):
 the phone-rematch trainers' `Page2` steady-state block was dead code on all

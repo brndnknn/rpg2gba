@@ -887,82 +887,92 @@ construction.
 **The sweep was run 2026-08-25; results and remediation are §44.** It could not
 be mechanical after all — CH01–CH03 have no manifest to cross-reference.
 
-### 45. A defeated trainer cannot be re-talked — blocks CH04's gate
+### 45. Larrie's re-talk shows the phone registration, not his line — and the harness misread it as "no script"
 
-*Filed 2026-08-27 from CH04's suite run on ROM `b07a02f8`. **This is the live
-blocker for CH04's §9 gate**: B11 fails on it, and B12-B15 are gated behind
-B11, so the chapter cannot go green until it is resolved. Not caused by any
-of that session's changes — B11 failed with this exact symptom on the
-session's first ROM (`ec7401d4`), before any of them.*
+*Filed 2026-08-27 from CH04's suite run on ROM `b07a02f8`; **substantially
+corrected the same day by the operator's own boot walk of that ROM**, which
+refuted the original diagnosis. The corrected version is below; the refuted
+claims are kept explicitly, because two of them were confidently wrong and
+the next reader should not re-derive them from the same evidence.*
 
-**Symptom.** Pressing A at a defeated trainer starts no script at all: no
-field lock, no message, indefinitely. `Emulator.interact()` reports
-"interaction did not start a script", which is accurate — nothing runs.
+**This is the live blocker for CH04's §9 gate**: B11 fails on it, and
+B12-B15 are gated behind B11.
 
-**Measured on two trainers, two maps, driven directly from each beat's own
-`pre_beat.gba` rather than through a beat** (so the beats' own navigation is
-not a variable):
+**What actually happens in game (operator boot walk, ROM `b07a02f8`).**
+Re-talking defeated Larrie: he **turns to face the player**, and a message
+appears saying the player **registered him in the phone**. He does NOT say
+his post-defeat idle line ("Watch your step! In caves, Pokémon can jump out
+from anywhere!"). A defeated trainer on the same walk **did** re-talk
+normally *(which trainer — Route 2's Timothy or Route 1's Richey — is
+unconfirmed; see the open question at the end of this item, it changes the
+scope)*.
 
-| trainer | map | local id | template | `gObjectEvents` reports | rendered? | A press |
-|---|---|---|---|---|---|---|
-| Larrie | 35 / MAP_ROUTE_02 | 1 | (18,36) | (18,39), active, valid `spriteId` | NO | nothing, 120 frames |
-| Richey | 33 / MAP_ROUTE_01 | 21 | (17,9) | (17,11), active, `spriteId=6` | NO | nothing, from ALL FOUR adjacent tiles, 3 presses |
+**So the real defect is the branch, not the interaction.** The post-battle
+continue-script runs on re-talk exactly as designed (`faceplayer` fires, a
+message prints). It is taking the REGISTRATION arm instead of the `Page2`
+arm, so `goto_if_set FLAG_MAP035_EVENT003_SSA, ...Page2` is not being taken
+at the moment the player talks. Two candidates, both cheap to check and
+neither yet checked: the flag genuinely is not set at that point in a real
+playthrough (the harness read it as set in its own seeded state, which is
+not the same thing), or `register_matchcall` re-runs and re-prints its
+message on a path that reaches the registration arm regardless. Note the
+message the operator saw is the *expected* text for the registration arm
+(`Registered HIKER Larrie in the POKéNAV.` appears in the B2 contact-sheet
+frame), so this is the wrong ARM being taken, not corrupted output.
 
-In both cases the trainer's `TRAINER_FLAGS_START + <trainer>` defeat flag and
-the event's `FLAG_MAP{n}_EVENT{e}_SSA` are both already set, and the object
-event's script points at a block whose first command is `trainerbattle_single`.
+**REFUTED — do not carry these forward.** Both came from harness
+observations and both are wrong:
 
-**What is ruled out.**
+1. ~~"A defeated trainer cannot be re-talked anywhere in this build; pressing
+   A starts no script at all."~~ False. A script demonstrably runs — the
+   trainer faces the player and prints a message. The harness's
+   `interact()` reporting "did not start a script", reproduced by driving
+   the emulator directly from `pre_beat.gba`, is a **harness** failure to
+   reach or detect the interaction, not the game's behavior.
+2. ~~"The trainer is not rendered."~~ False. Larrie is plainly visible in the
+   B11 contact-sheet frame (`route2-sheet-6.png`, the yellow-hatted Hiker,
+   same sprite as the B2 frame) and in play. That claim came from
+   misidentifying a distant sprite in a probe screenshot as the Barewl.
 
-- **Elevation.** `ObjectEventDoesElevationMatch` is the only z-condition in
-  the lookup path and `ELEVATION_TRANSITION` (0) is a wildcard. Larrie's
-  object `elevation` is 3 (`metadata_wiring.DEFAULT_ELEVATION`), and the
-  staged terrain elevation is 3 at his template (18,36), at his reported
-  (18,39), AND at the player's (18,40). 3 == 3 == 3; the check cannot trip.
-- **`TryOverrideTemplateCoordsForObjectEvent` moving them.** Despite the
-  name it assigns only `objectEventTemplate->movementType`. It never writes
-  x/y or elevation. The coordinate-writing function
-  (`OverrideTemplateCoordsForObjectEvent`) is not called from `trainer_see.c`.
-- **The harness's object decode being broken in general.** Static objects on
-  the same maps report their template coordinates EXACTLY (Route 02's Barewl
-  at (17,36); Route 01's item balls at (13,19) and (12,9); the rock-smash
-  rocks). Only the two defeated trainers disagree with their templates.
-- **The interaction lookup's other conditions.** `GetObjectEventIdByPosition`
-  checks `active`, tile match, and elevation only — no `invisible`,
-  `inanimate`, held-movement, or `berryTreeId` gate exists on that path.
+**Still unexplained, and now the harness-side question.** The harness reads
+`object_event(1)` for Larrie as `(18,39)` while his template is `(18,36)`,
+and `object_event(21)` for Richey as `(17,11)` against a template of
+`(17,9)`. Static objects on the same maps (the Barewl at (17,36), the item
+balls, the rocks) report their templates exactly, so the decode is right for
+those. Given the trainers ARE rendered and DO respond in play, the likely
+reading is now that these coordinates are wrong or stale and the harness is
+standing in the wrong place, which would explain the "no script" report
+directly. That makes it a `playtest/emulator.py` object-decode question —
+`off_objevent_currentcoords` and whether a trainer that has run an approach
+sequence keeps its live position in the field the harness reads — not an
+engine bug. **Elevation remains ruled out** (object elevation 3; staged
+terrain elevation 3 at template, at the reported tile, and at the player's
+tile; the only z-check is `ObjectEventDoesElevationMatch`, and 0 is a
+wildcard), as does `TryOverrideTemplateCoordsForObjectEvent` moving them (it
+assigns only `movementType`, never coordinates, despite its name).
 
-**The contradiction that has to be explained.** The engine's lookup should
-succeed: the harness reads the object as `active` at a tile directly adjacent
-to the player, with matching elevation, and the player verified facing it
-(`object_event(LOCALID_PLAYER).facing == "UP"`). Yet no script runs AND the
-sprite is not drawn on that tile — a screenshot at the moment of the press
-shows empty ground above the player, with the only nearby sprite being the
-Barewl at its own template. So either the reported `currentCoords` are stale
-(the object is really somewhere else, and the harness reads a field that no
-longer tracks it) or the object has been effectively removed while still
-flagged `active`. Neither offset is `MAP_OFFSET`, and the two deltas differ
-(+3 y for Larrie, +2 y for Richey), so it is not a constant bias error.
+**Next steps, in order.**
+1. Resolve the open question below — it decides whether §46's fix works for
+   phone trainers generally and Larrie is special, or whether no phone
+   trainer re-talks correctly.
+2. Check the flag branch in a real playthrough, not a seeded state: read
+   `FLAG_MAP035_EVENT003_SSA` at the moment of a re-talk.
+3. Fix the harness object-coordinate read, then re-point B11 at the live
+   position. B11 asserting the idle line stays the correct assertion.
 
-**Next step when this is picked up.** Compare the compiled script bytes and
-the live `struct ObjectEvent` field-by-field for a defeated APPROACH trainer
-(Larrie/Richey) against one that is interactable — Kevlar's Mawuli, a
-facility trainer emitted as `trainerbattle_no_intro` who never walks, whose
-repeat-interaction beat (kevlar B8) passes. The differing field is the
-answer. `Script_HasNoEffect` (this fork probes a script for observable
-effects before locking the player) is worth checking on that path too: it is
-a plausible mechanism for "A press does nothing" that would not show up as a
-lookup failure at all. Probe scripts from the session are throwaway but the
-technique is in `reference/` terms simple: construct `Emulator(pre_beat.gba,
-engine)`, `run(SEEDED_BOOT_FRAMES)`, then read `object_events()` directly.
+**Open question that changes the scope of this item.** The operator's walk
+had one trainer re-talk correctly and named it "Richey", but the two
+trainers on the CH04 walk route are Timothy (Youngster, plain vanilla
+`trainerbattle_single` + trailing msgbox, no phone registration) and Larrie.
+Richey is Route 1's phone trainer, reachable only by walking back south. If
+the working trainer was **Richey**, then a phone trainer's re-talk works and
+Larrie is a narrow one-off. If it was **Timothy**, then no phone trainer is
+known to re-talk correctly and §46's fix is unverified in play for its whole
+class. Confirm before acting on step 2.
 
-**Blast radius.** Player-visible in every chapter that has a trainer: you
-cannot talk to any trainer you have beaten, and at least two of them stop
-rendering. CH01-CH03 all passed their §9 gates with this present, because no
-beat in those chapters ever re-talked a defeated trainer — the first beat in
-the corpus that does is CH04's B11, which is how it surfaced. Related: the
-route1 regression beat written for §46 below (`n5_richey_retalk_deferred`)
-is written but NOT registered for exactly this reason, and should be
-registered as part of closing this item.
+**Blast radius.** CH01-CH03 all passed their §9 gates without this being
+visible, because CH04's B11 is the first beat in the corpus that re-talks a
+defeated trainer at all.
 
 ### 46. Phone-rematch trainers' `Page2` was dead code — FIXED 2026-08-27, unobservable until §45
 
