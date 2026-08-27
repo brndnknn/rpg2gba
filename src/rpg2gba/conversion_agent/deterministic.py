@@ -1808,6 +1808,32 @@ def classify_phone_rematch_trainer_battle(
     # release/end-ing — this is not a deviation from vanilla, it mirrors
     # ``Route102_EventScript_Calvin``'s own idle ``msgbox`` in exactly the
     # same not-yet-rematch-ready branch (Route102/scripts.inc:27).
+    #
+    # A sight trainer's object_event script pointer must be — and forever
+    # remain — the `trainerbattle_*` command itself, never a block that
+    # wraps or precedes it. Confirmed in the vendored engine:
+    # `GetTrainerFlagFromScriptPointer` (engine/src/battle_setup.c:1232)
+    # casts the object event's RAW SCRIPT BYTES at a fixed opcode offset to
+    # read the trainer id (`trainer_see.c:594` calls it during sight
+    # detection), so anything other than `trainerbattle_single(...)` as the
+    # first command at that pointer — e.g. a `_Dispatch` block starting with
+    # `if (flag(...))` — makes the engine read garbage as the trainer id and
+    # breaks sight-trainer detection outright (regressed route1:B13/Richey
+    # when a dispatcher wrapper was tried here). Routing a defeated trainer
+    # to Page2 on re-talk therefore CANNOT be done by pointing the
+    # object_event anywhere but Page1; it has to happen one hop later,
+    # inside the four-argument continue-script itself (this block), which
+    # the engine reaches via `gotopostbattlescript` and NOT through the
+    # object_event's own script pointer. So `register_label`'s block leads
+    # with a flag check: flag clear (first win) falls through and registers
+    # as before; flag set (any later re-talk, including the plain
+    # `EventScript_NoNormalTrainerBattle` re-talk path) jumps straight to
+    # Page2 without re-running registration. Mirrors vanilla's own
+    # `trainerbattle_single`/post-battle-script split
+    # (engine/data/maps/Route102/scripts.inc `Route102_EventScript_Calvin`
+    # / `Route102_EventScript_CalvinPostBattle`) — the branch just lives
+    # inside the continue-script's body rather than gating whether it's
+    # entered at all.
     register_label = _page_label(map_id, event, 1) + "_RegisterMatchCall"
     battle_block = _block(
         _page_label(map_id, event, 1),
@@ -1823,6 +1849,9 @@ def classify_phone_rematch_trainer_battle(
     register_block = _block(
         register_label,
         [
+            f"if (flag({ssa_flag})) {{",
+            f"    goto({_page_label(map_id, event, 2)})",
+            "}",
             "special(PlayerFaceTrainerAfterBattle)",
             "waitmovement(0)",
             f"register_matchcall({trainer_const})",
@@ -1846,6 +1875,15 @@ def classify_phone_rematch_trainer_battle(
             "end",
         ],
     )
+    # Page3 (page 2's idle text, above) has no label of its own, so this
+    # event still defines only 2 of its 3 canonical page labels and picks up
+    # the `collapsed_pages` trait (see the module comment above) —
+    # `metadata_wiring._resolve_script`'s `collapsed` branch points the
+    # object_event straight at Page1 and builds no dispatcher, which is
+    # exactly right here: a dispatcher wrapping Page1 would break sight
+    # detection (see the comment on `register_block` above). Routing to
+    # Page2 on re-talk is handled entirely inside `register_block`'s own
+    # flag check instead — nothing needs to route the object_event itself.
     return "\n\n".join([battle_block, register_block, rematch_block])
 
 

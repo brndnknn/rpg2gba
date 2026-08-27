@@ -279,6 +279,9 @@ def test_ev039_golden_output() -> None:
         "    end\n"
         "}\n\n"
         "script Map033_Trainer_5_Page1_RegisterMatchCall {\n"
+        "    if (flag(FLAG_MAP033_EVENT039_SSA)) {\n"
+        "        goto(Map033_Trainer_5_Page2)\n"
+        "    }\n"
         "    special(PlayerFaceTrainerAfterBattle)\n"
         "    waitmovement(0)\n"
         "    register_matchcall(TRAINER_BRANDON_16)\n"
@@ -301,6 +304,46 @@ def test_ev039_golden_output() -> None:
         "}"
     )
     assert out == expected
+
+
+# ----------------------------------------------------------------------------
+# post-battle branch — Map035 EV003 (Larrie): the fix for the dead-Page2 bug
+# (B11), WITHOUT a dispatcher (a dispatcher would break sight-trainer
+# detection -- GetTrainerFlagFromScriptPointer reads the object_event's raw
+# script bytes as a trainerbattle opcode; see the comment on `register_block`
+# in deterministic.py).
+# ----------------------------------------------------------------------------
+
+
+def test_larrie_register_block_branches_on_ssa_flag_to_page2() -> None:
+    """The `_RegisterMatchCall` continue-script -- NOT the object_event's own
+    script pointer -- must branch on the self-switch flag it sets: flag set
+    (any re-talk after a first win) jumps straight to Page2 (idle/rematch),
+    flag clear (first win) falls through and registers as before. The
+    object_event itself still points straight at Page1's
+    `trainerbattle_single`, unwrapped."""
+    ev = _make_event(_LARRIE, id=3)
+    out = D.classify_phone_rematch_trainer_battle(35, ev, D.Context(
+        trainers={("TRAINER_CLASS_HIKER", "Larrie", 0): "TRAINER_LARRIE_4"}
+    ))
+    assert out is not None
+    assert "script Map035_Trainer_5_Page1 {" in out
+    assert "trainerbattle_single(TRAINER_LARRIE_4," in out
+    assert (
+        "script Map035_Trainer_5_Page1_RegisterMatchCall {\n"
+        "    if (flag(FLAG_MAP035_EVENT003_SSA)) {\n"
+        "        goto(Map035_Trainer_5_Page2)\n"
+        "    }\n"
+        "    special(PlayerFaceTrainerAfterBattle)"
+    ) in out
+    # the flag check must come BEFORE registration, or a first win would
+    # jump to Page2 having never registered.
+    assert out.index("if (flag(FLAG_MAP035_EVENT003_SSA))") < out.index(
+        "register_matchcall(TRAINER_LARRIE_4)"
+    )
+    # no dispatcher block, and Page1's own script pointer is untouched --
+    # the object_event must keep pointing straight at trainerbattle_single.
+    assert "Dispatch" not in out
 
 
 # ----------------------------------------------------------------------------
