@@ -32,7 +32,8 @@ forced connector, not an optional route.
 Map roster source of truth: `reference/chapters.json` CH05 (`"maps": [36,
 37]`). Mechanically: enter from Route 2, cross Map036 (2 trainer battles, 4
 item balls, wild grass), warp into Map037 (1 trainer battle, 1 NPC item,
-wild grass, four inert "Stairs" events — §7), exit into Nowtoch City. No
+wild grass, four diagonal-staircase "Stairs" events that are mandatory
+for the exit — §3), exit into Nowtoch City. No
 story variable advances anywhere in this chapter — §3.
 
 ## 2. Map inventory
@@ -50,8 +51,10 @@ touches either — the chapter is pure warp, matching `00-atlas.md` §5's
 (`Map035.json:7285-7301`); **36→35** Map036 EV001 (17,40) `pbCaveExit` →
 Map035 (20,33) (`Map036.json:5395-5411`); **36→37** Map036 EV002 page 0
 (17,4) → Map037 (16,26) (`:5513-5522`; page 1, switch 22 = runtime
-predicate `s:tsOff?("A")`, is an inert one-time turn idiom, §7); **37→36**
-Map037 EV001 (16,27) → Map036 (17,4) (`Map037.json:3163-3172`); **37→40**
+predicate `s:tsOff?("A")`, is the arrival-nudge idiom, §7); **37→36**
+Map037 EV001 (16,27) → Map036 (17,4), dir 0 = retain
+(`Map037.json:3163-3172`; the earlier "dir=4" reading was wrong — the
+`code 201` parameter layout is `[?, map, x, y, dir, fade]`); **37→40**
 Map037 EV002 (16,5) `pbCaveExit` → Map040 Nowtoch (68,43)
 (`:3288-3304`), the boundary to CH06. Map040 also warps back to Map037
 (16,6), twice — a source/arrival pair (`Map040.json:25229`,`:25405`).
@@ -83,17 +86,28 @@ the self-switch-gated (once-only) pickups/battles along it.
 | B3 | 36 | event sight | approach Trainer(5) (18,29) | `pbTrainerBattle(HIKER,"Manny")` (`:6008-6014`); self-switch A after |
 | B4 | 36 | none | walk to (22,7) | EV005: `pbItemBall(GREATBALL)` (`:6196-6201`) |
 | B5 | 36 | event sight | approach Trainer(3) (6,13) | `pbTrainerBattle(BLACKBELT,"Keichi")` (`:6438-6444`) |
-| B6 | 36 | none | walk to (31,15) | EV008: `pbItemBall(TM76)` (`:6626-6631`); Surf-reachability unconfirmed, §7 |
-| B7 | 36 | none | walk to (34,12) | EV009: `pbItemBall(SABLEYEITE)`, a Mega Stone (`:6782-6787`); same §7 caveat |
+| ~~B6~~ | 36 | **blocked: Surf** | — | EV008 `pbItemBall(TM76)` (`:6626-6631`) sits in a sealed room; **deferred beat**, §7 |
+| ~~B7~~ | 36 | **blocked: Surf** | — | EV009 `pbItemBall(SABLEYEITE)`, a Mega Stone (`:6782-6787`); same sealed room, **deferred beat**, §7 |
 | B8 | 36→37 | player-touch | walk onto (17,4) | warp to Map037 (16,26) |
 | B9 | 37 | event sight | approach Trainer(3) (24,10) | `pbTrainerBattle(HIKER,"Nuñes")` (`Map037.json:3701-3707`) |
 | B10 | 37 | none | talk to EV005 (8,7) | flag on → `pbReceiveItem(REVIVE)` (`:3973-3979`) → flag off; self-switch A after |
 | B11 | 37→40 | player-touch | walk onto (16,5) | `pbCaveExit`, warp to Map040 (68,43) — boundary to CH06 |
 
-Four Map037 events (ids 3,6,7,8, all "Stairs") are omitted: each is a
-player-touch trigger with only a turn-in-place move route — no text,
-switch, variable, or item command anywhere. They gate and observe
-nothing — §7.
+Four Map037 events (ids 3,6,7,8, all "Stairs") write no state, so they
+carry no beat in the table above — but they are **not** inert, and the
+2026-08-28 CH05 dry-run corrects this document on that point
+(`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.2/§5.9). Each is the diagonal-
+staircase idiom already met on Map033: a player-touch, `through=false`
+event whose `code 111` character-direction branch reads the player's
+facing and force-moves them one tile **diagonally** (ev3/ev6 at (20,10)/
+(20,9), move codes 6/7 = NW/SE axis; ev7/ev8 at (11,10)/(11,9), codes 5/8
+= NE/SW). `tileset_converter/stairs.py` already classifies all four, so
+they convert to native `MB_SIDEWAYS_STAIRS_RIGHT_SIDE` / `_LEFT_SIDE`
+metatile behaviours — no object event and no script reach the ROM.
+**They are mandatory traversal:** a BFS over Map037's real walkability
+makes the cave exit (16,5) UNREACHABLE from the arrival cell with the
+four cells blocked (the trainer and the gift both keep stair-free paths).
+Any beat reaching the CH06 boundary crosses one.
 
 ## 4. Coverage targets
 
@@ -117,8 +131,8 @@ No `code 301` exists in either map; no other trainer events exist in the
 |---|---|---|---|---|
 | 36 | Escape Rope | EV003 p0 | first-pickup self-switch only | Yes (B2) |
 | 36 | Great Ball | EV005 p0 | same | Yes (B4) |
-| 36 | TM76 (Stealth Rock) | EV008 p0 | same | Yes (B6) — path untraced, §7 |
-| 36 | Sableyeite (Mega Stone) | EV009 p0 | same | Yes (B7) — path untraced, §7 |
+| 36 | TM76 (Stealth Rock) | EV008 p0 | same | **No — `blocked:surf`**, §7 |
+| 36 | Sableyeite (Mega Stone) | EV009 p0 | same | **No — `blocked:surf`**, §7 |
 | 37 | Revive | EV005 p0 (NPC talk) | `pbReceiveItem` inside flag bracket | Yes (B10) |
 
 No `switch 125`-style postgame gate exists — zero `code 122` writes, and all
@@ -207,20 +221,33 @@ credit to CH40 (flagged for the atlas maintainer, §7).
 
 ## 7. Open items for the lead
 
-- **TM76/Sableyeite reachability without Surf.** Tile stack under both
-  coordinates is dry floor (Map036 layer0=2617 at (31,15), 2678 at (34,12);
-  layers 1/2 both `0`; no autotile/pond id in range 0–335 touches either
-  spot). Wiki (§5 #3) implies reaching them needs Surf, and path
-  connectivity from the entrance was not traced. Surf isn't granted until
-  Act 5 (CH30) — needs a boot-walk/connectivity check before assuming
-  B6/B7 collectible here.
+- **~~TM76/Sableyeite reachability without Surf.~~ RESOLVED 2026-08-28 —
+  they need Surf; they are NOT collectible in CH05.** The tile stack under
+  both coordinates is dry floor, which is why the earlier read was
+  inconclusive — but connectivity settles it. A BFS over Map036's real
+  walkability (repo's own `layout.column_blocked` against
+  `tilesets.json["32"]`) finds **513 walkable tiles in 7 components, 450
+  reachable on foot from the entrance (17,39)**, and both items sit inside
+  a **sealed 30-tile room**, bbox x 31-36 / y 11-16: ordinary wall (terrain
+  tag 0) north, east and west, and its one southern opening drops into a
+  **water pocket (terrain tag 7, `isSurfable?`)** that is itself
+  disconnected from the walkable region. Every other target is reachable —
+  Escape Rope d=11, Manny d=15, Keichi d=49, Great Ball d=65, the Map037
+  warp d=63. **B6 and B7 therefore become deferred beats owed to the Surf
+  revisit (Map143, Act 5)**, in the `DEFERRED_BEATS` idiom CH02/CH04 use —
+  not live beats. Wiki §5 #3 was right.
 - **`PassageCave`/`PassageCave2` naming unconfirmed** — no
   `engine/data/maps/` entry exists for either map.
-- **Two sets of inert events, purpose unclear.** Map036 EV002 page 1
-  (switch 22 `s:tsOff?("A")`, autorun; silent turn + temp-switch set, no
-  dialogue/item/state change found) and the four "Stairs" events on Map037
-  (ids 3,6,7,8; turn-in-place only) both look like inert templates. Flag
-  both for an eye-check once art exists.
+- **~~Two sets of inert events, purpose unclear.~~ RESOLVED 2026-08-28 by
+  the CH05 dry-run — neither set is inert.** The four "Stairs" events on
+  Map037 are forced diagonal moves and are mandatory for the exit (§3).
+  Map036 EV002 page 1 (switch 22 `s:tsOff?("A")`, autorun) is the
+  **arrival-nudge** idiom: `get_character(0).onEvent?` -> go transparent ->
+  step the player one tile off the arrival cell -> `setTempSwitchOn("A")`.
+  Its fingerprint is byte-identical to CH04's `map035/ev001/p1` (which
+  carries `beat:B8`), and the idiom occurs **324 times across 73 maps** —
+  a corpus archetype, not a template left behind
+  (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.6).
 - **Two cross-references flagged but not resolved in this document**:
   Sableyeite vs `00-atlas.md`'s "first Mega Stone" credit to CH40 (§6), and
   Grott-Hole's HM04 Strength gate vs Map019's CH03/A1 binding (§5 #4,

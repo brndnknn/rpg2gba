@@ -1431,9 +1431,379 @@ annotation rather than emitting a confident single capability.
 
 ---
 
-## Part 5 — CH05 dry-run
+## Part 5 — CH05 dry-run (Passage Cave, maps 36 + 37), 2026-08-28
 
-*To be filled in after the decisions in Part 2 are adjudicated. v1's equivalent (Parts 6–7) found two
-structural holes — invisible overland seams, and the unrecognized-head rule earning its place — before
-any code was written. The same exercise runs against Passage Cave (maps 36, 37; 3 trainers, 5 items;
-first dungeon) before implementation begins.*
+Run before any Q13 slice is built, as Part 5 prescribes. Third calibration case after map 32
+(v1 §6) and map 35 (v1 §7), and the **first one run against the real generator** rather than a
+hand-script: `python -m rpg2gba.chapter_manifest generate --chapter CH05` now works unmodified.
+Output was written to a scratchpad path, not to `reference/manifests/` — nothing in this section
+is committed state.
+
+> `wrote CH05.manifest.json: 25 rows, 1 undispositionable, 9 need citation`
+
+Sources joined, as v1 §6.5 requires: `maps/Map0{36,37}.json`, `connections.json`,
+`transpile_unhandled.jsonl`.
+
+### 5.1 Scale, and a corrected census
+
+| | Map036 | Map037 | CH05 |
+|---|---|---|---|
+| size / tileset | 42x42 / ts32 "PU Caves" | 34x30 / ts32 | — |
+| events | 8 (ids 1-6, 8, 9 — **id 7 does not exist**) | 8 (ids 1-8) | 16 |
+| **pages / manifest rows** | **15** | **10** | **25** |
+| seam rows | 0 | 0 | **0** |
+| triggers | — | — | action 13, player_touch 8, event_touch 3, autorun 1 |
+
+**§4b.5's page counts are both wrong by one** — it says 14 and 9, i.e. 23 pages; the generator
+emits 15 and 10, and `chapter_atlas census --chapter CH05` independently reports
+`events=16 pages=25`. §4b.5 also attributes Map036's autorun system page to
+`ev2/p1`; it is **`ev2/p2`** (1-based) = `map036/ev002/p1` (0-based row id). Its classification
+of *which* events are what is otherwise exactly right, verified command-by-command.
+
+Everything else in §4b.5 holds: 4 item balls (Map036 ev3/5/8/9 — Escape Rope, Great Ball, TM76,
+Sableyeite), 3 trainers (Map036 ev4 HIKER "Manny", ev6 BLACKBELT "Keichi"; Map037 ev4 HIKER
+"Nuñes"), 4 staircases (Map037 ev3/6/7/8), 2 door/warps, 2 cave exits, 1 bespoke gift
+(Map037 ev5, Revive).
+
+### 5.2 CRITICAL — the four staircases disposition as `cosmetic`, and every check agrees
+
+This is the CH05 equivalent of v1 §6.2, and it is worse, because nothing fails.
+
+The four Map037 "Stairs" events are the diagonal-staircase idiom already met on Map033
+(CH02): `trigger=1` player-touch, `through=false`, a code-111 **character-direction** branch on
+the player's facing, and a forced diagonal move route in each arm. Verified from the data:
+
+| event | cell | branch | arms | axis | derived side |
+|---|---|---|---|---|---|
+| ev3 | (20,10) | `111 [6,-1,6]` — player faces RIGHT | move 6 / move 7 | NW/SE | `RIGHT_SIDE` |
+| ev6 | (20,9) | `111 [6,-1,6]` | move 6 / move 7 | NW/SE | `RIGHT_SIDE` |
+| ev7 | (11,10) | `111 [6,-1,4]` — player faces LEFT | move 5 / move 8 | NE/SW | `LEFT_SIDE` |
+| ev8 | (11,9) | `111 [6,-1,4]` | move 5 / move 8 | NE/SW | `LEFT_SIDE` |
+
+`tileset_converter/stairs.py` already handles all four, both axes, no fail-loud
+(`detect_stair_cells` returns the four cells classified LEFT/LEFT/RIGHT/RIGHT). They convert to
+native `MB_SIDEWAYS_STAIRS_{LEFT,RIGHT}_SIDE` metatile behaviours. **No object event and no
+script reach the ROM.**
+
+Now look at what the manifest says about those same four rows:
+
+```
+map037/ev003/p0   heads=[]   effects=[move_route]   stc=0   unhandled=0   other_codes=[]
+                  -> needs_citation=False   is_dispositionable=True   may_be_cosmetic=True
+```
+
+Identical for ev006, ev007, ev008. So:
+
+- `may_be_cosmetic` is True, because it is computed as "writes no state" and a staircase writes
+  no switch, variable, self-switch or item;
+- `needs_citation` is False, because `unrecognized_heads` is empty (there are no script heads at
+  all) and `script_typed_conditions` is 0 (the branch is character-direction, `params[0]==6`, not
+  script-typed `params[0]==12`);
+- `is_dispositionable` is True.
+
+**A single author keystroke — `"cosmetic"` — disposes of the map's principal traversal mechanic,
+and `check` exits 0.** This is exactly the B14 shape that `0983e163` diagnosed ("cosmetic was
+being decided on whether a page writes state"), reproduced mechanically, on the mechanic §4b.2
+calls "the significant find" with **222 corpus instances**.
+
+**The vocabulary has no correct verdict for these rows.** They are not `beat:` — there is no
+event in the output to interact with, and no state to assert. They are not `blocked:` or
+`unreachable`. They are emphatically not `cosmetic`. Q5's decided `terrain` row kind (by
+behaviour class) is the right home, but Q5 framed it as *adding* rows the event scan cannot see;
+here the requirement is the mirror image: **a page row whose only realization is a metatile
+behaviour must be *absorbed* by its terrain row, not double-counted beside it.** That absorption
+is not in any decision yet, and if both mechanisms fire naively CH05 gets 4 page rows and 4
+terrain rows for 4 staircases.
+
+**Recommendation:** the generator learns the stair fingerprint directly — it is a pure structural
+match on `trigger=player_touch` + character-direction branch + diagonal move arms, the same test
+`stairs.py:_page_qualifies` already implements — and emits those rows as `kind="terrain"`,
+`behaviour=MB_SIDEWAYS_STAIRS_*`, with no page row. Reuse `stairs.py`; do not write a second
+detector.
+
+One correction to §4b.2 while we are here: "It is templated nowhere and appears in no prior
+planning document" is true of the **playtest/manifest layer only**. The *converter* solved this
+mechanic during CH02 (Map033), and `stairs.py` plus the `behavior_overrides` overlay is that
+solution. The gap is not that the engine cannot do sideways stairs; it is that two layers of the
+pipeline already know about them and the beat layer is not one of them.
+
+### 5.3 CRITICAL — both maps are dark, and nothing in the pipeline can see it
+
+`intermediate/metadata_raw.json` (`MetadataDarkMap` = field 9):
+
+- **map 36: `DarkMap: true`. map 37: `DarkMap: true`.** 26 maps in the corpus carry it.
+- `pbs_converter/metadata.py:114` parses it into `dark_map: True` and nothing downstream reads it.
+- `tileset_converter/metadata_wiring.py:602` emits **`"requires_flash": False` as a hardcoded
+  literal** into every map header.
+
+So CH05 — the chapter `chapters.json` tier-promotes to medium *specifically* for "first candidate
+for cave/Flash handling" — will convert as a fully lit cave, and the manifest is structurally
+blind to it: `DarkMap` is a **map property**, not an event page, not a connection, not a terrain
+tag. It is a fifth capability surface on top of Part 4c's four, and the same argument applies —
+the head table cannot see it.
+
+Two things make this sharper than a missing feature:
+
+1. **It already shipped.** Map 19 (Grott-Hole) is `DarkMap: true` and went through **CH03's §9
+   boot-walk gate as a lit room**, unremarked. That is a live class-P instance in a gated chapter,
+   found by enumeration, not by walking.
+2. **Vanilla's Flash path cannot be the answer.** Part 4c established that HM05 has **no grant
+   site in the 199-map corpus**, and Uranium's own `CanUseMove(:FLASH)` handler additionally
+   requires `BADGEFORFLASH`
+   (`reference/scripts_dump/103__PField_HiddenMoves.rb:1161-1176`). A `requires_flash: true`
+   header would produce a cave the player can never light. So "wire `dark_map` to
+   `requires_flash`" is *not* the fix; this is a content-fidelity decision (CLAUDE.md §10) with
+   at least three options — render the darkness and grant Flash from somewhere, render it and
+   accept an unlightable cave, or strip darkness corpus-wide and record it — and it is the
+   operator's call, not the build agent's.
+
+The hardcoded `False` is a §4.5 silent default regardless of which way that call goes: it should
+read the parsed metadata and fail loud on a dark map until a decision is recorded.
+
+### 5.4 The cosmetic veto is vacuous on an unstaged map
+
+`transpile_unhandled.jsonl` has 332 rows; 244 carry a `map_id` and **those 244 fall on exactly 16
+map ids, every one of them a `SLICE_MAP_IDS` map** (the other 88 carry no map id at all). Maps 36 and 37 have never been staged, so they contribute zero rows, so
+every CH05 row gets `unhandled: 0`, so `may_be_cosmetic`'s unhandled-queue veto passes vacuously
+for the entire chapter.
+
+`05-passage-cave.md` §6 already warned that "zero entries means 'never staged', not 'clean'". The
+finding here is that **the generator does not encode that distinction and the checker cannot**:
+`unhandled == 0` is indistinguishable from `map never transpiled`, and it silently strengthens a
+verdict. Straightforward fix, and it is a prerequisite for trusting any pre-build manifest:
+record the set of map ids the queue actually covers, and have the generator mark rows for maps
+outside it — `unhandled: null` rather than `0`, with `may_be_cosmetic` False until the chapter is
+staged and the manifest regenerated. That also makes the generate-before-staging ordering
+explicit instead of conventional. (CH04 did not expose this: map 35 was staged before its
+manifest was generated, so its 6 queue rows were real.)
+
+### 5.5 CH05 cannot mint: two maps, one name
+
+`map_infos.json` names **both** map 36 and map 37 "Passage Cave", and `map_name_overrides.json`
+records both as `"CORRECT — no override"`. `map_constants.MapConstantRegistry.mint` is strict
+outside the Map Walker and raises:
+
+> `map 37 ('Passage Cave') -> MAP_PASSAGE_CAVE collides with already-minted map 36; add a
+> map_name_overrides.json entry`
+
+This is the fail-loud working exactly as designed, and it is CH05's **first** blocker — it fires
+before any of the interesting work. `05-passage-cave.md` §2/§7 proposes `PassageCave` /
+`PassageCave2` and flags the names as unconfirmed; the fix is two `overrides` entries with
+evidence. Map 19 was already disambiguated to "Passage Cave Grott-Hole" on the same grounds
+(CH03 scope pass), so the precedent and the house style both exist.
+
+### 5.6 The archetype build set is missing its largest member
+
+Q0's Tier-1 build set is trainer / item ball / staircase / door-warp / cave exit. Applied to
+CH05's 25 rows, that covers 22 (88%). The residual three are Map037 ev5's two bespoke-gift pages
+— and **`map036/ev002/p1`**, whose fingerprint is:
+
+```
+trigger=autorun  switch1=22 's:tsOff?("A")'  heads=[get_character, setTempSwitchOn]
+effects=[graphic, move_route, temp_switch_write]  script_typed_conditions=1
+```
+
+That is **byte-identical, field for field, to `map035/ev001/p1`** — a CH04 row, dispositioned
+`beat:B8`. Two instances in two consecutive chapters is already Q6's promote-on-second-use
+trigger. A corpus census settles the size: the idiom (autorun page, `get_character(0).onEvent?`
+branch, `setTempSwitchOn` tail, player nudged one tile off the arrival cell) occurs
+**324 times across 73 maps** — larger than the item ball (243), the staircase (222), the cave
+entrance/exit (102) and every Tier-2 archetype. Only the door/warp event (996) is bigger, and this
+idiom is the *other page* of many of those same events.
+
+**It is the arrival-nudge archetype, and neither §4b.1's ranking nor Q0's build set contains it.**
+The likely reason is instructive: §4b's census classified by *event role* (item ball, trainer,
+sign), and this idiom is a *page* of an event whose other page is a warp — the same event-level
+vs page-level axis error Q0 identified for trainer re-talk pages, biting in the other direction.
+It belongs in Tier 1, and CH05 needs it.
+
+### 5.7 CH05 *does* have blocked rows, and they are terrain-derived
+
+`05-passage-cave.md` §7 left open whether TM76 (31,15) and Sableyeite (34,12) on Map036 need Surf
+— "path connectivity from the entrance was not traced". Traced now, same method as §5.9:
+
+- Map036 has **513 walkable tiles in 7 connected components**; **450** are reachable on foot from
+  the entrance (17,39).
+- Escape Rope (10,35) d=11, Manny (18,29) d=15, Keichi (6,13) d=49, Great Ball (22,7) d=65, the
+  Map037 warp (17,4) d=63, the Route 2 exit (17,40) d=1 — all reachable.
+- **TM76 and Sableyeite are both inside a sealed 30-tile room** (bbox x 31-36, y 11-16). Ordinary
+  wall (terrain tag 0) on north, east and west; its only opening is south, into a **water pocket
+  (terrain tag 7, in `isSurfable?`)** that is itself disconnected from the walkable region.
+
+So the wiki was right and the two Mega-Stone-tier pickups are **`blocked:surf`** — and Surf is
+granted at Map143 (Part 4c), deep in Act 5. This is CH05's first genuine deferral, and it lands
+on the longest capability deferral in the corpus so far.
+
+**It also gives slice 2 a real test after all, on the surface Part 4c flagged as structurally
+invisible.** `blocked:surf` here is not derivable from a script head (there is none), not from a
+page condition (there is none), and not from `_HEAD_REQUIRES`. It is derivable only from
+reachability over **terrain tags** — precisely Q3 decision 4's "the graph derives the minimal set
+of capability-tagged obstacles". CH05 is thin for slice 2 (§5.8) but it is not empty, and the one
+case it does provide is the *hardest* of the four surfaces rather than the easiest.
+
+Corollary for the beat list: `05-passage-cave.md` B6 and B7 cannot be walked in CH05 and must be
+authored as deferred beats in the CH02/CH04 `DEFERRED_BEATS` idiom, not as live beats. They come
+back on the Surf revisit, not at CH07 with the rock-gated backlog — a **second, later** revisit
+debt on a chapter that was expected to generate none.
+
+### 5.7b Projected disposition, and the shape it makes
+
+| verdict | rows | which |
+|---|---|---|
+| `beat:` | 15 | 2 cave exits, 2 door-warps, 1 arrival-nudge, 2 item-ball p0, 3 trainer p0 + 3 trainer re-talk p1, 2 gift pages |
+| `blocked:surf` | 4 | `map036/ev008` and `ev009`, both pages each (§5.7) |
+| `cosmetic` | 2 | the two reachable spent item-ball p1 pages |
+| **no correct verdict** | **4** | the four staircases (§5.2) |
+
+Compare CH04's committed dispositions: 42 rows = 13 `beat`, 24 `unreachable` (geography),
+4 `deferred:rock_smash`, **1 `cosmetic`**. CH05 inverts that distribution: no geography gate
+anywhere, so the verdict doing the work is `cosmetic`, which is also the verdict with the weakest
+check (`may_be_cosmetic` is a single "writes no state" test). **CH05 is the first chapter where
+the weakest check carries the load** — which is why §5.2 matters more here than the raw count of
+four rows suggests.
+
+### 5.8 What CH05 does *not* exercise — now measured, not estimated
+
+Q13's "CH05 is not sufficient evidence" clause was written from the map roster, and predicted
+"likely no blocked rows". The generated manifest plus the reachability traces put numbers on it —
+and correct that one prediction (§5.7):
+
+| mechanism | CH05 exposure |
+|---|---|
+| seam rows / overland connections | **0** — `connections.json` has no entry touching 36 or 37 |
+| `requires[]` populated | **0 of 25 rows** |
+| `blocked:` derivation (Q3, slice 2) | **4 rows**, `blocked:surf`, terrain-derived only (§5.7) |
+| page conditions on a real global switch or variable | **0** — 8 self-switches and one runtime predicate (`s:tsOff?("A")`), that is all |
+| unrecognized script heads (v1 §6.3's rule) | **0** — every head is in `MECHANIC_BY_HEAD` now |
+| `unhandled` queue join | **0**, and vacuously so (§5.4) |
+| mart / Pokémon Center / PC templates | **0 instances** |
+
+The `blocked:` line is the one place the prediction was too pessimistic, and §5.7 argues it is
+worth more than its row count. Everything else holds. So of the two structural holes v1's dry
+runs found — invisible overland seams (§6.2) and the
+unrecognized-head rule (§6.3) — **CH05 exercises neither.** It is a regression-free surface for
+the existing machinery, and that is the risk, not the reassurance: Q13's standing rule ("a green
+CH05 gate is NOT evidence that slice 2, the capability model, or the mart/Center/PC templates are
+correct") is confirmed with harder numbers than it was written with. The retroactive
+re-derivation over CH01-CH04 is the only validation slice 2 gets.
+
+Against that, **slice 1 is exercised hard**, though not in the way Q13 states — see §5.9.
+
+### 5.9 Slice 1's stated CH05 validation is stated wrong (and the real one is sharper)
+
+Q13's slice table says: *"Map 37's four staircases cannot be routed at all by the current
+4-neighbour planner, so a wrong slice 1 fails immediately and visibly."* The premise is right
+(`_plan_route`'s own docstring, `emulator.py:1632-1639`, says a destination reachable only across
+a sideways staircase "is unroutable here"); the conclusion — *fails visibly* — is not.
+
+`_plan_route` returning `None` does not fail. It returns to `_route_waypoints`
+(`emulator.py:1716`), which logs a warning and **hands the leg to the greedy walker on the bare
+target** — the silent degrade this document's own grill findings identify as B3's mechanism and a
+standing §4.5 violation. So today, a stair-crossing leg on Map037 does not fail visibly; it
+walks unprotected, and whether it arrives is luck.
+
+Two decided items collide here, and the collision is a **build-ordering constraint that no
+decision states**:
+
+- the 2026-08-28 decision makes `_route_waypoints`' degrade **fail loud** ("permanent, not
+  interim — slice 1 does not touch this lane"); and
+- slice 1's graph is what teaches the planner to cross a staircase.
+
+Land the fail-loud first and **Map037 becomes unwalkable** — every stair-crossing leg raises. So
+either slice 1 lands first, or the fail-loud lands with an explicit stair-crossing escape until
+it does. Given the CH05 route is the first thing anyone will run after the fail-loud change, this
+is worth pinning before the build starts rather than rediscovering at the first red suite.
+
+There is also a modelling correction worth carrying into slice 1: a sideways staircase is not an
+impassable tile and not a diagonal *edge*. The cell is passable, the player presses EAST or WEST,
+and the **engine** turns that press into a diagonal displacement (`GetSidewaysStairsCollision`,
+`GetRightSideStairsDirection`). A graph that models it as an 8-neighbour edge will plan correct
+paths and then mispredict the player's position after each step. That mismatch — right path,
+wrong resulting cell, no trigger touched — is precisely Q13.1's "non-trigger divergence = the
+offline graph is wrong about the engine" class, so **CH05 will produce the first real entries in
+Q8's contradiction ledger.** That is the honest statement of what slice 1 gets validated by here,
+and it is a better test than "it fails immediately."
+
+**Measured: the staircases are mandatory for finishing the chapter.** A 4-neighbour BFS over
+Map037's real walkability — built with the repo's own `layout.column_blocked` against
+`tilesets.json["32"]`, run twice with the four stair cells forced walkable and forced blocked —
+gives:
+
+| target | stairs walkable | stairs blocked |
+|---|---|---|
+| cave exit (16,5) -> Nowtoch | reachable, 34 steps | **UNREACHABLE** |
+| trainer "Nuñes", adj (23,10) | reachable, 23 steps | reachable, same path |
+| gift NPC, adj (9,7) | reachable, 26 steps | reachable, same path |
+
+Walkable/blocked band, x=0..33 (stairs-blocked run; the walkable run differs only at x=11 and
+x=20 on rows 9 and 10):
+
+```
+y= 8: #######....#........##.....#######
+y= 9: #######....#........#......#######
+y=10: ######.....#..####..#......#######
+y=11: ########...#..#####.#......#######
+```
+
+The band is not a full-width wall: a west corridor (x=9-13) and an east zone (x=21-26) both run
+past it, which is why the trainer and the gift are collectible without ever touching a staircase.
+What the wall at x=11 and x=20 seals is the **centre** strip (x=12-19) — and the exit is at
+x=16. The four staircases are the only link from south-centre to north-centre.
+
+So the disposition in §5.2 is not "four cosmetic rows on a nice-to-have": `cosmetic` on those
+four rows would wave through **the one mechanic without which CH05 cannot be completed**, and
+`check` would exit 0 while doing it. It also means the ordering constraint above is not
+hypothetical — with the fail-loud landed and no stair model, the chapter's final leg raises every
+run.
+
+
+### 5.10 Two smaller flags
+
+- **A comment blocks a disposition.** `map037/ev004/p0` (the trainer "Nuñes") is the chapter's
+  one `is_dispositionable=False` row, and the sole reason is `other_codes=[408]`. Code 408 is
+  *Comment (continuation)*; code 108 (*Comment*) is already in `generator.py:107`'s
+  `_CODE_IGNORED` and 408 is not. So a two-line RMXP comment makes an otherwise ordinary trainer
+  page require human classification, and — under Q0's coverage checker — splits an archetype
+  fingerprint that is otherwise identical to Map036 ev4 and ev6. One-line fix: add 408 to
+  `_CODE_IGNORED`. Worth doing before the archetype checker exists, not after.
+- **Fingerprint on the head, not the graphic.** Three of CH05's item balls use
+  `character_name = "PU-POKEBALL"`; `map036/ev009` (Sableyeite) uses **`PU-MegaStone`**. Any
+  item-ball template keyed on the sprite misses it; keyed on `pbItemBall` it does not.
+
+### 5.11 Corrections owed to committed documents
+
+The dry run contradicts three committed artifacts. All three are cheap to fix and all three are
+load-bearing for CH05:
+
+1. **`reference/chapters/05-passage-cave.md` §3 and §7 are wrong about the staircases.** §3 omits
+   the four Stairs events on the grounds that "each is a player-touch trigger with only a
+   turn-in-place move route ... They gate and observe nothing", and §7 lists them as "inert
+   templates ... flag both for an eye-check once art exists". They are not turn-in-place and they
+   are not inert: each is a facing-conditional **forced diagonal move**, and they are very
+   probably the map's only vertical traversal. This is the approved spec a scenario gets written
+   from, so the error would propagate straight into the beat list.
+2. **§4b.5's page counts** (14 / 9 → **15 / 10**) and its `ev2/p1` attribution (→ `ev2/p2`).
+3. **`05-passage-cave.md` §2** gives Map037 ev1's return warp as `dir=4`; the data is
+   `[0, 36, 17, 4, 0, 1]` — direction **0** (retain). Its exit coordinate `(68,43)` is correct
+   and should be trusted over any re-read that reports `(43,2)`; the parameter layout is
+   `[?, map, x, y, dir, fade]`.
+
+### 5.12 Consequences
+
+- **Two new Tier-1 templates, not one build-set edit:** the arrival-nudge autorun (§5.6, 324
+  instances) joins the set; the staircase leaves the *page-row* world entirely and becomes a
+  terrain row (§5.2).
+- **Three fail-loud repairs are prerequisites, not follow-ups:** the `unhandled: 0`-vs-null
+  distinction (§5.4), `requires_flash` reading its parsed metadata (§5.3), and code 408 (§5.10).
+- **One operator decision is blocking, and it is a §10 content-fidelity call:** what CH05 does
+  about darkness, given HM05 is ungrantable (§5.3). It also retro-applies to map 19 in gated CH03.
+- **One naming decision is blocking and trivial:** override entries for maps 36 and 37 (§5.5).
+- **One ordering constraint should be pinned into Q13's slice plan:** slice 1 before the
+  `_route_waypoints` fail-loud, or an explicit stair escape between them (§5.9).
+- **CH05 is confirmed as thin for slice 2 and the capability model** with measured zeros (§5.8) —
+  but not empty: the Surf-sealed item room (§5.7) is a terrain-derived `blocked:` case, the
+  surface Part 4c called structurally invisible, so slice 2 should be built to satisfy it rather
+  than deferring all of its validation to the retroactive CH01-CH04 re-derivation.
+- **CH05 acquires a second revisit debt**, on Surf rather than Rock Smash: B6/B7 become deferred
+  beats owed to an Act-5 chapter (§5.7). §1.3(O)'s stranded-backlog problem now has a second,
+  much longer arm.

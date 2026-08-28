@@ -670,6 +670,53 @@ absent from `wild_encounters.json`. Data gap, unresolved — Poké Radar is not 
 engine feature the pipeline models yet, so this is a "when Radar lands" note,
 not a CH04 miss.
 
+### 53. Maps 36 and 37 share the display name "Passage Cave" — `mint` fails loud
+
+Surfaced by the CH05 dry run (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.5).
+`map_infos.json` names both maps "Passage Cave" and `map_name_overrides.json`
+records both as `"CORRECT — no override"`, so the strict (non-walker) path raises
+`map 37 ('Passage Cave') -> MAP_PASSAGE_CAVE collides with already-minted map 36`.
+**This is CH05's first blocker** — it fires before any other work. Fix = two
+`overrides` entries with evidence; `reference/chapters/05-passage-cave.md` §2
+proposes `PassageCave` / `PassageCave2`, and map 19 already set the precedent
+("Passage Cave Grott-Hole", CH03 scope pass). The fail-loud is working as
+designed; only the data is missing.
+
+### 54. `unhandled: 0` is indistinguishable from "map never transpiled"
+
+CH05 dry run §5.4. `transpile_unhandled.jsonl`'s 244 map-tagged rows fall on
+exactly the 16 `SLICE_MAP_IDS` maps, so any chapter generated before staging gets
+`unhandled: 0` on every row — and `ManifestRow.may_be_cosmetic`'s unhandled-queue
+veto then passes vacuously for the whole chapter. `05-passage-cave.md` §6 already
+warned that zero means "never staged, not clean"; the generator does not encode
+that and the checker cannot see it. Fix: record which map ids the queue covers,
+emit `unhandled: null` for maps outside it, and make `may_be_cosmetic` False until
+the chapter is staged and the manifest regenerated. Also makes the
+generate-after-staging ordering explicit instead of conventional. (CH04 did not
+expose this — map 35 was staged first, so its 6 rows were real.)
+
+### 55. Command code 408 (Comment continuation) is missing from `_CODE_IGNORED`
+
+CH05 dry run §5.10. `generator.py:107` ignores 108 (Comment) but not **408**
+(Comment continuation), so a two-line RMXP comment puts a code in `other_codes`,
+which makes `is_dispositionable` False. That is the *only* reason
+`map037/ev004/p0` — an otherwise ordinary trainer page, identical in every other
+respect to Map036 ev4 and ev6 — is CH05's one undispositionable row. Under Q0's
+archetype coverage checker it would also split a fingerprint on a comment.
+One-line fix; worth doing before the archetype checker exists, not after.
+
+### 56. `requires_flash` is a hardcoded `False` and `dark_map` is parsed but never read
+
+CH05 dry run §5.3, and the mechanical half of MEMORY.md's new dark-cave Open
+Question. `pbs_converter/metadata.py:114` sets `dark_map: True` from
+`MetadataDarkMap`; `tileset_converter/metadata_wiring.py:602` emits
+`"requires_flash": False` as a literal into every map header. 26 corpus maps are
+dark, including CH05's 36/37 and CH03's already-gated map 19. **The content call
+(what darkness should become, given HM05 has no grant site) is the operator's and
+is tracked as an Open Question** — this entry is only the §4.5 half: the header
+should read the parsed metadata and fail loud on a dark map until that decision is
+recorded, rather than silently defaulting.
+
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 
 - **Reflection narrow-scan** — tried and reverted 2026-07-07 (user: "not
