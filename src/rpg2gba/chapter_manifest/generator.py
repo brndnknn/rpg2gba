@@ -133,16 +133,22 @@ _HEAD_EFFECT: dict[str, str] = {
 }
 
 # Script-call head -> required capability, for `ManifestRow.requires`.
+# Every entry here is verified to occur in the corpus; the map-file count as of
+# 2026-08-27 is in the trailing comment. Do NOT add a head from general Pokemon
+# knowledge -- this table shipped with six invented entries (`pbStrength`,
+# `pbCutTree`, `pbSurf`, `pbWaterfall`, `pbDive`, `pbFishing`) that match ZERO
+# map files, written from priors rather than from the data. That is the §4.7
+# "verify against the real source" rule violated on the Essentials side, and it
+# would have let the capability checker validate `blocked:cut` for a capability
+# this game never spells that way. Grep the corpus before adding a row.
+#
+# Note also what this table structurally CANNOT express: Surf/Dive/Waterfall are
+# terrain-tag mechanics, not event scripts, so no head→capability mapping can
+# ever reach them. Terrain-gated capabilities need a second source.
 _HEAD_REQUIRES: dict[str, str] = {
-    "pbRockSmash": "rock_smash",
-    "pbRockSmashRandomEncounter": "rock_smash",
-    "pbStrength": "strength",
-    "pbPushThisBoulder": "strength",
-    "pbCutTree": "cut",
-    "pbSurf": "surf",
-    "pbWaterfall": "waterfall",
-    "pbDive": "dive",
-    "pbFishing": "old_rod",
+    "pbRockSmash": "rock_smash",              # 6 maps
+    "pbRockSmashRandomEncounter": "rock_smash",  # 6 maps
+    "pbPushThisBoulder": "strength",          # 15 maps
 }
 
 
