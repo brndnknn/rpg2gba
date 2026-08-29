@@ -18,6 +18,14 @@ import click
 from . import collision
 from .graph import Cell, MapGraph, build_map_graph
 from .ledges import DEFAULT_TERRAIN_TAG_MAP
+from .world import (
+    DEFAULT_CONNECTIONS_JSON,
+    DEFAULT_MAP_INFOS_JSON,
+    DEFAULT_SEAM_WARPS_PATH,
+    DEFAULT_START_MAP_ID,
+    WorldEdge,
+    build_world_graph,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +191,177 @@ def reachable_cmd(
     click.echo(f"{len(reach)} reachable cell(s) from {start} on map {map_id}")
     for cell in sorted(reach):
         click.echo(f"  {cell[0]},{cell[1]}")
+
+
+def _edge_json(e: WorldEdge) -> dict:
+    return {
+        "src_map": e.src_map,
+        "dst_map": e.dst_map,
+        "kind": e.kind,
+        "src_cell": f"{e.src_cell[0]},{e.src_cell[1]}" if e.src_cell else None,
+        "dst_cell": f"{e.dst_cell[0]},{e.dst_cell[1]}" if e.dst_cell else None,
+        "event_id": e.event_id,
+    }
+
+
+@cli.command("world")
+@click.option(
+    "--maps-dir", type=click.Path(exists=True, path_type=Path),
+    default=collision.DEFAULT_MAPS_DIR,
+    help="Decoded maps directory (default: output/uranium-build/maps)",
+)
+@click.option(
+    "--map-infos-json", type=click.Path(exists=True, path_type=Path),
+    default=DEFAULT_MAP_INFOS_JSON,
+    help="Decoded map_infos oracle (default: output/uranium-build/map_infos.json)",
+)
+@click.option(
+    "--connections-json", type=click.Path(exists=True, path_type=Path),
+    default=DEFAULT_CONNECTIONS_JSON,
+    help="Decoded connections oracle (default: output/uranium-build/connections.json)",
+)
+@click.option(
+    "--seam-warps-json", type=click.Path(exists=True, path_type=Path),
+    default=DEFAULT_SEAM_WARPS_PATH,
+    help="Seam-warp declarations (default: reference/seam_warps.json)",
+)
+@click.option(
+    "--start-map", type=int, default=DEFAULT_START_MAP_ID,
+    help=f"Game start map id, for the summary's unreachable-from-start report "
+    f"(default: {DEFAULT_START_MAP_ID}, CH01's outdoor map).",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit a full machine-readable JSON dump.")
+@click.option(
+    "--from", "from_map", type=int, default=None,
+    help="Report every map reachable from this map id, with hop distance.",
+)
+@click.option(
+    "--between", "between_maps", type=int, nargs=2, default=None,
+    help="Shortest map-to-map path between two map ids, edge kinds annotated.",
+)
+def world_cmd(
+    maps_dir: Path,
+    map_infos_json: Path,
+    connections_json: Path,
+    seam_warps_json: Path,
+    start_map: int,
+    as_json: bool,
+    from_map: int | None,
+    between_maps: tuple[int, int] | None,
+) -> None:
+    """Corpus-wide map-to-map adjacency: warps + connections + seam warps."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    graph = build_world_graph(
+        maps_dir=maps_dir,
+        map_infos=map_infos_json,
+        connections_json=connections_json,
+        seam_warps=seam_warps_json,
+    )
+
+    def name(mid: int) -> str:
+        return graph.names.get(mid, f"Map{mid:03d}")
+
+    if between_maps:
+        a, b = between_maps
+        path = graph.shortest_path(a, b)
+        if path is None:
+            click.echo(f"UNREACHABLE: no map-to-map path from {a} ({name(a)}) to {b} ({name(b)})")
+            raise SystemExit(1)
+        if not path:
+            click.echo(f"{a} ({name(a)}) is the same map as {b} ({name(b)})")
+            return
+        click.echo(f"{len(path)} hop(s): {a} ({name(a)})")
+        for e in path:
+            click.echo(f"  --[{e.kind}]--> {e.dst_map} ({name(e.dst_map)})")
+        return
+
+    if from_map is not None:
+        dist = graph.hop_distances_from(from_map)
+        click.echo(f"{len(dist)} map(s) reachable from {from_map} ({name(from_map)}):")
+        for mid in sorted(dist, key=lambda m: (dist[m], m)):
+            click.echo(f"  {dist[mid]:>3}  {mid} ({name(mid)})")
+        return
+
+    if as_json:
+        payload = {
+            "maps": sorted(graph.map_ids),
+            "names": {str(mid): n for mid, n in sorted(graph.names.items())},
+            "edges": [_edge_json(e) for e in graph.edges],
+            "maps_without_info": sorted(graph.maps_without_info),
+            "infos_without_map": sorted(graph.infos_without_map),
+            "variable_warp_count": graph.variable_warp_count,
+            "variable_warp_maps": {str(k): v for k, v in sorted(graph.variable_warp_maps.items())},
+            "one_way_pairs": [
+                {"src": a, "dst": b} for a, b in graph.one_way_pairs()
+            ],
+            "connected_components": [
+                sorted(c) for c in sorted(graph.connected_components(), key=lambda c: (-len(c), min(c)))
+            ],
+            "orphan_maps": graph.orphan_maps(),
+        }
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    # Human-readable summary.
+    edges_by_kind: dict[str, int] = {}
+    for e in graph.edges:
+        edges_by_kind[e.kind] = edges_by_kind.get(e.kind, 0) + 1
+
+    components = sorted(graph.connected_components(), key=lambda c: (-len(c), min(c)))
+    one_way = graph.one_way_pairs()
+    orphans = graph.orphan_maps()
+
+    if start_map in graph.map_ids:
+        reachable = graph.reachable_from(start_map)
+        unreachable = sorted(graph.map_ids - reachable)
+    else:
+        unreachable = None
+
+    click.echo(f"{len(graph.map_ids)} map(s), {len(graph.edges)} edge(s)")
+    for kind in ("warp", "connection", "seam_warp"):
+        click.echo(f"  {kind}: {edges_by_kind.get(kind, 0)}")
+    click.echo()
+
+    click.echo(f"{len(one_way)} one-way (non-reciprocal) map pair(s):")
+    for a, b in one_way:
+        click.echo(f"  {a} ({name(a)}) -> {b} ({name(b)}), no edge back")
+    click.echo()
+
+    click.echo(f"{len(components)} connected component(s) (direction-ignored)")
+    largest = components[0] if components else set()
+    click.echo(f"  largest: {len(largest)} map(s)")
+    for comp in components[1:]:
+        click.echo(f"  component ({len(comp)} map(s)): {sorted(comp)}")
+    click.echo()
+
+    if unreachable is None:
+        click.echo(f"start map {start_map} not present in the corpus -- cannot report unreachable maps")
+    else:
+        click.echo(f"{len(unreachable)} map(s) unreachable from start map {start_map} ({name(start_map)}):")
+        for mid in unreachable:
+            click.echo(f"  {mid} ({name(mid)})")
+    click.echo()
+
+    click.echo(f"{len(orphans)} orphan map(s) (no in-edges and no out-edges):")
+    for mid in orphans:
+        click.echo(f"  {mid} ({name(mid)})")
+    click.echo()
+
+    click.echo(
+        f"{graph.variable_warp_count} variable-driven warp(s) (destination chosen at "
+        f"runtime -- not represented as edges) across {len(graph.variable_warp_maps)} map(s):"
+    )
+    for mid, count in sorted(graph.variable_warp_maps.items()):
+        click.echo(f"  {mid} ({name(mid)}): {count}")
+
+    if graph.maps_without_info or graph.infos_without_map:
+        click.echo()
+        if graph.maps_without_info:
+            click.echo(f"{len(graph.maps_without_info)} map file(s) with no map_infos.json entry: "
+                       f"{sorted(graph.maps_without_info)}")
+        if graph.infos_without_map:
+            click.echo(f"{len(graph.infos_without_map)} map_infos.json entry(ies) with no map file: "
+                       f"{sorted(graph.infos_without_map)}")
 
 
 if __name__ == "__main__":
