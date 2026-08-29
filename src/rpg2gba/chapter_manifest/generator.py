@@ -101,10 +101,10 @@ _CODE_EFFECT: dict[int, str] = {
 
 # Codes that participate in extraction but never produce an effect tag or an
 # `other_codes` entry by themselves: the list terminator, 509 (ignored
-# duplicate of 209, per the brief), 106 (Wait), 108 (Comment), and 413 (Repeat
-# Above / loop terminator — same treatment as 412, the branch terminator: both
+# duplicate of 209, per the brief), 106 (Wait), 108 (Comment) and its 408
+# (Comment continuation) rider, and 413 (Repeat Above / loop terminator — same treatment as 412, the branch terminator: both
 # are structural closers with no independent meaning of their own).
-_CODE_IGNORED: frozenset[int] = frozenset({0, 509, 106, 108, 413})
+_CODE_IGNORED: frozenset[int] = frozenset({0, 509, 106, 108, 408, 413})
 _CODE_BRANCH: frozenset[int] = frozenset({111, 411, 412})
 
 # Script-call head -> effect tag, for the Ruby half of extraction. Distinct
