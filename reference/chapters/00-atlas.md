@@ -50,8 +50,10 @@ Design record: `reference/findings/grill_chapter_atlas_2026-07-30.md`.
 | **Revisit** | A location entered again later behind new traversal is a **separate chapter** over the same map ids, with `visit > 1`. Map ids are deliberately *not* unique across chapters. |
 | **Tier** | `full` / `medium` / `thin` — how deep that chapter's document goes. Distance from the frontier, promoted one tier where a mechanic first appears. |
 
-**59 chapters, 10 acts, 187 bound maps + 11 explicitly unbound = 198.** The
+**60 chapters, 10 acts, 187 bound maps + 11 explicitly unbound = 198.** The
 coverage command asserts that identity, so a map cannot fall through the gap.
+(`validate` also reports 17 revisit chapters, up from 16, and a tier split of
+2 full / 17 medium / 41 thin — CH07A, added 2026-08-29, is thin. See §7.)
 
 ## 2. Acts at a glance
 
@@ -82,6 +84,11 @@ Reading notes:
   holds up in A2.
 * **A10 (Dream World) is 13 maps and 9,073 commands in one chapter** — the
   densest single chapter in the game, and entirely optional.
+* **A2 is now 5 chapters, not 4** — CH07A was inserted 2026-08-29 (§7). Its two
+  maps (33, 81) were already bound to CH02 in A1, so they add nothing to A2's
+  "new maps" count under the de-dup rule; the rest of this table's A2 row
+  (revisited/events/commands/trainers/item grants/enc maps) was generated
+  before that insertion and is pending a census recompute.
 
 ## 3. Chapter chain
 
@@ -96,6 +103,7 @@ Tier legend: **F** full, **M** medium, **T** thin. Status is from the binding.
 | CH05 | Passage Cave | A1 | M | 2 | 3 | 5 | first dungeon |
 | CH06 | Nowtoch City | A1 | M | 8 | 6 | 11 | **Gym 1**, first metro, Rock Smash |
 | CH07 | Route 2 (revisit) | A2 | T | 1 | 4 | 3 | overland seam opens |
+| CH07A | Route 1 (revisit) | A2 | T | 2 | 9 | 7 | inserted 2026-08-29, see §7; maps 33/81, rides Kevlar (31) as entry leg |
 | CH08 | Moki Town (revisit) | A2 | T | 8 | 1 | 7 | first revisit-model test |
 | CH09 | Route 3 | A2 | T | 4 | 8 | 9 | Moki E seam |
 | CH10 | Burole Town | A2 | T | 9 | 8 | 3 | **Gym 2** |
@@ -151,7 +159,7 @@ Tier legend: **F** full, **M** medium, **T** thin. Status is from the binding.
 
 ## 4. Detail tiers
 
-**2 full · 17 medium · 40 thin.** The gradient is distance-based, with a
+**2 full · 17 medium · 41 thin.** The gradient is distance-based, with a
 promotion rule: *the chapter where a mechanic first appears is promoted one
 tier*, because that is where the "what needs new code" answer lives and it is
 cheap to write once. Promoted chapters and their reason are recorded in each
@@ -162,7 +170,8 @@ As the frontier advances, retier: the active chapter and its successor go
 
 ## 5. Mechanics inventory
 
-Derived from script-call heads across all 59 chapters. The count is **chapters
+Derived from script-call heads across all 59 chapters as of the last recompute
+(CH07A, added 2026-08-29, is not yet reflected). The count is **chapters
 that need it**, which is the number that matters for sequencing: a mechanic
 needed by 52 chapters must be right early.
 
@@ -219,7 +228,137 @@ data wins.**
 | 7 | "Hazard Zone", "Bell Island", "Tandor Underground", "Fossil Sidequest cave" | No maps of those names | Mechanic/area labels spanning existing maps; resolved in `chapters.json` notes. |
 | 8 | Route 8 revisited as Nuclear | Map **187**, distinct from map 117 | A separate chapter (CH52), not a revisit. |
 
-## 7. Known gaps in this atlas
+## 7. Slice-1 coverage audit (2026-08-29)
+
+`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` Q11 bound a chain re-check as a **slice-1
+exit criterion**: the chapter chain had been authored against `connections.json`'s
+14 overland rows, and was to be re-audited exactly once against the full
+warp/door connectivity graph. That graph now exists —
+`src/rpg2gba/traversal/world.py`, CLI `python -m rpg2gba.traversal world` — and
+this section is the close-out.
+
+**What was measured.** 199 maps, **1108 edges** (warp 1076, connection 28,
+seam_warp 4) — a 79x expansion over the 14 rows the chain was originally
+authored with. 12 connected components: one of 188 maps, plus 11 singletons,
+all editor scratch/menu/cutscene maps (30 POKE-URANIUM, 38 ETC, 39 Test Area,
+55 GAME, 56 MOVIES, 62 Unknown, 103 Gym3.1, 107 Labyrinth(Underwater), 118
+Route 14(Underwater), 124 Gym3, 999 Map999). 47 one-way (non-reciprocal) map
+pairs, most of them legitimate one-way story warps (the Championship Site
+gauntlet 131→194/195→196/197→199, the intro→title-screen edges, Hall of Fame
+199→48). 9 variable-driven (`mode != 0`) warps, all on map 212 "Palace of
+Dreams", whose destinations are chosen at runtime — the offline graph cannot
+see them, so this is a named, countable blind spot rather than an unmeasured
+one.
+
+**Three data findings from the world graph itself:**
+
+1. Map 183 "Rochfale Town" has 8 outgoing warps and **zero incoming edges** —
+   the player can never walk into it. It is a dangling RPG Maker editor
+   duplicate, currently bound to **CH14**. Needs verification before CH14 is
+   built.
+2. Map 999 has a `Map999.json` file but no `map_infos.json` entry, so it sits
+   outside the "187 bound + 11 unbound = 198" identity entirely — no coverage
+   check can see it. `coverage` confirms it directly: *"maps in corpus but in
+   no chapter and not declared unbound: 999 (Map999)"*. It is also an orphan
+   in the world graph — no edges at all.
+3. Four maps declared in `unbound_maps` do have real edges into the playable
+   graph: 51 (Intro) → 48, 57; 57 (Nuclear Plant) → 48; 94 (Mapa intro) → 14,
+   95; 95 (Intro 2) → 14. Being unbound is still probably right — these are
+   pre-title/cutscene maps — but "unbound" and "disconnected" are not the same
+   claim, and this atlas did not previously distinguish them.
+
+**The coverage audit — walked legs.** For each chapter, `coverage` takes the
+shortest map-to-map path from the predecessor chapter's `outdoor` map to the
+chapter's own `outdoor` map, and reports any transit maps belonging to neither
+chapter. It found **14 unmodelled walked legs**, not the single one Q11 knew
+about:
+
+| leg | transit map | covered by | at/after leg |
+|---|---|---|---|
+| CH07→CH08 | 31 (Kevlar Town) | CH03 | -- STRANDED -- |
+| CH07→CH08 | 33 (Route 01) | CH02 | -- STRANDED -- |
+| CH18→CH19 | 8 (Route 07) | CH17, CH20 | CH20 |
+| CH20→CH21 | 117 (Route 08) | CH22 | CH22 |
+| CH25→CH26 | 128 (Legen Town) | CH24, CH38, CH54 | CH38, CH54 |
+| CH25→CH26 | 27 (Route 09) | CH27 | CH27 |
+| CH25→CH26 | 22 (Route 06) | CH15 | -- STRANDED -- |
+| CH25→CH26 | 12 (Rochfale Town) | CH14 | -- STRANDED -- |
+| CH26→CH27 | 12 (Rochfale Town) | CH14 | -- STRANDED -- |
+| CH26→CH27 | 22 (Route 06) | CH15 | -- STRANDED -- |
+| CH27→CH28 | 128 (Legen Town) | CH24, CH38, CH54 | CH38, CH54 |
+| CH27→CH28 | 129 (Legen Town(Metro)) | CH24, CH38, CH54 | CH38, CH54 |
+| CH27→CH28 | 168 (Legen Town(Metro)) | CH24, CH38, CH54 | CH38, CH54 |
+| CH28→CH29 | 9 (Route 04) | CH11, CH32 | CH32 |
+| CH28→CH29 | 76 (Route 04) | CH11, CH32 | CH32 |
+| CH33→CH34 | 142 (Route 05) | CH13, CH26 | -- STRANDED -- |
+| CH37→CH38 | 8 (Route 07) | CH17, CH20 | -- STRANDED -- |
+| CH37→CH38 | 117 (Route 08) | CH22 | -- STRANDED -- |
+| CH37→CH38 | 140 (Route 11) | CH25 | -- STRANDED -- |
+| CH38→CH39 | 140 (Route 11) | CH25 | -- STRANDED -- |
+| CH38→CH39 | 117 (Route 08) | CH22 | -- STRANDED -- |
+| CH38→CH39 | 8 (Route 07) | CH17, CH20 | -- STRANDED -- |
+| CH38→CH39 | 101 (Bealbeach City) | CH19, CH37, CH51 | CH51 |
+| CH38→CH39 | 144 (Venesi City) | CH36, CH47 | CH47 |
+| CH45→CH46 | 88 (Route 16) | CH44 | -- STRANDED -- |
+| CH45→CH46 | 132 (Route 16) | CH44 | -- STRANDED -- |
+| CH45→CH46 | 106 (Lanthanite Cave) | CH43 | -- STRANDED -- |
+| CH51→CH52 | 8 (Route 07) | CH17, CH20 | -- STRANDED -- |
+| CH53→CH54 | 28 (Route 08 (plant)) | CH22 | -- STRANDED -- |
+| CH53→CH54 | 117 (Route 08) | CH22 | -- STRANDED -- |
+| CH53→CH54 | 140 (Route 11) | CH25 | -- STRANDED -- |
+| CH58→CH59 | 59 (Route 03) | CH09 | -- STRANDED -- |
+| CH58→CH59 | 1 (Route 03) | CH09 | -- STRANDED -- |
+| CH58→CH59 | 60 (Burole Town) | CH10, CH28 | -- STRANDED -- |
+| CH58→CH59 | 5 (Burole Town(Metro)) | CH10, CH28 | -- STRANDED -- |
+| CH58→CH59 | 6 (Burole Town(Metro)) | CH10, CH28 | -- STRANDED -- |
+| CH58→CH59 | 11 (Bealbeach City(Metro)) | CH19, CH37, CH51 | -- STRANDED -- |
+| CH58→CH59 | 3 (Bealbeach City(Metro)) | CH19, CH37, CH51 | -- STRANDED -- |
+| CH58→CH59 | 101 (Bealbeach City) | CH19, CH37, CH51 | -- STRANDED -- |
+| CH58→CH59 | 144 (Venesi City) | CH36, CH47 | -- STRANDED -- |
+| CH58→CH59 | 97 (Venesi City) | CH36, CH47 | -- STRANDED -- |
+
+"STRANDED" here means the strict finding: a transit map covered only by
+chapters **before** the leg, i.e. no chapter at or after the leg re-covers it.
+Only the **CH07→CH08 leg** strands content in that strict sense — the walk is
+`35 → 31 → 33 → 32`, and map 31 (Kevlar Town) was covered only by CH03, map 33
+(Route 01) only by CH02, both earlier than the leg with nothing later picking
+them back up. Every other leg's "STRANDED" rows are transit maps covered by
+some *earlier* chapter only — which is a stranding claim only if the leg newly
+unblocks content there, and that is **not derivable today**, because
+`reference/manifests/` holds dispositions for CH04 alone. Those 12 other legs
+are recorded as countable debt, re-checked once each chapter carries its own
+manifest.
+
+**The five decisions taken (operator-adjudicated 2026-08-29):**
+
+1. **`CH07A "Route 1 (revisit)"` is inserted between CH07 and CH08** — maps
+   [33, 81], outdoor 33, visit 2, act A2, tier thin. Full rationale is in its
+   `reference/chapters.json` entry: it restores CH02's 10
+   `DEFERRED_ROCK_GATED` beats (5 trainer battles, B3's staircase run, B14b, 3
+   item balls) and the Old Rod content in map 81 (gated on
+   `VAR_BATTLE_VAR01 >= 5`, written by CH06/Map042), and owes 6 boulder beats
+   never authored since Rock Smash was granted in CH06.
+2. **Kevlar (31) does not get its own chapter here.** It rides along as
+   CH07A's entry leg — enter from Route 2, cross Kevlar, exit south into
+   Route 1, full warp assertion per seam — because at Rock Smash time it owes
+   nothing.
+3. **Kevlar's and Passage Cave's real debt is a recorded permanent hold,
+   decided at CH25.** Their 10 deferrals are Strength ×7 (HM04, granted CH25),
+   Bike Wheel ×1 (CH11), post-Gym-5 story flag ×1, and B26 whose dev-only flag
+   `sw130` is never set anywhere in the corpus — a mis-disposition owed a
+   re-triage to `unreachable`. No leg in the 60-chapter chain re-crosses
+   Kevlar at or after CH25; it is Fly-only. The operator chose to record this
+   as a countable hold rather than mint a revisit chapter now.
+4. **The other 12 legs are recorded as countable debt**, each owed a re-check
+   once its chapters have dispositions.
+5. **Id `CH07A`, not a renumber.** `binding.py` accepts any unique string id;
+   renumbering CH08–CH59 would invalidate every `CHnn` reference in the docs
+   and the committed manifest filenames.
+   `tests/test_chapter_atlas.py::test_chapter_ids_are_contiguous_and_play_ordered`
+   was updated to permit a letter-suffixed insertion while still requiring
+   contiguous base numbers and play-ordered ids.
+
+## 8. Known gaps in this atlas
 
 Honest limits, so nothing here is over-trusted:
 
@@ -239,7 +378,28 @@ Honest limits, so nothing here is over-trusted:
    control-variable census, which the census tool can do but does not yet.
 4. **Encounter tables are counted, not validated.** 50 maps carry tables; the
    day/night gap and the Evening-bucket decision are still open.
-5. **CH39's map binding is a guess** (see §6 #6).
+5. **CH39's map binding is a guess** (see §6 #6). **CH18's data-derived binding
+   (§6 #5) and CH39's guess were both flagged uncertain before the 2026-08-29
+   coverage audit (§7) and neither was re-examined in that pass** — they still
+   owe verification.
 6. **Map 62 "Unknown"** — 24 events, unreferenced by the walkthrough, currently
    unbound. Needs a look before it is bound or stripped.
-7. **A stray `Map999.json`** exists with no `map_infos.json` entry. Unexplained.
+7. **`Map999.json` has no `map_infos.json` entry** — confirmed by the
+   2026-08-29 `coverage` run (§7): it falls outside the 187+11=198 identity
+   entirely, and it is also an orphan in the world graph (no edges in or out).
+   Still unexplained; needs a look before it is bound, declared unbound, or
+   stripped.
+8. **Map 183 "Rochfale Town" (bound to CH14) has zero incoming edges** in the
+   1108-edge world graph — 8 outgoing warps, none reciprocated. It reads as a
+   dangling RPG Maker editor duplicate the player can never walk into. Found
+   by the 2026-08-29 audit (§7); needs verification before CH14 is built.
+9. **Four `unbound_maps` entries have real graph edges into the playable
+   world**: 51 (Intro) → 48, 57; 57 (Nuclear Plant) → 48; 94 (Mapa intro) →
+   14, 95; 95 (Intro 2) → 14. Found by the 2026-08-29 audit (§7). Being
+   unbound (pre-title/cutscene maps) is still probably the right call, but
+   this atlas previously conflated "unbound" with "disconnected" and they are
+   not the same claim.
+10. **12 of the 14 walked legs found by the 2026-08-29 coverage audit (§7)
+    are recorded as countable debt, not resolved** — whether they newly
+    unblock content in an earlier-covering chapter is undecided pending
+    per-chapter manifests, which today exist only for CH04.

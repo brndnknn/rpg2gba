@@ -7,6 +7,7 @@ real file so a bad hand-edit fails the suite.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -187,9 +188,34 @@ def test_the_real_binding_validates() -> None:
 
 
 def test_chapter_ids_are_contiguous_and_play_ordered() -> None:
+    """Ids run CH01, CH02, ... in play order, with letter-suffixed insertions
+    (CH07A) allowed immediately after the chapter they follow.
+
+    The suffix hatch exists because a chapter discovered *after* the chain was
+    numbered must not renumber its successors: every `CHnn` reference in the
+    reference docs and every committed `CHnn.manifest.json` filename would go
+    stale at once. CH07A "Route 1 (revisit)" is the first such insertion
+    (2026-08-29, the slice-1 coverage audit). What the chain actually has to
+    guarantee is that the *base* numbers are contiguous from 1 and that play
+    order matches id order -- not that ids are bare integers.
+    """
     binding = load_binding()
     ids = [c.id for c in binding.chapters]
-    assert ids == [f"CH{n:02d}" for n in range(1, len(ids) + 1)]
+    parsed: list[tuple[int, str]] = []
+    for chapter_id in ids:
+        match = re.fullmatch(r"CH(\d{2})([A-Z]?)", chapter_id)
+        assert match, f"{chapter_id!r} is not CHnn or CHnnX"
+        parsed.append((int(match.group(1)), match.group(2)))
+
+    assert len(set(ids)) == len(ids), "duplicate chapter id"
+    assert parsed == sorted(parsed), f"chapters are not in play order: {ids}"
+
+    bases = [n for n, suffix in parsed if not suffix]
+    assert bases == list(range(1, len(bases) + 1))
+    for number, suffix in parsed:
+        if suffix:
+            assert (number, "") in parsed, (
+                f"CH{number:02d}{suffix} inserts after a chapter that does not exist")
 
 
 def test_every_act_lists_at_least_one_chapter() -> None:

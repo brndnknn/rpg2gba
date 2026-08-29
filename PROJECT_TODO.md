@@ -717,6 +717,71 @@ is tracked as an Open Question** — this entry is only the §4.5 half: the head
 should read the parsed metadata and fail loud on a dark map until that decision is
 recorded, rather than silently defaulting.
 
+### 57. 12 unmodelled walked legs still owed a per-chapter re-check
+
+*Filed 2026-08-29 out of the corpus-wide world-graph audit
+(`src/rpg2gba/traversal/world.py`, `python -m rpg2gba.traversal world`) that
+closed Q13 slice 1 (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md`) — 199 maps, 1108
+edges (1076 warp, 28 connection, 4 seam_warp) against the 14 overland rows
+`connections.json` was originally authored with. The audit walks each
+chapter's predecessor chain (shortest path, predecessor `outdoor` map →
+chapter `outdoor` map) and reports transit maps belonging to neither chapter.
+It found 14 unmodelled legs; CH07→CH08 is fixed today (new chapter `CH07A`
+"Route 1 (revisit)" in `reference/chapters.json`). The remaining 12 all cross
+maps some *earlier* chapter already covers — e.g. CH25→CH26 crosses Rochfale
+Town (12) and Route 6 (22); CH37→CH38 and CH38→CH39 cross Route 07 (8),
+Route 08 (117) and Route 11 (140); CH58→CH59 crosses 10 maps including both
+Burole and Bealbeach metro pairs. Whether any of them strand content depends
+on whether the leg newly unblocks rows dispositioned `blocked:` there, which
+needs per-chapter dispositions — `reference/manifests/` only covers CH04
+today (§43a). So the re-check is owed once a chapter acquires a manifest, not
+now, and it's mechanical: re-run the audit, and for each transit map ask
+whether the capabilities held at that leg unblock any `blocked:` row on it.
+The audit script lives only in a scratchpad today; promote it into
+`src/rpg2gba/chapter_atlas/` as a real subcommand (e.g. `chapter_atlas legs`)
+so it's re-runnable rather than re-derived each time.
+
+### 58. Map 183 "Rochfale Town" is unreachable but bound to CH14
+
+Filed 2026-08-29, same world-graph audit as §57. Map 183 has 8 outgoing warps
+and zero incoming edges in the full 199-map graph — the player can never walk
+into it. Rochfale Town has several same-named maps (12, 92, 93, 104, 130,
+183); 183 looks like a dangling RPG Maker editor duplicate. CH14's roster
+needs verification against the graph before CH14 is built: either 183 is
+genuinely dead content and belongs in `unbound_maps`, or one of the other
+Rochfale maps warps into it by a route the graph missed.
+
+### 59. Map 999 sits outside the coverage identity entirely
+
+Filed 2026-08-29, same world-graph audit as §57.
+`output/uranium-build/maps/Map999.json` exists but has no `map_infos.json`
+entry, so it's invisible to the "187 bound + 11 unbound = 198" coverage
+assertion and has no graph edges. Decide whether it's a decoder artifact, an
+editor leftover, or real content, then either give it an `unbound_maps` entry
+or stop emitting it.
+
+### 60. Four `unbound_maps` entries have live edges into the playable graph
+
+Filed 2026-08-29, same world-graph audit as §57. 51 (Intro) → 48, 57; 57
+(Nuclear Plant) → 48; 94 (Mapa intro) → 14, 95; 95 (Intro 2) → 14. "Declared
+unbound" and "disconnected from the playable graph" are currently the same
+claim in `unbound_maps`, but these four show they aren't. The bindings are
+probably still correct (pre-title/cutscene maps), but the reason strings
+should say so explicitly, and `chapter_atlas coverage` could assert the
+distinction instead of leaving it implicit.
+
+### 61. Kevlar Town (31) + Passage Cave (19): 10 deferrals held past CH25, one mis-triaged
+
+Filed 2026-08-29, same world-graph audit as §57. No leg in the 59-chapter
+chain re-crosses Kevlar Town at or after CH25 — it's Fly-only from there. Its
+10 deferrals are Strength ×7 (HM04, granted at CH25 Route 11), Bike Wheel ×1
+(CH11), a post-Gym-5 story flag ×1, and B26, whose dev-only flag `sw130` /
+`FLAG_FILE_RECOVERY` is never set anywhere in the corpus — a mis-disposition
+owed a re-triage from `deferred` to `unreachable`. Operator decision
+2026-08-29: record this as a countable hold and settle it when CH25 actually
+reaches the frontier, rather than minting a revisit chapter now. B26's
+re-triage is the one piece actionable immediately, independent of CH25.
+
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 
 - **Reflection narrow-scan** — tried and reverted 2026-07-07 (user: "not
