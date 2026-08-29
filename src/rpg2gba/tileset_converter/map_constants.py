@@ -230,6 +230,40 @@ class MapConstantRegistry:
         """The minted constants for an id (KeyError if not minted)."""
         return self._by_id[uranium_id]
 
+    def minted_ids(self) -> list[int]:
+        """Every minted Uranium map id, ascending.
+
+        The public way to enumerate state; consumers must not walk `_by_id`.
+        """
+        return sorted(self._by_id)
+
+    def map_const_to_uranium_id(self) -> dict[str, int]:
+        """Reverse index: `MAP_*` constant -> Uranium map id.
+
+        Minting is one-directional (id -> constants), but two consumers need
+        the reverse and this class is the one source of truth for map names
+        (CLAUDE.md 4.3), so the reverse index belongs here rather than being
+        re-derived. Both callers previously forked it -- the playtest beat
+        framework hand-parsed the persisted JSON and the emulator's map-id
+        bridge reached into `_by_id` -- which is the promote-on-second-use
+        case Q6 decided must become a parameterized shared helper rather
+        than two implementations.
+
+        Fails loud on a collision instead of silently keeping one winner: two
+        ids sharing a constant means minting is broken, and `mint` already
+        guards against it, so reaching here is a real invariant violation.
+        """
+        by_const: dict[str, int] = {}
+        for uid in sorted(self._by_id):
+            map_const = self._by_id[uid].map_const
+            if map_const in by_const:
+                raise ValueError(
+                    f"map constant {map_const!r} is claimed by both Uranium "
+                    f"map {by_const[map_const]} and map {uid} -- the minted "
+                    f"state at {self.state_path} is not a bijection")
+            by_const[map_const] = uid
+        return by_const
+
     def resolve_placeholder(self, placeholder: str) -> str:
         """Map a Phase 4 warp's `MAP_URANIUM_<N>` alias to the canonical `MAP_<NAME>`.
 

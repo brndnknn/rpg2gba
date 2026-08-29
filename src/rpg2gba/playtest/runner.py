@@ -48,7 +48,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import rules as playtest_rules
-from .chapter import Chapter
+from .chapter import Beat, Chapter, assert_chapter_locations_reachable
 from .contact_sheet import Waypoint, build_contact_sheet
 from .stamp import ROM_BASE, build_blob, dump_save_blocks
 
@@ -92,6 +92,77 @@ class BeatHangError(RuntimeError):
     an answer" -- CH03's B11 was the latter, and it read identically to
     silence until this existed.
     """
+
+
+class BeatContinuityError(RuntimeError):
+    """A beat's declared `at=`/`locations=` (Q13 slice 1, check 2 -- runtime
+    continuity) disagrees with where the previous beat actually left the
+    player. Raised, and caught, exactly where an ordinary beat assertion
+    failure is (the beat that declared the mismatched location is the one
+    that fails) -- this is deliberately the same failure shape as a
+    `ScenarioError`, not a `RunnerError`: it is data about this build's
+    beats, not a harness usage problem, so it gets the same repro bundle /
+    contact sheet / flake-rerun treatment any other beat failure gets.
+
+    This is the fix for `chapter.py`'s old "at= is descriptive metadata"
+    contract: a beat whose declared position disagreed with the inherited
+    one used to start silently somewhere else and fail later, often as a
+    misleading pathfinding "stuck" error near the target. Now the
+    disagreement itself is the error, raised at the point of disagreement,
+    naming both positions.
+    """
+
+
+def _check_beat_continuity(beat: Beat, enter: dict[str, object],
+                            emu: "Emulator") -> None:
+    """Q13 slice 1, check 2: does `beat`'s declared entry position
+    (`beat.locations[0]`, see below) match `enter` -- the position the
+    PREVIOUS beat actually left the player at (or, for the chapter's first
+    beat, the post-boot snapshot)?
+
+    **Multi-point interpretation:** only `locations[0]` is checked here. A
+    beat's later location entries name OTHER points it interacts with over
+    its own run (an NPC's tile, a door it walks to and crosses) -- points
+    the beat's own body is expected to reach by walking there, not points it
+    is expected to already be standing on when it starts. `locations[0]` is,
+    by the corpus's own authoring convention (every existing multi-point
+    beat in `chapters/{route1,kevlar}.py` lists the entry door/threshold
+    first), the one claim about *inherited* state: "this beat starts from
+    here." That is the only claim continuity can check without re-deriving
+    the beat's own walk plan, which is `chapter.py`'s reachability check's
+    job (independent, offline, one point at a time), not this one's.
+
+    A beat with no declared locations is unaffected -- `at=`/`locations=`
+    stay optional, and an undeclared beat makes no claim to check."""
+    if not beat.locations:
+        return
+    loc = beat.locations[0]
+    try:
+        expected_group = emu.resolve_constant(f"MAP_GROUP({loc.map_constant})")
+        expected_num = emu.resolve_constant(f"MAP_NUM({loc.map_constant})")
+    except Exception as exc:  # noqa: BLE001 - reported as this beat's failure
+        raise BeatContinuityError(
+            f"beat {beat.name!r}: declared map_constant "
+            f"{loc.map_constant!r} could not be resolved against this "
+            f"build's fork headers: {exc}") from exc
+
+    actual_map = (enter["map_group"], enter["map_num"])
+    expected_map = (expected_group, expected_num)
+    actual_pos = tuple(enter["player_pos"])
+    expected_pos = (loc.x, loc.y)
+
+    if actual_map != expected_map or actual_pos != expected_pos:
+        raise BeatContinuityError(
+            f"beat {beat.name!r}: declared at=({loc.x},{loc.y}) on "
+            f"{loc.map_constant} (map_group={expected_group}, "
+            f"map_num={expected_num}) does not match where the previous "
+            f"beat actually left the player: map_group="
+            f"{actual_map[0]}, map_num={actual_map[1]}, player_pos="
+            f"{actual_pos} -- the beat runs from wherever the previous beat "
+            "left off, so this beat's declared entry position is wrong, "
+            "the previous beat's exit is wrong, or the two beats are out "
+            "of order (registration order is playthrough order, "
+            "chapter.py's beat() docstring)")
 
 
 @contextmanager
@@ -395,6 +466,7 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
             logger.info("[%s] beat %s starting: %s", chapter.name, beat.name, beat.description)
             enter = pending_enter
             try:
+                _check_beat_continuity(beat, enter, emu)
                 with _beat_timeout(beat_timeout_s, beat.name):
                     beat.run(emu)
             except BeatHangError as exc:
@@ -690,6 +762,13 @@ def run_chapter(chapter: Chapter, rom: Path, engine: Path, *,
     chapter's version, and written (only on a full, `from_beat=None`, pass
     verdict) to advance this chapter's own recorded version.
     """
+    # Q13 slice 1, check 1: static, offline, no emulator time spent -- run
+    # before anything else so a bad at=/locations= declaration is reported
+    # immediately rather than discovered mid-attempt (or not at all, if the
+    # chapter never walks that far). Raises ValueError, listing every
+    # failing declaration, per `assert_chapter_locations_reachable`.
+    assert_chapter_locations_reachable(chapter)
+
     output_root = output_root or Path("output") / "playtest"
     blobs_dir = output_root / "blobs"
     emulator_factory = emulator_factory or _default_emulator_factory

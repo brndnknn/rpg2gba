@@ -552,22 +552,26 @@ class _MapIdBridge:
     def _build_table(self) -> dict[tuple[int, int], int]:
         registry = MapConstantRegistry(self._state_path)
         registry.load()
-        by_id = registry._by_id  # no public iterator; see class docstring
-        if not by_id:
+        # The registry owns this reverse index (CLAUDE.md 4.3). This used to
+        # walk the private `_by_id`, and `playtest/chapter.py` separately
+        # hand-parsed the same persisted JSON -- two forks of one table,
+        # promoted to `map_const_to_uranium_id` per Q6.
+        by_const = registry.map_const_to_uranium_id()
+        if not by_const:
             raise ScenarioError(
                 f"_plan_route: MapConstantRegistry state at {self._state_path} "
                 "has no minted maps -- cannot resolve the offline traversal "
                 "graph for the current map"
             )
         names: list[str] = []
-        for consts in by_id.values():
-            names.append(f"MAP_GROUP({consts.map_const})")
-            names.append(f"MAP_NUM({consts.map_const})")
+        for map_const in by_const:
+            names.append(f"MAP_GROUP({map_const})")
+            names.append(f"MAP_NUM({map_const})")
         resolved = self._emu.resolve_constants(names)
         table: dict[tuple[int, int], int] = {}
-        for uid, consts in by_id.items():
-            g = resolved[f"MAP_GROUP({consts.map_const})"]
-            n = resolved[f"MAP_NUM({consts.map_const})"]
+        for map_const, uid in by_const.items():
+            g = resolved[f"MAP_GROUP({map_const})"]
+            n = resolved[f"MAP_NUM({map_const})"]
             table[(g, n)] = uid
         return table
 
@@ -1265,7 +1269,7 @@ class Emulator:
         return True
 
     def current_field_message_text(self) -> str | None:
-        """The field message box's (window 0) full decoded source text, or
+        r"""The field message box's (window 0) full decoded source text, or
         `None` while no message box is up.
 
         Reads `gStringVar4` (`include/string_util.h`), not the printer's own
