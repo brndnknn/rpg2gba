@@ -203,6 +203,11 @@ omitted from B1, B3, B6 or B7 — they were enumerated, dispositioned, approved,
 
 ## Part 2 — Questions
 
+**Status note, 2026-08-29.** Q13 slice 1 is now built and closed — landed in `f780a972`,
+`364732ac`, `46bd2efe`, with the `_route_waypoints` fail-loud following it in `f705b642`, and its
+exit criterion (the one-shot chapter-chain edit against the full warp graph) closed by `c9f73178`
+and `31ddb7c5`. Slice 2 is next. The rest of Part 2's decisions remain recorded, not built.
+
 Each has context, options, and a recommendation where I have one. These are the grill topics.
 
 ### Q0. Should recurring event archetypes get data-driven beat templates, instead of a bespoke beat per instance?
@@ -1433,6 +1438,17 @@ annotation rather than emitting a confident single capability.
 
 ## Part 5 — CH05 dry-run (Passage Cave, maps 36 + 37), 2026-08-28
 
+**Status note, 2026-08-29.** This part is a dated finding — a snapshot of what was true on
+2026-08-28 — and several of its specifics are superseded below. Code 408 is fixed: added to
+`_CODE_IGNORED` the same day, in `511ef4af` (§5.10, §5.12). §5.9's build-ordering constraint is
+satisfied: slice 1 landed first (`f780a972`, `364732ac`, `46bd2efe`), the `_route_waypoints`
+fail-loud landed after it (`f705b642`), and Q13 slice 1 as a whole is now complete and closed
+(`c9f73178`, `31ddb7c5`, 2026-08-29). CH05's remaining decisions — the cave-darkness/Flash
+content-fidelity call and the maps 36/37 naming collision — are deferred by operator instruction
+(2026-08-29) until the CH05 branch is cut; their live home is `reference/chapters/05-passage-cave.md`
+§7, with a parked worklist section in `PROJECT_TODO.md`. Nothing in Part 5 below should be read as
+a live blocker on current work.
+
 Run before any Q13 slice is built, as Part 5 prescribes. Third calibration case after map 32
 (v1 §6) and map 35 (v1 §7), and the **first one run against the real generator** rather than a
 hand-script: `python -m rpg2gba.chapter_manifest generate --chapter CH05` now works unmodified.
@@ -1775,6 +1791,7 @@ run.
   page require human classification, and — under Q0's coverage checker — splits an archetype
   fingerprint that is otherwise identical to Map036 ev4 and ev6. One-line fix: add 408 to
   `_CODE_IGNORED`. Worth doing before the archetype checker exists, not after.
+  **FIXED 2026-08-28 (`511ef4af`).**
 - **Fingerprint on the head, not the graphic.** Three of CH05's item balls use
   `character_name = "PU-POKEBALL"`; `map036/ev009` (Sableyeite) uses **`PU-MegaStone`**. Any
   item-ball template keyed on the sprite misses it; keyed on `pbItemBall` it does not.
@@ -1804,11 +1821,20 @@ load-bearing for CH05:
   terrain row (§5.2).
 - **Three fail-loud repairs are prerequisites, not follow-ups:** the `unhandled: 0`-vs-null
   distinction (§5.4), `requires_flash` reading its parsed metadata (§5.3), and code 408 (§5.10).
+  **Status 2026-08-29:** the code 408 repair is done (`511ef4af`); the other two are parked as
+  `PROJECT_TODO.md` #54 (`unhandled` null-vs-0) and #56 (`requires_flash`).
 - **One operator decision is blocking, and it is a §10 content-fidelity call:** what CH05 does
   about darkness, given HM05 is ungrantable (§5.3). It also retro-applies to map 19 in gated CH03.
+  **Status 2026-08-29:** deferred by operator instruction to the opening of the CH05 branch;
+  live home is `reference/chapters/05-passage-cave.md` §7.
 - **One naming decision is blocking and trivial:** override entries for maps 36 and 37 (§5.5).
+  **Status 2026-08-29:** deferred by operator instruction to the opening of the CH05 branch;
+  live home is `reference/chapters/05-passage-cave.md` §7.
 - **One ordering constraint should be pinned into Q13's slice plan:** slice 1 before the
   `_route_waypoints` fail-loud, or an explicit stair escape between them (§5.9).
+  **Status 2026-08-29: satisfied.** Slice 1 landed first (`f780a972`, `364732ac`, `46bd2efe`),
+  the fail-loud landed after it (`f705b642`), and Q13 slice 1 is now complete and closed
+  (`c9f73178`, `31ddb7c5`).
 - **CH05 is confirmed as thin for slice 2 and the capability model** with measured zeros (§5.8) —
   but not empty: the Surf-sealed item room (§5.7) is a terrain-derived `blocked:` case, the
   surface Part 4c called structurally invisible, so slice 2 should be built to satisfy it rather

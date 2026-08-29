@@ -221,6 +221,91 @@ credit to CH40 (flagged for the atlas maintainer, §7).
 
 ## 7. Open items for the lead
 
+### 7.1 Decisions owed before this chapter builds
+
+These were deliberately deferred by the operator on 2026-08-29 and pulled
+out of `MEMORY.md`'s Open Questions and `PROJECT_TODO.md`'s Open section —
+they are **not** open questions on current work, since nothing upstream of
+CH05 depends on them. This document is their single live home; they are
+settled here when the CH05 branch opens.
+
+1. **Cave darkness / Flash — a CLAUDE.md §10 content-fidelity call.** Maps
+   36 and 37 are both `DarkMap: true` (`intermediate/metadata_raw.json`
+   field 9; 26 maps corpus-wide). `pbs_converter/metadata.py:114` parses
+   `dark_map` and nothing downstream reads it —
+   `tileset_converter/metadata_wiring.py:602` hardcodes
+   `"requires_flash": False`, a §4.5 silent default, so this chapter —
+   which `chapters.json` tier-promoted *for* being the first cave/Flash
+   candidate — currently converts fully lit. Wiring `requires_flash: true`
+   is **not** the fix: HM05 has no grant site anywhere in the 199-map
+   corpus, and Uranium's own `CanUseMove(:FLASH)`
+   (`scripts_dump/103__PField_HiddenMoves.rb:1161-1176`) additionally
+   requires `BADGEFORFLASH` — so a `true` header yields a cave the player
+   can never light. At least three options: render darkness and grant
+   Flash from somewhere; render it and accept an unlightable cave; or
+   strip darkness corpus-wide and record the decision. This **retro-
+   applies to map 19 (Grott-Hole)**, which is also `DarkMap` and already
+   shipped as a lit room through CH03's §9 boot-walk gate, unremarked.
+   `DarkMap` is a *map property* — a capability surface that is neither a
+   page, a seam, nor a terrain tag, and therefore invisible to the
+   manifest. (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.3.)
+2. **The engine map names for 36 and 37.** Both are named "Passage Cave"
+   in `map_infos.json`, so `MapConstantRegistry.mint` fails loud (`map 37
+   ('Passage Cave') -> MAP_PASSAGE_CAVE collides with already-minted map
+   36`) and `reference/map_name_overrides.json` currently records both as
+   `"CORRECT — no override"`. §2 of this document proposes `PassageCave` /
+   `PassageCave2`; map 19 set the precedent, disambiguated to "Passage
+   Cave Grott-Hole" on the same grounds. The names themselves are
+   unconfirmed — no `engine/data/maps/` entry exists for either. This is a
+   naming decision plus two `overrides` entries with evidence; the
+   fail-loud is working as designed and only the data is missing.
+   (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.5.)
+3. **The two unresolved cross-references**, carried forward from §7.3
+   below because they also want an operator call, not just a note: (a)
+   Sableyeite here versus `00-atlas.md` crediting CH40 with the "first
+   Mega Stone" — needs the atlas maintainer to confirm which credit is
+   right, or to record that both are genuine Mega Stones and the atlas
+   phrasing should change; (b) Grott-Hole's HM04 Strength gate against map
+   19's CH03/A1 binding — needs someone to check the corpus-wide HM
+   availability order against map 19's act placement and either confirm
+   the ordering is fine as designed or flag it as a sequencing defect
+   for CH03.
+
+### 7.2 Build prerequisites this chapter carries
+
+Work the CH05 build inherits, not open questions:
+
+- **B6/B7 become deferred beats** owed to a Surf revisit (Map143, Act 5),
+  since TM76 and Sableyeite sit in a Surf-sealed 30-tile room (§7.3,
+  RESOLVED entry below).
+- The **arrival-nudge autorun** archetype (`map036/ev002/p1`;
+  byte-identical fingerprint to CH04's `map035/ev001/p1`, which carries
+  `beat:B8`; 324 instances across 73 maps) is missing from the Tier-1
+  template build set and CH05 needs it authored.
+  (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.6.)
+- Two mechanical fail-loud repairs land with this chapter: the
+  `unhandled: 0`-versus-null distinction, and `requires_flash` reading its
+  parsed metadata instead of the hardcoded literal. Both are tracked in
+  `PROJECT_TODO.md` (#54 and #56) in a section parked against this branch.
+- Standing guardrail: **a green CH05 §9 boot-walk gate is not evidence**
+  that slice 2, the capability model, or the mart/Poké Center/PC templates
+  are correct — CH05 measures zero exposure to all three
+  (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.8).
+- The decided-but-unbuilt **re-disposition of the whole built corpus**
+  during CH05's build, with its ordering safeguard: freeze the expected
+  answers first, then derive, then diff, then write.
+- **Route-planning ordering is now satisfied, not owed.** The dry run
+  flagged a build-ordering hazard: landing the `_route_waypoints`
+  fail-loud before slice 1's stair model would make every stair-crossing
+  leg on Map037 raise, since a leg reachable only across a sideways
+  staircase is unroutable by the 4-neighbour planner
+  (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.9). Slice 1 landed in commits
+  `f780a972`..`46bd2efe` and the fail-loud landed after it in `f705b642`,
+  all on 2026-08-28 — so the graph and the fail-loud are both in place and
+  the chapter is routable. No action needed here.
+
+### 7.3 Loose ends and resolved notes
+
 - **~~TM76/Sableyeite reachability without Surf.~~ RESOLVED 2026-08-28 —
   they need Surf; they are NOT collectible in CH05.** The tile stack under
   both coordinates is dry floor, which is why the earlier read was
@@ -236,8 +321,6 @@ credit to CH40 (flagged for the atlas maintainer, §7).
   warp d=63. **B6 and B7 therefore become deferred beats owed to the Surf
   revisit (Map143, Act 5)**, in the `DEFERRED_BEATS` idiom CH02/CH04 use —
   not live beats. Wiki §5 #3 was right.
-- **`PassageCave`/`PassageCave2` naming unconfirmed** — no
-  `engine/data/maps/` entry exists for either map.
 - **~~Two sets of inert events, purpose unclear.~~ RESOLVED 2026-08-28 by
   the CH05 dry-run — neither set is inert.** The four "Stairs" events on
   Map037 are forced diagonal moves and are mandatory for the exit (§3).
@@ -251,7 +334,8 @@ credit to CH40 (flagged for the atlas maintainer, §7).
 - **Two cross-references flagged but not resolved in this document**:
   Sableyeite vs `00-atlas.md`'s "first Mega Stone" credit to CH40 (§6), and
   Grott-Hole's HM04 Strength gate vs Map019's CH03/A1 binding (§5 #4,
-  Map019 out of scope here).
+  Map019 out of scope here). Promoted to operator decisions in §7.1 #3
+  above; kept here as the evidence trail.
 
 ---
 

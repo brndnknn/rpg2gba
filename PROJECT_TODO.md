@@ -655,13 +655,6 @@ out of CH04's scope but filed so it is not rediscovered. Rule it (or its
 containing page) when CH01's interiors or the Rock Smash grant chapter is next
 touched.
 
-### 51. Q5.1 citation-verification experiment — run across CH04 + CH05
-
-Migrated from `CH04_TODO.md`. A blind second-agent pass over citation-triggered
-disposition rows only, scoped to run on CH04 and CH05; kept as standing
-practice if it catches at least one silent pass across both chapters. CH04's
-pass is done; the decision waits on CH05.
-
 ### 52. Route 2 Poké Radar catch-table entries missing from `wild_encounters.json`
 
 Migrated from `CH04_TODO.md` (`reference/chapters/04-route-2.md` §5, item 3).
@@ -669,53 +662,6 @@ The Route 2 wiki page lists a Poké Radar division (Dunsparce, Tofurang) that is
 absent from `wild_encounters.json`. Data gap, unresolved — Poké Radar is not an
 engine feature the pipeline models yet, so this is a "when Radar lands" note,
 not a CH04 miss.
-
-### 53. Maps 36 and 37 share the display name "Passage Cave" — `mint` fails loud
-
-Surfaced by the CH05 dry run (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.5).
-`map_infos.json` names both maps "Passage Cave" and `map_name_overrides.json`
-records both as `"CORRECT — no override"`, so the strict (non-walker) path raises
-`map 37 ('Passage Cave') -> MAP_PASSAGE_CAVE collides with already-minted map 36`.
-**This is CH05's first blocker** — it fires before any other work. Fix = two
-`overrides` entries with evidence; `reference/chapters/05-passage-cave.md` §2
-proposes `PassageCave` / `PassageCave2`, and map 19 already set the precedent
-("Passage Cave Grott-Hole", CH03 scope pass). The fail-loud is working as
-designed; only the data is missing.
-
-### 54. `unhandled: 0` is indistinguishable from "map never transpiled"
-
-CH05 dry run §5.4. `transpile_unhandled.jsonl`'s 244 map-tagged rows fall on
-exactly the 16 `SLICE_MAP_IDS` maps, so any chapter generated before staging gets
-`unhandled: 0` on every row — and `ManifestRow.may_be_cosmetic`'s unhandled-queue
-veto then passes vacuously for the whole chapter. `05-passage-cave.md` §6 already
-warned that zero means "never staged, not clean"; the generator does not encode
-that and the checker cannot see it. Fix: record which map ids the queue covers,
-emit `unhandled: null` for maps outside it, and make `may_be_cosmetic` False until
-the chapter is staged and the manifest regenerated. Also makes the
-generate-after-staging ordering explicit instead of conventional. (CH04 did not
-expose this — map 35 was staged first, so its 6 rows were real.)
-
-### 55. Command code 408 (Comment continuation) is missing from `_CODE_IGNORED`
-
-CH05 dry run §5.10. `generator.py:107` ignores 108 (Comment) but not **408**
-(Comment continuation), so a two-line RMXP comment puts a code in `other_codes`,
-which makes `is_dispositionable` False. That is the *only* reason
-`map037/ev004/p0` — an otherwise ordinary trainer page, identical in every other
-respect to Map036 ev4 and ev6 — is CH05's one undispositionable row. Under Q0's
-archetype coverage checker it would also split a fingerprint on a comment.
-One-line fix; worth doing before the archetype checker exists, not after.
-
-### 56. `requires_flash` is a hardcoded `False` and `dark_map` is parsed but never read
-
-CH05 dry run §5.3, and the mechanical half of MEMORY.md's new dark-cave Open
-Question. `pbs_converter/metadata.py:114` sets `dark_map: True` from
-`MetadataDarkMap`; `tileset_converter/metadata_wiring.py:602` emits
-`"requires_flash": False` as a literal into every map header. 26 corpus maps are
-dark, including CH05's 36/37 and CH03's already-gated map 19. **The content call
-(what darkness should become, given HM05 has no grant site) is the operator's and
-is tracked as an Open Question** — this entry is only the §4.5 half: the header
-should read the parsed metadata and fail loud on a dark map until that decision is
-recorded, rather than silently defaulting.
 
 ### 57. 12 unmodelled walked legs still owed a per-chapter re-check
 
@@ -782,6 +728,104 @@ owed a re-triage from `deferred` to `unreachable`. Operator decision
 reaches the frontier, rather than minting a revisit chapter now. B26's
 re-triage is the one piece actionable immediately, independent of CH25.
 
+## Parked until the CH05 branch is cut (do not raise before then)
+
+These are real, tracked work items, scoped entirely to CH05. They are not open
+questions and not blockers on any work that precedes CH05. **Operator
+instruction, 2026-08-29:** stop raising them in status reports or "what's
+next" summaries — they were being resurfaced every session even though the
+call on when to act on them is deliberately deferred until CH05's branch is
+open and the chapter is actually in front of him (this project cuts branches
+for chapter builds only; everything in between commits straight to main).
+Nothing here is decided or dropped by being parked. `reference/chapters/
+05-passage-cave.md` §7 is the chapter-local home for the same items; that
+section and this one must stay in sync. **Trigger to unpark: the CH05 branch
+is cut.** At that point this whole section becomes the CH05 build's opening
+worklist.
+
+### 51. Q5.1 citation-verification experiment — run across CH04 + CH05
+
+Migrated from `CH04_TODO.md`. A blind second-agent pass over citation-triggered
+disposition rows only, scoped to run on CH04 and CH05; kept as standing
+practice if it catches at least one silent pass across both chapters. CH04's
+pass is done; **CH05's pass, and the decision it feeds, wait on the CH05
+branch being cut.**
+
+### 53. Maps 36 and 37 share the display name "Passage Cave" — `mint` fails loud
+
+Surfaced by the CH05 dry run (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.5).
+`map_infos.json` names both maps "Passage Cave" and `map_name_overrides.json`
+records both as `"CORRECT — no override"`, so the strict (non-walker) path raises
+`map 37 ('Passage Cave') -> MAP_PASSAGE_CAVE collides with already-minted map 36`.
+It is the first task of the CH05 build, not a live blocker on anything now. Fix =
+two `overrides` entries with evidence; `reference/chapters/05-passage-cave.md` §2
+proposes `PassageCave` / `PassageCave2`, and map 19 already set the precedent
+("Passage Cave Grott-Hole", CH03 scope pass). The fail-loud is working as
+designed; only the data is missing.
+
+### 54. `unhandled: 0` is indistinguishable from "map never transpiled"
+
+CH05 dry run §5.4. `transpile_unhandled.jsonl`'s 244 map-tagged rows fall on
+exactly the 16 `SLICE_MAP_IDS` maps, so any chapter generated before staging gets
+`unhandled: 0` on every row — and `ManifestRow.may_be_cosmetic`'s unhandled-queue
+veto then passes vacuously for the whole chapter. `05-passage-cave.md` §6 already
+warned that zero means "never staged, not clean"; the generator does not encode
+that and the checker cannot see it. Fix: record which map ids the queue covers,
+emit `unhandled: null` for maps outside it, and make `may_be_cosmetic` False until
+the chapter is staged and the manifest regenerated. Also makes the
+generate-after-staging ordering explicit instead of conventional. (CH04 did not
+expose this — map 35 was staged first, so its 6 rows were real.)
+
+### 56. `requires_flash` is a hardcoded `False` and `dark_map` is parsed but never read
+
+CH05 dry run §5.3, and the mechanical half of MEMORY.md's new dark-cave Open
+Question. `pbs_converter/metadata.py:114` sets `dark_map: True` from
+`MetadataDarkMap`; `tileset_converter/metadata_wiring.py:602` emits
+`"requires_flash": False` as a literal into every map header. 26 corpus maps are
+dark, including CH05's 36/37 and CH03's already-gated map 19. **The content call
+(what darkness should become, given HM05 has no grant site) is the operator's, and
+is a decision deferred to the CH05 build, recorded in
+`reference/chapters/05-passage-cave.md` §7** — this entry is only the §4.5 half:
+the header should read the parsed metadata and fail loud on a dark map until that
+decision is recorded, rather than silently defaulting.
+
+### 62. CH05-scoped items scattered across `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` Part 5 with no tracked home
+
+Filed 2026-08-29 out of an audit of `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` Part 5
+(the CH05 dry run) that found several concrete findings never landed in either
+this file or `reference/chapters/05-passage-cave.md` §7. Parked here as CH05-build
+work, not open questions:
+
+- **The arrival-nudge autorun archetype is missing from Q0's Tier-1 template
+  build set entirely** (§5.6). Fingerprint `map036/ev002/p1` — autorun trigger,
+  `get_character(0).onEvent?` branch, `setTempSwitchOn` tail, player nudged one
+  tile off the arrival cell — is byte-identical to CH04's `map035/ev001/p1`
+  (`beat:B8`), and a corpus census puts the idiom at **324 instances across 73
+  maps**, bigger than the item ball (243), staircase (222) and cave-exit (102)
+  archetypes combined and second only to the door/warp event (996). It belongs in
+  Tier 1, and CH05 needs it authored before its beats can be written.
+- **TM76 and Sableyeite sit in a Surf-sealed 30-tile room** (§5.7): Map036 has 513
+  walkable tiles in 7 connected components, 450 reachable on foot from the
+  entrance, but the room at bbox x 31-36/y 11-16 opens only into a water pocket
+  disconnected from the walkable region. Both pickups are `blocked:surf`, and
+  Surf is granted at Map143 (Act 5) — the longest capability deferral found in the
+  corpus so far. `05-passage-cave.md` B6/B7 must be authored as deferred beats
+  (the CH02/CH04 `DEFERRED_BEATS` idiom), not live beats: a second, much longer
+  arm on the stranded-revisit backlog alongside the Rock Smash one (§39/§57).
+- **The standing guardrail that a green CH05 §9 gate is NOT evidence** that
+  slice 2, the capability model, or the mart/Poké Center/PC templates are correct
+  (§5.8, restating Q13). CH05 exercises zero seam rows, zero populated
+  `requires[]`, zero mart/Center/PC instances, and its only `blocked:` rows are
+  terrain-derived Surf, not switch/variable-derived — the least-representative
+  possible confirmation. Their real validation is the retroactive re-derivation
+  of CH01-CH04.
+- **The decided-but-unbuilt re-disposition of the whole built corpus during
+  CH05's build**, with its ordering safeguard: freeze the expected answers,
+  derive, diff, then write — do not derive-and-write in one pass, or a
+  regression in the derivation logic reads as a correct re-disposition. Cross-
+  referenced by `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.6, §5.7, §5.8, Q3 and
+  Q13.
+
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 
 - **Reflection narrow-scan** — tried and reverted 2026-07-07 (user: "not
@@ -796,6 +840,19 @@ re-triage is the one piece actionable immediately, independent of CH25.
   this, `ROM_TEST_DEV.md`'s "new_game.c debug-harness re-arm technique" section is.
 
 ## Done
+
+- **55. Command code 408 (Comment continuation) missing from `_CODE_IGNORED`**
+  (fixed `511ef4af`, 2026-08-28) — `generator.py:107` ignored 108 (Comment) but
+  not 408 (Comment continuation), so a two-line RMXP comment put a code in
+  `other_codes` and made `is_dispositionable` False; the only reason
+  `map037/ev004/p0` was CH05's one undispositionable row. `_CODE_IGNORED` now
+  reads `frozenset({0, 509, 106, 108, 408, 413})` — verified current at
+  `src/rpg2gba/chapter_manifest/generator.py:107`, with 408 treated as a
+  structural rider on 108, same as 413 is on 412. `PROJECT_TODO` #55;
+  `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.10. Landed before the CH01-CH03
+  manifests are generated, since it changes what they say; `pytest -k
+  manifest`: 109 passed. The CH05 dry-run doc and this file's own record of
+  the finding were not updated at the time the fix landed.
 
 - **12. Map viewer hot-reload** (2026-07-13) — built as scoped, both halves:
   tileset source PNGs joined the request-time stat fingerprint (eager
