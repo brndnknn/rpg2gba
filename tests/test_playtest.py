@@ -531,10 +531,12 @@ class _FakeWalkEmu:
                 return True, frames
         return False, 40
 
-    # The fake has no map grid to plan over, so it exercises exactly the
-    # degraded path a real run takes when `_plan_route` finds nothing: the
-    # bare target, walked greedily. That keeps these tests about the
-    # step-aside/oscillation/warp behaviour they were written for.
+    # The fake has no map grid to plan over, so waypoints are stubbed to the
+    # bare target. This keeps these tests about the step-aside/oscillation/
+    # warp behaviour they were written for. NOTE: this is a stub, not a
+    # behaviour a real run can reach -- a planning failure now raises
+    # `RoutePlanningError` (see `tests/test_route_fail_loud.py`); it used to
+    # degrade to exactly this bare target, which is what B3 rode.
     def _route_waypoints(self, tx: int, ty: int) -> list[tuple[int, int]]:
         return [(tx, ty)]
 

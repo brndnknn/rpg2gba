@@ -18,7 +18,7 @@ from ..tileset_converter.map_constants import DEFAULT_STATE_PATH as _DEFAULT_MAP
 from ..tileset_converter.map_constants import MapConstantRegistry
 from ..traversal.graph import MapGraph, build_map_graph
 from .contact_sheet import Waypoint
-from .errors import ScenarioError
+from .errors import RoutePlanningError, ScenarioError
 from .offsets import (
     OBJEVENT_ACTIVE_BIT_MASK,
     OBJEVENT_ACTIVE_BYTE_OFFSET,
@@ -1940,14 +1940,97 @@ class Emulator:
                     heapq.heappush(heap, (nd, nxt))
         return None
 
+    def _diagnose_unroutable(self, start: tuple[int, int],
+                             goal: tuple[int, int]) -> str:
+        """Why `_plan_route` found nothing, in the message itself.
+
+        A bare "no route" sends the reader back to the emulator to work out
+        which of several very different causes it was. The offline graph can
+        separate them cheaply, and the distinction that matters most is
+        PERMANENT vs TRANSIENT: if the graph says the goal is unreachable
+        from `start` on static terrain alone, waiting will never help and the
+        beat's coordinate or the chapter's route is wrong; if the graph says
+        it IS reachable, then a dynamic obstacle (an NPC, an item ball, a
+        Route 1 rock) is what blocked planning, and that is the case
+        `walk_to`'s re-plan loop exists to absorb.
+
+        Best-effort by construction: this runs on the failure path, so it
+        must never raise and mask the failure it is describing. Anything it
+        cannot determine is reported as unknown rather than guessed.
+        """
+        bits = [f"walk_to{goal}: no route from {start}"]
+        try:
+            bits.append(f"map={self.map_location()}")
+        except Exception:  # noqa: BLE001 - diagnosis must not mask the failure
+            bits.append("map=unknown")
+
+        graph = None
+        try:
+            current_map_graph = self._current_map_graph
+        except AttributeError:
+            bits.append("offline graph: unavailable")
+        else:
+            try:
+                graph = current_map_graph()
+            except Exception as exc:  # noqa: BLE001 - see docstring
+                bits.append(f"offline graph: unavailable ({exc})")
+
+        if graph is not None:
+            if not graph.is_walkable(goal):
+                bits.append(
+                    f"PERMANENT: the offline graph says {goal} is not a "
+                    "walkable cell at all -- the declared coordinate is "
+                    "wrong, or it is terrain the graph models as blocked")
+            elif goal not in graph.reachable_from(start):
+                bits.append(
+                    f"PERMANENT: {goal} is walkable but NOT reachable from "
+                    f"{start} on static terrain -- they are in different "
+                    "connected components, so no amount of waiting helps "
+                    "(a sealed room, or a capability-gated route)")
+            else:
+                bits.append(
+                    f"TRANSIENT: the offline graph reaches {goal} from "
+                    f"{start} on static terrain, so a dynamic obstacle "
+                    "blocked planning -- an object event standing on the "
+                    "only corridor, most likely")
+
+        try:
+            occupied = self._occupied_object_tiles(goal)
+        except Exception:  # noqa: BLE001 - see docstring
+            pass
+        else:
+            blockers = sorted(occupied)
+            if blockers:
+                shown = ", ".join(str(c) for c in blockers[:8])
+                more = "" if len(blockers) <= 8 else f" (+{len(blockers) - 8} more)"
+                bits.append(f"object-held tiles: {shown}{more}")
+
+        return "; ".join(bits)
+
     def _route_waypoints(self, tx: int, ty: int) -> list[tuple[int, int]]:
         """Turn a planned route into the corner tiles `_walk_greedy` can
         reach in a straight line, ending at the target.
 
-        If the grid can't be planned over — no route found, or the tile data
-        doesn't say what the engine really allows — this degrades to the bare
-        target and lets the greedy walker try anyway, so an ordinary planner
-        blind spot costs a slower failure rather than a wrong answer.
+        A planning failure RAISES `RoutePlanningError`. It used to log a
+        warning and return the bare target, handing the leg to `_walk_greedy`
+        with none of the planner's avoid-set, on the stated rationale that
+        "an ordinary planner blind spot costs a slower failure rather than a
+        wrong answer". CH04's B3 refutes that directly: the unprotected
+        greedy walk crossed Timothy's event-touch tile, the wrong trainer was
+        fought, and both guards passed. It was a wrong answer, not a slow
+        failure, and a silent fallback is a standing CLAUDE.md 4.5/11
+        violation regardless.
+
+        This is not interim code and slice 1 does not remove the need for it:
+        the offline graph changes where walkability comes from, but planning
+        can still fail -- occlusion, an unmodelled behaviour, a stale grid --
+        and this lane would walk unprotected no matter the source.
+
+        Raising does NOT mean a transient obstacle fails the walk. `walk_to`'s
+        re-plan loop treats a planning failure the same way it treats a stuck
+        leg: wait, re-plan, up to `_MAX_REPLANS` times. An NPC standing in the
+        only corridor still recovers. What is gone is the unprotected greedy
+        walk, not the retry.
 
         The one shape that is *not* a blind spot is a target outside the
         grid's own bounds: that means the grid is not this map's, and walking
@@ -1959,9 +2042,7 @@ class Emulator:
             return [(tx, ty)]
         route = self._plan_route(start, (tx, ty))
         if route is None:
-            logger.warning("walk_to(%d,%d): no planned route from %s — "
-                           "falling back to greedy pathing", tx, ty, start)
-            return [(tx, ty)]
+            raise RoutePlanningError(self._diagnose_unroutable(start, (tx, ty)))
         corners = [
             route[i] for i in range(1, len(route) - 1)
             if (route[i][0] - route[i - 1][0], route[i][1] - route[i - 1][1])
@@ -2541,7 +2622,17 @@ def _walk_to_once(emu: "Emulator", tx: int, ty: int, frame_budget: int,
     reason = f"walk_to({tx},{ty}) made no progress"
     for _ in range(_MAX_REPLANS):
         stuck = False
-        for wx, wy in emu._route_waypoints(tx, ty):
+        # A planning failure is a stuck iteration, not an instant abort: it
+        # is most often an NPC standing in the only corridor, which is
+        # exactly what this loop's wait-and-re-plan exists to absorb. What
+        # no longer happens is the silent degrade to an unprotected greedy
+        # walk on the bare target -- B3's mechanism. If planning still fails
+        # after `_MAX_REPLANS`, the diagnosis below is raised.
+        try:
+            waypoints = emu._route_waypoints(tx, ty)
+        except RoutePlanningError as exc:
+            stuck, reason, waypoints = True, str(exc), ()
+        for wx, wy in waypoints:
             arrived, used, why = emu._walk_greedy(
                 wx, wy, frame_budget - spent, max_sidesteps, start_map,
                 start_locked=start_locked)
