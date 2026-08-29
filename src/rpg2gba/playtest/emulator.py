@@ -7,12 +7,16 @@ robust against text-length, timing, and converter changes.
 """
 import heapq
 import logging
+import os
 import struct
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from ..text_validator.engine_metrics import load_charmap
+from ..tileset_converter.map_constants import DEFAULT_STATE_PATH as _DEFAULT_MAP_CONSTANTS_STATE
+from ..tileset_converter.map_constants import MapConstantRegistry
+from ..traversal.graph import MapGraph, build_map_graph
 from .contact_sheet import Waypoint
 from .errors import ScenarioError
 from .offsets import (
@@ -472,6 +476,102 @@ def _collision_walkable(blocks: Sequence[int], width: int, off: int,
     return (blocks[(x + off) + width * (y + off)] >> 10) & 0x3 == 0
 
 
+class _MapGraphSource:
+    """Lazily builds and caches the offline `MapGraph` (`rpg2gba.traversal`)
+    for each Uranium map id `_plan_route` asks for.
+
+    One `build_map_graph` call (a full decode-JSON parse) per map id for the
+    lifetime of the `Emulator` -- not per search node, and not even once per
+    `walk_to`, since a chapter walks the same map repeatedly. A callable
+    rather than a dict so a test can inject a fake with the same call shape
+    (`source(map_id) -> MapGraph`) without touching disk at all -- see
+    `Emulator._map_graph_source`.
+    """
+
+    def __init__(
+        self,
+        maps_dir: Path | None = None,
+        tilesets_json: Path | None = None,
+        terrain_tag_map: Path | None = None,
+    ) -> None:
+        out = Path(os.environ.get("RPG2GBA_OUTPUT", "output")) / "uranium-build"
+        self._maps_dir = maps_dir or (out / "maps")
+        self._tilesets_json = tilesets_json or (out / "tilesets.json")
+        self._terrain_tag_map = terrain_tag_map
+        self._cache: dict[int, MapGraph] = {}
+
+    def __call__(self, map_id: int) -> MapGraph:
+        graph = self._cache.get(map_id)
+        if graph is None:
+            graph = build_map_graph(
+                map_id,
+                maps_dir=self._maps_dir,
+                tilesets_json=self._tilesets_json,
+                terrain_tag_map=self._terrain_tag_map,
+            )
+            self._cache[map_id] = graph
+        return graph
+
+
+class _MapIdBridge:
+    """Resolves a live `map_location()` (group, num) to the Uranium map id
+    the offline `MapGraph` is keyed by, via the persisted
+    `MapConstantRegistry` state -- the one source of truth for Uranium id ->
+    `MAP_*` constant (CLAUDE.md §4.3, `tileset_converter/map_constants.py`)
+    -- and the emulator's own `resolve_constant` for `MAP_GROUP()`/
+    `MAP_NUM()` (same macro-probe pattern `assertions.at_map` uses).
+
+    The whole minted-map table is resolved in ONE batched
+    `resolve_constants` probe compile, the first time `resolve()` is called,
+    and cached for the `Emulator`'s lifetime -- not a probe per map, and
+    never a probe per search node. Failure to resolve is a `ScenarioError`,
+    never a quiet `None`: a caller (`_plan_route`) that can't identify which
+    map it's on has no static walkability to consult and must stop, not
+    silently fall back to the live grid (that fallback is exactly the "two
+    implementations of walkable" risk this bridge exists to close).
+    """
+
+    def __init__(self, emu: "Emulator", state_path: Path | None = None) -> None:
+        self._emu = emu
+        self._state_path = state_path or _DEFAULT_MAP_CONSTANTS_STATE
+        self._table: dict[tuple[int, int], int] | None = None
+
+    def resolve(self, group: int, num: int) -> int:
+        if self._table is None:
+            self._table = self._build_table()
+        try:
+            return self._table[(group, num)]
+        except KeyError:
+            raise ScenarioError(
+                f"_plan_route: map_location() group={group} num={num} has no "
+                f"minted Uranium map in the MapConstantRegistry state at "
+                f"{self._state_path} -- cannot resolve the offline traversal "
+                "graph for the current map"
+            ) from None
+
+    def _build_table(self) -> dict[tuple[int, int], int]:
+        registry = MapConstantRegistry(self._state_path)
+        registry.load()
+        by_id = registry._by_id  # no public iterator; see class docstring
+        if not by_id:
+            raise ScenarioError(
+                f"_plan_route: MapConstantRegistry state at {self._state_path} "
+                "has no minted maps -- cannot resolve the offline traversal "
+                "graph for the current map"
+            )
+        names: list[str] = []
+        for consts in by_id.values():
+            names.append(f"MAP_GROUP({consts.map_const})")
+            names.append(f"MAP_NUM({consts.map_const})")
+        resolved = self._emu.resolve_constants(names)
+        table: dict[tuple[int, int], int] = {}
+        for uid, consts in by_id.items():
+            g = resolved[f"MAP_GROUP({consts.map_const})"]
+            n = resolved[f"MAP_NUM({consts.map_const})"]
+            table[(g, n)] = uid
+        return table
+
+
 def _unwrap_message(text: str) -> str:
     """Collapse a decoded field message's line breaks so a substring check
     can span them.
@@ -560,6 +660,14 @@ class Emulator:
             raise ScenarioError(f"could not attach save file for {rom}")
         self.core.reset()
         self.frame = 0
+        # `_plan_route`'s static-walkability source (Q13 slice 2): a
+        # callable `map_id -> MapGraph` and a `(group, num) -> map_id`
+        # resolver, both lazily built and cached (see their classes'
+        # docstrings). Public instance attributes, not name-mangled: a test
+        # replaces either with a fake of the same call shape to inject a
+        # synthetic graph without touching disk (`test_plan_route_graph.py`).
+        self._map_graph_source = _MapGraphSource()
+        self._map_id_bridge = _MapIdBridge(self)
 
     # -- raw access ---------------------------------------------------------
 
@@ -1595,20 +1703,61 @@ class Emulator:
         map_w, map_h = width - (off * 2 + 1), height - off * 2
         return _collision_walkable(blocks, width, off, map_w, map_h, x, y)
 
+    def _current_map_graph(self) -> MapGraph:
+        """The offline `MapGraph` (`rpg2gba.traversal`) for whatever map
+        `map_location()` currently reads.
+
+        This is `_plan_route`'s bridge from a live runtime location to the
+        offline graph's Uranium map id: resolve (group, num) via
+        `_map_id_bridge`, then hand that id to `_map_graph_source`. Both are
+        cached (per-bridge, per-map-id respectively; see their classes), so
+        this costs nothing beyond a dict lookup after the first call for a
+        given map.
+
+        Deliberately has NO except clause of its own: a resolution failure
+        (unminted map, missing/unbuildable decoded data) is a
+        `ScenarioError` that propagates -- `_plan_route` must not plan on
+        stale or absent static walkability. The lightweight test fakes that
+        predate this method (`test_plan_route_objects.py`'s
+        `_FakeRouteEmu`, `test_playtest.py`'s `_FakeWalkEmu`/`_FakeGridEmu`)
+        simply don't define it, so the attribute lookup itself raises
+        `AttributeError` -- `_plan_route` binds this method inside a `try`
+        and calls it OUTSIDE, so only the missing-attribute case degrades to
+        the old live-grid-only behaviour. An `AttributeError` raised while
+        this method actually runs propagates loud; it must never be mistaken
+        for "this fake has no graph".
+        """
+        group, num = self.map_location()
+        map_id = self._map_id_bridge.resolve(group, num)
+        return self._map_graph_source(map_id)
+
     def _plan_route(self, start: tuple[int, int],
                     goal: tuple[int, int]) -> list[tuple[int, int]] | None:
         """Least-cost walkable route between two map-relative tiles, or
         None.
 
-        Dijkstra (uniform-cost search) over collision-0 tiles, avoiding warp
-        tiles other than the goal and tiles held by active object events
-        (NPCs, item balls, solid Rock events on Route 1) other than the
-        player's own object and the goal tile (see
-        `_occupied_object_tiles`). Elevation is deliberately not modelled —
-        mismatched-elevation edges (cliff rims) would be planned through; a
-        leg that hits one gets locally stuck and re-planned, and ultimately
-        fails loud, which is the same outcome as any other impassable
-        route.
+        Static walkability -- collision, staircases, one-way ledges -- comes
+        from the offline `MapGraph` for the current map (`_current_map_graph`,
+        `rpg2gba.traversal`), not a re-derivation over the live
+        `gBackupMapLayout` snapshot: PLAYTEST_AUTHORING_IMPROVEMENT_V2.md
+        Q13 decision 2, closing the "two implementations of walkable" risk
+        by construction. The live collision grid is still read (it must be,
+        for bounds and for the divergence check below) but no longer
+        decides which tiles are walkable; search proceeds over
+        `MapGraph.neighbors()` edges, so stair-diagonal displacements and
+        one-way ledge jumps are real graph edges here, not tile-adjacency
+        guesses.
+
+        Dynamic overlays the offline graph cannot know about stay live and
+        are unchanged: warp tiles other than the goal, and tiles held by
+        active object events (NPCs, item balls, solid Rock events on
+        Route 1) other than the player's own object and the goal tile (see
+        `_occupied_object_tiles`). Elevation is deliberately not modelled by
+        the offline graph either (`MapGraph.elevation_modelled` is always
+        False -- the decoded corpus carries no real height field, see
+        `traversal.graph`'s module docstring); a leg that hits a
+        mismatched-elevation edge gets locally stuck and re-planned, and
+        ultimately fails loud, same as before.
 
         Tall grass (`MB_TALL_GRASS`, via `_grass_cost_context`) costs
         `_GRASS_TRAVERSAL_COST` instead of the usual 1, so a route prefers a
@@ -1616,11 +1765,8 @@ class Emulator:
         that's the only way through -- including when grass IS the
         destination (B4 deliberately walks onto grass cells; Flood himself
         stands in one). Cost only ever biases which route is chosen among
-        walkable ones; it is never a reachability gate -- the plain BFS
-        reachability semantics (a tile is either walkable or it isn't) are
-        unchanged, just the tie-breaking among walkable routes. If the
-        behavior pointer chain can't be resolved, every tile costs 1 and
-        this is exactly the old plain-BFS behaviour.
+        walkable ones; it is never a reachability gate. If the behavior
+        pointer chain can't be resolved, every tile costs 1.
 
         Object events are a snapshot taken once per call, not re-read per
         search node: a patrolling NPC can make a planned route stale the
@@ -1629,13 +1775,33 @@ class Emulator:
         to avoid the common body-block case, not a replacement for that
         recovery path.
 
-        Also not modelled: sideways staircases (`GetSidewaysStairsCollision`
-        in `engine/src/event_object_movement.c`,
-        `GetRightSideStairsDirection` in `engine/src/field_player_avatar.c`),
-        where the engine turns an EAST/WEST press into a diagonal move. This
-        search is 4-neighbour, so a destination reachable only across such a
-        staircase is unroutable here and must be stepped manually by the
-        scenario.
+        Sideways staircases (`GetSidewaysStairsCollision` in
+        `engine/src/event_object_movement.c`, `GetRightSideStairsDirection`
+        in `engine/src/field_player_avatar.c`) ARE now modelled and
+        plannable: `MapGraph` represents an EAST/WEST press on a stair cell
+        as the engine's own diagonal displacement (`Edge.kind ==
+        "stair_diagonal"`), so a route across one can come out of this
+        search. Ledge jumps are likewise real edges (one-way, landing two
+        tiles past the ledge). What is still NOT modelled, by the offline
+        graph itself: elevation (see above) -- a cliff-rim edge is still
+        planned straight through it.
+
+        Every static-walkability verdict the search actually consults is
+        also checked against the live collision grid; a mismatch is logged
+        at WARNING (map, cell, both verdicts) and NOT acted on -- a carried,
+        non-blocking contradiction per Q13.1 (the offline graph can be wrong
+        about the real engine; this is the evidence trail, not a gate). The
+        chosen route always follows the offline graph's verdict.
+
+        `_current_map_graph` raising `AttributeError` (the lightweight test
+        fakes that predate the offline graph, e.g. `test_plan_route_objects.
+        py`'s `_FakeRouteEmu`) degrades to the OLD plain 4-neighbour,
+        live-grid-only search -- same AttributeError-degrade shape already
+        used for `_grass_cost_context`. Any other failure resolving or
+        building the graph (`ScenarioError` from `_map_id_bridge`/
+        `_map_graph_source`) propagates: there is no silent fallback to
+        live-grid-only walkability for a real `Emulator` that simply
+        couldn't resolve its map.
 
         A goal outside the grid's own bounds is not an unroutable target but
         a wrong grid, and raises — see `_route_waypoints`.
@@ -1660,10 +1826,49 @@ class Emulator:
             grass_ctx = None
         grass_cache: dict[tuple[int, int], bool] = {}
 
-        def walkable(x: int, y: int) -> bool:
-            if (x, y) in avoid or (x, y) in occupied:
-                return False
+        # Offline graph (Q13 decision 2). The degrade is scoped to the
+        # ATTRIBUTE LOOKUP alone -- the fakes that predate this primitive
+        # simply don't define the method. Binding first and calling outside
+        # the `try` is deliberate: `_current_map_graph` resolves constants,
+        # reads decoded JSON and builds a graph, and wrapping that whole
+        # call would let a genuine `AttributeError` raised deep inside it
+        # degrade this planner to live-grid walkability silently -- the
+        # two-implementations bug this change exists to remove, in the
+        # silent-wrong-answer shape CLAUDE.md §4.5/§11 forbid outright.
+        try:
+            current_map_graph = self._current_map_graph
+        except AttributeError:
+            graph = None
+        else:
+            graph = current_map_graph()
+
+        def live_walkable(x: int, y: int) -> bool:
             return _collision_walkable(blocks, width, off, map_w, map_h, x, y)
+
+        def dynamic_blocked(cell: tuple[int, int]) -> bool:
+            return cell in avoid or cell in occupied
+
+        def log_divergence(cell: tuple[int, int]) -> None:
+            """Record (never act on) a graph/live-grid disagreement about
+            one cell the search actually looked at -- Q13.1's carried,
+            non-blocking contradiction."""
+            static = graph.is_walkable(cell)
+            live = live_walkable(*cell)
+            if static != live:
+                logger.warning(
+                    "_plan_route: map %s cell %s -- offline graph walkable="
+                    "%s, live collision grid walkable=%s; using the offline "
+                    "graph's verdict (recorded divergence, Q13.1, not "
+                    "acted on)",
+                    graph.map_id, cell, static, live,
+                )
+
+        def walkable(x: int, y: int) -> bool:
+            """Plain live-grid walkability, only used on the no-graph
+            (fake-emulator) degrade path."""
+            if dynamic_blocked((x, y)):
+                return False
+            return live_walkable(x, y)
 
         def is_grass(x: int, y: int) -> bool:
             if grass_ctx is None:
@@ -1701,6 +1906,24 @@ class Emulator:
                     path.append(node)
                     node = prev[node]
                 return path[::-1]
+
+            if graph is not None:
+                cx, cy = cur
+                for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+                    neighbor = (cx + dx, cy + dy)
+                    if 0 <= neighbor[0] < map_w and 0 <= neighbor[1] < map_h:
+                        log_divergence(neighbor)
+                for edge in graph.neighbors(cur):
+                    nxt = edge.target
+                    if dynamic_blocked(nxt):
+                        continue
+                    nd = d + step_cost(*nxt)
+                    if nd < dist.get(nxt, float("inf")):
+                        dist[nxt] = nd
+                        prev[nxt] = cur
+                        heapq.heappush(heap, (nd, nxt))
+                continue
+
             cx, cy = cur
             for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
                 nxt = (cx + dx, cy + dy)
