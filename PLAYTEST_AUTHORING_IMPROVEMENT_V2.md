@@ -1731,9 +1731,18 @@ gives:
 
 | target | stairs walkable | stairs blocked |
 |---|---|---|
-| cave exit (16,5) -> Nowtoch | reachable, 34 steps | **UNREACHABLE** |
+| cave exit (16,5) -> Nowtoch | reachable, 35 steps | **UNREACHABLE** |
 | trainer "Nuñes", adj (23,10) | reachable, 23 steps | reachable, same path |
 | gift NPC, adj (9,7) | reachable, 26 steps | reachable, same path |
+
+> **Corrected 2026-08-28 (slice 1).** The cave-exit figure read **34** when this section was
+> written; the built graph measures **35**, and the graph is right. Settled by exhaustive search
+> rather than argument: **(16,26) is the unique cell on Map037** from which the trainer sits at 23
+> steps and the gift NPC at 26, and **no cell anywhere on the map** yields the original 34/23/26
+> triple — so the entry point was never in doubt and the exit figure was off by one. The other
+> three measurements reproduce exactly. **The structural conclusion is untouched**, and it is the
+> load-bearing part: the exit is unreachable without the staircases.
+> Regression: `tests/test_traversal_map037_golden.py`.
 
 Walkable/blocked band, x=0..33 (stairs-blocked run; the walkable run differs only at x=11 and
 x=20 on rows 9 and 10):
