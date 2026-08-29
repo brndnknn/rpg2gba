@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Map Inspector</title>
+<script>window.__VIEWER__=__VIEWER_CONFIG__;</script>
+<style>
+/*VIEWER_CSS*/</style>
+</head>
+<body>
+<div id="toolbar">
+  <span id="mode-switch" title="Graphics: quantization/tileset debugging. Events: event, trainer and beat debugging. Shortcut: e">
+    <button type="button" id="mode-btn-graphics" class="on">Graphics</button>
+    <button type="button" id="mode-btn-events">Events</button>
+  </span>
+  <div class="sep"></div>
+  <span id="graphics-chrome">
+  <span class="lbl">View:</span>
+  <label><input type="radio" name="view2" value="rmxp"> RPG Maker</label>
+  <label><input type="radio" name="view2" value="post-quant" checked> Quantized (family)</label>
+  <!-- Dormant: the original per-layer radios are kept intact but hidden; the 2-way
+       toggle above drives the same `currentLayer`. Unhide #layer-debug (or set its
+       display) to restore the full RMXP/L0/L1/L2/GBA/Post-Q layer inspector. -->
+  <span id="layer-debug" style="display:none">
+  <span class="lbl">Layer:</span>
+  <label><input type="radio" name="layer" value="rmxp" checked> RMXP</label>
+  <label><input type="radio" name="layer" value="l0"> L0</label>
+  <label><input type="radio" name="layer" value="l1"> L1</label>
+  <label><input type="radio" name="layer" value="l2"> L2</label>
+  <label><input type="radio" name="layer" value="gba"> GBA</label>
+  <label><input type="radio" name="layer" value="gba_bottom"> GBA&#8595;</label>
+  <label><input type="radio" name="layer" value="gba_top"> GBA&#8593;</label>
+  <label><input type="radio" name="layer" value="post-quant"> Post-Q</label>
+  </span>
+  <div class="sep"></div>
+  <span class="lbl">Overlay:</span>
+  <label><input type="checkbox" id="ov_collision"> Collision</label>
+  <label><input type="checkbox" id="ov_events" checked> Events</label>
+  <label><input type="checkbox" id="ov_warps" checked> Warps</label>
+  <label title="Cells containing a multi-frame (animated) autotile — pipeline currently renders frame 0 only"><input type="checkbox" id="ov_animated"> Animated</label>
+  <div class="sep"></div>
+  <button class="btn" id="btn-advanced" title="Show quantization / graphics-debug controls">Advanced</button>
+  <span id="adv-controls">
+    <span class="lbl">Debug:</span>
+    <label><input type="checkbox" id="ov_diff"> Diff</label>
+    <label><input type="checkbox" id="ov_priority"> Priority</label>
+    <label title="Heat-map cells by palette-merge loss (brighter = more colour snapped)"><input type="checkbox" id="ov_merge"> Merge</label>
+    <a class="btn" id="nav-palettes" href="#" style="display:none;text-decoration:none">Palettes &rarr;</a>
+  </span>
+  <span id="nonstock-badge" title="Live quantization knobs differ from stock (FamilyParams defaults, max_palettes=13) — this render is not a faithful ROM preview. Open Advanced to inspect/reset.">&#9888; non-stock quantize</span>
+  </span>
+  <span id="events-chrome">
+    <span class="lbl">Show:</span>
+    <select id="evt-filter" title="Filter which event kinds are drawn/listed">
+      <option value="all">All</option>
+      <option value="trainer">Trainers</option>
+      <option value="item">Items</option>
+      <option value="warp">Warps</option>
+      <option value="conditional">Conditional-only</option>
+    </select>
+    <label><input type="checkbox" id="ov_beats" checked> Beats</label>
+    <label><input type="checkbox" id="ov_dim" checked> Dim map</label>
+  </span>
+  <div class="sep"></div>
+  <span class="lbl">Zoom:</span>
+  <button class="btn" id="zoom-out">-</button>
+  <span id="zoom-val" style="min-width:28px;text-align:center">2x</span>
+  <button class="btn" id="zoom-in">+</button>
+  <button class="btn" id="zoom-fit">Fit</button>
+  <span class="lbl" id="map-title" style="color:#8cf"></span>
+</div>
+<div id="legend"></div>
+<div id="mapnav"></div>
+<div id="knobbar">
+  <span class="lbl">Family knobs:</span>
+  <label title="Interior hue degrees in (70,170) that split the green band into sub-families. Comma-separated, e.g. 120 or 100,140. Empty = one green.">green cuts <input id="k_green" type="text" size="9" placeholder="e.g. 120"></label>
+  <label title="max(R,G,B) below this = 'dark' family">dark&lt; <input id="k_dark" type="number" min="0" max="255" step="1"></label>
+  <label title="HSV saturation below this = 'neutral' family">neutral sat&lt; <input id="k_neutral" type="number" min="0" max="1" step="0.01"></label>
+  <label title="Minimum sub-palettes guaranteed to every family">pal floor <input id="k_floor" type="number" min="1" max="13" step="1"></label>
+  <label title="How leftover palettes are handed out: by distinct-colour overflow, or weighted by how many tiles a family covers">overflow
+    <select id="k_overflow"><option value="colors">colors</option><option value="coverage">coverage</option></select></label>
+  <label title="Total sub-palette budget (engine ceiling 13)">max pals <input id="k_maxpal" type="number" min="1" max="13" step="1"></label>
+  <button class="btn" id="k_apply">Apply &amp; re-render</button>
+  <span id="k_status" class="lbl"></span>
+</div>
+<div id="main">
+  <div id="canvas-wrap">
+    <canvas id="mapCanvas"></canvas>
+  </div>
+  <div id="sidebar">
+    <div id="cell-info"><span style="color:#555">Tap cells to build a selection, then add a note.</span></div>
+    <div id="event-inspector">
+      <div class="section-title">Event Inspector</div>
+      <div id="event-inspector-body"><span class="lbl">Tap a cell with an event marker to inspect it.</span></div>
+    </div>
+    <div id="beat-panel">
+      <div class="section-title" id="beat-head" style="cursor:pointer"><span id="beat-tri">&#9662;</span> Beats <span id="beat-count" class="lbl"></span></div>
+      <div id="beat-notes" class="lbl"></div>
+      <div id="beat-list"><span class="lbl">Loading…</span></div>
+    </div>
+    <div id="merge-panel">
+      <div class="section-title" id="merge-head" style="cursor:pointer"><span id="merge-tri">&#9656;</span> Worst palette merges <span id="merge-count" class="lbl"></span></div>
+      <div id="merge-list" style="display:none"></div>
+    </div>
+    <div id="feedback-panel">
+      <div class="section-title">Feedback</div>
+      <div id="sel-summary">No cells selected.</div>
+      <div>
+        <button class="btn" id="btn-expand" disabled title="Add every cell whose metatile renders pixel-identical to the focused cell's, all frames included (this map)">Expand similar</button>
+        <button class="btn" id="btn-clear" disabled>Clear</button>
+      </div>
+      <textarea id="note-text" placeholder="Describe what's wrong with these tiles…"></textarea>
+      <div>
+        <button class="btn" id="btn-save-flag" disabled>Save flag</button>
+        <button class="btn" id="btn-export" title="Write this map's flags as JSON (server mode: saved on the server, under output/map_feedback/)">Export JSON</button>
+      </div>
+      <div id="export-status" class="lbl"></div>
+      <div id="flag-list"></div>
+    </div>
+  </div>
+</div>
+<button class="btn" id="sidebar-toggle">&#9660; Inspector</button>
+<div id="statusbar"></div>
+<script>
+/*VIEWER_JS*/</script>
+</body>
+</html>

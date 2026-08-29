@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Palette Inspector</title>
+<script>window.__VIEWER__=__VIEWER_CONFIG__;</script>
+<style>
+/*VIEWER_CSS*/</style>
+</head>
+<body>
+<div id="topbar">
+  <a class="btn" id="nav-map" href="#" style="display:none;text-decoration:none">&larr; Map</a>
+  <span id="summary"></span>
+  <div class="sep"></div>
+  <button class="btn" id="btn-suspect" onclick="toggleSuspect()">Suspects only (&le;2c)</button>
+  <button class="btn" id="btn-collapse" onclick="toggleCollapse()">Hide empty pals</button>
+</div>
+<div id="mapnav"></div>
+<div id="knobbar">
+  <span class="lbl">Family knobs:</span>
+  <label title="Interior hue degrees in (70,170) that split the green band into sub-families. Comma-separated, e.g. 120 or 100,140. Empty = one green.">green cuts <input id="k_green" type="text" size="9" placeholder="e.g. 120"></label>
+  <label title="max(R,G,B) below this = 'dark' family">dark&lt; <input id="k_dark" type="number" min="0" max="255" step="1"></label>
+  <label title="HSV saturation below this = 'neutral' family">neutral sat&lt; <input id="k_neutral" type="number" min="0" max="1" step="0.01"></label>
+  <label title="Minimum sub-palettes guaranteed to every family">pal floor <input id="k_floor" type="number" min="1" max="13" step="1"></label>
+  <label title="How leftover palettes are handed out: by distinct-colour overflow, or weighted by how many tiles a family covers">overflow
+    <select id="k_overflow"><option value="colors">colors</option><option value="coverage">coverage</option></select></label>
+  <label title="Total sub-palette budget (engine ceiling 13)">max pals <input id="k_maxpal" type="number" min="1" max="13" step="1"></label>
+  <button class="btn" id="k_apply">Apply &amp; re-render</button>
+  <span id="k_status" class="lbl"></span>
+</div>
+<div id="content"></div>
+<div id="modal-backdrop" onclick="handleBackdropClick(event)">
+  <div id="modal-box">
+    <span id="modal-close" onclick="closeModal()">&#10005;</span>
+    <div id="modal-inner"></div>
+  </div>
+</div>
+<script>
+/*VIEWER_JS*/</script>
+</body>
+</html>

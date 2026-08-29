@@ -8,8 +8,8 @@ demoted behind an **Advanced** toggle. Tile feedback is the primary job now; the
 quant machinery is secondary.
 
 **It is one tool, not two.** There are two *views* (map grid + palette inspector)
-and two *delivery modes* (live server + self-contained file), all behind one shared
-core. Don't go looking for a second viewer.
+behind one shared core, served by a local HTTP server. Don't go looking for a
+second viewer.
 
 ---
 
@@ -77,56 +77,54 @@ that the build agent reads and fixes.
   **✕** on a row deletes it immediately.
 - Flagged cells get an orange **⚑** marker on the canvas (drawn unconditionally,
   not gated behind Advanced), so you can see punch-list coverage while panning.
-- **Export JSON** writes `MapNNN_feedback.json` — the current flag list as-is. In
-  **server mode** it POSTs to `/api/feedback/export` and the *server* writes the file
-  to `output/map_feedback/` on the machine running it (not a browser download — the
+- **Export JSON** writes `MapNNN_feedback.json` — the current flag list as-is. It
+  POSTs to `/api/feedback/export` and the *server* writes the file to
+  `output/map_feedback/` on the machine running it (not a browser download — the
   viewer is usually driven from a phone, and the file is only useful next to the rest
-  of the pipeline output); the written path is echoed under the button. In **static
-  mode** there's no server to write to, so it falls back to a browser download — the
-  only way to get flags out of static mode.
+  of the pipeline output); the written path is echoed under the button.
 
 **Storage:** flags persist to `reference/map_feedback/MapNNN.json` — a JSON list of
 `{cells, note}` objects. The directory lives under `reference/` (not `output/`) so
 flags survive `rm -rf output/` / `pipeline --clean`, but it is **gitignored**
 (2026-08-12, user call): a flag exists only until the build agent fixes it, so the
-history has no value. Server mode writes the whole file on every Save/delete via
+history has no value. The server writes the whole file on every Save/delete via
 `POST /api/feedback` (body `{map_id, flags}`) and loads it via
 `GET /api/feedback/<id>` on page load. The **old** location — gitignored
 `output/uranium-build/map_viewer_issues/` (one note per cell, keyed `"x,y"`, no
 grouping) — is **retired**; old files are **not** migrated, so re-flag anything you
-want kept under the new model. Static/phone mode has no server to write to, so
-flags live in memory only for the session — Export JSON before you close the tab.
+want kept under the new model.
 
 ---
 
 ## Architecture (why it's split across files)
 
 ```
-map_viewer_common.py        ← shared CORE (data + rendering + map-grid template)
+map_viewer_common.py        ← shared CORE (data + rendering + page assembly)
 ├─ build_map_data(map_id)       extract cells / metatiles / palette usage  →  dict
 ├─ render_tile_png()            one RMXP 16×16 tile  →  PNG
 ├─ render_metatile_png()        one metatile layer (bottom/top/post_*)  →  PNG
 ├─ load_feedback() / save_feedback()   per-map flag list  ↔  reference/map_feedback/MapNNN.json
-└─ MAP_VIEWER_HTML              the map-grid VIEW + feedback UI (template)
+├─ MAP_VIEWER_HTML              map-grid page, assembled from scripts/map_viewer/
+└─ PALETTE_VIEWER_HTML          palette-inspector page, same
 
-build_map_viewer.py         ← STATIC mode  (self-contained .html, base64-inlined)
-└─ build_config(map_id)         map data + every tile/metatile as base64 PNG
-
-palette_page.py             ← second VIEW: the palette inspector (Advanced-tier)
-└─ PALETTE_VIEWER_HTML          palette swatches + suspect-tile grid + colour-change popup
+scripts/map_viewer/         ← the web assets (real .html/.css/.js, editable)
+├─ viewer.{html,css,js}         the map-grid VIEW + feedback UI
+├─ palette.{html,css,js}        the palette inspector (Advanced-tier)
+└─ knobbar.js                   shared knob-panel script (spliced into both)
 
 map_graph.py                ← map RELATIONSHIPS (no rendering, pure metadata)
 ├─ build_index()                landing-page data: flat name list + parent_id forest
 └─ map_relationships(id)        per-map nav: name, parent, children, warp targets
 
-map_viewer_server.py        ← SERVER mode  (live HTTP, lazy /api/* PNG rendering,
-                               /api/feedback persistence)
+map_viewer_server.py        ← the server  (live HTTP, lazy /api/* PNG rendering,
+                               /api/feedback persistence; self-restarts on edits
+                               to any .py it imports or any scripts/map_viewer/ asset)
 ```
 
-The dependency chain proves it's one system:
-`palette_page.build_palette_html()` → `build_map_viewer.build_config()` →
-`map_viewer_common.build_map_data()`. The server serves both views; the static
-builder emits both files. They share data extraction, rendering, and swatch helpers.
+Each `*.html` carries `/*VIEWER_CSS*/` + `/*VIEWER_JS*/` placeholders and the
+`__VIEWER_CONFIG__` token the server fills per request; `map_viewer_common`
+assembles the three files into one string at import. The server serves both views
+from those two constants.
 
 **Not part of this tool:** `tree_debug.py` — a separate script that emits a **PNG**
 (not HTML) showing the per-layer RMXP→GBA collapse for one region. See its own
@@ -134,9 +132,7 @@ section below.
 
 ---
 
-## The two delivery modes
-
-### Server mode (recommended)
+## Running the server
 
 ```bash
 python scripts/map_viewer_server.py --port 8765        # default port 8765, host 0.0.0.0
@@ -158,42 +154,13 @@ Routes:
 
 Images render lazily on request and are cached (both in the browser via
 `immutable` cache headers and in a module-level cache server-side), so the first
-view of a map is a little slow, then snappy. Cross-links between the two views
-(`Palettes →` and `← Map` buttons) **only exist in server mode**, and flag saves
-only persist to disk in server mode.
-
-### Static mode (offline / phone fallback)
-
-Build self-contained HTML files — every tile/metatile is base64-inlined, no
-server or network needed. Survives Taildrop to a phone.
-
-```bash
-python scripts/build_map_viewer.py 32 49 48      # specific maps
-python scripts/build_map_viewer.py --all         # every map
-```
-
-Writes to `output/map_viewer/` (override with `--out-dir`). Per map it emits
-**both** files:
-
-- `MapNNN.html` — map-grid viewer
-- `MapNNN_palettes.html` — palette inspector
-
-You can also build just the palette page for one map:
-
-```bash
-python scripts/palette_page.py 32 [--out path.html]
-```
-
-Static files are larger (all images inlined) and have **no cross-view nav buttons,
-no cross-map nav strip, and no flag persistence** (those need live routes/server) —
-build flags in the session and **Export JSON** before closing the tab.
+view of a map is a little slow, then snappy.
 
 ---
 
-## Landing page & cross-map navigation (server mode only)
+## Landing page & cross-map navigation
 
-The landing page and the cross-map nav strip both need live routes, so static
-files don't have them. Data comes from `map_graph.py` — pure metadata, no rendering.
+Data comes from `map_graph.py` — pure metadata, no rendering.
 
 **Landing page** (`GET /`, `build_index()`): every openable map by **id + name**,
 type-to-filter (matches id or name), grouped into the RMXP editor tree so a town's
@@ -204,8 +171,8 @@ view and the palette view.
 the page config as `graph`): a horizontal chip bar — **⌂ Index** · the current map ·
 **up** (parent) · **sub** (child maps) · **warp→** (distinct code-201 transfer
 destinations). Every chip jumps to `/map/<id>`, so you can walk the world: town →
-its houses/gym → the maps its doors warp to. Shown only in server mode (the strip
-stays hidden when `V.graph` is absent, e.g. static files).
+its houses/gym → the maps its doors warp to. The strip hides itself when
+`V.graph` is absent.
 
 **Name & tree sources:** names resolve `reference/map_name_overrides.json`
 (corrected names win) → `map_infos.json` `name` → `Map{id:03d}` fallback. The tree
@@ -264,7 +231,6 @@ controls"; adds `body.adv`) to reveal the whole quantization/graphics-debug laye
   breaking the reload) → the page reloads, re-rendering the map **and** both
   palette views under the new params. A monotonic `generation` token is appended
   to post-quant image URLs (`&g=`) to defeat the browser's `immutable` cache.
-  Server mode only — it hides itself in static exports even with Advanced on.
 - **Diff** / **Priority** / **Merge** overlay checkboxes.
 - The **Palettes →** link to this map's palette inspector.
 - The **Worst palette merges** sidebar panel — a collapsible list of the metatiles
@@ -301,7 +267,7 @@ transparent) and a grid of the metatile thumbnails that draw from that palette.
 
 Swatch tooltips give RGB, hex, and the BGR555 value (the GBA's native 15-bit form).
 
-`← Map` (server mode) jumps back to this map's grid viewer.
+`← Map` jumps back to this map's grid viewer.
 
 ---
 
@@ -354,5 +320,4 @@ RPG Maker/Quantized toggle isn't fine-grained enough.
   needs `numpy` + `Pillow` (already in the project `.venv`).
 - **Nothing the viewer writes is committed.** Flags live in gitignored
   `reference/map_feedback/MapNNN.json` (under `reference/` only so they outlive
-  `rm -rf output/`); `output/map_viewer/` (static-mode HTML) is gitignored
-  generated art.
+  `rm -rf output/`).

@@ -1,5 +1,10 @@
 # Spec — Uranium Map Inspector (HTML viewer/editor)
 
+> **Historical (2026-06-22).** The self-contained "static" build path and
+> `scripts/build_map_viewer.py` referenced below were removed 2026-08-28; the
+> viewer is server-only now and its web assets live under `scripts/map_viewer/`.
+> Current usage: `reference/viewer/map_viewer.md`.
+
 **Status:** draft for review. **Author:** build agent, 2026-06-22.
 **Supersedes:** the ad-hoc debug scripts `scripts/tree_debug.py` (per-layer render)
 and `scripts/compare_collision.py` (collision diff) — the inspector generalizes both

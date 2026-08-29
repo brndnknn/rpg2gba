@@ -150,15 +150,8 @@ every map, nested under its RMXP parent; each row links to two views per map:
   swatches and which metatiles draw from it, with suspect (≤2 colours) and bad
   (high merge-loss) tiles highlighted.
 
-For offline/phone use without a running server, build self-contained HTML
-instead (larger files, no cross-map nav):
-
-```
-.venv/bin/python scripts/build_map_viewer.py 32 49 48   # specific maps
-.venv/bin/python scripts/build_map_viewer.py --all       # every map
-```
-
-Writes to `output/map_viewer/` (gitignored — don't commit it).
+The page's HTML/CSS/JS live as real files under `scripts/map_viewer/`; the
+server assembles and serves them (and self-restarts when you edit one).
 
 ### Leaving feedback on a map
 
@@ -171,12 +164,10 @@ while you review:
    (shows in the sidebar as "⚠ Flagged: <note>") and appears in the Issues list
    below, with a **✕** to remove it.
 
-In **server mode**, Save and the ✕ delete write straight through to
+Save and the ✕ delete write straight through to
 `output/uranium-build/map_viewer_issues/MapNNN.json` (gitignored) — no export
 step needed, and reloading the page reloads whatever's already saved for that
 map. That file is a plain `{"x,y": {x, y, note}, ...}` object, so once you've
 gone through a map and flagged what looks wrong, `cat` (or hand) that file to
-Claude for the actual fixes. There's also an **Export JSON** button that
-downloads a snapshot as an array — handy for the static/offline build below,
-which has no server to persist to and keeps issues in-memory-only for that
-reason.
+Claude for the actual fixes. There's also an **Export JSON** button that writes
+a snapshot to `reference/map_feedback/`.

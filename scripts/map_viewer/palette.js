@@ -1,150 +1,3 @@
-# ruff: noqa: E501
-"""Palette-centric HTML inspector page for a Pokémon Uranium map.
-
-For each GBA sub-palette, shows the 15 colour swatches (used vs. unused),
-and a suspect-first grid of metatile thumbnails that draw from it.
-Clicking a tile opens a detail popup: post-quant thumbnail (bottom + top stacked),
-which palette slots the tile actually uses, and each colour change
-(original source colour → snapped palette colour, changed ones highlighted).
-
-Companion to build_map_viewer.py — call build_config() from that module to get
-all data and inline images, then inject them into the PALETTE_VIEWER_HTML template.
-
-Usage:
-    python scripts/palette_page.py 32
-    python scripts/palette_page.py 32 --out /tmp/pal.html
-"""
-from __future__ import annotations
-
-import argparse
-import json
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent))
-from build_map_viewer import build_config  # noqa: E402
-from map_viewer_common import KNOBBAR_JS  # noqa: E402
-
-PALETTE_VIEWER_HTML = r"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Palette Inspector</title>
-<script>window.__VIEWER__=__VIEWER_CONFIG__;</script>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:#1a1a1a;color:#ddd;font:12px/1.4 monospace}
-#topbar{background:#252525;border-bottom:1px solid #444;padding:6px 10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;position:sticky;top:0;z-index:5}
-#summary{color:#8cf;font-weight:bold;flex:1;min-width:0}
-.sep{width:1px;background:#555;height:20px;margin:0 4px;flex-shrink:0}
-.btn{background:#333;border:1px solid #555;color:#ddd;padding:2px 8px;cursor:pointer;font:11px monospace;border-radius:2px}
-.btn:hover{background:#444}
-.btn.active{background:#2a3a4a;border-color:#5af;color:#5af}
-/* ---- map nav strip ---- */
-#mapnav{display:none;background:#1c1c1c;border-bottom:1px solid #383838;padding:4px 8px;gap:6px;align-items:center;overflow-x:auto;white-space:nowrap;font-size:11px}
-#mapnav.show{display:flex}
-#mapnav .navcur{color:#8cf;font-weight:bold;flex-shrink:0}
-#mapnav .navgrp{color:#777;flex-shrink:0;margin-left:2px}
-#mapnav .navchip{display:inline-block;background:#2a2a2a;border:1px solid #4a4a4a;color:#bcd;text-decoration:none;padding:1px 7px;border-radius:10px;flex-shrink:0}
-#mapnav .navchip:hover{background:#33414e;border-color:#5af;color:#cfe}
-#mapnav .navchip.home{background:#243d2e;border-color:#475}
-#mapnav .navsep{width:1px;height:16px;background:#444;flex-shrink:0;margin:0 2px}
-#content{padding:10px}
-.pal-section{background:#1e1e1e;border:1px solid #333;border-radius:4px;margin-bottom:14px;overflow:hidden}
-.pal-header{background:#252525;padding:6px 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-bottom:1px solid #333}
-.pal-title{color:#5af;font-weight:bold;font-size:13px}
-.pal-stats{color:#888;font-size:11px}
-.pal-extra{color:#666;font-size:10px}
-.pal-swatches{display:flex;align-items:flex-end;flex-wrap:wrap;gap:1px;padding:6px 10px 4px;border-bottom:1px solid #2a2a2a}
-.swatch{display:inline-block;width:16px;height:16px;border:1px solid #555;vertical-align:middle;cursor:default;margin:0;flex-shrink:0}
-.swatch-checker{background-image:repeating-conic-gradient(#777 0% 25%,#bbb 0% 50%);background-size:8px 8px}
-.swatch-unused{opacity:0.2;filter:grayscale(0.6)}
-.slot-wrap{display:flex;flex-direction:column;align-items:center;gap:1px}
-.slot-label{font-size:9px;color:#555;text-align:center;width:18px;line-height:1.2}
-.slot-label.used{color:#777}
-.tile-grid{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px}
-.tile-card{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:3px;border:2px solid #2a2a2a;border-radius:3px;background:#141414;transition:border-color .12s,background .12s}
-.tile-card:hover{background:#222;border-color:#555}
-.tile-card.suspect{border-color:#fa0}
-.tile-card.bad{border-color:#f44}
-.tile-card.suspect.bad{border-color:#f84}
-.tile-thumb{position:relative;width:32px;height:32px;flex-shrink:0;background:#000;border:1px solid #333}
-.tile-thumb img{position:absolute;top:0;left:0;width:32px;height:32px;image-rendering:pixelated;image-rendering:crisp-edges}
-.tile-caption{font-size:9px;color:#888;text-align:center;line-height:1.3;white-space:nowrap}
-.tile-nc{color:#fc8;font-weight:bold}
-.tile-nc-ok{color:#6b6}
-.tile-sev{color:#f66;font-size:8px}
-.empty-msg{color:#555;padding:8px 10px;font-size:11px}
-/* ---- modal ---- */
-#modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;align-items:center;justify-content:center}
-#modal-backdrop.open{display:flex}
-#modal-box{background:#1e1e1e;border:1px solid #555;border-radius:6px;padding:14px;max-width:400px;width:92%;max-height:90vh;overflow-y:auto;position:relative}
-#modal-close{position:absolute;top:8px;right:10px;cursor:pointer;color:#888;font-size:17px;line-height:1;padding:2px 4px}
-#modal-close:hover{color:#fff}
-.modal-title{color:#5af;font-weight:bold;margin-bottom:10px;font-size:13px;padding-right:22px}
-.modal-top{display:flex;gap:10px;margin-bottom:10px;align-items:flex-start}
-.modal-thumb-stack{position:relative;width:64px;height:64px;flex-shrink:0;border:1px solid #444;background:#000}
-.modal-thumb-stack img{position:absolute;top:0;left:0;width:64px;height:64px;image-rendering:pixelated;image-rendering:crisp-edges}
-.modal-stats{display:flex;flex-direction:column;gap:3px}
-.section-title{color:#5af;font-weight:bold;margin:8px 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
-.lbl{color:#888;font-size:11px}
-.val{color:#eee}
-.val-warn{color:#fc8;font-weight:bold}
-.val-bad{color:#f66;font-weight:bold}
-.slot-used-row{display:flex;flex-wrap:wrap;gap:2px;align-items:center;margin:4px 0}
-.slot-hi{outline:2px solid #5af;outline-offset:0}
-.cc-row{display:flex;align-items:center;gap:4px;padding:2px 0;font-size:10px;border-bottom:1px solid #1e1e1e}
-.cc-row.changed .swatch{outline:2px solid #fa0}
-.cc-arrow{color:#555}
-.cc-tag-same{color:#445}
-.cc-tag-changed{color:#fa0;font-weight:bold}
-@media (max-width:600px){
-  .tile-grid{gap:4px;padding:6px}
-  .tile-card{padding:2px}
-  #modal-box{padding:10px;max-width:100%;width:96%}
-  #topbar{gap:4px}
-  #mapnav{gap:8px;padding:6px 8px}
-  #mapnav .navchip{min-height:32px;padding:6px 12px;display:flex;align-items:center}
-  #mapnav .navsep{height:24px}
-}
-#knobbar{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;background:#1f241f;border-bottom:1px solid #3a463a;padding:4px 8px;font-size:11px}
-#knobbar label{color:#9a9;display:flex;align-items:center;gap:3px}
-#knobbar input,#knobbar select{background:#222;color:#dfe;border:1px solid #4a5a4a;font:11px monospace;padding:2px 3px;border-radius:2px}
-#knobbar input[type=number]{width:52px}
-#knobbar #k_apply{background:#2c3a2c;border-color:#5a7a5a;color:#cfe}
-#knobbar #k_status{color:#fa0}
-</style>
-</head>
-<body>
-<div id="topbar">
-  <a class="btn" id="nav-map" href="#" style="display:none;text-decoration:none">&larr; Map</a>
-  <span id="summary"></span>
-  <div class="sep"></div>
-  <button class="btn" id="btn-suspect" onclick="toggleSuspect()">Suspects only (&le;2c)</button>
-  <button class="btn" id="btn-collapse" onclick="toggleCollapse()">Hide empty pals</button>
-</div>
-<div id="mapnav"></div>
-<div id="knobbar">
-  <span class="lbl">Family knobs:</span>
-  <label title="Interior hue degrees in (70,170) that split the green band into sub-families. Comma-separated, e.g. 120 or 100,140. Empty = one green.">green cuts <input id="k_green" type="text" size="9" placeholder="e.g. 120"></label>
-  <label title="max(R,G,B) below this = 'dark' family">dark&lt; <input id="k_dark" type="number" min="0" max="255" step="1"></label>
-  <label title="HSV saturation below this = 'neutral' family">neutral sat&lt; <input id="k_neutral" type="number" min="0" max="1" step="0.01"></label>
-  <label title="Minimum sub-palettes guaranteed to every family">pal floor <input id="k_floor" type="number" min="1" max="13" step="1"></label>
-  <label title="How leftover palettes are handed out: by distinct-colour overflow, or weighted by how many tiles a family covers">overflow
-    <select id="k_overflow"><option value="colors">colors</option><option value="coverage">coverage</option></select></label>
-  <label title="Total sub-palette budget (engine ceiling 13)">max pals <input id="k_maxpal" type="number" min="1" max="13" step="1"></label>
-  <button class="btn" id="k_apply">Apply &amp; re-render</button>
-  <span id="k_status" class="lbl"></span>
-</div>
-<div id="content"></div>
-<div id="modal-backdrop" onclick="handleBackdropClick(event)">
-  <div id="modal-box">
-    <span id="modal-close" onclick="closeModal()">&#10005;</span>
-    <div id="modal-inner"></div>
-  </div>
-</div>
-<script>
 const V = window.__VIEWER__;
 const D = V.data;
 
@@ -163,10 +16,6 @@ function swatchHtml(c, extraCls, extraStyle) {
   return '<span class="' + cls + '" style="' + sty + '" title="' + swatchTitle(c) + '"></span>';
 }
 function getMetatileURL(idx, layer) {
-  if (V.mode === 'static') {
-    const m = (V.metatile_images || {})[String(idx)];
-    return m ? m[layer] : null;
-  }
   // `g` = quant generation: busts the browser's immutable cache after a knob Apply.
   const g = (V.quant && V.quant.generation) || 0;
   return '/api/metatile/' + D.meta.map_id + '/' + idx + '.png?layer=' + layer + '&g=' + g;
@@ -370,12 +219,12 @@ function handleBackdropClick(e) {
 }
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
 
-// ---- map nav strip (server mode only; populated from V.graph) ----
+// ---- map nav strip (populated from V.graph) ----
 function renderMapNav() {
   const nav = document.getElementById('mapnav');
   if (!nav) return;
   const g = V.graph;
-  if (V.mode !== 'server' || !g) { nav.classList.remove('show'); return; }
+  if (!g) { nav.classList.remove('show'); return; }
   const pad = function(n){ return String(n).padStart(3,'0'); };
   const esc = function(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
   const chip = function(id, name){
@@ -397,60 +246,10 @@ function renderMapNav() {
 (function init() {
   const m = D.meta;
   document.title = 'Palette Inspector — Map' + String(m.map_id).padStart(3,'0');
-  if (V.mode === 'server') {
-    const nav = document.getElementById('nav-map');
-    nav.href = '/map/' + m.map_id;
-    nav.style.display = '';
-  }
+  const nav = document.getElementById('nav-map');
+  nav.href = '/map/' + m.map_id;
+  nav.style.display = '';
   renderMapNav();
   renderAll();
 })();
 /*KNOBBAR_JS*/
-</script>
-</body>
-</html>
-"""
-
-# Inject the shared knob-panel JS (server-mode only; hides itself in static exports).
-PALETTE_VIEWER_HTML = PALETTE_VIEWER_HTML.replace("/*KNOBBAR_JS*/", KNOBBAR_JS)
-
-
-def build_palette_html(map_id: int) -> str:
-    """Build a self-contained palette inspector HTML page for the given map.
-
-    Calls build_config(map_id) from build_map_viewer (shared config + inline images),
-    then injects the result into PALETTE_VIEWER_HTML.
-    """
-    config = build_config(map_id)
-    config_json = json.dumps(config, separators=(",", ":"))
-    return PALETTE_VIEWER_HTML.replace("__VIEWER_CONFIG__", config_json)
-
-
-def main() -> None:
-    from map_viewer_common import _load_dotenv, _output_base  # noqa: E402
-
-    _load_dotenv()
-
-    ap = argparse.ArgumentParser(
-        description="Build a self-contained palette inspector HTML page for a Uranium map.",
-    )
-    ap.add_argument("map_id", type=int, metavar="MAP_ID", help="Map ID (e.g. 32)")
-    ap.add_argument("--out", default=None, help="Output path (default: output/map_viewer/MapNNN_palettes.html)")
-    args = ap.parse_args()
-
-    html = build_palette_html(args.map_id)
-
-    if args.out:
-        out_path = Path(args.out)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-    else:
-        out_dir = _output_base() / "map_viewer"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / f"Map{args.map_id:03d}_palettes.html"
-
-    out_path.write_text(html, encoding="utf-8")
-    print(f"Written: {out_path}  ({len(html.encode('utf-8')) // 1024} KB)")
-
-
-if __name__ == "__main__":
-    main()

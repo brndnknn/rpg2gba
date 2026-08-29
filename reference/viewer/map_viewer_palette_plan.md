@@ -2,6 +2,9 @@
 
 > Resume doc. Mirrors the approved plan at `~/.claude/plans/i-want-to-add-mutable-minsky.md`.
 > Status: approved, implementation not yet started. Built under `/delegate` (delegation-first) mode.
+> **Superseded paths (2026-08-28):** `scripts/build_map_viewer.py` and the static
+> build were removed; the viewer is server-only and its assets live under
+> `scripts/map_viewer/`. Keep reading for the palette-view design intent only.
 
 ## Context
 

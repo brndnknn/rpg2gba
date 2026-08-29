@@ -1,0 +1,141 @@
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#1a1a1a;color:#ddd;font:12px/1.4 monospace;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+#toolbar{background:#252525;border-bottom:1px solid #444;padding:4px 8px;display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;flex-shrink:0}
+#toolbar label{cursor:pointer;user-select:none;display:flex;align-items:center;gap:3px}
+#toolbar input[type=radio]{accent-color:#5af}
+#toolbar input[type=checkbox]{accent-color:#fa5}
+.sep{width:1px;background:#555;height:20px;margin:0 2px;flex-shrink:0}
+.btn{background:#333;border:1px solid #555;color:#ddd;padding:2px 8px;cursor:pointer;font:11px monospace;border-radius:2px}
+.btn:hover{background:#444}
+/* ---- map nav strip ---- */
+#mapnav{display:none;background:#1c1c1c;border-bottom:1px solid #383838;padding:4px 8px;gap:6px;align-items:center;overflow-x:auto;white-space:nowrap;flex-shrink:0;font-size:11px}
+#mapnav.show{display:flex}
+#knobbar{display:none;flex-wrap:wrap;gap:4px 10px;align-items:center;background:#1f241f;border-bottom:1px solid #3a463a;padding:4px 8px;flex-shrink:0;font-size:11px}
+#knobbar label{color:#9a9;display:flex;align-items:center;gap:3px}
+#knobbar input,#knobbar select{background:#222;color:#dfe;border:1px solid #4a5a4a;font:11px monospace;padding:2px 3px;border-radius:2px}
+#knobbar input[type=number]{width:52px}
+#knobbar #k_apply{background:#2c3a2c;border-color:#5a7a5a;color:#cfe}
+#knobbar #k_status{color:#fa0}
+#mapnav .navcur{color:#8cf;font-weight:bold;flex-shrink:0}
+#mapnav .navgrp{color:#777;flex-shrink:0;margin-left:2px}
+#mapnav .navchip{display:inline-block;background:#2a2a2a;border:1px solid #4a4a4a;color:#bcd;text-decoration:none;padding:1px 7px;border-radius:10px;flex-shrink:0}
+#mapnav .navchip:hover{background:#33414e;border-color:#5af;color:#cfe}
+#mapnav .navchip.home{background:#243d2e;border-color:#475}
+#mapnav .navsep{width:1px;height:16px;background:#444;flex-shrink:0;margin:0 2px}
+#main{display:flex;flex:1;min-height:0;position:relative}
+#canvas-wrap{flex:1;position:relative;overflow:hidden;background:#111}
+canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;width:100%;height:100%}
+#sidebar{width:300px;background:#1e1e1e;border-left:1px solid #444;overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column;transition:transform .2s}
+#sidebar-toggle{display:none}
+#cell-info{padding:8px;flex:1;overflow-y:auto}
+#feedback-panel{background:#1a1810;border-top:1px solid #554;padding:8px;flex-shrink:0}
+#merge-panel{background:#1a1018;border-top:1px solid #534;padding:6px 8px;flex-shrink:0;display:none}
+/* Quant/graphics-debug controls are collapsed by default; the Advanced toggle adds
+   `adv` to <body> to reveal the knob bar, the debug overlays, the palette link and
+   the worst-merges panel.  The core feedback UI is always visible. */
+#adv-controls{display:none;align-items:center;gap:4px 6px;flex-wrap:wrap}
+body.adv #adv-controls{display:flex}
+body.adv #merge-panel{display:block}
+body.adv #knobbar{display:flex}
+#btn-advanced.on{background:#3a2c3a;border-color:#7a5a7a;color:#ecf}
+/* Always-visible (not Advanced-gated) warning: the live quantization knobs differ
+   from stock (FamilyParams() defaults, max_palettes==13), so this render is NOT
+   a faithful ROM preview even with the knob bar hidden. */
+#nonstock-badge{display:none;color:#fc8;background:#3a2a10;border:1px solid #764;border-radius:3px;padding:2px 7px;font-size:11px;font-weight:bold}
+#nonstock-badge.show{display:inline-block}
+/* ---- mode switch (Graphics | Events) ---- */
+#mode-switch{display:flex;border:1px solid #555;border-radius:3px;overflow:hidden;flex-shrink:0}
+#mode-switch button{background:#2a2a2a;border:none;color:#aaa;padding:3px 10px;cursor:pointer;font:11px monospace}
+#mode-switch button.on{background:#2c3a4a;color:#9cf}
+#mode-switch button+button{border-left:1px solid #555}
+/* graphics-debug chrome (quantize view radios, Advanced + its panel, knobbar,
+   non-stock badge) is Graphics-mode only; the event chrome is Events-mode only.
+   One renderer either way -- this is purely which toolbar/sidebar bits show. */
+body.mode-events #graphics-chrome{display:none}
+body.mode-graphics #events-chrome{display:none}
+body.mode-events #knobbar{display:none !important}
+body.mode-events #adv-controls{display:none !important}
+body.mode-events #merge-panel{display:none !important}
+body.mode-events #nonstock-badge{display:none !important}
+#graphics-chrome{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center}
+#events-chrome{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center}
+#legend{display:none;flex-wrap:wrap;gap:4px 10px;align-items:center;background:#1c2020;border-bottom:1px solid #333;padding:3px 8px;font-size:10px;flex-shrink:0}
+body.mode-events #legend.show{display:flex}
+.legend-sw{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:3px;vertical-align:middle}
+.legend-shape{display:inline-block;width:9px;height:9px;margin-right:3px;vertical-align:middle}
+/* ---- event/beat sidebar sections: Events mode only ---- */
+#event-inspector,#beat-panel{display:none}
+body.mode-events #event-inspector{display:block}
+body.mode-events #beat-panel{display:block}
+#event-inspector{padding:8px;border-top:1px solid #333}
+#beat-panel{padding:8px;border-top:1px solid #333}
+.evt-kind-badge{display:inline-block;padding:0 5px;border-radius:8px;font-size:10px;font-weight:bold;color:#111}
+.evt-cond-badge{display:inline-block;color:#fc0;font-weight:bold;margin-left:4px}
+.evt-staged-yes{color:#6f6;font-weight:bold}
+.evt-staged-no{color:#f66;font-weight:bold}
+.beat-row{padding:3px 4px;margin:2px 0;font-size:11px;cursor:pointer;border-left:3px solid #555;background:#1a1a22}
+.beat-row:hover{background:#242433}
+.beat-chapter{color:#8cf;font-weight:bold;font-size:10px;text-transform:uppercase;margin:6px 0 2px}
+.beat-status-pass{border-left-color:#2ca02c}
+.beat-status-fail{border-left-color:#d55e00}
+.beat-status-flake{border-left-color:#cc79a7}
+.beat-status-skipped{border-left-color:#888}
+.evt-cmd-block{background:#151515;border:1px solid #333;padding:4px;margin-top:3px;max-height:160px;overflow-y:auto;font-size:10px;white-space:pre-wrap}
+#merge-list{margin-top:4px;max-height:200px;overflow-y:auto}
+.merge-item{display:flex;align-items:center;gap:6px;background:#251820;border:1px solid #534;padding:2px 5px;margin:2px 0;font-size:11px;cursor:pointer}
+.merge-item:hover{background:#3a2433}
+#statusbar{background:#111;border-top:1px solid #333;padding:2px 8px;font-size:11px;color:#999;flex-shrink:0;height:22px;white-space:nowrap;overflow:hidden}
+.section-title{color:#5af;font-weight:bold;margin:6px 0 3px;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+.layer-row{display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #2a2a2a}
+.thumb{width:32px;height:32px;image-rendering:pixelated;border:1px solid #444;background:#000;flex-shrink:0}
+.thumb-pair{display:flex;gap:4px}
+.lbl{color:#888;font-size:11px}
+.val{color:#eee}
+.mismatch{color:#f66;font-weight:bold}
+.match{color:#6f6}
+.blocked{color:#f55}
+.passable{color:#5d5}
+#flag-list{margin-top:6px;max-height:150px;overflow-y:auto}
+.flag-item{background:#252018;border:1px solid #554;padding:3px 5px;margin:2px 0;font-size:11px;cursor:pointer}
+.flag-item:hover{background:#33291a}
+.flag-item.editing{border-color:#fa0;background:#332a12}
+.flag-del{color:#f55;cursor:pointer;float:right;padding:0 2px}
+.flag-cells{color:#8cf}
+#sel-summary{margin:2px 0;font-size:11px}
+#sel-count{color:#fa0;font-weight:bold}
+#note-text{width:100%;height:50px;background:#222;color:#eee;border:1px solid #555;font:11px monospace;padding:3px;resize:vertical;margin-top:4px}
+#feedback-panel .btn{margin:2px 3px 2px 0}
+#feedback-panel .btn:disabled{opacity:.4;cursor:default}
+/* ---- palette / swatch display ---- */
+.swatch{display:inline-block;width:14px;height:14px;border:1px solid #555;vertical-align:middle;cursor:default;margin:1px;flex-shrink:0}
+.swatch-checker{background-image:repeating-conic-gradient(#777 0% 25%,#bbb 0% 50%);background-size:8px 8px}
+.pal-strip{display:flex;flex-wrap:wrap;align-items:center;gap:1px;margin:2px 0}
+.pal-label{color:#888;font-size:10px;margin-right:4px;white-space:nowrap}
+.cc-row{display:flex;align-items:center;gap:4px;padding:2px 0;font-size:10px;border-bottom:1px solid #222}
+.cc-row.changed .swatch{outline:2px solid #fa0}
+.cc-arrow{color:#666}
+.cc-tag-same{color:#556}
+.cc-tag-changed{color:#fa0}
+.qfit{font-size:10px;padding:1px 5px;margin:1px 0;border-left:3px solid #555;background:#222}
+.qfit-ok{border-left-color:#4a4;color:#9c9}
+.qfit-warn{border-left-color:#fa0;color:#fc8}
+.qfit-bad{border-left-color:#f44;color:#f99}
+.qfit-ok-txt{color:#6d6}
+.qfit-bad-txt{color:#f77;font-weight:bold}
+/* ---- responsive: narrow viewport ---- */
+@media (max-width:720px){
+  body{height:100dvh}
+  #main{flex-direction:column}
+  #sidebar{position:fixed;bottom:0;left:0;right:0;z-index:10;width:auto;max-height:55vh;border-left:none;border-top:2px solid #5af;transform:translateY(100%)}
+  #sidebar.open{transform:translateY(0)}
+  #sidebar-toggle{display:flex;align-items:center;justify-content:center;position:fixed;bottom:14px;right:14px;z-index:20;min-width:44px;min-height:44px;padding:0 14px;background:#2a2a2a;border:1px solid #555;border-radius:22px;color:#ddd;font:12px monospace;cursor:pointer}
+  #toolbar label{min-height:32px}
+  .btn{min-height:32px;padding:4px 10px}
+  .sep{height:28px}
+  #mapnav{gap:8px;padding:6px 8px}
+  #mapnav .navchip{min-height:32px;padding:6px 12px;display:flex;align-items:center}
+  #mapnav .navsep{height:24px}
+  #mode-switch button{min-height:32px;padding:4px 12px}
+  #legend{font-size:9px;padding:4px 6px}
+  #events-chrome select{min-height:30px}
+}

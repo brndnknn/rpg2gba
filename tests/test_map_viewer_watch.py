@@ -206,3 +206,13 @@ def test_watched_files_ignores_non_py_and_no_file_modules(tmp_path: Path) -> Non
         del sys.modules["_fake_no_file_mod_for_test"]
 
     assert data_file.resolve() not in watched
+
+
+def test_watched_files_includes_web_assets() -> None:
+    """The map_viewer/ web assets (.html/.css/.js) are not Python modules, so
+    they'd never enter the sys.modules-derived watch set -- _watched_files adds
+    them explicitly so editing viewer.css/js triggers the server restart."""
+    scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+    watched = _watched_files(scripts_dir)
+    assets = {p.name for p in watched if p.parent.name == "map_viewer"}
+    assert {"viewer.html", "viewer.css", "viewer.js", "knobbar.js"} <= assets

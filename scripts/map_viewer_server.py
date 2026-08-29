@@ -42,6 +42,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from map_graph import build_index, component_layout, map_relationships  # noqa: E402
 from map_viewer_common import (  # noqa: E402
     MAP_VIEWER_HTML,
+    PALETTE_VIEWER_HTML,
     _load_dotenv,
     build_map_data,
     current_quantize_state,
@@ -55,7 +56,6 @@ from map_viewer_common import (  # noqa: E402
     save_feedback,
     set_quantize_params,
 )
-from palette_page import PALETTE_VIEWER_HTML  # noqa: E402
 
 # map_viewer_events is a sibling module owned by another agent; it may not
 # exist on disk yet or may be mid-edit.  Import it defensively so a missing
@@ -352,7 +352,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _serve_map_page(self, map_id: int) -> None:
         data = build_map_data(map_id)
-        config = {"mode": "server", "data": data, "graph": map_relationships(map_id),
+        config = {"data": data, "graph": map_relationships(map_id),
                   "quant": get_quantize_params()}
         config_json = json.dumps(config, separators=(",", ":"))
         html = MAP_VIEWER_HTML.replace("__VIEWER_CONFIG__", config_json)
@@ -372,7 +372,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         data = build_map_data(map_id)
-        config = {"mode": "server", "data": data, "graph": map_relationships(map_id),
+        config = {"data": data, "graph": map_relationships(map_id),
                   "quant": get_quantize_params(), "component": layout}
         config_json = json.dumps(config, separators=(",", ":"))
         html = MAP_VIEWER_HTML.replace("__VIEWER_CONFIG__", config_json)
@@ -380,7 +380,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _serve_palette_page(self, map_id: int) -> None:
         data = build_map_data(map_id)
-        config = {"mode": "server", "data": data, "graph": map_relationships(map_id),
+        config = {"data": data, "graph": map_relationships(map_id),
                   "quant": get_quantize_params()}
         config_json = json.dumps(config, separators=(",", ":"))
         html = PALETTE_VIEWER_HTML.replace("__VIEWER_CONFIG__", config_json)
@@ -444,13 +444,19 @@ _BIND_RETRY_DELAY = 0.25
 
 def _watched_files(root: Path) -> list[Path]:
     """Resolved paths of every currently-imported module's source file that
-    lives under `root`, excluding .venv/venv/__pycache__ path components.
+    lives under `root`, excluding .venv/venv/__pycache__ path components, plus
+    the web-asset files under scripts/map_viewer/ (not Python, so not in
+    sys.modules -- editing viewer.css/js should still trigger a restart).
 
     Re-derived fresh on every poll (see module docstring above) rather than
     cached, so lazily-imported modules join the watch set on a later cycle.
     """
     root = root.resolve()
     out: list[Path] = []
+    asset_dir = Path(__file__).resolve().parent / "map_viewer"
+    for asset in sorted(asset_dir.glob("*")):
+        if asset.is_file():
+            out.append(asset)
     for module in list(sys.modules.values()):
         file = getattr(module, "__file__", None)
         if not file:
