@@ -16,14 +16,14 @@ def render_review(rows: list[ManifestRow], dispositions: dict[str, Disposition])
     """Render `rows`/`dispositions` as a Markdown review document.
 
     `cosmetic` rows collapse to a count plus a compact one-line-each list.
-    Everything else — `beat`, `deferred`, `unreachable`, undispositioned,
+    Everything else — `beat`, `blocked`, `unreachable`, undispositioned,
     and any row where `needs_citation` is True (even if disposed cosmetic-
     adjacent) — is expanded with its condition, effect tags, requirements,
     unhandled count, and (for seams) endpoints/offsets.
     """
     lines: list[str] = []
     rows_by_disposition: dict[str, list[ManifestRow]] = {
-        "beat": [], "deferred": [], "cosmetic": [], "unreachable": [], "undispositioned": [],
+        "beat": [], "blocked": [], "cosmetic": [], "unreachable": [], "undispositioned": [],
     }
     citation_owed: list[ManifestRow] = []
 
@@ -38,7 +38,7 @@ def render_review(rows: list[ManifestRow], dispositions: dict[str, Disposition])
     lines.append("# Chapter manifest review")
     lines.append("")
     lines.append(f"- total rows: {total}")
-    for verdict in ("beat", "deferred", "cosmetic", "unreachable"):
+    for verdict in ("beat", "blocked", "cosmetic", "unreachable"):
         lines.append(f"- {verdict}: {len(rows_by_disposition.get(verdict, []))}")
     lines.append(f"- undispositioned: {len(rows_by_disposition.get('undispositioned', []))}")
     lines.append(f"- citation owed: {len(citation_owed)}")
@@ -56,7 +56,7 @@ def render_review(rows: list[ManifestRow], dispositions: dict[str, Disposition])
 
     for verdict, heading in (
         ("beat", "Beats"),
-        ("deferred", "Deferred"),
+        ("blocked", "Blocked"),
         ("unreachable", "Unreachable"),
         ("undispositioned", "Undispositioned"),
     ):
@@ -74,7 +74,7 @@ def render_review(rows: list[ManifestRow], dispositions: dict[str, Disposition])
     lines.append(f"## Citation owed ({len(citation_owed)})")
     lines.append("")
     if citation_owed:
-        # Rows already expanded above (beat/deferred/unreachable/undispositioned)
+        # Rows already expanded above (beat/blocked/unreachable/undispositioned)
         # are not repeated in full; only rows that would otherwise have been
         # collapsed (cosmetic, or missing a disposition) are shown here in full.
         for row in citation_owed:
@@ -102,6 +102,10 @@ def _render_expanded(row: ManifestRow, disp: Disposition | None) -> list[str]:
         out.append(f"- disposition: `{disp.spec}`")
         if disp.source:
             out.append(f"- source: {disp.source}")
+        if disp.assertable is not None:
+            out.append(f"- assertable: {disp.assertable}")
+        if disp.negative_beat:
+            out.append(f"- negative beat: {disp.negative_beat}")
         if disp.note:
             out.append(f"- note: {disp.note}")
     else:

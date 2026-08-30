@@ -728,6 +728,67 @@ owed a re-triage from `deferred` to `unreachable`. Operator decision
 reaches the frontier, rather than minting a revisit chapter now. B26's
 re-triage is the one piece actionable immediately, independent of CH25.
 
+### 63. CH04 owes two negative beats — `map035/ev014/p1` and `map035/ev017/p1`
+
+Surfaced by slice 2's new `blocked_missed_assertion` checker rule, which is the
+first thing in the repo able to see this class at all. Both rows are the
+*cleared* pages of the two Route 2 boulders whose approach the player can already
+reach unaided, so a negative beat is writable today: walk up, press A, assert the
+refusal. `ev014/p0` and `ev017/p0` already carry `negative_beat: "B6"`; their p1
+siblings carry none.
+
+Not urgent and not a defect — CH04 passed its §9 gate and the rule is explicitly a
+missed-opportunity warning, not an error. Right time to spend it is CH07A, the
+Rock Smash revisit that walks map 35 again. Until then `check --chapter CH04`
+reports 2 warnings of this kind by design; do not silence them.
+
+### 64. `CapabilityModel.grants_capability` is the wrong signature — 28 warnings standing
+
+`check --chapter CH04` emits 28 `capability_model_unenforced` warnings because no
+capability model is supplied, and none can honestly be written against the current
+Protocol. `grants_capability(name) -> chapter_id | None` assumes a capability is a
+boolean granted by exactly one chapter. The Part 4c census
+(`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md`, "AMENDED 2026-08-27") found otherwise:
+capabilities are **predicates over player state**, and Uranium grants every field
+move by **two disjoint routes** — `rock_smash` is `numbadges >= 1 AND (knows
+ROCKSMASH OR holds BOXINGGLOVES)`, and the same move-or-gadget shape holds for
+strength/`POWERGLOVE`, surf/`SURFBOARD`, dive/`SCUBAGEAR`, waterfall/`CLIMBINGPICK`,
+with all five gadgets granted from one event (Map167/ev28) on a badge-count ladder
+at a different point in the game than the HMs.
+
+Some gates are also not derivable at all: `old_rod` sits behind `var[103] >= 5`,
+and variable 103 is named "Battle Var01" — the only artifact stating what it means
+is the dialogue text, so a name-keyed classifier misses it *confidently*. The
+redesigned model must therefore accept hand annotation.
+
+Deliberately left standing rather than papered over with a model that would answer
+confidently and wrongly. The sibling rule `approach_model_unenforced` is now down
+to 1 row (the seam, which has no event cell) because that half **was** derivable —
+see `chapter_manifest/approach_model.py`.
+
+### 65. CH01–CH03 manifests no longer load — `reachability_consulted` is a required field
+
+Slice 2 added `ManifestRow.reachability_consulted: bool` (`chapter_manifest/schema.py`),
+and `row_from_dict` does a strict field-set equality check by design — a missing key
+fails loud with "regenerate the manifest rather than patching it". CH04 was regenerated
+as part of the slice; `CH01.manifest.json`, `CH02.manifest.json` and `CH03.manifest.json`
+were not, so any `chapter_manifest` command pointed at those three (`check`, `render`,
+load) now hard-fails on the first row.
+
+The same break applies on the disposition side: the `deferred:` verdict and the
+geography-flavoured `unreachable:<reason>` arguments were removed from `_VERDICTS` in
+favour of `blocked:<set>`, so an un-migrated dispositions file fails `Disposition.parse`.
+Only CH04 has a dispositions file today, and it was hand-migrated.
+
+This is the intended fail-loud shape, not a defect — but it is an unacknowledged schema
+break on three gate-closed chapters, and a bystander running `check --chapter CH02` gets
+a crash with no other clue. **Remediation:** regenerate CH01–CH03 manifests once the
+per-(chapter,map) verified start cells exist for their maps (`_CHAPTER_MAP_START_CELLS`
+in `generator.py` currently covers CH04 only), and diff the result before committing —
+regenerating a gate-closed chapter's manifest is not a no-op edit.
+
+*Found 2026-08-30 during the slice-2 commit review.*
+
 ## Parked until the CH05 branch is cut (do not raise before then)
 
 These are real, tracked work items, scoped entirely to CH05. They are not open

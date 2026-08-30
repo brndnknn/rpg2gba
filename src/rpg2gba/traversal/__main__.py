@@ -16,8 +16,19 @@ from pathlib import Path
 import click
 
 from . import collision
+from .capabilities import (
+    VERIFIED_CAPABILITIES,
+    Capability,
+    build_capability_map,
+)
 from .graph import Cell, MapGraph, build_map_graph
 from .ledges import DEFAULT_TERRAIN_TAG_MAP
+from .reachability import derive_blocked_verdict, derive_blocked_verdict_for_event
+from .triggers import (
+    DEFAULT_ENGINE_MAPS_DIR,
+    DEFAULT_MAP_CONSTANTS_JSON,
+    build_trigger_overlay,
+)
 from .world import (
     DEFAULT_CONNECTIONS_JSON,
     DEFAULT_MAP_INFOS_JSON,
@@ -191,6 +202,209 @@ def reachable_cmd(
     click.echo(f"{len(reach)} reachable cell(s) from {start} on map {map_id}")
     for cell in sorted(reach):
         click.echo(f"  {cell[0]},{cell[1]}")
+
+
+@cli.command("triggers")
+@_MAP_OPTION
+@_MAPS_DIR_OPTION
+@_TILESETS_OPTION
+@_TERRAIN_TAG_OPTION
+@click.option(
+    "--map-constants-json", type=click.Path(exists=True, path_type=Path),
+    default=DEFAULT_MAP_CONSTANTS_JSON,
+    help="Decoded map-constants oracle (default: output/uranium-build/porymap/map_constants.json)",
+)
+@click.option(
+    "--engine-maps-dir", type=click.Path(exists=True, path_type=Path),
+    default=DEFAULT_ENGINE_MAPS_DIR,
+    help="Emitted pokeemerald maps directory (default: engine/data/maps)",
+)
+@click.option(
+    "--json", "as_json", is_flag=True, help="Emit machine-readable JSON instead of a table.",
+)
+def triggers_cmd(
+    map_id: int, maps_dir: Path, tilesets_json: Path, terrain_tag_map: Path | None,
+    map_constants_json: Path, engine_maps_dir: Path, as_json: bool,
+) -> None:
+    """Dump one map's trigger overlay: which tiles fire which event, and how certainly."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    graph = _build(map_id, maps_dir, tilesets_json, terrain_tag_map)
+    overlay = build_trigger_overlay(
+        map_id, graph=graph, map_constants_json=map_constants_json, engine_maps_dir=engine_maps_dir,
+    )
+
+    if as_json:
+        payload = {
+            "map_id": overlay.map_id,
+            "tiles": {
+                f"{x},{y}": [
+                    {
+                        "kind": ref.kind.value,
+                        "script": ref.script,
+                        "certainty": ref.certainty.value,
+                        "owner_xy": f"{ref.owner_xy[0]},{ref.owner_xy[1]}" if ref.owner_xy else None,
+                        "detail": ref.detail,
+                    }
+                    for ref in refs
+                ]
+                for (x, y), refs in sorted(overlay.tiles.items())
+            },
+        }
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    click.echo(
+        f"map {overlay.map_id}  {len(overlay.tiles)} trigger tile(s)  "
+        f"({len(overlay.certain_tiles())} certain, {len(overlay.possible_tiles())} possible)"
+    )
+    click.echo()
+    for (x, y), refs in sorted(overlay.tiles.items()):
+        for ref in refs:
+            owner = f"  owner={ref.owner_xy[0]},{ref.owner_xy[1]}" if ref.owner_xy else ""
+            click.echo(
+                f"  {x},{y}  {ref.kind.value:<13} {ref.certainty.value:<8} "
+                f"{ref.script}{owner}  ({ref.detail})"
+            )
+
+
+@cli.command("capabilities")
+@_MAP_OPTION
+@_MAPS_DIR_OPTION
+@_TILESETS_OPTION
+@click.option(
+    "--capability", "capability_names", multiple=True,
+    type=click.Choice(sorted(c.value for c in VERIFIED_CAPABILITIES)),
+    help="Restrict to these capabilities (default: all verified capabilities).",
+)
+@click.option(
+    "--json", "as_json", is_flag=True, help="Emit machine-readable JSON instead of a table.",
+)
+def capabilities_cmd(
+    map_id: int, maps_dir: Path, tilesets_json: Path, capability_names: tuple[str, ...],
+    as_json: bool,
+) -> None:
+    """Dump one map's capability-tagged obstacle cells (rocks, boulders, water, waterfalls)."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    capabilities = (
+        frozenset(Capability(name) for name in capability_names) if capability_names else None
+    )
+    cap_map = build_capability_map(
+        map_id, maps_dir=maps_dir, tilesets_json=tilesets_json, capabilities=capabilities,
+    )
+
+    if as_json:
+        payload = {
+            "map_id": cap_map.map_id,
+            "obstacles": {
+                f"{x},{y}": {
+                    "capability": obstacle.capability.value,
+                    "source": obstacle.source,
+                    "detail": obstacle.detail,
+                    "event_id": obstacle.event_id,
+                }
+                for (x, y), obstacle in sorted(cap_map.obstacles.items())
+            },
+        }
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    click.echo(f"map {cap_map.map_id}  {len(cap_map.obstacles)} obstacle cell(s)")
+    for cap in sorted(cap_map.capabilities_present(), key=lambda c: c.value):
+        click.echo(f"  {cap.value}: {len(cap_map.cells_for(cap))} cell(s)")
+    click.echo()
+    for (x, y), obstacle in sorted(cap_map.obstacles.items()):
+        click.echo(
+            f"  {x},{y}  {obstacle.capability.value:<10} {obstacle.source:<8} {obstacle.detail}"
+        )
+
+
+@cli.command("blocked")
+@_MAP_OPTION
+@_MAPS_DIR_OPTION
+@_TILESETS_OPTION
+@_TERRAIN_TAG_OPTION
+@click.option("--from", "start_str", required=True, help="Start cell, 'x,y'.")
+@click.option(
+    "--to", "goal_strs", multiple=True,
+    help="Target cell, 'x,y' -- goal is the cell itself. Repeatable.",
+)
+@click.option(
+    "--event", "event_ids", type=int, multiple=True,
+    help="Target event id -- goal is any cell orthogonally adjacent to the event's spawn "
+    "tile (an event is interacted with, never stood on). Repeatable.",
+)
+@click.option(
+    "--capability", "capability_names", multiple=True,
+    type=click.Choice(sorted(c.value for c in VERIFIED_CAPABILITIES)),
+    help="Restrict candidate capabilities considered (default: all verified capabilities).",
+)
+@click.option(
+    "--json", "as_json", is_flag=True, help="Emit machine-readable JSON instead of one line per target.",
+)
+def blocked_cmd(
+    map_id: int, maps_dir: Path, tilesets_json: Path, terrain_tag_map: Path | None,
+    start_str: str, goal_strs: tuple[str, ...], event_ids: tuple[int, ...],
+    capability_names: tuple[str, ...], as_json: bool,
+) -> None:
+    """Derive the blocked:<capability set> verdict for one or more targets on a map."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    if not goal_strs and not event_ids:
+        raise click.UsageError("at least one --to or --event is required")
+
+    graph = _build(map_id, maps_dir, tilesets_json, terrain_tag_map)
+    capability_map = build_capability_map(map_id, maps_dir=maps_dir, tilesets_json=tilesets_json)
+    start = _cell(start_str)
+    candidates = frozenset(Capability(name) for name in capability_names) if capability_names else None
+
+    targets: list[tuple[str, Cell, bool]] = []
+    for goal_str in goal_strs:
+        targets.append((goal_str, _cell(goal_str), False))
+    if event_ids:
+        map_json = collision.load_map_json(map_id, maps_dir)
+        events_by_id = {e["id"]: e for e in map_json.get("events", [])}
+        for event_id in event_ids:
+            event = events_by_id.get(event_id)
+            if event is None:
+                raise click.BadParameter(
+                    f"map {map_id} has no event id {event_id}", param_hint="--event",
+                )
+            targets.append((f"event {event_id}", (event["x"], event["y"]), True))
+
+    any_unreachable = False
+    results = []
+    for label, cell, is_event in targets:
+        verdict = (
+            derive_blocked_verdict_for_event(graph, capability_map, start, cell, candidates=candidates)
+            if is_event
+            else derive_blocked_verdict(graph, capability_map, start, cell, candidates=candidates)
+        )
+        results.append((label, cell, verdict))
+        if verdict.as_disposition() == "unreachable:geography":
+            any_unreachable = True
+
+    if as_json:
+        payload = {
+            "map_id": map_id,
+            "start": f"{start[0]},{start[1]}",
+            "results": [
+                {
+                    "target": label,
+                    "cell": f"{cell[0]},{cell[1]}",
+                    "reachable_now": verdict.reachable_now,
+                    "disposition": verdict.as_disposition(),
+                    "minimal_sets": [sorted(c.value for c in s) for s in verdict.minimal_sets],
+                }
+                for label, cell, verdict in results
+            ],
+        }
+        click.echo(json.dumps(payload, indent=2))
+    else:
+        for label, cell, verdict in results:
+            disposition = verdict.as_disposition() or "reachable"
+            click.echo(f"  {label} ({cell[0]},{cell[1]}): {disposition}")
+
+    if any_unreachable:
+        raise SystemExit(1)
 
 
 def _edge_json(e: WorldEdge) -> dict:

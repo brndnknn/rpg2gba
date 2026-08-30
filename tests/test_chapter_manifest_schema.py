@@ -172,7 +172,9 @@ def test_structurally_determined_row_owes_no_citation() -> None:
     [
         ("cosmetic", "cosmetic", None),
         ("beat:B12", "beat", "B12"),
-        ("deferred:rock_smash", "deferred", "rock_smash"),
+        ("blocked:rock_smash", "blocked", "rock_smash"),
+        ("blocked:rock_smash|strength", "blocked", "rock_smash|strength"),
+        ("blocked:tooling:emulator_set_flag", "blocked", "tooling:emulator_set_flag"),
         ("unreachable:dev-only flag sw130", "unreachable", "dev-only flag sw130"),
     ],
 )
@@ -187,9 +189,52 @@ def test_disposition_rejects_unknown_verdict() -> None:
         Disposition.parse("row", "probably-fine")
 
 
-def test_deferred_requires_a_capability() -> None:
+def test_blocked_requires_a_capability() -> None:
     with pytest.raises(DispositionError, match="requires an argument"):
-        Disposition.parse("row", "deferred")
+        Disposition.parse("row", "blocked")
+
+
+def test_blocked_rejects_unsorted_capability_set() -> None:
+    with pytest.raises(DispositionError, match="sorted ascending"):
+        Disposition.parse("row", "blocked:strength|rock_smash")
+
+
+def test_blocked_rejects_duplicate_capability() -> None:
+    with pytest.raises(DispositionError, match="sorted ascending"):
+        Disposition.parse("row", "blocked:rock_smash|rock_smash")
+
+
+def test_blocked_rejects_malformed_argument() -> None:
+    with pytest.raises(DispositionError, match="not a valid 'blocked:' argument"):
+        Disposition.parse("row", "blocked:Rock Smash")
+
+
+def test_assertable_only_applies_to_blocked() -> None:
+    with pytest.raises(DispositionError, match="only applies to verdict 'blocked'"):
+        Disposition(row_id="row", verdict="beat", argument="B1", assertable=True)
+
+
+def test_negative_beat_requires_assertable_true() -> None:
+    with pytest.raises(DispositionError, match="requires assertable=True"):
+        Disposition(row_id="row", verdict="blocked", argument="rock_smash", negative_beat="B6")
+
+
+def test_negative_beat_must_look_like_a_beat_label() -> None:
+    with pytest.raises(DispositionError, match="not a beat name"):
+        Disposition(
+            row_id="row", verdict="blocked", argument="rock_smash",
+            assertable=True, negative_beat="the boulder one",
+        )
+
+
+def test_blocked_row_with_assertable_and_negative_beat_round_trips() -> None:
+    disp = Disposition(
+        row_id="row", verdict="blocked", argument="rock_smash",
+        assertable=True, negative_beat="B6",
+    )
+    assert disp.spec == "blocked:rock_smash"
+    assert disp.assertable is True
+    assert disp.negative_beat == "B6"
 
 
 def test_cosmetic_takes_no_argument() -> None:
@@ -205,3 +250,19 @@ def test_beat_argument_must_look_like_a_beat_label() -> None:
 def test_row_ids_are_stable_and_zero_padded() -> None:
     assert page_row_id(35, 3, 1) == "map035/ev003/p1"
     assert seam_row_id(35, "n", 40) == "map035/seam/N/map040"
+
+
+def test_reachability_consulted_defaults_false() -> None:
+    """Conservative default: a row built without saying so is treated as
+    "the reachability source was never asked about this map" (CLAUDE.md
+    §4.5 -- absence of evidence is not evidence of absence)."""
+    row = ManifestRow(row_id="x", kind="page", map_id=1, content_hash="0")
+    assert row.reachability_consulted is False
+
+
+def test_reachability_consulted_round_trips() -> None:
+    row = ManifestRow(
+        row_id="x", kind="page", map_id=1, content_hash="0",
+        reachability_consulted=True,
+    )
+    assert row_from_dict(row_to_dict(row)) == row

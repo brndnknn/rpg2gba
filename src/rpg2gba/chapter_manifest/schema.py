@@ -87,14 +87,64 @@ COSMETIC_SAFE_TAGS: frozenset[str] = frozenset({
 
 STATE_WRITING_TAGS: frozenset[str] = EFFECT_TAGS - COSMETIC_SAFE_TAGS
 
-Verdict = Literal["beat", "deferred", "cosmetic", "unreachable"]
-_VERDICTS: frozenset[str] = frozenset({"beat", "deferred", "cosmetic", "unreachable"})
+Verdict = Literal["beat", "blocked", "cosmetic", "unreachable"]
+_VERDICTS: frozenset[str] = frozenset({"beat", "blocked", "cosmetic", "unreachable"})
 
 # Verdicts whose argument is mandatory. `cosmetic` takes none; `beat` names the
-# beat, `deferred` the capability that unblocks it, `unreachable` the reason.
-_ARGUMENT_REQUIRED: frozenset[str] = frozenset({"beat", "deferred", "unreachable"})
+# beat, `blocked` the capability set (or tooling primitive) that unblocks it,
+# `unreachable` the reason.
+#
+# `deferred` and geography-flavoured `unreachable:<reason>` collapsed into
+# `blocked:<capability set>` (PLAYTEST_AUTHORING_IMPROVEMENT_V2.md Q3, DECIDED
+# 2026-08-27): it answers exactly one question, what unblocks this row.
+# `unreachable` survives, narrowed to content no chapter will ever reach (cut
+# content, dead pages) -- it is no longer a synonym for "blocked and I gave up".
+_ARGUMENT_REQUIRED: frozenset[str] = frozenset({"beat", "blocked", "unreachable"})
 
 _BEAT_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+
+# `blocked:` argument shapes (Q3/Q10):
+#
+#   blocked:rock_smash                 -- one capability
+#   blocked:rock_smash|strength        -- a minimal capability SET, spelled as
+#                                          a "|"-joined list. "|" is chosen
+#                                          because it already appears in
+#                                          `traversal.reachability.BlockedVerdict
+#                                          .as_disposition`'s own spelling
+#                                          ("blocked:" + "|".join(...)) -- the
+#                                          derivation layer and the authored
+#                                          layer share one spelling, so a
+#                                          derived value can be affirmed
+#                                          verbatim. Sorted ascending and
+#                                          deduplicated so the string form is
+#                                          canonical (one row, one spelling,
+#                                          stable round trip).
+#   blocked:tooling:emulator_set_flag  -- Q10's third kind: blocked by the
+#                                          conversion/playtest tooling rather
+#                                          than an in-game capability. Never
+#                                          combined with capability tokens --
+#                                          it names exactly one missing
+#                                          primitive.
+_BLOCKED_TOOLING = re.compile(r"^tooling:[A-Za-z][A-Za-z0-9_]*$")
+_CAPABILITY_TOKEN = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def _validate_blocked_argument(row_id: str, argument: str) -> None:
+    if _BLOCKED_TOOLING.match(argument):
+        return
+    tokens = argument.split("|")
+    if not argument or any(not _CAPABILITY_TOKEN.match(t) for t in tokens):
+        raise DispositionError(
+            f"{row_id}: {argument!r} is not a valid 'blocked:' argument; expected "
+            "'tooling:<primitive>' or a '|'-joined, sorted, deduplicated list of "
+            "capability names, e.g. 'rock_smash' or 'rock_smash|strength'"
+        )
+    if tokens != sorted(tokens) or len(tokens) != len(set(tokens)):
+        raise DispositionError(
+            f"{row_id}: 'blocked:' argument {argument!r} must be sorted ascending "
+            "and free of duplicates, e.g. 'rock_smash|strength', not "
+            "'strength|rock_smash'"
+        )
 
 
 class DispositionError(ValueError):
@@ -207,6 +257,18 @@ class ManifestRow:
     condition: PageCondition | None = None
     trigger: str | None = None
     seam: SeamRef | None = None
+    # Whether the offline reachability source (`traversal.reachability`) was
+    # actually consulted while generating THIS row's `requires[]` -- i.e.
+    # whether this row's map had a verified entry in
+    # `generator._CHAPTER_MAP_START_CELLS` at generation time. False does NOT
+    # mean "no capability gates exist here"; it means the terrain-gated half
+    # of the capability model (surf, waterfall -- the half `_HEAD_REQUIRES`
+    # structurally cannot express) was never even asked about this map, so an
+    # absence of `requires` entries on an unconsulted row is not evidence of
+    # anything. Recorded per row (duplicated across every row sharing a
+    # `map_id`, same as `map_id` itself) rather than in a separate structure,
+    # because that is the manifest's existing shape for a per-map fact.
+    reachability_consulted: bool = False
 
     @property
     def is_dispositionable(self) -> bool:
@@ -266,6 +328,19 @@ class Disposition:
     # underneath a standing decision is the dangerous one.
     affirmed_hash: str | None = None
     note: str | None = None
+    # Assertability (Q3 decision 3): whether a negative beat can be written
+    # NOW for a `blocked:` row -- walk up to the blocked thing, press A,
+    # assert the refusal. An authoring judgment, separate from the verdict
+    # itself: the old vocabulary smuggled this into `deferred:` vs
+    # `unreachable:`, which is exactly what made the CH07 debt uncountable.
+    # None means "not judged" (or not applicable outside `blocked:`); only
+    # meaningful when `verdict == "blocked"`.
+    assertable: bool | None = None
+    # The beat id (e.g. "B6") that asserts the refusal, if one has been
+    # written. Optional even when `assertable` is True -- the judgment that a
+    # negative beat CAN be written and the act of writing one are different
+    # steps. Requires `assertable is True`.
+    negative_beat: str | None = None
 
     def __post_init__(self) -> None:
         if self.verdict not in _VERDICTS:
@@ -287,6 +362,23 @@ class Disposition:
                 f"{self.row_id}: {self.argument!r} is not a beat name; beat ids are "
                 "labels like 'B12' or 'N3'"
             )
+        if self.verdict == "blocked":
+            _validate_blocked_argument(self.row_id, self.argument or "")
+        if self.assertable is not None and self.verdict != "blocked":
+            raise DispositionError(
+                f"{self.row_id}: 'assertable' only applies to verdict 'blocked', "
+                f"got {self.verdict!r}"
+            )
+        if self.negative_beat is not None:
+            if self.assertable is not True:
+                raise DispositionError(
+                    f"{self.row_id}: 'negative_beat' requires assertable=True"
+                )
+            if not _BEAT_NAME.match(self.negative_beat):
+                raise DispositionError(
+                    f"{self.row_id}: {self.negative_beat!r} is not a beat name; beat "
+                    "ids are labels like 'B12' or 'N3'"
+                )
 
     @property
     def spec(self) -> str:
@@ -295,7 +387,7 @@ class Disposition:
 
     @classmethod
     def parse(cls, row_id: str, spec: str, **rest: Any) -> Disposition:
-        """Parse ``beat:B12`` / ``deferred:rock_smash`` / ``cosmetic``."""
+        """Parse ``beat:B12`` / ``blocked:rock_smash`` / ``cosmetic``."""
         verdict, _, argument = spec.partition(":")
         verdict = verdict.strip()
         argument = argument.strip()
@@ -309,7 +401,7 @@ class Disposition:
 
 _EXAMPLE_BY_VERDICT = {
     "beat": "beat:B12",
-    "deferred": "deferred:rock_smash",
+    "blocked": "blocked:rock_smash",
     "unreachable": "unreachable:dev-only flag sw130, never set in the corpus",
 }
 

@@ -12,12 +12,16 @@ from pathlib import Path
 import pytest
 
 from rpg2gba.chapter_manifest.checker import (
+    ApproachModel,
     CapabilityModel,
+    RULE_APPROACH_MODEL_UNENFORCED,
+    RULE_BLOCKED_MISSED_ASSERTION,
+    RULE_BLOCKED_NO_GRANTING_CHAPTER,
     RULE_CAPABILITY_MODEL_UNENFORCED,
-    RULE_DEFERRED_NO_GRANTING_CHAPTER,
     RULE_ILLEGAL_COSMETIC,
     RULE_MISSING_CITATION,
     RULE_ORPHAN_DISPOSITION,
+    RULE_REACHABILITY_UNENFORCED,
     RULE_STALE_DISPOSITION,
     RULE_UNAFFIRMED_DISPOSITION,
     RULE_UNDISPOSITIONABLE_ROW_DECIDED,
@@ -45,6 +49,9 @@ def _row(row_id: str = "map001/ev001/p0", **overrides) -> ManifestRow:
         map_id=1,
         content_hash="deadbeef00000000",
         effects=(),
+        # Most tests here aren't exercising RULE_REACHABILITY_UNENFORCED, so
+        # default to "consulted" and let that rule's own tests override this.
+        reachability_consulted=True,
     )
     defaults.update(overrides)
     return ManifestRow(**defaults)
@@ -190,7 +197,7 @@ def test_no_citation_needed_when_trigger_absent():
     assert all(f.rule != RULE_MISSING_CITATION for f in findings)
 
 
-# --- rule 7: deferred with no granting chapter ---------------------------
+# --- rule 7: blocked with no granting chapter ---------------------------
 
 
 class _FakeCapabilities:
@@ -201,32 +208,108 @@ class _FakeCapabilities:
         return self._grants.get(name)
 
 
-def test_deferred_without_capability_model_warns_unenforced():
+class _FakeApproach:
+    def __init__(self, walkable: set[str]) -> None:
+        self._walkable = walkable
+
+    def has_walkable_approach(self, row: ManifestRow) -> bool:
+        return row.row_id in self._walkable
+
+
+class _FakeApproachTristate:
+    """Answers True/False/None per row_id, for testing the "can't tell" arm
+    of the three-state Protocol."""
+
+    def __init__(self, answers: dict[str, bool | None]) -> None:
+        self._answers = answers
+
+    def has_walkable_approach(self, row: ManifestRow) -> bool | None:
+        return self._answers.get(row.row_id)
+
+
+def test_blocked_without_capability_model_warns_unenforced():
     row = _row(effects=(), content_hash="h1")
-    disp = _disp(row.row_id, "deferred:rock_smash", affirmed_hash="h1")
-    findings = check_chapter([row], {row.row_id: disp}, capabilities=None)
+    disp = _disp(row.row_id, "blocked:rock_smash", affirmed_hash="h1")
+    findings = check_chapter([row], {row.row_id: disp}, capabilities=None, approach=_FakeApproach(set()))
     rules = [f.rule for f in findings]
     assert RULE_CAPABILITY_MODEL_UNENFORCED in rules
     finding = next(f for f in findings if f.rule == RULE_CAPABILITY_MODEL_UNENFORCED)
     assert finding.severity == "warning"
 
 
-def test_deferred_with_no_granting_chapter_is_error():
+def test_blocked_with_no_granting_chapter_is_error():
     row = _row(effects=(), content_hash="h1")
-    disp = _disp(row.row_id, "deferred:nonexistent_capability", affirmed_hash="h1")
+    disp = _disp(row.row_id, "blocked:nonexistent_capability", affirmed_hash="h1")
     caps = _FakeCapabilities({"rock_smash": "CH06"})
-    findings = check_chapter([row], {row.row_id: disp}, capabilities=caps)
+    findings = check_chapter([row], {row.row_id: disp}, capabilities=caps, approach=_FakeApproach(set()))
     rules = [f.rule for f in findings]
-    assert RULE_DEFERRED_NO_GRANTING_CHAPTER in rules
+    assert RULE_BLOCKED_NO_GRANTING_CHAPTER in rules
 
 
-def test_deferred_with_granting_chapter_ok():
+def test_blocked_with_granting_chapter_ok():
     row = _row(effects=(), content_hash="h1")
-    disp = _disp(row.row_id, "deferred:rock_smash", affirmed_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash", affirmed_hash="h1")
     caps = _FakeCapabilities({"rock_smash": "CH06"})
-    findings = check_chapter([row], {row.row_id: disp}, capabilities=caps)
-    assert all(f.rule not in (RULE_DEFERRED_NO_GRANTING_CHAPTER,
+    findings = check_chapter([row], {row.row_id: disp}, capabilities=caps, approach=_FakeApproach(set()))
+    assert all(f.rule not in (RULE_BLOCKED_NO_GRANTING_CHAPTER,
                                RULE_CAPABILITY_MODEL_UNENFORCED) for f in findings)
+
+
+def test_blocked_multi_capability_set_checked_per_token():
+    row = _row(effects=(), content_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash|strength", affirmed_hash="h1")
+    caps = _FakeCapabilities({"rock_smash": "CH06"})  # strength ungranted
+    findings = check_chapter([row], {row.row_id: disp}, capabilities=caps, approach=_FakeApproach(set()))
+    finding = next(f for f in findings if f.rule == RULE_BLOCKED_NO_GRANTING_CHAPTER)
+    assert "strength" in finding.message
+
+
+def test_blocked_tooling_form_skips_capability_check():
+    row = _row(effects=(), content_hash="h1")
+    disp = _disp(row.row_id, "blocked:tooling:emulator_set_flag", affirmed_hash="h1")
+    findings = check_chapter([row], {row.row_id: disp}, capabilities=None, approach=_FakeApproach(set()))
+    assert all(f.rule not in (RULE_CAPABILITY_MODEL_UNENFORCED, RULE_BLOCKED_NO_GRANTING_CHAPTER)
+               for f in findings)
+
+
+# --- rule 8: blocked row with a missed assertion opportunity --------------
+
+
+def test_blocked_without_approach_model_warns_unenforced():
+    row = _row(effects=(), content_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash", affirmed_hash="h1")
+    caps = _FakeCapabilities({"rock_smash": "CH06"})
+    findings = check_chapter([row], {row.row_id: disp}, capabilities=caps, approach=None)
+    rules = [f.rule for f in findings]
+    assert RULE_APPROACH_MODEL_UNENFORCED in rules
+    finding = next(f for f in findings if f.rule == RULE_APPROACH_MODEL_UNENFORCED)
+    assert finding.severity == "warning"
+
+
+def test_blocked_row_walkable_with_no_negative_beat_is_flagged():
+    row = _row(effects=(), content_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash", affirmed_hash="h1")
+    approach = _FakeApproach({row.row_id})
+    findings = check_chapter([row], {row.row_id: disp}, approach=approach)
+    missed = next(f for f in findings if f.rule == RULE_BLOCKED_MISSED_ASSERTION)
+    assert missed.severity == "warning"
+
+
+def test_blocked_row_walkable_with_negative_beat_not_flagged():
+    row = _row(effects=(), content_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash", affirmed_hash="h1",
+                 assertable=True, negative_beat="B6")
+    approach = _FakeApproach({row.row_id})
+    findings = check_chapter([row], {row.row_id: disp}, approach=approach)
+    assert all(f.rule != RULE_BLOCKED_MISSED_ASSERTION for f in findings)
+
+
+def test_blocked_row_not_walkable_not_flagged():
+    row = _row(effects=(), content_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash", affirmed_hash="h1")
+    approach = _FakeApproach(set())
+    findings = check_chapter([row], {row.row_id: disp}, approach=approach)
+    assert all(f.rule != RULE_BLOCKED_MISSED_ASSERTION for f in findings)
 
 
 # --- exit_code -------------------------------------------------------------
@@ -246,8 +329,8 @@ def test_exit_code_nonzero_on_error():
 
 def test_exit_code_zero_when_only_warnings():
     row = _row(effects=(), content_hash="h1")
-    disp = _disp(row.row_id, "deferred:rock_smash", affirmed_hash="h1")
-    findings = check_chapter([row], {row.row_id: disp}, capabilities=None)
+    disp = _disp(row.row_id, "blocked:rock_smash", affirmed_hash="h1")
+    findings = check_chapter([row], {row.row_id: disp}, capabilities=None, approach=None)
     assert all(f.severity == "warning" for f in findings)
     assert exit_code(findings) == 0
 
@@ -268,7 +351,8 @@ def test_dispositions_round_trip(tmp_path: Path):
             source="wiki: Moki Town", affirmed_hash="abc123", note="checked twice",
         ),
         "map001/ev003/p0": Disposition(
-            row_id="map001/ev003/p0", verdict="deferred", argument="rock_smash",
+            row_id="map001/ev003/p0", verdict="blocked", argument="rock_smash",
+            assertable=True, negative_beat="B6",
         ),
     }
     path = tmp_path / "CH01.dispositions.json"
@@ -365,3 +449,84 @@ def test_render_summary_counts():
     md = render_review([row1, row2], {row1.row_id: disp1})
     assert "total rows: 2" in md
     assert "undispositioned: 1" in md
+
+
+# --- rule 9: reachability source not consulted for a map ------------------
+
+
+def test_unconsulted_map_is_flagged_once():
+    row1 = _row(row_id="map036/ev001/p0", map_id=36, effects=("text",),
+                content_hash="h1", reachability_consulted=False)
+    row2 = _row(row_id="map036/ev002/p0", map_id=36, effects=("text",),
+                content_hash="h2", reachability_consulted=False)
+    disp1 = _disp(row1.row_id, "cosmetic", affirmed_hash="h1")
+    disp2 = _disp(row2.row_id, "cosmetic", affirmed_hash="h2")
+    findings = check_chapter([row1, row2], {row1.row_id: disp1, row2.row_id: disp2})
+    matches = [f for f in findings if f.rule == RULE_REACHABILITY_UNENFORCED]
+    assert len(matches) == 1  # one finding per unconsulted MAP, not per row
+    assert matches[0].severity == "warning"
+    assert matches[0].row_id == "map036"
+    assert "surf" in matches[0].message and "waterfall" in matches[0].message
+
+
+def test_consulted_map_not_flagged():
+    row = _row(effects=("text",), content_hash="h1", reachability_consulted=True)
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    findings = check_chapter([row], {row.row_id: disp})
+    assert all(f.rule != RULE_REACHABILITY_UNENFORCED for f in findings)
+
+
+def test_unconsulted_map_flagged_even_when_no_blocked_rows_present():
+    """The whole point: an unconsulted map's rows can look "clean" (no
+    requires, no blocked verdicts) while the terrain-gated half of the
+    capability model was simply never asked. This must surface regardless of
+    verdict."""
+    row = _row(effects=("text",), content_hash="h1", reachability_consulted=False)
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    findings = check_chapter([row], {row.row_id: disp})
+    assert any(f.rule == RULE_REACHABILITY_UNENFORCED for f in findings)
+
+
+def test_unconsulted_map_finding_present_regardless_of_exit_code():
+    row = _row(effects=("text",), content_hash="h1", reachability_consulted=False)
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    findings = check_chapter([row], {row.row_id: disp})
+    assert exit_code(findings) == 0  # warning only, never blocks
+
+
+# --- rule 8 continued: three-state approach answer -------------------------
+
+
+def test_blocked_row_approach_unanswerable_is_unenforced_not_suppressed():
+    """None must never collapse into False -- an unanswerable row gets the
+    honest "unenforced" warning, not silent approval (no missed-assertion
+    warning, but also no false confidence that the approach is closed)."""
+    row = _row(effects=(), content_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash", affirmed_hash="h1")
+    approach = _FakeApproachTristate({row.row_id: None})
+    findings = check_chapter([row], {row.row_id: disp}, approach=approach)
+    rules = [f.rule for f in findings]
+    assert RULE_APPROACH_MODEL_UNENFORCED in rules
+    assert RULE_BLOCKED_MISSED_ASSERTION not in rules
+    unenforced = next(f for f in findings if f.rule == RULE_APPROACH_MODEL_UNENFORCED)
+    assert unenforced.severity == "warning"
+
+
+def test_blocked_row_approach_false_is_silent():
+    row = _row(effects=(), content_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash", affirmed_hash="h1")
+    approach = _FakeApproachTristate({row.row_id: False})
+    findings = check_chapter([row], {row.row_id: disp}, approach=approach)
+    rules = [f.rule for f in findings]
+    assert RULE_APPROACH_MODEL_UNENFORCED not in rules
+    assert RULE_BLOCKED_MISSED_ASSERTION not in rules
+
+
+def test_blocked_row_approach_true_fires_missed_assertion():
+    row = _row(effects=(), content_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash", affirmed_hash="h1")
+    approach = _FakeApproachTristate({row.row_id: True})
+    findings = check_chapter([row], {row.row_id: disp}, approach=approach)
+    rules = [f.rule for f in findings]
+    assert RULE_BLOCKED_MISSED_ASSERTION in rules
+    assert RULE_APPROACH_MODEL_UNENFORCED not in rules

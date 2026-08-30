@@ -51,3 +51,40 @@ def test_reachable_command_reports_count():
     result = CliRunner().invoke(cli, ["reachable", "--map", "37", "--from", "16,26"])
     assert result.exit_code == 0, result.output
     assert "reachable cell(s) from" in result.output
+
+
+def test_triggers_command_json_reports_trigger_tiles():
+    result = CliRunner().invoke(cli, ["triggers", "--map", "35", "--json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["map_id"] == 35
+    assert payload["tiles"], "map 35 should have at least one trigger tile"
+
+
+def test_capabilities_command_json_reports_rock_smash_obstacles():
+    result = CliRunner().invoke(cli, ["capabilities", "--map", "35", "--json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["map_id"] == 35
+    assert payload["obstacles"]["20,28"]["capability"] == "rock_smash"
+
+
+def test_blocked_command_reports_capability_gated_target():
+    result = CliRunner().invoke(
+        cli, ["blocked", "--map", "35", "--from", "21,56", "--to", "16,0"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "blocked:rock_smash" in result.output
+
+
+def test_blocked_command_event_target():
+    result = CliRunner().invoke(
+        cli, ["blocked", "--map", "35", "--from", "21,56", "--event", "14"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "reachable" in result.output
+
+
+def test_blocked_command_requires_at_least_one_target():
+    result = CliRunner().invoke(cli, ["blocked", "--map", "35", "--from", "21,56"])
+    assert result.exit_code != 0

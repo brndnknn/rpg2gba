@@ -129,3 +129,142 @@ def test_generate_unknown_chapter_fails_loud(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert not manifest_path.exists()
+
+
+# --- `check` subcommand: GraphApproachModel wiring -------------------------
+#
+# A 3x3 chokepoint map (start (1,0), a rock at the chokepoint (1,1), walls at
+# (0,1)/(2,1) forcing everything through the rock, a sign beyond it) --
+# mirrors the fixture in `test_chapter_manifest_generator.py`'s reachability
+# tests, duplicated locally rather than imported (this file's own convention:
+# `_write_map`/`_page`/`_cmd` are already independently duplicated there).
+
+
+def _write_traversable_map(
+    path: Path, map_id: int, width: int, height: int, events: list[dict],
+    wall_cells: set[tuple[int, int]],
+) -> None:
+    layer0 = [2 if (x, y) in wall_cells else 1 for y in range(height) for x in range(width)]
+    empty_layer = [0] * (width * height)
+    payload = {
+        "map_id": map_id,
+        "tileset_id": 1,
+        "width": width,
+        "height": height,
+        "tiles": {"xsize": width, "ysize": height, "zsize": 3,
+                  "data": layer0 + empty_layer + empty_layer},
+        "events": events,
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _write_tilesets(path: Path) -> None:
+    path.write_text(json.dumps({
+        "1": {"passages": [0, 0, 0x0F], "priorities": [0, 0, 0], "terrain_tags": [0, 0, 0]},
+    }), encoding="utf-8")
+
+
+def _setup_chokepoint_chapter(tmp_path: Path, chapter_id: str, map_id: int) -> tuple[Path, Path]:
+    events = [
+        {
+            "id": 1, "name": "Rock", "x": 1, "y": 1,
+            "pages": [_page([_cmd(355, ["Kernel.pbRockSmash(1)"])])],
+        },
+        {
+            "id": 2, "name": "Sign", "x": 1, "y": 2,
+            "pages": [_page([_cmd(101, ["Beyond the rock"])])],
+        },
+    ]
+    build_dir = tmp_path / "build"
+    (build_dir / "maps").mkdir(parents=True)
+    _write_traversable_map(
+        build_dir / "maps" / f"Map{map_id:03d}.json", map_id, 3, 3, events,
+        wall_cells={(0, 1), (2, 1)})
+    _write_tilesets(build_dir / "tilesets.json")
+    (build_dir / "connections.json").write_text("[]", encoding="utf-8")
+    chapters_path = tmp_path / "chapters.json"
+    chapters_path.write_text(json.dumps({
+        "chapters": [{"id": chapter_id, "maps": [map_id]}],
+    }), encoding="utf-8")
+    return build_dir, chapters_path
+
+
+def test_check_fires_missed_assertion_with_no_negative_beat(tmp_path: Path, monkeypatch) -> None:
+    """End to end through the CLI: a registered start cell, a `blocked:`
+    disposition with no `negative_beat`, and a genuinely walkable approach
+    (the rock's own north neighbour is the start tile) -- the rule that
+    could never fire with no approach model supplied now fires for real."""
+    from rpg2gba.chapter_manifest import generator
+    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHK", 50), (1, 0))
+
+    build_dir, chapters_path = _setup_chokepoint_chapter(tmp_path, "CHK", 50)
+    manifest_path = tmp_path / "CHK.manifest.json"
+    dispositions_path = tmp_path / "CHK.dispositions.json"
+
+    runner = CliRunner()
+    gen = runner.invoke(cli, [
+        "generate", "--chapter", "CHK",
+        "--manifest", str(manifest_path),
+        "--build-dir", str(build_dir),
+        "--chapters", str(chapters_path),
+    ])
+    assert gen.exit_code == 0, gen.output
+
+    rows = json.loads(manifest_path.read_text(encoding="utf-8"))
+    hashes = {r["row_id"]: r["content_hash"] for r in rows}
+    rock_row_id = "map050/ev001/p0"
+    sign_row_id = "map050/ev002/p0"
+    dispositions_path.write_text(json.dumps({
+        rock_row_id: {"disposition": "blocked:rock_smash", "affirmed_hash": hashes[rock_row_id]},
+        sign_row_id: {
+            "disposition": "blocked:rock_smash", "affirmed_hash": hashes[sign_row_id],
+            "assertable": True, "negative_beat": "B1",
+        },
+    }), encoding="utf-8")
+
+    result = runner.invoke(cli, [
+        "check", "--chapter", "CHK",
+        "--manifest", str(manifest_path),
+        "--dispositions", str(dispositions_path),
+        "--build-dir", str(build_dir),
+    ])
+
+    assert f"{rock_row_id} (blocked_missed_assertion)" in result.output
+    assert f"{sign_row_id} (blocked_missed_assertion)" not in result.output
+    assert f"{rock_row_id} (approach_model_unenforced)" not in result.output
+    assert f"{sign_row_id} (approach_model_unenforced)" not in result.output
+
+
+def test_check_unregistered_map_falls_back_to_unenforced(tmp_path: Path) -> None:
+    """No entry in `_CHAPTER_MAP_START_CELLS` for this chapter/map -- the
+    concrete model answers None for every row, same as no model at all."""
+    build_dir, chapters_path = _setup_chokepoint_chapter(tmp_path, "CHK_UNREG", 51)
+    manifest_path = tmp_path / "CHK_UNREG.manifest.json"
+    dispositions_path = tmp_path / "CHK_UNREG.dispositions.json"
+
+    runner = CliRunner()
+    gen = runner.invoke(cli, [
+        "generate", "--chapter", "CHK_UNREG",
+        "--manifest", str(manifest_path),
+        "--build-dir", str(build_dir),
+        "--chapters", str(chapters_path),
+    ])
+    assert gen.exit_code == 0, gen.output
+
+    rows = json.loads(manifest_path.read_text(encoding="utf-8"))
+    hashes = {r["row_id"]: r["content_hash"] for r in rows}
+    rock_row_id = "map051/ev001/p0"
+    dispositions_path.write_text(json.dumps({
+        rock_row_id: {"disposition": "blocked:rock_smash", "affirmed_hash": hashes[rock_row_id]},
+        "map051/ev002/p0": {"disposition": "cosmetic", "affirmed_hash": hashes["map051/ev002/p0"]},
+    }), encoding="utf-8")
+
+    result = runner.invoke(cli, [
+        "check", "--chapter", "CHK_UNREG",
+        "--manifest", str(manifest_path),
+        "--dispositions", str(dispositions_path),
+        "--build-dir", str(build_dir),
+    ])
+
+    assert f"{rock_row_id} (approach_model_unenforced)" in result.output
+    assert f"{rock_row_id} (blocked_missed_assertion)" not in result.output

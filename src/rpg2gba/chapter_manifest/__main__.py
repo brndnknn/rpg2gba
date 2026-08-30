@@ -23,6 +23,7 @@ from pathlib import Path
 import click
 
 from . import checker
+from .approach_model import GraphApproachModel
 from .dispositions import disposition_path, load_dispositions
 from .generator import generate_chapter_manifest, write_manifest
 from .schema import ManifestRow, row_from_dict
@@ -100,7 +101,12 @@ def generate_cmd(chapter: str, manifest: Path | None, build_dir: Path,
               type=click.Path(exists=True, path_type=Path), default=None,
               help="Disposition JSON path "
                    "(default: reference/manifests/<chapter>.dispositions.json)")
-def check_cmd(chapter: str, manifest: Path | None, dispositions_path_opt: Path | None) -> None:
+@click.option("--build-dir", type=click.Path(exists=True, path_type=Path),
+              default=DEFAULT_BUILD_DIR,
+              help="Converted-map build directory, for the approach model "
+                   "(default: output/uranium-build)")
+def check_cmd(chapter: str, manifest: Path | None, dispositions_path_opt: Path | None,
+              build_dir: Path) -> None:
     """Check a chapter's manifest against its dispositions; nonzero exit on error."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -115,7 +121,9 @@ def check_cmd(chapter: str, manifest: Path | None, dispositions_path_opt: Path |
     rows = load_manifest(manifest_file)
     dispositions = load_dispositions(dispositions_file)
 
-    findings = checker.check_chapter(rows, dispositions)
+    approach = GraphApproachModel(
+        chapter, maps_dir=build_dir / "maps", tilesets_json=build_dir / "tilesets.json")
+    findings = checker.check_chapter(rows, dispositions, approach=approach)
 
     if not findings:
         click.echo(f"chapter {chapter}: OK ({len(rows)} rows)")

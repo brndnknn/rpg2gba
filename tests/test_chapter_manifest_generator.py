@@ -19,6 +19,8 @@ from rpg2gba.chapter_atlas.census import (
     RUBY_KEYWORDS,
     _script_head,
 )
+from rpg2gba.chapter_manifest import generator
+from rpg2gba.chapter_manifest.approach_model import GraphApproachModel
 from rpg2gba.chapter_manifest.generator import (
     _extract_scripts,
     generate_chapter_manifest,
@@ -406,6 +408,276 @@ def test_write_manifest_sorted_by_row_id(tmp_path: Path) -> None:
     payload = json.loads(out.read_text(encoding="utf-8"))
     row_ids = [r["row_id"] for r in payload]
     assert row_ids == sorted(row_ids)
+
+
+# --- reachability-derived requires (second `requires[]` source) ----------
+#
+# `_CHAPTER_MAP_START_CELLS` only holds real, verified start cells (currently
+# just CH04/map035), so these tests monkeypatch it with a synthetic
+# (chapter, map) start cell rather than fighting real map geometry -- the
+# wiring being tested is generic over the table's contents.
+
+
+def _write_traversable_map(
+    path: Path, map_id: int, width: int, height: int, events: list[dict],
+    wall_cells: set[tuple[int, int]],
+) -> None:
+    """A minimal map with a full "tiles" block so `traversal.graph`/
+    `traversal.capabilities` can build a real `MapGraph`/`CapabilityMap` from
+    it: tile id 1 (passable) everywhere except `wall_cells` (tile id 2,
+    blocked)."""
+    layer0 = [
+        2 if (x, y) in wall_cells else 1
+        for y in range(height) for x in range(width)
+    ]
+    empty_layer = [0] * (width * height)
+    payload = {
+        "map_id": map_id,
+        "tileset_id": 1,
+        "width": width,
+        "height": height,
+        "tiles": {"xsize": width, "ysize": height, "zsize": 3,
+                  "data": layer0 + empty_layer + empty_layer},
+        "events": events,
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _write_tilesets(path: Path) -> None:
+    # passage 0 = passable, 0x0F = fully blocked (tile_map.PASSAGE_BLOCK_MASK).
+    path.write_text(json.dumps({
+        "1": {"passages": [0, 0, 0x0F], "priorities": [0, 0, 0], "terrain_tags": [0, 0, 0]},
+    }), encoding="utf-8")
+
+
+def _setup_reachability_chapter(
+    tmp_path: Path, chapter_id: str, map_id: int, width: int, height: int,
+    events: list[dict], wall_cells: set[tuple[int, int]],
+) -> tuple[Path, Path]:
+    build_dir = tmp_path / "build"
+    (build_dir / "maps").mkdir(parents=True)
+    _write_traversable_map(
+        build_dir / "maps" / f"Map{map_id:03d}.json", map_id, width, height, events, wall_cells)
+    _write_tilesets(build_dir / "tilesets.json")
+    (build_dir / "connections.json").write_text("[]", encoding="utf-8")
+    chapters_path = tmp_path / "chapters.json"
+    chapters_path.write_text(json.dumps({
+        "chapters": [{"id": chapter_id, "maps": [map_id]}],
+    }), encoding="utf-8")
+    return build_dir, chapters_path
+
+
+def _rock_and_sign_events() -> list[dict]:
+    """A 3x3 pocket: start (1,0), a rock (event 1) at the only chokepoint
+    (1,1), walls at (0,1)/(2,1), and a plain sign (event 2) at (1,2) reachable
+    only by crossing the rock's cell."""
+    return [
+        {
+            "id": 1, "name": "Rock", "x": 1, "y": 1,
+            "pages": [_page([_cmd(355, ["Kernel.pbRockSmash(1)"])])],
+        },
+        {
+            "id": 2, "name": "Sign", "x": 1, "y": 2,
+            "pages": [_page([_cmd(101, ["Beyond the rock"])])],
+        },
+    ]
+
+
+def test_reachability_requires_approach_gated_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A row with no gating script head of its own still picks up
+    `rock_smash` in `requires` when its only approach crosses a rock-obstacle
+    cell -- the 24-row (approach-gated) half of the CH04 split."""
+    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), (1, 0))
+    events = _rock_and_sign_events()
+    build_dir, chapters_path = _setup_reachability_chapter(
+        tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
+
+    rows = generate_chapter_manifest("CHR", build_dir=build_dir, chapters_path=chapters_path)
+
+    sign_row = next(r for r in rows if r.event_id == 2)
+    assert sign_row.requires == ("rock_smash",)
+    assert sign_row.script_heads == ()  # no head of its own -- reachability only
+    assert sign_row.reachability_consulted is True
+
+
+def test_reachability_requires_does_not_duplicate_head_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The rock event's own row already gets `rock_smash` from `_HEAD_REQUIRES`
+    (interaction-gated); its APPROACH is open (the start cell is adjacent to
+    it), so the reachability source contributes nothing extra -- no duplicate,
+    no spurious requirement."""
+    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), (1, 0))
+    events = _rock_and_sign_events()
+    build_dir, chapters_path = _setup_reachability_chapter(
+        tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
+
+    rows = generate_chapter_manifest("CHR", build_dir=build_dir, chapters_path=chapters_path)
+
+    rock_row = next(r for r in rows if r.event_id == 1)
+    assert rock_row.requires == ("rock_smash",)
+
+
+def test_reachability_requires_absent_without_verified_start_cell(tmp_path: Path) -> None:
+    """No entry in `_CHAPTER_MAP_START_CELLS` for this (chapter, map) -- the
+    generator degrades gracefully (empty reachability half) rather than
+    raising, and `_HEAD_REQUIRES` alone still applies."""
+    events = _rock_and_sign_events()
+    build_dir, chapters_path = _setup_reachability_chapter(
+        tmp_path, "CHR_UNREGISTERED", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
+
+    rows = generate_chapter_manifest(
+        "CHR_UNREGISTERED", build_dir=build_dir, chapters_path=chapters_path)
+
+    sign_row = next(r for r in rows if r.event_id == 2)
+    assert sign_row.requires == ()
+    assert sign_row.reachability_consulted is False
+    rock_row = next(r for r in rows if r.event_id == 1)
+    assert rock_row.requires == ("rock_smash",)  # _HEAD_REQUIRES still applies
+    assert rock_row.reachability_consulted is False
+
+
+def test_reachability_consulted_propagates_to_seam_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Seam rows carry the same per-map fact as page rows on that map --
+    there is no separate per-map metadata structure, so the flag lives on
+    every row sharing a `map_id`, seams included."""
+    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), (1, 0))
+    events = _rock_and_sign_events()
+    build_dir, chapters_path = _setup_reachability_chapter(
+        tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
+    (build_dir / "connections.json").write_text(
+        json.dumps([[99, "E", 0, 100, "W", 0]]), encoding="utf-8")
+
+    rows = generate_chapter_manifest("CHR", build_dir=build_dir, chapters_path=chapters_path)
+
+    seam_row = next(r for r in rows if r.kind == "seam")
+    assert seam_row.map_id == 99
+    assert seam_row.reachability_consulted is True
+
+
+def test_unverified_start_cell_warns_with_actionable_message(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An unregistered (chapter, map) pair is a visible WARNING, not a
+    DEBUG-level whisper -- an unconsulted map must not be indistinguishable
+    from "no capability gates here"."""
+    events = _rock_and_sign_events()
+    build_dir, chapters_path = _setup_reachability_chapter(
+        tmp_path, "CHR_LOUD", 42, 3, 3, events, wall_cells={(0, 1), (2, 1)})
+
+    with caplog.at_level("WARNING", logger="rpg2gba.chapter_manifest.generator"):
+        generate_chapter_manifest("CHR_LOUD", build_dir=build_dir, chapters_path=chapters_path)
+
+    warnings = [
+        r for r in caplog.records
+        if r.levelname == "WARNING" and "verified start cell" in r.getMessage()
+    ]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "not consulted" in message.lower() or "NOT consulted" in message
+    assert "surf" in message and "waterfall" in message
+    assert "_HEAD_REQUIRES" in message
+
+
+# --- GraphApproachModel (concrete checker.ApproachModel) -----------------
+
+
+def test_approach_model_true_when_start_itself_is_an_approach_cell(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The rock's own approach cell set includes (1,0), the start cell
+    itself -- trivially reachable with nothing held, so `reachable_now` is
+    True even though the rock is an uncleared rock_smash obstacle."""
+    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), (1, 0))
+    events = _rock_and_sign_events()
+    build_dir, chapters_path = _setup_reachability_chapter(
+        tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
+
+    model = GraphApproachModel(
+        "CHR", maps_dir=build_dir / "maps", tilesets_json=build_dir / "tilesets.json")
+    rows = generate_chapter_manifest("CHR", build_dir=build_dir, chapters_path=chapters_path)
+
+    rock_row = next(r for r in rows if r.event_id == 1)
+    assert model.has_walkable_approach(rock_row) is True
+
+
+def test_approach_model_closes_the_sibling_obstacle_blind_spot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A prior version of this model asked a purely LOCAL collision question
+    and answered True here: the sign's north neighbour (1,1) is
+    collision-open floor, so a plain walkability read cannot see that a
+    rock event occupies it. The reachability-from-entry version closes that
+    blind spot: (1,1) is the only way from the start (1,0) into row y=2 (the
+    walls at (0,1)/(2,1) seal the other columns), (1,1) is an uncleared
+    rock_smash obstacle, and nothing is held -- so the sign has NO reachable
+    approach cell right now. Verified empirically, not assumed: this fixture
+    is exactly the shape that exposed the old bug."""
+    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), (1, 0))
+    events = _rock_and_sign_events()
+    build_dir, chapters_path = _setup_reachability_chapter(
+        tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
+
+    model = GraphApproachModel(
+        "CHR", maps_dir=build_dir / "maps", tilesets_json=build_dir / "tilesets.json")
+    rows = generate_chapter_manifest("CHR", build_dir=build_dir, chapters_path=chapters_path)
+
+    sign_row = next(r for r in rows if r.event_id == 2)
+    assert model.has_walkable_approach(sign_row) is False
+
+
+def test_approach_model_none_for_seam_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), (1, 0))
+    events = _rock_and_sign_events()
+    build_dir, chapters_path = _setup_reachability_chapter(
+        tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
+    (build_dir / "connections.json").write_text(
+        json.dumps([[99, "E", 0, 100, "W", 0]]), encoding="utf-8")
+
+    model = GraphApproachModel(
+        "CHR", maps_dir=build_dir / "maps", tilesets_json=build_dir / "tilesets.json")
+    rows = generate_chapter_manifest("CHR", build_dir=build_dir, chapters_path=chapters_path)
+
+    seam_row = next(r for r in rows if r.kind == "seam")
+    assert model.has_walkable_approach(seam_row) is None
+
+
+def test_approach_model_none_for_unregistered_map(tmp_path: Path) -> None:
+    events = _rock_and_sign_events()
+    build_dir, chapters_path = _setup_reachability_chapter(
+        tmp_path, "CHR_UNREGISTERED", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
+
+    model = GraphApproachModel(
+        "CHR_UNREGISTERED", maps_dir=build_dir / "maps", tilesets_json=build_dir / "tilesets.json")
+    rows = generate_chapter_manifest(
+        "CHR_UNREGISTERED", build_dir=build_dir, chapters_path=chapters_path)
+
+    rock_row = next(r for r in rows if r.event_id == 1)
+    assert model.has_walkable_approach(rock_row) is None
+
+
+def test_approach_model_none_for_vanished_event(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A row whose event no longer exists in the decoded map data (deleted,
+    renumbered) cannot be answered, not silently answered False."""
+    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), (1, 0))
+    events = _rock_and_sign_events()
+    build_dir, chapters_path = _setup_reachability_chapter(
+        tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
+    rows = generate_chapter_manifest("CHR", build_dir=build_dir, chapters_path=chapters_path)
+    rock_row = next(r for r in rows if r.event_id == 1)
+
+    # Now remove the event from the decoded map data, simulating drift.
+    _write_traversable_map(
+        build_dir / "maps" / "Map099.json", 99, 3, 3,
+        [e for e in events if e["id"] != 1], wall_cells={(0, 1), (2, 1)})
+
+    model = GraphApproachModel(
+        "CHR", maps_dir=build_dir / "maps", tilesets_json=build_dir / "tilesets.json")
+    assert model.has_walkable_approach(rock_row) is None
 
 
 # --- map 32 (Moki Town) corpus regression fixture -----------------------

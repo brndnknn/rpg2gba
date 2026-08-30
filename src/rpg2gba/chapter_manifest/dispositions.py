@@ -16,10 +16,11 @@ chapter identifier used throughout the repo (e.g. ``CH04``).
 File shape — a JSON object mapping ``row_id`` to either:
 
 * a bare string spec, e.g. ``"cosmetic"``, ``"beat:B12"``,
-  ``"deferred:rock_smash"`` — the common case, kept to one line per row; or
+  ``"blocked:rock_smash"`` — the common case, kept to one line per row; or
 * an object ``{"disposition": "...", "source": "...",
-  "affirmed_hash": "...", "note": "..."}`` when the row also carries a
-  citation, an affirmed content hash, or a free-text note.
+  "affirmed_hash": "...", "assertable": true, "negative_beat": "...",
+  "note": "..."}`` when the row also carries a citation, an affirmed content
+  hash, an assertability judgment, or a free-text note.
 
 Both forms parse into `schema.Disposition` via `Disposition.parse`, which
 already validates the verdict and its argument — this module does not
@@ -89,7 +90,7 @@ def _parse_entry(path: Path, row_id: str, entry: Any) -> Disposition:
             )
         rest = {
             key: entry[key]
-            for key in ("source", "affirmed_hash", "note")
+            for key in ("source", "affirmed_hash", "note", "assertable", "negative_beat")
             if key in entry
         }
         try:
@@ -122,6 +123,8 @@ def write_dispositions(dispositions: dict[str, Disposition], path: Path) -> None
             for key, value in (
                 ("source", disp.source),
                 ("affirmed_hash", disp.affirmed_hash),
+                ("assertable", disp.assertable),
+                ("negative_beat", disp.negative_beat),
                 ("note", disp.note),
             )
             if value is not None

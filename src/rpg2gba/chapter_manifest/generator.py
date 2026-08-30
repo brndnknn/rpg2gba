@@ -42,6 +42,9 @@ from rpg2gba.chapter_manifest.schema import (
     row_to_dict,
     seam_row_id,
 )
+from rpg2gba.traversal.capabilities import CapabilityMap, build_capability_map
+from rpg2gba.traversal.graph import MapGraph, build_map_graph
+from rpg2gba.traversal.reachability import derive_blocked_verdict_for_event
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +153,105 @@ _HEAD_REQUIRES: dict[str, str] = {
     "pbRockSmashRandomEncounter": "rock_smash",  # 6 maps
     "pbPushThisBoulder": "strength",          # 15 maps
 }
+
+# --- reachability-derived requires (second source; schema.py's `requires`
+# field docstring) ------------------------------------------------------
+#
+# `_HEAD_REQUIRES` above finds capability gates in a row's own INTERACTION --
+# the event's script literally contains `pbRockSmash`. It cannot see a gate on
+# a row's APPROACH: an NPC standing behind a rockslide carries no
+# rock-smash-flavoured script of its own, because the geometry is the gate,
+# not the text (`reference/frozen/slice2_derivation_diff.md`'s two-source
+# split, confirmed on CH04: 24 approach-gated rows the head table cannot see,
+# 4 interaction-gated rows it already covers, no overlap).
+#
+# Deriving "approach gated by which capability" needs a start cell -- the
+# tile the player is actually standing on when they first reach this map --
+# which is chapter authoring knowledge, not something recoverable from decoded
+# map data alone. This table holds only start cells that have been verified
+# against a chapter's own boot-walk harness; a (chapter, map) pair absent from
+# it gets no reachability-derived requires at all (see
+# `_build_reachability_context`), same as the corpus behaved before this
+# table existed -- `_HEAD_REQUIRES` alone keeps covering it. That is a
+# graceful degrade, not a fail-loud gap: most of the corpus has no verified
+# start cell yet, and that is the chapter's current, expected, temporary
+# state, not corrupted input data.
+#
+# CH04/map035 (21,56): `playtest/chapters/route2.py:234`'s `KEVLAR_SEAM_ARROW`
+# comment -- the MB_NORTH_ARROW_WARP tile lands the player at map035 (21,56).
+# Cross-checked against the independent validation run recorded in
+# `reference/frozen/slice2_derivation_diff.md`.
+#
+# Registering a new entry is a step in THAT chapter's own build, not a
+# mystery to reverse-engineer here: the cost is finding the one cell the
+# player is actually standing on at first arrival on that map, and it must
+# come from the chapter's own boot-walk harness (an arrow-warp landing spot,
+# a warp-exit constant, an emulator-observed post-load position) -- never
+# guessed from map geometry or wiki prose. CH04's entry above is the worked
+# example: `(21, 56)` is not this table's own invention, it is a comment
+# transcribed from `route2.py`'s harness constant and then cross-checked
+# against an independent validation run. An entry added without that kind of
+# citation is exactly the "written from priors, matches zero maps" failure
+# `_HEAD_REQUIRES`'s own comment warns about, just moved to a different table.
+_CHAPTER_MAP_START_CELLS: dict[tuple[str, int], tuple[int, int]] = {
+    ("CH04", 35): (21, 56),
+}
+
+ReachabilityContext = tuple[MapGraph, CapabilityMap, tuple[int, int]]
+
+
+def _build_reachability_context(
+    chapter_id: str,
+    map_id: int,
+    maps_dir: Path,
+    tilesets_json: Path,
+) -> ReachabilityContext | None:
+    """The (graph, capability_map, start_cell) triple for reachability-
+    derived requires on `map_id`, or None if `map_id` has no verified start
+    cell for `chapter_id` yet (see `_CHAPTER_MAP_START_CELLS`).
+
+    `maps_dir`/`tilesets_json` are threaded through from the same `build_dir`
+    the generator itself reads (never the traversal package's own defaults),
+    so a chapter built against a non-default `build_dir` (e.g. a test
+    fixture) doesn't silently fall back to reading the real corpus."""
+    start = _CHAPTER_MAP_START_CELLS.get((chapter_id, map_id))
+    if start is None:
+        logger.warning(
+            "chapter manifest: %s map %03d has no verified start cell -- the "
+            "offline reachability source was NOT consulted for this map. "
+            "Terrain-gated capabilities (surf, waterfall) cannot appear in "
+            "requires[] for ANY row on this map as a result, and _HEAD_REQUIRES "
+            "structurally cannot express them either -- an absence of requires "
+            "entries here is not evidence the map has no capability gates. "
+            "Register a verified start cell in _CHAPTER_MAP_START_CELLS during "
+            "this chapter's build to close the gap.",
+            chapter_id, map_id,
+        )
+        return None
+    graph = build_map_graph(map_id, maps_dir=maps_dir, tilesets_json=tilesets_json)
+    capability_map = build_capability_map(map_id, maps_dir=maps_dir, tilesets_json=tilesets_json)
+    return graph, capability_map, start
+
+
+def _reachability_requires(
+    context: ReachabilityContext | None,
+    event_cell: tuple[int, int],
+) -> tuple[str, ...]:
+    """Capabilities needed to even APPROACH `event_cell` (an orthogonally-
+    adjacent tile), derived from the offline traversal graph. Empty when
+    `context` is None (no verified start cell -- see
+    `_build_reachability_context`), when the approach is already open with
+    nothing held, or when no `VERIFIED_CAPABILITIES` combination opens it at
+    all (`derive_blocked_verdict_for_event`'s empty `minimal_sets` -- true
+    geography, not a capability gate, so it is not added here)."""
+    if context is None:
+        return ()
+    graph, capability_map, start = context
+    verdict = derive_blocked_verdict_for_event(graph, capability_map, start, event_cell)
+    if verdict.reachable_now or not verdict.minimal_sets:
+        return ()
+    best = verdict.minimal_sets[0]
+    return tuple(sorted(c.value for c in best))
 
 
 def _load_json(path: Path) -> Any:
@@ -328,11 +430,15 @@ def _generate_page_rows(
     switch_names: dict[int, str],
     var_names: dict[int, str],
     unhandled_counts: Counter[tuple[int, int, int]],
+    reachability_context: ReachabilityContext | None,
 ) -> list[ManifestRow]:
+    reachability_consulted = reachability_context is not None
     rows: list[ManifestRow] = []
     for event in map_data.get("events", []):
         event_id = event["id"]
         event_name = event.get("name")
+        event_cell = (event["x"], event["y"])
+        reach_requires = _reachability_requires(reachability_context, event_cell)
         for page_idx, page in enumerate(event.get("pages", [])):
             commands = page.get("list") or []
             extracted = _extract_page(commands)
@@ -340,6 +446,7 @@ def _generate_page_rows(
                 page.get("condition") or {}, switch_names, var_names)
             trigger_raw = page.get("trigger")
             trigger = _TRIGGER_NAMES.get(trigger_raw, str(trigger_raw))
+            requires = tuple(sorted(set(extracted["requires"]) | set(reach_requires)))
             row = ManifestRow(
                 row_id=page_row_id(map_id, event_id, page_idx),
                 kind="page",
@@ -349,7 +456,7 @@ def _generate_page_rows(
                 script_heads=extracted["script_heads"],
                 unrecognized_heads=extracted["unrecognized_heads"],
                 other_codes=extracted["other_codes"],
-                requires=extracted["requires"],
+                requires=requires,
                 unhandled=unhandled_counts.get((map_id, event_id, page_idx), 0),
                 script_typed_conditions=extracted["script_typed_conditions"],
                 event_id=event_id,
@@ -357,6 +464,7 @@ def _generate_page_rows(
                 page_idx=page_idx,
                 condition=condition,
                 trigger=trigger,
+                reachability_consulted=reachability_consulted,
             )
             rows.append(row)
     return rows
@@ -365,6 +473,7 @@ def _generate_page_rows(
 def _generate_seam_rows(
     map_ids: set[int],
     connections: list[list[Any]],
+    consulted_by_map: dict[int, bool],
 ) -> list[ManifestRow]:
     rows: list[ManifestRow] = []
     for conn in connections:
@@ -383,6 +492,7 @@ def _generate_seam_rows(
                 content_hash=content_hash(list(conn)),
                 effects=("warp",),
                 seam=seam,
+                reachability_consulted=consulted_by_map.get(map_a, False),
             ))
         if map_b in map_ids:
             seam = SeamRef(
@@ -396,6 +506,7 @@ def _generate_seam_rows(
                 content_hash=content_hash(list(conn)),
                 effects=("warp",),
                 seam=seam,
+                reachability_consulted=consulted_by_map.get(map_b, False),
             ))
     return rows
 
@@ -434,16 +545,21 @@ def generate_chapter_manifest(
     connections = _load_json(conn_path) if conn_path.exists() else []
 
     rows: list[ManifestRow] = []
+    consulted_by_map: dict[int, bool] = {}
     for map_id in map_ids:
         map_path = maps_dir / f"Map{map_id:03d}.json"
         if not map_path.exists():
             raise FileNotFoundError(
                 f"chapter manifest: no converted map for id {map_id} at {map_path}")
         map_data = _load_json(map_path)
+        reachability_context = _build_reachability_context(
+            chapter_id, map_id, maps_dir, build_dir / "tilesets.json")
+        consulted_by_map[map_id] = reachability_context is not None
         rows.extend(_generate_page_rows(
-            map_id, map_data, switch_names, var_names, unhandled_counts))
+            map_id, map_data, switch_names, var_names, unhandled_counts,
+            reachability_context))
 
-    rows.extend(_generate_seam_rows(set(map_ids), connections))
+    rows.extend(_generate_seam_rows(set(map_ids), connections, consulted_by_map))
 
     rows.sort(key=lambda r: r.row_id)
     return rows

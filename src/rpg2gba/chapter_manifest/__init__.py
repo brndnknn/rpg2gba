@@ -9,8 +9,14 @@ files joined by a stable row id:
   maps, plus one per overland seam touching them, derived from
   ``output/uranium-build/`` (see `generator`).
 * **authored, committed, hand-edited** — a disposition per row
-  (``beat:Bn`` / ``deferred:<capability>`` / ``cosmetic`` / ``unreachable:<reason>``),
+  (``beat:Bn`` / ``blocked:<capability set>`` / ``cosmetic`` / ``unreachable:<reason>``),
   which the generator joins at build time and never writes to (see `schema`).
+  `blocked:` answers exactly one question -- what unblocks this row -- and
+  takes a "|"-joined capability set (or a `blocked:tooling:<primitive>` form
+  for a row gated on missing tooling, not an in-game capability); a separate
+  `assertable`/`negative_beat` pair on the `Disposition` records whether a
+  negative beat can be written today. `unreachable` is narrowed to content no
+  chapter will ever reach.
 
 The generator is emphatically driven from the **RMXP** side, never the compiled
 Poryscript: an event the transpiler silently dropped would otherwise be absent
