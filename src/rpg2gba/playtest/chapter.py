@@ -56,6 +56,7 @@ import json
 import logging
 import os
 import pkgutil
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -69,6 +70,28 @@ if TYPE_CHECKING:  # runtime import is lazy so the registry works without bindin
 logger = logging.getLogger(__name__)
 
 BeatFn = Callable[["Emulator"], None]
+
+# Row-id shape, mirroring `page_row_id`/`seam_row_id` in
+# `src/rpg2gba/chapter_manifest/schema.py` (defined locally rather than
+# imported so this module doesn't have to pull in the chapter_manifest
+# package just to validate a string shape):
+#
+#   page_row_id(map_id, event_id, page_idx) -> "map035/ev014/p1"
+#   seam_row_id(map_id, direction, other_map_id) -> "map035/seam/NORTH/map036"
+_PAGE_ROW_RE = re.compile(r"^map\d{3}/ev\d{3}/p\d+$")
+_SEAM_ROW_RE = re.compile(
+    r"^map\d{3}/seam/(NORTH|SOUTH|EAST|WEST)/map\d{3}$")
+
+
+def _validate_row_id(row: str, *, beat_name: str) -> None:
+    if _PAGE_ROW_RE.match(row) or _SEAM_ROW_RE.match(row):
+        return
+    raise ValueError(
+        f"beat {beat_name!r}: rows entry {row!r} does not match the "
+        "chapter-manifest row-id shape (expected a page row like "
+        "'map035/ev014/p1' or a seam row like 'map035/seam/NORTH/map036' "
+        "-- see page_row_id/seam_row_id in "
+        "src/rpg2gba/chapter_manifest/schema.py)")
 
 
 @dataclass(frozen=True)
@@ -97,6 +120,22 @@ class Beat:
     description: str
     run: BeatFn
     locations: tuple[BeatLocation, ...] = ()
+    group: str | None = None
+    rows: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class BeatGroup:
+    """A run of beats the route solver must keep contiguous.
+
+    Beats sharing a `Beat.group` value form one `BeatGroup`. A beat with no
+    `group` forms its own singleton group named after itself. `index` is the
+    group's position in the chapter (0-based), in the order the group's
+    first beat was registered -- see `Chapter.groups`."""
+
+    group_id: str
+    beats: tuple[str, ...]
+    index: int
 
 
 @dataclass(frozen=True)
@@ -123,6 +162,30 @@ class Chapter:
             f"chapter {self.name!r} has no beat {beat_name!r}; "
             f"beats are {[b.name for b in self.beats]}")
 
+    def groups(self) -> tuple[BeatGroup, ...]:
+        """Beats collapsed into contiguous `BeatGroup`s, in registration
+        order. `build()` already validated contiguity and the singleton-
+        name-vs-explicit-group-id collision, so this is a pure reshape --
+        one pass, no re-validation."""
+        result: list[BeatGroup] = []
+        current_id: str | None = None
+        current_beats: list[str] = []
+        for beat in self.beats:
+            group_id = beat.group if beat.group is not None else beat.name
+            if group_id != current_id:
+                if current_id is not None:
+                    result.append(BeatGroup(group_id=current_id,
+                                             beats=tuple(current_beats),
+                                             index=len(result)))
+                current_id = group_id
+                current_beats = []
+            current_beats.append(beat.name)
+        if current_id is not None:
+            result.append(BeatGroup(group_id=current_id,
+                                     beats=tuple(current_beats),
+                                     index=len(result)))
+        return tuple(result)
+
 
 # Names currently mid-`build()`, in call order — used only to detect a cycle
 # in the predecessor chain (a predecessor whose own resolution loops back to
@@ -137,12 +200,22 @@ def _prefix_beat(owner: str, beat: Beat) -> Beat:
     """Qualify `beat` with its owning chapter's name, unless it's already
     qualified (a beat that arrived via a predecessor's own predecessor keeps
     its existing `<true-owner>:<name>` — see the module docstring's note on
-    not double-prefixing)."""
+    not double-prefixing).
+
+    `group` is namespaced the same way as `name`, and for the same reason:
+    without it, an explicit group id chosen in a predecessor chapter could
+    collide with a same-named group (or singleton beat name) chosen
+    independently in a downstream chapter. A beat with no explicit group
+    needs no separate handling here -- its singleton group id is its own
+    (already-prefixed) name."""
     if ":" in beat.name:
         return beat
+    prefixed_group = (beat.group if beat.group is None or ":" in beat.group
+                       else f"{owner}:{beat.group}")
     return Beat(name=f"{owner}:{beat.name}",
                 description=f"[{owner}] {beat.description}", run=beat.run,
-                locations=beat.locations)
+                locations=beat.locations, group=prefixed_group,
+                rows=beat.rows)
 
 
 @dataclass
@@ -158,8 +231,23 @@ class ChapterBuilder:
              map_constant: str | None = None,
              at: tuple[int, int] | None = None,
              locations: tuple[BeatLocation, ...] | None = None,
+             group: str | None = None,
+             rows: tuple[str, ...] = (),
              ) -> Callable[[BeatFn], BeatFn]:
         """Register a beat, optionally declaring where it triggers.
+
+        `group=` and `rows=` feed the offline route solver (not consulted by
+        the beat body or the runner):
+
+        - `group=`: this beat's group id. Beats sharing a group id must be
+          registered contiguously (checked at `build()` time) -- the
+          solver treats a group as one indivisible stop, so its beats can
+          never be reordered apart. A beat with no `group` gets its own
+          singleton group, named after the beat itself.
+        - `rows=`: chapter-manifest row ids (`page_row_id`/`seam_row_id`
+          shape, e.g. `"map035/ev014/p1"` or `"map035/seam/NORTH/map036"`)
+          this beat exercises, letting the solver derive page-precedence
+          constraints. Validated against those shapes at registration time.
 
         Two mutually exclusive ways to declare location:
 
@@ -206,6 +294,13 @@ class ChapterBuilder:
         if any(b.name == name for b in self._beats):
             raise ValueError(f"duplicate beat {name!r} in chapter {self.name!r}")
 
+        if group is not None and not group.strip():
+            raise ValueError(
+                f"beat {name!r}: group= must be a non-empty string, "
+                f"got {group!r}")
+        for row in rows:
+            _validate_row_id(row, beat_name=name)
+
         shorthand_given = map_constant is not None or at is not None
         if shorthand_given and locations is not None:
             raise ValueError(
@@ -226,7 +321,8 @@ class ChapterBuilder:
 
         def decorate(fn: BeatFn) -> BeatFn:
             self._beats.append(Beat(name=name, description=description,
-                                    run=fn, locations=resolved_locations))
+                                    run=fn, locations=resolved_locations,
+                                    group=group, rows=rows))
             return fn
 
         return decorate
@@ -261,8 +357,54 @@ class ChapterBuilder:
         finally:
             _building_stack.pop()
 
+        _validate_groups(beats, chapter_name=self.name)
+
         return Chapter(name=self.name, doc=self.doc, beats=beats,
                         predecessor=self.predecessor)
+
+
+def _validate_groups(beats: tuple[Beat, ...], *, chapter_name: str) -> None:
+    """Enforce the two group invariants at `build()` time:
+
+    - Contiguity: beats sharing an explicit `group` id must be adjacent in
+      registration order -- the route solver treats a group as one
+      indivisible stop, so a scattered group can't be expressed.
+    - No singleton/explicit collision: a beat with no `group` forms a
+      singleton group named after itself, and that name must not collide
+      with an explicit `group` id used by some other beat in the same
+      (already-composed, predecessor-included) chapter.
+    """
+    explicit_group_ids = {b.group for b in beats if b.group is not None}
+    for beat in beats:
+        if beat.group is None and beat.name in explicit_group_ids:
+            raise ValueError(
+                f"chapter {chapter_name!r}: beat {beat.name!r} has no "
+                f"group=, so it forms a singleton group named {beat.name!r}, "
+                f"but that name collides with an explicit group= used by "
+                f"another beat in this chapter -- rename the beat or the "
+                f"group")
+
+    first_seen: dict[str, int] = {}
+    last_seen: dict[str, int] = {}
+    members: dict[str, list[str]] = {}
+    for i, beat in enumerate(beats):
+        if beat.group is None:
+            continue
+        first_seen.setdefault(beat.group, i)
+        last_seen[beat.group] = i
+        members.setdefault(beat.group, []).append(beat.name)
+
+    for group_id, start in first_seen.items():
+        end = last_seen[group_id]
+        span = beats[start:end + 1]
+        if any(b.group != group_id for b in span):
+            intervening = [b.name for b in span if b.group != group_id]
+            raise ValueError(
+                f"chapter {chapter_name!r}: group {group_id!r} "
+                f"(beats {members[group_id]}) is not contiguous -- "
+                f"{intervening} register in between. A group's beats must "
+                f"be registered adjacently because the route solver treats "
+                f"the group as one indivisible stop.")
 
 
 def chapter_names() -> list[str]:
