@@ -94,13 +94,33 @@ CHAPTER N / CHnn
  3. ART — quantize the chapter's real tilesets + sprites to GBA 4bpp.
  4. WIRE — map constants, layouts (collision + warp metatiles), object events,
       encounters, connections.
- 5. BUILD — assemble into the fork; `make modern` must exit 0.
- 6. BOOT — run in mGBA; walk the section. This is the gate (see ROADMAP §9).
- 7. FIX — cluster any systematic defect; fix the *converter*, re-run. Never hand-edit
+ 5. ROUTE — solve the chapter's walk and get it approved BEFORE the beats are
+      written. Needs step 4's emitted maps, not a ROM.
+      • `python -m rpg2gba.routing plan --chapter CHnn --module <mod> --dry-run`
+        → read the summary; any CROSSING line is a beat that will fire the wrong
+        event, and is fixed here, not after the walk goes wrong.
+      • operator approves the ORDER, not just the beat set — then drop --dry-run
+        to write reference/routes/CHnn.route.json.
+      • register the chapter module's beat groups in that order, and
+        `chapter_manifest check --chapter CHnn` enforces the two agree from then
+        on (RULE_ROUTE_ORDER). No plan on disk = the rule cannot run, and says
+        so as a route_model_unenforced warning — do not read that as a pass.
+ 6. BUILD — assemble into the fork; `make modern` must exit 0.
+ 7. BOOT — run in mGBA; walk the section. This is the gate (see ROADMAP §9).
+ 8. FIX — cluster any systematic defect; fix the *converter*, re-run. Never hand-edit
       output.
- 8. RECORD — MEMORY Current Phase + Decisions; commit one logical unit.
+ 9. RECORD — MEMORY Current Phase + Decisions; commit one logical unit.
  → widen the frontier: next chapter in the chain.
 ```
+
+**Why ROUTE sits at 5 and not later.** It reads the *emitted* map data (collision,
+warps, and slice 2's trigger overlay, which is built from the pokeemerald JSON rather
+than RMXP), so it cannot run before WIRE — but it must run before the chapter module's
+beats are registered, because registration order *is* playthrough order and the plan
+is what the operator approves. Solving after the beats are written inverts that: the
+solver then just grades an order nobody can change without reopening the chapter.
+That is exactly the state CH01–CH04 are in (`PROJECT_TODO.md` #67), and why the rule
+is enforced forward from CH05 rather than retroactively.
 
 ---
 

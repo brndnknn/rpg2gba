@@ -843,6 +843,16 @@ disposition failure rather than a generator one). Row kinds do not touch either.
 4. Once slice 3 lands, the read-through covers **the route plan as well as the beat set** — consistent
    with Q13's "what the operator approves is the route, not just the beat set."
 
+**Status note, 2026-08-30 — item 4 is half-built, items 1–3 are not.** Slice 3 landed (`513b0f00`), and
+with it a **ROUTE step at position 5 of `BUILD_PLAN.md`'s per-chapter loop**: solve, read the summary for
+foreign-trigger crossings, operator approves the *order*, write `reference/routes/CHnn.route.json`, then
+register the beat groups in that order with `RULE_ROUTE_ORDER` holding the two together. So "the operator
+approves the route, not just the beat set" is now a written step rather than an intention. What is still
+**not** built is the read-through itself (items 1–3) — §4b.5's step is still unnamed in the loop, and the
+verdict-correctness checklist and its decaying blind-spot appendix do not exist. Item 4 says the
+read-through *covers* the route plan; today the route plan is approved on its own, ahead of a read-through
+that has no written home.
+
 ### Q10. Deferral backlog: reconcile the two lists, and what about CH25?
 
 Class O. Two lists, never cross-checked, 23 beats. CH03's 10 are blocked until **CH25** — twenty
