@@ -81,6 +81,7 @@ _map_registry_cache: tuple[tuple, tuple[dict, dict]] | None = None
 _map_groups_cache: tuple[tuple, tuple[dict, list[str]]] | None = None
 _switch_names_cache: tuple[tuple, dict[str, str]] | None = None
 _variable_names_cache: tuple[tuple, dict[str, str]] | None = None
+_route_plans_cache: tuple[tuple, tuple[list, list[str]]] | None = None
 
 
 def _get_context():
@@ -236,6 +237,39 @@ def _get_map_group_table() -> tuple[dict[tuple[int, int], str], list[str]]:
 
     result = (table, notes)
     _map_groups_cache = (fp, result)
+    return result
+
+
+def _get_route_plans() -> tuple[list, list[str]]:
+    """Every valid route plan under ``reference/routes/*.route.json``, plus
+    degrade-notes for anything that failed to parse. An empty (or absent)
+    routes directory is normal today (most chapters have no solved route
+    yet) and degrades to ``([], [note])`` rather than raising — same
+    never-raise contract as the rest of this module."""
+    from rpg2gba.routing.plan import load_plan
+
+    routes_dir = mvc._repo_root() / "reference" / "routes"
+    paths = sorted(routes_dir.glob("*.route.json"))
+    fp = tuple((str(p), mvc._file_fingerprint(p)) for p in paths)
+    global _route_plans_cache
+    if _route_plans_cache is not None and _route_plans_cache[0] == fp:
+        return _route_plans_cache[1]
+
+    if not paths:
+        result = ([], [f"no route plans found in {routes_dir} — planned tiles unavailable"])
+        _route_plans_cache = (fp, result)
+        return result
+
+    plans: list = []
+    notes: list[str] = []
+    for path in paths:
+        try:
+            plans.append(load_plan(path))
+        except Exception as exc:
+            notes.append(f"{path} unreadable/malformed route plan, skipped ({exc})")
+
+    result = (plans, notes)
+    _route_plans_cache = (fp, result)
     return result
 
 
@@ -650,4 +684,46 @@ def beat_markers(map_id: int) -> dict:
                         "y": pos[1] if len(pos) > 1 else None,
                     })
 
-    return {"map_id": map_id, "declared": declared, "observed": observed, "notes": notes}
+    planned: list[dict] = []
+    plans, plan_notes = _get_route_plans()
+    notes += plan_notes
+    for plan in plans:
+        node_label = {
+            node.index: (node.group if node.kind == "group" else node.kind)
+            for node in plan.nodes
+        }
+        for segment in plan.segments:
+            tiles_by_map: dict[int, list[list[int]]] = {}
+            for leg in segment.legs:
+                tiles_by_map.setdefault(leg.map_id, []).extend(
+                    [x, y] for (x, y) in leg.tiles
+                )
+            if map_id not in tiles_by_map:
+                continue
+            crossings = [
+                {
+                    "x": crossing.cell[0],
+                    "y": crossing.cell[1],
+                    "script": crossing.script,
+                    "certainty": crossing.certainty,
+                    "declared": crossing.declared,
+                }
+                for crossing in segment.crossed_foreign_triggers
+                if crossing.map_id == map_id
+            ]
+            planned.append({
+                "chapter": plan.chapter_id,
+                "segment": segment.from_index,
+                "from_node": node_label.get(segment.from_index, segment.from_index),
+                "to_node": node_label.get(segment.to_index, segment.to_index),
+                "tiles": tiles_by_map[map_id],
+                "crossings": crossings,
+            })
+
+    return {
+        "map_id": map_id,
+        "declared": declared,
+        "observed": observed,
+        "planned": planned,
+        "notes": notes,
+    }

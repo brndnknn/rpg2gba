@@ -162,6 +162,7 @@ let ready = false;
 let viewMode = 'graphics';
 let eventFilter = 'all';       // all | trainer | item | warp | conditional
 let showBeats = true;
+let showPlanned = true;
 let dimBase = true;
 const KIND_COLORS = {
   warp: '#33e6ff', trainer: '#ff4444', item: '#ffcc00', npc: '#66ff66',
@@ -179,7 +180,12 @@ const STATUS_STYLE = {
   flake:   {color: '#cc79a7', shape: 'triangle'},
   skipped: {color: '#888888', shape: 'diamond'},
 };
-let beatsByMember = new Map();   // member id -> {declared, observed, notes} | 'loading' | 'error'
+// Planned-route palette: Okabe-Ito blue for the route itself, Okabe-Ito
+// orange for a crossed foreign trigger -- neither collides with the
+// declared star (#ffe066) or the observed STATUS_STYLE hues above.
+const PLANNED_ROUTE_COLOR = '#0072b2';
+const PLANNED_CROSSING_COLOR = '#e69f00';
+let beatsByMember = new Map();   // member id -> {declared, observed, planned, notes} | 'loading' | 'error'
 let focusEvent = null;           // event summary object last tapped, drives the inspector fetch
 
 // pointer tracking
@@ -390,7 +396,56 @@ function renderMember(m, cp) {
     }
   }
   ctx.restore();
+  // Planned draws first so declared/observed markers stay legible on top.
+  if (viewMode === 'events' && showPlanned) drawPlannedRoute(m, cp, baseX, baseY);
   if (viewMode === 'events' && showBeats) drawBeatMarkers(m, cp, baseX, baseY);
+}
+
+// ---- Events mode: planned route (slice 3) -- the offline solver's walk,
+// drawn as a connected polyline through the tiles it covers on this map
+// plus a subtle per-tile mark, so it reads clearly UNDER the declared
+// stars and observed status shapes drawn afterward. A crossed foreign
+// trigger is the fail-loud signal this layer exists for, so it gets its
+// own loud, shape-redundant marker (an X plus a ring, not just a colour).
+function drawPlannedRoute(m, cp, baseX, baseY) {
+  const data = beatsByMember.get(m.id);
+  if (!data || data === 'loading' || data === 'error') return;
+  const planned = data.planned || [];
+  if (!planned.length) return;
+  ctx.save();
+  const dotR = Math.max(1.5, cp * 0.09);
+  for (const item of planned) {
+    const tiles = item.tiles || [];
+    if (!tiles.length) continue;
+    ctx.strokeStyle = 'rgba(0,114,178,0.6)';
+    ctx.lineWidth = Math.max(2, cp * 0.16);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath();
+    tiles.forEach(function(t, i) {
+      const cx = baseX + t[0] * cp + cp / 2, cy = baseY + t[1] * cp + cp / 2;
+      if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
+    });
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(0,114,178,0.5)';
+    tiles.forEach(function(t) {
+      const cx = baseX + t[0] * cp + cp / 2, cy = baseY + t[1] * cp + cp / 2;
+      ctx.beginPath(); ctx.arc(cx, cy, dotR, 0, Math.PI * 2); ctx.fill();
+    });
+    (item.crossings || []).forEach(function(c) {
+      const cx = baseX + c.x * cp + cp / 2, cy = baseY + c.y * cp + cp / 2;
+      const cr = Math.max(5, cp * 0.32);
+      ctx.setLineDash(c.certainty === 'possible' ? [3, 2] : []);
+      ctx.strokeStyle = PLANNED_CROSSING_COLOR;
+      ctx.lineWidth = Math.max(2, cp * 0.13);
+      ctx.beginPath();
+      ctx.moveTo(cx - cr, cy - cr); ctx.lineTo(cx + cr, cy + cr);
+      ctx.moveTo(cx + cr, cy - cr); ctx.lineTo(cx - cr, cy + cr);
+      ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, cr * 1.15, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+    });
+  }
+  ctx.restore();
 }
 
 // ---- Events mode: beat markers (declared = star, observed = status-shaped
@@ -720,6 +775,7 @@ document.getElementById('evt-filter').addEventListener('change', function(e) {
   scheduleRender();
 });
 document.getElementById('ov_beats').addEventListener('change', function(e) { showBeats = e.target.checked; scheduleRender(); });
+document.getElementById('ov_planned').addEventListener('change', function(e) { showPlanned = e.target.checked; scheduleRender(); });
 document.getElementById('ov_dim').addEventListener('change', function(e) { dimBase = e.target.checked; scheduleRender(); });
 document.getElementById('beat-head').onclick = function() {
   const list = document.getElementById('beat-list');
@@ -936,6 +992,9 @@ function renderLegend() {
   for (const s of Object.keys(STATUS_STYLE)) {
     h += '<span><span class="legend-sw" style="background:' + STATUS_STYLE[s].color + ';border-radius:2px"></span>' + s + '</span>';
   }
+  h += '<span class="lbl" style="margin-left:8px">planned:</span>';
+  h += '<span><span class="legend-sw" style="background:' + PLANNED_ROUTE_COLOR + '"></span>route</span>';
+  h += '<span style="color:' + PLANNED_CROSSING_COLOR + '">&#10006; crossing</span>';
   el.innerHTML = h;
   el.classList.toggle('show', viewMode === 'events');
 }
@@ -949,15 +1008,18 @@ function renderBeatPanel() {
   if (data === 'error') { listEl.innerHTML = '<span class="mismatch">Failed to load beats.</span>'; notesEl.textContent = ''; return; }
   const declared = data.declared || [];
   const observed = data.observed || [];
-  countEl.textContent = '(' + declared.length + ' declared, ' + observed.length + ' observed)';
+  const planned = data.planned || [];
+  countEl.textContent = '(' + declared.length + ' declared, ' + observed.length + ' observed, ' +
+    planned.length + ' planned)';
   notesEl.innerHTML = (data.notes || []).map(function(n) { return escHtml(n); }).join('<br>');
   const byChapter = new Map();
   function bucket(chapter) {
-    if (!byChapter.has(chapter)) byChapter.set(chapter, {declared: [], observed: []});
+    if (!byChapter.has(chapter)) byChapter.set(chapter, {declared: [], observed: [], planned: []});
     return byChapter.get(chapter);
   }
   declared.forEach(function(b) { bucket(b.chapter).declared.push(b); });
   observed.forEach(function(b) { bucket(b.chapter).observed.push(b); });
+  planned.forEach(function(p) { bucket(p.chapter).planned.push(p); });
   let h = '';
   if (!byChapter.size) h = '<span class="lbl">No beats declared for this map.</span>';
   for (const [chapter, g] of byChapter) {
@@ -971,6 +1033,16 @@ function renderBeatPanel() {
       h += '<div class="beat-row ' + cls + '" onclick="focusBeat(' + JSON.stringify(chapter) + ',' + JSON.stringify(b.beat) + ',\'observed\',' + i + ')">' +
         (STATUS_STYLE[b.status] ? '&#9679;' : '&#9671;') + ' <b>' + escHtml(b.beat) + '</b> ' + escHtml(b.status || '') + ' (' + escHtml(b.phase || '') + ')</div>';
     });
+    g.planned.forEach(function(p) {
+      const crossCount = (p.crossings || []).length;
+      const cls = 'beat-row beat-planned' + (crossCount ? ' beat-planned-crossing' : '');
+      h += '<div class="' + cls + '" onclick="focusPlanned(' + JSON.stringify(chapter) + ',' + p.segment + ')">' +
+        '&#8594; seg ' + p.segment + ': ' + escHtml(String(p.from_node)) + ' &rarr; ' + escHtml(String(p.to_node)) +
+        ' (' + p.tiles.length + ' tiles)' +
+        (crossCount ? ' <span class="planned-crossing-tag">&#10006; ' + crossCount +
+          ' crossing' + (crossCount > 1 ? 's' : '') + '</span>' : '') +
+        '</div>';
+    });
   }
   listEl.innerHTML = h;
 }
@@ -982,6 +1054,14 @@ function focusBeat(chapter, beatName, which, idx) {
   const b = matches[idx] || matches[0];
   if (!b || b.x === undefined || b.y === undefined) return;
   centerOnCell(activeM, b.x, b.y, 3);
+}
+function focusPlanned(chapter, segment) {
+  const data = beatsByMember.get(activeM.id);
+  if (!data) return;
+  const item = (data.planned || []).find(function(p) { return p.chapter === chapter && p.segment === segment; });
+  if (!item || !item.tiles || !item.tiles.length) return;
+  const t = item.tiles[0];
+  centerOnCell(activeM, t[0], t[1], 3);
 }
 
 function updateSidebar() {

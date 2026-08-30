@@ -43,6 +43,8 @@ RULE_CAPABILITY_MODEL_UNENFORCED = "capability_model_unenforced"
 RULE_BLOCKED_MISSED_ASSERTION = "blocked_missed_assertion"
 RULE_APPROACH_MODEL_UNENFORCED = "approach_model_unenforced"
 RULE_REACHABILITY_UNENFORCED = "reachability_unenforced"
+RULE_ROUTE_ORDER = "route_order"
+RULE_ROUTE_MODEL_UNENFORCED = "route_model_unenforced"
 
 
 class CapabilityModel(Protocol):
@@ -101,12 +103,75 @@ class ApproachModel(Protocol):
         ...
 
 
+@dataclass(frozen=True)
+class RoutePrecedence:
+    """One `before` must come strictly ahead of `after`, and `reason` says why.
+
+    Deliberately a local, minimal shape rather than importing
+    `rpg2gba.routing.plan.PrecedenceEdge` -- this module must not import
+    `rpg2gba.routing` (or `rpg2gba.playtest`) at module load time, the same
+    seam discipline as `CapabilityModel`/`ApproachModel`. The CLI's concrete
+    `RouteModel` adapter is the thing that knows about the real
+    `RoutePlan`/`PrecedenceEdge` types and translates them into this shape.
+    """
+
+    before: str  # group id
+    after: str  # group id
+    reason: str
+
+
+class RouteModel(Protocol):
+    """The seam `RULE_ROUTE_ORDER` plugs into: does the chapter's registered
+    beat-group order match the order the offline route solver actually
+    planned?
+
+    Motivating incident: on CH04, group B2 was registered ahead of group B3
+    in the chapter module, but the solver's plan walked B3 before B2. Nothing
+    checked that the two agreed. The walk crossed Timothy's event-touch tile
+    on the way to Larrie, fired the wrong trainer battle, and both the
+    manifest checker and the boot-walk gate passed clean -- because neither
+    one compared registration order against plan order at all. It read as a
+    converter bug and ate three sessions before anyone thought to diff the
+    two orders by hand. This rule makes that diff automatic.
+
+    Not implemented here -- deliberately, same reasoning as
+    `CapabilityModel`/`ApproachModel`: `check_chapter`'s `route` argument
+    accepts anything satisfying this Protocol. The concrete adapter the CLI
+    wires in loads a chapter's `RoutePlan` (`rpg2gba.routing.plan.load_plan`)
+    for `planned_group_order`/`precedence_edges`, and its `Chapter.groups()`
+    (`rpg2gba.playtest.chapter.load_chapter`) for `registered_group_order`.
+    """
+
+    def planned_group_order(self) -> tuple[str, ...]:
+        """Group ids in the order the route solver planned to walk them --
+        i.e. the `group` of each `kind == "group"` node in `RoutePlan.nodes`,
+        in node order."""
+        ...
+
+    def registered_group_order(self) -> tuple[str, ...]:
+        """Group ids in the order they were registered in the chapter module
+        -- i.e. `BeatGroup.group_id` for each entry of `Chapter.groups()`, in
+        registration order. Registration order IS playthrough order
+        (`chapter.py`'s own docstring), so this is "the order the chapter
+        will actually be walked when the ROM runs it"."""
+        ...
+
+    def precedence_edges(self) -> tuple[RoutePrecedence, ...]:
+        """The solver's own `RoutePlan.precedence` edges, translated to the
+        local `RoutePrecedence` shape. An edge with `before`/`after` group
+        ids not present in `registered_group_order()` is ignored by the
+        rule (a name mismatch there is already reported by the missing-group
+        half of `RULE_ROUTE_ORDER`, once, not twice)."""
+        ...
+
+
 def check_chapter(
     rows: list[ManifestRow],
     dispositions: dict[str, Disposition],
     *,
     capabilities: CapabilityModel | None = None,
     approach: ApproachModel | None = None,
+    route: RouteModel | None = None,
 ) -> list[Finding]:
     """Check one chapter's generated rows against its authored dispositions.
 
@@ -301,7 +366,142 @@ def check_chapter(
             severity="warning",
         ))
 
+    # RULE_ROUTE_ORDER: registered beat-group order must match the offline
+    # route solver's planned order -- see `RouteModel`'s docstring for the
+    # CH04 incident this exists to catch. Chapter-scale, like
+    # RULE_REACHABILITY_UNENFORCED above, but there is no natural map/row
+    # to key it to (it's about the whole walk, not one map's data), so it
+    # uses the fixed row_id "chapter" -- same non-row convention as that
+    # rule's synthetic map-scoped id, just with nothing narrower available.
+    if route is None:
+        findings.append(Finding(
+            row_id="chapter",
+            rule=RULE_ROUTE_MODEL_UNENFORCED,
+            message=(
+                "could not check registered beat-group order against the "
+                "planned route order because no route model was supplied "
+                "(this rule is unenforced without one)"
+            ),
+            severity="warning",
+        ))
+    else:
+        findings.extend(_check_route_order(route))
+
     findings.sort(key=lambda f: (f.row_id, f.rule))
+    return findings
+
+
+def _check_route_order(route: RouteModel) -> list[Finding]:
+    """The substantive half of `RULE_ROUTE_ORDER`: compare planned vs.
+    registered group order, and the plan's precedence edges against the
+    registered order. Split out of `check_chapter` only for readability --
+    it is still just one more whole-chapter pass, called exactly once."""
+    findings: list[Finding] = []
+    planned = route.planned_group_order()
+    registered = route.registered_group_order()
+    planned_set = set(planned)
+    registered_set = set(registered)
+
+    planned_only = [g for g in planned if g not in registered_set]
+    for group_id in planned_only:
+        findings.append(Finding(
+            row_id="chapter",
+            rule=RULE_ROUTE_ORDER,
+            message=(
+                f"group {group_id!r} appears in the planned route order but "
+                "was never registered in the chapter -- a beat group was "
+                "dropped, renamed, or the route plan is stale and needs "
+                "re-solving"
+            ),
+            severity="error",
+        ))
+
+    registered_only = [g for g in registered if g not in planned_set]
+    for group_id in registered_only:
+        findings.append(Finding(
+            row_id="chapter",
+            rule=RULE_ROUTE_ORDER,
+            message=(
+                f"group {group_id!r} is registered in the chapter but does "
+                "not appear anywhere in the planned route order -- a new or "
+                "renamed beat group that the route plan has never seen; "
+                "re-run the solver"
+            ),
+            severity="error",
+        ))
+
+    # Compare relative order only over groups common to both -- a group
+    # missing from one side is already reported above, and dragging it into
+    # the ordering diff too would just restate the same mistake twice.
+    planned_common = [g for g in planned if g in registered_set]
+    registered_common = [g for g in registered if g in planned_set]
+    if planned_common != registered_common:
+        planned_index = {g: i for i, g in enumerate(planned)}
+        registered_index = {g: i for i, g in enumerate(registered)}
+        mismatched = [i for i in range(len(planned_common))
+                      if planned_common[i] != registered_common[i]]
+        is_pure_swap = (
+            len(mismatched) == 2
+            and planned_common[mismatched[0]] == registered_common[mismatched[1]]
+            and planned_common[mismatched[1]] == registered_common[mismatched[0]]
+        )
+        if is_pure_swap:
+            # A pure transposition of one pair -- name the swap directly
+            # rather than reporting each group "out of place" separately, so
+            # the finding points at the one edit (swap these two) that fixes
+            # it instead of two findings that could misleadingly suggest two
+            # independent problems.
+            a = planned_common[mismatched[0]]
+            b = planned_common[mismatched[1]]
+            findings.append(Finding(
+                row_id="chapter",
+                rule=RULE_ROUTE_ORDER,
+                message=(
+                    f"groups {a!r} and {b!r} are transposed: the plan walks "
+                    f"{a!r} before {b!r} (plan positions {planned_index[a]}, "
+                    f"{planned_index[b]}), but the chapter registers {b!r} "
+                    f"before {a!r} (registered positions "
+                    f"{registered_index[b]}, {registered_index[a]}) -- swap "
+                    "their registration order"
+                ),
+                severity="error",
+            ))
+        else:
+            for i in mismatched:
+                group_id = planned_common[i]
+                findings.append(Finding(
+                    row_id="chapter",
+                    rule=RULE_ROUTE_ORDER,
+                    message=(
+                        f"group {group_id!r} is out of order: the plan puts "
+                        f"it at position {planned_index[group_id]}, but it "
+                        f"is registered at position "
+                        f"{registered_index[group_id]} in the chapter -- "
+                        "reorder the chapter's beat registration to match "
+                        "the planned walk"
+                    ),
+                    severity="error",
+                ))
+
+    registered_index = {g: i for i, g in enumerate(registered)}
+    for edge in route.precedence_edges():
+        if edge.before not in registered_set or edge.after not in registered_set:
+            continue
+        if registered_index[edge.after] < registered_index[edge.before]:
+            findings.append(Finding(
+                row_id="chapter",
+                rule=RULE_ROUTE_ORDER,
+                message=(
+                    f"precedence violated: group {edge.after!r} is "
+                    f"registered before group {edge.before!r} (registered "
+                    f"positions {registered_index[edge.after]} < "
+                    f"{registered_index[edge.before]}), but the route plan "
+                    f"requires {edge.before!r} before {edge.after!r} -- "
+                    f"{edge.reason}"
+                ),
+                severity="error",
+            ))
+
     return findings
 
 

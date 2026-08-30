@@ -14,6 +14,7 @@ import pytest
 from rpg2gba.chapter_manifest.checker import (
     ApproachModel,
     CapabilityModel,
+    RoutePrecedence,
     RULE_APPROACH_MODEL_UNENFORCED,
     RULE_BLOCKED_MISSED_ASSERTION,
     RULE_BLOCKED_NO_GRANTING_CHAPTER,
@@ -22,6 +23,8 @@ from rpg2gba.chapter_manifest.checker import (
     RULE_MISSING_CITATION,
     RULE_ORPHAN_DISPOSITION,
     RULE_REACHABILITY_UNENFORCED,
+    RULE_ROUTE_MODEL_UNENFORCED,
+    RULE_ROUTE_ORDER,
     RULE_STALE_DISPOSITION,
     RULE_UNAFFIRMED_DISPOSITION,
     RULE_UNDISPOSITIONABLE_ROW_DECIDED,
@@ -67,9 +70,12 @@ def _disp(row_id: str, spec: str, **rest) -> Disposition:
 def test_undispositioned_row_is_error():
     row = _row()
     findings = check_chapter([row], {})
-    assert len(findings) == 1
-    assert findings[0].rule == RULE_UNDISPOSITIONED
-    assert findings[0].severity == "error"
+    # Filter out the unrelated route-model-unenforced warning that every
+    # no-`route=` call now carries (rule 10) -- this test is about rule 1.
+    relevant = [f for f in findings if f.rule != RULE_ROUTE_MODEL_UNENFORCED]
+    assert len(relevant) == 1
+    assert relevant[0].rule == RULE_UNDISPOSITIONED
+    assert relevant[0].severity == "error"
 
 
 def test_dispositioned_row_no_undispositioned_finding():
@@ -85,9 +91,12 @@ def test_dispositioned_row_no_undispositioned_finding():
 def test_orphan_disposition_is_error():
     disp = _disp("map999/ev001/p0", "cosmetic", affirmed_hash="h1")
     findings = check_chapter([], {"map999/ev001/p0": disp})
-    assert len(findings) == 1
-    assert findings[0].rule == RULE_ORPHAN_DISPOSITION
-    assert findings[0].severity == "error"
+    # Same filter as above -- rule 10's unenforced warning always shows up
+    # without a `route=`, and this test is about rule 2.
+    relevant = [f for f in findings if f.rule != RULE_ROUTE_MODEL_UNENFORCED]
+    assert len(relevant) == 1
+    assert relevant[0].rule == RULE_ORPHAN_DISPOSITION
+    assert relevant[0].severity == "error"
 
 
 def test_matching_disposition_not_orphan():
@@ -530,3 +539,196 @@ def test_blocked_row_approach_true_fires_missed_assertion():
     rules = [f.rule for f in findings]
     assert RULE_BLOCKED_MISSED_ASSERTION in rules
     assert RULE_APPROACH_MODEL_UNENFORCED not in rules
+
+
+# --- rule 10: registered beat-group order must match planned route order ---
+
+
+class _FakeRoute:
+    """A minimal `RouteModel` for tests that don't need a real `RoutePlan` --
+    e.g. isolating the reorder-diff logic from the plan's own on-disk shape.
+    """
+
+    def __init__(self, planned: tuple[str, ...], registered: tuple[str, ...],
+                 precedence: tuple[RoutePrecedence, ...] = ()) -> None:
+        self._planned = planned
+        self._registered = registered
+        self._precedence = precedence
+
+    def planned_group_order(self) -> tuple[str, ...]:
+        return self._planned
+
+    def registered_group_order(self) -> tuple[str, ...]:
+        return self._registered
+
+    def precedence_edges(self) -> tuple[RoutePrecedence, ...]:
+        return self._precedence
+
+
+def _plan_group_order(plan) -> tuple[str, ...]:
+    return tuple(n.group for n in plan.nodes if n.kind == "group")
+
+
+class _RealPlanRoute:
+    """The shape the CLI's real adapter has: planned order and precedence
+    come from an actual `RoutePlan`; registered order comes from wherever
+    `Chapter.groups()` put it (a plain tuple here, since these tests don't
+    need a real chapter module to exercise the diff logic)."""
+
+    def __init__(self, plan, registered: tuple[str, ...]) -> None:
+        self._plan = plan
+        self._registered = registered
+
+    def planned_group_order(self) -> tuple[str, ...]:
+        return _plan_group_order(self._plan)
+
+    def registered_group_order(self) -> tuple[str, ...]:
+        return self._registered
+
+    def precedence_edges(self) -> tuple[RoutePrecedence, ...]:
+        return tuple(
+            RoutePrecedence(before=e.before, after=e.after, reason=e.reason)
+            for e in self._plan.precedence
+        )
+
+
+def _build_route_plan(group_order: tuple[str, ...], precedence=()):
+    """A real `rpg2gba.routing.plan.RoutePlan` with one group node per name
+    in `group_order`, entry/exit bookends, and trivial single-tile segments
+    -- just enough to satisfy `RoutePlan.__post_init__`'s invariants."""
+    from rpg2gba.routing.plan import (
+        PrecedenceEdge,
+        RouteLeg,
+        RouteNode,
+        RoutePlan,
+        RouteSegment,
+    )
+
+    nodes = [RouteNode(index=0, kind="entry", map_id=1, cell=(0, 0))]
+    for i, group_id in enumerate(group_order, start=1):
+        nodes.append(RouteNode(index=i, kind="group", map_id=1, cell=(0, 0),
+                                group=group_id, beats=(f"{group_id}:b0",)))
+    nodes.append(RouteNode(index=len(nodes), kind="exit", map_id=1, cell=(0, 0)))
+
+    segments = tuple(
+        RouteSegment(from_index=i, to_index=i + 1,
+                     legs=(RouteLeg(map_id=1, tiles=((0, 0),)),), tile_count=1)
+        for i in range(len(nodes) - 1)
+    )
+    edges = tuple(PrecedenceEdge(before=b, after=a, reason=r) for b, a, r in precedence)
+
+    return RoutePlan(chapter_id="CH04", chapter_module="test_chapter",
+                      nodes=tuple(nodes), segments=segments, precedence=edges,
+                      tile_cost=len(segments), solver_method="test")
+
+
+def test_route_order_unenforced_without_route_model():
+    row = _row(effects=("text",), content_hash="h1")
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    findings = check_chapter([row], {row.row_id: disp}, route=None)
+    unenforced = [f for f in findings if f.rule == RULE_ROUTE_MODEL_UNENFORCED]
+    assert len(unenforced) == 1
+    assert unenforced[0].severity == "warning"
+    assert unenforced[0].row_id == "chapter"
+    assert all(f.rule != RULE_ROUTE_ORDER for f in findings)
+
+
+def test_route_order_matching_orders_no_finding():
+    row = _row(effects=("text",), content_hash="h1")
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    route = _FakeRoute(planned=("B1", "B2", "B3"), registered=("B1", "B2", "B3"))
+    findings = check_chapter([row], {row.row_id: disp}, route=route)
+    assert all(f.rule not in (RULE_ROUTE_ORDER, RULE_ROUTE_MODEL_UNENFORCED)
+               for f in findings)
+
+
+def test_route_order_transposed_pair_reports_swap_not_two_findings():
+    row = _row(effects=("text",), content_hash="h1")
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    route = _FakeRoute(planned=("B1", "B2", "B3"), registered=("B1", "B3", "B2"))
+    findings = check_chapter([row], {row.row_id: disp}, route=route)
+    order_findings = [f for f in findings if f.rule == RULE_ROUTE_ORDER]
+    assert len(order_findings) == 1
+    assert order_findings[0].severity == "error"
+    assert "'B2'" in order_findings[0].message and "'B3'" in order_findings[0].message
+    assert "transposed" in order_findings[0].message
+
+
+def test_route_order_group_in_plan_not_registered_is_error():
+    row = _row(effects=("text",), content_hash="h1")
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    route = _FakeRoute(planned=("B1", "B2"), registered=("B1",))
+    findings = check_chapter([row], {row.row_id: disp}, route=route)
+    order_findings = [f for f in findings if f.rule == RULE_ROUTE_ORDER]
+    assert len(order_findings) == 1
+    assert order_findings[0].severity == "error"
+    assert "'B2'" in order_findings[0].message
+    assert "never registered" in order_findings[0].message
+
+
+def test_route_order_group_registered_not_in_plan_is_error():
+    row = _row(effects=("text",), content_hash="h1")
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    route = _FakeRoute(planned=("B1",), registered=("B1", "B2"))
+    findings = check_chapter([row], {row.row_id: disp}, route=route)
+    order_findings = [f for f in findings if f.rule == RULE_ROUTE_ORDER]
+    assert len(order_findings) == 1
+    assert order_findings[0].severity == "error"
+    assert "'B2'" in order_findings[0].message
+    assert "does not appear anywhere in the planned route order" in order_findings[0].message
+
+
+def test_route_order_precedence_violation_names_reason():
+    row = _row(effects=("text",), content_hash="h1")
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    # Orders match exactly -- only the precedence edge is violated, so this
+    # isolates the precedence half of the rule from the reorder-diff half.
+    edge = RoutePrecedence(before="B3", after="B1",
+                            reason="B1 needs the item B3 grants")
+    route = _FakeRoute(planned=("B1", "B2", "B3"), registered=("B1", "B2", "B3"),
+                        precedence=(edge,))
+    findings = check_chapter([row], {row.row_id: disp}, route=route)
+    order_findings = [f for f in findings if f.rule == RULE_ROUTE_ORDER]
+    assert len(order_findings) == 1
+    assert order_findings[0].severity == "error"
+    assert "B1 needs the item B3 grants" in order_findings[0].message
+    assert "'B3'" in order_findings[0].message and "'B1'" in order_findings[0].message
+
+
+def test_route_order_precedence_satisfied_no_finding():
+    row = _row(effects=("text",), content_hash="h1")
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    edge = RoutePrecedence(before="B1", after="B3", reason="B3 needs B1's item")
+    route = _FakeRoute(planned=("B1", "B2", "B3"), registered=("B1", "B2", "B3"),
+                        precedence=(edge,))
+    findings = check_chapter([row], {row.row_id: disp}, route=route)
+    assert all(f.rule != RULE_ROUTE_ORDER for f in findings)
+
+
+def test_route_order_against_real_route_plan_transposed():
+    """Drives a real `rpg2gba.routing.plan.RoutePlan` through `RouteModel`,
+    so the rule is proven against the actual on-disk artifact type -- not
+    only the `_FakeRoute` stand-in used above."""
+    row = _row(effects=("text",), content_hash="h1")
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    plan = _build_route_plan(("B1", "B2", "B3"))
+    route = _RealPlanRoute(plan, registered=("B1", "B3", "B2"))
+    findings = check_chapter([row], {row.row_id: disp}, route=route)
+    order_findings = [f for f in findings if f.rule == RULE_ROUTE_ORDER]
+    assert len(order_findings) == 1
+    assert "transposed" in order_findings[0].message
+
+
+def test_route_order_against_real_route_plan_precedence_violation():
+    row = _row(effects=("text",), content_hash="h1")
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    plan = _build_route_plan(
+        ("B1", "B2", "B3"),
+        precedence=[("B3", "B1", "B1 needs the item B3 grants")],
+    )
+    route = _RealPlanRoute(plan, registered=("B1", "B2", "B3"))
+    findings = check_chapter([row], {row.row_id: disp}, route=route)
+    order_findings = [f for f in findings if f.rule == RULE_ROUTE_ORDER]
+    assert len(order_findings) == 1
+    assert order_findings[0].severity == "error"
+    assert "B1 needs the item B3 grants" in order_findings[0].message

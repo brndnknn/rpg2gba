@@ -23,6 +23,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import map_viewer_common as mvc  # noqa: E402
 import map_viewer_events as mve  # noqa: E402
 
+from rpg2gba.routing.plan import (  # noqa: E402
+    RouteLeg,
+    RouteNode,
+    RoutePlan,
+    RouteSegment,
+    TriggerCrossing,
+    write_plan,
+)
+
 MAPS_DIR = mvc._maps_dir()
 TRAINER_MAP_ID = 33  # has trainer/rematch events (see deterministic.py smoke checks)
 KEVLAR_CENTER_MAP_ID = 68  # MAP_KEVLAR_TOWN_POKEMON_CENTER: warps + item ball
@@ -44,14 +53,14 @@ def _clear_caches() -> None:
     for name in (
         "_ctx_cache", "_item_names_cache", "_trainer_join_cache",
         "_map_registry_cache", "_map_groups_cache", "_switch_names_cache",
-        "_variable_names_cache",
+        "_variable_names_cache", "_route_plans_cache",
     ):
         setattr(mve, name, None)
     yield
     for name in (
         "_ctx_cache", "_item_names_cache", "_trainer_join_cache",
         "_map_registry_cache", "_map_groups_cache", "_switch_names_cache",
-        "_variable_names_cache",
+        "_variable_names_cache", "_route_plans_cache",
     ):
         setattr(mve, name, None)
 
@@ -191,3 +200,122 @@ def test_beat_markers_missing_registry_state_degrades_gracefully(
 
     assert result["declared"] == []
     assert isinstance(result["notes"], list) and result["notes"]
+
+
+# ---------------------------------------------------------------------------
+# beat_markers — planned (slice 3)
+# ---------------------------------------------------------------------------
+
+_ROUTE_MAP_A = 501
+_ROUTE_MAP_B = 502
+
+
+def _two_map_plan(chapter_id: str = "CH99") -> RoutePlan:
+    """A synthetic 3-node route plan whose one segment crosses two maps
+    (entry on map A, group+exit on map B), with a foreign-trigger crossing
+    on map B, followed by a single-map segment map-B -> exit."""
+    nodes = (
+        RouteNode(index=0, kind="entry", map_id=_ROUTE_MAP_A, cell=(0, 0)),
+        RouteNode(
+            index=1, kind="group", map_id=_ROUTE_MAP_B, cell=(1, 1),
+            group="mawuli", beats=("beat1",),
+        ),
+        RouteNode(index=2, kind="exit", map_id=_ROUTE_MAP_B, cell=(2, 2)),
+    )
+    seg0 = RouteSegment(
+        from_index=0,
+        to_index=1,
+        legs=(
+            RouteLeg(map_id=_ROUTE_MAP_A, tiles=((0, 0), (1, 0))),
+            RouteLeg(map_id=_ROUTE_MAP_B, tiles=((0, 1), (1, 1))),
+        ),
+        tile_count=4,
+        crossed_foreign_triggers=(
+            TriggerCrossing(
+                map_id=_ROUTE_MAP_B, cell=(1, 1), script="EventScript_Foo",
+                certainty="certain", declared=False,
+            ),
+        ),
+    )
+    seg1 = RouteSegment(
+        from_index=1,
+        to_index=2,
+        legs=(RouteLeg(map_id=_ROUTE_MAP_B, tiles=((1, 1), (2, 2))),),
+        tile_count=2,
+    )
+    return RoutePlan(
+        chapter_id=chapter_id,
+        chapter_module="passage_test",
+        nodes=nodes,
+        segments=(seg0, seg1),
+        precedence=(),
+        tile_cost=6,
+        solver_method="test-solver",
+    )
+
+
+def test_beat_markers_planned_key_present_no_routes_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(mvc, "_repo_root", lambda: tmp_path)
+
+    result = mve.beat_markers(_ROUTE_MAP_A)
+
+    assert result["planned"] == []
+    assert any("planned tiles unavailable" in n for n in result["notes"])
+    # declared/observed still work (unaffected by the repo-root override).
+    assert isinstance(result["declared"], list)
+    assert isinstance(result["observed"], list)
+
+
+def test_beat_markers_planned_from_valid_route_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(mvc, "_repo_root", lambda: tmp_path)
+    routes_dir = tmp_path / "reference" / "routes"
+    write_plan(_two_map_plan(), routes_dir / "CH99.route.json")
+
+    result_a = mve.beat_markers(_ROUTE_MAP_A)
+    result_b = mve.beat_markers(_ROUTE_MAP_B)
+
+    # Map A only appears in segment 0 (the entry -> group leg).
+    assert len(result_a["planned"]) == 1
+    item_a = result_a["planned"][0]
+    assert item_a["chapter"] == "CH99"
+    assert item_a["segment"] == 0
+    assert item_a["from_node"] == "entry"
+    assert item_a["to_node"] == "mawuli"
+    assert item_a["tiles"] == [[0, 0], [1, 0]]
+    assert item_a["crossings"] == []
+
+    # Map B appears in both segments: one item per segment it's touched by.
+    assert len(result_b["planned"]) == 2
+    seg0_b = next(i for i in result_b["planned"] if i["segment"] == 0)
+    seg1_b = next(i for i in result_b["planned"] if i["segment"] == 1)
+    assert seg0_b["from_node"] == "entry"
+    assert seg0_b["to_node"] == "mawuli"
+    assert seg0_b["tiles"] == [[0, 1], [1, 1]]
+    assert seg0_b["crossings"] == [
+        {"x": 1, "y": 1, "script": "EventScript_Foo", "certainty": "certain", "declared": False}
+    ]
+    assert seg1_b["from_node"] == "mawuli"
+    assert seg1_b["to_node"] == "exit"
+    assert seg1_b["tiles"] == [[1, 1], [2, 2]]
+    assert seg1_b["crossings"] == []
+
+
+def test_beat_markers_planned_skips_malformed_route_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(mvc, "_repo_root", lambda: tmp_path)
+    routes_dir = tmp_path / "reference" / "routes"
+    write_plan(_two_map_plan("CH99"), routes_dir / "CH99.route.json")
+    (routes_dir / "CH98.route.json").write_text("{ not valid json", encoding="utf-8")
+
+    result = mve.beat_markers(_ROUTE_MAP_A)
+
+    assert len(result["planned"]) == 1
+    assert result["planned"][0]["chapter"] == "CH99"
+    assert any(
+        "CH98.route.json" in n and "skipped" in n for n in result["notes"]
+    )

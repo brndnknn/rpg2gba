@@ -789,6 +789,89 @@ regenerating a gate-closed chapter's manifest is not a no-op edit.
 
 *Found 2026-08-30 during the slice-2 commit review.*
 
+### 66. Nothing maps an atlas chapter id to its playtest module — `--module` is a hand-carried workaround
+
+`reference/chapters.json` keys chapters by atlas id (`CH04`), and so do the
+manifest, dispositions and route artifacts (`CH04.manifest.json`,
+`CH04.route.json`). The playtest scenario modules are named for the place
+instead (`moki`, `route1`, `kevlar`, `route2`), and **no artifact in the repo
+records which is which** — CH04 is Route 2 is `route2.py`, and that chain lives
+only in a human's head.
+
+Slice 3 is the first consumer needing both halves at once (the manifest for
+precedence, the chapter module for beat groups). `routing/__main__.py` therefore
+requires an explicit `--module`:
+
+    python -m rpg2gba.routing plan --chapter CH04 --module route2
+
+The resulting plan records `RoutePlan.chapter_module`, so every *downstream*
+consumer recovers it from the artifact (`chapter_manifest/route_model.py` does
+exactly this) — the operator types the pairing once per chapter, at solve time,
+and nothing else has to guess. That is deliberate: a wrong guess here silently
+routes the wrong chapter, and the shapes genuinely do not match (CH07/CH07A are
+revisits of maps whose modules already exist under their first-visit names).
+
+**Remediation:** add a `playtest_module` field to `reference/chapters.json`'s
+entries and have both CLIs read it, dropping `--module`. That is a schema change
+to a §4.3 source-of-truth file, so it needs an operator ruling first — in
+particular on what the field holds for the ~20 chapters with no scenario module
+yet (null, or absent), and for revisit chapters that will likely share a module
+with their first visit.
+
+*Found 2026-08-30 building slice 3.*
+
+### 67. No chapter routed so far carries a route plan, and CH01-CH03 cannot get one
+
+Slice 3's `RULE_ROUTE_ORDER` only enforces anything when
+`reference/routes/<chapter>.route.json` exists; with no plan on disk
+`build_route_model` returns None and the rule degrades to its
+`route_model_unenforced` warning. **No route plan is committed for CH01-CH04**,
+so the rule is unenforced for every chapter gated to date. Two separate
+reasons, and only the second is a defect:
+
+1. **CH01-CH03 cannot be solved at all.** Their manifests predate slice 2 and
+   are missing `reachability_consulted`, so `load_manifest` refuses them
+   ("regenerate the manifest rather than patching it") before the solver
+   sees a single beat. Regenerating a gate-closed chapter's manifest is
+   itself #65, so this is blocked behind that, not behind routing.
+
+2. **CH04 solves, but its plan disagrees with its registered order.** The
+   solver walks `B1 B15 B4 B9 B7 B3 B12 B5 B6 B13 B11 B2 B14` for 112 tiles;
+   `route2.py` registers `B1 B4 B14 B2 B3 B5 B6 B7 B9 B11 B12 B13 B15`,
+   which the solver's own cost model scores at 130 tiles. **Both orders are
+   entirely free of foreign-trigger crossings and neither has an unroutable
+   segment** -- measured 2026-08-30, not assumed. So the 18-tile gap is pure
+   walk distance: the registered order is suboptimal, not wrong, and nothing
+   about CH04's passed gate is invalidated by it.
+
+   Committing `CH04.route.json` as-is would therefore turn `check --chapter
+   CH04` red over a cosmetic reorder of a closed chapter. Not done.
+
+**Consequence: slice 3 is validated forward, from CH05, not retroactively.**
+This is the one place slice 3 differs from slice 2, whose retroactive
+re-derivation over CH01-CH04 was an explicit part of its build
+(`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md`, "Validation -- CH05 is not
+sufficient evidence"). Slice 3 has no equivalent, and the reason is
+structural: slice 2 re-derived a *fact about the world* that a gated chapter
+already recorded the right answer to, whereas slice 3 proposes an *ordering
+the operator has to approve* -- there is no pre-existing approved route to
+re-derive, because ordering was convention until now.
+
+What slice 3 does get instead is the CH04 B2/B3 incident as a worked case:
+the plan puts B3 at position 5 and B2 at position 11, while the chapter
+registers B2 at 3 ahead of B3 at 4. That is exactly the inversion whose
+un-checked walk crossed Timothy's event-touch tile and fought the wrong
+trainer, and `RULE_ROUTE_ORDER` reports it as an error. The rule would have
+caught the original incident.
+
+**Remediation:** solve and commit CH05's plan as part of CH05's authoring
+loop, where the operator approves the route before the chapter module is
+written and the two agree by construction. Revisit CH04 only if #65 reopens
+it for another reason -- do not reorder a gated chapter's beats to satisfy
+this rule on its own.
+
+*Found 2026-08-30 finishing slice 3.*
+
 ## Parked until the CH05 branch is cut (do not raise before then)
 
 These are real, tracked work items, scoped entirely to CH05. They are not open
