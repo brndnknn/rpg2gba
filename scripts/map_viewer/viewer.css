@@ -83,6 +83,14 @@ body.mode-events #beat-panel{display:block}
 .beat-planned{border-left-color:#0072b2}
 .beat-planned-crossing{border-left-color:#e69f00}
 .planned-crossing-tag{color:#e69f00;font-weight:bold}
+.beat-walked{border-left-color:#d55e00}
+.beat-walked-violation{border-left-color:#ff2b2b}
+.walked-off-plan-tag{color:#d55e00;font-weight:bold}
+.walked-violation-tag{color:#ff2b2b;font-weight:bold}
+/* Contradictions (Q8): information, not error -- a carried, non-blocking
+   finding, deliberately styled apart from the red/orange failure/violation
+   classes above so it never reads as something blocking the run. */
+.beat-contradiction{border-left-color:#5a8;background:#161c1a}
 .evt-cmd-block{background:#151515;border:1px solid #333;padding:4px;margin-top:3px;max-height:160px;overflow-y:auto;font-size:10px;white-space:pre-wrap}
 #merge-list{margin-top:4px;max-height:200px;overflow-y:auto}
 .merge-item{display:flex;align-items:center;gap:6px;background:#251820;border:1px solid #534;padding:2px 5px;margin:2px 0;font-size:11px;cursor:pointer}

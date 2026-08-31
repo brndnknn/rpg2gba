@@ -18,6 +18,13 @@ from ..tileset_converter.map_constants import DEFAULT_STATE_PATH as _DEFAULT_MAP
 from ..tileset_converter.map_constants import MapConstantRegistry
 from ..traversal.graph import MapGraph, build_map_graph
 from .contact_sheet import Waypoint
+from .contradictions import (
+    KIND_UNRESOLVED_MAP,
+    KIND_WALKABILITY,
+    Contradiction,
+    ContradictionLedger,
+)
+from .divergence import WalkedTile
 from .errors import RoutePlanningError, ScenarioError
 from .offsets import (
     OBJEVENT_ACTIVE_BIT_MASK,
@@ -672,6 +679,23 @@ class Emulator:
         # synthetic graph without touching disk (`test_plan_route_graph.py`).
         self._map_graph_source = _MapGraphSource()
         self._map_id_bridge = _MapIdBridge(self)
+        # Q13 slice 4. `_walk_path` is the tile sequence the walker
+        # actually stood on since the last `clear_walk_path()` (the runner
+        # clears it at every beat boundary), and it is what makes
+        # planned-vs-observed comparable at all: `observed_beats/*.json`
+        # used to hold enter/exit snapshots only -- two points per beat --
+        # which cannot show that a walk crossed a trigger tile between
+        # them. That is exactly what happened on CH04 B3, and the artifact
+        # that would have shown it the first time is this list.
+        self._walk_path: list[WalkedTile] = []
+        # Q8's ledger (see `contradictions.py`). Public-ish instance
+        # attribute so the runner can drain it into the run artifact and a
+        # test can inspect it; nothing may branch on its contents.
+        self.contradictions = ContradictionLedger()
+        # Q7's frame rule: how many times this beat explicitly pinned a
+        # frame. `waypoint()` clears it, so it is per-beat exactly like
+        # `_frame_pinned`.
+        self._frames_marked = 0
 
     # -- raw access ---------------------------------------------------------
 
@@ -835,6 +859,13 @@ class Emulator:
             return False
         self._text_frame = self.screen.to_pil().convert("RGB")
         self._frame_pinned = True
+        # Q7's frame rule counts *explicit* pins, not the automatic
+        # boundary waypoint every beat gets for free. The rule's whole
+        # point is that a negative claim ("nothing runs") is only evidence
+        # when someone chose the instant it is a claim about; the automatic
+        # frame is taken after the beat returns, which is precisely the
+        # wrong moment and is available to every beat regardless.
+        self._frames_marked += 1
         return True
 
     def waypoint(self, beat: str, name: str = "", note: str = "",
@@ -871,10 +902,16 @@ class Emulator:
         if self.screenshot_dir is None:
             self._text_frame = None
             self._frame_pinned = False
+            self._frames_marked = 0
             return None
         frame = None if failed else self._text_frame
         self._text_frame = None
         self._frame_pinned = False
+        # Per-beat, exactly like the pin: `waypoint` is the beat boundary.
+        # The runner reads `frames_marked()` BEFORE calling this on a
+        # failure, which is the only ordering that lets Q7's rule see what
+        # the beat did.
+        self._frames_marked = 0
         if frame is None and not failed:
             self._settle_frame()
             if self._frame_unreviewable():
@@ -1707,6 +1744,84 @@ class Emulator:
         map_w, map_h = width - (off * 2 + 1), height - off * 2
         return _collision_walkable(blocks, width, off, map_w, map_h, x, y)
 
+    # -- walked path (Q13 slice 4) -----------------------------------------
+
+    def _record_walk_tile(self, x: int, y: int) -> None:
+        """Append one tile the player actually stood on.
+
+        Called once per step attempt from `_walk_greedy`, at the point it
+        reads `player_pos()` -- which is also the point the arrival tile is
+        read, so a completed walk's final tile is in the path too.
+
+        **Consecutive duplicates are dropped**, because the walker reads
+        its position again after a blocked step, after a sidestep it then
+        undoes, and after the arrival settle. Recording those would turn a
+        12-tile walk into 40 rows saying the same thing, and the question
+        the path exists to answer -- "which tiles did this beat touch" --
+        does not care how many frames were spent on each.
+
+        **A tile whose map cannot be resolved is still recorded**, with
+        `map_id=None` and a one-time contradiction, rather than dropped: an
+        uncompared tile that is silently absent is indistinguishable from a
+        compared-and-clean one, which is the silent-default failure §4.5
+        exists to forbid.
+
+        This must never raise. It is instrumentation running inside a walk
+        that is doing real work; a failure to observe the walk is not a
+        reason to fail the walk. `map_location()` on a mid-warp frame and
+        `_map_id_bridge` on an unminted map are both expected, and both
+        resolve to "record what we know, note what we don't".
+        """
+        try:
+            group, num = self.map_location()
+        except Exception:  # noqa: BLE001 - instrumentation never fails a walk
+            logger.debug("_record_walk_tile: map_location() unreadable at "
+                         "(%s, %s); tile not recorded", x, y)
+            return
+        prev = self._walk_path[-1] if self._walk_path else None
+        if (prev is not None and prev.x == x and prev.y == y
+                and prev.map_group == group and prev.map_num == num):
+            return
+        try:
+            map_id: int | None = self._map_id_bridge.resolve(group, num)
+        except ScenarioError:
+            map_id = None
+            self.contradictions.record(Contradiction(
+                kind=KIND_UNRESOLVED_MAP,
+                beat="",
+                detail=(f"walked map_location() group={group} num={num} "
+                        "resolves to no minted Uranium map, so no tile on "
+                        "it can be compared against a route plan"),
+                model="a minted Uranium map for every walkable location",
+                measurement=f"group={group} num={num} is absent from the "
+                            "MapConstantRegistry state",
+                assumption="the tiles on this map are left uncompared",
+            ))
+        self._walk_path.append(
+            WalkedTile(map_id=map_id, map_group=group, map_num=num, x=x, y=y))
+
+    def walk_path(self) -> tuple[WalkedTile, ...]:
+        """The tiles walked since the last `clear_walk_path()`."""
+        return tuple(self._walk_path)
+
+    def frames_marked(self) -> int:
+        """Explicit `mark_frame()` calls since the last beat boundary (Q7)."""
+        return self._frames_marked
+
+    def map_graph(self, map_id: int) -> MapGraph:
+        """The offline `MapGraph` for an arbitrary map id, cached.
+
+        `_current_map_graph` answers "the map I am standing on"; slice 4's
+        walked-path comparison needs graphs for every map a beat's path
+        touched, which after a warp is more than one. Same source, same
+        cache -- this exists so the runner asks through a named method
+        rather than reaching into `_map_graph_source`."""
+        return self._map_graph_source(map_id)
+
+    def clear_walk_path(self) -> None:
+        """Start a fresh path. The runner calls this at each beat boundary."""
+        self._walk_path.clear()
+
     def _current_map_graph(self) -> MapGraph:
         """The offline `MapGraph` (`rpg2gba.traversal`) for whatever map
         `map_location()` currently reads.
@@ -1846,6 +1961,15 @@ class Emulator:
         else:
             graph = current_map_graph()
 
+        # Q8's ledger, same fake-degrade shape: a fake emulator carrying an
+        # injected graph (`test_plan_route_graph.py`) has no ledger, and a
+        # findings record with nowhere to go is discarded rather than
+        # crashing a planner test. Real `Emulator`s always have one.
+        try:
+            contradictions = self.contradictions
+        except AttributeError:
+            contradictions = ContradictionLedger()
+
         def live_walkable(x: int, y: int) -> bool:
             return _collision_walkable(blocks, width, off, map_w, map_h, x, y)
 
@@ -1859,13 +1983,27 @@ class Emulator:
             static = graph.is_walkable(cell)
             live = live_walkable(*cell)
             if static != live:
-                logger.warning(
-                    "_plan_route: map %s cell %s -- offline graph walkable="
-                    "%s, live collision grid walkable=%s; using the offline "
-                    "graph's verdict (recorded divergence, Q13.1, not "
-                    "acted on)",
-                    graph.map_id, cell, static, live,
-                )
+                # Slice 4: this used to be a bare `logger.warning`, which is
+                # the "carried by someone remembering to read the log"
+                # shape §1.5 disqualifies -- it never reached the artifact,
+                # the viewer, or the gate stamp. The ledger carries it into
+                # `observed_beats/<chapter>.json` instead, and it is also
+                # the whole of Q7's conformance number: a live harness read
+                # measured against the offline graph, the one oracle that
+                # is not the harness itself.
+                contradictions.record(Contradiction(
+                    kind=KIND_WALKABILITY,
+                    beat="",
+                    detail=(f"map {graph.map_id} cell {cell}: offline graph "
+                            f"walkable={static}, live collision grid "
+                            f"walkable={live}"),
+                    model=f"walkable={static}",
+                    measurement=f"walkable={live}",
+                    assumption="the offline graph's verdict was used for "
+                               "planning",
+                    map_id=graph.map_id,
+                    cell=cell,
+                ))
 
         def walkable(x: int, y: int) -> bool:
             """Plain live-grid walkability, only used on the no-graph
@@ -2291,6 +2429,20 @@ class Emulator:
         visited_sidesteps: set[tuple[int, int]] = set()
         perp_toggle = 0
 
+        # Q13 slice 4's per-step append. Bound once, outside the loop, with
+        # the same attribute-lookup degrade the rest of this function uses
+        # for `_in_battle`/`_grass_cost_context`: the lightweight walk fakes
+        # (`test_playtest.py`'s `_FakeWalkEmu`) call `Emulator._walk_greedy`
+        # unbound against an object that has no walked-path state. Binding
+        # here rather than calling inside a `try` keeps a genuine
+        # `AttributeError` raised *inside* the recorder loud, instead of
+        # silently turning every subsequent step into an unobserved one.
+        try:
+            record_tile = self._record_walk_tile
+        except AttributeError:
+            def record_tile(x: int, y: int) -> None:
+                return None
+
         while spent < frame_budget:
             if not start_locked:
                 # A wild encounter: no script, no lock, just a battle. Catch
@@ -2362,6 +2514,7 @@ class Emulator:
                 # as moki.py B4's cameo. Resume walking toward the target.
                 continue
             x, y = self.player_pos()
+            record_tile(x, y)
             if (x, y) == (tx, ty):
                 # The coord ticks before the step animation finishes; settle
                 # so a follow-up face/interact isn't eaten by the motion.

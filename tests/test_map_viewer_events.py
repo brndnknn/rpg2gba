@@ -319,3 +319,208 @@ def test_beat_markers_planned_skips_malformed_route_file(
     assert any(
         "CH98.route.json" in n and "skipped" in n for n in result["notes"]
     )
+
+
+# ---------------------------------------------------------------------------
+# beat_markers — walked / contradictions / conformance (Q13 slice 4, schema v2)
+# ---------------------------------------------------------------------------
+
+# Arbitrary ids, disjoint from any real minted map: only need to round-trip
+# through the fake registry/group-table these tests install.
+_TARGET_MAP_ID = 9001
+_OTHER_MAP_ID = 9002
+
+
+def _write_observed_beats(tmp_path: Path, chapter: str, payload: dict) -> None:
+    path = tmp_path / "output" / "playtest" / "observed_beats" / f"{chapter}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _patch_registry(monkeypatch: pytest.MonkeyPatch, by_const: dict[str, int]) -> None:
+    """Bypass the real MapConstantRegistry state file: beat_markers only
+    ever consumes the (by_id, by_const) tuple `_get_map_registry` returns."""
+    monkeypatch.setattr(mve, "_get_map_registry", lambda: ({}, by_const))
+
+
+def _patch_group_table(
+    monkeypatch: pytest.MonkeyPatch, table: dict[tuple[int, int], str] | None = None
+) -> None:
+    monkeypatch.setattr(mve, "_get_map_group_table", lambda: (table or {}, []))
+
+
+def _setup_output_and_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mvc, "_output_base", lambda: tmp_path / "output")
+    monkeypatch.setattr(mvc, "_repo_root", lambda: tmp_path)
+
+
+def test_beat_markers_walked_filters_tiles_and_carries_divergence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_output_and_repo(tmp_path, monkeypatch)
+    _patch_registry(monkeypatch, {"MAP_TARGET": _TARGET_MAP_ID})
+    _patch_group_table(monkeypatch)
+
+    payload = {
+        "version": 2,
+        "chapter": "ch_test",
+        "beats": [
+            {
+                "beat": "b1", "status": "pass", "enter": None, "exit": None,
+                "path": [
+                    {"map_id": _TARGET_MAP_ID, "map_group": 1, "map_num": 1, "x": 1, "y": 2},
+                    {"map_id": _TARGET_MAP_ID, "map_group": 1, "map_num": 1, "x": 2, "y": 2},
+                    {"map_id": _OTHER_MAP_ID, "map_group": 1, "map_num": 1, "x": 9, "y": 9},
+                ],
+                "divergence": {
+                    "beat": "b1", "compared": True, "steps": 3, "unresolved": 0,
+                    "off_plan": [
+                        {"map_id": _TARGET_MAP_ID, "cell": [2, 2], "step": 1,
+                         "kind": "off_plan", "triggers": []},
+                        {"map_id": _OTHER_MAP_ID, "cell": [9, 9], "step": 2,
+                         "kind": "off_plan", "triggers": []},
+                    ],
+                    "trigger_violations": [
+                        {"map_id": _TARGET_MAP_ID, "cell": [1, 2], "step": 0, "kind": "trigger",
+                         "triggers": [{"script": "EventScript_Foo", "kind": "warp",
+                                       "certainty": "certain", "detail": "d"}]},
+                    ],
+                    "note": "", "failed": True,
+                },
+                "frame_rule": None, "refused_claim": None,
+            },
+            {
+                # empty path -- must not appear in the walked layer at all
+                "beat": "b2", "status": "skipped", "enter": None, "exit": None,
+                "path": [], "divergence": None, "frame_rule": None, "refused_claim": None,
+            },
+        ],
+        "contradictions": [
+            {"kind": "graph_vs_live_collision", "beat": "b1", "detail": "d1",
+             "model": "m", "measurement": "meas", "assumption": "a",
+             "map_id": _TARGET_MAP_ID, "cell": [1, 2], "count": 2, "status": "carried"},
+            {"kind": "walk_off_plan", "beat": "b1", "detail": "d2",
+             "model": "m", "measurement": "meas", "assumption": "a",
+             "map_id": _OTHER_MAP_ID, "cell": [9, 9], "count": 1, "status": "carried"},
+            {"kind": "unresolved_map", "beat": "b1", "detail": "d3",
+             "model": "m", "measurement": "meas", "assumption": "a",
+             "map_id": None, "cell": None, "count": 1, "status": "carried"},
+        ],
+        "conformance": {"oracle": "offline_graph", "walkability_disagreements": 2,
+                         "distinct_cells": 1, "by_map": {str(_TARGET_MAP_ID): 2}},
+    }
+    _write_observed_beats(tmp_path, "ch_test", payload)
+
+    result = mve.beat_markers(_TARGET_MAP_ID)
+
+    assert len(result["walked"]) == 1
+    w = result["walked"][0]
+    assert w["chapter"] == "ch_test"
+    assert w["beat"] == "b1"
+    assert w["status"] == "pass"
+    assert w["tiles"] == [[1, 2], [2, 2]]
+    assert w["off_plan"] == [[2, 2]]
+    assert w["violations"] == [{"x": 1, "y": 2, "scripts": ["EventScript_Foo"]}]
+    assert w["compared"] is True
+
+    kinds = {c["kind"] for c in result["contradictions"]}
+    assert kinds == {"graph_vs_live_collision", "unresolved_map"}, (
+        "the OTHER_MAP_ID-scoped contradiction must be filtered out, but the "
+        "map_id=null one must survive"
+    )
+    scope_by_kind = {c["kind"]: c["scope"] for c in result["contradictions"]}
+    assert scope_by_kind["graph_vs_live_collision"] == "map"
+    assert scope_by_kind["unresolved_map"] == "unscoped"
+    for c in result["contradictions"]:
+        assert c["chapter"] == "ch_test"
+
+    assert result["conformance"] == {"ch_test": payload["conformance"]}
+
+
+def test_beat_markers_v1_artifact_degrades_walked_and_notes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_output_and_repo(tmp_path, monkeypatch)
+    _patch_registry(monkeypatch, {"MAP_TARGET": _TARGET_MAP_ID})
+    _patch_group_table(monkeypatch)
+
+    payload = {
+        # no "version" key at all -- the actual shape old runs left on disk
+        "chapter": "ch_old",
+        "beats": [{"beat": "b1", "status": "pass", "enter": None, "exit": None}],
+    }
+    _write_observed_beats(tmp_path, "ch_old", payload)
+
+    result = mve.beat_markers(_TARGET_MAP_ID)
+
+    assert result["walked"] == []
+    assert result["contradictions"] == []
+    assert result["conformance"] == {}
+    assert any("predates schema v2" in n for n in result["notes"])
+
+
+def test_beat_markers_walked_null_map_id_falls_back_to_group_num(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_output_and_repo(tmp_path, monkeypatch)
+    _patch_registry(monkeypatch, {"MAP_TARGET": _TARGET_MAP_ID})
+    _patch_group_table(monkeypatch, {(3, 4): "MAP_TARGET"})
+
+    payload = {
+        "version": 2,
+        "beats": [{
+            "beat": "b1", "status": "pass", "enter": None, "exit": None,
+            "path": [{"map_id": None, "map_group": 3, "map_num": 4, "x": 5, "y": 6}],
+            "divergence": None,
+        }],
+        "contradictions": [], "conformance": {},
+    }
+    _write_observed_beats(tmp_path, "ch_fallback", payload)
+
+    result = mve.beat_markers(_TARGET_MAP_ID)
+
+    assert len(result["walked"]) == 1
+    assert result["walked"][0]["tiles"] == [[5, 6]]
+
+
+def test_beat_markers_walked_unresolved_tile_dropped_with_note(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_output_and_repo(tmp_path, monkeypatch)
+    _patch_registry(monkeypatch, {"MAP_TARGET": _TARGET_MAP_ID})
+    _patch_group_table(monkeypatch)  # empty table -> the fallback lookup fails
+
+    payload = {
+        "version": 2,
+        "beats": [{
+            "beat": "b1", "status": "pass", "enter": None, "exit": None,
+            "path": [{"map_id": None, "map_group": 3, "map_num": 4, "x": 5, "y": 6}],
+            "divergence": None,
+        }],
+        "contradictions": [], "conformance": {},
+    }
+    _write_observed_beats(tmp_path, "ch_unresolved", payload)
+
+    result = mve.beat_markers(_TARGET_MAP_ID)
+
+    assert result["walked"] == []
+    assert any("unresolved map identity" in n for n in result["notes"])
+
+
+def test_beat_markers_corrupt_observed_file_degrades_to_note(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_output_and_repo(tmp_path, monkeypatch)
+    _patch_registry(monkeypatch, {"MAP_TARGET": _TARGET_MAP_ID})
+    _patch_group_table(monkeypatch)
+
+    bad_path = tmp_path / "output" / "playtest" / "observed_beats" / "ch_bad.json"
+    bad_path.parent.mkdir(parents=True, exist_ok=True)
+    bad_path.write_text("{ not valid json", encoding="utf-8")
+
+    result = mve.beat_markers(_TARGET_MAP_ID)
+
+    assert result["walked"] == []
+    assert result["contradictions"] == []
+    assert result["conformance"] == {}
+    assert any("unreadable" in n for n in result["notes"])

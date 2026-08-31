@@ -1133,6 +1133,22 @@ assertability field (schema only); the frame rule; and the **PC, mart and Pokém
 talk-to-a-thing archetypes that barely touch routing. The trainer, item-ball and staircase templates *do*
 want slices 1–2, since decoded approach paths are their entire point.
 
+**Status note, 2026-08-30 — all four slices are built.** Slice 4 landed alongside slice 3: the runner
+records the walked tile path per beat (`Emulator._record_walk_tile`, appended from `_walk_greedy`'s own
+position read); `playtest/divergence.py` compares it against the approved plan; a divergence onto a
+trigger tile fails the beat (`runner.DivergenceError`), and every other divergence is recorded in
+`playtest/contradictions.py`, Q8's ledger, which also absorbed `_plan_route`'s graph-vs-live-collision
+finding — previously a `logger.warning` that reached no artifact. Q7's frame rule is enforced by
+`playtest/frame_rule.py` at the point a beat fails, and Q7's conformance number is read out of that same
+ledger (`python -m rpg2gba.playtest conformance`) rather than from a second expectation table. The run
+artifact `observed_beats/<chapter>.json` is schema **2**.
+
+**What slice 4 is not yet validated by.** Like slice 3, its enforcing half is forward-only: with no
+route plan committed for any gated chapter (`PROJECT_TODO.md` #67), `compare_walk` reports
+`compared: false` everywhere today and no divergence can fail anything until CH05's plan is approved and
+committed. The non-enforcing halves — the walked path, the ledger, the frame rule, the conformance
+report — are live from the next run of any chapter.
+
 #### Validation — CH05 is not sufficient evidence
 
 CH05 is a thin surface for this much machinery: 2 maps, 3 trainers, 4 staircases, 4 item balls, no mart,

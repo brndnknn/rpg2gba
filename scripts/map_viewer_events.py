@@ -607,10 +607,20 @@ def event_detail(map_id: int, event_id: int) -> dict:
 
 
 def beat_markers(map_id: int) -> dict:
-    """Playtest beats (declared + observed) that belong to this Uranium map.
-    Never raises: any missing optional artifact (chapter modules, the
-    map-constant registry state, the observed-beats directory, the fork's
-    map_groups.h) degrades that half to empty plus a note."""
+    """Playtest beats (declared + observed + walked) that belong to this
+    Uranium map, plus Q8's carried contradictions and Q7's conformance
+    summary. Never raises: any missing optional artifact (chapter modules,
+    the map-constant registry state, the observed-beats directory, the
+    fork's map_groups.h) degrades that half to empty plus a note.
+
+    **Schema v1/v2 compatibility.** ``observed_beats/<chapter>.json`` grew a
+    ``"version": 2`` in Q13 slice 4, adding ``path``/``divergence`` per beat
+    and top-level ``contradictions``/``conformance``. A file with no
+    ``"version"`` key (or ``version < 2``) predates all of that -- every new
+    field is read with ``dict.get(..., default)`` so a v1 file degrades to
+    an empty ``walked`` layer / no contributions to ``contradictions`` or
+    ``conformance`` for that chapter, plus one explanatory note, rather than
+    raising or silently pretending the data exists (CLAUDE.md §4.5)."""
     from rpg2gba.playtest.chapter import chapter_names, load_chapter
 
     notes: list[str] = []
@@ -645,6 +655,18 @@ def beat_markers(map_id: int) -> dict:
                     })
 
     observed: list[dict] = []
+    # Q13 slice 4 additions. `walked` mirrors `planned`'s per-beat row shape
+    # (`tiles`/`off_plan`/`violations`/`compared`) so the frontend can reuse
+    # drawPlannedRoute's structure rather than invent a second one.
+    # `contradictions` carries Q8's ledger entries (map-scoped plus the
+    # map_id=null ones, tagged `scope` so neither the viewer nor a reader
+    # loses track of which is which — see the module-level docstring on
+    # `beat_markers` for why map_id=null must not be silently dropped).
+    # `conformance` is per-chapter and NOT filtered by map (it's a run-level
+    # number, per the brief).
+    walked: list[dict] = []
+    contradictions: list[dict] = []
+    conformance: dict[str, dict] = {}
     obs_dir = mvc._output_base() / "playtest" / "observed_beats"
     if not obs_dir.is_dir():
         notes.append(
@@ -660,6 +682,19 @@ def beat_markers(map_id: int) -> dict:
             except Exception:
                 notes.append(f"{path} unreadable")
                 continue
+
+            # A file with no "version" key predates the v2 rollout (Q13
+            # slice 4) entirely -- one note per chapter, not per beat, so a
+            # 200-map corpus with a mix of old/new artifacts doesn't drown
+            # the notes list.
+            if data.get("version", 1) < 2:
+                notes.append(
+                    f"{chapter_name}: observed-beats artifact predates schema "
+                    "v2 (no path/contradictions/conformance) — walked layer "
+                    "and contradiction/conformance contributions are empty "
+                    "for this chapter"
+                )
+
             for b in data.get("beats", []):
                 beat_name = b.get("beat")
                 status = b.get("status")
@@ -683,6 +718,105 @@ def beat_markers(map_id: int) -> dict:
                         "x": pos[0],
                         "y": pos[1] if len(pos) > 1 else None,
                     })
+
+                # ---- walked layer (schema v2's `path`) ----
+                # A v1 beat dict has no "path" key at all; `or []` makes
+                # that indistinguishable from "walked nothing", which is
+                # exactly the desired degrade (empty walked layer, no
+                # raise). Beats whose (raw, unfiltered) path is empty stay
+                # out of the layer entirely, per the brief.
+                raw_path = b.get("path") or []
+                if not raw_path:
+                    continue
+
+                tiles: list[list[int]] = []
+                unresolved = 0
+                for tile in raw_path:
+                    t_map_id = tile.get("map_id")
+                    if t_map_id is not None:
+                        # Belongs to some other map -- not an error, just
+                        # not this map's row; no fallback needed since the
+                        # id is already authoritative.
+                        if t_map_id == map_id:
+                            tiles.append([tile.get("x"), tile.get("y")])
+                        continue
+                    # map_id was null on this tile -- fall back to the same
+                    # (map_group, map_num) -> MAP_* -> uranium-id resolution
+                    # the `observed` layer above already uses.
+                    t_mg, t_mn = tile.get("map_group"), tile.get("map_num")
+                    t_const = (
+                        group_table.get((t_mg, t_mn))
+                        if t_mg is not None and t_mn is not None
+                        else None
+                    )
+                    t_uid = by_const.get(t_const) if t_const else None
+                    if t_uid == map_id:
+                        tiles.append([tile.get("x"), tile.get("y")])
+                    elif t_uid is None:
+                        # Genuinely unresolvable -- CLAUDE.md §4.5 forbids
+                        # silently dropping it, so it's counted and
+                        # summarized in one note per beat below rather than
+                        # one note per tile (a stuck-and-replanning walk can
+                        # revisit the same unresolved tile dozens of times).
+                        unresolved += 1
+                if unresolved:
+                    notes.append(
+                        f"{chapter_name}/{beat_name}: {unresolved} walked "
+                        "tile(s) with unresolved map identity dropped from "
+                        "the walked layer"
+                    )
+                if not tiles:
+                    continue
+
+                divergence = b.get("divergence") or {}
+                off_plan = [
+                    [d["cell"][0], d["cell"][1]]
+                    for d in (divergence.get("off_plan") or [])
+                    if d.get("map_id") == map_id
+                ]
+                violations = [
+                    {
+                        "x": d["cell"][0],
+                        "y": d["cell"][1],
+                        "scripts": [t.get("script") for t in d.get("triggers", [])],
+                    }
+                    for d in (divergence.get("trigger_violations") or [])
+                    if d.get("map_id") == map_id
+                ]
+                walked.append({
+                    "chapter": chapter_name,
+                    "beat": beat_name,
+                    "status": status,
+                    "tiles": tiles,
+                    "off_plan": off_plan,
+                    "violations": violations,
+                    "compared": bool(divergence.get("compared", False)),
+                })
+
+            # ---- contradictions (schema v2's top-level `contradictions`) ----
+            # Filtered to this map, PLUS the map_id=null ones (belong to no
+            # map, but must stay visible per the brief) -- both tagged with
+            # `scope` so the frontend (and any future reader) can tell them
+            # apart without either bucket vanishing.
+            for c in data.get("contradictions", []):
+                map_field = c.get("map_id")
+                if map_field == map_id:
+                    scope = "map"
+                elif map_field is None:
+                    scope = "unscoped"
+                else:
+                    continue
+                row = dict(c)
+                row["chapter"] = chapter_name
+                row["scope"] = scope
+                contradictions.append(row)
+
+            # ---- conformance (schema v2's top-level `conformance`) ----
+            # Run-level, not filtered by map -- absent entirely on a v1
+            # artifact, so no entry is added for that chapter rather than
+            # fabricating a zeroed one.
+            if "conformance" in data:
+                conformance[chapter_name] = data["conformance"]
 
     planned: list[dict] = []
     plans, plan_notes = _get_route_plans()
@@ -725,5 +859,8 @@ def beat_markers(map_id: int) -> dict:
         "declared": declared,
         "observed": observed,
         "planned": planned,
+        "walked": walked,
+        "contradictions": contradictions,
+        "conformance": conformance,
         "notes": notes,
     }

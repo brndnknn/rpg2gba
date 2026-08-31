@@ -50,6 +50,16 @@ from typing import TYPE_CHECKING
 from . import rules as playtest_rules
 from .chapter import Beat, Chapter, assert_chapter_locations_reachable
 from .contact_sheet import Waypoint, build_contact_sheet
+from .contradictions import KIND_OFF_PLAN, Contradiction, ContradictionLedger
+from .divergence import (
+    PlanIndex,
+    TriggerFact,
+    WalkComparison,
+    WalkedTile,
+    compare_walk,
+    load_plan_index_for_module,
+)
+from .frame_rule import check_frame_rule, refusal_error
 from .stamp import ROM_BASE, build_blob, dump_save_blocks
 
 if TYPE_CHECKING:  # runtime import is lazy so this module works without mgba
@@ -233,6 +243,196 @@ def _loc_from_snapshot(snap: Snapshot) -> dict[str, object]:
             "player_pos": list(snap.player_pos)}
 
 
+class _WalkOracle:
+    """Q13 slice 4's comparison oracle for one chapter run.
+
+    Holds the approved route plan (if the chapter has one) and builds slice
+    2's trigger overlays lazily, one per map the walk actually touches --
+    eagerly building overlays for a chapter's declared map roster is what
+    raised a bare `KeyError: 31` in slice 3, because a chapter's shortest
+    hop between two of its own points can transit a map it never declares.
+
+    **Why every trigger tile counts as "foreign" here, with no
+    destination-script set.** `TriggerOverlay.foreign_tiles` exists to let
+    the *solver* cross a tile it is deliberately aiming at. At runtime that
+    exemption is already carried by the plan itself: the destination tile a
+    beat interacts with is the last tile of the plan's own leg, so it is on
+    the plan and can never be reported. Anything the route legitimately
+    needs is on the plan; anything off the plan that fires a script is the
+    B2/B3 shape by construction. Deriving a runtime destination-script set
+    instead would mean joining manifest row ids (`map035/ev014/p1`) to
+    Poryscript labels (`Map035_EventScript_EV014`) through a mapping that
+    does not exist -- a second, guessable convention, for no gain.
+    """
+
+    def __init__(self, chapter_name: str, *,
+                 plan: PlanIndex | None = None) -> None:
+        self.plan = plan
+        self.chapter_name = chapter_name
+        self._triggers: dict[int, dict[tuple[int, int], tuple[TriggerFact, ...]]] = {}
+        self._unavailable: set[int] = set()
+
+    @classmethod
+    def for_chapter(cls, chapter_name: str) -> "_WalkOracle":
+        """Never raises on a missing plan; a plan that exists and will not
+        load is a real fault and propagates (CLAUDE.md §4.5)."""
+        return cls(chapter_name, plan=load_plan_index_for_module(chapter_name))
+
+    def _overlay_for(self, map_id: int, emu: "Emulator") -> dict:
+        cached = self._triggers.get(map_id)
+        if cached is not None:
+            return cached
+        if map_id in self._unavailable:
+            return {}
+        from ..traversal.triggers import build_trigger_overlay
+        from .divergence import foreign_trigger_index
+        try:
+            overlay = build_trigger_overlay(map_id, graph=emu.map_graph(map_id))
+        except Exception as exc:  # noqa: BLE001
+            # A map with no decoded trigger data cannot be checked, and that
+            # is worth saying out loud once per map rather than per step --
+            # but it is not a reason to fail a beat that is otherwise fine.
+            logger.warning(
+                "[%s] no trigger overlay for map %s (%s) -- walked tiles on "
+                "that map are compared against the plan but cannot be "
+                "classified as trigger crossings", self.chapter_name, map_id, exc)
+            self._unavailable.add(map_id)
+            return {}
+        built = foreign_trigger_index({map_id: overlay})[map_id]
+        self._triggers[map_id] = built
+        return built
+
+    def compare(self, beat: str, path: tuple[WalkedTile, ...],
+                emu: "Emulator") -> WalkComparison:
+        foreign = {}
+        if self.plan is not None:
+            for tile in path:
+                if tile.map_id is not None and tile.map_id not in foreign:
+                    foreign[tile.map_id] = self._overlay_for(tile.map_id, emu)
+        return compare_walk(beat, path, plan=self.plan, foreign_triggers=foreign)
+
+
+class DivergenceError(RuntimeError):
+    """The walk left the approved route onto a tile that fires a script.
+
+    This is the one divergence class that fails a beat. Every other
+    divergence -- a re-plan around a patrolling NPC, a leg the offline
+    graph models differently from the engine -- is recorded in Q8's
+    contradiction ledger and carried, because `route1:B14` showed that
+    blocking on ambiguous evidence truncates real work.
+
+    **Built and recorded, not raised.** The check runs *after* `beat.run`
+    has already returned cleanly -- that is the whole point, since the
+    beat's own assertions cannot see the tile it crossed on the way in --
+    so there is no `try` left to catch it. Raising here would escape
+    `_run_attempt` past the code that drains the ledger and writes the
+    artifact, and re-entering the failure path would double-count the
+    beat's carried findings. The class exists so the recorded message has
+    a name a reader can grep for, and so a future caller that *is* inside
+    a beat can raise it.
+    """
+
+
+def _close_walk(
+    oracle: _WalkOracle, beat_name: str, emu: "Emulator",
+    ledger: ContradictionLedger,
+) -> tuple[tuple[WalkedTile, ...], WalkComparison | None]:
+    """Read the beat's walked path, compare it, and drain the ledger.
+
+    Called on every exit from a beat -- pass, fail and hang alike -- so a
+    failed beat's path is recorded too. That is not a detail: a beat that
+    hung or failed is the one whose walk you most want to look at, and the
+    old two-point record went blank exactly there (`exit` is `None` for a
+    beat that raised).
+
+    Never raises. This is instrumentation wrapped around a result that is
+    already decided; a comparison that cannot be made must not convert a
+    passing beat into an error, and must not mask a failing one. A
+    *violation* it does find is returned as data and acted on by the
+    caller, not raised from here.
+    """
+    try:
+        path = emu.walk_path()
+    except AttributeError:
+        # Stub emulators in `tests/test_runner.py` predate the walked path.
+        return (), None
+    # `_plan_route` records its graph-vs-live findings with no beat name --
+    # it runs deep inside the walk stack and has no idea which beat it is
+    # in. The boundary is where that is known, so stamp them here.
+    try:
+        emu.contradictions.drain_into(ledger, beat=beat_name)
+    except AttributeError:
+        pass
+    if ":" in beat_name:
+        # An inherited beat. `ChapterBuilder(predecessor=...)` prepends the
+        # predecessor's beats renamed `<owner>:<name>` so the run can replay
+        # its way to the state this chapter starts from, and the solver
+        # drops exactly those groups when it plans (`routing.solver.
+        # _solvable_groups`, and `chapter_manifest.route_model` drops the
+        # same ones for the same reason). Comparing a replayed beat against
+        # a plan that deliberately does not contain it would report every
+        # tile of CH04's 60 inherited beats as off-plan -- thousands of
+        # carried findings saying only "this beat belongs to another
+        # chapter". The path is still recorded; only the comparison is
+        # skipped.
+        return path, None
+    try:
+        comparison = oracle.compare(beat_name, path, emu)
+    except Exception as exc:  # noqa: BLE001 - see docstring
+        logger.warning(
+            "[%s] beat %s: walked-path comparison could not run (%s) -- the "
+            "path is still recorded, but divergence is unenforced for it",
+            oracle.chapter_name, beat_name, exc)
+        return path, None
+    for div in comparison.off_plan:
+        # Q13.1 decision 3: an off-plan tile that fires nothing is evidence
+        # the offline graph is wrong about the engine, not evidence the run
+        # is wrong. Carried, never blocking.
+        ledger.record(Contradiction(
+            kind=KIND_OFF_PLAN,
+            beat=beat_name,
+            detail=(f"map {div.map_id} cell {div.cell} was walked at step "
+                    f"{div.step_index} but the approved route "
+                    f"({oracle.plan.chapter_id if oracle.plan else '?'}) "
+                    "never covers it"),
+            model="the approved route's tiles",
+            measurement="the tile the ROM actually stood on",
+            assumption="the run continued; a legitimate re-plan around a "
+                       "moving object diverges on every run",
+            map_id=div.map_id,
+            cell=div.cell,
+        ))
+    return path, comparison
+
+
+def _apply_frame_rule(outcome: BeatOutcome, beat_name: str,
+                      emu: "Emulator") -> None:
+    """Q7's enforced frame rule, applied to a beat that has just failed.
+
+    Refusing the claim does not un-fail the beat -- the beat failed, and
+    that stands. What is refused is the *recorded reason*: an unevidenced
+    negative claim is replaced by the frame-rule refusal, so a later reader
+    cannot take "nothing runs" at face value the way three CH04 write-ups
+    were taken. The original text is preserved verbatim inside the
+    refusal, never discarded.
+    """
+    try:
+        marked = emu.frames_marked()
+        screenshots = emu.screenshot_dir is not None
+    except AttributeError:
+        return  # a stub emulator that captures nothing
+    result = check_frame_rule(outcome.error, frames_marked=marked,
+                              screenshots_enabled=screenshots)
+    outcome.frame_rule = result.to_dict()
+    if not result.refused:
+        return
+    claim = outcome.error or ""
+    err = refusal_error(beat_name, claim, result)
+    logger.error("[frame rule] %s", err)
+    outcome.error = str(err)
+    outcome.refused_claim = claim
+
+
 def hash_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -274,19 +474,40 @@ class BeatOutcome:
     error: str | None = None
     traceback: str | None = None
     rule_version: int | None = None
+    # Q7's frame rule (`frame_rule.py`). `frame_rule` is the verdict dict
+    # for whatever claim this beat's failure made; `refused_claim` holds
+    # the original text when the rule refused it, so nothing is lost --
+    # `error` then carries the refusal instead.
+    frame_rule: dict[str, object] | None = None
+    refused_claim: str | None = None
 
 
 @dataclass(frozen=True)
 class ObservedBeat:
-    """Where the player actually was at one beat's boundaries, for the debug
-    map viewer (observed-vs-intended overlay). `enter`/`exit` are dicts
-    shaped `{"map_group": int, "map_num": int, "player_pos": [x, y]}`, or
-    `None` for `exit` when the beat raised or hung."""
+    """Where the player actually was over one beat, for the debug map viewer
+    (observed-vs-planned overlay). `enter`/`exit` are dicts shaped
+    `{"map_group": int, "map_num": int, "player_pos": [x, y]}`, or `None`
+    for `exit` when the beat raised or hung.
+
+    `path` is Q13.2's walked tile sequence -- every tile the walker actually
+    stood on during this beat. Until slice 4 this record held `enter`/`exit`
+    only, two points per beat, which cannot show what happened *between*
+    them; CH04's B3 walked through Timothy's event-touch tile, fought the
+    wrong trainer, and passed both guards, and this list is the artifact
+    that would have shown it the first time it happened.
+
+    `comparison` is the walked-vs-planned verdict for this beat
+    (`divergence.WalkComparison`), or `None` when the chapter carries no
+    approved route plan -- the ordinary state of every chapter gated before
+    CH05 (`PROJECT_TODO.md` #67).
+    """
 
     beat: str
     status: str  # "pass" | "fail" | "hang"
     enter: dict[str, object] | None
     exit: dict[str, object] | None
+    path: tuple["WalkedTile", ...] = ()
+    comparison: "WalkComparison | None" = None
 
 
 @dataclass
@@ -307,6 +528,9 @@ class AttemptResult:
     # to actually land on disk. `run_chapter` deletes it once every consumer
     # is done.
     scratch_rom: Path | None = None
+    # Q8's carried findings for this attempt. Never affects `passed`.
+    contradictions: ContradictionLedger = field(
+        default_factory=ContradictionLedger)
 
     @property
     def failed_beat(self) -> BeatOutcome | None:
@@ -418,6 +642,12 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
                   recorded_rule_versions: dict[str, int] | None = None,
                   ) -> AttemptResult:
     recorded_rule_versions = recorded_rule_versions or {}
+    # Q13 slice 4. The oracle is resolved once per attempt: a plan that does
+    # not exist is the ordinary case (route plans are enforced forward from
+    # CH05), and a plan that exists but will not load is a fault that stops
+    # the run here rather than silently leaving divergence unchecked.
+    oracle = _WalkOracle.for_chapter(chapter.name)
+    ledger = ContradictionLedger()
     start_idx = chapter.index_of(from_beat) if from_beat else 0
     scratch = output_root / f".{rom.stem}.{chapter.name}.attempt{attempt_no}.scratch.gba"
     scratch.parent.mkdir(parents=True, exist_ok=True)
@@ -465,6 +695,16 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
             outcome = beats_out[i]
             logger.info("[%s] beat %s starting: %s", chapter.name, beat.name, beat.description)
             enter = pending_enter
+            # Q13.2: the walked path is per beat, so it starts empty here
+            # and is read below whichever way the beat ends. Degrades for a
+            # stub emulator that predates the walked path -- this module's
+            # docstring promises the runner's own logic stays testable
+            # against one (`tests/test_runner.py`), and `_close_walk`
+            # degrades on the same attribute at the other end.
+            try:
+                emu.clear_walk_path()
+            except AttributeError:
+                pass
             try:
                 _check_beat_continuity(beat, enter, emu)
                 with _beat_timeout(beat_timeout_s, beat.name):
@@ -473,12 +713,15 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
                 logger.error("[%s] beat %s HUNG: %s", chapter.name, beat.name, exc)
                 outcome.status = "hang"
                 outcome.error = str(exc)
-                observed.append(ObservedBeat(beat.name, "hang", enter, None))
+                path, comparison = _close_walk(oracle, beat.name, emu, ledger)
+                observed.append(
+                    ObservedBeat(beat.name, "hang", enter, None, path, comparison))
                 emu.waypoint(beat.name, "HANG", note=beat.description, failed=True)
                 return AttemptResult(passed=False, beats=beats_out, pristine_rom=rom,
                                       final_emulator=emu, last_snapshot=last_snapshot,
                                       screenshot_dir=shots, waypoints=list(emu.waypoints),
-                                      observed_beats=observed, scratch_rom=scratch)
+                                      observed_beats=observed, scratch_rom=scratch,
+                                      contradictions=ledger)
             except Exception as exc:  # noqa: BLE001 - beat failures are data, not bugs here
                 import traceback as _tb
                 tb_text = _tb.format_exc()
@@ -486,17 +729,61 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
                 outcome.status = "fail"
                 outcome.error = str(exc)
                 outcome.traceback = tb_text
-                observed.append(ObservedBeat(beat.name, "fail", enter, None))
+                # Q7's frame rule, checked BEFORE the failure waypoint below,
+                # because that waypoint is the beat boundary that clears the
+                # mark count. A refused claim replaces the recorded reason --
+                # the beat still fails, but what goes in the record is "this
+                # negative claim came with no frame" rather than an
+                # unevidenced negative that a later reader would take at face
+                # value. Both of CH04's confidently-wrong write-ups were
+                # exactly that, and each was eventually corrected by the
+                # operator hand-walking the ROM to produce the very frame the
+                # rule now demands up front.
+                _apply_frame_rule(outcome, beat.name, emu)
+                path, comparison = _close_walk(oracle, beat.name, emu, ledger)
+                observed.append(
+                    ObservedBeat(beat.name, "fail", enter, None, path, comparison))
                 emu.waypoint(beat.name, "FAILED", note=beat.description, failed=True)
                 return AttemptResult(passed=False, beats=beats_out, pristine_rom=rom,
                                       final_emulator=emu, last_snapshot=last_snapshot,
                                       screenshot_dir=shots, waypoints=list(emu.waypoints),
-                                      observed_beats=observed, scratch_rom=scratch)
+                                      observed_beats=observed, scratch_rom=scratch,
+                                      contradictions=ledger)
+
+            path, comparison = _close_walk(oracle, beat.name, emu, ledger)
+            if comparison is not None and comparison.failed:
+                # Q13.1's blocking half. The beat's own assertions passed --
+                # that is precisely the CH04 B3 shape: the walk to Larrie
+                # crossed Timothy's event-touch tile, the wrong trainer was
+                # fought, and BOTH guards went green. Nothing the beat can
+                # assert about its end state sees the tile it crossed to get
+                # there, so this check has to live outside the beat.
+                cells = ", ".join(
+                    f"map {d.map_id} {d.cell} fires "
+                    f"{'/'.join(t.script for t in d.triggers) or '?'}"
+                    for d in comparison.trigger_violations)
+                exc = DivergenceError(
+                    f"beat {beat.name} left the approved route onto "
+                    f"{len(comparison.trigger_violations)} trigger tile(s) "
+                    f"the plan does not walk: {cells} — the walk fired a "
+                    "script that is not this beat's target")
+                logger.error("[%s] beat %s FAILED: %s", chapter.name, beat.name, exc)
+                outcome.status = "fail"
+                outcome.error = str(exc)
+                observed.append(
+                    ObservedBeat(beat.name, "fail", enter, None, path, comparison))
+                emu.waypoint(beat.name, "FAILED", note=beat.description, failed=True)
+                return AttemptResult(passed=False, beats=beats_out, pristine_rom=rom,
+                                      final_emulator=emu, last_snapshot=last_snapshot,
+                                      screenshot_dir=shots, waypoints=list(emu.waypoints),
+                                      observed_beats=observed, scratch_rom=scratch,
+                                      contradictions=ledger)
 
             logger.info("[%s] beat %s passed", chapter.name, beat.name)
             outcome.status = "pass"
             pending_enter = _loc(emu)
-            observed.append(ObservedBeat(beat.name, "pass", enter, pending_enter))
+            observed.append(
+                ObservedBeat(beat.name, "pass", enter, pending_enter, path, comparison))
             emu.waypoint(beat.name, note=beat.description)
 
             idx = chapter.index_of(beat.name)
@@ -534,7 +821,8 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
         return AttemptResult(passed=True, beats=beats_out, pristine_rom=rom,
                               final_emulator=emu, last_snapshot=last_snapshot,
                               screenshot_dir=shots, waypoints=list(emu.waypoints),
-                              observed_beats=observed, scratch_rom=scratch)
+                              observed_beats=observed, scratch_rom=scratch,
+                              contradictions=ledger)
     except BaseException:
         # No AttemptResult escapes on this path, so nobody downstream can clean
         # up after us.
@@ -686,9 +974,23 @@ def build_observed_beats_record(chapter: Chapter, attempts: list[AttemptResult],
     rather than a plain "pass", since that instability is the point of a
     flake verdict. Beats before `from_beat`'s start index, or after a beat
     that failed with no rerun-and-pass, are "skipped" with null locations.
+
+    **Schema 2 (Q13 slice 4)** adds three things to each beat and two to the
+    file. Per beat: `path`, the tile sequence the walk actually covered
+    (Q13.2); `divergence`, the walked-vs-planned verdict; and, on a failed
+    beat, `frame_rule`/`refused_claim` from Q7's rule. Per file:
+    `contradictions`, Q8's carried findings, and `conformance`, Q7's
+    harness-vs-offline-graph summary drawn from those same findings rather
+    than from a second hand-maintained expectation table -- a suite whose
+    expectations the harness recorded goes green when the harness lies.
+
+    The path is the reason the file grows, and that cost was taken
+    deliberately: two points per beat cannot show what a walk crossed
+    between them, which is exactly what CH04's B3 needed and did not have.
     """
     final_attempt = attempts[-1]
     by_name = {ob.beat: ob for ob in final_attempt.observed_beats}
+    outcome_by_name = {bo.name: bo for bo in final_attempt.beats}
 
     flaky_beat = None
     if verdict == "flake":
@@ -700,19 +1002,35 @@ def build_observed_beats_record(chapter: Chapter, attempts: list[AttemptResult],
         observed = by_name.get(beat.name)
         if observed is None:
             beats.append({"beat": beat.name, "status": "skipped",
-                           "enter": None, "exit": None})
+                           "enter": None, "exit": None,
+                           "path": [], "divergence": None,
+                           "frame_rule": None, "refused_claim": None})
             continue
         status = "flake" if beat.name == flaky_beat else observed.status
-        beats.append({"beat": beat.name, "status": status,
-                       "enter": observed.enter, "exit": observed.exit})
+        outcome = outcome_by_name.get(beat.name)
+        beats.append({
+            "beat": beat.name, "status": status,
+            "enter": observed.enter, "exit": observed.exit,
+            "path": [{"map_id": t.map_id, "map_group": t.map_group,
+                      "map_num": t.map_num, "x": t.x, "y": t.y}
+                     for t in observed.path],
+            "divergence": (observed.comparison.to_dict()
+                            if observed.comparison is not None else None),
+            "frame_rule": outcome.frame_rule if outcome is not None else None,
+            "refused_claim": (outcome.refused_claim
+                               if outcome is not None else None),
+        })
 
+    ledger = final_attempt.contradictions
     return {
-        "version": 1,
+        "version": 2,
         "chapter": chapter.name,
         "rom_sha256": rom_sha256,
         "generated_at": generated_at or datetime.now(timezone.utc).isoformat(),
         "from_beat": from_beat,
         "beats": beats,
+        "contradictions": ledger.to_list(),
+        "conformance": ledger.conformance(),
     }
 
 

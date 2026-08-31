@@ -163,6 +163,7 @@ let viewMode = 'graphics';
 let eventFilter = 'all';       // all | trainer | item | warp | conditional
 let showBeats = true;
 let showPlanned = true;
+let showWalked = true;
 let dimBase = true;
 const KIND_COLORS = {
   warp: '#33e6ff', trainer: '#ff4444', item: '#ffcc00', npc: '#66ff66',
@@ -185,7 +186,16 @@ const STATUS_STYLE = {
 // declared star (#ffe066) or the observed STATUS_STYLE hues above.
 const PLANNED_ROUTE_COLOR = '#0072b2';
 const PLANNED_CROSSING_COLOR = '#e69f00';
-let beatsByMember = new Map();   // member id -> {declared, observed, planned, notes} | 'loading' | 'error'
+// Walked-route palette (Q13 slice 4): Okabe-Ito vermillion for the actually-
+// walked line -- distinct from the planned route's blue and from every
+// STATUS_STYLE hue -- with a hollow marker for an off-plan tile (evidence,
+// non-blocking, Q8) and a louder ring+X for a trigger violation. A
+// violation is the SAME class of event `PLANNED_CROSSING_COLOR` marks
+// (a foreign trigger crossed), but observed rather than predicted, so it
+// reads as more severe: solid fill under the X, not just an outline.
+const WALKED_ROUTE_COLOR = '#d55e00';
+const WALKED_VIOLATION_COLOR = '#ff2b2b';
+let beatsByMember = new Map();   // member id -> {declared, observed, planned, walked, contradictions, conformance, notes} | 'loading' | 'error'
 let focusEvent = null;           // event summary object last tapped, drives the inspector fetch
 
 // pointer tracking
@@ -396,8 +406,11 @@ function renderMember(m, cp) {
     }
   }
   ctx.restore();
-  // Planned draws first so declared/observed markers stay legible on top.
+  // Draw order: planned (underneath) -> walked -> declared/observed beat
+  // markers (on top), so the predicted route reads first, the actual walk
+  // draws over it, and the beat stars/status-shapes stay legible above both.
   if (viewMode === 'events' && showPlanned) drawPlannedRoute(m, cp, baseX, baseY);
+  if (viewMode === 'events' && showWalked) drawWalkedRoute(m, cp, baseX, baseY);
   if (viewMode === 'events' && showBeats) drawBeatMarkers(m, cp, baseX, baseY);
 }
 
@@ -443,6 +456,67 @@ function drawPlannedRoute(m, cp, baseX, baseY) {
       ctx.stroke();
       ctx.beginPath(); ctx.arc(cx, cy, cr * 1.15, 0, Math.PI * 2); ctx.stroke();
       ctx.setLineDash([]);
+    });
+  }
+  ctx.restore();
+}
+
+// ---- Events mode: walked route (Q13 slice 4) -- the ACTUALLY-walked tile
+// sequence, one row per beat (`beat_markers`'s `walked` layer), drawn the
+// same way `drawPlannedRoute` draws its predicted route (polyline + per-tile
+// dot) but in a visually distinct color so "predicted" and "actual" never
+// get confused on the same map. `off_plan` tiles get a hollow marker (a
+// non-blocking Q8 contradiction -- informational, not an error); `violations`
+// get the loud ring+X treatment `PLANNED_CROSSING_COLOR` uses for a
+// predicted crossing, but in a hotter color and filled, since an observed
+// trigger violation is a beat FAILURE (divergence.py's `failed`), a more
+// severe event than a merely-declared crossing.
+function drawWalkedRoute(m, cp, baseX, baseY) {
+  const data = beatsByMember.get(m.id);
+  if (!data || data === 'loading' || data === 'error') return;
+  const walked = data.walked || [];
+  if (!walked.length) return;
+  ctx.save();
+  const dotR = Math.max(1.5, cp * 0.09);
+  for (const item of walked) {
+    const tiles = item.tiles || [];
+    if (!tiles.length) continue;
+    ctx.strokeStyle = 'rgba(213,94,0,0.75)';
+    ctx.lineWidth = Math.max(2, cp * 0.14);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath();
+    tiles.forEach(function(t, i) {
+      const cx = baseX + t[0] * cp + cp / 2, cy = baseY + t[1] * cp + cp / 2;
+      if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
+    });
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(213,94,0,0.6)';
+    tiles.forEach(function(t) {
+      const cx = baseX + t[0] * cp + cp / 2, cy = baseY + t[1] * cp + cp / 2;
+      ctx.beginPath(); ctx.arc(cx, cy, dotR, 0, Math.PI * 2); ctx.fill();
+    });
+    (item.off_plan || []).forEach(function(t) {
+      // Hollow marker: evidence the offline graph may be wrong about the
+      // engine (Q8 KIND_OFF_PLAN), carried and non-blocking -- deliberately
+      // NOT drawn with the same loud fill as a violation below.
+      const cx = baseX + t[0] * cp + cp / 2, cy = baseY + t[1] * cp + cp / 2;
+      const r = Math.max(4, cp * 0.24);
+      ctx.strokeStyle = WALKED_ROUTE_COLOR;
+      ctx.lineWidth = Math.max(1.5, cp * 0.09);
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    });
+    (item.violations || []).forEach(function(v) {
+      const cx = baseX + v.x * cp + cp / 2, cy = baseY + v.y * cp + cp / 2;
+      const cr = Math.max(5, cp * 0.34);
+      ctx.fillStyle = 'rgba(255,43,43,0.35)';
+      ctx.beginPath(); ctx.arc(cx, cy, cr * 1.15, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = WALKED_VIOLATION_COLOR;
+      ctx.lineWidth = Math.max(2.5, cp * 0.16);
+      ctx.beginPath();
+      ctx.moveTo(cx - cr, cy - cr); ctx.lineTo(cx + cr, cy + cr);
+      ctx.moveTo(cx + cr, cy - cr); ctx.lineTo(cx - cr, cy + cr);
+      ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, cr * 1.15, 0, Math.PI * 2); ctx.stroke();
     });
   }
   ctx.restore();
@@ -776,6 +850,7 @@ document.getElementById('evt-filter').addEventListener('change', function(e) {
 });
 document.getElementById('ov_beats').addEventListener('change', function(e) { showBeats = e.target.checked; scheduleRender(); });
 document.getElementById('ov_planned').addEventListener('change', function(e) { showPlanned = e.target.checked; scheduleRender(); });
+document.getElementById('ov_walked').addEventListener('change', function(e) { showWalked = e.target.checked; scheduleRender(); });
 document.getElementById('ov_dim').addEventListener('change', function(e) { dimBase = e.target.checked; scheduleRender(); });
 document.getElementById('beat-head').onclick = function() {
   const list = document.getElementById('beat-list');
@@ -995,6 +1070,10 @@ function renderLegend() {
   h += '<span class="lbl" style="margin-left:8px">planned:</span>';
   h += '<span><span class="legend-sw" style="background:' + PLANNED_ROUTE_COLOR + '"></span>route</span>';
   h += '<span style="color:' + PLANNED_CROSSING_COLOR + '">&#10006; crossing</span>';
+  h += '<span class="lbl" style="margin-left:8px">walked:</span>';
+  h += '<span><span class="legend-sw" style="background:' + WALKED_ROUTE_COLOR + '"></span>route</span>';
+  h += '<span style="color:' + WALKED_ROUTE_COLOR + '">&#9711; off-plan</span>';
+  h += '<span style="color:' + WALKED_VIOLATION_COLOR + '">&#10006; violation</span>';
   el.innerHTML = h;
   el.classList.toggle('show', viewMode === 'events');
 }
@@ -1009,17 +1088,22 @@ function renderBeatPanel() {
   const declared = data.declared || [];
   const observed = data.observed || [];
   const planned = data.planned || [];
+  const walked = data.walked || [];
+  const contradictions = data.contradictions || [];
+  const conformance = data.conformance || {};
   countEl.textContent = '(' + declared.length + ' declared, ' + observed.length + ' observed, ' +
-    planned.length + ' planned)';
+    planned.length + ' planned, ' + walked.length + ' walked)';
   notesEl.innerHTML = (data.notes || []).map(function(n) { return escHtml(n); }).join('<br>');
   const byChapter = new Map();
   function bucket(chapter) {
-    if (!byChapter.has(chapter)) byChapter.set(chapter, {declared: [], observed: [], planned: []});
+    if (!byChapter.has(chapter)) byChapter.set(chapter, {declared: [], observed: [], planned: [], walked: [], contradictions: []});
     return byChapter.get(chapter);
   }
   declared.forEach(function(b) { bucket(b.chapter).declared.push(b); });
   observed.forEach(function(b) { bucket(b.chapter).observed.push(b); });
   planned.forEach(function(p) { bucket(p.chapter).planned.push(p); });
+  walked.forEach(function(w) { bucket(w.chapter).walked.push(w); });
+  contradictions.forEach(function(c) { bucket(c.chapter).contradictions.push(c); });
   let h = '';
   if (!byChapter.size) h = '<span class="lbl">No beats declared for this map.</span>';
   for (const [chapter, g] of byChapter) {
@@ -1043,8 +1127,50 @@ function renderBeatPanel() {
           ' crossing' + (crossCount > 1 ? 's' : '') + '</span>' : '') +
         '</div>';
     });
+    g.walked.forEach(function(w) {
+      const violCount = (w.violations || []).length;
+      const offCount = (w.off_plan || []).length;
+      const cls = 'beat-row beat-walked' + (violCount ? ' beat-walked-violation' : '');
+      h += '<div class="' + cls + '" onclick="focusWalked(' + JSON.stringify(chapter) + ',' + JSON.stringify(w.beat) + ')">' +
+        '&#8605; <b>' + escHtml(w.beat) + '</b> walked (' + w.tiles.length + ' tiles' +
+        (w.compared ? '' : ', not compared') + ')' +
+        (offCount ? ' <span class="walked-off-plan-tag">&#9711; ' + offCount + ' off-plan</span>' : '') +
+        (violCount ? ' <span class="walked-violation-tag">&#10006; ' + violCount +
+          ' violation' + (violCount > 1 ? 's' : '') + '</span>' : '') +
+        '</div>';
+    });
+    // Contradictions render as INFORMATION, not error (Q8 decision 1: a
+    // carried, non-blocking finding) -- a distinct class from every
+    // beat-status-* / beat-*-crossing class above, deliberately never
+    // colored red/orange the way a failure or violation is.
+    g.contradictions.forEach(function(c) {
+      h += '<div class="beat-row beat-contradiction">' +
+        '&#9432; <b>' + escHtml(c.kind) + '</b>' +
+        (c.scope === 'unscoped' ? ' <span class="lbl">(no map)</span>' : '') +
+        (c.count > 1 ? ' <span class="lbl">&times;' + c.count + '</span>' : '') +
+        '<div class="lbl" style="margin-left:14px">' + escHtml(c.detail || '') + '</div>' +
+        '</div>';
+    });
+  }
+  if (Object.keys(conformance).length) {
+    h += '<div class="beat-chapter">conformance</div>';
+    for (const chapter of Object.keys(conformance)) {
+      const cf = conformance[chapter] || {};
+      h += '<div class="beat-row beat-contradiction">' +
+        '<b>' + escHtml(chapter) + '</b> <span class="lbl">oracle:</span> ' + escHtml(cf.oracle || '?') +
+        ' <span class="lbl">walkability disagreements:</span> ' + (cf.walkability_disagreements || 0) +
+        ' <span class="lbl">distinct cells:</span> ' + (cf.distinct_cells || 0) + '</div>';
+    }
   }
   listEl.innerHTML = h;
+}
+function focusWalked(chapter, beatName) {
+  const data = beatsByMember.get(activeM.id);
+  if (!data) return;
+  const item = (data.walked || []).find(function(w) { return w.chapter === chapter && w.beat === beatName; });
+  if (!item || !item.tiles || !item.tiles.length) return;
+  const t = item.tiles[0];
+  centerOnCell(activeM, t[0], t[1], 3);
 }
 function focusBeat(chapter, beatName, which, idx) {
   const data = beatsByMember.get(activeM.id);

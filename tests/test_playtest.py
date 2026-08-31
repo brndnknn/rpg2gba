@@ -922,6 +922,9 @@ class _FakeScreenEmu:
         self._text_frame = None
         self._text_was_drawing = False
         self._frame_pinned = False
+        # Q7's frame rule counts explicit pins per beat; `mark_frame`
+        # increments it and `waypoint` (the beat boundary) clears it.
+        self._frames_marked = 0
         self._blank = Image.new("RGB", (240, 160), (0, 0, 0))
         self._scene = Image.effect_noise((240, 160), 64).convert("RGB")
         # Scripted text state, for the note_text_frame-vs-mark_frame tests.
@@ -1114,6 +1117,9 @@ class _FakeTextEmu:
         self._text_frame = None
         self._text_was_drawing = False
         self._frame_pinned = False
+        # Q7's frame rule counts explicit pins per beat; `mark_frame`
+        # increments it and `waypoint` (the beat boundary) clears it.
+        self._frames_marked = 0
         self.taps = 0
         self._advanced = 0
         self.cleared = 0

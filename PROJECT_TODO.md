@@ -872,6 +872,50 @@ this rule on its own.
 
 *Found 2026-08-30 finishing slice 3.*
 
+**Widened 2026-08-30 by slice 4.** The same absence now leaves a second rule
+unenforced. `compare_walk` reports `compared: false` for every chapter, so the
+trigger-divergence check that would have caught CH04's B2/B3 incident cannot
+fail anything either. Same remediation, same chapter: committing CH05's
+approved plan turns on `RULE_ROUTE_ORDER` *and* runtime divergence enforcement
+together, and neither one is on before that. Slice 4's non-enforcing halves —
+the walked path, Q8's ledger, the frame rule, the conformance report — do not
+wait on a plan and are live now.
+
+### 68. Nothing pins slice 4's frame-rule phrase list to the harness's own text
+
+`playtest/frame_rule.py` classifies a beat's failure message as a negative
+claim by regex over an explicit phrase list, several entries of which were
+derived by grepping the harness's current `ScenarioError` strings. Nothing
+keeps the two in step: a future beat that phrases a negative claim a new way
+("the flag was never set", say) is silently not covered, and the rule's
+conservative bias means that failure mode is quiet by design — it prefers
+missing a negative claim over refusing an unrelated failure.
+
+This is accepted, not a defect: the escape hatch is that any author can
+satisfy the rule with one `mark_frame()` call, and a false refusal is more
+expensive than a miss. Worth a re-grep of `src/rpg2gba/playtest/` for new
+negative-claim phrasings whenever a chapter adds a batch of beats.
+
+*Found 2026-08-30 building slice 4.*
+
+### 69. A green test run writes synthetic chapter names into a tracked reference file
+
+`run_chapter` records the rule-set version of every chapter that passes into
+`reference/playtest_rule_versions.json`, and the runner's unit tests pass with
+synthetic chapters (`t1`, `t2`, `t9`, and now slice 4's `v4path`, `v4noplan`,
+...). Those names are already committed in that file from earlier runs, and
+every `pytest tests/test_runner*.py` adds any new ones, so the file shows up
+dirty after a plain test run and `rules-lag` reports chapters that do not
+exist.
+
+Cosmetic, but it makes `git status` lie after a test run, which is the kind of
+noise that trains an operator to ignore a dirty tree. The fix is for the tests
+to point the recorder at a `tmp_path` (the runner would need to accept the
+state path, or the tests would need to monkeypatch `rules._STATE_PATH`), plus a
+one-time cleanup of the synthetic names already committed.
+
+*Found 2026-08-30 building slice 4; the leak itself predates it.*
+
 ## Parked until the CH05 branch is cut (do not raise before then)
 
 These are real, tracked work items, scoped entirely to CH05. They are not open

@@ -7,6 +7,7 @@
     python -m rpg2gba.playtest walk --chapter moki --at-end
     python -m rpg2gba.playtest seeds --chapter moki
     python -m rpg2gba.playtest rules-lag
+    python -m rpg2gba.playtest conformance --chapter route2
 
 This is the iteration-loop consumer of `runner.run_chapter`; the gate/CI
 consumer is the thin pytest wrapper in `tests/test_runner.py`. Both drive the
@@ -15,6 +16,7 @@ as it goes, and exits non-zero only on a real (twice-failed) failure.
 """
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from pathlib import Path
@@ -226,6 +228,74 @@ def rules_lag() -> None:
         return
     for report in reports:
         click.echo(report.render())
+
+
+@cli.command("conformance")
+@click.option("--chapter", default=None,
+              help="One chapter (default: every chapter with a run artifact).")
+@click.option("--output", type=click.Path(path_type=Path), default=None,
+              help="Output root the runner wrote to (default: output/playtest)")
+def conformance(chapter: str | None, output: Path | None) -> None:
+    """Print Q7's conformance report and Q8's carried contradictions.
+
+    **There is no expectation table behind this, deliberately.** Q7's grill
+    finding was that a conformance suite whose expected values come from
+    the harness goes green when the harness lies -- the lying primitive and
+    the lying oracle agree, and `interact()`'s stale sample would have
+    passed a suite whose expectations `interact()` recorded. Only two
+    independent oracles exist: decoded map data (Q13's offline graph) and a
+    human reading a frame. So the conformance number here IS the count of
+    places the harness's live reads disagreed with the offline graph over
+    the run that actually happened, drawn from the same ledger the
+    divergence check writes. One mechanism, not two (Q7 decision 2).
+
+    Everything printed is a *carried* finding. None of it failed a run, and
+    none of it is closed by reading this report -- closure is against an
+    independent oracle (Q8 decision 3), never against another inference.
+    """
+    root = output or (Path("output") / "playtest")
+    obs_dir = root / "observed_beats"
+    if not obs_dir.is_dir():
+        click.echo(f"no run artifacts under {obs_dir} — run a chapter first")
+        return
+    paths = sorted(obs_dir.glob("*.json"))
+    if chapter is not None:
+        paths = [p for p in paths if p.stem == chapter]
+        if not paths:
+            raise click.ClickException(
+                f"no run artifact for chapter {chapter!r} under {obs_dir}")
+    shown = 0
+    for path in paths:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        version = record.get("version")
+        if version is None or int(version) < 2:
+            click.echo(f"{path.stem}: schema v{version} predates the "
+                        "conformance record — re-run the chapter")
+            continue
+        shown += 1
+        conf = record.get("conformance") or {}
+        click.echo(f"{path.stem}  (rom {str(record.get('rom_sha256'))[:8]}, "
+                    f"{record.get('generated_at')})")
+        click.echo(f"  oracle: {conf.get('oracle', '-')}  "
+                    f"walkability disagreements: "
+                    f"{conf.get('walkability_disagreements', 0)} "
+                    f"over {conf.get('distinct_cells', 0)} distinct cells")
+        for map_id, count in sorted((conf.get("by_map") or {}).items()):
+            click.echo(f"    map {map_id}: {count}")
+        carried = record.get("contradictions") or []
+        if not carried:
+            click.echo("  no carried contradictions")
+            continue
+        click.echo(f"  {len(carried)} carried contradiction(s):")
+        for item in carried:
+            beat = item.get("beat") or "-"
+            click.echo(f"    [{item.get('kind')}] {beat}: {item.get('detail')}")
+            click.echo(f"      model={item.get('model')!r} "
+                        f"measurement={item.get('measurement')!r} "
+                        f"assumed={item.get('assumption')!r} "
+                        f"x{item.get('count', 1)}")
+    if shown == 0:
+        click.echo("nothing to report")
 
 
 if __name__ == "__main__":

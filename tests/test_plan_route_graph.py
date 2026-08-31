@@ -23,6 +23,7 @@ import struct
 
 import pytest
 
+from rpg2gba.playtest.contradictions import KIND_WALKABILITY, ContradictionLedger
 from rpg2gba.traversal.direction import Direction
 from rpg2gba.traversal.graph import MapGraph
 
@@ -106,6 +107,11 @@ class _FakeGraphRouteEmu:
         self.write_u32(_GBACKUP, self._backup_w)
         self.write_u32(_GBACKUP + 4, self._backup_h)
         self.write_u32(_GBACKUP + 8, 0x9000)
+        # Q13 slice 4: `_plan_route` records graph-vs-live disagreements in
+        # Q8's ledger rather than only logging them. A fake without one
+        # degrades to a throwaway ledger (documented in `_plan_route`), so
+        # this fake carries a real one to make the record assertable.
+        self.contradictions = ContradictionLedger()
 
         if with_graph:
             if map_id_error is not None:
@@ -322,16 +328,27 @@ def test_divergence_is_logged_but_does_not_change_the_route_or_fail(caplog) -> N
     graph = _open_graph(3, 3)  # graph: (1,0) walkable (default)
     emu = _FakeGraphRouteEmu(map_w=3, map_h=3, walls={(1, 0)}, graph=graph)
 
-    with caplog.at_level(logging.WARNING, logger="rpg2gba.playtest.emulator"):
+    with caplog.at_level(logging.WARNING, logger="rpg2gba.playtest.contradictions"):
         route = emu._plan_route((0, 1), (2, 1))
 
     assert route == [(0, 1), (1, 1), (2, 1)]
-    divergence_lines = [r for r in caplog.records if "divergence" in r.message]
-    assert divergence_lines, caplog.text
-    msg = divergence_lines[0].message
-    assert "(1, 0)" in msg
-    assert "walkable=True" in msg  # graph's verdict
-    assert "walkable=False" in msg  # live grid's verdict
+
+    # Slice 4: the finding lands in Q8's ledger, not only in a log line. A
+    # warning nobody reads is the "carried by someone remembering" shape the
+    # source document disqualifies; the ledger is what reaches
+    # `observed_beats/<chapter>.json`, the viewer, and Q7's conformance
+    # number.
+    entries = [e for e in emu.contradictions.entries
+                if e.kind == KIND_WALKABILITY]
+    assert entries, emu.contradictions.entries
+    entry = entries[0]
+    assert entry.map_id == 37
+    assert entry.cell == (1, 0)
+    assert entry.model == "walkable=True"        # graph's verdict
+    assert entry.measurement == "walkable=False"  # live grid's verdict
+    assert entry.to_dict()["status"] == "carried"
+    # Still logged, so a live run's operator sees it go by.
+    assert [r for r in caplog.records if "contradiction recorded" in r.message]
 
 
 @needs_mgba

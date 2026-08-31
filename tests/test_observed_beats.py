@@ -54,7 +54,10 @@ def test_all_beats_present_in_order_on_a_clean_pass(tmp_path: Path) -> None:
     record = build_observed_beats_record(chapter, attempts, "pass", None,
                                           "deadbeef", generated_at="2026-08-13T00:00:00Z")
 
-    assert record["version"] == 1
+    # Schema 2 (Q13 slice 4) added the walked path, the divergence
+    # verdict and the frame-rule record per beat, plus the carried
+    # contradictions and conformance summary per file.
+    assert record["version"] == 2
     assert record["chapter"] == "t1"
     assert record["rom_sha256"] == "deadbeef"
     assert record["from_beat"] is None
@@ -159,7 +162,10 @@ def test_run_chapter_writes_observed_beats_file_on_pass(tmp_path: Path) -> None:
     path = out / "observed_beats" / "kevlar.json"
     assert path.exists()
     record = json.loads(path.read_text(encoding="utf-8"))
-    assert record["version"] == 1
+    # Schema 2 (Q13 slice 4) added the walked path, the divergence
+    # verdict and the frame-rule record per beat, plus the carried
+    # contradictions and conformance summary per file.
+    assert record["version"] == 2
     assert record["chapter"] == "kevlar"
     assert [b["beat"] for b in record["beats"]] == ["B1", "B2"]
     assert all(b["status"] == "pass" for b in record["beats"])
