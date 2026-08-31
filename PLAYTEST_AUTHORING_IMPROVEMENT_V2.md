@@ -203,12 +203,44 @@ omitted from B1, B3, B6 or B7 — they were enumerated, dispositioned, approved,
 
 ## Part 2 — Questions
 
+Each has context, options, and a recommendation where I have one. These are the grill topics.
+
+#### Build status, audited 2026-08-30
+
+Each decision's own `**Adjudicated…**` line is written when the decision is made and was not being
+updated when the thing shipped; six said "not yet built" about code that exists. They have been
+corrected, and this index is the summary. **It is derived from the code, not from the markers** —
+if the two ever disagree again, re-audit rather than trusting either.
+
+| Q | Built? | Where it stands |
+|---|---|---|
+| Q0 archetype beat templates | **no** | No `template`/`archetype`/`archetype_exempt` symbol exists. Costs authoring time per chapter, not correctness. |
+| Q1 provenance / coordinate-literal ban | **partial** | Slice 1's offline graph (the prerequisite) shipped; the named resolvers and the literal-ban lint did not. `chapters/route2.py:253` still declares bare int-tuples. |
+| Q2 `oracle=` on beats | **no** | `chapter.py:230`'s `beat()` has no `oracle` parameter. Its stated prerequisite (`at=` enforcement) is built. |
+| Q3 `blocked:` vocabulary | **partial** | Vocabulary + `assertable` shipped with slice 2; `CapabilityModel.grants_capability` is still the rejected signature (`PROJECT_TODO.md` #64). |
+| Q4 input fingerprint | **no** | `content_hash` still covers only pages and connections; no seam/terrain/encounter inputs. |
+| Q5 retroactive manifests + row kinds | **partial, regressed** | CH01-CH03 manifests exist but no longer load (`PROJECT_TODO.md` #65); no `PRE_MANIFEST_CHAPTER`, no `encounter_table`/`terrain` row kinds. |
+| Q6 forced helper promotion | **no** | No duplicate detector; `route1.py`'s shadowing helpers are still unpromoted. |
+| Q7 frame rule + conformance | **yes** | Slice 4 — `playtest/frame_rule.py`, `runner._apply_frame_rule`, `playtest conformance`. |
+| Q8 contradiction ledger | **yes** | Slice 4 — `playtest/contradictions.py`. |
+| Q9 read-through as a gate step | **partial** | Item 4 (route approval) is `BUILD_PLAN.md:97`; items 1-3 (the step, the checklist, the appendix) are absent. |
+| Q10 deferral backlog rule | **partial** | `blocked:tooling:` shipped; the bidirectional registration rule did not. |
+| Q11 revisit chapters | **yes** | `CH07A` "Route 1 (revisit)" in `reference/chapters.json:130-133`. |
+| Q12 citation-verification ledger | **no** | Parked until the CH05 branch (`PROJECT_TODO.md` #51) — do not raise before then. |
+| Q13 ordering + the walk between beats | **yes** | All four slices; see the slice table and its status notes. |
+
+**Three of the unbuilt items are the ones CH05 will actually walk into**, in this order: Q1's
+literal-coordinate ban (CH05 is the first chapter authored *after* that decision, so without the
+lint its chapter file reproduces exactly the pattern the decision bans); Q10's bidirectional
+registration rule (CH05 will register `DEFERRED_*` rows, and CH04's own route2.py-vs-dispositions
+disagreement is still undetected); and Q9 items 1-3 (CH04's highest-yield single step still has no
+home in the per-chapter loop). Q0 was recommended "before CH05" and was not built — that is an
+authoring-cost decision to make deliberately, not a correctness gate for a 2-map chapter.
+
 **Status note, 2026-08-29.** Q13 slice 1 is now built and closed — landed in `f780a972`,
 `364732ac`, `46bd2efe`, with the `_route_waypoints` fail-loud following it in `f705b642`, and its
 exit criterion (the one-shot chapter-chain edit against the full warp graph) closed by `c9f73178`
-and `31ddb7c5`. Slice 2 is next. The rest of Part 2's decisions remain recorded, not built.
-
-Each has context, options, and a recommendation where I have one. These are the grill topics.
+and `31ddb7c5`.
 
 ### Q0. Should recurring event archetypes get data-driven beat templates, instead of a bespoke beat per instance?
 
@@ -473,7 +505,13 @@ in the verdict name: `deferred:` drifted to mean "blocked but assertable," `unre
 
 #### DECIDED 2026-08-27 — `blocked:`, split from assertability, with `unreachable` reserved
 
-**Adjudicated with the operator. Recorded, not yet built.**
+**Adjudicated with the operator. PARTIALLY BUILT (slice 2, 2026-08-29).** The vocabulary shipped:
+`blocked` is a `_VERDICTS` member (`chapter_manifest/schema.py:91`), `blocked:tooling:` is handled
+(`schema.py:122`, `checker.py:270`), `assertable: bool | None` exists with validation
+(`schema.py:338`), and CH01-CH04 were re-dispositioned. **Not built:** the corrected
+`CapabilityModel` predicate signature — `grants_capability` is still the pre-amendment shape the
+Part-4c census rejected (`checker.py:59-68`), which is why 28 `capability_model_unenforced`
+warnings stand (`PROJECT_TODO.md` #64).
 
 1. **Collapse `deferred:` and `unreachable:`-by-geography into one verdict, `blocked:<capability set>`**,
    answering exactly one question: *what unblocks this row.* Geography stops being a verdict and becomes
@@ -631,7 +669,12 @@ its effect tags are a subset of `COSMETIC_SAFE_TAGS`; `STATE_WRITING_TAGS` forbi
 
 #### DECIDED 2026-08-28 — retroactive manifests with lazy affirmation, plus three new row kinds
 
-**Adjudicated with the operator. Recorded, not yet built.**
+**Adjudicated with the operator. PARTIALLY BUILT, and the built half has since regressed.**
+Decision 1's retroactive manifests exist (`reference/manifests/CH0{1,2,3}.manifest.json`,
+`de9343cb`) but **no longer load** — slice 2 made `reachability_consulted` required and they were
+never regenerated (`PROJECT_TODO.md` #65), and none has a dispositions file. **Not built:**
+`PRE_MANIFEST_CHAPTER` (no such symbol), and the two new row kinds — `ManifestRow.kind` is still
+`Literal["page", "seam"]` (`schema.py:228`), with `seam_warps.json` unread by the generator.
 
 1. **Generate and commit manifests for CH01, CH02 and CH03 now.** Generation is deterministic and cheap;
    the human disposition pass is the expensive half and is *not* required up front.
@@ -753,7 +796,7 @@ them separately builds one thing twice.
 
 #### DECIDED 2026-08-27 — enforced frame rule now; conformance suite folded into Q13
 
-**Adjudicated with the operator. Recorded, not yet built.**
+**Adjudicated with the operator. BUILT 2026-08-30** (Q13 slice 4, `cd13c3e1`): the frame rule is `playtest/frame_rule.py` + `runner._apply_frame_rule`; the conformance suite is item 2's one-mechanism version — `contradictions.ContradictionLedger.conformance()`, read out by `python -m rpg2gba.playtest conformance`, with no second expectation table.
 
 1. **The frame rule is enforced by the runner, not left as a discipline.** Any beat failure whose claim
    is a negative — "nothing runs", "the object is not rendered", "no script started" — requires a
@@ -799,7 +842,7 @@ asking the author to judge.
 
 #### DECIDED 2026-08-27 — contradictions are recorded and carried, not blocking
 
-**Adjudicated with the operator. Recorded, not yet built.**
+**Adjudicated with the operator. BUILT 2026-08-30** (Q13 slice 4, `cd13c3e1`): `playtest/contradictions.py`. Append-only, non-blocking, carried into `observed_beats/<chapter>.json` and the map viewer; nothing may branch on its contents.
 
 1. **A measurement/model contradiction is a recorded finding, not a blocking one.** Work continues on a
    **stated assumption**; the contradiction is carried forward in the artifact until explicitly closed.
@@ -893,7 +936,11 @@ Q5a's retroactive manifests exist.
 
 #### DECIDED 2026-08-28 — registration-based rule, plus `blocked:tooling:`
 
-**Adjudicated with the operator. Recorded, not yet built.**
+**Adjudicated with the operator. PARTIALLY BUILT.** `blocked:tooling:<primitive>` shipped with
+slice 2 (`chapter_manifest/schema.py:122`, `checker.py:270`). **The bidirectional registration rule
+did not** — nothing cross-references `DEFERRED_BEATS`/`DEFERRED_ROCK_GATED` against disposition
+rows; `RULE_ORPHAN_DISPOSITION` (`checker.py:345`) checks generated-row-vs-disposition, a different
+mismatch. So CH04's own route2.py-vs-dispositions disagreement is still undetected.
 
 1. **The checker rule is registration-based and bidirectional on the correct axis:** every `beat:Bn`
    disposition row must name a **registered** beat, and every `DEFERRED_*` entry must have its row
@@ -935,7 +982,7 @@ see most of the graph, so its clean result is weak evidence.
 
 #### DECIDED 2026-08-28 — deferred once more, but bound to slice 1's exit criteria
 
-**Adjudicated with the operator. Recorded, not yet built.**
+**Adjudicated with the operator. BUILT 2026-08-29**: the chain edit landed against slice 1's full warp graph — `reference/chapters.json` gained `CH07A` "Route 1 (revisit)" (`chapters.json:130-133`, atlas §7), restoring CH02's 10 deferred beats.
 
 1. **No chapter-chain edit now.** The chain is fixed **once**, against the full warp/door connectivity
    that Q13 slice 1's offline graph produces, rather than twice against a 14-entry overland graph that
@@ -1029,7 +1076,7 @@ That property is doing the work and must be explicit.
 
 #### DECIDED 2026-08-27 — offline traversable graph, consumed by the runtime, visualized in the viewer
 
-**Adjudicated with the operator. Recorded, not yet built.**
+**Adjudicated with the operator. BUILT 2026-08-29/30** across slices 1-4 — see the slice table below and its status notes. `src/rpg2gba/traversal/` (graph, triggers, reachability, world), `src/rpg2gba/routing/` (solver, plan, pathing, connections), `RULE_ROUTE_ORDER` (`chapter_manifest/checker.py:46`), and the viewer's planned/walked overlays.
 
 1. **An offline traversable graph is the single source of truth for walkability**, derived from decoded
    data with no ROM: collision + staircases + **ledge directionality** (one-way — ignoring it plans
@@ -1077,7 +1124,7 @@ the rule probably needs to be "diverged onto a trigger tile" rather than "diverg
 
 #### DECIDED 2026-08-28 — trigger divergence fails; all other divergence is a Q8 carried contradiction
 
-**Adjudicated with the operator. Recorded, not yet built.**
+**Adjudicated with the operator. BUILT 2026-08-30** (slice 4): `runner.DivergenceError` fails a beat on a divergence onto a trigger tile; every other divergence is recorded in Q8's ledger as `contradictions.KIND_OFF_PLAN` and carried.
 
 **The trigger half was already settled** by slice 4's own text ("fail on divergence **onto a trigger
 tile**, not on any divergence"). The open half was the other one, and it is the more important:
@@ -1196,7 +1243,7 @@ walks unprotected no matter where walkability came from. So fixing it is not int
 
 #### DECIDED 2026-08-28 — no planner-smartening; the silent degrade becomes fail-loud
 
-**Adjudicated with the operator. Recorded, not yet built.**
+**Adjudicated with the operator. BUILT 2026-08-29** (`f705b642`): `_route_waypoints` fails loud instead of degrading silently to an unprotected greedy walk on the bare target.
 
 1. **The avoid-set changes are not taken.** Adding sight cones and event-touch tiles to `_plan_route`
    and `_walk_greedy` teaches the runtime planner walkability that slice 1 then deletes — the doc's own
