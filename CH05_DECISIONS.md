@@ -11,6 +11,41 @@ argue for an option, that is marked *(doc leans)* — it is still yours to take 
 
 ---
 
+## Build status — audited 2026-09-01
+
+Derived from the code, not from each section's own prose. Recorded here because this repo has
+already been burned once by a decision doc whose inline markers said "not yet built" about code
+that existed (`360eaf60`). Update this table when an item lands; do not trust the sections below.
+
+| Item | Status | Where |
+|---|---|---|
+| A1 / C2 — cave darkness → `requires_flash` | **built** 2026-08-31 | `tileset_converter/metadata_wiring.py`; `PROJECT_TODO.md` Done #56 |
+| A2 — maps 36/37 names | **built** 2026-08-31 | `reference/map_name_overrides.json`; Done #53 |
+| A3 — Sableyeite | answered; no code owed | folds into B2's deferred-beat handling |
+| B1 — staircases absorbed into `terrain` rows | **built** 2026-09-01 | `chapter_manifest/{schema,generator}.py`; Done #54 |
+| C1 — `unhandled: null` outside the staged set | **built** 2026-09-01 | `chapter_manifest/{schema,generator,checker,render}.py`; Done #54 |
+| D1 — coordinate resolvers + literal-ban lint | **built** 2026-09-01 | `playtest/cells.py`, `tests/test_chapter_coordinate_literals.py` |
+| D3 — operator read-through as a named gate step | **built** 2026-09-01 | `BUILD_PLAN.md` step 5 READ; `reference/guides/read_through_checklist.md` |
+| B2 — `blocked:surf` derived by the route finder | **not built** | — |
+| D2 — bidirectional `DEFERRED_*` registration rule | **not built** | `RULE_ORPHAN_DISPOSITION` checks something else |
+| D4 — Tier-1 archetype templates | **not built** | incl. the 324-instance arrival-nudge |
+| D6 — per-chapter input fingerprint | **not built** | generator hashes pages/connections only |
+| E1 — chapter id → playtest module | **not built** | open question back to the operator, below |
+| E2 — CH05 route plan | **not built** | `reference/routes/` does not exist |
+| C4 — capability model signature | accepted as-is (option 2) | 28 warnings stand by decision |
+| D5, D7 | deferred by decision | — |
+| C3, D8 | deferred until after CH05 | — |
+
+**Two answers below are questions back to the build agent and remain unresolved:** E1 (why are
+playtest modules named by place rather than by chapter?) and D8 (was the re-disposition's point to
+compare derived authoring against the hand-written CH01–CH03?). Do not build against a guess.
+
+**One correction to the record:** C4's answer says Old Rod is mis-described as a field move somewhere
+in the repo. A search on 2026-09-01 found no such text — `02-route-1.md` and
+`PLAYTEST_AUTHORING_IMPROVEMENT.md:892` both describe it as Gym-1-gated, which agrees. Nothing owed.
+
+---
+
 ## How to read this
 
 Decisions come in four kinds, and they block differently:

@@ -94,7 +94,15 @@ CHAPTER N / CHnn
  3. ART — quantize the chapter's real tilesets + sprites to GBA 4bpp.
  4. WIRE — map constants, layouts (collision + warp metatiles), object events,
       encounters, connections.
- 5. ROUTE — solve the chapter's walk and get it approved BEFORE the beats are
+ 5. READ — read through the generated manifest and its authored dispositions
+      before anything is approved. Checklist: `reference/guides/read_through_checklist.md`.
+      • per row: is the verdict answering the right question for that row's
+        `kind` (page / seam / terrain), not just mechanically legal.
+      • was any row on the page skipped — a human's eye can slide off a row
+        that was visible the whole time.
+      • a verdict-definition error found here is fixed as a definition and
+        re-reviewed across every row of that kind, not patched on the one row.
+ 6. ROUTE — solve the chapter's walk and get it approved BEFORE the beats are
       written. Needs step 4's emitted maps, not a ROM.
       • `python -m rpg2gba.routing plan --chapter CHnn --module <mod> --dry-run`
         → read the summary; any CROSSING line is a beat that will fire the wrong
@@ -105,15 +113,23 @@ CHAPTER N / CHnn
         `chapter_manifest check --chapter CHnn` enforces the two agree from then
         on (RULE_ROUTE_ORDER). No plan on disk = the rule cannot run, and says
         so as a route_model_unenforced warning — do not read that as a pass.
- 6. BUILD — assemble into the fork; `make modern` must exit 0.
- 7. BOOT — run in mGBA; walk the section. This is the gate (see ROADMAP §9).
- 8. FIX — cluster any systematic defect; fix the *converter*, re-run. Never hand-edit
+ 7. BUILD — assemble into the fork; `make modern` must exit 0.
+ 8. BOOT — run in mGBA; walk the section. This is the gate (see ROADMAP §9).
+ 9. FIX — cluster any systematic defect; fix the *converter*, re-run. Never hand-edit
       output.
- 9. RECORD — MEMORY Current Phase + Decisions; commit one logical unit.
+10. RECORD — MEMORY Current Phase + Decisions; commit one logical unit.
  → widen the frontier: next chapter in the chain.
 ```
 
-**Why ROUTE sits at 5 and not later.** It reads the *emitted* map data (collision,
+**Why READ sits at 5, before ROUTE.** It needs step 4's generated manifest and
+authored dispositions, so it cannot run before WIRE — but it must run before ROUTE's
+approval, because ROUTE's operator sign-off on the beat order *is* the
+approve-before-build gate, and a verdict-definition error left unread means beats get
+approved and routed on a manifest that's still wrong underneath. CH04 ran this
+informally and it was the highest-yield step of that chapter; it had no written home
+until now.
+
+**Why ROUTE sits at 6 and not later.** It reads the *emitted* map data (collision,
 warps, and slice 2's trigger overlay, which is built from the pokeemerald JSON rather
 than RMXP), so it cannot run before WIRE — but it must run before the chapter module's
 beats are registered, because registration order *is* playthrough order and the plan

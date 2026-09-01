@@ -991,6 +991,56 @@ work, not open questions:
 
 ## Done
 
+- **D1 + D3 — the coordinate literal ban, and the read-through gets a written
+  home** (2026-09-01, CH05 prerequisites — `CH05_DECISIONS.md` D1 and D3, both
+  "option 1").
+
+  **D1.** `src/rpg2gba/playtest/cells.py` is the resolver vocabulary a chapter
+  author uses instead of typing coordinates: `event_cell`, `approach_to`
+  (walkable neighbour in deterministic N/S/E/W order, `prefer=` to pick a side),
+  `warp_cell` / `arrival_cell` (both sides of a warp, from
+  `MapGraph.warp_exits`), `entry_cell` (reads
+  `generator._CHAPTER_MAP_START_CELLS` — one table, not two), and the counted
+  escape hatch `raw_cell(x, y, why=...)` which refuses an empty `why`. Ambiguity
+  never resolves silently: more than one matching warp fails loud listing every
+  candidate. The decision named four resolvers; `event_cell` and `arrival_cell`
+  were added because without them the two commonest literal patterns (an
+  event's own cell, and post-warp arrival cells) would all have become
+  `raw_cell` escapes, which defeats the ban. Per-map graphs are cached keyed on
+  the map id, so the resolvers stay idempotent (§4.2).
+
+  **The lint** is `tests/test_chapter_coordinate_literals.py`, AST-walking
+  `chapters/*.py` as a pytest test — the shape `tests/test_moki_chapter.py`
+  already established for "no hardcoded flag/var ids". It flags four things: a
+  bare two-int tuple anywhere, an inline `at=(x, y)`, a `raw_cell` with no
+  `why=`, and a `raw_cell` with an empty one. **Grandfathering is a ratchet, not
+  an exemption:** `_PRE_BAN_BUDGET` freezes the four pre-ban chapters at their
+  measured counts (moki 13, route1 45, kevlar 42, route2 25) and fails if a
+  count rises — *and* fails if one drops without the budget being lowered to
+  match. Any chapter file not in the budget, CH05 onward, must be at zero. The
+  four existing chapters are deliberately NOT retrofitted: that would mean
+  editing three gate-passed chapters for no functional gain, and it would give
+  them an import-time dependency on decoded output they do not have today.
+
+  **D3.** `BUILD_PLAN.md`'s per-chapter loop gains **READ at position 5**,
+  pushing ROUTE to 6 and the loop to 10 steps. It sits there because it needs
+  step 4's generated manifest and authored dispositions, and must precede
+  ROUTE's operator sign-off — which *is* the approve-before-build gate the
+  decision names. Until now the ordering was inverted: the route plan was
+  approved on its own, ahead of a read-through with no written home. The
+  verdict-correctness checklist and its decaying blind-spot appendix are
+  `reference/guides/read_through_checklist.md`, grounded entirely in what CH04's
+  informal read-through actually caught (the page-vs-event `cosmetic` definition
+  error behind B14, the "Sign" name-vs-content confusion, the B15 encounter
+  table). The appendix ships with one worked decay already recorded — diagonal
+  staircases came off it the same day B1 landed — and one correction: `dark_map`
+  is **still** a live blind spot, because 2026-08-31 wired it into the emitted
+  map header, not into the manifest, so no verdict is ever authored about
+  darkness.
+
+  Suite **2787 passed, 19 skipped** (was 2767/19). `ruff check` clean on both new
+  files; the repo's pre-existing 201 ruff findings are unchanged and untouched.
+
 - **54. `unhandled: 0` was indistinguishable from "map never transpiled"; and
   the four Map037 staircases disposed as `cosmetic`** (2026-09-01, CH05
   prerequisites — `CH05_DECISIONS.md` C1 and B1, both "build the fix").

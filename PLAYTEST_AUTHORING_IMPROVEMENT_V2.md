@@ -223,7 +223,7 @@ if the two ever disagree again, re-audit rather than trusting either.
 | Q6 forced helper promotion | **no** | No duplicate detector; `route1.py`'s shadowing helpers are still unpromoted. |
 | Q7 frame rule + conformance | **yes** | Slice 4 — `playtest/frame_rule.py`, `runner._apply_frame_rule`, `playtest conformance`. |
 | Q8 contradiction ledger | **yes** | Slice 4 — `playtest/contradictions.py`. |
-| Q9 read-through as a gate step | **partial** | Item 4 (route approval) is `BUILD_PLAN.md:97`; items 1-3 (the step, the checklist, the appendix) are absent. |
+| Q9 read-through as a gate step | **yes** (2026-09-01) | Items 1-3 built: READ is step 5 of the 10-step loop, ahead of ROUTE (now 6); checklist + decaying appendix at `reference/guides/read_through_checklist.md`. Item 4 (route approval) was already the ROUTE step. |
 | Q10 deferral backlog rule | **partial** | `blocked:tooling:` shipped; the bidirectional registration rule did not. |
 | Q11 revisit chapters | **yes** | `CH07A` "Route 1 (revisit)" in `reference/chapters.json:130-133`. |
 | Q12 citation-verification ledger | **no** | Parked until the CH05 branch (`PROJECT_TODO.md` #51) — do not raise before then. |
@@ -895,6 +895,14 @@ approves the route, not just the beat set" is now a written step rather than an 
 verdict-correctness checklist and its decaying blind-spot appendix do not exist. Item 4 says the
 read-through *covers* the route plan; today the route plan is approved on its own, ahead of a read-through
 that has no written home.
+
+**Built 2026-09-01 — items 1-3 landed.** READ is now a named step at position 5 of the
+per-chapter loop, ahead of ROUTE (which moved to 6), so the inversion described above is
+closed: the read-through runs before the operator signs off on the route order. The
+verdict-correctness checklist and the decaying blind-spot appendix live at
+`reference/guides/read_through_checklist.md`. The appendix already carries a worked decay —
+diagonal staircases were struck from it the same day, when the generator learned to emit
+`terrain` rows (`PROJECT_TODO.md` #54).
 
 ### Q10. Deferral backlog: reconcile the two lists, and what about CH25?
 
