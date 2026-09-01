@@ -35,7 +35,7 @@ class _FakeInterruptEmu:
     made while locked (exactly the shape of `_walk_greedy`'s "wait 30
     frames, recheck" loop) and clears the lock when it hits zero --
     simulating a scene that runs for a while and then releases the player
-    on its own, the same shape moki.py's B5-hands-B6 a running autorun
+    on its own, the same shape ch01.py's B5-hands-B6 a running autorun
     beats need `walk_to` to tolerate.
 
     `grid_settle_polls` models the post-interruption map-grid transition
@@ -219,7 +219,7 @@ class _FakeInterruptEmu:
         from rpg2gba.playtest.emulator import Emulator
         return Emulator._wait_for_overworld_return(self, *args, **kwargs)
 
-    # `route1.py`'s `_walk_absorbing` calls these as ordinary BOUND methods
+    # `ch02.py`'s `_walk_absorbing` calls these as ordinary BOUND methods
     # (`emu.walk_to(...)`, `emu.is_trainer_battle()`), not unbound against
     # `Emulator` the way this file's own tests do -- so the fake needs them
     # as real attributes, delegating to the real (under-test) logic.
@@ -355,7 +355,7 @@ def test_is_trainer_battle_false_for_a_wild_encounter() -> None:
 
 # -- grace period: self-resolving scenes vs. genuinely input-blocked ones ---
 #
-# The moki.py B4 regression: crossing the fence-row tile fires Theo's cameo,
+# The ch01.py B4 regression: crossing the fence-row tile fires Theo's cameo,
 # a scene that locks the field, plays out with no input, and releases on its
 # own. That must keep working -- walk_to must wait it out, not raise, same as
 # the pre-fix behaviour. What must still raise is a lock that *doesn't*
@@ -367,7 +367,7 @@ def test_is_trainer_battle_false_for_a_wild_encounter() -> None:
 def test_walk_self_resolving_lock_waits_it_out_and_reaches_target() -> None:
     """A cameo-shaped lock (clears itself well within the grace) must NOT
     raise `WalkInterrupted` -- the walk waits, then continues to the
-    target, exactly like a pre-fix `walk_to` did for moki.py B4."""
+    target, exactly like a pre-fix `walk_to` did for ch01.py B4."""
     from rpg2gba.playtest.emulator import Emulator
 
     emu = _FakeInterruptEmu(start=(0, 0), lock_at=(2, 0),
@@ -414,7 +414,7 @@ def test_walk_battle_flagged_lock_raises_without_spending_the_grace() -> None:
 
 @needs_mgba
 def test_walk_already_locked_at_start_does_not_raise_walk_interrupted() -> None:
-    """The CH01 moki.py B5-hands-B6 shape: field is already locked when the
+    """The CH01 ch01.py B5-hands-B6 shape: field is already locked when the
     walk begins, and later releases on its own. `walk_to` must wait it out
     exactly as before -- no `WalkInterrupted`."""
     from rpg2gba.playtest.emulator import Emulator
@@ -698,13 +698,13 @@ def test_walk_to_resolve_interruptions_gives_up_after_the_cap() -> None:
     assert emu.resolve_calls == _MAX_INTERRUPTION_RESOLUTIONS
 
 
-# -- route1.py's `_walk_absorbing`: the directional absorption policy -------
+# -- ch02.py's `_walk_absorbing`: the directional absorption policy -------
 #
 # B7's regression: Flood's approach walk crosses tall grass, a wild
 # encounter interrupts it, and (before this policy) the beat had no way to
 # tell "absorb this" from "this IS the thing I'm testing" -- it just died.
 # `_walk_absorbing(absorb_wild=..., absorb_trainer=...)` is the general fix:
-# these tests exercise the 2x2 policy matrix directly against route1.py's
+# these tests exercise the 2x2 policy matrix directly against ch02.py's
 # own function (not just the underlying `WalkInterrupted`/`resolve_
 # interruption` primitives, already covered above), using `_FakeInterruptEmu`
 # with its `walk_to`/`is_trainer_battle` bound-method delegates.
@@ -717,7 +717,7 @@ def test_walk_to_resolve_interruptions_gives_up_after_the_cap() -> None:
 # file already does it.
 
 def _patch_route1_in_battle(monkeypatch, emu) -> None:
-    import rpg2gba.playtest.chapters.route1 as route1_module
+    import rpg2gba.playtest.chapters.ch02 as route1_module
     monkeypatch.setattr(route1_module, "in_battle", lambda e: e._in_battle_flag)
 
 
@@ -734,7 +734,7 @@ def _patch_win_battle(monkeypatch) -> None:
 
 @needs_mgba
 def test_walk_absorbing_wild_absorbed_trainer_passed_through(monkeypatch) -> None:
-    from rpg2gba.playtest.chapters.route1 import _walk_absorbing
+    from rpg2gba.playtest.chapters.ch02 import _walk_absorbing
 
     _patch_win_battle(monkeypatch)
 
@@ -760,7 +760,7 @@ def test_walk_absorbing_wild_absorbed_trainer_passed_through(monkeypatch) -> Non
 
 @needs_mgba
 def test_walk_absorbing_trainer_absorbed_wild_passed_through(monkeypatch) -> None:
-    from rpg2gba.playtest.chapters.route1 import _walk_absorbing
+    from rpg2gba.playtest.chapters.ch02 import _walk_absorbing
 
     _patch_win_battle(monkeypatch)
 
@@ -787,7 +787,7 @@ def test_walk_absorbing_both_kinds_absorbed(monkeypatch) -> None:
     """Pure-navigation policy (item pickups, doors, rock approaches, the
     north boundary): neither kind of incidental battle should ever stop the
     walk from reaching its target."""
-    from rpg2gba.playtest.chapters.route1 import _walk_absorbing
+    from rpg2gba.playtest.chapters.ch02 import _walk_absorbing
 
     _patch_win_battle(monkeypatch)
 
@@ -814,7 +814,7 @@ def test_walk_absorbing_gives_up_after_the_cap() -> None:
     `resolve_interruption` are stubbed directly on the fake, so this is
     purely about `_walk_absorbing`'s own loop bound.
     """
-    from rpg2gba.playtest.chapters.route1 import (
+    from rpg2gba.playtest.chapters.ch02 import (
         _MAX_ABSORBED_INTERRUPTIONS,
         _walk_absorbing,
     )
@@ -889,7 +889,7 @@ def test_walk_absorbing_survives_more_battles_than_the_old_cap_of_three() -> Non
     the new default of 12 -- must succeed, not fail loud. This is the
     concrete shape of the real ROM regression: cap=3 was too small for an
     ordinary grass crossing, not just a pathological case."""
-    from rpg2gba.playtest.chapters.route1 import _walk_absorbing
+    from rpg2gba.playtest.chapters.ch02 import _walk_absorbing
 
     emu = _StubAbsorbEmu(fail_count=8)
     _walk_absorbing(emu, "TEST", 5, 5, absorb_wild=False, absorb_trainer=True)
@@ -903,7 +903,7 @@ def test_walk_absorbing_passes_the_same_fresh_budget_every_retry() -> None:
     SAME explicit budget -- never a value decremented or otherwise carried
     over from a previous attempt (the coordinator's "verify a resumption
     doesn't inherit a partly-spent budget" ask)."""
-    from rpg2gba.playtest.chapters.route1 import (
+    from rpg2gba.playtest.chapters.ch02 import (
         _WALK_ABSORBING_FRAME_BUDGET,
         _walk_absorbing,
     )
@@ -943,20 +943,20 @@ def test_walk_to_resolve_interruptions_passes_the_same_fresh_budget_every_retry(
     assert budgets_seen == [1234, 1234, 1234]
 
 
-# -- route1.py's `_effective_trainer_facing`/`_sight_triggered`/
+# -- ch02.py's `_effective_trainer_facing`/`_sight_triggered`/
 # `_absorb_stray_wild`/`_step_absorbing` -- the 2026-08-11 route1 B7
 # regression's second and third cuts. Flood is `MOVEMENT_TYPE_LOOK_AROUND`
 # (verified against the compiled `engine/data/maps/Route01/events.inc`), so
 # his facing keeps rotating until `CheckTrainer`'s sight scan notices the
 # player and freezes it (`SetTrainerMovementType`, `trainer_see.c:858,980`)
-# -- route1.py's documented spawn-time `TrainerBeat.facing` can already be
+# -- ch02.py's documented spawn-time `TrainerBeat.facing` can already be
 # stale by the time a beat runs, and worse, a bare `in_battle()` check can't
 # tell an incidental wild encounter from the trainer's own battle, so
 # either one alone can misreport the sight trigger firing.
 
 @needs_mgba
 def test_effective_trainer_facing_prefers_live_over_documented(monkeypatch) -> None:
-    from rpg2gba.playtest.chapters.route1 import _effective_trainer_facing
+    from rpg2gba.playtest.chapters.ch02 import _effective_trainer_facing
 
     emu = _FakeInterruptEmu(start=(9, 9))
     # `_effective_trainer_facing` reads `emu.object_events()` directly --
@@ -971,7 +971,7 @@ def test_effective_trainer_facing_prefers_live_over_documented(monkeypatch) -> N
 
 @needs_mgba
 def test_effective_trainer_facing_falls_back_when_unspawned(monkeypatch) -> None:
-    from rpg2gba.playtest.chapters.route1 import _effective_trainer_facing
+    from rpg2gba.playtest.chapters.ch02 import _effective_trainer_facing
 
     emu = _FakeInterruptEmu(start=(9, 9))
     emu.object_events = lambda: []
@@ -980,7 +980,7 @@ def test_effective_trainer_facing_falls_back_when_unspawned(monkeypatch) -> None
 
 @needs_mgba
 def test_sight_triggered_true_for_a_lock_with_no_battle(monkeypatch) -> None:
-    from rpg2gba.playtest.chapters.route1 import _sight_triggered
+    from rpg2gba.playtest.chapters.ch02 import _sight_triggered
 
     emu = _FakeInterruptEmu(start=(0, 0), locked_at_start=True)
     _patch_route1_in_battle(monkeypatch, emu)
@@ -989,7 +989,7 @@ def test_sight_triggered_true_for_a_lock_with_no_battle(monkeypatch) -> None:
 
 @needs_mgba
 def test_sight_triggered_true_for_an_active_trainer_battle(monkeypatch) -> None:
-    from rpg2gba.playtest.chapters.route1 import _sight_triggered
+    from rpg2gba.playtest.chapters.ch02 import _sight_triggered
 
     emu = _FakeInterruptEmu(start=(0, 0), battle_type_flags=0x08)
     emu._in_battle_flag = True
@@ -1003,7 +1003,7 @@ def test_sight_triggered_false_for_a_wild_battle_even_if_also_locked(monkeypatch
     transition can briefly assert the field lock too, so `in_battle()` is
     checked FIRST -- an in-progress WILD battle must never read as
     triggered, even with `field_locked()` simultaneously true."""
-    from rpg2gba.playtest.chapters.route1 import _sight_triggered
+    from rpg2gba.playtest.chapters.ch02 import _sight_triggered
 
     emu = _FakeInterruptEmu(start=(0, 0), locked_at_start=True,
                             battle_type_flags=0)  # 0 -- not the trainer bit
@@ -1014,7 +1014,7 @@ def test_sight_triggered_false_for_a_wild_battle_even_if_also_locked(monkeypatch
 
 @needs_mgba
 def test_sight_triggered_false_when_nothing_is_happening(monkeypatch) -> None:
-    from rpg2gba.playtest.chapters.route1 import _sight_triggered
+    from rpg2gba.playtest.chapters.ch02 import _sight_triggered
 
     emu = _FakeInterruptEmu(start=(0, 0))
     _patch_route1_in_battle(monkeypatch, emu)
@@ -1023,7 +1023,7 @@ def test_sight_triggered_false_when_nothing_is_happening(monkeypatch) -> None:
 
 @needs_mgba
 def test_absorb_stray_wild_clears_a_wild_battle(monkeypatch) -> None:
-    from rpg2gba.playtest.chapters.route1 import _absorb_stray_wild
+    from rpg2gba.playtest.chapters.ch02 import _absorb_stray_wild
 
     emu = _FakeInterruptEmu(start=(0, 0), battle_type_flags=0)
     emu._in_battle_flag = True
@@ -1035,7 +1035,7 @@ def test_absorb_stray_wild_clears_a_wild_battle(monkeypatch) -> None:
 
 @needs_mgba
 def test_absorb_stray_wild_leaves_a_trainer_battle_alone(monkeypatch) -> None:
-    from rpg2gba.playtest.chapters.route1 import _absorb_stray_wild
+    from rpg2gba.playtest.chapters.ch02 import _absorb_stray_wild
 
     emu = _FakeInterruptEmu(start=(0, 0), battle_type_flags=0x08)
     emu._in_battle_flag = True
@@ -1049,7 +1049,7 @@ def test_absorb_stray_wild_leaves_a_trainer_battle_alone(monkeypatch) -> None:
 
 @needs_mgba
 def test_step_absorbing_moves_when_unobstructed(monkeypatch) -> None:
-    from rpg2gba.playtest.chapters.route1 import _step_absorbing
+    from rpg2gba.playtest.chapters.ch02 import _step_absorbing
 
     emu = _FakeInterruptEmu(start=(0, 0))
     _patch_route1_in_battle(monkeypatch, emu)
@@ -1071,7 +1071,7 @@ def test_step_absorbing_does_not_itself_clear_a_battle_started_by_a_successful_s
     division of responsibility down precisely, so a future "helpfully"
     added battle check inside `_step_absorbing` doesn't silently change
     what a `True` return means to its callers."""
-    from rpg2gba.playtest.chapters.route1 import _step_absorbing
+    from rpg2gba.playtest.chapters.ch02 import _step_absorbing
 
     emu = _FakeInterruptEmu(start=(0, 0), wild_battle_at=(1, 0))
     _patch_route1_in_battle(monkeypatch, emu)
@@ -1089,7 +1089,7 @@ def test_step_absorbing_returns_false_for_a_refused_trainer_battle(monkeypatch) 
     here at all): a trainer battle already in progress when the step is
     attempted, with `absorb_trainer=False`, must be handed back untouched
     rather than absorbed."""
-    from rpg2gba.playtest.chapters.route1 import _step_absorbing
+    from rpg2gba.playtest.chapters.ch02 import _step_absorbing
 
     emu = _FakeInterruptEmu(start=(0, 0), blocked={(1, 0)},
                             battle_type_flags=0x08)
@@ -1102,7 +1102,7 @@ def test_step_absorbing_returns_false_for_a_refused_trainer_battle(monkeypatch) 
 
 @needs_mgba
 def test_step_absorbing_returns_false_when_genuinely_blocked(monkeypatch) -> None:
-    from rpg2gba.playtest.chapters.route1 import _step_absorbing
+    from rpg2gba.playtest.chapters.ch02 import _step_absorbing
 
     emu = _FakeInterruptEmu(start=(0, 0), blocked={(1, 0)})
     _patch_route1_in_battle(monkeypatch, emu)

@@ -65,7 +65,7 @@ Kevlar↔Nowtoch through-cave is maps 36/37, via the map31↔35 seam). See §5.
 
 ## 3. Story beat chain
 
-**Beat numbering: `src/rpg2gba/playtest/chapters/kevlar.py` is the source of
+**Beat numbering: `src/rpg2gba/playtest/chapters/ch03.py` is the source of
 truth.** Its numbering was user-approved (`CH03_TODO.md`, 2026-08-12) and
 diverges from this document's original numbering wherever the approved list
 renumbered a beat. The table below uses the harness's canonical numbers; the
@@ -93,8 +93,8 @@ continuity) is:
 | *(none)* | B13 | Pick a Map031 berry plant (native `BerryTreeScript`) — never assigned a beat number in this document's original §3 table, only mentioned in prose (§5 #5) | active — spec gap |
 | *(none)* | B16 | The two flavor houses (Maury's apartment, the couple's house) — listed in §4.4 as non-chapter-relevant warps, never assigned a §3 beat number | active — spec gap |
 | *(none)* | N1 / N3 / N6 | Negative-path checks (item-ball re-touch, NurseTut re-talk, "no warp targets an unbuilt map" statement) | harness-only, no spec counterpart |
-| *(none)* | "B26" (`DEFERRED_BEATS`) | **Naming collision — needs a human decision.** `kevlar.py`'s `DEFERRED_BEATS` tuple also labels the Compensation Man Luxi gift "B26", colliding with the active, registered Center-PC beat above (`kevlar.py:574` vs `kevlar.py:1343`). Corresponds to this document's §7 "Compensation Man" open item (sw130, never written anywhere in the corpus). | conflict, unresolved |
-| *(none)* | B27 | Warp-arrival facing regression check for the Route 1 → Kevlar Town seam (B1's own warp) — task 2026-08-19, physically placed right after B1 in `kevlar.py` so it never re-navigates | active, harness-only |
+| *(none)* | "B26" (`DEFERRED_BEATS`) | **Naming collision — needs a human decision.** `ch03.py`'s `DEFERRED_BEATS` tuple also labels the Compensation Man Luxi gift "B26", colliding with the active, registered Center-PC beat above (`ch03.py:574` vs `ch03.py:1343`). Corresponds to this document's §7 "Compensation Man" open item (sw130, never written anywhere in the corpus). | conflict, unresolved |
+| *(none)* | B27 | Warp-arrival facing regression check for the Route 1 → Kevlar Town seam (B1's own warp) — task 2026-08-19, physically placed right after B1 in `ch03.py` so it never re-navigates | active, harness-only |
 | *(none)* | B28 | Warp-arrival facing regression check for the Poké Mart door (B10's own warp) — task 2026-08-19, placed right after B10 | active, harness-only |
 | *(none)* | B29 | Post-warp BGM regression check at the Poké Mart — task 2026-08-19, placed right after B28 | active, harness-only |
 | *(none)* | B30 | Warp-arrival facing regression check for the Poké Center's physical door (B3's own warp) — task 2026-08-19, placed right after B3 | active, harness-only |
@@ -298,7 +298,7 @@ and speak to the boy crying just outside of the entrance of the Poké Mart"*
 (`Kevlar_Town.wiki:28,30`; `Passage_Cave.wiki:10` concurs).
 
 So the cave **and** the Cry Boy sidequest are one **post-Strength return trip**.
-Beats B19–B24 in `playtest/chapters/kevlar.py` are deferred, not failing, and the
+Beats B19–B24 in `playtest/chapters/ch03.py` are deferred, not failing, and the
 boulder conversion moved to `PROJECT_TODO.md` #39, due in CH25. **Map019 stays in
 `SLICE_MAP_IDS`** (user call) so the cave is built and art-checked ahead of time.
 

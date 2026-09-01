@@ -95,7 +95,7 @@ _MAX_INTERRUPTION_RESOLUTIONS = 3
 
 # `_walk_greedy`'s grace period for a mid-walk lock that might be a
 # self-resolving scene -- an autorun cameo that plays out with no input and
-# releases the field on its own (moki.py B4: crossing the fence-row tile
+# releases the field on its own (ch01.py B4: crossing the fence-row tile
 # fires Theo's cameo, then the walk continues) -- rather than one that will
 # never clear without help (a msgbox waiting on a button the walk isn't
 # pressing, a sight trainer's approach-and-battle). Long enough to outlast
@@ -150,7 +150,7 @@ class WalkInterrupted(ScenarioError):
 
     Raised only when the walk *began* unlocked (see `_walk_greedy`'s
     `start_locked`); a walk that begins already locked (a beat that starts
-    mid-scene, e.g. `moki.py` B5 handing a running autorun to B6) keeps
+    mid-scene, e.g. `ch01.py` B5 handing a running autorun to B6) keeps
     today's wait-it-out behaviour unchanged.
 
     A caller that doesn't opt into `resolve_interruptions=True` still gets a
@@ -197,7 +197,7 @@ class ObjectEventState:
     #: its own live sight range (see `_read_object_event_slot`'s note on why
     #: this defaults to 0 rather than failing on offset tables that predate
     #: it). Meaningless for non-trainer objects (item balls, NPCs); callers
-    #: that care (route1.py's `_sight_lane_tiles`) only read it for objects
+    #: that care (ch02.py's `_sight_lane_tiles`) only read it for objects
     #: they already know are trainers.
     trainer_range: int = 0
 
@@ -1725,7 +1725,7 @@ class Emulator:
         on the current map's live grid -- the same collision check
         `_plan_route` searches over, exposed as a one-off public query for
         callers that need to test a single tile without going through the
-        whole route-planning machinery (e.g. route1.py's
+        whole route-planning machinery (e.g. ch02.py's
         `_sight_lane_tiles`, picking a trainer's approach tile).
 
         Ignores warp/object-event exclusions -- those are `_plan_route`-
@@ -2259,7 +2259,7 @@ class Emulator:
         `symbols`, the bit resolved via `resolve_constant` (a probe
         compile), never a hardcoded address or literal.
 
-        A caller (e.g. `route1.py`'s B4, which must fight off an incidental
+        A caller (e.g. `ch02.py`'s B4, which must fight off an incidental
         trainer ambush but hand a wild encounter back untouched -- that's
         its actual objective) needs this the instant `WalkInterrupted`
         reports `battle=True`, so it fails loud rather than reading garbage
@@ -2397,7 +2397,7 @@ class Emulator:
 
         If the field started unlocked, a lock appearing here needs one more
         distinction: is it a *self-resolving* scene (a scripted autorun/
-        cameo -- e.g. `moki.py` B4's Theo trigger -- that plays out with no
+        cameo -- e.g. `ch01.py` B4's Theo trigger -- that plays out with no
         input and releases the field on its own), or one that will never
         clear without help (a battle, or a msgbox waiting on a button the
         walk isn't pressing -- a sight trainer's approach-and-battle)? A
@@ -2511,7 +2511,7 @@ class Emulator:
                     raise WalkInterrupted(
                         (tx, ty), self.player_pos(), self._in_battle())
                 # Released within the grace -- a self-resolving scene, same
-                # as moki.py B4's cameo. Resume walking toward the target.
+                # as ch01.py B4's cameo. Resume walking toward the target.
                 continue
             x, y = self.player_pos()
             record_tile(x, y)

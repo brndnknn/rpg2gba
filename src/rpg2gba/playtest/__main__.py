@@ -1,13 +1,13 @@
 """Standalone CLI for the chapter runner (ROM_TEST_DEV C5(b)).
 
-    python -m rpg2gba.playtest run --chapter moki
-    python -m rpg2gba.playtest run --chapter moki --from-beat B7
+    python -m rpg2gba.playtest run --chapter CH01
+    python -m rpg2gba.playtest run --chapter CH01 --from-beat B7
     python -m rpg2gba.playtest list
-    python -m rpg2gba.playtest walk --chapter moki --at-beat B7
-    python -m rpg2gba.playtest walk --chapter moki --at-end
-    python -m rpg2gba.playtest seeds --chapter moki
+    python -m rpg2gba.playtest walk --chapter CH01 --at-beat B7
+    python -m rpg2gba.playtest walk --chapter CH01 --at-end
+    python -m rpg2gba.playtest seeds --chapter CH01
     python -m rpg2gba.playtest rules-lag
-    python -m rpg2gba.playtest conformance --chapter route2
+    python -m rpg2gba.playtest conformance --chapter CH04
 
 This is the iteration-loop consumer of `runner.run_chapter`; the gate/CI
 consumer is the thin pytest wrapper in `tests/test_runner.py`. Both drive the

@@ -18,7 +18,7 @@ never silently reused; any ROM rebuild invalidates every blob and requires
 a fresh green run to regenerate them.
 
 CLI:
-    python -m rpg2gba.playtest walk --chapter moki --at-beat B10
+    python -m rpg2gba.playtest walk --chapter CH01 --at-beat B10
 """
 from __future__ import annotations
 

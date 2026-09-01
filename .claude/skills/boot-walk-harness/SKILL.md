@@ -112,7 +112,7 @@ this area after every later fix.
    capture rule lands on the dialogue frame or the fully-settled frame —
    neither shows a mid-cutscene positioning bug.
 6. **A hardcoded APPROACH constant can be dead code with a valid-looking
-   name.** `kevlar.py`'s B8 (2026-08-14) declared `MAWULI_APPROACH = (3, 16)`
+   name.** `ch03.py`'s B8 (2026-08-14) declared `MAWULI_APPROACH = (3, 16)`
    but every actual call routed through `_approach_patrol_npc`, which
    computes its own approach from the NPC's *live* position and never
    touches the constant — so nothing ever exercised it. The constant turned

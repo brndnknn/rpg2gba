@@ -151,7 +151,7 @@ def _stub_save_in_game(monkeypatch):
 
 
 def test_run_chapter_writes_observed_beats_file_on_pass(tmp_path: Path) -> None:
-    chapter = make_chapter("kevlar", [("B1", ok), ("B2", ok)])
+    chapter = make_chapter("CH03", [("B1", ok), ("B2", ok)])
     rom = make_rom(tmp_path / "rom.gba")
     out = tmp_path / "out"
 
@@ -159,14 +159,14 @@ def test_run_chapter_writes_observed_beats_file_on_pass(tmp_path: Path) -> None:
                           emulator_factory=fake_factory)
 
     assert result.verdict == "pass"
-    path = out / "observed_beats" / "kevlar.json"
+    path = out / "observed_beats" / "CH03.json"
     assert path.exists()
     record = json.loads(path.read_text(encoding="utf-8"))
     # Schema 2 (Q13 slice 4) added the walked path, the divergence
     # verdict and the frame-rule record per beat, plus the carried
     # contradictions and conformance summary per file.
     assert record["version"] == 2
-    assert record["chapter"] == "kevlar"
+    assert record["chapter"] == "CH03"
     assert [b["beat"] for b in record["beats"]] == ["B1", "B2"]
     assert all(b["status"] == "pass" for b in record["beats"])
     assert record["rom_sha256"] is not None

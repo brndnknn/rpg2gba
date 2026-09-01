@@ -322,7 +322,7 @@ def lab_doorstep(emu: Emulator) -> None:
     Coordinates are the moki chapter's, imported rather than re-derived so
     there is one place to fix if a re-walk moves them.
     """
-    from .chapters.moki import (
+    from .chapters.ch01 import (
         AUNTIE_INTERACT,
         FENCE_TRIP_APPROACH,
         FENCE_TRIP_DIRECTION,

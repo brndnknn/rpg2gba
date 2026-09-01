@@ -250,7 +250,7 @@ extract them after two or three chapters, per A4's same logic.
 **C5. Runner surface?**
 - a) Everything through pytest (current `RPG2GBA_PLAYTEST=1` opt-in)
 - b) **Standalone CLI for iteration (`python -m rpg2gba.playtest run --chapter
-  moki [--from-beat N]`) + a thin pytest wrapper that runs the full chapter suite
+  CH01 [--from-beat N]`) + a thin pytest wrapper that runs the full chapter suite
   for gate/CI runs**
 - c) CLI only
 
@@ -721,7 +721,7 @@ unanswered above, recommending both.
 > | 1 | `var()` accessor | **done** — `Emulator.var()` in `playtest/emulator.py`, `vars_start` probed in `offsets.py`, tests in `tests/test_playtest.py` |
 > | 2 | Chapter doc for Moki | **done** — `reference/chapters/01-moki.md` |
 > | 3 | Battle mini-driver | **done** — `playtest/battle.py`: `in_battle`, `read_enemy_party`, `zero_enemy_hp`, `win_battle`; new struct offsets in `offsets.py`; `u16`/`write_u16` on `Emulator` |
-> | 4 | Chapter scenario | **done** — `playtest/chapters/moki.py`, 18 beats (B1–B15 + N1–N3 interleaved; N2 sits after B10 because it needs the player back outside). All symbols late-bound; map identity via `MAP_GROUP`/`MAP_NUM`. **Two live-run TODOs:** `THEO_LAB_INTERACT = (13, 9)` collision unverified, and the B13/N2 ceremony-tile doc/data discrepancy (doc says (16,43), `Map032.json` says (16,42) — annotated in the chapter doc) |
+> | 4 | Chapter scenario | **done** — `playtest/chapters/ch01.py`, 18 beats (B1–B15 + N1–N3 interleaved; N2 sits after B10 because it needs the player back outside). All symbols late-bound; map identity via `MAP_GROUP`/`MAP_NUM`. **Two live-run TODOs:** `THEO_LAB_INTERACT = (13, 9)` collision unverified, and the B13/N2 ceremony-tile doc/data discrepancy (doc says (16,43), `Map032.json` says (16,42) — annotated in the chapter doc) |
 > | 5 | Failure bundle + green stamp | **done** — `playtest/runner.py` (`run_chapter` → `ChapterRunResult`, verdict `pass`/`flake`/`fail`), `playtest/__main__.py` CLI (`run --chapter … [--from-beat …]`, `list`). Artifacts under `output/playtest/`: `bundles/<chapter>/<ts>/` (failure.json, state_dump.json, pre_beat.gba, screenshots/), `review/<chapter>-complete.gba`, `flake_log.jsonl`, `blobs/` with sha256 ROM-provenance refusal |
 > | 6 | Screenshot contact sheet | **done** — `playtest/contact_sheet.py` (`Waypoint`, `build_contact_sheet`, paginated PNG grid, 3 cols @2x, 12/page) + `Emulator.waypoint(beat, name, note, failed)`. The runner captures a waypoint at boot and at every beat boundary (and at the failing beat, captioned red), then renders the sheet on **both** outcomes: green → `output/playtest/review/<chapter>-sheet.png` beside the review ROM, red → inside the repro bundle, ending on the failing frame. Beats can add their own mid-beat waypoints. `ChapterRunResult.contact_sheet` + CLI prints the paths |
 > | 7 | `walk_to` step-aside retry | **done** — perpendicular single-step sidestep + re-path, `max_sidesteps=8`, visited-tile preference, post-sidestep `map_location()` guard; three distinct failure messages (step-aside exhausted / sidestep changed map / budget exhausted) |
@@ -855,7 +855,7 @@ script, then let `waypoint()` run as normal so both frames land on the
 sheet — `Waypoint` already supports multiple entries per beat name via
 `emu.waypoint()`'s own beat-boundary call plus mid-beat calls), not a change
 to the capture-priority logic itself. No new primitive needed; this is
-authoring debt in `playtest/chapters/moki.py` (and future chapter modules),
+authoring debt in `playtest/chapters/ch01.py` (and future chapter modules),
 now flagged as convention rather than a one-off.
 
 ## Dev-loop debt specific to the harness (migrated from `SLICE1_TODO.md` #30, 2026-08-04)
@@ -867,7 +867,7 @@ harness code) and is deliberately **not** duplicated here. The other two are
 harness-specific and land here:
 
 - **The chapter harness + atlas are the review vehicle and work end to end.**
-  `src/rpg2gba/playtest/` + `chapters/moki.py`: 17 beats (B1–B15 plus
+  `src/rpg2gba/playtest/` + `chapters/ch01.py`: 17 beats (B1–B15 plus
   interleaved negatives N2/N3 — N1 was dropped 2026-07-27 as a restatement of
   B2), review ROM + contact sheets under `output/playtest/review/`. Last
   recorded run: **GREEN 17/17, first attempt, fresh start, on ROM `b09d0e89`

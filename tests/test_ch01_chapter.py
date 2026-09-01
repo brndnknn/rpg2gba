@@ -1,9 +1,9 @@
-"""Tests for the Moki chapter scenario (`rpg2gba.playtest.chapters.moki`).
+"""Tests for the Moki chapter scenario (`rpg2gba.playtest.chapters.ch01`).
 
 These run everywhere -- no ROM, no emulator, no engine build. They check
 three things that don't need a live run:
 
-1. `CHAPTER` loads via `load_chapter("moki")` and is well-formed.
+1. `CHAPTER` loads via `load_chapter("CH01")` and is well-formed.
 2. The beat id / ordering matches `reference/chapters/01-moki.md`'s own
    tables (3.1 positive, 3.2 negative), parsed straight out of the doc's
    markdown so doc/scenario drift becomes a test failure.
@@ -25,7 +25,7 @@ from rpg2gba.playtest.chapter import Chapter, load_chapter
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CHAPTER_DOC = REPO_ROOT / "reference" / "chapters" / "01-moki.md"
 CHAPTER_MODULE = (
-    REPO_ROOT / "src" / "rpg2gba" / "playtest" / "chapters" / "moki.py"
+    REPO_ROOT / "src" / "rpg2gba" / "playtest" / "chapters" / "ch01.py"
 )
 
 
@@ -83,34 +83,34 @@ def test_doc_beat_tables_parse_to_the_expected_shape() -> None:
 
 
 def test_moki_chapter_loads() -> None:
-    chapter = load_chapter("moki")
+    chapter = load_chapter("CH01")
     assert isinstance(chapter, Chapter)
-    assert chapter.name == "moki"
+    assert chapter.name == "CH01"
     assert chapter.doc == "reference/chapters/01-moki.md"
     # 15 positive + 3 negative doc rows, less the dropped ones.
     assert len(chapter.beats) == 18 - len(DROPPED_DOC_BEATS)
 
 
 def test_moki_chapter_beat_order_matches_the_doc() -> None:
-    chapter = load_chapter("moki")
+    chapter = load_chapter("CH01")
     actual = [b.name for b in chapter.beats]
     assert actual == _expected_interleaved_order()
 
 
 def test_moki_chapter_beat_ids_are_unique() -> None:
-    chapter = load_chapter("moki")
+    chapter = load_chapter("CH01")
     names = [b.name for b in chapter.beats]
     assert len(names) == len(set(names))
 
 
 def test_moki_chapter_beats_have_nonempty_descriptions() -> None:
-    chapter = load_chapter("moki")
+    chapter = load_chapter("CH01")
     for beat in chapter.beats:
         assert beat.description.strip(), f"{beat.name} has an empty description"
 
 
 def test_index_of_resolves_every_beat() -> None:
-    chapter = load_chapter("moki")
+    chapter = load_chapter("CH01")
     for i, beat in enumerate(chapter.beats):
         assert chapter.index_of(beat.name) == i
 
@@ -158,7 +158,7 @@ def test_no_hardcoded_flag_or_var_ids_via_runtime_source() -> None:
     # helper defined elsewhere in the same module is still covered (the
     # static-file check above already covers module-level helpers too, but
     # this pins the check to what actually executes as beat bodies).
-    chapter = load_chapter("moki")
+    chapter = load_chapter("CH01")
     for beat in chapter.beats:
         src = inspect.getsource(beat.run)
         tree = ast.parse(src)

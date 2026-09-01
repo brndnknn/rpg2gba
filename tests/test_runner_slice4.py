@@ -350,7 +350,7 @@ def test_non_trigger_divergence_is_carried_not_blocking(
         tmp_path: Path, monkeypatch) -> None:
     """Same off-plan tile, firing nothing this time: the beat must pass,
     and the run artifact must carry a `walk_off_plan` contradiction with
-    status "carried" -- `route1:B14` is exactly why this must not block:
+    status "carried" -- `CH02:B14` is exactly why this must not block:
     blocking on ambiguous evidence truncates real work."""
     plan = PlanIndex(
         tiles={1: frozenset({(0, 0), (1, 0), (2, 0)})},

@@ -192,7 +192,7 @@ _HEAD_REQUIRES: dict[str, str] = {
 # start cell yet, and that is the chapter's current, expected, temporary
 # state, not corrupted input data.
 #
-# CH04/map035 (21,56): `playtest/chapters/route2.py:234`'s `KEVLAR_SEAM_ARROW`
+# CH04/map035 (21,56): `playtest/chapters/ch04.py:234`'s `KEVLAR_SEAM_ARROW`
 # comment -- the MB_NORTH_ARROW_WARP tile lands the player at map035 (21,56).
 # Cross-checked against the independent validation run recorded in
 # `reference/frozen/slice2_derivation_diff.md`.
@@ -204,7 +204,7 @@ _HEAD_REQUIRES: dict[str, str] = {
 # a warp-exit constant, an emulator-observed post-load position) -- never
 # guessed from map geometry or wiki prose. CH04's entry above is the worked
 # example: `(21, 56)` is not this table's own invention, it is a comment
-# transcribed from `route2.py`'s harness constant and then cross-checked
+# transcribed from `ch04.py`'s harness constant and then cross-checked
 # against an independent validation run. An entry added without that kind of
 # citation is exactly the "written from priors, matches zero maps" failure
 # `_HEAD_REQUIRES`'s own comment warns about, just moved to a different table.

@@ -3,7 +3,7 @@
 A *rule* is a manifest-shaped assertion class ("every row tagged `warp` owes
 a facing assertion") that a chapter's beats are expected to satisfy. Rules
 are invented mid-corpus -- warp-arrival facing was invented inside
-`kevlar.py` while `moki.py`/`route1.py` were never marked stale (finding F).
+`ch03.py` while `ch01.py`/`ch02.py` were never marked stale (finding F).
 Waivers were rejected as a design (they rot); this module implements the
 alternative that was decided instead: **monotonic, versioned rule sets**.
 

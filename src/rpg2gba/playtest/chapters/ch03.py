@@ -18,7 +18,7 @@ transcription slips found. `FLAG_NURSE_TUTORIAL` / `FLAG_SIDEQUEST_CRY_BOY` /
 `engine/data/scripts/uranium_flags.h`.
 
 **No wild encounters anywhere in this chapter's roster** (`encounter_list`
-is `[]` on all 5 maps, spec doc 4.3) -- unlike moki.py/route1.py, beats below
+is `[]` on all 5 maps, spec doc 4.3) -- unlike ch01.py/ch02.py, beats below
 use plain `emu.walk_to`, no grass/ambush-absorption machinery.
 
 **No native sight trainers in this chapter.** Every "Trainer(4)"/"Richboy"
@@ -85,7 +85,7 @@ what the transpiler actually emitted):
    also no `Emulator` primitive for reading `SaveBlock1`'s last-heal-location
    fields (no offset is probed for it). B6 has no engine-side effect and no
    harness-side read to test it with -- folded into B4's comment, not
-   registered as its own beat (same shape as moki.py's dropped N1).
+   registered as its own beat (same shape as ch01.py's dropped N1).
 8. **(2026-08-17) The cave (Grott-Hole) is post-Strength return-trip
    content, not CH03 -- deferred, not a converter gap.** `pbPushThisBoulder`
    (`reference/scripts_dump/101__PField_Field.rb`) is gated on
@@ -139,7 +139,7 @@ registered too: with money forced below any stock item's price, it asserts
 the purchase is refused and money/bag are unchanged, both immediately
 after the refusal and after the mart is exited.
 
-**Local ids are not RMXP event ids** (see route1.py's module docstring for
+**Local ids are not RMXP event ids** (see ch02.py's module docstring for
 the general rule). Tables read from `output/uranium-build/staging/
 local_ids/Map0{31,67,68,73,19}.json`, fresh-run artifacts:
 
@@ -158,7 +158,7 @@ local_ids/Map0{31,67,68,73,19}.json`, fresh-run artifacts:
 Facings read from each object's compiled `MOVEMENT_TYPE_FACE_*`
 (`events.inc`); a `MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE` object (Magikarp,
 Lou, Joe, Richard) patrols, so its approach is computed from its LIVE
-position each attempt via `_approach_patrol_npc`, mirroring route1.py's
+position each attempt via `_approach_patrol_npc`, mirroring ch02.py's
 `_approach_moving_npc`.
 """
 from __future__ import annotations
@@ -173,12 +173,12 @@ from ..pokecenter import heal_at_counter, use_pc
 if TYPE_CHECKING:  # runtime import is lazy so the registry works without bindings
     from ..emulator import Emulator
 
-kevlar = ChapterBuilder("kevlar", doc="reference/chapters/03-kevlar-town.md",
-                        predecessor="route1")
+ch03 = ChapterBuilder("CH03", doc="reference/chapters/03-kevlar-town.md",
+                        predecessor="CH02")
 
 # -- coordinates / ids (see module docstring for provenance) -----------------
 
-# B1: the real Route 1 -> Kevlar Town crossing. route1.py's B17 stands just
+# B1: the real Route 1 -> Kevlar Town crossing. ch02.py's B17 stands just
 # south of this seam without crossing it (Kevlar wasn't built yet when that
 # beat was written) -- this beat owns the actual step across.
 KEVLAR_ENTRY_APPROACH = (16, 6)
@@ -383,9 +383,9 @@ RICHARD_LOCAL = 6
 NORTH_EDGE_APPROACH = (28, 0)
 
 
-# -- small local helpers, copied+adapted from route1.py/moki.py -------------
+# -- small local helpers, copied+adapted from ch02.py/ch01.py -------------
 # `_at_map`/`_require_map`/`_try_step`/`_wait_for_map`/`_cross_threshold`/
-# `_enter_door`/`_assert_near` used to be copied here (route1.py's own
+# `_enter_door`/`_assert_near` used to be copied here (ch02.py's own
 # docstring used to say "deliberately not yet factored into a shared module"
 # -- that call is superseded) -- promoted to `assertions.py` 2026-08-20
 # (finding H). Aliased under their original names so every call site below
@@ -404,7 +404,7 @@ _DIR_VECTOR: dict[str, tuple[int, int]] = {
 }
 
 #: Bound on `_approach_patrol_npc`'s live-position re-read/retry loop --
-#: mirrors route1.py's `_MAX_PATROL_APPROACH_ATTEMPTS` (same
+#: mirrors ch02.py's `_MAX_PATROL_APPROACH_ATTEMPTS` (same
 #: custom-route-patrol regression class: a fixed approach tile goes stale
 #: the instant the NPC paces off its spawn).
 _MAX_PATROL_APPROACH_ATTEMPTS = 5
@@ -416,7 +416,7 @@ def _approach_patrol_npc(emu: Emulator, beat: str, local_id: int,
                          ) -> None:
     """Approach and `interact()` an NPC under `MOVEMENT_TYPE_URANIUM_
     CUSTOM_ROUTE`, re-reading its LIVE position each attempt rather than a
-    fixed tile -- see route1.py's `_approach_moving_npc` for the regression
+    fixed tile -- see ch02.py's `_approach_moving_npc` for the regression
     this mirrors."""
     dx, dy = _DIR_VECTOR[facing]
     for _ in range(max_attempts):
@@ -436,7 +436,7 @@ def _approach_patrol_npc(emu: Emulator, beat: str, local_id: int,
 
 
 # Promoted to `assertions.py` 2026-08-20 (this was the general two-argument
-# form; route1.py's near-duplicate is now a thin wrapper over the same
+# form; ch02.py's near-duplicate is now a thin wrapper over the same
 # function -- see assertions.flag_ssa's docstring).
 _flag_ssa = assertions.flag_ssa
 
@@ -491,7 +491,7 @@ _assert_bgm = assertions.assert_bgm
 
 # -- B1 ------------------------------------------------------------------
 
-@kevlar.beat("B1", "Crossing Route 1's north seam lands in Kevlar Town",
+@ch03.beat("B1", "Crossing Route 1's north seam lands in Kevlar Town",
              map_constant="MAP_ROUTE_01", at=KEVLAR_ENTRY_APPROACH)
 def b1(emu: Emulator) -> None:
     _cross_threshold(emu, "B1", KEVLAR_ENTRY_APPROACH, KEVLAR_ENTRY_DIRECTION,
@@ -500,7 +500,7 @@ def b1(emu: Emulator) -> None:
 
 # -- B27 (placed right after B1 -- see the block comment above _flag_ssa) --
 
-@kevlar.beat("B27", "Crossing Route 1 -> Kevlar Town (B1's own warp) lands "
+@ch03.beat("B27", "Crossing Route 1 -> Kevlar Town (B1's own warp) lands "
                     "the player facing away from the return warp "
                     "(warp-facing fix, task 2026-08-19) -- checked against "
                     "the live ROM, not just the unit-level metadata test",
@@ -517,7 +517,7 @@ def b27(emu: Emulator) -> None:
 
 # -- B2 ------------------------------------------------------------------
 
-@kevlar.beat("B2", "NurseTut's walkthrough runs and sets FLAG_NURSE_TUTORIAL "
+@ch03.beat("B2", "NurseTut's walkthrough runs and sets FLAG_NURSE_TUTORIAL "
                    "(warps the player straight into the Center)",
              map_constant="MAP_KEVLAR_TOWN", at=NURSE_TUT_APPROACH)
 def b2(emu: Emulator) -> None:
@@ -551,7 +551,7 @@ def b2(emu: Emulator) -> None:
 
 # -- N3 (NurseTut re-talk) --------------------------------------------------
 
-@kevlar.beat("N3", "Re-talking NurseTut (Map068's NurseTut2, local id 10) is "
+@ch03.beat("N3", "Re-talking NurseTut (Map068's NurseTut2, local id 10) is "
                    "the no-op page",
              map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=(8, 18))
 def n3(emu: Emulator) -> None:
@@ -560,7 +560,7 @@ def n3(emu: Emulator) -> None:
     # and EVENT016_SSA set (B2's autorun tail, see B5 below) reads
     # `Map068_EV016_Page2`, a bare `end`. `interact()` would fail loud on a
     # true no-op (it requires the field to lock) -- this presses A and polls
-    # briefly instead, same shape as moki.py's N3/route1.py's item re-touch.
+    # briefly instead, same shape as ch01.py's N3/ch02.py's item re-touch.
     emu.walk_to(8, 18)
     emu.face("UP")
     emu.tap("A")
@@ -574,7 +574,7 @@ def n3(emu: Emulator) -> None:
 
 # -- B3 ------------------------------------------------------------------
 
-@kevlar.beat("B3", "The physical Center door (independent of NurseTut's "
+@ch03.beat("B3", "The physical Center door (independent of NurseTut's "
                    "auto-warp) opens and returns",
              locations=(
                  BeatLocation("MAP_KEVLAR_TOWN_POKEMON_CENTER", CENTER_EXIT_APPROACH[0], CENTER_EXIT_APPROACH[1], "center exit"),
@@ -591,7 +591,7 @@ def b3(emu: Emulator) -> None:
 
 # -- B30/B31 (placed right after B3 -- see the block comment above _flag_ssa) -
 
-@kevlar.beat("B30", "Entering the Poke Center via the physical door (B3's "
+@ch03.beat("B30", "Entering the Poke Center via the physical door (B3's "
                     "own warp) lands the player facing away from the "
                     "return warp (warp-facing fix, task 2026-08-19)",
              map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=CENTER_ARRIVAL)
@@ -602,7 +602,7 @@ def b30(emu: Emulator) -> None:
     _assert_player_facing(emu, "B30", expected)
 
 
-@kevlar.beat("B31", "Arriving at the Poke Center plays the map's own BGM -- "
+@ch03.beat("B31", "Arriving at the Poke Center plays the map's own BGM -- "
                     "this is the ONE literal dropped PLAY_BGM instance in "
                     "the chapter (Map031_EV049_NurseTut, code 241), so this "
                     "beat is the direct test of the lead's claim, not just "
@@ -614,7 +614,7 @@ def b31(emu: Emulator) -> None:
 
 # -- B4 ------------------------------------------------------------------
 
-@kevlar.beat("B4", "The healing counter's Yes/No heal restores a damaged party "
+@ch03.beat("B4", "The healing counter's Yes/No heal restores a damaged party "
                    "and the full scene plays out to its close (healing-"
                    "location metadata has no test surface -- see module "
                    "docstring finding 7, B6 folded in here)",
@@ -639,7 +639,7 @@ def b4(emu: Emulator) -> None:
 
 # -- B26 -----------------------------------------------------------------
 
-@kevlar.beat("B26", "The Center's PC boots through the native EventScript_PC "
+@ch03.beat("B26", "The Center's PC boots through the native EventScript_PC "
                     "chain and returns control cleanly (2026-08-14: this was "
                     "previously an UNHANDLED-code-355 queue entry -- "
                     "pbPokeCenterPC never converted at all, see "
@@ -651,7 +651,7 @@ def b26(emu: Emulator) -> None:
 
 # -- B7 ------------------------------------------------------------------
 
-@kevlar.beat("B7", "Item ball at (17,7) grants an Antidote once",
+@ch03.beat("B7", "Item ball at (17,7) grants an Antidote once",
              map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=CENTER_ITEM_BALL_APPROACH)
 def b7(emu: Emulator) -> None:
     ssa = _flag_ssa(68, CENTER_ITEM_BALL_EVENT_ID)
@@ -680,7 +680,7 @@ def b7(emu: Emulator) -> None:
 
 # -- N1 ------------------------------------------------------------------
 
-@kevlar.beat("N1", "Re-touching the item ball does not re-grant the Antidote "
+@ch03.beat("N1", "Re-touching the item ball does not re-grant the Antidote "
                    "(CH03_TODO.md #9: the ball is a deliberately one-time "
                    "repurposed self-switch, not the native repeatable "
                    "template)",
@@ -708,7 +708,7 @@ def n1(emu: Emulator) -> None:
 
 # -- B5 --------------------------------------------------------------------
 
-@kevlar.beat("B5", "The PC-tour scene autoruns on Center arrival (NOT an NPC "
+@ch03.beat("B5", "The PC-tour scene autoruns on Center arrival (NOT an NPC "
                    "talk -- see module docstring finding 4), sets its 3 "
                    "self-switches AND leaves 5 Oran Berries in the bag "
                    "(finding 5, corrected 2026-08-19)")
@@ -717,7 +717,7 @@ def b5(emu: Emulator) -> None:
     # MAP_SCRIPT_ON_TRANSITION fires `Map068_EV015_Page1` the instant the
     # map loads with FLAG_NURSE_TUTORIAL set, before this beat runs) -- so
     # this only asserts the end state, exactly like B9's "no VAR_QUEST_LOG
-    # write" pattern in moki.py checks a fact rather than driving an action.
+    # write" pattern in ch01.py checks a fact rather than driving an action.
     for letter, event_id in (("A", 15), ("A", 16), ("A", 17)):
         ssa = _flag_ssa(68, event_id, letter)
         if not emu.flag(ssa):
@@ -741,7 +741,7 @@ def b5(emu: Emulator) -> None:
 
 # -- B8 ------------------------------------------------------------------
 
-@kevlar.beat("B8", "Mawuli's facility battle: win, and the offer repeats "
+@ch03.beat("B8", "Mawuli's facility battle: win, and the offer repeats "
                    "(transpiler._emit_facility_trainer_battle_idiom, "
                    "2026-08-15 -- converts the code-111-wrapped "
                    "pbTrainerBattle to trainerbattle_no_intro + "
@@ -765,7 +765,7 @@ def b8(emu: Emulator) -> None:
     emu.face(MAWULI_FACING)
     emu.interact()
     # commits YES at "Wanna fight?"; must stop the mash the instant the
-    # battle starts (route1.py's `_advance_to_battle` pattern) -- without
+    # battle starts (ch02.py's `_advance_to_battle` pattern) -- without
     # `stop=`, advance_dialog keeps holding A THROUGH the whole battle
     # (yesnobox/msgbox both advance on A) and only returns once it resolves
     # on its own, so the in_battle() check below reads False even on a
@@ -790,7 +790,7 @@ def b8(emu: Emulator) -> None:
 
 # -- B10 -----------------------------------------------------------------
 
-@kevlar.beat("B10", "Mart door opens; the pokemart menu opens at the "
+@ch03.beat("B10", "Mart door opens; the pokemart menu opens at the "
                     "counter sign",
              map_constant="MAP_KEVLAR_TOWN", at=MART_DOOR)
 def b10(emu: Emulator) -> None:
@@ -805,7 +805,7 @@ def b10(emu: Emulator) -> None:
 
 # -- B28/B29 (placed right after B10 -- see the block comment above _flag_ssa) -
 
-@kevlar.beat("B28", "Entering the Poke Mart (B10's own warp) lands the "
+@ch03.beat("B28", "Entering the Poke Mart (B10's own warp) lands the "
                     "player facing away from the return warp (warp-facing "
                     "fix, task 2026-08-19)",
              map_constant="MAP_KEVLAR_TOWN_POKEMART", at=MART_ARRIVAL)
@@ -816,7 +816,7 @@ def b28(emu: Emulator) -> None:
     _assert_player_facing(emu, "B28", expected)
 
 
-@kevlar.beat("B29", "Arriving at the Poke Mart plays the map's own BGM -- "
+@ch03.beat("B29", "Arriving at the Poke Mart plays the map's own BGM -- "
                     "checks the lead's structural-coverage claim for the "
                     "dropped post-warp presentation commands (task "
                     "2026-08-19)",
@@ -827,7 +827,7 @@ def b29(emu: Emulator) -> None:
 
 # -- B11 -----------------------------------------------------------------
 
-@kevlar.beat("B11", "Buying an item at the counter drives the native "
+@ch03.beat("B11", "Buying an item at the counter drives the native "
                     "pokemart menu to a real purchase: money down, bag up "
                     "(Emulator.money/set_money/bag_item_quantity/"
                     "item_price)",
@@ -898,7 +898,7 @@ def b11(emu: Emulator) -> None:
 
 # -- N4 --------------------------------------------------------------------
 
-@kevlar.beat("N4", "Mart purchase refused with insufficient money -- money "
+@ch03.beat("N4", "Mart purchase refused with insufficient money -- money "
                     "and bag stay untouched, and the mart still returns "
                     "control cleanly",
              map_constant="MAP_KEVLAR_TOWN_POKEMART", at=MART_COUNTER_APPROACH)
@@ -945,7 +945,7 @@ def n4(emu: Emulator) -> None:
 
 # -- B12 -----------------------------------------------------------------
 
-@kevlar.beat("B12", "Deliveryman's no-gift branch does not crash "
+@ch03.beat("B12", "Deliveryman's no-gift branch does not crash "
                     "(`Map067_EV009_Page1` is a bare `end` -- it is "
                     "literally inert, not just gift-less)",
              map_constant="MAP_KEVLAR_TOWN_POKEMART", at=DELIVERYMAN_APPROACH)
@@ -963,7 +963,7 @@ def b12(emu: Emulator) -> None:
 
 # -- B6 (renumbered B13 in the approved list -- berry plants) --------------
 
-@kevlar.beat("B13", "Picking a Map031 berry plant works (native "
+@ch03.beat("B13", "Picking a Map031 berry plant works (native "
                     "BerryTreeScript)",
              locations=(
                  BeatLocation("MAP_KEVLAR_TOWN_POKEMART", MART_ARRIVAL[0],
@@ -991,7 +991,7 @@ def b13(emu: Emulator) -> None:
 
 # -- B14 -----------------------------------------------------------------
 
-@kevlar.beat("B14", "Berry Boutique door opens; the NPC hands over one each "
+@ch03.beat("B14", "Berry Boutique door opens; the NPC hands over one each "
                     "of the four Uranium berries and sets its self-switch "
                     "(module finding 6, corrected 2026-08-19)",
              locations=(
@@ -1038,7 +1038,7 @@ def b14(emu: Emulator) -> None:
 
 # -- B32/B33 (placed right after B14 -- see the block comment above _flag_ssa) -
 
-@kevlar.beat("B32", "Entering the Berry Boutique (the 'flower shop') lands "
+@ch03.beat("B32", "Entering the Berry Boutique (the 'flower shop') lands "
                     "the player facing away from the return warp "
                     "(warp-facing fix, task 2026-08-19)",
              map_constant="MAP_KEVLAR_TOWN", at=BOUTIQUE_DOOR)
@@ -1053,7 +1053,7 @@ def b32(emu: Emulator) -> None:
     _assert_player_facing(emu, "B32", expected)
 
 
-@kevlar.beat("B33", "Arriving at the Berry Boutique plays the map's own "
+@ch03.beat("B33", "Arriving at the Berry Boutique plays the map's own "
                     "BGM (task 2026-08-19)",
              map_constant="MAP_KEVLAR_TOWN_BUILDINGS", at=BOUTIQUE_ARRIVAL)
 def b33(emu: Emulator) -> None:
@@ -1065,7 +1065,7 @@ def b33(emu: Emulator) -> None:
 
 # -- B15 -----------------------------------------------------------------
 
-@kevlar.beat("B15", "Bike Repair Shop refuses with no Bike Wheel held -- no "
+@ch03.beat("B15", "Bike Repair Shop refuses with no Bike Wheel held -- no "
                     "yes/no, no Bicycle grant exists in the compiled script "
                     "at all (the source of a Bike Wheel this chapter was "
                     "already flagged unresolved, spec §7)",
@@ -1090,7 +1090,7 @@ def b15(emu: Emulator) -> None:
 
 # -- B16 -----------------------------------------------------------------
 
-@kevlar.beat("B16", "Both flavor houses (Maury's apartment, the couple's "
+@ch03.beat("B16", "Both flavor houses (Maury's apartment, the couple's "
                     "house) warp in and back out cleanly",
              locations=(
                  BeatLocation("MAP_KEVLAR_TOWN", MAURY_DOOR[0], MAURY_DOOR[1], "Maury door"),
@@ -1119,7 +1119,7 @@ def b16(emu: Emulator) -> None:
 
 # -- B17 -----------------------------------------------------------------
 
-# Promoted to `assertions.py` 2026-08-20, unified with `moki.py`'s
+# Promoted to `assertions.py` 2026-08-20, unified with `ch01.py`'s
 # `_player_starter_species` under `assertions.read_party_species` /
 # `assertions.party_has_species` -- generalized from a hardcoded
 # SPECIES_MAGIKARP lookup to an explicit species-id parameter, same scan.
@@ -1143,7 +1143,7 @@ def _refuse_joke(emu: Emulator, beat: str) -> None:
         emu.advance_dialog()
 
 
-@kevlar.beat("B17", "Magikarp NPC seeded to 98 refusals: the 99th refusal "
+@ch03.beat("B17", "Magikarp NPC seeded to 98 refusals: the 99th refusal "
                     "increments VAR_HA_MAGIKARP to 99 with no gift yet; the "
                     "100th refusal (var already 99) fires the full "
                     "givemon/fanfare/nickname gift flow -- module finding 3")
@@ -1181,7 +1181,7 @@ def b17(emu: Emulator) -> None:
 
 # -- N2 (Magikarp not granted twice) ----------------------------------------
 
-@kevlar.beat("N2", "Repeated refusals DO accumulate VAR_HA_MAGIKARP -- the "
+@ch03.beat("N2", "Repeated refusals DO accumulate VAR_HA_MAGIKARP -- the "
                    "increment on each 'No' answer is the mechanism (100 "
                    "refusals earn the joke Magikarp), not a bug. Seeds its "
                    "own baseline of 0 so it's independent of B17's seeded "
@@ -1213,7 +1213,7 @@ def n2(emu: Emulator) -> None:
 
 # -- B18 -----------------------------------------------------------------
 
-@kevlar.beat("B18", "Cry Boy: idle page only (FLAG_HAS_STRENGTH is never "
+@ch03.beat("B18", "Cry Boy: idle page only (FLAG_HAS_STRENGTH is never "
                     "set corpus-wide); FLAG_SIDEQUEST_CRY_BOY stays unset",
              map_constant="MAP_KEVLAR_TOWN", at=CRY_BOY_APPROACH)
 def b18(emu: Emulator) -> None:
@@ -1389,7 +1389,7 @@ def b24(emu: Emulator) -> None:
 
 # -- N6 ------------------------------------------------------------------
 
-@kevlar.beat("N6", "No reachable warp in this chapter lands on an unbuilt "
+@ch03.beat("N6", "No reachable warp in this chapter lands on an unbuilt "
                    "map -- every door used above resolved to a real "
                    "MAP_KEVLAR_TOWN_* / MAP_PASSAGE_CAVE_GROTT_HOLE / "
                    "MAP_ROUTE_01 constant with no error; this beat is the "
@@ -1400,7 +1400,7 @@ def n6(emu: Emulator) -> None:
 
 # -- B25 -----------------------------------------------------------------
 
-@kevlar.beat("B25", "The north edge (toward unbuilt Route 2) is a clean "
+@ch03.beat("B25", "The north edge (toward unbuilt Route 2) is a clean "
                     "impassable wall -- no void, no crash",
              map_constant="MAP_KEVLAR_TOWN", at=NORTH_EDGE_APPROACH)
 def b25(emu: Emulator) -> None:
@@ -1436,9 +1436,9 @@ def b25(emu: Emulator) -> None:
 # -- deferred beats ---------------------------------------------------------
 #
 # Written, reviewed, and deliberately NOT registered. Same convention as
-# route1.py's DEFERRED_ROCK_GATED: kept as ready-made regression tests for
+# ch02.py's DEFERRED_ROCK_GATED: kept as ready-made regression tests for
 # whichever future chapter/patch closes the gap, restore the
-# `@kevlar.beat(...)` decorator at that point.
+# `@ch03.beat(...)` decorator at that point.
 
 # Bike Wheel -> Bicycle. The wheel's only source corpus-wide is Route 4
 # (CH11, Act 3, per the wiki and spec §5 #3) -- unreachable from CH03. Kept
@@ -1557,4 +1557,4 @@ ALL_CONSTANTS: tuple[str, ...] = (
     + ITEM_CONSTANTS + MISC_CONSTANTS + ("PARTY_SIZE",)
 )
 
-CHAPTER = kevlar.build()
+CHAPTER = ch03.build()

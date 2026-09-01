@@ -30,10 +30,10 @@ def test_builds_single_page_with_expected_geometry(tmp_path: Path) -> None:
     waypoints = make_waypoints(tmp_path, 3)
 
     pages = build_contact_sheet(waypoints, tmp_path / "out",
-                                chapter="moki", verdict="pass")
+                                chapter="CH01", verdict="pass")
 
     assert len(pages) == 1
-    assert pages[0] == tmp_path / "out" / "moki-sheet.png"
+    assert pages[0] == tmp_path / "out" / "CH01-sheet.png"
     sheet = Image.open(pages[0])
     # 3 waypoints at COLUMNS=3 -> one row; width covers 3 scaled cells.
     assert sheet.width >= 3 * 240 * 2
@@ -44,15 +44,15 @@ def test_paginates_beyond_per_page(tmp_path: Path) -> None:
     waypoints = make_waypoints(tmp_path, 14)
 
     pages = build_contact_sheet(waypoints, tmp_path / "out",
-                                chapter="moki", verdict="pass")
+                                chapter="CH01", verdict="pass")
 
-    assert [p.name for p in pages] == ["moki-sheet.png", "moki-sheet-2.png"]
+    assert [p.name for p in pages] == ["CH01-sheet.png", "CH01-sheet-2.png"]
     assert all(p.exists() for p in pages)
 
 
 def test_no_waypoints_produces_no_pages(tmp_path: Path) -> None:
     assert build_contact_sheet([], tmp_path / "out",
-                                chapter="moki", verdict="fail") == []
+                                chapter="CH01", verdict="fail") == []
 
 
 def test_missing_frame_file_does_not_sink_the_sheet(tmp_path: Path) -> None:
@@ -65,7 +65,7 @@ def test_missing_frame_file_does_not_sink_the_sheet(tmp_path: Path) -> None:
     ]
 
     pages = build_contact_sheet(waypoints, tmp_path / "out",
-                                chapter="moki", verdict="pass")
+                                chapter="CH01", verdict="pass")
 
     assert len(pages) == 1
     assert pages[0].exists()
@@ -79,7 +79,7 @@ def test_failed_waypoint_is_rendered(tmp_path: Path) -> None:
                           frame, failed=True)]
 
     pages = build_contact_sheet(waypoints, tmp_path / "out",
-                                chapter="moki", verdict="fail")
+                                chapter="CH01", verdict="fail")
 
     assert len(pages) == 1
     assert Image.open(pages[0]).size[0] > 0

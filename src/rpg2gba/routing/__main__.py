@@ -8,9 +8,11 @@
 the manifest and route files. `--module` is the playtest chapter module that
 registers the beats (`rpg2gba.playtest.chapters.<module>`, see
 `playtest.chapter.load_chapter`). They are two different names for one
-chapter -- CH04 is Route 2, whose module is `route2` -- and nothing in the
-repo maps between them today, so the module must be named explicitly. The
-plan records it as `RoutePlan.chapter_module` so every later consumer
+chapter. Since 2026-09-01 (CH05_DECISIONS E1) the module is *named for* the
+chapter id -- `CH04` -> `chapters/ch04.py` -- so `--module` defaults to the
+chapter id and only has to be passed when a chapter's beats deliberately live
+in some other module. The two remain separate fields rather than one, because
+the plan records the module as `RoutePlan.chapter_module` so every consumer
 (notably `chapter_manifest.route_model`) can rediscover it from the artifact
 rather than guessing. The chapter id
 used for the manifest/route file naming convention:
@@ -228,12 +230,13 @@ def cli() -> None:
 @click.option("--chapters", "chapters_path", type=click.Path(exists=True, path_type=Path),
               default=DEFAULT_CHAPTERS_PATH,
               help="Chapter/map chain JSON (default: reference/chapters.json)")
-@click.option("--module", "module", required=True,
-              help="Playtest chapter module registering the beats, e.g. route2 for CH04.")
+@click.option("--module", "module", default=None,
+              help="Playtest chapter module registering the beats "
+                   "(default: the chapter id, e.g. CH04 -> chapters/ch04.py).")
 @click.option("--dry-run", is_flag=True, help="Solve and print a summary; write nothing.")
 def plan_cmd(
     chapter: str, out: Path | None, manifest: Path | None, build_dir: Path,
-    chapters_path: Path, module: str, dry_run: bool,
+    chapters_path: Path, module: str | None, dry_run: bool,
 ) -> None:
     """Solve a chapter's route plan and write it (or, with --dry-run, just show it)."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -242,6 +245,7 @@ def plan_cmd(
     if not manifest_file.exists():
         raise click.ClickException(f"manifest not found: {manifest_file}")
 
+    module = module or chapter
     try:
         chapter_obj = load_chapter(module)
     except KeyError as exc:

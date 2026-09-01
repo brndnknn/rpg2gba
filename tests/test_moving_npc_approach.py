@@ -1,4 +1,4 @@
-"""Tests for `route1.py`'s `_approach_moving_npc` -- the 2026-08-16 B16
+"""Tests for `ch02.py`'s `_approach_moving_npc` -- the 2026-08-16 B16
 regression: the brother NPC in the old rod house (Map081 EV002) patrols
 under a custom move route (right,right,left,left, repeat --
 `MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE`, `Route01OldRodHouse/events.inc`), so a
@@ -19,7 +19,7 @@ the gap between the read and the button press.
 Same style as `test_sight_lane.py`: a bare fake implementing only what
 `_approach_moving_npc` reads/calls (`object_event`, `walk_to` via
 `_walk_absorbing`, `face`, `interact`, `screenshot`), gated on `needs_mgba`
-because `route1.py`'s `_walk_absorbing` lazily imports `WalkInterrupted`
+because `ch02.py`'s `_walk_absorbing` lazily imports `WalkInterrupted`
 from `emulator.py`, which needs the mgba python bindings at module scope.
 """
 import importlib.util
@@ -82,8 +82,8 @@ def test_approaches_the_tile_behind_the_npcs_live_position() -> None:
     """`facing="UP"` means the player stands south of the NPC and faces
     north toward it -- the approach tile is one step behind the NPC along
     that vector, i.e. `(npc.x, npc.y + 1)`, exactly like the real brother
-    NPC's south-facing approach in `route1.py`."""
-    from rpg2gba.playtest.chapters.route1 import _approach_moving_npc
+    NPC's south-facing approach in `ch02.py`."""
+    from rpg2gba.playtest.chapters.ch02 import _approach_moving_npc
 
     emu = _FakePatrolEmu(positions=[(12, 8)])
     _approach_moving_npc(emu, "TEST", local_id=2, facing="UP")
@@ -99,7 +99,7 @@ def test_retries_with_a_fresh_read_when_the_npc_steps_away() -> None:
     (12,8) to (14,8) between the first approach and the interact press.
     `_approach_moving_npc` must re-read its position and re-approach, not
     fail on the first `interact()` error."""
-    from rpg2gba.playtest.chapters.route1 import _approach_moving_npc
+    from rpg2gba.playtest.chapters.ch02 import _approach_moving_npc
 
     emu = _FakePatrolEmu(positions=[(12, 8), (14, 8)], interact_fail_times=1)
     _approach_moving_npc(emu, "TEST", local_id=2, facing="UP")
@@ -114,7 +114,7 @@ def test_fails_loud_after_max_attempts_exhausted() -> None:
     """If the NPC keeps stepping out from under every attempt (or the
     interact is genuinely broken), this must fail loud with a screenshot
     rather than retry forever or silently pass."""
-    from rpg2gba.playtest.chapters.route1 import (
+    from rpg2gba.playtest.chapters.ch02 import (
         _MAX_PATROL_APPROACH_ATTEMPTS, _approach_moving_npc,
     )
     from rpg2gba.playtest.errors import ScenarioError
@@ -135,7 +135,7 @@ def test_approach_tile_follows_facing_direction() -> None:
     """Same NPC position, different `facing` -- the approach tile must move
     with it (one step opposite the direction the player faces), not stay
     pinned to a UP-only assumption."""
-    from rpg2gba.playtest.chapters.route1 import _approach_moving_npc
+    from rpg2gba.playtest.chapters.ch02 import _approach_moving_npc
 
     emu = _FakePatrolEmu(positions=[(5, 5)])
     _approach_moving_npc(emu, "TEST", local_id=2, facing="LEFT")

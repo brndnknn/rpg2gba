@@ -118,7 +118,7 @@ def test_predecessor_beats_keep_locations(monkeypatch) -> None:
 
     PKG = "rpg2gba.playtest.chapters"
 
-    moki_builder = ChapterBuilder("moki", doc="reference/chapters/01-moki.md")
+    moki_builder = ChapterBuilder("CH01", doc="reference/chapters/01-moki.md")
 
     @moki_builder.beat("B1", "moki beat with a location",
                         map_constant="MAP_MOKI", at=(7, 8))
@@ -126,12 +126,12 @@ def test_predecessor_beats_keep_locations(monkeypatch) -> None:
         pass
 
     moki_chapter = moki_builder.build()
-    module = types.ModuleType(f"{PKG}.moki")
+    module = types.ModuleType(f"{PKG}.ch01")
     module.CHAPTER = moki_chapter
-    monkeypatch.setitem(sys.modules, f"{PKG}.moki", module)
+    monkeypatch.setitem(sys.modules, f"{PKG}.ch01", module)
 
     route1_builder = ChapterBuilder(
-        "route1", doc="reference/chapters/02-route-1.md", predecessor="moki")
+        "CH02", doc="reference/chapters/02-route-1.md", predecessor="CH01")
 
     @route1_builder.beat("B1", "route1 beat with a location",
                           map_constant="MAP_ROUTE_01", at=(9, 10))
@@ -141,7 +141,7 @@ def test_predecessor_beats_keep_locations(monkeypatch) -> None:
     route1_chapter = route1_builder.build()
 
     by_name = {b.name: b for b in route1_chapter.beats}
-    assert by_name["moki:B1"].locations == (BeatLocation("MAP_MOKI", 7, 8),)
+    assert by_name["CH01:B1"].locations == (BeatLocation("MAP_MOKI", 7, 8),)
     assert by_name["B1"].locations == (BeatLocation("MAP_ROUTE_01", 9, 10),)
 
 

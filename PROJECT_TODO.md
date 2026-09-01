@@ -789,37 +789,6 @@ regenerating a gate-closed chapter's manifest is not a no-op edit.
 
 *Found 2026-08-30 during the slice-2 commit review.*
 
-### 66. Nothing maps an atlas chapter id to its playtest module — `--module` is a hand-carried workaround
-
-`reference/chapters.json` keys chapters by atlas id (`CH04`), and so do the
-manifest, dispositions and route artifacts (`CH04.manifest.json`,
-`CH04.route.json`). The playtest scenario modules are named for the place
-instead (`moki`, `route1`, `kevlar`, `route2`), and **no artifact in the repo
-records which is which** — CH04 is Route 2 is `route2.py`, and that chain lives
-only in a human's head.
-
-Slice 3 is the first consumer needing both halves at once (the manifest for
-precedence, the chapter module for beat groups). `routing/__main__.py` therefore
-requires an explicit `--module`:
-
-    python -m rpg2gba.routing plan --chapter CH04 --module route2
-
-The resulting plan records `RoutePlan.chapter_module`, so every *downstream*
-consumer recovers it from the artifact (`chapter_manifest/route_model.py` does
-exactly this) — the operator types the pairing once per chapter, at solve time,
-and nothing else has to guess. That is deliberate: a wrong guess here silently
-routes the wrong chapter, and the shapes genuinely do not match (CH07/CH07A are
-revisits of maps whose modules already exist under their first-visit names).
-
-**Remediation:** add a `playtest_module` field to `reference/chapters.json`'s
-entries and have both CLIs read it, dropping `--module`. That is a schema change
-to a §4.3 source-of-truth file, so it needs an operator ruling first — in
-particular on what the field holds for the ~20 chapters with no scenario module
-yet (null, or absent), and for revisit chapters that will likely share a module
-with their first visit.
-
-*Found 2026-08-30 building slice 3.*
-
 ### 67. No chapter routed so far carries a route plan, and CH01-CH03 cannot get one
 
 Slice 3's `RULE_ROUTE_ORDER` only enforces anything when
@@ -915,6 +884,33 @@ state path, or the tests would need to monkeypatch `rules._STATE_PATH`), plus a
 one-time cleanup of the synthetic names already committed.
 
 *Found 2026-08-30 building slice 4; the leak itself predates it.*
+
+### 70. The test suite writes into tracked `reference/playtest_rule_versions.json`
+
+Running `pytest` mutates a committed §4.3-adjacent reference file. Observed
+2026-09-01: a full suite run added a `"CH03": 2` key to the working tree with no
+test asking for it, and the file already carries `kevlar3`, `t1`, `t2`, `t4`,
+`t5`, `t9`, `t10`, `t12`, `t13`, `v4conformance`, `v4noplan`, `v4offplan`,
+`v4path`, `v4perbeat`, `v4v1fields` — every one of them a test fixture's chapter
+name that leaked in the same way and was then committed.
+
+Some test calls `rules.record_chapter_version` (or drives a runner that does)
+against the real default path instead of a `tmp_path`; `tests/test_observed_beats.py`'s
+`run_chapter` fixture is the confirmed one. It used to be merely untidy, because
+fixture names like `t1` and `v4path` could never collide with a real chapter.
+**The #66 rename made it worse:** fixtures now name themselves `CH03` to match
+the production convention, so a leaked write lands *on a real chapter's key* and
+silently overwrites its recorded rule version instead of sitting beside it as
+obvious junk. That turns a cosmetic leak into a data-corruption path, and it is
+the reason this is filed rather than tolerated further. The file cannot be
+trusted as a record of which chapters were gated under which rule version, which
+is the one thing it is for.
+
+**Remediation:** find the writer that misses the `tmp_path` fixture, pin the
+default path behind a fixture that fails if a test touches it, and delete the 15
+leaked fixture keys in the same commit.
+
+*Found 2026-09-01 while migrating the file's keys for #66.*
 
 ## Parked until the CH05 branch is cut (do not raise before then)
 
@@ -1012,6 +1008,37 @@ maintainer. Evidence is recorded in
 
 
 ## Done
+
+- **#66 — an atlas chapter id now names its own playtest module** (2026-09-01,
+  `CH05_DECISIONS.md` E1). The proposed fix was a `playtest_module` field in
+  `reference/chapters.json`; the operator's answer dissolved the field instead
+  of adding it — *"should they be named by place? why aren't they named by the
+  chapters"*. The four modules were renamed to their chapter ids
+  (`moki.py`->`ch01.py`, `route1.py`->`ch02.py`, `kevlar.py`->`ch03.py`,
+  `route2.py`->`ch04.py`), so the mapping is the name and there is nothing left
+  to record. The old names were an accident of order: CH01-CH03 were written
+  before `chapters.json` and the atlas ids existed.
+
+  **`ChapterBuilder`'s name string moved with the filename** (`"moki"` ->
+  `"CH01"`), because renaming only the file would have left
+  `load_chapter("ch01").name == "moki"` — the same mapping problem one layer
+  down rather than gone. That changed the beat-qualification prefixes
+  (`moki:B1` -> `CH01:B1`), the observed-beats filenames
+  (`observed_beats/kevlar.json` -> `CH03.json`), the contact-sheet stems, and
+  the keys of `reference/playtest_rule_versions.json` (migrated in the same
+  commit; the four real chapters keep their recorded versions).
+  `load_chapter` lowercases its argument, so an atlas id passes through
+  verbatim from `chapters.json` and the filesystem still gets a conventional
+  lowercase module name.
+
+  **`--module` survives as an override, not a requirement.**
+  `routing/__main__.py` defaults it to the chapter id. It is still a separate
+  option, and `RoutePlan.chapter_module` is still recorded on every plan,
+  because `divergence.load_plan_index_for_module` deliberately joins on the
+  recorded value rather than on the naming convention — a convention that holds
+  today is not the same as a binding the artifact carries, and the revisit
+  chapters (CH07A) are the case where the two will part company.
+
 
 - **B2 — `blocked:surf` is derived, not asked for** (2026-09-01, CH05
   prerequisite — `CH05_DECISIONS.md` B2, "option 1, but derived from the route

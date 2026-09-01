@@ -1,15 +1,15 @@
 """Chapter 2 -- Route 1 (`reference/chapters/02-route-1.md`).
 
 Predecessor-chained onto `moki` (CH01): `route1.build()` gets CH01's 17 beats
-prepended (renamed `moki:B1` etc.) via `ChapterBuilder(..., predecessor="moki")`.
+prepended (renamed `CH01:B1` etc.) via `ChapterBuilder(..., predecessor="CH01")`.
 Moki's own last beat (`B15`) is a terminal checkpoint that does not move the
 player -- the run leaves off wherever B14's re-cross of the ceremony tiles
 put them: Map032 (Moki Town), standing on/near the `(16, 43..45)` trigger
-column (see `chapters/moki.py`'s `CEREMONY_APPROACH`/`CEREMONY_ROWS`). This
+column (see `chapters/ch01.py`'s `CEREMONY_APPROACH`/`CEREMONY_ROWS`). This
 chapter's B1 owns walking from there to the real Route-1 passage (a
 different, further-west column at `x=8`) and crossing it -- the same
 "doc jumps location without its own row, so the next beat owns the crossing"
-convention moki.py itself uses (see its B4/B13).
+convention ch01.py itself uses (see its B4/B13).
 
 **Local ids are not RMXP event ids.** `ObjectEventState`/`object_event`/
 `observe_object_event` (added to `Emulator` alongside this chapter) address
@@ -117,11 +117,11 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:  # runtime import is lazy so the registry works without bindings
     from ..emulator import Emulator
 
-route1 = ChapterBuilder("route1", doc="reference/chapters/02-route-1.md", predecessor="moki")
+ch02 = ChapterBuilder("CH02", doc="reference/chapters/02-route-1.md", predecessor="CH01")
 
 # -- coordinates (see module docstring for provenance) -----------------------
 
-# B1: the real Moki Town -> Route 1 passage. Distinct from moki.py's
+# B1: the real Moki Town -> Route 1 passage. Distinct from ch01.py's
 # CEREMONY_APPROACH column (x=16-17) -- this is further west, at the map's
 # edge (Map032.json EV037/EV023/EV036, (8,43)/(8,44)/(8,45), each
 # pbCaveEntrance + code 201 -> Map033(70,11)). Crossing from (9,44).
@@ -166,7 +166,7 @@ GRASS_CELL_B = (31, 7)
 # <trainer_const>`. `trainer_const` below is read from that same
 # scripts.inc, cross-checked against `engine/include/constants/
 # uranium_trainer_ids.h` via `probe_constants` (see
-# tests/test_route1_constants.py).
+# tests/test_ch02_constants.py).
 @dataclass(frozen=True)
 class TrainerBeat:
     event_id: int          # RMXP event id, for traceability/comments only
@@ -194,7 +194,7 @@ ALL_TRAINERS: tuple[TrainerBeat, ...] = (
 )
 
 # `TRAINER_REGISTERED_FLAGS_START + REMATCH_URANIUM_*` -- resolvable as a
-# constant *expression* (mirrors moki.py's `MAP_GROUP({map_const})` pattern);
+# constant *expression* (mirrors ch01.py's `MAP_GROUP({map_const})` pattern);
 # there is no standalone `FLAG_REGISTERED_URANIUM_*` #define, only a comment
 # recording its numeric value in the generated
 # `engine/include/constants/uranium_rematches.gen.h`.
@@ -278,15 +278,15 @@ NORTH_EXIT_APPROACH_B = (16, 6)
 NORTH_EXIT_TILE_B = (16, 5)  # for B17's failure message only; never stepped on
 
 
-# -- small local helpers, copied+adapted from chapters/moki.py --------------
+# -- small local helpers, copied+adapted from chapters/ch01.py --------------
 # `_at_map`/`_require_map`/`_try_step`/`_wait_for_map` used to be copied here
-# (moki.py's own docstring used to say "deliberately not yet factored into a
+# (ch01.py's own docstring used to say "deliberately not yet factored into a
 # shared module" -- that call is superseded) -- promoted to `assertions.py`
 # 2026-08-20 (finding H). Aliased under their original names so every call
 # site below is unchanged.
 #
 # `_cross_threshold`/`_enter_door` stay LOCAL, deliberately NOT promoted:
-# they differ from moki.py's/kevlar.py's byte-identical copies by routing
+# they differ from ch01.py's/ch03.py's byte-identical copies by routing
 # navigation through `_walk_absorbing` (defined further below) instead of a
 # plain `emu.walk_to` -- Route 1 has 137 grass cells and up to 9 trainer
 # sight cones, so a bare `walk_to` call here would raise on the first
@@ -316,8 +316,8 @@ def _enter_door(emu: Emulator, beat: str, door: tuple[int, int],
     _wait_for_map(emu, beat, dest_map)
 
 
-# Promoted to `assertions.py` 2026-08-20 (byte-identical to `moki.py`'s own
-# copy of `_advance_to_battle`, and to `kevlar.py`'s own copy of
+# Promoted to `assertions.py` 2026-08-20 (byte-identical to `ch01.py`'s own
+# copy of `_advance_to_battle`, and to `ch03.py`'s own copy of
 # `_assert_near`, at the time).
 _advance_to_battle = assertions.advance_to_battle
 _assert_near = assertions.assert_near
@@ -562,7 +562,7 @@ def _approach_moving_npc(emu: Emulator, beat: str, local_id: int,
 def _flag_ssa(event_id: int, letter: str = "A") -> str:
     """This module's events are all on Map033 -- a thin wrapper over the
     general `assertions.flag_ssa(map_num, event_id, letter)` (promoted from
-    `kevlar.py` 2026-08-20), not a second implementation. Same output as
+    `ch03.py` 2026-08-20), not a second implementation. Same output as
     before: `FLAG_MAP033_EVENT<id>_SS<letter>`."""
     return assertions.flag_ssa(33, event_id, letter)
 
@@ -670,7 +670,7 @@ def _sight_lane_tiles(emu: Emulator, beat: str, trainer_xy: tuple[int, int],
     the object is live and readable well before the approach reaches it.
 
     The trainer is located by matching `trainer_xy` against the live
-    `gObjectEvents` table (not a hardcoded local id -- route1.py doesn't
+    `gObjectEvents` table (not a hardcoded local id -- ch02.py doesn't
     track trainer local ids, only Flood/Lynette's for B14's pacing check).
 
     Fails loud if the lane has no walkable tile at all: a trainer facing
@@ -703,7 +703,7 @@ def _effective_trainer_facing(emu: Emulator, trainer_xy: tuple[int, int],
                               documented_facing: str) -> str:
     """The direction to approach `trainer_xy` from: its LIVE facing if the
     object event has spawned, else `documented_facing` (the RMXP page-0
-    `graphic.direction` route1.py's `TrainerBeat` records) as a best guess
+    `graphic.direction` ch02.py's `TrainerBeat` records) as a best guess
     for locating it before it has.
 
     2026-08-11 route1 B7 regression: Flood (and Lynette) are
@@ -1067,7 +1067,7 @@ def _rock_smash_refused(emu: Emulator, beat: str, local_id: int,
 
 # -- B1 ------------------------------------------------------------------
 
-@route1.beat("B1", "Crossing Moki Town's east passage lands on Route 1 near (70,11)",
+@ch02.beat("B1", "Crossing Moki Town's east passage lands on Route 1 near (70,11)",
              map_constant="MAP_MOKI_TOWN", at=ROUTE1_ENTRY_APPROACH)
 def b1(emu: Emulator) -> None:
     _cross_threshold(emu, "B1", ROUTE1_ENTRY_APPROACH, ROUTE1_ENTRY_DIRECTION,
@@ -1077,7 +1077,7 @@ def b1(emu: Emulator) -> None:
 
 # -- B2 ------------------------------------------------------------------
 
-@route1.beat("B2", "The x=57 sideways staircase is walkable both directions (CH02_TODO #14 regression)",
+@ch02.beat("B2", "The x=57 sideways staircase is walkable both directions (CH02_TODO #14 regression)",
              locations=(
                  BeatLocation("MAP_ROUTE_01", STAIR1_EAST_APPROACH[0], STAIR1_EAST_APPROACH[1], "east approach"),
                  BeatLocation("MAP_ROUTE_01", STAIR1_WEST_APPROACH[0], STAIR1_WEST_APPROACH[1], "west approach"),
@@ -1146,7 +1146,7 @@ def b3(emu: Emulator) -> None:
 
 # -- B4 ------------------------------------------------------------------
 
-@route1.beat("B4", "Wild grass produces a Chyinmunk/Birbie/Cubbug encounter (CH02_TODO #15 regression)",
+@ch02.beat("B4", "Wild grass produces a Chyinmunk/Birbie/Cubbug encounter (CH02_TODO #15 regression)",
              locations=(
                  BeatLocation("MAP_ROUTE_01", GRASS_CELL_A[0], GRASS_CELL_A[1], "grass cell A"),
                  BeatLocation("MAP_ROUTE_01", GRASS_CELL_B[0], GRASS_CELL_B[1], "grass cell B"),
@@ -1218,13 +1218,13 @@ def b6(emu: Emulator) -> None:
     _battle_trainer(emu, "B6", TRAINER_BOB)
 
 
-@route1.beat("B7", "Flood (BUGCATCHER, patrol) battles once, trainer flag latches",
+@ch02.beat("B7", "Flood (BUGCATCHER, patrol) battles once, trainer flag latches",
              map_constant="MAP_ROUTE_01", at=TRAINER_FLOOD.xy)
 def b7(emu: Emulator) -> None:
     _battle_trainer(emu, "B7", TRAINER_FLOOD)
 
 
-@route1.beat("B8", "Tath (SCHOOLKID, sight) battles once, trainer flag latches",
+@ch02.beat("B8", "Tath (SCHOOLKID, sight) battles once, trainer flag latches",
              map_constant="MAP_ROUTE_01", at=TRAINER_TATH.xy)
 def b8(emu: Emulator) -> None:
     _battle_trainer(emu, "B8", TRAINER_TATH)
@@ -1240,7 +1240,7 @@ def b10(emu: Emulator) -> None:
     _battle_trainer(emu, "B10", TRAINER_GERTHA)
 
 
-@route1.beat("B11", "Lynette (LASS, patrol) battles once, trainer flag latches",
+@ch02.beat("B11", "Lynette (LASS, patrol) battles once, trainer flag latches",
              map_constant="MAP_ROUTE_01", at=TRAINER_LYNETTE.xy)
 def b11(emu: Emulator) -> None:
     _battle_trainer(emu, "B11", TRAINER_LYNETTE)
@@ -1256,7 +1256,7 @@ def b12(emu: Emulator) -> None:
                     registered_flag=BRANDON_PHONE_REGISTERED_FLAG)
 
 
-@route1.beat("B13", "Richey the phone trainer battles and registers Match Call",
+@ch02.beat("B13", "Richey the phone trainer battles and registers Match Call",
              map_constant="MAP_ROUTE_01", at=TRAINER_RICHEY.xy)
 def b13(emu: Emulator) -> None:
     _battle_trainer(emu, "B13", TRAINER_RICHEY,
@@ -1279,7 +1279,7 @@ RICHEY_IDLE_TEXT = "battle you again, and"
 RICHEY_LOCAL_ID = 21
 
 
-@route1.beat("N5", "Re-talking defeated Richey reaches Page2 and prints his idle "
+@ch02.beat("N5", "Re-talking defeated Richey reaches Page2 and prints his idle "
                    "line (PROJECT_TODO #45 regression)",
              map_constant="MAP_ROUTE_01", at=TRAINER_RICHEY.xy)
 def n5_richey_retalk(emu: Emulator) -> None:
@@ -1349,7 +1349,7 @@ def n5_richey_retalk(emu: Emulator) -> None:
 
 # -- B14 -----------------------------------------------------------------
 
-@route1.beat("B14", "Trainer pacing survives: Flood and Lynette turn in place "
+@ch02.beat("B14", "Trainer pacing survives: Flood and Lynette turn in place "
                     "(CH02_TODO #9 LOOK_AROUND regression)",
              locations=(
                  BeatLocation("MAP_ROUTE_01", OLD_ROD_DOOR[0], OLD_ROD_DOOR[1], "old rod house door"),
@@ -1465,7 +1465,7 @@ def b14(emu: Emulator) -> None:
 
 # -- B15/B15b/B15c ---------------------------------------------------------
 
-@route1.beat("B15", "The 4 reachable ground items grant on first pickup, "
+@ch02.beat("B15", "The 4 reachable ground items grant on first pickup, "
                     "not on re-touch",
              locations=tuple(
                  BeatLocation("MAP_ROUTE_01", item_xy[0], item_xy[1], f"item ball (event {event_id})")
@@ -1501,7 +1501,7 @@ def b15c(emu: Emulator) -> None:
 
 # -- B16 -----------------------------------------------------------------
 
-@route1.beat("B16", "The old rod house door opens; the brother NPC and sign both "
+@ch02.beat("B16", "The old rod house door opens; the brother NPC and sign both "
                     "open/close dialogue cleanly",
              locations=(
                  BeatLocation("MAP_ROUTE_01", OLD_ROD_DOOR[0], OLD_ROD_DOOR[1], "old rod house door"),
@@ -1536,7 +1536,7 @@ def b16(emu: Emulator) -> None:
 
 # -- N1 (folded: fisherman refusal, then the exit back to Map033) -----------
 
-@route1.beat("N1", "Before Gym 1 (VAR_BATTLE_VAR01 < 5), the fisherman only redirects "
+@ch02.beat("N1", "Before Gym 1 (VAR_BATTLE_VAR01 < 5), the fisherman only redirects "
                    "-- no Old Rod, no state written -- then exit the house",
              locations=(
                  BeatLocation("MAP_ROUTE_01_OLD_ROD_HOUSE", FISHERMAN_INTERACT[0], FISHERMAN_INTERACT[1], "fisherman"),
@@ -1579,7 +1579,7 @@ def n1(emu: Emulator) -> None:
 
 # -- N2 ------------------------------------------------------------------
 
-@route1.beat("N2", "Rock Smash is unobtainable this chapter: 2 of the 6 boulders "
+@ch02.beat("N2", "Rock Smash is unobtainable this chapter: 2 of the 6 boulders "
                    "refuse to erase and keep blocking movement",
              locations=(
                  BeatLocation("MAP_ROUTE_01", ROCK_EV036[1][0], ROCK_EV036[1][1], "boulder EV036"),
@@ -1592,8 +1592,8 @@ def n2(emu: Emulator) -> None:
 
 # -- B17 -----------------------------------------------------------------
 
-@route1.beat("B17", "The north boundary is reachable up to the edge; the crossing "
-                    "itself now belongs to CH03 (kevlar:B1)",
+@ch02.beat("B17", "The north boundary is reachable up to the edge; the crossing "
+                    "itself now belongs to CH03 (CH03:B1)",
              locations=(
                  BeatLocation("MAP_ROUTE_01", NORTH_EXIT_APPROACH_A[0], NORTH_EXIT_APPROACH_A[1], "approach A"),
                  BeatLocation("MAP_ROUTE_01", NORTH_EXIT_APPROACH_B[0], NORTH_EXIT_APPROACH_B[1], "approach B"),
@@ -1607,7 +1607,7 @@ def b17(emu: Emulator) -> None:
     # This beat therefore stops one tile short and asserts only what is still
     # CH02's business: the approach tiles are reachable and the player is
     # still on Route 01 when the chapter ends. Stepping across is
-    # `kevlar:B1`, and leaving it there keeps the chapter chain's end-state
+    # `CH03:B1`, and leaving it there keeps the chapter chain's end-state
     # contract intact -- CH03 starts its own run from Route 01, not from
     # inside Kevlar.
     _walk_absorbing(emu, "B17", *NORTH_EXIT_APPROACH_A,
@@ -1622,7 +1622,7 @@ def _b17_retired_wall_assertion(emu: Emulator) -> None:
 
     While Kevlar Town was unbuilt, (15,5)/(16,5) read as BLOCKED on the
     compiled collision grid because no `WARP_OVERRIDES` entry stamped them --
-    "inert until wired", the same shape as moki.py's leftover cave doors. The
+    "inert until wired", the same shape as ch01.py's leftover cave doors. The
     beat asserted the player could NOT step north, which is precisely what
     CH03 changed."""
     # `reference/chapters/02-route-1.md` names (15,5)/(16,5) as the crossing
@@ -1633,7 +1633,7 @@ def _b17_retired_wall_assertion(emu: Emulator) -> None:
     # Checked directly against the compiled collision grid
     # (`engine/data/layouts/Route01/map.bin`): (15,5) and (16,5) themselves
     # currently read as BLOCKED terrain (same "inert until wired" shape as
-    # moki.py's leftover cave doors, M17) -- there is no live
+    # ch01.py's leftover cave doors, M17) -- there is no live
     # `WARP_OVERRIDES` entry for this seam (CH02_TODO #6 only wired the west
     # triad + the old-rod-house door). So "assert the player can stand
     # there" is asserted at the approach tiles just south, and the boundary
@@ -1683,7 +1683,7 @@ def b14_walk_up_and_down_deferred(emu: Emulator) -> None:
 # tests what its player can actually reach; registering these would hold CH02
 # permanently red over content that is gated, not broken. They are kept rather
 # than deleted because they are the ready-made regression tests for the
-# chapter that opens the gate -- restore the `@route1.beat(...)` decorators
+# chapter that opens the gate -- restore the `@ch02.beat(...)` decorators
 # (or move them into that chapter's module) at that point.
 #
 # Reachability was established by BFS over the compiled collision grid
@@ -1723,7 +1723,7 @@ DEFERRED_ROCK_GATED = (
 #
 # Every FLAG_*/VAR_*/MAP_*/TRAINER_*/SPECIES_* name-or-expression this module
 # resolves through `Emulator.resolve_constant`/`flag`/`var`, so a fast probe
-# compile (tests/test_route1_constants.py, `offsets.probe_constants`) can
+# compile (tests/test_ch02_constants.py, `offsets.probe_constants`) can
 # catch a bad symbol before a long emulator run has to find it. Kept
 # self-documenting: add a beat that references a new constant, add it here.
 #
@@ -1759,4 +1759,4 @@ ALL_CONSTANTS: tuple[str, ...] = (
     + TRAINER_DEFEAT_FLAGS + REGISTERED_FLAGS + (FISHERMAN_SSA_FLAG,)
 )
 
-CHAPTER = route1.build()
+CHAPTER = ch02.build()

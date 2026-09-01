@@ -645,7 +645,11 @@ def beat_markers(map_id: int) -> dict:
                 uid = by_const.get(loc.map_constant)
                 if uid == map_id:
                     declared.append({
-                        "chapter": name,
+                        # `chapter.name` (the atlas id), not the module name:
+                        # the two agree today (`ch03.py` -> `"CH03"`) only up
+                        # to case, and the observed half below keys off the
+                        # file stem, which is the atlas id.
+                        "chapter": chapter.name,
                         "beat": beat.name,
                         "description": beat.description,
                         "map_constant": loc.map_constant,

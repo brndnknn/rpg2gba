@@ -3,26 +3,26 @@
 **Why this module exists.** `PLAYTEST_AUTHORING_IMPROVEMENT.md` finding H:
 every good assertion helper used to live as a private function inside
 whichever chapter invented it (`_expected_arrival_facing`,
-`_assert_player_facing`, `_assert_bgm` were all `kevlar.py`-only;
+`_assert_player_facing`, `_assert_bgm` were all `ch03.py`-only;
 `_assert_near`/`_advance_to_battle`/`_flag_ssa` each existed as two
-independent copies). A helper invented in `kevlar.py` (CH03) is structurally
-unreachable from `route1.py` (CH02) -- which is exactly why CH01/CH02 stayed
+independent copies). A helper invented in `ch03.py` (CH03) is structurally
+unreachable from `ch02.py` (CH02) -- which is exactly why CH01/CH02 stayed
 stale against the warp-arrival-facing defect class while CH03 alone caught
 it. The rule that fixes the cause: an assertion helper that generalizes is
 promoted here, once, so a future chapter -- or a future *pass* over a prior
 chapter -- can just import it.
 
 **This is a behaviour-preserving move**, not a redesign. Every function below
-is the same code that used to live in `chapters/{moki,route1,kevlar}.py`,
+is the same code that used to live in `chapters/{ch01,ch02,ch03}.py`,
 with duplicate copies collapsed and generalized only where the duplicates
 were already identical or trivially parameterizable. See each function's
 docstring for its origin and, where two copies differed, which behaviour was
 kept and why.
 
 **What deliberately stayed chapter-local** (not promoted, see
-`chapters/route1.py`/`chapters/kevlar.py` for the originals):
+`chapters/ch02.py`/`chapters/ch03.py` for the originals):
 
-- `route1.py`'s `_walk_absorbing`/`_step_absorbing`/the whole sight-trainer
+- `ch02.py`'s `_walk_absorbing`/`_step_absorbing`/the whole sight-trainer
   approach machinery (`_approach_sight_trainer`, `_sight_lane_tiles`,
   `_effective_trainer_facing`, `_ride_into_trainer_battle`,
   `_assert_no_second_battle`, `_battle_trainer`, `_rock_smash_refused`) --
@@ -32,7 +32,7 @@ kept and why.
   navigation, and a future outdoor route would need its own encounter-rate
   tuning (`_MAX_ABSORBED_INTERRUPTIONS`'s binomial-tail comment is Route-1
   specific), not this exact constant.
-- `route1.py`'s/`kevlar.py`'s `_approach_moving_npc`/`_approach_patrol_npc`
+- `ch02.py`'s/`ch03.py`'s `_approach_moving_npc`/`_approach_patrol_npc`
   -- near-duplicates of each other, but the route1 version routes through
   `_walk_absorbing` (battle-absorbing) while kevlar's uses a plain
   `emu.walk_to` (Kevlar's roster has no wild encounters at all, module
@@ -40,7 +40,7 @@ kept and why.
   absorption or add dead machinery to a chapter with nothing to absorb.
   Both stay local; a future chapter with patrolling NPCs and wild
   encounters should look at both before writing a third copy.
-- `kevlar.py`'s `_refuse_joke`, `_b17_retired_wall_assertion` (route1),
+- `ch03.py`'s `_refuse_joke`, `_b17_retired_wall_assertion` (route1),
   `_sight_lane_tiles` (route1) -- genuinely one-chapter content, not general
   primitives.
 
@@ -71,10 +71,10 @@ if TYPE_CHECKING:  # runtime import is lazy so this module is importable without
 
 # -- navigation primitives ----------------------------------------------------
 #
-# Byte-identical across `moki.py`, `route1.py`, and `kevlar.py` at the time
+# Byte-identical across `ch01.py`, `ch02.py`, and `ch03.py` at the time
 # of promotion (2026-08-20) for `at_map`/`require_map`/`try_step`/
 # `wait_for_map`. `cross_threshold`/`enter_door` are identical between
-# `moki.py` and `kevlar.py`; `route1.py` keeps its own local override (see
+# `ch01.py` and `ch03.py`; `ch02.py` keeps its own local override (see
 # module docstring) because it must route through `_walk_absorbing` instead
 # of a plain `emu.walk_to` -- Route 1 has wild grass and roaming trainer
 # sight cones that a bare `walk_to` has no way to fight past. That is the
@@ -197,7 +197,7 @@ def cross_arrow_warp(emu: Emulator, beat: str, tile: tuple[int, int],
 
 def assert_near(emu: Emulator, beat: str, expected: tuple[int, int],
                  tolerance: int = 1) -> None:
-    """Byte-identical in `route1.py` and `kevlar.py` at promotion time."""
+    """Byte-identical in `ch02.py` and `ch03.py` at promotion time."""
     x, y = emu.player_pos()
     ex, ey = expected
     if abs(x - ex) > tolerance or abs(y - ey) > tolerance:
@@ -210,7 +210,7 @@ def assert_near(emu: Emulator, beat: str, expected: tuple[int, int],
 def advance_to_battle(emu: Emulator, max_taps: int = 1500) -> int:
     """`emu.advance_dialog()`, but stopping if a battle starts.
 
-    Byte-identical in `moki.py` and `route1.py` at promotion time. A script
+    Byte-identical in `ch01.py` and `ch02.py` at promotion time. A script
     that ends in a battle gives no field-control release to stop on -- an
     A-mash would keep pressing straight through the battle's own menus and
     resolve it by accident. A beat that owns the battle needs it handed over
@@ -223,8 +223,8 @@ def flag_ssa(map_num: int, event_id: int, letter: str = "A") -> str:
     """The self-switch flag name for an item ball / berry / one-time-grant
     event: `FLAG_MAP<map>_EVENT<id>_SS<letter>`.
 
-    Promoted from `kevlar.py`'s general two-argument-plus-map form.
-    `route1.py` carried a near-duplicate hardcoded to Map033
+    Promoted from `ch03.py`'s general two-argument-plus-map form.
+    `ch02.py` carried a near-duplicate hardcoded to Map033
     (`_flag_ssa(event_id, letter="A")`); it is now a thin wrapper over this
     function (`flag_ssa(33, event_id, letter)`), not a second
     implementation -- same behaviour, one source."""
@@ -233,7 +233,7 @@ def flag_ssa(map_num: int, event_id: int, letter: str = "A") -> str:
 
 # -- warp-arrival facing (finding H's flagship case) --------------------------
 #
-# Promoted verbatim from `kevlar.py` (2026-08-19 task). CH01/CH02 never
+# Promoted verbatim from `ch03.py` (2026-08-19 task). CH01/CH02 never
 # asserted arrival facing at all -- this is the fix for that staleness
 # (`PLAYTEST_AUTHORING_IMPROVEMENT.md` Part 4.5, Backlog 1).
 
@@ -295,7 +295,7 @@ def assert_player_facing(emu: Emulator, beat: str, expected: str) -> None:
             f"staged output) ({shot})")
 
 
-# -- post-warp BGM (kevlar.py's companion to the facing class) ---------------
+# -- post-warp BGM (ch03.py's companion to the facing class) ---------------
 
 def expected_bgm_song_id(emu: Emulator, engine_map_dir: str) -> int:
     """The MUS_* id THIS build's own compiled map header
@@ -323,8 +323,8 @@ def assert_bgm(emu: Emulator, beat: str, engine_map_dir: str) -> None:
 
 # -- party species reads -------------------------------------------------------
 #
-# `moki.py`'s `_player_starter_species` (slot 0 only, no scan) and
-# `kevlar.py`'s `_party_has_magikarp` (scans every slot for one species,
+# `ch01.py`'s `_player_starter_species` (slot 0 only, no scan) and
+# `ch03.py`'s `_party_has_magikarp` (scans every slot for one species,
 # stopping at the first SPECIES_NONE) read the same underlying struct via
 # `battle.decrypt_species` but were never unified. Both behaviours are kept
 # exactly, expressed as two thin functions over one shared scan
@@ -334,10 +334,10 @@ def player_starter_species(emu: Emulator) -> int:
     """Decode slot 0 of `gPlayerParty` the same way `battle.py` decodes
     `gEnemyParty` -- both are `struct Pokemon`, and the offsets battle.py
     already probes (`off_pkmn_box`, box-substruct fields) are struct-generic,
-    not enemy-party-specific. Promoted verbatim from `moki.py`: this is a
+    not enemy-party-specific. Promoted verbatim from `ch01.py`: this is a
     direct slot-0 read (no SPECIES_NONE early-out), so it can return
     SPECIES_NONE itself if the party is empty -- exactly what B8's "no
-    starter placed yet" check in `moki.py` relies on."""
+    starter placed yet" check in `ch01.py` relies on."""
     o = emu.offsets
     box_addr = emu.symbols["gPlayerParty"] + o["off_pkmn_box"]
     return decrypt_species(emu, box_addr)
@@ -347,7 +347,7 @@ def read_party_species(emu: Emulator) -> list[int]:
     """Every non-empty party slot's species, in slot order, stopping at the
     first `SPECIES_NONE` (mirrors `GetPartyCount`'s data-driven counting
     rather than assuming all `PARTY_SIZE` slots are populated). Promoted
-    from `kevlar.py`'s `_party_has_magikarp` scan loop, generalized to
+    from `ch03.py`'s `_party_has_magikarp` scan loop, generalized to
     return the whole list rather than testing one species inline."""
     species_none = emu.resolve_constant("SPECIES_NONE")
     o = emu.offsets
@@ -365,7 +365,7 @@ def read_party_species(emu: Emulator) -> list[int]:
 
 def party_has_species(emu: Emulator, species_id: int) -> bool:
     """Whether `species_id` occupies any party slot. Promoted from
-    `kevlar.py`'s `_party_has_magikarp`, generalized from a hardcoded
+    `ch03.py`'s `_party_has_magikarp`, generalized from a hardcoded
     SPECIES_MAGIKARP lookup to an explicit parameter -- same scan, same
     early-out at the first empty slot."""
     return species_id in read_party_species(emu)

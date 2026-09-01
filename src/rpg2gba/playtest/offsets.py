@@ -198,7 +198,7 @@ _PROBE_ENTRIES: dict[str, str] = {
     "off_objevent_movementtype": "offsetof(struct ObjectEvent, movementType)",
     # A sight trainer's own live sight range -- the exact `range` value
     # `GetTrainerApproachDistance`'s per-direction functions bound the
-    # approach distance to (engine/src/trainer_see.c:636-660); route1.py's
+    # approach distance to (engine/src/trainer_see.c:636-660); ch02.py's
     # `_sight_lane_tiles` reads this live rather than assuming a fixed scan
     # depth for every trainer.
     "off_objevent_trainerrange_berrytreeid":

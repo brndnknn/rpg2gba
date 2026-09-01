@@ -67,7 +67,7 @@ def use_pc(emu: Emulator, approach: tuple[int, int], facing: str, *,
     `ScriptMenu_CreatePCMultichoice`, a cursor-driven native menu, then (on
     the Pokemon Storage arm) `ShowPokemonStorageSystemPC` -- a full box-UI
     subsystem the harness has no spatial-navigation primitive for (same
-    acknowledged gap as `kevlar.py` B11's mart flow, which has "no money/bag
+    acknowledged gap as `ch03.py` B11's mart flow, which has "no money/bag
     primitive on Emulator"). Holding B instead of A answers every plain
     msgbox identically (per `Emulator.advance_dialog`'s own docstring) and
     then hits `MULTI_B_PRESSED` at the multichoice

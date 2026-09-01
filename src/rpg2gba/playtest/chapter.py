@@ -9,7 +9,7 @@ Authoring is plain Python (C4a) — no DSL:
 
     from ..chapter import ChapterBuilder
 
-    moki = ChapterBuilder("moki", doc="reference/chapters/01-moki.md")
+    moki = ChapterBuilder("CH01", doc="reference/chapters/01-moki.md")
 
     @moki.beat("B3", "Auntie grants the Running Shoes")
     def b3(emu):
@@ -25,8 +25,8 @@ chapter's beats have run declares that chapter as its `predecessor`; the
 predecessor's beats are prepended (in order), renamed `<chapter>:<beat>` so
 names stay unique, rather than copy-pasted into the new module:
 
-    route1 = ChapterBuilder("route1", doc="reference/chapters/02-route-1.md",
-                             predecessor="moki")
+    route1 = ChapterBuilder("CH02", doc="reference/chapters/02-route-1.md",
+                             predecessor="CH01")
 
     @route1.beat("B1", "Cross the Route 1 gate")
     def b1(emu):
@@ -34,7 +34,7 @@ names stay unique, rather than copy-pasted into the new module:
 
     CHAPTER = route1.build()
 
-`route1.CHAPTER.beats` is then moki's beats (`moki:B1`, `moki:B2`, ...)
+`route1.CHAPTER.beats` is then CH01's beats (`CH01:B1`, `CH01:B2`, ...)
 followed by route1's own (`B1`, `B2`, ...). Predecessor resolution is
 recursive and transitive: a predecessor that itself has a predecessor
 contributes beats that are *already* prefixed with their true origin
@@ -415,9 +415,16 @@ def chapter_names() -> list[str]:
 
 
 def load_chapter(name: str) -> Chapter:
-    """Import `rpg2gba.playtest.chapters.<name>` and return its `CHAPTER`."""
+    """Import `rpg2gba.playtest.chapters.<name>` and return its `CHAPTER`.
+
+    Modules are named for their atlas chapter id, lowercased so the filename
+    is a conventional Python module name (`CH01` -> `ch01.py`, 2026-09-01,
+    CH05_DECISIONS E1). The lookup is case-insensitive so the atlas id can be
+    passed through verbatim from `reference/chapters.json` without a caller
+    having to know which case a filesystem wants.
+    """
     try:
-        module = importlib.import_module(f"{__package__}.chapters.{name}")
+        module = importlib.import_module(f"{__package__}.chapters.{name.lower()}")
     except ModuleNotFoundError as exc:
         raise KeyError(
             f"no chapter {name!r}; known chapters: {chapter_names()}") from exc

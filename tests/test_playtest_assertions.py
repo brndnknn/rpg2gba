@@ -34,13 +34,13 @@ def test_flag_ssa_explicit_letter_and_zero_padding() -> None:
 
 
 def test_route1_flag_ssa_wrapper_matches_general_form() -> None:
-    """`route1.py`'s `_flag_ssa(event_id, letter)` is now a thin wrapper over
+    """`ch02.py`'s `_flag_ssa(event_id, letter)` is now a thin wrapper over
     `assertions.flag_ssa(33, event_id, letter)` -- pin that it produces the
     exact same string the old hardcoded-Map033 implementation did."""
-    from rpg2gba.playtest.chapters import route1
+    from rpg2gba.playtest.chapters import ch02
 
-    assert route1._flag_ssa(18) == "FLAG_MAP033_EVENT018_SSA" == assertions.flag_ssa(33, 18)
-    assert route1._flag_ssa(18, "B") == assertions.flag_ssa(33, 18, "B")
+    assert ch02._flag_ssa(18) == "FLAG_MAP033_EVENT018_SSA" == assertions.flag_ssa(33, 18)
+    assert ch02._flag_ssa(18, "B") == assertions.flag_ssa(33, 18, "B")
 
 
 # -- small fakes ---------------------------------------------------------------
@@ -332,7 +332,7 @@ def test_player_starter_species_reads_slot_zero() -> None:
 
 
 def test_player_starter_species_returns_species_none_when_empty() -> None:
-    """Promoted verbatim from `moki.py`: no early-out, so an empty party
+    """Promoted verbatim from `ch01.py`: no early-out, so an empty party
     reads back SPECIES_NONE itself (B8 relies on exactly this)."""
     emu = _party_emu([])
     assert assertions.player_starter_species(emu) == 0
@@ -359,7 +359,7 @@ def test_party_has_species_false_when_absent_or_empty() -> None:
 def test_beat_counts_unchanged_after_the_assertions_refactor() -> None:
     """Pins finding H's promotion as behaviour-preserving: moving helpers
     into `assertions.py` must not add, drop, or rename a beat. Import-based,
-    not grep-based -- `route1.py`/`kevlar.py` both contain prose comments
+    not grep-based -- `ch02.py`/`ch03.py` both contain prose comments
     describing the `@X.beat(...)` decorator syntax without applying it, so a
     grep count over-counts (see the task brief this test was written for)."""
     from rpg2gba.playtest.chapter import load_chapter
@@ -367,18 +367,18 @@ def test_beat_counts_unchanged_after_the_assertions_refactor() -> None:
     # route1 went 30 -> 31 on 2026-08-27: N5 (re-talking defeated Richey) was
     # registered once the silent-`Page2` bug it guards was fixed. kevlar
     # chains route1 as its predecessor, so it carries the same +1.
-    expected = {"moki": 17, "route1": 31, "kevlar": 61}
+    expected = {"CH01": 17, "CH02": 31, "CH03": 61}
     for name, count in expected.items():
         chapter = load_chapter(name)
         assert len(chapter.beats) == count, f"{name}: beat count drifted"
 
 
 def test_deferred_tuples_survive_the_refactor_intact() -> None:
-    """`route1.DEFERRED_ROCK_GATED` and `kevlar.DEFERRED_BEATS` are inert
+    """`ch02.DEFERRED_ROCK_GATED` and `ch03.DEFERRED_BEATS` are inert
     tuples of undecorated functions that no registered beat touches --
     ready-made regression tests for content years away. The refactor must
     not disturb their entry counts."""
-    from rpg2gba.playtest.chapters import kevlar, route1
+    from rpg2gba.playtest.chapters import ch02, ch03
 
-    assert len(route1.DEFERRED_ROCK_GATED) == 10
-    assert len(kevlar.DEFERRED_BEATS) == 10
+    assert len(ch02.DEFERRED_ROCK_GATED) == 10
+    assert len(ch03.DEFERRED_BEATS) == 10

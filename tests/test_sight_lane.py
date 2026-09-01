@@ -1,4 +1,4 @@
-"""Tests for `route1.py`'s `_sight_lane_tiles` (and its two callers picking
+"""Tests for `ch02.py`'s `_sight_lane_tiles` (and its two callers picking
 the farthest tile it returns) -- the 2026-08-14 B7 regression: `_approach_
 sight_trainer` used to walk a hardcoded standoff distance without checking
 it was walkable at all. Verified against the compiled collision grid, EVERY
@@ -8,7 +8,7 @@ terrain and the greedy stepper ground out after 8 step-aside attempts.
 
 Same style as `tests/test_walk_interruption.py`: a bare fake implementing
 only what the code under test reads (`object_events`/`tile_walkable`/
-`screenshot`), gated on `needs_mgba` because `route1.py` imports
+`screenshot`), gated on `needs_mgba` because `ch02.py` imports
 `WalkInterrupted` from `emulator.py` (lazily, at call time) and constructing
 a real `ObjectEventState` requires importing `emulator.py`, which needs the
 mgba python bindings at module scope.
@@ -59,7 +59,7 @@ def _trainer_event(x: int, y: int, trainer_range: int, facing: str = "RIGHT"):
 
 @needs_mgba
 def test_lane_scan_stops_at_the_first_wall() -> None:
-    from rpg2gba.playtest.chapters.route1 import _sight_lane_tiles
+    from rpg2gba.playtest.chapters.ch02 import _sight_lane_tiles
 
     # Trainer at (0,0) facing RIGHT, sight range 10; walkable up to (3,0),
     # (4,0) is a wall. The scan must stop there, not continue to the range.
@@ -76,7 +76,7 @@ def test_farthest_walkable_tile_is_last_in_the_list() -> None:
     """Both callers (`_approach_sight_trainer`/`_assert_no_second_battle`)
     use `tiles[-1]` as the approach target -- confirm the list is ordered
     closest-to-farthest so that's actually the farthest one."""
-    from rpg2gba.playtest.chapters.route1 import _sight_lane_tiles
+    from rpg2gba.playtest.chapters.ch02 import _sight_lane_tiles
 
     emu = _FakeSightLaneEmu(
         walkable={(0, 1), (0, 2), (0, 3), (0, 4)},
@@ -92,7 +92,7 @@ def test_one_tile_deep_lane_the_lynette_shape() -> None:
     """The real regression's sharpest case: a lane only one tile deep
     before the wall (Lynette's cone on the real ROM). Must return exactly
     that one tile, not fail and not fabricate a deeper approach."""
-    from rpg2gba.playtest.chapters.route1 import _sight_lane_tiles
+    from rpg2gba.playtest.chapters.ch02 import _sight_lane_tiles
 
     emu = _FakeSightLaneEmu(
         walkable={(1, 0)},
@@ -108,7 +108,7 @@ def test_scan_never_exceeds_the_trainers_own_live_sight_range() -> None:
     `trainer_range` -- the engine's own `GetTrainerApproachDistance` would
     never look further either (trainer_see.c's range-bounded per-direction
     functions)."""
-    from rpg2gba.playtest.chapters.route1 import _sight_lane_tiles
+    from rpg2gba.playtest.chapters.ch02 import _sight_lane_tiles
 
     emu = _FakeSightLaneEmu(
         walkable={(x, 0) for x in range(1, 11)},
@@ -123,7 +123,7 @@ def test_fails_loud_when_the_lane_is_entirely_blocked() -> None:
     """A trainer facing straight into a wall (the very first tile of the
     lane is unwalkable) can never trigger by sight -- a genuine conversion
     finding, not something to silently skip."""
-    from rpg2gba.playtest.chapters.route1 import _sight_lane_tiles
+    from rpg2gba.playtest.chapters.ch02 import _sight_lane_tiles
     from rpg2gba.playtest.errors import ScenarioError
 
     emu = _FakeSightLaneEmu(
@@ -146,7 +146,7 @@ def test_unspawned_trainer_falls_back_to_the_scan_cap_not_a_hard_error() -> None
     simply not spawned yet -- not "misplaced," not a reason to fail. The
     scan must fall back to `_SIGHT_SCAN_CAP` (pure terrain, no live
     trainer_range needed) instead of raising."""
-    from rpg2gba.playtest.chapters.route1 import _SIGHT_SCAN_CAP, _sight_lane_tiles
+    from rpg2gba.playtest.chapters.ch02 import _SIGHT_SCAN_CAP, _sight_lane_tiles
 
     emu = _FakeSightLaneEmu(
         walkable={(x, 0) for x in range(1, _SIGHT_SCAN_CAP + 5)},
@@ -163,7 +163,7 @@ def test_unspawned_trainer_scan_still_fails_loud_on_a_solid_wall() -> None:
     """The unspawned fallback still stops at the first unwalkable tile and
     still fails loud if there's nowhere to stand at all -- falling back to
     a wider cap doesn't relax the "faces a wall" diagnosis."""
-    from rpg2gba.playtest.chapters.route1 import _sight_lane_tiles
+    from rpg2gba.playtest.chapters.ch02 import _sight_lane_tiles
     from rpg2gba.playtest.errors import ScenarioError
 
     emu = _FakeSightLaneEmu(walkable=set(), trainer_ev=None)
@@ -177,7 +177,7 @@ def test_spawned_trainer_still_uses_its_own_live_range_not_the_cap() -> None:
     the precise live `trainer_range` still wins over the wider unspawned
     fallback cap -- the fallback is only for when there's nothing live to
     read yet."""
-    from rpg2gba.playtest.chapters.route1 import _SIGHT_SCAN_CAP, _sight_lane_tiles
+    from rpg2gba.playtest.chapters.ch02 import _SIGHT_SCAN_CAP, _sight_lane_tiles
 
     emu = _FakeSightLaneEmu(
         walkable={(x, 0) for x in range(1, _SIGHT_SCAN_CAP + 5)},

@@ -1818,7 +1818,7 @@ def classify_phone_rematch_trainer_battle(
     # detection), so anything other than `trainerbattle_single(...)` as the
     # first command at that pointer — e.g. a `_Dispatch` block starting with
     # `if (flag(...))` — makes the engine read garbage as the trainer id and
-    # breaks sight-trainer detection outright (regressed route1:B13/Richey
+    # breaks sight-trainer detection outright (regressed CH02:B13/Richey
     # when a dispatcher wrapper was tried here). Routing a defeated trainer
     # to Page2 on re-talk therefore CANNOT be done by pointing the
     # object_event anywhere but Page1 — it has to be the command that

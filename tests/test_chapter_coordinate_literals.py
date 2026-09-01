@@ -21,7 +21,7 @@ instead: every call must pass a non-empty string `why=`, or it is itself a
 violation (missing or empty `why=` defeats the counted-debt discipline the
 escape hatch exists for).
 
-**The ratchet.** `moki.py`, `route1.py`, `kevlar.py`, `route2.py` predate the
+**The ratchet.** `ch01.py`, `ch02.py`, `ch03.py`, `ch04.py` predate the
 ban and are explicitly NOT being retrofitted (out of scope for the task that
 introduced this test). `_PRE_BAN_BUDGET` freezes each file's *measured*
 violation count as of the day the ban landed -- this is debt to be paid down
@@ -93,10 +93,10 @@ def _map_const_for(uranium_id: int) -> str:
 # THIS IS DEBT, NOT AN ALLOWANCE: when a file is cleaned up, lower its number
 # here to match (the test enforces that direction too, not just the ceiling).
 _PRE_BAN_BUDGET: dict[str, int] = {
-    "moki.py": 13,
-    "route1.py": 45,
-    "kevlar.py": 42,
-    "route2.py": 25,
+    "ch01.py": 13,
+    "ch02.py": 45,
+    "ch03.py": 42,
+    "ch04.py": 25,
 }
 
 

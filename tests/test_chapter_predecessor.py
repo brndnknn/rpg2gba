@@ -27,9 +27,9 @@ def ok(emu) -> None:
 def install_chapter(name: str, chapter: Chapter) -> None:
     """Register `chapter` as `rpg2gba.playtest.chapters.<name>`'s CHAPTER,
     the same shape a real `chapters/<name>.py` module provides."""
-    module = types.ModuleType(f"{PKG}.{name}")
+    module = types.ModuleType(f"{PKG}.{name.lower()}")
     module.CHAPTER = chapter
-    sys.modules[f"{PKG}.{name}"] = module
+    sys.modules[f"{PKG}.{name.lower()}"] = module
 
 
 def install_builder(name: str, builder: ChapterBuilder) -> Chapter:
@@ -66,7 +66,7 @@ class LazyModule:
 
 
 def install_lazy(name: str, builder: ChapterBuilder) -> None:
-    sys.modules[f"{PKG}.{name}"] = LazyModule(builder)
+    sys.modules[f"{PKG}.{name.lower()}"] = LazyModule(builder)
 
 
 @pytest.fixture(autouse=True)
@@ -118,7 +118,7 @@ def test_no_predecessor_chapter_unchanged() -> None:
 # -- composition order + prefixing -------------------------------------------
 
 def test_predecessor_beats_come_first_and_are_prefixed() -> None:
-    moki_builder = ChapterBuilder("moki", doc="reference/chapters/01-moki.md")
+    moki_builder = ChapterBuilder("CH01", doc="reference/chapters/01-moki.md")
 
     @moki_builder.beat("B1", "moki first beat")
     def m1(emu):
@@ -128,10 +128,10 @@ def test_predecessor_beats_come_first_and_are_prefixed() -> None:
     def m2(emu):
         pass
 
-    install_builder("moki", moki_builder)
+    install_builder("CH01", moki_builder)
 
     route1_builder = ChapterBuilder(
-        "route1", doc="reference/chapters/02-route-1.md", predecessor="moki")
+        "CH02", doc="reference/chapters/02-route-1.md", predecessor="CH01")
 
     @route1_builder.beat("B1", "route1 first beat")
     def r1(emu):
@@ -139,10 +139,10 @@ def test_predecessor_beats_come_first_and_are_prefixed() -> None:
 
     route1 = route1_builder.build()
 
-    assert route1.predecessor == "moki"
-    assert [b.name for b in route1.beats] == ["moki:B1", "moki:B2", "B1"]
-    assert route1.beats[0].description == "[moki] moki first beat"
-    assert route1.beats[1].description == "[moki] moki second beat"
+    assert route1.predecessor == "CH01"
+    assert [b.name for b in route1.beats] == ["CH01:B1", "CH01:B2", "B1"]
+    assert route1.beats[0].description == "[CH01] moki first beat"
+    assert route1.beats[1].description == "[CH01] moki second beat"
     # Own beat keeps its bare name and description untouched.
     assert route1.beats[2].description == "route1 first beat"
     # run callables carry over unchanged (identity-preserved).
@@ -151,16 +151,16 @@ def test_predecessor_beats_come_first_and_are_prefixed() -> None:
 
 
 def test_index_of_works_on_composed_chapter() -> None:
-    moki_builder = ChapterBuilder("moki", doc="reference/chapters/01-moki.md")
+    moki_builder = ChapterBuilder("CH01", doc="reference/chapters/01-moki.md")
 
     @moki_builder.beat("B1", "moki first")
     def m1(emu):
         pass
 
-    install_builder("moki", moki_builder)
+    install_builder("CH01", moki_builder)
 
     route1_builder = ChapterBuilder(
-        "route1", doc="reference/chapters/02-route-1.md", predecessor="moki")
+        "CH02", doc="reference/chapters/02-route-1.md", predecessor="CH01")
 
     @route1_builder.beat("B1", "route1 first")
     def r1(emu):
@@ -172,7 +172,7 @@ def test_index_of_works_on_composed_chapter() -> None:
 
     route1 = route1_builder.build()
 
-    assert route1.index_of("moki:B1") == 0
+    assert route1.index_of("CH01:B1") == 0
     assert route1.index_of("B1") == 1
     assert route1.index_of("B2") == 2
     with pytest.raises(KeyError):
@@ -182,25 +182,25 @@ def test_index_of_works_on_composed_chapter() -> None:
 # -- three-chapter chain: no double-prefixing --------------------------------
 
 def test_three_chapter_chain_does_not_double_prefix() -> None:
-    moki_builder = ChapterBuilder("moki", doc="reference/chapters/01-moki.md")
+    moki_builder = ChapterBuilder("CH01", doc="reference/chapters/01-moki.md")
 
     @moki_builder.beat("B3", "auntie grants running shoes")
     def m3(emu):
         pass
 
-    install_builder("moki", moki_builder)
+    install_builder("CH01", moki_builder)
 
     route1_builder = ChapterBuilder(
-        "route1", doc="reference/chapters/02-route-1.md", predecessor="moki")
+        "CH02", doc="reference/chapters/02-route-1.md", predecessor="CH01")
 
     @route1_builder.beat("B1", "cross the gate")
     def r1(emu):
         pass
 
-    install_builder("route1", route1_builder)
+    install_builder("CH02", route1_builder)
 
     kevlar_builder = ChapterBuilder(
-        "kevlar", doc="reference/chapters/03-kevlar.md", predecessor="route1")
+        "CH03", doc="reference/chapters/03-kevlar.md", predecessor="CH02")
 
     @kevlar_builder.beat("B1", "enter kevlar city")
     def k1(emu):
@@ -209,16 +209,16 @@ def test_three_chapter_chain_does_not_double_prefix() -> None:
     kevlar = kevlar_builder.build()
 
     names = [b.name for b in kevlar.beats]
-    assert names == ["moki:B3", "route1:B1", "B1"]
+    assert names == ["CH01:B3", "CH02:B1", "B1"]
     # The moki-owned beat is qualified once, with its TRUE origin (moki), not
-    # with the immediate predecessor (route1) -- "moki:B3", never
-    # "kevlar:moki:B3" or "route1:moki:B3".
-    assert "moki:B3" in names
-    assert "kevlar:moki:B3" not in names
-    assert "route1:moki:B3" not in names
+    # with the immediate predecessor (route1) -- "CH01:B3", never
+    # "CH03:CH01:B3" or "CH02:CH01:B3".
+    assert "CH01:B3" in names
+    assert "CH03:CH01:B3" not in names
+    assert "CH02:CH01:B3" not in names
     descriptions = {b.name: b.description for b in kevlar.beats}
-    assert descriptions["moki:B3"] == "[moki] auntie grants running shoes"
-    assert descriptions["route1:B1"] == "[route1] cross the gate"
+    assert descriptions["CH01:B3"] == "[CH01] auntie grants running shoes"
+    assert descriptions["CH02:B1"] == "[CH02] cross the gate"
     assert descriptions["B1"] == "enter kevlar city"
 
 
@@ -226,7 +226,7 @@ def test_three_chapter_chain_does_not_double_prefix() -> None:
 
 def test_unknown_predecessor_raises_clear_error() -> None:
     builder = ChapterBuilder(
-        "route1", doc="reference/chapters/02-route-1.md",
+        "CH02", doc="reference/chapters/02-route-1.md",
         predecessor="does_not_exist")
 
     @builder.beat("B1", "first")

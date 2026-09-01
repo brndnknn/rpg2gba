@@ -67,21 +67,21 @@ def test_warp_facing_rule_claims_its_primitive_exists() -> None:
 # -- owning_chapter / effective_rule_version (the ancestor-pinning detail) --
 
 def test_owning_chapter_is_the_running_chapter_for_a_bare_beat_name() -> None:
-    assert rules.owning_chapter("kevlar", "B5") == "kevlar"
+    assert rules.owning_chapter("CH03", "B5") == "CH03"
 
 
 def test_owning_chapter_recovers_the_prefix_for_a_replayed_ancestor_beat() -> None:
     # ChapterBuilder._prefix_beat (chapter.py:115-124) renames predecessor
     # beats <owner>:<name>, and never double-prefixes -- so a beat that
     # arrived at kevlar via route1's own predecessor (moki) is still named
-    # "moki:B1", not "route1:moki:B1".
-    assert rules.owning_chapter("kevlar", "moki:B1") == "moki"
-    assert rules.owning_chapter("kevlar", "route1:B4") == "route1"
+    # "CH01:B1", not "CH02:CH01:B1".
+    assert rules.owning_chapter("CH03", "CH01:B1") == "CH01"
+    assert rules.owning_chapter("CH03", "CH02:B4") == "CH02"
 
 
 def test_effective_rule_version_uses_running_version_for_the_chapters_own_beat() -> None:
     version = rules.effective_rule_version(
-        "kevlar", "B5", running_version=7, recorded_versions={"moki": 1, "route1": 2})
+        "CH03", "B5", running_version=7, recorded_versions={"CH01": 1, "CH02": 2})
     assert version == 7
 
 
@@ -90,21 +90,21 @@ def test_effective_rule_version_pins_an_ancestor_beat_to_its_own_recorded_versio
     # evaluated at ITS OWN chapter's last recorded version, never the
     # running chapter's -- otherwise bumping CURRENT_VERSION for a new rule
     # would fail every descendant chapter's gate at once.
-    recorded = {"moki": 1, "route1": 2}
+    recorded = {"CH01": 1, "CH02": 2}
     assert rules.effective_rule_version(
-        "kevlar", "moki:B1", running_version=99, recorded_versions=recorded) == 1
+        "CH03", "CH01:B1", running_version=99, recorded_versions=recorded) == 1
     assert rules.effective_rule_version(
-        "kevlar", "route1:B4", running_version=99, recorded_versions=recorded) == 2
+        "CH03", "CH02:B4", running_version=99, recorded_versions=recorded) == 2
     # kevlar's own beat, in the same call batch, still tracks the running
     # (current) version -- proving the pin is per-beat, not per-chapter-run.
     assert rules.effective_rule_version(
-        "kevlar", "B1", running_version=99, recorded_versions=recorded) == 99
+        "CH03", "B1", running_version=99, recorded_versions=recorded) == 99
 
 
 def test_effective_rule_version_fails_loud_when_the_ancestor_was_never_recorded() -> None:
     with pytest.raises(ValueError, match="no recorded rule-set"):
         rules.effective_rule_version(
-            "kevlar", "moki:B1", running_version=5, recorded_versions={})
+            "CH03", "CH01:B1", running_version=5, recorded_versions={})
 
 
 # -- recorded-versions persistence (runner-only writer) ----------------------
@@ -115,51 +115,51 @@ def test_load_recorded_versions_returns_empty_dict_for_a_missing_file(tmp_path: 
 
 def test_record_chapter_version_round_trips(tmp_path: Path) -> None:
     path = tmp_path / "playtest_rule_versions.json"
-    rules.record_chapter_version(path, "moki", 1)
-    rules.record_chapter_version(path, "route1", 2)
-    assert rules.load_recorded_versions(path) == {"moki": 1, "route1": 2}
+    rules.record_chapter_version(path, "CH01", 1)
+    rules.record_chapter_version(path, "CH02", 2)
+    assert rules.load_recorded_versions(path) == {"CH01": 1, "CH02": 2}
 
 
 def test_record_chapter_version_only_overwrites_its_own_chapter(tmp_path: Path) -> None:
     path = tmp_path / "playtest_rule_versions.json"
-    rules.record_chapter_version(path, "moki", 1)
-    rules.record_chapter_version(path, "route1", 1)
-    rules.record_chapter_version(path, "moki", 2)  # moki re-gated under v2
+    rules.record_chapter_version(path, "CH01", 1)
+    rules.record_chapter_version(path, "CH02", 1)
+    rules.record_chapter_version(path, "CH01", 2)  # moki re-gated under v2
     versions = rules.load_recorded_versions(path)
-    assert versions["moki"] == 2
-    assert versions["route1"] == 1  # untouched -- route1 has not been re-run
+    assert versions["CH01"] == 2
+    assert versions["CH02"] == 1  # untouched -- route1 has not been re-run
 
 
 # -- lag report: generated, not maintained -----------------------------------
 
 def test_lag_report_names_every_rule_a_chapter_lags() -> None:
-    report = rules.lag_report("moki", recorded_version=0, current_version=2)
+    report = rules.lag_report("CH01", recorded_version=0, current_version=2)
     assert report.lagging == rules.RULES
     text = report.render()
-    assert "moki" in text
+    assert "CH01" in text
     assert "warp-arrival-facing" in text
     assert "text-content" in text
 
 
 def test_lag_report_is_empty_when_a_chapter_is_fully_current() -> None:
-    report = rules.lag_report("kevlar", recorded_version=2, current_version=2)
+    report = rules.lag_report("CH03", recorded_version=2, current_version=2)
     assert report.lagging == ()
     assert "up to date" in report.render()
 
 
 def test_lag_report_partial_lag_names_only_the_missing_rules() -> None:
-    report = rules.lag_report("kevlar", recorded_version=1, current_version=2)
+    report = rules.lag_report("CH03", recorded_version=1, current_version=2)
     assert [r.id for r in report.lagging] == ["text-content"]
 
 
 def test_lag_reports_reads_every_recorded_chapter_sorted_by_name(tmp_path: Path) -> None:
     path = tmp_path / "versions.json"
-    rules.record_chapter_version(path, "route1", 0)
-    rules.record_chapter_version(path, "kevlar", 1)
+    rules.record_chapter_version(path, "CH02", 0)
+    rules.record_chapter_version(path, "CH03", 1)
     reports = rules.lag_reports(path, current_version=2)
-    assert [r.chapter for r in reports] == ["kevlar", "route1"]
-    assert reports[0].recorded_version == 1
-    assert reports[1].recorded_version == 0
+    assert [r.chapter for r in reports] == ["CH02", "CH03"]
+    assert reports[0].recorded_version == 0
+    assert reports[1].recorded_version == 1
 
 
 # -- runner.py: BeatTally (Q10's generated tally) -----------------------------
@@ -204,18 +204,18 @@ def test_tally_render_matches_the_documented_shape() -> None:
 
 def test_assert_no_false_pass_allows_a_clean_pass() -> None:
     tally = BeatTally(total=3, run=3, passed=3, failed=0, hung=0, not_run=0)
-    _assert_no_false_pass("moki", "pass", tally)  # must not raise
+    _assert_no_false_pass("CH01", "pass", tally)  # must not raise
 
 
 def test_assert_no_false_pass_rejects_a_pass_verdict_with_a_not_run_beat() -> None:
     tally = BeatTally(total=3, run=2, passed=2, failed=0, hung=0, not_run=1)
     with pytest.raises(RunnerError, match="not_run"):
-        _assert_no_false_pass("moki", "pass", tally)
+        _assert_no_false_pass("CH01", "pass", tally)
 
 
 def test_assert_no_false_pass_allows_not_run_beats_on_a_fail_verdict() -> None:
     tally = BeatTally(total=3, run=1, passed=0, failed=1, hung=0, not_run=2)
-    _assert_no_false_pass("moki", "fail", tally)  # must not raise
+    _assert_no_false_pass("CH01", "fail", tally)  # must not raise
 
 
 # -- runner.py: _run_attempt with a stub emulator -----------------------------
@@ -344,9 +344,9 @@ def test_run_attempt_reports_a_hang_distinct_from_a_failure_and_stops(
 def test_run_attempt_pins_rule_version_per_beat_owner(monkeypatch, tmp_path, _pristine_rom) -> None:
     monkeypatch.setattr(runner, "_snapshot", _stub_snapshot)
     emu = _StubEmu()
-    chapter = _make_chapter("kevlar", [
-        ("moki:B1", lambda e: None),
-        ("route1:B4", lambda e: None),
+    chapter = _make_chapter("CH03", [
+        ("CH01:B1", lambda e: None),
+        ("CH02:B4", lambda e: None),
         ("B1", lambda e: None),
     ])
 
@@ -355,9 +355,9 @@ def test_run_attempt_pins_rule_version_per_beat_owner(monkeypatch, tmp_path, _pr
         **_run_attempt_kwargs(
             tmp_path, _pristine_rom, emu,
             running_rule_version=99,
-            recorded_rule_versions={"moki": 1, "route1": 2}))
+            recorded_rule_versions={"CH01": 1, "CH02": 2}))
 
     by_name = {b.name: b.rule_version for b in result.beats}
-    assert by_name["moki:B1"] == 1
-    assert by_name["route1:B4"] == 2
+    assert by_name["CH01:B1"] == 1
+    assert by_name["CH02:B4"] == 2
     assert by_name["B1"] == 99

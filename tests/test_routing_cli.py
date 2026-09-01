@@ -216,10 +216,11 @@ def test_plan_unknown_chapter_module_errors(tmp_path: Path, monkeypatch) -> None
 def test_plan_chapter_id_and_module_are_distinct_names(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
     """`--chapter` keys the artifacts, `--module` names the scenario module.
 
-    The real corpus never has these agree: CH04 is Route 2, whose playtest
-    module is `route2`. Nothing in the repo maps between them
-    (`PROJECT_TODO.md` #66), so the CLI takes both and records the module on
-    the plan for downstream consumers to recover.
+    The real corpus now has these agree by default: CH04 is Route 2, whose
+    playtest module is `ch04.py`. This test pins that they are still allowed
+    to DIFFER -- the CLI accepts an explicit `--module` that is not the
+    chapter id, and records it on the plan for downstream consumers to
+    recover.
     """
     chapter_id = "CH99"
     module = "someplace"

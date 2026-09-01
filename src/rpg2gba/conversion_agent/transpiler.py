@@ -573,7 +573,7 @@ _RANDOMIZER_MODE_RE = re.compile(r"^\s*\$PokemonGlobal\.randomizer\s*$")
 # scene's actual closing content (the nurse's return-facing movement plus the
 # "restored to full health"/"we hope to see you again" messages) — dropping
 # the whole conditional, as the generic script-condition path does, silently
-# truncated the healing scene (playtest missed it; see kevlar.py's B4 note).
+# truncated the healing scene (playtest missed it; see ch03.py's B4 note).
 _POKERUS_CHECK_RE = re.compile(r"^\s*Kernel\.pbPokerus\?\s*$")
 
 # Essentials inline-choice text escape (SLICE1_TODO #17): a Show Text message

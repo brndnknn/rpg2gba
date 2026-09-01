@@ -4,7 +4,7 @@ No emulator import, no I/O -- these exercise `classify_claim` and
 `check_frame_rule` against realistic message text only. The positive
 (non-negative) messages below are drawn verbatim or near-verbatim from real
 `ScenarioError(...)` call sites in `src/rpg2gba/playtest/` (assertions.py,
-emulator.py, battle.py, chapters/kevlar.py) so the false-positive check is
+emulator.py, battle.py, chapters/ch03.py) so the false-positive check is
 against the harness's actual prose, not a strawman.
 """
 
@@ -75,7 +75,7 @@ POSITIVE_EXAMPLES = [
     "gEnemyParty slot 0 is SPECIES_NONE within the expected roster (shot.png)",
     # walk budget exhausted (emulator.py _walk_to_once)
     "walk_to(14,22) frame budget exhausted (shot.png)",
-    # flag/count mismatch, an "expected X got Y" shape (chapters/kevlar.py)
+    # flag/count mismatch, an "expected X got Y" shape (chapters/ch03.py)
     "B14: expected +1 of each free sample, got potion, antidote (shot.png)",
     # stuck walk that isn't a "nothing happened" claim -- a positive report
     # of what did happen (a wall bump), not that nothing did

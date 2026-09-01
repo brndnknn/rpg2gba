@@ -515,7 +515,7 @@ e2e = pytest.mark.skipif(
 
 
 @e2e
-@pytest.mark.parametrize("chapter_name", ["moki"])
+@pytest.mark.parametrize("chapter_name", ["CH01"])
 def test_chapter_suite_is_green(tmp_path: Path, chapter_name: str) -> None:
     """Gate/CI wrapper: the named chapter must be fully green, from a new
     game, on the current build. Fails loud (non-pass verdict) rather than

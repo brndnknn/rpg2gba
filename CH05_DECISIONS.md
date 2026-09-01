@@ -30,15 +30,17 @@ that existed (`360eaf60`). Update this table when an item lands; do not trust th
 | D2 — bidirectional `DEFERRED_*` registration rule | **not built** | `RULE_ORPHAN_DISPOSITION` checks something else |
 | D4 — Tier-1 archetype templates | **not built** | incl. the 324-instance arrival-nudge |
 | D6 — per-chapter input fingerprint | **not built** | generator hashes pages/connections only |
-| E1 — chapter id → playtest module | **not built** | open question back to the operator, below |
+| E1 — chapter id → playtest module | **built** 2026-09-01 | modules renamed to chapter ids: `chapters/ch0{1,2,3,4}.py`; `PROJECT_TODO.md` Done #66 |
 | E2 — CH05 route plan | **not built** | `reference/routes/` does not exist |
 | C4 — capability model signature | accepted as-is (option 2) | 28 warnings stand by decision |
 | D5, D7 | deferred by decision | — |
-| C3, D8 | deferred until after CH05 | — |
+| C3 | deferred until after CH05 | — |
+| D8 — whole-corpus re-disposition | **deferred** 2026-09-01 (option 3) | stays blocked behind C3; the slip is recorded in D8 below |
 
-**Two answers below are questions back to the build agent and remain unresolved:** E1 (why are
-playtest modules named by place rather than by chapter?) and D8 (was the re-disposition's point to
-compare derived authoring against the hand-written CH01–CH03?). Do not build against a guess.
+**Both questions back to the build agent were answered on 2026-09-01** and are now closed: E1
+(modules renamed to chapter ids) and D8 (deferred — the operator was right that the comparison's
+whole point was CH01–CH03, which makes the CH04-only option worthless). No open questions remain in
+this document.
 
 **One correction to the record:** C4's answer says Old Rod is mis-described as a field move somewhere
 in the repo. A search on 2026-09-01 found no such text — `02-route-1.md` and
@@ -491,6 +493,19 @@ chapter that loads); (3) defer the whole re-disposition to a later chapter and r
 
 I think the whole point was to compare the new derived based authoring vs the hand written version that ch 1 - 3 shipped with. Correct me if i'm wrong here
 
+**Not wrong — and it kills option 2. Deferred (option 3) 2026-09-01.** CH04 was already authored
+under the derived flow, so re-disposing CH04 alone compares the new system against itself and proves
+nothing; the only chapters that make the comparison mean anything are CH01–CH03, which is exactly the
+set C3 broke. So the choice was never three-way. It was: unblock C3 first, or slip.
+
+Slipping, and recording it here rather than quietly dropping it: unblocking C3 means regenerating
+three gate-closed chapters' manifests, and doing that inside CH05's build would put a corpus-wide
+regeneration on the critical path of a chapter that has its own §9 boot gate to clear. The
+comparison does not decay by waiting — CH01–CH03's hand-written dispositions are committed and
+frozen, and the derived flow only gets more evidence behind it as CH05 and CH06 use it. **The debt:
+C3 must be unblocked before the re-disposition can run at all, and the re-disposition is owed
+against CH01–CH03 specifically, not against whatever loads at the time.**
+
 ---
 
 ## E — Process and scoping
@@ -508,6 +523,24 @@ module of the chapter they revisit.
 #### Answer
 
 should they be named by place? why aren't they named by the chapters
+
+**Resolved 2026-09-01 — renamed, field not added.** The question was the better one and it dissolved
+the item rather than answering it. There was no reason of substance: CH01–CH03's modules were
+written before `chapters.json` and the atlas ids existed, so they took the place names that were the
+only identifiers around at the time, and nothing since forced the issue. Both of my sub-questions
+(what the field holds for the ~20 module-less chapters; whether CH07A shares CH07's module) only
+existed because the field did — with the module *named for* the chapter, a chapter without a module
+simply has no file, and a revisit either gets `ch07a.py` or imports CH07's explicitly.
+
+`moki.py`→`ch01.py`, `route1.py`→`ch02.py`, `kevlar.py`→`ch03.py`, `route2.py`→`ch04.py`, and the
+`ChapterBuilder` name went with the filename (`"moki"`→`"CH01"`) — renaming only the file would have
+left `load_chapter("ch01").name == "moki"`, which is the same mapping problem one layer down. Full
+scope and the migrated artifacts are in `PROJECT_TODO.md` Done #66.
+
+`--module` survives on `routing plan` as an *override* defaulting to the chapter id, and every plan
+still records `RoutePlan.chapter_module`, because `divergence.load_plan_index_for_module` joins on
+the recorded value rather than on the convention. That is deliberate: a convention that holds today
+is not a binding the artifact carries, and CH07A is where the two will part company.
 
 ### E2. #67 — CH05's route plan
 
@@ -587,7 +620,9 @@ everything" and "build everything" ends of the range are both visible.
 - D2 (registration rule) — only if B2/B3 register deferred rows, which they almost certainly will.
 
 **Explicitly reasonable to defer for a 2-map chapter:** D4 (except possibly the arrival-nudge template),
-D5, D6, D7, C3/C4, D8, E1.
+D5, D6, D7, C3/C4, D8. *(E1 was deferrable on cost grounds but got built anyway on 2026-09-01, because
+the operator's answer replaced the proposed `playtest_module` schema field with a rename — cheaper than
+the thing it was compared against, not more expensive. D8 was deferred as proposed.)*
 
 **Decide deliberately, don't drift into:** D4. It was recommended "before CH05" and quietly reclassified
 as authoring cost. That may well be right — but it should be a call, not an omission, since the

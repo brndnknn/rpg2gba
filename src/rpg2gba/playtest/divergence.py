@@ -17,7 +17,7 @@ IMPROVEMENT_V2.md`'s 2026-08-28 decision ("trigger divergence fails; all
 other divergence is a Q8 carried contradiction") is explicit about why: a
 legitimate re-plan around a patrolling NPC diverges on every single run (the
 NPC is never in exactly the cell the offline graph assumed), and
-`route1:B14` already demonstrated that blocking a beat on ambiguous evidence
+`CH02:B14` already demonstrated that blocking a beat on ambiguous evidence
 throws away real, otherwise-valid work. Non-trigger divergence is instead
 recorded as a carried contradiction between the offline routing model and
 the measured walk (`WalkComparison.off_plan`) -- evidence the offline graph
@@ -241,16 +241,17 @@ def load_plan_index_for_module(
     module_name: str, *, root: Path | None = None
 ) -> PlanIndex | None:
     """The approved plan for the chapter *playtest module* `module_name`
-    (`"route2"`, `"kevlar"`, ...), or `None` when no plan claims it.
+    (`"CH04"`, `"CH03"`, ...), or `None` when no plan claims it.
 
     The runner knows which playtest module it is running; route plans are
-    named by *atlas chapter id* (`CH04.route.json`). Nothing maps one to
-    the other -- that missing mapping is `PROJECT_TODO.md` #66, and
-    `--module` is the hand-carried workaround elsewhere. Rather than add a
-    second, guessable convention (`CH04` <-> `route2` by position in some
-    list) that would rot the moment a chapter is renumbered, this reads the
-    binding out of the artifacts themselves: every plan records the
-    `chapter_module` it was solved for, so the join is a scan of
+    named by *atlas chapter id* (`CH04.route.json`). Playtest modules are now
+    named for their atlas chapter id (`CH04` -> `chapters/ch04.py`,
+    2026-09-01), so the join is derivable by convention. This function still
+    doesn't rely on that convention, though: it reads the binding out of the
+    artifacts themselves, since a module can still be run under an explicit
+    `--module` that differs from its chapter id (see `test_routing_cli.py`'s
+    `test_plan_chapter_id_and_module_are_distinct_names`) -- every plan
+    records the `chapter_module` it was solved for, so the join is a scan of
     `reference/routes/*.route.json` for the one that names this module.
 
     Two plans claiming the same module is a genuine fault -- the operator

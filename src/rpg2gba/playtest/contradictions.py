@@ -9,7 +9,7 @@ what to do with one, and the answer is deliberately not "stop":
    blocking one.** Work continues on a stated assumption; the
    contradiction is carried forward in the artifact until explicitly
    closed.
-2. **Not blocking, deliberately.** `route1:B14`'s RNG-timed facing check
+2. **Not blocking, deliberately.** `CH02:B14`'s RNG-timed facing check
    was indistinguishable from "not yet fired" and truncated two full CH04
    debug runs. A blocking rule halts work on genuine noise. The CH04
    failure was never that work continued -- it was that the disagreement

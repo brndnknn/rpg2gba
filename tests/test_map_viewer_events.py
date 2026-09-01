@@ -160,7 +160,7 @@ def test_beat_markers_declared_for_kevlar_center(monkeypatch: pytest.MonkeyPatch
     assert isinstance(result["declared"], list)
     assert isinstance(result["observed"], list)
     assert isinstance(result["notes"], list)
-    kevlar_beats = [b for b in result["declared"] if b["chapter"] == "kevlar"]
+    kevlar_beats = [b for b in result["declared"] if b["chapter"] == "CH03"]
     assert kevlar_beats, "expected at least one declared Kevlar beat on this map"
     for b in kevlar_beats:
         assert b["map_constant"] == "MAP_KEVLAR_TOWN_POKEMON_CENTER"

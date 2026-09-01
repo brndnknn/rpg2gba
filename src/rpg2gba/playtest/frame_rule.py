@@ -74,7 +74,7 @@ NEGATIVE_CLAIM_PATTERNS: tuple[_Pattern, ...] = (
         # The doc's own wording ("no script started") plus the two shapes
         # the harness actually raises for this class -- `interact()` and
         # the mart-counter beats say "did not start/open a script", not
-        # "script did not start" (emulator.py:2503, chapters/kevlar.py).
+        # "script did not start" (emulator.py:2503, chapters/ch03.py).
         "no script started", "script did not start", "never started",
         "did not start a script", "did not open a script",
     ),

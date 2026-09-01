@@ -136,7 +136,7 @@ def _check_beat_continuity(beat: Beat, enter: dict[str, object],
     the beat's own body is expected to reach by walking there, not points it
     is expected to already be standing on when it starts. `locations[0]` is,
     by the corpus's own authoring convention (every existing multi-point
-    beat in `chapters/{route1,kevlar}.py` lists the entry door/threshold
+    beat in `chapters/{ch02,ch03}.py` lists the entry door/threshold
     first), the one claim about *inherited* state: "this beat starts from
     here." That is the only claim continuity can check without re-deriving
     the beat's own walk plan, which is `chapter.py`'s reachability check's
@@ -318,7 +318,7 @@ class DivergenceError(RuntimeError):
     This is the one divergence class that fails a beat. Every other
     divergence -- a re-plan around a patrolling NPC, a leg the offline
     graph models differently from the engine -- is recorded in Q8's
-    contradiction ledger and carried, because `route1:B14` showed that
+    contradiction ledger and carried, because `CH02:B14` showed that
     blocking on ambiguous evidence truncates real work.
 
     **Built and recorded, not raised.** The check runs *after* `beat.run`

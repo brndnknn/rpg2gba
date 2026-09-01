@@ -23,9 +23,9 @@ def ok(emu) -> None:
 
 
 def install_chapter(name: str, chapter: Chapter) -> None:
-    module = types.ModuleType(f"{PKG}.{name}")
+    module = types.ModuleType(f"{PKG}.{name.lower()}")
     module.CHAPTER = chapter
-    sys.modules[f"{PKG}.{name}"] = module
+    sys.modules[f"{PKG}.{name.lower()}"] = module
 
 
 def install_builder(name: str, builder: ChapterBuilder) -> Chapter:
@@ -230,7 +230,7 @@ def test_singleton_name_colliding_with_explicit_group_raises() -> None:
 # -- predecessor-boundary group namespacing ------------------------------------
 
 def test_inherited_groups_are_namespaced_and_do_not_collide() -> None:
-    moki_builder = ChapterBuilder("moki", doc="reference/chapters/01-moki.md")
+    moki_builder = ChapterBuilder("CH01", doc="reference/chapters/01-moki.md")
 
     @moki_builder.beat("B1", "battle", group="mawuli")
     def m1(emu):
@@ -240,10 +240,10 @@ def test_inherited_groups_are_namespaced_and_do_not_collide() -> None:
     def m2(emu):
         pass
 
-    install_builder("moki", moki_builder)
+    install_builder("CH01", moki_builder)
 
     route1_builder = ChapterBuilder(
-        "route1", doc="reference/chapters/02-route-1.md", predecessor="moki")
+        "CH02", doc="reference/chapters/02-route-1.md", predecessor="CH01")
 
     @route1_builder.beat("B1", "own battle", group="mawuli")
     def r1(emu):
@@ -256,9 +256,9 @@ def test_inherited_groups_are_namespaced_and_do_not_collide() -> None:
     route1 = route1_builder.build()
     groups = route1.groups()
 
-    # Inherited group id is namespaced to "moki:mawuli", distinct from the
+    # Inherited group id is namespaced to "CH01:mawuli", distinct from the
     # local "mawuli" group -- no collision, and both stay contiguous.
     group_ids = [g.group_id for g in groups]
-    assert group_ids == ["moki:mawuli", "mawuli"]
-    assert groups[0].beats == ("moki:B1", "moki:B2")
+    assert group_ids == ["CH01:mawuli", "mawuli"]
+    assert groups[0].beats == ("CH01:B1", "CH01:B2")
     assert groups[1].beats == ("B1", "B2")

@@ -10,12 +10,12 @@ to `SLICE_MAP_IDS` on 2026-08-25 (`tileset_converter/map_set.py:35`, same day
 as this chapter's manifest approval), and `output/uranium-build/
 connections.json` now carries a real row for this seam:
 `[31, 'N', 11, 35, 'S', 0]` -- Map031 (Kevlar Town) has a real north
-connection to Map035 at offset 11. **`kevlar.py`'s B25 has not been updated
+connection to Map035 at offset 11. **`ch03.py`'s B25 has not been updated
 to reflect this and will very likely start failing once map 35 actually
 stages** (it currently asserts the opposite of what the wired connection
 should now do) -- flagged here because it's exactly the kind of cross-chapter
 regression this predecessor chain would otherwise hide; not fixed in this
-file, since B25 belongs to `kevlar.py`, not this module.
+file, since B25 belongs to `ch03.py`, not this module.
 
 **The Kevlar <-> Route 2 seam is an ARROW-WARP PAIR, not a connection**
 (2026-08-26). It was authored as a pokeemerald `connections` scroll-stitch,
@@ -26,7 +26,7 @@ exhausted (tile dedup already runs twice in `emit.py`, ~2 tiles left;
 pruning the 7 unreferenced metatiles frees 0 tiles, because every tile they
 touch is shared with a referenced metatile). The seam therefore renders
 garbage border metatiles as a connection -- visible in the first build's
-`kevlar:B25`/`B1` contact-sheet frames as checkerboarded tiles and solid
+`CH03:B25`/`B1` contact-sheet frames as checkerboarded tiles and solid
 orange blocks. User call: substitute a warp (`reference/seam_warps.json`).
 
 Mechanism: `MB_NORTH_ARROW_WARP` on Kevlar (31,0)/(32,0), `MB_SOUTH_ARROW_WARP`
@@ -78,7 +78,7 @@ checked 2026-08-25), not from the local-id-remapped space `object_event()`
 addresses. None of this chapter's NPCs are `MOVEMENT_TYPE_URANIUM_CUSTOM_
 ROUTE` patrols (every one checked below has `move_type: 0`, static), so no
 beat here needs `object_event()`/local ids at all -- every approach is a
-plain coordinate, unlike kevlar.py's Magikarp/Lou/Joe/Richard or route1.py's
+plain coordinate, unlike ch03.py's Magikarp/Lou/Joe/Richard or ch02.py's
 brother/Flood/Lynette.
 
 **Trainer battle triggers are RPG Maker "Event Touch" (trigger=2), not
@@ -87,7 +87,7 @@ Timothy's page 0) -- but their re-talk/defeated pages (Larrie's pages 1/2,
 Timothy's page 1) ARE trigger=0.** Checked directly against `Map035.json`,
 not assumed from the spec's "event-touch"/"talk to" prose. Since map 35 has
 never been transpiled (`unhandled: null`, CH04_TODO.md), how the transpiler
-actually converts a trigger=2 solid NPC is unconfirmed -- kevlar.py's finding
+actually converts a trigger=2 solid NPC is unconfirmed -- ch03.py's finding
 was that every trigger-driven NPC in ITS roster compiled to
 `TRAINER_TYPE_NONE` (plain `interact()`), but that finding is chapter-local
 and not assumed to generalize. `_trigger_trainer` below tries a bump first
@@ -107,7 +107,7 @@ currently-generated `output/uranium-build/trainers/trainer_manifest.json` --
 i.e. nothing today stages an engine-facing trainer id for Larrie's fight at
 all. Larrie's own page structure (self-switch A/B gating pages 2/1) strongly
 suggests his battle converts through the same phone-rematch/facility idiom
-kevlar.py's Mawuli (`_emit_facility_trainer_battle_idiom`) used rather than a
+ch03.py's Mawuli (`_emit_facility_trainer_battle_idiom`) used rather than a
 literal `trainerbattle_single`, which is plausibly why he isn't in the
 blocking-constants list -- but this is inference, not a confirmed fact, and
 per the task brief ("check what actually gets emitted before asserting a
@@ -156,7 +156,7 @@ walking north cannot reach unstaged data no matter what; the player gets two
 tiles of cave-mouth art and a wall. The real crossing into Passage Cave
 belongs to whichever chapter stages map 36 (CH05). B8 (the autorun) has NO live subject at all --
 nothing compiles for it this chapter -- so it is written but never
-registered, in the same unregistered-deferred-beat shape kevlar.py uses for
+registered, in the same unregistered-deferred-beat shape ch03.py uses for
 its Strength-gated cave content (`b19`-`b24`, `DEFERRED_BEATS`); see
 `b8_autorun_deferred` near the end of this module.
 
@@ -171,20 +171,20 @@ precondition anything else can produce), and the only way into page 1's body
 at all in the first place is a genuine PokeNav/Match-Call phone call
 (`createPhoneTrainer`/`customTrainerBattle`), which nothing in
 `playtest/emulator.py` knows how to drive (no menu-navigation primitive for
-PokeNav exists, unlike the mart menu `pokecenter.py`/kevlar.py's B11 already
+PokeNav exists, unlike the mart menu `pokecenter.py`/ch03.py's B11 already
 covers). There is also no `Emulator.set_flag`/self-switch-setter primitive
 to force the precondition directly the way `set_var` lets B17/N2 in
-kevlar.py force `VAR_HA_MAGIKARP` -- `Emulator` exposes `flag`/`var`/
+ch03.py force `VAR_HA_MAGIKARP` -- `Emulator` exposes `flag`/`var`/
 `set_var`, and nothing that writes a flag. Per the task brief ("encode it
-the way kevlar.py encodes a conditionally-reachable beat rather than
-inventing a mechanism"), this is written the same way kevlar.py's
+the way ch03.py encodes a conditionally-reachable beat rather than
+inventing a mechanism"), this is written the same way ch03.py's
 `b15_bike_wheel_deferred`/`b18_cry_boy_accept_deferred` are: a real function,
 never decorated, listed in `DEFERRED_BEATS` with the missing primitive named
 explicitly so a future PokeNav-driving primitive (or a `set_flag`) can
 resurrect it without re-deriving any of this.
 
 **B15's grass-cell coordinates are an unverified best-effort guess, flagged
-loudly.** Route 1's own `GRASS_CELL_A`/`GRASS_CELL_B` (route1.py) were
+loudly.** Route 1's own `GRASS_CELL_A`/`GRASS_CELL_B` (ch02.py) were
 picked by decoding real metatile-attribute bytes
 (`engine/data/tilesets/{primary,secondary}/uranium1033/
 metatile_attributes.bin`) against the compiled `Route01/map.bin`. No
@@ -200,9 +200,9 @@ the beat run) once map 35 boot-walks; if the corridor's actual grass tiles
 sit elsewhere, only `GRASS_CELL_A`/`GRASS_CELL_B` need to move, nothing else
 in the beat.
 
-**No wild encounter precedent existed in kevlar.py** (module docstring: "No
+**No wild encounter precedent existed in ch03.py** (module docstring: "No
 wild encounters anywhere in this chapter's roster"). B15 below is adapted
-from route1.py's B4 (`_walk_absorbing`-driven shuffle between two grass
+from ch02.py's B4 (`_walk_absorbing`-driven shuffle between two grass
 cells until `in_battle()`), the only existing wild-encounter beat in the
 corpus -- reusing its idiom, not inventing a new one, per the task brief.
 """
@@ -221,8 +221,8 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:  # runtime import is lazy so the registry works without bindings
     from ..emulator import Emulator
 
-route2 = ChapterBuilder("route2", doc="reference/chapters/04-route-2.md",
-                        predecessor="kevlar")
+ch04 = ChapterBuilder("CH04", doc="reference/chapters/04-route-2.md",
+                        predecessor="CH03")
 
 MAP_CONST = "MAP_ROUTE_02"  # assigned; zero-padded per MAP_ROUTE_01 -- see docstring
 
@@ -309,7 +309,7 @@ ITEM_BALL_ITEM = "ITEM_POTION"
 # dead code: it is the re-talk line, reached via `gotopostbattlescript` once
 # the trainer flag is set -- that is what B14 asserts. So there is no
 # `FLAG_MAP035_EVENT012_SSA` to read, and these beats read the native flag,
-# the same way route1.py's trainer beats always have.
+# the same way ch02.py's trainer beats always have.
 TIMOTHY_EVENT_ID = 12
 TIMOTHY_XY = (18, 47)
 TIMOTHY_APPROACH = (19, 47)
@@ -325,7 +325,7 @@ TIMOTHY_LOCAL_ID = 4
 # `reference/uranium_id_map.json:1976` -- NOT yet staged into
 # `trainer_converter/common.py`'s `SLICE_TRAINER_BATTLES` tuple or the
 # generated `trainer_manifest.json` (that's the open build-work item this
-# beat is written ahead of, same posture as kevlar.py referencing
+# beat is written ahead of, same posture as ch03.py referencing
 # TRAINER_MAWULI_90 before its own staging landed).
 TRAINER_TIMOTHY_CONST = "TRAINER_TIMOTHY_247"
 
@@ -416,7 +416,7 @@ BAREWL_TEXT = "Bare! Bar!"
 # tileset attribute data the docstring said did not exist for map 35 does
 # exist: `engine/data/tilesets/{primary,secondary}/uranium1035/
 # metatile_attributes.bin`, read against `Route02/map.bin` exactly the way
-# route1.py's cells were picked -- metatile id = block & 0x03FF, ids >= 512
+# ch02.py's cells were picked -- metatile id = block & 0x03FF, ids >= 512
 # index the secondary set, behavior = attr & 0x00FF, MB_TALL_GRASS = 2.
 #
 # The docstring's guess was wrong on both counts, and it said so itself.
@@ -437,13 +437,13 @@ LAND_MONS_MIN_LEVEL = 3
 LAND_MONS_MAX_LEVEL = 5
 
 
-# -- small local helpers, adapted from route1.py's absorption machinery -----
-# route1.py's `_walk_absorbing`/`_step_absorbing` were deliberately NOT
+# -- small local helpers, adapted from ch02.py's absorption machinery -----
+# ch02.py's `_walk_absorbing`/`_step_absorbing` were deliberately NOT
 # promoted to `assertions.py` (that module's own docstring: a map with no
 # wild encounters has no use for the machinery, and a future outdoor route
 # needs its own rate tuning). Route 2 is exactly that future outdoor route
 # -- `land_mons` rate 25, whole-corridor grass per the spec -- so this
-# module carries its own copy, tuned the same conservative way route1.py's
+# module carries its own copy, tuned the same conservative way ch02.py's
 # was, rather than reaching across chapter modules for a private helper.
 
 _at_map = assertions.at_map
@@ -456,7 +456,7 @@ _advance_to_battle = assertions.advance_to_battle
 _flag_ssa = assertions.flag_ssa
 
 
-#: Bound on `_walk_absorbing`'s incidental-battle retry loop. route1.py
+#: Bound on `_walk_absorbing`'s incidental-battle retry loop. ch02.py
 #: derived 12 from a Binomial(n=15, p=0.25) tail bound for its own longest
 #: plausible grass crossing; Route 2's `land_mons` rate (25) and corridor
 #: length are comparable in kind (a whole-corridor grass field, not a few
@@ -473,7 +473,7 @@ def _walk_absorbing(emu: Emulator, beat: str, tx: int, ty: int, *,
                     frame_budget: int = _WALK_ABSORBING_FRAME_BUDGET) -> None:
     """Walk to `(tx, ty)`, absorbing whichever kind(s) of incidental battle
     the caller declares, and handing control back the instant a battle of
-    the OTHER kind is detected. Byte-adapted from route1.py's own
+    the OTHER kind is detected. Byte-adapted from ch02.py's own
     `_walk_absorbing` (see its docstring for the full design rationale) --
     the only Route-2-specific change is the reused, not re-derived, retry
     bound (see `_MAX_ABSORBED_INTERRUPTIONS`)."""
@@ -505,7 +505,7 @@ def _walk_absorbing(emu: Emulator, beat: str, tx: int, ty: int, *,
 def _trainer_defeat_flag(trainer_const: str) -> str:
     """The engine's own defeat flag for a native `trainerbattle_single`
     trainer -- `TRAINER_FLAGS_START + <const>`, set inside the battle before
-    any script runs. Same helper route1.py has carried since CH02; route 2
+    any script runs. Same helper ch02.py has carried since CH02; route 2
     reached for `FLAG_MAP035_EVENT*_SSA` instead and that is what made every
     trainer beat in this chapter unpassable (see Timothy's comment above)."""
     return f"TRAINER_FLAGS_START + {trainer_const}"
@@ -517,7 +517,7 @@ def _trigger_trainer(emu: Emulator, beat: str, approach: tuple[int, int],
     tolerating either compiled trigger mechanism -- see module docstring
     ("Trainer battle triggers are RPG Maker Event Touch..."). Tries a bump
     (the literal Event-Touch reading) first; if that alone doesn't lock the
-    field or start a battle, falls back to `interact()` (kevlar.py's
+    field or start a battle, falls back to `interact()` (ch03.py's
     TRAINER_TYPE_NONE finding for its own roster). Only fails loud if
     NEITHER produces a battle."""
     _walk_absorbing(emu, beat, *approach, absorb_wild=True, absorb_trainer=False)
@@ -595,7 +595,7 @@ def _press_a_live(emu: Emulator, beat: str, local_id: int, facing: str,
     `facing` is the direction the PLAYER faces toward the NPC, as everywhere
     else in this module, so the approach tile is one step back along that
     vector. Retries on `interact()`'s own failure rather than a bespoke
-    position check, the same way route1.py's `_approach_moving_npc` does.
+    position check, the same way ch02.py's `_approach_moving_npc` does.
     """
     dx, dy = _DIR_VECTOR[facing]
     for _ in range(max_attempts):
@@ -629,7 +629,7 @@ def _settle_post_battle_script(emu: Emulator, beat: str, flag: str,
     flag before the writer has run.
 
     `if emu.field_locked(): emu.advance_dialog()` -- what B2/B4 did before
-    2026-08-26 -- is not enough either, and for a reason `kevlar.py` already
+    2026-08-26 -- is not enough either, and for a reason `ch03.py` already
     recorded once (its B4 comment, 2026-08-14: "this used to only check
     field_locked(), which is exactly what missed the scene's dropped
     completion tail"). Immediately after a battle ends the field lock can
@@ -661,7 +661,7 @@ def _settle_post_battle_script(emu: Emulator, beat: str, flag: str,
 
 # -- B1 ------------------------------------------------------------------
 
-@route2.beat("B1", "Crossing Kevlar Town's north seam lands on Route 2's "
+@ch04.beat("B1", "Crossing Kevlar Town's north seam lands on Route 2's "
                    "south edge",
              map_constant="MAP_KEVLAR_TOWN", at=KEVLAR_SEAM_ARROW)
 def b1(emu: Emulator) -> None:
@@ -699,7 +699,7 @@ def b1(emu: Emulator) -> None:
 # Before reordering these beats again, check sight cones and event-touch
 # tiles along the actual planned route, not just the endpoints.
 
-@route2.beat("B4", "Youngster Timothy's event-touch battle fires and is "
+@ch04.beat("B4", "Youngster Timothy's event-touch battle fires and is "
                    "won; self-switch A latches the defeated state (spec §3 "
                    "B4 / manifest map035/ev012/p0)",
              map_constant=MAP_CONST, at=TIMOTHY_APPROACH)
@@ -714,7 +714,7 @@ def b4(emu: Emulator) -> None:
     party = win_battle(emu)
     # No `_settle_post_battle_script` here, and none is needed: the native
     # trainer flag is set inside the battle, before any script runs (the
-    # reason route1.py's trainer beats can read it the instant `win_battle`
+    # reason ch02.py's trainer beats can read it the instant `win_battle`
     # returns). The settle helper exists for Larrie's self-switch, which IS
     # written by a post-battle continue script.
     if not emu.flag(defeat_flag):
@@ -739,7 +739,7 @@ def b4(emu: Emulator) -> None:
 # trainer who had despawned -- he is outside the object spawn window
 # from anywhere north of the rockslide, so `gObjectEvents` had no
 # entry to read. Measured 2026-08-27 on ROM `5953e98f`.) ------------
-@route2.beat("B14", "After B4, Timothy's defeated re-talk shows the "
+@ch04.beat("B14", "After B4, Timothy's defeated re-talk shows the "
                     "'impossible' line (spec §3.1 B14 / manifest "
                     "map035/ev012/p1)",
              map_constant=MAP_CONST, at=TIMOTHY_APPROACH)
@@ -759,7 +759,7 @@ def b14(emu: Emulator) -> None:
 
 # -- B2 ------------------------------------------------------------------
 
-@route2.beat("B2", "Hiker Larrie's event-touch battle fires and is won; "
+@ch04.beat("B2", "Hiker Larrie's event-touch battle fires and is won; "
                    "self-switch A latches the defeated state (spec §3 B2 / "
                    "manifest map035/ev003/p0)",
              map_constant=MAP_CONST, at=LARRIE_APPROACH)
@@ -782,7 +782,7 @@ def b2(emu: Emulator) -> None:
 
 # -- B3 ------------------------------------------------------------------
 
-@route2.beat("B3", "The item ball at (16,42) grants one Potion, once "
+@ch04.beat("B3", "The item ball at (16,42) grants one Potion, once "
                    "(spec §3 B3 / manifest map035/ev009/p0)",
              map_constant=MAP_CONST, at=ITEM_BALL_APPROACH)
 def b3(emu: Emulator) -> None:
@@ -806,7 +806,7 @@ def b3(emu: Emulator) -> None:
 
 # -- B5 ------------------------------------------------------------------
 
-@route2.beat("B5", "Reading the roadblock hint sign shows the Passage Cave "
+@ch04.beat("B5", "Reading the roadblock hint sign shows the Passage Cave "
                    "detour text (spec §3 B5 / manifest map035/ev013/p0)",
              map_constant=MAP_CONST, at=SIGN_ROADBLOCK_APPROACH)
 def b5(emu: Emulator) -> None:
@@ -820,7 +820,7 @@ def b5(emu: Emulator) -> None:
 
 # -- B6 ------------------------------------------------------------------
 
-@route2.beat("B6", "The rockslide gate: rocks 14 and 17 refuse to smash "
+@ch04.beat("B6", "The rockslide gate: rocks 14 and 17 refuse to smash "
                    "(Rock Smash unobtainable this chapter) and stay solid "
                    "(spec §3 B6, §3.1 -- exactly these two rows, the only "
                    "attemptable rocks on visit 1)",
@@ -866,7 +866,7 @@ def b6(emu: Emulator) -> None:
 
 # -- B7 ------------------------------------------------------------------
 
-@route2.beat("B7", "The cave-mouth tile is walkable and inert this chapter: "
+@ch04.beat("B7", "The cave-mouth tile is walkable and inert this chapter: "
                    "the whole event (id 1 'EV001', both pages) is dropped -- "
                    "its only code-201 warp targets unstaged Map036, and "
                    "`metadata_wiring.classify_event` skips the WHOLE event on "
@@ -948,7 +948,7 @@ def b8_autorun_deferred(emu: Emulator) -> None:
 
 # -- B9 ------------------------------------------------------------------
 
-@route2.beat("B9", "The 'Old entrance to Nowtoch City' sign at (19,34) "
+@ch04.beat("B9", "The 'Old entrance to Nowtoch City' sign at (19,34) "
                    "shows its sign-frame text (spec §3.1 B9 / manifest "
                    "map035/ev002/p0) -- not id 8 'Sign' @(19,33), which is "
                    "an empty, cosmetic page",
@@ -977,7 +977,7 @@ def b10_phone_rematch_deferred(emu: Emulator) -> None:
     2. Even granting (1), there is no `Emulator.set_flag`/self-switch-setter
        primitive to force the state directly (`Emulator` exposes `flag`/
        `var`/`set_var`, and nothing that writes a flag) -- unlike
-       kevlar.py's B17/N2, which force `VAR_HA_MAGIKARP` via `set_var`
+       ch03.py's B17/N2, which force `VAR_HA_MAGIKARP` via `set_var`
        because that primitive exists.
 
     Written in the expected shape anyway so a future PokeNav-driving
@@ -996,7 +996,7 @@ def b10_phone_rematch_deferred(emu: Emulator) -> None:
 
 # -- B11 -----------------------------------------------------------------
 
-@route2.beat("B11", "After B2, Larrie's defeated re-talk shows the caves "
+@ch04.beat("B11", "After B2, Larrie's defeated re-talk shows the caves "
                     "warning (spec §3.1 B11 / manifest map035/ev003/p2)",
              map_constant=MAP_CONST, at=LARRIE_APPROACH)
 def b11(emu: Emulator) -> None:
@@ -1015,7 +1015,7 @@ def b11(emu: Emulator) -> None:
 
 # -- B12 -----------------------------------------------------------------
 
-@route2.beat("B12", "After B3, re-touching the item ball grants no second "
+@ch04.beat("B12", "After B3, re-touching the item ball grants no second "
                     "Potion (spec §3.1 B12 / manifest map035/ev009/p1, "
                     "the one-shot assertion for B3)",
              map_constant=MAP_CONST, at=ITEM_BALL_APPROACH)
@@ -1041,7 +1041,7 @@ def b12(emu: Emulator) -> None:
 
 # -- B13 -----------------------------------------------------------------
 
-@route2.beat("B13", "The Barewl beside Larrie shows its text (spec §3.1 "
+@ch04.beat("B13", "The Barewl beside Larrie shows its text (spec §3.1 "
                     "B13 / manifest map035/ev011/p0). Only the text is "
                     "asserted -- the emote bubble (`pbCallBub(2)`) and the "
                     "cry SE ('015Cry') have no read primitive on `Emulator` "
@@ -1060,7 +1060,7 @@ def b13(emu: Emulator) -> None:
 
 # -- B15 -----------------------------------------------------------------
 
-@route2.beat("B15", "Wild grass south of the rockslide produces a "
+@ch04.beat("B15", "Wild grass south of the rockslide produces a "
                     "land_mons encounter, species/level per "
                     "wild_encounters.json (spec §3.1 B15 -- no manifest "
                     "row; an encounter table is neither an event page nor "
@@ -1071,12 +1071,12 @@ def b13(emu: Emulator) -> None:
                  BeatLocation(MAP_CONST, GRASS_CELL_B[0], GRASS_CELL_B[1], "grass cell B"),
              ))
 def b15(emu: Emulator) -> None:
-    # Adapted from route1.py's B4, the corpus's only existing wild-encounter
+    # Adapted from ch02.py's B4, the corpus's only existing wild-encounter
     # beat -- see module docstring for why the two grass-cell coordinates
     # themselves are an unverified guess, not decoded tileset data.
     _walk_absorbing(emu, "B15", *GRASS_CELL_A,
                     absorb_wild=False, absorb_trainer=True)
-    max_attempts = 80  # rate 25 -- P(80 misses) < 1e-8, same bound route1.py used
+    max_attempts = 80  # rate 25 -- P(80 misses) < 1e-8, same bound ch02.py used
     for _ in range(max_attempts):
         if in_battle(emu):
             break
@@ -1122,7 +1122,7 @@ def b15(emu: Emulator) -> None:
 # -- deferred beats -----------------------------------------------------------
 #
 # Written, reviewed, deliberately NOT registered. Same convention as
-# kevlar.py's `DEFERRED_BEATS`: kept as ready-made regression tests for
+# ch03.py's `DEFERRED_BEATS`: kept as ready-made regression tests for
 # whichever future chapter/patch closes the gap.
 
 DEFERRED_BEATS = (
@@ -1159,4 +1159,4 @@ ALL_CONSTANTS: tuple[str, ...] = (
     + TRAINER_CONSTANTS
 )
 
-CHAPTER = route2.build()
+CHAPTER = ch04.build()
