@@ -52,7 +52,6 @@ reachability rule and how a multi-point beat is interpreted.
 from __future__ import annotations
 
 import importlib
-import json
 import logging
 import os
 import pkgutil
@@ -62,6 +61,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..chapter_manifest.archetypes import ARCHETYPE_NAMES
 from ..tileset_converter.map_constants import MapConstantRegistry
 
 if TYPE_CHECKING:  # runtime import is lazy so the registry works without bindings
@@ -122,6 +122,13 @@ class Beat:
     locations: tuple[BeatLocation, ...] = ()
     group: str | None = None
     rows: tuple[str, ...] = ()
+    # Which recognized RPG Maker event archetype (`chapter_manifest.
+    # archetypes.ARCHETYPE_NAMES`) this beat claims to be exercising, or
+    # None for a beat that isn't one of the four recognized shapes. Feeds
+    # `playtest.archetypes.ChapterArchetypeModel`, the concrete adapter for
+    # `chapter_manifest.checker.ArchetypeModel` -- see that Protocol's
+    # docstring for why the checker itself never imports `playtest`.
+    archetype: str | None = None
 
 
 @dataclass(frozen=True)
@@ -215,7 +222,7 @@ def _prefix_beat(owner: str, beat: Beat) -> Beat:
     return Beat(name=f"{owner}:{beat.name}",
                 description=f"[{owner}] {beat.description}", run=beat.run,
                 locations=beat.locations, group=prefixed_group,
-                rows=beat.rows)
+                rows=beat.rows, archetype=beat.archetype)
 
 
 @dataclass
@@ -233,6 +240,7 @@ class ChapterBuilder:
              locations: tuple[BeatLocation, ...] | None = None,
              group: str | None = None,
              rows: tuple[str, ...] = (),
+             archetype: str | None = None,
              ) -> Callable[[BeatFn], BeatFn]:
         """Register a beat, optionally declaring where it triggers.
 
@@ -248,6 +256,16 @@ class ChapterBuilder:
           shape, e.g. `"map035/ev014/p1"` or `"map035/seam/NORTH/map036"`)
           this beat exercises, letting the solver derive page-precedence
           constraints. Validated against those shapes at registration time.
+        - `archetype=`: which recognized RPG Maker event archetype
+          (`chapter_manifest.archetypes.ARCHETYPE_NAMES` -- "trainer",
+          "item_ball", "warp", "arrival_nudge") this beat claims to be
+          exercising, or `None` (the default) for a beat that isn't one of
+          the four recognized shapes. Feeds `playtest.archetypes.
+          ChapterArchetypeModel`, which the checker's
+          `RULE_ARCHETYPE_CONFORMANCE` uses to confirm a `beat`-
+          dispositioned archetype row actually has a beat claiming it, not
+          just a disposition saying it does (the B14 shape). Validated
+          against `ARCHETYPE_NAMES` at registration time.
 
         Two mutually exclusive ways to declare location:
 
@@ -300,6 +318,11 @@ class ChapterBuilder:
                 f"got {group!r}")
         for row in rows:
             _validate_row_id(row, beat_name=name)
+        if archetype is not None and archetype not in ARCHETYPE_NAMES:
+            raise ValueError(
+                f"beat {name!r}: archetype={archetype!r} is not one of "
+                f"{sorted(ARCHETYPE_NAMES)} (chapter_manifest.archetypes."
+                "ARCHETYPE_NAMES)")
 
         shorthand_given = map_constant is not None or at is not None
         if shorthand_given and locations is not None:
@@ -322,7 +345,8 @@ class ChapterBuilder:
         def decorate(fn: BeatFn) -> BeatFn:
             self._beats.append(Beat(name=name, description=description,
                                     run=fn, locations=resolved_locations,
-                                    group=group, rows=rows))
+                                    group=group, rows=rows,
+                                    archetype=archetype))
             return fn
 
         return decorate

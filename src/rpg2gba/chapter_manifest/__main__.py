@@ -24,6 +24,7 @@ import click
 
 from . import checker
 from .approach_model import GraphApproachModel
+from .archetype_model import build_archetype_model
 from .dispositions import disposition_path, load_dispositions
 from .generator import generate_chapter_manifest, write_manifest
 from .route_model import build_route_model
@@ -38,6 +39,33 @@ DEFAULT_CHAPTERS_PATH = Path("reference") / "chapters.json"
 
 def _manifest_path(chapter: str) -> Path:
     return MANIFESTS_DIR / f"{chapter}.manifest.json"
+
+
+def _is_live_chapter(chapter: str, chapters_path: Path) -> bool:
+    """True unless `chapters.json` records this chapter's `status` as
+    ``"built"`` -- i.e. true for a chapter still being authored, false once
+    it has passed its §9 boot-walk gate. Drives `checker.RULE_ARCHETYPE_
+    CONFORMANCE`'s severity (`checker.check_chapter`'s `live_chapter`
+    docstring).
+
+    Falls back to `check_chapter`'s own default (False, gated/warning) with
+    a logged warning when the chapter id isn't in `chapters.json` at all --
+    e.g. a synthetic/test chapter id never registered there. That is a
+    real gap (a chapter this checker has never heard of), but it must not
+    make `check` itself unusable for such a chapter; the archetype rule
+    degrading to its quieter severity is the same shape as every other
+    `*_UNENFORCED` rule here rather than a hard failure of an unrelated
+    command.
+    """
+    with chapters_path.open(encoding="utf-8") as f:
+        data = json.load(f)
+    for entry in data.get("chapters", []):
+        if entry.get("id") == chapter:
+            return entry.get("status") != "built"
+    logger.warning(
+        "%s: no chapter %r found; defaulting RULE_ARCHETYPE_CONFORMANCE to "
+        "gated/warning severity", chapters_path, chapter)
+    return False
 
 
 def load_manifest(path: Path) -> list[ManifestRow]:
@@ -110,8 +138,12 @@ def generate_cmd(chapter: str, manifest: Path | None, build_dir: Path,
               type=click.Path(exists=True, path_type=Path), default=None,
               help="Route plan JSON path, for the route-order rule "
                    "(default: reference/routes/<chapter>.route.json)")
+@click.option("--chapters", "chapters_path", type=click.Path(exists=True, path_type=Path),
+              default=DEFAULT_CHAPTERS_PATH,
+              help="Chapter/map chain JSON, for archetype-conformance severity "
+                   "(default: reference/chapters.json)")
 def check_cmd(chapter: str, manifest: Path | None, dispositions_path_opt: Path | None,
-              build_dir: Path, route_path_opt: Path | None) -> None:
+              build_dir: Path, route_path_opt: Path | None, chapters_path: Path) -> None:
     """Check a chapter's manifest against its dispositions; nonzero exit on error."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -129,8 +161,11 @@ def check_cmd(chapter: str, manifest: Path | None, dispositions_path_opt: Path |
     approach = GraphApproachModel(
         chapter, maps_dir=build_dir / "maps", tilesets_json=build_dir / "tilesets.json")
     route = build_route_model(chapter, route=route_path_opt)
+    archetype_model = build_archetype_model(chapter)
+    live_chapter = _is_live_chapter(chapter, chapters_path)
     findings = checker.check_chapter(
-        rows, dispositions, approach=approach, route=route)
+        rows, dispositions, approach=approach, route=route,
+        archetype_model=archetype_model, live_chapter=live_chapter)
 
     if not findings:
         click.echo(f"chapter {chapter}: OK ({len(rows)} rows)")

@@ -288,6 +288,26 @@ def test_beat_argument_must_look_like_a_beat_label() -> None:
         Disposition.parse("row", "beat:the one with the boulder")
 
 
+def test_archetype_exempt_rejects_empty_reason() -> None:
+    with pytest.raises(DispositionError, match="non-empty"):
+        Disposition(row_id="row", verdict="beat", argument="B14", archetype_exempt="")
+
+
+def test_archetype_exempt_rejects_whitespace_only_reason() -> None:
+    with pytest.raises(DispositionError, match="non-empty"):
+        Disposition(row_id="row", verdict="beat", argument="B14", archetype_exempt="   ")
+
+
+def test_archetype_exempt_round_trips_with_a_reason() -> None:
+    disp = Disposition(
+        row_id="row", verdict="beat", argument="B14",
+        archetype_exempt="12-head gym-7 handler; no parameter makes this a standard trainer",
+    )
+    assert disp.archetype_exempt == (
+        "12-head gym-7 handler; no parameter makes this a standard trainer"
+    )
+
+
 def test_row_ids_are_stable_and_zero_padded() -> None:
     assert page_row_id(35, 3, 1) == "map035/ev003/p1"
     assert seam_row_id(35, "n", 40) == "map035/seam/N/map040"

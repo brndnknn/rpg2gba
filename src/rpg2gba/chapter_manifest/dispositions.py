@@ -19,8 +19,9 @@ File shape — a JSON object mapping ``row_id`` to either:
   ``"blocked:rock_smash"`` — the common case, kept to one line per row; or
 * an object ``{"disposition": "...", "source": "...",
   "affirmed_hash": "...", "assertable": true, "negative_beat": "...",
-  "note": "..."}`` when the row also carries a citation, an affirmed content
-  hash, an assertability judgment, or a free-text note.
+  "note": "...", "archetype_exempt": "..."}`` when the row also carries a
+  citation, an affirmed content hash, an assertability judgment, a free-text
+  note, or an archetype-conformance opt-out reason.
 
 Both forms parse into `schema.Disposition` via `Disposition.parse`, which
 already validates the verdict and its argument — this module does not
@@ -90,7 +91,10 @@ def _parse_entry(path: Path, row_id: str, entry: Any) -> Disposition:
             )
         rest = {
             key: entry[key]
-            for key in ("source", "affirmed_hash", "note", "assertable", "negative_beat")
+            for key in (
+                "source", "affirmed_hash", "note", "assertable", "negative_beat",
+                "archetype_exempt",
+            )
             if key in entry
         }
         try:
@@ -111,9 +115,9 @@ def write_dispositions(dispositions: dict[str, Disposition], path: Path) -> None
     exists for tooling that helps a human author affirm hashes (e.g. a
     "stamp the current content_hash onto every row I already decided"
     helper), so the output is meant to be re-read, hand-edited, and
-    re-written without spurious diffs: sorted keys, indent 2, trailing
-    newline, and the compact string form whenever a row carries nothing but
-    a verdict/argument.
+    re-written without spurious diffs: rows sorted by row_id, indent 2,
+    trailing newline, and the compact string form whenever a row carries
+    nothing but a verdict/argument.
     """
     payload: dict[str, Any] = {}
     for row_id in sorted(dispositions):
@@ -121,17 +125,25 @@ def write_dispositions(dispositions: dict[str, Disposition], path: Path) -> None
         extras = {
             key: value
             for key, value in (
-                ("source", disp.source),
                 ("affirmed_hash", disp.affirmed_hash),
+                ("source", disp.source),
                 ("assertable", disp.assertable),
                 ("negative_beat", disp.negative_beat),
                 ("note", disp.note),
+                ("archetype_exempt", disp.archetype_exempt),
             )
             if value is not None
         }
         payload[row_id] = disp.spec if not extras else {"disposition": disp.spec, **extras}
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
+    # No `sort_keys=True`: that sorts nested object keys too (`affirmed_hash`
+    # before `disposition` alphabetically), which is not the field order
+    # this function actually writes and would make every fresh write diverge
+    # from a file this function wrote before. Row order is already sorted by
+    # the loop above (`payload`'s insertion order IS row-id order), and each
+    # row's own key order is deliberately `disposition` first, extras after
+    # -- insertion order preserves both without re-sorting either.
+    text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
     path.write_text(text, encoding="utf-8")
     logger.info("wrote %d disposition(s) to %s", len(dispositions), path)

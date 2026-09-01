@@ -1,0 +1,407 @@
+{
+  "_header": {
+    "authored": "2026-09-01",
+    "authored_before_classifier_existed": true,
+    "purpose": "Frozen expected archetype-classifier output, written before archetypes.py existed so the derive-vs-freeze diff means something (CLAUDE.md standing safeguard).",
+    "sources": {
+      "CH04": "reference/manifests/CH04.manifest.json + reference/manifests/CH04.dispositions.json (committed, gate-passed, hand-authored). map035/ev001/p1 is the arrival_nudge fingerprint's first verified instance, dispositioned beat:B8.",
+      "CH05": "PLAYTEST_AUTHORING_IMPROVEMENT_V2.md §4b.5, a verbatim exhaustive hand worklist compiled 2026-08-27 covering Map036 (8 events/14 pages) and Map037 (8 events/9 pages). No CH05 manifest existed at authoring time (maps 36/37 may never have been staged through the transpiler) -- CH05 matches below are DERIVED FROM PROSE ONLY, not from real ManifestRow content, so their params (trigger, phone, rider, double) are best-effort inference from the described idiom shape, not verified byte-exact the way CH04's are."
+    },
+    "known_prose_arithmetic_note": "The §4b.5 worklist's stated page totals (Map036: 14, Map037: 9) do not cleanly reconcile against a literal per-bullet page count derived here (Map036 sums to 15 across ev1 cave-exit(1) + ev2 door/warp+nudge(2) + 4 trainer/item-ball-style events... ); left as-is rather than silently adjusted -- if CH05 is ever generated for real, the derived output is the tiebreaker, not this file.",
+    "map037_staircases_caveat": "ev3/ev6/ev7/ev8 on Map037 are described in the source worklist as event pages, but the generator absorbed diagonal-stair events into `terrain` rows on 2026-09-01 (after the worklist was written). Expectation: these should NOT appear as `kind==\"page\"` rows in a freshly generated CH05 manifest at all. If they do, the generator's terrain-absorption regressed -- report loudly per task instructions.",
+    "resolutions": [
+      {
+        "date": "2026-09-01",
+        "what": "CH05 params adopted from the real derivation",
+        "why": "CH05's maps 36/37 turned out to be staged, so a real manifest generated. The prose freeze could not know page triggers and honestly recorded them as null. Structure matched exactly; only the unknowable params differed. _header.known_prose_arithmetic_note already prescribed the derived output as tiebreaker in this case."
+      },
+      {
+        "date": "2026-09-01",
+        "what": "`rider` recomputed on both chapters after _RIDER_TAGS narrowed to {giveitem}",
+        "why": "The frozen value came from a spec error, not from the source data: `rider` originally included `self_switch_write`, which every pbTrainerBattle page 0 writes to gate its re-talk page, making the param constant-True and non-discriminating. It now tracks the V2 census axis it was meant to: an item grant folded into the battle page."
+      }
+    ]
+  },
+  "CH04": {
+    "matches": [
+      {
+        "archetype": "warp",
+        "map_id": 35,
+        "event_id": 1,
+        "params": {
+          "trigger": "player_touch"
+        },
+        "roles": {
+          "map035/ev001/p0": "warp"
+        },
+        "prescribed": {
+          "map035/ev001/p0": "beat"
+        }
+      },
+      {
+        "archetype": "arrival_nudge",
+        "map_id": 35,
+        "event_id": 1,
+        "params": {},
+        "roles": {
+          "map035/ev001/p1": "nudge"
+        },
+        "prescribed": {
+          "map035/ev001/p1": "beat"
+        }
+      },
+      {
+        "archetype": "trainer",
+        "map_id": 35,
+        "event_id": 3,
+        "params": {
+          "trigger": "event_touch",
+          "phone": true,
+          "double": false,
+          "retalk_pages": 2,
+          "rider": false
+        },
+        "roles": {
+          "map035/ev003/p0": "battle",
+          "map035/ev003/p1": "retalk",
+          "map035/ev003/p2": "retalk"
+        },
+        "prescribed": {
+          "map035/ev003/p0": "beat",
+          "map035/ev003/p1": "beat",
+          "map035/ev003/p2": "beat"
+        }
+      },
+      {
+        "archetype": "item_ball",
+        "map_id": 35,
+        "event_id": 9,
+        "params": {},
+        "roles": {
+          "map035/ev009/p0": "grant",
+          "map035/ev009/p1": "spent"
+        },
+        "prescribed": {
+          "map035/ev009/p0": "beat",
+          "map035/ev009/p1": "cosmetic"
+        }
+      },
+      {
+        "archetype": "trainer",
+        "map_id": 35,
+        "event_id": 12,
+        "params": {
+          "trigger": "event_touch",
+          "phone": false,
+          "double": false,
+          "retalk_pages": 1,
+          "rider": false
+        },
+        "roles": {
+          "map035/ev012/p0": "battle",
+          "map035/ev012/p1": "retalk"
+        },
+        "prescribed": {
+          "map035/ev012/p0": "beat",
+          "map035/ev012/p1": "beat"
+        }
+      },
+      {
+        "archetype": "trainer",
+        "map_id": 35,
+        "event_id": 23,
+        "params": {
+          "trigger": "event_touch",
+          "phone": true,
+          "double": false,
+          "retalk_pages": 2,
+          "rider": false
+        },
+        "roles": {
+          "map035/ev023/p0": "battle",
+          "map035/ev023/p1": "retalk",
+          "map035/ev023/p2": "retalk"
+        },
+        "prescribed": {
+          "map035/ev023/p0": "beat",
+          "map035/ev023/p1": "beat",
+          "map035/ev023/p2": "beat"
+        }
+      },
+      {
+        "archetype": "trainer",
+        "map_id": 35,
+        "event_id": 24,
+        "params": {
+          "trigger": "event_touch",
+          "phone": false,
+          "double": false,
+          "retalk_pages": 1,
+          "rider": false
+        },
+        "roles": {
+          "map035/ev024/p0": "battle",
+          "map035/ev024/p1": "retalk"
+        },
+        "prescribed": {
+          "map035/ev024/p0": "beat",
+          "map035/ev024/p1": "beat"
+        }
+      },
+      {
+        "archetype": "item_ball",
+        "map_id": 35,
+        "event_id": 25,
+        "params": {},
+        "roles": {
+          "map035/ev025/p0": "grant",
+          "map035/ev025/p1": "spent"
+        },
+        "prescribed": {
+          "map035/ev025/p0": "beat",
+          "map035/ev025/p1": "cosmetic"
+        }
+      },
+      {
+        "archetype": "item_ball",
+        "map_id": 35,
+        "event_id": 26,
+        "params": {},
+        "roles": {
+          "map035/ev026/p0": "grant",
+          "map035/ev026/p1": "spent"
+        },
+        "prescribed": {
+          "map035/ev026/p0": "beat",
+          "map035/ev026/p1": "cosmetic"
+        }
+      }
+    ],
+    "expected_no_archetype_match_row_ids": [
+      "map035/ev002/p0",
+      "map035/ev008/p0",
+      "map035/ev011/p0",
+      "map035/ev013/p0",
+      "map035/ev014/p0",
+      "map035/ev014/p1",
+      "map035/ev015/p0",
+      "map035/ev015/p1",
+      "map035/ev016/p0",
+      "map035/ev016/p1",
+      "map035/ev017/p0",
+      "map035/ev017/p1",
+      "map035/ev018/p0",
+      "map035/ev018/p1",
+      "map035/ev019/p0",
+      "map035/ev019/p1",
+      "map035/ev020/p0",
+      "map035/ev020/p1",
+      "map035/ev021/p0",
+      "map035/ev021/p1",
+      "map035/ev022/p0",
+      "map035/ev022/p1"
+    ],
+    "skipped_non_page_row_ids": [
+      "map035/seam/N/map040",
+      "map035/seam/S/map031"
+    ]
+  },
+  "CH05": {
+    "note": "Structure (archetype / event / roles / prescribed) was frozen from prose before the classifier existed and was reproduced exactly by the derivation. The `params` values were adopted from the 2026-09-01 derivation AFTER that diff was taken and recorded -- see _header.resolutions.",
+    "matches": [
+      {
+        "archetype": "warp",
+        "map_id": 36,
+        "event_id": 1,
+        "params": {
+          "trigger": "player_touch"
+        },
+        "roles": {
+          "map036/ev001/p0": "warp"
+        },
+        "prescribed": {
+          "map036/ev001/p0": "beat"
+        }
+      },
+      {
+        "archetype": "warp",
+        "map_id": 36,
+        "event_id": 2,
+        "params": {
+          "trigger": "player_touch"
+        },
+        "roles": {
+          "map036/ev002/p0": "warp"
+        },
+        "prescribed": {
+          "map036/ev002/p0": "beat"
+        }
+      },
+      {
+        "archetype": "arrival_nudge",
+        "map_id": 36,
+        "event_id": 2,
+        "params": {},
+        "roles": {
+          "map036/ev002/p1": "nudge"
+        },
+        "prescribed": {
+          "map036/ev002/p1": "beat"
+        }
+      },
+      {
+        "archetype": "item_ball",
+        "map_id": 36,
+        "event_id": 3,
+        "params": {},
+        "roles": {
+          "map036/ev003/p0": "grant",
+          "map036/ev003/p1": "spent"
+        },
+        "prescribed": {
+          "map036/ev003/p0": "beat",
+          "map036/ev003/p1": "cosmetic"
+        }
+      },
+      {
+        "archetype": "trainer",
+        "map_id": 36,
+        "event_id": 4,
+        "params": {
+          "trigger": "event_touch",
+          "phone": false,
+          "double": false,
+          "retalk_pages": 1,
+          "rider": false
+        },
+        "roles": {
+          "map036/ev004/p0": "battle",
+          "map036/ev004/p1": "retalk"
+        },
+        "prescribed": {
+          "map036/ev004/p0": "beat",
+          "map036/ev004/p1": "beat"
+        }
+      },
+      {
+        "archetype": "item_ball",
+        "map_id": 36,
+        "event_id": 5,
+        "params": {},
+        "roles": {
+          "map036/ev005/p0": "grant",
+          "map036/ev005/p1": "spent"
+        },
+        "prescribed": {
+          "map036/ev005/p0": "beat",
+          "map036/ev005/p1": "cosmetic"
+        }
+      },
+      {
+        "archetype": "trainer",
+        "map_id": 36,
+        "event_id": 6,
+        "params": {
+          "trigger": "event_touch",
+          "phone": false,
+          "double": false,
+          "retalk_pages": 1,
+          "rider": false
+        },
+        "roles": {
+          "map036/ev006/p0": "battle",
+          "map036/ev006/p1": "retalk"
+        },
+        "prescribed": {
+          "map036/ev006/p0": "beat",
+          "map036/ev006/p1": "beat"
+        }
+      },
+      {
+        "archetype": "item_ball",
+        "map_id": 36,
+        "event_id": 8,
+        "params": {},
+        "roles": {
+          "map036/ev008/p0": "grant",
+          "map036/ev008/p1": "spent"
+        },
+        "prescribed": {
+          "map036/ev008/p0": "beat",
+          "map036/ev008/p1": "cosmetic"
+        }
+      },
+      {
+        "archetype": "item_ball",
+        "map_id": 36,
+        "event_id": 9,
+        "params": {},
+        "roles": {
+          "map036/ev009/p0": "grant",
+          "map036/ev009/p1": "spent"
+        },
+        "prescribed": {
+          "map036/ev009/p0": "beat",
+          "map036/ev009/p1": "cosmetic"
+        }
+      },
+      {
+        "archetype": "warp",
+        "map_id": 37,
+        "event_id": 1,
+        "params": {
+          "trigger": "player_touch"
+        },
+        "roles": {
+          "map037/ev001/p0": "warp"
+        },
+        "prescribed": {
+          "map037/ev001/p0": "beat"
+        }
+      },
+      {
+        "archetype": "warp",
+        "map_id": 37,
+        "event_id": 2,
+        "params": {
+          "trigger": "player_touch"
+        },
+        "roles": {
+          "map037/ev002/p0": "warp"
+        },
+        "prescribed": {
+          "map037/ev002/p0": "beat"
+        }
+      },
+      {
+        "archetype": "trainer",
+        "map_id": 37,
+        "event_id": 4,
+        "params": {
+          "trigger": "event_touch",
+          "phone": false,
+          "double": false,
+          "retalk_pages": 1,
+          "rider": false
+        },
+        "roles": {
+          "map037/ev004/p0": "battle",
+          "map037/ev004/p1": "retalk"
+        },
+        "prescribed": {
+          "map037/ev004/p0": "beat",
+          "map037/ev004/p1": "beat"
+        }
+      }
+    ],
+    "expected_no_archetype_match_events": [
+      "map037/ev005"
+    ],
+    "expected_absent_page_rows_terrain_absorbed": [
+      "map037/ev003/*",
+      "map037/ev006/*",
+      "map037/ev007/*",
+      "map037/ev008/*"
+    ]
+  }
+}

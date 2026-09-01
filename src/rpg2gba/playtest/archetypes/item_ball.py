@@ -1,0 +1,158 @@
+"""The `item_ball` archetype beat template.
+
+Page 0 is the grant; page 1 is the "already spent" re-touch, prescribed
+`cosmetic` by `chapter_manifest.archetypes` (module docstring:
+`ArchetypeMatch.prescribed`) -- the operator decision of 2026-09-01 is that
+`cosmetic` means **no beat by default**. `negative_beat=True` promotes it to
+a real "re-touch grants nothing a second time" beat.
+
+The self-switch letter that gates the spent page is read from the manifest
+row itself (`ManifestRow.condition.self_switch_ch`), not hardcoded to "A" --
+`_match_item_ball` requires it to be set for the archetype to match at all
+(`chapter_manifest/archetypes.py`), so it is always present on a match.
+"""
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING
+
+from .. import assertions
+from ..cells import approach_to, event_cell
+from ..errors import ScenarioError
+from . import find_match, load_chapter_rows
+
+if TYPE_CHECKING:  # runtime import is lazy so this module works without bindings
+    from ...chapter_manifest.schema import ManifestRow
+    from ..chapter import ChapterBuilder
+    from ..emulator import Emulator
+
+logger = logging.getLogger(__name__)
+
+_DIR_TOWARD: dict[tuple[int, int], str] = {
+    (1, 0): "RIGHT", (-1, 0): "LEFT", (0, 1): "DOWN", (0, -1): "UP",
+}
+
+
+def _facing_toward(approach: tuple[int, int], target: tuple[int, int]) -> str:
+    delta = (target[0] - approach[0], target[1] - approach[1])
+    facing = _DIR_TOWARD.get(delta)
+    if facing is None:
+        raise ValueError(
+            f"item_ball_beats: approach {approach} is not orthogonally "
+            f"adjacent to target {target} (delta {delta})"
+        )
+    return facing
+
+
+def item_ball_beats(
+    builder: ChapterBuilder,
+    *,
+    chapter_id: str,
+    map_constant: str,
+    map_id: int,
+    event_id: int,
+    item: str,
+    beat_prefix: str,
+    negative_beat: bool = False,
+    approach_prefer: str | None = None,
+    manifest_rows: "tuple[ManifestRow, ...] | None" = None,
+    manifest_dir=None,
+) -> None:
+    """Register an `item_ball` archetype's grant beat, and its spent-page
+    negative beat if `negative_beat=True`.
+
+    `item` (a plain `ITEM_*` constant string) is author-supplied -- the
+    manifest's `ArchetypeMatch.params` for `item_ball` is empty
+    (`chapter_manifest/archetypes.py`), because which item a `giveitem`
+    call grants is not something a `ManifestRow`'s effect tags carry, only
+    that one is granted at all. There is nothing to validate this against;
+    only the self-switch gating and the approach/facing geometry are
+    manifest-derived here.
+    """
+    match = find_match(
+        chapter_id, map_id, event_id, "item_ball",
+        rows=manifest_rows, manifest_dir=manifest_dir,
+    )
+    grant_row_id = next(rid for rid, role in match.roles.items() if role == "grant")
+    spent_row_id = next(rid for rid, role in match.roles.items() if role == "spent")
+
+    rows = manifest_rows if manifest_rows is not None else load_chapter_rows(
+        chapter_id, manifest_dir=manifest_dir)
+    row_by_id = {r.row_id: r for r in rows}
+    spent_row = row_by_id.get(spent_row_id)
+    if spent_row is None or spent_row.condition is None \
+            or spent_row.condition.self_switch_ch is None:
+        raise ValueError(
+            f"item_ball_beats: {map_constant} event {event_id}: spent row "
+            f"{spent_row_id!r} carries no self_switch_ch -- "
+            "chapter_manifest.archetypes._match_item_ball should have "
+            "refused to match this event at all if that's true; this is "
+            "unreachable unless the manifest and the classifier disagree"
+        )
+    letter = spent_row.condition.self_switch_ch
+    ssa = assertions.flag_ssa(map_id, event_id, letter)
+
+    approach = approach_to(map_constant, event_id, prefer=approach_prefer)
+    facing = _facing_toward(approach, event_cell(map_constant, event_id))
+
+    @builder.beat(
+        f"{beat_prefix}_grant",
+        f"The item ball at {map_constant} event {event_id} grants "
+        f"{item} once (manifest {grant_row_id})",
+        map_constant=map_constant, at=approach,
+        archetype="item_ball", rows=(grant_row_id,),
+    )
+    def grant_beat(emu: Emulator) -> None:
+        if emu.flag(ssa):
+            raise ScenarioError(
+                f"{beat_prefix}_grant precondition failed: {ssa} already "
+                "set before the pickup"
+            )
+        bag_before = emu.bag_item_quantity(item)
+        emu.walk_to(*approach)
+        emu.face(facing)
+        emu.interact()
+        emu.advance_dialog()
+        if not emu.flag(ssa):
+            shot = emu.screenshot(f"{beat_prefix}_grant_no_ssa")
+            raise ScenarioError(
+                f"{beat_prefix}_grant: {ssa} not set after the pickup ({shot})"
+            )
+        bag_after = emu.bag_item_quantity(item)
+        if bag_after != bag_before + 1:
+            shot = emu.screenshot(f"{beat_prefix}_grant_bag_unchanged")
+            raise ScenarioError(
+                f"{beat_prefix}_grant: self-switch {ssa} was set but "
+                f"{item} did not reach the bag ({bag_before} -> "
+                f"{bag_after}, expected +1) ({shot})"
+            )
+
+    if negative_beat:
+        @builder.beat(
+            f"{beat_prefix}_spent",
+            f"Re-touching the spent item ball at {map_constant} event "
+            f"{event_id} grants nothing (manifest {spent_row_id})",
+            map_constant=map_constant, at=approach,
+            archetype="item_ball", rows=(spent_row_id,),
+        )
+        def spent_beat(emu: Emulator) -> None:
+            if not emu.flag(ssa):
+                raise ScenarioError(
+                    f"{beat_prefix}_spent precondition failed: {ssa} not "
+                    "set -- the grant beat must run first"
+                )
+            bag_before = emu.bag_item_quantity(item)
+            emu.walk_to(*approach)
+            emu.face(facing)
+            emu.interact()
+            emu.advance_dialog()
+            bag_after = emu.bag_item_quantity(item)
+            if bag_after != bag_before:
+                shot = emu.screenshot(f"{beat_prefix}_spent_regranted")
+                raise ScenarioError(
+                    f"{beat_prefix}_spent: re-touching the spent ball "
+                    f"changed {item} ({bag_before} -> {bag_after}), "
+                    f"expected no change ({shot})"
+                )
+
+        del spent_beat

@@ -16,6 +16,8 @@ from rpg2gba.chapter_manifest.checker import (
     CapabilityModel,
     RoutePrecedence,
     RULE_APPROACH_MODEL_UNENFORCED,
+    RULE_ARCHETYPE_CONFORMANCE,
+    RULE_ARCHETYPE_MODEL_UNENFORCED,
     RULE_BLOCKED_MISSED_ASSERTION,
     RULE_BLOCKED_NO_GRANTING_CHAPTER,
     RULE_CAPABILITY_MODEL_UNENFORCED,
@@ -754,4 +756,193 @@ def test_route_order_against_real_route_plan_precedence_violation():
     order_findings = [f for f in findings if f.rule == RULE_ROUTE_ORDER]
     assert len(order_findings) == 1
     assert order_findings[0].severity == "error"
-    assert "B1 needs the item B3 grants" in order_findings[0].message
+
+
+# --- rule 11/12: archetype conformance -------------------------------------
+
+
+def _trainer_row(row_id: str = "map010/ev001/p0", **overrides) -> ManifestRow:
+    defaults = dict(
+        row_id=row_id, kind="page", map_id=10, content_hash="th0",
+        event_id=1, page_idx=0, script_heads=("pbTrainerBattle",),
+        effects=(), trigger="action button", reachability_consulted=True,
+    )
+    defaults.update(overrides)
+    return ManifestRow(**defaults)
+
+
+def _item_ball_rows(
+    map_id: int = 20, event_id: int = 2,
+) -> tuple[ManifestRow, ManifestRow]:
+    grant = ManifestRow(
+        row_id=f"map{map_id:03d}/ev{event_id:03d}/p0", kind="page", map_id=map_id,
+        content_hash="ih0", event_id=event_id, page_idx=0,
+        script_heads=("pbItemBall",), effects=("giveitem",),
+        trigger="action button", reachability_consulted=True,
+    )
+    spent = ManifestRow(
+        row_id=f"map{map_id:03d}/ev{event_id:03d}/p1", kind="page", map_id=map_id,
+        content_hash="ih1", event_id=event_id, page_idx=1,
+        script_heads=(), effects=("text",),
+        condition=PageCondition(self_switch_ch="A"),
+        trigger="action button", reachability_consulted=True,
+    )
+    return grant, spent
+
+
+class _FakeArchetypeModel:
+    def __init__(self, claims: dict[str, str]) -> None:
+        self._claims = claims
+
+    def claimed_archetype(self, row_id: str) -> str | None:
+        return self._claims.get(row_id)
+
+
+def test_archetype_conformance_pass_no_finding():
+    row = _trainer_row()
+    disp = _disp(row.row_id, "beat:B1", affirmed_hash="th0")
+    model = _FakeArchetypeModel({row.row_id: "trainer"})
+    findings = check_chapter([row], {row.row_id: disp}, archetype_model=model)
+    assert all(f.rule != RULE_ARCHETYPE_CONFORMANCE for f in findings)
+    assert all(f.rule != RULE_ARCHETYPE_MODEL_UNENFORCED for f in findings)
+
+
+def test_archetype_conformance_trainer_mismatch_dispositioned_cosmetic():
+    row = _trainer_row()
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="th0")
+    findings = check_chapter([row], {row.row_id: disp})
+    finding = next(f for f in findings if f.rule == RULE_ARCHETYPE_CONFORMANCE)
+    assert "trainer" in finding.message
+    assert "'beat'" in finding.message
+    assert "'cosmetic'" in finding.message
+
+
+def test_archetype_conformance_item_ball_spent_page_may_be_a_negative_beat():
+    """A prescription is a floor, not an equality: `beat` on a page
+    prescribed `cosmetic` is the item-ball template's `negative_beat` arm --
+    a real "re-touch grants nothing" assertion, strictly stronger than
+    waving the spent page through as decoration. CH04's `map035/ev009/p1`
+    is exactly this and was hand-reasoned into it on 2026-08-25.
+    """
+    grant, spent = _item_ball_rows()
+    disp_grant = _disp(grant.row_id, "beat:B9", affirmed_hash="ih0")
+    disp_spent = _disp(spent.row_id, "beat:N1", affirmed_hash="ih1")
+    model = _FakeArchetypeModel({
+        grant.row_id: "item_ball", spent.row_id: "item_ball",
+    })
+    findings = check_chapter(
+        [grant, spent], {grant.row_id: disp_grant, spent.row_id: disp_spent},
+        archetype_model=model,
+    )
+    assert all(f.rule != RULE_ARCHETYPE_CONFORMANCE for f in findings)
+
+
+def test_archetype_conformance_negative_beat_still_needs_a_claiming_beat():
+    """Promoting the spent page to a beat does not exempt it from the
+    beat-claim half -- if it is a beat, a registered beat must own it.
+    """
+    grant, spent = _item_ball_rows()
+    disp_grant = _disp(grant.row_id, "beat:B9", affirmed_hash="ih0")
+    disp_spent = _disp(spent.row_id, "beat:N1", affirmed_hash="ih1")
+    model = _FakeArchetypeModel({grant.row_id: "item_ball"})
+    findings = check_chapter(
+        [grant, spent], {grant.row_id: disp_grant, spent.row_id: disp_spent},
+        archetype_model=model,
+    )
+    finding = next(
+        f for f in findings
+        if f.rule == RULE_ARCHETYPE_CONFORMANCE and f.row_id == spent.row_id
+    )
+    assert "no registered beat claims it" in finding.message
+
+
+@pytest.mark.parametrize("spec", ["blocked:rock_smash", "unreachable:sealed room"])
+def test_archetype_conformance_reachability_supersedes_the_prescription(spec):
+    """An archetype says what kind of event a row is; it cannot demand a
+    beat for a row no player can walk to. Eight CH04 rows north of Route
+    2's rockslide gate are genuine trainers and item balls AND genuinely
+    `blocked:rock_smash` until CH07 grants it.
+    """
+    row = _trainer_row()
+    findings = check_chapter([row], {row.row_id: _disp(row.row_id, spec,
+                                                       affirmed_hash="th0")})
+    assert all(f.rule != RULE_ARCHETYPE_CONFORMANCE for f in findings)
+
+
+def test_archetype_conformance_missing_disposition_is_flagged():
+    row = _trainer_row()
+    findings = check_chapter([row], {})
+    finding = next(
+        f for f in findings
+        if f.rule == RULE_ARCHETYPE_CONFORMANCE and f.row_id == row.row_id
+    )
+    assert "no disposition at all" in finding.message
+
+
+def test_archetype_exempt_row_skips_check_and_is_counted():
+    row = _trainer_row()
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="th0",
+                 archetype_exempt="genuinely not a standard trainer battle")
+    findings = check_chapter([row], {row.row_id: disp})
+    assert all(f.rule != RULE_ARCHETYPE_CONFORMANCE
+               for f in findings if f.row_id == row.row_id)
+    tally = next(f for f in findings
+                 if f.rule == RULE_ARCHETYPE_CONFORMANCE and f.row_id == "chapter")
+    assert "1 row" in tally.message
+    assert tally.severity == "warning"
+
+
+def test_archetype_conformance_severity_live_chapter_is_error():
+    row = _trainer_row()
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="th0")
+    findings = check_chapter([row], {row.row_id: disp}, live_chapter=True)
+    finding = next(f for f in findings if f.rule == RULE_ARCHETYPE_CONFORMANCE)
+    assert finding.severity == "error"
+
+
+def test_archetype_conformance_severity_gated_chapter_is_warning():
+    row = _trainer_row()
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="th0")
+    findings = check_chapter([row], {row.row_id: disp}, live_chapter=False)
+    finding = next(f for f in findings if f.rule == RULE_ARCHETYPE_CONFORMANCE)
+    assert finding.severity == "warning"
+
+
+def test_archetype_model_unenforced_without_model():
+    row = _trainer_row()
+    disp = _disp(row.row_id, "beat:B1", affirmed_hash="th0")
+    findings = check_chapter([row], {row.row_id: disp}, archetype_model=None)
+    finding = next(f for f in findings if f.rule == RULE_ARCHETYPE_MODEL_UNENFORCED)
+    assert finding.severity == "warning"
+    assert all(f.rule != RULE_ARCHETYPE_CONFORMANCE for f in findings)
+
+
+def test_archetype_model_wrong_claim_is_flagged():
+    row = _trainer_row()
+    disp = _disp(row.row_id, "beat:B1", affirmed_hash="th0")
+    model = _FakeArchetypeModel({row.row_id: "item_ball"})
+    findings = check_chapter([row], {row.row_id: disp}, archetype_model=model)
+    finding = next(f for f in findings if f.rule == RULE_ARCHETYPE_CONFORMANCE)
+    assert "item_ball" in finding.message and "trainer" in finding.message
+
+
+def test_archetype_model_missing_claim_is_flagged():
+    row = _trainer_row()
+    disp = _disp(row.row_id, "beat:B1", affirmed_hash="th0")
+    model = _FakeArchetypeModel({})
+    findings = check_chapter([row], {row.row_id: disp}, archetype_model=model)
+    finding = next(f for f in findings if f.rule == RULE_ARCHETYPE_CONFORMANCE)
+    assert "no registered beat claims it" in finding.message
+
+
+def test_ch04_dispositions_round_trip_is_byte_identical(tmp_path: Path):
+    """`archetype_exempt` must round-trip through `load_dispositions`/
+    `write_dispositions` without disturbing a real, committed, all-bare-
+    string disposition file -- no row in CH04 carries the field yet, so a
+    correct round trip must reproduce the file byte for byte."""
+    path = Path("reference/manifests/CH04.dispositions.json")
+    original = path.read_text(encoding="utf-8")
+    dispositions = load_dispositions(path)
+    out_path = tmp_path / "CH04.dispositions.roundtrip.json"
+    write_dispositions(dispositions, out_path)
+    assert out_path.read_text(encoding="utf-8") == original

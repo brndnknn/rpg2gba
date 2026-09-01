@@ -17,6 +17,7 @@ from ..text_validator.engine_metrics import load_charmap
 from ..tileset_converter.map_constants import DEFAULT_STATE_PATH as _DEFAULT_MAP_CONSTANTS_STATE
 from ..tileset_converter.map_constants import MapConstantRegistry
 from ..traversal.graph import MapGraph, build_map_graph
+from .charmap import invert_charmap_english_first
 from .contact_sheet import Waypoint
 from .contradictions import (
     KIND_UNRESOLVED_MAP,
@@ -403,32 +404,6 @@ def decode_text_bytes(data: bytes, byte_to_char: dict[int, str]) -> str:
         i += 1
 
 
-def _invert_charmap_english_first(char_to_byte: dict[str, int]) -> dict[int, str]:
-    """Build byte -> literal-char from `engine_metrics.Charmap.char_to_byte`.
-
-    Cannot be a blind `dict` inversion: `engine/charmap.txt` reuses the same
-    byte range for more than one glyph set (the Latin table, then a `@
-    Hiragana` section starting partway through the file that maps different
-    characters onto the same bytes, e.g. byte 0x01 is both 'À' and 'あ').
-    `load_charmap` parses the whole file, so `char_to_byte` legitimately holds
-    both -- correct for the forward (char -> byte) direction
-    `engine_metrics` needs, wrong for reverse decoding if taken blind (dict
-    inversion keeps whichever key was inserted *last*, i.e. the Japanese
-    entry, for a shared byte).
-
-    This build's ROM prints English (`ENG`, not `JPN` -- see
-    `_EXT_CTRL_OPERAND_LEN`), so the Latin section, which appears first in
-    the file, is what's on screen. Iterating `char_to_byte` in (insertion)
-    file order and keeping only the *first* char seen per byte recovers
-    exactly that section.
-    """
-    byte_to_char: dict[int, str] = {}
-    for char, byte in char_to_byte.items():
-        if byte not in byte_to_char:
-            byte_to_char[byte] = char
-    return byte_to_char
-
-
 def _read_object_event_slot(emu, base: int) -> ObjectEventState | None:
     """Decode one `gObjectEvents` slot starting at `base`, or None if the
     slot isn't active.
@@ -653,9 +628,9 @@ class Emulator:
         # active_printer_texts) -- reuses text_validator.engine_metrics'
         # charmap.txt parser (one source of truth for the char<->byte table,
         # CLAUDE.md §4.3) rather than a second parser, then locally inverts
-        # it; see `_invert_charmap_english_first` for why that inversion
+        # it; see `playtest.charmap` for why that inversion
         # can't be a blind dict-reverse.
-        self._byte_to_char = _invert_charmap_english_first(
+        self._byte_to_char = invert_charmap_english_first(
             load_charmap(engine / "charmap.txt").char_to_byte
         )
         self._text_frame: "object | None" = None

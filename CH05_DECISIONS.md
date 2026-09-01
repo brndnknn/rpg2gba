@@ -28,7 +28,7 @@ that existed (`360eaf60`). Update this table when an item lands; do not trust th
 | D3 — operator read-through as a named gate step | **built** 2026-09-01 | `BUILD_PLAN.md` step 5 READ; `reference/guides/read_through_checklist.md` |
 | B2 — `blocked:surf` derived by the route finder | **built** 2026-09-01 | `generator._CHAPTER_MAP_START_CELLS` + `reference/frozen/ch05_surf_expectations.json`; authoring the 4 dispositions belongs to CH05's build |
 | D2 — bidirectional `DEFERRED_*` registration rule | **not built** | `RULE_ORPHAN_DISPOSITION` checks something else |
-| D4 — Tier-1 archetype templates | **not built** | incl. the 324-instance arrival-nudge |
+| D4 — Tier-1 archetype templates | **built** 2026-09-01 | `chapter_manifest/archetypes.py` (classifier) + `playtest/archetypes/` (4 templates) + `RULE_ARCHETYPE_CONFORMANCE`; Tier 1 is **four** members, not six — see below |
 | D6 — per-chapter input fingerprint | **not built** | generator hashes pages/connections only |
 | E1 — chapter id → playtest module | **built** 2026-09-01 | modules renamed to chapter ids: `chapters/ch0{1,2,3,4}.py`; `PROJECT_TODO.md` Done #66 |
 | E2 — CH05 route plan | **not built** | `reference/routes/` does not exist |
@@ -422,6 +422,57 @@ accept a second corpus-wide retrofit later.
 #### Answer
 
 Option 1
+
+#### BUILT 2026-09-01 — four templates, not five, and the prescription is a floor
+
+Shipped as `chapter_manifest/archetypes.py` (fingerprint classifier, a pure function of
+`ManifestRow`), `playtest/archetypes/` (`trainer`, `item_ball`, `warp`, `arrival_nudge` templates +
+`ChapterArchetypeModel`), `RULE_ARCHETYPE_CONFORMANCE` + `ArchetypeModel` in `checker.py`,
+`Disposition.archetype_exempt`, and `chapter_manifest/archetype_model.py` wiring the two together in
+the CLI. Frozen expectations: `reference/frozen/archetype_expectations.json`.
+
+**Four Tier-1 members, not the six listed above.** The **staircase left the page world entirely**
+when [B1](#b1-the-four-staircases--the-vocabulary-has-no-correct-verdict) landed on 2026-09-01 —
+Map037's four staircases are `terrain` rows now, so there is nothing for a page template to claim
+(independently confirmed: CH05's generated manifest carries 4 terrain rows and no staircase page
+rows). And the **cave exit folded into the warp template as a parameter** rather than becoming a
+fifth template: `ManifestRow` cannot distinguish a cave exit from a door — the code-201 destination
+is not on the row — and the axis that actually varies is which navigation helper applies
+(`enter_door` / `cross_threshold` / `cross_arrow_warp`), which is the beat author's parameter, not a
+classification. That is Q0 rule 2 ("extend by parameter, never fork") working as intended.
+
+**Two operator calls made at build time.** `archetype_exempt` is a field on the disposition row, not
+a call in the chapter module — the exemption is a claim *about a manifest row*, it must work for rows
+with no beat and for gated chapters that predate templates, and it keeps `checker.py` from importing
+`playtest`. And the item ball's spent page is `cosmetic` by default with a `negative_beat=True`
+parameter promoting it to a real "re-touch grants nothing" beat.
+
+**The prescription is a floor on strength, not an equality — and CH04 taught us that.** Run with `!=`,
+the rule reported 10 findings against CH04's committed, gate-passed dispositions, and all 10 were the
+rule's error:
+
+- 8 rows are genuine trainers and item balls north of Route 2's rockslide gate, correctly
+  `blocked:rock_smash` until CH07. An archetype says what *kind* of event a row is; it cannot demand a
+  beat for a row no player can walk to. `blocked:` / `unreachable:` supersede the prescription.
+- `map035/ev009/p1` is a deliberate negative beat whose note already recorded the definition it was
+  reclassified under on 2026-08-25: *"cosmetic means no trigger to press, not merely no state write."*
+  That is the `negative_beat` arm, hand-derived a week before templates existed, so `beat` satisfies a
+  `cosmetic` prescription.
+
+What remains is the pair worth erroring on: a row with **no disposition at all** (the B14 shape) and a
+load-bearing archetype page **waved through as decoration**. CH04 now reports 0 archetype errors;
+CH05, generated and undispositioned, reports 19 errors, all "no disposition at all".
+
+**Standing debt, counted not silent:** with the beat-claim half wired, CH04 reports 9 warnings for
+rows whose beats exist but predate templates and so carry no `archetype=`. Warnings rather than errors
+because CH04 is gated — the decided "ERROR on the live chapter, counted debt elsewhere" behaviour.
+
+**Two corrections to the record this produced.** CH05's maps 36/37 **are** staged — its manifest
+generates for real, so C1's `unhandled: null` arm does not apply to it. And **Uranium's source
+contains no U+2019 anywhere**: the curly apostrophe commit `2a4e4b61` dodged is manufactured by our own
+decoder, because `engine/charmap.txt:91-92` defines byte `B4` twice (`’` then `'`) and the inverter
+keeps the first. `playtest/text_source.py` now normalizes source text through that same table, so the
+character cannot be dodged; the inversion lives in one place (`playtest/charmap.py`) instead of two.
 
 ### D5. Q2 — `oracle=` on beats
 

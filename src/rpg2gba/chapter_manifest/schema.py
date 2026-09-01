@@ -382,6 +382,16 @@ class Disposition:
     # negative beat CAN be written and the act of writing one are different
     # steps. Requires `assertable is True`.
     negative_beat: str | None = None
+    # An instance can be genuinely special and legitimately refuse the
+    # archetype `archetypes.classify_manifest` would otherwise prescribe for
+    # it (RULE_ARCHETYPE_CONFORMANCE, checker.py). When set, this is the
+    # REASON the row opts out -- not a boolean, because a boolean opt-out is
+    # exactly the un-greppable rubber stamp this field exists to prevent: a
+    # `True` says nothing about why, so nothing stops it from being pasted
+    # onto the next row a human doesn't feel like arguing about. A row's
+    # exemption is counted corpus-wide (checker.py), so growth in this field
+    # is visible, not quiet drift.
+    archetype_exempt: str | None = None
 
     def __post_init__(self) -> None:
         if self.verdict not in _VERDICTS:
@@ -420,6 +430,11 @@ class Disposition:
                     f"{self.row_id}: {self.negative_beat!r} is not a beat name; beat "
                     "ids are labels like 'B12' or 'N3'"
                 )
+        if self.archetype_exempt is not None and not self.archetype_exempt.strip():
+            raise DispositionError(
+                f"{self.row_id}: 'archetype_exempt' must be a non-empty, non-"
+                "whitespace reason, not the rubber stamp an empty string would be"
+            )
 
     @property
     def spec(self) -> str:

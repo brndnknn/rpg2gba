@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
+from .archetypes import classify_manifest
 from .schema import Disposition, ManifestRow
 
 Severity = Literal["error", "warning"]
@@ -45,6 +46,8 @@ RULE_APPROACH_MODEL_UNENFORCED = "approach_model_unenforced"
 RULE_REACHABILITY_UNENFORCED = "reachability_unenforced"
 RULE_ROUTE_ORDER = "route_order"
 RULE_ROUTE_MODEL_UNENFORCED = "route_model_unenforced"
+RULE_ARCHETYPE_CONFORMANCE = "archetype_conformance"
+RULE_ARCHETYPE_MODEL_UNENFORCED = "archetype_model_unenforced"
 
 
 class CapabilityModel(Protocol):
@@ -165,6 +168,33 @@ class RouteModel(Protocol):
         ...
 
 
+class ArchetypeModel(Protocol):
+    """The seam `RULE_ARCHETYPE_CONFORMANCE`'s beat-registry half plugs into.
+
+    Classification itself (`archetypes.classify_manifest`) lives in this
+    package and is imported directly -- it is a pure function of
+    `ManifestRow`, no seam needed. But "is there a registered beat that
+    actually claims this row, tagged with this archetype?" is a fact about
+    the playtest chapter modules, and `checker.py` deliberately does not
+    import `rpg2gba.playtest` or `rpg2gba.routing` at module load (same
+    discipline as `CapabilityModel`/`ApproachModel`/`RouteModel`). The CLI's
+    concrete adapter walks a chapter's registered beats and their declared
+    archetype tags to answer this.
+    """
+
+    def claimed_archetype(self, row_id: str) -> str | None:
+        """The archetype name a registered beat claims for `row_id`, or None
+        if no registered beat claims it at all.
+
+        A value that disagrees with `archetypes.classify_manifest`'s own
+        verdict for the row (or is None where a claim was expected) is what
+        `RULE_ARCHETYPE_CONFORMANCE` reports -- the row's disposition head
+        can be correct while the beat that owns it is still tagged wrong or
+        missing, and that gap is invisible without this model.
+        """
+        ...
+
+
 def check_chapter(
     rows: list[ManifestRow],
     dispositions: dict[str, Disposition],
@@ -172,6 +202,8 @@ def check_chapter(
     capabilities: CapabilityModel | None = None,
     approach: ApproachModel | None = None,
     route: RouteModel | None = None,
+    archetype_model: ArchetypeModel | None = None,
+    live_chapter: bool = False,
 ) -> list[Finding]:
     """Check one chapter's generated rows against its authored dispositions.
 
@@ -179,6 +211,16 @@ def check_chapter(
     the module docstring on why this module does not read the manifest
     file itself). `dispositions` is `row_id -> Disposition`, as returned by
     `dispositions.load_dispositions`.
+
+    `live_chapter` governs `RULE_ARCHETYPE_CONFORMANCE`'s severity: True for
+    the chapter currently being authored (ERROR), False for a chapter
+    already through its §9 boot-walk gate (WARNING). This module does not
+    read `reference/chapters.json` itself -- same file-I/O discipline as
+    `capabilities`/`approach`/`route` -- so the caller derives it (the CLI
+    reads a chapter's `status` field there: `"built"` means gated, anything
+    else means live) and passes the bool through. Defaults to False
+    (gated/warning) rather than True, so a caller that forgets to pass it
+    does not retroactively turn every already-gated chapter's manifest red.
     """
     findings: list[Finding] = []
     rows_by_id = {row.row_id: row for row in rows}
@@ -407,7 +449,168 @@ def check_chapter(
     else:
         findings.extend(_check_route_order(route))
 
+    findings.extend(
+        _check_archetype_conformance(
+            rows, dispositions, archetype_model=archetype_model, live_chapter=live_chapter
+        )
+    )
+
     findings.sort(key=lambda f: (f.row_id, f.rule))
+    return findings
+
+
+def _check_archetype_conformance(
+    rows: list[ManifestRow],
+    dispositions: dict[str, Disposition],
+    *,
+    archetype_model: ArchetypeModel | None,
+    live_chapter: bool,
+) -> list[Finding]:
+    """`RULE_ARCHETYPE_CONFORMANCE`: does every row a recognized archetype
+    covers carry a verdict at least as strong as the archetype prescribes,
+    and (for `beat` rows) is a registered beat actually claiming it as that
+    archetype?
+
+    "At least as strong" and not "equal to" -- see the floor-semantics
+    comment in the loop below for the two legitimate departures and the
+    CH04 evidence for each.
+
+    Severity mirrors `PRE_MANIFEST_CHAPTER`'s reasoning: a chapter already
+    through its §9 boot-walk gate passed under rules that predate this one,
+    so a brand-new rule going straight to ERROR on old, already-approved
+    content is a false alarm, not a regression -- and a permanently-red
+    check is one people learn to scroll past. A chapter still being
+    authored gets ERROR, because there nothing has been approved yet and
+    the whole point is to catch the B14 shape before it ships.
+    """
+    severity: Severity = "error" if live_chapter else "warning"
+    findings: list[Finding] = []
+    exempt_count = 0
+
+    for match in classify_manifest(rows):
+        for row_id, prescribed in match.prescribed.items():
+            role = match.roles[row_id]
+            disp = dispositions.get(row_id)
+
+            if disp is not None and disp.archetype_exempt:
+                exempt_count += 1
+                continue
+
+            if disp is None:
+                findings.append(Finding(
+                    row_id=row_id,
+                    rule=RULE_ARCHETYPE_CONFORMANCE,
+                    message=(
+                        f"row is the {role!r} page of a {match.archetype!r} "
+                        f"archetype, which prescribes {prescribed!r}, but the row "
+                        "carries no disposition at all -- a disposition pass "
+                        "skipped a row that was on the page the whole time (the "
+                        "B14 shape); disposition it or set archetype_exempt with "
+                        "a reason"
+                    ),
+                    severity=severity,
+                ))
+                continue
+
+            # A prescription is a FLOOR ON STRENGTH, not an equality. Two
+            # kinds of legitimate departure exist, and both were found on
+            # CH04's committed, gate-passed dispositions on 2026-09-01, when
+            # this compared with `!=` and reported 10 rows that were all
+            # correctly authored:
+            #
+            #   * `blocked:` / `unreachable:` supersede the prescription
+            #     entirely. Reachability is a different question from what
+            #     kind of event this is: eight rows north of Route 2's
+            #     rockslide gate are genuine trainers and item balls AND
+            #     genuinely unreachable until CH07 grants Rock Smash. An
+            #     archetype cannot demand a beat for a row no player can
+            #     walk to.
+            #   * `beat` satisfies a `cosmetic` prescription. That is the
+            #     item-ball template's `negative_beat` arm -- a real
+            #     "re-touch grants nothing" assertion is strictly stronger
+            #     than waving the spent page through as decoration.
+            #     `map035/ev009/p1` is exactly this, and its note records
+            #     the definition it was reclassified under on 2026-08-25:
+            #     "cosmetic means no trigger to press, not merely no state
+            #     write."
+            #
+            # What remains is the pair actually worth erroring on: a row
+            # with no disposition at all (above), and a load-bearing
+            # archetype page waved away as decoration (below).
+            if disp.verdict in ("blocked", "unreachable"):
+                continue
+
+            if prescribed == "beat" and disp.verdict == "cosmetic":
+                findings.append(Finding(
+                    row_id=row_id,
+                    rule=RULE_ARCHETYPE_CONFORMANCE,
+                    message=(
+                        f"row is the {role!r} page of a {match.archetype!r} "
+                        "archetype, which prescribes 'beat', but it is "
+                        f"dispositioned {disp.spec!r} -- an archetype page that "
+                        "carries the chapter's mechanics is being waved through "
+                        "as decoration; write the beat, or set archetype_exempt "
+                        "with a reason if this instance is genuinely special"
+                    ),
+                    severity=severity,
+                ))
+                continue
+
+            if disp.verdict != "beat":
+                continue
+
+            if archetype_model is None:
+                findings.append(Finding(
+                    row_id=row_id,
+                    rule=RULE_ARCHETYPE_MODEL_UNENFORCED,
+                    message=(
+                        f"row is the {role!r} page of a {match.archetype!r} "
+                        "archetype and correctly dispositioned 'beat', but "
+                        "whether a registered beat actually claims it as that "
+                        "archetype could not be checked because no archetype "
+                        "model was supplied (this rule is unenforced without one)"
+                    ),
+                    severity="warning",
+                ))
+                continue
+
+            claimed = archetype_model.claimed_archetype(row_id)
+            if claimed != match.archetype:
+                claim_desc = (
+                    f"is claimed as {claimed!r} instead" if claimed is not None
+                    else "no registered beat claims it"
+                )
+                findings.append(Finding(
+                    row_id=row_id,
+                    rule=RULE_ARCHETYPE_CONFORMANCE,
+                    message=(
+                        f"row is the {role!r} page of a {match.archetype!r} "
+                        f"archetype and dispositioned {disp.spec!r}, but "
+                        f"{claim_desc} -- register the beat that owns this row "
+                        f"with archetype={match.archetype!r}"
+                    ),
+                    severity=severity,
+                ))
+
+    # Reported only when non-zero -- an empty/no-match chapter has nothing to
+    # tally, and a bare `Finding(..., 0)` on every call would turn every
+    # clean chapter's `findings == []` expectation into a false positive.
+    # Absence already reads as "0" (see the report this rule feeds); a
+    # nonzero count is exactly the "visible growth, not quiet drift" signal
+    # the field exists for.
+    if exempt_count:
+        findings.append(Finding(
+            row_id="chapter",
+            rule=RULE_ARCHETYPE_CONFORMANCE,
+            message=(
+                f"{exempt_count} row(s) opted out of archetype conformance via "
+                "archetype_exempt this chapter (corpus baseline: 2, "
+                "map141/ev025/p0 and map131/ev003/*) -- tracked so a new "
+                "exemption is visible growth, not quiet drift"
+            ),
+            severity="warning",
+        ))
+
     return findings
 
 

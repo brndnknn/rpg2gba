@@ -1,6 +1,7 @@
 """Tests for the playtest harness's dialogue-text-content primitive
-(`src/rpg2gba/playtest/emulator.py`'s `decode_text_bytes` /
-`_invert_charmap_english_first`).
+(`src/rpg2gba/playtest/emulator.py`'s `decode_text_bytes`, and the charmap
+inversion it decodes through, `playtest/charmap.py`'s
+`invert_charmap_english_first`).
 
 `decode_text_bytes` is a pure function -- bytes in, decoded string out, no
 mgba/ROM/memory access -- specifically so it can be unit-tested hard without
@@ -135,10 +136,12 @@ def test_unmapped_byte_fails_loud_not_silently_dropped() -> None:
 def real_byte_to_char() -> dict[int, str]:
     if not (ENGINE / "charmap.txt").is_file():
         pytest.skip("engine/charmap.txt not present")
-    from rpg2gba.playtest.emulator import _invert_charmap_english_first
+    # Lives in `playtest/charmap.py`, not `emulator.py`, precisely so this
+    # fixture does not need mgba installed to build the table.
+    from rpg2gba.playtest.charmap import invert_charmap_english_first
     from rpg2gba.text_validator.engine_metrics import load_charmap
 
-    return _invert_charmap_english_first(
+    return invert_charmap_english_first(
         load_charmap(ENGINE / "charmap.txt").char_to_byte
     )
 
