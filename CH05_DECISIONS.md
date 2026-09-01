@@ -29,7 +29,7 @@ that existed (`360eaf60`). Update this table when an item lands; do not trust th
 | B2 — `blocked:surf` derived by the route finder | **built** 2026-09-01 | `generator._CHAPTER_MAP_START_CELLS` + `reference/frozen/ch05_surf_expectations.json`; authoring the 4 dispositions belongs to CH05's build |
 | D2 — bidirectional `DEFERRED_*` registration rule | **built** 2026-09-01 | `RULE_UNREGISTERED_BEAT` + `BeatModel` in `checker.py`, `chapter_manifest/beat_model.py`, `playtest/chapter.load_chapter_module`; the two directions collapse into one scan — see below |
 | D4 — Tier-1 archetype templates | **built** 2026-09-01 | `chapter_manifest/archetypes.py` (classifier) + `playtest/archetypes/` (4 templates) + `RULE_ARCHETYPE_CONFORMANCE`; Tier 1 is **four** members, not six — see below |
-| D6 — per-chapter input fingerprint | **not built** | generator hashes pages/connections only |
+| D6 — per-chapter input fingerprint | **deferred** 2026-09-01 (was option 1) | generator hashes pages/connections only; class-P staleness exposure stands — see below |
 | E1 — chapter id → playtest module | **built** 2026-09-01 | modules renamed to chapter ids: `chapters/ch0{1,2,3,4}.py`; `PROJECT_TODO.md` Done #66 |
 | E2 — CH05 route plan | **not built** | `reference/routes/` does not exist |
 | C4 — capability model signature | accepted as-is (option 2) | 28 warnings stand by decision |
@@ -539,6 +539,17 @@ derived from slice 1's graph — `map.bin`/`border.bin` collision (scoped to tou
 #### Answer
 
 Option 1
+
+**REVISED 2026-09-01 — option 2, deferred (operator).** Supersedes the option 1 above; the original
+answer is kept for the record. Nothing in CH05 goes stale *during* CH05, so the fingerprint buys
+nothing inside this chapter's own gate — it pays off on the next regeneration that touches a chapter
+already through one.
+
+**Debt this leaves standing:** the class-P instance is real and unfixed. Map 19 shipped lit through
+CH03's gate and nothing noticed; `generator.py` still hashes only page content and connections, so a
+decoded artifact a chapter's beats consumed can change underneath a gated chapter silently. CH05
+will be built without an input fingerprint, which means CH05 acquires the same exposure the moment
+it passes its gate.
 
 
 ### D7. Q6 — forced helper promotion
