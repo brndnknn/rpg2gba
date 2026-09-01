@@ -26,7 +26,7 @@ that existed (`360eaf60`). Update this table when an item lands; do not trust th
 | C1 — `unhandled: null` outside the staged set | **built** 2026-09-01 | `chapter_manifest/{schema,generator,checker,render}.py`; Done #54 |
 | D1 — coordinate resolvers + literal-ban lint | **built** 2026-09-01 | `playtest/cells.py`, `tests/test_chapter_coordinate_literals.py` |
 | D3 — operator read-through as a named gate step | **built** 2026-09-01 | `BUILD_PLAN.md` step 5 READ; `reference/guides/read_through_checklist.md` |
-| B2 — `blocked:surf` derived by the route finder | **not built** | — |
+| B2 — `blocked:surf` derived by the route finder | **built** 2026-09-01 | `generator._CHAPTER_MAP_START_CELLS` + `reference/frozen/ch05_surf_expectations.json`; authoring the 4 dispositions belongs to CH05's build |
 | D2 — bidirectional `DEFERRED_*` registration rule | **not built** | `RULE_ORPHAN_DISPOSITION` checks something else |
 | D4 — Tier-1 archetype templates | **not built** | incl. the 324-instance arrival-nudge |
 | D6 — per-chapter input fingerprint | **not built** | generator hashes pages/connections only |

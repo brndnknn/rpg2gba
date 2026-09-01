@@ -208,8 +208,28 @@ _HEAD_REQUIRES: dict[str, str] = {
 # against an independent validation run. An entry added without that kind of
 # citation is exactly the "written from priors, matches zero maps" failure
 # `_HEAD_REQUIRES`'s own comment warns about, just moved to a different table.
+#
+# CH05/map036 (17,39) and CH05/map037 (16,26): both are warp-exit constants in
+# the sense the paragraph above allows, read straight out of the decoded corpus
+# rather than transcribed from a harness -- each map is entered by exactly ONE
+# code-201 transfer, so its arrival cell is a fact about the data, not a choice:
+#   map 36 <- `Map035.json` ev001 at (20,33), destination (17,39). Sole entry.
+#   map 37 <- `Map036.json` ev002 at (17,4),  destination (16,26). Sole entry.
+# Reproduced by `extract_warp_exits` on each source map, and both agree with the
+# entrance cell the CH05 dry run used independently
+# (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md`, §5.7).
+#
+# Stated plainly, because the paragraph above asks for a boot-walk citation and
+# this is not one: **CH05 has no boot-walk harness yet** -- the chapter is not
+# built. What backs these two entries is warp geometry plus an independent prose
+# analysis, which is strictly stronger than a hand-typed guess and strictly
+# weaker than an observed post-load position. If CH05's boot walk ever lands the
+# player somewhere other than these cells, that is the harness correcting this
+# table, and this comment is the reason to believe the harness.
 _CHAPTER_MAP_START_CELLS: dict[tuple[str, int], tuple[int, int]] = {
     ("CH04", 35): (21, 56),
+    ("CH05", 36): (17, 39),
+    ("CH05", 37): (16, 26),
 }
 
 ReachabilityContext = tuple[MapGraph, CapabilityMap, tuple[int, int]]

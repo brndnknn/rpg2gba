@@ -989,7 +989,78 @@ work, not open questions:
   see Group C cleanup, `reference/guides/engine_gotchas.md` is not the home for
   this, `ROM_TEST_DEV.md`'s "new_game.c debug-harness re-arm technique" section is.
 
+### 69. `chapters.json` credits CH30 with the HM03 Surf grant; the corpus says map 143
+
+Found while building B2 (2026-09-01). `reference/chapters.json`'s CH30 (Amatree
+Town, maps 151/170/171/69) carries the note *"the HM03 Surf grant -- the single
+largest traversal unlock in the game."* The decoded corpus does not support it:
+scanning all **199** decoded maps, `Kernel.pbReceiveItem(::PBItems::HM03)` occurs
+on **map 143 only** — events 22 (`'the event'`, 27,46) and 24 (`'theo event2'`,
+27,47). Map 143 is not in CH30; it belongs to **CH29** (Route 10 / Anthell, act
+A5, visit 1) and **CH31** (Route 10 revisit, act A6, visit 2).
+
+This matters beyond tidiness: it decides which chapter owns the Surf revisit debt
+CH05 just acquired (its four `blocked:surf` rows on map 036). Owed to a Route 10
+chapter, not to Amatree Town.
+
+**Not fixed here on purpose.** Correcting the factual claim is one thing; deciding
+*which* chapter owns a capability grant is a chapter-assignment call (CLAUDE.md
+§10, "any decision about Uranium content fidelity"), and CH29-vs-CH31 is a real
+choice — the grant sits on a map both chapters contain. Needs the atlas
+maintainer. Evidence is recorded in
+`reference/frozen/ch05_surf_expectations.json`'s `granting_chapter` block.
+
+
 ## Done
+
+- **B2 — `blocked:surf` is derived, not asked for** (2026-09-01, CH05
+  prerequisite — `CH05_DECISIONS.md` B2, "option 1, but derived from the route
+  finder not from you asking a question").
+
+  **The engine already worked; the entry point was switched off.** `surf` has
+  been a first-class capability since slice 2 —
+  `traversal/capabilities.py`'s `_TERRAIN_TAG_CAPABILITY` maps terrain tags 5,
+  7 and 17 to `Capability.SURF` — and the terrain-obstacle route inverts the
+  event route correctly (water reads as collision; holding Surf flips it
+  passable). What was missing was one table entry:
+  `_CHAPTER_MAP_START_CELLS` held CH04 only, so
+  `_build_reachability_context` returned `None` for CH05 and **no** row on
+  either map could carry a terrain-gated capability.
+
+  **The start cells are derived, not typed.** Each CH05 map is entered by
+  exactly one code-201 transfer, so its arrival cell is a fact about the data:
+  `Map035` ev001 (20,33) → map 36 **(17,39)**; `Map036` ev002 (17,4) → map 37
+  **(16,26)**. Both reproduced with `extract_warp_exits`, and both agree with
+  the cell the CH05 dry run used independently. The comment says plainly that
+  CH05 has no boot-walk harness yet, so these are stronger than a guess and
+  weaker than an observed post-load position.
+
+  **Result, measured:** CH05 generates `requires: ["surf"]` on exactly
+  `map036/ev008/p0`, `ev008/p1`, `ev009/p0`, `ev009/p1` — the TM76 and
+  Sableyeite item balls in the sealed room at x31-36/y11-16 — and on **no other
+  row**; the other 11 map036 page rows and all of map 37 stay clear;
+  `reachability_consulted` is now true for every CH05 row. CH04 regenerates
+  byte-identical.
+
+  **Guarded by `reference/frozen/ch05_surf_expectations.json` +
+  `tests/test_ch05_surf_oracle.py` (5 tests).** The oracle records honestly that
+  it is **not** a blind freeze — the derivation predates it and was spot-checked
+  during investigation — and names what *is* independent: the sealed-room
+  analysis written up in the CH05 dry run before any surf derivation ran. Its
+  negative arm is the load-bearing half, since a bug marking the whole map
+  surf-gated would satisfy the positive arm alone. Mutation-tested: moving the
+  CH05 start cell inside the sealed room turns the end-to-end test red.
+
+  **Still owed, and not in scope here:** authoring the four `blocked:surf`
+  dispositions and their deferred beats. The generator only ever populates
+  `requires[]`; it never writes a disposition, and `dispositions.py` says that
+  separation is the point. Authoring lands in CH05's own build at the new READ
+  step, with the derived answer already sitting on the rows. Also unenforced by
+  design: `blocked:surf` will raise `capability_model_unenforced` exactly as
+  CH04's 28 `blocked:rock_smash` rows do — no `CapabilityModel` implementation
+  exists and `chapters.json` has no structured grants field (see #69).
+
+  Suite **2792 passed, 19 skipped** (was 2787/19).
 
 - **D1 + D3 — the coordinate literal ban, and the read-through gets a written
   home** (2026-09-01, CH05 prerequisites — `CH05_DECISIONS.md` D1 and D3, both
