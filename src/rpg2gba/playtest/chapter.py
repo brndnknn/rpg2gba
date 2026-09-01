@@ -59,6 +59,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import ModuleType
 from typing import TYPE_CHECKING
 
 from ..chapter_manifest.archetypes import ARCHETYPE_NAMES
@@ -438,8 +439,19 @@ def chapter_names() -> list[str]:
     return sorted(m.name for m in pkgutil.iter_modules(chapters.__path__))
 
 
-def load_chapter(name: str) -> Chapter:
-    """Import `rpg2gba.playtest.chapters.<name>` and return its `CHAPTER`.
+def load_chapter_module(name: str) -> ModuleType:
+    """Import and return `rpg2gba.playtest.chapters.<name>` itself.
+
+    `load_chapter` (below) is what most callers want -- it hands back the
+    built `Chapter`, which holds only the beats that were actually
+    registered. But `Chapter` cannot answer "what was deliberately left
+    unregistered, and why?": `DEFERRED_BEATS` is, by definition, the set of
+    beats that never went through `@beat(...)`, so it exists only as a
+    module-level attribute on the chapter module, never on `Chapter` itself.
+    A caller that needs that half -- e.g. an adapter reconciling a
+    `beat:Bn` disposition against what the chapter module actually declares
+    -- has to reach the module object directly, which is what this function
+    is for.
 
     Modules are named for their atlas chapter id, lowercased so the filename
     is a conventional Python module name (`CH01` -> `ch01.py`, 2026-09-01,
@@ -448,10 +460,15 @@ def load_chapter(name: str) -> Chapter:
     having to know which case a filesystem wants.
     """
     try:
-        module = importlib.import_module(f"{__package__}.chapters.{name.lower()}")
+        return importlib.import_module(f"{__package__}.chapters.{name.lower()}")
     except ModuleNotFoundError as exc:
         raise KeyError(
             f"no chapter {name!r}; known chapters: {chapter_names()}") from exc
+
+
+def load_chapter(name: str) -> Chapter:
+    """Import `rpg2gba.playtest.chapters.<name>` and return its `CHAPTER`."""
+    module = load_chapter_module(name)
     chapter = getattr(module, "CHAPTER", None)
     if not isinstance(chapter, Chapter):
         raise TypeError(

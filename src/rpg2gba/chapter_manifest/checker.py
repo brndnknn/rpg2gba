@@ -48,6 +48,8 @@ RULE_ROUTE_ORDER = "route_order"
 RULE_ROUTE_MODEL_UNENFORCED = "route_model_unenforced"
 RULE_ARCHETYPE_CONFORMANCE = "archetype_conformance"
 RULE_ARCHETYPE_MODEL_UNENFORCED = "archetype_model_unenforced"
+RULE_UNREGISTERED_BEAT = "unregistered_beat"
+RULE_BEAT_MODEL_UNENFORCED = "beat_model_unenforced"
 
 
 class CapabilityModel(Protocol):
@@ -195,6 +197,40 @@ class ArchetypeModel(Protocol):
         ...
 
 
+class BeatModel(Protocol):
+    """The seam `RULE_UNREGISTERED_BEAT` plugs into: does a `beat:Bn`
+    disposition actually name a beat that is registered and running?
+
+    Not implemented here -- deliberately, same reasoning as
+    `CapabilityModel`/`ApproachModel`/`RouteModel`/`ArchetypeModel`:
+    `checker.py` deliberately never imports `rpg2gba.playtest`, so "is this
+    beat registered?" is a fact about the playtest chapter modules and
+    arrives through a Protocol the CLI supplies. The concrete adapter walks
+    a chapter module's `@chapter.beat(...)` registrations and its
+    `DEFERRED_BEATS` tuple to answer both methods below.
+
+    A registered beat id may be matched as a *prefix family* -- `beat:B4`
+    satisfied by a template-registered `B4_battle` -- but that matching is
+    the model's business, not this rule's; `is_registered` returns the
+    already-resolved answer.
+    """
+
+    def is_registered(self, beat_id: str) -> bool:
+        """True if some registered beat (by exact id or prefix family)
+        claims `beat_id`."""
+        ...
+
+    def deferral_reason(self, beat_id: str) -> str | None:
+        """The recorded reason `beat_id` is unregistered because it was
+        deliberately written and then deferred (found in a chapter module's
+        `DEFERRED_BEATS`), or None if `beat_id` is not deferred at all --
+        i.e. no playtest module knows about it under any name, registered
+        or deferred. `RULE_UNREGISTERED_BEAT` uses this to distinguish "this
+        beat is known but intentionally not running" from "this name is a
+        typo or a stale rename"."""
+        ...
+
+
 def check_chapter(
     rows: list[ManifestRow],
     dispositions: dict[str, Disposition],
@@ -203,6 +239,7 @@ def check_chapter(
     approach: ApproachModel | None = None,
     route: RouteModel | None = None,
     archetype_model: ArchetypeModel | None = None,
+    beat_model: BeatModel | None = None,
     live_chapter: bool = False,
 ) -> list[Finding]:
     """Check one chapter's generated rows against its authored dispositions.
@@ -212,10 +249,16 @@ def check_chapter(
     file itself). `dispositions` is `row_id -> Disposition`, as returned by
     `dispositions.load_dispositions`.
 
-    `live_chapter` governs `RULE_ARCHETYPE_CONFORMANCE`'s severity: True for
-    the chapter currently being authored (ERROR), False for a chapter
-    already through its §9 boot-walk gate (WARNING). This module does not
-    read `reference/chapters.json` itself -- same file-I/O discipline as
+    `beat_model`, if supplied, backs `RULE_UNREGISTERED_BEAT`: every `beat:`
+    disposition must name a beat that is actually registered, not deferred
+    or nonexistent (see `BeatModel`'s docstring and `_check_unregistered_beat`
+    for the CH04 evidence this exists to catch).
+
+    `live_chapter` governs `RULE_ARCHETYPE_CONFORMANCE`'s (and, identically,
+    `RULE_UNREGISTERED_BEAT`'s) severity: True for the chapter currently
+    being authored (ERROR), False for a chapter already through its §9
+    boot-walk gate (WARNING). This module does not read
+    `reference/chapters.json` itself -- same file-I/O discipline as
     `capabilities`/`approach`/`route` -- so the caller derives it (the CLI
     reads a chapter's `status` field there: `"built"` means gated, anything
     else means live) and passes the bool through. Defaults to False
@@ -455,6 +498,12 @@ def check_chapter(
         )
     )
 
+    findings.extend(
+        _check_unregistered_beat(
+            dispositions, beat_model=beat_model, live_chapter=live_chapter
+        )
+    )
+
     findings.sort(key=lambda f: (f.row_id, f.rule))
     return findings
 
@@ -610,6 +659,102 @@ def _check_archetype_conformance(
             ),
             severity="warning",
         ))
+
+    return findings
+
+
+def _check_unregistered_beat(
+    dispositions: dict[str, Disposition],
+    *,
+    beat_model: BeatModel | None,
+    live_chapter: bool,
+) -> list[Finding]:
+    """`RULE_UNREGISTERED_BEAT`: every `beat:Bn` disposition must name a beat
+    that is actually registered -- not deferred, not a typo, not a stale
+    rename.
+
+    The original design note framed this as bidirectional: (a) every `beat:`
+    disposition names a registered beat, and (b) every `DEFERRED_*` entry's
+    row is dispositioned as something other than `beat:`. The two halves
+    collapse into this single scan, because both key on the beat id -- a
+    deferred beat is by construction not registered, so walking the
+    dispositions and asking the model about each `beat:` argument catches
+    (b) for free. A deferred beat whose row carries no disposition at all is
+    already `RULE_UNDISPOSITIONED`'s job, not this one's.
+
+    Motivating evidence: CH04's dispositions dispose `beat:B8` and
+    `beat:B10` while `ch04.py`'s `DEFERRED_BEATS` lists both -- the manifest
+    has claimed, since CH04 shipped, that something asserts those two rows
+    when nothing runs. Nothing checked that a `beat:` argument round-trips
+    through the registry at all.
+
+    Deliberately scans `dispositions` directly rather than joining through
+    `rows` -- a disposition whose row is not in the generated manifest is
+    already reported by `RULE_ORPHAN_DISPOSITION`, but it can independently
+    ALSO name an unregistered beat (both are true statements about the same
+    stale entry), so this rule reports on it too rather than skipping rows
+    not present in `rows_by_id`.
+
+    Severity mirrors `RULE_ARCHETYPE_CONFORMANCE`'s policy (see that
+    function's docstring for the full reasoning): ERROR while the chapter is
+    still being authored, WARNING once it is through its §9 gate, so CH04's
+    two real contradictions surface as counted debt on a chapter that has
+    already shipped, not a build-breaking regression.
+    """
+    severity: Severity = "error" if live_chapter else "warning"
+    findings: list[Finding] = []
+
+    beat_rows = [
+        (row_id, disp) for row_id, disp in dispositions.items()
+        if disp.verdict == "beat"
+    ]
+
+    if beat_model is None:
+        for row_id, disp in beat_rows:
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_BEAT_MODEL_UNENFORCED,
+                message=(
+                    f"row is dispositioned {disp.spec!r} but whether beat "
+                    f"{disp.argument!r} is actually registered could not be "
+                    "checked because no beat model was supplied (this rule "
+                    "is unenforced without one)"
+                ),
+                severity="warning",
+            ))
+        return findings
+
+    for row_id, disp in beat_rows:
+        beat_id = disp.argument or ""
+        if beat_model.is_registered(beat_id):
+            continue
+
+        reason = beat_model.deferral_reason(beat_id)
+        if reason is not None:
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_UNREGISTERED_BEAT,
+                message=(
+                    f"row is dispositioned {disp.spec!r}, but beat {beat_id!r} "
+                    f"is explicitly deferred ({reason!r}) and therefore never "
+                    "runs -- the disposition claims this row is covered when "
+                    "nothing asserts it; either register the beat, or change "
+                    "this row's disposition to one that reflects that nothing "
+                    "asserts it"
+                ),
+                severity=severity,
+            ))
+        else:
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_UNREGISTERED_BEAT,
+                message=(
+                    f"row is dispositioned {disp.spec!r}, but no playtest "
+                    f"module registers a beat {beat_id!r} under any name, "
+                    "deferred or otherwise -- likely a rename or a typo"
+                ),
+                severity=severity,
+            ))
 
     return findings
 

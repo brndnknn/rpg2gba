@@ -18,6 +18,7 @@ from rpg2gba.chapter_manifest.checker import (
     RULE_APPROACH_MODEL_UNENFORCED,
     RULE_ARCHETYPE_CONFORMANCE,
     RULE_ARCHETYPE_MODEL_UNENFORCED,
+    RULE_BEAT_MODEL_UNENFORCED,
     RULE_BLOCKED_MISSED_ASSERTION,
     RULE_BLOCKED_NO_GRANTING_CHAPTER,
     RULE_CAPABILITY_MODEL_UNENFORCED,
@@ -31,6 +32,7 @@ from rpg2gba.chapter_manifest.checker import (
     RULE_UNAFFIRMED_DISPOSITION,
     RULE_UNDISPOSITIONABLE_ROW_DECIDED,
     RULE_UNDISPOSITIONED,
+    RULE_UNREGISTERED_BEAT,
     check_chapter,
     exit_code,
 )
@@ -933,6 +935,84 @@ def test_archetype_model_missing_claim_is_flagged():
     findings = check_chapter([row], {row.row_id: disp}, archetype_model=model)
     finding = next(f for f in findings if f.rule == RULE_ARCHETYPE_CONFORMANCE)
     assert "no registered beat claims it" in finding.message
+
+
+# --- rule D2: beat: disposition must name a registered beat ---------------
+
+
+class _FakeBeatModel:
+    """A dict-backed `BeatModel` stand-in -- no import of the real
+    `beat_model` module (owned by a different agent, may not exist yet)."""
+
+    def __init__(self, registered: set[str], deferred: dict[str, str]) -> None:
+        self._registered = registered
+        self._deferred = deferred
+
+    def is_registered(self, beat_id: str) -> bool:
+        return beat_id in self._registered
+
+    def deferral_reason(self, beat_id: str) -> str | None:
+        return self._deferred.get(beat_id)
+
+
+def test_beat_disposition_registered_no_finding():
+    row = _row()
+    disp = _disp(row.row_id, "beat:B8", affirmed_hash="deadbeef00000000")
+    model = _FakeBeatModel(registered={"B8"}, deferred={})
+    findings = check_chapter([row], {row.row_id: disp}, beat_model=model)
+    assert all(f.rule not in (RULE_UNREGISTERED_BEAT, RULE_BEAT_MODEL_UNENFORCED)
+               for f in findings)
+
+
+def test_beat_disposition_deferred_reports_reason():
+    row = _row()
+    disp = _disp(row.row_id, "beat:B8", affirmed_hash="deadbeef00000000")
+    model = _FakeBeatModel(
+        registered=set(), deferred={"B8": "unreachable without harness primitive X"}
+    )
+    findings = check_chapter([row], {row.row_id: disp}, beat_model=model)
+    finding = next(f for f in findings if f.rule == RULE_UNREGISTERED_BEAT)
+    assert "unreachable without harness primitive X" in finding.message
+
+
+def test_beat_disposition_unknown_reports_distinct_message():
+    row = _row()
+    disp = _disp(row.row_id, "beat:B99", affirmed_hash="deadbeef00000000")
+    model = _FakeBeatModel(registered=set(), deferred={})
+    findings = check_chapter([row], {row.row_id: disp}, beat_model=model)
+    finding = next(f for f in findings if f.rule == RULE_UNREGISTERED_BEAT)
+    assert "no playtest module registers" in finding.message
+    assert "rename or a typo" in finding.message
+
+
+def test_beat_model_unenforced_without_model():
+    row = _row()
+    disp = _disp(row.row_id, "beat:B8", affirmed_hash="deadbeef00000000")
+    findings = check_chapter([row], {row.row_id: disp}, beat_model=None)
+    finding = next(f for f in findings if f.rule == RULE_BEAT_MODEL_UNENFORCED)
+    assert finding.severity == "warning"
+    assert all(f.rule != RULE_UNREGISTERED_BEAT for f in findings)
+
+
+@pytest.mark.parametrize("spec", ["cosmetic", "blocked:rock_smash", "unreachable:cut content"])
+def test_non_beat_verdicts_untouched_by_beat_rules(spec):
+    row = _row()
+    disp = _disp(row.row_id, spec, affirmed_hash="deadbeef00000000")
+    model = _FakeBeatModel(registered=set(), deferred={})
+    findings = check_chapter([row], {row.row_id: disp}, beat_model=model)
+    assert all(f.rule not in (RULE_UNREGISTERED_BEAT, RULE_BEAT_MODEL_UNENFORCED)
+               for f in findings)
+
+
+@pytest.mark.parametrize("live_chapter,expected", [(True, "error"), (False, "warning")])
+def test_unregistered_beat_severity_follows_live_chapter(live_chapter, expected):
+    row = _row()
+    disp = _disp(row.row_id, "beat:B8", affirmed_hash="deadbeef00000000")
+    model = _FakeBeatModel(registered=set(), deferred={"B8": "deferred for now"})
+    findings = check_chapter([row], {row.row_id: disp}, beat_model=model,
+                              live_chapter=live_chapter)
+    finding = next(f for f in findings if f.rule == RULE_UNREGISTERED_BEAT)
+    assert finding.severity == expected
 
 
 def test_ch04_dispositions_round_trip_is_byte_identical(tmp_path: Path):

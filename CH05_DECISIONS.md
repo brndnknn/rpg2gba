@@ -27,7 +27,7 @@ that existed (`360eaf60`). Update this table when an item lands; do not trust th
 | D1 — coordinate resolvers + literal-ban lint | **built** 2026-09-01 | `playtest/cells.py`, `tests/test_chapter_coordinate_literals.py` |
 | D3 — operator read-through as a named gate step | **built** 2026-09-01 | `BUILD_PLAN.md` step 5 READ; `reference/guides/read_through_checklist.md` |
 | B2 — `blocked:surf` derived by the route finder | **built** 2026-09-01 | `generator._CHAPTER_MAP_START_CELLS` + `reference/frozen/ch05_surf_expectations.json`; authoring the 4 dispositions belongs to CH05's build |
-| D2 — bidirectional `DEFERRED_*` registration rule | **not built** | `RULE_ORPHAN_DISPOSITION` checks something else |
+| D2 — bidirectional `DEFERRED_*` registration rule | **built** 2026-09-01 | `RULE_UNREGISTERED_BEAT` + `BeatModel` in `checker.py`, `chapter_manifest/beat_model.py`, `playtest/chapter.load_chapter_module`; the two directions collapse into one scan — see below |
 | D4 — Tier-1 archetype templates | **built** 2026-09-01 | `chapter_manifest/archetypes.py` (classifier) + `playtest/archetypes/` (4 templates) + `RULE_ARCHETYPE_CONFORMANCE`; Tier 1 is **four** members, not six — see below |
 | D6 — per-chapter input fingerprint | **not built** | generator hashes pages/connections only |
 | E1 — chapter id → playtest module | **built** 2026-09-01 | modules renamed to chapter ids: `chapters/ch0{1,2,3,4}.py`; `PROJECT_TODO.md` Done #66 |
@@ -371,6 +371,35 @@ chapter file partly generated.
 #### Answer
 
 Option 1
+
+#### BUILT 2026-09-01 — the two directions are one scan, and CH04's contradiction is real
+
+Shipped as `RULE_UNREGISTERED_BEAT` + `RULE_BEAT_MODEL_UNENFORCED` and the `BeatModel` Protocol in
+`checker.py`, the concrete adapter `chapter_manifest/beat_model.py`, and `load_chapter_module` in
+`playtest/chapter.py` (the built `Chapter` holds only *registered* beats, so `DEFERRED_BEATS` — by
+definition the ones that were not registered — is reachable only through the module object).
+
+**The bidirectionality collapses.** Both halves key on the beat id: a deferred beat is by
+construction not registered, so walking the dispositions and asking the model about each `beat:`
+argument catches "every `DEFERRED_*` entry's row is dispositioned as something other than `beat:`"
+for free. No second scan over the deferred entries exists, and none is needed. A deferred beat whose
+row carries no disposition at all is `RULE_UNDISPOSITIONED`'s job, not this rule's.
+
+**Beat ids match as prefix families.** A disposition names `B4`, but D4's templates register
+`B4_battle`/`B4_retalk` via `beat_prefix=`. So `B4` is satisfied by a beat named exactly `B4` or by
+any `B4_<something>`, matched on the literal `_` separator — without that, every template-authored
+chapter (i.e. CH05 onward) would read as entirely unregistered; with a naive `startswith`, `B4`
+would be satisfied by `B40_x`. Verified against the real CH04 module: `B4` and `B14` resolve
+independently.
+
+**CH04's contradiction was real and is now visible.** The rule fires on exactly two rows —
+`map035/ev001/p1` (`beat:B8`) and `map035/ev003/p1` (`beat:B10`) — both disposed `beat:` while
+`ch04.py`'s `DEFERRED_BEATS` names them, with the recorded reason quoted in the finding. Zero false
+positives on the other 11 `beat:` dispositions. CH04 is `status: "built"`, so these land as
+**counted debt** (warning), not a red build, under the same live/gated severity policy as
+`RULE_ARCHETYPE_CONFORMANCE`. B8's own deferral reason says "restore once CH05 stages Map036" — so
+CH05's build is the moment to resolve it, and that is a content decision for the operator, not
+something the rule decides.
 
 ### D3. Q9 items 1–3 — the operator read-through as a named gate step
 
