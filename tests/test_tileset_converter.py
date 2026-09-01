@@ -4282,6 +4282,32 @@ def test_map_json_schema() -> None:
     assert indoor["allow_running"] is False and indoor["show_map_name"] is False
 
 
+def test_map_json_requires_flash_follows_field() -> None:
+    """`requires_flash` in to_json_dict() reflects the MapFile field, not a
+    hardcoded literal (CH05_DECISIONS A1/C2: dark maps use Emerald's native
+    darkness handling via this key -> gMapHeader.cave)."""
+    consts = mc.MapConstants(32, "MAP_MOKI_TOWN", "MAP_URANIUM_32", "LAYOUT_MOKI_TOWN",
+                             "MAPSEC_MOKI_TOWN", "MokiTown", "Moki Town")
+    assert mw.MapFile(consts).to_json_dict()["requires_flash"] is False
+    assert mw.MapFile(consts, requires_flash=True).to_json_dict()["requires_flash"] is True
+
+
+def test_dark_map_for(tmp_path: Path) -> None:
+    """`_dark_map_for` reads `dark_map` from map_metadata.json: true for a dark
+    map, false for a non-dark map, and false (not a crash) for an id absent
+    from the file entirely."""
+    metadata_path = tmp_path / "map_metadata.json"
+    metadata_path.write_text(json.dumps({
+        "maps": {
+            "19": {"dark_map": True},
+            "32": {"dark_map": False},
+        }
+    }), encoding="utf-8")
+    assert mw._dark_map_for(19, metadata_path) is True
+    assert mw._dark_map_for(32, metadata_path) is False
+    assert mw._dark_map_for(999, metadata_path) is False
+
+
 _MAPS = Path("output/uranium-build/maps")
 _METADATA = Path("output/uranium-build/intermediate/map_metadata.json")
 

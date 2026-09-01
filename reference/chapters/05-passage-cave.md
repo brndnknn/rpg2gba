@@ -40,8 +40,8 @@ story variable advances anywhere in this chapter — §3.
 
 | RMXP id | Uranium identity (`map_infos.json`) | Engine dir | porymap constant | Role in chapter |
 |---|---|---|---|---|
-| 36 | Passage Cave (`parent_id:55`, `dark_map:true`) | `PassageCave` (proposed, §7) | `MAP_PASSAGE_CAVE` (proposed) | Entry hall; 4 item balls, 2 trainer battles, warp to Route 2 (CH04) and Map037 |
-| 37 | Passage Cave (`parent_id:36`, `dark_map:true`) | `PassageCave2` (proposed, §7) | `MAP_PASSAGE_CAVE_2` (proposed) | Back hall; 1 trainer battle, 1 NPC item, warp to Map036, exit to Nowtoch (CH06) |
+| 36 | Passage Cave 1F (`parent_id:55`, `dark_map:true`) | `PassageCave1F` | `MAP_PASSAGE_CAVE_1F` | Entry hall; 4 item balls, 2 trainer battles, warp to Route 2 (CH04) and Map037 |
+| 37 | Passage Cave 2F (`parent_id:36`, `dark_map:true`) | `PassageCave2F` | `MAP_PASSAGE_CAVE_2F` | Back hall; 1 trainer battle, 1 NPC item, warp to Map036, exit to Nowtoch (CH06) |
 
 **Wiring.** Map036 is the chapter's outdoor-equivalent parent
 (`"outdoor":36`); Map037 is its RMXP child. No `connections.json` seam
@@ -214,8 +214,7 @@ is in the slice-1 staged set; `unhandled` is `null`, and zero
 `transpile_unhandled.jsonl` entries means "never staged," not "clean");
 TM76/Sableyeite reachability without Surf is unconfirmed (§7, affects
 B6/B7); the four "Stairs" events and Map036 EV002 page 1 have no
-discernible function pending a boot-walk (§7); `PassageCave`/`PassageCave2`
-names are proposed only, no `engine/data/maps/` entry exists yet; the
+discernible function pending a boot-walk (§7); the
 Sableyeite grant here sits oddly against `00-atlas.md`'s "first Mega Stone"
 credit to CH40 (flagged for the atlas maintainer, §7).
 
@@ -229,7 +228,22 @@ they are **not** open questions on current work, since nothing upstream of
 CH05 depends on them. This document is their single live home; they are
 settled here when the CH05 branch opens.
 
-1. **Cave darkness / Flash — a CLAUDE.md §10 content-fidelity call.** Maps
+1. **Cave darkness / Flash — RESOLVED 2026-08-31 (operator ruling).**
+   Both premises below were wrong. In Uranium, Flash is **not** an HM: it
+   is a level-up move and **TM70**, so "HM05 has no grant site" does not
+   describe a gate. And a `DarkMap` cave is not pitch black in either
+   engine — Uranium, like Emerald, lights a radius around the player.
+   **Ruling: wire `dark_map` straight through to `requires_flash` on every
+   dark map and let Emerald's native handling render it.** In the fork,
+   `requires_flash` becomes `gMapHeader.cave`, and
+   `overworld.c:1106 SetDefaultFlashLevel()` gives a cave a small lit
+   radius with `FLAG_SYS_USE_FLASH` unset and a large one with it set —
+   exactly the intended behaviour, with no Flash grant, no badge gate and
+   no custom C. This also **ratifies nothing about map 19**: it retro-
+   applies, and map 19 (Grott-Hole) becomes dark on its next regeneration.
+   Closes `PROJECT_TODO.md` #56 (the hardcoded `False`) as a wiring job,
+   not a fail-loud stub. The original framing, kept for the record:
+   Maps
    36 and 37 are both `DarkMap: true` (`intermediate/metadata_raw.json`
    field 9; 26 maps corpus-wide). `pbs_converter/metadata.py:114` parses
    `dark_map` and nothing downstream reads it —
@@ -249,16 +263,17 @@ settled here when the CH05 branch opens.
    `DarkMap` is a *map property* — a capability surface that is neither a
    page, a seam, nor a terrain tag, and therefore invisible to the
    manifest. (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.3.)
-2. **The engine map names for 36 and 37.** Both are named "Passage Cave"
-   in `map_infos.json`, so `MapConstantRegistry.mint` fails loud (`map 37
-   ('Passage Cave') -> MAP_PASSAGE_CAVE collides with already-minted map
-   36`) and `reference/map_name_overrides.json` currently records both as
-   `"CORRECT — no override"`. §2 of this document proposes `PassageCave` /
-   `PassageCave2`; map 19 set the precedent, disambiguated to "Passage
-   Cave Grott-Hole" on the same grounds. The names themselves are
-   unconfirmed — no `engine/data/maps/` entry exists for either. This is a
-   naming decision plus two `overrides` entries with evidence; the
-   fail-loud is working as designed and only the data is missing.
+2. **The engine map names for 36 and 37 — RESOLVED 2026-08-31 (operator
+   ruling).** Map 36 is **"Passage Cave 1F"**, map 37 is **"Passage Cave
+   2F"** — floor labels, in the shape map 19's "Passage Cave Grott-Hole"
+   set. Both are now `overrides` entries in
+   `reference/map_name_overrides.json` (their former `"CORRECT — no
+   override"` verdicts are marked SUPERSEDED there, with the original text
+   kept), and `mint` verifies clean: `MAP_PASSAGE_CAVE_1F` /
+   `PassageCave1F` and `MAP_PASSAGE_CAVE_2F` / `PassageCave2F`, no
+   collision with map 19's `MAP_PASSAGE_CAVE_GROTT_HOLE`. §2's table above
+   is updated. The earlier `PassageCave` / `PassageCave2` proposal is
+   dropped — the bare `2` carried no meaning to a player or a reader.
    (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.5.)
 3. **The two unresolved cross-references**, carried forward from §7.3
    below because they also want an operator call, not just a note: (a)

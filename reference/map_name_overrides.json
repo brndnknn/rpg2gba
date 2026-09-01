@@ -44,7 +44,15 @@
     },
     "19": {
       "display_name": "Passage Cave Grott-Hole",
-      "evidence": "CH03 scope pass (2026-08-12), user-approved; SUPERSEDES this map's former `reviewed` verdict, which called it the Kevlar->Nowtoch through-cave. Two independent refutations: (a) warp trace — map 19's only code-201 command anywhere is EV7 (11,30) -> map 31 (13,7), the same tile its entrance sits on, and no warp in the corpus reaches map 19 from any map but 31, so it cannot be a through-route; the real through-cave is maps 36/37 via the map31<->map35 connection seam. (b) The wiki's own Passage Cave page carries a 'Grott-Hole' subsection stating the grott-hole does not connect to the through cave; its nav infobox (north=Nowtoch City, south=Route 2) describes maps 36/37 only. Name also disambiguates the engine dir from maps 36/37, which keep the plain 'Passage Cave' label."
+      "evidence": "CH03 scope pass (2026-08-12), user-approved; SUPERSEDES this map's former `reviewed` verdict, which called it the Kevlar->Nowtoch through-cave. Two independent refutations: (a) warp trace — map 19's only code-201 command anywhere is EV7 (11,30) -> map 31 (13,7), the same tile its entrance sits on, and no warp in the corpus reaches map 19 from any map but 31, so it cannot be a through-route; the real through-cave is maps 36/37 via the map31<->map35 connection seam. (b) The wiki's own Passage Cave page carries a 'Grott-Hole' subsection stating the grott-hole does not connect to the through cave; its nav infobox (north=Nowtoch City, south=Route 2) describes maps 36/37 only. Name also disambiguates the engine dir from maps 36/37 (since 2026-08-31 labelled 'Passage Cave 1F'/'2F' -- see their overrides)."
+    },
+    "36": {
+      "display_name": "Passage Cave 1F",
+      "evidence": "CH05 scope pass (2026-08-31), operator ruling; SUPERSEDES this map's former `reviewed` verdict ('CORRECT -- no override'). That verdict left maps 36 and 37 both named 'Passage Cave', which is right about identity but not mintable: `mint` fails loud on the second of them (map 37 -> MAP_PASSAGE_CAVE collides with already-minted map 36), and it was CH05's first blocker. Maps 36/37 are the two floors of the Kevlar->Nowtoch through-cave (map 19 is the separate Grott-Hole offshoot, see its override). Map 36 is the entrance floor: it carries the seam to the overland and the warps up to map 37. Floor labels are the operator's call, not derived. -> MAP_PASSAGE_CAVE_1F, dir PassageCave1F."
+    },
+    "37": {
+      "display_name": "Passage Cave 2F",
+      "evidence": "CH05 scope pass (2026-08-31), operator ruling; SUPERSEDES this map's former `reviewed` verdict (see map 36 for the collision that forced it). Map 37 is the inner/upper floor -- reachable only from map 36, and the floor whose four sideways staircases are its only vertical traversal. -> MAP_PASSAGE_CAVE_2F, dir PassageCave2F. No engine/data/maps/ entry existed for either map when this was decided, so nothing downstream was pinned to the old name."
     }
   },
 
@@ -71,13 +79,13 @@
     },
     "36": {
       "map_infos_name": "Passage Cave",
-      "verdict": "CORRECT — no override",
-      "evidence": "Passage Cave floor (parent of map 37). Same cave system as map 19."
+      "verdict": "SUPERSEDED 2026-08-31 — see `overrides` entry for map 36",
+      "evidence": "Kept as a record. The verdict accepted the bare map_infos name 'Passage Cave' for both floors; correct as identity, but two maps cannot share one MAP_* constant, so it blocked CH05's mint. Superseded by the CH05 floor disambiguation. Original text: 'Passage Cave floor (parent of map 37). Same cave system as map 19.'"
     },
     "37": {
       "map_infos_name": "Passage Cave",
-      "verdict": "CORRECT — no override",
-      "evidence": "Passage Cave inner floor (child of map 36)."
+      "verdict": "SUPERSEDED 2026-08-31 — see `overrides` entry for map 37",
+      "evidence": "Kept as a record. The verdict accepted the bare map_infos name 'Passage Cave' for both floors; correct as identity, but two maps cannot share one MAP_* constant, so it blocked CH05's mint. Superseded by the CH05 floor disambiguation. Original text: 'Passage Cave inner floor (child of map 36).'"
     }
   },
 

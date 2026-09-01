@@ -576,6 +576,7 @@ class MapFile:
 
     consts: MapConstants
     map_type: str = "MAP_TYPE_TOWN"
+    requires_flash: bool = False
     music: str = DEFAULT_MUSIC
     weather: str = DEFAULT_WEATHER
     region_map_section: str = DEFAULT_MAPSEC
@@ -599,7 +600,7 @@ class MapFile:
             "layout": self.consts.layout_const,
             "music": self.music,
             "region_map_section": self.region_map_section,
-            "requires_flash": False,
+            "requires_flash": self.requires_flash,
             "weather": self.weather,
             "map_type": self.map_type,
             "allow_cycling": is_town,
@@ -3417,11 +3418,24 @@ def _resolve_all_warp_events(
 
 # --- slice driver ------------------------------------------------------------
 
+def _metadata_entry_for(uid: int, metadata_path: Path) -> dict:
+    """Load `map_metadata.json` and return this uid's entry, or `{}` if absent."""
+    meta = json.loads(metadata_path.read_text(encoding="utf-8")).get("maps", {})
+    return meta.get(str(uid)) or {}
+
+
 def _map_type_for(uid: int, metadata_path: Path) -> str:
     """TOWN if the map is outdoor (metadata `outdoor` flag), else INDOOR."""
-    meta = json.loads(metadata_path.read_text(encoding="utf-8")).get("maps", {})
-    entry = meta.get(str(uid)) or {}
+    entry = _metadata_entry_for(uid, metadata_path)
     return "MAP_TYPE_TOWN" if entry.get("outdoor") else "MAP_TYPE_INDOOR"
+
+
+def _dark_map_for(uid: int, metadata_path: Path) -> bool:
+    """`requires_flash` for map.json — true iff Uranium's DarkMap metadata flag
+    (metadata `dark_map` flag) was set for this map. Emerald's native
+    SetDefaultFlashLevel() handles the rest; no engine change needed."""
+    entry = _metadata_entry_for(uid, metadata_path)
+    return bool(entry.get("dark_map"))
 
 
 def build_slice_maps(
@@ -3626,6 +3640,7 @@ def build_slice_maps(
         map_file = MapFile(
             consts=consts,
             map_type=_map_type_for(uid, metadata_path),
+            requires_flash=_dark_map_for(uid, metadata_path),
             object_events=result.object_events,
             warp_events=warp_events,
             coord_events=result.coord_events,
@@ -3715,6 +3730,7 @@ def build_warps_only_maps(
         map_file = MapFile(
             consts=consts,
             map_type=_map_type_for(uid, metadata_path),
+            requires_flash=_dark_map_for(uid, metadata_path),
             object_events=[],
             warp_events=warp_events,
         )

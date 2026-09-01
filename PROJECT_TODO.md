@@ -939,18 +939,6 @@ practice if it catches at least one silent pass across both chapters. CH04's
 pass is done; **CH05's pass, and the decision it feeds, wait on the CH05
 branch being cut.**
 
-### 53. Maps 36 and 37 share the display name "Passage Cave" — `mint` fails loud
-
-Surfaced by the CH05 dry run (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.5).
-`map_infos.json` names both maps "Passage Cave" and `map_name_overrides.json`
-records both as `"CORRECT — no override"`, so the strict (non-walker) path raises
-`map 37 ('Passage Cave') -> MAP_PASSAGE_CAVE collides with already-minted map 36`.
-It is the first task of the CH05 build, not a live blocker on anything now. Fix =
-two `overrides` entries with evidence; `reference/chapters/05-passage-cave.md` §2
-proposes `PassageCave` / `PassageCave2`, and map 19 already set the precedent
-("Passage Cave Grott-Hole", CH03 scope pass). The fail-loud is working as
-designed; only the data is missing.
-
 ### 54. `unhandled: 0` is indistinguishable from "map never transpiled"
 
 CH05 dry run §5.4. `transpile_unhandled.jsonl`'s 244 map-tagged rows fall on
@@ -963,19 +951,6 @@ emit `unhandled: null` for maps outside it, and make `may_be_cosmetic` False unt
 the chapter is staged and the manifest regenerated. Also makes the
 generate-after-staging ordering explicit instead of conventional. (CH04 did not
 expose this — map 35 was staged first, so its 6 rows were real.)
-
-### 56. `requires_flash` is a hardcoded `False` and `dark_map` is parsed but never read
-
-CH05 dry run §5.3, and the mechanical half of MEMORY.md's new dark-cave Open
-Question. `pbs_converter/metadata.py:114` sets `dark_map: True` from
-`MetadataDarkMap`; `tileset_converter/metadata_wiring.py:602` emits
-`"requires_flash": False` as a literal into every map header. 26 corpus maps are
-dark, including CH05's 36/37 and CH03's already-gated map 19. **The content call
-(what darkness should become, given HM05 has no grant site) is the operator's, and
-is a decision deferred to the CH05 build, recorded in
-`reference/chapters/05-passage-cave.md` §7** — this entry is only the §4.5 half:
-the header should read the parsed metadata and fail loud on a dark map until that
-decision is recorded, rather than silently defaulting.
 
 ### 62. CH05-scoped items scattered across `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` Part 5 with no tracked home
 
@@ -1028,6 +1003,45 @@ work, not open questions:
   this, `ROM_TEST_DEV.md`'s "new_game.c debug-harness re-arm technique" section is.
 
 ## Done
+
+- **56. `requires_flash` was a hardcoded `False`; `dark_map` was parsed and never
+  read** (2026-08-31, operator ruling, CH05 branch opening) — the content call
+  this entry was waiting on came back as "just render it": in Uranium, **Flash is
+  not an HM** (level-up move + **TM70**), so the "HM05 has no grant site in 199
+  maps" objection was not describing a gate, and a `DarkMap` cave is not pitch
+  black in either engine — both light a radius around the player. So the fix is
+  the honest wiring, and the fail-loud stub this entry proposed is unnecessary:
+  `dark_map` now flows straight to `requires_flash`. `MapFile` gained a
+  `requires_flash: bool = False` field serialized in `to_json_dict()`; new
+  `_dark_map_for(uid, metadata_path)` reads the parsed metadata beside
+  `_map_type_for` (their shared lookup factored into `_metadata_entry_for`,
+  behaviour-preserving); both `MapFile(...)` sites in `metadata_wiring.py`
+  (`build_slice_maps`, `build_warps_only_maps`) pass it. In the fork
+  `requires_flash` becomes `gMapHeader.cave`, and `overworld.c:1106
+  SetDefaultFlashLevel()` gives a cave a small lit radius with
+  `FLAG_SYS_USE_FLASH` unset, a large one with it set — native Emerald, no
+  engine change. Retro-applies to all **25** dark maps in the decoded corpus
+  (`{7,10,17,19,36,37,72,74,80,83,96,105,106,118,123,150,162,189,191,192,193,202,
+  205,208,213}`), so **CH03's map 19 becomes dark on its next regeneration** —
+  the class-P instance that shipped lit through CH03's §9 gate. Tests
+  `test_map_json_requires_flash_follows_field` + `test_dark_map_for` in
+  `tests/test_tileset_converter.py`; full suite 2758 passed, 19 skipped.
+  `05-passage-cave.md` §7.1 item 1 updated. CH05 dry run §5.3.
+
+- **53. Maps 36 and 37 shared the display name "Passage Cave"** (2026-08-31,
+  operator ruling, CH05 branch opening) — `map_infos.json` named both floors
+  "Passage Cave" and `map_name_overrides.json` recorded both as `"CORRECT — no
+  override"`, so the strict (non-walker) path raised `map 37 ('Passage Cave') ->
+  MAP_PASSAGE_CAVE collides with already-minted map 36`. The fail-loud was
+  working as designed; only the data was missing. Operator named them **Passage
+  Cave 1F** (36) and **Passage Cave 2F** (37) — floor labels, the shape map 19's
+  "Passage Cave Grott-Hole" set — rejecting the doc's `PassageCave` /
+  `PassageCave2` proposal because the bare `2` carries no meaning. Two
+  `overrides` entries written with evidence; the superseded `reviewed` verdicts
+  keep their original text. `build_map_constants` over {19,31,35,36,37} now
+  mints `MAP_PASSAGE_CAVE_1F`/`PassageCave1F` and
+  `MAP_PASSAGE_CAVE_2F`/`PassageCave2F` clean. `05-passage-cave.md` §2 table and
+  §7.1 item 2 updated. `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.5.
 
 - **55. Command code 408 (Comment continuation) missing from `_CODE_IGNORED`**
   (fixed `511ef4af`, 2026-08-28) — `generator.py:107` ignored 108 (Comment) but
