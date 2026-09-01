@@ -1,15 +1,21 @@
 """Builds the generated half of the per-chapter manifest (see the package
 docstring in ``__init__.py``).
 
-Joins three sources under ``output/uranium-build/`` for the chapter's own map
+Joins four sources under ``output/uranium-build/`` for the chapter's own map
 list (``reference/chapters.json``):
 
 * ``maps/Map###.json``            — one row per event page, unconditionally
-  (the generator never filters — see Q2(ii) in PLAYTEST_AUTHORING_IMPROVEMENT.md)
+  (the generator never filters — see Q2(ii) in PLAYTEST_AUTHORING_IMPROVEMENT.md),
+  except diagonal-stair events (`tileset_converter.stairs`), which are
+  absorbed into a `kind="terrain"` row instead of an ordinary page row
 * ``connections.json``            — one seam row per overland connection
   touching a chapter map, emitted from that map's side
 * ``transpile_unhandled.jsonl``   — joined on (map_id, event_id, page) to set
-  ``unhandled``, which vetoes a `cosmetic` disposition (Q1)
+  ``unhandled``, which vetoes a `cosmetic` disposition (Q1) — but only for
+  rows on a map that ``scripts/`` (below) says was actually staged
+* ``scripts/Map###.pory``         — ground truth for which maps were
+  transpiled at all; a map absent here gets `unhandled=None` on every row,
+  not `0` (`_load_staged_map_ids`) — see `ManifestRow.unhandled`'s docstring
 
 Nothing here is authored and nothing here filters. Idempotence (CLAUDE.md
 §4.2) is load-bearing: every tuple field on `ManifestRow` is built pre-sorted
@@ -20,7 +26,9 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections import Counter
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -37,10 +45,17 @@ from rpg2gba.chapter_manifest.schema import (
     ManifestRow,
     PageCondition,
     SeamRef,
+    TerrainRef,
     content_hash,
     page_row_id,
     row_to_dict,
     seam_row_id,
+    terrain_row_id,
+)
+from rpg2gba.tileset_converter.stairs import (
+    BEHAVIOR_BY_SIDE,
+    StairCell,
+    detect_stair_cells,
 )
 from rpg2gba.traversal.capabilities import CapabilityMap, build_capability_map
 from rpg2gba.traversal.graph import MapGraph, build_map_graph
@@ -268,6 +283,36 @@ def _load_name_table(path: Path) -> dict[int, str]:
     return {int(k): v for k, v in raw.items()}
 
 
+_STAGED_MAP_FILENAME = re.compile(r"^Map(\d+)\.pory$")
+
+
+def _load_staged_map_ids(scripts_dir: Path) -> set[int]:
+    """Map ids that were actually transpiled, from the transpiler's own
+    output directory (`<build_dir>/scripts/Map###.pory`) -- NOT inferred
+    from `transpile_unhandled.jsonl`'s contents.
+
+    Inferring "staged" from the queue is the bug this exists to fix: a
+    cleanly-transpiled map produces zero queue rows, which is
+    indistinguishable from a map that was never staged at all if the queue
+    is the only source consulted. `scripts_dir` is ground truth -- one
+    `.pory` file per staged map, clean or not.
+    """
+    if not scripts_dir.exists():
+        logger.warning(
+            "chapter manifest: no scripts dir at %s; no map can be treated as "
+            "staged, so every row's `unhandled` will be None (the safe "
+            "default -- nothing can then be dispositioned cosmetic)",
+            scripts_dir,
+        )
+        return set()
+    staged: set[int] = set()
+    for path in scripts_dir.iterdir():
+        match = _STAGED_MAP_FILENAME.match(path.name)
+        if match:
+            staged.add(int(match.group(1)))
+    return staged
+
+
 def _load_unhandled_counts(path: Path) -> Counter[tuple[int, int, int]]:
     counts: Counter[tuple[int, int, int]] = Counter()
     if not path.exists():
@@ -424,6 +469,40 @@ def _extract_page(commands: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _generate_terrain_rows(
+    map_id: int,
+    stair_cells: list[StairCell],
+    reachability_consulted: bool,
+) -> list[ManifestRow]:
+    """One `kind="terrain"` row per detected diagonal-stair cell.
+
+    Takes the cells rather than the map so the caller detects once and uses
+    the same answer for both halves of the absorption -- which page rows to
+    skip, and which terrain rows to emit. Detection itself is
+    `tileset_converter.stairs`'s job and is never re-implemented here: the
+    layout converter is the single source of truth for which cells get which
+    native metatile behaviour, and a second detector could disagree with it
+    silently.
+    """
+    rows: list[ManifestRow] = []
+    for cell in stair_cells:
+        terrain = TerrainRef(
+            x=cell.x, y=cell.y,
+            behavior=BEHAVIOR_BY_SIDE[cell.side],
+            source_event_id=cell.event_id,
+        )
+        rows.append(ManifestRow(
+            row_id=terrain_row_id(map_id, "stairs", cell.x, cell.y),
+            kind="terrain",
+            map_id=map_id,
+            content_hash=content_hash(asdict(terrain)),
+            effects=(),
+            terrain=terrain,
+            reachability_consulted=reachability_consulted,
+        ))
+    return rows
+
+
 def _generate_page_rows(
     map_id: int,
     map_data: dict[str, Any],
@@ -431,11 +510,24 @@ def _generate_page_rows(
     var_names: dict[int, str],
     unhandled_counts: Counter[tuple[int, int, int]],
     reachability_context: ReachabilityContext | None,
+    staged_map_ids: set[int],
 ) -> list[ManifestRow]:
     reachability_consulted = reachability_context is not None
     rows: list[ManifestRow] = []
+
+    # Diagonal-stair events are absorbed into terrain rows (below) instead of
+    # emitting an ordinary page row: the script itself is never emitted by
+    # the layout converter, so a page row for it would describe output that
+    # doesn't exist, and emitting both a page row and a terrain row for the
+    # same cell would double-count the same traversal mechanic.
+    stair_cells = detect_stair_cells(map_data)
+    absorbed_event_ids = {cell.event_id for cell in stair_cells}
+    rows.extend(_generate_terrain_rows(map_id, stair_cells, reachability_consulted))
+
     for event in map_data.get("events", []):
         event_id = event["id"]
+        if event_id in absorbed_event_ids:
+            continue
         event_name = event.get("name")
         event_cell = (event["x"], event["y"])
         reach_requires = _reachability_requires(reachability_context, event_cell)
@@ -447,6 +539,10 @@ def _generate_page_rows(
             trigger_raw = page.get("trigger")
             trigger = _TRIGGER_NAMES.get(trigger_raw, str(trigger_raw))
             requires = tuple(sorted(set(extracted["requires"]) | set(reach_requires)))
+            unhandled = (
+                unhandled_counts.get((map_id, event_id, page_idx), 0)
+                if map_id in staged_map_ids else None
+            )
             row = ManifestRow(
                 row_id=page_row_id(map_id, event_id, page_idx),
                 kind="page",
@@ -457,7 +553,7 @@ def _generate_page_rows(
                 unrecognized_heads=extracted["unrecognized_heads"],
                 other_codes=extracted["other_codes"],
                 requires=requires,
-                unhandled=unhandled_counts.get((map_id, event_id, page_idx), 0),
+                unhandled=unhandled,
                 script_typed_conditions=extracted["script_typed_conditions"],
                 event_id=event_id,
                 event_name=event_name,
@@ -540,6 +636,7 @@ def generate_chapter_manifest(
     var_names = _load_name_table(
         Path("reference/uranium_variables.json"))
     unhandled_counts = _load_unhandled_counts(build_dir / "transpile_unhandled.jsonl")
+    staged_map_ids = _load_staged_map_ids(build_dir / "scripts")
 
     conn_path = build_dir / "connections.json"
     connections = _load_json(conn_path) if conn_path.exists() else []
@@ -557,7 +654,7 @@ def generate_chapter_manifest(
         consulted_by_map[map_id] = reachability_context is not None
         rows.extend(_generate_page_rows(
             map_id, map_data, switch_names, var_names, unhandled_counts,
-            reachability_context))
+            reachability_context, staged_map_ids))
 
     rows.extend(_generate_seam_rows(set(map_ids), connections, consulted_by_map))
 

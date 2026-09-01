@@ -128,6 +128,11 @@ def _render_expanded(row: ManifestRow, disp: Disposition | None) -> list[str]:
         out.append(f"- requires: {list(row.requires)}")
     if row.unhandled:
         out.append(f"- unhandled: {row.unhandled}")
+    elif row.unhandled is None:
+        # Distinct from a measured 0: the reader must be able to tell "this
+        # map was never transpiled, the queue says nothing" apart from
+        # "transpiled and clean" at a glance.
+        out.append("- unhandled: null (map never staged)")
     if row.unrecognized_heads:
         out.append(f"- unrecognized heads: {list(row.unrecognized_heads)}")
     if row.other_codes:

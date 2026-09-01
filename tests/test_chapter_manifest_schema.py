@@ -16,11 +16,13 @@ from rpg2gba.chapter_manifest.schema import (
     ManifestRow,
     PageCondition,
     SeamRef,
+    TerrainRef,
     content_hash,
     page_row_id,
     row_from_dict,
     row_to_dict,
     seam_row_id,
+    terrain_row_id,
 )
 
 
@@ -56,9 +58,31 @@ def _seam_row() -> ManifestRow:
     )
 
 
-@pytest.mark.parametrize("row", [_page_row(), _seam_row()])
+def _terrain_row() -> ManifestRow:
+    terrain = TerrainRef(x=12, y=8, behavior="MB_SIDEWAYS_STAIRS_LEFT_SIDE", source_event_id=6)
+    return ManifestRow(
+        row_id=terrain_row_id(37, "stairs", 12, 8),
+        kind="terrain",
+        map_id=37,
+        content_hash=content_hash({
+            "x": 12, "y": 8, "behavior": "MB_SIDEWAYS_STAIRS_LEFT_SIDE", "source_event_id": 6,
+        }),
+        effects=(),
+        terrain=terrain,
+    )
+
+
+@pytest.mark.parametrize("row", [_page_row(), _seam_row(), _terrain_row()])
 def test_row_round_trips_exactly(row: ManifestRow) -> None:
     assert row_from_dict(row_to_dict(row)) == row
+
+
+def test_terrain_row_id_formatting() -> None:
+    assert terrain_row_id(37, "stairs", 12, 8) == "map037/terrain/stairs/12,8"
+
+
+def test_terrain_row_is_never_cosmetic() -> None:
+    assert not _terrain_row().may_be_cosmetic
 
 
 def test_row_from_dict_rejects_a_missing_field() -> None:
@@ -108,10 +132,25 @@ def test_self_switch_write_forbids_cosmetic() -> None:
 
 
 def test_pure_dialogue_page_may_be_cosmetic() -> None:
+    # `unhandled=0` explicitly: this test is about cosmetic-safe effects,
+    # not staging status, and the default is now `None` ("never staged"),
+    # which would make `may_be_cosmetic` False for an unrelated reason.
     row = ManifestRow(
         row_id="x", kind="page", map_id=1, content_hash="0", effects=("text", "se"),
+        unhandled=0,
     )
     assert row.may_be_cosmetic
+
+
+def test_unstaged_row_forbids_cosmetic_even_with_no_effects() -> None:
+    """`unhandled is None` (never staged) is its own veto, independent of
+    the unhandled-count check and the effects check below it -- an
+    unmeasured row is never "clean", even with an empty effect set."""
+    row = ManifestRow(
+        row_id="x", kind="page", map_id=1, content_hash="0", effects=(),
+        unhandled=None,
+    )
+    assert not row.may_be_cosmetic
 
 
 def test_unhandled_queue_entries_forbid_cosmetic() -> None:
@@ -133,8 +172,10 @@ def test_new_state_writing_tags_forbid_cosmetic(tag: str) -> None:
 
 @pytest.mark.parametrize("tag", ["bubble_ui", "animation", "screen_fx"])
 def test_new_cosmetic_safe_tags_permit_cosmetic(tag: str) -> None:
+    # `unhandled=0`: see test_pure_dialogue_page_may_be_cosmetic's comment.
     row = ManifestRow(
         row_id="x", kind="page", map_id=1, content_hash="0", effects=("text", tag),
+        unhandled=0,
     )
     assert row.may_be_cosmetic
     assert row.blocking_tags() == ()

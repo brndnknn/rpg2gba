@@ -158,11 +158,26 @@ def test_dispositionable_row_not_flagged():
 
 
 def test_illegal_cosmetic_state_writing_names_blocking_tags():
-    row = _row(effects=("giveitem", "text"), content_hash="h1")
+    # `unhandled=0`: this test isolates the state-writing-tags message from
+    # the never-staged (`unhandled is None`) arm, which is checked first and
+    # would otherwise produce a different message for the same row.
+    row = _row(effects=("giveitem", "text"), content_hash="h1", unhandled=0)
     disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
     findings = check_chapter([row], {row.row_id: disp})
     illegal = next(f for f in findings if f.rule == RULE_ILLEGAL_COSMETIC)
     assert "giveitem" in illegal.message
+
+
+def test_illegal_cosmetic_never_staged_reports_distinct_message():
+    """`unhandled is None` -- the map was never transpiled at all -- takes
+    priority over any other explanation, even when the row's effects would
+    also independently block cosmetic."""
+    row = _row(effects=(), content_hash="h1", unhandled=None)
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    findings = check_chapter([row], {row.row_id: disp})
+    illegal = next(f for f in findings if f.rule == RULE_ILLEGAL_COSMETIC)
+    assert "never" in illegal.message.lower() and "transpiled" in illegal.message.lower()
+    assert illegal.severity == "error"
 
 
 def test_illegal_cosmetic_unhandled_calls_out_dead_conversion():
@@ -174,7 +189,9 @@ def test_illegal_cosmetic_unhandled_calls_out_dead_conversion():
 
 
 def test_legal_cosmetic_not_flagged():
-    row = _row(effects=("text", "bgm"), content_hash="h1")
+    # `unhandled=0`: a staged, clean row -- otherwise the default `None`
+    # ("never staged") would itself trip RULE_ILLEGAL_COSMETIC.
+    row = _row(effects=("text", "bgm"), content_hash="h1", unhandled=0)
     disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
     findings = check_chapter([row], {row.row_id: disp})
     assert all(f.rule != RULE_ILLEGAL_COSMETIC for f in findings)
@@ -325,7 +342,9 @@ def test_blocked_row_not_walkable_not_flagged():
 
 
 def test_exit_code_zero_when_no_errors():
-    row = _row(effects=("text",), content_hash="h1")
+    # `unhandled=0`: a staged, clean cosmetic row -- see
+    # test_legal_cosmetic_not_flagged's comment.
+    row = _row(effects=("text",), content_hash="h1", unhandled=0)
     disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
     findings = check_chapter([row], {row.row_id: disp})
     assert exit_code(findings) == 0
@@ -497,7 +516,11 @@ def test_unconsulted_map_flagged_even_when_no_blocked_rows_present():
 
 
 def test_unconsulted_map_finding_present_regardless_of_exit_code():
-    row = _row(effects=("text",), content_hash="h1", reachability_consulted=False)
+    # `unhandled=0`: a staged, clean row -- this test isolates
+    # RULE_REACHABILITY_UNENFORCED (a warning) from RULE_ILLEGAL_COSMETIC
+    # (an error), which the default `unhandled=None` would also trip.
+    row = _row(effects=("text",), content_hash="h1", reachability_consulted=False,
+               unhandled=0)
     disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
     findings = check_chapter([row], {row.row_id: disp})
     assert exit_code(findings) == 0  # warning only, never blocks

@@ -230,7 +230,27 @@ def check_chapter(
             ))
 
         if disp.verdict == "cosmetic" and not row.may_be_cosmetic:
-            if row.unhandled:
+            # Checked first, and deliberately: `None` is falsy, so without
+            # this arm a never-staged row (`unhandled is None`) would fall
+            # through into the state-writing-tags `else` below and report a
+            # misleading "state-writing tags" message even when the row
+            # carries none -- the real problem is that the transpile queue
+            # was never consulted for this row at all.
+            if row.unhandled is None:
+                findings.append(Finding(
+                    row_id=row.row_id,
+                    rule=RULE_ILLEGAL_COSMETIC,
+                    message=(
+                        "disposed cosmetic but this row's map was never "
+                        "transpiled (no entry under the transpiler's "
+                        "scripts/ output) -- the unhandled-queue veto could "
+                        "not be evaluated, so 'cosmetic' cannot be "
+                        "justified; stage the map and regenerate the "
+                        "manifest"
+                    ),
+                    severity="error",
+                ))
+            elif row.unhandled:
                 findings.append(Finding(
                     row_id=row.row_id,
                     rule=RULE_ILLEGAL_COSMETIC,

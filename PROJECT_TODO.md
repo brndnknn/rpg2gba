@@ -939,19 +939,6 @@ practice if it catches at least one silent pass across both chapters. CH04's
 pass is done; **CH05's pass, and the decision it feeds, wait on the CH05
 branch being cut.**
 
-### 54. `unhandled: 0` is indistinguishable from "map never transpiled"
-
-CH05 dry run §5.4. `transpile_unhandled.jsonl`'s 244 map-tagged rows fall on
-exactly the 16 `SLICE_MAP_IDS` maps, so any chapter generated before staging gets
-`unhandled: 0` on every row — and `ManifestRow.may_be_cosmetic`'s unhandled-queue
-veto then passes vacuously for the whole chapter. `05-passage-cave.md` §6 already
-warned that zero means "never staged, not clean"; the generator does not encode
-that and the checker cannot see it. Fix: record which map ids the queue covers,
-emit `unhandled: null` for maps outside it, and make `may_be_cosmetic` False until
-the chapter is staged and the manifest regenerated. Also makes the
-generate-after-staging ordering explicit instead of conventional. (CH04 did not
-expose this — map 35 was staged first, so its 6 rows were real.)
-
 ### 62. CH05-scoped items scattered across `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` Part 5 with no tracked home
 
 Filed 2026-08-29 out of an audit of `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` Part 5
@@ -1003,6 +990,51 @@ work, not open questions:
   this, `ROM_TEST_DEV.md`'s "new_game.c debug-harness re-arm technique" section is.
 
 ## Done
+
+- **54. `unhandled: 0` was indistinguishable from "map never transpiled"; and
+  the four Map037 staircases disposed as `cosmetic`** (2026-09-01, CH05
+  prerequisites — `CH05_DECISIONS.md` C1 and B1, both "build the fix").
+
+  **C1.** `ManifestRow.unhandled` is now three-valued: a positive int is that
+  many queue entries, `0` means the map *was* staged and this page produced
+  none (a measured clean result), and `None` means the map was never staged so
+  the queue says nothing at all. `may_be_cosmetic` returns False on `None` —
+  unmeasured must not read as clean. The staged set comes from
+  `_load_staged_map_ids(build_dir / "scripts")`, i.e. the transpiler's own
+  `Map###.pory` output, **not** from the queue's contents: a cleanly-transpiled
+  map produces zero queue rows, which is exactly what an unstaged map produces,
+  so inferring staged-ness from the queue is the bug rather than the fix. A
+  missing `scripts/` dir warns and returns the empty set — nothing can then be
+  `cosmetic`, which fails safe. `RULE_ILLEGAL_COSMETIC` gained a third arm
+  checked *first* (`None` is falsy and would otherwise fall into the
+  state-writing-tags message and misreport the cause); `render.py` prints
+  `unhandled: null (map never staged)`.
+
+  **B1.** Diagonal-stair events are absorbed into `kind="terrain"` rows and no
+  longer emit a page row at all. Detection reuses
+  `tileset_converter.stairs.detect_stair_cells` — no second detector, since the
+  layout converter is the single source of truth for which cell gets which
+  native metatile behaviour (§4.3). New `TerrainRef(x, y, behavior,
+  source_event_id)` beside `SeamRef`, new `terrain` field, new
+  `terrain_row_id(map_id, subkind, x, y)` with a `subkind` slot so later terrain
+  kinds don't collide with stairs at the same cell. Terrain rows can never be
+  `cosmetic`, same as seams.
+
+  Measured on the real corpus: CH05 generates **21 page + 4 terrain = 25 rows**
+  (the same 25 the dry run projected — absorbed, not double-counted), all four
+  staircases carrying the right side (`map037/terrain/stairs/11,9` and `11,10`
+  LEFT, `20,9` and `20,10` RIGHT), no leftover page rows on events 3/6/7/8, and
+  **0 of 25 rows `may_be_cosmetic`** where previously every one of them was.
+  CH04 still checks 0 errors / 42 rows.
+
+  Adding the `terrain` field broke `row_from_dict`'s strict field-set equality —
+  the same mechanism that broke CH01–CH03 when `reachability_consulted` landed
+  (#65) — so `reference/manifests/CH04.manifest.json` was regenerated in the
+  same change. Diff is exactly 42 `"terrain": null` additions plus the two seam
+  rows' `unhandled` moving `0` → `null` (seams never set the field, so they took
+  the new default; correct, and they can't be cosmetic anyway). No
+  `content_hash` moved, no row added or removed, and a second regeneration is a
+  no-op. Suite **2767 passed, 19 skipped**.
 
 - **56. `requires_flash` was a hardcoded `False`; `dark_map` was parsed and never
   read** (2026-08-31, operator ruling, CH05 branch opening) — the content call

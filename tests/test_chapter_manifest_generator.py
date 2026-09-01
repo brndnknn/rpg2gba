@@ -73,6 +73,13 @@ def _setup_chapter(tmp_path: Path, map_id: int, events: list[dict]) -> Path:
     (build_dir / "maps").mkdir(parents=True)
     _write_map(build_dir / "maps" / f"Map{map_id:03d}.json", map_id, events)
     (build_dir / "connections.json").write_text("[]", encoding="utf-8")
+    # These fixtures represent a map that has been through the transpiler --
+    # most of these tests assert on `unhandled`/`may_be_cosmetic`, which now
+    # depend on staging status (`generator._load_staged_map_ids`). A `.pory`
+    # stub is all the loader looks at.
+    scripts_dir = build_dir / "scripts"
+    scripts_dir.mkdir(parents=True)
+    (scripts_dir / f"Map{map_id:03d}.pory").write_text("", encoding="utf-8")
     chapters_path = tmp_path / "chapters.json"
     chapters_path.write_text(json.dumps({
         "chapters": [{"id": "CHX", "maps": [map_id]}],
@@ -366,6 +373,100 @@ def test_generator_never_filters_conditional_pages(tmp_path: Path) -> None:
     gated = rows[1]
     assert gated.condition.switch1_id == 999
     assert not gated.condition.is_unconditional
+
+
+# --- staged-map detection (_load_staged_map_ids) --------------------------
+
+
+def test_load_staged_map_ids_parses_pory_filenames(tmp_path: Path) -> None:
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    (scripts_dir / "Map019.pory").write_text("", encoding="utf-8")
+    (scripts_dir / "Map035.pory").write_text("", encoding="utf-8")
+    (scripts_dir / "CommonEvents.pory").write_text("", encoding="utf-8")
+    (scripts_dir / "Map019.template_fields.json").write_text("{}", encoding="utf-8")
+
+    staged = generator._load_staged_map_ids(scripts_dir)
+
+    assert staged == {19, 35}
+
+
+def test_load_staged_map_ids_absent_dir_returns_empty_and_does_not_crash(
+    tmp_path: Path,
+) -> None:
+    staged = generator._load_staged_map_ids(tmp_path / "no-such-scripts-dir")
+    assert staged == set()
+
+
+def test_unstaged_map_gets_none_unhandled_staged_map_gets_int(tmp_path: Path) -> None:
+    """A page on an unstaged map cannot be measured against the transpile
+    queue at all (`None`); a page on a staged map with no matching queue
+    entry gets a real, measured `0`."""
+    events = [{
+        "id": 1, "name": "NPC", "x": 0, "y": 0,
+        "pages": [_page([_cmd(101, ["Hi"])])],
+    }]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 21, events)
+    # _setup_chapter stages map 21; unstage it for this test.
+    (build_dir / "scripts" / "Map021.pory").unlink()
+
+    rows = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+    assert rows[0].unhandled is None
+    assert rows[0].may_be_cosmetic is False
+
+    (build_dir / "scripts" / "Map021.pory").write_text("", encoding="utf-8")
+    rows2 = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+    assert rows2[0].unhandled == 0
+    assert rows2[0].may_be_cosmetic is True
+
+
+# --- diagonal-stair absorption into terrain rows ---------------------------
+
+
+def _stair_page(move_codes: list[int]) -> dict:
+    """A minimal player-touch stair page: a code-111 branch on the player's
+    facing direction (condition kind 6, character -1), then a move-route
+    command (209) targeting the player (-1) whose embedded route contains
+    the given diagonal move codes. Shape matches `stairs._page_qualifies`/
+    `_page_move_codes`."""
+    return _page([
+        _cmd(111, [6, -1, 0, 0]),
+        _cmd(209, [-1, {"list": [{"code": c} for c in move_codes]}]),
+    ], trigger=1)
+
+
+def test_stair_event_absorbed_into_terrain_row_no_page_row(tmp_path: Path) -> None:
+    """A diagonal-stair event (NW/SE axis -> RIGHT side) is skipped entirely
+    as a page row and instead produces exactly one terrain row -- while a
+    normal event on the same map is untouched."""
+    events = [
+        {
+            "id": 6, "name": "Stairs", "x": 5, "y": 9,
+            "pages": [_stair_page([7, 6])],  # NW, SE -> RIGHT side
+        },
+        {
+            "id": 7, "name": "Sign", "x": 0, "y": 0,
+            "pages": [_page([_cmd(101, ["Hello"])])],
+        },
+    ]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 37, events)
+
+    rows = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+
+    page_rows = [r for r in rows if r.kind == "page"]
+    terrain_rows = [r for r in rows if r.kind == "terrain"]
+
+    assert all(r.event_id != 6 for r in page_rows), "stair event must not get a page row"
+    assert {r.event_id for r in page_rows} == {7}
+
+    assert len(terrain_rows) == 1
+    terrain_row = terrain_rows[0]
+    assert terrain_row.terrain.x == 5
+    assert terrain_row.terrain.y == 9
+    assert terrain_row.terrain.behavior == "MB_SIDEWAYS_STAIRS_RIGHT_SIDE"
+    assert terrain_row.terrain.source_event_id == 6
+    assert terrain_row.may_be_cosmetic is False
+    assert terrain_row.unhandled is None
 
 
 def test_idempotence(tmp_path: Path) -> None:

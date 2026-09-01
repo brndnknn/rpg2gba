@@ -217,15 +217,33 @@ class SeamRef:
 
 
 @dataclass(frozen=True)
+class TerrainRef:
+    """A traversal mechanic realized by a metatile behaviour, not a script.
+
+    A diagonal-stair cell (`tileset_converter.stairs`) is converted to a
+    NATIVE pokeemerald metatile behaviour and its RMXP event is dropped from
+    the emitted output entirely — so, exactly like a `SeamRef`, an
+    event-only manifest cannot see it. `source_event_id` keeps the row
+    traceable back to the RMXP event it replaces, for citation and for
+    cross-checking against `stairs.py`'s own detection.
+    """
+
+    x: int
+    y: int
+    behavior: str
+    source_event_id: int
+
+
+@dataclass(frozen=True)
 class ManifestRow:
-    """One generated row: an event page, or an overland seam.
+    """One generated row: an event page, an overland seam, or a terrain mechanic.
 
     Pure derivation from `output/uranium-build/`. Nothing here is authored, and
     re-running the generator must reproduce it byte for byte.
     """
 
     row_id: str
-    kind: Literal["page", "seam"]
+    kind: Literal["page", "seam", "terrain"]
     map_id: int
     content_hash: str
     effects: tuple[str, ...] = ()
@@ -243,10 +261,23 @@ class ManifestRow:
     # `strength`, ...), from script content. Reachability-derived requirements
     # are a second source and are not populated yet.
     requires: tuple[str, ...] = ()
-    # Count of `transpile_unhandled.jsonl` entries joining to this row. A page
-    # with unhandled queue entries may not be dispositioned `cosmetic`: that is
-    # the free check for a dead conversion with no beat written at all.
-    unhandled: int = 0
+    # Count of `transpile_unhandled.jsonl` entries joining to this row, three-
+    # valued on purpose:
+    #
+    #   a positive int -- that many unhandled queue entries joined to this row.
+    #   0              -- the row's map WAS staged (it has a `<map>.pory` in
+    #                      the transpiler's own output) and this page produced
+    #                      no queue entries: a real, measured clean result.
+    #   None           -- the row's map was never staged at all, so the queue
+    #                      says nothing whatsoever about this row; the veto
+    #                      below cannot be evaluated and must not be read as
+    #                      "clean" just because the count is falsy.
+    #
+    # A page with unhandled queue entries may not be dispositioned `cosmetic`:
+    # that is the free check for a dead conversion with no beat written at
+    # all. `None` exists so a never-transpiled map cannot pass that check
+    # vacuously (see `generator._load_staged_map_ids`).
+    unhandled: int | None = None
     # Whether the page carries a code-111 conditional with params[0] == 12, i.e.
     # a branch whose behaviour lives in Ruby rather than in structure.
     script_typed_conditions: int = 0
@@ -257,6 +288,7 @@ class ManifestRow:
     condition: PageCondition | None = None
     trigger: str | None = None
     seam: SeamRef | None = None
+    terrain: TerrainRef | None = None
     # Whether the offline reachability source (`traversal.reachability`) was
     # actually consulted while generating THIS row's `requires[]` -- i.e.
     # whether this row's map had a verified entry in
@@ -282,7 +314,16 @@ class ManifestRow:
 
     @property
     def may_be_cosmetic(self) -> bool:
-        if self.kind == "seam":
+        if self.kind in ("seam", "terrain"):
+            # A seam is a warp; a terrain row is a load-bearing traversal
+            # behaviour realized by a metatile rather than a script. Neither
+            # is ever decoration.
+            return False
+        if self.unhandled is None:
+            # Unstaged, not clean. The whole point of the three-valued
+            # `unhandled` field is that "never measured" must not read the
+            # same as "measured and found nothing" -- an unstaged map's rows
+            # would otherwise wave through `cosmetic` vacuously.
             return False
         if self.unhandled:
             return False
@@ -452,6 +493,7 @@ def row_from_dict(data: dict[str, Any]) -> ManifestRow:
 
     condition = data["condition"]
     seam = data["seam"]
+    terrain = data["terrain"]
     return ManifestRow(
         **{
             **data,
@@ -462,12 +504,23 @@ def row_from_dict(data: dict[str, Any]) -> ManifestRow:
             "requires": tuple(data["requires"]),
             "condition": PageCondition(**condition) if condition is not None else None,
             "seam": SeamRef(**seam) if seam is not None else None,
+            "terrain": TerrainRef(**terrain) if terrain is not None else None,
         }
     )
 
 
 def page_row_id(map_id: int, event_id: int, page_idx: int) -> str:
     return f"map{map_id:03d}/ev{event_id:03d}/p{page_idx}"
+
+
+def terrain_row_id(map_id: int, subkind: str, x: int, y: int) -> str:
+    """Row id for a terrain row -- a traversal mechanic with no event of its
+    own once absorbed (see `TerrainRef`).
+
+    `subkind` slots in so later terrain kinds (ledges, water) don't collide
+    with stairs at the same cell; pass `"stairs"` for diagonal-stair rows.
+    """
+    return f"map{map_id:03d}/terrain/{subkind}/{x},{y}"
 
 
 def seam_row_id(map_id: int, direction: str, other_map_id: int) -> str:
