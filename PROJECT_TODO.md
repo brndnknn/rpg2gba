@@ -357,7 +357,7 @@ the boot gate, per the design doc's own open note.
 vice versa) in map.json; crossing the seam in mGBA shows continuous art with
 no palette snap and no garbage strip; collision at the boundary is sane.
 
-### 28. Time-of-day + Uranium-only encounter tables are dropped corpus-wide
+### 28. Time-of-day encounter tables are dropped corpus-wide (Cave half RESOLVED 2026-09-02)
 
 The encounter emitter (`tileset_converter/wild_encounters.py`, landed 2026-08-09,
 CH02_TODO #15) fills the fork's four native fields and drops everything else
@@ -389,6 +389,65 @@ currently folded into `land_mons` as a fallback source).
 worth `OW_TIME_OF_DAY_ENCOUNTERS = TRUE` corpus-wide; if yes, emitter support
 for suffixed base_labels + a documented precedence rule between plain and
 split tables. Also cross-referenced by `00-atlas.md:175`.
+
+#### RESOLVED 2026-09-02 — the Cave half is closed; only the time-of-day half remains
+
+Investigated when CH05 (Passage Cave) made this item's own "care about it when: a
+cave chapter lands" trigger fire. Both sides were checked — what the engine does
+with cave encounters, and whether Uranium's data actually loses anything.
+
+**Engine side: there is no cave encounter concept to lose fidelity against.**
+`struct WildEncounterTypes` (`engine/include/wild_encounter.h:29-36`) has exactly
+five pools — land, water, rock smash, fishing, and the DexNav hidden pool. There is
+no `cave_mons` field and no `WILD_AREA_CAVE` in `enum WildPokemonArea` (`:9-15`).
+Encounter rolls are triggered purely by metatile behavior
+(`MetatileBehavior_IsLandWildEncounter`); `StandardWildEncounter`
+(`engine/src/wild_encounter.c:648`) branches on area type only and never inspects
+`gMapHeader.mapType` or `.cave`. The slot pickers `ChooseWildMonIndex_Land` (`:185`)
+and friends take no map-type argument at all. `WildEncounterCheck` (`:590-620`) is
+the sole place `encounterRate` is modified — bike, Flute, Cleanse Tag, Lure, and
+player-mon abilities — with **no cave or map-type term**. All 11 `gMapHeader.cave` /
+`MAP_TYPE_UNDERGROUND` use sites in the engine are lighting/Flash
+(`fldeff_flash.c:45-60,83`, `overworld.c:1108`), object shadows
+(`overworld.c:1734`), battle backdrop and transition (`battle_setup.c:741,796`),
+Dusk Ball catch rate (`battle_script_commands.c:10674`), DexNav cosmetics
+(`dexnav.c:636,708,1115`), and the region map (`region_map.c:1253`). None touches
+table or rate selection. **In Emerald a cave is a land tile with the lights off.**
+
+**Data side: the fold is lossless across the whole corpus, not just CH05.**
+`Data/encounters.dat` has 52 map entries. **23 carry a `Cave` slot** — maps 7, 8,
+17, 36, 37, 71, 74, 80, 83, 96, 106, 123, 150, 184, 189, 190, 191, 192, 193, 202,
+209, 214, 216. Of those 23, **zero** also carry a populated `Land`-family table
+(`Land` / `LandMorning` / `LandDay` / `LandNight`). On every Cave map, `Cave` is the
+sole land-type table with real slot data, so the `_LAND_SOURCES` precedence at
+`pbs_converter/encounters.py:123` never actually has to choose. Watch out for the
+false positive: several Cave maps carry a nonzero `Land` *density* value with a
+null slot list — a leftover default field, not a table. Checking densities alone
+makes these look like conflicts.
+
+Maps 036 and 037 (Passage Cave 1F/2F) have byte-identical Cave tables — Tonemy,
+Barewl, Grozard, Dunsparce, all Lv 4-6 across twelve slots, densities 15 and 20 —
+and nothing else populated on either map.
+
+**Correction to this item's original framing:** the drop is *not* silent.
+`tileset_converter/wild_encounters.py:259-264` logs it at info level per map, naming
+the dropped tables. It logs at Phase 5 emission rather than Phase 2 conversion,
+which is why it reads as invisible from where you would naturally look.
+
+**Conclusion:** folding `Cave` into `land_mons` is correct behavior, not a
+compromise, and needs no code change now or later. HeadbuttLow/High and BugContest
+remain genuinely hostless, but they are not encounter-table fidelity in the same
+sense and no chapter has needed them yet.
+
+**Still open — the time-of-day half, which is the real item.** `OW_TIME_OF_DAY_ENCOUNTERS`
+(`engine/include/config/overworld.h:95`, FALSE) is one flag away from working: the
+schema field `WildPokemonHeader.encounterTypes[TIMES_OF_DAY_COUNT]`
+(`include/wild_encounter.h:39-43`) exists, and every selection function already calls
+`GetTimeOfDayForEncounters` (`wild_encounter.c:410-444`) before indexing
+`gWildMonHeaders`. The blocker is unchanged and is on our side, not the engine's:
+`_LAND_SOURCES` (`pbs_converter/encounters.py:57`) ranks plain `Land` ahead of the
+time-split tables, so a map carrying both silently uses the plain one. Flipping the
+flag without auditing that precedence changes behavior on maps nobody has walked.
 
 ### 30. `text_validator` never scans generated C data headers
 
@@ -943,13 +1002,36 @@ this file or `reference/chapters/05-passage-cave.md` §7. Parked here as CH05-bu
 work, not open questions:
 
 - **The arrival-nudge autorun archetype is missing from Q0's Tier-1 template
-  build set entirely** (§5.6). Fingerprint `map036/ev002/p1` — autorun trigger,
-  `get_character(0).onEvent?` branch, `setTempSwitchOn` tail, player nudged one
-  tile off the arrival cell — is byte-identical to CH04's `map035/ev001/p1`
-  (`beat:B8`), and a corpus census puts the idiom at **324 instances across 73
-  maps**, bigger than the item ball (243), staircase (222) and cave-exit (102)
-  archetypes combined and second only to the door/warp event (996). It belongs in
-  Tier 1, and CH05 needs it authored before its beats can be written.
+  build set entirely** (§5.6). **DONE 2026-09-01 by `CH05_DECISIONS.md` D4** —
+  this bullet was filed 2026-08-29 and the work landed two days later; verified in
+  code 2026-09-02. Template: `src/rpg2gba/playtest/archetypes/arrival_nudge.py`
+  (one of the four shipped). Classifier: `_match_arrival_nudge`
+  (`chapter_manifest/archetypes.py:159`), registered at `:43`, fingerprint
+  predicates `_NUDGE_HEADS` / `_NUDGE_EFFECTS_REQUIRED` at `:62-65`. The module
+  docstring (`:19-26`) records the design point worth keeping: `warp` and
+  `arrival_nudge` stay *separate* archetypes because the two pages routinely share
+  one event — the cave entrance is p0's warp, p1's nudge — so such an event yields
+  two `ArchetypeMatch` objects rather than one blended verdict. Map036 EV002 has
+  exactly that shape.
+
+  **Residue, carried into `CH05_TODO.md`: the template is written but has never run
+  in a ROM.** CH04's `map035/ev001/p1` (`beat:B8`) was authored and deliberately
+  *never registered* — its sibling warp page was out of slice, so nothing compiled
+  for it (`playtest/chapters/ch04.py:121-129`). Map036 EV002 p1 is the first live
+  exercise of `arrival_nudge`, against the corpus's second-largest idiom (324
+  instances across 73 maps — larger than item ball at 243, staircase at 222 and
+  cave-exit at 102 combined, behind only the door/warp event at 996). Of the four
+  Tier-1 templates this is the one most likely to surprise us in CH05.
+
+  Why it needs a beat at all, since the name misleads: the page *moves the player
+  and writes state* (`move_route` + `temp_switch_write` in its effects), so
+  `may_be_cosmetic` is false by the checker's own honest test — unlike the
+  staircase case in §5.2, where the vocabulary genuinely has no correct verdict.
+  It is also the thing that steps the player off the warp's own trigger tile.
+  Broken, it yields either a locked field on arrival (a freeze) or a refiring
+  autorun on that tile (a warp loop) — the latter being the class already
+  boot-observed in `WARP_FACING_HANDOFF.md` / `b7c5b8d7`, where a down-stairs warp
+  re-fired `TryArrowWarp` and bounced the player back upstairs.
 - **TM76 and Sableyeite sit in a Surf-sealed 30-tile room** (§5.7): Map036 has 513
   walkable tiles in 7 connected components, 450 reachable on foot from the
   entrance, but the room at bbox x 31-36/y 11-16 opens only into a water pocket

@@ -352,6 +352,23 @@ that CH05 becomes the corpus's next cleanup target.
 
 Option 1
 
+#### BUILT 2026-09-01 — resolvers and lint both shipped; the "Built:" line above is stale
+
+The **Built:** paragraph above was written 2026-08-28 and never updated. Verified against the code
+2026-09-02: option 1 shipped in full, in commit `758abc5b`.
+
+`src/rpg2gba/playtest/cells.py` implements `event_cell`, `approach_to`, `warp_cell`, `arrival_cell`,
+`entry_cell` and the `raw_cell(x, y, why=...)` escape hatch, cache-backed and failing loud. The lint is
+`tests/test_chapter_coordinate_literals.py` — an AST walker banning bare 2-int tuples in
+`src/rpg2gba/playtest/chapters/*.py`, with a ratchet budget for the pre-ban CH01-CH04 debt and zero
+tolerance for CH05 onward. 20 tests pass, including live resolver checks against the decoded Map037
+corpus rather than fixtures only.
+
+Two corrections to the stale text. The surviving literal is at `chapters/ch04.py:253`, not
+`chapters/route2.py:253` — the modules were renamed to chapter ids by E1 in the same batch. And no
+chapter module calls the resolvers yet, which is expected rather than a gap: CH05 is the first chapter
+authored after the ban and has not been written.
+
 ### D2. Q10 — bidirectional `DEFERRED_*` registration rule
 
 **Decided 2026-08-28:** every `beat:Bn` disposition row must name a **registered** beat, and every
@@ -420,6 +437,21 @@ formalize after; (3) skip it for a 2-map chapter.
 #### Answer
 
 Option 1
+
+#### BUILT 2026-09-01 — READ step and checklist both shipped; the "Built:" line above is stale
+
+Same staleness as D1, and from the same commit (`758abc5b`). Verified 2026-09-02.
+
+`BUILD_PLAN.md:97` carries **step 5, READ**, positioned before ROUTE (step 6) and therefore before
+approve-before-build, as the decision required. It references
+`reference/guides/read_through_checklist.md`, which exists at 103 lines and carries the per-`kind`
+verdict-question table plus the verdict-definition traps — CH04's B14 re-talk case, the
+`blocked` vs `unreachable` distinction, and the rest.
+
+D3 is a process artifact, not executable code, so it has no pytest target and should not be expected to
+have one. What remains genuinely unverified is *adoption*: nothing in the repo shows the checklist has
+been used on a real read-through yet, because CH05 authoring has not started. CH05's step 5 is its
+first live run.
 
 ### D4. Q0 — archetype templates, and two new Tier-1 members
 
