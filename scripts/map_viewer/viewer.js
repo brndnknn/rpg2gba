@@ -565,14 +565,29 @@ function drawBeatMarkers(m, cp, baseX, baseY) {
     }
   }
   const r = Math.max(4, cp * 0.22);
-  declared.forEach(function(b, i) {
+  declared.forEach(function(b) {
     const cx = baseX + b.x*cp + cp/2, cy = baseY + b.y*cp + cp/2;
     starPath(cx, cy, r);
-    ctx.fillStyle = '#ffe066'; ctx.fill();
+    // A DERIVED marker comes from a step-6a locations file, not an authored
+    // chapter module: it is a proposal under review, so it is drawn hollow
+    // with a dashed outline and must never read as a registered beat.
+    if (b.derived) {
+      ctx.fillStyle = 'rgba(255,224,102,0.25)'; ctx.fill();
+      ctx.setLineDash([3,2]);
+    } else {
+      ctx.fillStyle = '#ffe066'; ctx.fill();
+    }
     ctx.strokeStyle = '#7a5c00'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.setLineDash([]);
     if (cp >= 20) {
-      ctx.fillStyle = '#000'; ctx.fillText('B' + i, cx+r+1, cy+3);
-      ctx.fillStyle = '#ffe066'; ctx.fillText('B' + i, cx+r, cy+2);
+      // Label with the beat's OWN name, and its solved route position when
+      // there is one. This used to print 'B' + the array index, which is
+      // not the beat id and not the visit order -- beat ids are labels, not
+      // an ordering (playtest/chapter.py `beat()`), so an index-derived
+      // label was wrong twice over.
+      const label = (b.order != null ? '#' + b.order + ' ' : '') + (b.beat || '?');
+      ctx.fillStyle = '#000'; ctx.fillText(label, cx+r+1, cy+3);
+      ctx.fillStyle = '#ffe066'; ctx.fillText(label, cx+r, cy+2);
     }
   });
   observed.forEach(function(b, i) {
@@ -582,8 +597,9 @@ function drawBeatMarkers(m, cp, baseX, baseY) {
     if (b.status === 'skipped') { ctx.strokeStyle = st.color; ctx.lineWidth = 1.5; ctx.stroke(); }
     else { ctx.fillStyle = st.color; ctx.fill(); ctx.strokeStyle = '#111'; ctx.lineWidth = 1; ctx.stroke(); }
     if (cp >= 20) {
-      ctx.fillStyle = '#000'; ctx.fillText('N' + i, cx+r*0.65+1, cy+3);
-      ctx.fillStyle = st.color; ctx.fillText('N' + i, cx+r*0.65, cy+2);
+      const olabel = b.beat || ('N' + i);
+      ctx.fillStyle = '#000'; ctx.fillText(olabel, cx+r*0.65+1, cy+3);
+      ctx.fillStyle = st.color; ctx.fillText(olabel, cx+r*0.65, cy+2);
     }
   });
   ctx.restore();
@@ -1108,9 +1124,20 @@ function renderBeatPanel() {
   if (!byChapter.size) h = '<span class="lbl">No beats declared for this map.</span>';
   for (const [chapter, g] of byChapter) {
     h += '<div class="beat-chapter">' + escHtml(chapter) + '</div>';
-    g.declared.forEach(function(b, i) {
-      h += '<div class="beat-row" onclick="focusBeat(' + JSON.stringify(chapter) + ',' + JSON.stringify(b.beat) + ',\'declared\',' + i + ')">' +
-        '&#9733; <b>' + escHtml(b.beat) + '</b> ' + escHtml(b.description || '') + '</div>';
+    // Derived rows sort by solved route position, not by beat id: the point
+    // of reviewing them is the ORDER, and ids are labels (playtest/chapter.py
+    // `beat()`), so id order would actively mislead. Authored rows keep
+    // registration order, which already IS playthrough order.
+    const declaredRows = g.declared.slice();
+    if (declaredRows.length && declaredRows.every(function(b) { return b.order != null; })) {
+      declaredRows.sort(function(a, b) { return a.order - b.order; });
+    }
+    declaredRows.forEach(function(b, i) {
+      const cls = 'beat-row' + (b.derived ? ' beat-derived' : '');
+      const pos = b.order != null ? '<span class="beat-order">#' + b.order + '</span> ' : '';
+      h += '<div class="' + cls + '" onclick="focusBeat(' + JSON.stringify(chapter) + ',' + JSON.stringify(b.beat) + ',\'declared\',' + i + ')">' +
+        '&#9733; ' + pos + '<b>' + escHtml(b.beat) + '</b> ' + escHtml(b.description || '') +
+        (b.derived ? ' <span class="beat-derived-tag">derived</span>' : '') + '</div>';
     });
     g.observed.forEach(function(b, i) {
       const cls = 'beat-status-' + (b.status || 'skipped');

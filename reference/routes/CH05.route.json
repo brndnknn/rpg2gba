@@ -1,0 +1,1149 @@
+{
+  "schema": 1,
+  "_comment": [
+    "Generated route plan artifact -- do not hand-edit. Produced by the offline routing solver (rpg2gba.routing) from a chapter's manifest and traversal data. Re-run the solver rather than patching this file."
+  ],
+  "chapter": "CH05",
+  "chapter_module": "CH05",
+  "nodes": [
+    {
+      "index": 0,
+      "kind": "entry",
+      "map_id": 36,
+      "cell": [
+        17,
+        40
+      ],
+      "group": null,
+      "beats": [],
+      "rows": []
+    },
+    {
+      "index": 1,
+      "kind": "group",
+      "map_id": 36,
+      "cell": [
+        17,
+        40
+      ],
+      "group": "B1",
+      "beats": [
+        "B1"
+      ],
+      "rows": [
+        "map036/ev001/p0"
+      ]
+    },
+    {
+      "index": 2,
+      "kind": "group",
+      "map_id": 36,
+      "cell": [
+        10,
+        34
+      ],
+      "group": "B2",
+      "beats": [
+        "B2"
+      ],
+      "rows": [
+        "map036/ev003/p0",
+        "map036/ev003/p1"
+      ]
+    },
+    {
+      "index": 3,
+      "kind": "group",
+      "map_id": 36,
+      "cell": [
+        18,
+        28
+      ],
+      "group": "B3",
+      "beats": [
+        "B3"
+      ],
+      "rows": [
+        "map036/ev004/p0",
+        "map036/ev004/p1"
+      ]
+    },
+    {
+      "index": 4,
+      "kind": "group",
+      "map_id": 36,
+      "cell": [
+        6,
+        12
+      ],
+      "group": "B5",
+      "beats": [
+        "B5"
+      ],
+      "rows": [
+        "map036/ev006/p0",
+        "map036/ev006/p1"
+      ]
+    },
+    {
+      "index": 5,
+      "kind": "group",
+      "map_id": 36,
+      "cell": [
+        21,
+        7
+      ],
+      "group": "B4",
+      "beats": [
+        "B4"
+      ],
+      "rows": [
+        "map036/ev005/p0",
+        "map036/ev005/p1"
+      ]
+    },
+    {
+      "index": 6,
+      "kind": "group",
+      "map_id": 37,
+      "cell": [
+        16,
+        27
+      ],
+      "group": "B8",
+      "beats": [
+        "B8"
+      ],
+      "rows": [
+        "map036/ev002/p0",
+        "map037/ev001/p0"
+      ]
+    },
+    {
+      "index": 7,
+      "kind": "group",
+      "map_id": 36,
+      "cell": [
+        17,
+        4
+      ],
+      "group": "B12",
+      "beats": [
+        "B12"
+      ],
+      "rows": [
+        "map036/ev002/p1"
+      ]
+    },
+    {
+      "index": 8,
+      "kind": "group",
+      "map_id": 37,
+      "cell": [
+        8,
+        6
+      ],
+      "group": "B10",
+      "beats": [
+        "B10"
+      ],
+      "rows": [
+        "map037/ev005/p0",
+        "map037/ev005/p1"
+      ]
+    },
+    {
+      "index": 9,
+      "kind": "group",
+      "map_id": 37,
+      "cell": [
+        10,
+        9
+      ],
+      "group": "B13",
+      "beats": [
+        "B13"
+      ],
+      "rows": [
+        "map037/terrain/stairs/11,10",
+        "map037/terrain/stairs/11,9"
+      ]
+    },
+    {
+      "index": 10,
+      "kind": "group",
+      "map_id": 37,
+      "cell": [
+        16,
+        5
+      ],
+      "group": "B11",
+      "beats": [
+        "B11"
+      ],
+      "rows": [
+        "map037/ev002/p0"
+      ]
+    },
+    {
+      "index": 11,
+      "kind": "group",
+      "map_id": 37,
+      "cell": [
+        19,
+        9
+      ],
+      "group": "B14",
+      "beats": [
+        "B14"
+      ],
+      "rows": [
+        "map037/terrain/stairs/20,10",
+        "map037/terrain/stairs/20,9"
+      ]
+    },
+    {
+      "index": 12,
+      "kind": "group",
+      "map_id": 37,
+      "cell": [
+        24,
+        9
+      ],
+      "group": "B9",
+      "beats": [
+        "B9"
+      ],
+      "rows": [
+        "map037/ev004/p0",
+        "map037/ev004/p1"
+      ]
+    },
+    {
+      "index": 13,
+      "kind": "exit",
+      "map_id": 37,
+      "cell": [
+        19,
+        9
+      ],
+      "group": null,
+      "beats": [],
+      "rows": []
+    }
+  ],
+  "segments": [
+    {
+      "from": 0,
+      "to": 1,
+      "legs": [
+        {
+          "map_id": 36,
+          "tiles": [
+            [
+              17,
+              40
+            ]
+          ],
+          "exit_warp": null
+        }
+      ],
+      "tile_count": 0,
+      "crossed_foreign_triggers": []
+    },
+    {
+      "from": 1,
+      "to": 2,
+      "legs": [
+        {
+          "map_id": 36,
+          "tiles": [
+            [
+              17,
+              40
+            ],
+            [
+              17,
+              39
+            ],
+            [
+              17,
+              38
+            ],
+            [
+              17,
+              37
+            ],
+            [
+              17,
+              36
+            ],
+            [
+              17,
+              35
+            ],
+            [
+              17,
+              34
+            ],
+            [
+              16,
+              34
+            ],
+            [
+              15,
+              34
+            ],
+            [
+              14,
+              34
+            ],
+            [
+              13,
+              34
+            ],
+            [
+              12,
+              34
+            ],
+            [
+              11,
+              34
+            ],
+            [
+              10,
+              34
+            ]
+          ],
+          "exit_warp": null
+        }
+      ],
+      "tile_count": 13,
+      "crossed_foreign_triggers": []
+    },
+    {
+      "from": 2,
+      "to": 3,
+      "legs": [
+        {
+          "map_id": 36,
+          "tiles": [
+            [
+              10,
+              34
+            ],
+            [
+              11,
+              34
+            ],
+            [
+              12,
+              34
+            ],
+            [
+              13,
+              34
+            ],
+            [
+              14,
+              34
+            ],
+            [
+              15,
+              34
+            ],
+            [
+              16,
+              34
+            ],
+            [
+              17,
+              34
+            ],
+            [
+              18,
+              34
+            ],
+            [
+              18,
+              33
+            ],
+            [
+              19,
+              33
+            ],
+            [
+              20,
+              33
+            ],
+            [
+              20,
+              32
+            ],
+            [
+              20,
+              31
+            ],
+            [
+              20,
+              30
+            ],
+            [
+              20,
+              29
+            ],
+            [
+              20,
+              28
+            ],
+            [
+              19,
+              28
+            ],
+            [
+              18,
+              28
+            ]
+          ],
+          "exit_warp": null
+        }
+      ],
+      "tile_count": 18,
+      "crossed_foreign_triggers": []
+    },
+    {
+      "from": 3,
+      "to": 4,
+      "legs": [
+        {
+          "map_id": 36,
+          "tiles": [
+            [
+              18,
+              28
+            ],
+            [
+              18,
+              27
+            ],
+            [
+              18,
+              26
+            ],
+            [
+              18,
+              25
+            ],
+            [
+              19,
+              25
+            ],
+            [
+              20,
+              25
+            ],
+            [
+              20,
+              24
+            ],
+            [
+              20,
+              23
+            ],
+            [
+              21,
+              23
+            ],
+            [
+              22,
+              23
+            ],
+            [
+              23,
+              23
+            ],
+            [
+              23,
+              22
+            ],
+            [
+              23,
+              21
+            ],
+            [
+              23,
+              20
+            ],
+            [
+              23,
+              19
+            ],
+            [
+              23,
+              18
+            ],
+            [
+              23,
+              17
+            ],
+            [
+              23,
+              16
+            ],
+            [
+              23,
+              15
+            ],
+            [
+              22,
+              15
+            ],
+            [
+              21,
+              15
+            ],
+            [
+              20,
+              15
+            ],
+            [
+              19,
+              15
+            ],
+            [
+              18,
+              15
+            ],
+            [
+              17,
+              15
+            ],
+            [
+              16,
+              15
+            ],
+            [
+              15,
+              15
+            ],
+            [
+              14,
+              15
+            ],
+            [
+              13,
+              15
+            ],
+            [
+              13,
+              14
+            ],
+            [
+              12,
+              14
+            ],
+            [
+              11,
+              14
+            ],
+            [
+              10,
+              14
+            ],
+            [
+              9,
+              14
+            ],
+            [
+              9,
+              13
+            ],
+            [
+              9,
+              12
+            ],
+            [
+              8,
+              12
+            ],
+            [
+              7,
+              12
+            ],
+            [
+              6,
+              12
+            ]
+          ],
+          "exit_warp": null
+        }
+      ],
+      "tile_count": 38,
+      "crossed_foreign_triggers": []
+    },
+    {
+      "from": 4,
+      "to": 5,
+      "legs": [
+        {
+          "map_id": 36,
+          "tiles": [
+            [
+              6,
+              12
+            ],
+            [
+              6,
+              11
+            ],
+            [
+              6,
+              10
+            ],
+            [
+              6,
+              9
+            ],
+            [
+              6,
+              8
+            ],
+            [
+              7,
+              8
+            ],
+            [
+              8,
+              8
+            ],
+            [
+              8,
+              7
+            ],
+            [
+              9,
+              7
+            ],
+            [
+              10,
+              7
+            ],
+            [
+              11,
+              7
+            ],
+            [
+              12,
+              7
+            ],
+            [
+              13,
+              7
+            ],
+            [
+              14,
+              7
+            ],
+            [
+              15,
+              7
+            ],
+            [
+              16,
+              7
+            ],
+            [
+              17,
+              7
+            ],
+            [
+              18,
+              7
+            ],
+            [
+              19,
+              7
+            ],
+            [
+              20,
+              7
+            ],
+            [
+              21,
+              7
+            ]
+          ],
+          "exit_warp": null
+        }
+      ],
+      "tile_count": 20,
+      "crossed_foreign_triggers": []
+    },
+    {
+      "from": 5,
+      "to": 6,
+      "legs": [
+        {
+          "map_id": 36,
+          "tiles": [
+            [
+              21,
+              7
+            ],
+            [
+              21,
+              6
+            ],
+            [
+              20,
+              6
+            ],
+            [
+              19,
+              6
+            ],
+            [
+              19,
+              5
+            ],
+            [
+              18,
+              5
+            ],
+            [
+              17,
+              5
+            ],
+            [
+              17,
+              4
+            ]
+          ],
+          "exit_warp": {
+            "event_id": 2,
+            "dest_map": 37,
+            "dest_cell": [
+              16,
+              26
+            ]
+          }
+        },
+        {
+          "map_id": 37,
+          "tiles": [
+            [
+              16,
+              26
+            ],
+            [
+              16,
+              27
+            ]
+          ],
+          "exit_warp": null
+        }
+      ],
+      "tile_count": 8,
+      "crossed_foreign_triggers": []
+    },
+    {
+      "from": 6,
+      "to": 7,
+      "legs": [
+        {
+          "map_id": 37,
+          "tiles": [
+            [
+              16,
+              27
+            ]
+          ],
+          "exit_warp": {
+            "event_id": 1,
+            "dest_map": 36,
+            "dest_cell": [
+              17,
+              4
+            ]
+          }
+        },
+        {
+          "map_id": 36,
+          "tiles": [
+            [
+              17,
+              4
+            ]
+          ],
+          "exit_warp": null
+        }
+      ],
+      "tile_count": 0,
+      "crossed_foreign_triggers": []
+    },
+    {
+      "from": 7,
+      "to": 8,
+      "legs": [
+        {
+          "map_id": 36,
+          "tiles": [
+            [
+              17,
+              4
+            ]
+          ],
+          "exit_warp": {
+            "event_id": 2,
+            "dest_map": 37,
+            "dest_cell": [
+              16,
+              26
+            ]
+          }
+        },
+        {
+          "map_id": 37,
+          "tiles": [
+            [
+              16,
+              26
+            ],
+            [
+              16,
+              25
+            ],
+            [
+              16,
+              24
+            ],
+            [
+              16,
+              23
+            ],
+            [
+              16,
+              22
+            ],
+            [
+              16,
+              21
+            ],
+            [
+              16,
+              20
+            ],
+            [
+              16,
+              19
+            ],
+            [
+              16,
+              18
+            ],
+            [
+              15,
+              18
+            ],
+            [
+              14,
+              18
+            ],
+            [
+              13,
+              18
+            ],
+            [
+              12,
+              18
+            ],
+            [
+              11,
+              18
+            ],
+            [
+              11,
+              17
+            ],
+            [
+              11,
+              16
+            ],
+            [
+              11,
+              15
+            ],
+            [
+              10,
+              15
+            ],
+            [
+              10,
+              14
+            ],
+            [
+              9,
+              14
+            ],
+            [
+              9,
+              13
+            ],
+            [
+              9,
+              12
+            ],
+            [
+              9,
+              11
+            ],
+            [
+              9,
+              10
+            ],
+            [
+              9,
+              9
+            ],
+            [
+              9,
+              8
+            ],
+            [
+              9,
+              7
+            ],
+            [
+              9,
+              6
+            ],
+            [
+              8,
+              6
+            ]
+          ],
+          "exit_warp": null
+        }
+      ],
+      "tile_count": 28,
+      "crossed_foreign_triggers": []
+    },
+    {
+      "from": 8,
+      "to": 9,
+      "legs": [
+        {
+          "map_id": 37,
+          "tiles": [
+            [
+              8,
+              6
+            ],
+            [
+              8,
+              7
+            ],
+            [
+              8,
+              8
+            ],
+            [
+              8,
+              9
+            ],
+            [
+              9,
+              9
+            ],
+            [
+              10,
+              9
+            ]
+          ],
+          "exit_warp": null
+        }
+      ],
+      "tile_count": 5,
+      "crossed_foreign_triggers": []
+    },
+    {
+      "from": 9,
+      "to": 10,
+      "legs": [
+        {
+          "map_id": 37,
+          "tiles": [
+            [
+              10,
+              9
+            ],
+            [
+              12,
+              8
+            ],
+            [
+              12,
+              7
+            ],
+            [
+              12,
+              6
+            ],
+            [
+              12,
+              5
+            ],
+            [
+              13,
+              5
+            ],
+            [
+              14,
+              5
+            ],
+            [
+              15,
+              5
+            ],
+            [
+              16,
+              5
+            ]
+          ],
+          "exit_warp": null
+        }
+      ],
+      "tile_count": 8,
+      "crossed_foreign_triggers": []
+    },
+    {
+      "from": 10,
+      "to": 11,
+      "legs": [
+        {
+          "map_id": 37,
+          "tiles": [
+            [
+              16,
+              5
+            ],
+            [
+              16,
+              6
+            ],
+            [
+              16,
+              7
+            ],
+            [
+              16,
+              8
+            ],
+            [
+              16,
+              9
+            ],
+            [
+              17,
+              9
+            ],
+            [
+              18,
+              9
+            ],
+            [
+              19,
+              9
+            ]
+          ],
+          "exit_warp": null
+        }
+      ],
+      "tile_count": 7,
+      "crossed_foreign_triggers": []
+    },
+    {
+      "from": 11,
+      "to": 12,
+      "legs": [
+        {
+          "map_id": 37,
+          "tiles": [
+            [
+              19,
+              9
+            ],
+            [
+              21,
+              10
+            ],
+            [
+              21,
+              9
+            ],
+            [
+              22,
+              9
+            ],
+            [
+              23,
+              9
+            ],
+            [
+              24,
+              9
+            ]
+          ],
+          "exit_warp": null
+        }
+      ],
+      "tile_count": 5,
+      "crossed_foreign_triggers": []
+    },
+    {
+      "from": 12,
+      "to": 13,
+      "legs": [
+        {
+          "map_id": 37,
+          "tiles": [
+            [
+              24,
+              9
+            ],
+            [
+              24,
+              10
+            ],
+            [
+              23,
+              10
+            ],
+            [
+              22,
+              10
+            ],
+            [
+              21,
+              10
+            ],
+            [
+              19,
+              9
+            ]
+          ],
+          "exit_warp": null
+        }
+      ],
+      "tile_count": 5,
+      "crossed_foreign_triggers": []
+    }
+  ],
+  "precedence": [],
+  "cost": {
+    "tiles": 155
+  },
+  "solver": {
+    "method": "greedy+2opt"
+  }
+}

@@ -2,8 +2,9 @@
 
 **Status:** in progress. Branch `ch05` cut; steps 0-5 done and verified.
 **You are here:** → **STOP 3**. Step 6a has been run: `reference/routes/CH05.locations.json`
-holds 12 derived routing points and the route solves clean (155 tiles, no `CROSSING`).
-The next thing that needs *you* is approving the order, then step 6b.
+holds 12 derived routing points and `reference/routes/CH05.route.json` solves clean
+(155 tiles, no `CROSSING`) — the first route plan any chapter has ever carried. Review
+it in the map viewer (maps 36/37, Events mode), then approve the order and go to 6b.
 
 **What this document is.** The execution path for CH05. Two other documents already
 exist and this one does not repeat them:
@@ -462,6 +463,31 @@ $V -m rpg2gba.routing plan --chapter CH05 --locations --dry-run
 Read the summary. **Any `CROSSING` line is a beat that will fire the wrong event** —
 fix it here, not after the walk goes wrong.
 
+### Review it in the map viewer
+
+The route is easier to judge as a picture than as a tile count. With the server
+running (`python scripts/map_viewer_server.py --port 8765`):
+
+```
+http://localhost:8765/map/36     # Passage Cave 1F
+http://localhost:8765/map/37     # Passage Cave 2F
+```
+
+Press `e` for Events mode; **Beats / Planned / Walked / Dim** are default-on. You get
+the solver's ordered polyline (`drawPlannedRoute`, `viewer.js:423`), and — because a
+step-6a chapter has no authored module — **derived** beat markers read straight from
+`CH05.locations.json`, drawn hollow with a dashed outline and labelled `#<position>
+<beat>` so the visit order is legible on the map. Derived rows sort by solved position
+in the Beats panel, never by beat id; ids are labels, not an ordering.
+
+This is a **new** use of the overlay. `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md:1105-1112`
+promised and shipped it as an *after-the-fact* diagnostic for planned-vs-observed
+divergence; the approval gate it specified is the CLI text summary
+(`BUILD_PLAN.md:107-110`, "read the summary"). Reviewing the order visually *before*
+authoring is better than what is written down, and the wording change belongs in
+`BUILD_PLAN.md` — carried to `PROJECT_TODO.md` at step 10, not edited mid-chapter
+(§2 guardrail).
+
 ## ⏸ STOP 3 — you approve the ORDER
 
 This is a real gate, not a formality (`BUILD_PLAN.md` §2 step 6). You approve the
@@ -865,3 +891,22 @@ Append findings, surprises and decisions here as they happen, newest last.
   - `tests/test_routing_locations.py`, 16 pass. Full suite: 2898 pass, 9 fail, and all
     9 fail identically on the pre-change tree (verified by stash) — pre-existing and
     unrelated.
+- **2026-09-04 (viewer)** — The planned-route overlay promised by
+  `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md:1105-1112` was built and had simply never had
+  data: no chapter has ever committed a `.route.json` (`PROJECT_TODO.md` #67), and
+  step 6a had only ever been run with `--dry-run`, which writes nothing. Wrote
+  `CH05.route.json` and the overlay lit up first try on the already-running server.
+  Two gaps closed while confirming it:
+  - **The declared layer was empty pre-authoring**, by construction — it reads
+    `beat.locations` via `load_chapter`, and `ch05.py` does not exist. `beat_markers`
+    now falls back to `reference/routes/<chapter>.locations.json` for chapters with no
+    module, tagged `derived: True`, drawn hollow/dashed and labelled with the solved
+    route position. It never applies to a chapter whose module loaded, so a derived
+    cell cannot mask an authored one.
+  - **Beat markers were labelled `'B' + array_index`** (`viewer.js:577`), which is
+    neither the beat id nor the visit order — a beat named B1 sitting first in the
+    array rendered as "B0". Now labelled with the beat's own name plus `#position`.
+    Observed markers had the same `'N' + i` defect and now use the beat name.
+  Note V2 promised the *visualization*, not a visual approval gate: `BUILD_PLAN.md`
+  step 6 says "read the summary," a CLI text output. Making STOP 3 visual is a
+  genuine improvement on the written loop and is carried to `PROJECT_TODO.md`.
