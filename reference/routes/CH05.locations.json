@@ -1,0 +1,305 @@
+{
+  "chapter": "CH05",
+  "beats": [
+    {
+      "beat_id": "B1",
+      "map_constant": "MAP_PASSAGE_CAVE_1F",
+      "x": 17,
+      "y": 40,
+      "resolver": "event_cell(MAP_PASSAGE_CAVE_1F, ev1)",
+      "rows": [
+        "map036/ev001/p0"
+      ],
+      "candidates": [
+        {
+          "row_id": "map036/ev001/p0",
+          "map_constant": "MAP_PASSAGE_CAVE_1F",
+          "x": 17,
+          "y": 40,
+          "resolver": "event_cell(MAP_PASSAGE_CAVE_1F, ev1)"
+        }
+      ]
+    },
+    {
+      "beat_id": "B8",
+      "map_constant": "MAP_PASSAGE_CAVE_2F",
+      "x": 16,
+      "y": 27,
+      "resolver": "event_cell(MAP_PASSAGE_CAVE_2F, ev1)",
+      "rows": [
+        "map036/ev002/p0",
+        "map037/ev001/p0"
+      ],
+      "candidates": [
+        {
+          "row_id": "map036/ev002/p0",
+          "map_constant": "MAP_PASSAGE_CAVE_1F",
+          "x": 17,
+          "y": 4,
+          "resolver": "event_cell(MAP_PASSAGE_CAVE_1F, ev2)"
+        },
+        {
+          "row_id": "map037/ev001/p0",
+          "map_constant": "MAP_PASSAGE_CAVE_2F",
+          "x": 16,
+          "y": 27,
+          "resolver": "event_cell(MAP_PASSAGE_CAVE_2F, ev1)"
+        }
+      ]
+    },
+    {
+      "beat_id": "B12",
+      "map_constant": "MAP_PASSAGE_CAVE_1F",
+      "x": 17,
+      "y": 4,
+      "resolver": "event_cell(MAP_PASSAGE_CAVE_1F, ev2)",
+      "rows": [
+        "map036/ev002/p1"
+      ],
+      "candidates": [
+        {
+          "row_id": "map036/ev002/p1",
+          "map_constant": "MAP_PASSAGE_CAVE_1F",
+          "x": 17,
+          "y": 4,
+          "resolver": "event_cell(MAP_PASSAGE_CAVE_1F, ev2)"
+        }
+      ]
+    },
+    {
+      "beat_id": "B2",
+      "map_constant": "MAP_PASSAGE_CAVE_1F",
+      "x": 10,
+      "y": 34,
+      "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev3)",
+      "rows": [
+        "map036/ev003/p0",
+        "map036/ev003/p1"
+      ],
+      "candidates": [
+        {
+          "row_id": "map036/ev003/p0",
+          "map_constant": "MAP_PASSAGE_CAVE_1F",
+          "x": 10,
+          "y": 34,
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev3)"
+        },
+        {
+          "row_id": "map036/ev003/p1",
+          "map_constant": "MAP_PASSAGE_CAVE_1F",
+          "x": 10,
+          "y": 34,
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev3)"
+        }
+      ]
+    },
+    {
+      "beat_id": "B3",
+      "map_constant": "MAP_PASSAGE_CAVE_1F",
+      "x": 18,
+      "y": 28,
+      "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev4)",
+      "rows": [
+        "map036/ev004/p0",
+        "map036/ev004/p1"
+      ],
+      "candidates": [
+        {
+          "row_id": "map036/ev004/p0",
+          "map_constant": "MAP_PASSAGE_CAVE_1F",
+          "x": 18,
+          "y": 28,
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev4)"
+        },
+        {
+          "row_id": "map036/ev004/p1",
+          "map_constant": "MAP_PASSAGE_CAVE_1F",
+          "x": 18,
+          "y": 28,
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev4)"
+        }
+      ]
+    },
+    {
+      "beat_id": "B4",
+      "map_constant": "MAP_PASSAGE_CAVE_1F",
+      "x": 21,
+      "y": 7,
+      "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev5)",
+      "rows": [
+        "map036/ev005/p0",
+        "map036/ev005/p1"
+      ],
+      "candidates": [
+        {
+          "row_id": "map036/ev005/p0",
+          "map_constant": "MAP_PASSAGE_CAVE_1F",
+          "x": 21,
+          "y": 7,
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev5)"
+        },
+        {
+          "row_id": "map036/ev005/p1",
+          "map_constant": "MAP_PASSAGE_CAVE_1F",
+          "x": 21,
+          "y": 7,
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev5)"
+        }
+      ]
+    },
+    {
+      "beat_id": "B5",
+      "map_constant": "MAP_PASSAGE_CAVE_1F",
+      "x": 6,
+      "y": 12,
+      "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev6)",
+      "rows": [
+        "map036/ev006/p0",
+        "map036/ev006/p1"
+      ],
+      "candidates": [
+        {
+          "row_id": "map036/ev006/p0",
+          "map_constant": "MAP_PASSAGE_CAVE_1F",
+          "x": 6,
+          "y": 12,
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev6)"
+        },
+        {
+          "row_id": "map036/ev006/p1",
+          "map_constant": "MAP_PASSAGE_CAVE_1F",
+          "x": 6,
+          "y": 12,
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev6)"
+        }
+      ]
+    },
+    {
+      "beat_id": "B11",
+      "map_constant": "MAP_PASSAGE_CAVE_2F",
+      "x": 16,
+      "y": 5,
+      "resolver": "event_cell(MAP_PASSAGE_CAVE_2F, ev2)",
+      "rows": [
+        "map037/ev002/p0"
+      ],
+      "candidates": [
+        {
+          "row_id": "map037/ev002/p0",
+          "map_constant": "MAP_PASSAGE_CAVE_2F",
+          "x": 16,
+          "y": 5,
+          "resolver": "event_cell(MAP_PASSAGE_CAVE_2F, ev2)"
+        }
+      ]
+    },
+    {
+      "beat_id": "B9",
+      "map_constant": "MAP_PASSAGE_CAVE_2F",
+      "x": 24,
+      "y": 9,
+      "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev4)",
+      "rows": [
+        "map037/ev004/p0",
+        "map037/ev004/p1"
+      ],
+      "candidates": [
+        {
+          "row_id": "map037/ev004/p0",
+          "map_constant": "MAP_PASSAGE_CAVE_2F",
+          "x": 24,
+          "y": 9,
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev4)"
+        },
+        {
+          "row_id": "map037/ev004/p1",
+          "map_constant": "MAP_PASSAGE_CAVE_2F",
+          "x": 24,
+          "y": 9,
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev4)"
+        }
+      ]
+    },
+    {
+      "beat_id": "B10",
+      "map_constant": "MAP_PASSAGE_CAVE_2F",
+      "x": 8,
+      "y": 6,
+      "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev5)",
+      "rows": [
+        "map037/ev005/p0",
+        "map037/ev005/p1"
+      ],
+      "candidates": [
+        {
+          "row_id": "map037/ev005/p0",
+          "map_constant": "MAP_PASSAGE_CAVE_2F",
+          "x": 8,
+          "y": 6,
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev5)"
+        },
+        {
+          "row_id": "map037/ev005/p1",
+          "map_constant": "MAP_PASSAGE_CAVE_2F",
+          "x": 8,
+          "y": 6,
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev5)"
+        }
+      ]
+    },
+    {
+      "beat_id": "B13",
+      "map_constant": "MAP_PASSAGE_CAVE_2F",
+      "x": 10,
+      "y": 9,
+      "resolver": "stair_approach(MAP_PASSAGE_CAVE_2F, stair=(11,9))",
+      "rows": [
+        "map037/terrain/stairs/11,10",
+        "map037/terrain/stairs/11,9"
+      ],
+      "candidates": [
+        {
+          "row_id": "map037/terrain/stairs/11,10",
+          "map_constant": "MAP_PASSAGE_CAVE_2F",
+          "x": 10,
+          "y": 10,
+          "resolver": "stair_approach(MAP_PASSAGE_CAVE_2F, stair=(11,10))"
+        },
+        {
+          "row_id": "map037/terrain/stairs/11,9",
+          "map_constant": "MAP_PASSAGE_CAVE_2F",
+          "x": 10,
+          "y": 9,
+          "resolver": "stair_approach(MAP_PASSAGE_CAVE_2F, stair=(11,9))"
+        }
+      ]
+    },
+    {
+      "beat_id": "B14",
+      "map_constant": "MAP_PASSAGE_CAVE_2F",
+      "x": 19,
+      "y": 9,
+      "resolver": "stair_approach(MAP_PASSAGE_CAVE_2F, stair=(20,9))",
+      "rows": [
+        "map037/terrain/stairs/20,10",
+        "map037/terrain/stairs/20,9"
+      ],
+      "candidates": [
+        {
+          "row_id": "map037/terrain/stairs/20,10",
+          "map_constant": "MAP_PASSAGE_CAVE_2F",
+          "x": 19,
+          "y": 10,
+          "resolver": "stair_approach(MAP_PASSAGE_CAVE_2F, stair=(20,10))"
+        },
+        {
+          "row_id": "map037/terrain/stairs/20,9",
+          "map_constant": "MAP_PASSAGE_CAVE_2F",
+          "x": 19,
+          "y": 9,
+          "resolver": "stair_approach(MAP_PASSAGE_CAVE_2F, stair=(20,9))"
+        }
+      ]
+    }
+  ]
+}

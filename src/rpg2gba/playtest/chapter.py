@@ -79,19 +79,28 @@ BeatFn = Callable[["Emulator"], None]
 #
 #   page_row_id(map_id, event_id, page_idx) -> "map035/ev014/p1"
 #   seam_row_id(map_id, direction, other_map_id) -> "map035/seam/NORTH/map036"
+#   terrain_row_id(map_id, subkind, x, y) -> "map037/terrain/stairs/11,9"
 _PAGE_ROW_RE = re.compile(r"^map\d{3}/ev\d{3}/p\d+$")
 _SEAM_ROW_RE = re.compile(
     r"^map\d{3}/seam/(NORTH|SOUTH|EAST|WEST)/map\d{3}$")
+# Terrain rows were added to the manifest after this validator was written
+# and were rejected here until 2026-09-04, which made a beat unable to claim
+# the stair rows it exercises (CH05 B13/B14 are the first). `subkind` is
+# open-ended by design in `terrain_row_id`, so it is matched as a slug
+# rather than an enumeration.
+_TERRAIN_ROW_RE = re.compile(r"^map\d{3}/terrain/[a-z_]+/-?\d+,-?\d+$")
 
 
 def _validate_row_id(row: str, *, beat_name: str) -> None:
-    if _PAGE_ROW_RE.match(row) or _SEAM_ROW_RE.match(row):
+    if (_PAGE_ROW_RE.match(row) or _SEAM_ROW_RE.match(row)
+            or _TERRAIN_ROW_RE.match(row)):
         return
     raise ValueError(
         f"beat {beat_name!r}: rows entry {row!r} does not match the "
         "chapter-manifest row-id shape (expected a page row like "
-        "'map035/ev014/p1' or a seam row like 'map035/seam/NORTH/map036' "
-        "-- see page_row_id/seam_row_id in "
+        "'map035/ev014/p1', a seam row like 'map035/seam/NORTH/map036', or "
+        "a terrain row like 'map037/terrain/stairs/11,9' -- see "
+        "page_row_id/seam_row_id/terrain_row_id in "
         "src/rpg2gba/chapter_manifest/schema.py)")
 
 

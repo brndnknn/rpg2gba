@@ -49,6 +49,13 @@ from ..traversal.world import (
     WorldGraph,
     build_world_graph,
 )
+from .locations import (
+    chapter_from_locations,
+    derive_locations,
+    load_locations,
+    locations_path,
+    write_locations,
+)
 from .plan import RoutePlan, load_plan, plan_to_dict, route_path, write_plan
 from .solver import RouteSolverError, solve_route
 
@@ -57,6 +64,10 @@ logger = logging.getLogger(__name__)
 MANIFESTS_DIR = Path("reference") / "manifests"
 DEFAULT_BUILD_DIR = Path("output") / "uranium-build"
 DEFAULT_CHAPTERS_PATH = Path("reference") / "chapters.json"
+
+# Sentinel for `--locations` used with no value: fall back to the
+# reference/routes/<chapter>.locations.json convention.
+_LOCATIONS_DEFAULT = "@default"
 
 
 def _manifest_path(chapter: str) -> Path:
@@ -233,10 +244,14 @@ def cli() -> None:
 @click.option("--module", "module", default=None,
               help="Playtest chapter module registering the beats "
                    "(default: the chapter id, e.g. CH04 -> chapters/ch04.py).")
+@click.option("--locations", "locations_opt", type=str,
+              default=None, is_flag=False, flag_value=_LOCATIONS_DEFAULT,
+              help="Solve against a derived locations file instead of importing the playtest chapter module (default path: reference/routes/<chapter>.locations.json). This is the step-6 path: it lets an ORDER be approved before the beats are authored.")
 @click.option("--dry-run", is_flag=True, help="Solve and print a summary; write nothing.")
 def plan_cmd(
     chapter: str, out: Path | None, manifest: Path | None, build_dir: Path,
-    chapters_path: Path, module: str | None, dry_run: bool,
+    chapters_path: Path, module: str | None, locations_opt: str | None,
+    dry_run: bool,
 ) -> None:
     """Solve a chapter's route plan and write it (or, with --dry-run, just show it)."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -245,13 +260,33 @@ def plan_cmd(
     if not manifest_file.exists():
         raise click.ClickException(f"manifest not found: {manifest_file}")
 
-    module = module or chapter
-    try:
-        chapter_obj = load_chapter(module)
-    except KeyError as exc:
-        raise click.ClickException(str(exc)) from exc
-
     rows = load_manifest(manifest_file)
+
+    if locations_opt is not None:
+        if module is not None:
+            raise click.ClickException(
+                "--locations and --module are mutually exclusive: the first "
+                "solves against derived coordinates (before the beats exist), "
+                "the second against the authored module")
+        loc_file = (locations_path(chapter) if locations_opt == _LOCATIONS_DEFAULT
+                    else Path(locations_opt))
+        if not loc_file.exists():
+            raise click.ClickException(
+                f"locations file not found: {loc_file} -- run "
+                f"`python -m rpg2gba.routing locations --chapter {chapter}` first")
+        loc_chapter, records = load_locations(loc_file)
+        if loc_chapter != chapter:
+            raise click.ClickException(
+                f"{loc_file} is for chapter {loc_chapter!r}, not {chapter!r}")
+        chapter_obj = chapter_from_locations(chapter, records)
+        logger.info("solving against %d derived location(s) from %s",
+                    len(records), loc_file)
+    else:
+        module = module or chapter
+        try:
+            chapter_obj = load_chapter(module)
+        except KeyError as exc:
+            raise click.ClickException(str(exc)) from exc
     map_ids_for_chapter = _load_chapter_maps(chapter, chapters_path)
     graphs, overlays = _build_graphs_and_overlays(map_ids_for_chapter, build_dir)
     world = _build_world(build_dir)
@@ -274,6 +309,54 @@ def plan_cmd(
     write_plan(route, out_path)
     click.echo(f"wrote {out_path}: {len(route.nodes)} node(s), {route.tile_cost} tile(s)")
     sys.exit(0)
+
+
+@cli.command("locations")
+@click.option("--chapter", required=True, help="Chapter id, e.g. CH05.")
+@click.option("--manifest", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Manifest path (default: reference/manifests/<chapter>.manifest.json)")
+@click.option("--dispositions", "dispositions_opt",
+              type=click.Path(exists=True, path_type=Path), default=None,
+              help="Dispositions path (default: reference/manifests/<chapter>.dispositions.json)")
+@click.option("--out", type=click.Path(path_type=Path), default=None,
+              help="Output path (default: reference/routes/<chapter>.locations.json)")
+@click.option("--dry-run", is_flag=True, help="Derive and print; write nothing.")
+def locations_cmd(chapter: str, manifest: Path | None, dispositions_opt: Path | None,
+                  out: Path | None, dry_run: bool) -> None:
+    """Derive each dispositioned beat's routing point from the manifest.
+
+    Runs BEFORE the chapter's playtest module exists, which is what lets
+    step 6 approve an order rather than grade one. Emits where each beat is,
+    never what happens there.
+    """
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    manifest_file = manifest or _manifest_path(chapter)
+    if not manifest_file.exists():
+        raise click.ClickException(f"manifest not found: {manifest_file}")
+    disp_file = dispositions_opt or (MANIFESTS_DIR / f"{chapter}.dispositions.json")
+    if not disp_file.exists():
+        raise click.ClickException(f"dispositions not found: {disp_file}")
+
+    rows = load_manifest(manifest_file)
+    try:
+        records = derive_locations(chapter, rows, disp_file)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    for record in records:
+        extra = ""
+        if len({(c.map_constant, c.x, c.y) for c in record.candidates}) > 1:
+            extra = "  [multi-cell: routed on terminal row]"
+        click.echo(f"{record.beat_id:<5} {record.map_constant} "
+                   f"({record.x},{record.y})  {record.resolver}"
+                   f"  rows={','.join(record.rows)}{extra}")
+
+    if dry_run:
+        return
+    out_path = out or locations_path(chapter)
+    write_locations(chapter, records, out_path)
+    click.echo(f"wrote {out_path}: {len(records)} beat(s)")
 
 
 @cli.command("show")

@@ -1,8 +1,9 @@
 # CH05 — Passage Cave: live work items
 
-**Status:** in progress. Branch `ch05` cut; steps 0-2 done and verified.
-**You are here:** → step 3 (ART) is a read-and-check step with nothing to run, so the
-next command you execute is **step 4, WIRE**.
+**Status:** in progress. Branch `ch05` cut; steps 0-5 done and verified.
+**You are here:** → **STOP 3**. Step 6a has been run: `reference/routes/CH05.locations.json`
+holds 12 derived routing points and the route solves clean (155 tiles, no `CROSSING`).
+The next thing that needs *you* is approving the order, then step 6b.
 
 **What this document is.** The execution path for CH05. Two other documents already
 exist and this one does not repeat them:
@@ -411,8 +412,51 @@ Step 6 is what silences it.
 chapter red over. So `RULE_ROUTE_ORDER` has been unenforced for every chapter gated to
 date, and slice 3 is validated **forward, from here**.
 
+> **Revised 2026-09-04 — this step used to be circular, and the circle is now cut.**
+> `routing plan` imports the chapter's playtest module and reads every routing
+> coordinate out of the beats registered there (`solver.py:84-110` takes
+> `beat.locations[0]`; `__main__.py:249-252` does a literal
+> `importlib.import_module`). So the old step 6 asked you to approve an order using a
+> command that could not run until `ch05.py` — the thing the approved order is
+> supposed to shape — already existed. Every chapter to date resolved that by
+> authoring first, which is exactly why `routing` was built as a *grader*
+> (`513b0f00`, "Both beat orders were right, and nothing had ever compared them")
+> rather than a planner.
+>
+> **Step 6a now derives the coordinates from data that already exists at this point**
+> — the manifest, the dispositions, and the decoded map JSON — into a small reviewable
+> file. That file materializes into an in-memory `Chapter`, so `solver.py` is
+> untouched. Locations are pure lookups; behaviour (assertions, facing, prose) stays
+> hand-authored at 6b, so the standing rejection of a beat *generator*
+> (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md:309-330`) is not reopened.
+
+### Step 6a — derive the beat locations
+
 ```bash
-$V -m rpg2gba.routing plan --chapter CH05 --module ch05 --dry-run
+$V -m rpg2gba.routing locations --chapter CH05
+```
+
+Writes `reference/routes/CH05.locations.json`: one routing point per `beat:`
+disposition, each carrying the **resolver that produced it** and **every candidate row
+cell it was chosen from**. Read those two fields — they are the review surface. Rules
+the derivation applies, all of which fail loud rather than defaulting:
+
+- **Trigger decides the resolver**, not archetype: `player_touch`/`autorun` → the
+  event's own cell (you stand *on* a warp you step onto, and on the tile a nudge fires
+  from), `action`/`event_touch` → `approach_to`. This locates B10 and B12, neither of
+  which is one of the four recognized archetypes.
+- **A beat spanning distinct cells routes on its terminal row.** B8, B13 and B14 each
+  claim two rows under the round-trip and staircase idioms; a traversal is represented
+  by where it *ends*, because routing cost is about where the next beat departs from.
+  Multiple pages of one event collapse before this rule is ever consulted.
+- **A stair row resolves to its approach cell, never the stair cell.**
+- **Seam rows fail loud** — they carry a direction/offset, not a cell, and nothing
+  converts one. CH05 has none; a later chapter will hit this.
+
+Then solve against it:
+
+```bash
+$V -m rpg2gba.routing plan --chapter CH05 --locations --dry-run
 ```
 
 Read the summary. **Any `CROSSING` line is a beat that will fire the wrong event** —
@@ -426,10 +470,15 @@ plan is the thing you are signing off. Solving after the beats are written inver
 that — the solver then just grades an order nobody can change without reopening the
 chapter, which is exactly the state CH01-CH04 are in.
 
-Then write it and register the beats in that order:
+Because 6a auto-resolves the multi-cell beats, the approval covers **two** things now:
+the order itself, and the three derived choices the log lines flag (B8, B13, B14). The
+losing candidates are all in the file; overruling one means editing
+`CH05.locations.json` and re-solving, not arguing with the solver.
+
+### Step 6b — write the plan and author the beats
 
 ```bash
-$V -m rpg2gba.routing plan --chapter CH05 --module ch05
+$V -m rpg2gba.routing plan --chapter CH05 --locations
 ```
 
 - [ ] Author `src/rpg2gba/playtest/chapters/ch05.py`, beat groups in the approved order.
@@ -439,6 +488,14 @@ $V -m rpg2gba.routing plan --chapter CH05 --module ch05
       `warp_cell`, `arrival_cell`, `entry_cell` — and the `raw_cell(x, y, why="...")`
       escape hatch only with a real reason, counted per chapter. Three CH04 failures
       traced to unverified coordinate literals; that is what the ban is for.
+      `CH05.locations.json` records the resolver call for each beat, so this is
+      transcription, not rediscovery.
+- [ ] **Re-solve against the authored module** and confirm it agrees with 6a's plan:
+      ```bash
+      $V -m rpg2gba.routing plan --chapter CH05 --dry-run
+      ```
+      A disagreement means the authored beats drifted from what you approved. There is
+      no automated equality check between the two yet — see §Deferred.
 - [ ] Re-run `chapter_manifest check --chapter CH05`. `route_model_unenforced` should
       now be gone and `RULE_ROUTE_ORDER` enforcing.
 
@@ -624,6 +681,14 @@ Recorded so they are not re-litigated mid-chapter.
   discarding good work, while reporting success. The pic half legitimately stands
   alone; the battle half should stage per-trainer or abort. Out of CH05 scope
   (`BUILD_PLAN.md` §2 guardrail), belongs in `PROJECT_TODO.md`.
+- **No automated equality check between the locations plan and the authored module.**
+  Step 6a's `CH05.locations.json` and the `ch05.py` you author at 6b are two statements
+  of the same coordinates, and nothing yet fails if they disagree — 6b's re-solve is a
+  manual eyeball. This is the residual cost of splitting the artifact and it is the one
+  real objection to the approach; it wants a `routing locations --check` that diffs the
+  authored beats against the approved file. Out of CH05 scope (`BUILD_PLAN.md` §2),
+  carry to `PROJECT_TODO.md` at step 10.
+
 - **`ITEM_TM76` needs a sanity check — filed, not blocking.** The transpiler resolved
   B6's TM76 to `ITEM_TM76`, which passes the fork-index gate, but this expansion
   normally names TMs `ITEM_TM_<MOVE>`. `05-passage-cave.md:134` says TM76 is Stealth
@@ -760,3 +825,43 @@ Append findings, surprises and decisions here as they happen, newest last.
     B14 (east staircase) — down from the 13 the first pass minted. Renumbered
     contiguously while nothing is registered; note that B14 briefly meant the 2F->1F
     warp during this session and now means the east staircase.
+- **2026-09-04 (later still)** — **Step 6 was circular, and the circle is now cut in
+  code.** `routing plan` imports the playtest chapter module (`__main__.py:249-252`) and
+  reads every routing coordinate from the beats registered there
+  (`solver.py:84-110`, `beat.locations[0]`); the manifest carries no coordinates at all
+  (`generator.py:552` computes an event cell and discards it). So the old step 6 could
+  not run before `ch05.py` existed, which is why `routing` shipped as a grader
+  (`513b0f00`) and why no chapter has ever had a route plan — `reference/routes/` did
+  not exist in the tree or in history. Built `src/rpg2gba/routing/locations.py` plus a
+  `routing locations` subcommand and a `plan --locations` path: derive one routing
+  point per `beat:` disposition from manifest + dispositions + map JSON, materialize
+  the file as an in-memory `Chapter`, and hand *that* to `solve_route` — so `solver.py`
+  is unchanged. CH05 solves from derived locations: 12 beats, 14 nodes, **155 tiles, no
+  `CROSSING` lines**. Findings along the way, all of which would otherwise have surfaced
+  during authoring:
+  - **B11's cell was wrong in this log and is corrected.** The earlier entry claimed
+    `approach_to` defaults to (16,6), that staging map 40 makes "both (16,5) and (16,6)
+    go live at once", and that B11 therefore needs `prefer="east"` → (17,5). That
+    conflated a warp *destination* with a warp *source*. Map037's only code-201 events
+    are EV001 (16,27) and EV002 **(16,5)**; (16,6) carries no warp event, it is merely
+    where Map040's return warp deposits the player, and a destination arms nothing.
+    When CH06 stages map 40, **(16,5) goes live and (16,6) does not.** B11 is a
+    `player_touch` warp, so its cell is the trigger tile (16,5) and no `prefer=` is
+    needed. Operator call, 2026-09-04.
+  - **A terrain/stairs row can never be a routing point.** Its recorded cell is the
+    stair itself, and no edge in the traversal graph ever *targets* a stair cell — an
+    E/W press is redirected diagonally across it. BFS from anywhere in Map037's
+    walkable region reaches 282 cells and **none of the four stair cells is among
+    them**, even though `is_walkable` returns True for each. The first solve dead-ended
+    with "no route from group 'B10' to any of ['B13', 'B14']". `_stair_approach` now
+    resolves a stair row to the E/W neighbour owning the `stair_diagonal` edge (B13 →
+    (10,9), B14 → (19,9)). This is the same trap the earlier stairs entry describes from
+    the other direction: a cell-blocking experiment reads stair cells as unreachable,
+    and so does the router.
+  - **`_validate_row_id` rejected terrain row ids** (`playtest/chapter.py`), so no beat
+    could claim the stair rows it exercises — CH05's B13/B14 are the first to need it.
+    Fixed by adding the `terrain_row_id` shape; page and seam shapes unchanged. This
+    would have blocked step 6b authoring regardless of the routing work.
+  - `tests/test_routing_locations.py`, 16 pass. Full suite: 2898 pass, 9 fail, and all
+    9 fail identically on the pre-change tree (verified by stash) — pre-existing and
+    unrelated.
