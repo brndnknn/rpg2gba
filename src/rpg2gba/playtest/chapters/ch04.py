@@ -385,9 +385,11 @@ ROCK_17_FACING = "DOWN"
 # own seam row points at map 40 "Luz", not Passage Cave/map 36).
 CAVE_MOUTH_XY = (20, 33)
 CAVE_MOUTH_APPROACH = (20, 34)
-# First real collision north of the cave mouth (metatile 214, collision 1).
-CAVE_MOUTH_NORTH_WALL_XY = (20, 31)
-CAVE_MOUTH_NORTH_OPEN_XY = (20, 32)
+# The two tiles north of the mouth -- (20,31) the first real collision
+# (metatile 214, collision 1) and (20,32) the open cell before it -- were
+# constants here until 2026-09-04. They are gone because they are no longer
+# reachable without crossing (20,33), which now warps; anything north of the
+# boundary is CH05's to assert, not this chapter's. See B7.
 
 # B9: the "Old entrance to Nowtoch City" sign, Map035 event id 2 "EV002",
 # (19,34), graphic direction 2 (down) -> approach one tile south, facing UP,
@@ -866,48 +868,35 @@ def b6(emu: Emulator) -> None:
 
 # -- B7 ------------------------------------------------------------------
 
-@ch04.beat("B7", "The cave-mouth tile is walkable and inert this chapter: "
-                   "the whole event (id 1 'EV001', both pages) is dropped -- "
-                   "its only code-201 warp targets unstaged Map036, and "
-                   "`metadata_wiring.classify_event` skips the WHOLE event on "
-                   "any out-of-slice warp. EV001's pages are blank-graphic, so "
-                   "it never blocked the player in RMXP either (it is a "
-                   "player-touch warp host, not a wall) -- the player steps "
-                   "onto it, no warp fires, and real terrain stops them two "
-                   "tiles north. The crossing into Passage Cave belongs to "
-                   "whichever chapter stages map 36 (CH05)",
+@ch04.beat("B7", "The player can reach the Passage Cave mouth's approach "
+                   "tile (20,34) from this chapter's start, and this chapter "
+                   "asserts nothing about the tile itself. Boundary crossings "
+                   "belong to the ARRIVING chapter (operator convention, "
+                   "2026-09-04): CH04's contract is to deliver the player to "
+                   "the boundary, and the crossing into Passage Cave is CH05's "
+                   "to own, because that is the chapter whose maps make it "
+                   "true. This beat deliberately never steps onto the mouth "
+                   "tile (20,33)",
              map_constant=MAP_CONST, at=CAVE_MOUTH_APPROACH)
 def b7(emu: Emulator) -> None:
+    # DO NOT step onto CAVE_MOUTH_XY (20,33). Until 2026-09-04 this beat did
+    # exactly that and asserted no warp fired -- true only while map 36 was
+    # unstaged, because `metadata_wiring.classify_event` skips a whole event
+    # on any out-of-slice code-201. CH05 added 36/37 to `SLICE_MAP_IDS`, the
+    # warp now emits (MAP_ROUTE_02 warp_events at (20,33)), and crossing here
+    # would teleport the player into the cave for the FIVE beats registered
+    # after this one -- B9, B11, B12, B13 and B15 all declare
+    # map_constant=MAP_ROUTE_02. An edge beat that crosses the edge silently
+    # owns the player's position for everything downstream of it.
     _walk_absorbing(emu, "B7", *CAVE_MOUTH_APPROACH,
                     absorb_wild=True, absorb_trainer=True)
-    # Walking to (20,32) necessarily crosses the cave mouth at (20,33): the
-    # column is the only way in (x=19 is solid from y=34 north, x=21 has no
-    # clean run past y=29). `_walk_absorbing` is the retry-until-arrived
-    # primitive -- `try_step` overshoots here, since its 16-frame settle is a
-    # full extra tile of buffered input.
-    _walk_absorbing(emu, "B7", *CAVE_MOUTH_NORTH_OPEN_XY,
-                    absorb_wild=True, absorb_trainer=True)
-    if emu.player_pos() != CAVE_MOUTH_NORTH_OPEN_XY:
-        shot = emu.screenshot("b7_north_pos")
+    if emu.player_pos() != CAVE_MOUTH_APPROACH:
+        shot = emu.screenshot("b7_approach_pos")
         raise ScenarioError(
-            f"B7: expected to stand at {CAVE_MOUTH_NORTH_OPEN_XY} after "
-            f"crossing the cave mouth {CAVE_MOUTH_XY}, got "
-            f"{emu.player_pos()} ({shot})")
-    # The dropped event is inert: crossing it fired no warp.
-    _require_map(emu, "B7", MAP_CONST)
-
-    # Real terrain stops the walk north one tile later.
-    before = emu.player_pos()
-    emu.face("UP")
-    if _try_step(emu, "UP"):
-        shot = emu.screenshot("b7_wall_crossed")
-        raise ScenarioError(
-            f"B7: stepping UP from {CAVE_MOUTH_NORTH_OPEN_XY} toward "
-            f"{CAVE_MOUTH_NORTH_WALL_XY} moved the player -- that tile "
-            f"decodes collision 1 and must stop the walk north ({shot})")
-    if emu.player_pos() != before:
-        shot = emu.screenshot("b7_drifted")
-        raise ScenarioError(f"B7: player position changed anyway ({shot})")
+            f"B7: expected to stand at {CAVE_MOUTH_APPROACH}, one tile south "
+            f"of the cave mouth {CAVE_MOUTH_XY}, got {emu.player_pos()} "
+            f"({shot})")
+    # Still on Route 2: the walk stopped short of the boundary, as intended.
     _require_map(emu, "B7", MAP_CONST)
 
 
@@ -1126,9 +1115,18 @@ def b15(emu: Emulator) -> None:
 # whichever future chapter/patch closes the gap.
 
 DEFERRED_BEATS = (
-    ("B8", "Map035 EV001 page 1's once-per-visit autorun -- dropped whole "
-          "because EV001's OTHER page carries an out-of-slice warp; "
-          "restore once CH05 stages Map036", b8_autorun_deferred),
+    # NOT "restore once CH05 stages Map036" any more, which is what this said
+    # until 2026-09-04. CH05 staged it, and the operator's boundary convention
+    # settled where the beat goes: this autorun fires on the Route 2 side of
+    # the CH04|CH05 crossing, observable only by coming back OUT of the cave,
+    # so CH05's round-trip entry beat is what exercises it. CH04 deliberately
+    # never registers it -- same disposition as B7, one boundary, one owner.
+    ("B8", "Map035 EV001 page 1's once-per-visit autorun on the cave-mouth "
+          "arrival cell (20,33) -- a boundary observable, owned by CH05 "
+          "under the boundary convention (an outgoing chapter delivers the "
+          "player to the edge; the arriving chapter asserts the crossing). "
+          "Permanently deferred here, not pending: CH05's entry beat claims "
+          "this row", b8_autorun_deferred),
     ("B10", "Larrie's phone-rematch offer -- needs a PokeNav-driving "
            "primitive (none exists) or an Emulator.set_flag primitive "
            "(none exists) to reach the self-switch B/A precondition",

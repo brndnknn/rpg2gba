@@ -312,7 +312,7 @@ Two things to expect specifically here:
 
 **Good:** exit 0, manifest written to `reference/manifests/CH05.manifest.json`.
 
-- [ ] **Step 3's tileset-budget check, discharged here.** `phase5` exiting 0 *is* the
+- [x] **Step 3's tileset-budget check, discharged here.** `phase5` exiting 0 *is* the
       check — the 1024 guard raises from inside it. A `ValueError` naming a tileset and
       a count over 1024 stops the chapter; it is not something to work around.
 
@@ -693,3 +693,70 @@ Append findings, surprises and decisions here as they happen, newest last.
   `pipeline convert-map` are explanatory prose in callouts and this Log. Step 3
   reframed as an explicit no-command checkpoint keeping its number, with its two
   checks moved to checkboxes at steps 4 and 8 where they are actually discharged.
+- **2026-09-04** — **STOP 1 + step 5 (READ) done: 25 rows dispositioned, checker
+  0 errors.** Five findings, one operator convention, one cross-chapter repair.
+  - **Boundary convention (operator ruling).** *A boundary crossing belongs to the
+    chapter being opened, not the one shipping.* An outgoing chapter's contract is
+    to deliver the player to the edge; the crossing is asserted by the chapter whose
+    maps make it true. Rationale: an edge beat written against an unstaged neighbour
+    is a test authored to decay, and it fails in the wrong chapter. **Carry to
+    `PROJECT_TODO.md` at step 10** — `BUILD_PLAN.md` should state it, but editing the
+    shared loop doc mid-chapter is the §2 scope creep guardrail (same disposition the
+    ART defect got).
+  - **CH04's B7 was silently invalidated by step 1 and is now repaired.** Adding 36/37
+    to `SLICE_MAP_IDS` made `metadata_wiring.classify_event` stop returning
+    `("skip", "out-of-slice warp")` for Map035 EV001, so `MAP_ROUTE_02` now emits warps
+    at (20,33) — while B7 asserted *"the player steps onto it, no warp fires."* B7 is
+    8th of CH04's 13 beats, so crossing there would have teleported the player into the
+    cave for B9/B11/B12/B13/B15, all of which declare `map_constant=MAP_ROUTE_02`: one
+    stale edge assertion, six broken beats, inside CH05's own predecessor replay.
+    B7 now walks to (20,34) and stops. `_PRE_BAN_BUDGET["ch04.py"]` 25 -> 23.
+  - **B11 does not convert, by design.** Map040 is not in `SLICE_MAP_IDS`, so the exit
+    at Map037 (16,5) emitted no `warp_event` — `PassageCave2F` has exactly two warps,
+    (16,27) and (16,26). Under the convention B11 asserts only that the player reaches
+    the boundary; CH06 owns the crossing. **Step 7 constraint, and it is not obvious:**
+    the beat must use `approach_to(..., prefer="east")` -> **(17,5)**. The default
+    approach cell is (16,6) — and `Map040 ev019 (68,43)` warps back to `Map037 (16,6)`
+    twice, so staging map 40 mints an arrival warp there. **Both (16,5) and (16,6) go
+    live at once**; a BFS avoiding both still reaches (17,5) in 33 steps.
+  - **The stairs ARE mandatory traversal — but the obvious experiment says otherwise.**
+    Blocking the four stair *cells* changes reachability by exactly zero (282 -> 282)
+    because you are never *on* a sideways staircase: an E/W press into one is displaced
+    diagonally across it (`traversal/graph.py:221-225`), and the cells have no walkable
+    N/S neighbour, so they read as "unreachable" in any cell-blocking BFS. The correct
+    experiment removes `stair_diagonal` *edges*: reachability drops **282 -> 233** and
+    the exit (16,5) becomes UNREACHABLE, while Nuñes and the Revive NPC keep stair-free
+    paths — `05-passage-cave.md` §3 vindicated exactly as written. Anyone re-deriving
+    this with `column_blocked` and a cell blocklist will "disprove" a true claim.
+  - **CH04's deferred B8 is now unblocked and owed a decision — FILE, do not fix here.**
+    Its `DEFERRED_BEATS` reason reads *"restore once CH05 stages Map036"*, which this
+    chapter just did: Map035 EV001 compiles again, so the arrival nudge at (20,33) has a
+    live subject. `chapter_manifest check --chapter CH04` reports it today as
+    `unregistered_beat` (warning, because CH04 is not the live chapter). Open question
+    it raises: the nudge is a CH04 *row* but fires on the CH05 crossing — under the new
+    convention, whose beat is it? Not answered here.
+- **2026-09-04 (later)** — Two more operator rulings, both narrowing the beat set.
+  - **CH04's deferred B8 gets B7's treatment: it stays out of CH04, permanently.** Its
+    `DEFERRED_BEATS` reason no longer reads "restore once CH05 stages Map036" — the
+    autorun fires on the Route 2 side of the crossing and is observable only by coming
+    back OUT of the cave, so CH05's entry beat owns it. **Encoding gap, filed not
+    fixed:** `build_beat_model` loads a chapter's own module *plus predecessors*, never
+    successors, so a CH05 beat cannot satisfy CH04's committed `beat:B8` disposition.
+    CH04 therefore keeps reporting `unregistered_beat` as a **warning** (it is not the
+    live chapter) — counted debt, already recorded in `MEMORY.md` as such. The real fix
+    is letting `BeatModel` see a boundary row claimed by the arriving chapter; that is
+    tooling work, so it goes to `PROJECT_TODO.md` at step 10 beside the convention.
+  - **Warp round-trip idiom (operator).** *A warp is tested by crossing it, crossing
+    back, and crossing again, so the beat ENDS on the far side* — stated for a chapter's
+    entry warp and then generalized: "it probably makes sense to test any warp that
+    way." Consequence: **one beat per warp PAIR, claiming both manifest rows**, the same
+    shape as the staircases. Two ids collapsed — the 1F->2F and 2F->1F rows are now both
+    `beat:B8`, and the cave entry/exit pair is both `beat:B1` (the doc's B1 becomes the
+    round trip, not the one-way crossing). B11 is the single exception and that is the
+    point: with map 40 unstaged there is nothing to come back from, so it cannot use the
+    idiom, and CH06 writes the round trip when it stages Nowtoch.
+  - **Net beat set: B1-B5, B8-B14, plus `blocked:surf` for B6/B7.** Only THREE ids are
+    new beyond `05-passage-cave.md`'s list — B12 (arrival nudge), B13 (west staircase),
+    B14 (east staircase) — down from the 13 the first pass minted. Renumbered
+    contiguously while nothing is registered; note that B14 briefly meant the 2F->1F
+    warp during this session and now means the east staircase.

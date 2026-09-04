@@ -203,7 +203,7 @@ def test_warp_beat_registers_one_beat_with_resolved_location(
 ) -> None:
     b = _builder()
     warp_beat(
-        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_36", map_id=36,
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
         event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
         direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
     )
@@ -212,7 +212,7 @@ def test_warp_beat_registers_one_beat_with_resolved_location(
     beat = chapter.beats[0]
     assert beat.archetype == "warp"
     assert beat.rows == ("map036/ev001/p0",)
-    assert beat.locations[0].map_constant == "MAP_PASSAGE_CAVE_36"
+    assert beat.locations[0].map_constant == "MAP_PASSAGE_CAVE_1F"
     assert (beat.locations[0].x, beat.locations[0].y) != (0, 0)
 
 
@@ -222,7 +222,7 @@ def test_warp_beat_threshold_requires_direction(
     b = _builder()
     with pytest.raises(ValueError, match="requires direction="):
         warp_beat(
-            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_36",
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
             map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
             mechanism="threshold", beat_name="W1", manifest_rows=ch05_rows,
         )
@@ -234,7 +234,7 @@ def test_warp_beat_unknown_mechanism_fails_loud(
     b = _builder()
     with pytest.raises(ValueError, match="is not one of"):
         warp_beat(
-            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_36",
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
             map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
             mechanism="teleporter",  # not a real mechanism
             beat_name="W1", manifest_rows=ch05_rows,
@@ -249,8 +249,8 @@ def test_arrival_nudge_beat_registers_one_beat(
 ) -> None:
     b = _builder()
     arrival_nudge_beat(
-        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_36", map_id=36,
-        event_id=2, from_map_constant="MAP_PASSAGE_CAVE_37",
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=2, from_map_constant="MAP_PASSAGE_CAVE_2F",
         beat_name="N1", manifest_rows=ch05_rows,
     )
     chapter = b.build()
@@ -258,7 +258,7 @@ def test_arrival_nudge_beat_registers_one_beat(
     beat = chapter.beats[0]
     assert beat.archetype == "arrival_nudge"
     assert beat.rows == ("map036/ev002/p1",)
-    assert beat.locations[0].map_constant == "MAP_PASSAGE_CAVE_36"
+    assert beat.locations[0].map_constant == "MAP_PASSAGE_CAVE_1F"
 
 
 def test_arrival_nudge_beat_unknown_event_fails_loud(
@@ -267,8 +267,8 @@ def test_arrival_nudge_beat_unknown_event_fails_loud(
     b = _builder()
     with pytest.raises(ValueError, match="no 'arrival_nudge' archetype match"):
         arrival_nudge_beat(
-            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_36",
-            map_id=36, event_id=997, from_map_constant="MAP_PASSAGE_CAVE_37",
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=997, from_map_constant="MAP_PASSAGE_CAVE_2F",
             beat_name="NX", manifest_rows=ch05_rows,
         )
 

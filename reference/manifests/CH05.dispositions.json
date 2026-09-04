@@ -1,0 +1,145 @@
+{
+  "map036/ev001/p0": {
+    "disposition": "beat:B1",
+    "affirmed_hash": "306fcd584f65b5f1",
+    "note": "Cave exit at (17,40) -> Route 2 Map035 (20,33) via pbCaveExit: the RETURN leg of the CH04|CH05 boundary. Shares B1 -- the doc's B1 (\"enter cave from Route 2\") is now the round trip, not the one-way crossing, so the entry and return legs are one beat. WARP ROUND-TRIP IDIOM (operator, 2026-09-04): a warp is tested by crossing it, crossing back, and crossing again, so the beat ENDS on the far side. One beat per warp PAIR, claiming both manifest rows -- the same shape as the staircases (B13/B14), where one physical thing owns both its rows. Owned by CH05 under the boundary convention. STEP 7: B1's rows= must also claim the two CH04-manifest rows this beat exercises -- map035/ev001/p0 (the entry crossing) and map035/ev001/p1 (the Route 2 arrival nudge, permanently deferred in ch04.py as of 2026-09-04). Sequence: Route 2 (20,34) -> step (20,33) -> arrive 1F (17,39) -> walk (17,40) -> arrive Route 2 (20,33), nudge fires -> step back onto (20,33) -> end inside the cave."
+  },
+  "map036/ev002/p0": {
+    "disposition": "beat:B8",
+    "affirmed_hash": "43ecf218544d702a",
+    "note": "Player-touch warp 1F->2F at (17,4) -> Map037 (16,26). Doc B8, now the whole internal round trip rather than the forward leg alone. WARP ROUND-TRIP IDIOM (operator, 2026-09-04): a warp is tested by crossing it, crossing back, and crossing again, so the beat ENDS on the far side. One beat per warp PAIR, claiming both manifest rows -- the same shape as the staircases (B13/B14), where one physical thing owns both its rows. STEP 7: rows=(\"map036/ev002/p0\", \"map037/ev001/p0\"). Sequence: step (17,4) -> arrive 2F (16,26) -> walk (16,27) -> arrive 1F (17,4), B12's nudge fires -> step back onto (17,4) -> end on 2F, which is where the rest of the chapter happens."
+  },
+  "map036/ev002/p1": {
+    "disposition": "beat:B12",
+    "affirmed_hash": "4a55df2ccabd01ae",
+    "source": "output/uranium-build/maps/Map036.json ev002/p1; reference/scripts_dump/041_Interpreter.rb:536 get_character; reference/scripts_dump/022_Game_Event_v17.rb:78 setTempSwitchOn; reference/scripts_dump/101__PField_Field.rb:2929 setTempSwitchOn (Interpreter arm)",
+    "note": "Arrival-nudge autorun, gated on runtime predicate s:tsOff?(\"A\") (switch 22): go transparent -> step the player one tile off the arrival cell -> setTempSwitchOn(\"A\") makes it once-per-visit. Content hash 4a55df2ccabd01ae is BYTE-IDENTICAL to CH04's map035/ev001/p1 (324 instances across 73 maps). Own id, not shared: it is a distinct observable on its own event, and the arrival_nudge template registers it under its own prefix. Observable during B8's round trip: coming back down from 2F lands the player on (17,4) and this autorun steps them off it. Its own beat, not folded into B8 -- the round-trip idiom governs warps, and this is an autorun that happens to sit on the same event. The chapter's only row with unhandled queue entries (2)."
+  },
+  "map036/ev003/p0": {
+    "disposition": "beat:B2",
+    "affirmed_hash": "067df10d4d4645c6",
+    "source": "output/uranium-build/maps/Map036.json ev003/p0 (:5765-5771); reference/scripts_dump/101__PField_Field.rb:2303 Kernel.pbItemBall",
+    "note": "Escape Rope item ball at (10,35), one-shot via self-switch A. Doc B2; d=11 from the entrance. item_ball_beats(beat_prefix=\"B2\", negative_beat=True) registers B2_grant for this row."
+  },
+  "map036/ev003/p1": {
+    "disposition": "beat:B2",
+    "affirmed_hash": "6c2d90d22489cb2a",
+    "note": "Escape Rope ball's spent page (self-switch A). SHARES B2 with p0: item_ball_beats registers the family B2_grant + B2_spent, and beat_model._matches satisfies a `B2` disposition with either. One beat id per EVENT (operator, 2026-09-04). Not cosmetic -- reachable only because p0 set the self-switch (checklist trap (a)); the observable is that re-touching grants no second Escape Rope."
+  },
+  "map036/ev004/p0": {
+    "disposition": "beat:B3",
+    "affirmed_hash": "88d53c400a1e11af",
+    "source": "output/uranium-build/maps/Map036.json ev004/p0 (:6008-6014); reference/scripts_dump/115_PTrainer_NPCTrainers.rb:358 pbTrainerBattle; reference/scripts_dump/170__PSystem_Utilities.rb:1046 pbNoticePlayer; reference/scripts_dump/101__PField_Field.rb:2863 pbTrainerIntro, :2873 pbTrainerEnd",
+    "note": "Hiker Manny at (18,29), event-sight trainer battle; self-switch A after. Doc B3; d=15. Event name is \"Trainer(5)\" -- the verdict comes from the page's pbTrainerBattle content, not the name (checklist trap (b)). trainer_beats(beat_prefix=\"B3\") registers B3_battle here."
+  },
+  "map036/ev004/p1": {
+    "disposition": "beat:B3",
+    "affirmed_hash": "0f1650865355ac3d",
+    "note": "Manny's defeated re-talk page (self-switch A), pbCallBub emote + line. SHARES B3 with p0 -- trainer_beats registers B3_retalk0 for this row. Reachable only because p0's battle set the self-switch (checklist trap (a), the CH04 B14 shape)."
+  },
+  "map036/ev005/p0": {
+    "disposition": "beat:B4",
+    "affirmed_hash": "efdfa7b2c13cd64d",
+    "source": "output/uranium-build/maps/Map036.json ev005/p0 (:6196-6201); reference/scripts_dump/101__PField_Field.rb:2303 Kernel.pbItemBall",
+    "note": "Great Ball item ball at (22,7), one-shot via self-switch A. Doc B4; d=65, the deepest reachable target on 1F."
+  },
+  "map036/ev005/p1": {
+    "disposition": "beat:B4",
+    "affirmed_hash": "6c2d90d22489cb2a",
+    "note": "Great Ball's spent page. SHARES B4 (B4_grant + B4_spent). Same reasoning as map036/ev003/p1; identical content hash."
+  },
+  "map036/ev006/p0": {
+    "disposition": "beat:B5",
+    "affirmed_hash": "cc3c34dfe6934bc8",
+    "source": "output/uranium-build/maps/Map036.json ev006/p0 (:6438-6444); reference/scripts_dump/115_PTrainer_NPCTrainers.rb:358 pbTrainerBattle; reference/scripts_dump/170__PSystem_Utilities.rb:1046 pbNoticePlayer",
+    "note": "Blackbelt Keichi at (6,13), event-sight trainer battle. Doc B5; d=49. Event name \"Trainer(3)\" collides with Map037's Nunes event name -- both verdicts read from content, not name."
+  },
+  "map036/ev006/p1": {
+    "disposition": "beat:B5",
+    "affirmed_hash": "72f5e7de3d504e46",
+    "note": "Keichi's defeated re-talk page. SHARES B5 (B5_battle + B5_retalk0)."
+  },
+  "map036/ev008/p0": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "34f7a62ccab55332",
+    "source": "output/uranium-build/maps/Map036.json ev008/p0 (:6626-6631); reference/scripts_dump/101__PField_Field.rb:2303 Kernel.pbItemBall; output/uranium-build/wiki/Passage_Cave.wiki",
+    "assertable": false,
+    "note": "TM76 (Stealth Rock) item ball, inside the sealed 30-tile room (bbox x31-36 / y11-16). BFS over Map036's real walkability: 513 walkable tiles in 7 components, 450 reachable on foot from the entrance (17,39), and this room is in none of them -- wall on north/east/west, one southern opening into a surfable water pocket (terrain tag 7) that is itself disconnected. blocked, not unreachable: Surf is granted at Map143 (Act 5), a nameable future chapter, so a real revisit debt is owed. assertable=false because no walkable tile is adjacent -- the player cannot walk up and be refused, so no negative beat can be written now (contrast CH04's B6 rock, which had an open south face). The checker's own GraphApproachModel independently agreed: it raised no blocked_missed_assertion, which only happens when has_walkable_approach returns False. Doc B6, struck from the live list."
+  },
+  "map036/ev008/p1": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "6c2d90d22489cb2a",
+    "assertable": false,
+    "note": "TM76 ball's spent page. Same sealed room, same capability, same non-approachability as p0. blocked rather than beat because reachability supersedes the archetype: a spent-page assertion cannot be written for a ball that cannot be collected."
+  },
+  "map036/ev009/p0": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "f8b13c8df56832cb",
+    "source": "output/uranium-build/maps/Map036.json ev009/p0 (:6782-6787); reference/scripts_dump/101__PField_Field.rb:2303 Kernel.pbItemBall; output/uranium-build/wiki/Passage_Cave.wiki",
+    "assertable": false,
+    "note": "Sableyeite (Mega Stone) item ball, same sealed room as ev008, same BFS evidence, same Surf/Map143 debt, same assertable=false. Doc B7, struck from the live list. NOTE for the atlas maintainer: 00-atlas.md credits CH40 with the corpus's first Mega Stone; this one is earlier in map order but not collectible until Act 5 (05-passage-cave.md 7.1 #3a, open operator call)."
+  },
+  "map036/ev009/p1": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "6c2d90d22489cb2a",
+    "assertable": false,
+    "note": "Sableyeite ball's spent page. Same reasoning as map036/ev008/p1."
+  },
+  "map037/ev001/p0": {
+    "disposition": "beat:B8",
+    "affirmed_hash": "818beea2529db0ed",
+    "note": "Player-touch warp 2F->1F at (16,27) -> Map036 (17,4), dir 0 = retain facing. SHARES B8 with map036/ev002/p0: it is the return leg of the same internal warp pair, and under the round-trip idiom one beat owns both directions. Carried its own id until 2026-09-04 (since reused for the east staircase, so do not read the old number back into this row); collapsing it is what the idiom is for -- you cannot test a warp back without testing the warp back."
+  },
+  "map037/ev002/p0": {
+    "disposition": "beat:B11",
+    "affirmed_hash": "231626029f869d99",
+    "source": "output/uranium-build/maps/Map037.json ev002/p0 (:3288-3304); reference/scripts_dump/101__PField_Field.rb:2047 pbCaveExit",
+    "note": "The CH05|CH06 boundary at (16,5). Map040 (Nowtoch) is NOT in SLICE_MAP_IDS, so metadata_wiring.classify_event returned (\"skip\", \"out-of-slice warp\") and NO warp_event was emitted -- PassageCave2F has exactly two warps, (16,27) and (16,26), nothing at (16,5). Under the boundary convention (operator, 2026-09-04) B11 therefore asserts only that the player REACHES the boundary; the crossing into Nowtoch belongs to CH06. STEP 7 CONSTRAINT: the beat must approach from the EAST, at=(17,5), via approach_to(..., prefer=\"east\") -- it must NOT step on (16,5), and must NOT use the default approach cell (16,6), because Map040 warps back to Map037 (16,6) twice (05-passage-cave.md 2), so BOTH tiles become live warps the moment CH06 stages map 40. A BFS avoiding both reaches (17,5) in 33 steps. Reaching it requires crossing a staircase (B13/B14). NOT round-trippable, and that is the point: with map 40 unstaged there is no warp to cross and nothing to come back from, so B11 is the one warp row in the chapter that cannot use the round-trip idiom. CH06 writes the round trip when it stages Nowtoch."
+  },
+  "map037/ev004/p0": {
+    "disposition": "beat:B9",
+    "affirmed_hash": "f7f292ceb77e9449",
+    "source": "output/uranium-build/maps/Map037.json ev004/p0 (:3701-3707); reference/scripts_dump/115_PTrainer_NPCTrainers.rb:358 pbTrainerBattle; reference/scripts_dump/170__PSystem_Utilities.rb:1046 pbNoticePlayer",
+    "note": "Hiker Nunes at (24,10), event-sight trainer battle. Doc B9. Verified stair-free: reachable from the arrival cell with every stair_diagonal edge removed, so it does not depend on B13/B14."
+  },
+  "map037/ev004/p1": {
+    "disposition": "beat:B9",
+    "affirmed_hash": "b0983b13a5c4691e",
+    "note": "Nunes's defeated re-talk page. SHARES B9 (B9_battle + B9_retalk0)."
+  },
+  "map037/ev005/p0": {
+    "disposition": "beat:B10",
+    "affirmed_hash": "2a8a31adcc4b95e7",
+    "source": "output/uranium-build/maps/Map037.json ev005/p0 (:3973-3979); reference/scripts_dump/101__PField_Field.rb:2373 Kernel.pbReceiveItem; reference/scripts_dump/170__PSystem_Utilities.rb:2506 pbCallBub",
+    "note": "NPC at (8,7) grants a Revive on talk. The two code-121 writes are switch 185 FLAG_MENU_ON_EVENT on/off, bracketing the dialogue -- a scratch/mutex flag, not story state (05-passage-cave.md 3). Doc B10; self-switch A after. Verified stair-free. Matches no archetype template, so B10_grant is hand-written."
+  },
+  "map037/ev005/p1": {
+    "disposition": "beat:B10",
+    "affirmed_hash": "4f4ef220158cdca3",
+    "note": "The Revive NPC's post-gift page: pbCallBub + line, still inside the FLAG_MENU_ON_EVENT bracket. SHARES B10 -- hand-written B10_retalk. The one-id-per-event rule applies to hand-written events too, so the numbering describes the game rather than which rows a template happened to own. Carries switch_write, so cosmetic-ineligible on the mechanical rule alone; it would be a beat regardless, by checklist trap (a)."
+  },
+  "map037/terrain/stairs/11,9": {
+    "disposition": "beat:B13",
+    "affirmed_hash": "794a987efa3505e6",
+    "source": "output/uranium-build/maps/Map037.json ev008 (\"Stairs\", player-touch, through=false, code-111 character-direction branch, move code 8); src/rpg2gba/tileset_converter/stairs.py",
+    "note": "West staircase, upper cell -> MB_SIDEWAYS_STAIRS_LEFT_SIDE. B13 claims BOTH west cells: you are never ON a sideways staircase, an E/W press is displaced diagonally across it (traversal/graph.py:221-225), so crossing exercises both cells in one motion and there is one observable per staircase. MANDATORY TRAVERSAL, verified: with every stair_diagonal edge removed, reachability from the arrival cell (16,26) drops 282 -> 233 cells and the exit (16,5) becomes UNREACHABLE. The RMXP event is dropped entirely -- no object event and no script reach the ROM -- so walking it on device is the only evidence it converted."
+  },
+  "map037/terrain/stairs/11,10": {
+    "disposition": "beat:B13",
+    "affirmed_hash": "a216ab3ed982af74",
+    "source": "output/uranium-build/maps/Map037.json ev007 (\"Stairs\", player-touch, through=false, move code 5); src/rpg2gba/tileset_converter/stairs.py",
+    "note": "West staircase, lower cell -> MB_SIDEWAYS_STAIRS_LEFT_SIDE, NE/SW axis. Shares B13 with (11,9); the beat registers rows=(both)."
+  },
+  "map037/terrain/stairs/20,9": {
+    "disposition": "beat:B14",
+    "affirmed_hash": "0a8953af972471a7",
+    "source": "output/uranium-build/maps/Map037.json ev006 (\"Stairs\", player-touch, through=false, move code 7); src/rpg2gba/tileset_converter/stairs.py",
+    "note": "East staircase, upper cell -> MB_SIDEWAYS_STAIRS_RIGHT_SIDE, NW/SE axis. B14 claims both east cells, same argument as B13. This is the staircase on the shortest warp-safe route to B11's approach tile (17,5)."
+  },
+  "map037/terrain/stairs/20,10": {
+    "disposition": "beat:B14",
+    "affirmed_hash": "bec2d808eab06d9c",
+    "source": "output/uranium-build/maps/Map037.json ev003 (\"Stairs\", player-touch, through=false, move code 6); src/rpg2gba/tileset_converter/stairs.py",
+    "note": "East staircase, lower cell -> MB_SIDEWAYS_STAIRS_RIGHT_SIDE. Shares B14 with (20,9)."
+  }
+}
