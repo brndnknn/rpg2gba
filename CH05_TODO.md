@@ -715,6 +715,36 @@ Recorded so they are not re-litigated mid-chapter.
   authored beats against the approved file. Out of CH05 scope (`BUILD_PLAN.md` §2),
   carry to `PROJECT_TODO.md` at step 10.
 
+- **ROUTE (step 6) runs before object events exist, so its crossing check is vacuous —
+  reorder the loop AFTER CH05.** Step 4's `phase5` regenerates the engine maps as the
+  warps-only Map Walker corpus with no object events (`phase5.py:8-11`); trainer
+  objects and their sight cones are only restored at step 7 by `build_object_events`
+  and the assembler's copy into `engine/data/maps`. But `build_trigger_overlay` reads
+  `engine/data/maps`, so a route solved at step 6 sees **zero** trainers and reports
+  zero `CROSSING` lines regardless of the truth. CH05's first solve did exactly that;
+  after staging objects, the same 155-tile order was found to enter trainer cones in
+  five places. Affects every chapter, not just this one. Fix is a `BUILD_PLAN.md`
+  ordering change (ROUTE after object staging); shared-doc surgery, so carry to
+  `PROJECT_TODO.md` at step 10 rather than editing mid-chapter (§2 guardrail).
+- **`destination_scripts` is never populated, and is global rather than per-destination.**
+  `routing/__main__.py:296` calls `solve_route` without it and it defaults to empty
+  (`solver.py:229`), so **a trainer's own sight cone is treated as a foreign hazard on
+  the very segment whose destination is that trainer** — the solver contorts to avoid
+  Manny on its way to Manny. Re-solving CH05 with real cone data went 155 -> 233 tiles
+  and produced an incoherent order. It is also forwarded unchanged to every
+  `plan_segment` (`solver.py:355`), so it structurally cannot express "crossing X's
+  cone is fine when X is the destination." Filed, not fixed.
+- **No warp-topology precedence.** `_derive_precedence` (`solver.py:159-209`) builds
+  ordering edges only from self-switch reads/writes, so nothing prevents a far-side
+  beat being ordered before the warp beat that reaches it — the cone-aware re-solve put
+  B9 (on 2F) before B8 (the 1F->2F warp round trip that introduces 2F). Filed.
+- **A vacuous trigger overlay should say so.** Zero `CROSSING` lines currently reads
+  identically whether the route is clean or the overlay was empty. The project already
+  has the right idiom for this — `route_model_unenforced` refuses to look like a pass —
+  and the same discipline belongs here: if a chapter's dispositions carry trainer rows
+  but the overlay yields no `TRAINER_SIGHT` tiles on those maps, fail loud (§4.5).
+  Filed.
+
 - **`ITEM_TM76` needs a sanity check — filed, not blocking.** The transpiler resolved
   B6's TM76 to `ITEM_TM76`, which passes the fork-index gate, but this expansion
   normally names TMs `ITEM_TM_<MOVE>`. `05-passage-cave.md:134` says TM76 is Stealth
@@ -910,3 +940,43 @@ Append findings, surprises and decisions here as they happen, newest last.
   Note V2 promised the *visualization*, not a visual approval gate: `BUILD_PLAN.md`
   step 6 says "read the summary," a CLI text output. Making STOP 3 visual is a
   genuine improvement on the written loop and is carried to `PROJECT_TODO.md`.
+- **2026-09-04 (sight cones)** — Operator asked what happens if a trainer spots the
+  player before the walk reaches the cell where the battle was supposed to start. Two
+  separate answers, and the first one was a real hole.
+  - **Step 6's crossing check was measuring nothing.** See §Deferred: object events do
+    not exist at step 6. Ran step 7's first two commands (`stage_slice_scripts --write`,
+    `assemble_pathfinder`, both exit 0) to populate them, then re-checked. Real cones:
+    Manny (18,29) sight **5** `FACE_RIGHT` (single facing + stationary -> CERTAIN),
+    Keichi (6,13) sight 3 `LOOK_AROUND`, Nuñes m37 (24,10) sight 3 `LOOK_AROUND`. The
+    approved 155-tile order enters a cone on five legs: B2->B3 at (20,29) CERTAIN,
+    B3->B5, B5->B4, B14->B9, B9->exit. **All five are benign** — each is either into
+    the cone of the trainer that leg is walking to (B3 *is* Manny, B5 *is* Keichi, B9
+    *is* Nuñes) or past a trainer already defeated. No leg walks an *undefeated*
+    trainer's cone en route to a non-trainer beat, which is the shape that would
+    actually fire the wrong event. The order stands.
+  - **Runtime tolerance is already built, and is not a routing concern.** The question
+    "does the harness recognise the battle as the beat it was heading to, finish it in
+    place, and re-path around the trainer's new position" is answered yes on all three
+    counts: `_walk_greedy` polls `_in_battle()` even when the field is unlocked
+    (`emulator.py:2422-2437`, from the 2026-08-11 no-lock wild-battle regression) and
+    raises `WalkInterrupted`; `_trigger_trainer` asserts the live opponent trainer id,
+    not merely that a battle happened; and `_plan_route` blocks every active object
+    event's **live** tile via `_occupied_object_tiles` (`emulator.py:1613-1647`) on
+    every re-plan, so a trainer standing on the planned path is routed around. The
+    static `MapGraph` has no object-event awareness at all — occupancy is layered on at
+    plan time, deliberately. `_press_a_live` (`ch04.py:576-616`) exists for the
+    aftermath (Larrie's template (18,36) vs measured (18,39) post-battle).
+    `divergence.py` records the resulting off-plan tiles as non-blocking contradictions
+    and fails only on a genuinely foreign trigger. **Step-6b consequence:** the absorb
+    policy is per-walk and not automatic (`resolve_interruptions` defaults False), so
+    CH05's trainer beats must use CH04's `_walk_absorbing(absorb_wild=True,
+    absorb_trainer=False)` + assert-which-trainer pattern.
+  - **Two step-7 blockers found and fixed:** `reference/npc_gfx_map.json` had no entry
+    for `HGSS_048` (Keichi) or `PU-MegaStone` (the Sableyeite ball), and
+    `build_object_events` fails loud on a missing sheet. Added `HGSS_048` ->
+    `OBJ_EVENT_GFX_URANIUM_HGSS_048` / fallback `OBJ_EVENT_GFX_BLACK_BELT`
+    (`event_objects.h:70`; the sheet is a white-gi red-headband martial artist, which
+    agrees with the `TRAINER_CLASS_BLACK_BELT` mapping pinned in step 1), and
+    `PU-MegaStone` -> `OBJ_EVENT_GFX_POKE_BALL` (a sparkle overlay, not a character;
+    the item ball converts to the fork's native item ball, the same call `PU-POKEBALL`
+    already records).
