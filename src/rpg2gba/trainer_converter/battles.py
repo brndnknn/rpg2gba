@@ -75,6 +75,9 @@ _CLASS_PIC_INTERNAL_NAME: dict[str, str] = {
     "TRAINER_CLASS_RICH_BOY": "RICHBOY",
     "TRAINER_CLASS_HIKER": "HIKER",
     "TRAINER_CLASS_BIRD_KEEPER": "BIRDKEEPER",
+    # CH05 (Passage Cave), Keichi. Matches the internal name pinned in
+    # common.SLICE_TRAINER_PICS for trainertypes.dat id 16.
+    "TRAINER_CLASS_BLACK_BELT": "BLACKBELT",
 }
 
 #: Real `TRAINER_CLASS_*` constant -> real `TRAINER_ENCOUNTER_MUSIC_*`
@@ -100,6 +103,13 @@ _CLASS_ENCOUNTER_MUSIC: dict[str, str] = {
     # Vanilla's own Bird Keepers use it (engine/src/data/trainers.h line
     # 523) -- not the generic Male bucket.
     "TRAINER_CLASS_BIRD_KEEPER": "TRAINER_ENCOUNTER_MUSIC_COOL",
+    # CH05 (Passage Cave), Keichi. The constant's own comment names the class
+    # outright (include/constants/trainers.h:562, "Used for Guitarists,
+    # Psychics, Black Belts, Battle Girls, Dragon Tamers, Experts, and Old
+    # Couples"), and vanilla's own Black Belts use it
+    # (engine/src/data/trainers.h:1329) -- two independent confirmations, not
+    # a guess from the generic Male bucket.
+    "TRAINER_CLASS_BLACK_BELT": "TRAINER_ENCOUNTER_MUSIC_INTENSE",
 }
 
 _TRAINER_ANCHOR_RE_TMPL = r"^#define\s+{anchor}\s+(\d+)\s*$"

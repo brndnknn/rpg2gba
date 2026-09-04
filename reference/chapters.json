@@ -110,7 +110,7 @@
     {
       "id": "CH05", "act": "A1", "title": "Passage Cave", "wiki_page": "Passage Cave",
       "visit": 1, "outdoor": 36, "maps": [36, 37],
-      "predecessor": "CH04", "tier": "medium", "status": "planned",
+      "predecessor": "CH04", "tier": "medium", "status": "in_progress",
       "notes": "Traversal confirmed by warp graph: 35 -> 36 <-> 37 -> 40. First dungeon; first candidate for cave/Flash handling. In the wiki this unit is a raw <h3> tag, not a '===' heading."
     },
     {

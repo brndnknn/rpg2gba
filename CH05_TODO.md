@@ -1,7 +1,8 @@
 # CH05 — Passage Cave: live work items
 
-**Status:** open, not yet started. Branch `ch05` **not yet cut** (see step 0).
-**You are here:** → step 0, prerequisites. Nothing after it has begun.
+**Status:** in progress. Branch `ch05` cut; steps 0-2 done and verified.
+**You are here:** → step 3 (ART) is a read-and-check step with nothing to run, so the
+next command you execute is **step 4, WIRE**.
 
 **What this document is.** The execution path for CH05. Two other documents already
 exist and this one does not repeat them:
@@ -85,7 +86,7 @@ branches are for chapters only. The branch gets cut at the **end** of this step.
       "Built: … do not exist" long after the code landed; only D2 and D4 ever got a
       reconciling addendum. Fixed, because that doc is the one we consult mid-chapter.
 - [x] **`PROJECT_TODO.md` #28 Cave half resolved, #62 part 1 marked done.** See §Deferred.
-- [ ] **Cut the branch.**
+- [x] **Cut the branch.**
       ```bash
       git switch -c ch05
       ```
@@ -97,16 +98,80 @@ is clean because everything above was already committed to `main`.
 
 ## Step 1 — SELECT
 
-**Effort — you:** 2 min, mechanical · **me:** low · **attended:** no
+**Effort — you:** 30-45 min, mechanical · **me:** low · **attended:** no
 
 Not a judgement call. The chapter comes from the atlas chain in order, and CH05's
 binding is already written: `reference/chapters.json` gives **maps 36 and 37**, act
 A1, predecessor CH04, traversal `35 → 36 ↔ 37 → 40` confirmed by the warp graph.
 
-The one real action is adding the maps to the build set:
+**Revised 2026-09-04 — this step is four pinned lists, not one.** The doc previously
+claimed the "one real action" was `SLICE_MAP_IDS`. That is wrong and it cost a full
+debugging loop in step 2: most of the pipeline derives from `SLICE_MAP_IDS`, but
+**trainer pics, trainer battles, and species do not.** They are hand-maintained,
+append-only tuples, and the transpiler's fork-index gate fails on the *last* of them
+you forget, one at a time, with each failure looking unrelated to the previous.
 
-- [ ] Add `36, 37` to `SLICE_MAP_IDS` in `src/rpg2gba/tileset_converter/map_set.py:34`,
-      following the existing per-chapter comment convention above it.
+Do all of these before running step 2.
+
+- [x] **Maps.** Add `36, 37` to `SLICE_MAP_IDS` in
+      `src/rpg2gba/tileset_converter/map_set.py:34`, following the existing
+      per-chapter comment convention above it.
+- [x] **Trainer battles.** Append the chapter's trainers to `SLICE_TRAINER_BATTLES`
+      (`src/rpg2gba/trainer_converter/common.py:117`) **in map event order**. CH05:
+      `TRAINER_MANNY_5` (Map036 EV004), `TRAINER_KEICHI_248` (Map036 EV006),
+      `TRAINER_NUNES_128` (Map037 EV004). Order is load-bearing — fork trainer ids are
+      assigned by position off `PRISTINE_TRAINER_ANCHOR`, so this list is append-only.
+      Never reorder or remove.
+- [x] **Trainer pics.** Append a `TrainerPicSpec(<trainertypes.dat id>, "<INTERNAL>")`
+      to `SLICE_TRAINER_PICS` (`common.py:69`) for each trainer *class* not already
+      staged. CH05 needed only `TrainerPicSpec(16, "BLACKBELT")` for Keichi — Manny and
+      Nuñes are HIKER, already staged for CH04's Chuck. Verify the id against
+      `output/uranium-build/intermediate/trainer_types.json` **and** confirm a real
+      `Graphics/Characters/trainer<NNN>.png` exists before pinning it.
+- [x] **Trainer class mapping tables.** A new class also needs two rows in
+      `src/rpg2gba/trainer_converter/battles.py`: `_CLASS_PIC_INTERNAL_NAME:66`
+      (class → the internal name you pinned above) and `_CLASS_ENCOUNTER_MUSIC:82`
+      (class → `TRAINER_ENCOUNTER_MUSIC_*`). **Derive the music from the fork, never
+      guess** — the constants' own comments in `engine/include/constants/trainers.h`
+      name the classes they serve, and vanilla's own entries in
+      `engine/src/data/trainers.h` confirm it. CH05: `TRAINER_CLASS_BLACK_BELT` →
+      `TRAINER_ENCOUNTER_MUSIC_INTENSE`, confirmed by both (`trainers.h:562` names Black
+      Belts outright; `src/data/trainers.h:1329` uses it).
+- [x] **Species.** Append a `SpeciesSpec(<uranium_id>, "<INTERNAL>")` to
+      `STARTER_SPECIES` (`src/rpg2gba/species_converter/common.py:64`) for every
+      **Uranium-original** species in the chapter's trainer parties. Vanilla species
+      (Mankey, Dunsparce) need nothing — the gate unions fork species with staged
+      species. **Stage whole evolution families:** `build_staged_species` fails loud on
+      a staged species whose evolution target is not itself staged. CH05 needed
+      `GROZARD → TERLARD` (Nuñes) and `BAASHAUN → BAASCHAF → BAARIETTE` (Keichi).
+      Append-only, same reason as the trainer list.
+
+**Find the party species before you start**, rather than discovering them one failure
+at a time:
+
+```bash
+$V - <<'EOF'
+import json
+t = json.load(open("output/uranium-build/intermediate/trainers.json"))["trainers"]
+for n in ("TRAINER_MANNY_5", "TRAINER_KEICHI_248", "TRAINER_NUNES_128"):
+    print(n, [p["species"] for p in t[n]["party"]])
+EOF
+```
+
+**Then refresh the two manifests** — the staging chain is *species overlay → trainer
+battles → transpiler gate*, each link reading the previous one's manifest:
+
+```bash
+$V scripts/stage_species.py
+$V scripts/stage_trainers.py
+```
+
+**Check the counts, not the exit codes.** `stage_trainers.py` exits 0 while staging
+**zero** battles: `stage_slice` drops the whole batch when any single pinned trainer
+fails, so one missing species silently un-stages every previously-good chapter too.
+A `0 battle(s)` line is a regression, not a pass. CH05's expected numbers are
+**32 species** and **20 battles**. (Both scripts write only into `output/`; the full
+art pass runs in step 7's assembler. See §Deferred for the all-or-nothing bug.)
 
 Note map **19** is *also* named "Passage Cave" and is **not** ours — it belongs to
 CH03, because the warp graph shows it connects only to and from Kevlar (31) and never
@@ -128,17 +193,43 @@ Run the deterministic transpiler over maps 36 and 37. Everything mechanical beco
 Poryscript; anything uninterpretable lands in an explicit unhandled queue.
 
 ```bash
-$V -m rpg2gba.pipeline convert-map --map-id 036 > output/ch05-events-036.log 2>&1
-echo "exit=$?"
-$V -m rpg2gba.pipeline convert-map --map-id 037 > output/ch05-events-037.log 2>&1
+$V -m rpg2gba.conversion_agent.transpile_driver run --maps slice > output/ch05-events.log 2>&1
 echo "exit=$?"
 ```
+
+> **Corrected 2026-09-04 — the command here used to be
+> `pipeline convert-map --map-id 036/037`, and that is the wrong tool.**
+> `convert-map` is the retired Phase-4 orchestrator: its per-event core
+> (`orchestrator.py:465-490`) tries the whole-event classifier layer, then a memo,
+> then **spawns a live Claude call** (default backend `claude_code`,
+> `pipeline.py:302-305`). It has no general transpiler. `transpile_driver` does —
+> classifiers first, then `transpiler.transpile_event` for anything unclaimed
+> (`transpile_driver.py:1-15`), and no LLM at all. It is also what
+> `slice_expansion_runbook.md` step 3 and CH04 both used.
+>
+> The first CH05 run used the wrong command: 9 of 16 events spawned Claude, **all 9
+> came back queued as `agent-flagged unhandled`** — zero net conversions for ~$0.96.
+> Six were `Stairs` events on Map037, which `transpile_driver` handles natively (it
+> imports `tileset_converter.stairs`).
+>
+> **Re-run clean 2026-09-04** (after step 1's pinned lists were completed): 18 maps,
+> 308 events, no traceback. Both CH05 maps regenerated. Only EV001/EV002 per map are
+> queued, both in the corpus-wide `command follows a Transfer Player warp` cluster —
+> disposition them at step 5, not here.
+
+**Where the item balls went.** Map036's four item balls (EV003, EV005, EV008, EV009)
+appear in **neither** `Map036.pory` nor the unhandled queue, which looks like data loss
+and is not. Item balls are object events instantiated from a template, so the
+transpiler emits *fields*, not Poryscript — look in
+`output/uranium-build/scripts/Map036.template_fields.json`. The LLM run had emitted a
+bespoke `lock`/`giveitem`/`setflag`/`release` script plus a minted self-switch flag for
+each one: same behavior, four times the surface area, four extra registry flags.
 
 **Good:** exit 0, and the unhandled queue is short and boring. **Bad:** a queue entry
 naming a `pbXXX` script call we have never seen, or an unknown command code. That is
 the transpiler failing *loud and bounded* by design — it is a work item, not a crash.
 
-Hand me the two log paths and the exit codes; I read the queues, not the whole logs.
+Hand me the log path and the exit code; I read the queue, not the whole log.
 
 **Why it sits here:** it needs nothing but the deserialized map JSON, and everything
 after it needs its output. It is also the step most likely to surface genuinely new
@@ -146,27 +237,45 @@ work, so it runs before you have invested effort in art or wiring.
 
 ---
 
-## Step 3 — ART
+## Step 3 — ART (checkpoint — nothing to run)
 
-**Effort — you:** 10-20 min, mostly waiting · **me:** low · **attended:** no
+**Effort — you:** 0 min · **me:** none · **attended:** no
 
-Quantize maps 36/37's real tilesets and sprites to GBA 4bpp. This is the step the
-pathfinder slice deferred, which is exactly why that slice booted and was unplayable.
-A chapter is not done until it is playable *with real art* (`CLAUDE.md` §9, §11).
+**This step has no command, and cannot have one.** There is no `art`/`tilesets`/
+`quantize` subcommand on `rpg2gba.pipeline`, and no module under `tileset_converter/`
+has its own entry point. Do not go looking for one; the number is kept only to stay
+aligned with the canonical loop in `BUILD_PLAN.md:86-122`, which every chapter shares.
 
-Two specific risks for a cave, both worth checking rather than assuming:
+**Why it exists at all.** The pathfinder slice deferred art, booted, and was
+unplayable — a chapter is not done until it is playable *with real art*
+(`CLAUDE.md` §9, §11). This checkpoint is the standing refusal to defer it again. It
+is a decision already made, not work to perform.
 
-- **Tileset budget.** A tileset has two hard 1024 caps — metatile ids and distinct
-  8×8 tiles. `WALKER_OVERFLOW_MAP_IDS` (`map_set.py:64`) lists the maps that blow
-  them; **36 and 37 are not on it**, so they should fit. If the budget guard fires
-  anyway, that is a real finding and it stops the chapter.
-- **Legibility in the dark.** Passage Cave runs with Flash darkness. Art that reads
-  fine at full brightness can be unreadable through the flash overlay, and the boot
-  walk is where you would find that out. Worth an eyeball at step 8 specifically.
+**Where the art actually comes from:**
 
-**Good:** quantized output for both maps, no budget-guard failure. **Bad:** anything
-that makes you reach for a hand-edit of the output — fix the converter instead
-(`CLAUDE.md` §11).
+- **Tilesets — step 4's `pipeline phase5`.** `phase5.convert_all` calls
+  `build_slice_tilesets` (`tileset_converter/phase5.py:232`) as its own internal step
+  3, *"per-map graphics: synth tilesets + overlay"*. It **produces** the quantized art
+  rather than assuming it exists, so it re-runs on every `phase5`.
+- **Sprites — step 7's assembler chain.** `phase5` writes only empty-conversion stubs
+  (`sprite_emit.write_stub_gen_files`, `phase5.py:350`). Real NPC and player sheet
+  conversion is `sprite_pass.run_sprite_pass`, called from
+  `scripts/stage_slice_scripts.py:429` and `scripts/assemble_pathfinder.py:214`.
+
+**Its two checks are discharged elsewhere, and are checkboxes there, not here:**
+
+| Check | Discharged at | How you know |
+|---|---|---|
+| Tileset budget (two hard 1024 caps) | **step 4** | `phase5` exits 0. The guard is `NUM_TILES_TOTAL` / `NUM_METATILES_TOTAL` (`graphics/emit.py:47-48`), raised in `emit_tileset` (`:537-548`) |
+| Legibility through Flash darkness | **step 8** | your eyes, on the device |
+
+Pre-checked for CH05: maps 36 and 37 are on neither `WALKER_OVERFLOW_MAP_IDS` nor
+`WALKER_EMPTY_MAP_IDS` (`map_set.py:69,77`), so they are expected to fit. That is a
+prediction, not the check — the guard at step 4 is the check. If it fires anyway that
+is a real finding and it stops the chapter.
+
+**Bad, at either step:** anything that makes you reach for a hand-edit of generated
+output — fix the converter instead (`CLAUDE.md` §11).
 
 ---
 
@@ -202,6 +311,10 @@ Two things to expect specifically here:
   writing engine code for cave darkness, stop — something else is wrong.
 
 **Good:** exit 0, manifest written to `reference/manifests/CH05.manifest.json`.
+
+- [ ] **Step 3's tileset-budget check, discharged here.** `phase5` exiting 0 *is* the
+      check — the 1024 guard raises from inside it. A `ValueError` naming a tileset and
+      a count over 1024 stops the chapter; it is not something to work around.
 
 ---
 
@@ -335,11 +448,46 @@ $V -m rpg2gba.routing plan --chapter CH05 --module ch05
 
 **Effort — you:** 10-15 min, mostly waiting · **me:** low · **attended:** no
 
+Reconciled 2026-09-04 against `reference/guides/slice_expansion_runbook.md` steps
+3-6 (the authoritative runbook) and CH04's build record
+(`reference/archive/CH04_TODO.md:362`). The previous two-command block here was
+wrong; see §Log.
+
 ```bash
-$V -m rpg2gba.pipeline phase5 --maps slice > output/ch05-build.log 2>&1
+$V scripts/stage_slice_scripts.py --write > output/ch05-stage.log 2>&1
+echo "exit=$?"
+$V scripts/assemble_pathfinder.py > output/ch05-assemble.log 2>&1
+echo "exit=$?"
 make -C engine -j$(nproc) modern > output/ch05-make.log 2>&1
 echo "exit=$?"
 ```
+
+1. **`stage_slice_scripts.py --write`** — normalizes labels, regenerates `map.json`
+   with real page labels, prunes orphan warp blocks, and **runs the real NPC/player
+   sprite pass** (`sprite_pass.run_sprite_pass`, `stage_slice_scripts.py:429`). Map
+   ids come from `DEFAULT_SLICE = tuple(SLICE_MAP_IDS)` (`:71`), so step 1's edit is
+   picked up automatically — do not pass ids.
+2. **`assemble_pathfinder.py`** — full fork assembly: tileset graphics (re-run,
+   idempotent), layout `.bin`, species/trainer/encounter/rematch staging, copies
+   staged artifacts into the engine, emits `uranium_flags.h`. Also runs the sprite
+   pass (`:214`). On success it logs the exact `make` line to run next (`:1300`).
+3. **`make -C engine -j$(nproc) modern`** — must exit 0.
+
+Run these **by path, not `-m`** — they live in `scripts/` and are not package modules.
+
+> **Why `phase5` is not in this block.** `phase5` builds a disjoint artifact — a
+> warps-only Map Walker corpus with **no** Poryscript, events, or NPCs
+> (`phase5.py:8-11`), and only empty-conversion sprite stubs (`:350`). It is a
+> *prerequisite*, not a build stage: its step 1 mints
+> `output/uranium-build/porymap/map_constants.json` (`phase5.py:189-199`), which
+> both `stage_slice_scripts.py:416` and `assemble_pathfinder.py:1262` read and crash
+> without. Step 4 already runs it, so it is satisfied by the time you get here.
+> `phase5` + `make` **alone** — the old block — produces a ROM with stub sprites and
+> no Uranium NPC art. That is the bug this reconciliation fixes.
+
+> **Re-run step 2 first if script content changed since it ran.** Nothing detects
+> staleness for you. Step 4 (WIRE) does not touch scripts, so in the normal path this
+> is unnecessary.
 
 `make modern` must exit 0. Then the headless suite, which is the cheap filter before
 you spend your own time walking:
@@ -364,7 +512,7 @@ Per your standing rule, the walk starts at **the previous chapter's end** — se
 CH04's blob rather than replaying from the beginning:
 
 ```bash
-$V -m rpg2gba.playtest seeds --chapter CH04
+$V -m rpg2gba.playtest seeds --chapter CH04 --engine engine
 $V -m rpg2gba.playtest walk --chapter CH04 --at-end --engine engine
 ```
 
@@ -380,7 +528,9 @@ A chapter is not done until it **boots in mGBA and the section is genuinely play
 warps fire, NPCs sane, layout legible, art included.** You walk it. Specific things to
 look at this chapter, beyond the beat list:
 
-- **Does the cave read in the dark?** Step 3's legibility risk, only visible here.
+- [ ] **Does the cave read in the dark?** Step 3's legibility check, discharged here
+  and nowhere else — art that reads fine at full brightness can be unreadable through
+  the Flash overlay, and only your eyes on the device can tell you.
 - **The arrival nudge on Map036 EV002.** The `arrival_nudge` template has never run in
   a ROM — CH04's `beat:B8` was authored and deliberately never registered, because its
   sibling warp page was out of slice. This is its **first live exercise**, against the
@@ -453,6 +603,33 @@ Recorded so they are not re-litigated mid-chapter.
   `arrival_nudge` template and its classifier both exist. Its untested-in-ROM residue is
   live at step 8, not here.
 - **#67 — route plans.** In scope; it *is* step 6.
+- **`BUILD_PLAN.md:94`'s ART step has the same defect — fix AFTER CH05.** The
+  canonical per-chapter loop (`BUILD_PLAN.md:86-122`) lists ART as a peer of
+  SELECT/EVENTS/WIRE but gives it no owning command, exactly like this doc did before
+  2026-09-04. CH05 inherited the problem rather than introducing it, so CH06 will
+  rediscover it unless the shared doc is corrected. Deliberately **not** fixed
+  mid-chapter (operator decision, 2026-09-04): editing the shared planning doc during
+  a chapter is the scope creep the `BUILD_PLAN.md` §2 guardrail exists to prevent.
+  Carry to `PROJECT_TODO.md` at step 10 with the fix already known — ART is discharged
+  by step 4 (`phase5` → `build_slice_tilesets`) and step 7 (assembler →
+  `sprite_pass`), and its number is kept only for cross-reference alignment.
+- **Trainer battle staging is all-or-nothing — FILE, do not fix here.** Found
+  2026-09-04. `trainer_converter.stage.stage_slice` catches `build_staged_battles`'
+  `ValueError` and skips battle staging *wholesale* with a logged WARNING, then exits
+  0. One unstageable trainer therefore discards every battle in the manifest,
+  including chapters that staged fine before: CH05's Keichi took CH04's 17 battles
+  down to 0, and the damage surfaced as a *CH01* failure (`TRAINER_THEO_9/10/11`
+  undefined on Map050) because the transpiler walks `SLICE_MAP_IDS` in tuple order
+  and aborts at the first failing map. A §4.5 violation — a partial failure silently
+  discarding good work, while reporting success. The pic half legitimately stands
+  alone; the battle half should stage per-trainer or abort. Out of CH05 scope
+  (`BUILD_PLAN.md` §2 guardrail), belongs in `PROJECT_TODO.md`.
+- **`ITEM_TM76` needs a sanity check — filed, not blocking.** The transpiler resolved
+  B6's TM76 to `ITEM_TM76`, which passes the fork-index gate, but this expansion
+  normally names TMs `ITEM_TM_<MOVE>`. `05-passage-cave.md:134` says TM76 is Stealth
+  Rock; confirm the constant is actually that move and not a numbering coincidence.
+  Cannot bite in CH05 — the item is in the Surf-sealed room — which is exactly why it
+  would otherwise be found in Act 5.
 
 ---
 
@@ -465,3 +642,54 @@ Append findings, surprises and decisions here as they happen, newest last.
   about shipped code, never reconciled the way D2/D4 were) and corrected them. Found
   `PROJECT_TODO.md` #62 part 1 stale in the same way. #28's Cave half investigated and
   closed. Local-LLM pre-fill dropped from the plan.
+- **2026-09-04** — Steps 1 and 2 done: maps 36/37 added to `SLICE_MAP_IDS`, transpiler
+  clean on both (8/8 events each, logs `output/ch05-events-036.log` / `-037.log`).
+  Step 3 had no command; traced the pipeline and found ART is not a standalone
+  invocation — tilesets are produced inside step 4's `phase5`
+  (`phase5.py:232` → `build_slice_tilesets`; budget guard `graphics/emit.py:537-548`),
+  sprites inside step 7's assembler chain (`sprite_pass.run_sprite_pass`). Step 3
+  rewritten to say so explicitly. **Open discrepancy:** step 7's command block is
+  `phase5` + `make` only, but CH04 actually built via `transpile_driver` →
+  `stage_slice_scripts --write` → `assemble_pathfinder` → `make modern`. **Reconciled
+  same day** against `reference/guides/slice_expansion_runbook.md` steps 3-6 (the
+  authoritative runbook); step 7 rewritten. `phase5` stays out of the build block —
+  it is a prerequisite that mints `porymap/map_constants.json`, already satisfied by
+  step 4.
+- **2026-09-04** — **Step 2 was running the wrong tool.** `pipeline convert-map` is
+  the retired Phase-4 orchestrator and falls through to a live Claude spawn; the
+  deterministic transpiler is `conversion_agent.transpile_driver`. The first run
+  spawned Claude on 9 of 16 events and **all 9 returned queued as
+  `agent-flagged unhandled`** — zero conversions, ~$0.96, six of them `Stairs` events
+  the transpiler handles natively. This also silently violated ground rule 2 (that
+  rule meant ollama; the default backend routed to Claude). Step 2 corrected to
+  `transpile_driver run --maps slice`. **The maps still need re-converting** —
+  `output/uranium-build/scripts/Map036.pory` / `Map037.pory` currently hold the LLM
+  output. Not re-run yet; awaiting your go-ahead.
+- **2026-09-04** — Step 2 cleared, and the real blocker was **step 1, not step 2**.
+  Step 1 documented only `SLICE_MAP_IDS`; three more pinned lists (trainer battles,
+  trainer pics, species families) plus two class-mapping tables in `battles.py` were
+  never mentioned. Each omission failed separately and looked unrelated to the last,
+  costing a full loop. Step 1 rewritten to cover all four lists with the ordering
+  rules and the manifest-count checks. Decisions made along the way: `SABLEYEITE`
+  aliased to the existing vanilla `ITEM_SABLENITE` (operator call — same species, same
+  mega evolution, already wired; only the display name differs);
+  `TRAINER_CLASS_BLACK_BELT` mapped to `TRAINER_ENCOUNTER_MUSIC_INTENSE` (derived from
+  two independent fork sources, not guessed); `GROZARD/TERLARD` and
+  `BAASHAUN/BAASCHAF/BAARIETTE` staged as whole families. `tests/test_trainer_battles.py`
+  `test_unmapped_music_class_fails_loud` repointed from BLACK BELT (now mapped) to
+  HEX MANIAC — still a real fork class with no music row, so the assertion is
+  unchanged in strength. Added `scripts/stage_species.py` and
+  `scripts/stage_trainers.py`: the fast, `output/`-only half of the assembler's
+  species and trainer passes, for iterating on pinned lists without the art passes.
+  Final state: 32 species, 20 battles, 18 maps / 308 events, no traceback.
+- **2026-09-04** — Command audit of this document, all 21 instructed commands checked
+  against source. **One defect:** step 8's `playtest seeds --chapter CH04` was missing
+  the required `--engine` flag (`playtest/__main__.py:183-185`) and could not have
+  succeeded — ground rule 5 forbids satisfying it via `RPG2GBA_*`. Fixed. Everything
+  else — `chapter_manifest generate/review/check`, `routing plan`, `playtest
+  run/walk`, `phase5`, `transpile_driver run`, both `scripts/` invocations, `make -C
+  engine modern` — verified correct including every flag. **No retired LLM-path
+  command survives as a live instruction**; the four remaining mentions of
+  `pipeline convert-map` are explanatory prose in callouts and this Log. Step 3
+  reframed as an explicit no-command checkpoint keeping its number, with its two
+  checks moved to checkboxes at steps 4 and 8 where they are actually discharged.

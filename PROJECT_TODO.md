@@ -971,6 +971,41 @@ leaked fixture keys in the same commit.
 
 *Found 2026-09-01 while migrating the file's keys for #66.*
 
+### 107. Warp retain-facing tier 3 should test second-order reachability
+
+`metadata_wiring.compute_arrival_facings` tier 3 derives a `dest_dir=0`
+("retain facing") arrival by finding the source warp's single open,
+non-sibling, unblocked neighbour (`metadata_wiring.py:3025-3040`). It looks
+only one tile out, so it counts a neighbour as a candidate approach even when
+nothing can reach that neighbour except the warp tile itself. Two vertically
+opposed open tiles then read as ambiguous and it raises, pushing the case to
+`reference/warp_facing_overrides.json` as a hand decision.
+
+**The rule it is missing** (operator's, 2026-09-04): a tier-3 survivor is a
+genuine approach tile only if *it* has an open neighbour other than the warp
+tile — otherwise you could never have stood there to walk in.
+
+**Measured against the current slice**, applying that second-order check to
+every ambiguous retain-facing warp:
+
+| warp | tier 3 survivors | second-order |
+|---|---|---|
+| map35 (20,33) -> `36:17:39` | (20,32), (20,34) | **unique** -> `DIR_NORTH` |
+| map36 (17,4) -> `37:16:26` | (17,3), (17,5) | **unique** -> `DIR_NORTH` |
+| map33 (70,12) -> `32:8:43` | (69,12), (71,12) | still ambiguous |
+| map33 (70,11) -> `32:8:43` | (70,10), (69,11), (71,11) | still ambiguous |
+
+So it resolves both CH05 cases and neither CH03 one — a real reduction in hand
+overrides, **not** a complete replacement for the file. Both CH05 rows were
+hand-entered during CH05 (`DIR_NORTH` each) and agree with what the rule
+derives, so implementing this must reproduce them exactly; that agreement is
+the regression test.
+
+**Do not** delete `warp_facing_overrides.json` when this lands — the map33 pair
+still needs it, and per its own `_comment` the file remains the source of truth
+for a corrected facing. Prototype scan lives in this item's history; re-derive
+rather than trusting a pasted table.
+
 ## Parked until the CH05 branch is cut (do not raise before then)
 
 These are real, tracked work items, scoped entirely to CH05. They are not open

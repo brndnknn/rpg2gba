@@ -89,6 +89,12 @@ SLICE_TRAINER_PICS: tuple[TrainerPicSpec, ...] = (
     # Also CH04: Brent, TRAINER_CLASS_BIRD_KEEPER. trainertypes.dat id 42,
     # display name "BIRD KEEPER", real Graphics/Characters/trainer042.png.
     TrainerPicSpec(42, "BIRDKEEPER"),
+    # CH05 (Passage Cave): Keichi, TRAINER_CLASS_BLACKBELT. trainertypes.dat
+    # id 16 (intermediate/trainer_types.json, display name "BLACK BELT"),
+    # verified against a real Graphics/Characters/trainer016.png before
+    # pinning. Manny and Nunes need no new entry -- both are HIKER, already
+    # staged for CH04's Chuck.
+    TrainerPicSpec(16, "BLACKBELT"),
 )
 
 #: internal_name values in `SLICE_TRAINER_PICS` that additionally get a player
@@ -142,6 +148,13 @@ SLICE_TRAINER_BATTLES: tuple[str, ...] = (
     # visit, but his event still emits, so his id still has to resolve.
     "TRAINER_LARRIE_4",
     "TRAINER_BRENT_278",
+    # CH05 (Passage Cave): the chapter's three overworld battle trainers, in
+    # map event order -- Manny (Map036 EV004) then Keichi (Map036 EV006) then
+    # Nunes (Map037 EV004), all `trainerbattle_single`. Order is the append
+    # rule, not a preference.
+    "TRAINER_MANNY_5",
+    "TRAINER_KEICHI_248",
+    "TRAINER_NUNES_128",
 )
 
 
