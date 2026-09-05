@@ -82,13 +82,18 @@ def test_trainer_beats_registers_battle_and_retalk_in_order() -> None:
     )
     chapter = b.build()
     names = [beat.name for beat in chapter.beats]
-    assert names == ["T1_battle", "T1_retalk1"]
+    assert names == ["T1", "T1_retalk1"]
 
     battle, retalk = chapter.beats
     assert battle.archetype == "trainer"
     assert battle.rows == ("map035/ev012/p0",)
     assert retalk.archetype == "trainer"
     assert retalk.rows == ("map035/ev012/p1",)
+
+    # group=None defaults to beat_prefix, and reaches every beat the
+    # template registers -- the whole point of problem 1's fix.
+    assert battle.group == "T1"
+    assert retalk.group == "T1"
 
     for beat in chapter.beats:
         assert beat.locations, f"{beat.name}: no location declared"
@@ -113,11 +118,28 @@ def test_trainer_beats_two_retalk_pages() -> None:
     )
     chapter = b.build()
     names = [beat.name for beat in chapter.beats]
-    assert names == ["T2_battle", "T2_retalk1", "T2_retalk2"]
+    assert names == ["T2", "T2_retalk1", "T2_retalk2"]
     rows = [beat.rows for beat in chapter.beats]
     assert rows == [
         ("map035/ev003/p0",), ("map035/ev003/p1",), ("map035/ev003/p2",),
     ]
+    assert all(beat.group == "T2" for beat in chapter.beats)
+
+
+def test_trainer_beats_explicit_group_overrides_default_and_reaches_every_beat() -> None:
+    b = _builder()
+    trainer_beats(
+        b, chapter_id="CH04", map_constant="MAP_ROUTE_02", map_id=35,
+        event_id=3, trainer_const="TRAINER_LARRIE_4",
+        defeat_flag="FLAG_MAP035_EVENT003_SSA",
+        beat_prefix="T2", trigger="event_touch", phone=True, double=False,
+        retalk_pages=2, rider=False, group="STOP_LARRIE",
+    )
+    chapter = b.build()
+    assert [beat.name for beat in chapter.beats] == [
+        "T2", "T2_retalk1", "T2_retalk2",
+    ]
+    assert all(beat.group == "STOP_LARRIE" for beat in chapter.beats)
 
 
 def test_trainer_beats_param_disagreement_fails_loud() -> None:
@@ -166,9 +188,10 @@ def test_item_ball_beats_grant_only_by_default() -> None:
         event_id=9, item="ITEM_POTION", beat_prefix="IB1",
     )
     chapter = b.build()
-    assert [beat.name for beat in chapter.beats] == ["IB1_grant"]
+    assert [beat.name for beat in chapter.beats] == ["IB1"]
     assert chapter.beats[0].archetype == "item_ball"
     assert chapter.beats[0].rows == ("map035/ev009/p0",)
+    assert chapter.beats[0].group == "IB1"
 
 
 def test_item_ball_beats_negative_beat_adds_spent_beat() -> None:
@@ -179,11 +202,25 @@ def test_item_ball_beats_negative_beat_adds_spent_beat() -> None:
     )
     chapter = b.build()
     names = [beat.name for beat in chapter.beats]
-    assert names == ["IB1_grant", "IB1_spent"]
+    assert names == ["IB1", "IB1_spent"]
     grant, spent = chapter.beats
     assert grant.rows == ("map035/ev009/p0",)
     assert spent.rows == ("map035/ev009/p1",)
     assert grant.archetype == spent.archetype == "item_ball"
+    # group=None defaults to beat_prefix and reaches the satellite beat too.
+    assert grant.group == spent.group == "IB1"
+
+
+def test_item_ball_beats_explicit_group_overrides_default_and_reaches_every_beat() -> None:
+    b = _builder()
+    item_ball_beats(
+        b, chapter_id="CH04", map_constant="MAP_ROUTE_02", map_id=35,
+        event_id=9, item="ITEM_POTION", beat_prefix="IB1", negative_beat=True,
+        group="STOP_POTION",
+    )
+    chapter = b.build()
+    assert [beat.name for beat in chapter.beats] == ["IB1", "IB1_spent"]
+    assert all(beat.group == "STOP_POTION" for beat in chapter.beats)
 
 
 def test_item_ball_beats_unknown_event_fails_loud() -> None:
@@ -214,6 +251,22 @@ def test_warp_beat_registers_one_beat_with_resolved_location(
     assert beat.rows == ("map036/ev001/p0",)
     assert beat.locations[0].map_constant == "MAP_PASSAGE_CAVE_1F"
     assert (beat.locations[0].x, beat.locations[0].y) != (0, 0)
+    # group=None defaults to beat_name, consistent with the other templates.
+    assert beat.group == "W1"
+
+
+def test_warp_beat_explicit_group_overrides_default(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        group="STOP_CAVE_EXIT",
+    )
+    chapter = b.build()
+    assert chapter.beats[0].group == "STOP_CAVE_EXIT"
 
 
 def test_warp_beat_threshold_requires_direction(
@@ -259,6 +312,21 @@ def test_arrival_nudge_beat_registers_one_beat(
     assert beat.archetype == "arrival_nudge"
     assert beat.rows == ("map036/ev002/p1",)
     assert beat.locations[0].map_constant == "MAP_PASSAGE_CAVE_1F"
+    # group=None defaults to beat_name, consistent with the other templates.
+    assert beat.group == "N1"
+
+
+def test_arrival_nudge_beat_explicit_group_overrides_default(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    b = _builder()
+    arrival_nudge_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=2, from_map_constant="MAP_PASSAGE_CAVE_2F",
+        beat_name="N1", manifest_rows=ch05_rows, group="STOP_CAVE_ARRIVE",
+    )
+    chapter = b.build()
+    assert chapter.beats[0].group == "STOP_CAVE_ARRIVE"
 
 
 def test_arrival_nudge_beat_unknown_event_fails_loud(
@@ -363,4 +431,4 @@ def test_trainer_beats_loads_committed_ch04_manifest_from_disk() -> None:
         retalk_pages=1, rider=False,
     )
     chapter = b.build()
-    assert [beat.name for beat in chapter.beats] == ["T3_battle", "T3_retalk1"]
+    assert [beat.name for beat in chapter.beats] == ["T3", "T3_retalk1"]

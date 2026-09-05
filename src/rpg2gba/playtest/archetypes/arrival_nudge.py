@@ -39,10 +39,18 @@ def arrival_nudge_beat(
     beat_name: str,
     description: str | None = None,
     from_event_id: int | None = None,
+    group: str | None = None,
     manifest_rows: "tuple[ManifestRow, ...] | None" = None,
     manifest_dir=None,
 ) -> None:
     """Register one `arrival_nudge` archetype instance.
+
+    `group=` defaults to `beat_name` when omitted, matching the convention
+    of the other three templates (`ChapterBuilder.beat`'s `group=`
+    docstring) -- this template registers only one beat, so the default is
+    a no-op in the solver's eyes, but it keeps the convention uniform
+    across all four archetypes rather than leaving it an accident of this
+    template happening to have no satellites.
 
     `from_map_constant` is the map the player warps FROM to trigger this
     arrival -- required because `cells.arrival_cell` needs a source map to
@@ -66,6 +74,7 @@ def arrival_nudge_beat(
         rows=manifest_rows, manifest_dir=manifest_dir,
     )
     row_id = next(iter(match.roles))
+    resolved_group = group if group is not None else beat_name
 
     arrival = arrival_cell(
         map_constant, from_map=from_map_constant, event_id=from_event_id)
@@ -77,7 +86,7 @@ def arrival_nudge_beat(
             f"player one tile off the arrival cell (manifest {row_id})"
         ),
         map_constant=map_constant, at=arrival,
-        archetype="arrival_nudge", rows=(row_id,),
+        group=resolved_group, archetype="arrival_nudge", rows=(row_id,),
     )
     def run(emu: Emulator) -> None:
         assertions.require_map(emu, beat_name, map_constant)

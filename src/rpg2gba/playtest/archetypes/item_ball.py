@@ -55,6 +55,7 @@ def item_ball_beats(
     beat_prefix: str,
     negative_beat: bool = False,
     approach_prefer: str | None = None,
+    group: str | None = None,
     manifest_rows: "tuple[ManifestRow, ...] | None" = None,
     manifest_dir=None,
 ) -> None:
@@ -68,7 +69,19 @@ def item_ball_beats(
     that one is granted at all. There is nothing to validate this against;
     only the self-switch gating and the approach/facing geometry are
     manifest-derived here.
+
+    `group=` defaults to `beat_prefix` when omitted: an archetype instance's
+    beats belong to one route-solver stop, exactly as a hand-authored
+    chapter groups them today (`ChapterBuilder.beat`'s `group=` docstring).
+    The primary beat is named exactly `beat_prefix` (not `f"{beat_prefix}_grant"`)
+    because the chapter manifest dispositions this stop as bare `beat:{beat_prefix}`,
+    and `_check_route_approach` looks up a node's beats by that exact name
+    (`chapter_manifest/checker.py`, `RouteModel.declared_beat_cell`) -- the
+    primary beat *is* the stop the disposition names. The spent-page negative
+    beat keeps its descriptive `_spent` suffix; it is a satellite of the stop,
+    not the stop's own identity.
     """
+    resolved_group = group if group is not None else beat_prefix
     match = find_match(
         chapter_id, map_id, event_id, "item_ball",
         rows=manifest_rows, manifest_dir=manifest_dir,
@@ -96,16 +109,16 @@ def item_ball_beats(
     facing = _facing_toward(approach, event_cell(map_constant, event_id))
 
     @builder.beat(
-        f"{beat_prefix}_grant",
+        beat_prefix,
         f"The item ball at {map_constant} event {event_id} grants "
         f"{item} once (manifest {grant_row_id})",
         map_constant=map_constant, at=approach,
-        archetype="item_ball", rows=(grant_row_id,),
+        group=resolved_group, archetype="item_ball", rows=(grant_row_id,),
     )
     def grant_beat(emu: Emulator) -> None:
         if emu.flag(ssa):
             raise ScenarioError(
-                f"{beat_prefix}_grant precondition failed: {ssa} already "
+                f"{beat_prefix} precondition failed: {ssa} already "
                 "set before the pickup"
             )
         bag_before = emu.bag_item_quantity(item)
@@ -114,15 +127,15 @@ def item_ball_beats(
         emu.interact()
         emu.advance_dialog()
         if not emu.flag(ssa):
-            shot = emu.screenshot(f"{beat_prefix}_grant_no_ssa")
+            shot = emu.screenshot(f"{beat_prefix}_no_ssa")
             raise ScenarioError(
-                f"{beat_prefix}_grant: {ssa} not set after the pickup ({shot})"
+                f"{beat_prefix}: {ssa} not set after the pickup ({shot})"
             )
         bag_after = emu.bag_item_quantity(item)
         if bag_after != bag_before + 1:
-            shot = emu.screenshot(f"{beat_prefix}_grant_bag_unchanged")
+            shot = emu.screenshot(f"{beat_prefix}_bag_unchanged")
             raise ScenarioError(
-                f"{beat_prefix}_grant: self-switch {ssa} was set but "
+                f"{beat_prefix}: self-switch {ssa} was set but "
                 f"{item} did not reach the bag ({bag_before} -> "
                 f"{bag_after}, expected +1) ({shot})"
             )
@@ -133,7 +146,7 @@ def item_ball_beats(
             f"Re-touching the spent item ball at {map_constant} event "
             f"{event_id} grants nothing (manifest {spent_row_id})",
             map_constant=map_constant, at=approach,
-            archetype="item_ball", rows=(spent_row_id,),
+            group=resolved_group, archetype="item_ball", rows=(spent_row_id,),
         )
         def spent_beat(emu: Emulator) -> None:
             if not emu.flag(ssa):

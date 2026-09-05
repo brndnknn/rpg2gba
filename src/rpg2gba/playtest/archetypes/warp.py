@@ -59,6 +59,7 @@ def warp_beat(
     assert_facing: bool = False,
     assert_bgm: bool = False,
     dest_engine_map_dir: str | None = None,
+    group: str | None = None,
     manifest_rows: "tuple[ManifestRow, ...] | None" = None,
     manifest_dir=None,
 ) -> None:
@@ -70,7 +71,16 @@ def warp_beat(
     `cross_arrow_warp`'s own docstrings); `mechanism="door"` ignores it --
     `assertions.enter_door` always approaches from the south and holds UP,
     per pokeemerald's `TryDoorWarp` (`assertions.py`'s own citation).
+
+    `group=` defaults to `beat_name` when omitted, matching the convention
+    of the other three templates (`ChapterBuilder.beat`'s `group=`
+    docstring) -- this template registers only one beat, so the default is
+    a no-op in the solver's eyes (a singleton group named after the beat is
+    what an ungrouped beat already gets), but stating it explicitly keeps
+    the convention uniform across all four archetypes rather than leaving
+    it as an accident of this template happening to have no satellites.
     """
+    resolved_group = group if group is not None else beat_name
     if mechanism not in _MECHANISMS:
         raise ValueError(
             f"warp_beat: mechanism={mechanism!r} is not one of "
@@ -103,7 +113,7 @@ def warp_beat(
             f"via {mechanism} (manifest {row_id})"
         ),
         map_constant=map_constant, at=crossing,
-        archetype="warp", rows=(row_id,),
+        group=resolved_group, archetype="warp", rows=(row_id,),
     )
     def run(emu: Emulator) -> None:
         if mechanism == "door":
