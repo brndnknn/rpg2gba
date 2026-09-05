@@ -27,16 +27,20 @@ build-agent deviation from the assigned mapping** -- see its own section
 below for why calling `warp_beat` there would be actively wrong, not just
 differently-shaped.
 
-`warp_beat` crosses in exactly ONE direction per call and asserts arrival on
-the far side; it has no round-trip concept. The hand-authored module this
-one replaces tested `B1`/`B8` as round trips (cross in, cross back, cross in
-again) under an explicit operator convention (`CH05.dispositions.json`,
-2026-09-04). That idiom is **not reproducible through the template as it
-exists today** without writing the round-trip loop back in by hand around
-it, which the task brief for this rewrite forbids ("do not reimplement it
-around the template without telling me"). So the coverage below is
-genuinely narrower than the module this replaces: see each group's own
-section for exactly what dropped.
+**`warp_beat` now has a `round_trip=True` mode** (added after this module's
+first conversion pass, per the operator's decision that the idiom belongs
+in the template, not hand-written back into a chapter): it crosses the
+warp, asserts arrival, crosses back through the DERIVED reciprocal warp,
+asserts arrival back at the origin, then crosses forward once more --
+`playtest.archetypes.warp`'s own module docstring has the full contract,
+including why the return leg's press direction (`return_direction=`) is a
+required, explicit parameter alongside `round_trip=True`, not something
+derivable from the graph. `B1`/`B8` below now pass `round_trip=True`,
+restoring the "cross in, cross back, cross in again" convention the
+hand-authored module this one replaces used for both
+(`CH05.dispositions.json`, 2026-09-04) -- see each group's own section for
+exactly what's covered now versus what the very first conversion pass
+dropped.
 
 **Trainers are native, not self-switch-gated.** Per `CH05_TODO.md` step 1,
 `TRAINER_MANNY_5` / `TRAINER_KEICHI_248` / `TRAINER_NUNES_128` are staged
@@ -112,35 +116,64 @@ Rock Smash rows, which had an open south face). Surf itself is not granted
 until Act 5 (map 143); this room is the corpus's longest-standing capability
 deferral.
 
-**B1 -- reduced to the return crossing only.** The manifest row this
-chapter owns for B1 is `map036/ev001/p0`, the CAVE's own exit event (cave ->
-Route 2); the entrance crossing (Route 2 -> cave) is `map035/ev001/p0`,
-owned by CH04's manifest, not this one. The hand-written module this
-replaces asserted BOTH directions plus a repeat forward crossing plus CH04's
-own permanently-deferred arrival nudge on the Route 2 side, under the
-"boundary convention" that the arriving chapter tests a crossing the
-outgoing chapter's manifest can't claim. `warp_beat` only tests the one
-manifest row it is given -- `map036/ev001/p0` -- as a single cave-to-Route-2
-crossing. **Dropped by this conversion:** the explicit entrance-crossing
-assertion, the repeat forward crossing, and the CH04 nudge-displacement
-check. None of those rows belong to this chapter's own manifest, so nothing
-here is now UNCOVERED per `chapter_manifest check` -- the coverage that
-dropped was assurance this module chose to provide beyond its own rows, not
-assurance the manifest requires of it.
+**B1 -- round trip, one row claimed.** The manifest row this chapter owns
+for B1 is `map036/ev001/p0`, the CAVE's own exit event (cave -> Route 2);
+the entrance crossing (Route 2 -> cave) is `map035/ev001/p0`, owned by
+CH04's manifest, not this one. `warp_beat(round_trip=True,
+return_direction="UP")` now crosses cave -> Route 2 (claims
+`map036/ev001/p0`), crosses back Route 2 -> cave via the DERIVED reciprocal
+(`cells.warp_cell(ROUTE_2_CONST, to=MAP_1F)`, CH04's own entrance warp,
+exercised but not claimed -- same boundary convention as before: the
+arriving chapter tests a crossing the outgoing chapter's manifest can't),
+then crosses cave -> Route 2 once more, ending the beat back on
+`MAP_ROUTE_02`. **Still short of the pre-conversion hand-written beat in
+one respect:** that module's return leg additionally exercised CH04's own
+permanently-deferred arrival-nudge autorun on the Route 2 side
+(`map035/ev001/p1`) and asserted its specific one-tile displacement before
+crossing back in; `round_trip=True` asserts map+position on each leg but has
+no nudge-specific step (nudges are `arrival_nudge_beat`'s own archetype, a
+different template, and `map035/ev001/p1` is CH04's row, not claimable
+here). **B1 ends this beat on `MAP_ROUTE_02`, not inside the cave** -- an
+artifact of the manifest's own row orientation (this chapter's claimable
+crossing is cave-to-Route-2, so that is `round_trip`'s declared "forward"
+and its own destination), unchanged from this template's pre-round-trip
+one-way behavior and not newly introduced here; flagged, not resolved, same
+as the next paragraph's own continuity note.
 
-**B8 -- one stop, three beats, still short of the old round trip.** The
-warp pair (`map036/ev002/p0` forward, `map037/ev001/p0` return) and the
-nudge that fires on the return leg (`map036/ev002/p1`) are three
-`ArchetypeMatch` rows on two different maps; `warp_beat` claims one row per
-call, so covering both warp rows takes two calls: `warp_beat(beat_name="B8")`
-for the forward leg and `warp_beat(beat_name="B8_return", group="B8")` for
-the return leg, followed by `arrival_nudge_beat(beat_name="B8_nudge",
-group="B8")` for the nudge -- all three share `group="B8"` so the route
-solver still treats them as one indivisible stop, registered contiguously.
-**Dropped by this conversion:** the final "step back onto the warp tile and
-cross forward again, ending on 2F" repeat that closed out the hand-written
-beat. Forward, return, and the nudge on return are all still asserted;
-only the closing re-crossing is gone.
+**B8 -- one stop, three beats; the forward call now round-trips.** The warp
+pair (`map036/ev002/p0` forward, `map037/ev001/p0` return) and the nudge
+that fires on the return leg (`map036/ev002/p1`) are three `ArchetypeMatch`
+rows on two different maps; `warp_beat`/`find_match` key a claim to one
+exact `(map_id, event_id)` pair, so covering both warp rows still takes two
+calls -- `find_match` cannot merge a `map036` row and a `map037` row into
+one claim, and `round_trip=True` does not change that (task brief's "the
+pair collapses back to one call" option: not available without changing
+`find_match`'s matching key, which this task does not own).
+`warp_beat(beat_name="B8", round_trip=True, return_direction="DOWN")` now
+does the FULL forward/back/forward-again cycle on the forward leg alone --
+crosses 1F->2F (claims `map036/ev002/p0`), crosses back 2F->1F via the
+DERIVED reciprocal (physically the same warp `B8_return` also tests, just
+not claimed here), then crosses 1F->2F once more, ending back on 2F.
+`warp_beat(beat_name="B8_return", group="B8")` runs next, UNCHANGED
+(`round_trip` still `False` there) -- it still exists solely to claim
+`map037/ev001/p0` via its own `find_match` call, and it still performs one
+real 2F->1F crossing to do so, which leaves the group's own final position
+back on 1F. **Why `B8_return` was not also made `round_trip=True`:** its
+own declared "forward" is fixed by the manifest to 2F->1F (the row's own
+map/event), so round-tripping IT always ends on 1F too (a round trip's net
+effect is always two arrivals at the call's own declared destination and
+one at the origin) -- no ordering or choice of which single call gets
+`round_trip=True` avoids the group ending on 1F once `B8_return` runs last,
+since `B8_return` must physically run after `B8` (the only entry to 2F).
+This is the SAME map the group already ended on before this change (this
+is not a new regression); the possible mismatch against `B9`'s own declared
+`MAP_PASSAGE_CAVE_2F` entry is a pre-existing, unresolved question (like
+B1's own continuity note above), not exercised by any of this task's
+verification commands, flagged for the real ROM boot walk. **Restored
+versus the pre-conversion module:** the full three-crossing round trip on
+the forward warp (this was entirely absent before this change); the
+reciprocal warp is now physically exercised twice (once inside `B8`'s
+round trip, once by `B8_return`'s own claim) rather than once.
 
 **B11 -- deliberately NOT converted; still hand-written.** The assigned
 mapping for this rewrite calls for `warp_beat` here, but `map037/ev002/p0`
@@ -167,15 +200,17 @@ beats) actually left the player, checked strictly, at run time. CH04's own
 last own-beat (`B15`, the wild-grass encounter) leaves the player somewhere
 in the grass south of the rockslide, not at B1's declared entry
 (`event_cell(MAP_PASSAGE_CAVE_1F, 1)`, deep inside the cave) -- the two
-cannot literally agree, and B1 no longer has a body that itself walks the
-player across that gap (see B1's own section above: that leg is dropped,
-not merely reshaped). Whether the runner tolerates this (or whether CH04
-already has the same latent gap for its own first beat after CH03) is a
-`playtest.runner`/harness question, out of this file's scope and not
-exercised by any of this task's own verification commands
-(`routing plan --dry-run`, `chapter_manifest check`, `pytest`, `ruff`) --
-flagged for whoever runs Step 7's real ROM build, now a strictly larger risk
-than it was in the hand-written module.
+cannot literally agree, and B1's body (round trip or not) starts from its
+own declared `at=`, deep in the cave; it never walks the player across the
+CH04-handoff gap itself, round-tripping or no. `round_trip=True` does now
+put B1's body back onto `MAP_ROUTE_02` mid-beat (its own "cross back" leg),
+but only after starting from inside the cave -- it does not, and cannot,
+retroactively bridge the entry mismatch above. Whether the runner tolerates
+this (or whether CH04 already has the same latent gap for its own first
+beat after CH03) is a `playtest.runner`/harness question, out of this
+file's scope and not exercised by any of this task's own verification
+commands (`routing plan --dry-run`, `chapter_manifest check`, `pytest`,
+`ruff`) -- flagged for whoever runs Step 7's real ROM build.
 """
 from __future__ import annotations
 
@@ -321,6 +356,8 @@ warp_beat(
     mechanism="threshold",
     direction="DOWN",
     beat_name="B1",
+    round_trip=True,
+    return_direction="UP",
 )
 
 
@@ -422,6 +459,8 @@ warp_beat(
     mechanism="threshold",
     direction="DOWN",
     beat_name="B8",
+    round_trip=True,
+    return_direction="DOWN",
 )
 
 warp_beat(

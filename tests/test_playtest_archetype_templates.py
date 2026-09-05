@@ -294,6 +294,105 @@ def test_warp_beat_unknown_mechanism_fails_loud(
         )
 
 
+def test_warp_beat_round_trip_still_registers_one_beat_with_one_row(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    """`round_trip=True` is still ONE beat claiming ONE row (task brief) --
+    the extra crossings it performs at runtime don't change registration."""
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        round_trip=True, return_direction="UP",
+    )
+    chapter = b.build()
+    assert [beat.name for beat in chapter.beats] == ["W1"]
+    beat = chapter.beats[0]
+    assert beat.archetype == "warp"
+    assert beat.rows == ("map036/ev001/p0",)
+    assert beat.group == "W1"
+
+
+def test_warp_beat_round_trip_requires_return_direction_for_threshold(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    b = _builder()
+    with pytest.raises(ValueError, match="requires return_direction="):
+        warp_beat(
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
+            mechanism="threshold", direction="DOWN", beat_name="W1",
+            manifest_rows=ch05_rows, round_trip=True,
+        )
+
+
+def test_warp_beat_return_direction_without_round_trip_fails_loud(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    b = _builder()
+    with pytest.raises(ValueError, match="without round_trip=True"):
+        warp_beat(
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
+            mechanism="threshold", direction="DOWN", beat_name="W1",
+            manifest_rows=ch05_rows, return_direction="UP",
+        )
+
+
+def test_warp_beat_round_trip_derives_reciprocal_cells_not_a_literal(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    """The reciprocal warp/arrival cells are derived through `cells.py`'s
+    own resolvers (task brief), not passed in -- there is no parameter for
+    them at all. This just proves registration succeeds (i.e. the
+    reciprocal derivation didn't raise) for a real corpus pair (B1's own
+    Cave1F<->Route2 warp) with no coordinate ever spelled out here."""
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        round_trip=True, return_direction="UP",
+    )
+    chapter = b.build()
+    assert len(chapter.beats) == 1
+
+
+def test_warp_beat_round_trip_unknown_reciprocal_fails_loud(
+    ch05_rows: tuple[ManifestRow, ...], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A destination map with no warp back to the origin can't be
+    round-tripped -- `warp_beat` propagates `cells.warp_cell`'s own
+    fail-loud error rather than silently degrading to a one-way crossing.
+    Every real warp pair in the staged CH05 corpus happens to be mutually
+    reciprocal, so this patches `warp_cell` to simulate the one-way case
+    rather than searching the whole corpus for a coincidental example --
+    the forward leg's own resolution (real data) is left untouched."""
+    import rpg2gba.playtest.archetypes.warp as warp_module
+
+    real_warp_cell = warp_module.warp_cell
+
+    def _fake_warp_cell(map_constant: str, *, to: str, event_id: int | None = None):
+        if map_constant == "MAP_ROUTE_02" and to == "MAP_PASSAGE_CAVE_1F":
+            raise ValueError(
+                "warp_cell: MAP_ROUTE_02 has no warp exit whose destination "
+                "is MAP_PASSAGE_CAVE_1F (synthetic, for this test)"
+            )
+        return real_warp_cell(map_constant, to=to, event_id=event_id)
+
+    monkeypatch.setattr(warp_module, "warp_cell", _fake_warp_cell)
+
+    b = _builder()
+    with pytest.raises(ValueError, match="no warp exit"):
+        warp_beat(
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
+            mechanism="threshold", direction="DOWN", beat_name="W1",
+            manifest_rows=ch05_rows, round_trip=True, return_direction="UP",
+        )
+
+
 # -- arrival_nudge -------------------------------------------------------
 
 
