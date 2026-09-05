@@ -14,32 +14,29 @@ registers in that order, using the exact resolver call
 `reference/routes/CH05.locations.json` records for it -- this file is
 transcription of an already-reviewed plan, not fresh derivation.
 
-**Why the four archetype templates
-(`playtest.archetypes.{item_ball,trainer,warp,arrival_nudge}`) are NOT
-called directly here, even though every beat below matches one of them.**
-`chapter_manifest.checker.RULE_ROUTE_APPROACH` looks up a beat by its EXACT
-registered NAME (`route_model.PlanRouteModel.declared_beat_cell`, keyed on
-`Beat.name`), and the approved plan's `chosen_approach` nodes each cover a
-group whose `beats` list is the single bare id from
-`CH05.dispositions.json` (`"B2"`, `"B3"`, ... -- see
-`routing.locations.chapter_from_locations`, which gives every derived beat
-its own singleton group named after itself). None of the four template
-functions expose a `group=` parameter, and each always suffixes its beat
-names (`f"{beat_prefix}_grant"`, `f"{beat_prefix}_battle"`, ...) -- calling
-one verbatim would (a) create a NEW singleton group per suffix, which
-`RULE_ROUTE_ORDER` would then report as "registered but not in the planned
-order" for every group with more than one row, and (b) leave
-`declared_beat_cell("B2")` finding nothing (no beat is ever literally named
-`"B2"`), degrading the whole group's approach check to
-`RULE_ROUTE_MODEL_UNENFORCED` instead of a real pass. So every group below
-is hand-written with an EXACT-match primary beat name (`"B2"`, `"B3"`, ...)
-plus an explicit `group=` tying its sibling rows (spent page / re-talk page
-/ nudge) into one contiguous stop -- the same assertions the templates would
-make (grant/spent bag deltas, trainer identity, nudge displacement), just
-without the templates' fixed naming. This is a real, load-bearing gap
-between the router's naming assumptions and the templates' naming
-convention, worth carrying to `PROJECT_TODO.md`, not something to paper
-over in this file.
+**The four archetype templates
+(`playtest.archetypes.{item_ball,trainer,warp,arrival_nudge}`) are now used
+directly, for seven of the eleven groups below.** They previously could not
+be called at all: neither exposed `group=`, and none named its primary beat
+the bare id (`"B2"`) a disposition names (see git history at `aa2dcb0f` for
+the fix). That gap is closed, so `B2`/`B4` call `item_ball_beats`, `B3`/`B5`/
+`B9` call `trainer_beats`, and `B1`/`B8` call `warp_beat` (`B8` also calls
+`arrival_nudge_beat`). `B10`/`B13`/`B14` stay hand-written -- no archetype
+matches them, same as before. `B11` **also stays hand-written, by deliberate
+build-agent deviation from the assigned mapping** -- see its own section
+below for why calling `warp_beat` there would be actively wrong, not just
+differently-shaped.
+
+`warp_beat` crosses in exactly ONE direction per call and asserts arrival on
+the far side; it has no round-trip concept. The hand-authored module this
+one replaces tested `B1`/`B8` as round trips (cross in, cross back, cross in
+again) under an explicit operator convention (`CH05.dispositions.json`,
+2026-09-04). That idiom is **not reproducible through the template as it
+exists today** without writing the round-trip loop back in by hand around
+it, which the task brief for this rewrite forbids ("do not reimplement it
+around the template without telling me"). So the coverage below is
+genuinely narrower than the module this replaces: see each group's own
+section for exactly what dropped.
 
 **Trainers are native, not self-switch-gated.** Per `CH05_TODO.md` step 1,
 `TRAINER_MANNY_5` / `TRAINER_KEICHI_248` / `TRAINER_NUNES_128` are staged
@@ -48,17 +45,24 @@ unlike CH04's Larrie (a phone-rematch idiom needing an RPG-Maker self-switch
 flag), their defeat state is the engine's own `TRAINER_FLAGS_START + <id>`
 bit, set inside the battle before any script runs, so it can be read the
 instant `win_battle` returns (no post-battle-script settle needed, unlike
-CH04's Larrie).
+CH04's Larrie). `trainer_beats` takes this as a plain `defeat_flag=` string,
+computed the same way (`_trainer_defeat_flag`) it always was here -- the
+manifest cannot derive which mechanism (native flag vs. self-switch) the
+transpiler picked for a given instance, so this remains author-supplied.
 
 **Trigger dispatch is a hedge, not a confirmed fact.** The manifest
 describes these three trainers as event-sight (`pbNoticePlayer`), which
 CH04's own module docstring found ambiguous for its own roster (some
 compiled trigger=2 "Event Touch", but the *engine's* compiled dispatch
-mechanism for a solid NPC was unconfirmed at authoring time). `_trigger_trainer`
-below reuses CH04's resolution: try a bump first, fall back to `interact()`,
-and only fail if neither produces a trainer battle against the RIGHT
-trainer id. Untested against a real ROM at authoring time -- flagged, not
-guessed away.
+mechanism for a solid NPC was unconfirmed at authoring time). `trainer_beats`
+now owns this resolution (`_start_trigger`, generalized from CH04's own
+`_trigger_trainer`): try the stated trigger, retry with `interact()` if
+nothing fired, and only fail if neither produces a trainer battle against
+the RIGHT trainer id. `trigger="event_touch"` is passed for all three of
+this chapter's trainers, cross-checked against `classify_manifest`'s own
+derivation for each event at import time -- a mismatch is a loud
+`ValueError`, not a silently-accepted claim. Untested against a real ROM at
+authoring time -- flagged, not guessed away.
 
 **Re-talk beats use the STATIC approach cell, not a measured live position.**
 CH04 found that an event-touch trainer's battle walks it toward the player
@@ -66,20 +70,26 @@ and the compiled engine keeps the moved position afterward
 (`TryOverrideTemplateCoordsForObjectEvent`), so its own re-talk beats read a
 measured `local_id`/live position instead of trusting the template cell.
 No such measurement exists yet for Manny/Keichi/Nunes (this is the first
-build; nothing has boot-walked). Re-talk beats below approach the STATIC
-cell -- a real risk that the trainer has moved and the re-talk beat cannot
-reach it, deliberately accepted per the task brief's "prefer a weaker but
-correct assertion" over inventing an unverified `local_id`. If the boot walk
-finds this wrong, the fix is the same `_press_a_live`-style live-position
-read CH04 already has, not a new mechanism.
+build; nothing has boot-walked). `trainer_beats` is called below with no
+`local_id=`, so its re-talk beats fall back to the STATIC approach cell --
+the same real risk the hand-written module accepted (the trainer may have
+moved and the re-talk beat cannot reach it), deliberately kept per the task
+brief's "prefer a weaker but correct assertion" over inventing an unverified
+`local_id`. If the boot walk finds this wrong, the fix is passing a measured
+`local_id=` to `trainer_beats`, not a new mechanism.
 
-**Re-talk/gift text is asserted non-empty, never against a literal string.**
-Unlike CH04 (whose re-talk lines were already public via the manifest and
-its own module docstring), this repo's standing rule
-(`feedback-avoid-uranium-spoilers`) is that the build agent does not quote
-Uranium dialogue in files a human reviews casually. `emu.assert_text_contains`
-against a real string would require transcribing one; a non-empty-text check
-is the honest, weaker substitute.
+**Re-talk/gift text: the template checks MORE than the hand-written beats
+did, in the common case.** Unlike this module's own `B10_retalk` (still
+hand-written, still a bare non-empty check per the standing
+`feedback-avoid-uranium-spoilers` rule -- this file never quotes Uranium
+dialogue), `trainer_beats`' re-talk beats call
+`playtest.text_source.expected_text` and assert the REAL line
+(`emu.assert_text_contains`, with `{PLAYER}` split around the control code)
+when that lookup succeeds -- no dialogue is embedded in this source file,
+only fetched at run time. It degrades to the same non-empty check this
+module always used, with a loud warning log, only when
+`expected_text` cannot translate that page's control codes. Net effect for
+`B3`/`B5`/`B9`'s re-talk beats: coverage went UP, not down.
 
 **B13/B14 (the sideways staircases) use `raw_cell()`.** `playtest.cells` has
 no `stair_approach` resolver -- deliberately, per its own module docstring
@@ -102,17 +112,53 @@ Rock Smash rows, which had an open south face). Surf itself is not granted
 until Act 5 (map 143); this room is the corpus's longest-standing capability
 deferral.
 
-**B1 and B8 are warp round trips, not one-way crossings** (operator
-convention, 2026-09-04): a warp is tested by crossing it, crossing back, and
-crossing again, ending on the far side. B1 additionally exercises CH04's own
-permanently-deferred nudge on the Route 2 side
-(`ch04.b8_autorun_deferred`'s row, `map035/ev001/p1`) -- under the boundary
-convention an outgoing chapter delivers the player to the edge and the
-ARRIVING chapter (this one) asserts the crossing, so B1 claims that row too
-even though it is generated from a different chapter's manifest. B8's own
-nudge (`map036/ev002/p1`) is claimed by the sibling beat `B8_nudge`
-(same `group="B8"`), because a `Beat` can carry only one `archetype=` tag
-and B8's own rows are tagged `"warp"`.
+**B1 -- reduced to the return crossing only.** The manifest row this
+chapter owns for B1 is `map036/ev001/p0`, the CAVE's own exit event (cave ->
+Route 2); the entrance crossing (Route 2 -> cave) is `map035/ev001/p0`,
+owned by CH04's manifest, not this one. The hand-written module this
+replaces asserted BOTH directions plus a repeat forward crossing plus CH04's
+own permanently-deferred arrival nudge on the Route 2 side, under the
+"boundary convention" that the arriving chapter tests a crossing the
+outgoing chapter's manifest can't claim. `warp_beat` only tests the one
+manifest row it is given -- `map036/ev001/p0` -- as a single cave-to-Route-2
+crossing. **Dropped by this conversion:** the explicit entrance-crossing
+assertion, the repeat forward crossing, and the CH04 nudge-displacement
+check. None of those rows belong to this chapter's own manifest, so nothing
+here is now UNCOVERED per `chapter_manifest check` -- the coverage that
+dropped was assurance this module chose to provide beyond its own rows, not
+assurance the manifest requires of it.
+
+**B8 -- one stop, three beats, still short of the old round trip.** The
+warp pair (`map036/ev002/p0` forward, `map037/ev001/p0` return) and the
+nudge that fires on the return leg (`map036/ev002/p1`) are three
+`ArchetypeMatch` rows on two different maps; `warp_beat` claims one row per
+call, so covering both warp rows takes two calls: `warp_beat(beat_name="B8")`
+for the forward leg and `warp_beat(beat_name="B8_return", group="B8")` for
+the return leg, followed by `arrival_nudge_beat(beat_name="B8_nudge",
+group="B8")` for the nudge -- all three share `group="B8"` so the route
+solver still treats them as one indivisible stop, registered contiguously.
+**Dropped by this conversion:** the final "step back onto the warp tile and
+cross forward again, ending on 2F" repeat that closed out the hand-written
+beat. Forward, return, and the nudge on return are all still asserted;
+only the closing re-crossing is gone.
+
+**B11 -- deliberately NOT converted; still hand-written.** The assigned
+mapping for this rewrite calls for `warp_beat` here, but `map037/ev002/p0`
+does not compile to a working warp at all: Map040 (Nowtoch) is not in
+`SLICE_MAP_IDS`, so `metadata_wiring.classify_event` skipped it and emitted
+no `warp_event`
+(`CH05.dispositions.json`'s own note on this row). `warp_beat`'s body calls
+`assertions.cross_threshold` then `assertions.wait_for_map(..., dest_map)`,
+which polls until the map changes -- against a destination that was never
+staged, that call cannot succeed; it would hang out to its frame budget and
+fail loud on every run, not just report a weaker assertion. The
+dispositions file already documents this row as "the one warp row in the
+chapter that cannot use the round-trip idiom" for the same reason. This is
+a build-agent judgment call made without being asked: B11 keeps its
+hand-written body (reach the boundary tile, assert position and an
+un-locked field, assert nothing crossed), and the mismatch between the
+assigned mapping and what actually compiles here is flagged for the lead
+rather than silently worked around.
 
 **A genuine cross-chapter continuity risk, noted and not resolved here.**
 `playtest.runner._check_beat_continuity` compares each beat's declared
@@ -121,13 +167,15 @@ beats) actually left the player, checked strictly, at run time. CH04's own
 last own-beat (`B15`, the wild-grass encounter) leaves the player somewhere
 in the grass south of the rockslide, not at B1's declared entry
 (`event_cell(MAP_PASSAGE_CAVE_1F, 1)`, deep inside the cave) -- the two
-cannot literally agree, since B1's own body is what walks the player from
-the Route 2 side to the cave mouth and crosses. Whether the runner tolerates
-this (or whether CH04 already has the same latent gap for its own first
-beat after CH03) is a `playtest.runner`/harness question, out of this file's
-scope and not exercised by any of this task's own verification commands
+cannot literally agree, and B1 no longer has a body that itself walks the
+player across that gap (see B1's own section above: that leg is dropped,
+not merely reshaped). Whether the runner tolerates this (or whether CH04
+already has the same latent gap for its own first beat after CH03) is a
+`playtest.runner`/harness question, out of this file's scope and not
+exercised by any of this task's own verification commands
 (`routing plan --dry-run`, `chapter_manifest check`, `pytest`, `ruff`) --
-flagged for whoever runs Step 7's real ROM build.
+flagged for whoever runs Step 7's real ROM build, now a strictly larger risk
+than it was in the hand-written module.
 """
 from __future__ import annotations
 
@@ -136,8 +184,12 @@ from typing import TYPE_CHECKING
 
 from ...traversal.direction import CARDINALS, Direction
 from .. import assertions
-from ..battle import in_battle, win_battle
-from ..cells import approach_to, arrival_cell, event_cell, raw_cell, warp_cell
+from ..archetypes.arrival_nudge import arrival_nudge_beat
+from ..archetypes.item_ball import item_ball_beats
+from ..archetypes.trainer import trainer_beats
+from ..archetypes.warp import warp_beat
+from ..battle import in_battle
+from ..cells import approach_to, event_cell, raw_cell
 from ..chapter import ChapterBuilder
 from ..errors import ScenarioError
 
@@ -149,6 +201,8 @@ if TYPE_CHECKING:  # runtime import is lazy so the registry works without bindin
 ch05 = ChapterBuilder("CH05", doc="reference/chapters/05-passage-cave.md",
                         predecessor="CH04")
 
+_CHAPTER_ID = "CH05"
+
 MAP_1F = "MAP_PASSAGE_CAVE_1F"
 MAP_2F = "MAP_PASSAGE_CAVE_2F"
 ROUTE_2_CONST = "MAP_ROUTE_02"  # CH04's own map constant; see module docstring's B1
@@ -156,7 +210,8 @@ ROUTE_2_CONST = "MAP_ROUTE_02"  # CH04's own map constant; see module docstring'
 # -- shared helpers, adapted from ch04.py (chapter-local by design, per
 # assertions.py's own docstring on what deliberately does not get promoted --
 # a wild-encounter-aware absorbing walk is Route/Cave specific tuning, not a
-# corpus-wide primitive) --------------------------------------------------
+# corpus-wide primitive) -- still needed by B10/B11/B13/B14, the four groups
+# with no matching archetype template. -------------------------------------
 
 _MAX_ABSORBED_INTERRUPTIONS = 12
 _WALK_ABSORBING_FRAME_BUDGET = 6000
@@ -228,80 +283,14 @@ def _press_a(emu: Emulator, beat: str, approach: tuple[int, int], facing: str) -
 def _trainer_defeat_flag(trainer_const: str) -> str:
     """The engine's own defeat flag for a native `trainerbattle_single`
     trainer -- see module docstring on why CH05's trainers use this and not
-    an RPG-Maker self-switch."""
+    an RPG-Maker self-switch. Fed to `trainer_beats(defeat_flag=...)` below."""
     return f"TRAINER_FLAGS_START + {trainer_const}"
-
-
-def _trigger_trainer(emu: Emulator, beat: str, approach: tuple[int, int],
-                     facing: str, trainer_const: str) -> None:
-    """Byte-adapted from `ch04.py`'s `_trigger_trainer` -- bump first (the
-    literal "Event Touch" reading), fall back to `interact()`, and assert
-    WHICH trainer fought (never trust "a battle started" alone)."""
-    _walk_absorbing(emu, beat, *approach, absorb_wild=True, absorb_trainer=False)
-    emu.face(facing)
-    assertions.try_step(emu, facing)
-    if not emu.field_locked() and not in_battle(emu):
-        try:
-            emu.interact()
-        except ScenarioError:
-            pass
-    assertions.advance_to_battle(emu)
-    if not in_battle(emu):
-        shot = emu.screenshot(f"{beat}_no_battle")
-        raise ScenarioError(
-            f"{beat}: neither a bump nor interact() at {approach} started a "
-            f"battle ({shot})")
-    if not emu.is_trainer_battle():
-        shot = emu.screenshot(f"{beat}_wild_not_trainer")
-        raise ScenarioError(
-            f"{beat}: a battle started at {approach} but it isn't a trainer "
-            f"battle ({shot})")
-    expected = emu.resolve_constant(trainer_const)
-    actual = emu.opponent_trainer_id()
-    if actual != expected:
-        shot = emu.screenshot(f"{beat}_wrong_trainer")
-        raise ScenarioError(
-            f"{beat}: a trainer battle started at {approach}, but against "
-            f"trainer id {actual}, not {trainer_const} ({expected}) "
-            f"({shot})")
-
-
-def _battle_beat_body(emu: Emulator, beat: str, approach: tuple[int, int],
-                      facing: str, trainer_const: str, defeat_flag: str) -> None:
-    if emu.flag(defeat_flag):
-        raise ScenarioError(
-            f"{beat} precondition failed: {defeat_flag} already set before "
-            f"the fight")
-    _trigger_trainer(emu, beat, approach, facing, trainer_const)
-    party = win_battle(emu)
-    if not emu.flag(defeat_flag):
-        shot = emu.screenshot(f"{beat}_not_defeated")
-        raise ScenarioError(f"{beat}: {defeat_flag} not set after the win ({shot})")
-    logger.info("%s: enemy party at battle start: %s", beat,
-                [(m.species, m.level) for m in party])
-
-
-def _retalk_beat_body(emu: Emulator, beat: str, approach: tuple[int, int],
-                      facing: str, defeat_flag: str) -> None:
-    if not emu.flag(defeat_flag):
-        raise ScenarioError(
-            f"{beat} precondition failed: {defeat_flag} not set -- the "
-            f"battle beat must run first")
-    _press_a(emu, beat, approach, facing)
-    text = emu.current_field_message_text()
-    if not text or not text.strip():
-        shot = emu.screenshot(f"{beat}_empty_text")
-        raise ScenarioError(
-            f"{beat}: re-talk text is empty (see module docstring on why "
-            f"this checks non-empty rather than a literal string) ({shot})")
-    emu.advance_dialog()
-    if emu.field_locked():
-        shot = emu.screenshot(f"{beat}_stuck")
-        raise ScenarioError(f"{beat}: re-talk did not close cleanly ({shot})")
 
 
 def _item_grant_beat_body(emu: Emulator, beat: str, approach: tuple[int, int],
                           facing: str, item: str, ssa: str) -> None:
+    """Still used by B10 -- the Revive NPC matches no archetype template
+    (`pbReceiveItem`, not `pbItemBall`), so it stays hand-written."""
     if emu.flag(ssa):
         raise ScenarioError(
             f"{beat} precondition failed: {ssa} already set before the pickup")
@@ -318,161 +307,82 @@ def _item_grant_beat_body(emu: Emulator, beat: str, approach: tuple[int, int],
             f"{beat}: {item} {bag_before}->{bag_after}, expected +1 ({shot})")
 
 
-def _item_spent_beat_body(emu: Emulator, beat: str, approach: tuple[int, int],
-                          facing: str, item: str, ssa: str) -> None:
-    if not emu.flag(ssa):
-        raise ScenarioError(
-            f"{beat} precondition failed: {ssa} not set -- the grant beat "
-            f"must run first")
-    bag_before = emu.bag_item_quantity(item)
-    _press_a(emu, beat, approach, facing)
-    emu.advance_dialog()
-    bag_after = emu.bag_item_quantity(item)
-    if bag_after != bag_before:
-        shot = emu.screenshot(f"{beat}_regranted")
-        raise ScenarioError(
-            f"{beat}: {item} {bag_before}->{bag_after} on a re-touch, "
-            f"expected no change ({shot})")
+# -- B1 -- cave exit warp, Cave 1F -> Route 2 (map036/ev001) ---------------
+# See module docstring: the hand-written round trip this replaces is not
+# reproducible through `warp_beat`, which crosses one direction per call.
 
-
-# Direction lookup for a raw (dx, dy) displacement reuses `_direction_toward`
-# (defined above) rather than a second literal dict.
-
-
-# -- B1 -- cave entrance/exit warp round trip (map036/ev001/p0, plus CH04's
-# own deferred nudge on map035/ev001/p1; see module docstring) ------------
-
-_B1_ROUTE2_TRIGGER = warp_cell(ROUTE_2_CONST, to=MAP_1F)
-_B1_ROUTE2_APPROACH = (_B1_ROUTE2_TRIGGER[0], _B1_ROUTE2_TRIGGER[1] + 1)
-_B1_CAVE_TRIGGER = event_cell(MAP_1F, 1)
-_B1_CAVE_ARRIVAL = arrival_cell(MAP_1F, from_map=ROUTE_2_CONST)
-_B1_ROUTE2_ARRIVAL = arrival_cell(ROUTE_2_CONST, from_map=MAP_1F, event_id=1)
-
-
-@ch05.beat("B1", "The Route 2 <-> Passage Cave 1F warp pair round-trips: "
-                   "cross in, cross back out (exercising CH04's own "
-                   "permanently-deferred once-per-visit nudge on the Route "
-                   "2 side), then cross in again -- boundary convention: "
-                   "CH05 owns this crossing (manifest map036/ev001/p0, "
-                   "CH04 map035/ev001/p1)",
-            map_constant=MAP_1F, at=_B1_CAVE_TRIGGER, group="B1",
-            rows=("map036/ev001/p0",), archetype="warp")
-def b1(emu: Emulator) -> None:
-    # Forward: Route 2 -> Cave 1F (Map035's own entrance event, CH04-owned;
-    # this crossing is exercised here under the boundary convention).
-    assertions.cross_threshold(emu, "B1", _B1_ROUTE2_APPROACH, "UP", MAP_1F)
-    assertions.assert_near(emu, "B1", _B1_CAVE_ARRIVAL)
-
-    # Return: Cave 1F -> Route 2 (Map036's own exit event, this chapter's
-    # manifest row).
-    assertions.cross_threshold(emu, "B1", _B1_CAVE_ARRIVAL, "DOWN", ROUTE_2_CONST)
-    assertions.assert_near(emu, "B1", _B1_ROUTE2_ARRIVAL)
-
-    # CH04's own deferred nudge (map035/ev001/p1) fires here.
-    emu.settle_field()
-    if emu.field_locked():
-        shot = emu.screenshot("b1_stuck_after_nudge")
-        raise ScenarioError(
-            f"B1: field still locked after the Route 2 arrival nudge "
-            f"settled ({shot})")
-    nudged = emu.player_pos()
-    if nudged == _B1_ROUTE2_ARRIVAL:
-        shot = emu.screenshot("b1_no_nudge")
-        raise ScenarioError(
-            f"B1: player still at the Route 2 arrival cell "
-            f"{_B1_ROUTE2_ARRIVAL} after settling -- expected the nudge "
-            f"move route to have displaced them ({shot})")
-    dx = abs(nudged[0] - _B1_ROUTE2_ARRIVAL[0])
-    dy = abs(nudged[1] - _B1_ROUTE2_ARRIVAL[1])
-    if dx + dy != 1:
-        shot = emu.screenshot("b1_wrong_nudge_distance")
-        raise ScenarioError(
-            f"B1: nudged to {nudged}, expected exactly one tile off "
-            f"{_B1_ROUTE2_ARRIVAL} (Manhattan distance {dx + dy}) ({shot})")
-
-    # Forward again: confirms the warp still fires after the nudge, ending
-    # inside the cave for the rest of the chapter.
-    ddx = _B1_ROUTE2_ARRIVAL[0] - nudged[0]
-    ddy = _B1_ROUTE2_ARRIVAL[1] - nudged[1]
-    step_dir = _direction_toward(ddx, ddy)
-    assertions.try_step(emu, step_dir)
-    assertions.wait_for_map(emu, "B1", MAP_1F)
-    assertions.assert_near(emu, "B1", _B1_CAVE_ARRIVAL)
+warp_beat(
+    ch05,
+    chapter_id=_CHAPTER_ID,
+    map_constant=MAP_1F,
+    map_id=36,
+    event_id=1,
+    dest_map_constant=ROUTE_2_CONST,
+    mechanism="threshold",
+    direction="DOWN",
+    beat_name="B1",
+)
 
 
 # -- B2 -- Escape Rope item ball (map036/ev003) ----------------------------
 
-_B2_EVENT = 3
 _B2_ITEM = "ITEM_ESCAPE_ROPE"
-_B2_APPROACH = approach_to(MAP_1F, _B2_EVENT, prefer="east")
-_B2_FACING = _facing_toward(_B2_APPROACH, event_cell(MAP_1F, _B2_EVENT))
-_B2_SSA = assertions.flag_ssa(36, _B2_EVENT, "A")
 
-
-@ch05.beat("B2", "The Escape Rope item ball grants one Escape Rope, once "
-                   "(manifest map036/ev003/p0)",
-            map_constant=MAP_1F, at=_B2_APPROACH, group="B2",
-            rows=("map036/ev003/p0",), archetype="item_ball")
-def b2(emu: Emulator) -> None:
-    _item_grant_beat_body(emu, "B2", _B2_APPROACH, _B2_FACING, _B2_ITEM, _B2_SSA)
-
-
-@ch05.beat("B2_spent", "Re-touching the spent Escape Rope ball grants "
-                          "nothing a second time (manifest map036/ev003/p1)",
-            map_constant=MAP_1F, at=_B2_APPROACH, group="B2",
-            rows=("map036/ev003/p1",), archetype="item_ball")
-def b2_spent(emu: Emulator) -> None:
-    _item_spent_beat_body(emu, "B2_spent", _B2_APPROACH, _B2_FACING, _B2_ITEM, _B2_SSA)
+item_ball_beats(
+    ch05,
+    chapter_id=_CHAPTER_ID,
+    map_constant=MAP_1F,
+    map_id=36,
+    event_id=3,
+    item=_B2_ITEM,
+    beat_prefix="B2",
+    negative_beat=True,
+    approach_prefer="east",
+)
 
 
 # -- B3 -- Hiker Manny (map036/ev004) --------------------------------------
 
-_B3_EVENT = 4
 _B3_TRAINER = "TRAINER_MANNY_5"
-_B3_DEFEAT_FLAG = _trainer_defeat_flag(_B3_TRAINER)
-_B3_APPROACH = approach_to(MAP_1F, _B3_EVENT, prefer="east")
-_B3_FACING = _facing_toward(_B3_APPROACH, event_cell(MAP_1F, _B3_EVENT))
 
-
-@ch05.beat("B3", "Hiker Manny's trainer battle fires and is won; the "
-                   "native defeat flag latches (manifest map036/ev004/p0)",
-            map_constant=MAP_1F, at=_B3_APPROACH, group="B3",
-            rows=("map036/ev004/p0",), archetype="trainer")
-def b3(emu: Emulator) -> None:
-    _battle_beat_body(emu, "B3", _B3_APPROACH, _B3_FACING, _B3_TRAINER, _B3_DEFEAT_FLAG)
-
-
-@ch05.beat("B3_retalk0", "After B3, Manny's defeated re-talk page shows "
-                            "(manifest map036/ev004/p1)",
-            map_constant=MAP_1F, at=_B3_APPROACH, group="B3",
-            rows=("map036/ev004/p1",), archetype="trainer")
-def b3_retalk0(emu: Emulator) -> None:
-    _retalk_beat_body(emu, "B3_retalk0", _B3_APPROACH, _B3_FACING, _B3_DEFEAT_FLAG)
+trainer_beats(
+    ch05,
+    chapter_id=_CHAPTER_ID,
+    map_constant=MAP_1F,
+    map_id=36,
+    event_id=4,
+    trainer_const=_B3_TRAINER,
+    defeat_flag=_trainer_defeat_flag(_B3_TRAINER),
+    beat_prefix="B3",
+    trigger="event_touch",
+    phone=False,
+    double=False,
+    retalk_pages=1,
+    rider=False,
+    approach_prefer="east",
+)
 
 
 # -- B5 -- Blackbelt Keichi (map036/ev006) ---------------------------------
 
-_B5_EVENT = 6
 _B5_TRAINER = "TRAINER_KEICHI_248"
-_B5_DEFEAT_FLAG = _trainer_defeat_flag(_B5_TRAINER)
-_B5_APPROACH = approach_to(MAP_1F, _B5_EVENT, prefer="east")
-_B5_FACING = _facing_toward(_B5_APPROACH, event_cell(MAP_1F, _B5_EVENT))
 
-
-@ch05.beat("B5", "Blackbelt Keichi's trainer battle fires and is won; the "
-                   "native defeat flag latches (manifest map036/ev006/p0)",
-            map_constant=MAP_1F, at=_B5_APPROACH, group="B5",
-            rows=("map036/ev006/p0",), archetype="trainer")
-def b5(emu: Emulator) -> None:
-    _battle_beat_body(emu, "B5", _B5_APPROACH, _B5_FACING, _B5_TRAINER, _B5_DEFEAT_FLAG)
-
-
-@ch05.beat("B5_retalk0", "After B5, Keichi's defeated re-talk page shows "
-                            "(manifest map036/ev006/p1)",
-            map_constant=MAP_1F, at=_B5_APPROACH, group="B5",
-            rows=("map036/ev006/p1",), archetype="trainer")
-def b5_retalk0(emu: Emulator) -> None:
-    _retalk_beat_body(emu, "B5_retalk0", _B5_APPROACH, _B5_FACING, _B5_DEFEAT_FLAG)
+trainer_beats(
+    ch05,
+    chapter_id=_CHAPTER_ID,
+    map_constant=MAP_1F,
+    map_id=36,
+    event_id=6,
+    trainer_const=_B5_TRAINER,
+    defeat_flag=_trainer_defeat_flag(_B5_TRAINER),
+    beat_prefix="B5",
+    trigger="event_touch",
+    phone=False,
+    double=False,
+    retalk_pages=1,
+    rider=False,
+    approach_prefer="east",
+)
 
 
 # -- B4 -- Great Ball item ball (map036/ev005) -----------------------------
@@ -482,113 +392,84 @@ def b5_retalk0(emu: Emulator) -> None:
 # way; beat ids are labels, not ordering (ch04.py's own B4/B2/B3 note makes
 # the same point).
 
-_B4_EVENT = 5
 _B4_ITEM = "ITEM_GREAT_BALL"
-_B4_APPROACH = approach_to(MAP_1F, _B4_EVENT, prefer="west")
-_B4_FACING = _facing_toward(_B4_APPROACH, event_cell(MAP_1F, _B4_EVENT))
-_B4_SSA = assertions.flag_ssa(36, _B4_EVENT, "A")
+
+item_ball_beats(
+    ch05,
+    chapter_id=_CHAPTER_ID,
+    map_constant=MAP_1F,
+    map_id=36,
+    event_id=5,
+    item=_B4_ITEM,
+    beat_prefix="B4",
+    negative_beat=True,
+    approach_prefer="west",
+)
 
 
-@ch05.beat("B4", "The Great Ball item ball grants one Great Ball, once "
-                   "(manifest map036/ev005/p0)",
-            map_constant=MAP_1F, at=_B4_APPROACH, group="B4",
-            rows=("map036/ev005/p0",), archetype="item_ball")
-def b4(emu: Emulator) -> None:
-    _item_grant_beat_body(emu, "B4", _B4_APPROACH, _B4_FACING, _B4_ITEM, _B4_SSA)
+# -- B8 -- 1F <-> 2F warp pair plus the return-side nudge (map036/ev002,
+# map037/ev001) -- one stop, three beats; see module docstring for why this
+# is short of the old round trip and why it takes three template calls
+# instead of the "one warp beat" a single crossing would need. -------------
 
+warp_beat(
+    ch05,
+    chapter_id=_CHAPTER_ID,
+    map_constant=MAP_1F,
+    map_id=36,
+    event_id=2,
+    dest_map_constant=MAP_2F,
+    mechanism="threshold",
+    direction="DOWN",
+    beat_name="B8",
+)
 
-@ch05.beat("B4_spent", "Re-touching the spent Great Ball ball grants "
-                          "nothing a second time (manifest map036/ev005/p1)",
-            map_constant=MAP_1F, at=_B4_APPROACH, group="B4",
-            rows=("map036/ev005/p1",), archetype="item_ball")
-def b4_spent(emu: Emulator) -> None:
-    _item_spent_beat_body(emu, "B4_spent", _B4_APPROACH, _B4_FACING, _B4_ITEM, _B4_SSA)
+warp_beat(
+    ch05,
+    chapter_id=_CHAPTER_ID,
+    map_constant=MAP_2F,
+    map_id=37,
+    event_id=1,
+    dest_map_constant=MAP_1F,
+    mechanism="threshold",
+    direction="DOWN",
+    beat_name="B8_return",
+    group="B8",
+)
 
-
-# -- B8 -- 1F <-> 2F warp round trip (map036/ev002, map037/ev001) ---------
-# B8 crosses forward and back; the nudge on arrival back at 1F, and the
-# final forward crossing that actually ends the chapter on 2F, are the
-# sibling beat B8_nudge (module docstring: a Beat carries one archetype=,
-# and B8's own rows are "warp").
-
-_B8_FORWARD_EVENT = 2   # on MAP_1F
-_B8_RETURN_EVENT = 1    # on MAP_2F
-_B8_FORWARD_TRIGGER = event_cell(MAP_1F, _B8_FORWARD_EVENT)
-_B8_FORWARD_APPROACH = (_B8_FORWARD_TRIGGER[0], _B8_FORWARD_TRIGGER[1] + 1)
-_B8_FORWARD_ARRIVAL = arrival_cell(MAP_2F, from_map=MAP_1F, event_id=_B8_FORWARD_EVENT)
-_B8_RETURN_ARRIVAL = arrival_cell(MAP_1F, from_map=MAP_2F, event_id=_B8_RETURN_EVENT)
-
-
-@ch05.beat("B8", "The Passage Cave warp pair crosses forward (1F->2F) and "
-                   "back (2F->1F) (manifest map036/ev002/p0, "
-                   "map037/ev001/p0)",
-            map_constant=MAP_1F, at=_B8_FORWARD_APPROACH, group="B8",
-            rows=("map036/ev002/p0", "map037/ev001/p0"), archetype="warp")
-def b8(emu: Emulator) -> None:
-    assertions.cross_threshold(emu, "B8", _B8_FORWARD_APPROACH, "DOWN", MAP_2F)
-    assertions.assert_near(emu, "B8", _B8_FORWARD_ARRIVAL)
-    assertions.cross_threshold(emu, "B8", _B8_FORWARD_ARRIVAL, "DOWN", MAP_1F)
-    assertions.assert_near(emu, "B8", _B8_RETURN_ARRIVAL)
-
-
-@ch05.beat("B8_nudge", "Arriving back on 1F, the once-per-visit arrival "
-                          "nudge autorun fires (manifest map036/ev002/p1); "
-                          "stepping back onto the warp tile crosses forward "
-                          "again, ending on 2F for the rest of the chapter",
-            map_constant=MAP_1F, at=_B8_RETURN_ARRIVAL, group="B8",
-            rows=("map036/ev002/p1",), archetype="arrival_nudge")
-def b8_nudge(emu: Emulator) -> None:
-    assertions.require_map(emu, "B8_nudge", MAP_1F)
-    emu.settle_field()
-    if emu.field_locked():
-        shot = emu.screenshot("b8_nudge_stuck")
-        raise ScenarioError(
-            f"B8_nudge: field still locked after settling on arrival ({shot})")
-    pos = emu.player_pos()
-    if pos == _B8_RETURN_ARRIVAL:
-        shot = emu.screenshot("b8_nudge_no_nudge")
-        raise ScenarioError(
-            f"B8_nudge: player still at arrival cell {_B8_RETURN_ARRIVAL} "
-            f"after settling -- expected the nudge move route to have "
-            f"displaced them ({shot})")
-    dx = abs(pos[0] - _B8_RETURN_ARRIVAL[0])
-    dy = abs(pos[1] - _B8_RETURN_ARRIVAL[1])
-    if dx + dy != 1:
-        shot = emu.screenshot("b8_nudge_wrong_distance")
-        raise ScenarioError(
-            f"B8_nudge: nudged to {pos}, expected exactly one tile off "
-            f"{_B8_RETURN_ARRIVAL} (Manhattan distance {dx + dy}) ({shot})")
-    ddx = _B8_FORWARD_TRIGGER[0] - pos[0]
-    ddy = _B8_FORWARD_TRIGGER[1] - pos[1]
-    step_dir = _direction_toward(ddx, ddy)
-    assertions.try_step(emu, step_dir)
-    assertions.wait_for_map(emu, "B8_nudge", MAP_2F)
-    assertions.assert_near(emu, "B8_nudge", _B8_FORWARD_ARRIVAL)
+arrival_nudge_beat(
+    ch05,
+    chapter_id=_CHAPTER_ID,
+    map_constant=MAP_1F,
+    map_id=36,
+    event_id=2,
+    from_map_constant=MAP_2F,
+    from_event_id=1,
+    beat_name="B8_nudge",
+    group="B8",
+)
 
 
 # -- B9 -- Hiker Nunes (map037/ev004) --------------------------------------
 
-_B9_EVENT = 4
 _B9_TRAINER = "TRAINER_NUNES_128"
-_B9_DEFEAT_FLAG = _trainer_defeat_flag(_B9_TRAINER)
-_B9_APPROACH = approach_to(MAP_2F, _B9_EVENT, prefer="west")
-_B9_FACING = _facing_toward(_B9_APPROACH, event_cell(MAP_2F, _B9_EVENT))
 
-
-@ch05.beat("B9", "Hiker Nunes's trainer battle fires and is won; the "
-                   "native defeat flag latches (manifest map037/ev004/p0)",
-            map_constant=MAP_2F, at=_B9_APPROACH, group="B9",
-            rows=("map037/ev004/p0",), archetype="trainer")
-def b9(emu: Emulator) -> None:
-    _battle_beat_body(emu, "B9", _B9_APPROACH, _B9_FACING, _B9_TRAINER, _B9_DEFEAT_FLAG)
-
-
-@ch05.beat("B9_retalk0", "After B9, Nunes's defeated re-talk page shows "
-                            "(manifest map037/ev004/p1)",
-            map_constant=MAP_2F, at=_B9_APPROACH, group="B9",
-            rows=("map037/ev004/p1",), archetype="trainer")
-def b9_retalk0(emu: Emulator) -> None:
-    _retalk_beat_body(emu, "B9_retalk0", _B9_APPROACH, _B9_FACING, _B9_DEFEAT_FLAG)
+trainer_beats(
+    ch05,
+    chapter_id=_CHAPTER_ID,
+    map_constant=MAP_2F,
+    map_id=37,
+    event_id=4,
+    trainer_const=_B9_TRAINER,
+    defeat_flag=_trainer_defeat_flag(_B9_TRAINER),
+    beat_prefix="B9",
+    trigger="event_touch",
+    phone=False,
+    double=False,
+    retalk_pages=1,
+    rider=False,
+    approach_prefer="west",
+)
 
 
 # -- B14 -- east sideways staircase (map037/terrain/stairs/20,9 + 20,10) ---
@@ -706,6 +587,10 @@ def b10_retalk(emu: Emulator) -> None:
 
 
 # -- B11 -- CH05|CH06 boundary (map037/ev002) ------------------------------
+# Deliberately NOT converted to warp_beat -- see module docstring's own B11
+# section for why: Map040 is not in SLICE_MAP_IDS, so no warp actually
+# compiles here, and warp_beat's body would wait forever for a map change
+# that cannot happen.
 
 _B11_BOUNDARY = event_cell(MAP_2F, 2)
 
@@ -736,7 +621,7 @@ def b11(emu: Emulator) -> None:
 # -- symbol lint surface ------------------------------------------------------
 MAP_CONSTANTS: tuple[str, ...] = (ROUTE_2_CONST, MAP_1F, MAP_2F)
 
-FLAG_CONSTANTS: tuple[str, ...] = (_B2_SSA, _B4_SSA, _B10_SSA)
+FLAG_CONSTANTS: tuple[str, ...] = (_B10_SSA,)
 
 ITEM_CONSTANTS: tuple[str, ...] = (_B2_ITEM, _B4_ITEM, _B10_ITEM)
 
