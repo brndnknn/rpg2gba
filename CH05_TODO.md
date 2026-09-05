@@ -1,10 +1,19 @@
 # CH05 — Passage Cave: live work items
 
-**Status:** in progress. Branch `ch05` cut; steps 0-5 done and verified.
-**You are here:** → **STOP 3**. Step 6a has been run: `reference/routes/CH05.locations.json`
-holds 12 derived routing points and `reference/routes/CH05.route.json` solves clean
-(155 tiles, no `CROSSING`) — the first route plan any chapter has ever carried. Review
-it in the map viewer (maps 36/37, Events mode), then approve the order and go to 6b.
+**Status:** in progress. Branch `ch05` cut; steps 0-6 done and verified.
+**You are here:** → **Step 7 (BUILD)**. STOP 3 was approved by the operator on
+2026-09-05 after reviewing the route in the map viewer, and step 6b is done:
+`src/rpg2gba/playtest/chapters/ch05.py` registers all eleven beat groups in the
+approved order, seven of them built from the archetype templates. `routing plan
+--dry-run` reproduces the approved order at 141 tiles with no `CROSSING`;
+`chapter_manifest check --chapter CH05` is 0 errors / 4 warnings, with
+`RULE_ROUTE_ORDER` and `RULE_ROUTE_APPROACH` enforcing.
+
+> The 155-tile figure this line used to quote predates the candidate-approach
+> solver rewrite (`d81cd6dd`); the approved artifact solves at 143, and the
+> authored module at 141. The 2-tile gap is B8's representative point — the plan
+> costs a round trip from where it *ends*, the beat is registered where the player
+> must stand to *start* it. Both are right; see `d81cd6dd` and `ae72527c`.
 
 **What this document is.** The execution path for CH05. Two other documents already
 exist and this one does not repeat them:
