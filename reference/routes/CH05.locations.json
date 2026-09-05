@@ -28,6 +28,7 @@
       "resolver": "event_cell(MAP_PASSAGE_CAVE_2F, ev1)",
       "rows": [
         "map036/ev002/p0",
+        "map036/ev002/p1",
         "map037/ev001/p0"
       ],
       "candidates": [
@@ -39,30 +40,18 @@
           "resolver": "event_cell(MAP_PASSAGE_CAVE_1F, ev2)"
         },
         {
-          "row_id": "map037/ev001/p0",
-          "map_constant": "MAP_PASSAGE_CAVE_2F",
-          "x": 16,
-          "y": 27,
-          "resolver": "event_cell(MAP_PASSAGE_CAVE_2F, ev1)"
-        }
-      ]
-    },
-    {
-      "beat_id": "B12",
-      "map_constant": "MAP_PASSAGE_CAVE_1F",
-      "x": 17,
-      "y": 4,
-      "resolver": "event_cell(MAP_PASSAGE_CAVE_1F, ev2)",
-      "rows": [
-        "map036/ev002/p1"
-      ],
-      "candidates": [
-        {
           "row_id": "map036/ev002/p1",
           "map_constant": "MAP_PASSAGE_CAVE_1F",
           "x": 17,
           "y": 4,
           "resolver": "event_cell(MAP_PASSAGE_CAVE_1F, ev2)"
+        },
+        {
+          "row_id": "map037/ev001/p0",
+          "map_constant": "MAP_PASSAGE_CAVE_2F",
+          "x": 16,
+          "y": 27,
+          "resolver": "event_cell(MAP_PASSAGE_CAVE_2F, ev1)"
         }
       ]
     },
@@ -91,6 +80,32 @@
           "y": 34,
           "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev3)"
         }
+      ],
+      "approach_candidates": [
+        {
+          "x": 10,
+          "y": 34,
+          "side": "north",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev3, prefer=\"north\")"
+        },
+        {
+          "x": 10,
+          "y": 36,
+          "side": "south",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev3, prefer=\"south\")"
+        },
+        {
+          "x": 11,
+          "y": 35,
+          "side": "east",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev3, prefer=\"east\")"
+        },
+        {
+          "x": 9,
+          "y": 35,
+          "side": "west",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev3, prefer=\"west\")"
+        }
       ]
     },
     {
@@ -117,6 +132,26 @@
           "x": 18,
           "y": 28,
           "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev4)"
+        }
+      ],
+      "approach_candidates": [
+        {
+          "x": 18,
+          "y": 28,
+          "side": "north",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev4, prefer=\"north\")"
+        },
+        {
+          "x": 18,
+          "y": 30,
+          "side": "south",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev4, prefer=\"south\")"
+        },
+        {
+          "x": 19,
+          "y": 29,
+          "side": "east",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev4, prefer=\"east\")"
         }
       ]
     },
@@ -145,6 +180,14 @@
           "y": 7,
           "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev5)"
         }
+      ],
+      "approach_candidates": [
+        {
+          "x": 21,
+          "y": 7,
+          "side": "west",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev5, prefer=\"west\")"
+        }
       ]
     },
     {
@@ -171,6 +214,32 @@
           "x": 6,
           "y": 12,
           "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev6)"
+        }
+      ],
+      "approach_candidates": [
+        {
+          "x": 6,
+          "y": 12,
+          "side": "north",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev6, prefer=\"north\")"
+        },
+        {
+          "x": 6,
+          "y": 14,
+          "side": "south",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev6, prefer=\"south\")"
+        },
+        {
+          "x": 7,
+          "y": 13,
+          "side": "east",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev6, prefer=\"east\")"
+        },
+        {
+          "x": 5,
+          "y": 13,
+          "side": "west",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev6, prefer=\"west\")"
         }
       ]
     },
@@ -218,6 +287,32 @@
           "y": 9,
           "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev4)"
         }
+      ],
+      "approach_candidates": [
+        {
+          "x": 24,
+          "y": 9,
+          "side": "north",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev4, prefer=\"north\")"
+        },
+        {
+          "x": 24,
+          "y": 11,
+          "side": "south",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev4, prefer=\"south\")"
+        },
+        {
+          "x": 25,
+          "y": 10,
+          "side": "east",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev4, prefer=\"east\")"
+        },
+        {
+          "x": 23,
+          "y": 10,
+          "side": "west",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev4, prefer=\"west\")"
+        }
       ]
     },
     {
@@ -244,6 +339,32 @@
           "x": 8,
           "y": 6,
           "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev5)"
+        }
+      ],
+      "approach_candidates": [
+        {
+          "x": 8,
+          "y": 6,
+          "side": "north",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev5, prefer=\"north\")"
+        },
+        {
+          "x": 8,
+          "y": 8,
+          "side": "south",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev5, prefer=\"south\")"
+        },
+        {
+          "x": 9,
+          "y": 7,
+          "side": "east",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev5, prefer=\"east\")"
+        },
+        {
+          "x": 7,
+          "y": 7,
+          "side": "west",
+          "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev5, prefer=\"west\")"
         }
       ]
     },
@@ -272,6 +393,20 @@
           "y": 9,
           "resolver": "stair_approach(MAP_PASSAGE_CAVE_2F, stair=(11,9))"
         }
+      ],
+      "approach_candidates": [
+        {
+          "x": 10,
+          "y": 9,
+          "side": "west",
+          "resolver": "stair_approach(MAP_PASSAGE_CAVE_2F, stair=(11,9), side='west')  # no cells.py side param exists; this cell is the west E/W neighbour owning the stair_diagonal edge"
+        },
+        {
+          "x": 12,
+          "y": 9,
+          "side": "east",
+          "resolver": "stair_approach(MAP_PASSAGE_CAVE_2F, stair=(11,9), side='east')  # no cells.py side param exists; this cell is the east E/W neighbour owning the stair_diagonal edge"
+        }
       ]
     },
     {
@@ -298,6 +433,20 @@
           "x": 19,
           "y": 9,
           "resolver": "stair_approach(MAP_PASSAGE_CAVE_2F, stair=(20,9))"
+        }
+      ],
+      "approach_candidates": [
+        {
+          "x": 19,
+          "y": 9,
+          "side": "west",
+          "resolver": "stair_approach(MAP_PASSAGE_CAVE_2F, stair=(20,9), side='west')  # no cells.py side param exists; this cell is the west E/W neighbour owning the stair_diagonal edge"
+        },
+        {
+          "x": 21,
+          "y": 9,
+          "side": "east",
+          "resolver": "stair_approach(MAP_PASSAGE_CAVE_2F, stair=(20,9), side='east')  # no cells.py side param exists; this cell is the east E/W neighbour owning the stair_diagonal edge"
         }
       ]
     }

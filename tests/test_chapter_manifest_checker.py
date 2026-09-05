@@ -14,6 +14,7 @@ import pytest
 from rpg2gba.chapter_manifest.checker import (
     ApproachModel,
     CapabilityModel,
+    PlannedApproach,
     RoutePrecedence,
     RULE_APPROACH_MODEL_UNENFORCED,
     RULE_ARCHETYPE_CONFORMANCE,
@@ -26,6 +27,7 @@ from rpg2gba.chapter_manifest.checker import (
     RULE_MISSING_CITATION,
     RULE_ORPHAN_DISPOSITION,
     RULE_REACHABILITY_UNENFORCED,
+    RULE_ROUTE_APPROACH,
     RULE_ROUTE_MODEL_UNENFORCED,
     RULE_ROUTE_ORDER,
     RULE_STALE_DISPOSITION,
@@ -577,10 +579,14 @@ class _FakeRoute:
     """
 
     def __init__(self, planned: tuple[str, ...], registered: tuple[str, ...],
-                 precedence: tuple[RoutePrecedence, ...] = ()) -> None:
+                 precedence: tuple[RoutePrecedence, ...] = (),
+                 approaches: tuple[PlannedApproach, ...] = (),
+                 beat_cells: dict[str, tuple[int, int]] | None = None) -> None:
         self._planned = planned
         self._registered = registered
         self._precedence = precedence
+        self._approaches = approaches
+        self._beat_cells = beat_cells or {}
 
     def planned_group_order(self) -> tuple[str, ...]:
         return self._planned
@@ -590,6 +596,12 @@ class _FakeRoute:
 
     def precedence_edges(self) -> tuple[RoutePrecedence, ...]:
         return self._precedence
+
+    def planned_approaches(self) -> tuple[PlannedApproach, ...]:
+        return self._approaches
+
+    def declared_beat_cell(self, beat_id: str) -> tuple[int, int] | None:
+        return self._beat_cells.get(beat_id)
 
 
 def _plan_group_order(plan) -> tuple[str, ...]:
@@ -617,6 +629,12 @@ class _RealPlanRoute:
             RoutePrecedence(before=e.before, after=e.after, reason=e.reason)
             for e in self._plan.precedence
         )
+
+    def planned_approaches(self) -> tuple[PlannedApproach, ...]:
+        return ()
+
+    def declared_beat_cell(self, beat_id: str) -> tuple[int, int] | None:
+        return None
 
 
 def _build_route_plan(group_order: tuple[str, ...], precedence=()):
@@ -758,6 +776,110 @@ def test_route_order_against_real_route_plan_precedence_violation():
     order_findings = [f for f in findings if f.rule == RULE_ROUTE_ORDER]
     assert len(order_findings) == 1
     assert order_findings[0].severity == "error"
+
+
+# --- rule: planned approach side must match the beat's declared cell ------
+
+
+def _approach(group: str = "B1", cell: tuple[int, int] = (8, 6),
+              beats: tuple[str, ...] = ("B1",), side: str = "east",
+              resolver: str = "approach_to(MAP_PASSAGE_CAVE_2F, ev5, "
+                               "prefer=\"east\")",
+              map_id: int = 37) -> PlannedApproach:
+    return PlannedApproach(group=group, map_id=map_id, cell=cell,
+                            beats=beats, side=side, resolver=resolver)
+
+
+def test_route_approach_matching_cell_no_finding():
+    row = _row(effects=("text",), content_hash="h1")
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    route = _FakeRoute(
+        planned=("B1",), registered=("B1",),
+        approaches=(_approach(cell=(8, 6)),),
+        beat_cells={"B1": (8, 6)},
+    )
+    findings = check_chapter([row], {row.row_id: disp}, route=route)
+    assert all(f.rule != RULE_ROUTE_APPROACH for f in findings)
+
+
+def test_route_approach_mismatched_cell_is_error_naming_beat_side_and_resolver():
+    row = _row(effects=("text",), content_hash="h1")
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    route = _FakeRoute(
+        planned=("B1",), registered=("B1",),
+        approaches=(_approach(cell=(8, 6), side="east"),),
+        beat_cells={"B1": (9, 6)},
+    )
+    findings = check_chapter([row], {row.row_id: disp}, route=route)
+    approach_findings = [f for f in findings if f.rule == RULE_ROUTE_APPROACH]
+    assert len(approach_findings) == 1
+    finding = approach_findings[0]
+    assert finding.severity == "error"
+    assert "'B1'" in finding.message
+    assert "(8, 6)" in finding.message
+    assert "(9, 6)" in finding.message
+    assert "'east'" in finding.message
+    assert 'approach_to(MAP_PASSAGE_CAVE_2F, ev5, prefer="east")' in finding.message
+
+
+def test_route_approach_absent_chosen_approach_no_finding():
+    row = _row(effects=("text",), content_hash="h1")
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    route = _FakeRoute(
+        planned=("B1",), registered=("B1",),
+        approaches=(),  # no chosen_approach anywhere in the plan
+        beat_cells={"B1": (9, 6)},
+    )
+    findings = check_chapter([row], {row.row_id: disp}, route=route)
+    assert all(f.rule not in (RULE_ROUTE_APPROACH, RULE_ROUTE_MODEL_UNENFORCED)
+               for f in findings)
+
+
+def test_route_approach_no_route_model_is_unenforced_warning_not_silence():
+    row = _row(effects=("text",), content_hash="h1")
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    findings = check_chapter([row], {row.row_id: disp}, route=None)
+    unenforced = [f for f in findings if f.rule == RULE_ROUTE_MODEL_UNENFORCED]
+    assert len(unenforced) == 1
+    assert unenforced[0].severity == "warning"
+    assert all(f.rule != RULE_ROUTE_APPROACH for f in findings)
+
+
+def test_route_approach_no_registered_beat_available_is_unenforced_warning():
+    """The plan committed to a side for group B1, but B1's beat is never
+    registered with a declared location -- the mismatch cannot be checked,
+    so it must degrade to the warning, not read as a silent pass."""
+    row = _row(effects=("text",), content_hash="h1")
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    route = _FakeRoute(
+        planned=("B1",), registered=("B1",),
+        approaches=(_approach(beats=("B1",)),),
+        beat_cells={},  # B1 registered (per registered_group_order) but no location
+    )
+    findings = check_chapter([row], {row.row_id: disp}, route=route)
+    assert all(f.rule != RULE_ROUTE_APPROACH for f in findings)
+    unenforced = [f for f in findings if f.rule == RULE_ROUTE_MODEL_UNENFORCED]
+    assert len(unenforced) == 1
+    assert unenforced[0].severity == "warning"
+    assert "'B1'" in unenforced[0].message
+
+
+def test_route_approach_only_the_mismatching_node_is_reported():
+    row = _row(effects=("text",), content_hash="h1")
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    route = _FakeRoute(
+        planned=("B1", "B2", "B3"), registered=("B1", "B2", "B3"),
+        approaches=(
+            _approach(group="B1", beats=("B1",), cell=(1, 1)),
+            _approach(group="B2", beats=("B2",), cell=(2, 2)),
+            _approach(group="B3", beats=("B3",), cell=(3, 3)),
+        ),
+        beat_cells={"B1": (1, 1), "B2": (9, 9), "B3": (3, 3)},
+    )
+    findings = check_chapter([row], {row.row_id: disp}, route=route)
+    approach_findings = [f for f in findings if f.rule == RULE_ROUTE_APPROACH]
+    assert len(approach_findings) == 1
+    assert "'B2'" in approach_findings[0].message
 
 
 # --- rule 11/12: archetype conformance -------------------------------------

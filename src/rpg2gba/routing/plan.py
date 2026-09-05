@@ -83,6 +83,22 @@ class TriggerCrossing:
 
 
 @dataclass(frozen=True)
+class ChosenApproach:
+    """Which SIDE of a `RouteNode`'s cell the solver chose to approach it
+    from, when the beat behind that node carried more than one legal side
+    (`routing.solver.RouteCandidate`, `routing.locations.ApproachCandidate`).
+
+    `resolver` is a call an author can paste into a chapter module (for an
+    `approach_to`-derived beat) or prose-as-code (for a stair beat, which has
+    no paste-able `cells.py` side parameter) that pins this exact side --
+    see `routing.locations.ApproachCandidate`'s docstring.
+    """
+
+    side: str
+    resolver: str
+
+
+@dataclass(frozen=True)
 class RouteNode:
     index: int
     kind: str  # "entry" | "group" | "exit"
@@ -91,6 +107,7 @@ class RouteNode:
     group: str | None = None
     beats: tuple[str, ...] = ()
     rows: tuple[str, ...] = ()  # manifest row_ids this group exercises
+    chosen_approach: ChosenApproach | None = None
 
     def __post_init__(self) -> None:
         if self.kind not in _NODE_KINDS:
@@ -117,6 +134,11 @@ class RouteNode:
                 raise RoutePlanError(
                     f"node {self.index}: kind {self.kind!r} must have beats=(), "
                     f"got {self.beats!r}"
+                )
+            if self.chosen_approach is not None:
+                raise RoutePlanError(
+                    f"node {self.index}: kind {self.kind!r} must have "
+                    f"chosen_approach=None, got {self.chosen_approach!r}"
                 )
 
 
@@ -296,6 +318,28 @@ def _crossing_from_dict(data: Any, *, context: str) -> TriggerCrossing:
     )
 
 
+def _chosen_approach_to_dict(chosen: ChosenApproach | None) -> dict[str, Any] | None:
+    if chosen is None:
+        return None
+    return {"side": chosen.side, "resolver": chosen.resolver}
+
+
+def _chosen_approach_from_dict(data: Any, *, context: str) -> ChosenApproach | None:
+    if data is None:
+        return None
+    if not isinstance(data, dict):
+        raise RoutePlanError(
+            f"{context}: expected an object or null for chosen_approach, got {data!r}"
+        )
+    expected = {"side", "resolver"}
+    got = set(data)
+    if missing := expected - got:
+        raise RoutePlanError(f"{context}: chosen_approach is missing {sorted(missing)}")
+    if unknown := got - expected:
+        raise RoutePlanError(f"{context}: chosen_approach carries unknown keys {sorted(unknown)}")
+    return ChosenApproach(side=data["side"], resolver=data["resolver"])
+
+
 def _node_to_dict(node: RouteNode) -> dict[str, Any]:
     return {
         "index": node.index,
@@ -305,17 +349,19 @@ def _node_to_dict(node: RouteNode) -> dict[str, Any]:
         "group": node.group,
         "beats": list(node.beats),
         "rows": list(node.rows),
+        "chosen_approach": _chosen_approach_to_dict(node.chosen_approach),
     }
 
 
 def _node_from_dict(data: Any, *, context: str) -> RouteNode:
     if not isinstance(data, dict):
         raise RoutePlanError(f"{context}: expected an object for a node, got {data!r}")
-    expected = {"index", "kind", "map_id", "cell", "group", "beats", "rows"}
+    required = {"index", "kind", "map_id", "cell", "group", "beats", "rows"}
+    optional = {"chosen_approach"}
     got = set(data)
-    if missing := expected - got:
+    if missing := required - got:
         raise RoutePlanError(f"{context}: node is missing {sorted(missing)}")
-    if unknown := got - expected:
+    if unknown := got - required - optional:
         raise RoutePlanError(f"{context}: node carries unknown keys {sorted(unknown)}")
     return RouteNode(
         index=data["index"],
@@ -325,6 +371,14 @@ def _node_from_dict(data: Any, *, context: str) -> RouteNode:
         group=data["group"],
         beats=tuple(data["beats"]),
         rows=tuple(data["rows"]),
+        # `chosen_approach` is a schema addition (routing DP candidate-side
+        # selection): absent on any route plan written before it existed,
+        # so it defaults to None here rather than joining `required` --
+        # mirrors `routing.locations.load_locations`'s back-compat `.get()`
+        # discipline for the same reason (an already-committed file must
+        # keep loading).
+        chosen_approach=_chosen_approach_from_dict(
+            data.get("chosen_approach"), context=f"{context}.chosen_approach"),
     )
 
 

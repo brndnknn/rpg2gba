@@ -13,17 +13,19 @@ ROM) is needed.
 """
 from __future__ import annotations
 
+import json
 import sys
 import types
 from pathlib import Path
 
 import pytest
 
-from rpg2gba.chapter_manifest.checker import check_chapter
+from rpg2gba.chapter_manifest.checker import RULE_ROUTE_APPROACH, check_chapter
 from rpg2gba.chapter_manifest.route_model import PlanRouteModel, build_route_model
 from rpg2gba.playtest.chapter import ChapterBuilder
 from rpg2gba.routing.plan import (
     PrecedenceEdge,
+    RoutePlanError,
     RouteLeg,
     RouteNode,
     RoutePlan,
@@ -75,6 +77,46 @@ def _install_chapter_with_predecessor(
 
 def _cleanup_chapter(name: str) -> None:
     sys.modules.pop(f"{PKG}.{name}", None)
+
+
+def _install_chapter_at(name: str, beats: list[tuple[str, tuple[int, int]]]) -> None:
+    """Like `_install_chapter`, but each beat gets its own `at=` cell --
+    needed to exercise `declared_beat_cell`, which `_install_chapter`'s
+    uniform `at=(1, 1)` can't distinguish between beats."""
+    builder = ChapterBuilder(name, f"{name} test chapter")
+    for group_id, cell in beats:
+        def _run(emu: object) -> None:  # pragma: no cover - never executed
+            raise AssertionError("beat body must not run in this test")
+
+        builder.beat(
+            group_id, f"{group_id} description",
+            map_constant="MAP_G1", at=cell, group=group_id,
+        )(_run)
+
+    module = types.ModuleType(f"{PKG}.{name}")
+    module.CHAPTER = builder.build()  # type: ignore[attr-defined]
+    sys.modules[f"{PKG}.{name}"] = module
+
+
+def _inject_chosen_approaches(
+    path: Path, approaches: dict[int, dict[str, str] | None],
+) -> None:
+    """Patch `chosen_approach` onto specific node indices of an
+    already-written plan file.
+
+    `routing.plan.RouteNode`/`write_plan` don't carry this field yet -- it's
+    landing there alongside the route-solver work this test suite must not
+    block on (see the task brief: "write your code and tests against
+    synthetic fixtures you construct yourself ... do not block on the real
+    artifact"). Patching the JSON directly after `write_plan` lets these
+    tests exercise the agreed on-disk shape (`{"side": ..., "resolver":
+    ...}` on a group node) without needing that dataclass change landed
+    first."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    for node in data["nodes"]:
+        if node["index"] in approaches:
+            node["chosen_approach"] = approaches[node["index"]]
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
 def _plan(chapter_id: str, module: str, group_ids: list[str],
@@ -244,3 +286,136 @@ def test_rule_route_order_is_clean_despite_predecessor_when_plan_matches(
             _cleanup_chapter("successor_place2")
     finally:
         _cleanup_chapter("predecessor_place2")
+
+
+# --- chosen_approach: does the beat's declared cell match the plan's? ------
+
+
+def test_planned_approaches_empty_when_plan_carries_no_chosen_approach(
+    tmp_path: Path,
+) -> None:
+    """An older plan artifact, or one with no side-sensitive stops --
+    `planned_approaches()` must report nothing to check, not raise and not
+    fabricate an entry."""
+    _install_chapter_at("approach_place1", [("G1", (1, 0))])
+    try:
+        routes = tmp_path / "routes"
+        routes.mkdir(parents=True)
+        write_plan(_plan("CH99", "approach_place1", ["G1"]),
+                   routes / "CH99.route.json")
+
+        model = build_route_model("CH99", root=routes)
+        assert model is not None
+        assert model.planned_approaches() == ()
+    finally:
+        _cleanup_chapter("approach_place1")
+
+
+def test_rule_route_approach_clean_when_declared_cell_matches_plan(
+    tmp_path: Path,
+) -> None:
+    _install_chapter_at("approach_place2", [("G1", (1, 0))])
+    try:
+        routes = tmp_path / "routes"
+        routes.mkdir(parents=True)
+        path = routes / "CH99.route.json"
+        write_plan(_plan("CH99", "approach_place2", ["G1"]), path)
+        _inject_chosen_approaches(path, {
+            1: {"side": "east", "resolver": "approach_to(MAP_G1, ev1, "
+                                              "prefer=\"east\")"},
+        })
+
+        model = build_route_model("CH99", root=routes)
+        assert model is not None
+        approaches = model.planned_approaches()
+        assert len(approaches) == 1
+        assert approaches[0].side == "east"
+        assert approaches[0].cell == (1, 0)
+        assert model.declared_beat_cell("G1") == (1, 0)
+
+        findings = check_chapter([], {}, route=model)
+        assert all(f.rule != RULE_ROUTE_APPROACH for f in findings)
+    finally:
+        _cleanup_chapter("approach_place2")
+
+
+def test_rule_route_approach_errors_when_declared_cell_disagrees_with_plan(
+    tmp_path: Path,
+) -> None:
+    _install_chapter_at("approach_place3", [("G1", (9, 9))])
+    try:
+        routes = tmp_path / "routes"
+        routes.mkdir(parents=True)
+        path = routes / "CH99.route.json"
+        write_plan(_plan("CH99", "approach_place3", ["G1"]), path)
+        _inject_chosen_approaches(path, {
+            1: {"side": "east", "resolver": "approach_to(MAP_G1, ev1, "
+                                              "prefer=\"east\")"},
+        })
+
+        model = build_route_model("CH99", root=routes)
+        assert model is not None
+
+        findings = check_chapter([], {}, route=model)
+        approach_findings = [f for f in findings if f.rule == RULE_ROUTE_APPROACH]
+        assert len(approach_findings) == 1
+        finding = approach_findings[0]
+        assert finding.severity == "error"
+        assert "'G1'" in finding.message
+        assert "(1, 0)" in finding.message  # the plan's cell for node 1
+        assert "(9, 9)" in finding.message  # G1's declared cell
+        assert "'east'" in finding.message
+        assert 'approach_to(MAP_G1, ev1, prefer="east")' in finding.message
+    finally:
+        _cleanup_chapter("approach_place3")
+
+
+def test_declared_beat_cell_none_when_beat_has_no_location(
+    tmp_path: Path,
+) -> None:
+    """A registered beat with no `at=`/`locations=` at all -- the ordinary
+    "not enforceable for this beat" case, not a mismatch."""
+    builder = ChapterBuilder("approach_place4", "test chapter")
+
+    def _run(emu: object) -> None:  # pragma: no cover - never executed
+        raise AssertionError("beat body must not run in this test")
+
+    builder.beat("G1", "G1 description", group="G1")(_run)
+    module = types.ModuleType(f"{PKG}.approach_place4")
+    module.CHAPTER = builder.build()  # type: ignore[attr-defined]
+    sys.modules[f"{PKG}.approach_place4"] = module
+    try:
+        routes = tmp_path / "routes"
+        routes.mkdir(parents=True)
+        path = routes / "CH99.route.json"
+        write_plan(_plan("CH99", "approach_place4", ["G1"]), path)
+        _inject_chosen_approaches(path, {
+            1: {"side": "east", "resolver": "approach_to(MAP_G1, ev1, "
+                                              "prefer=\"east\")"},
+        })
+
+        model = build_route_model("CH99", root=routes)
+        assert model is not None
+        assert model.declared_beat_cell("G1") is None
+    finally:
+        _cleanup_chapter("approach_place4")
+
+
+def test_malformed_chosen_approach_raises_rather_than_degrading(
+    tmp_path: Path,
+) -> None:
+    """A `chosen_approach` that IS present but missing/extra keys is a real
+    fault in the artifact (CLAUDE.md §4.5) -- not "the field doesn't exist
+    yet", which degrades quietly instead."""
+    _install_chapter_at("approach_place5", [("G1", (1, 0))])
+    try:
+        routes = tmp_path / "routes"
+        routes.mkdir(parents=True)
+        path = routes / "CH99.route.json"
+        write_plan(_plan("CH99", "approach_place5", ["G1"]), path)
+        _inject_chosen_approaches(path, {1: {"side": "east"}})  # missing resolver
+
+        with pytest.raises(RoutePlanError):
+            build_route_model("CH99", root=routes)
+    finally:
+        _cleanup_chapter("approach_place5")

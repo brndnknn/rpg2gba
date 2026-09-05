@@ -27,8 +27,11 @@ from rpg2gba.traversal.graph import MapGraph
 from rpg2gba.traversal.triggers import Certainty, TriggerKind, TriggerOverlay, TriggerRef
 from rpg2gba.traversal.world import WorldEdge, WorldGraph
 
-from rpg2gba.routing.plan import PrecedenceEdge, RoutePlan, plan_from_dict, plan_to_dict, write_plan
-from rpg2gba.routing.solver import RouteSolverError, solve_route
+from rpg2gba.routing.occupancy import MapOccupancy, OccupiedTile
+from rpg2gba.routing.plan import (
+    ChosenApproach, PrecedenceEdge, RoutePlan, plan_from_dict, plan_to_dict, write_plan,
+)
+from rpg2gba.routing.solver import RouteCandidate, RouteSolverError, solve_route
 
 
 # ---------------------------------------------------------------------------
@@ -42,6 +45,19 @@ def _trivial_graph(map_id: int) -> MapGraph:
 
 def _empty_overlay(map_id: int) -> TriggerOverlay:
     return TriggerOverlay(map_id=map_id, tiles={})
+
+
+def _open_square_graph(map_id: int, size: int) -> MapGraph:
+    """A fully-open `size`x`size` grid -- every cell walkable, no walls --
+    so BFS distance between any two cells is exactly their Manhattan
+    distance. Used for the candidate-DP tests below, where the whole point
+    is to engineer a case where the cheapest ARRIVAL side is not the
+    cheapest TOTAL (arrival + departure) side, which needs real geometry
+    rather than the single-cell/corridor helpers above."""
+    return MapGraph(
+        map_id=map_id, width=size, height=size, tileset_id=0,
+        blocked={(x, y): False for x in range(size) for y in range(size)},
+    )
 
 
 def _corridor_graph(map_id: int, length: int) -> MapGraph:
@@ -225,6 +241,251 @@ def test_precedence_edge_derived_and_constrains_chosen_order() -> None:
     assert route.tile_cost == 11
 
 
+def _warp_row(row_id: str, map_id: int, event_id: int) -> ManifestRow:
+    return ManifestRow(
+        row_id=row_id, kind="page", map_id=map_id, content_hash="w",
+        event_id=event_id, effects=("warp",),
+    )
+
+
+# ---------------------------------------------------------------------------
+# warp-topology precedence
+# ---------------------------------------------------------------------------
+
+
+def test_warp_topology_orders_far_side_beat_after_its_introducing_warp() -> None:
+    """A far-side beat must never be ordered before the warp beat that first
+    reaches that map -- CH05_TODO.md's filed defect (B9 on 2F ordered before
+    B8, the 1F->2F warp). Cost matrix is engineered so the UNCONSTRAINED
+    cost-optimal order visits the far-side beat first (a cheap direct
+    shortcut from entry bypasses the introducing map entirely), which is
+    exactly the bug this precedence must override.
+    """
+    intro_row = _warp_row("map101/ev005/p0", map_id=101, event_id=5)
+
+    builder = ChapterBuilder("test", doc="reference/chapters/00-test.md")
+
+    @builder.beat("Wintro", "introduces the far map", map_constant="MAP_WINTRO", at=(0, 0),
+                  group="Wintro", rows=(intro_row.row_id,))
+    def wintro(emu) -> None:  # noqa: ANN001
+        pass
+
+    @builder.beat("Bfar", "far-side beat", map_constant="MAP_BFAR", at=(0, 0), group="Bfar")
+    def bfar(emu) -> None:  # noqa: ANN001
+        pass
+
+    chapter = builder.build()
+    map_ids = {"MAP_WINTRO": 101, "MAP_BFAR": 102}
+
+    w = _World()
+    w.home(100)  # entry
+    w.home(101)  # Wintro
+    w.home(102)  # Bfar
+    w.home(103)  # exit
+    w.add(100, 101, 201, 5)   # entry <-> Wintro: expensive
+    w.add(100, 102, 202, 1)   # entry <-> Bfar: cheap shortcut (the trap)
+    w.add(101, 103, 204, 1)   # Wintro <-> exit: cheap
+    w.add(102, 103, 205, 5)   # Bfar <-> exit: expensive
+
+    edges = w.edges + [
+        WorldEdge(src_map=101, dst_map=102, kind="warp",
+                  src_cell=(0, 0), dst_cell=(0, 0), event_id=5),
+        WorldEdge(src_map=102, dst_map=101, kind="warp",
+                  src_cell=(0, 0), dst_cell=(0, 0), event_id=6),
+    ]
+    world = _world(edges, w.map_ids)
+
+    route = solve_route(
+        chapter, "TESTCH", manifest_rows=[intro_row],
+        graphs=w.graphs, overlays=w.overlays, world=world,
+        entry=(100, (0, 0)), exit_=(103, (0, 0)), map_ids=map_ids,
+    )
+
+    assert PrecedenceEdge(
+        before="Wintro", after="Bfar", reason="warp_topology:map102",
+    ) in route.precedence
+
+    group_order = [n.group for n in route.nodes if n.kind == "group"]
+    assert group_order == ["Wintro", "Bfar"]
+    # forced order costs 5 (entry->Wintro) + 0 (Wintro->Bfar direct warp) + 5
+    # (Bfar->exit) = 10, even though the unconstrained-cheapest order
+    # (entry->Bfar->Wintro->exit, 1+0+1=2) puts Bfar first.
+    assert route.tile_cost == 10
+
+
+def test_single_outbound_boundary_group_ordered_last_and_becomes_exit() -> None:
+    """A single group owning a warp that leaves the chapter's own maps must
+    be ordered last, and the route's exit point becomes that group's own
+    cell -- not `_default_exit_location`'s pick."""
+    boundary_row = _warp_row("map102/ev009/p0", map_id=102, event_id=9)
+
+    builder = ChapterBuilder("test", doc="reference/chapters/00-test.md")
+
+    @builder.beat("A", "ordinary beat", map_constant="MAP_A", at=(0, 0), group="A")
+    def a(emu) -> None:  # noqa: ANN001
+        pass
+
+    @builder.beat("T", "terminal beat", map_constant="MAP_T", at=(0, 0), group="T",
+                  rows=(boundary_row.row_id,))
+    def t(emu) -> None:  # noqa: ANN001
+        pass
+
+    chapter = builder.build()
+    map_ids = {"MAP_A": 101, "MAP_T": 102}
+
+    w = _World()
+    w.home(100)  # entry
+    w.home(101)  # A
+    w.home(102)  # T (terminal)
+    w.add(100, 101, 201, 5)  # entry <-> A: expensive
+    w.add(100, 102, 202, 1)  # entry <-> T: cheap (would tempt T first)
+    w.add(101, 102, 203, 1)  # A <-> T: cheap
+
+    edges = w.edges + [
+        WorldEdge(src_map=102, dst_map=999, kind="warp",
+                  src_cell=(0, 0), dst_cell=(0, 0), event_id=9),
+    ]
+    world = _world(edges, w.map_ids | {999})
+
+    route = solve_route(
+        chapter, "TESTCH", manifest_rows=[boundary_row],
+        graphs=w.graphs, overlays=w.overlays, world=world,
+        entry=(100, (0, 0)), map_ids=map_ids,
+    )
+
+    assert PrecedenceEdge(
+        before="A", after="T", reason="warp_boundary:map999",
+    ) in route.precedence
+
+    group_order = [n.group for n in route.nodes if n.kind == "group"]
+    assert group_order == ["A", "T"]
+    assert route.nodes[-1].kind == "exit"
+    assert (route.nodes[-1].map_id, route.nodes[-1].cell) == (102, (0, 0))
+    # forced order: entry->A (5) + A->T (1) + T->exit (0, same cell) = 6.
+    assert route.tile_cost == 6
+
+
+def test_entry_warp_is_never_treated_as_terminal() -> None:
+    """The chapter's own entry warp destination lies outside the chapter's
+    map set by definition (it points back at the predecessor map), but it
+    must never be mistaken for the outbound boundary group -- the entry
+    group is excluded from rule 2's candidates."""
+    entry_warp_row = _warp_row("map101/ev003/p0", map_id=101, event_id=3)
+
+    builder = ChapterBuilder("test", doc="reference/chapters/00-test.md")
+
+    @builder.beat("Start", "chapter start", map_constant="MAP_START", at=(0, 0),
+                  group="Start", rows=(entry_warp_row.row_id,))
+    def start(emu) -> None:  # noqa: ANN001
+        pass
+
+    @builder.beat("Other", "chapter end", map_constant="MAP_OTHER", at=(0, 0),
+                  group="Other")
+    def other(emu) -> None:  # noqa: ANN001
+        pass
+
+    chapter = builder.build()
+    map_ids = {"MAP_START": 101, "MAP_OTHER": 102}
+
+    w = _World()
+    w.home(101)  # Start (== entry, by default derivation)
+    w.home(102)  # Other
+    w.add(101, 102, 201, 3)
+
+    edges = w.edges + [
+        WorldEdge(src_map=101, dst_map=999, kind="warp",
+                  src_cell=(0, 0), dst_cell=(0, 0), event_id=3),
+    ]
+    world = _world(edges, w.map_ids | {999})
+
+    route = solve_route(
+        chapter, "TESTCH", manifest_rows=[entry_warp_row],
+        graphs=w.graphs, overlays=w.overlays, world=world, map_ids=map_ids,
+    )
+
+    assert not any(e.reason.startswith("warp_boundary") for e in route.precedence)
+    # No terminal override fired, so the exit falls back to the default:
+    # the last own beat's last location (Other, map 102).
+    assert route.nodes[-1].kind == "exit"
+    assert route.nodes[-1].map_id == 102
+
+
+def test_two_outbound_boundary_candidates_raise_unless_exit_given() -> None:
+    row_t1 = _warp_row("map101/ev009/p0", map_id=101, event_id=9)
+    row_t2 = _warp_row("map102/ev011/p0", map_id=102, event_id=11)
+
+    builder = ChapterBuilder("test", doc="reference/chapters/00-test.md")
+
+    @builder.beat("T1", "candidate 1", map_constant="MAP_T1", at=(0, 0), group="T1",
+                  rows=(row_t1.row_id,))
+    def t1(emu) -> None:  # noqa: ANN001
+        pass
+
+    @builder.beat("T2", "candidate 2", map_constant="MAP_T2", at=(0, 0), group="T2",
+                  rows=(row_t2.row_id,))
+    def t2(emu) -> None:  # noqa: ANN001
+        pass
+
+    chapter = builder.build()
+    map_ids = {"MAP_T1": 101, "MAP_T2": 102}
+
+    w = _World()
+    w.home(100)  # entry
+    w.home(101)  # T1
+    w.home(102)  # T2
+    w.add(100, 101, 201, 1)
+    w.add(100, 102, 202, 1)
+
+    edges = w.edges + [
+        WorldEdge(src_map=101, dst_map=997, kind="warp",
+                  src_cell=(0, 0), dst_cell=(0, 0), event_id=9),
+        WorldEdge(src_map=102, dst_map=998, kind="warp",
+                  src_cell=(0, 0), dst_cell=(0, 0), event_id=11),
+    ]
+    world = _world(edges, w.map_ids | {997, 998})
+
+    with pytest.raises(RouteSolverError, match="terminal group"):
+        solve_route(
+            chapter, "TESTCH", manifest_rows=[row_t1, row_t2],
+            graphs=w.graphs, overlays=w.overlays, world=world,
+            entry=(100, (0, 0)), map_ids=map_ids,
+        )
+
+    # An explicit exit_= disambiguates: no raise, and the caller's own exit
+    # point is honoured over anything rule 2 might have derived.
+    route = solve_route(
+        chapter, "TESTCH", manifest_rows=[row_t1, row_t2],
+        graphs=w.graphs, overlays=w.overlays, world=world,
+        entry=(100, (0, 0)), exit_=(102, (0, 0)), map_ids=map_ids,
+    )
+    assert route.nodes[-1].kind == "exit"
+    assert (route.nodes[-1].map_id, route.nodes[-1].cell) == (102, (0, 0))
+    assert not any(e.reason.startswith("warp_boundary") for e in route.precedence)
+
+
+def test_world_none_derives_no_warp_precedence() -> None:
+    """With `world=None`, no warp precedence is derivable at all -- the
+    manifest carries a warp row that WOULD trigger rule 2 if a world graph
+    were supplied, but `_derive_warp_precedence` must short-circuit on
+    `world is None` before ever looking at it. Everything lives on one map so
+    the segments themselves route fine without a `WorldGraph`."""
+    boundary_row = _warp_row("map102/ev009/p0", map_id=102, event_id=9)
+
+    chapter, map_ids = _chapter_with_groups(("A", "MAP_A", 100))
+
+    graph = _corridor_graph(100, 4)
+    graphs = {100: graph}
+    overlays = {100: _empty_overlay(100)}
+
+    route = solve_route(
+        chapter, "TESTCH", manifest_rows=[boundary_row],
+        graphs=graphs, overlays=overlays, world=None,
+        entry=(100, (0, 0)), exit_=(100, (4, 0)), map_ids=map_ids,
+    )
+
+    assert route.precedence == ()
+
+
 def test_precedence_skips_silently_when_neither_side_is_claimed() -> None:
     writer, dependent = _self_switch_rows()
     chapter, map_ids = _chapter_with_groups(("G1", "MAP_G1", 101))
@@ -281,6 +542,202 @@ def test_two_opt_improves_a_bad_greedy_seed() -> None:
     assert group_order == ["P1", "P2", "P3"]
     assert route.tile_cost == 16
     assert route.solver_method == "greedy+2opt"
+
+
+# ---------------------------------------------------------------------------
+# candidate-site DP: breaking the approach-side circularity
+# ---------------------------------------------------------------------------
+#
+# `M` sits at the centre of a 5x5 open grid; its beat carries two candidate
+# sides, "north" (2, 1) and "south" (2, 3) -- north listed first, so it is
+# the side a resolver's own N/S/E/W tiebreak would have picked with no
+# `candidates=` at all. Entry lands EXACTLY on the south candidate and exit
+# sits due west, equidistant (Manhattan) from both candidates, so:
+#   - arrival cost:   north=2, south=0   (south is the cheap ARRIVAL side)
+#   - departure cost: north=3, south=3   (tied)
+#   - total:          north=5, south=3   -- south wins on total despite
+#     losing nothing (in fact winning) on arrival too; the real regression
+#     this guards is a per-step-greedy solver picking the ARRIVAL-cheapest
+#     side without accounting for what comes after. See
+#     `test_candidate_dp_beats_a_scheme_that_only_looks_at_arrival_cost`
+#     below for a case where arrival-cheapest and total-cheapest actively
+#     disagree.
+
+
+def _multiside_setup() -> tuple[Chapter, dict[str, int], dict[int, MapGraph],
+                                dict[int, TriggerOverlay]]:
+    builder = ChapterBuilder("test", doc="reference/chapters/00-test.md")
+
+    @builder.beat("M", "multi-side beat", map_constant="MAP_M", at=(2, 1), group="M")
+    def m(emu) -> None:  # noqa: ANN001
+        pass
+
+    chapter = builder.build()
+    map_ids = {"MAP_M": 100}
+    graph = _open_square_graph(100, 5)
+    graphs = {100: graph}
+    overlays = {100: _empty_overlay(100)}
+    return chapter, map_ids, graphs, overlays
+
+
+def _multiside_candidates() -> dict[str, tuple[RouteCandidate, ...]]:
+    return {
+        "M": (
+            RouteCandidate(x=2, y=1, side="north",
+                          resolver='approach_to(MAP_M, ev1, prefer="north")'),
+            RouteCandidate(x=2, y=3, side="south",
+                          resolver='approach_to(MAP_M, ev1, prefer="south")'),
+        ),
+    }
+
+
+def test_candidate_dp_prefers_non_default_side_when_cheaper_overall() -> None:
+    """The DP must pick the SOUTH candidate (cheaper total) over the N/S/E/W
+    default (NORTH), and record the chosen side on the node -- proof this
+    isn't a per-step greedy pick, which a naive port of the old resolver
+    tiebreak would still get right here by accident (south also happens to
+    be cheapest on arrival alone) -- see the disagreement case below."""
+    chapter, map_ids, graphs, overlays = _multiside_setup()
+
+    route = solve_route(
+        chapter, "TESTCH", manifest_rows=[],
+        graphs=graphs, overlays=overlays, world=None,
+        entry=(100, (2, 3)), exit_=(100, (0, 2)), map_ids=map_ids,
+        candidates=_multiside_candidates(),
+    )
+
+    group_node = next(n for n in route.nodes if n.kind == "group")
+    assert group_node.cell == (2, 3)
+    assert group_node.chosen_approach == ChosenApproach(
+        side="south", resolver='approach_to(MAP_M, ev1, prefer="south")')
+    assert route.tile_cost == 3  # 0 (already at south) + 3 (south -> exit)
+
+
+def test_candidate_dp_beats_a_scheme_that_only_looks_at_arrival_cost() -> None:
+    """Here the ARRIVAL-cheapest side ("north", at (3, 0)) is NOT the
+    TOTAL-cheapest side ("south", at (2, 3)):
+
+      dist(entry, north) = 1   dist(entry, south) = 3   -- north is arrival-cheap
+      dist(north, exit)  = 5   dist(south, exit)  = 1    -- south is departure-cheap
+      total north = 6         total south = 4            -- south wins overall
+
+    North is off the entry-exit axis just enough that its cheap arrival is
+    swamped by an expensive departure detour -- exactly the shape a per-step
+    greedy candidate pick (minimize distance from whatever was placed
+    immediately before, ignoring what comes after) gets wrong: it would lock
+    in north for its cheap arrival and never revisit that choice once it
+    sees the expensive departure. The DP must pick south."""
+    builder = ChapterBuilder("test", doc="reference/chapters/00-test.md")
+
+    @builder.beat("M", "multi-side beat", map_constant="MAP_M", at=(3, 0), group="M")
+    def m(emu) -> None:  # noqa: ANN001
+        pass
+
+    chapter = builder.build()
+    map_ids = {"MAP_M": 100}
+    graphs = {100: _open_square_graph(100, 5)}
+    overlays = {100: _empty_overlay(100)}
+    candidates = {
+        "M": (
+            RouteCandidate(x=3, y=0, side="north",
+                          resolver='approach_to(MAP_M, ev1, prefer="north")'),
+            RouteCandidate(x=2, y=3, side="south",
+                          resolver='approach_to(MAP_M, ev1, prefer="south")'),
+        ),
+    }
+
+    route = solve_route(
+        chapter, "TESTCH", manifest_rows=[],
+        graphs=graphs, overlays=overlays, world=None,
+        entry=(100, (2, 0)), exit_=(100, (2, 4)), map_ids=map_ids,
+        candidates=candidates,
+    )
+
+    group_node = next(n for n in route.nodes if n.kind == "group")
+    assert group_node.chosen_approach.side == "south"
+    assert group_node.cell == (2, 3)
+    assert route.tile_cost == 4  # 3 (entry->south) + 1 (south->exit)
+
+
+def test_candidate_occupancy_drops_blocked_candidates() -> None:
+    """A candidate cell occupied by a stationary NPC is dropped before
+    solving -- the group must route on its only remaining (unblocked) side,
+    never silently through the NPC."""
+    chapter, map_ids, graphs, overlays = _multiside_setup()
+    occupancy = {
+        100: MapOccupancy(map_id=100, tiles=(
+            OccupiedTile(cell=(2, 3), script="Map100_NPC", movement_type="MOVEMENT_TYPE_NONE"),
+        )),
+    }
+
+    route = solve_route(
+        chapter, "TESTCH", manifest_rows=[],
+        graphs=graphs, overlays=overlays, world=None,
+        entry=(100, (2, 0)), exit_=(100, (0, 2)), map_ids=map_ids,
+        candidates=_multiside_candidates(), occupancy=occupancy,
+    )
+
+    group_node = next(n for n in route.nodes if n.kind == "group")
+    assert group_node.cell == (2, 1)
+    assert group_node.chosen_approach.side == "north"
+
+
+def test_candidate_all_sides_occupied_fails_loud_naming_the_npcs() -> None:
+    chapter, map_ids, graphs, overlays = _multiside_setup()
+    occupancy = {
+        100: MapOccupancy(map_id=100, tiles=(
+            OccupiedTile(cell=(2, 1), script="Map100_NPC_N", movement_type="MOVEMENT_TYPE_NONE"),
+            OccupiedTile(cell=(2, 3), script="Map100_NPC_S", movement_type="MOVEMENT_TYPE_NONE"),
+        )),
+    }
+
+    with pytest.raises(RouteSolverError, match="M") as exc_info:
+        solve_route(
+            chapter, "TESTCH", manifest_rows=[],
+            graphs=graphs, overlays=overlays, world=None,
+            entry=(100, (2, 3)), exit_=(100, (0, 2)), map_ids=map_ids,
+            candidates=_multiside_candidates(), occupancy=occupancy,
+        )
+    message = str(exc_info.value)
+    assert "Map100_NPC_N" in message
+    assert "Map100_NPC_S" in message
+
+
+def test_candidate_solve_is_deterministic_across_repeated_runs() -> None:
+    chapter, map_ids, graphs, overlays = _multiside_setup()
+    kwargs = dict(
+        chapter=chapter, chapter_id="TESTCH", manifest_rows=[],
+        graphs=graphs, overlays=overlays, world=None,
+        entry=(100, (2, 3)), exit_=(100, (0, 2)), map_ids=map_ids,
+        candidates=_multiside_candidates(),
+    )
+    route1 = solve_route(**kwargs)
+    route2 = solve_route(**kwargs)
+    assert route1 == route2
+
+
+def test_empty_candidate_mapping_reproduces_default_behaviour() -> None:
+    """`candidates=None` (the default) and `candidates={}` must both
+    reproduce exactly today's single-cell-per-group behaviour: the group's
+    own resolved cell, with no `chosen_approach` recorded."""
+    chapter, map_ids, graphs, overlays = _multiside_setup()
+
+    baseline = solve_route(
+        chapter, "TESTCH", manifest_rows=[],
+        graphs=graphs, overlays=overlays, world=None,
+        entry=(100, (2, 3)), exit_=(100, (0, 2)), map_ids=map_ids,
+    )
+    explicit_empty = solve_route(
+        chapter, "TESTCH", manifest_rows=[],
+        graphs=graphs, overlays=overlays, world=None,
+        entry=(100, (2, 3)), exit_=(100, (0, 2)), map_ids=map_ids,
+        candidates={},
+    )
+
+    assert baseline == explicit_empty
+    group_node = next(n for n in baseline.nodes if n.kind == "group")
+    assert group_node.cell == (2, 1)  # the beat's own literal `at=` cell
+    assert group_node.chosen_approach is None
 
 
 # ---------------------------------------------------------------------------

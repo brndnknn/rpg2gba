@@ -13,7 +13,9 @@ from pathlib import Path
 import pytest
 
 from rpg2gba.playtest.chapter import _validate_row_id
+from rpg2gba.routing import locations as loc_mod
 from rpg2gba.routing.locations import (
+    ApproachCandidate,
     BeatLocationRecord,
     RowCell,
     cell_for_row,
@@ -22,11 +24,74 @@ from rpg2gba.routing.locations import (
     load_locations,
     write_locations,
 )
+from rpg2gba.tileset_converter.stairs import StairSide
+from rpg2gba.traversal.graph import MapGraph
 
 
 def _cell(row_id: str, x: int, y: int, map_constant: str = "MAP_A") -> RowCell:
     return RowCell(row_id=row_id, map_constant=map_constant, x=x, y=y,
                    resolver="test")
+
+
+def _open_grid(width: int, height: int) -> dict[tuple[int, int], bool]:
+    return {(x, y): False for x in range(width) for y in range(height)}
+
+
+# --------------------------------------------------------------------------
+# approach-side / stair-side candidate derivation (the operator-approved
+# schema addition: `approach_candidates` alongside the existing single x/y)
+# --------------------------------------------------------------------------
+
+
+def test_approach_side_candidates_all_four_walkable(monkeypatch):
+    """Four walkable sides emit four `ApproachCandidate`s in N/S/E/W order,
+    each carrying a paste-able `prefer=` resolver string."""
+    graph = MapGraph(map_id=999, width=5, height=5, tileset_id=0,
+                      blocked=_open_grid(5, 5))
+    monkeypatch.setattr(loc_mod, "build_map_graph", lambda map_id: graph)
+    monkeypatch.setattr(loc_mod, "event_cell", lambda mc, ev: (2, 2))
+
+    candidates = loc_mod._approach_side_candidates(999, "MAP_X", 7)
+
+    assert [(c.x, c.y, c.side) for c in candidates] == [
+        (2, 1, "north"), (2, 3, "south"), (3, 2, "east"), (1, 2, "west"),
+    ]
+    assert candidates[0].resolver == 'approach_to(MAP_X, ev7, prefer="north")'
+    assert candidates[3].resolver == 'approach_to(MAP_X, ev7, prefer="west")'
+
+
+def test_approach_side_candidates_skip_unwalkable_sides(monkeypatch):
+    """A blocked side is simply absent -- never a placeholder or a guess."""
+    blocked = _open_grid(5, 5)
+    blocked[(2, 1)] = True  # north of the event is walled
+    graph = MapGraph(map_id=999, width=5, height=5, tileset_id=0, blocked=blocked)
+    monkeypatch.setattr(loc_mod, "build_map_graph", lambda map_id: graph)
+    monkeypatch.setattr(loc_mod, "event_cell", lambda mc, ev: (2, 2))
+
+    candidates = loc_mod._approach_side_candidates(999, "MAP_X", 7)
+
+    assert [c.side for c in candidates] == ["south", "east", "west"]
+
+
+def test_stair_side_candidates_both_sides_legal(monkeypatch):
+    """A stair beat with both E/W neighbours owning a `stair_diagonal` edge
+    emits both, west then east -- the full set `_stair_approach` itself
+    picks the first (west) of."""
+    graph = MapGraph(
+        map_id=999, width=5, height=5, tileset_id=0, blocked=_open_grid(5, 5),
+        stair_sides={(2, 2): StairSide.RIGHT},
+    )
+    monkeypatch.setattr(loc_mod, "build_map_graph", lambda map_id: graph)
+
+    candidates = loc_mod._stair_side_candidates(999, "MAP_X", 2, 2)
+
+    assert [(c.x, c.y, c.side) for c in candidates] == [(1, 2, "west"), (3, 2, "east")]
+    # No public cells.py function takes a stair side, so the resolver is
+    # unambiguous prose-as-code, not a paste-able call -- both sides say so.
+    for c in candidates:
+        assert "no cells.py side param exists" in c.resolver
+        assert c.side in c.resolver
+
 
 
 class _Row:
@@ -127,6 +192,63 @@ def test_locations_file_round_trips(tmp_path: Path):
     chapter_id, loaded = load_locations(path)
     assert chapter_id == "CH05"
     assert loaded == records
+
+
+def test_approach_candidates_round_trip(tmp_path: Path):
+    """`approach_candidates` is a distinct field from `candidates` (row
+    candidates), round-tripping its own x/y/side/resolver shape."""
+    records = [
+        BeatLocationRecord(
+            beat_id="B10", map_constant="MAP_PASSAGE_CAVE_2F", x=8, y=6,
+            resolver='approach_to(MAP_PASSAGE_CAVE_2F, ev5)',
+            rows=("map037/ev005/p0",),
+            candidates=(_cell("map037/ev005/p0", 8, 6, "MAP_PASSAGE_CAVE_2F"),),
+            approach_candidates=(
+                ApproachCandidate(8, 6, "north",
+                                  'approach_to(MAP_PASSAGE_CAVE_2F, ev5, prefer="north")'),
+                ApproachCandidate(8, 8, "south",
+                                  'approach_to(MAP_PASSAGE_CAVE_2F, ev5, prefer="south")'),
+            ),
+        ),
+    ]
+    path = tmp_path / "CH05.locations.json"
+    write_locations("CH05", records, path)
+
+    chapter_id, loaded = load_locations(path)
+    assert chapter_id == "CH05"
+    assert loaded == records
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["beats"][0]["approach_candidates"] == [
+        {"x": 8, "y": 6, "side": "north",
+         "resolver": 'approach_to(MAP_PASSAGE_CAVE_2F, ev5, prefer="north")'},
+        {"x": 8, "y": 8, "side": "south",
+         "resolver": 'approach_to(MAP_PASSAGE_CAVE_2F, ev5, prefer="south")'},
+    ]
+    # `candidates` (row candidates) is untouched by the new field -- still
+    # exactly its own row_id/map_constant/x/y/resolver shape.
+    assert payload["beats"][0]["candidates"] == [
+        {"row_id": "map037/ev005/p0", "map_constant": "MAP_PASSAGE_CAVE_2F",
+         "x": 8, "y": 6, "resolver": "test"},
+    ]
+
+
+def test_locations_file_without_approach_candidates_still_loads(tmp_path: Path):
+    """A committed file written before this field existed must still load --
+    `load_locations` defaults it, never invalidating an older file."""
+    path = tmp_path / "CH05.locations.json"
+    path.write_text(json.dumps({
+        "chapter": "CH05",
+        "beats": [{
+            "beat_id": "B1", "map_constant": "MAP_A", "x": 1, "y": 1,
+            "resolver": "event_cell(MAP_A, ev1)", "rows": ["map036/ev001/p0"],
+            "candidates": [],
+        }],
+    }), encoding="utf-8")
+
+    chapter_id, loaded = load_locations(path)
+    assert chapter_id == "CH05"
+    assert loaded[0].approach_candidates == ()
 
 
 def test_every_candidate_is_persisted_for_review(tmp_path: Path):

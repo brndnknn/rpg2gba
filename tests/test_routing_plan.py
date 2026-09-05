@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from rpg2gba.routing.plan import (
+    ChosenApproach,
     PrecedenceEdge,
     RouteLeg,
     RouteNode,
@@ -172,6 +173,41 @@ def test_route_node_entry_forbids_group():
 def test_route_node_exit_forbids_beats():
     with pytest.raises(RoutePlanError, match="must have beats=\\(\\)"):
         RouteNode(index=0, kind="exit", map_id=1, cell=(0, 0), beats=("B1",))
+
+
+def test_route_node_entry_forbids_chosen_approach():
+    with pytest.raises(RoutePlanError, match="must have chosen_approach=None"):
+        RouteNode(index=0, kind="entry", map_id=1, cell=(0, 0),
+                  chosen_approach=ChosenApproach(side="east", resolver="x"))
+
+
+def test_route_node_group_may_carry_chosen_approach():
+    node = RouteNode(index=1, kind="group", map_id=1, cell=(0, 0),
+                      group="g1", beats=("B1",),
+                      chosen_approach=ChosenApproach(side="east", resolver="x"))
+    assert node.chosen_approach == ChosenApproach(side="east", resolver="x")
+
+
+def test_chosen_approach_round_trips_through_to_dict_and_back():
+    node = RouteNode(index=1, kind="group", map_id=36, cell=(8, 8),
+                      group="B10", beats=("B10",),
+                      chosen_approach=ChosenApproach(
+                          side="south",
+                          resolver='approach_to(MAP_A, ev5, prefer="south")'))
+    plan = RoutePlan(
+        chapter_id="CH05", chapter_module="mod",
+        nodes=(RouteNode(index=0, kind="entry", map_id=36, cell=(0, 0)), node,
+               RouteNode(index=2, kind="exit", map_id=36, cell=(1, 1))),
+        segments=(_minimal_segment(0, 1, 0), _minimal_segment(1, 2, 0)),
+        precedence=(), tile_cost=0, solver_method="greedy",
+    )
+    data = plan_to_dict(plan)
+    assert data["nodes"][1]["chosen_approach"] == {
+        "side": "south", "resolver": 'approach_to(MAP_A, ev5, prefer="south")',
+    }
+    assert data["nodes"][0]["chosen_approach"] is None
+    rebuilt = plan_from_dict(data)
+    assert rebuilt == plan
 
 
 # --- RoutePlan validation ------------------------------------------------

@@ -56,8 +56,9 @@ from .locations import (
     locations_path,
     write_locations,
 )
+from .occupancy import MapOccupancy, build_occupancy
 from .plan import RoutePlan, load_plan, plan_to_dict, route_path, write_plan
-from .solver import RouteSolverError, solve_route
+from .solver import RouteCandidate, RouteSolverError, solve_route
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +160,44 @@ class _LazyOverlays(Mapping):
         return len(self._cache)
 
 
+class _LazyOccupancy(Mapping):
+    """`MapOccupancy` per map id, built on first access and cached.
+
+    Reads the SAME `map_constants.json`/`engine/data/maps` source
+    `_LazyOverlays` does, and for the same reason `occupancy.py`'s module
+    docstring gives: occupancy and trigger sight cones must be present or
+    absent together for a given map, or a chapter could get one without the
+    other. Degrades identically to `_LazyOverlays` on a not-yet-emitted map.
+    """
+
+    def __init__(self, build_dir: Path) -> None:
+        self._map_constants_json = build_dir / "porymap" / "map_constants.json"
+        self._cache: dict[int, MapOccupancy] = {}
+
+    def __getitem__(self, map_id: int) -> MapOccupancy:
+        if map_id not in self._cache:
+            try:
+                self._cache[map_id] = build_occupancy(
+                    map_id,
+                    map_constants_json=self._map_constants_json,
+                    engine_maps_dir=DEFAULT_ENGINE_MAPS_DIR,
+                )
+            except FileNotFoundError as exc:
+                raise click.ClickException(
+                    f"map {map_id} lies on this chapter's route but has no emitted "
+                    f"map data to build an occupancy overlay from ({exc}). Convert "
+                    f"that map before routing this chapter -- routing it blind "
+                    f"would plan a walk straight through its NPCs."
+                ) from exc
+        return self._cache[map_id]
+
+    def __iter__(self):  # noqa: ANN204 - Mapping protocol
+        return iter(self._cache)
+
+    def __len__(self) -> int:
+        return len(self._cache)
+
+
 def _build_graphs_and_overlays(
     map_ids: list[int], build_dir: Path,
 ) -> tuple[Mapping[int, MapGraph], Mapping[int, TriggerOverlay]]:
@@ -195,9 +234,13 @@ def _summary(plan: RoutePlan) -> str:
     ]
     for node in plan.nodes:
         if node.kind == "group":
+            approach = ""
+            if node.chosen_approach is not None:
+                approach = (f" approach={node.chosen_approach.side} "
+                            f"({node.chosen_approach.resolver})")
             lines.append(
                 f"  [{node.index}] group {node.group!r} beats={list(node.beats)} "
-                f"map={node.map_id} cell={node.cell}"
+                f"map={node.map_id} cell={node.cell}{approach}"
             )
         else:
             lines.append(f"  [{node.index}] {node.kind} map={node.map_id} cell={node.cell}")
@@ -262,6 +305,13 @@ def plan_cmd(
 
     rows = load_manifest(manifest_file)
 
+    # group id -> its candidate approach sides, when the beat behind it
+    # carries more than one (derived-locations path only -- an authored
+    # module's `BeatLocation` has no side-candidate field, so this stays
+    # empty on that path and `solve_route` reproduces today's single-cell
+    # behaviour, per its own docstring).
+    route_candidates: dict[str, tuple[RouteCandidate, ...]] = {}
+
     if locations_opt is not None:
         if module is not None:
             raise click.ClickException(
@@ -281,6 +331,15 @@ def plan_cmd(
         chapter_obj = chapter_from_locations(chapter, records)
         logger.info("solving against %d derived location(s) from %s",
                     len(records), loc_file)
+        # `chapter_from_locations` gives every derived beat its own singleton
+        # group, named after the beat -- so `record.beat_id` IS the group id
+        # `solve_route` will see (see `playtest.chapter.Chapter.groups`).
+        for record in records:
+            if record.approach_candidates:
+                route_candidates[record.beat_id] = tuple(
+                    RouteCandidate(x=c.x, y=c.y, side=c.side, resolver=c.resolver)
+                    for c in record.approach_candidates
+                )
     else:
         module = module or chapter
         try:
@@ -289,6 +348,7 @@ def plan_cmd(
             raise click.ClickException(str(exc)) from exc
     map_ids_for_chapter = _load_chapter_maps(chapter, chapters_path)
     graphs, overlays = _build_graphs_and_overlays(map_ids_for_chapter, build_dir)
+    occupancy = _LazyOccupancy(build_dir)
     world = _build_world(build_dir)
     map_const_to_id = _load_map_ids(build_dir)
 
@@ -296,7 +356,8 @@ def plan_cmd(
         route = solve_route(
             chapter_obj, chapter,
             manifest_rows=rows, graphs=graphs, overlays=overlays, world=world,
-            map_ids=map_const_to_id,
+            map_ids=map_const_to_id, occupancy=occupancy,
+            candidates=route_candidates,
         )
     except RouteSolverError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -348,6 +409,9 @@ def locations_cmd(chapter: str, manifest: Path | None, dispositions_opt: Path | 
         extra = ""
         if len({(c.map_constant, c.x, c.y) for c in record.candidates}) > 1:
             extra = "  [multi-cell: routed on terminal row]"
+        if len(record.approach_candidates) > 1:
+            sides = "/".join(a.side for a in record.approach_candidates)
+            extra += f"  [approach sides: {sides}]"
         click.echo(f"{record.beat_id:<5} {record.map_constant} "
                    f"({record.x},{record.y})  {record.resolver}"
                    f"  rows={','.join(record.rows)}{extra}")

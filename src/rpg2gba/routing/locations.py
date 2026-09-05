@@ -40,11 +40,39 @@ from ..chapter_manifest.dispositions import load_dispositions
 from ..chapter_manifest.schema import ManifestRow
 from ..playtest import chapter as _chapter
 from ..playtest.cells import approach_to, event_cell
+from ..traversal.direction import CARDINALS
 from ..traversal.graph import build_map_graph
+from ..traversal.reachability import adjacent_approach_cells
 
 log = logging.getLogger(__name__)
 
 _BEAT_VERDICT = "beat"
+
+
+@dataclass(frozen=True)
+class ApproachCandidate:
+    """One legal SIDE a beat's location could be approached/used from.
+
+    Distinct from `RowCell`'s `candidates` (which lists candidate ROWS --
+    which manifest row a multi-row beat routed on, an entirely different
+    concept, CLAUDE.md §4.3): this is the set of walkable sides of a single
+    chosen cell, so the offline route solver can pick the cheapest one
+    itself instead of a resolver's fixed N/S/E/W (or west-then-east)
+    tiebreak silently deciding it (see `solver.py`'s `candidates=` param).
+
+    `resolver` is a call an author could paste into a chapter module to pin
+    this exact side -- for an `approach_to`-derived beat this is a literal,
+    valid `prefer=` call. For a `stair_approach`-derived beat there is no
+    public `cells.py` function with a side parameter (this module may not
+    add one -- see the derivation task brief), so `resolver` instead
+    describes the side unambiguously in prose-as-code shape; it is NOT
+    paste-able as-is.
+    """
+
+    x: int
+    y: int
+    side: str
+    resolver: str
 
 
 @dataclass(frozen=True)
@@ -56,6 +84,12 @@ class RowCell:
     reviewer can see that B11's cell came from `approach_to(map037, ev002)`
     rather than trusting prose, which is the class of conflation that put a
     wrong boundary cell in CH05_TODO's log.
+
+    `approach_candidates` is empty for a row whose cell carries no side
+    choice (an `event_cell`-derived row: the player stands ON the event's
+    own cell, so there is no "which side" question). For an
+    `approach_to`/`stair_approach`-derived row it holds every legal side, in
+    the same deterministic order those resolvers themselves use.
     """
 
     row_id: str
@@ -63,6 +97,7 @@ class RowCell:
     x: int
     y: int
     resolver: str
+    approach_candidates: tuple[ApproachCandidate, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -76,6 +111,7 @@ class BeatLocationRecord:
     resolver: str
     rows: tuple[str, ...]
     candidates: tuple[RowCell, ...]
+    approach_candidates: tuple[ApproachCandidate, ...] = ()
 
 
 # --------------------------------------------------------------------------
@@ -131,6 +167,32 @@ _ON_EVENT_TRIGGERS = frozenset({"player_touch", "autorun"})
 _ADJACENT_TRIGGERS = frozenset({"action", "event_touch"})
 
 
+def _stair_side_candidates(map_id: int, map_constant: str,
+                          x: int, y: int) -> tuple[ApproachCandidate, ...]:
+    """Every E/W neighbour of stair cell (x, y) that owns a `stair_diagonal`
+    edge, west then east -- the full candidate set `_stair_approach` itself
+    picks the first of. `cells.py` has no public function with a side
+    parameter for stairs (and this module may not add one), so `resolver`
+    describes the side in unambiguous prose-as-code rather than a paste-able
+    call -- see `ApproachCandidate`'s docstring.
+    """
+    graph = build_map_graph(map_id)
+    candidates: list[ApproachCandidate] = []
+    for side, (nx, ny) in (("west", (x - 1, y)), ("east", (x + 1, y))):
+        if not graph.in_bounds((nx, ny)):
+            continue
+        if any(edge.kind == "stair_diagonal"
+               for edge in graph.neighbors((nx, ny))):
+            candidates.append(ApproachCandidate(
+                x=nx, y=ny, side=side,
+                resolver=(f"stair_approach({map_constant}, stair=({x},{y}), "
+                          f"side={side!r})  # no cells.py side param exists; "
+                          f"this cell is the {side} E/W neighbour owning the "
+                          "stair_diagonal edge"),
+            ))
+    return tuple(candidates)
+
+
 def _stair_approach(map_id: int, map_constant: str, x: int, y: int,
                     *, row_id: str) -> tuple[int, int]:
     """The cell a player stands on to USE the sideways staircase at (x, y).
@@ -165,6 +227,31 @@ def _stair_approach(map_id: int, map_constant: str, x: int, y: int,
     )
 
 
+def _approach_side_candidates(map_id: int, map_constant: str,
+                             event_id: int) -> tuple[ApproachCandidate, ...]:
+    """Every walkable side of `event_id`'s own cell, in the same N/S/E/W
+    order `approach_to`/`adjacent_approach_cells` use -- the full candidate
+    set `approach_to(map_constant, event_id)` (no `prefer=`) itself picks
+    the first of. `resolver` is the exact paste-able `prefer=` call an
+    author would write to pin that side.
+    """
+    graph = build_map_graph(map_id)
+    cell = event_cell(map_constant, event_id)
+    candidates: list[ApproachCandidate] = []
+    for cand_cell in adjacent_approach_cells(graph, cell):
+        if not graph.is_walkable(cand_cell):
+            continue
+        dx = cand_cell[0] - cell[0]
+        dy = cand_cell[1] - cell[1]
+        direction = next(d for d in CARDINALS if d.delta == (dx, dy))
+        candidates.append(ApproachCandidate(
+            x=cand_cell[0], y=cand_cell[1], side=direction.value,
+            resolver=(f'approach_to({map_constant}, ev{event_id}, '
+                      f'prefer="{direction.value}")'),
+        ))
+    return tuple(candidates)
+
+
 def cell_for_row(row: ManifestRow) -> RowCell:
     """Derive one manifest row's cell, failing loud on a row kind that has
     no mechanical location (CLAUDE.md §4.5)."""
@@ -181,6 +268,8 @@ def cell_for_row(row: ManifestRow) -> RowCell:
             x=ax,
             y=ay,
             resolver=f"stair_approach({map_constant}, stair=({terrain.x},{terrain.y}))",
+            approach_candidates=_stair_side_candidates(
+                row.map_id, map_constant, terrain.x, terrain.y),
         )
 
     if row.kind == "seam":
@@ -205,7 +294,9 @@ def cell_for_row(row: ManifestRow) -> RowCell:
     if row.trigger in _ADJACENT_TRIGGERS:
         return RowCell(row.row_id, map_constant,
                        *approach_to(map_constant, row.event_id),
-                       resolver=f"approach_to({map_constant}, ev{row.event_id})")
+                       resolver=f"approach_to({map_constant}, ev{row.event_id})",
+                       approach_candidates=_approach_side_candidates(
+                           row.map_id, map_constant, row.event_id))
     raise ValueError(
         f"{row.row_id}: trigger {row.trigger!r} has no cell rule -- add it "
         f"to _ON_EVENT_TRIGGERS or _ADJACENT_TRIGGERS once you know which "
@@ -336,6 +427,7 @@ def derive_locations(chapter_id: str,
             resolver=chosen.resolver,
             rows=tuple(c.row_id for c in candidates),
             candidates=candidates,
+            approach_candidates=chosen.approach_candidates,
         ))
     return records
 
@@ -366,6 +458,13 @@ def write_locations(chapter_id: str,
                      "x": c.x, "y": c.y, "resolver": c.resolver}
                     for c in r.candidates
                 ],
+                **(
+                    {"approach_candidates": [
+                        {"x": a.x, "y": a.y, "side": a.side, "resolver": a.resolver}
+                        for a in r.approach_candidates
+                    ]}
+                    if r.approach_candidates else {}
+                ),
             }
             for r in records
         ],
@@ -391,6 +490,10 @@ def load_locations(path: Path) -> tuple[str, list[BeatLocationRecord]]:
                 RowCell(c["row_id"], c["map_constant"], c["x"], c["y"],
                         c["resolver"])
                 for c in b.get("candidates", ())
+            ),
+            approach_candidates=tuple(
+                ApproachCandidate(a["x"], a["y"], a["side"], a["resolver"])
+                for a in b.get("approach_candidates", ())
             ),
         )
         for b in payload["beats"]

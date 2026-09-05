@@ -9,6 +9,12 @@ from rpg2gba.traversal.graph import MapGraph
 from rpg2gba.traversal.triggers import Certainty, TriggerKind, TriggerOverlay, TriggerRef
 from rpg2gba.traversal.world import WorldEdge, WorldGraph
 
+from rpg2gba.routing.occupancy import (
+    MapOccupancy,
+    OccupancyError,
+    OccupiedTile,
+    build_occupancy,
+)
 from rpg2gba.routing.pathing import RoutePlanningError, path_avoiding, plan_segment
 
 
@@ -261,3 +267,187 @@ def test_plan_segment_connection_hop_raises():
             destination_scripts=frozenset(),
             world=world,
         )
+
+
+# ---------------------------------------------------------------------------
+# NPC occupancy -- hard block, distinct from the soft avoid-set
+# ---------------------------------------------------------------------------
+
+
+def _npc(cell: tuple[int, int], script: str = "map001/npc") -> OccupiedTile:
+    return OccupiedTile(cell=cell, script=script, movement_type="MOVEMENT_TYPE_FACE_DOWN")
+
+
+def test_path_avoiding_routes_around_a_blocked_cell():
+    graph = MapGraph(map_id=1, width=3, height=3, tileset_id=0, blocked=_open_grid(3, 3))
+
+    path = path_avoiding(graph, (0, 1), (2, 1), frozenset(), blocked=frozenset({(1, 1)}))
+
+    assert path is not None
+    assert (1, 1) not in path
+    assert path[0] == (0, 1)
+    assert path[-1] == (2, 1)
+
+
+def test_plan_segment_blocked_still_honored_on_fallback_path():
+    """Two equal-length routes from start to goal, both single-file: one
+    (through (0,1)) is occupied by a stationary NPC, the other (through
+    (2,1)) crosses a foreign trigger. Avoiding BOTH the trigger and the NPC
+    at once is impossible (each route hits one or the other), so the
+    preferred attempt fails and `_path_on_map` falls back -- and the
+    fallback must still refuse to walk through the NPC, even though nothing
+    stops it from crossing the trigger. This is the core regression: before
+    `blocked` existed, the fallback ignored occupancy entirely.
+    """
+    walls = {(1, 1)}  # wall off the middle row's center cell -- no direct
+    # shortcut between the two vertical corridors except via the top/bottom
+    # connecting rows.
+    graph = MapGraph(
+        map_id=1, width=3, height=3, tileset_id=0, blocked=_walled_grid(3, 3, walls),
+    )
+    overlay = TriggerOverlay(
+        map_id=1, tiles={(2, 1): [_coord_ref("map099/ev_someone_else")]},
+    )
+    occupancy = MapOccupancy(map_id=1, tiles=(_npc((0, 1), "map001/ev_stationary"),))
+
+    result = plan_segment(
+        1, (1, 0), 1, (1, 2),
+        graphs={1: graph}, overlays={1: overlay},
+        destination_scripts=frozenset(),
+        occupancy={1: occupancy},
+    )
+
+    tiles = result.legs[0].tiles
+    assert (0, 1) not in tiles  # never walks through the NPC
+    assert (2, 1) in tiles  # only remaining route crosses the trigger tile
+    assert len(result.crossings) == 1
+    assert result.crossings[0].cell == (2, 1)
+
+
+def test_plan_segment_raises_when_goal_is_a_blocked_npc_tile():
+    graph = MapGraph(map_id=1, width=3, height=3, tileset_id=0, blocked=_open_grid(3, 3))
+    overlay = _empty_overlay(1)
+    occupancy = MapOccupancy(map_id=1, tiles=(_npc((2, 1), "map001/ev005"),))
+
+    with pytest.raises(RoutePlanningError, match="map001/ev005"):
+        plan_segment(
+            1, (0, 1), 1, (2, 1),
+            graphs={1: graph}, overlays={1: overlay},
+            destination_scripts=frozenset(),
+            occupancy={1: occupancy},
+        )
+
+
+def test_plan_segment_raises_when_start_is_a_blocked_npc_tile():
+    graph = MapGraph(map_id=1, width=3, height=3, tileset_id=0, blocked=_open_grid(3, 3))
+    overlay = _empty_overlay(1)
+    occupancy = MapOccupancy(map_id=1, tiles=(_npc((0, 1), "map001/ev004"),))
+
+    with pytest.raises(RoutePlanningError, match="map001/ev004"):
+        plan_segment(
+            1, (0, 1), 1, (2, 1),
+            graphs={1: graph}, overlays={1: overlay},
+            destination_scripts=frozenset(),
+            occupancy={1: occupancy},
+        )
+
+
+def test_plan_segment_raises_when_only_route_is_through_a_blocked_npc_tile():
+    # Single-file corridor, no foreign trigger at all -- the NPC sits on the
+    # only possible route, so this is genuinely unroutable, distinct from a
+    # segment that's merely trigger-blocked.
+    walls = {(0, 0), (1, 0), (2, 0), (0, 2), (1, 2), (2, 2)}
+    graph = MapGraph(map_id=1, width=3, height=3, tileset_id=0, blocked=_walled_grid(3, 3, walls))
+    overlay = _empty_overlay(1)
+    occupancy = MapOccupancy(map_id=1, tiles=(_npc((1, 1), "map001/ev009"),))
+
+    with pytest.raises(RoutePlanningError, match="blocked by stationary-NPC"):
+        plan_segment(
+            1, (0, 1), 1, (2, 1),
+            graphs={1: graph}, overlays={1: overlay},
+            destination_scripts=frozenset(),
+            occupancy={1: occupancy},
+        )
+
+
+def test_plan_segment_absent_occupancy_reproduces_prior_behavior():
+    # No `occupancy=` argument at all -- must behave exactly as before this
+    # feature existed.
+    graph = MapGraph(map_id=1, width=3, height=3, tileset_id=0, blocked=_open_grid(3, 3))
+    overlay = TriggerOverlay(
+        map_id=1, tiles={(1, 1): [_coord_ref("map099/someone_elses_event")]},
+    )
+    result = plan_segment(
+        1, (0, 1), 1, (2, 1),
+        graphs={1: graph}, overlays={1: overlay},
+        destination_scripts=frozenset({"map001/ev001"}),
+    )
+    assert (1, 1) not in result.legs[0].tiles
+    assert result.crossings == ()
+
+
+# ---------------------------------------------------------------------------
+# occupancy.build_occupancy -- movement-type classification
+# ---------------------------------------------------------------------------
+
+
+def _write_occupancy_fixture(tmp_path, object_events: list[dict]) -> tuple:
+    import json
+
+    constants_json = tmp_path / "map_constants.json"
+    constants_json.write_text(json.dumps({"1": {"dir_name": "TestMap"}}), encoding="utf-8")
+
+    maps_dir = tmp_path / "maps"
+    (maps_dir / "TestMap").mkdir(parents=True)
+    (maps_dir / "TestMap" / "map.json").write_text(
+        json.dumps({"object_events": object_events}), encoding="utf-8",
+    )
+    return constants_json, maps_dir
+
+
+def test_build_occupancy_blocks_stationary_and_ignores_mobile(tmp_path):
+    constants_json, maps_dir = _write_occupancy_fixture(tmp_path, [
+        {"x": 5, "y": 5, "movement_type": "MOVEMENT_TYPE_FACE_DOWN", "script": "ev_stationary"},
+        {"x": 6, "y": 6, "movement_type": "MOVEMENT_TYPE_WANDER_AROUND", "script": "ev_mobile"},
+    ])
+
+    occupancy = build_occupancy(1, map_constants_json=constants_json, engine_maps_dir=maps_dir)
+
+    assert occupancy.blocked_cells() == frozenset({(5, 5)})
+    assert occupancy.at((5, 5)).script == "ev_stationary"
+    assert occupancy.at((6, 6)) is None
+
+
+def test_build_occupancy_raises_on_unrecognized_movement_type(tmp_path):
+    constants_json, maps_dir = _write_occupancy_fixture(tmp_path, [
+        {
+            "x": 8, "y": 7,
+            "movement_type": "MOVEMENT_TYPE_NOT_A_REAL_TYPE",
+            "script": "ev_unknown",
+        },
+    ])
+
+    with pytest.raises(OccupancyError, match="MOVEMENT_TYPE_NOT_A_REAL_TYPE"):
+        build_occupancy(1, map_constants_json=constants_json, engine_maps_dir=maps_dir)
+
+
+def test_build_occupancy_leaves_custom_route_patrols_passable(tmp_path):
+    """Operator ruling 2026-09-04: a patrolling NPC stays passable offline.
+
+    Map037 ev005 is the live case -- a custom route that paces
+    DOWN,DOWN,UP,UP over (8,7),(8,8),(8,9). Its footprint is derivable from
+    the Uranium move_route, and we deliberately do not block it; the runtime
+    walker re-plans around live object tiles instead.
+    """
+    constants_json, maps_dir = _write_occupancy_fixture(tmp_path, [
+        {
+            "x": 8, "y": 7,
+            "movement_type": "MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE",
+            "script": "Map037_EV005_Dispatch",
+        },
+    ])
+
+    occupancy = build_occupancy(1, map_constants_json=constants_json, engine_maps_dir=maps_dir)
+
+    assert occupancy.blocked_cells() == frozenset()
+    assert occupancy.at((8, 7)) is None
