@@ -494,8 +494,20 @@ warp_beat(
     map_id=36,
     event_id=2,
     dest_map_constant=MAP_2F,
+    # UP, not DOWN. The 1F transition tile (17,4) is approached from BELOW:
+    # (17,3) is a one-cell dead-end pocket whose only walkable neighbour is
+    # the transition tile itself ((17,2), (16,3), (18,3), (16,4), (18,4) are
+    # all blocked), so there is no way to stand north of the warp without
+    # first crossing it. Authored DOWN while the tile was inert, which cost
+    # nothing then and became unroutable the moment the warp went live:
+    # "walk_to(17, 3): no route from (22, 7) ... avoided warp tiles: (17, 4)".
+    #
+    # `return_direction` stays DOWN and is correct for the same kind of
+    # reason on the other floor: 2F's (16,27) is a dead end reachable only
+    # from (16,26), so the reciprocal really is entered pressing down. The
+    # "both floors are entered by pressing down" reading was half right.
     mechanism="threshold",
-    direction="DOWN",
+    direction="UP",
     beat_name="B8",
     round_trip=True,
     return_direction="DOWN",
