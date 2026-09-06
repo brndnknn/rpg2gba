@@ -606,7 +606,10 @@ def test_warp_beat_start_side_dest_crosses_back_first_and_ends_on_origin(
     legs: list[tuple[str, str]] = []
 
     class _RecordingEmu:
-        pass
+        # `_cross` drains the destination's arrival scripts after every
+        # crossing; a leg-order fake only has to answer the call.
+        def settle_field(self, **kwargs) -> int:
+            return 0
 
     def _fake_cross_threshold(emu, name, approach, direction, dest_map):
         legs.append((direction, dest_map))
@@ -656,7 +659,11 @@ def test_warp_beat_start_side_origin_is_unchanged(
     monkeypatch.setattr(real_assertions, "require_map", _noop)
     monkeypatch.setattr(real_assertions, "assert_near", _noop)
 
-    beat.run(object())
+    class _SettleEmu:
+        def settle_field(self, **kwargs) -> int:
+            return 0
+
+    beat.run(_SettleEmu())
 
     assert legs == [
         ("DOWN", "MAP_ROUTE_02"),

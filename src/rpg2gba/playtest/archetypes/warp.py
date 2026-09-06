@@ -222,6 +222,23 @@ def warp_beat(
         else:  # "arrow"
             assertions.cross_arrow_warp(
                 emu, beat_name, crossing_cell, crossing_direction, dest_map)
+        # Arriving is not the same as having arrived. `cross_threshold` and
+        # friends end at `wait_for_map`, which proves the map CHANGED and
+        # nothing more -- the destination's own arrival scripts may not have
+        # run yet. A converted map's OnFrame dispatcher tests its autorun
+        # guards in sequence (`Emulator.settle_field`), so the field can be
+        # released for a frame and re-locked as the next page arms itself.
+        # The next leg's `walk_to` then starts unlocked, watches the field
+        # lock underneath it, and raises `WalkInterrupted` -- which is what
+        # B1 did the first time the warps actually fired: "walk_to(17, 39)
+        # interrupted by a locked-field scene at (17, 39)".
+        #
+        # Draining here rather than reacting to it removes the race instead
+        # of racing better, and it is what `ch03.py`/`ch04.py` already do by
+        # hand after their own crossings. A beat that wants to ASSERT an
+        # arrival autorun (the `arrival_nudge` archetype) claims that page
+        # as its own row and does not go through this template.
+        emu.settle_field()
 
     def _forward(emu: Emulator, *, check_arrival_details: bool = False) -> None:
         """Cross the CLAIMED warp: origin -> dest.
@@ -276,7 +293,6 @@ def warp_beat(
         # about the warp. The claimed event is crossed either way -- first
         # leg when starting on its own map, middle leg when starting on the
         # far side.
-        import sys; print("DBG start_side=",start_side,"round_trip=",round_trip, file=sys.stderr)
         if start_side == "origin":
             _forward(emu, check_arrival_details=True)
             if round_trip:
