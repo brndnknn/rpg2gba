@@ -226,8 +226,22 @@ _HEAD_REQUIRES: dict[str, str] = {
 # weaker than an observed post-load position. If CH05's boot walk ever lands the
 # player somewhere other than these cells, that is the harness correcting this
 # table, and this comment is the reason to believe the harness.
+# CH05/map035 (19,49) is the first entry in this table backed by the strongest
+# citation the paragraph above names: an emulator-observed post-load position.
+# CH05 does not WARP onto Route 02 -- it inherits the player there when CH04's
+# last beat hands over -- so there is no warp-exit constant to read and no
+# geometry to reason from; the only way to know the cell is to run it. The
+# step-7 headless runs of 2026-09-06 recorded B1's entry as map 35 (19,49),
+# identically across runs 4, 6, 7 and 8 and across both attempts of each.
+#
+# It is registered because the route solver needs it. CH05 begins with a walk
+# across Route 02 to the cave mouth, and a plan whose entry node is anywhere
+# else does not contain that walk -- which is how B1 came to leave the approved
+# route onto Map035 EV012's trigger tile (Timothy, event touch) with nothing
+# planning around it.
 _CHAPTER_MAP_START_CELLS: dict[tuple[str, int], tuple[int, int]] = {
     ("CH04", 35): (21, 56),
+    ("CH05", 35): (19, 49),
     ("CH05", 36): (17, 39),
     ("CH05", 37): (16, 26),
 }

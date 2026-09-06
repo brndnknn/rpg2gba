@@ -24,12 +24,12 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from rpg2gba.traversal.capabilities import CapabilityMap
 from rpg2gba.traversal.collision import (
     DEFAULT_MAPS_DIR,
     DEFAULT_TILESETS_JSON,
     load_map_json,
 )
-from rpg2gba.traversal.capabilities import CapabilityMap
 from rpg2gba.traversal.graph import MapGraph
 from rpg2gba.traversal.reachability import derive_blocked_verdict_for_event
 

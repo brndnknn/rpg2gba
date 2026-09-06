@@ -273,6 +273,46 @@ def _get_route_plans() -> tuple[list, list[str]]:
     return result
 
 
+_derived_locations_cache = None
+
+
+def _get_derived_locations() -> tuple[dict, list[str]]:
+    """Every ``reference/routes/*.locations.json``, keyed by chapter id.
+
+    These are the route solver's *derived* beat locations, produced at
+    BUILD_PLAN step 6a from the manifest and dispositions BEFORE the
+    chapter's playtest module is authored. They exist so an order can be
+    approved rather than merely graded (`routing/locations.py`), and they
+    are what lets the viewer show beat markers for a chapter whose
+    `chapters/<id>.py` does not exist yet.
+
+    Same never-raise contract as `_get_route_plans`: an absent directory or
+    an unreadable file degrades to a note.
+    """
+    from rpg2gba.routing.locations import load_locations
+
+    routes_dir = mvc._repo_root() / "reference" / "routes"
+    paths = sorted(routes_dir.glob("*.locations.json"))
+    fp = tuple((str(p), mvc._file_fingerprint(p)) for p in paths)
+    global _derived_locations_cache
+    if _derived_locations_cache is not None and _derived_locations_cache[0] == fp:
+        return _derived_locations_cache[1]
+
+    by_chapter: dict = {}
+    notes: list[str] = []
+    for path in paths:
+        try:
+            chapter_id, records = load_locations(path)
+        except Exception as exc:
+            notes.append(f"{path} unreadable/malformed locations file, skipped ({exc})")
+            continue
+        by_chapter[chapter_id] = records
+
+    result = (by_chapter, notes)
+    _derived_locations_cache = (fp, result)
+    return result
+
+
 def _get_switch_names() -> dict[str, str]:
     path = mvc._repo_root() / "reference" / "uranium_switches.json"
     fp = mvc._file_fingerprint(path)
@@ -657,6 +697,61 @@ def beat_markers(map_id: int) -> dict:
                         "y": loc.y,
                         "label": loc.label,
                     })
+
+    # Derived-locations fallback (2026-09-04). A chapter at BUILD_PLAN step
+    # 6a has an approved-pending route but no `chapters/<id>.py` yet, so the
+    # loop above contributes nothing for it and the operator reviewing the
+    # order sees a bare polyline with no idea which stop is which beat.
+    # Fall back to the step-6a locations file for exactly those chapters --
+    # never for one whose module loaded, so a derived cell can never mask or
+    # contradict an authored one. `derived: True` is carried through to the
+    # frontend so the two are visually distinguishable; these are a proposal
+    # under review, not a chapter's committed claim about the world.
+    authored_chapters = {row["chapter"] for row in declared}
+    derived_by_chapter, derived_notes = _get_derived_locations()
+    notes.extend(derived_notes)
+    route_plans, _ = _get_route_plans()
+    for chapter_id, records in sorted(derived_by_chapter.items()):
+        if chapter_id in authored_chapters:
+            continue
+        # Beat ids are labels, not an ordering (`playtest/chapter.py`'s
+        # `beat()` docstring is explicit about this), so a marker showing
+        # "B4" says nothing about when it is visited. Carry the SOLVED
+        # position from the route plan instead -- that is the thing being
+        # approved at step 6's stop, and the only reason to look at these
+        # markers at all.
+        order_of: dict[str, int] = {}
+        for plan in route_plans:
+            if plan.chapter_id != chapter_id:
+                continue
+            position = 0
+            for node in plan.nodes:
+                if node.kind != "group":
+                    continue
+                position += 1
+                for beat_name in node.beats:
+                    order_of[beat_name] = position
+        for record in records:
+            if by_const.get(record.map_constant) != map_id:
+                continue
+            declared.append({
+                "chapter": chapter_id,
+                "beat": record.beat_id,
+                "description": f"derived from {', '.join(record.rows)}",
+                "map_constant": record.map_constant,
+                "x": record.x,
+                "y": record.y,
+                "label": record.resolver,
+                "derived": True,
+                "order": order_of.get(record.beat_id),
+            })
+        if any(by_const.get(r.map_constant) == map_id for r in records):
+            notes.append(
+                f"{chapter_id}: beat markers are DERIVED from "
+                f"reference/routes/{chapter_id}.locations.json (step 6a) — "
+                "the chapter module is not authored yet, so these are a "
+                "proposed order under review, not registered beats"
+            )
 
     observed: list[dict] = []
     # Q13 slice 4 additions. `walked` mirrors `planned`'s per-beat row shape

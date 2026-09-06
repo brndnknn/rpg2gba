@@ -191,6 +191,10 @@ class _FakeGraphRouteEmu:
         from rpg2gba.playtest.emulator import Emulator
         return Emulator._warp_tiles(self)
 
+    def _warp_event_tiles(self):
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator._warp_event_tiles(self)
+
     def _plan_route(self, start, goal):
         from rpg2gba.playtest.emulator import Emulator
         return Emulator._plan_route(self, start, goal)

@@ -382,3 +382,111 @@ def test_deferred_tuples_survive_the_refactor_intact() -> None:
 
     assert len(ch02.DEFERRED_ROCK_GATED) == 10
     assert len(ch03.DEFERRED_BEATS) == 10
+
+
+# -- talk_to_moving_npc: the NPC does not stay where it spawned ---------------
+
+
+class _MovingNpc:
+    """The minimum `talk_to_moving_npc` reads: an NPC position that can
+    change under it, a player position, and an interact that reports
+    whether anything fired."""
+
+    def __init__(self, npc: tuple[int, int], player: tuple[int, int], *,
+                 blocked: set[tuple[int, int]] | None = None,
+                 fires: bool = True) -> None:
+        self.npc = npc
+        self.player = player
+        self.blocked = blocked or set()
+        self.fires = fires
+        self.walks: list[tuple[int, int]] = []
+        self.faced: list[str] = []
+        self.interacts = 0
+
+    class _Ev:
+        def __init__(self, x: int, y: int) -> None:
+            self.x, self.y = x, y
+
+    def object_event(self, local_id: int) -> "_MovingNpc._Ev":
+        return self._Ev(*self.npc)
+
+    def player_pos(self) -> tuple[int, int]:
+        return self.player
+
+    def walk_to(self, x: int, y: int, *args, **kwargs) -> None:
+        self.walks.append((x, y))
+        if (x, y) in self.blocked or (x, y) == self.npc:
+            raise ScenarioError(f"blocked at {(x, y)}")
+        self.player = (x, y)
+
+    def face(self, direction: str) -> None:
+        self.faced.append(direction)
+
+    def interact(self, require_script: bool = True) -> bool:
+        self.interacts += 1
+        return self.fires
+
+    def screenshot(self, name: str) -> str:
+        return f"{name}.png"
+
+
+def test_talk_to_moving_npc_uses_the_side_the_player_already_stands_on() -> None:
+    """The B10 case: the NPC walked onto the derived approach cell and the
+    player is standing on its vacated spawn tile. No walk is needed at all
+    -- the player only has to turn around."""
+    emu = _MovingNpc(npc=(8, 8), player=(8, 7))
+
+    assertions.talk_to_moving_npc(emu, "B10", 2)
+
+    assert emu.walks == []            # already adjacent; nothing to walk
+    assert emu.faced == ["DOWN"]      # player is NORTH of the NPC
+    assert emu.interacts == 1
+
+
+def test_talk_to_moving_npc_walks_to_a_live_side_when_not_adjacent() -> None:
+    emu = _MovingNpc(npc=(8, 8), player=(3, 3))
+
+    assertions.talk_to_moving_npc(emu, "B10", 2)
+
+    # First side tried is the first walkable one in _TALK_SIDES order.
+    assert emu.walks[0] == (8, 9)
+    assert emu.player == (8, 9)
+    assert emu.faced == ["UP"]        # player ended SOUTH of the NPC
+
+
+def test_talk_to_moving_npc_tries_another_side_when_one_is_blocked() -> None:
+    """A blocked side is not a failure -- an NPC in a corridor has fewer
+    than four, and which ones are open changes as it moves."""
+    emu = _MovingNpc(npc=(8, 8), player=(3, 3), blocked={(8, 9), (8, 7)})
+
+    assertions.talk_to_moving_npc(emu, "B10", 2)
+
+    assert (8, 9) in emu.walks and (8, 7) in emu.walks
+    assert emu.player == (7, 8)       # fell through to the west side
+    assert emu.faced == ["RIGHT"]
+
+
+def test_talk_to_moving_npc_fails_loud_with_the_last_seen_position() -> None:
+    """An NPC that can never be reached is a finding about the map, not
+    something to pass over quietly."""
+    emu = _MovingNpc(npc=(8, 8), player=(3, 3),
+                     blocked={(8, 9), (8, 7), (7, 8), (9, 8)})
+
+    with pytest.raises(ScenarioError, match=r"last seen at \(8, 8\)"):
+        assertions.talk_to_moving_npc(emu, "B10", 2, attempts=2)
+
+
+def test_talk_to_moving_npc_uses_the_callers_walk() -> None:
+    """`WalkInterrupted` is a `ScenarioError`, so the blocked-side handler
+    would swallow a wild encounter. A caller on a map with a live encounter
+    table passes its own absorbing walker instead."""
+    emu = _MovingNpc(npc=(8, 8), player=(3, 3))
+    absorbed: list[tuple[int, int]] = []
+
+    def _absorbing(x: int, y: int) -> None:
+        absorbed.append((x, y))
+        emu.walk_to(x, y)
+
+    assertions.talk_to_moving_npc(emu, "B10", 2, walk=_absorbing)
+
+    assert absorbed == [(8, 9)]

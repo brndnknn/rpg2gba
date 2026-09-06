@@ -1,10 +1,11 @@
 """Offline route solver — turns a `Chapter` (beats/groups) into a `RoutePlan`.
 
 Builds one route node per `BeatGroup` (plus a fixed entry and exit node),
-derives `PrecedenceEdge`s from the chapter manifest's recorded self-switch
-read/write pairs, and orders the group nodes to minimize tile cost subject to
-those precedence constraints and a strong bias against crossing a foreign
-trigger tile.
+derives `PrecedenceEdge`s from two sources -- the chapter manifest's recorded
+self-switch read/write pairs, and the corpus-wide warp topology (`world`,
+see `_derive_warp_precedence`) -- and orders the group nodes to minimize tile
+cost subject to those precedence constraints and a strong bias against
+crossing a foreign trigger tile.
 
 Algorithm, exactly as approved by the operator: **precedence-respecting
 greedy nearest-neighbour seed, then 2-opt improvement over precedence-
@@ -19,14 +20,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from ..chapter_manifest.schema import ManifestRow
-from ..playtest.chapter import Beat, BeatGroup, BeatLocation, Chapter
+from ..playtest.chapter import Beat, BeatGroup, BeatLocation, Chapter, resolved_trigger_scripts
 from ..tileset_converter.map_constants import DEFAULT_STATE_PATH, MapConstantRegistry
 from ..traversal.graph import Cell, MapGraph
 from ..traversal.triggers import TriggerOverlay
 from ..traversal.world import WorldGraph
-
+from .occupancy import MapOccupancy
 from .pathing import RoutePlanningError, SegmentResult, plan_segment
-from .plan import PrecedenceEdge, RouteNode, RoutePlan, RouteSegment
+from .plan import ChosenApproach, PrecedenceEdge, RouteNode, RoutePlan, RouteSegment
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,24 @@ class _GroupPoint:
     rows: tuple[str, ...]
     map_id: int
     cell: Cell
+
+
+@dataclass(frozen=True)
+class RouteCandidate:
+    """One legal SIDE a group's beat could be approached/used from, handed
+    in by the caller via `solve_route`'s `candidates=` mapping (built from
+    `routing.locations.ApproachCandidate` for the derived-locations path --
+    see `routing/__main__.py`'s `plan` command).
+
+    Kept decoupled from `routing.locations.ApproachCandidate` (rather than
+    imported) so `solver.py` has no dependency on `locations.py`; the two
+    shapes are identical by convention, not by inheritance.
+    """
+
+    x: int
+    y: int
+    side: str
+    resolver: str
 
 
 def _default_map_ids() -> dict[str, int]:
@@ -127,6 +146,19 @@ def _own_beats(chapter: Chapter) -> list[Beat]:
 
 
 def _default_entry_location(chapter: Chapter, own_beats: Sequence[Beat]) -> BeatLocation:
+    """Where the chapter's route starts.
+
+    A declared `Chapter.route_entry` wins outright. Otherwise this falls back
+    to the first own beat's first location, which is the same cell the solver
+    uses as that group's INTERACTION point -- the one later segments are
+    costed from. That conflation is fine for a beat that begins where it acts,
+    and wrong for one that begins on the far side of its own warp
+    (`warp_beat(start_side="dest")`): CH05's B1 acts on the cave's exit warp
+    but the chapter begins on Route 02. See `Chapter.route_entry` for the
+    measured cost of overloading the one field.
+    """
+    if chapter.route_entry is not None:
+        return chapter.route_entry
     if not own_beats:
         raise RouteSolverError(
             f"chapter {chapter.name!r}: has no own beats (only inherited "
@@ -136,7 +168,8 @@ def _default_entry_location(chapter: Chapter, own_beats: Sequence[Beat]) -> Beat
     if not first.locations:
         raise RouteSolverError(
             f"chapter {chapter.name!r}: first own beat {first.name!r} declares no "
-            "location to use as the route entry; pass entry= explicitly"
+            "location to use as the route entry, and the chapter declares no "
+            "route_entry=; pass entry= explicitly"
         )
     return first.locations[0]
 
@@ -209,6 +242,164 @@ def _derive_precedence(
     return tuple(sorted(edges, key=lambda e: (e.before, e.after, e.reason)))
 
 
+def _derive_warp_precedence(
+    manifest_rows: Sequence[ManifestRow],
+    group_by_row: Mapping[str, str],
+    group_points: Sequence[_GroupPoint],
+    world: WorldGraph | None,
+    *,
+    entry_map: int,
+    entry_group_id: str | None,
+    chapter_id: str,
+    exit_provided: bool,
+) -> tuple[tuple[PrecedenceEdge, ...], tuple[int, Cell] | None]:
+    """Derive `PrecedenceEdge`s from warp topology, plus this chapter's
+    terminal boundary group's own point if one is identifiable.
+
+    Returns `((), None)` when `world` is None: no warp precedence can be
+    derived without the corpus-wide map graph.
+
+    `exit_provided` is whether the caller already passed an explicit `exit_=`
+    to `solve_route`. When true, rule 2 (below) is skipped entirely -- no
+    terminal-group detection, no rule-2 edges, and critically no ambiguity
+    raise: an explicit `exit_=` is itself the disambiguation the ambiguous
+    case exists to demand, so re-deriving (and possibly rejecting) a terminal
+    group the caller didn't ask for would be wrong. Rule 1 always runs
+    regardless of `exit_provided`.
+
+    A "chapter map" is any map a `group_points` entry sits on, plus
+    `entry_map`. A group "owns a warp landing on map X" when one of its rows
+    is a warp row (`row.kind == "page"` and `"warp" in row.effects`) whose
+    `(row.map_id, row.event_id)` resolves, through `world.edges_from(row.
+    map_id)`, to a `WorldEdge` of kind "warp" with `dst_map == X`.
+
+    Rule 1 (introducing-warp precedence): for each chapter map X other than
+    `entry_map`, find the groups that own a warp landing on X from a chapter
+    map. If exactly one such group G exists, every OTHER group located on X
+    must come after G (reason `warp_topology:mapNNN`). Zero or 2+ candidates
+    means the constraint can't be expressed singularly; logged at INFO and
+    skipped for that map, same discipline as `_derive_precedence`.
+
+    Rule 2 (terminal boundary group): a candidate terminal group is one that
+    owns a warp landing OUTSIDE the chapter's map set, excluding
+    `entry_group_id` (the chapter's own entry warp always points back at the
+    predecessor map and must never be treated as the exit). Exactly one
+    candidate T means every other group must come before T (reason
+    `warp_boundary:mapNNN`, NNN = T's destination map), and T's own
+    `(map_id, cell)` is returned as the route's terminal point. Two or more
+    candidates raises `RouteSolverError` naming each candidate and its
+    destination -- the caller must disambiguate with an explicit `exit_=`.
+    Zero candidates returns no rule-2 edges and `terminal_point=None`.
+    """
+    if world is None:
+        return (), None
+
+    map_by_group: dict[str, int] = {gp.group_id: gp.map_id for gp in group_points}
+    chapter_maps: set[int] = set(map_by_group.values()) | {entry_map}
+
+    # dst_map -> group_ids owning a warp row that lands on dst_map from a
+    # chapter map.
+    introducers: dict[int, set[str]] = {}
+    # group_id -> dst_maps (outside the chapter) it owns a warp row landing on.
+    outbound: dict[str, set[int]] = {}
+
+    for row in manifest_rows:
+        if row.kind != "page" or "warp" not in row.effects or row.event_id is None:
+            continue
+        if row.map_id not in chapter_maps:
+            continue
+        group_id = group_by_row.get(row.row_id)
+        if group_id is None:
+            continue
+        for edge in world.edges_from(row.map_id):
+            if edge.kind != "warp" or edge.event_id != row.event_id:
+                continue
+            introducers.setdefault(edge.dst_map, set()).add(group_id)
+            if edge.dst_map not in chapter_maps:
+                outbound.setdefault(group_id, set()).add(edge.dst_map)
+
+    edges: set[PrecedenceEdge] = set()
+
+    # --- rule 1: introducing-warp precedence --------------------------------
+
+    # A map needs an "introducing" warp only if the chapter has to let itself
+    # in. Two maps never do: the one the chapter STARTS on, and the one its
+    # declared entry warp LANDS on -- reaching that one is what starting there
+    # means.
+    #
+    # Missing the second is not a tie-break, it derives an impossible order.
+    # CH05 enters the Passage Cave from Route 02, and its entry beat B1 claims
+    # `map036/ev001` -- the cave's OUTBOUND event, because that is the only row
+    # CH05's manifest owns at that seam. So B1 does not look like a way *in*,
+    # the rule credited B8 (the 1F<->2F stairs, whose reciprocal does land on
+    # map 36) and emitted `B8 -> B1`: use the stairs before entering the cave.
+    # That forced the whole 1F sweep to run north-first and cross a trainer's
+    # trigger tile twice. While the entry was inside the cave this was masked,
+    # because `entry_map` alone already skipped map 36.
+    # Keyed on the entry MAP, not the entry cell: standing anywhere on map X
+    # you can walk to any warp on map X and cross it, so nothing has to
+    # "introduce" what X warps to. Keying it on the cell was too narrow -- it
+    # held only while the chapter's declared entry happened to BE the warp
+    # tile, and stopped applying the moment CH05's entry became the cell CH04
+    # actually hands over on, two dozen tiles short of the cave mouth.
+    #
+    # Maps deeper in are unaffected: map 37 is reachable only through map 36,
+    # never from the entry map, so it still requires its introducing warp.
+    entry_landing_maps: set[int] = set()
+    if world is not None:
+        for edge in world.edges_from(entry_map):
+            if edge.kind in ("warp", "seam_warp"):
+                entry_landing_maps.add(edge.dst_map)
+
+    for map_id in sorted(chapter_maps - {entry_map} - entry_landing_maps):
+        candidates = introducers.get(map_id, set())
+        if len(candidates) != 1:
+            logger.info(
+                "precedence: warp_topology:map%03d -- %d group(s) own a warp "
+                "landing on map %d from within the chapter (%s); need exactly "
+                "one to derive an introducing-warp edge, skipping",
+                map_id, len(candidates), map_id, sorted(candidates),
+            )
+            continue
+        (introducer,) = candidates
+        for gp in group_points:
+            if gp.map_id == map_id and gp.group_id != introducer:
+                edges.add(PrecedenceEdge(
+                    before=introducer, after=gp.group_id,
+                    reason=f"warp_topology:map{map_id:03d}",
+                ))
+
+    # --- rule 2: terminal boundary group ------------------------------------
+
+    terminal_point: tuple[int, Cell] | None = None
+    if exit_provided:
+        return tuple(sorted(edges, key=lambda e: (e.before, e.after, e.reason))), terminal_point
+
+    candidates = {g: dsts for g, dsts in outbound.items() if g != entry_group_id}
+    if len(candidates) == 1:
+        (terminal_group, dsts), = candidates.items()
+        dst_map = min(dsts)
+        for gp in group_points:
+            if gp.group_id != terminal_group:
+                edges.add(PrecedenceEdge(
+                    before=gp.group_id, after=terminal_group,
+                    reason=f"warp_boundary:map{dst_map:03d}",
+                ))
+        terminal_gp = next(gp for gp in group_points if gp.group_id == terminal_group)
+        terminal_point = (terminal_gp.map_id, terminal_gp.cell)
+    elif len(candidates) >= 2:
+        detail = ", ".join(
+            f"{g!r} (-> map{min(dsts):03d})" for g, dsts in sorted(candidates.items())
+        )
+        raise RouteSolverError(
+            f"chapter {chapter_id}: {len(candidates)} groups each own an outbound "
+            f"warp leaving the chapter's own maps ({detail}) -- cannot pick a "
+            "single terminal group; pass exit_= explicitly to disambiguate"
+        )
+
+    return tuple(sorted(edges, key=lambda e: (e.before, e.after, e.reason))), terminal_point
+
+
 def _point_label(index: int, group_id: str | None) -> str:
     if group_id is not None:
         return f"group {group_id!r}"
@@ -227,6 +418,8 @@ def solve_route(
     exit_: tuple[int, Cell] | None = None,
     map_ids: Mapping[str, int] | None = None,
     destination_scripts: frozenset[str] = frozenset(),
+    occupancy: Mapping[int, MapOccupancy] | None = None,
+    candidates: Mapping[str, tuple[RouteCandidate, ...]] | None = None,
 ) -> RoutePlan:
     """Solve a walk order over `chapter`'s OWN beat groups and return a `RoutePlan`.
 
@@ -237,8 +430,7 @@ def solve_route(
     `RouteSolverError` if `chapter` has no own groups at all.
 
     `entry`/`exit_` are `(map_id, cell)` overrides; by default the entry is
-    the chapter's own first beat's first declared location and the exit is
-    its own last beat's last declared location (both resolved through
+    the chapter's own first beat's first declared location (resolved through
     `map_ids`, CLAUDE.md §4.3's map-constant registry -- pass `map_ids=`
     explicitly to avoid touching the real persisted state, e.g. in tests).
     This is deliberate, not merely a filtering side effect: the boot-walk
@@ -246,26 +438,75 @@ def solve_route(
     chapter's route legitimately starts at its own first beat, not its
     predecessor's.
 
+    The default exit, absent an explicit `exit_=`, is no longer simply "the
+    chapter's own last beat's last declared location": if warp topology
+    (`world`, see `_derive_warp_precedence`) identifies exactly one group that
+    owns a warp leaving the chapter's own maps (excluding the entry group),
+    that group's own point becomes the exit -- forcing that group last
+    without also walking back to an unrelated cell afterward. Only when no
+    such single terminal group is identifiable does the exit fall back to the
+    last-own-beat's-last-location default.
+
+    Also raises `RouteSolverError` if, absent an explicit `exit_=`, warp
+    topology identifies two or more candidate terminal groups (each owning a
+    warp leaving the chapter's own maps) -- passing `exit_=` explicitly
+    disambiguates and suppresses this check entirely (see
+    `_derive_warp_precedence`).
+
     `destination_scripts` is forwarded to `pathing.plan_segment` unchanged:
     the set of this chapter's own trigger scripts that a route may cross
     freely (not "foreign"). Defaults to none, so every trigger this chapter
     doesn't explicitly own is avoided when possible.
 
+    `occupancy` (per map id, `routing.occupancy.MapOccupancy`) is likewise
+    forwarded to `pathing.plan_segment` unchanged: stationary-NPC tiles that
+    hard-block every segment's tile-level path, on both the preferred and
+    fallback route. Defaults to `None` (no occupancy data, current behaviour
+    unchanged) -- pass it explicitly to route around real NPC occupancy.
+
+    `candidates` (group id -> tuple of `RouteCandidate`, i.e. legal SIDES of
+    that group's own cell) breaks the circularity that a resolver like
+    `approach_to`/`stair_approach` used to resolve on its own: rather than a
+    fixed N/S/E/W (or west-then-east) tiebreak deciding which side a beat is
+    approached from, the group carries every legal side and the solver picks
+    among them AS PART OF ordering -- see the layered-DP note below. Defaults
+    to `None` (equivalent to an empty mapping): every group not present (or
+    mapped to an empty/falsy tuple) keeps exactly one site, its own
+    `_resolve_group_point` cell, reproducing today's behaviour exactly.
+    Candidate cells occupied by a stationary NPC (`occupancy`) are dropped
+    before solving; if EVERY candidate for a group is occupied, this raises
+    `RouteSolverError` naming the group, its beats, and the blocking NPC(s)
+    -- never silently falls back to a blocked cell. The chosen side (if any)
+    is recorded on the corresponding `RouteNode.chosen_approach`.
+
     Method: **precedence-respecting greedy nearest-neighbour seed, then
-    2-opt improvement over precedence-feasible reversals.** Entry is fixed
-    first, exit fixed last; every pairwise cost between two nodes is
-    `plan_segment(...).tile_count`, cached once and reused throughout (the
-    expensive part). A segment with any trigger crossing is scored with an
-    additive `_CROSSING_PENALTY` during search only, so a crossing-free
-    ordering always beats a crossing ordering when either is feasible -- but
-    `RoutePlan.tile_cost` is the true sum of `RouteSegment.tile_count`, never
-    including the penalty. A node pair `plan_segment` cannot route at all
-    scores as infinite and is never selected; if the greedy seed cannot find
-    any next node to visit, or precedence has no available group left to
-    place (a cycle), this raises `RouteSolverError` naming the stuck point.
-    2-opt then repeatedly looks for a precedence-legal reversal that strictly
-    lowers total cost, in a fixed deterministic candidate order, until no
-    reversal improves or `_TWO_OPT_MAX_PASSES` is hit.
+    2-opt improvement over precedence-feasible reversals -- both scored
+    through a layered DP over candidate sites, never a per-step greedy
+    candidate pick.** Entry is fixed first, exit fixed last. For any FIXED
+    order of groups, each group contributes one "layer" of candidate cells
+    (its own single cell, or every entry in `candidates[group_id]` with
+    occupied cells dropped); the true cost of that order is the shortest
+    path through this layered DAG, edge weights being
+    `plan_segment(...).tile_count` (+ `_CROSSING_PENALTY` for a foreign-
+    trigger crossing, search-time only, never in the final `tile_cost`)
+    between adjacent layers' candidates. The greedy seed extends this DP one
+    layer at a time as it places each next group (an O(1)-per-candidate
+    incremental step, not a full re-solve); 2-opt re-runs the full DP for
+    every candidate reversal it considers. Every pairwise
+    `plan_segment(...)` call, keyed by `(point_index, cell, point_index,
+    cell)`, is cached once and reused for the rest of the solve -- never
+    recomputed inside the DP or the 2-opt loop. Ties break deterministically
+    toward the earlier candidate in `candidates[group_id]`'s own order (the
+    callers of `solve_route` are expected to supply that order already
+    N/S/E/W or west-then-east, per `routing.locations.ApproachCandidate`).
+
+    A node pair `plan_segment` cannot route at all scores as infinite and is
+    never selected; if the greedy seed cannot find any next node to visit,
+    or precedence has no available group left to place (a cycle), this
+    raises `RouteSolverError` naming the stuck point. 2-opt then repeatedly
+    looks for a precedence-legal reversal that strictly lowers total cost,
+    in a fixed deterministic candidate order, until no reversal improves or
+    `_TWO_OPT_MAX_PASSES` is hit.
 
     `solver_method` on the returned plan is always `"greedy+2opt"`.
     """
@@ -301,13 +542,48 @@ def solve_route(
             context="chapter entry",
         )
     )
-    exit_map, exit_cell = (
-        exit_ if exit_ is not None
-        else _resolve_point(
+
+    # A trigger a predecessor's beat already resolved is not foreign to this
+    # chapter (`playtest.chapter.resolved_trigger_scripts`). CH05 must pass
+    # Timothy's event-touch tile to reach the cave at all -- `plan_segment`
+    # tries a trigger-free path first and there is none -- and CH04:B4 has
+    # already defeated him by then, so the tile fires nothing.
+    resolved_scripts = resolved_trigger_scripts(chapter)
+    effective_destination_scripts = frozenset(destination_scripts) | {
+        script for scripts in resolved_scripts.values() for script in scripts
+    }
+
+    group_by_row: dict[str, str] = {}
+    for gp in group_points:
+        for row_id in gp.rows:
+            group_by_row[row_id] = gp.group_id
+    self_switch_precedence = _derive_precedence(manifest_rows, group_by_row)
+
+    entry_group_id = next(
+        (gp.group_id for gp in group_points if (gp.map_id, gp.cell) == (entry_map, entry_cell)),
+        None,
+    )
+    warp_precedence, terminal_point = _derive_warp_precedence(
+        manifest_rows, group_by_row, group_points, world,
+        entry_map=entry_map,
+        entry_group_id=entry_group_id, chapter_id=chapter_id,
+        exit_provided=exit_ is not None,
+    )
+
+    if exit_ is not None:
+        exit_map, exit_cell = exit_
+    elif terminal_point is not None:
+        exit_map, exit_cell = terminal_point
+    else:
+        exit_map, exit_cell = _resolve_point(
             _default_exit_location(chapter, own_beats), map_ids=effective_map_ids,
             context="chapter exit",
         )
-    )
+
+    precedence = tuple(sorted(
+        set(self_switch_precedence) | set(warp_precedence),
+        key=lambda e: (e.before, e.after, e.reason),
+    ))
 
     # points[0] = entry, points[1..k] = group points (in groups() order),
     # points[-1] = exit.
@@ -323,12 +599,6 @@ def solve_route(
     }
     original_order: dict[int, int] = {idx: pos for pos, idx in enumerate(group_indices)}
 
-    group_by_row: dict[str, str] = {}
-    for gp in group_points:
-        for row_id in gp.rows:
-            group_by_row[row_id] = gp.group_id
-    precedence = _derive_precedence(manifest_rows, group_by_row)
-
     # Precedence edges as point-index pairs (before_point, after_point).
     point_by_group: dict[str, int] = {gid: idx for idx, gid in group_id_at.items()}
     precedence_point_pairs = [
@@ -338,39 +608,82 @@ def solve_route(
     for before_idx, after_idx in precedence_point_pairs:
         preds_of[after_idx].add(before_idx)
 
-    # --- pairwise cost cache ------------------------------------------------
+    # --- candidate sites per point index -------------------------------
 
-    cache: dict[tuple[int, int], SegmentResult | None] = {}
+    effective_candidates = candidates or {}
+    # group_id -> {(x, y): RouteCandidate}, for reattaching side/resolver
+    # metadata to whichever cell the DP ends up choosing for that group.
+    candidate_meta: dict[str, dict[Cell, RouteCandidate]] = {}
 
-    def segment_between(i: int, j: int) -> SegmentResult | None:
-        key = (i, j)
-        if key in cache:
-            return cache[key]
-        start_map, start_cell = points[i]
-        goal_map, goal_cell = points[j]
+    def _sites_for_group(gp: _GroupPoint) -> tuple[Cell, ...]:
+        raw = effective_candidates.get(gp.group_id)
+        if not raw:
+            return (gp.cell,)
+        map_occupancy = occupancy.get(gp.map_id) if occupancy is not None else None
+        blocked = map_occupancy.blocked_cells() if map_occupancy is not None else frozenset()
+        kept = [c for c in raw if (c.x, c.y) not in blocked]
+        if not kept:
+            occupants = sorted({
+                map_occupancy.at((c.x, c.y)).script
+                for c in raw
+                if map_occupancy is not None and map_occupancy.at((c.x, c.y)) is not None
+            })
+            raise RouteSolverError(
+                f"chapter {chapter_id}: group {gp.group_id!r} (beats "
+                f"{list(gp.beats)}) has {len(raw)} approach candidate(s) "
+                f"({[(c.x, c.y, c.side) for c in raw]}), all occupied by "
+                f"stationary NPC(s) {occupants} -- cannot route this beat "
+                "from any side"
+            )
+        candidate_meta[gp.group_id] = {(c.x, c.y): c for c in kept}
+        return tuple((c.x, c.y) for c in kept)
+
+    site_cells: dict[int, tuple[Cell, ...]] = {0: (entry_cell,)}
+    for idx in group_indices:
+        site_cells[idx] = _sites_for_group(group_points[idx - 1])
+    site_cells[n - 1] = (exit_cell,)
+
+    # --- pairwise cost cache, keyed by (point, cell, point, cell) -----------
+
+    site_cache: dict[tuple[int, Cell, int, Cell], SegmentResult | None] = {}
+
+    def segment_between(i: int, cell_i: Cell, j: int, cell_j: Cell) -> SegmentResult | None:
+        key = (i, cell_i, j, cell_j)
+        if key in site_cache:
+            return site_cache[key]
+        start_map = points[i][0]
+        goal_map = points[j][0]
         try:
             result = plan_segment(
-                start_map, start_cell, goal_map, goal_cell,
+                start_map, cell_i, goal_map, cell_j,
                 graphs=graphs, overlays=overlays,
-                destination_scripts=destination_scripts, world=world,
+                destination_scripts=effective_destination_scripts, world=world,
+                occupancy=occupancy,
             )
         except RoutePlanningError:
             result = None
-        cache[key] = result
+        site_cache[key] = result
         return result
 
-    def score(i: int, j: int) -> float | None:
-        result = segment_between(i, j)
+    def site_score(i: int, cell_i: Cell, j: int, cell_j: Cell) -> float | None:
+        result = segment_between(i, cell_i, j, cell_j)
         if result is None:
             return None
         penalty = _CROSSING_PENALTY if result.crossings else 0
         return result.tile_count + penalty
 
     # --- greedy nearest-neighbour seed, precedence-respecting ---------------
+    #
+    # `prev_layer` holds, for the group/point most recently placed, the best
+    # DP cost from entry to each of ITS candidate cells. Each step extends
+    # this one layer at a time (an O(1)-per-candidate incremental DP step,
+    # never a full re-solve, never a per-step greedy candidate pick within a
+    # single group -- see `solve_route`'s docstring).
 
     placed: list[int] = [0]
     placed_set: set[int] = {0}
     remaining: set[int] = set(group_indices)
+    prev_layer: dict[Cell, float] = {entry_cell: 0.0}
 
     while remaining:
         current = placed[-1]
@@ -384,21 +697,52 @@ def solve_route(
                 f"next (cycle among {sorted(group_id_at[i] for i in remaining)}); "
                 f"precedence edges: {[e.reason for e in precedence]}"
             )
-        scored = [(score(current, idx), idx) for idx in available]
-        finite = [(s, idx) for s, idx in scored if s is not None]
-        if not finite:
+
+        layer_by_idx: dict[int, dict[Cell, float]] = {}
+        scored: list[tuple[float, int]] = []
+        for idx in available:
+            layer: dict[Cell, float] = {}
+            for cell_j in site_cells[idx]:
+                best: float | None = None
+                for cell_i, cost_i in prev_layer.items():
+                    s = site_score(current, cell_i, idx, cell_j)
+                    if s is None:
+                        continue
+                    total = cost_i + s
+                    if best is None or total < best:
+                        best = total
+                if best is not None:
+                    layer[cell_j] = best
+            if layer:
+                layer_by_idx[idx] = layer
+                scored.append((min(layer.values()), idx))
+
+        if not scored:
             raise RouteSolverError(
                 f"chapter {chapter_id}: greedy seed dead-ended -- no route from "
                 f"{_point_label(current, group_id_at.get(current))} to any of "
                 f"{[group_id_at[idx] for idx in available]}"
             )
-        _, chosen = min(finite, key=lambda pair: (pair[0], original_order[pair[1]]))
+        _, chosen = min(scored, key=lambda pair: (pair[0], original_order[pair[1]]))
         placed.append(chosen)
         placed_set.add(chosen)
         remaining.discard(chosen)
+        prev_layer = layer_by_idx[chosen]
 
     last = placed[-1]
-    if score(last, n - 1) is None:
+    final_layer: dict[Cell, float] = {}
+    for cell_j in site_cells[n - 1]:
+        best = None
+        for cell_i, cost_i in prev_layer.items():
+            s = site_score(last, cell_i, n - 1, cell_j)
+            if s is None:
+                continue
+            total = cost_i + s
+            if best is None or total < best:
+                best = total
+        if best is not None:
+            final_layer[cell_j] = best
+    if not final_layer:
         raise RouteSolverError(
             f"chapter {chapter_id}: greedy seed dead-ended -- no route from "
             f"{_point_label(last, group_id_at.get(last))} to exit"
@@ -407,15 +751,36 @@ def solve_route(
     sequence: list[int] = [0] + placed[1:] + [n - 1]
 
     # --- 2-opt improvement over precedence-feasible reversals ---------------
+    #
+    # Every candidate order (including the seed itself) is scored by a FULL
+    # layered-DP pass over its own point sequence, `_dp_cost` below -- never
+    # a per-step greedy candidate pick -- so the order comparison reflects
+    # the true optimal arrive+depart cost for each candidate order, not one
+    # tied to whichever cell a previous step happened to pick.
+
+    def _dp_cost(seq: list[int]) -> float | None:
+        layer: dict[Cell, float] = {site_cells[seq[0]][0]: 0.0}
+        for pos in range(1, len(seq)):
+            i, j = seq[pos - 1], seq[pos]
+            next_layer: dict[Cell, float] = {}
+            for cell_j in site_cells[j]:
+                best = None
+                for cell_i, cost_i in layer.items():
+                    s = site_score(i, cell_i, j, cell_j)
+                    if s is None:
+                        continue
+                    total = cost_i + s
+                    if best is None or total < best:
+                        best = total
+                if best is not None:
+                    next_layer[cell_j] = best
+            if not next_layer:
+                return None
+            layer = next_layer
+        return min(layer.values())
 
     def total_cost(seq: list[int]) -> float | None:
-        total = 0.0
-        for a, b in zip(seq, seq[1:]):
-            s = score(a, b)
-            if s is None:
-                return None
-            total += s
-        return total
+        return _dp_cost(seq)
 
     def precedence_ok(seq: list[int]) -> bool:
         pos = {point: i for i, point in enumerate(seq)}
@@ -443,23 +808,86 @@ def solve_route(
             if improved:
                 break
 
+    # --- final candidate assignment for the chosen order --------------------
+    #
+    # Re-run the DP once more, with backpointers, to recover WHICH candidate
+    # cell was chosen at each position of the final `sequence` -- ties break
+    # toward the earlier candidate in `site_cells[j]`'s own order, since a
+    # strict `<` keeps the first-seen minimum and both the per-layer and
+    # per-predecessor iteration orders are exactly that candidate order.
+
+    def _dp_assignment(seq: list[int]) -> dict[int, Cell]:
+        first_site = site_cells[seq[0]][0]
+        layer: dict[Cell, float] = {first_site: 0.0}
+        backptrs: list[dict[Cell, Cell]] = [{}]
+        for pos in range(1, len(seq)):
+            i, j = seq[pos - 1], seq[pos]
+            next_layer: dict[Cell, float] = {}
+            back: dict[Cell, Cell] = {}
+            for cell_j in site_cells[j]:
+                best = None
+                best_prev: Cell | None = None
+                for cell_i, cost_i in layer.items():
+                    s = site_score(i, cell_i, j, cell_j)
+                    if s is None:
+                        continue
+                    total = cost_i + s
+                    if best is None or total < best:
+                        best = total
+                        best_prev = cell_i
+                if best is not None:
+                    next_layer[cell_j] = best
+                    back[cell_j] = best_prev
+            if not next_layer:
+                raise RouteSolverError(
+                    f"chapter {chapter_id}: internal error -- selected an "
+                    f"unroutable transition between sequence position "
+                    f"{pos - 1} and {pos}"
+                )
+            layer = next_layer
+            backptrs.append(back)
+        chosen: list[Cell] = [(0, 0)] * len(seq)
+        chosen[-1] = min(layer, key=lambda c: layer[c])
+        for pos in range(len(seq) - 1, 0, -1):
+            chosen[pos - 1] = backptrs[pos][chosen[pos]]
+        return {seq[pos]: chosen[pos] for pos in range(len(seq))}
+
+    chosen_cell_by_point = _dp_assignment(sequence)
+
     # --- build the final plan -------------------------------------------
 
-    nodes: list[RouteNode] = [RouteNode(index=0, kind="entry", map_id=entry_map, cell=entry_cell)]
+    nodes: list[RouteNode] = [
+        RouteNode(index=0, kind="entry", map_id=entry_map, cell=chosen_cell_by_point[0])
+    ]
     for pos, point_idx in enumerate(sequence[1:-1], start=1):
         gp = group_points[point_idx - 1]
+        cell = chosen_cell_by_point[point_idx]
+        chosen_approach: ChosenApproach | None = None
+        meta = candidate_meta.get(gp.group_id)
+        if meta is not None:
+            picked = meta.get(cell)
+            if picked is None:
+                raise RouteSolverError(
+                    f"chapter {chapter_id}: internal error -- chosen cell {cell} "
+                    f"for group {gp.group_id!r} is not among its own candidates"
+                )
+            chosen_approach = ChosenApproach(side=picked.side, resolver=picked.resolver)
         nodes.append(RouteNode(
-            index=pos, kind="group", map_id=gp.map_id, cell=gp.cell,
+            index=pos, kind="group", map_id=gp.map_id, cell=cell,
             group=gp.group_id, beats=gp.beats, rows=gp.rows,
+            chosen_approach=chosen_approach,
         ))
     nodes.append(RouteNode(
-        index=len(sequence) - 1, kind="exit", map_id=exit_map, cell=exit_cell,
+        index=len(sequence) - 1, kind="exit", map_id=exit_map,
+        cell=chosen_cell_by_point[n - 1],
     ))
 
     segments: list[RouteSegment] = []
     for pos in range(len(sequence) - 1):
         a, b = sequence[pos], sequence[pos + 1]
-        result = segment_between(a, b)
+        cell_a = chosen_cell_by_point[a]
+        cell_b = chosen_cell_by_point[b]
+        result = segment_between(a, cell_a, b, cell_b)
         if result is None:
             raise RouteSolverError(
                 f"chapter {chapter_id}: internal error -- selected an unroutable "

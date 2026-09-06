@@ -118,6 +118,31 @@ WARP_OVERRIDES: dict[int, set[tuple[int, int]]] = {
     68: {(7, 19), (8, 19)},              # center exit, two tiles EV002/EV008
     73: {(5, 12), (24, 13), (44, 13), (64, 13)},  # the strip's four exits
     19: {(11, 30)},                      # cave exit EV007 -> map31 (13,7)
+    # CH05 (2026-09-06). The Passage Cave frontier: step 1 added maps 36/37 to
+    # SLICE_MAP_IDS, which made the warp EVENTS compile, but nothing stamped
+    # their tiles -- and an unstamped warp tile is inert (the same thing that
+    # kept CH02's and CH03's frontiers closed until each opened its own). The
+    # step-7 headless run caught it: B1 pressed onto Route 02's (20,33) and no
+    # warp fired, because the tile was still plain floor.
+    #
+    # Derived from the maps' own code-201 events, not from the emitted warp
+    # table -- that table also carries the ARRIVAL warps `_resolve_all_warp_events`
+    # mints on every destination, which are plain floor BY DESIGN and must stay
+    # that way. All four below are `trigger=1` (player touch) with a blank
+    # graphic, i.e. real walk-on doors; none is the Map031-NurseTut shape (a
+    # PERSON carrying a code-201, deliberately unstamped so her tile doesn't
+    # grow a door).
+    #   35: EV001 (20,33) -> map36 (17,39)   Route 2 into the cave
+    #   36: EV001 (17,40) -> map35 (20,33)   cave back out to Route 2
+    #       EV002 (17,4)  -> map37 (16,26)   cave 1F up to 2F
+    #   37: EV001 (16,27) -> map36 (17,4)    cave 2F down to 1F
+    # Map037 EV002 (16,5) -> map40 is deliberately ABSENT: Map040 is not in
+    # SLICE_MAP_IDS, so no warp_event compiles there and a door stamp would be
+    # art promising a crossing that cannot happen. CH05's contract at that
+    # boundary is to deliver the player to the edge, not across it (B11).
+    35: {(20, 33)},
+    36: {(17, 40), (17, 4)},
+    37: {(16, 27)},
 }
 
 # Flag/var address layout for the pathfinder boot test. The numeric layout now

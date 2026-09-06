@@ -124,6 +124,31 @@ STARTER_SPECIES: tuple[SpeciesSpec, ...] = (
     SpeciesSpec(176, "LUXI"),
     SpeciesSpec(177, "LUXOR"),
     SpeciesSpec(178, "LUXELONG"),
+    # --- Grozard family (2026-09-04), CH05 trainer party --------------------
+    # TRAINER_NUNES_128 (CH05 beat B9) carries a GROZARD, so the family has to
+    # stage before that battle can. TYPE_GROUND only, no Nuclear typing.
+    # Abilities ABILITY_SAND_VEIL / ABILITY_ARENA_TRAP / hidden
+    # ABILITY_SAND_FORCE all resolve against
+    # engine/include/constants/abilities.h.
+    #   GROZARD -> TERLARD: evolutions.dat method 4 (Level) at 22, emitted as
+    #     a plain EVO_LEVEL — the simplest of the three methods
+    #     build_staged_species understands.
+    # TERLARD is terminal (no `.evolutions` on its species_info entry) and is
+    # staged here only because build_staged_species fails loud on a dangling
+    # evolution target, the same reason the Route 1 and Luxi blocks above
+    # stage whole families rather than single stages.
+    SpeciesSpec(18, "GROZARD"),
+    SpeciesSpec(19, "TERLARD"),
+    # --- Baashaun family (2026-09-04), CH05 trainer party -------------------
+    # TRAINER_KEICHI_248 (CH05 beat B5) carries a BAASHAUN, so the family has 
+    # to stage before that battle can. TYPE_DARK, and TYPE_FIGHTING, no 
+    # Nuclear typing. Abilities ABILITY_GUTS / ABILITY_MOXIE / 
+    # ABILITY_INTIMIDATE, all resolve against 
+    # engine/include/constants/abilities.h 
+    # Both evolutions are plain EVO_LEVEL at 22 and 44 respectively
+    SpeciesSpec(60, "BAASHAUN"),
+    SpeciesSpec(61, "BAASCHAF"),
+    SpeciesSpec(62, "BAARIETTE"),
 )
 
 

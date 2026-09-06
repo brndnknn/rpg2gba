@@ -6,8 +6,9 @@ faking technique from `tests/test_chapter_predecessor.py` (a fake module
 dropped into `sys.modules` under `rpg2gba.playtest.chapters.<name>`, since
 `load_chapter` is just `importlib.import_module` + `getattr(..., "CHAPTER")`).
 
-`build_map_graph`/`build_trigger_overlay`/`build_world_graph` are monkey-
-patched at the point `rpg2gba.routing.__main__` imported them, so these tests
+`build_map_graph`/`build_trigger_overlay`/`build_world_graph`/`build_occupancy`
+are monkey-patched at the point `rpg2gba.routing.__main__` imported them, so
+these tests
 never touch `output/`/`engine/` -- only a single trivial 1x1 map is needed
 since the test chapter's one group sits on the same map as its (default)
 entry/exit, so every segment is a same-map, zero-tile hop and the world
@@ -26,6 +27,8 @@ from rpg2gba.playtest.chapter import Chapter, ChapterBuilder
 from rpg2gba.traversal.graph import MapGraph
 from rpg2gba.traversal.triggers import TriggerOverlay
 from rpg2gba.traversal.world import WorldGraph
+
+from rpg2gba.routing.occupancy import MapOccupancy
 
 from rpg2gba.routing.__main__ import cli
 from rpg2gba.routing.plan import load_plan
@@ -64,6 +67,10 @@ def _fake_build_world_graph(**kwargs) -> WorldGraph:  # noqa: ANN003
     )
 
 
+def _fake_build_occupancy(map_id: int, **kwargs) -> MapOccupancy:  # noqa: ANN003
+    return MapOccupancy(map_id=map_id, tiles=())
+
+
 def _write_fixtures(tmp_path: Path, chapter: str) -> tuple[Path, Path, Path]:
     build_dir = tmp_path / "build"
     (build_dir / "porymap").mkdir(parents=True)
@@ -90,6 +97,7 @@ def _patch_builders(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(routing_main, "build_map_graph", _fake_build_map_graph)
     monkeypatch.setattr(routing_main, "build_trigger_overlay", _fake_build_trigger_overlay)
     monkeypatch.setattr(routing_main, "build_world_graph", _fake_build_world_graph)
+    monkeypatch.setattr(routing_main, "build_occupancy", _fake_build_occupancy)
 
 
 def _cleanup_chapter(name: str) -> None:

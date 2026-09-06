@@ -43,6 +43,14 @@ ENGINE_ROOT = REPO_ROOT / "engine"
 # these should show up here as an explicit diff, never a silent art
 # regression (STARTER_SPECIES_PLAN.md W3).
 EXPECTED_ICON_PAL_INDEX = {
+    # Pinned 2026-09-04 against the same real Uranium assets + vendored engine
+    # icon palettes, for CH05's two trainer-party families (Nunes' GROZARD and
+    # Keichi's BAASHAUN, each staged as a whole evolution chain).
+    "GROZARD": 5,
+    "TERLARD": 3,
+    "BAASHAUN": 0,
+    "BAASCHAF": 5,
+    "BAARIETTE": 0,
     "ORCHYNX": 1,
     "METALYNX": 1,
     "RAPTORCH": 1,

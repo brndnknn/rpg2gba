@@ -848,6 +848,12 @@ regenerating a gate-closed chapter's manifest is not a no-op edit.
 
 *Found 2026-08-30 during the slice-2 commit review.*
 
+**2026-09-06 — unblocked, CH05 has now passed its §9 gate.** The deferral
+condition ("immediately after CH05") is satisfied as of the CH05 boot-walk
+gate pass. Regenerating CH01-CH03's manifests and re-migrating their
+dispositions files is now due; see #62's note below for the ordering
+safeguard that must govern the re-derivation.
+
 ### 67. No chapter routed so far carries a route plan, and CH01-CH03 cannot get one
 
 Slice 3's `RULE_ROUTE_ORDER` only enforces anything when
@@ -897,6 +903,15 @@ loop, where the operator approves the route before the chapter module is
 written and the two agree by construction. Revisit CH04 only if #65 reopens
 it for another reason -- do not reorder a gated chapter's beats to satisfy
 this rule on its own.
+
+**2026-09-06 — CH05 was the forward validation this item called for.** CH05
+carries a committed `reference/routes/CH05.route.json`, solved and approved
+before the chapter module was authored (13 nodes, 165 tiles, no `CROSSING`
+lines, re-verified at the §9 gate to still agree exactly with the committed
+module). Slice 3 is now validated forward from CH05 as planned. The
+remaining work is the retroactive re-derivation for CH01-CH04, which stays
+gated behind #65 (CH01-CH03) and the suboptimal-but-not-wrong CH04 order
+noted above (not reopened by this).
 
 *Found 2026-08-30 finishing slice 3.*
 
@@ -970,6 +985,288 @@ default path behind a fixture that fails if a test touches it, and delete the 15
 leaked fixture keys in the same commit.
 
 *Found 2026-09-01 while migrating the file's keys for #66.*
+
+### 107. Warp retain-facing tier 3 should test second-order reachability
+
+`metadata_wiring.compute_arrival_facings` tier 3 derives a `dest_dir=0`
+("retain facing") arrival by finding the source warp's single open,
+non-sibling, unblocked neighbour (`metadata_wiring.py:3025-3040`). It looks
+only one tile out, so it counts a neighbour as a candidate approach even when
+nothing can reach that neighbour except the warp tile itself. Two vertically
+opposed open tiles then read as ambiguous and it raises, pushing the case to
+`reference/warp_facing_overrides.json` as a hand decision.
+
+**The rule it is missing** (operator's, 2026-09-04): a tier-3 survivor is a
+genuine approach tile only if *it* has an open neighbour other than the warp
+tile — otherwise you could never have stood there to walk in.
+
+**Measured against the current slice**, applying that second-order check to
+every ambiguous retain-facing warp:
+
+| warp | tier 3 survivors | second-order |
+|---|---|---|
+| map35 (20,33) -> `36:17:39` | (20,32), (20,34) | **unique** -> `DIR_NORTH` |
+| map36 (17,4) -> `37:16:26` | (17,3), (17,5) | **unique** -> `DIR_NORTH` |
+| map33 (70,12) -> `32:8:43` | (69,12), (71,12) | still ambiguous |
+| map33 (70,11) -> `32:8:43` | (70,10), (69,11), (71,11) | still ambiguous |
+
+So it resolves both CH05 cases and neither CH03 one — a real reduction in hand
+overrides, **not** a complete replacement for the file. Both CH05 rows were
+hand-entered during CH05 (`DIR_NORTH` each) and agree with what the rule
+derives, so implementing this must reproduce them exactly; that agreement is
+the regression test.
+
+**Do not** delete `warp_facing_overrides.json` when this lands — the map33 pair
+still needs it, and per its own `_comment` the file remains the source of truth
+for a corrected facing. Prototype scan lives in this item's history; re-derive
+rather than trusting a pasted table.
+
+### 71. `BUILD_PLAN.md:94`'s ART step has no owning command
+
+`BUILD_PLAN.md`'s canonical per-chapter loop lists step 3 as `ART — quantize
+the chapter's real tilesets + sprites to GBA 4bpp` (`BUILD_PLAN.md:94`) with
+no command under it, the same defect `CH05_TODO.md` step 3 carried before it
+was corrected on 2026-09-04. The fix is already known and was worked out
+while building CH05: ART has no standalone entry point because it isn't a
+separate stage — it is discharged by two other steps. Tilesets come from step
+4's `phase5` (`src/rpg2gba/tileset_converter/phase5.py:232`, `phase5.convert_all`
+→ `build_slice_tilesets`, its own internal "per-map graphics: synth tilesets +
+overlay" step, budget-guarded at `graphics/emit.py:537-548`). Sprites come from
+step 7's assembler chain (`sprite_pass.run_sprite_pass`, called from
+`scripts/stage_slice_scripts.py:429` and `scripts/assemble_pathfinder.py:214`);
+step 4 itself only writes empty-conversion stubs
+(`sprite_emit.write_stub_gen_files`, `phase5.py:350`). Fix: add a line under
+step 3 in `BUILD_PLAN.md` saying so, so CH06 doesn't rediscover it the same
+way CH05 did.
+
+### 72. Boundary-crossing convention needs to be written into `BUILD_PLAN.md`
+
+Operator ruling, 2026-09-04, made during CH05's READ step: *a boundary
+crossing belongs to the chapter being opened, not the one shipping.* An
+outgoing chapter's contract is to deliver the player to the edge; the
+crossing itself is asserted by the chapter whose maps make it true.
+Rationale: an edge beat written against an unstaged neighbour is a test
+authored to decay, and it fails in the wrong chapter — this is exactly what
+happened to CH04's B7 when CH05 staged `SLICE_MAP_IDS` 36/37 and
+`metadata_wiring.classify_event` stopped skipping Map035 EV001 as an
+out-of-slice warp, silently invalidating B7's "no warp fires" assertion and
+six downstream CH04 beats. `BUILD_PLAN.md` has no statement of this
+convention anywhere; it should, so a future chapter author doesn't have to
+rediscover it by breaking a closed chapter's beats. See also #73, the tooling
+half of the same gap.
+
+### 73. `build_beat_model` cannot see a boundary row claimed by the arriving chapter
+
+`chapter_manifest`'s `build_beat_model` loads a chapter's own playtest module
+plus its predecessors, but never its successors. Consequence: CH04's
+`DEFERRED_BEATS` entry for `map035/ev001/p1`, whose reason was updated
+2026-09-04 to record that the arrival nudge fires on the CH05 side of the
+crossing (see #72) and is permanently CH04's to skip, cannot be satisfied by
+a CH05 beat that claims the same manifest row — `chapter_manifest check
+--chapter CH04` reports it today as `unregistered_beat`. It is a warning, not
+an error, because CH04 is not the live chapter, so it does not fail the gate;
+it is counted debt. The real fix is letting `BeatModel` see a boundary row
+claimed by the chapter that is arriving, not just the ones that came before
+it. This is the tooling half of #72's convention.
+
+### 74. ROUTE runs before object events exist, so its crossing check is vacuous
+
+The per-chapter loop's step 6 (ROUTE) runs before step 7 (BUILD) stages
+object events, so `RULE_ROUTE_ORDER`'s crossing check has nothing to check
+against. Step 4's `phase5` regenerates the engine maps as a warps-only Map
+Walker corpus with no Poryscript, events, or NPCs — "only warp_events
+survive" (`src/rpg2gba/tileset_converter/phase5.py:8-11`); trainer objects
+and their sight cones are only restored at step 7 by `build_object_events`
+and the assembler's copy into `engine/data/maps`. But
+`build_trigger_overlay` reads `engine/data/maps`, so a route solved at step 6
+sees zero trainers on the map and reports zero `CROSSING` lines regardless of
+whether the order is actually safe. CH05's first solve did exactly that,
+reporting a clean 155-tile order; after running step 7's first two commands
+to stage real objects and re-checking, the same order was found to enter
+trainer sight cones on five separate legs. All five turned out benign (each
+leg either walks into the cone of the trainer that leg is walking *to*, or
+past a trainer already defeated), but that was verified by hand, not caught
+by the check — the check itself had nothing to say either way. Fix is a
+`BUILD_PLAN.md` ordering change: run ROUTE after object staging. Affects
+every chapter, not just CH05.
+
+### 75. A vacuous trigger overlay reads identically to a genuinely clean route
+
+Directly caused by #74: zero `CROSSING` lines out of `build_trigger_overlay`
+currently means either "the route is clean" or "the overlay had no trainer
+data to check against," and nothing distinguishes the two. The project
+already has the right idiom for this class of problem —
+`route_model_unenforced` (`chapter_manifest/checker.py`) refuses to let an
+absent route plan read as a passing `RULE_ROUTE_ORDER`. The same discipline
+belongs on the trigger overlay: if a chapter's dispositions carry trainer
+rows but the overlay yields no `TRAINER_SIGHT` tiles on the maps those rows
+live on, the rule should fail loud rather than silently reporting zero
+crossings (`CLAUDE.md` §4.5).
+
+### 76. `destination_scripts` is per-solve, not per-destination-segment
+
+Partial fix landed in CH05 — record this accurately, since the earlier
+framing (`reference/archive/CH05_TODO.md` §Deferred, written before the fix)
+claimed the field was simply never populated, which is no longer true. Commits `bc8e569f` and
+`a460e823` added `effective_destination_scripts`
+(`src/rpg2gba/routing/solver.py:551-553`): it unions in the triggers a
+predecessor chapter's beats already resolved
+(`playtest.chapter.resolved_trigger_scripts`), so a trigger CH04 already
+cleared (Timothy's event-touch tile, which CH05's B1 must cross to reach the
+cave) is no longer treated as foreign on CH05's walk. What remains unfixed is
+the original defect: the resulting set is still a single `frozenset`
+parameter (`solver.py:420`) forwarded unchanged to every `plan_segment` call
+(`solver.py:660`), so it structurally cannot express "crossing X's sight cone
+is fine specifically on the segment whose destination is X." A trainer's own
+cone is still treated as a foreign hazard on the very segment walking up to
+that trainer — re-solving CH05 with real per-map cone data but no per-segment
+exemption went from 155 to 233 tiles and produced an incoherent order before
+the resolved-trigger union was added. Verify these line numbers against the
+current file before relying on them; the file is under active routing work.
+
+### 77. No automated check that the authored chapter module matches its locations plan
+
+Step 6a of the per-chapter loop derives `reference/routes/CH05.locations.json`
+from the manifest + dispositions + decoded map JSON; step 6b hand-authors
+`src/rpg2gba/playtest/chapters/ch05.py` from it. They are two independent
+statements of the same coordinates, and nothing fails if they drift apart —
+6b's instruction to "re-solve and confirm it agrees" is a manual eyeball,
+not an assertion. Wants a `routing locations --check` subcommand that diffs
+the authored beats' resolved cells against the approved `.locations.json`
+file and fails loud on any disagreement.
+
+### 78. `RULE_ROUTE_APPROACH` only checks nodes carrying a `chosen_approach`
+
+`RULE_ROUTE_APPROACH` (`src/rpg2gba/chapter_manifest/checker.py:49`, enforced
+at `:924-982`) compares a plan node's committed approach cell against what
+the chapter module actually declared — but only for nodes that carry a
+`chosen_approach` in the first place. A group whose declared cell differs
+from the plan's chosen one goes entirely unchecked if the plan node never
+recorded a `chosen_approach`. CH05's B8 is exactly this case (the round-trip
+warp beat), on a different map than the corpus's next opportunity to hit it.
+Needs either a `chosen_approach` guaranteed on every multi-candidate node, or
+the rule widened to flag a node with no recorded approach as unenforced
+rather than silently skipped.
+
+### 79. `src/rpg2gba/playtest/cells.py` has no stair resolver
+
+The resolver vocabulary in `cells.py` (`event_cell`, `approach_to`,
+`warp_cell`, `arrival_cell`, `entry_cell`, plus the counted `raw_cell`
+escape hatch) has nothing for staircase rows. CH05's B13 and B14 are its only
+two `raw_cell()` uses (`src/rpg2gba/playtest/chapters/ch05.py:548` and
+`:586`), purely because of this gap — both `why=` strings say so explicitly.
+Not a discovery problem: `src/rpg2gba/routing/locations.py`'s
+`_stair_approach` (`:196-263`) already implements the correct logic — a
+stair row resolves to the E/W neighbour that owns the `stair_diagonal` edge
+in `traversal.graph.build_map_graph`'s real edges — for the routing side. A
+`stair_approach` resolver in `cells.py` would be a port of that function into
+the beat-authoring vocabulary, not new derivation work.
+
+### 80. `find_match` keys a claim to one `(map_id, event_id)` pair
+
+`src/rpg2gba/playtest/archetypes/__init__.py:101` `find_match` takes
+`(map_id, event_id, archetype)` plus an optional `row_id=` to disambiguate
+multiple pages of the same event matching the same archetype. It has no way
+to claim two separate warp *events* (i.e. two `(map_id, event_id)` pairs) as
+one beat. CH05's B8 needs exactly that — the 1F→2F and 2F→1F warp events are
+two different manifest rows under the operator's warp round-trip idiom ("a
+warp is tested by crossing it, crossing back, and crossing again, so the beat
+ends on the far side") — and the workaround is two separate `find_match`
+calls inside one beat body rather than one call that claims both rows.
+
+### 81. A warp beat has no map-based proof it actually crossed
+
+A warp beat whose destination map is the same map the player started on has
+no way to prove, from map identity alone, that the warp fired.
+`cross_threshold`'s `wait_for_map` step and the following `require_map`
+assertion both pass trivially in that case, because the player never had to
+leave the origin map — which is the same map they are being asked to assert
+arrival on. This is a live-caught defect, not hypothetical: only
+`assert_near`'s coordinate check caught CH05's B1 problem, and only because
+the coordinates happened to disagree; the map-identity half of the assertion
+was silently satisfied throughout. A warp beat should additionally assert
+that the player LEFT the origin map at some point during the crossing, not
+merely that they are on the destination map at the end.
+
+### 82. Route review in the map viewer is better than the CLI-text approval gate
+
+`BUILD_PLAN.md` step 6 specifies the ROUTE approval gate as "read the
+summary" — a CLI text output. CH05's STOP 3 instead reviewed the solved
+route visually in the map viewer (Events mode, the `Beats`/`Planned` overlay
+drawing the solver's ordered polyline plus derived beat markers) before
+authoring, and it was the better gate: order and approach-cell choices read
+as a picture much faster and more reliably than as a tile count. Wants the
+`BUILD_PLAN.md` step-6 wording changed to point at the viewer review instead
+of (or in addition to) the CLI summary.
+
+### 83. Trainer battle staging is all-or-nothing — a §4.5 violation
+
+`trainer_converter.stage.stage_slice` (`src/rpg2gba/trainer_converter/stage.py`)
+calls `stage_battles`, which wraps `build_staged_battles` in
+`try/except (ValueError, FileNotFoundError, KeyError)` and on any failure
+logs a WARNING and leaves `staged_battles` empty (`stage.py:619-625`) rather
+than propagating — `stage_slice` then exits 0 with zero battles staged. One
+unstageable trainer therefore discards every battle in the manifest,
+including chapters that staged fine on a previous run. CH05's Keichi
+(`TRAINER_KEICHI_248`, `BLACK_BELT` class) took CH04's 17 previously-staged
+battles down to 0 during the debugging loop that resolved his trainer-class
+mapping, and the damage surfaced as an apparent *CH01* failure
+(`TRAINER_THEO_9/10/11` undefined on Map050), because the transpiler walks
+`SLICE_MAP_IDS` in tuple order and aborts at the first map whose trainer
+constants don't resolve — CH01's maps sort before CH05's. A partial failure
+silently discarded good work while reporting overall success, which is
+exactly the class `CLAUDE.md` §4.5 calls out. The trainer-pic half of
+`stage_slice` legitimately stands alone from the battle half (a pic staging
+failure shouldn't block battles and vice versa); the battle half specifically
+should either stage per-trainer (skip only the failing one, loudly) or abort
+the whole run rather than silently zeroing it.
+
+### 84. `ITEM_TM76` needs a sanity check before it's ever reachable
+
+The transpiler resolved CH05's B6 (Map036 EV008, the item ball at the room
+sealed behind Surf) to `ITEM_TM76` via `reference/uranium_id_map.json:1383`,
+which passes the fork-index gate cleanly. But this expansion's normal TM
+naming convention is `ITEM_TM_<MOVE>`, not a bare numbered `ITEM_TM<N>` —
+worth confirming `ITEM_TM76` actually exists as a real, correctly-numbered
+constant and isn't a coincidental id collision.
+`reference/chapters/05-passage-cave.md:134` says Uranium's TM76 is Stealth
+Rock; that should be cross-checked against whatever move `ITEM_TM76` actually
+teaches in the fork. It cannot bite in CH05 itself — the item sits in the
+Surf-sealed room, `blocked:surf`, not reachable until Act 5 — which is
+exactly why a wrong mapping would otherwise go unnoticed until then.
+
+### 85. `BUILD_PLAN.md`'s boot-walk seeding recipe is broken for every chapter
+
+`BUILD_PLAN.md`'s step 8 (BOOT) instructs seeding the walk from the
+predecessor chapter's `--at-end` blob (`playtest seeds --chapter <prev>` then
+`walk --at-end`). That recipe cannot work for any chapter, not just CH05:
+seed blobs are keyed by the ROM's sha256 and invalidated by any rebuild, and
+the arriving chapter's own step 7 always rebuilds the ROM before step 8 runs
+— so by the time a chapter reaches BOOT, the predecessor's blobs from its own
+green run no longer match the current ROM hash, and `playtest seeds` reports
+"no seeds for this ROM build — run the chapter green from the start first."
+Found and worked around on CH05, 2026-09-06 (commit `be66391a`): the
+arriving chapter's own green run at step 7 already writes a seed blob for
+its first beat, and that state is identical to the predecessor's end state by
+construction (CH05's B1 blob boots to Route 02 (19,50), exactly where CH04
+leaves the player). The correct recipe is `playtest walk --chapter <this> --at-beat
+<first beat> --engine engine` — seed from the arriving chapter's own
+first-beat blob, never the predecessor's `--at-end`. `BUILD_PLAN.md` should
+say this instead of the current recipe.
+
+### 86. Frozen-Opus differential oracle is stale as of Map036 — two permanently red tests
+
+`tests/test_deterministic.py`'s `test_ground_item_differential_vs_frozen_opus`
+(`:1348`) and `test_pokemart_differential_vs_frozen_opus` (`:1441`) fail
+because the frozen-Opus oracle they diff against predates Map036 —
+`test_ground_item_differential_vs_frozen_opus` fails with "Map036:
+Map036_EV003_Page1 not in frozen-Opus oracle" and the pokemart test fails
+with "no mart events validated." Confirmed 2026-09-06 as the *only* two
+failures in an otherwise green suite (2 failed, 2982 passed, 16 skipped).
+Refreshing the frozen oracle to cover the post-CH05 corpus is an operator
+content call (what counts as ground truth to diff against), not a mechanical
+fix — this entry deliberately does not prescribe a resolution, only records
+that the two failures are known, isolated, and traced to this cause.
 
 ## Parked until the CH05 branch is cut (do not raise before then)
 
@@ -1053,6 +1350,14 @@ work, not open questions:
   regression in the derivation logic reads as a correct re-disposition. Cross-
   referenced by `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.6, §5.7, §5.8, Q3 and
   Q13.
+
+  **2026-09-06 — parts 3-4 (the corpus re-disposition) were folded into #65
+  and deferred to "after CH05"; that is now due.** CH05 has passed its §9
+  gate. The re-disposition work should proceed under #65/#67 rather than
+  here. **The ordering safeguard carries forward verbatim and must not be
+  lost in that move:** freeze the expected answers, derive, diff, then
+  write — never derive-and-write in one pass, or a regression in the
+  derivation logic reads as a correct re-disposition.
 
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 

@@ -59,6 +59,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -369,3 +370,83 @@ def party_has_species(emu: Emulator, species_id: int) -> bool:
     SPECIES_MAGIKARP lookup to an explicit parameter -- same scan, same
     early-out at the first empty slot."""
     return species_id in read_party_species(emu)
+
+
+# The four cells a player can stand on to talk to an NPC, and the facing
+# each one requires. Keyed by the offset FROM the NPC TO the player, so a
+# live NPC position turns straight into candidate approaches.
+_TALK_SIDES: tuple[tuple[tuple[int, int], str], ...] = (
+    ((0, 1), "UP"),      # player south of the NPC, facing north
+    ((0, -1), "DOWN"),   # player north of the NPC, facing south
+    ((-1, 0), "RIGHT"),  # player west of the NPC, facing east
+    ((1, 0), "LEFT"),    # player east of the NPC, facing west
+)
+
+
+def talk_to_moving_npc(emu: Emulator, beat: str, local_id: int, *,
+                       walk: Callable[[int, int], None] | None = None,
+                       attempts: int = 6) -> None:
+    """Interact with an NPC that does not stay where it spawned.
+
+    A `MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE` walker invalidates a derived
+    approach cell the moment it steps off its template position, and it
+    invalidates it in the worst way: the NPC ends up standing ON the
+    approach cell while the player stands on the NPC's vacated spawn tile.
+    `walk_to` then burns its step-aside budget trying to reach a tile a
+    solid object is occupying -- "B10 FAILED: stuck after 8 step-aside
+    attempts at 8,7 heading for 8,8" (step-7 run 15, 2026-09-06), where
+    (8,7) is the NPC's spawn cell and (8,8) the approach derived from it.
+
+    So the approach is resolved from the NPC's LIVE `gObjectEvents` position
+    on every attempt, not once up front, and the FACING is derived from
+    whichever side the player actually reached -- unlike `ch04.py`/
+    `archetypes/trainer.py`'s `_press_a_live`, which read a live position
+    but keep a fixed facing (right for a trainer that walks to the player
+    and stops, wrong for a walker that can be approached from any side).
+
+    Retries because the NPC is still moving: it can step away between
+    `walk_to` and `interact`, which is a race no single attempt can close.
+    A side the player is ALREADY standing on is tried first and costs no
+    walk at all, which is the common case right after the approach walk
+    parked the player next to it.
+
+    `walk` is how this helper moves one step of approach, defaulting to
+    `emu.walk_to`. It is a parameter because `WalkInterrupted` is a
+    `ScenarioError`, so the "that side is blocked, try another" handler
+    below would otherwise swallow a wild encounter and loop with the player
+    still in battle. A caller on a map with a live encounter table passes
+    its own absorbing walker (CH05 passes `ch05._walk_absorbing`, Passage
+    Cave being densities 15/20) so an ambush is resolved rather than
+    mistaken for an unreachable tile.
+
+    Fails loud, naming the NPC's last seen position, when every attempt is
+    exhausted -- an NPC that can never be reached is a finding about the
+    map or the route, not something to pass over quietly.
+    """
+    walk_to = walk if walk is not None else emu.walk_to
+    last_seen: tuple[int, int] | None = None
+    for _ in range(attempts):
+        npc = emu.object_event(local_id)
+        last_seen = (npc.x, npc.y)
+        player = emu.player_pos()
+        sides = [((npc.x + dx, npc.y + dy), facing) for (dx, dy), facing in _TALK_SIDES]
+        # Already adjacent? Use that side; no walk, no chance to lose the race.
+        sides.sort(key=lambda side: side[0] != player)
+        for cell, facing in sides:
+            if cell != player:
+                try:
+                    walk_to(*cell)
+                except ScenarioError:
+                    continue  # blocked, or the NPC moved into it -- try the next side
+                if emu.player_pos() != cell:
+                    continue
+            emu.face(facing)
+            if emu.interact(require_script=False):
+                return
+            break  # reached a side but nothing fired: re-read and try again
+    shot = emu.screenshot(f"{beat}_no_live_interact")
+    raise ScenarioError(
+        f"{beat}: could not interact with local id {local_id} after "
+        f"{attempts} attempts reading its live position (last seen at "
+        f"{last_seen}) ({shot})"
+    )

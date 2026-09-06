@@ -8,6 +8,7 @@ robust against text-length, timing, and converter changes.
 import heapq
 import logging
 import os
+import re
 import struct
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ from ..traversal.graph import MapGraph, build_map_graph
 from .charmap import invert_charmap_english_first
 from .contact_sheet import Waypoint
 from .contradictions import (
+    KIND_REPLAY_FALLBACK,
     KIND_UNRESOLVED_MAP,
     KIND_WALKABILITY,
     Contradiction,
@@ -120,6 +122,64 @@ _INTERRUPT_GRACE = 300  # 5s
 # frame into that still-settling transition).
 _BATTLE_SETTLE_BUDGET = 600  # 10s
 _DIALOGUE_SETTLE_BUDGET = 300  # 5s
+
+# The metatile behaviours under which the engine will actually warp the player
+# off a tile that carries a `warp_event`. EVERY trigger path in
+# `engine/src/field_control_avatar.c` gates on two things, not one: a warp
+# event at the position (`GetWarpEventAtMapPosition`) AND the tile's own
+# behaviour. A `warp_event` sitting on plain floor (`MB_NORMAL`) fires
+# nothing when it is stepped on.
+#
+# That is not a curiosity, it is the converter's normal output. Emerald has no
+# free-coordinate landing: an inbound warp must name an index into the
+# DESTINATION map's own warp table, so `metadata_wiring._resolve_all_warp_events`
+# emits an "arrival" `warp_event` on B for every source warp A->B, at B's
+# arrival coordinates, deliberately left as plain floor. `WARP_OVERRIDES`
+# stamps door metatiles at SOURCE warp coordinates only. So a map reachable by
+# a warp carries inert warp_events that a player walks straight over, and a
+# router that treats the warp table as the hazard list seals corridors the game
+# does not.
+#
+# Route 01's (15,7)/(16,7) Kevlar arrivals are the case that found this: they
+# made B17's target (15,6) unreachable on both the live grid and the offline
+# graph, while a human walks through them without a transition.
+#
+# Derived from the fork, not from memory (CLAUDE.md 4.7) -- the union of
+# `IsWarpMetatileBehavior`, `IsArrowWarpMetatileBehavior`,
+# `IsDirectionalStairWarpMetatileBehavior` (`field_screen_effect.c`) and
+# `TryDoorWarp`'s secret-base branch, expanded through
+# `engine/src/metatile_behavior.c`. Direction is deliberately NOT modelled:
+# an arrow warp or a sideways stair only fires when entered from one side,
+# but the planner has no committed approach direction at the time it builds
+# the avoid-set, so all four are treated as hazards. Over-avoiding costs a
+# detour or a loud unroutable; under-avoiding walks the scenario onto another
+# map, which corrupts every assertion after it.
+_WARP_TRIGGER_BEHAVIORS: tuple[str, ...] = (
+    # IsWarpMetatileBehavior
+    "MB_ANIMATED_DOOR",              # IsWarpDoor
+    "MB_LADDER",
+    "MB_UP_ESCALATOR", "MB_DOWN_ESCALATOR",
+    "MB_NON_ANIMATED_DOOR", "MB_WATER_DOOR", "MB_DEEP_SOUTH_WARP",
+    "MB_LAVARIDGE_GYM_B1F_WARP", "MB_LAVARIDGE_GYM_1F_WARP",
+    "MB_AQUA_HIDEOUT_WARP", "MB_MT_PYRE_HOLE", "MB_MOSSDEEP_GYM_WARP",
+    "MB_BRIDGE_OVER_OCEAN",          # IsUnionRoomWarp reuses this behaviour
+    # IsArrowWarpMetatileBehavior
+    "MB_NORTH_ARROW_WARP", "MB_STAIRS_OUTSIDE_ABANDONED_SHIP",
+    "MB_SOUTH_ARROW_WARP", "MB_WATER_SOUTH_ARROW_WARP",
+    "MB_SHOAL_CAVE_ENTRANCE",
+    "MB_EAST_ARROW_WARP", "MB_WEST_ARROW_WARP",
+    # IsDirectionalStairWarpMetatileBehavior
+    "MB_UP_RIGHT_STAIR_WARP", "MB_UP_LEFT_STAIR_WARP",
+    "MB_DOWN_RIGHT_STAIR_WARP", "MB_DOWN_LEFT_STAIR_WARP",
+    # TryDoorWarp -> IsOpenSecretBaseDoor
+    "MB_SECRET_BASE_SPOT_RED_CAVE_OPEN",
+    "MB_SECRET_BASE_SPOT_BROWN_CAVE_OPEN",
+    "MB_SECRET_BASE_SPOT_YELLOW_CAVE_OPEN",
+    "MB_SECRET_BASE_SPOT_BLUE_CAVE_OPEN",
+    "MB_SECRET_BASE_SPOT_TREE_LEFT_OPEN",
+    "MB_SECRET_BASE_SPOT_TREE_RIGHT_OPEN",
+    "MB_SECRET_BASE_SPOT_SHRUB_OPEN",
+)
 
 # `_plan_route`'s cost for entering a tall-grass (`MB_TALL_GRASS`) tile, vs.
 # 1 for ordinary ground -- Dijkstra prefers clear tiles when a reasonable
@@ -495,6 +555,28 @@ class _MapGraphSource:
         return graph
 
 
+_MAP_CONST_RE = re.compile(r"^\s*(MAP_[A-Z0-9_]+)\s*=", re.MULTILINE)
+
+
+def _defined_map_constants(engine: Path) -> frozenset[str]:
+    """Every `MAP_*` constant this build's headers declare.
+
+    Read from `include/constants/map_groups.h`, which pokeemerald
+    auto-generates from `data/maps/map_groups.json` -- so it names exactly
+    the maps compiled into this ROM, vanilla and slice alike. Used to scope
+    macro probes: the `MapConstantRegistry` is corpus-wide and will happily
+    offer constants no slice build defines.
+    """
+    header = engine / "include" / "constants" / "map_groups.h"
+    if not header.is_file():
+        raise ScenarioError(
+            f"_plan_route: {header} does not exist -- cannot tell which map "
+            "constants this build defines (is --engine pointing at a built "
+            "engine tree?)"
+        )
+    return frozenset(_MAP_CONST_RE.findall(header.read_text(encoding="utf-8")))
+
+
 class _MapIdBridge:
     """Resolves a live `map_location()` (group, num) to the Uranium map id
     the offline `MapGraph` is keyed by, via the persisted
@@ -545,6 +627,27 @@ class _MapIdBridge:
                 "has no minted maps -- cannot resolve the offline traversal "
                 "graph for the current map"
             )
+        # The registry is CORPUS-wide (every map the converter has minted a
+        # constant for), but a slice build only DEFINES the maps it actually
+        # builds -- `map_groups.h` is auto-generated from
+        # `data/maps/map_groups.json`, so it is the authoritative list of
+        # what this ROM's headers declare. Probing the full registry asks
+        # gcc about ~180 constants this build does not have, and the whole
+        # batched probe fails to compile, taking every map down with it
+        # (`MAP_ROUTE_03` undeclared, and many more). Scope to the
+        # intersection. Not a silent default: a map the player can stand on
+        # is by definition built, and if one somehow is not, `resolve()`
+        # still raises naming the group/num.
+        built = _defined_map_constants(self._emu.engine)
+        by_const = {c: uid for c, uid in by_const.items() if c in built}
+        if not by_const:
+            raise ScenarioError(
+                f"_plan_route: no minted map constant in {self._state_path} "
+                f"is defined by this build's map_groups.h ({len(built)} "
+                "constants) -- the registry state and the engine build "
+                "disagree about which maps exist"
+            )
+
         names: list[str] = []
         for map_const in by_const:
             names.append(f"MAP_GROUP({map_const})")
@@ -576,9 +679,14 @@ def _unwrap_message(text: str) -> str:
     what a beat asserts. Breaks become single spaces and runs of whitespace
     collapse, on both sides of the comparison.
 
-    Only the substring path normalizes. `exact=True` still compares the
-    decoded text verbatim, breaks included, for the rare beat that means to
-    pin the exact typesetting.
+    BOTH comparison paths normalize. `exact=True` used to compare verbatim,
+    breaks included, on the theory that a beat asking for equality wanted the
+    typesetting too -- but its only caller is the trainer template's re-talk
+    oracle, which is asserting what an NPC SAYS, and CH05's B3_retalk1 failed
+    on nothing but a wrap: expected "...all my Pokemon fainted?..." against a
+    box reading "...all my Pokemon\nfainted?...". Same string, same argument
+    as B5's above. A beat that really does mean to pin the wrap says
+    `verbatim=True` and says it on purpose.
     """
     for code in ("\\n", "\\l", "\\p"):
         text = text.replace(code, " ")
@@ -667,6 +775,11 @@ class Emulator:
         # attribute so the runner can drain it into the run artifact and a
         # test can inspect it; nothing may branch on its contents.
         self.contradictions = ContradictionLedger()
+        # The inherited beat currently running (`<owner>:<name>`), or None
+        # for a beat the chapter under test owns. Set per beat by `runner`;
+        # read only by `_walk_to_once`'s replay fallback, whose docstring
+        # carries the rationale and the expiry.
+        self.replay_beat: str | None = None
         # Q7's frame rule: how many times this beat explicitly pinned a
         # frame. `waypoint()` clears it, so it is per-beat exactly like
         # `_frame_pinned`.
@@ -1415,13 +1528,20 @@ class Emulator:
             text = self.current_field_message_text()
         return text
 
-    def assert_text_contains(self, expected: str, *, exact: bool = False) -> None:
+    def assert_text_contains(self, expected: str, *, exact: bool = False,
+                              verbatim: bool = False) -> None:
         """Assert the field message box currently shows `expected`.
 
         `exact=False` (default) checks substring containment -- the common
         case, since a checked phrase is usually shorter than its surrounding
         sentence. `exact=True` requires the whole decoded message (all
         pages) to equal `expected`.
+
+        Both paths compare through `_unwrap_message`, so where the engine
+        wrapped a line is not part of what is asserted -- it moves whenever
+        the string, the font or the box width changes. `verbatim=True` (only
+        meaningful with `exact=True`) turns that off for a beat that really
+        is pinning the typesetting.
 
         Raises `ScenarioError` printing both `expected` and the actual
         decoded text on failure -- PLAYTEST_AUTHORING_IMPROVEMENT.md's
@@ -1430,8 +1550,11 @@ class Emulator:
         did to the proxy-oracle findings that document is about.
         """
         actual = self.wait_for_field_message()
-        if exact:
+        if exact and verbatim:
             ok = actual == expected
+        elif exact:
+            ok = (actual is not None
+                  and _unwrap_message(actual) == _unwrap_message(expected))
         else:
             ok = (actual is not None
                   and _unwrap_message(expected) in _unwrap_message(actual))
@@ -1578,12 +1701,13 @@ class Emulator:
         raw = self.read_bytes(ptr, width * height * 2)
         return width, height, struct.unpack(f"<{width * height}H", raw)
 
-    def _warp_tiles(self) -> set[tuple[int, int]]:
-        """Map-relative coordinates of the current map's warp events.
+    def _warp_event_tiles(self) -> set[tuple[int, int]]:
+        """Map-relative coordinates of every entry in the current map's warp
+        event table, unfiltered -- including the ones that cannot fire.
 
-        A route must never *enter* one it wasn't aimed at: stepping on a warp
-        relocates the scenario to another map, which is the one walk failure
-        mode that corrupts every assertion after it rather than failing.
+        Callers that want the planner's hazard set want `_warp_tiles`, which
+        is this minus the inert entries. This is the raw table, split out so
+        the filter has something to filter and so a diagnosis can show both.
         """
         o = self.offsets
         events = self.u32(self.symbols["gMapHeader"] + o["off_mapheader_events"])
@@ -1599,6 +1723,89 @@ class Emulator:
              self.u16(warps + i * stride + o["off_warpevent_y"]))
             for i in range(count)
         }
+
+    def _warp_tiles(self) -> set[tuple[int, int]]:
+        """Map-relative coordinates of the warp events that can actually
+        WARP the player -- the planner's hazard set.
+
+        A route must never *enter* one it wasn't aimed at: stepping on a live
+        warp relocates the scenario to another map, which is the one walk
+        failure mode that corrupts every assertion after it rather than
+        failing.
+
+        But the warp table is not the hazard list. The engine fires a warp
+        only when a warp event and a warp-triggering metatile behaviour agree
+        (`_WARP_TRIGGER_BEHAVIORS`), and the converter emits arrival warps on
+        plain floor by design, so on any map reachable by a warp the raw table
+        over-reports. Taking the table at face value blocked Route 01's
+        (15,7)/(16,7) Kevlar arrivals and made B17's own target unreachable --
+        latent since 2026-07-27, invisible until `_route_waypoints` stopped
+        degrading to an unprotected greedy walk (f705b642).
+
+        The degrade is deliberately in the OTHER direction from
+        `_grass_cost_context`'s. If the behaviour of a tile cannot be read --
+        no attribute pointer chain, a coordinate outside the loaded grid, a
+        fake emulator that predates the primitive -- that tile stays in the
+        hazard set. An unreadable behaviour must not quietly unblock a real
+        door; over-avoiding costs a detour or a loud `RoutePlanningError`,
+        under-avoiding walks the run onto another map.
+        """
+        coords = self._warp_event_tiles()
+        if not coords:
+            return set()
+        try:
+            ctx = self._grass_cost_context()
+            if ctx is None:
+                raise ScenarioError("no metatile-attribute pointer chain")
+            triggers = set(self.resolve_constants(_WARP_TRIGGER_BEHAVIORS).values())
+            width, _height, blocks = self._map_grid()
+            off = self.offsets["val_map_offset"]
+        except Exception:
+            logger.info(
+                "_warp_tiles: could not resolve metatile behaviours, treating "
+                "all %d warp events as hazards", len(coords), exc_info=True)
+            return coords
+
+        live: set[tuple[int, int]] = set()
+        inert: set[tuple[int, int]] = set()
+        for x, y in coords:
+            try:
+                behavior = self._metatile_behavior(x, y, ctx, blocks, width, off)
+            except Exception:
+                live.add((x, y))
+                continue
+            (live if behavior in triggers else inert).add((x, y))
+        if inert:
+            logger.debug(
+                "_warp_tiles: %d of %d warp events on this map sit on "
+                "non-warping metatiles and are not avoided: %s",
+                len(inert), len(coords), sorted(inert))
+        return live
+
+    def _metatile_behavior(self, x: int, y: int, ctx: dict,
+                           blocks: tuple[int, ...], width: int,
+                           off: int) -> int:
+        """The behaviour byte of the metatile at map-relative `(x, y)`.
+
+        Follows the engine's own `GetAttributeByMetatileIdAndMapLayout`
+        (`engine/src/fieldmap.c`): mask the grid word down to a metatile id,
+        index the primary or secondary tileset's `metatileAttributes` by it,
+        and mask the packed `u16` for the behaviour. `ctx` is one
+        `_grass_cost_context` result, hoisted by the caller so a per-node
+        search loop doesn't re-walk the pointer chain.
+
+        Raises (`IndexError`) for a coordinate outside the loaded grid rather
+        than returning a behaviour read off some other tile's word.
+        """
+        idx = (x + off) + width * (y + off)
+        if not (0 <= idx < len(blocks)):
+            raise IndexError(f"({x},{y}) is outside the loaded map grid")
+        metatile_id = blocks[idx] & ctx["metatile_id_mask"]
+        if metatile_id < ctx["num_primary"]:
+            addr = ctx["primary_attrs"] + metatile_id * 2
+        else:
+            addr = ctx["secondary_attrs"] + (metatile_id - ctx["num_primary"]) * 2
+        return self.u16(addr) & ctx["behavior_mask"]
 
     def _player_object_slot(self) -> int:
         """The `gObjectEvents` slot index (`gPlayerAvatar.objectEventId`) the
@@ -1994,14 +2201,15 @@ class Emulator:
             cached = grass_cache.get(key)
             if cached is not None:
                 return cached
-            metatile_id = (blocks[(x + off) + width * (y + off)]
-                            & grass_ctx["metatile_id_mask"])
-            if metatile_id < grass_ctx["num_primary"]:
-                addr = grass_ctx["primary_attrs"] + metatile_id * 2
-            else:
-                addr = (grass_ctx["secondary_attrs"]
-                        + (metatile_id - grass_ctx["num_primary"]) * 2)
-            behavior = self.u16(addr) & grass_ctx["behavior_mask"]
+            try:
+                behavior = self._metatile_behavior(
+                    x, y, grass_ctx, blocks, width, off)
+            except IndexError:
+                # Grass is a COST, never a gate (see this method's docstring),
+                # so an out-of-grid cell prices as plain ground rather than
+                # failing the plan. `_warp_tiles` degrades the other way on
+                # the same error, because there it gates.
+                behavior = -1
             result = behavior == grass_ctx["mb_tall_grass"]
             grass_cache[key] = result
             return result
@@ -2103,16 +2311,33 @@ class Emulator:
             else:
                 bits.append(
                     f"TRANSIENT: the offline graph reaches {goal} from "
-                    f"{start} on static terrain, so a dynamic obstacle "
-                    "blocked planning -- an object event standing on the "
-                    "only corridor, most likely")
+                    f"{start} on static terrain, so something in the "
+                    "planner's avoid-set closed the route")
+
+        # Both halves of the avoid-set, always, and neither named as the
+        # cause. This message used to assert "an object event standing on
+        # the only corridor, most likely" and then print object tiles alone,
+        # while the avoid-set is warps UNION objects. On CH02's B17 the
+        # objects were innocent and two inert warp tiles were the blocker,
+        # and the templated guess sent two investigations the wrong way. A
+        # diagnosis that runs on the failure path may report what it sees;
+        # it may not pick a winner it never tested (CLAUDE.md 4.5).
+        try:
+            warps = self._warp_tiles()
+        except Exception:  # noqa: BLE001 - see docstring
+            bits.append("avoided warp tiles: unknown")
+        else:
+            shown = ", ".join(str(c) for c in sorted(warps))
+            bits.append(f"avoided warp tiles: {shown or 'none'}")
 
         try:
             occupied = self._occupied_object_tiles(goal)
         except Exception:  # noqa: BLE001 - see docstring
-            pass
+            bits.append("object-held tiles: unknown")
         else:
             blockers = sorted(occupied)
+            if not blockers:
+                bits.append("object-held tiles: none")
             if blockers:
                 shown = ", ".join(str(c) for c in blockers[:8])
                 more = "" if len(blockers) <= 8 else f" (+{len(blockers) - 8} more)"
@@ -2593,8 +2818,16 @@ class Emulator:
                 f"walk_to({tx},{ty}) {how} changed map from "
                 f"{start_map} to {here_map} — aborting ({shot})")
 
-    def interact(self, frame_budget: int = 30) -> None:
+    def interact(self, frame_budget: int = 30, *,
+                 require_script: bool = True) -> bool:
         """Press A; fail if no script picks up the field controls.
+
+        Returns whether a script actually started, so a caller that is
+        asserting the ABSENCE of one can say so. `require_script=False`
+        turns the failure off and leaves the verdict to the caller -- for a
+        page the manifest proves is empty, "nothing happened" is the pass
+        condition, not a fault. Nothing about the timing changes: the full
+        budget is spent either way.
 
         Polls for the lock every frame rather than sampling once at the end
         of the window. A script that locks, does its work and releases
@@ -2626,9 +2859,10 @@ class Emulator:
             self.run(1)
             if self.field_locked() or self.current_field_message_text() is not None:
                 picked_up = True
-        if not picked_up:
+        if not picked_up and require_script:
             shot = self.screenshot("interact_noop")
             raise ScenarioError(f"interaction did not start a script ({shot})")
+        return picked_up
 
     def advance_dialog(self, key: str = "A", max_taps: int = 1500,
                        stop: Callable[[], bool] | None = None) -> int:
@@ -2748,6 +2982,7 @@ def _walk_to_once(emu: "Emulator", tx: int, ty: int, frame_budget: int,
     # keep today's wait-it-out behaviour unchanged.
     start_locked = emu.field_locked()
     reason = f"walk_to({tx},{ty}) made no progress"
+    plan_failed = False
     for _ in range(_MAX_REPLANS):
         stuck = False
         # A planning failure is a stuck iteration, not an instant abort: it
@@ -2760,6 +2995,9 @@ def _walk_to_once(emu: "Emulator", tx: int, ty: int, frame_budget: int,
             waypoints = emu._route_waypoints(tx, ty)
         except RoutePlanningError as exc:
             stuck, reason, waypoints = True, str(exc), ()
+            plan_failed = True
+        else:
+            plan_failed = False
         for wx, wy in waypoints:
             arrived, used, why = emu._walk_greedy(
                 wx, wy, frame_budget - spent, max_sidesteps, start_map,
@@ -2774,5 +3012,98 @@ def _walk_to_once(emu: "Emulator", tx: int, ty: int, frame_budget: int,
             break
         emu.run(_REPLAN_WAIT)
         spent += _REPLAN_WAIT
+    if plan_failed and _replay_fallback_beat(emu):
+        _walk_unplanned_for_replay(emu, tx, ty, frame_budget - spent,
+                                   max_sidesteps, start_map, start_locked,
+                                   reason)
+        return
     shot = emu.screenshot("walk_stuck")
     raise ScenarioError(f"{reason} ({shot})")
+
+
+def _replay_fallback_beat(emu: "Emulator") -> str | None:
+    """The inherited beat currently running, if the replay fallback applies.
+
+    `runner` sets `emu.replay_beat` to the beat's own name for a beat that
+    came from `ChapterBuilder(predecessor=...)` and to `None` for a beat the
+    chapter under test owns. `None`/absent means no fallback: the chapter
+    being tested is always held to the strict planner.
+    """
+    return getattr(emu, "replay_beat", None)
+
+
+def _walk_unplanned_for_replay(
+    emu: "Emulator", tx: int, ty: int, frame_budget: int, max_sidesteps: int,
+    start_map, start_locked: bool, reason: str,
+) -> None:
+    """Walk greedily at the bare target, with none of the planner's
+    avoid-set -- the degrade f705b642 removed, restored for INHERITED beats
+    only and recorded every time it fires.
+
+    Why it is back at all: CH01-CH04's beats were authored while this degrade
+    fired on every planning failure, so their declared coordinates have never
+    been held to a strict planner. The router is new; CH05 is the run that
+    proves it. Failing an inherited beat on a route its own chapter never
+    committed to tests the wrong thing and blocks the replay that only exists
+    to reach CH05's starting state. `_close_walk` already draws this exact
+    line for the walked-path oracle, and for the same reason: an inherited
+    beat is replayed to reach a state, it is not the artifact under test.
+
+    Why it is narrow:
+
+    - INHERITED ONLY. A beat the chapter owns never reaches here, so CH05's
+      own 19 beats get the strict planner with no exception.
+    - PLANNING FAILURES ONLY. A leg that planned fine and then got stuck is
+      not this case and still fails loud; only `RoutePlanningError` after
+      `_MAX_REPLANS` degrades.
+    - AFTER the retry loop, never instead of it. A patrolling NPC still
+      recovers by waiting and re-planning; this is the last resort.
+    - RECORDED, never silent (`KIND_REPLAY_FALLBACK`). The finding lands in
+      the run's ledger with the beat's name, so a green replay that leaned on
+      it says so in its own artifact. What §4.5 forbids is the silence.
+
+    Why it expires: the gate is `emu.replay_beat`, which the runner derives
+    from the `<owner>:<name>` prefix `ChapterBuilder` puts on inherited beats.
+    Re-derive CH01 and run it as its own chapter and its beats are unprefixed,
+    so they get the strict planner automatically. Nothing here has to be
+    remembered and removed -- when CH01-CH04 have been re-run through the new
+    beat pipeline, this function is dead code and should be deleted.
+
+    Standing hazard while it lives: this is the walk that crossed Timothy's
+    event-touch tile in CH04's B3 and fought the wrong trainer while both
+    guards passed. An inherited beat can still pass for the wrong reason. The
+    ledger entry is where to look first when a CH05 beat fails for no reason
+    its own code explains.
+    """
+    beat = _replay_fallback_beat(emu)
+    logger.warning(
+        "[replay fallback] %s: walk_to(%d,%d) could not be planned after %d "
+        "re-plans (%s) -- walking greedily on the bare target with no "
+        "avoid-set, because this is an INHERITED beat. Recorded as a carried "
+        "finding; this beat's result is weaker evidence than a planned one.",
+        beat, tx, ty, _MAX_REPLANS, reason)
+    try:
+        emu.contradictions.record(Contradiction(
+            kind=KIND_REPLAY_FALLBACK,
+            beat="",  # stamped at the beat boundary by `_close_walk`
+            detail=(f"walk_to({tx},{ty}) was walked unplanned: {reason}"),
+            model="the route planner found no route",
+            measurement="walked greedily on the bare target",
+            assumption=(
+                "an inherited beat replays to reach state and predates the "
+                "strict planner, so the walk proceeds unprotected"),
+            cell=(tx, ty),
+        ))
+    except AttributeError:
+        # Lightweight walk fakes predate the ledger -- same degrade shape
+        # `_close_walk` uses for them. The WARNING above still fired.
+        pass
+    arrived, _used, why = emu._walk_greedy(
+        tx, ty, frame_budget, max_sidesteps, start_map,
+        start_locked=start_locked)
+    if not arrived:
+        # The fallback is a relaxation of PLANNING, not of arrival. A greedy
+        # walk that still cannot reach the tile is a real failure and stays
+        # loud -- otherwise this would be the silent-degrade shape twice over.
+        shot = emu.screenshot("walk_stuck")
+        raise ScenarioError(f"{why} ({shot})")

@@ -21,6 +21,8 @@ import struct
 
 import pytest
 
+from rpg2gba.playtest.emulator import _WARP_TRIGGER_BEHAVIORS
+
 needs_mgba = pytest.mark.skipif(
     importlib.util.find_spec("mgba") is None,
     reason="needs the mgba python bindings to import emulator.py",
@@ -57,12 +59,24 @@ _CONSTANTS = {
     "METATILE_ATTR_BEHAVIOR_MASK_FRLG": 0x01FF,
     "MAPGRID_METATILE_ID_MASK": 0x03FF,
 }
+# `_warp_tiles` resolves the whole warp-trigger behaviour table in one call,
+# so the fake has to answer for all of it. Values are synthetic and only have
+# to be distinct from each other and from MB_NORMAL (0) and MB_TALL_GRASS (2);
+# only `MB_ANIMATED_DOOR` is actually placed on a tile by these fixtures.
+_CONSTANTS.update({
+    name: 0x40 + i for i, name in enumerate(_WARP_TRIGGER_BEHAVIORS)
+})
 
 # Synthetic metatile ids used by these fixtures (arbitrary, within primary
 # range so the secondary-tileset branch is never exercised here -- that
 # pointer chain is still wired up on the fake for realism/completeness).
 _METATILE_NORMAL = 1
 _METATILE_GRASS = 2
+# A metatile that actually warps, for the warp-exclusion fixtures. A warp
+# event alone no longer excludes a tile -- the engine needs a warp-triggering
+# behaviour there too -- so a fixture that wants a hard-excluded tile has to
+# stamp one (see `add_warp`).
+_METATILE_DOOR = 3
 
 _COLLISION_BLOCKED = 0x0400  # bits 10-11 nonzero -> (block >> 10) & 0x3 != 0
 
@@ -113,6 +127,7 @@ class _FakeGrassRouteEmu:
         self._mem = _FakeMemory()
         self._walls = set(walls)
         self._grass = set(grass)
+        self._warp_doors: set[tuple[int, int]] = set()
         off = _MAP_OFFSET
         self._backup_w = map_w + (off * 2 + 1)
         self._backup_h = map_h + off * 2
@@ -129,6 +144,8 @@ class _FakeGrassRouteEmu:
         self.write_u16(_PRIMARY_ATTRS_ADDR + _METATILE_NORMAL * 2, 0)  # MB_NORMAL
         self.write_u16(_PRIMARY_ATTRS_ADDR + _METATILE_GRASS * 2,
                        _CONSTANTS["MB_TALL_GRASS"])
+        self.write_u16(_PRIMARY_ATTRS_ADDR + _METATILE_DOOR * 2,
+                       _CONSTANTS["MB_ANIMATED_DOOR"])
         # off_mapheader_events stays 0 -> _warp_tiles() sees no events table.
         self.write_u32(_GBACKUP, self._backup_w)            # off_backup_width
         self.write_u32(_GBACKUP + 4, self._backup_h)        # off_backup_height
@@ -173,6 +190,8 @@ class _FakeGrassRouteEmu:
         blocks = [_METATILE_NORMAL] * (w * h)
         for gx, gy in self._grass:
             blocks[(gx + off) + w * (gy + off)] = _METATILE_GRASS
+        for dx, dy in self._warp_doors:
+            blocks[(dx + off) + w * (dy + off)] = _METATILE_DOOR
         for wx, wy in self._walls:
             blocks[(wx + off) + w * (wy + off)] |= _COLLISION_BLOCKED
         return struct.pack(f"<{w * h}H", *blocks)
@@ -198,13 +217,19 @@ class _FakeGrassRouteEmu:
         self.write_u8(self.symbols["gPlayerAvatar"]
                        + self.offsets["off_playeravatar_objecteventid"], slot)
 
-    def add_warp(self, x: int, y: int) -> None:
+    def add_warp(self, x: int, y: int, *, live: bool = True) -> None:
         """Wire a single warp event, matching `_warp_tiles`'s own reads
-        (`gMapHeader.events -> warpCount`/`warps[i].x/y`). Only ever called
-        by the one test that needs a hard-excluded (not merely costed)
-        tile to contrast against grass's cost-only treatment.
+        (`gMapHeader.events -> warpCount`/`warps[i].x/y`).
+
+        `live=True` (the default) also stamps `_METATILE_DOOR` on the tile,
+        because a warp event on its own does not exclude anything: the engine
+        fires a warp only where an event and a warp-triggering behaviour
+        agree. `live=False` leaves the tile as plain floor -- the converter's
+        "arrival warp" shape, which a route may cross freely.
         """
         o = self.offsets
+        if live:
+            self._warp_doors.add((x, y))
         self.write_u32(self.symbols["gMapHeader"] + o["off_mapheader_events"],
                        _MAPEVENTS_ADDR)
         self.write_u8(_MAPEVENTS_ADDR + o["off_mapevents_warpcount"], 1)
@@ -225,6 +250,14 @@ class _FakeGrassRouteEmu:
     def _warp_tiles(self):
         from rpg2gba.playtest.emulator import Emulator
         return Emulator._warp_tiles(self)
+
+    def _warp_event_tiles(self):
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator._warp_event_tiles(self)
+
+    def _metatile_behavior(self, x, y, ctx, blocks, width, off):
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator._metatile_behavior(self, x, y, ctx, blocks, width, off)
 
     def _player_object_slot(self):
         from rpg2gba.playtest.emulator import Emulator
@@ -340,6 +373,57 @@ def test_grass_cost_does_not_break_warp_exclusion() -> None:
     assert (1, 1) not in route  # the warp tile is never entered
     assert (1, 0) in route      # forced through grass instead
     assert route[0] == (0, 0) and route[-1] == (2, 0)
+
+
+@needs_mgba
+def test_warp_event_on_plain_floor_is_not_excluded() -> None:
+    """The converse of the test above, and the CH02 B17 regression.
+
+    A warp event on a tile whose behaviour does not warp cannot relocate the
+    player: every trigger path in `engine/src/field_control_avatar.c` requires
+    both a warp event AND a warp-triggering behaviour. The converter emits
+    exactly this shape on purpose -- `_resolve_all_warp_events` mints an
+    "arrival" warp_event on the destination map of every warp, left as plain
+    floor, because Emerald can only land on an index into the destination's
+    own warp table.
+
+    Same layout as the exclusion test, but the warp at (1,1) is inert. The
+    cheap row-1 detour must be available again: 4 < 6, so the planner takes
+    it and leaves the grass alone. Taking the warp table at face value here
+    is what sealed Route 01's (15,7)/(16,7) and made B17's own target
+    (15,6) unreachable.
+    """
+    emu = _FakeGrassRouteEmu(map_w=3, map_h=2, grass={(1, 0)})
+    emu.add_warp(1, 1, live=False)
+
+    assert emu._warp_event_tiles() == {(1, 1)}  # still in the raw table
+    assert emu._warp_tiles() == set()           # but not a hazard
+
+    route = emu._plan_route((0, 0), (2, 0))
+
+    assert route is not None
+    assert (1, 1) in route  # the inert warp tile is crossed freely
+    assert (1, 0) not in route
+
+
+@needs_mgba
+def test_unreadable_metatile_behavior_keeps_every_warp_excluded() -> None:
+    """The degrade direction is the opposite of grass's, on purpose.
+
+    Grass is a cost, so an unresolvable behaviour prices a tile as ordinary
+    ground and the plan still happens. A warp is a gate, so an unresolvable
+    behaviour must leave the tile in the hazard set: silently unblocking a
+    real door would walk the scenario onto another map and corrupt every
+    assertion after it, which is the one failure mode `_warp_tiles` exists
+    to prevent. Over-avoiding only costs a detour or a loud unroutable.
+
+    `_FakeGrassRouteEmuNoContext` removes `_grass_cost_context` entirely,
+    the same shape a fake predating the primitive produces.
+    """
+    emu = _FakeGrassRouteEmuNoContext(map_w=3, map_h=2)
+    emu.add_warp(1, 1, live=False)
+
+    assert emu._warp_tiles() == {(1, 1)}
 
 
 @needs_mgba

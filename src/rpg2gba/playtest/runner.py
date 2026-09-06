@@ -40,7 +40,7 @@ import json
 import logging
 import shutil
 import signal
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -48,7 +48,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import rules as playtest_rules
-from .chapter import Beat, Chapter, assert_chapter_locations_reachable
+from .chapter import (
+    Beat,
+    Chapter,
+    assert_chapter_locations_reachable,
+    page_row_script,
+    resolved_trigger_scripts,
+)
 from .contact_sheet import Waypoint, build_contact_sheet
 from .contradictions import KIND_OFF_PLAN, Contradiction, ContradictionLedger
 from .divergence import (
@@ -126,45 +132,55 @@ class BeatContinuityError(RuntimeError):
 def _check_beat_continuity(beat: Beat, enter: dict[str, object],
                             emu: "Emulator") -> None:
     """Q13 slice 1, check 2: does `beat`'s declared entry position
-    (`beat.locations[0]`, see below) match `enter` -- the position the
-    PREVIOUS beat actually left the player at (or, for the chapter's first
-    beat, the post-boot snapshot)?
+    (`beat.entry_at`) match `enter` -- the position the PREVIOUS beat
+    actually left the player at (or, for the chapter's first beat, the
+    post-boot snapshot)?
 
-    **Multi-point interpretation:** only `locations[0]` is checked here. A
-    beat's later location entries name OTHER points it interacts with over
-    its own run (an NPC's tile, a door it walks to and crosses) -- points
-    the beat's own body is expected to reach by walking there, not points it
-    is expected to already be standing on when it starts. `locations[0]` is,
-    by the corpus's own authoring convention (every existing multi-point
-    beat in `chapters/{ch02,ch03}.py` lists the entry door/threshold
-    first), the one claim about *inherited* state: "this beat starts from
-    here." That is the only claim continuity can check without re-deriving
-    the beat's own walk plan, which is `chapter.py`'s reachability check's
-    job (independent, offline, one point at a time), not this one's.
+    **Only `entry_at` is checked here -- never `locations`/`at=`.** This
+    check used to read `beat.locations[0]` as the inherited-position claim,
+    on the theory (recorded in the old docstring here and in
+    `ChapterBuilder.beat`'s) that the corpus's own authoring convention
+    always lists the entry door/threshold first in a multi-point beat. The
+    first ROM run since this check landed (CH05, 2026-09-05) falsified that:
+    an offline audit of every inherited CH01 beat against the recorded
+    entry/exit positions from the last green run found 40 of 51 declared
+    `locations[0]` values disagreed with the beat's recorded entry position
+    (11 matched entry, 13 matched exit instead, 27 were neither), and
+    multi-point beats scored *worse* than single-`at=` ones. The corpus-wide
+    convention `at=`/`locations=` actually encode is "the tile the beat
+    triggers on," not "the tile the beat starts on" -- see
+    `ChapterBuilder.beat`'s docstring for the full measurement. `entry_at` is
+    the separate, explicit opt-in a beat uses to make the inherited-position
+    claim; a beat that doesn't set it makes no such claim, and is
+    unconditionally exempt from this check -- no fallback to `locations[0]`.
 
-    A beat with no declared locations is unaffected -- `at=`/`locations=`
-    stay optional, and an undeclared beat makes no claim to check."""
-    if not beat.locations:
+    A beat with no declared `entry_at` is unaffected."""
+    if beat.entry_at is None:
         return
-    loc = beat.locations[0]
+    map_constant = beat.locations[0].map_constant if beat.locations else None
+    if map_constant is None:
+        raise BeatContinuityError(
+            f"beat {beat.name!r}: declares entry_at={beat.entry_at!r} but no "
+            "map_constant= / locations= to resolve it against -- entry_at "
+            "needs a map to check continuity on")
     try:
-        expected_group = emu.resolve_constant(f"MAP_GROUP({loc.map_constant})")
-        expected_num = emu.resolve_constant(f"MAP_NUM({loc.map_constant})")
+        expected_group = emu.resolve_constant(f"MAP_GROUP({map_constant})")
+        expected_num = emu.resolve_constant(f"MAP_NUM({map_constant})")
     except Exception as exc:  # noqa: BLE001 - reported as this beat's failure
         raise BeatContinuityError(
             f"beat {beat.name!r}: declared map_constant "
-            f"{loc.map_constant!r} could not be resolved against this "
+            f"{map_constant!r} could not be resolved against this "
             f"build's fork headers: {exc}") from exc
 
     actual_map = (enter["map_group"], enter["map_num"])
     expected_map = (expected_group, expected_num)
     actual_pos = tuple(enter["player_pos"])
-    expected_pos = (loc.x, loc.y)
+    expected_pos = tuple(beat.entry_at)
 
     if actual_map != expected_map or actual_pos != expected_pos:
         raise BeatContinuityError(
-            f"beat {beat.name!r}: declared at=({loc.x},{loc.y}) on "
-            f"{loc.map_constant} (map_group={expected_group}, "
+            f"beat {beat.name!r}: declared entry_at={expected_pos} on "
+            f"{map_constant} (map_group={expected_group}, "
             f"map_num={expected_num}) does not match where the previous "
             f"beat actually left the player: map_group="
             f"{actual_map[0]}, map_num={actual_map[1]}, player_pos="
@@ -266,17 +282,83 @@ class _WalkOracle:
     """
 
     def __init__(self, chapter_name: str, *,
-                 plan: PlanIndex | None = None) -> None:
+                 plan: PlanIndex | None = None,
+                 resolved_scripts: dict[int, set[str]] | None = None) -> None:
         self.plan = plan
         self.chapter_name = chapter_name
+        # Per map, the page scripts an inherited beat already exercised, so
+        # they are not foreign to this chapter's walks. Same set the route
+        # solver plans against, from the same function, so the plan and the
+        # check that grades the plan cannot disagree about what is foreign.
+        self._resolved_scripts = resolved_scripts or {}
         self._triggers: dict[int, dict[tuple[int, int], tuple[TriggerFact, ...]]] = {}
         self._unavailable: set[int] = set()
 
+    def mark_rows_resolved(self, rows: Sequence[str]) -> None:
+        """Record that a beat of THIS chapter just passed, so the pages it
+        claims stop being foreign to the walks that come after it.
+
+        `resolved_trigger_scripts` narrows itself to INHERITED beats, on the
+        grounds that "a chapter's own triggers stay foreign to each other:
+        B3's trainer must not be excused for firing during an approach to
+        B8." That reasoning is about a trigger the chapter has not resolved
+        YET -- it does not survive the beat actually running. Once B3 has
+        won, B3's tile fires nothing, and failing a later beat for stepping
+        on it reports a script that cannot run.
+
+        CH05's B14 is the case. Its approach walks west from B9's stop
+        straight across Hiker Nunes' two event-touch tiles, and B9 defeated
+        him two beats earlier -- "beat B14 left the approved route onto 2
+        trigger tile(s) the plan does not walk: map 37 (22, 10) fires
+        Map037_EV004_Page1" (step-7 run 14, 2026-09-06), which is B9's own
+        battle page, already won.
+
+        Order-aware on purpose, and called only on a PASS: a beat that
+        failed did not necessarily resolve what it claims, and a beat that
+        has not run yet resolves nothing. That keeps the narrowing's real
+        intent -- an approach that walks a hot trigger is still a finding --
+        while dropping the part of it that outlives the beat.
+
+        **Known approximation, inherited from `resolved_trigger_scripts`.**
+        "Resolved" here means "this page's beat passed", which holds for the
+        latching shapes (a trainer's defeat flag, an item ball's one-shot)
+        but not for a page guarded by a TEMP switch -- an `arrival_nudge`
+        re-arms when the map is re-entered. The predecessor exemption makes
+        exactly the same assumption about exactly the same pages, so this is
+        the existing approximation reaching one chapter further, not a new
+        one. A chapter that re-enters a map and walks a nudge cell would be
+        excused wrongly; CH05 never returns to 1F after B8.
+        """
+        touched: set[int] = set()
+        for row_id in rows:
+            named = page_row_script(row_id)
+            if named is None:
+                continue  # seam/terrain rows name no page script
+            map_id, script = named
+            self._resolved_scripts.setdefault(map_id, set()).add(script)
+            touched.add(map_id)
+        # The overlay is built once per map and cached with the exemption
+        # already applied, so a newly resolved page has to drop it.
+        for map_id in touched:
+            self._triggers.pop(map_id, None)
+
     @classmethod
-    def for_chapter(cls, chapter_name: str) -> "_WalkOracle":
+    def for_chapter(cls, chapter: "Chapter | str") -> "_WalkOracle":
         """Never raises on a missing plan; a plan that exists and will not
-        load is a real fault and propagates (CLAUDE.md §4.5)."""
-        return cls(chapter_name, plan=load_plan_index_for_module(chapter_name))
+        load is a real fault and propagates (CLAUDE.md §4.5).
+
+        Takes the built `Chapter` where one is available, because the
+        inherited-beat exemption is derived from its beats; a bare name still
+        works (the stub runners in `tests/test_runner.py` pass one) and simply
+        gets no exemption, which is the pre-existing behaviour.
+        """
+        if isinstance(chapter, str):
+            return cls(chapter, plan=load_plan_index_for_module(chapter))
+        return cls(
+            chapter.name,
+            plan=load_plan_index_for_module(chapter.name),
+            resolved_scripts=resolved_trigger_scripts(chapter),
+        )
 
     def _overlay_for(self, map_id: int, emu: "Emulator") -> dict:
         cached = self._triggers.get(map_id)
@@ -298,7 +380,15 @@ class _WalkOracle:
                 "classified as trigger crossings", self.chapter_name, map_id, exc)
             self._unavailable.add(map_id)
             return {}
-        built = foreign_trigger_index({map_id: overlay})[map_id]
+        # Same exemption the route solver applies (`resolved_trigger_scripts`):
+        # a page an INHERITED beat already exercised is not foreign to this
+        # chapter's walks. Without it the oracle fails a beat for crossing a
+        # tile whose script cannot fire -- CH05's approach must pass Timothy's
+        # event-touch tile, and CH04:B4 defeated him 74 beats earlier.
+        built = foreign_trigger_index(
+            {map_id: overlay},
+            destination_scripts={map_id: self._resolved_scripts.get(map_id, set())},
+        )[map_id]
         self._triggers[map_id] = built
         return built
 
@@ -646,7 +736,7 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
     # not exist is the ordinary case (route plans are enforced forward from
     # CH05), and a plan that exists but will not load is a fault that stops
     # the run here rather than silently leaving divergence unchecked.
-    oracle = _WalkOracle.for_chapter(chapter.name)
+    oracle = _WalkOracle.for_chapter(chapter)
     ledger = ContradictionLedger()
     start_idx = chapter.index_of(from_beat) if from_beat else 0
     scratch = output_root / f".{rom.stem}.{chapter.name}.attempt{attempt_no}.scratch.gba"
@@ -703,6 +793,22 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
             # degrades on the same attribute at the other end.
             try:
                 emu.clear_walk_path()
+            except AttributeError:
+                pass
+            # Which routing standard this beat is held to. An inherited beat
+            # (`<owner>:<name>`, prepended by `ChapterBuilder(predecessor=)`)
+            # may fall back to an unplanned walk when the planner fails,
+            # because CH01-CH04's coordinates were authored while that
+            # fallback was unconditional and have never faced a strict
+            # planner; the chapter under test never may. Same line
+            # `_close_walk` draws for the walked-path oracle, and the same
+            # reason: an inherited beat replays to reach a state, it is not
+            # the artifact under test. Set per beat rather than once, so a
+            # chapter's own beats are strict even though inherited ones run
+            # on the same emulator. Expires when CH01-CH04 are re-derived --
+            # their beats are unprefixed when run as their own chapter.
+            try:
+                emu.replay_beat = beat.name if ":" in beat.name else None
             except AttributeError:
                 pass
             try:
@@ -780,6 +886,12 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
                                       contradictions=ledger)
 
             logger.info("[%s] beat %s passed", chapter.name, beat.name)
+            # This beat's own pages are no longer foreign to the walks after
+            # it (`_WalkOracle.mark_rows_resolved`). Inherited beats are
+            # already covered wholesale by `resolved_trigger_scripts`, and
+            # their `rows` name the PREDECESSOR's manifest, so skip them.
+            if ":" not in beat.name:
+                oracle.mark_rows_resolved(beat.rows)
             outcome.status = "pass"
             pending_enter = _loc(emu)
             observed.append(

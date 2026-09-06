@@ -20,23 +20,81 @@ only in a commit message. Wiring this adapter is what makes it checkable.
 """
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
+from typing import Any
 
 from rpg2gba.playtest.chapter import load_chapter
-from rpg2gba.routing.plan import RoutePlan, load_plan, route_path
+from rpg2gba.routing.plan import RoutePlan, RoutePlanError, load_plan, route_path
 
-from .checker import RoutePrecedence
+from .checker import PlannedApproach, RoutePrecedence
 
 logger = logging.getLogger(__name__)
+
+_CHOSEN_APPROACH_KEYS = frozenset({"side", "resolver"})
+
+
+def _read_chosen_approaches(route_file: Path) -> dict[int, tuple[str, str] | None]:
+    """Node index -> `(side, resolver)`, read directly off the plan JSON.
+
+    Deliberately bypasses `routing.plan.RouteNode`/`plan_from_dict` for this
+    one field: `chosen_approach` is not yet part of that dataclass's schema
+    (it is landing there alongside the route-solver work this adapter must
+    not block on -- see the task brief). Reading the raw JSON ourselves
+    means this adapter works whether or not `RouteNode` has caught up, and
+    never needs to change again once it does (the node's `group`/`map_id`/
+    `cell`/`beats` -- already on `RouteNode` -- still come from `RoutePlan`
+    itself; only the new key is read here).
+
+    Still fails loud (CLAUDE.md §4.5) on a `chosen_approach` that IS present
+    but malformed -- missing/extra keys are a real fault in the artifact,
+    not "the field doesn't exist yet"."""
+    raw: dict[str, Any] = json.loads(route_file.read_text(encoding="utf-8"))
+    result: dict[int, tuple[str, str] | None] = {}
+    for i, node in enumerate(raw.get("nodes", [])):
+        if not isinstance(node, dict):
+            continue
+        index = node.get("index", i)
+        chosen = node.get("chosen_approach")
+        if chosen is None:
+            result[index] = None
+            continue
+        if not isinstance(chosen, dict):
+            raise RoutePlanError(
+                f"{route_file}: nodes[{i}].chosen_approach must be an object "
+                f"or null, got {chosen!r}"
+            )
+        got = set(chosen)
+        if missing := _CHOSEN_APPROACH_KEYS - got:
+            raise RoutePlanError(
+                f"{route_file}: nodes[{i}].chosen_approach is missing "
+                f"{sorted(missing)}"
+            )
+        if unknown := got - _CHOSEN_APPROACH_KEYS:
+            raise RoutePlanError(
+                f"{route_file}: nodes[{i}].chosen_approach carries unknown "
+                f"keys {sorted(unknown)}"
+            )
+        result[index] = (chosen["side"], chosen["resolver"])
+    return result
 
 
 class PlanRouteModel:
     """`checker.RouteModel` backed by a real `RoutePlan` and `Chapter`."""
 
-    def __init__(self, plan: RoutePlan, registered: tuple[str, ...]) -> None:
+    def __init__(
+        self,
+        plan: RoutePlan,
+        registered: tuple[str, ...],
+        *,
+        beat_locations: dict[str, tuple[int, int]] | None = None,
+        chosen_approaches: dict[int, tuple[str, str] | None] | None = None,
+    ) -> None:
         self._plan = plan
         self._registered = registered
+        self._beat_locations = beat_locations or {}
+        self._chosen_approaches = chosen_approaches or {}
 
     def planned_group_order(self) -> tuple[str, ...]:
         return tuple(
@@ -52,6 +110,28 @@ class PlanRouteModel:
             RoutePrecedence(before=edge.before, after=edge.after, reason=edge.reason)
             for edge in self._plan.precedence
         )
+
+    def planned_approaches(self) -> tuple[PlannedApproach, ...]:
+        result: list[PlannedApproach] = []
+        for node in self._plan.nodes:
+            if node.kind != "group":
+                continue
+            chosen = self._chosen_approaches.get(node.index)
+            if chosen is None:
+                continue
+            side, resolver = chosen
+            result.append(PlannedApproach(
+                group=node.group,  # type: ignore[arg-type]
+                map_id=node.map_id,
+                cell=node.cell,
+                beats=node.beats,
+                side=side,
+                resolver=resolver,
+            ))
+        return tuple(result)
+
+    def declared_beat_cell(self, beat_id: str) -> tuple[int, int] | None:
+        return self._beat_locations.get(beat_id)
 
 
 def build_route_model(
@@ -110,4 +190,19 @@ def build_route_model(
     # "registered but never planned".
     registered = tuple(
         group.group_id for group in chapter.groups() if ":" not in group.group_id)
-    return PlanRouteModel(plan, registered)
+
+    # Same "own beats only" filter as `registered` above -- an inherited
+    # predecessor beat's declared location belongs to that predecessor's
+    # own chapter and route plan, not this one.
+    beat_locations = {
+        beat.name: (beat.locations[0].x, beat.locations[0].y)
+        for beat in chapter.beats
+        if ":" not in beat.name and beat.locations
+    }
+    chosen_approaches = _read_chosen_approaches(route_file)
+
+    return PlanRouteModel(
+        plan, registered,
+        beat_locations=beat_locations,
+        chosen_approaches=chosen_approaches,
+    )

@@ -46,6 +46,7 @@ RULE_APPROACH_MODEL_UNENFORCED = "approach_model_unenforced"
 RULE_REACHABILITY_UNENFORCED = "reachability_unenforced"
 RULE_ROUTE_ORDER = "route_order"
 RULE_ROUTE_MODEL_UNENFORCED = "route_model_unenforced"
+RULE_ROUTE_APPROACH = "route_approach"
 RULE_ARCHETYPE_CONFORMANCE = "archetype_conformance"
 RULE_ARCHETYPE_MODEL_UNENFORCED = "archetype_model_unenforced"
 RULE_UNREGISTERED_BEAT = "unregistered_beat"
@@ -125,6 +126,28 @@ class RoutePrecedence:
     reason: str
 
 
+@dataclass(frozen=True)
+class PlannedApproach:
+    """One plan node's committed approach side, translated to the local
+    shape `RULE_ROUTE_APPROACH` compares -- same reasoning as
+    `RoutePrecedence`: this module must not import `rpg2gba.routing`, so it
+    never sees the real `RouteNode`/`chosen_approach` JSON shape directly.
+
+    Mirrors the plan artifact's per-node `chosen_approach` object
+    (`{"side": ..., "resolver": ...}`) plus the node fields
+    `RULE_ROUTE_APPROACH` needs to locate and report the mismatch: which
+    group/beats the node covers, which map, and the cell the solver planned
+    against.
+    """
+
+    group: str
+    map_id: int
+    cell: tuple[int, int]
+    beats: tuple[str, ...]
+    side: str
+    resolver: str
+
+
 class RouteModel(Protocol):
     """The seam `RULE_ROUTE_ORDER` plugs into: does the chapter's registered
     beat-group order match the order the offline route solver actually
@@ -167,6 +190,29 @@ class RouteModel(Protocol):
         ids not present in `registered_group_order()` is ignored by the
         rule (a name mismatch there is already reported by the missing-group
         half of `RULE_ROUTE_ORDER`, once, not twice)."""
+        ...
+
+    def planned_approaches(self) -> tuple[PlannedApproach, ...]:
+        """One entry per plan node that carries a non-null
+        `chosen_approach` -- the approach side the route solver committed
+        to for that node's group, plus enough to locate it (map, cell,
+        which beats it covers). Empty for a plan that carries no
+        `chosen_approach` data at all (an older artifact, or a chapter with
+        no side-sensitive stops) -- `RULE_ROUTE_APPROACH` then has nothing
+        to check and reports nothing, same as `RULE_ROUTE_ORDER` on an
+        entirely-agreeing plan."""
+        ...
+
+    def declared_beat_cell(self, beat_id: str) -> tuple[int, int] | None:
+        """The cell `beat_id` actually declares -- `Beat.locations[0]`'s
+        `(x, y)`, the same point `runner.py`'s own continuity check treats
+        as "where this beat expects to be standing" -- or None if `beat_id`
+        is not a registered beat at all, or is registered but declares no
+        location (`at=`/`locations=` are optional). `RULE_ROUTE_APPROACH`
+        treats both None cases identically: it cannot compare a cell that
+        was never declared, so it degrades to
+        `RULE_ROUTE_MODEL_UNENFORCED` rather than reporting either a false
+        pass or a false mismatch."""
         ...
 
 
@@ -483,14 +529,15 @@ def check_chapter(
             row_id="chapter",
             rule=RULE_ROUTE_MODEL_UNENFORCED,
             message=(
-                "could not check registered beat-group order against the "
-                "planned route order because no route model was supplied "
-                "(this rule is unenforced without one)"
+                "could not check registered beat-group order (or planned "
+                "approach sides) against the route plan because no route "
+                "model was supplied (this rule is unenforced without one)"
             ),
             severity="warning",
         ))
     else:
         findings.extend(_check_route_order(route))
+        findings.extend(_check_route_approach(route))
 
     findings.extend(
         _check_archetype_conformance(
@@ -869,6 +916,83 @@ def _check_route_order(route: RouteModel) -> list[Finding]:
                 ),
                 severity="error",
             ))
+
+    return findings
+
+
+def _check_route_approach(route: RouteModel) -> list[Finding]:
+    """`RULE_ROUTE_APPROACH`: for every plan node the solver committed to a
+    side for, does the beat that node covers actually stand there?
+
+    Motivating gap: `RULE_ROUTE_ORDER` (above) makes sure the chapter walks
+    groups in the order the plan expects, but says nothing about *which
+    side of an NPC or staircase* a beat stands on -- that is chosen by the
+    solver too, per group, and recorded as the node's `chosen_approach`. The
+    chapter module declares its own beat position independently, via `at=`
+    (or the archetype templates' `approach_prefer=`, which resolves to an
+    `at=`). Nothing made those two choices agree: a route can be planned
+    against the north side of a passage while the registered beat stands on
+    the east side, with `at=` enforcement and `RULE_ROUTE_ORDER` both
+    green, and the plan the operator approved is then not the path that
+    gets walked. Ruled a hard ERROR, not a warning -- this is exactly the
+    "plan says one thing, ROM does another" gap the whole route-model
+    family exists to close.
+
+    Only the first of a node's `beats` with a resolvable declared cell is
+    compared -- a `chosen_approach` is one side for one stop, and multiple
+    beats sharing a group share that one stop's position (`RouteNode`
+    requires contiguous registration for a group, same as `RULE_ROUTE_ORDER`
+    treats it as indivisible). A node whose beats are all unregistered, or
+    registered with no declared location at all, cannot be checked -- that
+    degrades to `RULE_ROUTE_MODEL_UNENFORCED`, never a silent pass, the same
+    idiom `RULE_ROUTE_ORDER` and its siblings use throughout this module.
+    """
+    findings: list[Finding] = []
+    for approach in route.planned_approaches():
+        beat_id: str | None = None
+        declared: tuple[int, int] | None = None
+        for candidate in approach.beats:
+            cell = route.declared_beat_cell(candidate)
+            if cell is not None:
+                beat_id, declared = candidate, cell
+                break
+
+        if declared is None:
+            findings.append(Finding(
+                row_id="chapter",
+                rule=RULE_ROUTE_MODEL_UNENFORCED,
+                message=(
+                    f"group {approach.group!r} has a planned approach side "
+                    f"{approach.side!r} (resolver: {approach.resolver}), "
+                    "but none of its beats "
+                    f"{list(approach.beats)!r} are registered with a "
+                    "declared location -- the planned approach side could "
+                    "not be checked against anything (this rule is "
+                    "unenforced for this group)"
+                ),
+                severity="warning",
+            ))
+            continue
+
+        if declared == approach.cell:
+            continue
+
+        findings.append(Finding(
+            row_id="chapter",
+            rule=RULE_ROUTE_APPROACH,
+            message=(
+                f"beat {beat_id!r} (group {approach.group!r}, map "
+                f"{approach.map_id}): the route plan committed to approach "
+                f"side {approach.side!r} at cell {approach.cell!r} "
+                f"(resolver: {approach.resolver}), but the beat is "
+                f"registered at cell {declared!r} instead -- the plan the "
+                "operator approved is not the path that gets walked; pass "
+                f"approach_prefer={approach.side!r} (or prefer=) to the "
+                "beat's archetype template to match the plan, or re-solve "
+                "the route if the plan is the one that's wrong"
+            ),
+            severity="error",
+        ))
 
     return findings
 

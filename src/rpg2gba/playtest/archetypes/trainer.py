@@ -92,21 +92,56 @@ def _trainer_defeat_flag_settle(
     )
 
 
+def _approach(emu: Emulator, approach: tuple[int, int]) -> bool:
+    """Walk to the trainer's approach cell, tolerating the trainer firing on
+    the way. Returns whether the approach was interrupted.
+
+    A touch trainer's range can reach the approach cell itself, so the walk
+    that gets into position is the same motion that triggers him -- the field
+    locks mid-walk and `walk_to` raises `WalkInterrupted`. CH05's B3 (Hiker
+    Manny) is the case: "walk_to(19, 29) interrupted by a locked-field scene
+    at (19, 29)". Nothing went wrong there; the beat got what it came for one
+    step earlier than the template expected.
+
+    Deliberately NOT `resolve_interruptions=True`. That resolves the
+    interruption and walks on, which for a trainer beat would fight the battle
+    inside the movement helper and leave the assertions below nothing to
+    inspect. Here the interruption is caught and handed straight to those
+    assertions, which still check a battle is running, that it is a TRAINER
+    battle, and that the opponent id is the expected one -- so an ambush by
+    the wrong trainer on the way in still fails loud. That guard is CH04 B3's
+    legacy and this must not weaken it.
+    """
+    # Imported here, not at module scope: `WalkInterrupted` lives in
+    # `emulator.py`, which hard-imports `mgba`, and this module is deliberately
+    # importable without the bindings (see the TYPE_CHECKING guard above). By
+    # the time this runs there is a real emulator in hand.
+    from ..emulator import WalkInterrupted
+
+    try:
+        emu.walk_to(*approach)
+    except WalkInterrupted as exc:
+        logger.info(
+            "approach to %s was interrupted at %s -- the trainer fired during "
+            "the walk; the battle assertions decide whether it was the right "
+            "one", approach, exc.stopped_at)
+        return True
+    return False
+
+
 def _start_trigger(
     emu: Emulator, beat: str, approach: tuple[int, int], facing: str, trigger: str,
 ) -> None:
-    if trigger == "event_touch":
-        emu.walk_to(*approach)
+    if trigger in ("event_touch", "player_touch"):
+        if _approach(emu, approach):
+            return  # already triggered; a second nudge would be a second fight
         emu.face(facing)
         assertions.try_step(emu, facing)
     elif trigger == "action":
-        emu.walk_to(*approach)
+        if _approach(emu, approach):
+            return
         emu.face(facing)
         emu.interact()
-    elif trigger == "player_touch":
-        emu.walk_to(*approach)
-        emu.face(facing)
-        assertions.try_step(emu, facing)
     else:
         raise ScenarioError(
             f"{beat}: unrecognized trigger {trigger!r} -- expected "
@@ -132,11 +167,23 @@ def trainer_beats(
     approach_prefer: str | None = None,
     local_id: int | None = None,
     rider_item: str | None = None,
+    group: str | None = None,
     manifest_rows: "tuple[ManifestRow, ...] | None" = None,
     manifest_dir=None,
 ) -> None:
     """Register a `trainer` archetype's whole beat set: the battle beat plus
     one re-talk beat per re-talk page the manifest says exists.
+
+    `group=` defaults to `beat_prefix` when omitted, so the battle beat and
+    every re-talk beat form one indivisible route-solver stop, matching what
+    a hand-authored chapter does today (`ChapterBuilder.beat`'s `group=`
+    docstring). The battle beat is named exactly `beat_prefix` (not
+    `f"{beat_prefix}_battle"`) because the chapter manifest dispositions this
+    stop as bare `beat:{beat_prefix}`, and `_check_route_approach` looks up a
+    node's beats by that exact name (`chapter_manifest/checker.py`,
+    `RouteModel.declared_beat_cell`) -- the battle beat *is* the stop the
+    disposition names. Re-talk beats keep their descriptive `_retalk{n}`
+    suffixes; they are satellites of the stop, not the stop's own identity.
 
     `trigger`/`phone`/`double`/`retalk_pages`/`rider` are the author's
     stated claims about this instance -- checked against
@@ -188,22 +235,23 @@ def trainer_beats(
 
     approach = approach_to(map_constant, event_id, prefer=approach_prefer)
     facing = _facing_toward(approach, event_cell(map_constant, event_id))
+    resolved_group = group if group is not None else beat_prefix
 
     @builder.beat(
-        f"{beat_prefix}_battle",
+        beat_prefix,
         f"Trainer battle at {map_constant} event {event_id} fires and is "
         f"won; {defeat_flag} latches the defeated state "
         f"(manifest {battle_row_id})",
         map_constant=map_constant, at=approach,
-        archetype="trainer", rows=(battle_row_id,),
+        group=resolved_group, archetype="trainer", rows=(battle_row_id,),
     )
     def battle_beat(emu: Emulator) -> None:
         if emu.flag(defeat_flag):
             raise ScenarioError(
-                f"{beat_prefix}_battle precondition failed: {defeat_flag} "
+                f"{beat_prefix} precondition failed: {defeat_flag} "
                 "already set before the fight"
             )
-        _start_trigger(emu, f"{beat_prefix}_battle", approach, facing, trigger)
+        _start_trigger(emu, beat_prefix, approach, facing, trigger)
         if not emu.field_locked() and not in_battle(emu):
             # A second nudge for the `action` trainers (61 of the corpus's
             # 299), where stepping adjacent is not itself the trigger. This
@@ -217,27 +265,27 @@ def trainer_beats(
                 logger.debug(
                     "%s: follow-up interact() at %s did not take (%s); the "
                     "battle check below decides",
-                    f"{beat_prefix}_battle", approach, exc,
+                    beat_prefix, approach, exc,
                 )
         assertions.advance_to_battle(emu)
         if not in_battle(emu):
-            shot = emu.screenshot(f"{beat_prefix}_battle_no_battle")
+            shot = emu.screenshot(f"{beat_prefix}_no_battle")
             raise ScenarioError(
-                f"{beat_prefix}_battle: trigger {trigger!r} at {approach} "
+                f"{beat_prefix}: trigger {trigger!r} at {approach} "
                 f"never started a battle ({shot})"
             )
         if not emu.is_trainer_battle():
-            shot = emu.screenshot(f"{beat_prefix}_battle_wild_not_trainer")
+            shot = emu.screenshot(f"{beat_prefix}_wild_not_trainer")
             raise ScenarioError(
-                f"{beat_prefix}_battle: a battle started at {approach} but "
+                f"{beat_prefix}: a battle started at {approach} but "
                 f"it isn't a trainer battle ({shot})"
             )
         expected = emu.resolve_constant(trainer_const)
         actual = emu.opponent_trainer_id()
         if actual != expected:
-            shot = emu.screenshot(f"{beat_prefix}_battle_wrong_trainer")
+            shot = emu.screenshot(f"{beat_prefix}_wrong_trainer")
             raise ScenarioError(
-                f"{beat_prefix}_battle: a trainer battle started at "
+                f"{beat_prefix}: a trainer battle started at "
                 f"{approach}, but against trainer id {actual}, not "
                 f"{trainer_const} ({expected}) -- never trust 'a battle "
                 f"started' alone ({shot})"
@@ -247,22 +295,22 @@ def trainer_beats(
         )
         party = win_battle(emu)
         logger.info(
-            "%s: enemy party at battle start: %s", f"{beat_prefix}_battle",
+            "%s: enemy party at battle start: %s", beat_prefix,
             [(m.species, m.level) for m in party],
         )
-        _trainer_defeat_flag_settle(emu, f"{beat_prefix}_battle", defeat_flag)
+        _trainer_defeat_flag_settle(emu, beat_prefix, defeat_flag)
         if not emu.flag(defeat_flag):
-            shot = emu.screenshot(f"{beat_prefix}_battle_not_defeated")
+            shot = emu.screenshot(f"{beat_prefix}_not_defeated")
             raise ScenarioError(
-                f"{beat_prefix}_battle: {defeat_flag} not set after the win "
+                f"{beat_prefix}: {defeat_flag} not set after the win "
                 f"({shot})"
             )
         if bag_before is not None:
             bag_after = emu.bag_item_quantity(rider_item)
             if bag_after != bag_before + 1:
-                shot = emu.screenshot(f"{beat_prefix}_battle_rider_missing")
+                shot = emu.screenshot(f"{beat_prefix}_rider_missing")
                 raise ScenarioError(
-                    f"{beat_prefix}_battle: rider item {rider_item} "
+                    f"{beat_prefix}: rider item {rider_item} "
                     f"{bag_before}->{bag_after}, expected +1 ({shot})"
                 )
 
@@ -271,7 +319,7 @@ def trainer_beats(
             builder, beat_prefix=beat_prefix, page_idx=page_idx,
             retalk_row_id=retalk_row_id, map_id=map_id, event_id=event_id,
             map_constant=map_constant, approach=approach, facing=facing,
-            defeat_flag=defeat_flag, local_id=local_id,
+            defeat_flag=defeat_flag, local_id=local_id, group=resolved_group,
         )
 
 
@@ -279,7 +327,7 @@ def _register_retalk_beat(
     builder: ChapterBuilder, *, beat_prefix: str, page_idx: int,
     retalk_row_id: str, map_id: int, event_id: int, map_constant: str,
     approach: tuple[int, int], facing: str, defeat_flag: str,
-    local_id: int | None,
+    local_id: int | None, group: str,
 ) -> None:
     name = f"{beat_prefix}_retalk{page_idx}"
 
@@ -288,7 +336,7 @@ def _register_retalk_beat(
         f"Re-talk page {page_idx} of {map_constant} event {event_id} after "
         f"defeat (manifest {retalk_row_id})",
         map_constant=map_constant, at=approach,
-        archetype="trainer", rows=(retalk_row_id,),
+        group=group, archetype="trainer", rows=(retalk_row_id,),
     )
     def retalk_beat(emu: Emulator) -> None:
         if not emu.flag(defeat_flag):

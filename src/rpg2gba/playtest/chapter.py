@@ -44,10 +44,14 @@ a second prefix layered on.
 **`at=` is now enforced (PLAYTEST_AUTHORING_IMPROVEMENT_V2.md Q13 slice 1).**
 A declared `BeatLocation` is no longer decorative: `verify_chapter_locations`
 below is the static, offline half of that enforcement (reachability against
-`rpg2gba.traversal.graph.MapGraph`); `runner.py` owns the runtime half
-(continuity -- does the declared position match where the previous beat
-actually left the player). See `verify_chapter_locations`'s docstring for the
-reachability rule and how a multi-point beat is interpreted.
+`rpg2gba.traversal.graph.MapGraph`). `runner.py` owns the runtime half
+(continuity), but -- since 2026-09-05, after `locations[0]` turned out not to
+reliably mean "inherited entry position" (measured in `ChapterBuilder.beat`'s
+docstring) -- continuity is checked only against the separate, opt-in
+`entry_at=` beat parameter, and is a no-op for a beat that doesn't set it. See
+`verify_chapter_locations`'s docstring for the reachability rule and how a
+multi-point beat is interpreted, and `ChapterBuilder.beat`'s docstring for
+`entry_at=`.
 """
 from __future__ import annotations
 
@@ -79,19 +83,28 @@ BeatFn = Callable[["Emulator"], None]
 #
 #   page_row_id(map_id, event_id, page_idx) -> "map035/ev014/p1"
 #   seam_row_id(map_id, direction, other_map_id) -> "map035/seam/NORTH/map036"
+#   terrain_row_id(map_id, subkind, x, y) -> "map037/terrain/stairs/11,9"
 _PAGE_ROW_RE = re.compile(r"^map\d{3}/ev\d{3}/p\d+$")
 _SEAM_ROW_RE = re.compile(
     r"^map\d{3}/seam/(NORTH|SOUTH|EAST|WEST)/map\d{3}$")
+# Terrain rows were added to the manifest after this validator was written
+# and were rejected here until 2026-09-04, which made a beat unable to claim
+# the stair rows it exercises (CH05 B13/B14 are the first). `subkind` is
+# open-ended by design in `terrain_row_id`, so it is matched as a slug
+# rather than an enumeration.
+_TERRAIN_ROW_RE = re.compile(r"^map\d{3}/terrain/[a-z_]+/-?\d+,-?\d+$")
 
 
 def _validate_row_id(row: str, *, beat_name: str) -> None:
-    if _PAGE_ROW_RE.match(row) or _SEAM_ROW_RE.match(row):
+    if (_PAGE_ROW_RE.match(row) or _SEAM_ROW_RE.match(row)
+            or _TERRAIN_ROW_RE.match(row)):
         return
     raise ValueError(
         f"beat {beat_name!r}: rows entry {row!r} does not match the "
         "chapter-manifest row-id shape (expected a page row like "
-        "'map035/ev014/p1' or a seam row like 'map035/seam/NORTH/map036' "
-        "-- see page_row_id/seam_row_id in "
+        "'map035/ev014/p1', a seam row like 'map035/seam/NORTH/map036', or "
+        "a terrain row like 'map037/terrain/stairs/11,9' -- see "
+        "page_row_id/seam_row_id/terrain_row_id in "
         "src/rpg2gba/chapter_manifest/schema.py)")
 
 
@@ -115,12 +128,19 @@ class BeatLocation:
 
 @dataclass(frozen=True)
 class Beat:
-    """One row of a chapter doc's beat table."""
+    """One row of a chapter doc's beat table.
+
+    `entry_at`, independent of `locations` (see `ChapterBuilder.beat`'s
+    docstring for why the two are separate claims), is this beat's explicit
+    opt-in to runtime continuity checking: "this beat starts from here." A
+    beat that doesn't set it makes no inherited-position claim at all, and
+    `runner.py`'s `_check_beat_continuity` is a no-op for it."""
 
     name: str
     description: str
     run: BeatFn
     locations: tuple[BeatLocation, ...] = ()
+    entry_at: tuple[int, int] | None = None
     group: str | None = None
     rows: tuple[str, ...] = ()
     # Which recognized RPG Maker event archetype (`chapter_manifest.
@@ -130,6 +150,104 @@ class Beat:
     # `chapter_manifest.checker.ArchetypeModel` -- see that Protocol's
     # docstring for why the checker itself never imports `playtest`.
     archetype: str | None = None
+
+
+def page_row_script(row_id: str) -> tuple[int, str] | None:
+    """`("map037/ev004/p0")` -> `(37, "Map037_EV004_Page1")`, or `None` for a
+    row id that names no page script (seam and terrain rows).
+
+    The one place that knows this mapping. Both consumers of the
+    foreign-trigger exemption go through it -- `resolved_trigger_scripts`
+    below for a predecessor's dispositions, and
+    `runner._WalkOracle.mark_rows_resolved` for this chapter's own beats as
+    they pass -- so the two can never disagree about which script a row
+    names. Note the page number is 1-based on the label and 0-based in the
+    row id (`metadata_wiring.page_label`'s own convention).
+    """
+    from ..tileset_converter.metadata_wiring import page_label
+
+    if not _PAGE_ROW_RE.match(row_id):
+        return None
+    map_part, ev_part, page_part = row_id.split("/")
+    map_id = int(map_part[3:])
+    return map_id, page_label(map_id, int(ev_part[2:]), int(page_part[1:]) + 1)
+
+
+def resolved_trigger_scripts(chapter: "Chapter") -> dict[int, set[str]]:
+    """Per map id, the page scripts an INHERITED beat of `chapter` already
+    exercised -- so they are no longer "foreign" to this chapter's own walks.
+
+    A foreign trigger is one a walk has no business firing. The rule that
+    finds them asks only "does this beat own that script", which is right
+    within a chapter and wrong across a predecessor replay: an inherited beat
+    runs before EVERY beat this chapter owns (`ChapterBuilder`'s
+    `predecessor` prepends them), so what it resolved stays resolved.
+
+    CH05 is the case. Its approach from CH04's handover cell must pass
+    Youngster Timothy's event-touch tile -- `routing.pathing.plan_segment`
+    tries a trigger-free path first and there is none, so it is geography,
+    not a search failure. `CH04:B4` fights and defeats him during the replay
+    and latches his self-switch, so by the time CH05's first beat walks past,
+    the tile fires nothing. Treating it as foreign failed a beat over a
+    script that cannot run.
+
+    Two deliberate narrowings:
+
+    * INHERITED only. A chapter's own triggers stay foreign to each other:
+      B3's trainer must not be excused for firing during an approach to B8,
+      which is the point of the check.
+    * REGISTERED only. The claim comes from the predecessor's committed
+      dispositions (`beat:B4`), but a disposition is an intent, not a run --
+      CH04 disposes `beat:` on rows whose beats are in `DEFERRED_BEATS` and
+      never execute. So each claim is confirmed against a beat actually
+      present in `chapter.beats`, matched with `beat_model._matches` so a
+      template-registered family (`B4_battle`) satisfies `beat:B4` exactly as
+      the checker does.
+
+    The predecessors are read off `chapter.beats` itself rather than walking
+    `chapters.json` again -- the prefixes on the inherited beats already name
+    every chapter that contributed one, transitively.
+
+    Fail-soft: a predecessor with no dispositions file contributes nothing
+    (CH01-CH03 predate the manifest). That is the pre-existing behaviour --
+    every trigger stays foreign -- not a silent weakening.
+    """
+    from ..chapter_manifest.beat_model import _matches
+    from ..chapter_manifest.dispositions import disposition_path, load_dispositions
+
+    inherited: dict[str, set[str]] = {}
+    for beat in chapter.beats:
+        if ":" not in beat.name:
+            continue
+        owner, _, own_name = beat.name.partition(":")
+        inherited.setdefault(owner, set()).add(own_name)
+    if not inherited:
+        return {}
+
+    resolved: dict[int, set[str]] = {}
+    for owner, beat_names in inherited.items():
+        path = disposition_path(owner)
+        try:
+            dispositions = load_dispositions(path)
+        except (OSError, ValueError) as exc:
+            logger.info(
+                "resolved_trigger_scripts: no usable dispositions for "
+                "predecessor %s (%s) -- its triggers stay foreign", owner, exc)
+            continue
+        for row_id, disposition in dispositions.items():
+            if disposition.verdict != "beat":
+                continue
+            beat_id = (disposition.argument or "").strip()
+            if not beat_id:
+                continue
+            if not any(_matches(beat_id, name) for name in beat_names):
+                continue  # dispositioned but deferred: it never ran
+            named = page_row_script(row_id)
+            if named is None:
+                continue  # seam/terrain rows name no page script
+            map_id, script = named
+            resolved.setdefault(map_id, set()).add(script)
+    return resolved
 
 
 @dataclass(frozen=True)
@@ -161,6 +279,26 @@ class Chapter:
     doc: str
     beats: tuple[Beat, ...]
     predecessor: str | None = None
+    #: Where this chapter's route STARTS, when that is not the first beat's
+    #: own interaction cell. The route solver otherwise takes the entry from
+    #: `own_beats[0].locations[0]`, which is also what it uses as that
+    #: group's interaction cell -- the point later segments are costed FROM.
+    #: Those are the same cell for a beat that begins where it acts, and a
+    #: different one for a beat that begins on the far side of its own warp
+    #: (`warp_beat(start_side="dest")`).
+    #:
+    #: CH05's B1 is the case that forced the split: it is authored on the
+    #: cave's exit warp, which is where it acts and where it leaves the
+    #: player, but the chapter begins on Route 02 where CH04 hands the player
+    #: over. Overloading `locations[0]` to mean both costs the solver its
+    #: departure point -- measured, not guessed: it moved CH05 from 141 to
+    #: 258 tiles and reordered the cave into a backtracking sweep, because
+    #: every segment after B1 was then costed from Route 02 rather than from
+    #: inside the cave.
+    #:
+    #: Declaring it leaves `locations[0]` meaning exactly what it meant
+    #: before for every chapter, so CH01-CH04 re-solve unchanged.
+    route_entry: BeatLocation | None = None
 
     def index_of(self, beat_name: str) -> int:
         for i, b in enumerate(self.beats):
@@ -222,8 +360,8 @@ def _prefix_beat(owner: str, beat: Beat) -> Beat:
                        else f"{owner}:{beat.group}")
     return Beat(name=f"{owner}:{beat.name}",
                 description=f"[{owner}] {beat.description}", run=beat.run,
-                locations=beat.locations, group=prefixed_group,
-                rows=beat.rows, archetype=beat.archetype)
+                locations=beat.locations, entry_at=beat.entry_at,
+                group=prefixed_group, rows=beat.rows, archetype=beat.archetype)
 
 
 @dataclass
@@ -233,12 +371,14 @@ class ChapterBuilder:
     name: str
     doc: str
     predecessor: str | None = None
+    route_entry: BeatLocation | None = None
     _beats: list[Beat] = field(default_factory=list)
 
     def beat(self, name: str, description: str, *,
              map_constant: str | None = None,
              at: tuple[int, int] | None = None,
              locations: tuple[BeatLocation, ...] | None = None,
+             entry_at: tuple[int, int] | None = None,
              group: str | None = None,
              rows: tuple[str, ...] = (),
              archetype: str | None = None,
@@ -278,16 +418,43 @@ class ChapterBuilder:
 
         **`at=` records where the beat triggers, and does NOT move the
         player** -- a beat still runs from wherever the PREVIOUS beat left
-        off; declaring `at=`/`locations=` never teleports anyone. But as of
-        Q13 slice 1 the declaration is a checked claim, not decoration: it
-        must name a cell the offline traversable graph says is reachable
-        (`verify_chapter_locations`, static, checked before the ROM runs) and
-        it must match where the previous beat actually left the player
-        (`runner.py`'s per-beat continuity check, checked at run time). A
-        beat whose declared `at=` disagrees with the inherited position now
-        fails loud, at the point of disagreement, naming both positions --
-        it no longer silently starts somewhere else and fails later as a
-        misleading pathfinding "stuck" error near the target.
+        off; declaring `at=`/`locations=` never teleports anyone. It must
+        name a cell the offline traversable graph says is reachable
+        (`verify_chapter_locations`, static, checked before the ROM runs).
+        It is NOT, by itself, a claim about *inherited* position -- see
+        `entry_at=` below for that.
+
+        **`entry_at=` is the separate, opt-in claim that this beat starts
+        from a specific cell.** `_check_beat_continuity` (`runner.py`)
+        checks a beat's declared `entry_at` against where the PREVIOUS beat
+        actually left the player, at run time, and is a no-op for any beat
+        that doesn't set it. A beat whose `entry_at` disagrees with the
+        inherited position fails loud, at the point of disagreement, naming
+        both positions -- it no longer silently starts somewhere else and
+        fails later as a misleading pathfinding "stuck" error near the
+        target.
+
+        `entry_at=` was split out from `at=`/`locations[0]` on 2026-09-05
+        (PLAYTEST_AUTHORING_IMPROVEMENT_V2 follow-up) after the first ROM
+        run since continuity checking landed (2026-08-28) falsified the
+        premise it used to rest on. `_check_beat_continuity` used to read
+        `beat.locations[0]` as the inherited-position claim, on the theory
+        that the corpus's own authoring convention always lists the entry
+        door/threshold first in a multi-point beat. An offline audit of
+        every inherited CH01 beat replayed by CH05, against the recorded
+        entry/exit positions from the last green run, found that premise
+        false: 40 of 51 declared `locations[0]` values disagreed with the
+        beat's recorded entry position (11 matched entry, 13 matched exit
+        instead, 27 were neither -- a mid-beat cell), and multi-point beats
+        scored *worse* than single-`at=` ones (1 match against 12
+        mismatches), the opposite of what the old docstring claimed. The
+        corpus-wide convention `at=`/`locations=` actually encode is "the
+        tile the beat triggers on" -- the NPC talked to, the door stepped
+        on -- which is neither reliably the beat's entry nor its exit.
+        `entry_at=` exists so a beat can make the inherited-position claim
+        explicitly, only where it's actually true, instead of it being
+        inferred (wrongly, most of the time) from a declaration meant for
+        something else.
 
         **Registration order is playthrough order.** A chapter's beats are one
         continuous run, so position in this file is position in time, and beat
@@ -324,6 +491,12 @@ class ChapterBuilder:
                 f"beat {name!r}: archetype={archetype!r} is not one of "
                 f"{sorted(ARCHETYPE_NAMES)} (chapter_manifest.archetypes."
                 "ARCHETYPE_NAMES)")
+        if entry_at is not None:
+            if (not isinstance(entry_at, tuple) or len(entry_at) != 2
+                    or not all(isinstance(v, int) for v in entry_at)):
+                raise ValueError(
+                    f"beat {name!r}: entry_at= must be a (x, y) tuple of "
+                    f"ints, got {entry_at!r}")
 
         shorthand_given = map_constant is not None or at is not None
         if shorthand_given and locations is not None:
@@ -346,7 +519,7 @@ class ChapterBuilder:
         def decorate(fn: BeatFn) -> BeatFn:
             self._beats.append(Beat(name=name, description=description,
                                     run=fn, locations=resolved_locations,
-                                    group=group, rows=rows,
+                                    entry_at=entry_at, group=group, rows=rows,
                                     archetype=archetype))
             return fn
 
@@ -385,7 +558,8 @@ class ChapterBuilder:
         _validate_groups(beats, chapter_name=self.name)
 
         return Chapter(name=self.name, doc=self.doc, beats=beats,
-                        predecessor=self.predecessor)
+                        predecessor=self.predecessor,
+                        route_entry=self.route_entry)
 
 
 def _validate_groups(beats: tuple[Beat, ...], *, chapter_name: str) -> None:
@@ -623,8 +797,10 @@ def verify_chapter_locations(
     ("the door is here", "Flood is here", "Lynette is here") and must be
     independently reachable; there is no single "the" location for a
     multi-point beat to satisfy. (Contrast `runner.py`'s continuity check,
-    which -- documented there -- uses only `locations[0]`, the point the
-    beat expects to already be standing at when it starts.)
+    which -- documented there -- checks only the separate, opt-in `entry_at=`
+    field, not any `locations` entry -- `locations[0]` turned out not to be
+    a reliable inherited-position claim; see `ChapterBuilder.beat`'s
+    docstring for the 2026-09-05 measurement that found this.)
 
     Returns every check performed (pass and fail); callers that want fail-
     loud behaviour should use `assert_chapter_locations_reachable`. A beat

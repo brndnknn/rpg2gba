@@ -4034,9 +4034,26 @@ def test_load_warp_facing_overrides_shipped_file_loads_clean() -> None:
     corridor with unblocked floor on BOTH sides once its two vertically
     stacked sibling cells are excluded, which is genuine unresolvable-by-
     geometry ambiguity predating CH03 (Moki Town is an earlier chapter, not
-    Kevlar), not a tier-3 bug — see the "32:8:43" entry."""
+    Kevlar), not a tier-3 bug — see the "32:8:43" entry.
+
+    CH05 added two more (2026-09-04), both Passage Cave and both `DIR_NORTH`:
+    map35 (20,33) -> "36:17:39" (the Route 2 cave entrance, beat B1) and map36
+    (17,4) -> "37:16:26" (the 1F -> 2F stairs, beat B8). Unlike the map33 pair
+    these are NOT unresolvable by geometry — tier 3 only inspects the four
+    immediate neighbours, so it counts a tile nothing can reach except the warp
+    itself as a candidate approach. Applying a second-order reachability check
+    (a survivor is a real approach only if IT has an open neighbour other than
+    the warp tile) resolves both uniquely, and to exactly the values pinned
+    here; it resolves neither map33 case. That improvement is filed as
+    PROJECT_TODO #107 — when it lands, these two entries should become
+    derivable and their agreement with the derived answer is the regression
+    test. The map33 pair stays hand-pinned regardless."""
     overrides = mw.load_warp_facing_overrides()
-    assert overrides == {(32, 8, 43): "DIR_EAST"}
+    assert overrides == {
+        (32, 8, 43): "DIR_EAST",
+        (36, 17, 39): "DIR_NORTH",
+        (37, 16, 26): "DIR_NORTH",
+    }
 
 
 def test_render_arrival_facing_script_empty_is_none() -> None:

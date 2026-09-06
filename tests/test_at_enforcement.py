@@ -13,11 +13,17 @@ Two independent checks:
   `tests/test_traversal_graph.py` already relies on being present.
 
 - **Check 2 (runtime, `runner.py`)**: `_check_beat_continuity` -- a beat's
-  first declared location must match where the previous beat actually left
-  the player. Exercised both directly (unit) and through a full
-  `run_chapter` attempt against a stub emulator (`FakeEmulator` here,
+  explicit `entry_at=` (NOT `locations`/`at=`) must match where the previous
+  beat actually left the player. Exercised both directly (unit) and through a
+  full `run_chapter` attempt against a stub emulator (`FakeEmulator` here,
   independent of `test_runner.py`'s copy -- it needs `resolve_constant`,
   which that fixture doesn't implement).
+
+  `entry_at=` was split out from `locations[0]` on 2026-09-05: an offline
+  audit found `locations[0]` disagreed with a beat's recorded entry position
+  40 times out of 51 inherited beats, so continuity is now checked only
+  against the separate, opt-in `entry_at` field -- see `chapter.py`'s
+  `ChapterBuilder.beat` docstring for the full measurement.
 """
 from __future__ import annotations
 
@@ -272,20 +278,21 @@ def _entry(map_group: int, map_num: int, pos: tuple[int, int]) -> dict[str, obje
 
 def test_continuity_mismatch_is_caught_and_names_both_positions() -> None:
     emu = FakeEmulator(Path("rom"), Path("engine"), map_consts={ROUTE_01: (0, 33)})
-    beat = Beat("B2", "d", ok, (BeatLocation(ROUTE_01, 10, 10, "expected here"),))
+    beat = Beat("B2", "d", ok, (BeatLocation(ROUTE_01, 10, 10, "expected here"),),
+                entry_at=(10, 10))
     enter = _entry(0, 33, (5, 5))  # previous beat actually left the player at (5,5)
 
     with pytest.raises(BeatContinuityError) as exc_info:
         _check_beat_continuity(beat, enter, emu)
 
     message = str(exc_info.value)
-    assert "(10,10)" in message  # declared
-    assert "(5, 5)" in message   # actual
+    assert "(10, 10)" in message  # declared
+    assert "(5, 5)" in message    # actual
 
 
 def test_continuity_match_does_not_raise() -> None:
     emu = FakeEmulator(Path("rom"), Path("engine"), map_consts={ROUTE_01: (0, 33)})
-    beat = Beat("B2", "d", ok, (BeatLocation(ROUTE_01, 10, 10),))
+    beat = Beat("B2", "d", ok, (BeatLocation(ROUTE_01, 10, 10),), entry_at=(10, 10))
     enter = _entry(0, 33, (10, 10))
 
     _check_beat_continuity(beat, enter, emu)  # must not raise
@@ -299,27 +306,29 @@ def test_continuity_unaffected_when_beat_declares_nothing() -> None:
     _check_beat_continuity(beat, enter, emu)  # nothing to check, must not raise
 
 
-def test_continuity_checks_only_the_first_of_several_locations() -> None:
-    """Multi-point interpretation for check 2: `locations[1:]` are points the
-    beat's own body is expected to reach by walking there, not the inherited
-    entry position -- a mismatch on a later point must not raise here."""
+def test_continuity_not_checked_without_entry_at_even_if_at_disagrees() -> None:
+    """A beat that declares `at=`/`locations=` but no `entry_at=` makes no
+    inherited-position claim at all -- `locations[0]` disagreeing with the
+    inherited position must not raise. This is the corrected behaviour: the
+    old check read `locations[0]` as the inherited claim and would have
+    raised here."""
     emu = FakeEmulator(Path("rom"), Path("engine"), map_consts={ROUTE_01: (0, 33)})
     locations = (
-        BeatLocation(ROUTE_01, 10, 10, "entry, matches"),
-        BeatLocation(ROUTE_01, 40, 40, "interaction point, does not match enter"),
+        BeatLocation(ROUTE_01, 10, 10, "trigger tile, not an entry claim"),
+        BeatLocation(ROUTE_01, 40, 40, "interaction point"),
     )
-    beat = Beat("B2", "d", ok, locations)
-    enter = _entry(0, 33, (10, 10))
+    beat = Beat("B2", "d", ok, locations)  # no entry_at=
+    enter = _entry(0, 33, (999, 999))  # wildly disagrees with locations[0]
 
-    _check_beat_continuity(beat, enter, emu)  # only locations[0] is checked
+    _check_beat_continuity(beat, enter, emu)  # not checked at all, must not raise
 
 
 # -- end-to-end through run_chapter -------------------------------------------
 
 def test_run_chapter_fails_the_beat_on_continuity_mismatch(tmp_path: Path) -> None:
     """A full `run_chapter` attempt: B1 leaves the player at (5, 5); B2
-    declares at=(10, 10) on the same map. The mismatch must surface as B2's
-    own failure, not a silent wrong start."""
+    declares entry_at=WALKABLE_CELL on the same map. The mismatch must
+    surface as B2's own failure, not a silent wrong start."""
     rom = tmp_path / "rom.gba"
     rom.write_bytes(bytes(0x400))
 
@@ -332,10 +341,12 @@ def test_run_chapter_fails_the_beat_on_continuity_mismatch(tmp_path: Path) -> No
     # B2's declared cell must itself be reachable (check 1 runs up front,
     # ahead of any attempt) -- WALKABLE_CELL, not the (5, 5) B1 actually
     # lands at, so this exercises check 2 (continuity) specifically, not
-    # check 1 (reachability).
+    # check 1 (reachability). entry_at= is what makes this an inherited-
+    # position claim `_check_beat_continuity` actually checks.
     beats = (
         Beat("B1", "first", b1, ()),
-        Beat("B2", "second", b2, (BeatLocation(ROUTE_01, *WALKABLE_CELL, "wrong"),)),
+        Beat("B2", "second", b2, (BeatLocation(ROUTE_01, *WALKABLE_CELL, "wrong"),),
+             entry_at=WALKABLE_CELL),
     )
     chapter = Chapter(name="t_e2e", doc="reference/chapters/t_e2e.md", beats=beats)
 
@@ -352,5 +363,5 @@ def test_run_chapter_fails_the_beat_on_continuity_mismatch(tmp_path: Path) -> No
     b1_outcome, b2_outcome = result.attempts[0].beats
     assert b1_outcome.status == "pass"
     assert b2_outcome.status == "fail"
-    assert f"({WALKABLE_CELL[0]},{WALKABLE_CELL[1]})" in b2_outcome.error
+    assert f"({WALKABLE_CELL[0]}, {WALKABLE_CELL[1]})" in b2_outcome.error
     assert "(5, 5)" in b2_outcome.error

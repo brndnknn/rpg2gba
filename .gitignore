@@ -91,40 +91,18 @@ engine/src/data/graphics/uranium_trainer_sprites.h
 engine/src/data/graphics/uranium_trainer_backsprites.h
 engine/graphics/trainers/uranium/
 
-# Cries land beside the ~1161 TRACKED vanilla cry wavs, so they can't be
-# blanket-ignored by directory or extension — each staged species is listed
-# explicitly. NOTE (Phase 7): this list does not scale to the other 160
-# needs_engine species; the scalable fix is to prefix staged cry filenames
-# with `uranium_` in species_converter/common.py and ignore that glob instead.
-engine/sound/direct_sound_samples/cries/orchynx.wav
-engine/sound/direct_sound_samples/cries/metalynx.wav
-engine/sound/direct_sound_samples/cries/raptorch.wav
-engine/sound/direct_sound_samples/cries/archilles.wav
-engine/sound/direct_sound_samples/cries/eletux.wav
-engine/sound/direct_sound_samples/cries/electruxo.wav
-# CH02 (2026-08-05): Route 1's trainer parties dragged in 7 more species, and
-# evolution-chain closure dragged in 11 more behind them.
-engine/sound/direct_sound_samples/cries/chyinmunk.wav
-engine/sound/direct_sound_samples/cries/kinetmunk.wav
-engine/sound/direct_sound_samples/cries/birbie.wav
-engine/sound/direct_sound_samples/cries/aveden.wav
-engine/sound/direct_sound_samples/cries/splendifowl.wav
-engine/sound/direct_sound_samples/cries/cubbug.wav
-engine/sound/direct_sound_samples/cries/cubblfly.wav
-engine/sound/direct_sound_samples/cries/nimflora.wav
-engine/sound/direct_sound_samples/cries/barewl.wav
-engine/sound/direct_sound_samples/cries/dearewl.wav
-engine/sound/direct_sound_samples/cries/gararewl.wav
-engine/sound/direct_sound_samples/cries/tonemy.wav
-engine/sound/direct_sound_samples/cries/tofurang.wav
-engine/sound/direct_sound_samples/cries/fartog.wav
-engine/sound/direct_sound_samples/cries/folerog.wav
-engine/sound/direct_sound_samples/cries/blubelrog.wav
-engine/sound/direct_sound_samples/cries/owten.wav
-engine/sound/direct_sound_samples/cries/eshouten.wav
-engine/sound/direct_sound_samples/cries/luxi.wav
-engine/sound/direct_sound_samples/cries/luxor.wav
-engine/sound/direct_sound_samples/cries/luxelong.wav
+# Staged Uranium cries land beside the ~1161 TRACKED vanilla cry wavs. This
+# used to be an explicit per-species list, and it decayed exactly as its own
+# note predicted: CH05 staged GROZARD/TERLARD and the BAASHAUN family, and
+# their five wavs sat untracked-and-unignored — ROM-derived audio one
+# `git add -A` away from being committed (CLAUDE.md §2). Blanket-ignore the
+# directory instead, on the same reasoning as the per-map dirs below: a
+# gitignore rule never untracks, so all ~1161 vanilla cries stay tracked and
+# committed, and only newly GENERATED (Uranium) wavs are kept out of
+# `git status`. The cleaner long-term fix is still to prefix staged cry
+# filenames with `uranium_` in species_converter/common.py and ignore that
+# glob, which would let this be precise rather than broad.
+engine/sound/direct_sound_samples/cries/*.wav
 # Full-corpus Map Walker build: the assembler generates a per-map dir under
 # data/maps/ and data/layouts/ for every built Uranium map (~190) plus the
 # UraniumWalkerStub/ dummy for dropped stock map data. Blanket-ignore all per-map

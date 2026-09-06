@@ -287,8 +287,11 @@ def test_unmapped_music_class_fails_loud() -> None:
     it actually touches) must fail loud, not silently default to some
     music."""
     trainer_types = _trainer_types()
-    trainer_types["TRAINER_CLASS_UNMAPPABLE"]["name"] = "BLACK BELT"  # real class, unmapped here
-    fork_classes = _fork_classes() | {"TRAINER_CLASS_BLACK_BELT"}
+    # Was BLACK BELT until CH05 mapped that class for Keichi; any real fork
+    # class with no _CLASS_ENCOUNTER_MUSIC row works, so this moved to a class
+    # the corpus has not needed yet rather than weakening the assertion.
+    trainer_types["TRAINER_CLASS_UNMAPPABLE"]["name"] = "HEX MANIAC"  # real class, unmapped here
+    fork_classes = _fork_classes() | {"TRAINER_CLASS_HEX_MANIAC"}
     with pytest.raises(ValueError, match="no encounter-music mapping"):
         battles.build_staged_battles(
             ("TRAINER_UNMAPPABLE_1",),

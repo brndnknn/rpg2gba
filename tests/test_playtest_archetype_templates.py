@@ -82,13 +82,18 @@ def test_trainer_beats_registers_battle_and_retalk_in_order() -> None:
     )
     chapter = b.build()
     names = [beat.name for beat in chapter.beats]
-    assert names == ["T1_battle", "T1_retalk1"]
+    assert names == ["T1", "T1_retalk1"]
 
     battle, retalk = chapter.beats
     assert battle.archetype == "trainer"
     assert battle.rows == ("map035/ev012/p0",)
     assert retalk.archetype == "trainer"
     assert retalk.rows == ("map035/ev012/p1",)
+
+    # group=None defaults to beat_prefix, and reaches every beat the
+    # template registers -- the whole point of problem 1's fix.
+    assert battle.group == "T1"
+    assert retalk.group == "T1"
 
     for beat in chapter.beats:
         assert beat.locations, f"{beat.name}: no location declared"
@@ -113,11 +118,28 @@ def test_trainer_beats_two_retalk_pages() -> None:
     )
     chapter = b.build()
     names = [beat.name for beat in chapter.beats]
-    assert names == ["T2_battle", "T2_retalk1", "T2_retalk2"]
+    assert names == ["T2", "T2_retalk1", "T2_retalk2"]
     rows = [beat.rows for beat in chapter.beats]
     assert rows == [
         ("map035/ev003/p0",), ("map035/ev003/p1",), ("map035/ev003/p2",),
     ]
+    assert all(beat.group == "T2" for beat in chapter.beats)
+
+
+def test_trainer_beats_explicit_group_overrides_default_and_reaches_every_beat() -> None:
+    b = _builder()
+    trainer_beats(
+        b, chapter_id="CH04", map_constant="MAP_ROUTE_02", map_id=35,
+        event_id=3, trainer_const="TRAINER_LARRIE_4",
+        defeat_flag="FLAG_MAP035_EVENT003_SSA",
+        beat_prefix="T2", trigger="event_touch", phone=True, double=False,
+        retalk_pages=2, rider=False, group="STOP_LARRIE",
+    )
+    chapter = b.build()
+    assert [beat.name for beat in chapter.beats] == [
+        "T2", "T2_retalk1", "T2_retalk2",
+    ]
+    assert all(beat.group == "STOP_LARRIE" for beat in chapter.beats)
 
 
 def test_trainer_beats_param_disagreement_fails_loud() -> None:
@@ -166,9 +188,10 @@ def test_item_ball_beats_grant_only_by_default() -> None:
         event_id=9, item="ITEM_POTION", beat_prefix="IB1",
     )
     chapter = b.build()
-    assert [beat.name for beat in chapter.beats] == ["IB1_grant"]
+    assert [beat.name for beat in chapter.beats] == ["IB1"]
     assert chapter.beats[0].archetype == "item_ball"
     assert chapter.beats[0].rows == ("map035/ev009/p0",)
+    assert chapter.beats[0].group == "IB1"
 
 
 def test_item_ball_beats_negative_beat_adds_spent_beat() -> None:
@@ -179,11 +202,25 @@ def test_item_ball_beats_negative_beat_adds_spent_beat() -> None:
     )
     chapter = b.build()
     names = [beat.name for beat in chapter.beats]
-    assert names == ["IB1_grant", "IB1_spent"]
+    assert names == ["IB1", "IB1_spent"]
     grant, spent = chapter.beats
     assert grant.rows == ("map035/ev009/p0",)
     assert spent.rows == ("map035/ev009/p1",)
     assert grant.archetype == spent.archetype == "item_ball"
+    # group=None defaults to beat_prefix and reaches the satellite beat too.
+    assert grant.group == spent.group == "IB1"
+
+
+def test_item_ball_beats_explicit_group_overrides_default_and_reaches_every_beat() -> None:
+    b = _builder()
+    item_ball_beats(
+        b, chapter_id="CH04", map_constant="MAP_ROUTE_02", map_id=35,
+        event_id=9, item="ITEM_POTION", beat_prefix="IB1", negative_beat=True,
+        group="STOP_POTION",
+    )
+    chapter = b.build()
+    assert [beat.name for beat in chapter.beats] == ["IB1", "IB1_spent"]
+    assert all(beat.group == "STOP_POTION" for beat in chapter.beats)
 
 
 def test_item_ball_beats_unknown_event_fails_loud() -> None:
@@ -203,7 +240,7 @@ def test_warp_beat_registers_one_beat_with_resolved_location(
 ) -> None:
     b = _builder()
     warp_beat(
-        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_36", map_id=36,
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
         event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
         direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
     )
@@ -212,8 +249,24 @@ def test_warp_beat_registers_one_beat_with_resolved_location(
     beat = chapter.beats[0]
     assert beat.archetype == "warp"
     assert beat.rows == ("map036/ev001/p0",)
-    assert beat.locations[0].map_constant == "MAP_PASSAGE_CAVE_36"
+    assert beat.locations[0].map_constant == "MAP_PASSAGE_CAVE_1F"
     assert (beat.locations[0].x, beat.locations[0].y) != (0, 0)
+    # group=None defaults to beat_name, consistent with the other templates.
+    assert beat.group == "W1"
+
+
+def test_warp_beat_explicit_group_overrides_default(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        group="STOP_CAVE_EXIT",
+    )
+    chapter = b.build()
+    assert chapter.beats[0].group == "STOP_CAVE_EXIT"
 
 
 def test_warp_beat_threshold_requires_direction(
@@ -222,7 +275,7 @@ def test_warp_beat_threshold_requires_direction(
     b = _builder()
     with pytest.raises(ValueError, match="requires direction="):
         warp_beat(
-            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_36",
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
             map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
             mechanism="threshold", beat_name="W1", manifest_rows=ch05_rows,
         )
@@ -234,10 +287,109 @@ def test_warp_beat_unknown_mechanism_fails_loud(
     b = _builder()
     with pytest.raises(ValueError, match="is not one of"):
         warp_beat(
-            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_36",
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
             map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
             mechanism="teleporter",  # not a real mechanism
             beat_name="W1", manifest_rows=ch05_rows,
+        )
+
+
+def test_warp_beat_round_trip_still_registers_one_beat_with_one_row(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    """`round_trip=True` is still ONE beat claiming ONE row (task brief) --
+    the extra crossings it performs at runtime don't change registration."""
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        round_trip=True, return_direction="UP",
+    )
+    chapter = b.build()
+    assert [beat.name for beat in chapter.beats] == ["W1"]
+    beat = chapter.beats[0]
+    assert beat.archetype == "warp"
+    assert beat.rows == ("map036/ev001/p0",)
+    assert beat.group == "W1"
+
+
+def test_warp_beat_round_trip_requires_return_direction_for_threshold(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    b = _builder()
+    with pytest.raises(ValueError, match="requires return_direction="):
+        warp_beat(
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
+            mechanism="threshold", direction="DOWN", beat_name="W1",
+            manifest_rows=ch05_rows, round_trip=True,
+        )
+
+
+def test_warp_beat_return_direction_without_round_trip_fails_loud(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    b = _builder()
+    with pytest.raises(ValueError, match="without round_trip=True"):
+        warp_beat(
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
+            mechanism="threshold", direction="DOWN", beat_name="W1",
+            manifest_rows=ch05_rows, return_direction="UP",
+        )
+
+
+def test_warp_beat_round_trip_derives_reciprocal_cells_not_a_literal(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    """The reciprocal warp/arrival cells are derived through `cells.py`'s
+    own resolvers (task brief), not passed in -- there is no parameter for
+    them at all. This just proves registration succeeds (i.e. the
+    reciprocal derivation didn't raise) for a real corpus pair (B1's own
+    Cave1F<->Route2 warp) with no coordinate ever spelled out here."""
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        round_trip=True, return_direction="UP",
+    )
+    chapter = b.build()
+    assert len(chapter.beats) == 1
+
+
+def test_warp_beat_round_trip_unknown_reciprocal_fails_loud(
+    ch05_rows: tuple[ManifestRow, ...], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A destination map with no warp back to the origin can't be
+    round-tripped -- `warp_beat` propagates `cells.warp_cell`'s own
+    fail-loud error rather than silently degrading to a one-way crossing.
+    Every real warp pair in the staged CH05 corpus happens to be mutually
+    reciprocal, so this patches `warp_cell` to simulate the one-way case
+    rather than searching the whole corpus for a coincidental example --
+    the forward leg's own resolution (real data) is left untouched."""
+    import rpg2gba.playtest.archetypes.warp as warp_module
+
+    real_warp_cell = warp_module.warp_cell
+
+    def _fake_warp_cell(map_constant: str, *, to: str, event_id: int | None = None):
+        if map_constant == "MAP_ROUTE_02" and to == "MAP_PASSAGE_CAVE_1F":
+            raise ValueError(
+                "warp_cell: MAP_ROUTE_02 has no warp exit whose destination "
+                "is MAP_PASSAGE_CAVE_1F (synthetic, for this test)"
+            )
+        return real_warp_cell(map_constant, to=to, event_id=event_id)
+
+    monkeypatch.setattr(warp_module, "warp_cell", _fake_warp_cell)
+
+    b = _builder()
+    with pytest.raises(ValueError, match="no warp exit"):
+        warp_beat(
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
+            mechanism="threshold", direction="DOWN", beat_name="W1",
+            manifest_rows=ch05_rows, round_trip=True, return_direction="UP",
         )
 
 
@@ -249,8 +401,8 @@ def test_arrival_nudge_beat_registers_one_beat(
 ) -> None:
     b = _builder()
     arrival_nudge_beat(
-        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_36", map_id=36,
-        event_id=2, from_map_constant="MAP_PASSAGE_CAVE_37",
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=2, from_map_constant="MAP_PASSAGE_CAVE_2F",
         beat_name="N1", manifest_rows=ch05_rows,
     )
     chapter = b.build()
@@ -258,7 +410,22 @@ def test_arrival_nudge_beat_registers_one_beat(
     beat = chapter.beats[0]
     assert beat.archetype == "arrival_nudge"
     assert beat.rows == ("map036/ev002/p1",)
-    assert beat.locations[0].map_constant == "MAP_PASSAGE_CAVE_36"
+    assert beat.locations[0].map_constant == "MAP_PASSAGE_CAVE_1F"
+    # group=None defaults to beat_name, consistent with the other templates.
+    assert beat.group == "N1"
+
+
+def test_arrival_nudge_beat_explicit_group_overrides_default(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    b = _builder()
+    arrival_nudge_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=2, from_map_constant="MAP_PASSAGE_CAVE_2F",
+        beat_name="N1", manifest_rows=ch05_rows, group="STOP_CAVE_ARRIVE",
+    )
+    chapter = b.build()
+    assert chapter.beats[0].group == "STOP_CAVE_ARRIVE"
 
 
 def test_arrival_nudge_beat_unknown_event_fails_loud(
@@ -267,8 +434,8 @@ def test_arrival_nudge_beat_unknown_event_fails_loud(
     b = _builder()
     with pytest.raises(ValueError, match="no 'arrival_nudge' archetype match"):
         arrival_nudge_beat(
-            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_36",
-            map_id=36, event_id=997, from_map_constant="MAP_PASSAGE_CAVE_37",
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=997, from_map_constant="MAP_PASSAGE_CAVE_2F",
             beat_name="NX", manifest_rows=ch05_rows,
         )
 
@@ -363,4 +530,242 @@ def test_trainer_beats_loads_committed_ch04_manifest_from_disk() -> None:
         retalk_pages=1, rider=False,
     )
     chapter = b.build()
-    assert [beat.name for beat in chapter.beats] == ["T3_battle", "T3_retalk1"]
+    assert [beat.name for beat in chapter.beats] == ["T3", "T3_retalk1"]
+
+
+# --- start_side: the beat begins where the PLAYER is --------------------
+
+
+def test_warp_beat_start_side_dest_needs_a_return_direction(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    """Mirroring always crosses the reciprocal, round trip or not, so its
+    press direction is load-bearing even without `round_trip=True`."""
+    b = _builder()
+    with pytest.raises(ValueError, match="requires return_direction="):
+        warp_beat(
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
+            mechanism="threshold", direction="DOWN", beat_name="W1",
+            manifest_rows=ch05_rows, start_side="dest",
+        )
+
+
+def test_warp_beat_return_direction_without_either_mode_fails_loud(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    """A lone forward crossing never touches the reciprocal, so naming its
+    press direction is a claim the beat cannot honour."""
+    b = _builder()
+    with pytest.raises(ValueError, match="has no effect on a lone forward"):
+        warp_beat(
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
+            mechanism="threshold", direction="DOWN", beat_name="W1",
+            manifest_rows=ch05_rows, return_direction="UP",
+        )
+
+
+def test_warp_beat_unknown_start_side_fails_loud(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    b = _builder()
+    with pytest.raises(ValueError, match="is not 'origin' or 'dest'"):
+        warp_beat(
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
+            mechanism="threshold", direction="DOWN", beat_name="W1",
+            manifest_rows=ch05_rows, round_trip=True, return_direction="UP",
+            start_side="far",
+        )
+
+
+def test_warp_beat_start_side_dest_still_claims_the_same_single_row(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    """Which side the player starts on is a fact about the chapter's
+    approach, not about the warp -- it must not change what is claimed."""
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        round_trip=True, return_direction="UP", start_side="dest",
+    )
+    chapter = b.build()
+    assert [beat.name for beat in chapter.beats] == ["W1"]
+    assert chapter.beats[0].rows == ("map036/ev001/p0",)
+    assert chapter.beats[0].archetype == "warp"
+
+
+def test_warp_beat_start_side_dest_crosses_back_first_and_ends_on_origin(
+    ch05_rows: tuple[ManifestRow, ...], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The operator's round-trip rule, mirrored.
+
+    Starting on the far side, the legs must run dest->origin,
+    origin->dest, dest->origin: it begins where the player actually is,
+    crosses the claimed warp in the middle, and ENDS on the origin map so
+    the next beat inherits the right position. Both directions are
+    exercised, which is the whole reason the round trip exists.
+    """
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        round_trip=True, return_direction="UP", start_side="dest",
+    )
+    beat = b.build().beats[0]
+
+    legs: list[tuple[str, str]] = []
+
+    class _RecordingEmu:
+        # `_cross` drains the destination's arrival scripts after every
+        # crossing; a leg-order fake only has to answer the call.
+        def settle_field(self, **kwargs) -> int:
+            return 0
+
+    def _fake_cross_threshold(emu, name, approach, direction, dest_map):
+        legs.append((direction, dest_map))
+
+    def _noop(*args, **kwargs):
+        return None
+
+    from rpg2gba.playtest import assertions as real_assertions
+
+    monkeypatch.setattr(real_assertions, "cross_threshold", _fake_cross_threshold)
+    monkeypatch.setattr(real_assertions, "require_map", _noop)
+    monkeypatch.setattr(real_assertions, "assert_near", _noop)
+
+    beat.run(_RecordingEmu())
+
+    assert legs == [
+        ("UP", "MAP_PASSAGE_CAVE_1F"),    # dest -> origin, where we started
+        ("DOWN", "MAP_ROUTE_02"),          # the CLAIMED crossing
+        ("UP", "MAP_PASSAGE_CAVE_1F"),    # and back, ending on the origin
+    ]
+
+
+def test_warp_beat_start_side_origin_is_unchanged(
+    ch05_rows: tuple[ManifestRow, ...], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default ordering must not have moved: forward, back, forward."""
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        round_trip=True, return_direction="UP",
+    )
+    beat = b.build().beats[0]
+
+    legs: list[tuple[str, str]] = []
+
+    def _fake_cross_threshold(emu, name, approach, direction, dest_map):
+        legs.append((direction, dest_map))
+
+    def _noop(*args, **kwargs):
+        return None
+
+    from rpg2gba.playtest import assertions as real_assertions
+
+    monkeypatch.setattr(real_assertions, "cross_threshold", _fake_cross_threshold)
+    monkeypatch.setattr(real_assertions, "require_map", _noop)
+    monkeypatch.setattr(real_assertions, "assert_near", _noop)
+
+    class _SettleEmu:
+        def settle_field(self, **kwargs) -> int:
+            return 0
+
+    beat.run(_SettleEmu())
+
+    assert legs == [
+        ("DOWN", "MAP_ROUTE_02"),
+        ("UP", "MAP_PASSAGE_CAVE_1F"),
+        ("DOWN", "MAP_ROUTE_02"),
+    ]
+
+
+def test_warp_beat_start_side_dest_without_round_trip_is_two_legs(
+    ch05_rows: tuple[ManifestRow, ...], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CH05's B8_return shape: reciprocal in, claimed warp out, stop.
+
+    Mirrored and two-legged, the beat still proves the warp fires both
+    ways -- that is what mirroring guarantees -- but it hands the player
+    over on the map it started from instead of the far side. CH05 needs
+    exactly that so `B8_nudge` can observe the arrival it lands on.
+    """
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        return_direction="UP", start_side="dest",
+    )
+    beat = b.build().beats[0]
+
+    legs: list[tuple[str, str]] = []
+
+    def _fake_cross_threshold(emu, name, approach, direction, dest_map):
+        legs.append((direction, dest_map))
+
+    def _noop(*args, **kwargs):
+        return None
+
+    from rpg2gba.playtest import assertions as real_assertions
+
+    monkeypatch.setattr(real_assertions, "cross_threshold", _fake_cross_threshold)
+    monkeypatch.setattr(real_assertions, "require_map", _noop)
+    monkeypatch.setattr(real_assertions, "assert_near", _noop)
+
+    class _SettleEmu:
+        def settle_field(self, **kwargs) -> int:
+            return 0
+
+    beat.run(_SettleEmu())
+
+    assert legs == [
+        ("UP", "MAP_PASSAGE_CAVE_1F"),   # the DERIVED reciprocal, crossed first
+        ("DOWN", "MAP_ROUTE_02"),        # the CLAIMED crossing -- and we stop here
+    ]
+    assert beat.rows == ("map036/ev001/p0",)
+
+
+# --- cells.local_id: the compiled object-event id, not the RMXP one ------
+
+
+def test_local_id_resolves_against_the_staged_table() -> None:
+    """`emu.object_event()` addresses the remapped space `local_id_remap`
+    mints at staging, so the RMXP event id is the wrong number to reach
+    for. Map037's table maps RMXP 4 -> 1 and 5 -> 2."""
+    from rpg2gba.playtest.cells import local_id
+
+    assert local_id("MAP_PASSAGE_CAVE_2F", 4) == 1
+    assert local_id("MAP_PASSAGE_CAVE_2F", 5) == 2
+
+
+def test_local_id_fails_loud_on_an_event_with_no_object(
+) -> None:
+    """An event with no boot page never becomes an object event. Naming the
+    ids that DO exist is the difference between "which one is it" and a
+    bare KeyError."""
+    from rpg2gba.playtest.cells import local_id
+
+    with pytest.raises(ValueError, match="not an emitted object event"):
+        local_id("MAP_PASSAGE_CAVE_2F", 999)
+
+
+def test_local_id_fails_loud_on_an_unstaged_map(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """A map with no table has not been staged -- a different fix from an
+    event that simply has no object, so a different message."""
+    from rpg2gba.playtest import cells
+
+    monkeypatch.setattr(
+        cells, "_local_id_table_path", lambda uid: tmp_path / f"Map{uid:03d}.json")
+
+    with pytest.raises(ValueError, match="has not been staged"):
+        cells.local_id("MAP_PASSAGE_CAVE_2F", 5)

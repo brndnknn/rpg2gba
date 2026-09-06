@@ -55,6 +55,7 @@ def item_ball_beats(
     beat_prefix: str,
     negative_beat: bool = False,
     approach_prefer: str | None = None,
+    group: str | None = None,
     manifest_rows: "tuple[ManifestRow, ...] | None" = None,
     manifest_dir=None,
 ) -> None:
@@ -68,7 +69,19 @@ def item_ball_beats(
     that one is granted at all. There is nothing to validate this against;
     only the self-switch gating and the approach/facing geometry are
     manifest-derived here.
+
+    `group=` defaults to `beat_prefix` when omitted: an archetype instance's
+    beats belong to one route-solver stop, exactly as a hand-authored
+    chapter groups them today (`ChapterBuilder.beat`'s `group=` docstring).
+    The primary beat is named exactly `beat_prefix` (not `f"{beat_prefix}_grant"`)
+    because the chapter manifest dispositions this stop as bare `beat:{beat_prefix}`,
+    and `_check_route_approach` looks up a node's beats by that exact name
+    (`chapter_manifest/checker.py`, `RouteModel.declared_beat_cell`) -- the
+    primary beat *is* the stop the disposition names. The spent-page negative
+    beat keeps its descriptive `_spent` suffix; it is a satellite of the stop,
+    not the stop's own identity.
     """
+    resolved_group = group if group is not None else beat_prefix
     match = find_match(
         chapter_id, map_id, event_id, "item_ball",
         rows=manifest_rows, manifest_dir=manifest_dir,
@@ -92,20 +105,36 @@ def item_ball_beats(
     letter = spent_row.condition.self_switch_ch
     ssa = assertions.flag_ssa(map_id, event_id, letter)
 
+    # Does the spent page DO anything? Some are a "nothing here" message;
+    # others are an empty page whose only job is to make the ball vanish once
+    # the self-switch flips. CH05's Escape Rope ball (map036/ev003/p1) is the
+    # second kind: no graphic, a single terminator command, and a manifest row
+    # that records it exactly -- no effects, no script heads, no other codes,
+    # nothing unhandled.
+    #
+    # It matters because the two shapes have OPPOSITE pass conditions. On an
+    # empty page an A press starts no script, and demanding one fails a beat
+    # for behaving correctly. Read from the manifest rather than assumed, so
+    # a chapter whose spent page does speak still gets the stronger assertion.
+    spent_page_is_empty = not (
+        spent_row.effects or spent_row.script_heads
+        or spent_row.other_codes or spent_row.unhandled
+    )
+
     approach = approach_to(map_constant, event_id, prefer=approach_prefer)
     facing = _facing_toward(approach, event_cell(map_constant, event_id))
 
     @builder.beat(
-        f"{beat_prefix}_grant",
+        beat_prefix,
         f"The item ball at {map_constant} event {event_id} grants "
         f"{item} once (manifest {grant_row_id})",
         map_constant=map_constant, at=approach,
-        archetype="item_ball", rows=(grant_row_id,),
+        group=resolved_group, archetype="item_ball", rows=(grant_row_id,),
     )
     def grant_beat(emu: Emulator) -> None:
         if emu.flag(ssa):
             raise ScenarioError(
-                f"{beat_prefix}_grant precondition failed: {ssa} already "
+                f"{beat_prefix} precondition failed: {ssa} already "
                 "set before the pickup"
             )
         bag_before = emu.bag_item_quantity(item)
@@ -114,15 +143,15 @@ def item_ball_beats(
         emu.interact()
         emu.advance_dialog()
         if not emu.flag(ssa):
-            shot = emu.screenshot(f"{beat_prefix}_grant_no_ssa")
+            shot = emu.screenshot(f"{beat_prefix}_no_ssa")
             raise ScenarioError(
-                f"{beat_prefix}_grant: {ssa} not set after the pickup ({shot})"
+                f"{beat_prefix}: {ssa} not set after the pickup ({shot})"
             )
         bag_after = emu.bag_item_quantity(item)
         if bag_after != bag_before + 1:
-            shot = emu.screenshot(f"{beat_prefix}_grant_bag_unchanged")
+            shot = emu.screenshot(f"{beat_prefix}_bag_unchanged")
             raise ScenarioError(
-                f"{beat_prefix}_grant: self-switch {ssa} was set but "
+                f"{beat_prefix}: self-switch {ssa} was set but "
                 f"{item} did not reach the bag ({bag_before} -> "
                 f"{bag_after}, expected +1) ({shot})"
             )
@@ -133,7 +162,7 @@ def item_ball_beats(
             f"Re-touching the spent item ball at {map_constant} event "
             f"{event_id} grants nothing (manifest {spent_row_id})",
             map_constant=map_constant, at=approach,
-            archetype="item_ball", rows=(spent_row_id,),
+            group=resolved_group, archetype="item_ball", rows=(spent_row_id,),
         )
         def spent_beat(emu: Emulator) -> None:
             if not emu.flag(ssa):
@@ -144,8 +173,19 @@ def item_ball_beats(
             bag_before = emu.bag_item_quantity(item)
             emu.walk_to(*approach)
             emu.face(facing)
-            emu.interact()
-            emu.advance_dialog()
+            started = emu.interact(require_script=not spent_page_is_empty)
+            if spent_page_is_empty and started:
+                # The absence IS the assertion here: the ball is gone, so an
+                # A press at its tile must hit nothing. A script running means
+                # the page was emitted with a body it should not have, or the
+                # self-switch never flipped and page 1 answered again.
+                shot = emu.screenshot(f"{beat_prefix}_spent_unexpected_script")
+                raise ScenarioError(
+                    f"{beat_prefix}_spent: {spent_row_id} is an empty page, "
+                    f"but interacting started a script ({shot})"
+                )
+            if started:
+                emu.advance_dialog()
             bag_after = emu.bag_item_quantity(item)
             if bag_after != bag_before:
                 shot = emu.screenshot(f"{beat_prefix}_spent_regranted")

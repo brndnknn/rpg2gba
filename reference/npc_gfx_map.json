@@ -333,5 +333,14 @@
     "gfx": "OBJ_EVENT_GFX_URANIUM_PU_RANGERMALE",
     "fallback": "OBJ_EVENT_GFX_CAMPER",
     "note": "Custom sheet: male ranger NPC (Map035 Route 2, far side of the rockslide) — chapter-4 Route 2 expansion. Green cap and vest, backpack, dark pants; standard 4x4 walk sheet. No native ranger sprite in the fork (verified: engine/include/constants/event_objects.h has no OBJ_EVENT_GFX_*RANGER*); CAMPER picked as the nearest outdoors-uniform silhouette"
+  },
+  "HGSS_048": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_048",
+    "fallback": "OBJ_EVENT_GFX_BLACK_BELT",
+    "note": "HGSS overworld sheet 048 (Map036 EV006, Keichi) - CH05 Passage Cave expansion. Martial artist: white gi, red headband, bare feet; standard 4x4 walk sheet. Fallback OBJ_EVENT_GFX_BLACK_BELT (engine/include/constants/event_objects.h:70) agrees with the TRAINER_CLASS_BLACK_BELT mapping pinned for this trainer in step 1."
+  },
+  "PU-MegaStone": {
+    "gfx": "OBJ_EVENT_GFX_POKE_BALL",
+    "note": "Sparkling ground-item prop (Map036 EV009, the Sableyeite item ball) - a glint animation, not a character sheet. Converts to the fork's native item ball, so the native ball graphic is reused rather than staging a sheet for a sparkle overlay - the same call PU-POKEBALL records. The item itself is terrain-sealed behind Surf in CH05 (blocked:surf, B7)."
   }
 }

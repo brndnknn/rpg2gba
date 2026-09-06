@@ -334,3 +334,94 @@ def test_ch04_manifest_matches_frozen_expectations() -> None:
     expected = frozen["CH04"]["matches"]
 
     assert derived == expected
+
+
+# --- inherited-beat trigger resolution ----------------------------------
+
+
+def test_resolved_trigger_scripts_exempts_only_inherited_registered_beats() -> None:
+    """A trigger a predecessor's beat already ran is not foreign any more.
+
+    Three properties in one, because they are the three ways this can go
+    wrong:
+
+    * an INHERITED beat's dispositioned row is exempt (CH04:B4 defeated
+      Timothy, so CH05 may walk across his event-touch tile);
+    * a row whose beat is DEFERRED is NOT exempt -- a `beat:` disposition is
+      an intent, and CH04 disposes `beat:` on rows it never runs;
+    * this chapter's OWN triggers are never exempt, which is the check.
+    """
+    from rpg2gba.playtest.chapter import load_chapter, resolved_trigger_scripts
+
+    resolved = resolved_trigger_scripts(load_chapter("CH05"))
+
+    # CH04:B4 fights Timothy (map035/ev012/p0) during the replay.
+    assert "Map035_EV012_Page1" in resolved.get(35, set())
+
+    # CH04's B8/B10 are in DEFERRED_BEATS -- dispositioned, never run.
+    assert "Map035_EV001_Page2" not in resolved.get(35, set())
+    assert "Map035_EV003_Page2" not in resolved.get(35, set())
+
+    # CH05's own maps contribute nothing: its own beats are not inherited.
+    assert 36 not in resolved
+    assert 37 not in resolved
+
+
+def test_a_chapter_with_no_predecessor_resolves_nothing() -> None:
+    """The exemption exists only for a replay. CH01 has no predecessor, so
+    every trigger stays foreign to it -- the pre-existing behaviour."""
+    from rpg2gba.playtest.chapter import load_chapter, resolved_trigger_scripts
+
+    assert resolved_trigger_scripts(load_chapter("CH01")) == {}
+
+
+def test_page_row_script_names_the_compiled_label() -> None:
+    """The row id's page number is 0-based, the label's is 1-based -- the
+    one place that knows it, so the two exemption paths cannot drift."""
+    from rpg2gba.playtest.chapter import page_row_script
+
+    assert page_row_script("map037/ev004/p0") == (37, "Map037_EV004_Page1")
+    assert page_row_script("map035/ev012/p1") == (35, "Map035_EV012_Page2")
+    # Seam and terrain rows name no page script at all.
+    assert page_row_script("map035/seam/NORTH/map036") is None
+    assert page_row_script("map037/terrain/stairs/20,9") is None
+
+
+def test_own_rows_become_exempt_only_after_their_beat_passes() -> None:
+    """The narrowing in `resolved_trigger_scripts` is about a trigger the
+    chapter has not resolved YET; it must not outlive the beat.
+
+    CH05's B14 walks west from B9's stop across Hiker Nunes' two
+    event-touch tiles, and B9 defeated him two beats earlier -- so by then
+    the tile fires nothing. Before B9 runs, the same tile is a real
+    finding, and that must not change.
+    """
+    from rpg2gba.playtest.runner import _WalkOracle
+
+    oracle = _WalkOracle("CH05")
+    assert oracle._resolved_scripts.get(37, set()) == set()
+
+    # Terrain rows contribute nothing (B14's own rows are stair cells).
+    oracle.mark_rows_resolved(
+        ("map037/terrain/stairs/20,9", "map037/terrain/stairs/20,10"))
+    assert oracle._resolved_scripts.get(37, set()) == set()
+
+    # B9's battle page, once B9 has passed.
+    oracle.mark_rows_resolved(("map037/ev004/p0",))
+    assert oracle._resolved_scripts[37] == {"Map037_EV004_Page1"}
+
+
+def test_marking_a_row_drops_the_cached_overlay_for_that_map() -> None:
+    """The overlay is built once per map with the exemption already baked
+    in, so a newly resolved page has to invalidate it -- otherwise the
+    beat that resolved the trigger is the last one to benefit."""
+    from rpg2gba.playtest.runner import _WalkOracle
+
+    oracle = _WalkOracle("CH05")
+    oracle._triggers[37] = {(1, 1): ()}
+    oracle._triggers[36] = {(2, 2): ()}
+
+    oracle.mark_rows_resolved(("map037/ev004/p0",))
+
+    assert 37 not in oracle._triggers      # rebuilt with the new exemption
+    assert 36 in oracle._triggers          # untouched map keeps its cache
