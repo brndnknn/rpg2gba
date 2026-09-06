@@ -92,21 +92,56 @@ def _trainer_defeat_flag_settle(
     )
 
 
+def _approach(emu: Emulator, approach: tuple[int, int]) -> bool:
+    """Walk to the trainer's approach cell, tolerating the trainer firing on
+    the way. Returns whether the approach was interrupted.
+
+    A touch trainer's range can reach the approach cell itself, so the walk
+    that gets into position is the same motion that triggers him -- the field
+    locks mid-walk and `walk_to` raises `WalkInterrupted`. CH05's B3 (Hiker
+    Manny) is the case: "walk_to(19, 29) interrupted by a locked-field scene
+    at (19, 29)". Nothing went wrong there; the beat got what it came for one
+    step earlier than the template expected.
+
+    Deliberately NOT `resolve_interruptions=True`. That resolves the
+    interruption and walks on, which for a trainer beat would fight the battle
+    inside the movement helper and leave the assertions below nothing to
+    inspect. Here the interruption is caught and handed straight to those
+    assertions, which still check a battle is running, that it is a TRAINER
+    battle, and that the opponent id is the expected one -- so an ambush by
+    the wrong trainer on the way in still fails loud. That guard is CH04 B3's
+    legacy and this must not weaken it.
+    """
+    # Imported here, not at module scope: `WalkInterrupted` lives in
+    # `emulator.py`, which hard-imports `mgba`, and this module is deliberately
+    # importable without the bindings (see the TYPE_CHECKING guard above). By
+    # the time this runs there is a real emulator in hand.
+    from ..emulator import WalkInterrupted
+
+    try:
+        emu.walk_to(*approach)
+    except WalkInterrupted as exc:
+        logger.info(
+            "approach to %s was interrupted at %s -- the trainer fired during "
+            "the walk; the battle assertions decide whether it was the right "
+            "one", approach, exc.stopped_at)
+        return True
+    return False
+
+
 def _start_trigger(
     emu: Emulator, beat: str, approach: tuple[int, int], facing: str, trigger: str,
 ) -> None:
-    if trigger == "event_touch":
-        emu.walk_to(*approach)
+    if trigger in ("event_touch", "player_touch"):
+        if _approach(emu, approach):
+            return  # already triggered; a second nudge would be a second fight
         emu.face(facing)
         assertions.try_step(emu, facing)
     elif trigger == "action":
-        emu.walk_to(*approach)
+        if _approach(emu, approach):
+            return
         emu.face(facing)
         emu.interact()
-    elif trigger == "player_touch":
-        emu.walk_to(*approach)
-        emu.face(facing)
-        assertions.try_step(emu, facing)
     else:
         raise ScenarioError(
             f"{beat}: unrecognized trigger {trigger!r} -- expected "
