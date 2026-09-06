@@ -140,40 +140,39 @@ and its own destination), unchanged from this template's pre-round-trip
 one-way behavior and not newly introduced here; flagged, not resolved, same
 as the next paragraph's own continuity note.
 
-**B8 -- one stop, three beats; the forward call now round-trips.** The warp
-pair (`map036/ev002/p0` forward, `map037/ev001/p0` return) and the nudge
-that fires on the return leg (`map036/ev002/p1`) are three `ArchetypeMatch`
-rows on two different maps; `warp_beat`/`find_match` key a claim to one
-exact `(map_id, event_id)` pair, so covering both warp rows still takes two
-calls -- `find_match` cannot merge a `map036` row and a `map037` row into
-one claim, and `round_trip=True` does not change that (task brief's "the
-pair collapses back to one call" option: not available without changing
-`find_match`'s matching key, which this task does not own).
-`warp_beat(beat_name="B8", round_trip=True, return_direction="DOWN")` now
-does the FULL forward/back/forward-again cycle on the forward leg alone --
-crosses 1F->2F (claims `map036/ev002/p0`), crosses back 2F->1F via the
-DERIVED reciprocal (physically the same warp `B8_return` also tests, just
-not claimed here), then crosses 1F->2F once more, ending back on 2F.
-`warp_beat(beat_name="B8_return", group="B8")` runs next, UNCHANGED
-(`round_trip` still `False` there) -- it still exists solely to claim
-`map037/ev001/p0` via its own `find_match` call, and it still performs one
-real 2F->1F crossing to do so, which leaves the group's own final position
-back on 1F. **Why `B8_return` was not also made `round_trip=True`:** its
-own declared "forward" is fixed by the manifest to 2F->1F (the row's own
-map/event), so round-tripping IT always ends on 1F too (a round trip's net
-effect is always two arrivals at the call's own declared destination and
-one at the origin) -- no ordering or choice of which single call gets
-`round_trip=True` avoids the group ending on 1F once `B8_return` runs last,
-since `B8_return` must physically run after `B8` (the only entry to 2F).
-This is the SAME map the group already ended on before this change (this
-is not a new regression); the possible mismatch against `B9`'s own declared
-`MAP_PASSAGE_CAVE_2F` entry is a pre-existing, unresolved question (like
-B1's own continuity note above), not exercised by any of this task's
-verification commands, flagged for the real ROM boot walk. **Restored
-versus the pre-conversion module:** the full three-crossing round trip on
-the forward warp (this was entirely absent before this change); the
-reciprocal warp is now physically exercised twice (once inside `B8`'s
-round trip, once by `B8_return`'s own claim) rather than once.
+**B8 -- one stop, three beats, three crossings.** The warp pair
+(`map036/ev002/p0` forward, `map037/ev001/p0` return) and the nudge that
+fires on the return leg (`map036/ev002/p1`) are three `ArchetypeMatch` rows
+on two different maps; `warp_beat`/`find_match` key a claim to one exact
+`(map_id, event_id)` pair, so covering both warp rows still takes two
+calls. The stop's net motion is the operator's round-trip rule applied to
+the whole stop rather than to any one call: **1F -> 2F -> 1F -> 2F**, both
+directions proven, ending on 2F where the rest of the chapter is.
+
+`B8_nudge` is what fixes the order. It walks nowhere; it only observes the
+arrival autorun that fires when 2F's stairs land you on 1F, so whatever
+runs before it must END on 1F. That makes the sequence
+`B8_return`, `B8_nudge`, `B8`: `warp_beat(beat_name="B8_return",
+start_side="dest", round_trip=False)` climbs the derived reciprocal to 2F,
+crosses its own claimed warp back down to 1F and stops there (the same
+mirrored shape as B1, one leg shorter); the nudge then observes that
+arrival; and `warp_beat(beat_name="B8")` runs last as a lone forward
+crossing, ending the stop on 2F.
+
+**This reverses an earlier claim recorded here.** The previous arrangement
+-- `B8` round-tripping first, then `B8_return`, then the nudge -- argued
+that "no ordering or choice of which single call gets `round_trip=True`
+avoids the group ending on 1F." That was true only while `start_side`
+implied `round_trip`. The missing move was to mirror `B8_return` rather
+than round-trip `B8`; `warp_beat` now allows `start_side="dest"` with
+`round_trip=False` for exactly that (see `warp.py`). The old arrangement
+ended the stop on 1F while every remaining CH05 beat is on 2F, and no beat
+can walk between maps, so B9 failed on the first ROM run that got that far:
+"B9 FAILED: walk_to(23, 10): no route from (17, 5); map=(75, 16)" (step-7
+run 13, 2026-09-05). The cross-chapter question this paragraph used to
+defer -- B9's declared `MAP_PASSAGE_CAVE_2F` entry versus where the B8 stop
+leaves the player -- is what that run answered, and it is now resolved
+rather than flagged.
 
 **B11 -- deliberately NOT converted; still hand-written.** The assigned
 mapping for this rewrite calls for `warp_beat` here, but `map037/ev002/p0`
@@ -483,35 +482,30 @@ item_ball_beats(
 
 
 # -- B8 -- 1F <-> 2F warp pair plus the return-side nudge (map036/ev002,
-# map037/ev001) -- one stop, three beats; see module docstring for why this
-# is short of the old round trip and why it takes three template calls
-# instead of the "one warp beat" a single crossing would need. -------------
-
-warp_beat(
-    ch05,
-    chapter_id=_CHAPTER_ID,
-    map_constant=MAP_1F,
-    map_id=36,
-    event_id=2,
-    dest_map_constant=MAP_2F,
-    # UP, not DOWN. The 1F transition tile (17,4) is approached from BELOW:
-    # (17,3) is a one-cell dead-end pocket whose only walkable neighbour is
-    # the transition tile itself ((17,2), (16,3), (18,3), (16,4), (18,4) are
-    # all blocked), so there is no way to stand north of the warp without
-    # first crossing it. Authored DOWN while the tile was inert, which cost
-    # nothing then and became unroutable the moment the warp went live:
-    # "walk_to(17, 3): no route from (22, 7) ... avoided warp tiles: (17, 4)".
-    #
-    # `return_direction` stays DOWN and is correct for the same kind of
-    # reason on the other floor: 2F's (16,27) is a dead end reachable only
-    # from (16,26), so the reciprocal really is entered pressing down. The
-    # "both floors are entered by pressing down" reading was half right.
-    mechanism="threshold",
-    direction="UP",
-    beat_name="B8",
-    round_trip=True,
-    return_direction="DOWN",
-)
+# map037/ev001) -- one stop, three beats, three crossings. -----------------
+#
+# The stop's net motion is the operator's round-trip rule applied to the
+# STOP rather than to a single call: start on 1F, cross up to 2F, come back
+# down to 1F, cross up to 2F again and stay there. Both directions are
+# proven and the stop ends on the floor the rest of the chapter is on.
+#
+# It takes three calls because it claims three rows on two maps, and
+# `find_match` keys a claim to one exact `(map_id, event_id)` pair -- a
+# `map036` row and a `map037` row cannot be merged into one claim. What
+# decides the ORDER is `B8_nudge`: it does no walking of its own, it only
+# observes the arrival autorun that fires when 2F's stairs land you on 1F,
+# so the beat before it must end on 1F. That forces:
+#
+#   B8_return  1F -> 2F -> 1F   (start_side="dest", two legs)
+#   B8_nudge   observes the 1F arrival, ends one tile off it
+#   B8         1F -> 2F         (lone forward crossing, ends the stop on 2F)
+#
+# The earlier arrangement (B8 round-tripping first, then B8_return, then
+# the nudge) claimed the same three rows but ended the stop on 1F, while
+# every remaining CH05 beat is on 2F and no beat can walk between maps:
+# "B9 FAILED: walk_to(23, 10): no route from (17, 5); map=(75, 16)"
+# (step-7 run 13, 2026-09-05). Mirroring `B8_return` instead of `B8` is
+# what makes an ordering exist at all.
 
 warp_beat(
     ch05,
@@ -520,8 +514,22 @@ warp_beat(
     map_id=37,
     event_id=1,
     dest_map_constant=MAP_1F,
+    # Both of this pair's transition tiles sit at the end of a one-cell
+    # dead-end pocket, so each is entered from the only walkable neighbour
+    # it has. 2F's (16,27) is reachable only from (16,26) to its north, so
+    # the claimed crossing is entered pressing DOWN; 1F's (17,4) is
+    # reachable only from (17,5) to its south -- (17,3) is itself a pocket
+    # whose only exit is the transition tile -- so the reciprocal is
+    # entered pressing UP. The two directions being opposite here is
+    # geometry, not the usual out/back symmetry.
     mechanism="threshold",
     direction="DOWN",
+    return_direction="UP",
+    # The player is on 1F when this stop begins: this beat's row lives on
+    # the far floor, so it climbs the reciprocal first and comes back down
+    # through its own claimed warp. Same shape as B1 above, one leg
+    # shorter, because this one has to HAND OVER on 1F for the nudge.
+    start_side="dest",
     beat_name="B8_return",
     group="B8",
 )
@@ -535,6 +543,29 @@ arrival_nudge_beat(
     from_map_constant=MAP_2F,
     from_event_id=1,
     beat_name="B8_nudge",
+    group="B8",
+)
+
+warp_beat(
+    ch05,
+    chapter_id=_CHAPTER_ID,
+    map_constant=MAP_1F,
+    map_id=36,
+    event_id=2,
+    dest_map_constant=MAP_2F,
+    # UP, for the geometry reason spelled out on B8_return above: (17,3) is
+    # a one-cell dead-end pocket whose only walkable neighbour is the
+    # transition tile itself, so there is no way to stand north of the warp
+    # without first crossing it. Authored DOWN while the tile was inert,
+    # which cost nothing then and became unroutable the moment the warp
+    # went live: "walk_to(17, 3): no route from (22, 7) ... avoided warp
+    # tiles: (17, 4)".
+    #
+    # No `round_trip` here: the stop has already crossed both ways by the
+    # time this runs, and a round trip would end it back on 1F.
+    mechanism="threshold",
+    direction="UP",
+    beat_name="B8",
     group="B8",
 )
 

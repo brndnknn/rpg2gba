@@ -112,9 +112,15 @@ def warp_beat(
     claimed row. `"origin"` (the default) is the ordinary case: the player
     is on `map_constant`, the map whose event this beat claims. `"dest"`
     means the player begins on `dest_map_constant` -- the far side -- so
-    the round trip runs mirrored: dest->origin, origin->dest, dest->origin,
-    still ending on the far side from where it started and still crossing
-    the claimed event (on the middle leg rather than the first).
+    the legs run mirrored: the RECIPROCAL warp is crossed first, to reach
+    the map the claimed event lives on, and the claimed event itself is
+    crossed second. With `round_trip=True` a third leg follows and the beat
+    ends back on the far side it started from; with `round_trip=False` it
+    stops after two and ends on `dest_map_constant`, which is where it
+    began. Both forms prove the warp fires in BOTH directions -- mirroring
+    guarantees the reciprocal leg, so unlike `start_side="origin"` there is
+    no one-crossing mode on this side at all. What `round_trip` chooses
+    here is only which map the beat hands the player over on.
 
     CH05's B1 is why it exists. Its row is `map036/ev001/p0`, the CAVE's
     exit warp, so the template's origin is the cave -- but CH04 leaves the
@@ -122,20 +128,29 @@ def warp_beat(
     the cave's warp coordinates on Route 02 and asserts an arrival that
     never happens. `start_side="dest"` is the difference between a beat
     that begins where the player is and one that begins where its manifest
-    row lives. It requires `round_trip=True`: without the round trip there
-    is only one crossing, and starting it on the far side would cross the
-    reciprocal instead of the claimed warp.
+    row lives.
+
+    CH05's B8_return is why the two-leg (`round_trip=False`) form exists.
+    Its row is `map037/ev001/p0`, 2F's stairs down, but the whole B8 stop
+    is approached on 1F -- and `B8_nudge` has to observe the arrival autorun
+    that fires when those stairs land you on 1F, so the beat before it must
+    END on 1F. Mirrored and two-legged, `B8_return` runs 1F -> 2F -> 1F: it
+    starts where the player is, crosses its claimed warp, and stops on the
+    floor the nudge needs. `B8` then runs last as a lone forward crossing
+    and leaves the stop on 2F. Three crossings, three rows, and the stop
+    ends where the chapter continues -- see `chapters/ch05.py`.
 
     `round_trip=True` (module docstring) crosses forward, asserts arrival,
     crosses back through the DERIVED reciprocal warp, asserts arrival back
     at the origin, then crosses forward once more -- still one beat, one
     row claim (`rows=(row_id,)` below is unaffected by `round_trip`; the
     extra crossings exercise cells this beat's own row already covers, not
-    a second row). `return_direction` is required alongside it whenever
+    a second row). `return_direction` is required whenever the reciprocal
+    is crossed at all -- `round_trip=True` OR `start_side="dest"` -- and
     `mechanism` is `"threshold"` or `"arrow"` (the reciprocal's press
     direction cannot be derived, same reasoning as `direction` above); it
-    is rejected if given without `round_trip=True`, since it would
-    otherwise silently do nothing.
+    is rejected when neither mode is on, since it would otherwise silently
+    do nothing.
     """
     resolved_group = group if group is not None else beat_name
     if mechanism not in _MECHANISMS:
@@ -152,28 +167,28 @@ def warp_beat(
         raise ValueError(
             f"warp_beat: start_side={start_side!r} is not 'origin' or 'dest'"
         )
-    if start_side == "dest" and not round_trip:
-        raise ValueError(
-            "warp_beat: start_side='dest' requires round_trip=True -- a "
-            "single crossing that begins on the far side would cross the "
-            "RECIPROCAL warp, not the one this beat's row claims"
-        )
     if assert_bgm and dest_engine_map_dir is None:
         raise ValueError(
             "warp_beat: assert_bgm=True requires dest_engine_map_dir= "
             "(the compiled map's directory under engine/data/maps/)"
         )
-    if return_direction is not None and not round_trip:
+    # The reciprocal leg is crossed by BOTH extra modes: `round_trip` adds it
+    # after the claimed crossing, `start_side="dest"` adds it before. Either
+    # one means `return_direction` is load-bearing; neither means it is dead
+    # weight and saying it is a mistake worth failing on.
+    crosses_reciprocal = round_trip or start_side == "dest"
+    if return_direction is not None and not crosses_reciprocal:
         raise ValueError(
             "warp_beat: return_direction= was given without round_trip=True "
-            "-- it has no effect on a one-way crossing"
+            "or start_side='dest' -- it has no effect on a lone forward "
+            "crossing"
         )
-    if round_trip and mechanism in ("threshold", "arrow") and return_direction is None:
+    if crosses_reciprocal and mechanism in ("threshold", "arrow") and return_direction is None:
         raise ValueError(
-            f"warp_beat: round_trip=True with mechanism={mechanism!r} "
-            "requires return_direction= (the held D-pad direction of the "
-            "return crossing step -- not necessarily the same as direction=; "
-            "see warp.py's module docstring)"
+            f"warp_beat: mechanism={mechanism!r} with round_trip=True or "
+            "start_side='dest' requires return_direction= (the held D-pad "
+            "direction of the reciprocal crossing step -- not necessarily "
+            "the same as direction=; see warp.py's module docstring)"
         )
 
     match = find_match(
@@ -187,7 +202,7 @@ def warp_beat(
 
     return_crossing: tuple[int, int] | None = None
     return_arrival: tuple[int, int] | None = None
-    if round_trip:
+    if crosses_reciprocal:
         # Derived, never a coordinate literal (task brief) -- fails loud,
         # naming the maps involved, via cells.py's own zero/one/many
         # discipline if the reciprocal warp can't be found unambiguously.
@@ -276,6 +291,7 @@ def warp_beat(
             f"{map_constant} event {event_id} warps to {dest_map_constant} "
             f"via {mechanism} (manifest {row_id})"
             + (" (round trip)" if round_trip else "")
+            + (" (entered from the far side)" if start_side == "dest" else "")
         ),
         map_constant=map_constant, at=crossing,
         group=resolved_group, archetype="warp", rows=(row_id,),
@@ -301,6 +317,7 @@ def warp_beat(
         else:
             _back(emu)
             _forward(emu, check_arrival_details=True)
-            _back(emu)
+            if round_trip:
+                _back(emu)
 
     del run

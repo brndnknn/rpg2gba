@@ -536,18 +536,33 @@ def test_trainer_beats_loads_committed_ch04_manifest_from_disk() -> None:
 # --- start_side: the beat begins where the PLAYER is --------------------
 
 
-def test_warp_beat_start_side_dest_requires_round_trip(
+def test_warp_beat_start_side_dest_needs_a_return_direction(
     ch05_rows: tuple[ManifestRow, ...],
 ) -> None:
-    """A single crossing that begins on the far side would cross the
-    RECIPROCAL warp, not the one the beat's row claims."""
+    """Mirroring always crosses the reciprocal, round trip or not, so its
+    press direction is load-bearing even without `round_trip=True`."""
     b = _builder()
-    with pytest.raises(ValueError, match="requires round_trip=True"):
+    with pytest.raises(ValueError, match="requires return_direction="):
         warp_beat(
             b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
             map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
             mechanism="threshold", direction="DOWN", beat_name="W1",
             manifest_rows=ch05_rows, start_side="dest",
+        )
+
+
+def test_warp_beat_return_direction_without_either_mode_fails_loud(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    """A lone forward crossing never touches the reciprocal, so naming its
+    press direction is a claim the beat cannot honour."""
+    b = _builder()
+    with pytest.raises(ValueError, match="has no effect on a lone forward"):
+        warp_beat(
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
+            mechanism="threshold", direction="DOWN", beat_name="W1",
+            manifest_rows=ch05_rows, return_direction="UP",
         )
 
 
@@ -670,3 +685,49 @@ def test_warp_beat_start_side_origin_is_unchanged(
         ("UP", "MAP_PASSAGE_CAVE_1F"),
         ("DOWN", "MAP_ROUTE_02"),
     ]
+
+
+def test_warp_beat_start_side_dest_without_round_trip_is_two_legs(
+    ch05_rows: tuple[ManifestRow, ...], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CH05's B8_return shape: reciprocal in, claimed warp out, stop.
+
+    Mirrored and two-legged, the beat still proves the warp fires both
+    ways -- that is what mirroring guarantees -- but it hands the player
+    over on the map it started from instead of the far side. CH05 needs
+    exactly that so `B8_nudge` can observe the arrival it lands on.
+    """
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        return_direction="UP", start_side="dest",
+    )
+    beat = b.build().beats[0]
+
+    legs: list[tuple[str, str]] = []
+
+    def _fake_cross_threshold(emu, name, approach, direction, dest_map):
+        legs.append((direction, dest_map))
+
+    def _noop(*args, **kwargs):
+        return None
+
+    from rpg2gba.playtest import assertions as real_assertions
+
+    monkeypatch.setattr(real_assertions, "cross_threshold", _fake_cross_threshold)
+    monkeypatch.setattr(real_assertions, "require_map", _noop)
+    monkeypatch.setattr(real_assertions, "assert_near", _noop)
+
+    class _SettleEmu:
+        def settle_field(self, **kwargs) -> int:
+            return 0
+
+    beat.run(_SettleEmu())
+
+    assert legs == [
+        ("UP", "MAP_PASSAGE_CAVE_1F"),   # the DERIVED reciprocal, crossed first
+        ("DOWN", "MAP_ROUTE_02"),        # the CLAIMED crossing -- and we stop here
+    ]
+    assert beat.rows == ("map036/ev001/p0",)
