@@ -216,14 +216,13 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from ...traversal.direction import CARDINALS, Direction
 from .. import assertions
 from ..archetypes.arrival_nudge import arrival_nudge_beat
 from ..archetypes.item_ball import item_ball_beats
 from ..archetypes.trainer import trainer_beats
 from ..archetypes.warp import warp_beat
 from ..battle import in_battle
-from ..cells import approach_to, entry_cell, event_cell, raw_cell
+from ..cells import approach_to, entry_cell, event_cell, local_id, raw_cell
 from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
 
@@ -278,30 +277,6 @@ ch05 = ChapterBuilder("CH05", doc="reference/chapters/05-passage-cave.md",
 _MAX_ABSORBED_INTERRUPTIONS = 12
 _WALK_ABSORBING_FRAME_BUDGET = 6000
 
-# Keyed on `traversal.direction.Direction` members, never a bare (dx, dy)
-# tuple literal -- CH05 is the first chapter born under the D1 zero-tolerance
-# ban (`tests/test_chapter_coordinate_literals.py`), which flags ANY
-# two-int-constant tuple anywhere in the file, including a direction-delta
-# dict's keys, not just an `at=`/coordinate constant. `Direction.delta`
-# builds its own (dx, dy) internally (`traversal/direction.py`), so matching
-# against it here never spells one out.
-_DIRECTION_TO_FACING: dict[Direction, str] = {
-    Direction.NORTH: "UP", Direction.SOUTH: "DOWN",
-    Direction.EAST: "RIGHT", Direction.WEST: "LEFT",
-}
-
-
-def _direction_toward(dx: int, dy: int) -> str:
-    direction = next((d for d in CARDINALS if d.delta == (dx, dy)), None)
-    if direction is None:
-        raise ValueError(f"ch05: ({dx}, {dy}) is not one of the four cardinal deltas")
-    return _DIRECTION_TO_FACING[direction]
-
-
-def _facing_toward(approach: tuple[int, int], target: tuple[int, int]) -> str:
-    return _direction_toward(target[0] - approach[0], target[1] - approach[1])
-
-
 def _walk_absorbing(emu: Emulator, beat: str, tx: int, ty: int, *,
                     absorb_wild: bool, absorb_trainer: bool,
                     max_absorbed: int = _MAX_ABSORBED_INTERRUPTIONS,
@@ -336,37 +311,11 @@ def _walk_absorbing(emu: Emulator, beat: str, tx: int, ty: int, *,
         f"{(tx, ty)} without reaching it ({shot})")
 
 
-def _press_a(emu: Emulator, beat: str, approach: tuple[int, int], facing: str) -> None:
-    _walk_absorbing(emu, beat, *approach, absorb_wild=True, absorb_trainer=True)
-    emu.face(facing)
-    emu.interact()
-
-
 def _trainer_defeat_flag(trainer_const: str) -> str:
     """The engine's own defeat flag for a native `trainerbattle_single`
     trainer -- see module docstring on why CH05's trainers use this and not
     an RPG-Maker self-switch. Fed to `trainer_beats(defeat_flag=...)` below."""
     return f"TRAINER_FLAGS_START + {trainer_const}"
-
-
-def _item_grant_beat_body(emu: Emulator, beat: str, approach: tuple[int, int],
-                          facing: str, item: str, ssa: str) -> None:
-    """Still used by B10 -- the Revive NPC matches no archetype template
-    (`pbReceiveItem`, not `pbItemBall`), so it stays hand-written."""
-    if emu.flag(ssa):
-        raise ScenarioError(
-            f"{beat} precondition failed: {ssa} already set before the pickup")
-    bag_before = emu.bag_item_quantity(item)
-    _press_a(emu, beat, approach, facing)
-    emu.advance_dialog()
-    if not emu.flag(ssa):
-        shot = emu.screenshot(f"{beat}_no_ssa")
-        raise ScenarioError(f"{beat}: {ssa} not set after the pickup ({shot})")
-    bag_after = emu.bag_item_quantity(item)
-    if bag_after != bag_before + 1:
-        shot = emu.screenshot(f"{beat}_bag_unchanged")
-        raise ScenarioError(
-            f"{beat}: {item} {bag_before}->{bag_after}, expected +1 ({shot})")
 
 
 # -- B1 -- cave entry/exit warp, Cave 1F <-> Route 2 (map036/ev001) --------
@@ -672,9 +621,33 @@ def b13(emu: Emulator) -> None:
 
 _B10_EVENT = 5
 _B10_ITEM = "ITEM_REVIVE"
+# The NPC WALKS. Map037's event 5 is MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE (the
+# "1 mobile" the route solver reports for this map), so its template cell is
+# where it SPAWNS, not where it is. Approached as a static NPC, the walk
+# parked the player on the vacated spawn tile and then spent its whole
+# step-aside budget trying to enter the approach cell derived from that
+# tile -- which the NPC had walked onto: "B10 FAILED: stuck after 8
+# step-aside attempts at 8,7 heading for 8,8" (step-7 run 15, 2026-09-06).
+# (8,7) is the spawn cell and (8,8) its south approach; the player was
+# already adjacent to the NPC and could simply have turned around.
+#
+# `at=` below still declares the derived approach. That is the ROUTING
+# anchor -- where the solver sends the player to reach this stop -- and it
+# stays a true statement about where the stop is, even though the
+# interaction itself now resolves against the NPC's live position.
 _B10_APPROACH = approach_to(MAP_2F, _B10_EVENT, prefer="south")
-_B10_FACING = _facing_toward(_B10_APPROACH, event_cell(MAP_2F, _B10_EVENT))
+_B10_LOCAL_ID = local_id(MAP_2F, _B10_EVENT)
 _B10_SSA = assertions.flag_ssa(37, _B10_EVENT, "A")
+
+
+def _talk_b10(emu: Emulator, beat: str) -> None:
+    """Passage Cave has a live encounter table, so the live-approach walk
+    has to absorb ambushes rather than read them as a blocked side."""
+    assertions.talk_to_moving_npc(
+        emu, beat, _B10_LOCAL_ID,
+        walk=lambda tx, ty: _walk_absorbing(
+            emu, beat, tx, ty, absorb_wild=True, absorb_trainer=True),
+    )
 
 
 @ch05.beat("B10", "The NPC grants one Revive on talk, once (manifest "
@@ -682,7 +655,20 @@ _B10_SSA = assertions.flag_ssa(37, _B10_EVENT, "A")
             map_constant=MAP_2F, at=_B10_APPROACH, group="B10",
             rows=("map037/ev005/p0",))
 def b10(emu: Emulator) -> None:
-    _item_grant_beat_body(emu, "B10", _B10_APPROACH, _B10_FACING, _B10_ITEM, _B10_SSA)
+    if emu.flag(_B10_SSA):
+        raise ScenarioError(
+            f"B10 precondition failed: {_B10_SSA} already set before the grant")
+    bag_before = emu.bag_item_quantity(_B10_ITEM)
+    _talk_b10(emu, "B10")
+    emu.advance_dialog()
+    if not emu.flag(_B10_SSA):
+        shot = emu.screenshot("b10_no_ssa")
+        raise ScenarioError(f"B10: {_B10_SSA} not set after the grant ({shot})")
+    bag_after = emu.bag_item_quantity(_B10_ITEM)
+    if bag_after != bag_before + 1:
+        shot = emu.screenshot("b10_bag_unchanged")
+        raise ScenarioError(
+            f"B10: {_B10_ITEM} {bag_before}->{bag_after}, expected +1 ({shot})")
 
 
 @ch05.beat("B10_retalk", "After B10, the NPC's post-gift re-talk page shows "
@@ -694,7 +680,7 @@ def b10_retalk(emu: Emulator) -> None:
         raise ScenarioError(
             f"B10_retalk precondition failed: {_B10_SSA} not set -- B10 "
             f"must run first")
-    _press_a(emu, "B10_retalk", _B10_APPROACH, _B10_FACING)
+    _talk_b10(emu, "B10_retalk")
     text = emu.current_field_message_text()
     if not text or not text.strip():
         shot = emu.screenshot("b10_retalk_empty_text")

@@ -38,6 +38,10 @@ with identical inputs disagree (CLAUDE.md §4.2).
 """
 from __future__ import annotations
 
+import json
+import os
+from pathlib import Path
+
 from ..traversal.collision import load_map_json
 from ..traversal.direction import Direction
 from ..traversal.graph import MapGraph, build_map_graph
@@ -71,6 +75,16 @@ _GRAPH_CACHE: dict[int, MapGraph] = {}
 # empty" (which would never legitimately occur, but the sentinel pattern
 # costs nothing and keeps the intent explicit).
 _MAP_CONST_INDEX: dict[str, int] | None = None
+
+
+def _local_id_table_path(uid: int) -> Path:
+    """Where staging writes map `uid`'s RMXP-event-id -> local-id table.
+
+    Honours `RPG2GBA_OUTPUT` the same way the rest of the pipeline does
+    (read, never set -- CLAUDE.md sec 3); `.env-paths` is what populates it.
+    """
+    root = Path(os.environ.get("RPG2GBA_OUTPUT", "output"))
+    return root / "uranium-build" / "staging" / "local_ids" / f"Map{uid:03d}.json"
 
 
 def _map_const_index() -> dict[str, int]:
@@ -129,6 +143,46 @@ def event_cell(map_constant: str, event_id: int) -> Cell:
     uid, _graph = _graph_for(map_constant, resolver="event_cell")
     event = _event_lookup(uid, event_id, map_constant=map_constant, resolver="event_cell")
     return (event["x"], event["y"])
+
+
+def local_id(map_constant: str, event_id: int) -> int:
+    """The COMPILED object-event local id for RMXP event `event_id`.
+
+    Not a coordinate, but the same class of hand-transcribed constant the
+    ban exists for: `emu.object_event()` addresses the remapped space that
+    `tileset_converter.local_id_remap` mints at staging, so an RMXP event id
+    typed straight into a chapter addresses the wrong NPC (or none) and
+    looks exactly as confident either way. CH02 and CH03 both carry theirs
+    as literals with a citation comment; this is the resolver that replaces
+    the comment with a check.
+
+    Reads the staged table (`output/uranium-build/staging/local_ids/
+    Map###.json`, generated output -- never hand-edited, CLAUDE.md sec 11)
+    and fails loud two ways, because they need different fixes: a map with
+    no table has not been through the staging step that writes one, while a
+    map whose table omits the event means the event was never emitted as an
+    object event at all (no boot page, or stripped).
+    """
+    uid = _uranium_id(map_constant, resolver="local_id")
+    path = _local_id_table_path(uid)
+    if not path.exists():
+        raise ValueError(
+            f"local_id: {map_constant} (Uranium map {uid}) has no local-id "
+            f"table at {path} -- that file is written by "
+            "scripts/stage_slice_scripts.py, so this map has not been "
+            "staged; run the staging step before authoring against it"
+        )
+    table = json.loads(path.read_text(encoding="utf-8"))
+    resolved = table.get(str(event_id))
+    if resolved is None:
+        known = sorted(int(k) for k in table)
+        raise ValueError(
+            f"local_id: {map_constant} (Uranium map {uid}) event {event_id} "
+            f"is not an emitted object event -- events with local ids on "
+            f"this map are {known}. An event with no boot page (or one that "
+            "is stripped) never becomes an object event and has no local id"
+        )
+    return int(resolved)
 
 
 def approach_to(map_constant: str, event_id: int, *, prefer: str | None = None) -> Cell:

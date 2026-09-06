@@ -731,3 +731,41 @@ def test_warp_beat_start_side_dest_without_round_trip_is_two_legs(
         ("DOWN", "MAP_ROUTE_02"),        # the CLAIMED crossing -- and we stop here
     ]
     assert beat.rows == ("map036/ev001/p0",)
+
+
+# --- cells.local_id: the compiled object-event id, not the RMXP one ------
+
+
+def test_local_id_resolves_against_the_staged_table() -> None:
+    """`emu.object_event()` addresses the remapped space `local_id_remap`
+    mints at staging, so the RMXP event id is the wrong number to reach
+    for. Map037's table maps RMXP 4 -> 1 and 5 -> 2."""
+    from rpg2gba.playtest.cells import local_id
+
+    assert local_id("MAP_PASSAGE_CAVE_2F", 4) == 1
+    assert local_id("MAP_PASSAGE_CAVE_2F", 5) == 2
+
+
+def test_local_id_fails_loud_on_an_event_with_no_object(
+) -> None:
+    """An event with no boot page never becomes an object event. Naming the
+    ids that DO exist is the difference between "which one is it" and a
+    bare KeyError."""
+    from rpg2gba.playtest.cells import local_id
+
+    with pytest.raises(ValueError, match="not an emitted object event"):
+        local_id("MAP_PASSAGE_CAVE_2F", 999)
+
+
+def test_local_id_fails_loud_on_an_unstaged_map(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """A map with no table has not been staged -- a different fix from an
+    event that simply has no object, so a different message."""
+    from rpg2gba.playtest import cells
+
+    monkeypatch.setattr(
+        cells, "_local_id_table_path", lambda uid: tmp_path / f"Map{uid:03d}.json")
+
+    with pytest.raises(ValueError, match="has not been staged"):
+        cells.local_id("MAP_PASSAGE_CAVE_2F", 5)
