@@ -146,6 +146,19 @@ def _own_beats(chapter: Chapter) -> list[Beat]:
 
 
 def _default_entry_location(chapter: Chapter, own_beats: Sequence[Beat]) -> BeatLocation:
+    """Where the chapter's route starts.
+
+    A declared `Chapter.route_entry` wins outright. Otherwise this falls back
+    to the first own beat's first location, which is the same cell the solver
+    uses as that group's INTERACTION point -- the one later segments are
+    costed from. That conflation is fine for a beat that begins where it acts,
+    and wrong for one that begins on the far side of its own warp
+    (`warp_beat(start_side="dest")`): CH05's B1 acts on the cave's exit warp
+    but the chapter begins on Route 02. See `Chapter.route_entry` for the
+    measured cost of overloading the one field.
+    """
+    if chapter.route_entry is not None:
+        return chapter.route_entry
     if not own_beats:
         raise RouteSolverError(
             f"chapter {chapter.name!r}: has no own beats (only inherited "
@@ -155,7 +168,8 @@ def _default_entry_location(chapter: Chapter, own_beats: Sequence[Beat]) -> Beat
     if not first.locations:
         raise RouteSolverError(
             f"chapter {chapter.name!r}: first own beat {first.name!r} declares no "
-            "location to use as the route entry; pass entry= explicitly"
+            "location to use as the route entry, and the chapter declares no "
+            "route_entry=; pass entry= explicitly"
         )
     return first.locations[0]
 
@@ -235,6 +249,7 @@ def _derive_warp_precedence(
     world: WorldGraph | None,
     *,
     entry_map: int,
+    entry_cell: Cell,
     entry_group_id: str | None,
     chapter_id: str,
     exit_provided: bool,
@@ -308,7 +323,27 @@ def _derive_warp_precedence(
 
     # --- rule 1: introducing-warp precedence --------------------------------
 
-    for map_id in sorted(chapter_maps - {entry_map}):
+    # A map needs an "introducing" warp only if the chapter has to let itself
+    # in. Two maps never do: the one the chapter STARTS on, and the one its
+    # declared entry warp LANDS on -- reaching that one is what starting there
+    # means.
+    #
+    # Missing the second is not a tie-break, it derives an impossible order.
+    # CH05 enters the Passage Cave from Route 02, and its entry beat B1 claims
+    # `map036/ev001` -- the cave's OUTBOUND event, because that is the only row
+    # CH05's manifest owns at that seam. So B1 does not look like a way *in*,
+    # the rule credited B8 (the 1F<->2F stairs, whose reciprocal does land on
+    # map 36) and emitted `B8 -> B1`: use the stairs before entering the cave.
+    # That forced the whole 1F sweep to run north-first and cross a trainer's
+    # trigger tile twice. While the entry was inside the cave this was masked,
+    # because `entry_map` alone already skipped map 36.
+    entry_landing_maps: set[int] = set()
+    if world is not None:
+        for edge in world.edges_from(entry_map):
+            if edge.kind == "warp" and edge.src_cell == entry_cell:
+                entry_landing_maps.add(edge.dst_map)
+
+    for map_id in sorted(chapter_maps - {entry_map} - entry_landing_maps):
         candidates = introducers.get(map_id, set())
         if len(candidates) != 1:
             logger.info(
@@ -512,7 +547,8 @@ def solve_route(
     )
     warp_precedence, terminal_point = _derive_warp_precedence(
         manifest_rows, group_by_row, group_points, world,
-        entry_map=entry_map, entry_group_id=entry_group_id, chapter_id=chapter_id,
+        entry_map=entry_map, entry_cell=entry_cell,
+        entry_group_id=entry_group_id, chapter_id=chapter_id,
         exit_provided=exit_ is not None,
     )
 

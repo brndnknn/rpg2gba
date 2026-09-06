@@ -999,3 +999,80 @@ def test_chapter_with_only_inherited_beats_fails_loud() -> None:
             graphs=w.graphs, overlays=w.overlays, world=w.build(),
             entry=(999, (0, 0)), exit_=(998, (0, 0)), map_ids={"MAP_PRED": 999},
         )
+
+
+def test_entry_landing_map_needs_no_introducing_warp() -> None:
+    """A chapter that STARTS on a warp does not have to let itself in.
+
+    The introducing-warp rule skips `entry_map`, because a chapter obviously
+    reaches the map it begins on. It must also skip the map that entry warp
+    LANDS on, for the same reason -- otherwise it looks for a group to
+    "introduce" a map the chapter is already standing in, and credits
+    whichever group happens to own a warp landing there.
+
+    CH05 is the case: it enters the Passage Cave from Route 02, and its entry
+    beat claims the cave's OUTBOUND event (the only row that seam gives the
+    arriving chapter), so it does not look like a way *in*. The rule credited
+    the 1F<->2F staircase instead and emitted `stairs -> entry`: use the
+    stairs before entering the cave. Not a worse ordering -- an impossible
+    one, and it forced the whole floor to be swept backwards.
+
+    Here `Wentry` is the chapter's entry beat, standing on map 101 having
+    arrived from map 100, and `Wstairs` owns a warp that also lands on 101.
+    Nothing may be ordered before `Wentry` on account of map 101.
+    """
+    entry_row = _warp_row("map101/ev005/p0", map_id=101, event_id=5)
+    stairs_row = _warp_row("map102/ev006/p0", map_id=102, event_id=6)
+
+    builder = ChapterBuilder("test", doc="reference/chapters/00-test.md")
+
+    @builder.beat("Wentry", "the chapter's own entry crossing",
+                  map_constant="MAP_ENTRY_SIDE", at=(0, 0), group="Wentry",
+                  rows=(entry_row.row_id,))
+    def wentry(emu) -> None:  # noqa: ANN001
+        pass
+
+    @builder.beat("Wstairs", "a second warp that also lands on map 101",
+                  map_constant="MAP_STAIRS", at=(0, 0), group="Wstairs",
+                  rows=(stairs_row.row_id,))
+    def wstairs(emu) -> None:  # noqa: ANN001
+        pass
+
+    chapter = builder.build()
+    map_ids = {"MAP_ENTRY_SIDE": 101, "MAP_STAIRS": 102}
+
+    w = _World()
+    w.home(100)  # entry map -- the chapter starts here
+    w.home(101)
+    w.home(102)
+    w.home(103)  # exit
+    w.add(100, 101, 201, 1)
+    w.add(101, 102, 202, 1)
+    w.add(102, 103, 203, 1)
+
+    edges = w.edges + [
+        # the chapter's entry warp: map100 (0,0) -> map101
+        WorldEdge(src_map=100, dst_map=101, kind="warp",
+                  src_cell=(0, 0), dst_cell=(0, 0), event_id=1),
+        # the entry beat's own claimed row points back OUT to map 100
+        WorldEdge(src_map=101, dst_map=100, kind="warp",
+                  src_cell=(0, 0), dst_cell=(0, 0), event_id=5),
+        # the stairs land on 101 too -- the tempting false "introducer"
+        WorldEdge(src_map=102, dst_map=101, kind="warp",
+                  src_cell=(0, 0), dst_cell=(0, 0), event_id=6),
+    ]
+    world = _world(edges, w.map_ids)
+
+    route = solve_route(
+        chapter, "TESTCH", manifest_rows=[entry_row, stairs_row],
+        graphs=w.graphs, overlays=w.overlays, world=world,
+        entry=(100, (0, 0)), exit_=(103, (0, 0)), map_ids=map_ids,
+    )
+
+    assert not [
+        e for e in route.precedence
+        if e.after == "Wentry" and e.reason == "warp_topology:map101"
+    ], (
+        "nothing may be required before the chapter's own entry beat on "
+        f"account of the map it enters into: {route.precedence}"
+    )

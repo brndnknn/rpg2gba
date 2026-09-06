@@ -181,6 +181,26 @@ class Chapter:
     doc: str
     beats: tuple[Beat, ...]
     predecessor: str | None = None
+    #: Where this chapter's route STARTS, when that is not the first beat's
+    #: own interaction cell. The route solver otherwise takes the entry from
+    #: `own_beats[0].locations[0]`, which is also what it uses as that
+    #: group's interaction cell -- the point later segments are costed FROM.
+    #: Those are the same cell for a beat that begins where it acts, and a
+    #: different one for a beat that begins on the far side of its own warp
+    #: (`warp_beat(start_side="dest")`).
+    #:
+    #: CH05's B1 is the case that forced the split: it is authored on the
+    #: cave's exit warp, which is where it acts and where it leaves the
+    #: player, but the chapter begins on Route 02 where CH04 hands the player
+    #: over. Overloading `locations[0]` to mean both costs the solver its
+    #: departure point -- measured, not guessed: it moved CH05 from 141 to
+    #: 258 tiles and reordered the cave into a backtracking sweep, because
+    #: every segment after B1 was then costed from Route 02 rather than from
+    #: inside the cave.
+    #:
+    #: Declaring it leaves `locations[0]` meaning exactly what it meant
+    #: before for every chapter, so CH01-CH04 re-solve unchanged.
+    route_entry: BeatLocation | None = None
 
     def index_of(self, beat_name: str) -> int:
         for i, b in enumerate(self.beats):
@@ -253,6 +273,7 @@ class ChapterBuilder:
     name: str
     doc: str
     predecessor: str | None = None
+    route_entry: BeatLocation | None = None
     _beats: list[Beat] = field(default_factory=list)
 
     def beat(self, name: str, description: str, *,
@@ -439,7 +460,8 @@ class ChapterBuilder:
         _validate_groups(beats, chapter_name=self.name)
 
         return Chapter(name=self.name, doc=self.doc, beats=beats,
-                        predecessor=self.predecessor)
+                        predecessor=self.predecessor,
+                        route_entry=self.route_entry)
 
 
 def _validate_groups(beats: tuple[Beat, ...], *, chapter_name: str) -> None:

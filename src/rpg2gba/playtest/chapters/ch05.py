@@ -224,8 +224,8 @@ from ..archetypes.item_ball import item_ball_beats
 from ..archetypes.trainer import trainer_beats
 from ..archetypes.warp import warp_beat
 from ..battle import in_battle
-from ..cells import approach_to, event_cell, raw_cell
-from ..chapter import ChapterBuilder
+from ..cells import approach_to, event_cell, raw_cell, warp_cell
+from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
 
 logger = logging.getLogger(__name__)
@@ -233,14 +233,34 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:  # runtime import is lazy so the registry works without bindings
     from ..emulator import Emulator
 
-ch05 = ChapterBuilder("CH05", doc="reference/chapters/05-passage-cave.md",
-                        predecessor="CH04")
 
 _CHAPTER_ID = "CH05"
 
 MAP_1F = "MAP_PASSAGE_CAVE_1F"
 MAP_2F = "MAP_PASSAGE_CAVE_2F"
 ROUTE_2_CONST = "MAP_ROUTE_02"  # CH04's own map constant; see module docstring's B1
+
+# CH05 begins on ROUTE 2, not in the cave. CH04 hands the player over at the
+# route's own cave entrance (observed entry (19,49), map 35), and B1's first
+# move is a walk across Route 2 to the cave mouth.
+#
+# This has to be declared rather than inferred, because the solver's fallback
+# reads the entry off `own_beats[0].locations[0]` -- the same field it uses as
+# that group's INTERACTION cell, the point later segments are costed from.
+# B1 acts on, and ends on, the cave's exit warp; it only STARTS on Route 2.
+# Overloading the one field to mean both was measured at 141 -> 258 tiles with
+# the cave reordered into a backtracking sweep, because every segment after B1
+# was then costed from Route 2. See `Chapter.route_entry`.
+#
+# Derived, not a literal (D1): this is CH04's own entrance warp, the same
+# reciprocal `warp_beat` derives for B1's return leg.
+_ROUTE_ENTRY = warp_cell(ROUTE_2_CONST, to=MAP_1F)
+
+ch05 = ChapterBuilder("CH05", doc="reference/chapters/05-passage-cave.md",
+                        predecessor="CH04",
+                        route_entry=BeatLocation(
+                            ROUTE_2_CONST, *_ROUTE_ENTRY,
+                            label="CH05 entry (CH04 hands over on Route 2)"))
 
 # -- shared helpers, adapted from ch04.py (chapter-local by design, per
 # assertions.py's own docstring on what deliberately does not get promoted --

@@ -9,10 +9,10 @@
     {
       "index": 0,
       "kind": "entry",
-      "map_id": 36,
+      "map_id": 35,
       "cell": [
-        17,
-        40
+        20,
+        33
       ],
       "group": null,
       "beats": [],
@@ -46,16 +46,14 @@
       ],
       "group": "B2",
       "beats": [
-        "B2"
+        "B2",
+        "B2_spent"
       ],
       "rows": [
         "map036/ev003/p0",
         "map036/ev003/p1"
       ],
-      "chosen_approach": {
-        "side": "east",
-        "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev3, prefer=\"east\")"
-      }
+      "chosen_approach": null
     },
     {
       "index": 3,
@@ -67,16 +65,14 @@
       ],
       "group": "B3",
       "beats": [
-        "B3"
+        "B3",
+        "B3_retalk1"
       ],
       "rows": [
         "map036/ev004/p0",
         "map036/ev004/p1"
       ],
-      "chosen_approach": {
-        "side": "east",
-        "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev4, prefer=\"east\")"
-      }
+      "chosen_approach": null
     },
     {
       "index": 4,
@@ -88,16 +84,14 @@
       ],
       "group": "B5",
       "beats": [
-        "B5"
+        "B5",
+        "B5_retalk1"
       ],
       "rows": [
         "map036/ev006/p0",
         "map036/ev006/p1"
       ],
-      "chosen_approach": {
-        "side": "east",
-        "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev6, prefer=\"east\")"
-      }
+      "chosen_approach": null
     },
     {
       "index": 5,
@@ -109,28 +103,28 @@
       ],
       "group": "B4",
       "beats": [
-        "B4"
+        "B4",
+        "B4_spent"
       ],
       "rows": [
         "map036/ev005/p0",
         "map036/ev005/p1"
       ],
-      "chosen_approach": {
-        "side": "west",
-        "resolver": "approach_to(MAP_PASSAGE_CAVE_1F, ev5, prefer=\"west\")"
-      }
+      "chosen_approach": null
     },
     {
       "index": 6,
       "kind": "group",
-      "map_id": 37,
+      "map_id": 36,
       "cell": [
-        16,
-        27
+        17,
+        4
       ],
       "group": "B8",
       "beats": [
-        "B8"
+        "B8",
+        "B8_return",
+        "B8_nudge"
       ],
       "rows": [
         "map036/ev002/p0",
@@ -149,16 +143,14 @@
       ],
       "group": "B9",
       "beats": [
-        "B9"
+        "B9",
+        "B9_retalk1"
       ],
       "rows": [
         "map037/ev004/p0",
         "map037/ev004/p1"
       ],
-      "chosen_approach": {
-        "side": "west",
-        "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev4, prefer=\"west\")"
-      }
+      "chosen_approach": null
     },
     {
       "index": 8,
@@ -176,10 +168,7 @@
         "map037/terrain/stairs/20,10",
         "map037/terrain/stairs/20,9"
       ],
-      "chosen_approach": {
-        "side": "west",
-        "resolver": "stair_approach(MAP_PASSAGE_CAVE_2F, stair=(20,9), side='west')  # no cells.py side param exists; this cell is the west E/W neighbour owning the stair_diagonal edge"
-      }
+      "chosen_approach": null
     },
     {
       "index": 9,
@@ -197,10 +186,7 @@
         "map037/terrain/stairs/11,10",
         "map037/terrain/stairs/11,9"
       ],
-      "chosen_approach": {
-        "side": "west",
-        "resolver": "stair_approach(MAP_PASSAGE_CAVE_2F, stair=(11,9), side='west')  # no cells.py side param exists; this cell is the west E/W neighbour owning the stair_diagonal edge"
-      }
+      "chosen_approach": null
     },
     {
       "index": 10,
@@ -212,16 +198,14 @@
       ],
       "group": "B10",
       "beats": [
-        "B10"
+        "B10",
+        "B10_retalk"
       ],
       "rows": [
         "map037/ev005/p0",
         "map037/ev005/p1"
       ],
-      "chosen_approach": {
-        "side": "south",
-        "resolver": "approach_to(MAP_PASSAGE_CAVE_2F, ev5, prefer=\"south\")"
-      }
+      "chosen_approach": null
     },
     {
       "index": 11,
@@ -260,8 +244,29 @@
       "to": 1,
       "legs": [
         {
+          "map_id": 35,
+          "tiles": [
+            [
+              20,
+              33
+            ]
+          ],
+          "exit_warp": {
+            "event_id": 1,
+            "dest_map": 36,
+            "dest_cell": [
+              17,
+              39
+            ]
+          }
+        },
+        {
           "map_id": 36,
           "tiles": [
+            [
+              17,
+              39
+            ],
             [
               17,
               40
@@ -270,7 +275,7 @@
           "exit_warp": null
         }
       ],
-      "tile_count": 0,
+      "tile_count": 1,
       "crossed_foreign_triggers": []
     },
     {
@@ -717,6 +722,24 @@
               4
             ]
           ],
+          "exit_warp": null
+        }
+      ],
+      "tile_count": 7,
+      "crossed_foreign_triggers": []
+    },
+    {
+      "from": 6,
+      "to": 7,
+      "legs": [
+        {
+          "map_id": 36,
+          "tiles": [
+            [
+              17,
+              4
+            ]
+          ],
           "exit_warp": {
             "event_id": 2,
             "dest_map": 37,
@@ -729,32 +752,6 @@
         {
           "map_id": 37,
           "tiles": [
-            [
-              16,
-              26
-            ],
-            [
-              16,
-              27
-            ]
-          ],
-          "exit_warp": null
-        }
-      ],
-      "tile_count": 8,
-      "crossed_foreign_triggers": []
-    },
-    {
-      "from": 6,
-      "to": 7,
-      "legs": [
-        {
-          "map_id": 37,
-          "tiles": [
-            [
-              16,
-              27
-            ],
             [
               16,
               26
@@ -855,7 +852,7 @@
           "exit_warp": null
         }
       ],
-      "tile_count": 24,
+      "tile_count": 23,
       "crossed_foreign_triggers": []
     },
     {
@@ -1139,7 +1136,7 @@
     }
   ],
   "cost": {
-    "tiles": 143
+    "tiles": 142
   },
   "solver": {
     "method": "greedy+2opt"
