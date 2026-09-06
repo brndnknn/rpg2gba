@@ -617,19 +617,43 @@ things only a human can see.
 
 **Effort — you:** 45-90 min, judgement, hands-on · **me:** low · **attended:** no
 
-Per your standing rule, the walk starts at **the previous chapter's end** — seed from
-CH04's blob rather than replaying from the beginning:
+Per your standing rule, the walk starts at **the previous chapter's end**, seeded from
+a blob rather than replayed from the beginning.
+
+**Corrected 2026-09-06 — the CH04 recipe below could not run, and did not need to.**
+Seeds are keyed by the ROM's sha256 and invalidated by any rebuild, so
+`seeds --chapter CH04 --engine engine` returns *"no seeds for this ROM build — run the
+chapter green from the start first"*: CH04's own blobs predate the CH05 build. But
+CH05's step-7 green run wrote a full set of its own, and **`CH05/B1` is the same state
+by construction** — the seed taken just before CH05's first beat, with the player at
+`(19,50)` on Route 02, which is exactly where CH04 leaves them. So the walk is seeded
+from CH05's own B1 blob and no CH04 replay is owed:
 
 ```bash
-$V -m rpg2gba.playtest seeds --chapter CH04 --engine engine
-$V -m rpg2gba.playtest walk --chapter CH04 --at-end --engine engine
+$V -m rpg2gba.playtest walk --chapter CH05 --at-beat B1 --engine engine
 ```
 
-Then deliver it to the phone:
+Ran 2026-09-06, exit 0, `output/ch05-step8-walk.log`. Verification is on by default and
+passed — the ROM was booted with a deliberately foreign `.sav` paired, to prove the
+embedded state wins over any save residue already on the device:
+
+```
+verified: output/playtest/walk/CH05-B1.gba boots to map (75, 15) pos (19, 50)
+          with a foreign .sav paired
+```
+
+Then delivered to the phone:
 
 ```bash
-tailscale file cp <the .gba> iphone182:
+tailscale file cp output/playtest/walk/CH05-B1.gba iphone182:
 ```
+
+**Carry to `PROJECT_TODO.md` at step 10:** `BUILD_PLAN.md`'s boot-walk step should say
+*seed from the arriving chapter's own first-beat blob*, not *the predecessor's
+`--at-end`*. The predecessor form is only available when the predecessor was itself run
+green against the current ROM build, which after a frontier rebuild it never has been —
+so the written recipe fails for every chapter, not just this one. Shared-doc surgery,
+so filed rather than fixed mid-chapter (§2 guardrail).
 
 ## ⏸ STOP 5 — the gate itself
 
