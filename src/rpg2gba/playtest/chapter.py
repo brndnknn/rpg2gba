@@ -152,6 +152,86 @@ class Beat:
     archetype: str | None = None
 
 
+def resolved_trigger_scripts(chapter: "Chapter") -> dict[int, set[str]]:
+    """Per map id, the page scripts an INHERITED beat of `chapter` already
+    exercised -- so they are no longer "foreign" to this chapter's own walks.
+
+    A foreign trigger is one a walk has no business firing. The rule that
+    finds them asks only "does this beat own that script", which is right
+    within a chapter and wrong across a predecessor replay: an inherited beat
+    runs before EVERY beat this chapter owns (`ChapterBuilder`'s
+    `predecessor` prepends them), so what it resolved stays resolved.
+
+    CH05 is the case. Its approach from CH04's handover cell must pass
+    Youngster Timothy's event-touch tile -- `routing.pathing.plan_segment`
+    tries a trigger-free path first and there is none, so it is geography,
+    not a search failure. `CH04:B4` fights and defeats him during the replay
+    and latches his self-switch, so by the time CH05's first beat walks past,
+    the tile fires nothing. Treating it as foreign failed a beat over a
+    script that cannot run.
+
+    Two deliberate narrowings:
+
+    * INHERITED only. A chapter's own triggers stay foreign to each other:
+      B3's trainer must not be excused for firing during an approach to B8,
+      which is the point of the check.
+    * REGISTERED only. The claim comes from the predecessor's committed
+      dispositions (`beat:B4`), but a disposition is an intent, not a run --
+      CH04 disposes `beat:` on rows whose beats are in `DEFERRED_BEATS` and
+      never execute. So each claim is confirmed against a beat actually
+      present in `chapter.beats`, matched with `beat_model._matches` so a
+      template-registered family (`B4_battle`) satisfies `beat:B4` exactly as
+      the checker does.
+
+    The predecessors are read off `chapter.beats` itself rather than walking
+    `chapters.json` again -- the prefixes on the inherited beats already name
+    every chapter that contributed one, transitively.
+
+    Fail-soft: a predecessor with no dispositions file contributes nothing
+    (CH01-CH03 predate the manifest). That is the pre-existing behaviour --
+    every trigger stays foreign -- not a silent weakening.
+    """
+    from ..chapter_manifest.beat_model import _matches
+    from ..chapter_manifest.dispositions import disposition_path, load_dispositions
+    from ..tileset_converter.metadata_wiring import page_label
+
+    inherited: dict[str, set[str]] = {}
+    for beat in chapter.beats:
+        if ":" not in beat.name:
+            continue
+        owner, _, own_name = beat.name.partition(":")
+        inherited.setdefault(owner, set()).add(own_name)
+    if not inherited:
+        return {}
+
+    resolved: dict[int, set[str]] = {}
+    for owner, beat_names in inherited.items():
+        path = disposition_path(owner)
+        try:
+            dispositions = load_dispositions(path)
+        except (OSError, ValueError) as exc:
+            logger.info(
+                "resolved_trigger_scripts: no usable dispositions for "
+                "predecessor %s (%s) -- its triggers stay foreign", owner, exc)
+            continue
+        for row_id, disposition in dispositions.items():
+            if disposition.verdict != "beat":
+                continue
+            beat_id = (disposition.argument or "").strip()
+            if not beat_id:
+                continue
+            if not any(_matches(beat_id, name) for name in beat_names):
+                continue  # dispositioned but deferred: it never ran
+            if not _PAGE_ROW_RE.match(row_id):
+                continue  # seam/terrain rows name no page script
+            map_part, ev_part, page_part = row_id.split("/")
+            map_id = int(map_part[3:])
+            resolved.setdefault(map_id, set()).add(
+                page_label(map_id, int(ev_part[2:]), int(page_part[1:]) + 1)
+            )
+    return resolved
+
+
 @dataclass(frozen=True)
 class BeatGroup:
     """A run of beats the route solver must keep contiguous.

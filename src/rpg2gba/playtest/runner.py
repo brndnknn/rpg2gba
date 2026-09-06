@@ -48,7 +48,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import rules as playtest_rules
-from .chapter import Beat, Chapter, assert_chapter_locations_reachable
+from .chapter import (Beat, Chapter, assert_chapter_locations_reachable,
+                       resolved_trigger_scripts)
 from .contact_sheet import Waypoint, build_contact_sheet
 from .contradictions import KIND_OFF_PLAN, Contradiction, ContradictionLedger
 from .divergence import (
@@ -276,17 +277,35 @@ class _WalkOracle:
     """
 
     def __init__(self, chapter_name: str, *,
-                 plan: PlanIndex | None = None) -> None:
+                 plan: PlanIndex | None = None,
+                 resolved_scripts: dict[int, set[str]] | None = None) -> None:
         self.plan = plan
         self.chapter_name = chapter_name
+        # Per map, the page scripts an inherited beat already exercised, so
+        # they are not foreign to this chapter's walks. Same set the route
+        # solver plans against, from the same function, so the plan and the
+        # check that grades the plan cannot disagree about what is foreign.
+        self._resolved_scripts = resolved_scripts or {}
         self._triggers: dict[int, dict[tuple[int, int], tuple[TriggerFact, ...]]] = {}
         self._unavailable: set[int] = set()
 
     @classmethod
-    def for_chapter(cls, chapter_name: str) -> "_WalkOracle":
+    def for_chapter(cls, chapter: "Chapter | str") -> "_WalkOracle":
         """Never raises on a missing plan; a plan that exists and will not
-        load is a real fault and propagates (CLAUDE.md §4.5)."""
-        return cls(chapter_name, plan=load_plan_index_for_module(chapter_name))
+        load is a real fault and propagates (CLAUDE.md §4.5).
+
+        Takes the built `Chapter` where one is available, because the
+        inherited-beat exemption is derived from its beats; a bare name still
+        works (the stub runners in `tests/test_runner.py` pass one) and simply
+        gets no exemption, which is the pre-existing behaviour.
+        """
+        if isinstance(chapter, str):
+            return cls(chapter, plan=load_plan_index_for_module(chapter))
+        return cls(
+            chapter.name,
+            plan=load_plan_index_for_module(chapter.name),
+            resolved_scripts=resolved_trigger_scripts(chapter),
+        )
 
     def _overlay_for(self, map_id: int, emu: "Emulator") -> dict:
         cached = self._triggers.get(map_id)
@@ -308,7 +327,15 @@ class _WalkOracle:
                 "classified as trigger crossings", self.chapter_name, map_id, exc)
             self._unavailable.add(map_id)
             return {}
-        built = foreign_trigger_index({map_id: overlay})[map_id]
+        # Same exemption the route solver applies (`resolved_trigger_scripts`):
+        # a page an INHERITED beat already exercised is not foreign to this
+        # chapter's walks. Without it the oracle fails a beat for crossing a
+        # tile whose script cannot fire -- CH05's approach must pass Timothy's
+        # event-touch tile, and CH04:B4 defeated him 74 beats earlier.
+        built = foreign_trigger_index(
+            {map_id: overlay},
+            destination_scripts={map_id: self._resolved_scripts.get(map_id, set())},
+        )[map_id]
         self._triggers[map_id] = built
         return built
 
@@ -656,7 +683,7 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
     # not exist is the ordinary case (route plans are enforced forward from
     # CH05), and a plan that exists but will not load is a fault that stops
     # the run here rather than silently leaving divergence unchecked.
-    oracle = _WalkOracle.for_chapter(chapter.name)
+    oracle = _WalkOracle.for_chapter(chapter)
     ledger = ContradictionLedger()
     start_idx = chapter.index_of(from_beat) if from_beat else 0
     scratch = output_root / f".{rom.stem}.{chapter.name}.attempt{attempt_no}.scratch.gba"

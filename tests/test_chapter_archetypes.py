@@ -334,3 +334,42 @@ def test_ch04_manifest_matches_frozen_expectations() -> None:
     expected = frozen["CH04"]["matches"]
 
     assert derived == expected
+
+
+# --- inherited-beat trigger resolution ----------------------------------
+
+
+def test_resolved_trigger_scripts_exempts_only_inherited_registered_beats() -> None:
+    """A trigger a predecessor's beat already ran is not foreign any more.
+
+    Three properties in one, because they are the three ways this can go
+    wrong:
+
+    * an INHERITED beat's dispositioned row is exempt (CH04:B4 defeated
+      Timothy, so CH05 may walk across his event-touch tile);
+    * a row whose beat is DEFERRED is NOT exempt -- a `beat:` disposition is
+      an intent, and CH04 disposes `beat:` on rows it never runs;
+    * this chapter's OWN triggers are never exempt, which is the check.
+    """
+    from rpg2gba.playtest.chapter import load_chapter, resolved_trigger_scripts
+
+    resolved = resolved_trigger_scripts(load_chapter("CH05"))
+
+    # CH04:B4 fights Timothy (map035/ev012/p0) during the replay.
+    assert "Map035_EV012_Page1" in resolved.get(35, set())
+
+    # CH04's B8/B10 are in DEFERRED_BEATS -- dispositioned, never run.
+    assert "Map035_EV001_Page2" not in resolved.get(35, set())
+    assert "Map035_EV003_Page2" not in resolved.get(35, set())
+
+    # CH05's own maps contribute nothing: its own beats are not inherited.
+    assert 36 not in resolved
+    assert 37 not in resolved
+
+
+def test_a_chapter_with_no_predecessor_resolves_nothing() -> None:
+    """The exemption exists only for a replay. CH01 has no predecessor, so
+    every trigger stays foreign to it -- the pre-existing behaviour."""
+    from rpg2gba.playtest.chapter import load_chapter, resolved_trigger_scripts
+
+    assert resolved_trigger_scripts(load_chapter("CH01")) == {}

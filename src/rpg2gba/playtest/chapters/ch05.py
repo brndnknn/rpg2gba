@@ -224,7 +224,7 @@ from ..archetypes.item_ball import item_ball_beats
 from ..archetypes.trainer import trainer_beats
 from ..archetypes.warp import warp_beat
 from ..battle import in_battle
-from ..cells import approach_to, event_cell, raw_cell, warp_cell
+from ..cells import approach_to, entry_cell, event_cell, raw_cell
 from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
 
@@ -252,9 +252,17 @@ ROUTE_2_CONST = "MAP_ROUTE_02"  # CH04's own map constant; see module docstring'
 # the cave reordered into a backtracking sweep, because every segment after B1
 # was then costed from Route 2. See `Chapter.route_entry`.
 #
-# Derived, not a literal (D1): this is CH04's own entrance warp, the same
-# reciprocal `warp_beat` derives for B1's return leg.
-_ROUTE_ENTRY = warp_cell(ROUTE_2_CONST, to=MAP_1F)
+# It is where CH04 HANDS OVER, not where CH05 crosses. Declaring the crossing
+# cell instead still left the approach walk outside the plan -- the run starts
+# at (19,49) and walks north to the cave mouth, and a plan whose entry is the
+# warp tile does not contain that walk. B1 then left the approved route onto
+# Map035 EV012's trigger tile (Timothy, event touch) with nothing planning
+# around it.
+#
+# Derived, not a literal (D1): `entry_cell` reads the one verified table of
+# (chapter, map) start cells, where CH05/map035 is registered from the
+# emulator-observed position the step-7 runs recorded.
+_ROUTE_ENTRY = entry_cell(_CHAPTER_ID, ROUTE_2_CONST)
 
 ch05 = ChapterBuilder("CH05", doc="reference/chapters/05-passage-cave.md",
                         predecessor="CH04",

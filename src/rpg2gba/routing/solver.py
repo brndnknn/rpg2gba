@@ -20,7 +20,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from ..chapter_manifest.schema import ManifestRow
-from ..playtest.chapter import Beat, BeatGroup, BeatLocation, Chapter
+from ..playtest.chapter import Beat, BeatGroup, BeatLocation, Chapter, resolved_trigger_scripts
 from ..tileset_converter.map_constants import DEFAULT_STATE_PATH, MapConstantRegistry
 from ..traversal.graph import Cell, MapGraph
 from ..traversal.triggers import TriggerOverlay
@@ -249,7 +249,6 @@ def _derive_warp_precedence(
     world: WorldGraph | None,
     *,
     entry_map: int,
-    entry_cell: Cell,
     entry_group_id: str | None,
     chapter_id: str,
     exit_provided: bool,
@@ -337,10 +336,19 @@ def _derive_warp_precedence(
     # That forced the whole 1F sweep to run north-first and cross a trainer's
     # trigger tile twice. While the entry was inside the cave this was masked,
     # because `entry_map` alone already skipped map 36.
+    # Keyed on the entry MAP, not the entry cell: standing anywhere on map X
+    # you can walk to any warp on map X and cross it, so nothing has to
+    # "introduce" what X warps to. Keying it on the cell was too narrow -- it
+    # held only while the chapter's declared entry happened to BE the warp
+    # tile, and stopped applying the moment CH05's entry became the cell CH04
+    # actually hands over on, two dozen tiles short of the cave mouth.
+    #
+    # Maps deeper in are unaffected: map 37 is reachable only through map 36,
+    # never from the entry map, so it still requires its introducing warp.
     entry_landing_maps: set[int] = set()
     if world is not None:
         for edge in world.edges_from(entry_map):
-            if edge.kind == "warp" and edge.src_cell == entry_cell:
+            if edge.kind in ("warp", "seam_warp"):
                 entry_landing_maps.add(edge.dst_map)
 
     for map_id in sorted(chapter_maps - {entry_map} - entry_landing_maps):
@@ -535,6 +543,16 @@ def solve_route(
         )
     )
 
+    # A trigger a predecessor's beat already resolved is not foreign to this
+    # chapter (`playtest.chapter.resolved_trigger_scripts`). CH05 must pass
+    # Timothy's event-touch tile to reach the cave at all -- `plan_segment`
+    # tries a trigger-free path first and there is none -- and CH04:B4 has
+    # already defeated him by then, so the tile fires nothing.
+    resolved_scripts = resolved_trigger_scripts(chapter)
+    effective_destination_scripts = frozenset(destination_scripts) | {
+        script for scripts in resolved_scripts.values() for script in scripts
+    }
+
     group_by_row: dict[str, str] = {}
     for gp in group_points:
         for row_id in gp.rows:
@@ -547,7 +565,7 @@ def solve_route(
     )
     warp_precedence, terminal_point = _derive_warp_precedence(
         manifest_rows, group_by_row, group_points, world,
-        entry_map=entry_map, entry_cell=entry_cell,
+        entry_map=entry_map,
         entry_group_id=entry_group_id, chapter_id=chapter_id,
         exit_provided=exit_ is not None,
     )
@@ -639,7 +657,7 @@ def solve_route(
             result = plan_segment(
                 start_map, cell_i, goal_map, cell_j,
                 graphs=graphs, overlays=overlays,
-                destination_scripts=destination_scripts, world=world,
+                destination_scripts=effective_destination_scripts, world=world,
                 occupancy=occupancy,
             )
         except RoutePlanningError:
