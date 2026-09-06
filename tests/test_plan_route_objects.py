@@ -165,6 +165,10 @@ class _FakeRouteEmu:
         from rpg2gba.playtest.emulator import Emulator
         return Emulator._warp_tiles(self)
 
+    def _warp_event_tiles(self):
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator._warp_event_tiles(self)
+
     def _player_object_slot(self):
         from rpg2gba.playtest.emulator import Emulator
         return Emulator._player_object_slot(self)

@@ -122,6 +122,64 @@ _INTERRUPT_GRACE = 300  # 5s
 _BATTLE_SETTLE_BUDGET = 600  # 10s
 _DIALOGUE_SETTLE_BUDGET = 300  # 5s
 
+# The metatile behaviours under which the engine will actually warp the player
+# off a tile that carries a `warp_event`. EVERY trigger path in
+# `engine/src/field_control_avatar.c` gates on two things, not one: a warp
+# event at the position (`GetWarpEventAtMapPosition`) AND the tile's own
+# behaviour. A `warp_event` sitting on plain floor (`MB_NORMAL`) fires
+# nothing when it is stepped on.
+#
+# That is not a curiosity, it is the converter's normal output. Emerald has no
+# free-coordinate landing: an inbound warp must name an index into the
+# DESTINATION map's own warp table, so `metadata_wiring._resolve_all_warp_events`
+# emits an "arrival" `warp_event` on B for every source warp A->B, at B's
+# arrival coordinates, deliberately left as plain floor. `WARP_OVERRIDES`
+# stamps door metatiles at SOURCE warp coordinates only. So a map reachable by
+# a warp carries inert warp_events that a player walks straight over, and a
+# router that treats the warp table as the hazard list seals corridors the game
+# does not.
+#
+# Route 01's (15,7)/(16,7) Kevlar arrivals are the case that found this: they
+# made B17's target (15,6) unreachable on both the live grid and the offline
+# graph, while a human walks through them without a transition.
+#
+# Derived from the fork, not from memory (CLAUDE.md 4.7) -- the union of
+# `IsWarpMetatileBehavior`, `IsArrowWarpMetatileBehavior`,
+# `IsDirectionalStairWarpMetatileBehavior` (`field_screen_effect.c`) and
+# `TryDoorWarp`'s secret-base branch, expanded through
+# `engine/src/metatile_behavior.c`. Direction is deliberately NOT modelled:
+# an arrow warp or a sideways stair only fires when entered from one side,
+# but the planner has no committed approach direction at the time it builds
+# the avoid-set, so all four are treated as hazards. Over-avoiding costs a
+# detour or a loud unroutable; under-avoiding walks the scenario onto another
+# map, which corrupts every assertion after it.
+_WARP_TRIGGER_BEHAVIORS: tuple[str, ...] = (
+    # IsWarpMetatileBehavior
+    "MB_ANIMATED_DOOR",              # IsWarpDoor
+    "MB_LADDER",
+    "MB_UP_ESCALATOR", "MB_DOWN_ESCALATOR",
+    "MB_NON_ANIMATED_DOOR", "MB_WATER_DOOR", "MB_DEEP_SOUTH_WARP",
+    "MB_LAVARIDGE_GYM_B1F_WARP", "MB_LAVARIDGE_GYM_1F_WARP",
+    "MB_AQUA_HIDEOUT_WARP", "MB_MT_PYRE_HOLE", "MB_MOSSDEEP_GYM_WARP",
+    "MB_BRIDGE_OVER_OCEAN",          # IsUnionRoomWarp reuses this behaviour
+    # IsArrowWarpMetatileBehavior
+    "MB_NORTH_ARROW_WARP", "MB_STAIRS_OUTSIDE_ABANDONED_SHIP",
+    "MB_SOUTH_ARROW_WARP", "MB_WATER_SOUTH_ARROW_WARP",
+    "MB_SHOAL_CAVE_ENTRANCE",
+    "MB_EAST_ARROW_WARP", "MB_WEST_ARROW_WARP",
+    # IsDirectionalStairWarpMetatileBehavior
+    "MB_UP_RIGHT_STAIR_WARP", "MB_UP_LEFT_STAIR_WARP",
+    "MB_DOWN_RIGHT_STAIR_WARP", "MB_DOWN_LEFT_STAIR_WARP",
+    # TryDoorWarp -> IsOpenSecretBaseDoor
+    "MB_SECRET_BASE_SPOT_RED_CAVE_OPEN",
+    "MB_SECRET_BASE_SPOT_BROWN_CAVE_OPEN",
+    "MB_SECRET_BASE_SPOT_YELLOW_CAVE_OPEN",
+    "MB_SECRET_BASE_SPOT_BLUE_CAVE_OPEN",
+    "MB_SECRET_BASE_SPOT_TREE_LEFT_OPEN",
+    "MB_SECRET_BASE_SPOT_TREE_RIGHT_OPEN",
+    "MB_SECRET_BASE_SPOT_SHRUB_OPEN",
+)
+
 # `_plan_route`'s cost for entering a tall-grass (`MB_TALL_GRASS`) tile, vs.
 # 1 for ordinary ground -- Dijkstra prefers clear tiles when a reasonable
 # detour exists, but still crosses grass rather than take an absurd one (a
@@ -1622,12 +1680,13 @@ class Emulator:
         raw = self.read_bytes(ptr, width * height * 2)
         return width, height, struct.unpack(f"<{width * height}H", raw)
 
-    def _warp_tiles(self) -> set[tuple[int, int]]:
-        """Map-relative coordinates of the current map's warp events.
+    def _warp_event_tiles(self) -> set[tuple[int, int]]:
+        """Map-relative coordinates of every entry in the current map's warp
+        event table, unfiltered -- including the ones that cannot fire.
 
-        A route must never *enter* one it wasn't aimed at: stepping on a warp
-        relocates the scenario to another map, which is the one walk failure
-        mode that corrupts every assertion after it rather than failing.
+        Callers that want the planner's hazard set want `_warp_tiles`, which
+        is this minus the inert entries. This is the raw table, split out so
+        the filter has something to filter and so a diagnosis can show both.
         """
         o = self.offsets
         events = self.u32(self.symbols["gMapHeader"] + o["off_mapheader_events"])
@@ -1643,6 +1702,89 @@ class Emulator:
              self.u16(warps + i * stride + o["off_warpevent_y"]))
             for i in range(count)
         }
+
+    def _warp_tiles(self) -> set[tuple[int, int]]:
+        """Map-relative coordinates of the warp events that can actually
+        WARP the player -- the planner's hazard set.
+
+        A route must never *enter* one it wasn't aimed at: stepping on a live
+        warp relocates the scenario to another map, which is the one walk
+        failure mode that corrupts every assertion after it rather than
+        failing.
+
+        But the warp table is not the hazard list. The engine fires a warp
+        only when a warp event and a warp-triggering metatile behaviour agree
+        (`_WARP_TRIGGER_BEHAVIORS`), and the converter emits arrival warps on
+        plain floor by design, so on any map reachable by a warp the raw table
+        over-reports. Taking the table at face value blocked Route 01's
+        (15,7)/(16,7) Kevlar arrivals and made B17's own target unreachable --
+        latent since 2026-07-27, invisible until `_route_waypoints` stopped
+        degrading to an unprotected greedy walk (f705b642).
+
+        The degrade is deliberately in the OTHER direction from
+        `_grass_cost_context`'s. If the behaviour of a tile cannot be read --
+        no attribute pointer chain, a coordinate outside the loaded grid, a
+        fake emulator that predates the primitive -- that tile stays in the
+        hazard set. An unreadable behaviour must not quietly unblock a real
+        door; over-avoiding costs a detour or a loud `RoutePlanningError`,
+        under-avoiding walks the run onto another map.
+        """
+        coords = self._warp_event_tiles()
+        if not coords:
+            return set()
+        try:
+            ctx = self._grass_cost_context()
+            if ctx is None:
+                raise ScenarioError("no metatile-attribute pointer chain")
+            triggers = set(self.resolve_constants(_WARP_TRIGGER_BEHAVIORS).values())
+            width, _height, blocks = self._map_grid()
+            off = self.offsets["val_map_offset"]
+        except Exception:
+            logger.info(
+                "_warp_tiles: could not resolve metatile behaviours, treating "
+                "all %d warp events as hazards", len(coords), exc_info=True)
+            return coords
+
+        live: set[tuple[int, int]] = set()
+        inert: set[tuple[int, int]] = set()
+        for x, y in coords:
+            try:
+                behavior = self._metatile_behavior(x, y, ctx, blocks, width, off)
+            except Exception:
+                live.add((x, y))
+                continue
+            (live if behavior in triggers else inert).add((x, y))
+        if inert:
+            logger.debug(
+                "_warp_tiles: %d of %d warp events on this map sit on "
+                "non-warping metatiles and are not avoided: %s",
+                len(inert), len(coords), sorted(inert))
+        return live
+
+    def _metatile_behavior(self, x: int, y: int, ctx: dict,
+                           blocks: tuple[int, ...], width: int,
+                           off: int) -> int:
+        """The behaviour byte of the metatile at map-relative `(x, y)`.
+
+        Follows the engine's own `GetAttributeByMetatileIdAndMapLayout`
+        (`engine/src/fieldmap.c`): mask the grid word down to a metatile id,
+        index the primary or secondary tileset's `metatileAttributes` by it,
+        and mask the packed `u16` for the behaviour. `ctx` is one
+        `_grass_cost_context` result, hoisted by the caller so a per-node
+        search loop doesn't re-walk the pointer chain.
+
+        Raises (`IndexError`) for a coordinate outside the loaded grid rather
+        than returning a behaviour read off some other tile's word.
+        """
+        idx = (x + off) + width * (y + off)
+        if not (0 <= idx < len(blocks)):
+            raise IndexError(f"({x},{y}) is outside the loaded map grid")
+        metatile_id = blocks[idx] & ctx["metatile_id_mask"]
+        if metatile_id < ctx["num_primary"]:
+            addr = ctx["primary_attrs"] + metatile_id * 2
+        else:
+            addr = ctx["secondary_attrs"] + (metatile_id - ctx["num_primary"]) * 2
+        return self.u16(addr) & ctx["behavior_mask"]
 
     def _player_object_slot(self) -> int:
         """The `gObjectEvents` slot index (`gPlayerAvatar.objectEventId`) the
@@ -2038,14 +2180,15 @@ class Emulator:
             cached = grass_cache.get(key)
             if cached is not None:
                 return cached
-            metatile_id = (blocks[(x + off) + width * (y + off)]
-                            & grass_ctx["metatile_id_mask"])
-            if metatile_id < grass_ctx["num_primary"]:
-                addr = grass_ctx["primary_attrs"] + metatile_id * 2
-            else:
-                addr = (grass_ctx["secondary_attrs"]
-                        + (metatile_id - grass_ctx["num_primary"]) * 2)
-            behavior = self.u16(addr) & grass_ctx["behavior_mask"]
+            try:
+                behavior = self._metatile_behavior(
+                    x, y, grass_ctx, blocks, width, off)
+            except IndexError:
+                # Grass is a COST, never a gate (see this method's docstring),
+                # so an out-of-grid cell prices as plain ground rather than
+                # failing the plan. `_warp_tiles` degrades the other way on
+                # the same error, because there it gates.
+                behavior = -1
             result = behavior == grass_ctx["mb_tall_grass"]
             grass_cache[key] = result
             return result
@@ -2147,16 +2290,33 @@ class Emulator:
             else:
                 bits.append(
                     f"TRANSIENT: the offline graph reaches {goal} from "
-                    f"{start} on static terrain, so a dynamic obstacle "
-                    "blocked planning -- an object event standing on the "
-                    "only corridor, most likely")
+                    f"{start} on static terrain, so something in the "
+                    "planner's avoid-set closed the route")
+
+        # Both halves of the avoid-set, always, and neither named as the
+        # cause. This message used to assert "an object event standing on
+        # the only corridor, most likely" and then print object tiles alone,
+        # while the avoid-set is warps UNION objects. On CH02's B17 the
+        # objects were innocent and two inert warp tiles were the blocker,
+        # and the templated guess sent two investigations the wrong way. A
+        # diagnosis that runs on the failure path may report what it sees;
+        # it may not pick a winner it never tested (CLAUDE.md 4.5).
+        try:
+            warps = self._warp_tiles()
+        except Exception:  # noqa: BLE001 - see docstring
+            bits.append("avoided warp tiles: unknown")
+        else:
+            shown = ", ".join(str(c) for c in sorted(warps))
+            bits.append(f"avoided warp tiles: {shown or 'none'}")
 
         try:
             occupied = self._occupied_object_tiles(goal)
         except Exception:  # noqa: BLE001 - see docstring
-            pass
+            bits.append("object-held tiles: unknown")
         else:
             blockers = sorted(occupied)
+            if not blockers:
+                bits.append("object-held tiles: none")
             if blockers:
                 shown = ", ".join(str(c) for c in blockers[:8])
                 more = "" if len(blockers) <= 8 else f" (+{len(blockers) - 8} more)"
