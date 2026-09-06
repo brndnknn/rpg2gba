@@ -679,9 +679,14 @@ def _unwrap_message(text: str) -> str:
     what a beat asserts. Breaks become single spaces and runs of whitespace
     collapse, on both sides of the comparison.
 
-    Only the substring path normalizes. `exact=True` still compares the
-    decoded text verbatim, breaks included, for the rare beat that means to
-    pin the exact typesetting.
+    BOTH comparison paths normalize. `exact=True` used to compare verbatim,
+    breaks included, on the theory that a beat asking for equality wanted the
+    typesetting too -- but its only caller is the trainer template's re-talk
+    oracle, which is asserting what an NPC SAYS, and CH05's B3_retalk1 failed
+    on nothing but a wrap: expected "...all my Pokemon fainted?..." against a
+    box reading "...all my Pokemon\nfainted?...". Same string, same argument
+    as B5's above. A beat that really does mean to pin the wrap says
+    `verbatim=True` and says it on purpose.
     """
     for code in ("\\n", "\\l", "\\p"):
         text = text.replace(code, " ")
@@ -1523,13 +1528,20 @@ class Emulator:
             text = self.current_field_message_text()
         return text
 
-    def assert_text_contains(self, expected: str, *, exact: bool = False) -> None:
+    def assert_text_contains(self, expected: str, *, exact: bool = False,
+                              verbatim: bool = False) -> None:
         """Assert the field message box currently shows `expected`.
 
         `exact=False` (default) checks substring containment -- the common
         case, since a checked phrase is usually shorter than its surrounding
         sentence. `exact=True` requires the whole decoded message (all
         pages) to equal `expected`.
+
+        Both paths compare through `_unwrap_message`, so where the engine
+        wrapped a line is not part of what is asserted -- it moves whenever
+        the string, the font or the box width changes. `verbatim=True` (only
+        meaningful with `exact=True`) turns that off for a beat that really
+        is pinning the typesetting.
 
         Raises `ScenarioError` printing both `expected` and the actual
         decoded text on failure -- PLAYTEST_AUTHORING_IMPROVEMENT.md's
@@ -1538,8 +1550,11 @@ class Emulator:
         did to the proxy-oracle findings that document is about.
         """
         actual = self.wait_for_field_message()
-        if exact:
+        if exact and verbatim:
             ok = actual == expected
+        elif exact:
+            ok = (actual is not None
+                  and _unwrap_message(actual) == _unwrap_message(expected))
         else:
             ok = (actual is not None
                   and _unwrap_message(expected) in _unwrap_message(actual))
