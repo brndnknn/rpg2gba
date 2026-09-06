@@ -110,8 +110,8 @@
     {
       "id": "CH05", "act": "A1", "title": "Passage Cave", "wiki_page": "Passage Cave",
       "visit": 1, "outdoor": 36, "maps": [36, 37],
-      "predecessor": "CH04", "tier": "medium", "status": "in_progress",
-      "notes": "Traversal confirmed by warp graph: 35 -> 36 <-> 37 -> 40. First dungeon; first candidate for cave/Flash handling. In the wiki this unit is a raw <h3> tag, not a '===' heading."
+      "predecessor": "CH04", "tier": "medium", "status": "built",
+      "notes": "Passed its \u00a79 boot-walk gate 2026-09-06 (CH05 chapter suite GREEN 93/93 -- 74 inherited beats + 19 of its own, ROM b7b470c4). First dungeon, and the first chapter in the project to carry a route plan: reference/routes/CH05.route.json, solved at 165 tiles / 13 nodes with no CROSSING, with RULE_ROUTE_ORDER and RULE_ROUTE_APPROACH enforcing rather than warning -- so slice 3 is validated forward from here (PROJECT_TODO.md #67) and CH01-CH04 still carry no plan. Spec reference/chapters/05-passage-cave.md, design calls CH05_DECISIONS.md; CH05_TODO.md is retired to reference/archive/, carryovers migrated to PROJECT_TODO.md. First live exercise of the arrival_nudge template (Map036 EV002) and of all four archetype templates as callable code -- 7 of 11 beat groups are template calls. Traversal confirmed by warp graph: 35 -> 36 <-> 37 -> 40. B6/B7 (the TM76 room) are blocked:surf rather than DEFERRED_BEATS: the room is sealed by terrain, not by a switch. The 37 -> 40 crossing is CH06's to assert, not this chapter's -- boundary crossings belong to the arriving chapter (operator convention 2026-09-04), so B11 delivers the player to (16,5) and stops there. First candidate for cave/Flash handling. In the wiki this unit is a raw <h3> tag, not a '===' heading."
     },
     {
       "id": "CH06", "act": "A1", "title": "Nowtoch City", "wiki_page": "Nowtoch City",

@@ -1,6 +1,12 @@
 # CH05 — Passage Cave: live work items
 
-**Status:** in progress. Branch `ch05` cut; steps 0-7 done and verified.
+**Status:** **CLOSED — passed its §9 boot-walk gate 2026-09-06.** Chapter suite GREEN
+**93/93** (74 inherited + 19 its own), ROM `b7b470c4`, walk ROM
+`output/playtest/walk/CH05-B1.gba`. `chapters.json` status `built`; carryovers migrated
+to `PROJECT_TODO.md`. This file is retired to `reference/archive/` and is a historical
+record from here — do not treat it as live work.
+
+**Superseded status line (kept for the record):** in progress. Branch `ch05` cut; steps 0-7 done and verified.
 **You are here:** → **Step 8 (BOOT — the §9 gate)**. STOP 4 is **cleared**: step 7's
 headless suite is **93/93 run, 93 passed, 0 failed, 0 hung, 0 not run**
 (`output/ch05-playtest16.log`, 2026-09-06), rule-set version v2 recorded, green review
@@ -527,8 +533,8 @@ losing candidates are all in the file; overruling one means editing
 $V -m rpg2gba.routing plan --chapter CH05 --locations
 ```
 
-- [ ] Author `src/rpg2gba/playtest/chapters/ch05.py`, beat groups in the approved order.
-- [ ] **No bare coordinate literals.** CH05 is the first chapter under the D1 ban and
+- [x] Author `src/rpg2gba/playtest/chapters/ch05.py`, beat groups in the approved order.
+- [x] **No bare coordinate literals.** CH05 is the first chapter under the D1 ban and
       the lint is zero-tolerance for CH05+ (the CH01-CH04 debt has a ratchet budget).
       Use the resolvers in `src/rpg2gba/playtest/cells.py` — `event_cell`, `approach_to`,
       `warp_cell`, `arrival_cell`, `entry_cell` — and the `raw_cell(x, y, why="...")`
@@ -536,13 +542,13 @@ $V -m rpg2gba.routing plan --chapter CH05 --locations
       traced to unverified coordinate literals; that is what the ban is for.
       `CH05.locations.json` records the resolver call for each beat, so this is
       transcription, not rediscovery.
-- [ ] **Re-solve against the authored module** and confirm it agrees with 6a's plan:
+- [x] **Re-solve against the authored module** and confirm it agrees with 6a's plan:
       ```bash
       $V -m rpg2gba.routing plan --chapter CH05 --dry-run
       ```
       A disagreement means the authored beats drifted from what you approved. There is
       no automated equality check between the two yet — see §Deferred.
-- [ ] Re-run `chapter_manifest check --chapter CH05`. `route_model_unenforced` should
+- [x] Re-run `chapter_manifest check --chapter CH05`. `route_model_unenforced` should
       now be gone and `RULE_ROUTE_ORDER` enforcing.
 
 ---
@@ -655,13 +661,13 @@ green against the current ROM build, which after a frontier rebuild it never has
 so the written recipe fails for every chapter, not just this one. Shared-doc surgery,
 so filed rather than fixed mid-chapter (§2 guardrail).
 
-## ⏸ STOP 5 — the gate itself
+## ⏸ STOP 5 — the gate itself — **PASSED 2026-09-06**
 
 A chapter is not done until it **boots in mGBA and the section is genuinely playable —
 warps fire, NPCs sane, layout legible, art included.** You walk it. Specific things to
 look at this chapter, beyond the beat list:
 
-- [ ] **Does the cave read in the dark?** Step 3's legibility check, discharged here
+- [x] **Does the cave read in the dark?** Step 3's legibility check, discharged here
   and nowhere else — art that reads fine at full brightness can be unreadable through
   the Flash overlay, and only your eyes on the device can tell you.
 - **The arrival nudge on Map036 EV002.** The `arrival_nudge` template has never run in
@@ -684,7 +690,7 @@ CH01-CH04, which is post-CH05 work (§Deferred).
 
 ---
 
-## Step 9 — FIX
+## Step 9 — FIX — **nothing to fix**
 
 **Effort — you:** varies · **me:** high · **attended:** yes
 
@@ -694,17 +700,22 @@ generated output — it gets regenerated (`CLAUDE.md` §11).
 The `/debug` workflow drives this: clarify the symptom → localize the layer → fix →
 full verified rebuild with hash evidence → taildrop for retest.
 
+**Not needed this chapter.** The boot walk came back clean, so nothing entered this
+step. Notably the `arrival_nudge` on Map036 EV002 — flagged at STOP 5 as the single
+most likely thing to misbehave, and the template's first-ever run in a ROM — survived
+the walk in both of its predicted failure shapes (no freeze on arrival, no warp loop).
+
 ---
 
 ## Step 10 — RECORD
 
 **Effort — you:** 5 min · **me:** low · **attended:** no
 
-- [ ] `MEMORY.md` → Current Phase and Decisions Made.
-- [ ] `reference/chapters.json` → CH05 `status` to gated, with the gate note (date,
+- [x] `MEMORY.md` → Current Phase and Decisions Made.
+- [x] `reference/chapters.json` → CH05 `status` to **`built`** (the value CH01-CH04 all use; "gated" was this doc's word and is not a status the file has), with the gate note (date,
       suite result, ROM hash) in the established format.
-- [ ] Retire this file to `reference/archive/`, migrating carryovers to `PROJECT_TODO.md`.
-- [ ] Commit as one logical unit; merge `ch05`.
+- [x] Retire this file to `reference/archive/`, migrating carryovers to `PROJECT_TODO.md`.
+- [x] Commit as one logical unit; merge `ch05`.
 
 ---
 
