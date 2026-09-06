@@ -152,6 +152,27 @@ class Beat:
     archetype: str | None = None
 
 
+def page_row_script(row_id: str) -> tuple[int, str] | None:
+    """`("map037/ev004/p0")` -> `(37, "Map037_EV004_Page1")`, or `None` for a
+    row id that names no page script (seam and terrain rows).
+
+    The one place that knows this mapping. Both consumers of the
+    foreign-trigger exemption go through it -- `resolved_trigger_scripts`
+    below for a predecessor's dispositions, and
+    `runner._WalkOracle.mark_rows_resolved` for this chapter's own beats as
+    they pass -- so the two can never disagree about which script a row
+    names. Note the page number is 1-based on the label and 0-based in the
+    row id (`metadata_wiring.page_label`'s own convention).
+    """
+    from ..tileset_converter.metadata_wiring import page_label
+
+    if not _PAGE_ROW_RE.match(row_id):
+        return None
+    map_part, ev_part, page_part = row_id.split("/")
+    map_id = int(map_part[3:])
+    return map_id, page_label(map_id, int(ev_part[2:]), int(page_part[1:]) + 1)
+
+
 def resolved_trigger_scripts(chapter: "Chapter") -> dict[int, set[str]]:
     """Per map id, the page scripts an INHERITED beat of `chapter` already
     exercised -- so they are no longer "foreign" to this chapter's own walks.
@@ -193,7 +214,6 @@ def resolved_trigger_scripts(chapter: "Chapter") -> dict[int, set[str]]:
     """
     from ..chapter_manifest.beat_model import _matches
     from ..chapter_manifest.dispositions import disposition_path, load_dispositions
-    from ..tileset_converter.metadata_wiring import page_label
 
     inherited: dict[str, set[str]] = {}
     for beat in chapter.beats:
@@ -222,13 +242,11 @@ def resolved_trigger_scripts(chapter: "Chapter") -> dict[int, set[str]]:
                 continue
             if not any(_matches(beat_id, name) for name in beat_names):
                 continue  # dispositioned but deferred: it never ran
-            if not _PAGE_ROW_RE.match(row_id):
+            named = page_row_script(row_id)
+            if named is None:
                 continue  # seam/terrain rows name no page script
-            map_part, ev_part, page_part = row_id.split("/")
-            map_id = int(map_part[3:])
-            resolved.setdefault(map_id, set()).add(
-                page_label(map_id, int(ev_part[2:]), int(page_part[1:]) + 1)
-            )
+            map_id, script = named
+            resolved.setdefault(map_id, set()).add(script)
     return resolved
 
 
