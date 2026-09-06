@@ -86,6 +86,7 @@ def warp_beat(
     group: str | None = None,
     round_trip: bool = False,
     return_direction: str | None = None,
+    start_side: Literal["origin", "dest"] = "origin",
     manifest_rows: "tuple[ManifestRow, ...] | None" = None,
     manifest_dir=None,
 ) -> None:
@@ -105,6 +106,25 @@ def warp_beat(
     what an ungrouped beat already gets), but stating it explicitly keeps
     the convention uniform across all four archetypes rather than leaving
     it as an accident of this template happening to have no satellites.
+
+    `start_side` names which side of the warp the PLAYER IS STANDING ON
+    when the beat begins, which is not always the side that owns the
+    claimed row. `"origin"` (the default) is the ordinary case: the player
+    is on `map_constant`, the map whose event this beat claims. `"dest"`
+    means the player begins on `dest_map_constant` -- the far side -- so
+    the round trip runs mirrored: dest->origin, origin->dest, dest->origin,
+    still ending on the far side from where it started and still crossing
+    the claimed event (on the middle leg rather than the first).
+
+    CH05's B1 is why it exists. Its row is `map036/ev001/p0`, the CAVE's
+    exit warp, so the template's origin is the cave -- but CH04 leaves the
+    player on Route 02, and a beat that assumes it starts in the cave walks
+    the cave's warp coordinates on Route 02 and asserts an arrival that
+    never happens. `start_side="dest"` is the difference between a beat
+    that begins where the player is and one that begins where its manifest
+    row lives. It requires `round_trip=True`: without the round trip there
+    is only one crossing, and starting it on the far side would cross the
+    reciprocal instead of the claimed warp.
 
     `round_trip=True` (module docstring) crosses forward, asserts arrival,
     crosses back through the DERIVED reciprocal warp, asserts arrival back
@@ -127,6 +147,16 @@ def warp_beat(
         raise ValueError(
             f"warp_beat: mechanism={mechanism!r} requires direction= "
             "(the held D-pad direction of the crossing step)"
+        )
+    if start_side not in ("origin", "dest"):
+        raise ValueError(
+            f"warp_beat: start_side={start_side!r} is not 'origin' or 'dest'"
+        )
+    if start_side == "dest" and not round_trip:
+        raise ValueError(
+            "warp_beat: start_side='dest' requires round_trip=True -- a "
+            "single crossing that begins on the far side would cross the "
+            "RECIPROCAL warp, not the one this beat's row claims"
         )
     if assert_bgm and dest_engine_map_dir is None:
         raise ValueError(
@@ -165,7 +195,23 @@ def warp_beat(
         return_arrival = arrival_cell(map_constant, from_map=dest_map_constant)
 
     def _cross(emu: Emulator, crossing_cell: tuple[int, int],
-               crossing_direction: str | None, dest_map: str) -> None:
+               crossing_direction: str | None, dest_map: str,
+               from_map: str) -> None:
+        # Proving a warp fired means proving the player LEFT, not just that
+        # they are standing on the destination -- when `from_map` and
+        # `dest_map` are the same map, `wait_for_map`/`require_map` both
+        # pass without a warp ever firing. That is not hypothetical: B1's
+        # mis-sided authoring walked Route 02 the whole beat and both
+        # guards waved it through, and only a coordinate assertion caught
+        # it. A round trip exists to prove the warp works BOTH ways, so a
+        # guard that can pass trivially defeats the point of running it.
+        if from_map == dest_map:
+            raise ValueError(
+                f"warp_beat({beat_name}): a crossing from {from_map} to "
+                f"{dest_map} cannot be proven -- origin and destination are "
+                "the same map, so no map assertion can tell a fired warp "
+                "from a walk that did nothing"
+            )
         if mechanism == "door":
             assertions.enter_door(emu, beat_name, crossing_cell, dest_map)
         elif mechanism == "threshold":
@@ -176,6 +222,36 @@ def warp_beat(
         else:  # "arrow"
             assertions.cross_arrow_warp(
                 emu, beat_name, crossing_cell, crossing_direction, dest_map)
+
+    def _forward(emu: Emulator, *, check_arrival_details: bool = False) -> None:
+        """Cross the CLAIMED warp: origin -> dest.
+
+        `assert_facing`/`assert_bgm` describe the landing on
+        `dest_map_constant`, so they belong to THIS leg and are asked for
+        only on the first forward crossing -- checking them after a
+        reciprocal leg would test the arrival on the wrong map, which is
+        the mistake `start_side="dest"` exists to stop making.
+        """
+        _cross(emu, crossing, direction, dest_map_constant, map_constant)
+        assertions.require_map(emu, beat_name, dest_map_constant)
+        assertions.assert_near(emu, beat_name, arrival)
+
+        if not check_arrival_details:
+            return
+        if assert_facing:
+            dest_uid = map_uranium_id(dest_map_constant)
+            expected_facing = assertions.expected_arrival_facing(
+                dest_uid, *arrival)
+            assertions.assert_player_facing(emu, beat_name, expected_facing)
+        if assert_bgm:
+            assertions.assert_bgm(emu, beat_name, dest_engine_map_dir)
+
+    def _back(emu: Emulator) -> None:
+        """Cross the DERIVED reciprocal: dest -> origin."""
+        _cross(emu, return_crossing, return_direction, map_constant,
+               dest_map_constant)
+        assertions.require_map(emu, beat_name, map_constant)
+        assertions.assert_near(emu, beat_name, return_arrival)
 
     @builder.beat(
         beat_name,
@@ -188,26 +264,27 @@ def warp_beat(
         group=resolved_group, archetype="warp", rows=(row_id,),
     )
     def run(emu: Emulator) -> None:
-        _cross(emu, crossing, direction, dest_map_constant)
-        assertions.require_map(emu, beat_name, dest_map_constant)
-        assertions.assert_near(emu, beat_name, arrival)
-
-        if assert_facing:
-            dest_uid = map_uranium_id(dest_map_constant)
-            expected_facing = assertions.expected_arrival_facing(
-                dest_uid, *arrival)
-            assertions.assert_player_facing(emu, beat_name, expected_facing)
-
-        if assert_bgm:
-            assertions.assert_bgm(emu, beat_name, dest_engine_map_dir)
-
-        if round_trip:
-            _cross(emu, return_crossing, return_direction, map_constant)
-            assertions.require_map(emu, beat_name, map_constant)
-            assertions.assert_near(emu, beat_name, return_arrival)
-
-            _cross(emu, crossing, direction, dest_map_constant)
-            assertions.require_map(emu, beat_name, dest_map_constant)
-            assertions.assert_near(emu, beat_name, arrival)
+        # The operator's round-trip rule: start on the map you are standing
+        # on, cross to the other one, come back, then cross again so the
+        # beat ENDS on the far side. Three crossings is the fewest that
+        # proves a warp works in BOTH directions and still leaves the
+        # player where the next beat needs them; two would prove both
+        # directions but end where it started.
+        #
+        # `start_side` only chooses which leg is first, because which side
+        # the player is on is a fact about the chapter's approach, not
+        # about the warp. The claimed event is crossed either way -- first
+        # leg when starting on its own map, middle leg when starting on the
+        # far side.
+        import sys; print("DBG start_side=",start_side,"round_trip=",round_trip, file=sys.stderr)
+        if start_side == "origin":
+            _forward(emu, check_arrival_details=True)
+            if round_trip:
+                _back(emu)
+                _forward(emu)
+        else:
+            _back(emu)
+            _forward(emu, check_arrival_details=True)
+            _back(emu)
 
     del run

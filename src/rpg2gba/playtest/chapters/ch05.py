@@ -342,10 +342,19 @@ def _item_grant_beat_body(emu: Emulator, beat: str, approach: tuple[int, int],
             f"{beat}: {item} {bag_before}->{bag_after}, expected +1 ({shot})")
 
 
-# -- B1 -- cave exit warp, Cave 1F -> Route 2 (map036/ev001) ---------------
+# -- B1 -- cave entry/exit warp, Cave 1F <-> Route 2 (map036/ev001) --------
 # See module docstring: the hand-written round trip this replaces is not
 # reproducible through `warp_beat`, which crosses one direction per call.
-
+#
+# `start_side="dest"` because the player is NOT in the cave when this beat
+# begins. CH05's only claimable row here is `map036/ev001/p0` -- the CAVE's
+# exit warp -- so the template's origin is the cave, but CH04 hands the
+# player over on Route 02 (observed entry (19,49), map 35). Authored
+# origin-first, the beat walked the cave's warp coordinates ON ROUTE 02 for
+# all 17 tiles of its path and asserted an arrival that never happened
+# (step-7 run 4, 2026-09-06). Mirrored, it runs Route 2 -> cave -> Route 2
+# -> cave: it starts where the player is, proves the warp both ways, and
+# ends inside the cave where B2 needs them.
 warp_beat(
     ch05,
     chapter_id=_CHAPTER_ID,
@@ -358,6 +367,7 @@ warp_beat(
     beat_name="B1",
     round_trip=True,
     return_direction="UP",
+    start_side="dest",
 )
 
 

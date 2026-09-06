@@ -531,3 +531,135 @@ def test_trainer_beats_loads_committed_ch04_manifest_from_disk() -> None:
     )
     chapter = b.build()
     assert [beat.name for beat in chapter.beats] == ["T3", "T3_retalk1"]
+
+
+# --- start_side: the beat begins where the PLAYER is --------------------
+
+
+def test_warp_beat_start_side_dest_requires_round_trip(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    """A single crossing that begins on the far side would cross the
+    RECIPROCAL warp, not the one the beat's row claims."""
+    b = _builder()
+    with pytest.raises(ValueError, match="requires round_trip=True"):
+        warp_beat(
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
+            mechanism="threshold", direction="DOWN", beat_name="W1",
+            manifest_rows=ch05_rows, start_side="dest",
+        )
+
+
+def test_warp_beat_unknown_start_side_fails_loud(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    b = _builder()
+    with pytest.raises(ValueError, match="is not 'origin' or 'dest'"):
+        warp_beat(
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
+            mechanism="threshold", direction="DOWN", beat_name="W1",
+            manifest_rows=ch05_rows, round_trip=True, return_direction="UP",
+            start_side="far",
+        )
+
+
+def test_warp_beat_start_side_dest_still_claims_the_same_single_row(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    """Which side the player starts on is a fact about the chapter's
+    approach, not about the warp -- it must not change what is claimed."""
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        round_trip=True, return_direction="UP", start_side="dest",
+    )
+    chapter = b.build()
+    assert [beat.name for beat in chapter.beats] == ["W1"]
+    assert chapter.beats[0].rows == ("map036/ev001/p0",)
+    assert chapter.beats[0].archetype == "warp"
+
+
+def test_warp_beat_start_side_dest_crosses_back_first_and_ends_on_origin(
+    ch05_rows: tuple[ManifestRow, ...], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The operator's round-trip rule, mirrored.
+
+    Starting on the far side, the legs must run dest->origin,
+    origin->dest, dest->origin: it begins where the player actually is,
+    crosses the claimed warp in the middle, and ENDS on the origin map so
+    the next beat inherits the right position. Both directions are
+    exercised, which is the whole reason the round trip exists.
+    """
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        round_trip=True, return_direction="UP", start_side="dest",
+    )
+    beat = b.build().beats[0]
+
+    legs: list[tuple[str, str]] = []
+
+    class _RecordingEmu:
+        pass
+
+    def _fake_cross_threshold(emu, name, approach, direction, dest_map):
+        legs.append((direction, dest_map))
+
+    def _noop(*args, **kwargs):
+        return None
+
+    from rpg2gba.playtest import assertions as real_assertions
+
+    monkeypatch.setattr(real_assertions, "cross_threshold", _fake_cross_threshold)
+    monkeypatch.setattr(real_assertions, "require_map", _noop)
+    monkeypatch.setattr(real_assertions, "assert_near", _noop)
+
+    beat.run(_RecordingEmu())
+
+    assert legs == [
+        ("UP", "MAP_PASSAGE_CAVE_1F"),    # dest -> origin, where we started
+        ("DOWN", "MAP_ROUTE_02"),          # the CLAIMED crossing
+        ("UP", "MAP_PASSAGE_CAVE_1F"),    # and back, ending on the origin
+    ]
+
+
+def test_warp_beat_start_side_origin_is_unchanged(
+    ch05_rows: tuple[ManifestRow, ...], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default ordering must not have moved: forward, back, forward."""
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        round_trip=True, return_direction="UP",
+    )
+    beat = b.build().beats[0]
+
+    legs: list[tuple[str, str]] = []
+
+    def _fake_cross_threshold(emu, name, approach, direction, dest_map):
+        legs.append((direction, dest_map))
+
+    def _noop(*args, **kwargs):
+        return None
+
+    from rpg2gba.playtest import assertions as real_assertions
+
+    monkeypatch.setattr(real_assertions, "cross_threshold", _fake_cross_threshold)
+    monkeypatch.setattr(real_assertions, "require_map", _noop)
+    monkeypatch.setattr(real_assertions, "assert_near", _noop)
+
+    beat.run(object())
+
+    assert legs == [
+        ("DOWN", "MAP_ROUTE_02"),
+        ("UP", "MAP_PASSAGE_CAVE_1F"),
+        ("DOWN", "MAP_ROUTE_02"),
+    ]
