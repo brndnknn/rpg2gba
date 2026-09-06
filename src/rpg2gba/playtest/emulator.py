@@ -8,6 +8,7 @@ robust against text-length, timing, and converter changes.
 import heapq
 import logging
 import os
+import re
 import struct
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -495,6 +496,28 @@ class _MapGraphSource:
         return graph
 
 
+_MAP_CONST_RE = re.compile(r"^\s*(MAP_[A-Z0-9_]+)\s*=", re.MULTILINE)
+
+
+def _defined_map_constants(engine: Path) -> frozenset[str]:
+    """Every `MAP_*` constant this build's headers declare.
+
+    Read from `include/constants/map_groups.h`, which pokeemerald
+    auto-generates from `data/maps/map_groups.json` -- so it names exactly
+    the maps compiled into this ROM, vanilla and slice alike. Used to scope
+    macro probes: the `MapConstantRegistry` is corpus-wide and will happily
+    offer constants no slice build defines.
+    """
+    header = engine / "include" / "constants" / "map_groups.h"
+    if not header.is_file():
+        raise ScenarioError(
+            f"_plan_route: {header} does not exist -- cannot tell which map "
+            "constants this build defines (is --engine pointing at a built "
+            "engine tree?)"
+        )
+    return frozenset(_MAP_CONST_RE.findall(header.read_text(encoding="utf-8")))
+
+
 class _MapIdBridge:
     """Resolves a live `map_location()` (group, num) to the Uranium map id
     the offline `MapGraph` is keyed by, via the persisted
@@ -545,6 +568,27 @@ class _MapIdBridge:
                 "has no minted maps -- cannot resolve the offline traversal "
                 "graph for the current map"
             )
+        # The registry is CORPUS-wide (every map the converter has minted a
+        # constant for), but a slice build only DEFINES the maps it actually
+        # builds -- `map_groups.h` is auto-generated from
+        # `data/maps/map_groups.json`, so it is the authoritative list of
+        # what this ROM's headers declare. Probing the full registry asks
+        # gcc about ~180 constants this build does not have, and the whole
+        # batched probe fails to compile, taking every map down with it
+        # (`MAP_ROUTE_03` undeclared, and many more). Scope to the
+        # intersection. Not a silent default: a map the player can stand on
+        # is by definition built, and if one somehow is not, `resolve()`
+        # still raises naming the group/num.
+        built = _defined_map_constants(self._emu.engine)
+        by_const = {c: uid for c, uid in by_const.items() if c in built}
+        if not by_const:
+            raise ScenarioError(
+                f"_plan_route: no minted map constant in {self._state_path} "
+                f"is defined by this build's map_groups.h ({len(built)} "
+                "constants) -- the registry state and the engine build "
+                "disagree about which maps exist"
+            )
+
         names: list[str] = []
         for map_const in by_const:
             names.append(f"MAP_GROUP({map_const})")

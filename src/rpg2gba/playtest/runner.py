@@ -126,45 +126,55 @@ class BeatContinuityError(RuntimeError):
 def _check_beat_continuity(beat: Beat, enter: dict[str, object],
                             emu: "Emulator") -> None:
     """Q13 slice 1, check 2: does `beat`'s declared entry position
-    (`beat.locations[0]`, see below) match `enter` -- the position the
-    PREVIOUS beat actually left the player at (or, for the chapter's first
-    beat, the post-boot snapshot)?
+    (`beat.entry_at`) match `enter` -- the position the PREVIOUS beat
+    actually left the player at (or, for the chapter's first beat, the
+    post-boot snapshot)?
 
-    **Multi-point interpretation:** only `locations[0]` is checked here. A
-    beat's later location entries name OTHER points it interacts with over
-    its own run (an NPC's tile, a door it walks to and crosses) -- points
-    the beat's own body is expected to reach by walking there, not points it
-    is expected to already be standing on when it starts. `locations[0]` is,
-    by the corpus's own authoring convention (every existing multi-point
-    beat in `chapters/{ch02,ch03}.py` lists the entry door/threshold
-    first), the one claim about *inherited* state: "this beat starts from
-    here." That is the only claim continuity can check without re-deriving
-    the beat's own walk plan, which is `chapter.py`'s reachability check's
-    job (independent, offline, one point at a time), not this one's.
+    **Only `entry_at` is checked here -- never `locations`/`at=`.** This
+    check used to read `beat.locations[0]` as the inherited-position claim,
+    on the theory (recorded in the old docstring here and in
+    `ChapterBuilder.beat`'s) that the corpus's own authoring convention
+    always lists the entry door/threshold first in a multi-point beat. The
+    first ROM run since this check landed (CH05, 2026-09-05) falsified that:
+    an offline audit of every inherited CH01 beat against the recorded
+    entry/exit positions from the last green run found 40 of 51 declared
+    `locations[0]` values disagreed with the beat's recorded entry position
+    (11 matched entry, 13 matched exit instead, 27 were neither), and
+    multi-point beats scored *worse* than single-`at=` ones. The corpus-wide
+    convention `at=`/`locations=` actually encode is "the tile the beat
+    triggers on," not "the tile the beat starts on" -- see
+    `ChapterBuilder.beat`'s docstring for the full measurement. `entry_at` is
+    the separate, explicit opt-in a beat uses to make the inherited-position
+    claim; a beat that doesn't set it makes no such claim, and is
+    unconditionally exempt from this check -- no fallback to `locations[0]`.
 
-    A beat with no declared locations is unaffected -- `at=`/`locations=`
-    stay optional, and an undeclared beat makes no claim to check."""
-    if not beat.locations:
+    A beat with no declared `entry_at` is unaffected."""
+    if beat.entry_at is None:
         return
-    loc = beat.locations[0]
+    map_constant = beat.locations[0].map_constant if beat.locations else None
+    if map_constant is None:
+        raise BeatContinuityError(
+            f"beat {beat.name!r}: declares entry_at={beat.entry_at!r} but no "
+            "map_constant= / locations= to resolve it against -- entry_at "
+            "needs a map to check continuity on")
     try:
-        expected_group = emu.resolve_constant(f"MAP_GROUP({loc.map_constant})")
-        expected_num = emu.resolve_constant(f"MAP_NUM({loc.map_constant})")
+        expected_group = emu.resolve_constant(f"MAP_GROUP({map_constant})")
+        expected_num = emu.resolve_constant(f"MAP_NUM({map_constant})")
     except Exception as exc:  # noqa: BLE001 - reported as this beat's failure
         raise BeatContinuityError(
             f"beat {beat.name!r}: declared map_constant "
-            f"{loc.map_constant!r} could not be resolved against this "
+            f"{map_constant!r} could not be resolved against this "
             f"build's fork headers: {exc}") from exc
 
     actual_map = (enter["map_group"], enter["map_num"])
     expected_map = (expected_group, expected_num)
     actual_pos = tuple(enter["player_pos"])
-    expected_pos = (loc.x, loc.y)
+    expected_pos = tuple(beat.entry_at)
 
     if actual_map != expected_map or actual_pos != expected_pos:
         raise BeatContinuityError(
-            f"beat {beat.name!r}: declared at=({loc.x},{loc.y}) on "
-            f"{loc.map_constant} (map_group={expected_group}, "
+            f"beat {beat.name!r}: declared entry_at={expected_pos} on "
+            f"{map_constant} (map_group={expected_group}, "
             f"map_num={expected_num}) does not match where the previous "
             f"beat actually left the player: map_group="
             f"{actual_map[0]}, map_num={actual_map[1]}, player_pos="

@@ -44,10 +44,14 @@ a second prefix layered on.
 **`at=` is now enforced (PLAYTEST_AUTHORING_IMPROVEMENT_V2.md Q13 slice 1).**
 A declared `BeatLocation` is no longer decorative: `verify_chapter_locations`
 below is the static, offline half of that enforcement (reachability against
-`rpg2gba.traversal.graph.MapGraph`); `runner.py` owns the runtime half
-(continuity -- does the declared position match where the previous beat
-actually left the player). See `verify_chapter_locations`'s docstring for the
-reachability rule and how a multi-point beat is interpreted.
+`rpg2gba.traversal.graph.MapGraph`). `runner.py` owns the runtime half
+(continuity), but -- since 2026-09-05, after `locations[0]` turned out not to
+reliably mean "inherited entry position" (measured in `ChapterBuilder.beat`'s
+docstring) -- continuity is checked only against the separate, opt-in
+`entry_at=` beat parameter, and is a no-op for a beat that doesn't set it. See
+`verify_chapter_locations`'s docstring for the reachability rule and how a
+multi-point beat is interpreted, and `ChapterBuilder.beat`'s docstring for
+`entry_at=`.
 """
 from __future__ import annotations
 
@@ -124,12 +128,19 @@ class BeatLocation:
 
 @dataclass(frozen=True)
 class Beat:
-    """One row of a chapter doc's beat table."""
+    """One row of a chapter doc's beat table.
+
+    `entry_at`, independent of `locations` (see `ChapterBuilder.beat`'s
+    docstring for why the two are separate claims), is this beat's explicit
+    opt-in to runtime continuity checking: "this beat starts from here." A
+    beat that doesn't set it makes no inherited-position claim at all, and
+    `runner.py`'s `_check_beat_continuity` is a no-op for it."""
 
     name: str
     description: str
     run: BeatFn
     locations: tuple[BeatLocation, ...] = ()
+    entry_at: tuple[int, int] | None = None
     group: str | None = None
     rows: tuple[str, ...] = ()
     # Which recognized RPG Maker event archetype (`chapter_manifest.
@@ -231,8 +242,8 @@ def _prefix_beat(owner: str, beat: Beat) -> Beat:
                        else f"{owner}:{beat.group}")
     return Beat(name=f"{owner}:{beat.name}",
                 description=f"[{owner}] {beat.description}", run=beat.run,
-                locations=beat.locations, group=prefixed_group,
-                rows=beat.rows, archetype=beat.archetype)
+                locations=beat.locations, entry_at=beat.entry_at,
+                group=prefixed_group, rows=beat.rows, archetype=beat.archetype)
 
 
 @dataclass
@@ -248,6 +259,7 @@ class ChapterBuilder:
              map_constant: str | None = None,
              at: tuple[int, int] | None = None,
              locations: tuple[BeatLocation, ...] | None = None,
+             entry_at: tuple[int, int] | None = None,
              group: str | None = None,
              rows: tuple[str, ...] = (),
              archetype: str | None = None,
@@ -287,16 +299,43 @@ class ChapterBuilder:
 
         **`at=` records where the beat triggers, and does NOT move the
         player** -- a beat still runs from wherever the PREVIOUS beat left
-        off; declaring `at=`/`locations=` never teleports anyone. But as of
-        Q13 slice 1 the declaration is a checked claim, not decoration: it
-        must name a cell the offline traversable graph says is reachable
-        (`verify_chapter_locations`, static, checked before the ROM runs) and
-        it must match where the previous beat actually left the player
-        (`runner.py`'s per-beat continuity check, checked at run time). A
-        beat whose declared `at=` disagrees with the inherited position now
-        fails loud, at the point of disagreement, naming both positions --
-        it no longer silently starts somewhere else and fails later as a
-        misleading pathfinding "stuck" error near the target.
+        off; declaring `at=`/`locations=` never teleports anyone. It must
+        name a cell the offline traversable graph says is reachable
+        (`verify_chapter_locations`, static, checked before the ROM runs).
+        It is NOT, by itself, a claim about *inherited* position -- see
+        `entry_at=` below for that.
+
+        **`entry_at=` is the separate, opt-in claim that this beat starts
+        from a specific cell.** `_check_beat_continuity` (`runner.py`)
+        checks a beat's declared `entry_at` against where the PREVIOUS beat
+        actually left the player, at run time, and is a no-op for any beat
+        that doesn't set it. A beat whose `entry_at` disagrees with the
+        inherited position fails loud, at the point of disagreement, naming
+        both positions -- it no longer silently starts somewhere else and
+        fails later as a misleading pathfinding "stuck" error near the
+        target.
+
+        `entry_at=` was split out from `at=`/`locations[0]` on 2026-09-05
+        (PLAYTEST_AUTHORING_IMPROVEMENT_V2 follow-up) after the first ROM
+        run since continuity checking landed (2026-08-28) falsified the
+        premise it used to rest on. `_check_beat_continuity` used to read
+        `beat.locations[0]` as the inherited-position claim, on the theory
+        that the corpus's own authoring convention always lists the entry
+        door/threshold first in a multi-point beat. An offline audit of
+        every inherited CH01 beat replayed by CH05, against the recorded
+        entry/exit positions from the last green run, found that premise
+        false: 40 of 51 declared `locations[0]` values disagreed with the
+        beat's recorded entry position (11 matched entry, 13 matched exit
+        instead, 27 were neither -- a mid-beat cell), and multi-point beats
+        scored *worse* than single-`at=` ones (1 match against 12
+        mismatches), the opposite of what the old docstring claimed. The
+        corpus-wide convention `at=`/`locations=` actually encode is "the
+        tile the beat triggers on" -- the NPC talked to, the door stepped
+        on -- which is neither reliably the beat's entry nor its exit.
+        `entry_at=` exists so a beat can make the inherited-position claim
+        explicitly, only where it's actually true, instead of it being
+        inferred (wrongly, most of the time) from a declaration meant for
+        something else.
 
         **Registration order is playthrough order.** A chapter's beats are one
         continuous run, so position in this file is position in time, and beat
@@ -333,6 +372,12 @@ class ChapterBuilder:
                 f"beat {name!r}: archetype={archetype!r} is not one of "
                 f"{sorted(ARCHETYPE_NAMES)} (chapter_manifest.archetypes."
                 "ARCHETYPE_NAMES)")
+        if entry_at is not None:
+            if (not isinstance(entry_at, tuple) or len(entry_at) != 2
+                    or not all(isinstance(v, int) for v in entry_at)):
+                raise ValueError(
+                    f"beat {name!r}: entry_at= must be a (x, y) tuple of "
+                    f"ints, got {entry_at!r}")
 
         shorthand_given = map_constant is not None or at is not None
         if shorthand_given and locations is not None:
@@ -355,7 +400,7 @@ class ChapterBuilder:
         def decorate(fn: BeatFn) -> BeatFn:
             self._beats.append(Beat(name=name, description=description,
                                     run=fn, locations=resolved_locations,
-                                    group=group, rows=rows,
+                                    entry_at=entry_at, group=group, rows=rows,
                                     archetype=archetype))
             return fn
 
@@ -632,8 +677,10 @@ def verify_chapter_locations(
     ("the door is here", "Flood is here", "Lynette is here") and must be
     independently reachable; there is no single "the" location for a
     multi-point beat to satisfy. (Contrast `runner.py`'s continuity check,
-    which -- documented there -- uses only `locations[0]`, the point the
-    beat expects to already be standing at when it starts.)
+    which -- documented there -- checks only the separate, opt-in `entry_at=`
+    field, not any `locations` entry -- `locations[0]` turned out not to be
+    a reliable inherited-position claim; see `ChapterBuilder.beat`'s
+    docstring for the 2026-09-05 measurement that found this.)
 
     Returns every check performed (pass and fail); callers that want fail-
     loud behaviour should use `assert_chapter_locations_reachable`. A beat
