@@ -2803,8 +2803,16 @@ class Emulator:
                 f"walk_to({tx},{ty}) {how} changed map from "
                 f"{start_map} to {here_map} — aborting ({shot})")
 
-    def interact(self, frame_budget: int = 30) -> None:
+    def interact(self, frame_budget: int = 30, *,
+                 require_script: bool = True) -> bool:
         """Press A; fail if no script picks up the field controls.
+
+        Returns whether a script actually started, so a caller that is
+        asserting the ABSENCE of one can say so. `require_script=False`
+        turns the failure off and leaves the verdict to the caller -- for a
+        page the manifest proves is empty, "nothing happened" is the pass
+        condition, not a fault. Nothing about the timing changes: the full
+        budget is spent either way.
 
         Polls for the lock every frame rather than sampling once at the end
         of the window. A script that locks, does its work and releases
@@ -2836,9 +2844,10 @@ class Emulator:
             self.run(1)
             if self.field_locked() or self.current_field_message_text() is not None:
                 picked_up = True
-        if not picked_up:
+        if not picked_up and require_script:
             shot = self.screenshot("interact_noop")
             raise ScenarioError(f"interaction did not start a script ({shot})")
+        return picked_up
 
     def advance_dialog(self, key: str = "A", max_taps: int = 1500,
                        stop: Callable[[], bool] | None = None) -> int:

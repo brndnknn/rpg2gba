@@ -105,6 +105,22 @@ def item_ball_beats(
     letter = spent_row.condition.self_switch_ch
     ssa = assertions.flag_ssa(map_id, event_id, letter)
 
+    # Does the spent page DO anything? Some are a "nothing here" message;
+    # others are an empty page whose only job is to make the ball vanish once
+    # the self-switch flips. CH05's Escape Rope ball (map036/ev003/p1) is the
+    # second kind: no graphic, a single terminator command, and a manifest row
+    # that records it exactly -- no effects, no script heads, no other codes,
+    # nothing unhandled.
+    #
+    # It matters because the two shapes have OPPOSITE pass conditions. On an
+    # empty page an A press starts no script, and demanding one fails a beat
+    # for behaving correctly. Read from the manifest rather than assumed, so
+    # a chapter whose spent page does speak still gets the stronger assertion.
+    spent_page_is_empty = not (
+        spent_row.effects or spent_row.script_heads
+        or spent_row.other_codes or spent_row.unhandled
+    )
+
     approach = approach_to(map_constant, event_id, prefer=approach_prefer)
     facing = _facing_toward(approach, event_cell(map_constant, event_id))
 
@@ -157,8 +173,19 @@ def item_ball_beats(
             bag_before = emu.bag_item_quantity(item)
             emu.walk_to(*approach)
             emu.face(facing)
-            emu.interact()
-            emu.advance_dialog()
+            started = emu.interact(require_script=not spent_page_is_empty)
+            if spent_page_is_empty and started:
+                # The absence IS the assertion here: the ball is gone, so an
+                # A press at its tile must hit nothing. A script running means
+                # the page was emitted with a body it should not have, or the
+                # self-switch never flipped and page 1 answered again.
+                shot = emu.screenshot(f"{beat_prefix}_spent_unexpected_script")
+                raise ScenarioError(
+                    f"{beat_prefix}_spent: {spent_row_id} is an empty page, "
+                    f"but interacting started a script ({shot})"
+                )
+            if started:
+                emu.advance_dialog()
             bag_after = emu.bag_item_quantity(item)
             if bag_after != bag_before:
                 shot = emu.screenshot(f"{beat_prefix}_spent_regranted")
