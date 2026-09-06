@@ -1,13 +1,24 @@
 # CH05 — Passage Cave: live work items
 
-**Status:** in progress. Branch `ch05` cut; steps 0-6 done and verified.
-**You are here:** → **Step 7 (BUILD)**. STOP 3 was approved by the operator on
-2026-09-05 after reviewing the route in the map viewer, and step 6b is done:
-`src/rpg2gba/playtest/chapters/ch05.py` registers all eleven beat groups in the
-approved order, seven of them built from the archetype templates. `routing plan
---dry-run` reproduces the approved order at 141 tiles with no `CROSSING`;
-`chapter_manifest check --chapter CH05` is 0 errors / 4 warnings, with
-`RULE_ROUTE_ORDER` and `RULE_ROUTE_APPROACH` enforcing.
+**Status:** in progress. Branch `ch05` cut; steps 0-7 done and verified.
+**You are here:** → **Step 8 (BOOT — the §9 gate)**. STOP 4 is **cleared**: step 7's
+headless suite is **93/93 run, 93 passed, 0 failed, 0 hung, 0 not run**
+(`output/ch05-playtest16.log`, 2026-09-06), rule-set version v2 recorded, green review
+ROM at `output/playtest/review/CH05-complete.gba` plus eight contact sheets.
+
+Steps 6 and 7 were re-verified on 2026-09-06 rather than taken on report:
+`chapter_manifest check --chapter CH05` is **0 errors / 4 warnings** (all four
+`capability_model_unenforced` on the `blocked:surf` rows), and `routing plan
+--chapter CH05 --dry-run` re-solves the authored module to **165 tiles, 13 nodes, no
+`CROSSING`**, in exactly the group order committed to `reference/routes/CH05.route.json`
+— so `RULE_ROUTE_ORDER` and `RULE_ROUTE_APPROACH` are enforcing and agreeing. The
+141 -> 165 growth is the B1 Route-02 approach leg the first solve was missing;
+regenerated at `9a9f617d`.
+
+The engine ROM (`engine/pokeemerald.gba`) is **current**: it predates commit
+`08baf280` by timestamp only — the build ran before the commit was written — and every
+commit after it touches harness Python and the route JSON, nothing that enters the ROM.
+B1/B8/B8_return cross warps in that ROM, which is impossible with unstamped tiles.
 
 > The 155-tile figure this line used to quote predates the candidate-approach
 > solver rewrite (`d81cd6dd`); the approved artifact solves at 143, and the
@@ -588,11 +599,17 @@ you spend your own time walking:
 $V -m rpg2gba.playtest run --chapter CH05 --engine engine
 ```
 
-## ⏸ STOP 4 — before the boot walk
+## ⏸ STOP 4 — before the boot walk — **CLEARED 2026-09-06**
 
 We look at the headless results together. Anything red gets fixed before you pick up a
 device — the boot walk is the expensive resource in this loop and it should be spent on
 things only a human can see.
+
+- [x] **93/93, nothing red.** Nine defect commits between run 4 and run 16
+      (`0a9d276c` … `a38a1812`), each one only visible once the one above it stopped
+      failing first. All 74 inherited beats (CH01 17, CH02 14, CH03 30, CH04 13) plus
+      all 19 CH05 beats pass. B11 — the "probably BLOCKED, not walkable" worry carried
+      since 09-05 — passes: the tile is walkable and inert exactly as asserted.
 
 ---
 
