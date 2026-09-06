@@ -715,6 +715,22 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
                 emu.clear_walk_path()
             except AttributeError:
                 pass
+            # Which routing standard this beat is held to. An inherited beat
+            # (`<owner>:<name>`, prepended by `ChapterBuilder(predecessor=)`)
+            # may fall back to an unplanned walk when the planner fails,
+            # because CH01-CH04's coordinates were authored while that
+            # fallback was unconditional and have never faced a strict
+            # planner; the chapter under test never may. Same line
+            # `_close_walk` draws for the walked-path oracle, and the same
+            # reason: an inherited beat replays to reach a state, it is not
+            # the artifact under test. Set per beat rather than once, so a
+            # chapter's own beats are strict even though inherited ones run
+            # on the same emulator. Expires when CH01-CH04 are re-derived --
+            # their beats are unprefixed when run as their own chapter.
+            try:
+                emu.replay_beat = beat.name if ":" in beat.name else None
+            except AttributeError:
+                pass
             try:
                 _check_beat_continuity(beat, enter, emu)
                 with _beat_timeout(beat_timeout_s, beat.name):
