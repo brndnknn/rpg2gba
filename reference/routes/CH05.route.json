@@ -115,16 +115,16 @@
     {
       "index": 6,
       "kind": "group",
-      "map_id": 36,
+      "map_id": 37,
       "cell": [
-        17,
-        4
+        16,
+        27
       ],
       "group": "B8",
       "beats": [
-        "B8",
         "B8_return",
-        "B8_nudge"
+        "B8_nudge",
+        "B8"
       ],
       "rows": [
         "map036/ev002/p0",
@@ -806,24 +806,6 @@
               4
             ]
           ],
-          "exit_warp": null
-        }
-      ],
-      "tile_count": 7,
-      "crossed_foreign_triggers": []
-    },
-    {
-      "from": 6,
-      "to": 7,
-      "legs": [
-        {
-          "map_id": 36,
-          "tiles": [
-            [
-              17,
-              4
-            ]
-          ],
           "exit_warp": {
             "event_id": 2,
             "dest_map": 37,
@@ -836,6 +818,32 @@
         {
           "map_id": 37,
           "tiles": [
+            [
+              16,
+              26
+            ],
+            [
+              16,
+              27
+            ]
+          ],
+          "exit_warp": null
+        }
+      ],
+      "tile_count": 8,
+      "crossed_foreign_triggers": []
+    },
+    {
+      "from": 6,
+      "to": 7,
+      "legs": [
+        {
+          "map_id": 37,
+          "tiles": [
+            [
+              16,
+              27
+            ],
             [
               16,
               26
@@ -936,7 +944,7 @@
           "exit_warp": null
         }
       ],
-      "tile_count": 23,
+      "tile_count": 24,
       "crossed_foreign_triggers": []
     },
     {
@@ -1220,7 +1228,7 @@
     }
   ],
   "cost": {
-    "tiles": 163
+    "tiles": 165
   },
   "solver": {
     "method": "greedy+2opt"
