@@ -6,6 +6,8 @@ The pipeline tooling is the long-term deliverable. The Uranium ROM is the proof 
 
 **Personal use only.** The resulting ROM incorporates copyrighted assets and is not for distribution.
 
+Conversion work is organized into **chapters** — the unit of both building and review, each one a play-order section converted and boot-walked to playable before the next one starts.
+
 ## Building a ROM (pathfinder slice: Map049 ↔ Map048 ↔ Map32)
 
 Everything below lives in `output/uranium-build/` (gitignored) plus a handful of

@@ -35,6 +35,11 @@ nobody did.
 Token/progress tally is written to token_usage.jsonl as it goes; see it any time
 with `python scripts/run_stats.py`. A summary also prints on exit.
 """
+# SPENT (2026-09-07): the LLM bulk-run regime this script drives was retired
+# 2026-06-18 in favour of the deterministic transpiler
+# (src/rpg2gba/conversion_agent/transpile_driver.py). No event has been punted to
+# this script since the pivot. The live conversion path is the transpiler; this
+# file is kept for reference only, not deleted.
 from __future__ import annotations
 
 import argparse

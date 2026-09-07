@@ -875,7 +875,7 @@
 //       More space can be made by shifting flags around in constants/flags.h or changing how trainer flags are handled
 //       MAX_TRAINERS_COUNT can be increased but will take up additional saveblock space
 
-// URANIUM PATHFINDER SLICE: corpus-sized trainer provisioning (2026-08-05, user-authorized).
+// BEGIN URANIUM PATHFINDER SLICE — corpus-sized trainer provisioning (2026-08-05, user-authorized).
 // Vanilla was 858/864 — 6 free slots, and CH02 alone needs 9. Uranium ships 331 trainers
 // (output/uranium-build/intermediate/trainers.json), so both counts are raised ONCE to cover the
 // whole corpus rather than per chapter: 854 vanilla + 331 Uranium = 1185, rounded up.
@@ -886,6 +886,7 @@
 // same for +9 as for +400, which is why it is paid once here.
 #define TRAINERS_COUNT_EMERALD     1189
 #define MAX_TRAINERS_COUNT_EMERALD 1280
+// END URANIUM PATHFINDER SLICE
 
 #if IS_FRLG
 #define TRAINERS_COUNT                      TRAINERS_COUNT_FRLG

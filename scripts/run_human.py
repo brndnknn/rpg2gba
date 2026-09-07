@@ -99,6 +99,9 @@ def main() -> int:
     fork = os.environ.get("RPG2GBA_POKEEMERALD")
     fork_path = Path(fork) if fork and Path(fork).is_dir() else None
     registry = pipeline._phase4_registry(out_dir, clean=False, fork_path=fork_path)
+    # "human" is deliberately not a --backend click.Choice on the pipeline CLI
+    # (audit finding 23) — this script is the one sanctioned caller and reaches
+    # it directly via the private `_phase4_backend`. Leave it that way.
     backend = pipeline._phase4_backend("human")
     orchestrator = orch.Orchestrator(backend, registry, out_dir)
 

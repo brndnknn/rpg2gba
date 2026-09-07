@@ -1,5 +1,9 @@
 #include "global.h"
+// BEGIN URANIUM MAP WALKER — pulls UraniumWalker_FieldCB_MapLoad/UraniumWalker_IsActive
+// used below (map-load field callback swap, spawn suppression gate). Removing this include
+// breaks those call sites; reverting them too restores vanilla map-load/spawn behavior.
 #include "uranium_map_walker.h"
+// END URANIUM MAP WALKER
 #include "overworld.h"
 #include "battle_pyramid.h"
 #include "battle_setup.h"

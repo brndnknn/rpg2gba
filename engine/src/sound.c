@@ -1,5 +1,10 @@
 #include "global.h"
+// BEGIN URANIUM PATHFINDER SLICE — pulls RPG2GBA_BGM_TEMPO_SCALE (config/rpg2gba.h pacing
+// knob), used below to override map/script BGM tempo (PlayBGM only; fanfares, jingles, cries
+// and SEs keep their authored tempo). Removing this include breaks that override; the scale
+// is left at 256 (authored tempo, compiles away) so reverting is inert today regardless.
 #include "config/rpg2gba.h"
+// END URANIUM PATHFINDER SLICE
 #include "gba/m4a_internal.h"
 #include "sound.h"
 #include "battle.h"

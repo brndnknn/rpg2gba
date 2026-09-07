@@ -91,3 +91,8 @@ if (var(VAR_RESULT) == 1) {   # 1=Yes 0=No
 ## Stuck on the WHOLE event
 
 type  opus  to punt it to the bulk run.
+[2026-09-07: the bulk-run mop-up (`scripts/run_bulk.py`) this punt path fed is
+dormant — the LLM bulk-run regime was retired 2026-06-18 and no event has been
+punted to it since. `opus` still spawns the hand-invoked tail-tool backend for
+this one event, but nothing will later sweep up punted events in a bulk pass;
+treat a punt here as final, not deferred.]

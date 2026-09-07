@@ -8,6 +8,15 @@ agent**, because that's the part with the most moving pieces and the part we're
 actively building. The first section situates it inside the whole pipeline so the
 walkthrough stands on its own; everything after that is Phase 4.
 
+> **Correction (2026-09-07, build agent):** the paragraph below describes the
+> LLM-driven bulk-run regime, retired 2026-06-18 (`CLAUDE.md` §7,
+> `BUILD_PLAN.md` §1). The conversion spine today is a **deterministic
+> command→Poryscript transpiler** (`conversion_agent/transpiler.py`); the LLM
+> survives only as a hand-invoked tail tool for the irreducible remainder
+> (branch-heavy story logic, novel embedded Ruby), not as a per-event loop over
+> the whole corpus. The rest of this walkthrough describes that retired
+> per-event LLM loop and should be read as history, not the live pipeline.
+>
 > If you only read one thing: the conversion process is a **per-event loop** that
 > builds a prompt, asks an LLM (the *conversion agent*) for structured JSON,
 > validates every flag name through a registry, and refuses to accept any script

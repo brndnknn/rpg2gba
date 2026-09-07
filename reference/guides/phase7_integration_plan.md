@@ -71,7 +71,13 @@ emittable — this unblocks **SLICE1_TODO #2** (Auntie's `pbHasSpecies?
 species/item-conditional event logic corpus-wide.
 
 ### D4 — engine cutover: point RPG2GBA_POKEEMERALD at `engine/`
-Still pointing at the old external clone (CLAUDE.md §3). Cutover = one-time
+
+**Correction (2026-09-07, build agent):** this cutover is done. Per
+`CLAUDE.md` §3, `RPG2GBA_POKEEMERALD` has pointed at the vendored `engine/`
+tree since 2026-06-19; there is no external sibling clone left in the build
+path. Original text kept below for the historical mechanism/rationale.
+
+Was: still pointing at the old external clone. Cutover = one-time
 `make modern` in `engine/` to generate the headers the pipeline reads, then
 re-assemble so the custom C compiles, then flip the env var. Do this EARLY in
 Phase 7 (or before) — every other item lands C in the vendored tree, and

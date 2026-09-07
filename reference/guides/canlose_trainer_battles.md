@@ -86,9 +86,11 @@ Any new use of `HEAL_AFTER`-alone depends on this fix.
 3. **Party must be staged into the engine.** The opponent (`TRAINER_*`) and its
    party must exist in `engine/src/data/trainers.party` + a constant in
    `include/constants/opponents.h`. The Phase-2 trainer converter emits these to
-   `intermediate/trainers.json`, but they are **not yet wired into the slice
-   assembly** — the Theo parties were hand-added. Staging converted trainers is a
-   pipeline gap (see the pipeline TODO).
+   `intermediate/trainers.json`. **Correction (2026-09-07, build agent):** this
+   is no longer a pipeline gap — `scripts/stage_trainers.py` /
+   `rpg2gba.trainer_converter.stage` wires converted trainers into the slice
+   assembly (called from `scripts/assemble_pathfinder.py`'s `run_trainer_pass`),
+   so this is not hand-added per trainer anymore.
 4. **Runtime party selection.** `party_id = pbGet(151)+18` becomes a
    `switch (var(VAR_POKEMONTEST))` over the pre-resolved `TRAINER_*` constants.
 

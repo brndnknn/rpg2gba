@@ -129,7 +129,12 @@ class CappingBackend(ConversionBackend):
 
 
 class NullBackend(ConversionBackend):
-    """A spend-nothing guard for maintenance replays (`scripts/regen_outputs.py`).
+    """A spend-nothing guard for maintenance replays.
+
+    Its only caller, ``scripts/regen_outputs.py``, was deleted 2026-09-07 (repo audit
+    Q12 — it wiped ``output/`` and flipped corpus tests from skip to fail). The class
+    is kept as the safe wrapper for any future replay: it is the piece that makes a
+    replay provably non-spending.
 
     Wraps the production backend ONLY for its ``system_prompt`` — the memo manifest
     is fingerprinted by it, so a replay must look identical to the real run or every

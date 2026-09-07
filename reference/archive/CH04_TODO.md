@@ -21,7 +21,7 @@ as items close; move an item to **Done** with a one-line result rather than
 deleting it. Facts here are pointers — the cited code/docs stay authoritative.
 
 Seeded 2026-08-22. CH04 is the **pilot chapter for the generated manifest**
-(`PLAYTEST_AUTHORING_IMPROVEMENT.md` §4.3): the first chapter whose approval
+(`reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT.md` §4.3): the first chapter whose approval
 object is a joined manifest + disposition file rather than a prose beat table.
 
 ## Approved scope
@@ -57,7 +57,7 @@ it advances to `built` at the §9 gate.
   phone-rematch trainers were affected. Fixed in
   `src/rpg2gba/chapter_atlas/census.py`.
 - **Rockslide contradiction adjudicated** (closes
-  `PLAYTEST_AUTHORING_IMPROVEMENT.md` §7.2). Event 19's clearing page really is
+  `reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT.md` §7.2). Event 19's clearing page really is
   engine-ungated — no switch, variable or self-switch condition — but the gate
   is **geometric**: BFS over the tileset passage bytes shows event 19's
   trigger-adjacent tiles are unreachable from the south-accessible region while

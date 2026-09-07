@@ -3,7 +3,7 @@
 The architecture for map connections (seams) and cross-map color
 consistency, decided after the corpus-scaling audit, the seam census, the
 shared-tileset prototypes, and a user eye-gate. Evidence trail:
-`reference/findings/corpus_scaling_audit_2026-07-14.md`, `FABLE_PLAN.md`
+`reference/findings/corpus_scaling_audit_2026-07-14.md`, `reference/archive/FABLE_PLAN.md`
 step 2 (running log with all measured numbers), and the visual study in
 `output/tileset_palette_study/` (regenerable via its `scripts/`).
 

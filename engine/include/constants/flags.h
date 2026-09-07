@@ -388,7 +388,7 @@
 // Most are used implicitly by adding their REMATCH_* id to TRAINER_REGISTERED_FLAGS_START.
 // Some Match Call entries (like those for gym leaders, Wally, and all non-trainer NPCs like Prof. Birch)
 // have their own separate flag that needs to be set to be enabled; see src/pokenav_match_call_data.c
-// URANIUM PATHFINDER SLICE: relocate the registered-flag block (2026-08-25, user-authorized).
+// BEGIN URANIUM PATHFINDER SLICE — relocate the registered-flag block (2026-08-25, user-authorized).
 // Was a literal 0x15C, running 78 flags to 0x1A9 with only FLAG_UNUSED_0x1AA/0x1AB (2 flags)
 // free before FLAG_DEFEATED_DEOXYS at 0x1AC. CH02's two phone trainers used that headroom
 // exactly; CH04 needs two more, which would alias FLAG_DEFEATED_DEOXYS. No run of
@@ -407,6 +407,7 @@
 // for the CH02 trainer-count bump above (constants/opponents.h), paid again here rather than
 // left unresolved for the corpus.
 #define TRAINER_REGISTERED_FLAGS_START       RPG2GBA_TRAINER_REGISTERED_FLAGS_START // was 0x15C
+// END URANIUM PATHFINDER SLICE
 #define FLAG_REGISTERED_ROSE                 (TRAINER_REGISTERED_FLAGS_START + REMATCH_ROSE)
 #define FLAG_REGISTERED_ANDRES               (TRAINER_REGISTERED_FLAGS_START + REMATCH_ANDRES)
 #define FLAG_REGISTERED_DUSTY                (TRAINER_REGISTERED_FLAGS_START + REMATCH_DUSTY)

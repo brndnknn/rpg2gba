@@ -1,10 +1,17 @@
 # Pokémon Uranium → GBA ROM Conversion Pipeline: Roadmap
 
+> **Reconciliation banner (2026-09-07).** This document is the long-range
+> *what/why* plan (phases, success criteria), not a statement of current
+> progress. `MEMORY.md` → "Current Phase" is the sole authority on what is
+> done and what is next.
+
 **Project name:** `rpg2gba`
 
 **Goal:** Build a reusable pipeline that converts RPG Maker XP / Pokémon Essentials fan games into playable GBA ROMs, using Pokémon Uranium as the first end-to-end test case. The pipeline tooling is the long-term deliverable; the Uranium ROM is the proof of concept.
 
 **Estimated total scope:** This is a months-long hobby project, not a weekend build. Expect 6–12 months of part-time work to get a playable Uranium build through the full pipeline. The first three phases are achievable in weeks; the back half is where the long tail lives.
+
+The conversion campaign itself is built and reviewed in **chapters** — one play-order section converted completely (events and quantized art) and boot-walked before the frontier widens — rather than as one horizontal pass over all 199 maps (see `BUILD_PLAN.md` §2).
 
 ---
 
@@ -132,7 +139,7 @@ Run the build pipeline on the **Ubuntu desktop**. The GBA decomp toolchain is ha
 |---|---|---|
 | **devkitPro / devkitARM** | GBA cross-compiler | `pacman` via dkp-pacman |
 | **agbcc** | Older C compiler used by pokeemerald | Build from source ([agbcc repo](https://github.com/pret/agbcc)) |
-| **pokeemerald-expansion** | Base ROM project to fork | Clone from rh-hideout |
+| **pokeemerald-expansion** | Base ROM project to fork | **Vendored in-repo at `engine/`** since 2026-06-18 — do not clone (corrected 2026-09-07) |
 | **Porymap** | Visual map editor | Build from source or appimage |
 | **Poryscript** | Script language compiler (built into pokeemerald-expansion) | Comes with the project |
 | **Ruby 3.x** | For the rxdata deserializer | apt or rbenv |
@@ -260,6 +267,16 @@ Have a clean pokeemerald-expansion fork that builds successfully, plus the empty
 ### Tasks
 
 **1.1 Fork pokeemerald-expansion**
+
+> **Correction (2026-09-07, build agent):** this task originally described
+> cloning pokeemerald-expansion as an external sibling checkout. That's no
+> longer how it works — the fork is **vendored in-repo at `engine/`**, pinned
+> to a specific upstream commit (`engine/RPG2GBA_VENDOR.md`), and
+> `RPG2GBA_POKEEMERALD` points there (`CLAUDE.md` §3). Do not clone an
+> external copy; work against `engine/` directly. Task text below is kept for
+> the original Phase-1 rationale (the historical bring-up steps still apply
+> to the vendored tree).
+
 - Create a fork named something like `uranium-gba`
 - Verify a clean build: `make -j$(nproc)` should produce a working `pokeemerald.gba`
 - Test the resulting ROM in Delta on your iPhone — establish that the baseline works on your target device before changing anything

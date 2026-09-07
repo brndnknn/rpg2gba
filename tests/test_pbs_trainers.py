@@ -76,3 +76,24 @@ def test_edge_no_shadow(uranium_data: Path, reference_dir: Path, tmp_path: Path)
     """
     parsed, _types_json, _trainers_json = _build(uranium_data, reference_dir, tmp_path)
     assert sum(len(t.party) for t in parsed) == 1026
+
+
+def test_move_constant_zero_is_move_none() -> None:
+    """move id 0 (an empty custom-moveset slot) must resolve to MOVE_NONE.
+
+    Synthetic resolver, no Uranium source tree required (audit finding 8/38):
+    this guard previously fell through to the `move_internal` lookup and
+    raised `ValueError` on a 0-move id instead of returning MOVE_NONE.
+    """
+    r = trainers._Resolver(
+        id_map=IdMap(),
+        species_internal={},
+        move_internal={},
+        move_names={},
+        item_internal={},
+        item_names={},
+        fork_species=set(),
+        fork_moves=set(),
+        fork_items=set(),
+    )
+    assert r.move_constant(0) == "MOVE_NONE"

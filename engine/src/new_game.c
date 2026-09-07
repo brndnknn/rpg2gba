@@ -1,7 +1,18 @@
 #include "global.h"
+// BEGIN URANIUM PATHFINDER SLICE — pulls RPG2GBA_FAST_TEXT_DEFAULT (config/rpg2gba.h pacing
+// knob), used in SetDefaultOptions() below (same sentinel already fences that use site).
+// Removing this include breaks that branch; reverting it restores vanilla MID text speed.
 #include "config/rpg2gba.h"
+// END URANIUM PATHFINDER SLICE
+// BEGIN URANIUM MAP WALKER — pulls UraniumWalker_Begin, called below to hand off the new-game
+// boot sequence to the walker. Removing this include breaks that call.
 #include "uranium_map_walker.h"
+// END URANIUM MAP WALKER
+// BEGIN URANIUM EMBEDDED SAVE — pulls UraniumEmbeddedSave_TryLoad, checked below to let a
+// stamped state blob win over flash on boot. Removing this include breaks that check;
+// reverting it restores always-flash-then-new-game boot behavior.
 #include "uranium_embedded_save.h"
+// END URANIUM EMBEDDED SAVE
 #include "new_game.h"
 #include "random.h"
 #include "pokemon.h"

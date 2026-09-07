@@ -1,5 +1,10 @@
 # BUILD_PLAN.md — the active build sequence
 
+> **Reconciliation banner (2026-09-07).** This document is a topic reference for
+> *how* the pipeline is built, not a statement of where the project is today.
+> `MEMORY.md` → "Current Phase" is the sole authority on what is done and what
+> is next; where this doc's per-chapter status notes lag behind, MEMORY wins.
+
 **Status:** live. This is the project's single "current *how*" doc. `ROADMAP.md` owns
 the long-term *what/why* (phases, success criteria); this owns the steps we're
 executing right now. When they conflict on *what*, ROADMAP wins; on *how*, this wins.
@@ -243,7 +248,7 @@ script.
 
 ---
 
-## 6. CH01 (Moki Town, pathfinder) — PASSED, historical; active chapter is now CH02
+## 6. CH01 (Moki Town, pathfinder) — PASSED, historical
 
 **CH01 (Moki Town, the pathfinder slice, 8 maps — 49/48/32/50/64/65/172/89) passed
 its §9 boot-walk gate 2026-08-04** (not the original 3; see `MEMORY.md` Current
@@ -253,11 +258,13 @@ root-cause history — both "OPEN" items it lists were long since fixed (NPC gfx
 substitution: the real per-tile image pipeline shipped, §7). Full S1–S9 narrative:
 `reference/memory-archive.md`.
 
-**Active chapter is now CH02** (Route 1, maps 33 and 81) — see `CH02_TODO.md`
-(replaces `SLICE2_TODO.md`), blocked on promoting per-map tileset packing into
-`assemble_pathfinder.py` (`CH02_TODO.md` #4) before CH02 conversion can start.
-Chapter spec and beat chain: `reference/chapters/02-route-1.md`; whole chain:
-`reference/chapters/00-atlas.md`.
+> **2026-09-07 — the "active chapter is now CH02" note that used to sit here has
+> been removed.** It named `CH02_TODO.md`/`SLICE2_TODO.md` as the tracking docs,
+> both retired and deleted since; the project has since passed CH02 through CH05
+> and is now working CH06. Per the reconciliation banner at the top of this file,
+> `MEMORY.md` → Current Phase is the sole authority on which chapter is active —
+> this section carries no per-chapter status going forward. Chapter spec and beat
+> chain for any chapter: `reference/chapters/00-atlas.md`.
 
 <details>
 <summary>Original S9 boot diagnosis (3 root-cause classes, historical)</summary>

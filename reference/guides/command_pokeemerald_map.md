@@ -5,13 +5,21 @@
 > **deterministic-classifier + Track-B/C backlog**. Fork-verified where marked
 > ✓VERIFIED; ⚠RECHECK rows are proposals not yet confirmed against the fork.
 >
-> **This is NOT the agent's prompt.** The frozen conversion-agent guidance lives in
-> `reference/recon/uranium_script_calls.md` (loaded by `prompt_builder.load_command_reference`,
-> part of the §9-frozen system prompt — do **not** edit mid-campaign, invariant 1).
+> **This is NOT the agent's prompt.** The conversion-agent guidance lives in
+> `reference/recon/uranium_script_calls.md` (loaded by `prompt_builder.load_command_reference`).
+>
+> **Correction (2026-09-07, build agent):** the paragraph above describes the
+> retired regime. That system prompt was **frozen only during the LLM-bulk-run
+> era, retired 2026-06-18** (`CLAUDE.md` §7, `BUILD_PLAN.md` §1) — the LLM is no
+> longer the conversion spine, `system.md` is no longer frozen and is edited
+> like any other source file, and it now serves only a hand-invoked tail tool
+> for the irreducible tail (branch-heavy story logic, novel embedded Ruby). The
+> deterministic transpiler (`conversion_agent/transpiler.py`) is the spine.
 > The deterministic classifiers run *before* the agent, so a `DET` row here is built
 > as a classifier that **overrides** the agent's (often conservative) disposition —
-> e.g. the frozen table marks `pbPokeCenterPC` UNHANDLED, but it maps cleanly to a
-> native fork script, so we determinize it here without touching the frozen table.
+> e.g. the historical frozen table marked `pbPokeCenterPC` UNHANDLED, but it maps
+> cleanly to a native fork script, so we determinize it here without touching that
+> table.
 >
 > ---
 >

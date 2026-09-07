@@ -43,3 +43,11 @@ only here, it's history.
 | `slice1_queue_readthrough.md` | point-in-time transpiler-queue read-through | history only, no forward action items |
 | `walker_checkpoint2_findings.md` | checkpoint-2 sign-off + 2 deferrals | both deferrals shipped (`808966cd`); history only |
 | `mgba_automation_feasibility_2026-07-17.md` | headless-mGBA feasibility study | `src/rpg2gba/playtest/` (the shipped harness) |
+
+**2026-09-07 — repo-audit remediation (`investigations/repo-audit-dead-code-stale-docs.md`), fully spent docs:**
+
+| Archived doc | Was | Reason archived |
+|---|---|---|
+| `FABLE_PLAN.md` | Fable capacity plan (tileset/palette packing, audio substitution, Phase-6/7 debt census) | Fully spent — every step is marked DONE 2026-07-14; live content already absorbed into `MEMORY.md`, `reference/guides/connections_and_palette_families.md`, `reference/findings/audio_decision_2026-07-14.md`, and `reference/guides/phase7_integration_plan.md`. |
+| `PLAYTEST_AUTHORING_IMPROVEMENT.md` (V1) | 2026-08-20 playtest-authoring rework record (failure taxonomy, 11 decisions, manifest dry-runs) | Superseded by `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md`, its explicit successor (`V2.md:6`, "Predecessor: `PLAYTEST_AUTHORING_IMPROVEMENT.md`"); kept for the decision history that later chapter docs and `CH05_DECISIONS.md` still cite by line number. |
+| `map_inspector_spec.md` | Map Inspector viewer spec (Phase A + B1 design) | Carried two false supersession claims — that it supersedes `compare_collision.py` and `tree_debug.py` — which the live viewer still uses; `reference/viewer/map_viewer.md` is the current doc and documents both correctly. |

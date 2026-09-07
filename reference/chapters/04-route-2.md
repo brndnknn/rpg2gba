@@ -329,7 +329,7 @@ consistent with staying `medium`.
   from the south while the rocks stand, so the cutscene can only fire after
   the Passage Cave → Nowtoch detour brings the player back down from the
   north. CH04's gate is real and CH07's revisit stands. Closes
-  `PLAYTEST_AUTHORING_IMPROVEMENT.md` §7.2.
+  `reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT.md` §7.2.
 - **Rock reachability is not uniform** — rocks 14 and 17 are attemptable on
   visit 1, rocks 15, 16 and 18 are not. See §3.1.
 

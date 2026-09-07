@@ -65,9 +65,15 @@ For each candidate map id:
     `build_slice_maps`' returned `src_coords` — the wiring preview scripts
     help enumerate them). Miss it and the warp tile never gets the door
     metatile stamped: warp silently inert.
-- Ignore the stale literals in `scripts/run_slice.py:66` (retired LLM path),
-  `scripts/pathfinder_tile_census.py:25`, `scripts/pathfinder_warp_trace.py:19`
-  (one-off S1-era tools) — update only if you actually use them.
+- `scripts/run_slice.py` and `scripts/regen_outputs.py` were removed outright on
+  2026-09-07 (both were retired-LLM-path scripts, actively harmful if run — the
+  first spent API budget, the second stripped `output/` and flipped three tests
+  from skip to fail). The live re-emit path is
+  `python -m rpg2gba.conversion_agent.transpile_driver run --maps <ids>` followed
+  by `python scripts/stage_slice_scripts.py --write`.
+- Ignore the stale literals in `scripts/pathfinder_tile_census.py:25`,
+  `scripts/pathfinder_warp_trace.py:19` (one-off S1-era tools) — update only if
+  you actually use them.
 - Tests pinning the set: `tests/test_map_set.py` asserts
   `parse_map_ids("slice") == SLICE_MAP_IDS` (updates itself); fixture
   literals in `tests/test_tileset_converter.py:585,845,873,880` are

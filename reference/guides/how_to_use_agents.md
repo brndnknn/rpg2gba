@@ -10,7 +10,7 @@
 |---|---|---|
 | `CLAUDE.md` | Build agent | Permanent operating manual. Conventions, principles, boundaries. Rarely changes. |
 | `MEMORY.md` | Build agent | Running project state. Changes every session. Replaces the need to re-scan the repo. |
-| `src/conversion_agent/prompts/system.md` | Conversion agent (at runtime) | The conversion agent's instructions. Maintained by the build agent as a source file. |
+| `src/rpg2gba/conversion_agent/prompts/system.md` | Conversion agent (at runtime) | The conversion agent's instructions. Maintained by the build agent as a source file. |
 
 The build agent reads CLAUDE.md and MEMORY.md. It also *maintains* system.md — treating it like any other source file — but it does not run as the conversion agent.
 

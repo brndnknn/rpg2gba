@@ -44,7 +44,7 @@ this document.
 
 **One correction to the record:** C4's answer says Old Rod is mis-described as a field move somewhere
 in the repo. A search on 2026-09-01 found no such text — `02-route-1.md` and
-`PLAYTEST_AUTHORING_IMPROVEMENT.md:892` both describe it as Gym-1-gated, which agrees. Nothing owed.
+`reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT.md:892` both describe it as Gym-1-gated, which agrees. Nothing owed.
 
 ---
 

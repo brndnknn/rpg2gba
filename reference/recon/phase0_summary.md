@@ -1,5 +1,12 @@
 # Phase 0: Reconnaissance Summary
 
+> **Historical document (dated banner added 2026-09-07).** This is a
+> point-in-time snapshot from Phase 0 reconnaissance, not a live status doc.
+> Figures and open questions here (species counts, `.dat` inventory, etc.)
+> reflect the state of investigation at the time it was written and may since
+> be superseded by Phase 2 output or later findings. `MEMORY.md` → Current
+> Phase is the sole authority on current project status.
+
 ## What is Pokémon Uranium Technically?
 
 Pokémon Uranium is a fan-made Pokémon game built on **Pokémon Essentials v17** (Ruby-based RPG Maker XP framework). It ships as a compiled Windows executable with:

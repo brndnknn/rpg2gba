@@ -54,6 +54,37 @@ def main(verbose: bool) -> None:
     )
 
 
+class _LazyTranspileEvents(click.Group):
+    """Delegates to `conversion_agent.transpile_driver.cli` without importing
+    it (and its deterministic/fork_index/transpiler/flag_registry/tileset
+    dependency chain) until a subcommand is actually looked up — mirrors the
+    lazy-import style already used for phase3/phase4/phase5 below, and avoids
+    re-declaring `run`'s options by hand (they'd drift from the driver's own
+    definitions)."""
+
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        from rpg2gba.conversion_agent import transpile_driver
+
+        return transpile_driver.cli.list_commands(ctx)
+
+    def get_command(self, ctx: click.Context, name: str) -> click.Command | None:
+        from rpg2gba.conversion_agent import transpile_driver
+
+        return transpile_driver.cli.get_command(ctx, name)
+
+
+main.add_command(
+    _LazyTranspileEvents(
+        name="transpile-events",
+        help=(
+            "Deterministic event->Poryscript transpiler (live path; replaced "
+            "the retired `phase4 --run` LLM bulk conversion on 2026-06-18). "
+            "See `transpile-events run --help`."
+        ),
+    )
+)
+
+
 def _resolve_paths() -> tuple[Path, Path]:
     """Resolve Uranium source + output directories from env vars."""
     _load_dotenv()
@@ -227,6 +258,12 @@ def _phase4_backend(name: str, model: str = _DEFAULT_MODEL, usage_log_path: Path
         # so its memo entries share the production fingerprint — work done by hand and by
         # Opus dedupe against each other. `?` in the UI shows the compact lane quickref,
         # NOT this system prompt.
+        #
+        # "human" is intentionally NOT one of the --backend click.Choice options
+        # above (audit finding 23) — it's not a CLI-selectable backend, only a
+        # deliberate reach-around: scripts/run_human.py calls this private
+        # `_phase4_backend("human")` directly. Leave it as-is; don't widen the
+        # Choice lists and don't delete this branch.
         from rpg2gba.conversion_agent.backends.human import HumanBackend
 
         qr_path = REFERENCE_DIR / "guides" / "human_quickref.md"
@@ -255,7 +292,21 @@ def _phase4_backend(name: str, model: str = _DEFAULT_MODEL, usage_log_path: Path
     help="Claude model for the claude_code backend (e.g. claude-sonnet-4-6, claude-opus-4-8).",
 )
 def phase4(clean: bool, run: bool, backend: str, model: str) -> None:
-    """Build the conversion-agent machinery (Phase 4). Add --run to convert."""
+    """Build the conversion-agent machinery (Phase 4).
+
+    --run is retired (2026-06-18) — use `transpile-events run` instead.
+    """
+    if run:
+        # The LLM-driven bulk run this flag used to trigger was retired
+        # 2026-06-18 in favor of the deterministic transpiler (CLAUDE.md §4.1,
+        # §7). Refuse rather than silently running a dead path (CLAUDE.md
+        # §4.5 fail loud) — the rest of `phase4` (machinery/registry
+        # bring-up, no --run) still works below.
+        raise click.ClickException(
+            "phase4 --run is retired (2026-06-18) — the LLM bulk conversion "
+            "path is dead. Use `rpg2gba transpile-events run --maps <spec>` "
+            "instead (the deterministic transpiler; see BUILD_PLAN.md §3)."
+        )
     from rpg2gba.conversion_agent import orchestrator as orch
 
     _, out_dir = _resolve_paths()

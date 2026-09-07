@@ -1,13 +1,18 @@
 # Investigation: Repo audit — dead code, duplicated code, stale docs
 
-**Status:** blocked-on-answers — investigation complete, Q1-Q13 await your answers in-file
-**Started:** 2026-09-06   **Last updated:** 2026-09-06 (self-consistency pass: findings 8, 27, 39, H5, Q3, Q7 revised in place)
+**Status:** closed — 48 findings, Q1-Q13 all answered 2026-09-07; the artifact is the remediation plan in Next steps. **Stages A-E EXECUTED 2026-09-07** on branch `repo-audit-remediation` — see "Remediation execution log" below for what landed, what changed on contact with the repo, and the four follow-ups it opened.
+**Started:** 2026-09-06   **Last updated:** 2026-09-07 (remediation executed; execution log + follow-ups added)
 **Question:** What in this repo is dead, duplicated, or out of date — and specifically, which artifacts caused agents to follow retired processes or misread the project's current state?
-**Expected artifact:** plan — a prioritized remediation plan keyed to the Q1–Q8 answers
+**Expected artifact:** plan — the prioritized remediation plan in Next steps, keyed to the Q1–Q13 answers
 
 ## Summary
 
-**The audit is complete (48 findings); what remains is your decisions, Q1-Q13.** The
+**Closed 2026-09-07.** The audit found 48 things; all 13 decisions are made and the
+remediation plan is in Next steps, in five independently-shippable stages (engine safety →
+remove the harmful → the authority problem → MEMORY.md prune → code). Three answers diverge
+from my recommendation and are flagged in Decisions so nobody reverses them by accident.
+
+What the audit found: The
 headline: there is almost no classically dead code here — every module in `src/rpg2gba/`
 is referenced from somewhere (28), and spent one-offs in `scripts/` are expected by
 policy, not a defect (47). The repo's problem is that **its documentation asserts things
@@ -674,7 +679,31 @@ Findings marked CONFIRMED were verified first-hand; the distinction is load-bear
   A: in scope as an inventory — separate genuinely spent one-offs from load-bearing
   pipeline steps still invoked by code or docs. *Effect:* Next steps #2.
 
+- **2026-09-07 — Q1–Q13 all answered.** Compact record; full text under Open questions.
+  | Q | Answer | What it changed |
+  |---|---|---|
+  | Q1 | `MEMORY.md` → Current Phase is the **sole** frontier authority | Every other doc gets a "historical / topic reference" header and stops asserting what to do next. Unblocks Q2, Q4. |
+  | Q2 | Prune now, enforce later | Hoist live status to a skimmable headline; chronicle out of lines 18/43 into `memory-archive.md`; evict 4 resolved Open Questions. **No CI byte cap.** |
+  | Q3 | Guard now, consolidate separately | Two-line fix to `trainers.py:216` / `tm_hm.py:88`; the five-way `*_constant` consolidation becomes its own scoped change. |
+  | Q4 | Both, split by doc | Banner `BUILD_PLAN.md`/`ROADMAP.md`/`PROJECT_TODO.md`; archive `FABLE_PLAN.md` and `PLAYTEST_AUTHORING_IMPROVEMENT.md` V1. |
+  | Q5 | **Keep, rename to a warning name** (diverges from the recommendation to delete) | External clone survives as `pokeemerald-expansion-PRISTINE-DO-NOT-USE`; upstream stays available for diffing, misuse becomes self-evident at the path level. `MEMORY.md` ×3 + `PROJECT_TODO.md:13-16` updated to the new name and closed. |
+  | Q6 | Fix in the same change; banner in place | No CI check, no PROJECT_TODO filing. Finding 37's inline dated correction is the model. |
+  | Q7 | Both, in one change | Add `transpile-events` to the `pipeline.py` click group; make `phase4 --run` refuse and name the replacement. |
+  | Q8 | **Leave as-is, document it** (diverges from the recommendation to widen `click.Choice`) | `HumanBackend` stays script-only by design; add explanatory comments at `pipeline.py:225` and in `scripts/run_human.py`. No code deleted, no CLI change. |
+  | Q9 | All three | Rewrite the vendor doc's custom-changes section, fence `global.h:28` + `save.h:11`, correct `CLAUDE.md` §5's fence vocabulary, fix `MEMORY.md:101`. |
+  | Q10 | **Yes, plus a summary** (extends the recommendation) | `git diff 80cdfce2 HEAD -- engine/` is canonical in `CLAUDE.md` §3 and `RPG2GBA_VENDOR.md`, replacing the hand list — but a short feature-area summary stays for orientation, explicitly labelled as orientation, not inventory. |
+  | Q11 | No — mark all four spent | `run_bulk.py`, `prep_bulk_run.py`, `run_stats.py`, `run_report.py` marked spent; `human_quickref.md:56`'s punt instruction retired. **`backends/` + `orchestrator.py` stay.** Resolves H7. |
+  | Q12 | Delete both | `scripts/run_slice.py` and `scripts/regen_outputs.py` removed outright, not guarded. |
+  | Q13 | Archive it | `reference/viewer/map_inspector_spec.md` → `reference/archive/`. |
+
+- **2026-09-07 — three answers diverge from my recommendation; note them so nobody "corrects" them back.**
+  Q5 (rename, don't delete), Q8 (document the reach-around rather than widen the CLI), and Q10
+  (keep an orientation summary beside the canonical diff command). Each is a deliberate call,
+  not an oversight.
+
 ## Open questions
+
+**None — all 13 were answered 2026-09-07.** They are kept below with their recommendations and answers intact, because the rationale is what makes the remediation plan legible to a cold reader; the compact version is in Decisions.
 
 ### Q1. Which document should become the single "what to do next" authority?
 Finding 2 is the root cause of the reported confusion: six docs claim currency and
@@ -688,8 +717,7 @@ since `CLAUDE.md` §7 already says so, and demote every other doc to an explicit
 "historical / topic reference" header. Cheaper than a new file and removes the
 contradiction rather than adding a seventh claimant.
 **Blocked on:** —
-**Answer:**
-
+**Answer:** **MEMORY.md → Current Phase is the sole frontier authority** (2026-09-07). Every other doc gets an explicit "historical / topic reference" header and stops asserting what to do next. No new STATUS.md.
 ### Q2. Is MEMORY.md worth restructuring now, or only pruning?
 It is protocol-compliant in structure but 260 KB with 27 KB single lines (findings 4-7).
 Pruning to protocol (evict the 4 resolved Open Questions, move oversized Key File Notes
@@ -701,8 +729,7 @@ is line 18 and line 43: hoist the live status (CH05 passed / CH06 frontier) into
 short skimmable headline and push the historical chronicle into
 `reference/memory-archive.md`, which is already the designated destination.
 **Blocked on:** Q1
-**Answer:**
-
+**Answer:** **Prune now, mechanically enforce later** (2026-09-07). Hoist the live status (CH05 passed / CH06 frontier) into a short skimmable headline, push the historical chronicle out of lines 18 and 43 into `reference/memory-archive.md`, evict the 4 already-resolved Open Questions, move oversized Key File Notes to `reference/`. No CI byte cap in this pass.
 ### Q3. Fix the `move_constant` divergence by consolidation, or just add the guard?
 Finding 8 is a confirmed inconsistency across five copies; finding 38 establishes it is
 latent, not a live bug, so this is hygiene rather than a fix under pressure. Adding the
@@ -716,8 +743,7 @@ consolidation separately — the same five-way copy-paste affects `item_constant
 `species_constant` and `ability_constant`, so it wants its own scoped change with the
 golden tests re-run, not a drive-by.
 **Blocked on:** —
-**Answer:**
-
+**Answer:** **Add the guard now; file the consolidation separately** (2026-09-07). Two-line fix to `trainers.py:216` and `tm_hm.py:88` in the remediation pass; the five-way `move_/item_/species_/ability_constant` consolidation becomes its own scoped change with the golden tests re-run.
 ### Q4. How aggressive should the stale-doc treatment be — annotate or archive?
 Findings 1, 3, 12, 13, 14, 15 are all stale text in otherwise-useful documents.
 Options: (a) add a dated "SUPERSEDED — see X" banner at the top of each, (b) move spent
@@ -729,8 +755,7 @@ alongside the retired chapter TODOs, (c) both.
 spent ones (`FABLE_PLAN.md`, V1) so nothing greps them up as current. `reference/archive/`
 already exists and is the established convention.
 **Blocked on:** Q1
-**Answer:**
-
+**Answer:** **Both, split by doc** (2026-09-07). Banner the still-consulted docs (`BUILD_PLAN.md`, `ROADMAP.md`, `PROJECT_TODO.md`) with a dated header deferring frontier status to `MEMORY.md` (per Q1); physically archive the fully spent ones (`FABLE_PLAN.md`, `PLAYTEST_AUTHORING_IMPROVEMENT.md` V1) into `reference/archive/`.
 ### Q5. Delete the external `/home/b/repos/pokeemerald-expansion` clone?
 Finding 16: it is outside this repo, it is pristine upstream, it has already burned one
 session via a fabricated blocker, and its removal has been an open PROJECT_TODO item
@@ -740,7 +765,7 @@ across at least three MEMORY.md mentions.
 past cost and a one-command fix. Out-of-repo deletion is the user's call, hence this
 question rather than an action.
 **Blocked on:** —
-**Answer:**
+**Answer:** **Keep it, rename it to a warning name** (2026-09-07) — e.g. `pokeemerald-expansion-PRISTINE-DO-NOT-USE`. Upstream stays available for reference/diffing; misuse becomes self-evident at the path level. Update the three `MEMORY.md` mentions and `PROJECT_TODO.md:13-16` to the new name and close the item.
 ### Q6. Do the "already caught, never fixed" findings need a follow-through mechanism?
 Findings 20 and 21 were both documented in `reference/findings/critique_2026-07-01.md`
 nine weeks ago and are still live (finding 22). The repo audits itself well and acts on
@@ -751,8 +776,7 @@ the finding, rather than filing it — and for anything not fixed immediately, p
 banner on the offending file itself, not in a findings doc nobody re-reads. A findings
 doc is not a mechanism.
 **Blocked on:** Q4
-**Answer:**
-
+**Answer:** **Fix in the same change; banner in place** (2026-09-07). No new mechanism. Remediate doc text in the same change that records the finding; for anything not fixed immediately, put a dated banner on the offending file itself, never in a findings doc. Finding 37 (`ROM_TEST_DEV.md`'s inline dated correction) is the in-repo proof this pattern works. No CI staleness check, no PROJECT_TODO filing.
 ### Q7. Should the retired LLM bulk path be removed from the CLI, or just labelled?
 Findings 24-27 plus 25's discoverability trap: `phase4 --run` (retired, budget-spending,
 untested) is on the main `rpg2gba` console script, while the live deterministic spine
@@ -765,8 +789,7 @@ message naming the replacement. Removing the code outright is riskier — per fi
 the `backends/` package is retained by policy, even though the `run_bulk.py` script layer
 that drives it looks dormant (Q11).
 **Blocked on:** —
-**Answer:**
-
+**Answer:** **Do both, in one change** (2026-09-07). Add `transpile-events` to `pipeline.py`'s click group delegating to `transpile_driver.cli`, and make `phase4 --run` refuse with a message naming the replacement. Delete no code in `backends/`.
 ### Q8. Is `HumanBackend` meant to be CLI-reachable?
 Finding 23: `pipeline.py:225` handles `"human"` but no `--backend` choice offers it;
 only `scripts/run_human.py` reaches it, via the private `_phase4_backend`.
@@ -776,7 +799,7 @@ its three test files indicate it is wanted, and the private-function reach-aroun
 `scripts/run_human.py` is a symptom of the gap, not a design. If instead it is spent,
 delete the branch, the backend, and the script together.
 **Blocked on:** Q7
-**Answer:**
+**Answer:** **Leave as-is and document it** (2026-09-07). `HumanBackend` stays script-only; add a comment at `pipeline.py:225` and in `scripts/run_human.py` stating that `"human"` is intentionally not a `--backend` choice and is reached deliberately via `_phase4_backend`. Do not widen the `click.Choice` lists, do not delete the backend.
 ### Q9. Fix `engine/RPG2GBA_VENDOR.md` and fence the two unfenced edits?
 Finding 42 is the highest-consequence doc error in the audit: the vendor doc says the
 custom C is three test-only files to "revert/gate before a real build", when the real
@@ -792,8 +815,7 @@ replace the vendor doc's custom-changes section with a generated summary of
 `CLAUDE.md` §5 to list all four sentinel vocabularies. Also fix `MEMORY.md:101`, which
 repeats the "3 sentinel-fenced custom files" claim.
 **Blocked on:** —
-**Answer:**
-
+**Answer:** **All three** (2026-09-07): rewrite `RPG2GBA_VENDOR.md`'s custom-changes section from the real diff, fence `global.h:28` and `save.h:11`, and correct `CLAUDE.md` §5 to list all four sentinel vocabularies. Also fix `MEMORY.md:101`'s "3 sentinel-fenced custom files".
 ### Q10. Should `git diff 80cdfce2 HEAD -- engine/` become the documented way to see custom edits?
 The vendored tree has no upstream history, so that one command is the definitive
 custom-vs-pristine answer (finding 40) — and it cannot go stale the way a hand-maintained
@@ -804,7 +826,7 @@ canonical check, replacing the hand-maintained list rather than supplementing it
 hand-maintained inventory of 77 files will rot again; this is the general fix for the
 finding-34 class, applied here.
 **Blocked on:** Q9
-**Answer:**
+**Answer:** **Yes, with a summary alongside** (2026-09-07). `git diff 80cdfce2 HEAD -- engine/` becomes the canonical check in `CLAUDE.md` §3 and `RPG2GBA_VENDOR.md`, replacing the hand-maintained file list — but keep a short human-readable summary of the major feature areas (map walker, embedded save, event-range expansion, movement bytecode interpreter, generated-content include-hooks) so an agent gets orientation without running git. The summary is explicitly orientation, not an inventory.
 ### Q11. Is a bounded LLM tail run still part of the workflow?
 Finding 44: `backends/` is retained by explicit policy (`BUILD_PLAN.md:26`), but the
 operator layer that drives it (`run_bulk.py`, `prep_bulk_run.py`, `run_stats.py`,
@@ -817,8 +839,7 @@ and add a line to `human_quickref.md` saying the punt path is retired — leavin
 "type `opus` to punt it" instruction (`:56`) pointing at dormant machinery is the same
 trap as finding 1. Keep `backends/` either way; `convert-map` still needs it.
 **Blocked on:** —
-**Answer:**
-
+**Answer:** **No — mark all four spent** (2026-09-07). No event has been punted since the pivot. `run_bulk.py`, `prep_bulk_run.py`, `run_stats.py`, `run_report.py` are marked spent, and `reference/guides/human_quickref.md` gets a line retiring the punt path so `:56` stops pointing at dormant machinery. **`backends/` and `orchestrator.py` stay** — `convert-map` needs them.
 ### Q12. Delete `run_slice.py` and `regen_outputs.py`?
 Finding 45: both are retired LLM paths, and both are *harmful* if run — `run_slice.py`
 spends API budget, `regen_outputs.py` strips `output/` and flips three tests from skip to
@@ -832,8 +853,7 @@ correct replacement is documented
 rather keep them for reference, a one-line `raise SystemExit("retired — use ...")` at the
 top of each is the cheap alternative.
 **Blocked on:** —
-**Answer:**
-
+**Answer:** **Delete both** (2026-09-07). `scripts/run_slice.py` and `scripts/regen_outputs.py` are removed outright, not guarded.
 ### Q13. Is `reference/viewer/map_inspector_spec.md` worth keeping at all?
 Findings 21 and 46: it carries two false supersession claims (`compare_collision.py`,
 `tree_debug.py`), both about scripts the live viewer still uses, and both were flagged in
@@ -843,27 +863,95 @@ Findings 21 and 46: it carries two false supersession claims (`compare_collision
 self-annotates correctly, and it already documents both scripts accurately — the spec's
 only remaining function is to mislead.
 **Blocked on:** Q4
-**Answer:**
-
+**Answer:** **Archive it** (2026-09-07). Move `reference/viewer/map_inspector_spec.md` to `reference/archive/`; `reference/viewer/map_viewer.md` is the current doc and already documents `compare_collision.py` and `tree_debug.py` accurately.
 ## Next steps
 
-All of the original steps 1-4 are complete; their results are findings 34-48. What
-remains is a decision gate, not more investigation.
+**The investigation is closed. What follows is the artifact: the remediation plan, ordered by
+risk-per-unit-effort.** Each stage is independently shippable. Per Q6, *every* stage fixes the
+text in the same change that records the finding — nothing here gets filed for later.
 
-1. **Answer Q1-Q13 in this file.** Nothing further is worth investigating until Q1 (the
-   single frontier authority) is settled, because most remediation hangs off it. Q5, Q9,
-   Q12 are independent and can be answered in isolation.
-2. If a remediation pass is wanted, build the plan from the answered questions. Suggested
-   ordering by risk-per-unit-effort, for whoever writes it:
-   Q9 (vendor doc + unfenced fences — only finding whose failure mode is destroying
-   working code) → Q12 (delete the two harmful scripts) → Q5 (delete the external clone)
-   → Q1/Q4 (authority + banners) → Q2 (MEMORY.md prune) → Q3/Q7/Q8 (code).
-3. Optional, deferred by budget rather than by decision: verify the UNVERIFIED items in
-   Ground covered — H7/H8, the remaining `slice_expansion_runbook.md:199-204` status
-   lines, intra-file dead code in `transpiler.py`/`deterministic.py`, and a full
-   read-through of `git diff 80cdfce2 HEAD -- engine/` to confirm findings 40-41 caught
-   every unfenced edit (that diff is cheap to re-run and would close the one
-   completeness gap in the engine sweep).
+### Stage A — engine safety (Q9, Q10). Do this first; it is the only work whose failure mode is destroying working code.
+1. Rewrite `engine/RPG2GBA_VENDOR.md`'s "Our custom changes" section (`:26`, `:41-47`). Delete the
+   "three test-only files — revert/gate before a real build" claim outright. Replace with:
+   (a) `git diff 80cdfce2 HEAD -- engine/` named as **the** canonical custom-vs-pristine check,
+   with a note on why `21c24202` is unreachable; (b) a short orientation summary of the feature
+   areas — map walker, embedded save, event-range expansion, movement bytecode interpreter,
+   battle_setup rematch/heal, palette/sound pacing knobs, Uranium berries, ~15 generated-content
+   include-hooks — explicitly labelled *orientation, not an inventory* (Q10).
+2. Fence the two unfenced edits (finding 40): `engine/include/global.h:28` (the bare
+   `#include "config/uranium_walker.h"`) and `engine/include/config/save.h:11`
+   (`FREE_MYSTERY_EVENT_BUFFERS` `FALSE`→`TRUE`). `save.h` is the important one — the changed macro
+   value currently sits outside any fence, so a sentinel-based revert leaves it behind and produces
+   a save-layout mismatch.
+3. Correct `CLAUDE.md` §5 to list all four sentinel vocabularies (finding 41): `URANIUM PATHFINDER
+   SLICE`, `URANIUM MAP WALKER`, `URANIUM EMBEDDED SAVE`, `RPG2GBA EVENT RANGE EXPANSION` — plus the
+   no-`BEGIN` variant. Add the canonical diff command to `CLAUDE.md` §3.
+4. Fix `MEMORY.md:101`'s "3 sentinel-fenced custom files".
+5. **Verify:** `make -j$(nproc) modern` in `engine/` still builds clean after the fencing edits.
+
+### Stage B — remove the harmful (Q12, Q5, Q11).
+6. `git rm scripts/run_slice.py scripts/regen_outputs.py` (Q12). Then grep for both basenames and
+   fix every referrer — including `reference/guides/slice_expansion_runbook.md:68` and
+   `reference/memory-archive.md:131,530`, whose warnings become obsolete.
+7. Rename the external clone to `/home/b/repos/pokeemerald-expansion-PRISTINE-DO-NOT-USE` (Q5).
+   Update `MEMORY.md:92,101,304` and close `PROJECT_TODO.md:13-16` with the new name.
+   *This is an out-of-repo `mv` — confirm before running.*
+8. Mark the bulk-run operator layer spent (Q11): `run_bulk.py`, `prep_bulk_run.py`, `run_stats.py`,
+   `conversion_agent/run_report.py`. Add a dated header comment to each. Retire the punt path in
+   `reference/guides/human_quickref.md:56`. **Touch nothing in `backends/` or `orchestrator.py`.**
+
+### Stage C — the authority problem (Q1, Q4, Q6, Q13). This is the root cause of the reported confusion.
+9. Establish `MEMORY.md` → Current Phase as sole frontier authority (Q1). Amend `CLAUDE.md` §7 to
+   say so unambiguously and to say the other docs are topic references.
+10. Banner the still-consulted docs (Q4): `BUILD_PLAN.md` (and **fix or delete its stale §6 CH02
+    block at `:246-256`** — finding 1, the single most misleading passage in the repo),
+    `ROADMAP.md`, `PROJECT_TODO.md` (`:3-5` points at an archived `CH02_TODO.md`).
+    Banner text defers frontier status to `MEMORY.md` and carries a date.
+11. Archive to `reference/archive/`: `FABLE_PLAN.md`, `PLAYTEST_AUTHORING_IMPROVEMENT.md` (V1),
+    `reference/viewer/map_inspector_spec.md` (Q13). Update `reference/archive/README.md`'s
+    moved-docs table. Fix `MEMORY.md:98,189-190`, which call V1 authoritative (finding 13).
+12. Fix the false-status docs in place, each with a dated inline correction (Q6, findings 17, 18,
+    19, 20, 21, 35, 36, 46): `canlose_battle_pipeline_plan.md:6`, `command_pokeemerald_map.md:8-11`
+    (the frozen-prompt claim — highest-traffic guide in `reference/`),
+    `phase7_integration_plan.md:73-78`, `conversion_walkthrough.md:1-9`,
+    `canlose_trainer_battles.md:89-91`, `map_viewer_palette_plan.md:4`.
+13. Low-priority text fixes: `ROADMAP.md`/`README.md` vocabulary gap (finding 14) — add one
+    sentence naming chapters as the unit of work rather than a global find-and-replace, which
+    finding 34 shows is actively harmful; `ROADMAP.md:258-280` clone instruction (15);
+    `phase0_summary.md` banner (30); `.claude/skills/pbs-convert/SKILL.md:105` broken path (31);
+    `reference/guides/how_to_use_agents.md`'s stale `src/conversion_agent/` path (29).
+
+### Stage D — MEMORY.md prune (Q2).
+14. Hoist the live status (CH05 passed / CH06 = Nowtoch City, maps 40-47) into a short skimmable
+    headline; fix `:12`'s stale "slices" framing (finding 5).
+15. Split the mega-lines — `:43` (27 KB), `:18` (13 KB) — pushing the historical chronicle into
+    `reference/memory-archive.md`.
+16. Evict the 4 already-resolved Open Questions (`:302,304,306,309`) and the stray bullet at `:315`;
+    move oversized Key File Notes (`:101,111,130,134,139`) into `reference/` per the two-sentence
+    rule. Delete the superseded Map-Inspector bullets that `:151` says it supersedes (finding 7).
+    No CI byte cap this pass.
+
+### Stage E — code (Q3, Q7, Q8). Lowest risk; all latent.
+17. Add the `MOVE_NONE` guard to `pbs_converter/trainers.py:216` and `tm_hm.py:88` (Q3). Add a
+    synthetic-zero unit test for each — finding 38 notes both existing tests only round-trip real
+    env-gated Uranium data, so a regression fails silently in CI today.
+18. Add `transpile-events` to `pipeline.py`'s click group delegating to `transpile_driver.cli`, and
+    make `phase4 --run` refuse with a message naming the replacement (Q7).
+19. Comment `pipeline.py:225` and `scripts/run_human.py:102` to record that `"human"` is
+    intentionally script-only (Q8).
+20. **Separately scoped, not part of this plan:** consolidate the five-way
+    `move_/item_/species_/ability_constant` copy-paste, with all golden tests re-run (Q3).
+    Also unclaimed: the 10× `_reference_dir()`, 9× output-path resolution, and the two
+    non-validating `chapters.json` loaders (findings 9-10) — latent, no decision taken.
+
+### Not scheduled
+Deferred by budget, not by decision (was Next steps #3): H2 (`_load_name_table` vs the flag-registry
+sidecar loader), H3 (the `ch01.py`–`ch05.py` playtest copy-paste), H8
+(`scripts/count_unique_commands.py` — Q11's answer makes retirement likely but it was not asked),
+the UNVERIFIED status lines in `slice_expansion_runbook.md:199-204`, intra-file dead code in
+`transpiler.py`/`deterministic.py`, and a full line-level read of `git diff 80cdfce2 HEAD -- engine/`
+to confirm findings 40-41 caught **every** unfenced edit — that last one is cheap and closes the
+only completeness gap in the engine sweep. Worth doing as part of Stage A step 1.
 
 ## Ground covered
 
@@ -952,3 +1040,181 @@ remains is a decision gate, not more investigation.
   the `species_converter`/`pbs_converter`/`trainer_converter` parse→reconcile→emit
   skeletons in depth; `tests/` (143 files) as a corpus; `.github/` workflows;
   `reference/chapters/*.md` vs `chapters.json` drift.
+
+---
+
+## Remediation execution log — 2026-09-07, branch `repo-audit-remediation`
+
+All five stages of the Next-steps plan were executed in one pass (lead + five
+sub-agents, write-partitioned by file). Everything below is what actually landed,
+including the three places the repo disagreed with the plan.
+
+### Stage A — engine safety (Q9, Q10) — **DONE, build verified**
+
+- `engine/RPG2GBA_VENDOR.md`'s "Our custom changes" section rewritten. The
+  "three test-only files — revert/gate before a real build" claim is **deleted**, with a
+  dated `CORRECTED 2026-09-07` note saying what it claimed and why it was dangerous.
+  `git diff 80cdfce2 HEAD -- engine/` is named as **the** canonical check, with the
+  reason `21c24202` is unusable (flat `git archive` import, no upstream history).
+  The feature-area summary is labelled *orientation, not an inventory* and was
+  verified against the real diff, not the plan's list — it added **script-callable
+  live graphics swap**, **new-game boot redirect**, and **corpus-sized trainer/flag
+  capacity increases** to the areas the audit had named. A stale downstream line
+  ("only the two committed hook files differ from raw upstream") was fixed too.
+- The two unfenced edits are fenced: `engine/include/global.h:28` as
+  `URANIUM MAP WALKER`, `engine/include/config/save.h:11` as
+  `RPG2GBA EVENT RANGE EXPANSION` (matching the vocabulary already used in
+  `flags.h`/`vars.h`/`event_data.c` for that feature). Both fences say what breaks on
+  removal — the `save.h` one records that reverting it alone fails the
+  `SaveBlock1FreeSpace` static assert.
+- `CLAUDE.md` §5 now lists all four sentinel vocabularies, the `BEGIN`/`END` comment
+  form and the no-`BEGIN` variant, and states that **a fence is a locator, not a revert
+  script**. `CLAUDE.md` §3 carries the canonical diff command.
+- `MEMORY.md`'s "3 sentinel-fenced custom files" corrected — **and so was the Decisions
+  Made entry that caused it.** `[2026-06-18] "Fork-baseline divergences MUST be
+  reverted/gated before any real build"` is now explicitly marked **REVERSED
+  2026-09-07**: it was true when the custom C was two test conveniences and is now
+  false and destructive. That entry, not the vendor doc, is the origin of this whole
+  finding class; leaving it standing would have regrown the error.
+- **Build verified green:** `make -j$(nproc) modern` in `engine/` succeeds
+  (EWRAM 86.80%, IWRAM 86.99%, ROM 82.12%; only the pre-existing benign RWX-segment
+  linker note). Confirms the comment-only fences are inert.
+
+### Stage B — remove the harmful (Q12, Q11) — **DONE**; Q5 **BLOCKED, needs the operator**
+
+- `scripts/run_slice.py` and `scripts/regen_outputs.py` deleted. Both were read first
+  and the audit's characterization confirmed: `run_slice.py` really does spend budget
+  (`FROZEN_MODEL = "claude-opus-4-8"`, `--limit` caps *LLM* conversions);
+  `regen_outputs.py` really does clear checkpoints and `.pory` before replaying.
+- Every live referrer fixed (`slice_expansion_runbook.md:68` rewritten into a removal
+  notice naming the replacement). Referrers left alone deliberately: dated past-tense
+  entries in `reference/archive/`, `reference/findings/critique_2026-07-01.md`, and
+  `reference/memory-archive.md` — rewriting those falsifies history rather than
+  removing a dangling instruction.
+- One referrer the audit had not found: `backends/__init__.py`'s `NullBackend`
+  docstring cited `regen_outputs.py` as its only caller. Rewritten to record the
+  deletion and why the class is still worth keeping.
+- The four bulk-run operator scripts carry dated `SPENT (2026-09-07)` headers; none
+  deleted, `backends/` and `orchestrator.py` untouched as decided.
+- `human_quickref.md`'s punt instruction was at **line 93, not 56** (content drifted
+  since the audit). Annotated in place: `opus` still spawns the tail tool for that one
+  event, but nothing sweeps up punted events afterwards — **treat a punt as final,
+  not deferred.**
+
+### Stage C — the authority problem (Q1, Q4, Q6, Q13) — **DONE**
+
+- `CLAUDE.md` §7 rewritten: `MEMORY.md` → Current Phase is the **sole** frontier
+  authority, with a table assigning each other document what it owns and what it does
+  *not* own (`ROADMAP.md`, `BUILD_PLAN.md`, the atlas, `PROJECT_TODO.md`).
+- Banners on `BUILD_PLAN.md`, `ROADMAP.md`, `PROJECT_TODO.md`. `BUILD_PLAN.md`'s §6
+  CH02 block — the audit's "single most misleading passage" — kept as a **dated
+  historical note rather than deleted**, because the surrounding paragraph carried real
+  lineage; the "active chapter is now CH02" claim is gone from both the body and the
+  heading. `PROJECT_TODO.md`'s dead `CH02_TODO.md` pointer fixed.
+- Archived to `reference/archive/`: `FABLE_PLAN.md`,
+  `PLAYTEST_AUTHORING_IMPROVEMENT.md` (V1), `reference/viewer/map_inspector_spec.md`,
+  with `reference/archive/README.md` updated and every inbound reference across the
+  repo repointed. `MEMORY.md` no longer calls V1 authoritative — the note now leads
+  with V2 and says explicitly that the "authoritative" claim was the error.
+- All six false-status docs corrected in place with dated notes, each **verified against
+  the code before writing** — `canlose_battle_pipeline_plan.md` (both gaps built:
+  `transpiler.py:2433`, `scripts/stage_trainers.py`), `command_pokeemerald_map.md` (the
+  frozen-prompt claim removed), `phase7_integration_plan.md`, `conversion_walkthrough.md`,
+  `canlose_trainer_battles.md`, `map_viewer_palette_plan.md`. None were left unverified.
+- Low-priority sweep done: chapter vocabulary added to `ROADMAP.md`/`README.md` (one
+  sentence each, no blanket rename), the `ROADMAP.md` clone instruction corrected in
+  **two** places — the §1.1 body *and* the toolchain table at `:142`, which the plan
+  had missed — `.claude/skills/pbs-convert/SKILL.md` path fixed,
+  `how_to_use_agents.md` path fixed. `phase0_summary.md` lives at
+  `reference/recon/`, not `reference/guides/` as the plan said; bannered there.
+
+### Stage D — MEMORY.md prune (Q2) — **DONE**
+
+- **260 KB → 143 KB.** The Current Phase section is now a headline: a frontier table
+  (CH01-CH05 gate dates, CH06 = Nowtoch City maps 40-47 as next, branch policy), a
+  pointer to `POST_CH05_REVIEW.md`, and three standing facts. ~100 KB of dated
+  chronicle moved verbatim to `reference/memory-archive.md` → "Current Phase chronicle
+  (2026-05 → 2026-09-06)". The 27 KB and 13 KB mega-lines are gone from MEMORY.md.
+- Open Questions: the CH05 parking banner is generalized to any open chapter (none is
+  open); four entries evicted with a breadcrumb line — the `engine/` cutover (done;
+  residue is `PROJECT_TODO.md` #1), the Nuclear 1/8-HP effect and GBA charmap handling
+  (both duplicates of `PROJECT_TODO.md` #2/#3), and the superseded UNHANDLED
+  script-call question. The stray bullet below the section's closing `---` (Maps
+  49/172 arrival facing) was a discovery, not a question, and moved to the archive.
+- Five oversized Key File Notes replaced by one-line pointers: the bulk-run harness,
+  the hand-conversion pass, both Map Inspector notes, and the palette-packing
+  investigation. No CI byte cap, as decided.
+
+### Stage E — code (Q3, Q7, Q8) — **DONE, tests green**
+
+- `MOVE_NONE` guard added to `trainers.py:216` and `tm_hm.py:88`, copied verbatim from
+  the three copies that already had it (`pokemon.py:452`, `moves.py:205`,
+  `tmpbs.py:53`) rather than inventing a convention. Two synthetic-zero unit tests
+  added that construct the `_Resolver` directly with no dependency on
+  `RPG2GBA_URANIUM_SRC` — and the fail-without-fix behaviour was **actually checked**
+  by reverting the guards (both failed with `ValueError: move id 0 absent from
+  move_internal_names.json`), not assumed.
+- `transpile-events` added to `pipeline.py`'s click group via a lazy `click.Group`
+  subclass, so `rpg2gba --help` lists it without paying the transpiler's import chain.
+  It delegates to `transpile_driver`'s real command objects, so `--maps`/`--dry-run`
+  cannot drift from the driver's own definitions.
+- `phase4 --run` now refuses with a `ClickException` (exit 1) naming
+  `rpg2gba transpile-events run --maps <spec>`, raised before any orchestrator import
+  so it cannot be mistaken for a conversion failure. Non-`--run` `phase4` is unchanged.
+- `HumanBackend` documented at both ends as intentionally script-only; no
+  `click.Choice` widened, nothing deleted.
+- `pytest`: **2984 passed, 16 skipped, 2 failed** — the two failures
+  (`test_ground_item_differential_vs_frozen_opus`, `test_pokemart_differential_vs_frozen_opus`
+  in `tests/test_deterministic.py`) are **pre-existing**, confirmed identical with the
+  branch stashed; they depend on a gitignored on-disk oracle under `output/`.
+
+## Follow-ups opened by the remediation
+
+1. **Q5 is blocked on you: the clone rename needs a user-run `mv`.** Tracked as
+   `PROJECT_TODO.md` #1 with the exact command. The agent attempt was
+   classifier-blocked — the **second** time that has happened, so this will not
+   resolve itself on a future agent pass.
+   **And the audit's premise was wrong:** `/home/b/repos/pokeemerald-expansion` is
+   *not* pristine. Checked 2026-09-07: upstream `21c24202` with **6 modified tracked
+   files and ~125 untracked generated-artifact directories** from a pre-cutover
+   pipeline run sitting on top (uranium tilesets, cries, species graphics, map
+   layouts). So the decided name `-PRISTINE-DO-NOT-USE` would itself be a false claim
+   of the kind this audit exists to remove; the command in `PROJECT_TODO.md` uses
+   **`-STALE-DO-NOT-USE`** instead. Say the word if you want the original name anyway.
+   `CLAUDE.md` §3's description of that clone was corrected to match.
+2. **CLOSED same day — the engine sweep found six more unfenced edits, and all eight are now fenced.**
+   Stage A read all 77 files of the diff hunk-by-hunk (closing the completeness gap
+   the plan listed under "Not scheduled") and found six bare custom `#include` lines
+   beyond the two it was scoped to fix — `overworld.c:2`, `field_control_avatar.c:2`,
+   `event_object_movement.c:2`, `palette.c:2`, `sound.c:2`, `new_game.c:2-4` — plus
+   two soft cases with an opening comment but no `END` bracket
+   (`flags.h`'s `TRAINER_REGISTERED_FLAGS_START`, `opponents.h`'s
+   `TRAINERS_COUNT_EMERALD`). These are lower-risk than the two fixed (a missed
+   include leaves an unused header, not a behaviour or save-layout change), but all
+   eight were fenced in a follow-up pass with the build re-verified green — the memory
+   table came back byte-identical (EWRAM 86.80% / IWRAM 86.99% / ROM 82.12%), which is
+   the proof the comment-only fences are inert. Sentinel choices worth knowing:
+   `palette.c` and `sound.c` pull `config/rpg2gba.h` only for the **pacing knobs**
+   (`RPG2GBA_FADE_DELTA_Y`, `RPG2GBA_BGM_TEMPO_SCALE`), not the event-range expansion,
+   so they are fenced `URANIUM PATHFINDER SLICE` to match the existing
+   `RPG2GBA_FAST_TEXT_DEFAULT` fence in `new_game.c`; `new_game.c`'s three includes got
+   three separate fences rather than one block, so a
+   `grep "BEGIN URANIUM EMBEDDED SAVE"` sweep still finds every pull of that header.
+   **Everything else in the 77-file diff is properly fenced** — the "only two exist"
+   UNVERIFIED caveat is resolved, and the answer was "no, ten".
+3. **Stage D stopped short of the two-sentence rule on live notes.** Two Key File
+   Notes still exceed it — `tileset_converter/graphics/quantize.py` (~2.6 KB) and the
+   map-viewer tile-feedback note (~2.3 KB). Both describe *live* components, so
+   pushing them to `reference/` needs a judgement about which reference doc owns them,
+   not a mechanical move. Left in place deliberately.
+4. **Q3's consolidation is still unscheduled**, as decided — the five-way
+   `move_/item_/species_/ability_constant` copy-paste. The divergence is closed
+   (all five now guard zero) but the duplication is not. Also still unclaimed from
+   the plan's "Not scheduled" list: H2, H3, H8, the UNVERIFIED status lines in
+   `slice_expansion_runbook.md:199-204`, and intra-file dead code in
+   `transpiler.py`/`deterministic.py`.
+
+**Deliberately not done:** stale references to the three archived documents inside
+`reference/memory-archive.md` were left pointing at the old paths. It is a historical
+record; per Q6's "fix the text where the instruction is live", a dated archive entry
+is not a live instruction.

@@ -1,5 +1,10 @@
 #include "global.h"
+// BEGIN URANIUM MAP WALKER — pulls UraniumWalker_IsActive, used at the spawn-suppression
+// gates below (no NPCs ever while the walker is active, including the in-view scroll-spawn
+// path). Removing this include breaks those checks; reverting them too restores vanilla
+// object-event spawning.
 #include "uranium_map_walker.h"
+// END URANIUM MAP WALKER
 #include "malloc.h"
 #include "battle_anim.h"
 #include "battle_pyramid.h"

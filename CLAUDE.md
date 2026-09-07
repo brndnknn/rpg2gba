@@ -117,7 +117,9 @@ rpg2gba/
 
 ### The vendored engine (`engine/`)
 
-The `pokeemerald-expansion` fork is **vendored** in `engine/`, pinned at upstream `21c24202` (see `engine/RPG2GBA_VENDOR.md`). Custom engine C (Phase 6, plus the slice's spawn-override/intro-skip) lives there in version control — no longer an external sibling clone. `RPG2GBA_POKEEMERALD` is the path the pipeline uses, and the **cutover is DONE** (2026-06-19): it points at `engine/`, this repo's vendored tree. There is no longer any external sibling clone in the build path — if you find yourself reading `/home/b/repos/pokeemerald-expansion` or any other outside checkout, you are on the wrong tree; it is pristine upstream and lacks every custom header the pipeline needs. `engine/build/` and the assembler's generated output under `engine/` are gitignored.
+The `pokeemerald-expansion` fork is **vendored** in `engine/`, pinned at upstream `21c24202` (see `engine/RPG2GBA_VENDOR.md`). Custom engine C (Phase 6, plus the slice's spawn-override/intro-skip) lives there in version control — no longer an external sibling clone. `RPG2GBA_POKEEMERALD` is the path the pipeline uses, and the **cutover is DONE** (2026-06-19): it points at `engine/`, this repo's vendored tree. There is no longer any external sibling clone in the build path — if you find yourself reading `/home/b/repos/pokeemerald-expansion` or any other outside checkout, you are on the wrong tree. That clone sits at upstream `21c24202` with a pile of *stale* generated output from a pre-cutover run left on top of it (2026-09-07: 6 modified tracked files, ~125 untracked artifact dirs); it is neither pristine nor current, and it lacks the custom headers the pipeline needs. `engine/build/` and the assembler's generated output under `engine/` are gitignored.
+
+**To see what we changed versus stock pokeemerald-expansion, run `git diff 80cdfce2 HEAD -- engine/`.** That is the canonical, always-current custom-vs-pristine check — `80cdfce2` is the vendor-import commit and upstream `21c24202` is not a reachable object in this repo, so it cannot be used as a diff base. Never trust a hand-maintained list of "the custom files"; one rotted badly enough to be the top finding of the 2026-09-07 repo audit. `engine/RPG2GBA_VENDOR.md` carries an orientation summary of the feature areas, explicitly *not* an inventory.
 
 **Never set `RPG2GBA_*` yourself — not inline, not exported, not in a subshell.** The tracked `.env-paths` file at the repo root holds the correct values and the pipeline loads it at startup. Shell env *wins* over that file, so an inline override silently redirects the build at a tree that cannot work. This has burned a full session: an agent exported the stale clone path, hit the pristine tree's missing `include/config/rpg2gba.h`, and reported a fabricated "the fork lacks the event-range extension" blocker. The header has been committed at `engine/include/config/rpg2gba.h` since `5fc67dbf`. Run the pipeline commands bare and let it resolve its own paths.
 
@@ -225,7 +227,13 @@ def find_by_name(name: str) -> Optional[Species]: ...
 
 ### C
 
-- C code lives in the **vendored engine** (`engine/`, pokeemerald-expansion) — in-repo now, not an external fork. Mark custom edits with `URANIUM PATHFINDER SLICE`-style sentinel fences so they're revertable against pristine upstream
+- C code lives in the **vendored engine** (`engine/`, pokeemerald-expansion) — in-repo now, not an external fork. Mark custom edits with sentinel fences so they're locatable against pristine upstream. The vocabulary is **four** strings, not one (corrected 2026-09-07); pick the one matching the feature area:
+  - `URANIUM PATHFINDER SLICE` — the original slice work and most generated-content include-hooks
+  - `URANIUM MAP WALKER` — the map-walker harness (NPC suppression, free movement)
+  - `URANIUM EMBEDDED SAVE` — boot-continue instead of always-new-game
+  - `RPG2GBA EVENT RANGE EXPANSION` — the expanded flag/var ranges
+
+  Normal form is a `// BEGIN <sentinel> — why` / `// END <sentinel>` pair; a bare `// <sentinel>: …` opener with a matching `// END <sentinel>` also occurs in older edits. **A fence is a locator, not a revert script** — grep for the sentinels to find edits, but use `git diff 80cdfce2 HEAD -- engine/` (§3) as the authority on what is actually custom. Fenced-only reverts have historically missed unfenced one-line edits.
 - Follow the conventions of pokeemerald-expansion for any new code there: tabs, K&R-ish brace style, `g`-prefixed globals, `s`-prefixed statics
 - New constants go in the same headers as their kin (`include/constants/species.h`, etc.)
 
@@ -261,12 +269,27 @@ stored flags; never mint a `FLAG_*` for them.
 
 ## 7. Working with Each Pipeline Phase
 
-Per-phase detail — goals, tasks, exit criteria — lives in **ROADMAP.md** (Phases
-0–8). The **active build sequence** (the deterministic transpiler + the per-chapter
-operating loop) lives in **`BUILD_PLAN.md`**; the corpus-wide chapter plan lives in
-**`reference/chapters/00-atlas.md`** (bound by `reference/chapters.json`, one document
-per chapter beside it); the active phase and next concrete task live in
-**MEMORY.md → Current Phase**. Read all three before you start.
+**`MEMORY.md` → Current Phase is the *sole* authority on the frontier** — what is
+done, what is in progress, and what to do next. Nothing else in this repo states
+current status, and where another document appears to, `MEMORY.md` wins without
+argument. (Established 2026-09-07: the repo audit found six documents each implicitly
+claiming currency with nothing ranking them, which is why agents kept picking up
+retired processes.)
+
+Everything else is a **topic reference** — correct about its subject, silent about the
+frontier:
+
+| Document | Owns | Does *not* own |
+|---|---|---|
+| `MEMORY.md` → Current Phase | the frontier: active phase, next concrete task | — |
+| `ROADMAP.md` | per-phase goals, tasks, exit criteria (Phases 0–8) | what phase we're on |
+| `BUILD_PLAN.md` | *how* — the transpiler design and the per-chapter operating loop | which chapter is next |
+| `reference/chapters/00-atlas.md` (+ `chapters.json`, per-chapter docs) | the corpus-wide chapter plan and each chapter's scope | which chapters are done |
+| `PROJECT_TODO.md` | the open-item backlog | priority order or currency |
+
+Read `MEMORY.md` first, then whichever topic references your task actually needs. If
+you catch a topic reference asserting frontier status, fix it in place with a dated
+correction in the same change — don't file it.
 
 **Phase 4 was pivoted (2026-06-18):** the LLM-driven bulk run is retired. Event→
 Poryscript is now a deterministic transpiler you build and run (`BUILD_PLAN.md §3`);

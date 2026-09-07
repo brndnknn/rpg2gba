@@ -12,6 +12,11 @@ can be inspected at any time — mid-run from another terminal, or after the fac
 `scripts/run_stats.py` is a thin CLI over this; the bulk runner prints the same
 summary on exit.
 """
+# SPENT (2026-09-07): the LLM bulk-run regime this module reports on was retired
+# 2026-06-18 in favour of the deterministic transpiler
+# (src/rpg2gba/conversion_agent/transpile_driver.py). No event has been punted to
+# that regime since the pivot. The live conversion path is the transpiler; this
+# file is kept for reference only, not deleted.
 from __future__ import annotations
 
 import json

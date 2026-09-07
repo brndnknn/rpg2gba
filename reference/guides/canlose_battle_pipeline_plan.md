@@ -4,6 +4,15 @@
 > (`hand_conversions/Map050_EV019.pory`) into the deterministic spine. Written
 > 2026-07-21. Mechanism + engine facts: `canlose_trainer_battles.md` (read that
 > first). Status: **design only, not built** (user chose design-first 2026-07-21).
+>
+> **Correction (2026-09-07, build agent):** both gaps described below are now
+> built. Gap A — the transpiler emits `trainerbattle_earlyrival` + a
+> `VAR_RESULT` win/loss branch (`src/rpg2gba/conversion_agent/transpiler.py`,
+> around line 2433). Gap B — converted trainers are staged into the slice
+> assembly by `scripts/stage_trainers.py` / `rpg2gba.trainer_converter.stage`,
+> called from `scripts/assemble_pathfinder.py`'s `run_trainer_pass`, not
+> hand-added. Read the rest of this doc as historical design rationale, not a
+> live TODO.
 
 ## Goal
 

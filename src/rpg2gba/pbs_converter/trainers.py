@@ -214,6 +214,8 @@ class _Resolver:
         return const
 
     def move_constant(self, move_id: int) -> str:
+        if move_id == 0:
+            return "MOVE_NONE"
         internal = self.move_internal.get(move_id)
         if internal is None:
             raise ValueError(f"move id {move_id} absent from move_internal_names.json")

@@ -3,7 +3,7 @@
 **Status:** pre-decision working document. Written 2026-08-27, after CH04 (Route 2) passed its §9 gate
 and before CH05 (Passage Cave) scenario work starts.
 
-**Predecessor:** `PLAYTEST_AUTHORING_IMPROVEMENT.md` (2026-08-20), written before CH04. That document
+**Predecessor:** `reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT.md` (2026-08-20), written before CH04. That document
 analyzed CH01–CH03, named eight failure classes A–H, and decided a set of fixes. CH04 was the pilot
 chapter for those fixes. This document asks the same question one round later: *what did the fixes
 actually do, and what is left?*

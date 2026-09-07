@@ -166,7 +166,7 @@ treated as an emergency escape.
 > palettes) + per-map secondaries (7 palettes) — which also fixes the
 > same-art-different-colors quantization inconsistency the plain per-map
 > scheme would keep. Rationale, measurements (outdoor-family tile overlap up
-> to 30% pairwise), and validation gate: `FABLE_PLAN.md` step 2. Items 3–6
+> to 30% pairwise), and validation gate: `reference/archive/FABLE_PLAN.md` step 2. Items 3–6
 > stand unchanged.
 
 1. **Adopt per-map tileset packing for the slice pipeline before slice 2**

@@ -25,7 +25,13 @@
 #include "constants/items.h"
 #include "constants/moves.h"
 #include "config/save.h"
+// BEGIN URANIUM MAP WALKER — pulls in URANIUM_MAP_WALKER (config/uranium_walker.h) so it's
+// visible everywhere global.h is (i.e. everywhere), matching how config/save.h and the other
+// config/*.h knobs above are included project-wide. Revert by deleting this line; every #if
+// URANIUM_MAP_WALKER == TRUE gate elsewhere then fails to compile (macro undefined), which is
+// deliberately loud rather than silently defaulting the walker off.
 #include "config/uranium_walker.h"
+// END URANIUM MAP WALKER
 
 // Prevent cross-jump optimization.
 #define BLOCK_CROSS_JUMP asm("");

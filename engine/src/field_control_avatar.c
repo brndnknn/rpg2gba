@@ -1,5 +1,9 @@
 #include "global.h"
+// BEGIN URANIUM MAP WALKER — pulls UraniumWalker_IsActive, used at two input-gating
+// sites below (the walker owns A/B/R/L/Start while active). Removing this include breaks
+// those checks; reverting them too restores vanilla avatar input handling.
 #include "uranium_map_walker.h"
+// END URANIUM MAP WALKER
 #include "battle_setup.h"
 #include "bike.h"
 #include "coord_event_weather.h"

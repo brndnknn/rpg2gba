@@ -68,3 +68,21 @@ def test_edge_values_sorted_and_keys_internal(
     assert sample == sorted(sample)
     # Keys are the all_learnables form (bare internal name, no SPECIES_ prefix).
     assert all(not k.startswith("SPECIES_") for k in learnables)
+
+
+def test_move_constant_zero_is_move_none() -> None:
+    """move id 0 (an empty/null tm.dat slot) must resolve to MOVE_NONE.
+
+    Synthetic resolver, no Uranium source tree required (audit finding 8/38):
+    `tm.dat`'s real index 0 happens to be null, so this guard was safe only
+    by accident — a change to the input data alone could have made a missing
+    guard here go live with no code change.
+    """
+    r = tm_hm._Resolver(
+        id_map=IdMap(),
+        move_internal={},
+        move_names={},
+        species_internal={},
+        fork_moves=set(),
+    )
+    assert r.move_constant(0) == "MOVE_NONE"

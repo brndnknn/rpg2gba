@@ -1,7 +1,10 @@
 # Plan: Palette + color-mapping view in the map tile viewer
 
 > Resume doc. Mirrors the approved plan at `~/.claude/plans/i-want-to-add-mutable-minsky.md`.
-> Status: approved, implementation not yet started. Built under `/delegate` (delegation-first) mode.
+> Status: approved. **Correction (2026-09-07, build agent):** implementation has
+> since shipped — `scripts/map_viewer/palette.js`, `palette.css`, and
+> `palette.html` exist and are served by `map_viewer_server.py`. Built under
+> `/delegate` (delegation-first) mode.
 > **Superseded paths (2026-08-28):** `scripts/build_map_viewer.py` and the static
 > build were removed; the viewer is server-only and its assets live under
 > `scripts/map_viewer/`. Keep reading for the palette-view design intent only.
@@ -22,7 +25,7 @@ into GBA 16-color sub-palettes). The user wants, per tile:
 
 Plus a true **post-quant canvas layer** so the whole map can be viewed in real quantized
 colors (the `post-quant` toolbar option is currently stubbed but unimplemented; spec
-`reference/viewer/map_inspector_spec.md` §9 A3 anticipates this "palette-bug hunt" panel).
+`reference/archive/map_inspector_spec.md` §9 A3 anticipates this "palette-bug hunt" panel).
 
 This serves the §9 per-slice boot/art gate and the standing "validate graphics by eye"
 norm — averaged shift metrics hide exactly the per-region color wrecks this view exposes.
@@ -98,7 +101,7 @@ Front-end `post-quant` base layer composites `post_bottom` + `post_top`.
 | `scripts/map_viewer_common.py` | backend plumbing (`_ensure_loaded`, `build_map_data`, `render_metatile_png` post layers) **and** the embedded HTML/JS UI | Task C |
 | `scripts/build_map_viewer.py` | render + inline post-quant metatile PNGs | Task D |
 | `scripts/map_viewer_server.py` | serve `post_bottom`/`post_top` via `/api/metatile` | Task D |
-| `reference/viewer/map_inspector_spec.md` | document the new panel + layer | Lead/Haiku |
+| `reference/archive/map_inspector_spec.md` | document the new panel + layer | Lead/Haiku |
 
 Note: `map_viewer_common.py` holds **both** the Python data layer and the embedded
 HTML/JS template, so it is a single-owner file (Task C does both halves) — front-end and
@@ -128,7 +131,7 @@ File sets are disjoint per round (no two writers touch one file):
 - **Lead (Opus)** — pins/maintains the data contract, integrates each round, runs the full
   `pytest` + a manual viewer build, cross-checks exactness against an emitted `.pal`,
   updates `MEMORY.md`, and owns any commit. *Task E (Haiku)* may draft the
-  `map_inspector_spec.md` update from the lead's notes.
+  `reference/archive/map_inspector_spec.md` update from the lead's notes.
 
 Each brief will be full prose (cold-start agents): goal, exact files to touch, the pinned
 contract, what to return. Results are relayed back here, not shown to the user directly.
@@ -161,4 +164,4 @@ contract, what to return. Results are relayed back here, not shown to the user d
 - [x] Engine check (delegated, read-only): BG-palette budget — `max_palettes=13` is a HARD boundary (14/15 = dialogue window pals; 13 unblended by weather/time). Recorded in `graphics_conversion_notes.md §11`. Moki ts22 = 381 colours vs 195 ceiling → merging is a budget constraint.
 - [x] Docs updated: `graphics_conversion_notes.md §11`, `MEMORY.md` Map Inspector entry, this resume doc.
 - [ ] USER (per-slice gate §9): walk the live viewer — Post-Q layer, raw-vs-post-quant compare, Merge overlay + Worst-merges panel on map 32.
-- [ ] Open follow-up (not done): full-pool/slice analysis first-load cost on heavy tilesets (e.g. ts19) is unmeasured; `map_inspector_spec.md` not yet updated for the palette feature; non-slice maps analyze themselves alone (no shipped truth). `SLICE_MAP_IDS` must track `assemble_pathfinder.SLICE_MAP_IDS` if the slice widens.
+- [ ] Open follow-up (not done): full-pool/slice analysis first-load cost on heavy tilesets (e.g. ts19) is unmeasured; `reference/archive/map_inspector_spec.md` not yet updated for the palette feature; non-slice maps analyze themselves alone (no shipped truth). `SLICE_MAP_IDS` must track `assemble_pathfinder.SLICE_MAP_IDS` if the slice widens.

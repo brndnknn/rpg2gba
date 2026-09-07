@@ -8,7 +8,15 @@
 #define FREE_EXTRA_SEEN_FLAGS_SAVEBLOCK1    FALSE   // Free up unused Pokédex seen flags (52 bytes).
 #define FREE_TRAINER_HILL                   FALSE   // Frees up Trainer Hill data (28 bytes).
 #define FREE_TRAINER_TOWER                  FALSE   // Frees up Trainer Tower data (x bytes).
-#define FREE_MYSTERY_EVENT_BUFFERS          TRUE    // Frees up ramScript (1104 bytes). RPG2GBA: TRUE to offset the event-range expansion (config/rpg2gba.h).
+// BEGIN RPG2GBA EVENT RANGE EXPANSION (see rpg2gba reference/engine_extension_surface.md §2)
+// Was FALSE upstream. Flipped to TRUE to free ramScript's 1104 bytes and offset the
+// +272 flag / +512 var bytes the expanded ranges add to SaveBlock1 (config/rpg2gba.h) —
+// enforced by STATIC_ASSERT(SaveBlock1FreeSpace) in src/save.c. This is a save-layout
+// change, not sentinel-revertable text: reverting to FALSE without also reverting the
+// event-range expansion overflows SaveBlock1 and fails that static assert at build time
+// (loud), not silently. Revert both together, or not at all.
+#define FREE_MYSTERY_EVENT_BUFFERS          TRUE    // Frees up ramScript (1104 bytes).
+// END RPG2GBA EVENT RANGE EXPANSION
 #define FREE_MATCH_CALL                     FALSE   // Frees up match call and rematch / VS Seeker data. (104 bytes).
 #define FREE_UNION_ROOM_CHAT                FALSE   // Frees up union room chat (212 bytes).
 #define FREE_ENIGMA_BERRY                   FALSE   // Frees up E-Reader Enigma Berry data (52 bytes).

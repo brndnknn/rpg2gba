@@ -102,7 +102,7 @@ timestamp=False)`, wrapped with `wrap_header(guard, body, banner=banner)`.
   `output/uranium-build/src/data/<section>.h` (or `src/data/pokemon/*` for
   species sub-tables).
 
-Match the struct field layout in `reference/pokeemerald_struct_shapes.md`
+Match the struct field layout in `reference/guides/pokeemerald_struct_shapes.md`
 (`gSpeciesInfo`, `gMovesInfo`, items, etc.). **Defer unknown behavior to
 placeholders** (e.g. `EFFECT_PLACEHOLDER` for move effects) rather than guessing
 — the real behavior is captured in the worklist (step 5). *Ref: `moves.py`

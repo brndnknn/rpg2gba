@@ -1,5 +1,11 @@
 #include "global.h"
+// BEGIN URANIUM PATHFINDER SLICE — pulls RPG2GBA_FADE_DELTA_Y (config/rpg2gba.h pacing
+// knob), used at three gPaletteFade.deltaY assignments below to halve every fade-to/from-black
+// (warps, fadescreen, menu/battle-intro fades). Removing this include breaks those
+// assignments; RPG2GBA_FADE_DELTA_Y is a pure timing scale so reverting it restores vanilla
+// (deltaY = 2) fade speed exactly.
 #include "config/rpg2gba.h"
+// END URANIUM PATHFINDER SLICE
 #include "palette.h"
 #include "util.h"
 #include "decompress.h"
