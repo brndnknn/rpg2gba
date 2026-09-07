@@ -1,7 +1,7 @@
 # Investigation: Repo audit — dead code, duplicated code, stale docs
 
-**Status:** closed — 48 findings, Q1-Q13 all answered 2026-09-07; the artifact is the remediation plan in Next steps. **Stages A-E EXECUTED 2026-09-07** on branch `repo-audit-remediation`, then a **second pass the same day worked the "Not scheduled" deferrals to zero** (Q3 consolidation, H2, H3, H8, the UNVERIFIED status lines, the dead-code sweep, and follow-up #3). Two execution logs below. **Exactly one item is still open — follow-up #1, the external-clone rename, which needs the operator.**
-**Started:** 2026-09-06   **Last updated:** 2026-09-07 (second pass; deferrals closed, follow-ups #3 and #4 closed)
+**Status:** **COMPLETE — nothing open.** 48 findings, Q1-Q13 all answered, and everything remediated on branch `repo-audit-remediation` in three passes on 2026-09-07: Stages A-E, then the "Not scheduled" deferrals (Q3 consolidation, H2, H3, H8, the UNVERIFIED status lines, the dead-code sweep, follow-up #3), then Q5's close-out — the operator **deleted** the external clone rather than renaming it, reversing Q5's recorded answer. Two execution logs plus a closing finding below. **Read the closing finding before trusting `git diff 80cdfce2 HEAD -- engine/`:** the check this audit itself enshrined is incomplete, and 33 lines of custom C sit below its baseline.
+**Started:** 2026-09-06   **Last updated:** 2026-09-07 (Q5 closed by deletion; `80cdfce2`-is-not-pristine finding recorded; all follow-ups closed)
 **Question:** What in this repo is dead, duplicated, or out of date — and specifically, which artifacts caused agents to follow retired processes or misread the project's current state?
 **Expected artifact:** plan — the prioritized remediation plan in Next steps, keyed to the Q1–Q13 answers
 
@@ -791,7 +791,7 @@ across at least three MEMORY.md mentions.
 past cost and a one-command fix. Out-of-repo deletion is the user's call, hence this
 question rather than an action.
 **Blocked on:** —
-**Answer:** **Keep it, rename it to a warning name** (2026-09-07) — e.g. `pokeemerald-expansion-PRISTINE-DO-NOT-USE`. Upstream stays available for reference/diffing; misuse becomes self-evident at the path level. Update the three `MEMORY.md` mentions and `PROJECT_TODO.md:13-16` to the new name and close the item.
+**Answer:** ~~**Keep it, rename it to a warning name**~~ → **DELETED 2026-09-07, operator-run.** The original answer was "keep, rename to `-PRISTINE-DO-NOT-USE`" on the rationale that *upstream stays available for reference and diffing*. **That rationale did not survive checking, and the recommendation above turned out to be right.** Three things undid it, in order: (1) the clone is not pristine — 6 modified tracked files and ~125 untracked artifact dirs from a pre-cutover run, so the chosen name would itself have been a false claim of the kind this audit exists to remove, and it was changed to `-STALE-`; (2) the operator pushed on *why keep it at all*, and the answer did not hold — this repo already contains the pristine baseline at `80cdfce2` (verified: 29,958 of 29,961 blobs identical to upstream `21c24202`), upstream history and the `rh-hideout` remote are one `git clone` away, the three dirty C files were already carried into `engine/` at import, and the three dirty data files were pre-cutover in-place assembler edits — fossils of the practice the 2026-06-19 include-hooks change abolished; (3) nothing unique being at stake, a 589 MB decoy at the path that already caused the 2026-08-17 fabricated-blocker session is a liability, not an asset. **Lesson for this document's own method: "keep, it might be useful" was never tested against what was actually in the thing.** The verification that settled it also produced the `80cdfce2`-is-not-pristine finding below — which could only be established *because* the clone still existed, and now needs a fresh upstream clone to re-derive.
 ### Q6. Do the "already caught, never fixed" findings need a follow-through mechanism?
 Findings 20 and 21 were both documented in `reference/findings/critique_2026-07-01.md`
 nine weeks ago and are still live (finding 22). The repo audits itself well and acts on
@@ -1196,7 +1196,11 @@ including the three places the repo disagreed with the plan.
 
 ## Follow-ups opened by the remediation
 
-1. **Q5 is blocked on you: the clone rename needs a user-run `mv`.** Tracked as
+1. **CLOSED 2026-09-07 — the operator deleted the clone outright.** Not renamed:
+   the "keep it" rationale collapsed under questioning (see Q5 above for the full
+   reversal). `PROJECT_TODO.md` #1 is moved to Done. The original text is kept
+   below because the reasoning that turned out to be wrong is the useful part.
+   ~~Q5 is blocked on you: the clone rename needs a user-run `mv`.~~ Tracked as
    `PROJECT_TODO.md` #1 with the exact command. The agent attempt was
    classifier-blocked — the **second** time that has happened, so this will not
    resolve itself on a future agent pass.
@@ -1371,3 +1375,60 @@ every file touched (one pre-existing E501 in `chapter_manifest/generator.py:124`
 comment unrelated to this work, left as found).
 
 No engine C was touched in this pass, so no rebuild was owed.
+
+---
+
+## Closing finding — `80cdfce2` is not a pristine baseline (2026-09-07)
+
+Established while checking whether the external clone was worth keeping, and the
+single most consequential thing this audit produced — because it invalidates a rule
+**this audit itself wrote** four commits earlier.
+
+Stage A replaced the vendor doc's rotted "three test-only files" list with
+`git diff 80cdfce2 HEAD -- engine/`, and `CLAUDE.md` §3 called that "the canonical,
+always-current custom-vs-pristine check." The vendor doc went further and asserted the
+import "was a straight archive, not a rebase or a patched checkout," making `80cdfce2`
+equivalent in content to upstream `21c24202`.
+
+**That last claim is false.** Comparing blob hashes — exact across repositories, since
+git is content-addressed — between `engine/` at `80cdfce2` and upstream `21c24202` in
+the clone, while it still existed:
+
+- 29,961 vendored files vs 29,972 upstream
+- **29,958 byte-identical**
+- **3 differ:** `include/new_game.h`, `src/intro.c`, `src/new_game.c`
+- 12 upstream-only: `tools/compresSmol/*` (excluded by `engine/.gitignore`) and
+  `tools/mgba/mgba-rom-test.exe`
+- 1 vendored-only: `RPG2GBA_VENDOR.md` itself
+
+The three differing files are **exactly three of the six that were dirty in the
+clone's working tree**, and the vendored blobs equal the clone's *worktree* blobs
+rather than its *committed* ones. The import was taken from a dirty checkout. Those
+33 lines are the intro/title/menu skip and the new-game spawn override into Moki Town
+— real, load-bearing custom C that `git diff 80cdfce2 HEAD` can never show, because it
+predates the baseline.
+
+**Why it did not become a live hazard:** all 33 lines are properly
+`// BEGIN URANIUM PATHFINDER SLICE` / `// END` fenced, so the sentinel grep finds every
+one. The two checks fail in opposite directions, and that is the durable lesson:
+
+> **Fences miss unfenced edits. The diff misses pre-import edits. Neither check is
+> complete alone — run both and take the union.**
+
+`CLAUDE.md` §3's "canonical" wording is corrected, and `engine/RPG2GBA_VENDOR.md`
+carries the table and the rule.
+
+**Method note worth keeping, because it is this audit's own failure mode.** Stage A
+fixed a false inventory by replacing it with a mechanical check, and then trusted the
+mechanical check exactly as uncritically as the previous agent had trusted the hand
+list. The correction did not come from re-reading the docs — it came from the operator
+asking a question the doc had an answer for ("wouldn't the whole point be that it's a
+source of truth?") and that answer not surviving a hash comparison. Same shape as the
+`healparty` lesson already in `MEMORY.md`: a plausible method, confidently agreeing
+with the wrong answer.
+
+**One-way door, now closed:** this could only be verified while an upstream checkout
+existed on disk. It no longer does. Re-deriving it needs a fresh
+`git clone https://github.com/rh-hideout/pokeemerald-expansion.git` — which is why the
+numbers are written down here, in `CLAUDE.md` §3 and in `engine/RPG2GBA_VENDOR.md`
+rather than left as a reproducible command.

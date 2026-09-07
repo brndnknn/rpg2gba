@@ -17,30 +17,6 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
-### 1. Rename the old external pokeemerald-expansion clone (needs a user-run `mv`)
-
-`engine/` is the vendored, in-repo copy now (cutover done 2026-06-19). The old
-external clone at `/home/b/repos/pokeemerald-expansion` is stale and superseded
-but was never removed.
-
-**Decided 2026-09-07 (repo audit Q5): rename, don't delete.** Upstream stays
-available for reference and diffing; misuse becomes self-evident at the path
-level. Agent `mv` attempts are classifier-blocked (twice now), so this needs a
-user-run command:
-
-```
-mv /home/b/repos/pokeemerald-expansion /home/b/repos/pokeemerald-expansion-STALE-DO-NOT-USE
-```
-
-Name note: the audit suggested `-PRISTINE-DO-NOT-USE`, but the clone is **not**
-pristine — checked 2026-09-07, it sits at upstream `21c24202` with 6 modified
-tracked files and ~125 untracked generated-artifact directories from a
-pre-cutover pipeline run on top. `STALE` is the accurate warning.
-
-After the rename: update the `MEMORY.md` mentions and this item, then close.
-(The stale `.claude/settings.local.json` allowlist entry this item used to
-mention is already gone — checked 2026-09-07, no `pokeemerald-expansion` hits.)
-
 ### 2. Locate the Nuclear type's 1/8-HP-per-turn out-of-battle effect
 
 Not in `217_Nuclear_Forms_Moves.rb`; likely a field/step hook or
@@ -1418,6 +1394,29 @@ maintainer. Evidence is recorded in
 
 
 ## Done
+
+- **#1 — the old external pokeemerald-expansion clone is DELETED** (2026-09-07,
+  operator-run `rm -rf`, closing repo audit Q5). Q5's recorded answer was
+  "keep, rename" on the rationale that *upstream stays available for reference
+  and diffing* — **that rationale did not survive checking, and the operator
+  overrode it.** Nothing unique lived in the clone: the pristine baseline is
+  already commit `80cdfce2` in this repo (verified by blob hash, 29,958 of
+  29,961 files identical to upstream `21c24202`); upstream history and the
+  `rh-hideout` remote are one `git clone` away; the three dirty C files were
+  already carried into `engine/` at import; and the three dirty data files were
+  pre-cutover *in-place assembler edits* (`.include` hooks, a `gMapGroup_Uranium`
+  registration for a 3-map slice) — fossils of the practice the 2026-06-19
+  include-hooks change abolished. 589 MB reclaimed, and the decoy at the path
+  that caused the 2026-08-17 fabricated-blocker session is gone.
+  **Fallout fixed in the same change:** `render_player_compare.py`,
+  `pixel_grid_analysis.py` and `render_pc_exterior_compare.py` hardcoded that
+  path and are repointed at `engine/`; `CLAUDE.md` §3, `MEMORY.md` and
+  `reference/guides/pokeemerald_struct_shapes.md` updated.
+  **Found while verifying:** `80cdfce2` is *not* a pristine baseline — the
+  import came from a dirty tree and three files (`intro.c`, `new_game.c`,
+  `new_game.h`, 33 lines) carry custom edits below it, invisible to
+  `git diff 80cdfce2 HEAD`. They are sentinel-fenced, so grep finds them.
+  Recorded in `CLAUDE.md` §3 and `engine/RPG2GBA_VENDOR.md`.
 
 - **#66 — an atlas chapter id now names its own playtest module** (2026-09-01,
   `CH05_DECISIONS.md` E1). The proposed fix was a `playtest_module` field in

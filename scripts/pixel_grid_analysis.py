@@ -16,7 +16,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
 
-POKE = Path("/home/b/repos/pokeemerald-expansion")
+# Repointed 2026-09-07: the external clone this used to read was deleted; the
+# engine is vendored in-repo now (CLAUDE.md §3). Anchored to the repo rather
+# than the CWD so the script runs from anywhere.
+POKE = Path(__file__).resolve().parents[1] / "engine"
 URANIUM = Path("/home/b/repos/uranium-src/_unpacked/Graphics")
 OUT_DIR = Path("/home/b/repos/rpg2gba/output")
 

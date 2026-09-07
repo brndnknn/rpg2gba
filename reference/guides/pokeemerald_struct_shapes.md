@@ -1,6 +1,8 @@
 # pokeemerald-expansion struct shapes (P4)
 
-Verified 2026-05-20 against the fork at `/home/b/repos/pokeemerald-expansion`,
+Verified 2026-05-20 against the fork at `/home/b/repos/pokeemerald-expansion`
+(that external clone was **deleted 2026-09-07**; the engine is vendored at
+`engine/` — re-verify there),
 shallow clone HEAD `21c24202`. This is the authoritative reference for the
 Phase 2 C emitters. If the fork is updated, re-verify and update this doc
 **before** changing an emitter (PHASE2_PLAN.md P4 rule).

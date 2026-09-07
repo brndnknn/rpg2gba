@@ -19,7 +19,10 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-POKE = Path("/home/b/repos/pokeemerald-expansion")
+# Repointed 2026-09-07: the external clone this used to read was deleted; the
+# engine is vendored in-repo now (CLAUDE.md §3). Anchored to the repo rather
+# than the CWD so the script runs from anywhere.
+POKE = Path(__file__).resolve().parents[1] / "engine"
 EMERALD_SHEET = POKE / "graphics/object_events/pics/people/brendan/walking.png"
 URANIUM_SHEET = Path(
     "/home/b/repos/uranium-src/_unpacked/Graphics/Characters/HERO.png"

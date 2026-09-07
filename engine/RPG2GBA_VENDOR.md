@@ -40,29 +40,49 @@ before "a real build" — it *is* the real build.
 ### The canonical check: diff against the vendor-import commit
 
 There is no hand-maintained file list here anymore — that list is what rotted
-into the false claim above. The **only** authoritative, always-current view of
-what's custom vs. pristine is:
+into the false claim above. The primary view of what's custom vs. pristine is:
 
 ```
 git diff 80cdfce2 HEAD -- engine/
 ```
 
 `80cdfce2` is the commit that imported this tree via `git archive` (see
-Provenance above) — i.e. the last point at which `engine/` was byte-identical
-to upstream. Everything after it in this repo's history is a hand-written
+Provenance above). Everything after it in this repo's history is a hand-written
 custom change (plus incidental doc edits to this file itself).
 
 Upstream `21c24202` (the SHA this tree was forked from) is **not usable** as
 the diff base: this tree was imported as a flat `git archive` snapshot with no
 upstream history carried over, so `21c24202` is not a reachable commit object
 in *this* repository — `git diff 21c24202 HEAD` will simply fail to resolve.
-`80cdfce2` is the real pristine baseline as far as this repo's git history is
-concerned, and is equivalent to a diff against `21c24202` in content (the
-import was a straight archive, not a rebase or a patched checkout).
+
+**But `80cdfce2` is NOT a pristine baseline — corrected 2026-09-07.** This
+section used to claim the import "was a straight archive, not a rebase or a
+patched checkout" and that `80cdfce2` was "the last point at which `engine/` was
+byte-identical to upstream. **Both were false.** The import was taken from a
+*dirty* working tree, so three files arrived already carrying custom edits and
+the diff above is structurally blind to them:
+
+| File | What is below the baseline |
+|---|---|
+| `src/intro.c` | skip intro / title / menu, boot straight into a new game |
+| `src/new_game.c` | `CB2_StartUraniumSlice` + new-game spawn override into Moki Town |
+| `include/new_game.h` | its declaration |
+
+33 lines total. Established by comparing blob hashes against upstream
+`21c24202` while an external clone of it still existed (deleted 2026-09-07):
+**29,958 of 29,961 files were identical**, those three the only content
+exceptions. Twelve upstream files are also simply absent — `tools/compresSmol/*`,
+which `.gitignore` excludes, plus `tools/mgba/mgba-rom-test.exe`. Benign.
+
+All 33 lines *are* properly `// BEGIN URANIUM PATHFINDER SLICE` / `// END`
+fenced, so a sentinel grep does find them. That is the whole point:
+
+> **Fences miss unfenced edits; the diff misses pre-import edits. Neither check
+> is complete on its own — run both and take the union.**
 
 Re-run that `git diff` whenever you need to know what's custom — don't trust a
 prose summary (including the one below) to still be accurate; verify against
-the diff first.
+the diff first, then grep the four sentinels for anything below the baseline.
 
 ### Orientation (not an inventory) of the major feature areas
 
