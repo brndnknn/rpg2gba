@@ -29,7 +29,8 @@ from pathlib import Path
 
 from ._id_map import IdMap
 from ._marshal import dump_dat, load_json
-from ._naming import load_fork_constants, to_constant
+from ._naming import load_fork_constants
+from ._resolve import SpeciesResolverMixin
 
 logger = logging.getLogger(__name__)
 
@@ -58,19 +59,10 @@ _LAND_SOURCES = (LAND, CAVE, LAND_DAY, LAND_MORNING, LAND_NIGHT)
 
 
 @dataclass
-class _Resolver:
+class _Resolver(SpeciesResolverMixin):
     id_map: IdMap
     species_internal: dict[int, str]
     fork_species: set[str]
-
-    def species_constant(self, species_id: int) -> str:
-        internal = self.species_internal.get(species_id)
-        if internal is None:
-            raise ValueError(f"species id {species_id} absent from species_internal_names.json")
-        const = to_constant("SPECIES", internal)
-        needs = bool(self.fork_species) and const not in self.fork_species
-        self.id_map.add("species", internal, const, needs_engine=needs)
-        return const
 
 
 def _load_id_json(path: Path) -> dict[int, str]:

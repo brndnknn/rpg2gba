@@ -327,7 +327,13 @@ session: **add numpy**, **per-tile alpha classify**, **confirm full-town first**
   true→mapped colours**, don't summarise to a mean; (3) **measure the problem's
   structure before picking an algorithm** — the per-tile colour census reframed this
   from k-means to bin-packing and only then did it come right.
-- **NEXT (pending user sign-off):** wire the GBA 4bpp **binary emitter** —
+- ~~**NEXT (pending user sign-off):**~~ **DONE — corrected 2026-09-07 (repo audit
+  follow-up #3).** The 4bpp binary emitter was built: it is
+  `tileset_converter/graphics/emit.py`, driven by `build_slice_tilesets.py`, and it
+  has shipped every chapter ROM through CH05. Read the paragraph below as the
+  original scope, not as open work. `MEMORY.md` → Current Phase owns the frontier
+  (`CLAUDE.md` §7); this section owns the quantizer, and nothing else here states
+  what is next. Original text: wire the GBA 4bpp **binary emitter** —
   `gTileset_Uranium_*` 8×8 dedup → indexed `.bin` + `.pal`, metatile attributes
   carry the per-8×8 palette numbers; `tileset_map.json` `tiles` table becomes a
   generated artifact (§7b). **Stipple/shadow path still under-exercised** (Moki Town

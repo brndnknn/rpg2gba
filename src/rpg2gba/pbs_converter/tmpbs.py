@@ -24,7 +24,8 @@ from pathlib import Path
 
 from ._c_emit import generated_banner
 from ._id_map import IdMap
-from ._naming import load_fork_constants, to_constant
+from ._naming import load_fork_constants
+from ._resolve import MoveResolverMixin
 from .pokemon import parse_dexdata, parse_indexed_u16_list
 
 logger = logging.getLogger(__name__)
@@ -42,24 +43,13 @@ def _reference_dir() -> Path:
 
 
 @dataclass
-class _Resolver:
-    """Resolves move ids → `MOVE_*` (mirrors pokemon.py's move_constant)."""
+class _Resolver(MoveResolverMixin):
+    """Resolves move ids → `MOVE_*` (see `_resolve.MoveResolverMixin`)."""
 
     id_map: IdMap
     move_internal: dict[int, str]
     move_names: dict[int, str]
     fork_moves: set[str]
-
-    def move_constant(self, move_id: int) -> str:
-        if move_id == 0:
-            return "MOVE_NONE"
-        internal = self.move_internal.get(move_id)
-        if internal is None:
-            raise ValueError(f"move id {move_id} absent from move_internal_names.json")
-        const = to_constant("MOVE", self.move_names.get(move_id) or internal)
-        needs = bool(self.fork_moves) and const not in self.fork_moves
-        self.id_map.add("moves", internal, const, needs_engine=needs)
-        return const
 
 
 def _build_resolver(id_map: IdMap, ref: Path) -> _Resolver:

@@ -37,6 +37,7 @@ from pathlib import Path
 from ._id_map import IdMap
 from ._marshal import dump_dat, load_json
 from ._naming import load_fork_constants, to_constant
+from ._resolve import ItemResolverMixin, MoveResolverMixin, SpeciesResolverMixin
 
 logger = logging.getLogger(__name__)
 
@@ -178,7 +179,7 @@ def _reference_dir() -> Path:
 
 
 @dataclass
-class _Resolver:
+class _Resolver(SpeciesResolverMixin, MoveResolverMixin, ItemResolverMixin):
     """Mints TRAINER_*/TRAINER_CLASS_* and resolves party SPECIES_*/MOVE_*/ITEM_*."""
 
     id_map: IdMap
@@ -204,36 +205,6 @@ class _Resolver:
         self.id_map.add("trainers", key, const)
         return const
 
-    def species_constant(self, species_id: int) -> str:
-        internal = self.species_internal.get(species_id)
-        if internal is None:
-            raise ValueError(f"species id {species_id} absent from species_internal_names.json")
-        const = to_constant("SPECIES", internal)
-        needs = bool(self.fork_species) and const not in self.fork_species
-        self.id_map.add("species", internal, const, needs_engine=needs)
-        return const
-
-    def move_constant(self, move_id: int) -> str:
-        if move_id == 0:
-            return "MOVE_NONE"
-        internal = self.move_internal.get(move_id)
-        if internal is None:
-            raise ValueError(f"move id {move_id} absent from move_internal_names.json")
-        const = to_constant("MOVE", self.move_names.get(move_id) or internal)
-        needs = bool(self.fork_moves) and const not in self.fork_moves
-        self.id_map.add("moves", internal, const, needs_engine=needs)
-        return const
-
-    def item_constant(self, item_id: int) -> str:
-        if item_id == 0:
-            return "ITEM_NONE"
-        internal = self.item_internal.get(item_id)
-        if internal is None:
-            raise ValueError(f"item id {item_id} absent from item_internal_names.json")
-        const = to_constant("ITEM", self.item_names.get(item_id) or internal)
-        needs = bool(self.fork_items) and const not in self.fork_items
-        self.id_map.add("items", internal, const, needs_engine=needs)
-        return const
 
 
 def _build_resolver(id_map: IdMap, ref: Path) -> _Resolver:

@@ -1,7 +1,7 @@
 # Investigation: Repo audit — dead code, duplicated code, stale docs
 
-**Status:** closed — 48 findings, Q1-Q13 all answered 2026-09-07; the artifact is the remediation plan in Next steps. **Stages A-E EXECUTED 2026-09-07** on branch `repo-audit-remediation` — see "Remediation execution log" below for what landed, what changed on contact with the repo, and the four follow-ups it opened.
-**Started:** 2026-09-06   **Last updated:** 2026-09-07 (remediation executed; execution log + follow-ups added)
+**Status:** closed — 48 findings, Q1-Q13 all answered 2026-09-07; the artifact is the remediation plan in Next steps. **Stages A-E EXECUTED 2026-09-07** on branch `repo-audit-remediation`, then a **second pass the same day worked the "Not scheduled" deferrals to zero** (Q3 consolidation, H2, H3, H8, the UNVERIFIED status lines, the dead-code sweep, and follow-up #3). Two execution logs below. **Exactly one item is still open — follow-up #1, the external-clone rename, which needs the operator.**
+**Started:** 2026-09-06   **Last updated:** 2026-09-07 (second pass; deferrals closed, follow-ups #3 and #4 closed)
 **Question:** What in this repo is dead, duplicated, or out of date — and specifically, which artifacts caused agents to follow retired processes or misread the project's current state?
 **Expected artifact:** plan — the prioritized remediation plan in Next steps, keyed to the Q1–Q13 answers
 
@@ -641,11 +641,29 @@ Findings marked CONFIRMED were verified first-hand; the distinction is load-bear
   finding 8 latent rather than live. Confirming: trace whether trainer party move
   slots and TM/HM tables can carry an unset slot through to `move_constant`. The
   divergence is real either way; only the severity is open.
-- **H2. `chapter_manifest/generator.py:668-671`'s `_load_name_table` may duplicate
-  `flag_registry.py`'s switch/variable sidecar loader.** Not diffed (sub-agent budget).
-- **H3. The `ch01.py`–`ch05.py` playtest family is heavy copy-paste** (29 KB–93 KB
-  each, one self-documents as "byte-adapted from ch02.py"). Spot-checked helpers were
-  in sync; a full line-level diff was not done.
+- ~~**H2**~~ — RESOLVED 2026-09-07 and **fixed**. Verdict was PARTIAL-OVERLAP: both
+  loaders read the same two sidecars with the same `int(k)` normalization, so they
+  could never mint a *different name* for the same id — but `_load_name_table`
+  returned `{}` on a missing file where `seed_labels` raises, and both JSONs are
+  tracked in git, so the silent path could only ever hide a real breakage. Both now
+  call one `flag_registry.load_label_tables`; the generator's sidecar paths are
+  anchored to the repo instead of the CWD (the CWD-relative read was what the empty
+  table had been masking — `tests/test_chapter_manifest_cli.py` runs in an isolated
+  filesystem and went red the moment the loader started failing loud, which is the
+  proof the old behaviour was hiding something). Original text: `_load_name_table`
+  may duplicate `flag_registry.py`'s switch/variable sidecar loader.
+- ~~**H3**~~ — RESOLVED 2026-09-07, **no action taken, deliberately.** The diff was
+  done. **No diverged copies exist** — the dangerous case (a fix landing in one copy
+  and not the others) is not present. A 2026-08-20 consolidation had already promoted
+  the cross-file helpers into `src/rpg2gba/playtest/assertions.py`, and the chapters
+  hold thin aliases to it. What remains is ~150 lines across `ch02`/`ch04`/`ch05`
+  (`_walk_absorbing`, `_trainer_defeat_flag`), verified behaviourally identical, plus
+  per-chapter beat bodies — coordinates, flags, map constants — which are data, not
+  duplication, and account for essentially all of the 29 KB–93 KB. Extraction was
+  **declined**: it would reopen CH01–CH04, all of which have passed their §9 boot
+  gates, for a mechanical ~150-line move with no defect to fix. If it is ever done it
+  should ride along with a chapter already being reopened. Original text: the family
+  is heavy copy-paste; a full line-level diff was not done.
 - **H4. `ROM_TEST_DEV.md` (61 KB) is a raw grill/design transcript, not a current-state
   doc** — so its pervasive "slice" usage is lower-risk. Based on its framing, not on a
   full read.
@@ -664,10 +682,18 @@ Findings marked CONFIRMED were verified first-hand; the distinction is load-bear
   references them, but `backends/` (which they drive) is retained by explicit policy.
   Only the operator knows whether a bounded tail run is still part of the workflow.
   Escalated to Q11 rather than left as a hypothesis.
-- **H8. `scripts/count_unique_commands.py`** — a checked-in findings doc still gives a
-  "Reproduce" command for it, but its whole framing (the agent's frozen system prompt) is
-  a retired regime. Confirming: decide whether its outputs in `reference/recon/` are
-  still consulted.
+- ~~**H8**~~ — RESOLVED 2026-09-07: **the script is KEPT; only the diff document is
+  retired.** The two halves come apart cleanly. `count_unique_commands.py` is a
+  zero-LLM walk of the deserialized corpus that depends on nothing about the LLM
+  regime, spends nothing, and produces `reference/recon/uranium_real_commands.md` /
+  `uranium_excluded_noncommands.md` — the command-vocabulary ledger the *deterministic
+  transpiler* is measured against, which is more relevant after the pivot, not less.
+  Its header now says so, explicitly warning against retiring it alongside its
+  neighbour. `reference/findings/agent_coverage_diff.md` is the regime-bound half —
+  it compares that census to the agent's **frozen** prompt — and is bannered
+  HISTORICAL, with its "Reproduce" block split into the live census command and the
+  retired parity check. Original text: a checked-in findings doc still gives a
+  "Reproduce" command for it, but its whole framing is a retired regime.
 
 ## Decisions
 
@@ -1202,19 +1228,146 @@ including the three places the repo disagreed with the plan.
    `grep "BEGIN URANIUM EMBEDDED SAVE"` sweep still finds every pull of that header.
    **Everything else in the 77-file diff is properly fenced** — the "only two exist"
    UNVERIFIED caveat is resolved, and the answer was "no, ten".
-3. **Stage D stopped short of the two-sentence rule on live notes.** Two Key File
-   Notes still exceed it — `tileset_converter/graphics/quantize.py` (~2.6 KB) and the
-   map-viewer tile-feedback note (~2.3 KB). Both describe *live* components, so
-   pushing them to `reference/` needs a judgement about which reference doc owns them,
-   not a mechanical move. Left in place deliberately.
-4. **Q3's consolidation is still unscheduled**, as decided — the five-way
-   `move_/item_/species_/ability_constant` copy-paste. The divergence is closed
-   (all five now guard zero) but the duplication is not. Also still unclaimed from
-   the plan's "Not scheduled" list: H2, H3, H8, the UNVERIFIED status lines in
-   `slice_expansion_runbook.md:199-204`, and intra-file dead code in
-   `transpiler.py`/`deterministic.py`.
+3. **CLOSED 2026-09-07 — both oversized Key File Notes are now one-line pointers.**
+   The ownership judgement turned out to be easy: each note already *named* its owner
+   doc in its own text. `quantize.py`'s note was near-total duplication of
+   `reference/guides/graphics_conversion_notes.md` §10, which covers the two-phase
+   packer, the three by-eye bug fixes and the durable lessons in more detail — so the
+   note became a pointer and nothing was lost. The map-viewer note was mostly covered
+   by `reference/viewer/map_viewer.md`; the three facts that were **not** (the
+   2026-07-11 refocus superseding the Map-Inspector framing, the 2026-08-28 deletion
+   of the static HTML build and `palette_page.py`, and the `build_map_data` →
+   `compare_collision` `terrain`-argument gotcha) were moved into that guide under a
+   dated Provenance bullet first. MEMORY.md is 2 lines and ~4.6 KB lighter.
+   **Found while doing it:** `graphics_conversion_notes.md` §10 ended with a
+   "NEXT (pending user sign-off): wire the GBA 4bpp binary emitter" — a frontier
+   claim in a topic reference, and a false one: that emitter is
+   `tileset_converter/graphics/emit.py` and has shipped every ROM through CH05. Struck
+   through with a dated correction per Q6.
+4. **CLOSED 2026-09-07 — Q3's consolidation is done and the "Not scheduled" list is
+   fully worked.** See the second execution log below. Nothing from the original plan
+   or its deferrals remains open; the only outstanding item in this document is #1,
+   which is the operator's.
 
 **Deliberately not done:** stale references to the three archived documents inside
 `reference/memory-archive.md` were left pointing at the old paths. It is a historical
 record; per Q6's "fix the text where the instruction is live", a dated archive entry
 is not a live instruction.
+
+---
+
+## Second remediation pass — 2026-09-07, same branch: the deferrals
+
+The first pass executed Stages A–E and left a "Not scheduled" list plus two of its
+own follow-ups. This pass worked that list to zero. Every item is either fixed,
+verified-still-true, or explicitly declined with a reason.
+
+### Q3 — the five-way `*_constant` consolidation. **DONE**
+
+The divergence was closed in the first pass by adding the missing zero-guards; the
+duplication is closed now. New module `src/rpg2gba/pbs_converter/_resolve.py` holds
+five mixins — `Move`, `Species`, `Item`, `Ability`, `Type` — each the single
+definition of its resolver method, plus the `TYPE_NAME_OVERRIDES` table that
+`pokemon.py` and `moves.py` had been keeping "in sync" by hand (their own comment
+said so). The five `_Resolver` dataclasses now inherit what they need and declare
+only their fields.
+
+Two design points worth recording, because both are load-bearing:
+
+- **The mixins are plain classes, not dataclasses, and declare no runtime
+  annotations.** A dataclass base with annotated fields would inject fields into
+  every subclass in base-first order and silently reorder their constructors. The
+  fields each mixin reads are declared under `if TYPE_CHECKING:`, which never
+  executes, so nothing reaches `__annotations__`. Declaring the actual fields stays
+  the subclass's job — that is what keeps each converter's `_build_resolver` honest
+  about which reference tables it really loads.
+- **`species_constant` deliberately has no zero-guard**, unlike move/item/ability.
+  No PBS table uses species 0 as an empty slot, so a 0 there is a data defect and
+  must fail loud (§4.5). The asymmetry is now stated in the docstring instead of
+  being an accident of which copy you happened to read. Consolidating also settled a
+  cosmetic divergence: `pokemon.py` raised `no internal name for species id N` where
+  the other two named the sidecar file. The sidecar-naming message won.
+
+`tests/test_pbs_pokemon.py` was reaching `to_constant` through `pokemon`'s module
+namespace — an incidental re-export that the import cleanup removed. Fixed to import
+from `_naming` directly, which is where it lives.
+
+### H2 — `_load_name_table` vs the flag-registry sidecar loader. **DONE, and it was hiding a bug**
+
+Extracted `load_label_tables` in `flag_registry.py`; both `seed_labels` and
+`chapter_manifest/generator.py` call it. The interesting part is what the
+deduplication exposed rather than the deduplication itself: `_load_name_table`
+returned `{}` for a missing file, and the generator was reading
+`Path("reference/uranium_switches.json")` **relative to the CWD**. Both files are
+tracked in git, so the only thing that empty table could ever mean was "you are not
+in the repo root" — and it would have produced a manifest with every switch and
+variable silently unnamed. The moment the shared loader started failing loud,
+`test_chapter_manifest_cli.py` went red, because Click's `isolated_filesystem`
+changes directory. Fixed properly: the sidecar paths are anchored to the repo via
+`__file__`, matching what `pbs_converter` already does. The test passes again for the
+right reason. Note the CWD-relative `reference/` convention is repo-wide
+(`pipeline.py`, `transpile_driver.py`, `stage_slice_scripts.py`); only the generator
+was changed, since only it had a fail-loud reason to.
+
+### H3 — the `ch01.py`–`ch05.py` playtest copy-paste. **VERIFIED, action declined**
+
+No diverged copies. A 2026-08-20 consolidation had already moved the cross-file
+helpers into `playtest/assertions.py`; the chapters hold aliases. ~150 lines remain
+duplicated across `ch02`/`ch04`/`ch05` and are behaviourally identical. Declined —
+extracting them means reopening four chapters that have passed their §9 boot gates
+to fix nothing. Full reasoning in the H3 entry above.
+
+### H8 — `scripts/count_unique_commands.py`. **KEPT; its neighbour retired**
+
+Script kept and its header now says why; `reference/findings/agent_coverage_diff.md`
+bannered HISTORICAL. Full reasoning in the H8 entry above.
+
+### The UNVERIFIED status lines. **ALL SEVEN CHECKED — five true, two stale**
+
+`slice_expansion_runbook.md`'s "Limits every new map inherits" list was re-verified
+against the code and now carries a dated header saying so, so nobody re-checks it
+blind. Per-claim:
+
+| Claim | Verdict | Evidence |
+|---|---|---|
+| Animated tiles must land in PRIMARY; no secondary-callback variant | **still true** | `graphics/emit.py` fails loud when an animated effect does not fit PRIMARY; `build_slice_tilesets.py` gives the callback to PRIMARY only |
+| Page dispatch selects the script only; boot-page gfx/visibility/movement static | **still true** | `npc_gfx.select_boot_page` fixes those once at boot; the dispatcher routes only the interaction script |
+| Warp cells are all `MB_NON_ANIMATED_DOOR` | **still true** | one door behavior resolved and applied to every warp column; sideways stairs use `stairs.py`, a different idiom |
+| **NPC movement wiring is under investigation** | **STALE — built** | `metadata_wiring.py` emits `movement_type`, with custom-route bytecode, a trainer-movement allow-list and berry-tree growth types |
+| Viewer has no overworld N/S/E/W borders | **still true** | no `connections.dat` / border rendering anywhere in the viewer sources |
+| `nuclear_type_spec.md` — Nuclear type not built | **still true** | no `TYPE_NUCLEAR` in `engine/include/constants/types.h` or `types_info.h`; the whole doc is an unstarted Phase 6 spec |
+| **`text_corpus_scan_2026-07-24.md` — DrawTextEx tags not implemented** | **STALE — built** | `deterministic.py` strips the full tag family and maps `<br>`; only `<fs=n>` was handled when the scan was written |
+
+Both stale claims got dated in-place corrections per Q6. One structural note worth
+keeping: the runbook cites `SLICE1_TODO` #8/#10/#12, and that tracker now exists only
+at `reference/archive/SLICE1_TODO.md` — where #12 is *closed*. A live document citing
+item numbers in a retired tracker is the same failure shape as the rest of this audit,
+so the runbook now says the citations are provenance, not a backlog.
+
+### Intra-file dead code in `transpiler.py` / `deterministic.py`. **CLEAN — nothing found**
+
+Every module-level function, class, method and command-code constant in both files
+traces to a live caller: direct calls, `deterministic.py`'s `_CLASSIFIERS` dispatch
+list, `transpiler.py`'s code-keyed `emit_node` chain, the `_emit_if` idiom-probe
+chain, or `parse_tree`'s parse-time code checks. Indirect dispatch was checked
+explicitly for every classifier and every `_emit_*_idiom` method — that was the
+obvious false-positive trap, and nothing fell into it. **Zero confirmed-dead lines.**
+
+The only findings are two inert names in `transpiler.py`: a `logger` that is assigned
+and never called, and `INPUT_NUMBER = 103`, defined and never compared against (code
+103 falls through to the `# UNHANDLED` queue, which is the correct fail-loud
+behaviour). Both left alone: neither is a defect, and the live conversion spine is not
+worth touching for a two-line cosmetic edit. Recorded here so the next reader does not
+re-derive it.
+
+### Verification
+
+`.venv/bin/python -m pytest -q` → **2 failed, 2984 passed, 16 skipped** — identical to
+the baseline recorded in the first pass. The two reds are the pre-existing
+`test_ground_item_differential_vs_frozen_opus` /
+`test_pokemart_differential_vs_frozen_opus` in `test_deterministic.py`, which depend on
+a gitignored frozen-Opus oracle under `output/` that predates Map036. `ruff` clean on
+every file touched (one pre-existing E501 in `chapter_manifest/generator.py:124`, in a
+comment unrelated to this work, left as found).
+
+No engine C was touched in this pass, so no rebuild was owed.

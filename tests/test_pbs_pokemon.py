@@ -18,6 +18,7 @@ import pytest
 
 from rpg2gba.pbs_converter import pokemon
 from rpg2gba.pbs_converter._id_map import IdMap
+from rpg2gba.pbs_converter._naming import to_constant
 
 pytestmark = pytest.mark.phase2
 
@@ -60,7 +61,7 @@ def test_roundtrip_stats(uranium_data: Path, reference_dir: Path) -> None:
     for s in species:
         if s is None:
             continue
-        entry = _entry(c_text, pokemon.to_constant("SPECIES", s.internal_name))
+        entry = _entry(c_text, to_constant("SPECIES", s.internal_name))
         for field, expected in zip(pokemon._STAT_FIELDS, s.base_stats):
             m = re.search(rf"\.{field} = (\d+),", entry)
             assert m and int(m.group(1)) == expected, f"{s.internal_name}.{field}"

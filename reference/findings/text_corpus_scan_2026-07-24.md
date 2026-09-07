@@ -122,6 +122,13 @@ any situation."
 <b>Trainer Aptitude test</b>."
 ```
 
+> **IMPLEMENTED SINCE — corrected 2026-09-07 (repo audit follow-up).** The
+> recommendation below was taken. `conversion_agent/deterministic.py` now strips
+> the whole DrawTextEx tag family (`<b>/<i>/<u>/<s>/<c>/<c2>/<c3>/<o>/<outln>/`
+> `<outln2>/<fn>/<fs>/<icon>`) and turns `<br>` into a newline; before that
+> change only `<fs=n>`/`</fs>` were handled and the rest went through untouched.
+> Read the paragraph below as the historical recommendation, not as open work.
+
 **Recommendation (not implemented — out of scope for this validator):** the
 transpiler needs a DrawTextEx-tag handling rule alongside its existing
 backslash-code table — most likely strip `<b>`/`</b>`/`<c2=X>`/`</c2>` and keep

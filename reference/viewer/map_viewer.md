@@ -318,6 +318,20 @@ RPG Maker/Quantized toggle isn't fine-grained enough.
   `RPG2GBA_*` paths; run from the repo root.
 - **Zero external deps for the server** (stdlib `http.server`); the rendering core
   needs `numpy` + `Pillow` (already in the project `.venv`).
+- **Provenance (moved out of `MEMORY.md` 2026-09-07, repo audit follow-up #3).**
+  The viewer was **refocused into a tile-feedback tool on 2026-07-11**; that
+  supersedes the older "Map Inspector / Issues / slice-pool" framing, whose spec is
+  archived at `reference/archive/map_inspector_spec.md`. The 2026-07-12 ROM-parity
+  fix — pooling slice maps by their REAL `tileset_id` so the quantized view matches
+  the boot-gate ROM — has its full story in
+  `reference/viewer/viewer_rom_parity_2026-07-12.md`, and its oracle is
+  `scripts/verify_viewer_rom_match.py`. On **2026-08-28** the self-contained
+  "static" HTML build (`build_map_viewer.py`) and `palette_page.py` were **deleted**:
+  the viewer is server-only, its HTML/CSS/JS live as real files under
+  `scripts/map_viewer/`, and every `V.mode`/`mode:"static"` branch was stripped from
+  the JS. One live gotcha: `build_map_data`'s `our_blocked`/`uranium_blocked` calls
+  must pass the `terrain` argument (`compare_collision`'s signature since
+  2026-07-09).
 - **Nothing the viewer writes is committed.** Flags live in gitignored
   `reference/map_feedback/MapNNN.json` (under `reference/` only so they outlive
   `rm -rf output/`).

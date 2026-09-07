@@ -39,7 +39,8 @@ from pathlib import Path
 
 from ._c_emit import escape_c_string, generated_banner, wrap_header
 from ._id_map import IdMap
-from ._naming import load_fork_constants, to_constant
+from ._naming import load_fork_constants
+from ._resolve import MoveResolverMixin, TypeResolverMixin
 
 logger = logging.getLogger(__name__)
 
@@ -96,10 +97,6 @@ _FLAG_FIELD_BY_BIT: dict[int, str] = {
     12: "skyBattleBanned",  # m
 }
 _FLAG_HIGH_CRIT_BIT = 7  # h: high critical-hit rate -> criticalHitStage = 1
-
-# Uranium type internal names that don't map by `TYPE_<INTERNAL>`. Mirrors
-# pokemon.py's table (kept in sync; QMARKS is the "???" type).
-_TYPE_NAME_OVERRIDES: dict[str, str] = {"QMARKS": "TYPE_MYSTERY"}
 
 
 @dataclass
@@ -187,12 +184,11 @@ def _reference_dir() -> Path:
 
 
 @dataclass
-class _MoveResolver:
+class _MoveResolver(MoveResolverMixin, TypeResolverMixin):
     """Resolves Uranium move/type IDs to expansion constants via the IdMap.
 
-    The MOVE_* naming rule is identical to pokemon.py's (display name through
-    `_naming.to_constant`), so a move referenced from a learnset and the same
-    move emitted here mint the same constant.
+    `move_constant`/`type_constant` come from `_resolve`, so a move referenced
+    from a learnset and the same move emitted here mint the same constant.
     """
 
     id_map: IdMap
@@ -201,25 +197,6 @@ class _MoveResolver:
     move_descs: dict[int, str]
     type_internal: dict[int, str]
     fork_moves: set[str]
-
-    def move_constant(self, move_id: int) -> str:
-        if move_id == 0:
-            return "MOVE_NONE"
-        internal = self.move_internal.get(move_id)
-        if internal is None:
-            raise ValueError(f"move id {move_id} absent from move_internal_names.json")
-        const = to_constant("MOVE", self.move_names.get(move_id) or internal)
-        needs = bool(self.fork_moves) and const not in self.fork_moves
-        self.id_map.add("moves", internal, const, needs_engine=needs)
-        return const
-
-    def type_constant(self, type_idx: int) -> str:
-        internal = self.type_internal.get(type_idx)
-        if internal is None:
-            raise ValueError(f"type index {type_idx} absent from type_internal_names.json")
-        const = _TYPE_NAME_OVERRIDES.get(internal, to_constant("TYPE", internal))
-        self.id_map.add("types", internal, const)
-        return const
 
     def name(self, move_id: int) -> str:
         return self.move_names.get(move_id, self.move_internal.get(move_id, ""))

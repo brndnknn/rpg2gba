@@ -1,5 +1,18 @@
 # Data-derived command census vs. the conversion agent's referenced lists
 
+> **HISTORICAL — dated 2026-09-07 (repo audit, H8).** The right-hand side of this
+> comparison is the conversion agent's **frozen** system prompt, a regime retired
+> 2026-06-18 (`CLAUDE.md` §7): the LLM is no longer the conversion spine and its
+> prompt is no longer frozen. The *gaps* recorded here are gaps in a reference set
+> nothing reads that way any more, so do not open work items from them.
+>
+> **What survives is the left-hand side.** `scripts/count_unique_commands.py` is
+> regime-independent — a zero-LLM walk of the corpus — and it is **kept**, along
+> with `reference/recon/uranium_real_commands.md` and
+> `uranium_excluded_noncommands.md`. Those two are the command-vocabulary ledger
+> the deterministic transpiler is measured against, and re-running the script is
+> free. Only this diff document is retired.
+
 > Generated 2026-06-14. Compares the **data-derived** command vocabulary
 > (`scripts/count_unique_commands.py` → `uranium_real_commands.md` /
 > `uranium_excluded_noncommands.md`, walked fresh over all 199 maps + 100 common
@@ -112,8 +125,12 @@ subset of the agent's inventory. They differ only in:
 
 ## Reproduce
 
+The census half still reproduces exactly; the parity half compares against the
+retired frozen prompt and is kept only to show how the 2026-06-14 numbers were
+obtained.
+
 ```bash
-# census files
+# census files — still live, still free
 python3 scripts/count_unique_commands.py
 
 # code-table parity

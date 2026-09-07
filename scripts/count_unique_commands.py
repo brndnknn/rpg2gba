@@ -13,6 +13,14 @@ expressions, assignments / state-writes, local-variable receivers, and pure
 branch-condition reads.
 
 Run:  python3 scripts/count_unique_commands.py
+
+KEPT, not spent (2026-09-07, repo audit H8). This script predates the 2026-06-18
+transpiler pivot but does not depend on it: it reads the deserialized corpus and
+nothing else, spends nothing, and its two output docs are the command-vocabulary
+ledger the deterministic transpiler is measured against. The *third* document of
+that era, `reference/findings/agent_coverage_diff.md`, compares this census to the
+conversion agent's retired frozen prompt and IS historical -- it is bannered as
+such. Do not retire this script along with it.
 """
 from __future__ import annotations
 

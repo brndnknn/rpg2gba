@@ -148,6 +148,30 @@ def resolve_variable_var(registry: FlagRegistry, variable_id: int) -> str | None
         return None
 
 
+def load_label_tables(
+    switches_json: Path, variables_json: Path
+) -> tuple[dict[int, str], dict[int, str]]:
+    """Read the Phase 3 sidecars into ``{id: label}`` pairs, switches first.
+
+    The single loader for ``reference/uranium_switches.json`` /
+    ``uranium_variables.json``. Both files are tracked in git, so a missing one is
+    a real breakage and raises (§4.5) rather than degrading to an empty table —
+    ``chapter_manifest.generator`` used to swallow that case and would have
+    silently emitted a manifest with every switch and variable unnamed
+    (2026-09-07 repo audit, H2).
+
+    Labels come back raw, ``s:`` prefix intact: only ``FlagRegistry`` reads that
+    prefix as "runtime predicate, never mint a ``FLAG_*`` for it" (§6); display
+    consumers want the label as written.
+    """
+    switches: dict[str, str] = json.loads(Path(switches_json).read_text(encoding="utf-8"))
+    variables: dict[str, str] = json.loads(Path(variables_json).read_text(encoding="utf-8"))
+    return (
+        {int(k): v for k, v in switches.items()},
+        {int(k): v for k, v in variables.items()},
+    )
+
+
 class RegistryError(RuntimeError):
     """Raised on a validation failure, collision, or corrupt state."""
 
@@ -368,15 +392,12 @@ class FlagRegistry:
         script-switch temp-switch carve-out) must call this explicitly after
         ``load()``, or every label lookup silently returns ``None``.
         """
-        switches: dict[str, str] = json.loads(Path(switches_json).read_text(encoding="utf-8"))
-        variables: dict[str, str] = json.loads(Path(variables_json).read_text(encoding="utf-8"))
-        for k, v in switches.items():
-            sid = int(k)
-            self._switch_labels[sid] = v
-            if v.startswith("s:"):
+        switches, variables = load_label_tables(switches_json, variables_json)
+        for sid, label in switches.items():
+            self._switch_labels[sid] = label
+            if label.startswith("s:"):
                 self._script_switches.add(sid)
-        for k, v in variables.items():
-            self._var_labels[int(k)] = v
+        self._var_labels.update(variables)
 
     def pre_seed(self, preseed_md: Path, switches_json: Path, variables_json: Path) -> None:
         """Populate from the sidecars (labels + script-switches) and the pre-seed map."""

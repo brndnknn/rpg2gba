@@ -35,7 +35,14 @@ from pathlib import Path
 from ._binary import DatReader
 from ._c_emit import escape_c_string, generated_banner, wrap_header
 from ._id_map import IdMap
-from ._naming import load_fork_constants, to_constant
+from ._naming import load_fork_constants
+from ._resolve import (
+    AbilityResolverMixin,
+    ItemResolverMixin,
+    MoveResolverMixin,
+    SpeciesResolverMixin,
+    TypeResolverMixin,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -368,8 +375,6 @@ _EGG_GROUP_BY_INDEX: dict[int, str] = {
     15: "EGG_GROUP_NO_EGGS_DISCOVERED",
 }
 # Uranium type internal names that don't map by `TYPE_<INTERNAL>`.
-_TYPE_NAME_OVERRIDES: dict[str, str] = {"QMARKS": "TYPE_MYSTERY"}
-
 # struct SpeciesInfo field names, in Uranium base_stats / effort_points order
 # (HP, Atk, Def, Spd, SpA, SpD — matches the expansion struct order).
 _STAT_FIELDS: tuple[str, ...] = (
@@ -406,7 +411,13 @@ def _load_id_json(path: Path) -> dict[int, str]:
 
 
 @dataclass
-class _Resolver:
+class _Resolver(
+    SpeciesResolverMixin,
+    MoveResolverMixin,
+    AbilityResolverMixin,
+    ItemResolverMixin,
+    TypeResolverMixin,
+):
     """Resolves Uranium IDs to expansion constants, registering them in IdMap.
 
     The fork constant sets are the ground truth for `needs_engine`: a derived
@@ -431,15 +442,6 @@ class _Resolver:
     fork_abilities: set[str]
     fork_items: set[str]
 
-    def species_constant(self, species_id: int) -> str:
-        internal = self.species_internal.get(species_id)
-        if internal is None:
-            raise ValueError(f"no internal name for species id {species_id}")
-        const = to_constant("SPECIES", internal)
-        needs = bool(self.fork_species) and const not in self.fork_species
-        self.id_map.add("species", internal, const, needs_engine=needs)
-        return const
-
     def name(self, species_id: int) -> str:
         return self.species_names.get(species_id, self.species_internal.get(species_id, ""))
 
@@ -449,46 +451,6 @@ class _Resolver:
     def dex(self, species_id: int) -> str:
         return self.species_pokedex.get(species_id, "")
 
-    def move_constant(self, move_id: int) -> str:
-        if move_id == 0:
-            return "MOVE_NONE"
-        internal = self.move_internal.get(move_id)
-        if internal is None:
-            raise ValueError(f"move id {move_id} absent from move_internal_names.json")
-        const = to_constant("MOVE", self.move_names.get(move_id) or internal)
-        needs = bool(self.fork_moves) and const not in self.fork_moves
-        self.id_map.add("moves", internal, const, needs_engine=needs)
-        return const
-
-    def ability_constant(self, ability_id: int) -> str:
-        if ability_id == 0:
-            return "ABILITY_NONE"
-        internal = self.ability_internal.get(ability_id)
-        if internal is None:
-            raise ValueError(f"ability id {ability_id} absent from ability_internal_names.json")
-        const = to_constant("ABILITY", self.ability_names.get(ability_id) or internal)
-        needs = bool(self.fork_abilities) and const not in self.fork_abilities
-        self.id_map.add("abilities", internal, const, needs_engine=needs)
-        return const
-
-    def item_constant(self, item_id: int) -> str:
-        if item_id == 0:
-            return "ITEM_NONE"
-        internal = self.item_internal.get(item_id)
-        if internal is None:
-            raise ValueError(f"item id {item_id} absent from item_internal_names.json")
-        const = to_constant("ITEM", self.item_names.get(item_id) or internal)
-        needs = bool(self.fork_items) and const not in self.fork_items
-        self.id_map.add("items", internal, const, needs_engine=needs)
-        return const
-
-    def type_constant(self, type_idx: int) -> str:
-        internal = self.type_internal.get(type_idx)
-        if internal is None:
-            raise ValueError(f"type index {type_idx} absent from type_internal_names.json")
-        const = _TYPE_NAME_OVERRIDES.get(internal, to_constant("TYPE", internal))
-        self.id_map.add("types", internal, const)
-        return const
 
 
 def _build_resolver(id_map: IdMap, ref: Path) -> _Resolver:

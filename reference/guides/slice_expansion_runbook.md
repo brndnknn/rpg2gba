@@ -200,11 +200,30 @@ make -C engine -j$(nproc) modern
 
 ## Limits every new map inherits (known, tracked)
 
+> **Re-verified against the code 2026-09-07** (repo audit follow-up). The list
+> below is current as of that date; one entry was stale and is struck through.
+> The `SLICE1_TODO` citations point at `reference/archive/SLICE1_TODO.md` — that
+> tracker is retired, so treat the numbers as historical provenance, not a live
+> backlog.
+
 - `connections.dat` seams unconverted (step 0.4).
 - Animated tiles must land in the PRIMARY tileset; secondary-callback
-  variant not built yet (`SLICE1_TODO` #10).
+  variant not built yet (`SLICE1_TODO` #10). *Verified still true 2026-09-07:*
+  `graphics/emit.py` fails loud when an animated effect does not fit entirely in
+  PRIMARY, and `build_slice_tilesets.py` gives the animation callback to PRIMARY
+  only.
 - Page dispatch selects the *script* only — boot-page gfx/visibility/
-  movement stay static (MEMORY, bug-#7 notes).
+  movement stay static (MEMORY, bug-#7 notes). *Verified still true 2026-09-07:*
+  `npc_gfx.select_boot_page` fixes gfx/visibility/movement once at boot; the
+  page dispatcher routes the interaction script and nothing else.
 - Warp cells are all `MB_NON_ANIMATED_DOOR` regardless of door/stairs/mat
-  (`SLICE1_TODO` #8).
-- NPC movement wiring is under investigation (`SLICE1_TODO` #12).
+  (`SLICE1_TODO` #8). *Verified still true 2026-09-07:* `build_slice_tilesets.py`
+  resolves one door behavior and applies it to every warp column. (Sideways
+  stairs get their own behaviors via `stairs.py`, but that is the stairs
+  *terrain* idiom, not the warp cell.)
+- ~~NPC movement wiring is under investigation (`SLICE1_TODO` #12).~~
+  **CORRECTED 2026-09-07 — this was built and the line was stale.**
+  `tileset_converter/metadata_wiring.py` emits `movement_type` on real object
+  events, with custom-route bytecode (`MOVEMENT_TYPE_CUSTOM_ROUTE`), a
+  trainer-movement allow-list, and berry-tree growth types. `SLICE1_TODO` #12 is
+  itself closed in the archived tracker.

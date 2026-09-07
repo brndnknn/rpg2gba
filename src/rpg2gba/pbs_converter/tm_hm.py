@@ -34,7 +34,8 @@ from pathlib import Path
 from ._binary import DatReader
 from ._id_map import IdMap
 from ._marshal import dump_dat, load_json
-from ._naming import load_fork_constants, to_constant
+from ._naming import load_fork_constants
+from ._resolve import MoveResolverMixin
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ def assert_tutor_empty(path: Path) -> None:
 
 
 @dataclass
-class _Resolver:
+class _Resolver(MoveResolverMixin):
     """Resolves move ids → `MOVE_*` and species ids → internal-name keys."""
 
     id_map: IdMap
@@ -84,17 +85,6 @@ class _Resolver:
     move_names: dict[int, str]
     species_internal: dict[int, str]
     fork_moves: set[str]
-
-    def move_constant(self, move_id: int) -> str:
-        if move_id == 0:
-            return "MOVE_NONE"
-        internal = self.move_internal.get(move_id)
-        if internal is None:
-            raise ValueError(f"move id {move_id} absent from move_internal_names.json")
-        const = to_constant("MOVE", self.move_names.get(move_id) or internal)
-        needs = bool(self.fork_moves) and const not in self.fork_moves
-        self.id_map.add("moves", internal, const, needs_engine=needs)
-        return const
 
     def species_key(self, species_id: int) -> str:
         internal = self.species_internal.get(species_id)

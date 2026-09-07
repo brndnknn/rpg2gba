@@ -52,6 +52,7 @@ from rpg2gba.chapter_manifest.schema import (
     seam_row_id,
     terrain_row_id,
 )
+from rpg2gba.conversion_agent.flag_registry import load_label_tables
 from rpg2gba.tileset_converter.stairs import (
     BEHAVIOR_BY_SIDE,
     StairCell,
@@ -305,16 +306,6 @@ def _reachability_requires(
 
 def _load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _load_name_table(path: Path) -> dict[int, str]:
-    """Reads `uranium_switches.json` / `uranium_variables.json`'s ``{"id": "name"}``
-    shape. Absent file or absent id both resolve to `None` names upstream —
-    this only loads what exists."""
-    if not path.exists():
-        return {}
-    raw = _load_json(path)
-    return {int(k): v for k, v in raw.items()}
 
 
 _STAGED_MAP_FILENAME = re.compile(r"^Map(\d+)\.pory$")
@@ -665,10 +656,16 @@ def generate_chapter_manifest(
     map_ids = _load_chapter_maps(chapter_id, chapters_path)
     maps_dir = build_dir / "maps"
 
-    switch_names = _load_name_table(
-        Path("reference/uranium_switches.json"))
-    var_names = _load_name_table(
-        Path("reference/uranium_variables.json"))
+    # Shared with the flag registry — one loader for the two sidecars (H2).
+    # Anchored to the repo, not the CWD: the loader now fails loud on a missing
+    # sidecar, and a CWD-relative path would turn "ran from another directory"
+    # into that failure. The old CWD-relative read hid this by degrading to an
+    # empty table, which is exactly the silent default §4.5 forbids.
+    ref = Path(__file__).resolve().parents[3] / "reference"
+    switch_names, var_names = load_label_tables(
+        ref / "uranium_switches.json",
+        ref / "uranium_variables.json",
+    )
     unhandled_counts = _load_unhandled_counts(build_dir / "transpile_unhandled.jsonl")
     staged_map_ids = _load_staged_map_ids(build_dir / "scripts")
 
