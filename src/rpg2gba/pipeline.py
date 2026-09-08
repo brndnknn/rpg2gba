@@ -1,6 +1,7 @@
 """Top-level CLI for rpg2gba pipeline phases."""
 from __future__ import annotations
 
+import importlib
 import logging
 import os
 import shutil
@@ -47,35 +48,51 @@ def _load_dotenv() -> None:
 @click.group()
 @click.option("--verbose", "-v", is_flag=True, help="Enable DEBUG logging.")
 def main(verbose: bool) -> None:
-    """rpg2gba — RPG Maker XP to GBA ROM conversion pipeline."""
+    """rpg2gba — RPG Maker XP to GBA ROM conversion pipeline.
+
+    Two families of command live here.
+
+    \b
+    Pipeline stages — data conversion, run in order:
+      phase2 / phase3 / phase5, transpile-events, convert-map
+    Chapter loop — how work is actually driven (see CLAUDE.md §7):
+      chapter-atlas / chapter-manifest / routing / playtest
+    """
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
 
 
-class _LazyTranspileEvents(click.Group):
-    """Delegates to `conversion_agent.transpile_driver.cli` without importing
-    it (and its deterministic/fork_index/transpiler/flag_registry/tileset
-    dependency chain) until a subcommand is actually looked up — mirrors the
-    lazy-import style already used for phase3/phase4/phase5 below, and avoids
-    re-declaring `run`'s options by hand (they'd drift from the driver's own
-    definitions)."""
+class _LazyGroup(click.Group):
+    """Delegates to a sub-package's own click group without importing it (and
+    its dependency chain) until a subcommand is actually looked up — mirrors
+    the lazy-import style already used for phase3/phase4/phase5 below, and
+    avoids re-declaring the delegate's options by hand (they'd drift from the
+    delegate's own definitions).
+
+    `target` is "module.path:attr".
+    """
+
+    def __init__(self, *args: object, target: str, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self._target = target
+
+    def _delegate(self) -> click.Group:
+        module_name, _, attr = self._target.rpartition(":")
+        return getattr(importlib.import_module(module_name), attr)
 
     def list_commands(self, ctx: click.Context) -> list[str]:
-        from rpg2gba.conversion_agent import transpile_driver
-
-        return transpile_driver.cli.list_commands(ctx)
+        return self._delegate().list_commands(ctx)
 
     def get_command(self, ctx: click.Context, name: str) -> click.Command | None:
-        from rpg2gba.conversion_agent import transpile_driver
-
-        return transpile_driver.cli.get_command(ctx, name)
+        return self._delegate().get_command(ctx, name)
 
 
 main.add_command(
-    _LazyTranspileEvents(
+    _LazyGroup(
         name="transpile-events",
+        target="rpg2gba.conversion_agent.transpile_driver:cli",
         help=(
             "Deterministic event->Poryscript transpiler (live path; replaced "
             "the retired `phase4 --run` LLM bulk conversion on 2026-06-18). "
@@ -83,6 +100,34 @@ main.add_command(
         ),
     )
 )
+
+# The chapter loop (CLAUDE.md §7, BUILD_PLAN.md §2). These are the live way work is
+# driven, and until 2026-09-08 they were reachable only as `python -m rpg2gba.<pkg>`
+# — so this CLI advertised the pipeline stages and hid the loop entirely. Both forms
+# work; these delegate to the same click groups the module form invokes.
+for _name, _target, _help in (
+    (
+        "chapter-atlas",
+        "rpg2gba.chapter_atlas.__main__:cli",
+        "SELECT: chapter atlas — validate / list / census / coverage.",
+    ),
+    (
+        "chapter-manifest",
+        "rpg2gba.chapter_manifest.__main__:cli",
+        "READ: generate, check and review a chapter's manifest.",
+    ),
+    (
+        "routing",
+        "rpg2gba.routing.__main__:cli",
+        "ROUTE: solve visit order and write the chapter's route plan.",
+    ),
+    (
+        "playtest",
+        "rpg2gba.playtest.__main__:cli",
+        "BOOT: run or walk a chapter in the emulator (the section 9 gate).",
+    ),
+):
+    main.add_command(_LazyGroup(name=_name, target=_target, help=_help))
 
 
 def _resolve_paths() -> tuple[Path, Path]:
@@ -150,7 +195,7 @@ def _load_converters() -> None:
     help="Run only the named converter (e.g. --only pokemon). Useful for debugging.",
 )
 def phase2(clean: bool, only: str | None) -> None:
-    """Run PBS converters (Phase 2)."""
+    """Run PBS converters (pipeline stage 2 — PBS data -> C tables)."""
     uranium_src, out_dir = _resolve_paths()
     if clean and out_dir.exists():
         logger.info("wiping %s", out_dir)
@@ -189,7 +234,7 @@ REFERENCE_DIR = Path("reference")
 @main.command()
 @click.option("--clean", is_flag=True, help="Wipe output/uranium-build/maps/ before running.")
 def phase3(clean: bool) -> None:
-    """Run the rxdata map deserializer (Phase 3)."""
+    """Run the rxdata map deserializer (pipeline stage 3 — .rxdata -> JSON)."""
     from rpg2gba.map_deserializer import command_catalog, driver, validate
 
     uranium_src, out_dir = _resolve_paths()
@@ -292,7 +337,7 @@ def _phase4_backend(name: str, model: str = _DEFAULT_MODEL, usage_log_path: Path
     help="Claude model for the claude_code backend (e.g. claude-sonnet-4-6, claude-opus-4-8).",
 )
 def phase4(clean: bool, run: bool, backend: str, model: str) -> None:
-    """Build the conversion-agent machinery (Phase 4).
+    """Build the conversion-agent machinery (pipeline stage 4).
 
     --run is retired (2026-06-18) — use `transpile-events run` instead.
     """
@@ -436,7 +481,7 @@ def convert_common_events(backend: str, model: str, ce_ids: tuple[int, ...]) -> 
     help="Keep stock Emerald map data in the ROM (default: drop it to save ~1.1 MB).",
 )
 def phase5(maps_spec: str, clean: bool, dry_run: bool, keep_stock_maps: bool) -> None:
-    """Build the Map Walker corpus (warps-only) for a batch of Uranium maps."""
+    """Build the Map Walker corpus, warps-only (pipeline stage 5 — tilesets/layout)."""
     from rpg2gba.tileset_converter import phase5 as p5
     from rpg2gba.tileset_converter.map_set import resolve_map_ids
 
