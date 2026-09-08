@@ -353,6 +353,93 @@ def entry_cell(chapter_id: str, map_constant: str) -> Cell:
     return cell
 
 
+def stair_approach(map_constant: str, *, stair_event: int, side: str) -> Cell:
+    """The cell a player stands on to use the sideways staircase event
+    `stair_event`, entering from `side` ("east" or "west").
+
+    A sideways staircase is used by pressing a HORIZONTAL direction into it;
+    the engine redirects the step diagonally across
+    (`MB_SIDEWAYS_STAIRS_*`, modelled as `traversal.graph`'s `stair_diagonal`
+    edge). So the routing point is never the stair cell itself -- no edge in
+    the graph targets one -- it is the flat cell you press from.
+
+    **`side` is required, deliberately.** Which end a beat enters from is an
+    authoring claim, not something geometry can decide: CH02's B2 and B3 walk
+    each of Route 01's two staircases in BOTH directions, and that is the
+    whole point of those beats. A resolver that picked a side for the author
+    could not express them. This mirrors `approach_to`'s `prefer=`: naming a
+    side means the side is required, and an unwalkable one fails loud rather
+    than silently substituting the other.
+
+    **Why walkability is the test, and not `stair_diagonal` ownership.**
+    `routing.locations._stair_approach` asks a different question -- "which
+    cell does the stair edge depart FROM" -- and answers it by looking for a
+    neighbour that owns a `stair_diagonal` edge. That rule holds in the
+    middle of a staircase run and breaks at its ends: the flat cell you walk
+    in from does not own the edge, while an unwalkable cell partway along a
+    diagonal run does. Measured on Map033, ownership reproduces 4 of the 6
+    independently ROM-verified stair approaches in the corpus and returns an
+    unstandable cell for the other 2; plain walkability reproduces **all 6**
+    (CH02's four `STAIR*_APPROACH` constants, verified against a booted ROM
+    by CH02's own §9 gate, plus CH05's two `raw_cell` escapes). See
+    `tests/test_cells_stair_approach.py`, which pins exactly those six.
+
+    **Identified by event id, not coordinates**, matching `event_cell` and
+    `approach_to`. A stair IS an event (`tileset_converter.stairs`
+    detects them from their move-route pages), so naming it by id keeps the
+    call free of the bare coordinate tuples the ban exists to remove -- a
+    `stair=(20, 9)` argument would itself be an unchecked literal, exactly
+    what a resolver is supposed to replace.
+
+    Fails loud when the named side is out of bounds or not walkable, and
+    when `stair_event` is not a detected diagonal-stair event on that map --
+    an approach to something that is not a staircase is a stale beat, not an
+    answer to round off.
+    """
+    if side not in ("east", "west"):
+        raise ValueError(
+            f"stair_approach: side={side!r} must be 'east' or 'west' -- a "
+            "sideways staircase is entered by a horizontal press, so north/"
+            "south are not approaches to it"
+        )
+    uid, graph = _graph_for(map_constant, resolver="stair_approach")
+
+    from ..tileset_converter.stairs import detect_stair_cells
+
+    stairs = {c.event_id: (c.x, c.y) for c in detect_stair_cells(load_map_json(uid))}
+    if stair_event not in stairs:
+        raise ValueError(
+            f"stair_approach: {map_constant} event {stair_event} is not a "
+            f"diagonal-stair event -- detected stair events on this map are "
+            f"{sorted(stairs) or 'none'}. Either the beat is stale or this is "
+            "not a sideways staircase."
+        )
+
+    sx, sy = stairs[stair_event]
+    cell = (sx - 1, sy) if side == "west" else (sx + 1, sy)
+    if not graph.in_bounds(cell):
+        raise ValueError(
+            f"stair_approach: {map_constant} stair event {stair_event} "
+            f"(cell {(sx, sy)}) has no {side} neighbour -- {cell} is out of "
+            "bounds"
+        )
+    if not graph.is_walkable(cell):
+        other = (sx + 1, sy) if side == "west" else (sx - 1, sy)
+        hint = (
+            f" (the {'east' if side == 'west' else 'west'} side, {other}, is "
+            "walkable -- if the beat really enters from there, say so)"
+            if graph.in_bounds(other) and graph.is_walkable(other)
+            else " (neither side is walkable; this cell is probably partway "
+            "along a diagonal run rather than at one of its ends)"
+        )
+        raise ValueError(
+            f"stair_approach: {map_constant} stair event {stair_event} "
+            f"(cell {(sx, sy)}) cannot be entered from the {side}: {cell} is "
+            f"not walkable{hint}"
+        )
+    return cell
+
+
 def raw_cell(x: int, y: int, *, why: str) -> Cell:
     """The escape hatch: returns `(x, y)` unchanged, no derivation at all.
 
@@ -365,7 +452,8 @@ def raw_cell(x: int, y: int, *, why: str) -> Cell:
 
     `why` is required and must be non-empty (raises `ValueError` otherwise).
     It should say two things: what could not be derived through
-    `event_cell`/`approach_to`/`warp_cell`/`arrival_cell`, and what verified
+    `event_cell`/`approach_to`/`warp_cell`/`arrival_cell`/`stair_approach`,
+    and what verified
     the number instead (a screenshot, a hand count against the decoded JSON,
     a doc's own measured value) -- a `why` that just restates the numbers
     back is not a reason.

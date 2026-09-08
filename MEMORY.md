@@ -32,10 +32,10 @@ item (the external-clone rename) was overtaken — the operator deleted the clon
 on 2026-09-07, closing `PROJECT_TODO.md` #1.
 
 `POST_CH05_REVIEW.md`'s five decisions were all answered 2026-09-08 and D1–D5 are
-**implemented** (see the 09-08 session summary). What remains before CH06: **#87**
-(harvest `CommonEvents.pory` — CH06's Map043 is the corpus's first in-slice common-event
-call site) and the review's **G4 / #79** (the stair resolver), which was in the suggested
-order but outside the five decisions.
+**implemented**, as is **G4 / #79** (the stair resolver, done the same day after the
+operator asked whether it belonged before the re-derive — it did, and #90 is why). What
+remains before CH06: **#87** (harvest `CommonEvents.pory` — CH06's Map043 is the corpus's
+first in-slice common-event call site).
 
 ### Standing facts
 
@@ -296,6 +296,14 @@ Bambo reward thresholds (count-of-owned, not switches/vars) from `213_Bambo_Rewa
 **D5 also batched `npc_gfx_map`:** `build_object_events` collects every unmapped sheet on a map and raises once; `build_slice_maps` accumulates across the slice. Choosing the sprite stays a human call — what is batched is the list.
 
 **D3/D4 housekeeping:** `CH05_DECISIONS.md` archived (live docs cite it by bare name in historical entries and code cites it by label without a path — deliberately not rewritten; the new `reference/archive/README.md` row is the redirect). Four merged local branches deleted: `ch05`, `ch04-route-2`, `playtest-authoring-rework`, `repo-audit-remediation`. `backup/warp-facing-attempt-2026-07-16` kept — unmerged by design. **Note: `origin/ch04-route-2` still exists on the remote, 23 commits behind `main`.**
+
+**G4 / #79 — the stair resolver, and the bug it uncovered (#90).** Asked whether it belonged before the CH01–CH03 re-derive; measured rather than assumed. **CH01 and CH04 have zero stair cells; CH03 has 3 on Map031 that no beat references; the entire re-derivation exposure is CH02's four `STAIR*_APPROACH` constants** (4 of its 45 literals, not the whole budget the review implied).
+
+**The review called G4 "a port, not a discovery." It was neither.** `routing.locations._stair_approach` selected the E/W neighbour owning a `stair_diagonal` edge and **never checked it was walkable** — the edge describes the redirect, not a standable cell. On Map033 it returned an unstandable cell for **3 of 7 stair cells**, including both approaches CH02's B2/B3 verify against a booted ROM. Latent only because CH01–CH04 carry no route plans; it would have fired the moment CH02 was re-derived, and **#62's freeze-derive-diff could not have caught it** — the frozen expectation and the derivation come from the same rule, so they would agree with each other and disagree with the ROM. That is the concrete reason G4 belonged before the re-derive.
+
+**The rule was chosen by measurement.** Against the six independently ROM-verified stair approaches that exist (CH02's four gate-passed constants + CH05's two `raw_cell` values), edge-ownership reproduces **4** and returns an unstandable cell for 2; **plain walkability of the named side reproduces all 6.** `tests/test_cells_stair_approach.py` pins the comparison so it is not "simplified" back later.
+
+`cells.py.stair_approach(map, stair_event=N, side=...)`. **`side` is required** — CH02's B2/B3 walk each staircase in both directions, so a resolver that picked a side could not express them; an unwalkable named side fails loud and names the other, mirroring `approach_to`'s `prefer=`. **Keyed by event id, not coordinates** — `stair=(20,9)` would itself be a bare literal, and the lint caught exactly that on the first attempt. CH05's two `raw_cell`s are discharged and **CH05 is back to zero coordinate literals**. `CH05.locations.json` regenerated: every derived cell byte-identical, only the stale `resolver` hint strings changed.
 
 **Runbook updated** (`reference/guides/slice_expansion_runbook.md`): `WARP_OVERRIDES` struck from the HAZARD list, `slice-pins` documented as the first thing to run after editing `SLICE_MAP_IDS`, and `scripts/stage_species.py` / `stage_trainers.py` documented at last — both were written during CH05 and were the practical way to work the pinned lists while being absent from the runbook entirely.
 

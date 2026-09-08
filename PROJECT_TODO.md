@@ -1175,7 +1175,7 @@ Needs either a `chosen_approach` guaranteed on every multi-candidate node, or
 the rule widened to flag a node with no recorded approach as unenforced
 rather than silently skipped.
 
-### 79. `src/rpg2gba/playtest/cells.py` has no stair resolver
+### 79. DONE 2026-09-08 — `cells.py` has `stair_approach`, and it is not the port this entry predicted
 
 The resolver vocabulary in `cells.py` (`event_cell`, `approach_to`,
 `warp_cell`, `arrival_cell`, `entry_cell`, plus the counted `raw_cell`
@@ -1188,6 +1188,41 @@ stair row resolves to the E/W neighbour that owns the `stair_diagonal` edge
 in `traversal.graph.build_map_graph`'s real edges — for the routing side. A
 `stair_approach` resolver in `cells.py` would be a port of that function into
 the beat-authoring vocabulary, not new derivation work.
+
+**Built 2026-09-08** (`POST_CH05_REVIEW.md` G4) — but **"a port, not new
+derivation work" was wrong**, and measuring that was the useful part.
+
+`_stair_approach`'s rule (the E/W neighbour owning a `stair_diagonal` edge)
+holds in the middle of a staircase run and breaks at its ends: the flat cell
+you walk in from owns no such edge, while an unwalkable cell partway along a
+diagonal run does. Measured against the six independently ROM-verified stair
+approaches in the corpus — CH02's four `STAIR*_APPROACH` constants, gate-passed
+with B2/B3 asserting the displacement on a booted ROM, plus CH05's two
+`raw_cell` values — **ownership reproduces 4 and returns an unstandable cell
+for the other 2. Plain walkability of the named side reproduces all 6.** That
+is the rule `stair_approach` uses, and
+`tests/test_cells_stair_approach.py::test_walkability_rule_beats_edge_ownership_on_every_known_value`
+pins the comparison so the choice does not get "simplified" back later.
+
+**`side` is required, not inferred.** Which end a staircase is entered from is
+an authoring claim: CH02's B2 and B3 walk each of Route 01's two staircases in
+*both* directions, and that is the point of those beats. An unwalkable named
+side fails loud and names the other one, mirroring `approach_to`'s `prefer=`
+contract rather than silently substituting.
+
+**Keyed by event id, not coordinates.** A `stair=(20, 9)` argument would itself
+be a bare coordinate literal — the lint caught exactly that on the first
+attempt. A stair *is* an event, so `stair_event=` matches `event_cell` and
+`approach_to` and keeps the call inside the ban.
+
+CH05's two `raw_cell` escapes are discharged; **CH05 is back to zero coordinate
+literals**, the budget it was born with. `reference/routes/CH05.locations.json`
+was regenerated: every derived cell is byte-identical, only the `resolver` hint
+strings changed (they used to read "no cells.py side param exists", which is no
+longer true).
+
+The underlying defect is filed separately as **#90** — it is a bug in shipped
+code, not just a missing feature.
 
 ### 80. `find_match` keys a claim to one `(map_id, event_id)` pair
 
@@ -1421,6 +1456,44 @@ needed); and their parties pull in species not currently staged.
 
 Whether Map019's gang battles are worth replicating is a §10 content call, not a
 mechanical one. Filed so the census's finding does not evaporate.
+
+### 90. DONE 2026-09-08 — `_stair_approach` returned cells the player cannot stand on
+
+Found while scoping #79/G4, by checking the resolver's output against CH02's
+four ROM-verified stair approaches rather than against its own docstring.
+
+`routing.locations._stair_approach` selected "the E/W neighbour of the stair
+cell that owns a `stair_diagonal` edge" and **never checked that neighbour was
+walkable**. Owning the edge does not make a cell standable — the edge describes
+the redirect the staircase performs, not somewhere the player may stand — so on
+a diagonal run the unwalkable cells partway along it satisfied the test. Its
+sibling twenty lines below, `_approach_side_candidates`, had always filtered on
+`is_walkable`; the stair path simply never did.
+
+Measured on Map033 (Route 01, in slice since CH02), it returned an unstandable
+cell for **3 of the map's 7 stair cells**, including both of the approaches
+CH02's B2/B3 verify against a booted ROM:
+
+    stair (52,41) -> (53,41)  walkable=False    ch02 says (51,41)
+    stair (53,43) -> (52,43)  walkable=False
+    stair (53,44) -> (52,44)  walkable=False    ch02 says (54,44)
+
+**Latent, not live.** CH01–CH04 carry no route plans, so nothing consumed it
+outside CH05 — where all four of Map037's approaches happen to be walkable, so
+CH05's derived cells and `reference/routes/CH05.locations.json` are unchanged
+by the fix. It would have fired the moment CH01–CH03 were re-derived (#65) or
+CH02 got a route plan, and **#62's freeze-derive-diff safeguard could not have
+caught it**: the frozen expectation and the derivation come from the same rule,
+so they would have agreed with each other and disagreed with the ROM.
+
+**Fix:** walkability filter added to both `_stair_approach` and
+`_stair_side_candidates`. Silent-wrong became loud-can't — an all-unwalkable
+stair cell now raises, saying it is probably mid-run and pointing at
+`playtest.cells.stair_approach` for the side-aware resolver. `(53,43)` now
+correctly resolves east to `(54,43)` instead of returning unwalkable `(52,43)`.
+
+**Why this mattered for sequencing:** it is the concrete reason G4 belonged
+before the CH01–CH03 re-derivation rather than during it.
 
 ## Parked until the CH05 branch is cut (do not raise before then)
 

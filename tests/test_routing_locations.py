@@ -74,9 +74,8 @@ def test_approach_side_candidates_skip_unwalkable_sides(monkeypatch):
 
 
 def test_stair_side_candidates_both_sides_legal(monkeypatch):
-    """A stair beat with both E/W neighbours owning a `stair_diagonal` edge
-    emits both, west then east -- the full set `_stair_approach` itself
-    picks the first (west) of."""
+    """A stair beat with both E/W neighbours walkable emits both, west then
+    east -- the full set `_stair_approach` itself picks the first (west) of."""
     graph = MapGraph(
         map_id=999, width=5, height=5, tileset_id=0, blocked=_open_grid(5, 5),
         stair_sides={(2, 2): StairSide.RIGHT},
@@ -86,11 +85,12 @@ def test_stair_side_candidates_both_sides_legal(monkeypatch):
     candidates = loc_mod._stair_side_candidates(999, "MAP_X", 2, 2)
 
     assert [(c.x, c.y, c.side) for c in candidates] == [(1, 2, "west"), (3, 2, "east")]
-    # No public cells.py function takes a stair side, so the resolver is
-    # unambiguous prose-as-code, not a paste-able call -- both sides say so.
+    # Since 2026-09-08 `playtest.cells.stair_approach` takes a required side
+    # (POST_CH05_REVIEW.md G4), so the resolver is a real paste-able call
+    # rather than the prose-as-code this used to have to emit.
     for c in candidates:
-        assert "no cells.py side param exists" in c.resolver
-        assert c.side in c.resolver
+        assert c.resolver.startswith("stair_approach(MAP_X, ")
+        assert f"side={c.side!r}" in c.resolver
 
 
 

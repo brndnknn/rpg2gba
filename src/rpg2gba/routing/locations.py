@@ -169,28 +169,50 @@ _ADJACENT_TRIGGERS = frozenset({"action", "event_touch"})
 
 def _stair_side_candidates(map_id: int, map_constant: str,
                           x: int, y: int) -> tuple[ApproachCandidate, ...]:
-    """Every E/W neighbour of stair cell (x, y) that owns a `stair_diagonal`
-    edge, west then east -- the full candidate set `_stair_approach` itself
-    picks the first of. `cells.py` has no public function with a side
-    parameter for stairs (and this module may not add one), so `resolver`
-    describes the side in unambiguous prose-as-code rather than a paste-able
-    call -- see `ApproachCandidate`'s docstring.
+    """Every walkable E/W neighbour of stair cell (x, y), west then east --
+    the candidate set an author picks a side from.
+
+    Since 2026-09-08 `resolver` is a real paste-able call:
+    `playtest.cells.stair_approach` now takes a required `side`
+    (`POST_CH05_REVIEW.md` G4), so this no longer has to describe the side in
+    prose. It identifies the stair by EVENT ID, matching that resolver --
+    a coordinate pair in the emitted call would itself be a bare literal
+    under the coordinate ban.
+
+    Candidates are filtered on walkability, not on `stair_diagonal` edge
+    ownership. See `_stair_approach` for why the two differ and which one is
+    right at the ends of a diagonal run.
     """
     graph = build_map_graph(map_id)
+    event_id = _stair_event_id(map_id, x, y)
     candidates: list[ApproachCandidate] = []
     for side, (nx, ny) in (("west", (x - 1, y)), ("east", (x + 1, y))):
-        if not graph.in_bounds((nx, ny)):
+        if not graph.in_bounds((nx, ny)) or not graph.is_walkable((nx, ny)):
             continue
-        if any(edge.kind == "stair_diagonal"
-               for edge in graph.neighbors((nx, ny))):
-            candidates.append(ApproachCandidate(
-                x=nx, y=ny, side=side,
-                resolver=(f"stair_approach({map_constant}, stair=({x},{y}), "
-                          f"side={side!r})  # no cells.py side param exists; "
-                          f"this cell is the {side} E/W neighbour owning the "
-                          "stair_diagonal edge"),
-            ))
+        ref = (
+            f"stair_event={event_id}" if event_id is not None
+            else f"stair_event=<no stair event at ({x},{y})>"
+        )
+        candidates.append(ApproachCandidate(
+            x=nx, y=ny, side=side,
+            resolver=f"stair_approach({map_constant}, {ref}, side={side!r})",
+        ))
     return tuple(candidates)
+
+
+def _stair_event_id(map_id: int, x: int, y: int) -> int | None:
+    """The diagonal-stair event id at (x, y), or None if there isn't one.
+
+    `playtest.cells.stair_approach` is keyed by event id, so the paste-able
+    resolver string this module emits has to name one.
+    """
+    from ..tileset_converter.stairs import detect_stair_cells
+    from ..traversal.collision import load_map_json
+
+    for cell in detect_stair_cells(load_map_json(map_id)):
+        if (cell.x, cell.y) == (x, y):
+            return cell.event_id
+    return None
 
 
 def _stair_approach(map_id: int, map_constant: str, x: int, y: int,
@@ -207,18 +229,45 @@ def _stair_approach(map_id: int, map_constant: str, x: int, y: int,
     the solver for a path that provably does not exist.
 
     So resolve to the cell the stair edge departs FROM: the E/W neighbour
-    that owns a `stair_diagonal` edge. West is preferred over east purely
-    for determinism -- both are legitimate, and which one a beat should
-    really use depends on the direction of travel, which is an authoring
-    decision this derivation deliberately does not make.
+    that owns a `stair_diagonal` edge AND is itself walkable. West is
+    preferred over east purely for determinism among the *walkable*
+    candidates -- both are legitimate, and which one a beat should really
+    use depends on the direction of travel, which is an authoring decision
+    this derivation deliberately does not make.
+
+    **The walkability filter is not belt-and-braces** (added 2026-09-08,
+    `PROJECT_TODO.md` #90). Owning a `stair_diagonal` edge does not make a
+    cell standable: a diagonal staircase RUN has unwalkable cells partway
+    along it that still carry the edge, because the edge describes the
+    redirect the run performs, not somewhere the player may stand. Without
+    this filter the function returned an unstandable cell for **3 of
+    Map033's 7 stair cells** -- including both approaches CH02's B2/B3
+    verified against a booted ROM. `_approach_side_candidates`, twenty lines
+    below, has always filtered on `is_walkable`; the stair path simply never
+    did.
     """
     graph = build_map_graph(map_id)
+    unwalkable: list[tuple[int, int]] = []
     for nx, ny in ((x - 1, y), (x + 1, y)):
         if not graph.in_bounds((nx, ny)):
             continue
-        if any(edge.kind == "stair_diagonal"
-               for edge in graph.neighbors((nx, ny))):
-            return (nx, ny)
+        if not any(edge.kind == "stair_diagonal"
+                   for edge in graph.neighbors((nx, ny))):
+            continue
+        if not graph.is_walkable((nx, ny)):
+            unwalkable.append((nx, ny))
+            continue
+        return (nx, ny)
+    if unwalkable:
+        raise ValueError(
+            f"{row_id}: stair cell ({x},{y}) on {map_constant} has E/W "
+            f"neighbour(s) {unwalkable} owning a stair_diagonal edge, but "
+            "none of them is walkable -- the player cannot stand there to "
+            "use the staircase. This is usually a cell partway along a "
+            "DIAGONAL run: route to one of the run's ends instead, and see "
+            "`playtest.cells.stair_approach` for the side-aware resolver a "
+            "chapter author should use."
+        )
     raise ValueError(
         f"{row_id}: stair cell ({x},{y}) on {map_constant} has no E/W "
         "neighbour owning a stair_diagonal edge -- either the terrain row "
@@ -252,6 +301,20 @@ def _approach_side_candidates(map_id: int, map_constant: str,
     return tuple(candidates)
 
 
+def _stair_resolver_string(map_id: int, map_constant: str, x: int, y: int) -> str:
+    """The paste-able `playtest.cells.stair_approach` call for a stair row.
+
+    `_stair_approach` prefers the first walkable side, so the emitted call
+    names that same side rather than leaving the author to guess which one
+    the derived cell came from.
+    """
+    graph = build_map_graph(map_id)
+    event_id = _stair_event_id(map_id, x, y)
+    side = "west" if graph.is_walkable((x - 1, y)) else "east"
+    ref = f"stair_event={event_id}" if event_id is not None else f"stair_at=({x},{y})"
+    return f"stair_approach({map_constant}, {ref}, side={side!r})"
+
+
 def cell_for_row(row: ManifestRow) -> RowCell:
     """Derive one manifest row's cell, failing loud on a row kind that has
     no mechanical location (CLAUDE.md §4.5)."""
@@ -267,7 +330,7 @@ def cell_for_row(row: ManifestRow) -> RowCell:
             map_constant=map_constant,
             x=ax,
             y=ay,
-            resolver=f"stair_approach({map_constant}, stair=({terrain.x},{terrain.y}))",
+            resolver=_stair_resolver_string(row.map_id, map_constant, terrain.x, terrain.y),
             approach_candidates=_stair_side_candidates(
                 row.map_id, map_constant, terrain.x, terrain.y),
         )

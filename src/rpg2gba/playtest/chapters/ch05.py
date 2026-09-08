@@ -95,18 +95,19 @@ module always used, with a loud warning log, only when
 `expected_text` cannot translate that page's control codes. Net effect for
 `B3`/`B5`/`B9`'s re-talk beats: coverage went UP, not down.
 
-**B13/B14 (the sideways staircases) use `raw_cell()`.** `playtest.cells` has
-no `stair_approach` resolver -- deliberately, per its own module docstring
-and `routing.locations`' -- because a stair's routing point (the E/W
-neighbour owning the `stair_diagonal` edge) has no `prefer=`-style side
-parameter in the sanctioned vocabulary. The two values below
-((10,9) west-of-stair-(11,9), (19,9) west-of-stair-(20,9)) are copied
-verbatim from `reference/routes/CH05.locations.json`'s own
-`stair_approach(...)` derivation, itself built from
-`traversal.graph.build_map_graph`'s real `stair_diagonal` edges -- not
-guessed, not hand-measured against a screenshot, just outside the five
-resolvers this module is allowed to call directly. Two calls total, both
-cited here.
+**B13/B14 (the sideways staircases) used `raw_cell()` until 2026-09-08.**
+They were this chapter's only two escape hatches, and they existed purely
+because `playtest.cells` had no stair resolver. It has one now --
+`stair_approach(map, stair=..., side=...)`, `POST_CH05_REVIEW.md` G4 /
+`PROJECT_TODO.md` #79 -- and both beats derive their cell through it, so
+**CH05 is back to zero coordinate literals**, the budget it was born with.
+
+The resolver takes a required `side` rather than picking one, because which
+end a staircase is entered from is an authoring claim: CH02's B2/B3 walk each
+of Route 01's staircases in both directions. It also resolves on plain
+walkability of the named side, NOT on `stair_diagonal` edge ownership --
+the rule `routing.locations._stair_approach` uses, which returns an
+unstandable cell at the ends of a diagonal run (`PROJECT_TODO.md` #90).
 
 **B6/B7 (TM76, Sableyeite) are not authored at all.** Both are
 `blocked:surf`, `assertable=false` in `CH05.dispositions.json` -- the sealed
@@ -222,7 +223,7 @@ from ..archetypes.item_ball import item_ball_beats
 from ..archetypes.trainer import trainer_beats
 from ..archetypes.warp import warp_beat
 from ..battle import in_battle
-from ..cells import approach_to, entry_cell, event_cell, local_id, raw_cell
+from ..cells import approach_to, entry_cell, event_cell, local_id, stair_approach
 from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
 
@@ -545,16 +546,10 @@ trainer_beats(
 # No archetype: a staircase is not one of the four recognized RPG Maker
 # archetypes, same as ch04.py's rockslide boulders.
 
-_B14_APPROACH = raw_cell(
-    19, 9, why=(
-        "cells.py has no stair_approach resolver (only event_cell/"
-        "approach_to/warp_cell/arrival_cell/entry_cell exist -- see cells.py "
-        "module docstring). Value copied verbatim from "
-        "reference/routes/CH05.locations.json's B14 stair_approach "
-        "derivation: the west E/W neighbour of stair cell (20,9) that owns "
-        "the stair_diagonal edge (routing.locations._stair_approach), "
-        "itself built from traversal.graph.build_map_graph's real edges, "
-        "not measured or guessed."))
+# 2026-09-08: was `raw_cell(19, 9, ...)` because cells.py had no stair
+# resolver (POST_CH05_REVIEW.md G4 / PROJECT_TODO.md #79). `stair_approach`
+# now derives the same cell, so the escape hatch is discharged.
+_B14_APPROACH = stair_approach(MAP_2F, stair_event=6, side="west")
 
 
 @ch05.beat("B14", "The east sideways staircase is mandatory traversal: an "
@@ -583,12 +578,8 @@ def b14(emu: Emulator) -> None:
 
 # -- B13 -- west sideways staircase (map037/terrain/stairs/11,9 + 11,10) ---
 
-_B13_APPROACH = raw_cell(
-    10, 9, why=(
-        "cells.py has no stair_approach resolver -- same gap B14 cites "
-        "above. Value copied verbatim from CH05.locations.json's B13 "
-        "stair_approach derivation: the west E/W neighbour of stair cell "
-        "(11,9) that owns the stair_diagonal edge."))
+# 2026-09-08: was `raw_cell(10, 9, ...)` -- see B14 above.
+_B13_APPROACH = stair_approach(MAP_2F, stair_event=8, side="west")
 
 
 @ch05.beat("B13", "The west sideways staircase is mandatory traversal: an "
