@@ -433,7 +433,12 @@ def run_pipeline_mode() -> int:
     tilesets_json = out_dir / "tilesets.json"
 
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import assemble_pathfinder as ap  # WARP_OVERRIDES -- the real build's exact input
+    import assemble_pathfinder as ap  # the real build's exact input
+
+    # Derived, not hand-listed, since 2026-09-08 (PROJECT_TODO #25): the same
+    # warp_overrides.gen.json the assembler reads, so this really is the
+    # build's input and not a second copy of it.
+    warp_overrides = ap._load_warp_overrides(out_dir)
 
     from rpg2gba.tileset_converter.graphics.emit import (
         NUM_METATILES_IN_PRIMARY,
@@ -461,7 +466,7 @@ def run_pipeline_mode() -> int:
         print(f"=== tileset {ts} ({maps_desc}) ===")
 
         recon = _reconstruct_tileset(
-            ts, maplist, ap.WARP_OVERRIDES, fork, tilesets_json, terrain_table,
+            ts, maplist, warp_overrides, fork, tilesets_json, terrain_table,
         )
 
         problems = _cross_check_overlay(recon, overlay)

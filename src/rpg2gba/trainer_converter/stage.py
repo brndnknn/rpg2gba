@@ -146,6 +146,16 @@ GENERATOR = "rpg2gba.trainer_converter.stage"
 MANIFEST_VERSION = 1
 MANIFEST_NAME = "trainer_manifest.json"
 
+
+class TrainerStagingError(RuntimeError):
+    """A pinned trainer in `common.SLICE_TRAINER_BATTLES` could not be staged.
+
+    Raised by `stage_slice` instead of the pre-2026-09-08 behaviour of logging a
+    WARNING and returning a manifest with zero battles (`PROJECT_TODO.md` #83).
+    Carries every offending trainer's problems, not just the first --
+    `battles.build_staged_battles` already collects them.
+    """
+
 #: Engine-relative directory root all staged trainer art is hooked under.
 ENGINE_GFX_ROOT = Path("graphics/trainers/uranium")
 
@@ -567,7 +577,11 @@ def write_all(
 
 
 def stage_slice(
-    uranium_src: Path, out_dir: Path | None = None, engine_dir: Path | None = None
+    uranium_src: Path,
+    out_dir: Path | None = None,
+    engine_dir: Path | None = None,
+    *,
+    require_battles: bool = True,
 ) -> Path:
     """Convenience wrapper: convert `common.SLICE_TRAINER_PICS`' art via
     `pics.convert_slice_trainer_pics`, resolve `common.SLICE_TRAINER_BATTLES`
@@ -580,11 +594,18 @@ def stage_slice(
     this keeps its original 2-positional-argument call shape for existing
     callers (`scripts/assemble_pathfinder.py`). Returns the manifest path.
 
-    If any of `SLICE_TRAINER_BATTLES` can't be staged (e.g. a party species
-    hasn't been converted yet), battle staging is SKIPPED with a logged
-    warning rather than aborting pic staging -- the pics half of this slice
-    stands on its own. Callers that need battle failures to be fatal should
-    call `battles.build_staged_battles` directly.
+    **Battle-staging failures are fatal** (`PROJECT_TODO.md` #83, fixed
+    2026-09-08). The pics half of this slice genuinely stands on its own, so
+    pic conversion runs first and the manifest is still written -- but then a
+    `TrainerStagingError` propagates, because the previous behaviour (log a
+    WARNING, leave `staged_battles` empty, exit 0) meant one unstageable
+    trainer silently discarded *every* battle in the manifest, including ones
+    that staged fine on an earlier run. CH05's Keichi took CH04's 17
+    already-good battles to 0 that way, and the damage surfaced as an
+    apparent CH01 failure two steps downstream. `CLAUDE.md` §4.5.
+
+    Pass `require_battles=False` for the pics-only case (it still logs at
+    WARNING, but the caller has said it does not want battles).
     """
     if out_dir is None:
         out_dir = Path("output") / "uranium-build" / "trainers"
@@ -613,22 +634,37 @@ def stage_slice(
         if spec.internal_name in back_by_name
     ]
 
+    # Battle staging is deliberately deferred until after the pics are in hand
+    # so that a battle failure still leaves the (independent) pic work on disk
+    # -- but it is NOT swallowed. See the docstring and #83.
     staged_battles: list[StagedTrainerBattle] = []
+    failure: str | None = None
     if engine_dir is not None:
         try:
             staged_battles = stage_battles(
                 uranium_src=uranium_src, engine_dir=engine_dir, out_dir=out_dir
             )
         except (ValueError, FileNotFoundError, KeyError) as e:
-            logger.warning("trainer battle staging skipped: %s", e)
+            failure = str(e)
     else:
-        logger.warning(
-            "trainer battle staging skipped: RPG2GBA_POKEEMERALD not set and no engine_dir given"
-        )
+        failure = "RPG2GBA_POKEEMERALD not set and no engine_dir given"
 
     manifest = write_all(out_dir=out_dir, fronts=fronts, backs=backs, battles=staged_battles)
     manifest_path = out_dir / MANIFEST_NAME
     logger.info("trainer slice staged: %s", manifest_path)
+
+    if failure is not None:
+        if not require_battles:
+            logger.warning("trainer battle staging skipped: %s", failure)
+            return manifest_path
+        raise TrainerStagingError(
+            f"trainer battle staging FAILED, so {len(common.SLICE_TRAINER_BATTLES)} pinned "
+            f"battle(s) staged as 0 -- the pics half was still written to "
+            f"{manifest_path}, but the battle half of that manifest is now empty and "
+            f"any previously-staged battles have been overwritten.\n"
+            f"Every offending trainer is listed below (build_staged_battles collects "
+            f"them all, it does not stop at the first):\n{failure}"
+        )
     return manifest_path
 
 
@@ -703,4 +739,5 @@ __all__ = [
     "stage_slice",
     "stage_battles",
     "StagedTrainerBattle",
+    "TrainerStagingError",
 ]

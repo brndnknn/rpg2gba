@@ -1,0 +1,221 @@
+{
+  "_comment": "FROZEN golden: the hand-maintained assemble_pathfinder.WARP_OVERRIDES table exactly as it stood at commit 78152b75, immediately before POST_CH05_REVIEW G2 replaced it with a derivation (PROJECT_TODO #25). Every cell here was verified by a human against a booted ROM across CH01-CH05's five section-9 gates. Its job is to catch a REGRESSION IN THE DERIVATION: the derived set for maps 19/31/32/33/35/36/37/48/49/50/64/65/67/68/73/81/89/172 must still equal this. When a new chapter joins SLICE_MAP_IDS the derived set legitimately grows -- compare on these 18 maps only, never assert equality of the whole dict.",
+  "cells": {
+    "19": [
+      [
+        11,
+        30
+      ]
+    ],
+    "31": [
+      [
+        13,
+        7
+      ],
+      [
+        15,
+        43
+      ],
+      [
+        16,
+        43
+      ],
+      [
+        20,
+        12
+      ],
+      [
+        23,
+        28
+      ],
+      [
+        32,
+        28
+      ],
+      [
+        35,
+        6
+      ],
+      [
+        37,
+        14
+      ],
+      [
+        37,
+        28
+      ]
+    ],
+    "32": [
+      [
+        8,
+        43
+      ],
+      [
+        8,
+        44
+      ],
+      [
+        8,
+        45
+      ],
+      [
+        17,
+        11
+      ],
+      [
+        24,
+        42
+      ],
+      [
+        28,
+        31
+      ],
+      [
+        43,
+        31
+      ],
+      [
+        56,
+        42
+      ]
+    ],
+    "33": [
+      [
+        15,
+        5
+      ],
+      [
+        16,
+        5
+      ],
+      [
+        39,
+        18
+      ],
+      [
+        70,
+        11
+      ],
+      [
+        70,
+        12
+      ],
+      [
+        70,
+        13
+      ]
+    ],
+    "35": [
+      [
+        20,
+        33
+      ]
+    ],
+    "36": [
+      [
+        17,
+        4
+      ],
+      [
+        17,
+        40
+      ]
+    ],
+    "37": [
+      [
+        16,
+        27
+      ]
+    ],
+    "48": [
+      [
+        3,
+        3
+      ]
+    ],
+    "49": [
+      [
+        10,
+        11
+      ],
+      [
+        12,
+        3
+      ]
+    ],
+    "50": [
+      [
+        14,
+        19
+      ]
+    ],
+    "64": [
+      [
+        9,
+        14
+      ]
+    ],
+    "65": [
+      [
+        9,
+        14
+      ]
+    ],
+    "67": [
+      [
+        10,
+        11
+      ]
+    ],
+    "68": [
+      [
+        7,
+        19
+      ],
+      [
+        8,
+        19
+      ]
+    ],
+    "73": [
+      [
+        5,
+        12
+      ],
+      [
+        24,
+        13
+      ],
+      [
+        44,
+        13
+      ],
+      [
+        64,
+        13
+      ]
+    ],
+    "81": [
+      [
+        9,
+        14
+      ]
+    ],
+    "89": [
+      [
+        3,
+        3
+      ]
+    ],
+    "172": [
+      [
+        10,
+        11
+      ],
+      [
+        12,
+        3
+      ]
+    ]
+  }
+}

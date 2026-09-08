@@ -50,7 +50,7 @@ def test_run_graphics_pass_assigns_synthetic_ids_and_source_tileset_of(
     )
 
     monkeypatch.setattr(ap, "SLICE_MAP_IDS", [32, 33])
-    monkeypatch.setattr(ap, "WARP_OVERRIDES", {32: set(), 33: set()})
+    monkeypatch.setattr(ap, "_load_warp_overrides", lambda out: {32: set(), 33: set()})
 
     captured: dict = {}
 
@@ -92,7 +92,7 @@ def test_run_graphics_pass_leaves_original_map_json_untouched(
     )
 
     monkeypatch.setattr(ap, "SLICE_MAP_IDS", [32])
-    monkeypatch.setattr(ap, "WARP_OVERRIDES", {32: set()})
+    monkeypatch.setattr(ap, "_load_warp_overrides", lambda out: {32: set()})
 
     import rpg2gba.tileset_converter.graphics.build_slice_tilesets as bst_mod
     monkeypatch.setattr(bst_mod, "build_slice_tilesets", lambda *a, **kw: {})
@@ -136,7 +136,7 @@ def test_run_layout_pass_uses_matching_synthetic_tileset_key(
     }
 
     monkeypatch.setattr(ap, "SLICE_MAP_IDS", [32, 33])
-    monkeypatch.setattr(ap, "WARP_OVERRIDES", {32: set(), 33: set()})
+    monkeypatch.setattr(ap, "_load_warp_overrides", lambda out: {32: set(), 33: set()})
     monkeypatch.setattr(ap, "WALKABLE_OVERRIDES", {})
 
     import rpg2gba.tileset_converter.metadata_wiring as mw_mod

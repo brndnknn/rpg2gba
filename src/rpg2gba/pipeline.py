@@ -130,6 +130,42 @@ for _name, _target, _help in (
     main.add_command(_LazyGroup(name=_name, target=_target, help=_help))
 
 
+@main.command("slice-pins")
+@click.option("--census/--no-census", default=True, help="Also print the trainer census.")
+def slice_pins_cmd(census: bool) -> None:
+    """Check the four pinned lists are complete for the current SLICE_MAP_IDS.
+
+    Reports EVERY gap in one pass (SLICE_TRAINER_BATTLES, SLICE_TRAINER_PICS,
+    STARTER_SPECIES, trainer-class mappings). Exits non-zero on any gap, so it
+    can gate a chapter build. See `rpg2gba/slice_pins.py`.
+    """
+    import os
+
+    from rpg2gba import slice_pins
+
+    _load_dotenv()
+    out_dir = Path(os.environ.get("RPG2GBA_OUTPUT", "output")) / "uranium-build"
+    report = slice_pins.check_pinned_lists(
+        out_dir=out_dir, engine_dir=Path(os.environ["RPG2GBA_POKEEMERALD"])
+    )
+    if census:
+        click.echo("Trainer-battle events on in-slice maps:")
+        click.echo(report.format_census())
+        queued = [r for r in report.census if r.status == "queued-not-pinned"]
+        if queued:
+            click.echo(
+                f"\n{len(queued)} trainer(s) have a battle event on an in-slice map that "
+                "the transpiler has NOT emitted (still in the # UNHANDLED queue). Not a "
+                "build risk -- but that battle is missing from the ROM."
+            )
+        click.echo("")
+    if report.ok:
+        click.echo("pinned lists are complete for the current SLICE_MAP_IDS")
+        return
+    click.echo(report.format())
+    raise SystemExit(1)
+
+
 def _resolve_paths() -> tuple[Path, Path]:
     """Resolve Uranium source + output directories from env vars."""
     _load_dotenv()

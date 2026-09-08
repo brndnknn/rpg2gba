@@ -60,11 +60,15 @@ For each candidate map id:
     Controls which warp destinations survive `prune_map_pory`. Miss it and
     the new maps' warps are treated as out-of-slice and dropped even though
     wiring covered them.
-  - `scripts/assemble_pathfinder.py:58-62` — `WARP_OVERRIDES` (per-map warp
-    *source* coordinates). Each new map needs its entry (mirrors
-    `build_slice_maps`' returned `src_coords` — the wiring preview scripts
-    help enumerate them). Miss it and the warp tile never gets the door
-    metatile stamped: warp silently inert.
+  - ~~`scripts/assemble_pathfinder.py` — `WARP_OVERRIDES`~~ **No longer a hazard
+    (2026-09-08, `PROJECT_TODO.md` #25).** It is derived now, not hand-listed:
+    step 4 below persists `build_slice_maps`' own computed set to
+    `output/uranium-build/warp_overrides.gen.json` and the assembler reads it
+    back. Nothing to edit per chapter. The old hand-list is why CH02, CH03 and
+    CH05 each opened their frontier by hand — CH05's four missing cells left the
+    player unable to enter the Passage Cave, leave it, or use the stairs, with
+    every warp event compiling cleanly. If the file is absent the assembler now
+    fails loud rather than stamping nothing.
 - `scripts/run_slice.py` and `scripts/regen_outputs.py` were removed outright on
   2026-09-07 (both were retired-LLM-path scripts, actively harmful if run — the
   first spent API budget, the second stripped `output/` and flipped three tests
@@ -74,6 +78,42 @@ For each candidate map id:
 - Ignore the stale literals in `scripts/pathfinder_tile_census.py:25`,
   `scripts/pathfinder_warp_trace.py:19` (one-off S1-era tools) — update only if
   you actually use them.
+- **Four pinned lists must move together, and there is now one command that
+  tells you about all of them at once** (2026-09-08, `POST_CH05_REVIEW.md` G1):
+
+  ```bash
+  .venv/bin/python -m rpg2gba.pipeline slice-pins
+  ```
+
+  It derives what `SLICE_TRAINER_BATTLES`, `SLICE_TRAINER_PICS`,
+  `STARTER_SPECIES` and the trainer-class mapping tables *should* contain for the
+  current `SLICE_MAP_IDS`, and reports every gap in ONE pass, grouped by the file
+  you have to edit. Exits non-zero on any gap. Run it right after editing
+  `SLICE_MAP_IDS`, before anything else. CH05 discovered its three omissions one
+  at a time, each failing separately and looking unrelated to the last — that
+  one-at-a-time discovery is the whole cost this replaces.
+
+  It also prints an advisory census of every trainer-battle event on an in-slice
+  map. Trainers marked `queued-not-pinned` have a battle the transpiler has not
+  emitted: not a build risk, but that battle is missing from the ROM. Three
+  `TRAINER_CLASS_BIKER` events on Map019 have been in that state since CH03.
+
+- **Two staging scripts that are the practical way to work the pinned lists**
+  (written during CH05, undocumented here until 2026-09-08). Both write only
+  under `output/`, never into `engine/`, so they are the fast loop for iterating
+  on pinned lists without the art passes:
+
+  ```bash
+  .venv/bin/python scripts/stage_species.py    # species overlay + manifest
+  .venv/bin/python scripts/stage_trainers.py   # trainer pics + battles
+  ```
+
+  Run them in that order — the trainer pass reads the species manifest. Since
+  2026-09-08 a battle-staging failure is fatal and lists every offending trainer
+  (`PROJECT_TODO.md` #83); before that it logged a warning, returned zero
+  battles and exited 0, so one bad entry silently discarded every battle in the
+  manifest.
+
 - Tests pinning the set: `tests/test_map_set.py` asserts
   `parse_map_ids("slice") == SLICE_MAP_IDS` (updates itself); fixture
   literals in `tests/test_tileset_converter.py:585,845,873,880` are

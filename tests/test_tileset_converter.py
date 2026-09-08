@@ -12,6 +12,7 @@ import json
 import logging
 import struct
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -4459,3 +4460,77 @@ def test_passages_oracle_diff_reports_disagreements() -> None:
     """Passages oracle diff reports every cell where emitted GBA collision
     disagrees with the RMXP source passages value."""
     pytest.skip("Phase 5 §5.6 — not yet implemented")
+
+
+# --- npc_gfx_map batching (POST_CH05_REVIEW.md Tier 2, D5) -------------------
+#
+# Choosing which fork sprite resembles a Uranium NPC is a judgment call and
+# stays human. What changed 2026-09-08 is that the pipeline surfaces the WHOLE
+# list at once instead of one sheet per build -- the same "tell me everything
+# missing in one run" change G1 applied to the pinned lists.
+
+
+def test_every_unmapped_sheet_on_a_map_is_reported_not_just_the_first() -> None:
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {
+        "map_id": 33,
+        "events": [
+            _event(1, 5, 5, [_page(name="HGSS_000")]),          # mapped
+            _event(2, 6, 6, [_page(name="PU-NotASheet")]),      # unmapped
+            _event(3, 7, 7, [_page(name="PU-AlsoMissing")]),    # unmapped
+            _event(4, 8, 8, [_page(name="PU-ThirdMissing")]),   # unmapped
+        ],
+    }
+    with pytest.raises(KeyError) as exc:
+        mw.build_object_events(map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture())
+    message = exc.value.args[0]
+    for sheet in ("PU-NotASheet", "PU-AlsoMissing", "PU-ThirdMissing"):
+        assert sheet in message, f"{sheet} missing from the batched report"
+    assert "3 sheet(s)" in message
+    # The mapped sheet must not be implicated.
+    assert "HGSS_000" not in message
+
+
+def test_batched_sheet_report_names_every_event_using_a_sheet() -> None:
+    """Two events sharing one unmapped sheet is one decision, not two -- but the
+    author still needs to know where both are."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {
+        "map_id": 33,
+        "events": [
+            _event(7, 5, 5, [_page(name="PU-Shared")]),
+            _event(9, 6, 6, [_page(name="PU-Shared")]),
+        ],
+    }
+    with pytest.raises(KeyError) as exc:
+        mw.build_object_events(map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture())
+    message = exc.value.args[0]
+    assert "1 sheet(s)" in message
+    assert "EV007" in message and "EV009" in message
+
+
+def test_non_sheet_errors_are_not_deferred_by_the_slice_collector() -> None:
+    """Only the missing-sprite KeyError is batched. Anything else must still
+    abort immediately -- deferring an unrelated failure would hide it behind a
+    sprite report it has nothing to do with."""
+    failures: list[str] = []
+
+    def _boom(*a: object, **k: object) -> None:
+        raise KeyError("map 33 EV001: something else entirely")
+
+    with mock.patch.object(mw, "build_object_events", _boom):
+        with pytest.raises(KeyError, match="something else entirely"):
+            mw._build_object_events_collecting_sheets(failures, 33)
+    assert failures == []
+
+
+def test_sheet_errors_are_deferred_by_the_slice_collector() -> None:
+    failures: list[str] = []
+
+    def _boom(*a: object, **k: object) -> None:
+        raise KeyError("map 33: 2 sheet(s) have no reference/npc_gfx_map.json entry")
+
+    with mock.patch.object(mw, "build_object_events", _boom):
+        result = mw._build_object_events_collecting_sheets(failures, 33)
+    assert len(failures) == 1
+    assert result.object_events == []

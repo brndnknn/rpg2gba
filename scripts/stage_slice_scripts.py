@@ -374,7 +374,7 @@ def _regenerate_map_json(
         lambda uid: reg.get(uid).map_const,
         seam_suppress,
     )
-    mw.build_slice_maps(
+    warp_override_cells = mw.build_slice_maps(
         list(DEFAULT_SLICE),
         maps_dir=out / "maps",
         registry=reg,
@@ -396,6 +396,16 @@ def _regenerate_map_json(
         fork_constants=fork_constants,
         connections=slice_connections,
         extra_warps=extra_warps,
+    )
+    # Hand off the computed warp-override cells to the assembler (PROJECT_TODO
+    # #25). It runs in a separate process one runbook step later and used to
+    # carry a hand-written duplicate of this exact set; a chapter whose cells
+    # nobody added by hand booted with every one of its doors inert.
+    overrides_path = mw.write_warp_overrides(out, warp_override_cells)
+    print(
+        f"wrote {overrides_path} "
+        f"({len(warp_override_cells)} map(s), "
+        f"{sum(len(c) for c in warp_override_cells.values())} cell(s))"
     )
     flag_reg.save(flag_state_path)
     # Always write (empty → stub) so the engine #include resolves even with no

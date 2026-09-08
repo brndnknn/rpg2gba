@@ -2054,6 +2054,13 @@ def build_object_events(
     objects, _, _ = classify_map_events(map_json, slice_ids)
     uid = consts.uranium_id
     result = ObjectBuildResult()
+    # Sheets with no `reference/npc_gfx_map.json` entry, collected across the
+    # whole map and raised together at the end rather than one per build
+    # (POST_CH05_REVIEW.md Tier 2). Choosing which fork sprite resembles a
+    # Uranium NPC stays a human judgment call -- what is batched is the LIST,
+    # so a chapter's whole set is decided in one sitting. `build_slice_maps`
+    # accumulates these across maps for the same reason.
+    missing_sheets: dict[str, list[int]] = {}
     event_by_id = {e["id"]: e for e in map_json["events"]}
     objects_by_id = {e["id"]: e for e in objects}
     # Diagonal-stair events (see `collect_through_block_cells`'s docstring)
@@ -2546,13 +2553,14 @@ def build_object_events(
                     f"gfx map — call build_object_events(..., npc_gfx=load_npc_gfx_map"
                     f"(...))"
                 )
-            try:
-                graphics_id = npc_gfx[name]
-            except KeyError:
-                raise KeyError(
-                    f"map {uid} EV{eid:03d}: sheet {name!r} has no reference/"
-                    f"npc_gfx_map.json entry"
-                ) from None
+            if name not in npc_gfx:
+                # Record and move on; every missing sheet on this map is
+                # reported together below. The partial `result` is discarded
+                # by the raise, so skipping this event's placement (and its
+                # local_id) is safe.
+                missing_sheets.setdefault(name, []).append(eid)
+                continue
+            graphics_id = npc_gfx[name]
             states = (npc_gfx_states or {}).get(name)
             if states:
                 # A multi-state prop's page authors WHICH state it wears; the
@@ -2848,6 +2856,22 @@ def build_object_events(
                     f"no-op; something upstream (e.g. an always-visible "
                     f"hidden-actor classification) discarded its flag"
                 )
+
+    if missing_sheets:
+        # Placed before the template_fields staleness check purely for ordering
+        # hygiene: a skipped event has no local_id, and a missing sprite should
+        # never be reported as a stale sidecar. (No live shape reaches both --
+        # a template event is handled before the graphic lookup -- so this is
+        # defensive, not a fix for an observed bug.)
+        lines = "".join(
+            f"    {sheet!r}  (EV{', EV'.join(f'{e:03d}' for e in sorted(eids))})\n"
+            for sheet, eids in sorted(missing_sheets.items())
+        )
+        raise KeyError(
+            f"map {uid}: {len(missing_sheets)} sheet(s) have no "
+            f"reference/npc_gfx_map.json entry. All of them are listed here so "
+            f"the whole map's sprite choices can be made in one sitting:\n{lines}"
+        )
 
     if template_fields is not None:
         emitted_ids = {int(k) for k in result.local_id_map}
@@ -3595,6 +3619,12 @@ def build_slice_maps(
 
     overrides: dict[int, set[tuple[int, int]]] = {}
     local_id_tables: dict[int, dict[str, int]] = {}
+    # Missing-sprite failures are accumulated across the WHOLE slice and raised
+    # once at the end (POST_CH05_REVIEW.md Tier 2). `build_object_events` already
+    # batches within a map; without this the slice would still surface one map's
+    # worth per run, and a chapter with new NPCs on several maps would take one
+    # build per map to enumerate.
+    sheet_failures: list[str] = []
     for uid in slice_ids:
         consts = registry.get(uid)
         warp_events = resolved.get(uid, [])
@@ -3619,7 +3649,8 @@ def build_slice_maps(
                 maps[uid], tileset,
                 open_cells=(walkable_overrides or {}).get(uid, frozenset()),
             )
-        result = build_object_events(
+        result = _build_object_events_collecting_sheets(
+            sheet_failures, uid,
             maps[uid], consts, slice_set, pory_labels=pory_labels, npc_gfx=npc_gfx,
             npc_gfx_states=npc_gfx_states,
             event_traits=map_traits, flag_registry=flag_registry,
@@ -3687,6 +3718,14 @@ def build_slice_maps(
             len(result.coord_events), len(result.bg_events), len(result.dispatchers),
             len(result.drops),
         )
+    if sheet_failures:
+        raise KeyError(
+            f"{len(sheet_failures)} map(s) reference NPC sheets with no "
+            "reference/npc_gfx_map.json entry. Choosing which fork sprite "
+            "resembles a Uranium NPC is a judgment call and stays yours -- but "
+            "here is the whole slice's list, so it is one sitting rather than "
+            "one build per map:\n\n" + "\n".join(sheet_failures)
+        )
     if local_id_dir is not None:
         write_local_id_tables(local_id_dir, local_id_tables)
     return overrides
@@ -3739,3 +3778,96 @@ def build_warps_only_maps(
         map_out.write_text(json.dumps(map_file.to_json_dict(), indent=2) + "\n", encoding="utf-8")
         logger.info("map %d (%s): warps-only, %d warps", uid, consts.map_const, len(warp_events))
     return overrides
+
+
+def _build_object_events_collecting_sheets(
+    failures: list[str], uid: int, *args: object, **kwargs: object
+) -> "ObjectBuildResult":
+    """`build_object_events`, but a missing-sprite KeyError is collected instead
+    of aborting the slice at the first map that has one.
+
+    Only the missing-sheet failure is deferred; every other error still
+    propagates immediately, because they are not the "one per build" shape this
+    batching exists to fix. The caller raises with the full list once the slice
+    has been walked -- and it always raises, so the half-built maps produced
+    after a deferred failure are never returned.
+    """
+    try:
+        return build_object_events(*args, **kwargs)  # type: ignore[arg-type]
+    except KeyError as exc:
+        message = exc.args[0] if exc.args else ""
+        if not (isinstance(message, str) and "npc_gfx_map.json" in message):
+            raise
+        failures.append(message)
+        return ObjectBuildResult()
+
+
+# --- Warp-override cell persistence (PROJECT_TODO #25) -----------------------
+#
+# `build_slice_maps` computes the authoritative per-map warp-override cell set
+# (`src_coords | gated_door_cells`) as a side effect of wiring the maps. The
+# layout/tileset pass in `scripts/assemble_pathfinder.py` needs exactly that
+# set to stamp the door metatile -- an unstamped warp tile is plain floor and
+# the warp is inert -- but it runs in a SEPARATE process, one step later in the
+# loop, so until 2026-09-08 it carried a hand-written duplicate that a human
+# extended once per chapter. CH05 was the third chapter to open its own gate by
+# hand; before the four cells were added, the player could not enter the
+# Passage Cave, leave it, or use the 1F<->2F stairs, while every warp event
+# compiled cleanly.
+#
+# Rather than reimplement the derivation (the page-selection and gated-door
+# logic is subtle -- reimplementing it is precisely the divergence #25 warns
+# about), the computed set is persisted here and read back by the assembler.
+# One derivation, one writer, one reader.
+
+WARP_OVERRIDES_FILENAME = "warp_overrides.gen.json"
+
+
+def write_warp_overrides(
+    out_dir: Path, overrides: dict[int, set[tuple[int, int]]]
+) -> Path:
+    """Persist `build_slice_maps`' returned override cells for the assembler.
+
+    Sorted throughout so re-running on unchanged input is byte-identical
+    (`CLAUDE.md` §4.2).
+    """
+    path = out_dir / WARP_OVERRIDES_FILENAME
+    payload = {
+        "_comment": (
+            "GENERATED by metadata_wiring.write_warp_overrides via "
+            "scripts/stage_slice_scripts.py -- do not hand-edit. Per-map "
+            "warp-source + gated-door cells; scripts/assemble_pathfinder.py "
+            "stamps the tileset's door metatile at each so the warp fires. "
+            "Fix the wiring, not this file (CLAUDE.md section 11)."
+        ),
+        "cells": {
+            str(uid): [list(c) for c in sorted(cells)]
+            for uid, cells in sorted(overrides.items())
+        },
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def load_warp_overrides(out_dir: Path) -> dict[int, set[tuple[int, int]]]:
+    """Read back what :func:`write_warp_overrides` wrote.
+
+    Fails loud when absent (`CLAUDE.md` §4.5): an empty override set is not a
+    harmless default, it is a ROM in which no door works, and that is exactly
+    the failure this file exists to prevent.
+    """
+    path = out_dir / WARP_OVERRIDES_FILENAME
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"{path} does not exist. It is written by "
+            "`python scripts/stage_slice_scripts.py --write` (runbook step 4), "
+            "which must run before the assembler (step 5). Proceeding without it "
+            "would stamp no door metatiles at all, and every warp in the build "
+            "would be inert -- the chapter would boot and be unplayable."
+        )
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return {
+        int(uid): {(int(x), int(y)) for x, y in cells}
+        for uid, cells in payload["cells"].items()
+    }

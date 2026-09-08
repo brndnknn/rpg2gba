@@ -5,6 +5,9 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
+from rpg2gba.trainer_converter import stage as stage_mod
 from rpg2gba.trainer_converter.common import TrainerPicSpec
 from rpg2gba.trainer_converter.pics import BackPicResult, FrontPicResult
 from rpg2gba.trainer_converter.stage import (
@@ -341,3 +344,79 @@ def test_golden_output_for_slice_selection(tmp_path: Path) -> None:
         golden_path.write_text(combined, encoding="utf-8")
     expected = golden_path.read_text(encoding="utf-8")
     assert combined == expected
+
+
+# --- stage_slice: battle-staging failures are fatal (PROJECT_TODO #83) -------
+#
+# Before 2026-09-08 `stage_slice` caught any battle-staging failure, logged a
+# WARNING, left `staged_battles` empty and returned normally. One unstageable
+# trainer therefore discarded every battle in the manifest while the process
+# exited 0 — CH05's Keichi took CH04's 17 already-good battles to 0 that way,
+# and it surfaced two steps downstream as an apparent CH01 failure.
+
+
+def _patch_pics(monkeypatch) -> None:
+    """Neutralize the (art-reading) pic half so these tests exercise only the
+    battle half's error handling. `SLICE_TRAINER_PICS` is emptied so the
+    comprehensions over it yield nothing."""
+    monkeypatch.setattr(stage_mod.pics, "SLICE_TRAINER_PICS", ())
+    monkeypatch.setattr(
+        stage_mod.pics, "convert_slice_trainer_pics", lambda uranium_src, out_dir: ([], [])
+    )
+
+
+def test_stage_slice_raises_when_a_pinned_battle_cannot_be_staged(tmp_path, monkeypatch) -> None:
+    _patch_pics(monkeypatch)
+
+    def _boom(**kwargs):
+        raise ValueError("TRAINER_KEICHI_248: BLACK_BELT not in fork classes")
+
+    monkeypatch.setattr(stage_mod, "stage_battles", _boom)
+
+    with pytest.raises(stage_mod.TrainerStagingError) as exc:
+        stage_mod.stage_slice(tmp_path / "src", tmp_path / "out", tmp_path / "engine")
+    # The underlying per-trainer detail must survive into the raised message --
+    # build_staged_battles collects every offender and that list is the payload.
+    assert "TRAINER_KEICHI_248" in str(exc.value)
+    assert "BLACK_BELT" in str(exc.value)
+
+
+def test_stage_slice_still_writes_the_pic_half_before_raising(tmp_path, monkeypatch) -> None:
+    """The pics half legitimately stands alone, so it is not rolled back — but
+    the caller is not allowed to mistake the run for a success."""
+    _patch_pics(monkeypatch)
+    monkeypatch.setattr(
+        stage_mod, "stage_battles", lambda **kw: (_ for _ in ()).throw(ValueError("nope"))
+    )
+    out_dir = tmp_path / "out"
+
+    with pytest.raises(stage_mod.TrainerStagingError):
+        stage_mod.stage_slice(tmp_path / "src", out_dir, tmp_path / "engine")
+
+    manifest_path = out_dir / stage_mod.MANIFEST_NAME
+    assert manifest_path.is_file()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert [t for t in manifest["trainers"] if t.get("kind") == "battle"] == []
+
+
+def test_stage_slice_raises_when_no_engine_dir_is_resolvable(tmp_path, monkeypatch) -> None:
+    """A missing fork used to be the same silent zero-battle path."""
+    _patch_pics(monkeypatch)
+    monkeypatch.delenv("RPG2GBA_POKEEMERALD", raising=False)
+
+    with pytest.raises(stage_mod.TrainerStagingError) as exc:
+        stage_mod.stage_slice(tmp_path / "src", tmp_path / "out")
+    assert "RPG2GBA_POKEEMERALD" in str(exc.value)
+
+
+def test_stage_slice_require_battles_false_is_the_only_way_to_opt_out(
+    tmp_path, monkeypatch
+) -> None:
+    _patch_pics(monkeypatch)
+    monkeypatch.setattr(
+        stage_mod, "stage_battles", lambda **kw: (_ for _ in ()).throw(ValueError("nope"))
+    )
+    manifest_path = stage_mod.stage_slice(
+        tmp_path / "src", tmp_path / "out", tmp_path / "engine", require_battles=False
+    )
+    assert manifest_path.is_file()

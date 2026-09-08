@@ -275,7 +275,7 @@ call, not a bug — the scene itself boot-walked and passed 2026-08-02
 vanilla ball vs. convert Uranium's sheet) is still outstanding. Migrated
 from SLICE1_TODO #23, 2026-08-04.
 
-### 25. `assemble_pathfinder.WARP_OVERRIDES` is a hand-maintained duplicate
+### 25. DONE 2026-09-08 — `WARP_OVERRIDES` is derived, not hand-maintained
 
 `scripts/assemble_pathfinder.py:58` defines a hand-written `WARP_OVERRIDES:
 dict[int, set[tuple[int, int]]]` that must agree with what
@@ -288,6 +288,34 @@ nothing enforces it, so a future reconciliation could silently re-diverge
 and quietly re-break doors. Fix: derive `WARP_OVERRIDES` from
 `build_slice_maps`'s computed set instead of hand-listing it. Migrated from
 `reference/findings/gated_door_collapse_2026-07-26.md` §7, 2026-08-04.
+
+**Fixed 2026-09-08** (`POST_CH05_REVIEW.md` G2), by persistence rather than
+reimplementation. `build_slice_maps` already computed the authoritative set;
+the problem was that `assemble_pathfinder.py` runs in a separate process one
+runbook step later and could not see it. So runbook step 4
+(`scripts/stage_slice_scripts.py --write`) now writes
+`output/uranium-build/warp_overrides.gen.json` via
+`metadata_wiring.write_warp_overrides`, and step 5 reads it via
+`load_warp_overrides`. The hand-written dict is gone from
+`assemble_pathfinder.py`, and `scripts/verify_viewer_rom_match.py` reads the
+same file so it really is checking the build's input.
+
+Re-deriving the rule in the assembler was considered and rejected: the
+gated-door and boot-page-selection logic is subtle, and a second
+implementation of it is precisely the silent re-divergence this entry warned
+about. One derivation, one writer, one reader.
+
+`load_warp_overrides` **fails loud** when the file is absent rather than
+defaulting to an empty set — "no doors anywhere" must never be a silent
+default (§4.5).
+
+Guarded by `tests/test_warp_overrides_derivation.py` against
+`tests/fixtures/warp_overrides_ch01_ch05.json`, a frozen copy of the
+hand-maintained table exactly as it stood at `78152b75`. Every one of its 45
+cells was verified by a human against a booted ROM across CH01–CH05's five §9
+gates, which makes it the strongest available oracle for "did the derivation
+stay correct". The comparison is scoped to those 18 maps, so a new chapter
+growing the set does not fail the test for the wrong reason.
 
 ### 26. Lab starter scene: what puts Uranium's own player on (14,7)? — unresolved, plus a fidelity call riding on the answer
 
@@ -1198,7 +1226,7 @@ as a picture much faster and more reliably than as a tile count. Wants the
 `BUILD_PLAN.md` step-6 wording changed to point at the viewer review instead
 of (or in addition to) the CLI summary.
 
-### 83. Trainer battle staging is all-or-nothing — a §4.5 violation
+### 83. DONE 2026-09-08 — trainer battle staging failures are fatal
 
 `trainer_converter.stage.stage_slice` (`src/rpg2gba/trainer_converter/stage.py`)
 calls `stage_battles`, which wraps `build_staged_battles` in
@@ -1219,6 +1247,19 @@ exactly the class `CLAUDE.md` §4.5 calls out. The trainer-pic half of
 failure shouldn't block battles and vice versa); the battle half specifically
 should either stage per-trainer (skip only the failing one, loudly) or abort
 the whole run rather than silently zeroing it.
+
+**Fixed 2026-09-08** (`POST_CH05_REVIEW.md` G3): abort, not skip-per-trainer.
+`stage_slice` still runs the pic half first and still writes the manifest —
+the pics genuinely stand alone and there is no reason to throw that work away
+— but it then raises `TrainerStagingError` carrying every offending trainer.
+`build_staged_battles` already collected them all rather than stopping at the
+first, so the complete list was available the whole time; nothing was
+propagating it. `require_battles=False` is the explicit opt-out for a
+pics-only caller.
+
+`scripts/stage_trainers.py`'s "CHECK THE BATTLE COUNT, not just the exit code"
+banner is retired — the exit code is trustworthy now. Tests in
+`tests/test_trainer_stage.py`.
 
 ### 84. `ITEM_TM76` needs a sanity check before it's ever reachable
 
@@ -1323,6 +1364,63 @@ chapter that calls an unstripped one.
 
 After this lands, `reference/archive/oracle_pory/` is fully inert history and its
 README should say so.
+
+### 88. DONE 2026-09-08 — the four pinned lists have a completeness check (`rpg2gba slice-pins`)
+
+`POST_CH05_REVIEW.md` G1. Four lists must move together when a chapter joins
+`SLICE_MAP_IDS`; exactly one was guarded (`test_chapter_atlas.py` pins
+`SLICE_MAP_IDS` itself against the atlas). `test_trainer_battles.py` and
+`test_species_gate.py` checked that present entries are *valid*, never that the
+lists are *complete*, so an omission surfaced later as a transpile abort — and
+CH05 hit three of them one at a time, "each omission failed separately and
+looked unrelated to the last, costing a full loop".
+
+`src/rpg2gba/slice_pins.py`, run as `rpg2gba slice-pins` (or
+`python -m rpg2gba.slice_pins`). Two layers, because they answer different
+questions:
+
+- **The gate** — every `TRAINER_*` the transpiler actually *emits* into
+  `scripts/Map###.pory` must be in `SLICE_TRAINER_BATTLES`. Exact, and the
+  thing that fails a build: an unpinned emitted constant IS the transpile abort.
+- **The census** — every trainer-battle *event* on an in-slice map with its
+  status, whether or not it was emitted. Advisory, never an error.
+
+Pics, species and trainer-class mappings are not re-derived: the check runs the
+real `stage_battles` over the union of pinned + newly-required keys and
+re-groups its collected errors into per-list buckets. `build_staged_battles`
+already reports every offending trainer rather than the first, so one run yields
+the whole picture — which is also the Tier 2 class-mapping batching (D5).
+
+The reverse direction is deliberately never reported: `SLICE_TRAINER_BATTLES`
+may hold keys no map event resolves to. `TRAINER_THEO_9/10/11` are the standing
+case — which rival battle fires depends on the starter, so Map050's event names
+none of them.
+
+Preconditions fail loud rather than reporting clean: an absent `maps/` or an
+absent species manifest would otherwise read as "no gaps" / "every species
+missing". Tests: `tests/test_slice_pins.py` (19).
+
+### 89. Three Map019 trainers have battle events that never fire — in slice since CH03
+
+Surfaced 2026-09-08 by #88's census, which is the first thing that could see it.
+`TRAINER_LOU_136` (Map019 EV004), `TRAINER_JOE_135` (EV005) and
+`TRAINER_RICHARD_137` (EV006) — all `TRAINER_CLASS_BIKER` — sit on Map019, in
+`SLICE_MAP_IDS` since CH03, and each is `queued-not-pinned`: their
+`pbTrainerBattle` calls are still `# UNHANDLED code 111` in `Map019.pory`, so
+nothing is emitted and nothing aborts. The NPCs deliver their dialogue and never
+battle.
+
+**Not a build risk, and deliberately not fixed by pinning them.** Staging a
+battle nothing references would be dead data. The real work is the transpiler
+emitting the conditional-branch shape those three use, at which point #88's gate
+turns red and the pins follow. Two things are known already: `TRAINER_CLASS_BIKER`
+is **not** a constant the fork defines (checked 2026-09-08 against
+`include/constants/trainers.h`), so a class decision is owed before these can
+stage at all (§4.7 — check for a native analog before concluding new C is
+needed); and their parties pull in species not currently staged.
+
+Whether Map019's gang battles are worth replicating is a §10 content call, not a
+mechanical one. Filed so the census's finding does not evaporate.
 
 ## Parked until the CH05 branch is cut (do not raise before then)
 

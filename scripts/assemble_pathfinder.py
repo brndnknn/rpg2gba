@@ -74,76 +74,35 @@ logger = logging.getLogger(__name__)
 # truth in rpg2gba.tileset_converter.map_set, imported above. Phase B will set the
 # build target from a --maps selector (slice/full/id-list) via map_set.parse_map_ids.
 
-# S5 warp overrides: warp-source coords. The layout converter stamps the
-# tileset's warp metatile (MB_NON_ANIMATED_DOOR, collision 0) at each so the
-# warp_event actually fires — a generic floor tile (MB_NORMAL) under a warp is
-# inert (S9 fix 2026-06-18). Mirrors build_slice_maps' returned src_coords.
-WARP_OVERRIDES: dict[int, set[tuple[int, int]]] = {
-    49: {(10, 11), (12, 3)},
-    48: {(3, 3)},
-    # 32: player's house (28,31) + the interior doors added by SLICE1_TODO #13:
-    # lab EV003 (17,11), house-2 EV006 (43,31), house-1 EV007 (24,42),
-    # Theo's-house EV017 (56,42) + the Route-01 triad EV023/036/037 at the east
-    # edge (8,44)/(8,45)/(8,43), live since CH02 put Map033 in the slice — these
-    # were deliberately blocked cells while Route 01 was out of scope, and they
-    # are the ONLY way out of Moki Town onto the route.
-    32: {(28, 31), (17, 11), (43, 31), (24, 42), (56, 42), (8, 43), (8, 44), (8, 45)},
-    50: {(14, 19)},           # lab exit EV001
-    64: {(9, 14)},            # house-2 exit EV003
-    65: {(9, 14)},            # house-1 exit EV003
-    172: {(10, 11), (12, 3)},  # Theo 1F: street exit EV002 + stairs up EV003
-    89: {(3, 3)},             # Theo 2F: stairs down EV002
-    # CH02 (2026-08-05). 33: the west-edge triad back to Moki Town
-    # EV023/024/022 (70,11)/(70,12)/(70,13) + the old-rod-house door EV027
-    # (39,18). 81: the house exit EV003 (9,14).
-    # CH03 (2026-08-12) added the NORTH pair EV045/EV046 (15,5)/(16,5) -> map31
-    # (15,42)/(16,42): Route 01's half of the Route-01<->Kevlar seam. These were
-    # deliberately absent while Kevlar was out of scope (an unstamped warp tile
-    # is inert, which is what kept the frontier closed), and are the ONLY way
-    # north out of Route 01.
-    33: {(70, 11), (70, 12), (70, 13), (39, 18), (15, 5), (16, 5)},
-    81: {(9, 14)},
-    # CH03 (2026-08-12). 31: the four doors into the shared building strip
-    # (map73) EV012 (23,28) bike shop / EV013 (37,28) apartment / EV004 (35,6)
-    # berry boutique / EV041 (32,28) house, the Mart EV002 (37,14), the Center
-    # EV003 (20,12), the cave EV034 (13,7), and the south pair back to Route 01
-    # EV023/EV035 (15,43)/(16,43). Map031 EV049 ("NurseTut") also carries a
-    # code-201, but it is a PERSON who transfers the player mid-scene, not a
-    # door tile — deliberately not listed, or her tile would grow a door.
-    31: {
-        (37, 14), (20, 12), (35, 6), (23, 28), (37, 28), (32, 28),
-        (13, 7), (15, 43), (16, 43),
-    },
-    67: {(10, 11)},                      # mart exit EV002
-    68: {(7, 19), (8, 19)},              # center exit, two tiles EV002/EV008
-    73: {(5, 12), (24, 13), (44, 13), (64, 13)},  # the strip's four exits
-    19: {(11, 30)},                      # cave exit EV007 -> map31 (13,7)
-    # CH05 (2026-09-06). The Passage Cave frontier: step 1 added maps 36/37 to
-    # SLICE_MAP_IDS, which made the warp EVENTS compile, but nothing stamped
-    # their tiles -- and an unstamped warp tile is inert (the same thing that
-    # kept CH02's and CH03's frontiers closed until each opened its own). The
-    # step-7 headless run caught it: B1 pressed onto Route 02's (20,33) and no
-    # warp fired, because the tile was still plain floor.
-    #
-    # Derived from the maps' own code-201 events, not from the emitted warp
-    # table -- that table also carries the ARRIVAL warps `_resolve_all_warp_events`
-    # mints on every destination, which are plain floor BY DESIGN and must stay
-    # that way. All four below are `trigger=1` (player touch) with a blank
-    # graphic, i.e. real walk-on doors; none is the Map031-NurseTut shape (a
-    # PERSON carrying a code-201, deliberately unstamped so her tile doesn't
-    # grow a door).
-    #   35: EV001 (20,33) -> map36 (17,39)   Route 2 into the cave
-    #   36: EV001 (17,40) -> map35 (20,33)   cave back out to Route 2
-    #       EV002 (17,4)  -> map37 (16,26)   cave 1F up to 2F
-    #   37: EV001 (16,27) -> map36 (17,4)    cave 2F down to 1F
-    # Map037 EV002 (16,5) -> map40 is deliberately ABSENT: Map040 is not in
-    # SLICE_MAP_IDS, so no warp_event compiles there and a door stamp would be
-    # art promising a crossing that cannot happen. CH05's contract at that
-    # boundary is to deliver the player to the edge, not across it (B11).
-    35: {(20, 33)},
-    36: {(17, 40), (17, 4)},
-    37: {(16, 27)},
-}
+# S5 warp overrides: warp-source + gated-door coords. The layout converter
+# stamps the tileset's warp metatile (MB_NON_ANIMATED_DOOR, collision 0) at each
+# so the warp_event actually fires -- a generic floor tile (MB_NORMAL) under a
+# warp is inert (S9 fix 2026-06-18).
+#
+# DERIVED, not hand-listed, since 2026-09-08 (PROJECT_TODO #25, POST_CH05_REVIEW
+# G2). `metadata_wiring.build_slice_maps` already computes this exact set
+# (`src_coords | gated_door_cells`) while wiring the maps; runbook step 4
+# (`scripts/stage_slice_scripts.py --write`) persists it to
+# `warp_overrides.gen.json` and this pass reads it back. Before that, a
+# hand-written dict here had to be extended once per chapter, and CH02, CH03 and
+# CH05 each opened their own gate by hand -- CH05's four cells were the
+# difference between a working chapter and a completely inert one, with every
+# warp event compiling cleanly the whole time.
+#
+# The arrival warps `_resolve_all_warp_events` mints on every destination are
+# correctly absent: they are not real code-201 events, so they never enter
+# `src_coords`. They are plain floor by design and must stay that way.
+#
+# `load_warp_overrides` fails loud when the file is missing rather than
+# defaulting to an empty set -- "no doors anywhere" is the exact failure this
+# guards against, and it must never be the silent default (CLAUDE.md section 4.5).
+
+
+def _load_warp_overrides(out: Path) -> dict[int, set[tuple[int, int]]]:
+    from rpg2gba.tileset_converter.metadata_wiring import load_warp_overrides
+
+    return load_warp_overrides(out)
+
 
 # Flag/var address layout for the pathfinder boot test. The numeric layout now
 # lives in the ENGINE, single source of truth: include/config/rpg2gba.h defines
@@ -291,7 +250,7 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
 
     build_slice_tilesets(
         maps,
-        WARP_OVERRIDES,
+        _load_warp_overrides(out),
         fork=fork,
         base_tile_map=Path("reference/tileset_map.json"),
         overlay_out=Path("reference/tileset_map.gen.json"),
@@ -339,13 +298,15 @@ def run_layout_pass(
     slice_seams = seams_for_slice(load_seam_warps(), set(SLICE_MAP_IDS))
     seam_behavior_cells = behavior_cells_for(slice_seams)
 
+    all_warp_overrides = _load_warp_overrides(out)
+
     entries: list[dict] = []
     for map_id in SLICE_MAP_IDS:
         entry = consts[str(map_id)]
         map_json_path = out / "maps" / f"Map{map_id:03d}.json"
         map_json = json.loads(map_json_path.read_text(encoding="utf-8"))
 
-        warp_overrides = WARP_OVERRIDES.get(map_id, set())
+        warp_overrides = all_warp_overrides.get(map_id, set())
         # A working (in-slice) door matches the same blank-graphic/through=False
         # predicate collect_through_block_cells uses (see its docstring) — exclude
         # the map's own warp coords so its tile stays enterable. An out-of-slice

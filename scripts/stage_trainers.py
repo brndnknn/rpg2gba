@@ -11,10 +11,11 @@ copies generated headers into the fork. Use this when you have appended to
 `trainer_converter.common.SLICE_TRAINER_BATTLES` / `SLICE_TRAINER_PICS` and
 want the manifest refreshed before re-running the transpiler.
 
-CHECK THE BATTLE COUNT, not just the exit code. `stage_slice` skips battle
-staging wholesale with a logged WARNING when *any* pinned trainer cannot be
-staged — one bad entry drops every battle, including chapters that were
-staged fine before. An exit 0 with `0 battle(s)` is a regression, not a pass.
+Since 2026-09-08 (`PROJECT_TODO.md` #83) a battle-staging failure is FATAL:
+`stage_slice` raises `TrainerStagingError` listing every offending trainer
+rather than logging a WARNING and returning a manifest with zero battles. The
+manual "check the battle count, not the exit code" instruction that used to
+live here is retired — the exit code is now trustworthy.
 
     python scripts/stage_trainers.py
 """
@@ -46,10 +47,10 @@ def main() -> int:
     logger.info("trainer manifest: %s", manifest_path)
     logger.info("battle entries staged: %d", len(battles))
     if not battles:
-        logger.warning(
-            "0 battles staged — see the skip warning above; every pinned trainer "
-            "battle is now absent from the manifest, not just the failing one"
-        )
+        # Unreachable via a staging failure since #83 (stage_slice raises), but a
+        # genuinely empty SLICE_TRAINER_BATTLES would land here. Still not a pass.
+        logger.error("0 battles staged and no staging error — SLICE_TRAINER_BATTLES is empty?")
+        return 1
     return 0
 
 
