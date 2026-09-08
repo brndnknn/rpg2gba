@@ -312,7 +312,19 @@ fidelity on a first pass; manual polish of hero assets (player/starters) is Phas
 | Pathfinder S1–S9 converters (tile_map/layout/map_constants/metadata_wiring/assembly) | Frozen-Opus `.pory` *as product* (→ kept only as differential oracle) |
 | Orchestrator checkpoint/memo machinery (repurpose) | 19 scattered root planning docs |
 
-**Tracked obligation:** the fork-baseline divergences (`new_game.c` WarpToTruck spawn
-override + `intro.c` intro-skip, sentinel-fenced, uncommitted) are *test-only* and
-must be reverted/gated before any real build — a fresh fork clone drops them. See
-MEMORY → Decisions Made.
+**CORRECTED 2026-09-08:** this section used to carry a "tracked obligation" claiming the
+fork-baseline divergences (`new_game.c` WarpToTruck spawn override + `intro.c` intro-skip)
+were *test-only* and "must be reverted/gated before any real build." **That is false and
+dangerous, and it is the last surviving copy of the claim.** It was reversed on 2026-09-07
+in `MEMORY.md` → Decisions Made and in `engine/RPG2GBA_VENDOR.md:28-38`; this file was
+missed by that pass, and it cited MEMORY → Decisions Made — the very entry that refutes it.
+
+The custom engine work is **77 files / +2647 −343 lines**, committed and load-bearing:
+whole new source files (a map-walker debug mode, an embedded-save boot path), new engine
+mechanics (a movement-type bytecode interpreter, a live-graphics-swap special), gameplay
+content, pacing/save-layout changes, and ~15 generated-content include-hooks. None of it is
+test-only and none of it should be reverted before "a real build" — it *is* the real build.
+
+**The canonical way to see the custom edits is `git diff 80cdfce2 HEAD -- engine/`**, not any
+hand-maintained list. See `engine/RPG2GBA_VENDOR.md` for the full treatment, including why
+sentinel fences are a locator rather than a revert script.
