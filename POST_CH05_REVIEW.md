@@ -23,6 +23,32 @@ says so.
 
 ## 0. Decisions I need from you
 
+> **ANSWERED AND IMPLEMENTED 2026-09-08** (`a076452d`, `78152b75`). The table below is
+> kept as written; the resolutions are here.
+>
+> | # | Answer | Where it landed |
+> |---|---|---|
+> | D1 | **Before both.** G1/G2/G3 done on `main` before CH06 and before #65. | `PROJECT_TODO.md` #88, #25, #83 |
+> | D2 | **Neither option.** The review's premise was wrong — see below. Both tests deleted. | #86 (rewritten), #87 (new) |
+> | D3 | **Archive.** Done; `reference/archive/README.md` carries the redirect row. | — |
+> | D4 | **Delete.** `ch05` + three other merged locals dropped. `backup/warp-facing-attempt-2026-07-16` kept. | — |
+> | D5 | **Yes, same commit.** Trainer-class mappings and `npc_gfx_map` both batched. | `a076452d` |
+>
+> **D2's premise did not survive checking.** #86 said the frozen-Opus oracle was stale as
+> of Map036 and that refreshing it was a content call. In fact `_differential` read its
+> "oracle" from `output/uranium-build/scripts/`, which the **deterministic transpiler**
+> now writes, and iterated a `checkpoints/` dir holding only CH05's two files — so the
+> tests were comparing the pipeline to itself, and would have gone *green* on a match.
+> The real oracle was never lost (`reference/archive/oracle_pory/`, archived 2026-07-02
+> under grill D6 precisely so `--clean` could not destroy it), and it did not need
+> refreshing either: the same day's harvest retired it, recording *"the archive stays for
+> provenance, it gates nothing."* So there was no red baseline to decide about — there was
+> a dead pointer. Suite is now **3018 passed / 17 skipped / 0 failed**.
+>
+> **Not done, and outside these five decisions:** §4 step 3, **G4 / #79** (the stair
+> resolver). It was in the suggested order but was not one of the questions asked.
+
+
 | # | Decision | Why it's yours | My recommendation |
 |---|---|---|---|
 | D1 | **Sequence: G1/G2/G3 (§2) before CH06 or before #65?** | It reorders the agreed plan | **Before both.** They're small, mechanical, and each already cost a full debugging loop at CH05's scale. G2 decides whether CH06's first ROM has working doors. |
