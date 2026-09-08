@@ -1274,79 +1274,18 @@ def test_ground_item_output_compiles() -> None:
     assert result.ok, result.stderr
 
 
-# -- differential validation vs the frozen-Opus oracle (invariant 4) ----------
+# -- item-constant validation vs the Phase-2 source of truth ----------------
+#
+# The frozen-Opus differential tests that used to live here were removed
+# 2026-09-08: the oracle they diffed against was formally retired by the
+# grill-D6 harvest (reference/findings/oracle_harvest_2026-07-02.md), and they
+# had silently repointed at output/uranium-build/scripts/, which the
+# deterministic transpiler now writes -- so they compared the pipeline to
+# itself. The oracle text is preserved at reference/archive/oracle_pory/;
+# per D6 permanent goldens come from reviewed transpiler output, never Opus.
 
 _BUILD = Path("output/uranium-build")
 _ITEM_TOK = re.compile(r"ITEM_[A-Z0-9_]+")
-
-
-def _norm_items(block: str) -> str:
-    """Collapse every ``ITEM_*`` constant to a placeholder.
-
-    Frozen-Opus is an UNRELIABLE oracle for Uranium item names — it guesses the
-    vanilla spelling (e.g. ``ITEM_PARALYZE_HEAL``) where Phase 2 emitted Uranium's
-    own (``ITEM_PARLYZ_HEAL`` from display name "Parlyz Heal"). So the differential
-    validates structure/labels/counts against Opus while item spellings are checked
-    separately against the Phase-2 source of truth (`test_emitted_item_constants_are_real`)."""
-    return _ITEM_TOK.sub("ITEM_*", block)
-
-
-def _blocks_by_label(text: str) -> dict[str, str]:
-    """Map each top-level ``<kw> <label> { ... }`` block (script/mart/movement/…)
-    to its (line-rstripped) text."""
-    out: dict[str, str] = {}
-    label: str | None = None
-    cur: list[str] = []
-    for line in text.split("\n"):
-        if label is None:
-            m = re.match(r"^(?:script|mart|movement|text|raw)\s+(\S+)\s*\{", line)
-            if m:
-                label, cur = m.group(1), [line.rstrip()]
-        else:
-            cur.append(line.rstrip())
-            if line.strip() == "}":
-                out[label] = "\n".join(cur)
-                label = None
-    return out
-
-
-def _differential(classify) -> int:
-    """Run `classify` over every `.done` map and assert each block it claims
-    reproduces the frozen-Opus .pory byte-for-byte (iterative roadmap invariant 4).
-
-    The reliable oracle is the set of maps with a `.done` checkpoint (a `.partial`
-    map — paused mid-conversion — has gaps that are absent, not divergent).
-    `pytest.skip`s when the gitignored corpus/oracle isn't on disk; otherwise
-    returns the number of blocks validated."""
-    checkpoints, maps_dir, scripts_dir = _BUILD / "checkpoints", _BUILD / "maps", _BUILD / "scripts"
-    if not (checkpoints.is_dir() and maps_dir.is_dir() and scripts_dir.is_dir()):
-        pytest.skip("on-disk corpus/oracle absent (output/ is gitignored)")
-    ctx = D.load_context(reference_dir=Path("reference"), intermediate_dir=_BUILD / "intermediate")
-    if not ctx.items:
-        pytest.skip("item sidecars absent — classifier inert")
-    done = sorted(int(p.stem[3:]) for p in checkpoints.glob("Map*.done"))
-    checked = 0
-    for mid in done:
-        mp, po = maps_dir / f"Map{mid:03d}.json", scripts_dir / f"Map{mid:03d}.pory"
-        if not mp.is_file() or not po.is_file():
-            continue
-        oracle = _blocks_by_label(po.read_text(encoding="utf-8"))
-        data = json.loads(mp.read_text(encoding="utf-8"))
-        for ev in data.get("events", []):
-            out = classify(mid, ev, ctx)
-            if out is None:
-                continue
-            for label, block in _blocks_by_label(out).items():
-                assert label in oracle, f"Map{mid:03d}: {label} not in frozen-Opus oracle"
-                assert _norm_items(block) == _norm_items(oracle[label]), (
-                    f"Map{mid:03d}: {label} diverges from frozen-Opus (structure)"
-                )
-                checked += 1
-    return checked
-
-
-def test_ground_item_differential_vs_frozen_opus() -> None:
-    assert _differential(D.classify_ground_item) > 0, "no ground items validated"
 
 
 # ----------------------------------------------------------------------------
@@ -1438,14 +1377,10 @@ def test_pokemart_output_compiles() -> None:
     assert result.ok, result.stderr
 
 
-def test_pokemart_differential_vs_frozen_opus() -> None:
-    assert _differential(D.classify_pokemart) > 0, "no mart events validated"
-
-
 def test_emitted_item_constants_are_real() -> None:
     """Every ITEM_* the item classifiers emit across `.done` maps must be a real
     Phase-2 constant (a key in item_field_codes.json) — the authoritative oracle
-    for Uranium item names, vs frozen-Opus's vanilla guesses (invariant 4)."""
+    for Uranium item names (invariant 4)."""
     checkpoints, maps_dir = _BUILD / "checkpoints", _BUILD / "maps"
     codes = _BUILD / "intermediate" / "item_field_codes.json"
     if not (checkpoints.is_dir() and maps_dir.is_dir() and codes.is_file()):

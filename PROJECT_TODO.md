@@ -1253,19 +1253,76 @@ leaves the player). The correct recipe is `playtest walk --chapter <this> --at-b
 first-beat blob, never the predecessor's `--at-end`. `BUILD_PLAN.md` should
 say this instead of the current recipe.
 
-### 86. Frozen-Opus differential oracle is stale as of Map036 — two permanently red tests
+### 86. DONE 2026-09-08 — the two frozen-Opus differential tests were removed, not refreshed
 
-`tests/test_deterministic.py`'s `test_ground_item_differential_vs_frozen_opus`
-(`:1348`) and `test_pokemart_differential_vs_frozen_opus` (`:1441`) fail
-because the frozen-Opus oracle they diff against predates Map036 —
-`test_ground_item_differential_vs_frozen_opus` fails with "Map036:
-Map036_EV003_Page1 not in frozen-Opus oracle" and the pokemart test fails
-with "no mart events validated." Confirmed 2026-09-06 as the *only* two
-failures in an otherwise green suite (2 failed, 2982 passed, 16 skipped).
-Refreshing the frozen oracle to cover the post-CH05 corpus is an operator
-content call (what counts as ground truth to diff against), not a mechanical
-fix — this entry deliberately does not prescribe a resolution, only records
-that the two failures are known, isolated, and traced to this cause.
+**The diagnosis this entry originally carried was wrong.** It read: "the frozen-Opus
+oracle predates Map036 … refreshing it is an operator content call." Investigated
+2026-09-08 in the post-CH05 review walkthrough; what was actually true:
+
+- `_differential` (`tests/test_deterministic.py:1313`) read its "oracle" from
+  `output/uranium-build/scripts/` and iterated `output/uranium-build/checkpoints/*.done`.
+  Both are gitignored and were wiped by a `pipeline --clean` at some point; `scripts/`
+  is now written by the **deterministic transpiler**, and `checkpoints/` held exactly
+  two files (`Map036.done`, `Map037.done`) from CH05's transpile.
+- So the tests were comparing the classifiers against **the transpiler's own output**.
+  Had Map036 happened to match, they would have gone green by comparing the pipeline
+  to itself — a silent pass, the §4.5 shape.
+- The real oracle was never lost. It is committed at `reference/archive/oracle_pory/`
+  (20 `.pory` files), archived 2026-07-02 under grill decision **D6** *specifically so
+  that `pipeline --clean` could not destroy it*. The archive did its job; nobody
+  repointed the tests.
+- And it did not need repointing, because **the oracle was formally retired the same
+  day**. `reference/findings/oracle_harvest_2026-07-02.md` is the one-time D6 harvest
+  (maps 001–007, every divergence cluster dispositioned: 3 transpiler bugs found and
+  fixed, 5 clusters ruled Opus errors): *"with these dispositions recorded, the oracle
+  is retired (the archive stays for provenance, it gates nothing)."* Per D6, permanent
+  goldens come from reviewed transpiler output, never Opus text — which is exactly what
+  a permanent pytest against Opus text was.
+
+**Resolution:** both tests and the now-dead `_differential` / `_norm_items` /
+`_blocks_by_label` helpers deleted; a comment at the removal site records why.
+`test_emitted_item_constants_are_real` stays (it validates against the Phase-2 source
+of truth, not against Opus). Module green at 123 passed. The one obligation the July
+harvest deliberately held open is now filed separately as **#87**.
+
+
+### 87. `CommonEvents.pory` was never harvested against the oracle — and CH06 is the first chapter to call a common event
+
+**Prerequisite for CH06.** Filed 2026-09-08 out of the post-CH05 review walkthrough,
+splitting off the one obligation #86's harvest deliberately left open.
+`reference/findings/oracle_harvest_2026-07-02.md` retired the frozen-Opus oracle for
+maps, with one explicit exception:
+
+> **Not harvested** — CommonEvents: the driver has no CE pass yet (maps only). Harvest
+> the oracle's `CommonEvents.pory` when the CE pass lands, before retiring that file's
+> oracle status.
+
+**The CE pass has since landed** (`convert-common-events` is a registered pipeline
+stage and `output/uranium-build/scripts/CommonEvents.pory` exists), so the condition
+is met and nothing has been done. Current transpiler output is **401 lines / 23
+blocks** against the archived Opus version's **263 lines / 22 blocks**
+(`reference/archive/oracle_pory/CommonEvents.pory`), so there is real divergence to
+disposition. The first harvest found three genuine transpiler bugs across seven maps;
+this is the same exercise on the one file it skipped. Tool exists:
+`scripts/oracle_harvest.py`. Both sides need `normalize_pory` applied first — the
+archive is pre-normalization by design (raw `\"` escapes and `healparty` present).
+
+**Why it is scoped to CH06 rather than left unscheduled.** Measured across all 199
+decoded maps, common events are called from only **73 sites on 22 maps, 6 distinct
+CEs** — and **zero** of those maps are in the current 18-map `SLICE_MAP_IDS`, which is
+why five chapters shipped without touching one. CH06's **Map043** calls CE 4, 5 and 6
+(one each; the only `code 117` calls anywhere in maps 40–47), making it the corpus's
+first in-slice CE call site.
+
+**Mitigating, and worth confirming rather than assuming:** all three are already in
+`reference/strip_list.json` → `common_events`, tagged `"online (phase0: scripts
+233/235/236)"` with stub message *"The Tandor Network is unavailable."* and
+`expect_name` guards. So CH06's exposure is to the strip path, not to the converted
+text. The harvest is still the cheaper time to find a CE-pass bug than the first
+chapter that calls an unstripped one.
+
+After this lands, `reference/archive/oracle_pory/` is fully inert history and its
+README should say so.
 
 ## Parked until the CH05 branch is cut (do not raise before then)
 
