@@ -17,7 +17,7 @@ A pipeline that converts RPG Maker XP / Pokémon Essentials fan games into playa
 There are two AI agents in this project. **You are one of them.** Do not confuse your role with the other.
 
 - **You are the build agent.** You work on rpg2gba's Python, Ruby, and C code. You read this file. You have full repo access and can run tests, refactor, and propose new features. You behave like a developer joining the project.
-- **The other agent is the conversion agent.** It is a *runtime component of rpg2gba itself* — an LLM, **retired as the conversion spine (2026-06-18) and kept only as a hand-invoked tool for the irreducible tail** (branch-heavy story logic, novel embedded Ruby the deterministic transpiler can't interpret). It has no awareness of the codebase. Its prompt lives in `src/rpg2gba/conversion_agent/prompts/system.md` — **no longer frozen** (see §7) — which you maintain like any other source file.
+- **The other "agent" is a tail tool, not a peer.** The conversion spine is the **deterministic transpiler** you write and run (§4.1) — that is where conversion happens. What remains of the LLM is a *runtime component of rpg2gba itself*, **retired as the spine on 2026-06-18** and hand-invoked only for the irreducible tail (branch-heavy story logic, novel embedded Ruby the transpiler can't interpret). It has no awareness of the codebase. Its prompt lives in `src/rpg2gba/conversion_agent/prompts/system.md` — **no longer frozen** (see §7) — and you maintain it like any other source file. Its shrinking is the point: anything it handles that could be handled deterministically is a transpiler feature waiting to be written.
 
 You will never run as the conversion agent. The conversion agent will never run as you. If you find yourself uncertain which role you're in, you're the build agent — the conversion agent doesn't read CLAUDE.md.
 
@@ -69,47 +69,29 @@ to learn the structure. The rules that bind every session:
 
 ## 3. Repository Layout
 
-```
-rpg2gba/
-├── README.md                   # Public-facing project description
-├── ROADMAP.md                  # The plan; read for "what next"
-├── CLAUDE.md                   # This file
-├── pyproject.toml
-├── src/
-│   └── rpg2gba/
-│       ├── pbs_converter/          # Phase 2: deterministic Python
-│       │   ├── pokemon.py
-│       │   ├── moves.py
-│       │   ├── items.py
-│       │   ├── trainers.py
-│       │   ├── abilities.py
-│       │   └── encounters.py
-│       ├── rxdata_deserializer/    # Phase 3: Ruby
-│       │   └── deserialize.rb
-│       ├── conversion_agent/       # Phase 4: transpiler + classifiers; LLM tail-only
-│       │   ├── orchestrator.py     # The driver loop
-│       │   ├── flag_registry.py    # Single source of truth for FLAG_*/VAR_* names
-│       │   ├── backends/
-│       │   │   ├── ollama.py
-│       │   │   └── claude_code.py
-│       │   └── prompts/
-│       │       ├── system.md       # Tail-tool prompt (no longer frozen)
-│       │       └── few_shot/       # Example conversions, one .md per scenario
-│       ├── tileset_converter/      # Phase 5
-│       └── pipeline.py             # Top-level orchestration entry point
-├── tests/
-│   ├── test_pbs_pokemon.py     # Round-trip and golden-output tests
-│   ├── ...
-├── reference/                  # Hand-authored docs the build agent and humans read
-│   ├── poryscript_cheatsheet.md
-│   ├── rgss_event_commands.md
-│   ├── essentials_to_emerald_map.md
-│   └── uranium_id_map.json     # Authoritative ID mapping table
-├── scripts/                    # One-off utilities, debugging tools
-├── engine/                     # Vendored pokeemerald-expansion (pinned); custom C lives here
-└── output/                     # Generated artifacts; gitignored
-    └── uranium-build/
-```
+**Orientation, not an inventory.** This section names the handful of places you need to get
+your bearings. It is deliberately *not* a directory tree — a hand-drawn tree lived here until
+2026-09-08, went stale in nine packages, and was the third such stale tree in this repo.
+**Run `ls src/rpg2gba/` for the current package list**; the filesystem is the inventory.
+
+- **`src/rpg2gba/`** — the pipeline. The five packages worth knowing by name:
+  `pbs_converter/` (PBS data → C tables), `map_deserializer/` + `rxdata_deserializer/`
+  (RMXP `.rxdata` → JSON, via Ruby), `conversion_agent/` (**the deterministic event→Poryscript
+  transpiler lives here**, despite the name — plus the flag registry and the hand-invoked LLM
+  tail tool), and `tileset_converter/` (graphics, layout, and map assembly). The chapter loop's
+  own packages — `chapter_atlas/`, `chapter_manifest/`, `routing/`, `playtest/` — are listed
+  with their commands in §7.
+- **`reference/`** — hand-authored docs and the source-of-truth JSONs (§4.3). `guides/` is
+  pipeline knowledge, `chapters/` is the per-chapter corpus plan, `archive/` is retired docs
+  (read `reference/archive/README.md` first — it maps each archived doc to where its live
+  content went).
+- **`scripts/`** — utilities and instrumentation (the map viewer, oracle/comparison tools).
+  **~75 of its ~95 files are spent one-offs and only three say so**, so do not infer liveness
+  from a filename here. `scripts/assemble_pathfinder.py` in particular is named for a retired
+  era and is the assembly step of *every* chapter build.
+- **`engine/`** — the vendored pokeemerald-expansion fork; custom C lives here. See below.
+- **`output/`** — generated artifacts, gitignored, safe to wipe and regenerate.
+- **`tests/`**, **`investigations/`** — the suite, and durable investigation docs.
 
 ### Things outside this repo you may need to read
 
@@ -145,8 +127,10 @@ Every converter must be safely re-runnable from scratch. If running it twice pro
 
 | Concept | Source of truth |
 |---|---|
-| `SPECIES_*` constants | `src/rpg2gba/pbs_converter/pokemon.py` output |
-| `MOVE_*` constants | `src/rpg2gba/pbs_converter/moves.py` output |
+| Constant *spelling* for every `SPECIES_*`/`MOVE_*`/`ITEM_*`/`ABILITY_*`/`TYPE_*` | `src/rpg2gba/pbs_converter/_naming.py` → `to_constant(prefix, name)` — the single mint point (consolidated 2026-09-07; it replaced five hand-copied `*_constant` helpers, two of which had drifted) |
+| Name → constant *resolution* at emit time | `src/rpg2gba/pbs_converter/_resolve.py` (`MoveResolverMixin`, `SpeciesResolverMixin`, `ItemResolverMixin`, `AbilityResolverMixin`, `TypeResolverMixin`) |
+| `SPECIES_*` table contents | `src/rpg2gba/pbs_converter/pokemon.py` output |
+| `MOVE_*` table contents | `src/rpg2gba/pbs_converter/moves.py` output |
 | `FLAG_*` / `VAR_*` names | `src/rpg2gba/conversion_agent/flag_registry.py` |
 | Uranium internal name → expansion constant | `reference/uranium_id_map.json` |
 | Tile substitution table | `reference/tileset_map.json` |
@@ -189,6 +173,11 @@ Most "engine feature" tags ship natively (cave/Flash, bridges, PC, region map, r
 ### Python
 
 - Python 3.11+
+- **Scope of this section:** the rules below are binding in `src/rpg2gba/`. In `scripts/` and
+  `tests/` only the built-in-generics ban is binding — it holds repo-wide and is enforced.
+  (Measured 2026-09-07: type-hint coverage is complete in `src/` and ~17%/18% short in
+  `scripts/`/`tests/`. A pytest test has no caller, so `-> None` on it buys nothing. Scoping
+  the rule is deliberate — a rule everyone breaks teaches the reader this file is decorative.)
 - Type hints on all public functions
 - **Use built-in generic types for hints — never import `List`, `Dict`, `Tuple`, `Optional`, `Union` from `typing`.** Python 3.11 supports all of these natively:
   - `list[str]` not `List[str]`
@@ -251,9 +240,12 @@ The conversion agent's prompts are source code. Treat them with the same care.
 
 ## 6. The Flag Registry
 
-The full policy lives in **`reference/guides/flag_registry_policy.md`** — it's a Phase 4
-component, dormant during the current Phase 2. Read it when Phase 4 starts. It's
-the most common place pipelines like this go wrong, so don't wing it.
+The full policy lives in **`reference/guides/flag_registry_policy.md`**. **It is a Phase 4
+component and Phase 4 is the active phase** (`MEMORY.md` → Current Phase), so this is live
+right now — read it before touching flags or vars. It's the most common place pipelines like
+this go wrong, so don't wing it. *(Corrected 2026-09-08: this paragraph used to say the
+registry was "dormant during the current Phase 2", which was false and, worse, told the
+reader to skip the hard rule immediately below it.)*
 
 **Hard rule (applies always):** Every flag/var name goes through the registry —
 never hardcode one, even one you're certain of. You may modify `flag_registry.py`
@@ -304,6 +296,35 @@ replaced ad-hoc "slices" as the unit of work (2026-08-05); the identity is
 the loop didn't change, only how sections are chosen and named. "Slice" survives in
 code identifiers (`SLICE_MAP_IDS`) — deliberately not renamed.
 
+### The chapter loop's entry points
+
+**The `rpg2gba` console script is not the whole CLI, and reading `pipeline.py` alone will
+mislead you.** It registers the pipeline *stages* (`phase2`, `phase3`, `phase4`, `phase5`,
+`convert-map`, `convert-common-events`, `transpile-events`). The **chapter loop** — the way
+work actually gets done now — lives in four separate packages, invoked as modules:
+
+```bash
+# SELECT — which chapter, and does the atlas agree it is coherent?
+python -m rpg2gba.chapter_atlas validate | coverage | census
+
+# READ — generate and check the chapter's manifest
+python -m rpg2gba.chapter_manifest generate --chapter CHnn
+python -m rpg2gba.chapter_manifest check    --chapter CHnn   # enforces RULE_ROUTE_ORDER
+
+# ROUTE — solve the visit order, then write the plan
+python -m rpg2gba.routing plan --chapter CHnn --module <mod> --dry-run
+python -m rpg2gba.routing plan --chapter CHnn --module <mod>   # writes reference/routes/CHnn.route.json
+
+# BOOT — the §9 gate
+python -m rpg2gba.playtest run  --chapter CHnn
+python -m rpg2gba.playtest walk --chapter CHnn --at-beat B7
+```
+
+Each is also an `rpg2gba` subcommand (added 2026-09-08): `rpg2gba chapter-atlas`,
+`chapter-manifest`, `routing`, `playtest` — hyphenated, same subcommands underneath. Both
+forms work and delegate to the same click groups. The full loop with its build/assembly steps
+is `BUILD_PLAN.md §2`; the runnable end-to-end recipe is `README.md`.
+
 ---
 
 ## 8. Testing Expectations
@@ -321,12 +342,14 @@ code identifiers (`SLICE_MAP_IDS`) — deliberately not renamed.
 # Python
 pytest
 
-# Ruby
-ruby test/test_deserializer.rb
-
 # pokeemerald-expansion
 cd $RPG2GBA_POKEEMERALD && make -j$(nproc) modern
 ```
+
+*(Removed 2026-09-08: a `ruby test/test_deserializer.rb` line that pointed at a file and
+directory which do not exist. The Ruby deserializer is covered indirectly through
+`map_deserializer`'s Python tests; there is no standalone Ruby suite. If you want one, that
+is a task, not a doc fix.)*
 
 ### When tests fail
 
@@ -389,15 +412,21 @@ list is in ROADMAP.md "Known Pitfalls":
 
 ### Environment variables
 
-All of these live in the tracked `.env-paths` at the repo root and are already
-correct. Read them from there; **never override them on a command line** (§3).
+The pipeline loads the tracked `.env-paths` at startup. **Never override any `RPG2GBA_*`
+variable on a command line** — not inline, not exported, not in a subshell (§3). The table
+below says where each value actually comes from, because that distinction has mattered.
 
-| Variable | Purpose |
-|---|---|
-| `RPG2GBA_URANIUM_SRC` | Uranium source tree — `/home/b/repos/uranium-src/_unpacked` (note the `_unpacked` suffix; the parent dir is incomplete and looks broken if you check it by mistake) |
-| `RPG2GBA_POKEEMERALD` | The vendored engine — `engine/` in this repo, never an external clone |
-| `RPG2GBA_OUTPUT` | Output directory (defaults to `./output`) |
-| `OLLAMA_HOST` | Ollama server on the Ubuntu desktop (accessed over Tailscale) |
+| Variable | Set in | Purpose |
+|---|---|---|
+| `RPG2GBA_URANIUM_SRC` | `.env-paths` | Uranium source tree — note the `_unpacked` suffix; the parent dir is incomplete and looks broken if you check it by mistake |
+| `RPG2GBA_POKEEMERALD` | `.env-paths` | The vendored engine — `engine/` in this repo, never an external clone |
+| `RPG2GBA_PORYSCRIPT` | `.env-paths` | The `poryscript` binary. Resolved via this var or `PATH`; `poryscript.py` fails loud if absent |
+| `RPG2GBA_OUTPUT` | **code default** (`"output"`) | Output directory. *Not* in `.env-paths`; it is an in-code default you may override via the environment if you genuinely need to |
+| `OLLAMA_HOST` | `.env.example` only | Ollama server for the retired bulk path; not part of the chapter loop |
+
+*(Corrected 2026-09-08: this table used to claim all four lived in `.env-paths`. It omitted
+`RPG2GBA_PORYSCRIPT`, which does, and asserted `RPG2GBA_OUTPUT`/`OLLAMA_HOST` were pinned
+there, which they are not.)*
 
 ### Useful one-liners
 

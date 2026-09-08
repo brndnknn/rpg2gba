@@ -156,44 +156,16 @@ Run the build pipeline on the **Ubuntu desktop**. The GBA decomp toolchain is ha
 
 ### Repository Structure (the pipeline tool itself)
 
-```
-rpg2gba/
-├── README.md
-├── ROADMAP.md                  # this file
-├── CLAUDE.md                   # build agent instructions
-├── pyproject.toml
-├── src/
-│   ├── pbs_converter/
-│   │   ├── __init__.py
-│   │   ├── pokemon.py
-│   │   ├── moves.py
-│   │   ├── items.py
-│   │   ├── trainers.py
-│   │   ├── abilities.py
-│   │   └── encounters.py
-│   ├── rxdata_deserializer/
-│   │   └── deserialize.rb
-│   ├── conversion_agent/       # the runtime LLM component
-│   │   ├── orchestrator.py
-│   │   ├── flag_registry.py
-│   │   ├── backends/
-│   │   │   ├── ollama.py
-│   │   │   ├── claude_code.py
-│   │   │   └── anthropic_api.py
-│   │   └── prompts/
-│   │       ├── system.md
-│   │       └── few_shot/
-│   ├── tileset_converter/
-│   │   └── ...
-│   └── pipeline.py             # top-level entry point
-├── tests/
-├── reference/
-│   ├── poryscript_cheatsheet.md
-│   ├── rgss_event_commands.md
-│   └── essentials_to_emerald_map.md
-└── output/
-    └── uranium-build/          # gitignored; intermediate artifacts
-```
+**Removed 2026-09-08.** A hand-drawn directory tree lived here and had rotted badly: it showed
+`src/pbs_converter/` without the `rpg2gba/` package level, listed a `backends/anthropic_api.py`
+that does not exist, described `reference/` in a flat layout it left behind on 2026-07-13, and
+omitted nine packages added since. It was the **third** independently-stale copy of the same
+tree in this repo, and the stalest.
+
+The current layout is documented as *orientation, not inventory* in **`CLAUDE.md` §3**, and
+`ls src/rpg2gba/` is the authority. Hand-maintained inventories rot here with a track record:
+see also the "3 test-only custom files" claim about `engine/`, which rotted into a
+build-destroying instruction before it was caught.
 
 ---
 
