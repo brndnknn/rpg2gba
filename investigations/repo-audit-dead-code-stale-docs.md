@@ -1,7 +1,8 @@
 # Investigation: Repo audit — dead code, duplicated code, stale docs
 
-**Status:** **COMPLETE — nothing open.** 48 findings, Q1-Q13 all answered, and everything remediated on branch `repo-audit-remediation` in three passes on 2026-09-07: Stages A-E, then the "Not scheduled" deferrals (Q3 consolidation, H2, H3, H8, the UNVERIFIED status lines, the dead-code sweep, follow-up #3), then Q5's close-out — the operator **deleted** the external clone rather than renaming it, reversing Q5's recorded answer. Two execution logs plus a closing finding below. **Read the closing finding before trusting `git diff 80cdfce2 HEAD -- engine/`:** the check this audit itself enshrined is incomplete, and 33 lines of custom C sit below its baseline.
-**Started:** 2026-09-06   **Last updated:** 2026-09-07 (Q5 closed by deletion; `80cdfce2`-is-not-pristine finding recorded; all follow-ups closed)
+**Status:** **CLOSED — all 13 questions answered and remediated.** Scoped to Q1-Q13 only; this is *not* a claim that the repo is clean. Two follow-on investigations were spawned from it on 2026-09-07 — see "Follow-on investigations" at the end.
+**Status (original wording, 2026-09-07):** **COMPLETE — nothing open.** 48 findings, Q1-Q13 all answered, and everything remediated on branch `repo-audit-remediation` in three passes on 2026-09-07: Stages A-E, then the "Not scheduled" deferrals (Q3 consolidation, H2, H3, H8, the UNVERIFIED status lines, the dead-code sweep, follow-up #3), then Q5's close-out — the operator **deleted** the external clone rather than renaming it, reversing Q5's recorded answer. Two execution logs plus a closing finding below. **Read the closing finding before trusting `git diff 80cdfce2 HEAD -- engine/`:** the check this audit itself enshrined is incomplete, and 33 lines of custom C sit below its baseline.
+**Started:** 2026-09-06   **Last updated:** 2026-09-07 (follow-on docs spawned; Q5 closed by deletion; `80cdfce2`-is-not-pristine finding recorded; all follow-ups closed)
 **Question:** What in this repo is dead, duplicated, or out of date — and specifically, which artifacts caused agents to follow retired processes or misread the project's current state?
 **Expected artifact:** plan — the prioritized remediation plan in Next steps, keyed to the Q1–Q13 answers
 
@@ -1432,3 +1433,27 @@ existed on disk. It no longer does. Re-deriving it needs a fresh
 `git clone https://github.com/rh-hideout/pokeemerald-expansion.git` — which is why the
 numbers are written down here, in `CLAUDE.md` §3 and in `engine/RPG2GBA_VENDOR.md`
 rather than left as a reproducible command.
+
+---
+
+## Follow-on investigations (2026-09-07)
+
+The operator returned after the remediation, read `src/rpg2gba/conversion_agent/` and
+`scripts/`, and concluded the cleanup had not happened. It had — but this audit was a
+documentation-and-safety pass with **file count explicitly out of scope** (see Decisions →
+"scripts/ policy", and finding 47's "this inventory exists so nobody has to re-derive it,
+not as a deletion list"). Two questions it never asked came out of that session, and each
+got its own doc rather than being appended here:
+
+- **`investigations/conversion-agent-package-boundary.md`** — the package holding the live
+  deterministic spine is named for the retired LLM regime. Finding 28 asked "is this dead?"
+  and answered correctly; nobody asked "does the name still describe it?"
+- **`investigations/scripts-dir-liveness.md`** — 3 of 90 files in `scripts/` carry a
+  liveness marker, and finding 47's load-bearing/spent inventory lives only in this
+  document, which nothing points at. Also carries a hazard this audit's hand-enumerated
+  harmful set missed (`scripts/calibrate_map002.sh`).
+
+**Method note for this document's own record.** The original status line read "COMPLETE —
+nothing open." That was true of the 13 questions and false as a claim about the repo, and
+the operator read it the second way. Corrected above. A status line on an investigation doc
+should name its scope, not just its state — same finding-34 shape as everything else here.
