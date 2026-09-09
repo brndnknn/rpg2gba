@@ -42,13 +42,27 @@ import json
 import os
 from pathlib import Path
 
-from ..traversal.collision import load_map_json
+from ..tileset_converter.connections import ConnectionRow, load_connections
+from ..tileset_converter.layout import column_key
+from ..tileset_converter.terrain_tags import DEFAULT_TERRAIN_TAG_MAP, TerrainTagTable
+from ..traversal.collision import build_tile_grid, load_map_json, load_tileset_arrays
 from ..traversal.direction import Direction
 from ..traversal.graph import MapGraph, build_map_graph
 from ..traversal.reachability import adjacent_approach_cells
 from . import chapter as _chapter
 
 Cell = tuple[int, int]
+
+#: Fork-independent instance used only for its `effective_tag()` -- exactly
+#: `traversal.ledges`'s `_EFFECTIVE_TAG_ONLY` trick (see that module's
+#: docstring): `TerrainTagTable.effective_tag` touches no fork data, only the
+#: raw `terrain_tags` array and a column key, so constructing an otherwise-
+#: empty table purely to call it is safe reuse of the one place the
+#: "which tile's tag wins in a column" rule lives (CLAUDE.md §4.3), not a
+#: second implementation of it.
+_EFFECTIVE_TAG_ONLY = TerrainTagTable({}, {}, 0, 0, {})
+
+DEFAULT_SEAM_WARPS_JSON = Path("reference/seam_warps.json")
 
 _PREFER_TO_DIRECTION: dict[str, Direction] = {
     "north": Direction.NORTH,
@@ -76,6 +90,20 @@ _GRAPH_CACHE: dict[int, MapGraph] = {}
 # costs nothing and keeps the intent explicit).
 _MAP_CONST_INDEX: dict[str, int] | None = None
 
+#: tag (int, Essentials PBTerrain 0-22) -> MB_* behavior NAME (str), read
+#: straight from `reference/terrain_tag_map.json` and never re-derived
+#: (CLAUDE.md §4.3 -- this is the one source of truth for tag spelling; see
+#: `tileset_converter.terrain_tags`). Kept as names, not fork-resolved
+#: numeric enum values: `grass_cell` needs no `$RPG2GBA_POKEEMERALD` build
+#: artifact, only "does this tag's *name* say MB_TALL_GRASS", so there is no
+#: reason to pull in `_behavior_value`'s fork-header parse.
+_TAG_BEHAVIOR_NAMES: dict[int, str] | None = None
+
+#: seam_warps.json's `seams` list, cached whole -- it is small (currently one
+#: entry) and read many times per chapter-module import, same rationale as
+#: `_GRAPH_CACHE`/`_MAP_CONST_INDEX` above.
+_SEAM_WARPS_CACHE: list[dict] | None = None
+
 
 def _local_id_table_path(uid: int) -> Path:
     """Where staging writes map `uid`'s RMXP-event-id -> local-id table.
@@ -98,6 +126,24 @@ def _map_const_index() -> dict[str, int]:
             _chapter.default_map_constants_state_path()
         )
     return _MAP_CONST_INDEX
+
+
+def _tag_behavior_names(path: Path = DEFAULT_TERRAIN_TAG_MAP) -> dict[int, str]:
+    global _TAG_BEHAVIOR_NAMES
+    if _TAG_BEHAVIOR_NAMES is None:
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+        _TAG_BEHAVIOR_NAMES = {
+            int(tag_str): entry["behavior"] for tag_str, entry in raw["tags"].items()
+        }
+    return _TAG_BEHAVIOR_NAMES
+
+
+def _seam_warps(path: Path = DEFAULT_SEAM_WARPS_JSON) -> list[dict]:
+    global _SEAM_WARPS_CACHE
+    if _SEAM_WARPS_CACHE is None:
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+        _SEAM_WARPS_CACHE = raw["seams"]
+    return _SEAM_WARPS_CACHE
 
 
 def _uranium_id(map_constant: str, *, resolver: str) -> int:
@@ -462,6 +508,264 @@ def stair_approach(map_constant: str, *, stair_event: int, side: str) -> Cell:
             f"not walkable{hint}"
         )
     return cell
+
+
+def grass_cell(map_constant: str, x: int, y: int) -> Cell:
+    """Confirms `(x, y)` on `map_constant` is a tall-grass cell and returns it.
+
+    **This resolver validates; it does not choose.** A chapter author who
+    reaches for a grass cell already knows which one -- both of the pairs
+    this replaces (`ch02.py` Route 01, `ch04.py` Route 2) were established
+    by reading the metatile behavior byte directly out of the decoded
+    tileset data and, for Route 01, cross-checked against a booted ROM
+    passing that chapter's §9 gate. A resolver that instead *picked* "the
+    best grass cell" on a map could silently pick a different pair from the
+    one a passed gate already verified -- overwriting a verified fact with a
+    plausible-looking guess is worse than not deriving one at all. So the
+    caller names the cell (two plain ints, per the ban's own carve-out for
+    `raw_cell` -- a `grass_cell(mc, (x, y))` signature would itself be the
+    two-int tuple literal this whole module exists to remove) and this
+    resolver's entire job is to assert, against this build's own decoded
+    tileset arrays, that the named cell genuinely carries the MB_TALL_GRASS
+    behavior -- turning an unchecked literal into a checked one, exactly
+    `approach_to`'s `prefer=` contract applied to a different fact.
+
+    Derivation reuses the Phase 5 terrain-tag rule as data, not a rebuilt
+    decoder: `column_key` (the RMXP multi-layer stack) feeds
+    `TerrainTagTable.effective_tag` (topmost-nonzero-tag wins) against the
+    map's own tileset `terrain_tags` array, and the resulting tag is looked
+    up in `reference/terrain_tag_map.json` -- the same one source of truth
+    `terrain_tags.py`'s real Phase 5 emission reads (CLAUDE.md §4.3), just
+    read for its tag->behavior *name* rather than a fork-resolved enum
+    value, since this library (like `traversal.ledges`, which the same
+    `_EFFECTIVE_TAG_ONLY` placeholder trick is borrowed from) has no need to
+    touch `$RPG2GBA_POKEEMERALD` at all to answer "is this MB_TALL_GRASS".
+
+    One documented gap, inherited from `traversal.ledges`'s use of the same
+    placeholder: `effective_tag` is called WITHOUT an `is_opaque` callback
+    (this library has no graphics/raster data to build one from), so the
+    "solid tag-0 tile stops a covering water tag from leaking upward" rule
+    (`TerrainTagTable.effective_tag`'s own docstring, the fix for boot gate
+    2026-07-06's reflective-grass bug) does not apply here. In practice this
+    can only produce a false "not grass" or a wrong named tag on a column
+    that stacks a non-opaque covering tile over grass with a decorative tag
+    of its own -- it cannot manufacture a false "yes, this is grass" out of
+    nothing, so it does not undermine the fail-loud direction this resolver
+    exists for.
+
+    Fails loud two ways, because they need different fixes: `(x, y)` out of
+    the map's bounds is a typo in the coordinates themselves, while an
+    in-bounds cell whose effective tag resolves to some other behavior (the
+    error names it) means the citation that produced the coordinate was
+    wrong, or the map's tileset/layout changed under it.
+    """
+    uid, graph = _graph_for(map_constant, resolver="grass_cell")
+    cell = (x, y)
+    if not graph.in_bounds(cell):
+        raise ValueError(
+            f"grass_cell: {map_constant} (Uranium map {uid}) cell {cell} is "
+            f"out of bounds ({graph.width}x{graph.height})"
+        )
+
+    map_json = load_map_json(uid)
+    tileset_id = map_json["tileset_id"]
+    grid = build_tile_grid(map_json)
+    arrays = load_tileset_arrays(tileset_id)
+    key = column_key(grid, x, y)
+    tag = _EFFECTIVE_TAG_ONLY.effective_tag(arrays.terrain_tags, key)
+
+    names = _tag_behavior_names()
+    behavior = names.get(tag, f"<tag {tag} not in terrain_tag_map.json>")
+    if behavior != "MB_TALL_GRASS":
+        raise ValueError(
+            f"grass_cell: {map_constant} (Uranium map {uid}) cell {cell} is "
+            f"not tall grass -- its effective terrain tag is {tag} "
+            f"({behavior}), not MB_TALL_GRASS"
+        )
+    return cell
+
+
+def cell_for_local_id(map_constant: str, local_id_value: int) -> Cell:
+    """The cell of the object event whose COMPILED local id is
+    `local_id_value` -- the inverse of `local_id()` above.
+
+    `local_id()` answers "what local id does RMXP event N get"; some
+    beats (CH03's `BOULDERS`, three rock-pushing puzzle objects on map 19)
+    are naturally keyed the other way around -- the beat already knows
+    which local id `emu.object_event()` needs to address, and wants the
+    cell that object currently occupies, not a coordinate typed by hand
+    next to a comment citing the id. `event_cell()` cannot serve this
+    either: it is keyed on the RMXP event id, which is exactly the
+    identifier this call does NOT have.
+
+    Reuses the same staged local-id table `local_id()` reads
+    (`output/uranium-build/staging/local_ids/Map###.json`, CLAUDE.md §4.3 --
+    one table, read two directions, never a second copy or a second parse of
+    the map JSON to reconstruct it) and searches it for the RMXP event id(s)
+    mapped to `local_id_value`, then resolves that event's cell the same way
+    `event_cell` does.
+
+    Fails loud two ways: a map with no staged table (not yet through
+    staging, same message as `local_id()`'s equivalent case) and a
+    `local_id_value` absent from the table, naming every local id the table
+    DOES define so a typo'd id is obvious. Also fails loud -- a case
+    `local_id()` cannot hit, since it looks up in the other direction -- if
+    `local_id_value` is somehow assigned to more than one RMXP event; the
+    remap that produces this table is supposed to mint one local id per
+    emitted object event, so two events sharing one is a real corruption in
+    the staged table, not something to resolve by picking either.
+    """
+    uid, _graph = _graph_for(map_constant, resolver="cell_for_local_id")
+    path = _local_id_table_path(uid)
+    if not path.exists():
+        raise ValueError(
+            f"cell_for_local_id: {map_constant} (Uranium map {uid}) has no "
+            f"local-id table at {path} -- that file is written by "
+            "scripts/stage_slice_scripts.py, so this map has not been "
+            "staged; run the staging step before authoring against it"
+        )
+    table = json.loads(path.read_text(encoding="utf-8"))
+    matches = [int(event_id) for event_id, lid in table.items() if int(lid) == local_id_value]
+    if not matches:
+        known = sorted({int(lid) for lid in table.values()})
+        raise ValueError(
+            f"cell_for_local_id: {map_constant} (Uranium map {uid}) has no "
+            f"object event with local id {local_id_value} -- local ids on "
+            f"this map are {known}"
+        )
+    if len(matches) > 1:
+        raise ValueError(
+            f"cell_for_local_id: {map_constant} (Uranium map {uid}) local id "
+            f"{local_id_value} is assigned to more than one RMXP event "
+            f"({sorted(matches)}) -- the staged local-id table is supposed "
+            "to be one-to-one; this is corruption in that table, not "
+            "something to resolve by guessing one"
+        )
+    event = _event_lookup(uid, matches[0], map_constant=map_constant, resolver="cell_for_local_id")
+    return (event["x"], event["y"])
+
+
+def _connection_row_between(uid_a: int, uid_b: int) -> ConnectionRow | None:
+    """The real `connections.json` row joining Uranium maps `uid_a`/`uid_b`,
+    if one exists, else None. Used only by `seam_cells`'s fallback path --
+    see that function's docstring for why a hit here is itself an error, not
+    an alternate source of cells."""
+    root = Path(os.environ.get("RPG2GBA_OUTPUT", "output"))
+    path = root / "uranium-build" / "connections.json"
+    if not path.is_file():
+        return None
+    rows = load_connections(path)
+    wanted = frozenset((uid_a, uid_b))
+    for row in rows:
+        if row.pair_key == wanted:
+            return row
+    return None
+
+
+def seam_cells(map_constant: str, *, to: str) -> tuple[Cell, ...]:
+    """The seam cell(s) on `map_constant`'s side of its arrow-warp seam
+    crossing into `to`.
+
+    **Why this exists alongside `warp_cell`/`arrival_cell`, not folded into
+    them.** Those two resolve command-201 warp events -- an authored map
+    event with an id, a destination, and (for `arrival_cell`) a fixed
+    landing cell. A seam (`reference/seam_warps.json`) is a DIFFERENT thing
+    structurally: two synthetic `MB_*_ARROW_WARP` metatiles substituted for
+    a whole-border pokeemerald map CONNECTION, used only when the two maps'
+    combined tileset can't fit pokeemerald's 1024-8x8-tile cap
+    (`seam_warps.json`'s own `_comment`). There is no event id to key on and
+    no single "the" warp -- the schema pairs `cells_a[i]` with `cells_b[i]`
+    reciprocally, and a real seam (Kevlar Town <-> Route 2, today's only
+    entry) is TWO cells wide, so this needed its own resolver rather than a
+    third keyword bolted onto `warp_cell`.
+
+    **Why it returns a tuple, always, never a bare `Cell`.** The Kevlar seam
+    is two cells side by side and picking one for the caller would repeat
+    exactly the mistake `grass_cell`'s docstring argues against: a resolver
+    that silently chose between (31,0) and (32,0) could choose differently
+    from the cell a chapter's own boot-gate walk already verified (only
+    x=32's landing is open; x=31's landing cell is blocked -- see
+    `ch04.py`'s module docstring). Returning the whole `cells_a`/`cells_b`
+    list in the JSON's own documented pairing order lets the caller index
+    into it (`seam_cells(...)[1]`) -- an int index is not a coordinate
+    literal, so it is not something `test_chapter_coordinate_literals.py`'s
+    walker flags, and the choice of WHICH cell is still the author's claim,
+    not this resolver's guess. A seam with only one cell still returns a
+    1-tuple, so callers never need to branch on arity.
+
+    **Lookup order and the three fail-loud cases.** Seams are looked up by
+    which ones touch `to` first, not by the (map_constant, to) pair
+    directly, so a bad `map_constant` argument produces a DIFFERENT error
+    than an entirely unknown `to`:
+
+    1. No `seam_warps.json` entry touches `to` at all. Falls back to
+       `output/uranium-build/connections.json` (`tileset_converter.
+       connections.load_connections`, the real per-pair adjacency data --
+       see that module for the row schema) for the SAME map pair. A hit
+       there means the two maps share an ordinary whole-border pokeemerald
+       CONNECTION, not a substituted arrow-warp seam -- structurally the
+       thing `warp_cell`/`arrival_cell` and this resolver both do not
+       cover, since a connection has no fixed handful of cells to name (it
+       spans the entire shared edge). That is reported as its own error,
+       distinct from "no seam at all", because the fix differs: there is
+       real adjacency data, this resolver just cannot express a whole-edge
+       crossing as a `Cell` tuple. Neither seam nor connection data at all
+       is the "no seam at all" case.
+    2. `to` has a seam_warps.json entry, but `map_constant` is not its other
+       side -- naming whichever map(s) `to` DOES seam with, so a typo'd
+       `map_constant` (or a chapter author's wrong assumption about which
+       two maps are seamed) is obvious immediately rather than surfacing as
+       a wrong cell later.
+    3. More than one seam entry both touches `to` AND has `map_constant` as
+       its other side (impossible in today's single-entry corpus, but not
+       structurally impossible as the table grows) -- ambiguous, listing
+       every candidate seam id.
+    """
+    uid = _uranium_id(map_constant, resolver="seam_cells")
+    neighbor_uid = _uranium_id(to, resolver="seam_cells")
+
+    touching_neighbor = [
+        s for s in _seam_warps() if neighbor_uid in (s["map_a"], s["map_b"])
+    ]
+    if not touching_neighbor:
+        row = _connection_row_between(uid, neighbor_uid)
+        if row is not None:
+            raise ValueError(
+                f"seam_cells: {map_constant} and {to} share a real "
+                f"connections.json border ({row}), not a seam_warps.json "
+                "arrow-warp substitution -- that is a whole-edge crossing "
+                "with no fixed cell(s) to name, structurally outside what "
+                "warp_cell/arrival_cell/seam_cells can express"
+            )
+        raise ValueError(
+            f"seam_cells: no seam_warps.json entry touches {to} (Uranium "
+            f"map {neighbor_uid}) at all -- known seam ids are "
+            f"{sorted(s['id'] for s in _seam_warps())}"
+        )
+
+    party = [
+        s for s in touching_neighbor if uid in (s["map_a"], s["map_b"])
+    ]
+    if not party:
+        partners = sorted(
+            {s["map_a"] if s["map_a"] != neighbor_uid else s["map_b"] for s in touching_neighbor}
+        )
+        raise ValueError(
+            f"seam_cells: {to} (Uranium map {neighbor_uid}) has a seam, but "
+            f"not with {map_constant} (Uranium map {uid}) -- its seam "
+            f"partner map id(s) are {partners}"
+        )
+    if len(party) > 1:
+        ids = sorted(s["id"] for s in party)
+        raise ValueError(
+            f"seam_cells: {map_constant} and {to} are joined by "
+            f"{len(party)} distinct seam_warps.json entries ({ids}) -- "
+            "ambiguous"
+        )
+
+    seam = party[0]
+    cells = seam["cells_a"] if seam["map_a"] == uid else seam["cells_b"]
+    return tuple((c[0], c[1]) for c in cells)
 
 
 def raw_cell(x: int, y: int, *, why: str) -> Cell:
