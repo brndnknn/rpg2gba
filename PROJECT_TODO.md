@@ -1495,6 +1495,33 @@ correctly resolves east to `(54,43)` instead of returning unwalkable `(52,43)`.
 **Why this mattered for sequencing:** it is the concrete reason G4 belonged
 before the CH01–CH03 re-derivation rather than during it.
 
+### 91. Map-connection seams went live the same way `code 201` warps did, and nothing detects it
+
+`rpg2gba slice-growth` (`src/rpg2gba/slice_growth.py`, landed 2026-09-09) answers
+the `code 201` half of this: per gated chapter, which events carry a transfer to
+a map that was out-of-slice at authoring time and is in-slice now.
+`metadata_wiring.classify_event` had skipped those events entirely, so they were
+invisible to both the manifest generator and the beat author. It found six, all
+forward boundaries: CH01 Map032 EV023/EV036/EV037 -> Map033, CH02 Map033
+EV045/EV046 -> Map031, CH04 Map035 EV001 -> Map036.
+
+**It reports CH03 clean, and that is a scope artifact, not a verdict.** CH03's
+forward boundary is the Kevlar <-> Route 2 seam (`connections.json` 31 N<->S 35),
+a map connection rather than a `code 201` warp, and the detector structurally
+cannot see connection edges. CH03's B25 -- which asserted the north edge toward
+then-unbuilt Route 2 was "a clean impassable wall", and needed reconciling by
+hand in 2026-08-26 when Route 2 was built -- is the known instance of exactly
+this class going undetected.
+
+Wanted: the same enumeration over `connections.json` /
+`tileset_converter/connections.py`. Per gated chapter, every connection edge that
+became crossable after that chapter was authored. Until it exists, no gated
+chapter's seam boundary has been audited and "slice-growth is clean" must not be
+quoted as though it covered them.
+
+Tracked as **P2b** in `REDERIVATION_PLAN.md`; a prerequisite for that document's
+freeze step for the same reason the `code 201` half was.
+
 ## Parked until the CH05 branch is cut (do not raise before then)
 
 These are real, tracked work items, scoped entirely to CH05. They are not open
