@@ -31,7 +31,7 @@ from rpg2gba.traversal.collision import (
     load_map_json,
 )
 from rpg2gba.traversal.graph import MapGraph
-from rpg2gba.traversal.reachability import derive_blocked_verdict_for_event
+from rpg2gba.traversal.reachability import derive_blocked_verdict_for_event_from_starts
 
 from .generator import _build_reachability_context
 from .schema import ManifestRow
@@ -39,7 +39,7 @@ from .schema import ManifestRow
 logger = logging.getLogger(__name__)
 
 Cell = tuple[int, int]
-_Context = tuple[MapGraph, CapabilityMap, Cell]
+_Context = tuple[MapGraph, CapabilityMap, frozenset[Cell]]
 
 
 class GraphApproachModel:
@@ -128,9 +128,9 @@ class GraphApproachModel:
         context = self._context_for(row.map_id)
         if context is None:
             return None  # map not in generator._CHAPTER_MAP_START_CELLS
-        graph, capability_map, start = context
+        graph, capability_map, starts = context
         event_cell = self._event_cell(row.map_id, row.event_id)
         if event_cell is None:
             return None  # event vanished from the decoded map data
-        verdict = derive_blocked_verdict_for_event(graph, capability_map, start, event_cell)
+        verdict = derive_blocked_verdict_for_event_from_starts(graph, capability_map, starts, event_cell)
         return verdict.reachable_now

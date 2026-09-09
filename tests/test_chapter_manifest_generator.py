@@ -588,7 +588,7 @@ def test_reachability_requires_approach_gated_row(tmp_path: Path, monkeypatch: p
     """A row with no gating script head of its own still picks up
     `rock_smash` in `requires` when its only approach crosses a rock-obstacle
     cell -- the 24-row (approach-gated) half of the CH04 split."""
-    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), (1, 0))
+    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), frozenset({(1, 0)}))
     events = _rock_and_sign_events()
     build_dir, chapters_path = _setup_reachability_chapter(
         tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
@@ -608,7 +608,7 @@ def test_reachability_requires_does_not_duplicate_head_source(
     (interaction-gated); its APPROACH is open (the start cell is adjacent to
     it), so the reachability source contributes nothing extra -- no duplicate,
     no spurious requirement."""
-    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), (1, 0))
+    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), frozenset({(1, 0)}))
     events = _rock_and_sign_events()
     build_dir, chapters_path = _setup_reachability_chapter(
         tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
@@ -644,7 +644,7 @@ def test_reachability_consulted_propagates_to_seam_rows(
     """Seam rows carry the same per-map fact as page rows on that map --
     there is no separate per-map metadata structure, so the flag lives on
     every row sharing a `map_id`, seams included."""
-    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), (1, 0))
+    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), frozenset({(1, 0)}))
     events = _rock_and_sign_events()
     build_dir, chapters_path = _setup_reachability_chapter(
         tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
@@ -691,7 +691,7 @@ def test_approach_model_true_when_start_itself_is_an_approach_cell(
     """The rock's own approach cell set includes (1,0), the start cell
     itself -- trivially reachable with nothing held, so `reachable_now` is
     True even though the rock is an uncleared rock_smash obstacle."""
-    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), (1, 0))
+    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), frozenset({(1, 0)}))
     events = _rock_and_sign_events()
     build_dir, chapters_path = _setup_reachability_chapter(
         tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
@@ -716,7 +716,7 @@ def test_approach_model_closes_the_sibling_obstacle_blind_spot(
     rock_smash obstacle, and nothing is held -- so the sign has NO reachable
     approach cell right now. Verified empirically, not assumed: this fixture
     is exactly the shape that exposed the old bug."""
-    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), (1, 0))
+    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), frozenset({(1, 0)}))
     events = _rock_and_sign_events()
     build_dir, chapters_path = _setup_reachability_chapter(
         tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
@@ -730,7 +730,7 @@ def test_approach_model_closes_the_sibling_obstacle_blind_spot(
 
 
 def test_approach_model_none_for_seam_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), (1, 0))
+    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), frozenset({(1, 0)}))
     events = _rock_and_sign_events()
     build_dir, chapters_path = _setup_reachability_chapter(
         tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
@@ -764,7 +764,7 @@ def test_approach_model_none_for_vanished_event(
 ) -> None:
     """A row whose event no longer exists in the decoded map data (deleted,
     renumbered) cannot be answered, not silently answered False."""
-    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), (1, 0))
+    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), frozenset({(1, 0)}))
     events = _rock_and_sign_events()
     build_dir, chapters_path = _setup_reachability_chapter(
         tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})

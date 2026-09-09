@@ -195,7 +195,7 @@ def test_check_fires_missed_assertion_with_no_negative_beat(tmp_path: Path, monk
     (the rock's own north neighbour is the start tile) -- the rule that
     could never fire with no approach model supplied now fires for real."""
     from rpg2gba.chapter_manifest import generator
-    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHK", 50), (1, 0))
+    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHK", 50), frozenset({(1, 0)}))
 
     build_dir, chapters_path = _setup_chokepoint_chapter(tmp_path, "CHK", 50)
     manifest_path = tmp_path / "CHK.manifest.json"

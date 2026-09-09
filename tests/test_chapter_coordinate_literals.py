@@ -272,7 +272,7 @@ def test_entry_cell_hits_ch04_map35() -> None:
     # brief names, without needing decoded output at all (no map-constant
     # resolution is exercised here -- see the decoded-output-gated test
     # below for the full map_constant -> cell path).
-    assert _CHAPTER_MAP_START_CELLS[("CH04", 35)] == (21, 56)
+    assert _CHAPTER_MAP_START_CELLS[("CH04", 35)] == frozenset({(21, 56)})
 
 
 @requires_decoded_output

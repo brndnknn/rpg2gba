@@ -326,3 +326,52 @@ def derive_blocked_verdict_for_event(
         return BlockedVerdict(goal=event_cell, reachable_now=True, minimal_sets=[frozenset()])
     minimal_sets = _minimal_sets_for_predicate(resolved, predicate)
     return BlockedVerdict(goal=event_cell, reachable_now=False, minimal_sets=minimal_sets)
+
+
+def derive_blocked_verdict_for_event_from_starts(
+    graph: MapGraph,
+    capability_map: CapabilityMap,
+    starts: frozenset[Cell],
+    event_cell: Cell,
+    *,
+    candidates: frozenset[Capability] | None = None,
+) -> BlockedVerdict:
+    """The multi-start sibling of `derive_blocked_verdict_for_event`, for a
+    map whose start is not a single cell (a map with several disconnected
+    walkable components, each entered by its own door -- e.g. Kevlar's
+    building strip, map 73: four shops, four components, one map record;
+    see `chapter_manifest/generator.py`'s `_CHAPTER_MAP_START_CELLS` comment
+    block for the full citation).
+
+    Reachable if ANY orthogonally-adjacent cell of `event_cell` is reachable
+    from ANY of `starts`, for a given held-capability set. The predicate
+    quantifies over both `starts` and the event's approach cells, so
+    `_minimal_sets_for_predicate` finds the cheapest capability set that
+    opens the event from its best entrance -- the same minimal-set machinery
+    `derive_blocked_verdict_for_event` uses, unchanged.
+
+    Fails loud on an empty `starts` (CLAUDE.md §4.5): a vacuous quantifier
+    would make every event "unreachable" for a reason that has nothing to do
+    with the map's geometry, which is a silent wrong answer, not an honest
+    one.
+    """
+    if not starts:
+        raise ValueError(
+            "derive_blocked_verdict_for_event_from_starts: `starts` is empty -- "
+            "an event cannot be judged reachable or unreachable against zero "
+            "start cells; pass at least one verified start cell"
+        )
+    resolved = _validate_candidates(candidates)
+    approach_cells = adjacent_approach_cells(graph, event_cell)
+
+    def predicate(held: frozenset[Capability]) -> bool:
+        return any(
+            is_reachable_with(graph, capability_map, start, cell, held)
+            for start in starts
+            for cell in approach_cells
+        )
+
+    if predicate(frozenset()):
+        return BlockedVerdict(goal=event_cell, reachable_now=True, minimal_sets=[frozenset()])
+    minimal_sets = _minimal_sets_for_predicate(resolved, predicate)
+    return BlockedVerdict(goal=event_cell, reachable_now=False, minimal_sets=minimal_sets)

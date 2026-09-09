@@ -330,6 +330,16 @@ def entry_cell(chapter_id: str, map_constant: str) -> Cell:
     (cross-checked against an independent validation run, never the table's
     own invention, never guessed from map geometry).
 
+    The table's value is a `frozenset[Cell]`, because some maps hold several
+    disconnected walkable components each entered by its own door (Kevlar's
+    building strip, map 73). Beat authoring, unlike the reachability flood
+    that unions all of them, needs exactly ONE cell to stand a beat on, so
+    this resolver still returns a single `Cell` -- but on a genuinely
+    multi-start map there is no non-arbitrary way to pick one, and guessing
+    would be exactly the "confident wrong answer" the table's own comment
+    warns against. It therefore fails loud on more than one registered cell,
+    naming every candidate, rather than silently returning one of them.
+
     Fails loud on a miss: a `(chapter_id, map)` pair with no registered start
     cell is a real gap in that chapter's build (a verified entry point has
     not been recorded yet), not something this resolver can derive or
@@ -340,8 +350,8 @@ def entry_cell(chapter_id: str, map_constant: str) -> Cell:
     from ..chapter_manifest.generator import _CHAPTER_MAP_START_CELLS
 
     uid = _uranium_id(map_constant, resolver="entry_cell")
-    cell = _CHAPTER_MAP_START_CELLS.get((chapter_id, uid))
-    if cell is None:
+    cells = _CHAPTER_MAP_START_CELLS.get((chapter_id, uid))
+    if cells is None:
         raise ValueError(
             f"entry_cell: no verified start cell registered for chapter "
             f"{chapter_id!r} on {map_constant} (Uranium map {uid}) -- add a "
@@ -350,6 +360,20 @@ def entry_cell(chapter_id: str, map_constant: str) -> Cell:
             "chapter's own build; it must be verified (an emulator-observed "
             "position, a warp-exit constant), not guessed from geometry"
         )
+    if len(cells) > 1:
+        listing = ", ".join(str(c) for c in sorted(cells))
+        raise ValueError(
+            f"entry_cell: chapter {chapter_id!r} on {map_constant} (Uranium "
+            f"map {uid}) has {len(cells)} registered start cells ({listing}) "
+            "-- this map holds more than one disconnected walkable component "
+            "(e.g. several shops entered by separate doors from one map "
+            "record), so there is no single non-arbitrary entry cell. "
+            "entry_cell() cannot guess which door a beat means -- disambiguate "
+            "by authoring the beat with the specific cell it actually enters "
+            "on, read directly from _CHAPTER_MAP_START_CELLS, instead of "
+            "calling entry_cell() for this map"
+        )
+    (cell,) = cells
     return cell
 
 

@@ -60,7 +60,7 @@ from rpg2gba.tileset_converter.stairs import (
 )
 from rpg2gba.traversal.capabilities import CapabilityMap, build_capability_map
 from rpg2gba.traversal.graph import MapGraph, build_map_graph
-from rpg2gba.traversal.reachability import derive_blocked_verdict_for_event
+from rpg2gba.traversal.reachability import derive_blocked_verdict_for_event_from_starts
 
 logger = logging.getLogger(__name__)
 
@@ -240,14 +240,28 @@ _HEAD_REQUIRES: dict[str, str] = {
 # else does not contain that walk -- which is how B1 came to leave the approved
 # route onto Map035 EV012's trigger tile (Timothy, event touch) with nothing
 # planning around it.
-_CHAPTER_MAP_START_CELLS: dict[tuple[str, int], tuple[int, int]] = {
-    ("CH04", 35): (21, 56),
-    ("CH05", 35): (19, 49),
-    ("CH05", 36): (17, 39),
-    ("CH05", 37): (16, 26),
+#
+# The value type is a frozenset of cells, not a single cell (operator,
+# 2026-09-09 -- REDERIVATION_PLAN.md P6a). Map 73 (Kevlar's building strip) is
+# one map record holding FOUR shops in FOUR disconnected walkable components
+# (verified: 70x15, five components; the four arrival cells -- (44,12)
+# boutique, (5,11) bike shop, (24,12) Maury, (64,12) couple -- each sit in a
+# different one), each entered by its own door from the town square. A single
+# start cell can only flood one component, so it would judge every event
+# behind the other three doors unreachable when they are perfectly reachable
+# through their own doors -- and a wrong entry here is worse than a missing
+# one: absent, `has_walkable_approach` returns None ("unanswerable", honest);
+# present-but-wrong it returns False, a confident wrong answer. Every entry
+# below is still cited exactly as the paragraphs above require; a
+# single-cell map is simply the one-element case of the general shape.
+_CHAPTER_MAP_START_CELLS: dict[tuple[str, int], frozenset[tuple[int, int]]] = {
+    ("CH04", 35): frozenset({(21, 56)}),
+    ("CH05", 35): frozenset({(19, 49)}),
+    ("CH05", 36): frozenset({(17, 39)}),
+    ("CH05", 37): frozenset({(16, 26)}),
 }
 
-ReachabilityContext = tuple[MapGraph, CapabilityMap, tuple[int, int]]
+ReachabilityContext = tuple[MapGraph, CapabilityMap, frozenset[tuple[int, int]]]
 
 
 def _build_reachability_context(
@@ -256,16 +270,22 @@ def _build_reachability_context(
     maps_dir: Path,
     tilesets_json: Path,
 ) -> ReachabilityContext | None:
-    """The (graph, capability_map, start_cell) triple for reachability-
+    """The (graph, capability_map, start_cells) triple for reachability-
     derived requires on `map_id`, or None if `map_id` has no verified start
-    cell for `chapter_id` yet (see `_CHAPTER_MAP_START_CELLS`).
+    cells for `chapter_id` yet (see `_CHAPTER_MAP_START_CELLS`).
+
+    `start_cells` is a frozenset, not a single cell, because one map can hold
+    several disconnected walkable components each entered by its own door
+    (Kevlar's building strip, map 73 -- see the table's comment block); the
+    reachability flood unions all of them via
+    `reachability.derive_blocked_verdict_for_event_from_starts`.
 
     `maps_dir`/`tilesets_json` are threaded through from the same `build_dir`
     the generator itself reads (never the traversal package's own defaults),
     so a chapter built against a non-default `build_dir` (e.g. a test
     fixture) doesn't silently fall back to reading the real corpus."""
-    start = _CHAPTER_MAP_START_CELLS.get((chapter_id, map_id))
-    if start is None:
+    starts = _CHAPTER_MAP_START_CELLS.get((chapter_id, map_id))
+    if starts is None:
         logger.warning(
             "chapter manifest: %s map %03d has no verified start cell -- the "
             "offline reachability source was NOT consulted for this map. "
@@ -280,7 +300,7 @@ def _build_reachability_context(
         return None
     graph = build_map_graph(map_id, maps_dir=maps_dir, tilesets_json=tilesets_json)
     capability_map = build_capability_map(map_id, maps_dir=maps_dir, tilesets_json=tilesets_json)
-    return graph, capability_map, start
+    return graph, capability_map, starts
 
 
 def _reachability_requires(
@@ -292,12 +312,12 @@ def _reachability_requires(
     `context` is None (no verified start cell -- see
     `_build_reachability_context`), when the approach is already open with
     nothing held, or when no `VERIFIED_CAPABILITIES` combination opens it at
-    all (`derive_blocked_verdict_for_event`'s empty `minimal_sets` -- true
+    all (`derive_blocked_verdict_for_event_from_starts`'s empty `minimal_sets` -- true
     geography, not a capability gate, so it is not added here)."""
     if context is None:
         return ()
-    graph, capability_map, start = context
-    verdict = derive_blocked_verdict_for_event(graph, capability_map, start, event_cell)
+    graph, capability_map, starts = context
+    verdict = derive_blocked_verdict_for_event_from_starts(graph, capability_map, starts, event_cell)
     if verdict.reachable_now or not verdict.minimal_sets:
         return ()
     best = verdict.minimal_sets[0]
