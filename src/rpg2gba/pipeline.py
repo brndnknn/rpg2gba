@@ -166,6 +166,52 @@ def slice_pins_cmd(census: bool) -> None:
     raise SystemExit(1)
 
 
+@main.command("slice-growth")
+@click.option(
+    "--chapter",
+    "chapters",
+    multiple=True,
+    help="Restrict to this chapter id (e.g. CH03). Repeatable. Default: all gated chapters.",
+)
+@click.option(
+    "--chapters-json",
+    type=click.Path(path_type=Path),
+    default=Path("reference/chapters.json"),
+    show_default=True,
+)
+@click.option(
+    "--maps-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Defaults to $RPG2GBA_OUTPUT/uranium-build/maps.",
+)
+def slice_growth_cmd(chapters: tuple[str, ...], chapters_json: Path, maps_dir: Path | None) -> None:
+    """Detect code-201 warps that were out-of-slice when a chapter was
+    authored and are in-slice now (REDERIVATION_PLAN.md step P2 / A5).
+
+    `metadata_wiring.classify_event` skips an entire event on any
+    out-of-slice code-201 target, so such a warp was invisible at authoring
+    time and is live today with nothing having re-examined it. See
+    `rpg2gba/slice_growth.py`.
+    """
+    from rpg2gba import slice_growth
+
+    _load_dotenv()
+    if maps_dir is None:
+        maps_dir = Path(os.environ.get("RPG2GBA_OUTPUT", "output")) / "uranium-build" / "maps"
+    only_chapters = set(chapters) or None
+    reports = slice_growth.detect_slice_growth(
+        chapters_json=chapters_json, maps_dir=maps_dir, only_chapters=only_chapters
+    )
+    any_findings = False
+    for report in reports:
+        click.echo(report.format())
+        if not report.ok:
+            any_findings = True
+    if any_findings:
+        raise SystemExit(1)
+
+
 def _resolve_paths() -> tuple[Path, Path]:
     """Resolve Uranium source + output directories from env vars."""
     _load_dotenv()
