@@ -8,7 +8,7 @@ dispositions) and **#67** (route plans), executed under **#62**'s ordering safeg
 > state; when the task closes, its durable conclusions go to `MEMORY.md` / `PROJECT_TODO.md`
 > and this file is archived.
 
-**Live status (2026-09-09): P1 and P2 DONE. P6 census done; its table change is the next task. Nothing derived yet.**
+**Live status (2026-09-09): Phase A done except P3/P4. Phase B: P6 done, P5 outstanding. Nothing derived to disk — the freeze (P7) has not happened.**
 
 ---
 
@@ -106,14 +106,14 @@ the player to Kevlar mid-chapter.
 
 | # | Step | Item | Status |
 |---|---|---|---|
-| **P2b** | **The seam-crossing counterpart to P2.** `slice_growth` covers `code 201` only. Map-connection seams (`connections.json`, `tileset_converter/connections.py`) went live the same way and are invisible to it — CH03's B25 is the known instance. Enumerate, per gated chapter, every connection edge that became crossable after that chapter was authored. | new (from P2) | TODO |
+| **P2b** | **The seam-crossing counterpart to P2.** `slice_growth` covers `code 201` only. Map-connection seams (`connections.json`, `tileset_converter/connections.py`) went live the same way and are invisible to it — CH03's B25 is the known instance. Enumerate, per gated chapter, every connection edge that became crossable after that chapter was authored. | new (from P2) | **DONE** `3e4265a7` (#91) |
 
 ### Phase B — resolvers and data
 
 | # | Step | Item | Status |
 |---|---|---|---|
 | **P5** | **Three new `cells.py` resolvers**, surfaced by the literal inventory (§5): a grass-cell resolver (4 literals), a seam/connection-edge resolver (2 — these are map connections, not `code 201` warps, so `warp_cell`/`arrival_cell` don't apply), and a local-id-keyed lookup for the ch03 boulders (3 — `event_cell` keys on RMXP event id, not the compiled local id). Without these, 9 literals can only land as counted `raw_cell(..., why=)` debt. | new | TODO |
-| **P6** | **Derive the CH01–CH03 start cells** — `_CHAPTER_MAP_START_CELLS` (`chapter_manifest/generator.py:243`) holds 4 entries (CH04:35, CH05:35/36/37). Needed: **CH01 8 maps** (49, 48, 32, 50, 64, 65, 172, 89), **CH02 2** (33, 81), **CH03 5** (31, 67, 68, 73, 19) = **15**. A missing entry does **not** fail — it warns, and the manifest is capability-blind on that map (`generator.py:266-279`): terrain-gated capabilities cannot appear in `requires[]` for any row. Re-deriving without this yields manifests that load clean, check green, and are blind on all 15 maps — and the freeze would encode the blindness. **This is the bulk of the work and a prerequisite, not a step.** | A1 (inside #65) | census DONE, entries TODO |
+| **P6** | **Derive the CH01–CH03 start cells** — `_CHAPTER_MAP_START_CELLS` (`chapter_manifest/generator.py:243`) holds 4 entries (CH04:35, CH05:35/36/37). Needed: **CH01 8 maps** (49, 48, 32, 50, 64, 65, 172, 89), **CH02 2** (33, 81), **CH03 5** (31, 67, 68, 73, 19) = **15**. A missing entry does **not** fail — it warns, and the manifest is capability-blind on that map (`generator.py:266-279`): terrain-gated capabilities cannot appear in `requires[]` for any row. Re-deriving without this yields manifests that load clean, check green, and are blind on all 15 maps — and the freeze would encode the blindness. **This is the bulk of the work and a prerequisite, not a step.** | A1 (inside #65) | **DONE** (P6a/P6b) |
 
 **P6 census result (2026-09-09).** Of the 15 pairs, **9 are usable today without a ROM
 run** and **6 need a fresh boot-walk** — all six are CH01's, because CH01's suite never calls
@@ -144,9 +144,39 @@ which is exactly what the capability model already handles correctly.
 
 | # | Step | Item | Status |
 |---|---|---|---|
-| **P6a** | Change the table's value type to `frozenset[Cell]`; union the floods in `_build_reachability_context`; migrate the 4 existing entries. | A1 | TODO |
-| **P6b** | Register the 9 evidence-backed entries, each citing its source (warp geometry, or the specific beat whose `_assert_near` verified it). | A1 | TODO |
-| **P6c** | Boot-walk CH01 to observe its 6 arrival cells. Needs a ROM run. | A1 | TODO |
+| **P6a** | Change the table's value type to `frozenset[Cell]`; union the floods in `_build_reachability_context`; migrate the 4 existing entries. | A1 | **DONE** `70f7677f` |
+| **P6b** | Register the start cells. **All 15 landed, not 9** — see below. | A1 | **DONE** `90c5470a` |
+| **P6c** | ~~Boot-walk CH01 to observe its 6 arrival cells.~~ **No longer blocks the derivation** — see below. Needed only if a CH01 beat wants `entry_cell()` to name a specific arrival tile. | A1 | DEFERRED |
+
+**P6 outcome (2026-09-09): all 15 registered, no ROM run needed.** The census measured
+against the table's "exactly one inbound warp" rule and concluded 6 of 15 needed a boot-walk.
+Measured against what the table is *for* — flooding reachability — all 15 are derivable, and
+the argument is the point:
+
+- Registered set = every literal `code 201` destination targeting the map from an in-slice
+  source, minus self-warps, **minus destinations that are not walkable**. That last filter is
+  load-bearing, not hygiene: `Map031` (23,28)/(32,28)/(35,6)/(37,28) and `Map033` (39,18) are
+  shop-exit *door tiles* — blocked metatiles the warp lands you on and steps you off. A door
+  tile as a start cell floods nothing, reporting every event on the map unreachable.
+- That set is a **superset** of "first arrival", which would be unsound if a registered cell
+  could sit in a component the chapter can't reach. On **14 of 15 it can't**: all cells share
+  one connected component, so the flood is identical whichever is chosen. The proof is
+  monotone — adding a capability only merges components, never splits them.
+- **Map 73 is the exception and is exact, not superset**: four doors, four components, all
+  four entered during CH03.
+- **CH01/49 is the one non-derived entry** — CH01 starts there via the fork's own spawn
+  override, so `engine/src/new_game.c:174` is the citation.
+
+The soundness argument is now `tests/test_start_cell_registry.py` (38 checks) rather than a
+paragraph: every registered cell must be walkable, every entry's cells must share one
+component, map 73 pinned as the deliberate four-way exception.
+
+**Why P6c is deferred rather than done.** The boot-walk was only ever needed to name CH01's
+*exact* first-arrival tile. For reachability that is unobservable (see above). It still
+matters for `entry_cell()`, the beat-authoring resolver, which returns one cell and now fails
+loud on a multi-start map — so a CH01 beat that wants a named arrival tile needs either an
+observation or the specific cell written into the beat. That is a P9 question, not a
+prerequisite.
 
 ### Phase C — the derivation (branch `rederive-ch01-ch04`)
 
@@ -258,3 +288,8 @@ four chapters with the recipe it corrects.
   the start-cell table's value type to change (P6a). Cleared a blocker found on the way:
   `MOVEMENT_TYPE_BERRY_TREE_GROWTH` was unclassified and failed the CH03/CH04 route solve
   (`6bece623`).
+- **2026-09-09** — P2b done (`3e4265a7`, #91): `rpg2gba seam-growth`. One finding, CH03's
+  Kevlar→Route 2 seam — the known B25 case, which is what validates it.
+- **2026-09-09** — P6a (`70f7677f`) + P6b (`90c5470a`): start-cell table is a `frozenset`,
+  all 15 CH01–CH03 entries registered, soundness pinned by test. P6c deferred.
+  Suite 3114 passed / 17 skipped.
