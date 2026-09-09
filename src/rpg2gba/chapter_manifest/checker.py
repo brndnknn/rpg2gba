@@ -51,6 +51,8 @@ RULE_ARCHETYPE_CONFORMANCE = "archetype_conformance"
 RULE_ARCHETYPE_MODEL_UNENFORCED = "archetype_model_unenforced"
 RULE_UNREGISTERED_BEAT = "unregistered_beat"
 RULE_BEAT_MODEL_UNENFORCED = "beat_model_unenforced"
+RULE_TRIGGER_OVERLAY_VACUOUS = "trigger_overlay_vacuous"
+RULE_TRIGGER_OVERLAY_MODEL_UNENFORCED = "trigger_overlay_model_unenforced"
 
 
 class CapabilityModel(Protocol):
@@ -216,6 +218,48 @@ class RouteModel(Protocol):
         ...
 
 
+class TriggerOverlayModel(Protocol):
+    """The seam `RULE_TRIGGER_OVERLAY_VACUOUS` plugs into: did the trigger
+    overlay a route was solved against actually see a `TRAINER_SIGHT` tile
+    on every map this chapter has a dispositioned trainer row on?
+
+    Motivating incident (PROJECT_TODO #75): CH05's first solve reported a
+    clean 155-tile route with zero `CROSSING` lines -- read as "the route
+    avoids every trainer's sight cone" when the true state was "the trigger
+    overlay measured nothing at all" (the object event data it reads,
+    `traversal.triggers.build_trigger_overlay`, did not exist yet). Once
+    real object events landed, the identical walk order crossed five
+    trainer sight cones and both the solver and a human reading its zero
+    `CROSSING` output had passed it clean. Nothing distinguished "checked
+    and found nothing to avoid" from "had nothing to check against"
+    (CLAUDE.md §4.5).
+
+    Not implemented here -- deliberately, same reasoning as `RouteModel`:
+    `check_chapter`'s (and the standalone `check_trigger_overlay`'s)
+    `trigger_overlay` argument accepts anything satisfying this Protocol.
+    The CLI's concrete adapter wraps the `TriggerOverlay` objects the route
+    solver itself builds (`routing.__main__._LazyOverlays`), keyed by map
+    id, so this rule runs at the ROUTE step -- the point a vacuous overlay
+    is actually detectable -- rather than only later when
+    `chapter_manifest check` re-examines an already-written route plan.
+    """
+
+    def has_trainer_sight_tiles(self, map_id: int) -> bool:
+        """True iff the overlay for `map_id` carries at least one tile with
+        a `TriggerKind.TRAINER_SIGHT` ref -- i.e.
+        `build_trigger_overlay` found at least one trainer object event on
+        this map whose sight line reaches at least one tile.
+
+        False means the overlay measured nothing on this map: either no
+        trainer object event exists there at all (the CH05 case: the map
+        hadn't been emitted with real object events yet), or one does but
+        every sight line it casts is empty after occlusion/blockers. The
+        rule below treats both identically -- neither can back a claim that
+        a route "avoids" trainer sight on this map, because there was
+        nothing on the map to avoid in the overlay's own eyes."""
+        ...
+
+
 class ArchetypeModel(Protocol):
     """The seam `RULE_ARCHETYPE_CONFORMANCE`'s beat-registry half plugs into.
 
@@ -284,6 +328,7 @@ def check_chapter(
     capabilities: CapabilityModel | None = None,
     approach: ApproachModel | None = None,
     route: RouteModel | None = None,
+    trigger_overlay: TriggerOverlayModel | None = None,
     archetype_model: ArchetypeModel | None = None,
     beat_model: BeatModel | None = None,
     live_chapter: bool = False,
@@ -294,6 +339,11 @@ def check_chapter(
     the module docstring on why this module does not read the manifest
     file itself). `dispositions` is `row_id -> Disposition`, as returned by
     `dispositions.load_dispositions`.
+
+    `trigger_overlay`, if supplied, backs `RULE_TRIGGER_OVERLAY_VACUOUS` (see
+    `check_trigger_overlay`, which this delegates to): every map with a
+    dispositioned trainer row must show at least one `TRAINER_SIGHT` tile in
+    the overlay, or a zero-`CROSSING` route across it is unenforced/unproven.
 
     `beat_model`, if supplied, backs `RULE_UNREGISTERED_BEAT`: every `beat:`
     disposition must name a beat that is actually registered, not deferred
@@ -538,6 +588,10 @@ def check_chapter(
     else:
         findings.extend(_check_route_order(route))
         findings.extend(_check_route_approach(route))
+
+    findings.extend(
+        check_trigger_overlay(rows, dispositions, trigger_overlay=trigger_overlay)
+    )
 
     findings.extend(
         _check_archetype_conformance(
@@ -990,6 +1044,95 @@ def _check_route_approach(route: RouteModel) -> list[Finding]:
                 f"approach_prefer={approach.side!r} (or prefer=) to the "
                 "beat's archetype template to match the plan, or re-solve "
                 "the route if the plan is the one that's wrong"
+            ),
+            severity="error",
+        ))
+
+    return findings
+
+
+def _dispositioned_trainer_maps(
+    rows: list[ManifestRow], dispositions: dict[str, Disposition],
+) -> set[int]:
+    """Map ids carrying at least one `trainer`-archetype row that also has a
+    disposition on file.
+
+    Classification comes from `archetypes.classify_manifest`, the single
+    source of truth CLAUDE.md §4.3 assigns for "what counts as a trainer"
+    -- never re-derived from `script_heads` here. Gated on "has a
+    disposition" (rather than every row `classify_manifest` matches,
+    dispositioned or not) because an undispositioned trainer row is already
+    reported by `RULE_UNDISPOSITIONED`/`RULE_ARCHETYPE_CONFORMANCE`; this
+    rule only needs to know a trainer is *live* on a map, and "someone
+    dispositioned it" is the cheapest available proxy for "this trainer is
+    a real, authored battle" rather than a stray classifier false-positive
+    on dead content.
+    """
+    trainer_maps: set[int] = set()
+    for match in classify_manifest(rows):
+        if match.archetype != "trainer":
+            continue
+        if any(row_id in dispositions for row_id in match.roles):
+            trainer_maps.add(match.map_id)
+    return trainer_maps
+
+
+def check_trigger_overlay(
+    rows: list[ManifestRow],
+    dispositions: dict[str, Disposition],
+    *,
+    trigger_overlay: TriggerOverlayModel | None = None,
+) -> list[Finding]:
+    """`RULE_TRIGGER_OVERLAY_VACUOUS`: for every map with a dispositioned
+    trainer row, did the trigger overlay actually find a `TRAINER_SIGHT`
+    tile there?
+
+    Split out of `check_chapter` (which calls this too, so `chapter_manifest
+    check` also reports it) specifically so `routing.__main__.plan_cmd` can
+    call it directly, standalone, right after building the overlay and
+    before trusting the solved route's `CROSSING` output -- see
+    `TriggerOverlayModel`'s docstring for why the ROUTE step is where this
+    must fire, not only the later manifest-check pass. Same
+    unenforced-rather-than-silent idiom as `RULE_ROUTE_MODEL_UNENFORCED`:
+    a chapter with no trainer rows at all reports nothing (there is nothing
+    this rule could say), but a chapter WITH dispositioned trainer rows and
+    no `trigger_overlay` supplied degrades loud rather than passing quiet.
+    """
+    findings: list[Finding] = []
+    trainer_maps = _dispositioned_trainer_maps(rows, dispositions)
+    if not trainer_maps:
+        return findings
+
+    if trigger_overlay is None:
+        findings.append(Finding(
+            row_id="chapter",
+            rule=RULE_TRIGGER_OVERLAY_MODEL_UNENFORCED,
+            message=(
+                "chapter has dispositioned trainer row(s) on map(s) "
+                f"{sorted(trainer_maps)} but no trigger overlay model was "
+                "supplied, so a zero-CROSSING route cannot be told apart "
+                "from an overlay that measured nothing (this rule is "
+                "unenforced without one)"
+            ),
+            severity="warning",
+        ))
+        return findings
+
+    for map_id in sorted(trainer_maps):
+        if trigger_overlay.has_trainer_sight_tiles(map_id):
+            continue
+        findings.append(Finding(
+            row_id=f"map{map_id:03d}",
+            rule=RULE_TRIGGER_OVERLAY_VACUOUS,
+            message=(
+                f"map{map_id:03d} has a dispositioned trainer row, but the "
+                "trigger overlay found zero TRAINER_SIGHT tiles on this "
+                "map -- a route with no CROSSING lines here is "
+                "indistinguishable from an overlay that measured nothing "
+                "(PROJECT_TODO #75's CH05 incident: object events did not "
+                "exist yet). Confirm this map's object events are actually "
+                "emitted (trainer_type, movement_type, sight range) before "
+                "trusting a clean route across it"
             ),
             severity="error",
         ))

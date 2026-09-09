@@ -34,11 +34,19 @@ from pathlib import Path
 import click
 
 from ..chapter_manifest.__main__ import load_manifest
+from ..chapter_manifest.checker import (
+    Finding,
+    TriggerOverlayModel,
+    check_trigger_overlay,
+)
+from ..chapter_manifest.dispositions import disposition_path, load_dispositions
+from ..chapter_manifest.schema import Disposition, ManifestRow
 from ..playtest.chapter import load_chapter
 from ..tileset_converter.map_constants import DEFAULT_STATE_PATH, MapConstantRegistry
 from ..traversal.graph import MapGraph, build_map_graph
 from ..traversal.triggers import (
     DEFAULT_ENGINE_MAPS_DIR,
+    TriggerKind,
     TriggerOverlay,
     build_trigger_overlay,
 )
@@ -158,6 +166,80 @@ class _LazyOverlays(Mapping):
 
     def __len__(self) -> int:
         return len(self._cache)
+
+
+class _OverlayTrainerSightModel(TriggerOverlayModel):
+    """The concrete `TriggerOverlayModel` adapter `plan_cmd` wires into
+    `chapter_manifest.checker.check_trigger_overlay` (RULE_TRIGGER_OVERLAY_
+    VACUOUS/_MODEL_UNENFORCED, PROJECT_TODO #75) -- wraps the SAME
+    `_LazyOverlays` mapping this module already builds for `solve_route`
+    itself, so "does map N have a TRAINER_SIGHT tile" is answered from the
+    identical overlay the solver's own CROSSING accounting reads, not a
+    second, possibly-diverging build.
+    """
+
+    def __init__(self, overlays: Mapping[int, TriggerOverlay]) -> None:
+        self._overlays = overlays
+
+    def has_trainer_sight_tiles(self, map_id: int) -> bool:
+        overlay = self._overlays[map_id]
+        return any(
+            ref.kind is TriggerKind.TRAINER_SIGHT
+            for refs in overlay.tiles.values()
+            for ref in refs
+        )
+
+
+def _check_trigger_overlay_or_raise(
+    rows: list[ManifestRow],
+    chapter: str,
+    overlays: Mapping[int, TriggerOverlay],
+) -> None:
+    """Runs `check_trigger_overlay` at the ROUTE step itself -- see
+    `TriggerOverlayModel`'s docstring for why zero `CROSSING` lines must not
+    be allowed to read as "checked and clean" when it could instead mean
+    "the overlay measured nothing" (PROJECT_TODO #75, the CH05 incident).
+
+    Dispositions are loaded here, independently of `rows`, from the same
+    default path `chapter_manifest.__main__`'s `check` command reads
+    (`reference/manifests/<chapter>.dispositions.json`) -- if that file does
+    not exist yet, there is nothing to classify as a "dispositioned trainer
+    row" and the check is silently skipped. A chapter with no dispositions
+    file at all is a different, already-covered failure (`chapter_manifest
+    check`'s own `RULE_UNDISPOSITIONED`), not the vacuous-overlay problem
+    this rule exists to catch.
+    Raises `click.ClickException` on any ERROR-severity finding; logs any
+    WARNING-severity finding (e.g. `RULE_TRIGGER_OVERLAY_MODEL_UNENFORCED`,
+    which cannot fire here since this always supplies a model, but stays
+    generically handled for parity with `chapter_manifest check`'s own
+    reporting).
+    """
+    disp_file = disposition_path(chapter)
+    if not disp_file.exists():
+        logger.warning(
+            "%s: no dispositions file found -- skipping the trigger-overlay "
+            "vacuousness check (RULE_TRIGGER_OVERLAY_VACUOUS unenforced for "
+            "this solve)",
+            disp_file,
+        )
+        return
+
+    dispositions: dict[str, Disposition] = load_dispositions(disp_file)
+    findings: list[Finding] = check_trigger_overlay(
+        rows, dispositions, trigger_overlay=_OverlayTrainerSightModel(overlays),
+    )
+
+    errors = [f for f in findings if f.severity == "error"]
+    for f in findings:
+        if f.severity == "warning":
+            logger.warning("%s: %s: %s", f.rule, f.row_id, f.message)
+    if errors:
+        detail = "\n".join(f"  {f.row_id} ({f.rule}): {f.message}" for f in errors)
+        raise click.ClickException(
+            f"trigger overlay looks vacuous on {len(errors)} map(s) with a "
+            f"dispositioned trainer row -- a zero-CROSSING route across "
+            f"them would be unproven, not clean:\n{detail}"
+        )
 
 
 class _LazyOccupancy(Mapping):
@@ -351,6 +433,14 @@ def plan_cmd(
     occupancy = _LazyOccupancy(build_dir)
     world = _build_world(build_dir)
     map_const_to_id = _load_map_ids(build_dir)
+
+    # RULE_TRIGGER_OVERLAY_VACUOUS (PROJECT_TODO #75): before trusting
+    # whatever CROSSING count the solve below produces, confirm the overlay
+    # it will read actually saw a TRAINER_SIGHT tile on every map this
+    # chapter has a dispositioned trainer row on -- see
+    # `_check_trigger_overlay_or_raise`/`TriggerOverlayModel` for why this
+    # must happen here, at the ROUTE step, not later.
+    _check_trigger_overlay_or_raise(rows, chapter, overlays)
 
     try:
         route = solve_route(

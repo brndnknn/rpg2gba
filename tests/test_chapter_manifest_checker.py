@@ -31,11 +31,14 @@ from rpg2gba.chapter_manifest.checker import (
     RULE_ROUTE_MODEL_UNENFORCED,
     RULE_ROUTE_ORDER,
     RULE_STALE_DISPOSITION,
+    RULE_TRIGGER_OVERLAY_MODEL_UNENFORCED,
+    RULE_TRIGGER_OVERLAY_VACUOUS,
     RULE_UNAFFIRMED_DISPOSITION,
     RULE_UNDISPOSITIONABLE_ROW_DECIDED,
     RULE_UNDISPOSITIONED,
     RULE_UNREGISTERED_BEAT,
     check_chapter,
+    check_trigger_overlay,
     exit_code,
 )
 from rpg2gba.chapter_manifest.dispositions import (
@@ -1148,3 +1151,110 @@ def test_ch04_dispositions_round_trip_is_byte_identical(tmp_path: Path):
     out_path = tmp_path / "CH04.dispositions.roundtrip.json"
     write_dispositions(dispositions, out_path)
     assert out_path.read_text(encoding="utf-8") == original
+
+
+# --- rule 11: a vacuous trigger overlay must not read as a clean route -----
+#
+# PROJECT_TODO #75 / REDERIVATION_PLAN P1: CH05's first solve reported a
+# clean 155-tile route (zero CROSSING lines) before the object events it
+# needed even existed -- the trigger overlay had nothing to check against,
+# not a genuinely clear path. These tests pin the sibling rule to
+# RULE_ROUTE_MODEL_UNENFORCED that catches that class of false pass.
+
+
+class _FakeTriggerOverlay:
+    """A minimal `TriggerOverlayModel` for tests -- `seen` is the set of map
+    ids the fake overlay actually found a TRAINER_SIGHT tile on; every other
+    map id reads as vacuous, same as a real overlay with no trainer object
+    events on it."""
+
+    def __init__(self, seen: set[int]) -> None:
+        self._seen = seen
+
+    def has_trainer_sight_tiles(self, map_id: int) -> bool:
+        return map_id in self._seen
+
+
+def test_trigger_overlay_unenforced_without_model():
+    row = _trainer_row("map001/ev001/p0")
+    disp = _disp(row.row_id, "beat:B1", affirmed_hash="deadbeef00000000")
+    findings = check_chapter([row], {row.row_id: disp}, trigger_overlay=None)
+    unenforced = [f for f in findings if f.rule == RULE_TRIGGER_OVERLAY_MODEL_UNENFORCED]
+    assert len(unenforced) == 1
+    assert unenforced[0].severity == "warning"
+    assert unenforced[0].row_id == "chapter"
+    assert all(f.rule != RULE_TRIGGER_OVERLAY_VACUOUS for f in findings)
+
+
+def test_trigger_overlay_vacuous_on_trainer_map_is_error():
+    row = _trainer_row("map001/ev001/p0", map_id=7)
+    disp = _disp(row.row_id, "beat:B1", affirmed_hash="deadbeef00000000")
+    overlay = _FakeTriggerOverlay(seen=set())  # nothing seen anywhere
+    findings = check_chapter([row], {row.row_id: disp}, trigger_overlay=overlay)
+    finding = next(f for f in findings if f.rule == RULE_TRIGGER_OVERLAY_VACUOUS)
+    assert finding.severity == "error"
+    assert finding.row_id == "map007"
+    assert "zero TRAINER_SIGHT tiles" in finding.message
+    assert all(f.rule != RULE_TRIGGER_OVERLAY_MODEL_UNENFORCED for f in findings)
+
+
+def test_trigger_overlay_present_on_trainer_map_no_finding():
+    row = _trainer_row("map001/ev001/p0", map_id=7)
+    disp = _disp(row.row_id, "beat:B1", affirmed_hash="deadbeef00000000")
+    overlay = _FakeTriggerOverlay(seen={7})
+    findings = check_chapter([row], {row.row_id: disp}, trigger_overlay=overlay)
+    assert all(
+        f.rule not in (RULE_TRIGGER_OVERLAY_VACUOUS, RULE_TRIGGER_OVERLAY_MODEL_UNENFORCED)
+        for f in findings
+    )
+
+
+def test_trigger_overlay_no_trainer_rows_is_silent_even_without_model():
+    """No trainer archetype anywhere -- the rule has nothing to check, so it
+    must not manufacture an unenforced warning just because `trigger_overlay`
+    is None (mirrors RULE_ROUTE_MODEL_UNENFORCED's own always-fires shape
+    being the one thing this rule deliberately does NOT copy: that rule
+    checks the whole chapter's walk, this one only maps with a trainer)."""
+    row = _row(effects=("text",), content_hash="h1")
+    disp = _disp(row.row_id, "cosmetic", affirmed_hash="h1")
+    findings = check_chapter([row], {row.row_id: disp}, trigger_overlay=None)
+    assert all(
+        f.rule not in (RULE_TRIGGER_OVERLAY_VACUOUS, RULE_TRIGGER_OVERLAY_MODEL_UNENFORCED)
+        for f in findings
+    )
+
+
+def test_trigger_overlay_undispositioned_trainer_row_not_counted():
+    """A trainer row with no disposition on file yet is already covered by
+    RULE_UNDISPOSITIONED/RULE_ARCHETYPE_CONFORMANCE -- it must not also
+    force a trigger-overlay verdict for a battle nobody has confirmed is
+    live content yet."""
+    row = _trainer_row("map001/ev001/p0", map_id=7)
+    overlay = _FakeTriggerOverlay(seen=set())
+    findings = check_chapter([row], {}, trigger_overlay=overlay)
+    assert all(
+        f.rule not in (RULE_TRIGGER_OVERLAY_VACUOUS, RULE_TRIGGER_OVERLAY_MODEL_UNENFORCED)
+        for f in findings
+    )
+
+
+def test_check_trigger_overlay_standalone_multiple_maps():
+    """`check_trigger_overlay` is exported standalone so
+    `routing.__main__.plan_cmd` can call it directly at the ROUTE step,
+    without going through the rest of `check_chapter`'s rules (which need a
+    disposition on every row, an unrelated concern for a bare routing
+    solve). One vacuous map among several dispositioned trainer maps must
+    report exactly that map, not all of them."""
+    rows = [
+        _trainer_row("map001/ev001/p0", map_id=1, event_id=1),
+        _trainer_row("map002/ev001/p0", map_id=2, event_id=1),
+    ]
+    dispositions = {
+        rows[0].row_id: _disp(rows[0].row_id, "beat:B1", affirmed_hash="deadbeef00000000"),
+        rows[1].row_id: _disp(rows[1].row_id, "beat:B2", affirmed_hash="deadbeef00000000"),
+    }
+    overlay = _FakeTriggerOverlay(seen={1})  # map 2 is vacuous
+    findings = check_trigger_overlay(rows, dispositions, trigger_overlay=overlay)
+    assert len(findings) == 1
+    assert findings[0].rule == RULE_TRIGGER_OVERLAY_VACUOUS
+    assert findings[0].row_id == "map002"

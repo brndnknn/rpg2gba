@@ -30,6 +30,9 @@ from rpg2gba.traversal.world import WorldGraph
 
 from rpg2gba.routing.occupancy import MapOccupancy
 
+from rpg2gba.chapter_manifest.dispositions import Disposition, write_dispositions
+from rpg2gba.chapter_manifest.schema import ManifestRow, row_to_dict
+
 from rpg2gba.routing.__main__ import cli
 from rpg2gba.routing.plan import load_plan
 import rpg2gba.routing.__main__ as routing_main
@@ -254,3 +257,139 @@ def test_plan_chapter_id_and_module_are_distinct_names(tmp_path: Path, monkeypat
             assert written.chapter_module == module
     finally:
         _cleanup_chapter(module)
+
+
+# --- RULE_TRIGGER_OVERLAY_VACUOUS: PROJECT_TODO #75 / REDERIVATION_PLAN P1 --
+#
+# The ROUTE step (`plan_cmd`) must refuse to let a route across a map with a
+# dispositioned trainer row read as clean when the trigger overlay it was
+# solved against found zero TRAINER_SIGHT tiles there -- see
+# `chapter_manifest.checker.TriggerOverlayModel`'s docstring for the CH05
+# incident (a clean 155-tile route reported before the object events the
+# overlay needed even existed).
+
+
+def _write_trainer_manifest(manifest_path: Path, map_id: int) -> str:
+    """Writes a one-row manifest whose row is a `trainer` archetype match on
+    `map_id`, and returns that row's `row_id`."""
+    row = ManifestRow(
+        row_id=f"map{map_id:03d}/ev001/p0", kind="page", map_id=map_id,
+        content_hash="th0", event_id=1, page_idx=0,
+        script_heads=("pbTrainerBattle",), effects=(),
+        trigger="action button", reachability_consulted=True,
+    )
+    manifest_path.write_text(json.dumps([row_to_dict(row)]), encoding="utf-8")
+    return row.row_id
+
+
+def _write_trainer_disposition(row_id: str, chapter: str) -> None:
+    """Writes `reference/manifests/<chapter>.dispositions.json` (the default
+    path `_check_trigger_overlay_or_raise` reads) relative to the CURRENT
+    working directory -- callers must be inside a
+    `runner.isolated_filesystem(...)` block already."""
+    path = Path("reference") / "manifests" / f"{chapter}.dispositions.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_dispositions({row_id: Disposition(row_id=row_id, verdict="beat", argument="B1")}, path)
+
+
+def _fake_build_trigger_overlay_with_sight(sight_map_id: int):
+    """A `build_trigger_overlay` fake that plants one TRAINER_SIGHT tile on
+    `sight_map_id` and leaves every other map vacuous, same shape as
+    `_fake_build_trigger_overlay` otherwise."""
+    from rpg2gba.traversal.triggers import Certainty, TriggerKind, TriggerRef
+
+    def _build(map_id: int, **kwargs) -> TriggerOverlay:  # noqa: ANN003
+        if map_id != sight_map_id:
+            return TriggerOverlay(map_id=map_id, tiles={})
+        return TriggerOverlay(
+            map_id=map_id,
+            tiles={
+                (0, 1): [
+                    TriggerRef(
+                        kind=TriggerKind.TRAINER_SIGHT, script="EventScript_Trainer",
+                        certainty=Certainty.CERTAIN, owner_xy=(0, 0), detail="sight range 1 facing SOUTH",
+                    )
+                ]
+            },
+        )
+
+    return _build
+
+
+def test_plan_fails_on_vacuous_overlay_for_dispositioned_trainer_map(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+    chapter = "vacuousch"
+    _install_chapter(chapter)
+    try:
+        _patch_builders(monkeypatch)  # default fake overlay is always empty/vacuous
+        build_dir, chapters_path, manifest_path = _write_fixtures(tmp_path, chapter)
+        row_id = _write_trainer_manifest(manifest_path, MAP_ID)
+
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            _write_trainer_disposition(row_id, chapter)
+            result = runner.invoke(cli, [
+                "plan", "--chapter", chapter, "--module", chapter, "--dry-run",
+                "--manifest", str(manifest_path),
+                "--build-dir", str(build_dir),
+                "--chapters", str(chapters_path),
+            ])
+
+            assert result.exit_code != 0, result.output
+            assert "trigger_overlay_vacuous" in result.output
+            assert f"map{MAP_ID:03d}" in result.output
+    finally:
+        _cleanup_chapter(chapter)
+
+
+def test_plan_succeeds_when_overlay_actually_sees_trainer_sight(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+    chapter = "sightseench"
+    _install_chapter(chapter)
+    try:
+        _patch_builders(monkeypatch)
+        monkeypatch.setattr(
+            routing_main, "build_trigger_overlay",
+            _fake_build_trigger_overlay_with_sight(MAP_ID),
+        )
+        build_dir, chapters_path, manifest_path = _write_fixtures(tmp_path, chapter)
+        row_id = _write_trainer_manifest(manifest_path, MAP_ID)
+
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            _write_trainer_disposition(row_id, chapter)
+            result = runner.invoke(cli, [
+                "plan", "--chapter", chapter, "--module", chapter, "--dry-run",
+                "--manifest", str(manifest_path),
+                "--build-dir", str(build_dir),
+                "--chapters", str(chapters_path),
+            ])
+
+            assert result.exit_code == 0, result.output
+    finally:
+        _cleanup_chapter(chapter)
+
+
+def test_plan_skips_trigger_overlay_check_without_dispositions_file(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+    """No dispositions file on disk at all -- the check has nothing to
+    classify as a "dispositioned trainer row" and must not block routing a
+    chapter that hasn't reached the disposition step yet (that absence is
+    `chapter_manifest check`'s own RULE_UNDISPOSITIONED's job, not this
+    rule's)."""
+    chapter = "nodispch"
+    _install_chapter(chapter)
+    try:
+        _patch_builders(monkeypatch)  # vacuous overlay, but no dispositions file either
+        build_dir, chapters_path, manifest_path = _write_fixtures(tmp_path, chapter)
+        _write_trainer_manifest(manifest_path, MAP_ID)
+
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result = runner.invoke(cli, [
+                "plan", "--chapter", chapter, "--module", chapter, "--dry-run",
+                "--manifest", str(manifest_path),
+                "--build-dir", str(build_dir),
+                "--chapters", str(chapters_path),
+            ])
+
+            assert result.exit_code == 0, result.output
+    finally:
+        _cleanup_chapter(chapter)
