@@ -212,6 +212,70 @@ def slice_growth_cmd(chapters: tuple[str, ...], chapters_json: Path, maps_dir: P
         raise SystemExit(1)
 
 
+@main.command("seam-growth")
+@click.option(
+    "--chapter",
+    "chapters",
+    multiple=True,
+    help="Restrict to this chapter id (e.g. CH03). Repeatable. Default: all gated chapters.",
+)
+@click.option(
+    "--chapters-json",
+    type=click.Path(path_type=Path),
+    default=Path("reference/chapters.json"),
+    show_default=True,
+)
+@click.option(
+    "--connections-json",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Defaults to $RPG2GBA_OUTPUT/uranium-build/connections.json.",
+)
+@click.option(
+    "--seam-warps-json",
+    type=click.Path(path_type=Path),
+    default=Path("reference/seam_warps.json"),
+    show_default=True,
+)
+def seam_growth_cmd(
+    chapters: tuple[str, ...],
+    chapters_json: Path,
+    connections_json: Path | None,
+    seam_warps_json: Path,
+) -> None:
+    """Detect map-connection seams that were out-of-slice when a chapter was
+    authored and are crossable now (REDERIVATION_PLAN.md step P2b, #91).
+
+    `connections.build_connections` only emits a `connections.json` row once
+    BOTH its endpoint maps are staged, so a seam naming one of an
+    already-shipped chapter's own maps and a then-unbuilt neighbour was
+    invisible at authoring time and is live today with nothing having
+    re-examined it. This is the map-connection counterpart to
+    `slice-growth`'s code-201 detector -- see `rpg2gba/seam_growth.py`.
+    """
+    from rpg2gba import seam_growth
+
+    _load_dotenv()
+    if connections_json is None:
+        connections_json = (
+            Path(os.environ.get("RPG2GBA_OUTPUT", "output")) / "uranium-build" / "connections.json"
+        )
+    only_chapters = set(chapters) or None
+    reports = seam_growth.detect_seam_growth(
+        chapters_json=chapters_json,
+        connections_json=connections_json,
+        seam_warps_json=seam_warps_json,
+        only_chapters=only_chapters,
+    )
+    any_findings = False
+    for report in reports:
+        click.echo(report.format())
+        if not report.ok:
+            any_findings = True
+    if any_findings:
+        raise SystemExit(1)
+
+
 def _resolve_paths() -> tuple[Path, Path]:
     """Resolve Uranium source + output directories from env vars."""
     _load_dotenv()
