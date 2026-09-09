@@ -77,7 +77,7 @@ has walked off its spawn tile by playtest time, guessing "mobile" would
 silently under-block a standing NPC the player cannot actually walk through.
 Also unrecognized (never encountered on Uranium's corpus so far, and outside
 what has been verified above): `MOVEMENT_TYPE_PLAYER`,
-`MOVEMENT_TYPE_BERRY_TREE_GROWTH`, the `ROTATE_*`/`COPY_PLAYER*` families,
+the `ROTATE_*`/`COPY_PLAYER*` families,
 `TREE_DISGUISE`/`MOUNTAIN_DISGUISE`, `BURIED`, the `WALK_IN_PLACE_*` /
 `JOG_IN_PLACE_*` / `RUN_IN_PLACE_*` / `WALK_SLOWLY_IN_PLACE_*` families
 (despite the "WALK"/"JOG"/"RUN" in the name, these dispatch to
@@ -123,6 +123,22 @@ _STATIONARY_MOVEMENT_TYPES = frozenset({
     "MOVEMENT_TYPE_FACE_UP_LEFT_AND_RIGHT",
     "MOVEMENT_TYPE_FACE_DOWN_LEFT_AND_RIGHT",
     "MOVEMENT_TYPE_LOOK_AROUND",
+    # Added 2026-09-09, when CH03's map 31 became the first Uranium map to
+    # carry one ('BerryTreeScript' at (32,5)) -- the docstring above used to
+    # list this type as never-encountered. Verified stationary against the
+    # fork per CLAUDE.md 4.7 rather than assumed from the name:
+    # `MovementType_BerryTreeGrowth` (event_object_movement.c:4445) dispatches
+    # through `gMovementTypeFuncs_BerryTreeGrowth`, whose five states are
+    # NORMAL / MOVE / SPARKLE_START / SPARKLE / SPARKLE_END. The only
+    # movement action any of them issues is
+    # `MOVEMENT_ACTION_START_ANIM_IN_DIRECTION` (line 4491) -- an animation,
+    # not a step -- so the object never leaves its spawn tile and the
+    # BERRYTREEFUNC_MOVE state's name is about the growth animation, not
+    # locomotion. It occupies its cell at every berry stage: the stage-0
+    # branch sets `invisible = TRUE` (line 4467) but does not remove the
+    # object event, so the tile stays blocked whether or not a berry is
+    # showing.
+    "MOVEMENT_TYPE_BERRY_TREE_GROWTH",
 })
 
 _MOBILE_MOVEMENT_TYPES = frozenset({

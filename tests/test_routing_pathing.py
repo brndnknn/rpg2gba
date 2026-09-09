@@ -431,6 +431,30 @@ def test_build_occupancy_raises_on_unrecognized_movement_type(tmp_path):
         build_occupancy(1, map_constants_json=constants_json, engine_maps_dir=maps_dir)
 
 
+def test_build_occupancy_blocks_berry_tree(tmp_path):
+    """A berry tree occupies its tile at every growth stage.
+
+    CH03's map 31 carries the corpus's first one ('BerryTreeScript' at
+    (32,5)), which fails-loud'd the CH03/CH04 route solve until it was
+    classified. It is stationary despite its BERRYTREEFUNC_MOVE state: the
+    only movement action `MovementType_BerryTreeGrowth` issues is
+    `MOVEMENT_ACTION_START_ANIM_IN_DIRECTION`, an animation rather than a
+    step (`engine/src/event_object_movement.c:4491`).
+    """
+    constants_json, maps_dir = _write_occupancy_fixture(tmp_path, [
+        {
+            "x": 32, "y": 5,
+            "movement_type": "MOVEMENT_TYPE_BERRY_TREE_GROWTH",
+            "script": "BerryTreeScript",
+        },
+    ])
+
+    occupancy = build_occupancy(1, map_constants_json=constants_json, engine_maps_dir=maps_dir)
+
+    assert occupancy.blocked_cells() == frozenset({(32, 5)})
+    assert occupancy.at((32, 5)).script == "BerryTreeScript"
+
+
 def test_build_occupancy_leaves_custom_route_patrols_passable(tmp_path):
     """Operator ruling 2026-09-04: a patrolling NPC stays passable offline.
 
