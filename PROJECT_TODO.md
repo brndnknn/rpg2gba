@@ -1059,7 +1059,7 @@ separate stage — it is discharged by two other steps. Tilesets come from step
 4's `phase5` (`src/rpg2gba/tileset_converter/phase5.py:232`, `phase5.convert_all`
 → `build_slice_tilesets`, its own internal "per-map graphics: synth tilesets +
 overlay" step, budget-guarded at `graphics/emit.py:537-548`). Sprites come from
-step 7's assembler chain (`sprite_pass.run_sprite_pass`, called from
+BUILD's assembler chain (`sprite_pass.run_sprite_pass`, called from
 `scripts/stage_slice_scripts.py:429` and `scripts/assemble_pathfinder.py:214`);
 step 4 itself only writes empty-conversion stubs
 (`sprite_emit.write_stub_gen_files`, `phase5.py:350`). Fix: add a line under
@@ -1116,6 +1116,16 @@ past a trainer already defeated), but that was verified by hand, not caught
 by the check — the check itself had nothing to say either way. Fix is a
 `BUILD_PLAN.md` ordering change: run ROUTE after object staging. Affects
 every chapter, not just CH05.
+
+**RESOLVED 2026-09-09.** ROUTE and BUILD swapped in `BUILD_PLAN.md` §2's
+checklist — BUILD is now step 6, ROUTE step 7. Both of ROUTE's constraints
+hold at once: it still runs before the chapter module's beats are registered
+(step 8), and BUILD never reads the route plan, so there is no cycle. The
+step-4 bullet was corrected in the same change; it had claimed WIRE stages
+object events, which `phase5` has never done, and that misreading is what put
+ROUTE at 6 in the first place. #75's `RULE_TRIGGER_OVERLAY_VACUOUS` is the
+enforcement that the ordering stays put: with trainers unstaged, the solve
+now fails loud instead of reporting a clean route.
 
 ### 75. A vacuous trigger overlay reads identically to a genuinely clean route
 
@@ -1252,13 +1262,13 @@ merely that they are on the destination map at the end.
 
 ### 82. Route review in the map viewer is better than the CLI-text approval gate
 
-`BUILD_PLAN.md` step 6 specifies the ROUTE approval gate as "read the
+`BUILD_PLAN.md`'s ROUTE step specifies its approval gate as "read the
 summary" — a CLI text output. CH05's STOP 3 instead reviewed the solved
 route visually in the map viewer (Events mode, the `Beats`/`Planned` overlay
 drawing the solver's ordered polyline plus derived beat markers) before
 authoring, and it was the better gate: order and approach-cell choices read
 as a picture much faster and more reliably than as a tile count. Wants the
-`BUILD_PLAN.md` step-6 wording changed to point at the viewer review instead
+`BUILD_PLAN.md` ROUTE-step wording changed to point at the viewer review instead
 of (or in addition to) the CLI summary.
 
 ### 83. DONE 2026-09-08 — trainer battle staging failures are fatal
@@ -1316,12 +1326,12 @@ exactly why a wrong mapping would otherwise go unnoticed until then.
 predecessor chapter's `--at-end` blob (`playtest seeds --chapter <prev>` then
 `walk --at-end`). That recipe cannot work for any chapter, not just CH05:
 seed blobs are keyed by the ROM's sha256 and invalidated by any rebuild, and
-the arriving chapter's own step 7 always rebuilds the ROM before step 8 runs
+the arriving chapter's own BUILD always rebuilds the ROM before BOOT runs
 — so by the time a chapter reaches BOOT, the predecessor's blobs from its own
 green run no longer match the current ROM hash, and `playtest seeds` reports
 "no seeds for this ROM build — run the chapter green from the start first."
 Found and worked around on CH05, 2026-09-06 (commit `be66391a`): the
-arriving chapter's own green run at step 7 already writes a seed blob for
+arriving chapter's own green run at BOOT already writes a seed blob for
 its first beat, and that state is identical to the predecessor's end state by
 construction (CH05's B1 blob boots to Route 02 (19,50), exactly where CH04
 leaves the player). The correct recipe is `playtest walk --chapter <this> --at-beat

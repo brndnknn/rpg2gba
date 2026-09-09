@@ -97,8 +97,13 @@ CHAPTER N / CHnn
       • everything mechanical → Poryscript; uninterpretable script-calls → queue.
       • differential-test against the frozen-Opus oracle where it overlaps.
  3. ART — quantize the chapter's real tilesets + sprites to GBA 4bpp.
- 4. WIRE — map constants, layouts (collision + warp metatiles), object events,
-      encounters, connections.
+ 4. WIRE — map constants, layouts (collision + warp metatiles), encounters,
+      connections. NOT object events: `phase5` stages a warps-only Map Walker
+      corpus where "only warp_events survive"
+      (`src/rpg2gba/tileset_converter/phase5.py:8-11`); trainers and their
+      sight cones are restored at BUILD by `build_object_events`. This bullet
+      claimed object events until 2026-09-09 and the code never did that —
+      the misreading is what put ROUTE at step 6.
  5. READ — read through the generated manifest and its authored dispositions
       before anything is approved. Checklist: `reference/guides/read_through_checklist.md`.
       • per row: is the verdict answering the right question for that row's
@@ -107,8 +112,10 @@ CHAPTER N / CHnn
         that was visible the whole time.
       • a verdict-definition error found here is fixed as a definition and
         re-reviewed across every row of that kind, not patched on the one row.
- 6. ROUTE — solve the chapter's walk and get it approved BEFORE the beats are
-      written. Needs step 4's emitted maps, not a ROM.
+ 6. BUILD — assemble into the fork; `make modern` must exit 0.
+ 7. ROUTE — solve the chapter's walk and get it approved BEFORE the beats are
+      written. Needs BUILD's staged maps, not a ROM. (Moved after BUILD on
+      2026-09-09; it sat at 6 until then. See "Why ROUTE sits after BUILD".)
       • `python -m rpg2gba.routing plan --chapter CHnn --module <mod> --dry-run`
         → read the summary; any CROSSING line is a beat that will fire the wrong
         event, and is fixed here, not after the walk goes wrong.
@@ -118,7 +125,6 @@ CHAPTER N / CHnn
         `chapter_manifest check --chapter CHnn` enforces the two agree from then
         on (RULE_ROUTE_ORDER). No plan on disk = the rule cannot run, and says
         so as a route_model_unenforced warning — do not read that as a pass.
- 7. BUILD — assemble into the fork; `make modern` must exit 0.
  8. BOOT — run in mGBA; walk the section. This is the gate (see ROADMAP §9).
  9. FIX — cluster any systematic defect; fix the *converter*, re-run. Never hand-edit
       output.
@@ -134,14 +140,40 @@ approved and routed on a manifest that's still wrong underneath. CH04 ran this
 informally and it was the highest-yield step of that chapter; it had no written home
 until now.
 
-**Why ROUTE sits at 6 and not later.** It reads the *emitted* map data (collision,
-warps, and slice 2's trigger overlay, which is built from the pokeemerald JSON rather
-than RMXP), so it cannot run before WIRE — but it must run before the chapter module's
-beats are registered, because registration order *is* playthrough order and the plan
-is what the operator approves. Solving after the beats are written inverts that: the
-solver then just grades an order nobody can change without reopening the chapter.
-That is exactly the state CH01–CH04 are in (`PROJECT_TODO.md` #67), and why the rule
-is enforced forward from CH05 rather than retroactively.
+**Why ROUTE sits after BUILD, and still before the beats.** Two constraints bracket
+it, and only one of them was honoured until 2026-09-09.
+
+The constraint that was always honoured: ROUTE must run **before the chapter module's
+beats are registered**, because registration order *is* playthrough order and the plan
+is what the operator approves. Solving after the beats are written inverts that — the
+solver then just grades an order nobody can change without reopening the chapter. That
+is exactly the state CH01–CH04 are in (`PROJECT_TODO.md` #67), and why the rule is
+enforced forward from CH05 rather than retroactively.
+
+The constraint that was missed: ROUTE reads the *emitted* map data, and slice 2's
+trigger overlay is built from the staged pokeemerald JSON (`engine/data/maps`) rather
+than from RMXP. Object events are not staged until BUILD. So at step 6 the overlay saw
+**zero trainers on every map** and reported zero CROSSING lines whether or not the
+order was safe — a check that could only ever pass (`PROJECT_TODO.md` #74). CH05 was
+bitten by exactly this: its first solve reported a clean 155-tile route, and once
+object events existed the same order entered trainer sight cones in five places.
+
+BUILD does not read the route plan, so moving ROUTE after it introduces no cycle, and
+beats are not registered until step 8 — both constraints hold at once. The belt-and-
+braces half is `RULE_TRIGGER_OVERLAY_VACUOUS` (#75): if a chapter's dispositions carry
+trainer rows and the overlay yields no `TRAINER_SIGHT` tiles on those maps, the solve
+fails loud rather than reporting a clean route. That rule is what keeps this ordering
+honest if someone moves the steps back.
+
+**Boundary crossings belong to the chapter being opened, not the one shipping**
+(operator ruling, 2026-09-04). An outgoing chapter's contract is to deliver the player
+to the edge; the crossing itself is asserted by the chapter whose maps make it true.
+An edge beat written against an unstaged neighbour is a test authored to decay, and it
+fails in the wrong chapter: CH04's B7 asserted "no warp fires" at the cave mouth, and
+when CH05 staged maps 36/37 the warp started firing, silently invalidating B7 and six
+downstream CH04 beats. So a chapter does not write a beat for its forward boundary —
+it dispositions that row `boundary` and the arriving chapter claims it. See
+`PROJECT_TODO.md` #72/#73.
 
 ---
 
