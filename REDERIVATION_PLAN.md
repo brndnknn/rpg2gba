@@ -8,7 +8,7 @@ dispositions) and **#67** (route plans), executed under **#62**'s ordering safeg
 > state; when the task closes, its durable conclusions go to `MEMORY.md` / `PROJECT_TODO.md`
 > and this file is archived.
 
-**Live status (2026-09-09): P2 DONE (`f4190f2f`). P1 and P6's census in progress. Nothing derived yet.**
+**Live status (2026-09-09): P1 and P2 DONE. P6 census done; its table change is the next task. Nothing derived yet.**
 
 ---
 
@@ -73,7 +73,7 @@ Status values: `TODO` · `IN PROGRESS` · `DONE` · `BLOCKED`.
 
 | # | Step | Item | Status |
 |---|---|---|---|
-| **P1** | **Fail loud on a vacuous trigger overlay.** Zero `CROSSING` lines currently reads identically whether the route is clean or the overlay measured nothing. CH05's first solve reported a clean 155-tile route; once object events existed the same order entered trainer sight cones in **five** places. Apply the existing `route_model_unenforced` idiom: dispositions carry trainer rows but the overlay yields no `TRAINER_SIGHT` tiles on those maps → fail loud (§4.5). | #75 | IN PROGRESS |
+| **P1** | **Fail loud on a vacuous trigger overlay.** Zero `CROSSING` lines currently reads identically whether the route is clean or the overlay measured nothing. CH05's first solve reported a clean 155-tile route; once object events existed the same order entered trainer sight cones in **five** places. Apply the existing `route_model_unenforced` idiom: dispositions carry trainer rows but the overlay yields no `TRAINER_SIGHT` tiles on those maps → fail loud (§4.5). | #75 | **DONE** `f73d4b52` |
 | **P2** | **Build the A5 detector and run it.** Per gated chapter, enumerate every event on its maps carrying a `code 201` to a map that was out-of-slice when that chapter was authored and is in-slice now. `metadata_wiring.classify_event` skips an **entire event** on any out-of-slice `code 201`, so these were invisible at authoring time and are live now. Has already bitten twice (CH03 B25, CH04 B7 — the latter would have teleported the player for five downstream beats). **This detector's output is the real scope of the task and nobody can currently produce it.** No PROJECT_TODO number; file one. | A5 (unfiled) | **DONE** `f4190f2f` |
 | **P3** | **Encode boundary ownership.** "A boundary crossing belongs to the chapter being opened, not the one shipping" (operator, 2026-09-04) exists in no code and not in `BUILD_PLAN.md`. `build_beat_model` loads a chapter's own module plus predecessors, **never successors**, so a boundary row claimed by the arriving chapter cannot satisfy the shipping chapter's disposition — CH04 permanently reports `unregistered_beat` for `beat:B8`. All four chapters have a forward boundary and all four answers freeze at once. | #72, #73 | TODO |
 | **P4** | **Fix ROUTE-before-object-events ordering** (`#74`) and **make `destination_scripts` per-segment** (`#76`). A trainer's own sight cone is still a foreign hazard on the segment walking to it. Required now that route plans are in scope; same root cause as P1. | #74, #76 | TODO |
@@ -113,7 +113,40 @@ the player to Kevlar mid-chapter.
 | # | Step | Item | Status |
 |---|---|---|---|
 | **P5** | **Three new `cells.py` resolvers**, surfaced by the literal inventory (§5): a grass-cell resolver (4 literals), a seam/connection-edge resolver (2 — these are map connections, not `code 201` warps, so `warp_cell`/`arrival_cell` don't apply), and a local-id-keyed lookup for the ch03 boulders (3 — `event_cell` keys on RMXP event id, not the compiled local id). Without these, 9 literals can only land as counted `raw_cell(..., why=)` debt. | new | TODO |
-| **P6** | **Derive the CH01–CH03 start cells** — `_CHAPTER_MAP_START_CELLS` (`chapter_manifest/generator.py:243`) holds 4 entries (CH04:35, CH05:35/36/37). Needed: **CH01 8 maps** (49, 48, 32, 50, 64, 65, 172, 89), **CH02 2** (33, 81), **CH03 5** (31, 67, 68, 73, 19) = **15**. A missing entry does **not** fail — it warns, and the manifest is capability-blind on that map (`generator.py:266-279`): terrain-gated capabilities cannot appear in `requires[]` for any row. Re-deriving without this yields manifests that load clean, check green, and are blind on all 15 maps — and the freeze would encode the blindness. **This is the bulk of the work and a prerequisite, not a step.** | A1 (inside #65) | IN PROGRESS (census) |
+| **P6** | **Derive the CH01–CH03 start cells** — `_CHAPTER_MAP_START_CELLS` (`chapter_manifest/generator.py:243`) holds 4 entries (CH04:35, CH05:35/36/37). Needed: **CH01 8 maps** (49, 48, 32, 50, 64, 65, 172, 89), **CH02 2** (33, 81), **CH03 5** (31, 67, 68, 73, 19) = **15**. A missing entry does **not** fail — it warns, and the manifest is capability-blind on that map (`generator.py:266-279`): terrain-gated capabilities cannot appear in `requires[]` for any row. Re-deriving without this yields manifests that load clean, check green, and are blind on all 15 maps — and the freeze would encode the blindness. **This is the bulk of the work and a prerequisite, not a step.** | A1 (inside #65) | census DONE, entries TODO |
+
+**P6 census result (2026-09-09).** Of the 15 pairs, **9 are usable today without a ROM
+run** and **6 need a fresh boot-walk** — all six are CH01's, because CH01's suite never calls
+`_assert_near` on arrival, only confirms the map changed.
+
+- **Mechanical (6):** maps 64, 65, 89, 81, 67, 68 — a single inbound `code 201` (or two
+  tiles of one wide door agreeing on one cell), so the arrival cell is a fact about the data.
+- **Already path-1 in the repo (3):** maps 33, 31, 73 — these fail the strict "exactly one
+  inbound" test, but `ch02.py`/`ch03.py` already carry position-verified `_assert_near`
+  assertions from green §9 gates. Stronger evidence than the rule requires, sitting unused.
+- **Need a boot-walk (6):** CH01's maps 32, 48, 49, 50, 172.
+- **Zero disagreements** between a derived cell and an existing hand-authored constant.
+
+**The table's value type changes (operator, 2026-09-09).** Map 73 (Kevlar's building strip)
+is one map record holding **four shops in four disconnected components** — verified: 70×15,
+5 components, and the four arrival cells sit in four different ones. From a single start cell
+at the boutique (44,12), only 2 of its 11 events are reachable; the other 6 would be judged
+unreachable when they are reachable through their own doors. **Registering a wrong entry is
+worse than registering none** — absent, `has_walkable_approach` returns `None`
+("unanswerable", honest); present-but-wrong it returns `False`, a confident wrong answer the
+freeze would encode.
+
+So `_CHAPTER_MAP_START_CELLS` becomes `dict[tuple[str, int], frozenset[Cell]]` and
+`_build_reachability_context` floods from **all** of a map's start cells, unioning the
+results. CH04/CH05's existing entries become one-element sets. Note this is *not* the same
+condition as the outdoor maps (32, 33, 31) having many components — those are terrain-gated,
+which is exactly what the capability model already handles correctly.
+
+| # | Step | Item | Status |
+|---|---|---|---|
+| **P6a** | Change the table's value type to `frozenset[Cell]`; union the floods in `_build_reachability_context`; migrate the 4 existing entries. | A1 | TODO |
+| **P6b** | Register the 9 evidence-backed entries, each citing its source (warp geometry, or the specific beat whose `_assert_near` verified it). | A1 | TODO |
+| **P6c** | Boot-walk CH01 to observe its 6 arrival cells. Needs a ROM run. | A1 | TODO |
 
 ### Phase C — the derivation (branch `rederive-ch01-ch04`)
 
@@ -219,3 +252,9 @@ four chapters with the recipe it corrects.
 - **2026-09-09** — P2 done (`f4190f2f`): `rpg2gba slice-growth`, 6 affected events, all
   forward boundaries. Surfaced **P2b** (the seam counterpart) as new scope, and one audit
   item: `ch02.py`'s `NORTH_EXIT_TILE_B` comment has been stale since 2026-08-19.
+- **2026-09-09** — P1 done (`f73d4b52`): `trigger_overlay_vacuous`, verified in both
+  directions against CH05's real manifest. Suite 3060 passed / 17 skipped.
+- **2026-09-09** — P6 census done; splits 9 mechanical / 6 needing a boot-walk, and forced
+  the start-cell table's value type to change (P6a). Cleared a blocker found on the way:
+  `MOVEMENT_TYPE_BERRY_TREE_GROWTH` was unclassified and failed the CH03/CH04 route solve
+  (`6bece623`).
