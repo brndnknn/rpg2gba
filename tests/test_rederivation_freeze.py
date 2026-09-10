@@ -36,6 +36,16 @@ def _git_cat_file(blob_sha: str) -> str:
     return result.stdout
 
 
+def _import_generator():
+    """Import `scripts/freeze_rederivation.py`, which is a script, not a
+    package module. Expires with the script at P10."""
+    scripts_dir = str(REPO_ROOT / "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    import freeze_rederivation
+    return freeze_rederivation
+
+
 def _load_freeze(chapter: str) -> dict:
     path = FREEZE_DIR / f"{chapter}.freeze.json"
     with path.open(encoding="utf-8") as f:
@@ -164,28 +174,50 @@ def test_no_chapter_before_ch05_claims_manifest_rows_from_a_beat() -> None:
         )
 
 
-def test_script_is_idempotent(tmp_path: Path) -> None:
-    """Regenerating into a tmp dir reproduces the committed bytes exactly."""
-    script = REPO_ROOT / "scripts" / "freeze_rederivation.py"
-    env_python = sys.executable
+def test_generator_is_deterministic() -> None:
+    """Building the same chapter twice produces identical bytes.
 
-    # Run the script's own module functions against a redirected output dir
-    # by invoking it as a subprocess with a patched FREEZE_DIR is awkward
-    # (the constant is baked in), so instead we import it and call
-    # build_freeze() twice in-process and compare byte-for-byte dumps -- the
-    # thing that must not vary run to run.
-    sys.path.insert(0, str(REPO_ROOT / "scripts"))
-    try:
-        import freeze_rederivation as mod
-        for chapter in CHAPTERS:
-            first = mod._dump(mod.build_freeze(chapter))
-            second = mod._dump(mod.build_freeze(chapter))
-            assert first == second, f"{chapter}: not idempotent"
+    This is the half of the old idempotence test that is true forever. The
+    other half -- that regeneration reproduces the COMMITTED freeze -- was
+    only true until P8 derived its first manifest, because `build_freeze`
+    reads the working tree. It failed the moment CH01 was re-derived, which
+    is the freeze working as designed, so asserting it was asserting that
+    P8 had not started yet.
+    """
+    mod = _import_generator()
+    for chapter in CHAPTERS:
+        first = mod._dump(mod.build_freeze(chapter))
+        second = mod._dump(mod.build_freeze(chapter))
+        assert first == second, f"{chapter}: not deterministic"
 
-            committed = (FREEZE_DIR / f"{chapter}.freeze.json").read_text(
-                encoding="utf-8")
-            assert first == committed, (
-                f"{chapter}: regeneration does not match committed freeze "
-                "file -- run scripts/freeze_rederivation.py write")
-    finally:
-        sys.path.remove(str(REPO_ROOT / "scripts"))
+
+def test_write_refuses_to_clobber_an_existing_freeze() -> None:
+    """A freeze that can be silently overwritten is not a freeze.
+
+    `write` reads the working tree, so running it after P8 has derived would
+    replace the pre-derivation record with the post-derivation state -- and
+    the diff P8 depends on would compare the new answer against itself. It
+    must refuse without `--force`.
+    """
+    from click.testing import CliRunner
+
+    mod = _import_generator()
+    result = CliRunner().invoke(mod.cli, ["write"])
+    assert result.exit_code != 0
+    assert "refusing to overwrite" in result.output
+
+
+def test_check_verifies_against_pinned_blobs_not_the_working_tree() -> None:
+    """`check` must stay green after P8 regenerates a manifest.
+
+    The freeze's claim is "these bytes are what <path> held at blob <sha>",
+    which is checkable forever. A check defined as "regeneration matches
+    disk" instead goes red the moment the derivation it exists to police
+    actually runs -- and a check that fails when things are going right is
+    one people learn to ignore.
+    """
+    from click.testing import CliRunner
+
+    mod = _import_generator()
+    result = CliRunner().invoke(mod.cli, ["check"])
+    assert result.exit_code == 0, result.output

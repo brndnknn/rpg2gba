@@ -113,6 +113,20 @@ def _git_blob_sha(repo_relative_path: str) -> str:
     return result.stdout.strip()
 
 
+def _git_blob(blob_sha: str) -> str:
+    """The contents of a git blob. Fails loud if the sha does not resolve --
+    a freeze that cannot re-read its own source is not verifiable."""
+    result = subprocess.run(
+        ["git", "cat-file", "-p", blob_sha],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"git blob {blob_sha!r} does not resolve: {result.stderr.strip()}"
+        )
+    return result.stdout
+
+
 def _read_json(repo_relative_path: str) -> Any:
     path = REPO_ROOT / repo_relative_path
     with path.open(encoding="utf-8") as f:
@@ -297,9 +311,30 @@ def cli() -> None:
 
 
 @cli.command()
-def write() -> None:
-    """Regenerate all four freeze files on disk."""
+@click.option("--force", is_flag=True,
+              help="Overwrite freeze files that already exist. Only correct "
+                   "before P8 has derived anything.")
+def write(force: bool) -> None:
+    """Write the four freeze files. Refuses to clobber an existing freeze.
+
+    `build_freeze` reads the WORKING TREE, so it reproduces the committed
+    freeze only until P8 regenerates a manifest -- after that it reproduces
+    the newly derived state, which is the opposite of what a freeze is for.
+    A freeze that can be silently overwritten is not a freeze, so this
+    refuses by default and makes re-freezing a deliberate act (CLAUDE.md
+    §4.5). What verifies a freeze after P8 is the recorded git blob sha, not
+    regeneration -- see `check` and `tests/test_rederivation_freeze.py`.
+    """
     FREEZE_DIR.mkdir(parents=True, exist_ok=True)
+    existing = [c for c in CHAPTERS if _freeze_path(c).exists()]
+    if existing and not force:
+        raise click.ClickException(
+            f"freeze already exists for {', '.join(existing)}; refusing to "
+            "overwrite. The committed freeze is the pre-derivation record "
+            "P8 diffs against, and regenerating now would overwrite it with "
+            "whatever the working tree currently holds. Pass --force only if "
+            "you genuinely mean to re-freeze."
+        )
     for chapter in CHAPTERS:
         data = build_freeze(chapter)
         path = _freeze_path(chapter)
@@ -311,28 +346,60 @@ def write() -> None:
 
 @cli.command()
 def check() -> None:
-    """Regenerate in memory and diff against what is on disk.
+    """Verify each freeze against the git blobs it pinned.
 
-    Exits non-zero if anything on disk would change -- useful to P8 as a
-    guard against an accidental re-derive-and-write."""
+    Deliberately NOT "regenerate and diff against disk". Regeneration reads
+    the working tree, so once P8 derives a manifest that comparison reports
+    drift for the expected reason -- the working tree moved, which is the
+    whole point -- and a check that fails when things are going right is a
+    check people learn to ignore.
+
+    What a freeze actually claims is: *these bytes are what
+    `<path>` held at blob `<sha>`*. That claim stays checkable forever, so
+    this re-reads each pinned blob out of git and compares. It is the same
+    verification `tests/test_rederivation_freeze.py` does, available as a
+    command for P8 to run before trusting a diff."""
     drift = False
     for chapter in CHAPTERS:
-        data = build_freeze(chapter)
-        expected = _dump(data)
         path = _freeze_path(chapter)
         if not path.exists():
             logger.error("%s: missing on disk", path.relative_to(REPO_ROOT))
             drift = True
             continue
-        actual = path.read_text(encoding="utf-8")
-        if actual != expected:
-            logger.error("%s: drift detected", path.relative_to(REPO_ROOT))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        frozen_from = data["_header"]["frozen_from"]
+
+        manifest_blob = frozen_from["manifest"]["blob_sha"]
+        blob_rows = {r["row_id"]: r for r in json.loads(_git_blob(manifest_blob))}
+        if blob_rows != data["manifest_rows"]:
+            logger.error("%s: manifest_rows do not match blob %s",
+                         path.relative_to(REPO_ROOT), manifest_blob[:12])
             drift = True
-        else:
-            logger.info("%s: clean", path.relative_to(REPO_ROOT))
+            continue
+
+        disp_meta = frozen_from["dispositions"]
+        if disp_meta is None:
+            if data["dispositions"] is not None:
+                logger.error("%s: dispositions present with no source pinned",
+                             path.relative_to(REPO_ROOT))
+                drift = True
+                continue
+        elif json.loads(_git_blob(disp_meta["blob_sha"])) != data["dispositions"]:
+            logger.error("%s: dispositions do not match blob %s",
+                         path.relative_to(REPO_ROOT),
+                         disp_meta["blob_sha"][:12])
+            drift = True
+            continue
+
+        # The module is pinned by sha only -- its beats cannot be replayed
+        # out of a blob without executing it -- so all that can be checked
+        # here is that the sha still resolves.
+        _git_blob(frozen_from["chapter_module"]["blob_sha"])
+
+        logger.info("%s: matches its pinned blobs", path.relative_to(REPO_ROOT))
     if drift:
         raise SystemExit(1)
-    logger.info("all freeze files match regeneration")
+    logger.info("all freeze files match the blobs they pinned")
 
 
 if __name__ == "__main__":
