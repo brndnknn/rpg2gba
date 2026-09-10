@@ -1,0 +1,2998 @@
+{
+  "_header": {
+    "authored": "2026-09-10",
+    "chapter": "CH02",
+    "purpose": "Frozen expected state for CH02's committed, gate-passed manifest rows, dispositions, and beats, captured before REDERIVATION_PLAN.md P8 regenerates anything -- PROJECT_TODO #62: freeze the expected answers, derive, diff, then write; never derive-and-write in one pass, or a regression in the derivation logic reads as a correct re-disposition.",
+    "frozen_from": {
+      "manifest": {
+        "path": "reference/manifests/CH02.manifest.json",
+        "blob_sha": "fa2ad5a99b4df7f2c95c1c0d8cac99ae1ca7929c",
+        "rows": 83,
+        "loads_through_row_from_dict": false,
+        "missing_fields": [
+          "reachability_consulted",
+          "terrain"
+        ]
+      },
+      "dispositions": null,
+      "chapter_module": {
+        "path": "src/rpg2gba/playtest/chapters/ch02.py",
+        "blob_sha": "b8aee1696a35ffff40f9b9822b44588d591d7f5a",
+        "beats": 31,
+        "beats_own": 14,
+        "beats_own_with_rows": 0
+      }
+    },
+    "blind_spots": [
+      "No dispositions.json ever existed for this chapter -- verified by `git log --all`, not merely deleted. There is no hand- or gate-authored expected answer to freeze on the disposition side at all.",
+      "This freeze therefore protects only the manifest side for this chapter. PROJECT_TODO #62's safeguard (freeze, derive, diff) is structurally unavailable for this chapter's dispositions: there is nothing to diff a re-derivation against.",
+      "P8's disposition adjudication for this chapter has to rest on evidence outside this freeze: the chapter doc under reference/chapters/, the gate-passed beats, and the booted ROM -- not on agreement with a number this freeze invents.",
+      "The frozen manifest rows are themselves derivation output from commit de9343cb, not a hand-authored expectation. Agreement between this freeze and a re-derivation proves only that the derivation did not change since de9343cb -- never that de9343cb's output was right. REDERIVATION_PLAN.md \u00a71's #90 precedent is the warning: a frozen expectation and a derivation that come from the same rule agree with each other and disagree with the ROM."
+    ]
+  },
+  "manifest_rows": {
+    "map033/ev002/p0": {
+      "row_id": "map033/ev002/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "b6aa5186777853c4",
+      "effects": [
+        "giveitem",
+        "self_switch_write"
+      ],
+      "script_heads": [
+        "pbItemBall"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 2,
+      "event_name": "EV002",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev002/p1": {
+      "row_id": "map033/ev002/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "6c2d90d22489cb2a",
+      "effects": [],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 2,
+      "event_name": "EV002",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev003/p0": {
+      "row_id": "map033/ev003/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "b6aa5186777853c4",
+      "effects": [
+        "giveitem",
+        "self_switch_write"
+      ],
+      "script_heads": [
+        "pbItemBall"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 3,
+      "event_name": "EV003",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev003/p1": {
+      "row_id": "map033/ev003/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "6c2d90d22489cb2a",
+      "effects": [],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 3,
+      "event_name": "EV003",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev004/p0": {
+      "row_id": "map033/ev004/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "b3354e11683672b0",
+      "effects": [
+        "self_switch_write",
+        "switch_write"
+      ],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 4,
+      "event_name": "EV004",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "parallel",
+      "seam": null
+    },
+    "map033/ev004/p1": {
+      "row_id": "map033/ev004/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "6c2d90d22489cb2a",
+      "effects": [],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 4,
+      "event_name": "EV004",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev008/p0": {
+      "row_id": "map033/ev008/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "0eaa8e965c9baac8",
+      "effects": [
+        "giveitem",
+        "self_switch_write"
+      ],
+      "script_heads": [
+        "pbItemBall"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 8,
+      "event_name": "EV008",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev008/p1": {
+      "row_id": "map033/ev008/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "6c2d90d22489cb2a",
+      "effects": [],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 8,
+      "event_name": "EV008",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev009/p0": {
+      "row_id": "map033/ev009/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "00d1149603e20767",
+      "effects": [
+        "bubble_ui",
+        "self_switch_write",
+        "text",
+        "trainerbattle"
+      ],
+      "script_heads": [
+        "pbCallBub",
+        "pbNoticePlayer",
+        "pbTrainerBattle",
+        "pbTrainerEnd",
+        "pbTrainerIntro"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 9,
+      "event_name": "Trainer(3)",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "event_touch",
+      "seam": null
+    },
+    "map033/ev009/p1": {
+      "row_id": "map033/ev009/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "b5ab7d0b59c9d5ee",
+      "effects": [
+        "bubble_ui",
+        "text"
+      ],
+      "script_heads": [
+        "pbCallBub"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 9,
+      "event_name": "Trainer(3)",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev010/p0": {
+      "row_id": "map033/ev010/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "6aa13505c91bc68c",
+      "effects": [
+        "bubble_ui",
+        "self_switch_write",
+        "text",
+        "trainerbattle"
+      ],
+      "script_heads": [
+        "pbCallBub",
+        "pbNoticePlayer",
+        "pbTrainerBattle",
+        "pbTrainerEnd",
+        "pbTrainerIntro"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 10,
+      "event_name": "Trainer(4)",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "event_touch",
+      "seam": null
+    },
+    "map033/ev010/p1": {
+      "row_id": "map033/ev010/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "14ed96408d12f789",
+      "effects": [
+        "bubble_ui",
+        "text"
+      ],
+      "script_heads": [
+        "pbCallBub"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 10,
+      "event_name": "Trainer(4)",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev013/p0": {
+      "row_id": "map033/ev013/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "dfba1cd5ea05162f",
+      "effects": [],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 13,
+      "event_name": "Tree",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev020/p0": {
+      "row_id": "map033/ev020/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "2e2951ede454e802",
+      "effects": [],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 20,
+      "event_name": "EV020",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev022/p0": {
+      "row_id": "map033/ev022/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "915ec4ba4671381d",
+      "effects": [
+        "graphic",
+        "screen_fx",
+        "warp"
+      ],
+      "script_heads": [
+        "pbCaveExit"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 22,
+      "event_name": "EV022",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev022/p1": {
+      "row_id": "map033/ev022/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "022371a0a501171a",
+      "effects": [
+        "graphic",
+        "move_route",
+        "temp_switch_write"
+      ],
+      "script_heads": [
+        "get_character",
+        "setTempSwitchOn"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 3,
+      "script_typed_conditions": 1,
+      "event_id": 22,
+      "event_name": "EV022",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": 22,
+        "switch1_name": "s:tsOff?(\"A\")",
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "autorun",
+      "seam": null
+    },
+    "map033/ev023/p0": {
+      "row_id": "map033/ev023/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "42e2f08246a68f5a",
+      "effects": [
+        "graphic",
+        "screen_fx",
+        "warp"
+      ],
+      "script_heads": [
+        "pbCaveExit"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 23,
+      "event_name": "EV023",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev023/p1": {
+      "row_id": "map033/ev023/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "b427f6fc6697a5f4",
+      "effects": [
+        "graphic",
+        "move_route",
+        "temp_switch_write"
+      ],
+      "script_heads": [
+        "get_character",
+        "setTempSwitchOn"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 3,
+      "script_typed_conditions": 1,
+      "event_id": 23,
+      "event_name": "EV023",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": 22,
+        "switch1_name": "s:tsOff?(\"A\")",
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "autorun",
+      "seam": null
+    },
+    "map033/ev024/p0": {
+      "row_id": "map033/ev024/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "42e2f08246a68f5a",
+      "effects": [
+        "graphic",
+        "screen_fx",
+        "warp"
+      ],
+      "script_heads": [
+        "pbCaveExit"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 24,
+      "event_name": "EV024",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev024/p1": {
+      "row_id": "map033/ev024/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "e8e9ee9a28f12107",
+      "effects": [
+        "graphic",
+        "move_route",
+        "temp_switch_write"
+      ],
+      "script_heads": [
+        "get_character",
+        "setTempSwitchOn"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 3,
+      "script_typed_conditions": 1,
+      "event_id": 24,
+      "event_name": "EV024",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": 12,
+        "switch1_name": "s:tsOn?(\"A\")",
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "autorun",
+      "seam": null
+    },
+    "map033/ev025/p0": {
+      "row_id": "map033/ev025/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "58bfb375a4eeb4dc",
+      "effects": [
+        "giveitem",
+        "self_switch_write"
+      ],
+      "script_heads": [
+        "pbItemBall"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 25,
+      "event_name": "EV025",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev025/p1": {
+      "row_id": "map033/ev025/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "6c2d90d22489cb2a",
+      "effects": [],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 25,
+      "event_name": "EV025",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev026/p0": {
+      "row_id": "map033/ev026/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "1fb9ecde7c38865e",
+      "effects": [
+        "move_route"
+      ],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 26,
+      "event_name": "Stairs",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev027/p0": {
+      "row_id": "map033/ev027/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "8db80fad1a745500",
+      "effects": [
+        "graphic",
+        "move_route",
+        "screen_fx",
+        "warp"
+      ],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 27,
+      "event_name": "EV027",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev027/p1": {
+      "row_id": "map033/ev027/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "8a1c394b71462c44",
+      "effects": [
+        "graphic",
+        "move_route",
+        "temp_switch_write"
+      ],
+      "script_heads": [
+        "get_character",
+        "setTempSwitchOn"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 1,
+      "script_typed_conditions": 1,
+      "event_id": 27,
+      "event_name": "EV027",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": 22,
+        "switch1_name": "s:tsOff?(\"A\")",
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "autorun",
+      "seam": null
+    },
+    "map033/ev028/p0": {
+      "row_id": "map033/ev028/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "50631292062e4dc9",
+      "effects": [],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 28,
+      "event_name": "Luz",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": 106,
+        "switch1_name": "NIGHT? People",
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev029/p0": {
+      "row_id": "map033/ev029/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "e3da20fd925642b0",
+      "effects": [
+        "erase_event",
+        "move_route",
+        "se"
+      ],
+      "script_heads": [
+        "pbEraseThisEvent",
+        "pbRockSmash",
+        "pbRockSmashRandomEncounter"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [
+        "rock_smash"
+      ],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 29,
+      "event_name": "Rock",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev030/p0": {
+      "row_id": "map033/ev030/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "01f5a037c6e11b3c",
+      "effects": [
+        "bubble_ui",
+        "self_switch_write",
+        "text",
+        "trainerbattle"
+      ],
+      "script_heads": [
+        "pbCallBub",
+        "pbNoticePlayer",
+        "pbTrainerBattle",
+        "pbTrainerEnd",
+        "pbTrainerIntro"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 30,
+      "event_name": "Trainer(5)",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "event_touch",
+      "seam": null
+    },
+    "map033/ev030/p1": {
+      "row_id": "map033/ev030/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "b0ac8392867a971c",
+      "effects": [
+        "bubble_ui",
+        "text"
+      ],
+      "script_heads": [
+        "pbCallBub"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 30,
+      "event_name": "Trainer(5)",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev031/p0": {
+      "row_id": "map033/ev031/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "442cc9b6da24644e",
+      "effects": [
+        "move_route"
+      ],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 31,
+      "event_name": "Stairs",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev032/p0": {
+      "row_id": "map033/ev032/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "edc2dec0216b1d76",
+      "effects": [
+        "giveitem",
+        "self_switch_write"
+      ],
+      "script_heads": [
+        "pbItemBall"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 32,
+      "event_name": "EV032",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev032/p1": {
+      "row_id": "map033/ev032/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "6c2d90d22489cb2a",
+      "effects": [],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 32,
+      "event_name": "EV032",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev033/p0": {
+      "row_id": "map033/ev033/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "dd3d4a7a1f20cb19",
+      "effects": [
+        "move_route"
+      ],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 33,
+      "event_name": "Stairs",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev034/p0": {
+      "row_id": "map033/ev034/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "faac63dd6c7eb7d7",
+      "effects": [
+        "bubble_ui",
+        "self_switch_write",
+        "text",
+        "trainerbattle"
+      ],
+      "script_heads": [
+        "pbCallBub",
+        "pbNoticePlayer",
+        "pbTrainerBattle",
+        "pbTrainerEnd",
+        "pbTrainerIntro"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 34,
+      "event_name": "Trainer(4)",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "event_touch",
+      "seam": null
+    },
+    "map033/ev034/p1": {
+      "row_id": "map033/ev034/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "9c5d2166a40123d7",
+      "effects": [
+        "bubble_ui",
+        "text"
+      ],
+      "script_heads": [
+        "pbCallBub"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 34,
+      "event_name": "Trainer(4)",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev035/p0": {
+      "row_id": "map033/ev035/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "c64d11806a08750a",
+      "effects": [
+        "bubble_ui",
+        "self_switch_write",
+        "text",
+        "trainerbattle"
+      ],
+      "script_heads": [
+        "pbCallBub",
+        "pbNoticePlayer",
+        "pbTrainerBattle",
+        "pbTrainerEnd",
+        "pbTrainerIntro"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 35,
+      "event_name": "Trainer(2)",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "event_touch",
+      "seam": null
+    },
+    "map033/ev035/p1": {
+      "row_id": "map033/ev035/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "b745181a4937bafa",
+      "effects": [
+        "bubble_ui",
+        "text"
+      ],
+      "script_heads": [
+        "pbCallBub"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 35,
+      "event_name": "Trainer(2)",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev036/p0": {
+      "row_id": "map033/ev036/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "e3da20fd925642b0",
+      "effects": [
+        "erase_event",
+        "move_route",
+        "se"
+      ],
+      "script_heads": [
+        "pbEraseThisEvent",
+        "pbRockSmash",
+        "pbRockSmashRandomEncounter"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [
+        "rock_smash"
+      ],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 36,
+      "event_name": "Rock",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev037/p0": {
+      "row_id": "map033/ev037/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "2129f89e44535124",
+      "effects": [
+        "giveitem",
+        "self_switch_write"
+      ],
+      "script_heads": [
+        "pbItemBall"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 37,
+      "event_name": "EV037",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev037/p1": {
+      "row_id": "map033/ev037/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "6c2d90d22489cb2a",
+      "effects": [],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 37,
+      "event_name": "EV037",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev038/p0": {
+      "row_id": "map033/ev038/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "e3da20fd925642b0",
+      "effects": [
+        "erase_event",
+        "move_route",
+        "se"
+      ],
+      "script_heads": [
+        "pbEraseThisEvent",
+        "pbRockSmash",
+        "pbRockSmashRandomEncounter"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [
+        "rock_smash"
+      ],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 38,
+      "event_name": "Rock",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev039/p0": {
+      "row_id": "map033/ev039/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "f8f0cf3a9c703bf4",
+      "effects": [
+        "bubble_ui",
+        "self_switch_write",
+        "text",
+        "trainerbattle"
+      ],
+      "script_heads": [
+        "pbCallBub",
+        "pbNoticePlayer",
+        "pbPhoneRegisterBattle",
+        "pbTrainerBattle",
+        "pbTrainerEnd",
+        "pbTrainerIntro"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 39,
+      "event_name": "Trainer(5)",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "event_touch",
+      "seam": null
+    },
+    "map033/ev039/p1": {
+      "row_id": "map033/ev039/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "911a00f11592d8d8",
+      "effects": [
+        "bubble_ui",
+        "control_flow",
+        "self_switch_write",
+        "text"
+      ],
+      "script_heads": [
+        "createPhoneTrainer",
+        "pbCallBub",
+        "pbPhoneBattleCount",
+        "pbPhoneIncrement",
+        "pbTrainerEnd",
+        "pbTrainerIntro"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 2,
+      "event_id": 39,
+      "event_name": "Trainer(5)",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "B"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev039/p2": {
+      "row_id": "map033/ev039/p2",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "59e31fb74cd92581",
+      "effects": [
+        "bubble_ui",
+        "control_flow",
+        "text"
+      ],
+      "script_heads": [
+        "pbCallBub",
+        "pbPhoneBattleCount",
+        "pbPhoneRegisterBattle"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 39,
+      "event_name": "Trainer(5)",
+      "page_idx": 2,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev040/p0": {
+      "row_id": "map033/ev040/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "e3da20fd925642b0",
+      "effects": [
+        "erase_event",
+        "move_route",
+        "se"
+      ],
+      "script_heads": [
+        "pbEraseThisEvent",
+        "pbRockSmash",
+        "pbRockSmashRandomEncounter"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [
+        "rock_smash"
+      ],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 40,
+      "event_name": "Rock",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev041/p0": {
+      "row_id": "map033/ev041/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "b1981270d98885cf",
+      "effects": [
+        "bubble_ui",
+        "self_switch_write",
+        "text",
+        "trainerbattle"
+      ],
+      "script_heads": [
+        "pbCallBub",
+        "pbNoticePlayer",
+        "pbTrainerBattle",
+        "pbTrainerEnd",
+        "pbTrainerIntro"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 41,
+      "event_name": "Trainer(4)",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "event_touch",
+      "seam": null
+    },
+    "map033/ev041/p1": {
+      "row_id": "map033/ev041/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "f244ffb65eb13b86",
+      "effects": [
+        "bubble_ui",
+        "text"
+      ],
+      "script_heads": [
+        "pbCallBub"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 41,
+      "event_name": "Trainer(4)",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev042/p0": {
+      "row_id": "map033/ev042/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "e3da20fd925642b0",
+      "effects": [
+        "erase_event",
+        "move_route",
+        "se"
+      ],
+      "script_heads": [
+        "pbEraseThisEvent",
+        "pbRockSmash",
+        "pbRockSmashRandomEncounter"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [
+        "rock_smash"
+      ],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 42,
+      "event_name": "Rock",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev044/p0": {
+      "row_id": "map033/ev044/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "e3da20fd925642b0",
+      "effects": [
+        "erase_event",
+        "move_route",
+        "se"
+      ],
+      "script_heads": [
+        "pbEraseThisEvent",
+        "pbRockSmash",
+        "pbRockSmashRandomEncounter"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [
+        "rock_smash"
+      ],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 44,
+      "event_name": "Rock",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev045/p0": {
+      "row_id": "map033/ev045/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "6770c55b4394d5d7",
+      "effects": [
+        "graphic",
+        "screen_fx",
+        "warp"
+      ],
+      "script_heads": [
+        "pbCaveExit"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 45,
+      "event_name": "EV045",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev045/p1": {
+      "row_id": "map033/ev045/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "b427f6fc6697a5f4",
+      "effects": [
+        "graphic",
+        "move_route",
+        "temp_switch_write"
+      ],
+      "script_heads": [
+        "get_character",
+        "setTempSwitchOn"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 3,
+      "script_typed_conditions": 1,
+      "event_id": 45,
+      "event_name": "EV045",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": 22,
+        "switch1_name": "s:tsOff?(\"A\")",
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "autorun",
+      "seam": null
+    },
+    "map033/ev046/p0": {
+      "row_id": "map033/ev046/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "a7c1fca82e1fd7cc",
+      "effects": [
+        "graphic",
+        "screen_fx",
+        "warp"
+      ],
+      "script_heads": [
+        "pbCaveExit"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 46,
+      "event_name": "EV046",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev046/p1": {
+      "row_id": "map033/ev046/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "b427f6fc6697a5f4",
+      "effects": [
+        "graphic",
+        "move_route",
+        "temp_switch_write"
+      ],
+      "script_heads": [
+        "get_character",
+        "setTempSwitchOn"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 3,
+      "script_typed_conditions": 1,
+      "event_id": 46,
+      "event_name": "EV046",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": 22,
+        "switch1_name": "s:tsOff?(\"A\")",
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "autorun",
+      "seam": null
+    },
+    "map033/ev047/p0": {
+      "row_id": "map033/ev047/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "3119d5c1139a8856",
+      "effects": [
+        "move_route"
+      ],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 47,
+      "event_name": "Stairs",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev048/p0": {
+      "row_id": "map033/ev048/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "3119d5c1139a8856",
+      "effects": [
+        "move_route"
+      ],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 48,
+      "event_name": "EV048",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev050/p0": {
+      "row_id": "map033/ev050/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "58bfb375a4eeb4dc",
+      "effects": [
+        "giveitem",
+        "self_switch_write"
+      ],
+      "script_heads": [
+        "pbItemBall"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 50,
+      "event_name": "EV050",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev050/p1": {
+      "row_id": "map033/ev050/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "6c2d90d22489cb2a",
+      "effects": [],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 50,
+      "event_name": "EV050",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev053/p0": {
+      "row_id": "map033/ev053/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "7e85f0eb1ebd2d22",
+      "effects": [
+        "bubble_ui",
+        "self_switch_write",
+        "text",
+        "trainerbattle"
+      ],
+      "script_heads": [
+        "pbCallBub",
+        "pbNoticePlayer",
+        "pbPhoneRegisterBattle",
+        "pbTrainerBattle",
+        "pbTrainerEnd",
+        "pbTrainerIntro"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 53,
+      "event_name": "Trainer(5)",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "event_touch",
+      "seam": null
+    },
+    "map033/ev053/p1": {
+      "row_id": "map033/ev053/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "594b8dfec8402e7d",
+      "effects": [
+        "bubble_ui",
+        "control_flow",
+        "self_switch_write",
+        "text"
+      ],
+      "script_heads": [
+        "createPhoneTrainer",
+        "pbCallBub",
+        "pbPhoneBattleCount",
+        "pbPhoneIncrement",
+        "pbTrainerEnd",
+        "pbTrainerIntro"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 2,
+      "event_id": 53,
+      "event_name": "Trainer(5)",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "B"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev053/p2": {
+      "row_id": "map033/ev053/p2",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "079beda9567b7078",
+      "effects": [
+        "bubble_ui",
+        "control_flow",
+        "text"
+      ],
+      "script_heads": [
+        "pbCallBub",
+        "pbPhoneBattleCount",
+        "pbPhoneRegisterBattle"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 53,
+      "event_name": "Trainer(5)",
+      "page_idx": 2,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev066/p0": {
+      "row_id": "map033/ev066/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "f43477097f453245",
+      "effects": [
+        "move_route"
+      ],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 66,
+      "event_name": "EV066",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev069/p0": {
+      "row_id": "map033/ev069/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "f43477097f453245",
+      "effects": [
+        "move_route"
+      ],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 69,
+      "event_name": "EV069",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev097/p0": {
+      "row_id": "map033/ev097/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "d2946527c34d4094",
+      "effects": [],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 97,
+      "event_name": "Tree",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev098/p0": {
+      "row_id": "map033/ev098/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "81a1e738410912f5",
+      "effects": [
+        "bubble_ui",
+        "se",
+        "text"
+      ],
+      "script_heads": [
+        "pbCallBub"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 98,
+      "event_name": "Chyinmunk",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev099/p0": {
+      "row_id": "map033/ev099/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "1a251388ed5ff3b6",
+      "effects": [
+        "bubble_ui",
+        "text"
+      ],
+      "script_heads": [
+        "pbCallBub"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 99,
+      "event_name": "npc",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev100/p0": {
+      "row_id": "map033/ev100/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "592dad1898fced39",
+      "effects": [
+        "self_switch_write"
+      ],
+      "script_heads": [
+        "pbPickBerry"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 100,
+      "event_name": "BerryPlant",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev100/p1": {
+      "row_id": "map033/ev100/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "e3273445c72667a1",
+      "effects": [],
+      "script_heads": [
+        "pbBerryPlant"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 100,
+      "event_name": "BerryPlant",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev101/p0": {
+      "row_id": "map033/ev101/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "d30b4b6150954078",
+      "effects": [],
+      "script_heads": [
+        "pbBerryPlant"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 101,
+      "event_name": "BerryPlant",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev102/p0": {
+      "row_id": "map033/ev102/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "592dad1898fced39",
+      "effects": [
+        "self_switch_write"
+      ],
+      "script_heads": [
+        "pbPickBerry"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 102,
+      "event_name": "BerryPlant",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev102/p1": {
+      "row_id": "map033/ev102/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "e3273445c72667a1",
+      "effects": [],
+      "script_heads": [
+        "pbBerryPlant"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 102,
+      "event_name": "BerryPlant",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev103/p0": {
+      "row_id": "map033/ev103/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "9b27422e0d32c0b7",
+      "effects": [
+        "bubble_ui",
+        "self_switch_write",
+        "text",
+        "trainerbattle"
+      ],
+      "script_heads": [
+        "pbCallBub",
+        "pbNoticePlayer",
+        "pbTrainerBattle",
+        "pbTrainerEnd",
+        "pbTrainerIntro"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 103,
+      "event_name": "Trainer(3)",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "event_touch",
+      "seam": null
+    },
+    "map033/ev103/p1": {
+      "row_id": "map033/ev103/p1",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "ae1add3b7d6e1007",
+      "effects": [
+        "bubble_ui",
+        "text"
+      ],
+      "script_heads": [
+        "pbCallBub"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 103,
+      "event_name": "Trainer(3)",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev141/p0": {
+      "row_id": "map033/ev141/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "3c896bd547f9aebe",
+      "effects": [],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 141,
+      "event_name": "block",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map033/ev143/p0": {
+      "row_id": "map033/ev143/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "5d7250adf6e05832",
+      "effects": [],
+      "script_heads": [
+        "pbCancelVehicles"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 143,
+      "event_name": "EV143",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev144/p0": {
+      "row_id": "map033/ev144/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "5d7250adf6e05832",
+      "effects": [],
+      "script_heads": [
+        "pbCancelVehicles"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 144,
+      "event_name": "EV144",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev145/p0": {
+      "row_id": "map033/ev145/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "5d7250adf6e05832",
+      "effects": [],
+      "script_heads": [
+        "pbCancelVehicles"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 145,
+      "event_name": "EV145",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev146/p0": {
+      "row_id": "map033/ev146/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "5d7250adf6e05832",
+      "effects": [],
+      "script_heads": [
+        "pbCancelVehicles"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 146,
+      "event_name": "EV146",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map033/ev147/p0": {
+      "row_id": "map033/ev147/p0",
+      "kind": "page",
+      "map_id": 33,
+      "content_hash": "5d7250adf6e05832",
+      "effects": [],
+      "script_heads": [
+        "pbCancelVehicles"
+      ],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 147,
+      "event_name": "EV147",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map081/ev001/p0": {
+      "row_id": "map081/ev001/p0",
+      "kind": "page",
+      "map_id": 81,
+      "content_hash": "87357d1e703e202c",
+      "effects": [
+        "se",
+        "self_switch_write",
+        "switch_write",
+        "text"
+      ],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 1,
+      "event_id": 1,
+      "event_name": "EV001",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map081/ev001/p1": {
+      "row_id": "map081/ev001/p1",
+      "kind": "page",
+      "map_id": 81,
+      "content_hash": "c56b4b0e4ddf1c06",
+      "effects": [
+        "switch_write",
+        "text"
+      ],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 1,
+      "script_typed_conditions": 0,
+      "event_id": 1,
+      "event_name": "EV001",
+      "page_idx": 1,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": "A"
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map081/ev002/p0": {
+      "row_id": "map081/ev002/p0",
+      "kind": "page",
+      "map_id": 81,
+      "content_hash": "109ba468d5bba685",
+      "effects": [
+        "switch_write",
+        "text",
+        "var_write"
+      ],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 2,
+      "event_name": "EV002",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    },
+    "map081/ev003/p0": {
+      "row_id": "map081/ev003/p0",
+      "kind": "page",
+      "map_id": 81,
+      "content_hash": "4c97f242e207c065",
+      "effects": [
+        "graphic",
+        "screen_fx",
+        "se",
+        "warp"
+      ],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 3,
+      "event_name": "EV003",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "player_touch",
+      "seam": null
+    },
+    "map081/ev004/p0": {
+      "row_id": "map081/ev004/p0",
+      "kind": "page",
+      "map_id": 81,
+      "content_hash": "e111d0c06f99f00d",
+      "effects": [
+        "text"
+      ],
+      "script_heads": [],
+      "unrecognized_heads": [],
+      "other_codes": [],
+      "requires": [],
+      "unhandled": 0,
+      "script_typed_conditions": 0,
+      "event_id": 4,
+      "event_name": "EV004",
+      "page_idx": 0,
+      "condition": {
+        "switch1_id": null,
+        "switch1_name": null,
+        "switch2_id": null,
+        "switch2_name": null,
+        "variable_id": null,
+        "variable_name": null,
+        "variable_min": null,
+        "self_switch_ch": null
+      },
+      "trigger": "action",
+      "seam": null
+    }
+  },
+  "dispositions": null,
+  "beats": [
+    {
+      "name": "CH01:B1",
+      "own": false,
+      "map_constant": null,
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "CH01:B2",
+      "own": false,
+      "map_constant": "MAP_MOKI_TOWN_PLAYERS_HOUSE_1F",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "CH01:B3",
+      "own": false,
+      "map_constant": "MAP_MOKI_TOWN_PLAYERS_HOUSE_1F",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "CH01:B4",
+      "own": false,
+      "map_constant": "MAP_MOKI_TOWN",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "CH01:B5",
+      "own": false,
+      "map_constant": "MAP_MOKI_TOWN",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "CH01:B6",
+      "own": false,
+      "map_constant": null,
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "CH01:N3",
+      "own": false,
+      "map_constant": null,
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "CH01:B7",
+      "own": false,
+      "map_constant": "MAP_MOKI_TOWN_PROFESSOR_LAB",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "CH01:B8",
+      "own": false,
+      "map_constant": "MAP_MOKI_TOWN_PROFESSOR_LAB",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "CH01:B9",
+      "own": false,
+      "map_constant": null,
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "CH01:B10",
+      "own": false,
+      "map_constant": "MAP_MOKI_TOWN_PROFESSOR_LAB",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "CH01:N2",
+      "own": false,
+      "map_constant": "MAP_MOKI_TOWN",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "CH01:B11",
+      "own": false,
+      "map_constant": "MAP_MOKI_TOWN",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "CH01:B12",
+      "own": false,
+      "map_constant": null,
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "CH01:B13",
+      "own": false,
+      "map_constant": "MAP_MOKI_TOWN",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "CH01:B14",
+      "own": false,
+      "map_constant": "MAP_MOKI_TOWN",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "CH01:B15",
+      "own": false,
+      "map_constant": null,
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "B1",
+      "own": true,
+      "map_constant": "MAP_MOKI_TOWN",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "B2",
+      "own": true,
+      "map_constant": "MAP_ROUTE_01",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "B4",
+      "own": true,
+      "map_constant": "MAP_ROUTE_01",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "B7",
+      "own": true,
+      "map_constant": "MAP_ROUTE_01",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "B8",
+      "own": true,
+      "map_constant": "MAP_ROUTE_01",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "B11",
+      "own": true,
+      "map_constant": "MAP_ROUTE_01",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "B13",
+      "own": true,
+      "map_constant": "MAP_ROUTE_01",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "N5",
+      "own": true,
+      "map_constant": "MAP_ROUTE_01",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "B14",
+      "own": true,
+      "map_constant": "MAP_ROUTE_01",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "B15",
+      "own": true,
+      "map_constant": "MAP_ROUTE_01",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "B16",
+      "own": true,
+      "map_constant": "MAP_ROUTE_01",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "N1",
+      "own": true,
+      "map_constant": "MAP_ROUTE_01_OLD_ROD_HOUSE",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "N2",
+      "own": true,
+      "map_constant": "MAP_ROUTE_01",
+      "group": null,
+      "rows": []
+    },
+    {
+      "name": "B17",
+      "own": true,
+      "map_constant": "MAP_ROUTE_01",
+      "group": null,
+      "rows": []
+    }
+  ]
+}
