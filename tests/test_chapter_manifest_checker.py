@@ -22,6 +22,9 @@ from rpg2gba.chapter_manifest.checker import (
     RULE_BEAT_MODEL_UNENFORCED,
     RULE_BLOCKED_MISSED_ASSERTION,
     RULE_BLOCKED_NO_GRANTING_CHAPTER,
+    RULE_BOUNDARY_MODEL_UNENFORCED,
+    RULE_BOUNDARY_NOT_CROSSING,
+    RULE_BOUNDARY_UNCLAIMED,
     RULE_CAPABILITY_MODEL_UNENFORCED,
     RULE_ILLEGAL_COSMETIC,
     RULE_MISSING_CITATION,
@@ -1153,6 +1156,137 @@ def test_ch04_dispositions_round_trip_is_byte_identical(tmp_path: Path):
     assert out_path.read_text(encoding="utf-8") == original
 
 
+# --- rule 12 (PROJECT_TODO #72/#73): `boundary` disposition truthfulness --
+
+
+class _FakeBoundaryModel:
+    """A stand-in `BoundaryModel` -- no import of the real `boundary_model`
+    module (built alongside this rule, not before it)."""
+
+    def __init__(
+        self,
+        crossing: set[str],
+        successor_id: str | None,
+        successor_has_module: bool = True,
+        claimed: set[str] | None = None,
+    ) -> None:
+        self._crossing = crossing
+        self._successor_id = successor_id
+        self._successor_has_module = successor_has_module
+        self._claimed = claimed or set()
+
+    def is_forward_crossing(self, row_id: str) -> bool:
+        return row_id in self._crossing
+
+    def successor_chapter_id(self) -> str | None:
+        return self._successor_id
+
+    def successor_has_module(self) -> bool:
+        return self._successor_has_module
+
+    def successor_claims(self, row_id: str) -> bool:
+        return row_id in self._claimed
+
+
+def test_boundary_model_unenforced_without_model():
+    row = _row()
+    disp = _disp(row.row_id, "boundary", affirmed_hash="deadbeef00000000")
+    findings = check_chapter([row], {row.row_id: disp}, boundary_model=None)
+    finding = next(f for f in findings if f.rule == RULE_BOUNDARY_MODEL_UNENFORCED)
+    assert finding.severity == "warning"
+    assert all(f.rule not in (RULE_BOUNDARY_NOT_CROSSING, RULE_BOUNDARY_UNCLAIMED)
+               for f in findings)
+
+
+def test_boundary_not_a_real_crossing_is_flagged():
+    row = _row()
+    disp = _disp(row.row_id, "boundary", affirmed_hash="deadbeef00000000")
+    model = _FakeBoundaryModel(crossing=set(), successor_id="CH05")
+    findings = check_chapter([row], {row.row_id: disp}, boundary_model=model)
+    finding = next(f for f in findings if f.rule == RULE_BOUNDARY_NOT_CROSSING)
+    assert "does not lead anywhere outside the chapter" in finding.message
+    assert all(f.rule != RULE_BOUNDARY_UNCLAIMED for f in findings)
+
+
+def test_boundary_terminal_chapter_is_unclaimed():
+    row = _row()
+    disp = _disp(row.row_id, "boundary", affirmed_hash="deadbeef00000000")
+    model = _FakeBoundaryModel(crossing={row.row_id}, successor_id=None)
+    findings = check_chapter([row], {row.row_id: disp}, boundary_model=model)
+    finding = next(f for f in findings if f.rule == RULE_BOUNDARY_UNCLAIMED)
+    assert "terminal" in finding.message
+    assert "can never become true" in finding.message
+
+
+def test_boundary_successor_with_no_module_is_unenforced():
+    row = _row()
+    disp = _disp(row.row_id, "boundary", affirmed_hash="deadbeef00000000")
+    model = _FakeBoundaryModel(
+        crossing={row.row_id}, successor_id="CH05", successor_has_module=False,
+    )
+    findings = check_chapter([row], {row.row_id: disp}, boundary_model=model)
+    finding = next(f for f in findings if f.rule == RULE_BOUNDARY_MODEL_UNENFORCED)
+    assert finding.severity == "warning"
+    assert "CH05" in finding.message
+    assert all(f.rule != RULE_BOUNDARY_UNCLAIMED for f in findings)
+
+
+def test_boundary_unclaimed_by_successor_is_flagged():
+    row = _row()
+    disp = _disp(row.row_id, "boundary", affirmed_hash="deadbeef00000000")
+    model = _FakeBoundaryModel(
+        crossing={row.row_id}, successor_id="CH05",
+        successor_has_module=True, claimed=set(),
+    )
+    findings = check_chapter([row], {row.row_id: disp}, boundary_model=model)
+    finding = next(f for f in findings if f.rule == RULE_BOUNDARY_UNCLAIMED)
+    assert "CH05" in finding.message
+    assert "no beat" in finding.message
+
+
+def test_boundary_fully_claimed_no_finding():
+    row = _row()
+    disp = _disp(row.row_id, "boundary", affirmed_hash="deadbeef00000000")
+    model = _FakeBoundaryModel(
+        crossing={row.row_id}, successor_id="CH05",
+        successor_has_module=True, claimed={row.row_id},
+    )
+    findings = check_chapter([row], {row.row_id: disp}, boundary_model=model)
+    assert all(
+        f.rule not in (
+            RULE_BOUNDARY_NOT_CROSSING, RULE_BOUNDARY_UNCLAIMED,
+            RULE_BOUNDARY_MODEL_UNENFORCED,
+        )
+        for f in findings
+    )
+
+
+@pytest.mark.parametrize("live_chapter,expected", [(True, "error"), (False, "warning")])
+def test_boundary_unclaimed_severity_follows_live_chapter(live_chapter, expected):
+    row = _row()
+    disp = _disp(row.row_id, "boundary", affirmed_hash="deadbeef00000000")
+    model = _FakeBoundaryModel(crossing={row.row_id}, successor_id="CH05", claimed=set())
+    findings = check_chapter([row], {row.row_id: disp}, boundary_model=model,
+                              live_chapter=live_chapter)
+    finding = next(f for f in findings if f.rule == RULE_BOUNDARY_UNCLAIMED)
+    assert finding.severity == expected
+
+
+@pytest.mark.parametrize("spec", ["cosmetic", "blocked:rock_smash", "beat:B1"])
+def test_non_boundary_verdicts_untouched_by_boundary_rules(spec):
+    row = _row()
+    disp = _disp(row.row_id, spec, affirmed_hash="deadbeef00000000")
+    model = _FakeBoundaryModel(crossing=set(), successor_id=None)
+    findings = check_chapter([row], {row.row_id: disp}, boundary_model=model)
+    assert all(
+        f.rule not in (
+            RULE_BOUNDARY_NOT_CROSSING, RULE_BOUNDARY_UNCLAIMED,
+            RULE_BOUNDARY_MODEL_UNENFORCED,
+        )
+        for f in findings
+    )
+
+
 # --- rule 11: a vacuous trigger overlay must not read as a clean route -----
 #
 # PROJECT_TODO #75 / REDERIVATION_PLAN P1: CH05's first solve reported a
@@ -1258,3 +1392,36 @@ def test_check_trigger_overlay_standalone_multiple_maps():
     assert len(findings) == 1
     assert findings[0].rule == RULE_TRIGGER_OVERLAY_VACUOUS
     assert findings[0].row_id == "map002"
+
+
+# --- render: every schema verdict reaches the review view --------------
+
+
+def test_render_expands_boundary_row():
+    """A `boundary` row must appear in the rendered review.
+
+    Regression guard for the gap the #72/#73 work opened: `boundary` was
+    added to `schema._VERDICTS` while `render.py` still enumerated the four
+    older verdicts by hand and bucketed with `setdefault`, so a
+    `boundary`-dispositioned row was collected into a bucket nothing ever
+    read -- present in the manifest and in the checker, invisible in the one
+    artifact a human reviews.
+    """
+    row = _row(row_id="map035/ev001/p0", effects=("transfer",), content_hash="h1",
+               condition=PageCondition())
+    disp = _disp(row.row_id, "boundary", affirmed_hash="h1")
+    md = render_review([row], {row.row_id: disp})
+    assert "## Boundary (1)" in md
+    assert f"### `{row.row_id}`" in md
+    assert "- boundary: 1" in md
+
+
+def test_render_covers_every_schema_verdict():
+    """`render.py` renders every verdict the schema defines -- collapsed or
+    expanded, but never dropped. The module raises at import if this is
+    violated; this test states the invariant where a reader of the schema
+    will find it, and fails at the same moment for the same reason."""
+    from rpg2gba.chapter_manifest import render
+    from rpg2gba.chapter_manifest.schema import _VERDICTS
+
+    assert render._RENDERED_VERDICTS == _VERDICTS

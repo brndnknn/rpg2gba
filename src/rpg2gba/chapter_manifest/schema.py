@@ -87,18 +87,33 @@ COSMETIC_SAFE_TAGS: frozenset[str] = frozenset({
 
 STATE_WRITING_TAGS: frozenset[str] = EFFECT_TAGS - COSMETIC_SAFE_TAGS
 
-Verdict = Literal["beat", "blocked", "cosmetic", "unreachable"]
-_VERDICTS: frozenset[str] = frozenset({"beat", "blocked", "cosmetic", "unreachable"})
+Verdict = Literal["beat", "blocked", "boundary", "cosmetic", "unreachable"]
+_VERDICTS: frozenset[str] = frozenset({"beat", "blocked", "boundary", "cosmetic", "unreachable"})
 
-# Verdicts whose argument is mandatory. `cosmetic` takes none; `beat` names the
-# beat, `blocked` the capability set (or tooling primitive) that unblocks it,
-# `unreachable` the reason.
+# Verdicts whose argument is mandatory. `cosmetic` and `boundary` take none;
+# `beat` names the beat, `blocked` the capability set (or tooling primitive)
+# that unblocks it, `unreachable` the reason.
 #
 # `deferred` and geography-flavoured `unreachable:<reason>` collapsed into
 # `blocked:<capability set>` (PLAYTEST_AUTHORING_IMPROVEMENT_V2.md Q3, DECIDED
 # 2026-08-27): it answers exactly one question, what unblocks this row.
 # `unreachable` survives, narrowed to content no chapter will ever reach (cut
 # content, dead pages) -- it is no longer a synonym for "blocked and I gave up".
+#
+# `boundary` (PROJECT_TODO #72/#73, operator ruling 2026-09-04) is the newest
+# arrival and, like `cosmetic`, takes no argument -- deliberately, not an
+# oversight. A row on a chapter's forward boundary (the event that carries the
+# player into the next chapter's territory) is not the shipping chapter's to
+# assert; the chapter that arrives claims it. A qualified form such as
+# `boundary:CH05/B1` was considered and rejected: it would force the shipping
+# chapter's dispositions to name a beat in a chapter that has not been staged
+# yet -- the exact "authored against an unstaged neighbour" failure this
+# verdict exists to prevent, just relocated from a beat id into a disposition
+# argument. The shipping chapter would have to guess the successor's beat
+# naming and be re-edited when it guessed wrong. A bare `boundary` says only
+# "this row is not mine; whoever arrives claims it" -- *who* arrives is
+# derived from the chapter chain (`chapter_atlas.binding`), which is already
+# the one source of truth for chapter order, not re-stated here.
 _ARGUMENT_REQUIRED: frozenset[str] = frozenset({"beat", "blocked", "unreachable"})
 
 _BEAT_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
@@ -407,6 +422,13 @@ class Disposition:
         if self.verdict == "cosmetic" and self.argument:
             raise DispositionError(
                 f"{self.row_id}: verdict 'cosmetic' takes no argument, got {self.argument!r}"
+            )
+        if self.verdict == "boundary" and self.argument:
+            raise DispositionError(
+                f"{self.row_id}: verdict 'boundary' takes no argument, got "
+                f"{self.argument!r} -- a boundary row does not name the "
+                "arriving chapter or beat; see schema.py's _ARGUMENT_REQUIRED "
+                "comment for why that form was rejected"
             )
         if self.verdict == "beat" and not _BEAT_NAME.match(self.argument or ""):
             raise DispositionError(

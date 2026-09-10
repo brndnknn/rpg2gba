@@ -93,6 +93,37 @@ class ChapterBinding:
     def chapters_in(self, act_id: str) -> list[Chapter]:
         return [self.chapter(cid) for cid in self.act(act_id).chapters]
 
+    def successor(self, chapter_id: str) -> Chapter | None:
+        """The chapter whose `predecessor` names `chapter_id`, or None.
+
+        `chapters.json` (and `Chapter` above) model only the backward
+        pointer -- `predecessor` -- because that is what the playtest chapter
+        loader needs to compose a chapter's beats (`playtest.chapter.Chapter`
+        recursively resolves predecessors, never successors). Nothing needed
+        the forward direction until the `boundary` disposition verdict
+        (PROJECT_TODO #72/#73): checking that a chapter's forward-boundary
+        row is actually claimed by the chapter that arrives requires walking
+        *forward* from the chapter being checked, and re-deriving that by
+        hand at every call site would be a second copy of the chain
+        (`CLAUDE.md` §4.3) instead of one accessor on the source of truth.
+
+        Raises `KeyError` (via `chapter()`) if `chapter_id` itself is
+        unknown -- fail loud rather than let a typo read as "terminal
+        chapter, no successor." Raises `ValueError` if more than one chapter
+        names `chapter_id` as its predecessor: the chain this repo builds is
+        linear, and two chapters branching off the same predecessor is a
+        shape no consumer here is prepared to handle silently.
+        """
+        self.chapter(chapter_id)  # fail loud on an unknown id
+        matches = [c for c in self.chapters if c.predecessor == chapter_id]
+        if len(matches) > 1:
+            raise ValueError(
+                f"reference/chapters.json: chapter {chapter_id!r} has "
+                f"multiple successors {[c.id for c in matches]!r}; the "
+                "chapter chain this repo builds is expected to be linear"
+            )
+        return matches[0] if matches else None
+
     def chapters_for_map(self, map_id: int) -> list[Chapter]:
         """Every chapter covering *map_id*, in play order (revisits included)."""
         return [c for c in self.chapters if map_id in c.maps]

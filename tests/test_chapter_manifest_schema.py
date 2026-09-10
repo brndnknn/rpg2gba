@@ -212,6 +212,7 @@ def test_structurally_determined_row_owes_no_citation() -> None:
     "spec, verdict, argument",
     [
         ("cosmetic", "cosmetic", None),
+        ("boundary", "boundary", None),
         ("beat:B12", "beat", "B12"),
         ("blocked:rock_smash", "blocked", "rock_smash"),
         ("blocked:rock_smash|strength", "blocked", "rock_smash|strength"),
@@ -281,6 +282,11 @@ def test_blocked_row_with_assertable_and_negative_beat_round_trips() -> None:
 def test_cosmetic_takes_no_argument() -> None:
     with pytest.raises(DispositionError, match="takes no argument"):
         Disposition.parse("row", "cosmetic:looks nice")
+
+
+def test_boundary_takes_no_argument() -> None:
+    with pytest.raises(DispositionError, match="takes no argument"):
+        Disposition.parse("row", "boundary:CH05/B1")
 
 
 def test_beat_argument_must_look_like_a_beat_label() -> None:

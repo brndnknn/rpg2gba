@@ -53,6 +53,9 @@ RULE_UNREGISTERED_BEAT = "unregistered_beat"
 RULE_BEAT_MODEL_UNENFORCED = "beat_model_unenforced"
 RULE_TRIGGER_OVERLAY_VACUOUS = "trigger_overlay_vacuous"
 RULE_TRIGGER_OVERLAY_MODEL_UNENFORCED = "trigger_overlay_model_unenforced"
+RULE_BOUNDARY_NOT_CROSSING = "boundary_not_crossing"
+RULE_BOUNDARY_UNCLAIMED = "boundary_unclaimed"
+RULE_BOUNDARY_MODEL_UNENFORCED = "boundary_model_unenforced"
 
 
 class CapabilityModel(Protocol):
@@ -321,6 +324,74 @@ class BeatModel(Protocol):
         ...
 
 
+class BoundaryModel(Protocol):
+    """The seam `RULE_BOUNDARY_NOT_CROSSING`/`RULE_BOUNDARY_UNCLAIMED` plug
+    into: is a `boundary` disposition telling the truth, on both of its
+    claims -- that the row really is on this chapter's forward boundary, and
+    that the chapter which arrives actually claims it?
+
+    Not implemented here -- deliberately, same reasoning as
+    `CapabilityModel`/`ApproachModel`/`RouteModel`/`ArchetypeModel`/
+    `BeatModel`: `checker.py` must not import `rpg2gba.slice_growth`,
+    `rpg2gba.seam_growth`, `rpg2gba.chapter_atlas`, or `rpg2gba.playtest` at
+    module load time. The CLI's concrete adapter (`boundary_model.py`) is
+    built over `slice_growth.gated_chapter_slices` /
+    `find_slice_growth_events` and `seam_growth.find_seam_growth_edges` for
+    the "is this really a crossing" half, and over
+    `chapter_atlas.binding.ChapterBinding.successor` plus
+    `playtest.chapter.load_chapter`'s `Beat.rows` for the "does the arrival
+    claim it" half.
+    """
+
+    def is_forward_crossing(self, row_id: str) -> bool:
+        """True iff `row_id` names an event or seam that
+        `slice_growth`/`seam_growth` actually detected as one of this
+        chapter's own maps carrying a transfer or connection toward a map
+        outside this chapter's authoring-time slice.
+
+        A `boundary` disposition on a row that fails this is a false claim:
+        the row doesn't lead anywhere outside the chapter, and the
+        `boundary` verdict exists only for rows that do (Q72/Q73).
+        """
+        ...
+
+    def successor_chapter_id(self) -> str | None:
+        """The chapter id of the chapter that arrives after this one
+        (`ChapterBinding.successor`'s result for this chapter), or None if
+        this chapter is terminal -- nothing in the chain arrives after it,
+        so nothing could ever claim a `boundary` row here."""
+        ...
+
+    def successor_has_module(self) -> bool:
+        """True iff the successor chapter (if any) has a playtest module at
+        all. False is the ordinary, expected state of a `boundary` row
+        authored before its successor chapter has been started -- the
+        outgoing chapter's own manifest and dispositions are finished and
+        gated well before the next chapter's beats exist. The rule degrades
+        to `RULE_BOUNDARY_MODEL_UNENFORCED` in that case, the same
+        unenforced-not-silent idiom `RULE_UNREGISTERED_BEAT` uses for a
+        chapter with no playtest module of its own yet."""
+        ...
+
+    def successor_claims(self, row_id: str) -> bool:
+        """True iff some beat registered in the successor chapter's
+        (fully-composed) `Chapter.beats` lists `row_id` in its own `rows`.
+
+        Deliberately checked against the successor's registered beats, not
+        the successor's own manifest/dispositions file: the boundary row's
+        map is not necessarily one of the successor chapter's *own* maps in
+        `chapters.json` (CH04's boundary event lives on Map035, which is
+        CH04's map, not one of CH05's [36, 37]) -- generating a manifest row
+        for it under CH05 at all would be an orphan there. `Beat.rows` is
+        already how every other archetype/beat check in this package makes
+        a claim ("this beat covers this row") independent of which
+        chapter's own map roster the row's map happens to sit in
+        (`playtest.archetypes.ChapterArchetypeModel` does the identical
+        `beat.rows` walk for the same reason).
+        """
+        ...
+
+
 def check_chapter(
     rows: list[ManifestRow],
     dispositions: dict[str, Disposition],
@@ -331,6 +402,7 @@ def check_chapter(
     trigger_overlay: TriggerOverlayModel | None = None,
     archetype_model: ArchetypeModel | None = None,
     beat_model: BeatModel | None = None,
+    boundary_model: BoundaryModel | None = None,
     live_chapter: bool = False,
 ) -> list[Finding]:
     """Check one chapter's generated rows against its authored dispositions.
@@ -350,8 +422,15 @@ def check_chapter(
     or nonexistent (see `BeatModel`'s docstring and `_check_unregistered_beat`
     for the CH04 evidence this exists to catch).
 
+    `boundary_model`, if supplied, backs `RULE_BOUNDARY_NOT_CROSSING`/
+    `RULE_BOUNDARY_UNCLAIMED`: every `boundary` disposition must both name a
+    row that actually crosses out of this chapter's authoring-time slice,
+    and be claimed by a beat registered in the chapter that arrives next
+    (see `BoundaryModel`'s docstring and `_check_boundary`).
+
     `live_chapter` governs `RULE_ARCHETYPE_CONFORMANCE`'s (and, identically,
-    `RULE_UNREGISTERED_BEAT`'s) severity: True for the chapter currently
+    `RULE_UNREGISTERED_BEAT`'s, and `RULE_BOUNDARY_NOT_CROSSING`'s/
+    `RULE_BOUNDARY_UNCLAIMED`'s) severity: True for the chapter currently
     being authored (ERROR), False for a chapter already through its §9
     boot-walk gate (WARNING). This module does not read
     `reference/chapters.json` itself -- same file-I/O discipline as
@@ -605,6 +684,12 @@ def check_chapter(
         )
     )
 
+    findings.extend(
+        _check_boundary(
+            dispositions, boundary_model=boundary_model, live_chapter=live_chapter
+        )
+    )
+
     findings.sort(key=lambda f: (f.row_id, f.rule))
     return findings
 
@@ -662,8 +747,8 @@ def _check_archetype_conformance(
                 ))
                 continue
 
-            # A prescription is a FLOOR ON STRENGTH, not an equality. Two
-            # kinds of legitimate departure exist, and both were found on
+            # A prescription is a FLOOR ON STRENGTH, not an equality. Three
+            # kinds of legitimate departure exist; the first two were found on
             # CH04's committed, gate-passed dispositions on 2026-09-01, when
             # this compared with `!=` and reported 10 rows that were all
             # correctly authored:
@@ -683,11 +768,19 @@ def _check_archetype_conformance(
             #     the definition it was reclassified under on 2026-08-25:
             #     "cosmetic means no trigger to press, not merely no state
             #     write."
+            #   * `boundary` also supersedes the prescription entirely, same
+            #     reasoning as `blocked:`/`unreachable:` -- a forward-crossing
+            #     warp page can classify as the `warp` archetype (prescribing
+            #     `beat`) while genuinely being the arriving chapter's row to
+            #     assert, not this chapter's (PROJECT_TODO #72/#73). Listed
+            #     explicitly rather than left to fall through the `!= "beat"`
+            #     check below by accident -- both reach the same "no finding"
+            #     outcome, but only one of them says so.
             #
             # What remains is the pair actually worth erroring on: a row
             # with no disposition at all (above), and a load-bearing
             # archetype page waved away as decoration (below).
-            if disp.verdict in ("blocked", "unreachable"):
+            if disp.verdict in ("blocked", "unreachable", "boundary"):
                 continue
 
             if prescribed == "beat" and disp.verdict == "cosmetic":
@@ -853,6 +946,140 @@ def _check_unregistered_beat(
                     f"row is dispositioned {disp.spec!r}, but no playtest "
                     f"module registers a beat {beat_id!r} under any name, "
                     "deferred or otherwise -- likely a rename or a typo"
+                ),
+                severity=severity,
+            ))
+
+    return findings
+
+
+def _check_boundary(
+    dispositions: dict[str, Disposition],
+    *,
+    boundary_model: BoundaryModel | None,
+    live_chapter: bool,
+) -> list[Finding]:
+    """`RULE_BOUNDARY_NOT_CROSSING`/`RULE_BOUNDARY_UNCLAIMED`: does a
+    `boundary` disposition tell the truth on both of its claims -- that the
+    row really does lead outside this chapter's authoring-time territory,
+    and that the chapter which arrives next actually claims it?
+
+    A `boundary` disposition asserts two independent facts (`BoundaryModel`'s
+    docstring), and this rule checks each one, short-circuiting after the
+    first failure found for a given row -- a row that fails the
+    "is this really a crossing" test hasn't earned the right to be judged on
+    "did the successor claim it" too; only one finding is useful per row.
+
+    Five outcomes, checked in order:
+
+    1. No `boundary_model` at all: `RULE_BOUNDARY_MODEL_UNENFORCED`,
+       `warning`, for every `boundary` row -- same unenforced-not-silent
+       idiom as `RULE_BEAT_MODEL_UNENFORCED`.
+    2. `is_forward_crossing` is False: `RULE_BOUNDARY_NOT_CROSSING`, at the
+       live/gated severity -- the row doesn't lead anywhere outside the
+       chapter, so `boundary` is a false claim being used to dodge a real
+       disposition.
+    3. `successor_chapter_id()` is None: `RULE_BOUNDARY_UNCLAIMED`, at the
+       live/gated severity -- this chapter is terminal in the chain, so
+       nothing will ever arrive to claim the row; this is a statement that
+       can never become true, not a check that merely cannot run yet, so it
+       is reported as unclaimed rather than unenforced.
+    4. `successor_has_module()` is False: `RULE_BOUNDARY_MODEL_UNENFORCED`,
+       `warning` -- the ordinary expected state of a `boundary` row authored
+       well before its successor chapter's beats exist.
+    5. `successor_claims(row_id)` is False: `RULE_BOUNDARY_UNCLAIMED`, at the
+       live/gated severity -- the successor chapter exists and has beats,
+       but none of them lists this row.
+
+    Severity mirrors `RULE_ARCHETYPE_CONFORMANCE`'s/`RULE_UNREGISTERED_BEAT`'s
+    policy (see either docstring for the full reasoning): ERROR while the
+    chapter carrying the `boundary` row is still being authored, WARNING
+    once it is through its §9 gate.
+    """
+    severity: Severity = "error" if live_chapter else "warning"
+    findings: list[Finding] = []
+
+    boundary_rows = [
+        (row_id, disp) for row_id, disp in dispositions.items()
+        if disp.verdict == "boundary"
+    ]
+
+    if boundary_model is None:
+        for row_id, disp in boundary_rows:
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_BOUNDARY_MODEL_UNENFORCED,
+                message=(
+                    f"row is dispositioned {disp.spec!r} but whether it "
+                    "really crosses out of this chapter's territory, and "
+                    "whether the successor chapter claims it, could not be "
+                    "checked because no boundary model was supplied (this "
+                    "rule is unenforced without one)"
+                ),
+                severity="warning",
+            ))
+        return findings
+
+    for row_id, disp in boundary_rows:
+        if not boundary_model.is_forward_crossing(row_id):
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_BOUNDARY_NOT_CROSSING,
+                message=(
+                    f"row is dispositioned {disp.spec!r}, but neither "
+                    "slice_growth nor seam_growth detects it as a transfer "
+                    "or connection leading outside this chapter's "
+                    "authoring-time slice -- this row does not lead "
+                    "anywhere outside the chapter, so 'boundary' is a false "
+                    "claim; disposition it as something else"
+                ),
+                severity=severity,
+            ))
+            continue
+
+        successor_id = boundary_model.successor_chapter_id()
+        if successor_id is None:
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_BOUNDARY_UNCLAIMED,
+                message=(
+                    f"row is dispositioned {disp.spec!r}, but this chapter "
+                    "is terminal in reference/chapters.json's chain -- no "
+                    "chapter ever arrives after it, so nothing could ever "
+                    "claim this row; this can never become true, "
+                    "disposition it as something else"
+                ),
+                severity=severity,
+            ))
+            continue
+
+        if not boundary_model.successor_has_module():
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_BOUNDARY_MODEL_UNENFORCED,
+                message=(
+                    f"row is dispositioned {disp.spec!r}; the successor "
+                    f"chapter {successor_id!r} exists in the chain, but has "
+                    "no playtest module yet, so whether it actually claims "
+                    "this row could not be checked (the ordinary state of "
+                    "a boundary row authored well before its successor's "
+                    "beats exist -- this rule is unenforced for it, not "
+                    "negative)"
+                ),
+                severity="warning",
+            ))
+            continue
+
+        if not boundary_model.successor_claims(row_id):
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_BOUNDARY_UNCLAIMED,
+                message=(
+                    f"row is dispositioned {disp.spec!r}, but no beat "
+                    f"registered in successor chapter {successor_id!r} "
+                    "lists this row in its own rows -- nothing actually "
+                    "claims it; register a beat there that claims it, or "
+                    "disposition this row as something else"
                 ),
                 severity=severity,
             ))

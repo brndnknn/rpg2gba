@@ -140,6 +140,51 @@ def test_unknown_predecessor_is_rejected(tmp_path: Path) -> None:
         load_binding(_write(tmp_path, payload))
 
 
+def _with_successor(tmp_path: Path) -> Path:
+    """A two-chapter binding, CH01 -> CH02, with CH02 naming CH01 as its
+    `predecessor` -- i.e. CH02 is CH01's successor."""
+    payload = _minimal()
+    payload["chapters"].append({
+        "id": "CH02", "act": "A1", "title": "Elsewhere",
+        "wiki_page": "Elsewhere", "maps": [48], "outdoor": 48,
+        "predecessor": "CH01", "tier": "thin", "status": "planned",
+    })
+    payload["acts"][0]["chapters"] = ["CH01", "CH02"]
+    return _write(tmp_path, payload)
+
+
+def test_successor_returns_the_chapter_naming_it_as_predecessor(tmp_path: Path) -> None:
+    binding = load_binding(_with_successor(tmp_path))
+    successor = binding.successor("CH01")
+    assert successor is not None
+    assert successor.id == "CH02"
+
+
+def test_successor_of_a_terminal_chapter_is_none(tmp_path: Path) -> None:
+    binding = load_binding(_with_successor(tmp_path))
+    assert binding.successor("CH02") is None
+
+
+def test_successor_of_an_unknown_chapter_raises(tmp_path: Path) -> None:
+    binding = load_binding(_with_successor(tmp_path))
+    with pytest.raises(KeyError):
+        binding.successor("CH99")
+
+
+def test_successor_with_multiple_claimants_raises(tmp_path: Path) -> None:
+    payload = _minimal()
+    for suffix in ("A", "B"):
+        payload["chapters"].append({
+            "id": f"CH02{suffix}", "act": "A1", "title": f"Elsewhere {suffix}",
+            "wiki_page": f"Elsewhere {suffix}", "maps": [48], "outdoor": 48,
+            "predecessor": "CH01", "tier": "thin", "status": "planned",
+        })
+    payload["acts"][0]["chapters"] = ["CH01", "CH02A", "CH02B"]
+    binding = load_binding(_write(tmp_path, payload))
+    with pytest.raises(ValueError, match="multiple successors"):
+        binding.successor("CH01")
+
+
 def test_revisits_over_the_same_maps_are_allowed(tmp_path: Path) -> None:
     payload = _minimal()
     payload["chapters"].append({

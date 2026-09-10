@@ -268,3 +268,53 @@ def test_check_unregistered_map_falls_back_to_unenforced(tmp_path: Path) -> None
 
     assert f"{rock_row_id} (approach_model_unenforced)" in result.output
     assert f"{rock_row_id} (blocked_missed_assertion)" not in result.output
+
+
+# --- `check` subcommand: boundary model wiring (PROJECT_TODO #72/#73) -----
+#
+# No synthetic fixture path for `build_boundary_model` -- it reads the real
+# `reference/chapters.json` chain and the real `output/uranium-build/`
+# corpus by design (same as `build_beat_model`/`build_archetype_model`), so
+# these run against CH04's real, committed manifest and a scratch copy of
+# its real dispositions.
+
+
+def test_check_flags_a_boundary_disposition_that_is_not_a_real_crossing(
+    tmp_path: Path,
+) -> None:
+    """`map035/ev001/p1` is CH04's arrival-nudge autorun, not itself a
+    code-201 transfer -- `is_forward_crossing` is False for it (pinned in
+    `test_chapter_manifest_boundary_model.py`). Switching its real
+    disposition from `beat:B8` to `boundary` should be caught as a false
+    crossing claim, wired all the way through the CLI's real
+    `build_boundary_model`."""
+    dispositions_path = Path("reference/manifests/CH04.dispositions.json")
+    dispositions = json.loads(dispositions_path.read_text(encoding="utf-8"))
+    row_id = "map035/ev001/p1"
+    dispositions[row_id] = {
+        "disposition": "boundary",
+        "affirmed_hash": dispositions[row_id]["affirmed_hash"],
+    }
+
+    scratch = tmp_path / "CH04.dispositions.json"
+    scratch.write_text(json.dumps(dispositions), encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "check", "--chapter", "CH04",
+        "--dispositions", str(scratch),
+    ])
+
+    assert f"{row_id} (boundary_not_crossing)" in result.output
+
+
+def test_check_real_ch04_carries_no_boundary_dispositions_yet() -> None:
+    """Baseline: CH04's real, committed dispositions carry no `boundary`
+    verdict at all today (PROJECT_TODO #72/#73's enforcement landed before
+    any row was switched to it), so wiring in the real boundary model must
+    not manufacture a finding out of nothing."""
+    runner = CliRunner()
+    result = runner.invoke(cli, ["check", "--chapter", "CH04"])
+
+    assert "boundary_not_crossing" not in result.output
+    assert "boundary_unclaimed" not in result.output

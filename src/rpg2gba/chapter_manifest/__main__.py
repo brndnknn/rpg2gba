@@ -26,6 +26,7 @@ from . import checker
 from .approach_model import GraphApproachModel
 from .archetype_model import build_archetype_model
 from .beat_model import build_beat_model
+from .boundary_model import build_boundary_model
 from .dispositions import disposition_path, load_dispositions
 from .generator import generate_chapter_manifest, write_manifest
 from .route_model import build_route_model
@@ -165,11 +166,12 @@ def check_cmd(chapter: str, manifest: Path | None, dispositions_path_opt: Path |
     route = build_route_model(chapter, route=route_path_opt)
     archetype_model = build_archetype_model(chapter)
     beat_model = build_beat_model(chapter)
+    boundary_model = build_boundary_model(chapter)
     live_chapter = _is_live_chapter(chapter, chapters_path)
     findings = checker.check_chapter(
         rows, dispositions, approach=approach, route=route,
         archetype_model=archetype_model, beat_model=beat_model,
-        live_chapter=live_chapter)
+        boundary_model=boundary_model, live_chapter=live_chapter)
 
     if not findings:
         click.echo(f"chapter {chapter}: OK ({len(rows)} rows)")

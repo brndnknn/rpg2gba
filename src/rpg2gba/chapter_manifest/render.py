@@ -9,28 +9,65 @@ drift to.
 """
 from __future__ import annotations
 
-from .schema import Disposition, ManifestRow
+from .schema import _VERDICTS, Disposition, ManifestRow
+
+# Every verdict is either collapsed to a one-line-each list or expanded in
+# full, and the two sets together must cover `schema._VERDICTS` exactly. The
+# assertion below is the point of splitting them out as constants: `boundary`
+# (PROJECT_TODO #72/#73) was added to the schema without being added here, and
+# because the bucketing loop used `setdefault`, every `boundary` row was
+# silently dropped from the rendered review -- present in the manifest,
+# invisible to the human reading it. A verdict added to the schema from now on
+# fails loud at import (CLAUDE.md §4.5) instead of quietly vanishing from the
+# one artifact a reviewer actually reads.
+_COLLAPSED_VERDICTS: tuple[str, ...] = ("cosmetic",)
+
+_EXPANDED_SECTIONS: tuple[tuple[str, str], ...] = (
+    ("beat", "Beats"),
+    ("blocked", "Blocked"),
+    ("boundary", "Boundary"),
+    ("unreachable", "Unreachable"),
+    ("undispositioned", "Undispositioned"),
+)
+
+# `undispositioned` is this module's own synthetic bucket for a row with no
+# disposition at all, not a schema verdict, so it is excluded from the cover
+# check rather than added to `_VERDICTS`.
+_RENDERED_VERDICTS: frozenset[str] = frozenset(_COLLAPSED_VERDICTS) | {
+    verdict for verdict, _heading in _EXPANDED_SECTIONS
+} - {"undispositioned"}
+
+if _RENDERED_VERDICTS != _VERDICTS:
+    raise AssertionError(
+        "chapter_manifest/render.py does not render every schema verdict: "
+        f"missing {sorted(_VERDICTS - _RENDERED_VERDICTS)!r}, unknown "
+        f"{sorted(_RENDERED_VERDICTS - _VERDICTS)!r} -- add the verdict to "
+        "_COLLAPSED_VERDICTS or _EXPANDED_SECTIONS"
+    )
 
 
 def render_review(rows: list[ManifestRow], dispositions: dict[str, Disposition]) -> str:
     """Render `rows`/`dispositions` as a Markdown review document.
 
     `cosmetic` rows collapse to a count plus a compact one-line-each list.
-    Everything else — `beat`, `blocked`, `unreachable`, undispositioned,
+    Everything else — `beat`, `blocked`, `boundary`, `unreachable`, undispositioned,
     and any row where `needs_citation` is True (even if disposed cosmetic-
     adjacent) — is expanded with its condition, effect tags, requirements,
     unhandled count, and (for seams) endpoints/offsets.
     """
     lines: list[str] = []
     rows_by_disposition: dict[str, list[ManifestRow]] = {
-        "beat": [], "blocked": [], "cosmetic": [], "unreachable": [], "undispositioned": [],
+        verdict: [] for verdict in (*_VERDICTS, "undispositioned")
     }
     citation_owed: list[ManifestRow] = []
 
     for row in rows:
         disp = dispositions.get(row.row_id)
         bucket = disp.verdict if disp is not None else "undispositioned"
-        rows_by_disposition.setdefault(bucket, []).append(row)
+        # Not `setdefault`: a bucket this module does not know about is a
+        # verdict it cannot render, and the import-time cover check above
+        # exists precisely so that cannot happen silently.
+        rows_by_disposition[bucket].append(row)
         if row.needs_citation:
             citation_owed.append(row)
 
@@ -38,7 +75,7 @@ def render_review(rows: list[ManifestRow], dispositions: dict[str, Disposition])
     lines.append("# Chapter manifest review")
     lines.append("")
     lines.append(f"- total rows: {total}")
-    for verdict in ("beat", "blocked", "cosmetic", "unreachable"):
+    for verdict in sorted(_VERDICTS):
         lines.append(f"- {verdict}: {len(rows_by_disposition.get(verdict, []))}")
     lines.append(f"- undispositioned: {len(rows_by_disposition.get('undispositioned', []))}")
     lines.append(f"- citation owed: {len(citation_owed)}")
@@ -54,12 +91,7 @@ def render_review(rows: list[ManifestRow], dispositions: dict[str, Disposition])
         lines.append("(none)")
     lines.append("")
 
-    for verdict, heading in (
-        ("beat", "Beats"),
-        ("blocked", "Blocked"),
-        ("unreachable", "Unreachable"),
-        ("undispositioned", "Undispositioned"),
-    ):
+    for verdict, heading in _EXPANDED_SECTIONS:
         expand_rows = rows_by_disposition.get(verdict, [])
         lines.append(f"## {heading} ({len(expand_rows)})")
         lines.append("")
@@ -74,12 +106,12 @@ def render_review(rows: list[ManifestRow], dispositions: dict[str, Disposition])
     lines.append(f"## Citation owed ({len(citation_owed)})")
     lines.append("")
     if citation_owed:
-        # Rows already expanded above (beat/blocked/unreachable/undispositioned)
+        # Rows already expanded above (see `_EXPANDED_SECTIONS`)
         # are not repeated in full; only rows that would otherwise have been
         # collapsed (cosmetic, or missing a disposition) are shown here in full.
         for row in citation_owed:
             disp = dispositions.get(row.row_id)
-            if disp is not None and disp.verdict not in ("cosmetic",):
+            if disp is not None and disp.verdict not in _COLLAPSED_VERDICTS:
                 lines.append(f"- `{row.row_id}` — see {disp.verdict} section above")
             else:
                 lines.extend(_render_expanded(row, disp))
