@@ -8,8 +8,8 @@ dispositions) and **#67** (route plans), executed under **#62**'s ordering safeg
 > state; when the task closes, its durable conclusions go to `MEMORY.md` / `PROJECT_TODO.md`
 > and this file is archived.
 
-**Live status (2026-09-10): Phase A and Phase B are DONE (P1–P6). Next is P7, the freeze.
-Nothing derived to disk yet.**
+**Live status (2026-09-10): Phases A, B done; P7 (freeze) done on branch `rederive-ch01-ch04`.
+Next is P8. Nothing re-derived to disk yet.**
 
 ---
 
@@ -184,7 +184,7 @@ prerequisite.
 
 | # | Step | Item | Status |
 |---|---|---|---|
-| **P7** | **Freeze.** Write the expected answers for all four chapters from their committed, gate-passed artifacts *before* generating anything. Per #62, verbatim: *freeze the expected answers, derive, diff, then write — never derive-and-write in one pass, or a regression in the derivation logic reads as a correct re-disposition.* Precedent for the format: `reference/frozen/archetype_expectations.json`. | #62 | TODO |
+| **P7** | **Freeze.** Write the expected answers for all four chapters from their committed, gate-passed artifacts *before* generating anything. Per #62, verbatim: *freeze the expected answers, derive, diff, then write — never derive-and-write in one pass, or a regression in the derivation logic reads as a correct re-disposition.* Precedent for the format: `reference/frozen/archetype_expectations.json`. | #62 | **DONE** `aaae306e` |
 | **P8** | **Derive, diff, adjudicate** — manifests + dispositions for CH01–CH04, one chapter at a time, diffed against P7's freeze. Every diff line classified 1/2/3 per §1. Category-3 lines stop the pass. | #65 | TODO |
 | **P9** | **Route plans** for all four chapters (`routing plan --chapter CHnn --module <mod>`), and re-author beats adopting `entry_at`. Pay down the coordinate literals to zero (§5). | #67 | TODO |
 | **P10** | **Discharge the inherited obligations** (§4) and delete the scaffolding that expires with this task. | — | TODO |
@@ -282,6 +282,29 @@ task's. #44 (CH01/CH03 flavor interiors) is operator-deferred until after CH06's
 and #37 are independent. #85 is a minutes-long doc fix worth batching in, since P11 walks
 four chapters with the recipe it corrects.
 
+## 8. Corrections to this plan, measured 2026-09-10 during P7
+
+Three of §1/§5's claims did not survive contact with the artifacts. They are
+corrected here rather than in place because each changes what P8 can conclude.
+
+1. **"CH01–CH03's manifests no longer load … the disposition side broke the same way; only
+   CH04's was hand-migrated"** (§1) implies three disposition files that rotted. There are
+   none, and `git log --all` shows there never were. §1's framing is wrong in a way that
+   matters: **#62's safeguard is structurally unavailable for CH01–CH03's disposition side**,
+   because there is no prior answer to diff against. See
+   `reference/frozen/rederivation/README.md` for the full statement and for what those
+   chapters had instead (an operator-approved beat list, a green suite, a human walk — no
+   per-row artifact; `reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT.md` is the post-mortem).
+2. **The manifests fail to load on two missing fields, not one** — `reachability_consulted`
+   *and* `terrain`. §1 names only the first. Any tool in P8 that reads a pre-`de9343cb`
+   manifest must read raw JSON, not go through `row_from_dict`.
+3. **No beat in CH01–CH04 claims a manifest row.** All 19 of CH05's own beats carry `rows=`;
+   none of the 74 own beats across CH01–CH04 do. The beat↔row join that made CH05's checks
+   meaningful does not exist for any chapter being re-derived. Pinned as a test.
+
+Note also that beat counts quoted anywhere as 17/31/61/74/93 are **composed** totals
+(a chapter plus all predecessors). Own counts are **17/14/30/13/19**.
+
 ## 7. Log
 
 - **2026-09-09** — Plan opened. Scope set by operator: route plans in, CH04 in, `entry_at`
@@ -325,3 +348,9 @@ four chapters with the recipe it corrects.
   `schema._VERDICTS` at import. CH04/CH05 still check 0 errors, counts unchanged — no
   committed disposition uses `boundary` yet, and switching one is P7/P8's call, not this
   step's. Suite 3161 passed / 17 skipped.
+- **2026-09-10** — P7 done (`aaae306e`), branch `rederive-ch01-ch04` opened.
+  `reference/frozen/rederivation/CH0n.freeze.json` ×4 + `scripts/freeze_rederivation.py`
+  (`write`/`check`, idempotent, expires at P10). Sources pinned by **git blob sha**, not by a
+  hash of the working file, so the reference survives P8 overwriting the manifests.
+  **Three plan claims corrected by measurement while building it — see §8.** Suite 3196
+  passed / 17 skipped.
