@@ -2576,3 +2576,25 @@ the fix, which is a naming decision:
 
 Worth settling before CH01–CH03's dispositions are authored, since that is the
 first work to write `blocked:` tokens at volume.
+
+**RESOLVED 2026-09-10** (operator ruling; full argument in `REDERIVATION_PLAN.md`
+§10 R1). **Prefix variable-derived tokens with `var_`; switch-derived tokens keep
+the bare slug** — `blocked:got_pokemon` is a switch, `blocked:var_quest_log_4` is
+variable 101 at threshold 4. The five bases stop colliding by construction, and the
+*kind* of gate becomes readable in the disposition itself.
+
+The "changes every threshold token" cost this entry weighed turned out to be
+prospective only: **the migration cost on committed artifacts is zero.** The only
+`blocked:` tokens anywhere in the corpus are `blocked:rock_smash` ×28 (CH04) and
+`blocked:surf` ×4 (CH05), and per #92 neither is switch- or variable-derived. Every
+token the decision touches is one nobody has written yet — which is also why
+prefixing both (all 97 switch tokens) bought nothing the asymmetric form doesn't.
+
+The override table was rejected on the trap this entry already named: a token's
+spelling would depend on unrelated data, so adding a Uranium *variable* could
+silently rename an existing *switch*'s token.
+
+**Carries one obligation into the implementation:** a switch label that itself slugs
+to a leading `var_` re-opens the collision, so `token_for_label` must fail loud on
+that rather than mint it (CLAUDE.md §4.5). Nothing in the current label set does,
+which is why this is a guard and not a rename.

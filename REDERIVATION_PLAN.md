@@ -8,8 +8,9 @@ dispositions) and **#67** (route plans), executed under **#62**'s ordering safeg
 > state; when the task closes, its durable conclusions go to `MEMORY.md` / `PROJECT_TODO.md`
 > and this file is archived.
 
-**Live status (2026-09-10): Phases A, B done; P7 (freeze) done on branch `rederive-ch01-ch04`.
-Next is P8. Nothing re-derived to disk yet.**
+**Live status (2026-09-10): Phases A, B done; P7 (freeze) done. P8's CH01 half is done
+(`55b98f51`) — CH02/CH03/CH04 remain. The three questions that were blocking them are
+ruled in §10.** Branch `rederive-ch01-ch04`.
 
 ---
 
@@ -55,6 +56,9 @@ the booted ROM breaks the tie — not the frozen file.**
 | Is CH04 in scope? | **Yes.** All four chapters. (Supersedes #67's "CH04's order is not reopened" and POST_CH05_REVIEW's CH01–CH03 framing — three documents disagreed; this is the ruling.) |
 | Adopt `entry_at`? | **Yes.** Zero of five chapter modules use it today, so `_check_beat_continuity` enforces nothing corpus-wide. Re-authoring is the only window. |
 | Coordinate literals | **Drive all four to zero and delete `_PRE_BAN_BUDGET`.** See §5. |
+| `blocked:` token naming (#93) | **Prefix variable-derived tokens with `var_`**; switch tokens stay bare. §10 R1. |
+| Who owns `map035/ev001/p0`? | **CH05.** CH04 dispositions it `boundary`; CH05's B1 claims it in `rows=`. §10 R2. |
+| Who owns `map035/ev001/p1`? | **CH05.** It registers an `arrival_nudge_beat`; CH04 dispositions it `boundary`. Two code changes, in P8's scope. §10 R3. |
 
 **Branch policy.** `MEMORY.md` says branches are for chapter builds and in-between work goes
 straight to `main`. This task is both, so it splits:
@@ -185,7 +189,7 @@ prerequisite.
 | # | Step | Item | Status |
 |---|---|---|---|
 | **P7** | **Freeze.** Write the expected answers for all four chapters from their committed, gate-passed artifacts *before* generating anything. Per #62, verbatim: *freeze the expected answers, derive, diff, then write — never derive-and-write in one pass, or a regression in the derivation logic reads as a correct re-disposition.* Precedent for the format: `reference/frozen/archetype_expectations.json`. | #62 | **DONE** `aaae306e` |
-| **P8** | **Derive, diff, adjudicate** — manifests + dispositions for CH01–CH04, one chapter at a time, diffed against P7's freeze. Every diff line classified 1/2/3 per §1. Category-3 lines stop the pass. | #65 | TODO |
+| **P8** | **Derive, diff, adjudicate** — manifests + dispositions for CH01–CH04, one chapter at a time, diffed against P7's freeze. Every diff line classified 1/2/3 per §1. Category-3 lines stop the pass. Also carries §10 R3's two code changes and R1's `var_` prefix. | #65 | **CH01 DONE** `55b98f51` · CH02/CH03/CH04 TODO |
 | **P9** | **Route plans** for all four chapters (`routing plan --chapter CHnn --module <mod>`), and re-author beats adopting `entry_at`. Pay down the coordinate literals to zero (§5). | #67 | TODO |
 | **P10** | **Discharge the inherited obligations** (§4) and delete the scaffolding that expires with this task. | — | TODO |
 
@@ -212,8 +216,9 @@ doing the re-derivation twice.
   hand-transcribed local-id literals with `cells.local_id`** — `a38a1812` left both alone
   explicitly because "they belong to chapters that have not been re-derived yet." A written
   IOU addressed to this task.
-- **Give `map035/ev001/p1` an owner** — CH05's B1 doesn't exercise CH04's arrival-nudge
-  autorun on the Route 2 side (`d390e59f`'s admitted residual).
+- ~~**Give `map035/ev001/p1` an owner**~~ — **RULED, §10 R3** (2026-09-10). CH05 registers an
+  `arrival_nudge_beat` for it grouped with B1; CH04 dispositions it `boundary`. Two code
+  changes land in P8 to make that expressible.
 - **Know that `resolved_trigger_scripts` approximates "resolved" as "the beat passed"**
   (`a460e823`) — holds for latching shapes, not for a TEMP-switch page that re-arms on map
   re-entry. Documented, not fixed. Relevant before trusting the oracle across four chapters.
@@ -221,14 +226,14 @@ doing the re-derivation twice.
   passes: it was written from CH04's dispositions *before* the classifier existed.
 - **Fix CH03's B25 description string**, which still says the north edge leads to "unbuilt"
   Route 2. Reconciled 2026-08-26; the prose never caught up.
-- **Settle who owns `map035/ev001` — CH04 and CH05 currently contradict each other in
-  writing** (found 2026-09-10 while building `boundary_model.py`). CH04's `DEFERRED_BEATS`
-  reason says *CH05's entry beat claims this row*; `ch05.py`'s module docstring says the
-  opposite twice (*"owned by CH04's manifest, not this one"*, *"not claimable here"*), and
-  `successor_claims` confirms CH05 claims neither `p0` nor `p1` in any beat's `rows=`. Note
-  only **`p0` is a valid `boundary` candidate** — `p1` is an arrival-nudge autorun, not a
-  transfer, so `is_forward_crossing` rejects it. Whichever way P8 rules, `p1` needs a
-  different verdict, and a `boundary` on `p0` does not clear until CH05 adds it to a beat.
+- ~~**Settle who owns `map035/ev001`**~~ — **RULED, §10 R2 + R3** (2026-09-10): both pages go
+  to CH05, `p0` by P3's crossing rule and `p1` by the `arrival_nudge` archetype. The
+  contradiction was real (found 2026-09-10 while building `boundary_model.py`): CH04's
+  `DEFERRED_BEATS` reason said *CH05's entry beat claims this row*; `ch05.py`'s module
+  docstring said the opposite twice (*"owned by CH04's manifest, not this one"*, *"not
+  claimable here"*), and `successor_claims` confirmed CH05 claimed neither page in any
+  beat's `rows=`. **Both docstrings are now wrong in the same direction and must be
+  corrected in P8**, along with CH04's two `DEFERRED_BEATS` entries (§10's closing note).
 
 ## 5. The coordinate literals — 123, and what they actually are
 
@@ -305,7 +310,120 @@ corrected here rather than in place because each changes what P8 can conclude.
 Note also that beat counts quoted anywhere as 17/31/61/74/93 are **composed** totals
 (a chapter plus all predecessors). Own counts are **17/14/30/13/19**.
 
-## 7. Log
+## 10. Operator rulings, 2026-09-10
+
+Three decisions taken before P8's CH02/CH03/CH04 passes. Each was blocking: R1 because
+CH01–CH03's dispositions are the first work in the corpus to write `blocked:` tokens at
+volume, R2/R3 because P8 cannot adjudicate `map035/ev001` while CH04 and CH05 contradict
+each other about it in writing (§4).
+
+### R1 — `blocked:` tokens: prefix variables, not switches (`PROJECT_TODO.md` #93)
+
+`capability_sites.token_for_label` gains a `var_` prefix for variable-derived tokens;
+switch-derived tokens keep the bare slug. `blocked:got_pokemon` is a switch;
+`blocked:var_quest_log_4` is variable 101 at threshold 4. #93's five colliding bases stop
+colliding by construction, and the *kind* of gate becomes readable in the disposition
+itself, which is worth having on its own.
+
+**Measured before deciding: the migration cost on committed artifacts is zero.** The only
+`blocked:` tokens anywhere in the corpus are `blocked:rock_smash` ×28 (CH04) and
+`blocked:surf` ×4 (CH05), and per #92 neither is switch- or variable-derived — they resolve
+to no `code 121`/`122` site at all. Every token this decision touches is one that has not
+been written yet, so #93's "touches all 97 switch tokens" figure was prospective; prefixing
+only variables avoids it regardless.
+
+The asymmetry is deliberate. Prefixing both was rejected as noise on the common case (a
+plain boolean story gate). An override table for the five was rejected as the
+hand-maintained-list-beside-a-derivation shape — the same failure as `render.py`'s silent
+verdict drop (§11, P3) and CLAUDE.md §3's rotted file lists; a token's spelling would come
+to depend on unrelated data, so adding a Uranium *variable* could silently rename an
+existing *switch*'s token.
+
+**Carries one obligation:** a switch label that itself slugs to a leading `var_` would
+re-open the collision. `token_for_label` must fail loud on that rather than mint it
+(CLAUDE.md §4.5). Nothing in the current label set does, which is why this is a guard and
+not a rename.
+
+### R2 — `map035/ev001/p0` is `boundary`, claimed by CH05's B1
+
+CH04 dispositions the Route 2 → Passage Cave entrance warp as `boundary`; CH05's B1 adds
+`map035/ev001/p0` to its `rows=`. P3's ownership rule applied literally: the crossing
+belongs to the chapter being opened.
+
+**Nothing needs building for this half.** `rows=` is shape-validated only
+(`chapter.py:_validate_row_id` matches the row-id grammar and does not check membership in
+the chapter's own manifest), and `boundary_model._ensure_successor_loaded` gathers
+`beat.rows` from the successor's *module*, not its manifest. CH05's B1 already walks this
+exact crossing via the derived reciprocal — it gains a row id, not a test.
+
+The rejected alternative was resurrecting CH04's `b7` and keeping `beat:B7`. It is
+self-contained, but it makes CH04's B7 walk into Passage Cave, so CH04's §9 gate would
+depend on CH05's map being staged — inverting the chapter dependency order that P3's rule
+exists to protect.
+
+### R3 — `map035/ev001/p1` is `boundary` too, and P8 builds the plumbing
+
+CH05 registers an `arrival_nudge_beat` for it, grouped with B1; CH04 dispositions it
+`boundary`. Two code changes land in P8 to make that expressible:
+
+1. **`find_match` gains a manifest-chapter override.** It resolves rows via
+   `load_chapter_rows(chapter_id)`, so `arrival_nudge_beat(chapter_id="CH05", map_id=35)`
+   reads CH05's manifest, which has no map 35, and raises. A chapter must be able to
+   register an archetype instance on a *predecessor's* map.
+2. **`is_forward_crossing` widens from page-level to event-level.** `p1` is an autorun, not
+   a transfer, so the page-level test rejects it and CH04 is left with no verdict meaning
+   "the arriving chapter claims this."
+
+**Why not `cosmetic`, which was the first recommendation and is wrong.**
+`archetypes._match_arrival_nudge` matches this row exactly — `trigger="autorun"`, heads
+`{get_character, setTempSwitchOn}`, effects `{graphic, move_route, temp_switch_write}`, one
+script-typed condition, `switch1_id=22` — and returns `prescribed={row_id: "beat"}`. A
+`cosmetic` disposition would contradict the classifier on a row it holds an opinion about,
+and `reference/frozen/archetype_expectations.json` (§4) is where that contradiction would
+surface. This is not a special case: it is 1 of 324 `arrival_nudge` instances across 73
+maps, homeless only because its arrival cell sits on the predecessor's map.
+
+Nor is anything already folded in. `warp.py:254` states the contract directly — *"A beat
+that wants to ASSERT an arrival autorun (the `arrival_nudge` archetype) claims that page as
+its own row and does not go through this template."* `warp_beat`'s `settle_field()` drains
+the autorun so the next leg does not trip over a locked field; it asserts nothing. CH05
+already runs the correct pairing on its own map (`B8_return` + `B8_nudge`, `group="B8"`).
+
+**This ruling reaches CH01.** All six of
+`map032/{ev005,ev006,ev007,ev023,ev036,ev037}/p1` match the same fingerprint (verified
+2026-09-10 against the re-derived manifest). Three — `ev023`/`ev036`/`ev037` — are CH01's
+forward boundary and become `boundary` alongside their `p0`s under the widening, claimed by
+CH02; the other three are the house-door fade partners, which CH01 claims itself with
+ordinary `arrival_nudge_beat` calls. That is all 6 of the "forward-boundary rows" plus 3
+more off `investigations/ch01_coverage.md`'s 31-row `wants_a_beat` list, with no new
+hand-written beat.
+
+### Two things measured while ruling, neither of which was the expected answer
+
+**The `_TSA` flags are not a transpiler bug.** Every `setTempSwitchOn` compiles to
+`setflag(FLAG_MAP0nn_EVENTnnn_TSA)` and there is **no `clearflag` for any of them anywhere
+in the corpus** — which reads exactly like a per-visit RMXP temp switch
+(`reference/scripts_dump/022_Game_Event_v17.rb:78`; `@tempSwitches` is an instance var on
+`Game_Event`, recreated on every map load) rendered as a permanent flag. It is not.
+`engine/data/scripts/uranium_flags.h` allocates them from `RPG2GBA_TEMPSWITCH_BASE` =
+`RPG2GBA_TEMP_FLAGS_START`, and `engine/src/event_data.c:65` zeroes that entire range inside
+`ClearTempFieldEventData`, under an `RPG2GBA EVENT RANGE EXPANSION` fence whose own comment
+says *"converted-game temp switches share the vanilla temp-flag lifetime (reset on every map
+transition)."* Faithful. Recorded here because the absent `clearflag` will look like a bug
+again to the next reader, and because this is CLAUDE.md §4.7's reverse gate working: the
+fork was checked before the claim was made.
+
+**CH04's `b7`/`b8` deferral expired without anyone noticing.** `b8_autorun_deferred`'s
+docstring states its own resurrection condition — *"restore this once CH05 stages map 36 and
+event id 1 starts compiling again"* — and both halves have been true since CH05's gate.
+`output/uranium-build/scripts/Map035.pory` compiles `Map035_EV001_Page1` **and** `Page2`
+today. A deferral whose condition is written down but never re-checked is the same failure
+class as `ch02.py`'s stale `NORTH_EXIT_TILE_B` comment (§3, P2) and as CH04's `beat:B7` /
+`beat:B8` dispositions pointing at unregistered beats. **Neither beat is resurrected** — R2
+and R3 give both rows to CH05 — but the two `DEFERRED_BEATS` entries must go in P8, since
+their stated reason is now false.
+
+## 11. Log
 
 - **2026-09-09** — Plan opened. Scope set by operator: route plans in, CH04 in, `entry_at`
   adopted, literals to zero. Blocker list assembled from `POST_CH05_REVIEW.md` §3,
@@ -354,3 +472,37 @@ Note also that beat counts quoted anywhere as 17/31/61/74/93 are **composed** to
   hash of the working file, so the reference survives P8 overwriting the manifests.
   **Three plan claims corrected by measurement while building it — see §8.** Suite 3196
   passed / 17 skipped.
+- **2026-09-10** — `714d8832` + `f36e278c`: `src/rpg2gba/capability_sites.py`, the first
+  actual `CapabilityModel` implementation — 268 tokens from 518 switch and 731 variable
+  writes, with grants keyed to the granting map **event**, not to a chapter
+  (`chapters.json` is a plan; 55 of its 60 chapters will be re-cut, so "unblocked by CH57"
+  rots silently). Every `blocked:` row in the corpus had been checked against nothing until
+  this. Filed **#92** (`rock_smash`/`surf` have no `code 121`/`122` grant site at all —
+  Uranium has no HMs, so the real gate is `badge AND (move OR item)`, which `blocked:a|b`'s
+  AND-only grammar cannot express) and **#93** (the token collision, ruled in §10 R1). Suite
+  3198 → 3230 passed / 17 skipped.
+- **2026-09-10** — `4519c12e`: `freeze_rederivation check` no longer asserts that P8 has not
+  started. `build_freeze` reads the working tree, so the old "regenerating reproduces the
+  committed freeze" assertion went red the moment CH01 was re-derived — which is the freeze
+  working as designed. `check` now re-reads the pinned git blobs and verifies the claim a
+  freeze actually makes (*these bytes are what `<path>` held at blob `<sha>`*), which stays
+  checkable forever; `write` refuses to clobber an existing freeze without `--force`.
+- **2026-09-10** — **P8, CH01 half done** (`55b98f51`). Manifest diff vs. the P7 freeze: 211
+  rows, none added, none removed, no content-hash changes, and exactly one field on one row
+  — `map032/seam/E/map059` unhandled `0 → None`. Category 1: seam rows have no event page
+  for `transpile_unhandled` to join against, so `None` ("never measured") is the schema's
+  honest value and the frozen `0` read as "measured, none found". **No category-3 finding.**
+  Per §8.1 that agreement proves only that the derivation did not drift, so the deliverable
+  is the coverage analysis — `investigations/ch01_coverage.md`: of 211 rows, 56 gated
+  post-CH01, 40 gated same-visit, 68 inert, 16 covered, **31 wanting a beat**. §10 R3 takes 9
+  of those 31 without a hand-written beat; most of the rest are whole maps no beat enters
+  (Map048, Map064, Map065, Map089). Map048 — the player's own upstairs — carries a parallel
+  process setting `FLAG_GAME_RUNNING` and `FLAG_JUKEBOX`, so **neither has ever been set
+  during a CH01 boot-walk**. No dispositions authored: CH01's `CHnn.dispositions.json` still
+  does not exist (§8.1), so there was nothing to diff on that side.
+- **2026-09-10** — **Three operator rulings, §10**, unblocking P8's CH02/CH03/CH04 passes:
+  `var_`-prefixed variable tokens (#93), and both pages of `map035/ev001` to CH05 via
+  `boundary` plus two small code changes carried in P8. Two measurements taken while ruling
+  are recorded there rather than filed: the `_TSA` flags are faithful (not the transpiler bug
+  they look like — `event_data.c:65` clears the range every map transition), and CH04's
+  `b7`/`b8` deferral condition expired unnoticed.
