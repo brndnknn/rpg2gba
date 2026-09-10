@@ -276,6 +276,73 @@ def seam_growth_cmd(
         raise SystemExit(1)
 
 
+@main.command("capability-sites")
+@click.option(
+    "--maps-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Defaults to $RPG2GBA_OUTPUT/uranium-build/maps.",
+)
+@click.option(
+    "--switches-json",
+    type=click.Path(path_type=Path),
+    default=Path("reference/uranium_switches.json"),
+    show_default=True,
+)
+@click.option(
+    "--variables-json",
+    type=click.Path(path_type=Path),
+    default=Path("reference/uranium_variables.json"),
+    show_default=True,
+)
+@click.option(
+    "--chapters-json",
+    type=click.Path(path_type=Path),
+    default=Path("reference/chapters.json"),
+    show_default=True,
+)
+@click.option(
+    "--token",
+    "tokens",
+    multiple=True,
+    help="Print grant sites for this capability token. Repeatable.",
+)
+def capability_sites_cmd(
+    maps_dir: Path | None,
+    switches_json: Path,
+    variables_json: Path,
+    chapters_json: Path,
+    tokens: tuple[str, ...],
+) -> None:
+    """Derive, for every `blocked:<capability>` token, the map-event sites
+    that GRANT it (REDERIVATION_PLAN.md P8) -- the seam behind
+    `chapter_manifest.checker.CapabilityModel`. See `rpg2gba/
+    capability_sites.py`.
+    """
+    from rpg2gba import capability_sites
+
+    _load_dotenv()
+    if maps_dir is None:
+        maps_dir = Path(os.environ.get("RPG2GBA_OUTPUT", "output")) / "uranium-build" / "maps"
+    derivation = capability_sites.derive_capability_sites(
+        maps_dir=maps_dir,
+        switches_json=switches_json,
+        variables_json=variables_json,
+        chapters_json=chapters_json,
+    )
+    click.echo(derivation.format())
+    for token in tokens:
+        sites = derivation.grant_sites(token)
+        if sites is None:
+            click.echo(f"\n{token}: undetermined (no data source resolves it)")
+        elif not sites:
+            click.echo(f"\n{token}: no grant sites anywhere (unreachable)")
+        else:
+            click.echo(f"\n{token}: {len(sites)} grant site(s)")
+            for site in sites:
+                click.echo(f"  {site.row_id} (chapter {site.chapter_id}): {site.detail}")
+
+
 def _resolve_paths() -> tuple[Path, Path]:
     """Resolve Uranium source + output directories from env vars."""
     _load_dotenv()

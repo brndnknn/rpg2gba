@@ -13,6 +13,7 @@ import pytest
 
 from rpg2gba.chapter_manifest.checker import (
     ApproachModel,
+    CapabilityGrant,
     CapabilityModel,
     PlannedApproach,
     RoutePrecedence,
@@ -20,8 +21,9 @@ from rpg2gba.chapter_manifest.checker import (
     RULE_ARCHETYPE_CONFORMANCE,
     RULE_ARCHETYPE_MODEL_UNENFORCED,
     RULE_BEAT_MODEL_UNENFORCED,
+    RULE_BLOCKED_ALREADY_GRANTED,
     RULE_BLOCKED_MISSED_ASSERTION,
-    RULE_BLOCKED_NO_GRANTING_CHAPTER,
+    RULE_BLOCKED_NO_GRANT_SITE,
     RULE_BOUNDARY_MODEL_UNENFORCED,
     RULE_BOUNDARY_NOT_CROSSING,
     RULE_BOUNDARY_UNCLAIMED,
@@ -235,15 +237,36 @@ def test_no_citation_needed_when_trigger_absent():
     assert all(f.rule != RULE_MISSING_CITATION for f in findings)
 
 
-# --- rule 7: blocked with no granting chapter ---------------------------
+# --- rule 7: blocked with no grant site / already granted ----------------
 
 
 class _FakeCapabilities:
-    def __init__(self, grants: dict[str, str]) -> None:
-        self._grants = grants
+    """`checker.CapabilityModel` test double.
 
-    def grants_capability(self, name: str) -> str | None:
-        return self._grants.get(name)
+    `grants` maps a capability token straight to its `grant_sites()` answer
+    (`None` for undetermined, `()` for confidently-nothing-grants-it, a
+    nonempty tuple for real sites); a token absent from `grants` defaults to
+    `()` -- "this fake was never told anything about it," the same
+    ungranted default the tests exercised before `grants_capability` was
+    replaced by the three-state, site-keyed Protocol.
+
+    `within` maps a token to its `granted_within()` answer, defaulting to
+    `()` (not already granted in this chapter or a predecessor).
+    """
+
+    def __init__(
+        self,
+        grants: dict[str, tuple[CapabilityGrant, ...] | None] | None = None,
+        within: dict[str, tuple[CapabilityGrant, ...]] | None = None,
+    ) -> None:
+        self._grants = grants or {}
+        self._within = within or {}
+
+    def grant_sites(self, name: str) -> tuple[CapabilityGrant, ...] | None:
+        return self._grants.get(name, ())
+
+    def granted_within(self, name: str) -> tuple[CapabilityGrant, ...]:
+        return self._within.get(name, ())
 
 
 class _FakeApproach:
@@ -275,30 +298,33 @@ def test_blocked_without_capability_model_warns_unenforced():
     assert finding.severity == "warning"
 
 
-def test_blocked_with_no_granting_chapter_is_error():
+def test_blocked_with_no_grant_site_is_error():
     row = _row(effects=(), content_hash="h1")
     disp = _disp(row.row_id, "blocked:nonexistent_capability", affirmed_hash="h1")
-    caps = _FakeCapabilities({"rock_smash": "CH06"})
+    grant = CapabilityGrant(row_id="map042/ev003/p0", map_id=42, chapter_id="CH06")
+    caps = _FakeCapabilities({"rock_smash": (grant,)})
     findings = check_chapter([row], {row.row_id: disp}, capabilities=caps, approach=_FakeApproach(set()))
     rules = [f.rule for f in findings]
-    assert RULE_BLOCKED_NO_GRANTING_CHAPTER in rules
+    assert RULE_BLOCKED_NO_GRANT_SITE in rules
 
 
-def test_blocked_with_granting_chapter_ok():
+def test_blocked_with_grant_site_ok():
     row = _row(effects=(), content_hash="h1")
     disp = _disp(row.row_id, "blocked:rock_smash", affirmed_hash="h1")
-    caps = _FakeCapabilities({"rock_smash": "CH06"})
+    grant = CapabilityGrant(row_id="map042/ev003/p0", map_id=42, chapter_id="CH06")
+    caps = _FakeCapabilities({"rock_smash": (grant,)})
     findings = check_chapter([row], {row.row_id: disp}, capabilities=caps, approach=_FakeApproach(set()))
-    assert all(f.rule not in (RULE_BLOCKED_NO_GRANTING_CHAPTER,
-                               RULE_CAPABILITY_MODEL_UNENFORCED) for f in findings)
+    assert all(f.rule not in (RULE_BLOCKED_NO_GRANT_SITE, RULE_CAPABILITY_MODEL_UNENFORCED,
+                               RULE_BLOCKED_ALREADY_GRANTED) for f in findings)
 
 
 def test_blocked_multi_capability_set_checked_per_token():
     row = _row(effects=(), content_hash="h1")
     disp = _disp(row.row_id, "blocked:rock_smash|strength", affirmed_hash="h1")
-    caps = _FakeCapabilities({"rock_smash": "CH06"})  # strength ungranted
+    grant = CapabilityGrant(row_id="map042/ev003/p0", map_id=42, chapter_id="CH06")
+    caps = _FakeCapabilities({"rock_smash": (grant,)})  # strength ungranted
     findings = check_chapter([row], {row.row_id: disp}, capabilities=caps, approach=_FakeApproach(set()))
-    finding = next(f for f in findings if f.rule == RULE_BLOCKED_NO_GRANTING_CHAPTER)
+    finding = next(f for f in findings if f.rule == RULE_BLOCKED_NO_GRANT_SITE)
     assert "strength" in finding.message
 
 
@@ -306,8 +332,43 @@ def test_blocked_tooling_form_skips_capability_check():
     row = _row(effects=(), content_hash="h1")
     disp = _disp(row.row_id, "blocked:tooling:emulator_set_flag", affirmed_hash="h1")
     findings = check_chapter([row], {row.row_id: disp}, capabilities=None, approach=_FakeApproach(set()))
-    assert all(f.rule not in (RULE_CAPABILITY_MODEL_UNENFORCED, RULE_BLOCKED_NO_GRANTING_CHAPTER)
+    assert all(f.rule not in (RULE_CAPABILITY_MODEL_UNENFORCED, RULE_BLOCKED_NO_GRANT_SITE)
                for f in findings)
+
+
+def test_blocked_capability_undetermined_per_token_warns_unenforced():
+    """`grant_sites` returning `None` for one token in a `blocked:a|b` spec
+    warns unenforced for that token specifically, even when a model is
+    supplied and the other token resolves fine."""
+    row = _row(effects=(), content_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash|strength", affirmed_hash="h1")
+    grant = CapabilityGrant(row_id="map042/ev003/p0", map_id=42, chapter_id="CH06")
+    caps = _FakeCapabilities({"rock_smash": (grant,), "strength": None})
+    findings = check_chapter([row], {row.row_id: disp}, capabilities=caps, approach=_FakeApproach(set()))
+    finding = next(f for f in findings if f.rule == RULE_CAPABILITY_MODEL_UNENFORCED)
+    assert finding.severity == "warning"
+    assert "strength" in finding.message
+    assert all(f.rule != RULE_BLOCKED_NO_GRANT_SITE for f in findings)
+
+
+def test_blocked_already_granted_in_this_chapter_or_predecessor_is_error():
+    row = _row(effects=(), content_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash", affirmed_hash="h1")
+    grant = CapabilityGrant(row_id="map042/ev003/p0", map_id=42, chapter_id="CH06")
+    caps = _FakeCapabilities({"rock_smash": (grant,)}, within={"rock_smash": (grant,)})
+    findings = check_chapter([row], {row.row_id: disp}, capabilities=caps, approach=_FakeApproach(set()))
+    finding = next(f for f in findings if f.rule == RULE_BLOCKED_ALREADY_GRANTED)
+    assert finding.severity == "error"
+    assert "map042/ev003/p0" in finding.message
+
+
+def test_blocked_not_already_granted_when_granted_within_is_empty():
+    row = _row(effects=(), content_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash", affirmed_hash="h1")
+    grant = CapabilityGrant(row_id="map042/ev003/p0", map_id=42, chapter_id="CH06")
+    caps = _FakeCapabilities({"rock_smash": (grant,)})  # within defaults to ()
+    findings = check_chapter([row], {row.row_id: disp}, capabilities=caps, approach=_FakeApproach(set()))
+    assert all(f.rule != RULE_BLOCKED_ALREADY_GRANTED for f in findings)
 
 
 # --- rule 8: blocked row with a missed assertion opportunity --------------
@@ -316,7 +377,8 @@ def test_blocked_tooling_form_skips_capability_check():
 def test_blocked_without_approach_model_warns_unenforced():
     row = _row(effects=(), content_hash="h1")
     disp = _disp(row.row_id, "blocked:rock_smash", affirmed_hash="h1")
-    caps = _FakeCapabilities({"rock_smash": "CH06"})
+    grant = CapabilityGrant(row_id="map042/ev003/p0", map_id=42, chapter_id="CH06")
+    caps = _FakeCapabilities({"rock_smash": (grant,)})
     findings = check_chapter([row], {row.row_id: disp}, capabilities=caps, approach=None)
     rules = [f.rule for f in findings]
     assert RULE_APPROACH_MODEL_UNENFORCED in rules

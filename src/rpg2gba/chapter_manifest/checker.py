@@ -39,7 +39,8 @@ RULE_UNAFFIRMED_DISPOSITION = "unaffirmed_disposition"
 RULE_UNDISPOSITIONABLE_ROW_DECIDED = "undispositionable_row_decided"
 RULE_ILLEGAL_COSMETIC = "illegal_cosmetic"
 RULE_MISSING_CITATION = "missing_citation"
-RULE_BLOCKED_NO_GRANTING_CHAPTER = "blocked_no_granting_chapter"
+RULE_BLOCKED_NO_GRANT_SITE = "blocked_no_grant_site"
+RULE_BLOCKED_ALREADY_GRANTED = "blocked_already_granted"
 RULE_CAPABILITY_MODEL_UNENFORCED = "capability_model_unenforced"
 RULE_BLOCKED_MISSED_ASSERTION = "blocked_missed_assertion"
 RULE_APPROACH_MODEL_UNENFORCED = "approach_model_unenforced"
@@ -58,23 +59,71 @@ RULE_BOUNDARY_UNCLAIMED = "boundary_unclaimed"
 RULE_BOUNDARY_MODEL_UNENFORCED = "boundary_model_unenforced"
 
 
+@dataclass(frozen=True)
+class CapabilityGrant:
+    """One map-event site that grants a capability token -- the unit
+    `CapabilityModel` reports in, instead of a chapter id.
+
+    Deliberately keyed to a manifest row, not a chapter (operator ruling,
+    `REDERIVATION_PLAN.md` P8): a chapter id is a *plan* -- `reference/
+    chapters.json` is 5-of-60 built and the rest is a proposed carve-up that
+    will change, so "unblocked by CH57" rots silently when chapters are
+    re-cut. `map199/ev001/p0` is a fact about the game data and survives any
+    re-plan. It is also not the same fact as "CH57 owns map199" -- a chapter
+    *owning* a map is not the same as the specific event on it having been
+    implemented/verified as the grant, and event-level granularity is what
+    makes the discharge condition mechanically checkable.
+
+    `chapter_id` is the owning chapter of `map_id` in `reference/
+    chapters.json` at derivation time, or None if no chapter claims that map
+    yet -- carried through only for `granted_within`'s same-chapter-or-
+    predecessor test and for readable messages; it is not the identity of
+    the grant.
+    """
+
+    row_id: str
+    map_id: int
+    chapter_id: str | None
+
+
 class CapabilityModel(Protocol):
     """The seam `blocked:<capability set>` validation plugs into (Q8.2, Q3).
 
     Not implemented here — deliberately. `check_chapter`'s `capabilities`
-    argument accepts anything satisfying this Protocol; the agent building
-    the capability model (Q3's `chapters.json` "capabilities" block, or a
-    derivation off green seed blobs) only needs to provide one method.
+    argument accepts anything satisfying this Protocol. The concrete adapter
+    (`capability_model.py`) is built over `rpg2gba.capability_sites`'
+    corpus-wide scan for `code 121`/`code 122` writes that turn a named
+    switch/variable-threshold ON -- see that module's docstring for why
+    grants are keyed to map-event sites, not chapters.
     """
 
-    def grants_capability(self, name: str) -> str | None:
-        """Return the chapter id that grants `name`, or None if no chapter does.
+    def grant_sites(self, name: str) -> tuple[CapabilityGrant, ...] | None:
+        """Sites that turn capability `name` on.
 
-        A `blocked:<name set>` row is legitimate only when every capability in
-        the set returns a chapter id; when one returns None the row must be
-        dispositioned `unreachable`, not `blocked` (Q8.2). `blocked:tooling:*`
-        rows are never checked here — a missing harness primitive isn't a
-        chapter-granted capability (Q10).
+        Three-state, not boolean-or-list, because "nobody grants this" and
+        "we cannot tell" must never collapse into the same answer:
+
+          None      -- undetermined; the derivation cannot answer at all
+                       (no switch/variable in the corpus even slugs to this
+                       token, or every write it found was a computed/
+                       relative operation it cannot resolve to a constant)
+                       => `RULE_CAPABILITY_MODEL_UNENFORCED`, a warning.
+          ()         -- the derivation looked and nothing anywhere grants
+                       `name` => the row is unreachable, not blocked
+                       (`RULE_BLOCKED_NO_GRANT_SITE`, an error).
+          non-empty  -- the grant sites themselves.
+        """
+        ...
+
+    def granted_within(self, name: str) -> tuple[CapabilityGrant, ...]:
+        """The subset of `grant_sites(name)` (or `()` if that is `None`)
+        lying in THIS chapter or one of its predecessors -- i.e. the player
+        already holds `name` by the time this chapter runs, so a `blocked:`
+        row naming it is a false claim (`RULE_BLOCKED_ALREADY_GRANTED`).
+
+        Lives on the model, not in the checker, precisely so `checker.py`
+        stays free of the chapter-chain import (`chapter_atlas.binding`)
+        this needs to walk predecessors.
         """
         ...
 
@@ -563,21 +612,57 @@ def check_chapter(
                     severity="warning",
                 ))
             else:
-                ungranted = [
-                    c for c in capability_spec.split("|")
-                    if capabilities.grants_capability(c) is None
-                ]
-                if ungranted:
-                    findings.append(Finding(
-                        row_id=row.row_id,
-                        rule=RULE_BLOCKED_NO_GRANTING_CHAPTER,
-                        message=(
-                            f"blocked:{capability_spec} names capability(ies) "
-                            f"{ungranted} that no chapter in reference/chapters.json "
-                            "grants; this row is unreachable, not blocked"
-                        ),
-                        severity="error",
-                    ))
+                # Per-capability, not per-spec: `blocked:a|b` makes two
+                # independent claims, and each is checked and reported on
+                # its own rather than lumped into one finding (a spec can
+                # legitimately be undetermined on one token and
+                # already-granted on another).
+                for cap in capability_spec.split("|"):
+                    sites = capabilities.grant_sites(cap)
+                    if sites is None:
+                        findings.append(Finding(
+                            row_id=row.row_id,
+                            rule=RULE_CAPABILITY_MODEL_UNENFORCED,
+                            message=(
+                                f"blocked:{capability_spec} names capability "
+                                f"{cap!r}, but the derivation could not determine "
+                                "where (or whether) anything grants it -- no "
+                                "switch/variable in the corpus resolves to this "
+                                "token, or every write to the candidate was a "
+                                "computed/relative operation rather than a "
+                                "constant assignment (this rule is unenforced "
+                                "for this capability)"
+                            ),
+                            severity="warning",
+                        ))
+                        continue
+                    if not sites:
+                        findings.append(Finding(
+                            row_id=row.row_id,
+                            rule=RULE_BLOCKED_NO_GRANT_SITE,
+                            message=(
+                                f"blocked:{capability_spec} names capability "
+                                f"{cap!r}, but no map-event site anywhere grants "
+                                "it; this row is unreachable, not blocked"
+                            ),
+                            severity="error",
+                        ))
+                        continue
+                    already = capabilities.granted_within(cap)
+                    if already:
+                        site_ids = ", ".join(sorted(g.row_id for g in already))
+                        findings.append(Finding(
+                            row_id=row.row_id,
+                            rule=RULE_BLOCKED_ALREADY_GRANTED,
+                            message=(
+                                f"blocked:{capability_spec} names capability "
+                                f"{cap!r}, but it is already granted in this "
+                                f"chapter or a predecessor (site(s): {site_ids}) "
+                                "-- the player already holds it, so this row is "
+                                "reachable and 'blocked' is a false claim"
+                            ),
+                            severity="error",
+                        ))
 
             if approach is None:
                 findings.append(Finding(
