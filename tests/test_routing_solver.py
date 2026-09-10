@@ -796,6 +796,127 @@ def test_returns_a_plan_with_crossing_recorded_when_unavoidable() -> None:
 
 
 # ---------------------------------------------------------------------------
+# PROJECT_TODO #76 -- per-destination trigger safety
+# ---------------------------------------------------------------------------
+
+
+def test_approaching_a_beat_does_not_count_its_own_trigger_as_a_crossing() -> None:
+    """The only route to B's beat crosses B's own trigger tile (its sight
+    cone / coord-event, converted from `map202/ev007/p0`). That tile is not
+    foreign on the segment whose destination IS B -- it must solve with no
+    crossing recorded at all."""
+    own_script = "Map202_EV007_Page1"
+
+    builder = ChapterBuilder("test", doc="reference/chapters/00-test.md")
+
+    @builder.beat("B", "beat for B", map_constant="MAP_B", at=(0, 0), group="B",
+                  rows=("map202/ev007/p0",))
+    def b(emu) -> None:  # noqa: ANN001
+        pass
+
+    chapter = builder.build()
+    map_ids = {"MAP_B": 102}
+
+    w = _World()
+    w.home(100)  # entry
+    w.home(102)  # B
+    w.home(103)  # exit
+    w.add(100, 102, 202, 2, foreign_script=own_script)  # entry -> B: crosses B's own tile
+    w.add(102, 103, 204, 1)  # B -> exit: clean
+
+    route = solve_route(
+        chapter, "TESTCH", manifest_rows=[],
+        graphs=w.graphs, overlays=w.overlays, world=w.build(),
+        entry=(100, (0, 0)), exit_=(103, (0, 0)), map_ids=map_ids,
+    )
+
+    assert route.tile_cost == 2 + 1
+    assert all(s.crossed_foreign_triggers == () for s in route.segments)
+
+
+def test_approaching_a_different_beat_still_counts_that_beats_trigger_as_a_crossing() -> None:
+    """The converse of the above, and the regression that matters: a trigger
+    tile crossed on the way to A, but OWNED by B (a different beat/group),
+    must stay a foreign crossing. Guards against a fix that unions every
+    group's own scripts into one chapter-wide safe set instead of gating the
+    exemption by the segment's actual destination -- exactly the "B3's
+    trainer must not be excused for firing during an approach to B8" case
+    `resolved_trigger_scripts`'s docstring calls out, now expressed at the
+    per-segment level.
+
+    Order is NOT forced by corridor topology -- a corridor chain lets the
+    solver reach B by first passing through A's cell regardless of which
+    group is "visited" first, and #76's exemption makes reordering to
+    B-first strictly cheaper under the solver's crossing-averse search (it
+    erases the recorded crossing entirely, which is worth far more to the
+    search than the extra backtracking tiles cost -- see `_CROSSING_PENALTY`
+    in solver.py). Without a real constraint forcing A first, the solver
+    reorders to B, A and this regression guard never fires. So the order is
+    forced the same way `test_warp_topology_orders_far_side_beat_after_its_
+    introducing_warp` forces its order: A's beat owns the only warp landing
+    on B's map, deriving a `warp_topology` precedence edge that 2-opt must
+    respect regardless of cost.
+    """
+    a_intro_row = _warp_row("map101/ev007/p0", map_id=101, event_id=7)
+    b_script = "Map202_EV007_Page1"
+
+    builder = ChapterBuilder("test", doc="reference/chapters/00-test.md")
+
+    @builder.beat("A", "beat for A", map_constant="MAP_A", at=(0, 0), group="A",
+                  rows=(a_intro_row.row_id,))
+    def a(emu) -> None:  # noqa: ANN001
+        pass
+
+    @builder.beat("B", "beat for B", map_constant="MAP_B", at=(0, 0), group="B",
+                  rows=("map202/ev007/p0",))
+    def b(emu) -> None:  # noqa: ANN001
+        pass
+
+    chapter = builder.build()
+    map_ids = {"MAP_A": 101, "MAP_B": 102}
+
+    w = _World()
+    w.home(100)  # entry
+    w.home(101)  # A
+    w.home(102)  # B
+    w.home(103)  # exit
+    # entry -> A crosses B's own trigger tile.
+    w.add(100, 101, 201, 2, foreign_script=b_script)
+    w.add(102, 103, 204, 1)  # B -> exit: clean
+
+    edges = w.edges + [
+        # A's introducing warp onto B's map -- also the only A <-> B path,
+        # so this segment costs 0 tiles (a direct warp), same as the
+        # warp-topology precedence test above.
+        WorldEdge(src_map=101, dst_map=102, kind="warp",
+                  src_cell=(0, 0), dst_cell=(0, 0), event_id=7),
+        WorldEdge(src_map=102, dst_map=101, kind="warp",
+                  src_cell=(0, 0), dst_cell=(0, 0), event_id=8),
+    ]
+    world = _world(edges, w.map_ids)
+
+    route = solve_route(
+        chapter, "TESTCH", manifest_rows=[a_intro_row],
+        graphs=w.graphs, overlays=w.overlays, world=world,
+        entry=(100, (0, 0)), exit_=(103, (0, 0)), map_ids=map_ids,
+    )
+
+    assert PrecedenceEdge(
+        before="A", after="B", reason="warp_topology:map102",
+    ) in route.precedence
+
+    group_order = [n.group for n in route.nodes if n.kind == "group"]
+    assert group_order == ["A", "B"]
+    # entry->A (2, corridor) + A->B (0, direct warp) + B->exit (1, corridor).
+    assert route.tile_cost == 2 + 0 + 1
+
+    first_segment = route.segments[0]
+    assert len(first_segment.crossed_foreign_triggers) == 1
+    assert first_segment.crossed_foreign_triggers[0].script == b_script
+    assert all(s.crossed_foreign_triggers == () for s in route.segments[1:])
+
+
+# ---------------------------------------------------------------------------
 # fail-loud paths
 # ---------------------------------------------------------------------------
 

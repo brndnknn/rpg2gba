@@ -20,7 +20,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from ..chapter_manifest.schema import ManifestRow
-from ..playtest.chapter import Beat, BeatGroup, BeatLocation, Chapter, resolved_trigger_scripts
+from ..playtest.chapter import (
+    Beat,
+    BeatGroup,
+    BeatLocation,
+    Chapter,
+    page_row_script,
+    resolved_trigger_scripts,
+)
 from ..tileset_converter.map_constants import DEFAULT_STATE_PATH, MapConstantRegistry
 from ..traversal.graph import Cell, MapGraph
 from ..traversal.triggers import TriggerOverlay
@@ -453,10 +460,16 @@ def solve_route(
     disambiguates and suppresses this check entirely (see
     `_derive_warp_precedence`).
 
-    `destination_scripts` is forwarded to `pathing.plan_segment` unchanged:
-    the set of this chapter's own trigger scripts that a route may cross
-    freely (not "foreign"). Defaults to none, so every trigger this chapter
-    doesn't explicitly own is avoided when possible.
+    `destination_scripts` is the chapter-wide BASE of trigger scripts a route
+    may always cross freely (not "foreign"), unioned with the scripts a
+    predecessor chapter already resolved (`resolved_trigger_scripts`).
+    Forwarded to `pathing.plan_segment` per SEGMENT, not unchanged for the
+    whole solve: a segment ending at group `j` additionally gets `j`'s own
+    trigger scripts unioned in (PROJECT_TODO #76) -- a trainer's own sight
+    cone is not a hazard on the approach that walks up to that trainer, but
+    stays foreign on every other segment, including ones that merely pass
+    near it on the way to somewhere else. Defaults to none, so every trigger
+    no group along a given segment owns is avoided when possible.
 
     `occupancy` (per map id, `routing.occupancy.MapOccupancy`) is likewise
     forwarded to `pathing.plan_segment` unchanged: stationary-NPC tiles that
@@ -599,6 +612,24 @@ def solve_route(
     }
     original_order: dict[int, int] = {idx: pos for pos, idx in enumerate(group_indices)}
 
+    # A group's own trigger scripts are always safe to cross on a segment
+    # ENDING at that group -- a trainer's own sight cone is not a hazard on
+    # the approach that walks up to that trainer, even though it stays a
+    # hazard on every other segment (PROJECT_TODO #76). Derived from the same
+    # `page_row_script` join `resolved_trigger_scripts` uses for a
+    # predecessor's dispositions, so a row id maps to a script name exactly
+    # once in this codebase.
+    own_scripts_by_group: dict[str, frozenset[str]] = {}
+    for gp in group_points:
+        scripts: set[str] = set()
+        for row_id in gp.rows:
+            named = page_row_script(row_id)
+            if named is None:
+                continue  # seam/terrain row: names no page script
+            _, script = named
+            scripts.add(script)
+        own_scripts_by_group[gp.group_id] = frozenset(scripts)
+
     # Precedence edges as point-index pairs (before_point, after_point).
     point_by_group: dict[str, int] = {gid: idx for idx, gid in group_id_at.items()}
     precedence_point_pairs = [
@@ -653,11 +684,22 @@ def solve_route(
             return site_cache[key]
         start_map = points[i][0]
         goal_map = points[j][0]
+        # The safe-script set is a function of the DESTINATION point only:
+        # the chapter-wide base, plus (if `j` is a group) that group's own
+        # trigger scripts -- never the scripts of the point being left, and
+        # never another group's. `key` already includes `j`, so the cache
+        # stays sound (see solver.py's PROJECT_TODO #76 note).
+        dest_group_id = group_id_at.get(j)
+        dest_scripts = (
+            effective_destination_scripts | own_scripts_by_group[dest_group_id]
+            if dest_group_id is not None
+            else effective_destination_scripts
+        )
         try:
             result = plan_segment(
                 start_map, cell_i, goal_map, cell_j,
                 graphs=graphs, overlays=overlays,
-                destination_scripts=effective_destination_scripts, world=world,
+                destination_scripts=dest_scripts, world=world,
                 occupancy=occupancy,
             )
         except RoutePlanningError:
