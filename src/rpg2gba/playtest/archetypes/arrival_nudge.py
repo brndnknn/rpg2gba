@@ -42,6 +42,7 @@ def arrival_nudge_beat(
     group: str | None = None,
     manifest_rows: "tuple[ManifestRow, ...] | None" = None,
     manifest_dir=None,
+    manifest_chapter_id: str | None = None,
 ) -> None:
     """Register one `arrival_nudge` archetype instance.
 
@@ -68,10 +69,18 @@ def arrival_nudge_beat(
     shortcut. Only needed when more than one warp between the two maps
     exists; `arrival_cell` fails loud, naming every candidate, if it's
     needed and omitted.
+
+    `manifest_chapter_id=`, if given, is a predecessor chapter whose
+    manifest actually carries this row (`find_match`'s own docstring --
+    REDERIVATION_PLAN.md §10 R3): an arrival nudge sitting on a map the
+    PREVIOUS chapter owns, claimed by this chapter because only this
+    chapter's walk can trigger it. `None` (the default) preserves today's
+    behavior of reading `chapter_id`'s own manifest.
     """
     match = find_match(
         chapter_id, map_id, event_id, "arrival_nudge",
         rows=manifest_rows, manifest_dir=manifest_dir,
+        manifest_chapter_id=manifest_chapter_id,
     )
     row_id = next(iter(match.roles))
     resolved_group = group if group is not None else beat_name

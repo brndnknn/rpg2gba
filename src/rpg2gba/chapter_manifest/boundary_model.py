@@ -38,6 +38,7 @@ Without this adapter the rule can still catch nothing at all about a
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from rpg2gba.chapter_atlas.binding import load_binding
@@ -56,6 +57,38 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAPS_DIR = Path("output/uranium-build/maps")
 DEFAULT_CONNECTIONS_JSON = Path("output/uranium-build/connections.json")
+
+# The three manifest row-id grammars (`schema.py`'s `page_row_id`/
+# `seam_row_id`/`terrain_row_id` are the mint points; these are the read
+# side). Only a page row carries an `(map_id, event_id)` key -- a seam row
+# is keyed by direction/other-map, and a terrain row by cell, neither has an
+# event at all (`schema.SeamRef`/`TerrainRef` docstrings).
+_PAGE_ROW_RE = re.compile(r"^map(\d{3})/ev(\d{3})/p\d+$")
+_SEAM_ROW_RE = re.compile(r"^map\d{3}/seam/[A-Za-z0-9_]+/map\d{3}$")
+_TERRAIN_ROW_RE = re.compile(r"^map\d{3}/terrain/[^/]+/-?\d+,-?\d+$")
+
+
+def _event_key(row_id: str) -> tuple[int, int] | None:
+    """`(map_id, event_id)` for a page row, or `None` for a seam/terrain row
+    (neither has an event to key on).
+
+    Fails loud (CLAUDE.md §4.5) on a `row_id` that matches none of the
+    three known manifest row-id grammars at all -- a typo'd or otherwise
+    malformed row id must not silently read as "not a page, so no event",
+    since that would be indistinguishable from a genuine seam/terrain row.
+    """
+    page_match = _PAGE_ROW_RE.match(row_id)
+    if page_match is not None:
+        return int(page_match.group(1)), int(page_match.group(2))
+    if _SEAM_ROW_RE.match(row_id) or _TERRAIN_ROW_RE.match(row_id):
+        return None
+    raise ValueError(
+        f"boundary_model: row_id {row_id!r} matches none of the manifest's "
+        "row-id grammars -- page 'mapNNN/evNNN/pN' (schema.page_row_id), "
+        "seam 'mapNNN/seam/DIR/mapNNN' (schema.seam_row_id), or terrain "
+        "'mapNNN/terrain/kind/x,y' (schema.terrain_row_id) -- cannot "
+        "determine whether this is a forward crossing"
+    )
 
 
 def _crossing_row_ids(
@@ -116,13 +149,44 @@ class ChapterBoundaryModel:
     ) -> None:
         self._chapter_id = chapter_id
         self._crossing_row_ids = crossing_row_ids
+        # Every event a crossing PAGE row belongs to, keyed by (map_id,
+        # event_id) -- computed once here rather than re-derived per
+        # `is_forward_crossing` call, since `crossing_row_ids` doesn't
+        # change after construction. Seam/terrain crossing rows contribute
+        # nothing here (`_event_key` returns None for them); they can only
+        # ever match a row_id equal to themselves, which the exact-match
+        # check in `is_forward_crossing` already covers.
+        self._crossing_events: frozenset[tuple[int, int]] = frozenset(
+            key for row in crossing_row_ids
+            if (key := _event_key(row)) is not None
+        )
         self._successor_id = successor_id
         self._successor_module_checked = False
         self._successor_chapter: Chapter | None = None
         self._successor_claimed_rows: frozenset[str] = frozenset()
 
     def is_forward_crossing(self, row_id: str) -> bool:
-        return row_id in self._crossing_row_ids
+        """True iff `row_id` itself is a detected crossing, OR it is a page
+        of the SAME EVENT as one that is.
+
+        Widened from page-level to event-level (operator ruling,
+        `REDERIVATION_PLAN.md` §10 R3): a boundary event's non-transfer
+        pages -- an arrival autorun that nudges the player off the warp
+        landing cell, say -- are not themselves a `code 201` warp or a
+        connection seam, so the two detectors this model is built over
+        never tag them directly. But they are unreachable except by first
+        crossing that same event's transfer page, so they are exactly as
+        much "not this chapter's to assert" as the transfer page itself --
+        boundary-ness is a property of the EVENT (the whole set of pages
+        that make up one arrival), not of the individual page that happens
+        to carry the `code 201` command. Do not narrow this back to an
+        exact `row_id` membership test; that is the bug this widening
+        fixes (map035/ev001/p1, CH04/CH05).
+        """
+        if row_id in self._crossing_row_ids:
+            return True
+        key = _event_key(row_id)
+        return key is not None and key in self._crossing_events
 
     def successor_chapter_id(self) -> str | None:
         return self._successor_id

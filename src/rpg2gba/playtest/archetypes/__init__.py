@@ -107,6 +107,7 @@ def find_match(
     row_id: str | None = None,
     rows: Sequence[ManifestRow] | None = None,
     manifest_dir: Path | None = None,
+    manifest_chapter_id: str | None = None,
 ) -> ArchetypeMatch:
     """The one `ArchetypeMatch` a template call is asking about.
 
@@ -121,12 +122,28 @@ def find_match(
     shape allows it -- see `chapter_manifest.archetypes`' module
     docstring). `trainer`/`item_ball` are event-level and never need it.
 
-    Fails loud on zero or more-than-one candidate, naming what WAS found so
-    a caller can see whether it typo'd the event id, the archetype name, or
-    needs `row_id=` to disambiguate.
+    `manifest_chapter_id=` lets a chapter claim an archetype instance that
+    physically sits on a PREDECESSOR chapter's map (operator ruling,
+    `REDERIVATION_PLAN.md` §10 R3: `map035/ev001/p1`, an arrival-nudge
+    autorun on CH04's map 35 that only CH05's walk can ever trigger --
+    emerging from a cave CH04 never opens). `chapter_id` still identifies
+    the chapter doing the registering (it appears in beat names, error
+    messages, etc.); `manifest_chapter_id`, when given, is the chapter
+    whose *manifest* is actually loaded and searched, overriding the
+    default of reading `chapter_id`'s own manifest. Left `None` (the
+    default) this parameter is a complete no-op and `find_match` behaves
+    exactly as before -- only the caller that needs the split passes it.
+    Ignored when `rows=` is supplied directly, same as `manifest_dir=`.
+
+    Fails loud on zero or more-than-one candidate, naming what WAS found --
+    and, once `chapter_id` and the manifest actually searched can differ,
+    naming the searched manifest's own chapter id too, so a cross-chapter
+    call's failure doesn't misleadingly read as "CH05 has no rows on map
+    35" when the real search happened against CH04's manifest.
     """
+    manifest_id = manifest_chapter_id if manifest_chapter_id is not None else chapter_id
     resolved_rows = rows if rows is not None else load_chapter_rows(
-        chapter_id, manifest_dir=manifest_dir)
+        manifest_id, manifest_dir=manifest_dir)
     matches = classify_manifest(resolved_rows)
     candidates = [
         m for m in matches
@@ -140,9 +157,13 @@ def find_match(
             (m.archetype, sorted(m.roles)) for m in matches
             if m.map_id == map_id and m.event_id == event_id
         ]
+        searched = (
+            f" (searched {manifest_id}'s manifest)"
+            if manifest_id != chapter_id else ""
+        )
         raise ValueError(
             f"find_match: {chapter_id} map {map_id} event {event_id} has no "
-            f"{archetype!r} archetype match"
+            f"{archetype!r} archetype match{searched}"
             + (f" with row_id={row_id!r}" if row_id is not None else "")
             + (f" -- this event DOES classify as: {same_event}" if same_event
                else " -- classify_manifest finds no archetype at all on this event")

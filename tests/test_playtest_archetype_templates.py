@@ -21,13 +21,14 @@ resolve real coordinates through `cells.py`.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from rpg2gba.chapter_manifest.generator import generate_chapter_manifest
-from rpg2gba.chapter_manifest.schema import ManifestRow
-from rpg2gba.playtest.archetypes import ChapterArchetypeModel
+from rpg2gba.chapter_manifest.schema import ManifestRow, row_to_dict
+from rpg2gba.playtest.archetypes import ChapterArchetypeModel, find_match
 from rpg2gba.playtest.archetypes.arrival_nudge import arrival_nudge_beat
 from rpg2gba.playtest.archetypes.item_ball import item_ball_beats
 from rpg2gba.playtest.archetypes.trainer import trainer_beats
@@ -438,6 +439,71 @@ def test_arrival_nudge_beat_unknown_event_fails_loud(
             map_id=36, event_id=997, from_map_constant="MAP_PASSAGE_CAVE_2F",
             beat_name="NX", manifest_rows=ch05_rows,
         )
+
+
+# -- find_match: manifest_chapter_id (cross-chapter registration) ---------
+
+
+def _write_manifest(path: Path, rows: tuple[ManifestRow, ...]) -> None:
+    path.write_text(
+        json.dumps([row_to_dict(r) for r in rows]),
+        encoding="utf-8",
+    )
+
+
+_WARP_ROW = ManifestRow(
+    row_id="map035/ev001/p0", kind="page", map_id=35, content_hash="deadbeef",
+    effects=("warp",), event_id=1, event_name="cave_entrance", page_idx=0,
+    trigger="event_touch",
+)
+
+
+def test_find_match_manifest_chapter_id_reads_a_predecessors_manifest(
+    tmp_path: Path,
+) -> None:
+    """The row physically lives in CH04's manifest, but a CH05 caller
+    claims it -- `manifest_chapter_id="CH04"` must load CH04's file while
+    `chapter_id="CH05"` still identifies the registering chapter."""
+    _write_manifest(tmp_path / "CH04.manifest.json", (_WARP_ROW,))
+
+    match = find_match(
+        "CH05", 35, 1, "warp", manifest_dir=tmp_path, manifest_chapter_id="CH04",
+    )
+    assert match.map_id == 35
+    assert match.event_id == 1
+    assert "map035/ev001/p0" in match.roles
+
+
+def test_find_match_manifest_chapter_id_failure_names_the_searched_manifest(
+    tmp_path: Path,
+) -> None:
+    """When `chapter_id` and the manifest actually searched differ, a
+    zero-match failure must name which manifest was searched -- otherwise
+    it misleadingly reads as "CH05 has no such row" when CH04's manifest
+    (which has no matching row here either) was what was actually read."""
+    _write_manifest(tmp_path / "CH04.manifest.json", (_WARP_ROW,))
+
+    with pytest.raises(ValueError, match=r"searched CH04's manifest"):
+        find_match(
+            "CH05", 35, 999, "warp",
+            manifest_dir=tmp_path, manifest_chapter_id="CH04",
+        )
+
+
+def test_find_match_without_manifest_chapter_id_is_unchanged(
+    tmp_path: Path,
+) -> None:
+    """Omitting `manifest_chapter_id` (the default) must behave exactly as
+    before: `chapter_id`'s own manifest is read, and a failure names no
+    searched-manifest clause at all."""
+    _write_manifest(tmp_path / "CH04.manifest.json", (_WARP_ROW,))
+
+    match = find_match("CH04", 35, 1, "warp", manifest_dir=tmp_path)
+    assert "map035/ev001/p0" in match.roles
+
+    with pytest.raises(ValueError) as excinfo:
+        find_match("CH04", 35, 999, "warp", manifest_dir=tmp_path)
+    assert "searched" not in str(excinfo.value)
 
 
 # -- Beat.archetype validation (chapter.py) -------------------------------

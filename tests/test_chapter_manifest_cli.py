@@ -282,15 +282,19 @@ def test_check_unregistered_map_falls_back_to_unenforced(tmp_path: Path) -> None
 def test_check_flags_a_boundary_disposition_that_is_not_a_real_crossing(
     tmp_path: Path,
 ) -> None:
-    """`map035/ev001/p1` is CH04's arrival-nudge autorun, not itself a
-    code-201 transfer -- `is_forward_crossing` is False for it (pinned in
-    `test_chapter_manifest_boundary_model.py`). Switching its real
-    disposition from `beat:B8` to `boundary` should be caught as a false
-    crossing claim, wired all the way through the CLI's real
-    `build_boundary_model`."""
+    """`map035/ev002/p0` is CH04's "old entrance to Nowtoch City" sign on
+    Map035, event 2 -- an unrelated event to EV001 (the cave-entrance warp
+    and its arrival-nudge autorun) and not itself a code-201 transfer, so
+    `is_forward_crossing` is False for it. (`map035/ev001/p1` no longer
+    serves this test after the R3 event-level widening: it now reports
+    True, being a page of the same EVENT as `map035/ev001/p0`'s genuine
+    crossing -- see `test_chapter_manifest_boundary_model.py`.) Switching
+    ev002/p0's real disposition from `beat:B9` to `boundary` should be
+    caught as a false crossing claim, wired all the way through the CLI's
+    real `build_boundary_model`."""
     dispositions_path = Path("reference/manifests/CH04.dispositions.json")
     dispositions = json.loads(dispositions_path.read_text(encoding="utf-8"))
-    row_id = "map035/ev001/p1"
+    row_id = "map035/ev002/p0"
     dispositions[row_id] = {
         "disposition": "boundary",
         "affirmed_hash": dispositions[row_id]["affirmed_hash"],
