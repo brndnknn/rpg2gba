@@ -8,7 +8,8 @@ dispositions) and **#67** (route plans), executed under **#62**'s ordering safeg
 > state; when the task closes, its durable conclusions go to `MEMORY.md` / `PROJECT_TODO.md`
 > and this file is archived.
 
-**Live status (2026-09-09): Phase A done except P3/P4. Phase B: P6 done, P5 outstanding. Nothing derived to disk — the freeze (P7) has not happened.**
+**Live status (2026-09-10): Phase A and Phase B are DONE (P1–P6). Next is P7, the freeze.
+Nothing derived to disk yet.**
 
 ---
 
@@ -75,8 +76,9 @@ Status values: `TODO` · `IN PROGRESS` · `DONE` · `BLOCKED`.
 |---|---|---|---|
 | **P1** | **Fail loud on a vacuous trigger overlay.** Zero `CROSSING` lines currently reads identically whether the route is clean or the overlay measured nothing. CH05's first solve reported a clean 155-tile route; once object events existed the same order entered trainer sight cones in **five** places. Apply the existing `route_model_unenforced` idiom: dispositions carry trainer rows but the overlay yields no `TRAINER_SIGHT` tiles on those maps → fail loud (§4.5). | #75 | **DONE** `f73d4b52` |
 | **P2** | **Build the A5 detector and run it.** Per gated chapter, enumerate every event on its maps carrying a `code 201` to a map that was out-of-slice when that chapter was authored and is in-slice now. `metadata_wiring.classify_event` skips an **entire event** on any out-of-slice `code 201`, so these were invisible at authoring time and are live now. Has already bitten twice (CH03 B25, CH04 B7 — the latter would have teleported the player for five downstream beats). **This detector's output is the real scope of the task and nobody can currently produce it.** No PROJECT_TODO number; file one. | A5 (unfiled) | **DONE** `f4190f2f` |
-| **P3** | **Encode boundary ownership.** "A boundary crossing belongs to the chapter being opened, not the one shipping" (operator, 2026-09-04) exists in no code and not in `BUILD_PLAN.md`. `build_beat_model` loads a chapter's own module plus predecessors, **never successors**, so a boundary row claimed by the arriving chapter cannot satisfy the shipping chapter's disposition — CH04 permanently reports `unregistered_beat` for `beat:B8`. All four chapters have a forward boundary and all four answers freeze at once. | #72, #73 | TODO |
-| **P4** | **Fix ROUTE-before-object-events ordering** (`#74`) and **make `destination_scripts` per-segment** (`#76`). A trainer's own sight cone is still a foreign hazard on the segment walking to it. Required now that route plans are in scope; same root cause as P1. | #74, #76 | TODO |
+| **P3** | **Encode boundary ownership.** "A boundary crossing belongs to the chapter being opened, not the one shipping" (operator, 2026-09-04) exists in no code and not in `BUILD_PLAN.md`. `build_beat_model` loads a chapter's own module plus predecessors, **never successors**, so a boundary row claimed by the arriving chapter cannot satisfy the shipping chapter's disposition — CH04 permanently reports `unregistered_beat` for `beat:B8`. All four chapters have a forward boundary and all four answers freeze at once. | #72, #73 | **DONE** `2b6a3b6e` + `14aa6f43` |
+| **P4a** | **Fix ROUTE-before-object-events ordering** (`#74`). `BUILD_PLAN.md` §2: BUILD is now step 6, ROUTE step 7. Doc-only; #75 is what keeps it honest. | #74 | **DONE** `2b6a3b6e` |
+| **P4b** | **Make `destination_scripts` per-segment** (`#76`). A trainer's own sight cone is still a foreign hazard on the segment walking to it. Required now that route plans are in scope; same root cause as P1. | #76 | **DONE** `18869baf` |
 
 **P2 result (2026-09-09).** `rpg2gba slice-growth` — `src/rpg2gba/slice_growth.py`.
 **Six affected events**, and every one is its chapter's forward boundary, exactly the shape
@@ -112,7 +114,7 @@ the player to Kevlar mid-chapter.
 
 | # | Step | Item | Status |
 |---|---|---|---|
-| **P5** | **Three new `cells.py` resolvers**, surfaced by the literal inventory (§5): a grass-cell resolver (4 literals), a seam/connection-edge resolver (2 — these are map connections, not `code 201` warps, so `warp_cell`/`arrival_cell` don't apply), and a local-id-keyed lookup for the ch03 boulders (3 — `event_cell` keys on RMXP event id, not the compiled local id). Without these, 9 literals can only land as counted `raw_cell(..., why=)` debt. | new | TODO |
+| **P5** | **Three new `cells.py` resolvers**, surfaced by the literal inventory (§5): a grass-cell resolver (4 literals), a seam/connection-edge resolver (2 — these are map connections, not `code 201` warps, so `warp_cell`/`arrival_cell` don't apply), and a local-id-keyed lookup for the ch03 boulders (3 — `event_cell` keys on RMXP event id, not the compiled local id). Without these, 9 literals can only land as counted `raw_cell(..., why=)` debt. | new | **DONE** `502ed4e3` |
 | **P6** | **Derive the CH01–CH03 start cells** — `_CHAPTER_MAP_START_CELLS` (`chapter_manifest/generator.py:243`) holds 4 entries (CH04:35, CH05:35/36/37). Needed: **CH01 8 maps** (49, 48, 32, 50, 64, 65, 172, 89), **CH02 2** (33, 81), **CH03 5** (31, 67, 68, 73, 19) = **15**. A missing entry does **not** fail — it warns, and the manifest is capability-blind on that map (`generator.py:266-279`): terrain-gated capabilities cannot appear in `requires[]` for any row. Re-deriving without this yields manifests that load clean, check green, and are blind on all 15 maps — and the freeze would encode the blindness. **This is the bulk of the work and a prerequisite, not a step.** | A1 (inside #65) | **DONE** (P6a/P6b) |
 
 **P6 census result (2026-09-09).** Of the 15 pairs, **9 are usable today without a ROM
@@ -219,6 +221,14 @@ doing the re-derivation twice.
   passes: it was written from CH04's dispositions *before* the classifier existed.
 - **Fix CH03's B25 description string**, which still says the north edge leads to "unbuilt"
   Route 2. Reconciled 2026-08-26; the prose never caught up.
+- **Settle who owns `map035/ev001` — CH04 and CH05 currently contradict each other in
+  writing** (found 2026-09-10 while building `boundary_model.py`). CH04's `DEFERRED_BEATS`
+  reason says *CH05's entry beat claims this row*; `ch05.py`'s module docstring says the
+  opposite twice (*"owned by CH04's manifest, not this one"*, *"not claimable here"*), and
+  `successor_claims` confirms CH05 claims neither `p0` nor `p1` in any beat's `rows=`. Note
+  only **`p0` is a valid `boundary` candidate** — `p1` is an arrival-nudge autorun, not a
+  transfer, so `is_forward_crossing` rejects it. Whichever way P8 rules, `p1` needs a
+  different verdict, and a `boundary` on `p0` does not clear until CH05 adds it to a beat.
 
 ## 5. The coordinate literals — 123, and what they actually are
 
@@ -293,3 +303,25 @@ four chapters with the recipe it corrects.
 - **2026-09-09** — P6a (`70f7677f`) + P6b (`90c5470a`): start-cell table is a `frozenset`,
   all 15 CH01–CH03 entries registered, soundness pinned by test. P6c deferred.
   Suite 3114 passed / 17 skipped.
+- **2026-09-09** — P5 done (`502ed4e3`): `grass_cell`, `cell_for_local_id`, `seam_cells` in
+  `playtest/cells.py`. Corrects §5's inventory — the seam resolver covers **one** literal, not
+  two: ch03's `NORTH_EDGE_APPROACH` was never a seam cell and ch02's north-exit constants have
+  rows in neither `seam_warps.json` nor `connections.json`. Suite 3130 passed / 17 skipped.
+- **2026-09-09** — P4a done (`2b6a3b6e`, #74 RESOLVED): BUILD/ROUTE swapped in `BUILD_PLAN.md`
+  §2, and #72's boundary convention written down for the first time. Also corrected step 4's
+  claim that WIRE stages object events — `phase5` never has, and that misreading is what put
+  ROUTE at step 6.
+- **2026-09-10** — P4b done (`18869baf`, #76): `destination_scripts` is now per-segment, the
+  destination group's own scripts unioned in only on the segment ending there. Its converse
+  test needed a `warp_topology` precedence edge to force an order — corridor topology alone
+  cannot, because `_CROSSING_PENALTY` makes erasing a crossing worth thousands of tiles to the
+  search. **Any order-asserting test in `test_routing_solver.py` that relies on cost asymmetry
+  is suspect for the same reason; not yet swept.** Suite 3132 passed / 17 skipped.
+- **2026-09-10** — P3 done (`14aa6f43`, #72/#73): argument-free `boundary` verdict,
+  `ChapterBinding.successor`, `_check_boundary`'s five outcomes, and `boundary_model.py`
+  joining slice_growth + seam_growth with the successor's registered beats. Closes Phase A.
+  Found and fixed a silent drop on the way: a `boundary` row never reached `render.py`'s
+  review output at all; the hand-written verdict tuples there are now cover-checked against
+  `schema._VERDICTS` at import. CH04/CH05 still check 0 errors, counts unchanged — no
+  committed disposition uses `boundary` yet, and switching one is P7/P8's call, not this
+  step's. Suite 3161 passed / 17 skipped.
