@@ -95,6 +95,26 @@ def test_token_for_label_rejects_all_punctuation() -> None:
         token_for_label("---")
 
 
+def test_token_for_label_variable_kind_gets_var_prefix() -> None:
+    assert token_for_label("Quest Log", kind="variable") == "var_quest_log"
+    assert token_for_label("FINAL EVENT", kind="variable") == "var_final_event"
+
+
+def test_token_for_label_switch_kind_stays_bare_by_default() -> None:
+    assert token_for_label("FINAL EVENT") == token_for_label(
+        "FINAL EVENT", kind="switch"
+    )
+
+
+def test_token_for_label_switch_rejects_a_label_slugging_to_var_prefix() -> None:
+    """A switch label that itself slugs to something starting with `var_`
+    would re-open the exact base-name collision the prefix exists to
+    prevent (`PROJECT_TODO.md` #93, `REDERIVATION_PLAN.md` §10 R1) --
+    `token_for_label` must fail loud rather than mint it."""
+    with pytest.raises(CapabilitySitesError):
+        token_for_label("Var Something", kind="switch")
+
+
 # --- ON vs OFF direction ------------------------------------------------------
 
 
@@ -177,7 +197,7 @@ def test_constant_set_grants_threshold_token(tmp_path: Path) -> None:
     chapters_json = _write_chapters(tmp_path, [])
 
     d = derive_capability_sites(maps_dir, sw_json, var_json, chapters_json)
-    sites = d.grant_sites("quest_log_4")
+    sites = d.grant_sites("var_quest_log_4")
     assert sites is not None
     assert len(sites) == 1
     assert sites[0].row_id == "map001/ev001/p0"
@@ -199,7 +219,7 @@ def test_computed_write_is_recorded_undetermined_and_mints_no_token(
 
     d = derive_capability_sites(maps_dir, sw_json, var_json, chapters_json)
     assert d.tokens == ()
-    assert d.grant_sites("quest_log_1") is None
+    assert d.grant_sites("var_quest_log_1") is None
 
     determined = [w for w in d.variable_writes if w.determined]
     assert determined == []
@@ -221,7 +241,7 @@ def test_a_variable_with_both_constant_and_computed_writes_still_grants(
     chapters_json = _write_chapters(tmp_path, [])
 
     d = derive_capability_sites(maps_dir, sw_json, var_json, chapters_json)
-    sites = d.grant_sites("quest_log_2")
+    sites = d.grant_sites("var_quest_log_2")
     assert sites is not None
     assert len(sites) == 1
     assert sites[0].row_id == "map001/ev001/p0"
@@ -292,29 +312,29 @@ def test_real_corpus_final_event_and_got_pokemon() -> None:
 
 
 def test_an_unminted_threshold_is_computed_not_reported_undetermined() -> None:
-    """`quest_log_1` must resolve even though nothing writes exactly 1.
+    """`var_quest_log_1` must resolve even though nothing writes exactly 1.
 
     Threshold tokens are minted only for values the corpus actually writes,
-    so var 101 ("Quest Log") mints `quest_log_2` and `quest_log_4` and not
-    `quest_log_1` -- yet both of those writes satisfy `>= 1`, so the answer
-    is knowable. Reporting None there would say "cannot tell" about a
+    so var 101 ("Quest Log") mints `var_quest_log_2` and `var_quest_log_4`
+    and not `var_quest_log_1` -- yet both of those writes satisfy `>= 1`, so
+    the answer is knowable. Reporting None there would say "cannot tell" about a
     question with an answer, and would silently miss
     `RULE_BLOCKED_ALREADY_GRANTED` on the 12 CH01 rows gated `Quest Log >= 1`
     -- the exact error this model exists to catch.
     """
     derivation = derive_capability_sites()
 
-    minted = derivation.grant_sites("quest_log_2")
-    assert minted, "precondition: quest_log_2 is a minted token with sites"
+    minted = derivation.grant_sites("var_quest_log_2")
+    assert minted, "precondition: var_quest_log_2 is a minted token with sites"
 
-    computed = derivation.grant_sites("quest_log_1")
-    assert computed is not None, "quest_log_1 is answerable, not undetermined"
+    computed = derivation.grant_sites("var_quest_log_1")
+    assert computed is not None, "var_quest_log_1 is answerable, not undetermined"
     # Every write satisfying >= 2 also satisfies >= 1, so >= 1 is a superset.
     assert {s.row_id for s in minted} <= {s.row_id for s in computed}
 
 
 def test_a_threshold_no_constant_write_reaches_stays_undetermined() -> None:
-    """`quest_log_5` must stay None, but for the right reason.
+    """`var_quest_log_5` must stay None, but for the right reason.
 
     No constant write to var 101 reaches 5 (the corpus's highest is 4), but
     the variable also carries computed writes (`map042/ev003/p0`,
@@ -323,8 +343,8 @@ def test_a_threshold_no_constant_write_reaches_stays_undetermined() -> None:
     "cannot tell" -- not `()`, which would assert nothing grants it.
     """
     derivation = derive_capability_sites()
-    assert derivation.grant_sites("quest_log_5") is None
-    assert derivation.grant_sites("quest_log_99") is None
+    assert derivation.grant_sites("var_quest_log_5") is None
+    assert derivation.grant_sites("var_quest_log_99") is None
 
 
 def test_a_nonsense_threshold_token_is_not_invented() -> None:
@@ -334,25 +354,54 @@ def test_a_nonsense_threshold_token_is_not_invented() -> None:
     assert derivation.grant_sites("not_a_real_variable_3") is None
 
 
-def test_switch_and_variable_bases_that_collide_are_reported() -> None:
-    """Five bases name BOTH a switch and a variable, so `<base>` and
-    `<base>_<n>` are different game objects.
+def test_switch_and_variable_base_sharing_a_slug_no_longer_collide(
+    tmp_path: Path,
+) -> None:
+    """A switch label and a variable label that slug to the same base
+    (`PROJECT_TODO.md` #93 -- five such bases exist in the real corpus:
+    `final_event`, `first_strike`, `gym_2_gempuzzle`, `gym_4_puzzle`,
+    `dream_palace_grotto`) used to read as one capability at two thresholds:
+    `blocked:final_event` (switch) next to `blocked:final_event_2`
+    (variable) gave no visual signal they were different game objects.
 
-    `final_event` is switch 125 (granted at `map199/ev001/p0`, CH57) while
-    `final_event_2` is variable 127 (CH56) -- they read as one capability at
-    two thresholds and are unrelated. This is not `AmbiguousTokenError`: no
-    two token strings collide and each resolves deterministically, so
-    raising would break an otherwise-correct derivation. But it must not be
-    silent, because a reviewer reading `blocked:final_event` next to
-    `blocked:final_event_2` has no way to see they are different things.
+    `token_for_label`'s `var_` prefix on variable-derived tokens
+    (`REDERIVATION_PLAN.md` §10 R1) resolves this by construction: the
+    switch keeps the bare slug and the variable's base is always
+    `var_`-prefixed, so the two tokens can never even look alike. This pins
+    that guarantee directly, in place of the retired `colliding_bases`
+    report -- with the prefix in place there is nothing left for such a
+    report to find, so tracking it separately would be dead code asserting
+    an empty result forever.
     """
+    maps_dir = _write_maps(tmp_path, {
+        1: _map(1, [_event(1, [[_switch_cmd(50, 0)]])]),
+        2: _map(2, [_event(2, [[_var_cmd(101, operation=0, operand_type=0, operand=4)]])]),
+    })
+    sw_json, var_json = _write_sidecars(
+        tmp_path, {50: "Quest"}, {101: "Quest"}
+    )
+    chapters_json = _write_chapters(tmp_path, [])
+
+    derivation = derive_capability_sites(maps_dir, sw_json, var_json, chapters_json)
+    assert not hasattr(derivation, "colliding_bases")
+
+    switch_sites = derivation.grant_sites("quest")
+    variable_sites = derivation.grant_sites("var_quest_4")
+    assert switch_sites and variable_sites
+    assert {s.row_id for s in switch_sites}.isdisjoint(
+        {s.row_id for s in variable_sites}
+    )
+
+
+def test_real_corpus_final_event_and_var_final_event_stay_distinct() -> None:
+    """The real corpus's `final_event` base (switch 125 and variable 127)
+    is the actual case #93 was filed against. Confirms the guard doesn't
+    trip on it and the two tokens resolve to disjoint, non-empty sites."""
     derivation = derive_capability_sites()
 
-    assert "final_event" in derivation.colliding_bases
-    switch_id, var_id = derivation.colliding_bases["final_event"]
-    assert (switch_id, var_id) == (125, 127)
-
-    bare = derivation.grant_sites("final_event")
-    suffixed = derivation.grant_sites("final_event_2")
-    assert bare and suffixed
-    assert {s.row_id for s in bare}.isdisjoint({s.row_id for s in suffixed})
+    switch_sites = derivation.grant_sites("final_event")
+    variable_sites = derivation.grant_sites("var_final_event_2")
+    assert switch_sites and variable_sites
+    assert {s.row_id for s in switch_sites}.isdisjoint(
+        {s.row_id for s in variable_sites}
+    )

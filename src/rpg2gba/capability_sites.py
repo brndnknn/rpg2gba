@@ -49,14 +49,25 @@ codes:
 
 **Capability tokens.** `blocked:` arguments are lowercase
 `^[a-z][a-z0-9_]*$` tokens (`chapter_manifest.schema`'s `_CAPABILITY_TOKEN`).
-A switch's token is the slug of its Uranium label (`FINAL EVENT` ->
-`final_event`); a variable's token additionally embeds the threshold
-achieved by some constant write in the corpus, because `blocked:` specs like
-"Quest Log >= 4" are meaningless without a number (`Quest Log`, value `4` ->
-`quest_log_4`). `s:`-prefixed switches (`uranium_switches.json`'s runtime
-predicates -- self-switch checks, time-of-day) are excluded entirely, never
-minting a token (`CLAUDE.md` §6). Two switches (or a switch and a variable
-threshold) slugging to the same token is a fail-loud condition
+A switch's token is the bare slug of its Uranium label (`FINAL EVENT` ->
+`final_event`); a variable's token is `var_`-prefixed and additionally
+embeds the threshold achieved by some constant write in the corpus, because
+`blocked:` specs like "Quest Log >= 4" are meaningless without a number
+(`Quest Log`, value `4` -> `var_quest_log_4`). The `var_` prefix
+(`PROJECT_TODO.md` #93, `REDERIVATION_PLAN.md` §10 R1, operator ruling
+2026-09-10) makes the *kind* of gate legible in the disposition itself and
+resolves five bases in the Uranium corpus that would otherwise name both a
+switch and a variable (`final_event`, `first_strike`, `gym_2_gempuzzle`,
+`gym_4_puzzle`, `dream_palace_grotto`) -- without it, `blocked:final_event`
+(switch 125) and `blocked:final_event_2` (variable 127) would read as one
+capability at two thresholds when they are two unrelated game objects.
+`token_for_label` fail-louds (`CapabilitySitesError`) if a *switch* label
+would itself slug to something starting with the reserved `var_` prefix,
+since minting it would re-open that exact collision; no label in the
+current corpus trips this. `s:`-prefixed switches (`uranium_switches.json`'s
+runtime predicates -- self-switch checks, time-of-day) are excluded
+entirely, never minting a token (`CLAUDE.md` §6). Two switches (or two
+variable thresholds) slugging to the same token is a fail-loud condition
 (`AmbiguousTokenError`): an ambiguous capability token is worse than no
 token at all, because it would silently conflate two different in-game
 facts.
@@ -88,6 +99,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 from rpg2gba.chapter_manifest.schema import page_row_id
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
@@ -134,20 +146,40 @@ def _fold_accents(name: str) -> str:
     return "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
 
 
-def token_for_label(label: str) -> str:
+_VARIABLE_TOKEN_PREFIX = "var_"
+
+
+def token_for_label(
+    label: str, *, kind: Literal["switch", "variable"] = "switch"
+) -> str:
     """Slug a Uranium switch/variable label into a `blocked:` capability
     token (`^[a-z][a-z0-9_]*$`).
 
-    `"FINAL EVENT"` -> `"final_event"`, `"Got Pokemon"` -> `"got_pokemon"`.
-    Mirrors `pbs_converter._naming.to_constant`'s cleaning rules (drop
-    apostrophes/periods, fold accents, collapse non-alphanumeric runs to one
-    underscore) but lowercases instead of upper-casing -- a `blocked:`
-    capability token is a different vocabulary from a C constant, and
-    `_CAPABILITY_TOKEN`'s grammar is lowercase-first, not `PREFIX_UPPER`.
+    `"FINAL EVENT"` -> `"final_event"` (switch), `"Got Pokemon"` ->
+    `"got_pokemon"` (switch), `"Quest Log"` -> `"var_quest_log"` (variable,
+    before a threshold suffix is appended by the caller). Mirrors
+    `pbs_converter._naming.to_constant`'s cleaning rules (drop apostrophes/
+    periods, fold accents, collapse non-alphanumeric runs to one underscore)
+    but lowercases instead of upper-casing -- a `blocked:` capability token
+    is a different vocabulary from a C constant, and `_CAPABILITY_TOKEN`'s
+    grammar is lowercase-first, not `PREFIX_UPPER`.
+
+    `kind="variable"` prefixes the slug with `var_` (`PROJECT_TODO.md` #93,
+    `REDERIVATION_PLAN.md` §10 R1): a switch's token names a boolean story
+    gate directly, while a variable's token needs a threshold appended by
+    the caller (`Quest Log` @ 4 -> `var_quest_log_4`) and the prefix makes
+    the *kind* of gate legible in the disposition itself. `kind="switch"`
+    (the default) keeps the bare slug -- switches are the common case and
+    stay unprefixed so a plain boolean gate like `blocked:got_pokemon`
+    reads with no noise.
 
     Raises `CapabilitySitesError` if the label slugs to nothing at all (a
     label that is only punctuation) -- that is not a valid token under any
-    rule and must not silently become an empty string.
+    rule and must not silently become an empty string. Also raises for
+    `kind="switch"` if the slug itself starts with the reserved `var_`
+    prefix -- minting it would re-open the exact collision the prefix
+    exists to prevent (a switch and a variable both claiming the same base
+    name), so this fails loud rather than mint an ambiguous-looking token.
     """
     cleaned = _DROP.sub("", _fold_accents(label))
     snake = _SEP.sub("_", cleaned).strip("_").lower()
@@ -160,7 +192,18 @@ def token_for_label(label: str) -> str:
         # that starts with a digit (rare, but the sidecars are hand-authored
         # Uranium prose) would otherwise produce an invalid token silently.
         snake = f"c_{snake}"
-    return snake
+    if kind == "switch":
+        if snake.startswith(_VARIABLE_TOKEN_PREFIX):
+            raise CapabilitySitesError(
+                f"switch label {label!r} slugs to {snake!r}, which starts "
+                f"with the reserved {_VARIABLE_TOKEN_PREFIX!r} prefix -- "
+                "that prefix is reserved for variable-derived tokens "
+                "(PROJECT_TODO.md #93) and minting it for a switch would "
+                "re-open the exact base-name collision the prefix exists "
+                "to prevent; rename the switch label"
+            )
+        return snake
+    return f"{_VARIABLE_TOKEN_PREFIX}{snake}"
 
 
 @dataclass(frozen=True)
@@ -240,16 +283,18 @@ class CapabilityDerivation:
     # base token (no threshold suffix) -> variable id, so `grant_sites` can
     # answer a threshold nobody happened to write. See `_resolve_threshold`.
     variable_tokens: dict[str, int] = field(default_factory=dict)
-    # Bases where a switch label and a variable label slug the same way, so
-    # `<base>` names the switch and `<base>_<n>` names the VARIABLE -- two
-    # unrelated game objects behind near-identical tokens. Not an
-    # `AmbiguousTokenError`: no two tokens actually collide, each resolves
-    # deterministically, and raising would break a derivation that is
-    # otherwise correct. But `blocked:final_event` (switch 125) and
-    # `blocked:final_event_2` (variable 127) read as one capability at two
-    # thresholds and are not, so this is surfaced rather than left for a
-    # reviewer to not notice (CLAUDE.md §4.5).
-    colliding_bases: dict[str, tuple[int, int]] = field(default_factory=dict)
+    # NOTE: a prior revision tracked `colliding_bases` here -- bases where a
+    # switch label and a variable label slugged the same way, so `<base>`
+    # named the switch and `<base>_<n>` named the VARIABLE (five such bases
+    # existed: `final_event`, `first_strike`, `gym_2_gempuzzle`,
+    # `gym_4_puzzle`, `dream_palace_grotto`). `token_for_label`'s `var_`
+    # prefix on variable-derived tokens (`PROJECT_TODO.md` #93,
+    # `REDERIVATION_PLAN.md` §10 R1) removed the collision by construction:
+    # a variable's base is now always `var_<slug>`, and `token_for_label`
+    # fail-louds if a switch label would itself slug to a `var_`-prefixed
+    # string. With the guard in place, `<base>` (switch) and
+    # `var_<base>_<n>` (variable) can no longer read as the same capability
+    # at two thresholds, so there is nothing left to detect or report here.
 
     def grant_sites(self, token: str) -> tuple[CapabilitySite, ...] | None:
         if token in self._grants:
@@ -428,29 +473,6 @@ def _scan_writes(
     return switch_writes, variable_writes
 
 
-def _switch_variable_base_collisions(
-    token_sources: dict[str, list[tuple[str, int]]],
-    variable_tokens: dict[str, int],
-) -> dict[str, tuple[int, int]]:
-    """Bases claimed by both a switch label and a variable label.
-
-    Five exist in the Uranium corpus as of 2026-09-10 (`final_event`,
-    `first_strike`, `gym_2_gempuzzle`, `gym_4_puzzle`,
-    `dream_palace_grotto`). Reported, not raised -- see `colliding_bases`."""
-    collisions: dict[str, tuple[int, int]] = {}
-    for base, var_id in variable_tokens.items():
-        switch_ids = [i for kind, i in token_sources.get(base, []) if kind == "switch"]
-        if switch_ids:
-            collisions[base] = (switch_ids[0], var_id)
-    if collisions:
-        logger.warning(
-            "%d capability base token(s) name both a switch and a variable, "
-            "so `<base>` and `<base>_<n>` refer to different game objects: %s",
-            len(collisions), sorted(collisions),
-        )
-    return collisions
-
-
 def _register_token(
     token_sources: dict[str, list[tuple[str, int]]],
     token: str,
@@ -503,7 +525,7 @@ def derive_capability_sites(
 
     for switch_id, writes in by_switch.items():
         label = writes[0].switch_label
-        token = token_for_label(label)
+        token = token_for_label(label, kind="switch")
         _register_token(token_sources, token, ("switch", switch_id))
         on_sites = [
             CapabilitySite(
@@ -525,7 +547,7 @@ def derive_capability_sites(
 
     for var_id, writes in by_variable.items():
         label = writes[0].variable_label
-        base_token = token_for_label(label)
+        base_token = token_for_label(label, kind="variable")
         determined_values = sorted({
             w.value for w in writes if w.determined and w.value is not None
         })
@@ -569,8 +591,6 @@ def derive_capability_sites(
         _undetermined=undetermined,
         token_sources={t: tuple(s) for t, s in token_sources.items()},
         variable_tokens=variable_tokens,
-        colliding_bases=_switch_variable_base_collisions(
-            token_sources, variable_tokens),
     )
     return derivation
 
