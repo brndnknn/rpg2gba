@@ -2498,3 +2498,81 @@ closes. Update `01-moki.md` / `03-kevlar-town.md` beat tables to match; the
 deserialized event data, not a row-by-row human verification. Re-confirm each
 row against `output/uranium-build/maps/Map0{64,65,73,89}.json` when the work is
 picked up.
+
+### 92. The capability model cannot see field capabilities, because Uranium has no HMs
+
+*Filed 2026-09-10, out of building `src/rpg2gba/capability_sites.py` (`714d8832`).*
+
+`capability_sites.py` derives a capability's grant sites by scanning every map
+for `code 121` (Control Switches) and `code 122` (Control Variables) writes.
+That resolves story gates cleanly — `final_event` → `map199/ev001/p0` (CH57),
+`gym_1_defeated` → `map042/ev003/p0` (CH06), `quest_log_4` → `map032/ev009/p2`
+(CH01). It resolves **`rock_smash` and `surf` to nothing at all**, so CH04's 28
+`blocked:rock_smash` rows and CH05's 4 `blocked:surf` rows still report
+`capability_model_unenforced` — now for a computed reason rather than for want
+of a model, but unenforced either way.
+
+**Why (operator, 2026-09-10): there are no HMs in this game.** Completing a gym
+unlocks the move, and the badge is what permits using it in the field. For at
+least some capabilities there is **also an item** granting the same ability. The
+real gate on a Rock Smash boulder is therefore **the badge AND (the move OR the
+item)**.
+
+Two things follow, and the second is the harder one:
+
+1. **The grant source is not a switch/variable write**, so no amount of
+   extending the `code 121`/`122` scan will find it. It needs a different
+   source — badge state, move/item possession, or whatever Uranium actually
+   records — identified before anything is built.
+2. **`blocked:<token>` cannot express a conjunction.** The verdict's argument is
+   a flat set of capability tokens (`blocked:a|b`, meaning all of them), so
+   `badge AND (move OR item)` has no representation: the `|` separator already
+   means AND-of-a-set, and there is no OR. Modelling this honestly means either
+   a compound grammar or a decision that the disjunction collapses (e.g. treat
+   "can rock smash" as one derived capability whose grant sites are the union of
+   the move-unlock and the item, gated on the badge). **That is a vocabulary
+   decision and belongs to the operator**, not to whoever implements it.
+
+Until then `blocked:rock_smash`/`blocked:surf` staying *unenforced* is the
+correct state — it is an honest "not checked", not a silent pass. Do not make it
+green by inventing a grant site.
+
+See `MEMORY.md` → Uranium-Specific Discoveries for the mechanic itself.
+
+### 93. Five capability base tokens name both a switch and a variable
+
+*Filed 2026-09-10, same commit as #92.*
+
+`capability_sites.token_for_label` slugs a Uranium switch or variable label into
+a `blocked:` token. A switch's token is the bare slug; a variable's embeds the
+threshold (`Quest Log`, 4 → `quest_log_4`). Five labels collide at the base:
+
+| base | switch | variable |
+|---|---|---|
+| `final_event` | 125 | 127 |
+| `first_strike` | 73 | 120 |
+| `gym_2_gempuzzle` | 67 | 108 |
+| `gym_4_puzzle` | 79 | 112 |
+| `dream_palace_grotto` | 207 | 207 |
+
+So `blocked:final_event` is **switch 125** (granted at `map199/ev001/p0`, CH57)
+while `blocked:final_event_2` is **variable 127** (CH56) — two unrelated game
+objects that read as one capability at two thresholds.
+
+**This is deliberately not an `AmbiguousTokenError`.** No two token *strings*
+collide, each resolves deterministically, and raising would break a derivation
+that is otherwise correct across all 268 tokens. It is surfaced on
+`CapabilityDerivation.colliding_bases` and logged, and pinned by
+`test_switch_and_variable_bases_that_collide_are_reported`. What is missing is
+the fix, which is a naming decision:
+
+- **Prefix variable tokens** (`var_quest_log_4`, switches stay bare) —
+  unambiguous, and makes the *kind* of gate visible at review time, which is
+  useful in its own right. Changes every threshold token.
+- **Prefix both** (`sw_final_event` / `var_final_event_2`) — symmetric, but
+  touches all 97 switch tokens for the sake of 5 collisions.
+- **Disambiguate only the 5** via an override table — least churn, but a
+  token's spelling would then depend on unrelated data, which is its own trap.
+
+Worth settling before CH01–CH03's dispositions are authored, since that is the
+first work to write `blocked:` tokens at volume.

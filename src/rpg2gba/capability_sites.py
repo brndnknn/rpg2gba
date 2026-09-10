@@ -65,6 +65,20 @@ facts.
 chapters.json` for its owning chapter -- `None` if no chapter claims that
 map yet, never a hard failure (a map genuinely can be unowned at this stage
 of the corpus).
+
+**Known limit: field capabilities are invisible to this module, by nature
+rather than by omission.** `rock_smash` and `surf` resolve to nothing here,
+so CH04's 28 `blocked:rock_smash` rows and CH05's 4 `blocked:surf` rows stay
+`capability_model_unenforced`. **Uranium has no HMs** (operator, 2026-09-10):
+completing a gym unlocks the move, the badge permits using it in the field,
+and for at least some capabilities an *item* grants the same ability -- so
+the real gate is `badge AND (move OR item)`. None of that is a `code 121` or
+`code 122` write, so extending the scan cannot reach it; and `blocked:a|b`
+means AND-of-a-set with no OR, so the disjunction has no representation in
+the verdict grammar either. Leaving these *unenforced* is the correct state:
+it is an honest "not checked", not a silent pass. Do not make them green by
+inventing a grant site. See `PROJECT_TODO.md` #92 and `MEMORY.md` ->
+Uranium-Specific Discoveries.
 """
 from __future__ import annotations
 
