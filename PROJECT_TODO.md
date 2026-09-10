@@ -1424,10 +1424,33 @@ archive is pre-normalization by design (raw `\"` escapes and `healparty` present
 
 **Why it is scoped to CH06 rather than left unscheduled.** Measured across all 199
 decoded maps, common events are called from only **73 sites on 22 maps, 6 distinct
-CEs** — and **zero** of those maps are in the current 18-map `SLICE_MAP_IDS`, which is
-why five chapters shipped without touching one. CH06's **Map043** calls CE 4, 5 and 6
-(one each; the only `code 117` calls anywhere in maps 40–47), making it the corpus's
-first in-slice CE call site.
+CEs**. CH06's **Map043** calls CE 4, 5 and 6 (one each; the only `code 117` calls
+anywhere in maps 40–47).
+
+**Correction 2026-09-10 — the "zero in-slice" claim in this item was wrong.** It read
+*"**zero** of those maps are in the current 18-map `SLICE_MAP_IDS`, which is why five
+chapters shipped without touching one,"* and that is false: **`Map068` is CH03's, in
+slice since 2026-08-19, and has three `code 117` sites** — `ev009` "Receptionist TRADE"
+→ CE 4, `ev011` "Receptionist PVP" → CE 5, `ev013` "Receptionist TRADE" → CE 6. So
+CH06's Map043 is not the corpus's first in-slice CE call site; CH03's Map068 was, and
+five chapters did not ship without touching one.
+
+**The conclusion survives the correction, which is why this stays deferred.** Verified
+end to end 2026-09-10: the transpiler emits `call(CommonEvent_004/005/006)` at each
+receptionist, and `CommonEvents.pory` defines all three as
+`msgbox("The Tandor Network is unavailable.") / return` under a `# STRIPPED:`
+provenance comment. Map068's own events are **not** stripped — the NPCs remain and
+deliver the stub, which is the intended substitute for an online feature. So the
+in-slice exposure is real but already discharged, and it is to the strip path exactly
+as the next paragraph says.
+
+Two things this turned up for whoever does the harvest. `CommonEvents.pory` is **not a
+harvest from zero** — `CommonEvent_010` (RACING_Main) is already transpiled and carries
+its own `# UNHANDLED` comments. And CH03's three receptionist rows
+(`map068/ev009|ev011|ev013/p0`) each carry `effects: ['common_event']` and nothing
+else: `common_event` is in `STATE_WRITING_TAGS`, so the tag rule forbids `cosmetic`,
+yet these provably only show a box and return. They are cheap `beat:` rows, and a clean
+example of a state-writing *tag* on a row that writes no state.
 
 **Mitigating, and worth confirming rather than assuming:** all three are already in
 `reference/strip_list.json` → `common_events`, tagged `"online (phase0: scripts
