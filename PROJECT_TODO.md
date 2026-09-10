@@ -1082,6 +1082,9 @@ convention anywhere; it should, so a future chapter author doesn't have to
 rediscover it by breaking a closed chapter's beats. See also #73, the tooling
 half of the same gap.
 
+**RESOLVED 2026-09-09** (`2b6a3b6e`). Written into `BUILD_PLAN.md` §2 alongside
+the ROUTE/BUILD reorder, with CH04's B7 as the worked example of the cost.
+
 ### 73. `build_beat_model` cannot see a boundary row claimed by the arriving chapter
 
 `chapter_manifest`'s `build_beat_model` loads a chapter's own playtest module
@@ -1095,6 +1098,25 @@ an error, because CH04 is not the live chapter, so it does not fail the gate;
 it is counted debt. The real fix is letting `BeatModel` see a boundary row
 claimed by the chapter that is arriving, not just the ones that came before
 it. This is the tooling half of #72's convention.
+
+**MECHANISM LANDED 2026-09-10** (`14aa6f43`); the symptom is still open, on
+purpose. Rather than teach `BeatModel` to look forward, the answer is a new
+argument-free `boundary` disposition verdict plus `chapter_manifest/
+boundary_model.py`, which checks both halves of the claim: that the row really
+is a forward crossing (`slice_growth` for `code 201`, `seam_growth` for map
+connections — either alone is blind to half the corpus's boundaries), and that
+the successor chapter's registered `Beat.rows` actually claim it. See
+`ChapterBinding.successor` for the forward accessor `chapters.json` never had.
+
+**Still open:** `map035/ev001/p1` continues to report `unregistered_beat`,
+because nothing has switched CH04's disposition to `boundary` — those
+dispositions are re-derived under `REDERIVATION_PLAN.md`'s P7 freeze and
+editing them early would corrupt it. Two further facts for whoever does:
+only **`p0`** is a valid `boundary` candidate (`p1` is an arrival-nudge autorun,
+not a transfer, and `is_forward_crossing` rejects it), and **CH04 and CH05
+currently contradict each other in writing** about who owns the event — CH04's
+`DEFERRED_BEATS` reason says CH05 claims the row, `ch05.py`'s docstring says
+twice that it does not, and no CH05 beat lists it.
 
 ### 74. ROUTE runs before object events exist, so its crossing check is vacuous
 
@@ -1160,6 +1182,13 @@ that trainer — re-solving CH05 with real per-map cone data but no per-segment
 exemption went from 155 to 233 tiles and produced an incoherent order before
 the resolved-trigger union was added. Verify these line numbers against the
 current file before relying on them; the file is under active routing work.
+
+**RESOLVED 2026-09-10** (`18869baf`). The set is now a chapter-wide base
+unioned, per segment, with the destination group's own trigger scripts, keyed
+on the segment's destination point only (which the site cache key already
+includes). Derived through `page_row_script`, the same row-id-to-script join
+`resolved_trigger_scripts` uses, so a row maps to a script name once in this
+codebase (§4.3).
 
 ### 77. No automated check that the authored chapter module matches its locations plan
 
