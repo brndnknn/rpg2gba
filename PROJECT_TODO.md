@@ -2539,11 +2539,11 @@ green by inventing a grant site.
 
 See `MEMORY.md` → Uranium-Specific Discoveries for the mechanic itself.
 
-### 94. The archetype classifier is not open for extension
+### 94. DONE 2026-09-10 — the archetype classifier is not open for extension
 
 *Filed 2026-09-10. Prerequisite for `REDERIVATION_PLAN.md` §13.3's template program.*
 
-`classify_event` (`chapter_manifest/archetypes.py:198-224`) dispatches through a
+`classify_event` (`chapter_manifest/archetypes.py`) dispatched through a
 hand-written `if`/`elif` sequence, and `ARCHETYPE_NAMES` is a literal set. Adding
 an archetype means editing both by hand plus writing the template module — three
 edits in two files, none of which a new archetype can register itself into.
@@ -2560,6 +2560,29 @@ Note the constraint this must preserve: the `playtest/archetypes/` templates are
 file stays a linear approvable document with hand-controlled registration order.
 A registry changes how a *classifier* finds its matchers, not how a chapter
 registers its beats.
+
+**DONE 2026-09-10** (`c91f70d3`). `classify_event`'s hand-written sequence is now
+a walk over `_ARCHETYPE_REGISTRY`, a tuple of frozen `_ArchetypeEntry(name, level,
+matcher)` records; `ARCHETYPE_NAMES` is derived from that registry instead of
+restated beside it, so the set and the dispatch can no longer drift.
+`_build_registry` raises on a duplicate name or an unknown level rather than
+tolerating either (§4.5). Adding a fifth archetype is now one matcher plus one
+registry line. The constraint this entry named is preserved untouched: the
+`playtest/archetypes/` templates remain author-called, and registration order in
+the chapter file is still hand-controlled.
+
+Pure refactor, verified rather than assumed — the committed module and the
+working tree were both loaded and run over all five chapters' manifests, giving
+identical `ArchetypeMatch` output (111 matches, 30/29/31/9/12).
+
+**One sharp edge survives the refactor deliberately, and the next archetype has
+to know about it.** Event-level entries run in registry order and **once any
+event-level entry claims rows, no later event-level entry gets a turn** — so a
+third event-level archetype would be silently skipped on every event a trainer
+already matched. Today's four entries hide this (only `trainer` and `item_ball`
+are event-level and they do not overlap). `REDERIVATION_PLAN.md` §13.3's T1 third
+item — `pbReceiveItem` NPC gifts — is the first candidate that would be
+event-level and make this load-bearing.
 
 ### 95. `derive_blocked_verdict` asks the wrong question about obstacle rows
 

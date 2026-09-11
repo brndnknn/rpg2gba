@@ -199,7 +199,7 @@ prerequisite.
 |---|---|---|---|
 | **P7** | **Freeze.** Write the expected answers for all four chapters from their committed, gate-passed artifacts *before* generating anything. Per #62, verbatim: *freeze the expected answers, derive, diff, then write — never derive-and-write in one pass, or a regression in the derivation logic reads as a correct re-disposition.* Precedent for the format: `reference/frozen/archetype_expectations.json`. | #62 | **DONE** `aaae306e` |
 | **P8** | **Derive, diff, adjudicate the manifests** — CH01–CH04, one chapter at a time, diffed against P7's freeze. Every diff line classified 1/2/3 per §1. Category-3 lines stop the pass. Also carries §10 R3's two code changes and R1's `var_` prefix. | #65 | **DONE** — CH01 `55b98f51`, CH02/CH03 adjudicated + committed, CH04 clean. All category 1. |
-| **P8a** | **Re-author CH01–CH04's beats onto the archetype templates**, adopting `entry_at`, paying the coordinate literals down to zero (§5). Every template call populates `rows=` and `archetype=`, which is what makes P8b derivable. Ordered before P8b by §13's ruling. Needs #94 (registry) and the §13.3 templates it depends on. | #67, §13 | TODO |
+| **P8a** | **Re-author CH01–CH04's beats onto the archetype templates**, adopting `entry_at`, paying the coordinate literals down to zero (§5). Every template call populates `rows=` and `archetype=`, which is what makes P8b derivable. Ordered before P8b by §13's ruling. Needs the §13.3 templates it depends on; #94 (registry) is DONE 2026-09-10 (`c91f70d3`) and no longer gates this. | #67, §13 | TODO |
 | **P8b** | **Generate the disposition files** — derive `cosmetic`/`blocked`/`unreachable`/`boundary`, join `beat:` off P8a's `rows=`, hand-decide the ~109-row residue (§13.1). Affirmation is a separate pass from derivation. Carries §10 R2/R3's flip on CH04+CH05. | #65 | TODO |
 | **P9** | **Route plans** for all four chapters (`routing plan --chapter CHnn --module <mod>`). Still last: `routing locations` hard-fails without P8b's output. | #67 | TODO |
 | **P10** | **Discharge the inherited obligations** (§4) and delete the scaffolding that expires with this task. | — | TODO |
@@ -685,7 +685,11 @@ T1+T2 alone take mechanical coverage of the non-inert corpus from ~28.5% to roug
 **Blocker on all of it: the classifier is not open for extension.** `classify_event`
 (`archetypes.py:198-224`) is a hand-written `if`/`elif` sequence and `ARCHETYPE_NAMES` is a
 literal set; a fifth archetype means editing both by hand. Tolerable at five, untenable at
-fifteen. **Converting that dispatch to a registry is step zero** — filed as **#94**.
+fifteen. **Converting that dispatch to a registry is step zero** — filed as **#94**,
+**DONE 2026-09-10** (`c91f70d3`): `_ARCHETYPE_REGISTRY` is the dispatch now and
+`ARCHETYPE_NAMES` derives from it. Read #94's closing note before writing an
+event-level matcher — event-level precedence is first-claim-wins, so a third
+event-level archetype is silently skipped on any event `trainer` already matched.
 
 ### 13.4 The transpile-candidate list
 
