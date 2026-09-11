@@ -10,6 +10,23 @@
 
 ## Retired Session Summaries
 
+## Archived 2026-09-11 — Last Session Summary entry 2026-09-10/11 (why a disposition file is hand-authored, and the P8/P9 reordering)
+
+**2026-09-10/11 (why a disposition file is hand-authored, and the answer reordering `REDERIVATION_PLAN.md` P8/P9):** Four commits on `rederive-ch01-ch04`. The plan's new §13 owns the detail; what is durable beyond it is here.
+
+**A disposition file is ~70% a join the code could make for itself.** Four of the five verdicts already derive — `as_disposition()` emits `blocked:`/`unreachable:` in the exact authored spelling, `may_be_cosmetic` gates `cosmetic`, `boundary_model` derives `boundary`. Only `beat:` does not, **and that is a data gap, not a logic gap: 0 of CH01–CH04's 74 own beats carry `rows=`; all 19 of CH05's do.** Joining off `Beat.rows` for CH05 finds 21 row-refs against 21 authored `beat:` rows, exact set match, the only differences being beat-family heads `beat_model.py`'s prefix rule already governs. A generator ignoring `rows=` scores 24/42 on CH04 and 4/25 on CH05 — that control is what proves the gap is the missing join. **Consequence: P8 split, beat re-authoring (P8a, which populates `rows=`) now precedes disposition generation (P8b); P9 still last because `routing locations` hard-fails without dispositions.** Affirmation stays a separate pass from derivation or `RULE_UNAFFIRMED_DISPOSITION` goes vacuous.
+
+**The residue is the real content, and it is ~109 rows, not 425.** Rows unclaimed by any archetype: 178/29/91/22 = 320; `may_be_cosmetic` covers 211 of them, leaving 52/12/37/8 where nothing mechanical has an opinion. That remainder is where someone decides whether a piece of Uranium is worth testing; the rest is clerical.
+
+**Corpus census, for when template ROI is questioned again:** 199 maps, 8197 event pages, 630 fingerprints, the four archetypes covering 28.5%. **The single largest shape is 3545 pages on 150 maps with no commands at all** — idle poses and resolved pages — so the population that wants a beat is ~2586, not 8197. Eleven template candidates and ten transpile candidates are listed in plan §13.3/§13.4. Biggest single win is the flavour-NPC family (~915 pages): **eight fingerprint clusters collapse to one family**, fragmenting only on cosmetic tags (`pbCallBub`, `se`, a `random()` line-picker). Branching is 21.5% of pages but **shallow and wide — 75% have exactly one branch, 81% never nest past indent 1.**
+
+**Landed:** #94, the classifier's `if`/`elif` dispatch is a registry now (pure refactor, verified by running the committed module and the working tree side by side over all five chapters — 111 matches, identical). Then T1's two loosenings: `arrival_nudge` no longer demands a `graphic` tag, `item_ball` no longer demands a page-1 spent row. Strictly additive, two rows moved, both CH03, `archetype_expectations.json` unaffected.
+
+**Two things worth remembering past this task.** (1) **`derive_blocked_verdict` asks the wrong question about obstacle rows** — whether a tile *beside* the rock is reachable, never whether the rock can be *cleared* — so 5 of CH04's committed `blocked:rock_smash` rows do not reproduce. Filed **#95**; derived `blocked:` is unreliable on exactly the class #92 flagged. (2) **The manifest records the self-switch letter a page READS, never the one it WRITES.** A single-page item ball therefore has no letter to derive, and the first draft of `item_ball_beats` defaulted to `"A"` — a §4.5 silent default that would assert the wrong flag on a ball writing `B`. It demands the letter from the author now, and refuses one that contradicts a spent row when one exists.
+
+**Open, and live before §13.3's flavour-NPC family lands:** the event-level dispatch keeps a sharp edge the registry refactor deliberately preserved — **once any event-level archetype claims rows, no later event-level entry gets a turn.** A third event-level archetype would be silently skipped on every event a trainer already matched. Also open: T1's third item (`pbReceiveItem` NPC gifts, 31 pages / 21 maps) is unstarted and is a design fork, not a loosening — an NPC gift speaks and has a re-talk page, so it is plausibly its own archetype rather than a widened `item_ball`, and it would be event-level, which makes the sharp edge above load-bearing.
+
+
 ## Archived 2026-09-11 — Last Session Summary entry 2026-09-10 (Phase A and B of the CH01–CH04 re-derivation close)
 
 **2026-09-10 (Phase A and B of the CH01–CH04 re-derivation close — `REDERIVATION_PLAN.md` P3/P4b):** Three commits on `main`; the plan doc owns the step-by-step state, so only what is durable beyond it is here.

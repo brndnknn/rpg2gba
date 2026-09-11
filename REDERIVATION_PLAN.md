@@ -199,8 +199,9 @@ prerequisite.
 |---|---|---|---|
 | **P7** | **Freeze.** Write the expected answers for all four chapters from their committed, gate-passed artifacts *before* generating anything. Per #62, verbatim: *freeze the expected answers, derive, diff, then write — never derive-and-write in one pass, or a regression in the derivation logic reads as a correct re-disposition.* Precedent for the format: `reference/frozen/archetype_expectations.json`. | #62 | **DONE** `aaae306e` |
 | **P8** | **Derive, diff, adjudicate the manifests** — CH01–CH04, one chapter at a time, diffed against P7's freeze. Every diff line classified 1/2/3 per §1. Category-3 lines stop the pass. Also carries §10 R3's two code changes and R1's `var_` prefix. | #65 | **DONE** — CH01 `55b98f51`, CH02/CH03 adjudicated + committed, CH04 clean. All category 1. |
-| **P8a** | **Re-author CH01–CH04's beats onto the archetype templates**, adopting `entry_at`, paying the coordinate literals down to zero (§5). Every template call populates `rows=` and `archetype=`, which is what makes P8b derivable. Ordered before P8b by §13's ruling. Needs the §13.3 templates it depends on; #94 (registry) is DONE 2026-09-10 (`c91f70d3`) and no longer gates this. | #67, §13 | TODO |
-| **P8b** | **Generate the disposition files** — derive `cosmetic`/`blocked`/`unreachable`/`boundary`, join `beat:` off P8a's `rows=`, hand-decide the ~109-row residue (§13.1). Affirmation is a separate pass from derivation. Carries §10 R2/R3's flip on CH04+CH05. | #65 | TODO |
+| **P8a-1** | **Declare `rows=` (and `archetype=`) on every CH01–CH04 beat.** The half of P8a that P8b actually needs: §13.1's join input. Done by annotating the existing hand-written beats rather than by template adoption — the templates populate `rows=` as a side effect, but the declaration is the deliverable and does not require them. | #67, §13 | **DONE 2026-09-11** — CH04 `962bf578`, CH02 `677ef344`/`d62be7d3`, CH01+CH03 `8fe197d8`. 48 of the 74 own beats carry `rows=`, 73 rows claimed, 22 carry `archetype=`; the other 26 beats claim nothing and each file records why. |
+| **P8a-2** | **Re-author those beats onto the archetype templates**, adopting `entry_at`, paying the coordinate literals down to zero (§5). Now a code-quality and assertion-strength step, not a P8b prerequisite. Needs the §13.3 templates; #94 (registry) is DONE 2026-09-10 (`c91f70d3`) and no longer gates it. **Read §5's warning first: some literals are load-bearing ROM-verified truth, and the AST ratchet counts literals without ever asking whether one is still true.** | #67, §13 | TODO |
+| **P8b** | **Generate the disposition files** — derive `cosmetic`/`blocked`/`unreachable`/`boundary`, join `beat:` off P8a-1's `rows=` (which now exist), hand-decide the ~109-row residue (§13.1). Affirmation is a separate pass from derivation. Carries §10 R2/R3's flip on CH04+CH05. | #65 | TODO |
 | **P9** | **Route plans** for all four chapters (`routing plan --chapter CHnn --module <mod>`). Still last: `routing locations` hard-fails without P8b's output. | #67 | TODO |
 | **P10** | **Discharge the inherited obligations** (§4) and delete the scaffolding that expires with this task. | — | TODO |
 
@@ -651,6 +652,45 @@ its own pass.
 `playtest/archetypes/` templates are *not* a generator — the chapter file remains a linear,
 approvable document with hand-controlled registration order. Nothing here changes that: P8a
 is a human calling more templates, not a script writing `ch01.py`.
+
+### 13.2a What P8a-1 found, 2026-09-11
+
+The ruling above assumed `rows=` arrives as a side effect of template adoption. It does
+not have to, and separating them turned out to matter: the declaration is one keyword
+argument per beat, while template adoption is a rewrite of gate-passed beats carrying
+ROM-verified specifics. P8a-1 shipped the declaration alone and unblocked P8b; P8a-2 keeps
+the rewrite.
+
+**26 of the 74 beats claim no row, and that is the answer, not a gap.** Four recurring
+shapes, each documented in the chapter file that hit it:
+
+1. **Several beats, one page.** RMXP packs an intro, a choice and both branches into a
+   single page, so CH01's B6/N3 and B8/B9 contend for one row. Rule applied: the row goes to
+   the beat that asserts the most about it. CH02's N1/N2/N4 and CH03's three are the same.
+2. **Proving a dispatcher inert is not exercising a page.** CH01's B14 re-crosses at
+   `VAR_QUEST_LOG >= 4`, where the touch dispatcher falls to `end`; `map032/ev009/p3` is live
+   at that value but is action-trigger and B14 never presses A.
+3. **No row kind represents it.** Boot state, a terminal checkpoint, a wild-encounter table,
+   trainer pacing (a movement type belongs to the object event, not a page), and CH03's seven
+   warp-arrival-facing / map-BGM beats.
+4. **Boundary crossings — five of them, all waiting on P8b.** CH01→CH02 `map032/ev023/p0`,
+   CH02→CH03 `map033/ev046/p0`, CH03's `map031/seam/N/map035`, and CH04/CH05's known two.
+   None is claimed yet: §10 R2/R3 gives the row to the ARRIVING chapter through
+   `boundary_model.successor_claims`, **no chapter in the corpus makes such a claim today**
+   (CH05 claims only maps 36/37, so R2 is ruled and unimplemented), and claiming for one pair
+   alone would reintroduce the inconsistency §10 removes.
+
+**"Seam" in a beat description means a warp twice out of three times.** CH02's B1 and CH03's
+B1 both say "crossing"/"seam" and both cross a `code 201` warp; `connections.json` has neither
+a 32↔33 nor a 33↔31 edge. Only CH03's B25 sits on a real connection. Both misreadings were
+made and corrected during this pass — check `connections.json` before believing the prose.
+
+**One silently fatal bug surfaced.** `playtest/chapter.py`'s seam row-id regex read
+`(NORTH|SOUTH|EAST|WEST)`; real ids are single letters, straight from `connections.json`, so
+the pattern matched nothing the generator has ever emitted and no beat could claim a seam row
+at all. CH04's B1 was the first to try. Fixed with `tests/test_beat_row_ids.py`, which
+validates every row id in every committed manifest against the validator — the comparison
+that was missing in both this drift and #94's.
 
 ### 13.3 The template-candidate list
 
