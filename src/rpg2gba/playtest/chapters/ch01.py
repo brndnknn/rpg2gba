@@ -245,9 +245,43 @@ def b1(emu: Emulator) -> None:
 
 # -- B2 --------------------------------------------------------------------
 
+# `rows=` on the beats below (P8a, REDERIVATION_PLAN.md 13.1) records which
+# chapter-manifest rows each beat actually exercises, so the disposition
+# generator can join `beat:` instead of a human hand-writing it. Every mapping
+# was confirmed against the COMPILED scripts (`engine/data/maps/*/scripts.inc`)
+# and each row's page condition in the manifest, not inferred from a beat's
+# prose. 13 rows across 12 beats; RMXP "Page1" is manifest `p0`.
+#
+# FIVE BEATS CLAIM NOTHING, and each is a different reason:
+#   B1  -- asserts the fresh save spawns in Map049. A boot state is not an
+#          event page, a seam or terrain, so no manifest row can represent it.
+#   B15 -- the terminal end-of-chapter checkpoint, same category.
+#   B6  -- "B5's scene reaches the Yes/No prompt" happens INSIDE
+#          `map050/ev005/p0`. RMXP has one page there carrying the intro, the
+#          choice and both branches; there is no separate page for "reached
+#          the prompt". N3 runs that branch to completion with flag and var
+#          assertions, so N3 takes the row and B6 declares nothing rather than
+#          double-claiming it.
+#   B9  -- same shape. The starter grant and Theo's battle are one script:
+#          `map050/ev019/p0` is the only page of that event with any commands
+#          (p1 and p2 are command-less, gated on VAR_QUEST_LOG >= 1 and >= 4).
+#          B8 claims it; B9 fights the battle the same page runs into.
+#   B14 -- re-crossing the ceremony tiles at VAR_QUEST_LOG >= 4. What it
+#          proves is that the event-touch DISPATCHER falls through to `end`,
+#          which is not the same as exercising a page: `map032/ev009/p3` is
+#          the page active at that quest-log value, but it is action-trigger
+#          and B14 never presses A, so its text is never reached. The page
+#          B14 shows does not re-fire is p2, and B13 already claims that.
+#
+# Where two beats touch one page, the row goes to the beat that asserts the
+# most about it -- the same rule used in ch02.py, and the one `oracle=` will
+# want when it lands.
+
+
 @ch01.beat("B2", "Leaving 1F before talking to Auntie is blocked",
            map_constant="MAP_MOKI_TOWN_PLAYERS_HOUSE_1F",
-           at=HOUSE1F_EXIT_APPROACH)
+           at=HOUSE1F_EXIT_APPROACH,
+           rows=("map049/ev002/p0",))
 def b2(emu: Emulator) -> None:
     _assert_house1f_exit_blocked(emu, "B2")
 
@@ -255,7 +289,8 @@ def b2(emu: Emulator) -> None:
 # -- B3 ----------------------------------------------------------------------
 
 @ch01.beat("B3", "Auntie grants FLAG_SYS_B_DASH; her gift-once flag is set",
-           map_constant="MAP_MOKI_TOWN_PLAYERS_HOUSE_1F", at=AUNTIE_INTERACT)
+           map_constant="MAP_MOKI_TOWN_PLAYERS_HOUSE_1F", at=AUNTIE_INTERACT,
+           rows=("map049/ev001/p0",))
 def b3(emu: Emulator) -> None:
     emu.walk_to(*AUNTIE_INTERACT)
     emu.face("UP")
@@ -274,7 +309,8 @@ def b3(emu: Emulator) -> None:
 # -- B4 ------------------------------------------------------------------
 
 @ch01.beat("B4", "Crossing Map032's fence-row tile fires Theo's cameo, once",
-           map_constant="MAP_MOKI_TOWN", at=FENCE_TRIP_APPROACH)
+           map_constant="MAP_MOKI_TOWN", at=FENCE_TRIP_APPROACH,
+           rows=("map049/ev002/p1", "map032/ev074/p0"))
 def b4(emu: Emulator) -> None:
     if emu.flag("FLAG_MAP032_EVENT074_SSA"):
         raise ScenarioError(
@@ -302,7 +338,8 @@ def b4(emu: Emulator) -> None:
 # -- B5 ------------------------------------------------------------------
 
 @ch01.beat("B5", "Entering the lab autoruns Bambo's intro scene",
-           map_constant="MAP_MOKI_TOWN", at=LAB_DOOR_MOKI_TOWN)
+           map_constant="MAP_MOKI_TOWN", at=LAB_DOOR_MOKI_TOWN,
+           rows=("map032/ev003/p0",), archetype="warp")
 def b5(emu: Emulator) -> None:
     _enter_door(emu, "B5", LAB_DOOR_MOKI_TOWN, "MAP_MOKI_TOWN_PROFESSOR_LAB")
     if not emu.field_locked():
@@ -348,7 +385,8 @@ def b6(emu: Emulator) -> None:
 
 # -- N3 (before B7's Yes answer, per interleaving instructions) -------------
 
-@ch01.beat("N3", "Answering No at the aptitude-test offer re-offers cleanly")
+@ch01.beat("N3", "Answering No at the aptitude-test offer re-offers cleanly",
+           rows=("map050/ev005/p0",))
 def n3(emu: Emulator) -> None:
     quest_log_before = emu.var("VAR_QUEST_LOG")
     emu.advance_dialog("B")  # B always answers a yesnobox NO (see helper)
@@ -373,7 +411,8 @@ def n3(emu: Emulator) -> None:
 # -- B7 ------------------------------------------------------------------
 
 @ch01.beat("B7", "Re-offer + Yes answer plays the 4-question quiz",
-           map_constant="MAP_MOKI_TOWN_PROFESSOR_LAB", at=BAMBO_INTERACT)
+           map_constant="MAP_MOKI_TOWN_PROFESSOR_LAB", at=BAMBO_INTERACT,
+           rows=("map050/ev005/p2",))
 def b7(emu: Emulator) -> None:
     emu.walk_to(*BAMBO_INTERACT)
     emu.face("UP")
@@ -410,7 +449,8 @@ def b7(emu: Emulator) -> None:
 # -- B8 ------------------------------------------------------------------
 
 @ch01.beat("B8", "Interacting with the Machine grants the starter",
-           map_constant="MAP_MOKI_TOWN_PROFESSOR_LAB", at=MACHINE_INTERACT)
+           map_constant="MAP_MOKI_TOWN_PROFESSOR_LAB", at=MACHINE_INTERACT,
+           rows=("map050/ev019/p0",), archetype="trainer")
 def b8(emu: Emulator) -> None:
     emu.walk_to(*MACHINE_INTERACT)
     emu.face("UP")
@@ -470,7 +510,8 @@ def b9(emu: Emulator) -> None:
 # -- B10 -----------------------------------------------------------------
 
 @ch01.beat("B10", "The lab exit warp unlocks once VAR_QUEST_LOG >= 1",
-           map_constant="MAP_MOKI_TOWN_PROFESSOR_LAB", at=LAB_EXIT_APPROACH)
+           map_constant="MAP_MOKI_TOWN_PROFESSOR_LAB", at=LAB_EXIT_APPROACH,
+           rows=("map050/ev001/p1",), archetype="warp")
 def b10(emu: Emulator) -> None:
     quest_log = emu.var("VAR_QUEST_LOG")
     if quest_log < 1:
@@ -485,7 +526,8 @@ def b10(emu: Emulator) -> None:
 # physically requires being back out in Map032, which only B10 provides) --
 
 @ch01.beat("N2", "Skipping Theo's house: the pre-Theo redirect writes no state",
-           map_constant="MAP_MOKI_TOWN", at=CEREMONY_APPROACH)
+           map_constant="MAP_MOKI_TOWN", at=CEREMONY_APPROACH,
+           rows=("map032/ev009/p1",))
 def n2(emu: Emulator) -> None:
     quest_log_before = emu.var("VAR_QUEST_LOG")
     if quest_log_before != 1:
@@ -517,14 +559,16 @@ def n2(emu: Emulator) -> None:
 # -- B11 -----------------------------------------------------------------
 
 @ch01.beat("B11", "Theo's house door is always open (the gate is inside)",
-           map_constant="MAP_MOKI_TOWN", at=THEO_HOUSE_DOOR)
+           map_constant="MAP_MOKI_TOWN", at=THEO_HOUSE_DOOR,
+           rows=("map032/ev017/p0",), archetype="warp")
 def b11(emu: Emulator) -> None:
     _enter_door(emu, "B11", THEO_HOUSE_DOOR, "MAP_MOKI_TOWN_THEOS_HOUSE_1F")
 
 
 # -- B12 -----------------------------------------------------------------
 
-@ch01.beat("B12", "Entering Theo's 1F autoruns the PokePod scene")
+@ch01.beat("B12", "Entering Theo's 1F autoruns the PokePod scene",
+           rows=("map172/ev004/p0",))
 def b12(emu: Emulator) -> None:
     if not emu.field_locked():
         shot = emu.screenshot("b12_no_autorun")
@@ -556,7 +600,8 @@ def b12(emu: Emulator) -> None:
 # -- B13 -----------------------------------------------------------------
 
 @ch01.beat("B13", "Crossing the west-exit tiles plays the catch ceremony",
-           map_constant="MAP_MOKI_TOWN", at=CEREMONY_APPROACH)
+           map_constant="MAP_MOKI_TOWN", at=CEREMONY_APPROACH,
+           rows=("map032/ev009/p2",))
 def b13(emu: Emulator) -> None:
     quest_log_before = emu.var("VAR_QUEST_LOG")
     if quest_log_before < 2:

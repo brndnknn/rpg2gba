@@ -491,6 +491,51 @@ _assert_bgm = assertions.assert_bgm
 
 # -- B1 ------------------------------------------------------------------
 
+# `rows=` on the beats below (P8a, REDERIVATION_PLAN.md 13.1) records which
+# chapter-manifest rows each beat actually exercises, so the disposition
+# generator can join `beat:` instead of a human hand-writing it. 26 rows
+# across 17 of this chapter's 30 beats, each mapping confirmed against the
+# event's coordinates in the decoded map JSON and its page condition in the
+# manifest. `archetype=` is set only where EVERY row of the beat is the same
+# archetype: B13/B15 and B2 are deliberately left unset because they mix a
+# warp (or a nudge) with rows the classifier does not recognize, and the
+# declaration has to describe the whole beat.
+#
+# THIRTEEN BEATS CLAIM NOTHING, in four groups:
+#
+#   B27, B28, B29, B30, B31, B32, B33 -- warp-arrival FACING and map BGM.
+#     These assert `compute_arrival_facings`' output and map-header music,
+#     neither of which is an RGSS page. No manifest row kind can represent
+#     them. (`map031/ev002/p1`, `ev003/p1` and `ev004/p1` are real
+#     arrival_nudge rows, but nothing in these beats asserts anything about
+#     those pages, so they stay unclaimed rather than guessed at.)
+#
+#   N1, N2, N4 -- each re-exercises the same single page an earlier beat
+#     already claims: N1 the item ball's only page (B7 -- CH03_TODO #9, the
+#     ball is a repurposed one-time self-switch, so there is no "spent" page
+#     the way CH02's item balls have one), N2 the Magikarp NPC's page (B17),
+#     N4 the mart counter's page (B11). One row, one claimant.
+#
+#   N6 -- a chapter-wide invariant ("no reachable warp lands on an unbuilt
+#     map"), not a claim about any single row.
+#
+#   B1 and B25 -- both boundary crossings, and both are P8b's to flip, not
+#     this pass's. B1 is NOT a map connection, despite the word "seam" in its
+#     description: `connections.json` has no 33<->31 edge, and B1 stands on
+#     (16,6) pressing UP onto (16,5), which is Map033's EV046 -- one of the
+#     two `code 201` warps slice-growth reports for CH02 (EV045 is (15,5)).
+#     So the row is `map033/ev046/p0` and it lives in CH02's manifest, the
+#     departing chapter's. B25 is the mirror case on a real connection: the
+#     `map031/seam/N/map035` row is in THIS chapter's manifest, but B25
+#     deliberately stands at x=28, away from the seam cells, testing the wall
+#     rather than the crossing -- and CH04's B1 is the beat that crosses it.
+#     Per REDERIVATION_PLAN.md 10 R2/R3 the ARRIVING chapter claims a
+#     boundary row, resolved through `boundary_model.successor_claims` off
+#     the successor's `Beat.rows`. Nothing in the corpus makes such a claim
+#     yet, so making one here alone would reintroduce the inconsistency 10
+#     exists to remove. See ch02.py's B1 note for the same call.
+
+
 @ch03.beat("B1", "Crossing Route 1's north seam lands in Kevlar Town",
              map_constant="MAP_ROUTE_01", at=KEVLAR_ENTRY_APPROACH)
 def b1(emu: Emulator) -> None:
@@ -519,7 +564,8 @@ def b27(emu: Emulator) -> None:
 
 @ch03.beat("B2", "NurseTut's walkthrough runs and sets FLAG_NURSE_TUTORIAL "
                    "(warps the player straight into the Center)",
-             map_constant="MAP_KEVLAR_TOWN", at=NURSE_TUT_APPROACH)
+             map_constant="MAP_KEVLAR_TOWN", at=NURSE_TUT_APPROACH,
+             rows=("map031/ev049/p0", "map068/ev012/p1"))
 def b2(emu: Emulator) -> None:
     if emu.flag("FLAG_NURSE_TUTORIAL"):
         raise ScenarioError(
@@ -553,7 +599,8 @@ def b2(emu: Emulator) -> None:
 
 @ch03.beat("N3", "Re-talking NurseTut (Map068's NurseTut2, local id 10) is "
                    "the no-op page",
-             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=(8, 18))
+             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=(8, 18),
+             rows=("map068/ev016/p1",))
 def n3(emu: Emulator) -> None:
     # NurseTut2 (Map068 local id 10, (8,17)) is the object that survives
     # into the Center; `Map068_EV016_Dispatch` with FLAG_NURSE_TUTORIAL set
@@ -579,7 +626,8 @@ def n3(emu: Emulator) -> None:
              locations=(
                  BeatLocation("MAP_KEVLAR_TOWN_POKEMON_CENTER", CENTER_EXIT_APPROACH[0], CENTER_EXIT_APPROACH[1], "center exit"),
                  BeatLocation("MAP_KEVLAR_TOWN", CENTER_DOOR[0], CENTER_DOOR[1], "center door"),
-             ))
+             ),
+             rows=("map068/ev008/p0", "map031/ev003/p0"), archetype="warp")
 def b3(emu: Emulator) -> None:
     # B2 already stands the player inside Map068 via NurseTut's own warp;
     # this beat exercises the ORDINARY door as its own mechanism -- exit
@@ -618,7 +666,8 @@ def b31(emu: Emulator) -> None:
                    "and the full scene plays out to its close (healing-"
                    "location metadata has no test surface -- see module "
                    "docstring finding 7, B6 folded in here)",
-             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=HEAL_COUNTER_APPROACH)
+             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=HEAL_COUNTER_APPROACH,
+             rows=("map068/ev001/p0",))
 def b4(emu: Emulator) -> None:
     # `special HealPlayerParty` is a real, native call
     # (`Map068_EV001_Page1_2`) -- this only confirms the flow completes
@@ -644,7 +693,8 @@ def b4(emu: Emulator) -> None:
                     "previously an UNHANDLED-code-355 queue entry -- "
                     "pbPokeCenterPC never converted at all, see "
                     "CH03_TODO.md's classifier-near-miss recon note)",
-             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=PC_APPROACH)
+             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=PC_APPROACH,
+             rows=("map068/ev007/p0",))
 def b26(emu: Emulator) -> None:
     use_pc(emu, PC_APPROACH, PC_FACING, beat="B26")
 
@@ -652,7 +702,8 @@ def b26(emu: Emulator) -> None:
 # -- B7 ------------------------------------------------------------------
 
 @ch03.beat("B7", "Item ball at (17,7) grants an Antidote once",
-             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=CENTER_ITEM_BALL_APPROACH)
+             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=CENTER_ITEM_BALL_APPROACH,
+             rows=("map068/ev018/p0",), archetype="item_ball")
 def b7(emu: Emulator) -> None:
     ssa = _flag_ssa(68, CENTER_ITEM_BALL_EVENT_ID)
     if emu.flag(ssa):
@@ -711,7 +762,8 @@ def n1(emu: Emulator) -> None:
 @ch03.beat("B5", "The PC-tour scene autoruns on Center arrival (NOT an NPC "
                    "talk -- see module docstring finding 4), sets its 3 "
                    "self-switches AND leaves 5 Oran Berries in the bag "
-                   "(finding 5, corrected 2026-08-19)")
+                   "(finding 5, corrected 2026-08-19)",
+             rows=("map068/ev015/p0",))
 def b5(emu: Emulator) -> None:
     # B2's own warp already carried this scene to completion (Map068's
     # MAP_SCRIPT_ON_TRANSITION fires `Map068_EV015_Page1` the instant the
@@ -746,7 +798,8 @@ def b5(emu: Emulator) -> None:
                    "2026-08-15 -- converts the code-111-wrapped "
                    "pbTrainerBattle to trainerbattle_no_intro + "
                    "cleartrainerflag so the facility stays repeatable)",
-             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=MAWULI_APPROACH)
+             map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER", at=MAWULI_APPROACH,
+             rows=("map068/ev014/p0",), archetype="trainer")
 def b8(emu: Emulator) -> None:
     from ..battle import in_battle, win_battle
 
@@ -792,7 +845,8 @@ def b8(emu: Emulator) -> None:
 
 @ch03.beat("B10", "Mart door opens; the pokemart menu opens at the "
                     "counter sign",
-             map_constant="MAP_KEVLAR_TOWN", at=MART_DOOR)
+             map_constant="MAP_KEVLAR_TOWN", at=MART_DOOR,
+             rows=("map031/ev002/p0",), archetype="warp")
 def b10(emu: Emulator) -> None:
     # B8 ends with the player still inside the Pokémon Center -- there is no
     # B9 in this scenario (renumbered away from the spec's raw sequence, see
@@ -831,7 +885,8 @@ def b29(emu: Emulator) -> None:
                     "pokemart menu to a real purchase: money down, bag up "
                     "(Emulator.money/set_money/bag_item_quantity/"
                     "item_price)",
-             map_constant="MAP_KEVLAR_TOWN_POKEMART", at=MART_COUNTER_APPROACH)
+             map_constant="MAP_KEVLAR_TOWN_POKEMART", at=MART_COUNTER_APPROACH,
+             rows=("map067/ev003/p0",))
 def b11(emu: Emulator) -> None:
     price = emu.item_price(MART_FIRST_ITEM)
     emu.set_money(price + 1000)  # afford it with headroom, no clamp math needed
@@ -948,7 +1003,8 @@ def n4(emu: Emulator) -> None:
 @ch03.beat("B12", "Deliveryman's no-gift branch does not crash "
                     "(`Map067_EV009_Page1` is a bare `end` -- it is "
                     "literally inert, not just gift-less)",
-             map_constant="MAP_KEVLAR_TOWN_POKEMART", at=DELIVERYMAN_APPROACH)
+             map_constant="MAP_KEVLAR_TOWN_POKEMART", at=DELIVERYMAN_APPROACH,
+             rows=("map067/ev009/p0",))
 def b12(emu: Emulator) -> None:
     emu.walk_to(*DELIVERYMAN_APPROACH)
     emu.face("UP")
@@ -969,7 +1025,8 @@ def b12(emu: Emulator) -> None:
                  BeatLocation("MAP_KEVLAR_TOWN_POKEMART", MART_ARRIVAL[0],
                               MART_ARRIVAL[1], "mart exit"),
                  BeatLocation("MAP_KEVLAR_TOWN", BERRY_PLANT_APPROACH[0], BERRY_PLANT_APPROACH[1], "berry plant"),
-             ))
+             ),
+             rows=("map067/ev002/p0", "map031/ev042/p0"))
 def b13(emu: Emulator) -> None:
     # Cross from MART_ARRIVAL, not MART_COUNTER_APPROACH: the mart's exit
     # mat is (10,11) and the arrival tile (10,10) sits between it and the
@@ -997,7 +1054,8 @@ def b13(emu: Emulator) -> None:
              locations=(
                  BeatLocation("MAP_KEVLAR_TOWN", BOUTIQUE_DOOR[0], BOUTIQUE_DOOR[1], "boutique door"),
                  BeatLocation("MAP_KEVLAR_TOWN_BUILDINGS", BOUTIQUE_NPC_APPROACH[0], BOUTIQUE_NPC_APPROACH[1], "boutique NPC"),
-             ))
+             ),
+             rows=("map031/ev004/p0", "map073/ev007/p0"), archetype="warp")
 def b14(emu: Emulator) -> None:
     _enter_door(emu, "B14", BOUTIQUE_DOOR, "MAP_KEVLAR_TOWN_BUILDINGS")
     _assert_near(emu, "B14", BOUTIQUE_ARRIVAL)
@@ -1072,7 +1130,8 @@ def b33(emu: Emulator) -> None:
              locations=(
                  BeatLocation("MAP_KEVLAR_TOWN", BIKE_SHOP_DOOR[0], BIKE_SHOP_DOOR[1], "bike shop door"),
                  BeatLocation("MAP_KEVLAR_TOWN_BUILDINGS", BIKE_SHOP_NPC_APPROACH[0], BIKE_SHOP_NPC_APPROACH[1], "bike shop NPC"),
-             ))
+             ),
+             rows=("map031/ev012/p0", "map073/ev001/p0", "map073/ev002/p0"))
 def b15(emu: Emulator) -> None:
     _enter_door(emu, "B15", BIKE_SHOP_DOOR, "MAP_KEVLAR_TOWN_BUILDINGS")
     _assert_near(emu, "B15", BIKE_SHOP_ARRIVAL)
@@ -1099,7 +1158,9 @@ def b15(emu: Emulator) -> None:
                  BeatLocation("MAP_KEVLAR_TOWN", COUPLE_DOOR[0], COUPLE_DOOR[1], "couple door"),
                  BeatLocation("MAP_KEVLAR_TOWN_BUILDINGS", COUPLE_ARRIVAL[0],
                               COUPLE_ARRIVAL[1], "couple exit approach"),
-             ))
+             ),
+             rows=("map031/ev013/p0", "map073/ev004/p0",
+                   "map031/ev041/p0", "map073/ev009/p0"), archetype="warp")
 def b16(emu: Emulator) -> None:
     # Cross from the ARRIVAL tiles, not the exit mats one row below them
     # (24,13)/(64,13). `_cross_threshold` walks to its approach tile first,
@@ -1146,7 +1207,8 @@ def _refuse_joke(emu: Emulator, beat: str) -> None:
 @ch03.beat("B17", "Magikarp NPC seeded to 98 refusals: the 99th refusal "
                     "increments VAR_HA_MAGIKARP to 99 with no gift yet; the "
                     "100th refusal (var already 99) fires the full "
-                    "givemon/fanfare/nickname gift flow -- module finding 3")
+                    "givemon/fanfare/nickname gift flow -- module finding 3",
+             rows=("map031/ev014/p0",))
 def b17(emu: Emulator) -> None:
     emu.set_var("VAR_HA_MAGIKARP", 98)
     var_before = emu.var("VAR_HA_MAGIKARP")
@@ -1215,7 +1277,8 @@ def n2(emu: Emulator) -> None:
 
 @ch03.beat("B18", "Cry Boy: idle page only (FLAG_HAS_STRENGTH is never "
                     "set corpus-wide); FLAG_SIDEQUEST_CRY_BOY stays unset",
-             map_constant="MAP_KEVLAR_TOWN", at=CRY_BOY_APPROACH)
+             map_constant="MAP_KEVLAR_TOWN", at=CRY_BOY_APPROACH,
+             rows=("map031/ev007/p0",))
 def b18(emu: Emulator) -> None:
     if emu.flag("FLAG_SIDEQUEST_CRY_BOY"):
         raise ScenarioError(
