@@ -1073,11 +1073,26 @@ def _rock_smash_refused(emu: Emulator, beat: str, local_id: int,
 # reader should not have to reverse-engineer from the tuples:
 #
 # FIVE BEATS CLAIM NOTHING, AND THAT IS THE CORRECT ANSWER.
-#   B1  -- the crossing from Moki Town. CH02's manifest carries NO seam row at
-#          all: `map032/seam/E/map033` sits in CH01's manifest (map 32 is
-#          CH01's map), and no reciprocal `map033` seam row was generated for
-#          this side. That is an instance of PROJECT_TODO #91, not a gap in
-#          this beat -- there is no row here to claim.
+#   B1  -- the crossing from Moki Town, and the reason is structural rather
+#          than missing data. This crossing is not a map connection at all:
+#          `connections.json` has no 32<->33 edge (Moki's only connection is
+#          `[32, 'E', 26, 59, 'W', 0]`, which is why CH01's single seam row is
+#          `map032/seam/E/map059`). It is a `code 201` warp, one of the three
+#          slice-growth found on Map032 -- EV023/EV036/EV037 -- and B1 crosses
+#          EV023 specifically: it stands on (9,44) and presses LEFT onto
+#          (8,44), which is EV023's tile (EV036 is (8,45), EV037 is (8,43)).
+#          So the row B1 crosses is `map032/ev023/p0`, and it lives in CH01's
+#          manifest, because the departing map belongs to the shipping
+#          chapter. That asymmetry is exactly what REDERIVATION_PLAN.md 10
+#          R2/R3 ruled on for `map035/ev001`: the ARRIVING chapter claims the
+#          boundary row, and `boundary_model.successor_claims` resolves it out
+#          of the successor's `Beat.rows` rather than the successor's
+#          manifest. The claim is deliberately NOT made here: no chapter in
+#          the corpus claims a cross-manifest boundary row yet (CH05 claims
+#          only its own maps 36/37), and P8b is the step that carries that
+#          flip. Adding it for CH01/CH02 alone would reintroduce the very
+#          inconsistency 10 was resolving. When P8b runs, this is the fourth
+#          instance to flip, alongside CH04/CH05's two.
 #   B4  -- a wild-grass encounter. An encounter table is neither an event page
 #          nor a seam nor terrain, so no manifest row can ever represent it.
 #   B14 -- trainer pacing (MOVEMENT_TYPE_LOOK_AROUND surviving a battle). A
