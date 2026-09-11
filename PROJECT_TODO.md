@@ -2539,6 +2539,47 @@ green by inventing a grant site.
 
 See `MEMORY.md` → Uranium-Specific Discoveries for the mechanic itself.
 
+### 94. The archetype classifier is not open for extension
+
+*Filed 2026-09-10. Prerequisite for `REDERIVATION_PLAN.md` §13.3's template program.*
+
+`classify_event` (`chapter_manifest/archetypes.py:198-224`) dispatches through a
+hand-written `if`/`elif` sequence, and `ARCHETYPE_NAMES` is a literal set. Adding
+an archetype means editing both by hand plus writing the template module — three
+edits in two files, none of which a new archetype can register itself into.
+
+That is fine at four archetypes. §13.3 lists **eleven** candidates, and the two
+cheapest (`arrival_nudge`'s `graphic` requirement, `item_ball`'s page-1
+requirement) are *loosenings of existing predicates* rather than additions — they
+touch the same hard-coded chain. Convert the dispatch to a registry before the
+fifth lands, or the chain becomes the thing every template change has to
+negotiate.
+
+Note the constraint this must preserve: the `playtest/archetypes/` templates are
+**author-called, not a generator** (`MEMORY.md` → Key File Notes) — the chapter
+file stays a linear approvable document with hand-controlled registration order.
+A registry changes how a *classifier* finds its matchers, not how a chapter
+registers its beats.
+
+### 95. `derive_blocked_verdict` asks the wrong question about obstacle rows
+
+*Filed 2026-09-10, measured while ruling `REDERIVATION_PLAN.md` §13.*
+
+It asks whether a tile **adjacent to the event** is reachable. For an obstacle
+event — a Rock Smash rock, a Strength boulder — that is the wrong question: you
+can nearly always stand next to the rock. It never asks whether the obstacle can
+be **cleared**, so the verdict comes back `reachable_now=True` and
+`as_disposition()` returns `""`.
+
+Measured consequence: **5 of CH04's committed `blocked:rock_smash` rows do not
+reproduce** when derived (`map035/ev014/p0`, `ev014/p1`, `ev017/p0`, `ev017/p1`,
+`map035/seam/N/map040`). The hand-authored answers are the correct ones.
+
+This is independent of any disposition generator — it means a derived `blocked:`
+is unreliable on precisely the class #92 already flagged, and #92's finding (no
+`code 121`/`122` grant site exists for `rock_smash`/`surf` at all) is the reason
+it has never been caught by a disagreement.
+
 ### 93. Five capability base tokens name both a switch and a variable
 
 *Filed 2026-09-10, same commit as #92.*

@@ -8,12 +8,18 @@ dispositions) and **#67** (route plans), executed under **#62**'s ordering safeg
 > state; when the task closes, its durable conclusions go to `MEMORY.md` / `PROJECT_TODO.md`
 > and this file is archived.
 
-**Live status (2026-09-10): Phases A, B done; P7 (freeze) done. P8's CH01 half is done
-(`55b98f51`), and CH02/CH03's manifest diffs are adjudicated — all category 1, no
-category-3 finding (`investigations/ch02_ch03_rederivation_adjudication.md`). What remains
-in P8: authoring CH01–CH03's dispositions, and §10 R2/R3's flip on CH04+CH05. The three
-questions that were blocking them are ruled in §10; a fourth, surfaced by the adjudication,
-is ruled in §12.** Branch `rederive-ch01-ch04`.
+**Live status (2026-09-10): Phases A, B done; P7 (freeze) done. All four manifests are
+re-derived and adjudicated — CH01 `55b98f51`, CH02/CH03 committed after
+`investigations/ch02_ch03_rederivation_adjudication.md`, every diff line category 1, no
+category-3 finding anywhere.**
+
+**P8 has been split (§13, operator ruling 2026-09-10) and its halves now straddle P9.**
+Measurement showed a disposition file is ~70% a join the code can make for itself, blocked
+only because no beat before CH05 records the rows it covers. So beat re-authoring (**P8a**,
+which populates `rows=`) now comes *before* disposition authoring (**P8b**, now largely
+generated). What remains: P8a for four chapters, then P8b, then §10 R2/R3's flip on
+CH04+CH05 and the ~109-row hand-decided residue. Blocking questions are ruled in §10, §12
+and §13. Branch `rederive-ch01-ch04`.
 
 ---
 
@@ -192,8 +198,10 @@ prerequisite.
 | # | Step | Item | Status |
 |---|---|---|---|
 | **P7** | **Freeze.** Write the expected answers for all four chapters from their committed, gate-passed artifacts *before* generating anything. Per #62, verbatim: *freeze the expected answers, derive, diff, then write — never derive-and-write in one pass, or a regression in the derivation logic reads as a correct re-disposition.* Precedent for the format: `reference/frozen/archetype_expectations.json`. | #62 | **DONE** `aaae306e` |
-| **P8** | **Derive, diff, adjudicate** — manifests + dispositions for CH01–CH04, one chapter at a time, diffed against P7's freeze. Every diff line classified 1/2/3 per §1. Category-3 lines stop the pass. Also carries §10 R3's two code changes and R1's `var_` prefix. | #65 | **CH01 DONE** `55b98f51` · **CH02/CH03 manifests adjudicated** (§12) · CH04 manifest clean, its R2/R3 disposition flip TODO · CH01–CH03 dispositions TODO |
-| **P9** | **Route plans** for all four chapters (`routing plan --chapter CHnn --module <mod>`), and re-author beats adopting `entry_at`. Pay down the coordinate literals to zero (§5). | #67 | TODO |
+| **P8** | **Derive, diff, adjudicate the manifests** — CH01–CH04, one chapter at a time, diffed against P7's freeze. Every diff line classified 1/2/3 per §1. Category-3 lines stop the pass. Also carries §10 R3's two code changes and R1's `var_` prefix. | #65 | **DONE** — CH01 `55b98f51`, CH02/CH03 adjudicated + committed, CH04 clean. All category 1. |
+| **P8a** | **Re-author CH01–CH04's beats onto the archetype templates**, adopting `entry_at`, paying the coordinate literals down to zero (§5). Every template call populates `rows=` and `archetype=`, which is what makes P8b derivable. Ordered before P8b by §13's ruling. Needs #94 (registry) and the §13.3 templates it depends on. | #67, §13 | TODO |
+| **P8b** | **Generate the disposition files** — derive `cosmetic`/`blocked`/`unreachable`/`boundary`, join `beat:` off P8a's `rows=`, hand-decide the ~109-row residue (§13.1). Affirmation is a separate pass from derivation. Carries §10 R2/R3's flip on CH04+CH05. | #65 | TODO |
+| **P9** | **Route plans** for all four chapters (`routing plan --chapter CHnn --module <mod>`). Still last: `routing locations` hard-fails without P8b's output. | #67 | TODO |
 | **P10** | **Discharge the inherited obligations** (§4) and delete the scaffolding that expires with this task. | — | TODO |
 
 ### Phase D — gates
@@ -574,3 +582,157 @@ silent, and the disposition layer carries the full disjunction.
   `expected_capability` field is still accurate, merely incomplete. Suite 3274 passed / 17
   skipped (was 3261/17). CH04 0 errors / 44 warnings / 42 rows and CH05 0 errors / 5 warnings
   / 25 rows, both unchanged.
+
+## 13. Operator ruling, 2026-09-10 — the disposition file is mostly derivable, and P8/P9 are in the wrong order
+
+Opened when the operator asked why dispositions are hand-authored at all. Five
+measurements followed; each is reproducible and cited below. The short version: **a
+disposition file is ~70% bookkeeping over a join the code could make for itself, and the
+join is missing only because no beat before CH05 records which rows it covers.**
+
+### 13.1 What was measured
+
+**Four of the five verdicts already have a derivation.** `blocked:<spec>` and
+`unreachable:geography` come out of `BlockedVerdict.as_disposition()`
+(`traversal/reachability.py:253`) in the exact authored spelling — `schema.py`'s grammar
+comment says so outright (*"the derivation layer and the authored layer share one grammar,
+so a derived value can be affirmed as-is"*). `cosmetic` is gated by the generator-computed
+`may_be_cosmetic`. `boundary` falls out of `boundary_model.is_forward_crossing` +
+`successor_claims` (P3, `14aa6f43`). Only **`beat:<name>` has no derivation.**
+
+**And `beat:` is underivable for a data reason, not a logic reason.** Measured: **0 of the
+74 own beats in CH01–CH04 carry `rows=`; all 19 of CH05's do.** Re-running the join off
+`Beat.rows` for CH05 finds **21 row-refs against 21 authored `beat:` rows — exact set
+match, 0 missing, 0 extra.** 13 agree outright; the other 8 differ only by beat-family
+head (`beat:B8_nudge` derived vs `beat:B8` authored), which is `beat_model.py`'s documented
+prefix-family rule, not a judgment. With that normalization a generator reproduces **CH05's
+entire 25-row file**.
+
+**A generator that ignores `rows=` does badly, and that is the control.** Value-for-value
+against the two committed files: **CH04 24/42, CH05 4/25.** Nearly every disagreement is the
+mechanical side saying `cosmetic`/nothing where the human said `beat:Bnn`. This is the
+measurement that proves the gap is the missing join and not an algorithmic shortfall.
+
+**Two hazards a naive generator would hit.** (a) **46 rows across CH01–CH04 are both
+`may_be_cosmetic` and carry a non-empty `BlockedVerdict`** — precedence is a real decision,
+not a default. (b) **`derive_blocked_verdict` is wrong on obstacle rows**: it asks whether a
+tile *adjacent* to the event is reachable, so a Rock Smash boulder you can already stand
+beside derives `reachable_now=True`. That is why 5 of CH04's committed `blocked:rock_smash`
+rows do not reproduce. Filed as **#95**; it makes derived `blocked:` unreliable on exactly
+the class #92 already flagged, independent of any generator.
+
+**Residue, reconciled.** Two counts were produced and they measure different things; both
+are right. Rows unclaimed by any archetype: **CH01 178 / CH02 29 / CH03 91 / CH04 22 = 320**.
+Of those, `may_be_cosmetic` is true for **126/17/54/14 = 211**, leaving **52/12/37/8 ≈ 109**
+with no mechanical signal at all. **That ~109 is the disposition file's actual content** —
+the rows where someone decides whether a piece of Uranium is worth testing. The other ~211
+is clerical.
+
+### 13.2 The ruling — P8 splits, and its halves straddle P9
+
+Deriving `beat:` requires `rows=`; `rows=` is populated by the archetype templates;
+adopting the templates is beat re-authoring, which P9 already owns. Nothing about beat
+authoring needs a disposition file, while `routing locations` hard-fails without one
+(`routing/__main__.py:490`). So the dependency chain admits exactly one order, and the plan
+has two of its links backwards:
+
+| New step | Was | Work |
+|---|---|---|
+| **P8a** | part of P9 | Re-author CH01–CH04's beats onto the archetype templates, adopting `entry_at`. Every template call populates `rows=` and `archetype=`. |
+| **P8b** | P8 | Generate the disposition files: derive `cosmetic`/`blocked`/`unreachable`/`boundary`, join `beat:` off `rows=`, leave the ~109-row residue for hand decision. |
+| **P9** | P9 | Route plans (unchanged; still last, still needs P8b's output). |
+
+**Affirmation stays separate from derivation.** `affirmed_hash` is the mechanism that means
+*a human looked at this row's content* (`RULE_UNAFFIRMED_DISPOSITION`). A generator that
+auto-affirms its own output makes that rule vacuous. The generator proposes; affirming is
+its own pass.
+
+**Templates stay author-called.** `MEMORY.md` → Key File Notes is explicit that the
+`playtest/archetypes/` templates are *not* a generator — the chapter file remains a linear,
+approvable document with hand-controlled registration order. Nothing here changes that: P8a
+is a human calling more templates, not a script writing `ch01.py`.
+
+### 13.3 The template-candidate list
+
+Corpus census, **199 maps / 8197 event pages / 630 distinct fingerprints**. The four
+existing archetypes cover **2337 pages = 28.5%**.
+
+**The largest single shape is not a template candidate: 3545 pages on 150 maps have no
+commands at all** — idle poses, resolved "nothing left to say" pages, ambient decoration.
+They want `cosmetic`, which §13.1's derivation already gives them. The population that
+actually wants a beat is ~2586, not 8197, and every count below should be read against that
+denominator.
+
+Ordered by value. "Blocked on" names a §13.4 transpile item the template cannot be written
+before.
+
+| # | Candidate | Pages | Maps | Blocked on |
+|---|---|---|---|---|
+| T1 | **Predicate loosenings, not new templates** — `arrival_nudge` requiring a `graphic` effect tag; `item_ball` requiring a page-1 "spent" row (single-page item balls exist, e.g. `map068/ev018/p0`); `pbReceiveItem` NPC gifts alongside `pbItemBall` | ~95 | 56 | — |
+| T2 | **Flavour-NPC family** — three variants only: plain talk, randomized talk (`random()` + flat if-chain), toggling talk (self-switch two-state). **Eight fingerprint clusters collapse to this one family**; they fragment only on cosmetic tags (`pbCallBub`, `se`, `var_write`) | ~915 | 112+ | — |
+| T3 | **Staircase / terrain** — needs a terrain-aware classification path; see §13.5 | ~10s | — | — |
+| T4 | **Strength boulder** (`pbPushThisBoulder`) | 70 | 11 | X1 |
+| T5 | **Berry tree** (`pbBerryPlant` / `pbPickBerry`) | 96 | 12 | — (already native, see §13.5) |
+| T6 | **Surf dismount / vehicle cancel** (`pbCancelVehicles`) | ~5+ | 1+ | X2 |
+| T7 | **Rock Smash boulder** — already fully converted to native `EventScript_RockSmash`; unnamed, not unhandled | 11 local | 2 | — |
+| T8 | **Region-map NPC** (`pbShowMap` → `FieldShowRegionMap`) | 6 local | 2 | — |
+| T9 | **Bridge toggle** (`pbBridgeOn`) | 36 | 3 | verify |
+| T10 | **Common-event delegate** — a page whose whole body is one `call(CommonEvent_nnn)` | 53 | 21 | #87 |
+| T11 | **Cave exit** (`pbCaveExit`) | 32 | 13 | X3 (partial) |
+
+T1+T2 alone take mechanical coverage of the non-inert corpus from ~28.5% to roughly 60%.
+
+**Blocker on all of it: the classifier is not open for extension.** `classify_event`
+(`archetypes.py:198-224`) is a hand-written `if`/`elif` sequence and `ARCHETYPE_NAMES` is a
+literal set; a fifth archetype means editing both by hand. Tolerable at five, untenable at
+fifteen. **Converting that dispatch to a registry is step zero** — filed as **#94**.
+
+### 13.4 The transpile-candidate list
+
+Requested by the operator: the mechanics a template needs *transpiled first*. Rock Smash is
+the precedent and the proof that this is routine — RMXP's `pbRockSmash` choreography is
+discarded wholesale and replaced by native `EventScript_RockSmash`. Each item below is the
+same move for a different mechanic.
+
+Source: `output/uranium-build/transpile_unhandled.jsonl`, **340 entries / 69 kinds**.
+**Scope caveat: only 18 of 199 maps are staged**, so these counts are the CH01–CH04 slice's
+share, not the corpus's.
+
+| # | Item | Entries | Maps | Note |
+|---|---|---|---|---|
+| X1 | **`pbPushThisBoulder`** → native Strength | 5 | 2 | Blocks T4. Same shape as Rock Smash's native swap. |
+| X2 | **`$PokemonGlobal.surfing` conditional** → native Surf state | 5 | 1 | Blocks T6. |
+| X3 | **`pbCaveExit`** | 7 | 3 | Partially handled — CH05's B1 crosses one. |
+| X4 | **`pbSet`** | 10 | 2 | |
+| X5 | **"command follows a Transfer Player warp"** — pokeemerald halts the script at a warp, so everything after `code 201` on the page is dropped | **~150** | 12+ | **The single largest category.** Structural, not a mechanic; spans codes 223/101/509/106/204/355/209/210/241/202/207. |
+| X6 | **Commands outside the v1 deterministic tier** — 231/224/232/235/202 (picture/animation) | ~67 | 1–2 | Heavily concentrated on one map. |
+| X7 | **`pbTrainerIntro` / `pbTrainerEnd` residue** | 6 | 1 | Trainer archetype covers the shape; these are stragglers. |
+| X8 | **Button-input conditionals** (`code 111`) | 3 | 1 | |
+| X9 | **`code 122` operand kind 6** (random/item/actor) | 2 | 1 | |
+| X10 | **Animation ids with no emote mapping** (`code 207`) | 2 | 1 | |
+
+**X5 is the one to look at first** and it is not a template blocker — it is a correctness
+issue in shipped chapters. ~150 dropped commands across 12+ staged maps means page bodies
+that silently do less than the source does, inside chapters that have passed their §9 gates.
+
+### 13.5 Three claims corrected while measuring
+
+1. **Berry trees are converted, not missing.** A sub-agent read "no `.pory` output" as
+   "unconverted"; `transpiler.py:644` converts **item balls and berry plants to native
+   object-template idioms**. No script *is* the correct output, exactly as for Rock Smash.
+   The `MOVEMENT_TYPE_BERRY_TREE_GROWTH` fix (`6bece623`) is the corroborating evidence.
+   T5 is therefore unblocked.
+2. **A staircase is not a warp, and cannot become one.** Two independent reasons.
+   `warp_beat`'s whole body proves *the map changed* (`wait_for_map` → `require_map`), and
+   `warp.py:223-229` explicitly refuses a same-map crossing; a sideways staircase stays on
+   one map and asserts a position delta instead (`ch05.py:576`). Separately the stair event
+   is **absorbed into a `terrain` row and its page row dropped** (`generator.py:670-677`),
+   and `classify_manifest` only looks at `kind == "page"` — so there is no `ArchetypeMatch`
+   to find. This cuts *for* T3, not against it: terrain rows carry `TerrainRef(x, y,
+   behavior, source_event_id)`, so a staircase template needs **no fingerprinting at all**.
+   It needs a terrain-aware path the classifier does not have.
+3. **One fingerprint, two behaviours.** The 84-row `action / () / ()` cluster is ~45
+   "content consumed/gone" pages and ~39 "silent ambient decoration" pages, separable only
+   by whether `character_name` is blank in the source JSON. Both land `cosmetic`, so nothing
+   is blocked — recorded because a fingerprint-only classifier would merge them, and the
+   next shape like it may not be harmless.
