@@ -313,24 +313,78 @@ def derive_blocked_verdict(
     return BlockedVerdict(goal=goal, reachable_now=False, minimal_sets=minimal_sets)
 
 
+def _clearing_satisfied(
+    capability_map: CapabilityMap,
+    event_cell: Cell,
+    held: frozenset[Capability],
+) -> bool:
+    """Whether `event_cell`'s own obstacle (if any) is cleared under `held`.
+
+    No obstacle entry at `event_cell`: vacuously satisfied -- a plain NPC or
+    item-ball event has nothing to clear, so the *clearing* question must
+    collapse to the *approach* question rather than manufacturing a gate that
+    was never there. An obstacle entry: satisfied exactly when its
+    `.capability` is in `held`, independent of whether the approach cells
+    happen to be open."""
+    obstacle = capability_map.obstacles.get(event_cell)
+    return obstacle is None or obstacle.capability in held
+
+
 def derive_blocked_verdict_for_event(
     graph: MapGraph,
     capability_map: CapabilityMap,
     start: Cell,
     event_cell: Cell,
     *,
+    require_clearing: bool,
     candidates: frozenset[Capability] | None = None,
 ) -> BlockedVerdict:
-    """The blocked/open verdict for an event at `event_cell`: reachable if
-    ANY orthogonally-adjacent walkable cell is reachable from `start`."""
+    """The blocked/open verdict for an event at `event_cell` -- one of TWO
+    genuinely different questions, selected by `require_clearing`, which is
+    why it has no default (CLAUDE.md §4.5: a default here would be exactly
+    the silent-default the section forbids, since the two questions have
+    different right answers and only the caller knows which one it means):
+
+    `require_clearing=False` -- the APPROACH question: "is any orthogonally-
+    adjacent cell of `event_cell` reachable from `start`?" This is the
+    question that matters for a plain NPC or item-ball event, and for
+    whether the player can physically stand next to an obstacle event at
+    all (nearly always yes -- you can stand beside a rock from the far
+    side). It says nothing about whether the obstacle itself is cleared.
+
+    `require_clearing=True` -- the CLEARING question: the approach predicate
+    above, AND (if `capability_map.obstacles` has an entry for `event_cell`
+    itself) that obstacle's `.capability` must also be in `held`. For a cell
+    with no obstacle entry this is identical to `require_clearing=False` --
+    a plain event has nothing to clear, so there is nothing extra to ask.
+
+    Conflating these was the actual bug (backlog #95): a Rock Smash rock's
+    own cell is `source == "event"` in `capability_map.obstacles`, but the
+    old single-question form only ever asked the approach question, so a
+    rock reachable from either side derived `reachable_now=True` --
+    `as_disposition() == ""` -- even though the rock itself was never
+    cleared. That silently dropped 5 of CH04's hand-authored
+    `blocked:rock_smash` rows when re-derived: `map035/ev014/p0`,
+    `map035/ev014/p1`, `map035/ev017/p0`, `map035/ev017/p1`, and
+    `map035/seam/N/map040`.
+
+    The clearing conjunct is folded straight into the predicate handed to
+    `_minimal_sets_for_predicate`, so the existing exhaustive subset search
+    surfaces the obstacle's own capability in `minimal_sets` for free --
+    there is no separate "obstacle capability" bookkeeping to hand-build."""
     resolved = _validate_candidates(candidates)
     approach_cells = adjacent_approach_cells(graph, event_cell)
 
     def predicate(held: frozenset[Capability]) -> bool:
-        return any(
+        approach_ok = any(
             is_reachable_with(graph, capability_map, start, cell, held)
             for cell in approach_cells
         )
+        if not approach_ok:
+            return False
+        if require_clearing:
+            return _clearing_satisfied(capability_map, event_cell, held)
+        return True
 
     if predicate(frozenset()):
         return BlockedVerdict(goal=event_cell, reachable_now=True, minimal_sets=[frozenset()])
@@ -344,6 +398,7 @@ def derive_blocked_verdict_for_event_from_starts(
     starts: frozenset[Cell],
     event_cell: Cell,
     *,
+    require_clearing: bool,
     candidates: frozenset[Capability] | None = None,
 ) -> BlockedVerdict:
     """The multi-start sibling of `derive_blocked_verdict_for_event`, for a
@@ -360,6 +415,16 @@ def derive_blocked_verdict_for_event_from_starts(
     opens the event from its best entrance -- the same minimal-set machinery
     `derive_blocked_verdict_for_event` uses, unchanged.
 
+    `require_clearing` carries the exact same two-question meaning it has on
+    `derive_blocked_verdict_for_event` (see that function's docstring for
+    the full explanation and the motivating CH04 evidence) -- again with no
+    default, for the same CLAUDE.md §4.5 reason: the approach question and
+    the clearing question have genuinely different right answers, and only
+    the caller knows which one it's asking. `require_clearing=True` adds the
+    same conjunct here: if `event_cell` itself carries an obstacle entry,
+    that obstacle's capability must be in `held` in addition to some
+    approach cell being reachable from some start.
+
     Fails loud on an empty `starts` (CLAUDE.md §4.5): a vacuous quantifier
     would make every event "unreachable" for a reason that has nothing to do
     with the map's geometry, which is a silent wrong answer, not an honest
@@ -375,11 +440,16 @@ def derive_blocked_verdict_for_event_from_starts(
     approach_cells = adjacent_approach_cells(graph, event_cell)
 
     def predicate(held: frozenset[Capability]) -> bool:
-        return any(
+        approach_ok = any(
             is_reachable_with(graph, capability_map, start, cell, held)
             for start in starts
             for cell in approach_cells
         )
+        if not approach_ok:
+            return False
+        if require_clearing:
+            return _clearing_satisfied(capability_map, event_cell, held)
+        return True
 
     if predicate(frozenset()):
         return BlockedVerdict(goal=event_cell, reachable_now=True, minimal_sets=[frozenset()])

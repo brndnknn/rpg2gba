@@ -28,6 +28,7 @@ from rpg2gba.traversal.reachability import (
     adjacent_approach_cells,
     derive_blocked_verdict,
     derive_blocked_verdict_for_event,
+    derive_blocked_verdict_for_event_from_starts,
     is_reachable_with,
     minimal_capability_sets,
     reachable_with,
@@ -209,7 +210,7 @@ def test_a_goal_no_capability_can_make_standable_raises_rather_than_answering():
 
     # The same cell answers fine as an *event* goal, which is the question a
     # caller looking at a solid event actually has.
-    verdict = derive_blocked_verdict_for_event(graph, cap_map, (0, 0), (1, 1))
+    verdict = derive_blocked_verdict_for_event(graph, cap_map, (0, 0), (1, 1), require_clearing=False)
     assert verdict.reachable_now is True
 
 
@@ -287,7 +288,8 @@ def test_unverified_candidate_raises():
         )
     with pytest.raises(UnverifiedCapabilityError):
         derive_blocked_verdict_for_event(
-            graph, cap_map, (0, 0), (2, 2), candidates=frozenset({Capability.DIVE}),
+            graph, cap_map, (0, 0), (2, 2),
+            require_clearing=False, candidates=frozenset({Capability.DIVE}),
         )
 
 
@@ -340,9 +342,90 @@ def test_derive_blocked_verdict_for_event_reachable_via_any_adjacent_cell():
     )
     cap_map = _cap_map(1, {(1, 1): _event_obstacle((1, 1), Capability.ROCK_SMASH)})
 
-    verdict = derive_blocked_verdict_for_event(graph, cap_map, (0, 0), (1, 1))
+    verdict = derive_blocked_verdict_for_event(graph, cap_map, (0, 0), (1, 1), require_clearing=False)
     assert verdict.reachable_now is True
     assert verdict.as_disposition() == ""
+
+
+# ---------------------------------------------------------------------------
+# require_clearing: the approach question vs the clearing question
+# (backlog #95 -- an obstacle event's own tile must additionally be cleared,
+# not merely approached)
+# ---------------------------------------------------------------------------
+
+
+def test_require_clearing_distinguishes_approach_from_clearing_for_an_obstacle_event():
+    """A rock at (1,1) with BOTH approach cells freely open (nothing walls
+    off (0,1) or (2,1)). The approach question (require_clearing=False) says
+    reachable now -- you can always stand next to the rock. The clearing
+    question (require_clearing=True) must say otherwise: the rock itself is
+    still uncleared, so it takes ROCK_SMASH. This is the exact regression
+    shape of backlog #95's 5 dropped CH04 rows."""
+    graph = MapGraph(map_id=1, width=3, height=3, tileset_id=0, blocked=_open_grid(3, 3))
+    cap_map = _cap_map(1, {(1, 1): _event_obstacle((1, 1), Capability.ROCK_SMASH)})
+
+    approach_verdict = derive_blocked_verdict_for_event(
+        graph, cap_map, (0, 0), (1, 1), require_clearing=False,
+    )
+    assert approach_verdict.reachable_now is True
+
+    clearing_verdict = derive_blocked_verdict_for_event(
+        graph, cap_map, (0, 0), (1, 1), require_clearing=True,
+    )
+    assert clearing_verdict.reachable_now is False
+    assert clearing_verdict.minimal_sets == [frozenset({Capability.ROCK_SMASH})]
+
+
+def test_require_clearing_is_a_no_op_for_a_non_obstacle_event():
+    """An event cell with no entry in `capability_map.obstacles` (a plain
+    NPC or item ball) has nothing to clear -- both questions must agree."""
+    graph = MapGraph(map_id=1, width=3, height=3, tileset_id=0, blocked=_open_grid(3, 3))
+    cap_map = _cap_map(1, {})
+
+    approach_verdict = derive_blocked_verdict_for_event(
+        graph, cap_map, (0, 0), (1, 1), require_clearing=False,
+    )
+    clearing_verdict = derive_blocked_verdict_for_event(
+        graph, cap_map, (0, 0), (1, 1), require_clearing=True,
+    )
+    assert approach_verdict == clearing_verdict
+
+
+def test_require_clearing_has_no_default_for_derive_blocked_verdict_for_event():
+    """The no-default decision is load-bearing (CLAUDE.md §4.5) -- pin it
+    so a future edit can't quietly reintroduce a default."""
+    graph = MapGraph(map_id=1, width=3, height=3, tileset_id=0, blocked=_open_grid(3, 3))
+    cap_map = _cap_map(1, {})
+    with pytest.raises(TypeError):
+        derive_blocked_verdict_for_event(graph, cap_map, (0, 0), (1, 1))  # type: ignore[call-arg]
+
+
+def test_require_clearing_distinguishes_approach_from_clearing_multi_start():
+    """The multi-start sibling's equivalent of the obstacle regression test
+    above: two starts, both approach cells freely open, rock at (1,1)."""
+    graph = MapGraph(map_id=1, width=3, height=3, tileset_id=0, blocked=_open_grid(3, 3))
+    cap_map = _cap_map(1, {(1, 1): _event_obstacle((1, 1), Capability.ROCK_SMASH)})
+    starts = frozenset({(0, 0), (2, 2)})
+
+    approach_verdict = derive_blocked_verdict_for_event_from_starts(
+        graph, cap_map, starts, (1, 1), require_clearing=False,
+    )
+    assert approach_verdict.reachable_now is True
+
+    clearing_verdict = derive_blocked_verdict_for_event_from_starts(
+        graph, cap_map, starts, (1, 1), require_clearing=True,
+    )
+    assert clearing_verdict.reachable_now is False
+    assert clearing_verdict.minimal_sets == [frozenset({Capability.ROCK_SMASH})]
+
+
+def test_require_clearing_has_no_default_for_derive_blocked_verdict_for_event_from_starts():
+    graph = MapGraph(map_id=1, width=3, height=3, tileset_id=0, blocked=_open_grid(3, 3))
+    cap_map = _cap_map(1, {})
+    with pytest.raises(TypeError):
+        derive_blocked_verdict_for_event_from_starts(  # type: ignore[call-arg]
+            graph, cap_map, frozenset({(0, 0)}), (1, 1),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -368,4 +451,4 @@ def test_map35_rock_obstacles_classify_as_event_source_and_derivation_runs_clean
     # verdicts here -- that belongs to the lead's own frozen-oracle check.
     start = next(cell for cell in graph.blocked if graph.is_walkable(cell))
     for cell in expected_rock_cells:
-        derive_blocked_verdict_for_event(graph, cap_map, start, cell)
+        derive_blocked_verdict_for_event(graph, cap_map, start, cell, require_clearing=False)

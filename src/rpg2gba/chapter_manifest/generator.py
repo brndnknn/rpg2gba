@@ -394,13 +394,19 @@ def _reachability_requires(
     context: ReachabilityContext | None,
     event_cell: tuple[int, int],
 ) -> tuple[str, ...]:
-    """Capabilities needed to even APPROACH `event_cell` (an orthogonally-
-    adjacent tile), derived from the offline traversal graph. Empty when
-    `context` is None (no verified start cell -- see
-    `_build_reachability_context`), when the approach is already open with
-    nothing held, or when no `VERIFIED_CAPABILITIES` combination opens it at
-    all (`derive_blocked_verdict_for_event_from_starts`'s empty `minimal_sets` -- true
-    geography, not a capability gate, so it is not added here).
+    """Capabilities needed to actually GET PAST `event_cell` -- reach an
+    orthogonally-adjacent tile AND, if the event is itself an obstacle
+    (a Rock Smash rock, a Strength boulder), clear it -- derived from the
+    offline traversal graph via `require_clearing=True` (backlog #95: the
+    approach-only question used to answer `reachable_now=True` for a rock
+    reachable from either side even though the rock itself was never
+    cleared, which silently dropped 5 of CH04's hand-authored
+    `blocked:rock_smash` rows). Empty when `context` is None (no verified
+    start cell -- see `_build_reachability_context`), when the event is
+    already clear with nothing held, or when no `VERIFIED_CAPABILITIES`
+    combination opens it at all (`derive_blocked_verdict_for_event_from_starts`'s
+    empty `minimal_sets` -- true geography, not a capability gate, so it is
+    not added here).
 
     `ManifestRow.requires` stays a flat `tuple[str, ...]` (schema change out
     of scope for this function); it reports ONE minimal set -- the smallest,
@@ -413,7 +419,15 @@ def _reachability_requires(
     if context is None:
         return ()
     graph, capability_map, starts = context
-    verdict = derive_blocked_verdict_for_event_from_starts(graph, capability_map, starts, event_cell)
+    # `require_clearing=True`: this populates `requires[]`, which is asking
+    # what the player needs to actually GET PAST this event, not merely
+    # stand next to it -- for a Rock Smash rock or Strength boulder that
+    # means the obstacle's own capability, not just an open approach tile
+    # (backlog #95; see `reachability.derive_blocked_verdict_for_event`'s
+    # docstring for the two-question distinction and the CH04 evidence).
+    verdict = derive_blocked_verdict_for_event_from_starts(
+        graph, capability_map, starts, event_cell, require_clearing=True,
+    )
     if verdict.reachable_now or not verdict.minimal_sets:
         return ()
     best = verdict.minimal_sets[0]

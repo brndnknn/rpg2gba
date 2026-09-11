@@ -339,14 +339,27 @@ def capabilities_cmd(
     help="Restrict candidate capabilities considered (default: all verified capabilities).",
 )
 @click.option(
+    "--require-clearing", is_flag=True,
+    help="For --event targets, ask the CLEARING question (must the obstacle itself be "
+    "cleared -- e.g. rock_smash for a rock) instead of the default APPROACH question "
+    "(can the player merely stand next to it). No effect on --to targets, which have "
+    "no event of their own to clear. See reachability.derive_blocked_verdict_for_event's "
+    "docstring for the two-question distinction (backlog #95).",
+)
+@click.option(
     "--json", "as_json", is_flag=True, help="Emit machine-readable JSON instead of one line per target.",
 )
 def blocked_cmd(
     map_id: int, maps_dir: Path, tilesets_json: Path, terrain_tag_map: Path | None,
     start_str: str, goal_strs: tuple[str, ...], event_ids: tuple[int, ...],
-    capability_names: tuple[str, ...], as_json: bool,
+    capability_names: tuple[str, ...], require_clearing: bool, as_json: bool,
 ) -> None:
-    """Derive the blocked:<capability set> verdict for one or more targets on a map."""
+    """Derive the blocked:<capability set> verdict for one or more targets on a map.
+
+    By default --event targets ask the APPROACH question (can the player
+    reach a tile next to the event); pass --require-clearing to ask whether
+    the event's own obstacle (if any) is additionally cleared -- see
+    --require-clearing's help text."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     if not goal_strs and not event_ids:
         raise click.UsageError("at least one --to or --event is required")
@@ -374,7 +387,10 @@ def blocked_cmd(
     results = []
     for label, cell, is_event in targets:
         verdict = (
-            derive_blocked_verdict_for_event(graph, capability_map, start, cell, candidates=candidates)
+            derive_blocked_verdict_for_event(
+                graph, capability_map, start, cell,
+                require_clearing=require_clearing, candidates=candidates,
+            )
             if is_event
             else derive_blocked_verdict(graph, capability_map, start, cell, candidates=candidates)
         )

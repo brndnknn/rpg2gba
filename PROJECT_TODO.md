@@ -2584,7 +2584,7 @@ are event-level and they do not overlap). `REDERIVATION_PLAN.md` §13.3's T1 thi
 item — `pbReceiveItem` NPC gifts — is the first candidate that would be
 event-level and make this load-bearing.
 
-### 95. `derive_blocked_verdict` asks the wrong question about obstacle rows
+### 95. DONE 2026-09-11 — `derive_blocked_verdict` asks the wrong question about obstacle rows
 
 *Filed 2026-09-10, measured while ruling `REDERIVATION_PLAN.md` §13.*
 
@@ -2602,6 +2602,51 @@ This is independent of any disposition generator — it means a derived `blocked
 is unreliable on precisely the class #92 already flagged, and #92's finding (no
 `code 121`/`122` grant site exists for `rock_smash`/`surf` at all) is the reason
 it has never been caught by a disagreement.
+
+**DONE 2026-09-11.** The diagnosis was right and the fix is smaller than the
+entry implies: the two event-goal derivations were answering *one* question when
+there are *two*, so `derive_blocked_verdict_for_event` and
+`derive_blocked_verdict_for_event_from_starts` now take a keyword-only
+`require_clearing: bool` **with no default**.
+
+- `require_clearing=False` — the APPROACH question, today's behaviour byte for
+  byte: is any orthogonally-adjacent cell reachable.
+- `require_clearing=True` — the CLEARING question: that, **and** if
+  `capability_map.obstacles` carries an entry for the event's own cell, that
+  obstacle's capability must be held too. An event with no obstacle entry
+  collapses to the approach answer, so a plain NPC gains no invented gate.
+
+The conjunct goes inside the predicate handed to `_minimal_sets_for_predicate`,
+so the existing subset search surfaces the obstacle's own capability in
+`minimal_sets` for free — no second code path, and `BlockedVerdict` /
+`as_disposition()` are untouched.
+
+**No default is the load-bearing part** (§4.5). The two questions have different
+right answers and only the caller knows which it means, so each of the three call
+sites now says so out loud: `generator._reachability_requires` asks
+`require_clearing=True` (`requires[]` means *what do I need to get past this*),
+`approach_model.GraphApproachModel` asks `False` (it models walking up and
+pressing A — an uncleared rock still takes the interaction, which is what raises
+the prompt), and `traversal blocked` gained a `--require-clearing` flag rather
+than picking for the operator. Two tests pin the `TypeError` so a future edit
+cannot quietly reintroduce a default.
+
+**Verified on the real data, not just a fixture.** `map035/ev014` (20,28) and
+`map035/ev017` (19,29) each carry `Obstacle(source="event",
+capability=ROCK_SMASH)` on their own cell and now derive `blocked:rock_smash`
+under the clearing question while still deriving `""` under the approach
+question — reproducing CH04's hand-authored disposition for all four of their
+rows. `tests/test_traversal_frozen_oracle.py` pins that against the real map;
+`tests/test_traversal_reachability.py` pins the shape on a synthetic 3×3. Suite
+green at 3290 passed / 17 skipped.
+
+**Scope correction: this entry's list of five rows conflated two bugs.** The
+fifth, `map035/seam/N/map040`, is not an event, has no obstacle cell of its own,
+and derives **identically under both questions** — 6 of map 35's 38 walkable
+row-0 cells come back `blocked:rock_smash` either way, which the frozen-oracle
+test already asserted before this change. Whatever kept the seam row from
+reproducing in §13's measurement is a **disposition-generator** concern, not this
+derivation's, and is still open going into P8b.
 
 ### 93. Five capability base tokens name both a switch and a variable
 

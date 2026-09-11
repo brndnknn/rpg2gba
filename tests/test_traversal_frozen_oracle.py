@@ -43,6 +43,7 @@ from pathlib import Path
 import pytest
 
 from rpg2gba.traversal import build_capability_map, build_map_graph, derive_blocked_verdict_for_event
+from rpg2gba.traversal.capabilities import Capability
 from rpg2gba.traversal.collision import DEFAULT_MAPS_DIR, DEFAULT_TILESETS_JSON
 
 ORACLE_PATH = Path("reference/frozen/slice2_blocked_expectations.json")
@@ -136,8 +137,12 @@ def test_ch04_manifest_rows_split_24_blocked_4_reachable(
         event_id = int(m.group(1))
         cell = _event_cell(map035_json, event_id)
 
+        # require_clearing=False: this file pins the APPROACH question (see
+        # module docstring) -- the frozen oracle's 4 "reachable" rows are
+        # reachable-to-approach even though their rocks are uncleared, which
+        # is exactly what require_clearing=False means to ask.
         verdict = derive_blocked_verdict_for_event(
-            map035_graph, map035_capabilities, CH04_START, cell,
+            map035_graph, map035_capabilities, CH04_START, cell, require_clearing=False,
         )
 
         if row_id in CH04_APPROACH_REACHABLE_ROW_IDS:
@@ -167,7 +172,7 @@ def test_ch04_manifest_rows_split_24_blocked_4_reachable(
 
     seam_dispositions = {
         cell: derive_blocked_verdict_for_event(
-            map035_graph, map035_capabilities, CH04_START, cell,
+            map035_graph, map035_capabilities, CH04_START, cell, require_clearing=False,
         ).as_disposition()
         for cell in row0_cells
     }
@@ -184,6 +189,57 @@ def test_ch04_manifest_rows_split_24_blocked_4_reachable(
     assert len(blocked_row_ids) == 24, blocked_row_ids
     assert len(reachable_row_ids) == 4, reachable_row_ids
     assert set(reachable_row_ids) == CH04_APPROACH_REACHABLE_ROW_IDS
+
+
+def test_ch04_script_head_rows_derive_blocked_under_the_clearing_question(
+    map035_json, map035_graph, map035_capabilities,
+):
+    """The real-data half of backlog #95, on the rows that motivated it.
+
+    The 4 rows in `CH04_APPROACH_REACHABLE_ROW_IDS` are reachable-to-approach
+    (the test above pins that, and it is the correct answer to the approach
+    question -- you can stand beside either rock). But CH04's committed
+    dispositions call all 4 `blocked:rock_smash`, and the hand-authored
+    answer is the right one: the rows are about SMASHING the rock, and
+    `derive_blocked_verdict_for_event` had no way to ask that. It does now.
+
+    Both events carry an `Obstacle` on their own cell (`source == "event"`,
+    `capability == ROCK_SMASH`), so `require_clearing=True` reproduces the
+    authored disposition exactly. This is the assertion the synthetic 3x3
+    fixture in `test_traversal_reachability.py` cannot make: that the real
+    corpus data is tagged the way the fix assumes.
+
+    Note what this does NOT cover. #95 listed a fifth row,
+    `map035/seam/N/map040`, alongside these four. That row is not an event,
+    has no obstacle cell of its own, and derives identically under both
+    questions (6 of map 35's 38 walkable row-0 cells are `blocked:rock_smash`
+    either way -- the test above asserts exactly that). Whatever kept the
+    seam row from reproducing is a disposition-generator concern, not this
+    derivation's; #95 conflated the two.
+    """
+    for event_id in (14, 17):
+        cell = _event_cell(map035_json, event_id)
+
+        obstacle = map035_capabilities.obstacles.get(cell)
+        assert obstacle is not None, f"event {event_id} at {cell} carries no obstacle"
+        assert obstacle.source == "event"
+        assert obstacle.capability is Capability.ROCK_SMASH
+
+        approach = derive_blocked_verdict_for_event(
+            map035_graph, map035_capabilities, CH04_START, cell, require_clearing=False,
+        )
+        assert approach.as_disposition() == "", (
+            f"event {event_id} at {cell}: the approach question should still say "
+            f"reachable; got {approach.as_disposition()!r}"
+        )
+
+        clearing = derive_blocked_verdict_for_event(
+            map035_graph, map035_capabilities, CH04_START, cell, require_clearing=True,
+        )
+        assert clearing.as_disposition() == "blocked:rock_smash", (
+            f"event {event_id} at {cell}: expected the clearing question to reproduce "
+            f"CH04's authored 'blocked:rock_smash'; got {clearing.as_disposition()!r}"
+        )
 
 
 def test_ch02_beats_all_gated_on_rock_smash(oracle, map033_graph, map033_capabilities):
@@ -209,7 +265,7 @@ def test_ch02_beats_all_gated_on_rock_smash(oracle, map033_graph, map033_capabil
         assert beat["map_id"] == CH02_MAP_ID
         cell = tuple(beat["cell"])
         verdict = derive_blocked_verdict_for_event(
-            map033_graph, map033_capabilities, CH02_START, cell,
+            map033_graph, map033_capabilities, CH02_START, cell, require_clearing=False,
         )
         assert verdict.as_disposition() == "blocked:rock_smash|surf", (
             f"beat {beat['beat_id']} at {cell}: expected "

@@ -108,7 +108,7 @@ def test_map036_positive_arm_all_derive_blocked_surf(
     for row in rows:
         cell = tuple(row["event_cell"])
         verdict = derive_blocked_verdict_for_event(
-            map036_graph, map036_capabilities, start_cell_36, cell,
+            map036_graph, map036_capabilities, start_cell_36, cell, require_clearing=False,
         )
         assert verdict.as_disposition() == "blocked:surf", (
             f"{row['row_id']} at {cell}: expected 'blocked:surf', "
@@ -148,7 +148,7 @@ def test_map036_negative_arm_all_other_events_stay_clear(
         assert int(event_id_str) in ch05["event_ids_expected_clear"]
         cell = tuple(cell)
         verdict = derive_blocked_verdict_for_event(
-            map036_graph, map036_capabilities, start_cell_36, cell,
+            map036_graph, map036_capabilities, start_cell_36, cell, require_clearing=False,
         )
         surf_in_any_minimal_set = any(
             "surf" in {c.value for c in minimal_set}
@@ -180,7 +180,7 @@ def test_map037_no_row_derives_surf(oracle, start_cell_37, map037_graph, map037_
     for event in events:
         cell = (event["x"], event["y"])
         verdict = derive_blocked_verdict_for_event(
-            map037_graph, map037_capabilities, start_cell_37, cell,
+            map037_graph, map037_capabilities, start_cell_37, cell, require_clearing=False,
         )
         surf_in_any_minimal_set = any(
             "surf" in {c.value for c in minimal_set}

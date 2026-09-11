@@ -9,10 +9,14 @@ degrading to `RULE_APPROACH_MODEL_UNENFORCED` on every `blocked:` row.
 The question this model answers is reachability-from-entry, not local
 collision-openness: "starting from this chapter's registered start cell, with
 no field-move capability held, can the player reach any tile orthogonally
-adjacent to this event?" That is exactly
-`reachability.derive_blocked_verdict_for_event(...).reachable_now` -- the
-same derivation `generator._reachability_requires` already runs to populate
-`requires[]`, asked from the other side. A prior version of this model asked
+adjacent to this event?" That is exactly the APPROACH question --
+`reachability.derive_blocked_verdict_for_event(..., require_clearing=False)
+.reachable_now` -- deliberately not the CLEARING question
+`generator._reachability_requires` asks with `require_clearing=True` to
+populate `requires[]` (backlog #95): this model is asking whether the
+player can walk up and press A, which is answered by an open approach tile
+alone, not by whether an obstacle sitting on the event's own tile has been
+cleared. A prior version of this model asked
 a purely LOCAL question (is a neighbouring tile collision-open) and it was
 wrong: local walkability answers True across an entire open outdoor room
 whether or not the player can actually get into that room, which fired the
@@ -55,7 +59,12 @@ class GraphApproachModel:
     start) triple `generator._build_reachability_context` already builds for
     `requires[]` -- rather than reimplementing any part of it (CLAUDE.md
     §4.3). `.reachable_now` is exactly this model's answer when it can
-    answer at all.
+    answer at all. Called with `require_clearing=False`: "walk up to it and
+    press A" is the approach question, not the clearing question -- an
+    obstacle event that is fully approachable but not yet cleared still
+    lets the player walk up and interact (that's what triggers the
+    Rock-Smash prompt in the first place), so demanding clearing here would
+    misanswer this model's actual question.
 
     WHAT THIS TRUSTS, so a surprising answer is diagnosable rather than
     mysterious:
@@ -132,5 +141,7 @@ class GraphApproachModel:
         event_cell = self._event_cell(row.map_id, row.event_id)
         if event_cell is None:
             return None  # event vanished from the decoded map data
-        verdict = derive_blocked_verdict_for_event_from_starts(graph, capability_map, starts, event_cell)
+        verdict = derive_blocked_verdict_for_event_from_starts(
+            graph, capability_map, starts, event_cell, require_clearing=False,
+        )
         return verdict.reachable_now
