@@ -400,7 +400,16 @@ def _reachability_requires(
     `_build_reachability_context`), when the approach is already open with
     nothing held, or when no `VERIFIED_CAPABILITIES` combination opens it at
     all (`derive_blocked_verdict_for_event_from_starts`'s empty `minimal_sets` -- true
-    geography, not a capability gate, so it is not added here)."""
+    geography, not a capability gate, so it is not added here).
+
+    `ManifestRow.requires` stays a flat `tuple[str, ...]` (schema change out
+    of scope for this function); it reports ONE minimal set -- the smallest,
+    per `_minimal_sets_for_predicate`'s ordering -- even when the verdict
+    carries several independent alternatives. The full disjunction is not
+    lost: the disposition layer (`BlockedVerdict.as_disposition`,
+    `schema.parse_blocked_argument`) carries every minimal set. When more
+    than one exists here, the narrowing is logged so it stays legible in the
+    build log rather than silently discarding the alternatives."""
     if context is None:
         return ()
     graph, capability_map, starts = context
@@ -408,6 +417,17 @@ def _reachability_requires(
     if verdict.reachable_now or not verdict.minimal_sets:
         return ()
     best = verdict.minimal_sets[0]
+    if len(verdict.minimal_sets) > 1:
+        alternatives = verdict.minimal_sets[1:]
+        logger.warning(
+            "event cell %s has %d independent minimal capability sets; "
+            "requires[] keeps only %s -- alternative(s) %s are dropped from "
+            "the manifest row and survive only in the disposition layer",
+            event_cell,
+            len(verdict.minimal_sets),
+            "+".join(sorted(c.value for c in best)),
+            ", ".join("+".join(sorted(c.value for c in s)) for s in alternatives),
+        )
     return tuple(sorted(c.value for c in best))
 
 

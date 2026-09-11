@@ -9,8 +9,11 @@ dispositions) and **#67** (route plans), executed under **#62**'s ordering safeg
 > and this file is archived.
 
 **Live status (2026-09-10): Phases A, B done; P7 (freeze) done. P8's CH01 half is done
-(`55b98f51`) — CH02/CH03/CH04 remain. The three questions that were blocking them are
-ruled in §10.** Branch `rederive-ch01-ch04`.
+(`55b98f51`), and CH02/CH03's manifest diffs are adjudicated — all category 1, no
+category-3 finding (`investigations/ch02_ch03_rederivation_adjudication.md`). What remains
+in P8: authoring CH01–CH03's dispositions, and §10 R2/R3's flip on CH04+CH05. The three
+questions that were blocking them are ruled in §10; a fourth, surfaced by the adjudication,
+is ruled in §12.** Branch `rederive-ch01-ch04`.
 
 ---
 
@@ -189,7 +192,7 @@ prerequisite.
 | # | Step | Item | Status |
 |---|---|---|---|
 | **P7** | **Freeze.** Write the expected answers for all four chapters from their committed, gate-passed artifacts *before* generating anything. Per #62, verbatim: *freeze the expected answers, derive, diff, then write — never derive-and-write in one pass, or a regression in the derivation logic reads as a correct re-disposition.* Precedent for the format: `reference/frozen/archetype_expectations.json`. | #62 | **DONE** `aaae306e` |
-| **P8** | **Derive, diff, adjudicate** — manifests + dispositions for CH01–CH04, one chapter at a time, diffed against P7's freeze. Every diff line classified 1/2/3 per §1. Category-3 lines stop the pass. Also carries §10 R3's two code changes and R1's `var_` prefix. | #65 | **CH01 DONE** `55b98f51` · CH02/CH03/CH04 TODO |
+| **P8** | **Derive, diff, adjudicate** — manifests + dispositions for CH01–CH04, one chapter at a time, diffed against P7's freeze. Every diff line classified 1/2/3 per §1. Category-3 lines stop the pass. Also carries §10 R3's two code changes and R1's `var_` prefix. | #65 | **CH01 DONE** `55b98f51` · **CH02/CH03 manifests adjudicated** (§12) · CH04 manifest clean, its R2/R3 disposition flip TODO · CH01–CH03 dispositions TODO |
 | **P9** | **Route plans** for all four chapters (`routing plan --chapter CHnn --module <mod>`), and re-author beats adopting `entry_at`. Pay down the coordinate literals to zero (§5). | #67 | TODO |
 | **P10** | **Discharge the inherited obligations** (§4) and delete the scaffolding that expires with this task. | — | TODO |
 
@@ -423,6 +426,44 @@ class as `ch02.py`'s stale `NORTH_EXIT_TILE_B` comment (§3, P2) and as CH04's `
 and R3 give both rows to CH05 — but the two `DEFERRED_BEATS` entries must go in P8, since
 their stated reason is now false.
 
+## 12. Operator ruling, 2026-09-10 — the `blocked:` grammar gains a disjunction
+
+Surfaced by P8's CH02/CH03 adjudication and blocking disposition authoring, so ruled the
+same day. Full evidence in `investigations/ch02_ch03_rederivation_adjudication.md` §3.
+
+**The defect.** `BlockedVerdict.as_disposition()` narrowed to `minimal_sets[0]` and
+`_reachability_requires` did the same at `generator.py:410`. On 18 CH02 rows — and, it
+turned out, on **all 10** of CH02's frozen-oracle beats on Map033 — the real answer is two
+independent minimal sets, `rock_smash` *or* `surf`. The second was discarded silently, and
+the old grammar could not have expressed it anyway: `|` in `blocked:a|b` meant **AND**, the
+members of one minimal set. Authoring CH01–CH03's dispositions before fixing this would
+have frozen `blocked:rock_smash` onto rows whose gate is an either/or — §1's stated failure
+mode, where the frozen literal and the resolver agree with each other and disagree with the
+game.
+
+**The ruling.** `|` now means **OR** (alternative minimal sets, any one suffices); `+` means
+**AND** (members within one set); `+` binds tighter. **Migration cost measured before
+deciding and it is zero:** every `blocked:` spec committed anywhere in
+`reference/manifests/*.dispositions.json` is a single bare token (`blocked:rock_smash` ×28,
+`blocked:surf` ×4). Nothing in the corpus used `|`, so no disposition file changes and none
+was touched — they are under P7's freeze. Rejected alternative: keep `|` as AND and add a
+third separator for OR, which leaves two punctuation marks needing a precedence rule for a
+conjunction that has never once occurred in the corpus.
+
+**The checker's fold changes with it**, and this is the substantive half.
+`checker.py` looped per token and treated each as an independent claim. Under a disjunction
+that is wrong in both directions: `RULE_BLOCKED_ALREADY_GRANTED` must fire when **at least
+one** alternative is wholly granted, and `RULE_BLOCKED_NO_GRANT_SITE` only when **every**
+alternative is impossible — one impossible alternative beside a viable one is precisely what
+a correct `blocked` claims. Note the old fold was already too aggressive under AND semantics
+too (one held capability does not open a cell needing two); it never fired because no
+multi-token spec has ever existed.
+
+**`requires[]` is deliberately NOT changed.** `ManifestRow.requires` stays a flat
+`tuple[str, ...]` reporting one minimal set — widening it is a manifest schema change and a
+separate decision. The narrowing there is now logged at warning level instead of being
+silent, and the disposition layer carries the full disjunction.
+
 ## 11. Log
 
 - **2026-09-09** — Plan opened. Scope set by operator: route plans in, CH04 in, `entry_at`
@@ -506,3 +547,30 @@ their stated reason is now false.
   are recorded there rather than filed: the `_TSA` flags are faithful (not the transpiler bug
   they look like — `event_data.c:65` clears the range every map transition), and CH04's
   `b7`/`b8` deferral condition expired unnoticed.
+- **2026-09-10** — **P8, CH02 + CH03 manifest halves adjudicated**
+  (`investigations/ch02_ch03_rederivation_adjudication.md`). **Every diff line is category 1;
+  no category-3 finding.** The 7+3 row swap is the #54 stair absorption (`292a94bf`) — exact
+  cell-for-cell coverage, each terrain row's `source_event_id` naming the event it replaced,
+  and lossless (all 10 removed rows were pure `move_route` with no script, no condition, no
+  `unhandled`). **Not** #79/#90/`507b1997`, which touches only the beat-authoring approach
+  resolver; the misattribution was made once during this pass and is corrected in the doc.
+  The 25 `requires` diffs are `reachability_consulted: False → True` — maps 33/31/19 got
+  their `_CHAPTER_MAP_START_CELLS` entries in `90c5470a` (P6b), so the old `[]` was an
+  unmeasured default, not a judgment. All 25 are approach gates (mechanism 2), not script
+  gates. #92 makes them unenforceable, not wrong. Two findings that are not diff lines: the
+  `minimal_sets[0]` discard (ruled in §12) and the fact that `content_hash` covers only the
+  raw RMXP page, so it is blind to every one of the 25 field diffs by construction and gives
+  the row swap no continuity check at all.
+- **2026-09-10** — **§12 ruling implemented.** `blocked:` gains a disjunction: `|` = OR,
+  `+` = AND. `as_disposition` emits every minimal set; `schema.parse_blocked_argument` is the
+  shared parser and `_validate_blocked_argument` enforces canonical order plus a
+  proper-superset rejection (a non-minimal alternative beside the minimal one it is redundant
+  with); `checker.py`'s fold is per-alternative, not per-token. `requires[]` unchanged by
+  design, its narrowing now logged rather than silent. **One frozen-oracle test re-pinned,
+  not the oracle:** `test_ch02_beats_all_gated_on_rock_smash` asserted
+  `"blocked:rock_smash"` against all 10 CH02 beats and now asserts `"blocked:rock_smash|surf"`
+  — the discard was hiding a second route on every one of them.
+  `reference/frozen/slice2_blocked_expectations.json` was **not** touched; its
+  `expected_capability` field is still accurate, merely incomplete. Suite 3274 passed / 17
+  skipped (was 3261/17). CH04 0 errors / 44 warnings / 42 rows and CH05 0 errors / 5 warnings
+  / 25 rows, both unchanged.

@@ -236,6 +236,10 @@ def test_blocked_disposition_single_capability():
 
 
 def test_blocked_disposition_multi_capability():
+    # Re-pinned for the "+"-is-AND / "|"-is-OR grammar (2026-09-10): this
+    # goal needs BOTH rock_smash and surf (single corridor, one rock then
+    # one water crossing), which is an AND within one minimal set --
+    # spelled with "+", not "|" (that separates ALTERNATIVE sets now).
     walls = {(0, 1), (2, 1), (0, 2), (1, 2), (2, 2)}
     graph = MapGraph(
         map_id=1, width=3, height=4, tileset_id=0, blocked=_walled_grid(3, 4, walls),
@@ -245,6 +249,23 @@ def test_blocked_disposition_multi_capability():
         (1, 2): _terrain_obstacle((1, 2), Capability.SURF),
     })
     verdict = derive_blocked_verdict(graph, cap_map, (1, 0), (1, 3))
+    assert verdict.as_disposition() == "blocked:rock_smash+surf"
+
+
+def test_blocked_disposition_two_alternative_sets():
+    # Two independent single-capability routes (the same geometry as
+    # `test_two_independent_alternative_routes_yield_two_minimal_sets`):
+    # either rock_smash alone or surf alone opens the goal, so the
+    # disposition is an OR ("|") of two singleton sets, not an AND.
+    walls = {(0, 1), (2, 1), (3, 1), (4, 1)}
+    graph = MapGraph(
+        map_id=1, width=5, height=3, tileset_id=0, blocked=_walled_grid(5, 3, walls),
+    )
+    cap_map = _cap_map(1, {
+        (1, 1): _event_obstacle((1, 1), Capability.ROCK_SMASH),
+        (3, 1): _terrain_obstacle((3, 1), Capability.SURF),
+    })
+    verdict = derive_blocked_verdict(graph, cap_map, (0, 0), (2, 2))
     assert verdict.as_disposition() == "blocked:rock_smash|surf"
 
 

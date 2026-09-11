@@ -318,9 +318,13 @@ def test_blocked_with_grant_site_ok():
                                RULE_BLOCKED_ALREADY_GRANTED) for f in findings)
 
 
-def test_blocked_multi_capability_set_checked_per_token():
+def test_blocked_and_set_no_grant_site_for_one_member_is_error():
+    # Re-pinned for the "+"-is-AND / "|"-is-OR grammar (2026-09-10): this is
+    # ONE minimal set requiring both capabilities, spelled with "+". Since
+    # it's the only alternative, a missing grant site for either member
+    # makes the whole (only) alternative impossible.
     row = _row(effects=(), content_hash="h1")
-    disp = _disp(row.row_id, "blocked:rock_smash|strength", affirmed_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash+strength", affirmed_hash="h1")
     grant = CapabilityGrant(row_id="map042/ev003/p0", map_id=42, chapter_id="CH06")
     caps = _FakeCapabilities({"rock_smash": (grant,)})  # strength ungranted
     findings = check_chapter([row], {row.row_id: disp}, capabilities=caps, approach=_FakeApproach(set()))
@@ -336,12 +340,13 @@ def test_blocked_tooling_form_skips_capability_check():
                for f in findings)
 
 
-def test_blocked_capability_undetermined_per_token_warns_unenforced():
-    """`grant_sites` returning `None` for one token in a `blocked:a|b` spec
-    warns unenforced for that token specifically, even when a model is
-    supplied and the other token resolves fine."""
+def test_blocked_and_set_capability_undetermined_warns_unenforced():
+    """`grant_sites` returning `None` for one member of a `blocked:a+b` AND
+    set warns unenforced for the whole (only) alternative, even though the
+    other member resolves fine -- re-pinned from the old `|`-is-AND spelling
+    (2026-09-10)."""
     row = _row(effects=(), content_hash="h1")
-    disp = _disp(row.row_id, "blocked:rock_smash|strength", affirmed_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash+strength", affirmed_hash="h1")
     grant = CapabilityGrant(row_id="map042/ev003/p0", map_id=42, chapter_id="CH06")
     caps = _FakeCapabilities({"rock_smash": (grant,), "strength": None})
     findings = check_chapter([row], {row.row_id: disp}, capabilities=caps, approach=_FakeApproach(set()))
@@ -349,6 +354,49 @@ def test_blocked_capability_undetermined_per_token_warns_unenforced():
     assert finding.severity == "warning"
     assert "strength" in finding.message
     assert all(f.rule != RULE_BLOCKED_NO_GRANT_SITE for f in findings)
+
+
+# --- OR semantics: alternative capability sets (2026-09-10 grammar) --------
+
+
+def test_blocked_or_one_of_two_alternatives_satisfied_fires_already_granted():
+    row = _row(effects=(), content_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash|surf", affirmed_hash="h1")
+    rock_grant = CapabilityGrant(row_id="map042/ev003/p0", map_id=42, chapter_id="CH06")
+    surf_grant = CapabilityGrant(row_id="map050/ev001/p0", map_id=50, chapter_id="CH07")
+    caps = _FakeCapabilities(
+        {"rock_smash": (rock_grant,), "surf": (surf_grant,)},
+        within={"rock_smash": (rock_grant,)},  # only rock_smash already held
+    )
+    findings = check_chapter([row], {row.row_id: disp}, capabilities=caps, approach=_FakeApproach(set()))
+    finding = next(f for f in findings if f.rule == RULE_BLOCKED_ALREADY_GRANTED)
+    assert "rock_smash" in finding.message
+    assert "map042/ev003/p0" in finding.message
+    assert all(f.rule != RULE_BLOCKED_NO_GRANT_SITE for f in findings)
+
+
+def test_blocked_or_one_impossible_one_viable_does_not_fire_no_grant_site():
+    row = _row(effects=(), content_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash|surf", affirmed_hash="h1")
+    surf_grant = CapabilityGrant(row_id="map050/ev001/p0", map_id=50, chapter_id="CH07")
+    # rock_smash ungranted anywhere (impossible); surf has a real site but
+    # isn't held yet within this chapter/predecessor (still viable-blocked).
+    caps = _FakeCapabilities({"surf": (surf_grant,)})
+    findings = check_chapter([row], {row.row_id: disp}, capabilities=caps, approach=_FakeApproach(set()))
+    rules = [f.rule for f in findings]
+    assert RULE_BLOCKED_NO_GRANT_SITE not in rules
+    assert RULE_BLOCKED_ALREADY_GRANTED not in rules
+    assert RULE_CAPABILITY_MODEL_UNENFORCED not in rules
+
+
+def test_blocked_or_all_alternatives_impossible_fires_no_grant_site():
+    row = _row(effects=(), content_hash="h1")
+    disp = _disp(row.row_id, "blocked:rock_smash|surf", affirmed_hash="h1")
+    caps = _FakeCapabilities({})  # neither capability is granted anywhere
+    findings = check_chapter([row], {row.row_id: disp}, capabilities=caps, approach=_FakeApproach(set()))
+    finding = next(f for f in findings if f.rule == RULE_BLOCKED_NO_GRANT_SITE)
+    assert "rock_smash" in finding.message
+    assert "surf" in finding.message
 
 
 def test_blocked_already_granted_in_this_chapter_or_predecessor_is_error():

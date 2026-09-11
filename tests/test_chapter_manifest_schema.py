@@ -237,18 +237,69 @@ def test_blocked_requires_a_capability() -> None:
 
 
 def test_blocked_rejects_unsorted_capability_set() -> None:
+    # Re-pinned for the "+"-is-AND / "|"-is-OR grammar (2026-09-10): the
+    # within-set sortedness rule now applies to a "+"-joined AND set, not to
+    # "|" (which now separates alternatives and has its own ordering rule,
+    # covered below).
     with pytest.raises(DispositionError, match="sorted ascending"):
-        Disposition.parse("row", "blocked:strength|rock_smash")
+        Disposition.parse("row", "blocked:strength+rock_smash")
 
 
 def test_blocked_rejects_duplicate_capability() -> None:
     with pytest.raises(DispositionError, match="sorted ascending"):
-        Disposition.parse("row", "blocked:rock_smash|rock_smash")
+        Disposition.parse("row", "blocked:rock_smash+rock_smash")
 
 
 def test_blocked_rejects_malformed_argument() -> None:
     with pytest.raises(DispositionError, match="not a valid 'blocked:' argument"):
         Disposition.parse("row", "blocked:Rock Smash")
+
+
+def test_blocked_rejects_empty_argument() -> None:
+    with pytest.raises(DispositionError, match="requires an argument"):
+        Disposition.parse("row", "blocked:")
+
+
+def test_blocked_rejects_empty_alternative() -> None:
+    with pytest.raises(DispositionError, match="not a valid 'blocked:' argument"):
+        Disposition.parse("row", "blocked:rock_smash||surf")
+
+
+def test_blocked_rejects_empty_token_in_and_set() -> None:
+    with pytest.raises(DispositionError, match="not a valid 'blocked:' argument"):
+        Disposition.parse("row", "blocked:rock_smash++surf")
+
+
+def test_blocked_rejects_out_of_order_alternatives() -> None:
+    # Both alternatives are singleton AND sets, but "strength" sorts after
+    # "rock_smash" -- canonical order is (size, then sorted member tuple).
+    with pytest.raises(DispositionError, match="canonical order"):
+        Disposition.parse("row", "blocked:strength|rock_smash")
+
+
+def test_blocked_rejects_out_of_order_alternatives_by_size() -> None:
+    # A one-member set must sort before a two-member set of the same
+    # "first token", regardless of textual order.
+    with pytest.raises(DispositionError, match="canonical order"):
+        Disposition.parse("row", "blocked:rock_smash+strength|rock_smash")
+
+
+def test_blocked_rejects_duplicate_alternative() -> None:
+    with pytest.raises(DispositionError, match="more than once"):
+        Disposition.parse("row", "blocked:rock_smash|rock_smash")
+
+
+def test_blocked_rejects_superset_alternative() -> None:
+    # If rock_smash alone already opens the row, listing rock_smash+surf as
+    # a second alternative is not a second minimal route -- it's a
+    # non-minimal restatement of the first.
+    with pytest.raises(DispositionError, match="already suffices"):
+        Disposition.parse("row", "blocked:rock_smash|rock_smash+surf")
+
+
+def test_blocked_accepts_or_of_and_sets() -> None:
+    disp = Disposition.parse("row", "blocked:rock_smash|strength+surf")
+    assert disp.argument == "rock_smash|strength+surf"
 
 
 def test_assertable_only_applies_to_blocked() -> None:

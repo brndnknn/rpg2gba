@@ -638,6 +638,46 @@ def test_reachability_requires_absent_without_verified_start_cell(tmp_path: Path
     assert rock_row.reachability_consulted is False
 
 
+def test_reachability_requires_logs_narrowing_when_multiple_minimal_sets(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """`_reachability_requires` keeps only the smallest minimal set in the
+    flat `requires` tuple (the manifest row schema doesn't change), but when
+    `BlockedVerdict.minimal_sets` carries more than one independent
+    alternative, dropping the rest must be visible in the build log rather
+    than silent -- CLAUDE.md §4.5. Geometry: two disjoint corridors through
+    row y=1 (a rock at x=1, water at x=3) both feed the fully-open row y=2,
+    so either rock_smash alone or surf alone opens the approach to the event
+    at (2, 2) -- the same shape as
+    `test_two_independent_alternative_routes_yield_two_minimal_sets` in
+    `test_traversal_reachability.py`."""
+    from rpg2gba.traversal.capabilities import Capability, CapabilityMap, Obstacle
+    from rpg2gba.traversal.graph import MapGraph
+
+    walls = {(0, 1), (2, 1), (3, 1), (4, 1)}
+    graph = MapGraph(
+        map_id=1, width=5, height=3, tileset_id=0,
+        blocked={(x, y): (x, y) in walls for x in range(5) for y in range(3)},
+    )
+    capability_map = CapabilityMap(map_id=1, obstacles={
+        (1, 1): Obstacle(cell=(1, 1), capability=Capability.ROCK_SMASH,
+                          source="event", detail="1:Rock", event_id=1),
+        (3, 1): Obstacle(cell=(3, 1), capability=Capability.SURF,
+                          source="terrain", detail="7", event_id=None),
+    })
+    context = (graph, capability_map, frozenset({(0, 0)}))
+
+    with caplog.at_level("WARNING", logger="rpg2gba.chapter_manifest.generator"):
+        requires = generator._reachability_requires(context, (2, 2))
+
+    assert requires == ("rock_smash",)
+    assert len(caplog.records) == 1
+    message = caplog.records[0].getMessage()
+    assert "(2, 2)" in message
+    assert "rock_smash" in message
+    assert "surf" in message
+
+
 def test_reachability_consulted_propagates_to_seam_rows(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

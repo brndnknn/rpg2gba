@@ -251,17 +251,27 @@ class BlockedVerdict:
     minimal_sets: list[frozenset[Capability]]
 
     def as_disposition(self) -> str:
-        """"" when reachable now; "blocked:<cap>[|<cap>...]" using the
-        smallest minimal set (ties broken by sorted capability value, per
-        `_minimal_sets_for_predicate`'s ordering) when at least one
-        capability combination opens it; "unreachable:geography" when no
-        candidate combination does."""
+        """"" when reachable now; "unreachable:geography" when no candidate
+        capability combination opens it; otherwise "blocked:<spec>" naming
+        EVERY minimal set, not just the first -- `schema.py`'s grammar: "+"
+        joins the members within one minimal set (AND, all required), "|"
+        separates alternative sets (OR, any ONE suffices). E.g. two
+        independent routes -- rock_smash alone, or surf alone -- disposition
+        as "blocked:rock_smash|surf"; one route needing both disposition as
+        "blocked:rock_smash+surf".
+
+        Set and member order is the canonical spelling `schema.py` validates
+        against: `_minimal_sets_for_predicate` already returns `minimal_sets`
+        ordered by (size, then the sorted tuple of member values), so sets
+        are emitted in that order verbatim; members within each set are
+        sorted ascending by capability value."""
         if self.reachable_now:
             return ""
         if not self.minimal_sets:
             return "unreachable:geography"
-        best = self.minimal_sets[0]
-        return "blocked:" + "|".join(sorted(c.value for c in best))
+        return "blocked:" + "|".join(
+            "+".join(sorted(c.value for c in s)) for s in self.minimal_sets
+        )
 
 
 def derive_blocked_verdict(

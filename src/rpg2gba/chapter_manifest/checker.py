@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from .archetypes import classify_manifest
-from .schema import Disposition, ManifestRow
+from .schema import Disposition, ManifestRow, parse_blocked_argument
 
 Severity = Literal["error", "warning"]
 
@@ -612,57 +612,97 @@ def check_chapter(
                     severity="warning",
                 ))
             else:
-                # Per-capability, not per-spec: `blocked:a|b` makes two
-                # independent claims, and each is checked and reported on
-                # its own rather than lumped into one finding (a spec can
-                # legitimately be undetermined on one token and
-                # already-granted on another).
-                for cap in capability_spec.split("|"):
-                    sites = capabilities.grant_sites(cap)
-                    if sites is None:
-                        findings.append(Finding(
-                            row_id=row.row_id,
-                            rule=RULE_CAPABILITY_MODEL_UNENFORCED,
-                            message=(
-                                f"blocked:{capability_spec} names capability "
-                                f"{cap!r}, but the derivation could not determine "
-                                "where (or whether) anything grants it -- no "
-                                "switch/variable in the corpus resolves to this "
-                                "token, or every write to the candidate was a "
-                                "computed/relative operation rather than a "
-                                "constant assignment (this rule is unenforced "
-                                "for this capability)"
-                            ),
-                            severity="warning",
-                        ))
+                # `blocked:a|b+c` is a DISJUNCTION of minimal capability sets
+                # (schema.py): any ONE alternative set opening the row is
+                # enough, so the fold below is across alternatives, not a
+                # per-token loop -- the old grammar's `|` meant AND, and a
+                # per-token loop was the right fold for that. Under the new
+                # grammar a disjunction is only impossible when EVERY
+                # alternative is (one impossible alternative next to a
+                # viable one is exactly what a correct `blocked` still
+                # claims, not an error), and it is only "already granted" --
+                # i.e. secretly reachable now -- when at least one
+                # alternative's every member is already held.
+                alternatives = parse_blocked_argument(capability_spec)
+
+                satisfied: list[tuple[frozenset[str], tuple[CapabilityGrant, ...]]] = []
+                impossible: list[tuple[frozenset[str], tuple[str, ...]]] = []
+                undetermined: list[tuple[frozenset[str], tuple[str, ...]]] = []
+
+                for alt in alternatives:
+                    sites_by_cap = {cap: capabilities.grant_sites(cap) for cap in alt}
+                    missing = tuple(sorted(
+                        cap for cap, sites in sites_by_cap.items() if sites == ()
+                    ))
+                    if missing:
+                        impossible.append((alt, missing))
                         continue
-                    if not sites:
-                        findings.append(Finding(
-                            row_id=row.row_id,
-                            rule=RULE_BLOCKED_NO_GRANT_SITE,
-                            message=(
-                                f"blocked:{capability_spec} names capability "
-                                f"{cap!r}, but no map-event site anywhere grants "
-                                "it; this row is unreachable, not blocked"
-                            ),
-                            severity="error",
-                        ))
+                    unresolved = tuple(sorted(
+                        cap for cap, sites in sites_by_cap.items() if sites is None
+                    ))
+                    if unresolved:
+                        undetermined.append((alt, unresolved))
                         continue
-                    already = capabilities.granted_within(cap)
-                    if already:
-                        site_ids = ", ".join(sorted(g.row_id for g in already))
-                        findings.append(Finding(
-                            row_id=row.row_id,
-                            rule=RULE_BLOCKED_ALREADY_GRANTED,
-                            message=(
-                                f"blocked:{capability_spec} names capability "
-                                f"{cap!r}, but it is already granted in this "
-                                f"chapter or a predecessor (site(s): {site_ids}) "
-                                "-- the player already holds it, so this row is "
-                                "reachable and 'blocked' is a false claim"
-                            ),
-                            severity="error",
-                        ))
+                    within_by_cap = {cap: capabilities.granted_within(cap) for cap in alt}
+                    if all(within_by_cap.values()):
+                        grants = tuple(g for grants in within_by_cap.values() for g in grants)
+                        satisfied.append((alt, grants))
+
+                if satisfied:
+                    alt, grants = satisfied[0]
+                    site_ids = ", ".join(sorted({g.row_id for g in grants}))
+                    findings.append(Finding(
+                        row_id=row.row_id,
+                        rule=RULE_BLOCKED_ALREADY_GRANTED,
+                        message=(
+                            f"blocked:{capability_spec} names alternative "
+                            f"{'+'.join(sorted(alt))!r}, but every capability in "
+                            f"it is already granted in this chapter or a "
+                            f"predecessor (site(s): {site_ids}) -- the player "
+                            "already holds it, so this row is reachable and "
+                            "'blocked' is a false claim"
+                        ),
+                        severity="error",
+                    ))
+                elif impossible and len(impossible) == len(alternatives):
+                    reasons = "; ".join(
+                        f"{'+'.join(sorted(alt))!r} (no grant site anywhere for "
+                        f"{', '.join(missing)})"
+                        for alt, missing in impossible
+                    )
+                    findings.append(Finding(
+                        row_id=row.row_id,
+                        rule=RULE_BLOCKED_NO_GRANT_SITE,
+                        message=(
+                            f"blocked:{capability_spec} -- every alternative is "
+                            f"impossible ({reasons}); this row is unreachable, "
+                            "not blocked"
+                        ),
+                        severity="error",
+                    ))
+                elif undetermined:
+                    names = ", ".join(sorted({
+                        cap for _, caps in undetermined for cap in caps
+                    }))
+                    findings.append(Finding(
+                        row_id=row.row_id,
+                        rule=RULE_CAPABILITY_MODEL_UNENFORCED,
+                        message=(
+                            f"blocked:{capability_spec} could not be fully "
+                            f"checked -- the derivation could not determine "
+                            f"where (or whether) anything grants {names} -- no "
+                            "switch/variable in the corpus resolves to this "
+                            "token, or every write to the candidate was a "
+                            "computed/relative operation rather than a "
+                            "constant assignment (this rule is unenforced for "
+                            "this argument)"
+                        ),
+                        severity="warning",
+                    ))
+                # else: no alternative is satisfied, not every alternative is
+                # impossible, and none is undetermined -- at least one
+                # alternative is a viable-but-not-yet-granted route, which is
+                # exactly a correct `blocked` claim. No finding.
 
             if approach is None:
                 findings.append(Finding(

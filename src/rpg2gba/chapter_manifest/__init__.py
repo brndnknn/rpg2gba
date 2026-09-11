@@ -12,8 +12,10 @@ files joined by a stable row id:
   (``beat:Bn`` / ``blocked:<capability set>`` / ``cosmetic`` / ``unreachable:<reason>``),
   which the generator joins at build time and never writes to (see `schema`).
   `blocked:` answers exactly one question -- what unblocks this row -- and
-  takes a "|"-joined capability set (or a `blocked:tooling:<primitive>` form
-  for a row gated on missing tooling, not an in-game capability); a separate
+  takes one or more minimal capability sets ("+" joins tokens required
+  together, "|" separates alternative sets, either of which suffices; e.g.
+  `blocked:rock_smash|strength+surf`), or a `blocked:tooling:<primitive>`
+  form for a row gated on missing tooling, not an in-game capability; a separate
   `assertable`/`negative_beat` pair on the `Disposition` records whether a
   negative beat can be written today. `unreachable` is narrowed to content no
   chapter will ever reach.

@@ -118,22 +118,31 @@ _ARGUMENT_REQUIRED: frozenset[str] = frozenset({"beat", "blocked", "unreachable"
 
 _BEAT_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
-# `blocked:` argument shapes (Q3/Q10):
+# `blocked:` argument shapes (Q3/Q10, grammar revised 2026-09-10):
 #
 #   blocked:rock_smash                 -- one capability
-#   blocked:rock_smash|strength        -- a minimal capability SET, spelled as
-#                                          a "|"-joined list. "|" is chosen
-#                                          because it already appears in
-#                                          `traversal.reachability.BlockedVerdict
-#                                          .as_disposition`'s own spelling
-#                                          ("blocked:" + "|".join(...)) -- the
-#                                          derivation layer and the authored
-#                                          layer share one spelling, so a
-#                                          derived value can be affirmed
-#                                          verbatim. Sorted ascending and
-#                                          deduplicated so the string form is
-#                                          canonical (one row, one spelling,
-#                                          stable round trip).
+#   blocked:strength+surf              -- an AND: every member of ONE minimal
+#                                          capability SET is required. "+"
+#                                          joins tokens within a set.
+#   blocked:rock_smash|surf            -- an OR: EITHER alternative set
+#                                          suffices on its own. "|" separates
+#                                          alternative sets. "+" binds tighter
+#                                          than "|"; there is no grouping
+#                                          syntax (none is needed: an
+#                                          alternative is always a flat AND of
+#                                          tokens).
+#   blocked:rock_smash|strength+surf   -- rock_smash alone, OR strength and
+#                                          surf together.
+#
+# This spelling matches `traversal.reachability.BlockedVerdict.as_disposition`'s
+# own output verbatim -- the derivation layer and the authored layer share one
+# grammar, so a derived value can be affirmed as-is. Canonical form: within
+# each set, tokens sorted ascending and deduplicated; across sets, ordered by
+# (size, then the sorted tuple of member values) and deduplicated; no set may
+# be a proper superset of another (a non-minimal alternative is incoherent
+# alongside the minimal one it's redundant with). One row, one spelling,
+# stable round trip.
+#
 #   blocked:tooling:emulator_set_flag  -- Q10's third kind: blocked by the
 #                                          conversion/playtest tooling rather
 #                                          than an in-game capability. Never
@@ -144,22 +153,99 @@ _BLOCKED_TOOLING = re.compile(r"^tooling:[A-Za-z][A-Za-z0-9_]*$")
 _CAPABILITY_TOKEN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
+def parse_blocked_argument(argument: str) -> tuple[frozenset[str], ...]:
+    """Parse a `blocked:` capability argument into its alternative minimal
+    sets: `"|"` separates alternatives (OR -- any ONE suffices), `"+"` joins
+    capability tokens within one alternative (AND -- ALL are required). `+`
+    binds tighter than `|`; there is no grouping syntax.
+
+    Callers use this instead of re-splitting the string by hand. Does not
+    accept the `tooling:<primitive>` form -- callers must detect and handle
+    that prefix themselves before calling this, since it is never a
+    capability set.
+
+    Only parses: does not enforce canonical ordering, deduplication, or
+    minimality-across-alternatives. `_validate_blocked_argument` enforces
+    those on top of this for authored dispositions; a caller reading an
+    already-validated `Disposition.argument` gets a canonical parse for
+    free, but this function itself does not police that.
+
+    Raises `DispositionError` if `argument` is empty, contains an empty
+    alternative (e.g. ``"a||b"``), an empty token (e.g. ``"a++b"``), or any
+    token that does not match `_CAPABILITY_TOKEN`.
+    """
+    if not argument:
+        raise DispositionError("empty 'blocked:' capability argument")
+    alternatives: list[frozenset[str]] = []
+    for alt in argument.split("|"):
+        if not alt:
+            raise DispositionError(
+                f"{argument!r} contains an empty alternative (stray '|')"
+            )
+        tokens = alt.split("+")
+        if any(not t for t in tokens):
+            raise DispositionError(
+                f"{argument!r} contains an empty capability token (stray '+')"
+            )
+        for token in tokens:
+            if not _CAPABILITY_TOKEN.match(token):
+                raise DispositionError(
+                    f"{argument!r}: {token!r} is not a valid capability token"
+                )
+        alternatives.append(frozenset(tokens))
+    return tuple(alternatives)
+
+
 def _validate_blocked_argument(row_id: str, argument: str) -> None:
     if _BLOCKED_TOOLING.match(argument):
         return
-    tokens = argument.split("|")
-    if not argument or any(not _CAPABILITY_TOKEN.match(t) for t in tokens):
+    try:
+        alternatives = parse_blocked_argument(argument)
+    except DispositionError as exc:
         raise DispositionError(
-            f"{row_id}: {argument!r} is not a valid 'blocked:' argument; expected "
-            "'tooling:<primitive>' or a '|'-joined, sorted, deduplicated list of "
-            "capability names, e.g. 'rock_smash' or 'rock_smash|strength'"
-        )
-    if tokens != sorted(tokens) or len(tokens) != len(set(tokens)):
+            f"{row_id}: {argument!r} is not a valid 'blocked:' argument ({exc}); "
+            "expected 'tooling:<primitive>' or a '|'-joined list of '+'-joined "
+            "capability sets, e.g. 'rock_smash', 'strength+surf', or "
+            "'rock_smash|strength+surf'"
+        ) from exc
+
+    for alt in argument.split("|"):
+        tokens = alt.split("+")
+        if tokens != sorted(tokens) or len(tokens) != len(set(tokens)):
+            raise DispositionError(
+                f"{row_id}: 'blocked:' argument {argument!r} has capability set "
+                f"{alt!r} that is not sorted ascending and free of duplicates, "
+                "e.g. 'strength+surf', not 'surf+strength'"
+            )
+
+    def _sort_key(s: frozenset[str]) -> tuple[int, tuple[str, ...]]:
+        return (len(s), tuple(sorted(s)))
+
+    canonical = sorted(alternatives, key=_sort_key)
+    if list(alternatives) != canonical:
+        expected = "|".join("+".join(sorted(s)) for s in canonical)
         raise DispositionError(
-            f"{row_id}: 'blocked:' argument {argument!r} must be sorted ascending "
-            "and free of duplicates, e.g. 'rock_smash|strength', not "
-            "'strength|rock_smash'"
+            f"{row_id}: 'blocked:' argument {argument!r} alternatives are not "
+            f"in canonical order (by set size, then sorted capability values); "
+            f"expected {expected!r}"
         )
+    if len(set(alternatives)) != len(alternatives):
+        raise DispositionError(
+            f"{row_id}: 'blocked:' argument {argument!r} lists the same "
+            "capability set as an alternative more than once"
+        )
+
+    for i, superset_candidate in enumerate(alternatives):
+        for j, other in enumerate(alternatives):
+            if i != j and other < superset_candidate:
+                raise DispositionError(
+                    f"{row_id}: 'blocked:' argument {argument!r} lists "
+                    f"{'+'.join(sorted(superset_candidate))!r} as an "
+                    f"alternative, but {'+'.join(sorted(other))!r} alone "
+                    "already suffices (it is a subset) -- a non-minimal set "
+                    "is not a valid alternative alongside the minimal set it "
+                    "is redundant with; drop it"
+                )
 
 
 class DispositionError(ValueError):

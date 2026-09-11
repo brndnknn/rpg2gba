@@ -187,6 +187,20 @@ def test_ch04_manifest_rows_split_24_blocked_4_reachable(
 
 
 def test_ch02_beats_all_gated_on_rock_smash(oracle, map033_graph, map033_capabilities):
+    """Re-pinned 2026-09-10, not to the frozen oracle JSON (untouched -- its
+    `expected_capability: "rock_smash"` field and the beat cells are still
+    correct, just not the whole story) but to this test's own hardcoded
+    per-beat string, which is the thing that was actually wrong.
+
+    Every CH02 beat on map033 turns out to have TWO independent minimal
+    capability sets -- rock_smash alone, or surf alone -- not one. Before
+    `BlockedVerdict.as_disposition` emitted every minimal set (this task),
+    the surf alternative was silently discarded and this test asserted the
+    narrowed, incomplete answer verbatim; that was the exact bug class
+    CLAUDE.md's Map033 citation describes, caught here rather than just in
+    the manifest. `rock_smash` is still present in every disposition below,
+    so the oracle's `expected_capability` field is not contradicted -- it
+    just doesn't have a slot for "and also surf"."""
     ch02 = _find_set(oracle, "CH02")
     beats = ch02["beats"]
     assert len(beats) == ch02["expected_count"] == 10
@@ -197,7 +211,7 @@ def test_ch02_beats_all_gated_on_rock_smash(oracle, map033_graph, map033_capabil
         verdict = derive_blocked_verdict_for_event(
             map033_graph, map033_capabilities, CH02_START, cell,
         )
-        assert verdict.as_disposition() == "blocked:rock_smash", (
-            f"beat {beat['beat_id']} at {cell}: expected 'blocked:rock_smash', "
-            f"got {verdict.as_disposition()!r}"
+        assert verdict.as_disposition() == "blocked:rock_smash|surf", (
+            f"beat {beat['beat_id']} at {cell}: expected "
+            f"'blocked:rock_smash|surf', got {verdict.as_disposition()!r}"
         )
