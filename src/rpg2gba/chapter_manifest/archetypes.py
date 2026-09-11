@@ -31,17 +31,11 @@ unclaimed.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 from .schema import COSMETIC_SAFE_TAGS, ManifestRow
-
-ARCHETYPE_NAMES: frozenset[str] = frozenset({
-    "trainer",
-    "item_ball",
-    "warp",
-    "arrival_nudge",
-})
 
 _TRAINER_BATTLE_HEADS: frozenset[str] = frozenset({
     "pbTrainerBattle",
@@ -179,6 +173,75 @@ def _match_arrival_nudge(row: ManifestRow) -> ArchetypeMatch | None:
     )
 
 
+# --- the archetype registry ---------------------------------------------
+#
+# Adding a fifth archetype means writing its `_match_*` matcher and adding
+# one `_ArchetypeEntry` below -- nothing else in this module changes.
+# `ARCHETYPE_NAMES` and `classify_event`'s dispatch both derive from this
+# sequence, so they cannot drift apart the way a hand-written set and a
+# hand-written if/elif chain eventually would.
+#
+# ORDER IS LOAD-BEARING. Event-level entries run in the order listed here,
+# each claiming every row it matches before the next event-level entry
+# gets a turn (`if not claimed` today, `if row_id not in claimed` in
+# spirit). Page-level entries then run in the order listed here, once per
+# still-unclaimed row, first match wins for that row. The sequence below --
+# trainer, item_ball, warp, arrival_nudge -- reproduces today's precedence
+# exactly; do not reorder it as part of this refactor.
+
+EventMatcher = Callable[[Sequence[ManifestRow]], ArchetypeMatch | None]
+PageMatcher = Callable[[ManifestRow], ArchetypeMatch | None]
+
+
+@dataclass(frozen=True)
+class _ArchetypeEntry:
+    """One registered archetype: its name, its level, and its matcher.
+
+    `level="event"` matchers receive the whole page-ordered row sequence
+    for the event and may claim more than one row at once (trainer's
+    retalk pages, item_ball's grant+spent pair). `level="page"` matchers
+    receive a single still-unclaimed row and claim at most that one row.
+    The two calling conventions are why the field is typed loosely
+    (`Callable[..., ArchetypeMatch | None]`) rather than as a precise
+    union -- `classify_event` below is the one place that knows, per
+    entry, which shape to call it with.
+    """
+
+    name: str
+    level: Literal["event", "page"]
+    matcher: Callable[..., ArchetypeMatch | None]
+
+
+def _build_registry(entries: Sequence[_ArchetypeEntry]) -> tuple[_ArchetypeEntry, ...]:
+    seen: set[str] = set()
+    for entry in entries:
+        if entry.name in seen:
+            raise ValueError(f"archetype {entry.name!r} registered more than once")
+        if entry.level not in ("event", "page"):
+            raise ValueError(f"archetype {entry.name!r} has unknown level {entry.level!r}")
+        seen.add(entry.name)
+    return tuple(entries)
+
+
+_ARCHETYPE_REGISTRY: tuple[_ArchetypeEntry, ...] = _build_registry([
+    _ArchetypeEntry("trainer", "event", _match_trainer),
+    _ArchetypeEntry("item_ball", "event", _match_item_ball),
+    _ArchetypeEntry("warp", "page", _match_warp),
+    _ArchetypeEntry("arrival_nudge", "page", _match_arrival_nudge),
+])
+
+ARCHETYPE_NAMES: frozenset[str] = frozenset(
+    entry.name for entry in _ARCHETYPE_REGISTRY
+)
+
+_EVENT_LEVEL_ENTRIES: tuple[_ArchetypeEntry, ...] = tuple(
+    entry for entry in _ARCHETYPE_REGISTRY if entry.level == "event"
+)
+_PAGE_LEVEL_ENTRIES: tuple[_ArchetypeEntry, ...] = tuple(
+    entry for entry in _ARCHETYPE_REGISTRY if entry.level == "page"
+)
+
+
 def classify_event(rows: Sequence[ManifestRow]) -> tuple[ArchetypeMatch, ...]:
     """All rows of a single (map_id, event_id), page-ordered.
 
@@ -195,16 +258,17 @@ def classify_event(rows: Sequence[ManifestRow]) -> tuple[ArchetypeMatch, ...]:
     matches: list[ArchetypeMatch] = []
     claimed: set[str] = set()
 
-    trainer_match = _match_trainer(page_rows)
-    if trainer_match is not None:
-        matches.append(trainer_match)
-        claimed.update(trainer_match.roles)
-
-    if not claimed:
-        item_ball_match = _match_item_ball(page_rows)
-        if item_ball_match is not None:
-            matches.append(item_ball_match)
-            claimed.update(item_ball_match.roles)
+    # Event-level archetypes run first, in registry order. Each claims
+    # every row it matches; once any event-level archetype has claimed
+    # rows, later event-level entries do not get a turn -- this preserves
+    # the original "if not claimed" gate between trainer and item_ball.
+    for entry in _EVENT_LEVEL_ENTRIES:
+        if claimed:
+            break
+        event_match = entry.matcher(page_rows)
+        if event_match is not None:
+            matches.append(event_match)
+            claimed.update(event_match.roles)
 
     # Page-level archetypes run over whatever rows the event-level checks
     # above did not already claim -- this is what lets one event (e.g. a
@@ -213,15 +277,12 @@ def classify_event(rows: Sequence[ManifestRow]) -> tuple[ArchetypeMatch, ...]:
     for row in page_rows:
         if row.row_id in claimed:
             continue
-        warp_match = _match_warp(row)
-        if warp_match is not None:
-            matches.append(warp_match)
-            claimed.add(row.row_id)
-            continue
-        nudge_match = _match_arrival_nudge(row)
-        if nudge_match is not None:
-            matches.append(nudge_match)
-            claimed.add(row.row_id)
+        for entry in _PAGE_LEVEL_ENTRIES:
+            page_match = entry.matcher(row)
+            if page_match is not None:
+                matches.append(page_match)
+                claimed.add(row.row_id)
+                break
 
     return tuple(matches)
 

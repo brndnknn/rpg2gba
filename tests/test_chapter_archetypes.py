@@ -12,7 +12,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from rpg2gba.chapter_manifest.archetypes import (
+    _ARCHETYPE_REGISTRY,
+    _ArchetypeEntry,
+    _build_registry,
     ARCHETYPE_NAMES,
     classify_event,
     classify_manifest,
@@ -65,6 +70,42 @@ def test_archetype_names_are_the_four_documented_archetypes() -> None:
     assert ARCHETYPE_NAMES == frozenset({
         "trainer", "item_ball", "warp", "arrival_nudge",
     })
+
+
+# --- the registry itself -------------------------------------------------
+
+
+def test_archetype_names_is_derived_from_the_registry() -> None:
+    assert ARCHETYPE_NAMES == frozenset(
+        entry.name for entry in _ARCHETYPE_REGISTRY
+    )
+
+
+def test_registry_entries_appear_in_load_bearing_order() -> None:
+    """Order is precedence, not cosmetics: trainer beats item_ball at the
+    event level, and warp beats arrival_nudge at the page level, purely
+    because of registry position (see the module's registry comment)."""
+    assert [(entry.name, entry.level) for entry in _ARCHETYPE_REGISTRY] == [
+        ("trainer", "event"),
+        ("item_ball", "event"),
+        ("warp", "page"),
+        ("arrival_nudge", "page"),
+    ]
+
+
+def test_duplicate_archetype_name_fails_loud() -> None:
+    with pytest.raises(ValueError, match="registered more than once"):
+        _build_registry([
+            _ArchetypeEntry("trainer", "event", lambda rows: None),
+            _ArchetypeEntry("trainer", "page", lambda row: None),
+        ])
+
+
+def test_unknown_level_fails_loud() -> None:
+    with pytest.raises(ValueError, match="unknown level"):
+        _build_registry([
+            _ArchetypeEntry("bogus", "beat", lambda rows: None),  # type: ignore[arg-type]
+        ])
 
 
 # --- trainer -------------------------------------------------------------
