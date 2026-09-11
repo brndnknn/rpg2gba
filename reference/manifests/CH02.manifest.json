@@ -30,7 +30,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev002/p1",
@@ -58,7 +60,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev003/p0",
@@ -91,7 +95,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev003/p1",
@@ -119,7 +125,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev004/p0",
@@ -150,7 +158,9 @@
       "self_switch_ch": null
     },
     "trigger": "parallel",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev004/p1",
@@ -178,7 +188,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev008/p0",
@@ -194,7 +206,9 @@
     ],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 1,
     "event_id": 8,
@@ -211,7 +225,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev008/p1",
@@ -222,7 +238,9 @@
     "script_heads": [],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 0,
     "event_id": 8,
@@ -239,7 +257,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev009/p0",
@@ -261,7 +281,9 @@
     ],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 1,
     "event_id": 9,
@@ -278,7 +300,9 @@
       "self_switch_ch": null
     },
     "trigger": "event_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev009/p1",
@@ -294,7 +318,9 @@
     ],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 0,
     "event_id": 9,
@@ -311,7 +337,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev010/p0",
@@ -333,7 +361,9 @@
     ],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 1,
     "event_id": 10,
@@ -350,7 +380,9 @@
       "self_switch_ch": null
     },
     "trigger": "event_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev010/p1",
@@ -366,7 +398,9 @@
     ],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 0,
     "event_id": 10,
@@ -383,7 +417,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev013/p0",
@@ -394,7 +430,9 @@
     "script_heads": [],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "surf"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 0,
     "event_id": 13,
@@ -411,7 +449,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev020/p0",
@@ -422,7 +462,9 @@
     "script_heads": [],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "surf"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 0,
     "event_id": 20,
@@ -439,7 +481,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev022/p0",
@@ -473,7 +517,9 @@
       "self_switch_ch": null
     },
     "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev022/p1",
@@ -508,7 +554,9 @@
       "self_switch_ch": null
     },
     "trigger": "autorun",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev023/p0",
@@ -542,7 +590,9 @@
       "self_switch_ch": null
     },
     "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev023/p1",
@@ -577,7 +627,9 @@
       "self_switch_ch": null
     },
     "trigger": "autorun",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev024/p0",
@@ -611,7 +663,9 @@
       "self_switch_ch": null
     },
     "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev024/p1",
@@ -646,7 +700,9 @@
       "self_switch_ch": null
     },
     "trigger": "autorun",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev025/p0",
@@ -679,7 +735,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev025/p1",
@@ -707,37 +765,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
-  },
-  {
-    "row_id": "map033/ev026/p0",
-    "kind": "page",
-    "map_id": 33,
-    "content_hash": "1fb9ecde7c38865e",
-    "effects": [
-      "move_route"
-    ],
-    "script_heads": [],
-    "unrecognized_heads": [],
-    "other_codes": [],
-    "requires": [],
-    "unhandled": 0,
-    "script_typed_conditions": 0,
-    "event_id": 26,
-    "event_name": "Stairs",
-    "page_idx": 0,
-    "condition": {
-      "switch1_id": null,
-      "switch1_name": null,
-      "switch2_id": null,
-      "switch2_name": null,
-      "variable_id": null,
-      "variable_name": null,
-      "variable_min": null,
-      "self_switch_ch": null
-    },
-    "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev027/p0",
@@ -770,7 +800,9 @@
       "self_switch_ch": null
     },
     "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev027/p1",
@@ -805,7 +837,9 @@
       "self_switch_ch": null
     },
     "trigger": "autorun",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev028/p0",
@@ -833,7 +867,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev029/p0",
@@ -871,7 +907,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev030/p0",
@@ -910,7 +948,9 @@
       "self_switch_ch": null
     },
     "trigger": "event_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev030/p1",
@@ -943,37 +983,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
-  },
-  {
-    "row_id": "map033/ev031/p0",
-    "kind": "page",
-    "map_id": 33,
-    "content_hash": "442cc9b6da24644e",
-    "effects": [
-      "move_route"
-    ],
-    "script_heads": [],
-    "unrecognized_heads": [],
-    "other_codes": [],
-    "requires": [],
-    "unhandled": 0,
-    "script_typed_conditions": 0,
-    "event_id": 31,
-    "event_name": "Stairs",
-    "page_idx": 0,
-    "condition": {
-      "switch1_id": null,
-      "switch1_name": null,
-      "switch2_id": null,
-      "switch2_name": null,
-      "variable_id": null,
-      "variable_name": null,
-      "variable_min": null,
-      "self_switch_ch": null
-    },
-    "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev032/p0",
@@ -989,7 +1001,9 @@
     ],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 1,
     "event_id": 32,
@@ -1006,7 +1020,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev032/p1",
@@ -1017,7 +1033,9 @@
     "script_heads": [],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 0,
     "event_id": 32,
@@ -1034,37 +1052,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
-  },
-  {
-    "row_id": "map033/ev033/p0",
-    "kind": "page",
-    "map_id": 33,
-    "content_hash": "dd3d4a7a1f20cb19",
-    "effects": [
-      "move_route"
-    ],
-    "script_heads": [],
-    "unrecognized_heads": [],
-    "other_codes": [],
-    "requires": [],
-    "unhandled": 0,
-    "script_typed_conditions": 0,
-    "event_id": 33,
-    "event_name": "Stairs",
-    "page_idx": 0,
-    "condition": {
-      "switch1_id": null,
-      "switch1_name": null,
-      "switch2_id": null,
-      "switch2_name": null,
-      "variable_id": null,
-      "variable_name": null,
-      "variable_min": null,
-      "self_switch_ch": null
-    },
-    "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev034/p0",
@@ -1103,7 +1093,9 @@
       "self_switch_ch": null
     },
     "trigger": "event_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev034/p1",
@@ -1136,7 +1128,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev035/p0",
@@ -1158,7 +1152,9 @@
     ],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 1,
     "event_id": 35,
@@ -1175,7 +1171,9 @@
       "self_switch_ch": null
     },
     "trigger": "event_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev035/p1",
@@ -1191,7 +1189,9 @@
     ],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 0,
     "event_id": 35,
@@ -1208,7 +1208,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev036/p0",
@@ -1246,7 +1248,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev037/p0",
@@ -1262,7 +1266,9 @@
     ],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 1,
     "event_id": 37,
@@ -1279,7 +1285,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev037/p1",
@@ -1290,7 +1298,9 @@
     "script_heads": [],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 0,
     "event_id": 37,
@@ -1307,7 +1317,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev038/p0",
@@ -1345,7 +1357,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev039/p0",
@@ -1368,7 +1382,9 @@
     ],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 1,
     "event_id": 39,
@@ -1385,7 +1401,9 @@
       "self_switch_ch": null
     },
     "trigger": "event_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev039/p1",
@@ -1408,7 +1426,9 @@
     ],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 2,
     "event_id": 39,
@@ -1425,7 +1445,9 @@
       "self_switch_ch": "B"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev039/p2",
@@ -1444,7 +1466,9 @@
     ],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 1,
     "event_id": 39,
@@ -1461,7 +1485,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev040/p0",
@@ -1499,7 +1525,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev041/p0",
@@ -1521,7 +1549,9 @@
     ],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 1,
     "event_id": 41,
@@ -1538,7 +1568,9 @@
       "self_switch_ch": null
     },
     "trigger": "event_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev041/p1",
@@ -1554,7 +1586,9 @@
     ],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 0,
     "event_id": 41,
@@ -1571,7 +1605,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev042/p0",
@@ -1609,7 +1645,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev044/p0",
@@ -1647,7 +1685,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev045/p0",
@@ -1681,7 +1721,9 @@
       "self_switch_ch": null
     },
     "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev045/p1",
@@ -1716,7 +1758,9 @@
       "self_switch_ch": null
     },
     "trigger": "autorun",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev046/p0",
@@ -1750,7 +1794,9 @@
       "self_switch_ch": null
     },
     "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev046/p1",
@@ -1785,67 +1831,9 @@
       "self_switch_ch": null
     },
     "trigger": "autorun",
-    "seam": null
-  },
-  {
-    "row_id": "map033/ev047/p0",
-    "kind": "page",
-    "map_id": 33,
-    "content_hash": "3119d5c1139a8856",
-    "effects": [
-      "move_route"
-    ],
-    "script_heads": [],
-    "unrecognized_heads": [],
-    "other_codes": [],
-    "requires": [],
-    "unhandled": 0,
-    "script_typed_conditions": 0,
-    "event_id": 47,
-    "event_name": "Stairs",
-    "page_idx": 0,
-    "condition": {
-      "switch1_id": null,
-      "switch1_name": null,
-      "switch2_id": null,
-      "switch2_name": null,
-      "variable_id": null,
-      "variable_name": null,
-      "variable_min": null,
-      "self_switch_ch": null
-    },
-    "trigger": "player_touch",
-    "seam": null
-  },
-  {
-    "row_id": "map033/ev048/p0",
-    "kind": "page",
-    "map_id": 33,
-    "content_hash": "3119d5c1139a8856",
-    "effects": [
-      "move_route"
-    ],
-    "script_heads": [],
-    "unrecognized_heads": [],
-    "other_codes": [],
-    "requires": [],
-    "unhandled": 0,
-    "script_typed_conditions": 0,
-    "event_id": 48,
-    "event_name": "EV048",
-    "page_idx": 0,
-    "condition": {
-      "switch1_id": null,
-      "switch1_name": null,
-      "switch2_id": null,
-      "switch2_name": null,
-      "variable_id": null,
-      "variable_name": null,
-      "variable_min": null,
-      "self_switch_ch": null
-    },
-    "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev050/p0",
@@ -1878,7 +1866,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev050/p1",
@@ -1906,7 +1896,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev053/p0",
@@ -1946,7 +1938,9 @@
       "self_switch_ch": null
     },
     "trigger": "event_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev053/p1",
@@ -1986,7 +1980,9 @@
       "self_switch_ch": "B"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev053/p2",
@@ -2022,67 +2018,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
-  },
-  {
-    "row_id": "map033/ev066/p0",
-    "kind": "page",
-    "map_id": 33,
-    "content_hash": "f43477097f453245",
-    "effects": [
-      "move_route"
-    ],
-    "script_heads": [],
-    "unrecognized_heads": [],
-    "other_codes": [],
-    "requires": [],
-    "unhandled": 0,
-    "script_typed_conditions": 0,
-    "event_id": 66,
-    "event_name": "EV066",
-    "page_idx": 0,
-    "condition": {
-      "switch1_id": null,
-      "switch1_name": null,
-      "switch2_id": null,
-      "switch2_name": null,
-      "variable_id": null,
-      "variable_name": null,
-      "variable_min": null,
-      "self_switch_ch": null
-    },
-    "trigger": "player_touch",
-    "seam": null
-  },
-  {
-    "row_id": "map033/ev069/p0",
-    "kind": "page",
-    "map_id": 33,
-    "content_hash": "f43477097f453245",
-    "effects": [
-      "move_route"
-    ],
-    "script_heads": [],
-    "unrecognized_heads": [],
-    "other_codes": [],
-    "requires": [],
-    "unhandled": 0,
-    "script_typed_conditions": 0,
-    "event_id": 69,
-    "event_name": "EV069",
-    "page_idx": 0,
-    "condition": {
-      "switch1_id": null,
-      "switch1_name": null,
-      "switch2_id": null,
-      "switch2_name": null,
-      "variable_id": null,
-      "variable_name": null,
-      "variable_min": null,
-      "self_switch_ch": null
-    },
-    "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev097/p0",
@@ -2110,7 +2048,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev098/p0",
@@ -2144,7 +2084,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev099/p0",
@@ -2177,7 +2119,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev100/p0",
@@ -2209,7 +2153,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev100/p1",
@@ -2239,7 +2185,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev101/p0",
@@ -2269,7 +2217,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev102/p0",
@@ -2301,7 +2251,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev102/p1",
@@ -2331,7 +2283,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev103/p0",
@@ -2370,7 +2324,9 @@
       "self_switch_ch": null
     },
     "trigger": "event_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev103/p1",
@@ -2403,7 +2359,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev141/p0",
@@ -2414,7 +2372,9 @@
     "script_heads": [],
     "unrecognized_heads": [],
     "other_codes": [],
-    "requires": [],
+    "requires": [
+      "rock_smash"
+    ],
     "unhandled": 0,
     "script_typed_conditions": 0,
     "event_id": 141,
@@ -2431,7 +2391,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev143/p0",
@@ -2461,7 +2423,9 @@
       "self_switch_ch": null
     },
     "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev144/p0",
@@ -2491,7 +2455,9 @@
       "self_switch_ch": null
     },
     "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev145/p0",
@@ -2521,7 +2487,9 @@
       "self_switch_ch": null
     },
     "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev146/p0",
@@ -2551,7 +2519,9 @@
       "self_switch_ch": null
     },
     "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map033/ev147/p0",
@@ -2581,7 +2551,191 @@
       "self_switch_ch": null
     },
     "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
+  },
+  {
+    "row_id": "map033/terrain/stairs/52,41",
+    "kind": "terrain",
+    "map_id": 33,
+    "content_hash": "46947329f720a5c1",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": null,
+    "script_typed_conditions": 0,
+    "event_id": null,
+    "event_name": null,
+    "page_idx": null,
+    "condition": null,
+    "trigger": null,
+    "seam": null,
+    "terrain": {
+      "x": 52,
+      "y": 41,
+      "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
+      "source_event_id": 69
+    },
+    "reachability_consulted": true
+  },
+  {
+    "row_id": "map033/terrain/stairs/52,42",
+    "kind": "terrain",
+    "map_id": 33,
+    "content_hash": "a0e3e63bfbbc12c6",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": null,
+    "script_typed_conditions": 0,
+    "event_id": null,
+    "event_name": null,
+    "page_idx": null,
+    "condition": null,
+    "trigger": null,
+    "seam": null,
+    "terrain": {
+      "x": 52,
+      "y": 42,
+      "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
+      "source_event_id": 66
+    },
+    "reachability_consulted": true
+  },
+  {
+    "row_id": "map033/terrain/stairs/53,43",
+    "kind": "terrain",
+    "map_id": 33,
+    "content_hash": "aeffa36189f99e06",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": null,
+    "script_typed_conditions": 0,
+    "event_id": null,
+    "event_name": null,
+    "page_idx": null,
+    "condition": null,
+    "trigger": null,
+    "seam": null,
+    "terrain": {
+      "x": 53,
+      "y": 43,
+      "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
+      "source_event_id": 48
+    },
+    "reachability_consulted": true
+  },
+  {
+    "row_id": "map033/terrain/stairs/53,44",
+    "kind": "terrain",
+    "map_id": 33,
+    "content_hash": "9ca7f6d5f80331e3",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": null,
+    "script_typed_conditions": 0,
+    "event_id": null,
+    "event_name": null,
+    "page_idx": null,
+    "condition": null,
+    "trigger": null,
+    "seam": null,
+    "terrain": {
+      "x": 53,
+      "y": 44,
+      "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
+      "source_event_id": 47
+    },
+    "reachability_consulted": true
+  },
+  {
+    "row_id": "map033/terrain/stairs/57,10",
+    "kind": "terrain",
+    "map_id": 33,
+    "content_hash": "870fd6cb8cacbaf7",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": null,
+    "script_typed_conditions": 0,
+    "event_id": null,
+    "event_name": null,
+    "page_idx": null,
+    "condition": null,
+    "trigger": null,
+    "seam": null,
+    "terrain": {
+      "x": 57,
+      "y": 10,
+      "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
+      "source_event_id": 31
+    },
+    "reachability_consulted": true
+  },
+  {
+    "row_id": "map033/terrain/stairs/57,11",
+    "kind": "terrain",
+    "map_id": 33,
+    "content_hash": "3c255189ddf2e314",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": null,
+    "script_typed_conditions": 0,
+    "event_id": null,
+    "event_name": null,
+    "page_idx": null,
+    "condition": null,
+    "trigger": null,
+    "seam": null,
+    "terrain": {
+      "x": 57,
+      "y": 11,
+      "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
+      "source_event_id": 26
+    },
+    "reachability_consulted": true
+  },
+  {
+    "row_id": "map033/terrain/stairs/57,9",
+    "kind": "terrain",
+    "map_id": 33,
+    "content_hash": "9ee66c3cc3ecbd96",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": null,
+    "script_typed_conditions": 0,
+    "event_id": null,
+    "event_name": null,
+    "page_idx": null,
+    "condition": null,
+    "trigger": null,
+    "seam": null,
+    "terrain": {
+      "x": 57,
+      "y": 9,
+      "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
+      "source_event_id": 33
+    },
+    "reachability_consulted": true
   },
   {
     "row_id": "map081/ev001/p0",
@@ -2614,7 +2768,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map081/ev001/p1",
@@ -2645,7 +2801,9 @@
       "self_switch_ch": "A"
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map081/ev002/p0",
@@ -2677,7 +2835,9 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map081/ev003/p0",
@@ -2710,7 +2870,9 @@
       "self_switch_ch": null
     },
     "trigger": "player_touch",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   },
   {
     "row_id": "map081/ev004/p0",
@@ -2740,6 +2902,8 @@
       "self_switch_ch": null
     },
     "trigger": "action",
-    "seam": null
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true
   }
 ]
