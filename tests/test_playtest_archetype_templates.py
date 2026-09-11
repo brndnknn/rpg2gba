@@ -224,6 +224,66 @@ def test_item_ball_beats_explicit_group_overrides_default_and_reaches_every_beat
     assert all(beat.group == "STOP_POTION" for beat in chapter.beats)
 
 
+def test_item_ball_beats_single_page_item_ball_registers_grant_only() -> None:
+    """Loosened 2026-09-10 (REDERIVATION_PLAN.md sec 13.3 T1): CH03's
+    map068/ev018 is a single-page `pbItemBall` with no page-1 remainder --
+    `item_ball_beats` must still register the grant beat, claiming only the
+    one row."""
+    b = _builder()
+    item_ball_beats(
+        b, chapter_id="CH03", map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER",
+        map_id=68, event_id=18, item="ITEM_ANTIDOTE", beat_prefix="IBX",
+        self_switch_letter="A",
+    )
+    chapter = b.build()
+    assert [beat.name for beat in chapter.beats] == ["IBX"]
+    assert chapter.beats[0].archetype == "item_ball"
+    assert chapter.beats[0].rows == ("map068/ev018/p0",)
+
+
+def test_item_ball_beats_single_page_without_stated_letter_fails_loud() -> None:
+    """The letter a page WRITES is not in the manifest -- `Condition` carries
+    only the letter a page reads to gate itself -- so a single-page ball has
+    nothing to derive it from. Demanding it beats defaulting to "A"
+    (CLAUDE.md 4.5): a ball that writes B would otherwise have its grant beat
+    assert the wrong flag and pass or fail for the wrong reason."""
+    b = _builder()
+    with pytest.raises(ValueError, match="self_switch_letter= explicitly"):
+        item_ball_beats(
+            b, chapter_id="CH03", map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER",
+            map_id=68, event_id=18, item="ITEM_ANTIDOTE", beat_prefix="IBX",
+        )
+
+
+def test_item_ball_beats_stated_letter_contradicting_spent_row_fails_loud(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    """When a spent page DOES exist the manifest is the source of truth, so a
+    stated letter that disagrees with it is a contradiction, not an override
+    -- the same fail-loud-on-disagreement discipline the other templates apply
+    to author-stated params."""
+    b = _builder()
+    with pytest.raises(ValueError, match="disagrees with the spent row"):
+        item_ball_beats(
+            b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=3, item="ITEM_ESCAPE_ROPE", beat_prefix="IBX",
+            self_switch_letter="Z", manifest_rows=ch05_rows,
+        )
+
+
+def test_item_ball_beats_negative_beat_on_single_page_ball_fails_loud() -> None:
+    """A single-page item ball has no spent row to assert a negative beat
+    against -- `negative_beat=True` must fail loud rather than silently
+    skip the beat or crash on a missing row lookup."""
+    b = _builder()
+    with pytest.raises(ValueError, match="requires a 'spent' page"):
+        item_ball_beats(
+            b, chapter_id="CH03", map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER",
+            map_id=68, event_id=18, item="ITEM_ANTIDOTE", beat_prefix="IBX",
+            negative_beat=True,
+        )
+
+
 def test_item_ball_beats_unknown_event_fails_loud() -> None:
     b = _builder()
     with pytest.raises(ValueError, match="no 'item_ball' archetype match"):

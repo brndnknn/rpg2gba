@@ -8,8 +8,13 @@ a real "re-touch grants nothing a second time" beat.
 
 The self-switch letter that gates the spent page is read from the manifest
 row itself (`ManifestRow.condition.self_switch_ch`), not hardcoded to "A" --
-`_match_item_ball` requires it to be set for the archetype to match at all
-(`chapter_manifest/archetypes.py`), so it is always present on a match.
+`_match_item_ball` requires it to be set on the spent page for that page to be
+claimed at all (`chapter_manifest/archetypes.py`). A single-page item ball
+(loosened 2026-09-10, `map068/ev018/p0`-shaped: `pbItemBall` with no page-1
+remainder at all) has no spent row to read a letter from, so `item_ball_beats`
+demands `self_switch_letter=` from the author in that case rather than
+defaulting one, and refuses `negative_beat=True` outright since there is no
+spent row to assert against.
 """
 from __future__ import annotations
 
@@ -54,6 +59,7 @@ def item_ball_beats(
     item: str,
     beat_prefix: str,
     negative_beat: bool = False,
+    self_switch_letter: str | None = None,
     approach_prefer: str | None = None,
     group: str | None = None,
     manifest_rows: "tuple[ManifestRow, ...] | None" = None,
@@ -87,39 +93,86 @@ def item_ball_beats(
         rows=manifest_rows, manifest_dir=manifest_dir,
     )
     grant_row_id = next(rid for rid, role in match.roles.items() if role == "grant")
-    spent_row_id = next(rid for rid, role in match.roles.items() if role == "spent")
+    spent_row_id = next(
+        (rid for rid, role in match.roles.items() if role == "spent"), None)
 
-    rows = manifest_rows if manifest_rows is not None else load_chapter_rows(
-        chapter_id, manifest_dir=manifest_dir)
-    row_by_id = {r.row_id: r for r in rows}
-    spent_row = row_by_id.get(spent_row_id)
-    if spent_row is None or spent_row.condition is None \
-            or spent_row.condition.self_switch_ch is None:
-        raise ValueError(
-            f"item_ball_beats: {map_constant} event {event_id}: spent row "
-            f"{spent_row_id!r} carries no self_switch_ch -- "
-            "chapter_manifest.archetypes._match_item_ball should have "
-            "refused to match this event at all if that's true; this is "
-            "unreachable unless the manifest and the classifier disagree"
+    # A single-page item ball (chapter_manifest.archetypes._match_item_ball,
+    # loosened 2026-09-10 for map068/ev018/p0-shaped instances) has no
+    # "spent" role at all -- there is no remainder page to gate a negative
+    # beat against. `negative_beat=True` asks for exactly that beat, so it
+    # cannot be honoured here; fail loud rather than silently skip it or
+    # raise a bare KeyError from the `next()` below.
+    if spent_row_id is None:
+        if negative_beat:
+            raise ValueError(
+                f"item_ball_beats: {map_constant} event {event_id}: "
+                "negative_beat=True requires a 'spent' page, but this "
+                "item_ball match has none (a single-page item ball with no "
+                "remainder page) -- omit negative_beat= for this event"
+            )
+        # No page-1 condition exists to read the self-switch letter off of
+        # -- that is precisely what makes this a single-page item ball. The
+        # letter a page *writes* is not in the manifest at all: `Condition`
+        # carries `self_switch_ch`, the letter a page READS to gate itself
+        # (`chapter_manifest/schema.py`), and a single-page ball has no such
+        # page. So the letter is author-supplied here, and demanded rather
+        # than defaulted (CLAUDE.md 4.5): guessing "A" would assert
+        # FLAG_MAP..._SSA on a ball that actually writes B, and the beat
+        # would then pass or fail for the wrong reason.
+        if self_switch_letter is None:
+            raise ValueError(
+                f"item_ball_beats: {map_constant} event {event_id}: this is a "
+                "single-page item ball (no spent page), so the self-switch "
+                "letter cannot be read from the manifest -- pass "
+                "self_switch_letter= explicitly, citing the event's own "
+                "code-123 write in output/uranium-build/maps/"
+                f"Map{map_id:03d}.json"
+            )
+        letter = self_switch_letter
+        ssa = assertions.flag_ssa(map_id, event_id, letter)
+        spent_page_is_empty = False
+    else:
+        rows = manifest_rows if manifest_rows is not None else load_chapter_rows(
+            chapter_id, manifest_dir=manifest_dir)
+        row_by_id = {r.row_id: r for r in rows}
+        spent_row = row_by_id.get(spent_row_id)
+        if spent_row is None or spent_row.condition is None \
+                or spent_row.condition.self_switch_ch is None:
+            raise ValueError(
+                f"item_ball_beats: {map_constant} event {event_id}: spent row "
+                f"{spent_row_id!r} carries no self_switch_ch -- "
+                "chapter_manifest.archetypes._match_item_ball should have "
+                "refused to match this event at all if that's true; this is "
+                "unreachable unless the manifest and the classifier disagree"
+            )
+        letter = spent_row.condition.self_switch_ch
+        if self_switch_letter is not None and self_switch_letter != letter:
+            raise ValueError(
+                f"item_ball_beats: {map_constant} event {event_id}: stated "
+                f"self_switch_letter={self_switch_letter!r} disagrees with the "
+                f"spent row's own condition ({letter!r}) -- the manifest is the "
+                "source of truth when a spent page exists; drop the argument"
+            )
+        ssa = assertions.flag_ssa(map_id, event_id, letter)
+
+        # Does the spent page DO anything? Some are a "nothing here" message;
+        # others are an empty page whose only job is to make the ball vanish
+        # once the self-switch flips. CH05's Escape Rope ball (map036/ev003/p1)
+        # is the second kind: no graphic, a single terminator command, and a
+        # manifest row that records it exactly -- no effects, no script
+        # heads, no other codes, nothing unhandled.
+        #
+        # It matters because the two shapes have OPPOSITE pass conditions. On
+        # an empty page an A press starts no script, and demanding one fails
+        # a beat for behaving correctly. Read from the manifest rather than
+        # assumed, so a chapter whose spent page does speak still gets the
+        # stronger assertion. (Only reachable when a spent row exists at
+        # all -- a single-page item ball sets `spent_page_is_empty = False`
+        # above and never reaches this branch.)
+        spent_page_is_empty = not (
+            spent_row.effects or spent_row.script_heads
+            or spent_row.other_codes or spent_row.unhandled
         )
-    letter = spent_row.condition.self_switch_ch
-    ssa = assertions.flag_ssa(map_id, event_id, letter)
-
-    # Does the spent page DO anything? Some are a "nothing here" message;
-    # others are an empty page whose only job is to make the ball vanish once
-    # the self-switch flips. CH05's Escape Rope ball (map036/ev003/p1) is the
-    # second kind: no graphic, a single terminator command, and a manifest row
-    # that records it exactly -- no effects, no script heads, no other codes,
-    # nothing unhandled.
-    #
-    # It matters because the two shapes have OPPOSITE pass conditions. On an
-    # empty page an A press starts no script, and demanding one fails a beat
-    # for behaving correctly. Read from the manifest rather than assumed, so
-    # a chapter whose spent page does speak still gets the stronger assertion.
-    spent_page_is_empty = not (
-        spent_row.effects or spent_row.script_heads
-        or spent_row.other_codes or spent_row.unhandled
-    )
 
     approach = approach_to(map_constant, event_id, prefer=approach_prefer)
     facing = _facing_toward(approach, event_cell(map_constant, event_id))

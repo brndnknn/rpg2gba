@@ -54,8 +54,19 @@ _PHONE_HEADS: frozenset[str] = frozenset({
 _RIDER_TAGS: frozenset[str] = frozenset({"giveitem"})
 
 _NUDGE_HEADS: frozenset[str] = frozenset({"get_character", "setTempSwitchOn"})
+# `graphic` was required until 2026-09-10 (REDERIVATION_PLAN.md sec 13.3 T1):
+# real arrival-nudge pages exist that stage facing/BGM without ever touching
+# the sprite graphic (no `Set Graphic` command on the page) -- `map068/ev012/p1`
+# (CH03) is the instance that motivated dropping it: effects are exactly
+# `{move_route, temp_switch_write}`, trigger is autorun, script_heads match
+# `_NUDGE_HEADS` exactly, and the switch-condition fingerprint below is intact.
+# `move_route` and `temp_switch_write` stay mandatory -- they are the two
+# effects that are actually load-bearing for "this page moves/faces the
+# player and won't re-fire" (module docstring); `graphic` was only ever a
+# coincidental third tag on the instances the fingerprint was first written
+# against, not a defining feature of the archetype.
 _NUDGE_EFFECTS_REQUIRED: frozenset[str] = frozenset({
-    "graphic", "move_route", "temp_switch_write",
+    "move_route", "temp_switch_write",
 })
 
 
@@ -120,20 +131,35 @@ def _match_item_ball(rows: Sequence[ManifestRow]) -> ArchetypeMatch | None:
     if "pbItemBall" not in p0.script_heads:
         return None
     p1 = next((row for row in rows if row.page_idx == 1), None)
-    if p1 is None:
-        return None
-    if not _is_cosmetic_safe(p1):
-        return None
-    if p1.condition is None or p1.condition.self_switch_ch is None:
-        return None
+    # A page-1 "spent" remainder page was required until 2026-09-10
+    # (REDERIVATION_PLAN.md sec 13.3 T1): single-page item balls exist that
+    # never leave a remainder page behind at all -- `map068/ev018/p0` (CH03)
+    # is the instance that motivated dropping the requirement: page 0 alone
+    # has `script_heads = (pbItemBall,)` and `effects = (giveitem,
+    # self_switch_write)`, everything page 0 ever needed, and there is no
+    # page 1 in the event to demand anything of. When a page-1 row IS
+    # present, every prior requirement on it (cosmetic-safe, self-switch
+    # gated) still applies unchanged -- this only widens the "no p1 at all"
+    # case from a non-match to a match with no "spent" role.
+    if p1 is not None:
+        if not _is_cosmetic_safe(p1):
+            return None
+        if p1.condition is None or p1.condition.self_switch_ch is None:
+            return None
+
+    roles: dict[str, str] = {p0.row_id: "grant"}
+    prescribed: dict[str, str] = {p0.row_id: "beat"}
+    if p1 is not None:
+        roles[p1.row_id] = "spent"
+        prescribed[p1.row_id] = "cosmetic"
 
     return ArchetypeMatch(
         archetype="item_ball",
         map_id=p0.map_id,
         event_id=p0.event_id,  # type: ignore[arg-type]
         params={},
-        roles={p0.row_id: "grant", p1.row_id: "spent"},
-        prescribed={p0.row_id: "beat", p1.row_id: "cosmetic"},
+        roles=roles,
+        prescribed=prescribed,
     )
 
 

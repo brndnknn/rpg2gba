@@ -224,13 +224,23 @@ def test_item_ball_spent_page_only_does_not_match_alone() -> None:
     assert classify_event([p1]) == ()
 
 
-def test_item_ball_without_second_page_does_not_match() -> None:
+def test_item_ball_without_second_page_matches_as_single_page_grant_only() -> None:
+    """Loosened 2026-09-10 (REDERIVATION_PLAN.md sec 13.3 T1): a single-page
+    item ball with no remainder page -- e.g. `map068/ev018/p0` (CH03),
+    `pbItemBall` with `effects = (giveitem, self_switch_write)` and no page
+    1 in the event at all -- must match, with only a "grant" role and no
+    "spent" role at all (there is no row to own one)."""
     p0 = _page(
         35, 40, 0,
         effects=("giveitem", "self_switch_write"),
         script_heads=("pbItemBall",),
     )
-    assert classify_event([p0]) == ()
+    matches = classify_event([p0])
+    assert len(matches) == 1
+    match = matches[0]
+    assert match.archetype == "item_ball"
+    assert match.roles == {p0.row_id: "grant"}
+    assert match.prescribed == {p0.row_id: "beat"}
 
 
 def test_item_ball_second_page_not_gated_on_self_switch_does_not_match() -> None:
@@ -280,6 +290,36 @@ def _nudge_row(map_id: int, event_id: int, page_idx: int) -> ManifestRow:
 
 
 def test_arrival_nudge_fingerprint() -> None:
+    p1 = _nudge_row(35, 1, 1)
+    matches = classify_event([p1])
+    assert len(matches) == 1
+    assert matches[0].archetype == "arrival_nudge"
+    assert matches[0].roles == {p1.row_id: "nudge"}
+    assert matches[0].prescribed == {p1.row_id: "beat"}
+
+
+def test_arrival_nudge_matches_without_graphic_effect() -> None:
+    """Loosened 2026-09-10 (REDERIVATION_PLAN.md sec 13.3 T1): `graphic` is
+    no longer mandatory -- `map068/ev012/p1` (CH03) stages facing/BGM with
+    effects exactly `{move_route, temp_switch_write}` and no `graphic` tag
+    at all, yet is a real arrival nudge by every other fingerprint element."""
+    p1 = _page(
+        68, 12, 1, trigger="autorun",
+        effects=("move_route", "temp_switch_write"),
+        script_heads=("get_character", "setTempSwitchOn"),
+        condition=PageCondition(switch1_id=22, switch1_name='s:tsOff?("A")'),
+        script_typed_conditions=1,
+    )
+    matches = classify_event([p1])
+    assert len(matches) == 1
+    assert matches[0].archetype == "arrival_nudge"
+    assert matches[0].roles == {p1.row_id: "nudge"}
+    assert matches[0].prescribed == {p1.row_id: "beat"}
+
+
+def test_arrival_nudge_still_matches_with_graphic_effect_present() -> None:
+    """Regression: the pre-existing graphic-carrying nudge shape must match
+    identically to before this loosening."""
     p1 = _nudge_row(35, 1, 1)
     matches = classify_event([p1])
     assert len(matches) == 1
