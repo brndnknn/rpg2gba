@@ -1067,6 +1067,38 @@ def _rock_smash_refused(emu: Emulator, beat: str, local_id: int,
 
 # -- B1 ------------------------------------------------------------------
 
+# `rows=` on the beats below (P8a, REDERIVATION_PLAN.md 13.1) records which
+# chapter-manifest rows each beat actually exercises, so the disposition
+# generator can join `beat:` instead of a human hand-writing it. Two things a
+# reader should not have to reverse-engineer from the tuples:
+#
+# FIVE BEATS CLAIM NOTHING, AND THAT IS THE CORRECT ANSWER.
+#   B1  -- the crossing from Moki Town. CH02's manifest carries NO seam row at
+#          all: `map032/seam/E/map033` sits in CH01's manifest (map 32 is
+#          CH01's map), and no reciprocal `map033` seam row was generated for
+#          this side. That is an instance of PROJECT_TODO #91, not a gap in
+#          this beat -- there is no row here to claim.
+#   B4  -- a wild-grass encounter. An encounter table is neither an event page
+#          nor a seam nor terrain, so no manifest row can ever represent it.
+#   B14 -- trainer pacing (MOVEMENT_TYPE_LOOK_AROUND surviving a battle). A
+#          movement type is a property of the object event, not of any page.
+#   N2  -- two boulders REFUSING to smash. Those rows disposition
+#          `blocked:rock_smash`; claiming them would have the generator derive
+#          `beat:N2` over an authored blocked verdict, which is exactly
+#          backwards.
+#   B17 -- the north boundary. The crossing belongs to the arriving chapter
+#          (CH03:B1) by the 2026-09-04 operator convention, and this beat
+#          deliberately asserts nothing about the edge itself.
+#
+# THREE `p1` CLAIMS ARE WEAKER THAN THEY LOOK. B7/B8/B11 claim their trainer's
+# defeated page because `_battle_trainer` ends in `_assert_no_second_battle`,
+# whose result depends on page 1 being the active one -- but it proves only
+# that no battle restarts, never that the defeated line is right. CH02 has no
+# re-talk beat for Flood/Tath/Lynette the way it has N5 for Richey. When the
+# `oracle=` field lands (MEMORY.md Open Questions, decided 2026-08-27 and not
+# yet built), these three are the rows to look at first.
+
+
 @ch02.beat("B1", "Crossing Moki Town's east passage lands on Route 1 near (70,11)",
              map_constant="MAP_MOKI_TOWN", at=ROUTE1_ENTRY_APPROACH)
 def b1(emu: Emulator) -> None:
@@ -1081,7 +1113,9 @@ def b1(emu: Emulator) -> None:
              locations=(
                  BeatLocation("MAP_ROUTE_01", STAIR1_EAST_APPROACH[0], STAIR1_EAST_APPROACH[1], "east approach"),
                  BeatLocation("MAP_ROUTE_01", STAIR1_WEST_APPROACH[0], STAIR1_WEST_APPROACH[1], "west approach"),
-             ))
+             ),
+             rows=("map033/terrain/stairs/57,9", "map033/terrain/stairs/57,10",
+                   "map033/terrain/stairs/57,11"))
 def b2(emu: Emulator) -> None:
     # The approach walks are pure navigation (absorb both kinds of
     # incidental traffic); the staircase crossing itself uses `_try_step`,
@@ -1219,13 +1253,15 @@ def b6(emu: Emulator) -> None:
 
 
 @ch02.beat("B7", "Flood (BUGCATCHER, patrol) battles once, trainer flag latches",
-             map_constant="MAP_ROUTE_01", at=TRAINER_FLOOD.xy)
+             map_constant="MAP_ROUTE_01", at=TRAINER_FLOOD.xy,
+             rows=("map033/ev030/p0", "map033/ev030/p1"), archetype="trainer")
 def b7(emu: Emulator) -> None:
     _battle_trainer(emu, "B7", TRAINER_FLOOD)
 
 
 @ch02.beat("B8", "Tath (SCHOOLKID, sight) battles once, trainer flag latches",
-             map_constant="MAP_ROUTE_01", at=TRAINER_TATH.xy)
+             map_constant="MAP_ROUTE_01", at=TRAINER_TATH.xy,
+             rows=("map033/ev034/p0", "map033/ev034/p1"), archetype="trainer")
 def b8(emu: Emulator) -> None:
     _battle_trainer(emu, "B8", TRAINER_TATH)
 
@@ -1241,7 +1277,8 @@ def b10(emu: Emulator) -> None:
 
 
 @ch02.beat("B11", "Lynette (LASS, patrol) battles once, trainer flag latches",
-             map_constant="MAP_ROUTE_01", at=TRAINER_LYNETTE.xy)
+             map_constant="MAP_ROUTE_01", at=TRAINER_LYNETTE.xy,
+             rows=("map033/ev103/p0", "map033/ev103/p1"), archetype="trainer")
 def b11(emu: Emulator) -> None:
     _battle_trainer(emu, "B11", TRAINER_LYNETTE)
 
@@ -1257,7 +1294,8 @@ def b12(emu: Emulator) -> None:
 
 
 @ch02.beat("B13", "Richey the phone trainer battles and registers Match Call",
-             map_constant="MAP_ROUTE_01", at=TRAINER_RICHEY.xy)
+             map_constant="MAP_ROUTE_01", at=TRAINER_RICHEY.xy,
+             rows=("map033/ev053/p0",), archetype="trainer")
 def b13(emu: Emulator) -> None:
     _battle_trainer(emu, "B13", TRAINER_RICHEY,
                     registered_flag=RICHEY_REGISTERED_FLAG)
@@ -1281,7 +1319,8 @@ RICHEY_LOCAL_ID = 21
 
 @ch02.beat("N5", "Re-talking defeated Richey reaches Page2 and prints his idle "
                    "line (PROJECT_TODO #45 regression)",
-             map_constant="MAP_ROUTE_01", at=TRAINER_RICHEY.xy)
+             map_constant="MAP_ROUTE_01", at=TRAINER_RICHEY.xy,
+             rows=("map033/ev053/p2",), archetype="trainer")
 def n5_richey_retalk(emu: Emulator) -> None:
     """The regression beat for a bug that shipped through CH02's own gate.
 
@@ -1472,7 +1511,12 @@ def b14(emu: Emulator) -> None:
                  for event_id, item_xy, _approach, _facing in (
                      ITEM_POTION_A, ITEM_POTION_B, ITEM_ANTIDOTE_A, ITEM_ANTIDOTE_B,
                  )
-             ))
+             ),
+             rows=("map033/ev002/p0", "map033/ev002/p1",
+                   "map033/ev003/p0", "map033/ev003/p1",
+                   "map033/ev025/p0", "map033/ev025/p1",
+                   "map033/ev050/p0", "map033/ev050/p1"),
+             archetype="item_ball")
 def b15(emu: Emulator) -> None:
     for event_id, _item_xy, approach, facing in (
         ITEM_POTION_A, ITEM_POTION_B, ITEM_ANTIDOTE_A, ITEM_ANTIDOTE_B,
@@ -1507,7 +1551,8 @@ def b15c(emu: Emulator) -> None:
                  BeatLocation("MAP_ROUTE_01", OLD_ROD_DOOR[0], OLD_ROD_DOOR[1], "old rod house door"),
                  BeatLocation("MAP_ROUTE_01_OLD_ROD_HOUSE", OLD_ROD_ARRIVAL[0], OLD_ROD_ARRIVAL[1], "arrival"),
                  BeatLocation("MAP_ROUTE_01_OLD_ROD_HOUSE", SIGN_INTERACT[0], SIGN_INTERACT[1], "sign"),
-             ))
+             ),
+             rows=("map033/ev027/p0", "map081/ev002/p0", "map081/ev004/p0"))
 def b16(emu: Emulator) -> None:
     _enter_door(emu, "B16", OLD_ROD_DOOR, "MAP_ROUTE_01_OLD_ROD_HOUSE")
     _assert_near(emu, "B16", OLD_ROD_ARRIVAL)
@@ -1541,7 +1586,8 @@ def b16(emu: Emulator) -> None:
              locations=(
                  BeatLocation("MAP_ROUTE_01_OLD_ROD_HOUSE", FISHERMAN_INTERACT[0], FISHERMAN_INTERACT[1], "fisherman"),
                  BeatLocation("MAP_ROUTE_01_OLD_ROD_HOUSE", OLD_ROD_HOUSE_EXIT_APPROACH[0], OLD_ROD_HOUSE_EXIT_APPROACH[1], "exit approach"),
-             ))
+             ),
+             rows=("map081/ev001/p0", "map081/ev003/p0"))
 def n1(emu: Emulator) -> None:
     battle_var = emu.var("VAR_BATTLE_VAR01")
     if battle_var >= 5:
