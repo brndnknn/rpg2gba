@@ -82,11 +82,22 @@ BeatFn = Callable[["Emulator"], None]
 # package just to validate a string shape):
 #
 #   page_row_id(map_id, event_id, page_idx) -> "map035/ev014/p1"
-#   seam_row_id(map_id, direction, other_map_id) -> "map035/seam/NORTH/map036"
+#   seam_row_id(map_id, direction, other_map_id) -> "map035/seam/S/map031"
 #   terrain_row_id(map_id, subkind, x, y) -> "map037/terrain/stairs/11,9"
 _PAGE_ROW_RE = re.compile(r"^map\d{3}/ev\d{3}/p\d+$")
-_SEAM_ROW_RE = re.compile(
-    r"^map\d{3}/seam/(NORTH|SOUTH|EAST|WEST)/map\d{3}$")
+# The direction segment is `[A-Z]+`, deliberately NOT an enumeration.
+# `seam_row_id` upper-cases whatever direction string the connection record
+# carries, and those records come from `connections.json` -- RMXP-derived
+# data, where every direction in the corpus is a single letter (`N`/`S`/`E`).
+# This regex spelled it `(NORTH|SOUTH|EAST|WEST)` until 2026-09-11, which
+# matched NOTHING the generator has ever emitted: a beat could not claim a
+# seam row at all, and CH04's B1 was the first beat that tried. Same failure
+# as the terrain-row rejection noted below, and the same shape as #94's
+# `ARCHETYPE_NAMES` -- a hand-written enumeration beside a schema, drifting
+# silently because nothing compared the two. `test_beat_row_ids.py` now
+# validates every row id in the committed manifests against these patterns,
+# so the comparison exists.
+_SEAM_ROW_RE = re.compile(r"^map\d{3}/seam/[A-Z]+/map\d{3}$")
 # Terrain rows were added to the manifest after this validator was written
 # and were rejected here until 2026-09-04, which made a beat unable to claim
 # the stair rows it exercises (CH05 B13/B14 are the first). `subkind` is

@@ -665,7 +665,8 @@ def _settle_post_battle_script(emu: Emulator, beat: str, flag: str,
 
 @ch04.beat("B1", "Crossing Kevlar Town's north seam lands on Route 2's "
                    "south edge",
-             map_constant="MAP_KEVLAR_TOWN", at=KEVLAR_SEAM_ARROW)
+             map_constant="MAP_KEVLAR_TOWN", at=KEVLAR_SEAM_ARROW,
+             rows=("map035/seam/S/map031",))
 def b1(emu: Emulator) -> None:
     _cross_arrow_warp(emu, "B1", KEVLAR_SEAM_ARROW, KEVLAR_SEAM_DIRECTION,
                       MAP_CONST)
@@ -704,7 +705,8 @@ def b1(emu: Emulator) -> None:
 @ch04.beat("B4", "Youngster Timothy's event-touch battle fires and is "
                    "won; self-switch A latches the defeated state (spec §3 "
                    "B4 / manifest map035/ev012/p0)",
-             map_constant=MAP_CONST, at=TIMOTHY_APPROACH)
+             map_constant=MAP_CONST, at=TIMOTHY_APPROACH,
+             rows=("map035/ev012/p0",), archetype="trainer")
 def b4(emu: Emulator) -> None:
     defeat_flag = _trainer_defeat_flag(TRAINER_TIMOTHY_CONST)
     if emu.flag(defeat_flag):
@@ -744,7 +746,8 @@ def b4(emu: Emulator) -> None:
 @ch04.beat("B14", "After B4, Timothy's defeated re-talk shows the "
                     "'impossible' line (spec §3.1 B14 / manifest "
                     "map035/ev012/p1)",
-             map_constant=MAP_CONST, at=TIMOTHY_APPROACH)
+             map_constant=MAP_CONST, at=TIMOTHY_APPROACH,
+             rows=("map035/ev012/p1",), archetype="trainer")
 def b14(emu: Emulator) -> None:
     defeat_flag = _trainer_defeat_flag(TRAINER_TIMOTHY_CONST)
     if not emu.flag(defeat_flag):
@@ -764,7 +767,8 @@ def b14(emu: Emulator) -> None:
 @ch04.beat("B2", "Hiker Larrie's event-touch battle fires and is won; "
                    "self-switch A latches the defeated state (spec §3 B2 / "
                    "manifest map035/ev003/p0)",
-             map_constant=MAP_CONST, at=LARRIE_APPROACH)
+             map_constant=MAP_CONST, at=LARRIE_APPROACH,
+             rows=("map035/ev003/p0",), archetype="trainer")
 def b2(emu: Emulator) -> None:
     ssa_a = _flag_ssa(35, LARRIE_EVENT_ID, "A")
     if emu.flag(ssa_a):
@@ -786,7 +790,8 @@ def b2(emu: Emulator) -> None:
 
 @ch04.beat("B3", "The item ball at (16,42) grants one Potion, once "
                    "(spec §3 B3 / manifest map035/ev009/p0)",
-             map_constant=MAP_CONST, at=ITEM_BALL_APPROACH)
+             map_constant=MAP_CONST, at=ITEM_BALL_APPROACH,
+             rows=("map035/ev009/p0",), archetype="item_ball")
 def b3(emu: Emulator) -> None:
     ssa = _flag_ssa(35, ITEM_BALL_EVENT_ID, "A")
     if emu.flag(ssa):
@@ -810,7 +815,8 @@ def b3(emu: Emulator) -> None:
 
 @ch04.beat("B5", "Reading the roadblock hint sign shows the Passage Cave "
                    "detour text (spec §3 B5 / manifest map035/ev013/p0)",
-             map_constant=MAP_CONST, at=SIGN_ROADBLOCK_APPROACH)
+             map_constant=MAP_CONST, at=SIGN_ROADBLOCK_APPROACH,
+             rows=("map035/ev013/p0",))
 def b5(emu: Emulator) -> None:
     _press_a(emu, "B5", SIGN_ROADBLOCK_APPROACH, SIGN_ROADBLOCK_FACING)
     emu.assert_text_contains("Nowtoch City")
@@ -941,7 +947,8 @@ def b8_autorun_deferred(emu: Emulator) -> None:
                    "shows its sign-frame text (spec §3.1 B9 / manifest "
                    "map035/ev002/p0) -- not id 8 'Sign' @(19,33), which is "
                    "an empty, cosmetic page",
-             map_constant=MAP_CONST, at=SIGN_OLD_ENTRANCE_APPROACH)
+             map_constant=MAP_CONST, at=SIGN_OLD_ENTRANCE_APPROACH,
+             rows=("map035/ev002/p0",))
 def b9(emu: Emulator) -> None:
     _press_a(emu, "B9", SIGN_OLD_ENTRANCE_APPROACH, SIGN_OLD_ENTRANCE_FACING)
     emu.assert_text_contains(SIGN_OLD_ENTRANCE_TEXT)
@@ -987,7 +994,8 @@ def b10_phone_rematch_deferred(emu: Emulator) -> None:
 
 @ch04.beat("B11", "After B2, Larrie's defeated re-talk shows the caves "
                     "warning (spec §3.1 B11 / manifest map035/ev003/p2)",
-             map_constant=MAP_CONST, at=LARRIE_APPROACH)
+             map_constant=MAP_CONST, at=LARRIE_APPROACH,
+             rows=("map035/ev003/p2",), archetype="trainer")
 def b11(emu: Emulator) -> None:
     ssa_a = _flag_ssa(35, LARRIE_EVENT_ID, "A")
     if not emu.flag(ssa_a):
@@ -1007,7 +1015,8 @@ def b11(emu: Emulator) -> None:
 @ch04.beat("B12", "After B3, re-touching the item ball grants no second "
                     "Potion (spec §3.1 B12 / manifest map035/ev009/p1, "
                     "the one-shot assertion for B3)",
-             map_constant=MAP_CONST, at=ITEM_BALL_APPROACH)
+             map_constant=MAP_CONST, at=ITEM_BALL_APPROACH,
+             rows=("map035/ev009/p1",), archetype="item_ball")
 def b12(emu: Emulator) -> None:
     ssa = _flag_ssa(35, ITEM_BALL_EVENT_ID, "A")
     if not emu.flag(ssa):
@@ -1037,7 +1046,8 @@ def b12(emu: Emulator) -> None:
                     "(no sprite-overlay or sound-channel getter exists), "
                     "so 2 of the 3 observables the spec names are currently "
                     "unverifiable with this harness",
-             map_constant=MAP_CONST, at=BAREWL_APPROACH)
+             map_constant=MAP_CONST, at=BAREWL_APPROACH,
+             rows=("map035/ev011/p0",))
 def b13(emu: Emulator) -> None:
     _press_a(emu, "B13", BAREWL_APPROACH, BAREWL_FACING)
     emu.assert_text_contains(BAREWL_TEXT)
