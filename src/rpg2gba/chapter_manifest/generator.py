@@ -90,6 +90,11 @@ _CODE_EFFECT: dict[int, str] = {
     123: "self_switch_write",
     209: "move_route",
     210: "move_route",
+    # Set Event Location (202) -> `setobjectxy` (+ `turnobject` when the
+    # command also sets a facing). Grouped with the move-route pair: all
+    # three reposition an object and write no game state, so the same
+    # cosmetic-safe reading applies.
+    202: "move_route",
     241: "bgm",
     242: "bgm",
     249: "se",  # Play ME; grouped with `se` per the brief (not `bgm`)

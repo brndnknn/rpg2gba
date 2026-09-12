@@ -72,6 +72,7 @@ CONTROL_SWITCHES = 121
 CONTROL_VARIABLES = 122
 CONTROL_SELF_SWITCH = 123
 TRANSFER_PLAYER = 201
+SET_EVENT_LOCATION = 202
 CHANGE_MAP_SETTINGS = 204
 SHOW_ANIMATION = 207
 CHANGE_PLAYER_TRANSPARENCY = 208
@@ -1997,6 +1998,8 @@ class _PageEmitter:
                 f"warp(MAP_URANIUM_{params[1]}, {params[2]}, {params[3]})",
                 "waitstate",
             ]
+        if code == SET_EVENT_LOCATION:
+            return self._emit_set_event_location(node)
         if code == CHANGE_MAP_SETTINGS:
             return self._emit_change_map_settings(node)
         if code == SHOW_ANIMATION:
@@ -2035,6 +2038,96 @@ class _PageEmitter:
             node.index, code,
             f"command {code} outside the v1 deterministic tier",
         )]
+
+    def _emit_set_event_location(self, node: Node) -> list[str]:
+        """RMXP code 202 ("Set Event Location") -> ``setobjectxy``.
+
+        RMXP layout: ``[event_id, designation_type, arg1, arg2, arg3]``.
+        ``designation_type`` 0 = direct designation (``arg1=x, arg2=y,
+        arg3=direction``); only that shape is handled here. 1 (designate with
+        variables) and 2 (exchange with another event) have no established
+        indirection story in this transpiler and always queue — corpus census
+        2026-09-12 (``output/uranium-build/maps/*.json``) found 195 total
+        code-202 occurrences: 161 direct (type 0), 34 variable (type 1), 0
+        exchange (type 2) — so type 2 queues on principle, not on an observed
+        shape.
+
+        ``event_id`` 0 is RMXP's "this event" convention (verified against
+        the corpus: 35 of the 195 occurrences use id 0, always inside a
+        non-common event's own page); it resolves to ``ctx.event_id``, the
+        transpiler's existing notion of "the event currently being
+        transpiled" (same pattern as ``ERASE_EVENT`` above). A literal
+        nonzero id is emitted as-is — RMXP event id, not yet a compiled local
+        id — and left for ``tileset_converter.local_id_remap`` to rewrite
+        post-transpile (``REMAP_COMMANDS`` there already lists
+        ``"setobjectxy"`` for exactly this reason; its regex matches
+        ``setobjectxy(<int>`` on the first argument, which is exactly the
+        form emitted below).
+
+        ``setobjectxy`` (not ``setobjectxyperm``) is the right analog: RMXP's
+        "Set Event Location" repositions the event's *live* on-map instance,
+        the same thing ``setobjectxy`` does (`engine/asm/macros/event.inc`
+        ~702-707); ``setobjectxyperm`` instead rewrites the object's
+        off-screen *template* position (~878-885), a different, narrower
+        RMXP behavior this command was never observed to need.
+
+        ``setobjectxy`` only moves the object; it does not turn it, so a
+        nonzero ``arg3`` (direction) also needs a ``turnobject`` call
+        (`engine/asm/macros/event.inc:757`, ``.macro turnobject localId:req,
+        direction:req`` — same local-id shape, also in ``REMAP_COMMANDS``).
+        Direction 0 means "keep current facing" and emits nothing extra.
+        Nonzero values are resolved through ``_RMXP_DIRECTION_TO_DIR_CONST``
+        (the same RMXP-2/4/6/8 -> ``DIR_SOUTH``/``DIR_WEST``/``DIR_EAST``/
+        ``DIR_NORTH`` table ``_emit_player_facing_idiom`` already uses, reused
+        rather than re-minted per CLAUDE.md §4.3); an out-of-range direction
+        queues instead of guessing.
+        """
+        ctx = self.ctx
+        params = node.cmd.get("parameters", [])
+        if len(params) < 5 or not all(isinstance(v, int) for v in params[:5]):
+            return [ctx.queue(node.index, SET_EVENT_LOCATION, "malformed 202 params")]
+
+        event_id, designation_type, arg1, arg2, arg3 = params[:5]
+
+        if designation_type == 1:
+            return [ctx.queue(
+                node.index, SET_EVENT_LOCATION,
+                "variable-target set event location (designation_type 1)",
+            )]
+        if designation_type == 2:
+            return [ctx.queue(
+                node.index, SET_EVENT_LOCATION,
+                "exchange-with-event set event location (designation_type 2)",
+            )]
+        if designation_type != 0:
+            return [ctx.queue(
+                node.index, SET_EVENT_LOCATION,
+                f"set event location with unknown designation_type {designation_type}",
+            )]
+
+        if event_id == 0:
+            if ctx.event_id is None:
+                return [ctx.queue(
+                    node.index, SET_EVENT_LOCATION,
+                    "self-targeted set event location in a common event",
+                )]
+            target_id = ctx.event_id
+        else:
+            target_id = event_id
+
+        lines = [f"setobjectxy({target_id}, {arg1}, {arg2})"]
+
+        direction = arg3
+        if direction != 0:
+            dir_const = _RMXP_DIRECTION_TO_DIR_CONST.get(direction)
+            if dir_const is None:
+                return [ctx.queue(
+                    node.index, SET_EVENT_LOCATION,
+                    f"set event location with unhandled direction {direction}",
+                )]
+            lines.append(f"turnobject({target_id}, {dir_const})")
+
+        return lines
 
     # -- structured emitters -------------------------------------------------
 
