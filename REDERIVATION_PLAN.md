@@ -1428,13 +1428,14 @@ signatures. Also fix in passing: the duplicate `"pbRockSmash"` key in `MECHANIC_
    Essentials shapes, so this transfers to the next fan game. Two compound-boolean outliers get
    a fallback bucket, not a pattern. Manifest-schema + checker-rule change, ruled in under
    CLAUDE.md §10. Residual estimated 15–25 rows of the 110 — **estimated, not measured.**
-3. **Heal-location emitter + white-out beats** (§14.7). Emit `heal_locations.json` entries from
-   the already-parsed `healing_spot` metadata (22 corpus-wide, two in this branch) and
-   `setrespawn` at the `pbSetPokemonCenter` call sites. Set the **initial** anchor in the fenced
-   `new_game.c` block — today a white-out lands in vanilla Petalburg City. New harness
-   capability: force a party wipe and assert the post-white-out map/coords. **Two beats:** CH02
-   asserts the Moki anchor, CH04 asserts the Kevlar anchor. CH02's is expected to **fail** until
-   the `new_game.c` fix lands.
+3. **Heal-location emitter + white-out beats** (§14.7, **corrected 2026-09-12 — see §15.6**).
+   Emit `heal_locations.json` entries and `setrespawn` at the `pbSetPokemonCenter` call sites.
+   Set the **initial** anchor in the fenced `new_game.c` block — today a white-out lands in
+   vanilla Petalburg City. New harness capability: force a party wipe and assert the
+   post-white-out map/coords. **Two beats:** CH02 asserts the initial anchor, CH04 asserts the
+   Kevlar anchor. CH02's is expected to **fail** until the `new_game.c` fix lands.
+   **Do not derive these from the `healing_spot` metadata** — that is a different system
+   entirely (§15.6).
 4. **Capability requirement groups** (§14.9). `blocked:` tokens stay collapsed; the
    `badge AND (move OR item)` structure becomes requirement groups on `CapabilityDerivation` —
    one group per conjunct, alternatives within a group, route-order grant point = `max` over
@@ -1474,3 +1475,36 @@ signatures. Also fix in passing: the duplicate `"pbRockSmash"` key in `MECHANIC_
 - **The reward ladder** — filed against whichever chapter first drives Quest Log ≥ 5, which
   owes it a beat.
 - **P8a-2** — the archetype-template rewrite. Not a P8b prerequisite (§13.2a).
+
+### 15.6 Correction, 2026-09-12 — `HealingSpot` is Teleport's destination, not the respawn
+
+**§14.7 and §15.2.3 named the wrong source.** Uranium carries two unrelated globals and the
+ruling conflated them. Verified in the decompiled Ruby, both directions:
+
+| Global | Fed by | Consumed by |
+|---|---|---|
+| `$PokemonGlobal.healingSpot` | the `HealingSpot` **map metadata** field, re-read on every map change (`101__PField_Field.rb:1824-1825`) | the **TELEPORT** hidden move (`103__PField_HiddenMoves.rb:1211,1228`) and the region map. **Not the respawn.** |
+| `$PokemonGlobal.pokecenter{MapId,X,Y,Direction}` | `Kernel.pbSetPokemonCenter` **only** (`101__PField_Field.rb:1666-1676`) | `Kernel.pbStartOver`, the white-out handler, which copies all four into `$game_temp.player_new_*` (`:1921-1948`) |
+
+So the 22-map `healing_spot` table is the Teleport/Fly destination list. Deriving heal
+locations from it would have produced respawn points that are right by coincidence where a
+town has one Center and wrong everywhere else — and silently, since a white-out is invisible
+to a boot walk that never white-outs. **`pbSetPokemonCenter` call sites are the only correct
+source.**
+
+Recount on the corrected source: **64 call sites across 42 maps**, not 66 across 22 — the 22
+was the metadata table's row count, i.e. the other system's. In the staged corpus there is
+**exactly one**: `Map068` (Kevlar Town Pokémon Center) event 1 at (8,11), a bare
+`Kernel.pbSetPokemonCenter` with no arguments, so the respawn is the player's own tile at call
+time, not the event's.
+
+**The initial anchor is `MetadataHome`, not "Moki Town."** `pbStartOver` falls back to
+`MetadataHome` when `pokecenterMapId` was never set, and `metadata.py` already emits that as
+`URANIUM_START_MAP/X/Y/DIR = 49/7/7/2` — inside the Player's House 1F, on the spawn tile, not
+outdoors in the town. **Operator ruling 2026-09-12: match Uranium faithfully — map 49 at
+(7,7).** CH02's white-out beat asserts that, so it is the *initial anchor* beat rather than
+the "Moki anchor" beat §14.7 called it.
+
+Consequence for §14.7's standing precedent: unchanged. A white-out beat still goes in the
+chapter *after* the one that establishes an anchor. Only the anchor's coordinates and their
+derivation move.
