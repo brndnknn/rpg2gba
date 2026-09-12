@@ -23,7 +23,7 @@ in Decisions Made or Key File Notes.
 | **Gate-passed chapters** | CH01 Moki Town (2026-08-04) · CH02 Route 1 (08-12) · CH03 Kevlar Town (08-19) · CH04 Route 2 (08-27) · CH05 Comet Cave/Route 2 maps 36+37 (**09-06**) |
 | **Active chapter** | none — CH05 closed, CH06 not opened |
 | **Next** | **CH06 = Nowtoch City, maps 40–47** (`chapters.json` status `planned`, spec `reference/chapters/06-*.md`). Read `POST_CH05_REVIEW.md` before starting: it lists what CH05 filled with a human and what that costs at CH06's map count. |
-| **Open branch** | **`rederive-ch01-ch04`** — the CH01–CH04 re-derivation (`REDERIVATION_PLAN.md`). Through **P8a-1** as of 2026-09-11; **P8b next**. Merges only after P11, the §9 boot gate ×4. |
+| **Open branch** | **`rederive-ch01-ch04`** — the CH01–CH04 re-derivation (`REDERIVATION_PLAN.md`). Through **P8a-1** as of 2026-09-11; **P8b next, and its scope grew — read `REDERIVATION_PLAN.md` §14 before touching it.** Merges only after P11, now the §9 boot gate **×5** (CH05 is in bounds: §14.3 adds a behaviour-changing nudge assertion to its B1). |
 | **Branch policy** | chapters get a branch; in-between work commits straight to `main`. This branch is the standing exception — a four-chapter re-derivation, gated like a chapter. |
 
 **Before opening CH06:** the 2026-09-07 repo-audit remediation

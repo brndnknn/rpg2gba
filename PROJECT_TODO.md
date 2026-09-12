@@ -17,6 +17,70 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 96. Pokémon Centers heal but never become the respawn point
+
+**Found 2026-09-11 while walking `REDERIVATION_PLAN.md` §14's Q1. Found ONCE BEFORE and
+never filed** — `src/rpg2gba/playtest/chapters/ch03.py:83-88` finding #7 recorded it at
+chapter scope (*"No healing-location/respawn metadata write anywhere — `grep -i respawn`
+over the Center's whole compiled output: zero hits"*) and it never left that file. This
+entry exists so it cannot happen a third time.
+
+The `heal` effect converts, so the nurse heals the party. What does **not** convert is the
+respawn anchor:
+
+- `src/rpg2gba/conversion_agent/deterministic.py:91` classifies `Kernel.pbSetPokemonCenter`
+  as **STRIP**, justified by *"respawn is wired from metadata, not events."*
+  **That wiring does not exist.**
+- `src/rpg2gba/pbs_converter/metadata.py:13` parses Uranium's `HealingSpot` field into
+  `map_metadata.json` and stops there.
+- `grep -rn "HEAL_LOCATION" src/` → **zero hits**. Nothing in the pipeline touches
+  `engine/src/data/heal_locations.json`, which is still 100% stock Hoenn/Kanto — so no
+  `HEAL_LOCATION_*` constant exists for any Uranium Center even if a script emitted one.
+- Uranium side: `reference/scripts_dump/101__PField_Field.rb:1666-1676` stamps
+  map/x/y/direction into one global "last Center wins" slot.
+
+**Full native analog exists — no custom C** (§4.7 reverse gate, verified):
+`setrespawn <HEAL_LOCATION_*>` (`engine/asm/macros/event.inc:1455-1459`) →
+`ScrCmd_setrespawn` → `SetLastHealLocationWarp` with `SCREFF_SAVE`
+(`engine/src/scrcmd.c:2699-2706`). Struct and accessors at `engine/include/heal_location.h`.
+
+Work: mint a `HEAL_LOCATION_*` entry per Uranium Center into
+`engine/src/data/heal_locations.json` (it generates `include/constants/heal_locations.h`),
+and emit `setrespawn` from the nurse idiom instead of stripping the call. Currently blocks
+manifest row `map068/ev001/p0` (CH03, Kevlar's Center) and is item 3 of
+`REDERIVATION_PLAN.md` §14.1's ten.
+
+**Why a §9 boot walk never caught it:** a missing respawn anchor is only observable if the
+walk white-outs, and no beat does. Gate-passed chapters ship this.
+
+### 97. Recognition and emission are two unlinked layers, so rows are flagged for work already done
+
+**Root-caused 2026-09-11** (`REDERIVATION_PLAN.md` §14.1). A manifest row's
+`unrecognized_heads` / `other_codes` — and therefore `ManifestRow.is_dispositionable`
+(`chapter_manifest/schema.py:407-414`) — are judged **only** against two small,
+hand-maintained tables local to the manifest tool:
+
+- `_CODE_EFFECT` (`src/rpg2gba/chapter_manifest/generator.py:82-107`) for RMXP command codes
+- `MECHANIC_BY_HEAD` (`src/rpg2gba/chapter_atlas/census.py:78-135`) for Ruby script heads
+
+Neither is ever checked against `src/rpg2gba/conversion_agent/transpiler.py`, which is the
+actual conversion spine. `generator.py:600-604` documents the gap in passing. So a
+code/head the transpiler handles perfectly still reads as un-dispositionable until someone
+remembers to add it to a second table in a different package.
+
+**Measured blast radius on CH01+CH03 alone: 6 of the 28 undispositionable rows, plus part
+of 2 more, were flagged for work already done** — codes 104 (`_STRIP_CODES`,
+`transpiler.py:114`), 116 (`removeobject`, `:1898-1900`), 221/222 (`fadescreen`,
+`:1945-1950`), and the heads `pbPokerus` (predicate hard-folded at `:567-577`) and
+`pbNextMysteryGiftID` (`_emit_mystery_gift_id_strip`, `:2338-2358`, a user-approved strip
+dated 2026-08-19). Adding a head today takes four edits across two packages and step four
+is the one that gets forgotten.
+
+Fix direction: derive the recognition vocabulary from the transpiler, or make divergence
+fail loud — a test that asserts every head/code the transpiler handles is present in the
+manifest tables, and vice versa. §14.1 item 1 does the minimum (adds the missing entries);
+this item is the structural fix so the drift cannot silently return.
+
 ### 2. Locate the Nuclear type's 1/8-HP-per-turn out-of-battle effect
 
 Not in `217_Nuclear_Forms_Moves.rb`; likely a field/step hook or

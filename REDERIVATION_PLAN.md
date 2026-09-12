@@ -201,7 +201,7 @@ prerequisite.
 | **P8** | **Derive, diff, adjudicate the manifests** — CH01–CH04, one chapter at a time, diffed against P7's freeze. Every diff line classified 1/2/3 per §1. Category-3 lines stop the pass. Also carries §10 R3's two code changes and R1's `var_` prefix. | #65 | **DONE** — CH01 `55b98f51`, CH02/CH03 adjudicated + committed, CH04 clean. All category 1. |
 | **P8a-1** | **Declare `rows=` (and `archetype=`) on every CH01–CH04 beat.** The half of P8a that P8b actually needs: §13.1's join input. Done by annotating the existing hand-written beats rather than by template adoption — the templates populate `rows=` as a side effect, but the declaration is the deliverable and does not require them. | #67, §13 | **DONE 2026-09-11** — CH04 `962bf578`, CH02 `677ef344`/`d62be7d3`, CH01+CH03 `8fe197d8`. 48 of the 74 own beats carry `rows=`, 73 rows claimed, 22 carry `archetype=`; the other 26 beats claim nothing and each file records why. |
 | **P8a-2** | **Re-author those beats onto the archetype templates**, adopting `entry_at`, paying the coordinate literals down to zero (§5). Now a code-quality and assertion-strength step, not a P8b prerequisite. Needs the §13.3 templates; #94 (registry) is DONE 2026-09-10 (`c91f70d3`) and no longer gates it. **Read §5's warning first: some literals are load-bearing ROM-verified truth, and the AST ratchet counts literals without ever asking whether one is still true.** | #67, §13 | TODO |
-| **P8b** | **Generate the disposition files** — derive `cosmetic`/`blocked`/`unreachable`/`boundary`, join `beat:` off P8a-1's `rows=` (which now exist), hand-decide the ~109-row residue (§13.1). Affirmation is a separate pass from derivation. Carries §10 R2/R3's flip on CH04+CH05. | #65 | TODO |
+| **P8b** | **Generate the disposition files** — derive `cosmetic`/`blocked`/`unreachable`/`boundary`, join `beat:` off P8a-1's `rows=` (which now exist), hand-decide the **100**-row residue (measured; §13.1's ~109 was close). Affirmation is a separate pass from derivation. Carries §10 R2/R3's flip on CH04+CH05. **Read §14 first — it carries the operator's four rulings and corrects four claims made elsewhere in this plan.** Precedence is `boundary` > `beat` > `blocked` > `cosmetic` (§14.4); clerical rows get `derived_hash`, not `affirmed_hash` (§14.2); and P8b now absorbs **all ten** transpiler work items for the 28 undispositionable rows, item 7 timeboxed (§14.1). | #65 | TODO |
 | **P9** | **Route plans** for all four chapters (`routing plan --chapter CHnn --module <mod>`). Still last: `routing locations` hard-fails without P8b's output. | #67 | TODO |
 | **P10** | **Discharge the inherited obligations** (§4) and delete the scaffolding that expires with this task. | — | TODO |
 
@@ -209,7 +209,7 @@ prerequisite.
 
 | # | Step | Status |
 |---|---|---|
-| **P11** | **§9 boot gate, ×4.** Each re-derived chapter must boot in mGBA and be genuinely playable before the branch merges. This is an operator gate — I do not pass it on my own say-so (`CLAUDE.md` §9). The seeding recipe is `playtest walk --chapter <this> --at-beat <first> --engine engine`; predecessor `--at-end` blobs are keyed to the ROM's sha256 and any rebuild invalidates them (#85). | TODO |
+| **P11** | **§9 boot gate, ×5** (was ×4 — §14.3's nudge assertion changes CH05's B1 *behaviour*, and the operator's gate rule is that behaviour changes need a walk while declarative `rows=`/docstring edits do not). Each re-derived chapter, **plus CH05**, must boot in mGBA and be genuinely playable before the branch merges. This is an operator gate — I do not pass it on my own say-so (`CLAUDE.md` §9). The seeding recipe is `playtest walk --chapter <this> --at-beat <first> --engine engine`; predecessor `--at-end` blobs are keyed to the ROM's sha256 and any rebuild invalidates them (#85). | TODO |
 | **P12** | Fold conclusions into `MEMORY.md` + `PROJECT_TODO.md`, archive this file. | TODO |
 
 ## 4. Obligations this task inherits
@@ -780,3 +780,287 @@ that silently do less than the source does, inside chapters that have passed the
    by whether `character_name` is blank in the source JSON. Both land `cosmetic`, so nothing
    is blocked — recorded because a fingerprint-only classifier would merge them, and the
    next shape like it may not be harmless.
+
+## 14. Operator rulings, 2026-09-11 — the four P8b questions
+
+Four decisions carried from the operator to the build agent before the disposition pass,
+together with what was **measured against the tree while deciding** — several of which
+correct earlier sections of this plan. Where this section and §13 disagree, this section
+wins: it was measured, §13 estimated.
+
+### 14.0 Measured ground state (not estimates)
+
+| | CH01 | CH02 | CH03 | CH04 | total |
+|---|---|---|---|---|---|
+| manifest rows | 211 | 83 | 131 | 42 | **467** |
+| distinct `content_hash` | 157 | 60 | 108 | 27 | **352** |
+| `may_be_cosmetic` | 127 | 31 | 56 | 19 | **233** |
+| non-empty `requires` | 3 | 26 | 10 | 25 | **64** |
+| claimed by an own beat's `rows=` | 13 | 24 | 26 | 10 | **73** |
+| `cosmetic ∩ requires` | 0 | 10 | 1 | 12 | **23** |
+| `beat ∩ requires` | 0 | 0 | 0 | 0 | **0** |
+| `beat ∩ cosmetic` | 1 | 8 | 3 | 4 | **16** |
+| `is_dispositionable == False` | 19 | 0 | 9 | 0 | **28** |
+| need a hand `source` citation | 32 | 40 | 29 | 18 | **119** |
+| residue — no signal at all | 46 | 14 | 32 | 8 | **100** |
+
+Residue is **100** against §13.1's ~109, and cosmetic-eligible **233** against its ~211 —
+close enough to confirm the method. But §13.1's **46** for `cosmetic ∩ blocked` does **not
+reproduce**: the real figure is **23**, measured with the real `ManifestRow.may_be_cosmetic`
+property (an intermediate draft's 31 was also wrong, from an incomplete `STATE_WRITING_TAGS`
+set). Treat 23 as the number and §13.1's 46 as unexplained.
+
+Already discharged, contrary to the step text: **#95 is DONE** (`derive_blocked_verdict_for_event`
+gained keyword-only `require_clearing`; `map035/ev014`/`ev017` reproduce CH04's hand-authored
+`blocked:rock_smash`, closing §13.1 hazard (b)); **§10 R3's two code changes are in the tree**
+(`find_match(..., manifest_chapter_id=...)`, `is_forward_crossing` now event-level) with only
+the data-side flip outstanding; **#93 and #94 are DONE**; `write_dispositions` already exists
+(`chapter_manifest/dispositions.py:111`).
+
+### 14.1 Q1 — the 28 undispositionable rows: FIX ALL TEN WORK ITEMS
+
+Target is **zero errors**, not a shorter red list. Item 7 is timeboxed (below).
+
+**Root cause, previously unstated: recognition and emission are two unlinked layers.**
+`unrecognized_heads` / `other_codes` are judged *only* against two hand-maintained tables
+local to the manifest tool — `_CODE_EFFECT` (`chapter_manifest/generator.py:82-107`) and
+`MECHANIC_BY_HEAD` (`chapter_atlas/census.py:78-135`) — and **never** against
+`conversion_agent/transpiler.py`, the actual spine. `generator.py:600-604` documents the gap.
+Consequence: **6 of the 28 rows, and parts of 2 more, are flagged for work already done.**
+Wiring these so drift fails loud is part of this fix, not a follow-up.
+
+**Verified clearance ladder.** Per-signature counts do not sum — rows carry multiple
+blocking signatures (`map049/ev001/p3` alone carries 104, 221 *and* 222). Distinct-row
+clearances, measured:
+
+| # | Work | Clears | Nature |
+|---|---|---|---|
+| 1 | `_CODE_EFFECT` entries for 104/116/221/222 + `MECHANIC_BY_HEAD` for `pbPokerus`, `pbNextMysteryGiftID` | 6 | bookkeeping only — transpiler already handles all of these |
+| 2 | `isRockSmashSoftlocked` static collapse | 3 | 3rd instance of an existing idiom (`_emit_nuzlocke_mode_strip` `transpiler.py:2320-2336`) |
+| 3 | `pbSetPokemonCenter` → `setrespawn` + `HEAL_LOCATION_*` minting | 1 | **a real bug — see 14.1a** |
+| 4 | X4 `pbGet`/`pbSet` → `getvar`/`setvar` via the registry | 3 | trivial |
+| 5 | code 202 → `setobjectxy` + local-id plumbing | 3 | moderate; highest corpus payoff |
+| 6 | `isCustomGame` / `showRulesetSettings` strips | 1 | statically dead (Custom Mode unportable) |
+| 7 | 118/119 branch-embedded label residue | 3 | **timeboxed — see 14.1b** |
+| 8 | `pbPushThisBoulder` → `TF_KIND_PUSHABLE_BOULDER` | 5 | third instance of existing machinery |
+| 9 | `jvGiveReward` / `jvNextReward` reward ladder | 2 | composition of native primitives |
+| 10 | `pbNextMysteryGiftID` | 1 | collapses into item 1 — already decided |
+
+**Four Q1-relevant claims in this plan are WRONG. Carry these corrections, not the
+original text:**
+
+1. **"X1 is verified cheap — the Rock Smash swap exactly" (§13.4) is FALSE.** Rock Smash is
+   a *script* substitution: one `goto` at self-contained `EventScript_RockSmash`
+   (`engine/data/scripts/field_move_scripts.inc:64-93`), and the event keeps its ordinary
+   NPC classification and sprite. A boulder has **no meaningful script** — the push is
+   engine C keyed on `gObjectEvents[id].graphicsId == OBJ_EVENT_GFX_PUSHABLE_BOULDER`
+   (`engine/src/field_player_avatar.c:1044`, `Task_PushBoulder` `:1813-1878`), and
+   `EventScript_StrengthBoulder` carries only the one-time Strength dialogue that every
+   vanilla boulder shares verbatim (`engine/data/maps/VictoryRoad_1F_Frlg/map.json:75-117`).
+   It is an **object-declaration override**, a different pipeline layer. The cited evidence
+   (`EventScript_UseStrength`, `FLAG_SYS_USE_STRENGTH`, `MB_STRENGTH_BUTTON`) is true but
+   proves the wrong thing; `reference/chapters/03-kevlar-town.md:247` already ruled
+   object-driven, **not** `MB_PUSHABLE_BOULDER`.
+   Still bounded: a **third `TF_KIND_*` instance**. `KNOWN_TEMPLATE_KINDS`
+   (`metadata_wiring.py:244`) holds `item_ball` and `berry_tree` today; add the boulder kind
+   to it, to validation (`:1374-1415`) and to emission (`:2317-2342`), plus one transpiler
+   detector in the shape of `detect_item_ball` (`transpiler.py:694-818`). **No `engine/`
+   changes.** Note `record_trait("smashable_rock")` is a **flag-only** channel
+   (`metadata_wiring.py:1453-1469` sets `ObjectEvent.flag` and nothing else) and was never
+   90% of a boulder answer — likely why this sat deferred.
+2. **Code 202's "no obvious native analog" is FALSE.** `setobjectxy`
+   (`engine/asm/macros/event.inc:702-707`) and `setobjectxyperm` (`:879`) exist, and
+   `reference/guides/command_pokeemerald_map.md:88` already tags it **WIRE**, needing only a
+   local id — the same plumbing code 116 already does via `ctx.event_id`
+   (`transpiler.py:1898`). **199 corpus occurrences**: highest-payoff item on the list.
+3. **The freeze objection to absorbing transpiler work is FALSE ON MECHANISM.**
+   `generator.py:716` computes `content_hash(page)` over the **raw deserialized RMXP page**,
+   not over transpiler output. Fixing the transpiler cannot stale any `affirmed_hash`;
+   `RULE_STALE_DISPOSITION` will not fire. Other manifest fields (`unrecognized_heads`,
+   `other_codes`, `unhandled`) will diff against the P7 freeze — that is the freeze working
+   as designed. Consistent with 14.2's caveat that `content_hash` was blind to all 25
+   `reachability_consulted` diffs.
+4. **Mystery Gift was already decided and implemented, and is recorded in the wrong place.**
+   `transpiler.py:303-306`: *"the Mystery Gift subsystem is not ported (user-approved strip,
+   2026-08-19)"*, with `_emit_mystery_gift_id_strip` at `:2338-2358`. `map067/ev009/p1` is
+   blocked purely by the `census.py` table gap. Per `strip_list.json`'s own layer-split
+   header, the durable record belongs in **`reference/recon/uranium_script_calls.md`**, which
+   currently lists only `pbReceiveMysteryGift` (prose *"Feature not wired"*, no STRIP tag)
+   and **does not list `pbNextMysteryGiftID` at all**. Also correct two docs that contradict
+   the ruling: `reference/chapters/03-kevlar-town.md:263` (*"deferred feature"*) and
+   `06-nowtoch-city.md:221` (*"⚠RECHECK/STRIP-leaning"*). **Residual gap to fail loud on:**
+   the regex matches only the `pbNextMysteryGiftID>0` comparison form, not a bare assignment
+   (`id=pbNextMysteryGiftID`, `03-kevlar-town.md:261`).
+
+#### 14.1a Item 3 is a real bug and must be promoted out of chapter scope
+
+**Pokémon Centers heal but never become the respawn point.** `deterministic.py:91`
+classifies `Kernel.pbSetPokemonCenter` as **STRIP**, justified by *"respawn is wired from
+metadata, not events"* — **that wiring does not exist.** `pbs_converter/metadata.py:13`
+parses Uranium's `HealingSpot` field into `map_metadata.json` and stops there;
+`grep -rn HEAL_LOCATION src/` returns **zero hits**; `engine/src/data/heal_locations.json`
+is still 100% stock Hoenn/Kanto, so no `HEAL_LOCATION_*` constant exists for any Uranium
+Center. Uranium's own `pbSetPokemonCenter` (`reference/scripts_dump/101__PField_Field.rb:1666-1676`)
+stamps map/x/y/direction into a single global "last Center wins" slot.
+
+**Full native analog exists** (§4.7 reverse gate, verified): `setrespawn <HEAL_LOCATION_*>`
+(`engine/asm/macros/event.inc:1455-1459`) → `ScrCmd_setrespawn` → `SetLastHealLocationWarp`
+with `SCREFF_SAVE` (`engine/src/scrcmd.c:2699-2706`). No custom C.
+
+This was found once before at chapter scope — `playtest/chapters/ch03.py:83-88` finding #7,
+*"No healing-location/respawn metadata write anywhere… zero hits"* — and **never promoted to
+`PROJECT_TODO.md` or the roadmap.** File it corpus-wide this time. Note it is invisible to a
+§9 boot walk unless the walk white-outs, which is why a gate-passed chapter ships it.
+
+`pbPokerus` is the opposite and needs no work beyond item 1's table entry: it is a display
+getter, and `transpiler.py:567-577` already hard-folds the predicate to the RMXP `else` arm
+deliberately, since nothing can be infected this early.
+
+#### 14.1b Item 7 is timeboxed (operator ruling)
+
+The terminating-region label shape already hoists to `goto` (`transpiler.py:1231-1265`,
+`:1880-1888`) and covers 31 of 51 corpus labels. The other 20 sit inside a choice/branch arm
+and fall out on dedent — poryscript's flat `goto` cannot express them as-is. **Attempt it; if
+it needs a control-flow restructuring that is not already a known pattern, STOP and report —
+do not invent one.** The 3 affected rows (`map031/ev014/p0`, `map050/ev004/p2`,
+`map050/ev005/p0`) then ship red with a named backlog item for the operator to rule on.
+
+#### 14.1c Item 9's open sub-question
+
+The ladder gates on live `$Trainer.pokedexOwned` against thresholds
+10/20/30/50/75/100/125/150/175/194 (`reference/scripts_dump/213_Bambo_Reward.rb`). Variable
+22 (`"BAMBO REWARD"`, `reference/uranium_variables.json:23`) is a **claimed-rung index, not a
+dex counter** — its only writer in the whole corpus is `jvNextReward:18`. Eight rungs grant
+items, three grant eggs, the last egg's species resolving from the starter-choice flags;
+one-time each, strictly sequential, nothing repeatable. `jvNextReward` gates and advances;
+`jvGiveReward` pays out the current rung.
+All primitives exist: `giveegg` (`engine/asm/macros/event.inc:1176`), `giveitem` (`:2122`),
+`checkitemspace` (`:580` — the native analog of the Ruby `pbReceiveItem` bag-space check),
+and Pokédex-count specials `GetFrlgPokedexCount` / `HasAllMons`
+(`engine/data/specials.inc:573-574`). **Open:** those specials are Kanto/FRLG-dex shaped —
+establish which matches the port's actual dex mode before costing this tight. This would be
+the pipeline's first `giveegg`-emitting classifier.
+
+### 14.2 Q2 — affirmation at four-chapter scale: SPLIT THE MECHANISM
+
+The generator writes the ~233 `may_be_cosmetic` clerical rows with a **distinct,
+separately-counted marker** (`derived_hash` *alongside*, not instead of, `affirmed_hash`), so
+`affirmed_hash` keeps meaning "a human looked" and `RULE_UNAFFIRMED_DISPOSITION` keeps its
+teeth on exactly the rows it was written for. The build agent hand-writes the ~100 residue
+decisions and the 101 new citations; **the operator reviews those per chapter before commit.**
+
+- **`derived_hash` must be counted corpus-wide**, the way `archetype_exempt` already is.
+  That field's docstring (`schema.py:489-493`) is both the design precedent and the argument
+  against letting the generator write `affirmed_hash`: *"not a boolean, because a boolean
+  opt-out is exactly the un-greppable rubber stamp this field exists to prevent… A row's
+  exemption is counted corpus-wide (`checker.py`), so growth in this field is visible, not
+  quiet drift."*
+- **Two docstrings must be amended in the same change**, because P8b introduces a second
+  writer and both currently deny one exists: `dispositions.py`'s module docstring (*"The
+  generator never writes here — that separation is the whole point"*) and, not previously
+  noted, **`Disposition`'s own docstring at `schema.py:453-458`** (*"Hand-edited and
+  committed. The generator joins it by `row_id` and never writes to it"*).
+- **Affirmation surface is ~200, not 425.** 352 distinct `content_hash` of 467 rows, so 115
+  rows are exact content duplicates that one judgment legitimately covers — CH04 already does
+  this (`map035/ev015/p1`, `ev016/p1`, `ev018/p1` share hash `6c2d90d22489cb2a` and one note).
+  Plus 123 fully inert page rows, and the 119 citation-needing rows collapse to **30 distinct
+  `script_heads` signatures** whose top four clusters are already-settled idioms
+  (`setTempSwitchOn` = `arrival_nudge`; the trainer group; `pbItemBall`; `pbRockSmash`) — so a
+  citation there is transcription of a known answer, and one `source` string is correct for a
+  whole cluster.
+- **Caveat, carried:** `content_hash` covers the raw RMXP page only, so a shared hash means
+  "same source page", **not** "same derived situation" — it did not move for any of the 25
+  `reachability_consulted` field diffs.
+
+**Residue posture (Q2 sub):** default **`cosmetic`** unless something argues otherwise,
+**except** that a residue row with a persistent state write (`switch_write` / `var_write`) on
+a map no beat enters is **flagged for a beat**, not dispositioned cosmetic. A flag no test has
+ever set is a flag nobody knows works. This splits CH01's Map048/064/065/089 residue cluster
+on a principle rather than a coin flip. The live case is `map048/ev005/p0` — a
+parallel-process event on the player's own upstairs setting `FLAG_GAME_RUNNING` and
+`FLAG_JUKEBOX`, on a map no CH01 beat enters — which under this ruling **gets a beat**.
+
+### 14.3 Q3 — the 13 unclaimed boundary rows: ALL 13, INCLUDING CH05, PLUS THE NUDGE ASSERTION
+
+Add `rows=` claims to CH02, CH03, CH04 **and CH05**; flip the four CH04 boundary rows to
+`boundary`; correct both contradictory docstrings; drop CH04's false B8 `DEFERRED_BEATS`
+entry. **CH05 is in bounds for P8b** despite being gate-passed and outside the nominal
+four-chapter scope.
+
+The three-way contradiction, verified verbatim on disk:
+
+- `ch04.py:1134-1136` — *"Permanently deferred here, not pending: CH05's entry beat claims
+  this row"*, dated 2026-09-04 and **false**; CH05 claims nothing on map 35.
+- `ch05.py:121-136` — says the reverse twice: `map035/ev001/p0` *"owned by CH04's manifest,
+  not this one"*, and `map035/ev001/p1` *"is CH04's row, not claimable here."*
+- `CH04.dispositions.json` — still asserts both as `beat:B7` / `beat:B8`.
+
+`chapter.py:109-119` `_validate_row_id` is **shape-only** — three regexes, no
+manifest-membership check. **So CH05's refusal rests on a belief that is simply false:** the
+validator permits a predecessor's row id. Fix the docstring, not the validator. (Note also
+that `B7` is a live registered beat at `ch04.py:877` and is **not** in `DEFERRED_BEATS`; only
+B8 has a deferral tuple, so the phrase "CH04's b7/b8 deferral" conflates two things.)
+
+**The wrinkle that chose (A+) over (A): the two rows are not equally claimable.** `ch05.py`'s
+B1 already drives `map035/ev001/p0` via the derived reciprocal (*"exercised but not
+claimed"*), so claiming p0 is purely declarative. But the same docstring admits B1 is *"still
+short of the pre-conversion hand-written beat in one respect"* — the old beat asserted the
+arrival nudge's specific one-tile displacement for `map035/ev001/p1`, and `round_trip=True`
+*"asserts map+position on each leg but has no nudge-specific step."* Claiming p1 as-is would
+be a claim **no assertion backs**. So: **add the nudge-specific displacement assertion to
+CH05's B1**, making the p1 claim actually tested.
+
+**Gate rule (Q3 sub), operator:** declarative changes — a `rows=` claim, a docstring
+correction — need **no** new §9 walk, because they move no ROM bytes and change no beat
+behaviour. A change to beat **behaviour** does need one. The gate follows whether the ROM or
+the walk actually changed, not which file was touched.
+
+> **Consequence, stated so it is not a surprise at P11:** the nudge assertion *is* a
+> behaviour change to CH05, so under this rule **P11 is ×5, not ×4.** §3's Phase D wording is
+> updated accordingly. If the nudge assertion is later dropped back to plain declarative
+> claims, P11 returns to ×4.
+
+### 14.4 Q4 — precedence: `boundary` > `beat` > `blocked` > `cosmetic`
+
+Q4 sets only the middle pair; `boundary` outranking both was already settled by §10 R2/R3.
+
+A row a beat actually walks is asserted, so `beat:` is simply the truer statement; a real
+capability gate outranks decoration; and `cosmetic` keeps meaning "nothing asserts this and
+nothing gates it," which is what makes it safe to derive in bulk.
+
+**The `blocked > cosmetic` half is not a proposal — it describes the standing corpus.** Of
+the 23 `cosmetic ∩ requires` rows, 12 are CH04's, and its committed file chose `blocked:` on
+**every one**, including `map035/ev015/p1`, which has *empty* `effects` and is therefore pure
+decoration by `may_be_cosmetic`'s letter. A human looked and said no: the row is behind a
+capability gate, and "decoration" would lose that. CH04 passed a gate on those decisions, so
+ordering `blocked` above `beat` (rejected) would have had P8b rewriting gate-passed hand
+decisions on the strength of a generator rule.
+
+**`beat` vs `blocked` does not collide anywhere in the corpus — measured, all four chapters,
+overlap 0/0/0/0.** Both candidate orderings compute identical output on all 467 rows today.
+This rule is therefore written *before* a collision appears, not to rescue rows — and one
+will appear: P8a-1 only just added `rows=`, P8a-2 adds more beats, and a beat walking up to a
+Rock Smash boulder is the obvious future case. Two caveats: `requires` is the *narrowed*
+single minimal set (§12 left it flat by design), so it understates blocking where a row has
+alternative sets; and `blocked:` on the 23 rows lands as `capability_model_unenforced`
+warnings while #92 is open — honest, but unenforced.
+
+### 14.5 Recorded so it is not re-derived later
+
+- **#92 remains OPEN and P8b cannot close it.** `rock_smash` and `surf` have no grant site in
+  the capability model, so every `blocked:rock_smash` / `blocked:surf` row reports
+  `capability_model_unenforced` (~26 of CH04's current 38 warnings). P8b multiplies these
+  across CH02/CH03. **Expect the warning count to rise sharply; it is not a regression.**
+- **`note` is unenforced.** No checker rule reads it; CH04 carries one on 42/42 rows by
+  authoring habit, not requirement. Worth knowing before budgeting notes at scale.
+- **Live drift to fix in P8b** (§5 of the retired question file): `chapter.py:109-119`'s
+  `_validate_row_id` error message still teaches the long-form seam spelling
+  `'map035/seam/NORTH/map036'`, while `_SEAM_ROW_RE` accepts both and every real generated id
+  is single-letter (`map031/seam/N/map035`). The example validates while matching no row the
+  generator has ever emitted — the same drift §13.2a fixed in the pattern, surviving in the
+  message that teaches it.
+- **P8a-1's five unclaimed boundary crossings** (§13.2a item 4) are the same objects as
+  14.3's 13 rows seen from the beat side. 14.3 answers both.
+- `map035/seam/N/map040` derives identically under both `require_clearing` questions and is
+  not an obstacle case; its non-reproduction under #95 is a disposition-generator concern
+  handled by 14.1/14.4, not a derivation defect.
