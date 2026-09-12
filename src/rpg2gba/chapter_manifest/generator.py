@@ -41,6 +41,7 @@ from rpg2gba.chapter_atlas.census import (
     RUBY_KEYWORDS,
     _script_head,
 )
+from rpg2gba.chapter_manifest.conditions import classify_condition
 from rpg2gba.chapter_manifest.schema import (
     ManifestRow,
     PageCondition,
@@ -602,6 +603,11 @@ def _extract_page(commands: list[dict[str, Any]]) -> dict[str, Any]:
     effects: set[str] = set()
     other_codes: set[int] = set()
     script_typed_conditions = 0
+    # The condition text itself, captured rather than discarded (see the
+    # module-level note below and REDERIVATION_PLAN.md §14.6, Ruling 2). A
+    # page can carry more than one code-111/type-12 branch (nested or
+    # sequential conditionals), so this is a list, not a single string.
+    script_condition_texts: list[str] = []
 
     for cmd in commands:
         code = cmd.get("code")
@@ -613,6 +619,7 @@ def _extract_page(commands: list[dict[str, Any]]) -> dict[str, Any]:
                 if (len(params) >= 2 and params[0] == COND_TYPE_SCRIPT
                         and isinstance(params[1], str)):
                     script_typed_conditions += 1
+                    script_condition_texts.append(params[1])
             continue
         if code in (CODE_SCRIPT, CODE_SCRIPT_CONT):
             continue  # handled by _extract_scripts, not the numeric table
@@ -649,16 +656,24 @@ def _extract_page(commands: list[dict[str, Any]]) -> dict[str, Any]:
     # Also inspect code-111 script-typed conditional *expressions* for heads:
     # `pbTrainerBattle(...)` lives in `parameters[1]` of a type-12 branch, not
     # in a 355/655 block, and every trainer battle in the corpus is exactly
-    # this shape (census.py's note, reused verbatim by the brief).
-    for cmd in commands:
-        if cmd.get("code") != CODE_CONDITIONAL:
-            continue
-        params = cmd.get("parameters") or []
-        if len(params) >= 2 and params[0] == COND_TYPE_SCRIPT and isinstance(params[1], str):
-            head = _script_head(params[1])
-            if not head or head in RUBY_KEYWORDS:
-                continue
+    # this shape (census.py's note, reused verbatim by the brief). This reads
+    # `script_condition_texts`, captured above, rather than re-walking
+    # `commands` a second time -- the two loops used to derive the same
+    # information independently (REDERIVATION_PLAN.md §14.6), which is also
+    # what let the condition text itself go unclassified for so long: the
+    # walk that had it in hand only ever asked "what's the head," never "does
+    # this whole text match a known idiom."
+    condition_families: set[str] = set()
+    condition_unclassified: set[str] = set()
+    for text in script_condition_texts:
+        head = _script_head(text)
+        if head and head not in RUBY_KEYWORDS:
             _record_head(head)
+        family = classify_condition(text)
+        if family is not None:
+            condition_families.add(family.name)
+        else:
+            condition_unclassified.add(" ".join(text.split()))
 
     return {
         "effects": tuple(sorted(effects)),
@@ -667,6 +682,8 @@ def _extract_page(commands: list[dict[str, Any]]) -> dict[str, Any]:
         "unrecognized_heads": tuple(sorted(unrecognized_heads)),
         "requires": tuple(sorted(requires)),
         "script_typed_conditions": script_typed_conditions,
+        "condition_families": tuple(sorted(condition_families)),
+        "condition_unclassified": tuple(sorted(condition_unclassified)),
     }
 
 
@@ -756,6 +773,8 @@ def _generate_page_rows(
                 requires=requires,
                 unhandled=unhandled,
                 script_typed_conditions=extracted["script_typed_conditions"],
+                condition_families=extracted["condition_families"],
+                condition_unclassified=extracted["condition_unclassified"],
                 event_id=event_id,
                 event_name=event_name,
                 page_idx=page_idx,

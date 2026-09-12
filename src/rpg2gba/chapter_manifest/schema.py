@@ -382,6 +382,25 @@ class ManifestRow:
     # Whether the page carries a code-111 conditional with params[0] == 12, i.e.
     # a branch whose behaviour lives in Ruby rather than in structure.
     script_typed_conditions: int = 0
+    # Idiom family names (see `conditions.py`) matched by this page's
+    # script-typed condition texts, deduplicated and sorted. A row can carry
+    # more than one code-111/type-12 branch (nested or sequential
+    # conditionals), so this is the *set* of families recognized across all
+    # of them, not a single verdict.
+    #
+    # REDERIVATION_PLAN.md §14.6 (Ruling 2): the generator used to discard
+    # `params[1]` entirely once it had counted it, so a row's condition text
+    # was invisible past `script_typed_conditions`'s bare count. This field
+    # and `condition_unclassified` are what let `needs_citation` narrow from
+    # "any script-typed condition at all" to "a condition this table cannot
+    # explain."
+    condition_families: tuple[str, ...] = ()
+    # Normalized (`conditions._normalize`), deduplicated, sorted text of every
+    # script-typed condition on this row that `classify_condition` could not
+    # place in a family. Non-empty here is exactly the residual citation
+    # burden after classification -- the plan's "15-25 rows of the 110"
+    # estimate, now measurable per row instead of assumed.
+    condition_unclassified: tuple[str, ...] = ()
 
     event_id: int | None = None
     event_name: str | None = None
@@ -439,8 +458,15 @@ class ManifestRow:
         The trigger is mechanical on purpose. "Cite when the effect is
         non-obvious" fails by construction, because the author who misreads a
         design is the author who believes it is obvious.
+
+        Narrowed 2026-09-12 (REDERIVATION_PLAN.md §14.6, Ruling 2): a
+        script-typed condition no longer owes a citation on its own -- only
+        an *unclassified* one does. A row whose every code-111/type-12
+        condition lands in a known idiom family (`conditions.py`) needs no
+        human judgment to explain; `condition_unclassified` is exactly the
+        residue `classify_condition` could not place.
         """
-        return bool(self.unrecognized_heads) or self.script_typed_conditions > 0
+        return bool(self.unrecognized_heads) or bool(self.condition_unclassified)
 
     def blocking_tags(self) -> tuple[str, ...]:
         """The state-writing tags that forbid a `cosmetic` disposition."""
@@ -599,9 +625,45 @@ def row_to_dict(row: ManifestRow) -> dict[str, Any]:
     return asdict(row)
 
 
+# Fields added 2026-09-12 (REDERIVATION_PLAN.md §14.6, Ruling 2). Every
+# `reference/manifests/CHnn.manifest.json` committed before this change was
+# written without them, and this branch is explicitly forbidden from
+# regenerating those committed artifacts as a side effect of a schema change
+# (a later, dedicated pass owns that regeneration). So this is a deliberate,
+# narrow carve-out from the "both directions strict" rule stated above -- but
+# it is conservative, not lenient: a missing pair of keys reads as
+# "unclassified," not "classified." The actual pre-classification condition
+# text is gone (the generator used to discard `params[1]` outright), so there
+# is no way to recover a real verdict for these rows; defaulting
+# `condition_unclassified` to empty would silently clear `needs_citation` on
+# every legacy row carrying a script-typed condition, which is the opposite
+# of fail-loud (CLAUDE.md §4.5) -- a stale artifact would quietly look more
+# resolved than it is. Instead, a legacy row's citation obligation is
+# preserved exactly as it was before this change: one placeholder residue
+# entry per counted `script_typed_conditions`, until the row is regenerated
+# and gets a real verdict. Any other missing field still fails loud; see
+# `test_row_from_dict_rejects_a_missing_field`.
+_LEGACY_UNCLASSIFIED_PLACEHOLDER = (
+    "<pre-classifier manifest: condition text was discarded at generation "
+    "time; regenerate this manifest to classify it>"
+)
+
+
+def _condition_classifier_legacy_defaults(data: dict[str, Any]) -> dict[str, list[str]]:
+    script_typed_conditions = data.get("script_typed_conditions", 0) or 0
+    unclassified = (
+        [_LEGACY_UNCLASSIFIED_PLACEHOLDER] * script_typed_conditions
+        if script_typed_conditions > 0
+        else []
+    )
+    return {"condition_families": [], "condition_unclassified": unclassified}
+
+
 def row_from_dict(data: dict[str, Any]) -> ManifestRow:
     """Rebuild a row, rejecting any key set that is not exactly the row's fields."""
     expected = {f.name for f in fields(ManifestRow)}
+    if "condition_families" not in data and "condition_unclassified" not in data:
+        data = {**data, **_condition_classifier_legacy_defaults(data)}
     got = set(data)
     if missing := expected - got:
         raise ValueError(
@@ -625,6 +687,8 @@ def row_from_dict(data: dict[str, Any]) -> ManifestRow:
             "unrecognized_heads": tuple(data["unrecognized_heads"]),
             "other_codes": tuple(data["other_codes"]),
             "requires": tuple(data["requires"]),
+            "condition_families": tuple(data["condition_families"]),
+            "condition_unclassified": tuple(data["condition_unclassified"]),
             "condition": PageCondition(**condition) if condition is not None else None,
             "seam": SeamRef(**seam) if seam is not None else None,
             "terrain": TerrainRef(**terrain) if terrain is not None else None,

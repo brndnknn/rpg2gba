@@ -214,16 +214,31 @@ def test_legal_cosmetic_not_flagged():
 # --- rule 6: missing citation --------------------------------------------
 
 
-def test_missing_citation_when_script_typed_condition_present():
-    row = _row(script_typed_conditions=1, effects=("giveitem",), content_hash="h1")
+def test_missing_citation_when_condition_unclassified():
+    # Narrowed 2026-09-12 (REDERIVATION_PLAN.md §14.6, Ruling 2):
+    # `script_typed_conditions` alone no longer triggers this rule -- only an
+    # unclassified condition text does (`ManifestRow.needs_citation`).
+    row = _row(script_typed_conditions=1, condition_unclassified=("SomeNovelCheck?",),
+               effects=("giveitem",), content_hash="h1")
     disp = _disp(row.row_id, "beat:B1", affirmed_hash="h1")
     findings = check_chapter([row], {row.row_id: disp})
     rules = [f.rule for f in findings]
     assert RULE_MISSING_CITATION in rules
 
 
+def test_no_citation_needed_when_condition_classified():
+    # A script-typed condition that classifies into a known idiom family
+    # owes no citation, even though `script_typed_conditions` is still 1.
+    row = _row(script_typed_conditions=1, condition_families=("pb_rock_smash",),
+               effects=("giveitem",), content_hash="h1")
+    disp = _disp(row.row_id, "beat:B1", affirmed_hash="h1")
+    findings = check_chapter([row], {row.row_id: disp})
+    assert all(f.rule != RULE_MISSING_CITATION for f in findings)
+
+
 def test_citation_present_satisfies_rule():
-    row = _row(script_typed_conditions=1, effects=("giveitem",), content_hash="h1")
+    row = _row(script_typed_conditions=1, condition_unclassified=("SomeNovelCheck?",),
+               effects=("giveitem",), content_hash="h1")
     disp = _disp(row.row_id, "beat:B1", affirmed_hash="h1",
                  source="Data/Scripts.rxdata: pbReceiveItem")
     findings = check_chapter([row], {row.row_id: disp})
@@ -581,6 +596,7 @@ def test_render_collapses_cosmetic_row():
 
 def test_render_expands_citation_owed_row():
     row = _row(row_id="map002/ev005/p0", script_typed_conditions=1,
+               condition_unclassified=("SomeNovelCheck?",),
                effects=("giveitem",), content_hash="h2", condition=PageCondition())
     disp = _disp(row.row_id, "beat:B7", affirmed_hash="h2",
                  source="Essentials pbReceiveItem")

@@ -191,10 +191,27 @@ def test_unrecognized_head_blocks_disposition_and_owes_a_citation() -> None:
     assert row.needs_citation
 
 
-def test_script_typed_conditional_alone_owes_a_citation() -> None:
+def test_classified_script_typed_conditional_owes_no_citation() -> None:
+    # Narrowed 2026-09-12 (REDERIVATION_PLAN.md §14.6, Ruling 2):
+    # `script_typed_conditions` counting > 0 used to owe a citation on its
+    # own. It no longer does -- only an *unclassified* condition
+    # (`condition_unclassified` non-empty) does. A row whose sole
+    # script-typed condition landed in a known idiom family
+    # (`conditions.classify_condition`) needs no human judgment.
     row = ManifestRow(
         row_id="x", kind="page", map_id=1, content_hash="0",
         effects=("text",), script_typed_conditions=1,
+        condition_families=("pb_rock_smash",),
+    )
+    assert row.is_dispositionable
+    assert not row.needs_citation
+
+
+def test_unclassified_script_typed_conditional_owes_a_citation() -> None:
+    row = ManifestRow(
+        row_id="x", kind="page", map_id=1, content_hash="0",
+        effects=("text",), script_typed_conditions=1,
+        condition_unclassified=("SomeNovelUnrecognizedCheck?",),
     )
     assert row.is_dispositionable
     assert row.needs_citation

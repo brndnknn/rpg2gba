@@ -597,9 +597,10 @@ def check_chapter(
                 row_id=row.row_id,
                 rule=RULE_MISSING_CITATION,
                 message=(
-                    "row has an unrecognized script head or a script-typed "
-                    "conditional (code-111 params[0]==12) and needs a source "
-                    "citation, but the disposition has none"
+                    "row has an unrecognized script head or an unclassified "
+                    "script-typed conditional (code-111 params[0]==12 not "
+                    "matched by any idiom family in conditions.py) and needs "
+                    "a source citation, but the disposition has none"
                 ),
                 severity="error",
             ))
