@@ -17,6 +17,32 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 99. `_resolve_threshold` cannot fold increment writes, so reachable thresholds read as undetermined
+
+*Filed 2026-09-12 out of `REDERIVATION_PLAN.md` §14.11. Not P8b work — P8b hand-annotates
+around it.*
+
+`capability_sites._resolve_threshold` answers a `<variable>_<threshold>` token from **constant**
+`code 122` writes only. When no constant write reaches the threshold but the variable also has
+computed writes, it returns `None` (undetermined) and refuses to guess. That refusal is correct
+and must stay — but it means a threshold that *is* reachable purely by increments looks
+identical to one nothing grants.
+
+Worked case: Quest Log (var 101) has four writers corpus-wide — `Map032 ev9/p2` sets 4,
+`Map172 ev4/p0` sets 2, and `Map042 ev3/p0` (CH06 gym) and `Map050 ev19/p0` each add 1. So
+`quest_log_5` is reachable, but only via increments, so it resolves undetermined and
+`map050/ev005/p5`/`p6` need a hand-annotated requirement group instead.
+
+Fix direction: fold op-1 (add) writes into the reachability computation — a variable's maximum
+attainable value is the max over constant writes plus the sum of increments that can follow it,
+which is derivable from the chapter order the atlas already provides. Keep the refusal for
+genuinely computed writes (operand types that are not literal constants).
+
+**Why it matters beyond this row pair:** every Uranium story gate of the form "variable >= N
+reached by incrementing" has this shape, so this is the difference between a derived and a
+hand-annotated capability across the whole corpus — directly relevant to the cross-game goal,
+where hand annotation does not transfer.
+
 ### 98. The transpile queue is 1-based on `page`; manifest row ids are 0-based
 
 **IN SCOPE FOR P8b** (`REDERIVATION_PLAN.md` §14.8 ruling 2) — filed so it is greppable if

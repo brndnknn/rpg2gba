@@ -10,6 +10,17 @@
 
 ## Retired Session Summaries
 
+## Archived 2026-09-12 — Last Session Summary entry 2026-09-11 (two backlog items closed between chapters)
+
+**2026-09-11 (two backlog items closed between chapters — `54a8e1d6`, `ffd59557` on `rederive-ch01-ch04`):** No plan step advanced. *(Its "P8a is still next" was true when written; P8a-1 landed later the same day — see the entry above.)*
+
+**#94 was done and nothing said so.** The registry landed at `c91f70d3`, but its entry read as open and `REDERIVATION_PLAN.md`'s P8a row still named it a blocker — the one document a reader consults to start P8a listed a prerequisite that had shipped the day before. Marked DONE and both plan references corrected. **The durable part is the edge now written into #94 and §13.3 rather than lost with the closed entry:** event-level matchers are **first-claim-wins**, so a third event-level archetype is silently skipped on every event `trainer` already matched. Four entries hide it (only `trainer`/`item_ball` are event-level and they don't overlap); §13.3's T1 third item, `pbReceiveItem` NPC gifts, is the first candidate that would make it load-bearing.
+
+**#95 — there were two questions, and the code only ever asked one.** `derive_blocked_verdict_for_event` (+ its multi-start sibling) asked "is an adjacent approach cell reachable", which for a Rock Smash rock is nearly always yes, so an unsmashable rock derived `""`. Both now take keyword-only **`require_clearing: bool` with no default**: `True` adds one conjunct — if `capability_map.obstacles` has an entry for the event's *own* cell, that capability must be held too. **No-default is load-bearing, not fussiness** (§4.5): the two questions have different right answers and only the caller knows which it means, so `_reachability_requires` says `True`, `GraphApproachModel` says `False` (walking up and pressing A is what *raises* the Rock Smash prompt — demanding clearing there would misanswer it), and `traversal blocked` grew `--require-clearing` instead of guessing for the operator. The conjunct goes inside the predicate handed to `_minimal_sets_for_predicate`, so the capability appears in `minimal_sets` for free; `BlockedVerdict`/`as_disposition()` untouched.
+
+**A filed count is not evidence.** #95 claimed five CH04 rows didn't reproduce; only four do, and they share two event cells (`map035/ev014` (20,28), `ev017` (19,29), both `Obstacle(source="event", ROCK_SMASH)`). The fifth, `map035/seam/N/map040`, is not an event, has no obstacle cell, and derives **identically under both questions** — 6 of map 35's 38 walkable row-0 cells are `blocked:rock_smash` either way, which `test_traversal_frozen_oracle.py` already asserted *before* the change. **That row's non-reproduction is a disposition-generator concern and is still open going into P8b**; the entry was corrected rather than left claiming five fixes. Worth generalizing: a measurement taken through a generator attributes its own bugs to whatever it was measuring.
+
+
 ## Archived 2026-09-11 — Last Session Summary entry 2026-09-10/11 (why a disposition file is hand-authored, and the P8/P9 reordering)
 
 **2026-09-10/11 (why a disposition file is hand-authored, and the answer reordering `REDERIVATION_PLAN.md` P8/P9):** Four commits on `rederive-ch01-ch04`. The plan's new §13 owns the detail; what is durable beyond it is here.

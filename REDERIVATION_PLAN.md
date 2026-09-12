@@ -1333,3 +1333,144 @@ the **one-beat-id-per-EVENT** rule (operator, 2026-09-04), which appears in thre
 notes and is corpus-wide by the same argument. The sideways-staircase "one observable per
 staircase" reasoning went to `BUILD_PLAN.md` §2 as a corollary of the warp idiom, since it is
 the same "one physical thing owns both its rows" shape.
+
+### 14.11 Operator ruling, 2026-09-12 — item 9 is dropped; its two rows are `unreachable`, not undispositionable
+
+**Ruling: drop item 9's emission from P8b. Eight work items, not nine.** The reward ladder
+lands in the chapter that can prove it, on the same principle as §14.7's white-out precedent.
+
+**§14.1c asked the wrong gate.** Item 9's two rows (`map050/ev005/p5`, `p6`) are **not** gated
+on a dex count. Both pages carry the RMXP condition **`variable 101 >= 5`**, and variable 101
+is **"Quest Log"** (`reference/uranium_variables.json`). The dex thresholds live *inside* the
+page script (`jvNextReward`), so they govern rung selection, not page reachability.
+
+**Census of every `code 122` write to Quest Log across all 199 deserialized maps — four
+writers, and only two of them can cross 5:**
+
+| Site | Op | Value | Chapter |
+|---|---|---|---|
+| `Map032 ev9/p2` | set | **4** | CH01 |
+| `Map172 ev4/p0` | set | 2 | CH01 |
+| `Map042 ev3/p0` | **+1** | — | **CH06** |
+| `Map050 ev19/p0` | **+1** | — | — |
+
+The highest *constant* write is 4. Quest Log crosses 5 only via the increments, the first of
+which is the **CH06 gym**. **Those two pages are provably unreachable in CH01–CH05** — which is
+where the operator placed them from play knowledge ("no beats until we return to Moki Town post
+Act 1") before the census confirmed it.
+
+- **Verdict: `unreachable:quest_log_5`.** `unreachable` is already in the vocabulary
+  (`schema.py:90`), and `capability_sites._resolve_threshold` handles
+  `<variable>_<threshold>` tokens natively; `quest_log_4` is already a derived token (#92).
+  **`unreachable` is a verdict, not an error, so §14.1's zero-errors ruling stays intact.**
+- **These two rows are the first real user of §14.9's hand-annotation path.**
+  `_resolve_threshold` returns `None` (undetermined) here, not a clean grant, because the writes
+  that cross 5 are *increments* and its docstring refuses to guess when constant writes fall
+  short but computed writes exist. That refusal is correct; the rows get a hand-annotated
+  requirement group citing the census above.
+- **Corrected in passing (build agent, same session):** the earlier claim that "rungs 1–3 are
+  walkable, so walking them exercises the shape" was answering the dex gate while the page gate
+  is Quest Log. No rung is observable in this branch — not three, not zero-of-three. The dex
+  findings below stand for the ladder's internals whenever it is built.
+- **Item 9's mechanism findings are kept, because they close §14.1c permanently.** The port runs
+  National mode with Uranium species grafted past `NATIONAL_DEX_PECHARUNT`, and
+  `engine/include/constants/uranium_pokedex_ids.h:38-39` `#undef`s and re-pins
+  `NATIONAL_DEX_COUNT` to `NATIONAL_DEX_BAARIETTE`, so `GetNationalPokedexCount`'s
+  `i < NATIONAL_DEX_COUNT` loop (`pokedex.c:4547`) covers the grafted range — without that
+  override it would return 0 caught forever, silently. Vanilla species are uncatchable in the
+  port, so caught-count *is* Uranium-caught, identically before and after #31: **item 9 has no
+  dependency on #31 and §14.1c is closed.** Mechanism when built:
+  `setvar VAR_0x8004, 1` → `special GetFrlgPokedexCount` → compare `0x8006`. `HasAllMons` is a
+  complete-dex boolean and is the wrong tool. `giveegg` is native (`event.inc:1176`), so the egg
+  rungs are not new machinery either. Coverage caveat for whoever builds it: only **33 species
+  are staged** today, so 7 of the 10 rungs (10/20/30/50/75/100/125/150/175/194) are unreachable
+  even once the page opens.
+
+---
+
+## 15. P8b — final scope (settled 2026-09-12)
+
+**Read this section before starting P8b. It supersedes §14.1's ten-item list.** §14.1–§14.5 are
+the 2026-09-11 rulings; §14.6–§14.11 are the 2026-09-12 rulings that reshaped them; this
+section is the union, stated once. Where §14.1 and this section disagree, **this section wins**.
+
+### 15.1 The eight work items
+
+Item 7 is dropped (§14.8 — not a label problem; its rows belong to items 4 and 6). Item 9 is
+dropped (§14.11 — its rows are `unreachable`, not work). Item 10 folds into item 1.
+
+| # | Work | Clears | Nature |
+|---|---|---|---|
+| 1 | `_CODE_EFFECT` (104/116/221/222) + `MECHANIC_BY_HEAD` (`pbPokerus`, `pbNextMysteryGiftID`) entries | 6 | bookkeeping; transpiler already handles these (#97) |
+| 2 | Collapse `isRockSmashSoftlocked` statically | 3 | third instance of `_emit_nuzlocke_mode_strip` |
+| 3 | Heal-location emitter + `setrespawn` (§14.7) | 1 | **grew** — see 15.2 |
+| 4 | X4 `pbGet`/`pbSet` → `getvar`/`setvar` via the registry | 3 | trivial |
+| 5 | Code 202 → `setobjectxy` + local-id plumbing | 3 | moderate; **highest corpus payoff (199 occurrences)** |
+| 6 | Strip `isCustomGame` / `showRulesetSettings` | 1 | statically dead |
+| 8 | `pbPushThisBoulder` → `TF_KIND_PUSHABLE_BOULDER` | 5 | third `TF_KIND_*` instance; no `engine/` changes |
+
+Counts are distinct-row clearances and **do not sum** — rows carry multiple blocking
+signatures. Also fix in passing: the duplicate `"pbRockSmash"` key in `MECHANIC_BY_HEAD`
+(`census.py:90` and `:109`, second shadows first, same value).
+
+### 15.2 The five structural changes ruled in on 2026-09-12
+
+1. **`derived_hash` sidecar** (§14.6). Generator writes `reference/manifests/CHnn.derived.json`
+   — `row_id → derived_hash`, nothing else. `dispositions.py` stays single-writer and its
+   invariant docstring stays *true*. The checker loads manifest + dispositions + derived, joins
+   three ways, and **recomputes eligibility itself**: a `derived_hash` on an ineligible row is a
+   new error, not a pass. Counted corpus-wide like `archetype_exempt`. Rationale is the
+   cross-game pipeline — a new Essentials game has no hand-authored dispositions file at all,
+   and the two files' row counts *are* the automation ratio.
+2. **Condition classifier** (§14.6). Stop discarding `params[1]` at `generator.py:575-580`;
+   classify the condition text into idiom families; narrow `needs_citation` to *unclassified*
+   families only. 147 instances → 76 texts → **14 families, 10 judgment-free**; ~89% are vanilla
+   Essentials shapes, so this transfers to the next fan game. Two compound-boolean outliers get
+   a fallback bucket, not a pattern. Manifest-schema + checker-rule change, ruled in under
+   CLAUDE.md §10. Residual estimated 15–25 rows of the 110 — **estimated, not measured.**
+3. **Heal-location emitter + white-out beats** (§14.7). Emit `heal_locations.json` entries from
+   the already-parsed `healing_spot` metadata (22 corpus-wide, two in this branch) and
+   `setrespawn` at the `pbSetPokemonCenter` call sites. Set the **initial** anchor in the fenced
+   `new_game.c` block — today a white-out lands in vanilla Petalburg City. New harness
+   capability: force a party wipe and assert the post-white-out map/coords. **Two beats:** CH02
+   asserts the Moki anchor, CH04 asserts the Kevlar anchor. CH02's is expected to **fail** until
+   the `new_game.c` fix lands.
+4. **Capability requirement groups** (§14.9). `blocked:` tokens stay collapsed; the
+   `badge AND (move OR item)` structure becomes requirement groups on `CapabilityDerivation` —
+   one group per conjunct, alternatives within a group, route-order grant point = `max` over
+   groups of `min` over alternatives. Derived where possible, **hand-annotated where not**;
+   `map050/ev005/p5`/`p6` are the annotation path's first users (§14.11). Zero churn to
+   committed dispositions.
+5. **Queue↔manifest page offset** (§14.8, #98). Normalize the **queue writer** to 0-based
+   before the disposition pass reads either artifact. Manifest `row_id`s must not move — they
+   are load-bearing inside committed dispositions files.
+
+### 15.3 Disposition posture
+
+- **Precedence:** `boundary` > `beat` > `blocked` > `cosmetic` (§14.4). Beat and blocked have
+  zero measured overlap; CH04's committed dispositions already chose `blocked` over `cosmetic`
+  on 12 gated rows.
+- **Boundary rows:** all 13 claimed, **CH05 included** (§14.3). CH04's four flip to `boundary`.
+  Three contradictory docstrings corrected (`ch04.py`, `ch05.py`, `CH04.dispositions.json`).
+  CH05's B1 gains a nudge-displacement assertion — a real behaviour change, which is why the
+  merge gate is **×5**.
+- **Residue:** default `cosmetic`, **except** a row with a persistent state write on a map no
+  beat enters, which is flagged for a beat instead (§14.2). Live case: `map048/ev005/p0`.
+- **Notes:** none authored on generator-derived clerical rows; kept on hand rows, where the note
+  *is* the argument (§14.10). A corpus-wide convention never lives in a note.
+
+### 15.4 Tests P8b adds
+
+- No code 118/119 ever reaches the transpile queue for the staged corpus (§14.8) — so the day a
+  future chapter stages one of the 20 non-hoistable labels, it fails loud.
+- A duplicate-key guard on the head tables, and the #97 divergence test (every head/code the
+  transpiler handles is present in the manifest tables and vice versa).
+
+### 15.5 What P8b does NOT close
+
+- **#92 point 1** — identifying the non-switch grant source for field capabilities. Requirement
+  groups give it a home; the source itself is still unidentified.
+- **#31** — the Tandor regional dex. Independent of everything above (§14.11).
+- **The reward ladder** — filed against whichever chapter first drives Quest Log ≥ 5, which
+  owes it a beat.
+- **P8a-2** — the archetype-template rewrite. Not a P8b prerequisite (§13.2a).
