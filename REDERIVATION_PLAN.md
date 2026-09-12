@@ -916,7 +916,11 @@ This was found once before at chapter scope — `playtest/chapters/ch03.py:83-88
 getter, and `transpiler.py:567-577` already hard-folds the predicate to the RMXP `else` arm
 deliberately, since nothing can be infected this early.
 
-#### 14.1b Item 7 is timeboxed (operator ruling)
+#### 14.1b Item 7 is timeboxed (operator ruling) — **SUPERSEDED 2026-09-12: ITEM 7 IS DROPPED, see §14.8**
+
+> **Do not action this subsection.** Measured 2026-09-12: none of the three rows below is a
+> label problem, no queue entry in the corpus carries code 118/119, and item 7 is empty for
+> this branch. Kept for the reasoning, not the ruling. §14.8 owns it.
 
 The terminating-region label shape already hoists to `goto` (`transpiler.py:1231-1265`,
 `:1880-1888`) and covers 31 of 51 corpus labels. The other 20 sit inside a choice/branch arm
@@ -1210,3 +1214,49 @@ test for the Petalburg bug above** — it fails today and must, until the `new_g
 
 Scope note: the ruling is the emitter plus harness capability plus these two beats, not a
 white-out in all five chapters — the beat proves the anchor, and one anchor needs one proof.
+
+### 14.8 Operator ruling, 2026-09-12 — item 7 is dropped, and the queue↔manifest page offset is fixed in P8b
+
+**Ruling: drop item 7 from §14.1's ten. P8b's work-item count is nine.** Measured, not
+argued — §14.1b's premise does not survive contact with the three rows it names.
+
+| Row §14.1b blames on labels | What actually blocks it | Cleared by |
+|---|---|---|
+| `map031/ev014/p0` | **nothing** — `unrecognized_heads=[]`, `script_typed_conditions=0`, `unhandled=0` | already clean |
+| `map050/ev004/p2` | `isCustomGame`, `showRulesetSettings` | **item 6** |
+| `map050/ev005/p0` | `pbGet` | **item 4** |
+
+`hoistable_label_region` already returns a region for all three pages: `(2,23)` for
+`map031/ev014/p0` (runs to end of page; its `joke` label has **zero** jumps to it), `(40,53)`
+for `map050/ev004/p2` (terminating, code-115 Exit at 39), `(50,129)` for `map050/ev005/p0`
+(same-indent code-115 at 128 — the very "Map050 EV005's aptitude-test body" the module note at
+`transpiler.py:1244` already lists as a qualifying shape). The hoist is wired end to end
+(`:4021-4029`); the queueing `else` at `:1885-1892` is simply not reached by these pages.
+**Corpus-wide: 0 of the 340 entries in `output/uranium-build/transpile_unhandled.jsonl` carry
+code 118 or 119**, and maps 31 and 50 are both staged (14 and 18 entries), so that is a real
+absence rather than an unstaged map.
+
+Consequence: **P8b no longer contains a timeboxed item or a red-ship path.** Nothing in scope
+needs a control-flow restructuring, so nothing can tempt an agent into inventing one. This is
+the **fifth** corrected claim in §14.1.
+
+The 20 non-hoistable labels from the 2026-08-01 census are real and unrefuted; **none lands on
+a CH01–CH05 page.** Item 7 is empty *for this branch*, not wrong forever — it returns at
+whichever future chapter first stages one. **A regression test is added in P8b** asserting no
+code 118/119 ever reaches the transpile queue for the staged corpus, so that day fails loud
+instead of shipping a broken `goto`.
+
+**Ruling 2 — the queue↔manifest page offset is a P8b fix, not a backlog entry
+(`PROJECT_TODO.md` #98).** `transpile_unhandled.jsonl`'s `page` field is **1-based**; manifest
+`row_id` page suffixes are **0-based**. `map050/ev004` queue page 3 is manifest `p2`;
+`map050/ev005` queue pages 6 and 7 are `p5` and `p6`. Any queue↔manifest join that does not
+correct for this attributes an entry to the wrong page, and **manifest `p0` can never match
+anything** — which is precisely how three rows acquired a label bug they do not have.
+
+- **Normalize the queue writer to 0-based.** The manifest's `row_id`s are load-bearing inside
+  committed `.dispositions.json` files and must not move; the queue is regenerated output and
+  can.
+- P8b is the step that joins these two artifacts most heavily, so the offset is fixed *before*
+  the disposition pass reads them, not after.
+- Filed under the standing lesson this is the third instance of: **a measurement taken through
+  a generator attributes its own bugs to whatever it was measuring.**

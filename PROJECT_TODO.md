@@ -17,6 +17,29 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 98. The transpile queue is 1-based on `page`; manifest row ids are 0-based
+
+**IN SCOPE FOR P8b** (`REDERIVATION_PLAN.md` §14.8 ruling 2) — filed so it is greppable if
+P8b slips, not as deferred work.
+
+`output/uranium-build/transpile_unhandled.jsonl` writes `page` **1-based**; a manifest
+`row_id`'s `pN` suffix is **0-based**. Verified against page counts: `map050/ev004` has 3
+pages and the queue reports page 3 (= manifest `p2`); `map050/ev005` has 8 pages and the queue
+reports 6 and 7 (= `p5`, `p6`).
+
+Two failure modes, both silent:
+
+- a queue entry is attributed to the page *before* the one it came from;
+- **manifest `p0` can never match a queue entry at all**, so a genuinely-queued first page
+  reads as clean.
+
+This is how three rows were attributed to a label bug they do not have (§14.8 table). Fix:
+normalize the **queue writer** to 0-based — manifest `row_id`s are load-bearing inside
+committed `.dispositions.json` files and must not move, while the queue is regenerated output.
+
+Third instance of the standing lesson that a measurement taken through a generator attributes
+its own bugs to whatever it was measuring (cf. #95, #97).
+
 ### 96. Pokémon Centers heal but never become the respawn point
 
 **Found 2026-09-11 while walking `REDERIVATION_PLAN.md` §14's Q1. Found ONCE BEFORE and
