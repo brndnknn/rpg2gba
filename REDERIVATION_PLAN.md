@@ -1155,3 +1155,58 @@ JSONs under `output/uranium-build/maps/`):**
   shapes (`get_character`, `$game_player`, `$PokemonGlobal`, `Kernel.pbItemBall`,
   `pbPhoneBattleCount`), so the classifier transfers to the next fan game unchanged. Per-row
   hand citation transfers to nothing.
+
+### 14.7 Operator ruling, 2026-09-12 — item 3 builds the emitter, and the white-out beat becomes a standing precedent
+
+**Ruling: option 1 — build the generic heal-location emitter AND teach the harness to white
+out.** Plus a standing rule for where the verification beat goes, stated below.
+
+**The derivation was already parsed and thrown on the floor.** `metadata.dat` carries per-map
+`HealingSpot = [map, x, y]`; `pbs_converter/metadata.py:106` parses it into
+`MapMetadata.fields["healing_spot"]`; **nothing in `src/` or `scripts/` ever reads it**. There
+is no `heal_location` emitter in the repo. #96's "the wiring does not exist" is exactly right.
+
+**Measured (2026-09-12): 22 maps carry a healing spot corpus-wide**, and they are Center
+interiors pointing at outdoor coordinates — maps **49 and 50 → `[32, 28, 32]`** (Moki Town),
+map **68 → `[31, 20, 13]`** (Kevlar Town). That is a **1:1 fit** for pokeemerald's
+`engine/src/data/heal_locations.json` entry shape (`id`, `map`, `x`, `y`; `respawn_map` /
+`respawn_npc` / `respawn_x` / `respawn_y` are the newer in-Center respawn polish and are
+**optional**). So: mint `HEAL_LOCATION_*` from metadata, emit `setrespawn(...)` at the
+`pbSetPokemonCenter` call site. **66 call sites collapse onto 22 locations; this branch touches
+two.** No engine C, no fidelity loss.
+
+**A live recon ruling was carrying a retired premise.**
+`reference/recon/uranium_script_calls.md:71` ruled `pbSetPokemonCenter` redundant because it is
+"captured deterministically by §2.8 `metadata.py` as `HealingSpot` and **wired in Phase 5**"
+(false — nothing consumes it), and rejected `setrespawn` because the constant is one "the agent
+can't derive from the event JSON." True of an **LLM reading one event's JSON**; false of the
+transpiler, which joins the event's map id against metadata. The conclusion outlived the spine
+it was reasoned about. Corrected in place, dated.
+
+**LATENT BUG, found while grounding this ruling — a white-out today lands in vanilla Petalburg
+City.** The new-game spawn override (`engine/src/new_game.c:172-208`, `URANIUM PATHFINDER
+SLICE`) calls `SetWarpDestination(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F, …)` and **never sets a heal
+location**. Our boot path skips the intro/title/Birch speech, so no script ever runs
+`setrespawn` either. `ClearSav1` zeroes `gSaveBlock1Ptr->lastHealLocation`, and
+`SetWarpDestinationToLastHealLocation` (`overworld.c:758-763`) reads that zero as mapGroup 0 /
+mapNum 0 = **`MAP_PETALBURG_CITY`** (`engine/include/constants/map_groups.h:15`). Every
+gate-passed chapter ships this. **The initial anchor must be set in the same fenced
+`new_game.c` block as the spawn override**, per the operator's ruling that the game's opening
+respawn is Moki Town.
+
+**STANDING PRECEDENT (operator, 2026-09-12) — a white-out beat goes in the chapter AFTER the
+chapter that establishes or changes a respawn anchor.** Rationale: a respawn anchor set in
+chapter N is only *provable* once the player is somewhere else, and the chapter that sets it is
+standing on it. Applied to the current corpus:
+
+| Anchor event | Set in | White-out beat goes in |
+|---|---|---|
+| Initial anchor = Moki Town (`new_game.c`, game open) | CH01 | **CH02** |
+| Kevlar Town Center visited → anchor moves | CH03 | **CH04** |
+
+This is a rule for the atlas, not a one-off: every future chapter containing a Center owes its
+successor a white-out beat asserting the new anchor. It also makes CH02's beat a **regression
+test for the Petalburg bug above** — it fails today and must, until the `new_game.c` fix lands.
+
+Scope note: the ruling is the emitter plus harness capability plus these two beats, not a
+white-out in all five chapters — the beat proves the anchor, and one anchor needs one proof.

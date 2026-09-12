@@ -53,6 +53,29 @@ manifest row `map068/ev001/p0` (CH03, Kevlar's Center) and is item 3 of
 **Why a §9 boot walk never caught it:** a missing respawn anchor is only observable if the
 walk white-outs, and no beat does. Gate-passed chapters ship this.
 
+**RULED IN 2026-09-12 (`REDERIVATION_PLAN.md` §14.7): build the generic emitter, not two
+hand-minted constants.** The derivation source is already parsed and unconsumed — measured 22
+maps carry `HealingSpot`, all Center interiors pointing at outdoor coords (maps 49/50 →
+`[32,28,32]` Moki, 68 → `[31,20,13]` Kevlar), a 1:1 fit for a `heal_locations.json` entry.
+66 `pbSetPokemonCenter` call sites collapse onto those 22 locations; this branch touches two.
+`reference/recon/uranium_script_calls.md:71`'s STRIP ruling is corrected in place — its premise
+("the agent can't derive the constant from the event JSON") was true of the LLM and false of
+the transpiler.
+
+**SECOND BUG, same anchor, worse blast radius (found 2026-09-12):** the *initial* anchor is
+never set either, so a white-out today lands in **vanilla Petalburg City**. The spawn override
+(`engine/src/new_game.c:172-208`) sets a warp destination and no heal location; our boot path
+skips the intro, so no script runs `setrespawn`; `ClearSav1` zeroes `lastHealLocation`, and
+`SetWarpDestinationToLastHealLocation` (`overworld.c:758-763`) reads zero as mapGroup 0 /
+mapNum 0 = `MAP_PETALBURG_CITY` (`constants/map_groups.h:15`). Fix belongs in the same fenced
+`new_game.c` block as the spawn override.
+
+**Standing precedent set by the same ruling:** a white-out beat goes in the chapter AFTER the
+one that establishes or changes an anchor — initial Moki anchor (CH01) is asserted in **CH02**,
+the Kevlar Center anchor (CH03) in **CH04**, and every future chapter with a Center owes its
+successor the same. CH02's beat doubles as the regression test for the Petalburg bug and is
+expected to FAIL until the `new_game.c` fix lands.
+
 ### 97. Recognition and emission are two unlinked layers, so rows are flagged for work already done
 
 **Root-caused 2026-09-11** (`REDERIVATION_PLAN.md` §14.1). A manifest row's
