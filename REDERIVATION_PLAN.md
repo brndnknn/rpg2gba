@@ -1260,3 +1260,43 @@ anything** — which is precisely how three rows acquired a label bug they do no
   the disposition pass reads them, not after.
 - Filed under the standing lesson this is the third instance of: **a measurement taken through
   a generator attributes its own bugs to whatever it was measuring.**
+
+### 14.9 Operator ruling, 2026-09-12 — #92's vocabulary: collapse the token, structure the model
+
+**Ruling: the `blocked:` token stays collapsed. The conjunction moves into the capability
+model.** This answers the decision `PROJECT_TODO.md` #92 reserved for the operator.
+
+Uranium has no HMs: the real gate on a Rock Smash boulder is **`badge AND (move OR item)`**,
+and `blocked:a|b` means AND-of-a-set with no OR, so the verdict string cannot express it.
+
+**Rejected — compound grammar in the verdict** (`blocked:badge1&(rock_smash_move|boxinggloves)`):
+it churns every committed `blocked:rock_smash` in CH04/CH05, hands the checker a parser to
+maintain, and encodes a distinction **no beat can assert** — a negative beat walks up, presses
+A and observes a refusal; it never learns which conjunct failed.
+
+**Adopted — `rock_smash` remains one token** meaning "can rock smash in the field," with the
+structure held as **requirement groups** on the derivation: one group per conjunct, alternatives
+within a group. `rock_smash` requires `{badge_1}` and `{move_unlock, boxinggloves}`. The grant
+point in route order is **`max` over groups of `min` over alternatives**. Same shape for
+strength/`POWERGLOVE`, surf/`SURFBOARD`, dive/`SCUBAGEAR`, waterfall/`CLIMBINGPICK`.
+
+- **Zero churn, and the committed files were already right.** Every existing
+  `blocked:rock_smash` / `blocked:surf` disposition is correct under this reading, so nothing
+  authored to date is invalidated.
+- **`CapabilitySite` needs one addition.** Today it is a flat
+  `(token, row_id, map_id, chapter_id, detail)` (`capability_sites.py:238-248`), which can only
+  express a *union* of sites — OR-semantics — so it cannot currently say "the badge is also
+  required." Requirement groups are a small structured field on `CapabilityDerivation`, not a
+  new verdict vocabulary and not a schema change to dispositions.
+- **Derived where possible, hand-annotated where not** — the same split ruled in §14.6 for
+  dispositions. #64's `old_rod` case is why the annotation path is mandatory rather than
+  optional: it sits behind `var[103] >= 5`, variable 103 is named "Battle Var01", and the only
+  artifact stating what it means is dialogue text — a name-keyed classifier misses it
+  *confidently*.
+- **Consequence for the warning count.** #92 becomes closable inside or just after P8b, and the
+  `capability_model_unenforced` warnings go green *honestly* rather than multiplying across
+  CH02/CH03 as §14.5 predicted. §14.5's "expect the count to rise sharply" now holds only for
+  the window between P8b's disposition pass and the requirement-groups landing.
+- **Unchanged:** #92's standing prohibition. Do not make a row green by inventing a grant site.
+  A token with no derivable and no annotated grant stays *unenforced*, which is an honest "not
+  checked".

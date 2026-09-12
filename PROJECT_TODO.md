@@ -2662,6 +2662,25 @@ Until then `blocked:rock_smash`/`blocked:surf` staying *unenforced* is the
 correct state — it is an honest "not checked", not a silent pass. Do not make it
 green by inventing a grant site.
 
+**POINT 2 RULED 2026-09-12 (`REDERIVATION_PLAN.md` §14.9): collapse the token, structure the
+model.** No compound grammar. `rock_smash` stays one token meaning "can rock smash in the
+field"; the conjunction becomes **requirement groups** on `CapabilityDerivation` — one group
+per conjunct, alternatives within a group (`{badge_1}` AND `{move_unlock, boxinggloves}`), with
+the route-order grant point being `max` over groups of `min` over alternatives. A compound
+verdict string was rejected because it churns every committed `blocked:rock_smash`, gives the
+checker a parser to maintain, and encodes a distinction no beat can assert — a negative beat
+observes a refusal, never which conjunct caused it. Every disposition authored to date is
+already correct under this reading.
+
+`CapabilitySite` (`capability_sites.py:238-248`) needs one addition: the flat
+`(token, row_id, map_id, chapter_id, detail)` tuple can only express a union of sites, i.e.
+OR-semantics, so it cannot say "the badge is also required." Requirement groups are derived
+where possible and **hand-annotated where not** — #64's `old_rod` (`var[103] >= 5`, variable
+named "Battle Var01", meaning stated only in dialogue) is why the annotation path is mandatory.
+
+Point 1 (identifying the non-switch grant source) remains open. The prohibition above stands
+unchanged.
+
 See `MEMORY.md` → Uranium-Specific Discoveries for the mechanic itself.
 
 ### 94. DONE 2026-09-10 — the archetype classifier is not open for extension
