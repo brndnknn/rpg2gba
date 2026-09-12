@@ -306,6 +306,48 @@ _NUZLOCKE_MODE_GUARD_RE = re.compile(r"^\s*\$PokemonGlobal\.nuzlocke\s*==\s*true
 # then-nodes / 1 else-node.
 _MYSTERY_GIFT_ID_GUARD_RE = re.compile(r"^\s*pbNextMysteryGiftID\s*>\s*0\s*$")
 
+# isRockSmashSoftlocked? — Uranium's anti-softlock helper (see
+# reference/scripts_dump/221_Extra_Scripts.rb:796-812). Its very first line
+# is ``return false if !$PokemonGlobal.nuzlocke || !$PokemonGlobal.randomizer``
+# and Nuzlocke mode is already an established, user-approved not-ported strip
+# on this port (``_NUZLOCKE_MODE_GUARD_RE`` above — ``$PokemonGlobal.nuzlocke``
+# is never set true by any runtime path we ship), so ``!$PokemonGlobal.nuzlocke``
+# is always true and the function returns ``false`` before evaluating any of
+# its later randomizer/badge/party-composition checks. Statically FALSE on the
+# GBA, exactly like the Nuzlocke-mode guard it's gated behind. Real corpus
+# occurrences: Map032 (Rock Smash event, all 3 pages of the Rock Smash
+# choreography — output/uranium-build/maps/Map032.json lines 22518, 23139,
+# 26280), each a bare ``if isRockSmashSoftlocked?`` with a then-arm (softlock
+# rescue dialogue/heal) and no else-arm.
+_ROCK_SMASH_SOFTLOCKED_GUARD_RE = re.compile(r"^\s*isRockSmashSoftlocked\?\s*$")
+
+# isCustomGame?(any=false) — Uranium's "any custom-mode option enabled" check
+# (reference/scripts_dump/220_Custom_Mode.rb:244-262). It ORs together
+# $PokemonGlobal.nuzlocke, .nuzlockehealbattle, .nuzlockenomart,
+# .nuzlockepoisonfield, .challengemode (+ .nuzlockedupesclause,
+# .nuzlockeshinyclause, .randomizer when any=true) — every one of those flags
+# belongs to Custom Mode / Nuzlocke, neither of which is ported (Nuzlocke
+# already established not-ported above; Custom Mode is the same "not
+# portable to GBA" subsystem per REDERIVATION_PLAN.md item 6). No runtime
+# path on this port ever sets any of them true, so every disjunct is always
+# false and isCustomGame? always returns false. Statically FALSE, same
+# collapse as _emit_nuzlocke_mode_strip. Real corpus occurrences: Map050
+# EV005/EV027 (output/uranium-build/maps/Map050.json), always the bare
+# no-arg call ``isCustomGame?`` (the ``any=false`` default — no corpus call
+# ever passes ``true``).
+_CUSTOM_GAME_GUARD_RE = re.compile(r"^\s*isCustomGame\?\s*$")
+
+# showRulesetSettings(mode) — opens Uranium's PokemonRulesetScene, the Custom
+# Mode options UI (reference/scripts_dump/220_Custom_Mode.rb:776-781). Not
+# portable to GBA (no equivalent scene), and — because it's only ever reached
+# from behind an isCustomGame? guard that itself statically collapses to
+# false (see _CUSTOM_GAME_GUARD_RE above) — already dead code in every corpus
+# occurrence. Handled as a bare script-call strip (breadcrumb, no queue) for
+# the one occurrence NOT behind such a guard: Map039 EV015 (berry tree),
+# output/uranium-build/maps/Map039.json line ~1473, a standalone
+# ``showRulesetSettings(1)`` call with no enclosing isCustomGame? check.
+_SHOW_RULESET_SETTINGS_STRIP_RE = re.compile(r"^\s*showRulesetSettings\(\s*\d*\s*\)\s*$")
+
 # pbCaveEntrance — Essentials' cave-entry fade/step-in call (Map032 EV23/36/
 # 37 page 1; 48 corpus occurrences total, always bare — no argument list ever
 # observed, confirmed by corpus grep). Sits between a 223/106 fade-to-black
@@ -470,6 +512,33 @@ _NUZLOCKE_HEAL_STRIP_RE = re.compile(
 # (`x=pbGet(151)` / `x-=2` / `x=2 if x==-1`), so the three shapes below are
 # tracked into _ruby_locals and replayed per source-var value at emit time.
 _RUBY_LOCAL_PBGET_RE = re.compile(r"^\s*([a-z_]\w*)\s*=\s*pbGet\(\s*(\d+)\s*\)\s*$")
+
+# pbGet(id) / pbSet(id, value) — thin wrappers over $game_variables
+# (reference/scripts_dump/170__PSystem_Utilities.rb:2516-2528):
+#   def pbGet(id); return 0 if !id || !$game_variables; return $game_variables[id]; end
+#   def pbSet(id,value); if id && id>=0; $game_variables[id]=value ...; end
+# `pbSet`'s `$game_map.need_refresh = true` side effect (a tile-redraw hint)
+# has no GBA equivalent and is a deliberate no-op — nothing to fail loud
+# about, so it is simply not emitted.
+#
+# Only the fully-literal shapes are resolved deterministically here
+# (REDERIVATION_PLAN.md item 4, "trivial"): a plain `pbSet(<int>, <int>)`
+# statement, and `$game_variables[<int>] = pbGet(<int>)` (pbGet used exactly
+# where a plain variable read is expected — copied straight through, no
+# arithmetic). Any computed argument (array indexing, `$Trainer.*` reads,
+# ternaries, arithmetic — the overwhelming majority of real corpus call
+# sites; see the head-match fallbacks below) is deliberately NOT evaluated
+# (no Ruby expression evaluator, CLAUDE.md §4.5) and queues instead, with a
+# reason naming the specific unsupported shape.
+_PBSET_LITERAL_RE = re.compile(
+    r"^\s*(?:Kernel\.)?pbSet\(\s*(?P<var>\d+)\s*,\s*(?P<val>-?\d+)\s*\)\s*$"
+)
+_PBSET_HEAD_RE = re.compile(r"^\s*(?:Kernel\.)?pbSet\(")
+_PBGET_ASSIGN_LITERAL_RE = re.compile(
+    r"^\s*\$game_variables\[\s*(?P<target>\d+)\s*\]\s*=\s*"
+    r"(?:Kernel\.)?pbGet\(\s*(?P<source>\d+)\s*\)\s*$"
+)
+_PBGET_HEAD_RE = re.compile(r"(?:Kernel\.)?pbGet\(")
 _RUBY_LOCAL_ADDSUB_RE = re.compile(r"^\s*([a-z_]\w*)\s*(\+|-)=\s*(\d+)\s*$")
 _RUBY_LOCAL_WRAP_RE = re.compile(
     r"^\s*([a-z_]\w*)\s*=\s*(-?\d+)\s+if\s+\1\s*==\s*(-?\d+)\s*$"
@@ -1994,6 +2063,12 @@ class _PageEmitter:
         mystery_gift = self._emit_mystery_gift_id_strip(node)
         if mystery_gift is not None:
             return mystery_gift
+        rock_smash_softlocked = self._emit_rock_smash_softlocked_strip(node)
+        if rock_smash_softlocked is not None:
+            return rock_smash_softlocked
+        custom_game = self._emit_custom_game_strip(node)
+        if custom_game is not None:
+            return custom_game
         rock_smash = self._emit_rock_smash_idiom(node)
         if rock_smash is not None:
             return rock_smash
@@ -2353,6 +2428,72 @@ class _PageEmitter:
         breadcrumb = (
             "# mystery gift: not ported, unsatisfiable on GBA — then-arm "
             "dropped (user-approved strip, 2026-08-19)"
+        )
+        else_lines = self.emit_nodes(node.otherwise) if node.otherwise else []
+        return [breadcrumb, *else_lines]
+
+    def _emit_rock_smash_softlocked_strip(self, node: IfNode) -> list[str] | None:
+        """``isRockSmashSoftlocked?`` — see ``_ROCK_SMASH_SOFTLOCKED_GUARD_RE``
+        for the full derivation. Reading
+        ``reference/scripts_dump/221_Extra_Scripts.rb:796-812``, the
+        function's first statement is
+        ``return false if !$PokemonGlobal.nuzlocke || !$PokemonGlobal.randomizer``.
+        Nuzlocke mode is already a statically-false, user-approved not-ported
+        strip on this port (``_NUZLOCKE_MODE_GUARD_RE`` /
+        ``_emit_nuzlocke_mode_strip`` above — no runtime path ever sets
+        ``$PokemonGlobal.nuzlocke`` true), so ``!$PokemonGlobal.nuzlocke`` is
+        always true, the ``||`` short-circuits, and ``isRockSmashSoftlocked?``
+        always returns ``false`` before any of its later randomizer/badge/
+        party-composition checks run. Statically FALSE on the GBA — same
+        collapse as ``_emit_nuzlocke_mode_strip``/``_emit_mystery_gift_id_strip``:
+        drop the then-arm entirely and splice the else-arm's children in
+        directly (no wrapping ``if``). Real occurrences: Map032's Rock Smash
+        event, all 3 pages (output/uranium-build/maps/Map032.json lines
+        22518, 23139, 26280) — each a bare ``if isRockSmashSoftlocked?`` with
+        a then-arm (softlock-rescue dialogue/heal) and no else-arm, so the
+        splice is an empty list for all three. Returns ``None`` (falls
+        through to the generic script-condition queue) for any other script
+        condition."""
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        if not _ROCK_SMASH_SOFTLOCKED_GUARD_RE.match(params[1]):
+            return None
+        breadcrumb = (
+            "# isRockSmashSoftlocked?: unsatisfiable on GBA (gated behind "
+            "not-ported Nuzlocke mode) — then-arm dropped"
+        )
+        else_lines = self.emit_nodes(node.otherwise) if node.otherwise else []
+        return [breadcrumb, *else_lines]
+
+    def _emit_custom_game_strip(self, node: IfNode) -> list[str] | None:
+        """``isCustomGame?`` — see ``_CUSTOM_GAME_GUARD_RE`` for the full
+        derivation. Reading
+        ``reference/scripts_dump/220_Custom_Mode.rb:244-262``, the function
+        ORs together every Nuzlocke/Custom-Mode flag
+        (``.nuzlocke``, ``.nuzlockehealbattle``, ``.nuzlockenomart``,
+        ``.nuzlockepoisonfield``, ``.challengemode``, plus
+        ``.nuzlockedupesclause``/``.nuzlockeshinyclause``/``.randomizer`` when
+        called with ``any=true``) and returns true iff any is set. Custom
+        Mode (this whole script, ``220_Custom_Mode.rb``) is not ported —
+        same "not portable to GBA" call as Nuzlocke mode — so no runtime path
+        on this port ever sets any of these flags true, meaning every
+        disjunct is always false and ``isCustomGame?`` always returns false.
+        Statically FALSE on the GBA, same static collapse as
+        ``_emit_nuzlocke_mode_strip``: drop the then-arm, splice the
+        else-arm's children in directly. Real occurrences: Map050 EV005/
+        EV027 (output/uranium-build/maps/Map050.json), always the bare
+        no-arg form (the ``any=false`` default). Returns ``None`` (falls
+        through to the generic script-condition queue) for any other script
+        condition."""
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        if not _CUSTOM_GAME_GUARD_RE.match(params[1]):
+            return None
+        breadcrumb = (
+            "# isCustomGame?: Custom Mode not ported, unsatisfiable on GBA "
+            "— then-arm dropped"
         )
         else_lines = self.emit_nodes(node.otherwise) if node.otherwise else []
         return [breadcrumb, *else_lines]
@@ -3310,6 +3451,16 @@ class _PageEmitter:
         if _CAVE_ENTRANCE_STRIP_RE.match(text):
             return ["# cave transition: pbCaveEntrance subsumed by native warp fade"]
 
+        # showRulesetSettings(mode) — opens the Custom Mode options UI, not
+        # portable to GBA (see _SHOW_RULESET_SETTINGS_STRIP_RE). Breadcrumb,
+        # no queue. (The other corpus occurrences of this call are already
+        # unreachable — nested inside an isCustomGame? then-arm that
+        # _emit_custom_game_strip collapses away before this bare-call row
+        # is ever walked; this arm only fires for the one standalone
+        # occurrence, Map039 EV015.)
+        if _SHOW_RULESET_SETTINGS_STRIP_RE.match(text):
+            return ["# custom mode: showRulesetSettings stripped (not ported)"]
+
         # pbTrainerPC — the generic non-bedroom PC (see _TRAINER_PC_RE);
         # EventScript_PC ends the script itself, so `goto` (not `call`).
         if _TRAINER_PC_RE.match(text):
@@ -3573,6 +3724,54 @@ class _PageEmitter:
             if var_name is None:
                 return None  # unnamed RMXP variable — fall through to the queue
             return [f"specialvar({var_name}, CalculatePlayerPartyCount)"]
+
+        # pbSet(<int>, <int>) — literal id/value only (see _PBSET_LITERAL_RE
+        # and the pbGet/pbSet module note above). Unnamed target variable
+        # queues (never mints a scratch VAR_*, CLAUDE.md §6); a computed
+        # argument (anything not matching the fully-literal shape) also
+        # queues, with a reason naming the unsupported shape rather than
+        # falling through to the generic "script call: ..." echo.
+        m = _PBSET_LITERAL_RE.match(text)
+        if m:
+            var_name = self.ctx.var_for_variable(int(m.group("var")))
+            if var_name is None:
+                return [self.ctx.queue(
+                    node.index, SCRIPT,
+                    f"pbSet({m.group('var')}, ...): variable "
+                    f"{m.group('var')} is unnamed — cannot mint a VAR_*",
+                )]
+            return [f"setvar({var_name}, {int(m.group('val'))})"]
+        if _PBSET_HEAD_RE.match(text):
+            return [self.ctx.queue(
+                node.index, SCRIPT,
+                "pbSet(...) with a computed argument (not a plain int "
+                f"literal) — no expression evaluator: {text[:120]!r}",
+            )]
+
+        # $game_variables[<int>] = pbGet(<int>) — pbGet used exactly where a
+        # plain variable read is expected (see _PBGET_ASSIGN_LITERAL_RE):
+        # straight copyvar, no arithmetic. Any other pbGet(...) shape
+        # (nested in arithmetic/array-indexing/method args — the corpus
+        # norm) queues with a precise reason instead of falling through to
+        # the generic echo.
+        m = _PBGET_ASSIGN_LITERAL_RE.match(text)
+        if m:
+            target_name = self.ctx.var_for_variable(int(m.group("target")))
+            source_name = self.ctx.var_for_variable(int(m.group("source")))
+            if target_name is None or source_name is None:
+                return [self.ctx.queue(
+                    node.index, SCRIPT,
+                    f"$game_variables[{m.group('target')}]=pbGet("
+                    f"{m.group('source')}): unnamed variable (target or "
+                    "source) — cannot mint a VAR_*",
+                )]
+            return [f"copyvar({target_name}, {source_name})"]
+        if _PBGET_HEAD_RE.search(text):
+            return [self.ctx.queue(
+                node.index, SCRIPT,
+                "pbGet(...) not in a plain-variable-read assignment shape "
+                f"— no expression evaluator: {text[:120]!r}",
+            )]
 
         return None
 

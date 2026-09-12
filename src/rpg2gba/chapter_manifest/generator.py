@@ -126,6 +126,15 @@ _CODE_EFFECT: dict[int, str] = {
     112: "control_flow",
     113: "control_flow",
     115: "control_flow",
+    # Label (118) / Jump to Label (119): the transpiler dispatches both
+    # (`transpiler.py` LABEL/JUMP_TO_LABEL -> `goto`), so leaving them out
+    # of this table put a understood command into `other_codes`, which
+    # reads as "we do not know what this is". Tagged `control_flow` with
+    # 112/113 rather than filed under `_CODE_BRANCH`: that set is the
+    # if/else family the extractor walks into, while these are jumps, the
+    # same shape as Loop and Break Loop.
+    118: "control_flow",
+    119: "control_flow",
 }
 
 # Codes that participate in extraction but never produce an effect tag or an
