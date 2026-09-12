@@ -175,6 +175,27 @@ downstream CH04 beats. So a chapter does not write a beat for its forward bounda
 it dispositions that row `boundary` and the arriving chapter claims it. See
 `PROJECT_TODO.md` #72/#73.
 
+**A warp is tested by crossing it, crossing back, and crossing again — the beat ENDS on
+the far side** (operator ruling, 2026-09-04; promoted here 2026-09-12 from a
+`CH05.dispositions.json` note, where a corpus-wide convention had been living in one row's
+free text). One beat per warp **pair**, claiming both manifest rows. Rationale: a one-way
+crossing proves the forward warp fired and nothing else — it cannot see a return warp
+pointing at the wrong cell, and the return leg is where arrival nudges actually fire. The
+worked shape, CH05's B1: Route 2 (20,34) → step (20,33) → arrive 1F (17,39) → walk (17,40)
+→ arrive Route 2 (20,33), nudge fires → step back onto (20,33) → end inside the cave.
+
+Two corollaries:
+
+- **One physical thing owns both its rows.** Same shape as the sideways staircases
+  (CH05 B13/B14): you are never *on* a sideways staircase — an E/W press is displaced
+  diagonally across it (`traversal/graph.py:221-225`) — so one crossing exercises both
+  cells and there is one observable per staircase, not per cell.
+- **A forward boundary warp is the one warp that cannot use this idiom**, because under the
+  convention above the neighbour is unstaged, so there is no warp to cross and nothing to
+  come back from. Such a beat asserts only that the player *reaches* the boundary, and the
+  arriving chapter writes the round trip when it stages the far map. CH05's B11 is the
+  worked case.
+
 ---
 
 ## 3. The deterministic transpiler (Option B)

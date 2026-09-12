@@ -1300,3 +1300,36 @@ strength/`POWERGLOVE`, surf/`SURFBOARD`, dive/`SCUBAGEAR`, waterfall/`CLIMBINGPI
 - **Unchanged:** #92's standing prohibition. Do not make a row green by inventing a grant site.
   A token with no derivable and no annotated grant stays *unenforced*, which is an honest "not
   checked".
+
+### 14.10 Operator ruling, 2026-09-12 — notes are for judgment rows, and a durable ruling never lives in one
+
+**Ruling 1: generator-derived clerical rows get no authored `note`.** The `derived_hash` plus
+the row's own manifest facts already state why the row is cosmetic; a note there restates the
+machine's conclusion in prose. Notes stay on the **hand** rows — residue, boundary, blocked —
+where the note *is* the argument and nothing else records it. ~233 rows of authoring cost
+bought back.
+
+**Ruling 2: a corpus-wide convention may not live in a disposition note. The warp round-trip
+idiom is promoted to `BUILD_PLAN.md` §2**, beside the boundary-crossing convention it pairs
+with; the two CH05 notes that carried it now cite it instead.
+
+Measured before ruling, because §14.5's framing was slightly off:
+
+- **`note` is not unread.** `render.py:141-142` prints it into the human-readable review
+  artifact — so it is *unenforced* (no checker rule) but it is the text the operator reads at
+  review time. That is a different thing from dead.
+- **The two chapters use notes for two different jobs.** CH04: 42/42 rows, median 84 chars,
+  and repeated verbatim boilerplate (`"Spent page."` ×3, `"Cleared state of a
+  not-yet-approachable rock."` ×3). CH05: 25/25 rows, median **240** chars, max **1618**, and
+  substantive — coordinates, doc-beat cross-references, and operator rulings recorded nowhere
+  else. The split falls exactly on clerical-vs-judgment, which is the §14.6 split again.
+- **Why ruling 2 matters beyond tidiness:** the warp round-trip idiom is a rule for every warp
+  in the corpus and it was sitting in one row's free text — un-greppable, and it dies the day
+  that row is re-dispositioned. Same pattern that left the Poké Center respawn bug inside
+  `playtest/chapters/ch03.py` for a month (#96).
+
+**Still in CH05's notes, flagged not moved** (out of this ruling's scope, operator to confirm):
+the **one-beat-id-per-EVENT** rule (operator, 2026-09-04), which appears in three separate
+notes and is corpus-wide by the same argument. The sideways-staircase "one observable per
+staircase" reasoning went to `BUILD_PLAN.md` §2 as a corollary of the warp idiom, since it is
+the same "one physical thing owns both its rows" shape.
