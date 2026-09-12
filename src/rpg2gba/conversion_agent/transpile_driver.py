@@ -48,7 +48,7 @@ def _det_queue_entry(
         "map_id": entry.get("map_id", map_id),
         "event_id": entry.get("event_id", event.get("id")),
         "event_name": entry.get("event_name", event.get("name", "")),
-        "page": entry.get("page", 1),
+        "page": entry.get("page", 0),  # 0-based (#98)
         "line": entry.get("line", 0),
         "command_code": entry.get("command_code", 0),
         "description": entry.get("description", ""),

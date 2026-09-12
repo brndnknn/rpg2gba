@@ -859,7 +859,7 @@ def classify_simple_warp(
     )
     entry = {
         "command_code": TRANSFER_PLAYER,
-        "page": 1,
+        "page": 0,  # single-page event; 0-based per #98
         "description": (
             f"Transfer Player to Uranium map {target_map} at ({x}, {y}) — emitted as "
             f"placeholder warp(MAP_URANIUM_{target_map}, {x}, {y}); the real pokeemerald "

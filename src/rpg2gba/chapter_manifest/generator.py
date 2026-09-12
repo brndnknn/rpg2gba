@@ -109,6 +109,16 @@ _CODE_EFFECT: dict[int, str] = {
     208: "graphic",  # Change Transparent Flag
     207: "animation",  # Show Animation
     223: "screen_fx",  # Change Screen Color Tone
+    # The four codes below were `other_codes` purely because this table
+    # never named them, not because the transpiler cannot emit them
+    # (REDERIVATION_PLAN.md 15.1 item 1). Tags follow what it actually
+    # emits: 104 is stripped outright (`_STRIP_CODES`), 116 becomes
+    # `removeobject`, and the 221/222 transition pair becomes
+    # `fadescreen`.
+    104: "text",  # Change Text Options — stripped; display-only
+    116: "erase_event",  # Erase Event -> removeobject (persistent)
+    221: "screen_fx",  # Prepare for Transition -> fadescreen(FADE_TO_BLACK)
+    222: "screen_fx",  # Execute Transition -> fadescreen(FADE_FROM_BLACK)
     # Loop (112) / Break Loop (113) / Exit Event Processing (115): not
     # cosmetic-safe. 115 in particular terminates the remainder of a page's
     # command list, so a page carrying it cannot honestly be called decoration
@@ -480,6 +490,17 @@ def _load_staged_map_ids(scripts_dir: Path) -> set[int]:
 
 
 def _load_unhandled_counts(path: Path) -> Counter[tuple[int, int, int]]:
+    """Count queue entries per `(map_id, event_id, page)`.
+
+    The `page` key is **0-based**, matching the `pN` component of the
+    manifest `row_id` this counter is looked up with (`page_row_id`).
+    That agreement was the #98 bug: the queue writer emitted 1-based
+    pages while this table is queried with a 0-based `page_idx`, so a
+    page's `unhandled` count silently came from its neighbour. Fixed on
+    the writer side (`conversion_agent/transpiler.py`) so `row_id`s did
+    not have to move. Script block labels stay 1-based and are
+    deliberately a separate numbering -- see the note at the writer.
+    """
     counts: Counter[tuple[int, int, int]] = Counter()
     if not path.exists():
         logger.warning("no transpile_unhandled.jsonl at %s; unhandled counts blank", path)

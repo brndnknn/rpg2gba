@@ -106,7 +106,6 @@ MECHANIC_BY_HEAD: dict[str, str] = {
     "pbPhoneIncrement": "phone / rematch",
     "pbPhoneBattleCount": "phone / rematch",
     "pbMetro": "metro fast travel",
-    "pbRockSmash": "rock smash",
     "pbRockSmashRandomEncounter": "rock smash encounter",
     "pbCaveEntrance": "cave entry/exit",
     "pbCaveExit": "cave entry/exit",
@@ -127,6 +126,10 @@ MECHANIC_BY_HEAD: dict[str, str] = {
     "pbCallBub": "speech bubble UI",
     "pbEraseThisEvent": "event erase (persistent)",
     "setTempSwitchOn": "temp switch write (page re-eval)",
+    # Both are already handled in transpiler.py; their absence here was a
+    # table gap, not missing work (REDERIVATION_PLAN.md 15.1 item 1).
+    "pbPokerus": "pokerus display check (folded to the else arm)",
+    "pbNextMysteryGiftID": "mystery gift id (subsystem not ported, stripped)",
 }
 
 

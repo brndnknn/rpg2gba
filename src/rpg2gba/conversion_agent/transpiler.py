@@ -4058,8 +4058,15 @@ def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> Transpil
 
     name = _label_name(event.get("name", ""))
     blocks: list[str] = []
-    for page_no, page in enumerate(event.get("pages", []), start=1):
-        ctx.page_no = page_no
+    # Two different page numberings meet here and must not be conflated
+    # (#98). Script block LABELS are 1-based (`..._Page1` is the first
+    # page) and are load-bearing symbols -- renumbering them would rename
+    # every block in the corpus. The QUEUE's `page` field is 0-based, to
+    # match the manifest `row_id`'s `pN` component (`schema.page_row_id`),
+    # which is what the disposition pass joins on.
+    for page_idx, page in enumerate(event.get("pages", [])):
+        page_no = page_idx + 1
+        ctx.page_no = page_idx
         label = _page_label(map_id, event, page_no)
         body, movements, text_blocks, hoisted, aux_blocks = transpile_page(page, ctx, label)
         trigger = page.get("trigger")
@@ -4122,7 +4129,7 @@ def transpile_common_event(ce: dict, ctx: TranspileContext) -> TranspiledEvent:
     ctx.event_x = None
     ctx.event_y = None
     ctx.common_event_id = ce_id
-    ctx.page_no = 1
+    ctx.page_no = 0  # 0-based, matching the manifest row_id (#98)
     before = len(ctx.unhandled)
 
     label = f"CommonEvent_{ce_id:03d}"
