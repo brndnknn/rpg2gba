@@ -711,12 +711,15 @@ _CANLOSE_NAME_RE = re.compile(r'"([^"]*)"')
 # (CLAUDE.md §4.5).
 _CANLOSE_PBGET_PLUS_RE = re.compile(r"^pbGet\(\s*(\d+)\s*\)\s*\+\s*(\d+)$")
 
-# -- native object-template idioms (item balls, berry trees) -----------------
-# rpg2gba wave 2026-08-08: item balls and berry plants are converted to the
-# fork's NATIVE object-event systems (Common_EventScript_FindItem /
-# GetItemBallIdAndAmountFromTemplate — engine/src/item_ball.c — and
-# BerryTreeScript / MOVEMENT_TYPE_BERRY_TREE_GROWTH — engine/src/berry.c)
-# instead of being lowered command-by-command. Detection here is EVENT-level
+# -- native object-template idioms (item balls, berry trees, pushable boulders) --
+# rpg2gba wave 2026-08-08 (boulders added 2026-09-12, REDERIVATION_PLAN.md
+# §15.1 item 8): item balls, berry plants, and pushable Strength boulders are
+# converted to the fork's NATIVE object-event systems (Common_EventScript_
+# FindItem / GetItemBallIdAndAmountFromTemplate — engine/src/item_ball.c —
+# BerryTreeScript / MOVEMENT_TYPE_BERRY_TREE_GROWTH — engine/src/berry.c —
+# and OBJ_EVENT_GFX_PUSHABLE_BOULDER / TryPushBoulder — engine/src/
+# field_player_avatar.c) instead of being lowered command-by-command.
+# Detection here is EVENT-level
 # (scans every page's raw commands, not the parsed control-flow tree) and
 # runs in ``transpile_driver.transpile_map`` BEFORE both the idiom-collapse
 # classifiers (``deterministic.classify_ground_item`` already lowers bare
@@ -738,6 +741,37 @@ _BERRY_PLANT_CALL_RE = re.compile(r"^\s*pbBerryPlant\s*$")
 _PICK_BERRY_CALL_RE = re.compile(
     r"^\s*(?:Kernel\.)?pbPickBerry\(\s*(?:::)?PBItems::(\w+)\s*,\s*\d+\s*\)\s*$"
 )
+
+# REDERIVATION_PLAN.md §15.1 item 8 (third TF_KIND_* instance, "no engine/
+# changes"): a pushable Strength boulder. `pbPushThisBoulder`
+# (reference/scripts_dump/101__PField_Field.rb:2850) is a zero-arg predicate —
+# `if $PokemonMap.strengthUsed then pbPushThisEvent; return true end` — so
+# there is no argument shape to capture, unlike item balls/berries. The five
+# corpus rows currently staged (Map019 EV1/2/3, Map031 EV1/37 — confirmed
+# against output/uranium-build/transpile_unhandled.jsonl, matching the plan's
+# claimed count exactly) are all single-page events named "Boulder" whose
+# ENTIRE body is a bare `pbPushThisBoulder` script call (code 355), optionally
+# followed by an SE row, then the page terminator — the whole event IS the
+# native object placement, same shape as item balls/berry trees.
+#
+# The push itself is ALREADY NATIVE pokeemerald-expansion, keyed purely on
+# object graphics id: `TryPushBoulder` checks
+# `gObjectEvents[id].graphicsId == OBJ_EVENT_GFX_PUSHABLE_BOULDER`
+# (engine/src/field_player_avatar.c:1044, constant defined at
+# engine/include/constants/event_objects.h:113) and drives the push via
+# `Task_PushBoulder`/`sPushBoulderFuncs` (:1822-1878). No engine/ change is
+# needed to support this idiom — only the pipeline needs to know to place the
+# object with that graphics id instead of transpiling a script for it.
+#
+# Deliberately does NOT match the code-111 `if pbPushThisBoulder ... end`
+# conditional-branch shape that also occurs corpus-wide on unstaged maps
+# (reference/recon/uranium_real_commands.md:80 counts 84 total instances
+# across both shapes) — that shape wraps an arbitrary branch body this
+# detector has never inspected, and is out of scope for this work item, which
+# only clears the 5 bare-call rows actually queued today. An event using that
+# shape falls through to the general transpiler/classifiers and queues, per
+# CLAUDE.md §4.5 (fail loud, don't guess).
+_PUSH_BOULDER_CALL_RE = re.compile(r"^\s*(?:Kernel\.)?pbPushThisBoulder\s*$")
 
 
 def _script_condition_text(cmd: dict) -> str | None:
@@ -816,6 +850,25 @@ def detect_berry_tree(event: dict) -> tuple[str | None, bool] | None:
     return berry_symbol, berry_symbol is not None
 
 
+def detect_push_boulder(event: dict) -> bool:
+    """Scan every page's raw commands for a bare ``pbPushThisBoulder`` script
+    call (code 355/655, no arguments — see ``_PUSH_BOULDER_CALL_RE``).
+
+    Unlike ``detect_item_ball``/``detect_berry_tree`` there is no per-event
+    payload to extract (the call takes no arguments and the object's graphics
+    id — ``OBJ_EVENT_GFX_PUSHABLE_BOULDER`` — is fixed, not per-event data),
+    so this returns a plain ``bool`` rather than an ``Optional[tuple]``:
+    ``True`` when the idiom is present, ``False`` when it is not at all (the
+    caller falls through to the classifiers / general transpiler, which will
+    queue any other shape rather than guess)."""
+    for page in event.get("pages", []):
+        for cmd in page.get("list", []):
+            text = _script_call_text(cmd)
+            if text is not None and _PUSH_BOULDER_CALL_RE.match(text):
+                return True
+    return False
+
+
 def _resolve_fork_item(
     ctx: "TranspileContext", uranium_symbol: str, *, map_id: int, event_id: int | None, kind: str
 ) -> str:
@@ -850,14 +903,15 @@ def _resolve_fork_item(
 
 
 def resolve_native_object_template(map_id: int, event: dict, ctx: "TranspileContext") -> bool:
-    """Detect the item-ball / berry-tree idioms on ``event`` and, on a match,
-    record its ``Map{id:03d}.template_fields.json`` payload on ``ctx``.
+    """Detect the item-ball / berry-tree / pushable-boulder idioms on
+    ``event`` and, on a match, record its ``Map{id:03d}.template_fields.json``
+    payload on ``ctx``.
 
     Returns ``True`` when the event was claimed — the caller (``transpile_
     driver.transpile_map``) must emit NO ``.pory`` text and NO queue entry
     for it, exactly like the diagonal-stair skip; the native object-template
     fields are the whole story for these events. Returns ``False`` when
-    neither idiom matched, so the caller proceeds to the idiom-collapse
+    none of the three idioms matched, so the caller proceeds to the idiom-collapse
     classifiers / general transpiler as usual.
     """
     event_id = event.get("id")
@@ -887,6 +941,18 @@ def resolve_native_object_template(map_id: int, event: dict, ctx: "TranspileCont
             map_id, event_id,
             {"kind": "berry_tree", "berry_item": berry_const, "planted": planted},
         )
+        return True
+
+    if detect_push_boulder(event):
+        # No fork-item lookup needed (unlike item_ball/berry_tree) — the
+        # boulder's only per-event fact is "it exists here"; the object
+        # graphics id (OBJ_EVENT_GFX_PUSHABLE_BOULDER) and native push
+        # behavior are fixed engine constants, not per-event data. Downstream
+        # consumer (metadata_wiring.py's KNOWN_TEMPLATE_KINDS/validation/
+        # emission, REDERIVATION_PLAN.md §15.1 item 8) still needs a
+        # TF_KIND_PUSHABLE_BOULDER = "pushable_boulder" wiring pass — not
+        # present yet as of this change (out of this change's file scope).
+        ctx.record_template_fields(map_id, event_id, {"kind": "pushable_boulder"})
         return True
 
     return False

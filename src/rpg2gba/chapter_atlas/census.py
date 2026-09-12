@@ -130,6 +130,12 @@ MECHANIC_BY_HEAD: dict[str, str] = {
     # table gap, not missing work (REDERIVATION_PLAN.md 15.1 item 1).
     "pbPokerus": "pokerus display check (folded to the else arm)",
     "pbNextMysteryGiftID": "mystery gift id (subsystem not ported, stripped)",
+    # REDERIVATION_PLAN.md §15.1 item 8: already handled in transpiler.py
+    # (resolve_native_object_template / detect_push_boulder) as a native
+    # object-template idiom (TF_KIND_PUSHABLE_BOULDER), same family as
+    # pbItemBall/pbBerryPlant above — its absence here was the same table
+    # gap as pbPokerus/pbNextMysteryGiftID.
+    "pbPushThisBoulder": "pushable strength boulder",
 }
 
 

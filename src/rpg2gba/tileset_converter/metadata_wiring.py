@@ -238,12 +238,21 @@ KNOWN_TRAITS = {TRAIT_SMASHABLE_ROCK, TRAIT_TERMINAL_HIDE, TRAIT_COLLAPSED_PAGES
 # object-event systems (engine/src/item_ball.c, engine/data/scripts/
 # berry_tree.inc) instead of transpiled Ruby — the engine already implements
 # both, so hand-transpiling their Ruby would be reinventing a system that
-# already exists. `kind: "item_ball"` / `kind: "berry_tree"` are the only two
-# discriminators; any other value is a forward-compat fail-loud error, exactly
-# like `KNOWN_TRAITS` above.
+# already exists. `kind: "item_ball"` / `kind: "berry_tree"` / `kind:
+# "pushable_boulder"` are the only three discriminators; any other value is a
+# forward-compat fail-loud error, exactly like `KNOWN_TRAITS` above.
+#
+# `pushable_boulder` (transpiler.py's `resolve_native_object_template`, added
+# for P8b work item 8): Uranium's `pbPushThisBoulder` script call (bare,
+# code-355, no arguments) is the RMXP idiom for a Strength-pushable rock — the
+# fork already implements the whole mechanic natively (engine/src/
+# field_player_avatar.c `TryPushBoulder`, verified 2026-09-12), so this
+# converts straight to a native object template exactly like item_ball/
+# berry_tree, never to transpiled Ruby.
 TF_KIND_ITEM_BALL = "item_ball"
 TF_KIND_BERRY_TREE = "berry_tree"
-KNOWN_TEMPLATE_KINDS = {TF_KIND_ITEM_BALL, TF_KIND_BERRY_TREE}
+TF_KIND_PUSHABLE_BOULDER = "pushable_boulder"
+KNOWN_TEMPLATE_KINDS = {TF_KIND_ITEM_BALL, TF_KIND_BERRY_TREE, TF_KIND_PUSHABLE_BOULDER}
 
 # engine/include/constants/event_objects.h (verified 2026-08-08: OBJ_EVENT_GFX_
 # ITEM_BALL=59, OBJ_EVENT_GFX_BERRY_TREE=60). Fixed engine constants, not
@@ -259,6 +268,28 @@ BERRY_TREE_MOVEMENT_TYPE = "MOVEMENT_TYPE_BERRY_TREE_GROWTH"
 # verified by direct inspection of the vendored engine source.
 ITEM_BALL_SCRIPT = "Common_EventScript_FindItem"
 BERRY_TREE_SCRIPT = "BerryTreeScript"
+
+# engine/include/constants/event_objects.h:113 (verified 2026-09-12:
+# `#define OBJ_EVENT_GFX_PUSHABLE_BOULDER 87`). Like ITEM_BALL_GFX/
+# BERRY_TREE_GFX above, a fixed engine constant, not per-event data.
+PUSHABLE_BOULDER_GFX = "OBJ_EVENT_GFX_PUSHABLE_BOULDER"
+# Vanilla convention, confirmed by reading every shipped boulder object event
+# in the fork (`grep OBJ_EVENT_GFX_PUSHABLE_BOULDER engine/data/maps/*/
+# map.json` — FieryPath, MagmaHideout_1F, SeafloorCavern_Room{1..8},
+# Route110_TrickHousePuzzle4, etc., verified 2026-09-12): every single one
+# uses `movement_type=MOVEMENT_TYPE_LOOK_AROUND` and
+# `script=EventScript_StrengthBoulder` (engine/data/scripts/
+# field_move_scripts.inc:224 — prompts to use the Strength field move if not
+# already activated, else no-ops with a flavor message). Neither field
+# actually drives the push mechanic: `TryPushBoulder`
+# (engine/src/field_player_avatar.c:1038-1044) and `Task_PushBoulder`
+# (:1822-1878) key the whole interaction PURELY on
+# `gObjectEvents[id].graphicsId == OBJ_EVENT_GFX_PUSHABLE_BOULDER` — no
+# script call, no movement-type check. `movement_type`/`script` are only the
+# idle-animation and talk-to-it presentation; matching vanilla here is for
+# fidelity/consistency, not because the engine requires it.
+PUSHABLE_BOULDER_MOVEMENT_TYPE = "MOVEMENT_TYPE_LOOK_AROUND"
+PUSHABLE_BOULDER_SCRIPT = "EventScript_StrengthBoulder"
 
 # Uranium-minted berry tree ids are RAW INTEGERS (as strings), not named
 # BERRY_TREE_* fork #defines. Vanilla names its ids for readability
@@ -1413,6 +1444,22 @@ def _validate_template_fields(
                         f"{berry_item!r} is not a real fork ITEM_*_BERRY "
                         f"constant (engine/include/constants/items.h)"
                     )
+        elif kind == TF_KIND_PUSHABLE_BOULDER:
+            # `pbPushThisBoulder` takes no arguments (see the module comment
+            # above `TF_KIND_PUSHABLE_BOULDER`) — there is no item, amount, or
+            # id to validate, unlike item_ball/berry_tree. The honest check
+            # here is the mirror image of theirs: fail loud on any payload key
+            # beyond `kind` rather than silently ignoring it, matching this
+            # module's forward-compat posture (an unexpected key most likely
+            # means the transpiler started recording something this code
+            # doesn't know to consume yet).
+            extra_keys = sorted(set(payload) - {"kind"})
+            if extra_keys:
+                raise ValueError(
+                    f"map {uid} EV{eid:03d}: pushable_boulder has unexpected "
+                    f"payload key(s) {extra_keys} — this kind carries no "
+                    f"payload beyond 'kind'"
+                )
 
 
 def assign_berry_tree_ids(
@@ -2012,11 +2059,12 @@ def build_object_events(
     `build_slice_maps` is where a caller that passes nothing still gets
     `reference/strip_list.json` honored (see its docstring).
 
-    `template_fields` (event id -> `{"kind": "item_ball"|"berry_tree", ...}`,
-    from the transpile driver's `Map{id:03d}.template_fields.json` sidecar —
-    see the module comment above `TF_KIND_ITEM_BALL`) converts an event
-    STRAIGHT to a native pokeemerald object template instead of the ordinary
-    NPC/trainer/movement resolution path: an `item_ball` gets
+    `template_fields` (event id -> `{"kind": "item_ball"|"berry_tree"|
+    "pushable_boulder", ...}`, from the transpile driver's
+    `Map{id:03d}.template_fields.json` sidecar — see the module comment above
+    `TF_KIND_ITEM_BALL`) converts an event STRAIGHT to a native pokeemerald
+    object template instead of the ordinary NPC/trainer/movement resolution
+    path: an `item_ball` gets
     `graphics_id=OBJ_EVENT_GFX_ITEM_BALL`, `script=Common_EventScript_
     FindItem`, `route_id` = the sidecar's ITEM_* constant, `movement_range_x`
     = its amount, and the SAME hide flag `_terminal_self_switch_hide_flags`
@@ -2036,7 +2084,12 @@ def build_object_events(
     exactly the item_ball shape, but on a berry event). A native tree's
     pick/growth state lives entirely in its save slot, never in the object
     template's visibility flag (vanilla convention — every berry tree in
-    engine/data/maps/Route102/map.json carries `"flag": "0"`).
+    engine/data/maps/Route102/map.json carries `"flag": "0"`). A
+    `pushable_boulder` gets `graphics_id=OBJ_EVENT_GFX_PUSHABLE_BOULDER`,
+    `script=EventScript_StrengthBoulder`,
+    `movement_type=MOVEMENT_TYPE_LOOK_AROUND`, and `flag="0"` ALWAYS — see the
+    `TF_KIND_PUSHABLE_BOULDER` emission arm's comment for why a despawn flag
+    is never meaningful here even though vanilla itself assigns one.
 
     A template event whose boot page ALSO independently resolves a
     `trainer_sight_or_berry_tree_id` claim — a visible battle Trainer(N)'s
@@ -2370,6 +2423,37 @@ def build_object_events(
                         flag="0",
                         movement_type=BERRY_TREE_MOVEMENT_TYPE,
                         route_id=str(bid),
+                    )
+                )
+            elif tf_kind == TF_KIND_PUSHABLE_BOULDER:
+                # ALWAYS "0", never `template_flags.get(eid, ...)`. Vanilla
+                # DOES assign every shipped boulder a sequential
+                # FLAG_TEMP_11.._1F (see PUSHABLE_BOULDER_* module comment),
+                # but that flag only does something for a boulder that can be
+                # permanently removed — `HandleBoulderFallThroughHole`
+                # (engine/src/field_control_avatar.c:1402) FlagSets it when
+                # the boulder falls through an `MB_MT_PYRE_HOLE` tile, and
+                # `TrySpawnObjectEvents`' `!FlagGet(template->flagId)` gate
+                # (engine/src/event_object_movement.c ~2908/2947) is what then
+                # keeps it gone. Uranium's `pbPushThisBoulder` call is bare —
+                # no vanish outcome, no fall-through-hole tile in the
+                # converted corpus — so nothing in the converted script would
+                # ever FlagSet a minted flag, and the push mechanic itself
+                # (`TryPushBoulder`, field_player_avatar.c:1038-1044) keys
+                # purely on `graphics_id` regardless of `flag`. Spending a
+                # FLAG_TEMP_11.._1F slot from the shared, capacity-15
+                # ROCK_FLAG pool (also used by smashable rocks and hidden
+                # cutscene actors on the same map) for a mechanism that can
+                # never fire would just shrink that budget for no behavioral
+                # gain — a boulder is permanently visible scenery here, same
+                # reasoning as the berry_tree arm above.
+                result.object_events.append(
+                    ObjectEvent(
+                        x=event["x"], y=event["y"],
+                        graphics_id=PUSHABLE_BOULDER_GFX,
+                        script=PUSHABLE_BOULDER_SCRIPT,
+                        flag="0",
+                        movement_type=PUSHABLE_BOULDER_MOVEMENT_TYPE,
                     )
                 )
             else:
@@ -3554,8 +3638,9 @@ def build_slice_maps(
     with no reference-file dependencies).
 
     `template_fields` (Uranium map id -> that map's `build_object_events`
-    `template_fields` dict — event id -> `{"kind": "item_ball"|"berry_tree",
-    ...}`, from `Map{id:03d}.template_fields.json`) is forwarded per-map,
+    `template_fields` dict — event id -> `{"kind": "item_ball"|"berry_tree"|
+    "pushable_boulder", ...}`, from `Map{id:03d}.template_fields.json`) is
+    forwarded per-map,
     matching `event_traits`' legacy convention: a map absent from the outer
     dict, or the dict itself being `None`, is legacy behavior for that map
     (no template events). `berry_tree` ids are assigned ONCE up front, across

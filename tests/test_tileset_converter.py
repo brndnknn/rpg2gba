@@ -3684,6 +3684,45 @@ def test_build_object_events_berry_tree_missing_id_fails_loud() -> None:
         )
 
 
+def _pushable_boulder_tf() -> dict:
+    return {"kind": mw.TF_KIND_PUSHABLE_BOULDER}
+
+
+def test_build_object_events_pushable_boulder_fields() -> None:
+    """A kind="pushable_boulder" template gets the fixed native fields
+    (graphics_id, script, movement_type — all matching vanilla's own shipped
+    boulders, e.g. engine/data/maps/FieryPath/map.json) and flag stays "0":
+    unlike vanilla's FLAG_TEMP_11.._1F, nothing in the converted corpus can
+    ever FlagSet it (no fall-through-hole tiles, no removeobject call for a
+    bare `pbPushThisBoulder`), and the push mechanic itself is keyed purely
+    on graphics_id (`TryPushBoulder`, field_player_avatar.c)."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {"map_id": 33, "events": [_event(1, 4, 4, [_page(name="Boulder")])]}
+    result = mw.build_object_events(
+        map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(),
+        template_fields={1: _pushable_boulder_tf()},
+    )
+    (obj,) = result.object_events
+    assert obj.graphics_id == mw.PUSHABLE_BOULDER_GFX
+    assert obj.script == mw.PUSHABLE_BOULDER_SCRIPT
+    assert obj.movement_type == mw.PUSHABLE_BOULDER_MOVEMENT_TYPE
+    assert obj.flag == "0"
+    assert obj.route_id == "0"
+
+
+def test_build_object_events_pushable_boulder_unexpected_payload_key_fails_loud() -> None:
+    """`pbPushThisBoulder` takes no arguments, so a pushable_boulder payload
+    carrying any key besides 'kind' is forward-compat unknown -> fail loud,
+    the mirror image of item_ball/berry_tree's missing-required-key checks."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(33, "Route 1")
+    map_json = {"map_id": 33, "events": [_event(1, 4, 4, [_page(name="Boulder")])]}
+    with pytest.raises(ValueError):
+        mw.build_object_events(
+            map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(),
+            template_fields={1: {"kind": mw.TF_KIND_PUSHABLE_BOULDER, "amount": 1}},
+        )
+
+
 def test_build_object_events_template_fields_unknown_kind_fails_loud() -> None:
     """A template_fields kind other than item_ball/berry_tree is forward-compat
     unknown -> fail loud."""
