@@ -57,6 +57,7 @@ RULE_TRIGGER_OVERLAY_MODEL_UNENFORCED = "trigger_overlay_model_unenforced"
 RULE_BOUNDARY_NOT_CROSSING = "boundary_not_crossing"
 RULE_BOUNDARY_UNCLAIMED = "boundary_unclaimed"
 RULE_BOUNDARY_MODEL_UNENFORCED = "boundary_model_unenforced"
+RULE_DERIVED_HASH_INELIGIBLE = "derived_hash_ineligible"
 
 
 @dataclass(frozen=True)
@@ -452,6 +453,7 @@ def check_chapter(
     archetype_model: ArchetypeModel | None = None,
     beat_model: BeatModel | None = None,
     boundary_model: BoundaryModel | None = None,
+    derived: dict[str, str] | None = None,
     live_chapter: bool = False,
 ) -> list[Finding]:
     """Check one chapter's generated rows against its authored dispositions.
@@ -476,6 +478,15 @@ def check_chapter(
     row that actually crosses out of this chapter's authoring-time slice,
     and be claimed by a beat registered in the chapter that arrives next
     (see `BoundaryModel`'s docstring and `_check_boundary`).
+
+    `derived`, if supplied, is the machine-derived sidecar (`row_id ->
+    derived_hash`, `dispositions.load_derived`) -- see `_check_derived_hash`
+    for the eligibility recheck and the corpus-wide tally this backs
+    (`RULE_DERIVED_HASH_INELIGIBLE`). Unlike `capabilities`/`approach`/
+    `route`/etc., there is no "unenforced" degradation for a missing
+    sidecar: `None` (or an empty dict) just means nothing was machine-
+    derived yet, which is the ordinary state for a brand-new pipeline with
+    no sidecar at all, not a gap in coverage.
 
     `live_chapter` governs `RULE_ARCHETYPE_CONFORMANCE`'s (and, identically,
     `RULE_UNREGISTERED_BEAT`'s, and `RULE_BOUNDARY_NOT_CROSSING`'s/
@@ -814,6 +825,8 @@ def check_chapter(
             dispositions, boundary_model=boundary_model, live_chapter=live_chapter
         )
     )
+
+    findings.extend(_check_derived_hash(rows_by_id, derived))
 
     findings.sort(key=lambda f: (f.row_id, f.rule))
     return findings
@@ -1208,6 +1221,78 @@ def _check_boundary(
                 ),
                 severity=severity,
             ))
+
+    return findings
+
+
+def _check_derived_hash(
+    rows_by_id: dict[str, ManifestRow],
+    derived: dict[str, str] | None,
+) -> list[Finding]:
+    """`RULE_DERIVED_HASH_INELIGIBLE`: never trust a sidecar entry's mere
+    presence -- recompute `may_be_cosmetic` independently for every row it
+    names, and flag any entry sitting on a row this checker itself judges
+    ineligible for machine derivation (`REDERIVATION_PLAN.md` §15.2 item 1).
+
+    This is the cross-game seam: a brand-new Essentials game starts with no
+    hand-authored dispositions file at all, so `derived`'s row count against
+    the generated manifest's row count IS the automation ratio. That only
+    means something if a sidecar entry is *proof*, not a claim -- hence the
+    recheck here rather than trusting whatever wrote the sidecar.
+
+    A `row_id` in `derived` that names no row in `rows_by_id` at all (a
+    stale entry pointing at deleted/renamed content) is not this rule's
+    problem -- `RULE_ORPHAN_DISPOSITION` already exists for exactly that
+    shape on the dispositions side, and adding a second orphan check here
+    for a sidecar with no equivalent authored-file semantics is scope this
+    task does not need; such an entry is silently excluded from both the
+    per-row check and the tally below.
+    """
+    findings: list[Finding] = []
+    if not derived:
+        return findings
+
+    matched = 0
+    for row_id, _derived_hash in derived.items():
+        row = rows_by_id.get(row_id)
+        if row is None:
+            continue
+        matched += 1
+        if not row.may_be_cosmetic:
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_DERIVED_HASH_INELIGIBLE,
+                message=(
+                    "row carries a derived_hash in the machine-derived "
+                    "sidecar, but this checker's own may_be_cosmetic "
+                    "recheck judges the row ineligible for machine "
+                    "derivation -- a sidecar entry's presence is never "
+                    "trusted on its own; either the row was never staged "
+                    "(unhandled is None), carries unhandled transpile "
+                    "queue entries, an unrecognized head/code, or a "
+                    "state-writing effect tag"
+                ),
+                severity="error",
+            ))
+
+    # Reported only when non-zero -- same idiom as the `archetype_exempt`
+    # tally above: an empty/no-sidecar chapter has nothing to tally, and a
+    # bare `Finding(..., 0)` on every call would turn every clean chapter's
+    # `findings == []` expectation into a false positive. A nonzero count is
+    # exactly the automation-ratio signal this sidecar exists to make
+    # visible.
+    if matched:
+        findings.append(Finding(
+            row_id="chapter",
+            rule=RULE_DERIVED_HASH_INELIGIBLE,
+            message=(
+                f"{matched} row(s) carry a derived_hash in the machine-"
+                "derived sidecar this chapter -- tracked so the automation "
+                "ratio (machine-derived rows vs. total manifest rows) is "
+                "visible growth, not quiet drift"
+            ),
+            severity="warning",
+        ))
 
     return findings
 

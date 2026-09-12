@@ -4,14 +4,18 @@
     python -m rpg2gba.chapter_manifest check --chapter CH04
     python -m rpg2gba.chapter_manifest review --chapter CH04
 
-`generate` writes the manifest; `check` and `review` resolve the generated
-manifest and the authored disposition file by convention:
+`generate` writes the manifest and its machine-derived sidecar; `check` and
+`review` resolve the generated manifest, the authored disposition file, and
+(for `check`) the sidecar by convention:
 
     reference/manifests/<chapter>.manifest.json       (generator.py output)
-    reference/manifests/<chapter>.dispositions.json    (dispositions.py)
+    reference/manifests/<chapter>.dispositions.json    (dispositions.py, hand-authored)
+    reference/manifests/<chapter>.derived.json         (generator.py output)
 
-with `--manifest`/`--dispositions` overrides for pointing at a scratch copy.
-This module only reads those two files; it never writes either.
+with `--manifest`/`--dispositions`/`--derived` overrides for pointing at a
+scratch copy. This module never writes the dispositions file; it does write
+the manifest and the sidecar (`generate`), and only reads all three
+otherwise.
 """
 from __future__ import annotations
 
@@ -28,8 +32,8 @@ from .archetype_model import build_archetype_model
 from .beat_model import build_beat_model
 from .boundary_model import build_boundary_model
 from .capability_model import build_capability_model
-from .dispositions import disposition_path, load_dispositions
-from .generator import generate_chapter_manifest, write_manifest
+from .dispositions import derived_path, disposition_path, load_derived, load_dispositions
+from .generator import generate_chapter_manifest, write_derived, write_manifest
 from .route_model import build_route_model
 from .schema import ManifestRow, row_from_dict
 
@@ -102,27 +106,39 @@ def cli() -> None:
 @click.option("--chapter", required=True, help="Chapter id, e.g. CH04.")
 @click.option("--manifest", type=click.Path(path_type=Path), default=None,
               help="Manifest output path (default: reference/manifests/<chapter>.manifest.json)")
+@click.option("--derived", "derived_path_opt", type=click.Path(path_type=Path), default=None,
+              help="Machine-derived sidecar output path "
+                   "(default: reference/manifests/<chapter>.derived.json)")
 @click.option("--build-dir", type=click.Path(exists=True, path_type=Path),
               default=DEFAULT_BUILD_DIR,
               help="Converted-map build directory (default: output/uranium-build)")
 @click.option("--chapters", "chapters_path", type=click.Path(exists=True, path_type=Path),
               default=DEFAULT_CHAPTERS_PATH,
               help="Chapter/map chain JSON (default: reference/chapters.json)")
-def generate_cmd(chapter: str, manifest: Path | None, build_dir: Path,
-                  chapters_path: Path) -> None:
+def generate_cmd(chapter: str, manifest: Path | None, derived_path_opt: Path | None,
+                  build_dir: Path, chapters_path: Path) -> None:
     """Generate a chapter's manifest from converted map data."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     manifest_file = manifest or _manifest_path(chapter)
     manifest_file.parent.mkdir(parents=True, exist_ok=True)
+    # Sibling of wherever the manifest actually landed, not a fixed
+    # chapter-keyed default -- a caller pointing `--manifest` at a scratch
+    # path (every generator test does this) gets its sidecar alongside it,
+    # not written into the real reference/manifests/ tree by surprise.
+    derived_file = derived_path_opt or derived_path(chapter, root=manifest_file.parent)
+    derived_file.parent.mkdir(parents=True, exist_ok=True)
 
     rows = generate_chapter_manifest(chapter, build_dir=build_dir, chapters_path=chapters_path)
     write_manifest(rows, manifest_file)
+    write_derived(rows, derived_file)
 
     undispositionable = sum(1 for row in rows if not row.is_dispositionable)
     needs_citation = sum(1 for row in rows if row.needs_citation)
+    derived_count = sum(1 for row in rows if row.may_be_cosmetic)
     click.echo(f"wrote {manifest_file}: {len(rows)} rows, "
                f"{undispositionable} undispositionable, {needs_citation} need citation")
+    click.echo(f"wrote {derived_file}: {derived_count} machine-derived row(s)")
     sys.exit(0)
 
 
@@ -134,6 +150,10 @@ def generate_cmd(chapter: str, manifest: Path | None, build_dir: Path,
               type=click.Path(exists=True, path_type=Path), default=None,
               help="Disposition JSON path "
                    "(default: reference/manifests/<chapter>.dispositions.json)")
+@click.option("--derived", "derived_path_opt",
+              type=click.Path(exists=True, path_type=Path), default=None,
+              help="Machine-derived sidecar JSON path, for the derived-hash rule "
+                   "(default: reference/manifests/<chapter>.derived.json)")
 @click.option("--build-dir", type=click.Path(exists=True, path_type=Path),
               default=DEFAULT_BUILD_DIR,
               help="Converted-map build directory, for the approach model "
@@ -147,12 +167,14 @@ def generate_cmd(chapter: str, manifest: Path | None, build_dir: Path,
               help="Chapter/map chain JSON, for archetype-conformance severity "
                    "(default: reference/chapters.json)")
 def check_cmd(chapter: str, manifest: Path | None, dispositions_path_opt: Path | None,
-              build_dir: Path, route_path_opt: Path | None, chapters_path: Path) -> None:
+              derived_path_opt: Path | None, build_dir: Path, route_path_opt: Path | None,
+              chapters_path: Path) -> None:
     """Check a chapter's manifest against its dispositions; nonzero exit on error."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     manifest_file = manifest or _manifest_path(chapter)
     dispositions_file = dispositions_path_opt or disposition_path(chapter)
+    derived_file = derived_path_opt or derived_path(chapter)
 
     if not manifest_file.exists():
         raise click.ClickException(f"manifest not found: {manifest_file}")
@@ -161,6 +183,11 @@ def check_cmd(chapter: str, manifest: Path | None, dispositions_path_opt: Path |
 
     rows = load_manifest(manifest_file)
     dispositions = load_dispositions(dispositions_file)
+    # Same exists()-gated pattern as the dispositions file above, but the
+    # sidecar's ABSENCE is not an error: a brand-new Essentials game (or a
+    # chapter predating this sidecar) has none at all, and that is exactly
+    # the "0% automated" state the ratio this sidecar backs is meant to show.
+    derived = load_derived(derived_file) if derived_file.exists() else None
 
     approach = GraphApproachModel(
         chapter, maps_dir=build_dir / "maps", tilesets_json=build_dir / "tilesets.json")
@@ -173,7 +200,7 @@ def check_cmd(chapter: str, manifest: Path | None, dispositions_path_opt: Path |
     findings = checker.check_chapter(
         rows, dispositions, capabilities=capabilities, approach=approach, route=route,
         archetype_model=archetype_model, beat_model=beat_model,
-        boundary_model=boundary_model, live_chapter=live_chapter)
+        boundary_model=boundary_model, derived=derived, live_chapter=live_chapter)
 
     if not findings:
         click.echo(f"chapter {chapter}: OK ({len(rows)} rows)")

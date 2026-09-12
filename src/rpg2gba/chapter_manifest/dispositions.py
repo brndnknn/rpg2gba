@@ -108,6 +108,58 @@ def _parse_entry(path: Path, row_id: str, entry: Any) -> Disposition:
     )
 
 
+def derived_path(chapter_id: str, *, root: Path | None = None) -> Path:
+    """Path convention: ``reference/manifests/<chapter_id>.derived.json``.
+
+    The sidecar sits beside the generated manifest and the authored
+    dispositions file, but this module only *reads* it (`load_derived`
+    below) -- it is written by `generator.py`, not here. That keeps this
+    module's single-writer invariant (see the module docstring) true for
+    the file this module actually owns: nothing but a human, or
+    `write_dispositions` on their behalf, ever writes the dispositions
+    file, and the sidecar is deliberately a separate file for the same
+    reason -- so the generator can write ITS half without ever touching
+    the authored one.
+    """
+    base = root if root is not None else MANIFESTS_DIR
+    return base / f"{chapter_id}.derived.json"
+
+
+def load_derived(path: Path) -> dict[str, str]:
+    """Parse the machine-derived sidecar into `row_id -> derived_hash`.
+
+    Fails loud (CLAUDE.md §4.5) on malformed JSON, a non-object top level,
+    or any key/value that is not a string -- this loader never silently
+    drops or coerces a bad entry. A MISSING file is the caller's
+    responsibility (same pattern as the dispositions file): `__main__.py`
+    checks `.exists()` before calling this, so a chapter with no sidecar
+    yet (or a brand-new Essentials game with none at all) simply never
+    calls `load_derived`.
+    """
+    with path.open(encoding="utf-8") as f:
+        try:
+            raw = json.load(f)
+        except json.JSONDecodeError as exc:
+            raise DispositionFileError(f"{path}: invalid JSON: {exc}") from exc
+
+    if not isinstance(raw, dict):
+        raise DispositionFileError(
+            f"{path}: expected a JSON object mapping row_id -> derived_hash, "
+            f"got {type(raw).__name__}"
+        )
+
+    result: dict[str, str] = {}
+    for row_id, value in raw.items():
+        if not isinstance(row_id, str) or not isinstance(value, str):
+            raise DispositionFileError(
+                f"{path}: entry {row_id!r} -> {value!r} must be a string "
+                f"row_id mapping to a string derived_hash, got "
+                f"{type(row_id).__name__} -> {type(value).__name__}"
+            )
+        result[row_id] = value
+    return result
+
+
 def write_dispositions(dispositions: dict[str, Disposition], path: Path) -> None:
     """Serialize `row_id -> Disposition` deterministically.
 

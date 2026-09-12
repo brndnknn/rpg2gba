@@ -878,3 +878,38 @@ def write_manifest(rows: list[ManifestRow], path: Path) -> None:
     payload = [row_to_dict(row) for row in ordered]
     text = json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=False)
     path.write_text(text + "\n", encoding="utf-8")
+
+
+def write_derived(rows: list[ManifestRow], path: Path) -> None:
+    """Writes the machine-derived sidecar (`row_id -> derived_hash`),
+    `REDERIVATION_PLAN.md` §15.2 item 1.
+
+    This module has no notion yet of "this row was machine-derived" beyond
+    eligibility -- there is no transpiler-driven auto-disposition step in
+    the pipeline today, only the manifest's own `may_be_cosmetic` judgment
+    of what COULD be waved through as cosmetic without a human decision.
+    The honest minimal implementation, and the one this function gives, is:
+    every row `ManifestRow.may_be_cosmetic` accepts gets an entry, keyed to
+    its `content_hash` -- the same value `checker.py` compares an authored
+    disposition's `affirmed_hash` against, so a later content change
+    invalidates a sidecar entry exactly the way it invalidates a human
+    affirmation. `checker._check_derived_hash` still independently rechecks
+    `may_be_cosmetic` against every entry here rather than trusting this
+    function's judgment call at check time -- the eligibility gate is
+    intentionally duplicated in both places (CLAUDE.md §4.5: never trust a
+    stored claim's mere presence), so drift between "what the generator
+    thought was eligible when it wrote this" and "what the checker judges
+    eligible now" is caught, not silently inherited.
+
+    A future step that has the pipeline actually AUTO-DISPOSITION some rows
+    (rather than merely noting which ones are eligible to be) narrows this
+    function's population accordingly; nothing about the sidecar's shape or
+    the checker's recheck needs to change when that happens.
+    """
+    payload = {
+        row.row_id: row.content_hash
+        for row in sorted(rows, key=lambda r: r.row_id)
+        if row.may_be_cosmetic
+    }
+    text = json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=False)
+    path.write_text(text + "\n", encoding="utf-8")
