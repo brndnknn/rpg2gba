@@ -1064,3 +1064,94 @@ warnings while #92 is open — honest, but unenforced.
 - `map035/seam/N/map040` derives identically under both `require_clearing` questions and is
   not an obstacle case; its non-reproduction under #95 is a disposition-generator concern
   handled by 14.1/14.4, not a derivation defect.
+
+### 14.6 Operator rulings, 2026-09-12 — where `derived_hash` lives, and the condition classifier
+
+Two rulings, both taken after measurement rather than from priors. **The measurement refuted
+the build agent's own proposal on the way**, which is why the numbers are recorded here: the
+cheap-looking lever was worth ~0 rows and the expensive-looking one was worth ~110.
+
+**Ruling 1 — `derived_hash` goes in a GENERATED SIDECAR, not the dispositions file.**
+`reference/manifests/CHnn.derived.json`, written by `generator.py`, mapping `row_id →
+derived_hash` and nothing else. The checker loads manifest + dispositions + derived and joins
+three ways by `row_id`.
+
+- **`dispositions.py` stays single-writer** and its module docstring stays *true* rather than
+  being amended — "The generator never writes here — that separation is the whole point" is
+  the invariant, and 14.2's two-writer plan would have retired it in exchange for one fewer
+  file. `Disposition`'s docstring at `schema.py:453-458` also stays literally correct. So
+  **one docstring amendment, not the two 14.2 predicted** — and the one is a *reference* to
+  the sidecar, not a retraction.
+- **The checker recomputes eligibility itself** from the manifest and never trusts the
+  generator's stamp: a `derived_hash` satisfies `RULE_UNAFFIRMED_DISPOSITION` only on a row
+  whose eligibility predicate the checker re-derives and confirms. A `derived_hash` present on
+  an ineligible row is a new error, not a pass. Otherwise the stamp is exactly the
+  un-greppable rubber stamp `archetype_exempt`'s docstring exists to prevent.
+- `derived_hash` is still **counted corpus-wide**, as 14.2 required; the count reads the
+  sidecar.
+- **The deciding argument is the cross-game pipeline, not this branch.** The end state is a
+  new Essentials fan game dropped in with *no* hand-authored dispositions file at all — every
+  row derived. A sidecar makes "no hand file" the natural resting state (the checker loads a
+  file that isn't there and finds zero hand decisions). Two-writers-in-one-file makes the
+  hand-authored file *mandatory*, because it would be where the generated stamps live: a new
+  game's first run would have to create a file whose stated purpose is "things a human
+  decided." Secondary benefit: the two files' row counts **are** the automation ratio, per
+  chapter, readable from the filesystem and in git history, instead of a metric needing a
+  script.
+
+**Ruling 2 — P8b stops discarding the condition string and classifies it.** `needs_citation`
+narrows to *unclassified* families. This is a manifest-schema change and a checker-rule change,
+ruled in under CLAUDE.md §10.
+
+**Measured ground state for ruling 2 (2026-09-12, all five manifests + all 18 CH01–CH05 map
+JSONs under `output/uranium-build/maps/`):**
+
+| | |
+|---|---|
+| Rows, corpus-wide | **492** (CH01 211, CH02 83, CH03 131, CH04 42, CH05 25). CH01–CH04 = 467, matching 14.0 |
+| Citation-owing rows | **128** — `script_typed_conditions` only **110**, both **11**, `unrecognized_heads` only **7** |
+| Rows a head fix could ever clear | **18** of 128 |
+| Script-typed condition instances | **147**, collapsing to **76 distinct texts**, collapsing to **14 idiom families** |
+| Judgment-free families | **10 of 14** — one function/attribute name with interchangeable literal arguments |
+| Uranium-specific families | **4** (`jvGiveReward`/`jvNextReward`, `isCustomGame?`, `showRulesetSettings`, `isRockSmashSoftlocked?`) ≈ **16 of 147 instances, ~11%** |
+
+- **The string is in hand and thrown away.** `generator.py:575-580` sees code 111 /
+  `COND_TYPE_SCRIPT` (12), increments the count, and discards `params[1]`. The generator then
+  re-walks the same condition text 40 lines later (`:619-628`) to pull heads out of it. The
+  manifest records *that* a page has a Ruby condition and nothing about what it says — which
+  is the whole reason 110 rows owe a human a citation. The data needed to classify them was
+  discarded at parse time, not absent from the source.
+- **Recognition already exists; it is not applied to condition text.** `get_character`,
+  `pbItemBall`, `pbTrainerBattle`, `pbRockSmash`, `pbPickBerry`, `pbHasSpecies` and
+  `pbPhoneBattleCount` are all in the transpiler's recognized set today. This is **the
+  corpus's largest single instance of #97** (recognition and emission as unlinked layers) and
+  #97 should be read as pointing here.
+- **Text-level uniqueness is not shape-level uniqueness.** 55 of 76 distinct texts occur
+  exactly once (72% of texts, 37% of instances) but nearly all are the same four call patterns
+  with different literals — 22 distinct `pbTrainerBattle(...)`, plus `Kernel.pbItemBall`,
+  `Kernel.pbReceiveItem`, `$game_player.y` variants. Do not cost this off the singleton count.
+- **Two genuine outliers need judgment and get a fallback bucket, not a pattern:**
+  `!pbGet(1).is_a?(Numeric) || $game_variables[1] < 0` and one sibling are compound booleans,
+  not bare comparisons.
+- **REFUTED, recorded so it is not re-proposed:** deriving the `source` citation by joining
+  `script_heads` against `reference/recon/uranium_script_calls.md` clears ~**0** additional
+  rows. Only 18 of 128 rows involve an unrecognized head, and the 11 heads behind them
+  (`pbPushThisBoulder`, `isRockSmashSoftlocked`, `pbGet`, `pbSet`, `isCustomGame`,
+  `showRulesetSettings`, `jvGiveReward`, `jvNextReward`, `pbNextMysteryGiftID`, `pbPokerus`,
+  `pbSetPokemonCenter`) are **exactly 14.1's ten work items**. The head half of the citation
+  surface was already in scope; the hypothesis that a recon join would shrink it was wrong.
+- **Carried caveat — this is an instance-and-shape measurement, not a per-row one.** The
+  residual after classification is **estimated** at 15–25 rows of the 110, not measured; a
+  per-row family join was offered before the ruling and the operator declined it as
+  unnecessary. If the residual lands materially above 25, that is new information, not a
+  regression.
+- **CH04 and CH05 are already paid for.** All 27 of their citation-owing rows carry a
+  non-empty `source` today (18 + 9, zero missing), so the classifier's win is CH01–CH03's
+  101 rows. Existing hand citations become redundant but stay valid.
+- **Incidental defect found while inventorying, fix in passing:**
+  `chapter_atlas/census.py` `MECHANIC_BY_HEAD` declares `"pbRockSmash"` twice (`:90` and
+  `:109`), the second silently shadowing the first. Same value, so no behaviour change today.
+- **Cross-game reusability is the point.** ~89% of condition instances are vanilla Essentials
+  shapes (`get_character`, `$game_player`, `$PokemonGlobal`, `Kernel.pbItemBall`,
+  `pbPhoneBattleCount`), so the classifier transfers to the next fan game unchanged. Per-row
+  hand citation transfers to nothing.

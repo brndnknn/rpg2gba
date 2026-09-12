@@ -81,6 +81,21 @@ fail loud — a test that asserts every head/code the transpiler handles is pres
 manifest tables, and vice versa. §14.1 item 1 does the minimum (adds the missing entries);
 this item is the structural fix so the drift cannot silently return.
 
+**The corpus's largest instance of this item is in page CONDITIONS, not command bodies
+(measured 2026-09-12, `REDERIVATION_PLAN.md` §14.6).** 110 of the 128 citation-owing rows owe
+their citation *solely* to `script_typed_conditions > 0`, and the heads inside those
+conditions — `get_character`, `pbItemBall`, `pbTrainerBattle`, `pbRockSmash`, `pbPickBerry`,
+`pbHasSpecies`, `pbPhoneBattleCount` — are **already in the transpiler's recognized set**.
+`generator.py:575-580` counts a code-111 / `COND_TYPE_SCRIPT` condition and discards
+`params[1]`, so the recognition that exists is never applied to the text. The 147 instances
+collapse to 14 idiom families, 10 of them judgment-free. P8b's ruling-2 classifier
+(§14.6) is the fix for this half; this item remains the structural fix for the tables
+themselves.
+
+Also found while inventorying: `MECHANIC_BY_HEAD` declares `"pbRockSmash"` twice
+(`census.py:90` and `:109`), the second silently shadowing the first — same value, so no
+behaviour change, but a duplicate-key guard belongs in this item's fail-loud test.
+
 ### 2. Locate the Nuclear type's 1/8-HP-per-turn out-of-battle effect
 
 Not in `217_Nuclear_Forms_Moves.rb`; likely a field/step hook or
