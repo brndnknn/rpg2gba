@@ -59,6 +59,7 @@ EFFECT_TAGS: frozenset[str] = frozenset({
     "erase_event",
     "temp_switch_write",
     "control_flow",
+    "respawn_write",
 })
 
 # A row may be `cosmetic` only if its entire effect set is non-state-writing.
@@ -73,6 +74,17 @@ EFFECT_TAGS: frozenset[str] = frozenset({
 # (code 115) terminates the remainder of a page's command list — a page
 # carrying it cannot honestly be called decoration, regardless of what
 # commands precede it.
+# `respawn_write` (pbSetPokemonCenter -> setrespawn(HEAL_LOCATION_*)) is
+# likewise absent from COSMETIC_SAFE_TAGS below, hence state-writing via the
+# derived STATE_WRITING_TAGS set. It is deliberately its own tag, not `heal`:
+# pbSetPokemonCenter never heals the party (that is a separate pbHealAll/
+# code-314 call with its own `heal` tag) — it only records a respawn anchor.
+# That anchor is persistent state surviving a white-out AND a save/reload
+# (heal_locations.py's docstring: it feeds $PokemonGlobal.pokecenterMapId/X/
+# Y/Direction, read by Kernel.pbStartOver), so folding it into `heal` would
+# both mislabel the effect and, worse, let a page carrying only this call
+# read as `heal` and pass a reviewer's heal-is-usually-fine intuition when
+# what actually changed is where the player wakes up after fainting.
 COSMETIC_SAFE_TAGS: frozenset[str] = frozenset({
     "text",
     "choice",

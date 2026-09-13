@@ -168,6 +168,9 @@ _HEAD_EFFECT: dict[str, str] = {
     "pbHealAll": "heal",
     "pbPokeCenterPC": "pc",
     "pbTrainerPC": "pc",
+    # White-out respawn anchor, not `heal` — see schema.py's COSMETIC_SAFE_TAGS
+    # comment (P8b item 3, REDERIVATION_PLAN.md §15.2/§15.6).
+    "pbSetPokemonCenter": "respawn_write",
     "pbSetSelfSwitch": "self_switch_write",
     "pbCallBub": "bubble_ui",
     "pbEraseThisEvent": "erase_event",

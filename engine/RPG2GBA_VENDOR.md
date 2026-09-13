@@ -138,7 +138,7 @@ check the diff. Verified against `git diff 80cdfce2 HEAD -- engine/` on
   full Uranium trainer corpus) and `constants/flags.h` (relocating
   `TRAINER_REGISTERED_FLAGS_START` to a new `RPG2GBA_TRAINER_REGISTERED_FLAGS_*`
   region) — both save-layout-breaking, both explained in place.
-- **Roughly 15 generated-content include-hooks** — the recurring pattern of "the
+- **Roughly 16 generated-content include-hooks** — the recurring pattern of "the
   assembler writes a gitignored `*.gen.h`/`*.gen.json`/`.inc` file; a committed,
   sentinel-fenced one-or-two-line hook includes it, falling back to an empty
   stub or pristine upstream data when nothing is staged." Present in
@@ -149,8 +149,12 @@ check the diff. Verified against `git diff 80cdfce2 HEAD -- engine/` on
   `src/data/pokemon/species_info.h`, `src/data/graphics/{pokemon,trainers}.h`,
   `src/data/script_menu.h` (custom multichoice, same pattern), `sound/cry_tables.inc`
   (x2) and `sound/direct_sound_data.inc`, `data/event_scripts.s`, `data/map_events.s`,
-  `data/trainers.party`, `map_data_rules.mk`, `Makefile` (wild_encounters overlay),
-  and `tools/wild_encounters/wild_encounters_to_header.py`.
+  `data/trainers.party`, `map_data_rules.mk` (wild_encounters overlay *and* the
+  `URANIUM_HEAL_LOCATIONS` heal-location overlay, `json_data_rules.mk`), `Makefile`,
+  and `tools/wild_encounters/wild_encounters_to_header.py`. The heal-location
+  entry also sets `SetLastHealLocationWarp(HEAL_LOCATION_URANIUM_START)` in
+  `src/new_game.c`'s `WarpToTruck` — not an include-hook itself, but part of
+  the same white-out-respawn feature (§14.7/§15.6 in `REDERIVATION_PLAN.md`).
 
 Every item above is fenced with a sentinel comment naming its feature area
 (`URANIUM PATHFINDER SLICE`, `URANIUM MAP WALKER`, `URANIUM EMBEDDED SAVE`, or
@@ -168,7 +172,8 @@ layouts, scripts, and headers **into this tree**. Those are gitignored (see the
 repo-root `.gitignore`) and regenerated — **never commit pipeline output as
 engine source**. The assembler does **not** edit any tracked upstream file in place;
 it writes gitignored overlays — `data/maps/map_groups.gen.json`,
-`data/layouts/layouts.gen.json`, `data/maps/uranium_includes.inc`, the
+`data/layouts/layouts.gen.json`, `data/maps/uranium_includes.inc`,
+`src/data/heal_locations.gen.json`, the
 `uranium_*.h` / `CommonEvents.inc` headers, and the per-map dirs — which the committed
 include-hooks described above pull in. So after an assembly run `git status` stays
 clean against this repo's committed state (only the tracked hook files, not the

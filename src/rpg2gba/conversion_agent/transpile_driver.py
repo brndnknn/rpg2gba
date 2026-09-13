@@ -26,6 +26,7 @@ import click
 
 from rpg2gba.conversion_agent import deterministic, fork_index, hand_overrides, transpiler
 from rpg2gba.conversion_agent.flag_registry import FlagRegistry
+from rpg2gba.pbs_converter import heal_locations
 from rpg2gba.pbs_converter._id_map import IdMap
 from rpg2gba.tileset_converter import stairs
 from rpg2gba.tileset_converter.map_set import resolve_map_ids
@@ -550,6 +551,23 @@ def transpile_corpus(
     # Converted content of Uranium's full-screen starter-reveal scene; the
     # pbStarterSelector idiom queues without it (CLAUDE.md §4.3).
     ctx.starter_scene = transpiler._load_starter_selector_scene(reference_dir)
+    # (map_id, event_id, 0-based page_index) -> HEAL_LOCATION_* for a resolved
+    # pbSetPokemonCenter call site (P8b item 3, REDERIVATION_PLAN.md §15.2/
+    # §15.6). Required input, same posture as the species/item id maps above —
+    # called unguarded so a missing/malformed upstream artifact (maps_dir,
+    # tilesets.json, map_constants.json, metadata.h) fails loud here rather
+    # than silently emptying the table and turning every real call site into
+    # a queue entry with a misleading "not staged" reason. Scoped to this
+    # run's own map_ids (not the corpus-wide SLICE_MAP_IDS default) so a
+    # single-map debug run resolves the same call sites it would see in a
+    # full corpus run.
+    ctx.heal_locations = heal_locations.call_site_heal_locations(
+        maps_dir=maps_dir,
+        tilesets_json=out_dir / "tilesets.json",
+        map_constants_json=map_constants_path,
+        metadata_header=out_dir / "include" / "constants" / "metadata.h",
+        staged_map_ids=frozenset(map_ids),
+    )
     # Sheet name -> OBJ_EVENT_GFX_* for the code-41 live sprite swap. Read
     # unvalidated here (npc_gfx.load_npc_gfx_map's header check belongs to the
     # sprite pass); an unmapped sheet queues in the transpiler either way.
@@ -603,6 +621,12 @@ def transpile_corpus(
             trainer_manifest_path if trainer_manifest_path.is_file() else None,
         )
         extras |= _registry_minted_names(registry)
+        # HEAL_LOCATION_* for staged pbSetPokemonCenter sites: minted by
+        # heal_locations.py and written into the gitignored
+        # heal_locations.gen.json overlay by the assembler (a later step), so
+        # the git-tracked index can't see them. Common events never emit
+        # setrespawn (they always queue), so the CE gate below needs no extras.
+        extras |= set(ctx.heal_locations.values())
         violations = fork_index.verify_script(pory_text, index, extra_symbols=extras)
         if violations:
             lines = "\n".join(

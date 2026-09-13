@@ -190,7 +190,6 @@ def test_multi_page_emits_one_block_per_page() -> None:
     "call",
     [
         "pbCallBub(2)",
-        "Kernel.pbSetPokemonCenter",
         "pbRemoveDependency2",
         "Kernel.pbRemoveDependency2",
         "set_fog2(1)",
@@ -207,6 +206,19 @@ def test_strip_script_calls_dropped_text_preserved(call: str) -> None:
     # the script call left no trace
     assert call not in out
     assert out.count("msgbox(") == 1
+
+
+def test_set_pokemon_center_no_longer_strips_falls_through() -> None:
+    """`Kernel.pbSetPokemonCenter` was REMOVED from `_DIALOGUE_STRIP_RE`
+    (P8b item 3, REDERIVATION_PLAN.md §15.2/§15.6) — the recon ledger
+    corrected the STRIP ruling twice (reference/recon/uranium_script_calls.md
+    :71); it sets the white-out respawn point and is not stateless. A page
+    carrying it must fall through this fast-path classifier (return None)
+    rather than being silently dropped, so it reaches the real handling in
+    ``transpiler._emit_script_call`` (``_SET_POKEMON_CENTER_RE``)."""
+    ev = _event(_page(_cmd(D.SCRIPT, "Kernel.pbSetPokemonCenter"), _text("Welcome!")), id=4)
+    out = D.classify_pure_dialogue(2, ev)
+    assert out is None
 
 
 def test_conditional_branch_falls_through() -> None:

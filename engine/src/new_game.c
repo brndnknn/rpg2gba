@@ -13,6 +13,13 @@
 // reverting it restores always-flash-then-new-game boot behavior.
 #include "uranium_embedded_save.h"
 // END URANIUM EMBEDDED SAVE
+// BEGIN URANIUM PATHFINDER SLICE — pulls HEAL_LOCATION_URANIUM_START, used in
+// WarpToTruck() below to seed the first white-out respawn (S8.4 follow-up).
+// Neither this file nor overworld.h otherwise pulls this header; the other
+// call sites (heal_location.c, field_specials.c, etc.) each include it
+// directly. Removing this include breaks that call.
+#include "constants/heal_locations.h"
+// END URANIUM PATHFINDER SLICE
 #include "new_game.h"
 #include "random.h"
 #include "pokemon.h"
@@ -185,6 +192,17 @@ static void WarpToTruck(void)
     // player's-house spawn, swap this back to the MOKI_TOWN_PLAYERS_HOUSE_1F
     // call below (kept commented, not deleted).
     SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), MAP_NUM(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), WARP_ID_NONE, 7, 7);
+    // Vanilla seeds the first respawn point via `setrespawn` in
+    // data/maps/InsideOfTruck/scripts.inc:25, run from the truck intro our
+    // boot-skip never plays — so ClearSav1 leaves lastHealLocation zeroed and
+    // a white-out lands in MAP_PETALBURG_CITY (mapGroup 0/mapNum 0,
+    // include/constants/map_groups.h:15), not anywhere in the slice. Uranium's
+    // own fallback (pbStartOver, reference/scripts_dump/101__PField_Field.rb:
+    // 1920-1948) is MetadataHome (map 49) at (7,7) when no Center has been
+    // visited yet, i.e. exactly this spawn point. Seed it explicitly so a
+    // whiteout before the first Center visit respawns here instead of
+    // Petalburg. See REDERIVATION_PLAN.md §14.7/§15.6.
+    SetLastHealLocationWarp(HEAL_LOCATION_URANIUM_START);
     //
     // Previous POST-QUIZ spawn, kept for the starter-grant repro: the lab at
     // (14,8). (14,18) — just inside the entrance rug — crosses a row of "Hey,

@@ -49,6 +49,7 @@ from rpg2gba.conversion_agent.flag_registry import (
     resolve_variable_var,
 )
 from rpg2gba.pbs_converter._naming import to_constant
+from rpg2gba.pbs_converter.heal_locations import _CALL_RE as _SET_POKEMON_CENTER_RE
 
 logger = logging.getLogger(__name__)
 
@@ -406,6 +407,27 @@ _SHOW_MAP_RE = re.compile(r"^\s*(?:Kernel\.)?pbShowMap\s*$")
 # (engine/include/constants/flags.h:1463, "RECEIVED Running Shoes") — the
 # vanilla b-dash unlock flag.
 _RUNNING_SHOES_ON_RE = re.compile(r"^\s*\$PokemonGlobal\.runningShoes\s*=\s*true\s*$")
+
+# Kernel.pbSetPokemonCenter — the white-out respawn anchor
+# (reference/scripts_dump/101__PField_Field.rb:1666-1676:
+#   def pbSetPokemonCenter(map=$game_map.map_id, x=$game_player.x,
+#                           y=$game_player.y, direction=$game_player.direction)
+#     ...
+#   end
+# ). Previously ruled STRIP (still in `deterministic._DIALOGUE_STRIP_RE` until
+# this change); the recon ledger corrected that TWICE
+# (reference/recon/uranium_script_calls.md:71) — this call is the *only*
+# source of a white-out respawn point, and dropping it silently sends every
+# white-out to the global spawn (`MetadataHome`) instead of the local Center.
+# 64 call sites across 42 maps in the corpus; as of this change exactly one
+# (Map068 EV001 page0, the Kevlar Town Center) is staged and resolvable via
+# ``rpg2gba.pbs_converter.heal_locations.call_site_heal_locations()`` — every
+# other site queues (see ``_emit_script_call``) rather than guessing. Fork
+# native: `setrespawn HEAL_LOCATION_*` (engine/asm/macros/event.inc:1456-1459,
+# `SetLastHealLocationWarp`). Regex imported from ``heal_locations._CALL_RE``
+# rather than duplicated (CLAUDE.md §4.3 single source of truth) — it accepts
+# the bare call and the `Kernel.`-prefixed / up-to-4-literal-arg forms; see
+# that module for the exact accepted shapes.
 
 # $PokemonGlobal.seenStorageCreator=true — Essentials' "have you met Bill/the
 # PC's creator yet" flag; until set, script_menu.c prints the anonymous "SOMEONE'S
@@ -1066,6 +1088,18 @@ class TranspileContext:
     # swap naming one of these resolves to the exact state's constant instead of
     # the sheet's; see _emit_route_with_gfx_swaps.
     npc_gfx_states: dict[str, dict[tuple[int, int], str]] = field(default_factory=dict)
+
+    # (map_id, event_id, page_index) -> HEAL_LOCATION_* constant for a resolved
+    # `Kernel.pbSetPokemonCenter` call site, straight from
+    # rpg2gba.pbs_converter.heal_locations.call_site_heal_locations() (CLAUDE.md
+    # §4.3 single source of truth). ``page_index`` here is 0-based — the same
+    # basis as ``page_no`` below (set from ``page_idx`` in transpile_event,
+    # matching the manifest row_id per #98/7e2e2668), NOT the 1-based script
+    # block label numbering. Populated by the driver; a call site missing from
+    # this table (unstaged map, unresolved bare call, or a common event — see
+    # ``_emit_script_call``) queues instead of inventing a HEAL_LOCATION_*
+    # (CLAUDE.md §4.7 forward check).
+    heal_locations: dict[tuple[int, int, int], str] = field(default_factory=dict)
 
     # per-event cursor, set by transpile_event / transpile_common_event
     map_id: int = 0
@@ -3584,6 +3618,26 @@ class _PageEmitter:
                     f"seenStorageCreator continuation not 'true': {text[:120]!r}",
                 ),
             ]
+
+        # Kernel.pbSetPokemonCenter — white-out respawn anchor (see
+        # _SET_POKEMON_CENTER_RE above). Checked before _DIALOGUE_STRIP_RE
+        # (which no longer lists this head — recon corrected the STRIP ruling
+        # twice, reference/recon/uranium_script_calls.md:71). A common event
+        # has no single owning map/event to resolve a respawn tile against,
+        # so it always queues regardless of the lookup table's contents.
+        if _SET_POKEMON_CENTER_RE.match(text):
+            if self.ctx.event_id is not None and self.ctx.common_event_id is None:
+                key = (self.ctx.map_id, self.ctx.event_id, self.ctx.page_no)
+                heal_location = self.ctx.heal_locations.get(key)
+                if heal_location is not None:
+                    return [f"setrespawn({heal_location})"]
+            return [self.ctx.queue(
+                node.index, SCRIPT,
+                "pbSetPokemonCenter: call site not in the resolved "
+                "heal_locations table (unstaged map, unresolved bare call, "
+                "or a common event — no single owning map/event to resolve "
+                "a respawn tile against)",
+            )]
 
         if _DIALOGUE_STRIP_RE.match(text):
             return []

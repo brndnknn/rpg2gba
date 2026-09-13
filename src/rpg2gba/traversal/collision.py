@@ -88,3 +88,68 @@ def build_blocked_grid(
                 terrain_tags=arrays.terrain_tags,
             )
     return blocked
+
+
+# The RMXP passage byte's high bit ("*" in the RPG Maker editor's passage
+# grid) marks a counter: a piece of furniture the player cannot stand on, but
+# can interact *across* — the engine checks one tile further along the facing
+# direction when the immediately-faced tile is a counter. See
+# `Game_Player#front_map_x`/`front_map_y`+`check_event_trigger_touch`
+# (`reference/scripts_dump/023__Game_Player_v17.rb:196-215,343-356`), which
+# calls `Game_Map#counter?` (`reference/scripts_dump/025__Game_Map_v17.rb:343-354`).
+COUNTER_PASSAGE_BIT = 0x80
+
+
+def build_counter_grid(
+    grid: TileGrid, arrays: TilesetArrays
+) -> dict[tuple[int, int], bool]:
+    """{(x, y): is-counter} for every cell — a faithful port of
+    `Game_Map#counter?` (`reference/scripts_dump/025__Game_Map_v17.rb:343-354`):
+
+        for i in [2, 1, 0]
+          tile_id = data[x, y, i]
+          if tile_id == nil
+            return false
+          elsif @passages[tile_id] && @passages[tile_id] & 0x80 == 0x80
+            return true
+          end
+        end
+        return false
+
+    Layers are scanned top down (RMXP z-index 2, then 1, then 0 for the
+    standard 3-layer map — `TileGrid.tile_at`'s z is ascending, bottom
+    first, so this walks `z` from `grid.zsize - 1` down to `0`); the first
+    layer whose tile's passage byte has the counter bit (`0x80`) set wins.
+    The `tile_id == nil` branch is RMXP's out-of-bounds guard on `(x, y)`
+    itself, not on the tile id — this function is only ever called with
+    in-grid `(x, y)` (the caller's own `range(grid.ysize)`/`range(grid.xsize)`
+    loop), so that branch never fires here and is not reproduced.
+
+    Unlike `build_blocked_grid`'s `column_blocked` (which drops EMPTY tiles
+    from the scan before considering them), this does NOT skip empty
+    (id-0) tiles — `Game_Map#counter?` indexes `data[x, y, i]` and
+    `@passages[tile_id]` directly with no empty-tile special case, so tile id
+    0's own `passages[0]` entry is consulted exactly like any other id.
+
+    An out-of-range tile id for `arrays.passages` fails loud (`KeyError`),
+    mirroring `layout._passage_lookup`'s fail-loud convention for passage
+    lookups (CLAUDE.md §4.3/§4.5) — a passage byte decides real interaction
+    behavior, so a silent default here would be exactly the kind of "300 maps
+    later" bug that convention exists to prevent.
+    """
+    counters: dict[tuple[int, int], bool] = {}
+    for y in range(grid.ysize):
+        for x in range(grid.xsize):
+            is_counter = False
+            for z in range(grid.zsize - 1, -1, -1):
+                tile_id = grid.tile_at(x, y, z)
+                if not 0 <= tile_id < len(arrays.passages):
+                    raise KeyError(
+                        f"tile_id {tile_id} at ({x},{y},z={z}) out of range for "
+                        f"passages array (len {len(arrays.passages)})"
+                    )
+                if arrays.passages[tile_id] & COUNTER_PASSAGE_BIT:
+                    is_counter = True
+                    break
+            counters[(x, y)] = is_counter
+    return counters

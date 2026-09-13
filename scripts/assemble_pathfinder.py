@@ -31,6 +31,14 @@ Pass 2.6 (S8b5) — PokePod rematch table staging
     them as gitignored .gen.h fragments behind committed #include hooks in
     include/constants/rematches.h and src/battle_setup.c (see run_rematch_pass).
 
+Pass 2.7 (S8b6) — heal-location overlay
+    Derive the slice's white-out respawn points from `pbSetPokemonCenter` call
+    sites (`rpg2gba.pbs_converter.heal_locations`) and append them to an
+    overlay of the fork's `src/data/heal_locations.json`
+    (src/data/heal_locations.gen.json, gitignored; see run_heal_location_pass
+    docstring for the URANIUM_HEAL_LOCATIONS hook in
+    engine/json_data_rules.mk that selects it over the committed file).
+
 Pass 3 (S8d) — berry tree seed table
     Emit fork data/scripts/uranium_berry_trees.h (gitignored): the pre-planted
     berry-tree save-slot table consumed by new_game.c's NewGameInitData, right
@@ -764,6 +772,107 @@ def run_rematch_pass(out: Path, fork: Path, consts: dict, dry_run: bool) -> None
 
 
 # ---------------------------------------------------------------------------
+# S8b6: Heal-location overlay
+# ---------------------------------------------------------------------------
+
+def run_heal_location_pass(out: Path, fork: Path, consts: dict, dry_run: bool) -> None:
+    """Append the slice's white-out respawn points to an overlay of the fork's
+    `src/data/heal_locations.json`.
+
+    Entries come from `rpg2gba.pbs_converter.heal_locations.generate_entries`
+    (the start-anchor `HEAL_LOCATION_URANIUM_START` first, then Pokémon Center
+    entries derived from `pbSetPokemonCenter` call sites, sorted by id) — never
+    reimplemented or hand-listed here (CLAUDE.md §4.3).
+
+    Writes `fork/src/data/heal_locations.gen.json` (gitignored): the committed
+    upstream file's own `heal_locations` array with the slice's entries
+    appended, in the returned order. `engine/json_data_rules.mk`'s
+    `URANIUM_HEAL_LOCATIONS` var (near the top of the file) prefers this
+    overlay when present, falling back to the committed file when absent — a
+    repo with no overlay on disk builds pristine upstream behavior. The
+    committed file is always re-read fresh as the base (never a prior
+    overlay), mirroring `run_encounters_pass`'s `upsert_encounters` pattern, so
+    N runs with the same corpus produce byte-identical output (CLAUDE.md
+    §4.2) and entries never accumulate.
+
+    Two fail-loud checks beyond what `generate_entries` itself does:
+      - an id already present in the committed upstream file (never shadow a
+        vanilla heal location);
+      - a `map` value that is not one of `SLICE_MAP_IDS`' own `MAP_*`
+        constants (read from `consts`, the already-loaded `map_constants.json`
+        dict — never re-minted, CLAUDE.md §4.3) — `generate_entries` fails
+        loud on a *source call site's* map missing from the staged set, but a
+        resolved respawn can legally point at a DIFFERENT map (explicit
+        `pbSetPokemonCenter` args, or the anchor itself), so that destination
+        map needs its own check here or a heal location could reference a map
+        this build never assembles.
+
+    Also writes `out/heal_locations.json` via `heal_locations.write_entries`,
+    a plain review copy of just the slice's own entries (not the merged
+    overlay) — CLAUDE.md §4.4.
+    """
+    logger.info("=== S8b6: heal location overlay ===")
+    from rpg2gba.pbs_converter import heal_locations as hl
+
+    fork_heal_locations_path = fork / "src" / "data" / "heal_locations.json"
+    if not fork_heal_locations_path.is_file():
+        raise FileNotFoundError(
+            f"{fork_heal_locations_path} missing -- vendored engine incomplete"
+        )
+
+    upstream_text = fork_heal_locations_path.read_text(encoding="utf-8")
+    had_trailing_newline = upstream_text.endswith("\n")
+    upstream = json.loads(upstream_text)
+    upstream_list = upstream.get("heal_locations", [])
+    upstream_ids = {e["id"] for e in upstream_list}
+
+    entries, _resolutions = hl.generate_entries(
+        maps_dir=out / "maps",
+        tilesets_json=out / "tilesets.json",
+        map_constants_json=out / "porymap" / "map_constants.json",
+        staged_map_ids=frozenset(SLICE_MAP_IDS),
+        metadata_header=out / "include" / "constants" / "metadata.h",
+    )
+
+    valid_maps = {consts[str(mid)]["map_const"] for mid in SLICE_MAP_IDS}
+    for entry in entries:
+        if entry.id in upstream_ids:
+            raise ValueError(
+                f"heal location id {entry.id!r} already exists in the committed "
+                f"{fork_heal_locations_path} -- refusing to shadow an upstream entry"
+            )
+        if entry.map not in valid_maps:
+            raise ValueError(
+                f"heal location {entry.id!r} respawns onto {entry.map!r}, which "
+                "is not one of the maps this slice builds (SLICE_MAP_IDS) -- the "
+                "ROM would reference a map this build never assembles"
+            )
+
+    merged = dict(upstream)
+    merged["heal_locations"] = list(upstream_list) + [
+        {"id": e.id, "map": e.map, "x": e.x, "y": e.y} for e in entries
+    ]
+    gen_text = json.dumps(merged, indent=2, ensure_ascii=False)
+    if had_trailing_newline:
+        gen_text += "\n"
+
+    gen_path = fork_heal_locations_path.with_name(
+        fork_heal_locations_path.stem + ".gen" + fork_heal_locations_path.suffix
+    )
+    review_path = out / "heal_locations.json"
+
+    if not dry_run:
+        gen_path.parent.mkdir(parents=True, exist_ok=True)
+        gen_path.write_text(gen_text, encoding="utf-8")
+        hl.write_entries(entries, out_path=review_path)
+        logger.info("  wrote %s (+%d heal location(s))", gen_path.name, len(entries))
+    else:
+        logger.info(
+            "  [dry] would write %s (+%d heal location(s))", gen_path.name, len(entries)
+        )
+
+
+# ---------------------------------------------------------------------------
 # S8c: Fork assembly
 # ---------------------------------------------------------------------------
 
@@ -846,6 +955,17 @@ def run_fork_pass(
         npc_gfx_map_path=npc_gfx_map_path if npc_gfx_map_path.is_file() else None,
         trainer_manifest_path=trainer_manifest_path if trainer_manifest_path.is_file() else None,
     )
+    # HEAL_LOCATION_* constants are generated from heal_locations(.gen).json
+    # into an untracked header, so the index never carries them. Read the
+    # same file the build's URANIUM_HEAL_LOCATIONS hook selects (overlay if
+    # S8b6 wrote one, else upstream) — a setrespawn target absent from it
+    # would fail at make, so it must fail here first.
+    heal_json = fork / "src" / "data" / "heal_locations.gen.json"
+    if not heal_json.is_file():
+        heal_json = fork / "src" / "data" / "heal_locations.json"
+    gate_extras |= {
+        e["id"] for e in json.loads(heal_json.read_text(encoding="utf-8"))["heal_locations"]
+    }
     def _gate(pory_text: str, label: str) -> None:
         violations = fi.verify_script(pory_text, gate_index, extra_symbols=gate_extras)
         if violations:
@@ -1228,6 +1348,8 @@ def main() -> int:
                     help="Skip S8b4 (wild encounter tables already staged).")
     ap.add_argument("--skip-rematches", action="store_true",
                     help="Skip S8b5 (PokePod rematch table already staged).")
+    ap.add_argument("--skip-heal-locations", action="store_true",
+                    help="Skip S8b6 (heal-location overlay already staged).")
     args = ap.parse_args()
 
     repo_root = Path(__file__).parent.parent
@@ -1276,6 +1398,9 @@ def main() -> int:
 
     if not args.skip_rematches:
         run_rematch_pass(out, fork, consts, args.dry_run)
+
+    if not args.skip_heal_locations:
+        run_heal_location_pass(out, fork, consts, args.dry_run)
 
     run_fork_pass(out, fork, consts, staging, args.dry_run, batch_layouts=batch_layouts)
     run_berry_tree_pass(out, fork, args.dry_run)

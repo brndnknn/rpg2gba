@@ -77,6 +77,19 @@ ACTION_BUTTON_TRIGGER = 0  # RMXP page trigger: "talk to" (the NPC case)
 # (``pbSEPlay`` must not claim ``pbSEPlayWhatever``); the ``need_refresh =``
 # assignment ends in ``=`` (a non-word char, so ``\b`` would never follow) and is
 # its own branch without the anchor.
+#
+# ``Kernel.pbSetPokemonCenter`` REMOVED (P8b item 3, REDERIVATION_PLAN.md
+# §15.2/§15.6): the recon ledger corrected the STRIP ruling TWICE
+# (reference/recon/uranium_script_calls.md:71) — this call sets the white-out
+# respawn point and is not stateless. It is now handled in
+# ``transpiler._emit_script_call`` (``_SET_POKEMON_CENTER_RE`` ->
+# ``setrespawn(HEAL_LOCATION_*)`` on a resolved call site, else a queue entry).
+# Removing it from here means the three deterministic fast-path classifiers
+# that consult this regex (``_dialogue_body``, ``classify_simple_warp``,
+# ``_is_trainer_strip``) now correctly decline to fast-path any page carrying
+# this call — it falls through to the real transpiler/LLM path instead of
+# being silently dropped by a classifier that never sees the resolved
+# heal_locations table.
 _DIALOGUE_STRIP_RE = re.compile(
     r"^\s*(?:"
     r"(?:"
@@ -88,7 +101,6 @@ _DIALOGUE_STRIP_RE = re.compile(
     r"|\$scene\.spriteset\.addUserSprite"
     r"|(?:Kernel\.)?pbRemoveDependency2"
     r"|(?:Kernel\.)?pbAddDependency2"
-    r"|Kernel\.pbSetPokemonCenter"
     r")\b"
     r"|\$game_map\.need_refresh\s*="
     r")"

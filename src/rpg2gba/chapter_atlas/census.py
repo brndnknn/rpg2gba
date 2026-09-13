@@ -130,6 +130,10 @@ MECHANIC_BY_HEAD: dict[str, str] = {
     # table gap, not missing work (REDERIVATION_PLAN.md 15.1 item 1).
     "pbPokerus": "pokerus display check (folded to the else arm)",
     "pbNextMysteryGiftID": "mystery gift id (subsystem not ported, stripped)",
+    # White-out respawn anchor (P8b item 3, REDERIVATION_PLAN.md §15.2/§15.6) —
+    # was misclassified STRIP; now resolves to setrespawn(HEAL_LOCATION_*) on
+    # a staged call site, else queues (transpiler._SET_POKEMON_CENTER_RE).
+    "pbSetPokemonCenter": "white-out respawn anchor",
     # REDERIVATION_PLAN.md §15.1 item 8: already handled in transpiler.py
     # (resolve_native_object_template / detect_push_boulder) as a native
     # object-template idiom (TF_KIND_PUSHABLE_BOULDER), same family as
