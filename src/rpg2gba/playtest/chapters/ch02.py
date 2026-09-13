@@ -111,6 +111,7 @@ from .. import assertions
 from ..battle import in_battle, read_enemy_party, win_battle
 from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
+from ..whiteout import whiteout_beat
 
 logger = logging.getLogger(__name__)
 
@@ -1676,6 +1677,24 @@ def b17(emu: Emulator) -> None:
     _walk_absorbing(emu, "B17", *NORTH_EXIT_APPROACH_B,
                     absorb_wild=True, absorb_trainer=True)
     _require_map(emu, "B17", "MAP_ROUTE_01")
+
+
+# B18: the initial white-out anchor regression test (REDERIVATION_PLAN.md
+# §14.7/§15.6, standing rule). `MetadataHome`'s initial respawn (map 49,
+# Player's House 1F, (7,7)) is set in `engine/src/new_game.c`
+# (`SetLastHealLocationWarp(HEAL_LOCATION_URANIUM_START)`, commit 6df46066)
+# during new-game boot, before any chapter can run -- CH02 is the first
+# chapter after that anchor exists, so it is where this proves out. Before
+# 6df46066, a white-out landed in vanilla Petalburg City (§14.7's "LATENT
+# BUG"); this beat is the regression test for exactly that.
+whiteout_beat(
+    ch02, beat_name="B18",
+    heal_location_id="HEAL_LOCATION_URANIUM_START",
+    description="A forced white-out respawns at the initial anchor "
+                 "(MetadataHome, Player's House 1F (7,7)) -- regression "
+                 "test for the pre-6df46066 Petalburg white-out bug "
+                 "(REDERIVATION_PLAN.md §14.7/§15.6)",
+)
 
 
 def _b17_retired_wall_assertion(emu: Emulator) -> None:

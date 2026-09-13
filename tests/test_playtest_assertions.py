@@ -367,7 +367,9 @@ def test_beat_counts_unchanged_after_the_assertions_refactor() -> None:
     # route1 went 30 -> 31 on 2026-08-27: N5 (re-talking defeated Richey) was
     # registered once the silent-`Page2` bug it guards was fixed. kevlar
     # chains route1 as its predecessor, so it carries the same +1.
-    expected = {"CH01": 17, "CH02": 31, "CH03": 61}
+    # route1 went 31 -> 32 on 2026-09-13: B18 (the initial white-out anchor,
+    # REDERIVATION_PLAN.md §14.7/§15.6) was registered; kevlar carries the +1.
+    expected = {"CH01": 17, "CH02": 32, "CH03": 62}
     for name, count in expected.items():
         chapter = load_chapter(name)
         assert len(chapter.beats) == count, f"{name}: beat count drifted"

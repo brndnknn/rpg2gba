@@ -97,6 +97,15 @@ _PROBE_ENTRIES: dict[str, str] = {
     "off_tbp_opponenta": "offsetof(TrainerBattleParameter, params.opponentA)",
     # struct Main (include/main.h): gMain.callback2, for in-battle detection.
     "off_main_callback2": "offsetof(struct Main, callback2)",
+    # gMain.state (include/main.h:36, `u8 state`) -- CB2_WhiteOut's own
+    # ++gMain.state counter (engine/src/overworld.c:1931), driven by
+    # playtest.whiteout.force_white_out.
+    "off_main_state": "offsetof(struct Main, state)",
+    # SaveBlock1.lastHealLocation (include/global.h:1106, struct WarpData) --
+    # the white-out/Teleport respawn target set by `setrespawn`/
+    # `SetLastHealLocationWarp`. Read by playtest.whiteout to fail loud
+    # before triggering a white-out against an unset anchor.
+    "off_sb1_lastheallocation": "offsetof(struct SaveBlock1, lastHealLocation)",
     # -- walk_to's route planner (emulator.py) -------------------------------
     # gBackupMapLayout is the grid the engine's own MapGridGetCollisionAt
     # reads, so planning over it plans over exactly what the player can walk

@@ -215,6 +215,7 @@ from .. import assertions
 from ..battle import in_battle, read_enemy_party, win_battle
 from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
+from ..whiteout import whiteout_beat
 
 logger = logging.getLogger(__name__)
 
@@ -1116,6 +1117,23 @@ def b15(emu: Emulator) -> None:
     if in_battle(emu):
         shot = emu.screenshot("b15_still_in_battle")
         raise ScenarioError(f"B15: still in battle after win_battle() ({shot})")
+
+
+# B16: the Kevlar Town Pokemon Center white-out anchor regression test
+# (REDERIVATION_PLAN.md §14.7/§15.6, standing rule). CH03's Map068 EV001
+# bare `pbSetPokemonCenter` call emits `setrespawn
+# HEAL_LOCATION_KEVLAR_TOWN_POKEMON_CENTER` (engine/data/maps/
+# KevlarTownPokemonCenter/scripts.inc) -- CH04 is the first chapter after
+# that anchor is set, so it is where this proves out, same "beat goes in
+# the chapter AFTER the one that sets the anchor" rule CH02:B18 follows for
+# the initial anchor.
+whiteout_beat(
+    ch04, beat_name="B16",
+    heal_location_id="HEAL_LOCATION_KEVLAR_TOWN_POKEMON_CENTER",
+    description="A forced white-out respawns at the Kevlar Town Pokemon "
+                 "Center anchor (8,13), set by CH03's Map068 EV001 "
+                 "setrespawn (REDERIVATION_PLAN.md §14.7/§15.6)",
+)
 
 
 # -- deferred beats -----------------------------------------------------------

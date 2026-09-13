@@ -208,6 +208,20 @@ def assert_near(emu: Emulator, beat: str, expected: tuple[int, int],
             f"(tolerance {tolerance}) ({shot})")
 
 
+def assert_position_exact(emu: Emulator, beat: str, expected: tuple[int, int]) -> None:
+    """Exact player-position check, no tolerance -- unlike `assert_near`.
+
+    For landings the engine sets precisely (a heal location's respawn tile,
+    written verbatim by `WarpIntoMap` off `SetWarpDestinationToLastHealLocation`),
+    where any drift at all is itself the finding, not noise to tolerate.
+    """
+    x, y = emu.player_pos()
+    if (x, y) != expected:
+        shot = emu.screenshot(f"{beat}_wrong_landing")
+        raise ScenarioError(
+            f"{beat}: landed at ({x},{y}), expected exactly {expected} ({shot})")
+
+
 def advance_to_battle(emu: Emulator, max_taps: int = 1500) -> int:
     """`emu.advance_dialog()`, but stopping if a battle starts.
 

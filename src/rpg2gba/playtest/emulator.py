@@ -817,6 +817,10 @@ class Emulator:
     def u32(self, addr: int) -> int:
         return self.core.memory.u32[addr]
 
+    def write_u8(self, addr: int, value: int) -> None:
+        # Same `raw_write` arity fix as `write_u16`/`write_u32`.
+        self.core.memory.u8.raw_write(addr, value)
+
     def write_u16(self, addr: int, value: int) -> None:
         # Not `memory.u16[addr] = value`: that path in the mgba bindings
         # (site-packages/mgba/memory.py:60) calls `rawWrite16` without the
