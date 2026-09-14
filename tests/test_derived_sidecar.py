@@ -14,8 +14,10 @@ from __future__ import annotations
 import json
 
 from rpg2gba.chapter_manifest.checker import (
+    RULE_DERIVED_BEAT_CLAIMED,
     RULE_DERIVED_HASH_INELIGIBLE,
     RULE_ROUTE_MODEL_UNENFORCED,
+    RULE_UNDISPOSITIONED,
     check_chapter,
 )
 from rpg2gba.chapter_manifest.dispositions import derived_path, load_derived
@@ -173,3 +175,82 @@ def test_three_way_join_all_present_on_one_row():
     assert all(f.row_id != row.row_id for f in findings)
     assert [f for f in findings if f.rule == RULE_DERIVED_HASH_INELIGIBLE
             and f.row_id == "chapter"]
+
+
+# --- derived default: a sidecar entry IS the disposition ------------------
+
+
+class _Beats:
+    """Minimal `BeatModel`: only `claiming_beats` is exercised here."""
+
+    def __init__(self, claims: dict[str, tuple[str, ...]]) -> None:
+        self._claims = claims
+
+    def is_registered(self, beat_id: str) -> bool:
+        return True
+
+    def deferral_reason(self, beat_id: str) -> str | None:
+        return None
+
+    def claiming_beats(self, row_id: str) -> tuple[str, ...]:
+        return self._claims.get(row_id, ())
+
+
+def _per_row(findings, row_id):
+    return [f for f in findings if f.row_id == row_id]
+
+
+def test_row_omitted_from_dispositions_is_derived_cosmetic():
+    row = _row(content_hash="h1", unhandled=0)
+    findings = check_chapter([row], {}, derived={row.row_id: "h1"})
+    assert _per_row(findings, row.row_id) == []
+
+
+def test_no_dispositions_and_no_sidecar_is_still_undispositioned():
+    row = _row(content_hash="h1", unhandled=0)
+    findings = check_chapter([row], {}, derived=None)
+    assert [f.rule for f in _per_row(findings, row.row_id)] == [RULE_UNDISPOSITIONED]
+
+
+def test_stale_derived_hash_does_not_disposition_the_row():
+    row = _row(content_hash="h2", unhandled=0)
+    findings = check_chapter([row], {}, derived={row.row_id: "h1"})
+    matches = _per_row(findings, row.row_id)
+    assert [f.rule for f in matches] == [RULE_UNDISPOSITIONED]
+    assert "regenerate the sidecar" in matches[0].message
+
+
+def test_requires_row_is_not_derived():
+    # blocked outranks cosmetic: may_be_cosmetic is True, may_be_derived is not.
+    row = _row(content_hash="h1", unhandled=0, requires=("rock_smash",))
+    assert row.may_be_cosmetic and not row.may_be_derived
+    findings = check_chapter([row], {}, derived={row.row_id: "h1"})
+    rules = {f.rule for f in _per_row(findings, row.row_id)}
+    assert rules == {RULE_UNDISPOSITIONED, RULE_DERIVED_HASH_INELIGIBLE}
+
+
+def test_citation_owing_row_is_not_derived():
+    row = _row(content_hash="h1", unhandled=0,
+               condition_unclassified=("a || b",), script_typed_conditions=1)
+    assert row.may_be_cosmetic and not row.may_be_derived
+
+
+def test_beat_claimed_row_left_to_derived_default_is_error():
+    row = _row(content_hash="h1", unhandled=0)
+    findings = check_chapter(
+        [row], {}, derived={row.row_id: "h1"},
+        beat_model=_Beats({row.row_id: ("B3_grant",)}))
+    matches = [f for f in _per_row(findings, row.row_id)
+               if f.rule == RULE_DERIVED_BEAT_CLAIMED]
+    assert len(matches) == 1
+    assert matches[0].severity == "error"
+    assert "B3_grant" in matches[0].message
+
+
+def test_hand_beat_entry_overrides_derived_default():
+    row = _row(content_hash="h1", unhandled=0)
+    disp = _disp(row.row_id, "beat:B3", affirmed_hash="h1")
+    findings = check_chapter(
+        [row], {row.row_id: disp}, derived={row.row_id: "h1"},
+        beat_model=_Beats({row.row_id: ("B3",)}))
+    assert all(f.rule != RULE_DERIVED_BEAT_CLAIMED for f in findings)

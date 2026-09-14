@@ -58,6 +58,7 @@ RULE_BOUNDARY_NOT_CROSSING = "boundary_not_crossing"
 RULE_BOUNDARY_UNCLAIMED = "boundary_unclaimed"
 RULE_BOUNDARY_MODEL_UNENFORCED = "boundary_model_unenforced"
 RULE_DERIVED_HASH_INELIGIBLE = "derived_hash_ineligible"
+RULE_DERIVED_BEAT_CLAIMED = "derived_beat_claimed"
 
 
 @dataclass(frozen=True)
@@ -373,6 +374,13 @@ class BeatModel(Protocol):
         typo or a stale rename"."""
         ...
 
+    def claiming_beats(self, row_id: str) -> tuple[str, ...]:
+        """Names of the registered beats whose `rows=` list `row_id`, sorted;
+        `()` if none. `RULE_DERIVED_BEAT_CLAIMED` uses this: `beat` outranks
+        `cosmetic`, so a row a beat walks must not be left to the derived
+        `cosmetic` default."""
+        ...
+
 
 class BoundaryModel(Protocol):
     """The seam `RULE_BOUNDARY_NOT_CROSSING`/`RULE_BOUNDARY_UNCLAIMED` plug
@@ -506,10 +514,41 @@ def check_chapter(
     for row in rows:
         disp = dispositions.get(row.row_id)
         if disp is None:
+            # The derived default (REDERIVATION_PLAN.md §14.6 ruling 1): a row
+            # the dispositions file omits is `cosmetic`, affirmed by its
+            # sidecar derived_hash -- but only when this checker re-derives
+            # eligibility itself and the hash still matches. Every rule a hand
+            # `cosmetic` must satisfy is folded into `may_be_derived`, so there
+            # is nothing further to check on the row except beat precedence.
+            derived_hash = (derived or {}).get(row.row_id)
+            if (derived_hash is not None and derived_hash == row.content_hash
+                    and row.may_be_derived):
+                claims = beat_model.claiming_beats(row.row_id) if beat_model else ()
+                if claims:
+                    findings.append(Finding(
+                        row_id=row.row_id,
+                        rule=RULE_DERIVED_BEAT_CLAIMED,
+                        message=(
+                            f"row is left to the derived 'cosmetic' default, but "
+                            f"registered beat(s) {', '.join(claims)} claim it in "
+                            "rows= -- beat outranks cosmetic; disposition it "
+                            "beat:<id> in the dispositions file"
+                        ),
+                        severity="error",
+                    ))
+                continue
+            if derived_hash is not None and derived_hash != row.content_hash:
+                message = (
+                    f"row has no disposition entry, and its derived_hash "
+                    f"{derived_hash!r} does not match content_hash "
+                    f"{row.content_hash!r} -- regenerate the sidecar"
+                )
+            else:
+                message = "row has no disposition entry"
             findings.append(Finding(
                 row_id=row.row_id,
                 rule=RULE_UNDISPOSITIONED,
-                message="row has no disposition entry",
+                message=message,
                 severity="error",
             ))
             continue
@@ -805,13 +844,18 @@ def check_chapter(
         findings.extend(_check_route_order(route))
         findings.extend(_check_route_approach(route))
 
+    # Chapter-scale rules read the EFFECTIVE verdict: a derived-default row is
+    # `cosmetic`, not "no disposition" -- an archetype page left to that
+    # default is waved through as decoration and must say so.
+    effective = _effective_dispositions(rows, dispositions, derived)
+
     findings.extend(
-        check_trigger_overlay(rows, dispositions, trigger_overlay=trigger_overlay)
+        check_trigger_overlay(rows, effective, trigger_overlay=trigger_overlay)
     )
 
     findings.extend(
         _check_archetype_conformance(
-            rows, dispositions, archetype_model=archetype_model, live_chapter=live_chapter
+            rows, effective, archetype_model=archetype_model, live_chapter=live_chapter
         )
     )
 
@@ -831,6 +875,25 @@ def check_chapter(
 
     findings.sort(key=lambda f: (f.row_id, f.rule))
     return findings
+
+
+def _effective_dispositions(
+    rows: list[ManifestRow],
+    dispositions: dict[str, Disposition],
+    derived: dict[str, str] | None,
+) -> dict[str, Disposition]:
+    """Hand dispositions, plus a `cosmetic` for every row the hand file omits
+    that the sidecar validly derives (hash current, `may_be_derived`
+    rechecked here) -- the same acceptance test `check_chapter`'s row loop
+    applies. The hand entry always wins."""
+    effective = dict(dispositions)
+    for row in rows:
+        if row.row_id in effective:
+            continue
+        derived_hash = (derived or {}).get(row.row_id)
+        if derived_hash is not None and derived_hash == row.content_hash and row.may_be_derived:
+            effective[row.row_id] = Disposition(row_id=row.row_id, verdict="cosmetic")
+    return effective
 
 
 def _check_archetype_conformance(
@@ -1231,7 +1294,7 @@ def _check_derived_hash(
     derived: dict[str, str] | None,
 ) -> list[Finding]:
     """`RULE_DERIVED_HASH_INELIGIBLE`: never trust a sidecar entry's mere
-    presence -- recompute `may_be_cosmetic` independently for every row it
+    presence -- recompute `may_be_derived` independently for every row it
     names, and flag any entry sitting on a row this checker itself judges
     ineligible for machine derivation (`REDERIVATION_PLAN.md` §15.2 item 1).
 
@@ -1259,19 +1322,20 @@ def _check_derived_hash(
         if row is None:
             continue
         matched += 1
-        if not row.may_be_cosmetic:
+        if not row.may_be_derived:
             findings.append(Finding(
                 row_id=row_id,
                 rule=RULE_DERIVED_HASH_INELIGIBLE,
                 message=(
                     "row carries a derived_hash in the machine-derived "
-                    "sidecar, but this checker's own may_be_cosmetic "
+                    "sidecar, but this checker's own may_be_derived "
                     "recheck judges the row ineligible for machine "
                     "derivation -- a sidecar entry's presence is never "
                     "trusted on its own; either the row was never staged "
                     "(unhandled is None), carries unhandled transpile "
-                    "queue entries, an unrecognized head/code, or a "
-                    "state-writing effect tag"
+                    "queue entries, an unrecognized head/code, a "
+                    "state-writing effect tag, a non-empty requires "
+                    "(a blocked: candidate), or owes a citation"
                 ),
                 severity="error",
             ))

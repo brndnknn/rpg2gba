@@ -464,6 +464,24 @@ class ManifestRow:
         return not (set(self.effects) & STATE_WRITING_TAGS)
 
     @property
+    def may_be_derived(self) -> bool:
+        """Whether `cosmetic` is this row's answer with no human decision --
+        the population the machine-derived sidecar (`CHnn.derived.json`)
+        covers, and that a dispositions file may therefore omit.
+
+        Narrower than `may_be_cosmetic`, which only says `cosmetic` is *legal*.
+        Precedence is `boundary` > `beat` > `blocked` > `cosmetic`
+        (REDERIVATION_PLAN.md §14.4), so a row with a non-empty `requires` is a
+        `blocked:` candidate, not a derived `cosmetic` -- CH04's gate-passed file
+        chose `blocked:` on every such row. A row owing a citation needs a human
+        `source`, which a derived row cannot carry. `beat` outranks `cosmetic`
+        too, but beat claims live in the playtest modules, so that half is the
+        checker's (`RULE_DERIVED_BEAT_CLAIMED`), not this property's. A
+        forward-crossing row never gets here: a warp is state-writing.
+        """
+        return self.may_be_cosmetic and not self.requires and not self.needs_citation
+
+    @property
     def needs_citation(self) -> bool:
         """Rows whose effect the manifest's structure does not determine.
 

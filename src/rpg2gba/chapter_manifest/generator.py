@@ -927,11 +927,17 @@ def write_derived(rows: list[ManifestRow], path: Path) -> None:
     (rather than merely noting which ones are eligible to be) narrows this
     function's population accordingly; nothing about the sidecar's shape or
     the checker's recheck needs to change when that happens.
+
+    Narrowed 2026-09-13 (the P8b disposition pass): that step is here. An
+    entry now IS a disposition -- `cosmetic`, affirmed by `derived_hash`, for
+    a row the dispositions file does not list -- so the population is
+    `ManifestRow.may_be_derived`, which excludes `blocked:` candidates and
+    citation-owing rows from what `may_be_cosmetic` alone would admit.
     """
     payload = {
         row.row_id: row.content_hash
         for row in sorted(rows, key=lambda r: r.row_id)
-        if row.may_be_cosmetic
+        if row.may_be_derived
     }
     text = json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=False)
     path.write_text(text + "\n", encoding="utf-8")

@@ -135,7 +135,7 @@ def generate_cmd(chapter: str, manifest: Path | None, derived_path_opt: Path | N
 
     undispositionable = sum(1 for row in rows if not row.is_dispositionable)
     needs_citation = sum(1 for row in rows if row.needs_citation)
-    derived_count = sum(1 for row in rows if row.may_be_cosmetic)
+    derived_count = sum(1 for row in rows if row.may_be_derived)
     click.echo(f"wrote {manifest_file}: {len(rows)} rows, "
                f"{undispositionable} undispositionable, {needs_citation} need citation")
     click.echo(f"wrote {derived_file}: {derived_count} machine-derived row(s)")
@@ -178,11 +178,18 @@ def check_cmd(chapter: str, manifest: Path | None, dispositions_path_opt: Path |
 
     if not manifest_file.exists():
         raise click.ClickException(f"manifest not found: {manifest_file}")
-    if not dispositions_file.exists():
-        raise click.ClickException(f"dispositions not found: {dispositions_file}")
-
     rows = load_manifest(manifest_file)
-    dispositions = load_dispositions(dispositions_file)
+    # A missing dispositions file is zero hand decisions, not an error
+    # (REDERIVATION_PLAN.md §14.6 ruling 1): rows the derived sidecar covers
+    # are dispositioned without one, and every other row still reports
+    # `undispositioned`, so nothing passes vacuously.
+    if dispositions_file.exists():
+        dispositions = load_dispositions(dispositions_file)
+    else:
+        logging.getLogger(__name__).info(
+            "no dispositions file at %s -- checking with zero hand decisions",
+            dispositions_file)
+        dispositions = {}
     # Same exists()-gated pattern as the dispositions file above, but the
     # sidecar's ABSENCE is not an error: a brand-new Essentials game (or a
     # chapter predating this sidecar) has none at all, and that is exactly

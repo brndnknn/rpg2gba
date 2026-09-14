@@ -64,6 +64,11 @@ class ChapterBeatModel:
     def __init__(self, chapter: Chapter, module: ModuleType) -> None:
         self._registered: tuple[str, ...] = tuple(
             beat.name for beat in chapter.beats)
+        claims: dict[str, set[str]] = {}
+        for beat in chapter.beats:
+            for row_id in beat.rows:
+                claims.setdefault(row_id, set()).add(beat.name)
+        self._claims = {row_id: tuple(sorted(names)) for row_id, names in claims.items()}
 
         deferred: dict[str, str] = {}
         for entry in getattr(module, "DEFERRED_BEATS", ()):
@@ -87,6 +92,9 @@ class ChapterBeatModel:
             if _matches(beat_id, deferred_id):
                 return reason
         return None
+
+    def claiming_beats(self, row_id: str) -> tuple[str, ...]:
+        return self._claims.get(row_id, ())
 
 
 def build_beat_model(chapter_id: str) -> ChapterBeatModel | None:

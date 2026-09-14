@@ -1198,15 +1198,20 @@ class _FakeBeatModel:
     """A dict-backed `BeatModel` stand-in -- no import of the real
     `beat_model` module (owned by a different agent, may not exist yet)."""
 
-    def __init__(self, registered: set[str], deferred: dict[str, str]) -> None:
+    def __init__(self, registered: set[str], deferred: dict[str, str],
+                 claims: dict[str, tuple[str, ...]] | None = None) -> None:
         self._registered = registered
         self._deferred = deferred
+        self._claims = claims or {}
 
     def is_registered(self, beat_id: str) -> bool:
         return beat_id in self._registered
 
     def deferral_reason(self, beat_id: str) -> str | None:
         return self._deferred.get(beat_id)
+
+    def claiming_beats(self, row_id: str) -> tuple[str, ...]:
+        return self._claims.get(row_id, ())
 
 
 def test_beat_disposition_registered_no_finding():
