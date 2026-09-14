@@ -938,18 +938,17 @@ def test_map32_recognized_and_unrecognized_heads_match_document() -> None:
         all_unrecognized.update(row.unrecognized_heads)
         all_recognized.update(h for h in row.script_heads if h not in row.unrecognized_heads)
 
-    # `isRockSmashSoftlocked` remains unrecognized: it is not one of the six
-    # gaps the CH04 resolution closed (2026-08-22).
-    expected_unrecognized = {
-        "isRockSmashSoftlocked",
-    }
+    # `isRockSmashSoftlocked` was the last unrecognized head here after the
+    # CH04 resolution (2026-08-22). It became recognized 2026-09-13, once its
+    # static strip (REDERIVATION_PLAN.md §15.1 item 2) got its missing
+    # MECHANIC_BY_HEAD entry, so map 32 now has no unrecognized heads at all.
     expected_recognized = {
         "pbRockSmashRandomEncounter", "pbReceiveItem", "pbRockSmash",
         "pbCaveEntrance", "pbPhoneRegisterNPC",
         "pbCallBub", "get_character", "setTempSwitchOn",
-        "pbEraseThisEvent", "pbSetSelfSwitch",
+        "pbEraseThisEvent", "pbSetSelfSwitch", "isRockSmashSoftlocked",
     }
-    assert expected_unrecognized <= all_unrecognized
+    assert all_unrecognized == set()
     assert expected_recognized <= all_recognized
     assert all_recognized.isdisjoint(all_unrecognized)
 

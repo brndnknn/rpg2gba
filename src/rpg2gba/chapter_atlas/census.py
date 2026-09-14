@@ -140,6 +140,15 @@ MECHANIC_BY_HEAD: dict[str, str] = {
     # pbItemBall/pbBerryPlant above — its absence here was the same table
     # gap as pbPokerus/pbNextMysteryGiftID.
     "pbPushThisBoulder": "pushable strength boulder",
+    # REDERIVATION_PLAN.md §15.1 items 2 and 6: collapsed statically false in
+    # transpiler.py (_emit_rock_smash_softlocked_strip, _emit_custom_game_strip;
+    # showRulesetSettings dies inside the latter's then-arm, or is
+    # breadcrumb-stripped when bare). ea7e6eef landed the strips without these
+    # entries — the #97 divergence test compares codes, not heads — so five
+    # CH01 rows stayed undispositionable for work already done.
+    "isRockSmashSoftlocked": "rock smash softlock guard (Nuzlocke-only, stripped)",
+    "isCustomGame": "custom game mode check (not ported, stripped)",
+    "showRulesetSettings": "custom game ruleset UI (not ported, stripped)",
 }
 
 
