@@ -1223,7 +1223,7 @@ def b1_ev037(emu: Emulator) -> None:
            "not separately exercised -- all three land on the same tile and "
            "ev023 already proved the reciprocal direction works)",
            map_constant="MAP_ROUTE_01", at=B1_BACK2_APPROACH,
-           rows=("map033/ev022/p0",))
+           rows=("map033/ev022/p0",), archetype="warp")
 def b1_back2(emu: Emulator) -> None:
     _cross_threshold(emu, "B1_back2", B1_BACK2_APPROACH, "RIGHT", "MAP_MOKI_TOWN")
     emu.settle_field()

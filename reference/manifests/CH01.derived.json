@@ -609,6 +609,10 @@
     "disposition": "cosmetic",
     "derived_hash": "e47789dc2130ceb0"
   },
+  "map172/ev002/p0": {
+    "disposition": "beat:B13",
+    "derived_hash": "9993151c16915466"
+  },
   "map172/ev004/p0": {
     "disposition": "beat:B12",
     "derived_hash": "e70c34c28d39c11d"

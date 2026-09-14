@@ -285,7 +285,18 @@ def b1(emu: Emulator) -> None:
 # generator can join `beat:` instead of a human hand-writing it. Every mapping
 # was confirmed against the COMPILED scripts (`engine/data/maps/*/scripts.inc`)
 # and each row's page condition in the manifest, not inferred from a beat's
-# prose. 13 rows across 12 beats; RMXP "Page1" is manifest `p0`.
+# prose. 14 rows across 12 beats (B13 claims two); RMXP "Page1" is manifest
+# `p0`.
+#
+# B13 also claims `map172/ev002/p0` (2026-09-14 archetype-conformance pass):
+# `_leave_theo_house` steps DOWN under directed control through Theo's 1F
+# doorway, which is that row's own warp tile (`Map172.json` EV002 @ (10,11),
+# the door half of the stacked exit/arrival pair the module docstring
+# documents at `THEO_HOUSE_EXIT_APPROACH`) -- a controlled crossing, not an
+# incidental arrival, so it meets the warp-page claim bar. B13's other row
+# (`map032/ev009/p2`) is a story/dialogue page, not a warp, so the two rows
+# are mixed archetypes and B13 is deliberately left without an `archetype=`
+# tag (see `ChapterArchetypeModel`: a mixed-archetype beat doesn't get one).
 #
 # FIVE BEATS CLAIM NOTHING, and each is a different reason:
 #   B1  -- asserts the fresh save spawns in Map049. A boot state is not an
@@ -696,7 +707,7 @@ def b12(emu: Emulator) -> None:
 
 @ch01.beat("B13", "Crossing the west-exit tiles plays the catch ceremony",
            map_constant="MAP_MOKI_TOWN", at=CEREMONY_APPROACH,
-           rows=("map032/ev009/p2",))
+           rows=("map032/ev009/p2", "map172/ev002/p0"))
 def b13(emu: Emulator) -> None:
     quest_log_before = emu.var("VAR_QUEST_LOG")
     if quest_log_before < 2:
