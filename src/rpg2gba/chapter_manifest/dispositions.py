@@ -5,7 +5,13 @@ the *generated* row facts (owned by `generator.py`) and the *authored*
 per-row decisions this module reads and writes. The generator never writes
 here — that separation is the whole point, since CLAUDE.md §11 forbids
 editing generated output and a hand-made decision has to live somewhere the
-generator cannot clobber it.
+generator cannot clobber it. The one exception is `__main__.py`'s `affirm`
+command, which calls `write_dispositions` on this file -- but only on
+explicit human invocation (the operator runs `affirm` by hand after
+reviewing the generated proposal digest), and only for `blocked:` rows that
+were already machine-proposed with a matching content hash. That is still a
+human decision, just one recorded through a command instead of a text
+editor.
 
 Path convention: ``reference/manifests/<chapter_id>.dispositions.json``,
 sibling to the generated manifest at
@@ -29,6 +35,7 @@ duplicate that validation.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -210,6 +217,31 @@ def load_derived(path: Path) -> dict[str, DerivedEntry]:
         result[row_id] = DerivedEntry(
             disposition=spec, derived_hash=derived_hash, proposed=proposed)
     return result
+
+
+def proposal_digest(derived: dict[str, DerivedEntry]) -> str:
+    """Stable fingerprint of the CURRENT set of `blocked:` proposals in
+    `derived` (entries with `proposed=True`), keyed to the exact
+    ``disposition``/``derived_hash`` pair a human is being asked to affirm.
+
+    Built fresh from the sidecar every time -- never stored in the sidecar
+    itself (`load_derived`'s format v2 carries no digest field, and this
+    function must not grow one there). `generate` prints it in the review
+    file it writes; `affirm` recomputes it and refuses to write anything if
+    the two disagree, which is what catches "the sidecar changed since you
+    read the review" without needing a second file to go stale.
+
+    Lines are ``f"{row_id}\\t{disposition}\\t{derived_hash}\\n"``, sorted by
+    `row_id`, hashed with sha256 and truncated to 16 hex characters -- the
+    same truncation convention as `schema.content_hash`.
+    """
+    lines = [
+        f"{row_id}\t{entry.disposition}\t{entry.derived_hash}\n"
+        for row_id, entry in sorted(derived.items())
+        if entry.proposed
+    ]
+    blob = "".join(lines)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 
 def write_dispositions(dispositions: dict[str, Disposition], path: Path) -> None:

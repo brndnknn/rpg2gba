@@ -9,6 +9,10 @@ drift to.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+from .derivation import DerivedEntry
+from .dispositions import proposal_digest
 from .schema import _VERDICTS, Disposition, ManifestRow
 
 # Every verdict is either collapsed to a one-line-each list or expanded in
@@ -171,3 +175,160 @@ def _render_expanded(row: ManifestRow, disp: Disposition | None) -> list[str]:
         out.append(f"- other codes: {list(row.other_codes)}")
     out.append("")
     return out
+
+
+# --- blocked-proposal review (`generate`'s `--review` output) --------------
+
+
+@dataclass(frozen=True)
+class EventFacts:
+    """Display facts for one `(map_id, event_id)` pair, not carried by the
+    manifest itself (`ManifestRow` has `event_id` but not the event's name or
+    tile, and no map name at all).
+
+    Loaded from `output/uranium-build/` by `__main__.py`'s `generate_cmd`
+    (`map_infos.json` for `map_name`, `maps/Map<NNN>.json` for the rest) and
+    handed to `render_blocked_proposals` already resolved, so this module
+    stays pure -- no file I/O, easy to unit test with a hand-built dict.
+    """
+
+    map_name: str
+    event_name: str
+    x: int
+    y: int
+
+
+def _proposal_what(rows: list[ManifestRow]) -> str:
+    """A short, factual "what" for a group of merged proposal pages: the
+    union of their effect tags and recognized script heads. Deliberately not
+    a guess at narrative intent -- CLAUDE.md §4.5 (fail loud, don't invent) --
+    just what the generator already measured about the page.
+    """
+    effects = sorted({effect for row in rows for effect in row.effects})
+    heads = sorted({head for row in rows for head in row.script_heads})
+    parts = []
+    if effects:
+        parts.append("effects=" + ",".join(effects))
+    if heads:
+        parts.append("heads=" + ",".join(heads))
+    return "; ".join(parts) if parts else "(none)"
+
+
+def render_blocked_proposals(
+    chapter: str,
+    derived: dict[str, DerivedEntry],
+    rows: list[ManifestRow],
+    events: dict[tuple[int, int], EventFacts],
+) -> str:
+    """Render the human review of `chapter`'s `blocked:` PROPOSALS (the
+    sidecar's `proposed=True` entries -- `derivation.py`'s module docstring)
+    as Markdown, for a human to read before running `affirm`.
+
+    `events` should carry an `EventFacts` entry for every `(map_id,
+    event_id)` a "page"-kind proposal row names -- the caller (`__main__.py`)
+    is responsible for loading every needed fact up front, failing loud
+    (CLAUDE.md §4.5) on a genuine data inconsistency. A `(map_id, event_id)`
+    with no entry at all renders as a bare id with "(name unavailable)"
+    rather than raising, which is what lets `generate_cmd` degrade the same
+    way it already does for its beat/boundary models when the underlying
+    build data isn't reachable (e.g. a synthetic test build dir with no
+    `map_infos.json`) instead of failing the whole `generate` run over an
+    optional review artifact.
+
+    Always produces a complete document, even with zero proposals -- a
+    review that goes quiet on a re-run must say so explicitly rather than
+    leave a stale file with proposals that no longer exist.
+    """
+    rows_by_id = {row.row_id: row for row in rows}
+    digest = proposal_digest(derived)
+    proposals = sorted(
+        (row_id, entry) for row_id, entry in derived.items() if entry.proposed
+    )
+
+    lines: list[str] = []
+    lines.append(f"# Chapter {chapter}: blocked proposals awaiting affirmation")
+    lines.append("")
+    lines.append(f"- proposal digest: `{digest}`")
+    lines.append(f"- proposal count: {len(proposals)}")
+    lines.append("")
+    lines.append("To accept every proposal below exactly as shown, run:")
+    lines.append("")
+    lines.append("```")
+    lines.append(
+        f"python -m rpg2gba.chapter_manifest affirm --chapter {chapter} "
+        f"--digest {digest} --all"
+    )
+    lines.append("```")
+    lines.append("")
+    lines.append(
+        "Coordinates are RMXP event tiles `(x, y)`, origin top-left -- "
+        "viewable in the map viewer at `/map/<id>?mode=events`."
+    )
+    lines.append("")
+
+    if not proposals:
+        lines.append("No proposals awaiting affirmation.")
+        lines.append("")
+        return "\n".join(lines)
+
+    by_spec: dict[str, list[tuple[str, DerivedEntry]]] = {}
+    for row_id, entry in proposals:
+        by_spec.setdefault(entry.disposition, []).append((row_id, entry))
+
+    overall_total = 0
+    for spec in sorted(by_spec):
+        entries = by_spec[spec]
+        lines.append(f"## `{spec}` ({len(entries)} page(s))")
+        lines.append("")
+        lines.append("| Map | Event | (x, y) | Pages | What |")
+        lines.append("|---|---|---|---|---|")
+
+        groups: dict[tuple[int, int], list[tuple[str, ManifestRow]]] = {}
+        for row_id, _entry in entries:
+            row = rows_by_id[row_id]
+            key = (row.map_id, row.event_id if row.event_id is not None else -1)
+            groups.setdefault(key, []).append((row_id, row))
+
+        section_total = 0
+        for map_id, event_id in sorted(groups):
+            members = groups[(map_id, event_id)]
+            group_rows = [row for _row_id, row in members]
+            section_total += len(group_rows)
+            pages = sorted(
+                row.page_idx if row.page_idx is not None else 0 for row in group_rows
+            )
+            pages_str = ", ".join(f"p{p}" for p in pages)
+            what = _proposal_what(group_rows)
+            facts = events.get((map_id, event_id)) if event_id != -1 else None
+            if event_id == -1:
+                # Not an event-page row (a seam/terrain row can still carry
+                # `requires`) -- there is no event to look up.
+                map_label = f"map{map_id:03d}"
+                event_label = "(no event)"
+                x = y = "-"
+            elif facts is not None:
+                map_label = f"map{map_id:03d} -- {facts.map_name}"
+                event_label = f"ev{event_id:03d} -- {facts.event_name}"
+                x, y = facts.x, facts.y
+            else:
+                # The caller (`__main__.py`) is allowed to hand in a partial
+                # `events` map when the build data behind it is unavailable
+                # (a synthetic/test build dir with no `map_infos.json`,
+                # mirroring `generate_cmd`'s existing beat/boundary-model
+                # degrade) -- unresolved facts show as bare ids rather than
+                # aborting a review that otherwise has real content.
+                map_label = f"map{map_id:03d}"
+                event_label = f"ev{event_id:03d} (name unavailable)"
+                x = y = "?"
+            lines.append(
+                f"| {map_label} | {event_label} | ({x}, {y}) | {pages_str} | {what} |"
+            )
+        lines.append("")
+        lines.append(f"{section_total} page row(s) in this section.")
+        lines.append("")
+        overall_total += section_total
+
+    lines.append(f"{overall_total} page row(s) total across all proposals.")
+    lines.append("")
+
+    return "\n".join(lines)
