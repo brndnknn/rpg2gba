@@ -454,6 +454,29 @@ def test_warp_beat_round_trip_unknown_reciprocal_fails_loud(
         )
 
 
+def test_warp_beat_manifest_chapter_id_reads_a_predecessors_manifest(
+    tmp_path: Path,
+) -> None:
+    """CH05's B1_in/B1_nudge shape (REDERIVATION_PLAN.md sec 10 R2/R3): the
+    row physically lives in CH04's manifest, but CH05 claims it because
+    only CH05's walk can ever trigger it. `manifest_chapter_id="CH04"` must
+    load CH04's file while `chapter_id="CH05"` still identifies the
+    registering chapter (beat names, error messages)."""
+    _write_manifest(tmp_path / "CH04.manifest.json", (_WARP_ROW,))
+
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_ROUTE_02", map_id=35,
+        event_id=1, dest_map_constant="MAP_PASSAGE_CAVE_1F",
+        mechanism="threshold", direction="UP", beat_name="W1",
+        manifest_dir=tmp_path, manifest_chapter_id="CH04",
+    )
+    chapter = b.build()
+    assert [beat.name for beat in chapter.beats] == ["W1"]
+    assert chapter.beats[0].rows == ("map035/ev001/p0",)
+    assert chapter.beats[0].archetype == "warp"
+
+
 # -- arrival_nudge -------------------------------------------------------
 
 

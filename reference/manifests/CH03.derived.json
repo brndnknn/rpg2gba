@@ -104,6 +104,10 @@
     "disposition": "cosmetic",
     "derived_hash": "6357c2a1e535d41c"
   },
+  "map031/ev023/p0": {
+    "disposition": "beat:B1",
+    "derived_hash": "3f3495343b8d553c"
+  },
   "map031/ev028/p0": {
     "disposition": "cosmetic",
     "derived_hash": "50631292062e4dc9"
@@ -127,6 +131,10 @@
   "map031/ev033/p0": {
     "disposition": "cosmetic",
     "derived_hash": "50631292062e4dc9"
+  },
+  "map031/ev035/p0": {
+    "disposition": "beat:B1",
+    "derived_hash": "bccd2320a6d66b67"
   },
   "map031/ev036/p0": {
     "disposition": "cosmetic",

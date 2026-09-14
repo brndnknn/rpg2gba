@@ -35,10 +35,13 @@ asserts arrival back at the origin, then crosses forward once more --
 `playtest.archetypes.warp`'s own module docstring has the full contract,
 including why the return leg's press direction (`return_direction=`) is a
 required, explicit parameter alongside `round_trip=True`, not something
-derivable from the graph. `B1`/`B8` below now pass `round_trip=True`,
-restoring the "cross in, cross back, cross in again" convention the
-hand-authored module this one replaces used for both
-(`CH05.dispositions.json`, 2026-09-04) -- see each group's own section for
+derivable from the graph. `B8` below passes `round_trip=True`, restoring
+the "cross in, cross back, cross in again" convention the hand-authored
+module this one replaces used for both (`CH05.dispositions.json`,
+2026-09-04). `B1` used `round_trip=True` too until 2026-09-14, when it was
+split into three beats (`B1`/`B1_nudge`/`B1_in`) to claim the two
+Route-2/cave boundary rows CH04's manifest carries
+(REDERIVATION_PLAN.md sec 10 R2/R3) -- see each group's own section for
 exactly what's covered now versus what the very first conversion pass
 dropped.
 
@@ -117,29 +120,50 @@ Rock Smash rows, which had an open south face). Surf itself is not granted
 until Act 5 (map 143); this room is the corpus's longest-standing capability
 deferral.
 
-**B1 -- round trip, one row claimed.** The manifest row this chapter owns
-for B1 is `map036/ev001/p0`, the CAVE's own exit event (cave -> Route 2);
-the entrance crossing (Route 2 -> cave) is `map035/ev001/p0`, owned by
-CH04's manifest, not this one. `warp_beat(round_trip=True,
-return_direction="UP")` now crosses cave -> Route 2 (claims
-`map036/ev001/p0`), crosses back Route 2 -> cave via the DERIVED reciprocal
-(`cells.warp_cell(ROUTE_2_CONST, to=MAP_1F)`, CH04's own entrance warp,
-exercised but not claimed -- same boundary convention as before: the
-arriving chapter tests a crossing the outgoing chapter's manifest can't),
-then crosses cave -> Route 2 once more, ending the beat back on
-`MAP_ROUTE_02`. **Still short of the pre-conversion hand-written beat in
-one respect:** that module's return leg additionally exercised CH04's own
-permanently-deferred arrival-nudge autorun on the Route 2 side
-(`map035/ev001/p1`) and asserted its specific one-tile displacement before
-crossing back in; `round_trip=True` asserts map+position on each leg but has
-no nudge-specific step (nudges are `arrival_nudge_beat`'s own archetype, a
-different template, and `map035/ev001/p1` is CH04's row, not claimable
-here). **B1 ends this beat on `MAP_ROUTE_02`, not inside the cave** -- an
-artifact of the manifest's own row orientation (this chapter's claimable
-crossing is cave-to-Route-2, so that is `round_trip`'s declared "forward"
-and its own destination), unchanged from this template's pre-round-trip
-one-way behavior and not newly introduced here; flagged, not resolved, same
-as the next paragraph's own continuity note.
+**B1 -- three beats, three rows claimed (2026-09-14, supersedes the
+round-trip note below).** REDERIVATION_PLAN.md sec 10 R2/R3 assigns CH05
+the two Route 2/cave boundary rows that live in CH04's manifest --
+`map035/ev001/p0` (the entrance crossing, Route 2 -> cave) and
+`map035/ev001/p1` (the arrival-nudge autorun that fires landing on Route 2
+from the cave) -- because only CH05's own walk can ever trigger the cave
+side of that boundary; `map036/ev001/p0`, the CAVE's own exit event (cave
+-> Route 2), stays this chapter's own row as before. The old note calling
+`map035/ev001/p1` "CH04's row, not claimable here" no longer holds -- the
+operator ruling that added `manifest_chapter_id=` to `warp_beat`/
+`arrival_nudge_beat` (`archetypes/__init__.py`'s `find_match` docstring)
+is exactly the mechanism this claim uses.
+
+Three beats now cover the stop, in order: `B1` (`start_side="dest"`,
+`round_trip=False`) crosses the derived reciprocal first (Route 2 -> cave,
+the row CH05 now claims via `manifest_chapter_id="CH04"`) and then its own
+claimed warp back (cave -> Route 2, `map036/ev001/p0`), stopping on Route 2
+at the cell the arrival autorun fires on; `B1_nudge`
+(`arrival_nudge_beat(manifest_chapter_id="CH04")`) observes that autorun,
+claiming `map035/ev001/p1`; `B1_in` (`warp_beat(manifest_chapter_id="CH04")`)
+is a lone forward crossing back into the cave, claiming `map035/ev001/p0`
+directly rather than exercising it only as an unclaimed reciprocal, and
+hands B2 the player inside the cave same as before. All three share
+`group="B1"`, registered contiguously; `B1` is the group's first beat here
+(not last, as `B8`'s primary beat is) -- `chapter.py`'s
+`_validate_groups` only enforces contiguity and the singleton/explicit-name
+collision rule, not registration position within a group, so this ordering
+is legal.
+
+**The assembler drops the Map035 EV001 pages as orphans** (see
+`output/ch05-stage.log` line ~294-296: Map035 is CH04's slice map, and its
+EV001 pages are only ever wired as an orphan reference from the CH05 side
+of the boundary). What `B1_nudge` observes in the ROM is therefore the
+converted landing leaving the player off the warp tile -- the same shape
+`B8_nudge` already observes and passes on the ROM, not a new kind of gap
+this row introduces.
+
+**Superseded history, kept for the record.** The previous single-beat `B1`
+used `warp_beat(round_trip=True, return_direction="UP")`: cave -> Route 2
+(claiming `map036/ev001/p0`), back via the then-unclaimed reciprocal, then
+cave -> Route 2 once more, ending on `MAP_ROUTE_02` -- short of the
+pre-conversion hand-written beat, whose return leg additionally asserted
+`map035/ev001/p1`'s specific one-tile displacement, which `round_trip=True`
+had no way to claim. The split above is what closes that gap.
 
 **B8 -- one stop, three beats, three crossings.** The warp pair
 (`map036/ev002/p0` forward, `map037/ev001/p0` return) and the nudge that
@@ -200,12 +224,14 @@ beats) actually left the player, checked strictly, at run time. CH04's own
 last own-beat (`B15`, the wild-grass encounter) leaves the player somewhere
 in the grass south of the rockslide, not at B1's declared entry
 (`event_cell(MAP_PASSAGE_CAVE_1F, 1)`, deep inside the cave) -- the two
-cannot literally agree, and B1's body (round trip or not) starts from its
-own declared `at=`, deep in the cave; it never walks the player across the
-CH04-handoff gap itself, round-tripping or no. `round_trip=True` does now
-put B1's body back onto `MAP_ROUTE_02` mid-beat (its own "cross back" leg),
-but only after starting from inside the cave -- it does not, and cannot,
-retroactively bridge the entry mismatch above. Whether the runner tolerates
+cannot literally agree, and B1's body starts from its own declared `at=`,
+deep in the cave; it never walks the player across the CH04-handoff gap
+itself. (2026-09-14: B1 is `start_side="dest"`/`round_trip=False` now, not
+`round_trip=True` -- it crosses the reciprocal in, its own claimed warp
+back out, and stops on `MAP_ROUTE_02`; `B1_in` is the beat that re-enters
+the cave. Neither changes the shape of this paragraph's risk: B1's body
+still begins from its own declared `at=` deep in the cave, same mismatch,
+one beat earlier in the group than before.) Whether the runner tolerates
 this (or whether CH04 already has the same latent gap for its own first
 beat after CH03) is a `playtest.runner`/harness question, out of this
 file's scope and not exercised by any of this task's own verification
@@ -319,19 +345,25 @@ def _trainer_defeat_flag(trainer_const: str) -> str:
     return f"TRAINER_FLAGS_START + {trainer_const}"
 
 
-# -- B1 -- cave entry/exit warp, Cave 1F <-> Route 2 (map036/ev001) --------
-# See module docstring: the hand-written round trip this replaces is not
-# reproducible through `warp_beat`, which crosses one direction per call.
+# -- B1 -- cave entry/exit warp, Cave 1F <-> Route 2 (map036/ev001,
+# map035/ev001) -- one stop, three beats, three rows claimed. --------------
+# See module docstring: REDERIVATION_PLAN.md sec 10 R2/R3 assigns this
+# chapter the two Route 2/cave boundary rows CH04's manifest carries
+# (`map035/ev001/p0` and `p1`) as well as its own `map036/ev001/p0`, because
+# only CH05's walk can ever trigger the cave side of that boundary.
 #
-# `start_side="dest"` because the player is NOT in the cave when this beat
-# begins. CH05's only claimable row here is `map036/ev001/p0` -- the CAVE's
-# exit warp -- so the template's origin is the cave, but CH04 hands the
-# player over on Route 02 (observed entry (19,49), map 35). Authored
-# origin-first, the beat walked the cave's warp coordinates ON ROUTE 02 for
-# all 17 tiles of its path and asserted an arrival that never happened
-# (step-7 run 4, 2026-09-06). Mirrored, it runs Route 2 -> cave -> Route 2
-# -> cave: it starts where the player is, proves the warp both ways, and
-# ends inside the cave where B2 needs them.
+# `B1` mirrors the way `B8_return` mirrors below: the player is NOT in the
+# cave when the stop begins (CH04 hands over on Route 02, observed entry
+# (19,49), map 35), so `start_side="dest"` crosses the DERIVED reciprocal
+# first (Route 2 -> cave, `map035/ev001/p0`) and then the claimed warp back
+# (cave -> Route 2, `map036/ev001/p0`), `round_trip=False` so the stop ends
+# on Route 2 at the very cell the arrival autorun fires on -- it does NOT
+# re-enter the cave a second time the way the old round-tripped B1 did.
+# `B1_nudge` then claims that autorun (`map035/ev001/p1`) sitting on
+# CH04's own map, and `B1_in` crosses forward into the cave alone
+# (`map036/ev001/p0`'s reciprocal, unclaimed, exercised the same way every
+# other reciprocal crossing in this file is) so the stop still hands B2 the
+# player inside the cave.
 warp_beat(
     ch05,
     chapter_id=_CHAPTER_ID,
@@ -342,9 +374,36 @@ warp_beat(
     mechanism="threshold",
     direction="DOWN",
     beat_name="B1",
-    round_trip=True,
+    round_trip=False,
     return_direction="UP",
     start_side="dest",
+    group="B1",
+)
+
+arrival_nudge_beat(
+    ch05,
+    chapter_id=_CHAPTER_ID,
+    map_constant=ROUTE_2_CONST,
+    map_id=35,
+    event_id=1,
+    from_map_constant=MAP_1F,
+    beat_name="B1_nudge",
+    group="B1",
+    manifest_chapter_id="CH04",
+)
+
+warp_beat(
+    ch05,
+    chapter_id=_CHAPTER_ID,
+    map_constant=ROUTE_2_CONST,
+    map_id=35,
+    event_id=1,
+    dest_map_constant=MAP_1F,
+    mechanism="threshold",
+    direction="UP",
+    beat_name="B1_in",
+    group="B1",
+    manifest_chapter_id="CH04",
 )
 
 

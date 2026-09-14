@@ -89,6 +89,7 @@ def warp_beat(
     start_side: Literal["origin", "dest"] = "origin",
     manifest_rows: "tuple[ManifestRow, ...] | None" = None,
     manifest_dir=None,
+    manifest_chapter_id: str | None = None,
 ) -> None:
     """Register one `warp` archetype crossing.
 
@@ -151,6 +152,13 @@ def warp_beat(
     direction cannot be derived, same reasoning as `direction` above); it
     is rejected when neither mode is on, since it would otherwise silently
     do nothing.
+
+    `manifest_chapter_id=`, if given, is a predecessor chapter whose
+    manifest actually carries this row (`find_match`'s own docstring --
+    REDERIVATION_PLAN.md §10 R2): a warp page sitting on a map the
+    PREVIOUS chapter owns, claimed by this chapter because only this
+    chapter's walk can trigger it. `None` (the default) preserves today's
+    behavior of reading `chapter_id`'s own manifest.
     """
     resolved_group = group if group is not None else beat_name
     if mechanism not in _MECHANISMS:
@@ -194,6 +202,7 @@ def warp_beat(
     match = find_match(
         chapter_id, map_id, event_id, "warp",
         rows=manifest_rows, manifest_dir=manifest_dir,
+        manifest_chapter_id=manifest_chapter_id,
     )
     row_id = next(iter(match.roles))
 

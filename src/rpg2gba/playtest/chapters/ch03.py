@@ -166,6 +166,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .. import assertions
+from .. import cells
 from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
 from ..pokecenter import heal_at_counter, use_pc
@@ -369,8 +370,12 @@ CRY_BOY_FACING = "RIGHT"
 # CAVE_DOOR -- confirming the approach is reachable from the town side alone,
 # never through the sealed corridor.
 KEVLAR_BOULDERS: tuple[tuple[int, tuple[int, int], tuple[int, int], str], ...] = (
-    (1, (10, 16), (10, 17), "UP"),
-    (7, (12, 16), (12, 17), "UP"),
+    (cells.local_id("MAP_KEVLAR_TOWN", 1), cells.event_cell("MAP_KEVLAR_TOWN", 1),
+     cells.raw_cell(10, 17, why="BFS-verified town-side approach south of the "
+                                "boulder (see above)"), "UP"),
+    (cells.local_id("MAP_KEVLAR_TOWN", 37), cells.event_cell("MAP_KEVLAR_TOWN", 37),
+     cells.raw_cell(12, 17, why="BFS-verified town-side approach south of the "
+                                "boulder (see above)"), "UP"),
 )
 
 # B19: the cave door, map31 (13,7) -> map19 (11,29).
@@ -430,6 +435,7 @@ _wait_for_map = assertions.wait_for_map
 _cross_threshold = assertions.cross_threshold
 _enter_door = assertions.enter_door
 _assert_near = assertions.assert_near
+_assert_position_exact = assertions.assert_position_exact
 
 
 _DIR_VECTOR: dict[str, tuple[int, int]] = {
@@ -552,25 +558,44 @@ _assert_bgm = assertions.assert_bgm
 #   N6 -- a chapter-wide invariant ("no reachable warp lands on an unbuilt
 #     map"), not a claim about any single row.
 #
-#   B1 and B25 -- both boundary crossings, and both are P8b's to flip, not
-#     this pass's. B1 is NOT a map connection, despite the word "seam" in its
-#     description: `connections.json` has no 33<->31 edge, and B1 stands on
-#     (16,6) pressing UP onto (16,5), which is Map033's EV046 -- one of the
-#     two `code 201` warps slice-growth reports for CH02 (EV045 is (15,5)).
-#     So the row is `map033/ev046/p0` and it lives in CH02's manifest, the
-#     departing chapter's. B25 is the mirror case on a real connection: the
-#     `map031/seam/N/map035` row is in THIS chapter's manifest, but B25
-#     deliberately stands at x=28, away from the seam cells, testing the wall
-#     rather than the crossing -- and CH04's B1 is the beat that crosses it.
-#     Per REDERIVATION_PLAN.md 10 R2/R3 the ARRIVING chapter claims a
-#     boundary row, resolved through `boundary_model.successor_claims` off
-#     the successor's `Beat.rows`. Nothing in the corpus makes such a claim
-#     yet, so making one here alone would reintroduce the inconsistency 10
-#     exists to remove. See ch02.py's B1 note for the same call.
+#   B25 -- a boundary crossing, and still P8b's to flip, not this pass's.
+#     `map031/seam/N/map035` is a real connection, and B25 deliberately
+#     stands at x=28, away from the seam cells, testing the wall rather than
+#     the crossing -- CH04's B1 is the beat that crosses it. Per
+#     REDERIVATION_PLAN.md 10 R2/R3 the ARRIVING chapter claims a boundary
+#     row, resolved through `boundary_model.successor_claims` off the
+#     successor's `Beat.rows`. See ch02.py's B1 note for the same call.
+#
+#   B1's claim is MADE now (2026-09-14): B1 is NOT a map connection, despite
+#     the word "seam" in its description -- `connections.json` has no
+#     33<->31 edge, and B1 stands on (16,6) pressing UP onto (16,5), which is
+#     Map033's EV046 -- one of the two `code 201` warps slice-growth reports
+#     for CH02 (EV045 is (15,5)). So the row is `map033/ev046/p0`, and it
+#     lives in CH02's manifest, the departing chapter's -- the ARRIVING
+#     chapter (this one) claims it, per the same R2/R3 rule B25's note cites.
+#     CH04's B1 makes the mirror claim for its own boundary (the
+#     `map031/seam/N/map035` row) in ch04.py -- that edit is the lead's, not
+#     made here.
+#
+#     Five beats right after B27 (still contiguous with B1, per this block's
+#     own comment above `_flag_ssa`) walk the four `code 201` warps this
+#     boundary is actually made of and claim their pages: B1_ev035 and
+#     B1_ev023 cross FROM Kevlar back onto Route 1 and land EXACTLY on the
+#     p1 "arrival autorun" page of the Route 1 warp event they did NOT just
+#     use (ev046's p1 from ev035, ev045's p1 from ev023) -- an exact landing
+#     (`assert_position_exact`, no tolerance) is how "this autorun moves
+#     nobody" (module docstring, the finding B27's own comment explains) gets
+#     checked as a fact about THIS build, not assumed from the RGSS read.
+#     B1_ev045 crosses the other Route 1 warp into Kevlar (near-tolerance;
+#     its own p1 claim rides on B1_ev023's exact check, the same split
+#     B1/B27 already uses). B1_return re-crosses ev046 to hand the player
+#     back to exactly where B27 left them (rows=(), since ev046/p0 is
+#     already B1's own claim) -- so B2 onward runs unaffected.
 
 
 @ch03.beat("B1", "Crossing Route 1's north seam lands in Kevlar Town",
-             map_constant="MAP_ROUTE_01", at=KEVLAR_ENTRY_APPROACH)
+             map_constant="MAP_ROUTE_01", at=KEVLAR_ENTRY_APPROACH,
+             rows=("map033/ev046/p0",))
 def b1(emu: Emulator) -> None:
     _cross_threshold(emu, "B1", KEVLAR_ENTRY_APPROACH, KEVLAR_ENTRY_DIRECTION,
                      "MAP_KEVLAR_TOWN")
@@ -591,6 +616,108 @@ def b27(emu: Emulator) -> None:
     _assert_near(emu, "B27", (16, 42), tolerance=0)
     expected = _expected_arrival_facing(31, 16, 42)
     _assert_player_facing(emu, "B27", expected)
+
+
+# -- B1_ev035/B1_ev045/B1_ev023/B1_return (placed right after B27 -- see the
+# block comment above B1) -- the Route 1 <-> Kevlar boundary is actually 4
+# `code 201` warps (map033 ev045/ev046 southbound, map031 ev023/ev035
+# northbound), and B1 only crosses one of them (ev046). These four beats
+# claim the other three pages plus the two Route 1 p1 "arrival autorun"
+# pages, without any beat re-navigating across the map: each one starts from
+# exactly where the previous beat (B27, then each new beat in turn) already
+# left the player, mirroring B27-B33's own "piggyback on an already-standing
+# position" rule.
+def _crossing_approach(warp_cell: tuple[int, int], direction: str) -> tuple[int, int]:
+    """The cell you stand on to cross a threshold warp INTO `warp_cell`,
+    stepping `direction` -- one tile behind the trigger, opposite the
+    direction of travel. Same formula `warp.py`'s `_APPROACH_DELTA`/
+    `assertions.py`'s `_ARROW_APPROACH_DELTA` encode for the same purpose;
+    expressed here via `_DIR_VECTOR` (already module-local) instead of a
+    third private copy of the same four-entry table."""
+    dx, dy = _DIR_VECTOR[direction]
+    return (warp_cell[0] - dx, warp_cell[1] - dy)
+
+
+_KV_EV035_WARP = cells.warp_cell("MAP_KEVLAR_TOWN", to="MAP_ROUTE_01", event_id=35)
+_KV_EV035_APPROACH = _crossing_approach(_KV_EV035_WARP, "DOWN")
+_R1_EV046_ARRIVAL_FROM_EV035 = cells.arrival_cell(
+    "MAP_ROUTE_01", from_map="MAP_KEVLAR_TOWN", event_id=35)
+
+_R1_EV045_WARP = cells.warp_cell("MAP_ROUTE_01", to="MAP_KEVLAR_TOWN", event_id=45)
+_R1_EV045_APPROACH = _crossing_approach(_R1_EV045_WARP, "UP")
+_KV_ARRIVAL_FROM_EV045 = cells.arrival_cell(
+    "MAP_KEVLAR_TOWN", from_map="MAP_ROUTE_01", event_id=45)
+
+_KV_EV023_WARP = cells.warp_cell("MAP_KEVLAR_TOWN", to="MAP_ROUTE_01", event_id=23)
+_KV_EV023_APPROACH = _crossing_approach(_KV_EV023_WARP, "DOWN")
+_R1_ARRIVAL_FROM_EV023 = cells.arrival_cell(
+    "MAP_ROUTE_01", from_map="MAP_KEVLAR_TOWN", event_id=23)
+
+_R1_EV046_WARP = cells.warp_cell("MAP_ROUTE_01", to="MAP_KEVLAR_TOWN", event_id=46)
+_R1_EV046_APPROACH = _crossing_approach(_R1_EV046_WARP, "UP")
+_KV_ARRIVAL_FROM_EV046 = cells.arrival_cell(
+    "MAP_KEVLAR_TOWN", from_map="MAP_ROUTE_01", event_id=46)
+
+
+@ch03.beat("B1_ev035", "Crossing Kevlar Town's ev035 back onto Route 1 "
+                         "lands EXACTLY on ev046's p1 arrival-autorun tile "
+                         "(two south of ev046's own tile) -- an exact "
+                         "landing is how 'this autorun moves nobody' "
+                         "(module docstring) gets checked as a fact, not "
+                         "assumed from the RGSS read",
+             map_constant="MAP_KEVLAR_TOWN", at=_KV_EV035_APPROACH,
+             rows=("map031/ev035/p0", "map033/ev046/p1"))
+def b1_ev035(emu: Emulator) -> None:
+    _cross_threshold(emu, "B1_ev035", _KV_EV035_APPROACH, "DOWN", "MAP_ROUTE_01")
+    emu.settle_field()
+    if emu.field_locked():
+        shot = emu.screenshot("b1_ev035_field_locked")
+        raise ScenarioError(
+            f"B1_ev035: field still locked after crossing to Route 1 -- "
+            f"ev046's p1 arrival autorun should move nobody, not leave the "
+            f"field locked ({shot})")
+    _assert_position_exact(emu, "B1_ev035", _R1_EV046_ARRIVAL_FROM_EV035)
+
+
+@ch03.beat("B1_ev045", "Crossing Route 1's ev045 into Kevlar Town -- the "
+                         "other southbound half of the boundary B1 didn't "
+                         "cross (near-tolerance here; B1_ev023 below is the "
+                         "exact-landing check on this warp's paired p1 "
+                         "autorun)",
+             map_constant="MAP_ROUTE_01", at=_R1_EV045_APPROACH,
+             rows=("map033/ev045/p0",))
+def b1_ev045(emu: Emulator) -> None:
+    _cross_threshold(emu, "B1_ev045", _R1_EV045_APPROACH, "UP", "MAP_KEVLAR_TOWN")
+    _assert_near(emu, "B1_ev045", _KV_ARRIVAL_FROM_EV045, tolerance=1)
+
+
+@ch03.beat("B1_ev023", "Crossing Kevlar Town's ev023 back onto Route 1 "
+                         "lands EXACTLY on ev045's p1 arrival-autorun tile "
+                         "-- the mirror of B1_ev035's check, on the OTHER "
+                         "Route 1 warp",
+             map_constant="MAP_KEVLAR_TOWN", at=_KV_EV023_APPROACH,
+             rows=("map031/ev023/p0", "map033/ev045/p1"))
+def b1_ev023(emu: Emulator) -> None:
+    _cross_threshold(emu, "B1_ev023", _KV_EV023_APPROACH, "DOWN", "MAP_ROUTE_01")
+    emu.settle_field()
+    if emu.field_locked():
+        shot = emu.screenshot("b1_ev023_field_locked")
+        raise ScenarioError(
+            f"B1_ev023: field still locked after crossing to Route 1 -- "
+            f"ev045's p1 arrival autorun should move nobody, not leave the "
+            f"field locked ({shot})")
+    _assert_position_exact(emu, "B1_ev023", _R1_ARRIVAL_FROM_EV023)
+
+
+@ch03.beat("B1_return", "Crossing back over Route 1's ev046 hands the "
+                         "player back to exactly where B27 left them, so "
+                         "B2 onward proceeds unaffected -- ev046/p0 is "
+                         "already B1's own claim, so this beat claims "
+                         "nothing new",
+             map_constant="MAP_ROUTE_01", at=_R1_EV046_APPROACH)
+def b1_return(emu: Emulator) -> None:
+    _cross_threshold(emu, "B1_return", _R1_EV046_APPROACH, "UP", "MAP_KEVLAR_TOWN")
+    _assert_near(emu, "B1_return", _KV_ARRIVAL_FROM_EV046)
 
 
 # -- B2 ------------------------------------------------------------------

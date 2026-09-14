@@ -667,7 +667,10 @@ def _settle_post_battle_script(emu: Emulator, beat: str, flag: str,
 @ch04.beat("B1", "Crossing Kevlar Town's north seam lands on Route 2's "
                    "south edge",
              map_constant="MAP_KEVLAR_TOWN", at=KEVLAR_SEAM_ARROW,
-             rows=("map035/seam/S/map031",))
+             # The second id is CH03's side of the same seam: CH03 dispositions
+             # it `boundary`, and the arriving chapter claims it
+             # (REDERIVATION_PLAN.md §10 R2, 2026-09-14).
+             rows=("map035/seam/S/map031", "map031/seam/N/map035"))
 def b1(emu: Emulator) -> None:
     _cross_arrow_warp(emu, "B1", KEVLAR_SEAM_ARROW, KEVLAR_SEAM_DIRECTION,
                       MAP_CONST)

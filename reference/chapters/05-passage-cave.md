@@ -81,7 +81,9 @@ the self-switch-gated (once-only) pickups/battles along it.
 
 | Beat | Map | Gate | Player action (test) | Expected effect (observable) |
 |---|---|---|---|---|
-| B1 | 35→36 | — | enter cave from Route 2 | `pbCaveEntrance`, warp to Map036 (17,39) |
+| B1 | 36→35→35 | — | cross cave's own exit warp (`map036/ev001/p0`) to Route 2, via the DERIVED reciprocal `pbCaveEntrance` (`map035/ev001/p0`, claimed by `B1_in`, not here) | `pbCaveExit`, mirrored: reciprocal Route 2→cave first, then the claimed cave→Route 2 crossing; ends on Route 2 (20,33) |
+| B1_nudge | 35 | arrival autorun | observe the nudge that fires landing on (20,33) from the cave | claims `map035/ev001/p1` (CH04's own map, claimed here per REDERIVATION_PLAN.md §10 R2/R3 — only CH05's walk can trigger it); player displaced one tile off (20,33) |
+| B1_in | 35→36 | — | enter cave from Route 2 | `pbCaveEntrance`, claims `map035/ev001/p0` directly, warp to Map036 (17,39) |
 | B2 | 36 | self-switch A off | walk to (10,35) | EV003: `pbItemBall(ESCAPEROPE)` (`Map036.json:5765-5771`); self-switch A set |
 | B3 | 36 | event sight | approach Trainer(5) (18,29) | `pbTrainerBattle(HIKER,"Manny")` (`:6008-6014`); self-switch A after |
 | B4 | 36 | none | walk to (22,7) | EV005: `pbItemBall(GREATBALL)` (`:6196-6201`) |

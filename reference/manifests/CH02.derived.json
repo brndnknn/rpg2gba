@@ -59,6 +59,14 @@
     "derived_hash": "2e2951ede454e802",
     "proposed": true
   },
+  "map033/ev022/p0": {
+    "disposition": "beat:B1",
+    "derived_hash": "915ec4ba4671381d"
+  },
+  "map033/ev023/p0": {
+    "disposition": "beat:B1",
+    "derived_hash": "42e2f08246a68f5a"
+  },
   "map033/ev025/p0": {
     "disposition": "beat:B15",
     "derived_hash": "58bfb375a4eeb4dc"

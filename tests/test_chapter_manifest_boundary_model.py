@@ -172,17 +172,14 @@ def test_real_ch04_forward_crossing_and_claim_state() -> None:
     EVENT as the one that is, so `is_forward_crossing` now reports both
     (REDERIVATION_PLAN.md §10 R3: boundary-ness is a property of the event,
     not the individual page). CH04's successor is CH05, whose playtest
-    module exists, but CH05 does not currently claim EITHER row in any
-    beat's `rows=` -- `ch05.py`'s own module docstring says as much for
-    both ("owned by CH04's manifest, not this one" / "not claimable here").
-    This is exactly the contradiction PROJECT_TODO #72/#73 exists to
-    surface, not a bug in this adapter; if CH05 is later updated to claim
-    one of these rows, that's good news -- update the assertion."""
+    module exists. Re-pinned 2026-09-14 when R2/R3 were implemented: CH05's
+    `B1_in` claims p0 and `B1_nudge` claims p1, closing the #72/#73
+    contradiction this test was first written to surface."""
     model = build_boundary_model("CH04")
     assert model is not None
     assert model.successor_chapter_id() == "CH05"
     assert model.is_forward_crossing("map035/ev001/p0") is True
     assert model.is_forward_crossing("map035/ev001/p1") is True
     assert model.successor_has_module() is True
-    assert model.successor_claims("map035/ev001/p0") is False
-    assert model.successor_claims("map035/ev001/p1") is False
+    assert model.successor_claims("map035/ev001/p0") is True
+    assert model.successor_claims("map035/ev001/p1") is True

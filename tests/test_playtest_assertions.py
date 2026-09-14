@@ -369,7 +369,11 @@ def test_beat_counts_unchanged_after_the_assertions_refactor() -> None:
     # chains route1 as its predecessor, so it carries the same +1.
     # route1 went 31 -> 32 on 2026-09-13: B18 (the initial white-out anchor,
     # REDERIVATION_PLAN.md §14.7/§15.6) was registered; kevlar carries the +1.
-    expected = {"CH01": 17, "CH02": 32, "CH03": 62}
+    # 2026-09-14: moki 17 -> 18 (N4, the refused Moki rocks); route1 +1 for
+    # that, +4 for the Moki<->Route 1 boundary-claim crossings after B1
+    # (32 -> 37); kevlar carries both, +1 for N7 (the refused Kevlar
+    # boulders) and +4 for the Route 1<->Kevlar crossings after B27 (62 -> 72).
+    expected = {"CH01": 18, "CH02": 37, "CH03": 72}
     for name, count in expected.items():
         chapter = load_chapter(name)
         assert len(chapter.beats) == count, f"{name}: beat count drifted"

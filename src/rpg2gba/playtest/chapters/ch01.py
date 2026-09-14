@@ -49,7 +49,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .. import assertions
+from .. import assertions, cells
 from ..battle import in_battle, win_battle
 from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
@@ -139,9 +139,16 @@ CEREMONY_ROWS = (43, 45)  # the trigger column's extent, for B14's re-cross
 #     from the same standing tile, facing DOWN for EV014 and RIGHT for EV033.
 #   - (65,46), immediately west of EV015 -- facing RIGHT.
 # Both tiles are terrain-unblocked and carry no object event of their own.
-ROCK_EV014 = (5, (65, 45), (65, 44), "DOWN")
-ROCK_EV033 = (11, (66, 44), (65, 44), "RIGHT")
-ROCK_EV015 = (6, (66, 46), (65, 46), "RIGHT")
+_ROCK_NORTH_STAND = cells.raw_cell(
+    65, 44, why="BFS-chosen standing tile covering EV014 and EV033 (see above)")
+_ROCK_WEST_STAND = cells.raw_cell(
+    65, 46, why="BFS-chosen standing tile west of EV015 (see above)")
+ROCK_EV014 = (cells.local_id("MAP_MOKI_TOWN", 14),
+              cells.event_cell("MAP_MOKI_TOWN", 14), _ROCK_NORTH_STAND, "DOWN")
+ROCK_EV033 = (cells.local_id("MAP_MOKI_TOWN", 33),
+              cells.event_cell("MAP_MOKI_TOWN", 33), _ROCK_NORTH_STAND, "RIGHT")
+ROCK_EV015 = (cells.local_id("MAP_MOKI_TOWN", 15),
+              cells.event_cell("MAP_MOKI_TOWN", 15), _ROCK_WEST_STAND, "RIGHT")
 
 
 # -- small local helpers, built only from the emulator's public surface ------

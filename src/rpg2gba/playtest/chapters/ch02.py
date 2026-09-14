@@ -109,6 +109,7 @@ from typing import TYPE_CHECKING
 
 from .. import assertions
 from ..battle import in_battle, read_enemy_party, win_battle
+from ..cells import arrival_cell, warp_cell
 from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
 from ..whiteout import whiteout_beat
@@ -1073,27 +1074,41 @@ def _rock_smash_refused(emu: Emulator, beat: str, local_id: int,
 # generator can join `beat:` instead of a human hand-writing it. Two things a
 # reader should not have to reverse-engineer from the tuples:
 #
-# FIVE BEATS CLAIM NOTHING, AND THAT IS THE CORRECT ANSWER.
-#   B1  -- the crossing from Moki Town, and the reason is structural rather
-#          than missing data. This crossing is not a map connection at all:
+# FOUR BEATS CLAIM NOTHING, AND THAT IS THE CORRECT ANSWER.
+#   B1  -- claimed 2026-09-14 (see below); no longer in this list. The
+#          crossing from Moki Town is not a map connection at all:
 #          `connections.json` has no 32<->33 edge (Moki's only connection is
 #          `[32, 'E', 26, 59, 'W', 0]`, which is why CH01's single seam row is
-#          `map032/seam/E/map059`). It is a `code 201` warp, one of the three
-#          slice-growth found on Map032 -- EV023/EV036/EV037 -- and B1 crosses
-#          EV023 specifically: it stands on (9,44) and presses LEFT onto
-#          (8,44), which is EV023's tile (EV036 is (8,45), EV037 is (8,43)).
-#          So the row B1 crosses is `map032/ev023/p0`, and it lives in CH01's
-#          manifest, because the departing map belongs to the shipping
-#          chapter. That asymmetry is exactly what REDERIVATION_PLAN.md 10
-#          R2/R3 ruled on for `map035/ev001`: the ARRIVING chapter claims the
-#          boundary row, and `boundary_model.successor_claims` resolves it out
-#          of the successor's `Beat.rows` rather than the successor's
-#          manifest. The claim is deliberately NOT made here: no chapter in
-#          the corpus claims a cross-manifest boundary row yet (CH05 claims
-#          only its own maps 36/37), and P8b is the step that carries that
-#          flip. Adding it for CH01/CH02 alone would reintroduce the very
-#          inconsistency 10 was resolving. When P8b runs, this is the fourth
-#          instance to flip, alongside CH04/CH05's two.
+#          `map032/seam/E/map059`). It is one of THREE `code 201` warps on
+#          Map032 -- EV023/EV036/EV037, all landing on Route 1 (70,11) or
+#          (Route1->Moki's own reciprocal set, EV022/EV023/EV024 on Map033)
+#          landing on Moki's EV037 tile (8,43). B1 itself crosses EV023: it
+#          stands on (9,44) and presses LEFT onto (8,44) (EV036 is (8,45),
+#          EV037 is (8,43)). So the row B1 crosses is `map032/ev023/p0`, and
+#          it lives in CH01's manifest, because the departing map belongs to
+#          the shipping chapter. That asymmetry is exactly what
+#          REDERIVATION_PLAN.md 10 R2/R3 ruled on for `map035/ev001`: the
+#          ARRIVING chapter claims the boundary row, and
+#          `boundary_model.successor_claims` resolves it out of the
+#          successor's `Beat.rows` rather than the successor's manifest.
+#          2026-09-14: the claim is now made, on B1's own decorator
+#          (`rows=("map032/ev023/p0",)`), and four new beats
+#          (`B1_back`/`B1_ev037`/`B1_back2`/`B1_ev036`) registered right after
+#          B1 claim the remaining seven rows of the passage: CH01's
+#          `map032/ev037/p0` and `map032/ev036/p0` (the other two
+#          Moki->Route1 warps), CH01's `map033/ev023/p0` and
+#          `map033/ev022/p0` (two of the three Route1->Moki warps -- EV024 is
+#          not separately exercised; all three land on the same tile and
+#          EV023 already proves the reciprocal direction works), and the
+#          three Moki-side p1 arrival autoruns a Route1->Moki crossing
+#          triggers (`map032/ev037/p1`, `map032/ev023/p1`, `map032/ev036/p1`
+#          -- claimed together on `B1_back`, since every Route1->Moki landing
+#          fires all three at once; see that beat's own comment). One row is
+#          left unclaimed on purpose: `map033/ev024/p0`. B1's own crossing
+#          already proves EV023 (Moki->Route1 direction); the new beats prove
+#          the other two Moki->Route1 warps and two of the three Route1->Moki
+#          warps, in both directions, and leave the player back on Route 1
+#          near (70,11) where B2 already expects them.
 #   B4  -- a wild-grass encounter. An encounter table is neither an event page
 #          nor a seam nor terrain, so no manifest row can ever represent it.
 #   B14 -- trainer pacing (MOVEMENT_TYPE_LOOK_AROUND surviving a battle). A
@@ -1116,11 +1131,113 @@ def _rock_smash_refused(emu: Emulator, beat: str, local_id: int,
 
 
 @ch02.beat("B1", "Crossing Moki Town's east passage lands on Route 1 near (70,11)",
-             map_constant="MAP_MOKI_TOWN", at=ROUTE1_ENTRY_APPROACH)
+             map_constant="MAP_MOKI_TOWN", at=ROUTE1_ENTRY_APPROACH,
+             rows=("map032/ev023/p0",))
 def b1(emu: Emulator) -> None:
     _cross_threshold(emu, "B1", ROUTE1_ENTRY_APPROACH, ROUTE1_ENTRY_DIRECTION,
                      "MAP_ROUTE_01")
     _assert_near(emu, "B1", ROUTE1_ARRIVAL)
+
+
+# -- B1_back / B1_ev037 / B1_back2 / B1_ev036 -----------------------------
+#
+# The other five warps of the three-each-way Moki<->Route1 passage (see the
+# long comment above B1). Crossing cells/arrival cells are all DERIVED via
+# `cells.warp_cell`/`cells.arrival_cell` -- never a coordinate literal --
+# and the approach cell one step back along each crossing direction is
+# computed from `_DIR_VECTOR` (already used throughout this module), also
+# never a literal.
+
+def _approach_for(crossing: tuple[int, int], direction: str) -> tuple[int, int]:
+    """The tile you stand on one step BEFORE stepping `direction` onto
+    `crossing` -- i.e. `crossing` minus the direction's own movement vector.
+    Mirrors `archetypes/warp.py`'s private `_APPROACH_DELTA` table, computed
+    from this module's own `_DIR_VECTOR` instead of a second table."""
+    dx, dy = _DIR_VECTOR[direction]
+    return (crossing[0] - dx, crossing[1] - dy)
+
+
+B1_BACK_CROSSING = warp_cell("MAP_ROUTE_01", to="MAP_MOKI_TOWN", event_id=23)
+B1_BACK_APPROACH = _approach_for(B1_BACK_CROSSING, "RIGHT")
+B1_BACK_ARRIVAL = arrival_cell("MAP_MOKI_TOWN", from_map="MAP_ROUTE_01", event_id=23)
+
+B1_EV037_CROSSING = warp_cell("MAP_MOKI_TOWN", to="MAP_ROUTE_01", event_id=37)
+B1_EV037_APPROACH = _approach_for(B1_EV037_CROSSING, "LEFT")
+B1_EV037_ARRIVAL = arrival_cell("MAP_ROUTE_01", from_map="MAP_MOKI_TOWN", event_id=37)
+
+B1_BACK2_CROSSING = warp_cell("MAP_ROUTE_01", to="MAP_MOKI_TOWN", event_id=22)
+B1_BACK2_APPROACH = _approach_for(B1_BACK2_CROSSING, "RIGHT")
+B1_BACK2_ARRIVAL = arrival_cell("MAP_MOKI_TOWN", from_map="MAP_ROUTE_01", event_id=22)
+
+B1_EV036_CROSSING = warp_cell("MAP_MOKI_TOWN", to="MAP_ROUTE_01", event_id=36)
+B1_EV036_APPROACH = _approach_for(B1_EV036_CROSSING, "LEFT")
+B1_EV036_ARRIVAL = arrival_cell("MAP_ROUTE_01", from_map="MAP_MOKI_TOWN", event_id=36)
+
+
+@ch02.beat("B1_back",
+           "Route 1's ev023 warps back to Moki -- every Route1->Moki landing "
+           "fires all three of ev037/ev023/ev036's p1 arrival autoruns at "
+           "once (they all land on ev037's tile), so this beat also claims "
+           "ev023/ev036's p1 pages: only ev037/p1 actually nudges the "
+           "player, but ev023/p1 and ev036/p1 run on the same load and must "
+           "not move the player a second tile or leave the field locked",
+           map_constant="MAP_ROUTE_01", at=B1_BACK_APPROACH,
+           rows=("map033/ev023/p0", "map032/ev037/p1", "map032/ev023/p1",
+                 "map032/ev036/p1"))
+def b1_back(emu: Emulator) -> None:
+    _cross_threshold(emu, "B1_back", B1_BACK_APPROACH, "RIGHT", "MAP_MOKI_TOWN")
+    emu.settle_field()
+    if emu.field_locked():
+        shot = emu.screenshot("b1_back_stuck")
+        raise ScenarioError(
+            f"B1_back: field still locked after settling on arrival "
+            f"({shot})")
+    pos = emu.player_pos()
+    if pos == B1_BACK_ARRIVAL:
+        shot = emu.screenshot("b1_back_no_nudge")
+        raise ScenarioError(
+            f"B1_back: player still at arrival cell {B1_BACK_ARRIVAL} after "
+            f"the autorun settled -- expected ev037's nudge move route to "
+            f"have displaced them ({shot})")
+    dx = abs(pos[0] - B1_BACK_ARRIVAL[0])
+    dy = abs(pos[1] - B1_BACK_ARRIVAL[1])
+    if dx + dy != 1:
+        shot = emu.screenshot("b1_back_wrong_nudge_distance")
+        raise ScenarioError(
+            f"B1_back: nudged to {pos}, expected exactly one tile off "
+            f"arrival cell {B1_BACK_ARRIVAL} (got Manhattan distance "
+            f"{dx + dy}) ({shot})")
+
+
+@ch02.beat("B1_ev037", "Moki's ev037 (the tile every Route1->Moki warp lands "
+           "on) crosses to Route 1 the same as B1's ev023",
+           map_constant="MAP_MOKI_TOWN", at=B1_EV037_APPROACH,
+           rows=("map032/ev037/p0",))
+def b1_ev037(emu: Emulator) -> None:
+    _cross_threshold(emu, "B1_ev037", B1_EV037_APPROACH, "LEFT", "MAP_ROUTE_01")
+    _assert_near(emu, "B1_ev037", B1_EV037_ARRIVAL)
+
+
+@ch02.beat("B1_back2", "Route 1's ev022 warps back to Moki, the second of "
+           "the three Route1->Moki warps this chapter exercises (ev024 is "
+           "not separately exercised -- all three land on the same tile and "
+           "ev023 already proved the reciprocal direction works)",
+           map_constant="MAP_ROUTE_01", at=B1_BACK2_APPROACH,
+           rows=("map033/ev022/p0",))
+def b1_back2(emu: Emulator) -> None:
+    _cross_threshold(emu, "B1_back2", B1_BACK2_APPROACH, "RIGHT", "MAP_MOKI_TOWN")
+    emu.settle_field()
+    _assert_near(emu, "B1_back2", B1_BACK2_ARRIVAL)
+
+
+@ch02.beat("B1_ev036", "Moki's ev036 crosses to Route 1, leaving the player "
+           "back near (70,11) -- exactly where B1 used to leave them, so B2 "
+           "is unaffected",
+           map_constant="MAP_MOKI_TOWN", at=B1_EV036_APPROACH,
+           rows=("map032/ev036/p0",))
+def b1_ev036(emu: Emulator) -> None:
+    _cross_threshold(emu, "B1_ev036", B1_EV036_APPROACH, "LEFT", "MAP_ROUTE_01")
+    _assert_near(emu, "B1_ev036", B1_EV036_ARRIVAL)
 
 
 # -- B2 ------------------------------------------------------------------

@@ -134,6 +134,10 @@ not an asserted canonical path.
 | Beat | Map | Gate | Player action (test) | Expected effect (observable) |
 |---|---|---|---|---|
 | B1 | 33 | arrive from Moki Town (CH01) | walk east passage tile (8,43-45 on Map032) | `pbCaveEntrance` screen-darken, warp to Map033 (70,11), `pbCaveExit` screen-restore; `setTempSwitchOn("A")` marks the arrival tile fired once (`Map033.json` EV022/23/24) |
+| B1_back | 33 | standing on Route 1 near (70,11) (from B1) | walk west, step onto Map033 EV023 (70,11), pressing RIGHT to return | warps back to Map032, landing on EV037's tile (8,43); the arrival autorun nudges the player one tile off it, and EV023/EV036's own page-1 autoruns (same load, same landing tile) must not move the player a second tile or leave the field locked (claims Map032 EV037/EV023/EV036 page 1 together) |
+| B1_ev037 | 32 | standing on Map032 near (9,43) (from B1_back) | walk east passage tile, step onto Map032 EV037 (8,43), pressing LEFT | warps to Map033, landing near (70,11) — the tile every Route1→Moki warp lands on, crossed the other direction |
+| B1_back2 | 33 | standing on Route 1 near (70,11) (from B1_ev037) | walk west, step onto Map033 EV022 (70,12), pressing RIGHT to return | warps back to Map032, landing near (8,43) (second of the three Route1→Moki warps exercised; EV024 not separately exercised — all three land on the same tile) |
+| B1_ev036 | 32 | standing on Map032 near (9,45) (from B1_back2) | walk east passage tile, step onto Map032 EV036 (8,45), pressing LEFT | warps to Map033, landing near (70,11) — same landing B1 originally left the player at, so B2 (the grass encounter beat) is unaffected |
 | B2 | 33 | none | walk into `land_mons` grass anywhere on the map | 25%-rate encounter from a 12-entry table (Chyinmunk/Birbie/Cubbug, all lv2-3) — `intermediate/wild_encounters.json:928` |
 | B3 | 33 | none, flavor | approach EV098 "Chyinmunk" (37,8) | `pbCallBub(2)` + cry SFX + "Chyin.. Chyin!" — no state change |
 | B4 | 33 | none, flavor | talk to EV099 "npc" (42,27) | Fortog/Antidote hint dialogue — no state change |
