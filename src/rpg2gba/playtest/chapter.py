@@ -60,7 +60,7 @@ import logging
 import os
 import pkgutil
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
@@ -160,7 +160,19 @@ class Beat:
     # `playtest.archetypes.ChapterArchetypeModel`, the concrete adapter for
     # `chapter_manifest.checker.ArchetypeModel` -- see that Protocol's
     # docstring for why the checker itself never imports `playtest`.
-    archetype: str | None = None
+    # A beat whose rows are of different archetypes (a warp crossing plus
+    # the arrival nudge it lands on, say) carries `(row_id, archetype)`
+    # pairs instead of one name; read it through `archetype_of`.
+    archetype: str | tuple[tuple[str, str], ...] | None = None
+
+    def archetype_of(self, row_id: str) -> str | None:
+        """The archetype this beat claims for `row_id`, or None when it
+        claims none for that row (including a row it doesn't list)."""
+        if row_id not in self.rows or self.archetype is None:
+            return None
+        if isinstance(self.archetype, str):
+            return self.archetype
+        return dict(self.archetype).get(row_id)
 
 
 def page_row_script(row_id: str) -> tuple[int, str] | None:
@@ -392,7 +404,7 @@ class ChapterBuilder:
              entry_at: tuple[int, int] | None = None,
              group: str | None = None,
              rows: tuple[str, ...] = (),
-             archetype: str | None = None,
+             archetype: str | Mapping[str, str] | None = None,
              ) -> Callable[[BeatFn], BeatFn]:
         """Register a beat, optionally declaring where it triggers.
 
@@ -417,7 +429,13 @@ class ChapterBuilder:
           `RULE_ARCHETYPE_CONFORMANCE` uses to confirm a `beat`-
           dispositioned archetype row actually has a beat claiming it, not
           just a disposition saying it does (the B14 shape). Validated
-          against `ARCHETYPE_NAMES` at registration time.
+          against `ARCHETYPE_NAMES` at registration time. A single name
+          tags every row in `rows=`. A beat whose rows are of different
+          archetypes passes a `{row_id: archetype}` mapping instead; each
+          key must be one of this beat's `rows=`, and a listed row left out
+          of the mapping is claimed under no archetype (a story page riding
+          along with a warp crossing, say). Added 2026-09-14: before it,
+          about ten CH01-CH03 beats were untaggable.
 
         Two mutually exclusive ways to declare location:
 
@@ -497,11 +515,29 @@ class ChapterBuilder:
                 f"got {group!r}")
         for row in rows:
             _validate_row_id(row, beat_name=name)
-        if archetype is not None and archetype not in ARCHETYPE_NAMES:
-            raise ValueError(
-                f"beat {name!r}: archetype={archetype!r} is not one of "
-                f"{sorted(ARCHETYPE_NAMES)} (chapter_manifest.archetypes."
-                "ARCHETYPE_NAMES)")
+        resolved_archetype: str | tuple[tuple[str, str], ...] | None
+        if archetype is None or isinstance(archetype, str):
+            archetype_names = () if archetype is None else (archetype,)
+            resolved_archetype = archetype
+        else:
+            if not archetype:
+                raise ValueError(
+                    f"beat {name!r}: archetype= mapping is empty -- pass None "
+                    "for a beat that claims no archetype")
+            unlisted = sorted(set(archetype) - set(rows))
+            if unlisted:
+                raise ValueError(
+                    f"beat {name!r}: archetype= maps row(s) {unlisted} that "
+                    "are not in this beat's rows=")
+            archetype_names = tuple(archetype.values())
+            resolved_archetype = tuple(
+                (row, archetype[row]) for row in rows if row in archetype)
+        for archetype_name in archetype_names:
+            if archetype_name not in ARCHETYPE_NAMES:
+                raise ValueError(
+                    f"beat {name!r}: archetype={archetype_name!r} is not one of "
+                    f"{sorted(ARCHETYPE_NAMES)} (chapter_manifest.archetypes."
+                    "ARCHETYPE_NAMES)")
         if entry_at is not None:
             if (not isinstance(entry_at, tuple) or len(entry_at) != 2
                     or not all(isinstance(v, int) for v in entry_at)):
@@ -531,7 +567,7 @@ class ChapterBuilder:
             self._beats.append(Beat(name=name, description=description,
                                     run=fn, locations=resolved_locations,
                                     entry_at=entry_at, group=group, rows=rows,
-                                    archetype=archetype))
+                                    archetype=resolved_archetype))
             return fn
 
         return decorate

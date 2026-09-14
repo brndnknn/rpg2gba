@@ -622,7 +622,63 @@ def test_beat_default_archetype_is_none() -> None:
     assert chapter.beats[0].archetype is None
 
 
+def test_beat_accepts_per_row_archetype_mapping() -> None:
+    b = _builder()
+
+    @b.beat("X", "desc",
+            rows=("map031/ev003/p0", "map031/ev003/p1", "map031/ev042/p0"),
+            archetype={"map031/ev003/p1": "arrival_nudge",
+                       "map031/ev003/p0": "warp"})
+    def _x(emu):  # pragma: no cover - never called
+        pass
+
+    beat = b.build().beats[0]
+    assert beat.archetype_of("map031/ev003/p0") == "warp"
+    assert beat.archetype_of("map031/ev003/p1") == "arrival_nudge"
+    assert beat.archetype_of("map031/ev042/p0") is None
+    assert beat.archetype_of("map999/ev999/p0") is None
+
+
+def test_beat_rejects_mapping_key_outside_rows() -> None:
+    b = _builder()
+    with pytest.raises(ValueError, match="not in this beat's rows="):
+        @b.beat("X", "desc", rows=("map031/ev003/p0",),
+                archetype={"map031/ev004/p0": "warp"})
+        def _x(emu):  # pragma: no cover - registration fails first
+            pass
+
+
+def test_beat_rejects_unknown_name_inside_mapping() -> None:
+    b = _builder()
+    with pytest.raises(ValueError, match="is not one of"):
+        @b.beat("X", "desc", rows=("map031/ev003/p0",),
+                archetype={"map031/ev003/p0": "door"})
+        def _x(emu):  # pragma: no cover - registration fails first
+            pass
+
+
+def test_beat_rejects_empty_archetype_mapping() -> None:
+    b = _builder()
+    with pytest.raises(ValueError, match="mapping is empty"):
+        @b.beat("X", "desc", rows=("map031/ev003/p0",), archetype={})
+        def _x(emu):  # pragma: no cover - registration fails first
+            pass
+
+
 # -- ChapterArchetypeModel -------------------------------------------------
+
+
+def test_chapter_archetype_model_indexes_per_row_mapping() -> None:
+    b = _builder()
+
+    @b.beat("X", "desc", rows=("map031/ev003/p0", "map031/ev042/p0"),
+            archetype={"map031/ev003/p0": "warp"})
+    def _x(emu):  # pragma: no cover
+        pass
+
+    model = ChapterArchetypeModel(b.build())
+    assert model.claimed_archetype("map031/ev003/p0") == "warp"
+    assert model.claimed_archetype("map031/ev042/p0") is None
 
 
 def test_chapter_archetype_model_indexes_registered_rows() -> None:

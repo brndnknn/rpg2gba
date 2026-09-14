@@ -208,6 +208,51 @@ def assert_near(emu: Emulator, beat: str, expected: tuple[int, int],
             f"(tolerance {tolerance}) ({shot})")
 
 
+def assert_arrival_settled(emu: Emulator, beat: str, arrival: tuple[int, int],
+                           *, nudged: bool) -> None:
+    """The landing check for a warp arrival that an RMXP arrival autorun
+    (the `arrival_nudge` archetype) governs.
+
+    Drains the destination's arrival scripts, fails if the field is still
+    locked, then checks where the player ended up relative to `arrival`
+    (derive it with `cells.arrival_cell`, never a literal):
+
+    - `nudged=True`: the arrival lands on the nudging event's own tile, so
+      the player must end exactly one tile off it.
+    - `nudged=False`: the arrival lands elsewhere, so the map's nudge
+      autoruns run but must move nobody -- the player stays on `arrival`.
+
+    The assembler drops warp-event autorun pages as orphans, so in the ROM
+    this checks the converted landing, which is what CH05's gate-passed
+    `B8_nudge` observed (2026-09-14).
+    """
+    emu.settle_field()
+    if emu.field_locked():
+        shot = emu.screenshot(f"{beat}_stuck")
+        raise ScenarioError(
+            f"{beat}: field still locked after settling on arrival ({shot})")
+    pos = emu.player_pos()
+    if not nudged:
+        if pos != arrival:
+            shot = emu.screenshot(f"{beat}_moved_on_arrival")
+            raise ScenarioError(
+                f"{beat}: landed at {pos}, expected to stay on arrival cell "
+                f"{arrival} -- no nudge applies to this landing ({shot})")
+        return
+    if pos == arrival:
+        shot = emu.screenshot(f"{beat}_no_nudge")
+        raise ScenarioError(
+            f"{beat}: player still at arrival cell {arrival} after the "
+            f"autorun settled -- expected the nudge move route to have "
+            f"displaced them ({shot})")
+    distance = abs(pos[0] - arrival[0]) + abs(pos[1] - arrival[1])
+    if distance != 1:
+        shot = emu.screenshot(f"{beat}_wrong_nudge_distance")
+        raise ScenarioError(
+            f"{beat}: nudged to {pos}, expected exactly one tile off arrival "
+            f"cell {arrival} (got Manhattan distance {distance}) ({shot})")
+
+
 def assert_position_exact(emu: Emulator, beat: str, expected: tuple[int, int]) -> None:
     """Exact player-position check, no tolerance -- unlike `assert_near`.
 

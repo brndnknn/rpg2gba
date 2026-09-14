@@ -217,21 +217,22 @@ class ChapterArchetypeModel:
     def __init__(self, chapter: _chapter.Chapter) -> None:
         index: dict[str, str] = {}
         for beat in chapter.beats:
-            if beat.archetype is None:
-                continue
             for row in beat.rows:
+                archetype = beat.archetype_of(row)
+                if archetype is None:
+                    continue
                 existing = index.get(row)
-                if existing is not None and existing != beat.archetype:
+                if existing is not None and existing != archetype:
                     raise ValueError(
                         f"ChapterArchetypeModel: row {row!r} in chapter "
                         f"{chapter.name!r} is claimed as both {existing!r} "
-                        f"(by an earlier beat) and {beat.archetype!r} (by "
+                        f"(by an earlier beat) and {archetype!r} (by "
                         f"beat {beat.name!r}) -- two beats disagree about "
                         "what archetype this row is; that is an authoring "
                         "contradiction to resolve by hand, not something "
                         "this model may pick a winner for"
                     )
-                index[row] = beat.archetype
+                index[row] = archetype
         self._index = index
 
     def claimed_archetype(self, row_id: str) -> str | None:

@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 
 from .. import assertions
 from ..cells import arrival_cell
-from ..errors import ScenarioError
 from . import find_match
 
 if TYPE_CHECKING:  # runtime import is lazy so this module works without bindings
@@ -99,29 +98,6 @@ def arrival_nudge_beat(
     )
     def run(emu: Emulator) -> None:
         assertions.require_map(emu, beat_name, map_constant)
-        emu.settle_field()
-        if emu.field_locked():
-            shot = emu.screenshot(f"{beat_name}_stuck")
-            raise ScenarioError(
-                f"{beat_name}: field still locked after settling on "
-                f"arrival ({shot})"
-            )
-        pos = emu.player_pos()
-        if pos == arrival:
-            shot = emu.screenshot(f"{beat_name}_no_nudge")
-            raise ScenarioError(
-                f"{beat_name}: player still at arrival cell {arrival} "
-                "after the autorun settled -- expected the nudge move "
-                f"route to have displaced them ({shot})"
-            )
-        dx = abs(pos[0] - arrival[0])
-        dy = abs(pos[1] - arrival[1])
-        if dx + dy != 1:
-            shot = emu.screenshot(f"{beat_name}_wrong_nudge_distance")
-            raise ScenarioError(
-                f"{beat_name}: nudged to {pos}, expected exactly one tile "
-                f"off arrival cell {arrival} (got Manhattan distance "
-                f"{dx + dy}) ({shot})"
-            )
+        assertions.assert_arrival_settled(emu, beat_name, arrival, nudged=True)
 
     del run

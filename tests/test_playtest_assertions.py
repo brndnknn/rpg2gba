@@ -160,6 +160,56 @@ def test_assert_near_outside_tolerance_raises_with_screenshot() -> None:
     assert emu.screenshots == ["B3_wrong_landing"]
 
 
+# -- assert_arrival_settled ------------------------------------------------------
+
+class _ArrivalEmu(_FakeEmu):
+    def __init__(self, *, pos: tuple[int, int], locked: bool = False) -> None:
+        super().__init__(pos=pos)
+        self._locked = locked
+        self.settled = False
+
+    def settle_field(self) -> None:
+        self.settled = True
+
+    def field_locked(self) -> bool:
+        return self._locked
+
+
+def test_arrival_settled_nudged_accepts_exactly_one_tile_off() -> None:
+    emu = _ArrivalEmu(pos=(8, 44))
+    assertions.assert_arrival_settled(emu, "B1", (8, 43), nudged=True)
+    assert emu.settled and emu.screenshots == []
+
+
+def test_arrival_settled_nudged_rejects_staying_on_the_arrival_cell() -> None:
+    emu = _ArrivalEmu(pos=(8, 43))
+    with pytest.raises(ScenarioError, match="still at arrival cell"):
+        assertions.assert_arrival_settled(emu, "B1", (8, 43), nudged=True)
+    assert emu.screenshots == ["B1_no_nudge"]
+
+
+def test_arrival_settled_nudged_rejects_two_tiles_off() -> None:
+    emu = _ArrivalEmu(pos=(9, 44))
+    with pytest.raises(ScenarioError, match="Manhattan distance 2"):
+        assertions.assert_arrival_settled(emu, "B1", (8, 43), nudged=True)
+
+
+def test_arrival_settled_unnudged_requires_the_exact_cell() -> None:
+    assertions.assert_arrival_settled(
+        _ArrivalEmu(pos=(15, 7)), "B1", (15, 7), nudged=False)
+    emu = _ArrivalEmu(pos=(15, 8))
+    with pytest.raises(ScenarioError, match="no nudge applies"):
+        assertions.assert_arrival_settled(emu, "B1", (15, 7), nudged=False)
+    assert emu.screenshots == ["B1_moved_on_arrival"]
+
+
+def test_arrival_settled_fails_on_a_locked_field_before_checking_position() -> None:
+    emu = _ArrivalEmu(pos=(15, 7), locked=True)
+    with pytest.raises(ScenarioError, match="field still locked"):
+        assertions.assert_arrival_settled(emu, "B1", (15, 7), nudged=False)
+    assert emu.screenshots == ["B1_stuck"]
+
+
 # -- warp-arrival facing: the flagship promoted case --------------------------
 
 def test_assert_player_facing_matches() -> None:
