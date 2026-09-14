@@ -77,19 +77,31 @@ chapters.json` for its owning chapter -- `None` if no chapter claims that
 map yet, never a hard failure (a map genuinely can be unowned at this stage
 of the corpus).
 
-**Known limit: field capabilities are invisible to this module, by nature
-rather than by omission.** `rock_smash` and `surf` resolve to nothing here,
-so CH04's 28 `blocked:rock_smash` rows and CH05's 4 `blocked:surf` rows stay
-`capability_model_unenforced`. **Uranium has no HMs** (operator, 2026-09-10):
-completing a gym unlocks the move, the badge permits using it in the field,
-and for at least some capabilities an *item* grants the same ability -- so
-the real gate is `badge AND (move OR item)`. None of that is a `code 121` or
-`code 122` write, so extending the scan cannot reach it; and `blocked:a|b`
-means AND-of-a-set with no OR, so the disjunction has no representation in
-the verdict grammar either. Leaving these *unenforced* is the correct state:
-it is an honest "not checked", not a silent pass. Do not make them green by
-inventing a grant site. See `PROJECT_TODO.md` #92 and `MEMORY.md` ->
-Uranium-Specific Discoveries.
+**Known limit: field capabilities model only the badge half of their gate.**
+Uranium gates `rock_smash`/`surf`/etc. on `badge AND (move OR item)`
+(**Uranium has no HMs** -- operator, 2026-09-10): completing a gym unlocks
+the move, the badge permits using it in the field, and for at least some
+capabilities an *item* grants the same ability. The `move OR item` half is
+not a `code 121`/`code 122` write and `blocked:a|b` has no OR in its verdict
+grammar, so that half stays unmodelled -- deferred to CH06
+(`REDERIVATION_PLAN.md` §15.2 item 4).
+
+The `badge` half, by contrast, IS derivable: `$Trainer.badges[N]=true` is a
+literal, monotonic (never `=false` in the corpus) fact written from `code
+355`/`code 655` (Script/Script continuation) commands, and Uranium's
+`HIDDENMOVESCOUNTBADGES=true` setting (`reference/scripts_dump/
+002__Settings.rb:144-151`) gates each field move on a simple badge COUNT
+(`BADGEFORROCKSMASH=1`, `BADGEFORSURF=5`, etc.) -- not on any specific badge.
+`FIELD_CAPABILITY_BADGE_COUNT` models exactly that count, and
+`grant_sites`/`field_badge_requirement` expose it below. **This is necessary,
+NOT sufficient**: a field token's badge count being met never confirms the
+capability is actually held, because the `move OR item` conjunct could still
+be missing. `chapter_manifest.capability_model.ChapterCapabilityModel`
+enforces that asymmetry -- it may use the badge model to confirm a `blocked:`
+claim is still correct (badge not yet met) but must never use it alone to
+raise `blocked_already_granted`. Do not make these fully green by modelling
+the other conjunct here; that is CH06's job. See `PROJECT_TODO.md` #92 and
+`MEMORY.md` -> Uranium-Specific Discoveries.
 """
 from __future__ import annotations
 
@@ -113,6 +125,25 @@ DEFAULT_CHAPTERS_JSON = Path("reference/chapters.json")
 
 SWITCH_WRITE_CODE = 121
 VARIABLE_WRITE_CODE = 122
+SCRIPT_CODE = 355
+SCRIPT_CONTINUATION_CODE = 655
+
+# Badge-count requirement for each Uranium field capability
+# (`reference/scripts_dump/002__Settings.rb:144-151`, `HIDDENMOVESCOUNTBADGES
+# = true`). This models ONLY the badge-count conjunct of Uranium's real gate
+# (`badge AND (move OR item)`) -- the badge is NECESSARY, NOT SUFFICIENT. The
+# `move OR item` conjunct is deferred to CH06
+# (`REDERIVATION_PLAN.md` §15.2 item 4); see the module docstring.
+FIELD_CAPABILITY_BADGE_COUNT: dict[str, int] = {
+    "cut": 3,          # BADGEFORCUT
+    "flash": 0,        # BADGEFORFLASH
+    "rock_smash": 1,   # BADGEFORROCKSMASH
+    "strength": 4,     # BADGEFORSTRENGTH
+    "surf": 5,         # BADGEFORSURF
+    "dive": 7,         # BADGEFORDIVE
+    "fly": 8,          # BADGEFORFLY
+    "waterfall": 8,    # BADGEFORWATERFALL
+}
 
 # RMXP Control Variables `operation` codes (parameters[2]). Only 0 (Set) can
 # ever be resolved to a known constant by this module; the rest are relative
@@ -139,6 +170,12 @@ class AmbiguousTokenError(CapabilitySitesError):
 _CAPABILITY_TOKEN = re.compile(r"^[a-z][a-z0-9_]*$")
 _DROP = re.compile(r"['.]")
 _SEP = re.compile(r"[^A-Za-z0-9]+")
+
+# `$Trainer.badges[N]=true` inside a code-355/655 Script command's text
+# parameter. Whitespace-tolerant around `=` and the brackets; case is fixed
+# by Uranium's own convention (`$Trainer`, `badges`) so not folded.
+_BADGE_TRUE_RE = re.compile(r"\$Trainer\.badges\[\s*(\d+)\s*\]\s*=\s*true")
+_BADGE_FALSE_RE = re.compile(r"\$Trainer\.badges\[\s*(\d+)\s*\]\s*=\s*false")
 
 
 def _fold_accents(name: str) -> str:
@@ -236,6 +273,23 @@ class VariableWriteSite:
 
 
 @dataclass(frozen=True)
+class BadgeWriteSite:
+    """One `$Trainer.badges[N]=true` write, found inside a `code 355`
+    (Script) or `code 655` (Script continuation) command's text. Badges are
+    never revoked in the corpus (no `=false` write exists); a `=false` write,
+    if ever found, raises `CapabilitySitesError` rather than silently
+    breaking the monotonic-count assumption `FIELD_CAPABILITY_BADGE_COUNT`
+    relies on."""
+
+    row_id: str
+    map_id: int
+    event_id: int
+    page_idx: int
+    badge_index: int
+    chapter_id: str | None
+
+
+@dataclass(frozen=True)
 class CapabilitySite:
     """One site that grants a capability token -- the row-level fact
     `chapter_manifest.checker.CapabilityGrant` is built from."""
@@ -270,6 +324,7 @@ class CapabilityDerivation:
 
     switch_writes: tuple[SwitchWriteSite, ...] = field(default_factory=tuple)
     variable_writes: tuple[VariableWriteSite, ...] = field(default_factory=tuple)
+    badge_writes: tuple[BadgeWriteSite, ...] = field(default_factory=tuple)
     _grants: dict[str, tuple[CapabilitySite, ...]] = field(default_factory=dict)
     # token -> True if at least one source contributing to it had an
     # unresolved (computed) write that COULD have satisfied it but couldn't
@@ -297,6 +352,8 @@ class CapabilityDerivation:
     # at two thresholds, so there is nothing left to detect or report here.
 
     def grant_sites(self, token: str) -> tuple[CapabilitySite, ...] | None:
+        if token in FIELD_CAPABILITY_BADGE_COUNT:
+            return self._field_capability_grant_sites(token)
         if token in self._grants:
             return self._grants[token]
         if token in self._undetermined:
@@ -315,6 +372,50 @@ class CapabilityDerivation:
         # and would silently miss `RULE_BLOCKED_ALREADY_GRANTED` on the 12
         # CH01 rows gated `Quest Log >= 1`. Compute it instead.
         return self._resolve_threshold(token)
+
+    def _field_capability_grant_sites(
+        self, token: str
+    ) -> tuple[CapabilitySite, ...]:
+        """`grant_sites` for a field-capability token
+        (`FIELD_CAPABILITY_BADGE_COUNT`).
+
+        Corpus-wide only: every badge write anywhere is a candidate site,
+        because ANY badge write grows the player's total badge count, and it
+        is the COUNT (not a specific badge) the token's requirement is
+        checked against. This module has no notion of "as of this chapter"
+        -- that chain-scoped judgment belongs to
+        `chapter_manifest.capability_model.ChapterCapabilityModel`, which
+        decides, from these same sites plus its predecessor chain, whether
+        the count is actually met yet.
+
+        Returns `()` only when the corpus has zero badge writes at all
+        (nothing could ever satisfy any field token) -- never based on the
+        token's own required count, since even `flash`'s
+        `BADGEFORFLASH == 0` requirement is still "met" by the existence of
+        the badge-count mechanism itself; distinguishing "always met" from
+        "not yet met" is the adapter's job (module docstring)."""
+        required = FIELD_CAPABILITY_BADGE_COUNT[token]
+        if not self.badge_writes:
+            return ()
+        return tuple(
+            CapabilitySite(
+                token=token,
+                row_id=w.row_id,
+                map_id=w.map_id,
+                chapter_id=w.chapter_id,
+                detail=(
+                    f"badge {w.badge_index} -> true (field capability "
+                    f"{token!r} needs >= {required} badge"
+                    f"{'s' if required != 1 else ''})"
+                ),
+            )
+            for w in self.badge_writes
+        )
+
+    def field_badge_requirement(self, token: str) -> int | None:
+        """The required badge COUNT for a field-capability token, or `None`
+        if `token` is not one of `FIELD_CAPABILITY_BADGE_COUNT`'s keys."""
+        return FIELD_CAPABILITY_BADGE_COUNT.get(token)
 
     def _resolve_threshold(self, token: str) -> tuple[CapabilitySite, ...] | None:
         """Answer an un-minted `<variable>_<threshold>` token from the raw
@@ -413,9 +514,10 @@ def _scan_writes(
     var_labels: dict[int, str],
     script_switches: frozenset[int],
     map_owner: dict[int, str | None],
-) -> tuple[list[SwitchWriteSite], list[VariableWriteSite]]:
+) -> tuple[list[SwitchWriteSite], list[VariableWriteSite], list[BadgeWriteSite]]:
     switch_writes: list[SwitchWriteSite] = []
     variable_writes: list[VariableWriteSite] = []
+    badge_writes: list[BadgeWriteSite] = []
 
     for path in _iter_map_files(maps_dir):
         data = _load_json(path)
@@ -470,7 +572,33 @@ def _scan_writes(
                                 value=operand if determined else None,
                                 chapter_id=map_owner.get(data["map_id"]),
                             ))
-    return switch_writes, variable_writes
+                    elif code in (SCRIPT_CODE, SCRIPT_CONTINUATION_CODE):
+                        text = params[0] if params else None
+                        if not isinstance(text, str):
+                            continue
+                        false_match = _BADGE_FALSE_RE.search(text)
+                        if false_match:
+                            row_id = page_row_id(data["map_id"], event_id, page_idx)
+                            raise CapabilitySitesError(
+                                f"{row_id}: writes "
+                                f"badges[{false_match.group(1)}]=false -- the "
+                                "field-capability badge-count model "
+                                "(FIELD_CAPABILITY_BADGE_COUNT) assumes "
+                                "badges are monotonic (never revoked); a "
+                                "revocation must be handled explicitly, not "
+                                "silently dropped"
+                            )
+                        for m in _BADGE_TRUE_RE.finditer(text):
+                            row_id = page_row_id(data["map_id"], event_id, page_idx)
+                            badge_writes.append(BadgeWriteSite(
+                                row_id=row_id,
+                                map_id=data["map_id"],
+                                event_id=event_id,
+                                page_idx=page_idx,
+                                badge_index=int(m.group(1)),
+                                chapter_id=map_owner.get(data["map_id"]),
+                            ))
+    return switch_writes, variable_writes, badge_writes
 
 
 def _register_token(
@@ -509,7 +637,7 @@ def derive_capability_sites(
     )
     map_owner = _map_id_to_chapter(chapters_json)
 
-    switch_writes, variable_writes = _scan_writes(
+    switch_writes, variable_writes, badge_writes = _scan_writes(
         maps_dir, switch_labels, var_labels, script_switches, map_owner
     )
 
@@ -526,6 +654,14 @@ def derive_capability_sites(
     for switch_id, writes in by_switch.items():
         label = writes[0].switch_label
         token = token_for_label(label, kind="switch")
+        if token in FIELD_CAPABILITY_BADGE_COUNT:
+            raise CapabilitySitesError(
+                f"switch {switch_id} ({label!r}) slugs to {token!r}, which "
+                "is a reserved field-capability token "
+                "(FIELD_CAPABILITY_BADGE_COUNT) -- minting a switch-derived "
+                "token with the same name would silently shadow the "
+                "badge-count model; rename the switch label"
+            )
         _register_token(token_sources, token, ("switch", switch_id))
         on_sites = [
             CapabilitySite(
@@ -587,6 +723,7 @@ def derive_capability_sites(
     derivation = CapabilityDerivation(
         switch_writes=tuple(switch_writes),
         variable_writes=tuple(variable_writes),
+        badge_writes=tuple(badge_writes),
         _grants={t: tuple(sites) for t, sites in grants.items()},
         _undetermined=undetermined,
         token_sources={t: tuple(s) for t, s in token_sources.items()},
@@ -597,9 +734,11 @@ def derive_capability_sites(
 
 __all__ = [
     "AmbiguousTokenError",
+    "BadgeWriteSite",
     "CapabilityDerivation",
     "CapabilitySite",
     "CapabilitySitesError",
+    "FIELD_CAPABILITY_BADGE_COUNT",
     "SwitchWriteSite",
     "VariableWriteSite",
     "derive_capability_sites",

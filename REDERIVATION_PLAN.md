@@ -1268,6 +1268,10 @@ model.** This answers the decision `PROJECT_TODO.md` #92 reserved for the operat
 
 Uranium has no HMs: the real gate on a Rock Smash boulder is **`badge AND (move OR item)`**,
 and `blocked:a|b` means AND-of-a-set with no OR, so the verdict string cannot express it.
+*(Corrected 2026-09-13: that grammar claim is false. `schema.parse_blocked_argument` reads `|`
+as OR and `+` as AND, and `checker.py`'s blocked rules already evaluate that OR-of-ANDs form.
+The ruling below stands on its other grounds — churn, and that no beat can observe which
+conjunct refused.)*
 
 **Rejected — compound grammar in the verdict** (`blocked:badge1&(rock_smash_move|boxinggloves)`):
 it churns every committed `blocked:rock_smash` in CH04/CH05, hands the checker a parser to
@@ -1359,7 +1363,9 @@ which is the **CH06 gym**. **Those two pages are provably unreachable in CH01–
 where the operator placed them from play knowledge ("no beats until we return to Moki Town post
 Act 1") before the census confirmed it.
 
-- **Verdict: `unreachable:quest_log_5`.** `unreachable` is already in the vocabulary
+- **Verdict: `unreachable:var_quest_log_5`** *(token corrected 2026-09-13 — #93's `var_` prefix;
+  the checker never resolves `unreachable:` tokens against the capability model, so the
+  annotation described below is not needed)*. `unreachable` is already in the vocabulary
   (`schema.py:90`), and `capability_sites._resolve_threshold` handles
   `<variable>_<threshold>` tokens natively; `quest_log_4` is already a derived token (#92).
   **`unreachable` is a verdict, not an error, so §14.1's zero-errors ruling stays intact.**
@@ -1436,12 +1442,20 @@ signatures. Also fix in passing: the duplicate `"pbRockSmash"` key in `MECHANIC_
    Kevlar anchor. CH02's is expected to **fail** until the `new_game.c` fix lands.
    **Do not derive these from the `healing_spot` metadata** — that is a different system
    entirely (§15.6).
-4. **Capability requirement groups** (§14.9). `blocked:` tokens stay collapsed; the
-   `badge AND (move OR item)` structure becomes requirement groups on `CapabilityDerivation` —
-   one group per conjunct, alternatives within a group, route-order grant point = `max` over
-   groups of `min` over alternatives. Derived where possible, **hand-annotated where not**;
-   `map050/ev005/p5`/`p6` are the annotation path's first users (§14.11). Zero churn to
-   committed dispositions.
+4. **Capability requirement groups** (§14.9) — **SCOPED DOWN 2026-09-13 (operator): badge
+   count only; everything else deferred to CH06**, where Gym 1 (Map042) first puts a badge in
+   the chain and the data can inform the design. What P8b builds: a scan of
+   `$Trainer.badges[N]=true` script writes (8 badges, 9 sites, no revocations) plus a cited
+   `BADGEFOR*` threshold table (`Settings.rb:144-151`; Uranium counts badges,
+   `HIDDENMOVESCOUNTBADGES=true`). The badge is **necessary, not sufficient**: threshold unmet
+   in the chapter chain = confirmed blocked; threshold met = *undetermined*, never granted,
+   because the (move OR item) conjunct is unmodelled. In CH01–CH05 no badge is held, so this
+   alone settles every `blocked:rock_smash`/`blocked:surf` row. **Deferred to CH06:**
+   requirement groups proper, the move alternative (`pbCheckMove` is live party state, and
+   Gym 1's TM27 is Return, so the source is unidentified — #92 point 1), the Map167 gadget
+   items, route-order vs chapter-chain granularity, and the hand-annotation file.
+   `map050/ev005/p5`/`p6` need no annotation: `unreachable:` verdicts are never checked
+   against the capability model. Zero churn to committed dispositions.
 5. **Queue↔manifest page offset** (§14.8, #98). Normalize the **queue writer** to 0-based
    before the disposition pass reads either artifact. Manifest `row_id`s must not move — they
    are load-bearing inside committed dispositions files.

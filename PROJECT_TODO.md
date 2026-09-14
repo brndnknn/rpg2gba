@@ -2707,6 +2707,15 @@ named "Battle Var01", meaning stated only in dialogue) is why the annotation pat
 Point 1 (identifying the non-switch grant source) remains open. The prohibition above stands
 unchanged.
 
+**PARTIAL 2026-09-13 — badge half only (`REDERIVATION_PLAN.md` §15.2 item 4).** The badge
+conjunct is a count ladder (`numbadges >= BADGEFOR<X>`), sourced from `$Trainer.badges[N]=true`
+script writes; modelled as necessary-not-sufficient (met ⇒ undetermined, never granted). This
+settles CH01–CH05, where no badge is held. **Remaining, filed against CH06** (first chapter with
+a badge in its chain): the move alternative (`pbCheckMove` scans live party movesets; Gym 1's
+TM27 is Return, so "the gym unlocks the move" does not hold for Rock Smash and the source is
+still unidentified), the Map167 gadget items (script branches on `numbadges >= BADGEFOR<X>+1`),
+requirement groups proper, route-order granularity, and the annotation path.
+
 See `MEMORY.md` → Uranium-Specific Discoveries for the mechanic itself.
 
 ### 94. DONE 2026-09-10 — the archetype classifier is not open for extension

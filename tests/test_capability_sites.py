@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from rpg2gba.capability_sites import (
+    FIELD_CAPABILITY_BADGE_COUNT,
     AmbiguousTokenError,
     CapabilitySitesError,
     derive_capability_sites,
@@ -28,6 +29,10 @@ def _switch_cmd(sw_lo: int, value: int, sw_hi: int | None = None) -> dict:
 
 def _var_cmd(var_id: int, operation: int, operand_type: int, operand: int) -> dict:
     return {"code": 122, "parameters": [var_id, var_id, operation, operand_type, operand]}
+
+
+def _script_cmd(text: str, *, continuation: bool = False) -> dict:
+    return {"code": 655 if continuation else 355, "parameters": [text]}
 
 
 def _map(map_id: int, events: list[dict]) -> dict:
@@ -258,8 +263,14 @@ def test_unknown_token_with_no_switch_or_variable_source_is_undetermined(
     chapters_json = _write_chapters(tmp_path, [])
 
     d = derive_capability_sites(maps_dir, sw_json, var_json, chapters_json)
-    assert d.grant_sites("rock_smash") is None
-    assert d.grant_sites("surf") is None
+    # `rock_smash`/`surf` are now field-capability tokens (badge-count
+    # model, see below) and always resolve to a definite answer (`()` here,
+    # since this fixture has no badge writes at all) -- they are no longer
+    # examples of "no source whatsoever." A genuinely unheard-of token still
+    # is.
+    assert d.grant_sites("totally_unheard_of_capability") is None
+    assert d.grant_sites("rock_smash") == ()
+    assert d.grant_sites("surf") == ()
 
 
 # --- chapter ownership ---------------------------------------------------------
@@ -307,8 +318,12 @@ def test_real_corpus_final_event_and_got_pokemon() -> None:
     assert len(sites) == 1
     assert sites[0].row_id == "map199/ev001/p0"
 
-    assert d.grant_sites("rock_smash") is None
-    assert d.grant_sites("surf") is None
+    # `rock_smash`/`surf` are field-capability tokens now (badge-count
+    # model, see the badge-write tests below) -- the real corpus has badge
+    # writes, so both resolve to actual (necessary-not-sufficient) sites,
+    # not `None`.
+    assert d.grant_sites("rock_smash") is not None
+    assert d.grant_sites("surf") is not None
 
 
 def test_an_unminted_threshold_is_computed_not_reported_undetermined() -> None:
@@ -391,6 +406,106 @@ def test_switch_and_variable_base_sharing_a_slug_no_longer_collide(
     assert {s.row_id for s in switch_sites}.isdisjoint(
         {s.row_id for s in variable_sites}
     )
+
+
+# --- field capability badge-count model --------------------------------------
+
+
+def test_badge_write_found_in_code_355_and_code_655(tmp_path: Path) -> None:
+    maps_dir = _write_maps(tmp_path, {
+        1: _map(1, [_event(1, [[_script_cmd("$Trainer.badges[0]=true")]])]),
+        2: _map(2, [_event(2, [[_script_cmd(
+            "$Trainer.badges[1]=true", continuation=True
+        )]])]),
+    })
+    sw_json, var_json = _write_sidecars(tmp_path, {}, {})
+    chapters_json = _write_chapters(tmp_path, [])
+
+    d = derive_capability_sites(maps_dir, sw_json, var_json, chapters_json)
+    assert {w.badge_index for w in d.badge_writes} == {0, 1}
+    rows = {w.row_id for w in d.badge_writes}
+    assert rows == {"map001/ev001/p0", "map002/ev002/p0"}
+
+
+def test_badge_write_false_raises(tmp_path: Path) -> None:
+    maps_dir = _write_maps(tmp_path, {
+        1: _map(1, [_event(1, [[_script_cmd("$Trainer.badges[3]=false")]])]),
+    })
+    sw_json, var_json = _write_sidecars(tmp_path, {}, {})
+    chapters_json = _write_chapters(tmp_path, [])
+
+    with pytest.raises(CapabilitySitesError):
+        derive_capability_sites(maps_dir, sw_json, var_json, chapters_json)
+
+
+def test_badge_write_tolerates_whitespace(tmp_path: Path) -> None:
+    maps_dir = _write_maps(tmp_path, {
+        1: _map(1, [_event(1, [[_script_cmd(
+            "$Trainer.badges[ 2 ]  =  true"
+        )]])]),
+    })
+    sw_json, var_json = _write_sidecars(tmp_path, {}, {})
+    chapters_json = _write_chapters(tmp_path, [])
+
+    d = derive_capability_sites(maps_dir, sw_json, var_json, chapters_json)
+    assert {w.badge_index for w in d.badge_writes} == {2}
+
+
+def test_field_token_grant_sites_returns_badge_sites(tmp_path: Path) -> None:
+    maps_dir = _write_maps(tmp_path, {
+        1: _map(1, [_event(1, [[_script_cmd("$Trainer.badges[0]=true")]])]),
+    })
+    sw_json, var_json = _write_sidecars(tmp_path, {}, {})
+    chapters_json = _write_chapters(tmp_path, [])
+
+    d = derive_capability_sites(maps_dir, sw_json, var_json, chapters_json)
+    sites = d.grant_sites("rock_smash")
+    assert sites is not None
+    assert len(sites) == 1
+    assert sites[0].row_id == "map001/ev001/p0"
+    assert d.field_badge_requirement("rock_smash") == FIELD_CAPABILITY_BADGE_COUNT["rock_smash"]
+
+
+def test_field_token_grant_sites_empty_with_no_badge_writes(tmp_path: Path) -> None:
+    maps_dir = _write_maps(tmp_path, {1: _map(1, [])})
+    sw_json, var_json = _write_sidecars(tmp_path, {}, {})
+    chapters_json = _write_chapters(tmp_path, [])
+
+    d = derive_capability_sites(maps_dir, sw_json, var_json, chapters_json)
+    assert d.grant_sites("rock_smash") == ()
+    assert d.field_badge_requirement("rock_smash") == 1
+    assert d.field_badge_requirement("not_a_field_token") is None
+
+
+def test_switch_slugging_to_field_token_raises(tmp_path: Path) -> None:
+    maps_dir = _write_maps(tmp_path, {
+        1: _map(1, [_event(1, [[_switch_cmd(60, 0)]])]),
+    })
+    sw_json, var_json = _write_sidecars(tmp_path, {60: "Rock Smash"}, {})
+    chapters_json = _write_chapters(tmp_path, [])
+
+    with pytest.raises(CapabilitySitesError):
+        derive_capability_sites(maps_dir, sw_json, var_json, chapters_json)
+
+
+def test_real_corpus_badge_writes_census() -> None:
+    """Pinned against the real corpus (2026-09-13): 9 badge writes over 8
+    distinct badge indices (badge 7 is written true at two sites -- Map175
+    ev032/ev033). If this breaks because the corpus changed, that's real
+    news; update the assertion."""
+    d = derive_capability_sites()
+    assert len(d.badge_writes) == 9
+    assert len({w.badge_index for w in d.badge_writes}) == 8
+
+    assert d.field_badge_requirement("rock_smash") == 1
+    assert d.field_badge_requirement("surf") == 5
+
+
+def test_real_corpus_field_token_grant_sites() -> None:
+    d = derive_capability_sites()
+    sites = d.grant_sites("rock_smash")
+    assert sites is not None
+    assert len(sites) == 9
 
 
 def test_real_corpus_final_event_and_var_final_event_stay_distinct() -> None:

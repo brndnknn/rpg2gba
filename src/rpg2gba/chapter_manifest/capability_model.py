@@ -81,6 +81,31 @@ class ChapterCapabilityModel:
         self._chain_ids = chain_ids
 
     def grant_sites(self, name: str) -> tuple[CapabilityGrant, ...] | None:
+        """`checker.CapabilityModel.grant_sites`.
+
+        For a field-capability token (`capability_sites
+        .FIELD_CAPABILITY_BADGE_COUNT`), the badge-count conjunct is
+        NECESSARY, NOT SUFFICIENT (module docstring, `capability_sites`'s
+        "Known limit" paragraph): the `move OR item` conjunct is entirely
+        unmodelled. So once this chain's distinct badge count already meets
+        the token's requirement, this method must NEVER report grant sites
+        as if the capability were confirmed available -- doing so would let
+        `checker.py` raise `blocked_already_granted` on a row that may still
+        be genuinely blocked by the missing move/item. It returns `None`
+        (undetermined) in that case instead, and only returns the badge
+        sites while the chain's badge count still falls short (an honest
+        "not yet, as far as this model can tell" that keeps a correct
+        `blocked:` claim from getting a false error).
+        """
+        required = self._derivation.field_badge_requirement(name)
+        if required is not None:
+            distinct_in_chain = {
+                w.badge_index
+                for w in self._derivation.badge_writes
+                if w.chapter_id in self._chain_ids
+            }
+            if len(distinct_in_chain) >= required:
+                return None
         sites = self._derivation.grant_sites(name)
         if sites is None:
             return None
@@ -90,6 +115,20 @@ class ChapterCapabilityModel:
         )
 
     def granted_within(self, name: str) -> tuple[CapabilityGrant, ...]:
+        """`checker.CapabilityModel.granted_within`.
+
+        For a field-capability token this is always `()`: the badge-count
+        model can rule the capability NOT held (chain badge count short of
+        the requirement -- `grant_sites` returns real sites but none of them
+        represent the capability itself being granted) or refuse to say
+        (badge count met, `grant_sites` returns `None`) -- it can never
+        affirmatively confirm the capability is held, since the move/item
+        conjunct is unmodelled. Reporting anything non-empty here would let
+        `checker.py` treat a field capability as confirmed-held from the
+        badge alone.
+        """
+        if self._derivation.field_badge_requirement(name) is not None:
+            return ()
         sites = self.grant_sites(name)
         if not sites:
             return ()
