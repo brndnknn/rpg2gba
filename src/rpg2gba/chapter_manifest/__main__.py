@@ -26,12 +26,15 @@ from pathlib import Path
 
 import click
 
+from rpg2gba.slice_growth import SliceGrowthError
+
 from . import checker
 from .approach_model import GraphApproachModel
 from .archetype_model import build_archetype_model
 from .beat_model import build_beat_model
 from .boundary_model import build_boundary_model
 from .capability_model import build_capability_model
+from .derivation import derive_entry
 from .dispositions import derived_path, disposition_path, load_derived, load_dispositions
 from .generator import generate_chapter_manifest, write_derived, write_manifest
 from .route_model import build_route_model
@@ -131,14 +134,57 @@ def generate_cmd(chapter: str, manifest: Path | None, derived_path_opt: Path | N
 
     rows = generate_chapter_manifest(chapter, build_dir=build_dir, chapters_path=chapters_path)
     write_manifest(rows, manifest_file)
-    write_derived(rows, derived_file)
+
+    # Same models `check_cmd` builds, for the same reason: without them
+    # `derive_entry` can resolve `blocked:`/`cosmetic` but never
+    # `beat:`/`boundary` (both need the playtest-module/chain facts these
+    # adapters carry). Unlike `check_cmd`, `generate` must stay usable
+    # against a scratch/synthetic chapter that has no real, committed
+    # `reference/chapters.json` chain to read at all (every generator
+    # fixture test does this) -- both adapters read the REAL repo's chapter
+    # chain by design (their own docstrings), which raises loud
+    # (`FileNotFoundError`/`SliceGrowthError`) rather than degrading when
+    # that chain isn't reachable from the current working directory. That
+    # is exactly the "beat/boundary derivation is unenforced here" state
+    # (mirrors every other `*_UNENFORCED` degrade in `checker.py`), not a
+    # bug in the manifest being generated -- `cosmetic`/`blocked:` still
+    # derive normally without either model.
+    try:
+        beat_model = build_beat_model(chapter)
+    except (FileNotFoundError, SliceGrowthError) as exc:
+        logger.warning(
+            "could not build a beat model for %s (%s) -- beat: entries will "
+            "not be derived this run", chapter, exc)
+        beat_model = None
+    try:
+        boundary_model = build_boundary_model(chapter)
+    except (FileNotFoundError, SliceGrowthError) as exc:
+        logger.warning(
+            "could not build a boundary model for %s (%s) -- boundary "
+            "entries will not be derived this run", chapter, exc)
+        boundary_model = None
+    write_derived(rows, derived_file, beat_model=beat_model, boundary_model=boundary_model)
 
     undispositionable = sum(1 for row in rows if not row.is_dispositionable)
     needs_citation = sum(1 for row in rows if row.needs_citation)
-    derived_count = sum(1 for row in rows if row.may_be_derived)
+    entries = [
+        entry
+        for row in rows
+        for entry in (derive_entry(row, beat_model=beat_model, boundary_model=boundary_model),)
+        if entry is not None
+    ]
+    verdict_counts: dict[str, int] = {}
+    proposals = 0
+    for entry in entries:
+        head = entry.disposition.split(":", 1)[0]
+        verdict_counts[head] = verdict_counts.get(head, 0) + 1
+        if entry.proposed:
+            proposals += 1
+    breakdown = ", ".join(f"{head}={n}" for head, n in sorted(verdict_counts.items()))
     click.echo(f"wrote {manifest_file}: {len(rows)} rows, "
                f"{undispositionable} undispositionable, {needs_citation} need citation")
-    click.echo(f"wrote {derived_file}: {derived_count} machine-derived row(s)")
+    click.echo(f"wrote {derived_file}: {len(entries)} machine-derived row(s) "
+               f"({breakdown}; {proposals} proposal(s) awaiting affirmation)")
     sys.exit(0)
 
 

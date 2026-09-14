@@ -34,6 +34,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from .derivation import DerivedEntry
 from .schema import Disposition, DispositionError
 
 logger = logging.getLogger(__name__)
@@ -125,16 +126,28 @@ def derived_path(chapter_id: str, *, root: Path | None = None) -> Path:
     return base / f"{chapter_id}.derived.json"
 
 
-def load_derived(path: Path) -> dict[str, str]:
-    """Parse the machine-derived sidecar into `row_id -> derived_hash`.
+def load_derived(path: Path) -> dict[str, DerivedEntry]:
+    """Parse the machine-derived sidecar (format v2) into
+    `row_id -> DerivedEntry`.
+
+    File shape -- a JSON object mapping `row_id` to
+    `{"disposition": "<spec>", "derived_hash": "<hash>"}`, with a
+    `"proposed": true` key present only on a `blocked:` proposal (never on a
+    clerical `cosmetic`/`beat:`/`boundary` entry).
 
     Fails loud (CLAUDE.md §4.5) on malformed JSON, a non-object top level,
-    or any key/value that is not a string -- this loader never silently
-    drops or coerces a bad entry. A MISSING file is the caller's
-    responsibility (same pattern as the dispositions file): `__main__.py`
-    checks `.exists()` before calling this, so a chapter with no sidecar
-    yet (or a brand-new Essentials game with none at all) simply never
-    calls `load_derived`.
+    a row entry that is not an object with exactly `disposition`,
+    `derived_hash`, and optionally `proposed`, a `disposition` spec
+    `Disposition.parse` rejects, or the OLD bare-string sidecar format
+    (`row_id -> derived_hash` with no verdict at all) -- the last case names
+    the regenerate command explicitly, since it is the one shape a caller
+    might plausibly still have on disk from before this format existed.
+    This loader never silently drops, coerces, or defaults a bad entry.
+
+    A MISSING file is the caller's responsibility (same pattern as the
+    dispositions file): `__main__.py` checks `.exists()` before calling
+    this, so a chapter with no sidecar yet (or a brand-new Essentials game
+    with none at all) simply never calls `load_derived`.
     """
     with path.open(encoding="utf-8") as f:
         try:
@@ -144,19 +157,58 @@ def load_derived(path: Path) -> dict[str, str]:
 
     if not isinstance(raw, dict):
         raise DispositionFileError(
-            f"{path}: expected a JSON object mapping row_id -> derived_hash, "
-            f"got {type(raw).__name__}"
+            f"{path}: expected a JSON object mapping row_id -> derived "
+            f"entry, got {type(raw).__name__}"
         )
 
-    result: dict[str, str] = {}
+    result: dict[str, DerivedEntry] = {}
     for row_id, value in raw.items():
-        if not isinstance(row_id, str) or not isinstance(value, str):
+        if not isinstance(row_id, str):
             raise DispositionFileError(
-                f"{path}: entry {row_id!r} -> {value!r} must be a string "
-                f"row_id mapping to a string derived_hash, got "
-                f"{type(row_id).__name__} -> {type(value).__name__}"
+                f"{path}: non-string row_id key {row_id!r}"
             )
-        result[row_id] = value
+        if isinstance(value, str):
+            raise DispositionFileError(
+                f"{path}: row {row_id!r} uses the old bare-string sidecar "
+                "format (row_id -> derived_hash only, with no verdict) -- "
+                "regenerate with `python -m rpg2gba.chapter_manifest "
+                "generate --chapter <chapter>`"
+            )
+        if not isinstance(value, dict):
+            raise DispositionFileError(
+                f"{path}: row {row_id!r} entry must be an object, got "
+                f"{type(value).__name__}"
+            )
+        extra = set(value) - {"disposition", "derived_hash", "proposed"}
+        if extra:
+            raise DispositionFileError(
+                f"{path}: row {row_id!r} entry carries unknown key(s) "
+                f"{sorted(extra)}"
+            )
+        spec = value.get("disposition")
+        derived_hash = value.get("derived_hash")
+        proposed = value.get("proposed", False)
+        if not isinstance(spec, str):
+            raise DispositionFileError(
+                f"{path}: row {row_id!r} entry is missing a string "
+                "'disposition' field"
+            )
+        if not isinstance(derived_hash, str):
+            raise DispositionFileError(
+                f"{path}: row {row_id!r} entry is missing a string "
+                "'derived_hash' field"
+            )
+        if not isinstance(proposed, bool):
+            raise DispositionFileError(
+                f"{path}: row {row_id!r} entry's 'proposed' field must be "
+                f"a bool, got {type(proposed).__name__}"
+            )
+        try:
+            Disposition.parse(row_id, spec)
+        except DispositionError as exc:
+            raise DispositionFileError(f"{path}: {exc}") from exc
+        result[row_id] = DerivedEntry(
+            disposition=spec, derived_hash=derived_hash, proposed=proposed)
     return result
 
 

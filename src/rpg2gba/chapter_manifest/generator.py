@@ -30,7 +30,7 @@ import re
 from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rpg2gba.chapter_atlas.census import (
     CODE_CONDITIONAL,
@@ -42,6 +42,7 @@ from rpg2gba.chapter_atlas.census import (
     _script_head,
 )
 from rpg2gba.chapter_manifest.conditions import classify_condition
+from rpg2gba.chapter_manifest.derivation import derive_entry
 from rpg2gba.chapter_manifest.schema import (
     ManifestRow,
     PageCondition,
@@ -62,6 +63,12 @@ from rpg2gba.tileset_converter.stairs import (
 from rpg2gba.traversal.capabilities import CapabilityMap, build_capability_map
 from rpg2gba.traversal.graph import MapGraph, build_map_graph
 from rpg2gba.traversal.reachability import derive_blocked_verdict_for_event_from_starts
+
+if TYPE_CHECKING:
+    # Protocols only -- `generator.py` must not import `checker` at runtime
+    # (same layering discipline `checker.py` itself uses for the packages
+    # its own Protocol seams stand in for).
+    from rpg2gba.chapter_manifest.checker import BeatModel, BoundaryModel
 
 logger = logging.getLogger(__name__)
 
@@ -902,42 +909,56 @@ def write_manifest(rows: list[ManifestRow], path: Path) -> None:
     path.write_text(text + "\n", encoding="utf-8")
 
 
-def write_derived(rows: list[ManifestRow], path: Path) -> None:
-    """Writes the machine-derived sidecar (`row_id -> derived_hash`),
-    `REDERIVATION_PLAN.md` §15.2 item 1.
+def write_derived(
+    rows: list[ManifestRow],
+    path: Path,
+    *,
+    beat_model: "BeatModel | None" = None,
+    boundary_model: "BoundaryModel | None" = None,
+) -> None:
+    """Writes the machine-derived sidecar (format v2, `REDERIVATION_PLAN.md`
+    §15.2 item 1, narrowed by the 2026-09-14 four-verdict ruling).
 
-    This module has no notion yet of "this row was machine-derived" beyond
-    eligibility -- there is no transpiler-driven auto-disposition step in
-    the pipeline today, only the manifest's own `may_be_cosmetic` judgment
-    of what COULD be waved through as cosmetic without a human decision.
-    The honest minimal implementation, and the one this function gives, is:
-    every row `ManifestRow.may_be_cosmetic` accepts gets an entry, keyed to
-    its `content_hash` -- the same value `checker.py` compares an authored
-    disposition's `affirmed_hash` against, so a later content change
-    invalidates a sidecar entry exactly the way it invalidates a human
-    affirmation. `checker._check_derived_hash` still independently rechecks
-    `may_be_cosmetic` against every entry here rather than trusting this
-    function's judgment call at check time -- the eligibility gate is
-    intentionally duplicated in both places (CLAUDE.md §4.5: never trust a
-    stored claim's mere presence), so drift between "what the generator
-    thought was eligible when it wrote this" and "what the checker judges
-    eligible now" is caught, not silently inherited.
+    Every row `derivation.derive_entry` resolves to a `DerivedEntry` gets a
+    sidecar entry -- `{"disposition": ..., "derived_hash": ...}`, with
+    `"proposed": true` present only on a `blocked:` proposal. `derived_hash`
+    is the row's `content_hash` at generation time, the same value
+    `checker.py` compares an authored disposition's `affirmed_hash` against,
+    so a later content change invalidates a sidecar entry exactly the way it
+    invalidates a human affirmation.
 
-    A future step that has the pipeline actually AUTO-DISPOSITION some rows
-    (rather than merely noting which ones are eligible to be) narrows this
-    function's population accordingly; nothing about the sidecar's shape or
-    the checker's recheck needs to change when that happens.
+    `checker.check_chapter` never trusts this file's judgment at check
+    time -- it independently recomputes `derive_entry` for every row rather
+    than trusting whatever this function wrote earlier (CLAUDE.md §4.5:
+    never trust a stored claim's mere presence), so drift between "what the
+    generator derived when it wrote this" and "what the checker derives now"
+    is caught, not silently inherited. `beat_model`/`boundary_model` are
+    threaded through for the same reason `check_cmd` builds them: without
+    them, `derive_entry` can still resolve `blocked:`/`cosmetic` but never
+    `beat:`/`boundary`.
 
-    Narrowed 2026-09-13 (the P8b disposition pass): that step is here. An
-    entry now IS a disposition -- `cosmetic`, affirmed by `derived_hash`, for
-    a row the dispositions file does not list -- so the population is
-    `ManifestRow.may_be_derived`, which excludes `blocked:` candidates and
-    citation-owing rows from what `may_be_cosmetic` alone would admit.
+    This module's single-writer invariant for the AUTHORED dispositions file
+    (see the package docstring) is unaffected: this function writes only the
+    sidecar, never `CHnn.dispositions.json`, and a `blocked:` entry here is
+    explicitly a proposal, not a disposition -- a human must copy it into
+    the dispositions file with an `affirmed_hash` before it counts as one
+    (`checker.RULE_DERIVED_UNAFFIRMED`).
     """
-    payload = {
-        row.row_id: row.content_hash
+    entries = {
+        row.row_id: entry
         for row in sorted(rows, key=lambda r: r.row_id)
-        if row.may_be_derived
+        for entry in (derive_entry(row, beat_model=beat_model, boundary_model=boundary_model),)
+        if entry is not None
     }
+    payload: dict[str, Any] = {}
+    for row_id in sorted(entries):
+        entry = entries[row_id]
+        obj: dict[str, Any] = {
+            "disposition": entry.disposition,
+            "derived_hash": entry.derived_hash,
+        }
+        if entry.proposed:
+            obj["proposed"] = True
+        payload[row_id] = obj
     text = json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=False)
     path.write_text(text + "\n", encoding="utf-8")

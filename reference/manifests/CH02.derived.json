@@ -1,18 +1,276 @@
 {
-  "map033/ev002/p1": "6c2d90d22489cb2a",
-  "map033/ev003/p1": "6c2d90d22489cb2a",
-  "map033/ev004/p1": "6c2d90d22489cb2a",
-  "map033/ev025/p1": "6c2d90d22489cb2a",
-  "map033/ev028/p0": "50631292062e4dc9",
-  "map033/ev030/p1": "b0ac8392867a971c",
-  "map033/ev034/p1": "9c5d2166a40123d7",
-  "map033/ev050/p1": "6c2d90d22489cb2a",
-  "map033/ev097/p0": "d2946527c34d4094",
-  "map033/ev098/p0": "81a1e738410912f5",
-  "map033/ev099/p0": "1a251388ed5ff3b6",
-  "map033/ev100/p1": "e3273445c72667a1",
-  "map033/ev101/p0": "d30b4b6150954078",
-  "map033/ev102/p1": "e3273445c72667a1",
-  "map033/ev103/p1": "ae1add3b7d6e1007",
-  "map081/ev004/p0": "e111d0c06f99f00d"
+  "map033/ev002/p0": {
+    "disposition": "beat:B15",
+    "derived_hash": "b6aa5186777853c4"
+  },
+  "map033/ev002/p1": {
+    "disposition": "beat:B15",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map033/ev003/p0": {
+    "disposition": "beat:B15",
+    "derived_hash": "b6aa5186777853c4"
+  },
+  "map033/ev003/p1": {
+    "disposition": "beat:B15",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map033/ev004/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map033/ev008/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "0eaa8e965c9baac8",
+    "proposed": true
+  },
+  "map033/ev008/p1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "6c2d90d22489cb2a",
+    "proposed": true
+  },
+  "map033/ev009/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "00d1149603e20767",
+    "proposed": true
+  },
+  "map033/ev009/p1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "b5ab7d0b59c9d5ee",
+    "proposed": true
+  },
+  "map033/ev010/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "6aa13505c91bc68c",
+    "proposed": true
+  },
+  "map033/ev010/p1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "14ed96408d12f789",
+    "proposed": true
+  },
+  "map033/ev013/p0": {
+    "disposition": "blocked:surf",
+    "derived_hash": "dfba1cd5ea05162f",
+    "proposed": true
+  },
+  "map033/ev020/p0": {
+    "disposition": "blocked:surf",
+    "derived_hash": "2e2951ede454e802",
+    "proposed": true
+  },
+  "map033/ev025/p0": {
+    "disposition": "beat:B15",
+    "derived_hash": "58bfb375a4eeb4dc"
+  },
+  "map033/ev025/p1": {
+    "disposition": "beat:B15",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map033/ev027/p0": {
+    "disposition": "beat:B16",
+    "derived_hash": "8db80fad1a745500"
+  },
+  "map033/ev028/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map033/ev029/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "e3da20fd925642b0",
+    "proposed": true
+  },
+  "map033/ev030/p0": {
+    "disposition": "beat:B7",
+    "derived_hash": "01f5a037c6e11b3c"
+  },
+  "map033/ev030/p1": {
+    "disposition": "beat:B7",
+    "derived_hash": "b0ac8392867a971c"
+  },
+  "map033/ev032/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "edc2dec0216b1d76",
+    "proposed": true
+  },
+  "map033/ev032/p1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "6c2d90d22489cb2a",
+    "proposed": true
+  },
+  "map033/ev034/p0": {
+    "disposition": "beat:B8",
+    "derived_hash": "faac63dd6c7eb7d7"
+  },
+  "map033/ev034/p1": {
+    "disposition": "beat:B8",
+    "derived_hash": "9c5d2166a40123d7"
+  },
+  "map033/ev035/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "c64d11806a08750a",
+    "proposed": true
+  },
+  "map033/ev035/p1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "b745181a4937bafa",
+    "proposed": true
+  },
+  "map033/ev036/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "e3da20fd925642b0",
+    "proposed": true
+  },
+  "map033/ev037/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "2129f89e44535124",
+    "proposed": true
+  },
+  "map033/ev037/p1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "6c2d90d22489cb2a",
+    "proposed": true
+  },
+  "map033/ev038/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "e3da20fd925642b0",
+    "proposed": true
+  },
+  "map033/ev039/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "f8f0cf3a9c703bf4",
+    "proposed": true
+  },
+  "map033/ev039/p1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "911a00f11592d8d8",
+    "proposed": true
+  },
+  "map033/ev039/p2": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "59e31fb74cd92581",
+    "proposed": true
+  },
+  "map033/ev040/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "e3da20fd925642b0",
+    "proposed": true
+  },
+  "map033/ev041/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "b1981270d98885cf",
+    "proposed": true
+  },
+  "map033/ev041/p1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "f244ffb65eb13b86",
+    "proposed": true
+  },
+  "map033/ev042/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "e3da20fd925642b0",
+    "proposed": true
+  },
+  "map033/ev044/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "e3da20fd925642b0",
+    "proposed": true
+  },
+  "map033/ev045/p0": {
+    "disposition": "boundary",
+    "derived_hash": "6770c55b4394d5d7"
+  },
+  "map033/ev045/p1": {
+    "disposition": "boundary",
+    "derived_hash": "b427f6fc6697a5f4"
+  },
+  "map033/ev046/p0": {
+    "disposition": "boundary",
+    "derived_hash": "a7c1fca82e1fd7cc"
+  },
+  "map033/ev046/p1": {
+    "disposition": "boundary",
+    "derived_hash": "b427f6fc6697a5f4"
+  },
+  "map033/ev050/p0": {
+    "disposition": "beat:B15",
+    "derived_hash": "58bfb375a4eeb4dc"
+  },
+  "map033/ev050/p1": {
+    "disposition": "beat:B15",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map033/ev053/p0": {
+    "disposition": "beat:B13",
+    "derived_hash": "7e85f0eb1ebd2d22"
+  },
+  "map033/ev053/p2": {
+    "disposition": "beat:N5",
+    "derived_hash": "079beda9567b7078"
+  },
+  "map033/ev097/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "d2946527c34d4094"
+  },
+  "map033/ev098/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "81a1e738410912f5"
+  },
+  "map033/ev099/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "1a251388ed5ff3b6"
+  },
+  "map033/ev100/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "e3273445c72667a1"
+  },
+  "map033/ev101/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "d30b4b6150954078"
+  },
+  "map033/ev102/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "e3273445c72667a1"
+  },
+  "map033/ev103/p0": {
+    "disposition": "beat:B11",
+    "derived_hash": "9b27422e0d32c0b7"
+  },
+  "map033/ev103/p1": {
+    "disposition": "beat:B11",
+    "derived_hash": "ae1add3b7d6e1007"
+  },
+  "map033/ev141/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "3c896bd547f9aebe",
+    "proposed": true
+  },
+  "map033/terrain/stairs/57,10": {
+    "disposition": "beat:B2",
+    "derived_hash": "870fd6cb8cacbaf7"
+  },
+  "map033/terrain/stairs/57,11": {
+    "disposition": "beat:B2",
+    "derived_hash": "3c255189ddf2e314"
+  },
+  "map033/terrain/stairs/57,9": {
+    "disposition": "beat:B2",
+    "derived_hash": "9ee66c3cc3ecbd96"
+  },
+  "map081/ev001/p0": {
+    "disposition": "beat:N1",
+    "derived_hash": "87357d1e703e202c"
+  },
+  "map081/ev002/p0": {
+    "disposition": "beat:B16",
+    "derived_hash": "109ba468d5bba685"
+  },
+  "map081/ev003/p0": {
+    "disposition": "beat:N1",
+    "derived_hash": "4c97f242e207c065"
+  },
+  "map081/ev004/p0": {
+    "disposition": "beat:B16",
+    "derived_hash": "e111d0c06f99f00d"
+  }
 }

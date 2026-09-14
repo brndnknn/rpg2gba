@@ -1522,3 +1522,39 @@ the "Moki anchor" beat §14.7 called it.
 Consequence for §14.7's standing precedent: unchanged. A white-out beat still goes in the
 chapter *after* the one that establishes an anchor. Only the anchor's coordinates and their
 derivation move.
+
+### 15.7 Operator ruling, 2026-09-14 — generated `beat:` and `boundary` are clerical; `blocked:` is a proposal
+
+**Why it came up.** The first disposition-pass step (`9baada83`) made a `derived_hash` sidecar
+entry *be* a `cosmetic` disposition. Measured against it, CH01–CH03 still showed 231 open rows,
+but only ~73 needed judgment: 63 are joins off an existing beat's `rows=`, 11 are forward
+crossings, 20 carry a non-empty `requires`, and 64 are archetype-recognized rows no beat lists.
+§13.2 said "the generator proposes; affirming is its own pass" — applied to all of those, that
+is a ~160-row rubber-stamp review of decisions already made elsewhere.
+
+**Ruling.** The sidecar grows from `row_id → derived_hash` to
+`row_id → {disposition, derived_hash[, proposed]}` (an intermediate-format change, ruled in
+under CLAUDE.md §10), and the generator derives four verdicts with §14.4's precedence:
+
+| Verdict | Derived from | Status |
+|---|---|---|
+| `boundary` | `boundary_model.is_forward_crossing` | **clerical** — accepted on `derived_hash` |
+| `beat:<family>` | the beat(s) whose `rows=` list the row; one family head, else no derivation | **clerical** |
+| `blocked:<spec>` | `row.requires` | **proposal only** — never dispositions a row until a human copies it into the dispositions file with `affirmed_hash` |
+| `cosmetic` | `may_be_derived` | clerical (unchanged, §14.2) |
+
+A row that is undispositionable or owes a citation is never derived. The checker recomputes the
+derivation itself and errors on any sidecar entry that disagrees, and a clerical derived verdict
+still passes through every per-verdict rule (unregistered beat, boundary claims, capability)
+except affirmation. The dispositions file stays single-writer.
+
+**Why `blocked:` is held back.** It is the one negative claim — "untestable, so no test" —
+and its model is deliberately narrow (§15.2 item 4, badge-only) with a known false-positive
+history on obstacle rows (#95). A wrong clerical `blocked` silently switches testing off.
+**Revisit at CH06**, when requirement groups make the capability model real.
+
+**What this does not change.** `affirmed_hash` keeps meaning "a human looked" on every
+hand-written row; the ~73-row residue (story state writes, the six undispositionable/citation
+rows, `map048/ev005/p0`'s beat flag) is still hand-decided. The 64 archetype-recognized-but-
+unlisted rows are closed by adding them to existing beats' `rows=`, not by P8a-2 — P8a-2 would
+not make one more row derivable, since P8a-1 already declared `rows=`.

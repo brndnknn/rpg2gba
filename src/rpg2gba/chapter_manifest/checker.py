@@ -8,10 +8,13 @@ tooling, never from this module).
 """
 from __future__ import annotations
 
+import json
+from collections import Counter
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from .archetypes import classify_manifest
+from .derivation import DerivedEntry, derive_entry
 from .schema import Disposition, ManifestRow, parse_blocked_argument
 
 Severity = Literal["error", "warning"]
@@ -58,7 +61,8 @@ RULE_BOUNDARY_NOT_CROSSING = "boundary_not_crossing"
 RULE_BOUNDARY_UNCLAIMED = "boundary_unclaimed"
 RULE_BOUNDARY_MODEL_UNENFORCED = "boundary_model_unenforced"
 RULE_DERIVED_HASH_INELIGIBLE = "derived_hash_ineligible"
-RULE_DERIVED_BEAT_CLAIMED = "derived_beat_claimed"
+RULE_DERIVED_VERDICT_MISMATCH = "derived_verdict_mismatch"
+RULE_DERIVED_UNAFFIRMED = "derived_unaffirmed"
 
 
 @dataclass(frozen=True)
@@ -376,9 +380,11 @@ class BeatModel(Protocol):
 
     def claiming_beats(self, row_id: str) -> tuple[str, ...]:
         """Names of the registered beats whose `rows=` list `row_id`, sorted;
-        `()` if none. `RULE_DERIVED_BEAT_CLAIMED` uses this: `beat` outranks
-        `cosmetic`, so a row a beat walks must not be left to the derived
-        `cosmetic` default."""
+        `()` if none. `derivation.derive_entry` uses this: `beat` outranks
+        `cosmetic`/`blocked:`, so a row a beat walks derives `beat:<family
+        head>` rather than falling through to a weaker verdict, and the
+        checker's `RULE_DERIVED_VERDICT_MISMATCH` catches a sidecar that
+        disagrees with that."""
         ...
 
 
@@ -461,7 +467,7 @@ def check_chapter(
     archetype_model: ArchetypeModel | None = None,
     beat_model: BeatModel | None = None,
     boundary_model: BoundaryModel | None = None,
-    derived: dict[str, str] | None = None,
+    derived: dict[str, DerivedEntry] | None = None,
     live_chapter: bool = False,
 ) -> list[Finding]:
     """Check one chapter's generated rows against its authored dispositions.
@@ -488,8 +494,24 @@ def check_chapter(
     (see `BoundaryModel`'s docstring and `_check_boundary`).
 
     `derived`, if supplied, is the machine-derived sidecar (`row_id ->
-    derived_hash`, `dispositions.load_derived`) -- see `_check_derived_hash`
-    for the eligibility recheck and the corpus-wide tally this backs
+    DerivedEntry`, `dispositions.load_derived`, format v2). For a row the
+    hand dispositions file omits, this checker never trusts a sidecar
+    entry's mere presence: it recomputes `derivation.derive_entry(row,
+    beat_model=..., boundary_model=...)` itself and compares. A stale hash,
+    or a recomputed verdict that disagrees with the sidecar (including
+    disagreeing about whether it's a `proposed` `blocked:` candidate),
+    reports `RULE_UNDISPOSITIONED`/`RULE_DERIVED_VERDICT_MISMATCH` rather
+    than trusting the file. A CLERICAL entry that matches (`cosmetic`,
+    `beat:`, `boundary`) dispositions the row -- every per-row verdict rule
+    a hand disposition goes through also runs against it, except the
+    affirmation rules (`RULE_UNAFFIRMED_DISPOSITION`/`RULE_STALE_
+    DISPOSITION`), which apply only to hand dispositions. A `blocked:`
+    entry is only ever PROPOSED (`DerivedEntry.proposed`) -- a matching
+    proposal reports `RULE_DERIVED_UNAFFIRMED` with paste-ready JSON and
+    the row is left undispositioned; a human must copy it into the
+    dispositions file with an `affirmed_hash` before it counts.
+    `_check_derived_hash` additionally tallies the sidecar's contents,
+    per verdict and including proposals, as a chapter-level warning
     (`RULE_DERIVED_HASH_INELIGIBLE`). Unlike `capabilities`/`approach`/
     `route`/etc., there is no "unenforced" degradation for a missing
     sidecar: `None` (or an empty dict) just means nothing was machine-
@@ -513,286 +535,105 @@ def check_chapter(
 
     for row in rows:
         disp = dispositions.get(row.row_id)
-        if disp is None:
-            # The derived default (REDERIVATION_PLAN.md §14.6 ruling 1): a row
-            # the dispositions file omits is `cosmetic`, affirmed by its
-            # sidecar derived_hash -- but only when this checker re-derives
-            # eligibility itself and the hash still matches. Every rule a hand
-            # `cosmetic` must satisfy is folded into `may_be_derived`, so there
-            # is nothing further to check on the row except beat precedence.
-            derived_hash = (derived or {}).get(row.row_id)
-            if (derived_hash is not None and derived_hash == row.content_hash
-                    and row.may_be_derived):
-                claims = beat_model.claiming_beats(row.row_id) if beat_model else ()
-                if claims:
-                    findings.append(Finding(
-                        row_id=row.row_id,
-                        rule=RULE_DERIVED_BEAT_CLAIMED,
-                        message=(
-                            f"row is left to the derived 'cosmetic' default, but "
-                            f"registered beat(s) {', '.join(claims)} claim it in "
-                            "rows= -- beat outranks cosmetic; disposition it "
-                            "beat:<id> in the dispositions file"
-                        ),
-                        severity="error",
-                    ))
-                continue
-            if derived_hash is not None and derived_hash != row.content_hash:
-                message = (
-                    f"row has no disposition entry, and its derived_hash "
-                    f"{derived_hash!r} does not match content_hash "
-                    f"{row.content_hash!r} -- regenerate the sidecar"
-                )
-            else:
-                message = "row has no disposition entry"
+        if disp is not None:
+            # Hand wins outright -- a sidecar entry on this row_id, if any,
+            # is not even consulted.
+            if disp.affirmed_hash is None:
+                findings.append(Finding(
+                    row_id=row.row_id,
+                    rule=RULE_UNAFFIRMED_DISPOSITION,
+                    message="disposition has never been affirmed against a content_hash",
+                    severity="error",
+                ))
+            elif disp.affirmed_hash != row.content_hash:
+                findings.append(Finding(
+                    row_id=row.row_id,
+                    rule=RULE_STALE_DISPOSITION,
+                    message=(
+                        f"affirmed_hash {disp.affirmed_hash!r} does not match current "
+                        f"content_hash {row.content_hash!r}; row content changed since "
+                        "this decision was made and it must be re-affirmed"
+                    ),
+                    severity="error",
+                ))
+            findings.extend(_check_row_verdict_rules(
+                row, disp, capabilities=capabilities, approach=approach))
+            continue
+
+        # No hand disposition. The derived default (REDERIVATION_PLAN.md
+        # §14.6 ruling 1, narrowed by the 2026-09-14 four-verdict ruling): a
+        # row the dispositions file omits may still be dispositioned by a
+        # CLERICAL sidecar entry (`cosmetic`, `beat:`, `boundary`) -- but
+        # never a `blocked:` proposal, and never on the sidecar's word
+        # alone. This checker recomputes `derive_entry` itself and compares.
+        entry = (derived or {}).get(row.row_id)
+        if entry is None:
             findings.append(Finding(
                 row_id=row.row_id,
                 rule=RULE_UNDISPOSITIONED,
-                message=message,
+                message="row has no disposition entry",
                 severity="error",
             ))
             continue
 
-        if not row.is_dispositionable:
+        if entry.derived_hash != row.content_hash:
             findings.append(Finding(
                 row_id=row.row_id,
-                rule=RULE_UNDISPOSITIONABLE_ROW_DECIDED,
+                rule=RULE_UNDISPOSITIONED,
                 message=(
-                    "row carries an unrecognized script head or command code "
-                    f"(unrecognized_heads={list(row.unrecognized_heads)}, "
-                    f"other_codes={list(row.other_codes)}) and must be classified "
-                    "by a human before it can be dispositioned"
+                    f"row has no disposition entry, and its derived_hash "
+                    f"{entry.derived_hash!r} does not match content_hash "
+                    f"{row.content_hash!r} -- regenerate the sidecar"
                 ),
                 severity="error",
             ))
-            # Still worth checking the other rules on this row's disposition;
-            # an unrecognized row that is ALSO stale, uncited, etc. should
-            # surface every problem, not just this one.
+            continue
 
-        if disp.affirmed_hash is None:
+        recomputed = derive_entry(row, beat_model=beat_model, boundary_model=boundary_model)
+        if (recomputed is None
+                or recomputed.disposition != entry.disposition
+                or recomputed.proposed != entry.proposed):
+            recomputed_desc = (
+                repr(recomputed.disposition) if recomputed is not None else "nothing"
+            )
             findings.append(Finding(
                 row_id=row.row_id,
-                rule=RULE_UNAFFIRMED_DISPOSITION,
-                message="disposition has never been affirmed against a content_hash",
-                severity="error",
-            ))
-        elif disp.affirmed_hash != row.content_hash:
-            findings.append(Finding(
-                row_id=row.row_id,
-                rule=RULE_STALE_DISPOSITION,
+                rule=RULE_DERIVED_VERDICT_MISMATCH,
                 message=(
-                    f"affirmed_hash {disp.affirmed_hash!r} does not match current "
-                    f"content_hash {row.content_hash!r}; row content changed since "
-                    "this decision was made and it must be re-affirmed"
+                    f"sidecar says {entry.disposition!r}"
+                    f"{' (proposed)' if entry.proposed else ''}, but this "
+                    f"checker's own recheck derives {recomputed_desc} -- "
+                    "regenerate the sidecar"
                 ),
                 severity="error",
             ))
+            continue
 
-        if disp.verdict == "cosmetic" and not row.may_be_cosmetic:
-            # Checked first, and deliberately: `None` is falsy, so without
-            # this arm a never-staged row (`unhandled is None`) would fall
-            # through into the state-writing-tags `else` below and report a
-            # misleading "state-writing tags" message even when the row
-            # carries none -- the real problem is that the transpile queue
-            # was never consulted for this row at all.
-            if row.unhandled is None:
-                findings.append(Finding(
-                    row_id=row.row_id,
-                    rule=RULE_ILLEGAL_COSMETIC,
-                    message=(
-                        "disposed cosmetic but this row's map was never "
-                        "transpiled (no entry under the transpiler's "
-                        "scripts/ output) -- the unhandled-queue veto could "
-                        "not be evaluated, so 'cosmetic' cannot be "
-                        "justified; stage the map and regenerate the "
-                        "manifest"
-                    ),
-                    severity="error",
-                ))
-            elif row.unhandled:
-                findings.append(Finding(
-                    row_id=row.row_id,
-                    rule=RULE_ILLEGAL_COSMETIC,
-                    message=(
-                        f"disposed cosmetic but row has {row.unhandled} unhandled "
-                        "transpile queue entr(y/ies) - this is a dead conversion "
-                        "with no beat written at all, not decoration"
-                    ),
-                    severity="error",
-                ))
-            else:
-                findings.append(Finding(
-                    row_id=row.row_id,
-                    rule=RULE_ILLEGAL_COSMETIC,
-                    message=(
-                        "disposed cosmetic but row carries state-writing effect "
-                        f"tags {list(row.blocking_tags())}"
-                    ),
-                    severity="error",
-                ))
-
-        if row.needs_citation and not disp.source:
+        if entry.proposed:
+            snippet = json.dumps({
+                "disposition": entry.disposition,
+                "affirmed_hash": row.content_hash,
+            })
             findings.append(Finding(
                 row_id=row.row_id,
-                rule=RULE_MISSING_CITATION,
+                rule=RULE_DERIVED_UNAFFIRMED,
                 message=(
-                    "row has an unrecognized script head or an unclassified "
-                    "script-typed conditional (code-111 params[0]==12 not "
-                    "matched by any idiom family in conditions.py) and needs "
-                    "a source citation, but the disposition has none"
+                    f"sidecar proposes {entry.disposition!r} for this row, but "
+                    "a blocked: proposal is never accepted without a human "
+                    "affirming it -- if correct, copy this into the "
+                    f"dispositions file: \"{row.row_id}\": {snippet}"
                 ),
                 severity="error",
             ))
+            continue
 
-        if disp.verdict == "blocked":
-            capability_spec = disp.argument or ""
-            if capability_spec.startswith("tooling:"):
-                # blocked:tooling:<primitive> is a harness debt, not a
-                # chapter-granted capability -- CapabilityModel has nothing to
-                # say about it (Q10).
-                pass
-            elif capabilities is None:
-                findings.append(Finding(
-                    row_id=row.row_id,
-                    rule=RULE_CAPABILITY_MODEL_UNENFORCED,
-                    message=(
-                        f"blocked:{capability_spec} could not be checked against a "
-                        "granting chapter because no capability model was supplied "
-                        "(this rule is unenforced without one)"
-                    ),
-                    severity="warning",
-                ))
-            else:
-                # `blocked:a|b+c` is a DISJUNCTION of minimal capability sets
-                # (schema.py): any ONE alternative set opening the row is
-                # enough, so the fold below is across alternatives, not a
-                # per-token loop -- the old grammar's `|` meant AND, and a
-                # per-token loop was the right fold for that. Under the new
-                # grammar a disjunction is only impossible when EVERY
-                # alternative is (one impossible alternative next to a
-                # viable one is exactly what a correct `blocked` still
-                # claims, not an error), and it is only "already granted" --
-                # i.e. secretly reachable now -- when at least one
-                # alternative's every member is already held.
-                alternatives = parse_blocked_argument(capability_spec)
-
-                satisfied: list[tuple[frozenset[str], tuple[CapabilityGrant, ...]]] = []
-                impossible: list[tuple[frozenset[str], tuple[str, ...]]] = []
-                undetermined: list[tuple[frozenset[str], tuple[str, ...]]] = []
-
-                for alt in alternatives:
-                    sites_by_cap = {cap: capabilities.grant_sites(cap) for cap in alt}
-                    missing = tuple(sorted(
-                        cap for cap, sites in sites_by_cap.items() if sites == ()
-                    ))
-                    if missing:
-                        impossible.append((alt, missing))
-                        continue
-                    unresolved = tuple(sorted(
-                        cap for cap, sites in sites_by_cap.items() if sites is None
-                    ))
-                    if unresolved:
-                        undetermined.append((alt, unresolved))
-                        continue
-                    within_by_cap = {cap: capabilities.granted_within(cap) for cap in alt}
-                    if all(within_by_cap.values()):
-                        grants = tuple(g for grants in within_by_cap.values() for g in grants)
-                        satisfied.append((alt, grants))
-
-                if satisfied:
-                    alt, grants = satisfied[0]
-                    site_ids = ", ".join(sorted({g.row_id for g in grants}))
-                    findings.append(Finding(
-                        row_id=row.row_id,
-                        rule=RULE_BLOCKED_ALREADY_GRANTED,
-                        message=(
-                            f"blocked:{capability_spec} names alternative "
-                            f"{'+'.join(sorted(alt))!r}, but every capability in "
-                            f"it is already granted in this chapter or a "
-                            f"predecessor (site(s): {site_ids}) -- the player "
-                            "already holds it, so this row is reachable and "
-                            "'blocked' is a false claim"
-                        ),
-                        severity="error",
-                    ))
-                elif impossible and len(impossible) == len(alternatives):
-                    reasons = "; ".join(
-                        f"{'+'.join(sorted(alt))!r} (no grant site anywhere for "
-                        f"{', '.join(missing)})"
-                        for alt, missing in impossible
-                    )
-                    findings.append(Finding(
-                        row_id=row.row_id,
-                        rule=RULE_BLOCKED_NO_GRANT_SITE,
-                        message=(
-                            f"blocked:{capability_spec} -- every alternative is "
-                            f"impossible ({reasons}); this row is unreachable, "
-                            "not blocked"
-                        ),
-                        severity="error",
-                    ))
-                elif undetermined:
-                    names = ", ".join(sorted({
-                        cap for _, caps in undetermined for cap in caps
-                    }))
-                    findings.append(Finding(
-                        row_id=row.row_id,
-                        rule=RULE_CAPABILITY_MODEL_UNENFORCED,
-                        message=(
-                            f"blocked:{capability_spec} could not be fully "
-                            f"checked -- the derivation could not determine "
-                            f"where (or whether) anything grants {names} -- no "
-                            "switch/variable in the corpus resolves to this "
-                            "token, or every write to the candidate was a "
-                            "computed/relative operation rather than a "
-                            "constant assignment (this rule is unenforced for "
-                            "this argument)"
-                        ),
-                        severity="warning",
-                    ))
-                # else: no alternative is satisfied, not every alternative is
-                # impossible, and none is undetermined -- at least one
-                # alternative is a viable-but-not-yet-granted route, which is
-                # exactly a correct `blocked` claim. No finding.
-
-            if approach is None:
-                findings.append(Finding(
-                    row_id=row.row_id,
-                    rule=RULE_APPROACH_MODEL_UNENFORCED,
-                    message=(
-                        "could not check for a missed negative-beat opportunity "
-                        "because no approach model was supplied (this rule is "
-                        "unenforced without one)"
-                    ),
-                    severity="warning",
-                ))
-            else:
-                approach_answer = approach.has_walkable_approach(row)
-                if approach_answer is None:
-                    findings.append(Finding(
-                        row_id=row.row_id,
-                        rule=RULE_APPROACH_MODEL_UNENFORCED,
-                        message=(
-                            "the approach model could not determine a walkable-"
-                            "approach answer for this row (no event cell to test, "
-                            "or this row's map has no vetted traversal data) -- "
-                            "this rule is unenforced for this row, not negative"
-                        ),
-                        severity="warning",
-                    ))
-                elif approach_answer and disp.negative_beat is None:
-                    findings.append(Finding(
-                        row_id=row.row_id,
-                        rule=RULE_BLOCKED_MISSED_ASSERTION,
-                        message=(
-                            "row is blocked but an adjacent tile is reachable from the "
-                            "chapter's start cell with nothing held, and no "
-                            "negative beat recorded -- the player can already walk up "
-                            "and be refused; this is a missed authoring opportunity, "
-                            "not an error"
-                        ),
-                        severity="warning",
-                    ))
+        # CLERICAL and matching -- the row is dispositioned. Every per-row
+        # verdict rule a hand disposition goes through also runs against it,
+        # except the affirmation rules above (a derived entry has no
+        # affirmed_hash to check; its derived_hash already passed).
+        findings.extend(_check_row_verdict_rules(
+            row, entry.to_disposition(row.row_id),
+            capabilities=capabilities, approach=approach))
 
     for row_id, disp in dispositions.items():
         if row_id not in rows_by_id:
@@ -844,10 +685,15 @@ def check_chapter(
         findings.extend(_check_route_order(route))
         findings.extend(_check_route_approach(route))
 
-    # Chapter-scale rules read the EFFECTIVE verdict: a derived-default row is
-    # `cosmetic`, not "no disposition" -- an archetype page left to that
-    # default is waved through as decoration and must say so.
-    effective = _effective_dispositions(rows, dispositions, derived)
+    # Chapter-scale rules read the EFFECTIVE verdict: hand dispositions plus
+    # every row the hand file omits that this checker independently
+    # recomputes as a matching, ACCEPTED clerical derived entry -- never a
+    # `blocked:` proposal, which is not yet a disposition
+    # (`RULE_DERIVED_UNAFFIRMED`). An archetype page (or boundary/beat row)
+    # left to a clerical default is seen as that verdict, not as "no
+    # disposition".
+    effective = _effective_dispositions(
+        rows, dispositions, derived, beat_model=beat_model, boundary_model=boundary_model)
 
     findings.extend(
         check_trigger_overlay(rows, effective, trigger_overlay=trigger_overlay)
@@ -861,13 +707,13 @@ def check_chapter(
 
     findings.extend(
         _check_unregistered_beat(
-            dispositions, beat_model=beat_model, live_chapter=live_chapter
+            effective, beat_model=beat_model, live_chapter=live_chapter
         )
     )
 
     findings.extend(
         _check_boundary(
-            dispositions, boundary_model=boundary_model, live_chapter=live_chapter
+            effective, boundary_model=boundary_model, live_chapter=live_chapter
         )
     )
 
@@ -877,22 +723,280 @@ def check_chapter(
     return findings
 
 
+def _check_row_verdict_rules(
+    row: ManifestRow,
+    disp: Disposition,
+    *,
+    capabilities: CapabilityModel | None,
+    approach: ApproachModel | None,
+) -> list[Finding]:
+    """Every per-row verdict rule a disposition must satisfy, whether it is
+    hand-authored or an accepted CLERICAL derived entry
+    (`entry.to_disposition(row_id)`) -- everything `check_chapter`'s row
+    loop used to inline, EXCEPT the two affirmation rules
+    (`RULE_UNAFFIRMED_DISPOSITION`/`RULE_STALE_DISPOSITION`), which apply
+    only to a hand disposition's `affirmed_hash`: a derived entry has no
+    such field (its `derived_hash` already passed a stricter, hash-equality
+    check before this function is ever called for it), so those two rules
+    would have nothing to check and are the caller's job, not this one's.
+    """
+    findings: list[Finding] = []
+    row_id = row.row_id
+
+    if not row.is_dispositionable:
+        findings.append(Finding(
+            row_id=row_id,
+            rule=RULE_UNDISPOSITIONABLE_ROW_DECIDED,
+            message=(
+                "row carries an unrecognized script head or command code "
+                f"(unrecognized_heads={list(row.unrecognized_heads)}, "
+                f"other_codes={list(row.other_codes)}) and must be classified "
+                "by a human before it can be dispositioned"
+            ),
+            severity="error",
+        ))
+        # Still worth checking the other rules on this row's disposition; an
+        # unrecognized row that is ALSO stale, uncited, etc. should surface
+        # every problem, not just this one.
+
+    if disp.verdict == "cosmetic" and not row.may_be_cosmetic:
+        # Checked first, and deliberately: `None` is falsy, so without this
+        # arm a never-staged row (`unhandled is None`) would fall through
+        # into the state-writing-tags `else` below and report a misleading
+        # "state-writing tags" message even when the row carries none -- the
+        # real problem is that the transpile queue was never consulted for
+        # this row at all.
+        if row.unhandled is None:
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_ILLEGAL_COSMETIC,
+                message=(
+                    "disposed cosmetic but this row's map was never "
+                    "transpiled (no entry under the transpiler's "
+                    "scripts/ output) -- the unhandled-queue veto could "
+                    "not be evaluated, so 'cosmetic' cannot be "
+                    "justified; stage the map and regenerate the "
+                    "manifest"
+                ),
+                severity="error",
+            ))
+        elif row.unhandled:
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_ILLEGAL_COSMETIC,
+                message=(
+                    f"disposed cosmetic but row has {row.unhandled} unhandled "
+                    "transpile queue entr(y/ies) - this is a dead conversion "
+                    "with no beat written at all, not decoration"
+                ),
+                severity="error",
+            ))
+        else:
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_ILLEGAL_COSMETIC,
+                message=(
+                    "disposed cosmetic but row carries state-writing effect "
+                    f"tags {list(row.blocking_tags())}"
+                ),
+                severity="error",
+            ))
+
+    if row.needs_citation and not disp.source:
+        findings.append(Finding(
+            row_id=row_id,
+            rule=RULE_MISSING_CITATION,
+            message=(
+                "row has an unrecognized script head or an unclassified "
+                "script-typed conditional (code-111 params[0]==12 not "
+                "matched by any idiom family in conditions.py) and needs "
+                "a source citation, but the disposition has none"
+            ),
+            severity="error",
+        ))
+
+    if disp.verdict == "blocked":
+        capability_spec = disp.argument or ""
+        if capability_spec.startswith("tooling:"):
+            # blocked:tooling:<primitive> is a harness debt, not a
+            # chapter-granted capability -- CapabilityModel has nothing to
+            # say about it (Q10).
+            pass
+        elif capabilities is None:
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_CAPABILITY_MODEL_UNENFORCED,
+                message=(
+                    f"blocked:{capability_spec} could not be checked against a "
+                    "granting chapter because no capability model was supplied "
+                    "(this rule is unenforced without one)"
+                ),
+                severity="warning",
+            ))
+        else:
+            # `blocked:a|b+c` is a DISJUNCTION of minimal capability sets
+            # (schema.py): any ONE alternative set opening the row is
+            # enough, so the fold below is across alternatives, not a
+            # per-token loop -- the old grammar's `|` meant AND, and a
+            # per-token loop was the right fold for that. Under the new
+            # grammar a disjunction is only impossible when EVERY
+            # alternative is (one impossible alternative next to a
+            # viable one is exactly what a correct `blocked` still
+            # claims, not an error), and it is only "already granted" --
+            # i.e. secretly reachable now -- when at least one
+            # alternative's every member is already held.
+            alternatives = parse_blocked_argument(capability_spec)
+
+            satisfied: list[tuple[frozenset[str], tuple[CapabilityGrant, ...]]] = []
+            impossible: list[tuple[frozenset[str], tuple[str, ...]]] = []
+            undetermined: list[tuple[frozenset[str], tuple[str, ...]]] = []
+
+            for alt in alternatives:
+                sites_by_cap = {cap: capabilities.grant_sites(cap) for cap in alt}
+                missing = tuple(sorted(
+                    cap for cap, sites in sites_by_cap.items() if sites == ()
+                ))
+                if missing:
+                    impossible.append((alt, missing))
+                    continue
+                unresolved = tuple(sorted(
+                    cap for cap, sites in sites_by_cap.items() if sites is None
+                ))
+                if unresolved:
+                    undetermined.append((alt, unresolved))
+                    continue
+                within_by_cap = {cap: capabilities.granted_within(cap) for cap in alt}
+                if all(within_by_cap.values()):
+                    grants = tuple(g for grants in within_by_cap.values() for g in grants)
+                    satisfied.append((alt, grants))
+
+            if satisfied:
+                alt, grants = satisfied[0]
+                site_ids = ", ".join(sorted({g.row_id for g in grants}))
+                findings.append(Finding(
+                    row_id=row_id,
+                    rule=RULE_BLOCKED_ALREADY_GRANTED,
+                    message=(
+                        f"blocked:{capability_spec} names alternative "
+                        f"{'+'.join(sorted(alt))!r}, but every capability in "
+                        f"it is already granted in this chapter or a "
+                        f"predecessor (site(s): {site_ids}) -- the player "
+                        "already holds it, so this row is reachable and "
+                        "'blocked' is a false claim"
+                    ),
+                    severity="error",
+                ))
+            elif impossible and len(impossible) == len(alternatives):
+                reasons = "; ".join(
+                    f"{'+'.join(sorted(alt))!r} (no grant site anywhere for "
+                    f"{', '.join(missing)})"
+                    for alt, missing in impossible
+                )
+                findings.append(Finding(
+                    row_id=row_id,
+                    rule=RULE_BLOCKED_NO_GRANT_SITE,
+                    message=(
+                        f"blocked:{capability_spec} -- every alternative is "
+                        f"impossible ({reasons}); this row is unreachable, "
+                        "not blocked"
+                    ),
+                    severity="error",
+                ))
+            elif undetermined:
+                names = ", ".join(sorted({
+                    cap for _, caps in undetermined for cap in caps
+                }))
+                findings.append(Finding(
+                    row_id=row_id,
+                    rule=RULE_CAPABILITY_MODEL_UNENFORCED,
+                    message=(
+                        f"blocked:{capability_spec} could not be fully "
+                        f"checked -- the derivation could not determine "
+                        f"where (or whether) anything grants {names} -- no "
+                        "switch/variable in the corpus resolves to this "
+                        "token, or every write to the candidate was a "
+                        "computed/relative operation rather than a "
+                        "constant assignment (this rule is unenforced for "
+                        "this argument)"
+                    ),
+                    severity="warning",
+                ))
+            # else: no alternative is satisfied, not every alternative is
+            # impossible, and none is undetermined -- at least one
+            # alternative is a viable-but-not-yet-granted route, which is
+            # exactly a correct `blocked` claim. No finding.
+
+        if approach is None:
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_APPROACH_MODEL_UNENFORCED,
+                message=(
+                    "could not check for a missed negative-beat opportunity "
+                    "because no approach model was supplied (this rule is "
+                    "unenforced without one)"
+                ),
+                severity="warning",
+            ))
+        else:
+            approach_answer = approach.has_walkable_approach(row)
+            if approach_answer is None:
+                findings.append(Finding(
+                    row_id=row_id,
+                    rule=RULE_APPROACH_MODEL_UNENFORCED,
+                    message=(
+                        "the approach model could not determine a walkable-"
+                        "approach answer for this row (no event cell to test, "
+                        "or this row's map has no vetted traversal data) -- "
+                        "this rule is unenforced for this row, not negative"
+                    ),
+                    severity="warning",
+                ))
+            elif approach_answer and disp.negative_beat is None:
+                findings.append(Finding(
+                    row_id=row_id,
+                    rule=RULE_BLOCKED_MISSED_ASSERTION,
+                    message=(
+                        "row is blocked but an adjacent tile is reachable from the "
+                        "chapter's start cell with nothing held, and no "
+                        "negative beat recorded -- the player can already walk up "
+                        "and be refused; this is a missed authoring opportunity, "
+                        "not an error"
+                    ),
+                    severity="warning",
+                ))
+
+    return findings
+
+
 def _effective_dispositions(
     rows: list[ManifestRow],
     dispositions: dict[str, Disposition],
-    derived: dict[str, str] | None,
+    derived: dict[str, DerivedEntry] | None,
+    *,
+    beat_model: BeatModel | None,
+    boundary_model: BoundaryModel | None,
 ) -> dict[str, Disposition]:
-    """Hand dispositions, plus a `cosmetic` for every row the hand file omits
-    that the sidecar validly derives (hash current, `may_be_derived`
-    rechecked here) -- the same acceptance test `check_chapter`'s row loop
-    applies. The hand entry always wins."""
+    """Hand dispositions, plus a `Disposition` for every row the hand file
+    omits that this checker independently recomputes as a matching,
+    ACCEPTED clerical derived entry -- the same acceptance test
+    `check_chapter`'s row loop applies (never a `blocked:` proposal, which
+    is not yet a disposition). The hand entry always wins.
+    """
     effective = dict(dispositions)
     for row in rows:
         if row.row_id in effective:
             continue
-        derived_hash = (derived or {}).get(row.row_id)
-        if derived_hash is not None and derived_hash == row.content_hash and row.may_be_derived:
-            effective[row.row_id] = Disposition(row_id=row.row_id, verdict="cosmetic")
+        entry = (derived or {}).get(row.row_id)
+        if entry is None or entry.derived_hash != row.content_hash:
+            continue
+        if entry.proposed:
+            continue
+        recomputed = derive_entry(row, beat_model=beat_model, boundary_model=boundary_model)
+        if (recomputed is None
+                or recomputed.disposition != entry.disposition
+                or recomputed.proposed != entry.proposed):
+            continue
+        effective[row.row_id] = entry.to_disposition(row.row_id)
     return effective
 
 
@@ -1291,54 +1395,45 @@ def _check_boundary(
 
 def _check_derived_hash(
     rows_by_id: dict[str, ManifestRow],
-    derived: dict[str, str] | None,
+    derived: dict[str, DerivedEntry] | None,
 ) -> list[Finding]:
-    """`RULE_DERIVED_HASH_INELIGIBLE`: never trust a sidecar entry's mere
-    presence -- recompute `may_be_derived` independently for every row it
-    names, and flag any entry sitting on a row this checker itself judges
-    ineligible for machine derivation (`REDERIVATION_PLAN.md` §15.2 item 1).
+    """`RULE_DERIVED_HASH_INELIGIBLE`: the corpus-wide automation-ratio tally
+    for the machine-derived sidecar (`REDERIVATION_PLAN.md` §15.2 item 1).
+
+    Per-row ineligibility is no longer reported here -- `check_chapter`'s
+    row loop already recomputes `derive_entry` for every sidecar-covered row
+    and reports `RULE_DERIVED_VERDICT_MISMATCH` for any entry it disagrees
+    with, which includes an entry sitting on a now-ineligible row
+    (`derive_entry` returns None for it, and None never equals a sidecar
+    entry's disposition). A second per-row check here would just restate
+    that same finding under a different rule name.
 
     This is the cross-game seam: a brand-new Essentials game starts with no
     hand-authored dispositions file at all, so `derived`'s row count against
-    the generated manifest's row count IS the automation ratio. That only
-    means something if a sidecar entry is *proof*, not a claim -- hence the
-    recheck here rather than trusting whatever wrote the sidecar.
+    the generated manifest's row count IS the automation ratio -- broken
+    down by verdict head (`cosmetic`/`beat`/`boundary`/`blocked`) and by how
+    many of those are still-unaffirmed `blocked:` proposals.
 
     A `row_id` in `derived` that names no row in `rows_by_id` at all (a
-    stale entry pointing at deleted/renamed content) is not this rule's
-    problem -- `RULE_ORPHAN_DISPOSITION` already exists for exactly that
-    shape on the dispositions side, and adding a second orphan check here
-    for a sidecar with no equivalent authored-file semantics is scope this
-    task does not need; such an entry is silently excluded from both the
-    per-row check and the tally below.
+    stale entry pointing at deleted/renamed content) is excluded from the
+    tally -- `RULE_ORPHAN_DISPOSITION` has no sidecar equivalent, and
+    adding one is scope this task does not need.
     """
     findings: list[Finding] = []
     if not derived:
         return findings
 
+    counts: Counter[str] = Counter()
+    proposals = 0
     matched = 0
-    for row_id, _derived_hash in derived.items():
-        row = rows_by_id.get(row_id)
-        if row is None:
+    for row_id, entry in derived.items():
+        if row_id not in rows_by_id:
             continue
         matched += 1
-        if not row.may_be_derived:
-            findings.append(Finding(
-                row_id=row_id,
-                rule=RULE_DERIVED_HASH_INELIGIBLE,
-                message=(
-                    "row carries a derived_hash in the machine-derived "
-                    "sidecar, but this checker's own may_be_derived "
-                    "recheck judges the row ineligible for machine "
-                    "derivation -- a sidecar entry's presence is never "
-                    "trusted on its own; either the row was never staged "
-                    "(unhandled is None), carries unhandled transpile "
-                    "queue entries, an unrecognized head/code, a "
-                    "state-writing effect tag, a non-empty requires "
-                    "(a blocked: candidate), or owes a citation"
-                ),
-                severity="error",
-            ))
+        head = entry.disposition.split(":", 1)[0]
+        counts[head] += 1
+        if entry.proposed:
+            proposals += 1
 
     # Reported only when non-zero -- same idiom as the `archetype_exempt`
     # tally above: an empty/no-sidecar chapter has nothing to tally, and a
@@ -1347,14 +1442,16 @@ def _check_derived_hash(
     # exactly the automation-ratio signal this sidecar exists to make
     # visible.
     if matched:
+        breakdown = ", ".join(f"{head}={n}" for head, n in sorted(counts.items()))
         findings.append(Finding(
             row_id="chapter",
             rule=RULE_DERIVED_HASH_INELIGIBLE,
             message=(
-                f"{matched} row(s) carry a derived_hash in the machine-"
-                "derived sidecar this chapter -- tracked so the automation "
-                "ratio (machine-derived rows vs. total manifest rows) is "
-                "visible growth, not quiet drift"
+                f"{matched} row(s) carry a machine-derived entry in the "
+                f"sidecar this chapter ({breakdown}; {proposals} "
+                "proposal(s) awaiting human affirmation) -- tracked so the "
+                "automation ratio (machine-derived rows vs. total manifest "
+                "rows) is visible growth, not quiet drift"
             ),
             severity="warning",
         ))
