@@ -1,0 +1,26 @@
+{
+  "map032/ev014/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "71287f6c8f0cc2fe"
+  },
+  "map032/ev014/p1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "6c2d90d22489cb2a"
+  },
+  "map032/ev015/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "71287f6c8f0cc2fe"
+  },
+  "map032/ev015/p1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "6c2d90d22489cb2a"
+  },
+  "map032/ev033/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "71287f6c8f0cc2fe"
+  },
+  "map032/ev033/p1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "6c2d90d22489cb2a"
+  }
+}

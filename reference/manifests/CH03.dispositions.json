@@ -1,0 +1,42 @@
+{
+  "map019/ev001/p0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "b7058e69898f3633"
+  },
+  "map019/ev002/p0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "b7058e69898f3633"
+  },
+  "map019/ev003/p0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "b7058e69898f3633"
+  },
+  "map019/ev005/p0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "20f16b63cde5540d"
+  },
+  "map019/ev005/p1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "f7d82e87baff797c"
+  },
+  "map019/ev005/p2": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "42c54f61a70ec1e3"
+  },
+  "map019/ev006/p0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "d1080271f648b2a2"
+  },
+  "map019/ev006/p1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "3900791580710cab"
+  },
+  "map031/ev001/p0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "e868f0fb10d95c62"
+  },
+  "map031/ev037/p0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "e868f0fb10d95c62"
+  }
+}

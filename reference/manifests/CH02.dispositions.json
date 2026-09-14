@@ -1,0 +1,106 @@
+{
+  "map033/ev008/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "0eaa8e965c9baac8"
+  },
+  "map033/ev008/p1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "6c2d90d22489cb2a"
+  },
+  "map033/ev009/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "00d1149603e20767"
+  },
+  "map033/ev009/p1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "b5ab7d0b59c9d5ee"
+  },
+  "map033/ev010/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "6aa13505c91bc68c"
+  },
+  "map033/ev010/p1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "14ed96408d12f789"
+  },
+  "map033/ev013/p0": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "dfba1cd5ea05162f"
+  },
+  "map033/ev020/p0": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "2e2951ede454e802"
+  },
+  "map033/ev029/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "e3da20fd925642b0"
+  },
+  "map033/ev032/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "edc2dec0216b1d76"
+  },
+  "map033/ev032/p1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "6c2d90d22489cb2a"
+  },
+  "map033/ev035/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "c64d11806a08750a"
+  },
+  "map033/ev035/p1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "b745181a4937bafa"
+  },
+  "map033/ev036/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "e3da20fd925642b0"
+  },
+  "map033/ev037/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "2129f89e44535124"
+  },
+  "map033/ev037/p1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "6c2d90d22489cb2a"
+  },
+  "map033/ev038/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "e3da20fd925642b0"
+  },
+  "map033/ev039/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "f8f0cf3a9c703bf4"
+  },
+  "map033/ev039/p1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "911a00f11592d8d8"
+  },
+  "map033/ev039/p2": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "59e31fb74cd92581"
+  },
+  "map033/ev040/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "e3da20fd925642b0"
+  },
+  "map033/ev041/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "b1981270d98885cf"
+  },
+  "map033/ev041/p1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "f244ffb65eb13b86"
+  },
+  "map033/ev042/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "e3da20fd925642b0"
+  },
+  "map033/ev044/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "e3da20fd925642b0"
+  },
+  "map033/ev141/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "3c896bd547f9aebe"
+  }
+}
