@@ -475,6 +475,93 @@ def test_blocked_row_not_walkable_not_flagged():
     assert all(f.rule != RULE_BLOCKED_MISSED_ASSERTION for f in findings)
 
 
+# --- rule 8, cleared-state exemption (map032/ev014-style rock) -------------
+#
+# An obstacle event with two pages: p0 is the obstacle itself (writes a
+# self-switch and clears itself when cleared), p1 only appears once that
+# self-switch is on. p1 is unreachable empty-handed by construction --
+# nobody stands next to it before p0 has already been dealt with -- so the
+# approach model's per-cell "is the tile next to this walkable right now"
+# answer is true but meaningless for p1, and the missed-assertion warning
+# should not fire for it.
+
+
+def _rock_pages(map_id: int = 32, event_id: int = 14) -> tuple[ManifestRow, ManifestRow]:
+    obstacle = _row(
+        row_id=f"map{map_id:03d}/ev{event_id:03d}/p0", map_id=map_id,
+        content_hash="rh0", event_id=event_id, page_idx=0,
+        effects=("self_switch_write",),
+    )
+    cleared = _row(
+        row_id=f"map{map_id:03d}/ev{event_id:03d}/p1", map_id=map_id,
+        content_hash="rh1", event_id=event_id, page_idx=1,
+        effects=(), condition=PageCondition(self_switch_ch="A"),
+    )
+    return obstacle, cleared
+
+
+def test_cleared_state_page_with_blocked_writer_sibling_not_flagged():
+    obstacle, cleared = _rock_pages()
+    dispositions = {
+        obstacle.row_id: _disp(obstacle.row_id, "blocked:rock_smash", affirmed_hash="rh0"),
+        cleared.row_id: _disp(cleared.row_id, "blocked:rock_smash", affirmed_hash="rh1"),
+    }
+    approach = _FakeApproach({cleared.row_id})
+    findings = check_chapter([obstacle, cleared], dispositions, approach=approach)
+    assert all(
+        not (f.rule == RULE_BLOCKED_MISSED_ASSERTION and f.row_id == cleared.row_id)
+        for f in findings
+    )
+
+
+def test_cleared_state_page_with_unblocked_writer_sibling_still_flagged():
+    obstacle, cleared = _rock_pages()
+    dispositions = {
+        # The writer sibling (p0) is dispositioned `beat:`, not `blocked:` --
+        # condition 3 of the exemption fails, so p1's warning still fires.
+        obstacle.row_id: _disp(obstacle.row_id, "beat:B1", affirmed_hash="rh0"),
+        cleared.row_id: _disp(cleared.row_id, "blocked:rock_smash", affirmed_hash="rh1"),
+    }
+    approach = _FakeApproach({cleared.row_id})
+    findings = check_chapter([obstacle, cleared], dispositions, approach=approach)
+    assert any(
+        f.rule == RULE_BLOCKED_MISSED_ASSERTION and f.row_id == cleared.row_id
+        for f in findings
+    )
+
+
+def test_self_switch_gated_page_with_no_writer_sibling_still_flagged():
+    # Same self-switch-gated shape as `cleared` above, but nothing on this
+    # event writes that self-switch -- something else must gate it (or it's
+    # unauthored), and the exemption has no evidence to stand on.
+    map_id, event_id = 32, 15
+    gated = _row(
+        row_id=f"map{map_id:03d}/ev{event_id:03d}/p1", map_id=map_id,
+        content_hash="gh1", event_id=event_id, page_idx=1,
+        effects=(), condition=PageCondition(self_switch_ch="A"),
+    )
+    disp = _disp(gated.row_id, "blocked:rock_smash", affirmed_hash="gh1")
+    approach = _FakeApproach({gated.row_id})
+    findings = check_chapter([gated], {gated.row_id: disp}, approach=approach)
+    assert any(f.rule == RULE_BLOCKED_MISSED_ASSERTION for f in findings)
+
+
+def test_obstacle_page_itself_still_flagged():
+    # p0 -- the obstacle page, not gated on any self-switch -- is never
+    # exempt, even though it's the same event as a cleared-state p1.
+    obstacle, cleared = _rock_pages()
+    dispositions = {
+        obstacle.row_id: _disp(obstacle.row_id, "blocked:rock_smash", affirmed_hash="rh0"),
+        cleared.row_id: _disp(cleared.row_id, "blocked:rock_smash", affirmed_hash="rh1"),
+    }
+    approach = _FakeApproach({obstacle.row_id})
+    findings = check_chapter([obstacle, cleared], dispositions, approach=approach)
+    assert any(
+        f.rule == RULE_BLOCKED_MISSED_ASSERTION and f.row_id == obstacle.row_id
+        for f in findings
+    )
+
+
 # --- exit_code -------------------------------------------------------------
 
 

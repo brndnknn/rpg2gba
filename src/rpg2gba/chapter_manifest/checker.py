@@ -533,6 +533,18 @@ def check_chapter(
     findings: list[Finding] = []
     rows_by_id = {row.row_id: row for row in rows}
 
+    # Computed here, ahead of the per-row loop below, rather than at its
+    # original call site further down: RULE_BLOCKED_MISSED_ASSERTION's
+    # cleared-state exemption (`_cleared_state_page`) needs to ask what a
+    # SIBLING page's effective verdict is while still inside this same
+    # row's own verdict check, and `_effective_dispositions` has no
+    # dependency on anything the loop accumulates -- only on `rows`,
+    # `dispositions`, `derived`, `beat_model`, `boundary_model`, all already
+    # in scope. One computation, used by both the per-row rules and the
+    # chapter-scale rules below.
+    effective = _effective_dispositions(
+        rows, dispositions, derived, beat_model=beat_model, boundary_model=boundary_model)
+
     for row in rows:
         disp = dispositions.get(row.row_id)
         if disp is not None:
@@ -557,7 +569,8 @@ def check_chapter(
                     severity="error",
                 ))
             findings.extend(_check_row_verdict_rules(
-                row, disp, capabilities=capabilities, approach=approach))
+                row, disp, capabilities=capabilities, approach=approach,
+                rows=rows, effective=effective))
             continue
 
         # No hand disposition. The derived default (REDERIVATION_PLAN.md
@@ -633,7 +646,8 @@ def check_chapter(
         # affirmed_hash to check; its derived_hash already passed).
         findings.extend(_check_row_verdict_rules(
             row, entry.to_disposition(row.row_id),
-            capabilities=capabilities, approach=approach))
+            capabilities=capabilities, approach=approach,
+            rows=rows, effective=effective))
 
     for row_id, disp in dispositions.items():
         if row_id not in rows_by_id:
@@ -691,10 +705,8 @@ def check_chapter(
     # `blocked:` proposal, which is not yet a disposition
     # (`RULE_DERIVED_UNAFFIRMED`). An archetype page (or boundary/beat row)
     # left to a clerical default is seen as that verdict, not as "no
-    # disposition".
-    effective = _effective_dispositions(
-        rows, dispositions, derived, beat_model=beat_model, boundary_model=boundary_model)
-
+    # disposition". (`effective` itself was computed above, ahead of the
+    # per-row loop -- see the comment there.)
     findings.extend(
         check_trigger_overlay(rows, effective, trigger_overlay=trigger_overlay)
     )
@@ -723,12 +735,64 @@ def check_chapter(
     return findings
 
 
+def _cleared_state_page(
+    row: ManifestRow,
+    rows: list[ManifestRow],
+    effective: dict[str, Disposition],
+) -> bool:
+    """True iff `row` is a "cleared-state" page of an obstacle event --
+    gated on its own event's self-switch -- that can only ever exist after
+    ANOTHER page of the same event has already run and set that switch, so
+    RULE_BLOCKED_MISSED_ASSERTION's "the player can walk up and be refused"
+    claim is structurally impossible for it: nobody reaches this page
+    empty-handed, because nobody reaches it at all until the prerequisite
+    page's own `blocked:` capability has already been spent (Moki Town rock
+    map032/ev014 -- p0 is the rock, smashing it writes self-switch A and
+    erases the event; p1 is the smashed state, condition `self_switch_ch:
+    "A"`; a negative beat on p1 is unauthorable because no route to it
+    skips p0).
+
+    The approach model (`ApproachModel.has_walkable_approach`) only tests
+    the event's cell in isolation, so it cannot see this page-sequencing
+    fact -- this is a second, narrower source of truth layered on top of
+    it, not a relaxation of it.
+
+    Deliberately reads only generated row facts (`condition`, `effects`)
+    and `effective` dispositions, never `disp.assertable` or a note: this
+    exemption is a structural claim about reachability, not the author's
+    self-report, exactly like the rule it narrows.
+    """
+    if row.kind != "page" or row.condition is None or row.condition.self_switch_ch is None:
+        return False
+    writers = [
+        sibling for sibling in rows
+        if sibling.kind == "page"
+        and sibling.map_id == row.map_id
+        and sibling.event_id == row.event_id
+        and sibling.row_id != row.row_id
+        and "self_switch_write" in sibling.effects
+    ]
+    if not writers:
+        # Nothing on this event writes a self-switch -- something else must
+        # gate the condition (another event's write, or it's simply
+        # unauthored), and this exemption has no evidence for that. Fall
+        # through to the ordinary warning.
+        return False
+    return all(
+        effective.get(sibling.row_id) is not None
+        and effective[sibling.row_id].verdict == "blocked"
+        for sibling in writers
+    )
+
+
 def _check_row_verdict_rules(
     row: ManifestRow,
     disp: Disposition,
     *,
     capabilities: CapabilityModel | None,
     approach: ApproachModel | None,
+    rows: list[ManifestRow],
+    effective: dict[str, Disposition],
 ) -> list[Finding]:
     """Every per-row verdict rule a disposition must satisfy, whether it is
     hand-authored or an accepted CLERICAL derived entry
@@ -739,6 +803,11 @@ def _check_row_verdict_rules(
     such field (its `derived_hash` already passed a stricter, hash-equality
     check before this function is ever called for it), so those two rules
     would have nothing to check and are the caller's job, not this one's.
+
+    `rows` (the full chapter roster) and `effective` (hand-plus-accepted-
+    derived dispositions, keyed by row_id -- computed once by the caller,
+    see `check_chapter`) back `RULE_BLOCKED_MISSED_ASSERTION`'s
+    cleared-state exemption (`_cleared_state_page`) below.
     """
     findings: list[Finding] = []
     row_id = row.row_id
@@ -951,7 +1020,8 @@ def _check_row_verdict_rules(
                     ),
                     severity="warning",
                 ))
-            elif approach_answer and disp.negative_beat is None:
+            elif (approach_answer and disp.negative_beat is None
+                    and not _cleared_state_page(row, rows, effective)):
                 findings.append(Finding(
                     row_id=row_id,
                     rule=RULE_BLOCKED_MISSED_ASSERTION,
