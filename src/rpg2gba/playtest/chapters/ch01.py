@@ -115,6 +115,34 @@ CEREMONY_APPROACH = (17, 43)
 CEREMONY_DIRECTION = "LEFT"
 CEREMONY_ROWS = (43, 45)  # the trigger column's extent, for B14's re-cross
 
+# N4: the three Rock Smash boulders east of the ceremony area, RMXP EV014
+# (65,45), EV015 (66,46), EV033 (66,44) -- `Map032.json` events, coordinates
+# 1:1 with the converted GBA layout (verified against `Map033.json`'s EV036/
+# EV038, whose RMXP xy match the converted map's xy exactly -- the map
+# converter does not translate coordinates). Compiled local ids read from
+# `engine/data/maps/MokiTown/map.json`'s `object_events` array (1-indexed,
+# array position + 1, matching the convention `emulator.object_events()`
+# reads `localId` under): EV014 is array index 4 -> local id 5, EV015 is
+# index 5 -> local id 6, EV033 is index 10 -> local id 11.
+#
+# Approach tiles verified with `rpg2gba.traversal.collision`
+# (`build_blocked_grid` against `output/uranium-build/maps/Map032.json` +
+# `tilesets.json` tileset 22) plus a BFS from `THEO_HOUSE_DOOR` treating all
+# three rock cells as solid (object collision, not carried by the terrain
+# grid): the three rocks form an L against each other -- EV014 (65,45) west
+# of EV033 (66,44) and north of EV015 (66,46) -- and (66,45), the cell
+# between all three, is enclosed on 3 sides by rock and unreachable without
+# smashing one, the same "target inside the gated pocket" trap
+# `ch04.py`'s `ROCK_14_APPROACH` comment documents. Two reachable tiles
+# cover all three rocks instead:
+#   - (65,44), immediately north of EV014 and west of EV033 -- approach both
+#     from the same standing tile, facing DOWN for EV014 and RIGHT for EV033.
+#   - (65,46), immediately west of EV015 -- facing RIGHT.
+# Both tiles are terrain-unblocked and carry no object event of their own.
+ROCK_EV014 = (5, (65, 45), (65, 44), "DOWN")
+ROCK_EV033 = (11, (66, 44), (65, 44), "RIGHT")
+ROCK_EV015 = (6, (66, 46), (65, 46), "RIGHT")
+
 
 # -- small local helpers, built only from the emulator's public surface ------
 #
@@ -554,6 +582,66 @@ def n2(emu: Emulator) -> None:
             f"N2: VAR_QUEST_LOG changed from {quest_log_before} to "
             f"{quest_log_after} during the pre-Theo redirect -- the "
             f"redirect page must not write any variable ({shot})")
+
+
+# -- N4 (after N2, before B11 -- the player is free in Map032 here: N2 ends
+# at CEREMONY_APPROACH with no claim on where it leaves the player, and B11
+# opens with its own `walk_to(*THEO_HOUSE_DOOR)` from wherever the player
+# stands, so nothing downstream inherits this beat's ending position. No
+# state this beat touches (VAR_QUEST_LOG, party, flags) overlaps N2's or
+# B11's preconditions.) ---------------------------------------------------
+
+@ch01.beat("N4", "Rock Smash is unobtainable this chapter: all three of "
+                   "Moki Town's boulders refuse to erase and keep blocking "
+                   "movement",
+             locations=(
+                 BeatLocation("MAP_MOKI_TOWN", ROCK_EV014[1][0], ROCK_EV014[1][1], "boulder EV014"),
+                 BeatLocation("MAP_MOKI_TOWN", ROCK_EV033[1][0], ROCK_EV033[1][1], "boulder EV033"),
+                 BeatLocation("MAP_MOKI_TOWN", ROCK_EV015[1][0], ROCK_EV015[1][1], "boulder EV015"),
+             ))
+def n4(emu: Emulator) -> None:
+    for label, local_id, rock_xy, approach, facing in (
+        ("ev014", *ROCK_EV014),
+        ("ev033", *ROCK_EV033),
+        ("ev015", *ROCK_EV015),
+    ):
+        emu.walk_to(*approach)
+        before = emu.object_event(local_id)
+        if not before.active:
+            raise ScenarioError(
+                f"N4 precondition failed: rock {label} (local id {local_id}) "
+                f"already erased before the attempt")
+        emu.face(facing)
+        before_pos = emu.player_pos()
+        if _try_step(emu, facing):
+            shot = emu.screenshot(f"n4_{label}_not_blocking")
+            raise ScenarioError(
+                f"N4: stepping toward rock {label} at {rock_xy} moved the "
+                f"player -- the boulder is not blocking movement ({shot})")
+        if emu.player_pos() != before_pos:
+            shot = emu.screenshot(f"n4_{label}_position_drifted")
+            raise ScenarioError(
+                f"N4: player position changed anyway ({shot})")
+        emu.tap("A")
+        emu.run(30)
+        if emu.field_locked():
+            emu.advance_dialog()
+        if in_battle(emu):
+            shot = emu.screenshot(f"n4_{label}_encounter_fired")
+            raise ScenarioError(
+                f"N4: a Rock Smash encounter battle started at {rock_xy} "
+                f"despite the move being unobtainable this chapter ({shot})")
+        if emu.player_pos() != before_pos:
+            shot = emu.screenshot(f"n4_{label}_moved_after_a")
+            raise ScenarioError(
+                f"N4: player position changed after pressing A on rock "
+                f"{label} at {rock_xy} ({shot})")
+        after = emu.object_event(local_id)
+        if not after.active:
+            shot = emu.screenshot(f"n4_{label}_rock_erased")
+            raise ScenarioError(
+                f"N4: rock {label} (local id {local_id}) was erased despite "
+                f"no Rock Smash in the party ({shot})")
 
 
 # -- B11 -----------------------------------------------------------------

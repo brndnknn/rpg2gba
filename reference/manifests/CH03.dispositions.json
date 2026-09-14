@@ -1,11 +1,13 @@
 {
   "map019/ev001/p0": {
     "disposition": "blocked:strength",
-    "affirmed_hash": "b7058e69898f3633"
+    "affirmed_hash": "b7058e69898f3633",
+    "note": "Cave boulder. blocked_missed_assertion here is a known false positive (operator ruling 2026-09-14): the approach model starts Map019 at the cave arrival (11,29), but the cave door is sealed by Kevlar boulders map031/ev001+ev037 (N7) until Strength, so no negative beat is authorable in CH03. Map019 stays in CH03 for the build (03-kevlar-town.md 7.1)."
   },
   "map019/ev002/p0": {
     "disposition": "blocked:strength",
-    "affirmed_hash": "b7058e69898f3633"
+    "affirmed_hash": "b7058e69898f3633",
+    "note": "Cave boulder. blocked_missed_assertion here is a known false positive (operator ruling 2026-09-14): the approach model starts Map019 at the cave arrival (11,29), but the cave door is sealed by Kevlar boulders map031/ev001+ev037 (N7) until Strength, so no negative beat is authorable in CH03. Map019 stays in CH03 for the build (03-kevlar-town.md 7.1)."
   },
   "map019/ev003/p0": {
     "disposition": "blocked:strength",
@@ -33,10 +35,16 @@
   },
   "map031/ev001/p0": {
     "disposition": "blocked:strength",
-    "affirmed_hash": "e868f0fb10d95c62"
+    "affirmed_hash": "e868f0fb10d95c62",
+    "assertable": true,
+    "negative_beat": "N7",
+    "note": "Boulder at (10,16), approach (10,17) facing UP. Strength unobtainable in CH03; boulder stays."
   },
   "map031/ev037/p0": {
     "disposition": "blocked:strength",
-    "affirmed_hash": "e868f0fb10d95c62"
+    "affirmed_hash": "e868f0fb10d95c62",
+    "assertable": true,
+    "negative_beat": "N7",
+    "note": "Boulder at (12,16), approach (12,17) facing UP. Strength unobtainable in CH03; boulder stays."
   }
 }

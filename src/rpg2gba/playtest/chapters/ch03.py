@@ -340,6 +340,39 @@ MAGIKARP_STAGING = (29, 23)
 CRY_BOY_APPROACH = (38, 16)
 CRY_BOY_FACING = "RIGHT"
 
+# N7: the two Kevlar Town Strength boulders that seal the corridor south of
+# the cave door -- map31 local id 1 (RMXP ev001) at (10,16) and local id 7
+# (RMXP ev037) at (12,16), both `OBJ_EVENT_GFX_PUSHABLE_BOULDER` /
+# `EventScript_StrengthBoulder` (`engine/data/maps/KevlarTown/map.json`
+# object_events[0] and [6] -- NOT the inert `lock`/`release` boulders finding
+# 2 describes; those are the 3 *inside* Passage Cave on map19). Unlike the
+# cave boulders, these run the engine's real native Strength gate
+# (`engine/data/scripts/field_move_scripts.inc:224`): interacting checks
+# `FLAG_SYS_USE_STRENGTH`, then `checkfieldmove FIELD_MOVE_STRENGTH`, and
+# with no Strength-capable party member (guaranteed true pre-CH25, finding 8)
+# falls to `EventScript_CantStrength` -- a message, no push, no flag set.
+#
+# Approach/facing decided from a static decode of
+# `engine/data/layouts/KevlarTown/map.bin` (50x50, collision = (b>>10)&3,
+# same packing `scripts/harvest_bucket_metatiles.py` decodes): at row y=16
+# only x=10 and x=12 are collision-0 (x=9/11/13 are walled), i.e. the two
+# boulder tiles are the ONLY passable columns through that row -- confirms
+# B19's "jointly seal the only path through" reading directly against the
+# grid, not just BFS. y<=15 north of the boulders (the corridor up to
+# CAVE_DOOR) is walled off from y>=17 south of them except through those two
+# boulder tiles, so it is cave-side and NOT town-reachable pre-Strength --
+# only the SOUTH approach works. (10,17)/(12,17) and the row17-18 strip
+# between them (x=10-12, all collision-0) are open and mutually reachable
+# without touching row16; a BFS from CRY_BOY_APPROACH (38,16) with both
+# boulder tiles (10,16)/(12,16) excluded from the walkable set still reaches
+# both (10,17) and (12,17) (539 tiles total) while NOT reaching (10,15) or
+# CAVE_DOOR -- confirming the approach is reachable from the town side alone,
+# never through the sealed corridor.
+KEVLAR_BOULDERS: tuple[tuple[int, tuple[int, int], tuple[int, int], str], ...] = (
+    (1, (10, 16), (10, 17), "UP"),
+    (7, (12, 16), (12, 17), "UP"),
+)
+
 # B19: the cave door, map31 (13,7) -> map19 (11,29).
 CAVE_DOOR = (13, 7)
 CAVE_ARRIVAL = (11, 29)
@@ -1292,6 +1325,83 @@ def b18(emu: Emulator) -> None:
         raise ScenarioError(
             f"B18: FLAG_SIDEQUEST_CRY_BOY became set from the idle page -- "
             f"expected FLAG_HAS_STRENGTH to gate this off ({shot})")
+
+
+def _strength_boulder_refused(emu: Emulator, beat: str, local_id: int,
+                              boulder_xy: tuple[int, int],
+                              approach: tuple[int, int], facing: str) -> None:
+    """Approach a native Strength boulder with no Strength-capable party
+    member and confirm it stays exactly as immovable as `blocked:strength`
+    says: no push, no flag, no position change on either side. Mirrors
+    ch02.py's `_rock_smash_refused` shape, but this boulder runs a real
+    script (`EventScript_StrengthBoulder`), not an inert lock/release, so
+    both halves of the interaction are checked -- the walk-into bump AND
+    the interact() dialog.
+    """
+    emu.walk_to(*approach)
+    before = emu.object_event(local_id)
+    if (before.x, before.y) != boulder_xy:
+        raise ScenarioError(
+            f"{beat} precondition failed: boulder (local id {local_id}) "
+            f"at ({before.x},{before.y}), expected {boulder_xy}")
+    if emu.flag("FLAG_SYS_USE_STRENGTH"):
+        raise ScenarioError(
+            f"{beat} precondition failed: FLAG_SYS_USE_STRENGTH already set")
+
+    # Walking into the boulder: with the flag unset, this is a plain bump --
+    # the boulder is solid collision, not a push-in-progress.
+    emu.face(facing)
+    before_pos = emu.player_pos()
+    if _try_step(emu, facing):
+        shot = emu.screenshot(f"{beat}_boulder{local_id}_not_blocking")
+        raise ScenarioError(
+            f"{beat}: stepping toward the boulder (local id {local_id}) at "
+            f"{boulder_xy} moved the player -- expected it to still block "
+            f"movement pre-Strength ({shot})")
+    if emu.player_pos() != before_pos:
+        shot = emu.screenshot(f"{beat}_boulder{local_id}_drifted")
+        raise ScenarioError(f"{beat}: player position changed anyway ({shot})")
+
+    # Interacting: EventScript_StrengthBoulder's own path with no
+    # Strength-capable mon is EventScript_CantStrength -- a message, then
+    # release. No push, no flag.
+    emu.face(facing)
+    emu.interact()
+    emu.advance_dialog()
+
+    after = emu.object_event(local_id)
+    if (after.x, after.y) != boulder_xy:
+        shot = emu.screenshot(f"{beat}_boulder{local_id}_moved")
+        raise ScenarioError(
+            f"{beat}: boulder (local id {local_id}) moved from {boulder_xy} "
+            f"to ({after.x},{after.y}) despite no Strength in the party "
+            f"({shot})")
+    if emu.player_pos() != before_pos:
+        shot = emu.screenshot(f"{beat}_boulder{local_id}_player_moved")
+        raise ScenarioError(
+            f"{beat}: player position changed after the interact ({shot})")
+    if emu.flag("FLAG_SYS_USE_STRENGTH"):
+        shot = emu.screenshot(f"{beat}_boulder{local_id}_flag_leaked")
+        raise ScenarioError(
+            f"{beat}: FLAG_SYS_USE_STRENGTH became set despite no "
+            f"Strength-capable party member ({shot})")
+
+
+# -- N7 --------------------------------------------------------------------
+
+@ch03.beat("N7", "Strength is unobtainable this chapter: both Kevlar Town "
+                   "boulders sealing the cave corridor refuse to push and "
+                   "stay put",
+             locations=(
+                 BeatLocation("MAP_KEVLAR_TOWN", KEVLAR_BOULDERS[0][1][0],
+                              KEVLAR_BOULDERS[0][1][1], "boulder ev001"),
+                 BeatLocation("MAP_KEVLAR_TOWN", KEVLAR_BOULDERS[1][1][0],
+                              KEVLAR_BOULDERS[1][1][1], "boulder ev037"),
+             ))
+def n7(emu: Emulator) -> None:
+    for local_id, boulder_xy, approach, facing in KEVLAR_BOULDERS:
+        _strength_boulder_refused(emu, "N7", local_id, boulder_xy, approach,
+                                   facing)
 
 
 # -- B19 (DEFERRED to CH25 -- see DEFERRED_BEATS) -------------------------
