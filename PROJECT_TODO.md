@@ -17,6 +17,32 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 108. Blank-graphic parallel pages are dropped whole, and nothing sets FLAG_STARTING_OVER
+
+*Filed 2026-09-15 out of CH01's 2F stop (`ch01.py`, the comment block above `B3_up`).
+Two conversion gaps found on one map; both leave rows no beat can claim.*
+
+**Parallel pages.** `metadata_wiring` sends a blank-graphic trigger-4 event to
+`DROP_PARALLEL`, and `compute_autorun_entries` only picks up trigger 3, so the page's body
+is never emitted anywhere. The drop is not per-map, it is the rule. In CH01–CH05 it
+bites twice, both "set a switch and my self-switch once" pages:
+`map048/ev005/p0` (switches 49 JUKEBOX + 51 GAME RUNNING) and `map033/ev004/p0`
+(switch 54 RIVAL MASTER). Measured: nothing in Uranium reads 49 or 51 — no page
+condition, no conditional branch, no common event, nothing in `Scripts.rxdata` — so
+Map048's page is inert either way. Switch 54's readers are unmeasured, and the
+corpus-wide count of parallel pages with effects is too. Fix direction: a parallel page
+whose body is only state writes and has no wait/loop is semantically a run-once autorun,
+so `compute_autorun_entries` could admit it under the same guard logic; anything with
+waits or loops stays a loud queue entry.
+
+**Starting Over (switch 5).** Only Essentials' `pbStartOver` sets it
+(`PField_Field` ll. 1942/1966), on whiteout. The ROM whites out natively, so
+`FLAG_STARTING_OVER` is never set and the three heal-on-return autoruns gated on it are
+dead: `map048/ev013/p0`, `map049/ev022/p0`, `map068/ev001/p1`. Where the ROM's native
+whiteout actually sends a Uranium player is the real question (CH02's B18 anchors the
+initial one). Either set the flag on the native whiteout path, or disposition the three
+rows `unreachable:` with this item as the citation.
+
 ### 99. `_resolve_threshold` cannot fold increment writes, so reachable thresholds read as undetermined
 
 *Filed 2026-09-12 out of `REDERIVATION_PLAN.md` §14.11. Not P8b work — P8b hand-annotates

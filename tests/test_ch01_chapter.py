@@ -50,6 +50,12 @@ def _parse_doc_beat_ids() -> list[str]:
 # decision the reader can see, not a silent gap.
 DROPPED_DOC_BEATS = {"N1"}
 
+# Beats the chapter adds that have no doc row, keyed by the doc beat they run
+# right after. The 2F stop (2026-09-15, REDERIVATION_PLAN.md §15.8): the
+# player's upstairs was owed a beat once readable signs stopped counting as
+# decoration, and it runs between Auntie (B3) and the front door (B4).
+ADDED_BEATS_AFTER = {"B3": ["B3_up", "B3_signs", "B3_pc", "B3_down"]}
+
 
 def _expected_interleaved_order() -> list[str]:
     """The doc's positive beats (B1..B15) and negative beats (N2, N3, N4),
@@ -70,6 +76,7 @@ def _expected_interleaved_order() -> list[str]:
         if beat == "B7":
             order.append("N3")
         order.append(beat)
+        order.extend(ADDED_BEATS_AFTER.get(beat, []))
         if beat == "B10":
             order.append("N2")
             order.append("N4")
@@ -91,8 +98,9 @@ def test_moki_chapter_loads() -> None:
     assert isinstance(chapter, Chapter)
     assert chapter.name == "CH01"
     assert chapter.doc == "reference/chapters/01-moki.md"
-    # 15 positive + 4 negative doc rows, less the dropped ones.
-    assert len(chapter.beats) == 19 - len(DROPPED_DOC_BEATS)
+    # 15 positive + 4 negative doc rows, less the dropped ones, plus the added.
+    added = sum(len(beats) for beats in ADDED_BEATS_AFTER.values())
+    assert len(chapter.beats) == 19 - len(DROPPED_DOC_BEATS) + added
 
 
 def test_moki_chapter_beat_order_matches_the_doc() -> None:

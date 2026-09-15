@@ -70,6 +70,10 @@ maps, see §6).
 | B1 | 48 | new game | none — arrival state | Player spawns in Map049 (per B1 boot check), not Map048; potion/starting-inventory claim **unverified this pass**, see §7 |
 | B2 | 49 | none | leave 1F without talking to Auntie | **Blocked** — player cannot pass the exit tile; no state change (mechanical redirect, not a story beat but the chapter's first gate) |
 | B3 | 49 | talk to Auntie (event 1, "Auntie") | interact | `FLAG_SYS_B_DASH` set (native Emerald run flag; RMXP source: `$PokemonGlobal.runningShoes=true`); `FLAG_MAP049_EVENT001_SSA` set (gift-once self-switch, `flag_state.json:322`) — re-talking advances to later dialogue, no repeat grant |
+| B3_up | 49 → 48 | none | press RIGHT into 1F's sideways stairs (EV003) | warp to 2F; first arrival plays EV001's wake-up autorun and sets `FLAG_MAP048_EVENT001_SSA` *(added 2026-09-15 — the 2F stop, REDERIVATION_PLAN §15.8; `tests/test_ch01_chapter.py` `ADDED_BEATS_AFTER`)* |
+| B3_signs | 48 | none | press A on EV003/006–012 | each shows its text; EV007/008 (wall map) then open the region map and return control |
+| B3_pc | 48 | none | press A on EV004 | native `EventScript_PC` boots and backs out cleanly |
+| B3_down | 48 → 49 | `FLAG_MAP048_EVENT001_SSA` set | press LEFT into 2F's stairs (EV002), climb again, descend | both stairs fire again; the wake-up line does not replay; ends on 1F for B4 |
 | B4 | 32 | walk the fence row at column 26, near (26,12) | walk through the coord-touch trigger tile | Map032 EV074 fires once ("Theo runs up"); `FLAG_MAP032_EVENT074_SSA` set (`flag_state.json:314`) — never refires |
 | B5 | 50 | enter the lab (any `VAR_QUEST_LOG` value < required for later pages) | walk in | Map050 EV005 "Bambo" page-0 autorun scene fires immediately on entry (BOOT_WALK S3, passed) |
 | B6 | 50 | scene from B5 completes | none (scripted) | Aptitude-test Yes/No prompt (EV005 page 2, gated `self_switch D` set by the page-0 autorun) |

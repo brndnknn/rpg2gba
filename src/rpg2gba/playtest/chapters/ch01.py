@@ -53,6 +53,7 @@ from .. import assertions, cells
 from ..battle import in_battle, win_battle
 from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
+from ..pokecenter import use_pc
 from ..scenarios import BOOT_FRAMES
 
 if TYPE_CHECKING:  # runtime import is lazy so the registry works without bindings
@@ -306,6 +307,10 @@ def b1(emu: Emulator) -> None:
 # each crossing. B13's story row (`map032/ev009/p2`) and B4's other
 # row (`map032/ev074/p0`) stay unclaimed by any archetype, same as before.
 #
+# The same day's 2F stop (`B3_up`/`B3_signs`/`B3_pc`/`B3_down`, below B3)
+# adds 12 more rows across four beats; its own comment block lists the four
+# Map048 rows it leaves unclaimed.
+#
 # FIVE BEATS CLAIM NOTHING, and each is a different reason:
 #   B1  -- asserts the fresh save spawns in Map049. A boot state is not an
 #          event page, a seam or terrain, so no manifest row can represent it.
@@ -360,6 +365,184 @@ def b3(emu: Emulator) -> None:
             f"B3: FLAG_MAP049_EVENT001_SSA (gift-once flag) not set ({shot})")
 
 
+# -- the player's 2F (2026-09-15) -------------------------------------------
+#
+# Map048 had no beat at all until this pass: the fresh save spawns on 1F (B1),
+# and nothing in the chapter's chain sends the player upstairs. Under #43(b)
+# (REDERIVATION_PLAN.md §15.8) every page there the player can press A on is
+# owed a beat, so the stop below walks up, reads the room and comes back down
+# before B4 leaves the house. One group, 1F -> 2F -> 1F, ending where B4
+# expects the player.
+#
+# The staircases are sideways. Each RMXP stair page opens with a turn and a
+# diagonal step (Map049 EV003: turn right, move upper-right; Map048 EV002:
+# turn left, move lower-left), so 1F's is entered pressing RIGHT and 2F's
+# pressing LEFT -- and neither has a walkable tile south of it. The cell each
+# is pressed from is exactly the other floor's landing, a plain-floor arrival
+# anchor (`metadata_wiring._resolve_all_warp_events`), which the module-level
+# check below pins so a map change fails at import, not mid-walk.
+#
+# `warp_beat` is not used: its reciprocal lookup takes no `event_id=`, and 1F
+# carries a second warp to 2F (EV021, the Final-Event letter), so the round
+# trip would fail loud on the ambiguity. The wake-up line also has to be
+# observed before anything drains it, which the template's crossing does.
+#
+# Rows NOT claimed here, and why:
+#   map048/ev001/p1, ev005/p1 -- command-less action pages (derived cosmetic).
+#   map048/ev005/p0 -- the parallel page that sets switches 49/51. The
+#       transpiler drops every blank-graphic parallel page
+#       (`metadata_wiring.DROP_PARALLEL`), so it is not in the ROM, and
+#       nothing in Uranium reads either switch. Open question, not a beat.
+#   map048/ev013/p0 -- the heal-on-whiteout autorun, gated on "Starting Over"
+#       (switch 5), which only Essentials' `pbStartOver` sets. The ROM whites
+#       out natively and never sets FLAG_STARTING_OVER. Open question too.
+
+_HOUSE_1F = "MAP_MOKI_TOWN_PLAYERS_HOUSE_1F"
+_HOUSE_2F = "MAP_MOKI_TOWN_PLAYERS_HOUSE_2F"
+
+STAIRS_UP = cells.warp_cell(_HOUSE_1F, to=_HOUSE_2F, event_id=3)
+STAIRS_UP_ARRIVAL = cells.arrival_cell(_HOUSE_2F, from_map=_HOUSE_1F, event_id=3)
+STAIRS_DOWN = cells.warp_cell(_HOUSE_2F, to=_HOUSE_1F, event_id=2)
+STAIRS_DOWN_ARRIVAL = cells.arrival_cell(_HOUSE_1F, from_map=_HOUSE_2F, event_id=2)
+STAIRS_UP_DIRECTION = "RIGHT"
+STAIRS_DOWN_DIRECTION = "LEFT"
+STAIRS_UP_APPROACH = (STAIRS_UP[0] - 1, STAIRS_UP[1])
+STAIRS_DOWN_APPROACH = (STAIRS_DOWN[0] + 1, STAIRS_DOWN[1])
+if STAIRS_UP_APPROACH != STAIRS_DOWN_ARRIVAL or STAIRS_DOWN_APPROACH != STAIRS_UP_ARRIVAL:
+    raise ValueError(
+        f"ch01: the house stairs no longer land beside each other "
+        f"(up {STAIRS_UP} pressed from {STAIRS_UP_APPROACH}, lands "
+        f"{STAIRS_UP_ARRIVAL}; down {STAIRS_DOWN} pressed from "
+        f"{STAIRS_DOWN_APPROACH}, lands {STAIRS_DOWN_ARRIVAL}) -- re-read "
+        "both stair pages' move routes before changing the directions")
+
+WAKE_UP_FLAG = assertions.flag_ssa(48, 1)
+
+#: (event id, opens the region map after its text). EV007 and EV008 are the
+#: two halves of one wall map; the rest are text-only.
+BEDROOM_SIGNS = ((3, False), (6, False), (7, True), (8, True),
+                 (9, False), (10, False), (11, False), (12, False))
+BEDROOM_PC_EVENT = 4
+
+
+def _facing_toward(stand: tuple[int, int], target: tuple[int, int]) -> str:
+    dx, dy = target[0] - stand[0], target[1] - stand[1]
+    if abs(dx) + abs(dy) != 1:
+        raise ValueError(f"ch01: {stand} is not orthogonally adjacent to {target}")
+    if dx:
+        return "RIGHT" if dx > 0 else "LEFT"
+    return "DOWN" if dy > 0 else "UP"
+
+
+def _wait_for_overworld(emu: Emulator, beat: str, frame_budget: int = 600) -> None:
+    spent = 0
+    while spent < frame_budget and not (emu.overworld_input_ready()
+                                        and not emu.field_locked()):
+        emu.run(10)
+        spent += 10
+    if not emu.overworld_input_ready() or emu.field_locked():
+        shot = emu.screenshot(f"{beat}_not_back")
+        raise ScenarioError(
+            f"{beat}: control never returned to the field within "
+            f"{frame_budget} frames ({shot})")
+
+
+def _climb(emu: Emulator, beat: str) -> None:
+    emu.clear_field_message()
+    _cross_threshold(emu, beat, STAIRS_UP_APPROACH, STAIRS_UP_DIRECTION, _HOUSE_2F)
+
+
+def _descend(emu: Emulator, beat: str) -> None:
+    _cross_threshold(emu, beat, STAIRS_DOWN_APPROACH, STAIRS_DOWN_DIRECTION, _HOUSE_1F)
+    assertions.assert_arrival_settled(emu, beat, STAIRS_DOWN_ARRIVAL, nudged=False)
+
+
+@ch01.beat("B3_up", "1F's stairs carry the player up, and the first visit "
+                    "plays 2F's wake-up line and sets its self-switch",
+           map_constant=_HOUSE_1F, at=STAIRS_UP_APPROACH, group="2F",
+           rows=("map049/ev003/p0", "map048/ev001/p0"),
+           archetype={"map049/ev003/p0": "warp"})
+def b3_up(emu: Emulator) -> None:
+    if emu.flag(WAKE_UP_FLAG):
+        raise ScenarioError(
+            f"B3_up precondition failed: {WAKE_UP_FLAG} is already set")
+    _climb(emu, "B3_up")
+    if emu.wait_for_field_message(frame_budget=600) is None:
+        shot = emu.screenshot("b3_up_no_wake_up")
+        raise ScenarioError(
+            f"B3_up: first arrival on 2F showed no message -- the wake-up "
+            f"autorun (Map048 EV001 p1) never ran ({shot})")
+    emu.advance_dialog("A")
+    if not emu.flag(WAKE_UP_FLAG):
+        shot = emu.screenshot("b3_up_flag_unset")
+        raise ScenarioError(
+            f"B3_up: {WAKE_UP_FLAG} not set after the wake-up line ({shot})")
+    emu.settle_field()
+    assertions.assert_position_exact(emu, "B3_up", STAIRS_UP_ARRIVAL)
+    assertions.assert_player_facing(
+        emu, "B3_up", assertions.expected_arrival_facing(48, *STAIRS_UP_ARRIVAL))
+
+
+@ch01.beat("B3_signs", "Every bedroom sign answers A with its text, and the "
+                       "wall map opens the region map and hands control back",
+           map_constant=_HOUSE_2F,
+           at=cells.approach_to(_HOUSE_2F, BEDROOM_SIGNS[0][0]), group="2F",
+           rows=tuple(f"map048/ev{eid:03d}/p0" for eid, _ in BEDROOM_SIGNS))
+def b3_signs(emu: Emulator) -> None:
+    for event_id, region_map in BEDROOM_SIGNS:
+        beat = f"B3_signs(ev{event_id:03d})"
+        sign = cells.event_cell(_HOUSE_2F, event_id)
+        stand = cells.approach_to(_HOUSE_2F, event_id)
+        emu.walk_to(*stand)
+        emu.face(_facing_toward(stand, sign))
+        emu.interact()
+        if emu.wait_for_field_message() is None:
+            shot = emu.screenshot(f"{beat}_no_text")
+            raise ScenarioError(f"{beat}: the sign at {sign} showed no text ({shot})")
+        if region_map:
+            # B answers every msgbox, then closes the map
+            # (`FieldUpdateRegionMap` leaves on A or B). Stop the moment the
+            # main loop leaves the overworld, so the map is proven open
+            # rather than inferred from the lock.
+            emu.advance_dialog("B", stop=lambda: not emu.overworld_input_ready())
+            if emu.overworld_input_ready():
+                shot = emu.screenshot(f"{beat}_no_region_map")
+                raise ScenarioError(
+                    f"{beat}: the text closed without opening the region map ({shot})")
+        emu.advance_dialog("B")
+        _wait_for_overworld(emu, beat)
+        _require_map(emu, beat, _HOUSE_2F)
+
+
+BEDROOM_PC_APPROACH = cells.approach_to(_HOUSE_2F, BEDROOM_PC_EVENT)
+
+
+@ch01.beat("B3_pc", "The bedroom PC boots through the native EventScript_PC "
+                    "chain and returns control",
+           map_constant=_HOUSE_2F, at=BEDROOM_PC_APPROACH, group="2F",
+           rows=(f"map048/ev{BEDROOM_PC_EVENT:03d}/p0",))
+def b3_pc(emu: Emulator) -> None:
+    use_pc(emu, BEDROOM_PC_APPROACH,
+           _facing_toward(BEDROOM_PC_APPROACH, cells.event_cell(_HOUSE_2F, BEDROOM_PC_EVENT)),
+           beat="B3_pc")
+
+
+@ch01.beat("B3_down", "2F's stairs carry the player down, both floors' stairs "
+                      "fire again, and the wake-up line does not replay",
+           map_constant=_HOUSE_2F, at=STAIRS_DOWN_APPROACH, group="2F",
+           rows=("map048/ev002/p0",), archetype="warp")
+def b3_down(emu: Emulator) -> None:
+    _descend(emu, "B3_down")
+    _climb(emu, "B3_down")
+    if emu.wait_for_field_message(frame_budget=300) is not None:
+        shot = emu.screenshot("b3_down_wake_up_replayed")
+        raise ScenarioError(
+            f"B3_down: a message appeared on the second arrival on 2F -- the "
+            f"wake-up page should be behind {WAKE_UP_FLAG} now ({shot})")
+    assertions.assert_arrival_settled(emu, "B3_down", STAIRS_UP_ARRIVAL, nudged=False)
+    _descend(emu, "B3_down")
+
+
 # -- B4 ------------------------------------------------------------------
 
 #: The front door's landing tile in Map032, shared with `map032/ev005`'s
@@ -379,8 +562,8 @@ def b4(emu: Emulator) -> None:
             "B4 precondition failed: the trip tile's self-switch is "
             "already set before the walk")
     # The doc's beat table jumps map 49 -> 32 between B3 and B4 without a
-    # row of its own for the doorway; B3 leaves the player standing next to
-    # Auntie, so B4 owns the crossing.
+    # row of its own for the doorway; the 2F stop leaves the player on 1F at
+    # the stairs' landing, so B4 owns the crossing.
     _leave_house1f(emu, "B4")
     assertions.assert_arrival_settled(emu, "B4", B4_ARRIVAL, nudged=True)
     emu.walk_to(*FENCE_TRIP_APPROACH)
