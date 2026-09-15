@@ -2372,6 +2372,10 @@ construction.
 **The sweep was run 2026-08-25; results and remediation are §44.** It could not
 be mechanical after all — CH01–CH03 have no manifest to cross-reference.
 
+*(2026-09-15: the rule never reached the generator — P8b's derived `cosmetic` used
+"no state-writing tag" and waved through 100 CH01–CH03 talk rows. Now encoded as
+`ManifestRow.is_player_observable`; `REDERIVATION_PLAN.md` §15.8.)*
+
 ### 45. Defeated Larrie faces you and says nothing — ROOT-CAUSED, FIXED, AND CONFIRMED IN PLAY 2026-08-27
 
 **CLOSED (2026-08-27).** Confirmed in play by CH04's §9 boot walk: route2

@@ -860,6 +860,19 @@ def _check_row_verdict_rules(
                 ),
                 severity="error",
             ))
+        elif row.is_player_observable:
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_ILLEGAL_COSMETIC,
+                message=(
+                    f"disposed cosmetic but this {row.trigger} page shows the "
+                    f"player something (effects {list(row.effects)}) -- "
+                    "cosmetic means decoration nobody triggers (PROJECT_TODO "
+                    "#43(b)); write the beat, or disposition it unreachable "
+                    "if the page can't be reached"
+                ),
+                severity="error",
+            ))
         else:
             findings.append(Finding(
                 row_id=row_id,

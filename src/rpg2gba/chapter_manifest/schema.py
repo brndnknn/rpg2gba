@@ -99,6 +99,16 @@ COSMETIC_SAFE_TAGS: frozenset[str] = frozenset({
 
 STATE_WRITING_TAGS: frozenset[str] = EFFECT_TAGS - COSMETIC_SAFE_TAGS
 
+# Triggers a player sets off by pressing A or by touching. PROJECT_TODO.md
+# #43(b) (2026-08-25): `cosmetic` is decided on observability, not on state
+# writes -- "is there anything a player can press A on and observe?" A talk NPC
+# with a bubble, a cry and a line writes no state, and all three still break
+# independently. So a page with one of these triggers and ANY effect is never
+# decoration; COSMETIC_SAFE_TAGS only keeps meaning for the pages nobody
+# triggers (autorun/parallel ambience). A triggered page with no commands at
+# all has nothing to observe and stays eligible.
+PLAYER_TRIGGERS: frozenset[str] = frozenset({"action", "player_touch", "event_touch"})
+
 Verdict = Literal["beat", "blocked", "boundary", "cosmetic", "unreachable"]
 _VERDICTS: frozenset[str] = frozenset({"beat", "blocked", "boundary", "cosmetic", "unreachable"})
 
@@ -461,7 +471,14 @@ class ManifestRow:
             return False
         if not self.is_dispositionable:
             return False
+        if self.is_player_observable:
+            return False
         return not (set(self.effects) & STATE_WRITING_TAGS)
+
+    @property
+    def is_player_observable(self) -> bool:
+        """A page the player triggers that does anything at all (#43(b))."""
+        return self.trigger in PLAYER_TRIGGERS and bool(self.effects)
 
     @property
     def may_be_derived(self) -> bool:

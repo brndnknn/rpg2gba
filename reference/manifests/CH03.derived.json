@@ -14,10 +14,6 @@
     "derived_hash": "b7058e69898f3633",
     "proposed": true
   },
-  "map019/ev004/p1": {
-    "disposition": "cosmetic",
-    "derived_hash": "c97900f9253995bf"
-  },
   "map019/ev004/p2": {
     "disposition": "cosmetic",
     "derived_hash": "42c54f61a70ec1e3"
@@ -84,14 +80,6 @@
     "disposition": "cosmetic",
     "derived_hash": "f2f4c27f14ca60c1"
   },
-  "map031/ev009/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "195ad572ac82ef48"
-  },
-  "map031/ev010/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "9fd59487d9876023"
-  },
   "map031/ev011/p0": {
     "disposition": "cosmetic",
     "derived_hash": "50631292062e4dc9"
@@ -119,10 +107,6 @@
   "map031/ev017/p0": {
     "disposition": "cosmetic",
     "derived_hash": "50631292062e4dc9"
-  },
-  "map031/ev019/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "6357c2a1e535d41c"
   },
   "map031/ev023/p0": {
     "disposition": "beat:B1",
@@ -173,14 +157,6 @@
     "derived_hash": "e868f0fb10d95c62",
     "proposed": true
   },
-  "map031/ev039/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "42b3c7c4ebb8252a"
-  },
-  "map031/ev040/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "b843275edda3181c"
-  },
   "map031/ev041/p0": {
     "disposition": "beat:B16",
     "derived_hash": "07c482bf97f50dd5"
@@ -221,10 +197,6 @@
     "disposition": "cosmetic",
     "derived_hash": "88b8302eb47b355b"
   },
-  "map031/ev050/p1": {
-    "disposition": "cosmetic",
-    "derived_hash": "8d25d68759f3863c"
-  },
   "map031/seam/N/map035": {
     "disposition": "boundary",
     "derived_hash": "125372b734127799"
@@ -241,25 +213,9 @@
     "disposition": "cosmetic",
     "derived_hash": "9bcd932612d31f4a"
   },
-  "map067/ev006/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "7ce9ee9bcd8d8723"
-  },
-  "map067/ev007/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "7ce9ee9bcd8d8723"
-  },
-  "map067/ev008/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "e04e001cb7621ed9"
-  },
   "map067/ev009/p0": {
     "disposition": "beat:B12",
     "derived_hash": "b1a8dbb67fc27d89"
-  },
-  "map067/ev009/p1": {
-    "disposition": "cosmetic",
-    "derived_hash": "f7b60d4f9e479105"
   },
   "map068/ev001/p0": {
     "disposition": "beat:B4",
@@ -329,10 +285,6 @@
     "disposition": "beat:B3",
     "derived_hash": "6710d39c786d1755"
   },
-  "map068/ev010/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "9615cf3245b5094c"
-  },
   "map068/ev012/p0": {
     "disposition": "cosmetic",
     "derived_hash": "07dabff69eb5c582"
@@ -361,10 +313,6 @@
     "disposition": "beat:N3",
     "derived_hash": "6c2d90d22489cb2a"
   },
-  "map068/ev017/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "83fe4442c012a205"
-  },
   "map068/ev018/p0": {
     "disposition": "beat:B7",
     "derived_hash": "7817ff63143a101b"
@@ -372,10 +320,6 @@
   "map073/ev001/p0": {
     "disposition": "beat:B15",
     "derived_hash": "cfcf56bee5189a93"
-  },
-  "map073/ev001/p1": {
-    "disposition": "cosmetic",
-    "derived_hash": "ad66d34473a89767"
   },
   "map073/ev002/p0": {
     "disposition": "beat:B15",
@@ -385,14 +329,6 @@
     "disposition": "beat:B16",
     "derived_hash": "8bf6e1d90b03f3d9"
   },
-  "map073/ev005/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "fadbc2fa2d849bbb"
-  },
-  "map073/ev005/p2": {
-    "disposition": "cosmetic",
-    "derived_hash": "3da4f09ccafdade9"
-  },
   "map073/ev006/p2": {
     "disposition": "cosmetic",
     "derived_hash": "442e3fa78dad00fd"
@@ -401,20 +337,8 @@
     "disposition": "beat:B14",
     "derived_hash": "fa6060a044b2d452"
   },
-  "map073/ev008/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "291ba4409e8c2112"
-  },
   "map073/ev009/p0": {
     "disposition": "beat:B16",
     "derived_hash": "245ba5a20b2cb17c"
-  },
-  "map073/ev010/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "5ab76c6294be7425"
-  },
-  "map073/ev011/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "f610dc46f854292a"
   }
 }

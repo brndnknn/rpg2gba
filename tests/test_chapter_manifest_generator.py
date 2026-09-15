@@ -114,7 +114,7 @@ def test_golden_single_page_text_row(tmp_path: Path) -> None:
     assert row.page_idx == 0
     assert row.condition.is_unconditional
     assert row.trigger == "action"
-    assert row.may_be_cosmetic is True
+    assert row.may_be_cosmetic is False  # a sign you press A on (#43(b))
     assert row.is_dispositionable is True
 
 
@@ -287,7 +287,28 @@ def test_text_only_page_may_be_cosmetic(tmp_path: Path) -> None:
 
     row = rows[0]
     assert row.effects == ("text",)
-    assert row.may_be_cosmetic is True
+    # #43(b): a talk NPC the player presses A on is observable, not decoration.
+    assert row.may_be_cosmetic is False
+
+
+def test_cosmetic_follows_observability_not_state_writes(tmp_path: Path) -> None:
+    """#43(b), per trigger: a triggered page with any effect is observable; an
+    empty triggered page and an untriggered text page stay eligible."""
+    events = [
+        {"id": 1, "name": "Touch", "x": 0, "y": 0,
+         "pages": [_page([_cmd(101, ["Hi"])], trigger=1)]},
+        {"id": 2, "name": "Empty", "x": 1, "y": 0, "pages": [_page([])]},
+        {"id": 3, "name": "Ambient", "x": 2, "y": 0,
+         "pages": [_page([_cmd(101, ["Hi"])], trigger=4)]},
+    ]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 12, events)
+
+    rows = {r.event_name: r for r in generate_chapter_manifest(
+        "CHX", build_dir=build_dir, chapters_path=chapters_path)}
+
+    assert rows["Touch"].may_be_cosmetic is False
+    assert rows["Empty"].may_be_cosmetic is True
+    assert rows["Ambient"].may_be_cosmetic is True
 
 
 def test_unhandled_join_vetoes_cosmetic(tmp_path: Path) -> None:
@@ -401,10 +422,11 @@ def test_load_staged_map_ids_absent_dir_returns_empty_and_does_not_crash(
 def test_unstaged_map_gets_none_unhandled_staged_map_gets_int(tmp_path: Path) -> None:
     """A page on an unstaged map cannot be measured against the transpile
     queue at all (`None`); a page on a staged map with no matching queue
-    entry gets a real, measured `0`."""
+    entry gets a real, measured `0`. The page is a parallel process so the
+    observability rule (#43(b)) does not also veto `cosmetic` here."""
     events = [{
         "id": 1, "name": "NPC", "x": 0, "y": 0,
-        "pages": [_page([_cmd(101, ["Hi"])])],
+        "pages": [_page([_cmd(101, ["Hi"])], trigger=4)],
     }]
     build_dir, chapters_path = _setup_chapter(tmp_path, 21, events)
     # _setup_chapter stages map 21; unstage it for this test.

@@ -1558,3 +1558,24 @@ hand-written row; the ~73-row residue (story state writes, the six undisposition
 rows, `map048/ev005/p0`'s beat flag) is still hand-decided. The 64 archetype-recognized-but-
 unlisted rows are closed by adding them to existing beats' `rows=`, not by P8a-2 — P8a-2 would
 not make one more row derivable, since P8a-1 already declared `rows=`.
+
+### 15.8 Operator ruling, 2026-09-15 — derived `cosmetic` follows #43(b), not state writes
+
+**Why it came up.** A census of what CH01's unvisited houses would open found the generator
+still deciding `cosmetic` on the pre-#43(b) rule: `may_be_cosmetic` was "no state-writing
+tag", so a talk NPC (text, bubble, cry) derived `cosmetic`. `PROJECT_TODO.md` #43(b) had
+replaced that on 2026-08-25 with *is there anything a player can press A on and observe?*;
+CH04 was re-swept under it, the P8b derivation never was. Measured: **100 triggered text
+rows derived `cosmetic` — CH01 79, CH02 2, CH03 19**, CH04/CH05 0.
+
+**Ruling.** The generator follows #43(b). `ManifestRow.is_player_observable` = a page with a
+player trigger (`action`/`player_touch`/`event_touch`) and any effect; such a row is never
+`may_be_cosmetic`. A triggered page with no commands stays eligible; autorun/parallel pages
+keep the state-writing rule. The checker's `illegal_cosmetic` names the new reason.
+
+**Effect.** Derived `cosmetic` CH01 131 → 52, CH02 8 → 6, CH03 55 → 36; those rows rejoin the
+hand-decided residue. `undispositioned` is now **CH01 132 / CH02 17 / CH03 48** (was
+53/15/29). No committed hand-written `cosmetic` disposition became illegal. §15.3's "residue
+default `cosmetic`" is narrowed accordingly: a triggered row the player can observe wants a
+beat, or `unreachable:` when its page can't be reached in-chapter (e.g. Map064/065's
+`FINAL EVENT`-gated p1 twins).
