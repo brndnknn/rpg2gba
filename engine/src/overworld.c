@@ -4,6 +4,13 @@
 // breaks those call sites; reverting them too restores vanilla map-load/spawn behavior.
 #include "uranium_map_walker.h"
 // END URANIUM MAP WALKER
+// BEGIN URANIUM PATHFINDER SLICE — pulls FLAG_STARTING_OVER (the flag registry's
+// generated dump, keyed off config/rpg2gba.h's range bases), set in DoWhiteOut()
+// below. "../" for the same reason as new_game.c's uranium_berry_trees.h include.
+// Removing these includes breaks that call.
+#include "config/rpg2gba.h"
+#include "../data/scripts/uranium_flags.h"
+// END URANIUM PATHFINDER SLICE
 #include "overworld.h"
 #include "battle_pyramid.h"
 #include "battle_setup.h"
@@ -395,6 +402,13 @@ static void (*const sMovementStatusHandler[])(struct LinkPlayerObjectEvent *, st
 void DoWhiteOut(void)
 {
     RunScriptImmediately(EventScript_WhiteOut);
+    // BEGIN URANIUM PATHFINDER SLICE — Uranium's "Starting Over" switch
+    // (PROJECT_TODO #108). Essentials' pbStartOver sets it on every white-out,
+    // and the respawn map's converted autorun (a home heal or a Center nurse
+    // scene) runs on arrival and clears it. Without this, those pages never
+    // run. Revert this line to restore the silent native respawn.
+    FlagSet(FLAG_STARTING_OVER);
+    // END URANIUM PATHFINDER SLICE
     HealPlayerParty();
     Overworld_ResetStateAfterWhiteOut();
     SetWarpDestinationToLastHealLocation();

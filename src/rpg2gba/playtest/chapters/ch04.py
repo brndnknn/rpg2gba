@@ -1135,7 +1135,14 @@ whiteout_beat(
     heal_location_id="HEAL_LOCATION_KEVLAR_TOWN_POKEMON_CENTER",
     description="A forced white-out respawns at the Kevlar Town Pokemon "
                  "Center anchor (8,13), set by CH03's Map068 EV001 "
-                 "setrespawn (REDERIVATION_PLAN.md §14.7/§15.6)",
+                 "setrespawn (REDERIVATION_PLAN.md §14.7/§15.6); the "
+                 "nurse's Starting Over heal scene runs on arrival and "
+                 "clears the flag (#108)",
+    # 2026-09-15: Map068 EV001 page 2, the nurse's post-white-out heal
+    # autorun gated on Uranium's "Starting Over" switch, which the engine's
+    # white-out now sets. CH03's manifest carries the row; CH04 is the first
+    # chapter whose white-out lands here, same rule as the anchor itself.
+    starting_over_rows=("map068/ev001/p1",),
 )
 
 

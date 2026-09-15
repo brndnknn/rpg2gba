@@ -31,5 +31,10 @@
   "map032/ev033/p1": {
     "disposition": "blocked:rock_smash",
     "affirmed_hash": "6c2d90d22489cb2a"
+  },
+  "map048/ev013/p0": {
+    "disposition": "unreachable:Starting Over heal on 2F; every home white-out lands on 1F, whose own heal page clears the switch first",
+    "affirmed_hash": "5a207d7ff53b3267",
+    "note": "Dead in Uranium too, not a conversion gap. pbStartOver sends a home white-out to MetadataHome (Map049 (7,7)), and map049/ev022/p0 clears switch 5 on that arrival, before the player can climb to 2F. The engine's white-out now sets FLAG_STARTING_OVER (PROJECT_TODO #108), which CH02's B18 proves via map049/ev022/p0."
   }
 }

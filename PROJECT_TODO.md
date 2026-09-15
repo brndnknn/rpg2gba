@@ -54,6 +54,19 @@ whiteout actually sends a Uranium player is the real question (CH02's B18 anchor
 initial one). Either set the flag on the native whiteout path, or disposition the three
 rows `unreachable:` with this item as the citation.
 
+**Starting Over half: engine side DONE 2026-09-15 (operator approved).** A fenced
+`FlagSet(FLAG_STARTING_OVER)` in `DoWhiteOut` (`engine/src/overworld.c`,
+`URANIUM PATHFINDER SLICE`; `overworld.o` compiles, full link waits for P11).
+`whiteout_beat(starting_over_rows=...)` asserts the flag is set when control returns
+and clear once the arrival scripts drain. CH02 B18 claims `map049/ev022/p0`;
+CH04 B16 claims `map068/ev001/p1`. `map048/ev013/p0` is hand-dispositioned
+`unreachable:`, since it is dead in Uranium too (a home white-out lands on 1F, whose
+page clears the switch first). **Still open:** those two rows stay undispositioned
+in CH01/CH03, because a beat in a *later* chapter cannot satisfy an earlier chapter's
+check. The beat model sees only the chapter and its predecessors, and `boundary`
+requires a forward crossing. Needs an operator ruling. Not done either: Uranium's
+"scurried home / to a Center" message.
+
 ### 99. `_resolve_threshold` cannot fold increment writes, so reachable thresholds read as undetermined
 
 *Filed 2026-09-12 out of `REDERIVATION_PLAN.md` §14.11. Not P8b work — P8b hand-annotates

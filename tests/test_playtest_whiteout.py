@@ -63,7 +63,15 @@ class _FakeEmu:
     """
 
     def __init__(self, *, last_heal_location: tuple[int, int] = (3, 5),
-                 frames_to_finish: int = 120) -> None:
+                 frames_to_finish: int = 120,
+                 engine_sets_starting_over: bool = True,
+                 heal_page_clears_it: bool = True) -> None:
+        # The fenced DoWhiteOut FlagSet and the respawn map's heal page
+        # (PROJECT_TODO #108): the white-out sets the flag as it hands back
+        # control, and draining the arrival scripts clears it.
+        self.flags: set[str] = set()
+        self._engine_sets_starting_over = engine_sets_starting_over
+        self._heal_page_clears_it = heal_page_clears_it
         self.symbols = {
             "gMain": _MAIN_ADDR,
             "CB2_Overworld": _CB2_OVERWORLD_ADDR,
@@ -116,6 +124,8 @@ class _FakeEmu:
                 )
                 self._player_pos = (8, 13)
                 self._map_location = (1, 2)
+                if self._engine_sets_starting_over:
+                    self.flags.add("FLAG_STARTING_OVER")
             else:
                 self.write_u8(
                     self.symbols["gMain"] + self.offsets["off_main_state"], state)
@@ -126,7 +136,12 @@ class _FakeEmu:
 
     def settle_field(self) -> int:
         self.settle_field_calls += 1
+        if self._heal_page_clears_it:
+            self.flags.discard("FLAG_STARTING_OVER")
         return 0
+
+    def flag(self, name: str) -> bool:
+        return name in self.flags
 
     def screenshot(self, name: str):
         return None
@@ -305,4 +320,48 @@ def test_whiteout_beat_restores_state_even_when_assertion_fails(tmp_path: Path) 
     emu = _FakeEmu(frames_to_finish=4)
     with pytest.raises(ScenarioError, match="expected exactly"):
         chapter.beats[0].run(emu)
+    assert emu.restore_calls == [b"snap1"]
+
+
+# -- starting_over_rows (PROJECT_TODO #108) --------------------------------
+
+
+def _starting_over_chapter(tmp_path: Path):
+    p = tmp_path / "heal_locations.json"
+    p.write_text(json.dumps({"heal_locations": [
+        {"id": "HEAL_LOCATION_KEVLAR_TOWN_POKEMON_CENTER",
+         "map": "MAP_FAKE", "x": 8, "y": 13},
+    ]}), encoding="utf-8")
+    b = _builder()
+    whiteout_beat(
+        b, beat_name="B99",
+        heal_location_id="HEAL_LOCATION_KEVLAR_TOWN_POKEMON_CENTER",
+        heal_locations_json=p, starting_over_rows=("map068/ev001/p1",),
+    )
+    return b.build()
+
+
+def test_whiteout_beat_claims_starting_over_rows(tmp_path: Path) -> None:
+    assert _starting_over_chapter(tmp_path).beats[0].rows == ("map068/ev001/p1",)
+
+
+def test_whiteout_beat_starting_over_set_then_cleared_passes(tmp_path: Path) -> None:
+    emu = _FakeEmu(frames_to_finish=4)
+    _starting_over_chapter(tmp_path).beats[0].run(emu)
+    assert emu.restore_calls == [b"snap1"]
+
+
+def test_whiteout_beat_fails_when_the_engine_never_sets_starting_over(tmp_path: Path) -> None:
+    """A cleared flag alone proves nothing: the ROM without DoWhiteOut's
+    FlagSet also ends with it clear, so the set half must be observed too."""
+    emu = _FakeEmu(frames_to_finish=4, engine_sets_starting_over=False)
+    with pytest.raises(ScenarioError, match="not set when control returned"):
+        _starting_over_chapter(tmp_path).beats[0].run(emu)
+    assert emu.restore_calls == [b"snap1"]
+
+
+def test_whiteout_beat_fails_when_the_heal_page_never_runs(tmp_path: Path) -> None:
+    emu = _FakeEmu(frames_to_finish=4, heal_page_clears_it=False)
+    with pytest.raises(ScenarioError, match="still set after the arrival scripts"):
+        _starting_over_chapter(tmp_path).beats[0].run(emu)
     assert emu.restore_calls == [b"snap1"]

@@ -1835,7 +1835,11 @@ whiteout_beat(
     description="A forced white-out respawns at the initial anchor "
                  "(MetadataHome, Player's House 1F (7,7)) -- regression "
                  "test for the pre-6df46066 Petalburg white-out bug "
-                 "(REDERIVATION_PLAN.md §14.7/§15.6)",
+                 "(REDERIVATION_PLAN.md §14.7/§15.6); 1F's Starting Over "
+                 "heal page runs on arrival and clears the flag (#108)",
+    # 2026-09-15: Map049 EV022, the home heal autorun gated on Uranium's
+    # "Starting Over" switch, which the engine's white-out now sets.
+    starting_over_rows=("map049/ev022/p0",),
 )
 
 

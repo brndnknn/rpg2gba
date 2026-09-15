@@ -21,7 +21,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from . import assertions
 from .errors import ScenarioError
@@ -95,7 +95,14 @@ def read_last_heal_location(emu: Emulator) -> tuple[int, int]:
     return emu.u8(addr), emu.u8(addr + 1)
 
 
-def force_white_out(emu: Emulator, *, beat: str, frame_budget: int = 300) -> None:
+#: Uranium's "Starting Over" switch (switch 5), set by the fenced line in
+#: `DoWhiteOut` (engine/src/overworld.c, PROJECT_TODO #108) and cleared by
+#: the respawn map's converted heal autorun.
+STARTING_OVER_FLAG = "FLAG_STARTING_OVER"
+
+
+def force_white_out(emu: Emulator, *, beat: str, frame_budget: int = 300,
+                    on_arrival: Callable[[], None] | None = None) -> None:
     """Force a white-out via `CB2_WhiteOut`, then wait for control back.
 
     **What this exercises, precisely stated:** `CB2_WhiteOut` ->
@@ -135,6 +142,10 @@ def force_white_out(emu: Emulator, *, beat: str, frame_budget: int = 300) -> Non
     `emu.wait_for_map_grid()` and `emu.settle_field()` to drain the arrival
     autorun chain, mirroring `archetypes/warp.py`'s own crossing convention.
     Fails loud with a screenshot on timeout.
+
+    `on_arrival`, if given, runs after control returns and before the drain:
+    the one window where the respawn map's autoruns have not run yet,
+    because the arrival fade still holds the field lock.
     """
     if not emu.overworld_input_ready():
         raise ScenarioError(
@@ -175,6 +186,8 @@ def force_white_out(emu: Emulator, *, beat: str, frame_budget: int = 300) -> Non
             f"CB2_Overworld within {frame_budget} frames ({shot})"
         )
 
+    if on_arrival is not None:
+        on_arrival()
     emu.wait_for_map_grid()
     emu.settle_field()
 
@@ -186,14 +199,23 @@ def whiteout_beat(
     heal_location_id: str,
     description: str | None = None,
     heal_locations_json: Path = DEFAULT_HEAL_LOCATIONS_JSON,
+    starting_over_rows: tuple[str, ...] = (),
 ) -> None:
     """Register one white-out regression beat: force a white-out and assert
     the player lands at `heal_location_id`'s registered respawn.
 
-    No `rows=`/`archetype=`/`at=` -- a white-out has no RPG Maker event or
-    manifest row behind it (module docstring), and `at=` names a trigger
-    tile, which this beat doesn't have (it triggers via a RAM write, not by
-    standing anywhere).
+    No `archetype=`/`at=`, and no `rows=` of its own: a white-out itself
+    has no RPG Maker event behind it (module docstring), and `at=` names a
+    trigger tile, which this beat doesn't have (it triggers via a RAM write,
+    not by standing anywhere).
+
+    `starting_over_rows` (2026-09-15, PROJECT_TODO #108) is the exception:
+    the respawn map's converted "Starting Over" autorun page, the heal scene
+    Uranium plays on arrival. Passing its row ids claims them, and the beat
+    then also asserts `FLAG_STARTING_OVER` is set when control returns
+    (the engine's white-out set it) and clear once the arrival scripts have
+    drained (the page ran to its end). Both halves are needed: a cleared flag
+    alone cannot tell "the page ran" from "nothing ever set it".
 
     Deliberately does NOT assert facing: pokeemerald heal location entries
     carry no facing field (`struct HealLocation`, unlike a warp event), and
@@ -226,13 +248,30 @@ def whiteout_beat(
         "(REDERIVATION_PLAN.md §14.7/§15.6)"
     )
 
-    @builder.beat(beat_name, resolved_description)
+    def _starting_over_set_on_arrival(emu: Emulator) -> None:
+        if not emu.flag(STARTING_OVER_FLAG):
+            shot = emu.screenshot(f"{beat_name}_starting_over_unset")
+            raise ScenarioError(
+                f"{beat_name}: {STARTING_OVER_FLAG} not set when control "
+                "returned from the white-out -- DoWhiteOut's fenced FlagSet "
+                f"is missing from this ROM ({shot})")
+
+    @builder.beat(beat_name, resolved_description, rows=starting_over_rows)
     def run(emu: Emulator) -> None:
         expected = load_heal_location(heal_location_id, heal_locations_json)
         state = emu.snapshot_state()
         try:
-            force_white_out(emu, beat=beat_name)
+            force_white_out(
+                emu, beat=beat_name,
+                on_arrival=((lambda: _starting_over_set_on_arrival(emu))
+                            if starting_over_rows else None))
             assertions.require_map(emu, beat_name, expected.map_const)
+            if starting_over_rows and emu.flag(STARTING_OVER_FLAG):
+                shot = emu.screenshot(f"{beat_name}_starting_over_stuck")
+                raise ScenarioError(
+                    f"{beat_name}: {STARTING_OVER_FLAG} still set after the "
+                    "arrival scripts drained -- the respawn map's heal page "
+                    f"never ran ({', '.join(starting_over_rows)}) ({shot})")
             assertions.assert_position_exact(
                 emu, beat_name, (expected.x, expected.y))
         finally:
