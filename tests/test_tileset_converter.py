@@ -4260,6 +4260,65 @@ def test_compute_autorun_entries_body_write_already_in_guard_untouched() -> None
     assert entries[0].guard == "flag(FLAG_SOME_GATE)"
 
 
+def test_compute_autorun_entries_admits_run_once_parallel_page() -> None:
+    """Map048 EV005's real shape (PROJECT_TODO #108): a blank parallel page
+    that turns two switches on and then its own self-switch A, with a
+    command-less page 2 gated on A. It runs once in RMXP, so it rides the
+    ON_FRAME channel like an autorun, guarded off by its own self-switch."""
+    reg = FlagRegistry()
+    reg.propose_flag(51, "FLAG_GAME_RUNNING")
+    reg.propose_flag(49, "FLAG_JUKEBOX")
+    body = [
+        {"code": 121, "indent": 0, "parameters": [51, 51, 0]},
+        {"code": 121, "indent": 0, "parameters": [49, 49, 0]},
+        {"code": 123, "indent": 0, "parameters": ["A", 0]},
+    ]
+    event = _event(5, 4, 10, [_page(trigger=4, cmds=body), _page(cond=_self_cond("A"))])
+    entries = mw.compute_autorun_entries([event], 48, reg)
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry.page_label == "Map048_EV005_Page1"
+    assert "!flag(FLAG_MAP048_EVENT005_SSA)" in entry.guard.split(" && ")
+
+
+@pytest.mark.parametrize("cmds", [
+    # text: a parallel page with anything but state writes has no run-once form
+    [{"code": 101, "indent": 0, "parameters": ["hello"]},
+     {"code": 123, "indent": 0, "parameters": ["A", 0]}],
+    # a wait loop, the common per-frame parallel shape
+    [{"code": 106, "indent": 0, "parameters": [20]},
+     {"code": 123, "indent": 0, "parameters": ["A", 0]}],
+    # comments only: nothing to run
+    [{"code": 108, "indent": 0, "parameters": ["note"]}],
+])
+def test_compute_autorun_entries_skips_parallel_page_that_is_not_state_writes(cmds) -> None:
+    event = _event(5, 0, 0, [_page(trigger=4, cmds=cmds), _page(cond=_self_cond("A"))])
+    assert mw.compute_autorun_entries([event], 48, None) == []
+
+
+def test_compute_autorun_entries_skips_parallel_page_that_never_switches_off() -> None:
+    """State writes only, but nothing it writes turns its own guard off: the
+    self-switch it sets gates no higher page, and a variable write is not a
+    flag. On ON_FRAME it would re-dispatch every frame and starve every entry
+    after it, so it is not admitted."""
+    body = [
+        {"code": 122, "indent": 0, "parameters": [7, 7, 1, 0, 1]},
+        {"code": 123, "indent": 0, "parameters": ["A", 0]},
+    ]
+    event = _event(5, 0, 0, [_page(trigger=4, cmds=body)])
+    assert mw.compute_autorun_entries([event], 48, None) == []
+
+
+def test_compute_autorun_entries_parallel_write_the_guard_tests_positively_skips() -> None:
+    """Gated on switch 55 and turning switch 55 on: the write keeps the page
+    active, so it does not count as switching it off."""
+    reg = FlagRegistry()
+    reg.propose_flag(55, "FLAG_SOME_GATE")
+    body = [{"code": 121, "indent": 0, "parameters": [55, 55, 0]}]
+    event = _event(1, 0, 0, [_page(cond=_sw_cond(55), trigger=4, cmds=body)])
+    assert mw.compute_autorun_entries([event], 31, reg) == []
+
+
 def test_render_onframe_script_golden() -> None:
     """Guarded entries get an `if`/`goto`; the unconditional entry (guard
     "") gets a bare `goto`; the script always ends with setvar(VAR_TEMP_C, 1)."""

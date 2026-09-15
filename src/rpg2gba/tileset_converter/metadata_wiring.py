@@ -920,7 +920,8 @@ def build_page_dispatcher(
 
 @dataclass(frozen=True)
 class AutorunEntry:
-    """One RMXP trigger=3 (autorun) page eligible to dispatch from the
+    """One RMXP trigger=3 (autorun) page -- or run-once trigger=4 (parallel)
+    page -- eligible to dispatch from the
     ON_FRAME_TABLE channel: the page-body label to `goto()` and the boolean
     guard expression reproducing RMXP's "is THIS page the active one" test.
     `guard == ""` means unconditionally active (no own condition, no higher
@@ -990,11 +991,26 @@ def _page_body_written_flags(
     return written
 
 
+#: RMXP codes a run-once parallel page may carry: 0 end, 108/408 comment,
+#: 121 Control Switches, 122 Control Variables, 123 Control Self Switch.
+_STATE_WRITE_CODES: frozenset[int] = frozenset({0, 108, 408, 121, 122, 123})
+
+
+def _is_state_write_only(page: dict) -> bool:
+    """True when the page's command list is nothing but state writes and
+    comments, with at least one write -- no text, waits, branches, moves or
+    script calls. See `compute_autorun_entries` for why this is the parallel
+    shape the ON_FRAME channel can carry."""
+    codes = {cmd.get("code") for cmd in page.get("list", [])}
+    return codes <= _STATE_WRITE_CODES and bool(codes - {0, 108, 408})
+
+
 def compute_autorun_entries(
     events: list[dict], uid: int, flag_registry: FlagRegistry | None
 ) -> list[AutorunEntry]:
-    """Every trigger=3 (autorun) page across `events`, each paired with the
-    guard expression that reproduces RMXP's page-activation semantics: RMXP
+    """Every trigger=3 (autorun) page across `events` -- plus every trigger=4
+    (parallel) page that is really a run-once state write -- each paired with
+    the guard expression that reproduces RMXP's page-activation semantics: RMXP
     autoruns only the highest-index page whose condition holds, so an autorun
     page's guard is its own condition terms AND the negation of every
     HIGHER-index page's condition on the same event (regardless of that
@@ -1011,13 +1027,35 @@ def compute_autorun_entries(
     never be silently dropped (findings §3.2/§5).
 
     Sorted by (event_id, page_index) ascending — deterministic, independent
-    of the caller's event dict ordering."""
+    of the caller's event dict ordering.
+
+    Parallel pages (PROJECT_TODO #108, 2026-09-15). Until then no parallel
+    page's body reached the ROM: a blank-graphic one is `DROP_PARALLEL`, and
+    this function took trigger 3 only, so the transpiled body was pruned as
+    unreferenced. One shape is admitted now: a body of state writes and
+    comments only (`_is_state_write_only`) that turns ON a flag its own
+    guard negates -- in practice "set some switches, then set my own
+    self-switch", which RMXP runs exactly once and which the ON_FRAME channel
+    reproduces exactly. The body carries no `lock`, as in RMXP, where a
+    parallel page never takes the player's controls. Everything else a
+    parallel page does (waits, loops, pictures, per-frame polling) has no
+    run-once equivalent, so it is still not converted, now with a warning.
+    Corpus census on that date: 253 parallel pages, 4 of this shape
+    (Map033 EV004 and Map048 EV005 in the slice; Map059 EV024, Map066 EV021)."""
     entries: list[AutorunEntry] = []
     for event in sorted(events, key=lambda e: e["id"]):
         eid = event["id"]
         pages = event["pages"]
         for idx, page in enumerate(pages):
-            if page.get("trigger") != TRIGGER_AUTORUN:
+            trigger = page.get("trigger")
+            if trigger not in (TRIGGER_AUTORUN, TRIGGER_PARALLEL):
+                continue
+            if trigger == TRIGGER_PARALLEL and not _is_state_write_only(page):
+                logger.warning(
+                    "map %d EV%03d page %d: parallel page not converted -- its "
+                    "body is not pure state writes (PROJECT_TODO #108)",
+                    uid, eid, idx,
+                )
                 continue
             own_terms = _page_condition_terms(page["condition"], uid, eid, flag_registry)
             if own_terms is None:
@@ -1061,9 +1099,29 @@ def compute_autorun_entries(
             # discipline; this only fills the gap where the write is some
             # OTHER flag the guard never looks at (findings: Map031 EV049
             # page 2, FLAG_SYS_PC_LANETTE vs. guard FLAG_DEFEATED_GYM1_LEADER).
-            for written in dict.fromkeys(_page_body_written_flags(page, flag_registry)):
+            written_flags = list(dict.fromkeys(_page_body_written_flags(page, flag_registry)))
+            for written in written_flags:
                 if f"flag({written})" not in " ".join(guard_terms):
                     guard_terms.append(f"!flag({written})")
+            if trigger == TRIGGER_PARALLEL:
+                # A parallel page runs every frame for as long as it is the
+                # active page. Admitted only when a write in its own body
+                # provably switches it off: some flag it turns ON appears as
+                # a bare `!flag(...)` conjunct of its guard. A write buried in
+                # a disjunction, or one the guard tests positively, does not
+                # count -- such a page would re-dispatch forever and starve
+                # every entry after it.
+                written_flags += [
+                    self_switch_flag_name(uid, eid, letter)
+                    for letter in sorted(_self_switch_letters_set_on(page))
+                ]
+                if not any(f"!flag({flag})" in guard_terms for flag in written_flags):
+                    logger.warning(
+                        "map %d EV%03d page %d: parallel page not converted -- "
+                        "nothing it writes switches it off (PROJECT_TODO #108)",
+                        uid, eid, idx,
+                    )
+                    continue
             entries.append(
                 AutorunEntry(
                     event_id=eid, page_index=idx,

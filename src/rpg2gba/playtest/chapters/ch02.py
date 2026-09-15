@@ -1149,15 +1149,31 @@ def _rock_smash_refused(emu: Emulator, beat: str, local_id: int,
              "one tile off ev023's arrival tile by its p1 autorun",
              map_constant="MAP_MOKI_TOWN", at=ROUTE1_ENTRY_APPROACH,
              rows=("map032/ev023/p0", "map033/ev023/p1", "map033/ev022/p1",
-                   "map033/ev024/p1"),
+                   "map033/ev024/p1", "map033/ev004/p0"),
              archetype={"map032/ev023/p0": "warp",
                         "map033/ev023/p1": "arrival_nudge",
                         "map033/ev022/p1": "arrival_nudge",
                         "map033/ev024/p1": "arrival_nudge"})
 def b1(emu: Emulator) -> None:
+    # `map033/ev004/p0` (2026-09-15, PROJECT_TODO #108): a parallel page that
+    # turns on switch 54 and its own self-switch the first time Route 1 loads.
+    # It now rides the ON_FRAME channel as a run-once entry, so the first
+    # arrival must leave both flags set. Nothing in Uranium reads switch 54;
+    # the claim proves the page converts, not a downstream effect.
+    ev004_ssa = _flag_ssa(4)
+    if emu.flag(ev004_ssa) or emu.flag("FLAG_RIVAL_MASTER"):
+        raise ScenarioError(
+            f"B1 precondition failed: {ev004_ssa} or FLAG_RIVAL_MASTER is "
+            "already set before Route 1 has ever loaded")
     _cross_threshold(emu, "B1", ROUTE1_ENTRY_APPROACH, ROUTE1_ENTRY_DIRECTION,
                      "MAP_ROUTE_01")
     assertions.assert_arrival_settled(emu, "B1", B1_ARRIVAL, nudged=True)
+    for flag in (ev004_ssa, "FLAG_RIVAL_MASTER"):
+        if not emu.flag(flag):
+            shot = emu.screenshot("b1_parallel_page_did_not_run")
+            raise ScenarioError(
+                f"B1: {flag} not set after the first Route 1 arrival -- "
+                f"Map033 EV004's run-once parallel page never ran ({shot})")
 
 
 # -- B1_back / B1_ev037 / B1_back2 / B1_ev036 -----------------------------

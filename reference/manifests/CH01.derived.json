@@ -237,6 +237,10 @@
     "disposition": "beat:B3",
     "derived_hash": "4d0c4905d63fb50f"
   },
+  "map048/ev005/p0": {
+    "disposition": "beat:B3",
+    "derived_hash": "b5b861fced586b74"
+  },
   "map048/ev005/p1": {
     "disposition": "cosmetic",
     "derived_hash": "6c2d90d22489cb2a"

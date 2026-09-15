@@ -35,10 +35,21 @@ whose body is only state writes and has no wait/loop is semantically a run-once 
 so `compute_autorun_entries` could admit it under the same guard logic; anything with
 waits or loops stays a loud queue entry.
 
+**Parallel half DONE 2026-09-15 for the run-once shape.** `compute_autorun_entries` now admits a
+trigger-4 page whose body is only state writes/comments (`_is_state_write_only`) and that
+turns ON a flag appearing as a bare `!flag(...)` conjunct of its own guard. Anything else still
+isn't converted, now with a logged warning. Corpus census: 253 parallel pages, 4 of the admitted
+shape (Map033 EV004 and Map048 EV005 in the slice, Map059 EV024, Map066 EV021). The other
+**248 stay open**: waits, loops, pictures, scripts, all on maps not yet in the slice. They need
+per-shape work when their chapters arrive. Switch 54 turned out write-only too. Beats: CH01
+`B3_up` claims `map048/ev005/p0`; CH02 `B1` claims `map033/ev004/p0`.
+
 **Starting Over (switch 5).** Only Essentials' `pbStartOver` sets it
 (`PField_Field` ll. 1942/1966), on whiteout. The ROM whites out natively, so
 `FLAG_STARTING_OVER` is never set and the three heal-on-return autoruns gated on it are
-dead: `map048/ev013/p0`, `map049/ev022/p0`, `map068/ev001/p1`. Where the ROM's native
+dead: `map048/ev013/p0`, `map049/ev022/p0`, `map068/ev001/p1`. Corpus-wide, **29 pages**
+read switch 5 (most Center nurses, the two home HEAL pages, and special maps such as Map156's
+`GameOver`), so this is a pattern, not three rows. Where the ROM's native
 whiteout actually sends a Uranium player is the real question (CH02's B18 anchors the
 initial one). Either set the flag on the native whiteout path, or disposition the three
 rows `unreachable:` with this item as the citation.

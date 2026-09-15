@@ -308,7 +308,7 @@ def b1(emu: Emulator) -> None:
 # row (`map032/ev074/p0`) stay unclaimed by any archetype, same as before.
 #
 # The same day's 2F stop (`B3_up`/`B3_signs`/`B3_pc`/`B3_down`, below B3)
-# adds 12 more rows across four beats; its own comment block lists the four
+# adds 13 more rows across four beats; its own comment block lists the three
 # Map048 rows it leaves unclaimed.
 #
 # FIVE BEATS CLAIM NOTHING, and each is a different reason:
@@ -389,10 +389,13 @@ def b3(emu: Emulator) -> None:
 #
 # Rows NOT claimed here, and why:
 #   map048/ev001/p1, ev005/p1 -- command-less action pages (derived cosmetic).
-#   map048/ev005/p0 -- the parallel page that sets switches 49/51. The
-#       transpiler drops every blank-graphic parallel page
-#       (`metadata_wiring.DROP_PARALLEL`), so it is not in the ROM, and
-#       nothing in Uranium reads either switch. Open question, not a beat.
+#
+# `map048/ev005/p0` IS claimed, by B3_up: a parallel page that turns on
+# switches 49/51 and its own self-switch once. It reaches the ROM only since
+# the #108 transpiler fix admitted run-once parallel pages to the ON_FRAME
+# channel; before that every blank-graphic parallel page was dropped. Nothing
+# in Uranium reads either switch, so the claim proves the conversion, not a
+# downstream effect.
 #   map048/ev013/p0 -- the heal-on-whiteout autorun, gated on "Starting Over"
 #       (switch 5), which only Essentials' `pbStartOver` sets. The ROM whites
 #       out natively and never sets FLAG_STARTING_OVER. Open question too.
@@ -417,6 +420,8 @@ if STAIRS_UP_APPROACH != STAIRS_DOWN_ARRIVAL or STAIRS_DOWN_APPROACH != STAIRS_U
         "both stair pages' move routes before changing the directions")
 
 WAKE_UP_FLAG = assertions.flag_ssa(48, 1)
+#: Map048 EV005's run-once parallel page: its self-switch, then what it sets.
+UPSTAIRS_ONCE_FLAGS = (assertions.flag_ssa(48, 5), "FLAG_GAME_RUNNING", "FLAG_JUKEBOX")
 
 #: (event id, opens the region map after its text). EV007 and EV008 are the
 #: two halves of one wall map; the rest are text-only.
@@ -458,14 +463,17 @@ def _descend(emu: Emulator, beat: str) -> None:
 
 
 @ch01.beat("B3_up", "1F's stairs carry the player up, and the first visit "
-                    "plays 2F's wake-up line and sets its self-switch",
+                    "plays 2F's wake-up line and runs its once-only "
+                    "parallel page",
            map_constant=_HOUSE_1F, at=STAIRS_UP_APPROACH, group="2F",
-           rows=("map049/ev003/p0", "map048/ev001/p0"),
+           rows=("map049/ev003/p0", "map048/ev001/p0", "map048/ev005/p0"),
            archetype={"map049/ev003/p0": "warp"})
 def b3_up(emu: Emulator) -> None:
-    if emu.flag(WAKE_UP_FLAG):
-        raise ScenarioError(
-            f"B3_up precondition failed: {WAKE_UP_FLAG} is already set")
+    for flag in (WAKE_UP_FLAG, *UPSTAIRS_ONCE_FLAGS):
+        if emu.flag(flag):
+            raise ScenarioError(
+                f"B3_up precondition failed: {flag} is already set before "
+                "2F has ever loaded")
     _climb(emu, "B3_up")
     if emu.wait_for_field_message(frame_budget=600) is None:
         shot = emu.screenshot("b3_up_no_wake_up")
@@ -478,6 +486,12 @@ def b3_up(emu: Emulator) -> None:
         raise ScenarioError(
             f"B3_up: {WAKE_UP_FLAG} not set after the wake-up line ({shot})")
     emu.settle_field()
+    for flag in UPSTAIRS_ONCE_FLAGS:
+        if not emu.flag(flag):
+            shot = emu.screenshot("b3_up_parallel_page_did_not_run")
+            raise ScenarioError(
+                f"B3_up: {flag} not set after the first 2F visit -- Map048 "
+                f"EV005's run-once parallel page never ran ({shot})")
     assertions.assert_position_exact(emu, "B3_up", STAIRS_UP_ARRIVAL)
     assertions.assert_player_facing(
         emu, "B3_up", assertions.expected_arrival_facing(48, *STAIRS_UP_ARRIVAL))

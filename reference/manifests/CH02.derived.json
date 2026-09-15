@@ -15,6 +15,10 @@
     "disposition": "beat:B15",
     "derived_hash": "6c2d90d22489cb2a"
   },
+  "map033/ev004/p0": {
+    "disposition": "beat:B1",
+    "derived_hash": "b3354e11683672b0"
+  },
   "map033/ev004/p1": {
     "disposition": "cosmetic",
     "derived_hash": "6c2d90d22489cb2a"
