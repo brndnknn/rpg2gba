@@ -94,7 +94,9 @@ def _map_const_for(uranium_id: int) -> str:
 # here to match (the test enforces that direction too, not just the ceiling).
 _PRE_BAN_BUDGET: dict[str, int] = {
     "ch01.py": 13,
-    "ch02.py": 45,
+    # 45 -> 44 on 2026-09-15: B1's ROUTE1_ARRIVAL became arrival_cell(...),
+    # the same (70,11), when B1 took Route 1's arrival-nudge rows.
+    "ch02.py": 44,
     "ch03.py": 42,
     # 25 -> 23 on 2026-09-04: trimming B7 to stop at the cave-mouth approach
     # tile retired CAVE_MOUTH_NORTH_WALL_XY and CAVE_MOUTH_NORTH_OPEN_XY, the

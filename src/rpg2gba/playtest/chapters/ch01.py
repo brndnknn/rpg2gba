@@ -285,7 +285,7 @@ def b1(emu: Emulator) -> None:
 # generator can join `beat:` instead of a human hand-writing it. Every mapping
 # was confirmed against the COMPILED scripts (`engine/data/maps/*/scripts.inc`)
 # and each row's page condition in the manifest, not inferred from a beat's
-# prose. 14 rows across 12 beats (B13 claims two); RMXP "Page1" is manifest
+# prose. 17 rows across 12 beats (B13 claims three); RMXP "Page1" is manifest
 # `p0`.
 #
 # B13 also claims `map172/ev002/p0` (2026-09-14 archetype-conformance pass):
@@ -293,10 +293,18 @@ def b1(emu: Emulator) -> None:
 # doorway, which is that row's own warp tile (`Map172.json` EV002 @ (10,11),
 # the door half of the stacked exit/arrival pair the module docstring
 # documents at `THEO_HOUSE_EXIT_APPROACH`) -- a controlled crossing, not an
-# incidental arrival, so it meets the warp-page claim bar. B13's other row
-# (`map032/ev009/p2`) is a story/dialogue page, not a warp, so the two rows
-# are mixed archetypes and B13 is deliberately left without an `archetype=`
-# tag (see `ChapterArchetypeModel`: a mixed-archetype beat doesn't get one).
+# incidental arrival, so it meets the warp-page claim bar.
+#
+# 2026-09-15 pass: per-row `archetype=` mappings (the `{row_id: archetype}`
+# form `ChapterBuilder.beat` grew alongside `assertions.assert_arrival_settled`)
+# let a mixed-archetype beat tag its rows individually instead of declaring
+# none. B4, B10 and B13 each pick up a second row this pass -- the
+# `arrival_nudge` autorun tile the warp they perform lands on
+# (`map032/ev005/p1`, `map032/ev003/p1`, `map032/ev017/p1` respectively) --
+# with a landing assertion (`assertions.assert_arrival_settled(...,
+# nudged=True)`, arrival derived via `cells.arrival_cell`) added right after
+# each crossing. B13's story row (`map032/ev009/p2`) and B4's other
+# row (`map032/ev074/p0`) stay unclaimed by any archetype, same as before.
 #
 # FIVE BEATS CLAIM NOTHING, and each is a different reason:
 #   B1  -- asserts the fresh save spawns in Map049. A boot state is not an
@@ -354,9 +362,17 @@ def b3(emu: Emulator) -> None:
 
 # -- B4 ------------------------------------------------------------------
 
+#: The front door's landing tile in Map032, shared with `map032/ev005`'s
+#: arrival-nudge page. Map049 EV002's p1 and p3 both land here, which
+#: `arrival_cell` accepts as one answer.
+B4_ARRIVAL = cells.arrival_cell(
+    "MAP_MOKI_TOWN", from_map="MAP_MOKI_TOWN_PLAYERS_HOUSE_1F", event_id=2)
+
+
 @ch01.beat("B4", "Crossing Map032's fence-row tile fires Theo's cameo, once",
            map_constant="MAP_MOKI_TOWN", at=FENCE_TRIP_APPROACH,
-           rows=("map049/ev002/p1", "map032/ev074/p0"))
+           rows=("map049/ev002/p1", "map032/ev074/p0", "map032/ev005/p1"),
+           archetype={"map049/ev002/p1": "warp", "map032/ev005/p1": "arrival_nudge"})
 def b4(emu: Emulator) -> None:
     if emu.flag("FLAG_MAP032_EVENT074_SSA"):
         raise ScenarioError(
@@ -366,6 +382,7 @@ def b4(emu: Emulator) -> None:
     # row of its own for the doorway; B3 leaves the player standing next to
     # Auntie, so B4 owns the crossing.
     _leave_house1f(emu, "B4")
+    assertions.assert_arrival_settled(emu, "B4", B4_ARRIVAL, nudged=True)
     emu.walk_to(*FENCE_TRIP_APPROACH)
     _try_step(emu, FENCE_TRIP_DIRECTION)
     if not emu.field_locked():
@@ -555,9 +572,16 @@ def b9(emu: Emulator) -> None:
 
 # -- B10 -----------------------------------------------------------------
 
+#: The lab-exit warp's landing tile in Map032, shared with `map032/ev003`'s
+#: arrival-nudge page (the door itself, `map032/ev003/p0`, is B5's row).
+B10_ARRIVAL = cells.arrival_cell(
+    "MAP_MOKI_TOWN", from_map="MAP_MOKI_TOWN_PROFESSOR_LAB", event_id=1)
+
+
 @ch01.beat("B10", "The lab exit warp unlocks once VAR_QUEST_LOG >= 1",
            map_constant="MAP_MOKI_TOWN_PROFESSOR_LAB", at=LAB_EXIT_APPROACH,
-           rows=("map050/ev001/p1",), archetype="warp")
+           rows=("map050/ev001/p1", "map032/ev003/p1"),
+           archetype={"map050/ev001/p1": "warp", "map032/ev003/p1": "arrival_nudge"})
 def b10(emu: Emulator) -> None:
     quest_log = emu.var("VAR_QUEST_LOG")
     if quest_log < 1:
@@ -566,6 +590,7 @@ def b10(emu: Emulator) -> None:
             f"expected >= 1")
     _cross_threshold(emu, "B10", LAB_EXIT_APPROACH, LAB_EXIT_DIRECTION,
                      "MAP_MOKI_TOWN")
+    assertions.assert_arrival_settled(emu, "B10", B10_ARRIVAL, nudged=True)
 
 
 # -- N2 (after B8/B10, before B11/B12, per interleaving instructions --
@@ -705,9 +730,17 @@ def b12(emu: Emulator) -> None:
 
 # -- B13 -----------------------------------------------------------------
 
+#: Where `_leave_theo_house`'s crossing lands in Map032 -- the same tile as
+#: `THEO_HOUSE_DOOR`, shared with `map032/ev017`'s arrival-nudge page (the
+#: door itself, `map032/ev017/p0`, is B11's row).
+B13_ARRIVAL = cells.arrival_cell(
+    "MAP_MOKI_TOWN", from_map="MAP_MOKI_TOWN_THEOS_HOUSE_1F", event_id=2)
+
+
 @ch01.beat("B13", "Crossing the west-exit tiles plays the catch ceremony",
            map_constant="MAP_MOKI_TOWN", at=CEREMONY_APPROACH,
-           rows=("map032/ev009/p2", "map172/ev002/p0"))
+           rows=("map032/ev009/p2", "map172/ev002/p0", "map032/ev017/p1"),
+           archetype={"map172/ev002/p0": "warp", "map032/ev017/p1": "arrival_nudge"})
 def b13(emu: Emulator) -> None:
     quest_log_before = emu.var("VAR_QUEST_LOG")
     if quest_log_before < 2:
@@ -718,6 +751,7 @@ def b13(emu: Emulator) -> None:
     # the doc's beat table changes map between the rows without a row of its
     # own, so B13 owns the crossing (same shape as B4's).
     _leave_theo_house(emu, "B13")
+    assertions.assert_arrival_settled(emu, "B13", B13_ARRIVAL, nudged=True)
     emu.walk_to(*CEREMONY_APPROACH)
     _try_step(emu, CEREMONY_DIRECTION)
     if not emu.field_locked():

@@ -359,7 +359,7 @@ _CHAPTER_MAP_START_CELLS: dict[tuple[str, int], frozenset[tuple[int, int]]] = {
     # -- CH02 Route 1 --------------------------------------------------
     # (70,11) <- Map032 ev023/ev036/ev037, the three-tile Moki exit strip,
     # all agreeing on one destination -- CH02's first arrival, and the cell
-    # ch02.py's ROUTE1_ARRIVAL already position-asserts. (15,7)/(16,7) are
+    # ch02.py's B1_ARRIVAL already position-asserts. (15,7)/(16,7) are
     # the Kevlar returns (Map031 ev023/ev035).
     ("CH02", 33): frozenset({(15, 7), (16, 7), (70, 11)}),
     ("CH02", 81): frozenset({(9, 12)}),   # <- Map033 ev027 (old rod house)

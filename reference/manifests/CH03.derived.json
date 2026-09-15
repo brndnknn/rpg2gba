@@ -56,13 +56,25 @@
     "disposition": "beat:B10",
     "derived_hash": "cd8ad7e175f9b723"
   },
+  "map031/ev002/p1": {
+    "disposition": "beat:B13",
+    "derived_hash": "58dd3a15151250c1"
+  },
   "map031/ev003/p0": {
     "disposition": "beat:B3",
     "derived_hash": "6fafe0f0c75f5192"
   },
+  "map031/ev003/p1": {
+    "disposition": "beat:B3",
+    "derived_hash": "58dd3a15151250c1"
+  },
   "map031/ev004/p0": {
     "disposition": "beat:B14",
     "derived_hash": "8353134bf1f79290"
+  },
+  "map031/ev004/p1": {
+    "disposition": "beat:B14",
+    "derived_hash": "58dd3a15151250c1"
   },
   "map031/ev007/p0": {
     "disposition": "beat:B18",
@@ -88,9 +100,17 @@
     "disposition": "beat:B15",
     "derived_hash": "a22c72c136392d0c"
   },
+  "map031/ev012/p1": {
+    "disposition": "beat:B15",
+    "derived_hash": "d9fdee26a1a61ef8"
+  },
   "map031/ev013/p0": {
     "disposition": "beat:B16",
     "derived_hash": "5945b9ca24e15a7d"
+  },
+  "map031/ev013/p1": {
+    "disposition": "beat:B16",
+    "derived_hash": "d9fdee26a1a61ef8"
   },
   "map031/ev014/p0": {
     "disposition": "beat:B17",
@@ -107,6 +127,10 @@
   "map031/ev023/p0": {
     "disposition": "beat:B1",
     "derived_hash": "3f3495343b8d553c"
+  },
+  "map031/ev023/p1": {
+    "disposition": "beat:B1",
+    "derived_hash": "e8e9ee9a28f12107"
   },
   "map031/ev028/p0": {
     "disposition": "cosmetic",
@@ -136,6 +160,10 @@
     "disposition": "beat:B1",
     "derived_hash": "bccd2320a6d66b67"
   },
+  "map031/ev035/p1": {
+    "disposition": "beat:B1",
+    "derived_hash": "e8e9ee9a28f12107"
+  },
   "map031/ev036/p0": {
     "disposition": "cosmetic",
     "derived_hash": "d2e2e7dc7f46fcf0"
@@ -156,6 +184,10 @@
   "map031/ev041/p0": {
     "disposition": "beat:B16",
     "derived_hash": "07c482bf97f50dd5"
+  },
+  "map031/ev041/p1": {
+    "disposition": "beat:B16",
+    "derived_hash": "d9fdee26a1a61ef8"
   },
   "map031/ev042/p0": {
     "disposition": "beat:B13",

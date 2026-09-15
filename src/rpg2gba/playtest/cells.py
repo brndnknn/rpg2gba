@@ -354,7 +354,12 @@ def arrival_cell(map_constant: str, *, from_map: str, event_id: int | None = Non
             f"arrival_cell: {from_map} (Uranium map {from_uid}) has no warp "
             f"exit whose destination is {map_constant} (Uranium map {dest_uid})"
         )
-    if len(matches) > 1:
+    # Several exits that all land on the same cell are not ambiguous about
+    # the answer -- e.g. Map049 EV002's p1 and p3 are two transfer pages of
+    # one door, both landing on Moki (28,31), and `event_id=` cannot tell
+    # pages of one event apart anyway.
+    landings = {(exit_.dest_x, exit_.dest_y) for _cell, exit_ in matches}
+    if len(matches) > 1 and len(landings) > 1:
         listing = ", ".join(f"cell={cell} event_id={exit_.event_id}" for cell, exit_ in matches)
         raise ValueError(
             f"arrival_cell: {from_map} has {len(matches)} distinct warp "

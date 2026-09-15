@@ -129,7 +129,7 @@ ch02 = ChapterBuilder("CH02", doc="reference/chapters/02-route-1.md", predecesso
 # pbCaveEntrance + code 201 -> Map033(70,11)). Crossing from (9,44).
 ROUTE1_ENTRY_APPROACH = (9, 44)
 ROUTE1_ENTRY_DIRECTION = "LEFT"
-ROUTE1_ARRIVAL = (70, 11)
+B1_ARRIVAL = arrival_cell("MAP_ROUTE_01", from_map="MAP_MOKI_TOWN", event_id=23)
 
 # B2/B3: the two sideways-staircase runs (CH02_TODO #14). Both are native
 # MB_SIDEWAYS_STAIRS_* redirects: pressing a *horizontal* direction toward
@@ -237,6 +237,10 @@ FISHERMAN_INTERACT = (7, 9)      # Map081, south of EV001 (7,8) -- EV001 is
 SIGN_INTERACT = (9, 6)           # Map081, south of EV004 (9,5)
 OLD_ROD_HOUSE_EXIT_APPROACH = (9, 13)
 OLD_ROD_ARRIVAL = (9, 12)
+# N1's exit: Map081 ev003 -> Map033 ev027's tile, nudged by ev027's own p1
+# arrival autorun (the same shape as the Moki<->Route1 passage above).
+N1_ARRIVAL = arrival_cell("MAP_ROUTE_01", from_map="MAP_ROUTE_01_OLD_ROD_HOUSE",
+                          event_id=3)
 # EV002 "brother", by contrast, is NOT static -- Map081.json's move_type is 3
 # (custom route), the compiled route is codes 3,3,2,2 repeat (RMXP: 3=move
 # right, 2=move left), and `Route01OldRodHouse/events.inc` confirms it:
@@ -1109,6 +1113,17 @@ def _rock_smash_refused(emu: Emulator, beat: str, local_id: int,
 #          the other two Moki->Route1 warps and two of the three Route1->Moki
 #          warps, in both directions, and leave the player back on Route 1
 #          near (70,11) where B2 already expects them.
+#          2026-09-15: per-row `archetype=` mappings landed, plus the
+#          `assertions.assert_arrival_settled` helper (its origin was
+#          `B1_back`'s own hand-written settle/locked/nudge-distance block,
+#          now replaced by the call). B1 now also claims Route 1's three
+#          `ev023/ev022/ev024` p1 arrival autoruns (`arrival_nudge`) and
+#          asserts the landing via `assert_arrival_settled(..., nudged=True)`
+#          against `B1_ARRIVAL` (derived, not `ROUTE1_ARRIVAL`'s old literal,
+#          which is retired). `B1_back` claims its three Moki-side p1s the
+#          same way. The Old Rod House exit (`map033/ev027/p1`, the other
+#          arrival-nudge autorun on this route) is claimed by N1, the beat
+#          that actually performs that crossing back onto Route 1.
 #   B4  -- a wild-grass encounter. An encounter table is neither an event page
 #          nor a seam nor terrain, so no manifest row can ever represent it.
 #   B14 -- trainer pacing (MOVEMENT_TYPE_LOOK_AROUND surviving a battle). A
@@ -1130,13 +1145,19 @@ def _rock_smash_refused(emu: Emulator, beat: str, local_id: int,
 # yet built), these three are the rows to look at first.
 
 
-@ch02.beat("B1", "Crossing Moki Town's east passage lands on Route 1 near (70,11)",
+@ch02.beat("B1", "Crossing Moki Town's east passage lands on Route 1, nudged "
+             "one tile off ev023's arrival tile by its p1 autorun",
              map_constant="MAP_MOKI_TOWN", at=ROUTE1_ENTRY_APPROACH,
-             rows=("map032/ev023/p0",))
+             rows=("map032/ev023/p0", "map033/ev023/p1", "map033/ev022/p1",
+                   "map033/ev024/p1"),
+             archetype={"map032/ev023/p0": "warp",
+                        "map033/ev023/p1": "arrival_nudge",
+                        "map033/ev022/p1": "arrival_nudge",
+                        "map033/ev024/p1": "arrival_nudge"})
 def b1(emu: Emulator) -> None:
     _cross_threshold(emu, "B1", ROUTE1_ENTRY_APPROACH, ROUTE1_ENTRY_DIRECTION,
                      "MAP_ROUTE_01")
-    _assert_near(emu, "B1", ROUTE1_ARRIVAL)
+    assertions.assert_arrival_settled(emu, "B1", B1_ARRIVAL, nudged=True)
 
 
 # -- B1_back / B1_ev037 / B1_back2 / B1_ev036 -----------------------------
@@ -1183,36 +1204,20 @@ B1_EV036_ARRIVAL = arrival_cell("MAP_ROUTE_01", from_map="MAP_MOKI_TOWN", event_
            "not move the player a second tile or leave the field locked",
            map_constant="MAP_ROUTE_01", at=B1_BACK_APPROACH,
            rows=("map033/ev023/p0", "map032/ev037/p1", "map032/ev023/p1",
-                 "map032/ev036/p1"))
+                 "map032/ev036/p1"),
+           archetype={"map033/ev023/p0": "warp",
+                      "map032/ev037/p1": "arrival_nudge",
+                      "map032/ev023/p1": "arrival_nudge",
+                      "map032/ev036/p1": "arrival_nudge"})
 def b1_back(emu: Emulator) -> None:
     _cross_threshold(emu, "B1_back", B1_BACK_APPROACH, "RIGHT", "MAP_MOKI_TOWN")
-    emu.settle_field()
-    if emu.field_locked():
-        shot = emu.screenshot("b1_back_stuck")
-        raise ScenarioError(
-            f"B1_back: field still locked after settling on arrival "
-            f"({shot})")
-    pos = emu.player_pos()
-    if pos == B1_BACK_ARRIVAL:
-        shot = emu.screenshot("b1_back_no_nudge")
-        raise ScenarioError(
-            f"B1_back: player still at arrival cell {B1_BACK_ARRIVAL} after "
-            f"the autorun settled -- expected ev037's nudge move route to "
-            f"have displaced them ({shot})")
-    dx = abs(pos[0] - B1_BACK_ARRIVAL[0])
-    dy = abs(pos[1] - B1_BACK_ARRIVAL[1])
-    if dx + dy != 1:
-        shot = emu.screenshot("b1_back_wrong_nudge_distance")
-        raise ScenarioError(
-            f"B1_back: nudged to {pos}, expected exactly one tile off "
-            f"arrival cell {B1_BACK_ARRIVAL} (got Manhattan distance "
-            f"{dx + dy}) ({shot})")
+    assertions.assert_arrival_settled(emu, "B1_back", B1_BACK_ARRIVAL, nudged=True)
 
 
 @ch02.beat("B1_ev037", "Moki's ev037 (the tile every Route1->Moki warp lands "
            "on) crosses to Route 1 the same as B1's ev023",
            map_constant="MAP_MOKI_TOWN", at=B1_EV037_APPROACH,
-           rows=("map032/ev037/p0",))
+           rows=("map032/ev037/p0",), archetype="warp")
 def b1_ev037(emu: Emulator) -> None:
     _cross_threshold(emu, "B1_ev037", B1_EV037_APPROACH, "LEFT", "MAP_ROUTE_01")
     _assert_near(emu, "B1_ev037", B1_EV037_ARRIVAL)
@@ -1234,7 +1239,7 @@ def b1_back2(emu: Emulator) -> None:
            "back near (70,11) -- exactly where B1 used to leave them, so B2 "
            "is unaffected",
            map_constant="MAP_MOKI_TOWN", at=B1_EV036_APPROACH,
-           rows=("map032/ev036/p0",))
+           rows=("map032/ev036/p0",), archetype="warp")
 def b1_ev036(emu: Emulator) -> None:
     _cross_threshold(emu, "B1_ev036", B1_EV036_APPROACH, "LEFT", "MAP_ROUTE_01")
     _assert_near(emu, "B1_ev036", B1_EV036_ARRIVAL)
@@ -1685,7 +1690,8 @@ def b15c(emu: Emulator) -> None:
                  BeatLocation("MAP_ROUTE_01_OLD_ROD_HOUSE", OLD_ROD_ARRIVAL[0], OLD_ROD_ARRIVAL[1], "arrival"),
                  BeatLocation("MAP_ROUTE_01_OLD_ROD_HOUSE", SIGN_INTERACT[0], SIGN_INTERACT[1], "sign"),
              ),
-             rows=("map033/ev027/p0", "map081/ev002/p0", "map081/ev004/p0"))
+             rows=("map033/ev027/p0", "map081/ev002/p0", "map081/ev004/p0"),
+             archetype={"map033/ev027/p0": "warp"})
 def b16(emu: Emulator) -> None:
     _enter_door(emu, "B16", OLD_ROD_DOOR, "MAP_ROUTE_01_OLD_ROD_HOUSE")
     _assert_near(emu, "B16", OLD_ROD_ARRIVAL)
@@ -1720,7 +1726,9 @@ def b16(emu: Emulator) -> None:
                  BeatLocation("MAP_ROUTE_01_OLD_ROD_HOUSE", FISHERMAN_INTERACT[0], FISHERMAN_INTERACT[1], "fisherman"),
                  BeatLocation("MAP_ROUTE_01_OLD_ROD_HOUSE", OLD_ROD_HOUSE_EXIT_APPROACH[0], OLD_ROD_HOUSE_EXIT_APPROACH[1], "exit approach"),
              ),
-             rows=("map081/ev001/p0", "map081/ev003/p0"))
+             rows=("map081/ev001/p0", "map081/ev003/p0", "map033/ev027/p1"),
+             archetype={"map081/ev003/p0": "warp",
+                        "map033/ev027/p1": "arrival_nudge"})
 def n1(emu: Emulator) -> None:
     battle_var = emu.var("VAR_BATTLE_VAR01")
     if battle_var >= 5:
@@ -1754,6 +1762,7 @@ def n1(emu: Emulator) -> None:
             f"N1: EV001's self-switch A got set by the refusal path ({shot})")
 
     _cross_threshold(emu, "N1", OLD_ROD_HOUSE_EXIT_APPROACH, "DOWN", "MAP_ROUTE_01")
+    assertions.assert_arrival_settled(emu, "N1", N1_ARRIVAL, nudged=True)
 
 
 # -- N2 ------------------------------------------------------------------

@@ -161,3 +161,26 @@ def test_seam_cells_fails_loud_when_multiple_seams_match(monkeypatch) -> None:
         seam_cells("MAP_KEVLAR_TOWN", to="MAP_ROUTE_02")
     message = str(exc.value)
     assert "distinct seam_warps.json entries" in message
+
+
+# --- arrival_cell ------------------------------------------------------------
+
+@requires_decoded_output
+def test_arrival_cell_accepts_several_exits_sharing_one_landing() -> None:
+    """Map049 EV002 carries two transfer pages (p1, p3), both landing on Moki
+    (28,31); `event_id=` cannot separate pages of one event, and there is
+    only one answer, so this resolves rather than failing loud."""
+    from rpg2gba.playtest.cells import arrival_cell
+
+    landing = arrival_cell(
+        "MAP_MOKI_TOWN", from_map="MAP_MOKI_TOWN_PLAYERS_HOUSE_1F", event_id=2)
+    assert landing == (28, 31)
+
+
+@requires_decoded_output
+def test_arrival_cell_still_fails_loud_when_landings_differ() -> None:
+    """Kevlar's building strip has four doors into town with four landings."""
+    from rpg2gba.playtest.cells import arrival_cell
+
+    with pytest.raises(ValueError, match="disambiguate with event_id="):
+        arrival_cell("MAP_KEVLAR_TOWN", from_map="MAP_KEVLAR_TOWN_BUILDINGS")

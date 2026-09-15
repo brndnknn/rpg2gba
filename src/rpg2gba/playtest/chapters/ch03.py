@@ -532,13 +532,17 @@ _assert_bgm = assertions.assert_bgm
 
 # `rows=` on the beats below (P8a, REDERIVATION_PLAN.md 13.1) records which
 # chapter-manifest rows each beat actually exercises, so the disposition
-# generator can join `beat:` instead of a human hand-writing it. 26 rows
+# generator can join `beat:` instead of a human hand-writing it. 34 rows
 # across 17 of this chapter's 30 beats, each mapping confirmed against the
 # event's coordinates in the decoded map JSON and its page condition in the
-# manifest. `archetype=` is set only where EVERY row of the beat is the same
-# archetype: B13/B15 and B2 are deliberately left unset because they mix a
-# warp (or a nudge) with rows the classifier does not recognize, and the
-# declaration has to describe the whole beat.
+# manifest. `archetype=` takes a single name when every row of the beat is
+# that archetype, or a `{row_id: archetype}` mapping when they differ (added
+# 2026-09-14, ChapterBuilder.beat docstring). B2, B3, B13, B14, B15, B16, and
+# the Kevlar<->Route 1 boundary beats (B1, B1_ev035, B1_ev023) each mix a
+# door/threshold `warp` row with the arrival-side `arrival_nudge` autorun row
+# it lands on (or runs but must not move), and now tag each row individually
+# instead of leaving the whole beat unset (2026-09-15, the Kevlar door-exit
+# nudge claims).
 #
 # THIRTEEN BEATS CLAIM NOTHING, in four groups:
 #
@@ -546,8 +550,8 @@ _assert_bgm = assertions.assert_bgm
 #     These assert `compute_arrival_facings`' output and map-header music,
 #     neither of which is an RGSS page. No manifest row kind can represent
 #     them. (`map031/ev002/p1`, `ev003/p1` and `ev004/p1` are real
-#     arrival_nudge rows, but nothing in these beats asserts anything about
-#     those pages, so they stay unclaimed rather than guessed at.)
+#     arrival_nudge rows -- claimed by B13, B3, and B14 respectively via
+#     `assertions.assert_arrival_settled` (2026-09-15), not by this group.)
 #
 #   N1, N2, N4 -- each re-exercises the same single page an earlier beat
 #     already claims: N1 the item ball's only page (B7 -- CH03_TODO #9, the
@@ -595,10 +599,18 @@ _assert_bgm = assertions.assert_bgm
 
 @ch03.beat("B1", "Crossing Route 1's north seam lands in Kevlar Town",
              map_constant="MAP_ROUTE_01", at=KEVLAR_ENTRY_APPROACH,
-             rows=("map033/ev046/p0",))
+             rows=("map033/ev046/p0", "map031/ev035/p1", "map031/ev023/p1"),
+             archetype={"map033/ev046/p0": "warp",
+                        "map031/ev035/p1": "arrival_nudge",
+                        "map031/ev023/p1": "arrival_nudge"})
 def b1(emu: Emulator) -> None:
     _cross_threshold(emu, "B1", KEVLAR_ENTRY_APPROACH, KEVLAR_ENTRY_DIRECTION,
                      "MAP_KEVLAR_TOWN")
+    # ev035's and ev023's own arrival-nudge autoruns both run on any arrival
+    # to Kevlar Town, but neither's own tile is THIS landing (ev046's), so
+    # both must move nobody -- one settle covers both claims.
+    arrival = cells.arrival_cell("MAP_KEVLAR_TOWN", from_map="MAP_ROUTE_01", event_id=46)
+    assertions.assert_arrival_settled(emu, "B1", arrival, nudged=False)
 
 
 # -- B27 (placed right after B1 -- see the block comment above _flag_ssa) --
@@ -666,7 +678,8 @@ _KV_ARRIVAL_FROM_EV046 = cells.arrival_cell(
                          "(module docstring) gets checked as a fact, not "
                          "assumed from the RGSS read",
              map_constant="MAP_KEVLAR_TOWN", at=_KV_EV035_APPROACH,
-             rows=("map031/ev035/p0", "map033/ev046/p1"))
+             rows=("map031/ev035/p0", "map033/ev046/p1"),
+             archetype={"map031/ev035/p0": "warp", "map033/ev046/p1": "arrival_nudge"})
 def b1_ev035(emu: Emulator) -> None:
     _cross_threshold(emu, "B1_ev035", _KV_EV035_APPROACH, "DOWN", "MAP_ROUTE_01")
     emu.settle_field()
@@ -685,7 +698,7 @@ def b1_ev035(emu: Emulator) -> None:
                          "exact-landing check on this warp's paired p1 "
                          "autorun)",
              map_constant="MAP_ROUTE_01", at=_R1_EV045_APPROACH,
-             rows=("map033/ev045/p0",))
+             rows=("map033/ev045/p0",), archetype="warp")
 def b1_ev045(emu: Emulator) -> None:
     _cross_threshold(emu, "B1_ev045", _R1_EV045_APPROACH, "UP", "MAP_KEVLAR_TOWN")
     _assert_near(emu, "B1_ev045", _KV_ARRIVAL_FROM_EV045, tolerance=1)
@@ -696,7 +709,8 @@ def b1_ev045(emu: Emulator) -> None:
                          "-- the mirror of B1_ev035's check, on the OTHER "
                          "Route 1 warp",
              map_constant="MAP_KEVLAR_TOWN", at=_KV_EV023_APPROACH,
-             rows=("map031/ev023/p0", "map033/ev045/p1"))
+             rows=("map031/ev023/p0", "map033/ev045/p1"),
+             archetype={"map031/ev023/p0": "warp", "map033/ev045/p1": "arrival_nudge"})
 def b1_ev023(emu: Emulator) -> None:
     _cross_threshold(emu, "B1_ev023", _KV_EV023_APPROACH, "DOWN", "MAP_ROUTE_01")
     emu.settle_field()
@@ -725,7 +739,8 @@ def b1_return(emu: Emulator) -> None:
 @ch03.beat("B2", "NurseTut's walkthrough runs and sets FLAG_NURSE_TUTORIAL "
                    "(warps the player straight into the Center)",
              map_constant="MAP_KEVLAR_TOWN", at=NURSE_TUT_APPROACH,
-             rows=("map031/ev049/p0", "map068/ev012/p1"))
+             rows=("map031/ev049/p0", "map068/ev012/p1"),
+             archetype={"map031/ev049/p0": "warp", "map068/ev012/p1": "arrival_nudge"})
 def b2(emu: Emulator) -> None:
     if emu.flag("FLAG_NURSE_TUTORIAL"):
         raise ScenarioError(
@@ -787,12 +802,19 @@ def n3(emu: Emulator) -> None:
                  BeatLocation("MAP_KEVLAR_TOWN_POKEMON_CENTER", CENTER_EXIT_APPROACH[0], CENTER_EXIT_APPROACH[1], "center exit"),
                  BeatLocation("MAP_KEVLAR_TOWN", CENTER_DOOR[0], CENTER_DOOR[1], "center door"),
              ),
-             rows=("map068/ev008/p0", "map031/ev003/p0"), archetype="warp")
+             rows=("map068/ev008/p0", "map031/ev003/p0", "map031/ev003/p1"),
+             archetype={"map068/ev008/p0": "warp", "map031/ev003/p0": "warp",
+                        "map031/ev003/p1": "arrival_nudge"})
 def b3(emu: Emulator) -> None:
     # B2 already stands the player inside Map068 via NurseTut's own warp;
     # this beat exercises the ORDINARY door as its own mechanism -- exit
     # back to Map031 first, then re-enter via (20,12).
     _cross_threshold(emu, "B3", CENTER_EXIT_APPROACH, "DOWN", "MAP_KEVLAR_TOWN")
+    # The Center exit (map068/ev008) lands exactly on ev003's own tile, so
+    # its p1 arrival-nudge autorun must displace the player by one tile.
+    arrival = cells.arrival_cell("MAP_KEVLAR_TOWN",
+                                 from_map="MAP_KEVLAR_TOWN_POKEMON_CENTER", event_id=8)
+    assertions.assert_arrival_settled(emu, "B3", arrival, nudged=True)
     _enter_door(emu, "B3", CENTER_DOOR, "MAP_KEVLAR_TOWN_POKEMON_CENTER")
     _assert_near(emu, "B3", CENTER_ARRIVAL)
 
@@ -1186,7 +1208,8 @@ def b12(emu: Emulator) -> None:
                               MART_ARRIVAL[1], "mart exit"),
                  BeatLocation("MAP_KEVLAR_TOWN", BERRY_PLANT_APPROACH[0], BERRY_PLANT_APPROACH[1], "berry plant"),
              ),
-             rows=("map067/ev002/p0", "map031/ev042/p0"))
+             rows=("map067/ev002/p0", "map031/ev042/p0", "map031/ev002/p1"),
+             archetype={"map067/ev002/p0": "warp", "map031/ev002/p1": "arrival_nudge"})
 def b13(emu: Emulator) -> None:
     # Cross from MART_ARRIVAL, not MART_COUNTER_APPROACH: the mart's exit
     # mat is (10,11) and the arrival tile (10,10) sits between it and the
@@ -1197,6 +1220,11 @@ def b13(emu: Emulator) -> None:
     # (7,19)/(8,19)). This beat had never run before 2026-08-16 -- the old
     # B11 hung ahead of it -- so the mistake was invisible.
     _cross_threshold(emu, "B13", MART_ARRIVAL, "DOWN", "MAP_KEVLAR_TOWN")
+    # The mart exit (map067/ev002) lands exactly on ev002's own tile, so its
+    # p1 arrival-nudge autorun must displace the player by one tile.
+    arrival = cells.arrival_cell("MAP_KEVLAR_TOWN",
+                                 from_map="MAP_KEVLAR_TOWN_POKEMART", event_id=2)
+    assertions.assert_arrival_settled(emu, "B13", arrival, nudged=True)
     emu.walk_to(*BERRY_PLANT_APPROACH)
     emu.face(BERRY_PLANT_FACING)
     emu.interact()
@@ -1215,7 +1243,9 @@ def b13(emu: Emulator) -> None:
                  BeatLocation("MAP_KEVLAR_TOWN", BOUTIQUE_DOOR[0], BOUTIQUE_DOOR[1], "boutique door"),
                  BeatLocation("MAP_KEVLAR_TOWN_BUILDINGS", BOUTIQUE_NPC_APPROACH[0], BOUTIQUE_NPC_APPROACH[1], "boutique NPC"),
              ),
-             rows=("map031/ev004/p0", "map073/ev007/p0"), archetype="warp")
+             rows=("map031/ev004/p0", "map073/ev007/p0", "map031/ev004/p1"),
+             archetype={"map031/ev004/p0": "warp", "map073/ev007/p0": "warp",
+                        "map031/ev004/p1": "arrival_nudge"})
 def b14(emu: Emulator) -> None:
     _enter_door(emu, "B14", BOUTIQUE_DOOR, "MAP_KEVLAR_TOWN_BUILDINGS")
     _assert_near(emu, "B14", BOUTIQUE_ARRIVAL)
@@ -1252,6 +1282,11 @@ def b14(emu: Emulator) -> None:
     # arrival-above/mat-below shape as the Mart and the Center
     # (`KevlarTownBuildings/map.json`).
     _cross_threshold(emu, "B14", BOUTIQUE_ARRIVAL, "DOWN", "MAP_KEVLAR_TOWN")
+    # The Boutique exit (map073/ev007) lands exactly on ev004's own tile, so
+    # its p1 arrival-nudge autorun must displace the player by one tile.
+    arrival = cells.arrival_cell("MAP_KEVLAR_TOWN",
+                                 from_map="MAP_KEVLAR_TOWN_BUILDINGS", event_id=7)
+    assertions.assert_arrival_settled(emu, "B14", arrival, nudged=True)
 
 
 # -- B32/B33 (placed right after B14 -- see the block comment above _flag_ssa) -
@@ -1291,7 +1326,10 @@ def b33(emu: Emulator) -> None:
                  BeatLocation("MAP_KEVLAR_TOWN", BIKE_SHOP_DOOR[0], BIKE_SHOP_DOOR[1], "bike shop door"),
                  BeatLocation("MAP_KEVLAR_TOWN_BUILDINGS", BIKE_SHOP_NPC_APPROACH[0], BIKE_SHOP_NPC_APPROACH[1], "bike shop NPC"),
              ),
-             rows=("map031/ev012/p0", "map073/ev001/p0", "map073/ev002/p0"))
+             rows=("map031/ev012/p0", "map073/ev001/p0", "map073/ev002/p0",
+                   "map031/ev012/p1"),
+             archetype={"map031/ev012/p0": "warp", "map073/ev002/p0": "warp",
+                        "map031/ev012/p1": "arrival_nudge"})
 def b15(emu: Emulator) -> None:
     _enter_door(emu, "B15", BIKE_SHOP_DOOR, "MAP_KEVLAR_TOWN_BUILDINGS")
     _assert_near(emu, "B15", BIKE_SHOP_ARRIVAL)
@@ -1305,6 +1343,11 @@ def b15(emu: Emulator) -> None:
     # Leave the shop, same reason B14 does: B16 starts by walking to a door
     # on MAP_KEVLAR_TOWN. Arrival (5,11), exit mat (5,12).
     _cross_threshold(emu, "B15", BIKE_SHOP_ARRIVAL, "DOWN", "MAP_KEVLAR_TOWN")
+    # The Bike Shop exit (map073/ev002) lands exactly on ev012's own tile,
+    # so its p1 arrival-nudge autorun must displace the player by one tile.
+    arrival = cells.arrival_cell("MAP_KEVLAR_TOWN",
+                                 from_map="MAP_KEVLAR_TOWN_BUILDINGS", event_id=2)
+    assertions.assert_arrival_settled(emu, "B15", arrival, nudged=True)
 
 
 # -- B16 -----------------------------------------------------------------
@@ -1320,7 +1363,12 @@ def b15(emu: Emulator) -> None:
                               COUPLE_ARRIVAL[1], "couple exit approach"),
              ),
              rows=("map031/ev013/p0", "map073/ev004/p0",
-                   "map031/ev041/p0", "map073/ev009/p0"), archetype="warp")
+                   "map031/ev041/p0", "map073/ev009/p0",
+                   "map031/ev013/p1", "map031/ev041/p1"),
+             archetype={"map031/ev013/p0": "warp", "map073/ev004/p0": "warp",
+                        "map031/ev041/p0": "warp", "map073/ev009/p0": "warp",
+                        "map031/ev013/p1": "arrival_nudge",
+                        "map031/ev041/p1": "arrival_nudge"})
 def b16(emu: Emulator) -> None:
     # Cross from the ARRIVAL tiles, not the exit mats one row below them
     # (24,13)/(64,13). `_cross_threshold` walks to its approach tile first,
@@ -1330,12 +1378,20 @@ def b16(emu: Emulator) -> None:
     _enter_door(emu, "B16", MAURY_DOOR, "MAP_KEVLAR_TOWN_BUILDINGS")
     _assert_near(emu, "B16", MAURY_ARRIVAL)
     _cross_threshold(emu, "B16", MAURY_ARRIVAL, "DOWN", "MAP_KEVLAR_TOWN")
-    _assert_near(emu, "B16", MAURY_DOOR)
+    # Maury's exit (map073/ev004) lands exactly on ev013's own tile, so its
+    # p1 arrival-nudge autorun must displace the player by one tile.
+    maury_arrival = cells.arrival_cell("MAP_KEVLAR_TOWN",
+                                       from_map="MAP_KEVLAR_TOWN_BUILDINGS", event_id=4)
+    assertions.assert_arrival_settled(emu, "B16", maury_arrival, nudged=True)
 
     _enter_door(emu, "B16", COUPLE_DOOR, "MAP_KEVLAR_TOWN_BUILDINGS")
     _assert_near(emu, "B16", COUPLE_ARRIVAL)
     _cross_threshold(emu, "B16", COUPLE_ARRIVAL, "DOWN", "MAP_KEVLAR_TOWN")
-    _assert_near(emu, "B16", COUPLE_DOOR)
+    # The couple's exit (map073/ev009) lands exactly on ev041's own tile, so
+    # its p1 arrival-nudge autorun must displace the player by one tile.
+    couple_arrival = cells.arrival_cell("MAP_KEVLAR_TOWN",
+                                        from_map="MAP_KEVLAR_TOWN_BUILDINGS", event_id=9)
+    assertions.assert_arrival_settled(emu, "B16", couple_arrival, nudged=True)
 
 
 # -- B17 -----------------------------------------------------------------
