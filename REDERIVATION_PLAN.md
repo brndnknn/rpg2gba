@@ -1630,7 +1630,7 @@ Each lands unit-green. None is ROM-verified before P11.
 | # | Step | Rulings | Status |
 |---|---|---|---|
 | **C1** | Branch-arm manifest rows; re-derive CH01–CH05 manifests and sidecars; re-affirm invalidated hashes | R5 | DONE 2026-09-16 — see "C1 landed" below |
-| **C2** | Story-state model: highest-live-page liveness, earliest-live placement, `later:`/`unreachable:` derivation, generalized precedence | R6, R8 | TODO |
+| **C2** | Story-state model: highest-live-page liveness, earliest-live placement, `later:`/`unreachable:` derivation, generalized precedence | R6, R8 | IN PROGRESS — C2a (extraction + outcome table) landed 2026-09-16; C2b next |
 | **C3** | Engine-transition forks, white-out first, with the fenced-engine grep for the rest | R9 | TODO |
 | **C4** | Generic per-command extractors for every code present in CH01–CH05, source-derived | R11 | TODO |
 | **C5** | Archetype templates refactored onto the generic floor; the ⊇-floor checker rule | R11 | TODO |
@@ -1669,6 +1669,38 @@ hand work. `archetype_conformance` was verified row-for-row identical to the pre
 stay unclaimed (e.g. `map035/ev001/p1/b0,b1` → `boundary_unclaimed`, pinned in
 `test_check_real_ch04_carries_no_boundary_dispositions_yet`); `approach_model` answers `None`
 for branch rows.
+
+**C2 shape (operator, 2026-09-16):** (a) **per-family outcome table** — every condition
+family in `conditions.py` declares, per arm, how that arm becomes live: player input, random,
+evaluated from modelled state, an engine fork (trainer loss → C3 white-out), a harness
+primitive, a capability, or not yet modelled. An unmodelled family or unclassified condition
+refuses the arm by name. Type-6 facing checks are player input. (b) **Contrived arms are
+walked**: an arm reachable only through a contrived setup (item-ball else-arm on a full bag)
+is a real branch, and the missing harness state is its named blocker until the primitive
+exists — no new verdict, no `unreachable:`. (c) **Random outcomes: offline all, ROM first** —
+every outcome is live and checked offline (C10); a ROM walk asserts whichever outcome the RNG
+produced is in the valid set. No RNG-control primitive. (d) **CH01 is seeded from the intro
+chain**: the model runs over unbound Intro map 51 and whatever it transfers through to the
+first CH01 arrival; C3's fenced-engine grep checks that the `new_game.c` override sets the same
+state and fails loud where it doesn't.
+
+Design (lead, same day). **C2 builds the model; C6 orders it.** Package `story_state/`: per
+row (page trunk or arm scope) its **reads** (page conditions; 111 types 0/1/2; families via
+the table) and **writes** (121/122/123; `pbSetSelfSwitch`, `$game_switches[N]=`,
+`$game_variables[N]=`/`pbSet` with constant values; 117 inlines the common event's writes); a
+non-constant or unparsed write refuses the row by name until C8. Values are **sets** (a switch
+is `{False}`, `{True}` or both; a random 122 gives its range), so "possibly live" is exact
+under forks. Liveness is RMXP's highest-live-page rule plus the arm's guard and every ancestor
+arm's guard. Temp switches (`tsOn?`/`tsOff?`, `setTempSwitchOn`) reset on map entry, so they
+behave like per-visit input. Autorun and parallel pages are **forced**: they fire as soon as they
+are live on the player's map. Chapters are modelled in chain order, each over the maps of
+every chapter up to itself (backtracking is allowed), seeded from its predecessor's end state.
+The model outputs a **partial order**: `enabled_by` (writes a row needs, as any-of groups),
+`killed_by` (writes that end its liveness), ownership (`later:CHnn` / `unreachable:` with the
+furthest chapter modelled), and the chapter's end state. End state is defined only when every
+pair of conflicting writes to one key is ordered by the partial order; otherwise it fails loud
+naming both rows, as does a cycle among mandatory edges. Split: **C2a** extraction + outcome
+table + refusals; **C2b** liveness, saturation, partial order, chain seeding, ownership, CLI.
 
 C1–C6 stand on their own. C7 must land before C9 overwrites anything. Route plans (P9) become
 a C6 output rather than a separate step.

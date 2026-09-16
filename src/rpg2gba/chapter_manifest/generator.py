@@ -783,94 +783,37 @@ def _arms_skeleton(nodes: list[Node]) -> list[dict[str, Any]]:
 
 
 @dataclass
-class _BranchWalkContext:
-    """Fields every branch-arm row copies verbatim from its page row
-    (REDERIVATION_PLAN.md §16.3 C1), plus what `_walk_branches` needs to
-    build one."""
+class PageScope:
+    """One scope on a page -- the trunk, or one branch arm -- with the id,
+    parent and `BranchRef` it would own as a manifest row, plus its own flat
+    command list and direct child nodes (REDERIVATION_PLAN.md §16.3 C2a
+    item 1: single source for row scopes).
 
-    map_id: int
-    event_id: int
-    event_name: str | None
-    page_idx: int
-    condition: PageCondition
-    trigger: str
-    unhandled: int | None
-    reachability_consulted: bool
-    reach_requires: tuple[str, ...]
-    page_row_id: str
+    `row_id`/`parent_row_id`/`branch` are exactly what `_generate_page_rows`
+    used to compute inline per arm; `iter_page_scopes` is now the one place
+    that walk happens, so `story_state.extract` (which needs the same ids
+    without re-deriving them) and the manifest generator both consume it
+    rather than each carrying their own copy of the arm-numbering walk.
+
+    The trunk scope (`branch is None`, `parent_row_id is None`) is always
+    first; every branch-arm scope follows in the same flat `bN` source order
+    `branch_row_id` expects (arm openers in source order, depth-first).
+    """
+
+    row_id: str
+    parent_row_id: str | None
+    branch: BranchRef | None
     commands: list[dict[str, Any]]
+    nodes: list[Node]
 
 
-def _make_branch_row(
-    ctx: "_BranchWalkContext",
-    *,
-    arm_index: int,
-    arm_kind: str,
-    opener_code: int,
-    opener_index: int,
-    choice_index: int | None,
-    choice_text: str | None,
-    condition_type: int | None,
-    condition_text: str | None,
-    explicit: bool,
-    parent_row_id: str,
-    children: list[Node],
-) -> ManifestRow:
-    scope_commands = _flatten_scope(children, ctx.commands)
-    skeleton = _arms_skeleton(children)
-    extracted = _extract_page(scope_commands)
-    requires = tuple(sorted(set(extracted["requires"]) | set(ctx.reach_requires)))
-    row_id = branch_row_id(ctx.page_row_id, arm_index)
-    branch = BranchRef(
-        arm_index=arm_index,
-        arm_kind=arm_kind,  # type: ignore[arg-type]
-        opener_code=opener_code,
-        opener_index=opener_index,
-        choice_index=choice_index,
-        choice_text=choice_text,
-        condition_type=condition_type,
-        condition_text=condition_text,
-        explicit=explicit,
-    )
-    return ManifestRow(
-        row_id=row_id,
-        kind="branch",
-        map_id=ctx.map_id,
-        # The BranchRef (condition text / choice text) goes in too: an arm's
-        # meaning depends on what selects it, so a decision on the then-arm
-        # of `pbTrainerBattle(A)` must go stale when the condition becomes
-        # `pbTrainerBattle(B)`, even with the arm body untouched.
-        content_hash=content_hash({
-            "commands": scope_commands,
-            "arms_skeleton": skeleton,
-            "branch": asdict(branch),
-        }),
-        effects=extracted["effects"],
-        script_heads=extracted["script_heads"],
-        unrecognized_heads=extracted["unrecognized_heads"],
-        other_codes=extracted["other_codes"],
-        requires=requires,
-        unhandled=ctx.unhandled,
-        script_typed_conditions=extracted["script_typed_conditions"],
-        condition_families=extracted["condition_families"],
-        condition_unclassified=extracted["condition_unclassified"],
-        event_id=ctx.event_id,
-        event_name=ctx.event_name,
-        page_idx=ctx.page_idx,
-        condition=ctx.condition,
-        trigger=ctx.trigger,
-        reachability_consulted=ctx.reachability_consulted,
-        branch=branch,
-        parent_row_id=parent_row_id,
-    )
-
-
-def _walk_branches(
+def _walk_scopes(
     nodes: list[Node],
-    ctx: "_BranchWalkContext",
     parent_row_id: str,
+    page_row_id_: str,
+    commands: list[dict[str, Any]],
     counter: Iterator[int],
-    out: list[ManifestRow],
+    out: list[PageScope],
 ) -> None:
     """Depth-first walk assigning flat `bN` ids in source order of arm
     openers (REDERIVATION_PLAN.md §16.3 C1c). A plain recursive pre-order
@@ -891,47 +834,81 @@ def _walk_branches(
             condition_text = params[1] if len(params) >= 2 and isinstance(params[1], str) else None
 
             then_index = next(counter)
-            then_row = _make_branch_row(
-                ctx, arm_index=then_index, arm_kind="then",
+            then_row_id = branch_row_id(page_row_id_, then_index)
+            then_branch = BranchRef(
+                arm_index=then_index, arm_kind="then",
                 opener_code=CONDITIONAL_BRANCH, opener_index=node.index,
                 choice_index=None, choice_text=None,
                 condition_type=condition_type, condition_text=condition_text,
-                explicit=True, parent_row_id=parent_row_id, children=node.then,
+                explicit=True,
             )
-            out.append(then_row)
-            _walk_branches(node.then, ctx, then_row.row_id, counter, out)
+            out.append(PageScope(
+                row_id=then_row_id, parent_row_id=parent_row_id, branch=then_branch,
+                commands=_flatten_scope(node.then, commands), nodes=node.then,
+            ))
+            _walk_scopes(node.then, then_row_id, page_row_id_, commands, counter, out)
 
             else_children = node.otherwise if node.otherwise is not None else []
             else_index = next(counter)
-            else_row = _make_branch_row(
-                ctx, arm_index=else_index, arm_kind="else",
+            else_row_id = branch_row_id(page_row_id_, else_index)
+            else_branch = BranchRef(
+                arm_index=else_index, arm_kind="else",
                 opener_code=CONDITIONAL_BRANCH, opener_index=node.index,
                 choice_index=None, choice_text=None,
                 condition_type=condition_type, condition_text=condition_text,
                 explicit=node.otherwise is not None,
-                parent_row_id=parent_row_id, children=else_children,
             )
-            out.append(else_row)
-            _walk_branches(else_children, ctx, else_row.row_id, counter, out)
+            out.append(PageScope(
+                row_id=else_row_id, parent_row_id=parent_row_id, branch=else_branch,
+                commands=_flatten_scope(else_children, commands), nodes=else_children,
+            ))
+            _walk_scopes(else_children, else_row_id, page_row_id_, commands, counter, out)
 
         elif isinstance(node, ChoiceNode):
             for choice_index, choice_text, children in node.arms:
                 arm_kind = "cancel" if choice_index is None else "choice"
                 arm_index = next(counter)
-                arm_row = _make_branch_row(
-                    ctx, arm_index=arm_index, arm_kind=arm_kind,
+                row_id = branch_row_id(page_row_id_, arm_index)
+                branch = BranchRef(
+                    arm_index=arm_index, arm_kind=arm_kind,  # type: ignore[arg-type]
                     opener_code=SHOW_CHOICES, opener_index=node.index,
                     choice_index=choice_index, choice_text=choice_text,
                     condition_type=None, condition_text=None,
-                    explicit=True, parent_row_id=parent_row_id, children=children,
+                    explicit=True,
                 )
-                out.append(arm_row)
-                _walk_branches(children, ctx, arm_row.row_id, counter, out)
+                out.append(PageScope(
+                    row_id=row_id, parent_row_id=parent_row_id, branch=branch,
+                    commands=_flatten_scope(children, commands), nodes=children,
+                ))
+                _walk_scopes(children, row_id, page_row_id_, commands, counter, out)
 
         elif isinstance(node, LoopNode):
-            _walk_branches(node.children, ctx, parent_row_id, counter, out)
+            _walk_scopes(node.children, parent_row_id, page_row_id_, commands, counter, out)
 
         # Leaf / TextRun: no nested branch structure possible.
+
+
+def iter_page_scopes(
+    map_id: int, event: dict[str, Any], page_idx: int, page: dict[str, Any],
+) -> list[PageScope]:
+    """Every scope on one event page: the trunk first, then each branch arm
+    in flat `bN` source order (REDERIVATION_PLAN.md §16.3 C2a item 1).
+
+    The single implementation of "what scope does each row own" -- arm
+    numbering, parent linkage, and `BranchRef` construction all happen here
+    exactly once; `_generate_page_rows` (this module) and
+    `story_state.extract` both consume this instead of each walking
+    `parse_tree`'s output themselves.
+    """
+    commands = page.get("list") or []
+    tree = parse_tree(commands)
+    row_id = page_row_id(map_id, event["id"], page_idx)
+    scopes: list[PageScope] = [PageScope(
+        row_id=row_id, parent_row_id=None, branch=None,
+        commands=_flatten_scope(tree, commands), nodes=tree,
+    )]
+    _walk_scopes(tree, row_id, row_id, commands, itertools.count(), scopes)
+    return scopes
 
 
 def _generate_terrain_rows(
@@ -997,66 +974,73 @@ def _generate_page_rows(
         event_cell = (event["x"], event["y"])
         reach_requires = _reachability_requires(reachability_context, event_cell)
         for page_idx, page in enumerate(event.get("pages", [])):
-            commands = page.get("list") or []
-            tree = parse_tree(commands)
-            trunk_commands = _flatten_scope(tree, commands)
-            trunk_skeleton = _arms_skeleton(tree)
-            extracted = _extract_page(trunk_commands)
             condition = _build_condition(
                 page.get("condition") or {}, switch_names, var_names)
             trigger_raw = page.get("trigger")
             trigger = _TRIGGER_NAMES.get(trigger_raw, str(trigger_raw))
-            requires = tuple(sorted(set(extracted["requires"]) | set(reach_requires)))
             unhandled = (
                 unhandled_counts.get((map_id, event_id, page_idx), 0)
                 if map_id in staged_map_ids else None
             )
-            # Trunk-only hash (REDERIVATION_PLAN.md §16.3 C1b): every
-            # page-level, non-command field (condition/graphic/trigger/
-            # move_route/...) still goes in, same as the old `content_hash
-            # (page)`; only `"list"` is swapped for the trunk-only command
-            # dump, plus an explicit arm skeleton so the hash still changes
-            # when an arm is added/removed even though its CONTENTS live in
-            # that arm row's own hash, not here.
-            # A page with no arms hashes exactly as it did before C1 -- its
-            # trunk IS its list -- so R5 invalidates branching pages only.
-            trunk_payload = (
-                {**page, "list": trunk_commands, "arms_skeleton": trunk_skeleton}
-                if trunk_skeleton else page
-            )
-            row_id = page_row_id(map_id, event_id, page_idx)
-            row = ManifestRow(
-                row_id=row_id,
-                kind="page",
-                map_id=map_id,
-                content_hash=content_hash(trunk_payload),
-                effects=extracted["effects"],
-                script_heads=extracted["script_heads"],
-                unrecognized_heads=extracted["unrecognized_heads"],
-                other_codes=extracted["other_codes"],
-                requires=requires,
-                unhandled=unhandled,
-                script_typed_conditions=extracted["script_typed_conditions"],
-                condition_families=extracted["condition_families"],
-                condition_unclassified=extracted["condition_unclassified"],
-                event_id=event_id,
-                event_name=event_name,
-                page_idx=page_idx,
-                condition=condition,
-                trigger=trigger,
-                reachability_consulted=reachability_consulted,
-            )
-            rows.append(row)
 
-            branch_ctx = _BranchWalkContext(
-                map_id=map_id, event_id=event_id, event_name=event_name,
-                page_idx=page_idx, condition=condition, trigger=trigger,
-                unhandled=unhandled, reachability_consulted=reachability_consulted,
-                reach_requires=reach_requires, page_row_id=row_id, commands=commands,
-            )
-            branch_rows: list[ManifestRow] = []
-            _walk_branches(tree, branch_ctx, row_id, itertools.count(), branch_rows)
-            rows.extend(branch_rows)
+            scopes = iter_page_scopes(map_id, event, page_idx, page)
+            for scope in scopes:
+                extracted = _extract_page(scope.commands)
+                skeleton = _arms_skeleton(scope.nodes)
+                requires = tuple(sorted(set(extracted["requires"]) | set(reach_requires)))
+                if scope.branch is None:
+                    # Trunk-only hash (REDERIVATION_PLAN.md §16.3 C1b): every
+                    # page-level, non-command field (condition/graphic/
+                    # trigger/move_route/...) still goes in, same as the old
+                    # `content_hash(page)`; only `"list"` is swapped for the
+                    # trunk-only command dump, plus an explicit arm skeleton
+                    # so the hash still changes when an arm is added/removed
+                    # even though its CONTENTS live in that arm row's own
+                    # hash, not here. A page with no arms hashes exactly as
+                    # it did before C1 -- its trunk IS its list -- so R5
+                    # invalidates branching pages only.
+                    payload = (
+                        {**page, "list": scope.commands, "arms_skeleton": skeleton}
+                        if skeleton else page
+                    )
+                    kind = "page"
+                    branch = None
+                else:
+                    # The BranchRef (condition text / choice text) goes in
+                    # too: an arm's meaning depends on what selects it, so a
+                    # decision on the then-arm of `pbTrainerBattle(A)` must
+                    # go stale when the condition becomes
+                    # `pbTrainerBattle(B)`, even with the arm body untouched.
+                    payload = {
+                        "commands": scope.commands,
+                        "arms_skeleton": skeleton,
+                        "branch": asdict(scope.branch),
+                    }
+                    kind = "branch"
+                    branch = scope.branch
+                rows.append(ManifestRow(
+                    row_id=scope.row_id,
+                    kind=kind,  # type: ignore[arg-type]
+                    map_id=map_id,
+                    content_hash=content_hash(payload),
+                    effects=extracted["effects"],
+                    script_heads=extracted["script_heads"],
+                    unrecognized_heads=extracted["unrecognized_heads"],
+                    other_codes=extracted["other_codes"],
+                    requires=requires,
+                    unhandled=unhandled,
+                    script_typed_conditions=extracted["script_typed_conditions"],
+                    condition_families=extracted["condition_families"],
+                    condition_unclassified=extracted["condition_unclassified"],
+                    event_id=event_id,
+                    event_name=event_name,
+                    page_idx=page_idx,
+                    condition=condition,
+                    trigger=trigger,
+                    reachability_consulted=reachability_consulted,
+                    branch=branch,
+                    parent_row_id=scope.parent_row_id,
+                ))
     return rows
 
 

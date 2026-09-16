@@ -44,6 +44,52 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Literal
+
+# --- per-family arm outcome table (REDERIVATION_PLAN.md §16.3 C2, "C2 shape"
+# paragraph (a)) --------------------------------------------------------
+#
+# Every family declares how ITS two arms (then/else of the code-111 whose
+# condition text matched it) become live:
+#
+#   always     -- the enclosing scope's ordinary path: live whenever that
+#                 scope is (a won battle, a stored item, the no-capability
+#                 arm of a field move).
+#   input      -- the player's position, facing, choice or button decides.
+#   random     -- an RNG outcome decides (C2 ruling (c): every outcome is
+#                 live and checked offline; a ROM walk asserts whichever the
+#                 RNG produced is in the valid set).
+#   state      -- evaluable from `story_state.state`'s modelled keys. `detail`
+#                 names the shape (e.g. "game_variables_cmp"); the concrete
+#                 Test(s) are synthesized at extraction time
+#                 (`story_state.extract`), not baked into this static table,
+#                 because the literal switch/variable id is per-instance.
+#   fork       -- an engine transition (C3's territory). `detail` names it,
+#                 e.g. "whiteout".
+#   harness    -- reachable only in a contrived setup; `detail` names the
+#                 missing primitive (e.g. "full_bag"). C2 ruling (b): this is
+#                 a REAL branch arm, walked once the harness primitive
+#                 exists -- never `unreachable:`.
+#   capability -- `detail` names the capability token (e.g. "rock_smash").
+#   unmodelled -- `detail` says what state would be needed and is never
+#                 empty -- CLAUDE.md §4.5, a silent "we don't know" is not
+#                 acceptable, an explicit one is.
+OutcomeKind = Literal[
+    "always", "input", "random", "state", "fork", "harness", "capability", "unmodelled",
+]
+
+
+@dataclass(frozen=True)
+class ArmOutcome:
+    """How one arm (then or else) of a family's code-111 becomes live.
+
+    `detail` is required (non-empty) for every kind except `input`/`random`,
+    which name no further token -- the player's own action or the RNG IS the
+    detail.
+    """
+
+    kind: OutcomeKind
+    detail: str = ""
 
 
 @dataclass(frozen=True)
@@ -63,6 +109,14 @@ class ConditionFamily:
     pattern: re.Pattern[str]
     description: str
     judgment_free: bool
+    # Required (REDERIVATION_PLAN.md §16.3 C2): how the then-arm and the
+    # else-arm of this family's code-111 each become live. See `ArmOutcome`
+    # and `OutcomeKind` above for the vocabulary and C2a's citation rule --
+    # every non-input/random kind is decided from what the called Ruby
+    # ACTUALLY does (grepped in `reference/scripts_dump/`), cited in
+    # `description` as a short trailing clause, never guessed.
+    then_outcome: ArmOutcome
+    else_outcome: ArmOutcome
 
 
 def _rx(pattern: str) -> re.Pattern[str]:
@@ -85,8 +139,15 @@ _VANILLA_FAMILIES: tuple[ConditionFamily, ...] = (
         # 26 staged instances, e.g. "get_character(0).onEvent?" -- the
         # single most common condition shape in the corpus by a wide margin.
         pattern=_rx(r"get_character\(-?\d+\)\.onEvent\?"),
-        description="get_character(N).onEvent? -- self-switch-style event-running guard",
+        description=(
+            "get_character(N).onEvent? -- self-switch-style event-running "
+            "guard; Game_Event#onEvent? (022_Game_Event_v17.rb:117) compares "
+            "the character's position to $game_player's -- a player-position "
+            "read, both arms player input"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="input"),
+        else_outcome=ArmOutcome(kind="input"),
     ),
     ConditionFamily(
         name="pb_trainer_battle",
@@ -96,15 +157,35 @@ _VANILLA_FAMILIES: tuple[ConditionFamily, ...] = (
         # manifest from discarding the same information at the condition
         # layer.
         pattern=_rx(r"pb(?:Double)?TrainerBattle\(.*\)"),
-        description="pbTrainerBattle(...) / pbDoubleTrainerBattle(...) -- trainer battle trigger",
+        description=(
+            "pbTrainerBattle(...) / pbDoubleTrainerBattle(...) -- trainer "
+            "battle trigger; Kernel.pbTrainerBattle "
+            "(115_PTrainer_NPCTrainers.rb:358-549) returns (decision==1) -- "
+            "then=win, the ordinary path (always); on decision in {2,5} (loss/draw) with canlose=false "
+            "(the argument's own default, and the only value seen in the "
+            "CH01-CH05 corpus -- 0 canlose=true call sites, grepped) it calls "
+            "Kernel.pbStartOver -- else=fork:whiteout. A canlose=true call "
+            "site would make else a state-continuation instead; none exists "
+            "in the corpus this family covers (R13 scope)"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="always"),
+        else_outcome=ArmOutcome(kind="fork", detail="whiteout"),
     ),
     ConditionFamily(
         name="pb_item_ball",
         # 15 staged instances across 10 distinct item literals.
         pattern=_rx(r"Kernel\.pbItemBall\(.*\)"),
-        description="Kernel.pbItemBall(ITEM) -- overworld item-ball grant guard",
+        description=(
+            "Kernel.pbItemBall(ITEM) -- overworld item-ball grant guard; "
+            "Kernel.pbItemBall (101__PField_Field.rb:2303-2371) returns "
+            "$PokemonBag.pbStoreItem(...) -- true (then) if the bag has room, "
+            "the ordinary path (always); false (else, 'Too bad... The Bag is "
+            "full...') only with a full bag, the harness primitive 'full_bag'"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="always"),
+        else_outcome=ArmOutcome(kind="harness", detail="full_bag"),
     ),
     ConditionFamily(
         name="pb_rock_smash",
@@ -113,30 +194,55 @@ _VANILLA_FAMILIES: tuple[ConditionFamily, ...] = (
         # -- same shape, same guard role, folded in here rather than given
         # its own family.
         pattern=_rx(r"Kernel\.(?:pbRockSmash|pbCoralBreak)\??"),
-        description="Kernel.pbRockSmash / Kernel.pbCoralBreak -- breakable-terrain guard",
+        description=(
+            "Kernel.pbRockSmash / Kernel.pbCoralBreak -- breakable-terrain "
+            "guard; Kernel.pbRockSmash (103__PField_HiddenMoves.rb:385-410) "
+            "returns true only past the badge AND (move OR Boxing Gloves) gate "
+            "and a confirm -- then=capability rock_smash; it returns false "
+            "without the capability or on a declined confirm, so else is the "
+            "ordinary path (always)"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="capability", detail="rock_smash"),
+        else_outcome=ArmOutcome(kind="always"),
     ),
     ConditionFamily(
         name="game_player_axis",
         # 12 staged instances, e.g. "$game_player.x==17", "$game_player.y<=43".
         pattern=_rx(r"\$game_player\.[xy]\s*" + _CMP + r"\s*-?\d+"),
-        description="$game_player.x|y <cmp> N -- player-position gate",
+        description="$game_player.x|y <cmp> N -- player-position gate, both arms player input",
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="input"),
+        else_outcome=ArmOutcome(kind="input"),
     ),
     ConditionFamily(
         name="pb_receive_item",
         # 9 staged instances, e.g. "Kernel.pbReceiveItem(::PBItems::REVIVE)",
         # "Kernel.pbReceiveItem(::PBItems::POKeBALL,10)".
         pattern=_rx(r"Kernel\.pbReceiveItem\(.*\)"),
-        description="Kernel.pbReceiveItem(ITEM[, qty[, name]]) -- item grant guard",
+        description=(
+            "Kernel.pbReceiveItem(ITEM[, qty[, name]]) -- item grant guard; "
+            "Kernel.pbReceiveItem (101__PField_Field.rb:2373-2401+) returns "
+            "$PokemonBag.pbStoreItem(...) the same way pbItemBall does -- "
+            "then=always, else=harness 'full_bag'"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="always"),
+        else_outcome=ArmOutcome(kind="harness", detail="full_bag"),
     ),
     ConditionFamily(
         name="pb_phone_battle_count",
         # 8 staged instances, e.g. "pbPhoneBattleCount(PBTrainers::YOUNGSTER,\"Richey\")>=1".
         pattern=_rx(r"pbPhoneBattleCount\(.*\)\s*" + _CMP + r"\s*\d+"),
-        description="pbPhoneBattleCount(TRAINER, NAME) <cmp> N -- rematch-count gate",
+        description=(
+            "pbPhoneBattleCount(TRAINER, NAME) <cmp> N -- rematch-count "
+            "gate; pbPhoneBattleCount (133_PScreen_Phone.rb:120-126) returns "
+            "a per-trainer rematch counter held in $Trainer's phone-trainer "
+            "list, not a modelled Switch/Variable -- unmodelled both arms"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="unmodelled", detail="phone_battle_count(trainer)"),
+        else_outcome=ArmOutcome(kind="unmodelled", detail="phone_battle_count(trainer)"),
     ),
     ConditionFamily(
         name="pokemon_global_attr",
@@ -145,22 +251,43 @@ _VANILLA_FAMILIES: tuple[ConditionFamily, ...] = (
         # corpus-wide sibling "!$PokemonGlobal.surfing" (negated, bare) is
         # covered by the optional leading "!".
         pattern=_rx(r"!?\$PokemonGlobal\.\w+(?:\s*" + _CMP + r"\s*(?:true|false|-?\d+))?"),
-        description="$PokemonGlobal.<attr>[ <cmp> literal] -- global play-state flag read",
+        description=(
+            "$PokemonGlobal.<attr>[ <cmp> literal] -- global play-state flag "
+            "read; $PokemonGlobal is a PokemonGlobalMetadata instance, not a "
+            "modelled Switch/Variable/SelfSwitch -- unmodelled both arms "
+            "(worked example, REDERIVATION_PLAN.md §16.3 C2 design)"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="unmodelled", detail="$PokemonGlobal.<attr>"),
+        else_outcome=ArmOutcome(kind="unmodelled", detail="$PokemonGlobal.<attr>"),
     ),
     ConditionFamily(
         name="pb_pick_berry",
         # 5 staged instances, e.g. "pbPickBerry(PBItems::ORANBERRY,2)".
         pattern=_rx(r"pbPickBerry\(.*\)"),
-        description="pbPickBerry(ITEM, n) -- berry-tree harvest guard",
+        description=(
+            "pbPickBerry(ITEM, n) -- berry-tree harvest guard; pbPickBerry "
+            "(109_PField_BerryPlants.rb:616+) asks Kernel.pbConfirmMessage "
+            "'Want to pick it?' before its $PokemonBag.pbCanStore? check, so "
+            "the player's yes/no reaches both arms -- both arms player input"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="input"),
+        else_outcome=ArmOutcome(kind="input"),
     ),
     ConditionFamily(
         name="game_variables_cmp",
         # 4 staged instances, e.g. "$game_variables[1]==0".
         pattern=_rx(r"\$game_variables\[\d+\]\s*" + _CMP + r"\s*-?\d+"),
-        description="$game_variables[N] <cmp> M -- raw variable comparison",
+        description=(
+            "$game_variables[N] <cmp> M -- raw variable comparison; parses "
+            "directly into a Variable Test (extract.py builds the concrete "
+            "Test/negation from the literal id and value at extraction time, "
+            "per C2's worked example), both arms modelled state"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="state", detail="game_variables_cmp"),
+        else_outcome=ArmOutcome(kind="state", detail="game_variables_cmp"),
     ),
     ConditionFamily(
         name="pokemon_bag_query",
@@ -168,29 +295,55 @@ _VANILLA_FAMILIES: tuple[ConditionFamily, ...] = (
         # corpus-wide also seen with a bare symbol argument
         # ("$PokemonBag.pbQuantity(:FERRYPASS)>0"), which `.*` already covers.
         pattern=_rx(r"\$PokemonBag\.(?:pbQuantity|pbStoreItem)\(.*\)(?:\s*" + _CMP + r"\s*\d+)?"),
-        description="$PokemonBag.pbQuantity|pbStoreItem(ITEM)[ <cmp> N] -- inventory-quantity gate",
+        description=(
+            "$PokemonBag.pbQuantity|pbStoreItem(ITEM)[ <cmp> N] -- "
+            "inventory-quantity gate; current bag contents are not a "
+            "modelled key -- unmodelled both arms, harness-adjacent but a "
+            "distinct primitive from bag-capacity ('full_bag')"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="unmodelled", detail="bag_contents"),
+        else_outcome=ArmOutcome(kind="unmodelled", detail="bag_contents"),
     ),
     ConditionFamily(
         name="pb_has_species",
         # 3 staged instances, e.g. "pbHasSpecies?(::PBSpecies::RAPTORCH)".
         pattern=_rx(r"pbHasSpecies\?\(.*\)"),
-        description="pbHasSpecies?(SPECIES) -- party/box species-ownership guard",
+        description=(
+            "pbHasSpecies?(SPECIES) -- party/box species-ownership guard; "
+            "pbHasSpecies? (170__PSystem_Utilities.rb:2091-2099) scans "
+            "$Trainer.party -- not a modelled key, unmodelled both arms "
+            "(worked example, REDERIVATION_PLAN.md §16.3 C2 design)"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="unmodelled", detail="party_has_species"),
+        else_outcome=ArmOutcome(kind="unmodelled", detail="party_has_species"),
     ),
     ConditionFamily(
         name="pb_next_mystery_gift_id",
         # 1 staged instance, "pbNextMysteryGiftID>0".
         pattern=_rx(r"pbNextMysteryGiftID\s*" + _CMP + r"\s*\d+"),
-        description="pbNextMysteryGiftID <cmp> N -- pending mystery-gift guard",
+        description=(
+            "pbNextMysteryGiftID <cmp> N -- pending mystery-gift guard; "
+            "pbNextMysteryGiftID (147__PScreen_MysteryGift.rb:431-435) scans "
+            "$Trainer.mysterygift -- not a modelled key, unmodelled both arms"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="unmodelled", detail="mystery_gift_queue"),
+        else_outcome=ArmOutcome(kind="unmodelled", detail="mystery_gift_queue"),
     ),
     ConditionFamily(
         name="pb_pokerus",
         # 1 staged instance, "Kernel.pbPokerus?".
         pattern=_rx(r"Kernel\.pbPokerus\?"),
-        description="Kernel.pbPokerus? -- Pokerus-infection guard",
+        description=(
+            "Kernel.pbPokerus? -- Pokerus-infection guard, an RNG roll "
+            "(vanilla Essentials' PokeBattle_Pokemon#pbPokerus is a chance "
+            "check, not a modelled key) -- random both arms"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="random"),
+        else_outcome=ArmOutcome(kind="random"),
     ),
     # --- corpus-wide-only shapes: zero staged instances today, recognized
     # now so a later chapter's manifest doesn't have to rediscover them. ---
@@ -198,65 +351,122 @@ _VANILLA_FAMILIES: tuple[ConditionFamily, ...] = (
         name="pb_wild_battle",
         # 4 corpus-wide, e.g. "pbWildBattle(PBSpecies::LINKITE,38)".
         pattern=_rx(r"pbWildBattle\(.*\)"),
-        description="pbWildBattle(SPECIES, level) -- scripted wild encounter trigger",
+        description=(
+            "pbWildBattle(SPECIES, level) -- scripted wild encounter trigger; "
+            "shares PokeBattle_Battle's decision path with pbTrainerBattle "
+            "(a forced encounter with no canlose escape) -- then=win (always), "
+            "else=fork:whiteout, same reasoning as pb_trainer_battle"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="always"),
+        else_outcome=ArmOutcome(kind="fork", detail="whiteout"),
     ),
     ConditionFamily(
         name="trainer_attr",
         # $Trainer.ablePokemonCount<=1 (13 corpus-wide), $Trainer.gender==0
         # (4, also spaced "$Trainer.gender == 0" -- both occur).
         pattern=_rx(r"\$Trainer\.\w+\s*" + _CMP + r"\s*-?\w+"),
-        description="$Trainer.<attr> <cmp> literal -- player-character state gate",
+        description=(
+            "$Trainer.<attr> <cmp> literal -- player-character state gate; "
+            "$Trainer's own attributes (party count, gender, ...) are not "
+            "modelled Switch/Variable keys -- unmodelled both arms"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="unmodelled", detail="$Trainer.<attr>"),
+        else_outcome=ArmOutcome(kind="unmodelled", detail="$Trainer.<attr>"),
     ),
     ConditionFamily(
         name="input_trigger",
         # 7 corpus-wide, e.g. "Input.trigger?(Input::C)".
         pattern=_rx(r"Input\.trigger\?\(Input::\w+\)"),
-        description="Input.trigger?(Input::KEY) -- raw button-press poll",
+        description="Input.trigger?(Input::KEY) -- raw button-press poll, both arms player input",
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="input"),
+        else_outcome=ArmOutcome(kind="input"),
     ),
     ConditionFamily(
         name="distance_checker",
         # 10 corpus-wide, e.g. "distanceChecker>=2".
         pattern=_rx(r"distanceChecker\s*" + _CMP + r"\s*\d+"),
-        description="distanceChecker <cmp> N -- scripted proximity gate",
+        description=(
+            "distanceChecker <cmp> N -- scripted proximity gate; "
+            "distanceChecker (221_Extra_Scripts.rb:414-421) reads two "
+            "characters' x/y (get_character) -- position, same category as "
+            "game_player_axis/get_character_on_event -- both arms player input"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="input"),
+        else_outcome=ArmOutcome(kind="input"),
     ),
     ConditionFamily(
         name="pb_get_pokemon_egg",
         # 8 corpus-wide, e.g. "pbGetPokemon(1).egg?".
         pattern=_rx(r"pbGetPokemon\(\d+\)\.egg\?"),
-        description="pbGetPokemon(N).egg? -- party-slot egg-state guard",
+        description=(
+            "pbGetPokemon(N).egg? -- party-slot egg-state guard; a party "
+            "slot's egg flag is not a modelled key -- unmodelled both arms"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="unmodelled", detail="party_slot_egg_state"),
+        else_outcome=ArmOutcome(kind="unmodelled", detail="party_slot_egg_state"),
     ),
     ConditionFamily(
         name="pb_get_pokemon_shadow_rescue",
         # 6 corpus-wide, e.g. "(pbGetPokemon(1).isShadow? rescue false)".
         pattern=_rx(r"\(pbGetPokemon\(\d+\)\.isShadow\?\s*rescue\s*false\)"),
-        description="(pbGetPokemon(N).isShadow? rescue false) -- shadow-state guard, nil-safe",
+        description=(
+            "(pbGetPokemon(N).isShadow? rescue false) -- shadow-state guard, "
+            "nil-safe; a party slot's shadow flag is not a modelled key -- "
+            "unmodelled both arms"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="unmodelled", detail="party_slot_shadow_state"),
+        else_outcome=ArmOutcome(kind="unmodelled", detail="party_slot_shadow_state"),
     ),
     ConditionFamily(
         name="is_temp_switch_off",
         # 5 corpus-wide, e.g. 'isTempSwitchOff?("A")'.
         pattern=_rx(r'isTempSwitchOff\?\("\w+"\)'),
-        description='isTempSwitchOff?("X") -- ephemeral self-switch-style guard',
+        description=(
+            'isTempSwitchOff?("X") -- ephemeral self-switch-style guard; '
+            "isTempSwitchOff?/tsOff? (101__PField_Field.rb:2926-2927, "
+            "022_Game_Event_v17.rb:75) resolve to get_character(0) -- THIS "
+            "row's own running event -- so the TempSwitch key's (map_id, "
+            "event_id) must be filled in from the row being extracted, not "
+            "from the condition text; extract.py builds the concrete Test at "
+            "extraction time. Both arms modelled state"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="state", detail="is_temp_switch_off"),
+        else_outcome=ArmOutcome(kind="state", detail="is_temp_switch_off"),
     ),
     ConditionFamily(
         name="pb_day_care_deposited",
         # 3 corpus-wide, "Kernel.pbDayCareDeposited==1".
         pattern=_rx(r"Kernel\.pbDayCareDeposited\s*" + _CMP + r"\s*\d+"),
-        description="Kernel.pbDayCareDeposited <cmp> N -- Day Care occupancy gate",
+        description=(
+            "Kernel.pbDayCareDeposited <cmp> N -- Day Care occupancy gate; "
+            "pbDayCareDeposited (110_PField_DayCare.rb:6-12) counts "
+            "$PokemonGlobal.daycare slots -- not a modelled key, unmodelled "
+            "both arms"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="unmodelled", detail="daycare_deposited_count"),
+        else_outcome=ArmOutcome(kind="unmodelled", detail="daycare_deposited_count"),
     ),
     ConditionFamily(
         name="pb_egg_generated",
         # 6 corpus-wide, "Kernel.pbEggGenerated?".
         pattern=_rx(r"Kernel\.pbEggGenerated\?"),
-        description="Kernel.pbEggGenerated? -- Day Care egg-ready guard",
+        description=(
+            "Kernel.pbEggGenerated? -- Day Care egg-ready guard; "
+            "pbEggGenerated? (110_PField_DayCare.rb:1-4) reads "
+            "$PokemonGlobal.daycareEgg -- not a modelled key, unmodelled "
+            "both arms"
+        ),
         judgment_free=True,
+        then_outcome=ArmOutcome(kind="unmodelled", detail="daycare_egg_ready"),
+        else_outcome=ArmOutcome(kind="unmodelled", detail="daycare_egg_ready"),
     ),
 )
 
@@ -271,29 +481,71 @@ _URANIUM_FAMILIES: tuple[ConditionFamily, ...] = (
         name="uranium_jv_reward",
         # 5 staged instances: "jvGiveReward" (4), "jvNextReward" (1).
         pattern=_rx(r"jv(?:GiveReward|NextReward)"),
-        description="jvGiveReward / jvNextReward -- Uranium's quest-reward-ladder guard",
+        description=(
+            "jvGiveReward / jvNextReward -- Uranium's quest-reward-ladder "
+            "guard; jvNextReward/jvGiveReward (213_Bambo_Reward.rb:16-43+) "
+            "compare $Trainer.pokedexOwned (not a modelled key) against a "
+            "PROFREWARDS table indexed by $game_variables[22] -- variable 22 "
+            "IS modelled, but the guard is on pokedexOwned, and jvGiveReward "
+            "further branches on [4,6,8].include?($game_variables[22]), an "
+            "enumeration this Test grammar cannot express as a single "
+            "comparison -- unmodelled both arms"
+        ),
         judgment_free=False,
+        then_outcome=ArmOutcome(kind="unmodelled", detail="pokedex_owned_vs_profreward_tier"),
+        else_outcome=ArmOutcome(kind="unmodelled", detail="pokedex_owned_vs_profreward_tier"),
     ),
     ConditionFamily(
         name="uranium_is_custom_game",
         # 3 staged instances, bare "isCustomGame?".
         pattern=_rx(r"isCustomGame\?"),
-        description="isCustomGame? -- Uranium's Nuzlocke/randomizer custom-ruleset flag",
+        description=(
+            "isCustomGame? -- Uranium's Nuzlocke/randomizer custom-ruleset "
+            "flag; isCustomGame? (220_Custom_Mode.rb:244-256) ORs a handful "
+            "of $PokemonGlobal fields (nuzlocke, challengemode, ...) -- none "
+            "are modelled keys -- unmodelled both arms"
+        ),
         judgment_free=False,
+        then_outcome=ArmOutcome(kind="unmodelled", detail="$PokemonGlobal custom-ruleset flags"),
+        else_outcome=ArmOutcome(kind="unmodelled", detail="$PokemonGlobal custom-ruleset flags"),
     ),
     ConditionFamily(
         name="uranium_show_ruleset_settings",
         # 2 staged instances, "showRulesetSettings(1)".
         pattern=_rx(r"showRulesetSettings\(.*\)"),
-        description="showRulesetSettings(N) -- Uranium's custom-ruleset menu guard",
+        description=(
+            "showRulesetSettings(N) -- Uranium's custom-ruleset menu guard; "
+            "showRulesetSettings (220_Custom_Mode.rb:776-782) opens "
+            "PokemonRulesetScene and returns pbOptions's exit value -- the "
+            "player's own menu selection decides the branch, both arms "
+            "player input"
+        ),
         judgment_free=False,
+        then_outcome=ArmOutcome(kind="input"),
+        else_outcome=ArmOutcome(kind="input"),
     ),
     ConditionFamily(
         name="uranium_is_rock_smash_softlocked",
         # 3 staged instances, bare "isRockSmashSoftlocked?".
         pattern=_rx(r"isRockSmashSoftlocked\?"),
-        description="isRockSmashSoftlocked? -- Uranium's Rock Smash softlock-prevention guard",
+        description=(
+            "isRockSmashSoftlocked? -- Uranium's Rock Smash softlock-"
+            "prevention guard; isRockSmashSoftlocked? "
+            "(221_Extra_Scripts.rb:796-806+) combines "
+            "$PokemonGlobal.nuzlocke/randomizer, bag HM06 quantity, badge "
+            "count, and party/box move knowledge -- none individually "
+            "modelled and the combination isn't a single Test -- unmodelled "
+            "both arms"
+        ),
         judgment_free=False,
+        then_outcome=ArmOutcome(
+            kind="unmodelled",
+            detail="nuzlocke/randomizer + bag HM06 + badge + party/box move-knowledge state",
+        ),
+        else_outcome=ArmOutcome(
+            kind="unmodelled",
+            detail="nuzlocke/randomizer + bag HM06 + badge + party/box move-knowledge state",
+        ),
     ),
 )
 

@@ -30,6 +30,7 @@ from rpg2gba.chapter_manifest.schema import (
     branch_row_id,
     content_hash,
     page_row_id,
+    row_to_dict,
     seam_row_id,
     whole_page_views,
 )
@@ -1345,3 +1346,40 @@ def test_map32_script_head_block_frequencies_match_document() -> None:
     for head, expected_count in expected.items():
         assert counts[head] == expected_count, (
             f"{head}: expected {expected_count} blocks, generator found {counts[head]}")
+
+
+# --- iter_page_scopes single-source-of-truth test (REDERIVATION_PLAN.md §16.3
+# C2a item 1) --------------------------------------------------------------
+#
+# The refactor's proof obligation, per the brief: regenerate nothing on
+# disk -- reload each already-committed `reference/manifests/CHnn.manifest.json`
+# and re-run `generate_chapter_manifest` for that chapter against the real
+# corpus in memory, then assert row-for-row equality. Skips (rather than
+# fails) when `output/uranium-build/` is absent, matching every other
+# corpus-backed test in this file.
+REFERENCE_MANIFESTS_DIR = Path("reference/manifests")
+
+
+@pytest.mark.parametrize("chapter_id", ["CH01", "CH02", "CH03", "CH04", "CH05"])
+def test_iter_page_scopes_refactor_reproduces_committed_manifest(chapter_id: str) -> None:
+    if not (OUT_DIR / "maps").is_dir():
+        pytest.skip("no converted corpus on disk")
+    committed_path = REFERENCE_MANIFESTS_DIR / f"{chapter_id}.manifest.json"
+    if not committed_path.exists():
+        pytest.skip(f"no committed manifest for {chapter_id}")
+    committed = json.loads(committed_path.read_text(encoding="utf-8"))
+
+    rows = generate_chapter_manifest(
+        chapter_id, build_dir=OUT_DIR, chapters_path=CHAPTERS_PATH)
+    # Round-trip through JSON before comparing: `row_to_dict` keeps tuples
+    # (the in-memory `ManifestRow` shape), while the committed file holds
+    # lists -- `write_manifest` does the same round trip on the write side.
+    # Comparing tuples against lists directly would fail on every row for a
+    # reason that has nothing to do with the refactor under test.
+    regenerated = json.loads(json.dumps([row_to_dict(r) for r in rows], sort_keys=False))
+
+    assert regenerated == committed, (
+        f"{chapter_id}: iter_page_scopes refactor changed generator output -- "
+        "the single-source-of-truth walk must reproduce the pre-refactor "
+        "row set byte for byte"
+    )

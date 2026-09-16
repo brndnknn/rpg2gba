@@ -181,3 +181,31 @@ def test_compound_boolean_never_classifies_even_when_both_operands_would() -> No
         "$game_player.x == 3 || $game_player.y == 4",
     ):
         assert classify_condition(text) is None, text
+
+
+# --- per-family arm outcome table (REDERIVATION_PLAN.md §16.3 C2, "C2 shape"
+# (a)) -----------------------------------------------------------------
+
+_NON_EMPTY_DETAIL_KINDS = frozenset({"harness", "capability", "unmodelled"})
+
+
+def test_every_family_has_both_outcomes() -> None:
+    for family in FAMILIES:
+        assert family.then_outcome is not None, family.name
+        assert family.else_outcome is not None, family.name
+
+
+@pytest.mark.parametrize("family", FAMILIES, ids=lambda f: f.name)
+def test_harness_capability_unmodelled_outcomes_carry_a_detail(family) -> None:
+    for outcome in (family.then_outcome, family.else_outcome):
+        if outcome.kind in _NON_EMPTY_DETAIL_KINDS:
+            assert outcome.detail, (
+                f"{family.name}: {outcome.kind} outcome has an empty detail")
+
+
+@pytest.mark.parametrize("family", FAMILIES, ids=lambda f: f.name)
+def test_fork_outcomes_carry_a_detail(family) -> None:
+    for outcome in (family.then_outcome, family.else_outcome):
+        if outcome.kind == "fork":
+            assert outcome.detail, (
+                f"{family.name}: fork outcome has an empty detail")
