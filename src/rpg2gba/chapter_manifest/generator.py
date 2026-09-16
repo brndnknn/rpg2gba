@@ -24,11 +24,13 @@ byte for byte.
 """
 from __future__ import annotations
 
+import itertools
 import json
 import logging
 import re
 from collections import Counter
-from dataclasses import asdict
+from collections.abc import Iterator
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -44,17 +46,31 @@ from rpg2gba.chapter_atlas.census import (
 from rpg2gba.chapter_manifest.conditions import classify_condition
 from rpg2gba.chapter_manifest.derivation import derive_entry
 from rpg2gba.chapter_manifest.schema import (
+    BranchRef,
     ManifestRow,
     PageCondition,
     SeamRef,
     TerrainRef,
+    branch_row_id,
     content_hash,
     page_row_id,
+    row_id_sort_key,
     row_to_dict,
     seam_row_id,
     terrain_row_id,
 )
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
+from rpg2gba.conversion_agent.transpiler import (
+    CONDITIONAL_BRANCH,
+    SHOW_CHOICES,
+    SHOW_TEXT_CONT,
+    ChoiceNode,
+    IfNode,
+    LoopNode,
+    Node,
+    TextRun,
+    parse_tree,
+)
 from rpg2gba.tileset_converter.stairs import (
     BEHAVIOR_BY_SIDE,
     StairCell,
@@ -697,6 +713,227 @@ def _extract_page(commands: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _flatten_scope(nodes: list[Node], commands: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The raw commands one scope owns, per REDERIVATION_PLAN.md §16.3 C1b:
+    a `Leaf`/`TextRun` contributes its own raw command(s); a `LoopNode`
+    (code 112) is transparent -- its body belongs to the ENCLOSING scope,
+    not a branch of its own -- so its opener plus its flattened children are
+    both included; an `IfNode`/`ChoiceNode` contributes only its OPENER
+    command (the 111 with its condition text, the 102 with its choice list)
+    -- its arm bodies are each a separate scope, walked by `_walk_branches`,
+    never flattened in here. That is what keeps an arm's effects counted
+    exactly once: the opener line the arm's own condition/choice-list lives
+    on is trunk (or the enclosing arm's) content; the arm's body commands
+    only ever appear in `_flatten_scope` when `_walk_branches` calls this
+    function again for that arm's own `children` list.
+
+    A `TextRun`'s trailing 401 continuations are not stored as their own
+    nodes (`parse_tree` merges them into `TextRun.text`), so they are
+    re-collected here by scanning forward from the node's own index --
+    the same adjacency `parse_tree` itself walked, replayed against the
+    same `commands` list so the two never disagree.
+    """
+    out: list[dict[str, Any]] = []
+    for node in nodes:
+        if isinstance(node, TextRun):
+            idx = node.index
+            out.append(commands[idx])
+            j = idx + 1
+            while j < len(commands) and commands[j].get("code") == SHOW_TEXT_CONT:
+                out.append(commands[j])
+                j += 1
+        elif isinstance(node, LoopNode):
+            out.append(node.cmd)
+            out.extend(_flatten_scope(node.children, commands))
+        elif isinstance(node, (IfNode, ChoiceNode)):
+            out.append(node.cmd)
+        else:  # Leaf
+            out.append(node.cmd)
+    return out
+
+
+def _arms_skeleton(nodes: list[Node]) -> list[dict[str, Any]]:
+    """A structural (not content) summary of every branch construct directly
+    owned by `nodes`' scope -- used only inside a row's `content_hash`
+    payload (REDERIVATION_PLAN.md §16.3 C1b): "the trunk hash must still
+    change if an arm's structure changes ... hash the trunk commands plus a
+    skeleton of the arms." `_flatten_scope` above already includes each
+    opener's raw command (condition text / choice list) in the scope's own
+    hash input, but NOT whether a 111 had a real 411 in the source -- that
+    fact only lives in `IfNode.otherwise is None` vs `[]`, which is
+    otherwise invisible to a bare command dump. This closes that gap.
+
+    Recurses through `LoopNode` (transparent, same as `_flatten_scope`) but
+    stops at `IfNode`/`ChoiceNode` -- a nested branch's OWN skeleton is that
+    arm's concern (via its own `content_hash`), not this scope's.
+    """
+    out: list[dict[str, Any]] = []
+    for node in nodes:
+        if isinstance(node, IfNode):
+            out.append({"kind": "if", "index": node.index, "has_else": node.otherwise is not None})
+        elif isinstance(node, ChoiceNode):
+            out.append({
+                "kind": "choice",
+                "index": node.index,
+                "arms": [[ci, ct] for ci, ct, _ in node.arms],
+            })
+        elif isinstance(node, LoopNode):
+            out.extend(_arms_skeleton(node.children))
+    return out
+
+
+@dataclass
+class _BranchWalkContext:
+    """Fields every branch-arm row copies verbatim from its page row
+    (REDERIVATION_PLAN.md §16.3 C1), plus what `_walk_branches` needs to
+    build one."""
+
+    map_id: int
+    event_id: int
+    event_name: str | None
+    page_idx: int
+    condition: PageCondition
+    trigger: str
+    unhandled: int | None
+    reachability_consulted: bool
+    reach_requires: tuple[str, ...]
+    page_row_id: str
+    commands: list[dict[str, Any]]
+
+
+def _make_branch_row(
+    ctx: "_BranchWalkContext",
+    *,
+    arm_index: int,
+    arm_kind: str,
+    opener_code: int,
+    opener_index: int,
+    choice_index: int | None,
+    choice_text: str | None,
+    condition_type: int | None,
+    condition_text: str | None,
+    explicit: bool,
+    parent_row_id: str,
+    children: list[Node],
+) -> ManifestRow:
+    scope_commands = _flatten_scope(children, ctx.commands)
+    skeleton = _arms_skeleton(children)
+    extracted = _extract_page(scope_commands)
+    requires = tuple(sorted(set(extracted["requires"]) | set(ctx.reach_requires)))
+    row_id = branch_row_id(ctx.page_row_id, arm_index)
+    branch = BranchRef(
+        arm_index=arm_index,
+        arm_kind=arm_kind,  # type: ignore[arg-type]
+        opener_code=opener_code,
+        opener_index=opener_index,
+        choice_index=choice_index,
+        choice_text=choice_text,
+        condition_type=condition_type,
+        condition_text=condition_text,
+        explicit=explicit,
+    )
+    return ManifestRow(
+        row_id=row_id,
+        kind="branch",
+        map_id=ctx.map_id,
+        # The BranchRef (condition text / choice text) goes in too: an arm's
+        # meaning depends on what selects it, so a decision on the then-arm
+        # of `pbTrainerBattle(A)` must go stale when the condition becomes
+        # `pbTrainerBattle(B)`, even with the arm body untouched.
+        content_hash=content_hash({
+            "commands": scope_commands,
+            "arms_skeleton": skeleton,
+            "branch": asdict(branch),
+        }),
+        effects=extracted["effects"],
+        script_heads=extracted["script_heads"],
+        unrecognized_heads=extracted["unrecognized_heads"],
+        other_codes=extracted["other_codes"],
+        requires=requires,
+        unhandled=ctx.unhandled,
+        script_typed_conditions=extracted["script_typed_conditions"],
+        condition_families=extracted["condition_families"],
+        condition_unclassified=extracted["condition_unclassified"],
+        event_id=ctx.event_id,
+        event_name=ctx.event_name,
+        page_idx=ctx.page_idx,
+        condition=ctx.condition,
+        trigger=ctx.trigger,
+        reachability_consulted=ctx.reachability_consulted,
+        branch=branch,
+        parent_row_id=parent_row_id,
+    )
+
+
+def _walk_branches(
+    nodes: list[Node],
+    ctx: "_BranchWalkContext",
+    parent_row_id: str,
+    counter: Iterator[int],
+    out: list[ManifestRow],
+) -> None:
+    """Depth-first walk assigning flat `bN` ids in source order of arm
+    openers (REDERIVATION_PLAN.md §16.3 C1c). A plain recursive pre-order
+    walk produces exactly that order: every nested node's flat `index` sits
+    strictly between its parent opener's index and the parent's next
+    sibling, so visiting a node's own arms immediately (before moving to the
+    next sibling in `nodes`) is equivalent to a global sort of every
+    branch-construct by `.index`.
+
+    `LoopNode` is transparent here too (ruling: "Code 112 loops are NOT
+    branches"): its children are walked at the SAME `parent_row_id`, not
+    given a scope of their own.
+    """
+    for node in nodes:
+        if isinstance(node, IfNode):
+            params = node.cmd.get("parameters") or []
+            condition_type = params[0] if len(params) >= 1 else None
+            condition_text = params[1] if len(params) >= 2 and isinstance(params[1], str) else None
+
+            then_index = next(counter)
+            then_row = _make_branch_row(
+                ctx, arm_index=then_index, arm_kind="then",
+                opener_code=CONDITIONAL_BRANCH, opener_index=node.index,
+                choice_index=None, choice_text=None,
+                condition_type=condition_type, condition_text=condition_text,
+                explicit=True, parent_row_id=parent_row_id, children=node.then,
+            )
+            out.append(then_row)
+            _walk_branches(node.then, ctx, then_row.row_id, counter, out)
+
+            else_children = node.otherwise if node.otherwise is not None else []
+            else_index = next(counter)
+            else_row = _make_branch_row(
+                ctx, arm_index=else_index, arm_kind="else",
+                opener_code=CONDITIONAL_BRANCH, opener_index=node.index,
+                choice_index=None, choice_text=None,
+                condition_type=condition_type, condition_text=condition_text,
+                explicit=node.otherwise is not None,
+                parent_row_id=parent_row_id, children=else_children,
+            )
+            out.append(else_row)
+            _walk_branches(else_children, ctx, else_row.row_id, counter, out)
+
+        elif isinstance(node, ChoiceNode):
+            for choice_index, choice_text, children in node.arms:
+                arm_kind = "cancel" if choice_index is None else "choice"
+                arm_index = next(counter)
+                arm_row = _make_branch_row(
+                    ctx, arm_index=arm_index, arm_kind=arm_kind,
+                    opener_code=SHOW_CHOICES, opener_index=node.index,
+                    choice_index=choice_index, choice_text=choice_text,
+                    condition_type=None, condition_text=None,
+                    explicit=True, parent_row_id=parent_row_id, children=children,
+                )
+                out.append(arm_row)
+                _walk_branches(children, ctx, arm_row.row_id, counter, out)
+
+        elif isinstance(node, LoopNode):
+            _walk_branches(node.children, ctx, parent_row_id, counter, out)
+
+        # Leaf / TextRun: no nested branch structure possible.
+
+
 def _generate_terrain_rows(
     map_id: int,
     stair_cells: list[StairCell],
@@ -761,7 +998,10 @@ def _generate_page_rows(
         reach_requires = _reachability_requires(reachability_context, event_cell)
         for page_idx, page in enumerate(event.get("pages", [])):
             commands = page.get("list") or []
-            extracted = _extract_page(commands)
+            tree = parse_tree(commands)
+            trunk_commands = _flatten_scope(tree, commands)
+            trunk_skeleton = _arms_skeleton(tree)
+            extracted = _extract_page(trunk_commands)
             condition = _build_condition(
                 page.get("condition") or {}, switch_names, var_names)
             trigger_raw = page.get("trigger")
@@ -771,11 +1011,25 @@ def _generate_page_rows(
                 unhandled_counts.get((map_id, event_id, page_idx), 0)
                 if map_id in staged_map_ids else None
             )
+            # Trunk-only hash (REDERIVATION_PLAN.md §16.3 C1b): every
+            # page-level, non-command field (condition/graphic/trigger/
+            # move_route/...) still goes in, same as the old `content_hash
+            # (page)`; only `"list"` is swapped for the trunk-only command
+            # dump, plus an explicit arm skeleton so the hash still changes
+            # when an arm is added/removed even though its CONTENTS live in
+            # that arm row's own hash, not here.
+            # A page with no arms hashes exactly as it did before C1 -- its
+            # trunk IS its list -- so R5 invalidates branching pages only.
+            trunk_payload = (
+                {**page, "list": trunk_commands, "arms_skeleton": trunk_skeleton}
+                if trunk_skeleton else page
+            )
+            row_id = page_row_id(map_id, event_id, page_idx)
             row = ManifestRow(
-                row_id=page_row_id(map_id, event_id, page_idx),
+                row_id=row_id,
                 kind="page",
                 map_id=map_id,
-                content_hash=content_hash(page),
+                content_hash=content_hash(trunk_payload),
                 effects=extracted["effects"],
                 script_heads=extracted["script_heads"],
                 unrecognized_heads=extracted["unrecognized_heads"],
@@ -793,6 +1047,16 @@ def _generate_page_rows(
                 reachability_consulted=reachability_consulted,
             )
             rows.append(row)
+
+            branch_ctx = _BranchWalkContext(
+                map_id=map_id, event_id=event_id, event_name=event_name,
+                page_idx=page_idx, condition=condition, trigger=trigger,
+                unhandled=unhandled, reachability_consulted=reachability_consulted,
+                reach_requires=reach_requires, page_row_id=row_id, commands=commands,
+            )
+            branch_rows: list[ManifestRow] = []
+            _walk_branches(tree, branch_ctx, row_id, itertools.count(), branch_rows)
+            rows.extend(branch_rows)
     return rows
 
 
@@ -894,7 +1158,7 @@ def generate_chapter_manifest(
 
     rows.extend(_generate_seam_rows(set(map_ids), connections, consulted_by_map))
 
-    rows.sort(key=lambda r: r.row_id)
+    rows.sort(key=lambda r: row_id_sort_key(r.row_id))
     return rows
 
 
@@ -903,7 +1167,7 @@ def write_manifest(rows: list[ManifestRow], path: Path) -> None:
     2, trailing newline, non-ASCII left as-is. Idempotence (CLAUDE.md §4.2)
     depends on this being the only writer and on every field within a row
     already being pre-sorted by the generator."""
-    ordered = sorted(rows, key=lambda r: r.row_id)
+    ordered = sorted(rows, key=lambda r: row_id_sort_key(r.row_id))
     payload = [row_to_dict(row) for row in ordered]
     text = json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=False)
     path.write_text(text + "\n", encoding="utf-8")
@@ -946,7 +1210,7 @@ def write_derived(
     """
     entries = {
         row.row_id: entry
-        for row in sorted(rows, key=lambda r: r.row_id)
+        for row in sorted(rows, key=lambda r: row_id_sort_key(r.row_id))
         for entry in (derive_entry(row, beat_model=beat_model, boundary_model=boundary_model),)
         if entry is not None
     }

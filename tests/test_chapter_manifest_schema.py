@@ -11,15 +11,19 @@ from __future__ import annotations
 import pytest
 
 from rpg2gba.chapter_manifest.schema import (
+    BranchRef,
     Disposition,
     DispositionError,
     ManifestRow,
     PageCondition,
     SeamRef,
     TerrainRef,
+    branch_row_id,
     content_hash,
     page_row_id,
+    parse_row_id,
     row_from_dict,
+    row_id_sort_key,
     row_to_dict,
     seam_row_id,
     terrain_row_id,
@@ -401,3 +405,97 @@ def test_reachability_consulted_round_trips() -> None:
         reachability_consulted=True,
     )
     assert row_from_dict(row_to_dict(row)) == row
+
+
+# --- branch rows (REDERIVATION_PLAN.md §16.3 C1) --------------------------
+
+
+def test_branch_row_id_is_flat_off_the_page_row() -> None:
+    page = page_row_id(50, 5, 0)
+    assert branch_row_id(page, 2) == "map050/ev005/p0/b2"
+    # Flat even for a nested arm -- nesting lives in `parent_row_id`, never
+    # in the id string.
+    assert branch_row_id(page, 10) == "map050/ev005/p0/b10"
+
+
+def test_branch_ref_round_trips_through_a_branch_row() -> None:
+    branch = BranchRef(
+        arm_index=0, arm_kind="then", opener_code=111, opener_index=3,
+        choice_index=None, choice_text=None,
+        condition_type=12, condition_text="Kernel.pbTrainerBattle(1)",
+        explicit=True,
+    )
+    row = ManifestRow(
+        row_id=branch_row_id(page_row_id(50, 5, 0), 0),
+        kind="branch",
+        map_id=50,
+        content_hash=content_hash({"commands": []}),
+        event_id=5,
+        event_name="Trainer",
+        page_idx=0,
+        condition=PageCondition(),
+        trigger="action",
+        branch=branch,
+        parent_row_id=page_row_id(50, 5, 0),
+    )
+    assert row_from_dict(row_to_dict(row)) == row
+
+
+def test_parse_row_id_round_trips_all_four_kinds() -> None:
+    page = page_row_id(35, 3, 1)
+    branch = branch_row_id(page, 2)
+    seam = seam_row_id(35, "n", 40)
+    terrain = terrain_row_id(37, "stairs", 11, 9)
+
+    p = parse_row_id(page)
+    assert p.kind == "page"
+    assert p.map_id == 35 and p.event_id == 3 and p.page_idx == 1
+    assert p.owning_page_row_id == page
+    assert p.event_key == (35, 3)
+
+    b = parse_row_id(branch)
+    assert b.kind == "branch"
+    assert b.map_id == 35 and b.event_id == 3 and b.page_idx == 1 and b.arm_index == 2
+    assert b.owning_page_row_id == page
+    assert b.event_key == (35, 3)
+
+    s = parse_row_id(seam)
+    assert s.kind == "seam"
+    assert s.map_id == 35 and s.direction == "N" and s.other_map_id == 40
+    assert s.owning_page_row_id is None
+    assert s.event_key is None
+
+    t = parse_row_id(terrain)
+    assert t.kind == "terrain"
+    assert t.map_id == 37 and t.subkind == "stairs" and t.x == 11 and t.y == 9
+    assert t.owning_page_row_id is None
+    assert t.event_key is None
+
+
+def test_parse_row_id_rejects_malformed_row_id() -> None:
+    with pytest.raises(ValueError):
+        parse_row_id("not-a-row-id")
+
+
+def test_row_id_sort_key_orders_branch_arms_numerically() -> None:
+    page = page_row_id(50, 5, 0)
+    ids = [branch_row_id(page, n) for n in (10, 2, 0, 1)]
+    assert sorted(ids, key=row_id_sort_key) == [
+        branch_row_id(page, 0), branch_row_id(page, 1),
+        branch_row_id(page, 2), branch_row_id(page, 10),
+    ]
+
+
+def test_row_id_sort_key_orders_mixed_row_kinds_without_error() -> None:
+    ids = [
+        seam_row_id(50, "e", 51),
+        branch_row_id(page_row_id(50, 5, 0), 10),
+        page_row_id(50, 5, 0),
+        terrain_row_id(50, "stairs", 1, 2),
+        branch_row_id(page_row_id(50, 5, 0), 2),
+    ]
+    ordered = sorted(ids, key=row_id_sort_key)
+    # Just needs to not raise, and to keep the two branch rows in numeric
+    # order relative to each other.
+    assert ordered.index(branch_row_id(page_row_id(50, 5, 0), 2)) < ordered.index(
+        branch_row_id(page_row_id(50, 5, 0), 10))

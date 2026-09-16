@@ -321,4 +321,13 @@ def test_check_real_ch04_carries_no_boundary_dispositions_yet() -> None:
     result = runner.invoke(cli, ["check", "--chapter", "CH04"])
 
     assert "boundary_not_crossing" not in result.output
-    assert "boundary_unclaimed" not in result.output
+    # Since C1 (REDERIVATION_PLAN.md §16.3) the arrival nudge's two branch
+    # arms are rows of their own, derived `boundary` like their page, and
+    # CH05's `arrival_nudge_beat` claims only the page. That is real debt,
+    # not a manufactured finding: archetype templates claiming arm rows is
+    # C5's work. Pin it exactly so anything else still fails.
+    unclaimed = sorted(
+        line.split()[1] for line in result.output.splitlines()
+        if "(boundary_unclaimed)" in line
+    )
+    assert unclaimed == ["map035/ev001/p1/b0", "map035/ev001/p1/b1"]

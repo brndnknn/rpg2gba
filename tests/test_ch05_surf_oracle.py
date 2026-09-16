@@ -194,10 +194,19 @@ def test_map037_no_row_derives_surf(oracle, start_cell_37, map037_graph, map037_
 
 def test_ch05_manifest_carries_requires_surf_on_exactly_the_oracle_rows(oracle, tmp_path):
     """End-to-end through the real manifest generator: the four sealed-room
-    rows carry `requires == ("surf",)`, no other row on CH05's maps does,
-    and every row was generated with `reachability_consulted=True` (both
-    CH05 maps have a registered start cell in
-    `chapter_manifest/generator.py`'s `_CHAPTER_MAP_START_CELLS`)."""
+    rows carry `requires == ("surf",)`, no other PAGE row on CH05's maps
+    does, and every row was generated with `reachability_consulted=True`
+    (both CH05 maps have a registered start cell in
+    `chapter_manifest/generator.py`'s `_CHAPTER_MAP_START_CELLS`).
+
+    Restricted to `kind == "page"` (REDERIVATION_PLAN.md §16.3 C1, R5): the
+    oracle only names page rows, and reachability-derived `requires` now
+    also apply to a page's branch-arm rows (`_reachability_requires` is
+    per-EVENT, shared by the page row and every arm row under it) -- so an
+    events-008/009 page with a branch now has its `then`/`else` arm rows
+    carrying `surf` too, correctly, not a regression. That part is checked
+    separately below rather than folded into the oracle's fixed row-id set.
+    """
     positive = _find_set(oracle, MAP036_ID, "positive")
     expected_surf_row_ids = {row["row_id"] for row in positive["rows"]}
     assert len(expected_surf_row_ids) == 4
@@ -207,8 +216,21 @@ def test_ch05_manifest_carries_requires_surf_on_exactly_the_oracle_rows(oracle, 
     )
     assert rows, "generate_chapter_manifest returned no rows for CH05"
 
-    surf_row_ids = {row.row_id for row in rows if "surf" in row.requires}
+    page_rows = [r for r in rows if r.kind == "page"]
+    surf_row_ids = {row.row_id for row in page_rows if "surf" in row.requires}
     assert surf_row_ids == expected_surf_row_ids
+
+    # Every branch-arm row belonging to one of the four surf-gated pages
+    # inherits the same event-level reachability requirement.
+    for page_row_id in expected_surf_row_ids:
+        arm_rows = [r for r in rows if r.kind == "branch"
+                    and r.row_id.startswith(page_row_id + "/b")]
+        for arm in arm_rows:
+            assert "surf" in arm.requires, (
+                f"{arm.row_id}: expected to inherit 'surf' from its page "
+                f"{page_row_id}, same as every other reachability-derived "
+                "requirement"
+            )
 
     not_consulted = [row.row_id for row in rows if not row.reachability_consulted]
     assert not_consulted == [], (

@@ -59,7 +59,6 @@ import importlib
 import logging
 import os
 import pkgutil
-import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -76,47 +75,33 @@ logger = logging.getLogger(__name__)
 
 BeatFn = Callable[["Emulator"], None]
 
-# Row-id shape, mirroring `page_row_id`/`seam_row_id` in
-# `src/rpg2gba/chapter_manifest/schema.py` (defined locally rather than
-# imported so this module doesn't have to pull in the chapter_manifest
-# package just to validate a string shape):
-#
-#   page_row_id(map_id, event_id, page_idx) -> "map035/ev014/p1"
-#   seam_row_id(map_id, direction, other_map_id) -> "map035/seam/S/map031"
-#   terrain_row_id(map_id, subkind, x, y) -> "map037/terrain/stairs/11,9"
-_PAGE_ROW_RE = re.compile(r"^map\d{3}/ev\d{3}/p\d+$")
-# The direction segment is `[A-Z]+`, deliberately NOT an enumeration.
-# `seam_row_id` upper-cases whatever direction string the connection record
-# carries, and those records come from `connections.json` -- RMXP-derived
-# data, where every direction in the corpus is a single letter (`N`/`S`/`E`).
-# This regex spelled it `(NORTH|SOUTH|EAST|WEST)` until 2026-09-11, which
-# matched NOTHING the generator has ever emitted: a beat could not claim a
-# seam row at all, and CH04's B1 was the first beat that tried. Same failure
-# as the terrain-row rejection noted below, and the same shape as #94's
-# `ARCHETYPE_NAMES` -- a hand-written enumeration beside a schema, drifting
-# silently because nothing compared the two. `test_beat_row_ids.py` now
-# validates every row id in the committed manifests against these patterns,
-# so the comparison exists.
-_SEAM_ROW_RE = re.compile(r"^map\d{3}/seam/[A-Z]+/map\d{3}$")
-# Terrain rows were added to the manifest after this validator was written
-# and were rejected here until 2026-09-04, which made a beat unable to claim
-# the stair rows it exercises (CH05 B13/B14 are the first). `subkind` is
-# open-ended by design in `terrain_row_id`, so it is matched as a slug
-# rather than an enumeration.
-_TERRAIN_ROW_RE = re.compile(r"^map\d{3}/terrain/[a-z_]+/-?\d+,-?\d+$")
+# Row-id parsing is `chapter_manifest.schema.parse_row_id` now (C1,
+# REDERIVATION_PLAN.md §16.3 R5's "one implementation" rule) -- this module
+# used to carry its own regex trio rather than import the chapter_manifest
+# package just to validate a string shape, but that duplication is exactly
+# what let a stale `(NORTH|SOUTH|EAST|WEST)` seam pattern (fixed 2026-09-11)
+# silently reject every seam row the generator has ever emitted. Importing
+# `schema` from here does not create a cycle: `chapter_manifest.boundary_
+# model` already imports `playtest.chapter`, but `schema` itself imports
+# nothing from `playtest` or `chapter_manifest`'s other modules -- it is a
+# leaf. A branch row (`.../pN/bM`) is accepted here too, alongside page/
+# seam/terrain, so a beat can claim one.
+from ..chapter_manifest.schema import parse_row_id
 
 
 def _validate_row_id(row: str, *, beat_name: str) -> None:
-    if (_PAGE_ROW_RE.match(row) or _SEAM_ROW_RE.match(row)
-            or _TERRAIN_ROW_RE.match(row)):
-        return
-    raise ValueError(
-        f"beat {beat_name!r}: rows entry {row!r} does not match the "
-        "chapter-manifest row-id shape (expected a page row like "
-        "'map035/ev014/p1', a seam row like 'map035/seam/NORTH/map036', or "
-        "a terrain row like 'map037/terrain/stairs/11,9' -- see "
-        "page_row_id/seam_row_id/terrain_row_id in "
-        "src/rpg2gba/chapter_manifest/schema.py)")
+    try:
+        parse_row_id(row)
+    except ValueError as exc:
+        raise ValueError(
+            f"beat {beat_name!r}: rows entry {row!r} does not match the "
+            "chapter-manifest row-id shape (expected a page row like "
+            "'map035/ev014/p1', a branch row like 'map035/ev014/p1/b2', a "
+            "seam row like 'map035/seam/NORTH/map036', or a terrain row "
+            "like 'map037/terrain/stairs/11,9' -- see page_row_id/"
+            "branch_row_id/seam_row_id/terrain_row_id in "
+            "src/rpg2gba/chapter_manifest/schema.py)"
+        ) from exc
 
 
 @dataclass(frozen=True)
@@ -179,6 +164,12 @@ def page_row_script(row_id: str) -> tuple[int, str] | None:
     """`("map037/ev004/p0")` -> `(37, "Map037_EV004_Page1")`, or `None` for a
     row id that names no page script (seam and terrain rows).
 
+    A branch row (`"map037/ev004/p0/b2"`) resolves to the SAME script as its
+    owning page: the transpiler emits one `.pory` script per PAGE, not per
+    arm (`conversion_agent.transpiler.parse_tree` nests branches inside one
+    page's control flow), so an arm's trigger fires as part of that same
+    script -- there is no separate script for a branch row to name.
+
     The one place that knows this mapping. Both consumers of the
     foreign-trigger exemption go through it -- `resolved_trigger_scripts`
     below for a predecessor's dispositions, and
@@ -189,11 +180,11 @@ def page_row_script(row_id: str) -> tuple[int, str] | None:
     """
     from ..tileset_converter.metadata_wiring import page_label
 
-    if not _PAGE_ROW_RE.match(row_id):
+    parsed = parse_row_id(row_id)
+    if parsed.kind not in ("page", "branch"):
         return None
-    map_part, ev_part, page_part = row_id.split("/")
-    map_id = int(map_part[3:])
-    return map_id, page_label(map_id, int(ev_part[2:]), int(page_part[1:]) + 1)
+    assert parsed.event_id is not None and parsed.page_idx is not None
+    return parsed.map_id, page_label(parsed.map_id, parsed.event_id, parsed.page_idx + 1)
 
 
 def resolved_trigger_scripts(chapter: "Chapter") -> dict[int, set[str]]:

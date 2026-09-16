@@ -35,7 +35,9 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map019/ev002/p0",
@@ -73,7 +75,9 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map019/ev003/p0",
@@ -111,16 +115,17 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map019/ev004/p0",
     "kind": "page",
     "map_id": 19,
-    "content_hash": "cbfa60987e3a2c89",
+    "content_hash": "e59be4f341114948",
     "effects": [
       "bubble_ui",
-      "self_switch_write",
       "text",
       "trainerbattle"
     ],
@@ -156,7 +161,99 @@
     "trigger": "event_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map019/ev004/p0/b0",
+    "kind": "branch",
+    "map_id": 19,
+    "content_hash": "e1903a07317b007f",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 4,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 4,
+    "event_name": "Trainer(4)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 18,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::BIKER,\"Lou\",_I(\"Owww!\"),false,0,false,0)",
+      "explicit": true
+    },
+    "parent_row_id": "map019/ev004/p0"
+  },
+  {
+    "row_id": "map019/ev004/p0/b1",
+    "kind": "branch",
+    "map_id": 19,
+    "content_hash": "59338ea726517c99",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 4,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 4,
+    "event_name": "Trainer(4)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 18,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::BIKER,\"Lou\",_I(\"Owww!\"),false,0,false,0)",
+      "explicit": false
+    },
+    "parent_row_id": "map019/ev004/p0"
   },
   {
     "row_id": "map019/ev004/p1",
@@ -193,7 +290,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map019/ev004/p2",
@@ -225,16 +324,17 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map019/ev005/p0",
     "kind": "page",
     "map_id": 19,
-    "content_hash": "20f16b63cde5540d",
+    "content_hash": "fb40ed1cd1030ec0",
     "effects": [
       "bubble_ui",
-      "self_switch_write",
       "text",
       "trainerbattle"
     ],
@@ -272,7 +372,103 @@
     "trigger": "event_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map019/ev005/p0/b0",
+    "kind": "branch",
+    "map_id": 19,
+    "content_hash": "aef26635908583ab",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "strength"
+    ],
+    "unhandled": 4,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 5,
+    "event_name": "Trainer(4)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 22,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::BIKER,\"Joe\",_I(\"Urk...!\"),false,0,false,0)",
+      "explicit": true
+    },
+    "parent_row_id": "map019/ev005/p0"
+  },
+  {
+    "row_id": "map019/ev005/p0/b1",
+    "kind": "branch",
+    "map_id": 19,
+    "content_hash": "0aef5ce0119224c2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "strength"
+    ],
+    "unhandled": 4,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 5,
+    "event_name": "Trainer(4)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 22,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::BIKER,\"Joe\",_I(\"Urk...!\"),false,0,false,0)",
+      "explicit": false
+    },
+    "parent_row_id": "map019/ev005/p0"
   },
   {
     "row_id": "map019/ev005/p1",
@@ -311,7 +507,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map019/ev005/p2",
@@ -345,25 +543,23 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map019/ev006/p0",
     "kind": "page",
     "map_id": 19,
-    "content_hash": "d1080271f648b2a2",
+    "content_hash": "0d442bcc3899c2a9",
     "effects": [
       "bubble_ui",
       "move_route",
-      "self_switch_write",
-      "switch_write",
-      "text",
-      "trainerbattle"
+      "text"
     ],
     "script_heads": [
       "pbCallBub",
       "pbNoticePlayer",
-      "pbTrainerBattle",
       "pbTrainerEnd",
       "pbTrainerIntro"
     ],
@@ -373,7 +569,47 @@
       "strength"
     ],
     "unhandled": 5,
-    "script_typed_conditions": 2,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 6,
+    "event_name": "Richboy",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map019/ev006/p0/b0",
+    "kind": "branch",
+    "map_id": 19,
+    "content_hash": "c3951434b688c507",
+    "effects": [
+      "trainerbattle"
+    ],
+    "script_heads": [
+      "pbTrainerBattle"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "strength"
+    ],
+    "unhandled": 5,
+    "script_typed_conditions": 1,
     "condition_families": [
       "pb_trainer_battle"
     ],
@@ -394,7 +630,271 @@
     "trigger": "event_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 18,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 0,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map019/ev006/p0"
+  },
+  {
+    "row_id": "map019/ev006/p0/b1",
+    "kind": "branch",
+    "map_id": 19,
+    "content_hash": "c1dedc5a2fd20949",
+    "effects": [
+      "bubble_ui",
+      "move_route",
+      "self_switch_write",
+      "switch_write",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "strength"
+    ],
+    "unhandled": 5,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 6,
+    "event_name": "Richboy",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 19,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::BIKER,\"Richard\",_I(\"Aaaaargh!\"),false,1)",
+      "explicit": true
+    },
+    "parent_row_id": "map019/ev006/p0/b0"
+  },
+  {
+    "row_id": "map019/ev006/p0/b2",
+    "kind": "branch",
+    "map_id": 19,
+    "content_hash": "1d652c270e23296d",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "strength"
+    ],
+    "unhandled": 5,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 6,
+    "event_name": "Richboy",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 2,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 19,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::BIKER,\"Richard\",_I(\"Aaaaargh!\"),false,1)",
+      "explicit": false
+    },
+    "parent_row_id": "map019/ev006/p0/b0"
+  },
+  {
+    "row_id": "map019/ev006/p0/b3",
+    "kind": "branch",
+    "map_id": 19,
+    "content_hash": "69b5d58e5878817a",
+    "effects": [
+      "trainerbattle"
+    ],
+    "script_heads": [
+      "pbTrainerBattle"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "strength"
+    ],
+    "unhandled": 5,
+    "script_typed_conditions": 1,
+    "condition_families": [
+      "pb_trainer_battle"
+    ],
+    "condition_unclassified": [],
+    "event_id": 6,
+    "event_name": "Richboy",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 3,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 18,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 0,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map019/ev006/p0"
+  },
+  {
+    "row_id": "map019/ev006/p0/b4",
+    "kind": "branch",
+    "map_id": 19,
+    "content_hash": "f14149ef1cdcfba7",
+    "effects": [
+      "bubble_ui",
+      "move_route",
+      "self_switch_write",
+      "switch_write",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "strength"
+    ],
+    "unhandled": 5,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 6,
+    "event_name": "Richboy",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 4,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 51,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::BIKER,\"Richard\",_I(\"Aaaaargh!\"),false,0)",
+      "explicit": true
+    },
+    "parent_row_id": "map019/ev006/p0/b3"
+  },
+  {
+    "row_id": "map019/ev006/p0/b5",
+    "kind": "branch",
+    "map_id": 19,
+    "content_hash": "9ad5619eadc5c74a",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "strength"
+    ],
+    "unhandled": 5,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 6,
+    "event_name": "Richboy",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 5,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 51,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::BIKER,\"Richard\",_I(\"Aaaaargh!\"),false,0)",
+      "explicit": false
+    },
+    "parent_row_id": "map019/ev006/p0/b3"
   },
   {
     "row_id": "map019/ev006/p1",
@@ -428,7 +928,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map019/ev007/p0",
@@ -463,7 +965,9 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev001/p0",
@@ -499,7 +1003,9 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev002/p0",
@@ -536,16 +1042,16 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev002/p1",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "58dd3a15151250c1",
+    "content_hash": "dd9f034e6ea44b7b",
     "effects": [
-      "graphic",
-      "move_route",
       "temp_switch_write"
     ],
     "script_heads": [
@@ -577,7 +1083,100 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev002/p1/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "11b1d4354edcd009",
+    "effects": [
+      "graphic",
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 2,
+    "event_name": "EV002",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev002/p1"
+  },
+  {
+    "row_id": "map031/ev002/p1/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "4f8217c3e24208a2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 2,
+    "event_name": "EV002",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev002/p1"
   },
   {
     "row_id": "map031/ev003/p0",
@@ -614,16 +1213,16 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev003/p1",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "58dd3a15151250c1",
+    "content_hash": "dd9f034e6ea44b7b",
     "effects": [
-      "graphic",
-      "move_route",
       "temp_switch_write"
     ],
     "script_heads": [
@@ -655,7 +1254,100 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev003/p1/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "11b1d4354edcd009",
+    "effects": [
+      "graphic",
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 3,
+    "event_name": "EV003",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev003/p1"
+  },
+  {
+    "row_id": "map031/ev003/p1/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "4f8217c3e24208a2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 3,
+    "event_name": "EV003",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev003/p1"
   },
   {
     "row_id": "map031/ev004/p0",
@@ -692,16 +1384,16 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev004/p1",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "58dd3a15151250c1",
+    "content_hash": "dd9f034e6ea44b7b",
     "effects": [
-      "graphic",
-      "move_route",
       "temp_switch_write"
     ],
     "script_heads": [
@@ -733,17 +1425,109 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev004/p1/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "11b1d4354edcd009",
+    "effects": [
+      "graphic",
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 4,
+    "event_name": "EV004",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev004/p1"
+  },
+  {
+    "row_id": "map031/ev004/p1/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "4f8217c3e24208a2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 4,
+    "event_name": "EV004",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev004/p1"
   },
   {
     "row_id": "map031/ev006/p0",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "56f15d3cdbba7ad9",
+    "content_hash": "fb1ad2ee114864cd",
     "effects": [
       "bubble_ui",
       "switch_write",
-      "text",
       "var_write"
     ],
     "script_heads": [
@@ -772,7 +1556,282 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev006/p0/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "3c87066e69796dcf",
+    "effects": [
+      "switch_write",
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 6,
+    "event_name": "EV006",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 3,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev006/p0"
+  },
+  {
+    "row_id": "map031/ev006/p0/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "0c81027f0304f13c",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 6,
+    "event_name": "EV006",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 3,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev006/p0"
+  },
+  {
+    "row_id": "map031/ev006/p0/b2",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "4f83f99a1b5e284b",
+    "effects": [
+      "switch_write",
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 6,
+    "event_name": "EV006",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 2,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 9,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev006/p0"
+  },
+  {
+    "row_id": "map031/ev006/p0/b3",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "35f2ca9edf9d8e25",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 6,
+    "event_name": "EV006",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 3,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 9,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev006/p0"
+  },
+  {
+    "row_id": "map031/ev006/p0/b4",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "b009d89655c8eb62",
+    "effects": [
+      "switch_write",
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 6,
+    "event_name": "EV006",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 4,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 15,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev006/p0"
+  },
+  {
+    "row_id": "map031/ev006/p0/b5",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "c1662f6720e2498c",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 6,
+    "event_name": "EV006",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 5,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 15,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev006/p0"
   },
   {
     "row_id": "map031/ev007/p0",
@@ -809,16 +1868,58 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev007/p1",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "028862018386476a",
+    "content_hash": "0266f82861405a7f",
     "effects": [
       "bubble_ui",
       "choice",
+      "move_route",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 7,
+    "event_name": "Cry Boy",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 86,
+      "switch1_name": "Has Strength",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev007/p1/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "eb6c76683e7cdf3f",
+    "effects": [
+      "bubble_ui",
       "move_route",
       "switch_write",
       "text"
@@ -849,7 +1950,68 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "choice",
+      "opener_code": 102,
+      "opener_index": 9,
+      "choice_index": 0,
+      "choice_text": "Yes",
+      "condition_type": null,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev007/p1"
+  },
+  {
+    "row_id": "map031/ev007/p1/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "c3c5987f94ce7b3a",
+    "effects": [
+      "bubble_ui",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 7,
+    "event_name": "Cry Boy",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 86,
+      "switch1_name": "Has Strength",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "choice",
+      "opener_code": 102,
+      "opener_index": 9,
+      "choice_index": 1,
+      "choice_text": "No",
+      "condition_type": null,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev007/p1"
   },
   {
     "row_id": "map031/ev007/p2",
@@ -881,16 +2043,17 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev008/p0",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "ca72bbdcaba30e16",
+    "content_hash": "01180b5cce31d520",
     "effects": [
       "bubble_ui",
-      "text",
       "var_write"
     ],
     "script_heads": [
@@ -919,7 +2082,189 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev008/p0/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "fe9d8de245fa87c1",
+    "effects": [
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 8,
+    "event_name": "EV008",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 2,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev008/p0"
+  },
+  {
+    "row_id": "map031/ev008/p0/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "7797851a0397b018",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 8,
+    "event_name": "EV008",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 2,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev008/p0"
+  },
+  {
+    "row_id": "map031/ev008/p0/b2",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "15f9f18acbf9b9ae",
+    "effects": [
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 8,
+    "event_name": "EV008",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 2,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 6,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev008/p0"
+  },
+  {
+    "row_id": "map031/ev008/p0/b3",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "f42d7dede3adf677",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 8,
+    "event_name": "EV008",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 3,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 6,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev008/p0"
   },
   {
     "row_id": "map031/ev009/p0",
@@ -957,7 +2302,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev010/p0",
@@ -991,7 +2338,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev011/p0",
@@ -1023,7 +2372,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev012/p0",
@@ -1060,16 +2411,16 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev012/p1",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "d9fdee26a1a61ef8",
+    "content_hash": "eb1e6284df7d10d1",
     "effects": [
-      "graphic",
-      "move_route",
       "temp_switch_write"
     ],
     "script_heads": [
@@ -1101,7 +2452,100 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev012/p1/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "11b1d4354edcd009",
+    "effects": [
+      "graphic",
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 12,
+    "event_name": "EV012",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev012/p1"
+  },
+  {
+    "row_id": "map031/ev012/p1/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "4f8217c3e24208a2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 12,
+    "event_name": "EV012",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev012/p1"
   },
   {
     "row_id": "map031/ev013/p0",
@@ -1138,16 +2582,16 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev013/p1",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "d9fdee26a1a61ef8",
+    "content_hash": "eb1e6284df7d10d1",
     "effects": [
-      "graphic",
-      "move_route",
       "temp_switch_write"
     ],
     "script_heads": [
@@ -1179,20 +2623,244 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev013/p1/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "11b1d4354edcd009",
+    "effects": [
+      "graphic",
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 13,
+    "event_name": "EV013",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev013/p1"
+  },
+  {
+    "row_id": "map031/ev013/p1/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "4f8217c3e24208a2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 13,
+    "event_name": "EV013",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev013/p1"
   },
   {
     "row_id": "map031/ev014/p0",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "13ea152d28991b87",
+    "content_hash": "68761f731a1261d1",
     "effects": [
       "bubble_ui",
       "choice",
       "control_flow",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 14,
+    "event_name": "EV014",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev014/p0/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "1e13041eb3ae874d",
+    "effects": [
+      "bubble_ui",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 14,
+    "event_name": "EV014",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "choice",
+      "opener_code": 102,
+      "opener_index": 3,
+      "choice_index": 0,
+      "choice_text": "Yes",
+      "condition_type": null,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev014/p0"
+  },
+  {
+    "row_id": "map031/ev014/p0/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "dfbd2ecdc396ee4d",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 14,
+    "event_name": "EV014",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "choice",
+      "opener_code": 102,
+      "opener_index": 3,
+      "choice_index": 1,
+      "choice_text": "No",
+      "condition_type": null,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev014/p0"
+  },
+  {
+    "row_id": "map031/ev014/p0/b2",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "7a025924319cb33a",
+    "effects": [
+      "bubble_ui",
       "givemon",
-      "text",
-      "var_write"
+      "text"
     ],
     "script_heads": [
       "pbAddPokemon",
@@ -1221,7 +2889,69 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 2,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 9,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev014/p0/b1"
+  },
+  {
+    "row_id": "map031/ev014/p0/b3",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "26c3a31cb397cc4d",
+    "effects": [
+      "bubble_ui",
+      "text",
+      "var_write"
+    ],
+    "script_heads": [
+      "pbCallBub"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 14,
+    "event_name": "EV014",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 3,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 9,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev014/p0/b1"
   },
   {
     "row_id": "map031/ev017/p0",
@@ -1253,7 +2983,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev019/p0",
@@ -1287,7 +3019,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev023/p0",
@@ -1325,16 +3059,16 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev023/p1",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "e8e9ee9a28f12107",
+    "content_hash": "50a1f42b5255a708",
     "effects": [
-      "graphic",
-      "move_route",
       "temp_switch_write"
     ],
     "script_heads": [
@@ -1366,7 +3100,100 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev023/p1/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "15159e8843c858aa",
+    "effects": [
+      "graphic",
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 23,
+    "event_name": "EV023",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 12,
+      "switch1_name": "s:tsOn?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev023/p1"
+  },
+  {
+    "row_id": "map031/ev023/p1/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "4f8217c3e24208a2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 23,
+    "event_name": "EV023",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 12,
+      "switch1_name": "s:tsOn?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev023/p1"
   },
   {
     "row_id": "map031/ev028/p0",
@@ -1398,7 +3225,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev029/p0",
@@ -1430,7 +3259,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev030/p0",
@@ -1462,7 +3293,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev031/p0",
@@ -1494,7 +3327,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev032/p0",
@@ -1526,7 +3361,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev033/p0",
@@ -1558,7 +3395,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev034/p0",
@@ -1593,16 +3432,16 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev034/p1",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "4a55df2ccabd01ae",
+    "content_hash": "5539cd09d8efee80",
     "effects": [
-      "graphic",
-      "move_route",
       "temp_switch_write"
     ],
     "script_heads": [
@@ -1634,7 +3473,100 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev034/p1/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "744e1fb92a7097bb",
+    "effects": [
+      "graphic",
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 34,
+    "event_name": "EV034",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev034/p1"
+  },
+  {
+    "row_id": "map031/ev034/p1/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "4f8217c3e24208a2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 34,
+    "event_name": "EV034",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev034/p1"
   },
   {
     "row_id": "map031/ev035/p0",
@@ -1672,16 +3604,16 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev035/p1",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "e8e9ee9a28f12107",
+    "content_hash": "50a1f42b5255a708",
     "effects": [
-      "graphic",
-      "move_route",
       "temp_switch_write"
     ],
     "script_heads": [
@@ -1713,7 +3645,100 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev035/p1/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "15159e8843c858aa",
+    "effects": [
+      "graphic",
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 35,
+    "event_name": "EV035",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 12,
+      "switch1_name": "s:tsOn?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev035/p1"
+  },
+  {
+    "row_id": "map031/ev035/p1/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "4f8217c3e24208a2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 35,
+    "event_name": "EV035",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 12,
+      "switch1_name": "s:tsOn?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev035/p1"
   },
   {
     "row_id": "map031/ev036/p0",
@@ -1745,7 +3770,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev037/p0",
@@ -1781,7 +3808,9 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev039/p0",
@@ -1818,7 +3847,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev040/p0",
@@ -1855,7 +3886,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev041/p0",
@@ -1892,16 +3925,16 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev041/p1",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "d9fdee26a1a61ef8",
+    "content_hash": "eb1e6284df7d10d1",
     "effects": [
-      "graphic",
-      "move_route",
       "temp_switch_write"
     ],
     "script_heads": [
@@ -1933,16 +3966,107 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev041/p1/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "11b1d4354edcd009",
+    "effects": [
+      "graphic",
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 41,
+    "event_name": "EV041",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev041/p1"
+  },
+  {
+    "row_id": "map031/ev041/p1/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "4f8217c3e24208a2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 41,
+    "event_name": "EV041",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev041/p1"
   },
   {
     "row_id": "map031/ev042/p0",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "9d5a5f6045a199fd",
-    "effects": [
-      "self_switch_write"
-    ],
+    "content_hash": "73142c52d3bd9e42",
+    "effects": [],
     "script_heads": [
       "pbPickBerry"
     ],
@@ -1971,7 +4095,99 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev042/p0/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "c340e0174bf72d6e",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 42,
+    "event_name": "BerryPlant",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPickBerry(PBItems::PECHABERRY,1)",
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev042/p0"
+  },
+  {
+    "row_id": "map031/ev042/p0/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "c9d555914c8233ba",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 42,
+    "event_name": "BerryPlant",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPickBerry(PBItems::PECHABERRY,1)",
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev042/p0"
   },
   {
     "row_id": "map031/ev042/p1",
@@ -2005,7 +4221,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev043/p0",
@@ -2039,16 +4257,16 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev044/p0",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "592dad1898fced39",
-    "effects": [
-      "self_switch_write"
-    ],
+    "content_hash": "5ee93ebb450c405e",
+    "effects": [],
     "script_heads": [
       "pbPickBerry"
     ],
@@ -2077,7 +4295,99 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev044/p0/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "d6b3e68a9d332ff4",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 44,
+    "event_name": "BerryPlant",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPickBerry(PBItems::ORANBERRY,2)",
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev044/p0"
+  },
+  {
+    "row_id": "map031/ev044/p0/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "b491a611197c08bf",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 44,
+    "event_name": "BerryPlant",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPickBerry(PBItems::ORANBERRY,2)",
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev044/p0"
   },
   {
     "row_id": "map031/ev044/p1",
@@ -2111,16 +4421,16 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev045/p0",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "592dad1898fced39",
-    "effects": [
-      "self_switch_write"
-    ],
+    "content_hash": "5ee93ebb450c405e",
+    "effects": [],
     "script_heads": [
       "pbPickBerry"
     ],
@@ -2149,7 +4459,99 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev045/p0/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "d6b3e68a9d332ff4",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 45,
+    "event_name": "BerryPlant",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPickBerry(PBItems::ORANBERRY,2)",
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev045/p0"
+  },
+  {
+    "row_id": "map031/ev045/p0/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "b491a611197c08bf",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 45,
+    "event_name": "BerryPlant",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPickBerry(PBItems::ORANBERRY,2)",
+      "explicit": false
+    },
+    "parent_row_id": "map031/ev045/p0"
   },
   {
     "row_id": "map031/ev045/p1",
@@ -2183,7 +4585,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev046/p0",
@@ -2217,7 +4621,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev048/p0",
@@ -2255,7 +4661,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev048/p1",
@@ -2293,13 +4701,15 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev049/p0",
     "kind": "page",
     "map_id": 31,
-    "content_hash": "cf6437263ed3499e",
+    "content_hash": "5b043ea4ee64d7dd",
     "effects": [
       "bgm",
       "bubble_ui",
@@ -2336,7 +4746,193 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map031/ev049/p0/b0",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "b39456f911c99e9d",
+    "effects": [
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 49,
+    "event_name": "NurseTut",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 5,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 6,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev049/p0"
+  },
+  {
+    "row_id": "map031/ev049/p0/b1",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "d6596f0a55556344",
+    "effects": [
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 49,
+    "event_name": "NurseTut",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 5,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 6,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev049/p0"
+  },
+  {
+    "row_id": "map031/ev049/p0/b2",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "ddfd807049dde249",
+    "effects": [
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 49,
+    "event_name": "NurseTut",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 2,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 42,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 6,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev049/p0"
+  },
+  {
+    "row_id": "map031/ev049/p0/b3",
+    "kind": "branch",
+    "map_id": 31,
+    "content_hash": "caeb339b67eff286",
+    "effects": [
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 49,
+    "event_name": "NurseTut",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 3,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 42,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 6,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map031/ev049/p0"
   },
   {
     "row_id": "map031/ev049/p1",
@@ -2368,7 +4964,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev049/p2",
@@ -2402,7 +5000,9 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev050/p0",
@@ -2442,7 +5042,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/ev050/p1",
@@ -2479,7 +5081,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/seam/N/map035",
@@ -2511,7 +5115,9 @@
       "other_offset": 0
     },
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/terrain/stairs/25,16",
@@ -2539,7 +5145,9 @@
       "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
       "source_event_id": 27
     },
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/terrain/stairs/25,17",
@@ -2567,7 +5175,9 @@
       "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
       "source_event_id": 26
     },
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map031/terrain/stairs/25,18",
@@ -2595,7 +5205,9 @@
       "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
       "source_event_id": 24
     },
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map067/ev001/p0",
@@ -2632,7 +5244,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map067/ev002/p0",
@@ -2668,7 +5282,9 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map067/ev003/p0",
@@ -2704,17 +5320,18 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map067/ev004/p0",
     "kind": "page",
     "map_id": 67,
-    "content_hash": "1c5c08a85f4062a8",
+    "content_hash": "483341cbd50dfd4c",
     "effects": [
       "bubble_ui",
       "switch_write",
-      "text",
       "var_write"
     ],
     "script_heads": [
@@ -2743,7 +5360,103 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map067/ev004/p0/b0",
+    "kind": "branch",
+    "map_id": 67,
+    "content_hash": "a5ca54b152399fd9",
+    "effects": [
+      "switch_write",
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 4,
+    "event_name": "EV004",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 3,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map067/ev004/p0"
+  },
+  {
+    "row_id": "map067/ev004/p0/b1",
+    "kind": "branch",
+    "map_id": 67,
+    "content_hash": "619d62239a17fb78",
+    "effects": [
+      "switch_write",
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 4,
+    "event_name": "EV004",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 3,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map067/ev004/p0"
   },
   {
     "row_id": "map067/ev005/p0",
@@ -2775,7 +5488,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map067/ev006/p0",
@@ -2809,7 +5524,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map067/ev007/p0",
@@ -2843,7 +5560,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map067/ev008/p0",
@@ -2877,7 +5596,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map067/ev009/p0",
@@ -2909,13 +5630,15 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map067/ev009/p1",
     "kind": "page",
     "map_id": 67,
-    "content_hash": "f7b60d4f9e479105",
+    "content_hash": "6633b537c73dd95e",
     "effects": [
       "text"
     ],
@@ -2947,28 +5670,162 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map067/ev009/p1/b0",
+    "kind": "branch",
+    "map_id": 67,
+    "content_hash": "725ed3c8c040f33b",
+    "effects": [
+      "text"
+    ],
+    "script_heads": [
+      "pbNextMysteryGiftID"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 9,
+    "event_name": "Deliveryman",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 31,
+      "switch1_name": "s:pbNextMysteryGiftID>0",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbNextMysteryGiftID>0",
+      "explicit": true
+    },
+    "parent_row_id": "map067/ev009/p1"
+  },
+  {
+    "row_id": "map067/ev009/p1/b1",
+    "kind": "branch",
+    "map_id": 67,
+    "content_hash": "10da4b55f127e7b4",
+    "effects": [
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 9,
+    "event_name": "Deliveryman",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 31,
+      "switch1_name": "s:pbNextMysteryGiftID>0",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbNextMysteryGiftID>0",
+      "explicit": true
+    },
+    "parent_row_id": "map067/ev009/p1"
   },
   {
     "row_id": "map068/ev001/p0",
     "kind": "page",
     "map_id": 68,
-    "content_hash": "556e329070db588f",
+    "content_hash": "917a04a1344107b9",
     "effects": [
       "bubble_ui",
       "choice",
+      "respawn_write",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub",
+      "pbSetPokemonCenter"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 1,
+    "event_name": "EV001",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map068/ev001/p0/b0",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "0c8de9b2a0d860c7",
+    "effects": [
+      "bubble_ui",
       "heal",
       "move_route",
-      "respawn_write",
       "se",
-      "switch_write",
       "text",
       "var_write"
     ],
     "script_heads": [
       "pbCallBub",
-      "pbPokerus",
-      "pbSetPokemonCenter"
+      "pbPokerus"
     ],
     "unrecognized_heads": [],
     "other_codes": [],
@@ -2995,7 +5852,168 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "choice",
+      "opener_code": 102,
+      "opener_index": 5,
+      "choice_index": 0,
+      "choice_text": "YES",
+      "condition_type": null,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev001/p0"
+  },
+  {
+    "row_id": "map068/ev001/p0/b1",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "1aaab34234ba85fe",
+    "effects": [
+      "bubble_ui",
+      "switch_write",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 1,
+    "event_name": "EV001",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 18,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbPokerus?",
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev001/p0/b0"
+  },
+  {
+    "row_id": "map068/ev001/p0/b2",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "fda1047273ac5d7a",
+    "effects": [
+      "bubble_ui",
+      "move_route",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 1,
+    "event_name": "EV001",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 2,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 18,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbPokerus?",
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev001/p0/b0"
+  },
+  {
+    "row_id": "map068/ev001/p0/b3",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "1e567481e229192d",
+    "effects": [
+      "bubble_ui",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 1,
+    "event_name": "EV001",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 3,
+      "arm_kind": "choice",
+      "opener_code": 102,
+      "opener_index": 5,
+      "choice_index": 1,
+      "choice_text": "NO",
+      "condition_type": null,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev001/p0"
   },
   {
     "row_id": "map068/ev001/p1",
@@ -3037,7 +6055,9 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev002/p0",
@@ -3073,13 +6093,15 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev003/p0",
     "kind": "page",
     "map_id": 68,
-    "content_hash": "7d5cc60571d4bcee",
+    "content_hash": "335a0102a1431b99",
     "effects": [
       "bubble_ui",
       "choice",
@@ -3112,17 +6134,156 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map068/ev003/p0/b0",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "1e8bb2775eb2ec77",
+    "effects": [
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 3,
+    "event_name": "EV003",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "choice",
+      "opener_code": 102,
+      "opener_index": 3,
+      "choice_index": 0,
+      "choice_text": "Orchynx",
+      "condition_type": null,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev003/p0"
+  },
+  {
+    "row_id": "map068/ev003/p0/b1",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "9102e9a1acbd4640",
+    "effects": [
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 3,
+    "event_name": "EV003",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "choice",
+      "opener_code": 102,
+      "opener_index": 3,
+      "choice_index": 1,
+      "choice_text": "Raptorch",
+      "condition_type": null,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev003/p0"
+  },
+  {
+    "row_id": "map068/ev003/p0/b2",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "4c0db52bca576c46",
+    "effects": [
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 3,
+    "event_name": "EV003",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 2,
+      "arm_kind": "choice",
+      "opener_code": 102,
+      "opener_index": 3,
+      "choice_index": 2,
+      "choice_text": "Eletux",
+      "condition_type": null,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev003/p0"
   },
   {
     "row_id": "map068/ev004/p0",
     "kind": "page",
     "map_id": 68,
-    "content_hash": "214338b869e19b19",
+    "content_hash": "02ed08b7d5cd49c1",
     "effects": [
       "bubble_ui",
       "switch_write",
-      "text",
       "var_write"
     ],
     "script_heads": [
@@ -3151,7 +6312,282 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map068/ev004/p0/b0",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "78074265c164c943",
+    "effects": [
+      "switch_write",
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 4,
+    "event_name": "EV004",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 3,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev004/p0"
+  },
+  {
+    "row_id": "map068/ev004/p0/b1",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "0c81027f0304f13c",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 4,
+    "event_name": "EV004",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 3,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": false
+    },
+    "parent_row_id": "map068/ev004/p0"
+  },
+  {
+    "row_id": "map068/ev004/p0/b2",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "fec855a895c582b7",
+    "effects": [
+      "switch_write",
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 4,
+    "event_name": "EV004",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 2,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 9,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev004/p0"
+  },
+  {
+    "row_id": "map068/ev004/p0/b3",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "35f2ca9edf9d8e25",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 4,
+    "event_name": "EV004",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 3,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 9,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": false
+    },
+    "parent_row_id": "map068/ev004/p0"
+  },
+  {
+    "row_id": "map068/ev004/p0/b4",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "12404d6ecdbd69a7",
+    "effects": [
+      "switch_write",
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 4,
+    "event_name": "EV004",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 4,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 14,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev004/p0"
+  },
+  {
+    "row_id": "map068/ev004/p0/b5",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "1d78c49931bd08bf",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 4,
+    "event_name": "EV004",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 5,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 14,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": false
+    },
+    "parent_row_id": "map068/ev004/p0"
   },
   {
     "row_id": "map068/ev005/p0",
@@ -3183,7 +6619,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev005/p1",
@@ -3215,7 +6653,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev005/p2",
@@ -3247,7 +6687,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev005/p3",
@@ -3279,7 +6721,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev005/p4",
@@ -3311,7 +6755,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev005/p5",
@@ -3343,7 +6789,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev005/p6",
@@ -3375,7 +6823,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev006/p0",
@@ -3407,7 +6857,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev006/p1",
@@ -3439,7 +6891,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev006/p2",
@@ -3471,7 +6925,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev006/p3",
@@ -3503,7 +6959,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev006/p4",
@@ -3535,7 +6993,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev006/p5",
@@ -3567,7 +7027,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev006/p6",
@@ -3599,7 +7061,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev007/p0",
@@ -3635,7 +7099,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev008/p0",
@@ -3671,7 +7137,9 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev009/p0",
@@ -3705,7 +7173,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev010/p0",
@@ -3742,7 +7212,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev011/p0",
@@ -3776,7 +7248,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev012/p0",
@@ -3808,15 +7282,16 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev012/p1",
     "kind": "page",
     "map_id": 68,
-    "content_hash": "e0bc4db973e14e0a",
+    "content_hash": "5539cd09d8efee80",
     "effects": [
-      "move_route",
       "temp_switch_write"
     ],
     "script_heads": [
@@ -3848,7 +7323,99 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map068/ev012/p1/b0",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "9bbafd399c7370e2",
+    "effects": [
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 12,
+    "event_name": "EV012",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev012/p1"
+  },
+  {
+    "row_id": "map068/ev012/p1/b1",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "4f8217c3e24208a2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 12,
+    "event_name": "EV012",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": false
+    },
+    "parent_row_id": "map068/ev012/p1"
   },
   {
     "row_id": "map068/ev013/p0",
@@ -3882,16 +7449,57 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev014/p0",
     "kind": "page",
     "map_id": 68,
-    "content_hash": "3df83b5dac732cf6",
+    "content_hash": "ee6f8105926a84bd",
     "effects": [
       "bubble_ui",
       "choice",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 14,
+    "event_name": "EV014",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map068/ev014/p0/b0",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "3038255cf188c26b",
+    "effects": [
+      "bubble_ui",
       "text",
       "trainerbattle"
     ],
@@ -3924,13 +7532,167 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "choice",
+      "opener_code": 102,
+      "opener_index": 4,
+      "choice_index": 0,
+      "choice_text": "Yes",
+      "condition_type": null,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev014/p0"
+  },
+  {
+    "row_id": "map068/ev014/p0/b1",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "b6797d61a1bbbfab",
+    "effects": [
+      "bubble_ui",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 14,
+    "event_name": "EV014",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 8,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::RICHBOY,\"Mawuli\",_I(\"See? We keep losing!\"),false,0)",
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev014/p0/b0"
+  },
+  {
+    "row_id": "map068/ev014/p0/b2",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "ba6d98a9eb6dae29",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 14,
+    "event_name": "EV014",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 2,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 8,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::RICHBOY,\"Mawuli\",_I(\"See? We keep losing!\"),false,0)",
+      "explicit": false
+    },
+    "parent_row_id": "map068/ev014/p0/b0"
+  },
+  {
+    "row_id": "map068/ev014/p0/b3",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "8d339f966b860dcc",
+    "effects": [
+      "bubble_ui",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 14,
+    "event_name": "EV014",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 3,
+      "arm_kind": "choice",
+      "opener_code": 102,
+      "opener_index": 4,
+      "choice_index": 1,
+      "choice_text": "No",
+      "condition_type": null,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev014/p0"
   },
   {
     "row_id": "map068/ev015/p0",
     "kind": "page",
     "map_id": 68,
-    "content_hash": "54de69f15e842301",
+    "content_hash": "0613b3bc16aa1c2d",
     "effects": [
       "bgm",
       "bubble_ui",
@@ -3971,7 +7733,190 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map068/ev015/p0/b0",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "61a2dfe3ddf4a496",
+    "effects": [
+      "bubble_ui",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 15,
+    "event_name": "EV015",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": 126,
+      "switch1_name": "Nurse Tutorial",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 16,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonGlobal.nuzlocke==true",
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev015/p0"
+  },
+  {
+    "row_id": "map068/ev015/p0/b1",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "297ccbaf13aaff81",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 15,
+    "event_name": "EV015",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": 126,
+      "switch1_name": "Nurse Tutorial",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 16,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonGlobal.nuzlocke==true",
+      "explicit": false
+    },
+    "parent_row_id": "map068/ev015/p0"
+  },
+  {
+    "row_id": "map068/ev015/p0/b2",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "2c9d3581dd62ff7f",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 15,
+    "event_name": "EV015",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": 126,
+      "switch1_name": "Nurse Tutorial",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 2,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 83,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbReceiveItem(::PBItems::ORANBERRY,5,_I(\"Oran Berries\"))",
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev015/p0"
+  },
+  {
+    "row_id": "map068/ev015/p0/b3",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "389c8be6e1a255b5",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 15,
+    "event_name": "EV015",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": 126,
+      "switch1_name": "Nurse Tutorial",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 3,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 83,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbReceiveItem(::PBItems::ORANBERRY,5,_I(\"Oran Berries\"))",
+      "explicit": false
+    },
+    "parent_row_id": "map068/ev015/p0"
   },
   {
     "row_id": "map068/ev015/p1",
@@ -4003,7 +7948,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev016/p0",
@@ -4035,7 +7982,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev016/p1",
@@ -4067,7 +8016,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev017/p0",
@@ -4104,16 +8055,17 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map068/ev018/p0",
     "kind": "page",
     "map_id": 68,
-    "content_hash": "7817ff63143a101b",
+    "content_hash": "227083f323e0775d",
     "effects": [
-      "giveitem",
-      "self_switch_write"
+      "giveitem"
     ],
     "script_heads": [
       "pbItemBall"
@@ -4143,16 +8095,107 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map068/ev018/p0/b0",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "12db9366187ed884",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 18,
+    "event_name": "EV018",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbItemBall(::PBItems::ANTIDOTE)",
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev018/p0"
+  },
+  {
+    "row_id": "map068/ev018/p0/b1",
+    "kind": "branch",
+    "map_id": 68,
+    "content_hash": "4abb86e4b1d91544",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 18,
+    "event_name": "EV018",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbItemBall(::PBItems::ANTIDOTE)",
+      "explicit": true
+    },
+    "parent_row_id": "map068/ev018/p0"
   },
   {
     "row_id": "map073/ev001/p0",
     "kind": "page",
     "map_id": 73,
-    "content_hash": "cfcf56bee5189a93",
+    "content_hash": "daae095793138247",
     "effects": [
       "bubble_ui",
-      "self_switch_write",
       "text"
     ],
     "script_heads": [
@@ -4183,7 +8226,108 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map073/ev001/p0/b0",
+    "kind": "branch",
+    "map_id": 73,
+    "content_hash": "9534be3a402c240b",
+    "effects": [
+      "bubble_ui",
+      "self_switch_write",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 1,
+    "event_name": "EV001",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 4,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonBag.pbQuantity(PBItems::BIKEWHEEL)>0",
+      "explicit": true
+    },
+    "parent_row_id": "map073/ev001/p0"
+  },
+  {
+    "row_id": "map073/ev001/p0/b1",
+    "kind": "branch",
+    "map_id": 73,
+    "content_hash": "c7ed389891ccb1e2",
+    "effects": [
+      "bubble_ui",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 1,
+    "event_name": "EV001",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 4,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonBag.pbQuantity(PBItems::BIKEWHEEL)>0",
+      "explicit": true
+    },
+    "parent_row_id": "map073/ev001/p0"
   },
   {
     "row_id": "map073/ev001/p1",
@@ -4220,7 +8364,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map073/ev002/p0",
@@ -4256,21 +8402,17 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map073/ev003/p0",
     "kind": "page",
     "map_id": 73,
-    "content_hash": "5a719c36df104b6a",
-    "effects": [
-      "giveitem",
-      "shop"
-    ],
-    "script_heads": [
-      "pbPokemonMart",
-      "pbReceiveItem"
-    ],
+    "content_hash": "4ba76833d9e8e727",
+    "effects": [],
+    "script_heads": [],
     "unrecognized_heads": [],
     "other_codes": [],
     "requires": [],
@@ -4296,7 +8438,197 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map073/ev003/p0/b0",
+    "kind": "branch",
+    "map_id": 73,
+    "content_hash": "19f5eeb5a1fa0a63",
+    "effects": [
+      "giveitem"
+    ],
+    "script_heads": [
+      "pbReceiveItem"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 3,
+    "event_name": "EV003",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": 81,
+      "switch1_name": "Gym 4 end",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonBag.pbQuantity(PBItems::SPRINKLOTAD)==0",
+      "explicit": true
+    },
+    "parent_row_id": "map073/ev003/p0"
+  },
+  {
+    "row_id": "map073/ev003/p0/b1",
+    "kind": "branch",
+    "map_id": 73,
+    "content_hash": "01d75f7215710a3f",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 3,
+    "event_name": "EV003",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": 81,
+      "switch1_name": "Gym 4 end",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonBag.pbQuantity(PBItems::SPRINKLOTAD)==0",
+      "explicit": false
+    },
+    "parent_row_id": "map073/ev003/p0"
+  },
+  {
+    "row_id": "map073/ev003/p0/b2",
+    "kind": "branch",
+    "map_id": 73,
+    "content_hash": "7c7877771300b6c8",
+    "effects": [
+      "shop"
+    ],
+    "script_heads": [
+      "pbPokemonMart"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 3,
+    "event_name": "EV003",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": 81,
+      "switch1_name": "Gym 4 end",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 2,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 4,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 0,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map073/ev003/p0"
+  },
+  {
+    "row_id": "map073/ev003/p0/b3",
+    "kind": "branch",
+    "map_id": 73,
+    "content_hash": "6caca81d1fc3f8d6",
+    "effects": [
+      "shop"
+    ],
+    "script_heads": [
+      "pbPokemonMart"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 3,
+    "event_name": "EV003",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": 81,
+      "switch1_name": "Gym 4 end",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 3,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 4,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 0,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map073/ev003/p0"
   },
   {
     "row_id": "map073/ev004/p0",
@@ -4332,7 +8664,9 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map073/ev005/p0",
@@ -4369,7 +8703,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map073/ev005/p1",
@@ -4407,7 +8743,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map073/ev005/p2",
@@ -4444,7 +8782,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map073/ev006/p0",
@@ -4484,21 +8824,21 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map073/ev006/p1",
     "kind": "page",
     "map_id": 73,
-    "content_hash": "4877e6ef1b17ab20",
+    "content_hash": "de60a30f0711f250",
     "effects": [
       "bubble_ui",
-      "giveitem",
       "text"
     ],
     "script_heads": [
-      "pbCallBub",
-      "pbReceiveItem"
+      "pbCallBub"
     ],
     "unrecognized_heads": [],
     "other_codes": [],
@@ -4525,7 +8865,102 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map073/ev006/p1/b0",
+    "kind": "branch",
+    "map_id": 73,
+    "content_hash": "48411ec8c09d69a8",
+    "effects": [
+      "giveitem",
+      "text"
+    ],
+    "script_heads": [
+      "pbReceiveItem"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 6,
+    "event_name": "EV006",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": "A"
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 2,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonBag.pbQuantity(PBItems::SPRINKLOTAD)==0",
+      "explicit": true
+    },
+    "parent_row_id": "map073/ev006/p1"
+  },
+  {
+    "row_id": "map073/ev006/p1/b1",
+    "kind": "branch",
+    "map_id": 73,
+    "content_hash": "14992e6bc2567f62",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 6,
+    "event_name": "EV006",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": "A"
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 2,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonBag.pbQuantity(PBItems::SPRINKLOTAD)==0",
+      "explicit": false
+    },
+    "parent_row_id": "map073/ev006/p1"
   },
   {
     "row_id": "map073/ev006/p2",
@@ -4557,7 +8992,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map073/ev007/p0",
@@ -4593,7 +9030,9 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map073/ev008/p0",
@@ -4630,7 +9069,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map073/ev009/p0",
@@ -4666,7 +9107,9 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map073/ev010/p0",
@@ -4703,7 +9146,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map073/ev011/p0",
@@ -4740,6 +9185,8 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   }
 ]

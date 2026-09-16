@@ -1,7 +1,7 @@
 {
   "map033/ev008/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "0eaa8e965c9baac8"
+    "affirmed_hash": "102c78ebcad688ec"
   },
   "map033/ev008/p1": {
     "disposition": "blocked:rock_smash",
@@ -9,7 +9,7 @@
   },
   "map033/ev009/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "00d1149603e20767"
+    "affirmed_hash": "5599e725d9aa7ad5"
   },
   "map033/ev009/p1": {
     "disposition": "blocked:rock_smash",
@@ -17,7 +17,7 @@
   },
   "map033/ev010/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "6aa13505c91bc68c"
+    "affirmed_hash": "41e2fcc9cd6abe9b"
   },
   "map033/ev010/p1": {
     "disposition": "blocked:rock_smash",
@@ -33,11 +33,11 @@
   },
   "map033/ev029/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "e3da20fd925642b0"
+    "affirmed_hash": "a930201f885e155b"
   },
   "map033/ev032/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "edc2dec0216b1d76"
+    "affirmed_hash": "8a7f0e7b5918083a"
   },
   "map033/ev032/p1": {
     "disposition": "blocked:rock_smash",
@@ -45,7 +45,7 @@
   },
   "map033/ev035/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "c64d11806a08750a"
+    "affirmed_hash": "125c986316a2294a"
   },
   "map033/ev035/p1": {
     "disposition": "blocked:rock_smash",
@@ -53,14 +53,14 @@
   },
   "map033/ev036/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "e3da20fd925642b0",
+    "affirmed_hash": "a930201f885e155b",
     "assertable": true,
     "negative_beat": "N2",
     "note": "Rock at (14,16), approached from (14,15) facing DOWN (ch02.py ROCK_EV036). Rock Smash unobtainable in CH02; the rock refuses and keeps blocking. Half of N2."
   },
   "map033/ev037/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "2129f89e44535124"
+    "affirmed_hash": "75af4f4020b20bec"
   },
   "map033/ev037/p1": {
     "disposition": "blocked:rock_smash",
@@ -68,30 +68,30 @@
   },
   "map033/ev038/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "e3da20fd925642b0",
+    "affirmed_hash": "a930201f885e155b",
     "assertable": true,
     "negative_beat": "N2",
     "note": "Rock at (15,17), approached from (15,16) facing DOWN (ch02.py ROCK_EV038). Rock Smash unobtainable in CH02; the rock refuses and keeps blocking. Half of N2."
   },
   "map033/ev039/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "f8f0cf3a9c703bf4"
+    "affirmed_hash": "6ab4d4df014865a8"
   },
   "map033/ev039/p1": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "911a00f11592d8d8"
+    "affirmed_hash": "b70f4993e755bb3c"
   },
   "map033/ev039/p2": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "59e31fb74cd92581"
+    "affirmed_hash": "aab203a1b3ff459f"
   },
   "map033/ev040/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "e3da20fd925642b0"
+    "affirmed_hash": "a930201f885e155b"
   },
   "map033/ev041/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "b1981270d98885cf"
+    "affirmed_hash": "32b68435e24151da"
   },
   "map033/ev041/p1": {
     "disposition": "blocked:rock_smash",
@@ -99,11 +99,11 @@
   },
   "map033/ev042/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "e3da20fd925642b0"
+    "affirmed_hash": "a930201f885e155b"
   },
   "map033/ev044/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "e3da20fd925642b0"
+    "affirmed_hash": "a930201f885e155b"
   },
   "map033/ev141/p0": {
     "disposition": "blocked:rock_smash",

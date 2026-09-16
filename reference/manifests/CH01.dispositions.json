@@ -1,7 +1,7 @@
 {
   "map032/ev014/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "71287f6c8f0cc2fe",
+    "affirmed_hash": "a930201f885e155b",
     "assertable": true,
     "negative_beat": "N4",
     "note": "Rock at (65,45), approach (65,44) facing DOWN. Rock Smash unobtainable in CH01; nothing happens."
@@ -12,7 +12,7 @@
   },
   "map032/ev015/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "71287f6c8f0cc2fe",
+    "affirmed_hash": "a930201f885e155b",
     "assertable": true,
     "negative_beat": "N4",
     "note": "Rock at (66,46), approach (65,46) facing RIGHT. Rock Smash unobtainable in CH01; nothing happens."
@@ -23,7 +23,7 @@
   },
   "map032/ev033/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "71287f6c8f0cc2fe",
+    "affirmed_hash": "a930201f885e155b",
     "assertable": true,
     "negative_beat": "N4",
     "note": "Rock at (66,44), approach (65,44) facing RIGHT. Rock Smash unobtainable in CH01; nothing happens."

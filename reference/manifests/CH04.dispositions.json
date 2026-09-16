@@ -6,19 +6,19 @@
   },
   "map035/ev003/p0": {
     "disposition": "beat:B2",
-    "affirmed_hash": "650350eb92526788",
+    "affirmed_hash": "34d653cbf094b94e",
     "source": "output/uranium-build/maps/Map035.json ev003/p0; reference/scripts_dump/170__PSystem_Utilities.rb:2506 pbCallBub; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
     "note": "Hiker Larrie, event-touch trainer battle + phone rematch registration."
   },
   "map035/ev003/p1": {
     "disposition": "beat:B10",
-    "affirmed_hash": "92d7e23932364588",
+    "affirmed_hash": "c50bda502d0b5fb3",
     "source": "output/uranium-build/maps/Map035.json ev003/p1; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
     "note": "Post-battle self-switch B page: phone rematch offer. Carries control_flow."
   },
   "map035/ev003/p2": {
     "disposition": "beat:B11",
-    "affirmed_hash": "2674fa4cf6f7ec6f",
+    "affirmed_hash": "fa930f176c79241a",
     "source": "output/uranium-build/maps/Map035.json ev003/p2; reference/scripts_dump/170__PSystem_Utilities.rb:2506 pbCallBub",
     "note": "Self-switch A page: defeated-trainer re-talk. Carries control_flow."
   },
@@ -29,7 +29,7 @@
   },
   "map035/ev009/p0": {
     "disposition": "beat:B3",
-    "affirmed_hash": "b6aa5186777853c4",
+    "affirmed_hash": "255c5f02ae1512de",
     "source": "output/uranium-build/maps/Map035.json ev009/p0; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
     "note": "Potion item ball at (16,42), one-shot via self-switch A."
   },
@@ -45,7 +45,7 @@
   },
   "map035/ev012/p0": {
     "disposition": "beat:B4",
-    "affirmed_hash": "ae0a8a600fc0fce2",
+    "affirmed_hash": "a034ade4fa795003",
     "source": "output/uranium-build/maps/Map035.json ev012/p0; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
     "note": "Youngster Timothy, event-touch trainer battle."
   },
@@ -61,7 +61,7 @@
   },
   "map035/ev014/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "a6b3c424daf6d99e",
+    "affirmed_hash": "a930201f885e155b",
     "source": "output/uranium-build/maps/Map035.json ev014/p0; output/uranium-build/wiki/Route_2.wiki",
     "assertable": true,
     "negative_beat": "B6",
@@ -75,7 +75,7 @@
   },
   "map035/ev015/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "a6b3c424daf6d99e",
+    "affirmed_hash": "a930201f885e155b",
     "source": "output/uranium-build/maps/Map035.json ev015/p0; output/uranium-build/wiki/Route_2.wiki",
     "assertable": false,
     "note": "Rock at (21,29). No adjacent walkable tile in the south-reachable region on visit 1 - boxed in by rocks 14/16/18 and the tile wall. The player cannot even attempt it, so no negative beat can be written yet (was unreachable:boxed_in_by_outer_rocks)."
@@ -88,7 +88,7 @@
   },
   "map035/ev016/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "a6b3c424daf6d99e",
+    "affirmed_hash": "a930201f885e155b",
     "source": "output/uranium-build/maps/Map035.json ev016/p0; output/uranium-build/wiki/Route_2.wiki",
     "assertable": false,
     "note": "Rock at (22,28), east interior. No adjacent walkable tile on visit 1 (was unreachable:boxed_in_by_outer_rocks)."
@@ -101,7 +101,7 @@
   },
   "map035/ev017/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "a6b3c424daf6d99e",
+    "affirmed_hash": "a930201f885e155b",
     "source": "output/uranium-build/maps/Map035.json ev017/p0; output/uranium-build/wiki/Route_2.wiki",
     "assertable": true,
     "negative_beat": "B6",
@@ -115,7 +115,7 @@
   },
   "map035/ev018/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "a6b3c424daf6d99e",
+    "affirmed_hash": "a930201f885e155b",
     "source": "output/uranium-build/maps/Map035.json ev018/p0; output/uranium-build/wiki/Route_2.wiki",
     "assertable": false,
     "note": "Rock at (21,28), centre. Sealed by its neighbours on visit 1 (was unreachable:boxed_in_by_outer_rocks)."
@@ -128,7 +128,7 @@
   },
   "map035/ev019/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "3f6b007a8e3824c6",
+    "affirmed_hash": "f830a526f296ec08",
     "source": "output/uranium-build/maps/Map035.json ev019/p0; output/uranium-build/wiki/Route_2.wiki",
     "assertable": false,
     "note": "Ranger cutscene at (25,26) that bulk-clears rocks 14-18 via pbSetSelfSwitch. Page condition is engine-ungated, but the trigger tile is unreachable from the south while the rocks are solid - the gate is geometric (was unreachable:north_of_rockslide_gate). Adjudicates PLAYTEST_AUTHORING_IMPROVEMENT.md 7.2."
@@ -177,28 +177,28 @@
   },
   "map035/ev023/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "7d07e6a19a2ae734",
+    "affirmed_hash": "e765084fa7238363",
     "source": "output/uranium-build/maps/Map035.json ev023/p0; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
     "assertable": false,
     "note": "Bird Keeper Brent at (26,9), north of the gate (was unreachable:north_of_rockslide_gate)."
   },
   "map035/ev023/p1": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "d3f390414b122502",
+    "affirmed_hash": "613306aca88416e2",
     "source": "output/uranium-build/maps/Map035.json ev023/p1; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
     "assertable": false,
     "note": "Brent phone-rematch page."
   },
   "map035/ev023/p2": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "b53c8c53e3d12b35",
+    "affirmed_hash": "55dd33390faea053",
     "source": "output/uranium-build/maps/Map035.json ev023/p2; reference/scripts_dump/170__PSystem_Utilities.rb:2506 pbCallBub",
     "assertable": false,
     "note": "Brent defeated re-talk page."
   },
   "map035/ev024/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "6180e6ba8464da79",
+    "affirmed_hash": "6cabf01e5b498710",
     "source": "output/uranium-build/maps/Map035.json ev024/p0; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
     "assertable": false,
     "note": "Hiker Chuck at (29,23), north of the gate (was unreachable:north_of_rockslide_gate)."
@@ -211,7 +211,7 @@
   },
   "map035/ev025/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "2129f89e44535124",
+    "affirmed_hash": "75af4f4020b20bec",
     "source": "output/uranium-build/maps/Map035.json ev025/p0; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
     "assertable": false,
     "note": "Super Potion item ball at (30,10), north of the gate (was unreachable:north_of_rockslide_gate)."
@@ -224,7 +224,7 @@
   },
   "map035/ev026/p0": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "18bc167c4b7aa5d5",
+    "affirmed_hash": "ec60d1b310a55963",
     "source": "output/uranium-build/maps/Map035.json ev026/p0; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
     "assertable": false,
     "note": "TM78 Captivate item ball at (29,29). East of the rock cluster but separated from the south pocket by a mountain wall segment; BFS confirms the doc's 'beyond the gate' call (was unreachable:north_of_rockslide_gate)."

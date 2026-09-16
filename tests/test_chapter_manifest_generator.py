@@ -26,7 +26,13 @@ from rpg2gba.chapter_manifest.generator import (
     generate_chapter_manifest,
     write_manifest,
 )
-from rpg2gba.chapter_manifest.schema import page_row_id, seam_row_id
+from rpg2gba.chapter_manifest.schema import (
+    branch_row_id,
+    content_hash,
+    page_row_id,
+    seam_row_id,
+    whole_page_views,
+)
 
 OUT_DIR = Path("output/uranium-build")
 CHAPTERS_PATH = Path("reference/chapters.json")
@@ -394,6 +400,327 @@ def test_generator_never_filters_conditional_pages(tmp_path: Path) -> None:
     gated = rows[1]
     assert gated.condition.switch1_id == 999
     assert not gated.condition.is_unconditional
+
+
+# --- branch-arm rows (REDERIVATION_PLAN.md §16.3 C1) ----------------------
+
+
+def test_conditional_branch_without_else_yields_two_arm_rows(tmp_path: Path) -> None:
+    events = [{
+        "id": 1, "name": "Trainer", "x": 0, "y": 0,
+        "pages": [_page([
+            _cmd(111, [12, "Kernel.pbTrainerBattle(1)"]),
+            _cmd(101, ["You win!"], indent=1),
+            _cmd(412, [], indent=0),
+        ])],
+    }]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 60, events)
+
+    rows = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+
+    page_row = next(r for r in rows if r.kind == "page")
+    branches = sorted(
+        (r for r in rows if r.kind == "branch"), key=lambda r: r.branch.arm_index)
+    assert len(branches) == 2
+    then_row, else_row = branches
+    assert then_row.row_id == branch_row_id(page_row.row_id, 0)
+    assert else_row.row_id == branch_row_id(page_row.row_id, 1)
+    assert then_row.parent_row_id == page_row.row_id
+    assert else_row.parent_row_id == page_row.row_id
+
+    assert then_row.branch.arm_kind == "then"
+    assert then_row.branch.explicit is True
+    assert then_row.branch.opener_code == 111
+    assert then_row.branch.condition_type == 12
+    assert then_row.branch.condition_text == "Kernel.pbTrainerBattle(1)"
+    assert then_row.effects == ("text",)
+
+    assert else_row.branch.arm_kind == "else"
+    assert else_row.branch.explicit is False  # synthesized: no 411 in source
+    assert else_row.branch.condition_type == 12
+    assert else_row.branch.condition_text == "Kernel.pbTrainerBattle(1)"
+    assert else_row.effects == ()
+
+    # The condition text (on the opener, in the enclosing scope) counts
+    # toward the PAGE row, per trunk-only extraction (C1b) -- not either arm.
+    assert page_row.script_heads == ("pbTrainerBattle",)
+    assert then_row.script_heads == ()
+    assert else_row.script_heads == ()
+
+
+def test_page_without_arms_keeps_its_pre_c1_hash(tmp_path: Path) -> None:
+    """R5 invalidates hashes on branching pages only: a page with no arms is
+    its own trunk, so its hash must be exactly `content_hash(page)`."""
+    page = _page([_cmd(101, ["Hello"])])
+    events = [{"id": 1, "name": "Sign", "x": 0, "y": 0, "pages": [page]}]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 62, events)
+
+    rows = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+
+    assert [r.kind for r in rows] == ["page"]
+    assert rows[0].content_hash == content_hash(page)
+
+
+def test_arm_hash_tracks_its_condition_not_just_its_body(tmp_path: Path) -> None:
+    """A decision on the then-arm of `pbTrainerBattle(1)` must go stale when
+    the condition becomes `pbTrainerBattle(2)`, even with the body untouched."""
+    def arms(condition: str) -> dict[str, str]:
+        events = [{
+            "id": 1, "name": "Trainer", "x": 0, "y": 0,
+            "pages": [_page([
+                _cmd(111, [12, condition]),
+                _cmd(101, ["You win!"], indent=1),
+                _cmd(412, [], indent=0),
+            ])],
+        }]
+        root = tmp_path / condition.replace("(", "_").replace(")", "")
+        root.mkdir()
+        build_dir, chapters_path = _setup_chapter(root, 63, events)
+        rows = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+        return {r.row_id: r.content_hash for r in rows if r.kind == "branch"}
+
+    first = arms("pbTrainerBattle(1)")
+    second = arms("pbTrainerBattle(2)")
+    assert first.keys() == second.keys()
+    assert all(first[rid] != second[rid] for rid in first)
+
+
+def test_whole_page_views_fold_arms_back_into_their_page(tmp_path: Path) -> None:
+    events = [{
+        "id": 1, "name": "Nested", "x": 0, "y": 0,
+        "pages": [_page([
+            _cmd(111, [12, "pbTrainerBattle(1)"]),
+            _cmd(111, [12, "pbCallBub(1)"], indent=1),
+            _cmd(201, [0, 5, 1, 1, 2, 0], indent=2),
+            _cmd(412, [], indent=1),
+            _cmd(412, [], indent=0),
+        ], trigger=3)],
+    }]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 64, events)
+    rows = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+    page = next(r for r in rows if r.kind == "page")
+
+    view = whole_page_views(rows)[page.row_id]
+
+    assert "warp" not in page.effects
+    assert "warp" in view.effects
+    assert view.script_heads == ("pbCallBub", "pbTrainerBattle")
+    assert view.script_typed_conditions == 2
+    assert (view.row_id, view.content_hash) == (page.row_id, page.content_hash)
+
+
+def test_conditional_branch_with_else_both_arms_explicit(tmp_path: Path) -> None:
+    events = [{
+        "id": 1, "name": "Gate", "x": 0, "y": 0,
+        "pages": [_page([
+            _cmd(111, [0, 1, 0]),
+            _cmd(101, ["Open"], indent=1),
+            _cmd(411, [], indent=0),
+            _cmd(101, ["Closed"], indent=1),
+            _cmd(412, [], indent=0),
+        ])],
+    }]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 61, events)
+
+    rows = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+
+    branches = sorted(
+        (r for r in rows if r.kind == "branch"), key=lambda r: r.branch.arm_index)
+    assert len(branches) == 2
+    then_row, else_row = branches
+    assert then_row.branch.explicit is True
+    assert else_row.branch.explicit is True
+    assert then_row.effects == ("text",)
+    assert else_row.effects == ("text",)
+
+
+def test_show_choices_three_arms_and_no_cancel(tmp_path: Path) -> None:
+    events = [{
+        "id": 1, "name": "Menu", "x": 0, "y": 0,
+        "pages": [_page([
+            _cmd(102, [["A", "B", "C"], 3]),
+            _cmd(402, [0, "A"], indent=0),
+            _cmd(101, ["chose A"], indent=1),
+            _cmd(402, [1, "B"], indent=0),
+            _cmd(101, ["chose B"], indent=1),
+            _cmd(402, [2, "C"], indent=0),
+            _cmd(101, ["chose C"], indent=1),
+            _cmd(404, [], indent=0),
+        ])],
+    }]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 62, events)
+
+    rows = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+
+    page_row = next(r for r in rows if r.kind == "page")
+    branches = sorted(
+        (r for r in rows if r.kind == "branch"), key=lambda r: r.branch.arm_index)
+    assert len(branches) == 3
+    assert [b.branch.choice_index for b in branches] == [0, 1, 2]
+    assert [b.branch.choice_text for b in branches] == ["A", "B", "C"]
+    assert all(b.branch.arm_kind == "choice" for b in branches)
+    assert all(b.branch.opener_code == 102 for b in branches)
+    assert all(b.parent_row_id == page_row.row_id for b in branches)
+    for i, b in enumerate(branches):
+        assert b.row_id == branch_row_id(page_row.row_id, i)
+    assert [b.effects for b in branches] == [("text",)] * 3
+    # No cancel arm (403) present in this fixture -- none synthesized either.
+    assert not any(b.branch.arm_kind == "cancel" for b in branches)
+
+
+def test_nested_conditional_inside_choice_arm_no_double_count(tmp_path: Path) -> None:
+    """A 111 nested inside a choice arm contributes its condition to that
+    arm's row (not the page trunk), and its own two arms become separate
+    child rows with the choice arm as their `parent_row_id`. No effect is
+    counted on more than one row."""
+    events = [{
+        "id": 1, "name": "Menu", "x": 0, "y": 0,
+        "pages": [_page([
+            _cmd(102, [["Yes", "No"], 2]),
+            _cmd(402, [0, "Yes"], indent=0),
+            _cmd(111, [12, "Kernel.pbTrainerBattle(1)"], indent=1),
+            _cmd(101, ["fight"], indent=2),
+            _cmd(412, [], indent=1),
+            _cmd(402, [1, "No"], indent=0),
+            _cmd(101, ["never mind"], indent=1),
+            _cmd(404, [], indent=0),
+        ])],
+    }]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 63, events)
+
+    rows = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+
+    page_row = next(r for r in rows if r.kind == "page")
+    by_id = {r.row_id: r for r in rows if r.kind == "branch"}
+    assert len(by_id) == 4  # "Yes" choice, "No" choice, nested then, nested else
+
+    yes_row = next(r for r in by_id.values()
+                   if r.branch.arm_kind == "choice" and r.branch.choice_text == "Yes")
+    no_row = next(r for r in by_id.values()
+                  if r.branch.arm_kind == "choice" and r.branch.choice_text == "No")
+    nested = [r for r in by_id.values() if r.parent_row_id == yes_row.row_id]
+    assert len(nested) == 2  # the nested 111's then/else
+
+    # The page trunk has no script heads at all -- pbTrainerBattle lives on
+    # the "Yes" choice arm's own condition, not the page.
+    assert page_row.script_heads == ()
+    assert yes_row.script_heads == ("pbTrainerBattle",)
+    assert no_row.effects == ("text",)
+
+    nested_then = next(r for r in nested if r.branch.arm_kind == "then")
+    nested_else = next(r for r in nested if r.branch.arm_kind == "else")
+    assert nested_then.effects == ("text",)
+    assert nested_else.effects == ()
+    assert nested_then.branch.opener_code == 111
+    assert nested_then.parent_row_id == yes_row.row_id
+    assert nested_else.branch.explicit is False
+
+    # No head/effect appears on more than one row.
+    assert "pbTrainerBattle" not in no_row.script_heads
+    assert "pbTrainerBattle" not in nested_then.script_heads
+
+
+def test_loop_body_counted_in_enclosing_scope_not_a_branch(tmp_path: Path) -> None:
+    events = [{
+        "id": 1, "name": "Loopy", "x": 0, "y": 0,
+        "pages": [_page([
+            _cmd(112, [], indent=0),
+            _cmd(101, ["spin"], indent=1),
+            _cmd(113, [], indent=1),  # break loop
+            _cmd(413, [], indent=0),  # repeat above
+        ])],
+    }]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 64, events)
+
+    rows = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+
+    assert len([r for r in rows if r.kind == "branch"]) == 0
+    page_row = next(r for r in rows if r.kind == "page")
+    assert "text" in page_row.effects
+    assert "control_flow" in page_row.effects  # 112/113
+
+
+def test_trunk_hash_changes_when_arm_added_not_when_arm_content_changes(
+    tmp_path: Path,
+) -> None:
+    def _rows(commands: list[dict]) -> list:
+        events = [{
+            "id": 1, "name": "X", "x": 0, "y": 0,
+            "pages": [_page(commands)],
+        }]
+        build_dir, chapters_path = _setup_chapter(tmp_path / "run", 65, events)
+        return generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+
+    import shutil
+
+    base_cmds = [
+        _cmd(111, [0, 1, 0]),
+        _cmd(101, ["a"], indent=1),
+        _cmd(412, [], indent=0),
+    ]
+    rows1 = _rows(base_cmds)
+    page1 = next(r for r in rows1 if r.kind == "page")
+    then1 = next(r for r in rows1 if r.kind == "branch" and r.branch.arm_kind == "then")
+
+    shutil.rmtree(tmp_path / "run")
+
+    # Change ONLY the then-arm's content -- trunk hash must not move.
+    changed_arm_cmds = [
+        _cmd(111, [0, 1, 0]),
+        _cmd(101, ["a different line entirely"], indent=1),
+        _cmd(412, [], indent=0),
+    ]
+    rows2 = _rows(changed_arm_cmds)
+    page2 = next(r for r in rows2 if r.kind == "page")
+    then2 = next(r for r in rows2 if r.kind == "branch" and r.branch.arm_kind == "then")
+
+    assert page1.content_hash == page2.content_hash
+    assert then1.content_hash != then2.content_hash
+
+    shutil.rmtree(tmp_path / "run")
+
+    # Add a second 111 -- trunk hash (skeleton) must move.
+    added_arm_cmds = base_cmds + [
+        _cmd(111, [0, 2, 0]),
+        _cmd(101, ["b"], indent=1),
+        _cmd(412, [], indent=0),
+    ]
+    rows3 = _rows(added_arm_cmds)
+    page3 = next(r for r in rows3 if r.kind == "page")
+    assert page3.content_hash != page1.content_hash
+
+
+def test_branch_generation_is_idempotent(tmp_path: Path) -> None:
+    events = [{
+        "id": 1, "name": "Menu", "x": 0, "y": 0,
+        "pages": [_page([
+            _cmd(102, [["A", "B"], 2]),
+            _cmd(402, [0, "A"], indent=0),
+            _cmd(111, [12, "pbSomeCheck(1)"], indent=1),
+            _cmd(101, ["fight"], indent=2),
+            _cmd(412, [], indent=1),
+            _cmd(402, [1, "B"], indent=0),
+            _cmd(101, ["never mind"], indent=1),
+            _cmd(404, [], indent=0),
+        ])],
+    }]
+    build_dir, chapters_path = _setup_chapter(tmp_path, 66, events)
+
+    rows1 = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+    rows2 = generate_chapter_manifest("CHX", build_dir=build_dir, chapters_path=chapters_path)
+    assert rows1 == rows2
+
+    out1 = tmp_path / "m1.json"
+    out2 = tmp_path / "m2.json"
+    write_manifest(rows1, out1)
+    write_manifest(rows2, out2)
+    assert out1.read_text(encoding="utf-8") == out2.read_text(encoding="utf-8")
+
+    from rpg2gba.chapter_manifest.schema import row_id_sort_key
+
+    payload = json.loads(out1.read_text(encoding="utf-8"))
+    row_ids = [entry["row_id"] for entry in payload]
+    assert row_ids == sorted(row_ids, key=row_id_sort_key)
 
 
 # --- staged-map detection (_load_staged_map_ids) --------------------------
@@ -926,7 +1253,16 @@ def test_map32_no_code_201_warp_to_59_but_seam_row_present() -> None:
 def test_map32_boulder_events_page0_chain_and_page1_self_switch() -> None:
     """Events 14, 15, 33 are all named `Rock` with the documented page-0 chain
     (pbRockSmash -> pbRockSmashRandomEncounter -> isRockSmashSoftlocked ->
-    pbEraseThisEvent) and a page-1 gated on self-switch A."""
+    pbEraseThisEvent) and a page-1 gated on self-switch A.
+
+    Post-C1 (REDERIVATION_PLAN.md §16.3): page0's own top-level 111
+    (`pbRockSmash`) is trunk, but the chain's other three heads live inside
+    that 111's `then`/nested-`else` branch-arm rows, not on the page row
+    itself -- trunk-only extraction means a page row's `script_heads` no
+    longer merges its arms' content. This test now gathers heads across the
+    page row AND every branch-arm row descending from it (row ids prefixed
+    `<page_row_id>/b`), which is exactly the population C1b moved the heads
+    into."""
     rows = _map32_rows()
     by_event: dict[int, list] = {}
     for row in rows:
@@ -939,10 +1275,17 @@ def test_map32_boulder_events_page0_chain_and_page1_self_switch() -> None:
         assert len(event_rows) == 2
         page0, page1 = event_rows
         assert page0.event_name == "Rock"
+        branch_rows = [
+            r for r in rows
+            if r.kind == "branch" and r.row_id.startswith(page0.row_id + "/b")
+        ]
+        chain_heads = set(page0.script_heads)
+        for br in branch_rows:
+            chain_heads.update(br.script_heads)
         for head in ("pbRockSmash", "pbRockSmashRandomEncounter",
                      "isRockSmashSoftlocked", "pbEraseThisEvent"):
-            assert head in page0.script_heads, (
-                f"event {event_id} page0 missing expected head {head}")
+            assert head in chain_heads, (
+                f"event {event_id} page0's trunk+arms missing expected head {head}")
         assert page1.condition.self_switch_ch == "A"
         assert page1.condition.is_unconditional is False
 
@@ -950,12 +1293,17 @@ def test_map32_boulder_events_page0_chain_and_page1_self_switch() -> None:
 @_needs_map32
 def test_map32_recognized_and_unrecognized_heads_match_document() -> None:
     """Table in PLAYTEST_AUTHORING_IMPROVEMENT.md §6.3: six of eleven heads
-    found on map 32 are unrecognized against `MECHANIC_BY_HEAD`."""
+    found on map 32 are unrecognized against `MECHANIC_BY_HEAD`.
+
+    Post-C1: heads that used to live on a page row alone can now live on a
+    branch-arm row instead (trunk-only extraction), so both kinds are
+    scanned -- the document's per-map head census is unaffected by WHICH
+    row a head landed on, only by whether it was found at all."""
     rows = _map32_rows()
     all_unrecognized: set[str] = set()
     all_recognized: set[str] = set()
     for row in rows:
-        if row.kind != "page":
+        if row.kind not in ("page", "branch"):
             continue
         all_unrecognized.update(row.unrecognized_heads)
         all_recognized.update(h for h in row.script_heads if h not in row.unrecognized_heads)

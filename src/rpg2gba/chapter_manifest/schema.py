@@ -18,7 +18,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import asdict, dataclass, fields
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass, fields, replace
 from typing import Any, Literal
 
 # --- effect vocabulary -----------------------------------------------------
@@ -340,6 +341,42 @@ class SeamRef:
 
 
 @dataclass(frozen=True)
+class BranchRef:
+    """One arm of a code-111 Conditional Branch or code-102 Show Choices,
+    per REDERIVATION_PLAN.md §16.3 C1.
+
+    `opener_code`/`opener_index` name the BRANCH CONSTRUCT's own opener (the
+    111 or 102 command, at its flat position in the page's command list) --
+    shared by every arm the construct produces (both the `then`/`else` pair
+    of one 111, or every choice/cancel arm of one 102). `arm_index` is this
+    arm's own position in the page-wide flat `bN` numbering
+    (`branch_row_id`), not a per-construct index.
+
+    `condition_type`/`condition_text` are the 111's own `params[0]`/
+    `params[1]` (only meaningful for `arm_kind` `"then"`/`"else"` -- both
+    arms of one 111 share the same condition, since it is evaluated once).
+    `choice_index`/`choice_text` are the reverse: only meaningful for
+    `"choice"`/`"cancel"` (a 402's own choice index and text, or `None` for
+    a 403 cancel arm).
+
+    `explicit` is False only for a synthesized `else` arm whose page had no
+    411 in the source at all -- the fall-through path a player still walks,
+    just never written down. Every other arm (both `then`, a real `else`,
+    and every 402/403) is `explicit=True`.
+    """
+
+    arm_index: int
+    arm_kind: Literal["then", "else", "choice", "cancel"]
+    opener_code: int
+    opener_index: int
+    choice_index: int | None
+    choice_text: str | None
+    condition_type: int | None
+    condition_text: str | None
+    explicit: bool
+
+
+@dataclass(frozen=True)
 class TerrainRef:
     """A traversal mechanic realized by a metatile behaviour, not a script.
 
@@ -366,7 +403,7 @@ class ManifestRow:
     """
 
     row_id: str
-    kind: Literal["page", "seam", "terrain"]
+    kind: Literal["page", "seam", "terrain", "branch"]
     map_id: int
     content_hash: str
     effects: tuple[str, ...] = ()
@@ -443,6 +480,14 @@ class ManifestRow:
     # `map_id`, same as `map_id` itself) rather than in a separate structure,
     # because that is the manifest's existing shape for a per-map fact.
     reachability_consulted: bool = False
+    # Branch-arm identity (REDERIVATION_PLAN.md §16.3 C1, R5) -- set iff
+    # `kind == "branch"`. `None` for every page/seam/terrain row.
+    branch: BranchRef | None = None
+    # The enclosing row's id: the page row id for a top-level arm, the
+    # enclosing arm's own row id for a nested arm, `None` for page/seam/
+    # terrain rows (which have no enclosing row). See `parse_row_id`/
+    # `branch_row_id` for the row-id grammar this refers into.
+    parent_row_id: str | None = None
 
     @property
     def is_dispositionable(self) -> bool:
@@ -726,6 +771,7 @@ def row_from_dict(data: dict[str, Any]) -> ManifestRow:
     condition = data["condition"]
     seam = data["seam"]
     terrain = data["terrain"]
+    branch = data["branch"]
     return ManifestRow(
         **{
             **data,
@@ -739,12 +785,68 @@ def row_from_dict(data: dict[str, Any]) -> ManifestRow:
             "condition": PageCondition(**condition) if condition is not None else None,
             "seam": SeamRef(**seam) if seam is not None else None,
             "terrain": TerrainRef(**terrain) if terrain is not None else None,
+            "branch": BranchRef(**branch) if branch is not None else None,
         }
     )
 
 
 def page_row_id(map_id: int, event_id: int, page_idx: int) -> str:
     return f"map{map_id:03d}/ev{event_id:03d}/p{page_idx}"
+
+
+def branch_row_id(page_row_id: str, arm_index: int) -> str:
+    """Row id for one branch arm -- always suffixed onto its PAGE row id,
+    flat, regardless of nesting depth (REDERIVATION_PLAN.md §16.3 C1c):
+    `map050/ev005/p0/b2`, never `.../b0/b2`. Nesting is carried by
+    `ManifestRow.parent_row_id`, not by the id string."""
+    return f"{page_row_id}/b{arm_index}"
+
+
+def whole_page_views(rows: Sequence[ManifestRow]) -> dict[str, ManifestRow]:
+    """Each page row with its branch-arm descendants folded back in.
+
+    C1 made a page row trunk-only (REDERIVATION_PLAN.md §16.3). That is the
+    right shape for dispositions, where every arm needs its own verdict,
+    but not for questions about *what a page is*: D4's archetype
+    fingerprints were measured over whole pages, and an arrival nudge whose
+    warp sits inside a conditional reads as a bare `warp` from its trunk
+    alone. Keyed by page row id; the view keeps the page's own id and hash.
+    """
+    pages = {row.row_id: row for row in rows if row.kind == "page"}
+    descendants: dict[str, list[ManifestRow]] = {rid: [] for rid in pages}
+    for row in rows:
+        if row.kind != "branch":
+            continue
+        owner = parse_row_id(row.row_id).owning_page_row_id
+        if owner not in descendants:
+            raise ValueError(f"branch row {row.row_id!r} has no page row {owner!r} in this set")
+        descendants[owner].append(row)
+
+    def union(page: ManifestRow, arms: list[ManifestRow], name: str) -> tuple[Any, ...]:
+        out: set[Any] = set(getattr(page, name))
+        for arm in arms:
+            out.update(getattr(arm, name))
+        return tuple(sorted(out))
+
+    views: dict[str, ManifestRow] = {}
+    for rid, page in pages.items():
+        arms = descendants[rid]
+        if not arms:
+            views[rid] = page
+            continue
+        views[rid] = replace(
+            page,
+            effects=union(page, arms, "effects"),
+            script_heads=union(page, arms, "script_heads"),
+            unrecognized_heads=union(page, arms, "unrecognized_heads"),
+            other_codes=union(page, arms, "other_codes"),
+            requires=union(page, arms, "requires"),
+            script_typed_conditions=page.script_typed_conditions
+            + sum(arm.script_typed_conditions for arm in arms),
+            condition_families=union(page, arms, "condition_families"),
+            condition_unclassified=union(page, arms, "condition_unclassified"),
+        )
+    return views
 
 
 def terrain_row_id(map_id: int, subkind: str, x: int, y: int) -> str:
@@ -765,3 +867,120 @@ def seam_row_id(map_id: int, direction: str, other_map_id: int) -> str:
     dispositioned differently (one crossed in this chapter, one not).
     """
     return f"map{map_id:03d}/seam/{direction.upper()}/map{other_map_id:03d}"
+
+
+# --- row-id parsing (one implementation; CLAUDE.md §4.3) -------------------
+#
+# `boundary_model.py` and `playtest/chapter.py` each used to carry their own
+# regex pair for this. Both are read sites now, not mint points -- the four
+# grammars (`page_row_id`/`branch_row_id`/`seam_row_id`/`terrain_row_id`
+# above) are the only writers.
+
+_PAGE_ROW_RE = re.compile(r"^map(\d{3})/ev(\d{3})/p(\d+)$")
+_BRANCH_ROW_RE = re.compile(r"^map(\d{3})/ev(\d{3})/p(\d+)/b(\d+)$")
+_SEAM_ROW_RE = re.compile(r"^map(\d{3})/seam/([A-Za-z0-9_]+)/map(\d{3})$")
+_TERRAIN_ROW_RE = re.compile(r"^map(\d{3})/terrain/([^/]+)/(-?\d+),(-?\d+)$")
+
+RowKind = Literal["page", "branch", "seam", "terrain"]
+
+
+@dataclass(frozen=True)
+class ParsedRowId:
+    """The decoded shape of any of the four manifest row-id grammars.
+
+    Every field not meaningful for `kind` is `None` -- callers read only the
+    fields their own row kind populates. `owning_page_row_id`/`event_key`
+    are the two derived facts every current call site actually wants; both
+    are `None` for `seam`/`terrain`, which own no page or event."""
+
+    kind: RowKind
+    map_id: int
+    event_id: int | None = None
+    page_idx: int | None = None
+    arm_index: int | None = None
+    direction: str | None = None
+    other_map_id: int | None = None
+    subkind: str | None = None
+    x: int | None = None
+    y: int | None = None
+
+    @property
+    def owning_page_row_id(self) -> str | None:
+        """The page row id a `page`/`branch` row belongs to (itself, for a
+        page row); `None` for `seam`/`terrain`."""
+        if self.kind in ("page", "branch"):
+            assert self.event_id is not None and self.page_idx is not None
+            return page_row_id(self.map_id, self.event_id, self.page_idx)
+        return None
+
+    @property
+    def event_key(self) -> tuple[int, int] | None:
+        """`(map_id, event_id)` for a `page`/`branch` row; `None` for
+        `seam`/`terrain`, which have no event."""
+        if self.kind in ("page", "branch"):
+            assert self.event_id is not None
+            return (self.map_id, self.event_id)
+        return None
+
+
+def parse_row_id(row_id: str) -> ParsedRowId:
+    """Decode any of the four manifest row-id grammars.
+
+    A branch row (`.../pN/bM`) is deliberately matched before the plain page
+    pattern rather than relying on regex ordering being accidental -- the
+    page pattern's trailing `$` anchor would already reject a branch id, but
+    an explicit branch check first keeps the dispatch legible.
+
+    Raises `ValueError` on a `row_id` matching none of the four grammars --
+    fail loud (CLAUDE.md §4.5) rather than guess.
+    """
+    m = _BRANCH_ROW_RE.match(row_id)
+    if m:
+        map_id, event_id, page_idx, arm_index = (int(g) for g in m.groups())
+        return ParsedRowId(
+            "branch", map_id, event_id=event_id, page_idx=page_idx, arm_index=arm_index)
+    m = _PAGE_ROW_RE.match(row_id)
+    if m:
+        map_id, event_id, page_idx = (int(g) for g in m.groups())
+        return ParsedRowId("page", map_id, event_id=event_id, page_idx=page_idx)
+    m = _SEAM_ROW_RE.match(row_id)
+    if m:
+        map_id = int(m.group(1))
+        return ParsedRowId(
+            "seam", map_id, direction=m.group(2), other_map_id=int(m.group(3)))
+    m = _TERRAIN_ROW_RE.match(row_id)
+    if m:
+        map_id = int(m.group(1))
+        return ParsedRowId(
+            "terrain", map_id, subkind=m.group(2), x=int(m.group(3)), y=int(m.group(4)))
+    raise ValueError(
+        f"{row_id!r} matches none of the manifest row-id grammars -- page "
+        "'mapNNN/evNNN/pN' (page_row_id), branch 'mapNNN/evNNN/pN/bM' "
+        "(branch_row_id), seam 'mapNNN/seam/DIR/mapNNN' (seam_row_id), or "
+        "terrain 'mapNNN/terrain/kind/x,y' (terrain_row_id)"
+    )
+
+
+_ROW_ID_SORT_TOKEN_RE = re.compile(r"(\d+)")
+
+
+def row_id_sort_key(row_id: str) -> tuple[tuple[int, Any], ...]:
+    """Natural sort key for any manifest row id: digit runs compare
+    numerically (`b2` before `b10`), everything else compares as text.
+
+    Every token is wrapped `(0, text)` or `(1, number)` rather than left
+    bare, so tuples built from row ids of different shapes (a page id has
+    fewer digit runs than a branch id) never compare a bare `str` against a
+    bare `int` at the same tuple position -- Python raises on that instead
+    of ordering it, and the wrapper closes that off structurally rather than
+    relying on every row-id shape happening to line up.
+
+    The one sort-key implementation (CLAUDE.md §4.3); every place that sorts
+    manifest rows by row id -- `generate_chapter_manifest`, `write_manifest`,
+    `write_derived`, and any future one -- uses this instead of a bare
+    `key=lambda r: r.row_id` string sort, which puts `b10` before `b2`.
+    """
+    return tuple(
+        (1, int(tok)) if tok.isdigit() else (0, tok)
+        for tok in _ROW_ID_SORT_TOKEN_RE.split(row_id)
+    )

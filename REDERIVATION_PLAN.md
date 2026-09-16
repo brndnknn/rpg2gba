@@ -1629,7 +1629,7 @@ Each lands unit-green. None is ROM-verified before P11.
 
 | # | Step | Rulings | Status |
 |---|---|---|---|
-| **C1** | Branch-arm manifest rows; re-derive CH01–CH05 manifests and sidecars; re-affirm invalidated hashes | R5 | TODO |
+| **C1** | Branch-arm manifest rows; re-derive CH01–CH05 manifests and sidecars; re-affirm invalidated hashes | R5 | DONE 2026-09-16 — see "C1 landed" below |
 | **C2** | Story-state model: highest-live-page liveness, earliest-live placement, `later:`/`unreachable:` derivation, generalized precedence | R6, R8 | TODO |
 | **C3** | Engine-transition forks, white-out first, with the fenced-engine grep for the rest | R9 | TODO |
 | **C4** | Generic per-command extractors for every code present in CH01–CH05, source-derived | R11 | TODO |
@@ -1639,6 +1639,36 @@ Each lands unit-green. None is ROM-verified before P11.
 | **C8** | Shared Ruby-subset interpreter + input search; `map050/ev019` | R10 | TODO |
 | **C9** | Regenerate CH01–CH05 behind the frozen test, one commit per chapter | R12 | TODO |
 | **C10** | `offline:` verdict head, offline flavour checker, ROM sample selection | R2, R3 | TODO |
+
+**C1 shape (operator, 2026-09-16):** (a) every code 111 yields **two** arm rows, then and
+else, even when the source has no 411 — the fall-through is a walkable path; (b) the parent
+page row is **trunk only**: its effects and hash cover commands outside every arm (a 111's
+condition text runs in the enclosing scope, so it is trunk), and each arm row covers its own
+scope with nested arms excluded — no effect counted twice; (c) arm ids are **flat `bN`** in
+source order of arm openers across the page (`map050/ev005/p0/b2`), with a `parent_row_id`
+field for nesting, sorted numerically. Code 112 loops are not branches and stay in their
+enclosing scope. Measured load: 111s CH01 113 / CH02 51 / CH03 43 / CH04 22 / CH05 13; 402
+choice arms CH01 21 / CH03 11; no 403 cancel arms.
+
+**C1 landed (2026-09-16).** `schema.BranchRef`, `kind="branch"`, `parent_row_id`, one
+`parse_row_id` / `row_id_sort_key` (the duplicate regexes in `boundary_model.py` and
+`playtest/chapter.py` are gone); the generator walks the transpiler's own `parse_tree`. Three
+details beyond the shape above: an arm's hash includes its `BranchRef`, so an arm goes stale
+when its condition changes and not only its body; a page with **no** arms hashes exactly as
+before, so only branching pages were invalidated; and `schema.whole_page_views` folds arms back
+into their page for **what-is-this-page** questions. `archetypes.classify_manifest` uses it,
+because D4's fingerprints are whole-page facts; without it `map035/ev001/p1` read as a bare
+`warp` and CH05 failed to import. All **47** stale page decisions (CH01 3 / CH02 16 / CH03 2 /
+CH04 17 / CH05 9) were re-affirmed mechanically, on proof that each old `affirmed_hash` equals
+today's whole-page hash, so the source under the decision is unchanged and trunk ⊆ page.
+Result: rows CH01 458 / CH02 171 / CH03 222 / CH04 86 / CH05 43. Errors are now only
+`undispositioned` + `derived_unaffirmed`: page rows CH01 116 / CH02 13 / CH03 45, branch
+rows CH01 163 / CH02 63 / CH03 51 / CH04 36 / CH05 10. That is the generator's backlog, not
+hand work. `archetype_conformance` was verified row-for-row identical to the pre-C1 checker.
+**Debt handed to C5:** archetype templates claim page rows only, so arm rows of claimed pages
+stay unclaimed (e.g. `map035/ev001/p1/b0,b1` → `boundary_unclaimed`, pinned in
+`test_check_real_ch04_carries_no_boundary_dispositions_yet`); `approach_model` answers `None`
+for branch rows.
 
 C1–C6 stand on their own. C7 must land before C9 overwrites anything. Route plans (P9) become
 a C6 output rather than a separate step.

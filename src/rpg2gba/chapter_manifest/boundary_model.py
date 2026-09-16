@@ -38,7 +38,6 @@ Without this adapter the rule can still catch nothing at all about a
 from __future__ import annotations
 
 import logging
-import re
 from pathlib import Path
 
 from rpg2gba.chapter_atlas.binding import load_binding
@@ -51,44 +50,33 @@ from rpg2gba.slice_growth import (
 )
 from rpg2gba.tileset_converter.connections import load_connections
 
-from .schema import page_row_id, seam_row_id
+from .schema import page_row_id, parse_row_id, seam_row_id
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAPS_DIR = Path("output/uranium-build/maps")
 DEFAULT_CONNECTIONS_JSON = Path("output/uranium-build/connections.json")
 
-# The three manifest row-id grammars (`schema.py`'s `page_row_id`/
-# `seam_row_id`/`terrain_row_id` are the mint points; these are the read
-# side). Only a page row carries an `(map_id, event_id)` key -- a seam row
-# is keyed by direction/other-map, and a terrain row by cell, neither has an
-# event at all (`schema.SeamRef`/`TerrainRef` docstrings).
-_PAGE_ROW_RE = re.compile(r"^map(\d{3})/ev(\d{3})/p\d+$")
-_SEAM_ROW_RE = re.compile(r"^map\d{3}/seam/[A-Za-z0-9_]+/map\d{3}$")
-_TERRAIN_ROW_RE = re.compile(r"^map\d{3}/terrain/[^/]+/-?\d+,-?\d+$")
-
 
 def _event_key(row_id: str) -> tuple[int, int] | None:
-    """`(map_id, event_id)` for a page row, or `None` for a seam/terrain row
-    (neither has an event to key on).
+    """`(map_id, event_id)` for a page OR branch row, or `None` for a
+    seam/terrain row (neither has an event to key on).
 
-    Fails loud (CLAUDE.md §4.5) on a `row_id` that matches none of the
-    three known manifest row-id grammars at all -- a typo'd or otherwise
-    malformed row id must not silently read as "not a page, so no event",
-    since that would be indistinguishable from a genuine seam/terrain row.
+    A branch row resolves to the SAME event key as its own page -- a branch
+    arm is not a forward crossing in its own right (`code 201`/a seam
+    connection are page/seam-level facts, never inside a branch arm's own
+    scope in this corpus), but it is unreachable except by first reaching
+    its page, so `is_forward_crossing`'s event-level widening (see its
+    docstring) already covers it correctly once the two share a key.
+
+    Fails loud (CLAUDE.md §4.5) via `schema.parse_row_id` on a `row_id` that
+    matches none of the four known manifest row-id grammars at all -- a
+    typo'd or otherwise malformed row id must not silently read as "not a
+    page, so no event", since that would be indistinguishable from a
+    genuine seam/terrain row.
     """
-    page_match = _PAGE_ROW_RE.match(row_id)
-    if page_match is not None:
-        return int(page_match.group(1)), int(page_match.group(2))
-    if _SEAM_ROW_RE.match(row_id) or _TERRAIN_ROW_RE.match(row_id):
-        return None
-    raise ValueError(
-        f"boundary_model: row_id {row_id!r} matches none of the manifest's "
-        "row-id grammars -- page 'mapNNN/evNNN/pN' (schema.page_row_id), "
-        "seam 'mapNNN/seam/DIR/mapNNN' (schema.seam_row_id), or terrain "
-        "'mapNNN/terrain/kind/x,y' (schema.terrain_row_id) -- cannot "
-        "determine whether this is a forward crossing"
-    )
+    parsed = parse_row_id(row_id)
+    return parsed.event_key
 
 
 def _crossing_row_ids(

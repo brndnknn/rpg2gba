@@ -3,10 +3,9 @@
     "row_id": "map033/ev002/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "b6aa5186777853c4",
+    "content_hash": "255c5f02ae1512de",
     "effects": [
-      "giveitem",
-      "self_switch_write"
+      "giveitem"
     ],
     "script_heads": [
       "pbItemBall"
@@ -36,7 +35,99 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev002/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "a8d4aef19b39ad89",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 2,
+    "event_name": "EV002",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbItemBall(::PBItems::POTION)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev002/p0"
+  },
+  {
+    "row_id": "map033/ev002/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "982c2df0810a97de",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 2,
+    "event_name": "EV002",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbItemBall(::PBItems::POTION)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev002/p0"
   },
   {
     "row_id": "map033/ev002/p1",
@@ -68,16 +159,17 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev003/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "b6aa5186777853c4",
+    "content_hash": "255c5f02ae1512de",
     "effects": [
-      "giveitem",
-      "self_switch_write"
+      "giveitem"
     ],
     "script_heads": [
       "pbItemBall"
@@ -107,7 +199,99 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev003/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "a8d4aef19b39ad89",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 3,
+    "event_name": "EV003",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbItemBall(::PBItems::POTION)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev003/p0"
+  },
+  {
+    "row_id": "map033/ev003/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "982c2df0810a97de",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 3,
+    "event_name": "EV003",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbItemBall(::PBItems::POTION)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev003/p0"
   },
   {
     "row_id": "map033/ev003/p1",
@@ -139,7 +323,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev004/p0",
@@ -174,7 +360,9 @@
     "trigger": "parallel",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev004/p1",
@@ -206,16 +394,17 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev008/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "0eaa8e965c9baac8",
+    "content_hash": "102c78ebcad688ec",
     "effects": [
-      "giveitem",
-      "self_switch_write"
+      "giveitem"
     ],
     "script_heads": [
       "pbItemBall"
@@ -247,7 +436,103 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev008/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "d919bbe7203d89f7",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 8,
+    "event_name": "EV008",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbItemBall(::PBItems::REPEL)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev008/p0"
+  },
+  {
+    "row_id": "map033/ev008/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "73a2e13b70b8db48",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 8,
+    "event_name": "EV008",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbItemBall(::PBItems::REPEL)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev008/p0"
   },
   {
     "row_id": "map033/ev008/p1",
@@ -281,16 +566,17 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev009/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "00d1149603e20767",
+    "content_hash": "5599e725d9aa7ad5",
     "effects": [
       "bubble_ui",
-      "self_switch_write",
       "text",
       "trainerbattle"
     ],
@@ -328,7 +614,103 @@
     "trigger": "event_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev009/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "95e2b00dc640f98c",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 9,
+    "event_name": "Trainer(3)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 8,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::FISHERMAN,\"Marko\",_I(\"Okay, so maybe not JUST Water Pokémon.\"),false,0,false,0)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev009/p0"
+  },
+  {
+    "row_id": "map033/ev009/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "5a70b21133cb5937",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 9,
+    "event_name": "Trainer(3)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 8,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::FISHERMAN,\"Marko\",_I(\"Okay, so maybe not JUST Water Pokémon.\"),false,0,false,0)",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev009/p0"
   },
   {
     "row_id": "map033/ev009/p1",
@@ -367,16 +749,17 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev010/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "6aa13505c91bc68c",
+    "content_hash": "41e2fcc9cd6abe9b",
     "effects": [
       "bubble_ui",
-      "self_switch_write",
       "text",
       "trainerbattle"
     ],
@@ -414,7 +797,103 @@
     "trigger": "event_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev010/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "13f58cb9abe2bddb",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 10,
+    "event_name": "Trainer(4)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 11,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::YOUNGSTER,\"Bob\",_I(\"I guess I'll try out some new games.\"),false,0,false,0)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev010/p0"
+  },
+  {
+    "row_id": "map033/ev010/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "557c7582c79572d4",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 10,
+    "event_name": "Trainer(4)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 11,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::YOUNGSTER,\"Bob\",_I(\"I guess I'll try out some new games.\"),false,0,false,0)",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev010/p0"
   },
   {
     "row_id": "map033/ev010/p1",
@@ -453,7 +932,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev013/p0",
@@ -487,7 +968,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev020/p0",
@@ -521,7 +1004,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev022/p0",
@@ -559,16 +1044,16 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev022/p1",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "022371a0a501171a",
+    "content_hash": "d25f35247b40bcee",
     "effects": [
-      "graphic",
-      "move_route",
       "temp_switch_write"
     ],
     "script_heads": [
@@ -600,7 +1085,100 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev022/p1/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "15159e8843c858aa",
+    "effects": [
+      "graphic",
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 22,
+    "event_name": "EV022",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev022/p1"
+  },
+  {
+    "row_id": "map033/ev022/p1/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "4f8217c3e24208a2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 22,
+    "event_name": "EV022",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev022/p1"
   },
   {
     "row_id": "map033/ev023/p0",
@@ -638,16 +1216,16 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev023/p1",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "b427f6fc6697a5f4",
+    "content_hash": "5539cd09d8efee80",
     "effects": [
-      "graphic",
-      "move_route",
       "temp_switch_write"
     ],
     "script_heads": [
@@ -679,7 +1257,100 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev023/p1/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "15159e8843c858aa",
+    "effects": [
+      "graphic",
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 23,
+    "event_name": "EV023",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev023/p1"
+  },
+  {
+    "row_id": "map033/ev023/p1/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "4f8217c3e24208a2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 23,
+    "event_name": "EV023",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev023/p1"
   },
   {
     "row_id": "map033/ev024/p0",
@@ -717,16 +1388,16 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev024/p1",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "e8e9ee9a28f12107",
+    "content_hash": "50a1f42b5255a708",
     "effects": [
-      "graphic",
-      "move_route",
       "temp_switch_write"
     ],
     "script_heads": [
@@ -758,16 +1429,108 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev024/p1/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "15159e8843c858aa",
+    "effects": [
+      "graphic",
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 24,
+    "event_name": "EV024",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 12,
+      "switch1_name": "s:tsOn?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev024/p1"
+  },
+  {
+    "row_id": "map033/ev024/p1/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "4f8217c3e24208a2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 24,
+    "event_name": "EV024",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 12,
+      "switch1_name": "s:tsOn?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev024/p1"
   },
   {
     "row_id": "map033/ev025/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "58bfb375a4eeb4dc",
+    "content_hash": "aa0efa62d8c69735",
     "effects": [
-      "giveitem",
-      "self_switch_write"
+      "giveitem"
     ],
     "script_heads": [
       "pbItemBall"
@@ -797,7 +1560,99 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev025/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "12db9366187ed884",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 25,
+    "event_name": "EV025",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbItemBall(::PBItems::ANTIDOTE)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev025/p0"
+  },
+  {
+    "row_id": "map033/ev025/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "4abb86e4b1d91544",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 25,
+    "event_name": "EV025",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbItemBall(::PBItems::ANTIDOTE)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev025/p0"
   },
   {
     "row_id": "map033/ev025/p1",
@@ -829,7 +1684,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev027/p0",
@@ -866,16 +1723,16 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev027/p1",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "8a1c394b71462c44",
+    "content_hash": "0d8898fba19fac94",
     "effects": [
-      "graphic",
-      "move_route",
       "temp_switch_write"
     ],
     "script_heads": [
@@ -907,7 +1764,100 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev027/p1/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "11b1d4354edcd009",
+    "effects": [
+      "graphic",
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 27,
+    "event_name": "EV027",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev027/p1"
+  },
+  {
+    "row_id": "map033/ev027/p1/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "4f8217c3e24208a2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 27,
+    "event_name": "EV027",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev027/p1"
   },
   {
     "row_id": "map033/ev028/p0",
@@ -939,22 +1889,18 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev029/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "e3da20fd925642b0",
-    "effects": [
-      "erase_event",
-      "move_route",
-      "se"
-    ],
+    "content_hash": "a930201f885e155b",
+    "effects": [],
     "script_heads": [
-      "pbEraseThisEvent",
-      "pbRockSmash",
-      "pbRockSmashRandomEncounter"
+      "pbRockSmash"
     ],
     "unrecognized_heads": [],
     "other_codes": [],
@@ -983,16 +1929,116 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev029/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "22ca1d7986838b74",
+    "effects": [
+      "erase_event",
+      "move_route",
+      "se"
+    ],
+    "script_heads": [
+      "pbEraseThisEvent",
+      "pbRockSmashRandomEncounter"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 29,
+    "event_name": "Rock",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbRockSmash",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev029/p0"
+  },
+  {
+    "row_id": "map033/ev029/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "9689b7cffeb3327b",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 29,
+    "event_name": "Rock",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbRockSmash",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev029/p0"
   },
   {
     "row_id": "map033/ev030/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "01f5a037c6e11b3c",
+    "content_hash": "bf6e47ffd756a188",
     "effects": [
       "bubble_ui",
-      "self_switch_write",
       "text",
       "trainerbattle"
     ],
@@ -1028,7 +2074,99 @@
     "trigger": "event_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev030/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "e1a2b519e8a4dd85",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 30,
+    "event_name": "Trainer(5)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 9,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::BUGCATCHER,\"Flood\",_I(\"Wooow! That was wicked!\"),false,0,false,0)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev030/p0"
+  },
+  {
+    "row_id": "map033/ev030/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "fc52d7e7076f7427",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 30,
+    "event_name": "Trainer(5)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 9,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::BUGCATCHER,\"Flood\",_I(\"Wooow! That was wicked!\"),false,0,false,0)",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev030/p0"
   },
   {
     "row_id": "map033/ev030/p1",
@@ -1065,16 +2203,17 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev032/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "edc2dec0216b1d76",
+    "content_hash": "8a7f0e7b5918083a",
     "effects": [
-      "giveitem",
-      "self_switch_write"
+      "giveitem"
     ],
     "script_heads": [
       "pbItemBall"
@@ -1106,7 +2245,103 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev032/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "44d80c5fc6bde38e",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 32,
+    "event_name": "EV032",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbItemBall(::PBItems::RARECANDY)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev032/p0"
+  },
+  {
+    "row_id": "map033/ev032/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "1dd4842c176bd68d",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 32,
+    "event_name": "EV032",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbItemBall(::PBItems::RARECANDY)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev032/p0"
   },
   {
     "row_id": "map033/ev032/p1",
@@ -1140,16 +2375,17 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev034/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "faac63dd6c7eb7d7",
+    "content_hash": "0396e74497ea12af",
     "effects": [
       "bubble_ui",
-      "self_switch_write",
       "text",
       "trainerbattle"
     ],
@@ -1185,7 +2421,99 @@
     "trigger": "event_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev034/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "aae459dbc8bfc642",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 34,
+    "event_name": "Trainer(4)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 12,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::SCHOOLKID,\"Tath\",_I(\"Ah, it's not as strong as I'd hoped...\"),false,0,false,0)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev034/p0"
+  },
+  {
+    "row_id": "map033/ev034/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "19dbacd64c310d53",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 34,
+    "event_name": "Trainer(4)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 12,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::SCHOOLKID,\"Tath\",_I(\"Ah, it's not as strong as I'd hoped...\"),false,0,false,0)",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev034/p0"
   },
   {
     "row_id": "map033/ev034/p1",
@@ -1222,16 +2550,17 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev035/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "c64d11806a08750a",
+    "content_hash": "125c986316a2294a",
     "effects": [
       "bubble_ui",
-      "self_switch_write",
       "text",
       "trainerbattle"
     ],
@@ -1269,7 +2598,103 @@
     "trigger": "event_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev035/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "850aca1355a212b9",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 35,
+    "event_name": "Trainer(2)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 9,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::TRIATHLETE_MaleRunner,\"Brandon\",_I(\"Run, run, run!\"),false,0,false,0)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev035/p0"
+  },
+  {
+    "row_id": "map033/ev035/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "99712def1d6bf4bb",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 35,
+    "event_name": "Trainer(2)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 9,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::TRIATHLETE_MaleRunner,\"Brandon\",_I(\"Run, run, run!\"),false,0,false,0)",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev035/p0"
   },
   {
     "row_id": "map033/ev035/p1",
@@ -1308,22 +2733,18 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev036/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "e3da20fd925642b0",
-    "effects": [
-      "erase_event",
-      "move_route",
-      "se"
-    ],
+    "content_hash": "a930201f885e155b",
+    "effects": [],
     "script_heads": [
-      "pbEraseThisEvent",
-      "pbRockSmash",
-      "pbRockSmashRandomEncounter"
+      "pbRockSmash"
     ],
     "unrecognized_heads": [],
     "other_codes": [],
@@ -1352,16 +2773,116 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev036/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "22ca1d7986838b74",
+    "effects": [
+      "erase_event",
+      "move_route",
+      "se"
+    ],
+    "script_heads": [
+      "pbEraseThisEvent",
+      "pbRockSmashRandomEncounter"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 36,
+    "event_name": "Rock",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbRockSmash",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev036/p0"
+  },
+  {
+    "row_id": "map033/ev036/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "9689b7cffeb3327b",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 36,
+    "event_name": "Rock",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbRockSmash",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev036/p0"
   },
   {
     "row_id": "map033/ev037/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "2129f89e44535124",
+    "content_hash": "75af4f4020b20bec",
     "effects": [
-      "giveitem",
-      "self_switch_write"
+      "giveitem"
     ],
     "script_heads": [
       "pbItemBall"
@@ -1393,7 +2914,103 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev037/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "df9e59b053bc9b1f",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 37,
+    "event_name": "EV037",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbItemBall(::PBItems::SUPERPOTION)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev037/p0"
+  },
+  {
+    "row_id": "map033/ev037/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "a94ef1de37c7df45",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 37,
+    "event_name": "EV037",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbItemBall(::PBItems::SUPERPOTION)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev037/p0"
   },
   {
     "row_id": "map033/ev037/p1",
@@ -1427,22 +3044,18 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev038/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "e3da20fd925642b0",
-    "effects": [
-      "erase_event",
-      "move_route",
-      "se"
-    ],
+    "content_hash": "a930201f885e155b",
+    "effects": [],
     "script_heads": [
-      "pbEraseThisEvent",
-      "pbRockSmash",
-      "pbRockSmashRandomEncounter"
+      "pbRockSmash"
     ],
     "unrecognized_heads": [],
     "other_codes": [],
@@ -1471,23 +3084,122 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev038/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "22ca1d7986838b74",
+    "effects": [
+      "erase_event",
+      "move_route",
+      "se"
+    ],
+    "script_heads": [
+      "pbEraseThisEvent",
+      "pbRockSmashRandomEncounter"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 38,
+    "event_name": "Rock",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbRockSmash",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev038/p0"
+  },
+  {
+    "row_id": "map033/ev038/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "9689b7cffeb3327b",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 38,
+    "event_name": "Rock",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbRockSmash",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev038/p0"
   },
   {
     "row_id": "map033/ev039/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "f8f0cf3a9c703bf4",
+    "content_hash": "6ab4d4df014865a8",
     "effects": [
       "bubble_ui",
-      "self_switch_write",
       "text",
       "trainerbattle"
     ],
     "script_heads": [
       "pbCallBub",
       "pbNoticePlayer",
-      "pbPhoneRegisterBattle",
       "pbTrainerBattle",
       "pbTrainerEnd",
       "pbTrainerIntro"
@@ -1519,26 +3231,20 @@
     "trigger": "event_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
-    "row_id": "map033/ev039/p1",
-    "kind": "page",
+    "row_id": "map033/ev039/p0/b0",
+    "kind": "branch",
     "map_id": 33,
-    "content_hash": "911a00f11592d8d8",
+    "content_hash": "85e44c4f00fab8a5",
     "effects": [
-      "bubble_ui",
-      "control_flow",
-      "self_switch_write",
-      "text"
+      "self_switch_write"
     ],
     "script_heads": [
-      "createPhoneTrainer",
-      "pbCallBub",
-      "pbPhoneBattleCount",
-      "pbPhoneIncrement",
-      "pbTrainerEnd",
-      "pbTrainerIntro"
+      "pbPhoneRegisterBattle"
     ],
     "unrecognized_heads": [],
     "other_codes": [],
@@ -1546,9 +3252,102 @@
       "rock_smash"
     ],
     "unhandled": 0,
-    "script_typed_conditions": 2,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 39,
+    "event_name": "Trainer(5)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 12,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::FISHERMAN,\"Brandon\",_I(\"Erh... Other types are good as well...\"),false,0,false,0)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev039/p0"
+  },
+  {
+    "row_id": "map033/ev039/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "ab899c23cee8c8e3",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 39,
+    "event_name": "Trainer(5)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 12,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::FISHERMAN,\"Brandon\",_I(\"Erh... Other types are good as well...\"),false,0,false,0)",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev039/p0"
+  },
+  {
+    "row_id": "map033/ev039/p1",
+    "kind": "page",
+    "map_id": 33,
+    "content_hash": "b70f4993e755bb3c",
+    "effects": [],
+    "script_heads": [
+      "pbPhoneBattleCount"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 1,
     "condition_families": [
-      "game_variables_cmp",
       "pb_phone_battle_count"
     ],
     "condition_unclassified": [],
@@ -1568,16 +3367,216 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev039/p1/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "a95d4eb81af50458",
+    "effects": [
+      "bubble_ui",
+      "control_flow",
+      "text"
+    ],
+    "script_heads": [
+      "createPhoneTrainer",
+      "pbCallBub",
+      "pbTrainerIntro"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 1,
+    "condition_families": [
+      "game_variables_cmp"
+    ],
+    "condition_unclassified": [],
+    "event_id": 39,
+    "event_name": "Trainer(5)",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": "B"
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPhoneBattleCount(PBTrainers::FISHERMAN,\"Brandon\")>=1",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev039/p1"
+  },
+  {
+    "row_id": "map033/ev039/p1/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "c46d850af924a861",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [
+      "pbPhoneIncrement",
+      "pbTrainerEnd"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 39,
+    "event_name": "Trainer(5)",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": "B"
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 7,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$game_variables[1]==0",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev039/p1/b0"
+  },
+  {
+    "row_id": "map033/ev039/p1/b2",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "e91d917d8267f06c",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 39,
+    "event_name": "Trainer(5)",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": "B"
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 2,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 7,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$game_variables[1]==0",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev039/p1/b0"
+  },
+  {
+    "row_id": "map033/ev039/p1/b3",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "60de0b9b1006e85d",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 39,
+    "event_name": "Trainer(5)",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": "B"
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 3,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPhoneBattleCount(PBTrainers::FISHERMAN,\"Brandon\")>=1",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev039/p1"
   },
   {
     "row_id": "map033/ev039/p2",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "59e31fb74cd92581",
+    "content_hash": "aab203a1b3ff459f",
     "effects": [
       "bubble_ui",
-      "control_flow",
       "text"
     ],
     "script_heads": [
@@ -1612,22 +3611,117 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev039/p2/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "46cc1e6a74e92aaf",
+    "effects": [
+      "bubble_ui",
+      "control_flow",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub",
+      "pbPhoneRegisterBattle"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 39,
+    "event_name": "Trainer(5)",
+    "page_idx": 2,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": "A"
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPhoneBattleCount(PBTrainers::FISHERMAN,\"Brandon\")>=1",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev039/p2"
+  },
+  {
+    "row_id": "map033/ev039/p2/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "c5a5bda38147360b",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 39,
+    "event_name": "Trainer(5)",
+    "page_idx": 2,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": "A"
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPhoneBattleCount(PBTrainers::FISHERMAN,\"Brandon\")>=1",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev039/p2"
   },
   {
     "row_id": "map033/ev040/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "e3da20fd925642b0",
-    "effects": [
-      "erase_event",
-      "move_route",
-      "se"
-    ],
+    "content_hash": "a930201f885e155b",
+    "effects": [],
     "script_heads": [
-      "pbEraseThisEvent",
-      "pbRockSmash",
-      "pbRockSmashRandomEncounter"
+      "pbRockSmash"
     ],
     "unrecognized_heads": [],
     "other_codes": [],
@@ -1656,16 +3750,116 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev040/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "22ca1d7986838b74",
+    "effects": [
+      "erase_event",
+      "move_route",
+      "se"
+    ],
+    "script_heads": [
+      "pbEraseThisEvent",
+      "pbRockSmashRandomEncounter"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 40,
+    "event_name": "Rock",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbRockSmash",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev040/p0"
+  },
+  {
+    "row_id": "map033/ev040/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "9689b7cffeb3327b",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 40,
+    "event_name": "Rock",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbRockSmash",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev040/p0"
   },
   {
     "row_id": "map033/ev041/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "b1981270d98885cf",
+    "content_hash": "32b68435e24151da",
     "effects": [
       "bubble_ui",
-      "self_switch_write",
       "text",
       "trainerbattle"
     ],
@@ -1703,7 +3897,103 @@
     "trigger": "event_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev041/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "a839ec992e1c45b3",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 41,
+    "event_name": "Trainer(4)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 9,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::EXPERT_Female,\"Gertha\",_I(\"You're a strong kid...\"),false,0,false,0)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev041/p0"
+  },
+  {
+    "row_id": "map033/ev041/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "2c8a5d181bef6f8e",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 41,
+    "event_name": "Trainer(4)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 9,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::EXPERT_Female,\"Gertha\",_I(\"You're a strong kid...\"),false,0,false,0)",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev041/p0"
   },
   {
     "row_id": "map033/ev041/p1",
@@ -1742,22 +4032,18 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev042/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "e3da20fd925642b0",
-    "effects": [
-      "erase_event",
-      "move_route",
-      "se"
-    ],
+    "content_hash": "a930201f885e155b",
+    "effects": [],
     "script_heads": [
-      "pbEraseThisEvent",
-      "pbRockSmash",
-      "pbRockSmashRandomEncounter"
+      "pbRockSmash"
     ],
     "unrecognized_heads": [],
     "other_codes": [],
@@ -1786,13 +4072,15 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
-    "row_id": "map033/ev044/p0",
-    "kind": "page",
+    "row_id": "map033/ev042/p0/b0",
+    "kind": "branch",
     "map_id": 33,
-    "content_hash": "e3da20fd925642b0",
+    "content_hash": "22ca1d7986838b74",
     "effects": [
       "erase_event",
       "move_route",
@@ -1800,8 +4088,101 @@
     ],
     "script_heads": [
       "pbEraseThisEvent",
-      "pbRockSmash",
       "pbRockSmashRandomEncounter"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 42,
+    "event_name": "Rock",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbRockSmash",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev042/p0"
+  },
+  {
+    "row_id": "map033/ev042/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "9689b7cffeb3327b",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 42,
+    "event_name": "Rock",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbRockSmash",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev042/p0"
+  },
+  {
+    "row_id": "map033/ev044/p0",
+    "kind": "page",
+    "map_id": 33,
+    "content_hash": "a930201f885e155b",
+    "effects": [],
+    "script_heads": [
+      "pbRockSmash"
     ],
     "unrecognized_heads": [],
     "other_codes": [],
@@ -1830,7 +4211,108 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev044/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "22ca1d7986838b74",
+    "effects": [
+      "erase_event",
+      "move_route",
+      "se"
+    ],
+    "script_heads": [
+      "pbEraseThisEvent",
+      "pbRockSmashRandomEncounter"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 44,
+    "event_name": "Rock",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbRockSmash",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev044/p0"
+  },
+  {
+    "row_id": "map033/ev044/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "9689b7cffeb3327b",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [
+      "rock_smash"
+    ],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 44,
+    "event_name": "Rock",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbRockSmash",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev044/p0"
   },
   {
     "row_id": "map033/ev045/p0",
@@ -1868,16 +4350,16 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev045/p1",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "b427f6fc6697a5f4",
+    "content_hash": "5539cd09d8efee80",
     "effects": [
-      "graphic",
-      "move_route",
       "temp_switch_write"
     ],
     "script_heads": [
@@ -1909,7 +4391,100 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev045/p1/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "15159e8843c858aa",
+    "effects": [
+      "graphic",
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 45,
+    "event_name": "EV045",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev045/p1"
+  },
+  {
+    "row_id": "map033/ev045/p1/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "4f8217c3e24208a2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 45,
+    "event_name": "EV045",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev045/p1"
   },
   {
     "row_id": "map033/ev046/p0",
@@ -1947,16 +4522,16 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev046/p1",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "b427f6fc6697a5f4",
+    "content_hash": "5539cd09d8efee80",
     "effects": [
-      "graphic",
-      "move_route",
       "temp_switch_write"
     ],
     "script_heads": [
@@ -1988,16 +4563,108 @@
     "trigger": "autorun",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev046/p1/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "15159e8843c858aa",
+    "effects": [
+      "graphic",
+      "move_route"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 46,
+    "event_name": "EV046",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev046/p1"
+  },
+  {
+    "row_id": "map033/ev046/p1/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "4f8217c3e24208a2",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 46,
+    "event_name": "EV046",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": 22,
+      "switch1_name": "s:tsOff?(\"A\")",
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "autorun",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "get_character(0).onEvent?",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev046/p1"
   },
   {
     "row_id": "map033/ev050/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "58bfb375a4eeb4dc",
+    "content_hash": "aa0efa62d8c69735",
     "effects": [
-      "giveitem",
-      "self_switch_write"
+      "giveitem"
     ],
     "script_heads": [
       "pbItemBall"
@@ -2027,7 +4694,99 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev050/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "12db9366187ed884",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 50,
+    "event_name": "EV050",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbItemBall(::PBItems::ANTIDOTE)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev050/p0"
+  },
+  {
+    "row_id": "map033/ev050/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "4abb86e4b1d91544",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 50,
+    "event_name": "EV050",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "Kernel.pbItemBall(::PBItems::ANTIDOTE)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev050/p0"
   },
   {
     "row_id": "map033/ev050/p1",
@@ -2059,23 +4818,23 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev053/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "7e85f0eb1ebd2d22",
+    "content_hash": "c08d5665ae3bd8e5",
     "effects": [
       "bubble_ui",
-      "self_switch_write",
       "text",
       "trainerbattle"
     ],
     "script_heads": [
       "pbCallBub",
       "pbNoticePlayer",
-      "pbPhoneRegisterBattle",
       "pbTrainerBattle",
       "pbTrainerEnd",
       "pbTrainerIntro"
@@ -2105,34 +4864,117 @@
     "trigger": "event_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
-    "row_id": "map033/ev053/p1",
-    "kind": "page",
+    "row_id": "map033/ev053/p0/b0",
+    "kind": "branch",
     "map_id": 33,
-    "content_hash": "594b8dfec8402e7d",
+    "content_hash": "8f4b0a7831a0a7ca",
     "effects": [
-      "bubble_ui",
-      "control_flow",
-      "self_switch_write",
-      "text"
+      "self_switch_write"
     ],
     "script_heads": [
-      "createPhoneTrainer",
-      "pbCallBub",
-      "pbPhoneBattleCount",
-      "pbPhoneIncrement",
-      "pbTrainerEnd",
-      "pbTrainerIntro"
+      "pbPhoneRegisterBattle"
     ],
     "unrecognized_heads": [],
     "other_codes": [],
     "requires": [],
     "unhandled": 0,
-    "script_typed_conditions": 2,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 53,
+    "event_name": "Trainer(5)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 12,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::YOUNGSTER,\"Richey\",_I(\"Oh, crackers! I lost!\"),false,0,false,0)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev053/p0"
+  },
+  {
+    "row_id": "map033/ev053/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "fe017a87d56e45da",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 53,
+    "event_name": "Trainer(5)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 12,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::YOUNGSTER,\"Richey\",_I(\"Oh, crackers! I lost!\"),false,0,false,0)",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev053/p0"
+  },
+  {
+    "row_id": "map033/ev053/p1",
+    "kind": "page",
+    "map_id": 33,
+    "content_hash": "8df9e93830710be7",
+    "effects": [],
+    "script_heads": [
+      "pbPhoneBattleCount"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 1,
     "condition_families": [
-      "game_variables_cmp",
       "pb_phone_battle_count"
     ],
     "condition_unclassified": [],
@@ -2152,16 +4994,208 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev053/p1/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "5b822ce0c639dc48",
+    "effects": [
+      "bubble_ui",
+      "control_flow",
+      "text"
+    ],
+    "script_heads": [
+      "createPhoneTrainer",
+      "pbCallBub",
+      "pbTrainerIntro"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 1,
+    "condition_families": [
+      "game_variables_cmp"
+    ],
+    "condition_unclassified": [],
+    "event_id": 53,
+    "event_name": "Trainer(5)",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": "B"
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPhoneBattleCount(PBTrainers::YOUNGSTER,\"Richey\")>=1",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev053/p1"
+  },
+  {
+    "row_id": "map033/ev053/p1/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "3a0dc27d8bc6f9eb",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [
+      "pbPhoneIncrement",
+      "pbTrainerEnd"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 53,
+    "event_name": "Trainer(5)",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": "B"
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 7,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$game_variables[1]==0",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev053/p1/b0"
+  },
+  {
+    "row_id": "map033/ev053/p1/b2",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "e91d917d8267f06c",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 53,
+    "event_name": "Trainer(5)",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": "B"
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 2,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 7,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$game_variables[1]==0",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev053/p1/b0"
+  },
+  {
+    "row_id": "map033/ev053/p1/b3",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "26dd002a14fb13c8",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 53,
+    "event_name": "Trainer(5)",
+    "page_idx": 1,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": "B"
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 3,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPhoneBattleCount(PBTrainers::YOUNGSTER,\"Richey\")>=1",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev053/p1"
   },
   {
     "row_id": "map033/ev053/p2",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "079beda9567b7078",
+    "content_hash": "ccb073b2b9d1064e",
     "effects": [
       "bubble_ui",
-      "control_flow",
       "text"
     ],
     "script_heads": [
@@ -2194,7 +5228,104 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev053/p2/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "5367cf53648ffc50",
+    "effects": [
+      "bubble_ui",
+      "control_flow",
+      "text"
+    ],
+    "script_heads": [
+      "pbCallBub",
+      "pbPhoneRegisterBattle"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 53,
+    "event_name": "Trainer(5)",
+    "page_idx": 2,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": "A"
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPhoneBattleCount(PBTrainers::YOUNGSTER,\"Richey\")>=1",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev053/p2"
+  },
+  {
+    "row_id": "map033/ev053/p2/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "414ecf945973a039",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 53,
+    "event_name": "Trainer(5)",
+    "page_idx": 2,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": "A"
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPhoneBattleCount(PBTrainers::YOUNGSTER,\"Richey\")>=1",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev053/p2"
   },
   {
     "row_id": "map033/ev097/p0",
@@ -2226,7 +5357,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev098/p0",
@@ -2264,7 +5397,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev099/p0",
@@ -2301,16 +5436,16 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev100/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "592dad1898fced39",
-    "effects": [
-      "self_switch_write"
-    ],
+    "content_hash": "5ee93ebb450c405e",
+    "effects": [],
     "script_heads": [
       "pbPickBerry"
     ],
@@ -2339,7 +5474,99 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev100/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "d6b3e68a9d332ff4",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 100,
+    "event_name": "BerryPlant",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPickBerry(PBItems::ORANBERRY,2)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev100/p0"
+  },
+  {
+    "row_id": "map033/ev100/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "b491a611197c08bf",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 100,
+    "event_name": "BerryPlant",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPickBerry(PBItems::ORANBERRY,2)",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev100/p0"
   },
   {
     "row_id": "map033/ev100/p1",
@@ -2373,7 +5600,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev101/p0",
@@ -2407,16 +5636,16 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev102/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "592dad1898fced39",
-    "effects": [
-      "self_switch_write"
-    ],
+    "content_hash": "5ee93ebb450c405e",
+    "effects": [],
     "script_heads": [
       "pbPickBerry"
     ],
@@ -2445,7 +5674,99 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev102/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "d6b3e68a9d332ff4",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 102,
+    "event_name": "BerryPlant",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPickBerry(PBItems::ORANBERRY,2)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev102/p0"
+  },
+  {
+    "row_id": "map033/ev102/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "b491a611197c08bf",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 102,
+    "event_name": "BerryPlant",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbPickBerry(PBItems::ORANBERRY,2)",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev102/p0"
   },
   {
     "row_id": "map033/ev102/p1",
@@ -2479,16 +5800,17 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev103/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "9b27422e0d32c0b7",
+    "content_hash": "ab23305b095877bb",
     "effects": [
       "bubble_ui",
-      "self_switch_write",
       "text",
       "trainerbattle"
     ],
@@ -2524,7 +5846,99 @@
     "trigger": "event_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev103/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "6ec0466e7401f4f5",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 103,
+    "event_name": "Trainer(3)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 9,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::LASS,\"Lynette\",_I(\"Anyone can be a Trainer, but some people definitely seem more suited for it than others, don't you think?\"),false,0,false,0)",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev103/p0"
+  },
+  {
+    "row_id": "map033/ev103/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "d2b0d04f4516ceea",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 103,
+    "event_name": "Trainer(3)",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "event_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 9,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "pbTrainerBattle(PBTrainers::LASS,\"Lynette\",_I(\"Anyone can be a Trainer, but some people definitely seem more suited for it than others, don't you think?\"),false,0,false,0)",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev103/p0"
   },
   {
     "row_id": "map033/ev103/p1",
@@ -2561,7 +5975,9 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev141/p0",
@@ -2595,17 +6011,17 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/ev143/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "5d7250adf6e05832",
+    "content_hash": "abfcd9fc28f137f6",
     "effects": [],
-    "script_heads": [
-      "pbCancelVehicles"
-    ],
+    "script_heads": [],
     "unrecognized_heads": [],
     "other_codes": [],
     "requires": [],
@@ -2631,17 +6047,107 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev143/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "011c27825e2cc2a0",
+    "effects": [],
+    "script_heads": [
+      "pbCancelVehicles"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 143,
+    "event_name": "EV143",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "player_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonGlobal.surfing",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev143/p0"
+  },
+  {
+    "row_id": "map033/ev143/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "769ab8fd33ebedc8",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 143,
+    "event_name": "EV143",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "player_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonGlobal.surfing",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev143/p0"
   },
   {
     "row_id": "map033/ev144/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "5d7250adf6e05832",
+    "content_hash": "abfcd9fc28f137f6",
     "effects": [],
-    "script_heads": [
-      "pbCancelVehicles"
-    ],
+    "script_heads": [],
     "unrecognized_heads": [],
     "other_codes": [],
     "requires": [],
@@ -2667,17 +6173,107 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev144/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "011c27825e2cc2a0",
+    "effects": [],
+    "script_heads": [
+      "pbCancelVehicles"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 144,
+    "event_name": "EV144",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "player_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonGlobal.surfing",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev144/p0"
+  },
+  {
+    "row_id": "map033/ev144/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "769ab8fd33ebedc8",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 144,
+    "event_name": "EV144",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "player_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonGlobal.surfing",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev144/p0"
   },
   {
     "row_id": "map033/ev145/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "5d7250adf6e05832",
+    "content_hash": "abfcd9fc28f137f6",
     "effects": [],
-    "script_heads": [
-      "pbCancelVehicles"
-    ],
+    "script_heads": [],
     "unrecognized_heads": [],
     "other_codes": [],
     "requires": [],
@@ -2703,17 +6299,107 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev145/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "011c27825e2cc2a0",
+    "effects": [],
+    "script_heads": [
+      "pbCancelVehicles"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 145,
+    "event_name": "EV145",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "player_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonGlobal.surfing",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev145/p0"
+  },
+  {
+    "row_id": "map033/ev145/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "769ab8fd33ebedc8",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 145,
+    "event_name": "EV145",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "player_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonGlobal.surfing",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev145/p0"
   },
   {
     "row_id": "map033/ev146/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "5d7250adf6e05832",
+    "content_hash": "abfcd9fc28f137f6",
     "effects": [],
-    "script_heads": [
-      "pbCancelVehicles"
-    ],
+    "script_heads": [],
     "unrecognized_heads": [],
     "other_codes": [],
     "requires": [],
@@ -2739,17 +6425,107 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev146/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "011c27825e2cc2a0",
+    "effects": [],
+    "script_heads": [
+      "pbCancelVehicles"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 146,
+    "event_name": "EV146",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "player_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonGlobal.surfing",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev146/p0"
+  },
+  {
+    "row_id": "map033/ev146/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "769ab8fd33ebedc8",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 146,
+    "event_name": "EV146",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "player_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonGlobal.surfing",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev146/p0"
   },
   {
     "row_id": "map033/ev147/p0",
     "kind": "page",
     "map_id": 33,
-    "content_hash": "5d7250adf6e05832",
+    "content_hash": "abfcd9fc28f137f6",
     "effects": [],
-    "script_heads": [
-      "pbCancelVehicles"
-    ],
+    "script_heads": [],
     "unrecognized_heads": [],
     "other_codes": [],
     "requires": [],
@@ -2775,7 +6551,99 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/ev147/p0/b0",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "011c27825e2cc2a0",
+    "effects": [],
+    "script_heads": [
+      "pbCancelVehicles"
+    ],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 147,
+    "event_name": "EV147",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "player_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonGlobal.surfing",
+      "explicit": true
+    },
+    "parent_row_id": "map033/ev147/p0"
+  },
+  {
+    "row_id": "map033/ev147/p0/b1",
+    "kind": "branch",
+    "map_id": 33,
+    "content_hash": "769ab8fd33ebedc8",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 147,
+    "event_name": "EV147",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "player_touch",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 0,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonGlobal.surfing",
+      "explicit": false
+    },
+    "parent_row_id": "map033/ev147/p0"
   },
   {
     "row_id": "map033/terrain/stairs/52,41",
@@ -2803,7 +6671,9 @@
       "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
       "source_event_id": 69
     },
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/terrain/stairs/52,42",
@@ -2831,7 +6701,9 @@
       "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
       "source_event_id": 66
     },
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/terrain/stairs/53,43",
@@ -2859,7 +6731,9 @@
       "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
       "source_event_id": 48
     },
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/terrain/stairs/53,44",
@@ -2887,63 +6761,9 @@
       "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
       "source_event_id": 47
     },
-    "reachability_consulted": true
-  },
-  {
-    "row_id": "map033/terrain/stairs/57,10",
-    "kind": "terrain",
-    "map_id": 33,
-    "content_hash": "870fd6cb8cacbaf7",
-    "effects": [],
-    "script_heads": [],
-    "unrecognized_heads": [],
-    "other_codes": [],
-    "requires": [],
-    "unhandled": null,
-    "script_typed_conditions": 0,
-    "condition_families": [],
-    "condition_unclassified": [],
-    "event_id": null,
-    "event_name": null,
-    "page_idx": null,
-    "condition": null,
-    "trigger": null,
-    "seam": null,
-    "terrain": {
-      "x": 57,
-      "y": 10,
-      "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
-      "source_event_id": 31
-    },
-    "reachability_consulted": true
-  },
-  {
-    "row_id": "map033/terrain/stairs/57,11",
-    "kind": "terrain",
-    "map_id": 33,
-    "content_hash": "3c255189ddf2e314",
-    "effects": [],
-    "script_heads": [],
-    "unrecognized_heads": [],
-    "other_codes": [],
-    "requires": [],
-    "unhandled": null,
-    "script_typed_conditions": 0,
-    "condition_families": [],
-    "condition_unclassified": [],
-    "event_id": null,
-    "event_name": null,
-    "page_idx": null,
-    "condition": null,
-    "trigger": null,
-    "seam": null,
-    "terrain": {
-      "x": 57,
-      "y": 11,
-      "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
-      "source_event_id": 26
-    },
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map033/terrain/stairs/57,9",
@@ -2971,16 +6791,113 @@
       "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
       "source_event_id": 33
     },
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/terrain/stairs/57,10",
+    "kind": "terrain",
+    "map_id": 33,
+    "content_hash": "870fd6cb8cacbaf7",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": null,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": null,
+    "event_name": null,
+    "page_idx": null,
+    "condition": null,
+    "trigger": null,
+    "seam": null,
+    "terrain": {
+      "x": 57,
+      "y": 10,
+      "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
+      "source_event_id": 31
+    },
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map033/terrain/stairs/57,11",
+    "kind": "terrain",
+    "map_id": 33,
+    "content_hash": "3c255189ddf2e314",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": null,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": null,
+    "event_name": null,
+    "page_idx": null,
+    "condition": null,
+    "trigger": null,
+    "seam": null,
+    "terrain": {
+      "x": 57,
+      "y": 11,
+      "behavior": "MB_SIDEWAYS_STAIRS_RIGHT_SIDE",
+      "source_event_id": 26
+    },
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map081/ev001/p0",
     "kind": "page",
     "map_id": 81,
-    "content_hash": "87357d1e703e202c",
+    "content_hash": "dcb4a76ce2a8c69e",
+    "effects": [
+      "switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 1,
+    "event_name": "EV001",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map081/ev001/p0/b0",
+    "kind": "branch",
+    "map_id": 81,
+    "content_hash": "d6f7f1250a86ba95",
     "effects": [
       "se",
-      "self_switch_write",
       "switch_write",
       "text"
     ],
@@ -3010,7 +6927,156 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 1,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map081/ev001/p0"
+  },
+  {
+    "row_id": "map081/ev001/p0/b1",
+    "kind": "branch",
+    "map_id": 81,
+    "content_hash": "502d30c576218b6d",
+    "effects": [
+      "self_switch_write"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 1,
+    "event_name": "EV001",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 6,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonBag.pbStoreItem(::PBItems::OLDROD)",
+      "explicit": true
+    },
+    "parent_row_id": "map081/ev001/p0/b0"
+  },
+  {
+    "row_id": "map081/ev001/p0/b2",
+    "kind": "branch",
+    "map_id": 81,
+    "content_hash": "0e67c8e595bba033",
+    "effects": [],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 1,
+    "event_name": "EV001",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 2,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 6,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 12,
+      "condition_text": "$PokemonBag.pbStoreItem(::PBItems::OLDROD)",
+      "explicit": false
+    },
+    "parent_row_id": "map081/ev001/p0/b0"
+  },
+  {
+    "row_id": "map081/ev001/p0/b3",
+    "kind": "branch",
+    "map_id": 81,
+    "content_hash": "6a2921fd06a78144",
+    "effects": [
+      "switch_write",
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 1,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 1,
+    "event_name": "EV001",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 3,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 1,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map081/ev001/p0"
   },
   {
     "row_id": "map081/ev001/p1",
@@ -3045,16 +7111,17 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map081/ev002/p0",
     "kind": "page",
     "map_id": 81,
-    "content_hash": "109ba468d5bba685",
+    "content_hash": "c2f1288b0620f558",
     "effects": [
       "switch_write",
-      "text",
       "var_write"
     ],
     "script_heads": [],
@@ -3081,7 +7148,103 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
+  },
+  {
+    "row_id": "map081/ev002/p0/b0",
+    "kind": "branch",
+    "map_id": 81,
+    "content_hash": "d4e4c86e6d3c385a",
+    "effects": [
+      "switch_write",
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 2,
+    "event_name": "EV002",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 0,
+      "arm_kind": "then",
+      "opener_code": 111,
+      "opener_index": 2,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map081/ev002/p0"
+  },
+  {
+    "row_id": "map081/ev002/p0/b1",
+    "kind": "branch",
+    "map_id": 81,
+    "content_hash": "dee3af7dd64f3da5",
+    "effects": [
+      "switch_write",
+      "text"
+    ],
+    "script_heads": [],
+    "unrecognized_heads": [],
+    "other_codes": [],
+    "requires": [],
+    "unhandled": 0,
+    "script_typed_conditions": 0,
+    "condition_families": [],
+    "condition_unclassified": [],
+    "event_id": 2,
+    "event_name": "EV002",
+    "page_idx": 0,
+    "condition": {
+      "switch1_id": null,
+      "switch1_name": null,
+      "switch2_id": null,
+      "switch2_name": null,
+      "variable_id": null,
+      "variable_name": null,
+      "variable_min": null,
+      "self_switch_ch": null
+    },
+    "trigger": "action",
+    "seam": null,
+    "terrain": null,
+    "reachability_consulted": true,
+    "branch": {
+      "arm_index": 1,
+      "arm_kind": "else",
+      "opener_code": 111,
+      "opener_index": 2,
+      "choice_index": null,
+      "choice_text": null,
+      "condition_type": 1,
+      "condition_text": null,
+      "explicit": true
+    },
+    "parent_row_id": "map081/ev002/p0"
   },
   {
     "row_id": "map081/ev003/p0",
@@ -3118,7 +7281,9 @@
     "trigger": "player_touch",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   },
   {
     "row_id": "map081/ev004/p0",
@@ -3152,6 +7317,8 @@
     "trigger": "action",
     "seam": null,
     "terrain": null,
-    "reachability_consulted": true
+    "reachability_consulted": true,
+    "branch": null,
+    "parent_row_id": null
   }
 ]

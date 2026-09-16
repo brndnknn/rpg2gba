@@ -9,11 +9,23 @@
   },
   "map036/ev002/p1": {
     "disposition": "beat:B8",
-    "derived_hash": "4a55df2ccabd01ae"
+    "derived_hash": "5539cd09d8efee80"
+  },
+  "map036/ev002/p1/b0": {
+    "disposition": "cosmetic",
+    "derived_hash": "744e1fb92a7097bb"
+  },
+  "map036/ev002/p1/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f8217c3e24208a2"
   },
   "map036/ev003/p0": {
     "disposition": "beat:B2",
-    "derived_hash": "067df10d4d4645c6"
+    "derived_hash": "d72a2c880eaaf5a6"
+  },
+  "map036/ev003/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "103300f9926a291f"
   },
   "map036/ev003/p1": {
     "disposition": "beat:B2",
@@ -21,7 +33,11 @@
   },
   "map036/ev004/p0": {
     "disposition": "beat:B3",
-    "derived_hash": "88d53c400a1e11af"
+    "derived_hash": "f0494bc23db001cb"
+  },
+  "map036/ev004/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6551b265fa38c760"
   },
   "map036/ev004/p1": {
     "disposition": "beat:B3",
@@ -29,7 +45,11 @@
   },
   "map036/ev005/p0": {
     "disposition": "beat:B4",
-    "derived_hash": "efdfa7b2c13cd64d"
+    "derived_hash": "8c43f10d916f03ff"
+  },
+  "map036/ev005/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "72a58d1463ae302f"
   },
   "map036/ev005/p1": {
     "disposition": "beat:B4",
@@ -37,7 +57,11 @@
   },
   "map036/ev006/p0": {
     "disposition": "beat:B5",
-    "derived_hash": "cc3c34dfe6934bc8"
+    "derived_hash": "5063cff2a7750509"
+  },
+  "map036/ev006/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "cc30f944bb1c7e83"
   },
   "map036/ev006/p1": {
     "disposition": "beat:B5",
@@ -45,7 +69,17 @@
   },
   "map036/ev008/p0": {
     "disposition": "blocked:surf",
-    "derived_hash": "34f7a62ccab55332",
+    "derived_hash": "0249af67cbdff4bd",
+    "proposed": true
+  },
+  "map036/ev008/p0/b0": {
+    "disposition": "blocked:surf",
+    "derived_hash": "1c1e29fe474e35ee",
+    "proposed": true
+  },
+  "map036/ev008/p0/b1": {
+    "disposition": "blocked:surf",
+    "derived_hash": "a0449170993f5b87",
     "proposed": true
   },
   "map036/ev008/p1": {
@@ -55,7 +89,17 @@
   },
   "map036/ev009/p0": {
     "disposition": "blocked:surf",
-    "derived_hash": "f8b13c8df56832cb",
+    "derived_hash": "935299fd953d1153",
+    "proposed": true
+  },
+  "map036/ev009/p0/b0": {
+    "disposition": "blocked:surf",
+    "derived_hash": "1a046d40c9f6fc2b",
+    "proposed": true
+  },
+  "map036/ev009/p0/b1": {
+    "disposition": "blocked:surf",
+    "derived_hash": "2c6f1ce6f61cd707",
     "proposed": true
   },
   "map036/ev009/p1": {
@@ -73,7 +117,11 @@
   },
   "map037/ev004/p0": {
     "disposition": "beat:B9",
-    "derived_hash": "f7f292ceb77e9449"
+    "derived_hash": "b5c616fd51f72ec0"
+  },
+  "map037/ev004/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "532e08846fb3ab73"
   },
   "map037/ev004/p1": {
     "disposition": "beat:B9",
@@ -81,7 +129,11 @@
   },
   "map037/ev005/p0": {
     "disposition": "beat:B10",
-    "derived_hash": "2a8a31adcc4b95e7"
+    "derived_hash": "da637962d39029ec"
+  },
+  "map037/ev005/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "d4c462a7dc3f4795"
   },
   "map037/ev005/p1": {
     "disposition": "beat:B10",

@@ -35,7 +35,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from .schema import COSMETIC_SAFE_TAGS, ManifestRow
+from .schema import COSMETIC_SAFE_TAGS, ManifestRow, whole_page_views
 
 _TRAINER_BATTLE_HEADS: frozenset[str] = frozenset({
     "pbTrainerBattle",
@@ -403,13 +403,16 @@ def classify_manifest(rows: Sequence[ManifestRow]) -> tuple[ArchetypeMatch, ...]
     and independent of input order. Only `kind == "page"` rows are ever
     considered; `seam` and `terrain` rows are skipped up front.
     """
+    # Fingerprints are whole-page facts; C1's trunk-only page rows would hide
+    # every command inside a conditional (see `whole_page_views`).
+    views = whole_page_views(rows)
     groups: dict[tuple[int, int], list[ManifestRow]] = {}
     for row in rows:
         if row.kind != "page":
             continue
         if row.event_id is None:
             continue
-        groups.setdefault((row.map_id, row.event_id), []).append(row)
+        groups.setdefault((row.map_id, row.event_id), []).append(views[row.row_id])
 
     matches: list[ArchetypeMatch] = []
     for key in sorted(groups):
