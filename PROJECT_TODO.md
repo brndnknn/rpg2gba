@@ -476,48 +476,6 @@ call, not a bug — the scene itself boot-walked and passed 2026-08-02
 vanilla ball vs. convert Uranium's sheet) is still outstanding. Migrated
 from SLICE1_TODO #23, 2026-08-04.
 
-### 25. DONE 2026-09-08 — `WARP_OVERRIDES` is derived, not hand-maintained
-
-`scripts/assemble_pathfinder.py:58` defines a hand-written `WARP_OVERRIDES:
-dict[int, set[tuple[int, int]]]` that must agree with what
-`metadata_wiring.build_slice_maps` (`src/rpg2gba/tileset_converter/
-metadata_wiring.py:2257`) computes for gated-door and warp-override cells —
-a source-of-truth duplication that violates CLAUDE.md §4.3 ("one source of
-truth per concept"). They happen to agree today (the gated-door fix's item
-(4), `ObjectBuildResult.gated_door_cells`, is what keeps them agreeing) but
-nothing enforces it, so a future reconciliation could silently re-diverge
-and quietly re-break doors. Fix: derive `WARP_OVERRIDES` from
-`build_slice_maps`'s computed set instead of hand-listing it. Migrated from
-`reference/findings/gated_door_collapse_2026-07-26.md` §7, 2026-08-04.
-
-**Fixed 2026-09-08** (`POST_CH05_REVIEW.md` G2), by persistence rather than
-reimplementation. `build_slice_maps` already computed the authoritative set;
-the problem was that `assemble_pathfinder.py` runs in a separate process one
-runbook step later and could not see it. So runbook step 4
-(`scripts/stage_slice_scripts.py --write`) now writes
-`output/uranium-build/warp_overrides.gen.json` via
-`metadata_wiring.write_warp_overrides`, and step 5 reads it via
-`load_warp_overrides`. The hand-written dict is gone from
-`assemble_pathfinder.py`, and `scripts/verify_viewer_rom_match.py` reads the
-same file so it really is checking the build's input.
-
-Re-deriving the rule in the assembler was considered and rejected: the
-gated-door and boot-page-selection logic is subtle, and a second
-implementation of it is precisely the silent re-divergence this entry warned
-about. One derivation, one writer, one reader.
-
-`load_warp_overrides` **fails loud** when the file is absent rather than
-defaulting to an empty set — "no doors anywhere" must never be a silent
-default (§4.5).
-
-Guarded by `tests/test_warp_overrides_derivation.py` against
-`tests/fixtures/warp_overrides_ch01_ch05.json`, a frozen copy of the
-hand-maintained table exactly as it stood at `78152b75`. Every one of its 45
-cells was verified by a human against a booted ROM across CH01–CH05's five §9
-gates, which makes it the strongest available oracle for "did the derivation
-stay correct". The comparison is scoped to those 18 maps, so a new chapter
-growing the set does not fail the test for the wrong reason.
-
 ### 26. Lab starter scene: what puts Uranium's own player on (14,7)? — unresolved, plus a fidelity call riding on the answer
 
 `reference/findings/lab_starter_scene_positioning_2026-07-27.md` §4 poses an
@@ -775,47 +733,6 @@ ships with 2 spare metatiles. Do the copy-cost census before committing to it.
 **Due:** before Map117 / Map187 / Map163 / Map121 / Map028 enter a chapter (all
 Act 2+). Not urgent for the current frontier.
 
-### 33. Auto-derive ledge jump directions from RMXP passage bits — DONE 2026-08-24
-
-*Migrated from `CH02_TODO.md` #1 on the CH02 gate pass 2026-08-12. **Closed
-2026-08-24** during CH04's approval wait. Full derivation table + ts22
-inventory: `reference/archive/CH02_TODO.md` #1.*
-
-**Resolution.** `terrain_tags.column_behavior` derives the direction from the
-passage byte's low nibble; `ledge_directions` stays empty and is now purely an
-escape hatch. Sole clear bit -> `MB_JUMP_*` (0x08 south / 0x01 north / 0x02
-east / 0x04 west); 0x0F is a plain wall, silent; >=2 clear bits warns once and
-falls back to `MB_NORMAL`. The four `MB_JUMP_*` values resolve once at
-construction and fail loud if the fork lacks one. Suite 2358 passed / 19
-skipped. Derived directions reproduce the archive's hand-verified ts22
-inventory exactly (0x07/0x0B/0x0D/0x0E -> S/W/E/N), and map 35's 16 tag-1
-cells all derive `MB_JUMP_SOUTH` with zero ambiguity. **Caveat:** no ROM has
-been built with this yet, **and CH04 will not clear it** (user, 2026-08-25):
-map 35's 16 tag-1 cells all sit on the far side of the rockslide, which is
-geometrically impassable until Rock Smash arrives, so CH04 *builds* the derived
-ledges but cannot reach them — the boot-walk gate will pass without any ledge
-ever being jumped. First real hardware proof therefore waits on the chapter that
-opens the rockslide; do not read CH04's green gate as validating this item, and
-do not register a CH04 beat for it. `reference/archive/PATHFINDER_FINDINGS.md:106` mislabels tiles 840-842
-(0x0E) as a south ledge; it is north. Left unedited as archived history.
-
-Ledge directionality is fully recoverable from data already deserialized —
-Essentials never stores a jump direction, so the tile's 4-dir passage bits are
-the whole story (sole clear bit = the jump direction; 0x0F = pure wall). Rule:
-0x08→`MB_JUMP_SOUTH`, 0x01→`MB_JUMP_NORTH`, 0x02→`MB_JUMP_EAST`,
-0x04→`MB_JUMP_WEST`; 0 clear bits → `MB_NORMAL` silently; ≥2 → warn +
-`MB_NORMAL`. The empty `ledge_directions` override in
-`reference/terrain_tag_map.json` stays as an escape hatch and wins over the
-derivation — do not grow it.
-
-**Where:** `tileset_converter/terrain_tags.py` `column_behavior`, deriving when
-the override table misses. Tests in `tests/test_terrain_tags.py`: one per
-direction + blocker + ambiguous + override-wins. **Verify:** Route 01's six
-warning tiles resolve without hand entries, and Map032's ~30 south-ledge
-over-block cells become jumpable in-game. Until it lands, builds keep firing 3
-benign warnings for ts22 tiles 840/841/842 (the Moki pond-dock front, where
-`MB_NORMAL` and `MB_JUMP_NORTH` behave identically anyway).
-
 ### 34. Secondary-tileset animation support
 
 *Migrated from `CH02_TODO.md` #2 on the CH02 gate pass 2026-08-12.*
@@ -1053,36 +970,7 @@ confidently and wrongly. The sibling rule `approach_model_unenforced` is now dow
 to 1 row (the seam, which has no event cell) because that half **was** derivable —
 see `chapter_manifest/approach_model.py`.
 
-### 65. CH01–CH03 manifests no longer load — `reachability_consulted` is a required field
-
-Slice 2 added `ManifestRow.reachability_consulted: bool` (`chapter_manifest/schema.py`),
-and `row_from_dict` does a strict field-set equality check by design — a missing key
-fails loud with "regenerate the manifest rather than patching it". CH04 was regenerated
-as part of the slice; `CH01.manifest.json`, `CH02.manifest.json` and `CH03.manifest.json`
-were not, so any `chapter_manifest` command pointed at those three (`check`, `render`,
-load) now hard-fails on the first row.
-
-The same break applies on the disposition side: the `deferred:` verdict and the
-geography-flavoured `unreachable:<reason>` arguments were removed from `_VERDICTS` in
-favour of `blocked:<set>`, so an un-migrated dispositions file fails `Disposition.parse`.
-Only CH04 has a dispositions file today, and it was hand-migrated.
-
-This is the intended fail-loud shape, not a defect — but it is an unacknowledged schema
-break on three gate-closed chapters, and a bystander running `check --chapter CH02` gets
-a crash with no other clue. **Remediation:** regenerate CH01–CH03 manifests once the
-per-(chapter,map) verified start cells exist for their maps (`_CHAPTER_MAP_START_CELLS`
-in `generator.py` currently covers CH04 only), and diff the result before committing —
-regenerating a gate-closed chapter's manifest is not a no-op edit.
-
-*Found 2026-08-30 during the slice-2 commit review.*
-
-**2026-09-06 — unblocked, CH05 has now passed its §9 gate.** The deferral
-condition ("immediately after CH05") is satisfied as of the CH05 boot-walk
-gate pass. Regenerating CH01-CH03's manifests and re-migrating their
-dispositions files is now due; see #62's note below for the ordering
-safeguard that must govern the re-derivation.
-
-### 67. No chapter routed so far carries a route plan, and CH01-CH03 cannot get one
+### 67. No chapter routed so far carries a route plan, and CH01-CH03 have none committed
 
 Slice 3's `RULE_ROUTE_ORDER` only enforces anything when
 `reference/routes/<chapter>.route.json` exists; with no plan on disk
@@ -1096,6 +984,19 @@ reasons, and only the second is a defect:
    ("regenerate the manifest rather than patching it") before the solver
    sees a single beat. Regenerating a gate-closed chapter's manifest is
    itself #65, so this is blocked behind that, not behind routing.
+
+   **Corrected 2026-09-15:** this blocker is gone. #65 closed — the
+   CH01–CH05 manifests were regenerated in commit `eb0f064a`, and
+   `python -m rpg2gba.chapter_manifest check` loads and checks all five
+   chapters cleanly (CH01 118 / CH02 16 / CH03 48 / CH04 0 / CH05 0 errors,
+   all ordinary `undispositioned` findings, no load failure). CH01–CH03
+   dispositions files now exist too
+   (`reference/manifests/CH0{1,2,3}.dispositions.json`). So CH01–CH03 CAN
+   now be solved; what remains is purely that no route plan has been
+   generated and committed for them. Verified 2026-09-15: `reference/routes/`
+   contains only `CH05.route.json` and `CH05.locations.json`, so
+   `RULE_ROUTE_ORDER` is still unenforced on CH01–CH04 and a
+   `route_model_unenforced` warning still fires on all four.
 
 2. **CH04 solves, but its plan disagrees with its registered order.** The
    solver walks `B1 B15 B4 B9 B7 B3 B12 B5 B6 B13 B11 B2 B14` for 112 tiles;
@@ -1267,25 +1168,6 @@ step 4 itself only writes empty-conversion stubs
 step 3 in `BUILD_PLAN.md` saying so, so CH06 doesn't rediscover it the same
 way CH05 did.
 
-### 72. Boundary-crossing convention needs to be written into `BUILD_PLAN.md`
-
-Operator ruling, 2026-09-04, made during CH05's READ step: *a boundary
-crossing belongs to the chapter being opened, not the one shipping.* An
-outgoing chapter's contract is to deliver the player to the edge; the
-crossing itself is asserted by the chapter whose maps make it true.
-Rationale: an edge beat written against an unstaged neighbour is a test
-authored to decay, and it fails in the wrong chapter — this is exactly what
-happened to CH04's B7 when CH05 staged `SLICE_MAP_IDS` 36/37 and
-`metadata_wiring.classify_event` stopped skipping Map035 EV001 as an
-out-of-slice warp, silently invalidating B7's "no warp fires" assertion and
-six downstream CH04 beats. `BUILD_PLAN.md` has no statement of this
-convention anywhere; it should, so a future chapter author doesn't have to
-rediscover it by breaking a closed chapter's beats. See also #73, the tooling
-half of the same gap.
-
-**RESOLVED 2026-09-09** (`2b6a3b6e`). Written into `BUILD_PLAN.md` §2 alongside
-the ROUTE/BUILD reorder, with CH04's B7 as the worked example of the cost.
-
 ### 73. `build_beat_model` cannot see a boundary row claimed by the arriving chapter
 
 `chapter_manifest`'s `build_beat_model` loads a chapter's own playtest module
@@ -1319,37 +1201,6 @@ currently contradict each other in writing** about who owns the event — CH04's
 `DEFERRED_BEATS` reason says CH05 claims the row, `ch05.py`'s docstring says
 twice that it does not, and no CH05 beat lists it.
 
-### 74. ROUTE runs before object events exist, so its crossing check is vacuous
-
-The per-chapter loop's step 6 (ROUTE) runs before step 7 (BUILD) stages
-object events, so `RULE_ROUTE_ORDER`'s crossing check has nothing to check
-against. Step 4's `phase5` regenerates the engine maps as a warps-only Map
-Walker corpus with no Poryscript, events, or NPCs — "only warp_events
-survive" (`src/rpg2gba/tileset_converter/phase5.py:8-11`); trainer objects
-and their sight cones are only restored at step 7 by `build_object_events`
-and the assembler's copy into `engine/data/maps`. But
-`build_trigger_overlay` reads `engine/data/maps`, so a route solved at step 6
-sees zero trainers on the map and reports zero `CROSSING` lines regardless of
-whether the order is actually safe. CH05's first solve did exactly that,
-reporting a clean 155-tile order; after running step 7's first two commands
-to stage real objects and re-checking, the same order was found to enter
-trainer sight cones on five separate legs. All five turned out benign (each
-leg either walks into the cone of the trainer that leg is walking *to*, or
-past a trainer already defeated), but that was verified by hand, not caught
-by the check — the check itself had nothing to say either way. Fix is a
-`BUILD_PLAN.md` ordering change: run ROUTE after object staging. Affects
-every chapter, not just CH05.
-
-**RESOLVED 2026-09-09.** ROUTE and BUILD swapped in `BUILD_PLAN.md` §2's
-checklist — BUILD is now step 6, ROUTE step 7. Both of ROUTE's constraints
-hold at once: it still runs before the chapter module's beats are registered
-(step 8), and BUILD never reads the route plan, so there is no cycle. The
-step-4 bullet was corrected in the same change; it had claimed WIRE stages
-object events, which `phase5` has never done, and that misreading is what put
-ROUTE at 6 in the first place. #75's `RULE_TRIGGER_OVERLAY_VACUOUS` is the
-enforcement that the ordering stays put: with trainers unstaged, the solve
-now fails loud instead of reporting a clean route.
-
 ### 75. A vacuous trigger overlay reads identically to a genuinely clean route
 
 Directly caused by #74: zero `CROSSING` lines out of `build_trigger_overlay`
@@ -1362,34 +1213,6 @@ belongs on the trigger overlay: if a chapter's dispositions carry trainer
 rows but the overlay yields no `TRAINER_SIGHT` tiles on the maps those rows
 live on, the rule should fail loud rather than silently reporting zero
 crossings (`CLAUDE.md` §4.5).
-
-### 76. `destination_scripts` is per-solve, not per-destination-segment
-
-Partial fix landed in CH05 — record this accurately, since the earlier
-framing (`reference/archive/CH05_TODO.md` §Deferred, written before the fix)
-claimed the field was simply never populated, which is no longer true. Commits `bc8e569f` and
-`a460e823` added `effective_destination_scripts`
-(`src/rpg2gba/routing/solver.py:551-553`): it unions in the triggers a
-predecessor chapter's beats already resolved
-(`playtest.chapter.resolved_trigger_scripts`), so a trigger CH04 already
-cleared (Timothy's event-touch tile, which CH05's B1 must cross to reach the
-cave) is no longer treated as foreign on CH05's walk. What remains unfixed is
-the original defect: the resulting set is still a single `frozenset`
-parameter (`solver.py:420`) forwarded unchanged to every `plan_segment` call
-(`solver.py:660`), so it structurally cannot express "crossing X's sight cone
-is fine specifically on the segment whose destination is X." A trainer's own
-cone is still treated as a foreign hazard on the very segment walking up to
-that trainer — re-solving CH05 with real per-map cone data but no per-segment
-exemption went from 155 to 233 tiles and produced an incoherent order before
-the resolved-trigger union was added. Verify these line numbers against the
-current file before relying on them; the file is under active routing work.
-
-**RESOLVED 2026-09-10** (`18869baf`). The set is now a chapter-wide base
-unioned, per segment, with the destination group's own trigger scripts, keyed
-on the segment's destination point only (which the site cache key already
-includes). Derived through `page_row_script`, the same row-id-to-script join
-`resolved_trigger_scripts` uses, so a row maps to a script name once in this
-codebase (§4.3).
 
 ### 77. No automated check that the authored chapter module matches its locations plan
 
@@ -1414,55 +1237,6 @@ warp beat), on a different map than the corpus's next opportunity to hit it.
 Needs either a `chosen_approach` guaranteed on every multi-candidate node, or
 the rule widened to flag a node with no recorded approach as unenforced
 rather than silently skipped.
-
-### 79. DONE 2026-09-08 — `cells.py` has `stair_approach`, and it is not the port this entry predicted
-
-The resolver vocabulary in `cells.py` (`event_cell`, `approach_to`,
-`warp_cell`, `arrival_cell`, `entry_cell`, plus the counted `raw_cell`
-escape hatch) has nothing for staircase rows. CH05's B13 and B14 are its only
-two `raw_cell()` uses (`src/rpg2gba/playtest/chapters/ch05.py:548` and
-`:586`), purely because of this gap — both `why=` strings say so explicitly.
-Not a discovery problem: `src/rpg2gba/routing/locations.py`'s
-`_stair_approach` (`:196-263`) already implements the correct logic — a
-stair row resolves to the E/W neighbour that owns the `stair_diagonal` edge
-in `traversal.graph.build_map_graph`'s real edges — for the routing side. A
-`stair_approach` resolver in `cells.py` would be a port of that function into
-the beat-authoring vocabulary, not new derivation work.
-
-**Built 2026-09-08** (`POST_CH05_REVIEW.md` G4) — but **"a port, not new
-derivation work" was wrong**, and measuring that was the useful part.
-
-`_stair_approach`'s rule (the E/W neighbour owning a `stair_diagonal` edge)
-holds in the middle of a staircase run and breaks at its ends: the flat cell
-you walk in from owns no such edge, while an unwalkable cell partway along a
-diagonal run does. Measured against the six independently ROM-verified stair
-approaches in the corpus — CH02's four `STAIR*_APPROACH` constants, gate-passed
-with B2/B3 asserting the displacement on a booted ROM, plus CH05's two
-`raw_cell` values — **ownership reproduces 4 and returns an unstandable cell
-for the other 2. Plain walkability of the named side reproduces all 6.** That
-is the rule `stair_approach` uses, and
-`tests/test_cells_stair_approach.py::test_walkability_rule_beats_edge_ownership_on_every_known_value`
-pins the comparison so the choice does not get "simplified" back later.
-
-**`side` is required, not inferred.** Which end a staircase is entered from is
-an authoring claim: CH02's B2 and B3 walk each of Route 01's two staircases in
-*both* directions, and that is the point of those beats. An unwalkable named
-side fails loud and names the other one, mirroring `approach_to`'s `prefer=`
-contract rather than silently substituting.
-
-**Keyed by event id, not coordinates.** A `stair=(20, 9)` argument would itself
-be a bare coordinate literal — the lint caught exactly that on the first
-attempt. A stair *is* an event, so `stair_event=` matches `event_cell` and
-`approach_to` and keeps the call inside the ban.
-
-CH05's two `raw_cell` escapes are discharged; **CH05 is back to zero coordinate
-literals**, the budget it was born with. `reference/routes/CH05.locations.json`
-was regenerated: every derived cell is byte-identical, only the `resolver` hint
-strings changed (they used to read "no cells.py side param exists", which is no
-longer true).
-
-The underlying defect is filed separately as **#90** — it is a bug in shipped
-code, not just a missing feature.
 
 ### 80. `find_match` keys a claim to one `(map_id, event_id)` pair
 
@@ -1501,41 +1275,6 @@ as a picture much faster and more reliably than as a tile count. Wants the
 `BUILD_PLAN.md` ROUTE-step wording changed to point at the viewer review instead
 of (or in addition to) the CLI summary.
 
-### 83. DONE 2026-09-08 — trainer battle staging failures are fatal
-
-`trainer_converter.stage.stage_slice` (`src/rpg2gba/trainer_converter/stage.py`)
-calls `stage_battles`, which wraps `build_staged_battles` in
-`try/except (ValueError, FileNotFoundError, KeyError)` and on any failure
-logs a WARNING and leaves `staged_battles` empty (`stage.py:619-625`) rather
-than propagating — `stage_slice` then exits 0 with zero battles staged. One
-unstageable trainer therefore discards every battle in the manifest,
-including chapters that staged fine on a previous run. CH05's Keichi
-(`TRAINER_KEICHI_248`, `BLACK_BELT` class) took CH04's 17 previously-staged
-battles down to 0 during the debugging loop that resolved his trainer-class
-mapping, and the damage surfaced as an apparent *CH01* failure
-(`TRAINER_THEO_9/10/11` undefined on Map050), because the transpiler walks
-`SLICE_MAP_IDS` in tuple order and aborts at the first map whose trainer
-constants don't resolve — CH01's maps sort before CH05's. A partial failure
-silently discarded good work while reporting overall success, which is
-exactly the class `CLAUDE.md` §4.5 calls out. The trainer-pic half of
-`stage_slice` legitimately stands alone from the battle half (a pic staging
-failure shouldn't block battles and vice versa); the battle half specifically
-should either stage per-trainer (skip only the failing one, loudly) or abort
-the whole run rather than silently zeroing it.
-
-**Fixed 2026-09-08** (`POST_CH05_REVIEW.md` G3): abort, not skip-per-trainer.
-`stage_slice` still runs the pic half first and still writes the manifest —
-the pics genuinely stand alone and there is no reason to throw that work away
-— but it then raises `TrainerStagingError` carrying every offending trainer.
-`build_staged_battles` already collected them all rather than stopping at the
-first, so the complete list was available the whole time; nothing was
-propagating it. `require_battles=False` is the explicit opt-out for a
-pics-only caller.
-
-`scripts/stage_trainers.py`'s "CHECK THE BATTLE COUNT, not just the exit code"
-banner is retired — the exit code is trustworthy now. Tests in
-`tests/test_trainer_stage.py`.
-
 ### 84. `ITEM_TM76` needs a sanity check before it's ever reachable
 
 The transpiler resolved CH05's B6 (Map036 EV008, the item ball at the room
@@ -1568,39 +1307,6 @@ leaves the player). The correct recipe is `playtest walk --chapter <this> --at-b
 <first beat> --engine engine` — seed from the arriving chapter's own
 first-beat blob, never the predecessor's `--at-end`. `BUILD_PLAN.md` should
 say this instead of the current recipe.
-
-### 86. DONE 2026-09-08 — the two frozen-Opus differential tests were removed, not refreshed
-
-**The diagnosis this entry originally carried was wrong.** It read: "the frozen-Opus
-oracle predates Map036 … refreshing it is an operator content call." Investigated
-2026-09-08 in the post-CH05 review walkthrough; what was actually true:
-
-- `_differential` (`tests/test_deterministic.py:1313`) read its "oracle" from
-  `output/uranium-build/scripts/` and iterated `output/uranium-build/checkpoints/*.done`.
-  Both are gitignored and were wiped by a `pipeline --clean` at some point; `scripts/`
-  is now written by the **deterministic transpiler**, and `checkpoints/` held exactly
-  two files (`Map036.done`, `Map037.done`) from CH05's transpile.
-- So the tests were comparing the classifiers against **the transpiler's own output**.
-  Had Map036 happened to match, they would have gone green by comparing the pipeline
-  to itself — a silent pass, the §4.5 shape.
-- The real oracle was never lost. It is committed at `reference/archive/oracle_pory/`
-  (20 `.pory` files), archived 2026-07-02 under grill decision **D6** *specifically so
-  that `pipeline --clean` could not destroy it*. The archive did its job; nobody
-  repointed the tests.
-- And it did not need repointing, because **the oracle was formally retired the same
-  day**. `reference/findings/oracle_harvest_2026-07-02.md` is the one-time D6 harvest
-  (maps 001–007, every divergence cluster dispositioned: 3 transpiler bugs found and
-  fixed, 5 clusters ruled Opus errors): *"with these dispositions recorded, the oracle
-  is retired (the archive stays for provenance, it gates nothing)."* Per D6, permanent
-  goldens come from reviewed transpiler output, never Opus text — which is exactly what
-  a permanent pytest against Opus text was.
-
-**Resolution:** both tests and the now-dead `_differential` / `_norm_items` /
-`_blocks_by_label` helpers deleted; a comment at the removal site records why.
-`test_emitted_item_constants_are_real` stays (it validates against the Phase-2 source
-of truth, not against Opus). Module green at 123 passed. The one obligation the July
-harvest deliberately held open is now filed separately as **#87**.
-
 
 ### 87. `CommonEvents.pory` was never harvested against the oracle — and CH06 is the first chapter to call a common event
 
@@ -1663,41 +1369,6 @@ chapter that calls an unstripped one.
 After this lands, `reference/archive/oracle_pory/` is fully inert history and its
 README should say so.
 
-### 88. DONE 2026-09-08 — the four pinned lists have a completeness check (`rpg2gba slice-pins`)
-
-`POST_CH05_REVIEW.md` G1. Four lists must move together when a chapter joins
-`SLICE_MAP_IDS`; exactly one was guarded (`test_chapter_atlas.py` pins
-`SLICE_MAP_IDS` itself against the atlas). `test_trainer_battles.py` and
-`test_species_gate.py` checked that present entries are *valid*, never that the
-lists are *complete*, so an omission surfaced later as a transpile abort — and
-CH05 hit three of them one at a time, "each omission failed separately and
-looked unrelated to the last, costing a full loop".
-
-`src/rpg2gba/slice_pins.py`, run as `rpg2gba slice-pins` (or
-`python -m rpg2gba.slice_pins`). Two layers, because they answer different
-questions:
-
-- **The gate** — every `TRAINER_*` the transpiler actually *emits* into
-  `scripts/Map###.pory` must be in `SLICE_TRAINER_BATTLES`. Exact, and the
-  thing that fails a build: an unpinned emitted constant IS the transpile abort.
-- **The census** — every trainer-battle *event* on an in-slice map with its
-  status, whether or not it was emitted. Advisory, never an error.
-
-Pics, species and trainer-class mappings are not re-derived: the check runs the
-real `stage_battles` over the union of pinned + newly-required keys and
-re-groups its collected errors into per-list buckets. `build_staged_battles`
-already reports every offending trainer rather than the first, so one run yields
-the whole picture — which is also the Tier 2 class-mapping batching (D5).
-
-The reverse direction is deliberately never reported: `SLICE_TRAINER_BATTLES`
-may hold keys no map event resolves to. `TRAINER_THEO_9/10/11` are the standing
-case — which rival battle fires depends on the starter, so Map050's event names
-none of them.
-
-Preconditions fail loud rather than reporting clean: an absent `maps/` or an
-absent species manifest would otherwise read as "no gaps" / "every species
-missing". Tests: `tests/test_slice_pins.py` (19).
-
 ### 89. Three Map019 trainers have battle events that never fire — in slice since CH03
 
 Surfaced 2026-09-08 by #88's census, which is the first thing that could see it.
@@ -1719,44 +1390,6 @@ needed); and their parties pull in species not currently staged.
 
 Whether Map019's gang battles are worth replicating is a §10 content call, not a
 mechanical one. Filed so the census's finding does not evaporate.
-
-### 90. DONE 2026-09-08 — `_stair_approach` returned cells the player cannot stand on
-
-Found while scoping #79/G4, by checking the resolver's output against CH02's
-four ROM-verified stair approaches rather than against its own docstring.
-
-`routing.locations._stair_approach` selected "the E/W neighbour of the stair
-cell that owns a `stair_diagonal` edge" and **never checked that neighbour was
-walkable**. Owning the edge does not make a cell standable — the edge describes
-the redirect the staircase performs, not somewhere the player may stand — so on
-a diagonal run the unwalkable cells partway along it satisfied the test. Its
-sibling twenty lines below, `_approach_side_candidates`, had always filtered on
-`is_walkable`; the stair path simply never did.
-
-Measured on Map033 (Route 01, in slice since CH02), it returned an unstandable
-cell for **3 of the map's 7 stair cells**, including both of the approaches
-CH02's B2/B3 verify against a booted ROM:
-
-    stair (52,41) -> (53,41)  walkable=False    ch02 says (51,41)
-    stair (53,43) -> (52,43)  walkable=False
-    stair (53,44) -> (52,44)  walkable=False    ch02 says (54,44)
-
-**Latent, not live.** CH01–CH04 carry no route plans, so nothing consumed it
-outside CH05 — where all four of Map037's approaches happen to be walkable, so
-CH05's derived cells and `reference/routes/CH05.locations.json` are unchanged
-by the fix. It would have fired the moment CH01–CH03 were re-derived (#65) or
-CH02 got a route plan, and **#62's freeze-derive-diff safeguard could not have
-caught it**: the frozen expectation and the derivation come from the same rule,
-so they would have agreed with each other and disagreed with the ROM.
-
-**Fix:** walkability filter added to both `_stair_approach` and
-`_stair_side_candidates`. Silent-wrong became loud-can't — an all-unwalkable
-stair cell now raises, saying it is probably mid-run and pointing at
-`playtest.cells.stair_approach` for the side-aware resolver. `(53,43)` now
-correctly resolves east to `(54,43)` instead of returning unwalkable `(52,43)`.
-
-**Why this mattered for sequencing:** it is the concrete reason G4 belonged
-before the CH01–CH03 re-derivation rather than during it.
 
 ### 91. Map-connection seams went live the same way `code 201` warps did, and nothing detects it
 
@@ -2171,6 +1804,393 @@ maintainer. Evidence is recorded in
   `sys.modules` each 1 s poll, so converter modules are covered; `--no-watch`
   opt-out). Browser still needs a manual F5 after restart, as scoped.
   Live-verified end-to-end; +33 tests.
+
+### 25. DONE 2026-09-08 — `WARP_OVERRIDES` is derived, not hand-maintained
+
+`scripts/assemble_pathfinder.py:58` defines a hand-written `WARP_OVERRIDES:
+dict[int, set[tuple[int, int]]]` that must agree with what
+`metadata_wiring.build_slice_maps` (`src/rpg2gba/tileset_converter/
+metadata_wiring.py:2257`) computes for gated-door and warp-override cells —
+a source-of-truth duplication that violates CLAUDE.md §4.3 ("one source of
+truth per concept"). They happen to agree today (the gated-door fix's item
+(4), `ObjectBuildResult.gated_door_cells`, is what keeps them agreeing) but
+nothing enforces it, so a future reconciliation could silently re-diverge
+and quietly re-break doors. Fix: derive `WARP_OVERRIDES` from
+`build_slice_maps`'s computed set instead of hand-listing it. Migrated from
+`reference/findings/gated_door_collapse_2026-07-26.md` §7, 2026-08-04.
+
+**Fixed 2026-09-08** (`POST_CH05_REVIEW.md` G2), by persistence rather than
+reimplementation. `build_slice_maps` already computed the authoritative set;
+the problem was that `assemble_pathfinder.py` runs in a separate process one
+runbook step later and could not see it. So runbook step 4
+(`scripts/stage_slice_scripts.py --write`) now writes
+`output/uranium-build/warp_overrides.gen.json` via
+`metadata_wiring.write_warp_overrides`, and step 5 reads it via
+`load_warp_overrides`. The hand-written dict is gone from
+`assemble_pathfinder.py`, and `scripts/verify_viewer_rom_match.py` reads the
+same file so it really is checking the build's input.
+
+Re-deriving the rule in the assembler was considered and rejected: the
+gated-door and boot-page-selection logic is subtle, and a second
+implementation of it is precisely the silent re-divergence this entry warned
+about. One derivation, one writer, one reader.
+
+`load_warp_overrides` **fails loud** when the file is absent rather than
+defaulting to an empty set — "no doors anywhere" must never be a silent
+default (§4.5).
+
+Guarded by `tests/test_warp_overrides_derivation.py` against
+`tests/fixtures/warp_overrides_ch01_ch05.json`, a frozen copy of the
+hand-maintained table exactly as it stood at `78152b75`. Every one of its 45
+cells was verified by a human against a booted ROM across CH01–CH05's five §9
+gates, which makes it the strongest available oracle for "did the derivation
+stay correct". The comparison is scoped to those 18 maps, so a new chapter
+growing the set does not fail the test for the wrong reason.
+
+### 33. Auto-derive ledge jump directions from RMXP passage bits — DONE 2026-08-24
+
+*Migrated from `CH02_TODO.md` #1 on the CH02 gate pass 2026-08-12. **Closed
+2026-08-24** during CH04's approval wait. Full derivation table + ts22
+inventory: `reference/archive/CH02_TODO.md` #1.*
+
+**Resolution.** `terrain_tags.column_behavior` derives the direction from the
+passage byte's low nibble; `ledge_directions` stays empty and is now purely an
+escape hatch. Sole clear bit -> `MB_JUMP_*` (0x08 south / 0x01 north / 0x02
+east / 0x04 west); 0x0F is a plain wall, silent; >=2 clear bits warns once and
+falls back to `MB_NORMAL`. The four `MB_JUMP_*` values resolve once at
+construction and fail loud if the fork lacks one. Suite 2358 passed / 19
+skipped. Derived directions reproduce the archive's hand-verified ts22
+inventory exactly (0x07/0x0B/0x0D/0x0E -> S/W/E/N), and map 35's 16 tag-1
+cells all derive `MB_JUMP_SOUTH` with zero ambiguity. **Caveat:** no ROM has
+been built with this yet, **and CH04 will not clear it** (user, 2026-08-25):
+map 35's 16 tag-1 cells all sit on the far side of the rockslide, which is
+geometrically impassable until Rock Smash arrives, so CH04 *builds* the derived
+ledges but cannot reach them — the boot-walk gate will pass without any ledge
+ever being jumped. First real hardware proof therefore waits on the chapter that
+opens the rockslide; do not read CH04's green gate as validating this item, and
+do not register a CH04 beat for it. `reference/archive/PATHFINDER_FINDINGS.md:106` mislabels tiles 840-842
+(0x0E) as a south ledge; it is north. Left unedited as archived history.
+
+Ledge directionality is fully recoverable from data already deserialized —
+Essentials never stores a jump direction, so the tile's 4-dir passage bits are
+the whole story (sole clear bit = the jump direction; 0x0F = pure wall). Rule:
+0x08→`MB_JUMP_SOUTH`, 0x01→`MB_JUMP_NORTH`, 0x02→`MB_JUMP_EAST`,
+0x04→`MB_JUMP_WEST`; 0 clear bits → `MB_NORMAL` silently; ≥2 → warn +
+`MB_NORMAL`. The empty `ledge_directions` override in
+`reference/terrain_tag_map.json` stays as an escape hatch and wins over the
+derivation — do not grow it.
+
+**Where:** `tileset_converter/terrain_tags.py` `column_behavior`, deriving when
+the override table misses. Tests in `tests/test_terrain_tags.py`: one per
+direction + blocker + ambiguous + override-wins. **Verify:** Route 01's six
+warning tiles resolve without hand entries, and Map032's ~30 south-ledge
+over-block cells become jumpable in-game. Until it lands, builds keep firing 3
+benign warnings for ts22 tiles 840/841/842 (the Moki pond-dock front, where
+`MB_NORMAL` and `MB_JUMP_NORTH` behave identically anyway).
+
+### 65. DONE 2026-09-15 — CH01–CH03 manifests load again; `reachability_consulted` was the break
+
+Slice 2 added `ManifestRow.reachability_consulted: bool` (`chapter_manifest/schema.py`),
+and `row_from_dict` does a strict field-set equality check by design — a missing key
+fails loud with "regenerate the manifest rather than patching it". CH04 was regenerated
+as part of the slice; `CH01.manifest.json`, `CH02.manifest.json` and `CH03.manifest.json`
+were not, so any `chapter_manifest` command pointed at those three (`check`, `render`,
+load) now hard-fails on the first row.
+
+The same break applies on the disposition side: the `deferred:` verdict and the
+geography-flavoured `unreachable:<reason>` arguments were removed from `_VERDICTS` in
+favour of `blocked:<set>`, so an un-migrated dispositions file fails `Disposition.parse`.
+Only CH04 has a dispositions file today, and it was hand-migrated.
+
+This is the intended fail-loud shape, not a defect — but it is an unacknowledged schema
+break on three gate-closed chapters, and a bystander running `check --chapter CH02` gets
+a crash with no other clue. **Remediation:** regenerate CH01–CH03 manifests once the
+per-(chapter,map) verified start cells exist for their maps (`_CHAPTER_MAP_START_CELLS`
+in `generator.py` currently covers CH04 only), and diff the result before committing —
+regenerating a gate-closed chapter's manifest is not a no-op edit.
+
+*Found 2026-08-30 during the slice-2 commit review.*
+
+**2026-09-06 — unblocked, CH05 has now passed its §9 gate.** The deferral
+condition ("immediately after CH05") is satisfied as of the CH05 boot-walk
+gate pass. Regenerating CH01-CH03's manifests and re-migrating their
+dispositions files is now due; see #62's note below for the ordering
+safeguard that must govern the re-derivation.
+
+**DONE 2026-09-15.** Closed by commit `eb0f064a`, which regenerated the
+CH01–CH05 manifests. Verified the same day: `python -m rpg2gba.chapter_manifest
+check` loads and checks all five chapters successfully (CH01 118 errors / CH02
+16 / CH03 48 / CH04 0 / CH05 0 — every one an ordinary `undispositioned`
+finding, no load failure, no crash). The dispositions side is also settled:
+CH01–CH03 dispositions files now exist
+(`reference/manifests/CH0{1,2,3}.dispositions.json`).
+
+### 72. DONE 2026-09-09 — Boundary-crossing convention needs to be written into `BUILD_PLAN.md`
+
+Operator ruling, 2026-09-04, made during CH05's READ step: *a boundary
+crossing belongs to the chapter being opened, not the one shipping.* An
+outgoing chapter's contract is to deliver the player to the edge; the
+crossing itself is asserted by the chapter whose maps make it true.
+Rationale: an edge beat written against an unstaged neighbour is a test
+authored to decay, and it fails in the wrong chapter — this is exactly what
+happened to CH04's B7 when CH05 staged `SLICE_MAP_IDS` 36/37 and
+`metadata_wiring.classify_event` stopped skipping Map035 EV001 as an
+out-of-slice warp, silently invalidating B7's "no warp fires" assertion and
+six downstream CH04 beats. `BUILD_PLAN.md` has no statement of this
+convention anywhere; it should, so a future chapter author doesn't have to
+rediscover it by breaking a closed chapter's beats. See also #73, the tooling
+half of the same gap.
+
+**RESOLVED 2026-09-09** (`2b6a3b6e`). Written into `BUILD_PLAN.md` §2 alongside
+the ROUTE/BUILD reorder, with CH04's B7 as the worked example of the cost.
+
+### 74. DONE 2026-09-09 — ROUTE runs before object events exist, so its crossing check is vacuous
+
+The per-chapter loop's step 6 (ROUTE) runs before step 7 (BUILD) stages
+object events, so `RULE_ROUTE_ORDER`'s crossing check has nothing to check
+against. Step 4's `phase5` regenerates the engine maps as a warps-only Map
+Walker corpus with no Poryscript, events, or NPCs — "only warp_events
+survive" (`src/rpg2gba/tileset_converter/phase5.py:8-11`); trainer objects
+and their sight cones are only restored at step 7 by `build_object_events`
+and the assembler's copy into `engine/data/maps`. But
+`build_trigger_overlay` reads `engine/data/maps`, so a route solved at step 6
+sees zero trainers on the map and reports zero `CROSSING` lines regardless of
+whether the order is actually safe. CH05's first solve did exactly that,
+reporting a clean 155-tile order; after running step 7's first two commands
+to stage real objects and re-checking, the same order was found to enter
+trainer sight cones on five separate legs. All five turned out benign (each
+leg either walks into the cone of the trainer that leg is walking *to*, or
+past a trainer already defeated), but that was verified by hand, not caught
+by the check — the check itself had nothing to say either way. Fix is a
+`BUILD_PLAN.md` ordering change: run ROUTE after object staging. Affects
+every chapter, not just CH05.
+
+**RESOLVED 2026-09-09.** ROUTE and BUILD swapped in `BUILD_PLAN.md` §2's
+checklist — BUILD is now step 6, ROUTE step 7. Both of ROUTE's constraints
+hold at once: it still runs before the chapter module's beats are registered
+(step 8), and BUILD never reads the route plan, so there is no cycle. The
+step-4 bullet was corrected in the same change; it had claimed WIRE stages
+object events, which `phase5` has never done, and that misreading is what put
+ROUTE at 6 in the first place. #75's `RULE_TRIGGER_OVERLAY_VACUOUS` is the
+enforcement that the ordering stays put: with trainers unstaged, the solve
+now fails loud instead of reporting a clean route.
+
+### 76. DONE 2026-09-10 — `destination_scripts` is per-solve, not per-destination-segment
+
+Partial fix landed in CH05 — record this accurately, since the earlier
+framing (`reference/archive/CH05_TODO.md` §Deferred, written before the fix)
+claimed the field was simply never populated, which is no longer true. Commits `bc8e569f` and
+`a460e823` added `effective_destination_scripts`
+(`src/rpg2gba/routing/solver.py:551-553`): it unions in the triggers a
+predecessor chapter's beats already resolved
+(`playtest.chapter.resolved_trigger_scripts`), so a trigger CH04 already
+cleared (Timothy's event-touch tile, which CH05's B1 must cross to reach the
+cave) is no longer treated as foreign on CH05's walk. What remains unfixed is
+the original defect: the resulting set is still a single `frozenset`
+parameter (`solver.py:420`) forwarded unchanged to every `plan_segment` call
+(`solver.py:660`), so it structurally cannot express "crossing X's sight cone
+is fine specifically on the segment whose destination is X." A trainer's own
+cone is still treated as a foreign hazard on the very segment walking up to
+that trainer — re-solving CH05 with real per-map cone data but no per-segment
+exemption went from 155 to 233 tiles and produced an incoherent order before
+the resolved-trigger union was added. Verify these line numbers against the
+current file before relying on them; the file is under active routing work.
+
+**RESOLVED 2026-09-10** (`18869baf`). The set is now a chapter-wide base
+unioned, per segment, with the destination group's own trigger scripts, keyed
+on the segment's destination point only (which the site cache key already
+includes). Derived through `page_row_script`, the same row-id-to-script join
+`resolved_trigger_scripts` uses, so a row maps to a script name once in this
+codebase (§4.3).
+
+### 79. DONE 2026-09-08 — `cells.py` has `stair_approach`, and it is not the port this entry predicted
+
+The resolver vocabulary in `cells.py` (`event_cell`, `approach_to`,
+`warp_cell`, `arrival_cell`, `entry_cell`, plus the counted `raw_cell`
+escape hatch) has nothing for staircase rows. CH05's B13 and B14 are its only
+two `raw_cell()` uses (`src/rpg2gba/playtest/chapters/ch05.py:548` and
+`:586`), purely because of this gap — both `why=` strings say so explicitly.
+Not a discovery problem: `src/rpg2gba/routing/locations.py`'s
+`_stair_approach` (`:196-263`) already implements the correct logic — a
+stair row resolves to the E/W neighbour that owns the `stair_diagonal` edge
+in `traversal.graph.build_map_graph`'s real edges — for the routing side. A
+`stair_approach` resolver in `cells.py` would be a port of that function into
+the beat-authoring vocabulary, not new derivation work.
+
+**Built 2026-09-08** (`POST_CH05_REVIEW.md` G4) — but **"a port, not new
+derivation work" was wrong**, and measuring that was the useful part.
+
+`_stair_approach`'s rule (the E/W neighbour owning a `stair_diagonal` edge)
+holds in the middle of a staircase run and breaks at its ends: the flat cell
+you walk in from owns no such edge, while an unwalkable cell partway along a
+diagonal run does. Measured against the six independently ROM-verified stair
+approaches in the corpus — CH02's four `STAIR*_APPROACH` constants, gate-passed
+with B2/B3 asserting the displacement on a booted ROM, plus CH05's two
+`raw_cell` values — **ownership reproduces 4 and returns an unstandable cell
+for the other 2. Plain walkability of the named side reproduces all 6.** That
+is the rule `stair_approach` uses, and
+`tests/test_cells_stair_approach.py::test_walkability_rule_beats_edge_ownership_on_every_known_value`
+pins the comparison so the choice does not get "simplified" back later.
+
+**`side` is required, not inferred.** Which end a staircase is entered from is
+an authoring claim: CH02's B2 and B3 walk each of Route 01's two staircases in
+*both* directions, and that is the point of those beats. An unwalkable named
+side fails loud and names the other one, mirroring `approach_to`'s `prefer=`
+contract rather than silently substituting.
+
+**Keyed by event id, not coordinates.** A `stair=(20, 9)` argument would itself
+be a bare coordinate literal — the lint caught exactly that on the first
+attempt. A stair *is* an event, so `stair_event=` matches `event_cell` and
+`approach_to` and keeps the call inside the ban.
+
+CH05's two `raw_cell` escapes are discharged; **CH05 is back to zero coordinate
+literals**, the budget it was born with. `reference/routes/CH05.locations.json`
+was regenerated: every derived cell is byte-identical, only the `resolver` hint
+strings changed (they used to read "no cells.py side param exists", which is no
+longer true).
+
+The underlying defect is filed separately as **#90** — it is a bug in shipped
+code, not just a missing feature.
+
+### 83. DONE 2026-09-08 — trainer battle staging failures are fatal
+
+`trainer_converter.stage.stage_slice` (`src/rpg2gba/trainer_converter/stage.py`)
+calls `stage_battles`, which wraps `build_staged_battles` in
+`try/except (ValueError, FileNotFoundError, KeyError)` and on any failure
+logs a WARNING and leaves `staged_battles` empty (`stage.py:619-625`) rather
+than propagating — `stage_slice` then exits 0 with zero battles staged. One
+unstageable trainer therefore discards every battle in the manifest,
+including chapters that staged fine on a previous run. CH05's Keichi
+(`TRAINER_KEICHI_248`, `BLACK_BELT` class) took CH04's 17 previously-staged
+battles down to 0 during the debugging loop that resolved his trainer-class
+mapping, and the damage surfaced as an apparent *CH01* failure
+(`TRAINER_THEO_9/10/11` undefined on Map050), because the transpiler walks
+`SLICE_MAP_IDS` in tuple order and aborts at the first map whose trainer
+constants don't resolve — CH01's maps sort before CH05's. A partial failure
+silently discarded good work while reporting overall success, which is
+exactly the class `CLAUDE.md` §4.5 calls out. The trainer-pic half of
+`stage_slice` legitimately stands alone from the battle half (a pic staging
+failure shouldn't block battles and vice versa); the battle half specifically
+should either stage per-trainer (skip only the failing one, loudly) or abort
+the whole run rather than silently zeroing it.
+
+**Fixed 2026-09-08** (`POST_CH05_REVIEW.md` G3): abort, not skip-per-trainer.
+`stage_slice` still runs the pic half first and still writes the manifest —
+the pics genuinely stand alone and there is no reason to throw that work away
+— but it then raises `TrainerStagingError` carrying every offending trainer.
+`build_staged_battles` already collected them all rather than stopping at the
+first, so the complete list was available the whole time; nothing was
+propagating it. `require_battles=False` is the explicit opt-out for a
+pics-only caller.
+
+`scripts/stage_trainers.py`'s "CHECK THE BATTLE COUNT, not just the exit code"
+banner is retired — the exit code is trustworthy now. Tests in
+`tests/test_trainer_stage.py`.
+
+### 86. DONE 2026-09-08 — the two frozen-Opus differential tests were removed, not refreshed
+
+**The diagnosis this entry originally carried was wrong.** It read: "the frozen-Opus
+oracle predates Map036 … refreshing it is an operator content call." Investigated
+2026-09-08 in the post-CH05 review walkthrough; what was actually true:
+
+- `_differential` (`tests/test_deterministic.py:1313`) read its "oracle" from
+  `output/uranium-build/scripts/` and iterated `output/uranium-build/checkpoints/*.done`.
+  Both are gitignored and were wiped by a `pipeline --clean` at some point; `scripts/`
+  is now written by the **deterministic transpiler**, and `checkpoints/` held exactly
+  two files (`Map036.done`, `Map037.done`) from CH05's transpile.
+- So the tests were comparing the classifiers against **the transpiler's own output**.
+  Had Map036 happened to match, they would have gone green by comparing the pipeline
+  to itself — a silent pass, the §4.5 shape.
+- The real oracle was never lost. It is committed at `reference/archive/oracle_pory/`
+  (20 `.pory` files), archived 2026-07-02 under grill decision **D6** *specifically so
+  that `pipeline --clean` could not destroy it*. The archive did its job; nobody
+  repointed the tests.
+- And it did not need repointing, because **the oracle was formally retired the same
+  day**. `reference/findings/oracle_harvest_2026-07-02.md` is the one-time D6 harvest
+  (maps 001–007, every divergence cluster dispositioned: 3 transpiler bugs found and
+  fixed, 5 clusters ruled Opus errors): *"with these dispositions recorded, the oracle
+  is retired (the archive stays for provenance, it gates nothing)."* Per D6, permanent
+  goldens come from reviewed transpiler output, never Opus text — which is exactly what
+  a permanent pytest against Opus text was.
+
+**Resolution:** both tests and the now-dead `_differential` / `_norm_items` /
+`_blocks_by_label` helpers deleted; a comment at the removal site records why.
+`test_emitted_item_constants_are_real` stays (it validates against the Phase-2 source
+of truth, not against Opus). Module green at 123 passed. The one obligation the July
+harvest deliberately held open is now filed separately as **#87**.
+
+### 88. DONE 2026-09-08 — the four pinned lists have a completeness check (`rpg2gba slice-pins`)
+
+`POST_CH05_REVIEW.md` G1. Four lists must move together when a chapter joins
+`SLICE_MAP_IDS`; exactly one was guarded (`test_chapter_atlas.py` pins
+`SLICE_MAP_IDS` itself against the atlas). `test_trainer_battles.py` and
+`test_species_gate.py` checked that present entries are *valid*, never that the
+lists are *complete*, so an omission surfaced later as a transpile abort — and
+CH05 hit three of them one at a time, "each omission failed separately and
+looked unrelated to the last, costing a full loop".
+
+`src/rpg2gba/slice_pins.py`, run as `rpg2gba slice-pins` (or
+`python -m rpg2gba.slice_pins`). Two layers, because they answer different
+questions:
+
+- **The gate** — every `TRAINER_*` the transpiler actually *emits* into
+  `scripts/Map###.pory` must be in `SLICE_TRAINER_BATTLES`. Exact, and the
+  thing that fails a build: an unpinned emitted constant IS the transpile abort.
+- **The census** — every trainer-battle *event* on an in-slice map with its
+  status, whether or not it was emitted. Advisory, never an error.
+
+Pics, species and trainer-class mappings are not re-derived: the check runs the
+real `stage_battles` over the union of pinned + newly-required keys and
+re-groups its collected errors into per-list buckets. `build_staged_battles`
+already reports every offending trainer rather than the first, so one run yields
+the whole picture — which is also the Tier 2 class-mapping batching (D5).
+
+The reverse direction is deliberately never reported: `SLICE_TRAINER_BATTLES`
+may hold keys no map event resolves to. `TRAINER_THEO_9/10/11` are the standing
+case — which rival battle fires depends on the starter, so Map050's event names
+none of them.
+
+Preconditions fail loud rather than reporting clean: an absent `maps/` or an
+absent species manifest would otherwise read as "no gaps" / "every species
+missing". Tests: `tests/test_slice_pins.py` (19).
+
+### 90. DONE 2026-09-08 — `_stair_approach` returned cells the player cannot stand on
+
+Found while scoping #79/G4, by checking the resolver's output against CH02's
+four ROM-verified stair approaches rather than against its own docstring.
+
+`routing.locations._stair_approach` selected "the E/W neighbour of the stair
+cell that owns a `stair_diagonal` edge" and **never checked that neighbour was
+walkable**. Owning the edge does not make a cell standable — the edge describes
+the redirect the staircase performs, not somewhere the player may stand — so on
+a diagonal run the unwalkable cells partway along it satisfied the test. Its
+sibling twenty lines below, `_approach_side_candidates`, had always filtered on
+`is_walkable`; the stair path simply never did.
+
+Measured on Map033 (Route 01, in slice since CH02), it returned an unstandable
+cell for **3 of the map's 7 stair cells**, including both of the approaches
+CH02's B2/B3 verify against a booted ROM:
+
+    stair (52,41) -> (53,41)  walkable=False    ch02 says (51,41)
+    stair (53,43) -> (52,43)  walkable=False
+    stair (53,44) -> (52,44)  walkable=False    ch02 says (54,44)
+
+**Latent, not live.** CH01–CH04 carry no route plans, so nothing consumed it
+outside CH05 — where all four of Map037's approaches happen to be walkable, so
+CH05's derived cells and `reference/routes/CH05.locations.json` are unchanged
+by the fix. It would have fired the moment CH01–CH03 were re-derived (#65) or
+CH02 got a route plan, and **#62's freeze-derive-diff safeguard could not have
+caught it**: the frozen expectation and the derivation come from the same rule,
+so they would have agreed with each other and disagreed with the ROM.
+
+**Fix:** walkability filter added to both `_stair_approach` and
+`_stair_side_candidates`. Silent-wrong became loud-can't — an all-unwalkable
+stair cell now raises, saying it is probably mid-run and pointing at
+`playtest.cells.stair_approach` for the side-aware resolver. `(53,43)` now
+correctly resolves east to `(54,43)` instead of returning unwalkable `(52,43)`.
+
+**Why this mattered for sequencing:** it is the concrete reason G4 belonged
+before the CH01–CH03 re-derivation rather than during it.
 
 ### 29. `stage_slice_scripts` existence check is blind to engine-defined labels
 
