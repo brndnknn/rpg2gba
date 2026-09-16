@@ -21,6 +21,10 @@ generated). What remains: P8a for four chapters, then P8b, then §10 R2/R3's fli
 CH04+CH05 and the ~109-row hand-decided residue. Blocking questions are ruled in §10, §12
 and §13. Branch `rederive-ch01-ch04`.
 
+**2026-09-16: §16 supersedes the hand-disposition pass.** Beats are now generated (P8c, steps
+C1–C10); P8a-2 is retired and §15.3's residue becomes the generator's backlog. Read §16 before
+any further P8 work.
+
 ---
 
 ## 1. Why this task exists
@@ -200,7 +204,8 @@ prerequisite.
 | **P7** | **Freeze.** Write the expected answers for all four chapters from their committed, gate-passed artifacts *before* generating anything. Per #62, verbatim: *freeze the expected answers, derive, diff, then write — never derive-and-write in one pass, or a regression in the derivation logic reads as a correct re-disposition.* Precedent for the format: `reference/frozen/archetype_expectations.json`. | #62 | **DONE** `aaae306e` |
 | **P8** | **Derive, diff, adjudicate the manifests** — CH01–CH04, one chapter at a time, diffed against P7's freeze. Every diff line classified 1/2/3 per §1. Category-3 lines stop the pass. Also carries §10 R3's two code changes and R1's `var_` prefix. | #65 | **DONE** — CH01 `55b98f51`, CH02/CH03 adjudicated + committed, CH04 clean. All category 1. |
 | **P8a-1** | **Declare `rows=` (and `archetype=`) on every CH01–CH04 beat.** The half of P8a that P8b actually needs: §13.1's join input. Done by annotating the existing hand-written beats rather than by template adoption — the templates populate `rows=` as a side effect, but the declaration is the deliverable and does not require them. | #67, §13 | **DONE 2026-09-11** — CH04 `962bf578`, CH02 `677ef344`/`d62be7d3`, CH01+CH03 `8fe197d8`. 48 of the 74 own beats carry `rows=`, 73 rows claimed, 22 carry `archetype=`; the other 26 beats claim nothing and each file records why. |
-| **P8a-2** | **Re-author those beats onto the archetype templates**, adopting `entry_at`, paying the coordinate literals down to zero (§5). Now a code-quality and assertion-strength step, not a P8b prerequisite. Needs the §13.3 templates; #94 (registry) is DONE 2026-09-10 (`c91f70d3`) and no longer gates it. **Read §5's warning first: some literals are load-bearing ROM-verified truth, and the AST ratchet counts literals without ever asking whether one is still true.** | #67, §13 | TODO |
+| **P8a-2** | **Re-author those beats onto the archetype templates**, adopting `entry_at`, paying the coordinate literals down to zero (§5). Now a code-quality and assertion-strength step, not a P8b prerequisite. Needs the §13.3 templates; #94 (registry) is DONE 2026-09-10 (`c91f70d3`) and no longer gates it. **Read §5's warning first: some literals are load-bearing ROM-verified truth, and the AST ratchet counts literals without ever asking whether one is still true.** | #67, §13 | **RETIRED 2026-09-16** — subsumed by §16 C5/C9 (regenerated behind a frozen match-or-beat test) |
+| **P8c** | **Generated beats** — branch-arm rows, story-state model, engine forks, generic extractor floor with layered archetypes, whole-module generator, Ruby-subset interpreter, CH01–CH05 regenerated behind a freeze, offline flavour checks. Steps C1–C10 in §16.3. | §16 | TODO |
 | **P8b** | **Generate the disposition files** — derive `cosmetic`/`blocked`/`unreachable`/`boundary`, join `beat:` off P8a-1's `rows=` (which now exist), hand-decide the **100**-row residue (measured; §13.1's ~109 was close). Affirmation is a separate pass from derivation. Carries §10 R2/R3's flip on CH04+CH05. **Read §14 first — it carries the operator's four rulings and corrects four claims made elsewhere in this plan.** Precedence is `boundary` > `beat` > `blocked` > `cosmetic` (§14.4); clerical rows get `derived_hash`, not `affirmed_hash` (§14.2); and P8b now absorbs **all ten** transpiler work items for the 28 undispositionable rows, item 7 timeboxed (§14.1). | #65 | TODO |
 | **P9** | **Route plans** for all four chapters (`routing plan --chapter CHnn --module <mod>`). Still last: `routing locations` hard-fails without P8b's output. | #67 | TODO |
 | **P10** | **Discharge the inherited obligations** (§4) and delete the scaffolding that expires with this task. | — | TODO |
@@ -1579,3 +1584,83 @@ hand-decided residue. `undispositioned` is now **CH01 132 / CH02 17 / CH03 48** 
 default `cosmetic`" is narrowed accordingly: a triggered row the player can observe wants a
 beat, or `unreachable:` when its page can't be reached in-chapter (e.g. Map064/065's
 `FINAL EVENT`-gated p1 twins).
+
+
+## 16. P8c — generated beats (operator rulings, 2026-09-16)
+
+**Read this section before any further P8b/P8a work. It supersedes §15.3's hand-disposition
+pass and P8a-2.** The ~182 remaining `undispositioned` errors (CH01 118 / CH02 16 / CH03 48)
+are no longer hand work: they become the generator's backlog. Everything in §15.1/§15.2 that
+is committed stays committed.
+
+### 16.1 Why
+
+§15.7's "add missing rows to existing beats" closed one row, not 64 (`88fb1a8b`); §15.8 then
+put ~100 talk rows back into the residue. T2 (`fd96ba8c`) made the scale visible: the templates
+derive a beat's *body*, but every instance still needed a hand-written call whose only real
+content was placement. Measured corpus-wide the same day (every chapter's manifest built in
+memory, rows deduplicated across map revisits): **946 `flavour_npc` rows** (704 plain / 156
+toggling / 86 randomized) on 750 events across 128 maps — ~1,100 beats if all walked on
+hardware. §13.3's long tail is ~40% of the ~2,586 beat-worthy pages over 630 fingerprints.
+Hand authoring does not reach the end of that, and a hand-written beat is how a branch gets
+missed.
+
+### 16.2 The rulings
+
+| # | Question | Ruling |
+|---|---|---|
+| R1 | Authoring | **Beats are generated.** The operator goal is zero hand overrides, and it is a hard constraint, not a target. |
+| R2 | Flavour NPCs at scale | **Offline check for every row; a stratified ROM sample walks on hardware.** New verdict head **`offline:<archetype>`**, distinct from `beat:` so the two never read as the same thing in counts. A failing offline check is an **error**. |
+| R3 | ROM sample | One per **variant × map × emission shape** (flag-hidden object, condition-gated page, …). **Resampled when a later chapter revisits a map** — story state has changed what its NPCs say. |
+| R4 | Generator coverage | **All five archetypes** plus the generic template (R11), not flavour NPCs only. |
+| R5 | Branches | **Branch arms are their own manifest rows** — each arm of a code 102 Show Choices and each code 111 Conditional Branch is a child row (`map050/ev005/p0/b2`) needing its own verdict. Manifest-schema change, ruled in under CLAUDE.md §10. Every committed hash on a branching page is invalidated and re-derived. |
+| R6 | Story state and order | **One derived story-state model** over global switches, variables and self-switches, seeded from the predecessor chapter's end state. Liveness uses **RMXP's highest-live-page rule** (a page is live only if its conditions hold *and* no higher page's do). A row is walked once, at the **earliest** route position where it is live. Precedence generalizes `_derive_precedence`'s self-switch pairs to every write. Never live in the chapter → derived verdict (R8); unplaceable because precedence is cyclic → fail loud naming the cycle. The spine is generated too: no hand-written story beats. |
+| R7 | Output artifact | **Whole-file generated `playtest/chapters/chNN.py`**, headed `GENERATED — do not edit`, template calls in solved order, byte-identical on re-run (§4.2). Plus `reference/routes/CHnn.route.json` and `output/beats/CHnn.review.md` (order, what each beat asserts, sampled vs offline). **No overrides file.** A row the generator cannot produce is refused and listed with its named blocker; the chapter stays red until the blocker is fixed upstream or the row carries a real verdict. |
+| R8 | Row ownership | A row is owned by the **earliest chapter in the chain where the state model finds it live**. An earlier manifest gives it the derived verdict **`later:CHnn`**, which the checker verifies against CHnn's generated suite (unredeemed = error in the claiming chapter). It gates CHnn, not the manifest chapter. `unreachable:` is reserved for rows live nowhere, recorded with the furthest chapter modelled. Settles §15's open ruling and Grott Hole (`map019`, needs Strength → `later:CH25`). |
+| R9 | Engine transitions | **Precondition-gated forks.** Engine-side state changes (first: **white-out** — sets `FLAG_STARTING_OVER`, moves to the tracked respawn point) are snapshot → walk what they unlock → restore, placed at the earliest point they make a row live, never on the main path, never a pinned end-of-chapter beat. White-out's precondition is a held party. The full transition list is found by grepping the fenced engine code for `FlagSet`/`VarSet`, not guessed. Under this, `map049/ev022/p0` and `map068/ev001/p1` return to CH01/CH03 (their respawn anchors are in-chapter) — **inferred, confirm when the model runs**. |
+| R10 | Embedded Ruby state | **One Ruby-subset interpreter, shared with the transpiler** (§4.3). Values depending on player input fork over every outcome the consuming branch can take; each outcome is a branch-arm row reached by a search over inputs. The main path carries the first outcome in source order. An expression outside the subset refuses the row by name. Live case: `map050/ev019` (array tally in var 151 indexed by var 2, outcome = `index(max)`). |
+| R11 | The long tail | **A generic page template from the source command list is the floor for every row; archetypes are layered on top, not a fallback.** Trigger derived from page trigger type; one extractor per command code, expected values **always from the RMXP source, never from converted Poryscript** (the proxy-oracle rule); visual-only commands assert only that the page completes and returns control; a code with no extractor refuses the row. Archetypes claim first and *add* stronger oracles; where both cover a command the stronger wins per extractor. Checker rule: a row's generated assertions ⊇ its generic floor. A row is offline-eligible only if **every** floor assertion is offline-checkable (a `var_write` pulls a flavour NPC into the ROM sample). T1-third, T3, T4–T11 and service NPCs are built only if the generic floor proves too weak for them. |
+| R12 | CH01–CH05 | **Regenerate all five behind a frozen match-or-beat test.** Before any `chNN.py` is overwritten, freeze each hand beat's rows, assertion kinds, cells and values to `reference/frozen/hand_beats_ch01-ch05.json` (D4's `archetype_expectations.json` precedent). Generated suites must cover every frozen row with an assertion at least as strong and reproduce every frozen literal; a mismatch is fixed in the generator or state model, never excepted. One commit per chapter. |
+| R13 | Scope and sequencing | **Stay on `rederive-ch01-ch04`; build only what CH01–CH05 need.** Interpreter subset, extractors and engine transitions cover exactly what the five chapters contain; everything else fails loud and is extended by the first later chapter that needs it. **No intermediate hardware check** — P11 remains the single boot gate. |
+
+### 16.3 Steps
+
+Each lands unit-green. None is ROM-verified before P11.
+
+| # | Step | Rulings | Status |
+|---|---|---|---|
+| **C1** | Branch-arm manifest rows; re-derive CH01–CH05 manifests and sidecars; re-affirm invalidated hashes | R5 | TODO |
+| **C2** | Story-state model: highest-live-page liveness, earliest-live placement, `later:`/`unreachable:` derivation, generalized precedence | R6, R8 | TODO |
+| **C3** | Engine-transition forks, white-out first, with the fenced-engine grep for the rest | R9 | TODO |
+| **C4** | Generic per-command extractors for every code present in CH01–CH05, source-derived | R11 | TODO |
+| **C5** | Archetype templates refactored onto the generic floor; the ⊇-floor checker rule | R11 | TODO |
+| **C6** | Generator + solver integration: whole-module emit, review doc, refusal list, idempotence test | R1, R4, R7 | TODO |
+| **C7** | Freeze CH01–CH05 hand beats | R12 | TODO |
+| **C8** | Shared Ruby-subset interpreter + input search; `map050/ev019` | R10 | TODO |
+| **C9** | Regenerate CH01–CH05 behind the frozen test, one commit per chapter | R12 | TODO |
+| **C10** | `offline:` verdict head, offline flavour checker, ROM sample selection | R2, R3 | TODO |
+
+C1–C6 stand on their own. C7 must land before C9 overwrites anything. Route plans (P9) become
+a C6 output rather than a separate step.
+
+### 16.4 Known work the generator will refuse until fixed (not decisions)
+
+- **#109** — `text_source` rejects the straight quote staging converts; corpus-wide the text
+  oracle reads **877 of 946** flavour rows. Extend the fix to `*` and `[` (51 `"`, 12 `*`/`[`;
+  `assembly._CHARMAP_SUBS` already substitutes them at staging — reuse it, §4.3).
+- **`^` in `map207/ev011/p0`** — no staging substitution exists, so this may be a real ROM
+  text defect, not an oracle gap. Check before assuming either.
+- **5 untranslatable control codes** in flavour dialogue (e.g. `map052/ev003/p1`).
+- **#110** — five toggling instances with no page at `page_idx + 1`; under R6 the toggled page
+  comes from the state model, not an index default, so this should dissolve rather than need a
+  parameter.
+- **`map033/ev024/p0`** — `pbCaveExit` with 3 `# UNHANDLED`; a transpiler gap (§13.3 T11/X3),
+  then an ordinary `warp` beat.
+
+### 16.5 What this retires
+
+- **P8a-2** (template re-authoring) — subsumed by C5/C9.
+- **§15.3's residue posture** — no hand residue; rows are generated, refused with a blocker, or
+  carry a derived verdict.
+- **`DEFERRED_BEATS`** — a deferral becomes a derived `later:CHnn`.
+- **The 2026-09-14 `archetype_conformance` options** — never recorded, and overtaken.
