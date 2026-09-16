@@ -1308,67 +1308,6 @@ leaves the player). The correct recipe is `playtest walk --chapter <this> --at-b
 first-beat blob, never the predecessor's `--at-end`. `BUILD_PLAN.md` should
 say this instead of the current recipe.
 
-### 87. `CommonEvents.pory` was never harvested against the oracle — and CH06 is the first chapter to call a common event
-
-**Prerequisite for CH06.** Filed 2026-09-08 out of the post-CH05 review walkthrough,
-splitting off the one obligation #86's harvest deliberately left open.
-`reference/findings/oracle_harvest_2026-07-02.md` retired the frozen-Opus oracle for
-maps, with one explicit exception:
-
-> **Not harvested** — CommonEvents: the driver has no CE pass yet (maps only). Harvest
-> the oracle's `CommonEvents.pory` when the CE pass lands, before retiring that file's
-> oracle status.
-
-**The CE pass has since landed** (`convert-common-events` is a registered pipeline
-stage and `output/uranium-build/scripts/CommonEvents.pory` exists), so the condition
-is met and nothing has been done. Current transpiler output is **401 lines / 23
-blocks** against the archived Opus version's **263 lines / 22 blocks**
-(`reference/archive/oracle_pory/CommonEvents.pory`), so there is real divergence to
-disposition. The first harvest found three genuine transpiler bugs across seven maps;
-this is the same exercise on the one file it skipped. Tool exists:
-`scripts/oracle_harvest.py`. Both sides need `normalize_pory` applied first — the
-archive is pre-normalization by design (raw `\"` escapes and `healparty` present).
-
-**Why it is scoped to CH06 rather than left unscheduled.** Measured across all 199
-decoded maps, common events are called from only **73 sites on 22 maps, 6 distinct
-CEs**. CH06's **Map043** calls CE 4, 5 and 6 (one each; the only `code 117` calls
-anywhere in maps 40–47).
-
-**Correction 2026-09-10 — the "zero in-slice" claim in this item was wrong.** It read
-*"**zero** of those maps are in the current 18-map `SLICE_MAP_IDS`, which is why five
-chapters shipped without touching one,"* and that is false: **`Map068` is CH03's, in
-slice since 2026-08-19, and has three `code 117` sites** — `ev009` "Receptionist TRADE"
-→ CE 4, `ev011` "Receptionist PVP" → CE 5, `ev013` "Receptionist TRADE" → CE 6. So
-CH06's Map043 is not the corpus's first in-slice CE call site; CH03's Map068 was, and
-five chapters did not ship without touching one.
-
-**The conclusion survives the correction, which is why this stays deferred.** Verified
-end to end 2026-09-10: the transpiler emits `call(CommonEvent_004/005/006)` at each
-receptionist, and `CommonEvents.pory` defines all three as
-`msgbox("The Tandor Network is unavailable.") / return` under a `# STRIPPED:`
-provenance comment. Map068's own events are **not** stripped — the NPCs remain and
-deliver the stub, which is the intended substitute for an online feature. So the
-in-slice exposure is real but already discharged, and it is to the strip path exactly
-as the next paragraph says.
-
-Two things this turned up for whoever does the harvest. `CommonEvents.pory` is **not a
-harvest from zero** — `CommonEvent_010` (RACING_Main) is already transpiled and carries
-its own `# UNHANDLED` comments. And CH03's three receptionist rows
-(`map068/ev009|ev011|ev013/p0`) each carry `effects: ['common_event']` and nothing
-else: `common_event` is in `STATE_WRITING_TAGS`, so the tag rule forbids `cosmetic`,
-yet these provably only show a box and return. They are cheap `beat:` rows, and a clean
-example of a state-writing *tag* on a row that writes no state.
-
-**Mitigating, and worth confirming rather than assuming:** all three are already in
-`reference/strip_list.json` → `common_events`, tagged `"online (phase0: scripts
-233/235/236)"` with stub message *"The Tandor Network is unavailable."* and
-`expect_name` guards. So CH06's exposure is to the strip path, not to the converted
-text. The harvest is still the cheaper time to find a CE-pass bug than the first
-chapter that calls an unstripped one.
-
-After this lands, `reference/archive/oracle_pory/` is fully inert history and its
-README should say so.
-
 ### 89. Three Map019 trainers have battle events that never fire — in slice since CH03
 
 Surfaced 2026-09-08 by #88's census, which is the first thing that could see it.
@@ -1804,6 +1743,96 @@ maintainer. Evidence is recorded in
   `sys.modules` each 1 s poll, so converter modules are covered; `--no-watch`
   opt-out). Browser still needs a manual F5 after restart, as scoped.
   Live-verified end-to-end; +33 tests.
+
+### 87. DONE 2026-09-15 — `CommonEvents.pory` harvested against the oracle; 0 transpiler bugs, and the oracle archive is now inert
+
+**Prerequisite for CH06.** Filed 2026-09-08 out of the post-CH05 review walkthrough,
+splitting off the one obligation #86's harvest deliberately left open.
+`reference/findings/oracle_harvest_2026-07-02.md` retired the frozen-Opus oracle for
+maps, with one explicit exception:
+
+> **Not harvested** — CommonEvents: the driver has no CE pass yet (maps only). Harvest
+> the oracle's `CommonEvents.pory` when the CE pass lands, before retiring that file's
+> oracle status.
+
+**The CE pass has since landed** (`convert-common-events` is a registered pipeline
+stage and `output/uranium-build/scripts/CommonEvents.pory` exists), so the condition
+is met and nothing has been done. Current transpiler output is **401 lines / 23
+blocks** against the archived Opus version's **263 lines / 22 blocks**
+(`reference/archive/oracle_pory/CommonEvents.pory`), so there is real divergence to
+disposition. The first harvest found three genuine transpiler bugs across seven maps;
+this is the same exercise on the one file it skipped. Tool exists:
+`scripts/oracle_harvest.py`. Both sides need `normalize_pory` applied first — the
+archive is pre-normalization by design (raw `\"` escapes and `healparty` present).
+
+**Why it is scoped to CH06 rather than left unscheduled.** Measured across all 199
+decoded maps, common events are called from only **73 sites on 22 maps, 6 distinct
+CEs**. CH06's **Map043** calls CE 4, 5 and 6 (one each; the only `code 117` calls
+anywhere in maps 40–47).
+
+**Correction 2026-09-10 — the "zero in-slice" claim in this item was wrong.** It read
+*"**zero** of those maps are in the current 18-map `SLICE_MAP_IDS`, which is why five
+chapters shipped without touching one,"* and that is false: **`Map068` is CH03's, in
+slice since 2026-08-19, and has three `code 117` sites** — `ev009` "Receptionist TRADE"
+→ CE 4, `ev011` "Receptionist PVP" → CE 5, `ev013` "Receptionist TRADE" → CE 6. So
+CH06's Map043 is not the corpus's first in-slice CE call site; CH03's Map068 was, and
+five chapters did not ship without touching one.
+
+**The conclusion survives the correction, which is why this stays deferred.** Verified
+end to end 2026-09-10: the transpiler emits `call(CommonEvent_004/005/006)` at each
+receptionist, and `CommonEvents.pory` defines all three as
+`msgbox("The Tandor Network is unavailable.") / return` under a `# STRIPPED:`
+provenance comment. Map068's own events are **not** stripped — the NPCs remain and
+deliver the stub, which is the intended substitute for an online feature. So the
+in-slice exposure is real but already discharged, and it is to the strip path exactly
+as the next paragraph says.
+
+Two things this turned up for whoever does the harvest. `CommonEvents.pory` is **not a
+harvest from zero** — `CommonEvent_010` (RACING_Main) is already transpiled and carries
+its own `# UNHANDLED` comments. And CH03's three receptionist rows
+(`map068/ev009|ev011|ev013/p0`) each carry `effects: ['common_event']` and nothing
+else: `common_event` is in `STATE_WRITING_TAGS`, so the tag rule forbids `cosmetic`,
+yet these provably only show a box and return. They are cheap `beat:` rows, and a clean
+example of a state-writing *tag* on a row that writes no state.
+
+**Mitigating, and worth confirming rather than assuming:** all three are already in
+`reference/strip_list.json` → `common_events`, tagged `"online (phase0: scripts
+233/235/236)"` with stub message *"The Tandor Network is unavailable."* and
+`expect_name` guards. So CH06's exposure is to the strip path, not to the converted
+text. The harvest is still the cheaper time to find a CE-pass bug than the first
+chapter that calls an unstripped one.
+
+After this lands, `reference/archive/oracle_pory/` is fully inert history and its
+README should say so.
+
+
+**CLOSED 2026-09-15.** Ran `scripts/oracle_harvest.py --common-events`. Census:
+oracle **22 blocks / 263 lines**, ours **23 / 402** — 0 identical, 22 divergent,
+1 only-in-ours (`CommonEvent_010_Move1`, a movement block Opus never produced).
+The 0-identical count is the pre-normalization archive, not a signal.
+
+**No transpiler bugs.** All 22 divergences disposition as Opus error, strip-path
+stub, cosmetic text normalization, or a loud queued `# UNHANDLED` — full write-up
+in `reference/findings/oracle_harvest_commonevents_2026-09-15.md`. The sharpest
+findings: Opus terminated **11 of 22** common events with `end` instead of
+`return`, which would strand every `call(...)` caller mid-script; it invented five
+variable names where ours derives them from `uranium_variables.json` (var 4 really
+is "Temp Move Name", reused by Uranium as CE 035's dex-milestone index — the
+prettier Opus name described the wrong variable); and for CE 086/087 it fabricated
+a whole `multichoice` body including a `MULTI_DREAM_VISUALIZER` constant the fork
+does not define, plus warp coordinates and five `FLAG_DREAM_*` clearflags, where
+ours emits `# UNHANDLED code 102` and queues it.
+
+Ours carries **88 `# UNHANDLED` markers across 13 codes in 9 of 23 blocks** — all
+visible, all queued. That contrast is the §4.1 thesis on one artifact.
+
+Corroborated in passing: **#6** (`yesnobox` two-step) is live in CE 035, and
+**#5**'s `VAR_GYM8_*` worry gains a data point — our `VAR_BLACK_TILES` is the
+faithful derivation of Uranium's var 88 "Black Tiles"; the inconsistency with its
+`VAR_GYM8_*` siblings is upstream in Uranium. A prefix-normalizing rename is a
+registry-policy change (§10 gate), not a passing fix.
+
+`reference/archive/oracle_pory/README.md` now states the directory is inert.
 
 ### 25. DONE 2026-09-08 — `WARP_OVERRIDES` is derived, not hand-maintained
 

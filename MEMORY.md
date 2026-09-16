@@ -35,8 +35,13 @@ on 2026-09-07, closing `PROJECT_TODO.md` #1.
 `POST_CH05_REVIEW.md`'s five decisions were all answered 2026-09-08 and D1–D5 are
 **implemented**, as is **G4 / #79** (the stair resolver, done the same day after the
 operator asked whether it belonged before the re-derive — it did, and #90 is why). What
-remains before CH06: **#87** (harvest `CommonEvents.pory` — CH06's Map043 is the corpus's
-first in-slice common-event call site).
+remained before CH06 was **#87** (harvest `CommonEvents.pory`), **DONE 2026-09-15** —
+`reference/findings/oracle_harvest_commonevents_2026-09-15.md`. **No transpiler bugs; all
+22 divergences were Opus errors, strip-path stubs, cosmetic, or loud queued `# UNHANDLED`.**
+`reference/archive/oracle_pory/` is now fully inert history and its README says so. **So
+nothing is owed before CH06 opens.** (Its "CH06's Map043 is the corpus's first in-slice
+common-event call site" was already corrected in the item itself on 2026-09-10 — CH03's
+Map068 was, with three `code 117` sites.)
 
 ### Standing facts
 
@@ -291,6 +296,10 @@ Bambo reward thresholds (count-of-owned, not switches/vars) from `213_Bambo_Rewa
 **New open ruling, and it leaves two rows stranded.** A later chapter's beat cannot disposition an earlier chapter's row -- the beat model is own-plus-predecessors, and `boundary` requires an actual crossing -- so `map049/ev022/p0` and `map068/ev001/p1` stay undispositioned even though CH02 B18 and CH04 B16 exercise them.
 
 **What P11 has to prove, because nothing since 2026-09-13 has touched hardware.** CH02 B1 and CH03 B16 traded tolerant `assert_near` for exact one-tile-nudge checks; the 2F signs' region map has to hand control back; the 2F stairs are pressed sideways from plain-floor arrival anchors. Suite measured green the same day: **3522 passed, 16 skipped** (3393 at the 09-12b checkpoint).
+
+**Bookkeeping and #87, same day.** MEMORY's Last Session Summary was two days stale and the Current Phase `Open branch` cell had grown to 8.3 KB of chronicle in one table cell; both fixed in `b0676140`, which also found that MEMORY had been pointing since 2026-09-07 at a `memory-archive.md` "Current Phase chronicle" section **that was never created** (the audit's bulk went to the retired-summary sections instead). The section exists now. `PROJECT_TODO.md` had eleven finished items still sitting in Open — seven saying DONE in their own headings, three more (#72/#74/#76) closed in their bodies only — all moved; #65 closed as false since `eb0f064a`; #67 corrected but kept open, since only CH05 has a committed route plan.
+
+**Then #87's harvest, and its result is worth carrying.** `scripts/oracle_harvest.py --common-events` against the frozen-Opus archive: 22 divergent blocks, **zero transpiler bugs**. Opus ended **11 of 22** common events with `end` instead of `return` — which strands every `call(...)` caller, since the call site owns the `lock`/`release`/`end` (verified at `Map068_EV009_Page1`). It invented five variable names ours derives from `uranium_variables.json`; the instructive one is var 4, genuinely named "Temp Move Name" and genuinely reused by Uranium as CE 035's dex-milestone index, where Opus's prettier name described the wrong variable. And for CE 086/087 it fabricated an entire `multichoice` body — a `MULTI_DREAM_VISUALIZER` constant the fork does not define, warp coordinates, five `FLAG_DREAM_*` clearflags — where ours emits `# UNHANDLED code 102` and queues it. Ours carries 88 `# UNHANDLED` markers across 13 codes in 9 of 23 blocks, all visible. **§4.1's thesis, demonstrated on one file: the transpiler's failures are legible and the LLM's are not.**
 
 **2026-09-14 (§15.3's disposition pass opens, and its own premise does not survive measurement):** Eleven commits. `9baada83` made a derived hash *a disposition*, so it may only sit on a row nothing outranks; `6508e77b` implemented §15.7 -- the generator derives `beat:`/`boundary`/`cosmetic` as clerical and emits `blocked:` as a *proposal* awaiting a human, with `derivation.derive_entry` shared by generator and checker so the checker recomputes rather than trusts. `f7e2a9ac` added `chapter_manifest affirm --digest` plus a generated `output/manifests/CHnn.blocked_review.md`, and `8c6f5ce5` landed the operator's affirmation of all **42** `blocked` proposals -- which is how CH01-CH03 got dispositions files at all, having had none.
 

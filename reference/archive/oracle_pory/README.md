@@ -5,12 +5,27 @@ the retired Opus-4.8 conversion runs — archived per grill decision **D6**
 (`reference/grill_spine_2026-07-02.md`) so that `pipeline --clean` /
 `prep_bulk_run.py --yes` can no longer destroy the transpiler's differential oracle.
 
-**Role:** one-time harvest target for the deterministic transpiler. At each
-transpiler milestone, diff its output against these files (normalized text, not
-bytes) and disposition every divergence cluster as *transpiler bug* (fix) or *Opus
-error* (note, discard). These are **not golden files** — permanent regression
-goldens are minted from reviewed transpiler output, never from Opus text. After the
-harvest completes, this directory is inert history.
+**Role: none. This directory is INERT HISTORY as of 2026-09-15.** The harvest it
+existed for is complete and every divergence has been dispositioned. It gates
+nothing, no tool reads it in any pipeline path, and nothing here is a golden file —
+per D6, permanent regression goldens are minted from reviewed transpiler output and
+never from Opus text. Keep it for provenance only.
+
+The harvest ran in two parts, and both are recorded:
+
+| Part | Scope | Dispositions |
+|---|---|---|
+| 2026-07-02 | Maps 001–007 | `reference/findings/oracle_harvest_2026-07-02.md` — found and fixed **3 transpiler bugs** |
+| 2026-09-15 | `CommonEvents.pory` | `reference/findings/oracle_harvest_commonevents_2026-09-15.md` — **0 transpiler bugs**; all 22 divergences were Opus errors, strip-path stubs, cosmetic, or loud queued `# UNHANDLED` |
+
+The CommonEvents half was deferred at the time because the driver had no CE pass
+(maps only); `convert-common-events` landed later and `PROJECT_TODO.md` #87 tracked
+the obligation through to closure.
+
+*Historical role, for reading the notes below:* one-time harvest target for the
+deterministic transpiler — diff its output against these files on normalized text,
+not bytes, and disposition every divergence cluster as *transpiler bug* (fix) or
+*Opus error* (note, discard).
 
 ## Provenance (verified 2026-07-02 from run state, checkpoints, and token log)
 
