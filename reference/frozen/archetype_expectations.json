@@ -87,6 +87,20 @@
         }
       },
       {
+        "archetype": "flavour_npc",
+        "map_id": 35,
+        "event_id": 11,
+        "params": {
+          "variant": "plain"
+        },
+        "roles": {
+          "map035/ev011/p0": "talk"
+        },
+        "prescribed": {
+          "map035/ev011/p0": "beat"
+        }
+      },
+      {
         "archetype": "trainer",
         "map_id": 35,
         "event_id": 12,
@@ -104,6 +118,20 @@
         "prescribed": {
           "map035/ev012/p0": "beat",
           "map035/ev012/p1": "beat"
+        }
+      },
+      {
+        "archetype": "flavour_npc",
+        "map_id": 35,
+        "event_id": 13,
+        "params": {
+          "variant": "plain"
+        },
+        "roles": {
+          "map035/ev013/p0": "talk"
+        },
+        "prescribed": {
+          "map035/ev013/p0": "beat"
         }
       },
       {

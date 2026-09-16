@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 from .. import assertions
 from ..cells import approach_to, event_cell
 from ..errors import ScenarioError
-from . import find_match, load_chapter_rows
+from . import facing_toward, find_match, load_chapter_rows
 
 if TYPE_CHECKING:  # runtime import is lazy so this module works without bindings
     from ...chapter_manifest.schema import ManifestRow
@@ -32,22 +32,6 @@ if TYPE_CHECKING:  # runtime import is lazy so this module works without binding
     from ..emulator import Emulator
 
 logger = logging.getLogger(__name__)
-
-_DIR_TOWARD: dict[tuple[int, int], str] = {
-    (1, 0): "RIGHT", (-1, 0): "LEFT", (0, 1): "DOWN", (0, -1): "UP",
-}
-
-
-def _facing_toward(approach: tuple[int, int], target: tuple[int, int]) -> str:
-    delta = (target[0] - approach[0], target[1] - approach[1])
-    facing = _DIR_TOWARD.get(delta)
-    if facing is None:
-        raise ValueError(
-            f"item_ball_beats: approach {approach} is not orthogonally "
-            f"adjacent to target {target} (delta {delta})"
-        )
-    return facing
-
 
 def item_ball_beats(
     builder: ChapterBuilder,
@@ -175,7 +159,8 @@ def item_ball_beats(
         )
 
     approach = approach_to(map_constant, event_id, prefer=approach_prefer)
-    facing = _facing_toward(approach, event_cell(map_constant, event_id))
+    facing = facing_toward(
+        approach, event_cell(map_constant, event_id), caller="item_ball_beats")
 
     @builder.beat(
         beat_prefix,

@@ -820,7 +820,7 @@ def b3(emu: Emulator) -> None:
 @ch04.beat("B5", "Reading the roadblock hint sign shows the Passage Cave "
                    "detour text (spec §3 B5 / manifest map035/ev013/p0)",
              map_constant=MAP_CONST, at=SIGN_ROADBLOCK_APPROACH,
-             rows=("map035/ev013/p0",))
+             archetype="flavour_npc", rows=("map035/ev013/p0",))
 def b5(emu: Emulator) -> None:
     _press_a(emu, "B5", SIGN_ROADBLOCK_APPROACH, SIGN_ROADBLOCK_FACING)
     emu.assert_text_contains("Nowtoch City")
@@ -1051,7 +1051,7 @@ def b12(emu: Emulator) -> None:
                     "so 2 of the 3 observables the spec names are currently "
                     "unverifiable with this harness",
              map_constant=MAP_CONST, at=BAREWL_APPROACH,
-             rows=("map035/ev011/p0",))
+             archetype="flavour_npc", rows=("map035/ev011/p0",))
 def b13(emu: Emulator) -> None:
     _press_a(emu, "B13", BAREWL_APPROACH, BAREWL_FACING)
     emu.assert_text_contains(BAREWL_TEXT)

@@ -17,6 +17,53 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 109. `text_source` rejects the straight quote that staging normalizes, so 12 T2 rows have no oracle
+
+Surfaced 2026-09-15 while probing whether T2's `flavour_npc_beat` could be
+applied mechanically to the CH01-CH03 residue. Of 96 candidate rows, 84 resolve
+a source oracle and **12 fail loud** with:
+
+> `text_source: character U+0022 '"' has no engine/charmap.txt entry -- unrepresentable on the ROM's font`
+
+**This is an oracle gap, not a ROM bug, and the distinction is the whole item.**
+`engine/charmap.txt` genuinely has no `U+0022` entry -- it has `“` (B1) and `”`
+(B2) only. But `tileset_converter.assembly.normalize_pory` already converts `\"`
+to typographic `“`/`”` on an open/close toggle at staging (`assembly.py:475-476`,
+and its docstring at :549), so **the ROM text is correct**. It is
+`playtest.text_source._canonicalize_chars` -- the path a beat uses to derive
+expected text -- that does not apply the same substitution and therefore cannot
+read a page the pipeline converts fine.
+
+Rows affected (all `flavour_npc`, all otherwise mechanical): `map032/ev001/p0`,
+`map049/ev006/p0`, `map049/ev015/p0`, `map049/ev016/p0`, `map050/ev010/p0`, and
+7 more -- re-derive with the probe rather than trusting this list to stay current.
+
+**Fix shape, and the constraint on it:** `text_source` should apply the same
+open/close toggle, **reusing `assembly`'s implementation rather than
+re-implementing it** (§4.3 -- two independent quote-toggling state machines that
+must agree is exactly the drift this repo consolidated five `*_constant` helpers
+to avoid). The toggle is stateful across a string, so a naive `replace('"', '“')`
+is wrong and would silently mis-render every closing quote.
+
+Worth doing before T2's application pass: it is 12 of 96 rows, and every one of
+them is otherwise ready.
+
+### 110. Five of eleven `toggling` flavour NPCs have no page at `page_idx + 1`
+
+Same 2026-09-15 probe. `flavour_npc_beat`'s `toggling` variant registers a second
+beat asserting the self-switch actually revealed a different line, and defaults
+`toggled_page_idx=page_idx + 1`. For **5 of the 11** toggling instances in
+CH01-CH03 that page has no messages in source, so the default is wrong for them
+and the template will fail loud at registration telling the author to pass
+`toggled_page_idx=`.
+
+That is the designed behaviour, not a defect -- but it means the toggling
+instances are **not** mechanically applicable the way the 83 plain ones are, and
+whoever does the application pass should budget hand-inspection for those five
+rather than discovering them one failed import at a time. Unknown as yet whether
+the second page lives at a different index, or whether those five toggle
+something that is not a second dialogue page at all.
+
 ### 108. Blank-graphic parallel pages are dropped whole, and nothing sets FLAG_STARTING_OVER
 
 *Filed 2026-09-15 out of CH01's 2F stop (`ch01.py`, the comment block above `B3_up`).

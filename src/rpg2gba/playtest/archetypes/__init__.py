@@ -51,10 +51,49 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "ChapterArchetypeModel",
     "default_manifest_dir",
+    "facing_toward",
     "find_match",
     "load_chapter_rows",
     "map_uranium_id",
 ]
+
+
+# -- facing, shared by every template that talks to something ---------------
+#
+# Consolidated here 2026-09-15 when `flavour_npc` would have become the
+# FOURTH byte-identical copy (trainer.py, item_ball.py, chapters/ch01.py were
+# the first three, differing only in their error prefix). CLAUDE.md §4.3 --
+# one source of truth per concept; the repo had just made the same move on
+# five hand-copied `*_constant` helpers, two of which had drifted.
+_DIR_TOWARD: dict[tuple[int, int], str] = {
+    (0, -1): "up",
+    (0, 1): "down",
+    (-1, 0): "left",
+    (1, 0): "right",
+}
+
+
+def facing_toward(
+    approach: tuple[int, int], target: tuple[int, int], *, caller: str,
+) -> str:
+    """Which way to face, standing on `approach`, to look at `target`.
+
+    `caller` names the template in the error, because "approach is not
+    adjacent to target" is otherwise indistinguishable between four call
+    sites. Fails loud rather than picking a diagonal: `cells.approach_to`
+    is supposed to return an orthogonally adjacent cell, so a delta this
+    table does not hold means the cell derivation is wrong upstream and
+    guessing a direction here would bury it.
+    """
+    delta = (target[0] - approach[0], target[1] - approach[1])
+    facing = _DIR_TOWARD.get(delta)
+    if facing is None:
+        raise ValueError(
+            f"{caller}: approach {approach} is not orthogonally adjacent "
+            f"to target {target} (delta {delta}) -- cells.approach_to "
+            "should never produce this"
+        )
+    return facing
 
 # -- manifest loading, cached (mirrors playtest.cells' graph cache) ----------
 

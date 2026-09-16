@@ -66,9 +66,9 @@ def _page(
 # --- ARCHETYPE_NAMES ---------------------------------------------------
 
 
-def test_archetype_names_are_the_four_documented_archetypes() -> None:
+def test_archetype_names_are_the_documented_archetypes() -> None:
     assert ARCHETYPE_NAMES == frozenset({
-        "trainer", "item_ball", "warp", "arrival_nudge",
+        "trainer", "item_ball", "warp", "arrival_nudge", "flavour_npc",
     })
 
 
@@ -83,14 +83,26 @@ def test_archetype_names_is_derived_from_the_registry() -> None:
 
 def test_registry_entries_appear_in_load_bearing_order() -> None:
     """Order is precedence, not cosmetics: trainer beats item_ball at the
-    event level, and warp beats arrival_nudge at the page level, purely
-    because of registry position (see the module's registry comment)."""
+    event level, and warp beats arrival_nudge beats flavour_npc at the page
+    level, purely because of registry position (see the module's registry
+    comment)."""
     assert [(entry.name, entry.level) for entry in _ARCHETYPE_REGISTRY] == [
         ("trainer", "event"),
         ("item_ball", "event"),
         ("warp", "page"),
         ("arrival_nudge", "page"),
+        ("flavour_npc", "page"),
     ]
+    # The ordering intent, stated explicitly rather than just pinned: all
+    # event-level entries precede all page-level entries, and flavour_npc --
+    # the loosest page-level fingerprint -- is the LAST page-level entry, so
+    # every more specific page-level archetype gets first refusal on a row.
+    levels = [entry.level for entry in _ARCHETYPE_REGISTRY]
+    assert levels == sorted(levels, key=lambda level: level == "page")
+    page_level_names = [
+        entry.name for entry in _ARCHETYPE_REGISTRY if entry.level == "page"
+    ]
+    assert page_level_names[-1] == "flavour_npc"
 
 
 def test_duplicate_archetype_name_fails_loud() -> None:
@@ -196,8 +208,17 @@ def test_trainer_double_battle_head_sets_double_param() -> None:
 
 
 def test_plain_dialogue_npc_does_not_match_trainer() -> None:
+    """This fixture is the canonical plain flavour NPC -- since flavour_npc
+    was added, `classify_event` no longer returns empty for it. Preserve the
+    original intent (it must not match `trainer`) and additionally assert
+    the positive flavour_npc match it now produces."""
     p0 = _page(35, 11, 0, effects=("bubble_ui", "se", "text"), script_heads=("pbCallBub",))
-    assert classify_event([p0]) == ()
+    matches = classify_event([p0])
+    assert not any(match.archetype == "trainer" for match in matches)
+    assert len(matches) == 1
+    match = matches[0]
+    assert match.archetype == "flavour_npc"
+    assert match.params == {"variant": "plain"}
 
 
 # --- item_ball -------------------------------------------------------------
@@ -271,8 +292,16 @@ def test_warp_page_matches_on_warp_effect() -> None:
 
 
 def test_page_without_warp_effect_does_not_match_warp() -> None:
+    """This fixture (action trigger, bare `text` effect) is also a plain
+    flavour NPC -- preserve the original intent (must not match `warp`) and
+    assert the positive flavour_npc match it now produces."""
     p0 = _page(35, 2, 0, effects=("text",))
-    assert classify_event([p0]) == ()
+    matches = classify_event([p0])
+    assert not any(match.archetype == "warp" for match in matches)
+    assert len(matches) == 1
+    match = matches[0]
+    assert match.archetype == "flavour_npc"
+    assert match.params == {"variant": "plain"}
 
 
 # --- arrival_nudge -----------------------------------------------------
@@ -359,6 +388,117 @@ def test_event_can_produce_warp_and_arrival_nudge_from_different_pages() -> None
     for match in matches:
         all_roles.update(match.roles)
     assert all_roles == {p0.row_id: "warp", p1.row_id: "nudge"}
+
+
+# --- flavour_npc ---------------------------------------------------------
+
+
+def test_flavour_npc_plain_variant() -> None:
+    p0 = _page(35, 20, 0, effects=("bubble_ui", "se", "text"), script_heads=("pbCallBub",))
+    matches = classify_event([p0])
+    assert len(matches) == 1
+    match = matches[0]
+    assert match.archetype == "flavour_npc"
+    assert match.params == {"variant": "plain"}
+    assert match.roles == {p0.row_id: "talk"}
+    assert match.prescribed == {p0.row_id: "beat"}
+
+
+def test_flavour_npc_toggling_variant_has_self_switch_write() -> None:
+    p0 = _page(
+        35, 21, 0,
+        effects=("bubble_ui", "self_switch_write", "text"),
+        script_heads=("pbCallBub",),
+    )
+    matches = classify_event([p0])
+    assert len(matches) == 1
+    assert matches[0].archetype == "flavour_npc"
+    assert matches[0].params == {"variant": "toggling"}
+
+
+def test_flavour_npc_randomized_variant_has_var_write_no_self_switch() -> None:
+    p0 = _page(
+        35, 22, 0,
+        effects=("bubble_ui", "var_write", "text"),
+        script_heads=("pbCallBub",),
+    )
+    matches = classify_event([p0])
+    assert len(matches) == 1
+    assert matches[0].archetype == "flavour_npc"
+    assert matches[0].params == {"variant": "randomized"}
+
+
+def test_flavour_npc_rejects_global_switch_write() -> None:
+    """`switch_write` is deliberately excluded -- a global switch is story
+    state, not flavour (see the module's constants-block comment)."""
+    p0 = _page(
+        35, 23, 0,
+        effects=("bubble_ui", "switch_write", "text"),
+        script_heads=("pbCallBub",),
+    )
+    assert classify_event([p0]) == ()
+
+
+def test_flavour_npc_rejects_noncosmetic_script_head() -> None:
+    """`pbShowMap` is T8's region-map NPC -- its own archetype, not flavour,
+    even though its effects alone would look like "just talking"."""
+    p0 = _page(35, 24, 0, effects=("bubble_ui", "text"), script_heads=("pbShowMap",))
+    assert classify_event([p0]) == ()
+
+
+def test_flavour_npc_rejects_unhandled_commands() -> None:
+    p0 = _page(
+        35, 25, 0,
+        effects=("bubble_ui", "text"), script_heads=("pbCallBub",), unhandled=1,
+    )
+    assert classify_event([p0]) == ()
+
+
+def test_flavour_npc_rejects_script_typed_conditions() -> None:
+    p0 = _page(
+        35, 26, 0,
+        effects=("bubble_ui", "text"), script_heads=("pbCallBub",),
+        script_typed_conditions=1,
+    )
+    assert classify_event([p0]) == ()
+
+
+def test_flavour_npc_requires_action_trigger() -> None:
+    p0 = _page(
+        35, 27, 0, trigger="autorun",
+        effects=("bubble_ui", "text"), script_heads=("pbCallBub",),
+    )
+    assert classify_event([p0]) == ()
+
+
+def test_flavour_npc_precedence_no_constructible_collision() -> None:
+    """The registry comment (module docstring, registry block) frames
+    flavour_npc as the loosest page-level fingerprint, claimed last so a
+    more specific page-level archetype gets first refusal on a row. But as
+    actually coded, no row can satisfy both flavour_npc and another
+    registered page-level matcher's fingerprint at once:
+
+    * `warp` only requires `"warp" in effects`; flavour_npc requires
+      `effects` to be a *subset* of `_FLAVOUR_ALLOWED_EFFECTS`, which does
+      not include `"warp"` -- any row with the warp effect is automatically
+      rejected by flavour_npc's effects check.
+    * `arrival_nudge` requires `trigger == "autorun"`; flavour_npc requires
+      `trigger == "action"` -- the triggers are mutually exclusive, so no
+      row can present both.
+
+    So there is no row today that would exercise "flavour_npc registered
+    last actually mattered" -- a test asserting warp/arrival_nudge beats
+    flavour_npc on a shared row would pass vacuously (the shared row is
+    unconstructible), which is exactly what was asked not to write. This
+    test instead pins the two disqualifying facts directly against the
+    real module constants, so a future loosening of
+    `_FLAVOUR_ALLOWED_EFFECTS` or the arrival_nudge trigger check that
+    reopens a real collision is caught by a real failure here rather than
+    resting on an untested precedence assumption.
+    """
+    from rpg2gba.chapter_manifest.archetypes import _FLAVOUR_ALLOWED_EFFECTS
+
+    assert "warp" not in _FLAVOUR_ALLOWED_EFFECTS
 
 
 # --- classify_manifest: grouping, ordering, kind filtering ------------------

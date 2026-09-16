@@ -42,7 +42,7 @@ from ..battle import in_battle, win_battle
 from ..cells import approach_to, event_cell
 from ..errors import ScenarioError
 from ..text_source import expected_text
-from . import find_match
+from . import facing_toward, find_match
 
 if TYPE_CHECKING:  # runtime import is lazy so this module works without bindings
     from ...chapter_manifest.schema import ManifestRow
@@ -50,23 +50,6 @@ if TYPE_CHECKING:  # runtime import is lazy so this module works without binding
     from ..emulator import Emulator
 
 logger = logging.getLogger(__name__)
-
-_DIR_TOWARD: dict[tuple[int, int], str] = {
-    (1, 0): "RIGHT", (-1, 0): "LEFT", (0, 1): "DOWN", (0, -1): "UP",
-}
-
-
-def _facing_toward(approach: tuple[int, int], target: tuple[int, int]) -> str:
-    delta = (target[0] - approach[0], target[1] - approach[1])
-    facing = _DIR_TOWARD.get(delta)
-    if facing is None:
-        raise ValueError(
-            f"trainer_beats: approach {approach} is not orthogonally "
-            f"adjacent to target {target} (delta {delta}) -- "
-            "cells.approach_to should never produce this"
-        )
-    return facing
-
 
 def _trainer_defeat_flag_settle(
     emu: Emulator, beat: str, defeat_flag: str, budget: int = 1800,
@@ -234,7 +217,8 @@ def trainer_beats(
         )
 
     approach = approach_to(map_constant, event_id, prefer=approach_prefer)
-    facing = _facing_toward(approach, event_cell(map_constant, event_id))
+    facing = facing_toward(
+        approach, event_cell(map_constant, event_id), caller="trainer_beats")
     resolved_group = group if group is not None else beat_prefix
 
     @builder.beat(

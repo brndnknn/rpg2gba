@@ -70,6 +70,43 @@ _NUDGE_EFFECTS_REQUIRED: frozenset[str] = frozenset({
 })
 
 
+# --- flavour_npc (REDERIVATION_PLAN.md sec 13.3 T2) ------------------------
+#
+# The corpus's largest *talk* population: an NPC you press A on, who says
+# something and changes nothing you could observe later. Three variants only
+# -- plain, toggling (a self-switch flips to a second thing-to-say), and
+# randomized (`random()` picks a line) -- which is why this is one archetype
+# with a `variant` param rather than three registry entries. The V2 census's
+# eight fingerprint clusters fragment only on cosmetic tags (`pbCallBub`,
+# `se`, `var_write`), not on behaviour.
+#
+# These predicates were measured against the CH01-CH03 residue on 2026-09-15,
+# not estimated: of 111 action-triggered text rows, 97 qualify (83 plain, 11
+# toggling, 3 randomized) and the 14 rejects are all correctly rejected.
+# Keep them tight -- every loosening below was considered and refused:
+#
+#   `switch_write` is NOT allowed (5 rows). A global switch is story state:
+#     §15.8's whole point is that an observable write is not flavour. A
+#     self-switch is different -- it is page-local by construction, and is
+#     exactly how the toggling variant stores "I already said the first line".
+#   `script_heads` must be a subset of `pbCallBub` alone (9 rows rejected).
+#     `pbShowMap` is T8's region-map NPC, `displayNinjaLetter` is #9's card
+#     UI, `jvGiveReward` grants something. Each is its own archetype or its
+#     own backlog item; none is flavour, and all three read as "just talking"
+#     if you look only at effects.
+#   `unhandled` must be 0 and `script_typed_conditions` must be 0. A page
+#     with a queued command or an unparsed condition is a page whose
+#     behaviour we do not know -- claiming it as flavour would be the silent
+#     default CLAUDE.md §4.5 exists to forbid.
+_FLAVOUR_ALLOWED_EFFECTS: frozenset[str] = frozenset({
+    "text", "bubble_ui", "se", "self_switch_write", "var_write",
+})
+# `pbCallBub` is Uranium's speech-bubble helper -- it draws an emote over the
+# speaker's head and returns. Purely presentational, and by far the most
+# common head in this population (68 of 111 candidate rows).
+_FLAVOUR_COSMETIC_HEADS: frozenset[str] = frozenset({"pbCallBub"})
+
+
 @dataclass(frozen=True)
 class ArchetypeMatch:
     """One recognized archetype instance, scoped to the rows it explains.
@@ -199,6 +236,48 @@ def _match_arrival_nudge(row: ManifestRow) -> ArchetypeMatch | None:
     )
 
 
+def _flavour_variant(effects: frozenset[str]) -> str:
+    """Which of T2's three variants this page is.
+
+    Order matters: a toggling page may also carry `var_write`, and the
+    self-switch is the more specific signal (it is what makes the page
+    two-state at all), so it wins.
+    """
+    if "self_switch_write" in effects:
+        return "toggling"
+    if "var_write" in effects:
+        return "randomized"
+    return "plain"
+
+
+def _match_flavour_npc(row: ManifestRow) -> ArchetypeMatch | None:
+    if row.trigger != "action":
+        return None
+    effects = frozenset(row.effects)
+    if "text" not in effects:
+        return None
+    if effects - _FLAVOUR_ALLOWED_EFFECTS:
+        return None
+    if set(row.script_heads) - _FLAVOUR_COSMETIC_HEADS:
+        return None
+    # A queued command or an unclassified condition means we do not know what
+    # this page does; see the constants block above.
+    if row.unhandled:
+        return None
+    if row.script_typed_conditions:
+        return None
+    if row.condition_unclassified:
+        return None
+    return ArchetypeMatch(
+        archetype="flavour_npc",
+        map_id=row.map_id,
+        event_id=row.event_id,  # type: ignore[arg-type]
+        params={"variant": _flavour_variant(effects)},
+        roles={row.row_id: "talk"},
+        prescribed={row.row_id: "beat"},
+    )
+
+
 # --- the archetype registry ---------------------------------------------
 #
 # Adding a fifth archetype means writing its `_match_*` matcher and adding
@@ -254,6 +333,10 @@ _ARCHETYPE_REGISTRY: tuple[_ArchetypeEntry, ...] = _build_registry([
     _ArchetypeEntry("item_ball", "event", _match_item_ball),
     _ArchetypeEntry("warp", "page", _match_warp),
     _ArchetypeEntry("arrival_nudge", "page", _match_arrival_nudge),
+    # flavour_npc is deliberately LAST. Its fingerprint is the loosest here
+    # ("an action page that only talks"), so any row a more specific
+    # page-level archetype can explain must be claimed by that one first.
+    _ArchetypeEntry("flavour_npc", "page", _match_flavour_npc),
 ])
 
 ARCHETYPE_NAMES: frozenset[str] = frozenset(
