@@ -45,7 +45,20 @@ class TempSwitch:
     letter: str
 
 
-Key = Switch | Variable | SelfSwitch | TempSwitch
+@dataclass(frozen=True)
+class EngineKey:
+    """Engine-held state no RMXP switch/variable carries, but which an engine
+    transition reads (REDERIVATION_PLAN.md §16.3 C3). Integer-valued, like a
+    Variable. The one key today is `RESPAWN_MAP`: `$PokemonGlobal.
+    pokecenterMapId`, written by `Kernel.pbSetPokemonCenter` and read by
+    `Kernel.pbStartOver` (`101__PField_Field.rb:1666-1676,1920-1948`)."""
+
+    name: str
+
+
+RESPAWN_MAP = EngineKey("respawn_map")
+
+Key = Switch | Variable | SelfSwitch | TempSwitch | EngineKey
 
 CompareOp = Literal["==", "!=", ">=", "<=", ">", "<"]
 

@@ -1,6 +1,7 @@
 """CLI for the derived story-state model (REDERIVATION_PLAN.md §16.3 C2b).
 
     python -m rpg2gba.story_state report --chapter CH03
+    python -m rpg2gba.story_state engine-audit
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from pathlib import Path
 import click
 
 from rpg2gba.chapter_atlas.binding import load_binding
+from rpg2gba.story_state.engine_audit import format_report, run_real_audit
 from rpg2gba.story_state.model import ChapterStory, build_chapter_stories
 
 _CHAIN = ["CH01", "CH02", "CH03", "CH04", "CH05"]
@@ -42,6 +44,9 @@ def _story_to_dict(story: ChapterStory) -> dict:
         # ruling 2026-09-16) -- C2 joins and records rather than failing;
         # C6's route recomputes the real answer.
         "order_dependent": [asdict(o) for o in story.order_dependent],
+        # Engine-transition forks that ran on this chapter (REDERIVATION_PLAN.md
+        # §16.3 C3, ruling R9) -- never contributes to `end_state` above.
+        "forks": [asdict(f) for f in story.forks],
     }
 
 
@@ -92,6 +97,23 @@ def report(chapter: str) -> None:
     click.echo(f"  order_dependent: {len(story.order_dependent)}")
     for o in story.order_dependent:
         click.echo(f"    {o.key}: {list(o.writers)} -> {list(o.values)}")
+    click.echo(f"  forks: {len(story.forks)}")
+    for f in story.forks:
+        click.echo(
+            f"    {f.transition}: landing={list(f.landing_maps)} "
+            f"owned={len(f.owned_row_ids)} rows"
+        )
+
+
+@cli.command("engine-audit")
+def engine_audit() -> None:
+    """Check the fenced engine code against the declared engine transitions,
+    obligations and the Intro seed (REDERIVATION_PLAN.md §16.3 C3). Exits
+    non-zero when anything is owed."""
+    result = run_real_audit(_out_dir())
+    click.echo(format_report(result))
+    if not result.ok:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

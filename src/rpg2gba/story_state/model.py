@@ -18,14 +18,17 @@ from rpg2gba.chapter_atlas.binding import ChapterBinding, load_binding
 from rpg2gba.chapter_manifest.generator import generate_chapter_manifest
 from rpg2gba.chapter_manifest.schema import parse_row_id, row_id_sort_key
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
+from rpg2gba.pbs_converter.heal_locations import initial_anchor
 from rpg2gba.story_state.extract import (
     RowState,
     extract_map,
     extract_triggered_common_events,
 )
 from rpg2gba.story_state.state import (
+    RESPAWN_MAP,
     Adjust,
     Assign,
+    EngineKey,
     Key,
     SelfSwitch,
     Switch,
@@ -34,6 +37,7 @@ from rpg2gba.story_state.state import (
     Variable,
     Write,
 )
+from rpg2gba.story_state.transitions import TRANSITIONS
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +71,13 @@ def _default_value(key: Key) -> frozenset:
     if isinstance(key, TempSwitch):
         # Per-visit, reset on map entry -- never persisted, always both.
         return frozenset({False, True})
-    if isinstance(key, Variable):
+    if isinstance(key, (Variable, EngineKey)):
+        # `EngineKey` (RESPAWN_MAP) is int-valued like a Variable
+        # (REDERIVATION_PLAN.md §16.3 C3). `0` here is a bug-detection floor
+        # only -- the real value is always explicitly seeded into INTRO's
+        # state before saturation ever runs (`model_intro`'s
+        # `initial_anchor().map_id` seed), so this fallback should never be
+        # what a real chapter run actually observes.
         return frozenset({0})
     return frozenset({False})
 
@@ -94,7 +104,7 @@ def _apply_havoc(state: State, key: Key) -> None:
     TOP (REDERIVATION_PLAN.md §16.3 C2b handback FIX 2b): {False, True} for
     a switch-like key (a small enough domain that "havoc" already IS its
     full domain), or the `VARIABLE_TOP` sentinel for a Variable."""
-    if isinstance(key, Variable):
+    if isinstance(key, (Variable, EngineKey)):
         state[key] = frozenset({VARIABLE_TOP})
     else:
         state[key] = _get(state, key) | frozenset({False, True})
@@ -223,12 +233,35 @@ class OrderDependentKey:
 
 
 @dataclass(frozen=True)
+class ForkReport:
+    """One engine-transition fork that actually ran on a chapter
+    (REDERIVATION_PLAN.md §16.3 C3, ruling R9): its precondition was possible
+    at some point on the chapter's main path (its saturated state).
+    `landing_maps` is every map id `transition.lands_on` possibly held at any
+    point in the chapter (every map in cumulative
+    scope, if that key was TOP); `owned_row_ids` is every row the fork itself
+    newly owned (sorted) -- never rows already live on the main path or owned
+    by an earlier chapter (`saturate`'s `already_owned` excludes those from
+    the fork's own walk, same as any other saturation)."""
+
+    transition: str
+    landing_maps: tuple[int, ...]
+    owned_row_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ChapterStory:
     chapter_id: str
     seed_from: str
     rows: tuple[RowVerdict, ...]
     end_state: tuple[tuple[str, tuple], ...]
     intro_maps: tuple[int, ...] | None = None
+    # Engine-transition forks that ran on this chapter (REDERIVATION_PLAN.md
+    # §16.3 C3) -- never contributes to `end_state`/`order_dependent` (R9:
+    # never on the main path); a fork-owned row's OWN verdict still appears
+    # in `rows`/`common_events` above, status "live", with a `fork:<name>`
+    # blocker and an `engine:<name>` `enabled_by` group.
+    forks: tuple[ForkReport, ...] = ()
     # Triggered-common-event pseudo-rows (REDERIVATION_PLAN.md §16.3 C2
     # ruling (e)) reported HERE, never in `rows`: a pseudo-row is global (not
     # owned by any map), so it is reported once -- under whichever
@@ -846,12 +879,84 @@ def compute_end_state(
     # (or the switch-like full domain), joined onto whatever the normal
     # writers above would otherwise have said, never raising.
     for key in havoc_keys_owned:
-        if isinstance(key, Variable):
+        if isinstance(key, (Variable, EngineKey)):
             end[key] = frozenset({VARIABLE_TOP})
         else:
             end[key] = _get(end, key) | frozenset({False, True})
 
     return end, tuple(sorted(order_dependent, key=lambda o: o.key))
+
+
+# --- engine-transition forks (R9/C3) ---------------------------------------
+
+
+def _apply_transition_forks(
+    end_state: State,
+    rows_by_id: dict[str, RowState],
+    map_ids_in_scope: set[int],
+    *,
+    already_owned: dict[str, tuple[str, ...]],
+    owner_of: dict[str, tuple[str, int]],
+    structural_refusal: dict[str, tuple[str, ...] | None],
+    enabled_by_of: dict[str, tuple[tuple[str, ...], ...]],
+    owner_label: str,
+) -> tuple[ForkReport, ...]:
+    """Runs every `TRANSITIONS` entry whose precondition is possible in
+    `end_state` (REDERIVATION_PLAN.md §16.3 C3, ruling R9): snapshot -> apply
+    the transition's writes as OVERWRITES -> walk what it unlocks -> nothing
+    is restored explicitly, because the fork's own `saturate` call is a
+    throwaway walk over a COPY of `end_state`, never `end_state` itself, and
+    a fork-owned row's writes never flow back into it (the caller must not
+    fold the fork's `_SaturationResult.end_state` into anything -- only
+    `newly_owned`/`blockers` matter here).
+
+    Mutates `already_owned`/`owner_of`/`enabled_by_of` IN PLACE for every row
+    the fork newly owns -- exactly the bookkeeping an ordinary chapter-chain
+    `saturate` call's caller already does, so a later chapter's own
+    saturation (main path or a later fork) sees these rows as already owned
+    and never re-walks them. `owner_label` is the chapter id (or `"INTRO"`)
+    these rows are attributed to.
+    """
+    reports: list[ForkReport] = []
+    for transition in TRANSITIONS:
+        if not all(possible(t, end_state) for t in transition.precondition):
+            continue
+
+        fork_state: State = dict(end_state)
+        for w in transition.writes:
+            fork_state[w.key] = w.values  # OVERWRITE, not join -- R9/C3 spec.
+
+        landing_values = _get(fork_state, transition.lands_on)
+        if VARIABLE_TOP in landing_values:
+            landing_maps = sorted(map_ids_in_scope)
+        else:
+            landing_maps = sorted(v for v in landing_values if isinstance(v, int))
+        landing_set = set(landing_maps)
+
+        order = sorted(
+            (
+                rid for rid in rows_by_id
+                if _is_pseudo_row_id(rid) or parse_row_id(rid).map_id in landing_set
+            ),
+            key=row_id_sort_key,
+        )
+
+        fork_result = saturate(
+            fork_state, rows_by_id, order,
+            already_owned=already_owned, structural_refusal=structural_refusal,
+        )
+
+        for rid, stage in fork_result.newly_owned.items():
+            owner_of[rid] = (owner_label, stage)
+            already_owned[rid] = (f"fork:{transition.name}",) + fork_result.blockers[rid]
+            enabled_by_of[rid] = ((f"engine:{transition.name}",),)
+
+        reports.append(ForkReport(
+            transition=transition.name,
+            landing_maps=tuple(landing_maps),
+            owned_row_ids=tuple(sorted(fork_result.newly_owned)),
+        ))
+    return tuple(reports)
 
 
 # --- intro pseudo-chapter (R6/R8 CH01 seed) --------------------------------
@@ -890,6 +995,7 @@ def model_intro(
     switch_labels: dict[int, str],
     bound_map_ids: set[int],
     pseudo_rows: dict[str, RowState] | None = None,
+    metadata_header: Path | None = None,
 ) -> tuple[ChapterStory, State, list[int], list[str], dict[str, tuple[int, tuple[str, ...]]]]:
     """The unbound Intro chain (R6/§16.3 "CH01 seed" paragraph, operator
     ruling (d)): start map plus every map reached from it by a direct (201,
@@ -902,7 +1008,18 @@ def model_intro(
     CH01 even starts). The 5th return value is `{row_id: (stage, blockers)}`
     for every pseudo-row INTRO itself owned, so `build_chapter_stories` can
     seed the chain's `already_owned`/`owner_of` without re-deriving them.
+
+    `metadata_header` (default `build_dir/"include/constants/metadata.h"`)
+    seeds `RESPAWN_MAP` (REDERIVATION_PLAN.md §16.3 C3): every chapter
+    inherits INTRO's `initial_anchor().map_id` as the pre-any-Pokémon-Center
+    respawn, exactly `heal_locations.initial_anchor`'s own MetadataHome
+    fallback (`pbStartOver`, module docstring) -- reused here rather than
+    re-derived, per CLAUDE.md §4.3 one-source-of-truth.
     """
+    if metadata_header is None:
+        metadata_header = build_dir / "include" / "constants" / "metadata.h"
+    initial_respawn_map_id = initial_anchor(metadata_header).map_id
+
     system_path = build_dir / "system.json"
     system = json.loads(system_path.read_text(encoding="utf-8"))
     start_map_id = system["start_map_id"]
@@ -945,7 +1062,7 @@ def model_intro(
     order = sorted(rows_by_id, key=row_id_sort_key)
     refusal_cache: dict[str, tuple[str, ...] | None] = {}
     structural_refusal = {rid: _structural_refusal(rid, rows_by_id, refusal_cache) for rid in order}
-    seed: State = {}
+    seed: State = {RESPAWN_MAP: frozenset({initial_respawn_map_id})}
     result = saturate(
         seed, rows_by_id, order, already_owned={}, structural_refusal=structural_refusal)
     owned = set(result.newly_owned)
@@ -957,6 +1074,20 @@ def model_intro(
     end_state, order_dependent = compute_end_state(seed, owned, rows_by_id, enabled_by_of)
 
     _check_refused_pseudo_rows(pseudo_rows, structural_refusal, "INTRO", end_state)
+
+    # R9/C3, for consistency with the chapter chain -- a no-op in practice
+    # today (WHITEOUT's precondition, Switch(2) "Got Pokemon", is never
+    # possible True this early: the starter choice is CH01 content). Uses
+    # throwaway `owner_of`/`already_owned` dicts: INTRO's own row verdicts
+    # below are built from `result.newly_owned`/`owned`, not from these, so a
+    # fork that actually fired here would show up in `intro_forks`' own
+    # `owned_row_ids` but not (yet) in `story.rows` -- not exercised by the
+    # CH01-CH05 corpus (R13).
+    intro_forks = _apply_transition_forks(
+        end_state, rows_by_id, set(intro_maps),
+        already_owned={}, owner_of={}, structural_refusal=structural_refusal,
+        enabled_by_of=enabled_by_of, owner_label="INTRO",
+    )
 
     map_order = [rid for rid in order if not _is_pseudo_row_id(rid)]
     pseudo_order = [rid for rid in order if _is_pseudo_row_id(rid)]
@@ -1020,6 +1151,7 @@ def model_intro(
         end_state=_freeze_state(end_state), intro_maps=tuple(intro_maps),
         common_events=tuple(common_event_verdicts),
         order_dependent=order_dependent,
+        forks=intro_forks,
     )
     return story, end_state, intro_maps, refusals, pseudo_owned
 
@@ -1036,6 +1168,8 @@ def _state_key_repr(key: Key) -> str:
         return f"self_switch:{key.map_id}/{key.event_id}/{key.letter}"
     if isinstance(key, TempSwitch):
         return f"temp_switch:{key.map_id}/{key.event_id}/{key.letter}"
+    if isinstance(key, EngineKey):
+        return f"engine:{key.name}"
     raise TypeError(f"unknown key {key!r}")
 
 
@@ -1144,6 +1278,11 @@ def build_chapter_stories(
     order_dependent_by_chapter: dict[str, tuple[OrderDependentKey, ...]] = {}
     seed_from_by_chapter: dict[str, str] = {}
     enabled_by_by_chapter: dict[str, dict[str, tuple[tuple[str, ...], ...]]] = {}
+    forks_by_chapter: dict[str, tuple[ForkReport, ...]] = {}
+    # Every map id modelled so far (INTRO plus every chapter's own maps up to
+    # and including the current one) -- the R9/C3 "every map in cumulative
+    # scope" fallback when an engine transition's landing key is TOP.
+    cumulative_map_ids: set[int] = set(intro_maps)
 
     # Seed pseudo-row ownership/structural-refusal from INTRO -- a pseudo-row
     # INTRO already owned is never re-derived by the chain (§16.3 C2
@@ -1198,6 +1337,27 @@ def build_chapter_stories(
 
         end_state_by_chapter[chapter_id] = refined_end_state
         order_dependent_by_chapter[chapter_id] = refined_order_dependent
+        cumulative_map_ids |= own_map_ids_by_chapter[chapter_id]
+
+        # R9/C3: precondition-gated engine-transition forks, run over THIS
+        # chapter's own main-path end state -- after it (never before: the
+        # fork must see this chapter's own newly-owned main-path rows as
+        # already owned, per `already_owned` above) and strictly separate
+        # from it (never folded into `refined_end_state`/`seed` -- R9 "never
+        # on the main path"). `already_owned`/`owner_of` already carry this
+        # chapter's own main-path ownership at this point (set right after
+        # `saturate` above), so a fork can never re-attribute a main-path row.
+        # The fork reads the SATURATED state (every value a key held at any
+        # point in the chapter), not `refined_end_state`: a white-out before
+        # CH03's Pokémon Center visit lands on the seed's respawn map, which
+        # the refined end state has already overwritten (lead, C3 review).
+        forks_by_chapter[chapter_id] = _apply_transition_forks(
+            result.end_state, cumulative_rows, cumulative_map_ids,
+            already_owned=already_owned, owner_of=owner_of,
+            structural_refusal=structural_refusal, enabled_by_of=enabled_by_of,
+            owner_label=chapter_id,
+        )
+
         seed = refined_end_state
         seed_from = chapter_id
 
@@ -1281,6 +1441,7 @@ def build_chapter_stories(
             end_state=_freeze_state(end_state_by_chapter[chapter_id]), intro_maps=None,
             common_events=tuple(common_event_verdicts),
             order_dependent=order_dependent_by_chapter[chapter_id],
+            forks=forks_by_chapter[chapter_id],
         )
 
     return stories

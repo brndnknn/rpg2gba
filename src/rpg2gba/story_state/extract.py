@@ -44,7 +44,9 @@ from rpg2gba.conversion_agent.transpiler import (
     TextRun,
     parse_tree,
 )
+from rpg2gba.pbs_converter.heal_locations import _NOT_A_CALL, _parse_call
 from rpg2gba.story_state.state import (
+    RESPAWN_MAP,
     Adjust,
     Assign,
     Key,
@@ -469,6 +471,26 @@ def _extract_script_writes(
             writes.append(Assign(
                 Variable(int(m.group(1))), frozenset({int(m.group(2))}),
                 conditional, source, list_index,
+            ))
+            continue
+        # `Kernel.pbSetPokemonCenter` -- the white-out respawn write
+        # (REDERIVATION_PLAN.md §16.3 C3, state.py's `RESPAWN_MAP`
+        # docstring). Reuses `heal_locations._parse_call` (single source of
+        # truth for this call's shape, CLAUDE.md §4.3) rather than a second
+        # regex: a bare call resolves to THIS row's own map id (the calling
+        # map, per `pbSetPokemonCenter`'s own argument defaults); an
+        # explicit call's first argument is the target map id. An argument
+        # form `_parse_call` cannot recognize is a real, named refusal --
+        # not a silently dropped write (CLAUDE.md §4.5).
+        try:
+            parsed = _parse_call(line)
+        except ValueError as exc:
+            refusals.append(Refusal("unparseable_pokemon_center_call", f"{source}: {exc}"))
+            continue
+        if parsed is not _NOT_A_CALL:
+            target_map_id = map_id if parsed is None else parsed[0]
+            writes.append(Assign(
+                RESPAWN_MAP, frozenset({target_map_id}), conditional, source, list_index,
             ))
             continue
         if _STATE_WRITE_SMELL_RE.search(line):

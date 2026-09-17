@@ -24,6 +24,7 @@ from rpg2gba.story_state.extract import (
     extract_triggered_common_events,
 )
 from rpg2gba.story_state.state import (
+    RESPAWN_MAP,
     Adjust,
     Assign,
     SelfSwitch,
@@ -318,6 +319,37 @@ def test_script_writes_every_recognized_shape() -> None:
     assert ("Variable", 21, frozenset({4})) in keys_values
     assert ("Variable", 22, frozenset({5})) in keys_values
     assert row.refusals == ()
+
+
+# --- writes: pbSetPokemonCenter (REDERIVATION_PLAN.md §16.3 C3) -----------
+
+
+def test_pokemon_center_bare_call_writes_the_calling_map() -> None:
+    page = _page([_cmd(355, ["pbSetPokemonCenter"])])
+    rows = extract_map(68, _map([_event(1, [page])]), common_events=[], switch_labels={})
+    row = rows[page_row_id(68, 1, 0)]
+    assert row.writes == (Assign(RESPAWN_MAP, frozenset({68}), False,
+                                  "script @list[0]: pbSetPokemonCenter", 0),)
+    assert row.refusals == ()
+
+
+def test_pokemon_center_explicit_call_writes_its_first_argument() -> None:
+    page = _page([_cmd(355, ["Kernel.pbSetPokemonCenter(49, 7, 7, 2)"])])
+    rows = extract_map(68, _map([_event(1, [page])]), common_events=[], switch_labels={})
+    row = rows[page_row_id(68, 1, 0)]
+    assert row.writes == (Assign(
+        RESPAWN_MAP, frozenset({49}), False,
+        "script @list[0]: Kernel.pbSetPokemonCenter(49, 7, 7, 2)", 0,
+    ),)
+    assert row.refusals == ()
+
+
+def test_pokemon_center_unparseable_arguments_refuses_by_name() -> None:
+    page = _page([_cmd(355, ["pbSetPokemonCenter(someVariable, 7, 7, 2)"])])
+    rows = extract_map(68, _map([_event(1, [page])]), common_events=[], switch_labels={})
+    row = rows[page_row_id(68, 1, 0)]
+    assert row.writes == ()
+    assert row.refusals[0].code == "unparseable_pokemon_center_call"
 
 
 def test_unparsed_state_write_refuses() -> None:

@@ -1631,7 +1631,7 @@ Each lands unit-green. None is ROM-verified before P11.
 |---|---|---|---|
 | **C1** | Branch-arm manifest rows; re-derive CH01–CH05 manifests and sidecars; re-affirm invalidated hashes | R5 | DONE 2026-09-16 — see "C1 landed" below |
 | **C2** | Story-state model: highest-live-page liveness, earliest-live placement, `later:`/`unreachable:` derivation, generalized precedence | R6, R8 | DONE 2026-09-16 — C2a (extraction + outcome table) and C2b (model, CLI); see "C2b landed" below |
-| **C3** | Engine-transition forks, white-out first, with the fenced-engine grep for the rest | R9 | TODO |
+| **C3** | Engine-transition forks, white-out first, with the fenced-engine grep for the rest | R9 | IN PROGRESS — fork model + engine audit landed 2026-09-16; engine half (switch 52 seed, CE 51 day/night) next; see "C3" below |
 | **C4** | Generic per-command extractors for every code present in CH01–CH05, source-derived | R11 | TODO |
 | **C5** | Archetype templates refactored onto the generic floor; the ⊇-floor checker rule | R11 | TODO |
 | **C6** | Generator + solver integration: whole-module emit, review doc, refusal list, idempotence test | R1, R4, R7 | TODO |
@@ -1743,6 +1743,30 @@ The only `order_dependent` key is CH01's switch 104 (`map049/ev001/p2` vs `map05
 the amendment's case). CH01's refusals are mostly `unparsed_state_write` (C8's interpreter) and
 `unmodelled_outcome` (outcome-table gaps). **Not yet confirmed:** R9's inference that
 `map049/ev022/p0` / `map068/ev001/p1` return to their own chapters waits on C3.
+
+**C3 (2026-09-16).** Measured from source: `Kernel.pbStartOver` sets switch 5 Starting Over on
+both its Pokémon Center and `MetadataHome` paths and moves the player to
+`$PokemonGlobal.pokecenterMapId` (`101__PField_Field.rb:1920-1978`), which only
+`pbSetPokemonCenter` writes; before any call it is home, map 49. Wild and trainer losses both
+reach it. Design (lead): `story_state/transitions.py` declares transitions, engine obligations
+and harness-only engine writes. **White-out**: precondition switch 2 Got Pokemon (set only by
+the starter choice, `map050/ev019`), write switch 5 := ON, lands on `EngineKey("respawn_map")`,
+which extraction now writes from `pbSetPokemonCenter` and the Intro seeds from
+`initial_anchor()`. The fork runs per chapter over the chapter's **saturated** state (a
+white-out before CH03's center visit still lands on 49), walks only rows on the landing maps
+plus pseudo-rows, owns what it unlocks with blocker `fork:whiteout` and `enabled_by`
+`engine:whiteout`, and never touches the end state. **R9's inference confirmed:**
+`map049/ev022/p0` is CH01's (landing [49]); `map068/ev001/p1` is owned by CH03 (landing
+[49, 68]), still reported `refused` for its soft `$Trainer.party.length` write (C8);
+`map048/ev013/p0` stays `unreachable` because white-out never lands on 48. `story_state/
+engine_audit.py` + `python -m rpg2gba.story_state engine-audit` scan the four sentinel fences
+for `FlagSet`/`FlagClear`/`FlagToggle`/`VarSet` and fail on undeclared writes, missing
+transition writes, owed obligations, and Intro-seed keys a chapter reads that `new_game.c`
+doesn't set. Only two fenced writes exist (`DoWhiteOut`'s `FLAG_STARTING_OVER`, the harness's
+`FLAG_BADGE03_GET`). First run found two gaps: **switch 52 Mum** (Intro sets it,
+`map049/ev002/p1` reads it) and **CE 51 day/night** (switches 105/106 unnamed and unset).
+**Operator, same day:** fix both in the engine as part of C3: a fenced `FlagSet(FLAG_MUM)` in the
+spawn override, and 105/106 named and set from the RTC.
 
 C1–C6 stand on their own. C7 must land before C9 overwrites anything. Route plans (P9) become
 a C6 output rather than a separate step.

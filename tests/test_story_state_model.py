@@ -34,6 +34,23 @@ OUT_DIR = Path("output/uranium-build")
 CHAPTERS_PATH = Path("reference/chapters.json")
 
 
+def _write_metadata_header(
+    build_dir: Path, *, map_id: int = 49, x: int = 7, y: int = 7, direction: int = 2,
+) -> None:
+    """A minimal `metadata.h` fixture (`heal_locations.initial_anchor`'s
+    input shape) -- `model_intro` now reads this to seed `RESPAWN_MAP`
+    (REDERIVATION_PLAN.md §16.3 C3)."""
+    header_dir = build_dir / "include" / "constants"
+    header_dir.mkdir(parents=True, exist_ok=True)
+    (header_dir / "metadata.h").write_text(
+        f"#define URANIUM_START_MAP {map_id}\n"
+        f"#define URANIUM_START_X {x}\n"
+        f"#define URANIUM_START_Y {y}\n"
+        f"#define URANIUM_START_DIR {direction}\n",
+        encoding="utf-8",
+    )
+
+
 def _event(event_id: int, pages: list[dict], *, x: int = 0, y: int = 0) -> dict:
     return {"id": event_id, "name": None, "x": x, "y": y, "pages": pages}
 
@@ -258,6 +275,7 @@ def _write_chain_fixture(tmp_path: Path) -> tuple[Path, Path]:
 
     (build_dir / "common_events.json").write_text("[]", encoding="utf-8")
     (build_dir / "system.json").write_text(json.dumps({"start_map_id": 901}), encoding="utf-8")
+    _write_metadata_header(build_dir)
 
     chapters_path = tmp_path / "chapters.json"
     chapters_path.write_text(json.dumps({
@@ -320,6 +338,7 @@ def test_intro_follows_a_direct_transfer(tmp_path: Path) -> None:
     (build_dir / "maps" / "Map052.json").write_text(json.dumps(second_map), encoding="utf-8")
 
     (build_dir / "system.json").write_text(json.dumps({"start_map_id": 51}), encoding="utf-8")
+    _write_metadata_header(build_dir)
 
     story, end_state, intro_maps, refusals, pseudo_owned = model_intro(
         build_dir, common_events=[], switch_labels={}, bound_map_ids=set())
@@ -367,6 +386,7 @@ def _write_pseudo_row_fixture(tmp_path: Path) -> tuple[Path, Path]:
         "list": [{"code": 122, "parameters": [70, 70, 0, 0, 7], "indent": 0}],  # var 70 = 7
     }
     (build_dir / "common_events.json").write_text(json.dumps([ce]), encoding="utf-8")
+    _write_metadata_header(build_dir)
 
     chapters_path = tmp_path / "chapters.json"
     chapters_path.write_text(json.dumps({
@@ -394,6 +414,128 @@ def test_triggered_common_event_becomes_live_only_after_its_gate_row(tmp_path: P
 
     end_state = dict(chz.end_state)
     assert end_state["var:70"] == (7,)
+
+
+# --- engine-transition forks (REDERIVATION_PLAN.md §16.3 C3, ruling R9) ----
+
+
+def _write_whiteout_fixture(tmp_path: Path, *, got_pokemon: bool = True) -> tuple[Path, Path]:
+    """One chapter CHW over four synthetic maps, shaped after the real
+    map049/map068 white-out pattern (R9): map500 optionally sets Switch(2)
+    "Got Pokemon" (the precondition); map501 has a bare `pbSetPokemonCenter`
+    call (moving the respawn anchor away from the default) AND a forced
+    handler gated on Switch(5) "Starting Over" (only live via the fork);
+    map502 has an identically-shaped handler that must NOT be fork-owned
+    (it isn't on the landing map); map503 has an always-live control row to
+    confirm a main-path row is never reattributed to the fork."""
+    build_dir = tmp_path / "build"
+    (build_dir / "maps").mkdir(parents=True)
+
+    events_500 = (
+        [_event(1, [_page([_cmd(121, [2, 2, 0])], trigger=3)])]  # switch 2 ON, autorun
+        if got_pokemon
+        else [_event(1, [_page([_cmd(101, ["noop"])])])]
+    )
+    map_500 = _map(events_500, map_id=500)
+    (build_dir / "maps" / "Map500.json").write_text(json.dumps(map_500), encoding="utf-8")
+
+    map_501 = _map([
+        _event(1, [_page([_cmd(355, ["pbSetPokemonCenter"])], trigger=3)]),
+        _event(2, [_page([_cmd(101, ["handler"])], condition={
+            "switch1_valid": True, "switch1_id": 5}, trigger=3)]),
+    ], map_id=501)
+    (build_dir / "maps" / "Map501.json").write_text(json.dumps(map_501), encoding="utf-8")
+
+    map_502 = _map([
+        _event(1, [_page([_cmd(101, ["other handler"])], condition={
+            "switch1_valid": True, "switch1_id": 5}, trigger=3)]),
+    ], map_id=502)
+    (build_dir / "maps" / "Map502.json").write_text(json.dumps(map_502), encoding="utf-8")
+
+    map_503 = _map([_event(1, [_page([_cmd(101, ["always"])], trigger=3)])], map_id=503)
+    (build_dir / "maps" / "Map503.json").write_text(json.dumps(map_503), encoding="utf-8")
+
+    (build_dir / "common_events.json").write_text("[]", encoding="utf-8")
+    (build_dir / "system.json").write_text(json.dumps({"start_map_id": 500}), encoding="utf-8")
+    _write_metadata_header(build_dir, map_id=49)  # anchor distinct from 500-503
+
+    chapters_path = tmp_path / "chapters.json"
+    chapters_path.write_text(json.dumps({
+        "schema": 1,
+        "acts": [{"id": "A1", "title": "Act 1", "chapters": ["CHW"]}],
+        "chapters": [{"id": "CHW", "act": "A1", "title": "Whiteout",
+                      "maps": [500, 501, 502, 503]}],
+    }), encoding="utf-8")
+    return build_dir, chapters_path
+
+
+def test_fork_does_not_run_when_precondition_is_impossible(tmp_path: Path) -> None:
+    build_dir, chapters_path = _write_whiteout_fixture(tmp_path, got_pokemon=False)
+    stories = build_chapter_stories(["CHW"], build_dir=build_dir, chapters_path=chapters_path)
+    chw = stories["CHW"]
+
+    assert chw.forks == ()
+    handler = next(r for r in chw.rows if r.row_id == page_row_id(501, 2, 0))
+    assert handler.status in ("unreachable", "undetermined")
+    assert handler.owner is None
+
+
+def test_whiteout_fork_owns_forced_handler_on_landing_map_only(tmp_path: Path) -> None:
+    build_dir, chapters_path = _write_whiteout_fixture(tmp_path, got_pokemon=True)
+    stories = build_chapter_stories(["CHW"], build_dir=build_dir, chapters_path=chapters_path)
+    chw = stories["CHW"]
+
+    assert len(chw.forks) == 1
+    fork = chw.forks[0]
+    assert fork.transition == "whiteout"
+    # The bare `pbSetPokemonCenter` call on map501 moves the respawn anchor,
+    # but a white-out BEFORE that call still lands on the seed's anchor (map
+    # 49, from the metadata-header fixture): the fork reads every value the
+    # anchor held during the chapter, not just the refined end state.
+    assert fork.landing_maps == (49, 501)
+
+    landing_handler_id = page_row_id(501, 2, 0)
+    assert landing_handler_id in fork.owned_row_ids
+    handler = next(r for r in chw.rows if r.row_id == landing_handler_id)
+    assert handler.status == "live"
+    assert handler.owner == "CHW"
+    assert handler.blockers[0] == "fork:whiteout"
+    assert handler.enabled_by == (("engine:whiteout",),)
+
+    # The identically-shaped handler on map502 is NOT on the landing map, so
+    # the fork never walks it -- it stays unreachable/undetermined.
+    other_handler_id = page_row_id(502, 1, 0)
+    assert other_handler_id not in fork.owned_row_ids
+    other = next(r for r in chw.rows if r.row_id == other_handler_id)
+    assert other.status in ("unreachable", "undetermined")
+    assert other.owner is None
+
+
+def test_whiteout_fork_writes_never_reach_end_state(tmp_path: Path) -> None:
+    build_dir, chapters_path = _write_whiteout_fixture(tmp_path, got_pokemon=True)
+    stories = build_chapter_stories(["CHW"], build_dir=build_dir, chapters_path=chapters_path)
+    chw = stories["CHW"]
+
+    end_state = dict(chw.end_state)
+    # WHITEOUT sets Switch(5) inside the fork only -- nothing on CHW's own
+    # main path ever writes it, so it must never appear in the reported
+    # end state (R9: never on the main path).
+    assert "switch:5" not in end_state
+    assert chw.order_dependent == ()
+
+
+def test_main_path_row_is_never_reattributed_to_a_fork(tmp_path: Path) -> None:
+    build_dir, chapters_path = _write_whiteout_fixture(tmp_path, got_pokemon=True)
+    stories = build_chapter_stories(["CHW"], build_dir=build_dir, chapters_path=chapters_path)
+    chw = stories["CHW"]
+
+    always_id = page_row_id(503, 1, 0)
+    always = next(r for r in chw.rows if r.row_id == always_id)
+    assert always.status == "live"
+    assert always.owner == "CHW"
+    # No fork blocker -- this row was already owned by the main path before
+    # the fork ever ran.
+    assert always.blockers == ()
 
 
 def test_sibling_input_arms_join_instead_of_conflicting() -> None:
