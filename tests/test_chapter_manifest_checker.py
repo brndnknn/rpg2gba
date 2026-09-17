@@ -28,6 +28,7 @@ from rpg2gba.chapter_manifest.checker import (
     RULE_BOUNDARY_NOT_CROSSING,
     RULE_BOUNDARY_UNCLAIMED,
     RULE_CAPABILITY_MODEL_UNENFORCED,
+    RULE_FLOOR_MODEL_UNENFORCED,
     RULE_ILLEGAL_COSMETIC,
     RULE_MISSING_CITATION,
     RULE_ORPHAN_DISPOSITION,
@@ -84,9 +85,12 @@ def _disp(row_id: str, spec: str, **rest) -> Disposition:
 def test_undispositioned_row_is_error():
     row = _row()
     findings = check_chapter([row], {})
-    # Filter out the unrelated route-model-unenforced warning that every
-    # no-`route=` call now carries (rule 10) -- this test is about rule 1.
-    relevant = [f for f in findings if f.rule != RULE_ROUTE_MODEL_UNENFORCED]
+    # Filter out the unrelated route-model-unenforced and floor-model-
+    # unenforced warnings that every no-`route=`/no-`floor_coverage=` call
+    # now carries (rules 10 and the C5 floor rule) -- this test is about
+    # rule 1.
+    relevant = [f for f in findings
+                if f.rule not in (RULE_ROUTE_MODEL_UNENFORCED, RULE_FLOOR_MODEL_UNENFORCED)]
     assert len(relevant) == 1
     assert relevant[0].rule == RULE_UNDISPOSITIONED
     assert relevant[0].severity == "error"
@@ -105,9 +109,11 @@ def test_dispositioned_row_no_undispositioned_finding():
 def test_orphan_disposition_is_error():
     disp = _disp("map999/ev001/p0", "cosmetic", affirmed_hash="h1")
     findings = check_chapter([], {"map999/ev001/p0": disp})
-    # Same filter as above -- rule 10's unenforced warning always shows up
-    # without a `route=`, and this test is about rule 2.
-    relevant = [f for f in findings if f.rule != RULE_ROUTE_MODEL_UNENFORCED]
+    # Same filter as above -- rule 10's and the C5 floor rule's unenforced
+    # warnings always show up without a `route=`/`floor_coverage=`, and this
+    # test is about rule 2.
+    relevant = [f for f in findings
+                if f.rule not in (RULE_ROUTE_MODEL_UNENFORCED, RULE_FLOOR_MODEL_UNENFORCED)]
     assert len(relevant) == 1
     assert relevant[0].rule == RULE_ORPHAN_DISPOSITION
     assert relevant[0].severity == "error"

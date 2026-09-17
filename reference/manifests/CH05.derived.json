@@ -12,7 +12,7 @@
     "derived_hash": "5539cd09d8efee80"
   },
   "map036/ev002/p1/b0": {
-    "disposition": "cosmetic",
+    "disposition": "beat:B8",
     "derived_hash": "744e1fb92a7097bb"
   },
   "map036/ev002/p1/b1": {
@@ -22,6 +22,10 @@
   "map036/ev003/p0": {
     "disposition": "beat:B2",
     "derived_hash": "d72a2c880eaaf5a6"
+  },
+  "map036/ev003/p0/b0": {
+    "disposition": "beat:B2",
+    "derived_hash": "0f1a7940fcdd30de"
   },
   "map036/ev003/p0/b1": {
     "disposition": "cosmetic",
@@ -46,6 +50,10 @@
   "map036/ev005/p0": {
     "disposition": "beat:B4",
     "derived_hash": "8c43f10d916f03ff"
+  },
+  "map036/ev005/p0/b0": {
+    "disposition": "beat:B4",
+    "derived_hash": "34b2450825c85a11"
   },
   "map036/ev005/p0/b1": {
     "disposition": "cosmetic",

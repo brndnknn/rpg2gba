@@ -28,21 +28,34 @@ generalizes):
    ch03.py's B4 comment: a single guarded check can sample the flag before
    the continue script has run at all.
 7. The defeat flag is asserted set after the win.
-8. Each re-talk page's text is asserted non-empty AND matched against
-   `text_source.expected_text` -- degrading honestly (loud log, no
-   swallowed exception) on the documented `{PLAYER}`/control-code caveats.
+8. Each re-talk page's text is asserted, box by box, against the generic
+   beat floor's own `text` assertions (REDERIVATION_PLAN.md §16.3 C5) --
+   degrading honestly (loud log, non-empty check only) when the floor has
+   none for that row (refused, or `text_unnormalizable`).
+
+**C5 (REDERIVATION_PLAN.md §16.3):** every beat this template registers
+passes `assertions=declare_assertions(...)`, so the checker's ⊇-floor rule
+can compare what the body actually checks against what the RMXP source
+implies. See the block comment above `_NATIVE_TRAINER_FLAG_RE` for the
+declared-kinds story per beat.
 """
 from __future__ import annotations
 
 import logging
+import re
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .. import assertions
 from ..battle import in_battle, win_battle
 from ..cells import approach_to, event_cell
 from ..errors import ScenarioError
-from ..text_source import expected_text
-from . import facing_toward, find_match
+from . import FloorLookup, declare_assertions, facing_toward, find_match
+from ...beat_floor.assertion import FloorAssertion
+from ...beat_floor.lookup import default_build_dir
+from ...conversion_agent.flag_registry import self_switch_flag_name
+from ...pbs_converter._naming import to_constant
+from ...trainer_converter.battles import load_trainers_json
 
 if TYPE_CHECKING:  # runtime import is lazy so this module works without bindings
     from ...chapter_manifest.schema import ManifestRow
@@ -50,6 +63,177 @@ if TYPE_CHECKING:  # runtime import is lazy so this module works without binding
     from ..emulator import Emulator
 
 logger = logging.getLogger(__name__)
+
+
+# -- C5: declared assertions (REDERIVATION_PLAN.md §16.3 C5) -----------------
+#
+# The trainer archetype's floor-vs-declared story, in one place:
+#
+# 1. `battle` (identity): the floor's `battle` assertion on the battle page
+#    row carries the RMXP source's own literal identity -- `trainer_type`
+#    (the PBTrainers:: class symbol) and `name` (the display-name string),
+#    never a party id (the corpus's `pbTrainerBattle` calls all pass it
+#    positionally but the floor extractor -- `beat_floor/condition.py`'s
+#    `_extract_pb_trainer_battle` -- does not capture it; see that module).
+#    The author's `trainer_const` is therefore validated in the OTHER
+#    direction: resolve it forward through `trainers.json` (the same table
+#    `conversion_agent.deterministic.load_context` builds `ctx.trainers`
+#    from) and check ITS recorded `trainer_class`/`name` agree with what the
+#    floor derived from source -- no party id needed, because this doesn't
+#    need to reconstruct the trainers.json lookup key, only confirm the
+#    author's already-resolved answer against the same table.
+# 2. `battle` (defeat write): every CH01-CH05 sight-trainer instance the
+#    corpus has (`_TRAINER_BATTLE_RE` shape, RMXP self-switch A ON in the
+#    win branch) is ROUTED, at conversion time, through
+#    `conversion_agent.deterministic.classify_trainer_battle`'s
+#    `trainerbattle_single` (or the phone-rematch idiom's
+#    `trainerbattle_rematch`) -- both REQUIRE that exact self-switch shape
+#    structurally (`has_self_switch`) but never re-emit it as a checkable
+#    flag write: the native pokeemerald trainer-flags bit
+#    (`TRAINER_FLAGS_START + <trainer_const>`, `ch04.py`'s own
+#    `_trainer_defeat_flag`) takes over instead. There is no `AssertionKind`
+#    for "the native trainer-flags bit got set" -- it isn't a
+#    `story_state.state.Switch`/`SelfSwitch` write at all -- so a
+#    `defeat_flag` matching that native shape declares NOTHING for the win
+#    branch; that is the honest answer, not a gap. A `defeat_flag` that is
+#    instead a plain `FLAG_MAP<map>_EVENT<event>_SS<letter>` (reconstructed
+#    via `flag_registry.self_switch_flag_name`, matched against a REAL
+#    `self_switch_write` floor assertion on one of the battle row's branch
+#    rows) IS declared, on that branch row.
+# 3. `text`: the pre-battle intro box the floor sees (the row's own `text`
+#    kind) is left undeclared -- the battle beat's body never reads field
+#    message text before dismissing into combat, only re-talk beats do.
+# 4. `item_grant`: only declared when `rider=True` and the body's
+#    before/after bag-count check is for the SAME item the floor's
+#    `item_grant` assertion names (validated via the same internal-name ->
+#    `ITEM_*` table `deterministic._load_item_symbols` builds).
+
+
+_NATIVE_TRAINER_FLAG_RE = re.compile(r"^\s*TRAINER_FLAGS_START\s*\+\s*(\S+)\s*$")
+
+
+def _resolve_floor_lookup(
+    floor_lookup: FloorLookup | None, build_dir: Path | None,
+) -> FloorLookup:
+    if floor_lookup is not None:
+        return floor_lookup
+    from ...beat_floor.lookup import floor_for_row
+
+    return lambda row_id: floor_for_row(row_id, build_dir=build_dir)
+
+
+def _validate_battle_identity(
+    battle_row_id: str, trainer_const: str, *,
+    floor_lookup: FloorLookup, build_dir: Path | None,
+) -> str | None:
+    """`None` when `trainer_const` is confirmed, through `trainers.json`,
+    to name the same (trainer_class, display name) the floor's `battle`
+    assertion derived from the RMXP `pbTrainerBattle` call itself. Otherwise
+    a reason `battle` cannot be declared (no floor assertion, no
+    `trainers.json` to check against) -- never raised for those, only
+    logged; raises `ValueError` for a genuine identity MISMATCH, per this
+    package's fail-loud convention (module docstring point 4)."""
+    floor = floor_lookup(battle_row_id)
+    if floor.refused:
+        return f"floor for {battle_row_id} is refused"
+    battles = [a for a in floor.assertions if a.kind == "battle"]
+    if not battles:
+        return f"no 'battle' floor assertion on {battle_row_id}"
+    battle = battles[0]
+    if battle.param("kind") != "trainer":
+        return f"floor battle kind is {battle.param('kind')!r}, not 'trainer'"
+    trainer_type = battle.param("trainer_type")
+    name = battle.param("name")
+    expected_class = to_constant("TRAINER_CLASS", trainer_type)
+
+    resolved_build_dir = build_dir if build_dir is not None else default_build_dir()
+    trainers_path = Path(resolved_build_dir) / "intermediate" / "trainers.json"
+    if not trainers_path.is_file():
+        return f"no trainers.json at {trainers_path} to confirm trainer_const"
+    trainers = load_trainers_json(trainers_path.parent)
+    entry = trainers.get(trainer_const)
+    if entry is None:
+        return f"trainer_const {trainer_const!r} not found in trainers.json"
+    if entry.get("trainer_class") != expected_class or entry.get("name") != name:
+        raise ValueError(
+            f"trainer_beats: {battle_row_id}: trainer_const {trainer_const!r} "
+            f"resolves in trainers.json to trainer_class="
+            f"{entry.get('trainer_class')!r} name={entry.get('name')!r}, but "
+            f"the source pbTrainerBattle floor assertion says class "
+            f"{expected_class!r} name {name!r} -- fix the call site's "
+            "trainer_const"
+        )
+    return None
+
+
+def _defeat_write_declaration(
+    battle_row_id: str, trainer_const: str, defeat_flag: str, *,
+    map_id: int, event_id: int, floor_lookup: FloorLookup,
+) -> tuple[str, str] | None:
+    """`(row_id, kind)` to declare for the defeat-flag write `defeat_flag`
+    names, or `None` when nothing in the floor's vocabulary models it (see
+    module docstring point 2). Only `self_switch_write` is recognized today
+    -- no CH01-CH05 instance's `defeat_flag` is a plain native `FLAG_*`
+    backed by a `switch_write` (every non-native case staged so far is the
+    self-switch shape); a future one would need the same treatment added
+    here, not silently declared."""
+    native = _NATIVE_TRAINER_FLAG_RE.match(defeat_flag)
+    if native and native.group(1) == trainer_const:
+        return None
+    for i in range(8):
+        row_id = f"{battle_row_id}/b{i}"
+        try:
+            floor = floor_lookup(row_id)
+        except KeyError:
+            break
+        if floor.refused:
+            continue
+        for a in floor.assertions:
+            if a.kind != "self_switch_write":
+                continue
+            if a.param("event_id") != event_id:
+                continue
+            expected = self_switch_flag_name(map_id, a.param("event_id"), a.param("letter"))
+            if expected == defeat_flag:
+                return row_id, "self_switch_write"
+    return None
+
+
+def _validate_rider_item_grant(
+    battle_row_id: str, rider_item: str, *,
+    floor_lookup: FloorLookup, reference_dir: Path | None,
+) -> str | None:
+    """Mirrors `_validate_battle_identity` for the rider item: `None` when
+    `rider_item` is confirmed against the floor's `item_grant` assertion
+    (resolved through the same internal-name -> `ITEM_*` table
+    `conversion_agent.deterministic._load_item_symbols` builds); otherwise a
+    reason it cannot be declared. Raises `ValueError` on a genuine
+    mismatch."""
+    from ...conversion_agent.deterministic import _load_item_symbols
+
+    floor = floor_lookup(battle_row_id)
+    if floor.refused:
+        return f"floor for {battle_row_id} is refused"
+    grants = [a for a in floor.assertions if a.kind == "item_grant"]
+    if not grants:
+        return f"no 'item_grant' floor assertion on {battle_row_id}"
+    grant = grants[0]
+    resolved_reference_dir = reference_dir if reference_dir is not None else Path("reference")
+    symbols = _load_item_symbols(resolved_reference_dir)
+    expected = symbols.get(grant.param("item"))
+    if expected is None:
+        return (
+            f"item symbol {grant.param('item')!r} not found in "
+            f"{resolved_reference_dir}/uranium_data item tables"
+        )
+    if expected != rider_item:
+        raise ValueError(
+            f"trainer_beats: {battle_row_id}: rider_item {rider_item!r} "
+            f"disagrees with the source item_grant {grant.param('item')!r} "
+            f"(resolves to {expected!r}) -- fix the call site's rider_item"
+        )
+    return None
+
 
 def _trainer_defeat_flag_settle(
     emu: Emulator, beat: str, defeat_flag: str, budget: int = 1800,
@@ -153,6 +337,9 @@ def trainer_beats(
     group: str | None = None,
     manifest_rows: "tuple[ManifestRow, ...] | None" = None,
     manifest_dir=None,
+    build_dir: Path | None = None,
+    floor_lookup: FloorLookup | None = None,
+    reference_dir: Path | None = None,
 ) -> None:
     """Register a `trainer` archetype's whole beat set: the battle beat plus
     one re-talk beat per re-talk page the manifest says exists.
@@ -221,13 +408,55 @@ def trainer_beats(
         approach, event_cell(map_constant, event_id), caller="trainer_beats")
     resolved_group = group if group is not None else beat_prefix
 
+    resolved_lookup = _resolve_floor_lookup(floor_lookup, build_dir)
+
+    executed_kinds = {"trigger", "completes"}
+    extra_rows: list[str] = []
+
+    battle_reason = _validate_battle_identity(
+        battle_row_id, trainer_const, floor_lookup=resolved_lookup, build_dir=build_dir)
+    if battle_reason is None:
+        executed_kinds.add("battle")
+    else:
+        logger.info("%s: not declaring 'battle' -- %s", beat_prefix, battle_reason)
+
+    defeat_write = _defeat_write_declaration(
+        battle_row_id, trainer_const, defeat_flag, map_id=map_id,
+        event_id=event_id, floor_lookup=resolved_lookup)
+    if defeat_write is not None:
+        write_row_id, write_kind = defeat_write
+        extra_rows.append(write_row_id)
+        executed_kinds.add(write_kind)
+    else:
+        logger.info(
+            "%s: not declaring a state-write for defeat_flag=%r -- either the "
+            "native TRAINER_FLAGS bit (consumed from the source self-switch by "
+            "trainerbattle_single/_rematch, no floor kind models it) or no "
+            "branch row's write matches it", beat_prefix, defeat_flag)
+
+    if rider and rider_item:
+        item_reason = _validate_rider_item_grant(
+            battle_row_id, rider_item, floor_lookup=resolved_lookup,
+            reference_dir=reference_dir)
+        if item_reason is None:
+            executed_kinds.add("item_grant")
+        else:
+            logger.info("%s: not declaring 'item_grant' -- %s", beat_prefix, item_reason)
+
+    battle_rows = (battle_row_id, *extra_rows)
+    declared = declare_assertions(
+        battle_rows, executed_kinds=frozenset(executed_kinds),
+        template=beat_prefix, floor_lookup=resolved_lookup)
+    battle_archetype = {battle_row_id: "trainer"} if extra_rows else "trainer"
+
     @builder.beat(
         beat_prefix,
         f"Trainer battle at {map_constant} event {event_id} fires and is "
         f"won; {defeat_flag} latches the defeated state "
         f"(manifest {battle_row_id})",
         map_constant=map_constant, at=approach,
-        group=resolved_group, archetype="trainer", rows=(battle_row_id,),
+        group=resolved_group, archetype=battle_archetype, rows=battle_rows,
+        assertions=declared,
     )
     def battle_beat(emu: Emulator) -> None:
         if emu.flag(defeat_flag):
@@ -301,26 +530,58 @@ def trainer_beats(
     for page_idx, retalk_row_id in enumerate(sorted(retalk_row_ids), start=1):
         _register_retalk_beat(
             builder, beat_prefix=beat_prefix, page_idx=page_idx,
-            retalk_row_id=retalk_row_id, map_id=map_id, event_id=event_id,
+            retalk_row_id=retalk_row_id,
             map_constant=map_constant, approach=approach, facing=facing,
             defeat_flag=defeat_flag, local_id=local_id, group=resolved_group,
+            floor_lookup=resolved_lookup,
         )
 
 
 def _register_retalk_beat(
     builder: ChapterBuilder, *, beat_prefix: str, page_idx: int,
-    retalk_row_id: str, map_id: int, event_id: int, map_constant: str,
+    retalk_row_id: str, map_constant: str,
     approach: tuple[int, int], facing: str, defeat_flag: str,
-    local_id: int | None, group: str,
+    local_id: int | None, group: str, floor_lookup: FloorLookup,
 ) -> None:
     name = f"{beat_prefix}_retalk{page_idx}"
 
+    executed_kinds = {"trigger", "completes"}
+    text_assertions: tuple[FloorAssertion, ...] = ()
+    try:
+        floor = floor_lookup(retalk_row_id)
+    except KeyError as exc:
+        logger.info(
+            "%s: no floor for %s (%s) -- degrading to a non-empty text check",
+            name, retalk_row_id, exc)
+        floor = None
+    if floor is not None:
+        if floor.refused:
+            logger.info(
+                "%s: floor for %s is refused (%s) -- degrading to a "
+                "non-empty text check", name, retalk_row_id,
+                [r.reason for r in floor.refusals])
+        else:
+            text_assertions = tuple(sorted(
+                (a for a in floor.assertions if a.kind == "text"),
+                key=lambda a: a.list_index))
+            if text_assertions:
+                executed_kinds.add("text")
+            else:
+                logger.info(
+                    "%s: floor has no 'text' assertions for %s -- "
+                    "degrading to a non-empty text check", name, retalk_row_id)
+
+    declared = declare_assertions(
+        (retalk_row_id,), executed_kinds=frozenset(executed_kinds),
+        template=name, floor_lookup=floor_lookup)
+
     @builder.beat(
         name,
-        f"Re-talk page {page_idx} of {map_constant} event {event_id} after "
+        f"Re-talk page {page_idx} of {map_constant} after "
         f"defeat (manifest {retalk_row_id})",
         map_constant=map_constant, at=approach,
         group=group, archetype="trainer", rows=(retalk_row_id,),
+        assertions=declared,
     )
     def retalk_beat(emu: Emulator) -> None:
         if not emu.flag(defeat_flag):
@@ -334,31 +595,26 @@ def _register_retalk_beat(
             emu.walk_to(*approach)
             emu.face(facing)
             emu.interact()
-        try:
-            expected = expected_text(map_id, event_id, page_idx)
-        except ValueError:
-            logger.warning(
-                "%s: text_source.expected_text could not translate this "
-                "page's control codes -- degrading to a non-empty check "
-                "only (exact-text oracle unavailable for this page)",
-                name,
-            )
+        if text_assertions:
+            for a in text_assertions:
+                expected = a.param("text")
+                if "{PLAYER}" in expected:
+                    before, _, after = expected.partition("{PLAYER}")
+                    emu.assert_text_contains(before)
+                    if after:
+                        emu.assert_text_contains(after)
+                else:
+                    emu.assert_text_contains(expected, exact=True)
+                emu.advance_dialog()
+        else:
             actual = emu.current_field_message_text()
             if not actual or not actual.strip():
                 shot = emu.screenshot(f"{name}_empty_text")
                 raise ScenarioError(
-                    f"{name}: re-talk text is empty and the exact-text "
-                    f"oracle was unavailable for this page ({shot})"
-                ) from None
-        else:
-            if "{PLAYER}" in expected:
-                before, _, after = expected.partition("{PLAYER}")
-                emu.assert_text_contains(before)
-                if after:
-                    emu.assert_text_contains(after)
-            else:
-                emu.assert_text_contains(expected, exact=True)
-        emu.advance_dialog()
+                    f"{name}: re-talk text is empty and no floor text "
+                    f"oracle was available for this page ({shot})"
+                )
+            emu.advance_dialog()
         if emu.field_locked():
             shot = emu.screenshot(f"{name}_stuck")
             raise ScenarioError(

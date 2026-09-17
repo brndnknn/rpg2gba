@@ -87,6 +87,7 @@ BeatFn = Callable[["Emulator"], None]
 # leaf. A branch row (`.../pN/bM`) is accepted here too, alongside page/
 # seam/terrain, so a beat can claim one.
 from ..chapter_manifest.schema import parse_row_id
+from ..beat_floor.assertion import FloorAssertion
 
 
 def _validate_row_id(row: str, *, beat_name: str) -> None:
@@ -149,6 +150,11 @@ class Beat:
     # the arrival nudge it lands on, say) carries `(row_id, archetype)`
     # pairs instead of one name; read it through `archetype_of`.
     archetype: str | tuple[tuple[str, str], ...] | None = None
+    # The assertions this beat's body actually checks, in the generic floor's
+    # vocabulary (REDERIVATION_PLAN.md §16.3 C5). `None` means undeclared (a
+    # hand-written beat), which is distinct from declaring nothing. The
+    # checker's ⊇-floor rule compares these against each claimed row's floor.
+    assertions: frozenset[FloorAssertion] | None = None
 
     def archetype_of(self, row_id: str) -> str | None:
         """The archetype this beat claims for `row_id`, or None when it
@@ -375,7 +381,8 @@ def _prefix_beat(owner: str, beat: Beat) -> Beat:
     return Beat(name=f"{owner}:{beat.name}",
                 description=f"[{owner}] {beat.description}", run=beat.run,
                 locations=beat.locations, entry_at=beat.entry_at,
-                group=prefixed_group, rows=beat.rows, archetype=beat.archetype)
+                group=prefixed_group, rows=beat.rows, archetype=beat.archetype,
+                assertions=beat.assertions)
 
 
 @dataclass
@@ -396,6 +403,7 @@ class ChapterBuilder:
              group: str | None = None,
              rows: tuple[str, ...] = (),
              archetype: str | Mapping[str, str] | None = None,
+             assertions: frozenset[FloorAssertion] | None = None,
              ) -> Callable[[BeatFn], BeatFn]:
         """Register a beat, optionally declaring where it triggers.
 
@@ -529,6 +537,12 @@ class ChapterBuilder:
                     f"beat {name!r}: archetype={archetype_name!r} is not one of "
                     f"{sorted(ARCHETYPE_NAMES)} (chapter_manifest.archetypes."
                     "ARCHETYPE_NAMES)")
+        if assertions is not None:
+            stray = sorted({a.row_id for a in assertions} - set(rows))
+            if stray:
+                raise ValueError(
+                    f"beat {name!r}: assertions= name row(s) {stray} that are "
+                    "not in this beat's rows=")
         if entry_at is not None:
             if (not isinstance(entry_at, tuple) or len(entry_at) != 2
                     or not all(isinstance(v, int) for v in entry_at)):
@@ -558,7 +572,8 @@ class ChapterBuilder:
             self._beats.append(Beat(name=name, description=description,
                                     run=fn, locations=resolved_locations,
                                     entry_at=entry_at, group=group, rows=rows,
-                                    archetype=resolved_archetype))
+                                    archetype=resolved_archetype,
+                                    assertions=assertions))
             return fn
 
         return decorate

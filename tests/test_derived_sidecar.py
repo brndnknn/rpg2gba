@@ -21,6 +21,7 @@ from rpg2gba.chapter_manifest.checker import (
     RULE_DERIVED_HASH_INELIGIBLE,
     RULE_DERIVED_UNAFFIRMED,
     RULE_DERIVED_VERDICT_MISMATCH,
+    RULE_FLOOR_MODEL_UNENFORCED,
     RULE_ROUTE_MODEL_UNENFORCED,
     RULE_UNDISPOSITIONED,
     check_chapter,
@@ -52,9 +53,11 @@ def _disp(row_id: str, spec: str, **rest) -> Disposition:
 
 
 def _relevant(findings):
-    """Drop the route-model-unenforced warning every no-`route=` call carries
-    -- same filter `test_chapter_manifest_checker.py` uses throughout."""
-    return [f for f in findings if f.rule != RULE_ROUTE_MODEL_UNENFORCED]
+    """Drop the route-model-unenforced and floor-model-unenforced warnings
+    every no-`route=`/no-`floor_coverage=` call carries -- same filter
+    `test_chapter_manifest_checker.py` uses throughout."""
+    return [f for f in findings
+            if f.rule not in (RULE_ROUTE_MODEL_UNENFORCED, RULE_FLOOR_MODEL_UNENFORCED)]
 
 
 def _per_row(findings, row_id):

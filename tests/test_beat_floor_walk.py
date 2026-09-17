@@ -364,10 +364,10 @@ def test_real_chapter_has_no_unextracted_codes(chapter):
 
 
 @pytest.mark.parametrize("chapter", ["CH01", "CH02", "CH03", "CH04", "CH05"])
-def test_real_chapter_floor_rows_match_manifest_event_rows(chapter):
-    # The floor covers exactly the manifest's event rows (page + branch);
-    # stair events absorbed into `terrain` rows get none, and seam/terrain
-    # rows have no event commands to derive a floor from.
+def test_real_chapter_floor_rows_match_manifest_rows(chapter):
+    # The floor covers exactly every manifest row -- page, branch, seam, and
+    # terrain (beat_floor.terrain gives seam/terrain rows a row-level floor
+    # too, REDERIVATION_PLAN.md §16.3 C5), not just the event rows.
     import json
 
     if not (_BUILD_DIR / "maps").exists():
@@ -375,6 +375,6 @@ def test_real_chapter_floor_rows_match_manifest_event_rows(chapter):
     manifest = json.loads(
         Path(f"reference/manifests/{chapter}.manifest.json").read_text(encoding="utf-8"))
     rows = manifest["rows"] if isinstance(manifest, dict) else manifest
-    event_row_ids = {r["row_id"] for r in rows if r["kind"] in ("page", "branch")}
+    manifest_row_ids = {r["row_id"] for r in rows}
     floor_row_ids = set(walk.floor_for_chapter(chapter, build_dir=_BUILD_DIR))
-    assert floor_row_ids == event_row_ids
+    assert floor_row_ids == manifest_row_ids

@@ -42,9 +42,14 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Literal
 
+from ...beat_floor.assertion import FloorAssertion, make_params
+from ...beat_floor.lookup import floor_for_row as _default_floor_for_row
 from .. import assertions
 from ..cells import arrival_cell, warp_cell
-from . import find_match, map_uranium_id
+from . import (
+    FloorLookup, declare_assertions, find_match, load_chapter_rows,
+    map_uranium_id, walked_arms,
+)
 
 if TYPE_CHECKING:  # runtime import is lazy so this module works without bindings
     from ...chapter_manifest.schema import ManifestRow
@@ -52,6 +57,19 @@ if TYPE_CHECKING:  # runtime import is lazy so this module works without binding
     from ..emulator import Emulator
 
 logger = logging.getLogger(__name__)
+
+# Kinds this template's body actually checks (REDERIVATION_PLAN.md sec 16.3
+# C5). `trigger`/`completes` are the row's own bookkeeping; `warp` is the
+# arrival-position check `_forward`/`_back` always make; `visual`/`audio`
+# assert nothing beyond the page completing (assertion.py's own kind
+# docstrings), which `_cross`'s `emu.settle_field()` drive/observe -- so
+# declaring them is honest, not aspirational. `text`, `item_grant`,
+# `switch_write`, etc. are deliberately absent: nothing in this body reads a
+# text box or a state write, so a warp page that also does one of those
+# stays honestly uncovered for it.
+_EXECUTED_KINDS: frozenset[str] = frozenset({
+    "trigger", "completes", "warp", "visual", "audio",
+})
 
 Mechanism = Literal["door", "threshold", "arrow"]
 _MECHANISMS: frozenset[str] = frozenset({"door", "threshold", "arrow"})
@@ -66,6 +84,54 @@ _MECHANISMS: frozenset[str] = frozenset({"door", "threshold", "arrow"})
 _APPROACH_DELTA: dict[str, tuple[int, int]] = {
     "UP": (0, 1), "DOWN": (0, -1), "LEFT": (1, 0), "RIGHT": (-1, 0),
 }
+
+
+def _report_reciprocal_manifest_row(
+    *, beat_name: str, dest_map_constant: str, map_constant: str,
+    return_crossing: "tuple[int, int] | None", resolved_rows: "tuple[ManifestRow, ...]",
+) -> None:
+    """Advisory only (task brief point 4): a `round_trip`/`start_side="dest"`
+    leg crosses the RECIPROCAL warp, which this beat does not own. If that
+    reciprocal happens to be a real row in the manifest actually searched
+    for this call, name it in the log so the author can decide whether it
+    needs its own explicit claim -- never added to `rows=` here, because
+    `warp_beat`'s own contract (`test_warp_beat_start_side_dest_still_claims_
+    the_same_single_row`) is that which side the player starts on must not
+    change what a beat claims.
+    """
+    if return_crossing is None:
+        return
+    from ...chapter_manifest.archetypes import classify_manifest
+    from ...traversal.graph import build_map_graph
+
+    try:
+        dest_uid = map_uranium_id(dest_map_constant)
+        origin_uid = map_uranium_id(map_constant)
+        graph = build_map_graph(dest_uid)
+    except Exception:  # advisory path; never blocks registration
+        logger.debug("%s: reciprocal-manifest-row check skipped (map lookup failed)", beat_name)
+        return
+    candidates = [
+        exit_ for exit_ in graph.warp_exits.get(return_crossing, ())
+        if exit_.dest_map == origin_uid
+    ]
+    if not candidates:
+        return
+    matches = classify_manifest(resolved_rows)
+    for exit_ in candidates:
+        for match in matches:
+            if match.map_id != dest_uid or match.event_id != exit_.event_id:
+                continue
+            if match.archetype != "warp":
+                continue
+            for row_id in match.roles:
+                logger.info(
+                    "warp_beat(%s): the reciprocal crossing (%s event %s) is "
+                    "manifest row %s -- not auto-claimed (this beat only "
+                    "crosses it, it does not own it); give it its own "
+                    "warp_beat() call if it needs its own assertions",
+                    beat_name, dest_map_constant, exit_.event_id, row_id,
+                )
 
 
 def warp_beat(
@@ -90,8 +156,14 @@ def warp_beat(
     manifest_rows: "tuple[ManifestRow, ...] | None" = None,
     manifest_dir=None,
     manifest_chapter_id: str | None = None,
+    floor_lookup: FloorLookup | None = None,
 ) -> None:
     """Register one `warp` archetype crossing.
+
+    `floor_lookup=`, if given, replaces `beat_floor.lookup.floor_for_row`
+    for both the registration-time arrival check and `declare_assertions`
+    below -- real chapters never pass it; tests use it to inject a synthetic
+    `RowFloor` (REDERIVATION_PLAN.md sec 16.3 C5, task brief point 8).
 
     `direction` is required for `mechanism="threshold"` and
     `mechanism="arrow"` (both are held-D-pad crossings gated on the
@@ -205,9 +277,70 @@ def warp_beat(
         manifest_chapter_id=manifest_chapter_id,
     )
     row_id = next(iter(match.roles))
+    lookup = floor_lookup if floor_lookup is not None else _default_floor_for_row
 
     crossing = warp_cell(map_constant, to=dest_map_constant, event_id=event_id)
     arrival = arrival_cell(dest_map_constant, from_map=map_constant, event_id=event_id)
+
+    # Registration-time cross-check (task brief point 1): the RMXP source
+    # floor's own (map_id, x, y) for this row's code-201 must agree with the
+    # arrival cell `cells.arrival_cell` derived from the SAME build's decoded
+    # warp-exit graph -- both read the identical staged Map###.json, so
+    # disagreement here is never "the pipeline drifted a tile", it is a claim
+    # bug (wrong event_id, wrong map pairing) and fails loud naming both
+    # sides rather than surfacing later as a mystifying runtime landing miss.
+    dest_uid = map_uranium_id(dest_map_constant)
+    floor = lookup(row_id)
+    warp_floor_assertions = [a for a in floor.assertions if a.kind == "warp"]
+    if warp_floor_assertions:
+        if len(warp_floor_assertions) != 1:
+            raise ValueError(
+                f"warp_beat({beat_name}): row {row_id} floor carries "
+                f"{len(warp_floor_assertions)} 'warp' assertions, expected "
+                "exactly one"
+            )
+        floor_warp = warp_floor_assertions[0]
+        floor_params = dict(floor_warp.params)
+        if (floor_params["map_id"], floor_params["x"], floor_params["y"]) != (
+            dest_uid, arrival[0], arrival[1],
+        ):
+            raise ValueError(
+                f"warp_beat({beat_name}): derived arrival cell {arrival} on "
+                f"{dest_map_constant} (Uranium map {dest_uid}) disagrees "
+                f"with row {row_id}'s source floor warp target "
+                f"(map_id={floor_params['map_id']}, x={floor_params['x']}, "
+                f"y={floor_params['y']}) -- cells.arrival_cell and the "
+                "generic floor should never diverge on the same build"
+            )
+    elif assert_facing or assert_bgm:
+        raise ValueError(
+            f"warp_beat({beat_name}): assert_facing=/assert_bgm= requested "
+            f"but row {row_id}'s floor carries no 'warp' assertion to "
+            "strengthen (refused or malformed source command)"
+        )
+
+    extras: list[FloorAssertion] = []
+    expected_facing: str | None = None
+    if warp_floor_assertions and (assert_facing or assert_bgm):
+        floor_warp = warp_floor_assertions[0]
+        extra_params = dict(floor_warp.params)
+        if assert_facing:
+            expected_facing = assertions.expected_arrival_facing(dest_uid, *arrival)
+            extra_params["arrival_facing"] = expected_facing
+        if assert_bgm:
+            extra_params["bgm"] = dest_engine_map_dir
+        extras.append(FloorAssertion(
+            row_id=row_id, kind="warp", list_index=floor_warp.list_index,
+            code=floor_warp.code, params=make_params(**extra_params),
+            tag=floor_warp.tag,
+        ))
+
+    arm_rows = walked_arms(row_id, "warp", floor_lookup=lookup)
+    claimed_rows = (row_id,) + arm_rows
+    declared = declare_assertions(
+        claimed_rows, executed_kinds=_EXECUTED_KINDS, template="warp",
+        extras=extras, floor_lookup=lookup,
+    )
 
     return_crossing: tuple[int, int] | None = None
     return_arrival: tuple[int, int] | None = None
@@ -217,6 +350,16 @@ def warp_beat(
         # discipline if the reciprocal warp can't be found unambiguously.
         return_crossing = warp_cell(dest_map_constant, to=map_constant)
         return_arrival = arrival_cell(map_constant, from_map=dest_map_constant)
+        # Advisory report only (task brief point 4) -- never changes rows=.
+        resolved_rows = manifest_rows if manifest_rows is not None else load_chapter_rows(
+            manifest_chapter_id if manifest_chapter_id is not None else chapter_id,
+            manifest_dir=manifest_dir,
+        )
+        _report_reciprocal_manifest_row(
+            beat_name=beat_name, dest_map_constant=dest_map_constant,
+            map_constant=map_constant, return_crossing=return_crossing,
+            resolved_rows=resolved_rows,
+        )
 
     def _cross(emu: Emulator, crossing_cell: tuple[int, int],
                crossing_direction: str | None, dest_map: str,
@@ -275,14 +418,20 @@ def warp_beat(
         """
         _cross(emu, crossing, direction, dest_map_constant, map_constant)
         assertions.require_map(emu, beat_name, dest_map_constant)
-        assertions.assert_near(emu, beat_name, arrival)
+        # Exact, not `_assert_near`'s tolerance-1 (task brief point 1):
+        # `cells.arrival_cell` and the generic floor's warp target are the
+        # SAME RMXP source coordinates (both read straight off this build's
+        # decoded Map###.json, verified against each other above at
+        # registration time), and `chapter.py`'s own `ChapterBuilder.beat`
+        # docstring records that `ON_WARP_INTO_MAP` dispatch compares
+        # `getplayerxy` against them with no tolerance either -- a tolerant
+        # check here would hide exactly the one-tile miss that dispatch
+        # would catch anyway, just later and with a worse error.
+        assertions.assert_position_exact(emu, beat_name, arrival)
 
         if not check_arrival_details:
             return
         if assert_facing:
-            dest_uid = map_uranium_id(dest_map_constant)
-            expected_facing = assertions.expected_arrival_facing(
-                dest_uid, *arrival)
             assertions.assert_player_facing(emu, beat_name, expected_facing)
         if assert_bgm:
             assertions.assert_bgm(emu, beat_name, dest_engine_map_dir)
@@ -292,7 +441,9 @@ def warp_beat(
         _cross(emu, return_crossing, return_direction, map_constant,
                dest_map_constant)
         assertions.require_map(emu, beat_name, map_constant)
-        assertions.assert_near(emu, beat_name, return_arrival)
+        # Same exactness reasoning as `_forward` above -- `return_arrival` is
+        # derived through the identical `cells.arrival_cell` call.
+        assertions.assert_position_exact(emu, beat_name, return_arrival)
 
     @builder.beat(
         beat_name,
@@ -303,7 +454,8 @@ def warp_beat(
             + (" (entered from the far side)" if start_side == "dest" else "")
         ),
         map_constant=map_constant, at=crossing,
-        group=resolved_group, archetype="warp", rows=(row_id,),
+        group=resolved_group, archetype="warp", rows=claimed_rows,
+        assertions=declared,
     )
     def run(emu: Emulator) -> None:
         # The operator's round-trip rule: start on the map you are standing

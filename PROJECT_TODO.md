@@ -17,6 +17,39 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 111. `_minimal_sets_for_predicate` blows up in full-suite runs, but not in isolation
+
+Found 2026-09-17 closing C5. `pytest` (whole suite) stalled indefinitely at ~19%
+on three separate runs, pegging one core with flat RSS — a genuine compute
+blowup, not a deadlock and not swap. `SIGABRT` thread dumps put it in
+`traversal/reachability.py::_minimal_sets_for_predicate` (line ~199) every time,
+but reached from **two different callers** on different runs:
+
+- `chapter_manifest/generator.py:479 _reachability_requires`, under
+  `test_chapter_manifest_generator.py::test_map32_no_code_201_warp_to_59_but_seam_row_present`
+- `chapter_manifest/checker.py:1110 _check_row_verdict_rules` →
+  `approach_model.has_walkable_approach`, under C5's new
+  `test_chapter_manifest_floor_rule.py::test_real_corpus_ch01_through_ch05_has_no_floor_missing_findings`
+
+**In isolation both are fast and deterministic** — the floor-rule file runs in
+12.5s, and 12.5s ± 0.2 across `PYTHONHASHSEED` 0-4, so set-iteration order is
+*not* the trigger (that hypothesis was tested and is wrong). The whole suite also
+completed cleanly once, in 159s. So the trigger is full-suite process state, and
+the prime suspect is the process-lifetime caches `playtest/cells.py`
+(`_MAP_CONST_INDEX`, `_GRAPH_CACHE`) — independently observed the same day to
+leak across tests, making
+`test_chapter_manifest_cli.py::test_generate_writes_default_path_and_reports_count`
+fail when any archetype-template test runs first. A poisoned graph would make the
+minimal-set search explore a far larger space.
+
+**Not caused by C5**, but C5 raises exposure: the new real-corpus test drives the
+expensive path once per chapter, five times. Workaround until fixed: run the
+suite in two halves as separate processes (`ls tests/test_*.py`, split, one
+`pytest` invocation each) — 1821 + 2040 tests, ~100s and ~60s, fully green.
+
+Worth bounding the search itself regardless: an exponential subset enumeration
+with no cap is a latent hazard at CH06's map count.
+
 ### 109. `text_source` rejects the straight quote that staging normalizes, so 12 T2 rows have no oracle
 
 Surfaced 2026-09-15 while probing whether T2's `flavour_npc_beat` could be

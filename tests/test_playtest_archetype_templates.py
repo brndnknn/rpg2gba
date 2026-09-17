@@ -122,7 +122,13 @@ def test_trainer_beats_two_retalk_pages() -> None:
     assert names == ["T2", "T2_retalk1", "T2_retalk2"]
     rows = [beat.rows for beat in chapter.beats]
     assert rows == [
-        ("map035/ev003/p0",), ("map035/ev003/p1",), ("map035/ev003/p2",),
+        # C5 (REDERIVATION_PLAN.md §16.3): the battle beat also claims the
+        # win-arm branch row `.../p0/b0` -- its floor `self_switch_write`
+        # matches `defeat_flag=FLAG_MAP035_EVENT003_SSA` via
+        # `trainer._defeat_write_declaration`, so the beat's own
+        # `emu.flag(defeat_flag)` check after the win really is that write.
+        ("map035/ev003/p0", "map035/ev003/p0/b0"),
+        ("map035/ev003/p1",), ("map035/ev003/p2",),
     ]
     assert all(beat.group == "T2" for beat in chapter.beats)
 
@@ -190,8 +196,11 @@ def test_item_ball_beats_grant_only_by_default() -> None:
     )
     chapter = b.build()
     assert [beat.name for beat in chapter.beats] == ["IB1"]
-    assert chapter.beats[0].archetype == "item_ball"
-    assert chapter.beats[0].rows == ("map035/ev009/p0",)
+    # C5 (REDERIVATION_PLAN.md §16.3, shape (f)): the grant beat also claims
+    # the "bag has room" branch arm it actually walks, so `archetype` is a
+    # row->name mapping (the arm itself rides along under no archetype).
+    assert chapter.beats[0].archetype == (("map035/ev009/p0", "item_ball"),)
+    assert chapter.beats[0].rows == ("map035/ev009/p0", "map035/ev009/p0/b0")
     assert chapter.beats[0].group == "IB1"
 
 
@@ -205,9 +214,12 @@ def test_item_ball_beats_negative_beat_adds_spent_beat() -> None:
     names = [beat.name for beat in chapter.beats]
     assert names == ["IB1", "IB1_spent"]
     grant, spent = chapter.beats
-    assert grant.rows == ("map035/ev009/p0",)
+    # C5 (REDERIVATION_PLAN.md §16.3, shape (f)): the grant beat also claims
+    # the "bag has room" branch arm it actually walks.
+    assert grant.rows == ("map035/ev009/p0", "map035/ev009/p0/b0")
     assert spent.rows == ("map035/ev009/p1",)
-    assert grant.archetype == spent.archetype == "item_ball"
+    assert grant.archetype == (("map035/ev009/p0", "item_ball"),)
+    assert spent.archetype == "item_ball"
     # group=None defaults to beat_prefix and reaches the satellite beat too.
     assert grant.group == spent.group == "IB1"
 
@@ -227,8 +239,8 @@ def test_item_ball_beats_explicit_group_overrides_default_and_reaches_every_beat
 def test_item_ball_beats_single_page_item_ball_registers_grant_only() -> None:
     """Loosened 2026-09-10 (REDERIVATION_PLAN.md sec 13.3 T1): CH03's
     map068/ev018 is a single-page `pbItemBall` with no page-1 remainder --
-    `item_ball_beats` must still register the grant beat, claiming only the
-    one row."""
+    `item_ball_beats` must still register the grant beat, claiming the page
+    row and (C5, shape (f)) the "bag has room" branch arm it walks."""
     b = _builder()
     item_ball_beats(
         b, chapter_id="CH03", map_constant="MAP_KEVLAR_TOWN_POKEMON_CENTER",
@@ -237,8 +249,10 @@ def test_item_ball_beats_single_page_item_ball_registers_grant_only() -> None:
     )
     chapter = b.build()
     assert [beat.name for beat in chapter.beats] == ["IBX"]
-    assert chapter.beats[0].archetype == "item_ball"
-    assert chapter.beats[0].rows == ("map068/ev018/p0",)
+    # C5 (REDERIVATION_PLAN.md §16.3, shape (f)): the grant beat also claims
+    # the "bag has room" branch arm it actually walks.
+    assert chapter.beats[0].archetype == (("map068/ev018/p0", "item_ball"),)
+    assert chapter.beats[0].rows == ("map068/ev018/p0", "map068/ev018/p0/b0")
 
 
 def test_item_ball_beats_single_page_without_stated_letter_fails_loud() -> None:
@@ -493,7 +507,12 @@ def test_arrival_nudge_beat_registers_one_beat(
     assert [beat.name for beat in chapter.beats] == ["N1"]
     beat = chapter.beats[0]
     assert beat.archetype == "arrival_nudge"
-    assert beat.rows == ("map036/ev002/p1",)
+    # C5 (REDERIVATION_PLAN.md §16.3): the nudge's move route lives on the
+    # walked branch arm, not the page trunk (`map036/ev002/p1` itself has no
+    # `displacement` floor assertion -- see `arrival_nudge.py`'s
+    # `_walked_arms`), so the beat also claims and declares `p1/b0`, the arm
+    # a fresh arrival actually traverses.
+    assert beat.rows == ("map036/ev002/p1", "map036/ev002/p1/b0")
     assert beat.locations[0].map_constant == "MAP_PASSAGE_CAVE_1F"
     # group=None defaults to beat_name, consistent with the other templates.
     assert beat.group == "N1"
@@ -842,6 +861,10 @@ def test_warp_beat_start_side_dest_crosses_back_first_and_ends_on_origin(
     monkeypatch.setattr(real_assertions, "cross_threshold", _fake_cross_threshold)
     monkeypatch.setattr(real_assertions, "require_map", _noop)
     monkeypatch.setattr(real_assertions, "assert_near", _noop)
+    # C5: warp.py now checks the exact landing (assert_position_exact), not
+    # the tolerant assert_near these leg-order fakes were written against --
+    # see warp.py's own rationale on the switch. Patched the same way.
+    monkeypatch.setattr(real_assertions, "assert_position_exact", _noop)
 
     beat.run(_RecordingEmu())
 
@@ -878,6 +901,10 @@ def test_warp_beat_start_side_origin_is_unchanged(
     monkeypatch.setattr(real_assertions, "cross_threshold", _fake_cross_threshold)
     monkeypatch.setattr(real_assertions, "require_map", _noop)
     monkeypatch.setattr(real_assertions, "assert_near", _noop)
+    # C5: warp.py now checks the exact landing (assert_position_exact), not
+    # the tolerant assert_near these leg-order fakes were written against --
+    # see warp.py's own rationale on the switch. Patched the same way.
+    monkeypatch.setattr(real_assertions, "assert_position_exact", _noop)
 
     class _SettleEmu:
         def settle_field(self, **kwargs) -> int:
@@ -924,6 +951,10 @@ def test_warp_beat_start_side_dest_without_round_trip_is_two_legs(
     monkeypatch.setattr(real_assertions, "cross_threshold", _fake_cross_threshold)
     monkeypatch.setattr(real_assertions, "require_map", _noop)
     monkeypatch.setattr(real_assertions, "assert_near", _noop)
+    # C5: warp.py now checks the exact landing (assert_position_exact), not
+    # the tolerant assert_near these leg-order fakes were written against --
+    # see warp.py's own rationale on the switch. Patched the same way.
+    monkeypatch.setattr(real_assertions, "assert_position_exact", _noop)
 
     class _SettleEmu:
         def settle_field(self, **kwargs) -> int:

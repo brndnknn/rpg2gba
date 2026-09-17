@@ -1633,7 +1633,7 @@ Each lands unit-green. None is ROM-verified before P11.
 | **C2** | Story-state model: highest-live-page liveness, earliest-live placement, `later:`/`unreachable:` derivation, generalized precedence | R6, R8 | DONE 2026-09-16 — C2a (extraction + outcome table) and C2b (model, CLI); see "C2b landed" below |
 | **C3** | Engine-transition forks, white-out first, with the fenced-engine grep for the rest | R9 | DONE 2026-09-16 — fork model, engine audit, `FLAG_MUM` seed; day/night deferred to its first real reader; see "C3" below |
 | **C4** | Generic per-command extractors for every code present in CH01–CH05, source-derived | R11 | DONE 2026-09-17 — `beat_floor/`; see "C4 landed" below |
-| **C5** | Archetype templates refactored onto the generic floor; the ⊇-floor checker rule | R11 | TODO |
+| **C5** | Archetype templates refactored onto the generic floor; the ⊇-floor checker rule; seam and stair floors | R11 | DONE 2026-09-17 — `beat_floor/{coverage,lookup,terrain}.py`, all five templates declare; see "C5 landed" below |
 | **C6** | Generator + solver integration: whole-module emit, review doc, refusal list, idempotence test | R1, R4, R7 | TODO |
 | **C7** | Freeze CH01–CH05 hand beats | R12 | TODO |
 | **C8** | Shared Ruby-subset interpreter + input search; `map050/ev019` | R10 | TODO |
@@ -1838,6 +1838,76 @@ are C5/C6's business. Measured (report is byte-identical on re-run):
 rival battle passes `canlose=true` with result variable 7. Check this when the white-out fork
 reads trainer losses. `story_state` still models stair-absorbed events as rows (harmless: they
 carry no writes). Suite **3790 passed / 16 skipped**.
+
+**C5 shape (operator + lead, 2026-09-17).** (a) **Seam and terrain rows get a floor in C5**
+(operator): they have no command list, so C4 left them out, and R1's zero-hand-beat rule would
+otherwise leave B1/B13/B14-shaped rows with no oracle at C9. Two row-level ROM-only kinds:
+`seam_crossing` (both sides of the `connections.json` pair) and `stair_crossing` (cell, side,
+and the per-step diagonal displacement derived from the RMXP stair event's facing branches and
+move codes). The ⊇ rule then has no row-kind exemption. (b) **Declared assertions, one
+vocabulary** (lead): `Beat.assertions: frozenset[FloorAssertion] | None`; `None` is
+undeclared, which is not the same as declaring nothing. `beat_floor/coverage.py` holds the one
+definition: a floor assertion is covered by a declared one with the same `(row_id, kind,
+list_index, code)` whose params include the floor's params with equal values. Extra params are
+how an archetype is stronger (arrival facing, BGM id, exact nudge delta). An extra that
+contradicts a source param fails loud at registration. (c) **Honest declarations**:
+`playtest.archetypes.declare_assertions` declares a row's floor filtered to the kinds the
+template's body actually executes, plus extras. An unexecuted kind is left undeclared, so the
+checker reports it rather than the template claiming it. Each template's declared kinds are
+pinned by a test that proves the body checks them. (d) **Refused floors** skip the ⊇ rule; the
+refusal is the row's named blocker. (e) **Severity**: a declared shortfall is an error; an
+undeclared (hand-written) beat claiming a row is reported, not failed, until C9 replaces the hand
+suites. A `GENERATED` module (C6) has no undeclared beats by construction. (f) Branch rows: a
+template claims and declares the arm rows its walk actually traverses; the arms it does not walk
+stay for C6's generic template.
+
+**C5 landed (2026-09-17).** `beat_floor/coverage.py` (`assertion_key` / `covers` /
+`uncovered` / `contradicts`), `beat_floor/lookup.py`, `beat_floor/terrain.py`
+(`seam_floors_for_map`, `stair_floors_for_map`), `chapter_manifest/floor_model.py`, and four
+checker rules — `floor_uncovered`, `floor_undeclared`, `floor_missing`,
+`floor_model_unenforced` — wired into `chapter_manifest check`. All five templates declare
+through one `archetypes.declare_assertions`; `Beat.assertions` is `frozenset[FloorAssertion]
+| None`, `None` meaning undeclared. Stair displacement is derived from the RMXP event's
+type-6 facing branch and its 205/209 move codes, refusing by name
+(`stair_no_qualifying_page`, `stair_branch_not_singular`,
+`stair_unknown_facing_direction`) rather than guessing. Item (f) is real: `warp` and
+`arrival_nudge` share one `walked_arms` helper, `item_ball` claims only the `"always"` arm
+(leaving the bag-full harness arm), `trainer` claims only the arm carrying the defeat write,
+and `flavour_npc` claims no arms at all. Suite **3861 passed / 16 skipped**.
+
+Four stale pins were updated, not weakened: three `item_ball` expectations in
+`test_playtest_archetype_templates.py` (a claimed arm turns `archetype` into a row→name
+mapping and adds the arm to `rows`), and C1's deliberate CH04 pin
+`test_check_real_ch04_carries_no_boundary_dispositions_yet`, whose two unclaimed nudge arms
+became one — `b0` is now claimed, `b1` waits for C6.
+
+Only **CH05's** sidecar moved (`map036/ev002/p1/b0` `cosmetic`→`beat:B8`, plus derived
+entries for the two newly-claimed item_ball arms); CH01–CH04 regenerate byte-identically,
+which is §4.2 idempotence holding. Measured after regeneration:
+
+| | errors | `floor_uncovered` | `floor_undeclared` (warning) |
+|---|---|---|---|
+| CH01 | 279 | 0 | 24 |
+| CH02 | 76 | 0 | 30 |
+| CH03 | 96 | 0 | 34 |
+| CH04 | 36 | 0 | 10 |
+| CH05 | 14 | **6** | 7 |
+
+**Why the ⊇ rule only bites CH05, and what its 6 errors are (operator-ruled 2026-09-17).**
+`ch05.py` is the *only* chapter module that imports the archetype templates; CH01–CH04 are
+hand-written and declare nothing, so every one of their rows lands in `floor_undeclared` — a
+warning by ruling (e), precisely because C9 replaces those suites. `floor_uncovered` can
+only fire on a row that declared something, and only CH05 has any. The other four are not
+passing the ⊇ rule; they are not yet graded by it.
+
+All 6 are the **`trainer` template, and all name one missing capability: it does not assert
+the approach cutscene.** `map036/ev004/p0`, `map036/ev006/p0` and `map037/ev004/p0` each
+miss five floor assertions — `pbTrainerIntro` (audio), `pbNoticePlayer` and `pbCallBub`
+(visual), the pre-battle line (`text`), and `pbTrainerEnd`; their `p1` pages each miss
+`pbCallBub`. `warp`, `item_ball` and `arrival_nudge` cover their floors in full. **Ruled:
+accept as named debt.** The floor already enumerates exactly what is missing, and C6's
+generic template emits it for free; hand-authoring those oracles now is work C9 deletes, and
+inverts §4.1. Do not "fix" this by strengthening `trainer.py` — the fix is C6.
 
 C1–C6 stand on their own. C7 must land before C9 overwrites anything. Route plans (P9) become
 a C6 output rather than a separate step.

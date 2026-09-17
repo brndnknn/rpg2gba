@@ -39,6 +39,7 @@ from rpg2gba.beat_floor.assertion import (
 from rpg2gba.beat_floor.condition import extract_condition
 from rpg2gba.beat_floor.move_route import extract_move_route
 from rpg2gba.beat_floor.script import extract_script
+from rpg2gba.beat_floor.terrain import seam_floors_for_map, stair_floors_for_map
 from rpg2gba.chapter_manifest.generator import PageScope, detect_stair_cells, iter_page_scopes
 from rpg2gba.chapter_manifest.schema import row_id_sort_key
 from rpg2gba.conversion_agent.deterministic import join_text_lines, translate_text_codes
@@ -632,8 +633,17 @@ def floor_for_map(
     *,
     common_events: list[dict[str, Any]],
     switch_labels: dict[int, str],
+    connections: list[list[Any]] = (),
 ) -> dict[str, RowFloor]:
-    """Every row's `RowFloor` for one map's events (R11 C4 design)."""
+    """Every row's `RowFloor` for one map's events, plus its `seam` and
+    `terrain` rows (REDERIVATION_PLAN.md §16.3 C5 -- `beat_floor.terrain`).
+
+    `connections` is `chapter_manifest.generator`'s own `connections.json`
+    contents (a list of 6-tuples/lists); defaults to `()`, matching the
+    generator's own behaviour when no `connections.json` exists (no seam
+    rows) -- a caller with connections data available should pass it through
+    rather than accept a silently seam-less floor.
+    """
     common_events_by_id = {ce["id"]: ce for ce in common_events}
     row_states = extract_map(
         map_id, map_data, common_events=common_events, switch_labels=switch_labels)
@@ -660,6 +670,9 @@ def floor_for_map(
                     common_events_by_id, index_of, row_states,
                 )
 
+    result.update(seam_floors_for_map(map_id, list(connections)))
+    result.update(stair_floors_for_map(map_id, map_data))
+
     return result
 
 
@@ -683,11 +696,15 @@ def floor_for_chapter(chapter_id: str, *, build_dir: Any) -> dict[str, RowFloor]
     switch_labels, _var_labels = load_label_tables(
         ref_dir / "uranium_switches.json", ref_dir / "uranium_variables.json")
 
+    conn_path = build_dir / "connections.json"
+    connections = json.loads(conn_path.read_text(encoding="utf-8")) if conn_path.exists() else []
+
     merged: dict[str, RowFloor] = {}
     for map_id in maps:
         map_path = build_dir / "maps" / f"Map{map_id:03d}.json"
         map_data = json.loads(map_path.read_text(encoding="utf-8"))
         merged.update(floor_for_map(
-            map_id, map_data, common_events=common_events, switch_labels=switch_labels))
+            map_id, map_data, common_events=common_events, switch_labels=switch_labels,
+            connections=connections))
 
     return {rid: merged[rid] for rid in sorted(merged, key=row_id_sort_key)}

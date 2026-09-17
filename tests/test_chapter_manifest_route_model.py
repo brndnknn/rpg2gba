@@ -20,7 +20,11 @@ from pathlib import Path
 
 import pytest
 
-from rpg2gba.chapter_manifest.checker import RULE_ROUTE_APPROACH, check_chapter
+from rpg2gba.chapter_manifest.checker import (
+    RULE_FLOOR_MODEL_UNENFORCED,
+    RULE_ROUTE_APPROACH,
+    check_chapter,
+)
 from rpg2gba.chapter_manifest.route_model import PlanRouteModel, build_route_model
 from rpg2gba.playtest.chapter import ChapterBuilder
 from rpg2gba.routing.plan import (
@@ -281,7 +285,11 @@ def test_rule_route_order_is_clean_despite_predecessor_when_plan_matches(
             model = build_route_model("CH99", root=routes)
             assert model is not None
             findings = check_chapter([], {}, route=model)
-            assert findings == []
+            # Filter the C5 floor rule's unenforced warning -- this test
+            # supplies no `floor_coverage=` and is about route order, not
+            # floor coverage.
+            relevant = [f for f in findings if f.rule != RULE_FLOOR_MODEL_UNENFORCED]
+            assert relevant == []
         finally:
             _cleanup_chapter("successor_place2")
     finally:

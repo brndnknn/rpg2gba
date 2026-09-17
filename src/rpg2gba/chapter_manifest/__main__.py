@@ -46,6 +46,7 @@ from .dispositions import (
     proposal_digest,
     write_dispositions,
 )
+from .floor_model import build_floor_coverage_model
 from .generator import generate_chapter_manifest, write_derived, write_manifest
 from .render import EventFacts, render_blocked_proposals
 from .route_model import build_route_model
@@ -375,11 +376,13 @@ def check_cmd(chapter: str, manifest: Path | None, dispositions_path_opt: Path |
     beat_model = build_beat_model(chapter)
     boundary_model = build_boundary_model(chapter)
     capabilities = build_capability_model(chapter)
+    floor_coverage = build_floor_coverage_model(chapter, build_dir=build_dir)
     live_chapter = _is_live_chapter(chapter, chapters_path)
     findings = checker.check_chapter(
         rows, dispositions, capabilities=capabilities, approach=approach, route=route,
         archetype_model=archetype_model, beat_model=beat_model,
-        boundary_model=boundary_model, derived=derived, live_chapter=live_chapter)
+        boundary_model=boundary_model, floor_coverage=floor_coverage,
+        derived=derived, live_chapter=live_chapter)
 
     if not findings:
         click.echo(f"chapter {chapter}: OK ({len(rows)} rows)")

@@ -10,6 +10,12 @@
 
 ## Retired Session Summaries
 
+## Archived 2026-09-17 — Last Session Summary entry 2026-09-16 (the `archetype_conformance` residue became a design, and the design generates the beats)
+
+**2026-09-16 (the `archetype_conformance` residue became a design, and the design generates the beats):** No code; two docs. The 2026-09-14 residue options were never written down anywhere, so the residue was re-measured instead: `archetype_conformance` CH01 89 / CH02 4 / CH03 28, ~80% `flavour_npc`. **Corpus census (scratch, every chapter's manifest built in memory, deduped across map revisits): 946 `flavour_npc` rows** (704 plain / 156 toggling / 86 randomized) on 750 events / 128 maps; §13.3's ~915 estimate was close. The text oracle reads **877 of 946**: 51 straight `"` (#109), 12 `*`/`[` (same gap — `assembly._CHARMAP_SUBS` substitutes them, `text_source` does not), 5 untranslatable control codes, and 1 `^` (`map207/ev011/p0`) with **no** staging substitution — possibly a real ROM text defect.
+
+**A correction worth keeping:** the build agent first argued the story spine must stay hand-written because branch-heavy logic is "irreducible". That is CLAUDE.md's rule for *event→Poryscript conversion*, not for *beat authoring*; the operator caught it — branches are finite source structure, so generating them is what makes "every branch walked" provable. Grilled to 13 rulings, written as **`REDERIVATION_PLAN.md` §16 (P8c, steps C1–C10)**; the Current Phase cell lists them. Two facts found while grilling: `whiteout_beat` is already a snapshot/restore fork (`whiteout.py:262-278`), which is why white-out is modelled as a fork rather than a chapter-end beat; and `map050/ev019` keeps its outcome as a Ruby array in var 151 (`pbGet(151)[pbGet(2)] += 1`, then `index(max)`), which is why R10 needs a shared interpreter with input search.
+
 ## Archived 2026-09-16 — Last Session Summary entry 2026-09-15 (the conformance residue worked down, and `cosmetic` got narrower before the counts got smaller)
 
 **2026-09-15 (the conformance residue worked down, and `cosmetic` got narrower before the counts got smaller):** Five commits on `rederive-ch01-ch04`, all unit-green, **none ROM-verified**. Applied `4d04d0dc`'s residue infra (`9766704f`): 13 mixed-archetype beats tagged per row via `Beat.archetype_of`, and 19 arrival-nudge p1 rows claimed by the beat whose warp lands on or beside their tile, each backed by `assert_arrival_settled`; `arrival_cell` now accepts several exits sharing one landing. `archetype_conformance` 56 -> 27.

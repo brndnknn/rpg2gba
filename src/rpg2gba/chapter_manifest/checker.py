@@ -13,6 +13,9 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
+from rpg2gba.beat_floor.assertion import FloorAssertion, RowFloor
+from rpg2gba.beat_floor.coverage import uncovered
+
 from .archetypes import classify_manifest
 from .derivation import DerivedEntry, derive_entry
 from .schema import Disposition, ManifestRow, parse_blocked_argument
@@ -63,6 +66,10 @@ RULE_BOUNDARY_MODEL_UNENFORCED = "boundary_model_unenforced"
 RULE_DERIVED_HASH_INELIGIBLE = "derived_hash_ineligible"
 RULE_DERIVED_VERDICT_MISMATCH = "derived_verdict_mismatch"
 RULE_DERIVED_UNAFFIRMED = "derived_unaffirmed"
+RULE_FLOOR_UNCOVERED = "floor_uncovered"
+RULE_FLOOR_UNDECLARED = "floor_undeclared"
+RULE_FLOOR_MISSING = "floor_missing"
+RULE_FLOOR_MODEL_UNENFORCED = "floor_model_unenforced"
 
 
 @dataclass(frozen=True)
@@ -456,6 +463,72 @@ class BoundaryModel(Protocol):
         ...
 
 
+class FloorCoverageModel(Protocol):
+    """The seam `RULE_FLOOR_UNCOVERED`/`RULE_FLOOR_UNDECLARED`/
+    `RULE_FLOOR_MISSING` plug into (REDERIVATION_PLAN.md §16.3 C5, R11): does
+    every row a registered beat claims carry declared assertions that cover
+    the generic per-command floor `beat_floor` derives from source?
+
+    Not implemented here -- deliberately, same reasoning as every other
+    seam in this module (`CapabilityModel`/`ApproachModel`/.../
+    `BoundaryModel`): `checker.py` must not import `rpg2gba.playtest` at
+    module load time, so "which beats claim this row, and what do they
+    declare" is a fact about the playtest chapter modules that arrives
+    through this Protocol. `rpg2gba.beat_floor.assertion`/`.coverage` ARE
+    imported directly, unlike `rpg2gba.playtest` -- they are leaves (pure
+    record types and the `covers`/`uncovered` relation, no chapter-module
+    dependency), the same way `archetypes.classify_manifest` is imported
+    directly rather than routed through a Protocol.
+
+    The concrete adapter (`floor_model.py`) is built over a chapter's
+    (already predecessor-composed) `playtest.chapter.load_chapter(...).beats`
+    for `claims`/`declared`, and `beat_floor.lookup.floor_for_row` for
+    `floor`.
+    """
+
+    def floor(self, row_id: str) -> RowFloor:
+        """The generic floor for `row_id`, computed from RMXP source. Raises
+        `KeyError` if `row_id`'s map yields no floor for it at all (a
+        claimed row the floor cannot see) -- `check_chapter` treats that as
+        `RULE_FLOOR_MISSING`, an error, not a crash: the claim exists, the
+        floor doesn't, and that disagreement is exactly the kind of thing
+        this rule exists to surface, not raise through the CLI."""
+        ...
+
+    def declared(self, row_id: str) -> frozenset[FloorAssertion] | None:
+        """The union of `assertions` over every registered beat that claims
+        `row_id` (`claims(row_id)` is True) AND declares (`Beat.assertions
+        is not None`).
+
+        `None` means at least one beat claims `row_id` but NONE of the
+        claiming beats declares -- an undeclared, hand-written beat
+        (`RULE_FLOOR_UNDECLARED`). This is deliberately not the same as an
+        empty `frozenset()`, which would mean every claiming beat declared
+        and none of them checks anything at all -- that is a real (and
+        total) `RULE_FLOOR_UNCOVERED` failure, not an undeclared beat.
+
+        Only meaningful when `claims(row_id)` is True; the rule never calls
+        this otherwise."""
+        ...
+
+    def claims(self, row_id: str) -> bool:
+        """True iff some registered beat (predecessor-inherited beats
+        included, same as `BeatModel.claiming_beats`/`ArchetypeModel`'s own
+        `chapter.beats` walk) lists `row_id` in its `rows`. The ⊇ rule is
+        not applied to a row nothing claims -- R11 has nothing to say about
+        a row no beat has reached yet."""
+        ...
+
+    def is_generated(self) -> bool:
+        """True iff this chapter's playtest module is a C6-generated module
+        (its docstring/header begins `GENERATED -- do not edit`). None exist
+        yet (C6 is still TODO in the plan); every chapter today answers
+        False, so `RULE_FLOOR_UNDECLARED` reports rather than fails on a
+        hand-written chapter until C9 replaces the hand suites (C5 shape
+        (e))."""
+        ...
+
+
 def check_chapter(
     rows: list[ManifestRow],
     dispositions: dict[str, Disposition],
@@ -467,6 +540,7 @@ def check_chapter(
     archetype_model: ArchetypeModel | None = None,
     beat_model: BeatModel | None = None,
     boundary_model: BoundaryModel | None = None,
+    floor_coverage: FloorCoverageModel | None = None,
     derived: dict[str, DerivedEntry] | None = None,
     live_chapter: bool = False,
 ) -> list[Finding]:
@@ -492,6 +566,17 @@ def check_chapter(
     row that actually crosses out of this chapter's authoring-time slice,
     and be claimed by a beat registered in the chapter that arrives next
     (see `BoundaryModel`'s docstring and `_check_boundary`).
+
+    `floor_coverage`, if supplied, backs `RULE_FLOOR_UNCOVERED`/
+    `RULE_FLOOR_UNDECLARED`/`RULE_FLOOR_MISSING`: every row a registered beat
+    claims must have a generic floor (`RULE_FLOOR_MISSING` otherwise), that
+    floor must be declared by at least one claiming beat unless refused
+    (`RULE_FLOOR_UNDECLARED` otherwise), and the union of what claiming beats
+    declare must cover the floor (`RULE_FLOOR_UNCOVERED` otherwise). See
+    `FloorCoverageModel`'s docstring and `_check_floor_coverage`. Applied to
+    this chapter's own `rows` only -- unlike `capabilities`/`approach`, this
+    rule has no per-row author-facing disposition to key off, so it walks
+    the generated manifest directly.
 
     `derived`, if supplied, is the machine-derived sidecar (`row_id ->
     DerivedEntry`, `dispositions.load_derived`, format v2). For a row the
@@ -730,6 +815,8 @@ def check_chapter(
     )
 
     findings.extend(_check_derived_hash(rows_by_id, derived))
+
+    findings.extend(_check_floor_coverage(rows, floor_coverage=floor_coverage))
 
     findings.sort(key=lambda f: (f.row_id, f.rule))
     return findings
@@ -1538,6 +1625,123 @@ def _check_derived_hash(
             ),
             severity="warning",
         ))
+
+    return findings
+
+
+def _describe_floor_assertion(a: FloorAssertion) -> str:
+    """`kind@list_index` plus key params, e.g. `warp@12 (map_id=35, x=4,
+    y=7, direction='down')` -- enough to locate the missing assertion in the
+    source without dumping the whole `FloorAssertion` repr."""
+    key_params = ", ".join(f"{name}={value!r}" for name, value in a.params)
+    suffix = f" ({key_params})" if key_params else ""
+    return f"{a.kind}@{a.list_index}{suffix}"
+
+
+def _uncovered_message(missing: tuple[FloorAssertion, ...], *, cap: int = 8) -> str:
+    shown = missing[:cap]
+    remainder = len(missing) - len(shown)
+    listed = "; ".join(_describe_floor_assertion(a) for a in shown)
+    tail = f"; +{remainder} more" if remainder > 0 else ""
+    return (
+        f"row's declared assertions do not cover its generic floor -- "
+        f"{len(missing)} missing: {listed}{tail}"
+    )
+
+
+def _check_floor_coverage(
+    rows: list[ManifestRow],
+    *,
+    floor_coverage: FloorCoverageModel | None,
+) -> list[Finding]:
+    """`RULE_FLOOR_UNCOVERED`/`RULE_FLOOR_UNDECLARED`/`RULE_FLOOR_MISSING`
+    (REDERIVATION_PLAN.md §16.3 C5, R11): a row's declared assertions must
+    cover the generic per-command floor `beat_floor` derives from source,
+    for every row a registered beat claims.
+
+    Only asks the question of rows `floor_coverage.claims()` says something
+    claims -- R11's ⊇ rule has nothing to say about a row nothing has
+    reached yet, and a refused floor (`RowFloor.refused`) skips the rule
+    entirely: the refusal is already the row's named blocker (C5 shape (d)).
+    Restricted to THIS chapter's own `rows` (the generated manifest passed
+    to `check_chapter`), same as every other per-row rule in this module --
+    a beat that happens to also claim a predecessor chapter's row is
+    checked when THAT chapter's own `check_chapter` call walks its own rows,
+    not here.
+
+    Without a `floor_coverage` model, which rows are even claimed is not
+    knowable at all (that fact lives entirely on the model, exactly like
+    `RouteModel`'s registered/planned group orders) -- so this degrades to
+    one chapter-scale `RULE_FLOOR_MODEL_UNENFORCED` warning, the same shape
+    as `RULE_ROUTE_MODEL_UNENFORCED`, rather than a per-row warning this
+    checker cannot actually target at the claimed subset.
+    """
+    findings: list[Finding] = []
+    if floor_coverage is None:
+        findings.append(Finding(
+            row_id="chapter",
+            rule=RULE_FLOOR_MODEL_UNENFORCED,
+            message=(
+                "could not check the generic floor's superset rule against "
+                "any row because no floor coverage model was supplied (this "
+                "rule is unenforced without one)"
+            ),
+            severity="warning",
+        ))
+        return findings
+
+    generated = floor_coverage.is_generated()
+
+    for row in rows:
+        row_id = row.row_id
+        if not floor_coverage.claims(row_id):
+            continue
+
+        try:
+            floor = floor_coverage.floor(row_id)
+        except KeyError as exc:
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_FLOOR_MISSING,
+                message=(
+                    "row is claimed by a registered beat, but beat_floor "
+                    f"has no floor for it ({exc}) -- a claimed row the "
+                    "floor cannot see is a bug in the claim or in the "
+                    "floor, never an empty floor"
+                ),
+                severity="error",
+            ))
+            continue
+
+        if floor.refused:
+            # No defined floor to check against; the refusal is the row's
+            # named blocker (beat_floor's own CLI reports it).
+            continue
+
+        declared = floor_coverage.declared(row_id)
+        if declared is None:
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_FLOOR_UNDECLARED,
+                message=(
+                    "row is claimed by a registered beat, but no claiming "
+                    "beat declares its assertions -- an undeclared, "
+                    "hand-written beat cannot be checked against the "
+                    "generic floor's superset rule until it declares, or "
+                    "until C6/C9 replace it with a generated beat"
+                ),
+                severity="error" if generated else "warning",
+            ))
+            continue
+
+        missing = uncovered(floor, declared)
+        if missing:
+            findings.append(Finding(
+                row_id=row_id,
+                rule=RULE_FLOOR_UNCOVERED,
+                message=_uncovered_message(missing),
+                severity="error",
+            ))
 
     return findings
 

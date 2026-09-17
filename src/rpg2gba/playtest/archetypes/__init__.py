@@ -39,9 +39,10 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from ...beat_floor.assertion import FloorAssertion, RowFloor
 from ...chapter_manifest.archetypes import ArchetypeMatch, classify_manifest
 from ...chapter_manifest.schema import ManifestRow, row_from_dict
 from .. import chapter as _chapter
@@ -50,11 +51,13 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "ChapterArchetypeModel",
+    "declare_assertions",
     "default_manifest_dir",
     "facing_toward",
     "find_match",
     "load_chapter_rows",
     "map_uranium_id",
+    "walked_arms",
 ]
 
 
@@ -94,6 +97,91 @@ def facing_toward(
             "should never produce this"
         )
     return facing
+
+# -- declared assertions (REDERIVATION_PLAN.md §16.3 C5) ---------------------
+
+FloorLookup = Callable[[str], RowFloor]
+
+
+def walked_arms(
+    row_id: str, kind: str, *, floor_lookup: FloorLookup,
+) -> tuple[str, ...]:
+    """Branch children (`row_id/b0`, `/b1`, ...) whose floor carries a `kind`
+    assertion -- the arm a fresh walk actually traverses, per an archetype's
+    own fingerprint. Walks `bN` until `floor_lookup` reports there is no such
+    row; `()` for a page with no branches at all. Never a hardcoded index.
+
+    Shared by `warp.py` and `arrival_nudge.py` (hoisted 2026-09-17, C5
+    audit -- the two were byte-identical apart from which kind each filtered
+    on, so that became the one parameter that varies).
+    """
+    walked: list[str] = []
+    index = 0
+    while True:
+        candidate = f"{row_id}/b{index}"
+        try:
+            floor = floor_lookup(candidate)
+        except KeyError:
+            break
+        if any(a.kind == kind for a in floor.assertions):
+            walked.append(candidate)
+        index += 1
+    return tuple(walked)
+
+
+def declare_assertions(
+    rows: Sequence[str],
+    *,
+    executed_kinds: frozenset[str],
+    template: str,
+    extras: Sequence[FloorAssertion] = (),
+    floor_lookup: FloorLookup | None = None,
+) -> frozenset[FloorAssertion]:
+    """What a template's beat declares for `rows`: each row's floor filtered
+    to the kinds the template's body actually checks, with `extras` layered
+    on top (an extra sharing a floor key replaces that floor assertion and
+    must `covers` it -- a stronger oracle, never a different one).
+
+    Honest by construction: a floor kind the template does not execute is
+    left out rather than declared, so the checker's ⊇ rule reports it as
+    uncovered instead of the template claiming a check it never makes. A
+    refused floor contributes nothing (its refusal is the row's blocker).
+    An extra that contradicts the source, or names a row outside `rows`,
+    fails loud at registration.
+    """
+    from ...beat_floor.coverage import assertion_key, contradicts, covers
+    from ...beat_floor.lookup import floor_for_row
+
+    lookup = floor_lookup if floor_lookup is not None else floor_for_row
+    row_set = set(rows)
+    stray = sorted({a.row_id for a in extras} - row_set)
+    if stray:
+        raise ValueError(f"{template}: extras name row(s) {stray} outside rows={sorted(row_set)}")
+
+    declared: dict[tuple, list[FloorAssertion]] = {}
+    for row_id in rows:
+        floor = lookup(row_id)
+        if floor.refused:
+            continue
+        for a in floor.assertions:
+            if a.kind in executed_kinds:
+                declared.setdefault(assertion_key(a), []).append(a)
+        for extra in extras:
+            if extra.row_id != row_id:
+                continue
+            for f in floor.assertions:
+                if contradicts(extra, f):
+                    raise ValueError(
+                        f"{template}: declared {extra} contradicts the source "
+                        f"floor assertion {f}")
+    for extra in extras:
+        key = assertion_key(extra)
+        matched = [f for f in declared.get(key, []) if covers(extra, f)]
+        if key in declared:
+            declared[key] = [f for f in declared[key] if f not in matched]
+        declared.setdefault(key, []).append(extra)
+    return frozenset(a for group in declared.values() for a in group)
+
 
 # -- manifest loading, cached (mirrors playtest.cells' graph cache) ----------
 
