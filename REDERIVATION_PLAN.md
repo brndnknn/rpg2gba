@@ -1632,7 +1632,7 @@ Each lands unit-green. None is ROM-verified before P11.
 | **C1** | Branch-arm manifest rows; re-derive CH01–CH05 manifests and sidecars; re-affirm invalidated hashes | R5 | DONE 2026-09-16 — see "C1 landed" below |
 | **C2** | Story-state model: highest-live-page liveness, earliest-live placement, `later:`/`unreachable:` derivation, generalized precedence | R6, R8 | DONE 2026-09-16 — C2a (extraction + outcome table) and C2b (model, CLI); see "C2b landed" below |
 | **C3** | Engine-transition forks, white-out first, with the fenced-engine grep for the rest | R9 | DONE 2026-09-16 — fork model, engine audit, `FLAG_MUM` seed; day/night deferred to its first real reader; see "C3" below |
-| **C4** | Generic per-command extractors for every code present in CH01–CH05, source-derived | R11 | TODO |
+| **C4** | Generic per-command extractors for every code present in CH01–CH05, source-derived | R11 | DONE 2026-09-17 — `beat_floor/`; see "C4 landed" below |
 | **C5** | Archetype templates refactored onto the generic floor; the ⊇-floor checker rule | R11 | TODO |
 | **C6** | Generator + solver integration: whole-module emit, review doc, refusal list, idempotence test | R1, R4, R7 | TODO |
 | **C7** | Freeze CH01–CH05 hand beats | R12 | TODO |
@@ -1782,6 +1782,62 @@ strip-listed events, and a reader-less obligation is reported as `deferred_oblig
 failed. The first chapter with a real reader implements CE 51 from the RTC (Uranium's boundary:
 day is 6 ≤ hour < 20, `112_PField_Time_v17.rb:42-49`; hook alongside `DoTimeBasedEvents`,
 `engine/src/clock.c`). `engine-audit` now exits 0.
+
+**C4 shape (operator, 2026-09-16):** (a) **script 355/655 has one extractor per call head**
+(`census._script_head`), not one per code; visual-only heads (`pbCallBub`, 324) assert only
+completion; a head with no extractor refuses the row by name. The same holds for 111 type 12:
+one extractor per `conditions.py` family, and an unclassified condition refuses. (b) **Move
+routes assert net displacement where it is predictable**: the moved character's `(dx, dy)`
+and final facing, derived from the source steps. A route with an unpredictable step (random,
+toward/away player, a skippable or repeating route, step-forward with unknown facing) asserts
+only completion. (c) **Audio (241/242/249/250) is audio-only**: completion plus an
+`audio`-tagged assertion, not checked until audio is mapped, and it doesn't refuse the row.
+
+Design (lead, same day). Package **`beat_floor/`** (neither `playtest` nor `chapter_manifest`
+imports it the wrong way: the checker reaches it at C5 and the generator at C6).
+`assertion.py`: frozen `FloorAssertion(row_id, kind, list_index, code, params, offline,
+tag)` and `FloorRefusal(row_id, code, list_index, reason, detail)`, plus
+`RowFloor(row_id, trigger, assertions, refusals)`. The floor is a **set**. Order is not
+asserted, which makes loops (112/113), labels (118/119) and the ⊇ rule trivial. **Every row gets
+`trigger` and `completes`.** State writes are **not re-derived**: `switch_write` /
+`var_write` / `self_switch_write` come from `story_state.extract`'s `RowState.writes` (§4.3),
+so a 121/122/123 or a state-writing script head contributes through the story model, and a
+write refused there refuses the floor row. Offline-checkable kinds: `text`, `choice`,
+`switch_write`, `self_switch_write`, `warp`, `heal_party`, `erase_event`, `item_grant`;
+ROM-only kinds: `var_write` (R11's own example), `displacement`, `event_position`,
+`battle`. Code 117 inlines the common event body's assertions, attributed to the calling
+117's `list_index`. Code 115 ends its scope's walk. Code 111's *condition* runs in its
+enclosing scope, so a type-12 family extractor belongs to the enclosing row. CLI:
+`python -m rpg2gba.beat_floor report --chapter CHnn` → `output/beat_floor/CHnn.json`. A
+census test pins every (code / head / family / move-step) present in CH01–CH05 to an extractor.
+
+**C4 landed (2026-09-17).** `beat_floor/{assertion,walk,script,condition,move_route}.py`.
+Three details beyond the design above: (1) the contract gained **`pokemon_grant`** and
+**`service`** (ROM-only). A first pass had tagged marts, PCs, save, the starter selector and the
+online features as `visual`, which would have silently weakened the floor: `visual` means
+presentation only. (2) **`skippable` routes stay predictable.** Ignore If Can't Move only
+changes what a blocked step does, and collision is not modelled. The one-route
+`step_forward_unknown_facing` pair is the only other unpredictable reason. (3) Stair events
+absorbed into `terrain` rows get no floor. A real-corpus test pins the floor's rows to exactly
+each manifest's `page`+`branch` rows; seam and terrain rows have no event commands, and they
+are C5/C6's business. Measured (report is byte-identical on re-run):
+
+| | rows | refused | offline-eligible |
+|---|---|---|---|
+| CH01 | 457 | 56 | 334 |
+| CH02 | 164 | 3 | 134 |
+| CH03 | 218 | 18 | 157 |
+| CH04 | 84 | 3 | 65 |
+| CH05 | 39 | 0 | 35 |
+
+**Zero `no_extractor`.** Refusal reasons: `text_unnormalizable` 82 (#109's `"`/`[`/`*`, plus
+`\v[N]`; §16.4), `story_state_refusal` 32, `unknown_script_head` 38 and `non_literal_args` 19
+(embedded Ruby: assignments, `for` loops, `createPhoneTrainer` locals feeding
+`customTrainerBattle`; all C8), `unclassified_condition` 6. **Found in passing, not fixed:**
+`conditions.py`'s `pb_trainer_battle` docstring says CH01–CH05 has no `canlose=true` site, but a
+rival battle passes `canlose=true` with result variable 7. Check this when the white-out fork
+reads trainer losses. `story_state` still models stair-absorbed events as rows (harmless: they
+carry no writes). Suite **3790 passed / 16 skipped**.
 
 C1–C6 stand on their own. C7 must land before C9 overwrites anything. Route plans (P9) become
 a C6 output rather than a separate step.
