@@ -116,6 +116,8 @@ class AuditReport:
     owed_obligations: tuple[OwedObligation, ...]
     intro_seed_gaps: tuple[IntroSeedGap, ...]
     intro_seed_unread: tuple[str, ...]
+    # Informational, like `intro_seed_unread`: obligations no kept row reads yet.
+    deferred_obligations: tuple[str, ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -313,20 +315,25 @@ def audit(
         (h.write.call, h.write.constant, h.write.function) for h in HARNESS_ONLY
     }
 
+    # A new_game.c write that matches the Intro seed is declared by the model
+    # itself (C2 shape (d)), so it is not an undeclared write.
+    gaps, unread, seed_writes = _intro_seed_gaps(
+        engine_dir, writes, flag_state, intro_end_state, chapter_read_keys)
+
     undeclared: list[UndeclaredWrite] = []
     found_keys: set[tuple[str, str, str]] = set()
     for w in writes:
         key = (w.call, w.constant, w.function or "")
         found_keys.add(key)
-        if key in declared or key in harness:
+        if key in declared or key in harness or (w.path, w.line) in seed_writes:
             continue
         undeclared.append(UndeclaredWrite(
             write=w,
             detail=(
                 f"{w.path}:{w.line} {w.call}({w.constant}) inside "
                 f"{w.function or '<unknown function>'} (fenced {w.sentinel}) is "
-                "neither a declared EngineTransition.engine_writes entry nor a "
-                "HARNESS_ONLY write"
+                "neither a declared EngineTransition.engine_writes entry, a "
+                "HARNESS_ONLY write, nor a new_game.c write matching the Intro seed"
             ),
         ))
 
@@ -348,8 +355,18 @@ def audit(
         w.constant for w in writes if w.call in ("FlagSet", "FlagClear")
     }
     owed: list[OwedObligation] = []
+    deferred: list[str] = []
     switches = flag_state.get("switches", {})
     for ob in OBLIGATIONS:
+        # Owed only once a row the ROM keeps reads one of its switches
+        # (operator, 2026-09-16: R13 -- build what the chapters need). A
+        # reader-less obligation is reported, not failed.
+        if not any(f"switch:{sid}" in chapter_read_keys for sid in ob.switch_ids):
+            deferred.append(
+                f"obligation {ob.name!r} ({ob.pseudo_row_id}): no unstripped in-scope row "
+                f"reads switches {list(ob.switch_ids)} -- not owed yet"
+            )
+            continue
         for sid in ob.switch_ids:
             constant = switches.get(str(sid))
             if constant is None:
@@ -370,14 +387,13 @@ def audit(
                     ),
                 ))
 
-    gaps, unread = _intro_seed_gaps(engine_dir, writes, flag_state, intro_end_state, chapter_read_keys)
-
     return AuditReport(
         undeclared_writes=tuple(undeclared),
         missing_transition_writes=tuple(missing),
         owed_obligations=tuple(owed),
         intro_seed_gaps=tuple(gaps),
         intro_seed_unread=tuple(unread),
+        deferred_obligations=tuple(deferred),
     )
 
 
@@ -387,7 +403,9 @@ def _intro_seed_gaps(
     flag_state: dict,
     intro_end_state: tuple[tuple[str, tuple], ...],
     chapter_read_keys: set[str],
-) -> tuple[list[IntroSeedGap], list[str]]:
+) -> tuple[list[IntroSeedGap], list[str], set[tuple[Path, int]]]:
+    """Returns the gaps, the unread seed keys, and the `(path, line)` of every
+    new_game.c write that satisfies a seed key (read by a chapter or not)."""
     new_game_path = (engine_dir / "src" / "new_game.c").resolve()
     new_game_writes = [w for w in writes if w.path.resolve() == new_game_path]
 
@@ -402,6 +420,7 @@ def _intro_seed_gaps(
 
     gaps: list[IntroSeedGap] = []
     unread: list[str] = []
+    seed_writes: set[tuple[Path, int]] = set()
 
     for key, values in intro_end_state:
         if key.startswith("self_switch:") or key.startswith("temp_switch:") or key.startswith("engine:"):
@@ -420,10 +439,6 @@ def _intro_seed_gaps(
         if tuple(values) == default or set(values) == set(default):
             continue  # INTRO leaves this at the default -- nothing to seed
 
-        if key not in chapter_read_keys:
-            unread.append(key)
-            continue
-
         satisfied = False
         if constant is not None:
             for w in new_game_writes:
@@ -431,10 +446,16 @@ def _intro_seed_gaps(
                     continue
                 if key.startswith("switch:") and w.call == "FlagSet" and True in values:
                     satisfied = True
+                    seed_writes.add((w.path, w.line))
                     break
                 if key.startswith("switch:") and w.call == "FlagClear" and False in values:
                     satisfied = True
+                    seed_writes.add((w.path, w.line))
                     break
+
+        if key not in chapter_read_keys:
+            unread.append(key)
+            continue
 
         if not satisfied:
             gaps.append(IntroSeedGap(
@@ -448,23 +469,31 @@ def _intro_seed_gaps(
                 ),
             ))
 
-    return gaps, unread
+    return gaps, unread, seed_writes
 
 
 # --- chapter_read_keys ---------------------------------------------------
 
 
-def chapter_read_keys(build_dir: Path, chapter_ids: list[str]) -> set[str]:
+def chapter_read_keys(
+    build_dir: Path,
+    chapter_ids: list[str],
+    reference_dir: Path | None = None,
+) -> set[str]:
     """Every state key (`switch:N`/`var:N`/`self_switch:...`/`temp_switch:...`)
     some row on `chapter_ids`'s own maps reads: its page appearance tests
     (page_tests) plus its own/ancestor arm-guard tests, plus every triggered
-    common event's gating switch."""
+    common event's gating switch. Events in `strip_list.json`'s `map_events`
+    are skipped: the ROM never carries them, so nothing they read is owed."""
     import json
 
     from rpg2gba.chapter_atlas.binding import load_binding
+    from rpg2gba.chapter_manifest.schema import parse_row_id
     from rpg2gba.conversion_agent.flag_registry import load_label_tables
+    from rpg2gba.conversion_agent.orchestrator import load_map_event_strips
 
-    ref_dir = Path(__file__).resolve().parents[3] / "reference"
+    ref_dir = reference_dir or Path(__file__).resolve().parents[3] / "reference"
+    stripped = set(load_map_event_strips(ref_dir))
     chapters_path = ref_dir / "chapters.json"
     binding = load_binding(path=chapters_path)
     common_events = json.loads((build_dir / "common_events.json").read_text(encoding="utf-8"))
@@ -490,6 +519,9 @@ def chapter_read_keys(build_dir: Path, chapter_ids: list[str]) -> set[str]:
             rows = extract_map(
                 map_id, map_data, common_events=common_events, switch_labels=switch_labels)
             for row in rows.values():
+                ref = parse_row_id(row.row_id)
+                if (ref.map_id, ref.event_id) in stripped:
+                    continue
                 for t in row.page_tests:
                     keys.add(_state_key_repr(t.key))
                 if row.arm_guard is not None:
@@ -546,5 +578,9 @@ def format_report(report: AuditReport) -> str:
     lines.append(f"intro_seed_unread ({len(report.intro_seed_unread)}, informational):")
     for k in report.intro_seed_unread:
         lines.append(f"  - {k}")
+
+    lines.append(f"deferred_obligations ({len(report.deferred_obligations)}, informational):")
+    for d in report.deferred_obligations:
+        lines.append(f"  - {d}")
 
     return "\n".join(lines)

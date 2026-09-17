@@ -1631,7 +1631,7 @@ Each lands unit-green. None is ROM-verified before P11.
 |---|---|---|---|
 | **C1** | Branch-arm manifest rows; re-derive CH01–CH05 manifests and sidecars; re-affirm invalidated hashes | R5 | DONE 2026-09-16 — see "C1 landed" below |
 | **C2** | Story-state model: highest-live-page liveness, earliest-live placement, `later:`/`unreachable:` derivation, generalized precedence | R6, R8 | DONE 2026-09-16 — C2a (extraction + outcome table) and C2b (model, CLI); see "C2b landed" below |
-| **C3** | Engine-transition forks, white-out first, with the fenced-engine grep for the rest | R9 | IN PROGRESS — fork model + engine audit landed 2026-09-16; engine half (switch 52 seed, CE 51 day/night) next; see "C3" below |
+| **C3** | Engine-transition forks, white-out first, with the fenced-engine grep for the rest | R9 | DONE 2026-09-16 — fork model, engine audit, `FLAG_MUM` seed; day/night deferred to its first real reader; see "C3" below |
 | **C4** | Generic per-command extractors for every code present in CH01–CH05, source-derived | R11 | TODO |
 | **C5** | Archetype templates refactored onto the generic floor; the ⊇-floor checker rule | R11 | TODO |
 | **C6** | Generator + solver integration: whole-module emit, review doc, refusal list, idempotence test | R1, R4, R7 | TODO |
@@ -1693,7 +1693,9 @@ both 105 and 106 are possible and day-only and night-only rows are all live. **C
 51 as an engine transition the ROM must implement from the RTC** — nothing sets 105/106 today,
 so CH01–CH03's 19 night-lamp `Luz` events (Moki 11, Kevlar 7, Route 1 1, all on 106) never
 show. A ROM walk of a night row names `set_clock` as its harness blocker. CH06 Nowtoch has 60+
-rows gated the same way.
+rows gated the same way. *(Corrected 2026-09-16 by C3: the 19 lamps are no-port under the
+2026-08-05 ruling, so nothing in CH01–CH05 is missing; day/night is deferred to its first real
+reader. See "C3 closed".)*
 
 Design (lead, same day). **C2 builds the model; C6 orders it.** Package `story_state/`: per
 row (page trunk or arm scope) its **reads** (page conditions; 111 types 0/1/2; families via
@@ -1767,6 +1769,19 @@ doesn't set. Only two fenced writes exist (`DoWhiteOut`'s `FLAG_STARTING_OVER`, 
 `map049/ev002/p1` reads it) and **CE 51 day/night** (switches 105/106 unnamed and unset).
 **Operator, same day:** fix both in the engine as part of C3: a fenced `FlagSet(FLAG_MUM)` in the
 spawn override, and 105/106 named and set from the RTC.
+
+**C3 closed, same day.** `NewGameInitData` sets `FLAG_MUM` after vanilla's map-flag reset,
+fenced; the audit treats a `new_game.c` write matching the Intro seed as declared. **Day/night
+was re-ruled once measured:** every CH01–CH05 row reading 105/106 is a `Luz` lamp, all 19
+already under the 2026-08-05 no-port ruling (map 31's seven and map 33's one were listed; map
+32's eleven, the same kind, were not, and are now). Corpus-wide, 387 rows read 105/106 and only
+22 are not lamps (maps 12/40/60/93/101/183). The registry also mints `FLAG_*` only for a live
+reader, so naming the flags now would have meant working around §6. **Operator:** an
+obligation is owed only when a row the ROM keeps reads its switches. `chapter_read_keys` skips
+strip-listed events, and a reader-less obligation is reported as `deferred_obligations`, not
+failed. The first chapter with a real reader implements CE 51 from the RTC (Uranium's boundary:
+day is 6 ≤ hour < 20, `112_PField_Time_v17.rb:42-49`; hook alongside `DoTimeBasedEvents`,
+`engine/src/clock.c`). `engine-audit` now exits 0.
 
 C1–C6 stand on their own. C7 must land before C9 overwrites anything. Route plans (P9) become
 a C6 output rather than a separate step.

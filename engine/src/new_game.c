@@ -86,6 +86,11 @@
 // scripts/ from src/ (mirrors how src/data/*.h siblings resolve "data/...").
 #include "../data/scripts/uranium_berry_trees.h"
 // END URANIUM PATHFINDER SLICE
+// BEGIN URANIUM PATHFINDER SLICE — pulls FLAG_MUM (the flag registry's generated dump),
+// set in NewGameInitData() below. "../" for the same reason as uranium_berry_trees.h.
+// Removing this include breaks that call.
+#include "../data/scripts/uranium_flags.h"
+// END URANIUM PATHFINDER SLICE
 
 extern const u8 EventScript_ResetAllMapFlags[];
 extern const u8 EventScript_ResetAllMapFlagsFrlg[];
@@ -315,6 +320,13 @@ void NewGameInitData(void)
         RunScriptImmediately(EventScript_ResetAllMapFlagsFrlg);
     else
         RunScriptImmediately(EventScript_ResetAllMapFlags);
+    // BEGIN URANIUM PATHFINDER SLICE — the Intro-chain seed. The boot skip never
+    // plays Uranium's Intro (maps 51/57), whose modelled end state turns switch 52
+    // "Mum" on; CH01's map049/ev002/p1 reads it. `python -m rpg2gba.story_state
+    // engine-audit` checks every such key is set here (REDERIVATION_PLAN.md §16.3 C3).
+    // Revert this block to restore vanilla new-game flags.
+    FlagSet(FLAG_MUM);
+    // END URANIUM PATHFINDER SLICE
 #if IS_FRLG
         StringCopy(gSaveBlock1Ptr->rivalName, rivalName);
 #endif
