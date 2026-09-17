@@ -17,7 +17,12 @@ import pytest
 from rpg2gba.chapter_manifest.generator import generate_chapter_manifest
 from rpg2gba.chapter_manifest.schema import branch_row_id, page_row_id
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
-from rpg2gba.story_state.extract import ArmGuard, RowState, extract_map
+from rpg2gba.story_state.extract import (
+    ArmGuard,
+    RowState,
+    extract_map,
+    extract_triggered_common_events,
+)
 from rpg2gba.story_state.state import (
     Adjust,
     Assign,
@@ -113,8 +118,10 @@ def test_arm_guard_switch_then_else() -> None:
     then_row = rows[branch_row_id(page_id, 0)]
     else_row = rows[branch_row_id(page_id, 1)]
 
-    assert then_row.arm_guard == ArmGuard(tests=(Test(Switch(12), "==", True),), negated=False)
-    assert else_row.arm_guard == ArmGuard(tests=(Test(Switch(12), "==", False),), negated=True)
+    assert then_row.arm_guard == ArmGuard(
+        tests=(Test(Switch(12), "==", True),), negated=False, opener_index=0)
+    assert else_row.arm_guard == ArmGuard(
+        tests=(Test(Switch(12), "==", False),), negated=True, opener_index=0)
 
 
 def test_arm_guard_variable_cmp_negates_on_else() -> None:
@@ -236,9 +243,9 @@ def test_switch_write_range() -> None:
     rows = extract_map(999, _map([_event(1, [page])]), common_events=[], switch_labels={})
     row = rows[page_row_id(999, 1, 0)]
     assert row.writes == (
-        Assign(Switch(10), frozenset({True}), False, "code 121 @list[0]"),
-        Assign(Switch(11), frozenset({True}), False, "code 121 @list[0]"),
-        Assign(Switch(12), frozenset({True}), False, "code 121 @list[0]"),
+        Assign(Switch(10), frozenset({True}), False, "code 121 @list[0]", 0),
+        Assign(Switch(11), frozenset({True}), False, "code 121 @list[0]", 0),
+        Assign(Switch(12), frozenset({True}), False, "code 121 @list[0]", 0),
     )
 
 
@@ -246,28 +253,28 @@ def test_switch_write_off() -> None:
     page = _page([_cmd(121, [3, 3, 1])])
     rows = extract_map(999, _map([_event(1, [page])]), common_events=[], switch_labels={})
     row = rows[page_row_id(999, 1, 0)]
-    assert row.writes == (Assign(Switch(3), frozenset({False}), False, "code 121 @list[0]"),)
+    assert row.writes == (Assign(Switch(3), frozenset({False}), False, "code 121 @list[0]", 0),)
 
 
 def test_variable_write_constant() -> None:
     page = _page([_cmd(122, [4, 4, 0, 0, 7])])
     rows = extract_map(999, _map([_event(1, [page])]), common_events=[], switch_labels={})
     row = rows[page_row_id(999, 1, 0)]
-    assert row.writes == (Assign(Variable(4), frozenset({7}), False, "code 122 @list[0]"),)
+    assert row.writes == (Assign(Variable(4), frozenset({7}), False, "code 122 @list[0]", 0),)
 
 
 def test_variable_write_random_range() -> None:
     page = _page([_cmd(122, [4, 4, 0, 2, 1, 3])])
     rows = extract_map(999, _map([_event(1, [page])]), common_events=[], switch_labels={})
     row = rows[page_row_id(999, 1, 0)]
-    assert row.writes == (Assign(Variable(4), frozenset({1, 2, 3}), False, "code 122 @list[0]"),)
+    assert row.writes == (Assign(Variable(4), frozenset({1, 2, 3}), False, "code 122 @list[0]", 0),)
 
 
 def test_variable_write_adjust() -> None:
     page = _page([_cmd(122, [4, 4, 1, 0, 2])])  # add 2
     rows = extract_map(999, _map([_event(1, [page])]), common_events=[], switch_labels={})
     row = rows[page_row_id(999, 1, 0)]
-    assert row.writes == (Adjust(Variable(4), "+", 2, False, "code 122 @list[0]"),)
+    assert row.writes == (Adjust(Variable(4), "+", 2, False, "code 122 @list[0]", 0),)
 
 
 def test_variable_write_nonconstant_refuses() -> None:
@@ -283,7 +290,7 @@ def test_self_switch_write() -> None:
     rows = extract_map(999, _map([_event(5, [page])]), common_events=[], switch_labels={})
     row = rows[page_row_id(999, 5, 0)]
     assert row.writes == (
-        Assign(SelfSwitch(999, 5, "A"), frozenset({True}), False, "code 123 @list[0]"),)
+        Assign(SelfSwitch(999, 5, "A"), frozenset({True}), False, "code 123 @list[0]", 0),)
 
 
 # --- writes: scripts --------------------------------------------------
@@ -321,6 +328,18 @@ def test_unparsed_state_write_refuses() -> None:
     assert row.refusals[0].code == "unparsed_state_write"
 
 
+def test_compound_assignment_to_a_ruby_local_is_not_state() -> None:
+    """map050/ev019's starter script does `x=pbGet(151)` / `x-=2`: the local
+    is scratch, while an indexed target is still a state write."""
+    page = _page([_cmd(355, ["x=pbGet(151)"]), _cmd(655, ["x-=2"]),
+                  _cmd(355, ["pbGet(151)[pbGet(2)] += 1"])])
+    rows = extract_map(999, _map([_event(1, [page])]), common_events=[], switch_labels={})
+    row = rows[page_row_id(999, 1, 0)]
+    assert [r.detail.rsplit(": ", 1)[-1] for r in row.refusals] == ["pbGet(151)[pbGet(2)] += 1"]
+    assert row.havoc_global is False
+    assert set(row.havoc_keys) == {Variable(151), Variable(2)}
+
+
 def test_non_state_script_line_is_not_a_refusal() -> None:
     page = _page([_cmd(355, ["Kernel.pbMessage(_INTL(\"hi\"))"])])
     rows = extract_map(999, _map([_event(1, [page])]), common_events=[], switch_labels={})
@@ -337,7 +356,7 @@ def test_common_event_inline_unconditional_write() -> None:
     page = _page([_cmd(117, [1])])
     rows = extract_map(999, _map([_event(1, [page])]), common_events=[ce], switch_labels={})
     row = rows[page_row_id(999, 1, 0)]
-    assert row.writes == (Assign(Switch(6), frozenset({True}), False, "code 121 @list[0]"),)
+    assert row.writes == (Assign(Switch(6), frozenset({True}), False, "code 121 @list[0]", 0),)
 
 
 def test_common_event_inline_conditional_write() -> None:
@@ -418,6 +437,73 @@ def test_row_ids_match_the_generator_one_to_one() -> None:
 
 
 # --- real-data test ------------------------------------------------------
+
+
+# --- triggered common events (pseudo-rows, REDERIVATION_PLAN.md §16.3 C2
+# ruling (e)) ---------------------------------------------------------------
+
+
+def _ce(ce_id: int, trigger: int, switch_id: int, list_: list[dict]) -> dict:
+    return {"id": ce_id, "name": f"CE{ce_id}", "trigger": trigger, "switch_id": switch_id,
+            "list": list_}
+
+
+def test_common_event_51_day_night_shape() -> None:
+    """The exact shape of common event 51 ("Only Day people"), verbatim from
+    REDERIVATION_PLAN.md §16.3 C2 ruling (e)."""
+    ce51 = _ce(51, trigger=2, switch_id=51, list_=[
+        _cmd(111, [12, "Time.now.hour<6||Time.now.hour>=20"], indent=0),
+        _cmd(121, [105, 105, 1], indent=1),
+        _cmd(121, [106, 106, 0], indent=1),
+        _cmd(411, [], indent=0),
+        _cmd(121, [105, 105, 0], indent=1),
+        _cmd(121, [106, 106, 1], indent=1),
+        _cmd(412, [], indent=0),
+        _cmd(106, [200], indent=0),
+    ])
+    rows = extract_triggered_common_events([ce51], switch_labels={})
+
+    trunk = rows["common/ce051"]
+    assert trunk.page_tests == (Test(Switch(51), "==", True),)
+    assert trunk.forced is True
+    assert trunk.parent_row_id is None
+    assert trunk.event_page_row_ids == ("common/ce051",)
+
+    then_arm = rows["common/ce051/b0"]
+    else_arm = rows["common/ce051/b1"]
+    assert then_arm.parent_row_id == "common/ce051"
+    assert else_arm.parent_row_id == "common/ce051"
+    assert then_arm.arm_guard.outcome.kind == "input"
+    assert then_arm.arm_guard.outcome.detail == "clock"
+
+    then_values = {w.key: w.values for w in then_arm.writes}
+    else_values = {w.key: w.values for w in else_arm.writes}
+    assert then_values[Switch(105)] == frozenset({False})
+    assert then_values[Switch(106)] == frozenset({True})
+    assert else_values[Switch(105)] == frozenset({True})
+    assert else_values[Switch(106)] == frozenset({False})
+
+
+def test_only_autorun_and_parallel_common_events_are_extracted() -> None:
+    ce_none = _ce(1, trigger=0, switch_id=1, list_=[_cmd(101, ["x"])])
+    ce_action = _ce(2, trigger=None, switch_id=2, list_=[_cmd(101, ["x"])])
+    ce_autorun = _ce(3, trigger=1, switch_id=3, list_=[_cmd(101, ["x"])])
+    ce_parallel = _ce(4, trigger=2, switch_id=4, list_=[_cmd(101, ["x"])])
+    ce_no_switch = _ce(5, trigger=1, switch_id=0, list_=[_cmd(101, ["x"])])
+
+    rows = extract_triggered_common_events(
+        [ce_none, ce_action, ce_autorun, ce_parallel, ce_no_switch], switch_labels={})
+
+    row_ces = {rid.split("/")[1] for rid in rows}
+    assert row_ces == {"ce003", "ce004"}
+
+
+def test_self_switch_write_in_common_event_is_refused() -> None:
+    ce = _ce(80, trigger=1, switch_id=90, list_=[_cmd(123, ["A", 0], indent=0)])
+    rows = extract_triggered_common_events([ce], switch_labels={})
+    trunk = rows["common/ce080"]
+    assert trunk.writes == ()
+    assert any(r.code == "invalid_self_switch_write_in_common_event" for r in trunk.refusals)
 
 
 @pytest.mark.skipif(not (OUT_DIR / "maps").is_dir(), reason="no converted corpus on disk")

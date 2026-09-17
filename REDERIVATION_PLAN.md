@@ -1630,7 +1630,7 @@ Each lands unit-green. None is ROM-verified before P11.
 | # | Step | Rulings | Status |
 |---|---|---|---|
 | **C1** | Branch-arm manifest rows; re-derive CH01–CH05 manifests and sidecars; re-affirm invalidated hashes | R5 | DONE 2026-09-16 — see "C1 landed" below |
-| **C2** | Story-state model: highest-live-page liveness, earliest-live placement, `later:`/`unreachable:` derivation, generalized precedence | R6, R8 | IN PROGRESS — C2a (extraction + outcome table) landed 2026-09-16; C2b next |
+| **C2** | Story-state model: highest-live-page liveness, earliest-live placement, `later:`/`unreachable:` derivation, generalized precedence | R6, R8 | DONE 2026-09-16 — C2a (extraction + outcome table) and C2b (model, CLI); see "C2b landed" below |
 | **C3** | Engine-transition forks, white-out first, with the fenced-engine grep for the rest | R9 | TODO |
 | **C4** | Generic per-command extractors for every code present in CH01–CH05, source-derived | R11 | TODO |
 | **C5** | Archetype templates refactored onto the generic floor; the ⊇-floor checker rule | R11 | TODO |
@@ -1684,6 +1684,17 @@ chain**: the model runs over unbound Intro map 51 and whatever it transfers thro
 first CH01 arrival; C3's fenced-engine grep checks that the `new_game.c` override sets the same
 state and fails loud where it doesn't.
 
+(e) **Day/night is clock input, and the engine owes it** (operator, same day, found by
+C2b's triggered-common-event guard): common event 51 (parallel, gated on switch 51 GAME
+RUNNING, set on map048) sets switch 105 DAY / 106 NIGHT from the real-time hour every 200
+frames. Triggered common events become modelled pseudo-rows (`common/ceNNN`), and a
+`time_of_day` condition family is player input (the clock), so once GAME RUNNING is possible
+both 105 and 106 are possible and day-only and night-only rows are all live. **C3 carries CE
+51 as an engine transition the ROM must implement from the RTC** — nothing sets 105/106 today,
+so CH01–CH03's 19 night-lamp `Luz` events (Moki 11, Kevlar 7, Route 1 1, all on 106) never
+show. A ROM walk of a night row names `set_clock` as its harness blocker. CH06 Nowtoch has 60+
+rows gated the same way.
+
 Design (lead, same day). **C2 builds the model; C6 orders it.** Package `story_state/`: per
 row (page trunk or arm scope) its **reads** (page conditions; 111 types 0/1/2; families via
 the table) and **writes** (121/122/123; `pbSetSelfSwitch`, `$game_switches[N]=`,
@@ -1697,10 +1708,41 @@ are live on the player's map. Chapters are modelled in chain order, each over th
 every chapter up to itself (backtracking is allowed), seeded from its predecessor's end state.
 The model outputs a **partial order**: `enabled_by` (writes a row needs, as any-of groups),
 `killed_by` (writes that end its liveness), ownership (`later:CHnn` / `unreachable:` with the
-furthest chapter modelled), and the chapter's end state. End state is defined only when every
-pair of conflicting writes to one key is ordered by the partial order; otherwise it fails loud
-naming both rows, as does a cycle among mandatory edges. Split: **C2a** extraction + outcome
+furthest chapter modelled), and the chapter's end state. *(Amended same day, after real data: the first rule here
+failed loud whenever two unordered rows wrote different values to one key. CH01's lab door
+and Auntie both unlock at variable 101 ≥ 1 and set switch 104 ON and OFF, and the player may
+do them in either order — the order is C6's to choose, not an error. Now: writes within one
+page execution are ordered by list index, with mutually exclusive arms joined; conflicting
+unordered writes across pages **join** and are listed as `order_dependent` keys in the
+report. C2's end states are sound over-approximations, and **C6 recomputes each chapter's seed
+from its concrete route**. Refusals do not starve saturation: guard-refused rows still
+contribute their parseable writes, unparsed writes make the keys they name "any value", and a
+row that is not live because of either is `undetermined`, not `unreachable`.)* Split: **C2a** extraction + outcome
 table + refusals; **C2b** liveness, saturation, partial order, chain seeding, ownership, CLI.
+
+**C2b landed (2026-09-16).** `story_state/model.py`: `_live_status` (highest-live-page rule plus
+ancestor arm guards), `saturate` (fixpoint), `compute_enabled_by` / `compute_killed_by`,
+`compute_end_state` (per-page shadowing by `list_index`, sibling arms joined, cross-page
+conflicts recorded as `order_dependent`, only a precedence cycle raises), `model_intro` (CH01's
+seed from the Intro chain) and `build_chapter_stories` (chain walk, `later:CHnn` / `unreachable`
+/ `undetermined`). `extract.py` gained `havoc_keys` / `havoc_global` for unparsed writes and
+`extract_triggered_common_events` (`common/ceNNN` pseudo-rows; a refused pseudo-row whose gate is
+possibly true fails loud). `conditions.py` gained `time_of_day` (ruling (e)), the one compound
+condition that classifies. CLI: `python -m rpg2gba.story_state report --chapter CHnn` →
+`output/story_state/CHnn.json`. Measured, row status per chapter (chain modelled through each):
+
+| | live | refused | unreachable | undetermined |
+|---|---|---|---|---|
+| CH01 | 261 | 101 | 77 | 18 |
+| CH02 | 157 | 24 | 4 | 0 |
+| CH03 | 196 | 15 | 16 | 0 |
+| CH04 | 63 | 19 | 0 | 2 |
+| CH05 | 51 | 0 | 0 | 0 |
+
+The only `order_dependent` key is CH01's switch 104 (`map049/ev001/p2` vs `map050/ev001/p1`,
+the amendment's case). CH01's refusals are mostly `unparsed_state_write` (C8's interpreter) and
+`unmodelled_outcome` (outcome-table gaps). **Not yet confirmed:** R9's inference that
+`map049/ev022/p0` / `map068/ev001/p1` return to their own chapters waits on C3.
 
 C1–C6 stand on their own. C7 must land before C9 overwrites anything. Route plans (P9) become
 a C6 output rather than a separate step.

@@ -209,3 +209,37 @@ def test_fork_outcomes_carry_a_detail(family) -> None:
         if outcome.kind == "fork":
             assert outcome.detail, (
                 f"{family.name}: fork outcome has an empty detail")
+
+
+# --- time_of_day: the one compound-boolean exception (REDERIVATION_PLAN.md
+# §16.3 C2 ruling (e), common event 51's day/night guard) -------------------
+
+
+def test_time_of_day_matches_common_event_51_night_guard() -> None:
+    family = classify_condition("Time.now.hour<6||Time.now.hour>=20")
+    assert family is not None
+    assert family.name == "time_of_day"
+    assert family.then_outcome == family.else_outcome
+    assert family.then_outcome.kind == "input"
+    assert family.then_outcome.detail == "clock"
+
+
+def test_time_of_day_matches_the_day_negation_with_and() -> None:
+    family = classify_condition("Time.now.hour>=6&&Time.now.hour<20")
+    assert family is not None
+    assert family.name == "time_of_day"
+
+
+def test_time_of_day_matches_a_single_clause_too() -> None:
+    family = classify_condition("Time.now.hour<6")
+    assert family is not None
+    assert family.name == "time_of_day"
+
+
+def test_non_time_compound_boolean_still_does_not_classify() -> None:
+    assert classify_condition(
+        "pbTrainerBattle(PBTrainers::A,'x') || pbTrainerBattle(PBTrainers::B,'y')"
+    ) is None
+    assert classify_condition(
+        "!pbGet(1).is_a?(Numeric) || $game_variables[1] < 0"
+    ) is None

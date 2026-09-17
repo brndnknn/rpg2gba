@@ -88,12 +88,25 @@ class Assign(object):
     guaranteed on every execution of the calling row, only on the arm's own
     path. `source` is a short human citation, e.g. ``"code 121 @list[4]"`` or
     ``"script @list[7]: pbSetSelfSwitch(18, \"A\", true)"``.
+
+    `list_index` is this write's position in its OWNING PAGE's raw command
+    list (`page["list"]`), REGARDLESS of which row (trunk or a nested arm)
+    the write's own row belongs to (REDERIVATION_PLAN.md §16.3 C2b handback,
+    FIX 1: a page trunk and its descendant arms are one execution, ordered by
+    list position, not unordered sibling rows). For a write attributed
+    through an inlined common event (a 117 call), `list_index` is the index
+    of the 117 CALL ITSELF in the calling page -- not the write's position
+    inside the common event's own body -- since that is where the calling
+    page's own execution order places the inlined effect. Defaults to `-1`
+    ("unpopulated") only so hand-built test fixtures that don't care about
+    ordering don't have to pass it; every real extraction populates it.
     """
 
     key: Key
     values: frozenset[bool | int]
     conditional: bool
     source: str
+    list_index: int = -1
 
 
 @dataclass(frozen=True)
@@ -113,6 +126,7 @@ class Adjust(object):
     amount: int
     conditional: bool
     source: str
+    list_index: int = -1  # see Assign.list_index
 
 
 Write = Assign | Adjust

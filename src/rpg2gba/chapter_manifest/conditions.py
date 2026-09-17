@@ -39,6 +39,15 @@ reading Uranium's own Ruby source, so they do not transfer.
 compound booleans mixing a type guard with a variable comparison. No family
 matches them on purpose -- `classify_condition` returns `None` and the row
 keeps its citation requirement.
+
+**`time_of_day` is the one explicit exception to "a compound boolean never
+classifies" (REDERIVATION_PLAN.md §16.3 C2 ruling (e), found by C2b's
+triggered-common-event guard on real data).** Common event 51 (parallel,
+gated on switch 51 GAME RUNNING) sets switch 105 DAY / 106 NIGHT from
+`Time.now.hour<6||Time.now.hour>=20` (and its negation) every 200 frames --
+a compound `||`/`&&` join of `Time.now.hour <cmp> N` clauses, and the ONLY
+compound shape this table recognizes on purpose. `classify_condition`
+special-cases it before the general "no compound classifies" guard.
 """
 from __future__ import annotations
 
@@ -549,7 +558,32 @@ _URANIUM_FAMILIES: tuple[ConditionFamily, ...] = (
     ),
 )
 
-FAMILIES: tuple[ConditionFamily, ...] = _VANILLA_FAMILIES + _URANIUM_FAMILIES
+# --- the one compound-boolean exception (REDERIVATION_PLAN.md §16.3 C2
+# ruling (e)) -------------------------------------------------------------
+
+_TIME_OF_DAY_CLAUSE = r"Time\.now\.hour\s*" + _CMP + r"\s*\d+"
+_TIME_OF_DAY_FAMILY = ConditionFamily(
+    name="time_of_day",
+    # e.g. "Time.now.hour<6||Time.now.hour>=20" (common event 51's night
+    # guard) and its negation (the day guard); one or more
+    # `Time.now.hour <cmp> N` clauses joined by `||`/`&&`. Anchored and
+    # specific on purpose -- this is the single compound shape this table
+    # is allowed to recognize.
+    pattern=_rx(_TIME_OF_DAY_CLAUSE + r"(?:\s*(?:\|\||&&)\s*" + _TIME_OF_DAY_CLAUSE + r")*"),
+    description=(
+        "Time.now.hour <cmp> N[ (|||&&) Time.now.hour <cmp> N ...] -- "
+        "real-time clock read; common event 51 (parallel, gated on switch "
+        "51 GAME RUNNING, 022_Game_Event_v17.rb-era common-event trigger) "
+        "polls Time.now.hour every 200 frames to set switch 105 DAY / 106 "
+        "NIGHT (REDERIVATION_PLAN.md §16.3 C2 ruling (e)) -- ruled player "
+        "input (the clock), both arms"
+    ),
+    judgment_free=True,
+    then_outcome=ArmOutcome(kind="input", detail="clock"),
+    else_outcome=ArmOutcome(kind="input", detail="clock"),
+)
+
+FAMILIES: tuple[ConditionFamily, ...] = _VANILLA_FAMILIES + _URANIUM_FAMILIES + (_TIME_OF_DAY_FAMILY,)
 
 # Duplicate-name guard, same reasoning as the head tables' guard (15.4): a
 # second family silently shadowing a first would make `classify_condition`
@@ -584,22 +618,27 @@ def classify_condition(text: str) -> ConditionFamily | None:
     assert exclusivity, so a future ambiguous pair fails soft (first-listed
     wins) rather than raising mid-generation.
 
-    A compound boolean never classifies, whatever its operands look like.
-    REDERIVATION_PLAN.md §14 ruling 2 is explicit that the compound outliers
-    "need judgment and get a fallback bucket, not a pattern", so this is the
-    ruling stated in code rather than left to the patterns to imply. It also
-    closes a real hole: every family's argument list is `.*`, and under
-    `fullmatch` a greedy `.*` happily spans a `)` and an operator, so
+    A compound boolean never classifies, whatever its operands look like --
+    with exactly one exception: `time_of_day` (REDERIVATION_PLAN.md §16.3 C2
+    ruling (e)), a real-time-clock compound found live on CH01-CH03 real
+    data by C2b's triggered-common-event guard. REDERIVATION_PLAN.md §14
+    ruling 2 is explicit that the OTHER compound outliers "need judgment and
+    get a fallback bucket, not a pattern", so this is the ruling stated in
+    code rather than left to the patterns to imply. It also closes a real
+    hole: every family's argument list is `.*`, and under `fullmatch` a
+    greedy `.*` happily spans a `)` and an operator, so
     `pbTrainerBattle(A) || pbTrainerBattle(B)` matched `pb_trainer_battle`
     before this guard -- a two-branch condition silently inheriting a
     single-call family's "no citation owed". Latent, not live: all 7
-    compound-boolean texts in the 199-map corpus already fell through to
-    `None` on their operands, so the guard changes no current row. It is
-    here so that the day one does not, the row owes a citation rather than
-    quietly claiming it does not.
+    non-clock compound-boolean texts in the 199-map corpus already fell
+    through to `None` on their operands, so the guard changes no current row
+    besides the clock one. It is here so that the day one does not, the row
+    owes a citation rather than quietly claiming it does not.
     """
     normalized = _normalize(text)
     if "||" in normalized or "&&" in normalized:
+        if _TIME_OF_DAY_FAMILY.pattern.fullmatch(normalized):
+            return _TIME_OF_DAY_FAMILY
         return None
     for family in FAMILIES:
         if family.pattern.fullmatch(normalized):

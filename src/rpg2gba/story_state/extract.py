@@ -10,6 +10,19 @@ recognized script idioms, and 117 common-event inlining).
 C2b (liveness, saturation, ordering, chapter chaining) consumes this
 module's `RowState` records; nothing here decides whether a row is ever
 actually reached.
+
+`extract_triggered_common_events` (REDERIVATION_PLAN.md §16.3 C2 ruling (e))
+mints a second family of `RowState`: a pseudo-row `common/ceNNN` (and its
+branch-arm children `common/ceNNN/bM`) per autorun/parallel common event,
+covering behaviour that runs with no map event or page of its own at all
+(RMXP fires a triggered common event globally, gated only on its own switch).
+These ids are model-internal -- they follow no `chapter_manifest.schema`
+grammar (`page_row_id`/`branch_row_id`/`seam_row_id`/`terrain_row_id`),
+`schema.parse_row_id` does not and should not recognize them, and they never
+appear in a manifest (`chapter_manifest` proper). `model.py` special-cases
+them (never routed through `parse_row_id`) and reports them in a separate
+`common_events` section rather than folding them into a chapter's own-map
+row list.
 """
 from __future__ import annotations
 
@@ -34,6 +47,7 @@ from rpg2gba.conversion_agent.transpiler import (
 from rpg2gba.story_state.state import (
     Adjust,
     Assign,
+    Key,
     Refusal,
     SelfSwitch,
     Switch,
@@ -58,6 +72,16 @@ _TRIGGER_NAMES: dict[int, str] = {
     0: "action", 1: "player_touch", 2: "event_touch", 3: "autorun", 4: "parallel",
 }
 _FORCED_TRIGGERS = frozenset({3, 4})  # autorun, parallel
+
+# Common-event triggers are a SEPARATE, shorter numbering from event-page
+# triggers above (RMXP's own `RPG::CommonEvent#trigger`: 0 none, 1 autorun,
+# 2 parallel -- no action/player_touch/event_touch, since a common event has
+# no map position of its own). Verified against the corpus: common event 51
+# ("Only Day people") and 10/11 ("RACING-Main"/"RACING-Mini") are all
+# `trigger=2` and are plainly parallel background processes, not something a
+# player "touches".
+_CE_TRIGGER_NAMES: dict[int, str] = {0: "none", 1: "autorun", 2: "parallel"}
+_CE_FORCED_TRIGGERS = frozenset({1, 2})
 
 _VAR_COMPARISONS: dict[int, str] = {0: "==", 1: ">=", 2: "<=", 3: ">", 4: "<", 5: "!="}
 _NEGATE_CMP: dict[str, str] = {
@@ -87,12 +111,23 @@ class ArmGuard:
     concretely parse (game_variables_cmp, is_temp_switch_off, plain
     switch/variable/self-switch 111) carries `tests` and the outcome for
     context. `choice_index` is set only for a 102/402/403 arm.
+
+    `opener_index` is `BranchRef.opener_index` -- the branch CONSTRUCT's own
+    position (shared by every arm of one 111/102), always populated. Combined
+    with a row's `parent_row_id` (the same for every arm of one construct),
+    `(parent_row_id, opener_index)` identifies "this specific branch
+    construct" -- `model.py`'s sibling-arm-join rule (REDERIVATION_PLAN.md
+    §16.3 C2b handback: input/random siblings join rather than conflict at
+    end-state) uses it to find which rows are mutually-exclusive alternatives
+    of the SAME opener, as opposed to two unrelated branches that happen to
+    share an enclosing scope.
     """
 
     tests: tuple[Test, ...] = ()
     negated: bool = False
     outcome: ArmOutcome | None = None
     choice_index: int | None = None
+    opener_index: int | None = None
 
 
 @dataclass(frozen=True)
@@ -120,6 +155,13 @@ class RowState:
     forced: bool
     refusals: tuple[Refusal, ...]
     event_page_row_ids: tuple[str, ...]
+    # REDERIVATION_PLAN.md §16.3 C2b handback FIX 2b: keys an
+    # `unparsed_state_write` on this row visibly named (best-effort, no
+    # attempt at the value) and whether some such write named NO
+    # recognizable key at all (a strictly worse "could be touching
+    # anything" claim). Neither implies the other.
+    havoc_keys: tuple[Key, ...] = ()
+    havoc_global: bool = False
 
 
 # --- page-condition reads ------------------------------------------------
@@ -208,7 +250,8 @@ def _arm_guard(
     if branch.arm_kind in ("choice", "cancel"):
         detail = "cancel" if branch.choice_index is None else f"choice_index={branch.choice_index}"
         return ArmGuard(outcome=ArmOutcome(kind="input", detail=detail),
-                         choice_index=branch.choice_index), ()
+                         choice_index=branch.choice_index,
+                         opener_index=branch.opener_index), ()
 
     is_else = branch.arm_kind == "else"
     opener = raw_commands[branch.opener_index]
@@ -224,7 +267,10 @@ def _arm_guard(
         switch_id, onoff = params[1], params[2]
         on = onoff == 0
         value = (not on) if is_else else on
-        return ArmGuard(tests=(Test(Switch(switch_id), "==", value),), negated=is_else), ()
+        return ArmGuard(
+            tests=(Test(Switch(switch_id), "==", value),), negated=is_else,
+            opener_index=branch.opener_index,
+        ), ()
 
     if ctype == 1:  # variable [1, id, operand_kind, operand, cmp]
         if len(params) < 5:
@@ -247,7 +293,10 @@ def _arm_guard(
             ),)
         if is_else:
             op = _NEGATE_CMP[op]
-        return ArmGuard(tests=(Test(Variable(var_id), op, operand),), negated=is_else), ()
+        return ArmGuard(
+            tests=(Test(Variable(var_id), op, operand),), negated=is_else,
+            opener_index=branch.opener_index,
+        ), ()
 
     if ctype == 2:  # self-switch [2, "A", 0=ON/1=OFF]
         if len(params) < 3:
@@ -260,11 +309,14 @@ def _arm_guard(
         value = (not on) if is_else else on
         return ArmGuard(
             tests=(Test(SelfSwitch(map_id, event_id, letter), "==", value),),
-            negated=is_else,
+            negated=is_else, opener_index=branch.opener_index,
         ), ()
 
     if ctype == 6:  # character facing -- player input, both arms
-        return ArmGuard(outcome=ArmOutcome(kind="input", detail="facing")), ()
+        return ArmGuard(
+            outcome=ArmOutcome(kind="input", detail="facing"),
+            opener_index=branch.opener_index,
+        ), ()
 
     if ctype == 12:  # script-typed -- classify via the family table
         text = branch.condition_text or ""
@@ -284,7 +336,7 @@ def _arm_guard(
                     op = _NEGATE_CMP[op]
                 return ArmGuard(
                     tests=(Test(Variable(var_id), op, value),),
-                    negated=is_else, outcome=outcome,
+                    negated=is_else, outcome=outcome, opener_index=branch.opener_index,
                 ), ()
         elif family.name == "is_temp_switch_off":
             m = _IS_TEMP_SWITCH_OFF_RE.fullmatch(" ".join(text.split()))
@@ -295,10 +347,10 @@ def _arm_guard(
                 value = is_else
                 return ArmGuard(
                     tests=(Test(TempSwitch(map_id, event_id, letter), "==", value),),
-                    negated=is_else, outcome=outcome,
+                    negated=is_else, outcome=outcome, opener_index=branch.opener_index,
                 ), ()
 
-        return ArmGuard(outcome=outcome, negated=is_else), ()
+        return ArmGuard(outcome=outcome, negated=is_else, opener_index=branch.opener_index), ()
 
     return None, (Refusal(
         "unhandled_condition_type",
@@ -318,14 +370,59 @@ _RE_PBSET = re.compile(r'^pbSet\(\s*(\d+)\s*,\s*(-?\d+)\s*\)$')
 
 _STATE_WRITE_SMELL_RE = re.compile(
     r'\$game_switches\[|\$game_variables\[|\$game_self_switches|pbSet\(|'
-    r'pbSetSelfSwitch\(|setTempSwitch\w*\s*\(.*(=|On|Off)|[+\-*/%]=')
+    r'pbSetSelfSwitch\(|setTempSwitch\w*\s*\(.*(=|On|Off)|'
+    # A compound assignment is state only when its target is: an index or
+    # call result (`pbGet(151)[pbGet(2)] += 1`, `$game_variables[1] += 1`) or
+    # a global/instance variable. A bare local (`x -= 2` in map050/ev019's
+    # starter script) is Ruby scratch, and treating it as an unnamed state
+    # write made every non-live row in CH01-CH05 `undetermined`.
+    r'(?:[\])]|[$@]\w+)\s*[+\-*/%]=')
+
+# --- havoc-key extraction for an UNPARSED state write (REDERIVATION_PLAN.md
+# §16.3 C2b handback, FIX 2b): "we cannot say what value this writes" must
+# not become "we cannot say ANYTHING downstream" -- so an unparsed write
+# still contributes whatever concrete KEYS it visibly names (best-effort,
+# regex-level, no attempt at the actual assigned value) to `RowState.
+# havoc_keys`; only a line naming no recognizable key at all sets
+# `havoc_global` (a true "could be touching anything" escape hatch). -------
+
+_RE_HAVOC_SWITCH = re.compile(r"\$game_switches\[\s*(\d+)\s*\]")
+_RE_HAVOC_VARIABLE = re.compile(r"\$game_variables\[\s*(\d+)\s*\]")
+_RE_HAVOC_PBSET_VAR = re.compile(r"pbSet\(\s*(\d+)")
+_RE_HAVOC_PBGET_VAR = re.compile(r"pbGet\(\s*(\d+)")
+_RE_HAVOC_SELF_SWITCH = re.compile(r'pbSetSelfSwitch\(\s*(\d+)\s*,\s*"([A-Za-z0-9])"')
+
+
+def _havoc_keys_in_line(line: str, map_id: int) -> tuple[frozenset[Key], bool]:
+    """Every key `line` visibly names, plus whether it named at least one.
+
+    `found=False` means the line matched `_STATE_WRITE_SMELL_RE` (it smells
+    like a state write) but named no key this function recognizes at all --
+    the caller sets `RowState.havoc_global` in that case, a strictly WORSE
+    (more conservative) claim than a per-key havoc.
+    """
+    keys: set[Key] = set()
+    for m in _RE_HAVOC_SWITCH.finditer(line):
+        keys.add(Switch(int(m.group(1))))
+    for m in _RE_HAVOC_VARIABLE.finditer(line):
+        keys.add(Variable(int(m.group(1))))
+    for m in _RE_HAVOC_PBSET_VAR.finditer(line):
+        keys.add(Variable(int(m.group(1))))
+    for m in _RE_HAVOC_PBGET_VAR.finditer(line):
+        keys.add(Variable(int(m.group(1))))
+    for m in _RE_HAVOC_SELF_SWITCH.finditer(line):
+        keys.add(SelfSwitch(map_id, int(m.group(1)), m.group(2)))
+    return frozenset(keys), bool(keys)
 
 
 def _extract_script_writes(
     text: str, map_id: int, event_id: int, conditional: bool, source_prefix: str,
-) -> tuple[tuple[Write, ...], tuple[Refusal, ...]]:
+    list_index: int,
+) -> tuple[tuple[Write, ...], tuple[Refusal, ...], frozenset[Key], bool]:
     writes: list[Write] = []
     refusals: list[Refusal] = []
+    havoc_keys: set[Key] = set()
+    havoc_global = False
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line:
@@ -336,47 +433,52 @@ def _extract_script_writes(
             other_event_id, letter, value = int(m.group(1)), m.group(2), m.group(3) == "true"
             writes.append(Assign(
                 SelfSwitch(map_id, other_event_id, letter), frozenset({value}),
-                conditional, source,
+                conditional, source, list_index,
             ))
             continue
         m = _RE_SET_TEMP_ON.match(line)
         if m:
             writes.append(Assign(
                 TempSwitch(map_id, event_id, m.group(1)), frozenset({True}),
-                conditional, source,
+                conditional, source, list_index,
             ))
             continue
         m = _RE_SET_TEMP_OFF.match(line)
         if m:
             writes.append(Assign(
                 TempSwitch(map_id, event_id, m.group(1)), frozenset({False}),
-                conditional, source,
+                conditional, source, list_index,
             ))
             continue
         m = _RE_GAME_SWITCH_ASSIGN.match(line)
         if m:
             writes.append(Assign(
                 Switch(int(m.group(1))), frozenset({m.group(2) == "true"}),
-                conditional, source,
+                conditional, source, list_index,
             ))
             continue
         m = _RE_GAME_VAR_ASSIGN.match(line)
         if m:
             writes.append(Assign(
                 Variable(int(m.group(1))), frozenset({int(m.group(2))}),
-                conditional, source,
+                conditional, source, list_index,
             ))
             continue
         m = _RE_PBSET.match(line)
         if m:
             writes.append(Assign(
                 Variable(int(m.group(1))), frozenset({int(m.group(2))}),
-                conditional, source,
+                conditional, source, list_index,
             ))
             continue
         if _STATE_WRITE_SMELL_RE.search(line):
             refusals.append(Refusal("unparsed_state_write", source))
-    return tuple(writes), tuple(refusals)
+            line_keys, found = _havoc_keys_in_line(line, map_id)
+            if found:
+                havoc_keys |= line_keys
+            else:
+                havoc_global = True
+    return tuple(writes), tuple(refusals), frozenset(havoc_keys), havoc_global
 
 
 def _extract_leaf_writes(
@@ -387,36 +489,45 @@ def _extract_leaf_writes(
     common_events_by_id: dict[int, dict[str, Any]],
     conditional: bool,
     visited_ce: frozenset[int],
-) -> tuple[tuple[Write, ...], tuple[Refusal, ...]]:
+) -> tuple[tuple[Write, ...], tuple[Refusal, ...], frozenset[Key], bool]:
+    """`index` is the WRITE'S ATTRIBUTED `list_index` (REDERIVATION_PLAN.md
+    §16.3 C2b handback FIX 1) -- already resolved by the caller
+    (`_extract_scope_writes`) to either the command's true page-list
+    position, or (inside an inlined common event) the calling 117's own
+    position -- used both for the human `source` citation and `Write.
+    list_index`. `117` recurses into `_extract_ce_writes` with that SAME
+    resolved `index` as the forced attribution for everything the inlined
+    event writes."""
     code = cmd.get("code")
     params = cmd.get("parameters") or []
 
     if code == CODE_SWITCH_WRITE:
         if len(params) < 3:
-            return (), (Refusal("malformed_write", f"code 121 @list[{index}]: too few params"),)
+            return (), (Refusal("malformed_write", f"code 121 @list[{index}]: too few params"),), frozenset(), False
         lo, hi, value = params[0], params[1], params[2]
         on = value == 0
         writes = tuple(
-            Assign(Switch(sid), frozenset({on}), conditional, f"code 121 @list[{index}]")
+            Assign(Switch(sid), frozenset({on}), conditional, f"code 121 @list[{index}]", index)
             for sid in range(lo, hi + 1)
         )
-        return writes, ()
+        return writes, (), frozenset(), False
 
     if code == CODE_VAR_WRITE:
         if len(params) < 5:
-            return (), (Refusal("malformed_write", f"code 122 @list[{index}]: too few params"),)
+            return (), (Refusal("malformed_write", f"code 122 @list[{index}]: too few params"),), frozenset(), False
         lo, hi, op, operand_kind, operand = params[0], params[1], params[2], params[3], params[4]
         writes: list[Write] = []
         refusals: list[Refusal] = []
         for vid in range(lo, hi + 1):
             source = f"code 122 @list[{index}]"
             if op == 0 and operand_kind == 0 and isinstance(operand, int):
-                writes.append(Assign(Variable(vid), frozenset({operand}), conditional, source))
+                writes.append(Assign(
+                    Variable(vid), frozenset({operand}), conditional, source, index))
             elif op == 0 and operand_kind == 2 and len(params) >= 6:
                 rlo, rhi = operand, params[5]
                 if isinstance(rlo, int) and isinstance(rhi, int) and rhi >= rlo:
                     writes.append(Assign(
-                        Variable(vid), frozenset(range(rlo, rhi + 1)), conditional, source))
+                        Variable(vid), frozenset(range(rlo, rhi + 1)), conditional, source, index))
                 else:
                     refusals.append(Refusal(
                         "nonconstant_variable_write",
@@ -424,50 +535,50 @@ def _extract_leaf_writes(
                     ))
             elif op in _VAR_OP_SYMBOLS and operand_kind == 0 and isinstance(operand, int):
                 writes.append(Adjust(
-                    Variable(vid), _VAR_OP_SYMBOLS[op], operand, conditional, source))
+                    Variable(vid), _VAR_OP_SYMBOLS[op], operand, conditional, source, index))
             else:
                 refusals.append(Refusal(
                     "nonconstant_variable_write",
                     f"{source}: variable {vid} op {op!r} operand_kind {operand_kind!r} "
                     f"operand {operand!r} not a constant-write shape",
                 ))
-        return tuple(writes), tuple(refusals)
+        return tuple(writes), tuple(refusals), frozenset(), False
 
     if code == CODE_SELF_SWITCH_WRITE:
         if len(params) < 2:
-            return (), (Refusal("malformed_write", f"code 123 @list[{index}]: too few params"),)
+            return (), (Refusal("malformed_write", f"code 123 @list[{index}]: too few params"),), frozenset(), False
         letter, value = params[0], params[1]
         writes = (Assign(
             SelfSwitch(map_id, event_id, letter), frozenset({value == 0}),
-            conditional, f"code 123 @list[{index}]",
+            conditional, f"code 123 @list[{index}]", index,
         ),)
-        return writes, ()
+        return writes, (), frozenset(), False
 
     if code == CODE_COMMON_EVENT_CALL:
         if not params:
-            return (), (Refusal("malformed_write", f"code 117 @list[{index}]: no params"),)
+            return (), (Refusal("malformed_write", f"code 117 @list[{index}]: no params"),), frozenset(), False
         ce_id = params[0]
         source_prefix = f"code 117 @list[{index}] (common event {ce_id})"
         if ce_id in visited_ce:
             return (), (Refusal(
                 "common_event_cycle",
                 f"{source_prefix}: already inlined on this path -- cycle",
-            ),)
+            ),), frozenset(), False
         ce = common_events_by_id.get(ce_id)
         if ce is None:
-            return (), (Refusal("missing_common_event", f"{source_prefix}: not found"),)
+            return (), (Refusal("missing_common_event", f"{source_prefix}: not found"),), frozenset(), False
         ce_commands = ce.get("list") or []
         tree = parse_tree(ce_commands)
         return _extract_ce_writes(
             tree, ce_commands, map_id, event_id, common_events_by_id,
-            conditional, visited_ce | {ce_id},
+            conditional, visited_ce | {ce_id}, forced_list_index=index,
         )
 
     if code in (CODE_SCRIPT, CODE_SCRIPT_CONT):
         # Handled at the caller as grouped script blocks, not per-leaf.
-        return (), ()
+        return (), (), frozenset(), False
 
-    return (), ()
+    return (), (), frozenset(), False
 
 
 def _extract_scope_writes(
@@ -477,18 +588,32 @@ def _extract_scope_writes(
     common_events_by_id: dict[int, dict[str, Any]],
     conditional: bool,
     visited_ce: frozenset[int],
-) -> tuple[tuple[Write, ...], tuple[Refusal, ...]]:
+    *,
+    index_of: dict[int, int],
+    forced_list_index: int | None,
+) -> tuple[tuple[Write, ...], tuple[Refusal, ...], frozenset[Key], bool]:
     """Writes directly in one flat (already-scoped) command list -- a page
     trunk's own commands, a branch arm's own commands, or one scope of an
     inlined common event. Scripts (355/655) are grouped into blocks first
     (a block can span several consecutive commands), everything else is
-    dispatched per leaf command."""
+    dispatched per leaf command.
+
+    `index_of` maps `id(cmd)` -> that command's position in its OWNING
+    PAGE's raw `list` (built once per page/common-event by the caller);
+    `forced_list_index`, when not `None`, overrides it for every write in
+    this scope -- used when this scope is itself inside an inlined common
+    event, so every write it produces is attributed to the calling page's
+    117 command instead of a meaningless position inside the callee's own
+    body (REDERIVATION_PLAN.md §16.3 C2b handback FIX 1)."""
     writes: list[Write] = []
     refusals: list[Refusal] = []
+    havoc_keys: set[Key] = set()
+    havoc_global = False
     i = 0
     while i < len(commands):
         cmd = commands[i]
         code = cmd.get("code")
+        resolved_index = forced_list_index if forced_list_index is not None else index_of.get(id(cmd), -1)
         if code == CODE_SCRIPT:
             parts = [str((cmd.get("parameters") or [""])[0] if cmd.get("parameters") else "")]
             j = i + 1
@@ -497,18 +622,23 @@ def _extract_scope_writes(
                 parts.append(str(p[0]) if p else "")
                 j += 1
             text = "\n".join(parts)
-            source_prefix = f"script @list[{i}]"
-            w, r = _extract_script_writes(text, map_id, event_id, conditional, source_prefix)
+            source_prefix = f"script @list[{resolved_index}]"
+            w, r, hk, hg = _extract_script_writes(
+                text, map_id, event_id, conditional, source_prefix, resolved_index)
             writes.extend(w)
             refusals.extend(r)
+            havoc_keys |= hk
+            havoc_global = havoc_global or hg
             i = j
             continue
-        w, r = _extract_leaf_writes(
-            cmd, i, map_id, event_id, common_events_by_id, conditional, visited_ce)
+        w, r, hk, hg = _extract_leaf_writes(
+            cmd, resolved_index, map_id, event_id, common_events_by_id, conditional, visited_ce)
         writes.extend(w)
         refusals.extend(r)
+        havoc_keys |= hk
+        havoc_global = havoc_global or hg
         i += 1
-    return tuple(writes), tuple(refusals)
+    return tuple(writes), tuple(refusals), frozenset(havoc_keys), havoc_global
 
 
 def _extract_ce_writes(
@@ -519,44 +649,65 @@ def _extract_ce_writes(
     common_events_by_id: dict[int, dict[str, Any]],
     conditional: bool,
     visited_ce: frozenset[int],
-) -> tuple[tuple[Write, ...], tuple[Refusal, ...]]:
+    *,
+    forced_list_index: int,
+) -> tuple[tuple[Write, ...], tuple[Refusal, ...], frozenset[Key], bool]:
     """Inlines one common event: its own trunk writes inherit the caller's
     `conditional` flag; anything inside any of ITS OWN branch arms
     (recursively) is forced `conditional=True` (REDERIVATION_PLAN.md §16.3
-    C2a item 4)."""
+    C2a item 4). EVERY write produced here -- trunk or nested arm -- carries
+    `forced_list_index` (the calling 117's own position), never a position
+    inside the callee's own command list; the callee's internal branching
+    still matters for `conditional`, just not for cross-page write ordering.
+    """
     writes: list[Write] = []
     refusals: list[Refusal] = []
+    havoc_keys: set[Key] = set()
+    havoc_global = False
 
     trunk_commands = _flatten_scope(tree, commands)
-    w, r = _extract_scope_writes(
-        trunk_commands, map_id, event_id, common_events_by_id, conditional, visited_ce)
+    w, r, hk, hg = _extract_scope_writes(
+        trunk_commands, map_id, event_id, common_events_by_id, conditional, visited_ce,
+        index_of={}, forced_list_index=forced_list_index,
+    )
     writes.extend(w)
     refusals.extend(r)
+    havoc_keys |= hk
+    havoc_global = havoc_global or hg
 
     def _walk(nodes: list[Node]) -> None:
+        nonlocal havoc_global
         for node in nodes:
             if isinstance(node, IfNode):
                 for children in (node.then, node.otherwise if node.otherwise is not None else []):
                     arm_commands = _flatten_scope(children, commands)
-                    w2, r2 = _extract_scope_writes(
-                        arm_commands, map_id, event_id, common_events_by_id, True, visited_ce)
+                    w2, r2, hk2, hg2 = _extract_scope_writes(
+                        arm_commands, map_id, event_id, common_events_by_id, True, visited_ce,
+                        index_of={}, forced_list_index=forced_list_index,
+                    )
                     writes.extend(w2)
                     refusals.extend(r2)
+                    havoc_keys.update(hk2)
+                    havoc_global = havoc_global or hg2
                     _walk(children)
             elif isinstance(node, ChoiceNode):
                 for _, _, children in node.arms:
                     arm_commands = _flatten_scope(children, commands)
-                    w2, r2 = _extract_scope_writes(
-                        arm_commands, map_id, event_id, common_events_by_id, True, visited_ce)
+                    w2, r2, hk2, hg2 = _extract_scope_writes(
+                        arm_commands, map_id, event_id, common_events_by_id, True, visited_ce,
+                        index_of={}, forced_list_index=forced_list_index,
+                    )
                     writes.extend(w2)
                     refusals.extend(r2)
+                    havoc_keys.update(hk2)
+                    havoc_global = havoc_global or hg2
                     _walk(children)
             elif isinstance(node, LoopNode):
                 _walk(node.children)
             # Leaf / TextRun: no nested branch structure.
 
     _walk(tree)
-    return tuple(writes), tuple(refusals)
+    return tuple(writes), tuple(refusals), frozenset(havoc_keys), havoc_global
 
 
 # --- top-level entry point -----------------------------------------------
@@ -589,6 +740,11 @@ def extract_map(
         for page, scopes in per_page_scopes:
             raw_condition = page.get("condition") or {}
             raw_commands = page.get("list") or []
+            # id(cmd) -> this command's true position in THIS PAGE's own
+            # list (REDERIVATION_PLAN.md §16.3 C2b handback FIX 1) -- every
+            # scope's commands are the SAME dict objects sliced out of
+            # `raw_commands` by `_flatten_scope`, so identity lookup works.
+            index_of = {id(cmd): idx for idx, cmd in enumerate(raw_commands)}
             page_tests, page_refusals = _page_condition_reads(
                 raw_condition, map_id, event_id, switch_labels)
             trigger_raw = page.get("trigger")
@@ -602,9 +758,10 @@ def extract_map(
                     arm_guard, guard_refusals = _arm_guard(
                         scope.branch, raw_commands, map_id, event_id)
 
-                writes, write_refusals = _extract_scope_writes(
+                writes, write_refusals, havoc_keys, havoc_global = _extract_scope_writes(
                     scope.commands, map_id, event_id, common_events_by_id,
                     False, frozenset(),
+                    index_of=index_of, forced_list_index=None,
                 )
 
                 result[scope.row_id] = RowState(
@@ -618,6 +775,122 @@ def extract_map(
                     forced=forced,
                     refusals=guard_refusals + write_refusals,
                     event_page_row_ids=event_page_row_ids,
+                    havoc_keys=tuple(sorted(havoc_keys, key=repr)),
+                    havoc_global=havoc_global,
                 )
+
+    return result
+
+
+# --- triggered common events (pseudo-rows) --------------------------------
+
+
+def _pseudo_ce_row_id(ce_id: int) -> str:
+    return f"common/ce{ce_id:03d}"
+
+
+def extract_triggered_common_events(
+    common_events: list[dict[str, Any]],
+    *,
+    switch_labels: dict[int, str],
+) -> dict[str, "RowState"]:
+    """One pseudo-`RowState` family per autorun/parallel common event
+    (REDERIVATION_PLAN.md §16.3 C2 ruling (e)): a trunk row `common/ceNNN`
+    gated on the common event's own `switch_id`, plus a branch-arm child row
+    `common/ceNNN/bM` per branch arm, using the SAME scope walk as a map
+    page (`chapter_manifest.generator.iter_page_scopes`) -- the common
+    event's own command list is walked exactly as if it were one page's
+    `list`, then the resulting row ids are remapped from the page/branch
+    grammar onto the `common/ceNNN[/bM]` pseudo grammar (see this module's
+    docstring for why these ids never go through `schema.parse_row_id`).
+
+    A common event has no map or event identity of its own, so:
+      - its trunk `page_tests` is exactly the one `Switch(switch_id) == True`
+        gate RMXP itself checks before running it (both `forced=True`, a
+        single-page `event_page_row_ids`, so the highest-live-page kill rule
+        never applies -- there IS no higher page);
+      - a self-switch write inside it is invalid (RMXP has no "current event"
+        for a common event to write its own self-switch against) and is
+        refused rather than silently attributed to a bogus (map_id, event_id).
+    """
+    result: dict[str, RowState] = {}
+
+    for ce in common_events:
+        trigger_raw = ce.get("trigger")
+        if trigger_raw not in _CE_FORCED_TRIGGERS:
+            continue
+        switch_id = ce.get("switch_id")
+        if not switch_id:
+            continue
+        ce_id = ce["id"]
+        trunk_row_id = _pseudo_ce_row_id(ce_id)
+        trigger = _CE_TRIGGER_NAMES.get(trigger_raw, str(trigger_raw))
+
+        label = switch_labels.get(switch_id)
+        if label is not None and label.startswith("s:"):
+            result[trunk_row_id] = RowState(
+                row_id=trunk_row_id, parent_row_id=None,
+                page_tests=(), page_refusals=(Refusal(
+                    "unmodelled_predicate",
+                    f"common event {ce_id} gating switch {switch_id}: runtime "
+                    f"predicate {label!r}, not a plain switch -- not modelled",
+                ),),
+                arm_guard=None, writes=(), trigger=trigger, forced=True,
+                refusals=(), event_page_row_ids=(trunk_row_id,),
+            )
+            continue
+
+        page_tests = (Test(Switch(switch_id), "==", True),)
+        commands = ce.get("list") or []
+        index_of = {id(cmd): idx for idx, cmd in enumerate(commands)}
+        scopes = iter_page_scopes(0, {"id": ce_id}, 0, {"list": commands})
+
+        id_map: dict[str, str] = {scopes[0].row_id: trunk_row_id}
+        page_prefix = scopes[0].row_id
+        for scope in scopes[1:]:
+            suffix = scope.row_id[len(page_prefix):]  # e.g. "/b2"
+            id_map[scope.row_id] = trunk_row_id + suffix
+
+        for scope in scopes:
+            new_row_id = id_map[scope.row_id]
+            new_parent_row_id = (
+                id_map[scope.parent_row_id] if scope.parent_row_id is not None else None
+            )
+            arm_guard: ArmGuard | None = None
+            guard_refusals: tuple[Refusal, ...] = ()
+            if scope.branch is not None:
+                arm_guard, guard_refusals = _arm_guard(
+                    scope.branch, commands, map_id=0, event_id=ce_id)
+
+            raw_writes, write_refusals, havoc_keys, havoc_global = _extract_scope_writes(
+                scope.commands, 0, ce_id, {}, False, frozenset(),
+                index_of=index_of, forced_list_index=None,
+            )
+            writes: list[Write] = []
+            self_switch_refusals: list[Refusal] = []
+            for w in raw_writes:
+                if isinstance(w.key, SelfSwitch):
+                    self_switch_refusals.append(Refusal(
+                        "invalid_self_switch_write_in_common_event",
+                        f"common event {ce_id}: {w.source} -- a common event "
+                        "has no self-switch of its own",
+                    ))
+                else:
+                    writes.append(w)
+
+            result[new_row_id] = RowState(
+                row_id=new_row_id,
+                parent_row_id=new_parent_row_id,
+                page_tests=page_tests,
+                page_refusals=(),
+                arm_guard=arm_guard,
+                writes=tuple(writes),
+                trigger=trigger,
+                forced=True,
+                refusals=guard_refusals + write_refusals + tuple(self_switch_refusals),
+                event_page_row_ids=(trunk_row_id,),
+                havoc_keys=tuple(sorted(havoc_keys, key=repr)),
+                havoc_global=havoc_global,
+            )
 
     return result
