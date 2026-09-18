@@ -53,6 +53,15 @@ def _connections(build_dir: str) -> tuple[list, ...]:
 
 
 @cache
+def _door_cells(build_dir: str) -> dict[int, frozenset[tuple[int, int]]]:
+    """The emitted layout's door cells (`walk.load_door_cells`), for the
+    `warp` floor's `arrives_on_door`."""
+    from rpg2gba.beat_floor.walk import load_door_cells
+
+    return load_door_cells(build_dir)
+
+
+@cache
 def floor_for_map_cached(build_dir: str, map_id: int) -> dict[str, RowFloor]:
     from rpg2gba.beat_floor.walk import floor_for_map
 
@@ -61,6 +70,7 @@ def floor_for_map_cached(build_dir: str, map_id: int) -> dict[str, RowFloor]:
     return floor_for_map(
         map_id, map_data,
         common_events=_common_events(build_dir), switch_labels=_switch_labels(),
+        door_cells=_door_cells(build_dir),
         connections=list(_connections(build_dir)))
 
 

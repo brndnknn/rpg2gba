@@ -494,7 +494,8 @@ def b3_up(emu: Emulator) -> None:
                 f"EV005's run-once parallel page never ran ({shot})")
     assertions.assert_position_exact(emu, "B3_up", STAIRS_UP_ARRIVAL)
     assertions.assert_player_facing(
-        emu, "B3_up", assertions.expected_arrival_facing(48, *STAIRS_UP_ARRIVAL))
+        emu, "B3_up",
+        assertions.expected_arrival_facing(49, STAIRS_UP, STAIRS_UP_DIRECTION))
 
 
 @ch01.beat("B3_signs", "Every bedroom sign answers A with its text, and the "

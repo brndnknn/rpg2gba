@@ -4,6 +4,10 @@
 **Status:** **DECIDED 2026-09-18 (operator), in a wider form than proposed — read §0 first.** §0 is
 authoritative; §§1–7 below are the original proposal, kept for its reasoning and measurements.
 Where they disagree, §0 wins. Lands as step **C5b** of `REDERIVATION_PLAN.md` §16.3.
+**LANDED 2026-09-18 (unit-green, not ROM-run).** Two deviations from §0's letter, both recorded
+in §16.3 "C5b landed": `struct WarpEvent` is 12 bytes, not 10 (modern's `-mabi=apcs-gnu` rounds
+struct sizes to 4), and `ScrCmd_warp` keeps vanilla's Reset and carries only the direction
+(bike/surf flags still reset) rather than calling `StoreInitialPlayerAvatarState`.
 **Origin:** operator, 2026-09-17, while auditing `reference/warp_facing_overrides.json`.
 **Scope:** the 449 of 1085 RMXP transfers (41.4%) whose `dir` parameter is 0.
 

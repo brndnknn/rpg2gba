@@ -82,7 +82,7 @@ POSITIVE_EXAMPLES = [
     "stuck after 6 step-aside attempts at 14,22 heading for 16,22",
     # wrong facing (assertions.py assert_player_facing)
     "B9: player facing DIR_SOUTH, expected DIR_NORTH (derived live from "
-    "compute_arrival_facings over this build's own staged output) (shot.png)",
+    "this build's own staged warp direction) (shot.png)",
     # wrong BGM (assertions.py assert_bgm)
     "B12: gMPlayInfo_BGM is playing song id 87, expected 42 "
     "(engine/data/maps/Route1/map.json's own \"music\" key) (shot.png)",

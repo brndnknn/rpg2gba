@@ -50,6 +50,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..conversion_agent.deterministic import RMXP_DIRECTION_TO_DIR_CONST
 from ..conversion_agent.flag_registry import (
     TERMINAL_HIDE_FLAG_PLACEHOLDER,
     FlagRegistry,
@@ -69,7 +70,6 @@ from .npc_gfx import (
     select_boot_page,
     static_face_spec,
 )
-from .layout import TileGrid, column_blocked, column_key
 from .route_bytecode import RouteRegistry
 from .route_sim import simulate_route
 from .stairs import StairSide, stair_cell_sides, stair_event_ids
@@ -85,23 +85,27 @@ NO_SCRIPT = "0x0"
 
 TRANSFER_CODE = 201  # RMXP "Transfer Player"; params [method, dest_map, x, y, dir, fade]
 
-# RMXP Transfer Player `dir` param -> the direction the player faces on arrival
-# (numpad convention), for the explicit tier-2 directions. 0 ("retain current
-# facing") is NOT looked up here: RMXP retain means "keep facing the direction
-# you were already walking", which the engine's own `GetAdjustedInitialDirection`
-# (overworld.c) cannot reproduce for our plain-floor arrival tiles — it always
-# falls through to DIR_SOUTH. `compute_arrival_facings`' tier 3 derives the real
-# retain direction instead, from the source warp's approach geometry. (2026-07-16
-# decision to skip dir=0 outright is superseded — see reference/warp_facing_overrides.json.)
-_ARRIVAL_DIR_CONST = {2: "DIR_SOUTH", 4: "DIR_WEST", 6: "DIR_EAST", 8: "DIR_NORTH"}
+# RMXP Transfer Player `dir` param (numpad convention) -> the engine DIR_*
+# constant the player faces on arrival. 0 / None ("retain current facing") maps
+# to the warp_event's `"facing": "0"`: the engine keeps the facing the player
+# walked in with (RPG2GBA_WARP_RETAIN_FACING, engine/include/config/rpg2gba.h;
+# WARP_RETAIN_FACING_PROPOSAL.md §0 R2). The direction rides on the DEPARTURE
+# warp, so no arrival-side coordinate table is needed.
+RETAIN_FACING = "0"
 
-# Scratch vars for the on-warp facing script. VAR_TEMP_1 == 0 is the vanilla
-# ON_WARP_INTO_MAP_TABLE trigger idiom (temp vars are zeroed by
-# ClearTempFieldEventData on every map transition, event_data.c); TEMP_2/3 hold
-# the getplayerxy readback. All three are scratch inside one synchronous script.
-_FACING_GUARD_VAR = "VAR_TEMP_1"
-_FACING_X_VAR = "VAR_TEMP_2"
-_FACING_Y_VAR = "VAR_TEMP_3"
+
+def warp_facing_for(dest_dir: int | None) -> str:
+    """The warp_event `"facing"` value for an RMXP transfer direction: a DIR_*
+    constant for 2/4/6/8, `RETAIN_FACING` for 0/None. Fails loud on anything
+    else (CLAUDE.md §4.5)."""
+    if dest_dir in (0, None):
+        return RETAIN_FACING
+    try:
+        return RMXP_DIRECTION_TO_DIR_CONST[dest_dir]
+    except KeyError:
+        raise ValueError(
+            f"unknown RMXP transfer direction {dest_dir!r} (expected one of 0/2/4/6/8)"
+        ) from None
 
 # ON_FRAME_TABLE guard var: 0 while the per-visit autorun dispatch is still
 # live, set to 1 the first frame no autorun page's guard matches (see
@@ -590,6 +594,9 @@ class WarpEvent:
     y: int
     dest_map: str
     dest_warp_id: int = 0
+    # Arrival facing carried on this (departure) warp — `warp_facing_for`.
+    # Arrival-only warp_events are never stepped on, so theirs stays retain.
+    facing: str = RETAIN_FACING
 
     def to_dict(self) -> dict:
         return {
@@ -598,6 +605,7 @@ class WarpEvent:
             "elevation": 0,
             "dest_map": self.dest_map,
             "dest_warp_id": str(self.dest_warp_id),
+            "facing": self.facing,
         }
 
 
@@ -3131,329 +3139,28 @@ def _map_dims(map_json: dict) -> tuple[int, int]:
     return map_json["width"], map_json["height"]
 
 
-@dataclass(frozen=True)
-class ArrivalFacing:
-    """Where the player lands, and which way Uranium says they should face."""
-
-    x: int
-    y: int
-    dir_const: str  # an engine DIR_* constant
-
-
-# Reverse of the RMXP "retain facing" (dest_dir == 0) derivation: an OPEN
-# non-sibling, non-blocked neighbour of the source warp cell at this (dx, dy)
-# offset means the player approached FROM that neighbour, so they were walking
-# in the opposite compass direction — which is the direction they're still
-# facing the instant they land (see `_derive_retain_facing`).
-_FACING_AWAY_FROM_OFFSET = {
-    (0, -1): "DIR_SOUTH",  # neighbour to the north -> arrived walking south
-    (0, 1): "DIR_NORTH",   # neighbour to the south -> arrived walking north
-    (-1, 0): "DIR_EAST",   # neighbour to the west -> arrived walking east
-    (1, 0): "DIR_WEST",    # neighbour to the east -> arrived walking west
-}
-
-
-def _derive_retain_facing(
-    src_uid: int,
-    spec: "WarpSpec",
-    maps: dict[int, dict],
-    tilesets: dict,
-    warp_lists: dict[int, list["WarpSpec"]],
-) -> str:
-    """Tier 3: reconstruct the facing an RMXP `dest_dir == 0` ("retain current
-    facing") arrival resolves to in practice — the direction the player was
-    walking when they stepped onto the SOURCE warp cell.
-
-    Looks at the 4-neighbours of the source cell (`spec.src_x`, `spec.src_y`)
-    on the SOURCE map (`src_uid`), discarding: off-map neighbours; neighbours
-    that are themselves another warp's source cell on this same map (a
-    multi-tile-wide door/edge warp's sibling cells must not count as each
-    other's approach); and BLOCKED neighbours (RMXP multi-layer passability,
-    `layout.column_blocked`). Exactly one survivor means the player walked in
-    from there, so they're facing away from it. Fails loud (§4.5) on 0 or 2+
-    survivors — genuinely ambiguous geometry needs a human call via
-    `reference/warp_facing_overrides.json`, not a guess."""
-    src_map = maps[src_uid]
-    width, height = _map_dims(src_map)
-    tileset_id = src_map["tileset_id"]
-    try:
-        tileset = tilesets[str(tileset_id)]
-    except KeyError:
-        raise KeyError(
-            f"map {src_uid}: tileset {tileset_id} missing from tilesets.json "
-            f"(needed to derive retain-facing for its warp -> map {spec.dest_uid} "
-            f"({spec.dest_x}, {spec.dest_y}))"
-        ) from None
-    tiles = src_map["tiles"]
-    grid = TileGrid(
-        xsize=tiles["xsize"], ysize=tiles["ysize"], zsize=tiles["zsize"], data=tiles["data"],
-    )
-    sibling_cells = {(s.src_x, s.src_y) for s in warp_lists.get(src_uid, [])}
-    survivors: list[tuple[int, int]] = []
-    for dx, dy in _FACING_AWAY_FROM_OFFSET:
-        nx, ny = spec.src_x + dx, spec.src_y + dy
-        if not (0 <= nx < width and 0 <= ny < height):
-            continue
-        if (nx, ny) in sibling_cells:
-            continue
-        if column_blocked(
-            column_key(grid, nx, ny),
-            passages=tileset["passages"],
-            priorities=tileset.get("priorities"),
-            terrain_tags=tileset.get("terrain_tags"),
-        ):
-            continue
-        survivors.append((nx, ny))
-    if len(survivors) != 1:
-        override_key = f"{spec.dest_uid}:{spec.dest_x}:{spec.dest_y}"
-        raise ValueError(
-            f"map {src_uid} warp at ({spec.src_x}, {spec.src_y}) -> map "
-            f"{spec.dest_uid} arrival ({spec.dest_x}, {spec.dest_y}): dest_dir=0 "
-            f'("retain facing") is ambiguous — {len(survivors)} open non-sibling, '
-            f"unblocked neighbour(s) found {sorted(survivors)!r} (need exactly 1). "
-            f'Add "{override_key}": "DIR_<NORTH|SOUTH|EAST|WEST>" to '
-            f"reference/warp_facing_overrides.json to resolve it."
-        )
-    nx, ny = survivors[0]
-    return _FACING_AWAY_FROM_OFFSET[(nx - spec.src_x, ny - spec.src_y)]
-
-
-def load_warp_facing_overrides(
-    reference_dir: Path = DEFAULT_STRIP_LIST_DIR,
-) -> dict[tuple[int, int, int], str]:
-    """`reference/warp_facing_overrides.json` -> `{(dest_uid, x, y): DIR_*}`,
-    `compute_arrival_facings`' tier-1 hand overrides (CLAUDE.md §4.3 — this
-    file is the source of truth for a corrected arrival facing).
-
-    Fails loud (§4.5) on a malformed `"<dest_uid>:<x>:<y>"` key or an unknown
-    DIR_* value. Whether each surviving key actually matches a real in-bounds
-    arrival is checked by `compute_arrival_facings` itself, once it knows the
-    resolved arrival set — a stale/typo'd key that matches nothing is a bug in
-    this file just as much as a bad direction is, so that also fails loud."""
-    path = reference_dir / "warp_facing_overrides.json"
-    data = json.loads(path.read_text(encoding="utf-8"))
-    known_dirs = set(_ARRIVAL_DIR_CONST.values())
-    out: dict[tuple[int, int, int], str] = {}
-    for raw_key, dir_const in data.get("overrides", {}).items():
-        parts = raw_key.split(":")
-        if len(parts) != 3 or not all(p.lstrip("-").isdigit() for p in parts):
-            raise ValueError(
-                f'{path}: malformed override key {raw_key!r}; expected '
-                f'"<dest_uid>:<x>:<y>"'
-            )
-        dest_uid, x, y = (int(p) for p in parts)
-        if dir_const not in known_dirs:
-            raise ValueError(
-                f"{path}: override {raw_key!r} has unknown direction "
-                f"{dir_const!r} (expected one of {sorted(known_dirs)})"
-            )
-        out[(dest_uid, x, y)] = dir_const
-    return out
-
-
-def compute_arrival_facings(
-    warp_lists: dict[int, list[WarpSpec]],
-    maps: dict[int, dict],
-    tilesets: dict | None = None,
-    overrides: dict[tuple[int, int, int], str] | None = None,
-) -> dict[int, list[ArrivalFacing]]:
-    """Per-map arrival coord -> post-warp facing.
-
-    Realized as an ON_WARP_INTO_MAP_TABLE map script rather than arrival-tile
-    metatile behaviors: the `MB_*_ARROW_WARP` behaviors that would produce the
-    same facing natively are also *live step-triggers* (`TryArrowWarp`), and the
-    engine pairs each one's trigger direction with the direction a player
-    naturally looks right after arriving — so they re-warp on the way out. See
-    `WARP_FACING_HANDOFF.md` (git stash) for the full trace.
-
-    `overrides` (`{(dest_uid, x, y): DIR_*}`) defaults to `None`, which
-    auto-loads `load_warp_facing_overrides()` (mirrors `build_slice_maps`'
-    `stripped_event_ids=None` convention) — pass `{}` explicitly to opt out
-    (e.g. an isolated unit test with no reference-file dependency). Validation
-    of an override's key against the resolved arrival set (see tier 1 below)
-    only applies to keys whose `dest_uid` appears in `maps` — a caller that
-    only loaded a handful of maps (a synthetic fixture, a partial slice) isn't
-    on the hook for override entries about maps it never mentioned.
-
-    Three precedence tiers per arrival, highest first:
-      1. `overrides` — a hand call always wins.
-      2. `spec.dest_dir` in `{2, 4, 6, 8}` — the explicit RMXP Transfer Player
-         direction, via `_ARRIVAL_DIR_CONST`. UNCHANGED from the original
-         (pre-tier-3) behavior.
-      3. `spec.dest_dir` in `{0, None}` ("retain facing") — derived from the
-         source warp's approach geometry by `_derive_retain_facing`, which
-         needs `tilesets` (Phase-3 `tilesets.json`, keyed by `str(tileset_id)`)
-         to compute passability. If `tilesets` is `None` (no tileset data
-         given), tier 3 is SKIPPED with a logged warning instead of derived —
-         the arrival gets no facing entry at all, i.e. the engine's own
-         DIR_SOUTH default applies, exactly like the original behavior. The
-         sole production caller (`build_slice_maps`) always loads and forwards
-         `tilesets`, so this fallback is unreachable there; it exists only so
-         callers that never pass `tilesets` (direct unit tests, callers with
-         no tilesets.json) still get a well-defined, non-crashing result.
-
-    Skips out-of-bounds arrivals, which get no arrival warp_event of their own
-    in `_resolve_all_warp_events` and so have no distinct landing tile to key
-    on — before consulting any tier, including `overrides`.
-
-    Fail-loud (§4.5) on: an unknown non-zero/non-override direction; two
-    arrivals sharing one coord with different facings (coordinate dispatch
-    cannot tell those apart, and silently picking one would be wrong half the
-    time); a tier-3 derivation with zero or 2+ surviving approach neighbours
-    (`_derive_retain_facing`); and an `overrides` entry that matches no
-    in-bounds arrival (a stale/typo'd key is a silent no-op otherwise).
-    """
-    if overrides is None:
-        overrides = load_warp_facing_overrides()
-    out: dict[int, list[ArrivalFacing]] = {}
-    seen: dict[tuple[int, int, int], str] = {}
-    used_override_keys: set[tuple[int, int, int]] = set()
-    for src_uid, specs in warp_lists.items():
-        for spec in specs:
-            dest_map_json = maps.get(spec.dest_uid)
-            if dest_map_json is not None:
-                width, height = _map_dims(dest_map_json)
-                if not (0 <= spec.dest_x < width and 0 <= spec.dest_y < height):
-                    continue  # no arrival warp_event exists; nothing to key on
-
-            key = (spec.dest_uid, spec.dest_x, spec.dest_y)
-
-            if key in overrides:
-                dir_const = overrides[key]
-                used_override_keys.add(key)
-            elif spec.dest_dir in (0, None):
-                if tilesets is None:
-                    logger.warning(
-                        "map %d warp -> map %d (%d, %d): dest_dir=0/None and no "
-                        "tileset data given; skipping arrival-facing derivation "
-                        "(engine default DIR_SOUTH applies)",
-                        src_uid, spec.dest_uid, spec.dest_x, spec.dest_y,
-                    )
-                    continue
-                dir_const = _derive_retain_facing(src_uid, spec, maps, tilesets, warp_lists)
-            else:
-                dir_const = _ARRIVAL_DIR_CONST.get(spec.dest_dir)
-                if dir_const is None:
-                    raise ValueError(
-                        f"map {src_uid} warp -> {spec.dest_uid}: unknown RMXP transfer "
-                        f"direction {spec.dest_dir!r} (expected one of 0/2/4/6/8)"
-                    )
-
-            existing = seen.get(key)
-            if existing is not None:
-                if existing != dir_const:
-                    raise ValueError(
-                        f"map {spec.dest_uid} arrival ({spec.dest_x}, {spec.dest_y}): "
-                        f"conflicting arrival facings {existing} vs {dir_const} — two "
-                        f"warps land on one tile wanting different directions, which "
-                        f"coordinate dispatch cannot distinguish"
-                    )
-                continue  # same coord, same facing: one table row covers both
-            seen[key] = dir_const
-            out.setdefault(spec.dest_uid, []).append(
-                ArrivalFacing(spec.dest_x, spec.dest_y, dir_const)
-            )
-
-    # Only flag an unused override as stale if its dest map is one this call
-    # actually knows about — a caller with a partial `maps` (a synthetic
-    # fixture, a slice that doesn't include that map) can't have matched it
-    # regardless, and that's not the override's fault.
-    unused = sorted(
-        key for key in set(overrides) - used_override_keys if key[0] in maps
-    )
-    if unused:
-        keys_repr = ", ".join(f'"{u}:{x}:{y}"' for u, x, y in unused)
-        raise ValueError(
-            f"reference/warp_facing_overrides.json: override key(s) {keys_repr} "
-            f"match no in-bounds warp arrival — remove or fix the stale entry"
-        )
-    return out
-
-
-def _on_warp_block(
-    consts: MapConstants, facings: list[ArrivalFacing]
-) -> tuple[str, str] | None:
-    """The ON_WARP_INTO_MAP_TABLE entry + its facing script, shared by
-    `render_arrival_facing_script` (standalone caller/tests) and
-    `render_map_scripts` (the unified emitter). Returns
-    `(table_entry, script_text)`, or `None` for no facings.
-
-    Uses the vanilla ON_WARP_INTO_MAP_TABLE idiom (see any Battle Frontier
-    lobby): the table fires when VAR_TEMP_1 == 0, and the script guards
-    itself by setting it. The hook runs in `InitObjectEventsLocal`
-    (overworld.c) *after* `InitPlayerAvatar` has applied the engine's default
-    facing and well before the screen fades in, so the turn is invisible.
-
-    Every command here must be non-blocking: `TryRunOnWarpIntoMapScript` uses
-    `RunScriptImmediately`, which runs the script to completion in one call."""
-    if not facings:
-        return None
-    label = f"{consts.dir_name}_OnWarpFacing"
-    table_entry = f"{_FACING_GUARD_VAR}, 0: {label}"
-    lines = [
-        f"script {label} {{",
-        f"    setvar({_FACING_GUARD_VAR}, 1)",
-        f"    getplayerxy({_FACING_X_VAR}, {_FACING_Y_VAR})",
-    ]
-    for i, f in enumerate(sorted(facings, key=lambda a: (a.y, a.x))):
-        kw = "if" if i == 0 else "elif"
-        lines.append(
-            f"    {kw} (var({_FACING_X_VAR}) == {f.x} "
-            f"&& var({_FACING_Y_VAR}) == {f.y}) {{"
-        )
-        lines.append(f"        turnobject(LOCALID_PLAYER, {f.dir_const})")
-        lines.append("    }")
-    lines.append("}")
-    return table_entry, "\n".join(lines)
-
-
-def render_arrival_facing_script(
-    consts: MapConstants, facings: list[ArrivalFacing]
-) -> str | None:
-    """The `mapscripts` + on-warp facing script for one map, as poryscript —
-    a thin wrapper around `_on_warp_block` kept for its own callers/tests.
-    `render_map_scripts` is the unified emitter (ON_TRANSITION +
-    ON_FRAME_TABLE + this table, whichever sections are non-empty) that
-    `build_slice_maps` actually wires up now.
-
-    Returns None when the map has no arrival needing an override — the caller
-    then leaves the empty `mapscripts` stub alone."""
-    on_warp = _on_warp_block(consts, facings)
-    if on_warp is None:
-        return None
-    table_entry, script_text = on_warp
-    return (
-        f"mapscripts {consts.dir_name}_MapScripts {{\n"
-        "    MAP_SCRIPT_ON_WARP_INTO_MAP_TABLE [\n"
-        f"        {table_entry}\n"
-        "    ]\n"
-        "}\n\n"
-        f"{script_text}"
-    )
-
-
 def render_map_scripts(
     consts: MapConstants,
-    facings: list[ArrivalFacing],
     frame_entries: list[AutorunEntry],
     transition_lines: list[str],
 ) -> str | None:
     """The unified per-map `mapscripts` block: one `<Dir>_MapScripts` symbol
-    carrying whichever of ON_TRANSITION / ON_FRAME_TABLE / ON_WARP_INTO_MAP_
-    TABLE are non-empty, in that order (findings §3.2/§5) — there can be only
-    ONE mapscripts block per map, so this generalizes what
-    `render_arrival_facing_script` did for the warp-facing case alone.
+    carrying whichever of ON_TRANSITION / ON_FRAME_TABLE are non-empty, in
+    that order (findings §3.2/§5) — there can be only ONE mapscripts block
+    per map.
 
     - ON_TRANSITION: inlined, body = `transition_lines` (hidden cutscene
       actor visibility — `ObjectBuildResult.transition_lines`).
     - ON_FRAME_TABLE: one row (`VAR_TEMP_C, 0: <Dir>_OnFrame`) plus the
       `<Dir>_OnFrame` dispatcher script, from `frame_entries`
       (`compute_autorun_entries`).
-    - ON_WARP_INTO_MAP_TABLE: unchanged from `render_arrival_facing_script`
-      (`_on_warp_block`), byte-compatible with the existing warp-facing pins.
 
-    Returns None when all three sections are empty — the caller keeps
-    today's empty-`mapscripts`-stub behavior."""
+    (The ON_WARP_INTO_MAP_TABLE arrival-facing section was removed in C5b,
+    2026-09-18: arrival facing now rides on the departure warp_event's
+    `"facing"` field and the engine applies it — WARP_RETAIN_FACING_PROPOSAL.md.)
+
+    Returns None when both sections are empty — the caller keeps today's
+    empty-`mapscripts`-stub behavior."""
     sections: list[str] = []
     scripts: list[str] = []
 
@@ -3469,16 +3176,6 @@ def render_map_scripts(
             "    ]"
         )
         scripts.append(_render_onframe_script(onframe_label, frame_entries))
-
-    on_warp = _on_warp_block(consts, facings)
-    if on_warp is not None:
-        table_entry, warp_script = on_warp
-        sections.append(
-            "    MAP_SCRIPT_ON_WARP_INTO_MAP_TABLE [\n"
-            f"        {table_entry}\n"
-            "    ]"
-        )
-        scripts.append(warp_script)
 
     if not sections:
         return None
@@ -3519,9 +3216,16 @@ def _resolve_all_warp_events(
     Returns the full per-map warp_event list (source warps first, then arrivals),
     keyed by Uranium map id.
     """
-    # Pass 1: source warps, stable original order/index.
+    # Pass 1: source warps, stable original order/index. Each carries its own
+    # arrival facing (the RMXP transfer direction) for the engine to apply.
     events: dict[int, list[WarpEvent]] = {
-        uid: [WarpEvent(s.src_x, s.src_y, registry.get(s.dest_uid).map_const) for s in specs]
+        uid: [
+            WarpEvent(
+                s.src_x, s.src_y, registry.get(s.dest_uid).map_const,
+                facing=warp_facing_for(s.dest_dir),
+            )
+            for s in specs
+        ]
         for uid, specs in warp_lists.items()
     }
 
@@ -3626,7 +3330,6 @@ def build_slice_maps(
     stripped_event_ids: dict[int, dict[int, str | None]] | None = None,
     template_fields: dict[int, dict[int, dict]] | None = None,
     fork_constants: set[str] | None = None,
-    warp_facing_overrides: dict[tuple[int, int, int], str] | None = None,
     connections: dict[int, list[dict]] | None = None,
     extra_warps: dict[int, list["WarpSpec"]] | None = None,
 ) -> dict[int, set[tuple[int, int]]]:
@@ -3709,15 +3412,6 @@ def build_slice_maps(
     is forwarded unchanged to every `build_object_events` call for the
     `item`/`berry_item` forward check (CLAUDE.md §4.7).
 
-    `warp_facing_overrides` is forwarded to `compute_arrival_facings`'
-    `overrides` param unchanged: `None` (the default) auto-loads
-    `reference/warp_facing_overrides.json` via `load_warp_facing_overrides()`
-    — the real entry point real callers get for free, matching
-    `stripped_event_ids`'s None-means-auto-load convention above. Pass `{}`
-    explicitly to opt out (e.g. a test building a partial slice whose `maps`
-    happens to include a map an override entry targets, but not the specific
-    warp that entry is about — see `test_build_slice_maps_smoke`).
-
     `extra_warps` (Uranium map id -> extra `WarpSpec`s to inject, normally
     `direct_pair=True` seam warps from `tileset_converter.seam_warps` —
     reference/seam_warps.json's map-connection-tile-budget substitution) are
@@ -3726,9 +3420,7 @@ def build_slice_maps(
     (the warp-source-cell override set this function returns; a seam warp's
     cell is force-passable via `behavior_overrides`, not the door-metatile
     `warp_overrides` path — see `tile_map.BEHAVIOR_KINDS`'s arrow_warp_*
-    kinds) and from `compute_arrival_facings` (arrow warps carry their own
-    direction gating; no ON_WARP_INTO_MAP_TABLE facing entry is needed or
-    wanted for them). `None` (the default) injects nothing."""
+    kinds). `None` (the default) injects nothing."""
     if stripped_event_ids is None:
         stripped_event_ids = load_stripped_event_ids()
     slice_set = set(slice_ids)
@@ -3749,16 +3441,13 @@ def build_slice_maps(
         for uid in slice_ids
     }
     # `_resolve_all_warp_events` needs the extra (seam-warp) specs merged in to
-    # pair them; `src_coords`/`compute_arrival_facings` below use `warp_lists`
-    # (the real-event-only lists), never this merged view.
+    # pair them; `src_coords` below uses `warp_lists` (the real-event-only
+    # lists), never this merged view.
     resolve_warp_lists = {
         uid: warp_lists[uid] + (extra_warps or {}).get(uid, [])
         for uid in slice_ids
     }
     resolved = _resolve_all_warp_events(resolve_warp_lists, registry, maps)
-    arrival_facings = compute_arrival_facings(
-        warp_lists, maps, tilesets=tilesets, overrides=warp_facing_overrides,
-    )
 
     overrides: dict[int, set[tuple[int, int]]] = {}
     local_id_tables: dict[int, dict[str, int]] = {}
@@ -3836,9 +3525,7 @@ def build_slice_maps(
         # entry referencing a page block the prune pass removes.
         autorun_objects, _, _ = classify_map_events(maps[uid], slice_set)
         frame_entries = compute_autorun_entries(autorun_objects, uid, flag_registry)
-        map_scripts = render_map_scripts(
-            consts, arrival_facings.get(uid, []), frame_entries, result.transition_lines,
-        )
+        map_scripts = render_map_scripts(consts, frame_entries, result.transition_lines)
         if map_scripts is not None:
             blocks.append(map_scripts)
 

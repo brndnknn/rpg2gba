@@ -1634,7 +1634,7 @@ Each lands unit-green. None is ROM-verified before P11.
 | **C3** | Engine-transition forks, white-out first, with the fenced-engine grep for the rest | R9 | DONE 2026-09-16 — fork model, engine audit, `FLAG_MUM` seed; day/night deferred to its first real reader; see "C3" below |
 | **C4** | Generic per-command extractors for every code present in CH01–CH05, source-derived | R11 | DONE 2026-09-17 — `beat_floor/`; see "C4 landed" below |
 | **C5** | Archetype templates refactored onto the generic floor; the ⊇-floor checker rule; seam and stair floors | R11 | DONE 2026-09-17 — `beat_floor/{coverage,lookup,terrain}.py`, all five templates declare; see "C5 landed" below |
-| **C5b** | Warp facing moves into the engine: retain-facing fallback, per-warp departure direction in `struct WarpEvent`, pending-facing special for script warps, door tiles yield to the warp's direction; arrival-facing table and tiers 1–3 deleted | `WARP_RETAIN_FACING_PROPOSAL.md` §0 R1–R6 | TODO — **runs before C6** (2026-09-18); see "C5b" below |
+| **C5b** | Warp facing moves into the engine: retain-facing fallback, per-warp departure direction in `struct WarpEvent`, pending-facing special for script warps, door tiles yield to the warp's direction; arrival-facing table and tiers 1–3 deleted | `WARP_RETAIN_FACING_PROPOSAL.md` §0 R1–R6 | **DONE 2026-09-18** (unit-green); see "C5b landed" below |
 | **C7** | Freeze CH01–CH05 hand beats — **rows + identity only; coverage is the test, not literal match** (R12 amended 2026-09-17) | R12 | TODO — **runs before C6** (2026-09-17) |
 | **C6** | Generator + solver integration: whole-module emit, review doc, refusal list, idempotence test | R1, R4, R7 | TODO — **runs after C7** (2026-09-17) |
 | **C8** | Shared Ruby-subset interpreter + input search; `map050/ev019` | R10 | TODO |
@@ -2097,6 +2097,43 @@ Unit-green only. **ROM risks carried into P11:** the Moki (32)(8,43..45) ↔ Rou
 edge stack (the only built-map case where door-south and the authored direction disagree), the
 three never-walked explicit-direction script warps (map032/ev078, map049/ev021, map172/ev004),
 and dir-0 building exits whose arrival auto-step now follows the approach direction.
+
+**C5b landed 2026-09-18** (unit-green; no ROM run — P11). Suite **3891 passed / 16 skipped**
+(two halves, #111). What actually shipped, where it differs from the plan, and what it found:
+
+- **Engine** (commit "C5b engine"): as scoped, with two deviations from §0's letter.
+  `struct WarpEvent` is **12 bytes, not 10** — modern builds with `-mabi=apcs-gnu`, which rounds
+  struct sizes to 4; the pad is explicit and the `STATIC_ASSERT` caught it on the first build.
+  `ScrCmd_warp` **keeps vanilla's Reset and carries only the direction** (its own facing, or a
+  pending `SetWarpArrivalFacing` one) rather than calling `StoreInitialPlayerAvatarState`, so a
+  script warp still drops bike/surf state exactly as vanilla. The departure override lives in
+  `SetupWarp`, which every Store→SetupWarp path (step-on, arrow, door) shares.
+- **Pipeline:** `metadata_wiring.warp_facing_for` writes `"facing"` on every source warp_event
+  (arrival-only warp_events stay `0`); `deterministic.warp_lines` emits the special pair for
+  explicit script-warp directions, used by the transpiler and the simple-warp classifier. The
+  RMXP 2/4/6/8 → `DIR_*` table now has one home, `deterministic.RMXP_DIRECTION_TO_DIR_CONST`
+  (the transpiler had its own copy). `render_map_scripts` lost its `facings` parameter.
+  `fork_index` pins 625 specials.
+- **Floor:** `warp` gains `arrives_on_door`, read from the build's `warp_overrides.gen.json`
+  (exactly the cells the assembler stamps `MB_NON_ANIMATED_DOOR`). `ExtractContext.door_cells`
+  carries it; `floor_for_map` requires `door_cells=` and `_extract_warp` raises without it.
+- **Playtest:** `assertions.facing_for_direction` (explicit wins, else approach),
+  `arrival_landing_cell` (door → one step on), and `expected_arrival_facing(src_map, src_cell,
+  approach)` re-keyed on the departure warp. The `warp` template now asserts the landing cell,
+  not the raw arrival, on its forward leg. **Its reciprocal leg does not** (no floor for the
+  unclaimed row) — a reciprocal landing on a door tile will fail that exact check in-ROM.
+- **Invariants** (`tests/test_warp_facing_invariant.py`, rewritten): arrival facings are
+  enumerated per *reachable* approach — a `traversal.graph` flood from every way into a map,
+  warp cells as barriers, door landings seeded to a fixed point. The R5 guard is green: every
+  door-tile arrival's exit step lands on walkable non-warp ground for every approach, and no
+  arrival lands on an arrow or stair tile. **All three entries of the deleted
+  `warp_facing_overrides.json` now follow from the source data** (Route 1 → Moki east, both
+  cave arrivals north) — pinned by `test_former_hand_overrides_now_follow_from_retain`. The
+  first draft, using plain passability, flagged exactly those three as hazards: one-tile pockets
+  behind cave mouths and the strip behind the Route 1 warp column are open but unreachable.
+- **Re-sourced chapter facing checks** resolve offline against the staged build: ch03 B27/B28/
+  B30/B32 (Route 1 seam, Mart, Center, Boutique) → **UP**, ch01 `B3_up` → **RIGHT** (dir 0, stairs pressed right).
+  First in-ROM confirmation at P11.
 
 ### 16.4 Known work the generator will refuse until fixed (not decisions)
 

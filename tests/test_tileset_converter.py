@@ -3830,314 +3830,46 @@ def test_build_object_events_template_fields_none_is_legacy_noop() -> None:
     assert obj.route_id == "0"
 
 
-# --- post-warp arrival facing --------------------------------------------------
-
-def _spec(dest_uid: int, x: int, y: int, direction: int | None) -> mw.WarpSpec:
-    return mw.WarpSpec(src_x=0, src_y=0, dest_uid=dest_uid, dest_x=x, dest_y=y, dest_dir=direction)
-
-
-def test_compute_arrival_facings_direction_mapping() -> None:
-    """Each RMXP numpad Transfer Player direction maps to its engine DIR_*
-    constant (see `_ARRIVAL_DIR_CONST`)."""
-    maps = {48: {"width": 20, "height": 20}}
-    for direction, dir_const in (
-        (4, "DIR_WEST"), (6, "DIR_EAST"), (8, "DIR_NORTH"), (2, "DIR_SOUTH"),
-    ):
-        warp_lists = {49: [_spec(48, 5, 6, direction)]}
-        out = mw.compute_arrival_facings(warp_lists, maps)
-        assert out == {48: [mw.ArrivalFacing(5, 6, dir_const)]}
-
-
-def test_compute_arrival_facings_skips_zero_and_none() -> None:
-    """dest_dir 0 ("retain facing") and None (malformed/legacy event) are tier
-    3 candidates, but with NO `tilesets` given (the default, as here) tier 3
-    cannot compute passability and is skipped with a logged warning instead of
-    derived — see `compute_arrival_facings`' docstring. That's why this still
-    produces no arrival entry at all: it is NOT dest_dir=0/None being ignored
-    outright any more (see the tier-3 tests below for that case), it's the
-    documented no-tileset-data fallback, which is unreachable in production
-    (`build_slice_maps` always forwards `tilesets`)."""
-    maps = {48: {"width": 20, "height": 20}}
-    warp_lists = {49: [_spec(48, 5, 6, 0), _spec(49, 2, 3, None)]}
-    assert mw.compute_arrival_facings(warp_lists, maps) == {}
-
-
-def test_compute_arrival_facings_unknown_direction_fails_loud() -> None:
-    """A direction outside {0, 2, 4, 6, 8} is an unrecognized RMXP transfer
-    dir — fail loud rather than silently dropping it or guessing a facing."""
-    maps = {48: {"width": 20, "height": 20}}
-    warp_lists = {49: [_spec(48, 5, 6, 5)]}
-    with pytest.raises(ValueError):
-        mw.compute_arrival_facings(warp_lists, maps)
-
-
-def test_compute_arrival_facings_same_coord_same_dir_dedups() -> None:
-    """Two warps (from different source maps) landing on the identical
-    (dest_uid, x, y) with the SAME facing collapse into exactly one table row."""
-    maps = {48: {"width": 20, "height": 20}}
-    warp_lists = {
-        49: [_spec(48, 5, 6, 4)],
-        50: [_spec(48, 5, 6, 4)],
-    }
-    out = mw.compute_arrival_facings(warp_lists, maps)
-    assert out == {48: [mw.ArrivalFacing(5, 6, "DIR_WEST")]}
-
-
-def test_compute_arrival_facings_same_coord_different_dir_fails_loud() -> None:
-    """Two warps landing on the identical coord but wanting DIFFERENT facings
-    can't be told apart by coordinate dispatch alone — fail loud rather than
-    silently picking one (which would be wrong half the time)."""
-    maps = {48: {"width": 20, "height": 20}}
-    warp_lists = {
-        49: [_spec(48, 5, 6, 4)],
-        50: [_spec(48, 5, 6, 6)],
-    }
-    with pytest.raises(ValueError):
-        mw.compute_arrival_facings(warp_lists, maps)
-
-
-def test_compute_arrival_facings_out_of_bounds_skipped() -> None:
-    """An arrival coord outside the destination map's bounds gets no arrival
-    warp_event of its own (`_resolve_all_warp_events` falls back to
-    return-warp pairing for it instead), so there's no distinct landing tile
-    to key a facing override on — skipped, not an error."""
-    maps = {48: {"width": 10, "height": 10}}
-    warp_lists = {49: [_spec(48, 99, 99, 4)]}
-    assert mw.compute_arrival_facings(warp_lists, maps) == {}
-
-
-# --- tier 3: derived "retain" facing -------------------------------------------
-
-# Tiny synthetic tileset: tile 1 is open floor (passage 0), tile 2 is a wall
-# (passage 0x0F, blocks). Tile 0 (RMXP's "no tile" sentinel) is never placed.
-_OPEN, _WALL = 1, 2
-
-
-def _facing_tileset() -> dict:
-    return {"passages": [0, 0, 0x0F], "priorities": [0, 0, 0], "terrain_tags": [0, 0, 0]}
-
-
-def _facing_src_map(
-    width: int, height: int, open_cells: set[tuple[int, int]], tileset_id: int = 1,
-) -> dict:
-    """A width x height, single-layer (zsize=1) source map: every cell is a
-    WALL by default except the given `open_cells`, which are floor."""
-    data = [
-        _OPEN if (x, y) in open_cells else _WALL
-        for y in range(height)
-        for x in range(width)
-    ]
-    return {
-        "width": width, "height": height, "tileset_id": tileset_id,
-        "tiles": {"xsize": width, "ysize": height, "zsize": 1, "data": data},
-    }
-
-
-def _facing_spec(src_x: int, src_y: int, dest_uid: int, dx: int, dy: int) -> mw.WarpSpec:
-    return mw.WarpSpec(src_x=src_x, src_y=src_y, dest_uid=dest_uid, dest_x=dx, dest_y=dy, dest_dir=0)
-
+# --- post-warp arrival facing (C5b: carried on the departure warp) ------------
 
 @pytest.mark.parametrize(
-    ("open_offset", "expected_dir"),
-    [
-        ((0, -1), "DIR_SOUTH"),  # sole open neighbour is NORTH -> walked south
-        ((0, 1), "DIR_NORTH"),   # sole open neighbour is SOUTH -> walked north
-        ((-1, 0), "DIR_EAST"),   # sole open neighbour is WEST -> walked east
-        ((1, 0), "DIR_WEST"),    # sole open neighbour is EAST -> walked west
-    ],
+    ("direction", "expected"),
+    [(2, "DIR_SOUTH"), (4, "DIR_WEST"), (6, "DIR_EAST"), (8, "DIR_NORTH"),
+     (0, "0"), (None, "0")],
 )
-def test_compute_arrival_facings_tier3_derives_from_sole_open_neighbour(
-    open_offset: tuple[int, int], expected_dir: str,
-) -> None:
-    """dest_dir=0 with tileset data given derives the arrival facing from the
-    single open (unblocked, non-sibling) neighbour of the source warp cell —
-    the direction the player must have walked in from."""
-    ox, oy = open_offset
-    src_map = _facing_src_map(3, 3, {(1 + ox, 1 + oy)})
-    maps = {10: src_map, 99: {"width": 5, "height": 5}}
-    warp_lists = {10: [_facing_spec(1, 1, 99, 0, 0)]}
-    out = mw.compute_arrival_facings(warp_lists, maps, tilesets={"1": _facing_tileset()})
-    assert out == {99: [mw.ArrivalFacing(0, 0, expected_dir)]}
+def test_warp_facing_for_maps_rmxp_direction(direction: int | None, expected: str) -> None:
+    """Each RMXP numpad Transfer Player direction maps to its engine DIR_*
+    constant; 0 ("retain facing") and None (legacy event) map to the retain
+    value 0, which the engine resolves to the facing the player walked in with
+    (RPG2GBA_WARP_RETAIN_FACING)."""
+    assert mw.warp_facing_for(direction) == expected
 
 
-def test_compute_arrival_facings_tier3_excludes_sibling_warp_cells() -> None:
-    """Two adjacent warp source cells in a wall (a multi-tile door / map-edge
-    warp) must not count each other as an approach neighbour — each has its
-    own single open neighbour below, and both correctly derive DIR_NORTH."""
-    src_map = _facing_src_map(4, 3, {(1, 1), (2, 1), (1, 2), (2, 2)})
-    maps = {10: src_map, 99: {"width": 5, "height": 5}}
-    warp_lists = {10: [_facing_spec(1, 1, 99, 0, 0), _facing_spec(2, 1, 99, 1, 0)]}
-    out = mw.compute_arrival_facings(warp_lists, maps, tilesets={"1": _facing_tileset()})
-    assert out == {
-        99: [mw.ArrivalFacing(0, 0, "DIR_NORTH"), mw.ArrivalFacing(1, 0, "DIR_NORTH")],
-    }
+def test_warp_facing_for_unknown_direction_fails_loud() -> None:
+    """A direction outside {0, 2, 4, 6, 8} is an unrecognized RMXP transfer
+    dir -- fail loud rather than silently retaining or guessing."""
+    with pytest.raises(ValueError, match="unknown RMXP transfer direction 5"):
+        mw.warp_facing_for(5)
 
 
-def test_compute_arrival_facings_tier3_ambiguous_two_open_fails_loud() -> None:
-    """Two open non-sibling neighbours (north AND south both clear) can't be
-    resolved to one approach direction — fail loud with map ids, coords, and
-    the override JSON key the user would add."""
-    src_map = _facing_src_map(3, 3, {(1, 0), (1, 2)})  # north open, south open
-    maps = {10: src_map, 99: {"width": 5, "height": 5}}
-    warp_lists = {10: [_facing_spec(1, 1, 99, 2, 3)]}
-    with pytest.raises(ValueError) as exc_info:
-        mw.compute_arrival_facings(warp_lists, maps, tilesets={"1": _facing_tileset()})
-    msg = str(exc_info.value)
-    assert "map 10" in msg and "(1, 1)" in msg
-    assert "map 99" in msg and "(2, 3)" in msg
-    assert '"99:2:3": "DIR_<NORTH|SOUTH|EAST|WEST>"' in msg
-
-
-def test_compute_arrival_facings_tier3_enclosed_fails_loud() -> None:
-    """Zero open neighbours (fully walled in) is just as unresolvable as two —
-    fail loud rather than defaulting."""
-    src_map = _facing_src_map(3, 3, set())  # all four neighbours are WALL
-    maps = {10: src_map, 99: {"width": 5, "height": 5}}
-    warp_lists = {10: [_facing_spec(1, 1, 99, 0, 0)]}
-    with pytest.raises(ValueError):
-        mw.compute_arrival_facings(warp_lists, maps, tilesets={"1": _facing_tileset()})
-
-
-def test_compute_arrival_facings_tier3_dedups_same_facing() -> None:
-    """Two different source warps whose tier-3 derivation both land on ONE
-    destination tile wanting the SAME facing collapse into one table row,
-    same as the existing tier-2 same-coord/same-dir dedup."""
-    src_map_a = _facing_src_map(3, 3, {(1, 2)})  # south open -> DIR_NORTH
-    src_map_b = _facing_src_map(3, 3, {(1, 2)})  # south open -> DIR_NORTH
-    maps = {10: src_map_a, 11: src_map_b, 99: {"width": 5, "height": 5}}
+def test_resolved_source_warp_carries_facing_arrival_retains() -> None:
+    """The facing rides on the DEPARTURE warp_event (the one the player steps
+    on), serialized as map.json's `"facing"`; the minted arrival warp_event is
+    never stepped on, so it stays retain ("0")."""
+    reg = _mint_two_maps()
+    maps = {48: {"width": 20, "height": 20}, 49: {"width": 20, "height": 20}}
     warp_lists = {
-        10: [_facing_spec(1, 1, 99, 0, 0)],
-        11: [_facing_spec(1, 1, 99, 0, 0)],
+        49: [
+            mw.WarpSpec(src_x=1, src_y=1, dest_uid=48, dest_x=5, dest_y=6, dest_dir=4),
+            mw.WarpSpec(src_x=2, src_y=1, dest_uid=48, dest_x=7, dest_y=6, dest_dir=0),
+        ],
+        48: [],
     }
-    out = mw.compute_arrival_facings(warp_lists, maps, tilesets={"1": _facing_tileset()})
-    assert out == {99: [mw.ArrivalFacing(0, 0, "DIR_NORTH")]}
-
-
-def test_compute_arrival_facings_override_beats_dest_dir() -> None:
-    """Tier 1 (hand override) wins over tier 2 (explicit dest_dir)."""
-    maps = {48: {"width": 20, "height": 20}}
-    warp_lists = {49: [_spec(48, 5, 6, 8)]}  # would be DIR_NORTH via tier 2
-    out = mw.compute_arrival_facings(
-        warp_lists, maps, overrides={(48, 5, 6): "DIR_EAST"},
-    )
-    assert out == {48: [mw.ArrivalFacing(5, 6, "DIR_EAST")]}
-
-
-def test_compute_arrival_facings_dest_dir_beats_derivation() -> None:
-    """Tier 2 (explicit dest_dir) wins over tier 3 — and tier 3 must not even
-    be attempted: the source map here is fully enclosed, which would raise if
-    tier 3 ran, but dest_dir=8 short-circuits before that."""
-    src_map = _facing_src_map(3, 3, set())  # would raise if tier 3 ran
-    maps = {10: src_map, 99: {"width": 5, "height": 5}}
-    warp_lists = {10: [mw.WarpSpec(src_x=1, src_y=1, dest_uid=99, dest_x=0, dest_y=0, dest_dir=8)]}
-    out = mw.compute_arrival_facings(warp_lists, maps, tilesets={"1": _facing_tileset()})
-    assert out == {99: [mw.ArrivalFacing(0, 0, "DIR_NORTH")]}
-
-
-def test_compute_arrival_facings_override_matching_no_arrival_fails_loud() -> None:
-    """An override entry whose key doesn't match any in-bounds warp arrival is
-    a stale/typo'd entry — fail loud rather than silently ignoring it."""
-    maps = {48: {"width": 20, "height": 20}}
-    warp_lists = {49: [_spec(48, 5, 6, 8)]}
-    with pytest.raises(ValueError, match="match no in-bounds warp arrival"):
-        mw.compute_arrival_facings(
-            warp_lists, maps, overrides={(48, 99, 99): "DIR_EAST"},
-        )
-
-
-def test_load_warp_facing_overrides_unknown_direction_fails_loud(tmp_path: Path) -> None:
-    """An override file entry with a direction outside the known DIR_* set
-    fails loud at load time — a typo shouldn't silently no-op."""
-    (tmp_path / "warp_facing_overrides.json").write_text(
-        json.dumps({"overrides": {"48:5:6": "DIR_SIDEWAYS"}}), encoding="utf-8",
-    )
-    with pytest.raises(ValueError, match="unknown direction"):
-        mw.load_warp_facing_overrides(tmp_path)
-
-
-def test_load_warp_facing_overrides_malformed_key_fails_loud(tmp_path: Path) -> None:
-    """An override key that isn't the documented "<dest_uid>:<x>:<y>" shape
-    fails loud rather than being silently skipped."""
-    (tmp_path / "warp_facing_overrides.json").write_text(
-        json.dumps({"overrides": {"not-a-key": "DIR_NORTH"}}), encoding="utf-8",
-    )
-    with pytest.raises(ValueError, match="malformed override key"):
-        mw.load_warp_facing_overrides(tmp_path)
-
-
-def test_load_warp_facing_overrides_shipped_file_loads_clean() -> None:
-    """The real shipped `reference/warp_facing_overrides.json` loads without
-    error and validates. CH03 itself needs no hand overrides (a needed CH03
-    entry would be a signal tier 3's rule is wrong, not something to paper
-    over) — but the file is not required to stay empty forever: map 33's
-    3-tile-tall warp at (70,11-13) -> Moki Town (32, 8, 43) sits in an open
-    corridor with unblocked floor on BOTH sides once its two vertically
-    stacked sibling cells are excluded, which is genuine unresolvable-by-
-    geometry ambiguity predating CH03 (Moki Town is an earlier chapter, not
-    Kevlar), not a tier-3 bug — see the "32:8:43" entry.
-
-    CH05 added two more (2026-09-04), both Passage Cave and both `DIR_NORTH`:
-    map35 (20,33) -> "36:17:39" (the Route 2 cave entrance, beat B1) and map36
-    (17,4) -> "37:16:26" (the 1F -> 2F stairs, beat B8). Unlike the map33 pair
-    these are NOT unresolvable by geometry — tier 3 only inspects the four
-    immediate neighbours, so it counts a tile nothing can reach except the warp
-    itself as a candidate approach. Applying a second-order reachability check
-    (a survivor is a real approach only if IT has an open neighbour other than
-    the warp tile) resolves both uniquely, and to exactly the values pinned
-    here; it resolves neither map33 case. That improvement is filed as
-    PROJECT_TODO #107 — when it lands, these two entries should become
-    derivable and their agreement with the derived answer is the regression
-    test. The map33 pair stays hand-pinned regardless."""
-    overrides = mw.load_warp_facing_overrides()
-    assert overrides == {
-        (32, 8, 43): "DIR_EAST",
-        (36, 17, 39): "DIR_NORTH",
-        (37, 16, 26): "DIR_NORTH",
-    }
-
-
-def test_render_arrival_facing_script_empty_is_none() -> None:
-    """No facings for a map -> None (the caller leaves the empty `mapscripts`
-    stub alone rather than injecting an empty script)."""
-    consts = mc.MapConstants(48, "MAP_X", "MAP_URANIUM_48", "LAYOUT_X", "MAPSEC_X", "X", "X")
-    assert mw.render_arrival_facing_script(consts, []) is None
-
-
-def test_render_arrival_facing_script_two_arrivals_golden() -> None:
-    """Golden-ish shape for a two-arrival map: the mapscripts block wired to
-    ON_WARP_INTO_MAP_TABLE, the getplayerxy readback, and one guarded
-    turnobject per arrival — the first branch is `if`, later ones `elif`."""
-    consts = mc.MapConstants(
-        48, "MAP_MOKI_TOWN_PLAYERS_HOUSE_2F", "MAP_URANIUM_48", "LAYOUT_X", "MAPSEC_X",
-        "MokiTownPlayersHouse2F", "Moki Town Player's House 2F",
-    )
-    facings = [
-        mw.ArrivalFacing(5, 6, "DIR_WEST"),
-        mw.ArrivalFacing(2, 3, "DIR_NORTH"),
-    ]
-    text = mw.render_arrival_facing_script(consts, facings)
-    assert text is not None
-    assert "mapscripts MokiTownPlayersHouse2F_MapScripts {" in text
-    assert "MAP_SCRIPT_ON_WARP_INTO_MAP_TABLE [" in text
-    assert f"{mw._FACING_GUARD_VAR}, 0: MokiTownPlayersHouse2F_OnWarpFacing" in text
-    assert f"getplayerxy({mw._FACING_X_VAR}, {mw._FACING_Y_VAR})" in text
-
-    # one turnobject per arrival, with the right facing constant
-    assert text.count("turnobject(LOCALID_PLAYER,") == 2
-    assert "turnobject(LOCALID_PLAYER, DIR_NORTH)" in text
-    assert "turnobject(LOCALID_PLAYER, DIR_WEST)" in text
-
-    # sorted (y, x) ascending -> (2, 3)/NORTH first, (5, 6)/WEST second; the
-    # first guard is `if`, the second `elif`, each with the matching coords.
-    if_idx = text.index(
-        f"if (var({mw._FACING_X_VAR}) == 2 && var({mw._FACING_Y_VAR}) == 3)"
-    )
-    elif_idx = text.index(
-        f"elif (var({mw._FACING_X_VAR}) == 5 && var({mw._FACING_Y_VAR}) == 6)"
-    )
-    assert if_idx < elif_idx
-    assert text.count("    if (") == 1
-    assert text.count("elif (") == 1
+    events = mw._resolve_all_warp_events(warp_lists, reg, maps)
+    src_explicit, src_retain = events[49]
+    assert src_explicit.to_dict()["facing"] == "DIR_WEST"
+    assert src_retain.to_dict()["facing"] == "0"
+    assert [e.to_dict()["facing"] for e in events[48]] == ["0", "0"]
 
 
 # --- compute_autorun_entries / render_map_scripts (findings §3.2 BUG B') -----
@@ -4339,15 +4071,14 @@ def test_render_onframe_script_golden() -> None:
     not poryscript.is_available(), reason="poryscript binary not installed"
 )
 def test_render_map_scripts_all_sections_compile() -> None:
-    """All three sections together (ON_TRANSITION, ON_FRAME_TABLE,
-    ON_WARP_INTO_MAP_TABLE) render as ONE mapscripts block and compile
-    through the real poryscript binary (findings §3.2/§5, single-block
-    constraint)."""
+    """Both sections together (ON_TRANSITION, ON_FRAME_TABLE) render as ONE
+    mapscripts block and compile through the real poryscript binary (findings
+    §3.2/§5, single-block constraint). No ON_WARP_INTO_MAP_TABLE: arrival
+    facing moved onto the departure warp_event in C5b."""
     consts = mc.MapConstants(
         32, "MAP_MOKI_TOWN", "MAP_URANIUM_32", "LAYOUT_X", "MAPSEC_X",
         "MokiTown", "Moki Town",
     )
-    facings = [mw.ArrivalFacing(5, 6, "DIR_WEST")]
     frame_entries = [mw.AutorunEntry(74, 0, "Map032_EV074_Page1", "flag(FLAG_X)")]
     transition_lines = [
         "# EV016 Bambo",
@@ -4356,28 +4087,27 @@ def test_render_map_scripts_all_sections_compile() -> None:
         "    clearflag(FLAG_TEMP_11)",
         "}",
     ]
-    text = mw.render_map_scripts(consts, facings, frame_entries, transition_lines)
+    text = mw.render_map_scripts(consts, frame_entries, transition_lines)
     assert text is not None
     assert text.count("mapscripts MokiTown_MapScripts {") == 1
     assert "MAP_SCRIPT_ON_TRANSITION {" in text
     assert "MAP_SCRIPT_ON_FRAME_TABLE [" in text
-    assert "MAP_SCRIPT_ON_WARP_INTO_MAP_TABLE [" in text
+    assert "MAP_SCRIPT_ON_WARP_INTO_MAP_TABLE" not in text
     assert "script MokiTown_OnFrame {" in text
-    assert "script MokiTown_OnWarpFacing {" in text
     result = poryscript.compile_script(text)
     assert result.ok, result.stderr
 
 
 def test_render_map_scripts_empty_is_none() -> None:
     consts = mc.MapConstants(32, "MAP_X", "MAP_URANIUM_32", "LAYOUT_X", "MAPSEC_X", "X", "X")
-    assert mw.render_map_scripts(consts, [], [], []) is None
+    assert mw.render_map_scripts(consts, [], []) is None
 
 
 def test_render_map_scripts_only_transition() -> None:
-    """A map with hidden actors but no warp facing / autorun still gets a
+    """A map with hidden actors but no autorun still gets a
     real mapscripts block with just ON_TRANSITION."""
     consts = mc.MapConstants(32, "MAP_X", "MAP_URANIUM_32", "LAYOUT_X", "MAPSEC_X", "X", "X")
-    text = mw.render_map_scripts(consts, [], [], ["setflag(FLAG_TEMP_11)"])
+    text = mw.render_map_scripts(consts, [], ["setflag(FLAG_TEMP_11)"])
     assert text is not None
     assert "MAP_SCRIPT_ON_TRANSITION {" in text
     assert "        setflag(FLAG_TEMP_11)" in text
@@ -4460,12 +4190,6 @@ def test_build_slice_maps_smoke(tmp_path: Path) -> None:
         [32, 48, 49], maps_dir=_MAPS, registry=reg, metadata_path=_METADATA,
         out_dir=tmp_path / "maps", dispatcher_dir=tmp_path / "disp",
         npc_gfx=npc_gfx, route_registry=RouteRegistry(), flag_registry=flag_reg,
-        # This slice includes map 32 (Moki Town) but not map 33 (Route 1),
-        # whose warp is the only thing that makes the real
-        # reference/warp_facing_overrides.json "32:8:43" entry non-stale —
-        # opt out of that reference-file dependency (matches
-        # stripped_event_ids's documented `{}` opt-out convention).
-        warp_facing_overrides={},
     )
     # Map049: spawn floor, two override cells. The stairs (12,3) is a plain
     # warp; the street door at (10,11) is a GATED door (EV002: page 0 refuses

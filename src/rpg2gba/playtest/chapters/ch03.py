@@ -484,8 +484,9 @@ _flag_ssa = assertions.flag_ssa
 # regression floor. Two defect classes that were reasoned about but never
 # asserted in-ROM (2026-08-19 task): (1) `compute_arrival_facings`'s
 # `_derive_retain_facing` fix (`tileset_converter/metadata_wiring.py`,
-# `reference/warp_facing_overrides.json`) for the CH03 "RMXP retain-facing"
-# bug -- tests/test_warp_facing_invariant.py pins the fix at the metadata
+# `reference/warp_facing_overrides.json` -- all three deleted in C5b,
+# 2026-09-18, when the engine gained real retain-facing) for the CH03 "RMXP
+# retain-facing" bug -- tests/test_warp_facing_invariant.py pins the fix at the metadata
 # layer, but nothing before this drove the real ON_WARP_INTO_MAP_TABLE
 # script in the running ROM. (2) the transpiler's per-map dropped-command
 # queue: every Transfer Player warp on Map031 strands the commands RMXP
@@ -497,7 +498,10 @@ _flag_ssa = assertions.flag_ssa
 # UNVERIFIED until now.
 #
 # Both are checked with facts read live off THIS build's own artifacts
-# (`compute_arrival_facings` run over the staged slice for facing;
+# (the departure warp's own RMXP direction, read off the staged slice by
+# `assertions.expected_arrival_facing` since C5b 2026-09-18 -- it used to be
+# `compute_arrival_facings`, deleted when facing moved onto the departure
+# warp;
 # `engine/data/maps/<Dir>/map.json`'s own "music" key for BGM), never a
 # hardcoded DIR_*/MUS_* literal -- boot-walk-harness SKILL.md Phase 2 rule 3.
 #
@@ -547,7 +551,7 @@ _assert_bgm = assertions.assert_bgm
 # THIRTEEN BEATS CLAIM NOTHING, in four groups:
 #
 #   B27, B28, B29, B30, B31, B32, B33 -- warp-arrival FACING and map BGM.
-#     These assert `compute_arrival_facings`' output and map-header music,
+#     These assert the staged warp direction and map-header music,
 #     neither of which is an RGSS page. No manifest row kind can represent
 #     them. (`map031/ev002/p1`, `ev003/p1` and `ev004/p1` are real
 #     arrival_nudge rows -- claimed by B13, B3, and B14 respectively via
@@ -626,7 +630,9 @@ def b27(emu: Emulator) -> None:
     # being checked, and it just ran. Re-walking here to "re-trigger" it was
     # the earlier version's bug (see the block comment above _flag_ssa).
     _assert_near(emu, "B27", (16, 42), tolerance=0)
-    expected = _expected_arrival_facing(31, 16, 42)
+    # B1's warp is Route 1's (map033) ev046, crossed holding UP.
+    route1_warp = cells.warp_cell("MAP_ROUTE_01", to="MAP_KEVLAR_TOWN", event_id=46)
+    expected = _expected_arrival_facing(33, route1_warp, KEVLAR_ENTRY_DIRECTION)
     _assert_player_facing(emu, "B27", expected)
 
 
@@ -828,7 +834,7 @@ def b3(emu: Emulator) -> None:
 def b30(emu: Emulator) -> None:
     # No navigation: B3 already stands the player at CENTER_ARRIVAL via the
     # exact warp under test.
-    expected = _expected_arrival_facing(68, *CENTER_ARRIVAL)
+    expected = _expected_arrival_facing(31, CENTER_DOOR, "UP")
     _assert_player_facing(emu, "B30", expected)
 
 
@@ -1048,7 +1054,7 @@ def b10(emu: Emulator) -> None:
 def b28(emu: Emulator) -> None:
     # No navigation: B10 already stands the player at MART_ARRIVAL via the
     # exact warp under test.
-    expected = _expected_arrival_facing(67, *MART_ARRIVAL)
+    expected = _expected_arrival_facing(31, MART_DOOR, "UP")
     _assert_player_facing(emu, "B28", expected)
 
 
@@ -1302,7 +1308,7 @@ def b32(emu: Emulator) -> None:
     # _flag_ssa for why that distinction matters).
     _enter_door(emu, "B32", BOUTIQUE_DOOR, "MAP_KEVLAR_TOWN_BUILDINGS")
     _assert_near(emu, "B32", BOUTIQUE_ARRIVAL)
-    expected = _expected_arrival_facing(73, *BOUTIQUE_ARRIVAL)
+    expected = _expected_arrival_facing(31, BOUTIQUE_DOOR, "UP")
     _assert_player_facing(emu, "B32", expected)
 
 

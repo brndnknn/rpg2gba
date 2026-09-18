@@ -248,7 +248,7 @@ def test_build_slice_maps_extra_warps_end_to_end(tmp_path: Path) -> None:
     overrides = mw.build_slice_maps(
         [31, 35], maps_dir=maps_dir, registry=reg, metadata_path=metadata_path,
         out_dir=out_dir, dispatcher_dir=tmp_path / "disp",
-        stripped_event_ids={}, warp_facing_overrides={}, extra_warps=extra_warps,
+        stripped_event_ids={}, extra_warps=extra_warps,
     )
 
     # No real code-201 warps on either map: src_coords must be empty.

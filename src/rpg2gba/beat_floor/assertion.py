@@ -12,6 +12,7 @@ This module is the contract every extractor module in the package shares:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
@@ -23,7 +24,7 @@ AssertionKind = Literal[
     "switch_write",       # params: switch_id, value
     "var_write",          # params: var_id, op, value (story_state Assign/Adjust, rendered)
     "self_switch_write",  # params: event_id, letter, value
-    "warp",               # params: map_id, x, y, direction
+    "warp",               # params: map_id, x, y, direction, arrives_on_door (bool)
     "heal_party",
     "erase_event",        # params: event_id
     "item_grant",         # params: item (internal name), quantity
@@ -120,6 +121,11 @@ class ExtractContext:
     event: dict[str, Any]                       # the raw event (x, y, pages)
     map_data: dict[str, Any]
     common_events_by_id: dict[int, dict[str, Any]]
+    # Uranium map id -> the cells the emitted layout stamps as door tiles
+    # (`metadata_wiring.load_warp_overrides`, the build's
+    # `warp_overrides.gen.json`) -- the `warp` extractor's `arrives_on_door`.
+    # None = not supplied: the warp extractor fails loud rather than guess.
+    door_cells: Mapping[int, frozenset[tuple[int, int]]] | None = None
 
 
 ExtractResult = tuple[tuple[FloorAssertion, ...], tuple[FloorRefusal, ...]]

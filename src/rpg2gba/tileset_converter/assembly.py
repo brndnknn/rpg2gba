@@ -381,7 +381,10 @@ def patch_out_of_slice_warps(pory_text: str, allowed_uranium_maps: set[int]) -> 
     CommonEvents can reference any map in the corpus; only the in-slice alias
     header is present at build time, so unresolvable MAP_URANIUM_<N> constants
     cause undefined-symbol link errors. Replacing with ``return`` is safe: the
-    entire CE is unreachable from slice gameplay anyway."""
+    entire CE is unreachable from slice gameplay anyway. A preceding
+    ``setvar(VAR_0x8004, DIR_*)`` / ``special(SetWarpArrivalFacing)`` pair
+    (``deterministic.warp_lines``) is left in place — harmless, since the
+    engine clears an unconsumed pending facing on the next map load."""
     def _repl(m: re.Match[str]) -> str:
         if int(m.group(1)) in allowed_uranium_maps:
             return m.group(0)

@@ -36,10 +36,12 @@ def _map_data(commands: list[dict], *, trigger: int = 0) -> dict:
     }
 
 
-def _floor(commands: list[dict], *, trigger: int = 0, common_events: list[dict] | None = None):
+def _floor(commands: list[dict], *, trigger: int = 0, common_events: list[dict] | None = None,
+           door_cells: dict[int, frozenset[tuple[int, int]]] | None = None):
     map_data = _map_data(commands, trigger=trigger)
     return walk.floor_for_map(
         MAP_ID, map_data, common_events=common_events or [], switch_labels={},
+        door_cells=door_cells if door_cells is not None else {},
     )
 
 
@@ -123,7 +125,29 @@ def test_warp_direct_target():
     assert w.param("x") == 10
     assert w.param("y") == 12
     assert w.param("direction") == 2
+    assert w.param("arrives_on_door") is False
     assert not row.refused
+
+
+def test_warp_arrives_on_door_reads_emitted_door_cells():
+    """`arrives_on_door` is True exactly when the emitted layout stamps the
+    arrival cell (on the DESTINATION map) as a door tile -- the same cell on
+    another map, or a neighbouring cell, does not count."""
+    commands = [{"code": 201, "parameters": [0, 5, 10, 12, 0, 0]}]
+    on_door = _only(_row(commands, door_cells={5: frozenset({(10, 12)})}), "warp")
+    assert on_door.param("arrives_on_door") is True
+    other_map = _only(_row(commands, door_cells={6: frozenset({(10, 12)})}), "warp")
+    assert other_map.param("arrives_on_door") is False
+    neighbour = _only(_row(commands, door_cells={5: frozenset({(10, 13)})}), "warp")
+    assert neighbour.param("arrives_on_door") is False
+
+
+def test_warp_without_door_cells_fails_loud():
+    """An ExtractContext built without door cells cannot answer
+    arrives_on_door -- the extractor raises rather than guess plain floor."""
+    ctx = ExtractContext(1, 1, 0, "map001/ev001/p0", {}, {}, {})
+    with pytest.raises(ValueError, match="door cells"):
+        walk._extract_warp({"code": 201, "parameters": [0, 5, 10, 12, 2, 0]}, 0, ctx)
 
 
 def test_warp_variable_target_refuses():

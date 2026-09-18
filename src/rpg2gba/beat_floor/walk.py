@@ -25,6 +25,7 @@ tests can inject fakes by monkeypatching `walk.extract_script` etc. -- see
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 from rpg2gba.beat_floor.assertion import (
@@ -194,7 +195,14 @@ def _extract_warp(cmd: dict[str, Any], list_index: int, ctx: ExtractContext) -> 
     """201 Transfer Player. `parameters`: [designation, map_id, x, y,
     direction, fade_type] (designation 0 = direct constants; 1/2 = variable-
     designated -- refused, R11's proxy-oracle rule can't read a variable's
-    runtime value from source alone)."""
+    runtime value from source alone).
+
+    `arrives_on_door` (C5b) is whether the emitted layout stamps the arrival
+    cell as a door tile (`ctx.door_cells`): the engine then walks the player
+    one step on in their arrival facing, so a beat's expected final cell is
+    the destination plus that step (`playtest.assertions.arrival_landing_
+    cell`). Direction 0 ("retain") is left for the consumer to resolve from
+    its own approach -- the floor cannot know how the row is crossed."""
     params = cmd.get("parameters") or []
     if not params or params[0] != 0:
         return (), (FloorRefusal(
@@ -207,9 +215,17 @@ def _extract_warp(cmd: dict[str, Any], list_index: int, ctx: ExtractContext) -> 
             code=201, detail=f"code 201 @list[{list_index}]: too few params {params!r}",
         ),)
     map_id, x, y, direction = params[1], params[2], params[3], params[4]
+    if ctx.door_cells is None:
+        raise ValueError(
+            f"{ctx.row_id}: code 201 @list[{list_index}] needs the emitted layout's "
+            "door cells (ExtractContext.door_cells) to derive arrives_on_door -- "
+            "pass door_cells= to floor_for_map")
+    arrives_on_door = (x, y) in ctx.door_cells.get(map_id, frozenset())
     assertion = FloorAssertion(
         row_id=ctx.row_id, kind="warp", list_index=list_index, code=201,
-        params=make_params(map_id=map_id, x=x, y=y, direction=direction), tag="position",
+        params=make_params(map_id=map_id, x=x, y=y, direction=direction,
+                           arrives_on_door=arrives_on_door),
+        tag="position",
     )
     return (assertion,), ()
 
@@ -593,10 +609,12 @@ def _build_row_floor(
     common_events_by_id: dict[int, dict[str, Any]],
     index_of: dict[int, int],
     row_states: dict[str, RowState],
+    door_cells: Mapping[int, frozenset[tuple[int, int]]],
 ) -> RowFloor:
     ctx = ExtractContext(
         map_id=map_id, event_id=event_id, page_idx=page_idx, row_id=scope.row_id,
         event=event, map_data=map_data, common_events_by_id=common_events_by_id,
+        door_cells=door_cells,
     )
 
     assertions: list[FloorAssertion] = [
@@ -627,12 +645,28 @@ def _build_row_floor(
     )
 
 
+def load_door_cells(build_dir: Any) -> dict[int, frozenset[tuple[int, int]]]:
+    """The emitted layout's door-tile cells per Uranium map: the build's
+    `warp_overrides.gen.json`, which is exactly the set the assembler stamps
+    MB_NON_ANIMATED_DOOR on (`metadata_wiring.load_warp_overrides` -- fails
+    loud when the file is absent, CLAUDE.md §4.5)."""
+    from pathlib import Path
+
+    from rpg2gba.tileset_converter.metadata_wiring import load_warp_overrides
+
+    return {
+        uid: frozenset(cells)
+        for uid, cells in load_warp_overrides(Path(build_dir)).items()
+    }
+
+
 def floor_for_map(
     map_id: int,
     map_data: dict[str, Any],
     *,
     common_events: list[dict[str, Any]],
     switch_labels: dict[int, str],
+    door_cells: Mapping[int, frozenset[tuple[int, int]]],
     connections: list[list[Any]] = (),
 ) -> dict[str, RowFloor]:
     """Every row's `RowFloor` for one map's events, plus its `seam` and
@@ -643,6 +677,11 @@ def floor_for_map(
     generator's own behaviour when no `connections.json` exists (no seam
     rows) -- a caller with connections data available should pass it through
     rather than accept a silently seam-less floor.
+
+    `door_cells` (required, no default) is the emitted layout's door-tile
+    cells per Uranium map -- `load_door_cells(build_dir)` -- which the `warp`
+    extractor needs for `arrives_on_door` (C5b). Required so a caller cannot
+    silently get a floor where every arrival reads as plain floor.
     """
     common_events_by_id = {ce["id"]: ce for ce in common_events}
     row_states = extract_map(
@@ -667,7 +706,7 @@ def floor_for_map(
             for scope in iter_page_scopes(map_id, event, page_idx, page):
                 result[scope.row_id] = _build_row_floor(
                     scope, trigger, map_id, event_id, page_idx, event, map_data,
-                    common_events_by_id, index_of, row_states,
+                    common_events_by_id, index_of, row_states, door_cells,
                 )
 
     result.update(seam_floors_for_map(map_id, list(connections)))
@@ -699,12 +738,14 @@ def floor_for_chapter(chapter_id: str, *, build_dir: Any) -> dict[str, RowFloor]
     conn_path = build_dir / "connections.json"
     connections = json.loads(conn_path.read_text(encoding="utf-8")) if conn_path.exists() else []
 
+    door_cells = load_door_cells(build_dir)
+
     merged: dict[str, RowFloor] = {}
     for map_id in maps:
         map_path = build_dir / "maps" / f"Map{map_id:03d}.json"
         map_data = json.loads(map_path.read_text(encoding="utf-8"))
         merged.update(floor_for_map(
             map_id, map_data, common_events=common_events, switch_labels=switch_labels,
-            connections=connections))
+            door_cells=door_cells, connections=connections))
 
     return {rid: merged[rid] for rid in sorted(merged, key=row_id_sort_key)}

@@ -37,10 +37,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from rpg2gba.conversion_agent.deterministic import (
+    RMXP_DIRECTION_TO_DIR_CONST as _RMXP_DIRECTION_TO_DIR_CONST,
+)
+from rpg2gba.conversion_agent.deterministic import (
     _label_name,
     format_pory_dialogue,
     join_text_lines,
     translate_text_codes,
+    warp_lines,
 )
 from rpg2gba.conversion_agent.flag_registry import (
     TERMINAL_HIDE_FLAG_PLACEHOLDER,
@@ -276,15 +280,9 @@ _HAS_SPECIES_RE = re.compile(r"^\s*pbHasSpecies\?\(\s*::PBSpecies::([A-Za-z0-9_]
 # NPC local-id lookup that is deliberately out of scope (no established
 # RMXP-local-id -> fork-local-id mapping exists yet) and must keep queueing,
 # not be guessed at. RMXP direction constants 2/4/6/8 (down/left/right/up)
-# map onto the fork's DIR_SOUTH/DIR_WEST/DIR_EAST/DIR_NORTH
-# (engine/include/constants/global.h:205-209); any other direction value
-# falls through to the queue.
-_RMXP_DIRECTION_TO_DIR_CONST = {
-    2: "DIR_SOUTH",
-    4: "DIR_WEST",
-    6: "DIR_EAST",
-    8: "DIR_NORTH",
-}
+# map onto the fork's DIR_SOUTH/DIR_WEST/DIR_EAST/DIR_NORTH through
+# `_RMXP_DIRECTION_TO_DIR_CONST` (imported above; owned by deterministic.py);
+# any other direction value falls through to the queue.
 
 # $PokemonBag.pbQuantity(PBItems::SYMBOL) <op> 0 — a bag has-item/lacks-item
 # guard (Map073 EV1 page 1 cmd 4 `...BIKEWHEEL)>0`; EV3 page 1 cmd 0 and EV6
@@ -2094,10 +2092,13 @@ class _PageEmitter:
             if len(params) < 4 or params[0] != 0 \
                     or not all(isinstance(v, int) for v in params[1:4]):
                 return [ctx.queue(node.index, code, "variable-target player transfer")]
-            return [
-                f"warp(MAP_URANIUM_{params[1]}, {params[2]}, {params[3]})",
-                "waitstate",
-            ]
+            direction = params[4] if len(params) > 4 else None
+            lines = warp_lines(params[1], params[2], params[3], direction)
+            if lines is None:
+                return [ctx.queue(
+                    node.index, code, f"player transfer with unknown direction {direction!r}",
+                )]
+            return lines
         if code == SET_EVENT_LOCATION:
             return self._emit_set_event_location(node)
         if code == CHANGE_MAP_SETTINGS:

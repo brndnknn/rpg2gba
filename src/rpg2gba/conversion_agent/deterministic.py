@@ -816,6 +816,37 @@ def classify_pokemart(map_id: int, event: dict, ctx: "Context | None" = None) ->
 
 # -- Classifier 4: Simple Warp (plan §7) --------------------------------------
 
+# RMXP direction constants 2/4/6/8 (down/left/right/up) -> the fork's DIR_*
+# (engine/include/constants/global.h). The single table for this mapping: the
+# transpiler's turn/face commands, script warps below, and metadata_wiring's
+# departure-warp `"facing"` all read it.
+RMXP_DIRECTION_TO_DIR_CONST = {
+    2: "DIR_SOUTH",
+    4: "DIR_WEST",
+    6: "DIR_EAST",
+    8: "DIR_NORTH",
+}
+
+
+def warp_lines(target_map: int, x: int, y: int, direction: int | None) -> list[str] | None:
+    """The Poryscript for an RMXP code-201 transfer to a literal target.
+
+    RMXP `direction` 0 ("retain facing"; None = absent) emits a bare `warp`: the engine keeps
+    the player's facing across a script warp (RPG2GBA_WARP_RETAIN_FACING,
+    engine/include/config/rpg2gba.h). 2/4/6/8 first set an explicit arrival
+    facing through the `SetWarpArrivalFacing` special, which the next `warp`
+    consumes (WARP_RETAIN_FACING_PROPOSAL.md §0 R3). Any other direction is
+    unrecognized: returns None so the caller queues or bails rather than
+    guessing (CLAUDE.md §4.5)."""
+    lines: list[str] = []
+    if direction not in (0, None):
+        dir_const = RMXP_DIRECTION_TO_DIR_CONST.get(direction)
+        if dir_const is None:
+            return None
+        lines += [f"setvar(VAR_0x8004, {dir_const})", "special(SetWarpArrivalFacing)"]
+    return lines + [f"warp(MAP_URANIUM_{target_map}, {x}, {y})", "waitstate"]
+
+
 _WARP_SAFE_CODES = {0, 5, 6, 7, 106, 201, 221, 222, 223, 224, 249, 250}
 # 0 term · 5/6/7 lock/face/release (absent in corpus, allowed) · 106 wait ·
 # 201 transfer · 221/222 transition · 223 tone-fade · 224 flash · 249/250 ME/SE
@@ -859,15 +890,14 @@ def classify_simple_warp(
     target_map, x, y = params[1], params[2], params[3]
     if not all(isinstance(v, int) for v in (target_map, x, y)):
         return None
+    # RMXP 201 always carries `direction` (params[4]); a short list is a
+    # malformed event, treated as retain like metadata_wiring's WarpSpec.
+    warp = warp_lines(target_map, x, y, params[4] if len(params) > 4 else None)
+    if warp is None:
+        return None
     script = _block(
         _page_label(map_id, event, 1),
-        [
-            "lockall",
-            f"warp(MAP_URANIUM_{target_map}, {x}, {y})",
-            "waitstate",
-            "releaseall",
-            "end",
-        ],
+        ["lockall", *warp, "releaseall", "end"],
     )
     entry = {
         "command_code": TRANSFER_PLAYER,

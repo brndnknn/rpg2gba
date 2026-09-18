@@ -743,6 +743,37 @@ def test_warp_audio_script_call_stripped() -> None:
     assert "pbSEPlay" not in out.script
 
 
+def test_warp_explicit_direction_sets_arrival_facing() -> None:
+    """An explicit RMXP direction (4 = left) emits the SetWarpArrivalFacing
+    pair right before the warp; the script still compiles."""
+    ev = _event(_page(_cmd(D.TRANSFER_PLAYER, 0, 60, 21, 20, 4, 1)), id=2, name="EV002")
+    out = D.classify_simple_warp(2, ev)
+    assert out is not None
+    lines = [ln.strip() for ln in out.script.splitlines()]
+    i = lines.index("setvar(VAR_0x8004, DIR_WEST)")
+    assert lines[i + 1:i + 3] == ["special(SetWarpArrivalFacing)", "warp(MAP_URANIUM_60, 21, 20)"]
+
+
+def test_warp_unknown_direction_returns_none() -> None:
+    """A direction outside {0, 2, 4, 6, 8} → classifier declines (no guess)."""
+    ev = _event(_page(_cmd(D.TRANSFER_PLAYER, 0, 60, 21, 20, 5, 1)), id=2, name="EV002")
+    assert D.classify_simple_warp(2, ev) is None
+
+
+@pytest.mark.parametrize(
+    ("direction", "expected"),
+    [
+        (0, ["warp(MAP_URANIUM_1, 2, 3)", "waitstate"]),
+        (None, ["warp(MAP_URANIUM_1, 2, 3)", "waitstate"]),
+        (8, ["setvar(VAR_0x8004, DIR_NORTH)", "special(SetWarpArrivalFacing)",
+             "warp(MAP_URANIUM_1, 2, 3)", "waitstate"]),
+        (7, None),
+    ],
+)
+def test_warp_lines(direction: int | None, expected: list[str] | None) -> None:
+    assert D.warp_lines(1, 2, 3, direction) == expected
+
+
 def test_warp_mode_nonzero_returns_none() -> None:
     """mode != 0 (variable warp) → classifier declines."""
     ev = _event(_page(_cmd(D.TRANSFER_PLAYER, 1, 60, 21, 20, 0, 1)), id=2, name="EV002")

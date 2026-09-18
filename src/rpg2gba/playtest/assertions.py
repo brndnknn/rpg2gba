@@ -305,40 +305,73 @@ _DIR_CONST_TO_FACING: dict[str, str] = {
 }
 
 
-def expected_arrival_facing(dest_uid: int, x: int, y: int) -> str:
-    """The harness facing string this build's OWN pipeline assigns to a real
-    warp arrival -- runs `compute_arrival_facings` over the staged slice
-    (`output/uranium-build/maps/*.json` + `tilesets.json` +
-    `reference/warp_facing_overrides.json`, the exact inputs `build_slice_
-    maps` feeds it), not a literal `"UP"` -- so a future registry/converter
-    change that shifts the derived direction fails a beat that uses this
-    instead of leaving it silently green. This property is load-bearing;
-    do not replace the live `compute_arrival_facings` call with a cached or
-    hardcoded table."""
+#: harness facing string -> the (dx, dy) one step in that direction
+_FACING_STEP: dict[str, tuple[int, int]] = {
+    "UP": (0, -1), "DOWN": (0, 1), "LEFT": (-1, 0), "RIGHT": (1, 0),
+}
+
+
+def facing_for_direction(direction: int | None, approach: str) -> str:
+    """The harness facing string a warp with RMXP transfer `direction` lands
+    with, when the player crossed it facing `approach` (C5b,
+    WARP_RETAIN_FACING_PROPOSAL.md §0): an explicit 2/4/6/8 is carried on the
+    departure warp and wins; 0/None ("retain facing") keeps `approach`,
+    because the engine keeps the facing the player walked in with
+    (RPG2GBA_WARP_RETAIN_FACING). Pure -- `expected_arrival_facing` is the
+    build-reading entry point."""
+    from ..conversion_agent.deterministic import RMXP_DIRECTION_TO_DIR_CONST
+
+    if approach not in _FACING_STEP:
+        raise ValueError(f"facing_for_direction: approach {approach!r} is not one of "
+                         f"{sorted(_FACING_STEP)}")
+    if direction in (0, None):
+        return approach
+    try:
+        return _DIR_CONST_TO_FACING[RMXP_DIRECTION_TO_DIR_CONST[direction]]
+    except KeyError:
+        raise ValueError(
+            f"facing_for_direction: unknown RMXP transfer direction {direction!r}") from None
+
+
+def arrival_landing_cell(arrival: tuple[int, int], facing: str,
+                         arrives_on_door: bool) -> tuple[int, int]:
+    """Where the player stands once a warp's arrival settles: the arrival
+    cell itself, or -- when it is a door tile (the `warp` floor's
+    `arrives_on_door`) -- one step further in the arrival `facing`, because
+    the engine's door exit (`Task_ExitNonAnimDoor`, field_screen_effect.c)
+    walks the player one tile in the direction they face."""
+    if not arrives_on_door:
+        return arrival
+    dx, dy = _FACING_STEP[facing]
+    return (arrival[0] + dx, arrival[1] + dy)
+
+
+def expected_arrival_facing(src_map_id: int, src_cell: tuple[int, int], approach: str) -> str:
+    """The harness facing string the player should arrive with after
+    crossing the warp at `src_cell` on Uranium map `src_map_id` while facing
+    `approach` -- read live off THIS build's own staged
+    `output/uranium-build/maps/MapNNN.json` (the transfer direction the
+    pipeline writes onto the departure warp_event's `"facing"`), never a
+    literal, so a converter change that shifts the direction fails the beat
+    instead of leaving it silently green. Fails loud when no kept warp sits
+    on that cell or the warps there disagree on the direction."""
     from ..tileset_converter import metadata_wiring as mw
     from ..tileset_converter.map_set import SLICE_MAP_IDS
 
     out = Path(os.environ.get("RPG2GBA_OUTPUT", "output")) / "uranium-build"
-    maps_dir = out / "maps"
-    slice_set = set(SLICE_MAP_IDS)
-    maps = {
-        uid: json.loads((maps_dir / f"Map{uid:03d}.json").read_text(encoding="utf-8"))
-        for uid in SLICE_MAP_IDS
+    map_json = json.loads(
+        (out / "maps" / f"Map{src_map_id:03d}.json").read_text(encoding="utf-8"))
+    directions = {
+        spec.dest_dir
+        for _event, spec in mw.classify_map_events(map_json, set(SLICE_MAP_IDS))[1]
+        if (spec.src_x, spec.src_y) == tuple(src_cell)
     }
-    warp_lists = {
-        uid: [spec for _event, spec in mw.classify_map_events(maps[uid], slice_set)[1]]
-        for uid in SLICE_MAP_IDS
-    }
-    tilesets = json.loads((out / "tilesets.json").read_text(encoding="utf-8"))
-    facings = mw.compute_arrival_facings(warp_lists, maps, tilesets=tilesets)
-
-    for f in facings.get(dest_uid, []):
-        if (f.x, f.y) == (x, y):
-            return _DIR_CONST_TO_FACING[f.dir_const]
-    raise ScenarioError(
-        f"expected_arrival_facing: map {dest_uid} arrival ({x},{y}) has no "
-        f"row in compute_arrival_facings' own output -- nothing to compare "
-        f"the live ROM facing against")
+    if len(directions) != 1:
+        raise ScenarioError(
+            f"expected_arrival_facing: map {src_map_id} cell {tuple(src_cell)} yields "
+            f"{len(directions)} distinct kept-warp directions {sorted(directions, key=str)} "
+            f"-- expected exactly one (no kept warp there, or they disagree)")
+    return facing_for_direction(directions.pop(), approach)
 
 
 def assert_player_facing(emu: Emulator, beat: str, expected: str) -> None:
@@ -351,8 +384,7 @@ def assert_player_facing(emu: Emulator, beat: str, expected: str) -> None:
         shot = emu.screenshot(f"{beat.lower()}_wrong_facing")
         raise ScenarioError(
             f"{beat}: player facing {actual}, expected {expected} (derived "
-            f"live from compute_arrival_facings over this build's own "
-            f"staged output) ({shot})")
+            f"live from this build's own staged warp direction) ({shot})")
 
 
 # -- post-warp BGM (ch03.py's companion to the facing class) ---------------

@@ -1,8 +1,0 @@
-{
-  "_comment": "Hand overrides for post-warp arrival facing (CLAUDE.md §4.3: this file is the single source of truth for a CORRECTED arrival facing, taking precedence over both the automatic tiers in metadata_wiring.compute_arrival_facings). Keyed by \"<dest_uid>:<x>:<y>\" — the Uranium destination map uid and the Uranium arrival coords (the same coords an ArrivalFacing keys on) — mapping to an engine DIR_* constant name (DIR_NORTH / DIR_SOUTH / DIR_EAST / DIR_WEST). Use this ONLY when tier 3 (derive the approach direction from the source warp's single open non-sibling, non-blocked neighbour) raises because the geometry is genuinely ambiguous (0 or >1 open neighbours) — tier 3 raising with a real single-neighbour answer is a bug in tier 3, not a case for this file. Every key here must match some in-bounds warp arrival, and every value must be a known DIR_* constant, or the pipeline fails loud (CLAUDE.md §4.5) rather than silently ignoring a stale/typo'd entry.",
-  "overrides": {
-    "32:8:43": "DIR_EAST",
-    "36:17:39": "DIR_NORTH",
-    "37:16:26": "DIR_NORTH"
-  }
-}

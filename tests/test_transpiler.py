@@ -333,6 +333,45 @@ def test_warp_emits_map_and_waitstate(ctx: T.TranspileContext) -> None:
     assert "    waitstate" in lines
 
 
+def test_warp_retain_direction_emits_bare_warp(ctx: T.TranspileContext) -> None:
+    # RMXP direction 0 ("retain facing"): no facing special — the engine keeps
+    # the player's facing across a script warp (RPG2GBA_WARP_RETAIN_FACING).
+    res = run_event(ctx, [[cmd(T.TRANSFER_PLAYER, [0, 32, 28, 31, 0, 1])]], trigger=1)
+    assert "SetWarpArrivalFacing" not in res.text
+    assert "VAR_0x8004" not in res.text
+
+
+@pytest.mark.parametrize(
+    ("direction", "dir_const"),
+    [(2, "DIR_SOUTH"), (4, "DIR_WEST"), (6, "DIR_EAST"), (8, "DIR_NORTH")],
+)
+def test_warp_explicit_direction_sets_arrival_facing(
+    ctx: T.TranspileContext, direction: int, dir_const: str,
+) -> None:
+    # An explicit RMXP direction sets the pending arrival facing immediately
+    # before the warp consumes it (WARP_RETAIN_FACING_PROPOSAL.md §0 R3).
+    res = run_event(
+        ctx, [[cmd(T.TRANSFER_PLAYER, [0, 49, 6, 8, direction, 1])]], trigger=1,
+    )
+    lines = [ln.strip() for ln in res.text.splitlines()]
+    i = lines.index(f"setvar(VAR_0x8004, {dir_const})")
+    assert lines[i:i + 4] == [
+        f"setvar(VAR_0x8004, {dir_const})",
+        "special(SetWarpArrivalFacing)",
+        "warp(MAP_URANIUM_49, 6, 8)",
+        "waitstate",
+    ]
+    assert not res.unhandled
+
+
+def test_warp_unknown_direction_queues(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.TRANSFER_PLAYER, [0, 32, 28, 31, 5, 1])]], trigger=1)
+    assert "warp(" not in res.text
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.TRANSFER_PLAYER
+    assert "unknown direction 5" in res.unhandled[0].description
+
+
 def test_warp_variable_target_queues(ctx: T.TranspileContext) -> None:
     res = run_event(ctx, [[cmd(T.TRANSFER_PLAYER, [1, 32, 28, 31, 0, 1])]], trigger=1)
     assert len(res.unhandled) == 1

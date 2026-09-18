@@ -319,13 +319,27 @@ def warp_beat(
             "strengthen (refused or malformed source command)"
         )
 
-    extras: list[FloorAssertion] = []
+    # Arrival facing and landing cell (C5b, WARP_RETAIN_FACING_PROPOSAL.md §0):
+    # the claimed warp's own RMXP direction when explicit, else the facing the
+    # player crossed with (`door` is always entered holding UP -- see
+    # `assertions.enter_door`). When the floor says the arrival cell is a door
+    # tile, the engine walks the player one step on in that facing, so the
+    # forward leg lands one tile past `arrival`.
     expected_facing: str | None = None
+    landing = arrival
+    if warp_floor_assertions:
+        floor_params = dict(warp_floor_assertions[0].params)
+        approach = "UP" if mechanism == "door" else direction
+        expected_facing = assertions.facing_for_direction(
+            floor_params["direction"], approach)
+        landing = assertions.arrival_landing_cell(
+            arrival, expected_facing, floor_params["arrives_on_door"])
+
+    extras: list[FloorAssertion] = []
     if warp_floor_assertions and (assert_facing or assert_bgm):
         floor_warp = warp_floor_assertions[0]
         extra_params = dict(floor_warp.params)
         if assert_facing:
-            expected_facing = assertions.expected_arrival_facing(dest_uid, *arrival)
             extra_params["arrival_facing"] = expected_facing
         if assert_bgm:
             extra_params["bgm"] = dest_engine_map_dir
@@ -426,8 +440,9 @@ def warp_beat(
         # docstring records that `ON_WARP_INTO_MAP` dispatch compares
         # `getplayerxy` against them with no tolerance either -- a tolerant
         # check here would hide exactly the one-tile miss that dispatch
-        # would catch anyway, just later and with a worse error.
-        assertions.assert_position_exact(emu, beat_name, arrival)
+        # would catch anyway, just later and with a worse error. `landing` is
+        # `arrival` itself unless the floor marks it a door tile (C5b).
+        assertions.assert_position_exact(emu, beat_name, landing)
 
         if not check_arrival_details:
             return
@@ -442,7 +457,10 @@ def warp_beat(
                dest_map_constant)
         assertions.require_map(emu, beat_name, map_constant)
         # Same exactness reasoning as `_forward` above -- `return_arrival` is
-        # derived through the identical `cells.arrival_cell` call.
+        # derived through the identical `cells.arrival_cell` call. Unlike the
+        # forward leg there is no floor for the (unclaimed) reciprocal row, so
+        # a reciprocal that lands on a door tile is NOT offset by the C5b
+        # exit step here; that mismatch fails this check loudly in-ROM (P11).
         assertions.assert_position_exact(emu, beat_name, return_arrival)
 
     @builder.beat(

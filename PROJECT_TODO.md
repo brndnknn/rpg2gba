@@ -90,8 +90,9 @@ the build voided the whole column.
 
 **Still open — fix when the first chapter containing one of these maps is built** (no CH01–CH04
 map is affected, so today nothing hits it): `traversal/collision.py` `build_tile_grid` (+
-`graph.py`, `capabilities.py`) and `metadata_wiring._derive_retain_facing` (~line 3188) build raw
-unmasked grids and feed them to `column_blocked`. They will `KeyError` on ids past `passages`, or
+`graph.py`, `capabilities.py`) and `tests/test_warp_facing_invariant.py`'s `_blocked` build raw
+unmasked grids *(2026-09-18: `metadata_wiring._derive_retain_facing` was the other listed site;
+deleted in C5b, and its replacement invariant test inherited the same raw-grid shape)* and feed them to `column_blocked`. They will `KeyError` on ids past `passages`, or
 — worse, silently — apply collision from a layer the ROM no longer has where `passages` is longer
 than the image (tileset 19 `Indoor(1)`: table 2072, image bound 1824; maps 29, 97, 98, 102, 104,
 113, 126). Fix = mask with the recorded `atlas_max` before `column_blocked`. A shared-loader
@@ -1347,11 +1348,13 @@ leaked fixture keys in the same commit.
 
 ### 107. Warp retain-facing tier 3 should test second-order reachability
 
-**SUPERSEDED 2026-09-18 — close when C5b lands.** The operator ruled to delete tier 3
-outright (retain-facing and departure-side direction move into the engine —
-`WARP_RETAIN_FACING_PROPOSAL.md` §0, `REDERIVATION_PLAN.md` §16.3 C5b). Do not implement
-the rule below. The same deletion removes `_derive_retain_facing` from #114's
-still-open list.
+**CLOSED 2026-09-18 — C5b landed.** Tier 3 is deleted (retain-facing and departure-side
+direction moved into the engine — `WARP_RETAIN_FACING_PROPOSAL.md` §0, `REDERIVATION_PLAN.md`
+§16.3 C5b). The rule below was never implemented in `metadata_wiring`; its idea survives as
+the approach model of `tests/test_warp_facing_invariant.py`, which floods `traversal.graph`
+reachability from every way into a map (warp cells as barriers, door landings seeded to a fixed
+point) — and under that model all three former hand overrides follow from the source data
+(`test_former_hand_overrides_now_follow_from_retain`).
 
 `metadata_wiring.compute_arrival_facings` tier 3 derives a `dest_dir=0`
 ("retain facing") arrival by finding the source warp's single open,

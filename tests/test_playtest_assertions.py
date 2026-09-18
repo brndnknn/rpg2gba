@@ -232,69 +232,84 @@ def test_assert_player_facing_mismatch_raises() -> None:
     assert emu.screenshots == ["b27_wrong_facing"]
 
 
-def test_expected_arrival_facing_reads_this_builds_own_pipeline(
-        tmp_path, monkeypatch) -> None:
-    """`expected_arrival_facing` must derive its answer from a live call
-    into `compute_arrival_facings`, not a hardcoded table -- that property
-    is the whole point of promoting it (see the function's own docstring
-    and `PLAYTEST_AUTHORING_IMPROVEMENT.md` Q4 #1). This pins the wiring
-    (env var -> staged files -> classify_map_events -> compute_arrival_
-    facings -> dir-const translation) with the two expensive calls faked
-    out, since a full metadata_wiring run needs real staged build output."""
+@pytest.mark.parametrize(
+    ("direction", "approach", "expected"),
+    [(2, "UP", "DOWN"), (4, "UP", "LEFT"), (6, "DOWN", "RIGHT"), (8, "LEFT", "UP"),
+     (0, "LEFT", "LEFT"), (None, "RIGHT", "RIGHT")],
+)
+def test_facing_for_direction(direction, approach, expected) -> None:
+    """An explicit RMXP direction wins; 0/None ("retain facing") keeps the
+    facing the player crossed with (C5b, RPG2GBA_WARP_RETAIN_FACING)."""
+    assert assertions.facing_for_direction(direction, approach) == expected
+
+
+def test_facing_for_direction_rejects_unknowns() -> None:
+    with pytest.raises(ValueError, match="unknown RMXP transfer direction 5"):
+        assertions.facing_for_direction(5, "UP")
+    with pytest.raises(ValueError, match="approach 'NORTH'"):
+        assertions.facing_for_direction(0, "NORTH")
+
+
+def test_arrival_landing_cell_steps_off_a_door_in_the_facing() -> None:
+    """A door-tile arrival lands one step on in the arrival facing (the
+    engine's Task_ExitNonAnimDoor); any other arrival stays put."""
+    assert assertions.arrival_landing_cell((5, 5), "DOWN", False) == (5, 5)
+    assert assertions.arrival_landing_cell((5, 5), "DOWN", True) == (5, 6)
+    assert assertions.arrival_landing_cell((5, 5), "UP", True) == (5, 4)
+    assert assertions.arrival_landing_cell((5, 5), "LEFT", True) == (4, 5)
+    assert assertions.arrival_landing_cell((5, 5), "RIGHT", True) == (6, 5)
+
+
+def _stage_map(tmp_path, monkeypatch, specs) -> None:
+    """Stage an (empty) Map031.json and fake the classifier to return
+    `specs` for it -- `expected_arrival_facing` must read the staged map and
+    thread it through `classify_map_events`, not a hardcoded table."""
     from rpg2gba.tileset_converter import map_set, metadata_wiring
 
-    out = tmp_path / "uranium-build"
-    maps_dir = out / "maps"
+    maps_dir = tmp_path / "uranium-build" / "maps"
     maps_dir.mkdir(parents=True)
-    (maps_dir / "Map031.json").write_text("{}", encoding="utf-8")
-    (out / "tilesets.json").write_text("{}", encoding="utf-8")
-
+    (maps_dir / "Map031.json").write_text('{"marker": 1}', encoding="utf-8")
     monkeypatch.setenv("RPG2GBA_OUTPUT", str(tmp_path))
     monkeypatch.setattr(map_set, "SLICE_MAP_IDS", (31,))
-    monkeypatch.setattr(
-        metadata_wiring, "classify_map_events",
-        lambda map_json, slice_set: (None, [("some_event", "some_spec")]))
 
-    captured: dict = {}
+    def _fake_classify(map_json, slice_set):
+        assert map_json == {"marker": 1}  # the staged file was actually read
+        return None, [({"id": i}, s) for i, s in enumerate(specs)]
 
-    def _fake_compute(warp_lists, maps, *, tilesets):
-        captured["warp_lists"] = warp_lists
-        captured["maps"] = maps
-        captured["tilesets"] = tilesets
-        return {31: [metadata_wiring.ArrivalFacing(16, 42, "DIR_SOUTH")]}
-
-    monkeypatch.setattr(metadata_wiring, "compute_arrival_facings", _fake_compute)
-
-    result = assertions.expected_arrival_facing(31, 16, 42)
-
-    assert result == "DOWN"
-    # the staged Map031.json was actually read and threaded through, not
-    # bypassed -- confirms the file-reading half of the wiring, not just
-    # the dir-const translation half.
-    assert captured["warp_lists"] == {31: ["some_spec"]}
-    assert captured["maps"] == {31: {}}
-    assert captured["tilesets"] == {}
+    monkeypatch.setattr(metadata_wiring, "classify_map_events", _fake_classify)
 
 
-def test_expected_arrival_facing_raises_when_no_row_matches(
+def test_expected_arrival_facing_reads_the_staged_departure_warp(
         tmp_path, monkeypatch) -> None:
-    from rpg2gba.tileset_converter import map_set, metadata_wiring
+    from rpg2gba.tileset_converter.metadata_wiring import WarpSpec
 
-    out = tmp_path / "uranium-build"
-    maps_dir = out / "maps"
-    maps_dir.mkdir(parents=True)
-    (maps_dir / "Map031.json").write_text("{}", encoding="utf-8")
-    (out / "tilesets.json").write_text("{}", encoding="utf-8")
+    _stage_map(tmp_path, monkeypatch, [
+        WarpSpec(src_x=20, src_y=12, dest_uid=68, dest_x=8, dest_y=18, dest_dir=0),
+        WarpSpec(src_x=16, src_y=5, dest_uid=31, dest_x=16, dest_y=42, dest_dir=8),
+    ])
+    # explicit direction on the warp at (16, 5) wins over the approach
+    assert assertions.expected_arrival_facing(31, (16, 5), "DOWN") == "UP"
+    # retain (0) at (20, 12): the approach is kept
+    assert assertions.expected_arrival_facing(31, (20, 12), "LEFT") == "LEFT"
 
-    monkeypatch.setenv("RPG2GBA_OUTPUT", str(tmp_path))
-    monkeypatch.setattr(map_set, "SLICE_MAP_IDS", (31,))
-    monkeypatch.setattr(
-        metadata_wiring, "classify_map_events", lambda map_json, slice_set: (None, []))
-    monkeypatch.setattr(metadata_wiring, "compute_arrival_facings",
-                         lambda warp_lists, maps, *, tilesets: {})
 
-    with pytest.raises(ScenarioError, match="has no row in compute_arrival_facings"):
-        assertions.expected_arrival_facing(31, 16, 42)
+def test_expected_arrival_facing_raises_when_no_warp_on_cell(
+        tmp_path, monkeypatch) -> None:
+    _stage_map(tmp_path, monkeypatch, [])
+    with pytest.raises(ScenarioError, match=r"yields 0 distinct kept-warp directions"):
+        assertions.expected_arrival_facing(31, (16, 5), "UP")
+
+
+def test_expected_arrival_facing_raises_when_warps_disagree(
+        tmp_path, monkeypatch) -> None:
+    from rpg2gba.tileset_converter.metadata_wiring import WarpSpec
+
+    _stage_map(tmp_path, monkeypatch, [
+        WarpSpec(src_x=1, src_y=1, dest_uid=2, dest_x=0, dest_y=0, dest_dir=2),
+        WarpSpec(src_x=1, src_y=1, dest_uid=2, dest_x=0, dest_y=0, dest_dir=8),
+    ])
+    with pytest.raises(ScenarioError, match=r"yields 2 distinct kept-warp directions"):
+        assertions.expected_arrival_facing(31, (1, 1), "UP")
 
 
 # -- post-warp BGM --------------------------------------------------------------
