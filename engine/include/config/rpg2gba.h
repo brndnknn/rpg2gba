@@ -79,4 +79,22 @@
 // makes a wrong track sound sluggish instead of wrong. Fix the mapping.
 #define RPG2GBA_BGM_TEMPO_SCALE        256
 
+// rpg2gba warp arrival facing (C5b, decided 2026-09-18 —
+// WARP_RETAIN_FACING_PROPOSAL.md §0).
+//
+// RMXP warps carry an arrival direction where 0 means "keep facing the way
+// you walked in"; stock Emerald warps carry none and fall back to DIR_SOUTH.
+// When TRUE:
+//   - struct WarpEvent's `facing` byte (0 = retain, else DIR_*) is applied on
+//     arrival through the step-on/door warp paths;
+//   - the arrival-tile fallback, and the door-tile branch (whose exit step
+//     then follows it), return the stored direction instead of DIR_SOUTH;
+//   - ScrCmd_warp stores the player's facing instead of resetting it, and
+//     applies a pending facing set by the SetWarpArrivalFacing special.
+// Arrow, stair, ladder and surf arrivals and every other warp kind (fly,
+// teleport, dig, escape rope, whiteout, the other warp* commands) are
+// unchanged either way. FALSE restores vanilla behavior exactly; the
+// `facing` byte is still emitted but ignored.
+#define RPG2GBA_WARP_RETAIN_FACING     TRUE
+
 #endif // GUARD_CONFIG_RPG2GBA_H

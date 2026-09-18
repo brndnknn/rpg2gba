@@ -4,6 +4,11 @@
 // those checks; reverting them too restores vanilla avatar input handling.
 #include "uranium_map_walker.h"
 // END URANIUM MAP WALKER
+// BEGIN URANIUM PATHFINDER SLICE — RPG2GBA_WARP_RETAIN_FACING, for SetupWarp's arrival
+// facing below; the struct size pins the warp_def macro (asm/macros/map.inc) to the struct.
+#include "config/rpg2gba.h"
+STATIC_ASSERT(sizeof(struct WarpEvent) == 12, WarpEventSizeMatchesWarpDefMacro);
+// END URANIUM PATHFINDER SLICE
 #include "battle_setup.h"
 #include "bike.h"
 #include "coord_event_weather.h"
@@ -1082,6 +1087,14 @@ static void SetupWarp(struct MapHeader *unused, s8 warpEventId, struct MapPositi
     {
         warpEvent = &gMapHeader.events->warps[warpEventId];
     }
+
+    // BEGIN URANIUM PATHFINDER SLICE — the departure warp's arrival facing overrides the
+    // facing StoreInitialPlayerAvatarState() just saved (0 = keep it). Stock maps carry 0.
+#if RPG2GBA_WARP_RETAIN_FACING
+    if (warpEvent->facing != DIR_NONE)
+        SetInitialPlayerAvatarDirection(warpEvent->facing);
+#endif
+    // END URANIUM PATHFINDER SLICE
 
     if (warpEvent->mapNum == MAP_NUM(MAP_DYNAMIC))
     {

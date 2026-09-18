@@ -234,6 +234,10 @@ EWRAM_DATA static struct WarpData sFixedDiveWarp = {0};
 EWRAM_DATA static struct WarpData sFixedHoleWarp = {0};
 EWRAM_DATA static mapsec_u16_t sLastMapSectionId = 0;
 EWRAM_DATA static struct InitialPlayerAvatarState sInitialPlayerAvatarState = {0};
+// BEGIN URANIUM PATHFINDER SLICE — a script warp's explicit arrival facing, set by the
+// SetWarpArrivalFacing special and consumed by the next ScrCmd_warp (DIR_NONE = none).
+EWRAM_DATA static u8 sPendingWarpArrivalFacing = DIR_NONE;
+// END URANIUM PATHFINDER SLICE
 EWRAM_DATA static u16 sAmbientCrySpecies = 0;
 EWRAM_DATA static bool8 sIsAmbientCryWaterMon = FALSE;
 EWRAM_DATA static u8 sHoursOverride = 0; // used to override apparent time of day hours
@@ -1028,6 +1032,40 @@ void StoreInitialPlayerAvatarState(void)
         sInitialPlayerAvatarState.transitionFlags = PLAYER_AVATAR_FLAG_ON_FOOT;
 }
 
+// BEGIN URANIUM PATHFINDER SLICE — warp arrival facing (RPG2GBA_WARP_RETAIN_FACING,
+// WARP_RETAIN_FACING_PROPOSAL.md §0). RMXP warps carry an arrival direction; these let the
+// departure warp (SetupWarp) or a script warp (ScrCmd_warp) set it on the stored state that
+// GetAdjustedInitialDirection falls back to.
+void SetInitialPlayerAvatarDirection(u8 direction)
+{
+    sInitialPlayerAvatarState.direction = direction;
+}
+
+// special: VAR_0x8004 = DIR_SOUTH/NORTH/WEST/EAST; the next ScrCmd_warp arrives facing it.
+void SetWarpArrivalFacing(void)
+{
+    if (gSpecialVar_0x8004 >= DIR_SOUTH && gSpecialVar_0x8004 <= DIR_EAST)
+        sPendingWarpArrivalFacing = gSpecialVar_0x8004;
+    else
+        sPendingWarpArrivalFacing = DIR_NONE;
+}
+
+void ClearPendingWarpArrivalFacing(void)
+{
+    sPendingWarpArrivalFacing = DIR_NONE;
+}
+
+// Applies and clears a pending script-warp facing; FALSE when none was set.
+bool32 ApplyPendingWarpArrivalFacing(void)
+{
+    if (sPendingWarpArrivalFacing == DIR_NONE)
+        return FALSE;
+    sInitialPlayerAvatarState.direction = sPendingWarpArrivalFacing;
+    sPendingWarpArrivalFacing = DIR_NONE;
+    return TRUE;
+}
+// END URANIUM PATHFINDER SLICE
+
 static struct InitialPlayerAvatarState *GetInitialPlayerAvatarState(void)
 {
     struct InitialPlayerAvatarState playerStruct;
@@ -1082,7 +1120,14 @@ static enum Direction GetAdjustedInitialDirection(struct InitialPlayerAvatarStat
     else if (MetatileBehavior_IsDeepSouthWarp(metatileBehavior) == TRUE)
         return DIR_NORTH;
     else if (MetatileBehavior_IsNonAnimDoor(metatileBehavior) == TRUE || MetatileBehavior_IsDoor(metatileBehavior) == TRUE)
+    // BEGIN URANIUM PATHFINDER SLICE — door arrivals keep the warp's facing (the exit
+    // step then follows it) instead of always facing south. Vanilla: return DIR_SOUTH;
+#if RPG2GBA_WARP_RETAIN_FACING
+        return playerStruct->direction;
+#else
         return DIR_SOUTH;
+#endif
+    // END URANIUM PATHFINDER SLICE
     else if (MetatileBehavior_IsSouthArrowWarp(metatileBehavior) == TRUE)
         return DIR_NORTH;
     else if (MetatileBehavior_IsNorthArrowWarp(metatileBehavior) == TRUE)
@@ -1101,7 +1146,14 @@ static enum Direction GetAdjustedInitialDirection(struct InitialPlayerAvatarStat
     else if (MetatileBehavior_IsLadder(metatileBehavior) == TRUE)
         return playerStruct->direction;
     else
+    // BEGIN URANIUM PATHFINDER SLICE — plain arrivals keep the stored facing (RMXP
+    // retain semantics, or the warp's explicit facing). Vanilla: return DIR_SOUTH;
+#if RPG2GBA_WARP_RETAIN_FACING
+        return playerStruct->direction;
+#else
         return DIR_SOUTH;
+#endif
+    // END URANIUM PATHFINDER SLICE
 }
 
 static u16 GetCenterScreenMetatileBehavior(void)
@@ -2605,6 +2657,10 @@ static void InitObjectEventsLocal(void)
     InitPlayerAvatar(x, y, player->direction, gSaveBlock2Ptr->playerGender);
     SetPlayerAvatarTransitionFlags(player->transitionFlags);
     ResetInitialPlayerAvatarState();
+    // BEGIN URANIUM PATHFINDER SLICE — a SetWarpArrivalFacing that no warp consumed must
+    // not leak into a later, unrelated script warp.
+    ClearPendingWarpArrivalFacing();
+    // END URANIUM PATHFINDER SLICE
     // BEGIN URANIUM MAP WALKER — no NPCs; no on-warp map scripts
 #if URANIUM_MAP_WALKER != TRUE
     TrySpawnObjectEvents(0, 0);

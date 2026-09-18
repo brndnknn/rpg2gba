@@ -60,12 +60,16 @@
 	.endm
 
 	@ Defines a warp event for map data. Mirrors the struct layout of WarpEvent in include/global.fieldmap.h
-	.macro warp_def x:req, y:req, elevation:req, warpId:req, map_id:req
+	.macro warp_def x:req, y:req, elevation:req, warpId:req, map_id:req, facing=0
 	.2byte \x, \y
 	.byte \elevation
 	.byte \warpId
 	.byte \map_id & 0xFF  @ map num
 	.byte \map_id >> 8    @ map group
+	@ BEGIN URANIUM PATHFINDER SLICE — arrival facing (0 = retain, else DIR_*) + pad
+	.byte \facing
+	.space 3  @ Padding (struct is 12 bytes under -mabi=apcs-gnu)
+	@ END URANIUM PATHFINDER SLICE
 	inc _num_warps
 	.endm
 

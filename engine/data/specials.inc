@@ -644,3 +644,7 @@ gSpecials::
 	@ VAR_0x8004 = local id, VAR_0x8005 = OBJ_EVENT_GFX_* id. See
 	@ src/event_object_movement.c (RMXP move-command 41).
 	def_special RPG2GBA_SetObjectEventGfx
+	@ BEGIN URANIUM PATHFINDER SLICE — script-warp arrival facing (RPG2GBA_WARP_RETAIN_FACING).
+	@ VAR_0x8004 = DIR_*; the next `warp` arrives facing it. See src/overworld.c.
+	def_special SetWarpArrivalFacing
+	@ END URANIUM PATHFINDER SLICE

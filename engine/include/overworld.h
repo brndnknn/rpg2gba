@@ -123,6 +123,12 @@ bool8 SetDiveWarpDive(u16 x, u16 y);
 void LoadMapFromCameraTransition(u8 mapGroup, u8 mapNum);
 void ResetInitialPlayerAvatarState(void);
 void StoreInitialPlayerAvatarState(void);
+// BEGIN URANIUM PATHFINDER SLICE — warp arrival facing (RPG2GBA_WARP_RETAIN_FACING)
+void SetInitialPlayerAvatarDirection(u8 direction);
+void SetWarpArrivalFacing(void);
+void ClearPendingWarpArrivalFacing(void);
+bool32 ApplyPendingWarpArrivalFacing(void);
+// END URANIUM PATHFINDER SLICE
 bool32 Overworld_IsBikingAllowed(void);
 void SetDefaultFlashLevel(void);
 void SetFlashLevel(s32 flashLevel);
