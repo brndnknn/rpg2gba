@@ -1634,8 +1634,8 @@ Each lands unit-green. None is ROM-verified before P11.
 | **C3** | Engine-transition forks, white-out first, with the fenced-engine grep for the rest | R9 | DONE 2026-09-16 — fork model, engine audit, `FLAG_MUM` seed; day/night deferred to its first real reader; see "C3" below |
 | **C4** | Generic per-command extractors for every code present in CH01–CH05, source-derived | R11 | DONE 2026-09-17 — `beat_floor/`; see "C4 landed" below |
 | **C5** | Archetype templates refactored onto the generic floor; the ⊇-floor checker rule; seam and stair floors | R11 | DONE 2026-09-17 — `beat_floor/{coverage,lookup,terrain}.py`, all five templates declare; see "C5 landed" below |
-| **C6** | Generator + solver integration: whole-module emit, review doc, refusal list, idempotence test | R1, R4, R7 | TODO |
-| **C7** | Freeze CH01–CH05 hand beats | R12 | TODO |
+| **C7** | Freeze CH01–CH05 hand beats — **rows + identity only; coverage is the test, not literal match** (R12 amended 2026-09-17) | R12 | TODO — **runs before C6** (2026-09-17) |
+| **C6** | Generator + solver integration: whole-module emit, review doc, refusal list, idempotence test | R1, R4, R7 | TODO — **runs after C7** (2026-09-17) |
 | **C8** | Shared Ruby-subset interpreter + input search; `map050/ev019` | R10 | TODO |
 | **C9** | Regenerate CH01–CH05 behind the frozen test, one commit per chapter | R12 | TODO |
 | **C10** | `offline:` verdict head, offline flavour checker, ROM sample selection | R2, R3 | TODO |
@@ -1911,6 +1911,144 @@ inverts §4.1. Do not "fix" this by strengthening `trainer.py` — the fix is C6
 
 C1–C6 stand on their own. C7 must land before C9 overwrites anything. Route plans (P9) become
 a C6 output rather than a separate step.
+
+**C7 and C6 swapped, 2026-09-17 (operator).** C7 now runs first. **The step labels are stable
+identifiers, not sequence numbers** — every "the fix is C6" / "waits for C6" reference elsewhere in
+this file still means the generator, and C6_GENERATOR_PLAN.md is unaffected in scope. Renumbering
+was rejected precisely because those references would rot.
+
+Why: nothing ever required C6 first. The only stated constraint was C7 before C9, and the C6-first
+listing was presentation order. Freezing first (a) removes the safety question of where C6's emit
+may land — C9 still owns overwriting `chNN.py`, but nothing irreplaceable is at risk, and (b) gives
+the generator a fixed grading target from day one instead of an ad-hoc diff against hand modules.
+C7 depends on nothing C6 builds.
+
+**C7 gains a validation pass (same ruling).** CH01–CH04 declare no assertions, so every row lands in
+`floor_undeclared` and `beat_floor.coverage.contradicts` has never been able to fire on them: their
+literals have never been checked against the source floor. Freezing them unvalidated collides with
+R12's "a mismatch is fixed in the generator or state model, never excepted" — a wrong hand literal
+would become ground truth the generator is then required to reproduce. This is §5's warning ("some
+literals are load-bearing ROM-verified truth, and the AST ratchet counts literals without ever
+asking whether one is still true") pointed at the freeze. So: before `hand_beats_ch01-ch05.json` is
+blessed, every captured value is run through `contradicts` against its row's `RowFloor`, and
+contradictions are adjudicated as hand-beat bugs **then**, while fixing them is ordinary work.
+Afterwards the file is authoritative and R12's no-exceptions rule is safe to apply.
+
+The rejected steelman for C6-first was that the generator's output shape should dictate the freeze
+shape. C5 already shipped the comparison vocabulary (`assertion_key` / `covers` / `contradicts`), so
+the freeze can be expressed in `FloorAssertion` terms today without waiting.
+
+**Measured 2026-09-17, and it makes C7 bigger than the swap assumed.** C7 is still independent of
+C6, but it is not cheap. `ChapterBuilder.beat()` (`playtest/chapter.py:398`) accepts a declarative
+`assertions=frozenset[FloorAssertion]`, and **0 of the 95 beats across CH01–CH05 pass it**
+(22/19/36/13/5); `Beat.assertions = None` is the documented expected state for a hand-written beat.
+Assertion kinds, cells and values live inside beat bodies as imperative calls against a live
+`Emulator`. The repo's one existing static capture, `scripts/freeze_rederivation.py::_beat_dicts`,
+captures only `name`/`own`/`group`/`rows` and deliberately does not touch `beat.assertions`. R12's
+cited precedent, `reference/frozen/archetype_expectations.json`, was **hand-authored from prose** by
+its own header's admission ("CH05 matches below are DERIVED FROM PROSE ONLY, not verified
+byte-exact").
+
+So capture is one of: hand-author 95 beats' values; bespoke AST extraction over the ~20 assertion
+helpers; or emulator-driven recording — **the third collides with the standing rule that P8b work
+lands unit-green and chapter walks wait for the P11 gate.**
+
+**R12 AMENDED 2026-09-17 (operator). Freeze coverage, not literals.** The generated suite is **not**
+required to reproduce the hand suite's literal values, and **is not required to route the same way** —
+beat order, grouping and approach differences between the hand and generated suites are expected and
+fine. The requirement is a floor, not a match: **the generated suite must cover everything the hand
+suite covered, at least as well.** Covering *more* is the expected outcome, not a failure.
+
+This replaces "reproduce every frozen literal" in R12 as originally written. Consequences:
+
+1. **What gets frozen** shrinks to what is mechanically capturable today: the set of rows each hand
+   beat claims, plus beat identity. `scripts/freeze_rederivation.py::_beat_dicts` already captures
+   `name`/`own`/`group`/`rows` — no per-beat literal transcription, no AST extraction, no emulator
+   capture. The expensive capture problem above dissolves.
+2. **Order and grouping are captured but NOT graded.** They are recorded for review only; a routing
+   difference is never a failure.
+3. **Grading is two rules:** (a) every frozen row is claimed by some generated beat, and (b) each
+   generated beat's assertions ⊇ that row's floor (C5's existing ⊇ rule). Values come from the source
+   floor, which is also what made the separate validation pass unnecessary — the floor *is* the
+   oracle, so there is no hand literal left to validate.
+4. **The hand suites are not deleted on a green test.** C9 does not overwrite `chNN.py`. The
+   generated module lands alongside the hand module, both are kept, and removal of the hand suite is
+   a **separate operator-gated step** taken only after coverage is confirmed. Note for whoever
+   implements this: while both suites exist, two beats claim the same rows — check
+   `RULE_UNREGISTERED_BEAT` and `RULE_ARCHETYPE_CONFORMANCE` tolerate double-claiming, or scope them
+   per-module.
+
+**The one real gap in this scheme, and it must be handled explicitly.** Floor-⊇ grading proves the
+generated suite covers the hand suite only for hand content that is *derivable from the RMXP source*.
+Hand beats also assert things the command list cannot show — negative beats (an exit is blocked,
+something does *not* happen), hardware-observed facts, and beats claiming no row at all, which a
+row-coverage test cannot even see. These are **not** covered by rules (a) and (b) and would be
+silently lost. They must be enumerated and adjudicated one by one, not auto-graded.
+
+**Residue measured 2026-09-17 (AST parse of the five modules, not grep).** Corpus is **91 beats**,
+not 95 — ch01 22 / ch02 18 / ch03 35 / ch04 13 / ch05 5; the earlier 95 came from a `grep -c` that
+counted commented-out decorators.
+
+| | ch01 | ch02 | ch03 | ch04 | ch05 |
+|---|---|---|---|---|---|
+| beats | 22 | 18 | 35 | 13 | 5 |
+| claim a row | 16 | 14 | 21 | 10 | 5 |
+| **claim no row** | **6** | **4** | **14** | **3** | **0** |
+| negative beats | 3 | 2 | 8 | 1 | 0 |
+
+**27 of 91 beats claim no row at all** and are invisible to row-coverage grading. In ch03 the rowless
+set is almost entirely two families: arrival-BGM beats with their reciprocal-warp partners
+(`B27`–`B33`), and every negative beat (`N1`, `N2`, `N4`, `N6`, `N7`). That is not incidental — a
+negative or audio fact has no command-list row to point at, so the authors claimed none.
+
+**CH05 contains none of this risk** — zero rowless beats, zero negative beats. It is therefore a fine
+proving ground for generator *mechanics* and a useless one for this residue. (Bears on
+`C6_GENERATOR_PLAN.md` question C1.)
+
+**Triage — most of the residue is derivable from a source other than the page command list.** "Not in
+the command list" is not the same as "not derivable," and the distinction decides how much is
+genuinely hand work:
+
+1. **Derivable from a different source; wants a new extractor, not a hand beat.**
+   - *BGM* (`ch03.B29/B31/B33`, and `assert_bgm=True` in CH05's templates): the value is the compiled
+     map's own `music` header field. `beat_floor/` has **no audio extractor at all** today.
+   - *Blocked movement / impassable edge* (`ch01.B2`, `ch01.N4`, `ch02.N1/N2`, `ch03.N7/B15/B25`,
+     `ch04.B6`): collision and passability come from the traversal graph. `beat_floor/terrain.py` is
+     the precedent — a row-level kind with no command list behind it.
+   - *Arrival position and facing* beyond the bare warp destination: the floor's `warp` kind carries
+     no facing param today.
+2. **Already derivable — via the state model, not the page.** The no-refire / no-op-page beats
+   (`ch01.B14`, `ch03.N1/N3/B12`) assert that a *second* interaction hits a different page. Under
+   R6's highest-live-page rule that is a source fact C2 already models; grading them means floor-ing
+   the other page, not inventing an oracle.
+3. **Genuinely not source-derivable; stays hand-authored or moves house.**
+   - *Cross-chapter unobtainability* ("Rock Smash is unobtainable this chapter" — `ch01.N4`,
+     `ch02.N2`, `ch03.N7`): a claim about chapter scope, not about any row. This arguably belongs to
+     the chapter atlas or `story_state`, not to a beat.
+   - *No-crash / no-void at an unbuilt edge* (`ch03.B25`): an assertion about the absence of an
+     engine failure mode.
+   - *`emu.field_locked()` as a proxy for "something happened"*: pervasive, with no floor kind.
+   - *Live party/species RAM reads* (`player_starter_species`, `party_has_species`).
+
+**Not yet decided (operator):** which of group 1 becomes an extractor inside this plan versus named
+debt, and whether group 3's cross-chapter claims move to the atlas. Group 2 needs no ruling — it is
+already covered, just not wired.
+
+**One correction to R12's mental model, from the same measurement.** CH05's template beats express
+BGM as an *extra param* on the existing `warp` assertion. Since the source floor carries no `bgm`
+param, `coverage.contradicts` cannot check it — `coverage.py`'s rule is that extra declared
+assertions with no floor key are allowed and ignored. So CH05's BGM checks have exactly the same
+epistemic status as CH01–CH04's: an un-cross-checked literal, merely packaged in the structured type.
+Being expressed as a `FloorAssertion` does not make a claim source-verified.
+
+**Superseded below (kept for the reasoning, no longer the question):** the validation pass exists
+because hand literals have never been checked against the source floor. If every frozen literal must
+be validated against the floor anyway, the floor is the value oracle — so freezing the literal may be
+the wrong thing to freeze. A coarser freeze (rows, beat identity, assertion *strength* — roughly what
+`freeze_rederivation.py` already captures), with values taken from the floor, collapses the capture
+problem and the validation pass together, and sits better with §5's warning that a hand literal may
+no longer be true. The cost is that R12's "reproduce every frozen literal" weakens to "cover every
+frozen row at least as strongly," which is a weaker guarantee against silent regression.
 
 ### 16.4 Known work the generator will refuse until fixed (not decisions)
 
