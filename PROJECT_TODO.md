@@ -17,6 +17,141 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 114. 20 maps reference tile ids past their tileset's `passages` array
+
+Found 2026-09-17 while measuring warp arrival geometry: `column_blocked` raises a `KeyError` on
+certain cells because the map's tile data names a `tile_id` >= `len(tileset["passages"])`. Any
+passability question about those cells is unanswerable, which silently excluded 16 warp transfers
+(all on map 97) from that measurement.
+
+**Measured over all 199 decoded maps** (`output/uranium-build/maps/Map*.json` +
+`tilesets.json`), counting distinct out-of-range tile ids and affected cells:
+
+| map | tileset | len(passages) | max tile_id | distinct over | cells |
+|---|---|---|---|---|---|
+| 124 | 11 | 1880 | 3554 | 56 | **916** |
+| 97 | 19 | 2072 | 2791 | 20 | 255 |
+| 102 | 19 | 2072 | 3515 | 24 | 189 |
+| 8 | 28 | 1488 | 5591 | 28 | 67 |
+| 140 | 12 | 536 | 3462 | 7 | 68 |
+| 104, 113, 126 | 19 | 2072 | 2791 | 20 | 51 each |
+| 27 | 12 | 536 | 3105 | 11 | 36 |
+| 1, 20 | 12 | 536 | 3462 | 7 | 34 each |
+| 94 | 22 | 1184 | 8197 | 9 | 25 |
+| 9, 88, 154, 160 | 12 | 536 | 3105 | 11 | 18 each |
+| 183 | 25 | 1184 | 2396 | 13 | 13 |
+| 29 | 19 | 2072 | 3288 | 9 | 10 |
+| 98 | 19 | 2072 | 2829 | 7 | 7 |
+| 87 | 27 | 1184 | 5535 | 2 | 2 |
+
+20 maps across **7 tilesets** (12, 19, 28, 27, 22, 11, 25). Tileset 12 accounts for 8 maps and
+tileset 19 for 7. The same out-of-range ids recur across maps sharing a tileset (e.g. maps 104,
+113, 126 all hit the identical 20 ids), which points at a **tileset-side decode or truncation
+defect**, not per-map corruption.
+
+**Why it has not bitten yet:** the narrow 4-neighbour scans the warp code performs never land on
+these cells — 0 of the 347 tier-3-eligible warps touch one. It surfaces only on whole-grid scans.
+That is luck, not safety: `tile_map.TileMap.passage()` raises on the same condition, so any future
+full-map passability pass (a router, a reachability check, a generated blocked-terrain oracle)
+will hit it.
+
+**Investigated 2026-09-17 — it is Uranium's own data, not a decode defect.** An independent
+RGSSAD extractor + from-scratch Table decoder reproduced `_unpacked/Data` byte-for-byte and our
+map JSON cell-for-cell (0 mismatches), and `Tilesets.rxdata` decodes identically. The ids are
+stale tile references on ONE layer of a cell, past the bottom of the tileset PNG; RMXP draws that
+layer as nothing and the other layers normally. (The player never stands on them — Uranium's own
+`passable?` would crash on `nil & bit`.) Across the 18 live maps every affected cell keeps at
+least one good layer. Maps 124 and 183 were the outliers — orphaned drafts painted against the
+full `Outside.png` sheet — and are now STRIP-listed (`c8088f23`).
+
+**Fixed (`15b31a03`):** tileset build, layout conversion and the map viewer mask the bad layer to
+empty per layer (`layout.mask_out_of_atlas`), bound = the tileset PNG's height
+(`TileRasterizer.max_static_tile_id`, recorded per synthetic tileset as `atlas_max`). Previously
+the build voided the whole column.
+
+**Still open — fix when the first chapter containing one of these maps is built** (no CH01–CH04
+map is affected, so today nothing hits it): `traversal/collision.py` `build_tile_grid` (+
+`graph.py`, `capabilities.py`) and `metadata_wiring._derive_retain_facing` (~line 3188) build raw
+unmasked grids and feed them to `column_blocked`. They will `KeyError` on ids past `passages`, or
+— worse, silently — apply collision from a layer the ROM no longer has where `passages` is longer
+than the image (tileset 19 `Indoor(1)`: table 2072, image bound 1824; maps 29, 97, 98, 102, 104,
+113, 126). Fix = mask with the recorded `atlas_max` before `column_blocked`. A shared-loader
+refactor was tried 2026-09-17 and discarded as premature: with no affected map built it added a
+sentinel bound and strict/lenient modes to pass synthetic tests only. Build against a real map.
+
+### 113. `_event_transfers` reads variable-designated warps as literal coordinates
+
+Found 2026-09-17 while verifying the code-201 parameter layout (operator
+challenged the reading; the layout held, these two defects did not).
+
+`TRANSFER_CODE`'s own comment names the layout —
+`params [method, dest_map, x, y, dir, fade]`
+(`src/rpg2gba/tileset_converter/metadata_wiring.py:86`) — but
+`_event_transfers` (same file, **line 661**) never reads `method`:
+
+```python
+out.append((p[1], p[2], p[3], p[4] if len(p) > 4 else None))
+```
+
+RMXP `method` is 0 = direct designation, 1 = **designation by variable**, in
+which case `p[1..3]` are *variable ids*, not a map and coordinates.
+
+**Measured over all 199 decoded maps** (`output/uranium-build/maps/Map*.json`):
+1085 code-201 commands, all with exactly 6 parameters. `method` is 0 for 1076
+and **1 for 9** — all nine on **map 212** (events 3, 4, 5, 7, 8), every one with
+parameters `[1, 95, 93, 94, 8, 0]`, i.e. destination map = var 95, x = var 93,
+y = var 94.
+
+Today those nine are read as the literal destination "map 95, tile (93, 94)" — a
+fabricated target. It also feeds the in-slice membership test at
+`metadata_wiring.py:703`, so a bogus target can wrongly classify an event as
+out-of-slice and skip it outright. This is a silent default of exactly the kind
+§4.5 forbids.
+
+**Latent, not live:** map 212 is in no CH01–CH05 slice. It goes live the moment a
+chapter includes it. Fix is either fail loud on `method != 0`, or resolve the
+variables through the story-state model (`story_state/`) when they are
+statically known.
+
+Re-derive rather than trusting this table: the scan is a plain walk over the
+decoded map JSONs counting `code == 201` by `parameters[0]`.
+
+### 112. A collapsed door bakes in page 0's destination and facing
+
+Found 2026-09-17, same scan as #113.
+
+`classify_event` collapses an event into a single `warp_event` when its first
+page is player-touch and *every* player-touch page carries a transfer, then takes
+**`transfers[0]`** — the first code-201 in page order — for the whole warp
+(`src/rpg2gba/tileset_converter/metadata_wiring.py:712-713`). Later pages'
+transfers are discarded, including their destinations.
+
+**Measured over all 199 maps:** 25 events have pages that disagree on the
+transfer *direction*; **4 of those would collapse** into one `warp_event`:
+
+| map | ev | dirs across pages | taken | distinct destinations |
+|---|---|---|---|---|
+| 137 | 26 | 6, 8 | 8 | **4** |
+| 156 | 4 | 4, 6 | 6 | 1 |
+| 156 | 25 | 2, 6 | 6 | **2** |
+| 213 | 3 | 0, 6 | 0 | **2** |
+
+**The destination disagreement is the more serious half.** `map137/ev026` has
+four distinct destinations across its pages and collapses to the first;
+`map156/ev004` is the pure-facing case (one destination, two facings, coin flip).
+A door whose target depends on story state is exactly the shape the gated-door
+rule (`reference/findings/gated_door_collapse_2026-07-26.md`) exists to protect,
+but that rule only fires when a touch page carries *no* transfer — it does not
+notice pages that transfer *somewhere else*.
+
+**Latent for CH01–CH05:** none of the four are in those chapters' maps (137, 156,
+213). The other 21 disagreeing events stay multi-page objects, where the
+dispatcher picks the live page and that page's own `warp()` runs — correct today.
+`map049/ev021` is in CH01 but is one of the 21, so it is not affected.
+
+Likely fix: fail loud when a collapsing event's transfers are not unanimous on
+(dest, dir), and leave it as a multi-page object instead.
+
 ### 111. `_minimal_sets_for_predicate` blows up in full-suite runs, but not in isolation
 
 Found 2026-09-17 closing C5. `pytest` (whole suite) stalled indefinitely at ~19%
@@ -971,16 +1106,6 @@ The audit script lives only in a scratchpad today; promote it into
 `src/rpg2gba/chapter_atlas/` as a real subcommand (e.g. `chapter_atlas legs`)
 so it's re-runnable rather than re-derived each time.
 
-### 58. Map 183 "Rochfale Town" is unreachable but bound to CH14
-
-Filed 2026-08-29, same world-graph audit as §57. Map 183 has 8 outgoing warps
-and zero incoming edges in the full 199-map graph — the player can never walk
-into it. Rochfale Town has several same-named maps (12, 92, 93, 104, 130,
-183); 183 looks like a dangling RPG Maker editor duplicate. CH14's roster
-needs verification against the graph before CH14 is built: either 183 is
-genuinely dead content and belongs in `unbound_maps`, or one of the other
-Rochfale maps warps into it by a route the graph missed.
-
 ### 59. Map 999 sits outside the coverage identity entirely
 
 Filed 2026-08-29, same world-graph audit as §57.
@@ -1564,6 +1689,11 @@ maintainer. Evidence is recorded in
 
 
 ## Done
+
+- **#58 — Map 183 "Rochfale Town" STRIP-listed** (2026-09-17, `c8088f23`). Verified
+  unreachable (no incoming warps/connections/script transfers; map 212's variable warps
+  only target 212). An orphaned duplicate of map 12, painted against `Outside.png`;
+  removed from CH14 and moved to `unbound_maps`, along with map 124 "Gym3" (CH19).
 
 - **#1 — the old external pokeemerald-expansion clone is DELETED** (2026-09-07,
   operator-run `rm -rf`, closing repo audit Q5). Q5's recorded answer was
