@@ -675,6 +675,12 @@ silence, or build the ~15-row substitution table (recommended). Not
 slice-specific — applies to every future slice until decided. Migrated from
 SLICE1_TODO #7, 2026-08-04.
 
+**2026-09-18:** the P8c BGM extractor is deferred to this item (`REDERIVATION_PLAN.md`
+§16.3 residue rulings). Every built map header is `MUS_LITTLEROOT`, so the hand BGM beats
+are vacuous until this lands; when it does, add the floor extractor (header music =
+`audio_map.json`[RMXP BGM]) in the same change. Operator: this item may stay open
+indefinitely — nothing in P8c blocks on it.
+
 ### 23. Tile-animation follow-ups — untested beyond the slice's 2 effects
 
 Core animation feature is done and user-verified (2026-07-12 build), but

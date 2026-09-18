@@ -2031,9 +2031,29 @@ genuinely hand work:
    - *`emu.field_locked()` as a proxy for "something happened"*: pervasive, with no floor kind.
    - *Live party/species RAM reads* (`player_starter_species`, `party_has_species`).
 
-**Not yet decided (operator):** which of group 1 becomes an extractor inside this plan versus named
-debt, and whether group 3's cross-chapter claims move to the atlas. Group 2 needs no ruling — it is
-already covered, just not wired.
+**DECIDED 2026-09-18 (operator, grill session).** Three corrections to the triage above came out of
+reading the code first, and they changed the rulings:
+
+- *The floor's `warp` kind already carries the direction* — `beat_floor/walk.py:209-212` records
+  `direction=params[4]`. The "no facing param" line above is wrong.
+- *Every built map's header music is `MUS_LITTLEROOT`* (`metadata_wiring.py:81` `DEFAULT_MUSIC`,
+  never overridden; Uranium BGM is unconverted pending `PROJECT_TODO.md` #22). The hand BGM beats
+  compare the header to itself and are vacuous today.
+- *The "blocked movement" beats are not collision tests.* `ch01.N4`, `ch02.N2`, `ch04.B6` (Rock
+  Smash) and `ch03.N7` (Strength) are field-move obstacles in a chapter with no grant site — the
+  capability model's `blocked:<cap>` verdict, which the hand beats simply never claimed. `ch01.B2`
+  already claims its row. `ch03.B25` is the map-edge case, below.
+
+| Residue | Ruling |
+|---|---|
+| Arrival position + facing | **Extractor, delivered inside C5b.** The `warp` floor gains `arrives_on_door` from the emitted layout; the generator resolves dir 0 from its own approach and computes the final cell (destination + the door auto-step in the facing direction, `WARP_RETAIN_FACING_PROPOSAL.md` §0 R5). Covers the P11 nudge risks (CH02 B1, CH03 B16). |
+| BGM | **Named debt, non-blocking, tied to #22.** No extractor over a placeholder. When #22 lands a substitution table, the extractor comes with it (header music = `audio_map.json`[RMXP BGM]). The debt does **not** block the hand-suite removal step; #22 may stay open indefinitely. |
+| Field-move obstacles | **Extractor now (C7 residue work, before C6):** a `blocked_obstacle` floor kind per row dispositioned `blocked:<cap>` — interaction leaves it in place (no erase, no state write) and its tile stays impassable. **C6 groups these beats by (map, blocking capability)**, matching the hand N4/N7 split; each assertion carries its row id, so a failure still names the rock. |
+| Cross-chapter unobtainability | **Does not move to the atlas.** It is already the capability model's fact (`capability_sites.py`, `RULE_BLOCKED_NO_GRANT_SITE`/`RULE_BLOCKED_ALREADY_GRANTED`), and the ROM consequence is the `blocked_obstacle` kind. A second home would violate §4.3. |
+| `ch03.B25` map edge | **Retired as adjudicated residue.** Its premise (Route 2 unbuilt) is gone; it now tests one wall column. The void/crash defect class is caught at build time by `connections.py` (unminted target, out-of-build target, bidirectionality). The hand beat stays in `ch03.py` until hand-suite removal; nothing is owed. |
+| Live party reads, `emu.field_locked()` | **Not residue.** Party reads verify the existing `pokemon_grant` kind (`beat_floor/script.py:199`); `field_locked()` is a harness technique, not a claim. |
+
+Group 2 still needs no ruling — covered, just not wired.
 
 **One correction to R12's mental model, from the same measurement.** CH05's template beats express
 BGM as an *extra param* on the existing `warp` assertion. Since the source floor carries no `bgm`
@@ -2069,6 +2089,9 @@ independent of C7 (C7 freezes rows and identity, not facing literals). Scope, in
 3. Tests: rewrite `tests/test_warp_facing_invariant.py` onto the new semantics (tier-3 assertions
    replaced, not deleted; wall-facer pin reworded "decided: faithful"); add R5's door-tile guard;
    re-source `ch03.py::_expected_arrival_facing` from RMXP `dest_dir`.
+4. Floor (added 2026-09-18, C7 residue ruling): the `warp` floor kind gains `arrives_on_door` from
+   the emitted layout, so a beat's expected final cell is derivable (destination + auto-step in the
+   facing direction). Dir-0 facing is resolved by the generator from its approach, not the floor.
 
 Unit-green only. **ROM risks carried into P11:** the Moki (32)(8,43..45) ↔ Route 1 (33)(70,11)
 edge stack (the only built-map case where door-south and the authored direction disagree), the

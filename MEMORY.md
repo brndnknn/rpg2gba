@@ -306,6 +306,13 @@ sites, walker-build interaction, whether the pre-fade turn is visible) should be
 reading the engine before it is put to the operator — three of the proposal's four "open
 questions" closed that way. Also committed the prior session's uncommitted C7/C6 swap, R12
 amendment, C6 plan and PROJECT_TODO #112–#114, and corrected the Frontier's stale "Next: C6".
+**Then C7's two open residue rulings, same session** (`REDERIVATION_PLAN.md` §16.3 "DECIDED
+2026-09-18"): arrival position/facing → extractor inside C5b; BGM → non-blocking debt on #22
+(every header is `MUS_LITTLEROOT`, so the hand checks are vacuous); field-move obstacles → a
+`blocked_obstacle` floor kind, C6 grouping by (map, capability); unobtainability stays with the
+capability model (no atlas move); `ch03.B25` retired. **Reading the code first dissolved most of
+the residue** — §16.3's triage had the warp floor lacking a direction param (it has one) and
+filed the rock beats as collision tests (they are `blocked:` verdicts nobody claimed).
 
 **2026-09-17 (C5 — a session limit cut it off four stale test pins short of done):** The
 previous session built C5 end to end and hit the limit uncommitted; this session audited it,
