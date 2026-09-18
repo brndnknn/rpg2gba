@@ -87,10 +87,67 @@ different numbers, stop and find out why before going further.
 **refuse** with a clear error, because a freeze of uncommitted code can't name its own
 source. Hint: compare `git hash-object <path>` against the `HEAD` blob.
 
+> **Hint — running git from Python.** Use `subprocess.run` with the command as a *list*
+> (no shell string). Read the output from `.stdout` and check `.returncode` yourself.
+> The repo already does exactly this in `scripts/freeze_rederivation.py:101–113`
+> (`_git_blob_sha`). Read it, then write your own version:
+>
+> ```python
+> result = subprocess.run(
+>     ["git", "rev-parse", f"HEAD:{repo_relative}"],
+>     cwd=REPO_ROOT,          # run from the repo root, whatever the caller's cwd is
+>     capture_output=True,    # collect stdout/stderr instead of printing them
+>     text=True,              # give me str, not bytes
+> )
+> if result.returncode != 0:
+>     raise RuntimeError(f"... {result.stderr.strip()}")
+> sha = result.stdout.strip()   # strip the trailing newline
+> ```
+>
+> The two commands you need, and what each answers:
+> - `git rev-parse HEAD:src/…/ch01.py` gives the blob of the file **as committed**
+> - `git hash-object src/…/ch01.py` gives the blob of the file **as it is on disk right now**
+>
+> If they differ, the file has uncommitted edits. Try both in a terminal first on a clean
+> file, then after adding a blank line, so you know what you're comparing.
+
 ### R3 — Row-id validation (fail loud)
 
 Every row id a beat claims must exist in that chapter's manifest. If one doesn't, raise with
 the chapter, beat name and bad row id. Don't drop it and don't warn.
+
+> **Hint — what "fail loud" means here, and what it doesn't.** It does *not* mean "crash on
+> the first problem". It means that problems are never silently dropped, and that a bad
+> freeze is never written. Use the **collect, then raise** pattern: check *everything*,
+> gather every problem into a list, and after the loop raise once with all of them. Then a
+> single run shows you every bad row, not just the first:
+>
+> ```python
+> problems: list[str] = []
+> for chapter in CHAPTERS:
+>     known = _manifest_row_ids(chapter)
+>     for beat in own_beats(chapter):
+>         for row in beat["rows"]:
+>             if row not in known:
+>                 problems.append(f"{chapter}:{beat['name']} claims {row!r}, not in manifest")
+> if problems:
+>     raise FreezeError("\n".join(problems))
+> # only reached when clean -> safe to return / write
+> ```
+>
+> **And yes, no file is written when there are problems.** This file is the *grading oracle*
+> for C9. A freeze that quietly leaves out a bad row would later grade the generator against
+> a smaller target than the hand suite actually had, which is exactly the silent loss C7
+> exists to prevent. The fix for a bad row goes in the **hand module** (`chNN.py`: correct or
+> remove the stale id) or the manifest, never in the freeze. You probably won't hit any,
+> since C1 regenerated the manifests and the checker has been clean, but the check is there
+> so you'd find out if you did.
+>
+> Task 2's `validate_residue` uses the same shape (it returns `list[str]`), so reuse the
+> pattern. Also: read manifests as **raw JSON** (`json.load` then `{r["row_id"] for r in rows}`),
+> the same way `scripts/freeze_rederivation.py:136` (`_manifest_rows_by_id`) does, and not
+> through `chapter_manifest.schema`'s loader. You only need the ids, and the raw read has
+> fewer ways to fail.
 
 ### R4 — CLI
 
@@ -107,8 +164,10 @@ the chapter, beat name and bad row id. Don't drop it and don't warn.
   3. *(hook for Task 2)* any frozen beat with `rows == []` has no entry in the residue
      ledger. Until Task 2 exists, have this raise if the ledger file is missing.
 
-Use click, following the house style of `src/rpg2gba/beat_floor/__main__.py`. Add an
-`if __name__ == "__main__": cli()` guard, or a `__main__.py` if you prefer the package form.
+**Already wired for you.** The stub `src/rpg2gba/playtest/hand_freeze.py` has the click
+group, both commands, `--force`, the refuse-to-overwrite check and the exit codes. The
+commands call `build_freeze()`, `diff_freeze()` and `dump()`. You implement those and the
+helpers under them; you shouldn't need to touch the CLI code.
 
 ### R5 — A loader for downstream use
 
@@ -130,45 +189,23 @@ def load_frozen_hand_beats(path: Path = FROZEN_PATH) -> list[FrozenBeat]:
     schema version it doesn't know."""
 ```
 
-## Skeleton (fill in the bodies)
+## Stub files (start here)
 
-```python
-"""Freeze CH01–CH05's hand beats: rows + identity (REDERIVATION_PLAN.md §16.3 C7)."""
-from __future__ import annotations
+- **`src/rpg2gba/playtest/hand_freeze.py`**: constants, `FreezeError`, `FrozenBeat`,
+  `dump()` and the whole CLI are done. Every function that raises `NotImplementedError` is
+  yours. A suggested order that keeps you able to run something at each step:
+  1. `head_blob_sha`, `worktree_blob_sha` (try them in a REPL:
+     `from rpg2gba.playtest.hand_freeze import *; head_blob_sha(module_path("CH01"))`)
+  2. `manifest_row_ids`, `own_beats`
+  3. `build_freeze`. At this point `write` works.
+  4. `diff_freeze`, plus a minimal `validate_residue`. At this point `check` works.
+  5. `load_frozen_hand_beats`
+- **`tests/test_hand_freeze.py`**: the six tests, stubbed with a comment saying what each
+  asserts. The whole file is **skipped** by a `pytestmark` line so the suite stays green;
+  delete that line when you start.
 
-import json
-import logging
-import re
-import subprocess
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
-
-import click
-
-from rpg2gba.playtest.chapter import load_chapter
-
-logger = logging.getLogger(__name__)
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-FROZEN_PATH = REPO_ROOT / "reference" / "frozen" / "hand_beats_ch01-ch05.json"
-CHAPTERS = ("CH01", "CH02", "CH03", "CH04", "CH05")
-AUTHORED = "2026-09-18"
-SCHEMA = 1
-
-
-def _module_path(chapter: str) -> str:
-    return f"src/rpg2gba/playtest/chapters/{chapter.lower()}.py"
-
-
-def _head_blob_sha(repo_relative: str) -> str: ...
-def _worktree_blob_sha(repo_relative: str) -> str: ...
-def _manifest_row_ids(chapter: str) -> set[str]: ...
-def own_beats(chapter: str) -> list[dict[str, Any]]: ...
-def build_freeze() -> dict[str, Any]: ...
-def dump(data: dict[str, Any]) -> str:
-    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
-```
+The function names are public (no leading `_`), unlike in the tables above, because the
+tests call them directly.
 
 ## Tests (`tests/test_hand_freeze.py`)
 
@@ -179,7 +216,7 @@ Each of these must exist:
 | `test_own_beat_counts` | per-chapter own counts are 22/18/35/13/5 |
 | `test_no_inherited_names` | no frozen `name` contains `:` |
 | `test_build_is_deterministic` | `dump(build_freeze()) == dump(build_freeze())` |
-| `test_unknown_row_fails_loud` | monkeypatch `_manifest_row_ids` to drop one real row → `build_freeze` raises and the message names the row |
+| `test_unknown_row_fails_loud` | monkeypatch `manifest_row_ids` to drop one real row → `build_freeze` raises and the message names the row |
 | `test_check_detects_stale_blob` | a freeze dict with a tampered `blob_sha` → `check` logic reports stale |
 | `test_loader_roundtrip` | `load_frozen_hand_beats` on a `tmp_path` file written by `dump(build_freeze())` returns 91 beats |
 
