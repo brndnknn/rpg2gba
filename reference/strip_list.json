@@ -133,6 +133,18 @@
       "expect_events": 0,
       "feature": "empty debug/template map (80x80, tileset 6, no MapInfos entry)",
       "reason": "Not a real location; excluded from Phase-5 mint. User-approved 2026-06-12. See reference/map_name_overrides.json orphans."
+    },
+    {
+      "id": 124,
+      "expect_events": 45,
+      "feature": "'Gym3' (43x60) -- orphaned editor draft of Bealbeach Gym; the live gym is 102 (+103 'Gym3.1')",
+      "reason": "Unreachable: zero incoming warps, connections, or script transfers (map 212's variable warps only target 212 itself). Painted against the full Outside.png overworld sheet but bound to tileset 11 (Cavetiles), so 916/7740 cells point past the tileset image -- it renders as empty in-game and in our pipeline. User-approved 2026-09-17."
+    },
+    {
+      "id": 183,
+      "expect_events": 34,
+      "feature": "'Rochfale Town' (54x60) -- orphaned editor duplicate; the live Rochfale Town is 12 (70x70, same tileset 25)",
+      "reason": "Unreachable: 8 outgoing warps, zero incoming warps/connections/script transfers (00-atlas.md finding #8, now verified). Painted against the full Outside.png sheet but bound to tileset 25 (PU-Route05-06, 100 rows), so its tile ids overrun the image and it renders as garbage. User-approved 2026-09-17."
     }
   ]
 }

@@ -169,9 +169,9 @@
     },
     {
       "id": "CH14", "act": "A3", "title": "Rochfale Town", "wiki_page": "Rochfale Town",
-      "visit": 1, "outdoor": 12, "maps": [12, 13, 92, 93, 130, 104, 98, 91, 183],
+      "visit": 1, "outdoor": 12, "maps": [12, 13, 92, 93, 130, 104, 98, 91],
       "predecessor": "CH13", "tier": "thin", "status": "planned",
-      "notes": "Has NO Gym map -- it has Cypress Lab (98). The wiki navigation calling it 'Gym 4' is wrong. Seam: 12 W <-> 22 E."
+      "notes": "Has NO Gym map -- it has Cypress Lab (98). The wiki navigation calling it 'Gym 4' is wrong. Seam: 12 W <-> 22 E. (2026-09-17: map 183, a second 'Rochfale Town', removed -- unreachable orphaned duplicate, now in strip_list.json.)"
     },
     {
       "id": "CH15", "act": "A3", "title": "Route 6", "wiki_page": "Route 6",
@@ -197,9 +197,9 @@
     },
     {
       "id": "CH19", "act": "A3", "title": "Bealbeach City", "wiki_page": "Bealbeach City",
-      "visit": 1, "outdoor": 101, "maps": [101, 102, 103, 124, 108, 58, 109, 113, 126, 156, 3, 11, 52],
+      "visit": 1, "outdoor": 101, "maps": [101, 102, 103, 108, 58, 109, 113, 126, 156, 3, 11, 52],
       "predecessor": "CH18", "tier": "thin", "status": "planned",
-      "notes": "Gym 3 spans three maps (102 + 103 'Gym3.1' + 124 'Gym3'). Largest interior roster in the game: department store with an elevator (58), Rangers HQ (156), metro (3, 11), resort/casino (52)."
+      "notes": "Gym 3 is 102 + 103 'Gym3.1'. (Corrected 2026-09-17: this used to say it also spans 124 'Gym3' -- 124 is an unreachable orphaned draft with no incoming edges, now in strip_list.json.) Largest interior roster in the game: department store with an elevator (58), Rangers HQ (156), metro (3, 11), resort/casino (52)."
     },
 
     {
@@ -304,7 +304,7 @@
 
     {
       "id": "CH37", "act": "A7", "title": "Bealbeach City (revisit)", "wiki_page": "Bealbeach City",
-      "visit": 2, "outdoor": 101, "maps": [101, 102, 103, 124, 108, 58, 109, 113, 126, 156, 3, 11, 52],
+      "visit": 2, "outdoor": 101, "maps": [101, 102, 103, 108, 58, 109, 113, 126, 156, 3, 11, 52],
       "predecessor": "CH36", "tier": "thin", "status": "planned", "notes": "Optional."
     },
     {
@@ -387,7 +387,7 @@
     },
     {
       "id": "CH51", "act": "A9", "title": "Bealbeach City (Rangers HQ revisit)", "wiki_page": "Bealbeach City",
-      "visit": 3, "outdoor": 101, "maps": [101, 102, 103, 124, 108, 58, 109, 113, 126, 156, 3, 11, 52],
+      "visit": 3, "outdoor": 101, "maps": [101, 102, 103, 108, 58, 109, 113, 126, 156, 3, 11, 52],
       "predecessor": "CH50", "tier": "thin", "status": "planned", "notes": ""
     },
     {
@@ -451,6 +451,8 @@
     "57": "'Nuclear Plant' -- intro flashback plant, distinct from Epsilon/Omicron/Zeta",
     "14": "'Title Screen'",
     "94": "'Mapa intro'",
-    "95": "'Intro 2'"
+    "95": "'Intro 2'",
+    "124": "'Gym3' -- unreachable orphaned draft of the Bealbeach gym; STRIP-listed 2026-09-17 (strip_list.json)",
+    "183": "'Rochfale Town' -- unreachable orphaned duplicate of map 12; STRIP-listed 2026-09-17 (strip_list.json)"
   }
 }

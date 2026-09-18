@@ -255,7 +255,10 @@ one.
 1. Map 183 "Rochfale Town" has 8 outgoing warps and **zero incoming edges** —
    the player can never walk into it. It is a dangling RPG Maker editor
    duplicate, currently bound to **CH14**. Needs verification before CH14 is
-   built.
+   built. *(Resolved 2026-09-17: verified unreachable — including map 212's variable
+   warps, which only target 212 itself — and STRIP-listed along with 124 "Gym3";
+   both moved to `unbound_maps`. Both are drafts painted against the full
+   `Outside.png` sheet, so their tile ids overrun their bound tileset.)*
 2. Map 999 has a `Map999.json` file but no `map_infos.json` entry, so it sits
    outside the "187 bound + 11 unbound = 198" identity entirely — no coverage
    check can see it. `coverage` confirms it directly: *"maps in corpus but in
@@ -393,6 +396,7 @@ Honest limits, so nothing here is over-trusted:
    1108-edge world graph — 8 outgoing warps, none reciprocated. It reads as a
    dangling RPG Maker editor duplicate the player can never walk into. Found
    by the 2026-08-29 audit (§7); needs verification before CH14 is built.
+   *(Resolved 2026-09-17: verified and STRIP-listed; see finding 1 above.)*
 9. **Four `unbound_maps` entries have real graph edges into the playable
    world**: 51 (Intro) → 48, 57; 57 (Nuclear Plant) → 48; 94 (Mapa intro) →
    14, 95; 95 (Intro 2) → 14. Found by the 2026-08-29 audit (§7). Being
