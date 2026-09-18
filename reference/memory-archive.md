@@ -10,6 +10,32 @@
 
 ## Retired Session Summaries
 
+## Archived 2026-09-18 — Last Session Summary entry 2026-09-18 (warp arrival facing — a grill session widened a 41% shrink into deleting the table)
+
+**2026-09-18 (warp arrival facing — a grill session widened a 41% shrink into deleting the table):**
+Design only, no code. The operator grilled `WARP_RETAIN_FACING_PROPOSAL.md`'s open questions; six
+rulings are now its §0 and land as **C5b** before C6. **The widening came from the operator's
+question, not the proposal:** "if the warp runs from the departure tile, why can't it keep its
+behavior?" — stock pokeemerald warps carry no direction, so the whole arrival-keyed apparatus
+(tiers 1–3, overrides file, ON_WARP_INTO_MAP_TABLE facing) was compensating for one missing
+struct field. `struct WarpEvent` gains it; a pending-facing special covers script warps; door
+tiles yield to it. **Found on the way:** the transpiler drops `params[4]`, so every
+explicit-direction script warp arrives facing south today; arriving on an
+`MB_NON_ANIMATED_DOOR` tile auto-steps the player in their facing (`Task_ExitNonAnimDoor`), so
+facing decides position, not just looks; and most `warp(...)` bodies in generated `.pory` are
+dead (PROJECT_TODO #115). **Lesson:** a question the engine can answer (which `ScrCmd_warp*`
+sites, walker-build interaction, whether the pre-fade turn is visible) should be answered by
+reading the engine before it is put to the operator — three of the proposal's four "open
+questions" closed that way. Also committed the prior session's uncommitted C7/C6 swap, R12
+amendment, C6 plan and PROJECT_TODO #112–#114, and corrected the Frontier's stale "Next: C6".
+**Then C7's two open residue rulings, same session** (`REDERIVATION_PLAN.md` §16.3 "DECIDED
+2026-09-18"): arrival position/facing → extractor inside C5b; BGM → non-blocking debt on #22
+(every header is `MUS_LITTLEROOT`, so the hand checks are vacuous); field-move obstacles → a
+`blocked_obstacle` floor kind, C6 grouping by (map, capability); unobtainability stays with the
+capability model (no atlas move); `ch03.B25` retired. **Reading the code first dissolved most of
+the residue** — §16.3's triage had the warp floor lacking a direction param (it has one) and
+filed the rock beats as collision tests (they are `blocked:` verdicts nobody claimed).
+
 ## Archived 2026-09-18 — Last Session Summary entry 2026-09-16b (C2b — the story-state model runs, and a session limit cut it off before the commit)
 
 The previous session built C2b end to end but hit the limit uncommitted; this session verified and committed it. `story_state/model.py` does highest-live-page liveness, saturation, `enabled_by`/`killed_by`, end state and chain ownership (`later:CHnn`/`unreachable`/`undetermined`), seeded from the Intro chain for CH01; triggered common events are `common/ceNNN` pseudo-rows, and `time_of_day` is clock input (CE 51 — nothing in the ROM sets switches 105/106 yet, so C3 owes it from the RTC). **The end-state rule was amended against real data:** unordered conflicting writes join and are reported as `order_dependent` (only CH01 switch 104, lab door vs Auntie) instead of failing loud; C6 recomputes seeds from the concrete route. Row status CH01 live 261 / refused 101 / unreachable 77 / undetermined 18; CH05 all 51 live; full table in `REDERIVATION_PLAN.md` §16.3 "C2b landed". Suite 3674 passed / 16 skipped. **Then C3's model half:** white-out is a fork (precondition switch 2 Got Pokemon, write switch 5, lands on a new `EngineKey` respawn map written by `pbSetPokemonCenter`, seeded 49); a first cut read the refined end state and missed the pre-center landing on 49, so the fork reads the saturated state. The new engine audit's first run found the ROM never sets Mum (52) or day/night (105/106). **A premise corrected mid-session:** the lead told the operator day/night would make 19 night lamps show; the research then found all 19 are no-port `Luz` glows, and the operator re-ruled day/night as deferred. **Measure what consumes an engine obligation before scoping it.** `FLAG_MUM` is seeded in `new_game.c`; C3 closed, audit green, suite 3699 / 16.
