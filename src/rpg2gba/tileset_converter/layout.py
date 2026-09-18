@@ -43,6 +43,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .graphics.sources import STATIC_BASE
 from .tile_map import (
     BLOCKED_COLLISION,
     BLOCKED_ELEVATION,
@@ -89,6 +90,40 @@ class TileGrid:
     def column(self, x: int, y: int) -> list[int]:
         """The `zsize` stacked tile ids at (x, y), bottom layer first."""
         return [self.tile_at(x, y, z) for z in range(self.zsize)]
+
+
+def mask_out_of_atlas(
+    grid: TileGrid, max_static_tile_id: int
+) -> tuple[TileGrid, list[tuple[int, int, int, int]]]:
+    """Zero out every static tile id beyond ``max_static_tile_id``, one layer at a
+    time — the single source of truth for the "stale RMXP id" fix (see
+    `graphics/raster.py`'s module docstring): a handful of live Uranium maps carry
+    a static tile id on ONE layer of a cell that points past the bottom of their
+    tileset PNG. RMXP draws that one layer as nothing while the other layers of
+    the same cell draw normally (each layer is composited independently); it is
+    also never actually walked (Uranium's own passability check would crash on
+    it), so treating the layer as empty is both the faithful and the safe
+    substitute — never drop the whole cell.
+
+    Returns a NEW `TileGrid` (``grid`` is not mutated) plus the list of masked
+    ``(x, y, z, tile_id)`` cells, ``tile_id`` being the ORIGINAL id (for
+    diagnostics/reporting — callers that need the count just take ``len()``).
+    Autotile ids (< `STATIC_BASE`) and 0 (already empty) are never in range for
+    this check and are left untouched. Idempotent: masking an already-masked
+    grid finds nothing left to mask (mirrors `TileRasterizer.in_atlas`, which
+    this bound must stay consistent with — see the module's callers)."""
+    masked: list[tuple[int, int, int, int]] = []
+    data = list(grid.data)
+    plane = grid.ysize * grid.xsize
+    for z in range(grid.zsize):
+        for y in range(grid.ysize):
+            for x in range(grid.xsize):
+                idx = z * plane + y * grid.xsize + x
+                tid = data[idx]
+                if tid >= STATIC_BASE and tid > max_static_tile_id:
+                    masked.append((x, y, z, tid))
+                    data[idx] = EMPTY_TILE
+    return TileGrid(grid.xsize, grid.ysize, grid.zsize, data), masked
 
 
 @dataclass
@@ -258,10 +293,15 @@ def collapse_column(grid: TileGrid, x: int, y: int, tile_map: TileMap, tileset_i
         key = column_key(grid, x, y)
         if not key:
             return tile_map.void(tileset_id)
-        # A column with an out-of-atlas garbage tile was dropped from the tileset by
-        # build_slice_tilesets; void it here too (both paths use the same predicate).
+        # `grid` must already be `mask_out_of_atlas`-masked by the caller (S8a
+        # masks before this is ever reached) — a key with an out-of-atlas static
+        # tile id here means a masking site was missed, not a legitimate void.
         if not tile_map.column_in_atlas(tileset_id, key):
-            return tile_map.void(tileset_id)
+            raise AssertionError(
+                f"collapse_column: column {key!r} at ({x}, {y}) for tileset "
+                f"{tileset_id} still has an out-of-atlas tile id — the grid "
+                f"should have been mask_out_of_atlas()-masked before this call"
+            )
         visual = tile_map.lookup_column(tileset_id, key)
     else:  # bucket mode, unchanged behavior
         tid = topmost_tile_id(grid, x, y)
@@ -388,6 +428,19 @@ def convert_layout(
     tileset_id = tileset_key if tileset_key is not None else map_json["tileset_id"]
     choice = tile_map.tileset_for(tileset_id)
 
+    # Mask stale out-of-atlas static tile ids (module docstring of
+    # `graphics/raster.py`) BEFORE any column_key is computed below, so every
+    # column key this function ever produces already excludes them — same bound
+    # `build_slice_tilesets` masked against when it built this tileset's columns.
+    max_tid = tile_map.atlas_max_for(tileset_id)
+    if max_tid is not None:
+        grid, masked_cells = mask_out_of_atlas(grid, max_tid)
+        if masked_cells:
+            logger.warning(
+                "layout %s: masked %d out-of-atlas cell-layer(s) for tileset %d "
+                "(max static id %d)", name, len(masked_cells), tileset_id, max_tid,
+            )
+
     blocks: list[int] = []
     void_count = 0
     for y in range(height):  # row-major: y outer, x inner
@@ -397,8 +450,14 @@ def convert_layout(
             metatile = collapse_column(grid, x, y, tile_map, tileset_id)
             if (x, y) in overrides:
                 key = column_key(grid, x, y) or None
+                # `grid` is already masked above; a key surviving with an
+                # out-of-atlas id means a masking site was missed, not a
+                # legitimate empty/garbage warp cell (that case is `key is None`).
                 if key is not None and not tile_map.column_in_atlas(tileset_id, key):
-                    key = None
+                    raise AssertionError(
+                        f"layout {name}: warp cell ({x}, {y}) column {key!r} still "
+                        f"has an out-of-atlas tile id after masking"
+                    )
                 metatile = tile_map.warp_for_column(tileset_id, key)
             elif (x, y) in behaviors:
                 # Behavior stamp wins over unblocked_cells (redundant, not
@@ -408,7 +467,10 @@ def convert_layout(
                 # the engine's sideways-stairs redirect requires a passable tile.
                 key = column_key(grid, x, y) or None
                 if key is not None and not tile_map.column_in_atlas(tileset_id, key):
-                    key = None
+                    raise AssertionError(
+                        f"layout {name}: behavior cell ({x}, {y}) column {key!r} "
+                        f"still has an out-of-atlas tile id after masking"
+                    )
                 metatile = tile_map.behavior_for_column(tileset_id, behaviors[(x, y)], key)
             elif (x, y) in blocked:
                 metatile = Metatile(metatile.metatile_id, BLOCKED_COLLISION, BLOCKED_ELEVATION)

@@ -50,7 +50,12 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from rpg2gba.tileset_converter.layout import TileGrid, column_blocked, column_key
+from rpg2gba.tileset_converter.layout import (
+    TileGrid,
+    column_blocked,
+    column_key,
+    mask_out_of_atlas,
+)
 from rpg2gba.tileset_converter.stairs import BEHAVIOR_BY_SIDE, StairSide
 from rpg2gba.tileset_converter.terrain_tags import (
     TerrainTagTable,
@@ -67,8 +72,8 @@ from .emit import (
     emit_tileset,
 )
 from .quantize import build_quantized_tileset_family
-from .raster import TileRasterizer
-from .sources import STATIC_BASE, load_tileset_sources
+from .raster import TileRasterizer, column_in_atlas
+from .sources import load_tileset_sources
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +146,28 @@ def _behavior_value(fork: Path, name: str) -> int:
 def _grid_of(map_json: dict) -> TileGrid:
     t = map_json["tiles"]
     return TileGrid(t["xsize"], t["ysize"], t["zsize"], t["data"])
+
+
+def _masked_grid_of(
+    map_json: dict, max_static_tile_id: int | None, *, map_id: int | None = None
+) -> TileGrid:
+    """`_grid_of` masked to `max_static_tile_id` (`layout.mask_out_of_atlas`) —
+    the single point every column-key computation in this module goes through,
+    so a column key can never carry a stale out-of-atlas static tile id past
+    this function. Identity when `max_static_tile_id` is None (a synthetic test
+    rasterizer with no real atlas bounds — see `column_in_atlas`'s docstring).
+    Logs one warning per map when anything was actually masked."""
+    grid = _grid_of(map_json)
+    if max_static_tile_id is None:
+        return grid
+    grid, masked = mask_out_of_atlas(grid, max_static_tile_id)
+    if masked:
+        logger.warning(
+            "Map%s: masked %d out-of-atlas tile(s) past static id %d",
+            f"{map_id:03d}" if map_id is not None else "?",
+            len(masked), max_static_tile_id,
+        )
+    return grid
 
 
 def _default_rasterizer(
@@ -300,15 +327,20 @@ def _void_metatile() -> MetatileImage:
 
 def column_keys_for_maps(
     maplist: list[tuple[int, dict]],
+    max_static_tile_id: int | None = None,
 ) -> list[tuple[tuple[int, int], ...]]:
     """Return sorted unique non-empty column keys across all maps in ``maplist``.
 
     ``maplist`` is ``[(map_id, map_json), ...]``.  The stable sort gives
     deterministic metatile-id assignment across re-runs.  Empty column keys
-    (cells that contain no tiles) are excluded."""
+    (cells that contain no tiles) are excluded.  ``max_static_tile_id``, when
+    given, masks every map's grid first (`_masked_grid_of`) so a returned key
+    never carries a stale out-of-atlas static tile id on any layer — only a
+    cell whose EVERY non-empty layer was out-of-atlas ends up fully empty and
+    excluded."""
     keys: set[tuple[tuple[int, int], ...]] = set()
-    for _map_id, map_json in maplist:
-        grid = _grid_of(map_json)
+    for map_id, map_json in maplist:
+        grid = _masked_grid_of(map_json, max_static_tile_id, map_id=map_id)
         for y in range(grid.ysize):
             for x in range(grid.xsize):
                 k = column_key(grid, x, y)
@@ -406,30 +438,45 @@ def build_slice_tilesets(
         passages = get_passages(ts)
         terrain_tags = get_terrain_tags(ts)
 
-        # Enumerate all unique column keys across all maps for this tileset.
-        ordered = column_keys_for_maps(maplist)
-
-        # Drop column keys that reference out-of-atlas (garbage) static tile ids:
-        # some Uranium maps carry stray tile ids far outside their tileset atlas
-        # (e.g. 3408 in a 304-tile Gatehouse), which the rasterizer fails loud on.
-        # Autotile ids (< STATIC_BASE) are always valid; static ids must be in range.
-        # Dropped columns resolve to the void metatile in convert_layout, matching
-        # the map viewer's pre-render filter (map_viewer_common._ensure_tileset_analysis).
-        # A synthetic test rasterizer has no atlas bounds -> nothing to drop.
+        # Atlas bound for this tileset (None for a synthetic test rasterizer with
+        # no real atlas bounds — see `column_in_atlas`'s docstring). Computed BEFORE
+        # any column key below so every one of them is `mask_out_of_atlas`-masked,
+        # not dropped: a stray out-of-atlas static tile id on one layer of a cell
+        # (e.g. 3408 in a 304-tile Gatehouse) now just zeroes that one layer —
+        # the other layers of the same cell still get a real metatile.
         max_tid = rast.max_static_tile_id() if hasattr(rast, "max_static_tile_id") else None
 
-        def _in_atlas(k: tuple) -> bool:
-            if max_tid is None:
-                return True
-            return all(tid < STATIC_BASE or tid <= max_tid for _, tid in k)
+        # One masked grid per map, cached for the rest of this tileset's work
+        # below (column keys, door keys, stair keys all need the SAME masked
+        # grid per map) — masks and logs once per map, not once per use site.
+        grid_cache: dict[int, TileGrid] = {
+            map_id: _masked_grid_of(map_json, max_tid, map_id=map_id)
+            for map_id, map_json in maplist
+        }
 
-        garbage = len(ordered) - len([k for k in ordered if _in_atlas(k)])
-        if garbage:
-            logger.warning(
-                "tileset %d: dropped %d column key(s) with out-of-atlas tile ids "
-                "(max static id %d) -> void", ts, garbage, max_tid,
+        # Enumerate all unique column keys across all maps for this tileset
+        # (already masked — see `_masked_grid_of` above).
+        keys: set[tuple[tuple[int, int], ...]] = set()
+        for map_id, _map_json in maplist:
+            grid = grid_cache[map_id]
+            for y in range(grid.ysize):
+                for x in range(grid.xsize):
+                    k = column_key(grid, x, y)
+                    if k:
+                        keys.add(k)
+        ordered = sorted(keys)
+
+        # Fail-loud backstop, not a real filter any more: every key in `ordered`
+        # was built from a masked grid, so none of them should ever fail this —
+        # a hit here means a masking site was missed, not a legitimate garbage tile.
+        still_bad = [k for k in ordered if not column_in_atlas(rast, k)]
+        if still_bad:
+            raise AssertionError(
+                f"tileset {ts}: {len(still_bad)} column key(s) still reference "
+                f"out-of-atlas tile ids after masking (max static id {max_tid}) "
+                f"— e.g. {still_bad[0]!r}; a grid-construction site upstream of "
+                "column_keys_for_maps was not masked"
             )
-            ordered = [k for k in ordered if _in_atlas(k)]
 
         if not ordered:
             raise ValueError(
@@ -439,11 +486,11 @@ def build_slice_tilesets(
 
         # Collect door (warp) column keys separately — need the MB_NON_ANIMATED_DOOR copy.
         door_keys: set[tuple] = set()
-        for map_id, map_json in maplist:
-            grid = _grid_of(map_json)
+        for map_id, _map_json in maplist:
+            grid = grid_cache[map_id]
             for wx, wy in warp_coords.get(map_id, set()):
                 dk = column_key(grid, wx, wy)
-                if dk and _in_atlas(dk):
+                if dk:
                     door_keys.add(dk)
 
         # Collect stair (behavior-override) column keys, per KIND — same pattern as
@@ -464,12 +511,12 @@ def build_slice_tilesets(
         # one cell, and minting copies pushes tileset 1033 to 1029 metatiles, past
         # the hard 1024 cap.
         stair_users: dict[tuple, set[str]] = {}
-        for map_id, map_json in maplist:
-            grid = _grid_of(map_json)
+        for map_id, _map_json in maplist:
+            grid = grid_cache[map_id]
             cells = stair_cells.get(map_id, {})
             for (sx, sy), kind in cells.items():
                 sk = column_key(grid, sx, sy)
-                if sk and _in_atlas(sk):
+                if sk:
                     stair_keys.add((sk, kind))
                     stair_users.setdefault(sk, set()).add(kind)
                 else:

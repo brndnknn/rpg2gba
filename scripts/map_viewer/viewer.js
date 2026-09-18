@@ -299,6 +299,21 @@ function drawOverlayCell(cell, dx, dy, cp, m) {
       ctx.fillRect(dx, dy, cp, cp);
     }
   }
+  if (cell.out_of_atlas) {
+    // One layer of this cell had a stale RMXP tile id past the tileset atlas
+    // bounds and was masked to empty (the rest of the cell renders normally —
+    // see layout.mask_out_of_atlas) — a small corner marker, not a full
+    // overlay, so the still-rendered cell underneath stays visible. Always
+    // shown, not gated behind an overlay toggle.
+    const s = Math.max(4, cp * 0.28);
+    ctx.fillStyle = 'rgba(255,0,0,0.9)';
+    ctx.beginPath();
+    ctx.moveTo(dx + cp, dy);
+    ctx.lineTo(dx + cp, dy + s);
+    ctx.lineTo(dx + cp - s, dy);
+    ctx.closePath();
+    ctx.fill();
+  }
   const ik = cell.x + ',' + cell.y;
   if ((m ? m.flaggedCells : flaggedCells).has(ik)) {
     ctx.fillStyle = 'rgba(255,120,0,0.45)'; ctx.fillRect(dx, dy, cp, cp);
@@ -1390,9 +1405,11 @@ function setActive(m) {
   worstBuilt = false;
   const mm = D.meta;
   document.title = 'Map Inspector — Map' + String(mm.map_id).padStart(3,'0');
+  const oobN = (D.out_of_atlas || []).length;
   document.getElementById('map-title').textContent =
     (stitched ? 'Stitched · active ' : '') + 'Map' + String(mm.map_id).padStart(3,'0') + ' — ' + (mm.name || '') +
-    ' (' + mm.xsize + '\xd7' + mm.ysize + ')';
+    ' (' + mm.xsize + '\xd7' + mm.ysize + ')' +
+    (oobN ? ' · ' + oobN + ' out-of-atlas cell' + (oobN === 1 ? '' : 's') : '');
   const navp = document.getElementById('nav-palettes');
   if (navp) navp.href = '/palettes/' + mm.map_id;
   const mergeN = (D.colkey_palettes || []).filter(function(cp) { return cp && cp.merge_severity > 0; }).length;
@@ -1624,9 +1641,11 @@ function loadMemberFeedback(mem) {
   activeM.flags = flags;               // alias the active member's feedback state
   activeM.flaggedCells = flaggedCells;
   document.title = 'Map Inspector — Map' + String(m.map_id).padStart(3,'0');
+  const oobN0 = (D.out_of_atlas || []).length;
   document.getElementById('map-title').textContent =
     (stitched ? 'Stitched · active ' : '') + 'Map' + String(m.map_id).padStart(3,'0') + ' — ' + (m.name || '') +
-    ' (' + m.xsize + '\xd7' + m.ysize + ')';
+    ' (' + m.xsize + '\xd7' + m.ysize + ')' +
+    (oobN0 ? ' · ' + oobN0 + ' out-of-atlas cell' + (oobN0 === 1 ? '' : 's') : '');
   document.getElementById('statusbar').textContent =
     'Map' + String(m.map_id).padStart(3,'0') + ' — ' + m.xsize + '\xd7' + m.ysize +
     ' cells, tileset ' + m.tileset_id + ' (' + m.tileset_name + ')';

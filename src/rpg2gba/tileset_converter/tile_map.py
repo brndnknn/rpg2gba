@@ -397,6 +397,13 @@ class TileMap:
         """True iff this tileset has a non-empty explicit tiles table (real-art column mode)."""
         return bool(self._tiles.get(tileset_id))
 
+    def atlas_max_for(self, tileset_id: int) -> int | None:
+        """The recorded atlas bound (`layout.mask_out_of_atlas`'s ``max_static_tile_id``)
+        for this tileset, or None if never recorded (legacy/bucket mode — nothing to
+        mask). Written by `graphics.build_slice_tilesets` into the `atlas_max`
+        overlay section."""
+        return self._atlas_max.get(tileset_id)
+
     def column_in_atlas(self, tileset_id: int, key: tuple[tuple[int, int], ...]) -> bool:
         """False iff the column references a static tile id past the tileset's atlas
         bound (garbage tile). build_slice_tilesets drops such columns from the

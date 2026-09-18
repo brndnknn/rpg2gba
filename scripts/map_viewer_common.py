@@ -37,14 +37,13 @@ from rpg2gba.tileset_converter.graphics.quantize import (
     FamilyParams,
     build_quantized_tileset_family,
 )
-from rpg2gba.tileset_converter.graphics.raster import TileRasterizer
+from rpg2gba.tileset_converter.graphics.raster import TileRasterizer, column_in_atlas
 from rpg2gba.tileset_converter.graphics.sources import (
-    STATIC_BASE,
     load_tileset_sources,
     tileset_source_paths,
 )
 from rpg2gba.tileset_converter.graphics.sprites import convert_character_sheet
-from rpg2gba.tileset_converter.layout import TileGrid, column_key
+from rpg2gba.tileset_converter.layout import TileGrid, column_key, mask_out_of_atlas
 from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
 from rpg2gba.tileset_converter.sprite_pass import _characters_dir, _resolve_sheet
 from rpg2gba.tileset_converter.tile_map import serialize_column_key
@@ -295,6 +294,7 @@ class _MapState:
     map_width: int
     map_height: int
     events_raw: list
+    masked_cells: list[tuple[int, int, int, int]]  # (x, y, z, orig_tile_id) zeroed by mask_out_of_atlas
     colkeys_sorted: list[tuple]           # stable-sorted column-key tuples
     colkey_to_idx: dict[tuple, int]       # tuple -> index in colkeys_sorted
     metatile_imgs: list[MetatileImage | None]  # indexed by colkey idx; None = empty col
@@ -476,31 +476,26 @@ def _ensure_tileset_analysis(
                 continue
         maplist.append((mid, doc))
 
-    pool_keys = column_keys_for_maps(maplist)
-
-    # Filter out column keys that reference static tile ids beyond the atlas bounds.
-    # Some maps (e.g. Map094) carry garbage tile ids (1550, 4531, 8197 …) that are
-    # way outside any real tileset atlas.  Drop those keys before rendering so the
-    # fail-loud ValueError in _render_static is never reached via this pre-pass.
-    # Autotile ids (< STATIC_BASE) are always fine.
+    # Column keys are computed from a `mask_out_of_atlas`-masked grid per map (see
+    # `column_keys_for_maps`), so a stale RMXP tile id past the atlas bound
+    # (e.g. Map094's 1550, 4531, 8197 …) never appears in a key here — the cell's
+    # other layers still contribute their own key, they just don't drag the whole
+    # cell out of the pool any more.
     max_tid = raster.max_static_tile_id()
-    valid_keys = [
-        k for k in pool_keys
-        if all(tid < STATIC_BASE or tid <= max_tid for _, tid in k)
-    ]
-    dropped = len(pool_keys) - len(valid_keys)
-    if dropped:
-        log.debug(
-            "tileset %d: dropped %d out-of-bounds column key(s) (max static tile_id %d)",
-            tileset_id, dropped, max_tid,
+    pool_keys = column_keys_for_maps(maplist, max_static_tile_id=max_tid)
+
+    # Fail-loud backstop: every key above was built from a masked grid, so none
+    # of them should ever fail this — a hit means a masking site was missed.
+    still_bad = [k for k in pool_keys if not column_in_atlas(raster, k)]
+    if still_bad:
+        raise AssertionError(
+            f"tileset {tileset_id}: {len(still_bad)} pool column key(s) still "
+            f"reference out-of-atlas tile ids after masking (max static id "
+            f"{max_tid}) — e.g. {still_bad[0]!r}"
         )
-    pool_keys = valid_keys
 
     pool_desc = "+".join(f"Map{m:03d}" for m in pool_map_ids)
-    print(
-        f"    tileset {tileset_id}: pool [{pool_desc}], {len(pool_keys)} pool keys"
-        + (f" ({dropped} dropped as out-of-bounds)" if dropped else "")
-    )
+    print(f"    tileset {tileset_id}: pool [{pool_desc}], {len(pool_keys)} pool keys")
 
     if not pool_keys:
         analysis: PaletteAnalysis = PaletteAnalysis(palettes=[], metatiles=[])
@@ -532,6 +527,9 @@ def _refresh_postquant(map_id: int, state: _MapState) -> None:
     postquant: list[tuple[np.ndarray, np.ndarray] | None] = []
     for ck in state.colkeys_sorted:
         if not ck:
+            # Empty column (either genuinely empty, or every non-empty layer was
+            # out-of-atlas and got masked away — state.grid is already masked, see
+            # _ensure_loaded) -> void, same as the pre-quant render.
             postquant.append(None)
             continue
         pool_idx = pool_key_to_idx.get(ck)
@@ -659,6 +657,18 @@ def _ensure_loaded(map_id: int) -> None:
 
     tileset_sources = load_tileset_sources(tileset_id, tilesets_json=tilesets_json_path)
     raster = TileRasterizer(tileset_sources)
+
+    # Mask stale out-of-atlas static tile ids (module docstring of
+    # graphics/raster.py) BEFORE any column_key below: only the bad layer is
+    # zeroed, the rest of the cell renders normally. The ORIGINAL (x, y, z,
+    # tile_id) tuples are kept on state for build_map_data's out_of_atlas report.
+    max_tid = raster.max_static_tile_id()
+    grid, masked_cells = mask_out_of_atlas(grid, max_tid)
+    if masked_cells:
+        log.warning(
+            "Map%03d: masked %d out-of-atlas cell-layer(s) (stale RMXP ids past "
+            "static id %d)", map_id, len(masked_cells), max_tid,
+        )
     animated_slots: set[int] = {
         slot
         for slot, path in enumerate(tileset_sources.autotiles)
@@ -685,6 +695,8 @@ def _ensure_loaded(map_id: int) -> None:
     colkey_to_idx = {ck: i for i, ck in enumerate(colkeys_sorted)}
 
     # Pre-render all metatiles (cheap numpy compositing; persists for server reuse).
+    # `grid` is already masked above, so every non-empty key here is fully
+    # in-atlas and renders normally; only a genuinely all-empty column is void.
     metatile_imgs: list[MetatileImage | None] = []
     for ck in colkeys_sorted:
         if not ck:
@@ -718,6 +730,7 @@ def _ensure_loaded(map_id: int) -> None:
         map_width=int(doc.get("width", grid.xsize)),
         map_height=int(doc.get("height", grid.ysize)),
         events_raw=doc.get("events", []),
+        masked_cells=masked_cells,
         colkeys_sorted=colkeys_sorted,
         colkey_to_idx=colkey_to_idx,
         metatile_imgs=metatile_imgs,
@@ -752,6 +765,14 @@ def render_tile_png(map_id: int, tile_id: int) -> bytes:
     state = _map_cache[map_id]
     if tile_id == 0:
         img: Image.Image = Image.fromarray(np.zeros((16, 16, 4), dtype=np.uint8), "RGBA")
+    elif not state.raster.in_atlas(tile_id):
+        # Stale RMXP tile id past atlas bounds — a clean 404, not the
+        # fail-loud ValueError _render_static would raise (CLAUDE.md §4.5:
+        # that fail-loud behaviour is intentional for the build pipeline, but
+        # the viewer must not 500 on a known, already-voided cell).
+        raise FileNotFoundError(
+            f"tile {tile_id} is out-of-atlas (stale RMXP id) for map {map_id}"
+        )
     else:
         img = state.raster.render(tile_id)
         if img is None:
@@ -888,15 +909,37 @@ def build_map_data(map_id: int) -> dict:
         else:
             metatile_attrs.append({"layer_type": int(mt.layer_type), "behavior": int(mt.behavior)})
 
+    # (x, y) -> {z: original_tile_id} for every layer `mask_out_of_atlas` zeroed
+    # (see _ensure_loaded) — `grid` itself only has the post-mask (0) value, so
+    # this is the only place the ORIGINAL stale id survives for reporting.
+    masked_by_xy: dict[tuple[int, int], dict[int, int]] = {}
+    for mx, my, mz, mtid in state.masked_cells:
+        masked_by_xy.setdefault((mx, my), {})[mz] = mtid
+
     cells: list[dict] = []
+    out_of_atlas: list[dict] = []
     for y in range(grid.ysize):
         for x in range(grid.xsize):
             layers = [grid.tile_at(x, y, z) for z in range(grid.zsize)]
             ck = column_key(grid, x, y)
             colkey_idx = state.colkey_to_idx[ck]
+            masked_here = masked_by_xy.get((x, y), {})
 
             layer_detail: list[dict] = []
+            cell_out_of_atlas = bool(masked_here)
             for z, tid in enumerate(layers):
+                orig_tid = masked_here.get(z)
+                if orig_tid is not None:
+                    # This layer was masked to empty (stale out-of-atlas RMXP
+                    # id) — report the ORIGINAL id, not the post-mask 0. Nothing
+                    # meaningful to look up for a tile id that was never real.
+                    out_of_atlas.append({"x": x, "y": y, "layer": z, "tile_id": orig_tid})
+                    layer_detail.append({
+                        "z": z, "tile_id": orig_tid, "passage": 0,
+                        "priority": 0, "terrain": 0, "autotile_name": None,
+                        "out_of_atlas": True,
+                    })
+                    continue
                 if tid == 0:
                     continue
                 pas = state.passages[tid] if 0 <= tid < len(state.passages) else 0
@@ -910,6 +953,9 @@ def build_map_data(map_id: int) -> dict:
                     "priority": pri, "terrain": ter, "autotile_name": at_name,
                 })
 
+            # `grid` is already masked, so these read only in-atlas tile ids —
+            # a masked-away layer is correctly treated as absent (RMXP itself
+            # draws/tests nothing for it; layout._passage_lookup never sees it).
             col_ours = our_blocked(grid, state.passages, state.priorities, state.terrain_tags, x, y)
             col_ur = uranium_blocked(grid, state.passages, state.priorities, state.terrain_tags, x, y)
             pmax = max(
@@ -929,6 +975,8 @@ def build_map_data(map_id: int) -> dict:
             }
             if any(_tile_is_animated(tid, state.animated_slots) for tid in layers):
                 cell["animated"] = True
+            if cell_out_of_atlas:
+                cell["out_of_atlas"] = True
             cells.append(cell)
 
     # ---- palette data -------------------------------------------------------
@@ -948,6 +996,10 @@ def build_map_data(map_id: int) -> dict:
 
     rmxp_tile_colors: dict[str, list[list[int]]] = {}
     for tid in used_tile_ids:
+        if not state.raster.in_atlas(tid):
+            # Stale RMXP tile id past atlas bounds — never render, just report no colors.
+            rmxp_tile_colors[str(tid)] = []
+            continue
         img = state.raster.render(tid)
         if img is None:
             rmxp_tile_colors[str(tid)] = []
@@ -966,7 +1018,9 @@ def build_map_data(map_id: int) -> dict:
     # L1 5-bit distance over snapped colours so the worst tiles can be heat-mapped.
     colkey_palettes: list[dict] = []
     for ck in state.colkeys_sorted:
-        if not ck:
+        if not ck or ck not in pool_key_to_idx:
+            # Empty column, or an out-of-atlas colkey dropped from the pool
+            # (see _ensure_tileset_analysis) -> no palette data, same as empty.
             colkey_palettes.append({
                 "palette_indices": [], "color_changes": [],
                 "quadrant_fit": [], "merge_colors": 0, "merge_severity": 0,
@@ -1027,7 +1081,7 @@ def build_map_data(map_id: int) -> dict:
     # pal -> { colkey_idx -> set(slot) }
     pal_tile_slots: list[dict[int, set[int]]] = [{} for _ in analysis.palettes]
     for ck_idx, ck in enumerate(state.colkeys_sorted):
-        if not ck:
+        if not ck or ck not in pool_key_to_idx:
             continue
         mt_pal = analysis.metatiles[pool_key_to_idx[ck]]
         for qp in mt_pal.quadrants:
@@ -1086,6 +1140,7 @@ def build_map_data(map_id: int) -> dict:
         "rmxp_tile_colors": rmxp_tile_colors,
         "colkey_palettes": colkey_palettes,
         "palette_usage": palette_usage,
+        "out_of_atlas": out_of_atlas,
     }
 
 

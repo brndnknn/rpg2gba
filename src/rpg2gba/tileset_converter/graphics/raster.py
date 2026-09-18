@@ -85,6 +85,25 @@ class TileRasterizer:
         rows = atlas.height // RMXP_TILE_PX
         return STATIC_BASE + rows * TILESET_COLUMNS - 1
 
+    def in_atlas(self, tile_id: int) -> bool:
+        """True if ``tile_id`` would render without raising against this atlas.
+
+        Some Uranium source maps carry a handful of stale static tile ids that
+        point past the bottom of the tileset image — RMXP silently draws
+        nothing for them, so they are not really "garbage," just out of range
+        for a fail-loud renderer. This predicate lets callers (the build
+        pipeline, the map viewer) detect and void those cells *before* calling
+        `render`/`_render_static`, which still fails loud by design (see the
+        module docstring and `tests/test_graphics_raster.py`
+        `test_static_out_of_bounds_fails_loud`)."""
+        if tile_id == 0:
+            return True
+        if 0 < tile_id < STATIC_BASE:
+            return True
+        if tile_id >= STATIC_BASE:
+            return tile_id <= self.max_static_tile_id()
+        return False
+
     # --- rendering ----------------------------------------------------------
 
     def render(self, tile_id: int, frame: int = 0) -> Image.Image:
@@ -160,3 +179,25 @@ class TileRasterizer:
             return Image.new("RGBA", (NATIVE_TILE_PX, NATIVE_TILE_PX), _TRANSPARENT)
         flat = flatten_autotile(template, variant, frame=frame)
         return downscale_2x(flat)
+
+
+def column_in_atlas(rast: TileRasterizer, key: tuple[tuple[int, int], ...]) -> bool:
+    """True if every ``(layer, tile_id)`` pair in a column key is in ``rast``'s atlas.
+
+    The build pipeline and the layout converter both mask (`layout.
+    mask_out_of_atlas`) a static tile id past the atlas bound to empty on its
+    OWN layer BEFORE any column key is computed (see `TileGrid`'s callers), so
+    a key seen after that point should never fail this — callers use it as a
+    fail-loud backstop (a hit means a masking site was missed), not a filter
+    to drop or void columns by any more. ``rast`` objects without an
+    `in_atlas` method are treated via `max_static_tile_id` if that's present
+    instead (some test doubles expose only the latter); with neither, nothing
+    is out of range."""
+    in_atlas = getattr(rast, "in_atlas", None)
+    if in_atlas is not None:
+        return all(in_atlas(tid) for _, tid in key)
+    max_static_tile_id = getattr(rast, "max_static_tile_id", None)
+    if max_static_tile_id is None:
+        return True
+    max_tid = max_static_tile_id()
+    return all(tid < STATIC_BASE or tid <= max_tid for _, tid in key)

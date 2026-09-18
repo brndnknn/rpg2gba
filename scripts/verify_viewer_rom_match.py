@@ -139,7 +139,6 @@ def _reconstruct_tileset(
     source_tileset_of=None so `resolve(ts) == ts` throughout -- matches the real
     build's call in scripts/assemble_pathfinder.py::run_graphics_pass)."""
     from rpg2gba.tileset_converter.graphics import build_slice_tilesets as bst
-    from rpg2gba.tileset_converter.graphics.sources import STATIC_BASE
     from rpg2gba.tileset_converter.layout import column_key
     from rpg2gba.tileset_converter.tile_map import serialize_column_key
 
@@ -148,28 +147,21 @@ def _reconstruct_tileset(
     passages = bst._load_passages(tilesets_json, ts)
     terrain_tags = bst._load_terrain_tags(tilesets_json, ts)
 
-    ordered = bst.column_keys_for_maps(maplist)
     max_tid = rast.max_static_tile_id()
-
-    def _in_atlas(k: tuple) -> bool:
-        return all(tid < STATIC_BASE or tid <= max_tid for _, tid in k)
-
-    garbage = len(ordered) - len([k for k in ordered if _in_atlas(k)])
-    if garbage:
-        logger.warning(
-            "tileset %d: %d out-of-atlas column key(s) dropped (matches build)",
-            ts, garbage,
-        )
-    ordered = [k for k in ordered if _in_atlas(k)]
+    # Matches the real build: a stray out-of-atlas static tile id on one layer
+    # of a cell is masked (zeroed), not dropped whole — `_masked_grid_of`/
+    # `column_keys_for_maps(max_static_tile_id=...)` (build_slice_tilesets.py)
+    # is the single place this happens; mirror it via the same helpers here.
+    ordered = bst.column_keys_for_maps(maplist, max_static_tile_id=max_tid)
     if not ordered:
         raise ValueError(f"tileset {ts}: no non-empty in-atlas columns")
 
     door_keys: set = set()
     for map_id, map_json in maplist:
-        grid = bst._grid_of(map_json)
+        grid = bst._masked_grid_of(map_json, max_tid, map_id=map_id)
         for wx, wy in warp_coords.get(map_id, set()):
             dk = column_key(grid, wx, wy)
-            if dk and _in_atlas(dk):
+            if dk:
                 door_keys.add(dk)
 
     opaque_cache: dict[int, bool] = {}
