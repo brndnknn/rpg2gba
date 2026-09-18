@@ -17,6 +17,25 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 115. Collapsed warp events still emit a dead Poryscript body
+
+Found 2026-09-18 while inventorying script warps for the warp-facing design
+(`WARP_RETAIN_FACING_PROPOSAL.md` §0). When `classify_event`
+(`src/rpg2gba/tileset_converter/metadata_wiring.py`) collapses an event into a
+native `warp_event`, it drops the `object_event` — but the transpiler still emits
+that event's script body into `output/uranium-build/scripts/Map*.pory`, and no
+dispatcher references it. Same for events skipped because their destination is
+out of slice (e.g. `map037/ev002` → map 40).
+
+**Measured over CH01–CH05's 18 maps:** 52 `warp(...)` call sites in the `.pory`
+files, of which only **8** (7 event-pages) are live script warps. The rest are
+dead labels shadowing a native warp at the same cell.
+
+Harmless at runtime. The cost is misdirection: grepping `warp(` overstates
+script warps roughly 6×, which nearly skewed the 2026-09-18 design discussion.
+Fix: skip transpiling (or emit a one-line breadcrumb for) events the classifier
+realized natively or skipped.
+
 ### 114. 20 maps reference tile ids past their tileset's `passages` array
 
 Found 2026-09-17 while measuring warp arrival geometry: `column_blocked` raises a `KeyError` on
@@ -1321,6 +1340,12 @@ leaked fixture keys in the same commit.
 *Found 2026-09-01 while migrating the file's keys for #66.*
 
 ### 107. Warp retain-facing tier 3 should test second-order reachability
+
+**SUPERSEDED 2026-09-18 — close when C5b lands.** The operator ruled to delete tier 3
+outright (retain-facing and departure-side direction move into the engine —
+`WARP_RETAIN_FACING_PROPOSAL.md` §0, `REDERIVATION_PLAN.md` §16.3 C5b). Do not implement
+the rule below. The same deletion removes `_derive_retain_facing` from #114's
+still-open list.
 
 `metadata_wiring.compute_arrival_facings` tier 3 derives a `dest_dir=0`
 ("retain facing") arrival by finding the source warp's single open,

@@ -1634,6 +1634,7 @@ Each lands unit-green. None is ROM-verified before P11.
 | **C3** | Engine-transition forks, white-out first, with the fenced-engine grep for the rest | R9 | DONE 2026-09-16 — fork model, engine audit, `FLAG_MUM` seed; day/night deferred to its first real reader; see "C3" below |
 | **C4** | Generic per-command extractors for every code present in CH01–CH05, source-derived | R11 | DONE 2026-09-17 — `beat_floor/`; see "C4 landed" below |
 | **C5** | Archetype templates refactored onto the generic floor; the ⊇-floor checker rule; seam and stair floors | R11 | DONE 2026-09-17 — `beat_floor/{coverage,lookup,terrain}.py`, all five templates declare; see "C5 landed" below |
+| **C5b** | Warp facing moves into the engine: retain-facing fallback, per-warp departure direction in `struct WarpEvent`, pending-facing special for script warps, door tiles yield to the warp's direction; arrival-facing table and tiers 1–3 deleted | `WARP_RETAIN_FACING_PROPOSAL.md` §0 R1–R6 | TODO — **runs before C6** (2026-09-18); see "C5b" below |
 | **C7** | Freeze CH01–CH05 hand beats — **rows + identity only; coverage is the test, not literal match** (R12 amended 2026-09-17) | R12 | TODO — **runs before C6** (2026-09-17) |
 | **C6** | Generator + solver integration: whole-module emit, review doc, refusal list, idempotence test | R1, R4, R7 | TODO — **runs after C7** (2026-09-17) |
 | **C8** | Shared Ruby-subset interpreter + input search; `map050/ev019` | R10 | TODO |
@@ -2049,6 +2050,30 @@ the wrong thing to freeze. A coarser freeze (rows, beat identity, assertion *str
 problem and the validation pass together, and sits better with §5's warning that a hand literal may
 no longer be true. The cost is that R12's "reproduce every frozen literal" weakens to "cover every
 frozen row at least as strongly," which is a weaker guarantee against silent regression.
+
+**C5b added 2026-09-18 (operator).** Warp arrival facing is re-founded on the departure side; the
+full rulings and measurements are `WARP_RETAIN_FACING_PROPOSAL.md` §0, which is the authority —
+this entry only places the step. It lands **before C6** so the generator derives warp assertions
+from the final model rather than from `compute_arrival_facings`, which C5b deletes. It is
+independent of C7 (C7 freezes rows and identity, not facing literals). Scope, in landing order:
+
+1. Engine (`engine/`, fenced `URANIUM PATHFINDER SLICE`, gated on `RPG2GBA_WARP_RETAIN_FACING`,
+   default ON): retain-facing fallback; `ScrCmd_warp` stores instead of resets; `struct WarpEvent`
+   direction byte + `warp_def` + `mapjson` + size `STATIC_ASSERT`; departure override in the
+   step-on/door paths; `SetWarpArrivalFacing` special with clear-on-map-load; door branch yields
+   to the stored direction. `make modern` clean.
+2. Pipeline: `metadata_wiring` emits `"facing"` on departure warps from `dest_dir`; the transpiler
+   emits the special before `warp(...)` for explicit `params[4]`; delete `compute_arrival_facings`,
+   the ON_WARP_INTO_MAP_TABLE facing block, `_derive_retain_facing`, and
+   `reference/warp_facing_overrides.json`.
+3. Tests: rewrite `tests/test_warp_facing_invariant.py` onto the new semantics (tier-3 assertions
+   replaced, not deleted; wall-facer pin reworded "decided: faithful"); add R5's door-tile guard;
+   re-source `ch03.py::_expected_arrival_facing` from RMXP `dest_dir`.
+
+Unit-green only. **ROM risks carried into P11:** the Moki (32)(8,43..45) ↔ Route 1 (33)(70,11)
+edge stack (the only built-map case where door-south and the authored direction disagree), the
+three never-walked explicit-direction script warps (map032/ev078, map049/ev021, map172/ev004),
+and dir-0 building exits whose arrival auto-step now follows the approach direction.
 
 ### 16.4 Known work the generator will refuse until fixed (not decisions)
 

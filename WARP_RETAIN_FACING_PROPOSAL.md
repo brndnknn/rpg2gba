@@ -1,10 +1,56 @@
 # Proposal — implement RMXP "retain facing" in the engine, delete tier 3
 
 **Written:** 2026-09-17, against `625c8cc9` on `rederive-ch01-ch04`.
-**Status:** PROPOSAL. Not decided. Changes baseline pokeemerald warp behavior, so it is a
-CLAUDE.md §10 call — the operator's, not the build agent's.
+**Status:** **DECIDED 2026-09-18 (operator), in a wider form than proposed — read §0 first.** §0 is
+authoritative; §§1–7 below are the original proposal, kept for its reasoning and measurements.
+Where they disagree, §0 wins. Lands as step **C5b** of `REDERIVATION_PLAN.md` §16.3.
 **Origin:** operator, 2026-09-17, while auditing `reference/warp_facing_overrides.json`.
 **Scope:** the 449 of 1085 RMXP transfers (41.4%) whose `dir` parameter is 0.
+
+---
+
+## 0. Decisions — 2026-09-18 (operator, grill session)
+
+The proposal asked only for retain-facing (dir 0). The session widened it: **RMXP's transfer
+direction lives on the departure side, so carry it there, and delete the arrival-facing table
+entirely** — not shrink it by 41%.
+
+**Root cause, stated once.** Stock pokeemerald warps carry no direction. The engine therefore
+infers post-warp facing from the *arrival tile's* metatile behavior (`GetAdjustedInitialDirection`,
+`overworld.c:1078-1105`), and the pipeline compensated by keying facing on arrival coordinates
+(`ON_WARP_INTO_MAP_TABLE`). Every defect class in this area — tier-3 ambiguity, wall-facers from
+derivation, coordinate clashes, door tiles forcing south — descends from that missing field.
+
+| # | Ruling |
+|---|---|
+| **R1** | **Engine retains facing, behind `RPG2GBA_WARP_RETAIN_FACING` in `include/config/rpg2gba.h`, default ON.** Fallback at `overworld.c:1103-1104` returns `playerStruct->direction`. `ScrCmd_warp` (`scrcmd.c:969-981`) calls `StoreInitialPlayerAvatarState()` instead of `ResetInitialPlayerAvatarState()`. **Only `ScrCmd_warp` changes** — the transpiler and `deterministic.py` emit only `warp(...)`; the other seven `ScrCmd_warp*` sites are stock flows we never call (answers original Q2). Fly / Teleport / Dig-Escape Rope / white-out each call `ResetInitialPlayerAvatarState()` themselves (`overworld.c:420/431/443/478`) and keep DIR_SOUTH. |
+| **R2** | **Direction on the departure warp.** `struct WarpEvent` (`include/global.fieldmap.h:165`) gains a direction byte, 0 = retain, else `DIR_*`; size 8 → 10 with alignment, guarded by `STATIC_ASSERT(sizeof(struct WarpEvent) == 10)`. `warp_def` (`asm/macros/map.inc:63`) emits the byte and an explicit pad byte; `tools/mapjson/mapjson.cpp:287-292` reads an optional per-warp `"facing"` field, default 0. The step-on/door warp paths in `field_control_avatar.c` override the stored facing with a non-zero field after `StoreInitialPlayerAvatarState()`. ROM cost < 10 KB; no RAM (warp tables stay in ROM, read by pointer); **no save-format change** (not in the save block — seed blobs still load). Pipeline: `metadata_wiring` writes `"facing"` from RMXP `dest_dir` on the departure warp. **Deleted:** `compute_arrival_facings`, `_on_warp_block`/the ON_WARP_INTO_MAP_TABLE facing block, all three tiers, `_derive_retain_facing`, `reference/warp_facing_overrides.json`. |
+| **R3** | **Explicit-direction script warps use a pending-facing special.** `setvar(VAR_0x8004, DIR_*)` → `special(SetWarpArrivalFacing)` → `warp(...)`. `ScrCmd_warp` stores facing, then applies and clears the pending value if set; the pending value is also cleared on map load so a branch that never warps cannot leak it. Invisible, like RMXP (which applies the direction while the screen is dark); `turnobject` before `warp` was rejected because the turn shows before the fade. The transpiler starts reading `params[4]` — **today it drops it** (`transpiler.py:2092-2100`), so every explicit-direction script warp currently arrives facing south. |
+| **R4** | **Uranium-authored wall-facers are reproduced faithfully** (maps 49/172, `dir=4` into a wall). `test_uranium_authored_wall_facers_are_pinned` stays, reworded from "pending a fidelity call" to "decided: faithful". |
+| **R5** | **Under the switch, the warp's direction wins on door tiles.** The `IsNonAnimDoor`/`IsDoor` branch of `GetAdjustedInitialDirection` returns the stored direction instead of `DIR_SOUTH`. The pipeline stamps `MB_NON_ANIMATED_DOOR` on *every* warp source tile as a trigger mechanism (S9), so "door → face south" is a stock-game guess firing on tiles that are not doors. **The arrival auto-step (`Task_ExitNonAnimDoor`, `field_screen_effect.c:393-414`) is kept** — it is what subsumed Uranium's own door walk-out autoruns — and now follows the warp's direction. Arrow, stair, ladder and surf/dive branches are untouched (they drive mechanics). **Guard test:** every dir-0 arrival on a door tile must step onto walkable ground for every direction its source warp can be entered from, and no arrival may land on an arrow/stair tile; both fail loud. |
+| **R6** | **Lands as C5b on `rederive-ch01-ch04`, before C6**, unit-green; first ROM run at P11. Playtest facing expectations (`ch03.py::_expected_arrival_facing`, which reads `compute_arrival_facings`) are re-sourced from RMXP `dest_dir` in the same step. |
+
+**Measurements behind the rulings (2026-09-18, all 199 decoded maps):**
+
+- **Coordinate clashes (why R2 over "retain + keep the table for explicit dirs").** 777 step-on
+  `WarpSpec`s land on 591 in-bounds tiles; **4 tiles** receive both a dir-0 and an explicit-dir
+  transfer — map 71 (18,73), 117 (45,70), 213 (26,20), 216 (21,38), all out of slice. 0 tiles
+  receive two different explicit directions. Departure-side direction makes the clash impossible.
+- **Script warps in CH01–CH05: 8 `warp()` calls / 7 event-pages** (6 in CH01, 1 in CH03; none in
+  CH02/CH04/CH05). 3 explicit-direction — map032/ev078/p1 (up), map049/ev021/p1 2nd warp (right,
+  same-map), map172/ev004/p3 (left, same-map) — none walked by a playtest. The 3 walked ones
+  (CH01 B4, B10; CH03 B2) are all dir 0.
+- **Door-tile arrivals on the 18 built maps: 15 tiles, 20 transfers**, all `MB_NON_ANIMATED_DOOR`
+  (no arrow/stair/animated-door arrivals). 15 dir-0 — building exits onto their own front door,
+  plus Passage Cave 2F→1F (36)(17,4) and Route 1→Moki (32)(8,43). 5 explicit, **3 disagreeing with
+  the forced south**: Moki (32)(8,43..45) → Route 1 (33)(70,11), `dir=4`. Today the table's
+  `turnobject` runs before the auto-step and masks this; with the table gone, R5 is what keeps it.
+  Stair-tile arrivals beyond the built maps are unverified — stair behavior overrides are computed
+  by the assembler, not persisted — and are covered by R5's guard test as maps get built.
+
+**Out of scope:** variable-target transfers (`method=1`, map 212, PROJECT_TODO #113) and
+collapsed doors whose pages disagree on direction/destination (#112) — both latent, both
+independent of this design.
 
 ---
 
@@ -125,6 +171,12 @@ So the table survives regardless, for at least 364 transfers. This proposal shri
 does not remove it.
 
 ## 6. Open questions
+
+**All answered 2026-09-18 — see §0.** Q1 → R2/R5 (the "brief wrong facing" was never visible: the
+table's `turnobject` runs in `InitObjectEventsLocal` before fade-in; the real Q1 was coordinate
+clashes and door tiles). Q2 → R1 (only `ScrCmd_warp`). Q3 → R1 (yes, default on). Q4 → yes:
+`InitPlayerAvatar` applies the facing before the `URANIUM_MAP_WALKER` block
+(`overworld.c:2604-2615`), so the design works in the walker build.
 
 **Q1 — How does the engine know a warp should retain facing?** The fallback in (a) is reached by
 *any* arrival with no behavior match, which under our plain-floor arrivals is all of them —
