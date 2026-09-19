@@ -39,6 +39,27 @@ that kind.
 **Order:** Do 1 before 2, because Task 2's ledger is validated by Task 1's `check` command.
 Task 3 is independent and can be done at any point.
 
+### Scaffolding status (2026-09-19)
+
+Every task now has a stub module and a **fully written** test file, so you work test-first:
+pick a test, make it pass, move on. A test file whose task you haven't started carries a
+`pytestmark = pytest.mark.skip(...)` line so the suite stays green. Delete that line when
+you start the task.
+
+| Task | Stub (yours to fill) | Tests (written for you) | Skip line? |
+|---|---|---|---|
+| 1 | `src/rpg2gba/playtest/hand_freeze.py` | `tests/test_hand_freeze.py` | **removed**: live now |
+| 2 | same module, `validate_residue` | `tests/test_hand_freeze_residue.py` | present |
+| 3 | `src/rpg2gba/beat_floor/obstacle.py` (+ edits to `assertion.py`, `walk.py`) | `tests/test_beat_floor_obstacle.py` | present |
+
+The tests were checked against a throwaway reference implementation (kept outside the repo),
+so a failure means your code, not the test. The one exception is a test that reads **your**
+hand-authored data (`test_residue_ledger_complete`), which is red until that data exists.
+
+Two measured corrections came out of writing the tests. Both are recorded in the task files:
+the own-beat total is **111, not 91** (Task 1, Q4), and the build directory is
+**`output/uranium-build/`, not `output/`** (Task 3).
+
 ## Required reading
 
 - `CLAUDE.md` §4 (operating principles: fail loud, idempotence, one source of truth) and §5

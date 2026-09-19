@@ -114,6 +114,40 @@ Extend Task 1's `check` so that it fails when:
 Put the validation in a pure function, `validate_residue(frozen, ledger, manifest_ids) -> list[str]`,
 that returns problem strings. `check` prints them and exits 1 if there are any.
 
+- `frozen`: the freeze dict (Task 1's shape).
+- `ledger`: the parsed residue JSON, or `None` if the file doesn't exist. `None` is still
+  exactly **one** problem when any rowless beat exists, as in Task 1.
+- `manifest_ids`: `dict[str, set[str]]`, chapter → row ids. It's a *parameter*, not a call to
+  `manifest_row_ids` inside the function, so the function stays pure and the tests can pass a
+  tiny synthetic manifest. The caller (`check`) builds it.
+- A ledger whose `schema` isn't 1 is a problem too.
+
+**Changing a signature means changing every caller.** Before you start, search for
+`validate_residue(` across `src/` and `tests/`. You'll find the `check` command (it passes two
+arguments today) and Task 1's `test_minimal_residue_rule_missing_ledger`. Update `check`, and
+delete that test (`test_missing_ledger` in the new file replaces it). This is the one place in
+the assignment where you edit the CLI code.
+
+#### Hints
+
+- **Start with the vocabulary as data, not as code.** One module-level mapping from ruling to
+  the tuple of fields it requires turns "is this ruling known?" and "which fields does it
+  need?" into two dictionary lookups. A chain of `if ruling == ...` branches is the version
+  that grows a bug when a tenth ruling arrives. Try to make the table in "The ruling
+  vocabulary" and your constant look the same.
+- **Sets do most of the R1 work.** Build three sets of `"CHnn:Name"` keys: rowless beats,
+  beats that claim rows, and ledger keys. "Missing" and "stale/unknown" are then set
+  differences. Why do "stale" (claims rows) and "unknown" (not frozen at all) deserve
+  *different* messages, even though both are "an entry that shouldn't be there"?
+- **Present but empty counts as missing.** `"rows": []` on a `covered_elsewhere` entry is as
+  useless as no `rows` key at all, and the tests check both. One truthiness check handles both.
+- **Iterate in a sorted order** so the problem list is stable from run to run. That's the same
+  idempotence reasoning as the freeze itself, applied to error output.
+- **Once an entry's ruling is unknown, stop checking that entry.** You can't know which extra
+  fields it needs. Do you still want to report its unknown row ids?
+- The chapter for a `rows` check comes from the ledger **key** (`"CH03:B25"` → `CH03`).
+  `str.partition(":")` is a neat way to split it.
+
 ### R2 — Rule on every beat
 
 Read each body (the file:line is given). Pick a ruling. **Prefer the most specific one:**
@@ -130,15 +164,50 @@ also names `ch03.N1`, `N3` and `B12` as no-refire beats. Work out which number i
 (your Task 1 freeze file is the authority now) and add a dated correction next to the plan's
 table. **Don't** silently rewrite the old number: CLAUDE.md §7 asks for a dated correction.
 
-## Tests (add to `tests/test_hand_freeze.py`)
+## Tests — `tests/test_hand_freeze_residue.py` (implemented, skipped)
+
+**Written for you as of 2026-09-19.** The file starts with a `pytestmark = pytest.mark.skip(...)`
+line; delete it when you start. Everything except the first test uses a tiny **synthetic**
+freeze: three CH01 beats (`B1` and `N4` rowless, `B2` claiming a row), a three-row manifest,
+and a clean two-entry ledger. That way the tests pin the *rules*, and they don't care what
+you decide for the real beats.
 
 | Test | Asserts |
 |---|---|
-| `test_residue_ledger_complete` | `validate_residue` on the committed files returns `[]` |
-| `test_residue_missing_entry` | drop one entry → a problem naming that beat |
-| `test_residue_stale_entry` | add `"CH05:B1"` (which claims rows) → a problem |
-| `test_residue_bad_ruling` | `"ruling": "vibes"` → a problem |
-| `test_residue_open_needs_question` | an `open` entry with no `question` → a problem |
+| `test_residue_ledger_complete` | `validate_residue` on the **committed** files returns `[]`. This is the only real-data test, so it stays red until your ledger is written |
+| `test_synthetic_baseline_is_clean` | the clean synthetic ledger gives `[]`. **If this fails, fix it first**, since every other test assumes it |
+| `test_missing_ledger` | `None` gives exactly one problem |
+| `test_residue_missing_entry` | drop `CH01:N4` → exactly one problem, naming it |
+| `test_residue_stale_entry` | an entry for `CH01:B2` (claims rows) → exactly one problem, naming it |
+| `test_residue_unknown_beat` | an entry for `CH01:B99` → exactly one problem, naming it |
+| `test_residue_bad_ruling` | `"ruling": "vibes"` → a problem mentioning `vibes` |
+| `test_residue_note_required` | no `note` → a problem |
+| `test_residue_open_needs_question` | `open` without `question` → a problem mentioning `question` |
+| `test_residue_rows_rulings_need_rows` | ×4 rulings: no `rows` → a problem mentioning `rows` |
+| `test_residue_empty_rows_is_missing_rows` | `"rows": []` counts as missing |
+| `test_residue_cites_rulings_need_cites` | `build_check` / `retired` without `cites` → a problem mentioning `cites` |
+| `test_residue_bare_rulings_need_nothing_extra` | `bgm_debt` / `not_residue` with only a `note` → clean |
+| `test_residue_unknown_row_id` | one bad id among good ones → exactly one problem, naming the bad id |
+| `test_residue_reports_every_problem` | three independent problems → at least three strings (collect, then report) |
+| `test_residue_unknown_schema` | `schema: 2` → a problem |
+
+Several tests assert **exactly one** problem. That's deliberate: one mistake shouldn't produce
+a cascade of three messages. If you get two where one is expected, ask which message the
+operator actually needs.
+
+```bash
+.venv/bin/pytest tests/test_hand_freeze_residue.py -q -k "not ledger_complete"   # the rules
+.venv/bin/pytest tests/test_hand_freeze_residue.py -q                            # + your ledger
+.venv/bin/python -m rpg2gba.playtest.hand_freeze check                           # the real gate
+```
+
+### Suggested order
+
+1. Code first, against the synthetic tests, until everything except `ledger_complete` is green.
+2. Then the judgment work (R2): create `reference/frozen/hand_beats_residue.json`, starting
+   with only the three worked examples. `check` will immediately list every beat you haven't
+   ruled on, which makes it your to-do list. Work down it, reading each beat body.
+3. R3's count reconciliation last, when your ledger's size is the measured number.
 
 ## Questions (commit message)
 

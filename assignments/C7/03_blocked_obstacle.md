@@ -145,11 +145,32 @@ describes what happens *without* it. Both are true.
 up in the trunk's `scope.commands`, an arm's, or both. Then make sure **exactly one** row per
 obstacle page gets the assertion. Record what you found in Q2.
 
+#### Hints for R4
+
+- Before writing any filter, **measure**. For one real rock (`Map033.json` ev29 is the simplest
+  one), loop over `iter_page_scopes(33, event, 0, page)` (it lives in
+  `chapter_manifest/generator.py`) and print each `scope.row_id` next to
+  `_extract_page(scope.commands)["requires"]`. Then do the same for map032 ev14, which has
+  nested arms. Write down what you see *before* deciding anything, because Q2 wants the
+  observation, not the fix.
+- Once you know which scopes report the capability, you have two broad choices: filter in
+  `floor_for_map` (only some scopes get the call), or filter inside `obstacle_assertions`
+  (it gets called for every scope and declines for some). Which keeps `obstacle_assertions`
+  a pure "these commands → this assertion" function? Which one makes the unit tests in the
+  "pure function" section keep making sense?
+- `chapter_manifest.schema.parse_row_id(row_id).kind` tells you what kind a row is. That's
+  sturdier than string-matching on `"/b"`.
+- Think about a boulder too: it has a single scope. Does your rule still pick it?
+
 ### R5 — Real-data cross-check (script, not a test)
+
+> **Correction, 2026-09-19:** the build directory is `output/uranium-build/`, not `output/`.
+> The maps are at `output/uranium-build/maps/MapNNN.json`. This section and the fixture note
+> below used to say `output/`.
 
 Write `scripts/check_blocked_obstacles.py` (mark it a one-off in its docstring). For each of
 CH01–CH05 it should:
-1. compute `floor_for_chapter(ch, build_dir=Path("output"))`,
+1. compute `floor_for_chapter(ch, build_dir=Path("output/uranium-build"))`,
 2. load `reference/manifests/CHnn.dispositions.json`,
 3. for every row dispositioned `blocked:<cap>`, report whether its floor has a matching
    `blocked_obstacle` (same capability).
@@ -164,32 +185,74 @@ rather than skipping the check.
 
 ## Tests — `tests/test_beat_floor_obstacle.py`
 
-Build synthetic maps the way `tests/test_beat_floor_walk.py:22` does. **Add `x`/`y` to the
-event dict**, because the existing helper leaves them out. A Rock Smash page looks like this:
+**Implemented for you as of 2026-09-19, and skipped.** Delete the `pytestmark` line when you
+start. The stub `src/rpg2gba/beat_floor/obstacle.py` is also in place (signature and
+docstring, body raises `NotImplementedError`).
 
-```python
-ROCK_PAGE = [
-    {"code": 111, "indent": 0, "parameters": [12, "Kernel.pbRockSmash"]},
-    {"code": 355, "indent": 1, "parameters": ["pbEraseThisEvent"]},
-    {"code": 0,   "indent": 1, "parameters": []},
-    {"code": 412, "indent": 0, "parameters": []},
-    {"code": 0,   "indent": 0, "parameters": []},
-]
+> **Correction, 2026-09-19: the fixture this section used to show was wrong.** It had
+> `pbEraseThisEvent` alone in the arm. A real rock (`output/uranium-build/maps/Map033.json`
+> ev29 p0) has **two** capability calls: the trunk's `111 Kernel.pbRockSmash` condition *and*
+> a `355 Kernel.pbRockSmashRandomEncounter` inside the then-arm. That second call is what
+> makes R4 a real problem rather than a hypothetical one. The test file's `ROCK_PAGE` is cut
+> down from the real page (the move route is dropped). It's still worth opening the real page
+> and comparing. Boulders (`Map031.json` ev1) are a single `355 pbPushThisBoulder` on a
+> player-touch page.
+
+The tests go through the **real walker** (`walk.floor_for_map` on a one-event synthetic map),
+so they only pass once both R2 (the extractor) and R3 (the wiring) are done. The three
+"pure function" tests call `obstacle_assertions` directly, so you can get those green first.
+
+| Test | Asserts | Needs |
+|---|---|---|
+| `test_pure_function_no_capability` | a text page → `((), ())` | R2 |
+| `test_multiple_capabilities_refuses` | rock + boulder heads in one scope → one `obstacle_multiple_capabilities` refusal, no assertion | R2 |
+| `test_missing_y_alone_refuses` | `x` present, `y` absent → `obstacle_missing_cell` | R2 |
+| `test_cell_zero_is_a_real_cell` | `(0, 0)` is a real cell, not "missing" | R2 |
+| `test_rock_smash_page_gets_obstacle` | exactly one across the map; `list_index -1`, `code None`, tag `position`, params `{x, y, capability: "rock_smash"}` built with `make_params` | R2+R3+R4 |
+| `test_strength_boulder_gets_obstacle` | `pbPushThisBoulder` → `"strength"`, on the trunk row | R2+R3 |
+| `test_plain_npc_gets_none` | a text page gets none | R3 |
+| `test_visual_placeholder_kept` | `visual` and `blocked_obstacle` both present | R3 |
+| `test_missing_cell_refuses` | no `x`/`y` → exactly one `obstacle_missing_cell` refusal on the map, and no assertion | R3+R4 |
+| `test_one_row_per_obstacle_page` | trunk + arms carry exactly one between them | **R4** |
+| `test_obstacle_row_keeps_existing_assertions` | the merge adds to `trigger`/`completes`, it doesn't replace them | R3 |
+| `test_not_offline` | not in `OFFLINE_KINDS`, and the row isn't `offline_eligible` | R1+R3 |
+| `test_covers_roundtrip` | `covers(a, a)`; a different `capability` `contradicts` | R2+R3 |
+
+```bash
+.venv/bin/pytest tests/test_beat_floor_obstacle.py -q -k "pure or multiple or missing_y or cell_zero"   # R2 alone
+.venv/bin/pytest tests/test_beat_floor_obstacle.py -q                                                 # everything
+.venv/bin/pytest tests/test_beat_floor_*.py -q                                                        # regression
 ```
 
-*(Verify this shape against a real rock page in `output/maps/Map032.json` before you trust
-it. That verification is part of the assignment.)*
+If you wire it up and see `test_one_row_per_obstacle_page` fail with a list of two or three
+assertions, **that's R4**, not a test bug. Read the row ids in the failure message; they're
+the answer to Q2's first half.
 
-| Test | Asserts |
-|---|---|
-| `test_rock_smash_page_gets_obstacle` | one `blocked_obstacle`; `list_index == -1`; `code is None`; params `{x, y, capability: "rock_smash"}` |
-| `test_strength_boulder_gets_obstacle` | `pbPushThisBoulder` → `capability == "strength"` |
-| `test_plain_npc_gets_none` | a text-only page has no `blocked_obstacle` |
-| `test_visual_placeholder_kept` | the rock page still carries its `visual` assertion |
-| `test_missing_cell_refuses` | event without `x` → refusal `obstacle_missing_cell`, no assertion |
-| `test_one_row_per_obstacle_page` | across trunk + arms, exactly one row carries the kind (R4) |
-| `test_not_offline` | `"blocked_obstacle" not in OFFLINE_KINDS`, and such a row is not `offline_eligible` |
-| `test_covers_roundtrip` | `coverage.covers(a, a)` is true; changing `capability` makes `contradicts` true |
+### Hints for R2
+
+- The whole detector is one expression you're told to reuse. Before writing anything, call it
+  from a REPL on `ROCK_PAGE`, on the arm's commands alone, and on `BOULDER_PAGE`, and look at
+  what comes back (type, order, duplicates?). You'll need `len(...)` on it, so ask whether the
+  same capability can appear twice.
+- There are three outcomes plus one refusal path. Write them as early returns, in the order
+  the docstring lists them. Which check has to come **before** the cell check, so a text
+  page with no `x` doesn't refuse?
+- "Missing" means the key is absent, not that the value is falsy (`test_cell_zero_is_a_real_cell`).
+- `FloorRefusal` is positional-friendly, but use keywords. `terrain.py`'s refusals are the
+  house style: a stable `reason` id plus a `detail` that cites what was seen.
+- `_extract_page` is private to the generator. Importing it is the deliberate §4.3 choice
+  here (see `terrain.py`'s precedent). Add a short comment saying *why*, so the next reader
+  doesn't "fix" it by writing a second detector.
+- **Import cycles:** `walk.py` imports from `chapter_manifest.generator` at module level
+  already, so a module-level import in `obstacle.py` should be fine. If you do hit a cycle,
+  the error message names the import chain, so read it before reaching for a local import.
+
+### Hints for R3
+
+- `dataclasses.replace` on a frozen dataclass returns a **new** object. The snippet in R3
+  is nearly complete. The piece it leaves to you is R4's filter.
+- `refusals` is a tuple, `assertions` is a frozenset. That's why one uses `+` and the other
+  uses `|`.
 
 Also run the existing `tests/test_beat_floor_*.py`. They must stay green. If one breaks,
 decide whether the old expectation or your change is wrong, and explain which in the commit.
