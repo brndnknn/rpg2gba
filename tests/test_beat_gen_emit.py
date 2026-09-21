@@ -15,8 +15,6 @@ import pytest
 from rpg2gba.beat_gen import emit
 from rpg2gba.beat_gen.plan import ChapterPlan, PlannedBeat, make_kwargs
 
-pytestmark = pytest.mark.skip(reason="C6 Task 6 not started -- remove this line to start")
-
 TRAINER = PlannedBeat(name="m036e004_trainer", template="trainer", map_id=36,
                       rows=("map036/ev004/p0", "map036/ev004/p1"), group="m036e004_trainer",
                       kwargs=make_kwargs(map_id=36, event_id=4, rider=False))
