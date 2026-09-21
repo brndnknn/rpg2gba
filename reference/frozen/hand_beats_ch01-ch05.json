@@ -1,0 +1,1047 @@
+{
+  "schema": 1,
+  "authored": "2026-09-18",
+  "rule": "REDERIVATION_PLAN.md §16.3 R12 (amended 2026-09-17): rows + identity; order/group recorded, not graded",
+  "sources": {
+    "CH01": {
+      "module": "src/rpg2gba/playtest/chapters/ch01.py",
+      "blob_sha": "168cae937b50d31235eb3de9f0f590f7202c5387"
+    },
+    "CH02": {
+      "module": "src/rpg2gba/playtest/chapters/ch02.py",
+      "blob_sha": "e2c4db215e090f2f9606ba53eb81ceb80a0a6116"
+    },
+    "CH03": {
+      "module": "src/rpg2gba/playtest/chapters/ch03.py",
+      "blob_sha": "54071f9cfe86e06cf754f13f1b89fecd21efbc6a"
+    },
+    "CH04": {
+      "module": "src/rpg2gba/playtest/chapters/ch04.py",
+      "blob_sha": "23502d4830db72eba96cb943960bb112776890e1"
+    },
+    "CH05": {
+      "module": "src/rpg2gba/playtest/chapters/ch05.py",
+      "blob_sha": "4bf56b9fe5705fd8e6e641bad21ffd8aeb765a90"
+    }
+  },
+  "chapters": {
+    "CH01": [
+      {
+        "name": "B1",
+        "order": 0,
+        "group": null,
+        "map_constant": null,
+        "rows": []
+      },
+      {
+        "name": "B2",
+        "order": 1,
+        "group": null,
+        "map_constant": "MAP_MOKI_TOWN_PLAYERS_HOUSE_1F",
+        "rows": [
+          "map049/ev002/p0"
+        ]
+      },
+      {
+        "name": "B3",
+        "order": 2,
+        "group": null,
+        "map_constant": "MAP_MOKI_TOWN_PLAYERS_HOUSE_1F",
+        "rows": [
+          "map049/ev001/p0"
+        ]
+      },
+      {
+        "name": "B3_up",
+        "order": 3,
+        "group": "2F",
+        "map_constant": "MAP_MOKI_TOWN_PLAYERS_HOUSE_1F",
+        "rows": [
+          "map049/ev003/p0",
+          "map048/ev001/p0",
+          "map048/ev005/p0"
+        ]
+      },
+      {
+        "name": "B3_signs",
+        "order": 4,
+        "group": "2F",
+        "map_constant": "MAP_MOKI_TOWN_PLAYERS_HOUSE_2F",
+        "rows": [
+          "map048/ev003/p0",
+          "map048/ev006/p0",
+          "map048/ev007/p0",
+          "map048/ev008/p0",
+          "map048/ev009/p0",
+          "map048/ev010/p0",
+          "map048/ev011/p0",
+          "map048/ev012/p0"
+        ]
+      },
+      {
+        "name": "B3_pc",
+        "order": 5,
+        "group": "2F",
+        "map_constant": "MAP_MOKI_TOWN_PLAYERS_HOUSE_2F",
+        "rows": [
+          "map048/ev004/p0"
+        ]
+      },
+      {
+        "name": "B3_down",
+        "order": 6,
+        "group": "2F",
+        "map_constant": "MAP_MOKI_TOWN_PLAYERS_HOUSE_2F",
+        "rows": [
+          "map048/ev002/p0"
+        ]
+      },
+      {
+        "name": "B4",
+        "order": 7,
+        "group": null,
+        "map_constant": "MAP_MOKI_TOWN",
+        "rows": [
+          "map049/ev002/p1",
+          "map032/ev074/p0",
+          "map032/ev005/p1"
+        ]
+      },
+      {
+        "name": "B5",
+        "order": 8,
+        "group": null,
+        "map_constant": "MAP_MOKI_TOWN",
+        "rows": [
+          "map032/ev003/p0"
+        ]
+      },
+      {
+        "name": "B6",
+        "order": 9,
+        "group": null,
+        "map_constant": null,
+        "rows": []
+      },
+      {
+        "name": "N3",
+        "order": 10,
+        "group": null,
+        "map_constant": null,
+        "rows": [
+          "map050/ev005/p0"
+        ]
+      },
+      {
+        "name": "B7",
+        "order": 11,
+        "group": null,
+        "map_constant": "MAP_MOKI_TOWN_PROFESSOR_LAB",
+        "rows": [
+          "map050/ev005/p2"
+        ]
+      },
+      {
+        "name": "B8",
+        "order": 12,
+        "group": null,
+        "map_constant": "MAP_MOKI_TOWN_PROFESSOR_LAB",
+        "rows": [
+          "map050/ev019/p0"
+        ]
+      },
+      {
+        "name": "B9",
+        "order": 13,
+        "group": null,
+        "map_constant": null,
+        "rows": []
+      },
+      {
+        "name": "B10",
+        "order": 14,
+        "group": null,
+        "map_constant": "MAP_MOKI_TOWN_PROFESSOR_LAB",
+        "rows": [
+          "map050/ev001/p1",
+          "map032/ev003/p1"
+        ]
+      },
+      {
+        "name": "N2",
+        "order": 15,
+        "group": null,
+        "map_constant": "MAP_MOKI_TOWN",
+        "rows": [
+          "map032/ev009/p1"
+        ]
+      },
+      {
+        "name": "N4",
+        "order": 16,
+        "group": null,
+        "map_constant": "MAP_MOKI_TOWN",
+        "rows": []
+      },
+      {
+        "name": "B11",
+        "order": 17,
+        "group": null,
+        "map_constant": "MAP_MOKI_TOWN",
+        "rows": [
+          "map032/ev017/p0"
+        ]
+      },
+      {
+        "name": "B12",
+        "order": 18,
+        "group": null,
+        "map_constant": null,
+        "rows": [
+          "map172/ev004/p0"
+        ]
+      },
+      {
+        "name": "B13",
+        "order": 19,
+        "group": null,
+        "map_constant": "MAP_MOKI_TOWN",
+        "rows": [
+          "map032/ev009/p2",
+          "map172/ev002/p0",
+          "map032/ev017/p1"
+        ]
+      },
+      {
+        "name": "B14",
+        "order": 20,
+        "group": null,
+        "map_constant": "MAP_MOKI_TOWN",
+        "rows": []
+      },
+      {
+        "name": "B15",
+        "order": 21,
+        "group": null,
+        "map_constant": null,
+        "rows": []
+      }
+    ],
+    "CH02": [
+      {
+        "name": "B1",
+        "order": 0,
+        "group": null,
+        "map_constant": "MAP_MOKI_TOWN",
+        "rows": [
+          "map032/ev023/p0",
+          "map033/ev023/p1",
+          "map033/ev022/p1",
+          "map033/ev024/p1",
+          "map033/ev004/p0"
+        ]
+      },
+      {
+        "name": "B1_back",
+        "order": 1,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": [
+          "map033/ev023/p0",
+          "map032/ev037/p1",
+          "map032/ev023/p1",
+          "map032/ev036/p1"
+        ]
+      },
+      {
+        "name": "B1_ev037",
+        "order": 2,
+        "group": null,
+        "map_constant": "MAP_MOKI_TOWN",
+        "rows": [
+          "map032/ev037/p0"
+        ]
+      },
+      {
+        "name": "B1_back2",
+        "order": 3,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": [
+          "map033/ev022/p0"
+        ]
+      },
+      {
+        "name": "B1_ev036",
+        "order": 4,
+        "group": null,
+        "map_constant": "MAP_MOKI_TOWN",
+        "rows": [
+          "map032/ev036/p0"
+        ]
+      },
+      {
+        "name": "B2",
+        "order": 5,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": [
+          "map033/terrain/stairs/57,9",
+          "map033/terrain/stairs/57,10",
+          "map033/terrain/stairs/57,11"
+        ]
+      },
+      {
+        "name": "B4",
+        "order": 6,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": []
+      },
+      {
+        "name": "B7",
+        "order": 7,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": [
+          "map033/ev030/p0",
+          "map033/ev030/p1"
+        ]
+      },
+      {
+        "name": "B8",
+        "order": 8,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": [
+          "map033/ev034/p0",
+          "map033/ev034/p1"
+        ]
+      },
+      {
+        "name": "B11",
+        "order": 9,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": [
+          "map033/ev103/p0",
+          "map033/ev103/p1"
+        ]
+      },
+      {
+        "name": "B13",
+        "order": 10,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": [
+          "map033/ev053/p0"
+        ]
+      },
+      {
+        "name": "N5",
+        "order": 11,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": [
+          "map033/ev053/p2"
+        ]
+      },
+      {
+        "name": "B14",
+        "order": 12,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": []
+      },
+      {
+        "name": "B15",
+        "order": 13,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": [
+          "map033/ev002/p0",
+          "map033/ev002/p1",
+          "map033/ev003/p0",
+          "map033/ev003/p1",
+          "map033/ev025/p0",
+          "map033/ev025/p1",
+          "map033/ev050/p0",
+          "map033/ev050/p1"
+        ]
+      },
+      {
+        "name": "B16",
+        "order": 14,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": [
+          "map033/ev027/p0",
+          "map081/ev002/p0",
+          "map081/ev004/p0"
+        ]
+      },
+      {
+        "name": "N1",
+        "order": 15,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01_OLD_ROD_HOUSE",
+        "rows": [
+          "map081/ev001/p0",
+          "map081/ev003/p0",
+          "map033/ev027/p1"
+        ]
+      },
+      {
+        "name": "N2",
+        "order": 16,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": []
+      },
+      {
+        "name": "B17",
+        "order": 17,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": []
+      },
+      {
+        "name": "B18",
+        "order": 18,
+        "group": null,
+        "map_constant": null,
+        "rows": [
+          "map049/ev022/p0"
+        ]
+      }
+    ],
+    "CH03": [
+      {
+        "name": "B1",
+        "order": 0,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": [
+          "map033/ev046/p0",
+          "map031/ev035/p1",
+          "map031/ev023/p1"
+        ]
+      },
+      {
+        "name": "B27",
+        "order": 1,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN",
+        "rows": []
+      },
+      {
+        "name": "B1_ev035",
+        "order": 2,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN",
+        "rows": [
+          "map031/ev035/p0",
+          "map033/ev046/p1"
+        ]
+      },
+      {
+        "name": "B1_ev045",
+        "order": 3,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": [
+          "map033/ev045/p0"
+        ]
+      },
+      {
+        "name": "B1_ev023",
+        "order": 4,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN",
+        "rows": [
+          "map031/ev023/p0",
+          "map033/ev045/p1"
+        ]
+      },
+      {
+        "name": "B1_return",
+        "order": 5,
+        "group": null,
+        "map_constant": "MAP_ROUTE_01",
+        "rows": []
+      },
+      {
+        "name": "B2",
+        "order": 6,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN",
+        "rows": [
+          "map031/ev049/p0",
+          "map068/ev012/p1"
+        ]
+      },
+      {
+        "name": "N3",
+        "order": 7,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN_POKEMON_CENTER",
+        "rows": [
+          "map068/ev016/p1"
+        ]
+      },
+      {
+        "name": "B3",
+        "order": 8,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN_POKEMON_CENTER",
+        "rows": [
+          "map068/ev008/p0",
+          "map031/ev003/p0",
+          "map031/ev003/p1"
+        ]
+      },
+      {
+        "name": "B30",
+        "order": 9,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN_POKEMON_CENTER",
+        "rows": []
+      },
+      {
+        "name": "B31",
+        "order": 10,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN_POKEMON_CENTER",
+        "rows": []
+      },
+      {
+        "name": "B4",
+        "order": 11,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN_POKEMON_CENTER",
+        "rows": [
+          "map068/ev001/p0"
+        ]
+      },
+      {
+        "name": "B26",
+        "order": 12,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN_POKEMON_CENTER",
+        "rows": [
+          "map068/ev007/p0"
+        ]
+      },
+      {
+        "name": "B7",
+        "order": 13,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN_POKEMON_CENTER",
+        "rows": [
+          "map068/ev018/p0"
+        ]
+      },
+      {
+        "name": "N1",
+        "order": 14,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN_POKEMON_CENTER",
+        "rows": []
+      },
+      {
+        "name": "B5",
+        "order": 15,
+        "group": null,
+        "map_constant": null,
+        "rows": [
+          "map068/ev015/p0"
+        ]
+      },
+      {
+        "name": "B8",
+        "order": 16,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN_POKEMON_CENTER",
+        "rows": [
+          "map068/ev014/p0"
+        ]
+      },
+      {
+        "name": "B10",
+        "order": 17,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN",
+        "rows": [
+          "map031/ev002/p0"
+        ]
+      },
+      {
+        "name": "B28",
+        "order": 18,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN_POKEMART",
+        "rows": []
+      },
+      {
+        "name": "B29",
+        "order": 19,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN_POKEMART",
+        "rows": []
+      },
+      {
+        "name": "B11",
+        "order": 20,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN_POKEMART",
+        "rows": [
+          "map067/ev003/p0"
+        ]
+      },
+      {
+        "name": "N4",
+        "order": 21,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN_POKEMART",
+        "rows": []
+      },
+      {
+        "name": "B12",
+        "order": 22,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN_POKEMART",
+        "rows": [
+          "map067/ev009/p0"
+        ]
+      },
+      {
+        "name": "B13",
+        "order": 23,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN_POKEMART",
+        "rows": [
+          "map067/ev002/p0",
+          "map031/ev042/p0",
+          "map031/ev002/p1"
+        ]
+      },
+      {
+        "name": "B14",
+        "order": 24,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN",
+        "rows": [
+          "map031/ev004/p0",
+          "map073/ev007/p0",
+          "map031/ev004/p1"
+        ]
+      },
+      {
+        "name": "B32",
+        "order": 25,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN",
+        "rows": []
+      },
+      {
+        "name": "B33",
+        "order": 26,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN_BUILDINGS",
+        "rows": []
+      },
+      {
+        "name": "B15",
+        "order": 27,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN",
+        "rows": [
+          "map031/ev012/p0",
+          "map073/ev001/p0",
+          "map073/ev002/p0",
+          "map031/ev012/p1"
+        ]
+      },
+      {
+        "name": "B16",
+        "order": 28,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN",
+        "rows": [
+          "map031/ev013/p0",
+          "map073/ev004/p0",
+          "map031/ev041/p0",
+          "map073/ev009/p0",
+          "map031/ev013/p1",
+          "map031/ev041/p1"
+        ]
+      },
+      {
+        "name": "B17",
+        "order": 29,
+        "group": null,
+        "map_constant": null,
+        "rows": [
+          "map031/ev014/p0"
+        ]
+      },
+      {
+        "name": "N2",
+        "order": 30,
+        "group": null,
+        "map_constant": null,
+        "rows": []
+      },
+      {
+        "name": "B18",
+        "order": 31,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN",
+        "rows": [
+          "map031/ev007/p0"
+        ]
+      },
+      {
+        "name": "N7",
+        "order": 32,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN",
+        "rows": []
+      },
+      {
+        "name": "N6",
+        "order": 33,
+        "group": null,
+        "map_constant": null,
+        "rows": []
+      },
+      {
+        "name": "B25",
+        "order": 34,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN",
+        "rows": []
+      }
+    ],
+    "CH04": [
+      {
+        "name": "B1",
+        "order": 0,
+        "group": null,
+        "map_constant": "MAP_KEVLAR_TOWN",
+        "rows": [
+          "map035/seam/S/map031",
+          "map031/seam/N/map035"
+        ]
+      },
+      {
+        "name": "B4",
+        "order": 1,
+        "group": null,
+        "map_constant": "MAP_ROUTE_02",
+        "rows": [
+          "map035/ev012/p0"
+        ]
+      },
+      {
+        "name": "B14",
+        "order": 2,
+        "group": null,
+        "map_constant": "MAP_ROUTE_02",
+        "rows": [
+          "map035/ev012/p1"
+        ]
+      },
+      {
+        "name": "B2",
+        "order": 3,
+        "group": null,
+        "map_constant": "MAP_ROUTE_02",
+        "rows": [
+          "map035/ev003/p0"
+        ]
+      },
+      {
+        "name": "B3",
+        "order": 4,
+        "group": null,
+        "map_constant": "MAP_ROUTE_02",
+        "rows": [
+          "map035/ev009/p0"
+        ]
+      },
+      {
+        "name": "B5",
+        "order": 5,
+        "group": null,
+        "map_constant": "MAP_ROUTE_02",
+        "rows": [
+          "map035/ev013/p0"
+        ]
+      },
+      {
+        "name": "B6",
+        "order": 6,
+        "group": null,
+        "map_constant": "MAP_ROUTE_02",
+        "rows": []
+      },
+      {
+        "name": "B7",
+        "order": 7,
+        "group": null,
+        "map_constant": "MAP_ROUTE_02",
+        "rows": []
+      },
+      {
+        "name": "B9",
+        "order": 8,
+        "group": null,
+        "map_constant": "MAP_ROUTE_02",
+        "rows": [
+          "map035/ev002/p0"
+        ]
+      },
+      {
+        "name": "B11",
+        "order": 9,
+        "group": null,
+        "map_constant": "MAP_ROUTE_02",
+        "rows": [
+          "map035/ev003/p2"
+        ]
+      },
+      {
+        "name": "B12",
+        "order": 10,
+        "group": null,
+        "map_constant": "MAP_ROUTE_02",
+        "rows": [
+          "map035/ev009/p1"
+        ]
+      },
+      {
+        "name": "B13",
+        "order": 11,
+        "group": null,
+        "map_constant": "MAP_ROUTE_02",
+        "rows": [
+          "map035/ev011/p0"
+        ]
+      },
+      {
+        "name": "B15",
+        "order": 12,
+        "group": null,
+        "map_constant": "MAP_ROUTE_02",
+        "rows": []
+      },
+      {
+        "name": "B16",
+        "order": 13,
+        "group": null,
+        "map_constant": null,
+        "rows": [
+          "map068/ev001/p1"
+        ]
+      }
+    ],
+    "CH05": [
+      {
+        "name": "B1",
+        "order": 0,
+        "group": "B1",
+        "map_constant": "MAP_PASSAGE_CAVE_1F",
+        "rows": [
+          "map036/ev001/p0"
+        ]
+      },
+      {
+        "name": "B1_nudge",
+        "order": 1,
+        "group": "B1",
+        "map_constant": "MAP_ROUTE_02",
+        "rows": [
+          "map035/ev001/p1",
+          "map035/ev001/p1/b0"
+        ]
+      },
+      {
+        "name": "B1_in",
+        "order": 2,
+        "group": "B1",
+        "map_constant": "MAP_ROUTE_02",
+        "rows": [
+          "map035/ev001/p0"
+        ]
+      },
+      {
+        "name": "B2",
+        "order": 3,
+        "group": "B2",
+        "map_constant": "MAP_PASSAGE_CAVE_1F",
+        "rows": [
+          "map036/ev003/p0",
+          "map036/ev003/p0/b0"
+        ]
+      },
+      {
+        "name": "B2_spent",
+        "order": 4,
+        "group": "B2",
+        "map_constant": "MAP_PASSAGE_CAVE_1F",
+        "rows": [
+          "map036/ev003/p1"
+        ]
+      },
+      {
+        "name": "B3",
+        "order": 5,
+        "group": "B3",
+        "map_constant": "MAP_PASSAGE_CAVE_1F",
+        "rows": [
+          "map036/ev004/p0"
+        ]
+      },
+      {
+        "name": "B3_retalk1",
+        "order": 6,
+        "group": "B3",
+        "map_constant": "MAP_PASSAGE_CAVE_1F",
+        "rows": [
+          "map036/ev004/p1"
+        ]
+      },
+      {
+        "name": "B5",
+        "order": 7,
+        "group": "B5",
+        "map_constant": "MAP_PASSAGE_CAVE_1F",
+        "rows": [
+          "map036/ev006/p0"
+        ]
+      },
+      {
+        "name": "B5_retalk1",
+        "order": 8,
+        "group": "B5",
+        "map_constant": "MAP_PASSAGE_CAVE_1F",
+        "rows": [
+          "map036/ev006/p1"
+        ]
+      },
+      {
+        "name": "B4",
+        "order": 9,
+        "group": "B4",
+        "map_constant": "MAP_PASSAGE_CAVE_1F",
+        "rows": [
+          "map036/ev005/p0",
+          "map036/ev005/p0/b0"
+        ]
+      },
+      {
+        "name": "B4_spent",
+        "order": 10,
+        "group": "B4",
+        "map_constant": "MAP_PASSAGE_CAVE_1F",
+        "rows": [
+          "map036/ev005/p1"
+        ]
+      },
+      {
+        "name": "B8_return",
+        "order": 11,
+        "group": "B8",
+        "map_constant": "MAP_PASSAGE_CAVE_2F",
+        "rows": [
+          "map037/ev001/p0"
+        ]
+      },
+      {
+        "name": "B8_nudge",
+        "order": 12,
+        "group": "B8",
+        "map_constant": "MAP_PASSAGE_CAVE_1F",
+        "rows": [
+          "map036/ev002/p1",
+          "map036/ev002/p1/b0"
+        ]
+      },
+      {
+        "name": "B8",
+        "order": 13,
+        "group": "B8",
+        "map_constant": "MAP_PASSAGE_CAVE_1F",
+        "rows": [
+          "map036/ev002/p0"
+        ]
+      },
+      {
+        "name": "B9",
+        "order": 14,
+        "group": "B9",
+        "map_constant": "MAP_PASSAGE_CAVE_2F",
+        "rows": [
+          "map037/ev004/p0"
+        ]
+      },
+      {
+        "name": "B9_retalk1",
+        "order": 15,
+        "group": "B9",
+        "map_constant": "MAP_PASSAGE_CAVE_2F",
+        "rows": [
+          "map037/ev004/p1"
+        ]
+      },
+      {
+        "name": "B14",
+        "order": 16,
+        "group": "B14",
+        "map_constant": "MAP_PASSAGE_CAVE_2F",
+        "rows": [
+          "map037/terrain/stairs/20,9",
+          "map037/terrain/stairs/20,10"
+        ]
+      },
+      {
+        "name": "B13",
+        "order": 17,
+        "group": "B13",
+        "map_constant": "MAP_PASSAGE_CAVE_2F",
+        "rows": [
+          "map037/terrain/stairs/11,9",
+          "map037/terrain/stairs/11,10"
+        ]
+      },
+      {
+        "name": "B10",
+        "order": 18,
+        "group": "B10",
+        "map_constant": "MAP_PASSAGE_CAVE_2F",
+        "rows": [
+          "map037/ev005/p0"
+        ]
+      },
+      {
+        "name": "B10_retalk",
+        "order": 19,
+        "group": "B10",
+        "map_constant": "MAP_PASSAGE_CAVE_2F",
+        "rows": [
+          "map037/ev005/p1"
+        ]
+      },
+      {
+        "name": "B11",
+        "order": 20,
+        "group": "B11",
+        "map_constant": "MAP_PASSAGE_CAVE_2F",
+        "rows": [
+          "map037/ev002/p0"
+        ]
+      }
+    ]
+  }
+}

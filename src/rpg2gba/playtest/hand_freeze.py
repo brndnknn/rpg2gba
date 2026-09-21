@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-import subprocess  # noqa: F401  -- you'll need it for the git helpers
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -71,13 +71,29 @@ def module_path(chapter: str) -> str:
 def head_blob_sha(repo_relative: str) -> str:
     """Blob sha of `repo_relative` as committed at HEAD
     (`git rev-parse HEAD:<path>`). Raises if git can't resolve it."""
-    raise NotImplementedError
+    result = subprocess.run(
+        ["git", "rev-parse", f"HEAD:{repo_relative}"],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Cannot resolve path for '{repo_relative}': "
+            f"{result.stderr.strip()}")
+    return result.stdout.strip()
 
 
 def worktree_blob_sha(repo_relative: str) -> str:
     """Blob sha of `repo_relative` as it is on disk now
     (`git hash-object <path>`). Raises if git fails."""
-    raise NotImplementedError
+    result = subprocess.run(
+        ["git", "hash-object", f"{repo_relative}"],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Cannot resolve path for '{repo_relative}': "
+            f"{result.stderr.strip()}")
+    return result.stdout.strip()
 
 
 # --- capture (R1, R3) ----------------------------------------------------
@@ -85,13 +101,33 @@ def worktree_blob_sha(repo_relative: str) -> str:
 def manifest_row_ids(chapter: str) -> set[str]:
     """Every `row_id` in `reference/manifests/<chapter>.manifest.json`,
     read as raw JSON."""
-    raise NotImplementedError
+    path = REPO_ROOT / "reference" / "manifests" / f"{chapter.upper()}.manifest.json"
+    ids: set[str] = set()
+    for row in _read_json(path):
+        row_id = row["row_id"]
+        if row_id in ids:
+            raise ValueError(
+                f"{chapter}: duplicate row_id {row_id!r} in {path.name} "
+                "-- data defect, refusing to merge silently")
+        ids.add(row_id)
+    return ids
 
 
 def own_beats(chapter: str) -> list[dict[str, Any]]:
     """The chapter's own beats, in registration order, as R1's dicts:
     `name`, `order`, `group`, `map_constant`, `rows`."""
-    raise NotImplementedError
+    own = [b for b in load_chapter(chapter).beats if not _INHERITED.match(b.name)]
+    result: list[dict[str, Any]] = []
+    for order, beat in enumerate(own):
+        map_constant = beat.locations[0].map_constant if beat.locations else None
+        result.append({
+            "name": beat.name,
+            "order": order,
+            "group": beat.group,
+            "map_constant": map_constant,
+            "rows": list(beat.rows),
+        })
+    return result
 
 
 def build_freeze() -> dict[str, Any]:
@@ -100,7 +136,40 @@ def build_freeze() -> dict[str, Any]:
     Collect-then-raise: raises `FreezeError` listing EVERY problem (a module
     with uncommitted edits, a claimed row missing from its manifest) rather
     than stopping at the first. Never returns a partial document."""
-    raise NotImplementedError
+    problems: list[str] = []
+    sources: dict[str, dict[str, str]] = {}
+    chapters: dict[str, list[dict[str, Any]]] = {}
+    # A chapter's beats legitimately claim rows a predecessor's manifest owns
+    # (CH02 re-walks map032, CH05 claims into map035): a row is known if any
+    # manifest from CH01 up to this chapter carries it. Measured 2026-09-21.
+    known: set[str] = set()
+    for chapter in CHAPTERS:
+        module = module_path(chapter)
+        head = head_blob_sha(module)
+        if worktree_blob_sha(module) != head:
+            problems.append(
+                f"{chapter}: {module} has uncommitted changes; a freeze of "
+                "uncommitted code cannot name its own source")
+        # A dirty module still gets its rows checked, so one run reports both.
+        known |= manifest_row_ids(chapter)
+        beats = own_beats(chapter)
+        for beat in beats:
+            for row in beat["rows"]:
+                if row not in known:
+                    problems.append(
+                        f"{chapter}:{beat['name']} claims {row!r}, "
+                        f"not in any manifest CH01..{chapter}")
+        sources[chapter] = {"module": module, "blob_sha": head}
+        chapters[chapter] = beats
+    if problems:
+        raise FreezeError("\n".join(problems))
+    return {
+        "schema": SCHEMA,
+        "authored": AUTHORED,
+        "rule": RULE,
+        "sources": sources,
+        "chapters": chapters,
+    }
 
 
 def dump(data: dict[str, Any]) -> str:
@@ -117,7 +186,25 @@ def diff_freeze(committed: dict[str, Any], rebuilt: dict[str, Any]) -> list[str]
     Report (a) any chapter whose `sources[ch].blob_sha` differs between the
     two ("stale: CHnn module changed since freeze"), and (b) any chapter
     whose beat list differs. Pure function: no I/O."""
-    raise NotImplementedError
+    problems: list[str] = []
+    for chapter in CHAPTERS:
+        old_sha = committed["sources"][chapter]["blob_sha"]
+        new_sha = rebuilt["sources"][chapter]["blob_sha"]
+        if old_sha != new_sha:
+            problems.append(f"stale: {chapter} module changed since freeze")
+        # Both are reported even when stale: the beat diff says WHAT changed,
+        # which is what the operator needs to decide whether to re-freeze.
+        old = {b["name"]: b for b in committed["chapters"][chapter]}
+        new = {b["name"]: b for b in rebuilt["chapters"][chapter]}
+        for name in sorted(old.keys() - new.keys()):
+            problems.append(f"{chapter}:{name} frozen but no longer registered")
+        for name in sorted(new.keys() - old.keys()):
+            problems.append(f"{chapter}:{name} registered but not frozen")
+        for name in sorted(old.keys() & new.keys()):
+            if old[name] != new[name]:
+                fields = sorted(k for k in old[name] if old[name][k] != new[name].get(k))
+                problems.append(f"{chapter}:{name} differs from freeze ({', '.join(fields)})")
+    return problems
 
 
 def validate_residue(
@@ -126,7 +213,14 @@ def validate_residue(
     """Task 2 hook. Until Task 2, the only rule: a missing ledger (`None`)
     while any frozen beat has `rows == []` is one problem. Task 2 replaces
     the body with the full validation."""
-    raise NotImplementedError
+    if ledger is not None:
+        return []
+    rowless = [f"{ch}:{b['name']}" for ch, beats in frozen["chapters"].items()
+               for b in beats if not b["rows"]]
+    if not rowless:
+        return []
+    return [f"residue ledger {RESIDUE_PATH.name} missing, but {len(rowless)} "
+            "frozen beats claim no rows"]
 
 
 # --- downstream loader (R5) ----------------------------------------------
@@ -134,7 +228,20 @@ def validate_residue(
 def load_frozen_hand_beats(path: Path = FROZEN_PATH) -> list[FrozenBeat]:
     """Every frozen hand beat, CH01 first, in order. Raises on a `schema`
     this code doesn't know."""
-    raise NotImplementedError
+    data = _read_json(path)
+    if data.get("schema") != SCHEMA:
+        raise ValueError(
+            f"{path}: unknown freeze schema {data.get('schema')!r}, expected {SCHEMA}")
+    # Walk CHAPTERS, not file order: the promised "CH01 first" survives a
+    # reordered file, and a missing chapter raises KeyError instead of vanishing.
+    return [
+        FrozenBeat(
+            chapter=chapter, name=b["name"], order=b["order"], group=b["group"],
+            map_constant=b["map_constant"], rows=tuple(b["rows"]),
+        )
+        for chapter in CHAPTERS
+        for b in data["chapters"][chapter]
+    ]
 
 
 # --- CLI (wired; you shouldn't need to edit below) -----------------------

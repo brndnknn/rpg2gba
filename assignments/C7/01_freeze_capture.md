@@ -156,6 +156,37 @@ the chapter, beat name and bad row id. Don't drop it and don't warn.
 > through `chapter_manifest.schema`'s loader. You only need the ids, and the raw read has
 > fewer ways to fail.
 
+> **Hint — how and where to raise `FreezeError`.** The class already exists in the stub
+> (`class FreezeError(Exception)`), so there is nothing to define. You only need to know
+> *when* to raise it and *what* to put in it.
+>
+> - **Raise it in `build_freeze()`, once, after the loop.** Not inside the per-row check.
+>   A `raise` leaves the function immediately, which is exactly what collect-then-raise is
+>   avoiding. Inside the loop you only `problems.append(...)`.
+> - **The message is the only channel the operator sees.** The `write` command catches it
+>   with `except FreezeError as exc` and prints `freeze NOT written:\n{exc}`. So
+>   `"\n".join(problems)` gives one problem per line, and each line must stand alone: name the
+>   chapter, the beat, and the offending value (`CH03:B7 claims 'map099/ev001/p0', not in
+>   manifest`). A bare `"bad row"` is useless at 2am.
+> - **Two kinds of problem, one exception.** A dirty module (R2) and an unknown row (R3) both
+>   mean "unsafe to write", so both go into the same `problems` list and the same
+>   `FreezeError`. One run then reports both.
+> - **Don't raise `FreezeError` for everything.** Match the exception to the meaning:
+>   - `FreezeError`: the freeze *content* is unsafe (dirty module, bad row). `write` and
+>     `check` both catch it and turn it into a clean CLI message.
+>   - `ValueError`: bad *input data* or a schema you don't know
+>     (`load_frozen_hand_beats`, and the duplicate-`row_id` case in `manifest_row_ids`).
+>   - `RuntimeError` / `FileNotFoundError`: environment failures (git can't resolve a path,
+>     manifest file missing). These are *not* caught by the CLI, so they surface as a
+>     traceback. That is deliberate: they mean the tooling is broken, not that the freeze is
+>     wrong.
+> - **Test it the same way the tests do.** `pytest.raises(FreezeError)` as a context manager,
+>   then check the text with `str(excinfo.value)`. `test_unknown_row_fails_loud` asserts the
+>   bad row id appears in the message, so if you leave it out, that test tells you.
+> - **`raise ... from exc`** only matters if you catch something and re-raise a different
+>   type. You probably don't need it in `build_freeze`, since you are raising fresh from a
+>   list, not translating another exception. (The CLI wrapper already does it for you.)
+
 ### R4 — CLI
 
 ```bash
