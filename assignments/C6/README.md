@@ -73,6 +73,13 @@ byte-identical generated module. A test can still be wrong, though, because C6 i
 If you're convinced one is, argue it in the commit message and change it; don't quietly
 weaken your code to pass it.
 
+## Research docs (2026-09-21)
+
+`research/` has one measured-data doc per open task (01, 02, 03, 04, 05, 07, 09): counts,
+file:line citations and the decisions the data leaves open, with no solutions. Each doc ends in
+a "Decisions left to you" list. Lead corrections are marked inline and dated. The docs are a
+snapshot, so re-measure anything you're about to rely on if the data has moved.
+
 ## Measured facts you'll need (2026-09-19)
 
 | | CH01 | CH02 | CH03 | CH04 | CH05 |
