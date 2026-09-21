@@ -184,11 +184,6 @@ def test_diff_freeze_detects_beat_change(freeze):
     assert not any("stale" in p for p in problems)
 
 
-def test_minimal_residue_rule_missing_ledger(freeze):
-    # There ARE rowless beats (Task 2's whole subject), so no ledger is a problem.
-    assert len(hand_freeze.validate_residue(freeze, None)) == 1
-
-
 # Step 5 -- loader
 
 def test_loader_rejects_unknown_schema(tmp_path, freeze):

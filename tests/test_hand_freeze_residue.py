@@ -19,8 +19,6 @@ import pytest
 
 from rpg2gba.playtest import hand_freeze
 
-pytestmark = pytest.mark.skip(reason="C7 Task 2 not started -- remove this line to start")
-
 
 def _beat(name: str, order: int, rows: list[str]) -> dict:
     return {"name": name, "order": order, "group": None,

@@ -1,0 +1,137 @@
+{
+  "schema": 1,
+  "entries": {
+    "CH01:B1": {
+      "ruling": "open",
+      "question": "Which source-derived oracle owns the new-save start map and the initial-flag state (a start-state model, or stays hand-authored)?",
+      "note": "Fresh save spawns on the player's house 1F map with the running-shoes flag not yet set."
+    },
+    "CH01:B6": {
+      "ruling": "covered_elsewhere",
+      "rows": ["map050/ev005/p0"],
+      "note": "Mid-scene checkpoint inside the single intro page that N3 already claims; reaches the yes/no prompt without unlocking the field."
+    },
+    "CH01:B9": {
+      "ruling": "covered_elsewhere",
+      "rows": ["map050/ev019/p0"],
+      "note": "Wins the trainer battle that the starter-grant page (claimed by B8) runs straight into, then reads the quest var and starter flag that page writes."
+    },
+    "CH01:N4": {
+      "ruling": "blocked_obstacle",
+      "rows": ["map032/ev014/p0", "map032/ev015/p0", "map032/ev033/p0"],
+      "note": "Three rocks refuse to break without Rock Smash, stay impassable, and start no encounter."
+    },
+    "CH01:B14": {
+      "ruling": "state_model",
+      "rows": ["map032/ev009/p3"],
+      "note": "Re-crossing the trigger tiles at quest var 4 reaches the higher page, which is a no-op: no field lock and no quest-var change."
+    },
+    "CH01:B15": {
+      "ruling": "covered_elsewhere",
+      "rows": ["map032/ev009/p2"],
+      "note": "Chapter-end read that the quest var written by the page B13 claims still holds at 4."
+    },
+    "CH02:B4": {
+      "ruling": "open",
+      "question": "Should the wild-encounter check (species set and level range from the map's land table) become a floor kind derived from the encounter data, or stay a hand assertion?",
+      "note": "Walking two grass cells eventually starts a wild (not trainer) battle with an allowed species and level."
+    },
+    "CH02:B14": {
+      "ruling": "state_model",
+      "rows": ["map033/ev030/p1", "map033/ev103/p1"],
+      "note": "Two already-defeated sight trainers do not rebattle, and their look-around movement type survives a map reload; the defeated pages are the ones in force."
+    },
+    "CH02:N2": {
+      "ruling": "blocked_obstacle",
+      "rows": ["map033/ev036/p0", "map033/ev038/p0"],
+      "note": "Two boulders refuse to break without Rock Smash and keep blocking."
+    },
+    "CH02:B17": {
+      "ruling": "open",
+      "question": "Does 'the player can stand on the boundary approach tiles and is still on the map' need any floor claim, given boundary crossings belong to the arriving chapter's warp rows?",
+      "note": "Walks to the two tiles just short of the north boundary and asserts the player is still on the same map."
+    },
+    "CH03:B27": {
+      "ruling": "arrival_floor",
+      "rows": ["map033/ev046/p0"],
+      "note": "The warp B1 crosses lands at an exact cell facing away from the return warp."
+    },
+    "CH03:B1_return": {
+      "ruling": "covered_elsewhere",
+      "rows": ["map033/ev046/p0"],
+      "note": "Re-crosses the warp B1 already claims to restore the player's position for later beats."
+    },
+    "CH03:B30": {
+      "ruling": "arrival_floor",
+      "rows": ["map031/ev003/p0"],
+      "note": "Entering the Center through its physical door lands facing away from the return warp."
+    },
+    "CH03:B31": {
+      "ruling": "bgm_debt",
+      "note": "Asserts arrival BGM equals the map header; vacuous until PROJECT_TODO #22 maps Uranium BGM."
+    },
+    "CH03:N1": {
+      "ruling": "covered_elsewhere",
+      "rows": ["map068/ev018/p0", "map068/ev018/p0/b0"],
+      "note": "Re-touching the item ball grants nothing more; the event has one page and its own branch writes the self-switch that B7's claim already covers."
+    },
+    "CH03:B28": {
+      "ruling": "arrival_floor",
+      "rows": ["map031/ev002/p0"],
+      "note": "Entering the Mart through its door lands facing away from the return warp."
+    },
+    "CH03:B29": {
+      "ruling": "bgm_debt",
+      "note": "Asserts arrival BGM equals the map header; vacuous until PROJECT_TODO #22 maps Uranium BGM."
+    },
+    "CH03:N4": {
+      "ruling": "open",
+      "question": "Who owns the native shop refusal (insufficient money leaves money and bag unchanged and returns control): a floor kind over the shop row, or engine-side shop.c behavior outside pipeline scope?",
+      "note": "A mart purchase with too little money is refused and money and bag are unchanged."
+    },
+    "CH03:B32": {
+      "ruling": "arrival_floor",
+      "rows": ["map031/ev004/p0"],
+      "note": "Entering the Boutique through its door lands at the expected cell facing away from the return warp."
+    },
+    "CH03:B33": {
+      "ruling": "bgm_debt",
+      "note": "Asserts arrival BGM equals the map header; vacuous until PROJECT_TODO #22 maps Uranium BGM."
+    },
+    "CH03:N2": {
+      "ruling": "covered_elsewhere",
+      "rows": ["map031/ev014/p0"],
+      "note": "Two refusals of the offer raise the counter var by one each; the same page is claimed by B17."
+    },
+    "CH03:N7": {
+      "ruling": "blocked_obstacle",
+      "rows": ["map031/ev001/p0", "map031/ev037/p0"],
+      "note": "Two boulders refuse to move without Strength and stay put."
+    },
+    "CH03:N6": {
+      "ruling": "build_check",
+      "cites": "src/rpg2gba/tileset_converter/connections.py (map-edge targets); src/rpg2gba/tileset_converter/metadata_wiring.py classify_event (out-of-slice door warps are dropped, never emitted)",
+      "note": "Every reachable warp resolves to a built MAP_ constant, which the build enforces; the beat only reads the current map."
+    },
+    "CH03:B25": {
+      "ruling": "retired",
+      "cites": "REDERIVATION_PLAN.md §16.3 DECIDED 2026-09-18, ch03.B25 row",
+      "note": "Map-edge wall column; void/crash class moved to connections.py build checks."
+    },
+    "CH04:B6": {
+      "ruling": "blocked_obstacle",
+      "rows": ["map035/ev014/p0", "map035/ev017/p0"],
+      "note": "Two rockslide rocks refuse to break without Rock Smash, block movement, and start no encounter."
+    },
+    "CH04:B7": {
+      "ruling": "open",
+      "question": "Does 'the player reaches the approach tile one short of a boundary and does not cross' need any floor claim, given the crossing belongs to the arriving chapter?",
+      "note": "Walks to the tile one short of a cave mouth and asserts the player is still on the same map."
+    },
+    "CH04:B15": {
+      "ruling": "open",
+      "question": "Should the wild-encounter check (species set and level range from the map's land table) become a floor kind derived from the encounter data, or stay a hand assertion?",
+      "note": "Walking grass eventually starts a wild (not trainer) battle with an allowed species and level."
+    }
+  }
+}

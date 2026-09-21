@@ -207,20 +207,87 @@ def diff_freeze(committed: dict[str, Any], rebuilt: dict[str, Any]) -> list[str]
     return problems
 
 
+# The ruling vocabulary as data: ruling -> the extra fields it requires
+# (REDERIVATION_PLAN.md §16.3 "DECIDED 2026-09-18"). `note` is required of all.
+RESIDUE_SCHEMA = 1
+RESIDUE_RULINGS: dict[str, tuple[str, ...]] = {
+    "arrival_floor": ("rows",),
+    "bgm_debt": (),
+    "blocked_obstacle": ("rows",),
+    "state_model": ("rows",),
+    "covered_elsewhere": ("rows",),
+    "build_check": ("cites",),
+    "retired": ("cites",),
+    "not_residue": (),
+    "open": ("question",),
+}
+
+
 def validate_residue(
-    frozen: dict[str, Any], ledger: dict[str, Any] | None,
+    frozen: dict[str, Any],
+    ledger: dict[str, Any] | None,
+    manifest_ids: dict[str, set[str]],
 ) -> list[str]:
-    """Task 2 hook. Until Task 2, the only rule: a missing ledger (`None`)
-    while any frozen beat has `rows == []` is one problem. Task 2 replaces
-    the body with the full validation."""
-    if ledger is not None:
-        return []
-    rowless = [f"{ch}:{b['name']}" for ch, beats in frozen["chapters"].items()
-               for b in beats if not b["rows"]]
-    if not rowless:
-        return []
-    return [f"residue ledger {RESIDUE_PATH.name} missing, but {len(rowless)} "
-            "frozen beats claim no rows"]
+    """Problems with the residue ledger, one string each; `[]` means clean.
+
+    Every frozen beat with `rows == []` needs exactly one ledger entry, and
+    every entry must name such a beat, use a known ruling, carry that
+    ruling's extra fields plus a `note`, and cite only manifest rows. Pure:
+    `manifest_ids` (chapter -> row ids) is a parameter so callers and tests
+    control the I/O. A row is known if any manifest from CH01 up to the
+    entry's chapter carries it, matching `build_freeze`."""
+    rowless: set[str] = set()
+    rowed: set[str] = set()
+    for chapter, beats in frozen["chapters"].items():
+        for beat in beats:
+            (rowed if beat["rows"] else rowless).add(f"{chapter}:{beat['name']}")
+
+    if ledger is None:
+        if not rowless:
+            return []
+        return [f"residue ledger {RESIDUE_PATH.name} missing, but "
+                f"{len(rowless)} frozen beats claim no rows"]
+
+    problems: list[str] = []
+    if ledger.get("schema") != RESIDUE_SCHEMA:
+        problems.append(
+            f"residue ledger schema {ledger.get('schema')!r}, expected {RESIDUE_SCHEMA}")
+    entries: dict[str, dict[str, Any]] = ledger.get("entries", {})
+
+    for key in sorted(rowless - entries.keys()):
+        problems.append(f"{key} claims no rows and has no residue ledger entry")
+    for key in sorted(entries):
+        if key in rowless:
+            problems.extend(_entry_problems(key, entries[key], manifest_ids))
+        elif key in rowed:
+            problems.append(f"{key}: stale ledger entry -- the beat now claims rows")
+        else:
+            problems.append(f"{key}: ledger entry names a beat that is not frozen")
+    return problems
+
+
+def _entry_problems(
+    key: str, entry: dict[str, Any], manifest_ids: dict[str, set[str]],
+) -> list[str]:
+    """Field-level problems for one ledger entry whose beat is rowless."""
+    ruling = entry.get("ruling")
+    if ruling not in RESIDUE_RULINGS:
+        # Unknown ruling: its required fields are unknowable, so stop here.
+        return [f"{key}: unknown ruling {ruling!r}"]
+    problems = [
+        f"{key}: ruling {ruling!r} requires {field!r}"
+        for field in ("note", *RESIDUE_RULINGS[ruling])
+        if not entry.get(field)  # absent and empty are the same defect
+    ]
+    chapter = key.partition(":")[0]
+    known: set[str] = set()
+    for ch in CHAPTERS[:CHAPTERS.index(chapter) + 1]:
+        known |= manifest_ids.get(ch, set())
+    problems.extend(
+        f"{key}: row {row!r} not in any manifest CH01..{chapter}"
+        for row in entry.get("rows", ()) if row not in known
+    )
+    return problems
 
 
 # --- downstream loader (R5) ----------------------------------------------
@@ -286,7 +353,9 @@ def check() -> None:
     except FreezeError as exc:
         raise click.ClickException(f"cannot rebuild freeze:\n{exc}") from exc
     ledger = _read_json(RESIDUE_PATH) if RESIDUE_PATH.exists() else None
-    problems = diff_freeze(committed, rebuilt) + validate_residue(committed, ledger)
+    manifest_ids = {ch: manifest_row_ids(ch) for ch in CHAPTERS}
+    problems = (diff_freeze(committed, rebuilt)
+                + validate_residue(committed, ledger, manifest_ids))
     for problem in problems:
         click.echo(problem, err=True)
     if problems:
