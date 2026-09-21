@@ -1635,7 +1635,7 @@ Each lands unit-green. None is ROM-verified before P11.
 | **C4** | Generic per-command extractors for every code present in CH01–CH05, source-derived | R11 | DONE 2026-09-17 — `beat_floor/`; see "C4 landed" below |
 | **C5** | Archetype templates refactored onto the generic floor; the ⊇-floor checker rule; seam and stair floors | R11 | DONE 2026-09-17 — `beat_floor/{coverage,lookup,terrain}.py`, all five templates declare; see "C5 landed" below |
 | **C5b** | Warp facing moves into the engine: retain-facing fallback, per-warp departure direction in `struct WarpEvent`, pending-facing special for script warps, door tiles yield to the warp's direction; arrival-facing table and tiers 1–3 deleted | `WARP_RETAIN_FACING_PROPOSAL.md` §0 R1–R6 | **DONE 2026-09-18** (unit-green); see "C5b landed" below |
-| **C7** | Freeze CH01–CH05 hand beats — **rows + identity only; coverage is the test, not literal match** (R12 amended 2026-09-17) | R12 | TODO — **runs before C6** (2026-09-17) |
+| **C7** | Freeze CH01–CH05 hand beats — **rows + identity only; coverage is the test, not literal match** (R12 amended 2026-09-17) | R12 | **DONE 2026-09-21** (unit-green); see "C7 landed" below |
 | **C6** | Generator + solver integration: whole-module emit, review doc, refusal list, idempotence test | R1, R4, R7 | TODO — **runs after C7** (2026-09-17) |
 | **C8** | Shared Ruby-subset interpreter + input search; `map050/ev019` | R10 | TODO |
 | **C9** | Regenerate CH01–CH05 behind the frozen test, one commit per chapter | R12 | TODO |
@@ -1997,7 +1997,7 @@ counted commented-out decorators.
 | **claim no row** | **6** | **4** | **14** | **3** | **0** |
 | negative beats | 3 | 2 | 8 | 1 | 0 |
 
-**27 of 91 beats claim no row at all** and are invisible to row-coverage grading. In ch03 the rowless
+**27 of 91 beats claim no row at all** *(corrected 2026-09-21: 27 of **111** registered beats — 22/19/35/14/21; the 91 was a decorator count. The 27 stands: CH01 6 / CH02 4 / CH03 14 / CH04 3 / CH05 0, confirmed against `reference/frozen/hand_beats_ch01-ch05.json`)* and are invisible to row-coverage grading. In ch03 the rowless
 set is almost entirely two families: arrival-BGM beats with their reciprocal-warp partners
 (`B27`–`B33`), and every negative beat (`N1`, `N2`, `N4`, `N6`, `N7`). That is not incidental — a
 negative or audio fact has no command-list row to point at, so the authors claimed none.
@@ -2097,6 +2097,23 @@ Unit-green only. **ROM risks carried into P11:** the Moki (32)(8,43..45) ↔ Rou
 edge stack (the only built-map case where door-south and the authored direction disagree), the
 three never-walked explicit-direction script warps (map032/ev078, map049/ev021, map172/ev004),
 and dir-0 building exits whose arrival auto-step now follows the approach direction.
+
+**C7 landed 2026-09-21** (unit-green; no ROM run — P11). Built as the `assignments/C7/` brief, on
+the operator's instruction to complete it. What shipped:
+
+- **Freeze** — `playtest/hand_freeze.py` (`write` / `check`), `reference/frozen/hand_beats_ch01-ch05.json`:
+  111 registered own beats, git blob provenance, refuses a dirty module or unknown row. **Deviation from
+  the brief:** a chapter's beats claim rows a *predecessor's* manifest owns (16 rows: CH02→map032,
+  CH05→map035…), so a row is known if any manifest CH01..this chapter carries it.
+- **Residue ledger** — `reference/frozen/hand_beats_residue.json`, enforced by `check` through the
+  table-driven `validate_residue`. 27 entries: 7 covered_elsewhere, 4 blocked_obstacle, 4 arrival_floor,
+  3 bgm_debt, 2 state_model, 1 retired, 1 build_check, **6 open** (CH01:B1, CH02:B4, CH02:B17, CH03:N4,
+  CH04:B7, CH04:B15 — questions in the ledger). CH03:N1 is `covered_elsewhere`, not `state_model`
+  (its event has one page).
+- **`blocked_obstacle`** — `beat_floor/obstacle.py`; the head appears on trunk *and* arms, so
+  `floor_for_map` calls it once per page over the concatenated scope commands. `scripts/check_blocked_obstacles.py`:
+  0 mismatches; unmatched `blocked:` rows are p1/p2 follow-ups, behind-obstacle NPCs, and `surf` (no head modelled).
+- Not run: the whole suite (#111) — only `test_hand_freeze*` and `tests/test_beat_floor_*` (all green).
 
 **C5b landed 2026-09-18** (unit-green; no ROM run — P11). Suite **3891 passed / 16 skipped**
 (two halves, #111). What actually shipped, where it differs from the plan, and what it found:
