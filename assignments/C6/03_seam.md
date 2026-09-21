@@ -20,7 +20,8 @@ seam. Your module adds two things:
 
 ## Why the landing filter exists
 
-A1 names it: "the Kevlar x=31/x=32 case". On the Route 1 → Route 2 seam (`map031/seam/N/map035`),
+A1 names it: "the Kevlar x=31/x=32 case". On the Kevlar Town → Route 2 seam (`map031/seam/N/map035`;
+*corrected 2026-09-21: this said "Route 1 → Route 2", but map031 is Kevlar Town*),
 column 31 is walkable on both sides, but the tile just past the landing is a wall. Column 32
 is fine. `test_real_kevlar_seam_x31_closed_x32_open` pins exactly that. Load both maps with
 `traversal.graph.build_map_graph` and look for yourself before you write the filter.
