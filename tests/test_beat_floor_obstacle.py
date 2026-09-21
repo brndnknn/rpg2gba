@@ -18,8 +18,6 @@ import pytest
 from rpg2gba.beat_floor import coverage, walk
 from rpg2gba.beat_floor.assertion import OFFLINE_KINDS, FloorAssertion, make_params
 
-pytestmark = pytest.mark.skip(reason="C7 Task 3 not started -- remove this line to start")
-
 MAP_ID = 1
 EVENT_ID = 1
 TRUNK = "map001/ev001/p0"

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any
 
 from rpg2gba.beat_floor.assertion import (
@@ -39,10 +40,11 @@ from rpg2gba.beat_floor.assertion import (
 )
 from rpg2gba.beat_floor.condition import extract_condition
 from rpg2gba.beat_floor.move_route import extract_move_route
+from rpg2gba.beat_floor.obstacle import obstacle_assertions
 from rpg2gba.beat_floor.script import extract_script
 from rpg2gba.beat_floor.terrain import seam_floors_for_map, stair_floors_for_map
 from rpg2gba.chapter_manifest.generator import PageScope, detect_stair_cells, iter_page_scopes
-from rpg2gba.chapter_manifest.schema import row_id_sort_key
+from rpg2gba.chapter_manifest.schema import parse_row_id, row_id_sort_key
 from rpg2gba.conversion_agent.deterministic import join_text_lines, translate_text_codes
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
 from rpg2gba.playtest.text_source import (
@@ -703,11 +705,28 @@ def floor_for_map(
             trigger_raw = page.get("trigger")
             trigger = _TRIGGER_NAMES.get(trigger_raw, str(trigger_raw))
 
-            for scope in iter_page_scopes(map_id, event, page_idx, page):
+            scopes = list(iter_page_scopes(map_id, event, page_idx, page))
+            for scope in scopes:
                 result[scope.row_id] = _build_row_floor(
                     scope, trigger, map_id, event_id, page_idx, event, map_data,
                     common_events_by_id, index_of, row_states, door_cells,
                 )
+
+            # `blocked_obstacle` is per PAGE: the capability head appears on
+            # the trunk and in arms, so ask once on the trunk row with every
+            # scope's commands unioned (an arm-only head is still caught).
+            trunk = next(
+                (s for s in scopes if parse_row_id(s.row_id).kind == "page"), None)
+            if trunk is not None:
+                page_commands = [c for s in scopes for c in s.commands]
+                extra, refused = obstacle_assertions(trunk.row_id, event, page_commands)
+                if extra or refused:
+                    floor = result[trunk.row_id]
+                    result[trunk.row_id] = replace(
+                        floor,
+                        assertions=floor.assertions | frozenset(extra),
+                        refusals=floor.refusals + refused,
+                    )
 
     result.update(seam_floors_for_map(map_id, list(connections)))
     result.update(stair_floors_for_map(map_id, map_data))

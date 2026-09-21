@@ -38,6 +38,7 @@ AssertionKind = Literal[
     # Row-level kinds for rows with no command list (C5): list_index -1, code None.
     "seam_crossing",      # params: map_id, direction, offset, other_map_id, other_direction, other_offset
     "stair_crossing",     # params: x, y, side ("left"|"right"), steps (((step_dir, dx, dy), ...))
+    "blocked_obstacle",   # params: x, y, capability ("rock_smash"|"strength")
 ]
 
 AssertionTag = Literal["state", "text", "position", "flow", "audio", "visual", "service"]
@@ -47,7 +48,7 @@ OFFLINE_KINDS: frozenset[str] = frozenset({
     "warp", "heal_party", "erase_event", "item_grant", "pokemon_grant", "audio", "visual",
 })
 """Kinds checkable without the emulator. `var_write`, `displacement`,
-`event_position`, `battle`, `service`, `seam_crossing` and `stair_crossing` are ROM-only (R11: a `var_write` pulls a
+`event_position`, `battle`, `service`, `seam_crossing`, `stair_crossing` and `blocked_obstacle` (impassability needs the emulator) are ROM-only (R11: a `var_write` pulls a
 flavour NPC into the ROM sample; a menu the player drives is not proven by its
 call existing in the compiled script). `audio`/`visual` assert nothing a ROM walk
 could fail beyond `completes`, so they do not block offline eligibility."""
