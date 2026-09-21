@@ -8,14 +8,10 @@ STATUS: implemented, skipped. DELETE the `pytestmark` line to start Task 8.
 """
 from __future__ import annotations
 
-import pytest
-
 from rpg2gba.beat_floor.assertion import FloorAssertion, RowFloor, make_params
 from rpg2gba.beat_gen import review
 from rpg2gba.beat_gen.plan import ChapterPlan, Elsewhere, PlannedBeat, Refusal, make_kwargs
 from rpg2gba.story_state.model import OrderDependentKey
-
-pytestmark = pytest.mark.skip(reason="C6 Task 8 not started -- remove this line to start")
 
 SECTIONS = ["## Summary", "## Order", "## Assertions", "## Refusals", "## Elsewhere",
             "## Order-dependent writes"]
