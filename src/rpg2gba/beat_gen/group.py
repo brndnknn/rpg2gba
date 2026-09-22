@@ -8,6 +8,7 @@ STATUS: implemented (`assignments/C6/02_group.md`).
 """
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Mapping, Sequence
 
 from rpg2gba.beat_floor.assertion import RowFloor
@@ -123,6 +124,10 @@ def plan_beats(
         remaining.difference_update(row_ids)
 
     # --- 1. archetype matches, layered on top ------------------------------
+    # Page-level archetypes can match more than one page of one event (a
+    # multi-page NPC, a warp on two pages); those beats are named by page
+    # so the names stay unique (C6 part two, CH01).
+    per_event = Counter((m.archetype, m.map_id, m.event_id) for m in matches)
     for match in matches:
         role_ids = list(match.roles)
         if not all(rid in remaining for rid in role_ids):
@@ -130,6 +135,9 @@ def plan_beats(
         role_ids_sorted = sorted(role_ids, key=lambda rid: position[rid])
         main_rows = [owned_by_id[rid] for rid in role_ids_sorted]
         main_name = beat_name(match.archetype, main_rows)
+        if per_event[(match.archetype, match.map_id, match.event_id)] > 1:
+            page = parse_row_id(role_ids_sorted[0]).page_idx
+            main_name = f"m{match.map_id:03d}e{match.event_id:03d}p{page}_{match.archetype}"
         main_pos = position[role_ids_sorted[0]]
         _claim(role_ids_sorted)
         staged.append((main_pos, 0, PlannedBeat(

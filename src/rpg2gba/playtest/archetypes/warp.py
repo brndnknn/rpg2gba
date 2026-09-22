@@ -44,6 +44,7 @@ from typing import TYPE_CHECKING, Literal
 
 from ...beat_floor.assertion import FloorAssertion, make_params
 from ...beat_floor.lookup import floor_for_row as _default_floor_for_row
+from ...chapter_manifest.schema import page_row_id
 from .. import assertions
 from ..cells import arrival_cell, warp_cell
 from ..errors import ScenarioError
@@ -135,6 +136,28 @@ def _report_reciprocal_manifest_row(
                 )
 
 
+def _reciprocal_event(map_constant: str, dest_map_constant: str,
+                      crossing: tuple[int, int]) -> int | None:
+    """The event id of the far map's warp back to `map_constant`, or None
+    when there is exactly one (`warp_cell`'s own lookup then suffices). With
+    several, the one whose landing is nearest `crossing` (Manhattan); a tie
+    fails loud."""
+    from ...traversal.graph import build_map_graph
+
+    origin_uid = map_uranium_id(map_constant)
+    graph = build_map_graph(map_uranium_id(dest_map_constant))
+    backs = {(e.event_id, (e.dest_x, e.dest_y)) for exits in graph.warp_exits.values()
+             for e in exits if e.dest_map == origin_uid}
+    if len({ev for ev, _ in backs}) <= 1:
+        return None
+    ranked = sorted((abs(x - crossing[0]) + abs(y - crossing[1]), ev) for ev, (x, y) in backs)
+    if ranked[0][0] == ranked[1][0] and ranked[0][1] != ranked[1][1]:
+        raise ValueError(
+            f"warp_beat: {dest_map_constant} has warps back to {map_constant} landing "
+            f"equally near {crossing}: events {ranked[0][1]} and {ranked[1][1]}")
+    return ranked[0][1]
+
+
 def _legs(
     start_side: Literal["origin", "dest"],
     round_trip: bool,
@@ -181,6 +204,7 @@ def warp_beat(
     start_side: Literal["origin", "dest"] = "origin",
     end_side: "Literal['origin', 'dest'] | None" = None,
     boundary: bool = False,
+    page_idx: int | None = None,
     manifest_rows: "tuple[ManifestRow, ...] | None" = None,
     manifest_dir=None,
     manifest_chapter_id: str | None = None,
@@ -278,6 +302,10 @@ def warp_beat(
     `round_trip=True` (two ways to say the same thing) and with
     `boundary=True` (which never crosses at all).
 
+    `page_idx=` names the page when more than one page of the event is a
+    warp (CH01's map049/ev002 p1 and p3); it becomes `find_match`'s
+    `row_id=`. `None` (the default) keeps the one-match lookup.
+
     `manifest_chapter_id=`, if given, is a predecessor chapter whose
     manifest actually carries this row (`find_match`'s own docstring --
     REDERIVATION_PLAN.md §10 R2): a warp page sitting on a map the
@@ -360,6 +388,7 @@ def warp_beat(
 
     match = find_match(
         chapter_id, map_id, event_id, "warp",
+        row_id=page_row_id(map_id, event_id, page_idx) if page_idx is not None else None,
         rows=manifest_rows, manifest_dir=manifest_dir,
         manifest_chapter_id=manifest_chapter_id,
     )
@@ -477,8 +506,13 @@ def warp_beat(
         # Derived, never a coordinate literal (task brief) -- fails loud,
         # naming the maps involved, via cells.py's own zero/one/many
         # discipline if the reciprocal warp can't be found unambiguously.
-        return_crossing = warp_cell(dest_map_constant, to=map_constant)
-        return_arrival = arrival_cell(map_constant, from_map=dest_map_constant)
+        # When the far map has several warps back (CH01's 1F -> 2F: the
+        # stairs and a second event), the reciprocal is the one that lands
+        # nearest this warp's own cell -- the way back to where you left.
+        back_event = _reciprocal_event(map_constant, dest_map_constant, crossing)
+        return_crossing = warp_cell(dest_map_constant, to=map_constant, event_id=back_event)
+        return_arrival = arrival_cell(map_constant, from_map=dest_map_constant,
+                                      event_id=back_event)
         # Advisory report only (task brief point 4) -- never changes rows=.
         resolved_rows = manifest_rows if manifest_rows is not None else load_chapter_rows(
             manifest_chapter_id if manifest_chapter_id is not None else chapter_id,

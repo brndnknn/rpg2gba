@@ -30,6 +30,7 @@ TEMPLATE_CALLS: dict[str, tuple[str, str, str]] = {
     "obstacle": ("rpg2gba.playtest.archetypes.generic", "obstacle_beat", "beat_name"),
     "stair": ("rpg2gba.playtest.archetypes.generic", "stair_beat", "beat_name"),
     "seam": ("rpg2gba.playtest.archetypes.generic", "seam_beat", "beat_name"),
+    "transit": ("rpg2gba.playtest.archetypes.generic", "transit_beat", "beat_name"),
 }
 
 HEADER_FIRST_LINE = '"""GENERATED -- do not edit.'
@@ -83,7 +84,7 @@ def render_call(chapter_var: str, chapter_id: str, beat: PlannedBeat) -> str:
         f"    {name_kw}={render_value(beat.name)},",
         f"    group={render_value(beat.group)},",
     ]
-    if beat.template not in ARCHETYPE_TEMPLATES:
+    if beat.template not in ARCHETYPE_TEMPLATES and beat.template != "transit":
         lines.append(f"    rows={render_value(beat.rows)},")
     for key, val in beat.kwargs:
         lines.append(f"    {key}={render_value(val)},")

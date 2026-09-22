@@ -21,12 +21,12 @@ STATUS: stub (`assignments/C6/05_adapt.md`).
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 
 from rpg2gba.beat_floor.assertion import RowFloor
 from rpg2gba.beat_gen.plan import Kwargs, PlannedBeat, make_kwargs
 from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch
-from rpg2gba.chapter_manifest.schema import parse_row_id
+from rpg2gba.chapter_manifest.schema import ManifestRow, parse_row_id
 from rpg2gba.pbs_converter._naming import to_constant
 from rpg2gba.playtest.archetypes.item_ball import _uranium_item_constants
 from rpg2gba.routing.locations import ApproachCandidate
@@ -150,23 +150,29 @@ def _trainer_const_for(name: str, trainer_class: str, *, row_id: str) -> str:
 
 def _warp_kwargs(
     beat: PlannedBeat, match: ArchetypeMatch, floors: Mapping[str, RowFloor],
-    map_constant_fn: MapConstantFn,
+    map_constant_fn: MapConstantFn, rows: Sequence[ManifestRow] = (),
 ) -> dict:
     row_id = _require_role_row(match, "warp")
     floor = _floor(floors, row_id)
     warp = _one_assertion(floor, "warp", row_id=row_id)
-    return {
+    out = {
         "map_constant": map_constant_fn(beat.map_id),
         "map_id": beat.map_id,
         "event_id": match.event_id,
         "dest_map_constant": map_constant_fn(warp.param("map_id")),
         "mechanism": _WARP_MECHANISM,
     }
+    # Page-level: two pages of one event can each be a warp (CH01's
+    # map049/ev002 p1 and p3), so a non-zero page is named.
+    page_idx = parse_row_id(row_id).page_idx
+    if page_idx:
+        out["page_idx"] = page_idx
+    return out
 
 
 def _arrival_nudge_kwargs(
     beat: PlannedBeat, match: ArchetypeMatch, floors: Mapping[str, RowFloor],
-    map_constant_fn: MapConstantFn,
+    map_constant_fn: MapConstantFn, rows: Sequence[ManifestRow] = (),
 ) -> dict:
     row_id = _require_role_row(match, "nudge")
     map_constant = map_constant_fn(beat.map_id)
@@ -182,33 +188,34 @@ def _arrival_nudge_kwargs(
                 continue
             if (a.param("map_id"), a.param("x"), a.param("y")) == (beat.map_id, ex, ey):
                 found.append(candidate_row_id)
-    found = sorted(set(found))
     if not found:
         raise ValueError(
             f"archetype_kwargs: {row_id}: no warp floor assertion in the "
             f"supplied floors lands on this event's own cell ({ex},{ey}) on "
             f"map {beat.map_id} -- the source warp cannot be identified"
         )
-    if len(found) > 1:
+    # The source is an EVENT (`arrival_nudge_beat` takes from_event_id): two
+    # pages of one event carrying the same transfer are one source (CH01's
+    # map049/ev002 p1 and p3). Only two different events are ambiguous.
+    sources = sorted({parse_row_id(rid).event_key for rid in found})
+    if len(sources) > 1:
         raise ValueError(
-            f"archetype_kwargs: {row_id}: {len(found)} warp floor "
-            f"assertions land on ({ex},{ey}) on map {beat.map_id}: {found} "
-            "-- ambiguous"
+            f"archetype_kwargs: {row_id}: warps from {len(sources)} events land on "
+            f"({ex},{ey}) on map {beat.map_id}: {sorted(set(found))} -- ambiguous"
         )
-    source_row_id = found[0]
-    parsed = parse_row_id(source_row_id)
+    (from_map, from_event), = sources
     return {
         "map_constant": map_constant,
         "map_id": beat.map_id,
         "event_id": match.event_id,
-        "from_map_constant": map_constant_fn(parsed.map_id),
-        "from_event_id": parsed.event_id,
+        "from_map_constant": map_constant_fn(from_map),
+        "from_event_id": from_event,
     }
 
 
 def _item_ball_kwargs(
     beat: PlannedBeat, match: ArchetypeMatch, floors: Mapping[str, RowFloor],
-    map_constant_fn: MapConstantFn,
+    map_constant_fn: MapConstantFn, rows: Sequence[ManifestRow] = (),
 ) -> dict:
     grant_row_id = _require_role_row(match, "grant")
     floor = _floor(floors, grant_row_id)
@@ -225,7 +232,7 @@ def _item_ball_kwargs(
 
 def _trainer_kwargs(
     beat: PlannedBeat, match: ArchetypeMatch, floors: Mapping[str, RowFloor],
-    map_constant_fn: MapConstantFn,
+    map_constant_fn: MapConstantFn, rows: Sequence[ManifestRow] = (),
 ) -> dict:
     battle_row_id = _require_role_row(match, "battle")
     floor = _floor(floors, battle_row_id)
@@ -256,7 +263,7 @@ def _trainer_kwargs(
 
 def _flavour_npc_kwargs(
     beat: PlannedBeat, match: ArchetypeMatch, floors: Mapping[str, RowFloor],
-    map_constant_fn: MapConstantFn,
+    map_constant_fn: MapConstantFn, rows: Sequence[ManifestRow] = (),
 ) -> dict:
     # No CH05 EXPECTED row pins this (research/05_adapt.md §9: CH05 has no
     # flavour_npc match), so only what the stub signature calls for and
@@ -266,12 +273,50 @@ def _flavour_npc_kwargs(
     # docstring: "checked against the manifest independently derives"), so
     # stating it costs nothing and makes the generated call self-documenting
     # rather than silent about which of the three variants it claims to be.
-    return {
+    out: dict = {
         "map_constant": map_constant_fn(beat.map_id),
         "map_id": beat.map_id,
         "event_id": match.event_id,
         "variant": str(match.params["variant"]),
     }
+    # Page-level archetype: an event can carry one match per page (a
+    # multi-page NPC talks differently per story state; CH01 has 17 such
+    # events), so the call names its page. 0 is the template default.
+    talk_row = _require_role_row(match, "talk")
+    page_idx = parse_row_id(talk_row).page_idx
+    if page_idx:
+        out["page_idx"] = page_idx
+    if out["variant"] == "toggling":
+        out.update(_toggled_page(talk_row, floors, rows))
+    return out
+
+
+def _toggled_page(talk_row: str, floors: Mapping[str, RowFloor],
+                  rows: Sequence[ManifestRow]) -> dict:
+    """For a toggling NPC: the self-switch its page (or an arm of it)
+    writes, and the page of the same event that switch reveals -- the page
+    whose own condition is that self-switch. Template defaults ("A", page
+    1) are left implicit. No revealed page: nothing to add (the template's
+    `_again` beat then claims no row). More than one: fail loud."""
+    letters = sorted({a.param("letter") for rid, f in floors.items()
+                      if rid == talk_row or rid.startswith(f"{talk_row}/")
+                      for a in f.assertions if a.kind == "self_switch_write"})
+    if len(letters) != 1:
+        return {}
+    letter = letters[0]
+    key = parse_row_id(talk_row).event_key
+    revealed = sorted(r.page_idx for r in rows
+                      if r.kind == "page" and parse_row_id(r.row_id).event_key == key
+                      and r.condition is not None and r.condition.self_switch_ch == letter)
+    if len(revealed) > 1:
+        raise ValueError(f"archetype_kwargs: {talk_row}: self-switch {letter} reveals "
+                         f"pages {revealed} -- expected one")
+    out: dict = {}
+    if letter != "A":
+        out["self_switch_letter"] = letter
+    if revealed and revealed[0] != 1:
+        out["toggled_page_idx"] = revealed[0]
+    return out
 
 
 _ARCHETYPE_KWARGS: dict[str, Callable] = {
@@ -289,18 +334,20 @@ def archetype_kwargs(
     floors: Mapping[str, RowFloor],
     *,
     map_constant_fn: MapConstantFn,
+    rows: Sequence[ManifestRow] = (),
 ) -> Kwargs:
     """The source-derived kwargs for one archetype beat (sorted, via
     `make_kwargs`). Only keywords the template accepts. Raises `ValueError`
     naming the row if a value can't be derived (a floor without the
-    expected assertion, an unknown item, an unmintable trainer)."""
+    expected assertion, an unknown item, an unmintable trainer). `rows` is
+    the manifest, needed only to find a toggling NPC's revealed page."""
     fn = _ARCHETYPE_KWARGS.get(match.archetype)
     if fn is None:
         raise ValueError(
             f"archetype_kwargs: unknown archetype {match.archetype!r} for "
             f"beat {beat.name!r}"
         )
-    values = fn(beat, match, floors, map_constant_fn)
+    values = fn(beat, match, floors, map_constant_fn, rows)
     return make_kwargs(**values)
 
 

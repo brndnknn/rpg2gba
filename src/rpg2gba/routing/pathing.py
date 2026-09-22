@@ -127,6 +127,35 @@ def _crossings_on_path(
     return tuple(crossings)
 
 
+def _path_into_solid_warp(
+    map_id: int, start: Cell, warp: Cell, *, graph: MapGraph, overlay: TriggerOverlay,
+    destination_scripts: frozenset[str], occupancy: MapOccupancy | None,
+) -> tuple[list[Cell], tuple[TriggerCrossing, ...]]:
+    """`_path_on_map` to the best walkable orthogonal neighbour of a solid
+    warp tile, plus the press step onto it. Neighbours are tried in N, S,
+    E, W order; the shortest path wins, ties to the earlier side."""
+    x, y = warp
+    best: tuple[list[Cell], tuple[TriggerCrossing, ...]] | None = None
+    errors: list[str] = []
+    for side in ((x, y - 1), (x, y + 1), (x + 1, y), (x - 1, y)):
+        if not graph.is_walkable(side):
+            continue
+        try:
+            path, crossings = _path_on_map(
+                map_id, start, side, graph=graph, overlay=overlay,
+                destination_scripts=destination_scripts, occupancy=occupancy)
+        except RoutePlanningError as exc:
+            errors.append(str(exc))
+            continue
+        if best is None or len(path) < len(best[0]):
+            best = (path, crossings)
+    if best is None:
+        raise RoutePlanningError(
+            f"map {map_id}: solid warp tile {warp} has no reachable walkable side from "
+            f"{start}" + (f" ({'; '.join(errors)})" if errors else ""))
+    return best[0] + [warp], best[1]
+
+
 def _path_on_map(
     map_id: int,
     start: Cell,
@@ -148,7 +177,19 @@ def _path_on_map(
     front (naming the occupying event) rather than left to fall out of
     `path_avoiding` as a bare "no path" -- a beat that asks the player to
     stand on an NPC is a real authoring bug, not something to route around.
+
+    A goal that is a SOLID warp tile (a building's exit mat: map 65's (9,14)
+    is impassable with only its north side open) is reached the way the
+    engine fires it: walk to a walkable orthogonal neighbour, then press
+    into the tile. The path ends with that press step onto the warp cell.
+    Without this, no segment could ever leave such a building (C6 part two,
+    CH01).
     """
+    if not graph.is_walkable(goal) and goal in graph.warp_exits:
+        return _path_into_solid_warp(map_id, start, goal, graph=graph, overlay=overlay,
+                                     destination_scripts=destination_scripts,
+                                     occupancy=occupancy)
+
     blocked = occupancy.blocked_cells() if occupancy is not None else frozenset()
 
     if goal in blocked:

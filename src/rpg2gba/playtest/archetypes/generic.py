@@ -171,6 +171,11 @@ def _flag_registry() -> FlagRegistry:
 # -- STEP_HANDLERS: drive the emulator for one step -------------------------
 
 _PLAYER_TRIGGERS = frozenset({"action", "player_touch", "event_touch"})
+_ARRIVAL_TRIGGERS = frozenset({"autorun", "parallel"})
+# What an arrival page's beat can't observe after the fact: the trigger
+# already fired and the text was already driven through. Left undeclared,
+# so they stay honestly uncovered (owed to an arrival-cutscene template).
+_NOT_AFTER_THE_FACT = frozenset({"trigger", "text"})
 
 
 def _player_facing(emu: "Emulator") -> str:
@@ -372,7 +377,17 @@ def generic_beat(
             f"generic_beat: {beat_name}: page row {page_row_id!r} (owning "
             f"{resolved_rows[0]!r}) is not in chapter {manifest_id!r}'s manifest"
         )
-    cell = cell_for_row(page_row)
+    if page_row.trigger in _ARRIVAL_TRIGGERS and page_row.event_id is not None:
+        # `cell_for_row` has no rule for `parallel`, and an arrival page's
+        # own tile is only a fallback location (see below), so it is built here.
+        from rpg2gba.routing.locations import RowCell, _map_constant_for
+
+        const = _map_constant_for(page_row.map_id)
+        ex, ey = event_cell(const, page_row.event_id)
+        cell = RowCell(row_id=page_row.row_id, map_constant=const, x=ex, y=ey,
+                       resolver="event_cell (arrival page)")
+    else:
+        cell = cell_for_row(page_row)
 
     # Every row of a generic beat belongs to one page (the page and its
     # arms), and each arm's floor repeats the page's `trigger`/`completes`.
@@ -392,7 +407,25 @@ def generic_beat(
     # pages fire on their own; the beat stands on the routing point.
     trigger = dict(trigger_step.params).get("trigger") if trigger_step else None
     faces_target: tuple[int, int] | None = None
-    if trigger in _PLAYER_TRIGGERS and page_row.event_id is not None:
+    arrival = trigger in _ARRIVAL_TRIGGERS
+    if arrival:
+        # Autorun/parallel: fires on arriving on the map, usually during the
+        # crossing that brought the player here (whose settle drains it).
+        # Observed after the fact: no walk, no trigger, no text -- only the
+        # state it leaves. Located at the arrival the solver picked
+        # (beat_gen's "arrive@(x,y)" side).
+        # Without a pick (an arrival nudge's arms ride in the nudge's group,
+        # located at its exact landing), the page's own routing cell stands.
+        if approach_prefer is None:
+            x, y = cell.x, cell.y
+        elif approach_prefer.startswith("arrive@("):
+            x, y = (int(v) for v in approach_prefer[len("arrive@("):-1].split(","))
+        else:
+            raise ValueError(f"generic_beat: {beat_name}: a {trigger} page takes "
+                             f"approach_prefer='arrive@(x,y)', got {approach_prefer!r}")
+        trigger_step = None
+        middle_steps = [s for s in middle_steps if s.kind not in _NOT_AFTER_THE_FACT]
+    elif trigger in _PLAYER_TRIGGERS and page_row.event_id is not None:
         faces_target = event_cell(cell.map_constant, page_row.event_id)
         x, y = approach_to(cell.map_constant, page_row.event_id, prefer=approach_prefer)
     elif approach_prefer is not None:
@@ -409,8 +442,9 @@ def generic_beat(
         x, y = cell.x, cell.y
 
     declared = declare_assertions(
-        resolved_rows, executed_kinds=GENERIC_EXECUTED_KINDS, template="generic",
-        floor_lookup=resolved_lookup,
+        resolved_rows,
+        executed_kinds=GENERIC_EXECUTED_KINDS - (_NOT_AFTER_THE_FACT if arrival else frozenset()),
+        template="generic", floor_lookup=resolved_lookup,
     )
 
     @builder.beat(
@@ -423,9 +457,10 @@ def generic_beat(
         from rpg2gba.playtest.emulator import WalkInterrupted
 
         assertions.require_map(emu, beat_name, cell.map_constant)
-        fired_on_the_way = False
+        fired_on_the_way = arrival       # an arrival page already ran
         try:
-            emu.walk_to(x, y)
+            if not arrival:
+                emu.walk_to(x, y)
         except WalkInterrupted:
             # An event-touch page can reach the player first (the trainer
             # template's `_approach` makes the same call); the steps below
@@ -743,5 +778,46 @@ def seam_beat(
         other_cells = seam_cells(other_map_constant, to=map_constant)
         assertions.cross_arrow_warp(
             emu, beat_name, other_cells[0], reverse_direction, map_constant)
+
+    del body
+
+
+# -- transit_beat -----------------------------------------------------------
+
+Hop = tuple[str, int, int, str, str]
+"""(map_constant, approach_x, approach_y, press, dest_map_constant)."""
+
+
+def transit_beat(
+    builder: ChapterBuilder,
+    *,
+    chapter_id: str,
+    beat_name: str,
+    hops: Sequence[Hop],
+    group: str | None = None,
+) -> None:
+    """Register one travel beat: cross each hop's warp, in order, to reach
+    the map the next beat is on (C6 part two, `beat_gen/continuity.py`).
+
+    Claims no rows and declares nothing. It is not a test of these warps --
+    each is asserted by its own warp beat -- only the way between two
+    beats, derived from the chapter's world graph. A hop stands on its
+    approach cell and holds `press` until the map changes (the threshold
+    idiom `warp_beat` uses), then lets the arrival settle."""
+    if not hops:
+        raise ValueError(f"transit_beat: {beat_name}: no hops")
+    first_map, fx, fy, _, _ = hops[0]
+
+    @builder.beat(
+        beat_name,
+        f"Travel ({chapter_id}): " + " -> ".join(
+            [hops[0][0]] + [h[4] for h in hops]),
+        map_constant=first_map, at=(fx, fy), group=group,
+    )
+    def body(emu: "Emulator") -> None:
+        for map_constant, x, y, press, dest in hops:
+            assertions.require_map(emu, beat_name, map_constant)
+            assertions.cross_threshold(emu, beat_name, (x, y), press, dest)
+            emu.settle_field()
 
     del body

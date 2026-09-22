@@ -39,6 +39,9 @@ TemplateName = Literal[
     "obstacle",   # blocked_obstacle rows grouped by (map, capability)
     "stair",      # one staircase's terrain rows, crossed both ways (A3)
     "seam",       # one connections.json seam row (A1)
+    # travel between beats (C6 part two, `continuity.py`): crosses warps to
+    # reach the next beat's map; claims and declares nothing
+    "transit",
 ]
 
 ARCHETYPE_TEMPLATES: frozenset[str] = frozenset(
@@ -122,7 +125,10 @@ class PlannedBeat:
     kwargs: Kwargs = ()
 
     def __post_init__(self) -> None:
-        if not self.rows:
+        if self.template == "transit":
+            if self.rows:
+                raise ValueError(f"transit beat {self.name!r} must claim no rows")
+        elif not self.rows:
             raise ValueError(f"beat {self.name!r} claims no rows")
         keys = [k for k, _ in self.kwargs]
         if keys != sorted(keys) or len(keys) != len(set(keys)):
