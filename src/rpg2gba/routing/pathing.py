@@ -127,6 +127,23 @@ def _crossings_on_path(
     return tuple(crossings)
 
 
+def landing_cell(graph: MapGraph, cell: Cell) -> Cell:
+    """Where a warp arrival leaves the player standing. Usually the warp's
+    destination cell itself; when that is a SOLID door tile (Route 1's Old
+    Rod house exit lands on (39,18)), the engine walks the player off it, so
+    the landing is its single walkable orthogonal neighbour. Anything else
+    -- no open side, or several -- raises `RoutePlanningError`."""
+    if graph.is_walkable(cell):
+        return cell
+    x, y = cell
+    sides = [c for c in ((x, y - 1), (x, y + 1), (x + 1, y), (x - 1, y)) if graph.is_walkable(c)]
+    if len(sides) != 1:
+        raise RoutePlanningError(
+            f"map {graph.map_id}: arrival cell {cell} is solid with {len(sides)} open "
+            f"sides {sides} -- cannot tell where the player lands")
+    return sides[0]
+
+
 def _path_into_solid_warp(
     map_id: int, start: Cell, warp: Cell, *, graph: MapGraph, overlay: TriggerOverlay,
     destination_scripts: frozenset[str], occupancy: MapOccupancy | None,
@@ -440,7 +457,7 @@ def plan_segment(
         all_crossings.extend(crossings)
 
         current_map = hop.dst_map
-        current_cell = hop.dst_cell
+        current_cell = landing_cell(graphs[current_map], hop.dst_cell)
 
     graph = graphs[current_map]
     overlay = overlays[current_map]

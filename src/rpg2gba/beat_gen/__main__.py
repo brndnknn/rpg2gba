@@ -35,6 +35,7 @@ from rpg2gba.beat_floor.assertion import RowFloor
 from rpg2gba.beat_floor.lookup import floor_for_row
 from rpg2gba.beat_floor.walk import floor_for_chapter
 from rpg2gba.beat_gen.adapt import (
+    NoArrivalError,
     archetype_kwargs,
     is_boundary_warp,
     route_kwargs,
@@ -51,6 +52,7 @@ from rpg2gba.beat_gen.plan import (
     ChapterPlan,
     Elsewhere,
     PlannedBeat,
+    Refusal,
     Selection,
     make_kwargs,
 )
@@ -78,6 +80,7 @@ from rpg2gba.routing.locations import (
     cell_for_row,
     chapter_from_locations,
 )
+from rpg2gba.routing.pathing import RoutePlanningError, landing_cell
 from rpg2gba.routing.plan import write_plan
 from rpg2gba.routing.solver import RouteCandidate, solve_route
 from rpg2gba.story_state.model import build_chapter_stories
@@ -144,7 +147,13 @@ def _arrival_cells(world: WorldGraph, graphs: Mapping[int, MapGraph], map_id: in
              if e.src_map in chain_maps and e.dst_cell is not None}
     if entry is not None and entry[0] == map_id:
         cells.add(entry[1])
-    return tuple(sorted(c for c in cells if graphs[map_id].is_walkable(c)))
+    landed: set[tuple[int, int]] = set()
+    for c in cells:
+        try:
+            landed.add(landing_cell(graphs[map_id], c))   # a door-tile arrival steps off
+        except RoutePlanningError:
+            continue
+    return tuple(sorted(landed))
 
 
 def _cell_fn(warp_rows: frozenset[str], graphs: Mapping[int, MapGraph],
@@ -209,13 +218,20 @@ def _picks_with_fallback(records: Sequence[BeatLocationRecord], picks: Mapping[s
     return out
 
 
-def _apply_route_kwargs(beat: PlannedBeat, *, boundary: bool = False) -> PlannedBeat:
+def _apply_route_kwargs(beat: PlannedBeat, *, boundary: bool = False,
+                        nudge_group: bool = False) -> PlannedBeat:
     """Turn the `approach_prefer` pick `order_beats` stamped on a beat into
     that template's route kwargs (for a warp: press direction and round
     trip, or for a `boundary` warp the stop-on-the-edge form). A warp
     without a pick raises: it would reach the emitter with no direction,
     which `warp_beat` can't walk."""
     side = dict(beat.kwargs).get("approach_prefer")
+    if nudge_group and side is not None:
+        # A nudge's place is its exact landing cell; neither it nor its arms
+        # take a side (a solid door tile under it can still give the solver
+        # candidates, and the pick lands on the whole group).
+        return dataclasses.replace(beat, kwargs=make_kwargs(
+            **{k: v for k, v in beat.kwargs if k != "approach_prefer"}))
     if side is None:
         if beat.template == "warp":
             raise ValueError(
@@ -319,33 +335,63 @@ def _split_unreachable(
     records: Sequence[BeatLocationRecord], entry: tuple[int, tuple[int, int]],
     graphs: Mapping[int, MapGraph], world: WorldGraph, chain_maps: frozenset[int],
     binding: ChapterBinding, chapter_id: str, occupancy: Mapping,
-) -> tuple[list[BeatLocationRecord], list[tuple[str, list[tuple[str, str | None]]]]]:
-    """(reachable records, [(group, [(row, later owner)])]). The owner is
-    the first successor chapter whose maps, added to this chain, make one of
-    the group's sites reachable. Only chapters with a committed manifest are
-    searched -- beyond them the maps aren't staged in this build -- so None
-    means "no chapter derived so far opens it"."""
-    def sites(record: BeatLocationRecord) -> list[tuple[int, tuple[int, int]]]:
-        m = map_uranium_id(record.map_constant)
-        cells = [(c.x, c.y) for c in record.approach_candidates] or [(record.x, record.y)]
-        return [(m, c) for c in cells]
+) -> tuple[list[BeatLocationRecord], dict[str, str | None]]:
+    """(records the player can reach, {unreachable row: later owner}).
+
+    Row by row: a group spanning several cells (an obstacle group's rocks, an
+    exit strip, a staircase) keeps the rows the player can reach and is
+    re-pointed at one of them when its routing row is the unreachable one; a
+    group with no reachable row leaves the plan. The owner is the first
+    successor chapter whose maps, added to this chain, make the row
+    reachable. Only chapters with a committed manifest are searched --
+    beyond them the maps aren't staged in this build -- so None means "no
+    chapter derived so far opens it"."""
+    def row_sites(cell: RowCell) -> list[tuple[int, tuple[int, int]]]:
+        m = map_uranium_id(cell.map_constant)
+        return [(m, (c.x, c.y)) for c in cell.approach_candidates] or [(m, (cell.x, cell.y))]
 
     reach = reachable_sites(entry, graphs, world, chain_maps, occupancy)
-    kept = [r for r in records if any(s in reach for s in sites(r))]
-    unreached = [r for r in records if r not in kept]
-    later: list[tuple[str, list[tuple[str, str | None]]]] = []
-    if unreached:
+    kept: list[BeatLocationRecord] = []
+    dropped: dict[str, list[tuple[int, tuple[int, int]]]] = {}
+    for record in records:
+        ok = [c for c in record.candidates if any(s in reach for s in row_sites(c))]
+        ok_rows = {c.row_id for c in ok}
+        for c in record.candidates:
+            if c.row_id not in ok_rows:
+                dropped[c.row_id] = row_sites(c)
+        # A row with no cell of its own (it rides on another row's cell)
+        # follows its group's routing point.
+        routing_ok = any(s in reach for s in (
+            [(map_uranium_id(record.map_constant), (a.x, a.y)) for a in record.approach_candidates]
+            or [(map_uranium_id(record.map_constant), (record.x, record.y))]))
+        if not ok and not routing_ok:
+            for row in record.rows:
+                dropped.setdefault(row, [])
+            logger.info("%s: %s is unreachable from the entry over this chapter's maps",
+                        chapter_id, record.beat_id)
+            continue
+        rows = tuple(r for r in record.rows if r not in dropped)
+        if routing_ok or not ok:
+            kept.append(dataclasses.replace(record, rows=rows, candidates=tuple(ok)))
+            continue
+        first = ok[0]
+        kept.append(dataclasses.replace(
+            record, rows=rows, candidates=tuple(ok), map_constant=first.map_constant,
+            x=first.x, y=first.y, resolver=first.resolver,
+            approach_candidates=first.approach_candidates))
+        logger.info("%s: %s re-pointed at reachable row %s", chapter_id, record.beat_id,
+                    first.row_id)
+
+    later: dict[str, str | None] = {}
+    if dropped:
         wider, owners = chain_maps, []
         nxt = binding.successor(chapter_id)
         while nxt is not None and (MANIFEST_DIR / f"{nxt.id}.manifest.json").exists():
             wider = wider | frozenset(nxt.maps)
             owners.append((nxt.id, reachable_sites(entry, graphs, world, wider, occupancy)))
             nxt = binding.successor(nxt.id)
-        for r in unreached:
-            owner = next((cid for cid, rs in owners if any(s in rs for s in sites(r))), None)
-            later.append((r.beat_id, [(row, owner) for row in r.rows]))
-            logger.info("%s: %s is unreachable from the entry over this chapter's maps; "
-                        "later: %s", chapter_id, r.beat_id, owner)
+        for row, sites in dropped.items():
+            later[row] = next((cid for cid, rs in owners if any(s in rs for s in sites)), None)
     return kept, later
 
 
@@ -359,21 +405,33 @@ def _warp_dest(beat: PlannedBeat, floors: Mapping[str, RowFloor]) -> int:
 
 def _group_boundary_exits(beats: Sequence[PlannedBeat], floors: Mapping[str, RowFloor],
                           chain_maps: frozenset[int]) -> tuple[PlannedBeat, ...]:
-    """One group per chapter EXIT, not per warp tile. A wide exit is several
-    warp events on one map landing on the same destination cell (CH01's
-    Moki -> Route 1 edge: events 23, 36 and 37 all land on map 33 (70,11));
-    as separate groups the solver sees three terminal candidates and
-    refuses. Grouped under the first beat's name they are one stop."""
-    first: dict[tuple, str] = {}
-    out: list[PlannedBeat] = []
+    """One group per chapter EXIT, not per warp tile. A wide exit is a
+    contiguous strip of warp tiles on one map bound for the same map
+    (CH01's Moki -> Route 1: events 23, 36, 37 at (8,43..45); CH02's Route 1
+    -> Kevlar: events 45 and 46). As separate groups the solver sees several
+    terminal candidates and refuses. A strip is grouped under the name of
+    its first beat in plan order."""
+    from rpg2gba.playtest.cells import event_cell
+
+    tiles: dict[str, tuple[int, int, int, int]] = {}      # beat -> (map, dest, x, y)
     for b in beats:
         if b.template == "warp" and is_boundary_warp(b, floors, chain_maps):
-            (dest,) = {(a.param("map_id"), a.param("x"), a.param("y"))
-                       for r in b.rows for a in floors[r].assertions if a.kind == "warp"}
-            group = first.setdefault((b.map_id, dest), b.group)
-            b = dataclasses.replace(b, group=group)
-        out.append(b)
-    return tuple(out)
+            x, y = event_cell(_map_constant_for(b.map_id), parse_row_id(b.rows[0]).event_id)
+            tiles[b.name] = (b.map_id, _warp_dest(b, floors), x, y)
+    group_of: dict[str, str] = {}
+    for b in beats:                       # plan order: the first tile names the strip
+        if b.name not in tiles or b.name in group_of:
+            continue
+        group_of[b.name] = b.group
+        stack = [b.name]
+        while stack:
+            m, d, x, y = tiles[stack.pop()]
+            for other, (om, od, ox, oy) in tiles.items():
+                if other not in group_of and (om, od) == (m, d) and abs(ox - x) + abs(oy - y) == 1:
+                    group_of[other] = b.group
+                    stack.append(other)
+    return tuple(dataclasses.replace(b, group=group_of[b.name]) if b.name in group_of else b
+                 for b in beats)
 
 
 def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR) -> ChapterPlan:
@@ -427,14 +485,23 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR) -> ChapterPlan:
         if inbound_ids and set(b.rows) <= inbound_ids else b
         for b in beats)
 
-    # 3. Adapt, source half.
-    beats = tuple(
-        _merge_kwargs(b, dict(archetype_kwargs(b, _match_for(b, matches), floors,
-                                               map_constant_fn=_map_constant_for,
-                                               rows=all_rows)))
-        if b.template in ARCHETYPE_TEMPLATES else b
-        for b in beats
-    )
+    # 3. Adapt, source half. An arrival nudge nothing lands on never fires:
+    #    its whole group (the nudge and its arms) is refused by name.
+    planned = beats
+    adapted: list[PlannedBeat] = []
+    dead_groups: dict[str, str] = {}
+    for b in planned:
+        if b.template in ARCHETYPE_TEMPLATES:
+            try:
+                b = _merge_kwargs(b, dict(archetype_kwargs(
+                    b, _match_for(b, matches), floors,
+                    map_constant_fn=_map_constant_for, rows=all_rows)))
+            except NoArrivalError as exc:
+                dead_groups[b.group] = str(exc)
+        adapted.append(b)
+    dead_refusals = tuple(Refusal(row_id, "cell", "no_arrival", dead_groups[b.group])
+                          for b in planned if b.group in dead_groups for row_id in b.rows)
+    beats = tuple(b for b in adapted if b.group not in dead_groups)
     beats = _group_boundary_exits(beats, floors, chain_maps)
 
     # 4. Locate. Graphs are lazy: a seam or a route may touch maps outside
@@ -462,11 +529,18 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR) -> ChapterPlan:
     occupancy = _LazyOccupancy(build_dir)
     records, later = _split_unreachable(records, entry, graphs, world, chain_maps,
                                         binding, chapter_id, occupancy)
-    beats = tuple(b for b in beats if b.group not in {g for g, _ in later})
+    trimmed: list[PlannedBeat] = []
+    for b in beats:
+        rows = tuple(r for r in b.rows if r not in later)
+        if len(rows) == len(b.rows):
+            trimmed.append(b)
+        elif rows:
+            trimmed.append(dataclasses.replace(b, rows=rows))
+    beats = tuple(trimmed)
     selection = Selection(owned=selection.owned, refusals=selection.refusals,
                           elsewhere=selection.elsewhere + tuple(
                               Elsewhere(row_id, "later", owner)
-                              for _, rows_owner in later for row_id, owner in rows_owner))
+                              for row_id, owner in later.items()))
 
     # 5. Solve, with the same argument assembly as `routing plan`. The
     #    route starts where the predecessor leaves the player (A5), not at
@@ -490,9 +564,11 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR) -> ChapterPlan:
     #    into a map this chapter's ROM doesn't build.
     group_order, picks = route_order(route.nodes)
     beats = order_beats(beats, group_order, _picks_with_fallback(records, picks))
+    nudge_groups = {b.group for b in beats if b.template == "arrival_nudge"}
     beats = tuple(
         _apply_route_kwargs(
-            b, boundary=b.template == "warp" and is_boundary_warp(b, floors, chain_maps))
+            b, boundary=b.template == "warp" and is_boundary_warp(b, floors, chain_maps),
+            nudge_group=b.group in nudge_groups)
         for b in beats)
 
     # 7. Map continuity (`beat_gen/continuity.py`): each warp's start and
@@ -510,7 +586,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR) -> ChapterPlan:
         chapter_id=chapter_id,
         predecessor=predecessor,
         beats=beats,
-        refusals=selection.refusals + tuple(cell_refusals),
+        refusals=selection.refusals + dead_refusals + tuple(cell_refusals),
         elsewhere=selection.elsewhere,
         order_dependent=story.order_dependent,
         route=route,

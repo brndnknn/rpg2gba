@@ -150,12 +150,17 @@ def _reciprocal_event(map_constant: str, dest_map_constant: str,
              for e in exits if e.dest_map == origin_uid}
     if len({ev for ev, _ in backs}) <= 1:
         return None
-    ranked = sorted((abs(x - crossing[0]) + abs(y - crossing[1]), ev) for ev, (x, y) in backs)
-    if ranked[0][0] == ranked[1][0] and ranked[0][1] != ranked[1][1]:
+    ranked = sorted((abs(x - crossing[0]) + abs(y - crossing[1]), ev, (x, y))
+                    for ev, (x, y) in backs)
+    nearest = [(ev, cell) for dist, ev, cell in ranked if dist == ranked[0][0]]
+    # Several warps landing on the SAME cell are one way back (a wide exit,
+    # Route 1's events 22-24 -> Moki (8,43)); the lowest event stands for
+    # it. Equally near but different cells is a real ambiguity.
+    if len({cell for _, cell in nearest}) > 1:
         raise ValueError(
             f"warp_beat: {dest_map_constant} has warps back to {map_constant} landing "
-            f"equally near {crossing}: events {ranked[0][1]} and {ranked[1][1]}")
-    return ranked[0][1]
+            f"equally near {crossing} on different cells: {sorted(nearest)}")
+    return min(ev for ev, _ in nearest)
 
 
 def _legs(

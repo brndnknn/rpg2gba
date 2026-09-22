@@ -22,6 +22,7 @@ from collections.abc import Mapping
 
 from rpg2gba.routing.connections import connections_between, crossing_cells, load_connections
 from rpg2gba.routing.occupancy import MapOccupancy
+from rpg2gba.routing.pathing import RoutePlanningError, landing_cell
 from rpg2gba.traversal.graph import Cell, MapGraph
 from rpg2gba.traversal.world import WorldGraph
 
@@ -79,7 +80,13 @@ def reachable_sites(
             if tile != cell and graph.is_walkable(tile):
                 continue          # a walkable warp tile fires when stood on
             for exit_ in graph.warp_exits.get(tile, ()):
-                visit((exit_.dest_map, (exit_.dest_x, exit_.dest_y)))
+                if exit_.dest_map not in maps:
+                    continue
+                try:
+                    land = landing_cell(graphs[exit_.dest_map], (exit_.dest_x, exit_.dest_y))
+                except RoutePlanningError:
+                    continue      # a landing nobody can stand on leads nowhere
+                visit((exit_.dest_map, land))
         for target in seam_moves[map_id].get(cell, ()):
             visit(target)
     return frozenset(seen)

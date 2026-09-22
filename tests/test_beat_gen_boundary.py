@@ -1,8 +1,6 @@
 """`beat_gen.boundary` (C6 part two; REDERIVATION_PLAN.md §10 R2/R3): which
 rows a chapter hands to its successor, and which it claims from its
 predecessor."""
-import pytest
-
 from rpg2gba.beat_floor.assertion import FloorAssertion, RowFloor, make_params
 from rpg2gba.beat_gen.boundary import inbound_rows, split_outbound, warp_destinations
 from rpg2gba.beat_gen.plan import Elsewhere, Selection
@@ -36,12 +34,22 @@ FLOORS = {WARP: _floor(WARP, 9), NUDGE: _floor(NUDGE), ARM: _floor(ARM),
 
 
 def test_warp_destinations_reads_page_floors():
-    assert warp_destinations(ROWS, FLOORS) == {WARP: 9, OTHER: 2}
+    assert warp_destinations(ROWS, FLOORS) == {WARP: frozenset({9}), OTHER: frozenset({2})}
 
 
-def test_a_page_with_two_destinations_fails_loud():
-    with pytest.raises(ValueError, match="expected one destination"):
-        warp_destinations((_row(WARP),), {WARP: _floor(WARP, 2, 3)})
+def test_a_page_with_two_destinations_keeps_both():
+    # A scripted transfer per branch (CH01's map049/ev021/p0 warps to 48 and 49).
+    assert warp_destinations((_row(WARP),), {WARP: _floor(WARP, 2, 3)}) == {
+        WARP: frozenset({2, 3})}
+
+
+def test_a_two_destination_page_is_a_crossing_if_either_leaves_the_chain():
+    rows, floors = (_row(WARP),), {WARP: _floor(WARP, 2, 9)}
+    sel = split_outbound(Selection(owned=rows, refusals=(), elsewhere=()), floors,
+                         chain_maps=frozenset({1, 2}), successor_id="CHNEXT")
+    assert [r.row_id for r in sel.owned] == [WARP]      # the crossing page stays owned
+    assert inbound_rows(rows, floors, chapter_maps=frozenset({9}),
+                        pred_chain_maps=frozenset({1, 2})) == rows
 
 
 def test_outbound_keeps_the_crossing_page_and_hands_its_event_to_the_successor():

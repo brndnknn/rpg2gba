@@ -34,6 +34,11 @@ from rpg2gba.traversal.graph import Cell, MapGraph
 
 MapConstantFn = Callable[[int], str]
 
+
+class NoArrivalError(ValueError):
+    """An arrival-nudge match no warp lands on: the autorun never fires.
+    `build_plan` refuses its rows by name instead of failing the chapter."""
+
 # A2's answer: every CH01-CH05 warp source cell this corpus carries is
 # door-stamped, so crossing it is always a held-D-pad step-on threshold, not
 # a literal door or an arrow tile. This is a corpus-wide constant, not a
@@ -181,29 +186,24 @@ def _arrival_nudge_kwargs(
 
     ex, ey = event_cell(map_constant, match.event_id)
 
-    found: list[str] = []
-    for candidate_row_id, candidate_floor in floors.items():
-        for a in candidate_floor.assertions:
-            if a.kind != "warp":
-                continue
-            if (a.param("map_id"), a.param("x"), a.param("y")) == (beat.map_id, ex, ey):
-                found.append(candidate_row_id)
+    found = sorted(
+        candidate_row_id for candidate_row_id, candidate_floor in floors.items()
+        for a in candidate_floor.assertions
+        if a.kind == "warp"
+        and (a.param("map_id"), a.param("x"), a.param("y")) == (beat.map_id, ex, ey))
     if not found:
-        raise ValueError(
-            f"archetype_kwargs: {row_id}: no warp floor assertion in the "
-            f"supplied floors lands on this event's own cell ({ex},{ey}) on "
-            f"map {beat.map_id} -- the source warp cannot be identified"
-        )
-    # The source is an EVENT (`arrival_nudge_beat` takes from_event_id): two
-    # pages of one event carrying the same transfer are one source (CH01's
-    # map049/ev002 p1 and p3). Only two different events are ambiguous.
-    sources = sorted({parse_row_id(rid).event_key for rid in found})
-    if len(sources) > 1:
-        raise ValueError(
-            f"archetype_kwargs: {row_id}: warps from {len(sources)} events land on "
-            f"({ex},{ey}) on map {beat.map_id}: {sorted(set(found))} -- ambiguous"
-        )
-    (from_map, from_event), = sources
+        # Not a lookup failure: nothing in the game lands here, so this
+        # arrival autorun never fires (Route 1's three exits all land on
+        # Moki (8,43), event 37's tile; the nudges on events 23 and 36 are
+        # dead). The caller turns this into a named refusal.
+        raise NoArrivalError(
+            f"archetype_kwargs: {row_id}: no warp lands on this arrival autorun's "
+            f"cell ({ex},{ey}) on map {beat.map_id} -- it never fires")
+    # The source is an EVENT (`arrival_nudge_beat` takes from_event_id). Two
+    # pages of one event (CH01's map049/ev002 p1 and p3), or several exit
+    # tiles landing on this same cell (Route 1's events 22-24), are one
+    # arrival; the lowest event stands for it.
+    from_map, from_event = min(parse_row_id(rid).event_key for rid in found)
     return {
         "map_constant": map_constant,
         "map_id": beat.map_id,

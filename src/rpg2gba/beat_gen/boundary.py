@@ -27,19 +27,18 @@ from rpg2gba.chapter_manifest.schema import ManifestRow, parse_row_id
 
 
 def warp_destinations(rows: Sequence[ManifestRow], floors: Mapping[str, RowFloor]
-                      ) -> dict[str, int]:
-    """{page row id: destination map} for every page whose floor carries a
-    warp. A page with two different destinations fails loud: nothing here
-    can say which one is the crossing."""
-    out: dict[str, int] = {}
+                      ) -> dict[str, frozenset[int]]:
+    """{page row id: destination maps} for every page whose floor carries a
+    warp. A page can warp to more than one map (a scripted transfer in each
+    branch, CH01's map049/ev021/p0); it is a crossing if any of them is."""
+    out: dict[str, frozenset[int]] = {}
     for row in rows:
         if row.kind != "page" or row.row_id not in floors:
             continue
-        dests = {a.param("map_id") for a in floors[row.row_id].assertions if a.kind == "warp"}
-        if len(dests) > 1:
-            raise ValueError(f"{row.row_id}: warps to {sorted(dests)} -- expected one destination")
+        dests = frozenset(a.param("map_id") for a in floors[row.row_id].assertions
+                          if a.kind == "warp")
         if dests:
-            out[row.row_id] = dests.pop()
+            out[row.row_id] = dests
     return out
 
 
@@ -57,7 +56,7 @@ def split_outbound(
     crossing page itself, moved to `Elsewhere("boundary", successor_id)`.
     The crossing page stays owned: it gets the stop-at-the-edge beat."""
     dests = warp_destinations(selection.owned, floors)
-    crossings = {rid for rid, dest in dests.items() if dest not in chain_maps}
+    crossings = {rid for rid, maps in dests.items() if maps - chain_maps}
     events = {_event_key(rid) for rid in crossings}
     owned: list[ManifestRow] = []
     handed: list[Elsewhere] = []
@@ -82,7 +81,7 @@ def inbound_rows(
     a page that warps onto one of `chapter_maps` from outside the
     predecessor's own chain -- the crossings this chapter opens."""
     dests = warp_destinations(pred_rows, pred_floors)
-    events = {_event_key(rid) for rid, dest in dests.items()
-              if dest in chapter_maps and dest not in pred_chain_maps}
+    events = {_event_key(rid) for rid, maps in dests.items()
+              if (maps & chapter_maps) - pred_chain_maps}
     return tuple(r for r in pred_rows
                  if r.kind in ("page", "branch") and _event_key(r.row_id) in events)
