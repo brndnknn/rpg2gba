@@ -1636,7 +1636,7 @@ Each lands unit-green. None is ROM-verified before P11.
 | **C5** | Archetype templates refactored onto the generic floor; the ⊇-floor checker rule; seam and stair floors | R11 | DONE 2026-09-17 — `beat_floor/{coverage,lookup,terrain}.py`, all five templates declare; see "C5 landed" below |
 | **C5b** | Warp facing moves into the engine: retain-facing fallback, per-warp departure direction in `struct WarpEvent`, pending-facing special for script warps, door tiles yield to the warp's direction; arrival-facing table and tiers 1–3 deleted | `WARP_RETAIN_FACING_PROPOSAL.md` §0 R1–R6 | **DONE 2026-09-18** (unit-green); see "C5b landed" below |
 | **C7** | Freeze CH01–CH05 hand beats — **rows + identity only; coverage is the test, not literal match** (R12 amended 2026-09-17) | R12 | **DONE 2026-09-21** (unit-green); see "C7 landed" below |
-| **C6** | Generator + solver integration: whole-module emit, review doc, refusal list, idempotence test | R1, R4, R7 | TODO — **runs after C7** (2026-09-17) |
+| **C6** | Generator + solver integration: whole-module emit, review doc, refusal list, idempotence test | R1, R4, R7 | **Part one DONE 2026-09-22** (unit-green; CH05 end to end); see "C6 part one landed" below. Part two (map continuity, boundary claims, A5, CH01–CH04) IN PROGRESS |
 | **C8** | Shared Ruby-subset interpreter + input search; `map050/ev019` | R10 | TODO |
 | **C9** | Regenerate CH01–CH05 behind the frozen test, one commit per chapter | R12 | TODO |
 | **C10** | `offline:` verdict head, offline flavour checker, ROM sample selection | R2, R3 | TODO |
@@ -2097,6 +2097,34 @@ Unit-green only. **ROM risks carried into P11:** the Moki (32)(8,43..45) ↔ Rou
 edge stack (the only built-map case where door-south and the authored direction disagree), the
 three never-walked explicit-direction script warps (map032/ev078, map049/ev021, map172/ev004),
 and dir-0 building exits whose arrival auto-step now follows the approach direction.
+
+**C6 part one landed 2026-09-22** (unit-green; no ROM run — P11). The `assignments/C6/` brief, all
+nine tasks, delegated to the build agent in full by the operator. Suite **4127 passed / 16 skipped**
+(two halves, #111). `python -m rpg2gba.beat_gen generate --chapter CH05` writes
+`output/beats/{ch05.generated.py,CH05.review.md,CH05.route.json}`: 20 beats, 14 groups, 35 rows,
+**0 refusals**, 8 elsewhere (the surf item balls). Each task's commit answers its Questions. What
+the build found:
+
+- **Boundary warps** (Task 9's blocker): a warp whose destination is on no map of the chapter
+  chain is a boundary. `warp_beat(boundary=True)` stops on the approach cell, never steps on,
+  claims the row and declares nothing (the crossing is owed to the chapter being opened, §10 R2).
+  It stops short because standing on the tile, as hand B11 does, asserts "unstaged", which breaks
+  the day the next chapter stages (hand ch04's B7, 2026-09-04). The duplicate-exit bug is fixed
+  in `traversal/warps.py`.
+- **CH01 refuses 215 rows**, not B2's 56. B2 measured floor refusals only; the full rule table
+  adds 94 `undetermined` story rows and story-headed refusals. B2's exit criterion is unaffected.
+- **Generic template**: four lead fixes the offline tests couldn't reach (trigger vocabulary
+  `player_touch`, one page run per beat instead of one per arm row, fire from an adjacent cell,
+  seam edge letter vs press). Known P11 limit: a page's arms are often mutually exclusive, and one
+  walk takes one.
+- **Diff vs hand CH05**: hand-only = CH04's three `map035/ev001` boundary rows (R2/R3 successor
+  claims, which the generator doesn't produce yet); generated-only = eleven branch arms. Visit
+  order matches.
+- **Top finding, drives part two:** the generated suite doesn't track which map the player is on
+  between beats. Every warp round-trips from its own map, so three of CH05's four warps start or
+  end on the wrong map, and the 1F nudge runs while the player is on 2F. The hand module solved
+  each case by hand. Part two opens with a map-continuity pass, successor boundary claims, and a
+  route entry taken from the predecessor's end (A5).
 
 **C7 landed 2026-09-21** (unit-green; no ROM run — P11). Built as the `assignments/C7/` brief, on
 the operator's instruction to complete it. What shipped:
