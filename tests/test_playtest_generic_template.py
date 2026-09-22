@@ -24,8 +24,6 @@ from rpg2gba.beat_floor.lookup import floor_for_row
 from rpg2gba.playtest.archetypes import declare_assertions, generic
 from rpg2gba.playtest.chapter import ChapterBuilder
 
-pytestmark = pytest.mark.skip(reason="C6 Task 7 not started -- remove this line to start")
-
 NPC = "map037/ev005/p0"                  # CH05's Revive NPC: no archetype claims it
 NPC_ARMS = (f"{NPC}/b0", f"{NPC}/b1")
 ROW_LEVEL = {"seam_crossing", "stair_crossing", "blocked_obstacle"}

@@ -578,6 +578,18 @@ class ChapterBuilder:
 
         return decorate
 
+    def claimed_rows(self) -> frozenset[str]:
+        """Every row id claimed by a beat registered so far, across the
+        whole `_beats` list (registration order not required -- callers
+        that need order-sensitivity, none do today, can walk `_beats`
+        directly).
+
+        Exists so a caller like `generic.generic_beat`'s `skip_claimed=`
+        can ask "has anything already claimed this row?" without reaching
+        into `builder._beats` itself -- exactly the private-attribute
+        access a public method exists to prevent (Task 7 brief)."""
+        return frozenset(row for beat in self._beats for row in beat.rows)
+
     def build(self) -> Chapter:
         if not self._beats:
             raise ValueError(f"chapter {self.name!r} declares no beats")
