@@ -13,8 +13,6 @@ from rpg2gba.beat_gen import group
 from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch
 from rpg2gba.chapter_manifest.schema import ManifestRow, SeamRef, TerrainRef
 
-pytestmark = pytest.mark.skip(reason="C6 Task 2 not started -- remove this line to start")
-
 
 def _page(map_id: int, event_id: int, page: int) -> ManifestRow:
     return ManifestRow(row_id=f"map{map_id:03d}/ev{event_id:03d}/p{page}", kind="page",
