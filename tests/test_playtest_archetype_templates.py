@@ -1005,3 +1005,51 @@ def test_local_id_fails_loud_on_an_unstaged_map(
 
     with pytest.raises(ValueError, match="has not been staged"):
         cells.local_id("MAP_PASSAGE_CAVE_2F", 5)
+
+
+# -- warp_beat(boundary=True): a warp that leaves the chapter (C6 Task 9) -----
+
+def _boundary_warp(b: ChapterBuilder, rows: tuple[ManifestRow, ...], **extra) -> None:
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_2F", map_id=37,
+        event_id=2, dest_map_constant="MAP_NOWTOCH_CITY", mechanism="threshold",
+        direction="UP", beat_name="EXIT", manifest_rows=rows, boundary=True, **extra,
+    )
+
+
+def test_boundary_warp_stops_on_the_approach_cell_and_still_claims_the_row(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    from rpg2gba.playtest.cells import warp_cell
+
+    b = _builder()
+    _boundary_warp(b, ch05_rows)
+    (beat,) = b.build().beats
+    cx, cy = warp_cell("MAP_PASSAGE_CAVE_2F", to="MAP_NOWTOCH_CITY", event_id=2)
+    loc = beat.locations[0]
+    assert (loc.map_constant, loc.x, loc.y) == ("MAP_PASSAGE_CAVE_2F", cx, cy + 1)  # UP: south
+    assert beat.rows == ("map037/ev002/p0",)
+    assert beat.archetype == "warp"
+
+
+def test_boundary_warp_declares_nothing_it_does_not_execute(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    """Declared (not None) but empty: the page never runs here, so the
+    crossing stays uncovered, owed to the chapter being opened (§10 R2)."""
+    b = _builder()
+    _boundary_warp(b, ch05_rows)
+    (beat,) = b.build().beats
+    assert beat.assertions == frozenset()
+
+
+@pytest.mark.parametrize("extra", [
+    {"round_trip": True, "return_direction": "DOWN"},
+    {"start_side": "dest", "return_direction": "DOWN"},
+    {"assert_facing": True},
+])
+def test_boundary_warp_rejects_every_mode_that_would_cross(
+    ch05_rows: tuple[ManifestRow, ...], extra: dict,
+) -> None:
+    with pytest.raises(ValueError, match="boundary=True never crosses"):
+        _boundary_warp(_builder(), ch05_rows, **extra)

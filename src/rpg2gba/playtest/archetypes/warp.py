@@ -46,6 +46,7 @@ from ...beat_floor.assertion import FloorAssertion, make_params
 from ...beat_floor.lookup import floor_for_row as _default_floor_for_row
 from .. import assertions
 from ..cells import arrival_cell, warp_cell
+from ..errors import ScenarioError
 from . import (
     FloorLookup, declare_assertions, find_match, load_chapter_rows,
     map_uranium_id, walked_arms,
@@ -153,6 +154,7 @@ def warp_beat(
     round_trip: bool = False,
     return_direction: str | None = None,
     start_side: Literal["origin", "dest"] = "origin",
+    boundary: bool = False,
     manifest_rows: "tuple[ManifestRow, ...] | None" = None,
     manifest_dir=None,
     manifest_chapter_id: str | None = None,
@@ -231,8 +233,33 @@ def warp_beat(
     PREVIOUS chapter owns, claimed by this chapter because only this
     chapter's walk can trigger it. `None` (the default) preserves today's
     behavior of reading `chapter_id`'s own manifest.
+
+    `boundary=True` is for a warp that LEAVES the chapter: its destination
+    belongs to a later chapter, so this chapter's ROM may or may not have
+    staged it (C6 Task 9). The beat walks to the approach cell on the
+    `direction` side, asserts it stands there on `map_constant` with the
+    field unlocked, and stops -- it never steps onto the warp. That holds
+    whether or not the destination is staged, which is the lesson of
+    `ch04.py`'s B7 (it stepped on the cave mouth and asserted nothing fired,
+    true only until CH05 staged the cave). It still claims the row, but
+    declares none of its floor kinds: nothing here executes the page, so
+    the crossing stays honestly uncovered, owed to the chapter being opened
+    (REDERIVATION_PLAN.md §10 R2). No round trip, no far-side start, no
+    arrival facing/BGM: each would need the destination staged.
     """
     resolved_group = group if group is not None else beat_name
+    if boundary and (round_trip or start_side != "origin" or return_direction is not None
+                     or assert_facing or assert_bgm):
+        raise ValueError(
+            "warp_beat: boundary=True never crosses the warp, so round_trip=, "
+            "start_side='dest', return_direction=, assert_facing= and "
+            "assert_bgm= are all meaningless with it"
+        )
+    if boundary and mechanism == "door":
+        raise ValueError(
+            "warp_beat: boundary=True with mechanism='door' has no approach "
+            "side to stop on -- no boundary door exists in this corpus yet"
+        )
     if mechanism not in _MECHANISMS:
         raise ValueError(
             f"warp_beat: mechanism={mechanism!r} is not one of "
@@ -352,9 +379,37 @@ def warp_beat(
     arm_rows = walked_arms(row_id, "warp", floor_lookup=lookup)
     claimed_rows = (row_id,) + arm_rows
     declared = declare_assertions(
-        claimed_rows, executed_kinds=_EXECUTED_KINDS, template="warp",
-        extras=extras, floor_lookup=lookup,
+        claimed_rows, executed_kinds=frozenset() if boundary else _EXECUTED_KINDS,
+        template="warp", extras=extras, floor_lookup=lookup,
     )
+
+    if boundary:
+        dx, dy = _APPROACH_DELTA[direction]
+        edge = (crossing[0] + dx, crossing[1] + dy)
+
+        @builder.beat(
+            beat_name,
+            description or (
+                f"{map_constant} event {event_id} leaves the chapter for "
+                f"{dest_map_constant} (manifest {row_id}); the beat stops on "
+                f"the approach cell {edge} and does not cross"
+            ),
+            map_constant=map_constant, at=edge,
+            group=resolved_group, archetype="warp", rows=claimed_rows,
+            assertions=declared,
+        )
+        def run_boundary(emu: Emulator) -> None:
+            emu.walk_to(*edge)
+            assertions.require_map(emu, beat_name, map_constant)
+            assertions.assert_position_exact(emu, beat_name, edge)
+            if emu.field_locked():
+                shot = emu.screenshot(f"{beat_name}_unexpected_lock")
+                raise ScenarioError(
+                    f"{beat_name}: field locked on the approach cell {edge} of a "
+                    f"chapter-boundary warp -- nothing should fire here ({shot})")
+
+        del run_boundary
+        return
 
     return_crossing: tuple[int, int] | None = None
     return_arrival: tuple[int, int] | None = None

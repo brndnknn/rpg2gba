@@ -18,7 +18,6 @@ from rpg2gba.beat_gen import __main__ as cli
 from rpg2gba.chapter_manifest.schema import parse_row_id
 from rpg2gba.playtest.chapter import Chapter
 
-pytestmark = pytest.mark.skip(reason="C6 Task 9 not started -- remove this line to start")
 
 FROZEN = Path("reference/frozen/hand_beats_ch01-ch05.json")
 

@@ -321,11 +321,37 @@ def warp_candidates(cell: Cell, graph: MapGraph) -> tuple[ApproachCandidate, ...
     return tuple(candidates)
 
 
-def route_kwargs(template: str, side: str) -> Kwargs:
+def is_boundary_warp(
+    beat: PlannedBeat, floors: Mapping[str, RowFloor], chain_maps: frozenset[int],
+) -> bool:
+    """Does this warp beat leave the chapter? True when its floor's warp
+    destination is on none of `chain_maps` -- the maps of this chapter and
+    every predecessor (`reference/chapters.json`, the §4.3 source of truth
+    for membership), i.e. every map this chapter's ROM stages. Such a warp
+    can't be round-tripped: the far side belongs to a chapter not built yet
+    (C6 Task 9's blocker). Raises on a non-warp beat or a floor without
+    exactly one warp assertion."""
+    if beat.template != "warp":
+        raise ValueError(f"is_boundary_warp: beat {beat.name!r} is a {beat.template!r}")
+    dests = {a.param("map_id") for row_id in beat.rows
+             for a in _floor(floors, row_id).assertions if a.kind == "warp"}
+    if len(dests) != 1:
+        raise ValueError(
+            f"is_boundary_warp: beat {beat.name!r} has {len(dests)} warp "
+            f"destinations {sorted(dests)} (expected exactly 1)")
+    return dests.pop() not in chain_maps
+
+
+def route_kwargs(template: str, side: str, *, boundary: bool = False) -> Kwargs:
     """The kwargs a solver pick turns into for `template`. For `warp`: the
     press direction (standing south of the tile, you press UP), a round trip
-    and the reverse press. For every other template: `approach_prefer`.
-    Raises `ValueError` on an unknown side."""
+    and the reverse press -- or, for a `boundary` warp (its destination is
+    a later chapter's map, see `is_boundary_warp`), the press direction and
+    `boundary=True`, with no round trip: the beat stops on `side` and never
+    crosses. For every other template: `approach_prefer`. Raises
+    `ValueError` on an unknown side, or `boundary` on a non-warp."""
+    if boundary and template != "warp":
+        raise ValueError(f"route_kwargs: boundary=True on template {template!r}, not 'warp'")
     if template == "warp":
         press = _WARP_PRESS.get(side)
         if press is None:
@@ -334,6 +360,8 @@ def route_kwargs(template: str, side: str) -> Kwargs:
                 f"-- expected one of {sorted(_WARP_PRESS)}"
             )
         direction, return_direction = press
+        if boundary:
+            return make_kwargs(direction=direction, boundary=True)
         return make_kwargs(
             direction=direction, return_direction=return_direction, round_trip=True)
     return make_kwargs(approach_prefer=side)

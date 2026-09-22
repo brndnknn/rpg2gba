@@ -11,9 +11,8 @@ Output lands in `output/` by ruling (C6 plan B1): C9, not C6, owns putting
 a generated module under `playtest/chapters/` and a route under
 `reference/routes/`.
 
-STATUS: wired (`assignments/C6/09_cli.md`). The boundary-warp decision
-(the task file's "blocker you will hit") is still open; see the
-`BOUNDARY WARP` note in `build_plan`.
+STATUS: done (`assignments/C6/09_cli.md`). A warp that leaves the chapter
+is a boundary beat (`adapt.is_boundary_warp`, `warp_beat(boundary=True)`).
 
 The solver's argument assembly is imported from `routing/__main__.py`'s
 `plan` command rather than copied: the lazy graph/overlay/occupancy views,
@@ -32,7 +31,12 @@ import click
 from rpg2gba.beat_floor.assertion import RowFloor
 from rpg2gba.beat_floor.lookup import floor_for_row
 from rpg2gba.beat_floor.walk import floor_for_chapter
-from rpg2gba.beat_gen.adapt import archetype_kwargs, route_kwargs, warp_candidates
+from rpg2gba.beat_gen.adapt import (
+    archetype_kwargs,
+    is_boundary_warp,
+    route_kwargs,
+    warp_candidates,
+)
 from rpg2gba.beat_gen.emit import emit_module
 from rpg2gba.beat_gen.group import plan_beats
 from rpg2gba.beat_gen.locate import locate_beats, order_beats, route_order
@@ -147,11 +151,12 @@ def _picks_with_fallback(records: Sequence[BeatLocationRecord], picks: Mapping[s
     return out
 
 
-def _apply_route_kwargs(beat: PlannedBeat) -> PlannedBeat:
+def _apply_route_kwargs(beat: PlannedBeat, *, boundary: bool = False) -> PlannedBeat:
     """Turn the `approach_prefer` pick `order_beats` stamped on a beat into
     that template's route kwargs (for a warp: press direction and round
-    trip). A warp without a pick raises: it would reach the emitter with no
-    direction, which `warp_beat` can't walk."""
+    trip, or for a `boundary` warp the stop-on-the-edge form). A warp
+    without a pick raises: it would reach the emitter with no direction,
+    which `warp_beat` can't walk."""
     side = dict(beat.kwargs).get("approach_prefer")
     if side is None:
         if beat.template == "warp":
@@ -159,7 +164,7 @@ def _apply_route_kwargs(beat: PlannedBeat) -> PlannedBeat:
                 f"warp beat {beat.name!r} has no approach side: the solver made no "
                 f"pick and its group has more than one candidate")
         return beat
-    return _merge_kwargs(beat, dict(route_kwargs(beat.template, side)),
+    return _merge_kwargs(beat, dict(route_kwargs(beat.template, side, boundary=boundary)),
                          drop=("approach_prefer",))
 
 
@@ -217,14 +222,18 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR) -> ChapterPlan:
         occupancy=_LazyOccupancy(build_dir), candidates=candidates,
     )
 
-    # 6. Order, then adapt's route half.
-    # BOUNDARY WARP (09_cli.md, "The blocker you will hit"): every warp that
-    # reaches here becomes a round trip, including one whose destination is
-    # the next chapter's unstaged map. Which stage marks a warp as a chapter
-    # boundary, and what its beat does instead, is the open design call.
+    # 6. Order, then adapt's route half. A warp whose destination is on no
+    #    map of this chapter's chain is a chapter boundary (09_cli.md's
+    #    blocker): it stops on the solver's side instead of round-tripping
+    #    into a map this chapter's ROM doesn't build.
+    chain_maps = frozenset(m for c in _chain_to(binding, chapter_id)
+                           for m in binding.chapter(c).maps)
     group_order, picks = route_order(route.nodes)
     beats = order_beats(beats, group_order, _picks_with_fallback(records, picks))
-    beats = tuple(_apply_route_kwargs(b) for b in beats)
+    beats = tuple(
+        _apply_route_kwargs(
+            b, boundary=b.template == "warp" and is_boundary_warp(b, floors, chain_maps))
+        for b in beats)
 
     return ChapterPlan(
         chapter_id=chapter_id,
