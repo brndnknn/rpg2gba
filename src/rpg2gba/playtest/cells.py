@@ -48,7 +48,6 @@ from ..tileset_converter.terrain_tags import DEFAULT_TERRAIN_TAG_MAP, TerrainTag
 from ..traversal.collision import build_tile_grid, load_map_json, load_tileset_arrays
 from ..traversal.direction import Direction
 from ..traversal.graph import MapGraph, build_map_graph
-from ..traversal.reachability import adjacent_approach_cells
 from . import chapter as _chapter
 
 Cell = tuple[int, int]
@@ -234,8 +233,9 @@ def local_id(map_constant: str, event_id: int) -> int:
 def approach_to(map_constant: str, event_id: int, *, prefer: str | None = None) -> Cell:
     """The cell a player stands on to interact with event `event_id`.
 
-    Candidates are `adjacent_approach_cells` around the event's own cell,
-    filtered to `graph.is_walkable`, kept in the deterministic N/S/E/W order.
+    Candidates are `MapGraph.interaction_cells` around the event's own cell:
+    each walkable orthogonal neighbour, or the cell across a counter on that
+    side, kept in the deterministic N/S/E/W order.
     Without `prefer`, the first walkable candidate wins. With `prefer` (one
     of "north"/"south"/"east"/"west"), that specific side is required --
     fails loud if it isn't walkable rather than silently falling back to a
@@ -251,7 +251,10 @@ def approach_to(map_constant: str, event_id: int, *, prefer: str | None = None) 
     event = _event_lookup(uid, event_id, map_constant=map_constant, resolver="approach_to")
     cell = (event["x"], event["y"])
 
-    candidates = [c for c in adjacent_approach_cells(graph, cell) if graph.is_walkable(c)]
+    # Walkable sides, reaching across a counter where there is one
+    # (`MapGraph.interaction_cells`).
+    by_side = dict(graph.interaction_cells(cell))
+    candidates = list(by_side.values())
 
     if prefer is not None:
         direction = _PREFER_TO_DIRECTION.get(prefer)
@@ -260,16 +263,16 @@ def approach_to(map_constant: str, event_id: int, *, prefer: str | None = None) 
                 f"approach_to: {map_constant} event {event_id}: prefer="
                 f"{prefer!r} is not one of {sorted(_PREFER_TO_DIRECTION)}"
             )
-        dx, dy = direction.delta
-        wanted = (cell[0] + dx, cell[1] + dy)
-        if wanted not in candidates:
+        if direction not in by_side:
+            dx, dy = direction.delta
             raise ValueError(
                 f"approach_to: {map_constant} event {event_id} (cell {cell}) "
                 f"cannot be approached from the {prefer} side -- that cell "
-                f"({wanted}) is out of bounds or not walkable; walkable "
+                f"({(cell[0] + dx, cell[1] + dy)}) is out of bounds or not "
+                f"walkable, and no counter reaches across it; walkable "
                 f"candidates are {candidates or 'none'}"
             )
-        return wanted
+        return by_side[direction]
 
     if not candidates:
         raise ValueError(

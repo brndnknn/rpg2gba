@@ -79,11 +79,13 @@ def reachable_sites(
         for tile in [cell] + [(x + dx, y + dy) for dx, dy in _ORTHO]:
             if tile != cell and graph.is_walkable(tile):
                 continue          # a walkable warp tile fires when stood on
+            press = (tile[0] - x, tile[1] - y) if tile != cell else None
             for exit_ in graph.warp_exits.get(tile, ()):
                 if exit_.dest_map not in maps:
                     continue
                 try:
-                    land = landing_cell(graphs[exit_.dest_map], (exit_.dest_x, exit_.dest_y))
+                    land = landing_cell(graphs[exit_.dest_map], (exit_.dest_x, exit_.dest_y),
+                                        facing=exit_.dest_facing, press=press)
                 except RoutePlanningError:
                     continue      # a landing nobody can stand on leads nowhere
                 visit((exit_.dest_map, land))

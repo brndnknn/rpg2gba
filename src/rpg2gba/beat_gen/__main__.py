@@ -143,17 +143,20 @@ def _arrival_cells(world: WorldGraph, graphs: Mapping[int, MapGraph], map_id: in
     """Where a player can arrive on `map_id` in this chapter's ROM: the
     walkable landing cells of warps into it from the chain's maps, plus the
     route entry when it is on this map. Sorted."""
-    cells = {e.dst_cell for e in world.edges_to(map_id)
-             if e.src_map in chain_maps and e.dst_cell is not None}
-    if entry is not None and entry[0] == map_id:
-        cells.add(entry[1])
     landed: set[tuple[int, int]] = set()
-    for c in cells:
+    if entry is not None and entry[0] == map_id:
+        landed.add(entry[1])
+    for e in world.edges_to(map_id):
+        if e.src_map not in chain_maps or e.dst_cell is None:
+            continue
+        facing = next((w.dest_facing for w in graphs[e.src_map].warp_exits.get(e.src_cell, ())
+                       if w.event_id == e.event_id), 0)
         try:
-            landed.add(landing_cell(graphs[map_id], c))   # a door-tile arrival steps off
+            # A door-tile arrival steps off in the arrival facing.
+            landed.add(landing_cell(graphs[map_id], e.dst_cell, facing=facing))
         except RoutePlanningError:
             continue
-    return tuple(sorted(landed))
+    return tuple(sorted(c for c in landed if graphs[map_id].is_walkable(c)))
 
 
 def _cell_fn(warp_rows: frozenset[str], graphs: Mapping[int, MapGraph],
@@ -287,14 +290,25 @@ standing south of it you press UP, and so on. N/S/W/E-side order."""
 
 
 def _route_between(world: WorldGraph, maps: frozenset[int],
-                   reach: frozenset[tuple[int, tuple[int, int]]]):  # noqa: ANN202
+                   reach: frozenset[tuple[int, tuple[int, int]]],
+                   graphs: Mapping[int, MapGraph]):  # noqa: ANN202
     """`continuity.RouteBetween` over this chapter's maps: the fewest warp
     hops from map `a` to map `b`, each crossed from a reachable walkable side
     of its warp tile. Deterministic: edges are tried in sorted order."""
+    def lands_reachably(e) -> bool:  # noqa: ANN001
+        """The arrival's LANDING is reachable (a door arrival's destination
+        cell is the solid door tile; the player stands one step off it)."""
+        facing = next((w.dest_facing for w in graphs[e.src_map].warp_exits.get(e.src_cell, ())
+                       if w.event_id == e.event_id), 0)
+        try:
+            return (e.dst_map, landing_cell(graphs[e.dst_map], e.dst_cell, facing=facing)) in reach
+        except RoutePlanningError:
+            return False
+
     edges = sorted(
         (e for m in sorted(maps) for e in world.edges_from(m)
          if e.kind in ("warp", "seam_warp") and e.dst_map in maps
-         and e.src_cell is not None and (e.dst_map, e.dst_cell) in reach),
+         and e.src_cell is not None and e.dst_cell is not None and lands_reachably(e)),
         key=lambda e: (e.src_map, e.dst_map, e.src_cell, e.dst_cell))
 
     def hop_for(edge) -> tuple[str, int, int, str, str] | None:  # noqa: ANN001
@@ -545,7 +559,15 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR) -> ChapterPlan:
     # 5. Solve, with the same argument assembly as `routing plan`. The
     #    route starts where the predecessor leaves the player (A5), not at
     #    this chapter's first record.
-    _check_trigger_overlay_or_raise(list(all_rows), chapter_id, overlays)
+    # Only rows the plan still walks: a trainer row that went to `later`
+    # (Grott-Hole, map 19) mustn't demand sight tiles on a map not routed.
+    walked = {r for b in beats for r in b.rows}
+    walked |= {parse_row_id(r).owning_page_row_id for r in walked} - {None}
+    walked_pages = {parse_row_id(r).owning_page_row_id for r in walked} - {None}
+    _check_trigger_overlay_or_raise(
+        [r for r in all_rows
+         if r.row_id in walked or parse_row_id(r.row_id).owning_page_row_id in walked_pages],
+        chapter_id, overlays)
     candidates = {
         r.beat_id: tuple(RouteCandidate(x=c.x, y=c.y, side=c.side, resolver=c.resolver)
                          for c in r.approach_candidates)
@@ -579,7 +601,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR) -> ChapterPlan:
         nudge_source={b.name: map_uranium_id(dict(b.kwargs)["from_map_constant"])
                       for b in beats if b.template == "arrival_nudge"},
         route_between=_route_between(
-            world, chain_maps, reachable_sites(entry, graphs, world, chain_maps, occupancy)),
+            world, chain_maps, reachable_sites(entry, graphs, world, chain_maps, occupancy),
+            graphs),
     )
 
     return ChapterPlan(

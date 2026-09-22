@@ -40,9 +40,7 @@ from ..chapter_manifest.dispositions import load_dispositions
 from ..chapter_manifest.schema import ManifestRow
 from ..playtest import chapter as _chapter
 from ..playtest.cells import approach_to, event_cell
-from ..traversal.direction import CARDINALS
 from ..traversal.graph import build_map_graph
-from ..traversal.reachability import adjacent_approach_cells
 
 log = logging.getLogger(__name__)
 
@@ -279,7 +277,7 @@ def _stair_approach(map_id: int, map_constant: str, x: int, y: int,
 def _approach_side_candidates(map_id: int, map_constant: str,
                              event_id: int) -> tuple[ApproachCandidate, ...]:
     """Every walkable side of `event_id`'s own cell, in the same N/S/E/W
-    order `approach_to`/`adjacent_approach_cells` use -- the full candidate
+    order `approach_to`/`MapGraph.interaction_cells` use -- the full candidate
     set `approach_to(map_constant, event_id)` (no `prefer=`) itself picks
     the first of. `resolver` is the exact paste-able `prefer=` call an
     author would write to pin that side.
@@ -287,12 +285,8 @@ def _approach_side_candidates(map_id: int, map_constant: str,
     graph = build_map_graph(map_id)
     cell = event_cell(map_constant, event_id)
     candidates: list[ApproachCandidate] = []
-    for cand_cell in adjacent_approach_cells(graph, cell):
-        if not graph.is_walkable(cand_cell):
-            continue
-        dx = cand_cell[0] - cell[0]
-        dy = cand_cell[1] - cell[1]
-        direction = next(d for d in CARDINALS if d.delta == (dx, dy))
+    # Same sides `approach_to` offers, counter reach-over included.
+    for direction, cand_cell in graph.interaction_cells(cell):
         candidates.append(ApproachCandidate(
             x=cand_cell[0], y=cand_cell[1], side=direction.value,
             resolver=(f'approach_to({map_constant}, ev{event_id}, '

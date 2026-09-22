@@ -141,8 +141,30 @@ class MapGraph:
     warp_exits: dict[Cell, list[WarpExit]] = field(default_factory=dict)
     elevation_modelled: bool = False
     elevation_note: str = _ELEVATION_NOTE
+    # Counter tiles (`collision.build_counter_grid`): not stood on, but
+    # interacted ACROSS -- see `interaction_cells`.
+    counters: frozenset[Cell] = frozenset()
 
     # -- basic queries --------------------------------------------------
+
+    def interaction_cells(self, cell: Cell) -> list[tuple[Direction, Cell]]:
+        """Where the player stands to use an event at `cell`, per side, in
+        N/S/E/W order: the orthogonal neighbour if walkable, or -- when that
+        neighbour is a counter -- the cell one further out, since the engine
+        reaches across a counter (`Game_Player#check_event_trigger_there`;
+        pokeemerald's MB_COUNTER). Kevlar's Center nurse stands behind one.
+        Used where the player stands; `reachability.adjacent_approach_cells`
+        (the manifest's `requires` model) is deliberately unchanged."""
+        out: list[tuple[Direction, Cell]] = []
+        x, y = cell
+        for d in CARDINALS:
+            dx, dy = d.delta
+            near = (x + dx, y + dy)
+            if self.is_walkable(near):
+                out.append((d, near))
+            elif near in self.counters and self.is_walkable((x + 2 * dx, y + 2 * dy)):
+                out.append((d, (x + 2 * dx, y + 2 * dy)))
+        return out
 
     def in_bounds(self, cell: Cell) -> bool:
         x, y = cell
@@ -366,4 +388,6 @@ def build_map_graph(
         stair_sides=stair_sides,
         ledge_directions=ledge_directions,
         warp_exits=warp_exits,
+        counters=frozenset(c for c, is_counter in
+                           collision.build_counter_grid(grid, arrays).items() if is_counter),
     )

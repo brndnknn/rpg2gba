@@ -235,8 +235,17 @@ def _trainer_kwargs(
     map_constant_fn: MapConstantFn, rows: Sequence[ManifestRow] = (),
 ) -> dict:
     battle_row_id = _require_role_row(match, "battle")
-    floor = _floor(floors, battle_row_id)
-    battle = _one_assertion(floor, "battle", row_id=battle_row_id)
+    _floor(floors, battle_row_id)
+    # The battle can sit in an arm of the page (Kevlar's Pokemon Center
+    # trainer fights only on "Wanna fight? -> Yes": map068/ev014/p0/b0).
+    battles = [a for rid, f in sorted(floors.items())
+               if rid == battle_row_id or rid.startswith(f"{battle_row_id}/")
+               for a in f.assertions if a.kind == "battle"]
+    if len(battles) != 1:
+        raise ValueError(
+            f"archetype_kwargs: {battle_row_id}: page and arms carry {len(battles)} "
+            "'battle' assertions (expected exactly 1)")
+    battle = battles[0]
     if battle.param("kind") != "trainer":
         raise ValueError(
             f"archetype_kwargs: {battle_row_id}: floor battle kind is "

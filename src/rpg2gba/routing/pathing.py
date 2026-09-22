@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import logging
 from collections import deque
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from rpg2gba.traversal.graph import Cell, MapGraph
@@ -127,21 +127,42 @@ def _crossings_on_path(
     return tuple(crossings)
 
 
-def landing_cell(graph: MapGraph, cell: Cell) -> Cell:
+# RMXP facing codes (a warp's destination facing) -> step (dx, dy).
+_RMXP_FACING_STEP = {2: (0, 1), 4: (-1, 0), 6: (1, 0), 8: (0, -1)}
+
+
+def landing_cell(graph: MapGraph, cell: Cell, *, facing: int = 0,
+                 press: tuple[int, int] | None = None) -> Cell:
     """Where a warp arrival leaves the player standing. Usually the warp's
-    destination cell itself; when that is a SOLID door tile (Route 1's Old
-    Rod house exit lands on (39,18)), the engine walks the player off it, so
-    the landing is its single walkable orthogonal neighbour. Anything else
-    -- no open side, or several -- raises `RoutePlanningError`."""
+    destination cell itself. When that is a SOLID door tile, the engine walks
+    the player one step off it in the arrival facing: the warp's own
+    destination `facing` (RMXP 2/4/6/8) when it has one, else the direction
+    the player was pressing (`press`, a unit step -- C5b's retain-facing
+    rule). Without either, the tile's single walkable orthogonal neighbour
+    (Route 1's Old Rod house exit, (39,18)). No open landing, or several and
+    nothing to choose by, raises `RoutePlanningError`."""
     if graph.is_walkable(cell):
         return cell
     x, y = cell
+    step = _RMXP_FACING_STEP.get(facing) or press
+    if step is not None and graph.is_walkable((x + step[0], y + step[1])):
+        return (x + step[0], y + step[1])
     sides = [c for c in ((x, y - 1), (x, y + 1), (x + 1, y), (x - 1, y)) if graph.is_walkable(c)]
     if len(sides) != 1:
         raise RoutePlanningError(
             f"map {graph.map_id}: arrival cell {cell} is solid with {len(sides)} open "
             f"sides {sides} -- cannot tell where the player lands")
     return sides[0]
+
+
+def _hop_landing(graphs: Mapping[int, MapGraph], hop: WorldEdge, path: Sequence[Cell]) -> Cell:
+    """`landing_cell` for one warp hop, with the facing read off the source
+    map's `WarpExit` and the press off the leg's last step."""
+    facing = next((e.dest_facing for e in graphs[hop.src_map].warp_exits.get(hop.src_cell, ())
+                   if e.event_id == hop.event_id), 0)
+    press = ((path[-1][0] - path[-2][0], path[-1][1] - path[-2][1])
+             if len(path) >= 2 else None)
+    return landing_cell(graphs[hop.dst_map], hop.dst_cell, facing=facing, press=press)
 
 
 def _path_into_solid_warp(
@@ -390,7 +411,104 @@ def plan_segment(
     `connections.json` lazily the first time it's needed; pass it explicitly
     to inject test data or a scratch-build copy. Its `exit_warp.event_id` is
     `None` -- a connection crossing has no originating RMXP event.
+
+    When that fails -- a same-map goal in another walkable component (Kevlar's
+    building strip, map 73: four shops, four components, one door each), or a
+    shortest hop sequence whose last door lands in the wrong component -- a
+    bounded search over warp hop sequences (`_detour_segment`) is tried
+    before giving up; it re-raises the original error when it finds nothing.
     """
+    try:
+        return _direct_segment(
+            start_map, start_cell, goal_map, goal_cell, graphs=graphs, overlays=overlays,
+            destination_scripts=destination_scripts, world=world, connections=connections,
+            occupancy=occupancy)
+    except RoutePlanningError:
+        if world is None:
+            raise
+        detour = _detour_segment(
+            start_map, start_cell, goal_map, goal_cell, graphs=graphs, overlays=overlays,
+            destination_scripts=destination_scripts, world=world, occupancy=occupancy)
+        if detour is None:
+            raise
+        return detour
+
+
+_DETOUR_MAX_HOPS = 2
+
+
+def _detour_segment(
+    start_map: int, start_cell: Cell, goal_map: int, goal_cell: Cell, *,
+    graphs: Mapping[int, MapGraph], overlays: Mapping[int, TriggerOverlay],
+    destination_scripts: frozenset[str], world: WorldGraph,
+    occupancy: Mapping[int, MapOccupancy] | None,
+) -> SegmentResult | None:
+    """The cheapest route through at most `_DETOUR_MAX_HOPS` warp/seam-warp
+    hops, each leg walkable on its own map, found breadth-first (fewest hops
+    first, then fewest tiles). None when there is none. Deterministic: edges
+    are tried in sorted order.
+
+    Bounded to the goal's neighbourhood: every hop lands on the goal map or
+    on a map with a warp into it (out one door, in through another). An
+    unbounded search fans out over the whole world graph on every failed
+    segment the solver's pairwise sweep tries, building graphs for maps no
+    chapter route touches."""
+    near_goal = {e.src_map for e in world.edges_to(goal_map)} | {goal_map}
+    def leg_on(map_id: int, a: Cell, b: Cell):  # noqa: ANN202
+        return _path_on_map(
+            map_id, a, b, graph=graphs[map_id], overlay=overlays[map_id],
+            destination_scripts=destination_scripts,
+            occupancy=occupancy.get(map_id) if occupancy is not None else None)
+
+    frontier: list[tuple[int, Cell, tuple[RouteLeg, ...], tuple[TriggerCrossing, ...]]] = [
+        (start_map, start_cell, (), ())]
+    seen = {(start_map, start_cell)}
+    for _ in range(_DETOUR_MAX_HOPS):
+        found: list[SegmentResult] = []
+        nxt = []
+        for map_id, cell, legs, crossings in frontier:
+            edges = sorted(
+                (e for e in world.edges_from(map_id)
+                 if e.kind in ("warp", "seam_warp") and e.src_cell is not None
+                 and e.dst_cell is not None and e.dst_map in near_goal),
+                key=lambda e: (e.dst_map, e.src_cell, e.dst_cell))
+            for e in edges:
+                try:
+                    path, cross = leg_on(map_id, cell, e.src_cell)
+                    land = _hop_landing(graphs, e, path)
+                except (RoutePlanningError, ValueError):
+                    continue
+                if (e.dst_map, land) in seen:
+                    continue
+                seen.add((e.dst_map, land))
+                leg = RouteLeg(map_id=map_id, tiles=tuple(path), exit_warp=RouteWarp(
+                    event_id=e.event_id, dest_map=e.dst_map, dest_cell=e.dst_cell))
+                state = (e.dst_map, land, legs + (leg,), crossings + tuple(cross))
+                nxt.append(state)
+                if e.dst_map == goal_map:
+                    try:
+                        tail, tail_cross = leg_on(goal_map, land, goal_cell)
+                    except (RoutePlanningError, ValueError):
+                        continue
+                    all_legs = state[2] + (RouteLeg(map_id=goal_map, tiles=tuple(tail),
+                                                    exit_warp=None),)
+                    found.append(SegmentResult(legs=all_legs, tile_count=_tile_count(all_legs),
+                                               crossings=state[3] + tuple(tail_cross)))
+        if found:
+            return min(found, key=lambda r: r.tile_count)
+        frontier = nxt
+    return None
+
+
+def _direct_segment(
+    start_map: int, start_cell: Cell, goal_map: int, goal_cell: Cell, *,
+    graphs: Mapping[int, MapGraph], overlays: Mapping[int, TriggerOverlay],
+    destination_scripts: frozenset[str], world: WorldGraph | None,
+    connections: tuple[MapConnection, ...] | None,
+    occupancy: Mapping[int, MapOccupancy] | None,
+) -> SegmentResult:
+    """`plan_segment`'s original strategy: on-map BFS for a same-map goal,
+    the world graph's shortest hop sequence otherwise."""
     if start_map == goal_map:
         graph = graphs[start_map]
         overlay = overlays[start_map]
@@ -457,7 +575,7 @@ def plan_segment(
         all_crossings.extend(crossings)
 
         current_map = hop.dst_map
-        current_cell = landing_cell(graphs[current_map], hop.dst_cell)
+        current_cell = _hop_landing(graphs, hop, path)
 
     graph = graphs[current_map]
     overlay = overlays[current_map]

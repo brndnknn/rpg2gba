@@ -89,6 +89,9 @@ def facing_toward(
     guessing a direction here would bury it.
     """
     delta = (target[0] - approach[0], target[1] - approach[1])
+    if delta[0] == 0 and abs(delta[1]) == 2 or delta[1] == 0 and abs(delta[0]) == 2:
+        # Across a counter (`MapGraph.interaction_cells`): straight, two out.
+        delta = (delta[0] // 2, delta[1] // 2)
     facing = _DIR_TOWARD.get(delta)
     if facing is None:
         raise ValueError(
