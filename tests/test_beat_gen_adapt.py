@@ -19,8 +19,6 @@ from rpg2gba.beat_gen.emit import TEMPLATE_CALLS
 from rpg2gba.beat_gen.plan import PlannedBeat
 from rpg2gba.traversal.graph import MapGraph
 
-pytestmark = pytest.mark.skip(reason="C6 Task 5 not started -- remove this line to start")
-
 CAVE_1F, CAVE_2F = "MAP_PASSAGE_CAVE_1F", "MAP_PASSAGE_CAVE_2F"
 MAP_CONSTANTS = {35: "MAP_ROUTE_02", 36: CAVE_1F, 37: CAVE_2F, 40: "MAP_FORTY"}
 
