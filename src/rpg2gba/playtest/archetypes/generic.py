@@ -322,12 +322,15 @@ def generic_beat(
     group: str | None = None,
     approach_prefer: str | None = None,
     skip_claimed: bool = False,
+    manifest_chapter_id: str | None = None,
     floor_lookup: FloorLookup | None = None,
 ) -> None:
     """Register one generic beat claiming `rows` (a page row and/or its
     arms). With `skip_claimed=True`, rows some earlier beat in `builder`
     already claims are dropped first, and if none remain nothing is
-    registered. Fails loud (`ValueError`) on a refused floor."""
+    registered. Fails loud (`ValueError`) on a refused floor.
+    `manifest_chapter_id=` names a predecessor whose manifest carries the
+    rows (a successor boundary claim, §10 R2), as `find_match` takes it."""
     resolved_lookup: FloorLookup = (
         floor_lookup if floor_lookup is not None else _default_floor_for_row)
     resolved_rows = tuple(rows)
@@ -360,13 +363,14 @@ def generic_beat(
             "page or branch row -- generic_beat only claims page/branch "
             "rows; use stair_beat/seam_beat for terrain/seam rows"
         )
-    chapter_rows = load_chapter_rows(chapter_id)
+    manifest_id = manifest_chapter_id if manifest_chapter_id is not None else chapter_id
+    chapter_rows = load_chapter_rows(manifest_id)
     row_by_id = {r.row_id: r for r in chapter_rows}
     page_row = row_by_id.get(page_row_id)
     if page_row is None:
         raise ValueError(
             f"generic_beat: {beat_name}: page row {page_row_id!r} (owning "
-            f"{resolved_rows[0]!r}) is not in chapter {chapter_id!r}'s manifest"
+            f"{resolved_rows[0]!r}) is not in chapter {manifest_id!r}'s manifest"
         )
     cell = cell_for_row(page_row)
 

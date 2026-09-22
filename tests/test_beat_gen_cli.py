@@ -48,9 +48,34 @@ def test_ch05_is_green(plan):
 
 def test_ch05_plan_shape(plan):
     assert plan.chapter_id == "CH05" and plan.predecessor == "CH04"
-    assert len(plan.beats) == 20
+    # 20 own beats + 3 successor claims on CH04's cave mouth (§10 R2/R3,
+    # C6 part two): the warp, its arrival nudge and the nudge's arms.
+    assert len(plan.beats) == 23
+    inbound = [b for b in plan.beats if dict(b.kwargs).get("manifest_chapter_id") == "CH04"]
+    assert [b.name for b in inbound] == [
+        "m035e001_warp", "m035e001_arrival_nudge", "m035e001_arrival_nudge_arms"]
     assert {e.status for e in plan.elsewhere} == {"blocked"}   # the two surf items
     assert plan.route is not None
+
+
+def test_every_beat_starts_on_the_map_the_player_is_on(plan):
+    """The continuity pass's contract, re-checked from the outside: walking
+    the warps' legs from the route's entry, every non-warp beat is on the
+    player's current map."""
+    from rpg2gba.beat_gen.__main__ import BUILD_DIR, _warp_dest
+    from rpg2gba.beat_floor.walk import floor_for_chapter
+
+    floors = {**floor_for_chapter("CH04", build_dir=BUILD_DIR),
+              **floor_for_chapter("CH05", build_dir=BUILD_DIR)}
+    cur = plan.route.nodes[0].map_id
+    for beat in plan.beats:
+        kw = dict(beat.kwargs)
+        if beat.template == "warp" and not kw.get("boundary"):
+            sides = {"origin": beat.map_id, "dest": _warp_dest(beat, floors)}
+            assert cur == sides[kw["start_side"]], beat.name
+            cur = sides[kw["end_side"]]
+        else:
+            assert cur == beat.map_id, beat.name
 
 
 def test_groups_are_contiguous_in_route_order(plan):

@@ -82,11 +82,13 @@ class Elsewhere:
     """A manifest row this chapter does not walk: the story model places it
     in another chapter (`later`) or in none (`unreachable`), or it sits
     behind a field-move obstacle the chapter can't pass (`blocked`: the row
-    `requires` a capability and is not itself the obstacle)."""
+    `requires` a capability and is not itself the obstacle), or it belongs
+    to a boundary event the successor opens (`boundary`, §10 R2/R3; added
+    in C6 part two, `beat_gen/boundary.py`)."""
 
     row_id: str
-    status: Literal["later", "unreachable", "blocked"]
-    owner: str | None = None             # the owning chapter for `later`, else None
+    status: Literal["later", "unreachable", "blocked", "boundary"]
+    owner: str | None = None             # the owning chapter for `later`/`boundary`, else None
     requires: tuple[str, ...] = ()       # the capabilities, for `blocked`
 
 

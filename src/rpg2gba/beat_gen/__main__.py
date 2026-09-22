@@ -37,6 +37,8 @@ from rpg2gba.beat_gen.adapt import (
     route_kwargs,
     warp_candidates,
 )
+from rpg2gba.beat_gen.boundary import inbound_rows, split_outbound
+from rpg2gba.beat_gen.continuity import thread_maps
 from rpg2gba.beat_gen.emit import emit_module
 from rpg2gba.beat_gen.group import plan_beats
 from rpg2gba.beat_gen.locate import locate_beats, order_beats, route_order
@@ -44,6 +46,7 @@ from rpg2gba.beat_gen.plan import (
     ARCHETYPE_TEMPLATES,
     ChapterPlan,
     PlannedBeat,
+    Selection,
     make_kwargs,
 )
 from rpg2gba.beat_gen.review import render_review
@@ -52,7 +55,8 @@ from rpg2gba.beat_gen.select import select_rows
 from rpg2gba.chapter_atlas.binding import ChapterBinding, load_binding
 from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch, classify_manifest
 from rpg2gba.chapter_manifest.schema import ManifestRow, parse_row_id
-from rpg2gba.playtest.archetypes import load_chapter_rows
+from rpg2gba.playtest.archetypes import load_chapter_rows, map_uranium_id
+from rpg2gba.playtest.chapter import load_chapter
 from rpg2gba.routing.__main__ import (
     DEFAULT_CHAPTERS_PATH,
     _build_graphs_and_overlays,
@@ -168,23 +172,74 @@ def _apply_route_kwargs(beat: PlannedBeat, *, boundary: bool = False) -> Planned
                          drop=("approach_prefer",))
 
 
+def _chain_maps(binding: ChapterBinding, chapter_id: str) -> frozenset[int]:
+    """Every map of `chapter_id` and its predecessors: what its ROM stages."""
+    return frozenset(m for c in _chain_to(binding, chapter_id) for m in binding.chapter(c).maps)
+
+
+def _predecessor_end(predecessor: str) -> tuple[int, tuple[int, int]]:
+    """Where the predecessor's walk leaves the player: its own last beat's
+    last declared location (A5: "the chapter start is the previous
+    chapter's end"). Read from its registered module, which C9 makes the
+    generated one."""
+    chapter = load_chapter(predecessor)
+    own = [b for b in chapter.beats if ":" not in b.name and b.locations]
+    if not own:
+        raise ValueError(f"{predecessor}: no own beat declares a location to start from")
+    loc = own[-1].locations[-1]
+    return map_uranium_id(loc.map_constant), (loc.x, loc.y)
+
+
+def _warp_dest(beat: PlannedBeat, floors: Mapping[str, RowFloor]) -> int:
+    dests = {a.param("map_id") for r in beat.rows for a in floors[r].assertions
+             if a.kind == "warp"}
+    if len(dests) != 1:
+        raise ValueError(f"warp beat {beat.name!r}: {len(dests)} destinations {sorted(dests)}")
+    return dests.pop()
+
+
 def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR) -> ChapterPlan:
     """Run stages 1-4 for one chapter and return the fully decided plan."""
     # 1. Load.
     binding = load_binding(DEFAULT_CHAPTERS_PATH)
     predecessor = binding.chapter(chapter_id).predecessor
+    successor = binding.successor(chapter_id)
     rows = load_chapter_rows(chapter_id)
-    rows_by_id = {r.row_id: r for r in rows}
     stories = build_chapter_stories(_chain_to(binding, chapter_id), build_dir=build_dir,
                                     chapters_path=DEFAULT_CHAPTERS_PATH)
     story = stories[chapter_id]
     verdicts = {v.row_id: v for v in story.rows}
     floors: dict[str, RowFloor] = floor_for_chapter(chapter_id, build_dir=build_dir)
-    matches = classify_manifest(rows)
+    chain_maps = _chain_maps(binding, chapter_id)
 
-    # 2. Select and group.
-    selection = select_rows(rows, verdicts, floors)
+    # 2. Select, hand boundary events to the successor, and claim the
+    #    predecessor's crossings into this chapter (§10 R2/R3,
+    #    `beat_gen/boundary.py`). Inbound beats search the predecessor's
+    #    manifest (`manifest_chapter_id=`).
+    selection = split_outbound(select_rows(rows, verdicts, floors), floors, chain_maps,
+                               successor.id if successor is not None else None)
+    inbound: tuple[ManifestRow, ...] = ()
+    if predecessor is not None:
+        pred_rows = load_chapter_rows(predecessor)
+        pred_floors = floor_for_chapter(predecessor, build_dir=build_dir)
+        inbound = inbound_rows(pred_rows, pred_floors,
+                               frozenset(binding.chapter(chapter_id).maps),
+                               _chain_maps(binding, predecessor))
+        inbound_sel = select_rows(inbound, {v.row_id: v for v in stories[predecessor].rows},
+                                  pred_floors)
+        selection = Selection(owned=inbound_sel.owned + selection.owned,
+                              refusals=inbound_sel.refusals + selection.refusals,
+                              elsewhere=inbound_sel.elsewhere + selection.elsewhere)
+        floors.update({r.row_id: pred_floors[r.row_id] for r in inbound})
+    all_rows = tuple(inbound) + tuple(rows)
+    rows_by_id = {r.row_id: r for r in all_rows}
+    matches = classify_manifest(inbound) + classify_manifest(rows)
     beats = plan_beats(selection.owned, matches, floors)
+    inbound_ids = frozenset(r.row_id for r in inbound)
+    beats = tuple(
+        _merge_kwargs(b, {"manifest_chapter_id": predecessor})
+        if inbound_ids and set(b.rows) <= inbound_ids else b
+        for b in beats)
 
     # 3. Adapt, source half.
     beats = tuple(
@@ -208,8 +263,10 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR) -> ChapterPlan:
     located = {r.beat_id for r in records}
     beats = tuple(b for b in beats if b.group in located)
 
-    # 5. Solve, with the same argument assembly as `routing plan`.
-    _check_trigger_overlay_or_raise(list(rows), chapter_id, overlays)
+    # 5. Solve, with the same argument assembly as `routing plan`. The
+    #    route starts where the predecessor leaves the player (A5), not at
+    #    this chapter's first record.
+    _check_trigger_overlay_or_raise(list(all_rows), chapter_id, overlays)
     candidates = {
         r.beat_id: tuple(RouteCandidate(x=c.x, y=c.y, side=c.side, resolver=c.resolver)
                          for c in r.approach_candidates)
@@ -217,23 +274,31 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR) -> ChapterPlan:
     }
     route = solve_route(
         chapter_from_locations(chapter_id, records), chapter_id,
-        manifest_rows=rows, graphs=graphs, overlays=overlays,
+        manifest_rows=all_rows, graphs=graphs, overlays=overlays,
         world=_build_world(build_dir), map_ids=_load_map_ids(build_dir),
         occupancy=_LazyOccupancy(build_dir), candidates=candidates,
+        entry=_predecessor_end(predecessor) if predecessor is not None else None,
     )
 
     # 6. Order, then adapt's route half. A warp whose destination is on no
     #    map of this chapter's chain is a chapter boundary (09_cli.md's
     #    blocker): it stops on the solver's side instead of round-tripping
     #    into a map this chapter's ROM doesn't build.
-    chain_maps = frozenset(m for c in _chain_to(binding, chapter_id)
-                           for m in binding.chapter(c).maps)
     group_order, picks = route_order(route.nodes)
     beats = order_beats(beats, group_order, _picks_with_fallback(records, picks))
     beats = tuple(
         _apply_route_kwargs(
             b, boundary=b.template == "warp" and is_boundary_warp(b, floors, chain_maps))
         for b in beats)
+
+    # 7. Map continuity (`beat_gen/continuity.py`): each warp's start and
+    #    end side follow from where the player is and where the next beat is.
+    beats = thread_maps(
+        beats, start_map=route.nodes[0].map_id,
+        warp_dest={b.name: _warp_dest(b, floors) for b in beats if b.template == "warp"},
+        nudge_source={b.name: map_uranium_id(dict(b.kwargs)["from_map_constant"])
+                      for b in beats if b.template == "arrival_nudge"},
+    )
 
     return ChapterPlan(
         chapter_id=chapter_id,

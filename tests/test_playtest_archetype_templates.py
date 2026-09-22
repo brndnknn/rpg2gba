@@ -1053,3 +1053,116 @@ def test_boundary_warp_rejects_every_mode_that_would_cross(
 ) -> None:
     with pytest.raises(ValueError, match="boundary=True never crosses"):
         _boundary_warp(_builder(), ch05_rows, **extra)
+
+
+# -- warp_beat(end_side=): the shortest proof-both-ways leg sequence ------
+
+
+def test_legs_covers_all_eight_start_round_trip_end_side_combinations() -> None:
+    from rpg2gba.playtest.archetypes.warp import _legs
+
+    # Legacy four (round_trip/start_side, no end_side):
+    assert _legs("origin", False, None) == ("F",)
+    assert _legs("origin", True, None) == ("F", "B", "F")
+    assert _legs("dest", False, None) == ("B", "F")
+    assert _legs("dest", True, None) == ("B", "F", "B")
+
+    # New four (end_side given, round_trip always False):
+    assert _legs("origin", False, "origin") == ("F", "B")
+    assert _legs("origin", False, "dest") == ("F", "B", "F")
+    assert _legs("dest", False, "dest") == ("B", "F")
+    assert _legs("dest", False, "origin") == ("B", "F", "B")
+
+
+def test_warp_beat_end_side_origin_registers_and_walks_forward_then_back(
+    ch05_rows: tuple[ManifestRow, ...], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The new shape: starts and ends on the origin, still proving the
+    warp fires both ways -- what a beat needs when the next beat is back
+    on the warp's own map (e.g. an arrival nudge observed after return)."""
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        return_direction="UP", end_side="origin",
+    )
+    beat = b.build().beats[0]
+    assert beat.rows == ("map036/ev001/p0",)
+    assert beat.archetype == "warp"
+    assert "(ends on the origin)" in beat.description
+    assert "(round trip)" not in beat.description
+
+    legs: list[tuple[str, str]] = []
+
+    def _fake_cross_threshold(emu, name, approach, direction, dest_map):
+        legs.append((direction, dest_map))
+
+    def _noop(*args, **kwargs):
+        return None
+
+    from rpg2gba.playtest import assertions as real_assertions
+
+    monkeypatch.setattr(real_assertions, "cross_threshold", _fake_cross_threshold)
+    monkeypatch.setattr(real_assertions, "require_map", _noop)
+    monkeypatch.setattr(real_assertions, "assert_near", _noop)
+    monkeypatch.setattr(real_assertions, "assert_position_exact", _noop)
+
+    class _SettleEmu:
+        def settle_field(self, **kwargs) -> int:
+            return 0
+
+    beat.run(_SettleEmu())
+
+    assert legs == [
+        ("DOWN", "MAP_ROUTE_02"),          # the CLAIMED crossing
+        ("UP", "MAP_PASSAGE_CAVE_1F"),     # the DERIVED reciprocal, ending on origin
+    ]
+
+
+def test_warp_beat_end_side_with_round_trip_fails_loud(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    with pytest.raises(ValueError, match="both describe where the beat ends"):
+        warp_beat(
+            _builder(), chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
+            mechanism="threshold", direction="DOWN", beat_name="W1",
+            manifest_rows=ch05_rows, round_trip=True, return_direction="UP",
+            end_side="origin",
+        )
+
+
+def test_warp_beat_end_side_with_boundary_fails_loud(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    with pytest.raises(ValueError, match="boundary=True never crosses"):
+        _boundary_warp(_builder(), ch05_rows, end_side="origin")
+
+
+def test_warp_beat_end_side_requires_return_direction_for_threshold(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    with pytest.raises(ValueError, match="requires return_direction="):
+        warp_beat(
+            _builder(), chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
+            mechanism="threshold", direction="DOWN", beat_name="W1",
+            manifest_rows=ch05_rows, end_side="origin",
+        )
+
+
+def test_warp_beat_end_side_with_return_direction_does_not_raise_the_without_round_trip_error(
+    ch05_rows: tuple[ManifestRow, ...],
+) -> None:
+    """`return_direction=` is load-bearing once `end_side=` crosses the
+    reciprocal -- it must not trip the "no effect on a lone forward
+    crossing" guard."""
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        return_direction="UP", end_side="dest",
+    )
+    assert [beat.name for beat in b.build().beats] == ["W1"]

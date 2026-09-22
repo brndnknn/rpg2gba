@@ -135,6 +135,31 @@ def _report_reciprocal_manifest_row(
                 )
 
 
+def _legs(
+    start_side: Literal["origin", "dest"],
+    round_trip: bool,
+    end_side: "Literal['origin', 'dest'] | None",
+) -> tuple[str, ...]:
+    """The ordered leg sequence ("F" = `_forward`, "B" = `_back`) for one
+    `warp_beat` call. See `warp_beat`'s docstring for the full table; this
+    is its literal implementation, kept as a standalone function so the
+    eight combinations can be tested directly without registering a beat.
+
+    When `end_side` is given, the legs are the shortest sequence (at least
+    two, so both directions are always proven) that starts on `start_side`
+    and ends on `end_side` -- which is exactly the legacy `round_trip`/
+    `start_side` shapes for three of the four combos, and new (origin ->
+    origin, "F", "B") for the fourth.
+    """
+    if end_side is not None:
+        if start_side == "origin":
+            return ("F", "B") if end_side == "origin" else ("F", "B", "F")
+        return ("B", "F") if end_side == "dest" else ("B", "F", "B")
+    if start_side == "origin":
+        return ("F", "B", "F") if round_trip else ("F",)
+    return ("B", "F", "B") if round_trip else ("B", "F")
+
+
 def warp_beat(
     builder: ChapterBuilder,
     *,
@@ -154,6 +179,7 @@ def warp_beat(
     round_trip: bool = False,
     return_direction: str | None = None,
     start_side: Literal["origin", "dest"] = "origin",
+    end_side: "Literal['origin', 'dest'] | None" = None,
     boundary: bool = False,
     manifest_rows: "tuple[ManifestRow, ...] | None" = None,
     manifest_dir=None,
@@ -227,6 +253,31 @@ def warp_beat(
     is rejected when neither mode is on, since it would otherwise silently
     do nothing.
 
+    `end_side=` names which map the beat must END on, as an alternative to
+    `round_trip`/`start_side` choosing it implicitly. When given, the legs
+    are the shortest sequence (at least two, so both directions are always
+    proven) that starts on `start_side` and ends on `end_side`:
+
+    | start_side | end_side | legs      |
+    |---|---|---|
+    | origin     | origin   | F, B      |
+    | origin     | dest     | F, B, F   |
+    | dest       | dest     | B, F      |
+    | dest       | origin   | B, F, B   |
+
+    (F = the claimed warp, origin -> dest; B = the derived reciprocal,
+    dest -> origin.) Three of these are the legacy `round_trip`/
+    `start_side` shapes under a new name; origin -> origin (F, B) is new --
+    it is what a beat needs when the NEXT beat is back on the warp's own
+    map (for example an arrival nudge observed after returning), which
+    neither `round_trip=True` (ends on the far side, three legs) nor the
+    plain `round_trip=False` default (also ends on the far side, one leg)
+    can produce. `end_side=` always crosses the reciprocal, so it implies
+    `return_direction=` whenever `mechanism` needs one, the same as
+    `round_trip`/`start_side="dest"` do; it is rejected together with
+    `round_trip=True` (two ways to say the same thing) and with
+    `boundary=True` (which never crosses at all).
+
     `manifest_chapter_id=`, if given, is a predecessor chapter whose
     manifest actually carries this row (`find_match`'s own docstring --
     REDERIVATION_PLAN.md §10 R2): a warp page sitting on a map the
@@ -249,11 +300,11 @@ def warp_beat(
     """
     resolved_group = group if group is not None else beat_name
     if boundary and (round_trip or start_side != "origin" or return_direction is not None
-                     or assert_facing or assert_bgm):
+                     or assert_facing or assert_bgm or end_side is not None):
         raise ValueError(
             "warp_beat: boundary=True never crosses the warp, so round_trip=, "
-            "start_side='dest', return_direction=, assert_facing= and "
-            "assert_bgm= are all meaningless with it"
+            "start_side='dest', return_direction=, assert_facing=, "
+            "assert_bgm= and end_side= are all meaningless with it"
         )
     if boundary and mechanism == "door":
         raise ValueError(
@@ -274,6 +325,15 @@ def warp_beat(
         raise ValueError(
             f"warp_beat: start_side={start_side!r} is not 'origin' or 'dest'"
         )
+    if end_side not in ("origin", "dest", None):
+        raise ValueError(
+            f"warp_beat: end_side={end_side!r} is not 'origin', 'dest', or None"
+        )
+    if end_side is not None and round_trip:
+        raise ValueError(
+            "warp_beat: end_side= and round_trip=True both describe where "
+            "the beat ends -- give only one"
+        )
     if assert_bgm and dest_engine_map_dir is None:
         raise ValueError(
             "warp_beat: assert_bgm=True requires dest_engine_map_dir= "
@@ -283,12 +343,12 @@ def warp_beat(
     # after the claimed crossing, `start_side="dest"` adds it before. Either
     # one means `return_direction` is load-bearing; neither means it is dead
     # weight and saying it is a mistake worth failing on.
-    crosses_reciprocal = round_trip or start_side == "dest"
+    crosses_reciprocal = round_trip or start_side == "dest" or end_side is not None
     if return_direction is not None and not crosses_reciprocal:
         raise ValueError(
-            "warp_beat: return_direction= was given without round_trip=True "
-            "or start_side='dest' -- it has no effect on a lone forward "
-            "crossing"
+            "warp_beat: return_direction= was given without round_trip=True, "
+            "start_side='dest', or end_side= -- it has no effect on a lone "
+            "forward crossing"
         )
     if crosses_reciprocal and mechanism in ("threshold", "arrow") and return_direction is None:
         raise ValueError(
@@ -525,33 +585,26 @@ def warp_beat(
             f"via {mechanism} (manifest {row_id})"
             + (" (round trip)" if round_trip else "")
             + (" (entered from the far side)" if start_side == "dest" else "")
+            + (" (ends on the origin)" if end_side == "origin" else "")
+            + (" (ends on the far side)" if end_side == "dest" else "")
         ),
         map_constant=map_constant, at=crossing,
         group=resolved_group, archetype="warp", rows=claimed_rows,
         assertions=declared,
     )
     def run(emu: Emulator) -> None:
-        # The operator's round-trip rule: start on the map you are standing
-        # on, cross to the other one, come back, then cross again so the
-        # beat ENDS on the far side. Three crossings is the fewest that
-        # proves a warp works in BOTH directions and still leaves the
-        # player where the next beat needs them; two would prove both
-        # directions but end where it started.
-        #
-        # `start_side` only chooses which leg is first, because which side
-        # the player is on is a fact about the chapter's approach, not
-        # about the warp. The claimed event is crossed either way -- first
-        # leg when starting on its own map, middle leg when starting on the
-        # far side.
-        if start_side == "origin":
-            _forward(emu, check_arrival_details=True)
-            if round_trip:
-                _back(emu)
-                _forward(emu)
-        else:
-            _back(emu)
-            _forward(emu, check_arrival_details=True)
-            if round_trip:
+        # The leg sequence is entirely `_legs`'s call (see its docstring
+        # and warp_beat's own table for `end_side`); this just walks it.
+        # `check_arrival_details` (facing/BGM) describes the landing on
+        # `dest_map_constant` after the CLAIMED crossing, so only the
+        # first forward leg asks for it -- a later forward leg would be
+        # re-checking the same landing a second time.
+        seen_forward = False
+        for leg in _legs(start_side, round_trip, end_side):
+            if leg == "F":
+                _forward(emu, check_arrival_details=not seen_forward)
+                seen_forward = True
+            else:
                 _back(emu)
 
     del run

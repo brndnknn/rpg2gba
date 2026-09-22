@@ -134,8 +134,8 @@ def _elsewhere(plan: ChapterPlan) -> list[str]:
         return ["none"]
     lines: list[str] = []
     for e in plan.elsewhere:
-        if e.status == "later":
-            lines.append(f"- {e.row_id}: later -- owner {e.owner}")
+        if e.status in ("later", "boundary"):
+            lines.append(f"- {e.row_id}: {e.status} -- owner {e.owner}")
         elif e.status == "blocked":
             lines.append(f"- {e.row_id}: blocked -- requires {', '.join(e.requires)}")
         else:
