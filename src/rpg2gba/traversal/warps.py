@@ -72,5 +72,10 @@ def extract_warp_exits(map_json: dict) -> list[WarpExit]:
                         dest_facing=dest_facing,
                     )
                 )
+    # One event routinely carries the same transfer on several pages (Map040
+    # event 19 does). Those are one exit, not several: consumers such as
+    # `cells.py`'s zero/one/many rule would otherwise count a duplicate as
+    # an ambiguity (C6 Task 9). Exits that differ in any field stay distinct.
+    exits = list(dict.fromkeys(exits))
     exits.sort(key=lambda w: (w.cell[1], w.cell[0], w.event_id))
     return exits
