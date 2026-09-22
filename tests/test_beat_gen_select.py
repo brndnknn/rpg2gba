@@ -17,8 +17,6 @@ from rpg2gba.beat_gen.plan import Elsewhere, Refusal
 from rpg2gba.chapter_manifest.schema import ManifestRow
 from rpg2gba.story_state.model import RowVerdict
 
-pytestmark = pytest.mark.skip(reason="C6 Task 1 not started -- remove this line to start")
-
 
 def _row(row_id: str, kind: str = "page", *, requires: tuple[str, ...] = ()) -> ManifestRow:
     return ManifestRow(row_id=row_id, kind=kind, map_id=int(row_id[3:6]), content_hash="x",
