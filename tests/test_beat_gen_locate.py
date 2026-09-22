@@ -19,8 +19,6 @@ from rpg2gba.chapter_manifest.schema import ManifestRow
 from rpg2gba.routing.locations import ApproachCandidate, RowCell
 from rpg2gba.routing.plan import ChosenApproach, RouteNode
 
-pytestmark = pytest.mark.skip(reason="C6 Task 4 not started -- remove this line to start")
-
 PAGE = "map001/ev001/p0"
 ARM = "map001/ev001/p0/b0"
 PAGE2 = "map001/ev002/p0"
@@ -82,6 +80,20 @@ def test_arm_is_located_through_its_page_under_its_own_id():
     (cand,) = records[0].candidates
     assert cand.row_id == ARM
     assert (cand.map_constant, cand.x, cand.y) == ("MAP_ONE", 4, 5)
+
+
+def test_nested_arm_is_located_through_its_page_not_its_parent_arm():
+    # Added by the lead (2026-09-22): a nested arm's parent_row_id is another
+    # arm, which cell_fn refuses; it must resolve through the owning page.
+    nested = "map001/ev001/p0/b1"
+    rows = dict(ROWS)
+    rows[nested] = ManifestRow(row_id=nested, kind="branch", map_id=1, content_hash="x",
+                               parent_row_id=ARM)
+    records, refusals = locate.locate_beats(
+        [_beat("arms", (ARM, nested))], rows, cell_fn=_cell_fn, seam_fn=_seam_fn,
+        map_constant_fn=lambda m: "MAP_ONE")
+    assert refusals == []
+    assert {c.row_id for c in records[0].candidates} == {ARM, nested}
 
 
 def test_seam_row_offers_every_crossing_as_a_candidate():
