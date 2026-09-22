@@ -16,9 +16,6 @@ from rpg2gba.routing.connections import MapConnection
 from rpg2gba.traversal.direction import Direction
 from rpg2gba.traversal.graph import MapGraph
 
-pytestmark = pytest.mark.skip(reason="C6 Task 3 not started -- remove this line to start")
-
-
 def _graph(map_id: int, w: int, h: int, walls: set[tuple[int, int]] = frozenset()) -> MapGraph:
     blocked = {(x, y): (x, y) in walls for x in range(w) for y in range(h)}
     return MapGraph(map_id=map_id, width=w, height=h, tileset_id=0, blocked=blocked)
