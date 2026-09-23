@@ -21,7 +21,7 @@
     },
     "CH05": {
       "module": "src/rpg2gba/playtest/chapters/ch05.py",
-      "blob_sha": "4bf56b9fe5705fd8e6e641bad21ffd8aeb765a90"
+      "blob_sha": "11be2db153fa5e95368e82dcae350bc10a163a7c"
     }
   },
   "chapters": {
