@@ -8,8 +8,10 @@ this module emits into a route -- nothing here picks an order.
 """
 from __future__ import annotations
 
+import functools
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -710,6 +712,7 @@ def compute_end_state(
     owned_row_ids: set[str],
     rows_by_id: dict[str, RowState],
     enabled_by_of: dict[str, tuple[tuple[str, ...], ...]],
+    pick_winner: Callable[[tuple[str, ...]], str | None] | None = None,
 ) -> tuple[State, tuple["OrderDependentKey", ...]]:
     """The chapter's end state: `seed` plus, for every key any OWNED row of
     this chapter writes, the value(s) its maximal writers agree on -- plus
@@ -758,6 +761,12 @@ def compute_end_state(
     A true precedence CYCLE (no writer of a key is maximal at all) is the
     one case still genuinely impossible to resolve here and still raises
     `OrderDependentEndState`.
+
+    `pick_winner` (C6 seed recompute): given an order-dependent key's sorted
+    maximal writers, the one the chapter's concrete route visits last, or
+    None when no route is known. A pick lands that writer's value in the end
+    state -- the next chapter's seed -- instead of the join; the key is still
+    recorded (with the joined values) so the review doc shows the choice.
     """
     order_dependent: list[OrderDependentKey] = []
     havoc_keys_owned: set[Key] = {
@@ -865,10 +874,19 @@ def compute_end_state(
             joined = _get(end, key)
             for _, w in maximal:
                 joined = _union_values(joined, w.values)
-            end[key] = joined
+            writers = tuple(sorted(r for r, _ in maximal))
+            winner = pick_winner(writers) if pick_winner is not None else None
+            if winner is None:
+                end[key] = joined
+            else:
+                won = [w for r, w in maximal if r == winner]
+                if not won:
+                    raise ValueError(f"story_state: key {key!r}: picked winner {winner!r} "
+                                     f"is not one of its writers {list(writers)}")
+                end[key] = frozenset(won[0].values)
             order_dependent.append(OrderDependentKey(
                 key=_state_key_repr(key),
-                writers=tuple(sorted(r for r, _ in maximal)),
+                writers=writers,
                 values=_freeze_values(joined),
             ))
             continue
@@ -1244,12 +1262,20 @@ def build_chapter_stories(
     *,
     build_dir: Path,
     chapters_path: Path,
+    winner_for: Callable[[str, tuple[str, ...]], str | None] | None = None,
 ) -> dict[str, ChapterStory]:
     """Models `chapter_ids` (in chain order, e.g. CH01..CH05) cumulatively.
 
     Returns one `ChapterStory` per requested chapter id (plus `"INTRO"`),
     each reporting only the rows on THAT chapter's own maps (§16.3 C2b
     output spec).
+
+    `winner_for(chapter_id, writers)` is C6's seed recompute: the writer of
+    an order-dependent key that chapter's concrete route visits last, or
+    None where no route is known yet. Each pick narrows that chapter's end
+    state, so every successor is seeded (and its liveness checked) from
+    the route rather than from the join. Omitted, the model is C2's pure
+    over-approximation, as before.
     """
     binding = load_binding(path=chapters_path)
     common_events = _load_common_events(build_dir)
@@ -1332,8 +1358,10 @@ def build_chapter_stories(
             for rid in owned_this_chapter
         }
         enabled_by_by_chapter[chapter_id] = enabled_by_of
+        pick = (None if winner_for is None
+                else functools.partial(winner_for, chapter_id))
         refined_end_state, refined_order_dependent = compute_end_state(
-            seed, owned_this_chapter, cumulative_rows, enabled_by_of)
+            seed, owned_this_chapter, cumulative_rows, enabled_by_of, pick)
 
         end_state_by_chapter[chapter_id] = refined_end_state
         order_dependent_by_chapter[chapter_id] = refined_order_dependent

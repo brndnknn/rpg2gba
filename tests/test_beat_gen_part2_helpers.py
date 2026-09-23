@@ -1,6 +1,6 @@
 """Focused tests for a handful of C6 part two helpers (CH01 end to end):
 
-- `beat_gen.__main__._engine_spawn`: reads the new-game spawn off the real
+- `beat_gen.reach.engine_spawn`: reads the new-game spawn off the real
   vendored engine's `new_game.c`.
 - `beat_gen.group.plan_beats`: page-named beats when one event has two
   matches of the same archetype.
@@ -14,7 +14,7 @@ import pytest
 
 from rpg2gba.beat_floor.assertion import FloorAssertion, RowFloor, make_params
 from rpg2gba.beat_gen import group
-from rpg2gba.beat_gen.__main__ import _engine_spawn
+from rpg2gba.beat_gen.reach import engine_spawn
 from rpg2gba.beat_gen.adapt import _toggled_page
 from rpg2gba.beat_gen.plan import PlannedBeat, make_kwargs
 from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch
@@ -22,12 +22,12 @@ from rpg2gba.chapter_manifest.schema import ManifestRow, PageCondition
 
 
 # ---------------------------------------------------------------------------
-# _engine_spawn -- against the real vendored engine (no RPG2GBA_* set)
+# engine_spawn -- against the real vendored engine (no RPG2GBA_* set)
 # ---------------------------------------------------------------------------
 
 
 def test_engine_spawn_reads_the_real_new_game_c():
-    assert _engine_spawn() == (49, (7, 7))
+    assert engine_spawn() == (49, (7, 7))
 
 
 # ---------------------------------------------------------------------------

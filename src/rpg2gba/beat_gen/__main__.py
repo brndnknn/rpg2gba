@@ -24,8 +24,6 @@ from __future__ import annotations
 import dataclasses
 import functools
 import logging
-import os
-import re
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
@@ -43,8 +41,14 @@ from rpg2gba.beat_gen.adapt import (
 )
 from rpg2gba.beat_gen.boundary import inbound_rows, split_outbound
 from rpg2gba.beat_gen.continuity import thread_maps
-from rpg2gba.beat_gen.reach import reachable_sites
+from rpg2gba.beat_gen.reach import engine_spawn, reachable_sites
 from rpg2gba.beat_gen.emit import emit_module
+from rpg2gba.beat_gen.facing import (
+    event_ids_by_map,
+    facing_sides,
+    pin_records,
+    split_facing_arms,
+)
 from rpg2gba.beat_gen.group import plan_beats
 from rpg2gba.beat_gen.locate import locate_beats, order_beats, route_order
 from rpg2gba.beat_gen.plan import (
@@ -58,6 +62,7 @@ from rpg2gba.beat_gen.plan import (
 )
 from rpg2gba.beat_gen.review import render_review
 from rpg2gba.beat_gen.seam import SeamCrossing, connection_for, seam_crossings
+from rpg2gba.beat_gen.seed import route_winner
 from rpg2gba.beat_gen.select import select_rows
 from rpg2gba.chapter_atlas.binding import ChapterBinding, load_binding
 from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch, classify_manifest
@@ -84,6 +89,7 @@ from rpg2gba.routing.pathing import RoutePlanningError, landing_cell
 from rpg2gba.routing.plan import write_plan
 from rpg2gba.routing.solver import RouteCandidate, solve_route
 from rpg2gba.story_state.model import build_chapter_stories
+from rpg2gba.traversal.collision import load_map_json
 from rpg2gba.traversal.graph import MapGraph
 from rpg2gba.traversal.world import WorldGraph
 
@@ -263,27 +269,6 @@ def _predecessor_end(predecessor: str) -> tuple[int, tuple[int, int]]:
     return map_uranium_id(loc.map_constant), (loc.x, loc.y)
 
 
-_SPAWN_RE = re.compile(
-    r"^\s*SetWarpDestination\(MAP_GROUP\((MAP_\w+)\),\s*MAP_NUM\(\1\),\s*WARP_ID_NONE,"
-    r"\s*(\d+),\s*(\d+)\);", re.MULTILINE)
-
-
-def _engine_spawn() -> tuple[int, tuple[int, int]]:
-    """The new-game spawn, read from the engine's `WarpToTruck` (A5: CH01's
-    start is "the engine spawn", a source fact -- `new_game.c`'s fenced
-    override). Exactly one uncommented `SetWarpDestination` must be there."""
-    root = Path(os.environ.get("RPG2GBA_POKEEMERALD", "engine"))
-    source = (root / "src" / "new_game.c").read_text(encoding="utf-8")
-    body = source[source.index("static void WarpToTruck(void)\n{"):]
-    body = body[:body.index("\n}\n")]
-    found = _SPAWN_RE.findall(body)
-    if len(found) != 1:
-        raise ValueError(f"new_game.c WarpToTruck: expected one SetWarpDestination, found "
-                         f"{len(found)}")
-    const, x, y = found[0]
-    return map_uranium_id(const), (int(x), int(y))
-
-
 _PRESS_INTO = (((0, 1), "UP"), ((0, -1), "DOWN"), ((-1, 0), "RIGHT"), ((1, 0), "LEFT"))
 """(offset of the approach cell from the warp tile, the press onto it):
 standing south of it you press UP, and so on. N/S/W/E-side order."""
@@ -448,15 +433,20 @@ def _group_boundary_exits(beats: Sequence[PlannedBeat], floors: Mapping[str, Row
                  for b in beats)
 
 
-def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR) -> ChapterPlan:
-    """Run stages 1-4 for one chapter and return the fully decided plan."""
-    # 1. Load.
+def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
+               out_dir: Path = DEFAULT_OUT_DIR) -> ChapterPlan:
+    """Run stages 1-4 for one chapter and return the fully decided plan.
+    `out_dir` is where the predecessors' generated modules are read from
+    (their routes decide their order-dependent writes, `beat_gen/seed.py`)."""
+    # 1. Load. Each predecessor's end state is seeded from its own solved
+    #    route (C6 seed recompute).
     binding = load_binding(DEFAULT_CHAPTERS_PATH)
     predecessor = binding.chapter(chapter_id).predecessor
     successor = binding.successor(chapter_id)
     rows = load_chapter_rows(chapter_id)
     stories = build_chapter_stories(_chain_to(binding, chapter_id), build_dir=build_dir,
-                                    chapters_path=DEFAULT_CHAPTERS_PATH)
+                                    chapters_path=DEFAULT_CHAPTERS_PATH,
+                                    winner_for=route_winner(chapter_id, out_dir))
     story = stories[chapter_id]
     verdicts = {v.row_id: v for v in story.rows}
     floors: dict[str, RowFloor] = floor_for_chapter(chapter_id, build_dir=build_dir)
@@ -517,13 +507,20 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR) -> ChapterPlan:
                           for b in planned if b.group in dead_groups for row_id in b.rows)
     beats = tuple(b for b in adapted if b.group not in dead_groups)
     beats = _group_boundary_exits(beats, floors, chain_maps)
+    # 3b. A4 (`beat_gen/facing.py`): an arm gated on the player's facing is
+    #     its own group, walked from the side that selects it.
+    sides_by_row: dict[str, frozenset[str]] = {}
+    for map_id, event_ids in sorted(event_ids_by_map(r for b in beats for r in b.rows).items()):
+        sides_by_row.update(facing_sides(
+            map_id, load_map_json(map_id, build_dir / "maps"), event_ids))
+    beats, facing_pins = split_facing_arms(beats, sides_by_row)
 
     # 4. Locate. Graphs are lazy: a seam or a route may touch maps outside
     #    the chapter's own list (`routing.__main__._LazyGraphs`).
     graphs, overlays = _build_graphs_and_overlays(list(binding.chapter(chapter_id).maps),
                                                   build_dir)
     world = _build_world(build_dir)
-    entry = _predecessor_end(predecessor) if predecessor is not None else _engine_spawn()
+    entry = _predecessor_end(predecessor) if predecessor is not None else engine_spawn()
     warp_rows = frozenset(r for b in beats if b.template == "warp" for r in b.rows)
     records, cell_refusals = locate_beats(
         beats, rows_by_id,
@@ -532,6 +529,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR) -> ChapterPlan:
                          frozenset(r for b in beats if b.template == "arrival_nudge"
                                    for r in b.rows)),
         seam_fn=_seam_fn(graphs), map_constant_fn=_map_constant_for)
+    records, facing_refusals = pin_records(records, facing_pins)
+    cell_refusals = [*cell_refusals, *facing_refusals]
     # A refused group has no record, so the solver can't visit it; its
     # beats leave the plan and survive only as refusals in the review doc.
     located = {r.beat_id for r in records}
@@ -646,7 +645,7 @@ def cli() -> None:
               show_default=True)
 def generate(chapter_id: str, out_dir: Path) -> None:
     """Generate one chapter's module, review doc and route."""
-    plan = build_plan(chapter_id)
+    plan = build_plan(chapter_id, out_dir=out_dir)
     for path in write_outputs(plan, out_dir):
         logger.info("wrote %s", path)
     if plan.refusals:

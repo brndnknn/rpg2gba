@@ -235,6 +235,46 @@ def test_order_dependent_writers_join_and_are_recorded_not_raised() -> None:
     assert odk.values == (False, True)
 
 
+def test_order_dependent_key_lands_the_route_winner() -> None:
+    """C6 seed recompute: a route pick lands the last writer's value in the
+    end state (the next chapter's seed); the key is still recorded, joined."""
+    a = _event(1, [_page([_cmd(121, [2, 2, 0])])])  # switch 2 ON
+    b = _event(2, [_page([_cmd(121, [2, 2, 1])])])  # switch 2 OFF
+    rows = _rows([a, b])
+    owned = set(rows)
+    seen: list[tuple[str, ...]] = []
+
+    def pick(writers: tuple[str, ...]) -> str:
+        seen.append(writers)
+        return page_row_id(999, 1, 0)                 # the route visits the ON last
+
+    end_state, order_dependent = compute_end_state(
+        {}, owned, rows, {rid: () for rid in owned}, pick)
+    assert seen == [(page_row_id(999, 1, 0), page_row_id(999, 2, 0))]
+    assert end_state[Switch(2)] == frozenset({True})
+    assert order_dependent[0].values == (False, True)
+
+
+def test_order_dependent_key_without_a_pick_stays_joined() -> None:
+    a = _event(1, [_page([_cmd(121, [2, 2, 0])])])
+    b = _event(2, [_page([_cmd(121, [2, 2, 1])])])
+    rows = _rows([a, b])
+    owned = set(rows)
+    end_state, _ = compute_end_state({}, owned, rows, {rid: () for rid in owned},
+                                     lambda _writers: None)
+    assert end_state[Switch(2)] == frozenset({False, True})
+
+
+def test_order_dependent_pick_must_be_a_writer() -> None:
+    a = _event(1, [_page([_cmd(121, [2, 2, 0])])])
+    b = _event(2, [_page([_cmd(121, [2, 2, 1])])])
+    rows = _rows([a, b])
+    owned = set(rows)
+    with pytest.raises(ValueError, match="not one of its writers"):
+        compute_end_state({}, owned, rows, {rid: () for rid in owned},
+                          lambda _writers: "map999/ev009/p0")
+
+
 # --- chaining ---------------------------------------------------------
 
 

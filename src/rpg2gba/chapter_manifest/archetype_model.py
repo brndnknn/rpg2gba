@@ -19,6 +19,12 @@ purpose:
 Without this adapter the rule can still catch a row nobody dispositioned,
 but not a row dispositioned `beat:` whose beat was never actually written
 against the archetype -- which is the half that closes the set.
+
+**One model per chapter module (B1, C6).** While a hand module and a
+generated module both claim a chapter's rows, each is checked through its own
+model; they are never merged into one index. Inside one module two claims on
+a row are fine when they agree and fail loud when they contradict
+(`tests/test_chapter_manifest_double_claim.py`).
 """
 from __future__ import annotations
 
