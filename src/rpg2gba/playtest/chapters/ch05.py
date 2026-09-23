@@ -249,7 +249,7 @@ from ..archetypes.item_ball import item_ball_beats
 from ..archetypes.trainer import trainer_beats
 from ..archetypes.warp import warp_beat
 from ..battle import in_battle
-from ..cells import approach_to, entry_cell, event_cell, local_id, stair_approach
+from ..cells import approach_to, event_cell, local_id, raw_cell, stair_approach
 from ..chapter import BeatLocation, ChapterBuilder
 from ..errors import ScenarioError
 
@@ -284,10 +284,22 @@ ROUTE_2_CONST = "MAP_ROUTE_02"  # CH04's own map constant; see module docstring'
 # Map035 EV012's trigger tile (Timothy, event touch) with nothing planning
 # around it.
 #
-# Derived, not a literal (D1): `entry_cell` reads the one verified table of
-# (chapter, map) start cells, where CH05/map035 is registered from the
-# emulator-observed position the step-7 runs recorded.
-_ROUTE_ENTRY = entry_cell(_CHAPTER_ID, ROUTE_2_CONST)
+# Not derived via `entry_cell` (A5 removed the hand-kept per-chapter
+# start-cell table it used to read): CH04 hands over at
+# (19,49) on Route 2, the position emulator-observed in CH05's step-7
+# headless runs and formerly registered as `("CH05", 35)` in that table.
+# Deriving this cell from CH04's own last declared beat location instead
+# gives (19,50) -- one tile off the observed handover -- so the emulator
+# observation is kept as a `raw_cell` rather than silently drifting to the
+# derived-but-wrong value (operator ruling 2026-09-23).
+_ROUTE_ENTRY = raw_cell(
+    19, 49,
+    why="CH04 hands over to CH05 at Route 2 (19,49); emulator-observed in "
+        "CH05's step-7 headless runs (reference/memory-archive.md: 'B1 enters "
+        "on map 35 (Route 02) at (19,49)'). CH04's last declared beat location derives to (19,50), "
+        "one tile off this observed handover, so the observation is kept "
+        "rather than the derivation (operator ruling 2026-09-23).",
+)
 
 ch05 = ChapterBuilder("CH05", doc="reference/chapters/05-passage-cave.md",
                         predecessor="CH04",

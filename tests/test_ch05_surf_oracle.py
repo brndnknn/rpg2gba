@@ -196,8 +196,8 @@ def test_ch05_manifest_carries_requires_surf_on_exactly_the_oracle_rows(oracle, 
     """End-to-end through the real manifest generator: the four sealed-room
     rows carry `requires == ("surf",)`, no other PAGE row on CH05's maps
     does, and every row was generated with `reachability_consulted=True`
-    (both CH05 maps have a registered start cell in
-    `chapter_manifest/generator.py`'s `_CHAPTER_MAP_START_CELLS`).
+    (both CH05 maps have a derivable start cell via
+    `chapter_manifest/generator.py`'s `_start_cells`, A5).
 
     Restricted to `kind == "page"` (REDERIVATION_PLAN.md §16.3 C1, R5): the
     oracle only names page rows, and reachability-derived `requires` now

@@ -405,8 +405,7 @@ def derive_blocked_verdict_for_event_from_starts(
     map whose start is not a single cell (a map with several disconnected
     walkable components, each entered by its own door -- e.g. Kevlar's
     building strip, map 73: four shops, four components, one map record;
-    see `chapter_manifest/generator.py`'s `_CHAPTER_MAP_START_CELLS` comment
-    block for the full citation).
+    see `chapter_manifest/generator.py`'s `_start_cells` docstring).
 
     Reachable if ANY orthogonally-adjacent cell of `event_cell` is reachable
     from ANY of `starts`, for a given held-capability set. The predicate

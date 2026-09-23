@@ -164,6 +164,22 @@ def _write_tilesets(path: Path) -> None:
     }), encoding="utf-8")
 
 
+def _patch_start_cells(
+    monkeypatch, chapter_id: str, map_id: int, cells: frozenset[tuple[int, int]] | None,
+) -> None:
+    """Stand in for `generator._start_cells` (A5's derivation) with a
+    synthetic answer for one (chapter_id, map_id), None for everything else
+    -- these CLI tests use synthetic chapter ids (`CHK`, `CHK_UNREG`) that
+    don't exist in `reference/chapters.json`, so the real derivation would
+    fail loud on them rather than degrade gracefully."""
+    from rpg2gba.chapter_manifest import generator
+
+    def fake(cid: str, mid: int, build_dir: Path) -> frozenset[tuple[int, int]] | None:
+        return cells if (cid, mid) == (chapter_id, map_id) else None
+
+    monkeypatch.setattr(generator, "_start_cells", fake)
+
+
 def _setup_chokepoint_chapter(tmp_path: Path, chapter_id: str, map_id: int) -> tuple[Path, Path]:
     events = [
         {
@@ -194,8 +210,7 @@ def test_check_fires_missed_assertion_with_no_negative_beat(tmp_path: Path, monk
     disposition with no `negative_beat`, and a genuinely walkable approach
     (the rock's own north neighbour is the start tile) -- the rule that
     could never fire with no approach model supplied now fires for real."""
-    from rpg2gba.chapter_manifest import generator
-    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHK", 50), frozenset({(1, 0)}))
+    _patch_start_cells(monkeypatch, "CHK", 50, frozenset({(1, 0)}))
 
     build_dir, chapters_path = _setup_chokepoint_chapter(tmp_path, "CHK", 50)
     manifest_path = tmp_path / "CHK.manifest.json"
@@ -235,9 +250,10 @@ def test_check_fires_missed_assertion_with_no_negative_beat(tmp_path: Path, monk
     assert f"{sign_row_id} (approach_model_unenforced)" not in result.output
 
 
-def test_check_unregistered_map_falls_back_to_unenforced(tmp_path: Path) -> None:
-    """No entry in `_CHAPTER_MAP_START_CELLS` for this chapter/map -- the
-    concrete model answers None for every row, same as no model at all."""
+def test_check_unregistered_map_falls_back_to_unenforced(tmp_path: Path, monkeypatch) -> None:
+    """No derivable entry cell for this chapter/map -- the concrete model
+    answers None for every row, same as no model at all."""
+    _patch_start_cells(monkeypatch, "CHK_UNREG", 51, None)
     build_dir, chapters_path = _setup_chokepoint_chapter(tmp_path, "CHK_UNREG", 51)
     manifest_path = tmp_path / "CHK_UNREG.manifest.json"
     dispositions_path = tmp_path / "CHK_UNREG.dispositions.json"

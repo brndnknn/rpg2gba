@@ -470,8 +470,8 @@ class ManifestRow:
     terrain: TerrainRef | None = None
     # Whether the offline reachability source (`traversal.reachability`) was
     # actually consulted while generating THIS row's `requires[]` -- i.e.
-    # whether this row's map had a verified entry in
-    # `generator._CHAPTER_MAP_START_CELLS` at generation time. False does NOT
+    # whether this row's map had a derivable entry cell from
+    # `generator._start_cells` at generation time. False does NOT
     # mean "no capability gates exist here"; it means the terrain-gated half
     # of the capability model (surf, waterfall -- the half `_HEAD_REQUIRES`
     # structurally cannot express) was never even asked about this map, so an

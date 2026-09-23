@@ -97,7 +97,6 @@ logger = logging.getLogger(__name__)
 
 BUILD_DIR = Path("output/uranium-build")
 DEFAULT_OUT_DIR = Path("output/beats")
-MANIFEST_DIR = Path("reference/manifests")
 
 
 def _chain_to(binding: ChapterBinding, chapter_id: str) -> list[str]:
@@ -330,10 +329,48 @@ def _route_between(world: WorldGraph, maps: frozenset[int],
     return route
 
 
+class _NoOccupancy:
+    def blocked_cells(self) -> frozenset[tuple[int, int]]:
+        return frozenset()
+
+
+class _ChainOccupancy:
+    """NPC walls on the chain's own maps only. A successor searched for a
+    `later` owner may not be emitted yet (CH06's map 040), so it has no
+    overlay; the search only names an owner and plans no walk there, so it
+    floods that map's geometry alone."""
+
+    def __init__(self, occupancy: Mapping, chain_maps: frozenset[int]) -> None:
+        self._occupancy = occupancy
+        self._chain_maps = chain_maps
+
+    def __getitem__(self, map_id: int):  # noqa: ANN204
+        return self._occupancy[map_id] if map_id in self._chain_maps else _NoOccupancy()
+
+
+def _staged(chapter_id: str, maps: Sequence[int], graphs: Mapping[int, MapGraph],
+            build_dir: Path) -> bool:
+    """Every map of a successor has decoded data AND a graph this build can
+    build. The corpus is converted progressively: past the frontier a map's
+    tileset may not be staged (tile ids beyond its passages array), and the
+    `later`-owner search stops there rather than guess."""
+    for m in maps:
+        if not (build_dir / "maps" / f"Map{m:03d}.json").exists():
+            logger.info("later-owner search stops at %s: map %03d is not decoded", chapter_id, m)
+            return False
+        try:
+            graphs[m]
+        except KeyError as exc:
+            logger.info("later-owner search stops at %s: map %03d has no graph (%s)",
+                        chapter_id, m, exc)
+            return False
+    return True
+
+
 def _split_unreachable(
     records: Sequence[BeatLocationRecord], entry: tuple[int, tuple[int, int]],
     graphs: Mapping[int, MapGraph], world: WorldGraph, chain_maps: frozenset[int],
-    binding: ChapterBinding, chapter_id: str, occupancy: Mapping,
+    binding: ChapterBinding, chapter_id: str, occupancy: Mapping, build_dir: Path,
 ) -> tuple[list[BeatLocationRecord], dict[str, str | None]]:
     """(records the player can reach, {unreachable row: later owner}).
 
@@ -342,9 +379,10 @@ def _split_unreachable(
     re-pointed at one of them when its routing row is the unreachable one; a
     group with no reachable row leaves the plan. The owner is the first
     successor chapter whose maps, added to this chain, make the row
-    reachable. Only chapters with a committed manifest are searched --
-    beyond them the maps aren't staged in this build -- so None means "no
-    chapter derived so far opens it"."""
+    reachable. A successor is searched when every map of it is staged in
+    `build_dir`, with or without a committed manifest (CH04's north seam onto
+    map 040 belongs to CH06, which has none yet), so None means "no staged
+    chapter opens it". The search stops once every row has an owner."""
     def row_sites(cell: RowCell) -> list[tuple[int, tuple[int, int]]]:
         m = map_uranium_id(cell.map_constant)
         return [(m, (c.x, c.y)) for c in cell.approach_candidates] or [(m, (cell.x, cell.y))]
@@ -381,16 +419,17 @@ def _split_unreachable(
         logger.info("%s: %s re-pointed at reachable row %s", chapter_id, record.beat_id,
                     first.row_id)
 
-    later: dict[str, str | None] = {}
-    if dropped:
-        wider, owners = chain_maps, []
-        nxt = binding.successor(chapter_id)
-        while nxt is not None and (MANIFEST_DIR / f"{nxt.id}.manifest.json").exists():
-            wider = wider | frozenset(nxt.maps)
-            owners.append((nxt.id, reachable_sites(entry, graphs, world, wider, occupancy)))
-            nxt = binding.successor(nxt.id)
+    later: dict[str, str | None] = {row: None for row in dropped}
+    wider = chain_maps
+    nxt = binding.successor(chapter_id) if dropped else None
+    while nxt is not None and any(owner is None for owner in later.values()) and _staged(
+            nxt.id, nxt.maps, graphs, build_dir):
+        wider = wider | frozenset(nxt.maps)
+        reach = reachable_sites(entry, graphs, world, wider, _ChainOccupancy(occupancy, chain_maps))
         for row, sites in dropped.items():
-            later[row] = next((cid for cid, rs in owners if any(s in rs for s in sites)), None)
+            if later[row] is None and any(s in reach for s in sites):
+                later[row] = nxt.id
+        nxt = binding.successor(nxt.id)
     return kept, later
 
 
@@ -541,7 +580,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     #     to the first successor whose maps open it.
     occupancy = _LazyOccupancy(build_dir)
     records, later = _split_unreachable(records, entry, graphs, world, chain_maps,
-                                        binding, chapter_id, occupancy)
+                                        binding, chapter_id, occupancy, build_dir)
     trimmed: list[PlannedBeat] = []
     for b in beats:
         rows = tuple(r for r in b.rows if r not in later)

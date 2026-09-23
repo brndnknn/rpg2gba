@@ -88,11 +88,11 @@ class GraphApproachModel:
       deliberate: the rule this feeds asks whether a negative beat can be
       written TODAY, not after some future chapter grants a capability.
 
-    Gated by the same registry `generator._build_reachability_context` uses
-    for reachability-derived `requires[]` (`generator._CHAPTER_MAP_START_CELLS`):
-    a map absent from it answers `None` (unanswerable) for every row on it.
-    One gate for "is this map's traversal picture vetted enough to comment
-    on", not two.
+    Gated by the same derivation `generator._build_reachability_context` uses
+    for reachability-derived `requires[]` (`generator._start_cells`): a map
+    with no derivable entry cell answers `None` (unanswerable) for every row
+    on it. One gate for "is this map's traversal picture vetted enough to
+    comment on", not two.
     """
 
     def __init__(
@@ -136,7 +136,7 @@ class GraphApproachModel:
             return None  # a seam row has no event cell to test
         context = self._context_for(row.map_id)
         if context is None:
-            return None  # map not in generator._CHAPTER_MAP_START_CELLS
+            return None  # map has no derivable entry cell (generator._start_cells)
         graph, capability_map, starts = context
         event_cell = self._event_cell(row.map_id, row.event_id)
         if event_cell is None:

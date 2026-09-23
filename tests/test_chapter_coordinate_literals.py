@@ -267,30 +267,43 @@ def test_raw_cell_returns_the_pair_unchanged() -> None:
     assert raw_cell(5, 9, why="measured against a screenshot") == (5, 9)
 
 
+@requires_decoded_output
 def test_entry_cell_hits_ch04_map35() -> None:
-    from rpg2gba.chapter_manifest.generator import _CHAPTER_MAP_START_CELLS
+    from rpg2gba.chapter_manifest.generator import _start_cells
 
-    # Confirms the fixture this resolver reads still holds the entry the
-    # brief names, without needing decoded output at all (no map-constant
-    # resolution is exercised here -- see the decoded-output-gated test
-    # below for the full map_constant -> cell path).
-    assert _CHAPTER_MAP_START_CELLS[("CH04", 35)] == frozenset({(21, 56)})
+    # A5 replaced the hand-kept per-chapter start-cell table with a
+    # derivation (`beat_gen.reach.chapter_entry_cells`) that builds the
+    # chapter's map graphs from the decoded corpus, so this now needs
+    # `output/uranium-build/` staged, unlike the old direct-dict-lookup
+    # version of this test. Map035 is CH04's seam crossing onto Route 2 --
+    # every cell of the six-tile seam strip is a valid landing, not just the
+    # single cell the old table registered from `ch04.py`'s harness comment.
+    build_dir = REPO_ROOT / "output" / "uranium-build"
+    assert _start_cells("CH04", 35, build_dir) == frozenset({
+        (20, 56), (21, 56), (22, 56), (23, 56), (24, 56), (25, 56),
+    })
 
 
 @requires_decoded_output
 def test_entry_cell_miss_names_chapter_and_map() -> None:
-    # Unlike the hit test above (a direct dict lookup, no decoded output
-    # needed), `entry_cell` itself first resolves `map_constant` to a
-    # Uranium map id via the same map_constants.json state every other
-    # resolver in cells.py reads -- so exercising the real fail-loud path
-    # (rather than the table directly) does need the decoded corpus staged.
+    # `entry_cell` itself first resolves `map_constant` to a Uranium map id
+    # via the same map_constants.json state every other resolver in cells.py
+    # reads, then derives entry cells for the (unknown) chapter -- so
+    # exercising the real fail-loud path does need the decoded corpus
+    # staged.
     from rpg2gba.playtest import cells
 
-    # Use a chapter id that can never legitimately collide with a real entry.
+    # A real chapter that never enters the map: `entry_cell`'s own
+    # `ValueError`, naming both. (CH01 never reaches CH05's cave, map 37.)
     with pytest.raises(ValueError) as excinfo:
-        cells.entry_cell("CH99-NOT-REAL", _map_const_for(37))
-    assert "CH99-NOT-REAL" in str(excinfo.value)
+        cells.entry_cell("CH01", _map_const_for(37))
+    assert "CH01" in str(excinfo.value)
     assert "37" in str(excinfo.value) or _map_const_for(37) in str(excinfo.value)
+
+    # An unknown chapter is a fault, not a miss: the binding's `KeyError`
+    # propagates (fail loud, §4.5) rather than degrading to "no cells".
+    with pytest.raises(KeyError, match="CH99-NOT-REAL"):
+        cells.entry_cell("CH99-NOT-REAL", _map_const_for(37))
 
 
 @requires_decoded_output

@@ -34,6 +34,29 @@ def uranium_data() -> Path:
     return data
 
 
+_REAL_BUILD = (REPO_ROOT / "output" / "uranium-build").resolve()
+
+
+@pytest.fixture(autouse=True)
+def _synthetic_builds_have_no_entry_cells(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`chapter_manifest.generator._start_cells` (A5) derives entry cells from
+    the real corpus's world graph and fails loud without it. A synthetic
+    `tmp_path` build has no world graph, so there it answers "no derivable
+    entry" -- the documented unenforced path. The real build still runs the
+    real derivation; a test that needs specific cells patches `_start_cells`
+    itself (later `setattr` wins)."""
+    from rpg2gba.chapter_manifest import generator
+
+    real = generator._start_cells
+
+    def start_cells(chapter_id: str, map_id: int, build_dir: Path):  # noqa: ANN202
+        if Path(build_dir).resolve() != _REAL_BUILD:
+            return None
+        return real(chapter_id, map_id, build_dir)
+
+    monkeypatch.setattr(generator, "_start_cells", start_cells)
+
+
 @pytest.fixture(scope="session")
 def reference_dir() -> Path:
     """The repo's committed `reference/` sidecars."""

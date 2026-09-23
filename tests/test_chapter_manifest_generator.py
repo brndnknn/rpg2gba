@@ -863,10 +863,10 @@ def test_write_manifest_sorted_by_row_id(tmp_path: Path) -> None:
 
 # --- reachability-derived requires (second `requires[]` source) ----------
 #
-# `_CHAPTER_MAP_START_CELLS` only holds real, verified start cells (currently
-# just CH04/map035), so these tests monkeypatch it with a synthetic
-# (chapter, map) start cell rather than fighting real map geometry -- the
-# wiring being tested is generic over the table's contents.
+# `generator._start_cells` derives entry cells from the real corpus (A5), so
+# these tests monkeypatch it with a synthetic (chapter, map) start cell
+# rather than fighting real map geometry -- the wiring being tested is
+# generic over the derivation's output.
 
 
 def _write_traversable_map(
@@ -918,6 +918,22 @@ def _setup_reachability_chapter(
     return build_dir, chapters_path
 
 
+def _patch_start_cells(
+    monkeypatch: pytest.MonkeyPatch, chapter_id: str, map_id: int,
+    cells: frozenset[tuple[int, int]] | None,
+) -> None:
+    """Stand in for `generator._start_cells` (A5's derivation) with a
+    synthetic answer for one (chapter_id, map_id), None for everything else
+    -- these tests exercise the generic reachability wiring, not the real
+    derivation (which reads `reference/chapters.json`/the routing package
+    and would not know a synthetic `CHR` chapter)."""
+
+    def fake(cid: str, mid: int, build_dir: Path) -> frozenset[tuple[int, int]] | None:
+        return cells if (cid, mid) == (chapter_id, map_id) else None
+
+    monkeypatch.setattr(generator, "_start_cells", fake)
+
+
 def _rock_and_sign_events() -> list[dict]:
     """A 3x3 pocket: start (1,0), a rock (event 1) at the only chokepoint
     (1,1), walls at (0,1)/(2,1), and a plain sign (event 2) at (1,2) reachable
@@ -938,7 +954,7 @@ def test_reachability_requires_approach_gated_row(tmp_path: Path, monkeypatch: p
     """A row with no gating script head of its own still picks up
     `rock_smash` in `requires` when its only approach crosses a rock-obstacle
     cell -- the 24-row (approach-gated) half of the CH04 split."""
-    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), frozenset({(1, 0)}))
+    _patch_start_cells(monkeypatch, "CHR", 99, frozenset({(1, 0)}))
     events = _rock_and_sign_events()
     build_dir, chapters_path = _setup_reachability_chapter(
         tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
@@ -958,7 +974,7 @@ def test_reachability_requires_does_not_duplicate_head_source(
     (interaction-gated); its APPROACH is open (the start cell is adjacent to
     it), so the reachability source contributes nothing extra -- no duplicate,
     no spurious requirement."""
-    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), frozenset({(1, 0)}))
+    _patch_start_cells(monkeypatch, "CHR", 99, frozenset({(1, 0)}))
     events = _rock_and_sign_events()
     build_dir, chapters_path = _setup_reachability_chapter(
         tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
@@ -969,10 +985,13 @@ def test_reachability_requires_does_not_duplicate_head_source(
     assert rock_row.requires == ("rock_smash",)
 
 
-def test_reachability_requires_absent_without_verified_start_cell(tmp_path: Path) -> None:
-    """No entry in `_CHAPTER_MAP_START_CELLS` for this (chapter, map) -- the
-    generator degrades gracefully (empty reachability half) rather than
-    raising, and `_HEAD_REQUIRES` alone still applies."""
+def test_reachability_requires_absent_without_verified_start_cell(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No derivable entry cell for this (chapter, map) -- the generator
+    degrades gracefully (empty reachability half) rather than raising, and
+    `_HEAD_REQUIRES` alone still applies."""
+    _patch_start_cells(monkeypatch, "CHR_UNREGISTERED", 99, None)
     events = _rock_and_sign_events()
     build_dir, chapters_path = _setup_reachability_chapter(
         tmp_path, "CHR_UNREGISTERED", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
@@ -1034,7 +1053,7 @@ def test_reachability_consulted_propagates_to_seam_rows(
     """Seam rows carry the same per-map fact as page rows on that map --
     there is no separate per-map metadata structure, so the flag lives on
     every row sharing a `map_id`, seams included."""
-    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), frozenset({(1, 0)}))
+    _patch_start_cells(monkeypatch, "CHR", 99, frozenset({(1, 0)}))
     events = _rock_and_sign_events()
     build_dir, chapters_path = _setup_reachability_chapter(
         tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
@@ -1063,7 +1082,7 @@ def test_unverified_start_cell_warns_with_actionable_message(
 
     warnings = [
         r for r in caplog.records
-        if r.levelname == "WARNING" and "verified start cell" in r.getMessage()
+        if r.levelname == "WARNING" and "derivable entry cell" in r.getMessage()
     ]
     assert len(warnings) == 1
     message = warnings[0].getMessage()
@@ -1081,7 +1100,7 @@ def test_approach_model_true_when_start_itself_is_an_approach_cell(
     """The rock's own approach cell set includes (1,0), the start cell
     itself -- trivially reachable with nothing held, so `reachable_now` is
     True even though the rock is an uncleared rock_smash obstacle."""
-    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), frozenset({(1, 0)}))
+    _patch_start_cells(monkeypatch, "CHR", 99, frozenset({(1, 0)}))
     events = _rock_and_sign_events()
     build_dir, chapters_path = _setup_reachability_chapter(
         tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
@@ -1106,7 +1125,7 @@ def test_approach_model_closes_the_sibling_obstacle_blind_spot(
     rock_smash obstacle, and nothing is held -- so the sign has NO reachable
     approach cell right now. Verified empirically, not assumed: this fixture
     is exactly the shape that exposed the old bug."""
-    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), frozenset({(1, 0)}))
+    _patch_start_cells(monkeypatch, "CHR", 99, frozenset({(1, 0)}))
     events = _rock_and_sign_events()
     build_dir, chapters_path = _setup_reachability_chapter(
         tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
@@ -1120,7 +1139,7 @@ def test_approach_model_closes_the_sibling_obstacle_blind_spot(
 
 
 def test_approach_model_none_for_seam_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), frozenset({(1, 0)}))
+    _patch_start_cells(monkeypatch, "CHR", 99, frozenset({(1, 0)}))
     events = _rock_and_sign_events()
     build_dir, chapters_path = _setup_reachability_chapter(
         tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})
@@ -1154,7 +1173,7 @@ def test_approach_model_none_for_vanished_event(
 ) -> None:
     """A row whose event no longer exists in the decoded map data (deleted,
     renumbered) cannot be answered, not silently answered False."""
-    monkeypatch.setitem(generator._CHAPTER_MAP_START_CELLS, ("CHR", 99), frozenset({(1, 0)}))
+    _patch_start_cells(monkeypatch, "CHR", 99, frozenset({(1, 0)}))
     events = _rock_and_sign_events()
     build_dir, chapters_path = _setup_reachability_chapter(
         tmp_path, "CHR", 99, 3, 3, events, wall_cells={(0, 1), (2, 1)})

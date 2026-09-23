@@ -24,6 +24,7 @@ byte for byte.
 """
 from __future__ import annotations
 
+import functools
 import itertools
 import json
 import logging
@@ -221,6 +222,7 @@ _HEAD_REQUIRES: dict[str, str] = {
     "pbPushThisBoulder": "strength",          # 15 maps
 }
 
+
 # --- reachability-derived requires (second source; schema.py's `requires`
 # field docstring) ------------------------------------------------------
 #
@@ -233,171 +235,62 @@ _HEAD_REQUIRES: dict[str, str] = {
 # 4 interaction-gated rows it already covers, no overlap).
 #
 # Deriving "approach gated by which capability" needs a start cell -- the
-# tile the player is actually standing on when they first reach this map --
-# which is chapter authoring knowledge, not something recoverable from decoded
-# map data alone. This table holds only start cells that have been verified
-# against a chapter's own boot-walk harness; a (chapter, map) pair absent from
-# it gets no reachability-derived requires at all (see
-# `_build_reachability_context`), same as the corpus behaved before this
-# table existed -- `_HEAD_REQUIRES` alone keeps covering it. That is a
-# graceful degrade, not a fail-loud gap: most of the corpus has no verified
-# start cell yet, and that is the chapter's current, expected, temporary
-# state, not corrupted input data.
-#
-# CH04/map035 (21,56): `playtest/chapters/ch04.py:234`'s `KEVLAR_SEAM_ARROW`
-# comment -- the MB_NORTH_ARROW_WARP tile lands the player at map035 (21,56).
-# Cross-checked against the independent validation run recorded in
-# `reference/frozen/slice2_derivation_diff.md`.
-#
-# Registering a new entry is a step in THAT chapter's own build, not a
-# mystery to reverse-engineer here: the cost is finding the one cell the
-# player is actually standing on at first arrival on that map, and it must
-# come from the chapter's own boot-walk harness (an arrow-warp landing spot,
-# a warp-exit constant, an emulator-observed post-load position) -- never
-# guessed from map geometry or wiki prose. CH04's entry above is the worked
-# example: `(21, 56)` is not this table's own invention, it is a comment
-# transcribed from `ch04.py`'s harness constant and then cross-checked
-# against an independent validation run. An entry added without that kind of
-# citation is exactly the "written from priors, matches zero maps" failure
-# `_HEAD_REQUIRES`'s own comment warns about, just moved to a different table.
-#
-# CH05/map036 (17,39) and CH05/map037 (16,26): both are warp-exit constants in
-# the sense the paragraph above allows, read straight out of the decoded corpus
-# rather than transcribed from a harness -- each map is entered by exactly ONE
-# code-201 transfer, so its arrival cell is a fact about the data, not a choice:
-#   map 36 <- `Map035.json` ev001 at (20,33), destination (17,39). Sole entry.
-#   map 37 <- `Map036.json` ev002 at (17,4),  destination (16,26). Sole entry.
-# Reproduced by `extract_warp_exits` on each source map, and both agree with the
-# entrance cell the CH05 dry run used independently
-# (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md`, §5.7).
-#
-# Stated plainly, because the paragraph above asks for a boot-walk citation and
-# this is not one: **CH05 has no boot-walk harness yet** -- the chapter is not
-# built. What backs these two entries is warp geometry plus an independent prose
-# analysis, which is strictly stronger than a hand-typed guess and strictly
-# weaker than an observed post-load position. If CH05's boot walk ever lands the
-# player somewhere other than these cells, that is the harness correcting this
-# table, and this comment is the reason to believe the harness.
-# CH05/map035 (19,49) is the first entry in this table backed by the strongest
-# citation the paragraph above names: an emulator-observed post-load position.
-# CH05 does not WARP onto Route 02 -- it inherits the player there when CH04's
-# last beat hands over -- so there is no warp-exit constant to read and no
-# geometry to reason from; the only way to know the cell is to run it. The
-# step-7 headless runs of 2026-09-06 recorded B1's entry as map 35 (19,49),
-# identically across runs 4, 6, 7 and 8 and across both attempts of each.
-#
-# It is registered because the route solver needs it. CH05 begins with a walk
-# across Route 02 to the cave mouth, and a plan whose entry node is anywhere
-# else does not contain that walk -- which is how B1 came to leave the approved
-# route onto Map035 EV012's trigger tile (Timothy, event touch) with nothing
-# planning around it.
-#
-# The value type is a frozenset of cells, not a single cell (operator,
-# 2026-09-09 -- REDERIVATION_PLAN.md P6a). Map 73 (Kevlar's building strip) is
-# one map record holding FOUR shops in FOUR disconnected walkable components
-# (verified: 70x15, five components; the four arrival cells -- (44,12)
-# boutique, (5,11) bike shop, (24,12) Maury, (64,12) couple -- each sit in a
-# different one), each entered by its own door from the town square. A single
-# start cell can only flood one component, so it would judge every event
-# behind the other three doors unreachable when they are perfectly reachable
-# through their own doors -- and a wrong entry here is worse than a missing
-# one: absent, `has_walkable_approach` returns None ("unanswerable", honest);
-# present-but-wrong it returns False, a confident wrong answer. Every entry
-# below is still cited exactly as the paragraphs above require; a
-# single-cell map is simply the one-element case of the general shape.
-#
-# CH01/CH02/CH03's 15 maps were registered as one batch on 2026-09-09
-# (REDERIVATION_PLAN.md P6b) under a DERIVED rule, which is worth stating
-# precisely because the paragraphs above ask for a boot-walk citation and
-# this is a different kind of evidence:
-#
-#   For each (chapter, map), take every literal code-201 destination that
-#   targets that map from a source map in the current slice, drop self-warps,
-#   and drop destinations that are not walkable. Register what remains.
-#
-# The dropped-unwalkable step matters and is not hygiene: Map031's (23,28),
-# (32,28), (35,6), (37,28) and Map033's (39,18) are shop-exit DOOR tiles --
-# blocked metatiles the warp lands you on and steps you off. As reachability
-# starts they flood nothing, so registering one would produce exactly the
-# confident-wrong-answer the paragraph above warns about.
-#
-# WHY A DERIVED SET IS SOUND HERE, when a single guessed cell would not be.
-# This set is a SUPERSET of "the cell the player first arrives on" -- it is
-# every cell they can arrive on. That would be dangerous if it could
-# over-report reachability, i.e. if some registered cell sat in a component
-# the chapter cannot actually reach. It cannot, on 14 of these 15 maps:
-# every registered cell on them lies in ONE connected component (verified
-# 2026-09-09 via `graph.connected_components()`), so the flood is provably
-# identical whichever cell is chosen, and the exact first-arrival is
-# unobservable for this table's purpose. The proof is monotone in
-# capabilities: two cells sharing a no-capability component remain in the
-# same component under any capability that is later added, since adding a
-# capability only ever merges components. Map 73 is the sole exception -- its
-# four cells are four components -- and there all four ARE genuinely entered
-# during CH03 (ch03.py carries BOUTIQUE_ARRIVAL, BIKE_SHOP_ARRIVAL,
-# MAURY_ARRIVAL and COUPLE_ARRIVAL, each position-verified across CH03's
-# green gate), so the set is exact rather than a superset.
-#
-# This is emphatically NOT a licence to guess a cell on a future map. It is
-# the narrow case where the answer does not depend on the guess, and it comes
-# with the check that establishes that. A map whose arrival cells span more
-# than one component gets no such pass: register every genuinely-used door
-# (map 73) or leave it out.
-#
-# CH01/49 (7,7) is the one entry here that is NOT derived from a warp: CH01
-# begins there on a fresh save via this fork's own new-game spawn override
-# (`engine/src/new_game.c:174`, "Map049 @ 7,7, URANIUM_START_MAP"), so the
-# engine source is the citation. It shares component 0 with that map's two
-# warp arrivals, so it does not change the flood -- it is registered because
-# it is the true first-arrival and the table should say so where it can.
-_CHAPTER_MAP_START_CELLS: dict[tuple[str, int], frozenset[tuple[int, int]]] = {
-    # -- CH01 Moki Town ------------------------------------------------
-    # (7,7) engine spawn override; (10,9) <- Map032 ev005 (front door);
-    # (11,3) <- Map048 ev002 (stairs down).
-    ("CH01", 49): frozenset({(7, 7), (10, 9), (11, 3)}),
-    # (4,3) <- Map049 ev003, (4,6) <- Map049 ev021 -- the two staircases.
-    ("CH01", 48): frozenset({(4, 3), (4, 6)}),
-    # The town square. (28,31) <- Map049 ev002 is CH01's true first arrival
-    # (leaving the player's house); the rest are returns from the lab
-    # (17,11), houses (43,31)/(24,42), Theo's (56,42), and Route 1 (8,43).
-    ("CH01", 32): frozenset({
-        (8, 43), (17, 11), (24, 42), (28, 31), (43, 31), (56, 42),
-    }),
-    # (14,18) <- Map032 ev003 (the lab door); (14,7) <- Map032 ev078, a
-    # scripted event-touch cutscene warp rather than a normal door.
-    ("CH01", 50): frozenset({(14, 7), (14, 18)}),
-    ("CH01", 64): frozenset({(9, 12)}),   # <- Map032 ev006
-    ("CH01", 65): frozenset({(9, 12)}),   # <- Map032 ev007
-    # Theo's house. (10,10) <- Map032 ev017 (door); (11,3) <- Map089 ev002
-    # (stairs down from 2F).
-    ("CH01", 172): frozenset({(10, 10), (11, 3)}),
-    ("CH01", 89): frozenset({(4, 3)}),    # <- Map172 ev003 (stairs up)
-    # -- CH02 Route 1 --------------------------------------------------
-    # (70,11) <- Map032 ev023/ev036/ev037, the three-tile Moki exit strip,
-    # all agreeing on one destination -- CH02's first arrival, and the cell
-    # ch02.py's B1_ARRIVAL already position-asserts. (15,7)/(16,7) are
-    # the Kevlar returns (Map031 ev023/ev035).
-    ("CH02", 33): frozenset({(15, 7), (16, 7), (70, 11)}),
-    ("CH02", 81): frozenset({(9, 12)}),   # <- Map033 ev027 (old rod house)
-    # -- CH03 Kevlar Town ----------------------------------------------
-    # (15,42)/(16,42) <- Map033 ev045/ev046, the two-tile Route 1 seam and
-    # CH03's first arrival -- ch03.py's B27 position-asserts (16,42) with
-    # tolerance=0. The rest are returns: cave (13,7), Center (20,12),
-    # Mart (37,14).
-    ("CH03", 31): frozenset({(13, 7), (15, 42), (16, 42), (20, 12), (37, 14)}),
-    ("CH03", 67): frozenset({(10, 10)}),  # <- Map031 ev002 (Mart)
-    # <- Map031 ev003 and ev049, two door tiles agreeing on one destination.
-    ("CH03", 68): frozenset({(8, 18)}),
-    # The four-shop strip -- four doors, four components, all four used in
-    # CH03. Map031 ev004 boutique, ev012 bike shop, ev013 Maury, ev041 couple.
-    ("CH03", 73): frozenset({(5, 11), (24, 12), (44, 12), (64, 12)}),
-    ("CH03", 19): frozenset({(11, 29)}),  # <- Map031 ev034 (Grott-Hole cave)
-    # -- CH04 / CH05 (registered during their own builds) ---------------
-    ("CH04", 35): frozenset({(21, 56)}),
-    ("CH05", 35): frozenset({(19, 49)}),
-    ("CH05", 36): frozenset({(17, 39)}),
-    ("CH05", 37): frozenset({(16, 26)}),
-}
+# tile(s) the player can actually be entering this map on -- for the offline
+# reachability flood to start from. That used to be a hand-kept table
+# (a table keyed by chapter and map, requiring a citation per entry,
+# registered chapter by chapter). A5 (C6_GENERATOR_PLAN.md) replaced it: `_start_cells`
+# below derives the same shape from source data via
+# `beat_gen.reach.chapter_entry_cells` -- the engine spawn plus every landing
+# a reachable warp/seam/connection puts the player on, flooded over the
+# chapter's own chain (itself and its predecessors). A (chapter, map) pair
+# with no derivable entry (nothing in the chain reaches it) still gets no
+# reachability-derived requires -- `_HEAD_REQUIRES` alone keeps covering it,
+# same graceful degrade as before.
+@functools.cache
+def _chapter_entry_cells(chapter_id: str, build_dir: Path) -> dict[int, frozenset[tuple[int, int]]]:
+    """The derived `{map_id: entry_cells}` for `chapter_id`'s own maps (A5),
+    computed once per (chapter_id, build_dir) -- building the graphs/world
+    this needs is slow, and the generator calls this once per row's map.
+
+    No NPC occupancy: `requires[]` answers "which field move opens this", and
+    a story NPC standing in a door (CH03's Grott-Hole) is not a field move.
+    The route solver and `beat_gen`'s geography pass do treat NPCs as walls;
+    that is where a story-blocked map is deferred.
+
+    Fails loud: an unknown chapter or a build missing the chain's map data
+    is a real fault (§4.5). A synthetic test build patches `_start_cells`.
+
+    Imports the routing/beat_gen/chapter_atlas pieces lazily to avoid an
+    import cycle (`chapter_manifest` is imported from lower in the stack than
+    `routing`)."""
+    from rpg2gba.beat_gen.reach import chapter_entry_cells
+    from rpg2gba.chapter_atlas.binding import load_binding
+    from rpg2gba.routing.__main__ import _build_graphs_and_overlays, _build_world
+
+    binding = load_binding(Path("reference/chapters.json"))
+    chapter = binding.chapter(chapter_id)
+    chain: list[int] = list(chapter.maps)
+    predecessor = chapter.predecessor
+    while predecessor is not None:
+        pred_chapter = binding.chapter(predecessor)
+        chain = list(pred_chapter.maps) + chain
+        predecessor = pred_chapter.predecessor
+
+    graphs, _ = _build_graphs_and_overlays(chain, build_dir)
+    return chapter_entry_cells(frozenset(chapter.maps), frozenset(chain), graphs,
+                               _build_world(build_dir))
+
+
+def _start_cells(
+    chapter_id: str, map_id: int, build_dir: Path,
+) -> frozenset[tuple[int, int]] | None:
+    """The derived entry cells for `(chapter_id, map_id)` (A5), or None when
+    the set is empty -- nothing in the chapter's chain reaches this map, or
+    the derivation itself could not run (see `_chapter_entry_cells`).
+    Replaces the hand-kept per-chapter start-cell table (A5)."""
+    cells = _chapter_entry_cells(chapter_id, build_dir).get(map_id)
+    return cells if cells else None
+
 
 ReachabilityContext = tuple[MapGraph, CapabilityMap, frozenset[tuple[int, int]]]
 
@@ -409,30 +302,29 @@ def _build_reachability_context(
     tilesets_json: Path,
 ) -> ReachabilityContext | None:
     """The (graph, capability_map, start_cells) triple for reachability-
-    derived requires on `map_id`, or None if `map_id` has no verified start
-    cells for `chapter_id` yet (see `_CHAPTER_MAP_START_CELLS`).
+    derived requires on `map_id`, or None if `map_id` has no derivable start
+    cells for `chapter_id` (see `_start_cells`).
 
     `start_cells` is a frozenset, not a single cell, because one map can hold
     several disconnected walkable components each entered by its own door
-    (Kevlar's building strip, map 73 -- see the table's comment block); the
-    reachability flood unions all of them via
-    `reachability.derive_blocked_verdict_for_event_from_starts`.
+    (e.g. Kevlar's building strip); the reachability flood unions all of them
+    via `reachability.derive_blocked_verdict_for_event_from_starts`.
 
     `maps_dir`/`tilesets_json` are threaded through from the same `build_dir`
     the generator itself reads (never the traversal package's own defaults),
     so a chapter built against a non-default `build_dir` (e.g. a test
     fixture) doesn't silently fall back to reading the real corpus."""
-    starts = _CHAPTER_MAP_START_CELLS.get((chapter_id, map_id))
+    starts = _start_cells(chapter_id, map_id, maps_dir.parent)
     if starts is None:
         logger.warning(
-            "chapter manifest: %s map %03d has no verified start cell -- the "
+            "chapter manifest: %s map %03d has no derivable entry cell -- the "
             "offline reachability source was NOT consulted for this map. "
             "Terrain-gated capabilities (surf, waterfall) cannot appear in "
             "requires[] for ANY row on this map as a result, and _HEAD_REQUIRES "
             "structurally cannot express them either -- an absence of requires "
             "entries here is not evidence the map has no capability gates. "
-            "Register a verified start cell in _CHAPTER_MAP_START_CELLS during "
-            "this chapter's build to close the gap.",
+            "No reachable warp/seam/connection lands on this map from the "
+            "engine spawn over this chapter's chain.",
             chapter_id, map_id,
         )
         return None

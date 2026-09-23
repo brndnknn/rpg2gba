@@ -373,58 +373,57 @@ def arrival_cell(map_constant: str, *, from_map: str, event_id: int | None = Non
 
 
 def entry_cell(chapter_id: str, map_constant: str) -> Cell:
-    """The verified cell at which chapter `chapter_id`'s walk first enters
+    """The derived cell at which chapter `chapter_id`'s walk first enters
     `map_constant`.
 
-    Reads `chapter_manifest.generator._CHAPTER_MAP_START_CELLS` -- the one
-    table of hand-verified (chapter, map) start cells, keyed by
-    `(chapter_id, uranium_map_id)` -- rather than holding a second copy here
-    (CLAUDE.md §4.3). See that table's own comment block in `generator.py`
-    for the citation discipline an entry must satisfy before it's added
-    (cross-checked against an independent validation run, never the table's
-    own invention, never guessed from map geometry).
+    Reads `chapter_manifest.generator._start_cells` -- the derivation that
+    replaced the old hand-kept per-chapter start-cell table (A5,
+    C6_GENERATOR_PLAN.md) -- rather than holding a second copy here
+    (CLAUDE.md §4.3). `_start_cells` derives the engine spawn plus every
+    landing a reachable warp/seam/connection puts the player on, flooded
+    over the chapter's own chain, via `beat_gen.reach.chapter_entry_cells`.
 
-    The table's value is a `frozenset[Cell]`, because some maps hold several
-    disconnected walkable components each entered by its own door (Kevlar's
-    building strip, map 73). Beat authoring, unlike the reachability flood
-    that unions all of them, needs exactly ONE cell to stand a beat on, so
-    this resolver still returns a single `Cell` -- but on a genuinely
-    multi-start map there is no non-arbitrary way to pick one, and guessing
-    would be exactly the "confident wrong answer" the table's own comment
-    warns against. It therefore fails loud on more than one registered cell,
+    The derivation's value is a `frozenset[Cell]`, because some maps hold
+    several disconnected walkable components each entered by its own door
+    (Kevlar's building strip, map 73). Beat authoring, unlike the
+    reachability flood that unions all of them, needs exactly ONE cell to
+    stand a beat on, so this resolver still returns a single `Cell` -- but on
+    a genuinely multi-start map there is no non-arbitrary way to pick one,
+    and guessing would be exactly the "confident wrong answer" A5's design
+    warns against. It therefore fails loud on more than one derived cell,
     naming every candidate, rather than silently returning one of them.
 
-    Fails loud on a miss: a `(chapter_id, map)` pair with no registered start
-    cell is a real gap in that chapter's build (a verified entry point has
-    not been recorded yet), not something this resolver can derive or
-    approximate on its own -- the fix is to register a citation-backed entry
-    in `_CHAPTER_MAP_START_CELLS` during that chapter's own build, per its
-    comment block, not to guess one here.
+    Fails loud on a miss: a `(chapter_id, map)` pair with no derivable entry
+    cell means nothing in the chapter's chain (engine spawn over itself and
+    its predecessors) reaches this map -- this resolver cannot derive or
+    approximate one on its own. If the map genuinely is entered, the gap is
+    upstream (the chain, connections, or seam warps this derivation reads),
+    not something to patch here.
     """
-    from ..chapter_manifest.generator import _CHAPTER_MAP_START_CELLS
+    from ..chapter_manifest.generator import _start_cells
 
     uid = _uranium_id(map_constant, resolver="entry_cell")
-    cells = _CHAPTER_MAP_START_CELLS.get((chapter_id, uid))
+    root = Path(os.environ.get("RPG2GBA_OUTPUT", "output"))
+    build_dir = root / "uranium-build"
+    cells = _start_cells(chapter_id, uid, build_dir)
     if cells is None:
         raise ValueError(
-            f"entry_cell: no verified start cell registered for chapter "
-            f"{chapter_id!r} on {map_constant} (Uranium map {uid}) -- add a "
-            f"citation-backed entry to _CHAPTER_MAP_START_CELLS in "
-            "src/rpg2gba/chapter_manifest/generator.py as part of that "
-            "chapter's own build; it must be verified (an emulator-observed "
-            "position, a warp-exit constant), not guessed from geometry"
+            f"entry_cell: no derivable entry cell for chapter {chapter_id!r} "
+            f"on {map_constant} (Uranium map {uid}) -- no reachable "
+            "warp/seam/connection lands on this map from the engine spawn "
+            f"over {chapter_id}'s chain (chapter_manifest.generator._start_cells)"
         )
     if len(cells) > 1:
         listing = ", ".join(str(c) for c in sorted(cells))
         raise ValueError(
             f"entry_cell: chapter {chapter_id!r} on {map_constant} (Uranium "
-            f"map {uid}) has {len(cells)} registered start cells ({listing}) "
+            f"map {uid}) has {len(cells)} derived entry cells ({listing}) "
             "-- this map holds more than one disconnected walkable component "
             "(e.g. several shops entered by separate doors from one map "
             "record), so there is no single non-arbitrary entry cell. "
             "entry_cell() cannot guess which door a beat means -- disambiguate "
             "by authoring the beat with the specific cell it actually enters "
-            "on, read directly from _CHAPTER_MAP_START_CELLS, instead of "
+            "on, read directly from generator._start_cells, instead of "
             "calling entry_cell() for this map"
         )
     (cell,) = cells
