@@ -328,56 +328,108 @@ def test_pokemon_center_bare_call_writes_the_calling_map() -> None:
     page = _page([_cmd(355, ["pbSetPokemonCenter"])])
     rows = extract_map(68, _map([_event(1, [page])]), common_events=[], switch_labels={})
     row = rows[page_row_id(68, 1, 0)]
-    assert row.writes == (Assign(RESPAWN_MAP, frozenset({68}), False,
-                                  "script @list[0]: pbSetPokemonCenter", 0),)
+    assert len(row.writes) == 1
+    w = row.writes[0]
+    assert (w.key, w.values, w.conditional, w.list_index) == (RESPAWN_MAP, frozenset({68}), False, 0)
     assert row.refusals == ()
+    assert row.computed is None
 
 
 def test_pokemon_center_explicit_call_writes_its_first_argument() -> None:
     page = _page([_cmd(355, ["Kernel.pbSetPokemonCenter(49, 7, 7, 2)"])])
     rows = extract_map(68, _map([_event(1, [page])]), common_events=[], switch_labels={})
     row = rows[page_row_id(68, 1, 0)]
-    assert row.writes == (Assign(
-        RESPAWN_MAP, frozenset({49}), False,
-        "script @list[0]: Kernel.pbSetPokemonCenter(49, 7, 7, 2)", 0,
-    ),)
+    assert len(row.writes) == 1
+    w = row.writes[0]
+    assert (w.key, w.values, w.conditional, w.list_index) == (RESPAWN_MAP, frozenset({49}), False, 0)
     assert row.refusals == ()
 
 
 def test_pokemon_center_unparseable_arguments_refuses_by_name() -> None:
+    """`someVariable` is an undefined bareword -- Ruby (and this
+    interpreter) reads that as a zero-arg method call, so the real refusal
+    is `ruby_unknown_call:someVariable`, not the old regex reader's own
+    invented `unparseable_pokemon_center_call` code (REDERIVATION_PLAN.md
+    §16.3 C8 stage 4: "pass the interpreter's own code through unchanged")."""
     page = _page([_cmd(355, ["pbSetPokemonCenter(someVariable, 7, 7, 2)"])])
     rows = extract_map(68, _map([_event(1, [page])]), common_events=[], switch_labels={})
     row = rows[page_row_id(68, 1, 0)]
     assert row.writes == ()
-    assert row.refusals[0].code == "unparseable_pokemon_center_call"
+    assert row.refusals[0].code == "ruby_unknown_call:someVariable"
+    assert row.havoc_global is True
 
 
-def test_unparsed_state_write_refuses() -> None:
+def test_unparsed_state_write_becomes_a_computed_row() -> None:
+    """`$game_variables[3] += 1` reads `Variable(3)` before writing it --
+    an out-of-scope read at extraction time (`read_domain` always returns
+    `None`), so this row DEFERS instead of refusing outright
+    (REDERIVATION_PLAN.md §16.3 C8 stage 4: "a script-bearing row whose run
+    reads out-of-scope state ... becomes computed"). Until the resolver
+    half lands, it still surfaces `unparsed_state_write`/`havoc_global` so
+    every EXISTING consumer stays sound in the interim."""
     page = _page([_cmd(355, ["$game_variables[3] += 1"])])
     rows = extract_map(999, _map([_event(1, [page])]), common_events=[], switch_labels={})
     row = rows[page_row_id(999, 1, 0)]
     assert row.writes == ()
     assert row.refusals[0].code == "unparsed_state_write"
+    assert row.havoc_global is True
+    assert row.computed is not None
+    assert row.computed.first_unknown_read == "Variable(id=3)"
+    assert row.computed.row_id == page_row_id(999, 1, 0)
 
 
 def test_compound_assignment_to_a_ruby_local_is_not_state() -> None:
     """map050/ev019's starter script does `x=pbGet(151)` / `x-=2`: the local
-    is scratch, while an indexed target is still a state write."""
+    is scratch. `pbGet(151)` reads `Variable(151)` before anything in this
+    scope writes it, so the WHOLE row (not just the third line) defers as
+    computed -- the interpreter runs the full scope together, unlike the
+    old line-by-line regex reader."""
     page = _page([_cmd(355, ["x=pbGet(151)"]), _cmd(655, ["x-=2"]),
                   _cmd(355, ["pbGet(151)[pbGet(2)] += 1"])])
     rows = extract_map(999, _map([_event(1, [page])]), common_events=[], switch_labels={})
     row = rows[page_row_id(999, 1, 0)]
-    assert [r.detail.rsplit(": ", 1)[-1] for r in row.refusals] == ["pbGet(151)[pbGet(2)] += 1"]
-    assert row.havoc_global is False
-    assert set(row.havoc_keys) == {Variable(151), Variable(2)}
+    assert row.writes == ()
+    assert row.computed is not None
+    assert row.computed.first_unknown_read == "Variable(id=151)"
 
 
-def test_non_state_script_line_is_not_a_refusal() -> None:
-    page = _page([_cmd(355, ["Kernel.pbMessage(_INTL(\"hi\"))"])])
+def test_non_state_script_call_with_no_reads_or_writes_is_not_a_refusal() -> None:
+    """`pbSave` is a registered no-state-effect call (`ruby_subset.
+    builtins.EFFECT_CALLS`) -- a script that only calls it writes nothing
+    and refuses nothing, same disposition the old regex reader gave any
+    line it didn't recognize as a state write. (`Kernel.pbMessage(_INTL(...))`,
+    the old fixture here, is NOT actually modelled by the interpreter --
+    neither `pbMessage` nor `_INTL` is a registered builtin, so it refuses
+    `ruby_unknown_call:_INTL` for real; see
+    `test_unmodelled_message_call_refuses_by_name` below, a real gap the
+    old regex reader silently missed.)"""
+    page = _page([_cmd(355, ["Kernel.pbSave"])])
     rows = extract_map(999, _map([_event(1, [page])]), common_events=[], switch_labels={})
     row = rows[page_row_id(999, 1, 0)]
     assert row.writes == ()
     assert row.refusals == ()
+
+
+def test_unmodelled_message_call_refuses_by_name() -> None:
+    page = _page([_cmd(355, ["Kernel.pbMessage(_INTL(\"hi\"))"])])
+    rows = extract_map(999, _map([_event(1, [page])]), common_events=[], switch_labels={})
+    row = rows[page_row_id(999, 1, 0)]
+    assert row.writes == ()
+    assert row.refusals[0].code == "ruby_unknown_call:_INTL"
+
+
+def test_inline_choice_text_produces_a_variable_write() -> None:
+    """A bare `\\ch[...]` text choice used to produce NOTHING under the old
+    regex readers (`story_state` never modelled it). The interpreter path
+    now resolves it to a real variable write over the choice's domain."""
+    page = _page([_cmd(101, ["Pick one\\ch[5,0,Yes,No]"])])
+    rows = extract_map(999, _map([_event(1, [page])]), common_events=[], switch_labels={})
+    row = rows[page_row_id(999, 1, 0)]
+    assert row.refusals == ()
+    assert len(row.writes) == 1
+    w = row.writes[0]
+    assert w.key == Variable(5)
+    assert w.values == frozenset({0, 1})
 
 
 # --- common event inlining --------------------------------------------
@@ -406,9 +458,13 @@ def test_common_event_inline_conditional_write() -> None:
 
 
 def test_common_event_cycle_refuses() -> None:
-    ce_a = _common_event(3, [_cmd(117, [4])])
-    ce_b = _common_event(4, [_cmd(117, [3])])
-    page = _page([_cmd(117, [3])])
+    # ids kept away from reference/strip_list.json's real CE 4/5/6
+    # (GTS/VT/LOBBY) -- those are now honestly honored as no-ops
+    # (REDERIVATION_PLAN.md §16.3 C8 stage 4), and this fixture wants a
+    # genuine 117->117 cycle, not a strip-listed no-op.
+    ce_a = _common_event(30, [_cmd(117, [31])])
+    ce_b = _common_event(31, [_cmd(117, [30])])
+    page = _page([_cmd(117, [30])])
     rows = extract_map(
         999, _map([_event(1, [page])]), common_events=[ce_a, ce_b], switch_labels={})
     row = rows[page_row_id(999, 1, 0)]

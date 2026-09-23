@@ -2256,6 +2256,58 @@ always followed by a code 314 Recover All (`transpiler.py:516`), so with no Nuzl
 port it is a builtin no-op. `static_predicates` (`$PokemonGlobal.randomizer = false`) still has
 no consumer anywhere in `src/` — noted, not C8's.
 
+**C8 stage 4 landed (2026-09-23).** `story_state` extraction now runs the interpreter, and the
+resolver fixpoint runs around saturation. New `story_state/scope_search.py` (`ComputedScope`,
+`run_scope`, `scope_needs_interpreter`, `writes_from_result`, `witness_citations`,
+`named_write_targets`); `extract.py` routes any scope carrying a 355 or an inline `\ch` through
+`search_scope` **as a whole** and the five regex readers plus `_STATE_WRITE_SMELL_RE` are
+deleted; `model.py` gains `resolve_computed_rows`/`_resolve_computed_row`, and `RowVerdict`
+gains `witnesses` (in the report JSON — 40 CH01 rows carry one). `search_scope` grew
+`write_index` (the last position per key, so a resolved write can carry `Assign.list_index`) and
+an optional `index_of` (the flattened scope's offsets are not the owning page's list indices).
+
+`unparsed_state_write` **21 / 2 / 2 / 13 / 0 → 7 / 0 / 0 / 0 / 0**; the surviving 7 are computed
+CH01 rows that never become live, so the placeholder is never resolved. Live refusals now:
+CH01 `party_model` 68, `search_nonscalar_value` 19, `computed_row_self_reference` 11;
+CH03 `party_model` 4, `computed_row_self_reference` 1; CH02/CH04/CH05 none of these.
+Ruling (b) landed as a side effect (`EngineKey('pokedex')` is a resolved write), and so did
+correction 1: `story_state` honours `stripped_ce_ids` on 117, which suppresses CH03's three
+GTS/VT/LOBBY `no_port`/`$lobbyreset` refusals at source. Suite **4282 passed / 16 skipped**
+(two halves), engine audit OK.
+
+Five findings worth keeping, each a real defect the work exposed:
+
+1. **The fixpoint oscillated, it did not diverge.** Widening a counter to TOP makes the next
+   pass refuse on *reading* that TOP, which drops the havoc, which lets it resolve again. A
+   refusal is the top of this lattice: `resolve_computed_rows` now treats a row that resolves to
+   a refusal as **settled** and never re-runs it. `MAX_RESOLVER_PASSES = 8` is a fail-loud bound,
+   not the mechanism.
+2. **A key a row both reads and writes is a counter** (`map050/ev019/p0`'s `Variable(101)`) and
+   has no enumerable value set — re-running it against a flow-insensitive union feeds its own
+   previous values back and the set grows by one per pass until the blowup guard. The whole row
+   widens (`computed_row_self_reference`), which is exactly the standing it had before C8.
+3. **The interpreter's refusals must be SOFT.** Landing them in the hard bucket excluded rows
+   from saturation outright — FIX 2a's original starvation bug, re-introduced. Every write-level
+   interpreter code is soft; only its structural failures (`search_ce_cycle`,
+   `search_missing_common_event`, `search_malformed_write`) stay hard.
+4. **A refusing search reports no keys, so FIX 2b's per-key havoc was silently lost** (every
+   refusal became `havoc_global`, quietly changing row statuses). Restored by
+   `named_write_targets`, which names write targets from the **AST** rather than by regex.
+5. **`builtins.py`'s vocabulary was scanned from the chapter maps, never INTRO's `Map051`.** A
+   refusal aborts the whole scope, so one undeclared `$PokemonGlobal.runToggle` discarded the
+   script block that also sets switch 52 — `FLAG_MUM`'s Intro seed vanished and the engine audit
+   caught it. Declared with citations, plus `pbChangePlayer`/`pbEventScreen`/`pbShowPokemon`/
+   `pbDisposePokemon`/`pbGenderSelector`; a `_parse_body` gap on a brace-block's closing `}` was
+   fixed the same way (the brace-block path had never met real data). **The lesson generalises:
+   a table built by scanning "the corpus" is only as complete as the maps that scan covered.**
+
+Two calls made here that a later step may overturn: `party_model` and `search_nonscalar_value`
+map to the **`story-state`** blocker in `beat_gen/select.py` rather than earning a new `Blocker`
+literal (ruling (b) names `party_model` a blocker, but the literal set is C6's contract and
+`plan.py`'s `Blocker` is unchanged); and `search_nonscalar_value` is a genuinely new refusal —
+a variable holding a species name (`'Eletux'`), which `state.Assign.values` (`bool | int`)
+cannot carry.
+
 ### 16.4 Known work the generator will refuse until fixed (not decisions)
 
 - **#109** — `text_source` rejects the straight quote staging converts; corpus-wide the text

@@ -33,6 +33,25 @@ _BLOCKER_BY_REASON: dict[str, Blocker] = {
     "story_state_refusal": "story-state",
     "stair_no_qualifying_page": "floor",
     "obstacle_missing_cell": "floor",
+    # C8 stage 4 put the real interpreter behind story-state extraction, so
+    # these replaced the `unparsed_state_write` catch-all above. Every one
+    # below was MEASURED across CH01-CH05 on 2026-09-23 -- the file's rule
+    # against pre-populating unseen reasons still holds, so the rest of the
+    # interpreter's codes (`ruby_unknown_call`, `search_cap`, ...) are
+    # deliberately absent and will still raise for a person to classify.
+    "ruby_unknown_attribute": "C8",
+    "computed_row_self_reference": "C8",
+    # Not C8's to fix: the interpreter resolved these rows fine, the STATE
+    # MODEL cannot hold the answer. `party_model` is the blocker C8's shape
+    # ruling (b) named and deferred to "the first chapter that needs those
+    # rows green"; `search_nonscalar_value` is a variable holding a string
+    # (a species name), which `state.Assign.values` (bool|int) cannot carry.
+    "party_model": "story-state",
+    "search_nonscalar_value": "story-state",
+    # Pre-existing extraction codes, measured in CH02-CH05 the same day (the
+    # CH01-only fixture above never reached them).
+    "nonconstant_variable_write": "story-state",
+    "unhandled_condition_type": "story-state",
 }
 
 # Row kinds that stand for themselves rather than an RMXP event page/branch:

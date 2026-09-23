@@ -345,6 +345,49 @@ def test_closer_code_in_scope_is_an_assertion_failure():
         )
 
 
+def test_write_index_is_the_last_writing_position():
+    commands = [
+        _cmd(121, [1, 1, 0]),                       # switch 1 = ON @0
+        _cmd(122, [5, 5, 0, 0, 7]),                 # var5 = 7      @1
+        _cmd(355, ["$game_switches[1]=false"]),     # switch 1 again @2
+    ]
+    result = search_scope(
+        commands, map_id=1, event_id=1, common_events_by_id={},
+        stripped_ce_ids=frozenset(), read_domain=lambda k: None,
+    )
+    assert result.refusal is None
+    assert result.write_index[Switch(1)] == 2
+    assert result.write_index[Variable(5)] == 1
+
+
+def test_write_index_uses_index_of_when_given():
+    """A flattened scope's offsets are not the owning page's list positions;
+    `story_state` extraction passes `index_of` so writes carry the index
+    `Assign.list_index` is specified against."""
+    first = _cmd(121, [1, 1, 0])
+    second = _cmd(122, [5, 5, 0, 0, 7])
+    result = search_scope(
+        [first, second], map_id=1, event_id=1, common_events_by_id={},
+        stripped_ce_ids=frozenset(), read_domain=lambda k: None,
+        index_of={id(first): 12, id(second): 30},
+    )
+    assert result.refusal is None
+    assert result.write_index[Switch(1)] == 12
+    assert result.write_index[Variable(5)] == 30
+
+
+def test_write_index_of_an_inlined_common_event_is_the_call_site():
+    call = _cmd(117, [999])
+    result = search_scope(
+        [call], map_id=1, event_id=1,
+        common_events_by_id={999: {"list": [_cmd(121, [3, 3, 0])]}},
+        stripped_ce_ids=frozenset(), read_domain=lambda k: None,
+        index_of={id(call): 8},
+    )
+    assert result.refusal is None
+    assert result.write_index[Switch(3)] == 8
+
+
 # --- section 4: real-corpus measurement gate ------------------------------
 
 

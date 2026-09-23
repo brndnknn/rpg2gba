@@ -333,12 +333,16 @@ def test_script_block_grouped_and_dispatched(monkeypatch):
         return (), ()
 
     monkeypatch.setattr(walk, "extract_script", fake_extract_script)
+    # A call the interpreter's builtin table declares: C8 stage 4 put real
+    # story-state extraction behind this row, so an INVENTED name here would
+    # refuse (`ruby_unknown_call`) and mask what this test is about, which is
+    # only that a 355 + its 655 continuations arrive as ONE joined block.
     commands = [
-        {"code": 355, "parameters": ["pbFoo("]},
+        {"code": 355, "parameters": ["pbCallBub("]},
         {"code": 655, "parameters": ["1, 2)"]},
     ]
     row = _row(commands)
-    assert calls == [("pbFoo(\n1, 2)", 0)]
+    assert calls == [("pbCallBub(\n1, 2)", 0)]
     assert not row.refused
 
 

@@ -27,7 +27,8 @@ row list.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace as _dc_replace
+from pathlib import Path
 from typing import Any
 
 from rpg2gba.chapter_manifest.conditions import ArmOutcome, classify_condition
@@ -44,9 +45,16 @@ from rpg2gba.conversion_agent.transpiler import (
     TextRun,
     parse_tree,
 )
-from rpg2gba.pbs_converter.heal_locations import _NOT_A_CALL, _parse_call
+from rpg2gba.story_state.scope_search import (
+    ComputedScope,
+    named_write_targets,
+    scope_needs_interpreter,
+    stripped_ce_ids_for,
+    witness_citations,
+    writes_from_result,
+)
+from rpg2gba.ruby_subset.search import search_scope
 from rpg2gba.story_state.state import (
-    RESPAWN_MAP,
     Adjust,
     Assign,
     Key,
@@ -164,6 +172,18 @@ class RowState:
     # anything" claim). Neither implies the other.
     havoc_keys: tuple[Key, ...] = ()
     havoc_global: bool = False
+    # REDERIVATION_PLAN.md §16.3 C8 stage 4: populated instead of `writes`
+    # when this row's own run reads state outside its own scope -- the
+    # resolver in `story_state/model.py` re-runs `computed` (via
+    # `scope_search.run_scope`) against saturated value sets until this
+    # row's writes stop changing. `witnesses` is a JSON-serialisable
+    # citation, one `(key_repr, value_repr, choice_labels)` entry per
+    # `(key, value)` the interpreter search resolved for a row that
+    # resolved fully at extraction time -- empty for a `computed` row
+    # (nothing resolved yet) and for a row that never needed the
+    # interpreter at all.
+    computed: "ComputedScope | None" = None
+    witnesses: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
 
 
 # --- page-condition reads ------------------------------------------------
@@ -362,145 +382,26 @@ def _arm_guard(
 
 # --- writes ------------------------------------------------------------
 
-_RE_SET_SELF_SWITCH = re.compile(
-    r'^pbSetSelfSwitch\(\s*(\d+)\s*,\s*"([A-Za-z0-9])"\s*,\s*(true|false)\s*\)$')
-_RE_SET_TEMP_ON = re.compile(r'^setTempSwitchOn\(\s*"(\w+)"\s*\)$')
-_RE_SET_TEMP_OFF = re.compile(r'^setTempSwitchOff\(\s*"(\w+)"\s*\)$')
-_RE_GAME_SWITCH_ASSIGN = re.compile(r'^\$game_switches\[\s*(\d+)\s*\]\s*=\s*(true|false)$')
-_RE_GAME_VAR_ASSIGN = re.compile(r'^\$game_variables\[\s*(\d+)\s*\]\s*=\s*(-?\d+)$')
-_RE_PBSET = re.compile(r'^pbSet\(\s*(\d+)\s*,\s*(-?\d+)\s*\)$')
 
-_STATE_WRITE_SMELL_RE = re.compile(
-    r'\$game_switches\[|\$game_variables\[|\$game_self_switches|pbSet\(|'
-    r'pbSetSelfSwitch\(|setTempSwitch\w*\s*\(.*(=|On|Off)|'
-    # A compound assignment is state only when its target is: an index or
-    # call result (`pbGet(151)[pbGet(2)] += 1`, `$game_variables[1] += 1`) or
-    # a global/instance variable. A bare local (`x -= 2` in map050/ev019's
-    # starter script) is Ruby scratch, and treating it as an unnamed state
-    # write made every non-live row in CH01-CH05 `undetermined`.
-    r'(?:[\])]|[$@]\w+)\s*[+\-*/%]=')
-
-# --- havoc-key extraction for an UNPARSED state write (REDERIVATION_PLAN.md
-# §16.3 C2b handback, FIX 2b): "we cannot say what value this writes" must
-# not become "we cannot say ANYTHING downstream" -- so an unparsed write
-# still contributes whatever concrete KEYS it visibly names (best-effort,
-# regex-level, no attempt at the actual assigned value) to `RowState.
-# havoc_keys`; only a line naming no recognizable key at all sets
-# `havoc_global` (a true "could be touching anything" escape hatch). -------
-
-_RE_HAVOC_SWITCH = re.compile(r"\$game_switches\[\s*(\d+)\s*\]")
-_RE_HAVOC_VARIABLE = re.compile(r"\$game_variables\[\s*(\d+)\s*\]")
-_RE_HAVOC_PBSET_VAR = re.compile(r"pbSet\(\s*(\d+)")
-_RE_HAVOC_PBGET_VAR = re.compile(r"pbGet\(\s*(\d+)")
-_RE_HAVOC_SELF_SWITCH = re.compile(r'pbSetSelfSwitch\(\s*(\d+)\s*,\s*"([A-Za-z0-9])"')
+def _default_reference_dir() -> Path:
+    """`reference/` at the repo root -- same derivation `engine_audit.py`/
+    `model.py` already use (`Path(__file__).resolve().parents[3]`)."""
+    return Path(__file__).resolve().parents[3] / "reference"
 
 
-def _havoc_keys_in_line(line: str, map_id: int) -> tuple[frozenset[Key], bool]:
-    """Every key `line` visibly names, plus whether it named at least one.
+@dataclass(frozen=True)
+class ScopeExtraction:
+    """Everything `_extract_scope_writes` (and its CE-inlining sibling
+    `_extract_ce_writes`) derive for one flattened command list -- grown
+    from a 4-tuple (REDERIVATION_PLAN.md §16.3 C8 stage 4) once `computed`/
+    `witnesses` joined `writes`/`refusals`/`havoc_keys`/`havoc_global`."""
 
-    `found=False` means the line matched `_STATE_WRITE_SMELL_RE` (it smells
-    like a state write) but named no key this function recognizes at all --
-    the caller sets `RowState.havoc_global` in that case, a strictly WORSE
-    (more conservative) claim than a per-key havoc.
-    """
-    keys: set[Key] = set()
-    for m in _RE_HAVOC_SWITCH.finditer(line):
-        keys.add(Switch(int(m.group(1))))
-    for m in _RE_HAVOC_VARIABLE.finditer(line):
-        keys.add(Variable(int(m.group(1))))
-    for m in _RE_HAVOC_PBSET_VAR.finditer(line):
-        keys.add(Variable(int(m.group(1))))
-    for m in _RE_HAVOC_PBGET_VAR.finditer(line):
-        keys.add(Variable(int(m.group(1))))
-    for m in _RE_HAVOC_SELF_SWITCH.finditer(line):
-        keys.add(SelfSwitch(map_id, int(m.group(1)), m.group(2)))
-    return frozenset(keys), bool(keys)
-
-
-def _extract_script_writes(
-    text: str, map_id: int, event_id: int, conditional: bool, source_prefix: str,
-    list_index: int,
-) -> tuple[tuple[Write, ...], tuple[Refusal, ...], frozenset[Key], bool]:
-    writes: list[Write] = []
-    refusals: list[Refusal] = []
-    havoc_keys: set[Key] = set()
-    havoc_global = False
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        source = f"{source_prefix}: {line}"
-        m = _RE_SET_SELF_SWITCH.match(line)
-        if m:
-            other_event_id, letter, value = int(m.group(1)), m.group(2), m.group(3) == "true"
-            writes.append(Assign(
-                SelfSwitch(map_id, other_event_id, letter), frozenset({value}),
-                conditional, source, list_index,
-            ))
-            continue
-        m = _RE_SET_TEMP_ON.match(line)
-        if m:
-            writes.append(Assign(
-                TempSwitch(map_id, event_id, m.group(1)), frozenset({True}),
-                conditional, source, list_index,
-            ))
-            continue
-        m = _RE_SET_TEMP_OFF.match(line)
-        if m:
-            writes.append(Assign(
-                TempSwitch(map_id, event_id, m.group(1)), frozenset({False}),
-                conditional, source, list_index,
-            ))
-            continue
-        m = _RE_GAME_SWITCH_ASSIGN.match(line)
-        if m:
-            writes.append(Assign(
-                Switch(int(m.group(1))), frozenset({m.group(2) == "true"}),
-                conditional, source, list_index,
-            ))
-            continue
-        m = _RE_GAME_VAR_ASSIGN.match(line)
-        if m:
-            writes.append(Assign(
-                Variable(int(m.group(1))), frozenset({int(m.group(2))}),
-                conditional, source, list_index,
-            ))
-            continue
-        m = _RE_PBSET.match(line)
-        if m:
-            writes.append(Assign(
-                Variable(int(m.group(1))), frozenset({int(m.group(2))}),
-                conditional, source, list_index,
-            ))
-            continue
-        # `Kernel.pbSetPokemonCenter` -- the white-out respawn write
-        # (REDERIVATION_PLAN.md §16.3 C3, state.py's `RESPAWN_MAP`
-        # docstring). Reuses `heal_locations._parse_call` (single source of
-        # truth for this call's shape, CLAUDE.md §4.3) rather than a second
-        # regex: a bare call resolves to THIS row's own map id (the calling
-        # map, per `pbSetPokemonCenter`'s own argument defaults); an
-        # explicit call's first argument is the target map id. An argument
-        # form `_parse_call` cannot recognize is a real, named refusal --
-        # not a silently dropped write (CLAUDE.md §4.5).
-        try:
-            parsed = _parse_call(line)
-        except ValueError as exc:
-            refusals.append(Refusal("unparseable_pokemon_center_call", f"{source}: {exc}"))
-            continue
-        if parsed is not _NOT_A_CALL:
-            target_map_id = map_id if parsed is None else parsed[0]
-            writes.append(Assign(
-                RESPAWN_MAP, frozenset({target_map_id}), conditional, source, list_index,
-            ))
-            continue
-        if _STATE_WRITE_SMELL_RE.search(line):
-            refusals.append(Refusal("unparsed_state_write", source))
-            line_keys, found = _havoc_keys_in_line(line, map_id)
-            if found:
-                havoc_keys |= line_keys
-            else:
-                havoc_global = True
-    return tuple(writes), tuple(refusals), frozenset(havoc_keys), havoc_global
+    writes: tuple[Write, ...] = ()
+    refusals: tuple[Refusal, ...] = ()
+    havoc_keys: frozenset[Key] = frozenset()
+    havoc_global: bool = False
+    computed: ComputedScope | None = None
+    witnesses: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
 
 
 def _extract_leaf_writes(
@@ -511,6 +412,7 @@ def _extract_leaf_writes(
     common_events_by_id: dict[int, dict[str, Any]],
     conditional: bool,
     visited_ce: frozenset[int],
+    stripped_ce_ids: frozenset[int],
 ) -> tuple[tuple[Write, ...], tuple[Refusal, ...], frozenset[Key], bool]:
     """`index` is the WRITE'S ATTRIBUTED `list_index` (REDERIVATION_PLAN.md
     §16.3 C2b handback FIX 1) -- already resolved by the caller
@@ -581,6 +483,11 @@ def _extract_leaf_writes(
             return (), (Refusal("malformed_write", f"code 117 @list[{index}]: no params"),), frozenset(), False
         ce_id = params[0]
         source_prefix = f"code 117 @list[{index}] (common event {ce_id})"
+        # A strip-listed CE (reference/strip_list.json's `common_events`) is
+        # a no-op, same disposition as `ruby_subset.search._exec_ce`
+        # (CLAUDE.md §4.3 -- one strip-honoring rule, not two).
+        if ce_id in stripped_ce_ids:
+            return (), (), frozenset(), False
         if ce_id in visited_ce:
             return (), (Refusal(
                 "common_event_cycle",
@@ -591,10 +498,12 @@ def _extract_leaf_writes(
             return (), (Refusal("missing_common_event", f"{source_prefix}: not found"),), frozenset(), False
         ce_commands = ce.get("list") or []
         tree = parse_tree(ce_commands)
-        return _extract_ce_writes(
+        sub = _extract_ce_writes(
             tree, ce_commands, map_id, event_id, common_events_by_id,
-            conditional, visited_ce | {ce_id}, forced_list_index=index,
+            conditional, visited_ce | {ce_id}, stripped_ce_ids,
+            forced_list_index=index,
         )
+        return sub.writes, sub.refusals, sub.havoc_keys, sub.havoc_global
 
     if code in (CODE_SCRIPT, CODE_SCRIPT_CONT):
         # Handled at the caller as grouped script blocks, not per-leaf.
@@ -613,12 +522,12 @@ def _extract_scope_writes(
     *,
     index_of: dict[int, int],
     forced_list_index: int | None,
-) -> tuple[tuple[Write, ...], tuple[Refusal, ...], frozenset[Key], bool]:
-    """Writes directly in one flat (already-scoped) command list -- a page
+    stripped_ce_ids: frozenset[int],
+    row_id: str | None = None,
+) -> ScopeExtraction:
+    """Everything one flat (already-scoped) command list writes -- a page
     trunk's own commands, a branch arm's own commands, or one scope of an
-    inlined common event. Scripts (355/655) are grouped into blocks first
-    (a block can span several consecutive commands), everything else is
-    dispatched per leaf command.
+    inlined common event.
 
     `index_of` maps `id(cmd)` -> that command's position in its OWNING
     PAGE's raw `list` (built once per page/common-event by the caller);
@@ -626,7 +535,85 @@ def _extract_scope_writes(
     this scope -- used when this scope is itself inside an inlined common
     event, so every write it produces is attributed to the calling page's
     117 command instead of a meaningless position inside the callee's own
-    body (REDERIVATION_PLAN.md §16.3 C2b handback FIX 1)."""
+    body (REDERIVATION_PLAN.md §16.3 C2b handback FIX 1).
+
+    `row_id`, when not `None`, marks this as a genuine manifest row scope
+    (called directly from `extract_map`/`extract_triggered_common_events`,
+    never from `_extract_ce_writes`'s inlining walk) -- the only case where
+    an unresolved out-of-scope read can become a `ComputedScope` rather
+    than a conservative refusal (REDERIVATION_PLAN.md §16.3 C8 stage 4:
+    "the unit of evaluation is a row scope"; a CE-internal arm has no row
+    identity of its own to defer against).
+
+    If `commands` needs the interpreter (`scope_needs_interpreter` -- any
+    355/655 script block or an inline `\\ch[...]` text choice), the WHOLE
+    scope is run once through `ruby_subset.search.search_scope`, which
+    itself handles 121/122/123, 355/655, 117 inlining and `\\ch` -- so this
+    function does NOT also walk it leaf-by-leaf in that case. A scope with
+    neither keeps the original structural leaf walk, unchanged.
+    """
+    if scope_needs_interpreter(commands):
+        result = search_scope(
+            commands,
+            map_id=map_id, event_id=event_id,
+            common_events_by_id=common_events_by_id,
+            stripped_ce_ids=stripped_ce_ids,
+            read_domain=lambda key: None,
+            index_of=index_of if forced_list_index is None else None,
+        )
+        label = row_id if row_id is not None else f"ce-scope @list[{forced_list_index}]"
+        if result.refusal is None:
+            writes, bad_refusals = writes_from_result(
+                result, conditional=conditional, source_prefix=f"interpreter {label}",
+            )
+            if forced_list_index is not None:
+                writes = tuple(_dc_replace(w, list_index=forced_list_index) for w in writes)
+            witnesses = witness_citations(result) if not bad_refusals else ()
+            return ScopeExtraction(
+                writes=writes, refusals=bad_refusals, witnesses=witnesses,
+            )
+        if result.refusal.code == "search_unknown_read" and row_id is not None:
+            # C8 stage 4: this row's writes depend on state the resolver
+            # (`story_state/model.py`) must saturate first -- defer, don't
+            # refuse outright. Until the resolver half lands (same commit,
+            # per the lead's design), ALSO surface an `unparsed_state_write`
+            # refusal with `havoc_global=True` so `model.py` stays sound in
+            # the interim: a computed row with no resolver yet must still
+            # look, to every EXISTING consumer, like "writes unknown."
+            computed = ComputedScope(
+                row_id=row_id, map_id=map_id, event_id=event_id, commands=commands,
+                index_of=dict(index_of), common_events_by_id=common_events_by_id,
+                stripped_ce_ids=stripped_ce_ids, conditional=conditional,
+                first_unknown_read=result.refusal.detail,
+            )
+            return ScopeExtraction(
+                refusals=(Refusal(
+                    "unparsed_state_write",
+                    f"interpreter {label}: computed row, unresolved read "
+                    f"{result.refusal.detail} -- {result.refusal.code}",
+                ),),
+                havoc_global=True,
+                computed=computed,
+            )
+        # Any other refusal code (party_model, ruby_parse_error,
+        # ruby_unknown_call:*, search_cap, search_loop, search_ce_branches,
+        # ruby_type_error:*, or a CE-nested `search_unknown_read` with no
+        # row of its own to defer) -- pass the interpreter's own code
+        # through unchanged (do not invent/translate a new one) and stay
+        # conservative for everything downstream.
+        # The row still writes SOMETHING. Name what the scripts can be seen
+        # to assign so the model havocs those keys rather than everything
+        # (model.py FIX 2b); fall back to global havoc only when nothing
+        # could be named, exactly as the regex reader this replaced did.
+        named = named_write_targets(commands, map_id=map_id, event_id=event_id)
+        return ScopeExtraction(
+            refusals=(Refusal(
+                result.refusal.code, f"interpreter {label}: {result.refusal.detail}",
+            ),),
+            havoc_keys=frozenset(named),
+            havoc_global=not named,
+        )
+
     writes: list[Write] = []
     refusals: list[Refusal] = []
     havoc_keys: set[Key] = set()
@@ -636,31 +623,27 @@ def _extract_scope_writes(
         cmd = commands[i]
         code = cmd.get("code")
         resolved_index = forced_list_index if forced_list_index is not None else index_of.get(id(cmd), -1)
-        if code == CODE_SCRIPT:
-            parts = [str((cmd.get("parameters") or [""])[0] if cmd.get("parameters") else "")]
-            j = i + 1
-            while j < len(commands) and commands[j].get("code") == CODE_SCRIPT_CONT:
-                p = commands[j].get("parameters") or [""]
-                parts.append(str(p[0]) if p else "")
-                j += 1
-            text = "\n".join(parts)
-            source_prefix = f"script @list[{resolved_index}]"
-            w, r, hk, hg = _extract_script_writes(
-                text, map_id, event_id, conditional, source_prefix, resolved_index)
-            writes.extend(w)
-            refusals.extend(r)
-            havoc_keys |= hk
-            havoc_global = havoc_global or hg
-            i = j
+        if code in (CODE_SCRIPT, CODE_SCRIPT_CONT):
+            # No script/`\ch` anywhere in this scope reached this branch
+            # (scope_needs_interpreter would have routed it above), so a
+            # lone 355/655 here is structurally unreachable in practice --
+            # still a no-op, not a crash, matching the old grouping's
+            # "nothing recognized" disposition for an empty/blank block.
+            i += 1
             continue
         w, r, hk, hg = _extract_leaf_writes(
-            cmd, resolved_index, map_id, event_id, common_events_by_id, conditional, visited_ce)
+            cmd, resolved_index, map_id, event_id, common_events_by_id, conditional,
+            visited_ce, stripped_ce_ids,
+        )
         writes.extend(w)
         refusals.extend(r)
         havoc_keys |= hk
         havoc_global = havoc_global or hg
         i += 1
-    return tuple(writes), tuple(refusals), frozenset(havoc_keys), havoc_global
+    return ScopeExtraction(
+        writes=tuple(writes), refusals=tuple(refusals),
+        havoc_keys=frozenset(havoc_keys), havoc_global=havoc_global,
+    )
 
 
 def _extract_ce_writes(
@@ -671,9 +654,10 @@ def _extract_ce_writes(
     common_events_by_id: dict[int, dict[str, Any]],
     conditional: bool,
     visited_ce: frozenset[int],
+    stripped_ce_ids: frozenset[int],
     *,
     forced_list_index: int,
-) -> tuple[tuple[Write, ...], tuple[Refusal, ...], frozenset[Key], bool]:
+) -> ScopeExtraction:
     """Inlines one common event: its own trunk writes inherit the caller's
     `conditional` flag; anything inside any of ITS OWN branch arms
     (recursively) is forced `conditional=True` (REDERIVATION_PLAN.md §16.3
@@ -681,21 +665,26 @@ def _extract_ce_writes(
     `forced_list_index` (the calling 117's own position), never a position
     inside the callee's own command list; the callee's internal branching
     still matters for `conditional`, just not for cross-page write ordering.
-    """
+
+    None of this recursion ever passes a `row_id` down to `_extract_scope_
+    writes` -- a CE inlined into a row has no row identity of its own, so
+    an unresolved out-of-scope read inside it can only become a
+    conservative refusal, never a `ComputedScope` (see `_extract_scope_
+    writes`'s own docstring)."""
     writes: list[Write] = []
     refusals: list[Refusal] = []
     havoc_keys: set[Key] = set()
     havoc_global = False
 
     trunk_commands = _flatten_scope(tree, commands)
-    w, r, hk, hg = _extract_scope_writes(
+    sub = _extract_scope_writes(
         trunk_commands, map_id, event_id, common_events_by_id, conditional, visited_ce,
-        index_of={}, forced_list_index=forced_list_index,
+        index_of={}, forced_list_index=forced_list_index, stripped_ce_ids=stripped_ce_ids,
     )
-    writes.extend(w)
-    refusals.extend(r)
-    havoc_keys |= hk
-    havoc_global = havoc_global or hg
+    writes.extend(sub.writes)
+    refusals.extend(sub.refusals)
+    havoc_keys |= sub.havoc_keys
+    havoc_global = havoc_global or sub.havoc_global
 
     def _walk(nodes: list[Node]) -> None:
         nonlocal havoc_global
@@ -703,33 +692,38 @@ def _extract_ce_writes(
             if isinstance(node, IfNode):
                 for children in (node.then, node.otherwise if node.otherwise is not None else []):
                     arm_commands = _flatten_scope(children, commands)
-                    w2, r2, hk2, hg2 = _extract_scope_writes(
+                    sub2 = _extract_scope_writes(
                         arm_commands, map_id, event_id, common_events_by_id, True, visited_ce,
                         index_of={}, forced_list_index=forced_list_index,
+                        stripped_ce_ids=stripped_ce_ids,
                     )
-                    writes.extend(w2)
-                    refusals.extend(r2)
-                    havoc_keys.update(hk2)
-                    havoc_global = havoc_global or hg2
+                    writes.extend(sub2.writes)
+                    refusals.extend(sub2.refusals)
+                    havoc_keys.update(sub2.havoc_keys)
+                    havoc_global = havoc_global or sub2.havoc_global
                     _walk(children)
             elif isinstance(node, ChoiceNode):
                 for _, _, children in node.arms:
                     arm_commands = _flatten_scope(children, commands)
-                    w2, r2, hk2, hg2 = _extract_scope_writes(
+                    sub2 = _extract_scope_writes(
                         arm_commands, map_id, event_id, common_events_by_id, True, visited_ce,
                         index_of={}, forced_list_index=forced_list_index,
+                        stripped_ce_ids=stripped_ce_ids,
                     )
-                    writes.extend(w2)
-                    refusals.extend(r2)
-                    havoc_keys.update(hk2)
-                    havoc_global = havoc_global or hg2
+                    writes.extend(sub2.writes)
+                    refusals.extend(sub2.refusals)
+                    havoc_keys.update(sub2.havoc_keys)
+                    havoc_global = havoc_global or sub2.havoc_global
                     _walk(children)
             elif isinstance(node, LoopNode):
                 _walk(node.children)
             # Leaf / TextRun: no nested branch structure.
 
     _walk(tree)
-    return tuple(writes), tuple(refusals), frozenset(havoc_keys), havoc_global
+    return ScopeExtraction(
+        writes=tuple(writes), refusals=tuple(refusals),
+        havoc_keys=frozenset(havoc_keys), havoc_global=havoc_global,
+    )
 
 
 # --- top-level entry point -----------------------------------------------
@@ -741,10 +735,18 @@ def extract_map(
     *,
     common_events: list[dict[str, Any]],
     switch_labels: dict[int, str],
+    stripped_ce_ids: frozenset[int] | None = None,
 ) -> dict[str, "RowState"]:
     """Every row's `RowState` for one map's events, keyed by manifest row id
     (the same ids `chapter_manifest.generator.iter_page_scopes` mints).
-    """
+
+    `stripped_ce_ids` defaults to `scope_search.stripped_ce_ids_for` against
+    the repo's own `reference/` dir when not supplied -- so a caller that
+    hasn't been updated to thread it through explicitly still gets
+    strip-list-honoring 117 inlining for free (REDERIVATION_PLAN.md §16.3
+    C8 stage 4 measurement note: this changed CE 4/5/6 GTS/VT/LOBBY
+    inlining, previously unconditional)."""
+    sce = stripped_ce_ids if stripped_ce_ids is not None else stripped_ce_ids_for(_default_reference_dir())
     common_events_by_id = {ce["id"]: ce for ce in common_events}
     result: dict[str, RowState] = {}
 
@@ -780,11 +782,14 @@ def extract_map(
                     arm_guard, guard_refusals = _arm_guard(
                         scope.branch, raw_commands, map_id, event_id)
 
-                writes, write_refusals, havoc_keys, havoc_global = _extract_scope_writes(
+                sub = _extract_scope_writes(
                     scope.commands, map_id, event_id, common_events_by_id,
                     False, frozenset(),
                     index_of=index_of, forced_list_index=None,
+                    stripped_ce_ids=sce, row_id=scope.row_id,
                 )
+                writes, write_refusals = sub.writes, sub.refusals
+                havoc_keys, havoc_global = sub.havoc_keys, sub.havoc_global
 
                 result[scope.row_id] = RowState(
                     row_id=scope.row_id,
@@ -799,6 +804,8 @@ def extract_map(
                     event_page_row_ids=event_page_row_ids,
                     havoc_keys=tuple(sorted(havoc_keys, key=repr)),
                     havoc_global=havoc_global,
+                    computed=sub.computed,
+                    witnesses=sub.witnesses,
                 )
 
     return result
@@ -815,6 +822,7 @@ def extract_triggered_common_events(
     common_events: list[dict[str, Any]],
     *,
     switch_labels: dict[int, str],
+    stripped_ce_ids: frozenset[int] | None = None,
 ) -> dict[str, "RowState"]:
     """One pseudo-`RowState` family per autorun/parallel common event
     (REDERIVATION_PLAN.md §16.3 C2 ruling (e)): a trunk row `common/ceNNN`
@@ -835,6 +843,7 @@ def extract_triggered_common_events(
         for a common event to write its own self-switch against) and is
         refused rather than silently attributed to a bogus (map_id, event_id).
     """
+    sce = stripped_ce_ids if stripped_ce_ids is not None else stripped_ce_ids_for(_default_reference_dir())
     result: dict[str, RowState] = {}
 
     for ce in common_events:
@@ -884,10 +893,13 @@ def extract_triggered_common_events(
                 arm_guard, guard_refusals = _arm_guard(
                     scope.branch, commands, map_id=0, event_id=ce_id)
 
-            raw_writes, write_refusals, havoc_keys, havoc_global = _extract_scope_writes(
+            sub = _extract_scope_writes(
                 scope.commands, 0, ce_id, {}, False, frozenset(),
                 index_of=index_of, forced_list_index=None,
+                stripped_ce_ids=sce, row_id=new_row_id,
             )
+            raw_writes, write_refusals = sub.writes, sub.refusals
+            havoc_keys, havoc_global = sub.havoc_keys, sub.havoc_global
             writes: list[Write] = []
             self_switch_refusals: list[Refusal] = []
             for w in raw_writes:
@@ -913,6 +925,8 @@ def extract_triggered_common_events(
                 event_page_row_ids=(trunk_row_id,),
                 havoc_keys=tuple(sorted(havoc_keys, key=repr)),
                 havoc_global=havoc_global,
+                computed=sub.computed,
+                witnesses=sub.witnesses,
             )
 
     return result

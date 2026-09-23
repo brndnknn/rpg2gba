@@ -174,6 +174,35 @@ def test_engine_attribute_writes():
     assert pokedex.writes == (StateWrite(EngineKey("pokedex"), True),)
 
 
+def test_run_toggle_is_a_passthrough_engine_attr():
+    res = evaluate_program(
+        parse_program("$PokemonGlobal.runToggle=true"), oracle=FixedOracle(), event=None,
+    )
+    assert res.refusal is None
+    assert res.writes == (StateWrite(EngineKey("pokemonglobal_run_toggle"), True),)
+
+
+@pytest.mark.parametrize(
+    "call,args",
+    [
+        ("pbChangePlayer(0)", (0,)),
+        ("pbEventScreen(ButtonEventScene)", (ConstRef(None, "ButtonEventScene"),)),
+        ("pbShowPokemon(35,256,220)", (35, 256, 220)),
+        ("pbDisposePokemon", ()),
+        ("pbGenderSelector", ()),
+    ],
+)
+def test_intro_chain_effect_calls_record_effect_not_write(call, args):
+    # map051 (INTRO chain, never scanned when this table was first built
+    # from CH01-CH05 alone) -- player-avatar/presentation calls with no
+    # story-state key this evaluator models.
+    res = evaluate_program(parse_program(call), oracle=FixedOracle(), event=None)
+    assert res.refusal is None
+    assert res.writes == ()
+    name = call.split("(", 1)[0]
+    assert res.effects == (Effect(name, args, res.effects[0].span),)
+
+
 def test_need_refresh_is_a_noop():
     res = evaluate_program(
         parse_program("$game_map.need_refresh=true"), oracle=FixedOracle(), event=None,

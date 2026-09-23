@@ -707,7 +707,11 @@ def test_unparsed_write_with_a_named_key_havocs_that_variable() -> None:
     rows = _rows([_event(1, [page])])
     row = rows[page_row_id(999, 1, 0)]
     assert row.writes == ()
-    assert row.refusals[0].code == "unparsed_state_write"
+    # C8 stage 4: the catch-all `unparsed_state_write` is gone -- the
+    # interpreter says precisely WHY it could not put a value to the write.
+    # The FIX 2b behaviour this test is really about is unchanged: the key
+    # the script visibly assigns is havoc'd by name, not globally.
+    assert row.refusals[0].code == "ruby_unknown_call:someExpression"
     assert row.havoc_keys == (Variable(7),)
     assert row.havoc_global is False
 
@@ -783,6 +787,70 @@ def test_undetermined_when_a_specific_havoc_key_matches_this_rows_own_gate() -> 
     # a havoc'd key doesn't just excuse non-liveness, it can also grant it.
     assert gated_row_id in result.newly_owned
     assert havoc_row_id in result.newly_owned
+
+
+# --- C8 stage 4: the resolver fixpoint around saturation ----------------
+
+
+def _resolved(rows: dict, seed: dict | None = None) -> dict:
+    from rpg2gba.story_state.model import resolve_computed_rows
+    order = _order(rows)
+    return resolve_computed_rows(
+        seed or {}, rows, order,
+        already_owned={}, structural_refusal=_structural_refusals(rows),
+    )
+
+
+def test_computed_row_resolves_against_saturated_state() -> None:
+    """A row whose script reads a variable another row writes cannot be
+    resolved at extraction time; the fixpoint resolves it against the
+    saturated value set (REDERIVATION_PLAN.md §16.3, "Stages 3-4 refined").
+    """
+    writer = _event(1, [_page([_cmd(122, [151, 151, 0, 0, 2])])])  # var151 = 2
+    reader = _event(2, [_page([_cmd(355, ["$game_switches[60]=(pbGet(151)==2)"])])])
+    rows = _rows([writer, reader])
+
+    reader_id = page_row_id(999, 2, 0)
+    assert rows[reader_id].computed is not None, "reader should be computed at extraction"
+    assert rows[reader_id].writes == ()
+
+    resolved = _resolved(rows)
+    row = resolved[reader_id]
+    assert row.computed is None or row.writes, "the fixpoint should have resolved it"
+    assign = next(w for w in row.writes if w.key == Switch(60))
+    # var151's SATURATED set is {0, 2}: saturation unions a write into the
+    # key's prior values, and Variable's default is 0. The resolved switch
+    # is therefore genuinely both -- the fixpoint resolves against what the
+    # key may be, not against one chosen execution.
+    assert assign.values == frozenset({False, True})
+    assert row.havoc_global is False
+    assert not any(r.code == "unparsed_state_write" for r in row.refusals)
+    assert row.witnesses, "a resolved row carries its input vector"
+
+
+def test_computed_row_reading_a_top_value_refuses_by_name() -> None:
+    """"Could be anything" cannot be enumerated -- the row keeps its havoc
+    and refuses under its own code rather than inventing a value."""
+    from rpg2gba.story_state.model import _resolve_computed_row
+
+    reader = _event(2, [_page([_cmd(355, ["$game_switches[60]=(pbGet(151)==2)"])])])
+    rows = _rows([reader])
+    reader_id = page_row_id(999, 2, 0)
+    assert rows[reader_id].computed is not None
+
+    row = _resolve_computed_row(rows[reader_id], {Variable(151): frozenset({VARIABLE_TOP})})
+    assert [r.code for r in row.refusals] == ["computed_row_top_read"]
+    assert row.writes == ()
+    # The write is still carried, just without a value: the key the script
+    # can be SEEN to assign is havoc'd by name (model.py FIX 2b), so the
+    # row does not have to claim it touches everything.
+    assert row.havoc_keys == (Switch(60),)
+    assert row.havoc_global is False
+
+
+def test_resolution_survives_a_chapter_with_no_computed_rows() -> None:
+    rows = _rows([_event(1, [_page([_cmd(121, [4, 4, 0])])])])
+    assert _resolved(rows) is rows
 
 
 # --- real-data test (CH01-CH05) ----------------------------------------

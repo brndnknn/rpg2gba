@@ -135,6 +135,12 @@ class SearchResult:
     runs: int
     values: dict[Key, frozenset]
     always_written: frozenset[Key]
+    # Per key, the LAST position in the scope at which any run wrote it --
+    # the page-list index when the caller supplied `index_of`, otherwise the
+    # flattened-scope offset. This is what `story_state.state.Assign`'s
+    # `list_index` is specified against; the max over runs is taken because
+    # a key written on several paths is ordered by the latest of them.
+    write_index: dict[Key, int]
     witnesses: dict[tuple[Key, object], tuple[Choice, ...]]
     effects: tuple[tuple[Effect, ...], ...]
     reads: frozenset[Key]
@@ -144,7 +150,7 @@ class SearchResult:
 
 def _empty_result(refusal: Refusal) -> SearchResult:
     return SearchResult(
-        runs=0, values={}, always_written=frozenset(), witnesses={},
+        runs=0, values={}, always_written=frozenset(), write_index={}, witnesses={},
         effects=(), reads=frozenset(), inputs=False, refusal=refusal,
     )
 
@@ -206,11 +212,18 @@ class _RunEngine:
         common_events_by_id: dict[int, dict[str, Any]],
         stripped_ce_ids: frozenset[int],
         read_domain: Callable[[Key], "frozenset | None"],
+        index_of: dict[int, int] | None = None,
     ) -> None:
         self.prefix = prefix
         self._next = 0
         self.world: dict[Key, object] = {}
         self.explicit: set[Key] = set()
+        # The command position every `set_key` below is attributed to -- set
+        # by `_exec_commands` before it dispatches each command, so the write
+        # primitives don't each have to thread an index through.
+        self.current_index = -1
+        self.write_index: dict[Key, int] = {}
+        self.index_of = index_of or {}
         self.read_keys: set[Key] = set()
         self.trace: list[Choice] = []
         self.effects: list[Effect] = []
@@ -249,6 +262,9 @@ class _RunEngine:
     def set_key(self, key: Key, value: object) -> None:
         self.world[key] = value
         self.explicit.add(key)
+        # Last writer within one run wins, matching `Assign.list_index`'s
+        # "where this row's execution places the write".
+        self.write_index[key] = self.current_index
 
     # -- evaluate.Oracle adapter for one 355/655 block ---------------------
 
@@ -468,7 +484,15 @@ def _exec_commands(
     while i < n:
         cmd = commands[i]
         code = cmd.get("code")
-        idx = forced_index if forced_index is not None else i
+        if forced_index is not None:
+            idx = forced_index
+        else:
+            # `i` is a position in the FLATTENED scope; a caller that has the
+            # owning page's raw list (story_state's extraction does) passes
+            # `index_of` so writes carry the page index `Assign.list_index`
+            # is specified in. Without it, the flattened position stands.
+            idx = engine.index_of.get(id(cmd), i)
+        engine.current_index = idx
 
         if code in _NEVER_FLATTENED_CODES:
             raise AssertionError(
@@ -517,11 +541,12 @@ def _run_once(
     common_events_by_id: dict[int, dict[str, Any]],
     stripped_ce_ids: frozenset[int],
     read_domain: Callable[[Key], "frozenset | None"],
+    index_of: dict[int, int] | None = None,
 ) -> _RunEngine | _Frontier:
     engine = _RunEngine(
         prefix, map_id=map_id, event_id=event_id,
         common_events_by_id=common_events_by_id, stripped_ce_ids=stripped_ce_ids,
-        read_domain=read_domain,
+        read_domain=read_domain, index_of=index_of,
     )
     try:
         _exec_commands(engine, commands, frozenset(), forced_index=None)
@@ -541,10 +566,12 @@ def search_scope(
     common_events_by_id: dict[int, dict[str, Any]],
     stripped_ce_ids: frozenset[int],
     read_domain: Callable[[Key], "frozenset | None"],
+    index_of: dict[int, int] | None = None,
     cap: int = 4096,
 ) -> SearchResult:
     values: dict[Key, frozenset] = {}
     always_written: set[Key] | None = None
+    write_index: dict[Key, int] = {}
     witnesses: dict[tuple[Key, object], tuple[Choice, ...]] = {}
     effect_seqs: set[tuple[Effect, ...]] = set()
     reads: set[Key] = set()
@@ -560,6 +587,9 @@ def search_scope(
             value = engine.world[key]
             values.setdefault(key, frozenset())
             values[key] = values[key] | frozenset({value})
+            idx = engine.write_index[key]
+            if idx > write_index.get(key, -1):
+                write_index[key] = idx
             witness_key = (key, value)
             if witness_key not in witnesses:
                 witnesses[witness_key] = tuple(engine.trace)
@@ -579,6 +609,7 @@ def search_scope(
             prefix, commands, map_id=map_id, event_id=event_id,
             common_events_by_id=common_events_by_id,
             stripped_ce_ids=stripped_ce_ids, read_domain=read_domain,
+            index_of=index_of,
         )
         if isinstance(outcome, _Frontier):
             for value in outcome.domain:
@@ -597,6 +628,7 @@ def search_scope(
         runs=completed,
         values=values,
         always_written=frozenset(always_written or ()),
+        write_index=write_index,
         witnesses=witnesses,
         effects=tuple(sorted(effect_seqs, key=lambda seq: tuple((e.name, e.list_index) for e in seq))),
         reads=frozenset(reads),

@@ -122,6 +122,17 @@ class _Parser:
             tok = self._peek()
             if tok.kind == "NAME" and tok.text in terminators:
                 break
+            # A brace-block body (`_parse_brace_block`) has no keyword
+            # terminator -- its only stop condition is the closing `}`,
+            # which is an OP token, not a NAME, so the check above never
+            # catches it. Every other body-parsing site (if/while/etc.,
+            # the top-level Program) uses keyword terminators exclusively
+            # and never has a legitimate bare `}` at statement-start (a
+            # hash literal's own closing `}` is consumed internally by
+            # `_parse_hash_lit`, never surfacing here) -- safe to stop
+            # unconditionally on this token.
+            if tok.kind == "OP" and tok.text == "}":
+                break
             statements.append(self._parse_statement())
             self._skip_newlines()
         return tuple(statements)

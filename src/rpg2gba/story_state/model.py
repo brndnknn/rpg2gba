@@ -12,7 +12,7 @@ import functools
 import json
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -26,12 +26,19 @@ from rpg2gba.story_state.extract import (
     extract_map,
     extract_triggered_common_events,
 )
+from rpg2gba.story_state.scope_search import (
+    named_write_targets,
+    run_scope,
+    witness_citations,
+    writes_from_result,
+)
 from rpg2gba.story_state.state import (
     RESPAWN_MAP,
     Adjust,
     Assign,
     EngineKey,
     Key,
+    Refusal,
     SelfSwitch,
     Switch,
     TempSwitch,
@@ -215,6 +222,11 @@ class RowVerdict:
     forced: bool
     refusals: tuple[str, ...]
     detail: str | None
+    # C8 stage 4: for a row whose writes the interpreter resolved, one
+    # citation per (key, value) -- `(key_repr, value_repr, choice labels)`,
+    # the input vector that produced it. Empty for a row extraction folded
+    # to static writes without ever running a search.
+    witnesses: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -304,7 +316,36 @@ _SOFT_GUARD_REFUSAL_PREFIXES = frozenset({
     "unparsed_state_condition",
     "unmodelled_outcome",
 })
-_SOFT_WRITE_REFUSAL_CODES = frozenset({"unparsed_state_write"})
+_SOFT_WRITE_REFUSAL_CODES = frozenset({
+    "unparsed_state_write",
+    # C8 stage 4: the interpreter's write-level refusals. Every one of these
+    # means "this row writes SOMETHING we cannot put a value to" -- the same
+    # claim `unparsed_state_write` made, now said precisely -- and every one
+    # is raised with `havoc_global`, so the row's effect is still carried.
+    # They are soft for FIX 2a's reason: a row excluded from saturation
+    # starves everything downstream of it, which is a far worse answer than
+    # carrying it as possibly-live. The interpreter's STRUCTURAL failures
+    # (`search_ce_cycle`, `search_missing_common_event`,
+    # `search_malformed_write`) are deliberately absent -- they are the
+    # exact analogues of the hard codes above and stay hard.
+    "computed_row_top_read",
+    "computed_row_self_reference",
+    "ruby_parse_error",
+    "ruby_unknown_call",
+    "ruby_unknown_attribute",
+    "ruby_type_error",
+    "ruby_unsupported_node",
+    "party_model",
+    "no_port",
+    "search_cap",
+    "search_loop",
+    "search_ce_branches",
+    "search_type_error",
+    "search_inline_choice",
+    "search_nonscalar_value",
+    "search_empty_domain",
+    "search_unknown_read",
+})
 
 
 def _is_hard_refused(codes: tuple[str, ...] | None) -> bool:
@@ -417,6 +458,182 @@ class _SaturationResult:
     end_state: State
     newly_owned: dict[str, int]  # row_id -> stage, this call's new owners only
     blockers: dict[str, tuple[str, ...]]  # row_id -> blockers, newly-owned rows only
+
+
+# --- the resolver fixpoint around saturation ------------------------------
+
+# A computed row's writes are re-derived once per pass against the previous
+# pass's saturated value sets. Value sets only ever grow (saturation is a
+# flow-insensitive union) and are capped by `MAX_VARIABLE_VALUES`, so this
+# terminates well inside the bound; the bound exists to fail loud
+# (CLAUDE.md §4.5) if some future non-monotone resolution starts oscillating
+# instead of quietly spinning.
+MAX_RESOLVER_PASSES = 8
+
+
+def _resolve_computed_row(row: RowState, state: State) -> RowState:
+    """One computed row re-run against `state`, as an ordinary `RowState`.
+
+    A row is *computed* when its own scope reads state it does not itself
+    write, so extraction could not name its writes (REDERIVATION_PLAN.md
+    §16.3, "Stages 3-4 refined"). Here the read domain is the saturated
+    value set, so the same interpreter run yields concrete writes.
+
+    Reading a TOP key refuses by name (`computed_row_top_read`): "could be
+    anything" cannot be enumerated, so the row keeps its havoc rather than
+    pretending to a value. The placeholder `unparsed_state_write` refusal
+    and `havoc_global` that extraction attaches to every computed row are
+    dropped here -- resolution is what they were standing in for.
+    """
+    assert row.computed is not None
+
+    def read_domain(key: Key) -> frozenset | None:
+        values = _get(state, key)
+        if VARIABLE_TOP in values:
+            return None  # the only None this resolver ever returns
+        return values
+
+    result = run_scope(row.computed, read_domain)
+    carried = tuple(r for r in row.refusals if r.code != "unparsed_state_write")
+
+    if result.refusal is not None:
+        code = result.refusal.code
+        if code == "search_unknown_read":
+            # `read_domain` answers every key except a TOP one.
+            code = "computed_row_top_read"
+        named = named_write_targets(
+            row.computed.commands,
+            map_id=row.computed.map_id, event_id=row.computed.event_id,
+        )
+        return replace(
+            row,
+            refusals=carried + (Refusal(code, f"{row.row_id}: {result.refusal.detail}"),),
+            havoc_keys=named,
+            havoc_global=not named,
+        )
+
+    writes, refusals = writes_from_result(
+        result, conditional=row.computed.conditional,
+        source_prefix=f"resolved {row.row_id}",
+    )
+
+    # A key this row both READS and WRITES is a counter: its new value is a
+    # function of its own old one. Re-running it against a saturated (union)
+    # value set feeds last pass's values straight back in, so the set grows
+    # every pass -- an ascending chain that ends at the blowup guard, never
+    # at a fixpoint (measured: `map050/ev019/p0`'s Variable(101)). A
+    # counter's true may-value is unbounded, i.e. TOP, and every other write
+    # this row makes was derived from a now-TOP read, so none of them can be
+    # trusted either: the whole row widens. This is exactly the standing it
+    # had before C8 (an `unparsed_state_write` with havoc), now named.
+    self_referential = sorted((k for k in result.values if k in result.reads), key=repr)
+    if self_referential:
+        return replace(
+            row,
+            writes=(),
+            refusals=carried + (Refusal(
+                "computed_row_self_reference",
+                f"{row.row_id}: {', '.join(repr(k) for k in self_referential)} "
+                f"read and written by this row -- a counter, widened to TOP",
+            ),),
+            havoc_keys=tuple(sorted(result.values, key=repr)),
+            havoc_global=True,
+        )
+
+    return replace(
+        row,
+        writes=writes,
+        refusals=carried + refusals,
+        witnesses=witness_citations(result),
+        havoc_global=False,
+        havoc_keys=(),
+    )
+
+
+def _resolution_signature(row: RowState) -> tuple:
+    """The part of a resolved row saturation actually reads -- the fixpoint's
+    convergence test (witnesses and other citations are excluded)."""
+    return (
+        tuple(sorted(row.writes, key=repr)),
+        tuple(sorted((r.code, r.detail) for r in row.refusals)),
+        tuple(sorted(row.havoc_keys, key=repr)),
+        row.havoc_global,
+    )
+
+
+def _attach_witnesses(
+    verdicts: list[RowVerdict], rows_by_id: dict[str, RowState],
+) -> list[RowVerdict]:
+    """Copies each row's resolved-write citations onto its verdict, so the
+    report carries the input vector behind every derived value (C8 stage 4).
+    """
+    out: list[RowVerdict] = []
+    for verdict in verdicts:
+        row = rows_by_id.get(verdict.row_id)
+        witnesses = row.witnesses if row is not None else ()
+        out.append(replace(verdict, witnesses=witnesses) if witnesses else verdict)
+    return out
+
+
+def resolve_computed_rows(
+    seed: State,
+    rows_by_id: dict[str, RowState],
+    order: list[str],
+    *,
+    already_owned: dict[str, tuple[str, ...]],
+    structural_refusal: dict[str, tuple[str, ...] | None],
+) -> dict[str, RowState]:
+    """`rows_by_id` with every live computed row resolved to real writes.
+
+    The fixpoint the plan calls for (REDERIVATION_PLAN.md §16.3, "Stages 3-4
+    refined"): saturate, re-resolve every computed row this chapter newly
+    owns against the resulting end state, and repeat until the resolved
+    writes stop changing. Sound because saturation's value sets are a
+    flow-insensitive union that only grows, so each pass's read domain is a
+    superset of the last's.
+
+    Rows an earlier chapter already owns are left alone -- their writes are
+    folded into `seed` and belong to that chapter's own report.
+    """
+    computed_ids = [
+        rid for rid in order
+        if rows_by_id[rid].computed is not None and rid not in already_owned
+    ]
+    if not computed_ids:
+        return rows_by_id
+
+    working = dict(rows_by_id)
+    # A row that RESOLVED TO A REFUSAL is settled: a refusal is the top of
+    # this lattice, and re-running it can only oscillate (widening a key to
+    # TOP makes the next pass refuse on reading it, which drops the havoc,
+    # which lets it resolve again -- measured on `map050/ev019/p0`). Only
+    # rows that resolved to concrete writes are re-run as the state grows.
+    settled: set[str] = set()
+    for _ in range(MAX_RESOLVER_PASSES):
+        result = saturate(
+            seed, working, order,
+            already_owned=already_owned, structural_refusal=structural_refusal)
+        changed = False
+        for rid in computed_ids:
+            if rid not in result.newly_owned or rid in settled:
+                continue  # not live at all, or already at the top
+            resolved = _resolve_computed_row(rows_by_id[rid], result.end_state)
+            if any(r.code.startswith("computed_row_") for r in resolved.refusals):
+                settled.add(rid)
+            # Compare only what saturation consumes. A witness trace cites
+            # the read values behind a write, so it keeps changing as the
+            # read domain grows even after the writes themselves have
+            # settled -- comparing whole rows would never converge.
+            if _resolution_signature(resolved) != _resolution_signature(working[rid]):
+                working[rid] = resolved
+                changed = True
+        if not changed:
+            return working
+
+    raise RuntimeError(
+        f"resolver did not converge in {MAX_RESOLVER_PASSES} passes; "
+        f"computed rows: {sorted(computed_ids)}"
+    )
 
 
 def saturate(
@@ -1081,6 +1298,13 @@ def model_intro(
     refusal_cache: dict[str, tuple[str, ...] | None] = {}
     structural_refusal = {rid: _structural_refusal(rid, rows_by_id, refusal_cache) for rid in order}
     seed: State = {RESPAWN_MAP: frozenset({initial_respawn_map_id})}
+    rows_by_id = resolve_computed_rows(
+        seed, rows_by_id, order, already_owned={}, structural_refusal=structural_refusal)
+    # Resolution replaces a computed row's placeholder refusal with whatever
+    # the interpreter actually concluded, so the structural view has to be
+    # taken again -- it is what the verdicts below report.
+    refusal_cache = {}
+    structural_refusal = {rid: _structural_refusal(rid, rows_by_id, refusal_cache) for rid in order}
     result = saturate(
         seed, rows_by_id, order, already_owned={}, structural_refusal=structural_refusal)
     owned = set(result.newly_owned)
@@ -1164,6 +1388,8 @@ def model_intro(
         # (ChapterStory.common_events docstring); INTRO never records them
         # as "unreachable".
 
+    verdicts = _attach_witnesses(verdicts, rows_by_id)
+    common_event_verdicts = _attach_witnesses(common_event_verdicts, rows_by_id)
     story = ChapterStory(
         chapter_id="INTRO", seed_from="<defaults>", rows=tuple(verdicts),
         end_state=_freeze_state(end_state), intro_maps=tuple(intro_maps),
@@ -1341,6 +1567,14 @@ def build_chapter_stories(
             if rid not in structural_refusal:
                 structural_refusal[rid] = _structural_refusal(rid, cumulative_rows, refusal_cache)
 
+        cumulative_rows.update(resolve_computed_rows(
+            seed, cumulative_rows, order,
+            already_owned=already_owned, structural_refusal=structural_refusal))
+        # See `model_intro`: resolution changes what a computed row refuses,
+        # and the verdicts below report the structural view, so retake it.
+        refusal_cache = {}
+        for rid in order:
+            structural_refusal[rid] = _structural_refusal(rid, cumulative_rows, refusal_cache)
         result = saturate(
             seed, cumulative_rows, order,
             already_owned=already_owned, structural_refusal=structural_refusal)
@@ -1463,6 +1697,8 @@ def build_chapter_stories(
                 forced=cumulative_rows[rid].forced, refusals=(), detail=None,
             ))
 
+        verdicts = _attach_witnesses(verdicts, cumulative_rows)
+        common_event_verdicts = _attach_witnesses(common_event_verdicts, cumulative_rows)
         stories[chapter_id] = ChapterStory(
             chapter_id=chapter_id, seed_from=seed_from_by_chapter[chapter_id],
             rows=tuple(verdicts),

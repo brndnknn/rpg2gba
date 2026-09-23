@@ -175,6 +175,14 @@ NOOP_ATTRS: frozenset[tuple[str, str]] = frozenset({
 # footnote strip_list.json already carries for `static_predicates`.
 PASSTHROUGH_ENGINE_ATTRS: dict[tuple[str, str], str] = {
     ("$PokemonGlobal", "surfing"): "pokemonglobal_surfing",
+    # `attr_accessor :runToggle` (221_Extra_Scripts.rb:295-299) -- an
+    # auto-run UI preference toggled alongside (but distinct from)
+    # `runningShoes` itself (215_Uranium_Pause_Menu.rb:367-368, the pause
+    # menu's run icon). Real, toggles in play, but not one of the four named
+    # engine-unlock attributes and not a never-exists static predicate
+    # either -- same bucket as `surfing` above for the same reason. Judgment
+    # call -- see report to lead.
+    ("$PokemonGlobal", "runToggle"): "pokemonglobal_run_toggle",
 }
 
 
@@ -281,6 +289,34 @@ EFFECT_CALLS: frozenset[str] = frozenset({
     "pbWildBattle",
     "pbItemBall",
     "pbPickBerry",
+    # INTRO chain (map051, opening cutscene -- never scanned when this table
+    # was first built from CH01-CH05 alone). 170__PSystem_Utilities.rb:521-530
+    # -- writes $Trainer.trainertype/metaID, $game_player.character_name/hue,
+    # $PokemonGlobal.playerID: real persistent state, but none of it is a
+    # switch/var/engine-unlock/party-dex quantity this evaluator models (it's
+    # player-avatar identity, a different concept entirely) -- same bucket as
+    # pbAddPokemon/pbReceiveItem above: a real effect, recorded, but with no
+    # further story-state modelling. Judgment call -- see report to lead.
+    "pbChangePlayer",
+    # 061_EventScene_v17.rb:714-723 -- generic screen launcher (fade in,
+    # `cls.new(viewport).main`, fade out/dispose). No state write of its own;
+    # whatever the passed class does is opaque the same way pbEventScreen's
+    # sibling screen launchers (pbStarterSelector, pbTrainerIntro) already
+    # are in this table.
+    "pbEventScreen",
+    # 197_BW_Utilities.rb:465-474 -- creates a $pokeani animated picture,
+    # plays its cry. $pokeani is a transient screen-local global (also
+    # written by the sibling pbDisposePokemon at 197_BW_Utilities.rb:476-485,
+    # both pure presentation), never a story-state key.
+    "pbShowPokemon",
+    "pbDisposePokemon",
+    # 229_GenderSelect.rb:399-403 -- launches a screen whose deep internal
+    # flow (229_GenderSelect.rb:257-264/271-280/288-297) reassigns
+    # `$Trainer=PokeBattle_Trainer.new(...)` (name/gender/id) and calls
+    # pbChangePlayer itself. Same bucket as pbChangePlayer above: real
+    # persistent player-identity state, not a switch/var/engine-unlock/
+    # party-dex quantity this evaluator models. Judgment call -- see report.
+    "pbGenderSelector",
 })
 
 
