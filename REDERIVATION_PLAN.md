@@ -2256,6 +2256,23 @@ always followed by a code 314 Recover All (`transpiler.py:516`), so with no Nuzl
 port it is a builtin no-op. `static_predicates` (`$PokemonGlobal.randomizer = false`) still has
 no consumer anywhere in `src/` — noted, not C8's.
 
+*Stage 7 re-scoped to three tasks (2026-09-23), after measuring each item above.* Two of the
+four things item (7) lists are already closed: the **`nuzlocke_heal` correction landed in stage
+4** (`evaluate.py::_is_nuzlocke_party_loop` matches the loop structurally and emits a no-op
+effect), and **`story_state`'s half of the 117 strip-honoring landed there too** — only
+`beat_floor`'s half is outstanding. Two further measured corrections to the text above: the
+`jvGiveReward` extractor **already exists** (`beat_floor/script.py:397` and
+`condition.py:189`), as a deliberate `non_literal_args` refusal, so the work is to *replace* it,
+not add one; and the refusal's stated reason is wrong in an instructive way — `jvGiveReward`
+reads only `$game_variables[22]` and switches 59/60/61, all modelled, while it is
+**`jvNextReward`** that reads `$Trainer.pokedexOwned` and must keep refusing `party_model`
+(`reference/scripts_dump/213_Bambo_Reward.rb`). Strip-honoring's blast radius is smaller than it
+looks: 36 code-117 calls to CEs 4/5/6 corpus-wide across 11 maps, but only **3 in staged
+chapters**, all on `Map068` (CH03) at `ev009`/`ev011`/`ev013` page 0 `list[0]`. Written up as
+`assignments/C8/` (three tasks: the reward ladder, `beat_floor` strip-honoring, and surfacing
+the `FLAG_SYS_*` fork check inside `engine-audit`, where it is currently only a standalone
+pytest grep of `flags.h` that bypasses `fork_index`).
+
 **C8 stage 4 landed (2026-09-23).** `story_state` extraction now runs the interpreter, and the
 resolver fixpoint runs around saturation. New `story_state/scope_search.py` (`ComputedScope`,
 `run_scope`, `scope_needs_interpreter`, `writes_from_result`, `witness_citations`,
@@ -2322,7 +2339,9 @@ a raw body string.
 **Gate: transpiler output byte-identical** across all 19 staged maps plus `CommonEvents.pory`
 *and* the queue JSON, before vs after. That was the point of the stage's shape — it is why the
 two widenings the AST now makes available were both deliberately declined (see the module
-docstring). Suite **4282 passed / 16 skipped** (two halves), unchanged.
+docstring). Suite **4320 passed / 16 skipped** (two halves). *(Corrected 2026-09-23: the entry
+first said 4282, the number measured before that same commit's 38 new `ruby_idioms` tests were
+added. No behaviour changed — the count was written down early.)*
 
 Three things worth keeping:
 
