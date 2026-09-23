@@ -2308,6 +2308,40 @@ literal (ruling (b) names `party_model` a blocker, but the literal set is C6's c
 a variable holding a species name (`'Eletux'`), which `state.Assign.values` (`bool | int`)
 cannot carry.
 
+**C8 stage 6 landed (2026-09-23).** The transpiler's `_RubyLocal`/array/argmax path now reads
+through `ruby_subset`. New `conversion_agent/ruby_idioms.py`: twelve pure matchers over a parsed
+statement (`match_local_from_var`, `match_local_addsub`, `match_local_wrap`,
+`match_array_literal`, `match_array_bump`, `match_array_argmax`, `match_remap_arm_open`,
+`match_local_const_assign`, `is_block_end`, `match_var_from_local`, `match_string_list`,
+`match_var_from_list_index`), replacing thirteen anchored regexes now deleted from
+`transpiler.py`. **The module recognizes; it does not emit** — every emitter
+(`_emit_argmax`'s `>=` chain, the scratch-var allocation, `_emit_local_materialize`) stays put,
+so this is a swap of the reader only. `_emit_array_literal` now takes parsed `values` instead of
+a raw body string.
+
+**Gate: transpiler output byte-identical** across all 19 staged maps plus `CommonEvents.pory`
+*and* the queue JSON, before vs after. That was the point of the stage's shape — it is why the
+two widenings the AST now makes available were both deliberately declined (see the module
+docstring). Suite **4282 passed / 16 skipped** (two halves), unchanged.
+
+Three things worth keeping:
+
+1. **The idiom is smaller than it looks and entirely on two maps.** Census of all 664 script
+   rows in the staged corpus: 3 `x=pbGet(N)`, 1 `x-=2`, 2 postfix wraps, 1 array literal, 4
+   indexed bumps, 1 argmax, 2 remap arms, 2 arm bodies, 2 write-backs, 1 string list, 1 indexed
+   readback — every one of them on `map050` or `map032`. The gate therefore covers 100% of the
+   affected sites, not a sample.
+2. **Widening `pbGet(N)` to also accept `$game_variables[N]` is measurably a no-op** (same 8
+   rows matched either way, all 664 rows scanned). Declined anyway: the narrow miss queues the
+   row where a human sees it (§4.5), where the wide form would quietly handle an unmeasured
+   shape.
+3. **The `if x==A / x=B / elsif / end` remap chain is still matched one row at a time.** RMXP
+   delivers it as separate 655 rows and `_merge_script_call_rows` deliberately refuses to fuse
+   them (they are complete statements, not wrap fragments), so parsing the chain as one `ast.If`
+   would mean buffering rows across a page and flushing unterminated ones — a larger change than
+   this stage bought. The opener row is normalized into a parseable statement instead (`elsif`
+   → `if`, append `end`); the two-line normalization is in `match_remap_arm_open`.
+
 ### 16.4 Known work the generator will refuse until fixed (not decisions)
 
 - **#109** — `text_source` rejects the straight quote staging converts; corpus-wide the text

@@ -52,6 +52,7 @@ from rpg2gba.conversion_agent.flag_registry import (
     resolve_switch_flag,
     resolve_variable_var,
 )
+from rpg2gba.conversion_agent import ruby_idioms
 from rpg2gba.conversion_agent.inline_choice import (
     InlineChoiceError,
     has_inline_choice,
@@ -537,7 +538,8 @@ _NUZLOCKE_HEAL_STRIP_RE = re.compile(
 # The argument is a Ruby local built over the preceding script rows
 # (`x=pbGet(151)` / `x-=2` / `x=2 if x==-1`), so the three shapes below are
 # tracked into _ruby_locals and replayed per source-var value at emit time.
-_RUBY_LOCAL_PBGET_RE = re.compile(r"^\s*([a-z_]\w*)\s*=\s*pbGet\(\s*(\d+)\s*\)\s*$")
+# Recognized by `ruby_idioms.match_local_from_var` / `match_local_addsub` /
+# `match_local_wrap` (C8 stage 6 — AST shapes, not regexes).
 
 # pbGet(id) / pbSet(id, value) — thin wrappers over $game_variables
 # (reference/scripts_dump/170__PSystem_Utilities.rb:2516-2528):
@@ -565,10 +567,6 @@ _PBGET_ASSIGN_LITERAL_RE = re.compile(
     r"(?:Kernel\.)?pbGet\(\s*(?P<source>\d+)\s*\)\s*$"
 )
 _PBGET_HEAD_RE = re.compile(r"(?:Kernel\.)?pbGet\(")
-_RUBY_LOCAL_ADDSUB_RE = re.compile(r"^\s*([a-z_]\w*)\s*(\+|-)=\s*(\d+)\s*$")
-_RUBY_LOCAL_WRAP_RE = re.compile(
-    r"^\s*([a-z_]\w*)\s*=\s*(-?\d+)\s+if\s+\1\s*==\s*(-?\d+)\s*$"
-)
 _STARTER_SELECTOR_RE = re.compile(
     r"^\s*pbStarterSelector\(\s*([a-z_]\w*)\s*(?:,\s*(true|false)\s*)?\)\s*$"
 )
@@ -595,21 +593,11 @@ _STARTER_SELECTOR_PBGET_RE = re.compile(
 # it is a minted var in the Uranium range (data/scripts/uranium_flags.h), so
 # it cannot collide with these.
 _ARRAY_BUCKET_VARS = ("VAR_TEMP_3", "VAR_TEMP_4", "VAR_TEMP_5")
-_ARRAY_LITERAL_RE = re.compile(
-    r"^\s*\$game_variables\[\s*(\d+)\s*\]\s*=\s*\[\s*([\d\s,]*?)\s*\]\s*$"
-)
-_ARRAY_INDEXED_BUMP_RE = re.compile(
-    r"^\s*pbGet\(\s*(\d+)\s*\)\[\s*pbGet\(\s*(\d+)\s*\)\s*\]\s*\+=\s*(\d+)\s*$"
-)
-_ARRAY_ARGMAX_RE = re.compile(
-    r"^\s*([a-z_]\w*)\s*=\s*pbGet\(\s*(\d+)\s*\)\.index\(\s*pbGet\(\s*(\d+)\s*\)\.max\s*\)\s*$"
-)
-_RUBY_IF_EQ_RE = re.compile(r"^\s*(?:els)?if\s+([a-z_]\w*)\s*==\s*(-?\d+)\s*$")
-_RUBY_ASSIGN_CONST_RE = re.compile(r"^\s*([a-z_]\w*)\s*=\s*(-?\d+)\s*$")
-_RUBY_END_RE = re.compile(r"^\s*end\s*$")
-_VAR_ASSIGN_LOCAL_RE = re.compile(
-    r"^\s*\$game_variables\[\s*(\d+)\s*\]\s*=\s*([a-z_]\w*)\s*$"
-)
+# The array literal, the indexed bump, the argmax, the `if x==A / x=B` remap
+# chain and the write-back to a real variable are recognized by
+# `ruby_idioms.match_array_literal` / `match_array_bump` /
+# `match_array_argmax` / `match_remap_arm_open` + `match_local_const_assign`
+# + `is_block_end` / `match_var_from_local` (C8 stage 6).
 
 # ``$game_variables[N]=$Trainer.party.length`` (Map068 EV001 page1 cmd14 /
 # page2 cmd8, both var 43). Fork-native ``CalculatePlayerPartyCount``
@@ -627,23 +615,18 @@ _PARTY_LENGTH_ASSIGN_RE = re.compile(
 # name-back) ---------------------------------------------------------------
 # `list=["Orchynx","Raptorch","Eletux"]` binds a plain (non-$game_variables)
 # Ruby local to an ordered string literal; `$game_variables[3]=list[x]` then
-# indexes it by the SAME local `x` already tracked by `_RUBY_LOCAL_PBGET_RE`/
-# `_RUBY_LOCAL_WRAP_RE` above (Uranium's `x=pbGet(151); x=0 if x==3`) and
-# also materialized into a real var by `_VAR_ASSIGN_LOCAL_RE`'s plain-local
+# indexes it by the SAME local `x` already tracked by
+# `ruby_idioms.match_local_from_var`/`match_local_wrap` above (Uranium's
+# `x=pbGet(151); x=0 if x==3`) and also materialized into a real var by
+# `match_var_from_local`'s plain-local
 # arm (`$game_variables[1]=x`, the same `x`). Nothing is emitted for either
 # row — like the other Ruby-local trackers, they only feed a later idiom,
 # here `\v[3]` in the very next dialogue row's text
 # (`_PageEmitter._emit_value_var_text`). Corpus census 2026-08-02: this
 # string-array shape is ONE site (`list=[` never appears elsewhere), unlike
 # the `x=pbGet(151)` readback itself, which recurs — see the plain-local
-# materialize arm's own docstring.
-_STRING_LIST_LITERAL_RE = re.compile(
-    r'^\s*([a-z_]\w*)\s*=\s*\[\s*((?:"[^"]*"\s*,?\s*)*)\]\s*$'
-)
-_STRING_LIST_ITEM_RE = re.compile(r'"([^"]*)"')
-_LIST_INDEX_ASSIGN_RE = re.compile(
-    r"^\s*\$game_variables\[\s*(\d+)\s*\]\s*=\s*([a-z_]\w*)\[\s*([a-z_]\w*)\s*\]\s*$"
-)
+# materialize arm's own docstring. Both rows are recognized by
+# `ruby_idioms.match_string_list` / `match_var_from_list_index` (C8 stage 6).
 
 # u16 subtract-and-test-sign threshold. NOT 32768: 0x8000 is SPECIAL_VARS_START
 # (include/constants/vars.h), and the `compare` macro (asm/macros/event.inc)
@@ -680,7 +663,7 @@ _POKERUS_CHECK_RE = re.compile(r"^\s*Kernel\.pbPokerus\?\s*$")
 
 # ``\v[N]`` game-variable text substitution — normally unrecognized (queues,
 # see translate_text_codes). _PageEmitter._emit_value_var_text resolves the
-# one shape a tracked list-index readback produces (_LIST_INDEX_ASSIGN_RE);
+# one shape a tracked list-index readback produces (ruby_idioms.match_var_from_list_index);
 # any other \v[N] still falls through and queues.
 _VALUE_VAR_RE = re.compile(r"\\v\[(\d+)\]")
 
@@ -1910,7 +1893,7 @@ class _PageEmitter:
         self._choice_count = 0  # running per-page \ch counter (label uniqueness)
         # Ruby locals built across 355/655 rows: name -> (source_var_id, offset,
         # wrap). Only the shapes the starter-selector idiom needs; see
-        # _RUBY_LOCAL_PBGET_RE and friends.
+        # ruby_idioms.match_local_from_var and friends.
         self._ruby_locals: dict[str, _RubyLocal] = {}
         # Set to the opener row's cmd index when a
         # "$PokemonGlobal.seenStorageCreator=" row (no value yet) was just
@@ -1931,11 +1914,11 @@ class _PageEmitter:
         # sharing the same local find the var it now lives in.
         self._materialized_locals: dict[str, str] = {}
         # Plain Ruby local name -> ordered string literal it was bound to
-        # (see _STRING_LIST_LITERAL_RE).
+        # (see ruby_idioms.match_string_list).
         self._string_lists: dict[str, list[str]] = {}
         # Uranium variable id -> (real var it would have held the indexed
         # string, the ordered values) for a \v[N] text substitution
-        # (see _LIST_INDEX_ASSIGN_RE / _emit_value_var_text).
+        # (see ruby_idioms.match_var_from_list_index / _emit_value_var_text).
         self._value_text_choices: dict[int, tuple[str, list[str]]] = {}
 
     # -- leaf emitters -------------------------------------------------------
@@ -3769,97 +3752,110 @@ class _PageEmitter:
                 "special(EnableNationalPokedex)",
             ]
 
-        # -- Ruby locals feeding pbStarterSelector ---------------------------
-        # These three rows emit nothing on their own; they build the argument
-        # the selector call below consumes. Tracked, not queued.
-        m = _RUBY_LOCAL_PBGET_RE.match(text)
-        if m:
-            self._ruby_locals[m.group(1)] = _RubyLocal(source_var=int(m.group(2)))
+        # -- Ruby locals / arrays / argmax (C8 stage 6) -----------------------
+        # Twelve shapes, all recognized by `ruby_idioms` against a real parse
+        # rather than an anchored regex each (CLAUDE.md §4.3). The row is
+        # parsed ONCE here and the parse tree handed to each matcher in turn;
+        # the order below is the order the regexes used to be tried in, which
+        # several of these depend on (`x=0` must not be read as a remap arm
+        # body before the array/argmax shapes have had their look). A row
+        # that doesn't parse leaves `stmt` None, so every node matcher misses
+        # and the row falls through to the queue exactly as before.
+        stmt = ruby_idioms.parse_statement(text)
+
+        # These rows emit nothing on their own; they build the argument the
+        # pbStarterSelector call below consumes. Tracked, not queued.
+        from_var = ruby_idioms.match_local_from_var(stmt) if stmt else None
+        if from_var is not None:
+            self._ruby_locals[from_var.name] = _RubyLocal(
+                source_var=from_var.source_var)
             return []
 
-        m = _RUBY_LOCAL_ADDSUB_RE.match(text)
-        if m and m.group(1) in self._ruby_locals:
-            local = self._ruby_locals[m.group(1)]
-            delta = int(m.group(3)) * (1 if m.group(2) == "+" else -1)
-            self._ruby_locals[m.group(1)] = _RubyLocal(
-                local.source_var, local.offset + delta, local.wrap
+        addsub = ruby_idioms.match_local_addsub(stmt) if stmt else None
+        if addsub is not None and addsub.name in self._ruby_locals:
+            local = self._ruby_locals[addsub.name]
+            self._ruby_locals[addsub.name] = _RubyLocal(
+                local.source_var, local.offset + addsub.delta, local.wrap
             )
             return []
 
-        m = _RUBY_LOCAL_WRAP_RE.match(text)
-        if m and m.group(1) in self._ruby_locals:
-            local = self._ruby_locals[m.group(1)]
-            self._ruby_locals[m.group(1)] = _RubyLocal(
-                local.source_var, local.offset, (int(m.group(3)), int(m.group(2)))
+        wrap = ruby_idioms.match_local_wrap(stmt) if stmt else None
+        if wrap is not None and wrap.name in self._ruby_locals:
+            local = self._ruby_locals[wrap.name]
+            self._ruby_locals[wrap.name] = _RubyLocal(
+                local.source_var, local.offset,
+                (wrap.from_value, wrap.to_value),
             )
             return []
 
         # -- array-valued game variable (the aptitude tally) ------------------
-        m = _ARRAY_LITERAL_RE.match(text)
-        if m:
-            return self._emit_array_literal(int(m.group(1)), m.group(2))
+        array_lit = ruby_idioms.match_array_literal(stmt) if stmt else None
+        if array_lit is not None:
+            return self._emit_array_literal(array_lit.var_id, array_lit.values)
 
-        m = _ARRAY_INDEXED_BUMP_RE.match(text)
-        if m:
+        bump = ruby_idioms.match_array_bump(stmt) if stmt else None
+        if bump is not None:
             return self._emit_array_bump(
-                int(m.group(1)), int(m.group(2)), int(m.group(3)))
+                bump.var_id, bump.index_var, bump.delta)
 
-        m = _ARRAY_ARGMAX_RE.match(text)
-        if m and m.group(2) == m.group(3) and int(m.group(2)) in self._array_vars:
+        argmax = ruby_idioms.match_array_argmax(stmt) if stmt else None
+        if argmax is not None and argmax.var_id in self._array_vars:
             # Value lands in the local; nothing is emitted until the local is
-            # written back to a real variable (_VAR_ASSIGN_LOCAL_RE below).
-            self._ruby_locals[m.group(1)] = _RubyLocal(
-                source_var=int(m.group(2)), argmax_of=int(m.group(2)))
+            # written back to a real variable (match_var_from_local below).
+            self._ruby_locals[argmax.name] = _RubyLocal(
+                source_var=argmax.var_id, argmax_of=argmax.var_id)
             return []
 
-        m = _RUBY_ASSIGN_CONST_RE.match(text)
-        if m and self._pending_remap is not None:
+        const_assign = (
+            ruby_idioms.match_local_const_assign(stmt) if stmt else None)
+        if const_assign is not None and self._pending_remap is not None:
             # Body of the `if x==A / x=B` remap opened below.
-            name, value = m.group(1), int(m.group(2))
-            local = self._ruby_locals.get(name)
+            local = self._ruby_locals.get(const_assign.name)
             if local is not None and local.argmax_of is not None:
-                self._pending_remap = (name, self._pending_remap[1], value)
-                local.remap[self._pending_remap[1]] = value
+                self._pending_remap = (
+                    const_assign.name, self._pending_remap[1],
+                    const_assign.value,
+                )
+                local.remap[self._pending_remap[1]] = const_assign.value
                 return []
 
-        m = _RUBY_IF_EQ_RE.match(text)
-        if m:
-            local = self._ruby_locals.get(m.group(1))
+        arm = ruby_idioms.match_remap_arm_open(text)
+        if arm is not None:
+            local = self._ruby_locals.get(arm.name)
             if local is not None and local.argmax_of is not None:
                 # `if x==1 / x=0 / elsif x==0 / x=1 / end` is a value
                 # permutation over the argmax result, not control flow — the
                 # arms are mutually exclusive tests of the same local.
-                self._pending_remap = (m.group(1), int(m.group(2)), None)
+                self._pending_remap = (arm.name, arm.tested_value, None)
                 return []
 
-        if _RUBY_END_RE.match(text) and self._pending_remap is not None:
+        if ruby_idioms.is_block_end(text) and self._pending_remap is not None:
             self._pending_remap = None
             return []
 
-        m = _VAR_ASSIGN_LOCAL_RE.match(text)
-        if m:
-            local = self._ruby_locals.get(m.group(2))
+        writeback = ruby_idioms.match_var_from_local(stmt) if stmt else None
+        if writeback is not None:
+            local = self._ruby_locals.get(writeback.name)
             if local is not None and local.argmax_of is not None:
-                return self._emit_argmax(int(m.group(1)), local)
+                return self._emit_argmax(writeback.var_id, local)
             if local is not None:
                 return self._emit_local_materialize(
-                    int(m.group(1)), m.group(2), local)
+                    writeback.var_id, writeback.name, local)
 
         # -- string-valued Ruby local + indexed text readback ----------------
-        # See _STRING_LIST_LITERAL_RE's docstring. Both rows are tracked only;
-        # nothing is emitted until _emit_value_var_text sees the \v[N].
-        m = _STRING_LIST_LITERAL_RE.match(text)
-        if m:
-            self._string_lists[m.group(1)] = _STRING_LIST_ITEM_RE.findall(m.group(2))
+        # See ruby_idioms.StringList. Both rows are tracked only; nothing is
+        # emitted until _emit_value_var_text sees the \v[N].
+        string_list = ruby_idioms.match_string_list(stmt) if stmt else None
+        if string_list is not None:
+            self._string_lists[string_list.name] = list(string_list.values)
             return []
 
-        m = _LIST_INDEX_ASSIGN_RE.match(text)
-        if m:
-            var_id, list_name, local_name = int(m.group(1)), m.group(2), m.group(3)
-            values = self._string_lists.get(list_name)
-            target = self._materialized_locals.get(local_name)
+        readback = ruby_idioms.match_var_from_list_index(stmt) if stmt else None
+        if readback is not None:
+            values = self._string_lists.get(readback.list_name)
+            target = self._materialized_locals.get(readback.index_name)
             if values and target is not None:
-                self._value_text_choices[var_id] = (target, values)
+                self._value_text_choices[readback.var_id] = (target, values)
                 return []
 
         m = _STARTER_SELECTOR_PBGET_RE.match(text)
@@ -3946,7 +3942,7 @@ class _PageEmitter:
         one-shot switch scrutinee — Map032 EV9's ``VAR_TEMP_POKEMON_CHOICE``
         is read by five different branches downstream). Registers the target
         under ``local_name`` in ``_materialized_locals`` so a later
-        list-index readback (``_LIST_INDEX_ASSIGN_RE``) sharing the same
+        list-index readback (``ruby_idioms.match_var_from_list_index``) sharing the same
         local can find it. Returns ``None`` (queues) if either var is
         unnamed.
         """
@@ -3972,7 +3968,7 @@ class _PageEmitter:
     def _emit_value_var_text(self, raw: str) -> list[str] | None:
         """A dialogue row whose ``\\v[N]`` control code names a tracked
         list-index readback (``_value_text_choices``, built by
-        ``_LIST_INDEX_ASSIGN_RE``) — GBA has no runtime string variable to
+        ``ruby_idioms.match_var_from_list_index``) — GBA has no runtime string variable to
         substitute at that control code the way RMXP does, so this resolves
         it at conversion time into one ``if``-branch per possible value of
         the real var the index was materialized into (Map032 EV9's "Go!
@@ -4068,17 +4064,20 @@ class _PageEmitter:
 
     # -- array-valued game variables -----------------------------------------
 
-    def _emit_array_literal(self, var_id: int, body: str) -> list[str] | None:
-        """``$game_variables[N] = [0,0,0]`` — bind N scratch vars, seed them."""
-        try:
-            values = [int(v) for v in body.split(",") if v.strip() != ""]
-        except ValueError:
-            return None
+    def _emit_array_literal(
+        self, var_id: int, values: tuple[int, ...]
+    ) -> list[str] | None:
+        """``$game_variables[N] = [0,0,0]`` — bind N scratch vars, seed them.
+
+        `values` comes parsed from `ruby_idioms.ArrayLiteral`; an element
+        that wasn't an integer literal never reaches here (the matcher
+        misses, and the row queues).
+        """
         if not values or len(values) > len(_ARRAY_BUCKET_VARS):
             return None  # wider than the idiom covers — queue, don't guess
         buckets = list(_ARRAY_BUCKET_VARS[:len(values)])
         self._array_vars[var_id] = buckets
-        return [f"# $game_variables[{var_id}] = {values} — array-valued "
+        return [f"# $game_variables[{var_id}] = {list(values)} — array-valued "
                 f"variable, one scratch var per element",
                 *(f"setvar({b}, {v})" for b, v in zip(buckets, values))]
 
