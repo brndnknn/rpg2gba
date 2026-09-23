@@ -2223,7 +2223,28 @@ unknown call → named refusal; `$Trainer.party…`/dex counts → `party_model`
 sets, capped at 4096; output = written value sets plus a **witness** (input vector) per outcome.
 (4) `story_state/extract.py` writes move onto it; the report JSON gains `witnesses`. (5)
 `beat_floor/script.py` parses whole statements. (6) the transpiler's `_RubyLocal`/array/argmax
-path. (7) `jvGiveReward`/`PROFREWARDS` extractor, `engine-audit` `FLAG_SYS_*`, and two
+path.
+
+*Stages 3–4 refined (lead, same day), after reading `model.py`.* The unit of evaluation is a
+**row scope**, meaning the row's own flattened command list (`_flatten_scope`, the same one
+extraction uses), not one script block. Bambo's `b2` has four `\ch` writes to var 2 and five
+script blocks that must run in order within one execution. Stage 3's `ruby_subset/search.py`
+runs a scope concretely. It handles text `\ch` (via a pure `parse_inline_choice` lifted out of
+`transpiler._emit_inline_choice`, §4.3), 121/122/123, 355/655 and 117 (a strip-listed CE is a
+no-op). Nested arm scopes are skipped, since they are their own rows. Out-of-scope reads come
+from a `read_domain(key)` callback, and the product of reads and inputs is capped at 4096. The
+output is the per-key value sets, the effects, and the first witness per `(key, value)` in DFS
+order. `ev019/b1`'s switch 59/60/61 writes depend on var 151, which Bambo writes, so they
+**cannot resolve at extraction time**. Stage 4 therefore adds a **resolver fixpoint around
+saturation**. A script-bearing row whose run reads out-of-scope state or input becomes
+*computed*. Its writes are evaluated against the previous iteration's saturated value sets
+(sound, since saturation is already a flow-insensitive union). The resolver starts from the seed
+and repeats until the writes stop changing, which terminates because the value sets only grow
+and are capped. A computed row that reads a TOP value refuses by name. A row whose run reads
+nothing folds to static `Assign`s at extraction, exactly as today, so `beat_floor` is unaffected
+for it.
+
+(7) `jvGiveReward`/`PROFREWARDS` extractor, `engine-audit` `FLAG_SYS_*`, and two
 corrections found the same day: **CEs 4/5/6 (GTS/VT/LOBBY) are already in `strip_list.json`**
 with a stub message — the `$lobbyreset`/`system(...)` refusals exist only because
 `story_state`/`beat_floor` inline code 117 without honoring common-event strips, so the fix is
