@@ -1637,7 +1637,7 @@ Each lands unit-green. None is ROM-verified before P11.
 | **C5b** | Warp facing moves into the engine: retain-facing fallback, per-warp departure direction in `struct WarpEvent`, pending-facing special for script warps, door tiles yield to the warp's direction; arrival-facing table and tiers 1–3 deleted | `WARP_RETAIN_FACING_PROPOSAL.md` §0 R1–R6 | **DONE 2026-09-18** (unit-green); see "C5b landed" below |
 | **C7** | Freeze CH01–CH05 hand beats — **rows + identity only; coverage is the test, not literal match** (R12 amended 2026-09-17) | R12 | **DONE 2026-09-21** (unit-green); see "C7 landed" below |
 | **C6** | Generator + solver integration: whole-module emit, review doc, refusal list, idempotence test | R1, R4, R7 | **Part one DONE 2026-09-22** (unit-green; CH05 end to end); see "C6 part one landed" below. Part two (map continuity, boundary claims, A5, CH01–CH04) IN PROGRESS |
-| **C8** | Shared Ruby-subset interpreter + input search; `map050/ev019` | R10 | TODO |
+| **C8** | Shared Ruby-subset interpreter + input search; `map050/ev019` | R10 | **IN PROGRESS** — shape ruled 2026-09-23; see "C8 shape" below |
 | **C9** | Regenerate CH01–CH05 behind the frozen test, one commit per chapter | R12 | TODO |
 | **C10** | `offline:` verdict head, offline flavour checker, ROM sample selection | R2, R3 | TODO |
 
@@ -2179,6 +2179,60 @@ the operator's instruction to complete it. What shipped:
 - **Re-sourced chapter facing checks** resolve offline against the staged build: ch03 B27/B28/
   B30/B32 (Route 1 seam, Mart, Center, Boutique) → **UP**, ch01 `B3_up` → **RIGHT** (dir 0, stairs pressed right).
   First in-ROM confirmation at P11.
+
+**C8 shape (operator, 2026-09-23).** Measured first: **21 distinct rows / 85 refusal entries**
+blocked on embedded Ruby (floor rows CH01 59 / CH02 4 / CH03 15 / CH04 7 / CH05 0; story_state
+`unparsed_state_write` sites 21 / 2 / 2 / 3 / 0). "Shared (§4.3)" means CLAUDE.md §4.3: today
+five independent regex readers parse embedded Ruby (`story_state/extract.py`, `transpiler.py`'s
+`_RubyLocal`/array/argmax, `beat_floor/script.py`, `beat_floor/condition.py`,
+`chapter_manifest/conditions.py`; `census._script_head` counts heads only). Rulings:
+(a) **New package `ruby_subset/`** — tokenizer, small AST, evaluator over `story_state`'s value
+sets. `story_state` and `beat_floor/script.py` move onto it now; the transpiler moves only its
+`_RubyLocal`/array/argmax path (the `map050/ev019` idiom). The two 111-condition readers stay
+until something they refuse needs it (R13). (b) **Engine-held unlock attributes become
+`EngineKey`s** — `$PokemonGlobal.runningShoes` / `$Trainer.pokedex` / `$Trainer.pokegear`
+(native `FLAG_SYS_B_DASH` / `FLAG_SYS_POKEDEX_GET` / `FLAG_SYS_POKENAV_GET`), asserted by the
+floor and checked by `engine-audit`; `$game_map.need_refresh` is visual-only. **Party and dex
+quantities** (`$Trainer.party…`, `pokedexSeen`/`pokedexOwned`) are **not** modelled: they refuse
+under one named blocker **`party_model`**, which also absorbs the existing `unmodelled` party
+families in `conditions.py`; option "bounded input + `set_party` harness" or a real party model
+is a later step, taken by the first chapter that needs those rows green. (c) **Input search is
+exhaustive with a fail-loud cap** (4096 input combinations); main path takes the first outcome
+in source order, the rest become arm rows (R10). (d) **Every script-head extractor parses the
+whole statement through the interpreter.** Found while measuring:
+`x=pbGet(151).index(pbGet(151).max)` passes the C4 floor refusal-free because head-only matching
+reads it as a bare `pbGet` getter — a silent false negative. Refusal counts may rise before they
+fall. (e) **Content fidelity:** `system("start http://…")` and `$lobbyreset` (online lobby) go on
+the strip list; `jvGiveReward` gets its own extractor that reads `PROFREWARDS` from source rather
+than interpreting Uranium's script library. **To verify before building:** Bambo's
+`index(max)` yields 0..2 while `map050/ev019` compares var 151 against 1..3. *(Verified same day:
+Bambo's `map050/ev005/p0/b2` runs the argmax, a `{1↔0}` remap, then a code 122 `var151 += 1` at list 127, so var
+151 ∈ {1,2,3}. The input is four inline `\ch[2,0,…]` text choices of three options each — an
+Essentials text escape, not a 102 — so 81 combinations. `story_state` does not model `\ch` today;
+the transpiler parses it (`transpiler.py:670`). `pbStarterSelector` is presentation only.)*
+
+**C8 design (lead, 2026-09-23; operator: build agent implements).** Stages, one commit each:
+(1) `ruby_subset/{lexer,ast,parser}.py` — parses every 355/655 block and 111-type-12 script in
+CH01–CH05, pinned by a real-corpus test; out-of-subset syntax raises a named `RubyParseError`.
+(2) `ruby_subset/evaluate.py` — **concrete** execution (not abstract set arithmetic, which arrays
+and `index(max)` don't survive) over one assignment of inputs; builtins by table (`pbGet`,
+`pbSet`, `pbSetSelfSwitch`, `$game_switches`/`$game_variables`, `Array#index/max/[]/[]=`);
+unknown call → named refusal; `$Trainer.party…`/dex counts → `party_model`; unlock attributes →
+`EngineKey` writes. (3) **Page-level input search** — runs the page's command sequence (text
+`\ch`, 102/402, 355/655, 121/122/123, 111) over the product of input domains and read-key value
+sets, capped at 4096; output = written value sets plus a **witness** (input vector) per outcome.
+(4) `story_state/extract.py` writes move onto it; the report JSON gains `witnesses`. (5)
+`beat_floor/script.py` parses whole statements. (6) the transpiler's `_RubyLocal`/array/argmax
+path. (7) `jvGiveReward`/`PROFREWARDS` extractor, `engine-audit` `FLAG_SYS_*`, and two
+corrections found the same day: **CEs 4/5/6 (GTS/VT/LOBBY) are already in `strip_list.json`**
+with a stub message — the `$lobbyreset`/`system(...)` refusals exist only because
+`story_state`/`beat_floor` inline code 117 without honoring common-event strips, so the fix is
+there, not a new strip entry (ruling (e) is satisfied by the existing entries); and **the
+`for i in $Trainer.party / i.nuzlocke_heal / end` loop is not `party_model`** — `nuzlocke_heal`
+is the original `heal` aliased under Uranium's Nuzlocke override (`220_Custom_Mode.rb:212-223`),
+always followed by a code 314 Recover All (`transpiler.py:516`), so with no Nuzlocke mode in the
+port it is a builtin no-op. `static_predicates` (`$PokemonGlobal.randomizer = false`) still has
+no consumer anywhere in `src/` — noted, not C8's.
 
 ### 16.4 Known work the generator will refuse until fixed (not decisions)
 
