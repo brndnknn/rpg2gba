@@ -116,6 +116,23 @@ def test_missing_floor_assertion_fails_loud(ch05):
         adapt.archetype_kwargs(beat, m, stripped, map_constant_fn=MAP_CONSTANTS.__getitem__)
 
 
+def test_single_page_item_ball_reads_its_own_self_switch_write():
+    # map068/ev018 (Kevlar's Pokemon Center Antidote): one page, code 123
+    # ['A', 0] -- no spent page to read the letter from, and the template
+    # refuses to guess it.
+    from rpg2gba.beat_floor.walk import floor_for_chapter
+    from rpg2gba.chapter_manifest.archetypes import classify_manifest
+    from rpg2gba.playtest.archetypes import load_chapter_rows
+    m = next(m for m in classify_manifest(load_chapter_rows("CH03"))
+             if (m.archetype, m.map_id, m.event_id) == ("item_ball", 68, 18))
+    floors = floor_for_chapter("CH03", build_dir=Path("output/uranium-build"))
+    beat = PlannedBeat(name="i", template="item_ball", map_id=68,
+                       rows=tuple(sorted(m.roles)), group="g")
+    got = dict(adapt.archetype_kwargs(beat, m, floors, map_constant_fn=lambda _: "MAP_X"))
+    assert got["negative_beat"] is False
+    assert got["self_switch_letter"] == "A"
+
+
 # --- warp_candidates ------------------------------------------------------------
 
 def _graph(walls: set[tuple[int, int]] = frozenset()) -> MapGraph:

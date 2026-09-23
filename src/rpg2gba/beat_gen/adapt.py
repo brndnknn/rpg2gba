@@ -221,13 +221,27 @@ def _item_ball_kwargs(
     floor = _floor(floors, grant_row_id)
     grant = _one_assertion(floor, "item_grant", row_id=grant_row_id)
     item = _resolve_item_constant(grant.param("item"), row_id=grant_row_id)
-    return {
+    has_spent = _role_row(match, "spent") is not None
+    out: dict = {
         "map_constant": map_constant_fn(beat.map_id),
         "map_id": beat.map_id,
         "event_id": match.event_id,
         "item": item,
-        "negative_beat": _role_row(match, "spent") is not None,
+        "negative_beat": has_spent,
     }
+    if not has_spent:
+        # A single-page ball has no spent page whose condition names the
+        # letter, so the template demands it: read it off the grant page's
+        # own code-123 write (page or arm), as `_toggled_page` does.
+        letters = sorted({a.param("letter") for rid, f in floors.items()
+                          if rid == grant_row_id or rid.startswith(f"{grant_row_id}/")
+                          for a in f.assertions if a.kind == "self_switch_write"})
+        if len(letters) != 1:
+            raise ValueError(
+                f"archetype_kwargs: {grant_row_id}: single-page item ball writes "
+                f"self-switch letters {letters} (expected exactly 1)")
+        out["self_switch_letter"] = letters[0]
+    return out
 
 
 def _trainer_kwargs(
