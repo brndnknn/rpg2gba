@@ -2234,7 +2234,8 @@ runs a scope concretely. It handles text `\ch` (via a pure `parse_inline_choice`
 no-op). Nested arm scopes are skipped, since they are their own rows. Out-of-scope reads come
 from a `read_domain(key)` callback, and the product of reads and inputs is capped at 4096. The
 output is the per-key value sets, the effects, and the first witness per `(key, value)` in DFS
-order. `ev019/b1`'s switch 59/60/61 writes depend on var 151, which Bambo writes, so they
+order. `ev019/p0`'s switch 59/60/61 writes (trunk; `b1` holds the three `pbAddPokemon`
+grants — corrected by stage 3) depend on var 151, which Bambo writes, so they
 **cannot resolve at extraction time**. Stage 4 therefore adds a **resolver fixpoint around
 saturation**. A script-bearing row whose run reads out-of-scope state or input becomes
 *computed*. Its writes are evaluated against the previous iteration's saturated value sets

@@ -30,6 +30,12 @@ from rpg2gba.ruby_subset.parser import (
     parse_program,
     script_block_source,
 )
+from rpg2gba.ruby_subset.search import (
+    Choice,
+    SearchResult,
+    load_stripped_ce_ids,
+    search_scope,
+)
 
 __all__ = [
     "ast",
@@ -50,4 +56,8 @@ __all__ = [
     "Symbol",
     "evaluate_expression",
     "evaluate_program",
+    "Choice",
+    "SearchResult",
+    "load_stripped_ce_ids",
+    "search_scope",
 ]

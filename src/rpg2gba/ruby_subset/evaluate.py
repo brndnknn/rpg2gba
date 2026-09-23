@@ -292,7 +292,10 @@ class _Interp:
         return self._state[key]
 
     def set_key(self, key: Key, value: object) -> None:
-        self._touch(key)
+        # A plain assignment is not a read: the oracle is not consulted, so a
+        # write-only key never becomes an out-of-scope read for the search.
+        # An explicitly assigned key is always reported, so it needs no
+        # initial snapshot.
         self._state[key] = value
         self._explicit.add(key)
 
@@ -300,8 +303,9 @@ class _Interp:
         out: list[StateWrite] = []
         for key, final in self._state.items():
             final_x = _export(final)
-            initial_x = self._initial[key]
-            changed = final_x != initial_x
+            # Only keys first reached through a read have a snapshot; a key
+            # mutated in place (`pbGet(151)[i] += 1`) was read first.
+            changed = key in self._initial and final_x != self._initial[key]
             if changed or key in self._explicit:
                 out.append(StateWrite(key, final_x))
         out.sort(key=_write_sort_key)

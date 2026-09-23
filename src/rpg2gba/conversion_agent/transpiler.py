@@ -52,6 +52,11 @@ from rpg2gba.conversion_agent.flag_registry import (
     resolve_switch_flag,
     resolve_variable_var,
 )
+from rpg2gba.conversion_agent.inline_choice import (
+    InlineChoiceError,
+    has_inline_choice,
+    parse_inline_choice,
+)
 from rpg2gba.pbs_converter._naming import to_constant
 from rpg2gba.pbs_converter.heal_locations import _CALL_RE as _SET_POKEMON_CENTER_RE
 
@@ -668,21 +673,10 @@ _POKERUS_CHECK_RE = re.compile(r"^\s*Kernel\.pbPokerus\?\s*$")
 
 # Essentials inline-choice text escape (SLICE1_TODO #17): a Show Text message
 # trailing \ch[var,ifCancel,opt1,opt2,...] (reference/scripts_dump/059_Messages.rb
-# :1218-1225, 1360-1362, 1429-1465). Split on the literal marker, not a single
-# regex over the whole payload — option text is free-form (may itself contain
-# escapes/brackets from embedded color codes) and the true end of the command
-# is "the last ']' in the message" (verified tail-only corpus shape), not the
-# first one a naive `\[.*?\]` would stop at.
-_CH_MARK = "\\ch["
-# Cosmetic color-code carriers inside option labels — stripped, never queued
-# for these two shapes specifically (same disposition as _COLOR_CODE_RE in
-# deterministic.py, applied here to \ch's own comma-split option text).
-_CH_COLOR_TAG_RE = re.compile(r"<c2=[0-9a-fA-F]+>")
-_CH_LEGACY_COLOR_RE = re.compile(r"\\c\[\d+\]")
-# After stripping the two shapes above, any surviving backslash or angle
-# bracket is an unrecognized tag — queue the whole command rather than emit
-# mystery text into a menu option.
-_CH_RESIDUAL_TAG_RE = re.compile(r"[\\<>]")
+# :1218-1225, 1360-1362, 1429-1465). Parsing (marker detection, comma-split
+# fields, color-code stripping) now lives in `conversion_agent.inline_choice`
+# (CLAUDE.md §4.3 -- C8 stage 3 part A); this module keeps only the emit-side
+# work (var-name resolution, text translation, dynmultichoice/queue lines).
 
 # ``\v[N]`` game-variable text substitution — normally unrecognized (queues,
 # see translate_text_codes). _PageEmitter._emit_value_var_text resolves the
@@ -2001,7 +1995,7 @@ class _PageEmitter:
         params = cmd.get("parameters", [])
 
         if isinstance(node, TextRun):
-            if _CH_MARK in node.text:
+            if has_inline_choice(node.text):
                 return self._emit_inline_choice(node)
             value_text = self._emit_value_var_text(node.text)
             if value_text is not None:
@@ -3003,76 +2997,27 @@ class _PageEmitter:
         (SLICE1_TODO #17) — a Show Text message whose choice menu is embedded
         in the text itself rather than a separate 102 command. Fork-native
         ``dynmultichoice`` (asm/macros/event.inc:1932) + a ``msgbox`` for the
-        prompt. See the module-level ``_CH_MARK``/``_CH_*_RE`` comments for
-        the parsing rationale. Queues (whole command, nothing emitted) for:
-        more than one ``\\ch[`` marker, text after the closing ``]`` (must be
-        the tail), too few comma fields, a non-integer var/ifCancel, a
-        negative ifCancel (unrepresentable in a GBA u16 var), an unresolvable
-        var id, or a residual unknown tag in a label after color-code strip.
+        prompt. Parsing is `conversion_agent.inline_choice.parse_inline_choice`
+        (CLAUDE.md §4.3); this method does the emit-side work only: var-name
+        resolution, text translation, dynmultichoice/queue lines. Queues
+        (whole command, nothing emitted) for every reason
+        `parse_inline_choice` can raise, plus an unresolvable var id.
         """
         text = node.text
-        if text.count(_CH_MARK) != 1:
-            return [self.ctx.queue(
-                node.index, SHOW_TEXT,
-                f"inline choice: expected exactly one \\ch[...] marker, "
-                f"found {text.count(_CH_MARK)}: {text[:120]!r}",
-            )]
-        mark_idx = text.index(_CH_MARK)
-        inner_start = mark_idx + len(_CH_MARK)
-        close_idx = text.rfind("]")
-        if close_idx < inner_start:
-            return [self.ctx.queue(
-                node.index, SHOW_TEXT,
-                f"inline choice: no closing ']' for \\ch[...]: {text[:120]!r}",
-            )]
-        if text[close_idx + 1 :].strip():
-            return [self.ctx.queue(
-                node.index, SHOW_TEXT,
-                f"inline choice: trailing text after \\ch[...] block: {text[:120]!r}",
-            )]
-        prompt_text = text[:mark_idx]
-        inner = text[inner_start:close_idx]
-
-        fields = [f.strip() for f in inner.split(",")]
-        if len(fields) < 3:
-            return [self.ctx.queue(
-                node.index, SHOW_TEXT,
-                f"inline choice: too few \\ch[...] fields ({len(fields)}): {inner!r}",
-            )]
-        var_str, if_cancel_str, *option_texts = fields
         try:
-            var_id = int(var_str)
-            if_cancel = int(if_cancel_str)
-        except ValueError:
-            return [self.ctx.queue(
-                node.index, SHOW_TEXT,
-                f"inline choice: non-integer var/ifCancel in \\ch[{inner}]",
-            )]
-        if if_cancel < 0:
-            return [self.ctx.queue(
-                node.index, SHOW_TEXT,
-                f"inline choice: negative ifCancel ({if_cancel}) is "
-                f"unrepresentable in a GBA u16 var — \\ch[{inner}]",
-            )]
+            choice = parse_inline_choice(text)
+        except InlineChoiceError as exc:
+            return [self.ctx.queue(node.index, SHOW_TEXT, exc.message)]
 
-        options: list[str] = []
-        for opt in option_texts:
-            stripped = _CH_COLOR_TAG_RE.sub("", opt)
-            stripped = _CH_LEGACY_COLOR_RE.sub("", stripped)
-            stripped = stripped.strip()
-            if _CH_RESIDUAL_TAG_RE.search(stripped):
-                return [self.ctx.queue(
-                    node.index, SHOW_TEXT,
-                    f"inline choice: residual unknown tag in option {opt!r} "
-                    f"after color-code strip — \\ch[{inner}]",
-                )]
-            options.append(stripped)
+        prompt_text = choice.prompt_text
+        if_cancel = choice.if_cancel
+        options = choice.options
 
-        var_name = self.ctx.var_for_variable(var_id)
+        var_name = self.ctx.var_for_variable(choice.var_id)
         if var_name is None:
             return [self.ctx.queue(
                 node.index, SHOW_TEXT,
-                f"inline choice: variable {var_id} is unnamed — cannot mint a VAR_*",
+                f"inline choice: variable {choice.var_id} is unnamed — cannot mint a VAR_*",
             )]
 
         prompt_source = _COLOUR_TEXT_CODE_RE.sub("", _BLUE_TEXT_CODE_RE.sub("", prompt_text))
