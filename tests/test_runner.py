@@ -446,7 +446,7 @@ def test_cli_run_reports_pass_and_exits_zero(tmp_path: Path, monkeypatch: pytest
     from rpg2gba.playtest import __main__ as cli_mod
 
     chapter = make_chapter("cliok", [("B1", ok)])
-    monkeypatch.setattr(cli_mod, "load_chapter", lambda name: chapter)
+    monkeypatch.setattr(cli_mod, "load_chapter", lambda name, suite="hand": chapter)
 
     def fake_run_chapter(chap, rom, engine, **kwargs):
         return runner_mod.ChapterRunResult(
@@ -474,7 +474,7 @@ def test_cli_run_exits_nonzero_on_real_failure(tmp_path: Path, monkeypatch: pyte
     from rpg2gba.playtest import __main__ as cli_mod
 
     chapter = make_chapter("clifail", [("B1", ok)])
-    monkeypatch.setattr(cli_mod, "load_chapter", lambda name: chapter)
+    monkeypatch.setattr(cli_mod, "load_chapter", lambda name, suite="hand": chapter)
 
     def fake_run_chapter(chap, rom, engine, **kwargs):
         return runner_mod.ChapterRunResult(

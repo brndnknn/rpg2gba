@@ -67,15 +67,18 @@ def list_chapters() -> None:
 @click.option("--beat-timeout", type=int, default=DEFAULT_BEAT_TIMEOUT_S,
               help="Per-beat wall-clock hang budget in seconds (Q10). "
                    f"Default: {DEFAULT_BEAT_TIMEOUT_S}.")
+@click.option("--suite", type=click.Choice(["hand", "gen"]), default="hand",
+              show_default=True, help="Load the chapter from the hand-written "
+                   "or beat-gen-generated module suite.")
 def run(chapter: str, from_beat: str | None, rom: Path | None, engine: Path,
-        output: Path | None, no_rerun: bool, beat_timeout: int) -> None:
+        output: Path | None, no_rerun: bool, beat_timeout: int, suite: str) -> None:
     """Run one chapter's beats headlessly; report pass/flake/fail."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     rom = rom or engine / "pokeemerald.gba"
     output = output or Path("output") / "playtest"
 
     try:
-        chap = load_chapter(chapter)
+        chap = load_chapter(chapter, suite=suite)
         result = run_chapter(chap, rom, engine, from_beat=from_beat,
                               output_root=output, rerun_on_failure=not no_rerun,
                               beat_timeout_s=beat_timeout)
@@ -131,9 +134,12 @@ def run(chapter: str, from_beat: str | None, rom: Path | None, engine: Path,
               help="Verify by booting the built ROM with a foreign save paired, "
                    "to prove the embedded state wins over any .sav residue on "
                    "the target device.")
+@click.option("--suite", type=click.Choice(["hand", "gen"]), default="hand",
+              show_default=True, help="Load the chapter from the hand-written "
+                   "or beat-gen-generated module suite.")
 def walk_cmd(chapter: str, at_beat: str | None, at_end: bool, rom: Path | None,
              engine: Path, output: Path | None, out: Path | None,
-             verify: bool) -> None:
+             verify: bool, suite: str) -> None:
     """Build a bootable ROM positioned at a chosen point in a chapter.
 
     Patches an embedded-save seed blob into a copy of the pristine ROM so it
@@ -159,7 +165,7 @@ def walk_cmd(chapter: str, at_beat: str | None, at_end: bool, rom: Path | None,
     out.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        chap = load_chapter(chapter)
+        chap = load_chapter(chapter, suite=suite)
         seed = walk.build_walk_rom(output, chap, rom, engine, at_beat=at_beat,
                                     at_end=at_end, out=out, verify=verify)
     except (KeyError, RunnerError) as exc:
@@ -185,15 +191,18 @@ def walk_cmd(chapter: str, at_beat: str | None, at_end: bool, rom: Path | None,
               help="Engine build dir (map/elf must match the ROM)")
 @click.option("--output", type=click.Path(path_type=Path), default=None,
               help="Output root for artifacts (default: output/playtest)")
+@click.option("--suite", type=click.Choice(["hand", "gen"]), default="hand",
+              show_default=True, help="Load the chapter from the hand-written "
+                   "or beat-gen-generated module suite.")
 def seeds_cmd(chapter: str, rom: Path | None, engine: Path,
-              output: Path | None) -> None:
+              output: Path | None, suite: str) -> None:
     """List seed blobs available to walk from for this chapter/ROM build."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     rom = rom or engine / "pokeemerald.gba"
     output = output or Path("output") / "playtest"
 
     try:
-        chap = load_chapter(chapter)
+        chap = load_chapter(chapter, suite=suite)
         available = walk.available_seeds(output, chap, rom)
     except (KeyError, RunnerError) as exc:
         click.echo(f"error: {exc}", err=True)

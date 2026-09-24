@@ -335,7 +335,7 @@ and CLAUDE.md §10 puts intermediate-JSON schema changes in the ask-first column
 **B1 — Where does C6's output land?** — **CLOSED 2026-09-17 by the C7/C6 swap.**
 
 *(Corrected 2026-09-24: C9 does **not** overwrite `chNN.py`; it commits the generated suite as
-`playtest/chapters/chNN_gen.py` beside it — `REDERIVATION_PLAN.md` §16.3 "C9 rulings".)*
+`playtest/chapters_gen/chNN.py` beside it — `REDERIVATION_PLAN.md` §16.3 "C9 rulings".)*
 With the freeze landing first, this stopped being a safety question. C9 still owns overwriting
 `chNN.py` (one commit per chapter, graded against the frozen file), so C6 emits to
 `output/beats/chNN.generated.py` by convention — but nothing irreplaceable is at risk either way, and

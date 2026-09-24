@@ -63,7 +63,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from ..chapter_manifest.archetypes import ARCHETYPE_NAMES
 from ..tileset_converter.map_constants import MapConstantRegistry
@@ -74,6 +74,13 @@ if TYPE_CHECKING:  # runtime import is lazy so the registry works without bindin
 logger = logging.getLogger(__name__)
 
 BeatFn = Callable[["Emulator"], None]
+
+#: Which chapter-module package a name resolves against: "hand" is the
+#: hand-written `playtest.chapters` package (the default, unchanged
+#: behaviour); "gen" is the beat-gen-written `playtest.chapters_gen`
+#: sibling (C9 rulings). See `load_chapter`/`load_chapter_module` and
+#: `ChapterBuilder.suite`.
+Suite = Literal["hand", "gen"]
 
 # Row-id parsing is `chapter_manifest.schema.parse_row_id` now (C1,
 # REDERIVATION_PLAN.md §16.3 R5's "one implementation" rule) -- this module
@@ -393,6 +400,13 @@ class ChapterBuilder:
     doc: str
     predecessor: str | None = None
     route_entry: BeatLocation | None = None
+    #: Which suite THIS builder belongs to. "hand" (the default) always
+    #: resolves its predecessor from the hand suite, exactly as before this
+    #: field existed. "gen" (set by the generator's emitted modules,
+    #: `beat_gen/emit.py`) replays its predecessor from the gen suite when
+    #: that gen module exists, else falls back to the hand suite -- see
+    #: `build()`.
+    suite: Suite = "hand"
     _beats: list[Beat] = field(default_factory=list)
 
     def beat(self, name: str, description: str, *,
@@ -607,12 +621,25 @@ class ChapterBuilder:
                     chain = " -> ".join(_building_stack + [self.predecessor])
                     raise ValueError(
                         f"cycle in predecessor chain: {chain}")
-                try:
-                    predecessor_chapter = load_chapter(self.predecessor)
-                except KeyError as exc:
-                    raise ValueError(
-                        f"chapter {self.name!r} declares unknown predecessor "
-                        f"{self.predecessor!r}") from exc
+                predecessor_chapter: Chapter | None = None
+                predecessor_suite: Suite = "hand"
+                if self.suite == "gen":
+                    try:
+                        predecessor_chapter = load_chapter(self.predecessor, suite="gen")
+                        predecessor_suite = "gen"
+                    except KeyError:
+                        predecessor_chapter = None
+                if predecessor_chapter is None:
+                    try:
+                        predecessor_chapter = load_chapter(self.predecessor, suite="hand")
+                        predecessor_suite = "hand"
+                    except KeyError as exc:
+                        raise ValueError(
+                            f"chapter {self.name!r} declares unknown predecessor "
+                            f"{self.predecessor!r}") from exc
+                logger.info(
+                    "chapter %r (suite=%r): resolved predecessor %r from the %r suite",
+                    self.name, self.suite, self.predecessor, predecessor_suite)
                 prefixed = tuple(
                     _prefix_beat(predecessor_chapter.name, b)
                     for b in predecessor_chapter.beats)
@@ -671,6 +698,9 @@ def _validate_groups(beats: tuple[Beat, ...], *, chapter_name: str) -> None:
                 f"the group as one indivisible stop.")
 
 
+_SUITE_PACKAGES: dict[Suite, str] = {"hand": "chapters", "gen": "chapters_gen"}
+
+
 def chapter_names() -> list[str]:
     """Every module under `rpg2gba.playtest.chapters`, sorted."""
     from . import chapters
@@ -678,8 +708,19 @@ def chapter_names() -> list[str]:
     return sorted(m.name for m in pkgutil.iter_modules(chapters.__path__))
 
 
-def load_chapter_module(name: str) -> ModuleType:
-    """Import and return `rpg2gba.playtest.chapters.<name>` itself.
+def gen_chapter_names() -> list[str]:
+    """Every module under `rpg2gba.playtest.chapters_gen`, sorted -- the
+    "gen" suite's counterpart to `chapter_names()` above. Generated modules
+    land here one chapter at a time (C9 rulings), so this list is typically
+    a strict subset of `chapter_names()`."""
+    from . import chapters_gen
+
+    return sorted(m.name for m in pkgutil.iter_modules(chapters_gen.__path__))
+
+
+def load_chapter_module(name: str, *, suite: Suite = "hand") -> ModuleType:
+    """Import and return `rpg2gba.playtest.chapters.<name>` (`suite="hand"`,
+    the default) or `rpg2gba.playtest.chapters_gen.<name>` (`suite="gen"`).
 
     `load_chapter` (below) is what most callers want -- it hands back the
     built `Chapter`, which holds only the beats that were actually
@@ -698,16 +739,29 @@ def load_chapter_module(name: str) -> ModuleType:
     passed through verbatim from `reference/chapters.json` without a caller
     having to know which case a filesystem wants.
     """
+    package = _SUITE_PACKAGES[suite]
+    target = f"{__package__}.{package}.{name.lower()}"
     try:
-        return importlib.import_module(f"{__package__}.chapters.{name.lower()}")
+        return importlib.import_module(target)
     except ModuleNotFoundError as exc:
+        # Only the chapter module itself being absent is "no such chapter".
+        # A module that exists but fails one of ITS imports must surface, or a
+        # broken gen module would fall back to the hand suite without a word.
+        if exc.name != target:
+            raise
+        if suite == "hand":
+            raise KeyError(
+                f"no chapter {name!r}; known chapters: {chapter_names()}") from exc
         raise KeyError(
-            f"no chapter {name!r}; known chapters: {chapter_names()}") from exc
+            f"no chapter {name!r} in suite {suite!r}; "
+            f"known gen chapters: {gen_chapter_names()}") from exc
 
 
-def load_chapter(name: str) -> Chapter:
-    """Import `rpg2gba.playtest.chapters.<name>` and return its `CHAPTER`."""
-    module = load_chapter_module(name)
+def load_chapter(name: str, *, suite: Suite = "hand") -> Chapter:
+    """Import `rpg2gba.playtest.chapters(_gen).<name>` and return its
+    `CHAPTER` (`suite="hand"` by default -- unchanged for every existing
+    caller)."""
+    module = load_chapter_module(name, suite=suite)
     chapter = getattr(module, "CHAPTER", None)
     if not isinstance(chapter, Chapter):
         raise TypeError(

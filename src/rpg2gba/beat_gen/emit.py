@@ -92,6 +92,25 @@ def render_call(chapter_var: str, chapter_id: str, beat: PlannedBeat) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _never_fires_chunk(plan: ChapterPlan) -> str:
+    """The module-level `NEVER_FIRES` dict (C9 ruling 3): every
+    `plan.elsewhere` entry with `status == "never_fires"`, keyed by row id
+    to its proof (`detail`). Always emitted, `{}` when empty, sorted by row
+    id for determinism -- the C9 grader reads this because it can't re-run
+    the generator to re-derive it."""
+    entries = sorted(
+        ((e.row_id, e.detail) for e in plan.elsewhere if e.status == "never_fires"),
+        key=lambda kv: kv[0])
+    if not entries:
+        return "NEVER_FIRES: dict[str, str] = {}"
+    lines = ["NEVER_FIRES: dict[str, str] = {"]
+    lines.extend(
+        f"    {render_value(row_id)}: {render_value(detail)},"
+        for row_id, detail in entries)
+    lines.append("}")
+    return "\n".join(lines)
+
+
 def _imports(plan: ChapterPlan) -> list[str]:
     """`from <module> import <names>` lines, one per module, both levels
     sorted, for the templates the plan actually uses. Always includes
@@ -134,11 +153,14 @@ def emit_module(plan: ChapterPlan) -> str:
     builder_kwargs = [f"doc={render_value(doc)}"]
     if plan.predecessor is not None:
         builder_kwargs.append(f"predecessor={render_value(plan.predecessor)}")
+    builder_kwargs.append(f"suite={render_value('gen')}")
     builder_args = ", ".join([render_value(plan.chapter_id), *builder_kwargs])
     chunks.append(f"{chapter_var} = ChapterBuilder({builder_args})")
 
     for beat in plan.beats:
         chunks.append(render_call(chapter_var, plan.chapter_id, beat).rstrip("\n"))
+
+    chunks.append(_never_fires_chunk(plan))
 
     chunks.append(f"CHAPTER = {chapter_var}.build()")
 

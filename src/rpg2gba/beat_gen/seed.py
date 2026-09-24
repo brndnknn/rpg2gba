@@ -21,17 +21,19 @@ logger = logging.getLogger(__name__)
 WinnerFor = Callable[[str, tuple[str, ...]], str | None]
 
 
-def route_winner(chapter_id: str, out_dir: Path) -> WinnerFor:
-    """`build_chapter_stories`'s `winner_for` while generating `chapter_id`
-    into `out_dir`. Fails loud when a predecessor's module was never
-    generated -- the chain is generated in order."""
+def route_winner(chapter_id: str, module_dir: Path) -> WinnerFor:
+    """`build_chapter_stories`'s `winner_for` while generating `chapter_id`,
+    reading predecessors' already-generated modules from `module_dir`
+    (`playtest.chapters_gen`, or a redirected `--module-dir`). Fails loud
+    when a predecessor's module was never generated -- the chain is
+    generated in order."""
     @functools.cache
     def own_order(cid: str) -> dict[str, int]:
-        path = out_dir / f"{cid.lower()}.generated.py"
+        path = module_dir / f"{cid.lower()}.py"
         if not path.exists():
             raise ValueError(
                 f"{chapter_id}: {cid} has an order-dependent write and no generated "
-                f"route at {path} -- run `beat_gen generate --chapter {cid}` first")
+                f"module at {path} -- run `beat_gen generate --chapter {cid}` first")
         spec = importlib.util.spec_from_file_location(f"_seed_{cid.lower()}_generated", path)
         assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)

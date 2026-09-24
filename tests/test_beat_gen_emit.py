@@ -13,7 +13,7 @@ import ast
 import pytest
 
 from rpg2gba.beat_gen import emit
-from rpg2gba.beat_gen.plan import ChapterPlan, PlannedBeat, make_kwargs
+from rpg2gba.beat_gen.plan import ChapterPlan, Elsewhere, PlannedBeat, make_kwargs
 
 TRAINER = PlannedBeat(name="m036e004_trainer", template="trainer", map_id=36,
                       rows=("map036/ev004/p0", "map036/ev004/p1"), group="m036e004_trainer",
@@ -25,8 +25,9 @@ STAIR = PlannedBeat(name="m037stair11x9", template="stair", map_id=37,
                     rows=("map037/terrain/stairs/11,9",), group="m037stair11x9")
 
 
-def _plan(*beats, predecessor="CH04"):
-    return ChapterPlan(chapter_id="CH05", predecessor=predecessor, beats=beats)
+def _plan(*beats, predecessor="CH04", elsewhere=()):
+    return ChapterPlan(chapter_id="CH05", predecessor=predecessor, beats=beats,
+                       elsewhere=elsewhere)
 
 
 # --- render_value ---------------------------------------------------------------
@@ -137,6 +138,56 @@ def test_builder_line():
 def test_no_predecessor_is_omitted_not_none():
     src = emit.emit_module(_plan(TRAINER, predecessor=None))
     assert "predecessor" not in src
+
+
+def test_builder_call_carries_suite_gen():
+    tree = ast.parse(emit.emit_module(_plan(TRAINER)))
+    (assign,) = [n for n in tree.body if isinstance(n, ast.Assign)
+                 and isinstance(n.value, ast.Call)
+                 and getattr(n.value.func, "id", "") == "ChapterBuilder"]
+    kw = {k.arg: ast.literal_eval(k.value) for k in assign.value.keywords}
+    assert kw["suite"] == "gen"
+
+
+# --- NEVER_FIRES (C9 ruling 3) ----------------------------------------------
+
+def test_never_fires_is_present_and_empty_by_default():
+    src = emit.emit_module(_plan(TRAINER))
+    tree = ast.parse(src)
+    (assign,) = [n for n in tree.body if isinstance(n, ast.AnnAssign)
+                 and getattr(n.target, "id", "") == "NEVER_FIRES"]
+    assert ast.literal_eval(assign.value) == {}
+
+
+def test_never_fires_carries_the_proof_sorted_by_row_id():
+    elsewhere = (
+        Elsewhere("map068/ev012/p1/b0", "never_fires", detail="proof b"),
+        Elsewhere("map068/ev012/p1", "never_fires", detail="proof a"),
+        Elsewhere("map001/ev001/p0", "blocked", requires=("surf",)),
+    )
+    src = emit.emit_module(_plan(TRAINER, elsewhere=elsewhere))
+    tree = ast.parse(src)
+    (assign,) = [n for n in tree.body if isinstance(n, ast.AnnAssign)
+                 and getattr(n.target, "id", "") == "NEVER_FIRES"]
+    value = ast.literal_eval(assign.value)
+    assert value == {
+        "map068/ev012/p1": "proof a",
+        "map068/ev012/p1/b0": "proof b",
+    }
+    # sorted by row id in the source text too
+    assert src.index("map068/ev012/p1'") < src.index("map068/ev012/p1/b0'")
+
+
+def test_never_fires_appears_before_chapter_assignment():
+    src = emit.emit_module(_plan(TRAINER, elsewhere=(
+        Elsewhere("map068/ev012/p1", "never_fires", detail="proof"),)))
+    assert src.index("NEVER_FIRES") < src.index("CHAPTER = ch05.build()")
+
+
+def test_never_fires_is_deterministic():
+    plan = _plan(TRAINER, elsewhere=(
+        Elsewhere("map068/ev012/p1", "never_fires", detail="proof"),))
+    assert emit.emit_module(plan) == emit.emit_module(plan)
 
 
 def test_byte_identical_on_rerun():

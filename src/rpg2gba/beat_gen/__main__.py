@@ -1,15 +1,20 @@
 """`python -m rpg2gba.beat_gen generate --chapter CHnn` (C6 Task 9).
 
-Ties the stages together and writes, under `--out-dir` (default
-`output/beats/`):
+Ties the stages together and writes:
 
-    chNN.generated.py   the module (emit.py)
-    CHnn.review.md      the review doc (review.py)
-    CHnn.route.json     the solved route (routing.plan.write_plan)
+    chNN.py             the module (emit.py), under `--module-dir`
+                        (default `src/rpg2gba/playtest/chapters_gen/`)
+    CHnn.review.md      the review doc (review.py), under `--out-dir`
+                        (default `output/beats/`)
+    CHnn.route.json     the solved route (routing.plan.write_plan), under
+                        `--out-dir`
 
-Output lands in `output/` by ruling (C6 plan B1): C9, not C6, owns putting
-a generated module under `playtest/chapters/` and a route under
-`reference/routes/`.
+The module lands beside the hand-written suite (`playtest/chapters/`) as a
+tracked, loadable sibling package -- `playtest.chapters_gen` -- per the C9
+rulings (`REDERIVATION_PLAN.md` §16.3): "no overwrite", one commit per
+chapter after the operator approves its review doc. The review doc and
+route JSON stay under `output/` (gitignored); only the module itself is
+meant to be committed, and only when the operator says so.
 
 STATUS: done (`assignments/C6/09_cli.md`). A warp that leaves the chapter
 is a boundary beat (`adapt.is_boundary_warp`, `warp_beat(boundary=True)`).
@@ -67,6 +72,7 @@ from rpg2gba.beat_gen.select import select_rows
 from rpg2gba.chapter_atlas.binding import ChapterBinding, load_binding
 from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch, classify_manifest
 from rpg2gba.chapter_manifest.schema import ManifestRow, parse_row_id
+from rpg2gba.playtest import chapters_gen as playtest_chapters_gen
 from rpg2gba.playtest.archetypes import load_chapter_rows, map_uranium_id
 from rpg2gba.playtest.chapter import load_chapter
 from rpg2gba.routing.__main__ import (
@@ -97,6 +103,9 @@ logger = logging.getLogger(__name__)
 
 BUILD_DIR = Path("output/uranium-build")
 DEFAULT_OUT_DIR = Path("output/beats")
+# Derived from the package's own __file__, not a cwd-relative string, so
+# `generate` writes to the right place regardless of invocation directory.
+DEFAULT_MODULE_DIR = Path(playtest_chapters_gen.__file__).parent
 
 
 def _chain_to(binding: ChapterBinding, chapter_id: str) -> list[str]:
@@ -485,9 +494,10 @@ def _never_fires_elsewhere(
 
 
 def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
-               out_dir: Path = DEFAULT_OUT_DIR) -> ChapterPlan:
+               out_dir: Path = DEFAULT_OUT_DIR,
+               module_dir: Path = DEFAULT_MODULE_DIR) -> ChapterPlan:
     """Run stages 1-4 for one chapter and return the fully decided plan.
-    `out_dir` is where the predecessors' generated modules are read from
+    `module_dir` is where the predecessors' generated modules are read from
     (their routes decide their order-dependent writes, `beat_gen/seed.py`)."""
     # 1. Load. Each predecessor's end state is seeded from its own solved
     #    route (C6 seed recompute).
@@ -497,7 +507,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     rows = load_chapter_rows(chapter_id)
     stories = build_chapter_stories(_chain_to(binding, chapter_id), build_dir=build_dir,
                                     chapters_path=DEFAULT_CHAPTERS_PATH,
-                                    winner_for=route_winner(chapter_id, out_dir))
+                                    winner_for=route_winner(chapter_id, module_dir))
     story = stories[chapter_id]
     verdicts = {v.row_id: v for v in story.rows}
     floors: dict[str, RowFloor] = floor_for_chapter(chapter_id, build_dir=build_dir)
@@ -667,13 +677,21 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     )
 
 
-def write_outputs(plan: ChapterPlan, out_dir: Path, *, build_dir: Path = BUILD_DIR) -> list[Path]:
+def write_outputs(plan: ChapterPlan, out_dir: Path, *, module_dir: Path | None = None,
+                  build_dir: Path = BUILD_DIR) -> list[Path]:
     """Write the three artifacts; return their paths in a fixed order
-    (module, review, route). Overwrites; must be byte-identical on re-run."""
+    (module, review, route). Overwrites; must be byte-identical on re-run.
+
+    `module_dir` (default `DEFAULT_MODULE_DIR`, `playtest/chapters_gen/`)
+    is where the module (`chNN.py`) lands; `out_dir` still owns the review
+    doc and route JSON. Callers that must not write into `src/` (tests)
+    pass an explicit `module_dir=`."""
     if plan.route is None:
         raise ValueError(f"{plan.chapter_id}: plan has no solved route to write")
     out_dir.mkdir(parents=True, exist_ok=True)
-    module_path = out_dir / f"{plan.chapter_id.lower()}.generated.py"
+    module_dir = DEFAULT_MODULE_DIR if module_dir is None else module_dir
+    module_dir.mkdir(parents=True, exist_ok=True)
+    module_path = module_dir / f"{plan.chapter_id.lower()}.py"
     review_path = out_dir / f"{plan.chapter_id}.review.md"
     route_path = out_dir / f"{plan.chapter_id}.route.json"
 
@@ -695,10 +713,12 @@ def cli() -> None:
 @click.option("--chapter", "chapter_id", required=True, help="e.g. CH05")
 @click.option("--out-dir", type=click.Path(path_type=Path), default=DEFAULT_OUT_DIR,
               show_default=True)
-def generate(chapter_id: str, out_dir: Path) -> None:
+@click.option("--module-dir", type=click.Path(path_type=Path), default=DEFAULT_MODULE_DIR,
+              show_default=True, help="Where the generated chNN.py module is written.")
+def generate(chapter_id: str, out_dir: Path, module_dir: Path) -> None:
     """Generate one chapter's module, review doc and route."""
-    plan = build_plan(chapter_id, out_dir=out_dir)
-    for path in write_outputs(plan, out_dir):
+    plan = build_plan(chapter_id, out_dir=out_dir, module_dir=module_dir)
+    for path in write_outputs(plan, out_dir, module_dir=module_dir):
         logger.info("wrote %s", path)
     if plan.refusals:
         logger.warning("%s: %d rows refused -- see the review doc",

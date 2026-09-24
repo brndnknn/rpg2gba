@@ -2428,7 +2428,7 @@ deliberate, and it fails loudly if one ever appears.
 
 **C9 rulings (operator, 2026-09-24).** Five questions, settled in one walkthrough.
 
-1. **No overwrite.** The generator emits to a tracked `src/rpg2gba/playtest/chapters/chNN_gen.py`
+1. **No overwrite.** The generator emits to a tracked `src/rpg2gba/playtest/chapters_gen/chNN.py` (a sibling package, so chapter listings never see it)
    beside the hand `chNN.py`; `playtest` gains `--suite hand|gen`. A C9 commit is that file plus a
    green grade. Hand-suite removal stays a separate operator-gated step (R12 amended). This
    corrects the "C9 overwrite" wording in `CLAUDE.md` §9 and `C6_GENERATOR_PLAN.md` B1/C2.
@@ -2454,10 +2454,17 @@ deliberate, and it fails loudly if one ever appears.
    `CHnn.review.md`. A later upstream fix means regenerating the chain and diffing: an unaffected
    chapter is byte-identical (§4.2) and stays approved; a changed one is re-reviewed on its diff
    only. The grader runs as a test, so a committed chapter that drifts fails loudly.
+   *Consequence, ruled the same day (operator, option 1):* generating CH02+ reads CH01's
+   **generated** module for the `switch:104` seed (`beat_gen/seed.py`), so generated modules sit
+   **uncommitted** in `chapters_gen/` until each is approved, and a clean checkout cannot
+   regenerate CH02–CH05 until CH01 commits. Accepted: a clean checkout cannot regenerate anything
+   without the untracked `output/uranium-build/` either. Rejected: chain-order commits (everything
+   waits on CH01's backlog) and a tracked seed-winner file (a second CH01-derived artifact needing
+   its own approval).
 
 Build order before the single background regeneration: #109 (`text_source` reuses
 `assembly._CHARMAP_SUBS` and the quote toggle — not a `charmap.txt` change; clears all 5 frozen
-text refusals incl. `*`); the `never_fires` verdict; generator output to `chNN_gen.py` +
+text refusals incl. `*`); the `never_fires` verdict; generator output to `chapters_gen/chNN.py` +
 `--suite`; the grader (rules (a)/(b) + `never_fires` + residue ledger) as a test. Still to check
 after regenerating: `map068/ev012/p1` (assumed the same `no_arrival` shape) and CH01 B8/B13's
 `unparsed_state_write` rows (may be C8's never-live computed rows).

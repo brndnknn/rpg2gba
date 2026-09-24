@@ -19,24 +19,24 @@ CHAPTER = _B(beats=(
 
 
 @pytest.fixture
-def out_dir(tmp_path: Path) -> Path:
-    (tmp_path / "chy.generated.py").write_text(_MODULE, encoding="utf-8")
+def module_dir(tmp_path: Path) -> Path:
+    (tmp_path / "chy.py").write_text(_MODULE, encoding="utf-8")
     return tmp_path
 
 
-def test_last_writer_in_the_predecessor_route_wins(out_dir: Path):
-    winner_for = route_winner("CHX", out_dir)
+def test_last_writer_in_the_predecessor_route_wins(module_dir: Path):
+    winner_for = route_winner("CHX", module_dir)
     assert winner_for("CHY", ("map001/ev003/p0", "map001/ev001/p0")) == "map001/ev003/p0"
     assert winner_for("CHY", ("map001/ev001/p0", "map001/ev002/p0/b0")) == "map001/ev002/p0/b0"
 
 
-def test_the_chapter_being_generated_has_no_route_yet(out_dir: Path):
-    assert route_winner("CHY", out_dir)("CHY", ("map001/ev001/p0", "map001/ev003/p0")) is None
+def test_the_chapter_being_generated_has_no_route_yet(module_dir: Path):
+    assert route_winner("CHY", module_dir)("CHY", ("map001/ev001/p0", "map001/ev003/p0")) is None
 
 
-def test_an_unwalked_writer_keeps_the_join(out_dir: Path):
+def test_an_unwalked_writer_keeps_the_join(module_dir: Path):
     # Inherited beats (a `:` name) are not this chapter's route.
-    assert route_winner("CHX", out_dir)("CHY", ("map001/ev001/p0", "map001/ev009/p0")) is None
+    assert route_winner("CHX", module_dir)("CHY", ("map001/ev001/p0", "map001/ev009/p0")) is None
 
 
 def test_a_predecessor_never_generated_fails_loud(tmp_path: Path):

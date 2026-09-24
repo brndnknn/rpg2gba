@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import types
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
 from rpg2gba.beat_gen import __main__ as cli
 from rpg2gba.chapter_manifest.schema import parse_row_id
@@ -30,7 +32,8 @@ def plan():
 @pytest.fixture(scope="module")
 def written(plan, tmp_path_factory):
     out = tmp_path_factory.mktemp("beats")
-    return out, cli.write_outputs(plan, out)
+    module_dir = tmp_path_factory.mktemp("chapters_gen")
+    return out, cli.write_outputs(plan, out, module_dir=module_dir)
 
 
 def _load(path: Path):
@@ -102,13 +105,17 @@ def test_build_plan_is_deterministic(plan):
 
 def test_three_artifacts_in_fixed_order(written):
     out, paths = written
-    assert [p.name for p in paths] == ["ch05.generated.py", "CH05.review.md", "CH05.route.json"]
-    assert all(p.parent == out and p.exists() for p in paths)
+    assert [p.name for p in paths] == ["ch05.py", "CH05.review.md", "CH05.route.json"]
+    module_path, review_path, route_path = paths
+    assert module_path.exists()
+    assert review_path.parent == out and review_path.exists()
+    assert route_path.parent == out and route_path.exists()
 
 
 def test_rerun_is_byte_identical(plan, written, tmp_path):
     _, first = written
-    second = cli.write_outputs(plan, tmp_path)
+    second_module_dir = tmp_path / "module"
+    second = cli.write_outputs(plan, tmp_path, module_dir=second_module_dir)
     for a, b in zip(first, second):
         assert a.read_bytes() == b.read_bytes(), a.name
 
@@ -174,3 +181,60 @@ def test_never_fires_elsewhere_skips_beats_outside_dead_groups():
                         rows=("map036/ev002/p1",), group="m036e002",
                         kwargs=make_kwargs())
     assert cli._never_fires_elsewhere((live,), {}) == ()
+
+
+# --- --module-dir CLI wiring (mocked: no staged corpus needed) -----------------
+
+def test_generate_cli_threads_out_dir_and_module_dir(tmp_path, monkeypatch):
+    """`generate` must pass its `--out-dir`/`--module-dir` options straight
+    through to `build_plan`/`write_outputs`, and default `--module-dir` to
+    `DEFAULT_MODULE_DIR` (`playtest/chapters_gen/`) when omitted. Mocked so
+    this doesn't need a staged `output/uranium-build/` corpus."""
+    calls = {}
+
+    def fake_build_plan(chapter_id, *, build_dir=cli.BUILD_DIR,
+                        out_dir=cli.DEFAULT_OUT_DIR, module_dir=cli.DEFAULT_MODULE_DIR):
+        calls["build_plan"] = (chapter_id, out_dir, module_dir)
+        return types.SimpleNamespace(refusals=())
+
+    def fake_write_outputs(plan, out_dir, *, module_dir=None, build_dir=cli.BUILD_DIR):
+        calls["write_outputs"] = (out_dir, module_dir)
+        return [module_dir / "ch05.py", out_dir / "CH05.review.md", out_dir / "CH05.route.json"]
+
+    monkeypatch.setattr(cli, "build_plan", fake_build_plan)
+    monkeypatch.setattr(cli, "write_outputs", fake_write_outputs)
+
+    out_dir = tmp_path / "out"
+    module_dir = tmp_path / "modules"
+    runner = CliRunner()
+    result = runner.invoke(cli.cli, [
+        "generate", "--chapter", "CH05",
+        "--out-dir", str(out_dir), "--module-dir", str(module_dir),
+    ])
+
+    assert result.exit_code == 0, result.output
+    assert calls["build_plan"] == ("CH05", out_dir, module_dir)
+    assert calls["write_outputs"] == (out_dir, module_dir)
+
+
+def test_generate_cli_module_dir_defaults_to_chapters_gen(tmp_path, monkeypatch):
+    calls = {}
+
+    def fake_build_plan(chapter_id, *, build_dir=cli.BUILD_DIR,
+                        out_dir=cli.DEFAULT_OUT_DIR, module_dir=cli.DEFAULT_MODULE_DIR):
+        calls["module_dir"] = module_dir
+        return types.SimpleNamespace(refusals=())
+
+    def fake_write_outputs(plan, out_dir, *, module_dir=None, build_dir=cli.BUILD_DIR):
+        return [module_dir / "ch05.py", out_dir / "CH05.review.md", out_dir / "CH05.route.json"]
+
+    monkeypatch.setattr(cli, "build_plan", fake_build_plan)
+    monkeypatch.setattr(cli, "write_outputs", fake_write_outputs)
+
+    runner = CliRunner()
+    result = runner.invoke(cli.cli, [
+        "generate", "--chapter", "CH05", "--out-dir", str(tmp_path / "out"),
+    ])
+
+    assert result.exit_code == 0, result.output
+    assert calls["module_dir"] == cli.DEFAULT_MODULE_DIR
