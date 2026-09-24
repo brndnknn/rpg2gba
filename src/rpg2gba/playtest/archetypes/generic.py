@@ -24,7 +24,7 @@ without a handler that checks it.
 
 `GENERIC_EXECUTED_KINDS` (Task 7, R1): `trigger`/`completes`/`text` are the
 required minimum. Beyond that, `switch_write`/`var_write`/
-`self_switch_write`/`visual` are added because each is checkable with a
+`self_switch_write`/`engine_flag_write`/`visual` are added because each is checkable with a
 single, stateless, absolute read after the row's steps run -- exactly what
 a per-kind `StepHandler(emu, beat_name, step) -> None` can honestly do
 without any state shared across steps. `item_grant` and `battle` are left
@@ -82,7 +82,7 @@ if TYPE_CHECKING:  # runtime import is lazy so this module works without mGBA bi
 # why each kind is in or out (Task 7, R1).
 GENERIC_EXECUTED_KINDS: frozenset[str] = frozenset({
     "trigger", "completes", "text",
-    "switch_write", "var_write", "self_switch_write",
+    "switch_write", "var_write", "self_switch_write", "engine_flag_write",
     "visual",
 })
 
@@ -294,6 +294,21 @@ def _handle_self_switch_write(emu: "Emulator", beat_name: str, step: Step) -> No
         )
 
 
+def _handle_engine_flag_write(emu: "Emulator", beat_name: str, step: Step) -> None:
+    # The flag name is the native FLAG_SYS_* itself (C8 ruling (b)), verified
+    # against the fork by `engine-audit` -- no registry lookup to fail.
+    params = dict(step.params)
+    name = str(params["flag"])
+    expected = bool(params["value"])
+    actual = emu.flag(name)
+    if actual != expected:
+        shot = emu.screenshot(f"{beat_name}_{name.lower()}")
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: {name} reads {actual!r}, expected "
+            f"{expected!r} ({shot})"
+        )
+
+
 def _handle_visual(emu: "Emulator", beat_name: str, step: Step) -> None:
     # `assertion.py`'s own OFFLINE_KINDS comment: visual "asserts nothing a
     # ROM walk could fail beyond completes". The row already ran to
@@ -312,6 +327,7 @@ STEP_HANDLERS.update({
     "switch_write": _handle_switch_write,
     "var_write": _handle_var_write,
     "self_switch_write": _handle_self_switch_write,
+    "engine_flag_write": _handle_engine_flag_write,
     "visual": _handle_visual,
 })
 

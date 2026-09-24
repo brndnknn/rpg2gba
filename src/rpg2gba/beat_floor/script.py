@@ -131,9 +131,10 @@ _ATTRIBUTE_TABLES = (
     bi.ENGINE_ATTRIBUTES, bi.STATIC_PREDICATE_ATTRS, bi.NOOP_ATTRS,
     bi.PASSTHROUGH_ENGINE_ATTRS, bi.PARTY_MODEL_ATTRS,
 )
-# Attribute writes that are silent here: a redraw hint, or a party write
-# story_state refuses party_model for the row itself.
-_SILENT_ATTRIBUTE_WRITES = (bi.NOOP_ATTRS, bi.PARTY_MODEL_ATTRS)
+# Attribute writes that are silent here: an engine unlock (story_state's
+# EngineKey write becomes the row's `engine_flag_write` in walk.py), a redraw
+# hint, or a party write story_state refuses party_model for the row itself.
+_SILENT_ATTRIBUTE_WRITES = (bi.ENGINE_ATTRIBUTES, bi.NOOP_ATTRS, bi.PARTY_MODEL_ATTRS)
 _STATE_GLOBALS = frozenset({"$game_switches", "$game_variables", "$game_self_switches"})
 
 
@@ -202,13 +203,6 @@ def _check_target(target: ast.Node) -> None:
         key = _attribute_key(target)
         if key is not None and any(key in table for table in _SILENT_ATTRIBUTE_WRITES):
             return
-        if key in bi.ENGINE_ATTRIBUTES:
-            # Ruling (b): an unlock is "asserted by the floor", but story_state's
-            # EngineKey write has no AssertionKind yet (walk._state_assertions_
-            # for_row skips EngineKey). Silence here would drop the unlock from
-            # the floor entirely, so it refuses by name until the kind exists.
-            flag = bi.ENGINE_ATTRIBUTES[key].flag
-            raise _Refused("engine_flag_unasserted", f"{key[0]}.{key[1]} -> {flag}: no floor kind")
         raise _Refused("unmodelled_attribute_write", f"assignment to {target.name!r}")
     if isinstance(target, ast.GlobalVar):
         raise _Refused("unmodelled_global_write", f"assignment to {target.name}")

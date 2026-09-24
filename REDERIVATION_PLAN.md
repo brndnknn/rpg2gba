@@ -2398,6 +2398,7 @@ byte-identical). New names: `conditional_script_effect` 3 (map050/ev019 b1's
 `pbAddPokemon(...) if $game_variables[151]==N`, previously a misleading `non_literal_args`), and
 `unmodelled_attribute_write` 1 (`$Trainer.party[i].nuclearFree=`).
 
+*(Resolved the same day, operator: "add the engine_flag_write kind now". See the next entry.)*
 **One finding, and an open question for the operator:** `engine_flag_unasserted` 5
 (`$PokemonGlobal.runningShoes`, `$Trainer.pokedex`, `$Trainer.pokegear`,
 `seenStorageCreator` ×2 — CH01 3 / CH03 2). Ruling (b) says unlock attributes are "asserted by
@@ -2407,6 +2408,23 @@ would have made them **silent**, dropping the unlock from the floor without sayi
 refuse by name instead. Closing it needs a new kind (e.g. `engine_flag_write`: flag, value), an
 `OFFLINE_KINDS` decision, and a `generic.py` ROM handler. That changes the floor JSON's schema
 (CLAUDE.md §10: ask first).
+
+**`engine_flag_write` landed (2026-09-24, operator-approved).** This closes ruling (b)'s floor
+half. The new `AssertionKind` `engine_flag_write` has params `flag` (the native `FLAG_SYS_*`)
+and `value`, and is in `OFFLINE_KINDS`, with the same standing as `switch_write`.
+`walk._state_assertions_for_row` maps a story_state `EngineKey` write to it when the key is one
+of `builtins.ENGINE_ATTRIBUTES` (a key_name → flag map built from that table). Other
+`EngineKey`s (respawn map, surfing, run toggle) are still skipped. `script.py` treats unlock
+writes as silent again, because story_state carries them, so `engine_flag_unasserted` is gone.
+`generic.py` gains `_handle_engine_flag_write`, one `emu.flag(FLAG_SYS_*)` read; the name needs
+no registry lookup because `engine-audit` already proves it exists in the fork. The transpiler
+already emits the matching `setflag(FLAG_SYS_*)`, so the assertion checks real ROM behaviour.
+Measured: 4 assertions (CH01 B_DASH at map049/ev001/p0 and POKENAV_GET at map172/ev004/p0;
+CH03 PC_LANETTE at map031/ev049 p0 and p2). CH03 refused rows 16 → 14, CH01 unchanged at 61.
+The Pokédex unlock (map032/ev009/p2) asserts nothing because story_state refuses that whole row
+(a computed row with an unresolved read), so the row stays refused loudly. `beat_gen/review.py`
+still raises on an `engine:` order-dependent key, and none exists in the corpus; that is
+deliberate, and it fails loudly if one ever appears.
 
 ### 16.4 Known work the generator will refuse until fixed (not decisions)
 

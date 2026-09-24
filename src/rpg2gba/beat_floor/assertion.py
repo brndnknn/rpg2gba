@@ -24,6 +24,7 @@ AssertionKind = Literal[
     "switch_write",       # params: switch_id, value
     "var_write",          # params: var_id, op, value (story_state Assign/Adjust, rendered)
     "self_switch_write",  # params: event_id, letter, value
+    "engine_flag_write",  # params: flag (native FLAG_SYS_*), value -- C8 ruling (b) unlocks
     "warp",               # params: map_id, x, y, direction, arrives_on_door (bool)
     "heal_party",
     "erase_event",        # params: event_id
@@ -45,7 +46,7 @@ AssertionTag = Literal["state", "text", "position", "flow", "audio", "visual", "
 
 OFFLINE_KINDS: frozenset[str] = frozenset({
     "trigger", "completes", "text", "choice", "switch_write", "self_switch_write",
-    "warp", "heal_party", "erase_event", "item_grant", "pokemon_grant", "audio", "visual",
+    "engine_flag_write", "warp", "heal_party", "erase_event", "item_grant", "pokemon_grant", "audio", "visual",
 })
 """Kinds checkable without the emulator. `var_write`, `displacement`,
 `event_position`, `battle`, `service`, `seam_crossing`, `stair_crossing` and `blocked_obstacle` (impassability needs the emulator) are ROM-only (R11: a `var_write` pulls a

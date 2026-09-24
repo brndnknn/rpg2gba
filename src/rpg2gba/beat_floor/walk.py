@@ -53,6 +53,7 @@ from rpg2gba.playtest.text_source import (
     _default_engine_dir,
     _strip_zero_width_tokens,
 )
+from rpg2gba.ruby_subset.builtins import ENGINE_ATTRIBUTES
 from rpg2gba.story_state.extract import (
     _default_reference_dir,
     _TRIGGER_NAMES,
@@ -70,6 +71,10 @@ from rpg2gba.story_state.state import (
 )
 
 logger = logging.getLogger(__name__)
+
+# EngineKey name -> native FLAG_SYS_* for the engine-held unlocks (C8 ruling
+# (b)); read from the one table, never restated here (§4.3).
+_UNLOCK_FLAGS: dict[str, str] = {a.key_name: a.flag for a in ENGINE_ATTRIBUTES.values()}
 
 
 # --- RMXP command codes used by this module (kept local, matching the
@@ -565,9 +570,12 @@ def _state_assertions_for_row(row_id: str, row_state: RowState) -> tuple[
 ]:
     """Converts one row's `story_state.extract.RowState` writes/refusals
     into floor assertions/refusals (R11 C4 design: "State writes are NOT
-    re-derived"). `TempSwitch`/`EngineKey` writes are per-visit/engine-only
-    state with no `AssertionKind` of their own -- skipped, not mapped
-    (documented, per the brief's "or map them if obvious": neither is)."""
+    re-derived"). An `EngineKey` write for an engine-held unlock
+    (`builtins.ENGINE_ATTRIBUTES`: running shoes, Pokédex, PokéGear, storage
+    creator) becomes `engine_flag_write` on its native `FLAG_SYS_*` (C8 ruling
+    (b), added 2026-09-24). Every other `EngineKey` (respawn map, surfing,
+    run toggle) and `TempSwitch` writes are per-visit/engine-only state with
+    no `AssertionKind` -- skipped, not mapped."""
     assertions: list[FloorAssertion] = []
     for write in row_state.writes:
         key = write.key
@@ -605,6 +613,15 @@ def _state_assertions_for_row(row_id: str, row_state: RowState) -> tuple[
                         var_id=key.id, op=write.op, value=write.amount),
                     tag="state",
                 ))
+        elif isinstance(key, EngineKey) and key.name in _UNLOCK_FLAGS:
+            if not isinstance(write, Assign):
+                continue  # a flag has no arithmetic write form
+            assertions.append(FloorAssertion(
+                row_id=row_id, kind="engine_flag_write", list_index=write.list_index,
+                code=355, params=make_params(
+                    flag=_UNLOCK_FLAGS[key.name], value=_render_write_value(write.values)),
+                tag="state",
+            ))
         elif isinstance(key, (TempSwitch, EngineKey)):
             continue
         else:  # pragma: no cover - exhaustive over story_state.state.Key

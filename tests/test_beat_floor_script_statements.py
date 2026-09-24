@@ -59,12 +59,13 @@ def test_postfix_conditional_state_write_is_silent():
     assert _reasons("$game_switches[61] = true if $game_variables[151]==1") == []
 
 
-def test_engine_attribute_write_refuses_until_the_floor_can_assert_it():
-    # Ruling (b) wants the unlock asserted; no AssertionKind carries an
-    # EngineKey yet, and silence would drop it. One refusal for the whole
-    # statement, even split across rows (old scheme: `true` refused as a head).
-    assert _reasons("$PokemonGlobal.seenStorageCreator=\ntrue") == ["engine_flag_unasserted"]
-    assert _reasons("$Trainer.pokedex=true") == ["engine_flag_unasserted"]
+def test_engine_attribute_write_is_silent_here():
+    # Silent in the script extractor: story_state's EngineKey write becomes
+    # the row's `engine_flag_write` (walk.py), pinned in
+    # test_beat_floor_engine_flag_write.py. Old scheme: the split-row `true`
+    # continuation refused as a head.
+    assert _reasons("$PokemonGlobal.seenStorageCreator=\ntrue") == []
+    assert _reasons("$Trainer.pokedex=true") == []
 
 
 def test_redraw_hint_write_is_silent():
