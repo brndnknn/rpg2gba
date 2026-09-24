@@ -1636,9 +1636,9 @@ Each lands unit-green. None is ROM-verified before P11.
 | **C5** | Archetype templates refactored onto the generic floor; the ⊇-floor checker rule; seam and stair floors | R11 | DONE 2026-09-17 — `beat_floor/{coverage,lookup,terrain}.py`, all five templates declare; see "C5 landed" below |
 | **C5b** | Warp facing moves into the engine: retain-facing fallback, per-warp departure direction in `struct WarpEvent`, pending-facing special for script warps, door tiles yield to the warp's direction; arrival-facing table and tiers 1–3 deleted | `WARP_RETAIN_FACING_PROPOSAL.md` §0 R1–R6 | **DONE 2026-09-18** (unit-green); see "C5b landed" below |
 | **C7** | Freeze CH01–CH05 hand beats — **rows + identity only; coverage is the test, not literal match** (R12 amended 2026-09-17) | R12 | **DONE 2026-09-21** (unit-green); see "C7 landed" below |
-| **C6** | Generator + solver integration: whole-module emit, review doc, refusal list, idempotence test | R1, R4, R7 | **Part one DONE 2026-09-22** (unit-green; CH05 end to end); see "C6 part one landed" below. Part two (map continuity, boundary claims, A5, CH01–CH04) IN PROGRESS |
-| **C8** | Shared Ruby-subset interpreter + input search; `map050/ev019` | R10 | **IN PROGRESS** — shape ruled 2026-09-23; see "C8 shape" below |
-| **C9** | Regenerate CH01–CH05 behind the frozen test, one commit per chapter | R12 | TODO |
+| **C6** | Generator + solver integration: whole-module emit, review doc, refusal list, idempotence test | R1, R4, R7 | **Part one DONE 2026-09-22** (unit-green; CH05 end to end); see "C6 part one landed" below. Part two (map continuity, boundary claims, A5, CH01–CH04) **DONE 2026-09-23** |
+| **C8** | Shared Ruby-subset interpreter + input search; `map050/ev019` | R10 | **DONE 2026-09-24** — all seven stages; see "C8 shape" and the stage entries below |
+| **C9** | Regenerate CH01–CH05 behind the frozen test, one commit per chapter — **lands alongside the hand module, never overwrites it** | R12 | **Rulings settled 2026-09-24**, build TODO; see "C9 rulings" below |
 | **C10** | `offline:` verdict head, offline flavour checker, ROM sample selection | R2, R3 | TODO |
 
 **C1 shape (operator, 2026-09-16):** (a) every code 111 yields **two** arm rows, then and
@@ -2425,6 +2425,42 @@ The Pokédex unlock (map032/ev009/p2) asserts nothing because story_state refuse
 (a computed row with an unresolved read), so the row stays refused loudly. `beat_gen/review.py`
 still raises on an `engine:` order-dependent key, and none exists in the corpus; that is
 deliberate, and it fails loudly if one ever appears.
+
+**C9 rulings (operator, 2026-09-24).** Five questions, settled in one walkthrough.
+
+1. **No overwrite.** The generator emits to a tracked `src/rpg2gba/playtest/chapters/chNN_gen.py`
+   beside the hand `chNN.py`; `playtest` gains `--suite hand|gen`. A C9 commit is that file plus a
+   green grade. Hand-suite removal stays a separate operator-gated step (R12 amended). This
+   corrects the "C9 overwrite" wording in `CLAUDE.md` §9 and `C6_GENERATOR_PLAN.md` B1/C2.
+2. **Strict grading, scoped to frozen rows.** A frozen row the generator refuses blocks that
+   chapter's commit, with no named exceptions. Refusals on rows outside the freeze (e.g. CH01's
+   `party_model` rows, which no hand beat claims) do not block C9. Measured on the pre-C8
+   `output/beats/`: 19 frozen rows refused (CH01 7 / CH02 5 / CH03 7 / CH04 0 / CH05 0). CH02's
+   `m033stair52x41` refusal is correct (behind rock-smash boulders) and is not a frozen row.
+3. **`never_fires` verdict.** All 9 frozen `no_arrival` refusals are arrival-nudge autoruns
+   (`get_character_on_event` guard) on cells no warp lands on — e.g. the Moki↔Route 1 passage's
+   three warps share one landing tile, so only that tile's p1 runs (hand `ch02.B1_back`'s own
+   docstring says so; its claim on the siblings had no assertion behind it). The generator's
+   diagnosis is right; the bookkeeping is wrong. `no_arrival` becomes a `never_fires` verdict,
+   listed in the review doc, and the grader counts a frozen row with a proven `never_fires` as
+   satisfied. A proof, not an exception.
+4. **Residue.** The six `open` ledger entries are settled: CH01:B1 `retired` (no start-state
+   oracle will be added); CH02:B4, CH04:B15 (wild encounters) and CH03:N4 (shop refusal)
+   `retired` as engine-owned; CH02:B17 and CH04:B7 `covered_elsewhere` by the generated boundary
+   `warp_beat`s (`map033/ev045,ev046/p0`, `map035/ev001/p0`). Ledger has no `open` entries left.
+5. **Review gate per chapter; generate in chain order, commit in readiness order.** Generation is
+   CH01→CH05 (the `switch:104` seed reads the predecessor's generated module). Commits go CH05,
+   CH04, then CH02/CH03, then CH01, each after the operator approves that chapter's
+   `CHnn.review.md`. A later upstream fix means regenerating the chain and diffing: an unaffected
+   chapter is byte-identical (§4.2) and stays approved; a changed one is re-reviewed on its diff
+   only. The grader runs as a test, so a committed chapter that drifts fails loudly.
+
+Build order before the single background regeneration: #109 (`text_source` reuses
+`assembly._CHARMAP_SUBS` and the quote toggle — not a `charmap.txt` change; clears all 5 frozen
+text refusals incl. `*`); the `never_fires` verdict; generator output to `chNN_gen.py` +
+`--suite`; the grader (rules (a)/(b) + `never_fires` + residue ledger) as a test. Still to check
+after regenerating: `map068/ev012/p1` (assumed the same `no_arrival` shape) and CH01 B8/B13's
+`unparsed_state_write` rows (may be C8's never-live computed rows).
 
 ### 16.4 Known work the generator will refuse until fixed (not decisions)
 

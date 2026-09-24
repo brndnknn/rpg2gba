@@ -2,9 +2,9 @@
   "schema": 1,
   "entries": {
     "CH01:B1": {
-      "ruling": "open",
-      "question": "Which source-derived oracle owns the new-save start map and the initial-flag state (a start-state model, or stays hand-authored)?",
-      "note": "Fresh save spawns on the player's house 1F map with the running-shoes flag not yet set."
+      "ruling": "retired",
+      "cites": "REDERIVATION_PLAN.md §16.3 C9 rulings 2026-09-24",
+      "note": "Fresh save spawns on the player's house 1F map with the running-shoes flag not yet set. Operator: no start-state oracle will be added."
     },
     "CH01:B6": {
       "ruling": "covered_elsewhere",
@@ -32,9 +32,9 @@
       "note": "Chapter-end read that the quest var written by the page B13 claims still holds at 4."
     },
     "CH02:B4": {
-      "ruling": "open",
-      "question": "Should the wild-encounter check (species set and level range from the map's land table) become a floor kind derived from the encounter data, or stay a hand assertion?",
-      "note": "Walking two grass cells eventually starts a wild (not trainer) battle with an allowed species and level."
+      "ruling": "retired",
+      "cites": "REDERIVATION_PLAN.md §16.3 C9 rulings 2026-09-24",
+      "note": "Walking two grass cells eventually starts a wild (not trainer) battle with an allowed species and level. Engine-owned (wild encounter roll), outside pipeline scope."
     },
     "CH02:B14": {
       "ruling": "state_model",
@@ -47,9 +47,9 @@
       "note": "Two boulders refuse to break without Rock Smash and keep blocking."
     },
     "CH02:B17": {
-      "ruling": "open",
-      "question": "Does 'the player can stand on the boundary approach tiles and is still on the map' need any floor claim, given boundary crossings belong to the arriving chapter's warp rows?",
-      "note": "Walks to the two tiles just short of the north boundary and asserts the player is still on the same map."
+      "ruling": "covered_elsewhere",
+      "rows": ["map033/ev045/p0", "map033/ev046/p0"],
+      "note": "Walks to the two tiles just short of the north-edge warps; the generated boundary warp_beat claims both rows and likewise stops on the approach cell (crossing owned by CH03, §10 R2)."
     },
     "CH03:B27": {
       "ruling": "arrival_floor",
@@ -85,9 +85,9 @@
       "note": "Asserts arrival BGM equals the map header; vacuous until PROJECT_TODO #22 maps Uranium BGM."
     },
     "CH03:N4": {
-      "ruling": "open",
-      "question": "Who owns the native shop refusal (insufficient money leaves money and bag unchanged and returns control): a floor kind over the shop row, or engine-side shop.c behavior outside pipeline scope?",
-      "note": "A mart purchase with too little money is refused and money and bag are unchanged."
+      "ruling": "retired",
+      "cites": "REDERIVATION_PLAN.md §16.3 C9 rulings 2026-09-24",
+      "note": "A mart purchase with too little money is refused and money and bag are unchanged. Engine-owned (vanilla shop.c), outside pipeline scope."
     },
     "CH03:B32": {
       "ruling": "arrival_floor",
@@ -124,14 +124,14 @@
       "note": "Two rockslide rocks refuse to break without Rock Smash, block movement, and start no encounter."
     },
     "CH04:B7": {
-      "ruling": "open",
-      "question": "Does 'the player reaches the approach tile one short of a boundary and does not cross' need any floor claim, given the crossing belongs to the arriving chapter?",
-      "note": "Walks to the tile one short of a cave mouth and asserts the player is still on the same map."
+      "ruling": "covered_elsewhere",
+      "rows": ["map035/ev001/p0"],
+      "note": "Walks to the tile one short of the cave-mouth warp; the generated boundary warp_beat claims the row and likewise stops on the approach cell (crossing owned by CH05, §10 R2)."
     },
     "CH04:B15": {
-      "ruling": "open",
-      "question": "Should the wild-encounter check (species set and level range from the map's land table) become a floor kind derived from the encounter data, or stay a hand assertion?",
-      "note": "Walking grass eventually starts a wild (not trainer) battle with an allowed species and level."
+      "ruling": "retired",
+      "cites": "REDERIVATION_PLAN.md §16.3 C9 rulings 2026-09-24",
+      "note": "Walking grass eventually starts a wild (not trainer) battle with an allowed species and level. Engine-owned (wild encounter roll), outside pipeline scope."
     }
   }
 }

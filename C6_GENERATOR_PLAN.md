@@ -334,6 +334,8 @@ and CLAUDE.md §10 puts intermediate-JSON schema changes in the ask-first column
 
 **B1 — Where does C6's output land?** — **CLOSED 2026-09-17 by the C7/C6 swap.**
 
+*(Corrected 2026-09-24: C9 does **not** overwrite `chNN.py`; it commits the generated suite as
+`playtest/chapters/chNN_gen.py` beside it — `REDERIVATION_PLAN.md` §16.3 "C9 rulings".)*
 With the freeze landing first, this stopped being a safety question. C9 still owns overwriting
 `chNN.py` (one commit per chapter, graded against the frozen file), so C6 emits to
 `output/beats/chNN.generated.py` by convention — but nothing irreplaceable is at risk either way, and
@@ -426,8 +428,9 @@ Implementation note: while both exist, two beats claim the same rows — confirm
 - **Context added 2026-09-18:** group A's answers turned every former hand-authored choice (seam
   cell, stair starting end, warp press side, event approach side, order-dependent writes) into a
   solver pick. Its only human-visible record is the review doc.
-- **Answer (2026-09-18): it is an operator gate, folded into CLAUDE.md §9 gate 2.** Before each
-  chapter's C9 overwrite, and for every future generated chapter, the operator reads and approves
+- **Answer (2026-09-18): it is an operator gate, folded into CLAUDE.md §9 gate 2.** *(Corrected
+  2026-09-24: there is no overwrite; read "before each chapter's C9 commit". Approval is per
+  chapter.)* Before each chapter's C9 overwrite, and for every future generated chapter, the operator reads and approves
   `CHnn.review.md`, then walks the ROM. This is part of the per-chapter boot gate, not a new fourth
   gate, because the generator outlives the rederivation. §9 was amended the same day.
 
