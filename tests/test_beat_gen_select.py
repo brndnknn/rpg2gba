@@ -224,3 +224,15 @@ def test_real_ch01_partitions_and_classifies_every_refusal(stories):
                + [e.row_id for e in sel.elsewhere])
     assert sorted(buckets) == sorted(r.row_id for r in rows)   # each row exactly once
     assert sel.refusals, "CH01 is expected to carry refusals (C6 plan B2)"
+
+
+# --- Elsewhere validation (C9 ruling 3) -----------------------------------------
+
+def test_elsewhere_never_fires_requires_nonempty_detail():
+    with pytest.raises(ValueError, match="never_fires"):
+        Elsewhere("map068/ev012/p1", "never_fires")
+
+
+def test_elsewhere_never_fires_with_detail_is_fine():
+    e = Elsewhere("map068/ev012/p1", "never_fires", detail="no warp lands on this cell")
+    assert e.detail == "no warp lands on this cell"

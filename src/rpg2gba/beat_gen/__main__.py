@@ -472,6 +472,18 @@ def _group_boundary_exits(beats: Sequence[PlannedBeat], floors: Mapping[str, Row
                  for b in beats)
 
 
+def _never_fires_elsewhere(
+    planned: Sequence[PlannedBeat], dead_groups: Mapping[str, str],
+) -> tuple[Elsewhere, ...]:
+    """Every row of a dead arrival-nudge group (C9 ruling 3): `dead_groups`
+    maps a group id to the `NoArrivalError` proof text, and every row of
+    every beat in that group becomes a `never_fires` elsewhere entry
+    carrying that proof as `detail`."""
+    return tuple(
+        Elsewhere(row_id, "never_fires", detail=dead_groups[b.group])
+        for b in planned if b.group in dead_groups for row_id in b.rows)
+
+
 def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                out_dir: Path = DEFAULT_OUT_DIR) -> ChapterPlan:
     """Run stages 1-4 for one chapter and return the fully decided plan.
@@ -528,8 +540,10 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         if inbound_ids and set(b.rows) <= inbound_ids else b
         for b in beats)
 
-    # 3. Adapt, source half. An arrival nudge nothing lands on never fires:
-    #    its whole group (the nudge and its arms) is refused by name.
+    # 3. Adapt, source half. An arrival nudge nothing lands on never fires
+    #    (C9 ruling 3): its whole group (the nudge and its arms) is dropped
+    #    from beats and its rows become `never_fires` elsewhere entries, not
+    #    refusals -- the proof is the `NoArrivalError` message.
     planned = beats
     adapted: list[PlannedBeat] = []
     dead_groups: dict[str, str] = {}
@@ -542,8 +556,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
             except NoArrivalError as exc:
                 dead_groups[b.group] = str(exc)
         adapted.append(b)
-    dead_refusals = tuple(Refusal(row_id, "cell", "no_arrival", dead_groups[b.group])
-                          for b in planned if b.group in dead_groups for row_id in b.rows)
+    dead_elsewhere = _never_fires_elsewhere(planned, dead_groups)
     beats = tuple(b for b in adapted if b.group not in dead_groups)
     beats = _group_boundary_exits(beats, floors, chain_maps)
     # 3b. A4 (`beat_gen/facing.py`): an arm gated on the player's facing is
@@ -647,8 +660,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         chapter_id=chapter_id,
         predecessor=predecessor,
         beats=beats,
-        refusals=selection.refusals + dead_refusals + tuple(cell_refusals),
-        elsewhere=selection.elsewhere,
+        refusals=selection.refusals + tuple(cell_refusals),
+        elsewhere=selection.elsewhere + dead_elsewhere,
         order_dependent=story.order_dependent,
         route=route,
     )

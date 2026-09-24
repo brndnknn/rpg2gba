@@ -143,3 +143,34 @@ def test_frozen_rows_on_ch05_maps_are_claimed(written):
     chapter = _load(paths[0]).CHAPTER
     claimed = {r for b in chapter.beats if ":" not in b.name for r in b.rows}
     assert on_maps - claimed == set()
+
+
+# --- never_fires (C9 ruling 3) --------------------------------------------------
+
+def test_dead_arrival_nudge_group_yields_never_fires_elsewhere_not_refusal():
+    from rpg2gba.beat_gen.plan import Elsewhere, PlannedBeat, make_kwargs
+
+    beat = PlannedBeat(name="m068e012p1", template="arrival_nudge", map_id=68,
+                        rows=("map068/ev012/p1",), group="m068e012",
+                        kwargs=make_kwargs())
+    arm = PlannedBeat(name="m068e012p1b0", template="arrival_nudge_arms", map_id=68,
+                       rows=("map068/ev012/p1/b0",), group="m068e012",
+                       kwargs=make_kwargs())
+    detail = ("archetype_kwargs: map068/ev012/p1: no warp lands on this arrival "
+              "autorun's cell (5,6) on map 68 -- it never fires")
+    dead_groups = {"m068e012": detail}
+
+    result = cli._never_fires_elsewhere((beat, arm), dead_groups)
+
+    assert result == (
+        Elsewhere("map068/ev012/p1", "never_fires", detail=detail),
+        Elsewhere("map068/ev012/p1/b0", "never_fires", detail=detail))
+
+
+def test_never_fires_elsewhere_skips_beats_outside_dead_groups():
+    from rpg2gba.beat_gen.plan import PlannedBeat, make_kwargs
+
+    live = PlannedBeat(name="m036e002p1", template="arrival_nudge", map_id=36,
+                        rows=("map036/ev002/p1",), group="m036e002",
+                        kwargs=make_kwargs())
+    assert cli._never_fires_elsewhere((live,), {}) == ()

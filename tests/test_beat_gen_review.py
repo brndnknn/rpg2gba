@@ -8,6 +8,8 @@ STATUS: implemented, skipped. DELETE the `pytestmark` line to start Task 8.
 """
 from __future__ import annotations
 
+import dataclasses
+
 from rpg2gba.beat_floor.assertion import FloorAssertion, RowFloor, make_params
 from rpg2gba.beat_gen import review
 from rpg2gba.beat_gen.plan import ChapterPlan, Elsewhere, PlannedBeat, Refusal, make_kwargs
@@ -103,6 +105,15 @@ def test_elsewhere_shows_status_and_capability():
     section = _section(_doc(), "## Elsewhere")
     assert "blocked" in section and "rock_smash" in section
     assert "unreachable" in section and "map048/ev013/p0" in section
+
+
+def test_elsewhere_shows_never_fires_with_detail():
+    detail = "no warp lands on this arrival autorun's cell (5,6) on map 68 -- it never fires"
+    plan = dataclasses.replace(
+        PLAN, elsewhere=PLAN.elsewhere + (Elsewhere("map068/ev012/p1", "never_fires",
+                                                     detail=detail),))
+    section = _section(_doc(plan), "## Elsewhere")
+    assert "never_fires" in section and "map068/ev012/p1" in section and detail in section
 
 
 def test_order_dependent_write_shows_order_taken_and_end_value():

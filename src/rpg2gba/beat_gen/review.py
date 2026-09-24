@@ -138,6 +138,8 @@ def _elsewhere(plan: ChapterPlan) -> list[str]:
             lines.append(f"- {e.row_id}: {e.status} -- owner {e.owner}")
         elif e.status == "blocked":
             lines.append(f"- {e.row_id}: blocked -- requires {', '.join(e.requires)}")
+        elif e.status == "never_fires":
+            lines.append(f"- {e.row_id}: never_fires -- {e.detail}")
         else:
             lines.append(f"- {e.row_id}: {e.status}")
     return lines

@@ -87,12 +87,19 @@ class Elsewhere:
     behind a field-move obstacle the chapter can't pass (`blocked`: the row
     `requires` a capability and is not itself the obstacle), or it belongs
     to a boundary event the successor opens (`boundary`, §10 R2/R3; added
-    in C6 part two, `beat_gen/boundary.py`)."""
+    in C6 part two, `beat_gen/boundary.py`), or it provably never executes
+    (`never_fires`, C9 ruling 3: an arrival-nudge autorun whose cell no warp
+    lands on -- `detail` carries the proof, the `NoArrivalError` message)."""
 
     row_id: str
-    status: Literal["later", "unreachable", "blocked", "boundary"]
+    status: Literal["later", "unreachable", "blocked", "boundary", "never_fires"]
     owner: str | None = None             # the owning chapter for `later`/`boundary`, else None
     requires: tuple[str, ...] = ()       # the capabilities, for `blocked`
+    detail: str = ""                     # required non-empty for `never_fires`: the proof
+
+    def __post_init__(self) -> None:
+        if self.status == "never_fires" and not self.detail:
+            raise ValueError(f"{self.row_id}: never_fires requires a non-empty detail")
 
 
 @dataclass(frozen=True)
