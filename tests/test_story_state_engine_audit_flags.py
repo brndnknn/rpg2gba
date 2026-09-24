@@ -31,9 +31,6 @@ from rpg2gba.story_state.engine_audit import AuditReport, audit, format_report
 OUT_DIR = Path("output/uranium-build")
 _ENGINE_DIR = Path("engine")
 
-pytestmark = pytest.mark.skip(reason="assignments/C8/03_engine_audit_flags.md not started")
-
-
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")

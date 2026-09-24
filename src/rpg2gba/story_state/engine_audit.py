@@ -15,11 +15,14 @@ Read-only: this module never touches `engine/` (CLAUDE.md's "do not edit
 """
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from rpg2gba.conversion_agent.flag_registry import FlagRegistry
+from rpg2gba.conversion_agent.fork_index import ForkIndex, load_or_build
+from rpg2gba.ruby_subset.builtins import ENGINE_ATTRIBUTES
 from rpg2gba.story_state.extract import extract_map, extract_triggered_common_events
 from rpg2gba.story_state.model import _state_key_repr
 from rpg2gba.story_state.transitions import (
@@ -28,6 +31,8 @@ from rpg2gba.story_state.transitions import (
     TRANSITIONS,
     EngineWrite,
 )
+
+logger = logging.getLogger(__name__)
 
 SENTINELS: tuple[str, ...] = (
     "URANIUM PATHFINDER SLICE",
@@ -110,6 +115,19 @@ class IntroSeedGap:
 
 
 @dataclass(frozen=True)
+class UnresolvedEngineFlag:
+    """One `ENGINE_ATTRIBUTES` entry whose `FLAG_SYS_*` did not resolve in
+    the fork-capability index (CLAUDE.md §4.7's forward gate, applied to
+    `ruby_subset.builtins.ENGINE_ATTRIBUTES` -- REDERIVATION_PLAN.md §16.3
+    "C8 shape" ruling (b))."""
+
+    namespace: str
+    attribute: str
+    flag: str
+    detail: str
+
+
+@dataclass(frozen=True)
 class AuditReport:
     undeclared_writes: tuple[UndeclaredWrite, ...]
     missing_transition_writes: tuple[MissingTransitionWrite, ...]
@@ -118,6 +136,16 @@ class AuditReport:
     intro_seed_unread: tuple[str, ...]
     # Informational, like `intro_seed_unread`: obligations no kept row reads yet.
     deferred_obligations: tuple[str, ...] = ()
+    # ENGINE_ATTRIBUTES flags that don't resolve in the fork index -- a hard
+    # failure (the pipeline would emit a symbol the fork doesn't define), so
+    # this DOES count toward `ok`, unlike the informational fields above.
+    unresolved_engine_flags: tuple[UnresolvedEngineFlag, ...] = ()
+    # None when the flag check ran; a non-empty reason string when it could
+    # not (no ForkIndex available) -- a visible "not verified" marker,
+    # distinct from both "verified clean" and "verified and broken". Does
+    # NOT count toward `ok`: "could not check" is not the same failure class
+    # as "checked and broken".
+    engine_flag_check_skipped: str | None = None
 
     @property
     def ok(self) -> bool:
@@ -126,6 +154,7 @@ class AuditReport:
             or self.missing_transition_writes
             or self.owed_obligations
             or self.intro_seed_gaps
+            or self.unresolved_engine_flags
         )
 
 
@@ -291,6 +320,7 @@ def audit(
     flag_state: dict,
     intro_end_state: tuple[tuple[str, tuple], ...],
     chapter_read_keys: set[str],
+    engine_index: ForkIndex | None = None,
 ) -> AuditReport:
     """Cross-checks the fenced engine against `transitions.py`'s
     declarations and the flag registry.
@@ -300,6 +330,12 @@ def audit(
     name or `None`). `intro_end_state` is `ChapterStory.end_state` for
     INTRO. `chapter_read_keys` is every key repr (`switch:N`/`var:N`) some
     in-scope chapter row reads -- see `chapter_read_keys` below.
+
+    `engine_index` is the fork-capability index (CLAUDE.md §4.7) used to
+    check every `ruby_subset.builtins.ENGINE_ATTRIBUTES` flag actually
+    resolves in the fork. `audit()` stays pure over its inputs -- it never
+    builds the index itself (`run_real_audit` does that); `None` means "not
+    verified" and is reported as such, never silently treated as clean.
     """
     regions = scan_fenced_regions(engine_dir)
     writes = fenced_state_writes(regions)
@@ -387,6 +423,8 @@ def audit(
                     ),
                 ))
 
+    unresolved_flags, flag_check_skipped = _engine_attribute_flag_check(engine_index)
+
     return AuditReport(
         undeclared_writes=tuple(undeclared),
         missing_transition_writes=tuple(missing),
@@ -394,7 +432,37 @@ def audit(
         intro_seed_gaps=tuple(gaps),
         intro_seed_unread=tuple(unread),
         deferred_obligations=tuple(deferred),
+        unresolved_engine_flags=unresolved_flags,
+        engine_flag_check_skipped=flag_check_skipped,
     )
+
+
+def _engine_attribute_flag_check(
+    engine_index: ForkIndex | None,
+) -> tuple[tuple[UnresolvedEngineFlag, ...], str | None]:
+    """Checks every `ruby_subset.builtins.ENGINE_ATTRIBUTES` flag against
+    `engine_index.constants` (CLAUDE.md §4.7's forward gate). Returns the
+    findings and a skip-reason (`None` when the check ran)."""
+    if engine_index is None:
+        return (), (
+            "engine_flag_check_skipped: no ForkIndex was supplied -- the "
+            f"{len(ENGINE_ATTRIBUTES)} ENGINE_ATTRIBUTES flags were NOT "
+            "verified against the fork"
+        )
+
+    unresolved: list[UnresolvedEngineFlag] = []
+    for (namespace, attribute), engine_attr in ENGINE_ATTRIBUTES.items():
+        if engine_attr.flag in engine_index.constants:
+            continue
+        unresolved.append(UnresolvedEngineFlag(
+            namespace=namespace, attribute=attribute, flag=engine_attr.flag,
+            detail=(
+                f"{namespace}.{attribute} maps to {engine_attr.flag}, but "
+                "the fork-capability index does not define that constant -- "
+                "the pipeline would emit a symbol the fork doesn't have"
+            ),
+        ))
+    return tuple(unresolved), None
 
 
 def _intro_seed_gaps(
@@ -552,7 +620,21 @@ def run_real_audit(build_dir: Path | None = None) -> AuditReport:
 
     read_keys = chapter_read_keys(build_dir, chapter_ids)
 
-    return audit(engine_dir, flag_state, intro_end_state, read_keys)
+    try:
+        engine_index: ForkIndex | None = load_or_build(repo_root)
+    except Exception:
+        # A failure to build the fork-capability index (e.g. no `engine/`
+        # tree, or a build-tool problem unrelated to this audit's own
+        # checks) must not crash the whole engine-audit command -- it
+        # degrades to a visible "not verified" marker instead (R3), so a
+        # caller still sees the rest of the report rather than a traceback.
+        logger.warning(
+            "engine_audit: failed to build ForkIndex, engine-flag check "
+            "will report as skipped", exc_info=True,
+        )
+        engine_index = None
+
+    return audit(engine_dir, flag_state, intro_end_state, read_keys, engine_index=engine_index)
 
 
 def format_report(report: AuditReport) -> str:
@@ -582,5 +664,11 @@ def format_report(report: AuditReport) -> str:
     lines.append(f"deferred_obligations ({len(report.deferred_obligations)}, informational):")
     for d in report.deferred_obligations:
         lines.append(f"  - {d}")
+
+    lines.append(f"unresolved_engine_flags ({len(report.unresolved_engine_flags)}):")
+    for f in report.unresolved_engine_flags:
+        lines.append(f"  - {f.detail}")
+    if report.engine_flag_check_skipped is not None:
+        lines.append(f"  - skipped: {report.engine_flag_check_skipped}")
 
     return "\n".join(lines)

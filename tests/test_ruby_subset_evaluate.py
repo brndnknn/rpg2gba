@@ -37,7 +37,6 @@ REPO = Path(__file__).resolve().parents[1]
 MAPS_DIR = REPO / "output" / "uranium-build" / "maps"
 COMMON_EVENTS_PATH = REPO / "output" / "uranium-build" / "common_events.json"
 CHAPTERS_PATH = REPO / "reference" / "chapters.json"
-ENGINE_FLAGS_PATH = REPO / "engine" / "include" / "constants" / "flags.h"
 
 
 # --- section 1: hand-picked unit tests -------------------------------------
@@ -424,18 +423,16 @@ def test_ch01_ch05_evaluate_refusal_set_is_pinned():
 
 
 # --- section 3: §4.7 forward check for ENGINE_ATTRIBUTES -------------
-
-
-@pytest.mark.skipif(
-    not ENGINE_FLAGS_PATH.exists(), reason="engine/include/constants/flags.h not present",
-)
-def test_engine_attribute_flags_exist_in_the_fork():
-    text = ENGINE_FLAGS_PATH.read_text(encoding="utf-8")
-    for (ns, attr), engine_attr in bi.ENGINE_ATTRIBUTES.items():
-        assert f"#define {engine_attr.flag}" in text, (
-            f"{ns}.{attr} claims native flag {engine_attr.flag!r}, "
-            f"not found in {ENGINE_FLAGS_PATH}"
-        )
+#
+# Retired 2026-09-24 (assignments/C8/03_engine_audit_flags.md, R4): this test
+# used to grep `engine/include/constants/flags.h` directly -- exactly the
+# class of check CLAUDE.md §4.7 exists to replace (a substring search also
+# matches a commented-out line or a `_OLD` suffix). The same guarantee is now
+# owned by `python -m rpg2gba.story_state engine-audit`, which checks
+# `ENGINE_ATTRIBUTES` against the real fork-capability index
+# (`tests/test_story_state_engine_audit_flags.py::
+# test_all_engine_attribute_flags_resolve_in_the_real_fork`). Keeping both
+# would be the exact §4.3 drift this task cleans up.
 
 
 # --- section 4: determinism ---------------------------------------------
