@@ -47,6 +47,8 @@ __all__ = [
     "EFFECT_CALLS",
     "INPUT_CALLS",
     "RANDOM_SPECIES_CALL",
+    "STATE_READ_CALLS",
+    "VALUE_METHODS",
 ]
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -383,3 +385,26 @@ INPUT_CALLS: dict[str, InputSpec] = {
 # a single opaque ConstRef, which this module can't construct without an
 # import cycle with evaluate.py) -- see report to lead.
 RANDOM_SPECIES_CALL = "pbGetRandomPokemonSpecies"
+
+
+# --- pure reads (C8 stage 5) -----------------------------------------------
+# Heads that evaluate.py's `_dispatch_head` answers with a value and no write,
+# effect or input -- the dedicated branches at the top of that function, which
+# are code rather than table rows. Declared here so `beat_floor/script.py`
+# can tell a pure sub-expression from an effect without a second copy of the
+# evaluator's dispatch (§4.3); `tests/test_beat_floor_script_statements.py`
+# pins that each one evaluates without an effect or `ruby_unknown_call`.
+STATE_READ_CALLS: frozenset[str] = frozenset({
+    "pbGet",
+    "tsOn?",
+    "tsOff?",
+    "_I",
+    "$game_map.map_id",
+    "$game_player.x",
+    "$game_player.y",
+    "$PokemonBag.pbQuantity",
+})
+
+# Value-level methods `_eval_value_method` computes purely (`onEvent?` is
+# deliberately absent: it is a player-position INPUT, not a pure read).
+VALUE_METHODS: frozenset[str] = frozenset({"index", "max", "length", "is_a?"})

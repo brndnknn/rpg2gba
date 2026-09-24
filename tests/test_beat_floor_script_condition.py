@@ -69,13 +69,13 @@ def test_unknown_head_refuses_row():
     assert r[0].code == 355
 
 
-def test_none_head_refuses_row():
-    # `_script_head` finds no leading identifier at all on a bare operator
-    # line -- still refused, not silently skipped.
+def test_unparseable_block_refuses_row():
+    # C8 stage 5: a block outside the Ruby subset refuses as a whole, by
+    # name -- still refused, not silently skipped.
     a, r = extract_script("+=1", 0, _ctx())
     assert a == ()
     assert len(r) == 1
-    assert r[0].reason == "unknown_script_head"
+    assert r[0].reason == "ruby_parse_error"
 
 
 def test_visual_head_asserts_visual_and_nothing_else():
@@ -159,7 +159,12 @@ def test_pokemon_mart_literal_asserts_service_with_items():
 
 
 def test_custom_trainer_battle_refuses_non_literal():
-    a, r = extract_script('customTrainerBattle(trainer, "Oh no!")', 0, _ctx())
+    # The corpus shape: the local is built earlier in the same block.
+    text = (
+        'trainer = createPhoneTrainer(PBTrainers::BIRDKEEPER,"Brent",0)\n'
+        'result = customTrainerBattle(trainer, "Oh no!")'
+    )
+    a, r = extract_script(text, 0, _ctx())
     assert a == ()
     assert len(r) == 1
     assert r[0].reason == "non_literal_args"
@@ -173,7 +178,7 @@ def test_service_heads_assert_service_kind():
         ("pbSave", "save"),
         ("pbPokeCenterPC", "pc"),
         ("pbTrainerPC", "pc"),
-        ("pbStarterSelector(x)", "starter_select"),
+        ("pbStarterSelector(1,true)", "starter_select"),
         ("pbChooseNuclearCurePokemon(1,3)", "nuclear_cure"),
         ("GTS.open", "online_gts"),
     ):
@@ -218,7 +223,7 @@ def test_transfer_player_resolves_this_map_and_literal_xy():
 
 
 def test_mixed_head_block_covers_every_line():
-    text = 'pbNoticePlayer(event)\npbTrainerIntro(:X)\nsetTempSwitchOn("A")'
+    text = 'pbNoticePlayer(get_character(0))\npbTrainerIntro(:X)\nsetTempSwitchOn("A")'
     a, r = extract_script(text, 0, _ctx())
     assert r == ()
     assert sorted(_kinds(a)) == ["audio", "visual"]

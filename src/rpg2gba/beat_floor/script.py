@@ -1,14 +1,30 @@
 """Script-call-head extractors for the generic beat floor (REDERIVATION_PLAN.md
-§16.3 C4, "C4 shape" (a)).
+§16.3 C4, "C4 shape" (a); whole-statement parsing since C8 stage 5).
 
-One extractor per Ruby call head found in a code-355/655 block
-(`census._script_head`, `Kernel.` already normalized away), not one per
-command code -- a single 355/655 block can itself contain several complete
-Ruby statements (`_split_statements` below), and every statement's head must
-resolve or the row is refused. A head with no extractor -- or a statement
-with no recognizable head at all (`census._script_head` returns `None`,
-usually a stray fragment of embedded control flow: `if`/`elsif`/`end`, a
-loop variable, C8's problem, not C4's) -- refuses the row.
+One extractor per Ruby call head, not one per command code. A 355/655 block
+is parsed whole by `ruby_subset.parse_program` (C8 ruling (d)) -- the same
+grammar story_state's interpreter runs -- and each top-level statement is
+classified from its AST, never from its leading identifier:
+
+* a call to a registered head (bare, `Kernel.`-qualified, or on a namespace
+  such as `$PokemonBag.` / `GTS.`), or a local assignment whose right-hand
+  side is one (`result = customTrainerBattle(...)`), dispatches to that
+  head's extractor with the call's own source text. Its arguments must be
+  pure (see below), or it refuses.
+* anything else -- a state or local assignment, `if`/`unless`/`for`/`while`
+  -- is **silent** only if it provably has no effect of its own: every call
+  inside it is a pure read (`builtins.STATE_READ_CALLS`, attribute reads,
+  `VALUE_METHODS`) or a state-writing head, and every assignment target is
+  one story_state models. Such a statement's only consequence is state,
+  which story_state's interpreter owns for the same row. Otherwise it refuses
+  by name: an effect under control flow (`conditional_script_effect`), a
+  player input inside an expression (`script_input`), or an unmodelled
+  assignment target.
+
+This closes the head-only false negative ruling (d) found: under the old
+split-and-read-the-head scheme `x=pbGet(151).index(pbGet(151).max)` read as
+a bare `pbGet` getter, and `if`/`elsif`/`end` fragments refused as unknown
+heads. A block outside the subset refuses `ruby_parse_error`.
 
 State-writing heads (`pbSetSelfSwitch`, `setTempSwitchOn`, `pbSet`, raw
 `$game_switches`/`$game_variables` assignment) return an EMPTY result on
@@ -31,79 +47,269 @@ from rpg2gba.beat_floor.assertion import (
     make_params,
 )
 from rpg2gba.beat_floor.reward_ladder import load_profrewards
-from rpg2gba.chapter_atlas.census import _script_head
 from rpg2gba.conversion_agent.deterministic import _PBPOKEMART_ITEM_RE, _PBPOKEMART_LIST_RE
 from rpg2gba.conversion_agent.transpiler import _ADD_POKEMON_RE, _RECEIVE_ITEM_RE
+from rpg2gba.ruby_subset import ast
+from rpg2gba.ruby_subset import builtins as bi
+from rpg2gba.ruby_subset.evaluate import _is_nuzlocke_party_loop
+from rpg2gba.ruby_subset.parser import RubyParseError, parse_program
 
 CODE_SCRIPT = 355
 
 
-# --- statement splitting --------------------------------------------------
+# --- whole-statement parsing (C8 stage 5) ------------------------------------
 
 def _split_statements(text: str) -> list[str]:
-    """Split a joined 355/655 block into top-level Ruby statements.
-
-    Most blocks are ONE call whose own string argument happens to wrap
-    across several raw text rows (`pbPhoneRegisterBattle(_I("...\\n...a
-    multi-line loss quote..."))` -- 133_PScreen_Phone.rb:91); splitting on
-    every raw newline would shred that single call into several bogus
-    "statements" whose heads are mid-sentence words. Others really are
-    several complete statements, one per raw row
-    (`pbNoticePlayer(event)` / `pbTrainerIntro(:X)` / `setTempSwitchOn("A")`).
-
-    The two are told apart by paren depth alone: a newline only starts a new
-    statement once every `(` opened so far in this block has been closed.
-    Verified against the CH01-CH05 corpus's two representative shapes
-    (`pbPokemonMart([\\nPBItems::X,\\n...])`, whose surrounding `(` stays
-    open across every `PBItems::` line despite the inner `[...]`, and the
-    phone-quote wrap above) -- both collapse to one statement, as they must.
-    An unclosed trailing `(` folds the remainder of the block into one
-    statement rather than dropping any of it (fails safe, not silent,
-    CLAUDE.md §4.5).
-    """
-    statements: list[str] = []
-    buf: list[str] = []
-    depth = 0
-    for ch in text:
-        if ch == "\n" and depth <= 0:
-            stmt = "".join(buf).strip()
-            if stmt:
-                statements.append(stmt)
-            buf = []
-            continue
-        if ch == "(":
-            depth += 1
-        elif ch == ")":
-            depth -= 1
-        buf.append(ch)
-    stmt = "".join(buf).strip()
-    if stmt:
-        statements.append(stmt)
-    return statements
+    """The source text of each top-level Ruby statement in a joined 355/655
+    block, cut at the parser's own statement spans -- so a call whose string
+    argument wraps across raw rows stays one statement, and an
+    `if ... elsif ... end` is one statement rather than four fragments.
+    Raises `RubyParseError` outside the subset."""
+    program = parse_program(text)
+    return [text[s.span[0]:s.span[1]] for s in program.statements]
 
 
 def extract_script(text: str, list_index: int, ctx: ExtractContext) -> ExtractResult:
+    try:
+        program = parse_program(text)
+    except RubyParseError as exc:
+        return (), (FloorRefusal(
+            row_id=ctx.row_id, reason="ruby_parse_error", list_index=list_index,
+            code=CODE_SCRIPT, detail=f"{exc.reason}: {text[:120]!r}",
+        ),)
     assertions: list[FloorAssertion] = []
     refusals: list[FloorRefusal] = []
-    for stmt in _split_statements(text):
-        head = _script_head(stmt)
-        extractor = SCRIPT_HEAD_EXTRACTORS.get(head) if head is not None else None
-        if extractor is None:
+    for stmt in program.statements:
+        try:
+            a, r = _extract_statement(stmt, text, list_index, ctx)
+        except _Refused as refused:
             refusals.append(FloorRefusal(
-                row_id=ctx.row_id,
-                reason="unknown_script_head",
-                list_index=list_index,
+                row_id=ctx.row_id, reason=refused.reason, list_index=list_index,
                 code=CODE_SCRIPT,
-                detail=(
-                    f"no recognized call head: {stmt[:120]!r}" if head is None
-                    else f"head {head!r} has no extractor: {stmt[:120]!r}"
-                ),
+                detail=f"{refused.detail}: {_source(text, stmt)[:120]!r}",
             ))
             continue
-        a, r = extractor(stmt, list_index, ctx)
         assertions.extend(a)
         refusals.extend(r)
     return tuple(assertions), tuple(refusals)
+
+
+class _Refused(Exception):
+    def __init__(self, reason: str, detail: str) -> None:
+        super().__init__(reason, detail)
+        self.reason = reason
+        self.detail = detail
+
+
+def _source(text: str, node: ast.Node) -> str:
+    return text[node.span[0]:node.span[1]]
+
+
+def _call_head(node: ast.Call) -> str | None:
+    """The dotted head of a call on no receiver, `Kernel.`, or a namespace
+    (`$PokemonBag.pbDeleteItem`, `GTS.open`) -- the key convention
+    `SCRIPT_HEAD_EXTRACTORS` and `ruby_subset.builtins` share. `None` for a
+    method on a computed value (`pbGet(151).index(...)`)."""
+    receiver = node.receiver
+    if receiver is None:
+        return node.name
+    if isinstance(receiver, ast.Const):
+        return node.name if receiver.name == "Kernel" else f"{receiver.name}.{node.name}"
+    if isinstance(receiver, ast.GlobalVar):
+        return f"{receiver.name}.{node.name}"
+    return None
+
+
+def _attribute_key(node: ast.Call) -> tuple[str, str] | None:
+    """`($Global, attr)` for a zero-arg attribute on a namespace global."""
+    if node.args or not isinstance(node.receiver, ast.GlobalVar):
+        return None
+    return (node.receiver.name, node.name)
+
+
+_ATTRIBUTE_TABLES = (
+    bi.ENGINE_ATTRIBUTES, bi.STATIC_PREDICATE_ATTRS, bi.NOOP_ATTRS,
+    bi.PASSTHROUGH_ENGINE_ATTRS, bi.PARTY_MODEL_ATTRS,
+)
+# Attribute writes that are silent here: a redraw hint, or a party write
+# story_state refuses party_model for the row itself.
+_SILENT_ATTRIBUTE_WRITES = (bi.NOOP_ATTRS, bi.PARTY_MODEL_ATTRS)
+_STATE_GLOBALS = frozenset({"$game_switches", "$game_variables", "$game_self_switches"})
+
+
+def _is_pure_head(head: str) -> bool:
+    """A head that returns a value without an effect the floor could assert:
+    the interpreter's pure reads, opaque constructors, and every head this
+    module's registry already answers with no assertion (a state writer
+    story_state owns, a getter, a no-UI counter)."""
+    if head in bi.STATE_READ_CALLS or head in bi.CONSTRUCTOR_CALLS:
+        return True
+    if head in bi.PARTY_MODEL_CALLS or head == bi.RANDOM_SPECIES_CALL:
+        return True  # a read; story_state refuses party_model for the row itself
+    if head in (bi.STATIC_FALSE_CALLS | bi.STATIC_ZERO_CALLS) and head not in bi.EFFECT_CALLS:
+        return True
+    return SCRIPT_HEAD_EXTRACTORS.get(head) is _no_assertion
+
+
+def _check_pure(node: ast.Node) -> None:
+    """Raise `_Refused` unless `node` is an expression with no effect of its
+    own -- every value it computes lands only in state or locals."""
+    if isinstance(node, ast.Call):
+        _check_pure_call(node)
+        return
+    if isinstance(node, (ast.Assign, ast.OpAssign)):
+        _check_target(node.target)
+        _check_pure(node.value)
+        return
+    for child in _children(node):
+        _check_pure(child)
+
+
+def _check_pure_call(node: ast.Call) -> None:
+    if node.block is not None:
+        raise _Refused("unknown_script_head", f"block argument on {node.name!r}")
+    head = _call_head(node)
+    if head is None:
+        if node.name not in bi.VALUE_METHODS:
+            raise _Refused("unknown_script_head", f"method {node.name!r} on a computed value")
+        _check_pure(node.receiver)
+    else:
+        key = _attribute_key(node)
+        if key is not None and any(key in table for table in _ATTRIBUTE_TABLES):
+            return
+        if head in bi.INPUT_CALLS:
+            raise _Refused("script_input", f"player/engine input {head!r} inside an expression")
+        if not _is_pure_head(head):
+            if head in SCRIPT_HEAD_EXTRACTORS or head in bi.EFFECT_CALLS:
+                raise _Refused("nested_script_effect", f"effect {head!r} inside an expression")
+            raise _Refused("unknown_script_head", f"head {head!r} has no extractor")
+    for arg in node.args:
+        _check_pure(arg)
+
+
+def _check_target(target: ast.Node) -> None:
+    """Raise `_Refused` unless story_state models this assignment target."""
+    if isinstance(target, ast.Local):
+        return
+    if isinstance(target, ast.Index):
+        receiver = target.receiver
+        if not (isinstance(receiver, ast.GlobalVar) and receiver.name in _STATE_GLOBALS):
+            _check_pure(receiver)  # in-place array mutation, e.g. pbGet(151)[i] += 1
+        for arg in target.args:
+            _check_pure(arg)
+        return
+    if isinstance(target, ast.Call):
+        key = _attribute_key(target)
+        if key is not None and any(key in table for table in _SILENT_ATTRIBUTE_WRITES):
+            return
+        if key in bi.ENGINE_ATTRIBUTES:
+            # Ruling (b): an unlock is "asserted by the floor", but story_state's
+            # EngineKey write has no AssertionKind yet (walk._state_assertions_
+            # for_row skips EngineKey). Silence here would drop the unlock from
+            # the floor entirely, so it refuses by name until the kind exists.
+            flag = bi.ENGINE_ATTRIBUTES[key].flag
+            raise _Refused("engine_flag_unasserted", f"{key[0]}.{key[1]} -> {flag}: no floor kind")
+        raise _Refused("unmodelled_attribute_write", f"assignment to {target.name!r}")
+    if isinstance(target, ast.GlobalVar):
+        raise _Refused("unmodelled_global_write", f"assignment to {target.name}")
+    raise _Refused("unknown_script_head", f"assignment target {type(target).__name__}")
+
+
+def _check_silent_body(body: tuple[ast.Node, ...]) -> None:
+    for stmt in body:
+        _check_silent(stmt)
+
+
+def _check_silent(stmt: ast.Node) -> None:
+    """Raise `_Refused` unless `stmt` changes nothing but modelled state and
+    locals. An asserting head under control flow is `conditional_script_effect`:
+    the floor is unconditional, so it cannot claim the effect happens."""
+    if isinstance(stmt, (ast.If, ast.Unless)):
+        _check_pure(stmt.cond)
+        _check_silent_body(stmt.then_body)
+        for cond, body in getattr(stmt, "elifs", ()):
+            _check_pure(cond)
+            _check_silent_body(body)
+        if stmt.else_body is not None:
+            _check_silent_body(stmt.else_body)
+        return
+    if isinstance(stmt, ast.For):
+        if _is_nuzlocke_party_loop(stmt):
+            return  # the evaluator's structural no-op (C8 design (7))
+        _check_pure(stmt.iterable)
+        _check_silent_body(stmt.body)
+        return
+    if isinstance(stmt, ast.While):
+        _check_pure(stmt.cond)
+        _check_silent_body(stmt.body)
+        return
+    if isinstance(stmt, ast.Call):
+        head = _call_head(stmt)
+        if head is not None and not _is_pure_head(head) and (
+            head in SCRIPT_HEAD_EXTRACTORS or head in bi.EFFECT_CALLS
+        ):
+            raise _Refused("conditional_script_effect", f"effect {head!r} under control flow")
+    _check_pure(stmt)
+
+
+def _dispatch_call(stmt: ast.Node) -> ast.Call | None:
+    """The registered call a top-level statement IS: the statement itself,
+    or the right-hand side of a plain local assignment
+    (`trainer = createPhoneTrainer(...)`)."""
+    node = stmt
+    if isinstance(stmt, ast.Assign) and isinstance(stmt.target, ast.Local):
+        node = stmt.value
+    if isinstance(node, ast.Call):
+        head = _call_head(node)
+        if head is not None and head in SCRIPT_HEAD_EXTRACTORS:
+            return node
+    return None
+
+
+def _extract_statement(
+    stmt: ast.Node, text: str, list_index: int, ctx: ExtractContext,
+) -> ExtractResult:
+    call = _dispatch_call(stmt)
+    if call is not None:
+        for arg in call.args:
+            _check_pure(arg)
+        return SCRIPT_HEAD_EXTRACTORS[_call_head(call)](_source(text, call), list_index, ctx)
+    if isinstance(stmt, ast.Call):
+        head = _call_head(stmt)
+        if head is not None and not _is_pure_head(head):
+            raise _Refused("unknown_script_head", f"head {head!r} has no extractor")
+    _check_silent(stmt)
+    return (), ()
+
+
+def _children(node: ast.Node) -> tuple[ast.Node, ...]:
+    """Direct sub-expressions of a non-call, non-assignment expression node."""
+    if isinstance(node, ast.ArrayLit):
+        return node.elements
+    if isinstance(node, ast.HashLit):
+        return tuple(n for pair in node.pairs for n in pair)
+    if isinstance(node, ast.RangeLit):
+        return (node.lo, node.hi)
+    if isinstance(node, ast.BinOp):
+        return (node.left, node.right)
+    if isinstance(node, ast.UnaryOp):
+        return (node.operand,)
+    if isinstance(node, ast.Ternary):
+        return (node.cond, node.then, node.else_)
+    if isinstance(node, ast.Index):
+        return (node.receiver, *node.args)
+    if isinstance(node, ast.ScopedConst):
+        return (node.scope,)
+    if isinstance(node, (ast.Return, ast.Break, ast.Next)):
+        return (node.value,) if node.value is not None else ()
+    if isinstance(node, (
+        ast.Int, ast.Float, ast.Str, ast.Sym, ast.Bool, ast.Nil,
+        ast.Local, ast.GlobalVar, ast.Const,
+    )):
+        return ()
+    if isinstance(node, (ast.If, ast.Unless, ast.For, ast.While)):
+        raise _Refused("conditional_script_effect", "control flow inside an expression")
+    raise _Refused("unknown_script_head", f"unsupported node {type(node).__name__}")
 
 
 # --- shared builders -------------------------------------------------------

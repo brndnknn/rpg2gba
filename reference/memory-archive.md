@@ -10,6 +10,22 @@
 
 ## Retired Session Summaries
 
+## Archived 2026-09-24 — Last Session Summary entry 2026-09-18b (C5b implemented — the invariant test found the deleted overrides were never corrections)
+
+Landed C5b end to end in two commits (engine; pipeline + floor + tests + docs), unit-green, no
+ROM run. **Two findings worth keeping.** (1) The `STATIC_ASSERT` on `struct WarpEvent` fired on
+the first build: modern's `-mabi=apcs-gnu` rounds struct sizes to 4, so 8+2 bytes is 12, not the
+10 §0 planned — pin struct sizes with an assert whenever asm macros mirror a C struct. (2) The
+R5 guard's first draft flagged exactly the three entries of the deleted overrides file as
+hazards; they were one-tile pockets behind cave mouths and a strip behind the Route 1 warp
+column — open by passability, unreachable in play. Flooding `traversal.graph` from every way
+into a map (warp cells as barriers, door landings seeded to a fixed point) makes all three
+follow from the source data, now pinned. **Lesson:** "open neighbour" is not "approach"; any
+future approach-derived claim should use reachability, not adjacency (this is #107's idea,
+which is now closed). Also: `ScrCmd_warp` deliberately keeps vanilla Reset and carries only
+the direction, and the `warp` template's reciprocal leg does not apply the door exit step —
+both recorded in §16.3 "C5b landed" as P11 risks.
+
 ## Archived 2026-09-18 — Last Session Summary entry 2026-09-18 (warp arrival facing — a grill session widened a 41% shrink into deleting the table)
 
 **2026-09-18 (warp arrival facing — a grill session widened a 41% shrink into deleting the table):**

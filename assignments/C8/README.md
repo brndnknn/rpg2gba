@@ -1,5 +1,9 @@
 # Assignment C8 — Stage 7: Finishing the Shared Ruby Subset
 
+> **Closed 2026-09-24.** The operator delegated this assignment to the build agent, and all three
+> tasks are committed; see `REDERIVATION_PLAN.md` §16.3 "C8 stage 7 landed". This folder is
+> kept as the spec record.
+
 **Course:** RPG2GBA 230 — Static Analysis and Fail-Loud Pipelines
 **Weight:** 3 tasks, 100 points total
 **Prerequisites:** C8 stages 1–4 and 6 are landed (they are). Python 3.11 dataclasses, pytest,

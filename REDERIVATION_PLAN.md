@@ -2361,6 +2361,53 @@ Three things worth keeping:
    this stage bought. The opener row is normalized into a parseable statement instead (`elsif`
    → `if`, append `end`); the two-line normalization is in `match_remap_arm_open`.
 
+**C8 stage 7 landed (2026-09-24), three commits.** The operator reversed the 2026-09-23 decision
+to leave `assignments/C8/` to them and delegated it. **(1) `jvGiveReward`**
+(`beat_floor/reward_ladder.py`): the ladder is read from `213_Bambo_Reward.rb` via
+`parse_expression`; the refusal is kept but made precise, as `one_of_n_grant` (7 script sites)
+and `bag_capacity_unmodelled` (4 `if jvGiveReward` conditions, testing the return value, i.e.
+bag space). The rejected option was a disjunctive assertion kind. Every site sits behind
+`jvNextReward` (`party_model`), and var 22's only writer is `jvNextReward`, so nothing
+could consume that kind yet. CH01 `non_literal_args` 15 → 4, refused rows unchanged. **(2)
+strip-honoring:** `beat_floor` skips code-117 calls to CEs 4/5/6 through the same
+`stripped_ce_ids_for`. CH03 refused 19 → 16, `unclassified_condition` 4 → 0,
+`text_unnormalizable` 34 → 11: the three Map068 rows had been carrying the whole online-lobby UI
+body. **(3) `engine-audit`** checks all four `ENGINE_ATTRIBUTES` flags against `fork_index`,
+and the `flags.h` grep test is retired. A failed index build is reported as "skipped" and is not
+counted as a failure; a flag that is missing from the index is.
+
+**C8 stage 5 landed (2026-09-24).** `beat_floor/script.py` parses each 355/655 block whole with
+`parse_program` and classifies top-level statements from the AST. The paren-depth splitter and
+the `census._script_head` lookup are gone. A registered call (or `local = registered_call(...)`)
+dispatches to its extractor, which receives the call's own source text; its arguments must be
+pure. Any other statement is silent only if it changes nothing but modelled state and locals:
+every call inside it is a pure read (new `builtins.STATE_READ_CALLS`/`VALUE_METHODS`, pinned
+against the evaluator by a test) or a no-assertion head. Otherwise it refuses by name:
+`conditional_script_effect`, `nested_script_effect`, `script_input`,
+`unmodelled_attribute_write`, `unmodelled_global_write`, `engine_flag_unasserted` or
+`ruby_parse_error`. Extractors are unchanged, still regex over their own call text, shared with
+the transpiler's emitter. Suite **4379 passed / 16 skipped** (two halves, stages 5 and 7
+together; the 43 scaffolded tests now run).
+
+Ruling (d) predicted counts would rise before they fell; **they fell.** Floor refused rows: CH01
+62 → 61, CH03 16 → 16 (after task 2), CH04 3 → 2, CH02/CH05 unchanged. `unknown_script_head`:
+CH01 23 → 0, CH03 8 → 1, CH04 2 → 0. What cleared: `if`/`elsif`/`end` and `for` fragments
+around pure state writes (Bambo's tally, map035's self-switch loop), the nuzlocke loop, and
+`x=pbGet(151)...`. story_state owns all of these and has not changed (its output is
+byte-identical). New names: `conditional_script_effect` 3 (map050/ev019 b1's
+`pbAddPokemon(...) if $game_variables[151]==N`, previously a misleading `non_literal_args`), and
+`unmodelled_attribute_write` 1 (`$Trainer.party[i].nuclearFree=`).
+
+**One finding, and an open question for the operator:** `engine_flag_unasserted` 5
+(`$PokemonGlobal.runningShoes`, `$Trainer.pokedex`, `$Trainer.pokegear`,
+`seenStorageCreator` ×2 — CH01 3 / CH03 2). Ruling (b) says unlock attributes are "asserted by
+the floor", but `walk._state_assertions_for_row` skips every `EngineKey` write, because no
+`AssertionKind` carries one. Under the old scheme these rows refused as unknown heads. Stage 5
+would have made them **silent**, dropping the unlock from the floor without saying so, so they
+refuse by name instead. Closing it needs a new kind (e.g. `engine_flag_write`: flag, value), an
+`OFFLINE_KINDS` decision, and a `generic.py` ROM handler. That changes the floor JSON's schema
+(CLAUDE.md §10: ask first).
+
 ### 16.4 Known work the generator will refuse until fixed (not decisions)
 
 - **#109** — `text_source` rejects the straight quote staging converts; corpus-wide the text

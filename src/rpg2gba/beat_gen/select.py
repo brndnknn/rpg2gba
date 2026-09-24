@@ -60,6 +60,13 @@ _BLOCKER_BY_REASON: dict[str, Blocker] = {
     # Measured: CH01 7 / 4, every other chapter 0.
     "one_of_n_grant": "floor",
     "bag_capacity_unmodelled": "story-state",
+    # C8 stage 5 (2026-09-24): whole-statement script parsing. Measured
+    # CH01-CH05: `conditional_script_effect` 3 (map050/ev019 b1's postfix
+    # pbAddPokemon grants), `engine_flag_unasserted` 5 (unlock attribute
+    # writes with no floor kind yet), `unmodelled_attribute_write` 1.
+    "conditional_script_effect": "floor",
+    "engine_flag_unasserted": "floor",
+    "unmodelled_attribute_write": "C8",
 }
 
 # Row kinds that stand for themselves rather than an RMXP event page/branch:
