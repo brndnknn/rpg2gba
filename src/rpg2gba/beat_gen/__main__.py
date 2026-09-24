@@ -204,10 +204,14 @@ def _cell_fn(warp_rows: frozenset[str], graphs: Mapping[int, MapGraph],
                                       resolver=f"arrival into map {row.map_id} at ({ax},{ay})")
                     for ax, ay in landing))
         cell = cell_for_row(row)
+        # Already an adjacent cell with its event's sides (an action-button
+        # warp): re-siding around it would name sides of the approach cell,
+        # not of the event, and the runtime resolves them against the event.
+        if cell.approach_candidates:
+            return cell
         # A routing cell on a SOLID tile (an event on a building's exit
         # mat) can't be stood on; like a warp, it's used from its sides.
-        solid = not cell.approach_candidates and not graphs[row.map_id].is_walkable(
-            (cell.x, cell.y))
+        solid = not graphs[row.map_id].is_walkable((cell.x, cell.y))
         if row.row_id not in warp_rows and not solid:
             return cell
         return dataclasses.replace(

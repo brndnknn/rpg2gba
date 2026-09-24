@@ -183,6 +183,48 @@ def test_never_fires_elsewhere_skips_beats_outside_dead_groups():
     assert cli._never_fires_elsewhere((live,), {}) == ()
 
 
+# --- _cell_fn: which cells get re-sided as warps --------------------------------
+
+class _OpenGraph:
+    """Every cell walkable except `walls`."""
+    def __init__(self, walls=()):
+        self.walls = set(walls)
+
+    def is_walkable(self, cell):
+        return cell not in self.walls
+
+
+def _page_row(row_id="map031/ev049/p0", trigger="action"):
+    from rpg2gba.chapter_manifest.schema import ManifestRow
+    return ManifestRow(row_id=row_id, kind="page", map_id=31, content_hash="x",
+                       event_id=49, page_idx=0, trigger=trigger)
+
+
+def test_action_warp_keeps_its_event_relative_sides(monkeypatch):
+    """Regression (C9 regen, Kevlar Center door): an action-button warp's
+    cell is already the APPROACH cell with the event's sides. Re-siding it
+    as a warp named sides of the approach cell -- `east` of (21,14) -- which
+    the runtime resolves against the event, (22,13), a wall."""
+    from rpg2gba.routing.locations import ApproachCandidate, RowCell
+    row = _page_row()
+    sides = (ApproachCandidate(21, 14, "south", "s"), ApproachCandidate(20, 13, "west", "w"))
+    cell = RowCell(row.row_id, "MAP_KEVLAR_TOWN", 21, 14, "approach_to", sides)
+    monkeypatch.setattr(cli, "cell_for_row", lambda r: cell)
+    fn = cli._cell_fn(frozenset({row.row_id}), {31: _OpenGraph()}, lambda m: ())
+    assert fn(row).approach_candidates == sides
+
+
+def test_touch_warp_on_its_event_cell_is_sided_around_the_event(monkeypatch):
+    from rpg2gba.routing.locations import RowCell
+    row = _page_row(trigger="player_touch")
+    cell = RowCell(row.row_id, "MAP_KEVLAR_TOWN", 21, 13, "event_cell")
+    monkeypatch.setattr(cli, "cell_for_row", lambda r: cell)
+    fn = cli._cell_fn(frozenset({row.row_id}), {31: _OpenGraph(walls={(22, 13)})},
+                      lambda m: ())
+    got = {(c.side, c.x, c.y) for c in fn(row).approach_candidates}
+    assert got == {("north", 21, 12), ("south", 21, 14), ("west", 20, 13)}
+
+
 # --- --module-dir CLI wiring (mocked: no staged corpus needed) -----------------
 
 def test_generate_cli_threads_out_dir_and_module_dir(tmp_path, monkeypatch):
