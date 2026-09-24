@@ -53,7 +53,13 @@ from rpg2gba.playtest.text_source import (
     _default_engine_dir,
     _strip_zero_width_tokens,
 )
-from rpg2gba.story_state.extract import _TRIGGER_NAMES, RowState, extract_map
+from rpg2gba.story_state.extract import (
+    _default_reference_dir,
+    _TRIGGER_NAMES,
+    RowState,
+    extract_map,
+)
+from rpg2gba.story_state.scope_search import stripped_ce_ids_for
 from rpg2gba.story_state.state import (
     Assign,
     EngineKey,
@@ -376,6 +382,7 @@ def _walk_commands(
     ctx: ExtractContext,
     index_of: dict[int, int],
     visited_ce: frozenset[int],
+    stripped_ce_ids: frozenset[int],
 ) -> ExtractResult:
     """Walks one flat scope's commands (a page trunk, a branch arm, or an
     inlined common event's own flattened body), dispatching text/script
@@ -436,7 +443,7 @@ def _walk_commands(
             break
 
         if code == COMMON_EVENT_CALL:
-            a, r = _walk_common_event_call(cmd, list_index, ctx, visited_ce)
+            a, r = _walk_common_event_call(cmd, list_index, ctx, visited_ce, stripped_ce_ids)
             assertions.extend(a)
             refusals.extend(r)
             i += 1
@@ -452,13 +459,25 @@ def _walk_commands(
 
 def _walk_common_event_call(
     cmd: dict[str, Any], list_index: int, ctx: ExtractContext, visited_ce: frozenset[int],
+    stripped_ce_ids: frozenset[int],
 ) -> ExtractResult:
     """117 Call Common Event: inlines the callee's body -- trunk plus every
     branch arm (both sides; the floor asserts what COULD happen, not what
     is certain) -- with every resulting assertion/refusal attributed to
     THIS call's own `list_index` (R11 C4 shape), never a position inside
     the callee's own command list. Guards against a common-event call
-    cycle with a `visited_ce` set threaded through the recursion."""
+    cycle with a `visited_ce` set threaded through the recursion.
+
+    A `ce_id` in `stripped_ce_ids` (`reference/strip_list.json`'s whole
+    common events -- ids 4/5/6, GTS/VT/LOBBY) is a no-op: the ROM will not
+    contain that common event, so it produces neither assertions nor
+    refusals, and its body is never walked. This check runs BEFORE the
+    missing-CE lookup below (order: malformed -> cycle -> stripped ->
+    missing -> inline) -- a stripped CE may legitimately be absent from
+    `common_events.json`, and a `missing_common_event` refusal for
+    something deliberately not run would be wrong. Matches
+    `story_state.extract.extract_map`'s own treatment of the same command
+    (C8 stage 4, commit `bd80c080`; CLAUDE.md §4.3)."""
     params = cmd.get("parameters") or []
     if not params:
         return (), (FloorRefusal(
@@ -472,6 +491,8 @@ def _walk_common_event_call(
             code=COMMON_EVENT_CALL,
             detail=f"code 117 @list[{list_index}] (common event {ce_id}): already inlined on this path",
         ),)
+    if ce_id in stripped_ce_ids:
+        return (), ()
     ce = ctx.common_events_by_id.get(ce_id)
     if ce is None:
         return (), (FloorRefusal(
@@ -496,7 +517,8 @@ def _walk_common_event_call(
         # per-command `index_of` inside the callee, so pass an empty one
         # and let `_walk_commands` fall back to `list_index=-1` internally;
         # override every produced record's `list_index` to the call site.
-        a, r = _walk_commands(flat, ctx, index_of={}, visited_ce=new_visited)
+        a, r = _walk_commands(
+            flat, ctx, index_of={}, visited_ce=new_visited, stripped_ce_ids=stripped_ce_ids)
         for item in a:
             assertions.append(FloorAssertion(
                 row_id=item.row_id, kind=item.kind, list_index=list_index,
@@ -612,6 +634,7 @@ def _build_row_floor(
     index_of: dict[int, int],
     row_states: dict[str, RowState],
     door_cells: Mapping[int, frozenset[tuple[int, int]]],
+    stripped_ce_ids: frozenset[int],
 ) -> RowFloor:
     ctx = ExtractContext(
         map_id=map_id, event_id=event_id, page_idx=page_idx, row_id=scope.row_id,
@@ -631,7 +654,7 @@ def _build_row_floor(
     ]
     refusals: list[FloorRefusal] = []
 
-    a, r = _walk_commands(scope.commands, ctx, index_of, frozenset())
+    a, r = _walk_commands(scope.commands, ctx, index_of, frozenset(), stripped_ce_ids)
     assertions.extend(a)
     refusals.extend(r)
 
@@ -670,6 +693,7 @@ def floor_for_map(
     switch_labels: dict[int, str],
     door_cells: Mapping[int, frozenset[tuple[int, int]]],
     connections: list[list[Any]] = (),
+    stripped_ce_ids: frozenset[int] | None = None,
 ) -> dict[str, RowFloor]:
     """Every row's `RowFloor` for one map's events, plus its `seam` and
     `terrain` rows (REDERIVATION_PLAN.md §16.3 C5 -- `beat_floor.terrain`).
@@ -684,10 +708,22 @@ def floor_for_map(
     cells per Uranium map -- `load_door_cells(build_dir)` -- which the `warp`
     extractor needs for `arrives_on_door` (C5b). Required so a caller cannot
     silently get a floor where every arrival reads as plain floor.
+
+    `stripped_ce_ids` (keyword-only, default `None`) is the set of
+    whole-strip-listed common-event ids (`reference/strip_list.json`) whose
+    code-117 calls are a no-op rather than inlined -- same treatment as
+    `story_state.extract.extract_map`'s own parameter of the same name
+    (C8 stage 4; assignments/C8/02_strip_honoring.md). `None` defaults via
+    `stripped_ce_ids_for(_default_reference_dir())` so a caller who has not
+    been updated still gets strip-honouring for free; an explicit
+    `frozenset()` disables stripping entirely.
     """
+    sce = stripped_ce_ids if stripped_ce_ids is not None else stripped_ce_ids_for(
+        _default_reference_dir())
     common_events_by_id = {ce["id"]: ce for ce in common_events}
     row_states = extract_map(
-        map_id, map_data, common_events=common_events, switch_labels=switch_labels)
+        map_id, map_data, common_events=common_events, switch_labels=switch_labels,
+        stripped_ce_ids=sce)
 
     # Diagonal-stair events are absorbed into `terrain` manifest rows, never
     # page rows (`chapter_manifest.generator._generate_page_rows`); they get
@@ -709,7 +745,7 @@ def floor_for_map(
             for scope in scopes:
                 result[scope.row_id] = _build_row_floor(
                     scope, trigger, map_id, event_id, page_idx, event, map_data,
-                    common_events_by_id, index_of, row_states, door_cells,
+                    common_events_by_id, index_of, row_states, door_cells, sce,
                 )
 
             # `blocked_obstacle` is per PAGE: the capability head appears on
@@ -734,12 +770,17 @@ def floor_for_map(
     return result
 
 
-def floor_for_chapter(chapter_id: str, *, build_dir: Any) -> dict[str, RowFloor]:
+def floor_for_chapter(
+    chapter_id: str, *, build_dir: Any, stripped_ce_ids: frozenset[int] | None = None,
+) -> dict[str, RowFloor]:
     """Every row's `RowFloor` for one chapter's own maps, loaded the same
     way `story_state.model.build_chapter_stories` loads them (R11 C4
     design): `reference/chapters.json` for map membership,
     `build_dir/maps/MapNNN.json` per map, `build_dir/common_events.json`,
-    and the tracked switch/variable label sidecars."""
+    and the tracked switch/variable label sidecars.
+
+    `stripped_ce_ids` is threaded straight through to `floor_for_map`,
+    which resolves the `None` default (see its own docstring)."""
     import json
     from pathlib import Path
 
@@ -765,6 +806,6 @@ def floor_for_chapter(chapter_id: str, *, build_dir: Any) -> dict[str, RowFloor]
         map_data = json.loads(map_path.read_text(encoding="utf-8"))
         merged.update(floor_for_map(
             map_id, map_data, common_events=common_events, switch_labels=switch_labels,
-            door_cells=door_cells, connections=connections))
+            door_cells=door_cells, connections=connections, stripped_ce_ids=stripped_ce_ids))
 
     return {rid: merged[rid] for rid in sorted(merged, key=row_id_sort_key)}

@@ -62,7 +62,18 @@ def _door_cells(build_dir: str) -> dict[int, frozenset[tuple[int, int]]]:
 
 
 @cache
-def floor_for_map_cached(build_dir: str, map_id: int) -> dict[str, RowFloor]:
+def floor_for_map_cached(
+    build_dir: str, map_id: int, *, stripped_ce_ids: frozenset[int] | None = None,
+) -> dict[str, RowFloor]:
+    """`walk.floor_for_map`, cached per `(build_dir, map_id, stripped_ce_ids)`.
+
+    `stripped_ce_ids` is part of the `@cache` key deliberately: leaving it
+    out would let a call with an explicit strip set silently answer a later
+    call with a different one (or `None`) from the same cache entry, and
+    since it changes the floor's actual assertions (not just bookkeeping),
+    that would be a correctness bug hiding behind a cache -- worse than the
+    minor cost of one cache entry per distinct set actually requested. It
+    is a `frozenset`, so it is hashable and safe to key on."""
     from rpg2gba.beat_floor.walk import floor_for_map
 
     path = Path(build_dir) / "maps" / f"Map{map_id:03d}.json"
@@ -71,16 +82,20 @@ def floor_for_map_cached(build_dir: str, map_id: int) -> dict[str, RowFloor]:
         map_id, map_data,
         common_events=_common_events(build_dir), switch_labels=_switch_labels(),
         door_cells=_door_cells(build_dir),
-        connections=list(_connections(build_dir)))
+        connections=list(_connections(build_dir)),
+        stripped_ce_ids=stripped_ce_ids)
 
 
-def floor_for_row(row_id: str, *, build_dir: Path | None = None) -> RowFloor:
+def floor_for_row(
+    row_id: str, *, build_dir: Path | None = None,
+    stripped_ce_ids: frozenset[int] | None = None,
+) -> RowFloor:
     """The floor for one manifest row id. Fails loud (KeyError) when the
     row's map yields no floor for that id -- a claimed row the floor cannot
     see is a bug in the claim or in the floor, never an empty floor."""
     resolved = str(build_dir if build_dir is not None else default_build_dir())
     parsed = parse_row_id(row_id)
-    floors = floor_for_map_cached(resolved, parsed.map_id)
+    floors = floor_for_map_cached(resolved, parsed.map_id, stripped_ce_ids=stripped_ce_ids)
     try:
         return floors[row_id]
     except KeyError:

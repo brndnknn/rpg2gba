@@ -34,8 +34,6 @@ import pytest
 
 from rpg2gba.beat_floor import lookup, walk
 
-pytestmark = pytest.mark.skip(reason="assignments/C8/02_strip_honoring.md not started")
-
 MAP_ID = 1
 EVENT_ID = 1
 PAGE_IDX = 0
