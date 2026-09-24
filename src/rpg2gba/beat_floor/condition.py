@@ -188,16 +188,27 @@ def _extract_pb_rock_smash(text: str, list_index: int, ctx: ExtractContext) -> E
 
 # --- jvGiveReward / jvNextReward ----------------------------------------
 
-# uranium_jv_reward matches both jvGiveReward (213_Bambo_Reward.rb:33-45,
-# performs the grant -- egg or item(s) -- indexed by $game_variables[22],
-# never literal) and jvNextReward/jvNextRewardPhone (pure reads, no side
-# effect). Dispatched by which head the condition text names.
+# uranium_jv_reward matches both jvGiveReward (213_Bambo_Reward.rb:33-45)
+# and jvNextReward/jvNextRewardPhone (pure reads, no side effect).
+# Dispatched by which head the condition text names.
+#
+# A `if jvGiveReward` condition tests jvGiveReward's RETURN VALUE, not which
+# rung fires -- a different question from R2's (script.py's bare-call
+# extractor). Reading the Ruby again: the return is `item`, which tracks
+# whether `Kernel.pbReceiveItem` succeeded, i.e. bag-space success/failure.
+# Bag capacity isn't modelled (nothing in `story_state` tracks bag
+# occupancy), so this can't resolve either -- but for a genuinely different
+# reason than the R2 refusal, hence its own reason code.
 def _extract_uranium_jv_reward(text: str, list_index: int, ctx: ExtractContext) -> ExtractResult:
     if "jvGiveReward" in text:
         return (), (FloorRefusal(
-            row_id=ctx.row_id, reason="non_literal_args", list_index=list_index,
+            row_id=ctx.row_id, reason="bag_capacity_unmodelled", list_index=list_index,
             code=CODE_CONDITION,
-            detail="jvGiveReward: reward selected by $game_variables[22], not literal",
+            detail=(
+                "jvGiveReward: condition tests the return value, which is "
+                "Kernel.pbReceiveItem's bag-space success/failure -- bag "
+                "capacity is not modelled"
+            ),
         ),)
     return (), ()
 

@@ -22,8 +22,6 @@ from rpg2gba.beat_floor.script import SCRIPT_HEAD_EXTRACTORS, _split_statements,
 from rpg2gba.chapter_atlas.census import _script_head
 from rpg2gba.ruby_subset import FixedOracle, evaluate_expression, parse_expression
 
-pytestmark = pytest.mark.skip(reason="assignments/C8/01_jvgivereward.md not started")
-
 REPO = Path(__file__).resolve().parents[1]
 SCRIPTS_DUMP_DIR = REPO / "reference" / "scripts_dump"
 

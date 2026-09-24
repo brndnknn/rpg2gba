@@ -198,11 +198,13 @@ def test_system_head_refuses_unknown_script_head():
     assert r[0].reason == "unknown_script_head"
 
 
-def test_jv_give_reward_refuses_non_literal_args():
+def test_jv_give_reward_refuses_one_of_n_grant():
+    # C8 stage 7 task 1: was `non_literal_args`, a misdiagnosis -- var 22 is
+    # modelled; the real obstruction is the floor's lack of a one-of-N kind.
     a, r = extract_script("jvGiveReward", 0, _ctx())
     assert a == ()
     assert len(r) == 1
-    assert r[0].reason == "non_literal_args"
+    assert r[0].reason == "one_of_n_grant"
 
 
 def test_transfer_player_resolves_this_map_and_literal_xy():
@@ -294,10 +296,12 @@ def test_pb_pick_berry_asserts_item_grant():
 
 
 def test_jv_give_reward_family_refuses_give_but_not_next():
+    # C8 stage 7 task 1: the condition tests pbReceiveItem's bag-space
+    # success, not which rung fired.
     a, r = extract_condition("jvGiveReward", 0, _ctx())
     assert a == ()
     assert len(r) == 1
-    assert r[0].reason == "non_literal_args"
+    assert r[0].reason == "bag_capacity_unmodelled"
     a, r = extract_condition("jvNextReward", 0, _ctx())
     assert a == ()
     assert r == ()

@@ -20,6 +20,7 @@ second, divergent source of truth for the same fact (CLAUDE.md §4.3).
 from __future__ import annotations
 
 import re
+from functools import cache
 
 from rpg2gba.beat_floor.assertion import (
     ExtractContext,
@@ -29,6 +30,7 @@ from rpg2gba.beat_floor.assertion import (
     ScriptHeadExtractor,
     make_params,
 )
+from rpg2gba.beat_floor.reward_ladder import load_profrewards
 from rpg2gba.chapter_atlas.census import _script_head
 from rpg2gba.conversion_agent.deterministic import _PBPOKEMART_ITEM_RE, _PBPOKEMART_LIST_RE
 from rpg2gba.conversion_agent.transpiler import _ADD_POKEMON_RE, _RECEIVE_ITEM_RE
@@ -143,15 +145,6 @@ def _service(name: str, **literal_params: object) -> ScriptHeadExtractor:
     return _extractor
 
 
-def _refuse(reason: str, detail: str) -> ScriptHeadExtractor:
-    def _extractor(text: str, list_index: int, ctx: ExtractContext) -> ExtractResult:
-        return (), (FloorRefusal(
-            row_id=ctx.row_id, reason=reason, list_index=list_index, code=CODE_SCRIPT,
-            detail=f"{detail}: {text[:120]!r}",
-        ),)
-    return _extractor
-
-
 # --- erase / item grant / warp ---------------------------------------------
 
 # pbEraseThisEvent -- 059_Messages.rb:347-354: erases $game_map.events
@@ -241,6 +234,53 @@ def _extract_custom_trainer_battle(
         detail=(
             f"customTrainerBattle: trainer identity is a local variable, "
             f"not literal: {text[:120]!r}"
+        ),
+    ),)
+
+
+_JV_GIVE_REWARD_RE = re.compile(r"^\s*(?:Kernel\.)?jvGiveReward\s*$")
+
+
+@cache
+def _reward_candidates() -> str:
+    """Every grant the PROFREWARDS ladder can pay, for the refusal detail.
+    Cached: the ladder is read from source once per process, not per site."""
+    rungs = load_profrewards()
+    items = sorted({item for rung in rungs for item in rung.items})
+    eggs = sorted({rung.species for rung in rungs if rung.is_egg and rung.species is not None})
+    return ", ".join([
+        *(f"item:{item}" for item in items),
+        *(f"egg:{species}" for species in eggs),
+    ])
+
+
+# jvGiveReward (213_Bambo_Reward.rb:33-51) grants an egg or item(s) selected
+# by `PROFREWARDS[$game_variables[22]]` -- variable 22 is ordinary modelled
+# state (C8 stage 7, assignment task 1's whole point: `jvGiveReward` itself
+# needs no party/dex model, unlike `jvNextReward`), but the floor is a
+# CONJUNCTION of its row's assertions (`coverage.uncovered`) and exactly one
+# PROFREWARDS rung pays out per visit -- there is no vocabulary today for "one
+# of these N grants holds" at a single `(row_id, kind, list_index, code)` key
+# (`coverage.contradicts` would flag the siblings as mutually refuting). R2's
+# "refuse, precisely" option: keep refusing, but name the true obstruction
+# instead of the old (wrong) "not literal" diagnosis, and list the candidate
+# grants read straight from the ladder so the refusal is still informative.
+def _extract_jv_give_reward(text: str, list_index: int, ctx: ExtractContext) -> ExtractResult:
+    if not _JV_GIVE_REWARD_RE.match(text):
+        return (), (FloorRefusal(
+            row_id=ctx.row_id, reason="non_literal_args", list_index=list_index, code=CODE_SCRIPT,
+            detail=f"jvGiveReward: not a bare literal call: {text[:120]!r}",
+        ),)
+    # Refuse loudly rather than silently falling back to the old blanket
+    # refusal if the ladder itself can't be read (CLAUDE.md §4.5) -- let
+    # `FileNotFoundError`/`ValueError` propagate.
+    candidates = _reward_candidates()
+    return (), (FloorRefusal(
+        row_id=ctx.row_id, reason="one_of_n_grant", list_index=list_index, code=CODE_SCRIPT,
+        detail=(
+            "jvGiveReward: the floor is a conjunction -- exactly one PROFREWARDS "
+            "rung pays out per visit and the vocabulary cannot express a "
+            f"one-of-N grant at one call site; candidates: {candidates}"
         ),
     ),)
 
@@ -390,14 +430,8 @@ SCRIPT_HEAD_EXTRACTORS: dict[str, ScriptHeadExtractor] = {
     "pbPokemonMart": _extract_pokemon_mart,
     "customTrainerBattle": _extract_custom_trainer_battle,
 
-    # jvGiveReward (213_Bambo_Reward.rb:33-51) grants an egg or item(s)
-    # selected from PROFREWARDS[$game_variables[22]] -- indexed by runtime
-    # state, never a literal in the source -- refuses rather than guessing
-    # which reward table row fires (CLAUDE.md §4.5).
-    "jvGiveReward": _refuse(
-        "non_literal_args",
-        "jvGiveReward: reward selected by $game_variables[22], not literal",
-    ),
+    # jvGiveReward: see `_extract_jv_give_reward` above (C8 stage 7, task 1).
+    "jvGiveReward": _extract_jv_give_reward,
 
     # `system("start http://...")` -- a Ruby Kernel#system shell-out
     # (opens a URL in the OS browser), not presentation of anything

@@ -52,6 +52,14 @@ _BLOCKER_BY_REASON: dict[str, Blocker] = {
     # CH01-only fixture above never reached them).
     "nonconstant_variable_write": "story-state",
     "unhandled_condition_type": "story-state",
+    # C8 stage 7 task 1 (2026-09-24), replacing jvGiveReward's old
+    # `non_literal_args`. `one_of_n_grant`: exactly one PROFREWARDS rung pays
+    # out, and the floor (a conjunction) has no disjunctive kind to say so --
+    # a floor-vocabulary gap. `bag_capacity_unmodelled`: `if jvGiveReward`
+    # tests pbReceiveItem's bag-space success, state the model does not hold.
+    # Measured: CH01 7 / 4, every other chapter 0.
+    "one_of_n_grant": "floor",
+    "bag_capacity_unmodelled": "story-state",
 }
 
 # Row kinds that stand for themselves rather than an RMXP event page/branch:
