@@ -518,13 +518,36 @@ def _assert_representable(content: str, allowed: set[str], context: str) -> None
             )
 
 
-def _normalize_string_content(content: str, allowed: set[str], context: str) -> str:
+def apply_dialogue_char_substitutions(content: str, *, quote_escaped: bool) -> str:
+    """The one implementation of the dialogue-text charmap substitution:
+    the open/close typographic-quote toggle plus `_CHARMAP_SUBS` (``*`` ->
+    ``~``, ``[`` -> ``(``, ``]`` -> ``)``). No representability check here —
+    callers with different fail-loud message shapes do that themselves
+    (`_normalize_string_content` below; `playtest.text_source` via its own
+    `_canonicalize_chars`). CLAUDE.md sec 4.3: one mint point, not two
+    independent quote-toggling state machines that must agree.
+
+    `quote_escaped` selects which substring in `content` is a literal
+    double quote to toggle open/close (reset to "open" at the start of
+    `content` every call — i.e. per string literal / per message):
+
+    * ``True`` — `.pory` string-literal content, where poryscript's own
+      quoting means a literal quote arrives as ``\\"`` and ``\\n``/``\\l``/
+      ``\\p``/``\\\\`` escapes must survive untouched (`normalize_pory`'s
+      case).
+    * ``False`` — plain text with a bare ``"`` for a literal quote and no
+      backslash-quoting of its own, except that ``\\n``/``\\l`` two-character
+      escape tokens (already literal text at this point, not a live
+      newline) must still pass through unexamined (`playtest.text_source`'s
+      case, where the RMXP source is already past
+      `deterministic.translate_text_codes`).
+    """
     out: list[str] = []
     quote_open = True
     i, n = 0, len(content)
     while i < n:
         c = content[i]
-        if c == "\\" and i + 1 < n:
+        if quote_escaped and c == "\\" and i + 1 < n:
             nxt = content[i + 1]
             if nxt == '"':  # escaped quote -> typographic open/close, alternating
                 out.append(_OPEN_QUOTE if quote_open else _CLOSE_QUOTE)
@@ -533,9 +556,23 @@ def _normalize_string_content(content: str, allowed: set[str], context: str) -> 
                 out += [c, nxt]
             i += 2
             continue
+        if not quote_escaped and c == "\\" and i + 1 < n and content[i + 1] in "nl":
+            # A literal \n / \l escape token (not a quote) -- pass through.
+            out += [c, content[i + 1]]
+            i += 2
+            continue
+        if not quote_escaped and c == '"':
+            out.append(_OPEN_QUOTE if quote_open else _CLOSE_QUOTE)
+            quote_open = not quote_open
+            i += 1
+            continue
         out.append(_CHARMAP_SUBS.get(c, c))
         i += 1
-    result = "".join(out)
+    return "".join(out)
+
+
+def _normalize_string_content(content: str, allowed: set[str], context: str) -> str:
+    result = apply_dialogue_char_substitutions(content, quote_escaped=True)
     _assert_representable(result, allowed, context)
     return result
 

@@ -173,6 +173,52 @@ def test_curly_quote_in_source_stays_curly(tmp_path: Path) -> None:
     assert text == "I can’t tell."
 
 
+# -- normalization: straight double quote / asterisk (PROJECT_TODO #109) ----
+
+
+def test_straight_double_quote_becomes_typographic_pair(tmp_path: Path) -> None:
+    _write_map(
+        tmp_path, 1, [_event(1, [[_show_text('He said "hello" to me.')]])]
+    )
+    text = ts.expected_text(1, 1, 0, build_dir=tmp_path)
+    assert text == "He said “hello” to me."
+
+
+def test_two_quoted_phrases_alternate_open_close(tmp_path: Path) -> None:
+    _write_map(
+        tmp_path,
+        1,
+        [_event(1, [[_show_text('"First one" and "second one".')]])],
+    )
+    text = ts.expected_text(1, 1, 0, build_dir=tmp_path)
+    assert text == "“First one” and “second one”."
+
+
+def test_asterisk_becomes_tilde(tmp_path: Path) -> None:
+    _write_map(tmp_path, 1, [_event(1, [[_show_text("...*sniffle*...")]])])
+    text = ts.expected_text(1, 1, 0, build_dir=tmp_path)
+    assert text == "...~sniffle~..."
+
+
+def test_quote_toggle_resets_per_message(tmp_path: Path) -> None:
+    """Two separate message boxes each open with a straight quote -- the
+    toggle must reset per message, not carry over from the previous box
+    (each 101/401* run is a distinct `.pory` string literal at staging)."""
+    _write_map(
+        tmp_path,
+        1,
+        [_event(1, [[
+            _show_text('"First box."'),
+            _other(),
+            _show_text('"Second box."'),
+        ]])],
+    )
+    msgs = ts.page_messages(1, 1, 0, build_dir=tmp_path)
+    assert len(msgs) == 2
+    assert msgs[0].text == "“First box.”"
+    assert msgs[1].text == "“Second box.”"
+
+
 # -- control codes ------------------------------------------------------------
 
 

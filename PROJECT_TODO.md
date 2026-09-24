@@ -205,7 +205,13 @@ suite in two halves as separate processes (`ls tests/test_*.py`, split, one
 Worth bounding the search itself regardless: an exponential subset enumeration
 with no cap is a latent hazard at CH06's map count.
 
-### 109. `text_source` rejects the straight quote that staging normalizes, so 12 T2 rows have no oracle
+### 109. `text_source` rejects the straight quote that staging normalizes, so 12 T2 rows have no oracle -- DONE 2026-09-24
+
+Fixed by extracting `assembly.apply_dialogue_char_substitutions` (the open/close
+quote toggle + `*`/`[`/`]` subs) out of `_normalize_string_content` as the one
+shared implementation, and having `text_source.page_messages` call it
+(`quote_escaped=False`) before `_canonicalize_chars`; `normalize_pory` is
+byte-identical. All previously-refusing rows now resolve.
 
 Surfaced 2026-09-15 while probing whether T2's `flavour_npc_beat` could be
 applied mechanically to the CH01-CH03 residue. Of 96 candidate rows, 84 resolve

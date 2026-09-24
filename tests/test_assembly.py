@@ -394,6 +394,39 @@ def test_normalize_is_idempotent():
     assert asm.normalize_pory(once, _ALLOWED) == once
 
 
+# --- apply_dialogue_char_substitutions (shared with playtest.text_source) ---
+
+
+def test_apply_dialogue_char_substitutions_quote_escaped_matches_normalize_pory():
+    # quote_escaped=True is exactly what _normalize_string_content uses --
+    # normalize_pory's own behavior must be unchanged (PROJECT_TODO #109).
+    out = asm.apply_dialogue_char_substitutions('say \\"hi\\" now', quote_escaped=True)
+    assert out == "say “hi” now"
+
+
+def test_apply_dialogue_char_substitutions_bare_quote_toggles():
+    out = asm.apply_dialogue_char_substitutions('say "hi" now', quote_escaped=False)
+    assert out == "say “hi” now"
+
+
+def test_apply_dialogue_char_substitutions_bare_quote_alternates_across_two_pairs():
+    out = asm.apply_dialogue_char_substitutions(
+        '"first" and "second"', quote_escaped=False
+    )
+    assert out == "“first” and “second”"
+
+
+def test_apply_dialogue_char_substitutions_bare_quote_preserves_nl_escapes():
+    out = asm.apply_dialogue_char_substitutions('"a"\\nb\\lc', quote_escaped=False)
+    assert out == "“a”\\nb\\lc"
+
+
+def test_apply_dialogue_char_substitutions_star_and_brackets_both_modes():
+    assert asm.apply_dialogue_char_substitutions("*x*", quote_escaped=True) == "~x~"
+    assert asm.apply_dialogue_char_substitutions("*x*", quote_escaped=False) == "~x~"
+    assert asm.apply_dialogue_char_substitutions("[x]", quote_escaped=False) == "(x)"
+
+
 # --- undefined-symbol patches (multichoice + self/temp-switch refs) ----------
 
 def test_patch_undefined_multichoice_stubs_unknown():

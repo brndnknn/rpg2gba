@@ -36,6 +36,19 @@ pipeline:
   to the U+2019 problem this module exists to fix for real (CLAUDE.md's
   brief; previously dodged by rewriting an assertion in commit `2a4e4b61`
   rather than fixed here).
+* `tileset_converter.assembly.apply_dialogue_char_substitutions` -- the same
+  open/close typographic-quote toggle and `*`/`[`/`]` substitutions staging's
+  `normalize_pory` applies to every `.pory` string literal, called here with
+  `quote_escaped=False` (RMXP source text has a bare `"` for a quote, not
+  `.pory`'s `\\"`). A consecutive 101/401* run (one message box, per
+  `_extract_message_groups` above) becomes exactly one `.pory` string
+  literal at every dialogue emission site in `deterministic.py`/
+  `transpiler.py` -- so resetting the toggle per message here agrees with
+  resetting it per string literal at staging, with one documented exception
+  this module cannot reach anyway: `transpiler._emit_value_var_text`'s
+  `\\v[N]`-substitution dialogue fans one message box out into several
+  sibling literals, but `translate_text_codes` already refuses `\\v[n]`
+  before normalization runs (PROJECT_TODO #109).
 
 `playtest.emulator._invert_charmap_english_first` does exactly the
 byte-to-char inversion this module also needs, but `playtest.emulator`
@@ -65,6 +78,7 @@ from rpg2gba.conversion_agent.deterministic import (
 )
 from rpg2gba.playtest.charmap import invert_charmap_english_first
 from rpg2gba.text_validator.engine_metrics import load_charmap
+from rpg2gba.tileset_converter.assembly import apply_dialogue_char_substitutions
 
 logger = logging.getLogger(__name__)
 
@@ -300,6 +314,7 @@ def page_messages(
                 f"does not recognize -- raw fragments: {fragments!r}"
             )
         text = _strip_zero_width_tokens(translated.text)
+        text = apply_dialogue_char_substitutions(text, quote_escaped=False)
         text = _canonicalize_chars(text, table)
         messages.append(SourceMessage(
             map_id=map_id,
