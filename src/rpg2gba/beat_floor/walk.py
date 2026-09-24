@@ -48,10 +48,9 @@ from rpg2gba.chapter_manifest.schema import parse_row_id, row_id_sort_key
 from rpg2gba.conversion_agent.deterministic import join_text_lines, translate_text_codes
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
 from rpg2gba.playtest.text_source import (
-    _canonicalize_chars,
     _char_canon_table,
     _default_engine_dir,
-    _strip_zero_width_tokens,
+    rom_text,
 )
 from rpg2gba.ruby_subset.builtins import ENGINE_ATTRIBUTES
 from rpg2gba.story_state.extract import (
@@ -97,16 +96,14 @@ _CONDITION_TYPE_SCRIPT = 12
 def _normalize_fragments(fragments: list[str]) -> str:
     """Fragments -> ROM-comparable text, via the exact pipeline
     `playtest.text_source.page_messages` uses per message (join, translate
-    control codes, strip zero-width pause tokens, canonicalize chars).
+    control codes, then `text_source.rom_text`).
     Raises `ValueError` on anything neither step recognizes -- the caller
     converts that into a `FloorRefusal(reason="text_unnormalizable")`."""
     translated = translate_text_codes(join_text_lines(fragments))
     if translated is None:
         raise ValueError(
             f"unrecognized control code in fragments {fragments!r}")
-    text = _strip_zero_width_tokens(translated.text)
-    table = _char_canon_table(_default_engine_dir())
-    return _canonicalize_chars(text, table)
+    return rom_text(translated.text, _char_canon_table(_default_engine_dir()))
 
 
 def _text_blocks(commands: list[dict[str, Any]]) -> list[tuple[int, int]]:

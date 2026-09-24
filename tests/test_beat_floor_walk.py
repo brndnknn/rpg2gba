@@ -106,6 +106,17 @@ def test_text_unnormalizable_refuses_row():
     assert any(r.reason == "text_unnormalizable" for r in row.refusals)
 
 
+def test_text_gets_stagings_char_substitutions():
+    """Regression (#109 follow-up): the floor's text path must apply the same
+    straight-quote and `*` substitutions `text_source.page_messages` does --
+    it had its own copy of the pipeline and kept refusing `"` and `*`."""
+    commands = [{"code": 101, "parameters": ['He said "hi" *wink*']}]
+    row = _row(commands)
+    assert not row.refused, row.refusals
+    text = _only(row, "text").param("text")
+    assert '"' not in text and "*" not in text
+
+
 # --- choice --------------------------------------------------------------
 
 def test_choice_normalizes_options():

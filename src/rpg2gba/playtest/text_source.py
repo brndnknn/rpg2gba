@@ -276,6 +276,18 @@ def _strip_zero_width_tokens(text: str) -> str:
     return _PAUSE_TOKEN_RE.sub("", text)
 
 
+def rom_text(translated: str, table: dict[str, str]) -> str:
+    """Control-code-translated message text -> what the ROM displays: strip
+    zero-width pause tokens, apply staging's character substitutions, then
+    canonicalize against the charmap. The one implementation, shared by
+    `page_messages` and `beat_floor.walk` so the floor and the playtest can
+    never disagree about a character. Raises `ValueError` on a character
+    with no charmap entry."""
+    text = _strip_zero_width_tokens(translated)
+    text = apply_dialogue_char_substitutions(text, quote_escaped=False)
+    return _canonicalize_chars(text, table)
+
+
 def page_messages(
     map_id: int,
     event_id: int,
@@ -313,9 +325,7 @@ def page_messages(
                 f"message {idx} contains a control code translate_text_codes "
                 f"does not recognize -- raw fragments: {fragments!r}"
             )
-        text = _strip_zero_width_tokens(translated.text)
-        text = apply_dialogue_char_substitutions(text, quote_escaped=False)
-        text = _canonicalize_chars(text, table)
+        text = rom_text(translated.text, table)
         messages.append(SourceMessage(
             map_id=map_id,
             event_id=event_id,
