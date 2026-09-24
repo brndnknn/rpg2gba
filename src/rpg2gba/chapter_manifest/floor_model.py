@@ -37,11 +37,10 @@ from types import ModuleType
 
 from rpg2gba.beat_floor.assertion import FloorAssertion, RowFloor
 from rpg2gba.beat_floor.lookup import floor_for_row
+from rpg2gba.beat_gen.emit import GENERATED_HEADER as _GENERATED_HEADER
 from rpg2gba.playtest.chapter import Beat, Chapter, load_chapter, load_chapter_module
 
 logger = logging.getLogger(__name__)
-
-_GENERATED_HEADER = "GENERATED — do not edit"
 
 
 class ChapterFloorCoverageModel:
@@ -82,13 +81,13 @@ class ChapterFloorCoverageModel:
 
 
 def _module_is_generated(module: ModuleType) -> bool:
-    """True iff `module`'s docstring/header marks it a C6-generated module
-    (see `checker.FloorCoverageModel.is_generated`'s docstring). None exist
-    yet -- C6 is still TODO in `REDERIVATION_PLAN.md` -- so this is
-    deliberately a plain string check, not a registry: there is nothing to
-    register against yet, and every real chapter module today is hand-
-    written and answers False.
-    """
+    """True iff `module`'s docstring/header marks it a C6/C9-generated
+    module (see `checker.FloorCoverageModel.is_generated`'s docstring). This
+    is deliberately a plain string check against `beat_gen.emit.
+    GENERATED_HEADER` (the emitter's own single source of truth for the
+    marker), not a registry -- a generated module's docstring always starts
+    with it (`emit.HEADER_FIRST_LINE`), and every hand-written chapter
+    module answers False."""
     doc = getattr(module, "__doc__", None) or ""
     return doc.strip().startswith(_GENERATED_HEADER)
 

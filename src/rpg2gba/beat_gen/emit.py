@@ -33,7 +33,12 @@ TEMPLATE_CALLS: dict[str, tuple[str, str, str]] = {
     "transit": ("rpg2gba.playtest.archetypes.generic", "transit_beat", "beat_name"),
 }
 
-HEADER_FIRST_LINE = '"""GENERATED -- do not edit.'
+#: The generated-module marker, single source of truth (used by both the
+#: docstring emitted below and `chapter_manifest.floor_model._module_is_
+#: generated`, which used to hardcode a mismatched em-dash copy that could
+#: never match this literal two-hyphen text -- see that module for the fix).
+GENERATED_HEADER = "GENERATED -- do not edit"
+HEADER_FIRST_LINE = f'"""{GENERATED_HEADER}.'
 
 
 def render_value(value: Any) -> str:

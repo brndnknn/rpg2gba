@@ -363,5 +363,37 @@ def check() -> None:
     click.echo("hand-beat freeze OK")
 
 
+@cli.command()
+@click.option("--chapter", default=None,
+              help="Grade one chapter (e.g. CH05). Omit to grade every "
+                   "chapter with a generated module.")
+def grade(chapter: str | None) -> None:
+    """C9 grader: does the generated suite cover the frozen hand suite?
+    (`freeze_grade.grade_chapter_from_disk`.) Exits 1 on any problem."""
+    from rpg2gba.playtest import freeze_grade
+    from rpg2gba.playtest.chapter import gen_chapter_names
+
+    if chapter is not None:
+        chapters = [chapter.upper()]
+    else:
+        chapters = [name.upper() for name in gen_chapter_names()]
+        if not chapters:
+            click.echo("no generated chapters")
+            return
+
+    any_problems = False
+    for ch in chapters:
+        problems = freeze_grade.grade_chapter_from_disk(ch)
+        if problems:
+            any_problems = True
+            click.echo(f"{ch}: {len(problems)} problem(s)")
+            for problem in problems:
+                click.echo(f"  {problem}")
+        else:
+            click.echo(f"{ch}: OK")
+    if any_problems:
+        raise SystemExit(1)
+
+
 if __name__ == "__main__":
     cli()
