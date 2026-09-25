@@ -283,6 +283,43 @@ def _derive_story_precedence(
     return tuple(sorted(edges, key=lambda e: (e.before, e.after, e.reason)))
 
 
+def _acyclic_story_edges(
+    hard: Sequence[PrecedenceEdge], story: Sequence[PrecedenceEdge],
+) -> tuple[PrecedenceEdge, ...]:
+    """The story edges that fit on top of the hard (self-switch, warp) ones.
+
+    A story edge that would close a cycle means one group holds rows that
+    must come both before and after another group's -- the event needs two
+    visits (CH01's map050/ev005: arm b3 enables page 2, whose arm b0 enables
+    page 0's arm b0). No group order satisfies that, so the edge is skipped
+    and logged; it is a grouping problem, not an ordering one. Edges are
+    tried in sorted order, so the result is deterministic."""
+    succ: dict[str, set[str]] = {}
+    for e in hard:
+        succ.setdefault(e.before, set()).add(e.after)
+
+    def reaches(src: str, dst: str) -> bool:
+        seen, stack = set(), [src]
+        while stack:
+            node = stack.pop()
+            if node == dst:
+                return True
+            if node not in seen:
+                seen.add(node)
+                stack.extend(succ.get(node, ()))
+        return False
+
+    kept: list[PrecedenceEdge] = []
+    for e in sorted(story, key=lambda e: (e.before, e.after, e.reason)):
+        if reaches(e.after, e.before):
+            logger.info("precedence: %s would close a cycle (%s -> %s); skipped",
+                        e.reason, e.before, e.after)
+            continue
+        succ.setdefault(e.before, set()).add(e.after)
+        kept.append(e)
+    return tuple(kept)
+
+
 def _derive_warp_precedence(
     manifest_rows: Sequence[ManifestRow],
     group_by_row: Mapping[str, str],
@@ -630,7 +667,8 @@ def solve_route(
         )
 
     precedence = tuple(sorted(
-        set(self_switch_precedence) | set(warp_precedence) | set(story_precedence),
+        set(self_switch_precedence) | set(warp_precedence) | set(_acyclic_story_edges(
+            tuple(self_switch_precedence) + tuple(warp_precedence), story_precedence)),
         key=lambda e: (e.before, e.after, e.reason),
     ))
 

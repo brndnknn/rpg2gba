@@ -1229,3 +1229,19 @@ def test_story_precedence_ignores_a_writer_in_the_same_group():
     group_by_row = {"map001/ev001/p0": "g", "map001/ev001/p1": "g"}
     assert _derive_story_precedence(
         {"map001/ev001/p1": (("map001/ev001/p0",),)}, group_by_row) == ()
+
+
+def test_story_edge_that_closes_a_cycle_is_skipped():
+    """CH01's map050/ev005 shape: page 0's group enables page 2's, and page
+    2's arm enables an arm back in page 0's group. The first story edge in
+    sorted order is kept; the one closing the cycle is dropped. A hard edge
+    is never dropped, even when a story edge disagrees with it."""
+    from rpg2gba.routing.plan import PrecedenceEdge
+    from rpg2gba.routing.solver import _acyclic_story_edges
+
+    p0_to_p2 = PrecedenceEdge(before="p0", after="p2", reason="story:a")
+    p2_to_p0 = PrecedenceEdge(before="p2", after="p0", reason="story:b")
+    assert _acyclic_story_edges((), (p2_to_p0, p0_to_p2)) == (p0_to_p2,)
+
+    hard = (PrecedenceEdge(before="p2", after="p0", reason="warp_topology:x"),)
+    assert _acyclic_story_edges(hard, (p0_to_p2,)) == ()
