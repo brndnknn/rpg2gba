@@ -20,6 +20,9 @@ from rpg2gba.playtest.hand_freeze import FrozenBeat
 
 ROW = "map001/ev001/p0"
 BUILD_DIR = Path("output/uranium-build")
+#: A frozen CH01 beat claiming ROW, so rule (b) grades it (C9 ruling 6).
+FROZEN = [FrozenBeat(chapter="CH01", name="B1", order=0, group=None,
+                     map_constant=None, rows=(ROW,))]
 
 
 def _frozen(chapter: str, name: str, rows: tuple[str, ...]) -> FrozenBeat:
@@ -28,9 +31,10 @@ def _frozen(chapter: str, name: str, rows: tuple[str, ...]) -> FrozenBeat:
 
 
 def _beat(name: str, rows: tuple[str, ...] = (),
-          assertions: frozenset[FloorAssertion] | None = None) -> Beat:
+          assertions: frozenset[FloorAssertion] | None = None,
+          archetype: str | None = None) -> Beat:
     return Beat(name=name, description="", run=lambda emu: None,
-                rows=rows, assertions=assertions)
+                rows=rows, assertions=assertions, archetype=archetype)
 
 
 def _chapter(name: str, beats: tuple[Beat, ...]) -> Chapter:
@@ -55,7 +59,7 @@ def _patch_floor(monkeypatch, floors: dict[str, RowFloor]) -> None:
     monkeypatch.setattr(freeze_grade, "floor_for_row", fake)
 
 
-def _grade(chapter_id, frozen, residue, gen_chapter, never_fires=()):
+def _grade_full(chapter_id, frozen, residue, gen_chapter, never_fires=(), successor=None):
     return freeze_grade.grade_chapter(
         chapter_id,
         frozen_beats=frozen,
@@ -64,7 +68,13 @@ def _grade(chapter_id, frozen, residue, gen_chapter, never_fires=()):
         never_fires=dict.fromkeys(never_fires, "proof") if not isinstance(never_fires, dict)
         else never_fires,
         build_dir=BUILD_DIR,
+        successor=successor,
     )
+
+
+def _grade(chapter_id, frozen, residue, gen_chapter, never_fires=()):
+    """The failing problems only -- most tests grade pass/fail."""
+    return _grade_full(chapter_id, frozen, residue, gen_chapter, never_fires).problems
 
 
 # --- rule (a): row coverage ------------------------------------------------
@@ -167,7 +177,7 @@ def test_inherited_beat_claim_is_not_checked_for_floor_ge(monkeypatch):
 def test_no_assertions_declared_is_a_problem(monkeypatch):
     _patch_floor(monkeypatch, {ROW: _floor(assertions=(_warp_assertion(),))})
     gen = _chapter("CH01", (_beat("B1", rows=(ROW,), assertions=None),))
-    problems = _grade("CH01", [], {}, gen)
+    problems = _grade("CH01", FROZEN, {}, gen)
     assert len(problems) == 1
     assert "none of them declares" in problems[0]
 
@@ -179,7 +189,7 @@ def test_undercovering_declared_assertion_is_a_problem(monkeypatch):
     # match it against the floor's warp assertion.
     other_kind = FloorAssertion(row_id=ROW, kind="heal_party", list_index=1, code=105)
     gen = _chapter("CH01", (_beat("B1", rows=(ROW,), assertions=frozenset({other_kind})),))
-    problems = _grade("CH01", [], {}, gen)
+    problems = _grade("CH01", FROZEN, {}, gen)
     assert len(problems) == 1
     assert "not declared at all" in problems[0]
 
@@ -189,7 +199,7 @@ def test_contradicting_declared_assertion_is_reported_as_contradiction(monkeypat
     contradicting = _warp_assertion(direction=9)  # same key, wrong value
     _patch_floor(monkeypatch, {ROW: _floor(assertions=(floor_assertion,))})
     gen = _chapter("CH01", (_beat("B1", rows=(ROW,), assertions=frozenset({contradicting})),))
-    problems = _grade("CH01", [], {}, gen)
+    problems = _grade("CH01", FROZEN, {}, gen)
     assert len(problems) == 1
     assert "contradict" in problems[0]
 
@@ -199,7 +209,7 @@ def test_refused_floor_on_claimed_row_is_reported_distinctly(monkeypatch):
                             detail="unhandled command")
     _patch_floor(monkeypatch, {ROW: _floor(refusals=(refusal,))})
     gen = _chapter("CH01", (_beat("B1", rows=(ROW,), assertions=frozenset()),))
-    problems = _grade("CH01", [], {}, gen)
+    problems = _grade("CH01", FROZEN, {}, gen)
     assert len(problems) == 1
     assert "refuses" in problems[0]
 
@@ -214,7 +224,119 @@ def test_multiple_own_beats_claiming_same_row_union_their_assertions(monkeypatch
         _beat("B1", rows=(ROW,), assertions=frozenset({a1})),
         _beat("B2", rows=(ROW,), assertions=frozenset({a2})),
     ))
-    assert _grade("CH01", [], {}, gen) == []
+    assert _grade("CH01", FROZEN, {}, gen) == []
+
+
+# --- C9 grading rulings 6-10 (2026-09-24) ------------------------------------
+
+def _text_assertion(row_id: str = ROW) -> FloorAssertion:
+    return FloorAssertion(row_id=row_id, kind="text", list_index=0, code=101,
+                           params=make_params(text="Hello"), tag="text")
+
+
+def _kind_assertion(kind: str, list_index: int, row_id: str = ROW, **params) -> FloorAssertion:
+    return FloorAssertion(row_id=row_id, kind=kind, list_index=list_index, code=None,
+                           params=make_params(**params))
+
+
+def test_generator_only_row_is_reported_not_failed(monkeypatch):
+    """Ruling 6: rule (b) grades required rows only; a generator-only row
+    that undercovers its floor is counted as info."""
+    _patch_floor(monkeypatch, {ROW: _floor(assertions=(_text_assertion(),))})
+    gen = _chapter("CH01", (_beat("B1", rows=(ROW,), assertions=frozenset()),))
+    grade = _grade_full("CH01", [], {}, gen)
+    assert grade.problems == []
+    assert len(grade.generator_only_partial) == 1
+    assert ROW in grade.generator_only_partial[0]
+
+
+def test_walk_checked_kinds_are_not_graded(monkeypatch):
+    """Ruling 7: audio/visual/displacement are left to the boot walk."""
+    text = _text_assertion()
+    walk_checked = (
+        _kind_assertion("audio", 1, name="bgm"),
+        _kind_assertion("visual", 2, detail="emote"),
+        _kind_assertion("displacement", 3, target=0, dx=1, dy=0),
+    )
+    _patch_floor(monkeypatch, {ROW: _floor(assertions=(text, *walk_checked))})
+    gen = _chapter("CH01", (_beat("B1", rows=(ROW,), assertions=frozenset({text})),))
+    assert _grade("CH01", FROZEN, {}, gen) == []
+
+
+def test_walk_checked_kind_still_fails_when_contradicted(monkeypatch):
+    """Ruling 7 exempts a MISSING walk-checked assertion, never a wrong one."""
+    floor_audio = _kind_assertion("audio", 1, name="bgm_a")
+    wrong_audio = _kind_assertion("audio", 1, name="bgm_b")
+    _patch_floor(monkeypatch, {ROW: _floor(assertions=(floor_audio,))})
+    gen = _chapter("CH01", (_beat("B1", rows=(ROW,), assertions=frozenset({wrong_audio})),))
+    problems = _grade("CH01", FROZEN, {}, gen)
+    assert len(problems) == 1
+    assert "contradict" in problems[0]
+
+
+def test_blocked_obstacle_floor_owes_only_the_block(monkeypatch):
+    """Ruling 10: a capability-blocked row can't trigger or complete."""
+    block = _kind_assertion("blocked_obstacle", 0, x=3, y=4, capability="rock_smash")
+    flow = (_kind_assertion("trigger", -1, trigger="action"), _kind_assertion("completes", -1))
+    _patch_floor(monkeypatch, {ROW: _floor(assertions=(block, *flow))})
+    gen = _chapter("CH01", (_beat("B1", rows=(ROW,), assertions=frozenset({block})),))
+    assert _grade("CH01", FROZEN, {}, gen) == []
+
+
+def test_blocked_obstacle_floor_still_owes_the_block(monkeypatch):
+    block = _kind_assertion("blocked_obstacle", 0, x=3, y=4, capability="rock_smash")
+    _patch_floor(monkeypatch, {ROW: _floor(assertions=(block,))})
+    gen = _chapter("CH01", (_beat("B1", rows=(ROW,), assertions=frozenset()),))
+    problems = _grade("CH01", FROZEN, {}, gen)
+    assert len(problems) == 1
+    assert "blocked_obstacle" in problems[0]
+
+
+def test_boundary_row_covered_by_successor_crossing(monkeypatch):
+    """Ruling 9: a boundary warp declares nothing; the successor crosses."""
+    warp = _warp_assertion()
+    _patch_floor(monkeypatch, {ROW: _floor(assertions=(warp,))})
+    gen = _chapter("CH01", (_beat("B1", rows=(ROW,), assertions=frozenset(), archetype="warp"),))
+    succ = _chapter("CH02", (_beat("m1_warp", rows=(ROW,), assertions=frozenset({warp}),
+                                   archetype="warp"),))
+    assert _grade_full("CH01", FROZEN, {}, gen, successor=succ).problems == []
+
+
+def test_boundary_row_fails_when_successor_crossing_undercovers(monkeypatch):
+    warp = _warp_assertion()
+    _patch_floor(monkeypatch, {ROW: _floor(assertions=(warp,))})
+    gen = _chapter("CH01", (_beat("B1", rows=(ROW,), assertions=frozenset(), archetype="warp"),))
+    succ = _chapter("CH02", (_beat("m1_warp", rows=(ROW,), assertions=frozenset(),
+                                   archetype="warp"),))
+    problems = _grade_full("CH01", FROZEN, {}, gen, successor=succ).problems
+    assert len(problems) == 1
+    assert problems[0].startswith(ROW)
+
+
+def test_boundary_row_fails_when_successor_does_not_claim_it(monkeypatch):
+    _patch_floor(monkeypatch, {ROW: _floor(assertions=(_warp_assertion(),))})
+    gen = _chapter("CH01", (_beat("B1", rows=(ROW,), assertions=frozenset(), archetype="warp"),))
+    succ = _chapter("CH02", ())
+    problems = _grade_full("CH01", FROZEN, {}, gen, successor=succ).problems
+    assert len(problems) == 1
+    assert "does not claim its crossing" in problems[0]
+
+
+def test_boundary_row_without_generated_successor_is_deferred(monkeypatch):
+    _patch_floor(monkeypatch, {ROW: _floor(assertions=(_warp_assertion(),))})
+    gen = _chapter("CH01", (_beat("B1", rows=(ROW,), assertions=frozenset(), archetype="warp"),))
+    grade = _grade_full("CH01", FROZEN, {}, gen, successor=None)
+    assert grade.problems == []
+    assert len(grade.deferred) == 1 and ROW in grade.deferred[0]
+
+
+def test_non_warp_beat_declaring_nothing_is_not_a_boundary_claim(monkeypatch):
+    """Only a warp beat's empty declaration reads as a boundary stop."""
+    _patch_floor(monkeypatch, {ROW: _floor(assertions=(_text_assertion(),))})
+    gen = _chapter("CH01", (_beat("B1", rows=(ROW,), assertions=frozenset(), archetype="generic"),))
+    grade = _grade_full("CH01", FROZEN, {}, gen, successor=None)
+    assert grade.deferred == []
+    assert len(grade.problems) == 1
 
 
 # --- real-data smoke test ----------------------------------------------------
@@ -226,5 +348,5 @@ def test_real_generated_chapters_are_green(chapter):
     # run, not a failure. Once modules land here, each one is its own case.
     if not (BUILD_DIR / "maps").exists():
         pytest.skip("no converted map corpus at output/uranium-build/maps")
-    problems = freeze_grade.grade_chapter_from_disk(chapter.upper())
+    problems = freeze_grade.grade_chapter_from_disk(chapter.upper()).problems
     assert problems == []

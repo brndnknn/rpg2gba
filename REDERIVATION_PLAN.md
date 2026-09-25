@@ -2462,6 +2462,47 @@ deliberate, and it fails loudly if one ever appears.
    waits on CH01's backlog) and a tracked seed-winner file (a second CH01-derived artifact needing
    its own approval).
 
+**C9 grading rulings (operator, 2026-09-24, later).** Taken after three regenerations left every
+chapter failing the grade, mostly on rule (b). Background: Claude Doc "C9 regen: approach-side
+fix and grading rule (b)".
+
+6. **Rule (b) applies to frozen rows only (option A).** R12 said "that row's floor" without saying
+   which rows. It means the rows `_required_rows` builds: frozen hand rows plus rowed residue.
+   Partial coverage on rows only the generator claims is **reported, not failed**: the grader
+   prints a count per chapter, and the review doc lists every row as tracked debt. Rejected: B
+   (every claimed row, 167 rows before any chapter could pass) and C (compare against what each
+   hand beat checked, which is the capture problem R12's amendment avoided).
+7. **`audio`, `visual` and `displacement` are not graded under rule (b).** The hand suite never
+   checked them: hand `trainer.py` asserts neither the approach cutscene's music nor its emote,
+   and no hand beat asserts a move route step by step. The §9 boot walk checks them better by
+   eye. They stay in the floor and in the review doc as walk-checked. This settles CH05's 6
+   accepted `floor_uncovered` (C5): the walk covers the trainer approach cutscene, not a template
+   extension. A move route that displaces the *player* is still caught indirectly, because the
+   next beat paths from the real position and fails if it's wrong.
+8. **Warp checks unchanged:** map changed plus the exact landing cell. The cell check is free
+   (same decoded source coordinates) and is the only thing that proves a same-map warp or
+   catches a one-tile miss.
+9. **A frozen row claimed only by a `boundary` warp is covered by the successor's crossing.** A
+   boundary `warp_beat` stops on the approach cell and declares nothing; the next chapter's
+   generated module crosses it (`chapters_gen/ch05.py`'s `m035e001_warp` carries
+   `manifest_chapter_id='CH04'`). The grader accepts the successor's claim if it covers the
+   floor. If the successor has no generated module yet (CH05 → CH06), the row is reported as
+   deferred, not failed.
+10. **A row whose floor carries `blocked_obstacle` owes only that assertion.** The player lacks
+    the field move, so the event's own `trigger`/`completes` can't run. `obstacle_beat` asserts
+    the block; that is the whole floor for grading.
+11. **NPC escorts get a talk-then-ride beat, with no rewind.** An action-button page with a
+    sprite that contains a transfer (code 201) walks to a legal side, faces the NPC, presses A,
+    rides the script, asserts the landing map and cell, text and state writes, and leaves the
+    player where they land; the route solver plans on from there. It replaces the step-on
+    `threshold` warp `beat_gen/adapt.py` hard-codes today (NurseTut `map031/ev049` in CH03).
+    Rewind is rejected: it discards the escort's state writes, which later rows depend on
+    (NurseTut's flag gates the Center's PC-tour autorun). Measured corpus-wide (53 pages): 18
+    walk back through ordinary warps, 15 return through a second escort (all transport:
+    ferries, metro, train), 15 relocate within the same map, 5 are one-way story escorts.
+    `Emulator.snapshot_state`/`restore_state` remain available if a later chapter needs a
+    stateless ride it never returns from.
+
 Build order before the single background regeneration: #109 (`text_source` reuses
 `assembly._CHARMAP_SUBS` and the quote toggle — not a `charmap.txt` change; clears all 5 frozen
 text refusals incl. `*`); the `never_fires` verdict; generator output to `chapters_gen/chNN.py` +

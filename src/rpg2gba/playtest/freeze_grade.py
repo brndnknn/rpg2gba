@@ -14,15 +14,30 @@ grouping and which chapter replays what are recorded, never graded):
     the generated chapter, or proven `never_fires` by the generated
     module's `NEVER_FIRES` dict (C9 ruling 3 -- a proof, not an exception).
 
-(b) **Floor ⊇.** For every row the generated chapter's own beats claim, the
-    union of those beats' declared assertions for that row must cover the
-    row's generic floor (`beat_floor.lookup.floor_for_row`), using the same
-    ⊇ comparison `chapter_manifest.checker._check_floor_coverage` uses --
+(b) **Floor ⊇, on the rows rule (a) requires.** For every required row the
+    generated chapter's own beats claim, the union of those beats' declared
+    assertions for that row must cover the row's generic floor
+    (`beat_floor.lookup.floor_for_row`), using the same ⊇ comparison
+    `chapter_manifest.checker._check_floor_coverage` uses --
     `beat_floor.coverage.uncovered`/`contradicts` -- not a second one. A row
     whose claiming beats all declare `None` (undeclared) is a problem for a
     generated module (unlike a hand module, which only warns). A row whose
     floor itself refuses is reported distinctly: it should not have been
     claimed at all.
+
+    Scoped by the 2026-09-24 grading rulings (REDERIVATION_PLAN.md §16.3,
+    C9 rulings 6-10):
+    - Only required rows are graded (ruling 6). A generator-only row that
+      fails the same check is counted in `ChapterGrade.generator_only_partial`
+      -- reported, never a problem; the review doc lists it as debt.
+    - `audio`/`visual`/`displacement` floor assertions are walk-checked, not
+      graded (ruling 7). A *contradicting* declaration of one is still a
+      problem: a wrong claim is worse than a missing one.
+    - A required row claimed only by a boundary warp (a `warp` beat that
+      declares nothing for it) is graded against the successor chapter's
+      generated claim instead (ruling 9); with no generated successor yet it
+      is `deferred`, not a problem.
+    - A floor carrying `blocked_obstacle` owes only that (ruling 10).
 
 This module is pure logic over injected data (`grade_chapter`); I/O lives
 only in `grade_chapter_from_disk`, the thin loader the CLI and the real-
@@ -33,13 +48,20 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from rpg2gba.beat_floor.assertion import FloorAssertion, RowFloor
 from rpg2gba.beat_floor.coverage import contradicts, uncovered
 from rpg2gba.beat_floor.lookup import default_build_dir, floor_for_row
-from rpg2gba.playtest.chapter import Beat, Chapter, load_chapter, load_chapter_module
+from rpg2gba.playtest.chapter import (
+    Beat,
+    Chapter,
+    gen_chapter_names,
+    load_chapter,
+    load_chapter_module,
+)
 from rpg2gba.playtest.hand_freeze import (
     FROZEN_PATH,
     RESIDUE_PATH,
@@ -56,6 +78,24 @@ logger = logging.getLogger(__name__)
 #: and need nothing graded.
 _ROWED_RESIDUE_RULINGS = frozenset(
     {"arrival_floor", "blocked_obstacle", "state_model", "covered_elsewhere"})
+
+#: Floor kinds the §9 boot walk checks by eye instead of rule (b) (C9 ruling
+#: 7): the hand suite never asserted them either.
+WALK_CHECKED_KINDS = frozenset({"audio", "visual", "displacement"})
+
+
+@dataclass(frozen=True)
+class ChapterGrade:
+    """One chapter's grade. `problems == []` is a pass; the other two lists
+    are reported, never failed."""
+
+    problems: list[str] = field(default_factory=list)
+    #: Required boundary rows whose crossing belongs to a successor chapter
+    #: that has no generated module yet (C9 ruling 9).
+    deferred: list[str] = field(default_factory=list)
+    #: Generator-only rows (not required) that would fail rule (b) -- the
+    #: tracked debt C9 ruling 6 keeps visible without grading.
+    generator_only_partial: list[str] = field(default_factory=list)
 
 
 def _own_beats(chapter: Chapter) -> tuple[Beat, ...]:
@@ -121,56 +161,111 @@ def _check_row_coverage(
     return problems
 
 
-def _uncovered_message(row_id: str, beat_names: list[str], floor: RowFloor,
-                        declared: frozenset[FloorAssertion]) -> str:
+def _graded_gaps(
+    floor: RowFloor, declared: frozenset[FloorAssertion],
+) -> tuple[list[FloorAssertion], list[FloorAssertion]]:
+    """(contradicted, missing) floor assertions rule (b) grades. Every
+    contradiction counts; a merely-missing assertion counts unless it is
+    walk-checked (C9 ruling 7) or the floor is a capability block, which
+    owes only its `blocked_obstacle` (C9 ruling 10)."""
     missing = uncovered(floor, declared)
     contradicted = [f for f in missing if any(contradicts(d, f) for d in declared)]
-    plain_missing = [f for f in missing if f not in contradicted]
+    if any(a.kind == "blocked_obstacle" for a in floor.assertions):
+        owed = [f for f in missing if f.kind == "blocked_obstacle"]
+    else:
+        owed = [f for f in missing if f.kind not in WALK_CHECKED_KINDS]
+    return contradicted, [f for f in owed if f not in contradicted]
+
+
+def _row_floor_problem(
+    chapter_id: str, row_id: str, beats: Sequence[Beat], *, build_dir: Path,
+) -> str | None:
+    """Rule (b) for one row claimed by `beats`, or None if it passes."""
+    beat_names = [b.name for b in beats]
+    try:
+        floor = floor_for_row(row_id, build_dir=build_dir)
+    except KeyError as exc:
+        return (f"{chapter_id}: row {row_id!r}, claimed by {beat_names}, has "
+                f"no generic floor at all ({exc})")
+
+    if floor.refused:
+        return (f"{chapter_id}: row {row_id!r} is claimed by {beat_names}, "
+                f"but its floor refuses ({[r.reason for r in floor.refusals]}) "
+                "-- a refused row is the generator's own blocker and should "
+                "not have been claimed")
+
+    declaring = [b for b in beats if b.assertions is not None]
+    if not declaring:
+        return (f"{chapter_id}: row {row_id!r} is claimed by {beat_names}, "
+                "but none of them declares assertions (undeclared claim in a "
+                "generated module)")
+
+    declared = frozenset(
+        a for b in declaring for a in b.assertions if a.row_id == row_id)
+    contradicted, missing = _graded_gaps(floor, declared)
+    if not contradicted and not missing:
+        return None
     parts = []
     if contradicted:
-        parts.append(
-            f"declared assertion(s) contradict the floor: {list(contradicted)}")
-    if plain_missing:
-        parts.append(f"floor assertion(s) not declared at all: {list(plain_missing)}")
+        parts.append(f"declared assertion(s) contradict the floor: {contradicted}")
+    if missing:
+        parts.append(f"floor assertion(s) not declared at all: {missing}")
     return (f"{row_id}: claimed by {beat_names} but does not cover its floor -- "
             + "; ".join(parts))
 
 
+def _is_boundary_claim(row_id: str, beats: Sequence[Beat]) -> bool:
+    """True iff every claiming beat is a warp declaring nothing for `row_id`
+    -- the shape of `warp_beat(boundary=True)`, which stops on the approach
+    cell and leaves the crossing to the successor chapter."""
+    return all(b.archetype == "warp" for b in beats) and not any(
+        a.row_id == row_id for b in beats for a in (b.assertions or ()))
+
+
 def _check_floor_ge(
-    chapter_id: str, claimed_by_own: Mapping[str, list[Beat]], *, build_dir: Path,
-) -> list[str]:
+    chapter_id: str,
+    claimed_by_own: Mapping[str, list[Beat]],
+    required_rows: Mapping[str, list[str]],
+    *,
+    successor: Chapter | None,
+    build_dir: Path,
+) -> ChapterGrade:
     problems: list[str] = []
+    deferred: list[str] = []
+    generator_only: list[str] = []
+    successor_claims = (
+        _claimed_by_own(_own_beats(successor)) if successor is not None else {})
+
     for row_id, beats in sorted(claimed_by_own.items()):
-        beat_names = [b.name for b in beats]
-        try:
-            floor = floor_for_row(row_id, build_dir=build_dir)
-        except KeyError as exc:
-            problems.append(
-                f"{chapter_id}: row {row_id!r}, claimed by {beat_names}, has "
-                f"no generic floor at all ({exc})")
+        if row_id not in required_rows:
+            message = _row_floor_problem(chapter_id, row_id, beats, build_dir=build_dir)
+            if message is not None:
+                generator_only.append(message)
             continue
 
-        if floor.refused:
-            problems.append(
-                f"{chapter_id}: row {row_id!r} is claimed by {beat_names}, "
-                f"but its floor refuses ({[r.reason for r in floor.refusals]}) "
-                "-- a refused row is the generator's own blocker and should "
-                "not have been claimed")
-            continue
-
-        declaring = [b for b in beats if b.assertions is not None]
-        if not declaring:
-            problems.append(
-                f"{chapter_id}: row {row_id!r} is claimed by {beat_names}, "
-                "but none of them declares assertions (undeclared claim in a "
-                "generated module)")
-            continue
-
-        declared = frozenset(
-            a for b in declaring for a in b.assertions if a.row_id == row_id)
-        if uncovered(floor, declared):
-            problems.append(_uncovered_message(row_id, beat_names, floor, declared))
-    return problems
+        if _is_boundary_claim(row_id, beats):
+            beat_names = [b.name for b in beats]
+            if successor is None:
+                deferred.append(
+                    f"{chapter_id}: row {row_id!r} is claimed only by boundary "
+                    f"warp {beat_names}; its crossing belongs to the successor "
+                    "chapter, which has no generated module yet")
+                continue
+            crossing = successor_claims.get(row_id)
+            if not crossing:
+                problems.append(
+                    f"{chapter_id}: row {row_id!r} is claimed only by boundary "
+                    f"warp {beat_names}, and the successor {successor.name} "
+                    "does not claim its crossing")
+                continue
+            message = _row_floor_problem(
+                successor.name, row_id, crossing, build_dir=build_dir)
+        else:
+            message = _row_floor_problem(chapter_id, row_id, beats, build_dir=build_dir)
+        if message is not None:
+            problems.append(message)
+    return ChapterGrade(problems=problems, deferred=deferred,
+                        generator_only_partial=generator_only)
 
 
 def grade_chapter(
@@ -181,17 +276,24 @@ def grade_chapter(
     gen_chapter: Chapter,
     never_fires: Mapping[str, str],
     build_dir: Path,
-) -> list[str]:
-    """Pure grade of one chapter. `[]` means the generated suite covers the
-    frozen hand suite for `chapter_id`. All inputs are already loaded;
-    `grade_chapter_from_disk` is the I/O wrapper real callers use."""
+    successor: Chapter | None = None,
+) -> ChapterGrade:
+    """Pure grade of one chapter. `.problems == []` means the generated suite
+    covers the frozen hand suite for `chapter_id`. `successor` is the next
+    chapter's generated suite, if one exists (boundary rows, C9 ruling 9).
+    All inputs are already loaded; `grade_chapter_from_disk` is the I/O
+    wrapper real callers use."""
     own_beats = _own_beats(gen_chapter)
     claimed_by_own = _claimed_by_own(own_beats)
 
     required_rows = _required_rows(chapter_id, frozen_beats, residue_entries)
-    problems = _check_row_coverage(chapter_id, required_rows, claimed_by_own, never_fires)
-    problems += _check_floor_ge(chapter_id, claimed_by_own, build_dir=build_dir)
-    return problems
+    row_problems = _check_row_coverage(
+        chapter_id, required_rows, claimed_by_own, never_fires)
+    floor = _check_floor_ge(chapter_id, claimed_by_own, required_rows,
+                            successor=successor, build_dir=build_dir)
+    return ChapterGrade(problems=row_problems + floor.problems,
+                        deferred=floor.deferred,
+                        generator_only_partial=floor.generator_only_partial)
 
 
 def _load_residue_entries(path: Path) -> dict[str, dict[str, Any]]:
@@ -207,7 +309,7 @@ def grade_chapter_from_disk(
     build_dir: Path | None = None,
     frozen_path: Path = FROZEN_PATH,
     residue_path: Path = RESIDUE_PATH,
-) -> list[str]:
+) -> ChapterGrade:
     """Load everything `grade_chapter` needs from disk and grade
     `chapter_id` (e.g. `"CH05"`). Returns a single problem naming the
     missing module if `chapter_id` has no generated suite yet -- that is
@@ -216,7 +318,7 @@ def grade_chapter_from_disk(
     try:
         gen_chapter = load_chapter(chapter_id.lower(), suite="gen")
     except KeyError as exc:
-        return [f"{chapter_id}: no generated chapter module ({exc})"]
+        return ChapterGrade(problems=[f"{chapter_id}: no generated chapter module ({exc})"])
     module = load_chapter_module(chapter_id, suite="gen")
     never_fires: Mapping[str, str] = getattr(module, "NEVER_FIRES", {})
 
@@ -232,4 +334,23 @@ def grade_chapter_from_disk(
         gen_chapter=gen_chapter,
         never_fires=never_fires,
         build_dir=resolved_build_dir,
+        successor=_generated_successor(chapter_id),
     )
+
+
+def _generated_successor(chapter_id: str) -> Chapter | None:
+    """The generated suite whose `predecessor` is `chapter_id`, or None if
+    that chapter has no generated module yet. Fails loud if more than one
+    generated suite names the same predecessor -- the chain is linear."""
+    successors = []
+    for name in gen_chapter_names():
+        if name.upper() == chapter_id:
+            continue
+        candidate = load_chapter(name, suite="gen")
+        if candidate.predecessor is not None and candidate.predecessor.upper() == chapter_id:
+            successors.append(candidate)
+    if len(successors) > 1:
+        raise ValueError(
+            f"{chapter_id}: several generated suites name it as predecessor: "
+            f"{[c.name for c in successors]}")
+    return successors[0] if successors else None

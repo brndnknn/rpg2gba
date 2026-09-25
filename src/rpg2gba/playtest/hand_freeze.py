@@ -383,14 +383,21 @@ def grade(chapter: str | None) -> None:
 
     any_problems = False
     for ch in chapters:
-        problems = freeze_grade.grade_chapter_from_disk(ch)
-        if problems:
+        result = freeze_grade.grade_chapter_from_disk(ch)
+        if result.problems:
             any_problems = True
-            click.echo(f"{ch}: {len(problems)} problem(s)")
-            for problem in problems:
+            click.echo(f"{ch}: {len(result.problems)} problem(s)")
+            for problem in result.problems:
                 click.echo(f"  {problem}")
         else:
             click.echo(f"{ch}: OK")
+        # Reported, never failed (C9 rulings 6 and 9). The count is enough
+        # here; the chapter's review doc lists the rows.
+        for line in result.deferred:
+            click.echo(f"  deferred: {line}")
+        if result.generator_only_partial:
+            click.echo(f"  info: {len(result.generator_only_partial)} generator-only "
+                       "row(s) with partial floor coverage (tracked in the review doc)")
     if any_problems:
         raise SystemExit(1)
 
