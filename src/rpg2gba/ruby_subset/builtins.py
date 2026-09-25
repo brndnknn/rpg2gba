@@ -36,7 +36,10 @@ __all__ = [
     "ENGINE_ATTRIBUTES",
     "PARTY_MODEL_ATTRS",
     "PARTY_MODEL_CALLS",
+    "STATIC_PREDICATES",
     "STATIC_PREDICATE_ATTRS",
+    "STATIC_GLOBALS",
+    "load_static_predicates",
     "NOOP_ATTRS",
     "PASSTHROUGH_ENGINE_ATTRS",
     "CONST_VALUES",
@@ -135,6 +138,20 @@ PARTY_MODEL_CALLS: frozenset[str] = frozenset({
 # --- category 3: static predicates / no-ops -----------------------------
 
 
+def load_static_predicates() -> dict[str, bool]:
+    """Every `reference/strip_list.json` `static_predicates` entry, keyed by
+    its raw predicate text (`"$PokemonGlobal.randomizer"`, `"$skipGameIntro"`).
+    The one reader of that table: the attribute/global tables below and
+    `story_state.extract`'s type-12 branch path both derive from this."""
+    if not _STRIP_LIST_PATH.exists():
+        return {}
+    data = json.loads(_STRIP_LIST_PATH.read_text(encoding="utf-8"))
+    return {entry["predicate"]: bool(entry["value"]) for entry in data.get("static_predicates", [])}
+
+
+STATIC_PREDICATES: dict[str, bool] = load_static_predicates()
+
+
 def _load_static_predicates() -> dict[tuple[str, str], bool]:
     """`$PokemonGlobal.randomizer` -> False, sourced from
     `reference/strip_list.json`'s `static_predicates` (CLAUDE.md §4.3 --
@@ -147,18 +164,21 @@ def _load_static_predicates() -> dict[tuple[str, str], bool]:
     predicates: dict[tuple[str, str], bool] = {
         ("$PokemonGlobal", "nuzlocke"): False,
     }
-    if _STRIP_LIST_PATH.exists():
-        data = json.loads(_STRIP_LIST_PATH.read_text(encoding="utf-8"))
-        for entry in data.get("static_predicates", []):
-            predicate = entry["predicate"]
-            if "." not in predicate:
-                continue
-            ns, attr = predicate.split(".", 1)
-            predicates[(ns, attr)] = bool(entry["value"])
+    for predicate, value in STATIC_PREDICATES.items():
+        if "." not in predicate:
+            continue
+        ns, attr = predicate.split(".", 1)
+        predicates[(ns, attr)] = value
     return predicates
 
 
 STATIC_PREDICATE_ATTRS: dict[tuple[str, str], bool] = _load_static_predicates()
+
+# Bare `$global` static predicates (`$skipGameIntro` -> False, REDERIVATION_PLAN.md
+# §16.3 ruling 14) -- the dot-free entries of the same table.
+STATIC_GLOBALS: dict[str, bool] = {
+    predicate: value for predicate, value in STATIC_PREDICATES.items() if "." not in predicate
+}
 
 # `$game_map.need_refresh = ...` -- redraw hint, presentation only.
 NOOP_ATTRS: frozenset[tuple[str, str]] = frozenset({

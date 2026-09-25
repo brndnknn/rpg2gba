@@ -251,6 +251,24 @@ def test_randomizer_static_predicate_from_strip_list():
     assert value is False
 
 
+def test_skip_game_intro_bare_global_is_static_false():
+    # Ruling 14: a bare `$global` static predicate evaluates to its value.
+    assert bi.STATIC_GLOBALS == {"$skipGameIntro": False}
+    value, res = evaluate_expression(
+        parse_expression("$skipGameIntro"), oracle=FixedOracle(), event=None,
+    )
+    assert res.refusal is None
+    assert value is False
+
+
+def test_unknown_bare_global_still_refuses():
+    _, res = evaluate_expression(
+        parse_expression("$someUnportedGlobal"), oracle=FixedOracle(), event=None,
+    )
+    assert res.refusal is not None
+    assert res.refusal.code == "ruby_unknown_attribute:bare $someUnportedGlobal"
+
+
 def test_ruby_truthiness_zero_is_truthy():
     res = evaluate_program(
         parse_program("x = 0\n$game_switches[1] = true if x"), oracle=FixedOracle(), event=None,

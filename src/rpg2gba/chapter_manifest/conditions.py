@@ -83,8 +83,12 @@ from typing import Literal
 #   unmodelled -- `detail` says what state would be needed and is never
 #                 empty -- CLAUDE.md §4.5, a silent "we don't know" is not
 #                 acceptable, an explicit one is.
+#   dead       -- never live: the arm contradicts a `static_predicates`
+#                 constant (`reference/strip_list.json`). No family here
+#                 declares it; `story_state.extract` assigns it before family
+#                 classification. `detail` names the predicate and its value.
 OutcomeKind = Literal[
-    "always", "input", "random", "state", "fork", "harness", "capability", "unmodelled",
+    "always", "input", "random", "state", "fork", "harness", "capability", "unmodelled", "dead",
 ]
 
 

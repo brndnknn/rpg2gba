@@ -633,3 +633,22 @@ def test_extract_map_covers_every_ch01_ch05_manifest_row() -> None:
 
     assert total_rows > 0
     print("refusal tally:", dict(refusal_tally))
+
+
+# --- static predicates (REDERIVATION_PLAN.md §16.3 ruling 14) -------------
+
+
+def test_static_predicate_arm_selects_the_constant_arm() -> None:
+    from rpg2gba.story_state.extract import _static_predicate_arm
+
+    # $skipGameIntro is statically false: the then arm is dead, else is live.
+    assert _static_predicate_arm("$skipGameIntro", is_else=False).kind == "dead"
+    assert _static_predicate_arm("$skipGameIntro", is_else=True).kind == "always"
+    # A leading `!` flips which arm the constant selects.
+    assert _static_predicate_arm("!$skipGameIntro", is_else=False).kind == "always"
+    assert _static_predicate_arm(" ! $skipGameIntro ", is_else=True).kind == "dead"
+    # The dotted entry comes from the same table.
+    assert _static_predicate_arm("$PokemonGlobal.randomizer", is_else=False).kind == "dead"
+    # Anything else, including a compound, is left to the family table.
+    assert _static_predicate_arm("$skipGameIntro && $DEBUG", is_else=False) is None
+    assert _static_predicate_arm("$PokemonGlobal.surfing", is_else=False) is None

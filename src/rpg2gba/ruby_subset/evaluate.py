@@ -506,6 +506,8 @@ def _eval(interp: _Interp, node: ast.Node) -> object:
             raise RubyRefusal("ruby_type_error", f"read of unset local {node.name!r}", node.span)
         return interp.locals[node.name]
     if isinstance(node, ast.GlobalVar):
+        if node.name in bi.STATIC_GLOBALS:
+            return bi.STATIC_GLOBALS[node.name]
         raise RubyRefusal("ruby_unknown_attribute", f"bare {node.name}", node.span)
     if isinstance(node, ast.InstanceVar):
         raise RubyRefusal("ruby_unsupported_node", "InstanceVar", node.span)

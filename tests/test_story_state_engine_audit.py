@@ -364,13 +364,16 @@ def test_real_engine_fenced_writes_found() -> None:
     }
     assert ("engine/src/overworld.c", "FlagSet", "FLAG_STARTING_OVER", "DoWhiteOut") in found
     assert ("engine/src/new_game.c", "FlagSet", "FLAG_BADGE03_GET", "CB2_StartUraniumSlice") in found
-    assert ("engine/src/new_game.c", "FlagSet", "FLAG_MUM", "NewGameInitData") in found
+    # Ruling 14 (2026-09-25) removed C3's FLAG_MUM seed: a fresh game takes
+    # the full intro, where only Auntie sets switch 52.
+    assert not [w for w in found if w[2] == "FLAG_MUM"]
 
 
 @pytest.mark.skipif(not (OUT_DIR / "maps").is_dir(), reason="no converted corpus on disk")
 def test_run_real_audit_is_clean() -> None:
-    # C3 closed 2026-09-16: FLAG_MUM seeds new_game.c, and day/night is
-    # deferred because every CH01-CH05 reader of 105/106 is a stripped lamp.
+    # Clean with no Intro seed at all since ruling 14 ($skipGameIntro is
+    # statically false, so INTRO sets no in-scope key); day/night is deferred
+    # because every CH01-CH05 reader of 105/106 is a stripped lamp.
     report = run_real_audit()
     assert report.ok, format_report(report)
     assert [d for d in report.deferred_obligations if "day_night" in d]

@@ -870,3 +870,25 @@ def test_model_runs_for_ch01_through_ch05() -> None:
         story = stories[cid]
         assert story.chapter_id == cid
         assert story.rows
+
+
+@pytest.mark.skipif(not (OUT_DIR / "maps").is_dir(), reason="no converted corpus on disk")
+def test_fresh_game_takes_full_intro_so_auntie_gates_the_door() -> None:
+    """Ruling 14 (REDERIVATION_PLAN.md §16.3): `$skipGameIntro` is statically
+    false, so Map051's skip arm (the only INTRO writer of switch 52 "Mum")
+    is dead. Auntie's goodbye becomes the sole writer, the door's
+    "say goodbye first" page is live on arrival, and the exit page follows
+    Auntie."""
+    stories = build_chapter_stories(["CH01"], build_dir=OUT_DIR, chapters_path=CHAPTERS_PATH)
+    assert "switch:52" not in {str(k) for k, _ in stories["INTRO"].end_state}
+    intro = {r.row_id: r for r in stories["INTRO"].rows}
+    assert intro["map051/ev002/p0/b0"].status != "live"
+    assert intro["map051/ev002/p0/b1"].status == "live"
+
+    rows = {r.row_id: r for r in stories["CH01"].rows}
+    assert rows["map049/ev002/p0"].status == "live"
+    assert rows["map049/ev002/p0"].stage == 0
+    door_exit = rows["map049/ev002/p1"]
+    assert door_exit.status == "live"
+    assert door_exit.stage == 1
+    assert door_exit.enabled_by == (("map049/ev001/p0",),)

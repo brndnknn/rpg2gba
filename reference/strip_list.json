@@ -6,6 +6,12 @@
       "value": false,
       "feature": "randomizer game mode (playthrough-wide species / moveset / type / wild-encounter shuffling; also gates nuzlocke_heal)",
       "reason": "No-port. Fork-verified 2026-07-21 (grep of engine/ include+src+config): pokeemerald-expansion ships NO randomizer or nuzlocke run-mode and no GetRandomPokemonSpecies analog — the 'randomiz' hits are all incidental (RNG primitive, AI switch-in, lottery/contest/TV). Supporting it would be a from-scratch subsystem with zero story weight. So `$PokemonGlobal.randomizer` is statically false in this port: a code-111 conditioned on it emits the else (normal) arm; the then (randomizer) arm is dropped as dead code (it is also unfillable — no random-species primitive exists). User-approved 2026-07-21. IMPLEMENTATION PENDING: transpiler does not yet read this (EV019's two randomizer branches are handled in the Map050_EV019.pory hand file today); the future static-predicate idiom in transpiler.py should consume this entry rather than hardcoding the string."
+    },
+    {
+      "predicate": "$skipGameIntro",
+      "value": false,
+      "feature": "'Skip intro?' prompt on New Game (137__PScreen_Load.rb:840-844), offered only under $DEBUG or when a save file already exists; its arm in the intro (Map051 EV002) fast-forwards gender select, Running Shoes and switch 52 'Mum', then warps into the house",
+      "reason": "No-port. A fresh game in this port always takes the full intro path, where talking to Auntie (map049/ev001/p0) is the only writer of switch 52 and the gate out of the house. Operator ruling 2026-09-25 (REDERIVATION_PLAN.md §16.3 ruling 14), which also removed C3's FlagSet(FLAG_MUM) new-game seed that had mirrored this arm."
     }
   ],
   "common_events": [

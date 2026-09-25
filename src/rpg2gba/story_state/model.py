@@ -437,7 +437,9 @@ def _live_status(
             # parent (FIX 2a: sound over-approximation, not a guess at which
             # way the unparsed guard actually goes).
             tests = guard.tests if guard is not None else ()
-            if not all(possible(t, state) for t in tests):
+            if guard is not None and guard.outcome is not None and guard.outcome.kind == "dead":
+                result = (False, ())  # contradicts a static predicate (ruling 14)
+            elif not all(possible(t, state) for t in tests):
                 result = (False, ())
             else:
                 blockers = parent_blockers

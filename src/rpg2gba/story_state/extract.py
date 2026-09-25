@@ -53,6 +53,7 @@ from rpg2gba.story_state.scope_search import (
     witness_citations,
     writes_from_result,
 )
+from rpg2gba.ruby_subset.builtins import STATIC_PREDICATES
 from rpg2gba.ruby_subset.search import search_scope
 from rpg2gba.story_state.state import (
     Adjust,
@@ -263,6 +264,24 @@ _GAME_VARIABLES_CMP_RE = re.compile(
 _IS_TEMP_SWITCH_OFF_RE = re.compile(r'isTempSwitchOff\?\("(\w+)"\)')
 
 
+def _static_predicate_arm(text: str, is_else: bool) -> ArmOutcome | None:
+    """A condition that is exactly a `static_predicates` entry (optionally
+    negated with a leading `!`) is a compile-time constant: the arm it
+    selects is `always`, the other is `dead` (REDERIVATION_PLAN.md §16.3
+    ruling 14). Anything else, including a compound using one, is None and
+    goes to the family table as before."""
+    normalized = " ".join(text.split())
+    negated = normalized.startswith("!")
+    predicate = normalized[1:].strip() if negated else normalized
+    if predicate not in STATIC_PREDICATES:
+        return None
+    holds = STATIC_PREDICATES[predicate] != negated
+    arm_live = holds != is_else
+    if arm_live:
+        return ArmOutcome(kind="always", detail=f"{predicate}={STATIC_PREDICATES[predicate]}")
+    return ArmOutcome(kind="dead", detail=f"{predicate}={STATIC_PREDICATES[predicate]}")
+
+
 def _arm_guard(
     branch: BranchRef,
     raw_commands: list[dict[str, Any]],
@@ -342,6 +361,9 @@ def _arm_guard(
 
     if ctype == 12:  # script-typed -- classify via the family table
         text = branch.condition_text or ""
+        static = _static_predicate_arm(text, is_else)
+        if static is not None:
+            return ArmGuard(outcome=static, negated=is_else, opener_index=branch.opener_index), ()
         family = classify_condition(text)
         if family is None:
             return None, (Refusal(
