@@ -370,9 +370,9 @@ def test_whiteout_beat_fails_when_the_heal_page_never_runs(tmp_path: Path) -> No
 @pytest.mark.skipif(not Path("output/uranium-build/maps").is_dir(),
                     reason="no converted corpus on disk")
 def test_whiteout_fork_beat_declares_only_what_it_proves() -> None:
-    """Ruling 15: the generated form declares trigger/completes/switch_write
-    for CH01's home Starting Over page; heal_party (ruling 17) and the
-    walk-checked visual stay undeclared, so the grader still reports them."""
+    """Rulings 15 and 17: the generated form declares trigger/completes/
+    switch_write/heal_party for CH01's home Starting Over page; the
+    walk-checked visual stays undeclared."""
     from rpg2gba.playtest.whiteout import whiteout_fork_beat
 
     b = ChapterBuilder("CH01", doc="reference/chapters/01-moki-town.md")
@@ -381,4 +381,5 @@ def test_whiteout_fork_beat_declares_only_what_it_proves() -> None:
                        heal_location_id="HEAL_LOCATION_URANIUM_START")
     beat = b.build().beats[0]
     assert beat.rows == ("map049/ev022/p0",)
-    assert {a.kind for a in beat.assertions} == {"trigger", "completes", "switch_write"}
+    assert {a.kind for a in beat.assertions} == {
+        "trigger", "completes", "switch_write", "heal_party"}

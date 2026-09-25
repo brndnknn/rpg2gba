@@ -249,7 +249,11 @@ def whiteout_beat(
 #: Over page: it ran on arrival (`trigger`), to its end (`completes`), and
 #: cleared switch 5 (`switch_write`) -- all three shown by FLAG_STARTING_OVER
 #: being set when control returns and clear once the arrival scripts drain.
-WHITEOUT_EXECUTED_KINDS: frozenset[str] = frozenset({"trigger", "completes", "switch_write"})
+#: `heal_party` (ruling 17): `DoWhiteOut` already healed the party before the
+#: warp, so the lead is set to 1 HP in the arrival window and must be full
+#: again once the page has run.
+WHITEOUT_EXECUTED_KINDS: frozenset[str] = frozenset(
+    {"trigger", "completes", "switch_write", "heal_party"})
 
 
 def whiteout_fork_beat(
@@ -267,16 +271,19 @@ def whiteout_fork_beat(
     no tile of its own: the white-out is forced by a RAM write and the
     snapshot restore puts the player back). Declares the floor kinds it
     proves (`WHITEOUT_EXECUTED_KINDS`)."""
+    from ..beat_floor.lookup import floor_for_row
     from .archetypes import declare_assertions
 
     declared = declare_assertions(
         rows, executed_kinds=WHITEOUT_EXECUTED_KINDS, template="whiteout")
+    heal_rows = tuple(r for r in rows
+                      if any(a.kind == "heal_party" for a in floor_for_row(r).assertions))
     _register_whiteout(
         builder, beat_name=beat_name, heal_location_id=heal_location_id,
         description=(f"White-out lands at {heal_location_id} and runs "
                      f"{', '.join(rows)} ({chapter_id})"),
         heal_locations_json=DEFAULT_HEAL_LOCATIONS_JSON,
-        starting_over_rows=rows, group=group, declared=declared)
+        starting_over_rows=rows, group=group, declared=declared, heal_rows=heal_rows)
 
 
 def _register_whiteout(
@@ -289,6 +296,7 @@ def _register_whiteout(
     starting_over_rows: tuple[str, ...],
     group: str | None = None,
     declared: frozenset | None = None,
+    heal_rows: tuple[str, ...] = (),
 ) -> None:
     if heal_locations_json.exists():
         # Fail loud now, not 20 minutes into a ROM run (see docstring).
@@ -306,6 +314,8 @@ def _register_whiteout(
                 f"{beat_name}: {STARTING_OVER_FLAG} not set when control "
                 "returned from the white-out -- DoWhiteOut's fenced FlagSet "
                 f"is missing from this ROM ({shot})")
+        if heal_rows:
+            assertions.damage_lead(emu, beat_name)
 
     @builder.beat(beat_name, resolved_description, rows=starting_over_rows,
                   group=group, assertions=declared)
@@ -324,6 +334,8 @@ def _register_whiteout(
                     f"{beat_name}: {STARTING_OVER_FLAG} still set after the "
                     "arrival scripts drained -- the respawn map's heal page "
                     f"never ran ({', '.join(starting_over_rows)}) ({shot})")
+            if heal_rows:
+                assertions.require_lead_healed(emu, beat_name, heal_rows[0])
             assertions.assert_position_exact(
                 emu, beat_name, (expected.x, expected.y))
         finally:

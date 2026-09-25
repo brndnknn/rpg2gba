@@ -563,3 +563,44 @@ def test_talk_to_moving_npc_uses_the_callers_walk() -> None:
     assertions.talk_to_moving_npc(emu, "B10", 2, walk=_absorbing)
 
     assert absorbed == [(8, 9)]
+
+
+# --- party HP (REDERIVATION_PLAN.md §16.3 ruling 17) ----------------------
+
+
+class _HpEmu:
+    """Just enough of `Emulator` for the party-HP helpers: gPlayerParty at
+    0x1000, `hp` at +0x56 and `maxHP` at +0x58 (the probed offsets' shape)."""
+
+    def __init__(self, hp: int, max_hp: int) -> None:
+        self.symbols = {"gPlayerParty": 0x1000}
+        self.offsets = {"off_pkmn_hp": 0x56, "off_pkmn_maxhp": 0x58}
+        self.mem = {0x1056: hp, 0x1058: max_hp}
+
+    def u16(self, addr: int) -> int:
+        return self.mem[addr]
+
+    def write_u16(self, addr: int, value: int) -> None:
+        self.mem[addr] = value
+
+    def screenshot(self, name: str) -> str:
+        return f"{name}.png"
+
+
+def test_damage_then_heal_check_round_trip():
+    from rpg2gba.playtest.assertions import damage_lead, read_lead_hp, require_lead_healed
+
+    emu = _HpEmu(hp=20, max_hp=20)
+    damage_lead(emu, "B1")
+    assert read_lead_hp(emu) == (1, 20)
+    with pytest.raises(ScenarioError, match="1/20 after the heal"):
+        require_lead_healed(emu, "B1", "map049/ev022/p0")
+    emu.write_u16(0x1056, 20)  # what the page's heal does
+    require_lead_healed(emu, "B1", "map049/ev022/p0")
+
+
+def test_damage_lead_refuses_an_empty_party():
+    from rpg2gba.playtest.assertions import damage_lead
+
+    with pytest.raises(ScenarioError, match="maxHP is 0"):
+        damage_lead(_HpEmu(hp=0, max_hp=0), "B1")

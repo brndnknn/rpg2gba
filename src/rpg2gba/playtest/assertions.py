@@ -455,6 +455,37 @@ def read_party_species(emu: Emulator) -> list[int]:
     return species_list
 
 
+def read_lead_hp(emu: Emulator) -> tuple[int, int]:
+    """`(hp, maxHP)` of party slot 0, from `struct Pokemon`'s unencrypted
+    tail (`include/pokemon.h`)."""
+    o = emu.offsets
+    base = emu.symbols["gPlayerParty"]
+    return emu.u16(base + o["off_pkmn_hp"]), emu.u16(base + o["off_pkmn_maxhp"])
+
+
+def damage_lead(emu: Emulator, beat: str) -> None:
+    """Set the lead's HP to 1, so a following heal is observable
+    (REDERIVATION_PLAN.md §16.3 ruling 17: every heal the corpus plays
+    happens when the party is usually full already). Fails loud on an empty
+    party or a lead already at 1 max HP, where nothing could be observed."""
+    hp, max_hp = read_lead_hp(emu)
+    if max_hp <= 1:
+        raise ScenarioError(
+            f"{beat}: can't set up a heal check: lead maxHP is {max_hp} "
+            "(empty party, or nothing to restore)")
+    emu.write_u16(emu.symbols["gPlayerParty"] + emu.offsets["off_pkmn_hp"], 1)
+
+
+def require_lead_healed(emu: Emulator, beat: str, row_id: str) -> None:
+    """The heal after `damage_lead` restored the lead to max HP."""
+    hp, max_hp = read_lead_hp(emu)
+    if hp != max_hp:
+        shot = emu.screenshot(f"{beat}_not_healed")
+        raise ScenarioError(
+            f"{beat}: {row_id}: lead HP is {hp}/{max_hp} after the heal, "
+            f"expected full ({shot})")
+
+
 def party_has_species(emu: Emulator, species_id: int) -> bool:
     """Whether `species_id` occupies any party slot. Promoted from
     `ch03.py`'s `_party_has_magikarp`, generalized from a hardcoded

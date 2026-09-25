@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from . import assertions
 from .errors import ScenarioError
 
 if TYPE_CHECKING:  # runtime import is lazy so the module works without bindings
@@ -28,10 +29,11 @@ def heal_at_counter(emu: Emulator, approach: tuple[int, int], facing: str, *,
     """Walk to a Center's healing counter, accept the heal, and verify the
     whole scene completed -- not just that the field released.
 
-    `special HealPlayerParty` itself has no test surface (the harness has no
-    party-HP read to difference against a "damaged party" precondition, and
-    none of the beats calling this set one up either), so this instead
-    verifies the mechanism the pokerus-drop bug actually broke: the counter
+    The heal itself (ruling 17, 2026-09-25): the lead is set to 1 HP before
+    talking and must be back at full after -- the party is usually full when
+    a test walk reaches a Center, so a full-HP read alone proves nothing.
+    The scene's completion is checked separately, by the mechanism the
+    pokerus-drop bug actually broke: the counter
     NPC's return-facing movement after the "restored to full health" /
     "we hope to see you again" close (`applymovement(..., face_down)` in the
     fork script), by reading `counter_local_id`'s facing off
@@ -41,6 +43,7 @@ def heal_at_counter(emu: Emulator, approach: tuple[int, int], facing: str, *,
     """
     emu.walk_to(*approach)
     emu.face(facing)
+    assertions.damage_lead(emu, beat)
     emu.interact()
     emu.advance_dialog("A")  # commits YES at the yesnobox, mashes through the rest
     if emu.field_locked():
@@ -48,6 +51,7 @@ def heal_at_counter(emu: Emulator, approach: tuple[int, int], facing: str, *,
         raise ScenarioError(
             f"{beat}: the healing counter's scene never released control "
             f"({shot})")
+    assertions.require_lead_healed(emu, beat, "healing counter")
     ev = emu.object_event(counter_local_id)
     if ev.facing != "DOWN":
         shot = emu.screenshot(f"{beat}_heal_facing")

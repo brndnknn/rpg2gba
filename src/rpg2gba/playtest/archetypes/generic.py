@@ -42,11 +42,18 @@ out rather than declaring a kind it only partly executes. `audio` is left
 out too: `assertion.py`'s own `AssertionKind` comment says it is "not
 checked until audio is mapped" -- `bgm_song_id()` reads BGM only, no SE
 read exists, so this is the code's own standing position, not a new call
-made here. `choice`/`warp`/`heal_party`/`pokemon_grant`/`service`/
+made here. `choice`/`warp`/`pokemon_grant`/`service`/
 `displacement`/`event_position`/`erase_event` are each a real, cited
 observation gap in `assignments/C6/research/07_generic.md` §2 -- none
 buys enough (`warp`'s single-page-in-a-multi-step-loop map-change problem
 in particular) to be worth the design complexity here.
+
+`heal_party` joined 2026-09-25 (REDERIVATION_PLAN.md §16.3 ruling 17): the
+party is usually full when a heal plays, so a full-HP read proves nothing.
+The body sets the lead to 1 HP before firing a page that heals (the one
+"before" action this design allows, taken in the body, not a handler), and
+the handler reads it back at full. An arrival page has already run by the
+time the beat acts, so there it stays undeclared, like `trigger`/`text`.
 
 STATUS: implemented (`assignments/C6/07_generic.md`).
 """
@@ -83,7 +90,7 @@ if TYPE_CHECKING:  # runtime import is lazy so this module works without mGBA bi
 GENERIC_EXECUTED_KINDS: frozenset[str] = frozenset({
     "trigger", "completes", "text",
     "switch_write", "var_write", "self_switch_write", "engine_flag_write",
-    "visual",
+    "visual", "heal_party",
 })
 
 
@@ -175,7 +182,7 @@ _ARRIVAL_TRIGGERS = frozenset({"autorun", "parallel"})
 # What an arrival page's beat can't observe after the fact: the trigger
 # already fired and the text was already driven through. Left undeclared,
 # so they stay honestly uncovered (owed to an arrival-cutscene template).
-_NOT_AFTER_THE_FACT = frozenset({"trigger", "text"})
+_NOT_AFTER_THE_FACT = frozenset({"trigger", "text", "heal_party"})
 
 
 def _player_facing(emu: "Emulator") -> str:
@@ -320,7 +327,13 @@ def _handle_visual(emu: "Emulator", beat_name: str, step: Step) -> None:
     return
 
 
+def _handle_heal_party(emu: "Emulator", beat_name: str, step: Step) -> None:
+    # The body set the lead to 1 HP before firing the page (module docstring).
+    assertions.require_lead_healed(emu, beat_name, step.row_id)
+
+
 STEP_HANDLERS.update({
+    "heal_party": _handle_heal_party,
     "trigger": _handle_trigger,
     "completes": _handle_completes,
     "text": _handle_text,
@@ -474,6 +487,10 @@ def generic_beat(
 
         assertions.require_map(emu, beat_name, cell.map_constant)
         fired_on_the_way = arrival       # an arrival page already ran
+        if any(s.kind == "heal_party" for s in middle_steps):
+            # Before the walk: a touch page can fire on the way (below).
+            # Never on an arrival beat (heal_party is undeclared there).
+            assertions.damage_lead(emu, beat_name)
         try:
             if not arrival:
                 emu.walk_to(x, y)
