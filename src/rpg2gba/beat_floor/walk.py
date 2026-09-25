@@ -43,6 +43,7 @@ from rpg2gba.beat_floor.move_route import extract_move_route
 from rpg2gba.beat_floor.obstacle import obstacle_assertions
 from rpg2gba.beat_floor.script import extract_script
 from rpg2gba.beat_floor.terrain import seam_floors_for_map, stair_floors_for_map
+from rpg2gba.beat_floor.var_text import var_text_source
 from rpg2gba.chapter_manifest.generator import PageScope, detect_stair_cells, iter_page_scopes
 from rpg2gba.chapter_manifest.schema import parse_row_id, row_id_sort_key
 from rpg2gba.conversion_agent.deterministic import join_text_lines, translate_text_codes
@@ -395,6 +396,7 @@ def _walk_commands(
 
     text_blocks = dict(_text_blocks(commands))
     script_blocks = dict(_script_blocks(commands))
+    earlier_scripts: list[str] = []  # this scope's script blocks so far (ruling 18)
 
     i = 0
     n = len(commands)
@@ -409,15 +411,26 @@ def _walk_commands(
             for c in commands[i:end]:
                 params = c.get("parameters") or []
                 fragments.append(str(params[0]) if params else "")
+            index_within_row = sum(1 for a in assertions if a.kind in ("text", "var_text"))
             try:
                 text = _normalize_fragments(fragments)
             except ValueError as exc:
-                refusals.append(FloorRefusal(
-                    row_id=ctx.row_id, reason="text_unnormalizable", list_index=list_index,
-                    code=SHOW_TEXT, detail=f"code 101 @list[{list_index}]: {exc}",
-                ))
+                var_text = var_text_source(fragments, earlier_scripts)
+                if var_text is None:
+                    refusals.append(FloorRefusal(
+                        row_id=ctx.row_id, reason="text_unnormalizable", list_index=list_index,
+                        code=SHOW_TEXT, detail=f"code 101 @list[{list_index}]: {exc}",
+                    ))
+                else:
+                    var_id, script, input_vars = var_text
+                    assertions.append(FloorAssertion(
+                        row_id=ctx.row_id, kind="var_text", list_index=list_index,
+                        code=SHOW_TEXT, tag="text",
+                        params=make_params(index=index_within_row, raw=tuple(fragments),
+                                           var_id=var_id, script=script,
+                                           input_vars=input_vars),
+                    ))
             else:
-                index_within_row = sum(1 for a in assertions if a.kind == "text")
                 assertions.append(FloorAssertion(
                     row_id=ctx.row_id, kind="text", list_index=list_index, code=SHOW_TEXT,
                     params=make_params(index=index_within_row, text=text), tag="text",
@@ -432,6 +445,7 @@ def _walk_commands(
                 params = c.get("parameters") or []
                 parts.append(str(params[0]) if params else "")
             text = "\n".join(parts)
+            earlier_scripts.append(text)
             a, r = extract_script(text, list_index, ctx)
             assertions.extend(a)
             refusals.extend(r)
@@ -708,6 +722,7 @@ def floor_for_map(
     door_cells: Mapping[int, frozenset[tuple[int, int]]],
     connections: list[list[Any]] = (),
     stripped_ce_ids: frozenset[int] | None = None,
+    resolved_rows: Mapping[str, RowState] | None = None,
 ) -> dict[str, RowFloor]:
     """Every row's `RowFloor` for one map's events, plus its `seam` and
     `terrain` rows (REDERIVATION_PLAN.md §16.3 C5 -- `beat_floor.terrain`).
@@ -731,6 +746,11 @@ def floor_for_map(
     `stripped_ce_ids_for(_default_reference_dir())` so a caller who has not
     been updated still gets strip-honouring for free; an explicit
     `frozenset()` disables stripping entirely.
+
+    `resolved_rows` replaces extraction-time row states with the story
+    model's resolved ones (`lookup.resolved_rows`): a computed row's writes
+    depend on state from earlier chapters, which extraction on one map
+    cannot see, so without this its placeholder refusal refuses the floor.
     """
     sce = stripped_ce_ids if stripped_ce_ids is not None else stripped_ce_ids_for(
         _default_reference_dir())
@@ -738,6 +758,8 @@ def floor_for_map(
     row_states = extract_map(
         map_id, map_data, common_events=common_events, switch_labels=switch_labels,
         stripped_ce_ids=sce)
+    if resolved_rows:
+        row_states.update({rid: rs for rid, rs in resolved_rows.items() if rid in row_states})
 
     # Diagonal-stair events are absorbed into `terrain` manifest rows, never
     # page rows (`chapter_manifest.generator._generate_page_rows`); they get
@@ -813,6 +835,9 @@ def floor_for_chapter(
     connections = json.loads(conn_path.read_text(encoding="utf-8")) if conn_path.exists() else []
 
     door_cells = load_door_cells(build_dir)
+    from rpg2gba.beat_floor.lookup import resolved_rows
+
+    resolved = resolved_rows(str(build_dir))
 
     merged: dict[str, RowFloor] = {}
     for map_id in maps:
@@ -820,6 +845,7 @@ def floor_for_chapter(
         map_data = json.loads(map_path.read_text(encoding="utf-8"))
         merged.update(floor_for_map(
             map_id, map_data, common_events=common_events, switch_labels=switch_labels,
-            door_cells=door_cells, connections=connections, stripped_ce_ids=stripped_ce_ids))
+            door_cells=door_cells, connections=connections, stripped_ce_ids=stripped_ce_ids,
+            resolved_rows=resolved))
 
     return {rid: merged[rid] for rid in sorted(merged, key=row_id_sort_key)}

@@ -55,6 +55,11 @@ The body sets the lead to 1 HP before firing a page that heals (the one
 the handler reads it back at full. An arrival page has already run by the
 time the beat acts, so there it stays undeclared, like `trigger`/`text`.
 
+`var_text` (ruling 18) is a `\\v[N]` line: the handler reads the ROM's values
+of the input variables the floor recorded, runs the page's own script through
+the Ruby-subset evaluator (`beat_floor.var_text`) and checks the resulting
+line exactly as `text` does. Undeclared on arrival pages, like `text`.
+
 STATUS: implemented (`assignments/C6/07_generic.md`).
 """
 from __future__ import annotations
@@ -90,7 +95,7 @@ if TYPE_CHECKING:  # runtime import is lazy so this module works without mGBA bi
 GENERIC_EXECUTED_KINDS: frozenset[str] = frozenset({
     "trigger", "completes", "text",
     "switch_write", "var_write", "self_switch_write", "engine_flag_write",
-    "visual", "heal_party",
+    "visual", "heal_party", "var_text",
 })
 
 
@@ -182,7 +187,7 @@ _ARRIVAL_TRIGGERS = frozenset({"autorun", "parallel"})
 # What an arrival page's beat can't observe after the fact: the trigger
 # already fired and the text was already driven through. Left undeclared,
 # so they stay honestly uncovered (owed to an arrival-cutscene template).
-_NOT_AFTER_THE_FACT = frozenset({"trigger", "text", "heal_party"})
+_NOT_AFTER_THE_FACT = frozenset({"trigger", "text", "var_text", "heal_party"})
 
 
 def _player_facing(emu: "Emulator") -> str:
@@ -241,6 +246,25 @@ def _handle_text(emu: "Emulator", beat_name: str, step: Step) -> None:
         )
     emu.clear_field_message()
     emu.tap("A")
+
+
+def _handle_var_text(emu: "Emulator", beat_name: str, step: Step) -> None:
+    """A `\\v[N]` line (ruling 18): the expected text is the page's own
+    script evaluated on the ROM's current values of its input variables."""
+    from rpg2gba.beat_floor.var_text import expected_var_text
+
+    params = dict(step.params)
+    inputs: dict[int, int] = {}
+    for var_id in params["input_vars"]:
+        name = _flag_registry().get_var(var_id)
+        if name is None:
+            raise ScenarioError(
+                f"{beat_name}: {step.row_id}: var {var_id} has no minted VAR_* "
+                "name in the persisted flag registry -- not guessing one")
+        inputs[var_id] = emu.var(name)
+    expected = expected_var_text(params["raw"], params["var_id"], params["script"], inputs)
+    _handle_text(emu, beat_name, Step(step.row_id, "text", step.list_index,
+                                      (("index", params["index"]), ("text", expected))))
 
 
 def _handle_switch_write(emu: "Emulator", beat_name: str, step: Step) -> None:
@@ -334,6 +358,7 @@ def _handle_heal_party(emu: "Emulator", beat_name: str, step: Step) -> None:
 
 STEP_HANDLERS.update({
     "heal_party": _handle_heal_party,
+    "var_text": _handle_var_text,
     "trigger": _handle_trigger,
     "completes": _handle_completes,
     "text": _handle_text,

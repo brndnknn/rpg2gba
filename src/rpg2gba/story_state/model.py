@@ -1560,8 +1560,14 @@ def build_chapter_stories(
     build_dir: Path,
     chapters_path: Path,
     winner_for: Callable[[str, tuple[str, ...]], str | None] | None = None,
+    resolved_out: dict[str, RowState] | None = None,
 ) -> dict[str, ChapterStory]:
     """Models `chapter_ids` (in chain order, e.g. CH01..CH05) cumulatively.
+
+    `resolved_out`, if given, is filled with every computed row on each
+    chapter's own maps as resolved in that chapter's pass -- the row state
+    the verdicts were built from. `beat_floor` needs it: extraction alone
+    leaves a computed row's placeholder refusal in place.
 
     Returns one `ChapterStory` per requested chapter id (plus `"INTRO"`),
     each reporting only the rows on THAT chapter's own maps (§16.3 C2b
@@ -1643,6 +1649,11 @@ def build_chapter_stories(
         cumulative_rows.update(resolve_computed_rows(
             seed, cumulative_rows, order,
             already_owned=already_owned, structural_refusal=structural_refusal))
+        if resolved_out is not None:
+            resolved_out.update({
+                rid: rs for rid, rs in cumulative_rows.items()
+                if rs.computed is not None and not _is_pseudo_row_id(rid)
+                and parse_row_id(rid).map_id in own_map_ids_by_chapter[chapter_id]})
         # See `model_intro`: resolution changes what a computed row refuses,
         # and the verdicts below report the structural view, so retake it.
         refusal_cache = {}

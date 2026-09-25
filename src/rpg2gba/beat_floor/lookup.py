@@ -62,6 +62,23 @@ def _door_cells(build_dir: str) -> dict[int, frozenset[tuple[int, int]]]:
 
 
 @cache
+def resolved_rows(build_dir: str) -> dict:
+    """The story model's resolved computed rows over its modelled chain
+    (`story_state.model.build_chapter_stories(resolved_out=)`), for
+    `walk.floor_for_map`. Empty for a build dir with no `system.json`: a
+    synthetic test corpus has no chapter chain to resolve against."""
+    if not (Path(build_dir) / "system.json").is_file():
+        return {}
+    from rpg2gba.story_state.__main__ import _CHAIN
+    from rpg2gba.story_state.model import build_chapter_stories
+
+    out: dict = {}
+    build_chapter_stories(list(_CHAIN), build_dir=Path(build_dir),
+                          chapters_path=_REF_DIR / "chapters.json", resolved_out=out)
+    return out
+
+
+@cache
 def floor_for_map_cached(
     build_dir: str, map_id: int, *, stripped_ce_ids: frozenset[int] | None = None,
 ) -> dict[str, RowFloor]:
@@ -83,7 +100,8 @@ def floor_for_map_cached(
         common_events=_common_events(build_dir), switch_labels=_switch_labels(),
         door_cells=_door_cells(build_dir),
         connections=list(_connections(build_dir)),
-        stripped_ce_ids=stripped_ce_ids)
+        stripped_ce_ids=stripped_ce_ids,
+        resolved_rows=resolved_rows(build_dir))
 
 
 def floor_for_row(

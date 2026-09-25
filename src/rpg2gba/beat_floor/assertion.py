@@ -20,6 +20,9 @@ AssertionKind = Literal[
     "trigger",            # params: trigger ("action"|"touch"|"event_touch"|"autorun"|"parallel")
     "completes",          # the page runs to its end and returns control
     "text",               # params: index (message box within the row), text (normalized)
+    "var_text",           # params: index, raw (source text with one \v[N]), var_id (N),
+                          #   script (the 355/655 block that writes it), input_vars
+                          #   -- ruling 18; ROM-only: the value comes from ROM state
     "choice",             # params: options (tuple[str, ...], normalized)
     "switch_write",       # params: switch_id, value
     "var_write",          # params: var_id, op, value (story_state Assign/Adjust, rendered)
