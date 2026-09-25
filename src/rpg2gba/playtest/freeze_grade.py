@@ -12,7 +12,10 @@ grouping and which chapter replays what are recorded, never graded):
     hand_beats_residue.json`, rulings `arrival_floor`/`blocked_obstacle`/
     `state_model`/`covered_elsewhere`), must be claimed by some OWN beat of
     the generated chapter, or proven `never_fires` by the generated
-    module's `NEVER_FIRES` dict (C9 ruling 3 -- a proof, not an exception).
+    module's `NEVER_FIRES` dict (C9 ruling 3 -- a proof, not an exception),
+    or claimed by the own beats of the generated chapter whose manifest owns
+    the row (C9 ruling 12: a hand beat that tested another chapter's row,
+    e.g. CH02's white-out on CH01's house, doesn't move the row).
 
 (b) **Floor ⊇, on the rows rule (a) requires.** For every required row the
     generated chapter's own beats claim, the union of those beats' declared
@@ -67,6 +70,7 @@ from rpg2gba.playtest.hand_freeze import (
     RESIDUE_PATH,
     FrozenBeat,
     load_frozen_hand_beats,
+    manifest_row_ids,
 )
 
 logger = logging.getLogger(__name__)
@@ -138,11 +142,38 @@ def _required_rows(
     return required
 
 
+@dataclass(frozen=True)
+class OwnerSuite:
+    """Another chapter's generated suite, as the grader needs it: its own
+    beats' claims and the rows its manifest owns (C9 ruling 12)."""
+
+    name: str
+    claims: Mapping[str, list[Beat]]
+    manifest_rows: frozenset[str]
+
+
+def _owner_claims(
+    chapter_id: str, owners: Sequence[OwnerSuite],
+) -> dict[str, tuple[str, list[Beat]]]:
+    """Rows another chapter both owns (in its manifest) and claims with its
+    own generated beats -> (that chapter, those beats). First in the order
+    given wins; the caller passes chain order."""
+    found: dict[str, tuple[str, list[Beat]]] = {}
+    for owner in owners:
+        if owner.name.upper() == chapter_id:
+            continue
+        for row_id, beats in owner.claims.items():
+            if row_id in owner.manifest_rows and row_id not in found:
+                found[row_id] = (owner.name, beats)
+    return found
+
+
 def _check_row_coverage(
     chapter_id: str,
     required_rows: Mapping[str, list[str]],
     claimed_by_own: Mapping[str, list[Beat]],
     never_fires: Mapping[str, str],
+    claimed_by_owner: Mapping[str, tuple[str, list[Beat]]],
 ) -> list[str]:
     # A beat asserting a row and a proof that the row never runs cannot both
     # be right; whichever is wrong, the generator emitted a contradiction.
@@ -152,12 +183,13 @@ def _check_row_coverage(
         for row_id in sorted(set(claimed_by_own) & set(never_fires))
     ]
     for row_id, sources in sorted(required_rows.items()):
-        if row_id in claimed_by_own or row_id in never_fires:
+        if row_id in claimed_by_own or row_id in never_fires or row_id in claimed_by_owner:
             continue
         problems.append(
             f"{chapter_id}: row {row_id!r}, claimed by {sources}, is not "
-            f"claimed by any own beat of the generated {chapter_id} and is "
-            "not in NEVER_FIRES")
+            f"claimed by any own beat of the generated {chapter_id}, nor by "
+            "the generated chapter whose manifest owns it, and is not in "
+            "NEVER_FIRES")
     return problems
 
 
@@ -228,6 +260,7 @@ def _check_floor_ge(
     required_rows: Mapping[str, list[str]],
     *,
     successor: Chapter | None,
+    claimed_by_owner: Mapping[str, tuple[str, list[Beat]]],
     build_dir: Path,
 ) -> ChapterGrade:
     problems: list[str] = []
@@ -264,6 +297,14 @@ def _check_floor_ge(
             message = _row_floor_problem(chapter_id, row_id, beats, build_dir=build_dir)
         if message is not None:
             problems.append(message)
+
+    # Required rows only the owning chapter claims (C9 ruling 12) are graded
+    # against that chapter's beats.
+    for row_id, (owner, beats) in sorted(claimed_by_owner.items()):
+        if row_id in required_rows and row_id not in claimed_by_own:
+            message = _row_floor_problem(owner, row_id, beats, build_dir=build_dir)
+            if message is not None:
+                problems.append(message)
     return ChapterGrade(problems=problems, deferred=deferred,
                         generator_only_partial=generator_only)
 
@@ -277,20 +318,25 @@ def grade_chapter(
     never_fires: Mapping[str, str],
     build_dir: Path,
     successor: Chapter | None = None,
+    owners: Sequence[OwnerSuite] = (),
 ) -> ChapterGrade:
     """Pure grade of one chapter. `.problems == []` means the generated suite
     covers the frozen hand suite for `chapter_id`. `successor` is the next
-    chapter's generated suite, if one exists (boundary rows, C9 ruling 9).
+    chapter's generated suite, if one exists (boundary rows, C9 ruling 9);
+    `owners` are the other chapters' generated suites in chain order (a
+    frozen row another chapter owns and claims, C9 ruling 12).
     All inputs are already loaded; `grade_chapter_from_disk` is the I/O
     wrapper real callers use."""
     own_beats = _own_beats(gen_chapter)
     claimed_by_own = _claimed_by_own(own_beats)
+    claimed_by_owner = _owner_claims(chapter_id, owners)
 
     required_rows = _required_rows(chapter_id, frozen_beats, residue_entries)
     row_problems = _check_row_coverage(
-        chapter_id, required_rows, claimed_by_own, never_fires)
+        chapter_id, required_rows, claimed_by_own, never_fires, claimed_by_owner)
     floor = _check_floor_ge(chapter_id, claimed_by_own, required_rows,
-                            successor=successor, build_dir=build_dir)
+                            successor=successor, claimed_by_owner=claimed_by_owner,
+                            build_dir=build_dir)
     return ChapterGrade(problems=row_problems + floor.problems,
                         deferred=floor.deferred,
                         generator_only_partial=floor.generator_only_partial)
@@ -326,6 +372,14 @@ def grade_chapter_from_disk(
     frozen_beats = [b for b in all_frozen if b.chapter == chapter_id]
     residue_entries = _load_residue_entries(residue_path)
 
+    others = [load_chapter(name, suite="gen") for name in sorted(gen_chapter_names())
+              if name.upper() != chapter_id]
+    owners = [
+        OwnerSuite(name=other.name, claims=_claimed_by_own(_own_beats(other)),
+                   manifest_rows=frozenset(manifest_row_ids(other.name)))
+        for other in others
+    ]
+
     resolved_build_dir = build_dir if build_dir is not None else default_build_dir()
     return grade_chapter(
         chapter_id,
@@ -334,21 +388,19 @@ def grade_chapter_from_disk(
         gen_chapter=gen_chapter,
         never_fires=never_fires,
         build_dir=resolved_build_dir,
-        successor=_generated_successor(chapter_id),
+        successor=_generated_successor(chapter_id, others),
+        owners=owners,
     )
 
 
-def _generated_successor(chapter_id: str) -> Chapter | None:
+def _generated_successor(chapter_id: str, others: Sequence[Chapter]) -> Chapter | None:
     """The generated suite whose `predecessor` is `chapter_id`, or None if
     that chapter has no generated module yet. Fails loud if more than one
     generated suite names the same predecessor -- the chain is linear."""
-    successors = []
-    for name in gen_chapter_names():
-        if name.upper() == chapter_id:
-            continue
-        candidate = load_chapter(name, suite="gen")
-        if candidate.predecessor is not None and candidate.predecessor.upper() == chapter_id:
-            successors.append(candidate)
+    successors = [
+        c for c in others
+        if c.predecessor is not None and c.predecessor.upper() == chapter_id
+    ]
     if len(successors) > 1:
         raise ValueError(
             f"{chapter_id}: several generated suites name it as predecessor: "

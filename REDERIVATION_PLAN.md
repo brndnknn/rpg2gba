@@ -2502,6 +2502,37 @@ fix and grading rule (b)".
     ferries, metro, train), 15 relocate within the same map, 5 are one-way story escorts.
     `Emulator.snapshot_state`/`restore_state` remain available if a later chapter needs a
     stateless ride it never returns from.
+12. **A frozen row the hand suite tested from another chapter is covered by the owning
+    chapter's claim.** If the generated chapter whose manifest owns the row claims it, rule (a)
+    is satisfied and rule (b) grades that chapter's beats. Cases: CH02:B18's white-out heal
+    `map049/ev022/p0` (CH01's, per R9), CH04:B1's `map031/seam/N/map035` (CH03's manifest), and
+    CH04:B16's `map068/ev001/p1` (CH03's, per R9; still refused `party_model`). The seam sits in
+    CH03's module although R2 says the arriving chapter owns a crossing; it is tested once
+    either way, so it is not moved now.
+13. **CH01's three story-model refusals are fixed in the model, not ruled as debt** (operator,
+    2026-09-25). `map050/ev019/p0` (starter machine) and `map032/ev009/p2` (catch ceremony) are
+    on CH01's critical path: without a beat that runs them, the generated CH01 never grants a
+    starter or advances the quest log, and CH02+ inherit that state. Two fixes: model a
+    `+= n` counter write without widening the row to TOP (clears `computed_row_self_reference`
+    on `ev019`, and the `havoc_global` spill that leaves `map049/ev002/p0` undetermined); and
+    drop only a non-scalar key's write instead of refusing the whole row (clears
+    `search_nonscalar_value` on `ev009/p2`, whose other writes — the quest log — still land).
+    *Landed 2026-09-25:* `scope_search.self_contained_counters` (a variable updated in place and
+    read nowhere else gets a placeholder read and is havoc'd alone) and non-scalar keys → havoc.
+    Both rows now resolve `live`. Each then hit a further blocker, not yet fixed: `ev019/p0`'s
+    floor is built from extraction-time row states (`beat_floor/walk.py:738`), which for a
+    computed row still carry the placeholder `unparsed_state_write` — the floor needs the
+    resolver's output; `ev009/p2`'s text `Go! \v[3]!` is `text_unnormalizable` (`\v[n]`).
+    `map049/ev002/p0` now reads `unreachable`: switch 52 is seeded at new game by C3's fenced
+    `FlagSet(FLAG_MUM)`, which follows the intro's `$skipGameIntro` branch — the full intro
+    never sets it (only Auntie does). Operator decision pending on removing that seed.
+    Also landed: Strength boulders (`map031/ev001`, `ev037`) were dropped as unreachable because
+    `beat_gen._cell_fn` routed onto the boulder's own occupied tile; obstacle rows now get
+    their walkable sides. Found, not fixed: CH01's white-out heal `m049e022p0` is a plain
+    arrival `generic_beat` that never forces a white-out (the fork tags are dropped by
+    `beat_gen/select.py`); the fix is emitting `whiteout.whiteout_beat` for `fork:whiteout`
+    rows. Unverified: generated beats may bundle mutually exclusive branch arms
+    (`m033e034_trainer_arms`).
 
 Build order before the single background regeneration: #109 (`text_source` reuses
 `assembly._CHARMAP_SUBS` and the quote toggle — not a `charmap.txt` change; clears all 5 frozen

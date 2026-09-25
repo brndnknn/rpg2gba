@@ -175,13 +175,17 @@ def _arrival_cells(world: WorldGraph, graphs: Mapping[int, MapGraph], map_id: in
 
 def _cell_fn(warp_rows: frozenset[str], graphs: Mapping[int, MapGraph],
              arrivals: Callable[[int], tuple[tuple[int, int], ...]],
-             nudge_rows: frozenset[str] = frozenset()):  # noqa: ANN202
+             nudge_rows: frozenset[str] = frozenset(),
+             obstacle_rows: frozenset[str] = frozenset()):  # noqa: ANN202
     """`cell_for_row`, except:
 
-    - a warp beat's row, or any row whose routing cell is a solid tile, gets
-      its walkable sides as approach candidates (`cell_for_row` puts the
-      player ON a warp, which offers the solver nothing to pick; Task 5's
-      `warp_candidates`);
+    - a warp beat's row, an obstacle beat's row, or any row whose routing
+      cell is a solid tile, gets its walkable sides as approach candidates
+      (`cell_for_row` puts the player ON a warp, which offers the solver
+      nothing to pick; Task 5's `warp_candidates`). An obstacle is pressed
+      into, never stood on: a Strength boulder's tile is walkable terrain
+      under the boulder object, so without this the reach pass floods to
+      the boulder's own occupied tile and drops the row as unreachable;
     - an autorun/parallel page is located at an ARRIVAL into its map. It
       fires when the map loads, not where its event stands (often an NPC or
       a wall), so any arrival cell is where it is observed; the solver
@@ -212,7 +216,7 @@ def _cell_fn(warp_rows: frozenset[str], graphs: Mapping[int, MapGraph],
         # A routing cell on a SOLID tile (an event on a building's exit
         # mat) can't be stood on; like a warp, it's used from its sides.
         solid = not graphs[row.map_id].is_walkable((cell.x, cell.y))
-        if row.row_id not in warp_rows and not solid:
+        if row.row_id not in warp_rows and row.row_id not in obstacle_rows and not solid:
             return cell
         return dataclasses.replace(
             cell, approach_candidates=warp_candidates((cell.x, cell.y), graphs[row.map_id]))
@@ -593,6 +597,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         cell_fn=_cell_fn(warp_rows, graphs,
                          lambda m: _arrival_cells(world, graphs, m, chain_maps, entry),
                          frozenset(r for b in beats if b.template == "arrival_nudge"
+                                   for r in b.rows),
+                         frozenset(r for b in beats if b.template == "obstacle"
                                    for r in b.rows)),
         seam_fn=_seam_fn(graphs), map_constant_fn=_map_constant_for)
     records, facing_refusals = pin_records(records, facing_pins)

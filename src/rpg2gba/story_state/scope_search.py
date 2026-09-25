@@ -19,6 +19,7 @@ refined").
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -47,6 +48,7 @@ __all__ = [
     "ComputedScope",
     "run_scope",
     "scope_needs_interpreter",
+    "self_contained_counters",
     "writes_from_result",
     "witness_citations",
     "stripped_ce_ids_for",
@@ -214,17 +216,111 @@ def named_write_targets(
     return tuple(keys)
 
 
+# RMXP Control Variables (122): [start_id, end_id, operation, operand_type,
+# operand, ...]. Operations 1-5 (add/sub/mul/div/mod) read the target's own
+# value; 0 (set) does not. Operand type 1 reads another variable.
+_CODE_CONTROL_VARIABLES = 122
+_CODE_CONDITIONAL = 111
+_CODE_CALL_COMMON_EVENT = 117
+_CODE_SCRIPT_CONT = 655
+_SELF_READING_OPS = frozenset({1, 2, 3, 4, 5})
+_INT_RE = re.compile(r"\b(\d+)\b")
+# Commands that take a variable id as a designated operand, with the index of
+# their "designated by variable" flag and the param indices it switches on.
+_VARIABLE_DESIGNATED = {
+    201: (0, (1, 2, 3)),   # Transfer Player
+    202: (1, (2, 3)),      # Set Event Location
+    231: (3, (4, 5)),      # Show Picture
+    232: (3, (4, 5)),      # Move Picture
+}
+
+
+def _foreign_variable_reads(
+    commands: list[dict[str, Any]],
+    common_events_by_id: dict[int, dict[str, Any]],
+    visited_ce: frozenset[int] = frozenset(),
+) -> tuple[set[int], bool]:
+    """Variable ids `commands` reads for any purpose OTHER than updating that
+    same variable in place, and whether a script block appears (scripts are
+    matched textually by the caller). Recurses through common-event calls."""
+    reads: set[int] = set()
+    scripts: list[str] = []
+    for cmd in commands:
+        code = cmd.get("code")
+        params = cmd.get("parameters") or []
+        if code == _CODE_CONDITIONAL and len(params) >= 4 and params[0] == 1:
+            reads.add(params[1])
+            if params[2] == 1:
+                reads.add(params[3])
+        elif code == _CODE_CONTROL_VARIABLES and len(params) >= 5 and params[3] == 1:
+            reads.add(params[4])
+        elif code in _VARIABLE_DESIGNATED:
+            flag_idx, id_idxs = _VARIABLE_DESIGNATED[code]
+            if len(params) > max(id_idxs) and params[flag_idx] == 1:
+                reads.update(params[i] for i in id_idxs)
+        elif code in (_CODE_SCRIPT, _CODE_SCRIPT_CONT) and params:
+            scripts.append(str(params[0]))
+        elif code == _CODE_CALL_COMMON_EVENT and params:
+            ce_id = params[0]
+            ce = common_events_by_id.get(ce_id)
+            if ce is None or ce_id in visited_ce:
+                return reads, True  # unknown callee: treat as reading anything
+            sub_reads, sub_unknown = _foreign_variable_reads(
+                ce.get("list") or [], common_events_by_id, visited_ce | {ce_id})
+            reads |= sub_reads
+            if sub_unknown:
+                return reads, True
+    joined = "\n".join(scripts)
+    reads.update(int(n) for n in _INT_RE.findall(joined))
+    return reads, False
+
+
+def self_contained_counters(
+    commands: list[dict[str, Any]],
+    common_events_by_id: dict[int, dict[str, Any]],
+) -> frozenset[Key]:
+    """Variables this scope updates in place (Control Variables add/sub/mul/
+    div/mod on the variable itself) and reads NOWHERE else -- no branch, no
+    other variable's operand, no designated coordinate, no script (any
+    integer literal in a script counts, deliberately conservative), no
+    common event this scope calls.
+
+    Such a counter's value flows only back into itself, so nothing else the
+    row writes can depend on it: the resolver can evaluate the row with any
+    placeholder value for it, keep the other writes, and mark the counter
+    alone "could be anything" (C9 ruling 13). Without this, reading and
+    writing the same key has no fixpoint and the whole row widens to TOP
+    (`computed_row_self_reference`)."""
+    self_updated: set[int] = set()
+    for cmd in commands:
+        params = cmd.get("parameters") or []
+        if (cmd.get("code") == _CODE_CONTROL_VARIABLES and len(params) >= 3
+                and params[2] in _SELF_READING_OPS):
+            self_updated.update(range(params[0], params[1] + 1))
+    if not self_updated:
+        return frozenset()
+    foreign, unknown = _foreign_variable_reads(commands, common_events_by_id)
+    if unknown:
+        return frozenset()
+    return frozenset(Variable(i) for i in sorted(self_updated - foreign))
+
+
 def writes_from_result(
     result: SearchResult, *, conditional: bool, source_prefix: str,
-) -> tuple[tuple[Write, ...], tuple[Refusal, ...]]:
-    """Convert a refusal-free `SearchResult` into `state.Assign` writes.
+) -> tuple[tuple[Write, ...], tuple[Key, ...]]:
+    """Convert a refusal-free `SearchResult` into `state.Assign` writes,
+    plus the keys it wrote a non-scalar value to.
 
     Every value in `result.values[key]` must be a `bool` or `int` -- an
-    `Opaque`/`ConstRef`/`Symbol` (or any other evaluator marker) is not a
-    representable state value (CLAUDE.md §5's dataclass-shape discipline
-    plus §4.5 fail-loud): no write is emitted for that key, and a
-    `search_nonscalar_value` `Refusal` names it instead of silently
-    coercing or dropping it.
+    `Opaque`/`ConstRef`/`Symbol` or a string (a species NAME stored in a
+    variable) is not a representable state value (CLAUDE.md §5's
+    dataclass-shape discipline): no write is emitted for that key, and it
+    is returned as a havoc key instead, so every reader of it sees "could
+    be anything" and refuses by name there (`computed_row_top_read`). The
+    row's other writes stand (C9 ruling 13, 2026-09-25): one text-valued
+    variable says nothing about the quest log written beside it. Before
+    that ruling this raised `search_nonscalar_value` and the whole row was
+    refused.
 
     A key written on every completed run (`key in result.always_written`)
     is unconditional unless the caller says otherwise; a key written on
@@ -232,15 +328,11 @@ def writes_from_result(
     says.
     """
     writes: list[Write] = []
-    refusals: list[Refusal] = []
+    havoc: list[Key] = []
     for key in sorted(result.values, key=repr):
         values = result.values[key]
-        bad = sorted((v for v in values if not isinstance(v, (bool, int))), key=repr)
-        if bad:
-            idx = result.write_index.get(key, -1)
-            refusals.append(Refusal(
-                "search_nonscalar_value", f"{key!r} @list[{idx}]: {bad[0]!r}",
-            ))
+        if any(not isinstance(v, (bool, int)) for v in values):
+            havoc.append(key)
             continue
         is_conditional = conditional or key not in result.always_written
         writes.append(Assign(
@@ -248,7 +340,7 @@ def writes_from_result(
             f"{source_prefix}: search over {result.runs} runs",
             result.write_index[key],
         ))
-    return tuple(writes), tuple(refusals)
+    return tuple(writes), tuple(havoc)
 
 
 def witness_citations(

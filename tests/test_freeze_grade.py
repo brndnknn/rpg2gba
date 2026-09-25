@@ -59,7 +59,8 @@ def _patch_floor(monkeypatch, floors: dict[str, RowFloor]) -> None:
     monkeypatch.setattr(freeze_grade, "floor_for_row", fake)
 
 
-def _grade_full(chapter_id, frozen, residue, gen_chapter, never_fires=(), successor=None):
+def _grade_full(chapter_id, frozen, residue, gen_chapter, never_fires=(), successor=None,
+                owners=()):
     return freeze_grade.grade_chapter(
         chapter_id,
         frozen_beats=frozen,
@@ -69,7 +70,14 @@ def _grade_full(chapter_id, frozen, residue, gen_chapter, never_fires=(), succes
         else never_fires,
         build_dir=BUILD_DIR,
         successor=successor,
+        owners=owners,
     )
+
+
+def _owner(name: str, beats: tuple[Beat, ...], manifest_rows: tuple[str, ...]):
+    return freeze_grade.OwnerSuite(
+        name=name, claims=freeze_grade._claimed_by_own(beats),
+        manifest_rows=frozenset(manifest_rows))
 
 
 def _grade(chapter_id, frozen, residue, gen_chapter, never_fires=()):
@@ -337,6 +345,46 @@ def test_non_warp_beat_declaring_nothing_is_not_a_boundary_claim(monkeypatch):
     grade = _grade_full("CH01", FROZEN, {}, gen, successor=None)
     assert grade.deferred == []
     assert len(grade.problems) == 1
+
+
+# --- C9 ruling 12: the owning chapter's claim counts ---------------------------
+
+FROZEN_CH02 = [FrozenBeat(chapter="CH02", name="B18", order=0, group=None,
+                          map_constant=None, rows=(ROW,))]
+
+
+def test_row_claimed_by_owning_chapter_satisfies_coverage(monkeypatch):
+    warp = _warp_assertion()
+    _patch_floor(monkeypatch, {ROW: _floor(assertions=(warp,))})
+    gen = _chapter("CH02", ())
+    owner = _owner("CH01", (_beat("m1", rows=(ROW,), assertions=frozenset({warp})),), (ROW,))
+    assert _grade_full("CH02", FROZEN_CH02, {}, gen, owners=[owner]).problems == []
+
+
+def test_claim_by_a_chapter_that_does_not_own_the_row_does_not_count(monkeypatch):
+    warp = _warp_assertion()
+    _patch_floor(monkeypatch, {ROW: _floor(assertions=(warp,))})
+    gen = _chapter("CH02", ())
+    other = _owner("CH01", (_beat("m1", rows=(ROW,), assertions=frozenset({warp})),), ())
+    problems = _grade_full("CH02", FROZEN_CH02, {}, gen, owners=[other]).problems
+    assert len(problems) == 1 and "not claimed" in problems[0]
+
+
+def test_owning_chapter_claim_is_graded_for_floor(monkeypatch):
+    _patch_floor(monkeypatch, {ROW: _floor(assertions=(_warp_assertion(),))})
+    gen = _chapter("CH02", ())
+    owner = _owner("CH01", (_beat("m1", rows=(ROW,), assertions=frozenset()),), (ROW,))
+    problems = _grade_full("CH02", FROZEN_CH02, {}, gen, owners=[owner]).problems
+    assert len(problems) == 1
+    assert "does not cover its floor" in problems[0]
+
+
+def test_owner_suite_for_the_graded_chapter_itself_is_ignored(monkeypatch):
+    _patch_floor(monkeypatch, {})
+    gen = _chapter("CH02", ())
+    self_owner = _owner("CH02", (_beat("m1", rows=(ROW,), assertions=frozenset()),), (ROW,))
+    problems = _grade_full("CH02", FROZEN_CH02, {}, gen, owners=[self_owner]).problems
+    assert len(problems) == 1 and "not claimed" in problems[0]
 
 
 # --- real-data smoke test ----------------------------------------------------

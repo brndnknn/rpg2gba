@@ -225,6 +225,31 @@ def test_touch_warp_on_its_event_cell_is_sided_around_the_event(monkeypatch):
     assert got == {("north", 21, 12), ("south", 21, 14), ("west", 20, 13)}
 
 
+def test_obstacle_on_walkable_terrain_is_sided_around_the_object(monkeypatch):
+    """Regression (C9, Kevlar Strength boulders map031/ev001, ev037): the
+    boulder's tile is walkable terrain under the boulder object. Without its
+    sides the reach pass floods to the occupied tile itself and drops the row
+    as `later -- owner None`."""
+    from rpg2gba.routing.locations import RowCell
+    row = _page_row(row_id="map031/ev001/p0", trigger="player_touch")
+    cell = RowCell(row.row_id, "MAP_KEVLAR_TOWN", 10, 16, "event_cell")
+    monkeypatch.setattr(cli, "cell_for_row", lambda r: cell)
+    graph = _OpenGraph(walls={(9, 16), (11, 16), (10, 15)})
+    fn = cli._cell_fn(frozenset(), {31: graph}, lambda m: (),
+                      obstacle_rows=frozenset({row.row_id}))
+    got = {(c.side, c.x, c.y) for c in fn(row).approach_candidates}
+    assert got == {("south", 10, 17)}
+
+
+def test_non_obstacle_touch_event_on_walkable_tile_stays_on_its_cell(monkeypatch):
+    from rpg2gba.routing.locations import RowCell
+    row = _page_row(row_id="map031/ev001/p0", trigger="player_touch")
+    cell = RowCell(row.row_id, "MAP_KEVLAR_TOWN", 10, 16, "event_cell")
+    monkeypatch.setattr(cli, "cell_for_row", lambda r: cell)
+    fn = cli._cell_fn(frozenset(), {31: _OpenGraph()}, lambda m: ())
+    assert fn(row).approach_candidates == ()
+
+
 # --- --module-dir CLI wiring (mocked: no staged corpus needed) -----------------
 
 def test_generate_cli_threads_out_dir_and_module_dir(tmp_path, monkeypatch):

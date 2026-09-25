@@ -29,6 +29,7 @@ from rpg2gba.story_state.extract import (
 from rpg2gba.story_state.scope_search import (
     named_write_targets,
     run_scope,
+    self_contained_counters,
     witness_citations,
     writes_from_result,
 )
@@ -470,6 +471,10 @@ class _SaturationResult:
 # instead of quietly spinning.
 MAX_RESOLVER_PASSES = 8
 
+#: The read domain handed to a self-contained counter (C9 ruling 13): one
+#: arbitrary value, because its value reaches nothing but itself.
+_COUNTER_PLACEHOLDER = frozenset({0})
+
 
 def _resolve_computed_row(row: RowState, state: State) -> RowState:
     """One computed row re-run against `state`, as an ordinary `RowState`.
@@ -486,8 +491,13 @@ def _resolve_computed_row(row: RowState, state: State) -> RowState:
     dropped here -- resolution is what they were standing in for.
     """
     assert row.computed is not None
+    counters = self_contained_counters(
+        row.computed.commands, row.computed.common_events_by_id)
 
     def read_domain(key: Key) -> frozenset | None:
+        if key in counters:
+            # Its value reaches nothing but itself, so any one value does.
+            return _COUNTER_PLACEHOLDER
         values = _get(state, key)
         if VARIABLE_TOP in values:
             return None  # the only None this resolver ever returns
@@ -512,10 +522,14 @@ def _resolve_computed_row(row: RowState, state: State) -> RowState:
             havoc_global=not named,
         )
 
-    writes, refusals = writes_from_result(
+    writes, nonscalar = writes_from_result(
         result, conditional=row.computed.conditional,
         source_prefix=f"resolved {row.row_id}",
     )
+    # A self-contained counter's written values came from the placeholder,
+    # not from the game: drop them and mark the counter "could be anything".
+    writes = tuple(w for w in writes if w.key not in counters)
+    counter_havoc = tuple(sorted((k for k in result.values if k in counters), key=repr))
 
     # A key this row both READS and WRITES is a counter: its new value is a
     # function of its own old one. Re-running it against a saturated (union)
@@ -526,7 +540,10 @@ def _resolve_computed_row(row: RowState, state: State) -> RowState:
     # this row makes was derived from a now-TOP read, so none of them can be
     # trusted either: the whole row widens. This is exactly the standing it
     # had before C8 (an `unparsed_state_write` with havoc), now named.
-    self_referential = sorted((k for k in result.values if k in result.reads), key=repr)
+    # A counter nothing else reads (`self_contained_counters`) is the
+    # exception and was already handled above (C9 ruling 13).
+    self_referential = sorted(
+        (k for k in result.values if k in result.reads and k not in counters), key=repr)
     if self_referential:
         return replace(
             row,
@@ -543,10 +560,10 @@ def _resolve_computed_row(row: RowState, state: State) -> RowState:
     return replace(
         row,
         writes=writes,
-        refusals=carried + refusals,
+        refusals=carried,
         witnesses=witness_citations(result),
         havoc_global=False,
-        havoc_keys=(),
+        havoc_keys=tuple(sorted(set(nonscalar) | set(counter_havoc), key=repr)),
     )
 
 

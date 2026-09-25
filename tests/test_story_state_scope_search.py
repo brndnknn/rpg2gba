@@ -16,6 +16,7 @@ from rpg2gba.story_state.scope_search import (
     ComputedScope,
     run_scope,
     scope_needs_interpreter,
+    self_contained_counters,
     stripped_ce_ids_for,
     witness_citations,
     writes_from_result,
@@ -67,8 +68,8 @@ def test_writes_from_result_emits_one_assign_per_key() -> None:
         always_written=frozenset({Switch(6), Variable(2)}),
         write_index={Switch(6): 4, Variable(2): 7},
     )
-    writes, refusals = writes_from_result(result, conditional=False, source_prefix="row/x")
-    assert refusals == ()
+    writes, havoc = writes_from_result(result, conditional=False, source_prefix="row/x")
+    assert havoc == ()
     by_key = {w.key: w for w in writes}
     assert by_key[Switch(6)].values == frozenset({True})
     assert by_key[Switch(6)].conditional is False
@@ -84,8 +85,8 @@ def test_writes_from_result_key_not_always_written_is_conditional() -> None:
         always_written=frozenset(),  # only written on SOME runs
         write_index={Switch(6): 0},
     )
-    writes, refusals = writes_from_result(result, conditional=False, source_prefix="row/x")
-    assert refusals == ()
+    writes, havoc = writes_from_result(result, conditional=False, source_prefix="row/x")
+    assert havoc == ()
     assert writes[0].conditional is True
 
 
@@ -95,11 +96,14 @@ def test_writes_from_result_caller_conditional_forces_conditional_even_if_always
         always_written=frozenset({Switch(6)}),
         write_index={Switch(6): 0},
     )
-    writes, refusals = writes_from_result(result, conditional=True, source_prefix="row/x")
+    writes, havoc = writes_from_result(result, conditional=True, source_prefix="row/x")
     assert writes[0].conditional is True
 
 
-def test_writes_from_result_nonscalar_value_refuses_and_emits_no_write_for_that_key() -> None:
+def test_writes_from_result_nonscalar_value_havocs_only_that_key() -> None:
+    """C9 ruling 13: a non-scalar value (e.g. a species name stored in a
+    variable) makes that key "could be anything"; the row's other writes
+    stand and nothing is refused."""
     class _Opaque:
         def __repr__(self) -> str:
             return "<opaque>"
@@ -108,17 +112,14 @@ def test_writes_from_result_nonscalar_value_refuses_and_emits_no_write_for_that_
         values={
             Switch(6): frozenset({True}),
             Variable(9): frozenset({_Opaque()}),
+            Variable(3): frozenset({"Orchynx"}),
         },
-        always_written=frozenset({Switch(6), Variable(9)}),
-        write_index={Switch(6): 0, Variable(9): 1},
+        always_written=frozenset({Switch(6), Variable(9), Variable(3)}),
+        write_index={Switch(6): 0, Variable(9): 1, Variable(3): 2},
     )
-    writes, refusals = writes_from_result(result, conditional=False, source_prefix="row/x")
+    writes, havoc = writes_from_result(result, conditional=False, source_prefix="row/x")
     assert {w.key for w in writes} == {Switch(6)}
-    assert len(refusals) == 1
-    assert refusals[0].code == "search_nonscalar_value"
-    assert "Variable(id=9)" in refusals[0].detail
-    assert "@list[1]" in refusals[0].detail
-    assert "<opaque>" in refusals[0].detail
+    assert set(havoc) == {Variable(9), Variable(3)}
 
 
 def test_writes_from_result_bool_and_int_are_both_scalar() -> None:
@@ -128,8 +129,8 @@ def test_writes_from_result_bool_and_int_are_both_scalar() -> None:
         always_written=frozenset({Switch(1), Variable(1)}),
         write_index={Switch(1): 0, Variable(1): 0},
     )
-    writes, refusals = writes_from_result(result, conditional=False, source_prefix="row/x")
-    assert refusals == ()
+    writes, havoc = writes_from_result(result, conditional=False, source_prefix="row/x")
+    assert havoc == ()
     assert {w.key for w in writes} == {Switch(1), Variable(1)}
 
 
@@ -213,3 +214,47 @@ def test_stripped_ce_ids_for_matches_load_stripped_ce_ids_for_real_reference_dir
     if not (reference_dir / "strip_list.json").exists():
         return
     assert stripped_ce_ids_for(reference_dir) == load_stripped_ce_ids(reference_dir)
+
+
+# --- self_contained_counters (C9 ruling 13) -----------------------------
+
+
+def test_counter_updated_in_place_and_read_nowhere_else_is_self_contained() -> None:
+    commands = [_cmd(121, [6, 6, 0]), _cmd(122, [101, 101, 1, 0, 1])]
+    assert self_contained_counters(commands, {}) == frozenset({Variable(101)})
+
+
+def test_plain_set_is_not_a_counter() -> None:
+    commands = [_cmd(122, [101, 101, 0, 0, 4])]
+    assert self_contained_counters(commands, {}) == frozenset()
+
+
+def test_counter_read_by_a_branch_is_not_self_contained() -> None:
+    commands = [_cmd(122, [101, 101, 1, 0, 1]), _cmd(111, [1, 101, 0, 3, 1])]
+    assert self_contained_counters(commands, {}) == frozenset()
+
+
+def test_counter_used_as_another_variables_operand_is_not_self_contained() -> None:
+    commands = [_cmd(122, [101, 101, 1, 0, 1]), _cmd(122, [5, 5, 0, 1, 101])]
+    assert self_contained_counters(commands, {}) == frozenset()
+
+
+def test_counter_mentioned_in_a_script_is_not_self_contained() -> None:
+    commands = [_cmd(122, [101, 101, 1, 0, 1]), _cmd(355, ["x = pbGet(101)"])]
+    assert self_contained_counters(commands, {}) == frozenset()
+
+
+def test_counter_read_inside_a_called_common_event_is_not_self_contained() -> None:
+    ces = {7: {"list": [_cmd(111, [1, 101, 0, 2, 1])]}}
+    commands = [_cmd(122, [101, 101, 1, 0, 1]), _cmd(117, [7])]
+    assert self_contained_counters(commands, ces) == frozenset()
+
+
+def test_unknown_common_event_makes_nothing_self_contained() -> None:
+    commands = [_cmd(122, [101, 101, 1, 0, 1]), _cmd(117, [99])]
+    assert self_contained_counters(commands, {}) == frozenset()
+
+
+def test_variable_designated_transfer_counts_as_a_read() -> None:
+    commands = [_cmd(122, [101, 101, 1, 0, 1]), _cmd(201, [1, 101, 102, 103, 0])]
+    assert self_contained_counters(commands, {}) == frozenset()

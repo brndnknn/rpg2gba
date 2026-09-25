@@ -563,14 +563,14 @@ def _extract_scope_writes(
         )
         label = row_id if row_id is not None else f"ce-scope @list[{forced_list_index}]"
         if result.refusal is None:
-            writes, bad_refusals = writes_from_result(
+            writes, nonscalar = writes_from_result(
                 result, conditional=conditional, source_prefix=f"interpreter {label}",
             )
             if forced_list_index is not None:
                 writes = tuple(_dc_replace(w, list_index=forced_list_index) for w in writes)
-            witnesses = witness_citations(result) if not bad_refusals else ()
             return ScopeExtraction(
-                writes=writes, refusals=bad_refusals, witnesses=witnesses,
+                writes=writes, havoc_keys=frozenset(nonscalar),
+                witnesses=witness_citations(result),
             )
         if result.refusal.code == "search_unknown_read" and row_id is not None:
             # C8 stage 4: this row's writes depend on state the resolver
