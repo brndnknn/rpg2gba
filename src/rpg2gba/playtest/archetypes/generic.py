@@ -27,10 +27,9 @@ required minimum. Beyond that, `switch_write`/`var_write`/
 `self_switch_write`/`engine_flag_write`/`visual` are added because each is checkable with a
 single, stateless, absolute read after the row's steps run -- exactly what
 a per-kind `StepHandler(emu, beat_name, step) -> None` can honestly do
-without any state shared across steps. `battle` is left out: its wild half has no observable identity (no party/species read
-in the emulator's public API for anything but the player's own party), so
-a `battle` handler could only ever check the trainer half honestly; left
-out rather than declaring a kind it only partly executes. `audio` is left
+without any state shared across steps. `battle` is checked for its trainer
+half only (below); a wild battle has no observable identity, so its
+assertion stays undeclared. `audio` is left
 out too: `assertion.py`'s own `AssertionKind` comment says it is "not
 checked until audio is mapped" -- `bgm_song_id()` reads BGM only, no SE
 read exists, so this is the code's own standing position, not a new call
@@ -73,6 +72,16 @@ page with no text proves `trigger` by its own self-switch
 write. Text is compared as words (`text_matches`): the ROM re-wraps lines
 and expands `{...}` codes.
 
+Trainer battles joined 2026-09-25. The floor names the trainer by class
+and display name; the registration resolves that to every trainers.json
+const with both (a rival's party is picked from a variable at run time, so
+any of them is the right trainer). The handler drives the script into the
+battle, checks it is a trainer battle against one of those consts, wins it,
+and reads the engine's defeat flag for the trainer actually fought. For an
+early-rival battle the engine sets that flag on a loss too, so there the
+won arm's own writes are what prove the win. A page that heals after its
+battle has its lead damaged after the battle, not before the walk.
+
 STATUS: implemented (`assignments/C6/07_generic.md`).
 """
 from __future__ import annotations
@@ -111,6 +120,7 @@ GENERIC_EXECUTED_KINDS: frozenset[str] = frozenset({
     "trigger", "completes", "text",
     "switch_write", "var_write", "self_switch_write", "engine_flag_write",
     "visual", "heal_party", "var_text", "item_grant", "choice", "service",
+    "battle",
 })
 
 #: Services `_handle_service` can prove opened (ruling 20). Any other service
@@ -210,7 +220,8 @@ _ARRIVAL_TRIGGERS = frozenset({"autorun", "parallel"})
 # when the page shows text; the rest stay undeclared, so they stay honestly
 # uncovered: a heal or a `\\v[N]` line can't be read back afterwards.
 _NOT_AFTER_THE_FACT = frozenset(
-    {"trigger", "text", "var_text", "heal_party", "item_grant", "choice", "service"})
+    {"trigger", "text", "var_text", "heal_party", "item_grant", "choice", "service",
+     "battle"})
 #: Re-admitted on an arrival page that shows text: its drain is found by
 #: that text, which proves it fired, and carries the bag delta.
 _FROM_THE_DRAIN = frozenset({"trigger", "text", "item_grant", "choice"})
@@ -566,6 +577,17 @@ def _phone_trainer(row_id: str, beat_name: str, lookup: FloorLookup, manifest_id
     return _trainer_const_for(name, to_constant("TRAINER_CLASS", trainer_type), row_id=row_id)
 
 
+def _battle_consts(step: Step, beat_name: str) -> tuple[str, ...]:
+    """The trainers.json consts a trainer `battle` step can be against."""
+    from rpg2gba.beat_gen.adapt import trainer_consts_for
+    from rpg2gba.pbs_converter._naming import to_constant
+
+    params = dict(step.params)
+    return trainer_consts_for(
+        str(params["name"]), to_constant("TRAINER_CLASS", str(params["trainer_type"])),
+        row_id=f"{beat_name}: {step.row_id}")
+
+
 def _wait_for(emu: "Emulator", cond: Callable[[], bool], frames: int = 600) -> bool:
     for _ in range(frames):
         if cond():
@@ -659,7 +681,47 @@ def _handle_heal_party(emu: "Emulator", beat_name: str, step: Step) -> None:
     assertions.require_lead_healed(emu, beat_name, step.row_id)
 
 
+def _handle_battle(emu: "Emulator", beat_name: str, step: Step) -> None:
+    """Drive the script into its trainer battle, check who it is against,
+    win it, and read the defeat flag for that trainer (module docstring).
+    `consts` is added to the floor params by `generic_beat`."""
+    from rpg2gba.playtest.battle import in_battle, win_battle
+
+    params = dict(step.params)
+    if "consts" not in params:
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: battle at list[{step.list_index}] has no "
+            "resolved trainer consts -- only a trainer battle is checked")
+    if not in_battle(emu):
+        assertions.advance_to_battle(emu)
+    if not in_battle(emu):
+        shot = emu.screenshot(f"{beat_name}_no_battle")
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: no battle started for {params['name']} "
+            f"({shot})")
+    if not emu.is_trainer_battle():
+        shot = emu.screenshot(f"{beat_name}_wild_not_trainer")
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: a battle started, but not a trainer "
+            f"battle ({shot})")
+    expected = {emu.resolve_constant(c): c for c in params["consts"]}
+    actual = emu.opponent_trainer_id()
+    if actual not in expected:
+        shot = emu.screenshot(f"{beat_name}_wrong_trainer")
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: fought trainer id {actual}, not one of "
+            f"{sorted(params['consts'])} ({shot})")
+    win_battle(emu)
+    flag_id = emu.resolve_constant("TRAINER_FLAGS_START") + actual
+    if not _wait_for(emu, lambda: emu.flag(flag_id), frames=120):
+        shot = emu.screenshot(f"{beat_name}_not_defeated")
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: {expected[actual]}'s defeat flag is not "
+            f"set after the win ({shot})")
+
+
 STEP_HANDLERS.update({
+    "battle": _handle_battle,
     "choice": _handle_choice,
     "service": _handle_service,
     "heal_party": _handle_heal_party,
@@ -862,10 +924,12 @@ def generic_beat(
     # are resolved now; phone_register is checked after `completes`.
     declared = frozenset(
         a for a in declared
-        if a.kind != "service" or a.param("name") in SUPPORTED_SERVICES)
+        if (a.kind != "service" or a.param("name") in SUPPORTED_SERVICES)
+        and (a.kind != "battle" or a.param("kind") == "trainer"))
     middle_steps = [
         s for s in middle_steps
-        if s.kind != "service" or dict(s.params)["name"] in SUPPORTED_SERVICES]
+        if (s.kind != "service" or dict(s.params)["name"] in SUPPORTED_SERVICES)
+        and (s.kind != "battle" or dict(s.params).get("kind") == "trainer")]
     phone_steps: list[Step] = []
     resolved_steps: list[Step] = []
     for step in middle_steps:
@@ -881,6 +945,9 @@ def generic_beat(
                 consts.append(const)
             step = Step(step.row_id, step.kind, step.list_index,
                         step.params + (("consts", tuple(consts)),))
+        elif step.kind == "battle":
+            step = Step(step.row_id, step.kind, step.list_index, step.params + (
+                ("consts", _battle_consts(step, beat_name)),))
         elif name == "phone_register":
             phone_steps.append(Step(step.row_id, step.kind, step.list_index, step.params + (
                 ("trainer", _phone_trainer(step.row_id, beat_name, resolved_lookup,
@@ -907,6 +974,14 @@ def generic_beat(
                 "no entry in reference/uranium_id_map.json's 'items' table")
         grant_const[item] = const
 
+    # heal_party after a battle: the lead is damaged once the battle is won
+    # (`damage_after`), not before the walk.
+    heal_at = next((i for i, s in enumerate(middle_steps)
+                    if s.kind == "heal_party" and s.row_id not in random_guard), None)
+    heals = heal_at is not None
+    damage_after = None if heal_at is None else next(
+        (i for i in range(heal_at - 1, -1, -1) if middle_steps[i].kind == "battle"), None)
+
     @builder.beat(
         beat_name,
         f"Generic floor coverage for {', '.join(resolved_rows)} ({chapter_id})",
@@ -919,8 +994,7 @@ def generic_beat(
 
         assertions.require_map(emu, beat_name, cell.map_constant)
         fired_on_the_way = arrival       # an arrival page already ran
-        if any(s.kind == "heal_party" and s.row_id not in random_guard
-               for s in middle_steps):
+        if heals and damage_after is None:
             # Before the walk: a touch page can fire on the way (below).
             # Never on an arrival beat (heal_party is undeclared there).
             assertions.damage_lead(emu, beat_name)
@@ -940,12 +1014,16 @@ def generic_beat(
                 emu.face(facing_toward((x, y), faces_target, caller="generic_beat"))
             if trigger_step is not None:
                 STEP_HANDLERS["trigger"](emu, beat_name, trigger_step)
-        for step in middle_steps:
+        for i, step in enumerate(middle_steps):
             guard = random_guard.get(step.row_id)
             if guard is not None and (step.kind == "heal_party"
                                       or not _guard_holds(emu, beat_name, guard)):
                 continue  # the RNG picked a sibling arm (or: no damage to heal)
             STEP_HANDLERS[step.kind](emu, beat_name, step)
+            if i == damage_after:
+                # A heal after a battle: damaged now, so the lead fights at
+                # full HP and the heal still has something to restore.
+                assertions.damage_lead(emu, beat_name)
         if completes_step is not None:
             STEP_HANDLERS["completes"](emu, beat_name, completes_step)
         if arrival:

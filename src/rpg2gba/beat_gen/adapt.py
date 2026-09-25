@@ -131,16 +131,24 @@ def _trainers_json() -> dict[str, dict]:
     return load_trainers_json(default_build_dir() / "intermediate")
 
 
-def _trainer_const_for(name: str, trainer_class: str, *, row_id: str) -> str:
-    candidates = sorted(
+def trainer_consts_for(name: str, trainer_class: str, *, row_id: str) -> tuple[str, ...]:
+    """Every trainers.json const with this (name, class), sorted -- all the
+    parties the floor's identity can name (a rival's party is picked at run
+    time from a variable, so a battle there is any of them). Raises on none."""
+    candidates = tuple(sorted(
         const for const, entry in _trainers_json().items()
         if entry.get("name") == name and entry.get("trainer_class") == trainer_class
-    )
+    ))
     if not candidates:
         raise ValueError(
             f"archetype_kwargs: {row_id}: no trainers.json entry matches "
             f"name={name!r} trainer_class={trainer_class!r}"
         )
+    return candidates
+
+
+def _trainer_const_for(name: str, trainer_class: str, *, row_id: str) -> str:
+    candidates = trainer_consts_for(name, trainer_class, row_id=row_id)
     if len(candidates) > 1:
         raise ValueError(
             f"archetype_kwargs: {row_id}: {len(candidates)} trainers.json "

@@ -2662,6 +2662,28 @@ the fact.
 Regrade **13 → 7**. ROM-unverified until P11: menu detection by `gSpecialVar_Result == 0xFF`
 during a drain, and the transcript's edge sampling.
 
+**Trainer battles in the generic template (built 2026-09-25, build agent's design, no
+ruling).** Three battle pages landed in `generic_beat`, and none of them fits `trainer_beats`:
+- Richey `map033/ev053` and Larrie `map035/ev003` are phone trainers. Their rematch page p1
+  is unreachable, so the trainer match is half-owned (`group.py`), and p1/p2's arms are refused
+  (`phone_battle_count`).
+- The rival `map050/ev019/p0` is a losable battle. It is emitted as `trainerbattle_earlyrival`
+  in a `switch` over the rival's parties, chosen by a variable, with a white-out fork arm.
+
+So `battle` joins `GENERIC_EXECUTED_KINDS`, for trainer battles only; a wild battle still has
+no observable identity and stays undeclared.
+- **Identity:** the registration resolves the floor's (name, class) to every trainers.json
+  const that carries both (`adapt.trainer_consts_for`). A rival party picked at run time is
+  any of them.
+- **Handler:** drives the script into the battle, checks it is a trainer battle against one
+  of those consts, wins it, and reads `TRAINER_FLAGS_START + <id fought>`.
+- **Early-rival caveat:** `CB2_EndTrainerBattle` sets that flag on a loss too, so for the
+  rival the won arm's switch-35 write is the proof of the win.
+- **Heal after a battle:** when a battle precedes the page's `heal_party` (the rival's won
+  arm), the lead is damaged after the battle rather than before the walk.
+
+Regrade **7 → 4**.
+
 Also on the list, no ruling needed: the starter machine's floor must read the resolver's row
 states, not extraction-time ones (`beat_floor/walk.py:738`, a bug); branch-arm bundling
 (`m033e034_trainer_arms`) needs investigating before anything is decided.

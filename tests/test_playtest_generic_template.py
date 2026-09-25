@@ -70,10 +70,9 @@ def test_steps_trigger_first_completes_last_rest_by_list_index():
 
 def test_steps_drop_kinds_the_body_does_not_execute():
     floor = _floor(_a("trigger", -1, trigger="action"), _a("completes", -1),
-                   _a("battle", 3, kind="trainer"))
-    if "battle" in generic.GENERIC_EXECUTED_KINDS:
-        pytest.skip("your generic body executes battles; this case doesn't apply")
-    assert "battle" not in {s.kind for s in generic.steps_for(floor)}
+                   _a("audio", 3, code=241, name="PU-Lab"))
+    assert "audio" not in generic.GENERIC_EXECUTED_KINDS
+    assert "audio" not in {s.kind for s in generic.steps_for(floor)}
 
 
 def test_steps_refuse_a_refused_floor():
@@ -386,3 +385,116 @@ def test_service_phone_register_checks_the_match_call_flag():
     STEP_HANDLERS["service"](_ServiceEmu(registered=True), "B1", step)
     with pytest.raises(ScenarioError, match="not registered for match call"):
         STEP_HANDLERS["service"](_ServiceEmu(registered=False), "B1", step)
+
+
+# --- battle: trainer half only ----------------------------------------------
+
+
+class _BattleEmu:
+    """A battle already running against `opponent`; winning sets `flag_after`."""
+
+    def __init__(self, *, opponent=7, trainer=True, flag_after=True):
+        self.opponent, self.trainer, self.flag_after = opponent, trainer, flag_after
+        self.won = False
+
+    def is_trainer_battle(self):
+        return self.trainer
+
+    def opponent_trainer_id(self):
+        return self.opponent
+
+    def resolve_constant(self, name):
+        return {"TRAINER_FLAGS_START": 0x500, "TRAINER_RICHEY": 7, "TRAINER_THEO_2": 9}[name]
+
+    def flag(self, flag_id):
+        return self.won and self.flag_after and flag_id == 0x500 + self.opponent
+
+    def run(self, frames):
+        pass
+
+    def screenshot(self, name):
+        return f"{name}.png"
+
+
+def _battle(monkeypatch, emu, consts=("TRAINER_RICHEY",)):
+    from rpg2gba.playtest import battle
+    from rpg2gba.playtest.archetypes.generic import STEP_HANDLERS, Step
+
+    monkeypatch.setattr(battle, "in_battle", lambda e: not e.won)
+
+    def win(e):
+        e.won = True
+    monkeypatch.setattr(battle, "win_battle", win)
+    params = (("kind", "trainer"), ("name", "Richey"), ("trainer_type", "YOUNGSTER"))
+    if consts is not None:
+        params += (("consts", consts),)
+    STEP_HANDLERS["battle"](emu, "B1", Step("map033/ev053/p0", "battle", 12, params))
+
+
+def test_battle_handler_checks_the_trainer_wins_and_reads_the_defeat_flag(monkeypatch):
+    emu = _BattleEmu()
+    _battle(monkeypatch, emu)
+    assert emu.won
+
+
+def test_battle_handler_accepts_any_party_of_the_named_trainer(monkeypatch):
+    _battle(monkeypatch, _BattleEmu(opponent=9), consts=("TRAINER_RICHEY", "TRAINER_THEO_2"))
+
+
+def test_battle_handler_rejects_the_wrong_trainer_a_wild_battle_and_no_flag(monkeypatch):
+    from rpg2gba.playtest.errors import ScenarioError
+
+    with pytest.raises(ScenarioError, match="fought trainer id 9"):
+        _battle(monkeypatch, _BattleEmu(opponent=9))
+    with pytest.raises(ScenarioError, match="not a trainer battle"):
+        _battle(monkeypatch, _BattleEmu(trainer=False))
+    with pytest.raises(ScenarioError, match="defeat flag is not set"):
+        _battle(monkeypatch, _BattleEmu(flag_after=False))
+    with pytest.raises(ScenarioError, match="no resolved trainer consts"):
+        _battle(monkeypatch, _BattleEmu(), consts=None)
+
+
+RICHEY = ("map033/ev053/p0", "map033/ev053/p0/b0")
+RIVAL = ("map050/ev019/p0", "map050/ev019/p0/b7", "map050/ev019/p0/b8")
+
+
+def test_generic_beat_declares_a_trainer_battle():
+    b = _builder()
+    generic.generic_beat(b, chapter_id="CH02", beat_name="m033e053p0", rows=RICHEY)
+    (beat,) = b.build().beats
+    battles = [a for a in beat.assertions if a.kind == "battle"]
+    assert [(a.row_id, a.param("name")) for a in battles] == [(RICHEY[0], "Richey")]
+
+
+def test_generic_beat_leaves_a_wild_battle_undeclared():
+    wild = _a("battle", 3, kind="wild", species="PIDGEY")
+    lookup = {NPC: _floor(_a("trigger", -1, trigger="action"), _a("completes", -1), wild)}
+    b = _builder()
+    generic.generic_beat(b, chapter_id="CH05", beat_name="n", rows=(NPC,),
+                         floor_lookup=lookup.__getitem__)
+    (beat,) = b.build().beats
+    assert "battle" not in {a.kind for a in beat.assertions}
+
+
+class _AnyEmu:
+    def __getattr__(self, name):
+        return lambda *a, **k: 0
+
+
+def test_a_heal_after_a_battle_damages_the_lead_after_the_battle(monkeypatch):
+    from rpg2gba.playtest import assertions
+
+    b = _builder()
+    generic.generic_beat(b, chapter_id="CH01", beat_name="m050e019p0", rows=RIVAL)
+    (beat,) = b.build().beats
+    assert {"battle", "heal_party", "switch_write"} <= {a.kind for a in beat.assertions}
+
+    calls: list[str] = []
+    monkeypatch.setattr(assertions, "require_map", lambda *a: None)
+    monkeypatch.setattr(assertions, "damage_lead", lambda *a: calls.append("damage"))
+    for kind in generic.STEP_HANDLERS:
+        monkeypatch.setitem(generic.STEP_HANDLERS, kind,
+                            lambda emu, name, step: calls.append(step.kind))
+    beat.run(_AnyEmu())
+    assert calls.index("battle") < calls.index("damage") < calls.index("heal_party")
+    assert calls.count("damage") == 1
