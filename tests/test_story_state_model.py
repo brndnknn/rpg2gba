@@ -36,10 +36,19 @@ CHAPTERS_PATH = Path("reference/chapters.json")
 
 def _write_metadata_header(
     build_dir: Path, *, map_id: int = 49, x: int = 7, y: int = 7, direction: int = 2,
+    encounter_maps: tuple[int, ...] = (),
 ) -> None:
     """A minimal `metadata.h` fixture (`heal_locations.initial_anchor`'s
     input shape) -- `model_intro` now reads this to seed `RESPAWN_MAP`
-    (REDERIVATION_PLAN.md §16.3 C3)."""
+    (REDERIVATION_PLAN.md §16.3 C3). Also writes `wild_encounters.json` with a
+    land table on each of `encounter_maps` (ruling 15's losable-battle check
+    reads it)."""
+    enc_dir = build_dir / "intermediate"
+    enc_dir.mkdir(parents=True, exist_ok=True)
+    land = {"encounter_rate": 5, "mons": [{"species": "SPECIES_X", "min_level": 2, "max_level": 2}]}
+    (enc_dir / "wild_encounters.json").write_text(json.dumps({
+        "maps": {str(m): {"land_mons": land} for m in encounter_maps},
+    }), encoding="utf-8")
     header_dir = build_dir / "include" / "constants"
     header_dir.mkdir(parents=True, exist_ok=True)
     (header_dir / "metadata.h").write_text(
@@ -459,7 +468,9 @@ def test_triggered_common_event_becomes_live_only_after_its_gate_row(tmp_path: P
 # --- engine-transition forks (REDERIVATION_PLAN.md §16.3 C3, ruling R9) ----
 
 
-def _write_whiteout_fixture(tmp_path: Path, *, got_pokemon: bool = True) -> tuple[Path, Path]:
+def _write_whiteout_fixture(
+    tmp_path: Path, *, got_pokemon: bool = True, losable: bool = True,
+) -> tuple[Path, Path]:
     """One chapter CHW over four synthetic maps, shaped after the real
     map049/map068 white-out pattern (R9): map500 optionally sets Switch(2)
     "Got Pokemon" (the precondition); map501 has a bare `pbSetPokemonCenter`
@@ -467,7 +478,9 @@ def _write_whiteout_fixture(tmp_path: Path, *, got_pokemon: bool = True) -> tupl
     handler gated on Switch(5) "Starting Over" (only live via the fork);
     map502 has an identically-shaped handler that must NOT be fork-owned
     (it isn't on the landing map); map503 has an always-live control row to
-    confirm a main-path row is never reattributed to the fork."""
+    confirm a main-path row is never reattributed to the fork. `losable`
+    puts a wild encounter table on map503 (ruling 15: no losable battle, no
+    white-out)."""
     build_dir = tmp_path / "build"
     (build_dir / "maps").mkdir(parents=True)
 
@@ -497,7 +510,8 @@ def _write_whiteout_fixture(tmp_path: Path, *, got_pokemon: bool = True) -> tupl
 
     (build_dir / "common_events.json").write_text("[]", encoding="utf-8")
     (build_dir / "system.json").write_text(json.dumps({"start_map_id": 500}), encoding="utf-8")
-    _write_metadata_header(build_dir, map_id=49)  # anchor distinct from 500-503
+    _write_metadata_header(  # anchor distinct from 500-503
+        build_dir, map_id=49, encounter_maps=(503,) if losable else ())
 
     chapters_path = tmp_path / "chapters.json"
     chapters_path.write_text(json.dumps({
@@ -517,6 +531,18 @@ def test_fork_does_not_run_when_precondition_is_impossible(tmp_path: Path) -> No
     assert chw.forks == ()
     handler = next(r for r in chw.rows if r.row_id == page_row_id(501, 2, 0))
     assert handler.status in ("unreachable", "undetermined")
+    assert handler.owner is None
+
+
+def test_fork_does_not_run_without_a_losable_battle(tmp_path: Path) -> None:
+    # Ruling 15: a held party is not enough; something has to be able to
+    # beat it. No encounter table and no battle call on CHW's maps.
+    build_dir, chapters_path = _write_whiteout_fixture(tmp_path, got_pokemon=True, losable=False)
+    stories = build_chapter_stories(["CHW"], build_dir=build_dir, chapters_path=chapters_path)
+    chw = stories["CHW"]
+
+    assert chw.forks == ()
+    handler = next(r for r in chw.rows if r.row_id == page_row_id(501, 2, 0))
     assert handler.owner is None
 
 
@@ -540,7 +566,11 @@ def test_whiteout_fork_owns_forced_handler_on_landing_map_only(tmp_path: Path) -
     assert handler.status == "live"
     assert handler.owner == "CHW"
     assert handler.blockers[0] == "fork:whiteout"
-    assert handler.enabled_by == (("engine:whiteout",),)
+    # Ruling 16: after the engine marker, the real enablers -- here only the
+    # pbSetPokemonCenter row that moved the anchor onto this landing map.
+    # Got Pokemon needs no group: map500 is the fixture's start map, so INTRO
+    # already set it and CHW's seed satisfies the precondition.
+    assert handler.enabled_by == (("engine:whiteout",), (page_row_id(501, 1, 0),))
 
     # The identically-shaped handler on map502 is NOT on the landing map, so
     # the fork never walks it -- it stays unreachable/undetermined.

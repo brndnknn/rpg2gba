@@ -2543,16 +2543,20 @@ fix and grading rule (b)".
     `false` (cited). Expected: INTRO leaves 52 at default, `ev002/p0` live at stage 0, `ev002/p1`
     at stage 1 `enabled_by` Auntie, `engine-audit` clean with the fence deleted whole. (The seed
     was originally a dev convenience for skipping the intro on fresh boots; no longer used.)
-15. **The white-out fork needs a losable battle** (operator, 2026-09-25). The precondition becomes
-    switch 2 Got Pokemon **and** a chapter map with a wild encounter table
-    (`wild_encounters.json`) or a trainer battle without `canlose=true`. CH01 has neither (no
-    encounter tables on 32/48/49/50/64/65/89/172; its only battle, the rival at `map050/ev019`,
-    passes `canlose=true`), so CH01 gets no fork and `map049/ev022/p0` moves to **CH02** (map 33
-    has encounters), matching the hand B18. Ruling 12's CH02:B18 case dissolves. CH03 keeps its
-    own fork (the Kevlar Center sets the anchor partway through; CH03 has losable battles), so
-    `map068/ev001/p1` stays CH03's, **ordered after the Center visit** (ruling 16). Considered
-    and rejected: a generator placement rule ("next chapter after the anchor"), which leaves
-    the model claiming CH01 can white out. The generator emits `whiteout.whiteout_beat` for
+15. **The white-out fork needs a losable battle; CH01 keeps its white-out** (operator,
+    2026-09-25, **corrected the same day**). The precondition becomes switch 2 Got Pokemon
+    **and** a chapter map with a land/water/fishing encounter table (`wild_encounters.json`
+    `maps`) or a battle call whose `canlose` is absent or Ruby-falsy. *As first ruled*, CH01 was
+    believed to have neither and the row was to move to CH02. **That was a build-agent error:**
+    the scan read the file's top level, not `maps`. Map 32 Moki Town has a land table (wild
+    Chyinmunk Lv 2–4) and 23 grass-tagged cells (`PBTerrain.isGrass?` tags 2/10/11/14), mostly
+    the catch-ceremony patch at (11–15, 43–45) beside the Route 1 exit. A post-starter CH01
+    white-out is real play. **Operator, re-ruled:** CH01 keeps `map049/ev022/p0` (R9 as
+    derived), ordered after the starter by ruling 16's edges; ruling 12's CH02:B18 case stands.
+    The precondition still lands. It changes nothing for CH01–CH05 but stops a false fork in a
+    later chapter whose only battles are `canlose`. CH03 keeps its own fork, so
+    `map068/ev001/p1` stays CH03's, **ordered after the Center visit** (ruling 16). The rival's
+    `canlose=true` (`map050/ev019`) stands as found. The generator emits `whiteout.whiteout_beat` for
     `fork:whiteout` rows: `starting_over_rows` = the fork's `owned_row_ids`,
     `heal_location_id` from the landing `respawn_map` value (fail loud on zero or several), and it
     keeps the template's snapshot/restore. That differs from ruling 11 on purpose: a white-out's

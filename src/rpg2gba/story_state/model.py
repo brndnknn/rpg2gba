@@ -47,7 +47,8 @@ from rpg2gba.story_state.state import (
     Variable,
     Write,
 )
-from rpg2gba.story_state.transitions import TRANSITIONS
+from rpg2gba.story_state.losable import losable_battle_evidence
+from rpg2gba.story_state.transitions import TRANSITIONS, EngineTransition
 
 logger = logging.getLogger(__name__)
 
@@ -1144,6 +1145,37 @@ def compute_end_state(
 # --- engine-transition forks (R9/C3) ---------------------------------------
 
 
+def _stripped_map_events() -> set[tuple[int, int]]:
+    """`strip_list.json`'s map events (their battles never reach the ROM)."""
+    from rpg2gba.conversion_agent.orchestrator import load_map_event_strips
+
+    return set(load_map_event_strips(Path(__file__).resolve().parents[3] / "reference"))
+
+
+def _fork_enabled_by(
+    transition: EngineTransition,
+    row_id: str,
+    rows_by_id: dict[str, RowState],
+    seed: State,
+    owner_of: dict[str, tuple[str, int]],
+) -> tuple[tuple[str, ...], ...]:
+    """See `_apply_transition_forks`. Same group shape as
+    `compute_enabled_by`: every group must hold, any row in a group will do."""
+    tests = list(transition.precondition)
+    if not _is_pseudo_row_id(row_id):
+        tests.append(Test(key=transition.lands_on, op="==", value=parse_row_id(row_id).map_id))
+    groups: list[tuple[str, ...]] = [(f"engine:{transition.name}",)]
+    for test in tests:
+        if certain(test, seed):
+            continue
+        writers = tuple(sorted(
+            r for r in owner_of
+            if r in rows_by_id and any(_write_satisfies(w, test) for w in rows_by_id[r].writes)))
+        if writers:
+            groups.append(writers)
+    return tuple(groups)
+
+
 def _apply_transition_forks(
     end_state: State,
     rows_by_id: dict[str, RowState],
@@ -1154,6 +1186,8 @@ def _apply_transition_forks(
     structural_refusal: dict[str, tuple[str, ...] | None],
     enabled_by_of: dict[str, tuple[tuple[str, ...], ...]],
     owner_label: str,
+    losable_battle: bool,
+    seed: State,
 ) -> tuple[ForkReport, ...]:
     """Runs every `TRANSITIONS` entry whose precondition is possible in
     `end_state` (REDERIVATION_PLAN.md §16.3 C3, ruling R9): snapshot -> apply
@@ -1170,9 +1204,22 @@ def _apply_transition_forks(
     saturation (main path or a later fork) sees these rows as already owned
     and never re-walks them. `owner_label` is the chapter id (or `"INTRO"`)
     these rows are attributed to.
+
+    `losable_battle` says whether this chapter's own maps hold a battle that
+    can white out (`losable.losable_battle_evidence`); a transition with
+    `requires_losable_battle` is skipped without one (ruling 15).
+
+    A fork-owned row's `enabled_by` is the `engine:<name>` marker group
+    followed by the real enablers (ruling 16): for each precondition test,
+    and for "the respawn anchor is this row's map", that `seed` (the
+    chapter's start state) doesn't already satisfy, the group of owned rows
+    whose writes do -- the starter choice for Got Pokemon, the Center's
+    `pbSetPokemonCenter` for a landing it moved the anchor to.
     """
     reports: list[ForkReport] = []
     for transition in TRANSITIONS:
+        if transition.requires_losable_battle and not losable_battle:
+            continue
         if not all(possible(t, end_state) for t in transition.precondition):
             continue
 
@@ -1203,7 +1250,8 @@ def _apply_transition_forks(
         for rid, stage in fork_result.newly_owned.items():
             owner_of[rid] = (owner_label, stage)
             already_owned[rid] = (f"fork:{transition.name}",) + fork_result.blockers[rid]
-            enabled_by_of[rid] = ((f"engine:{transition.name}",),)
+            enabled_by_of[rid] = _fork_enabled_by(
+                transition, rid, rows_by_id, seed, owner_of)
 
         reports.append(ForkReport(
             transition=transition.name,
@@ -1348,6 +1396,10 @@ def model_intro(
         end_state, rows_by_id, set(intro_maps),
         already_owned={}, owner_of={}, structural_refusal=structural_refusal,
         enabled_by_of=enabled_by_of, owner_label="INTRO",
+        losable_battle=bool(losable_battle_evidence(
+            {m for m in intro_maps if (maps_dir / f"Map{m:03d}.json").exists()},
+            build_dir, _stripped_map_events())),
+        seed=seed,
     )
 
     map_order = [rid for rid in order if not _is_pseudo_row_id(rid)]
@@ -1565,6 +1617,8 @@ def build_chapter_stories(
         owner_of[rid] = ("INTRO", stage)
         already_owned[rid] = blockers
 
+    stripped = _stripped_map_events()
+
     # Pass 1: walk the chain once, growing cumulative scope and ownership.
     seed = intro_end_state
     seed_from = "INTRO"
@@ -1637,6 +1691,9 @@ def build_chapter_stories(
             already_owned=already_owned, owner_of=owner_of,
             structural_refusal=structural_refusal, enabled_by_of=enabled_by_of,
             owner_label=chapter_id,
+            losable_battle=bool(losable_battle_evidence(
+                own_map_ids_by_chapter[chapter_id], build_dir, stripped)),
+            seed=seed,
         )
 
         seed = refined_end_state

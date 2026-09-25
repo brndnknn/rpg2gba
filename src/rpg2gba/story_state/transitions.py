@@ -44,6 +44,9 @@ class EngineTransition:
     lands_on: EngineKey
     engine_writes: tuple[EngineWrite, ...]
     source: str
+    # The fork also needs the chapter to hold a battle that can white out
+    # (`losable.losable_battle_evidence`; REDERIVATION_PLAN.md §16.3 ruling 15).
+    requires_losable_battle: bool = False
 
 
 @dataclass(frozen=True)
@@ -79,6 +82,8 @@ WHITEOUT = EngineTransition(
     lands_on=RESPAWN_MAP,
     engine_writes=(EngineWrite("FlagSet", "FLAG_STARTING_OVER", "DoWhiteOut"),),
     source="reference/scripts_dump/101__PField_Field.rb:1920-1978",
+    # pbStartOver follows only a battle that was not allowed to be lost.
+    requires_losable_battle=True,
 )
 
 TRANSITIONS: tuple[EngineTransition, ...] = (WHITEOUT,)
