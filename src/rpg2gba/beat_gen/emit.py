@@ -32,6 +32,7 @@ TEMPLATE_CALLS: dict[str, tuple[str, str, str]] = {
     "seam": ("rpg2gba.playtest.archetypes.generic", "seam_beat", "beat_name"),
     "transit": ("rpg2gba.playtest.archetypes.generic", "transit_beat", "beat_name"),
     "whiteout": ("rpg2gba.playtest.whiteout", "whiteout_fork_beat", "beat_name"),
+    "escort": ("rpg2gba.playtest.archetypes.escort", "escort_beat", "beat_name"),
 }
 
 #: The generated-module marker, single source of truth (used by both the

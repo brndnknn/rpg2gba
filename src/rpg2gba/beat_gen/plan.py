@@ -44,6 +44,9 @@ TemplateName = Literal[
     "transit",
     # a white-out fork's landing-map rows (`whiteout.py`, ruling 15)
     "whiteout",
+    # a `warp` match on an action-button page: talk, ride the transfer, stay
+    # where it lands (C9 grading ruling 11, `playtest/archetypes/escort.py`)
+    "escort",
 ]
 
 ARCHETYPE_TEMPLATES: frozenset[str] = frozenset(

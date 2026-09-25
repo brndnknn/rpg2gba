@@ -70,6 +70,23 @@ def test_nudge_not_right_after_its_crossing_fails_loud():
         thread_maps(beats, start_map=1, warp_dest=DEST, nudge_source={"n": 2})
 
 
+def _escort(name: str, map_id: int) -> PlannedBeat:
+    return PlannedBeat(name=name, template="escort", map_id=map_id, rows=(f"{name}/r",),
+                       group=name)
+
+
+def test_escort_then_a_beat_on_the_destination_needs_no_transit():
+    beats = [_escort("e", 1), _beat("a", 2)]
+    out = thread_maps(beats, start_map=1, warp_dest={"e": 2}, nudge_source={})
+    assert [b.name for b in out] == ["e", "a"]   # no transit inserted
+
+
+def test_escort_then_an_arrival_nudge_from_its_origin_is_accepted():
+    beats = [_escort("e", 1), _beat("n", 2, "arrival_nudge")]
+    out = thread_maps(beats, start_map=1, warp_dest={"e": 2}, nudge_source={"n": 1})
+    assert [b.name for b in out] == ["e", "n"]
+
+
 def test_boundary_warp_is_left_alone_and_must_be_on_its_own_map():
     boundary = PlannedBeat(name="x", template="warp", map_id=1, rows=("x/r",), group="x",
                            kwargs=make_kwargs(direction="UP", boundary=True))

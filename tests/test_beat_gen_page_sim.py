@@ -366,3 +366,104 @@ def test_real_canlose_trainer_battle_decides_per_arm():
     assert "map050/ev019/p0/b8" in result.taken
     assert "map050/ev019/p0/b9" in result.not_taken
     assert result.state[Switch(35)] == frozenset({False})
+
+
+# --- 8. player-facing conditions ([6, -1, dir]) -- escort (ruling 11) -------
+
+
+def _facing_if_page(direction: int) -> dict:
+    return {
+        "trigger": 0, "condition": dict(_NO_CONDITION),
+        "list": [
+            {"code": 111, "indent": 0, "parameters": [6, -1, direction]},
+            _switch_write(30, True), _blank(),
+            {"code": 411, "indent": 0, "parameters": []},
+            _switch_write(31, True), _blank(),
+            {"code": 412, "indent": 0, "parameters": []},
+        ],
+    }
+
+
+FACING_ROW = "map051/ev010/p0"
+FACING_THEN, FACING_ELSE = f"{FACING_ROW}/b0", f"{FACING_ROW}/b1"
+
+
+def test_player_facing_then_arm_taken_when_fired_from_south():
+    page = _facing_if_page(8)  # [6, -1, 8]: "is the player facing up?"
+    rows = _rows(51, 10, page)
+    # Player south of the event, facing toward it -- facing up.
+    result = run_page(FACING_ROW, page, rows, {}, Firing(cell=(5, 6), event_cell=(5, 5)))
+    assert result.taken == {FACING_THEN} and result.not_taken == {FACING_ELSE}
+
+
+def test_player_facing_else_arm_taken_from_the_east():
+    page = _facing_if_page(8)
+    rows = _rows(51, 10, page)
+    # Player east of the event, facing toward it -- facing left, not up.
+    result = run_page(FACING_ROW, page, rows, {}, Firing(cell=(6, 5), event_cell=(5, 5)))
+    assert result.taken == {FACING_ELSE} and result.not_taken == {FACING_THEN}
+
+
+def test_player_facing_move_route_updates_facing_before_a_second_check():
+    # First [6,-1,8] check, fired from the south (facing up), takes the
+    # then-arm; a move-route "move left" (code 2) then "turn right" (code
+    # 18) follows; the SECOND [6,-1,8] check must see that turn (facing
+    # right, not up any more), so it takes the else-arm.
+    page = {
+        "trigger": 0, "condition": dict(_NO_CONDITION),
+        "list": [
+            {"code": 111, "indent": 0, "parameters": [6, -1, 8]},
+            _switch_write(40, True), _blank(),
+            {"code": 411, "indent": 0, "parameters": []},
+            _switch_write(41, True), _blank(),
+            {"code": 412, "indent": 0, "parameters": []},
+            {"code": 209, "indent": 0,
+             "parameters": [-1, {"__class__": "RPG::MoveRoute", "list": []}]},
+            {"code": 509, "indent": 0,
+             "parameters": [{"__class__": "RPG::MoveCommand", "code": 2, "parameters": []}]},
+            {"code": 509, "indent": 0,
+             "parameters": [{"__class__": "RPG::MoveCommand", "code": 18, "parameters": []}]},
+            {"code": 210, "indent": 0, "parameters": []},
+            {"code": 111, "indent": 0, "parameters": [6, -1, 8]},
+            _switch_write(42, True), _blank(),
+            {"code": 411, "indent": 0, "parameters": []},
+            _switch_write(43, True), _blank(),
+            {"code": 412, "indent": 0, "parameters": []},
+        ],
+    }
+    rows = _rows(51, 11, page)
+    row = "map051/ev011/p0"
+    first_then, first_else = f"{row}/b0", f"{row}/b1"
+    second_then, second_else = f"{row}/b2", f"{row}/b3"
+    result = run_page(row, page, rows, {}, Firing(cell=(5, 6), event_cell=(5, 5)))
+    assert result.taken == {first_then, second_else}
+    assert result.not_taken == {first_else, second_then}
+
+
+def test_player_facing_undecided_for_an_autorun_page():
+    # trigger=3 (autorun): facing is never seeded from cell/event_cell.
+    page = _facing_if_page(8)
+    page["trigger"] = 3
+    rows = _rows(51, 12, page)
+    row = "map051/ev012/p0"
+    result = run_page(row, page, rows, {}, Firing(cell=(5, 6), event_cell=(5, 5)))
+    assert result.undecided == {f"{row}/b0", f"{row}/b1"}
+
+
+def test_npc_facing_stays_undecided():
+    # [6, N, dir] with N != -1 is an NPC's own facing, not the player's --
+    # this interpreter never models it.
+    page = {
+        "trigger": 0, "condition": dict(_NO_CONDITION),
+        "list": [
+            {"code": 111, "indent": 0, "parameters": [6, 3, 8]},
+            _switch_write(30, True), _blank(),
+            {"code": 411, "indent": 0, "parameters": []},
+            _switch_write(31, True), _blank(),
+            {"code": 412, "indent": 0, "parameters": []},
+        ],
+    }
+    rows = _rows(51, 13, page)
+    row = "map051/ev013/p0"
+    result = run_page(row, page, rows, {}, Firing(cell=(5, 6), event_cell=(5, 5)))
+    assert result.undecided == {f"{row}/b0", f"{row}/b1"}

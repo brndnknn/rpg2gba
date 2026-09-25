@@ -374,6 +374,22 @@ def archetype_kwargs(
     return make_kwargs(**values)
 
 
+def escort_kwargs(
+    beat: PlannedBeat, floors: Mapping[str, RowFloor], *, map_constant_fn: MapConstantFn,
+) -> Kwargs:
+    """The source-derived kwargs for an `escort` beat (ruling 11): the
+    event, and the map its page's one transfer lands on. The landing cell
+    the template reads off the same floor itself."""
+    row_id = beat.rows[0]
+    warp = _one_assertion(_floor(floors, row_id), "warp", row_id=row_id)
+    return make_kwargs(
+        map_constant=map_constant_fn(beat.map_id),
+        map_id=beat.map_id,
+        event_id=parse_row_id(row_id).event_id,
+        dest_map_constant=map_constant_fn(warp.param("map_id")),
+    )
+
+
 def warp_candidates(cell: Cell, graph: MapGraph) -> tuple[ApproachCandidate, ...]:
     """Every side a warp cell can be stepped onto from: one candidate per
     walkable orthogonal neighbour, `side` naming where the player stands

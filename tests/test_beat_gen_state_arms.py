@@ -144,6 +144,28 @@ def test_undecided_and_random_arms_stay_claimed_and_other_templates_pass(monkeyp
     assert beats == (rolled, stair) and elsewhere == ()
 
 
+def test_an_escort_skipped_arm_drops_to_unselected_arm_and_is_never_refired(monkeypatch):
+    # Same page shape as the toggle NPC, but claimed as an escort beat: the
+    # firing takes b0 (A off), so b1 is skipped. Unlike a generic beat, an
+    # escort must NOT get a `_r1` re-fire even though a second run_page
+    # would take b1 (ruling 11 -- the ride happens once).
+    escort = PlannedBeat(name="m064e001_escort", template="escort", map_id=64,
+                         rows=(PAGE, f"{PAGE}/b0", f"{PAGE}/b1"), group="m064e001_escort")
+
+    calls = []
+
+    def stub(page_id, page, states, state, firing):
+        calls.append(page_id)
+        return _toggle(page_id, page, states, state, firing)
+
+    beats, elsewhere = _run((escort,), stub, monkeypatch)
+    assert len(calls) == 1   # never re-fired
+    assert [(b.name, b.rows) for b in beats] == [
+        ("m064e001_escort", (PAGE, f"{PAGE}/b0")),
+    ]
+    assert [(e.row_id, e.status) for e in elsewhere] == [(f"{PAGE}/b1", "unselected_arm")]
+
+
 def test_taint_folds_every_unwalked_write_in_as_a_possibility():
     state = {Switch(35): frozenset({False}), Variable(3): frozenset({1})}
     out = apply_taint(state, [Assign(Switch(35), frozenset({True}), False, "s"),

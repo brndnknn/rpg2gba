@@ -183,6 +183,44 @@ def test_order_follows_first_row_in_manifest_order():
     assert [x.name for x in beats] == ["m001e009p0", "m001e003p0"]
 
 
+# --- warp match becomes an escort when the page is action-triggered --------
+
+def _warp_page(map_id: int, event_id: int, page: int = 0) -> ManifestRow:
+    return ManifestRow(row_id=f"map{map_id:03d}/ev{event_id:03d}/p{page}", kind="page",
+                       map_id=map_id, content_hash="x", event_id=event_id, page_idx=page,
+                       trigger="action")
+
+
+def _warp_match(map_id: int, event_id: int, page: int = 0) -> ArchetypeMatch:
+    row_id = f"map{map_id:03d}/ev{event_id:03d}/p{page}"
+    return ArchetypeMatch(archetype="warp", map_id=map_id, event_id=event_id,
+                          params={}, roles={row_id: "warp"}, prescribed={row_id: "beat"})
+
+
+def test_action_trigger_warp_match_becomes_one_escort_beat_with_its_arms():
+    p0 = _warp_page(41, 6)
+    b0, b1 = _arm(p0.row_id, 0), _arm(p0.row_id, 1)
+    rows = [p0, b0, b1]
+    beats = group.plan_beats(rows, [_warp_match(41, 6)], _floors(rows))
+    assert [(b.name, b.template) for b in beats] == [("m041e006_escort", "escort")]
+    (beat,) = beats
+    assert beat.rows == (p0.row_id, b0.row_id, b1.row_id)
+    assert beat.group == "m041e006_escort"
+
+
+def test_player_touch_warp_match_is_unchanged():
+    p0 = _page(41, 6, 0)   # `_page`: no `trigger` field set (defaults, not "action")
+    b0 = _arm(p0.row_id, 0)
+    rows = [p0, b0]
+    beats = group.plan_beats(rows, [_warp_match(41, 6)], _floors(rows))
+    assert [(b.name, b.template) for b in beats] == [
+        ("m041e006_warp", "warp"), ("m041e006_warp_arms", "generic"),
+    ]
+    main, arms = beats
+    assert main.rows == (p0.row_id,)
+    assert arms.rows == (b0.row_id,)
+
+
 def test_every_row_claimed_exactly_once():
     p0, p1 = _page(36, 4, 0), _page(36, 4, 1)
     rows = [p0, _arm(p0.row_id, 0), p1, _page(36, 7, 0), _stair(36, 1, 1)]

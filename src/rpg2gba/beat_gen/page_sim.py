@@ -78,6 +78,17 @@ _MOVE_DELTA: dict[int, tuple[int, int]] = {
 _MOVE_UNDECIDING = frozenset({9, 10, 11, 12, 13})
 _MOVE_JUMP = 14
 
+# The player's facing, as RMXP numbers it (2 down, 4 left, 6 right, 8 up),
+# for a type-6 "character is facing" condition on the player (params
+# `[6, -1, dir]`). A cardinal move or a turn sets it; anything that turns
+# the player some other way loses it (None: undecided). Direction fix (35)
+# freezes it until 36, which we can't see past either, so both lose it.
+_MOVE_FACES: dict[int, int] = {1: 2, 2: 4, 3: 6, 4: 8, 16: 2, 17: 4, 18: 6, 19: 8}
+_MOVE_LOSES_FACING = frozenset({5, 6, 7, 8, 9, 10, 11, 12, 13, 20, 21, 22, 23, 24, 25, 26})
+_DIRECTION_FIX_ON, _DIRECTION_FIX_OFF = 35, 36
+_CHARACTER_DIRECTION = 6
+_PLAYER = -1
+
 _MAX_STEPS = 2000
 
 # --- public shapes -----------------------------------------------------
@@ -88,7 +99,10 @@ class Firing:
     """One concrete firing of one page: where the player stood, where the
     firing event itself sits (for `get_character(0).onEvent?`), and how any
     102 Show Choices were answered -- `choice_answers[opener_index]` is the
-    402 arm's own `choice_index`, or `-1` for the 403 cancel arm."""
+    402 arm's own `choice_index`, or `-1` for the 403 cancel arm. A talk or
+    touch page's player starts out facing the event from `cell`, which
+    decides a `[6, -1, dir]` player-facing branch (tracked through the
+    player's move routes)."""
 
     cell: tuple[int, int] | None
     event_cell: tuple[int, int] | None
@@ -188,6 +202,22 @@ def _union(a: frozenset, b: frozenset) -> frozenset:
 
 
 # --- deciding one arm's guard --------------------------------------------
+
+
+def _facing_toward(cell: tuple[int, int] | None,
+                   event_cell: tuple[int, int] | None) -> int | None:
+    """The RMXP facing of a player who fires a talk/touch page from `cell`
+    at an event on `event_cell`: toward it, along one axis (a counter puts
+    it two tiles away). None when that isn't a straight line."""
+    if cell is None or event_cell is None:
+        return None
+    dx, dy = event_cell[0] - cell[0], event_cell[1] - cell[1]
+    if dx == 0 and dy != 0:
+        return 2 if dy > 0 else 8
+    if dy == 0 and dx != 0:
+        return 6 if dx > 0 else 4
+    return None
+
 
 _GAME_PLAYER_RE = re.compile(r"\$game_player\.([xy])\s*(==|!=|>=|<=|>|<)\s*(-?\d+)")
 _ON_EVENT_RE = re.compile(r"get_character\(-?\d+\)\.onEvent\?")
@@ -303,6 +333,11 @@ class _Runner:
         self.cell = firing.cell
         self.event_cell = firing.event_cell
         self.choice_answers = firing.choice_answers
+        self.facing: int | None = None
+        self._direction_fixed = False
+        page_row = row_states.get(page_row_id)
+        if page_row is not None and page_row.trigger in ("action", "player_touch", "event_touch"):
+            self.facing = _facing_toward(firing.cell, firing.event_cell)
 
         self.taken: set[str] = set()
         self.not_taken: set[str] = set()
@@ -467,10 +502,15 @@ class _Runner:
         then_rs = self.row_states.get(then_row)
         else_rs = self.row_states.get(else_row)
         params = node.cmd.get("parameters") or []
-        t = _decide_arm(then_rs.arm_guard if then_rs else None, params,
-                         self.cell, self.event_cell, self.state, self.global_havoc)
-        e = _decide_arm(else_rs.arm_guard if else_rs else None, params,
-                         self.cell, self.event_cell, self.state, self.global_havoc)
+        if len(params) >= 3 and params[0] == _CHARACTER_DIRECTION and params[1] == _PLAYER:
+            # Decided here, not by `_decide_arm`: the facing guard carries no
+            # `negated`, and only the construct knows which arm is which.
+            t, e = self._decide_player_facing(params)
+        else:
+            t = _decide_arm(then_rs.arm_guard if then_rs else None, params,
+                             self.cell, self.event_cell, self.state, self.global_havoc)
+            e = _decide_arm(else_rs.arm_guard if else_rs else None, params,
+                             self.cell, self.event_cell, self.state, self.global_havoc)
         if t is True and e is True:
             raise ValueError(
                 f"page_sim: {then_row!r}/{else_row!r} both decided true -- contradiction")
@@ -546,11 +586,14 @@ class _Runner:
         return None
 
     def _apply_move_step(self, cmd: dict[str, Any]) -> None:
-        if self._route_target != -1 or self.cell is None:
+        if self._route_target != -1:
             return
         params = cmd.get("parameters") or []
         sub = params[0] if params else {}
         subcode = sub.get("code") if isinstance(sub, dict) else None
+        self._apply_facing_step(subcode, sub)
+        if self.cell is None:
+            return
         x, y = self.cell
         if subcode in _MOVE_DELTA:
             dx, dy = _MOVE_DELTA[subcode]
@@ -564,6 +607,28 @@ class _Runner:
             self.cell = (x + dx, y + dy)
         # Any other move sub-command (turn, wait, speed change, ...)
         # doesn't reposition the player.
+
+    def _apply_facing_step(self, subcode: int | None, sub: Any) -> None:
+        if subcode in (_DIRECTION_FIX_ON, _DIRECTION_FIX_OFF):
+            self._direction_fixed = subcode == _DIRECTION_FIX_ON
+            self.facing = None
+        elif self._direction_fixed:
+            return
+        elif subcode in _MOVE_FACES:
+            self.facing = _MOVE_FACES[subcode]
+        elif subcode in _MOVE_LOSES_FACING:
+            self.facing = None
+        elif subcode == _MOVE_JUMP:
+            sp = (sub.get("parameters") or []) if isinstance(sub, dict) else []
+            if any(sp[:2]):
+                self.facing = None   # a jump turns toward its larger axis
+
+    def _decide_player_facing(self, params: list[Any]) -> tuple[bool | None, bool | None]:
+        """(then, else) for a `[6, -1, dir]` condition on the player."""
+        if self.facing is None:
+            return None, None
+        base = self.facing == params[2]
+        return base, not base
 
     def _exec(self, nodes: list[Node], row_id: str) -> None:
         writes_by_index = self._writes_index(row_id)
@@ -593,6 +658,9 @@ class _Runner:
                         continue
                     if code == TRANSFER_PLAYER:
                         self.cell = None
+                        tp = node.cmd.get("parameters") or []
+                        if len(tp) > 4 and tp[4] in (2, 4, 6, 8):
+                            self.facing = tp[4]   # 0 retains it (engine: WARP_RETAIN_FACING)
                     elif code == SET_MOVE_ROUTE:
                         params = node.cmd.get("parameters") or []
                         self._route_target = params[0] if params else None

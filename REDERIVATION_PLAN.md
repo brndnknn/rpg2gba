@@ -2502,6 +2502,19 @@ fix and grading rule (b)".
     ferries, metro, train), 15 relocate within the same map, 5 are one-way story escorts.
     `Emulator.snapshot_state`/`restore_state` remain available if a later chapter needs a
     stateless ride it never returns from.
+    **Built 2026-09-25:** `playtest/archetypes/escort.py` (`escort_beat`). `beat_gen/group.py`
+    turns a `warp` match on an `action` page into template `escort`. It keys on the trigger,
+    not on the sprite: a step-on crossing can't fire a talked-to page either way. In CH01–CH05
+    that is only NurseTut. The beat claims the page plus its arms (no `_arms` companion). It
+    walks up, presses A, checks the text, and checks the landing map and cell the moment the
+    map changes (before `settle_field`: the Center tour moves the player). Then it settles and
+    checks the state writes and `completes`. `continuity.thread_maps` leaves the player on the
+    destination, arrived from the origin. `state_arms` drops the arms the one firing skips and
+    never re-fires an escort. `page_sim` now tracks the player's facing (toward the event at
+    fire time, through player move routes, kept by a retain-facing transfer) and decides
+    `[6, -1, dir]` player-facing branches, so NurseTut's b1/b3 are `unselected_arm` from
+    (21,14). A4's facing groups elsewhere are unchanged (CH01 regenerated: none dropped).
+    Regrade **13** (CH03 3 → 2). ROM risk for P11: the landing read races the tour's fade-in.
 12. **A frozen row the hand suite tested from another chapter is covered by the owning
     chapter's claim.** If the generated chapter whose manifest owns the row claims it, rule (a)
     is satisfied and rule (b) grades that chapter's beats. Cases: CH02:B18's white-out heal

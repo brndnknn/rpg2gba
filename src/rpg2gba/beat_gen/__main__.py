@@ -41,6 +41,7 @@ from rpg2gba.beat_floor.walk import floor_for_chapter
 from rpg2gba.beat_gen.adapt import (
     NoArrivalError,
     archetype_kwargs,
+    escort_kwargs,
     is_boundary_warp,
     route_kwargs,
     warp_candidates,
@@ -690,6 +691,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                     map_constant_fn=_map_constant_for, rows=all_rows)))
             except NoArrivalError as exc:
                 dead_groups[b.group] = str(exc)
+        elif b.template == "escort":
+            b = _merge_kwargs(b, dict(escort_kwargs(b, floors, map_constant_fn=_map_constant_for)))
         adapted.append(b)
     dead_elsewhere = _never_fires_elsewhere(planned, dead_groups)
     beats = tuple(b for b in adapted if b.group not in dead_groups)
@@ -799,7 +802,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     #    end side follow from where the player is and where the next beat is.
     beats = thread_maps(
         beats, start_map=route.nodes[0].map_id,
-        warp_dest={b.name: _warp_dest(b, floors) for b in beats if b.template == "warp"},
+        warp_dest={b.name: _warp_dest(b, floors) for b in beats
+                   if b.template in ("warp", "escort")},
         nudge_source={b.name: map_uranium_id(dict(b.kwargs)["from_map_constant"])
                       for b in beats if b.template == "arrival_nudge"},
         route_between=_route_between(

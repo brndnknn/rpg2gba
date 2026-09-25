@@ -134,19 +134,33 @@ def plan_beats(
             continue  # a half-owned match cannot register; falls to generic
         role_ids_sorted = sorted(role_ids, key=lambda rid: position[rid])
         main_rows = [owned_by_id[rid] for rid in role_ids_sorted]
-        main_name = beat_name(match.archetype, main_rows)
+        role_set = set(role_ids)
+        arm_rows = [r for r in owned if r.row_id in remaining and r.kind == "branch"
+                    and owning_page(r) in role_set]
+        template = match.archetype
+        if template == "warp" and main_rows[0].trigger == "action":
+            # Ruling 11: a transfer on a talked-to page is an escort. It
+            # fires once and never comes back, so its arms ride in the same
+            # beat; `state_arms` drops the ones that firing doesn't take.
+            template = "escort"
+        main_name = beat_name(template, main_rows)
         if per_event[(match.archetype, match.map_id, match.event_id)] > 1:
             page = parse_row_id(role_ids_sorted[0]).page_idx
-            main_name = f"m{match.map_id:03d}e{match.event_id:03d}p{page}_{match.archetype}"
+            main_name = f"m{match.map_id:03d}e{match.event_id:03d}p{page}_{template}"
         main_pos = position[role_ids_sorted[0]]
+        if template == "escort":
+            ids = role_ids_sorted + sorted((r.row_id for r in arm_rows),
+                                           key=lambda rid: position[rid])
+            _claim(ids)
+            staged.append((main_pos, 0, PlannedBeat(
+                name=main_name, template="escort", map_id=match.map_id,
+                rows=tuple(ids), group=main_name)))
+            continue
         _claim(role_ids_sorted)
         staged.append((main_pos, 0, PlannedBeat(
             name=main_name, template=match.archetype, map_id=match.map_id,
             rows=tuple(role_ids_sorted), group=main_name)))
 
-        role_set = set(role_ids)
-        arm_rows = [r for r in owned if r.row_id in remaining and r.kind == "branch"
-                    and owning_page(r) in role_set]
         if arm_rows:
             arm_ids = sorted((r.row_id for r in arm_rows), key=lambda rid: position[rid])
             _claim(arm_ids)

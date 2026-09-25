@@ -6,13 +6,14 @@ one cell with the story state the route has built up by then, and takes one
 arm of every then/else. This stage runs after the route is ordered, when
 both are known. Starting from the chapter's seed state (its predecessor's
 end state) it fires, in walk order, the page of every beat that fires one,
-through `page_sim.run_page`, and for each generic beat:
+through `page_sim.run_page`, and for each generic or escort beat:
 
 - an arm the firing certainly takes stays claimed;
 - an arm it certainly skips is re-fired for: when firing the page again from
   the state the first firing left takes it (an NPC whose page flips its own
   self switch, `map064/ev001/p0`), a beat `<name>_r<n>` in the same group
-  claims it, walking the rest of that firing unclaimed (`walk_rows`);
+  claims it, walking the rest of that firing unclaimed (`walk_rows`) --
+  never for an escort, which fires once and doesn't come back (ruling 11);
 - an arm no firing takes goes to `elsewhere` as `unselected_arm`, with what
   selected its sibling (the state, or the cell the page fired from);
 - an arm the simulation can't decide stays claimed, as before.
@@ -31,6 +32,7 @@ from typing import Any
 
 from rpg2gba.beat_gen.page_sim import Firing, PageRun, run_page
 from rpg2gba.beat_gen.plan import Elsewhere, PlannedBeat, make_kwargs
+from rpg2gba.chapter_manifest.generator import iter_page_scopes
 from rpg2gba.chapter_manifest.schema import parse_row_id
 from rpg2gba.story_state.extract import RowState
 from rpg2gba.story_state.model import VARIABLE_TOP, _get, _union_values
@@ -48,9 +50,13 @@ from rpg2gba.story_state.state import (
 #: Templates whose beat fires its rows' pages. The rest walk terrain,
 #: travel, or stand in front of an obstacle without firing it.
 FIRING_TEMPLATES: frozenset[str] = frozenset(
-    {"generic", "warp", "arrival_nudge", "item_ball", "trainer", "flavour_npc"})
+    {"generic", "warp", "arrival_nudge", "item_ball", "trainer", "flavour_npc", "escort"})
+#: Templates whose claimed arms this stage settles. An escort fires once and
+#: never comes back (ruling 11), so it is never re-fired.
+_ARM_TEMPLATES = frozenset({"generic", "escort"})
 
 _ARRIVAL = frozenset({"autorun", "parallel"})
+_FACING_NAMES = {2: "down", 4: "left", 6: "right", 8: "up"}
 _REFIRES = 3
 
 Taint = Assign | Adjust | Key
@@ -99,6 +105,14 @@ def _why(arm: str, states: Mapping[str, RowState], page: Mapping[str, Any],
     if kind == "input" and params and params[0] == 12:
         side = "else of " if guard.negated else ""
         return f"{side}`{params[1]}` from cell {firing.cell} (event at {firing.event_cell})"
+    if kind == "input" and params and params[0] == 6 and params[1] == -1:
+        parsed = parse_row_id(arm)
+        scope = next(s for s in iter_page_scopes(
+            parsed.map_id, {"id": parsed.event_id}, parsed.page_idx, page) if s.row_id == arm)
+        side = "else of " if scope.branch.arm_kind == "else" else ""
+        facing = _FACING_NAMES.get(params[2], params[2])
+        return (f"{side}the player facing {facing}, fired from cell {firing.cell} "
+                f"(event at {firing.event_cell})")
     detail = f":{guard.outcome.detail}" if guard.outcome is not None and guard.outcome.detail else ""
     return f"its guard is `{kind}{detail}`, which the walk doesn't take"
 
@@ -157,7 +171,7 @@ def select_state_arms(
                 state = apply_taint(run.state, taint)
                 if arrival:
                     arrival_runs[(beat.group, page_id)] = run
-            if beat.template != "generic":
+            if beat.template not in _ARM_TEMPLATES:
                 continue
 
             claimed = [r for r in beat.rows if r != page_id and r not in random
@@ -174,7 +188,7 @@ def select_state_arms(
             remaining = list(skipped)
             answers = dict(dict(beat.kwargs).get("choice_answers", ()))
             for n in range(1, _REFIRES + 1):
-                if arrival or not remaining:
+                if arrival or not remaining or beat.template == "escort":
                     break
                 again = run_page(page_id, page, states, state, firing)
                 got = [r for r in remaining if r in again.taken]

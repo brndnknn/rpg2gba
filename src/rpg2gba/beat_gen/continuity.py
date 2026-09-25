@@ -11,6 +11,10 @@ beat needs). `warp_beat` then walks the shortest leg sequence of two or
 more that does both (F,B / F,B,F / B,F / B,F,B), so every warp is still
 proven in both directions (the operator's round-trip rule).
 
+An escort (C9 grading ruling 11) is a one-way crossing: it starts on its
+own map and leaves the player on its destination, having arrived there from
+the origin. `warp_dest` carries its destination too.
+
 An arrival nudge observes the autorun that fires when the player lands on
 its map from its source map, so the beat before it must be a warp whose
 last leg arrives exactly that way.
@@ -135,4 +139,6 @@ def thread_maps(
                 f"{out[-1].name if out else None!r}")
         arrived_from = None     # only the beat right after a crossing sees the arrival
         out.append(beat)
+        if beat.template == "escort":
+            arrived_from, cur = beat.map_id, warp_dest[beat.name]
     return tuple(out)
