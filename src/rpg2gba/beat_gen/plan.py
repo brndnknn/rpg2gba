@@ -91,17 +91,20 @@ class Elsewhere:
     to a boundary event the successor opens (`boundary`, §10 R2/R3; added
     in C6 part two, `beat_gen/boundary.py`), or it provably never executes
     (`never_fires`, C9 ruling 3: an arrival-nudge autorun whose cell no warp
-    lands on -- `detail` carries the proof, the `NoArrivalError` message)."""
+    lands on -- `detail` carries the proof, the `NoArrivalError` message), or
+    it is a branch arm the walk does not take where its sibling runs
+    (`unselected_arm`, ruling 19 -- `detail` says what selects it instead)."""
 
     row_id: str
-    status: Literal["later", "unreachable", "blocked", "boundary", "never_fires"]
+    status: Literal["later", "unreachable", "blocked", "boundary", "never_fires",
+                    "unselected_arm"]
     owner: str | None = None             # the owning chapter for `later`/`boundary`, else None
     requires: tuple[str, ...] = ()       # the capabilities, for `blocked`
     detail: str = ""                     # required non-empty for `never_fires`: the proof
 
     def __post_init__(self) -> None:
-        if self.status == "never_fires" and not self.detail:
-            raise ValueError(f"{self.row_id}: never_fires requires a non-empty detail")
+        if self.status in ("never_fires", "unselected_arm") and not self.detail:
+            raise ValueError(f"{self.row_id}: {self.status} requires a non-empty detail")
 
 
 @dataclass(frozen=True)

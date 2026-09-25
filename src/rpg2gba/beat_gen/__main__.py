@@ -45,6 +45,7 @@ from rpg2gba.beat_gen.adapt import (
     route_kwargs,
     warp_candidates,
 )
+from rpg2gba.beat_gen.arms import blocked_arms
 from rpg2gba.beat_gen.boundary import inbound_rows, split_outbound
 from rpg2gba.beat_gen.continuity import thread_maps
 from rpg2gba.beat_gen.reach import engine_spawn, reachable_sites
@@ -544,6 +545,13 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         floors.update({r.row_id: pred_floors[r.row_id] for r in inbound})
     all_rows = tuple(inbound) + tuple(rows)
     rows_by_id = {r.row_id: r for r in all_rows}
+    # White-out fork rows have no tile; `whiteout.place_whiteout_beats`
+    # places them after ordering (rulings 15-16).
+    fork_owned = {rid for f in story.forks if f.transition == "whiteout"
+                  for rid in f.owned_row_ids}
+    # Ruling 19: exclusive arms the walk doesn't take leave the plan.
+    all_verdicts = {v.row_id: v for s in stories.values() for v in s.rows}
+    selection = blocked_arms(selection, all_verdicts, fork_owned)
     # An archetype template reads its whole page -- arms included -- so a
     # match whose page has a refused arm can't register as that archetype
     # (CH01's map065/ev001: a #109 text gap on one arm). It falls to the
@@ -553,10 +561,6 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     matches = tuple(
         m for m in classify_manifest(inbound) + classify_manifest(rows)
         if not any(rid.startswith(f"{page}/") for page in m.roles for rid in refused_ids))
-    # White-out fork rows have no tile; `whiteout.place_whiteout_beats`
-    # places them after ordering (rulings 15-16).
-    fork_owned = {rid for f in story.forks if f.transition == "whiteout"
-                  for rid in f.owned_row_ids}
     fork_rows = tuple(r.row_id for r in selection.owned if r.row_id in fork_owned)
     beats = plan_beats(tuple(r for r in selection.owned if r.row_id not in fork_owned),
                        matches, floors)
