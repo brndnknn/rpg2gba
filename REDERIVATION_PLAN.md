@@ -2533,6 +2533,66 @@ fix and grading rule (b)".
     `beat_gen/select.py`); the fix is emitting `whiteout.whiteout_beat` for `fork:whiteout`
     rows. Unverified: generated beats may bundle mutually exclusive branch arms
     (`m033e034_trainer_arms`).
+14. **C3's `FlagSet(FLAG_MUM)` new-game seed is removed, and the story model fixes
+    `$skipGameIntro = false`** (operator, 2026-09-25). Switch 52 has two writers: Auntie's
+    goodbye `map049/ev001/p0` and Map051's `$skipGameIntro` arm, which `137__PScreen_Load.rb:840-844`
+    offers only under `$DEBUG` or with an existing save. The model applied the skip arm, so INTRO
+    ended with 52 = {True}, the door's block page `map049/ev002/p0` read `unreachable`, and C3
+    seeded the engine to match. A fresh game takes the full intro, and talking to Auntie is the
+    gate out of the house. Fix: `$skipGameIntro` becomes a known `ruby_subset` global, value
+    `false` (cited). Expected: INTRO leaves 52 at default, `ev002/p0` live at stage 0, `ev002/p1`
+    at stage 1 `enabled_by` Auntie, `engine-audit` clean with the fence deleted whole. (The seed
+    was originally a dev convenience for skipping the intro on fresh boots; no longer used.)
+15. **The white-out fork needs a losable battle** (operator, 2026-09-25). The precondition becomes
+    switch 2 Got Pokemon **and** a chapter map with a wild encounter table
+    (`wild_encounters.json`) or a trainer battle without `canlose=true`. CH01 has neither (no
+    encounter tables on 32/48/49/50/64/65/89/172; its only battle, the rival at `map050/ev019`,
+    passes `canlose=true`), so CH01 gets no fork and `map049/ev022/p0` moves to **CH02** (map 33
+    has encounters), matching the hand B18. Ruling 12's CH02:B18 case dissolves. CH03 keeps its
+    own fork (the Kevlar Center sets the anchor partway through; CH03 has losable battles), so
+    `map068/ev001/p1` stays CH03's, **ordered after the Center visit** (ruling 16). Considered
+    and rejected: a generator placement rule ("next chapter after the anchor"), which leaves
+    the model claiming CH01 can white out. The generator emits `whiteout.whiteout_beat` for
+    `fork:whiteout` rows: `starting_over_rows` = the fork's `owned_row_ids`,
+    `heal_location_id` from the landing `respawn_map` value (fail loud on zero or several), and it
+    keeps the template's snapshot/restore. That differs from ruling 11 on purpose: a white-out's
+    only write (switch 5) nets to zero and is off the story path.
+16. **Story-state `enabled_by` becomes a route-solver precedence edge** (operator, 2026-09-25).
+    `routing/solver.py` derived precedence only from self-switch pairs (`_derive_precedence`)
+    and warp topology (`_derive_warp_precedence`); nothing in `beat_gen/` or `routing/` read the
+    story model's `enabled_by`, so global-switch ordering (Auntie before the door after ruling
+    14, the white-out after the Center) held only by nearest-neighbour luck. Add
+    `_derive_story_precedence`: a claimed row's `enabled_by` row in a different group gives
+    `before=writer_group → after=row_group`. Skip rules match the self-switch edges; engine and
+    seed-satisfied keys give no edge; a disjunctive `enabled_by` edges only when it has a single
+    alternative (others logged). A fork-owned row's `enabled_by` names real rows: the
+    precondition writers in-chapter and the row that wrote the landing `respawn_map`
+    (`pbSetPokemonCenter`), not just `engine:whiteout`. Unsolvable or changed routes surface
+    at the next regen.
+17. **`heal_party` is ROM-checked** (operator, 2026-09-25). Nothing checked a heal before: `pokecenter.py:31-40`
+    checks only that the scene finished, and `generic.py` leaves the kind out. Both Uranium
+    (`pbStartOver` calls `pbHealAll` first, `101__PField_Field.rb:1925`) and the engine
+    (`DoWhiteOut` → `HealPlayerParty`, `overworld.c:416`) heal *before* the respawn warp, so the
+    arrival page's `314` is redundant in play and a full-HP check proves nothing. New
+    `assertions` helper reads/writes party `hp`/`maxHP` (unencrypted `struct Pokemon` tail):
+    set lead HP to 1 before the heal, assert max after. White-out uses `force_white_out`'s
+    `on_arrival` window; the Center nurse and Auntie's heal pages use the same helper.
+18. **`\v[N]` text is predicted by evaluating the page's own Ruby with the ROM's input**
+    (operator, 2026-09-25). `map032/ev009/p2`'s "Go! \v[3]!" is **not** the player's starter:
+    `x = pbGet(151); x = 0 if x == 3; $game_variables[3] = list[x]` over the 0-based
+    `["Orchynx","Raptorch","Eletux"]`, with var 151 the 1-based pick. That names the starter
+    after the player's in rotation; the rival (party `pbGet(151)+18`, Theo 19/20/21 =
+    Eletux/Orchynx/Raptorch) holds the one before. So the ceremony sends out the third. (Found by
+    the operator; the build agent's first proposal, "match the lead species", would have
+    demanded the wrong line every time.) The oracle reads var 151 from the ROM, runs the
+    preceding script through `ruby_subset`, and expects the exact substituted line, independent
+    of the transpiler's `_emit_value_var_text` branches. A `\v[N]` the interpreter can't evaluate
+    stays refused. Rejected: any-of the alternatives, which passes the exact bug this check
+    exists for.
+
+Also on the list, no ruling needed: the starter machine's floor must read the resolver's row
+states, not extraction-time ones (`beat_floor/walk.py:738`, a bug); branch-arm bundling
+(`m033e034_trainer_arms`) needs investigating before anything is decided.
 
 Build order before the single background regeneration: #109 (`text_source` reuses
 `assembly._CHARMAP_SUBS` and the quote toggle — not a `charmap.txt` change; clears all 5 frozen
