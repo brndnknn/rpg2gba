@@ -19,6 +19,7 @@ from rpg2gba.beat_floor.assertion import FloorAssertion, FloorRefusal, RowFloor,
 from rpg2gba.beat_floor.coverage import uncovered
 from rpg2gba.beat_floor.lookup import floor_for_row
 from rpg2gba.playtest.archetypes.trainer import (
+    _intro_text_assertions,
     _register_retalk_beat,
     trainer_beats,
 )
@@ -45,8 +46,9 @@ def test_ch04_timothy_declared_kinds_and_uncovered() -> None:
     """map035 event 12 (Timothy, CH04): a native `trainerbattle_single`
     instance -- `defeat_flag` is the native TRAINER_FLAGS bit, so the win
     branch's `self_switch_write` is correctly left undeclared (module
-    docstring point 2), and the battle beat never reads the pre-battle
-    text box, so `text`/`audio`/`visual` stay undeclared too."""
+    docstring point 2). The battle beat reads the pre-battle intro box, so
+    `text` is declared (point 3, 2026-09-24); `audio`/`visual` stay
+    undeclared -- walk-checked, not graded (C9 ruling 7)."""
     b = _builder()
     trainer_beats(
         b, chapter_id="CH04", map_constant="MAP_ROUTE_02", map_id=35,
@@ -60,11 +62,11 @@ def test_ch04_timothy_declared_kinds_and_uncovered() -> None:
 
     assert battle.rows == ("map035/ev012/p0",)
     battle_kinds = {a.kind for a in battle.assertions}
-    assert battle_kinds == {"trigger", "completes", "battle"}
+    assert battle_kinds == {"trigger", "completes", "battle", "text"}
 
     battle_floor = floor_for_row("map035/ev012/p0", build_dir=_BUILD_DIR)
     battle_uncovered = {a.kind for a in uncovered(battle_floor, battle.assertions)}
-    assert battle_uncovered == {"audio", "visual", "text"}
+    assert battle_uncovered == {"audio", "visual"}
 
     assert retalk.rows == ("map035/ev012/p1",)
     retalk_kinds = {a.kind for a in retalk.assertions}
@@ -91,10 +93,10 @@ def test_ch02_marko_declared_kinds_and_uncovered() -> None:
     battle, retalk = chapter.beats
 
     assert battle.rows == ("map033/ev009/p0",)
-    assert {a.kind for a in battle.assertions} == {"trigger", "completes", "battle"}
+    assert {a.kind for a in battle.assertions} == {"trigger", "completes", "battle", "text"}
 
     battle_floor = floor_for_row("map033/ev009/p0", build_dir=_BUILD_DIR)
-    assert uncovered(battle_floor, battle.assertions)  # non-empty: audio/visual/text
+    assert uncovered(battle_floor, battle.assertions)  # non-empty: audio/visual
 
     assert retalk.rows == ("map033/ev009/p1",)
     assert "text" in {a.kind for a in retalk.assertions}
@@ -267,3 +269,41 @@ def test_retalk_beat_body_passes_when_shown_text_matches_declared() -> None:
     emu = _FakeRetalkEmu(
         defeat_flag_set=True, shown_texts=["Someone tougher than me? Impossible!"])
     beat.run(emu)  # type: ignore[arg-type]  # must not raise
+
+
+# -- (d) intro text: declared only when every text box precedes the battle ----
+
+_BATTLE_ROW = "map999/ev001/p0"
+
+
+def _battle_floor(*text_indices: int, battle_index: int | None = 9) -> RowFloor:
+    assertions = {
+        FloorAssertion(row_id=_BATTLE_ROW, kind="text", list_index=i, code=101,
+                       params=make_params(index=n, text=f"line {n}"), tag="text")
+        for n, i in enumerate(text_indices)
+    }
+    if battle_index is not None:
+        assertions.add(FloorAssertion(
+            row_id=_BATTLE_ROW, kind="battle", list_index=battle_index, code=111,
+            params=make_params(kind="trainer", name="X", trainer_type="Y"), tag="flow"))
+    return RowFloor(row_id=_BATTLE_ROW, trigger="event_touch",
+                    assertions=frozenset(assertions), refusals=())
+
+
+def test_intro_text_before_the_battle_is_declarable() -> None:
+    texts, reason = _intro_text_assertions(_BATTLE_ROW, lambda _row: _battle_floor(3, 8))
+    assert reason is None
+    assert [a.list_index for a in texts] == [3, 8]
+
+
+def test_text_after_the_battle_blocks_the_declaration() -> None:
+    texts, reason = _intro_text_assertions(_BATTLE_ROW, lambda _row: _battle_floor(8, 12))
+    assert texts == ()
+    assert reason is not None and "follow the battle" in reason
+
+
+def test_text_without_a_battle_assertion_is_not_declared() -> None:
+    texts, reason = _intro_text_assertions(
+        _BATTLE_ROW, lambda _row: _battle_floor(1, battle_index=None))
+    assert texts == ()
+    assert reason is not None and "no 'battle'" in reason

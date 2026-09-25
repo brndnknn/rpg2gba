@@ -101,8 +101,12 @@ logger = logging.getLogger(__name__)
 #    `self_switch_write` floor assertion on one of the battle row's branch
 #    rows) IS declared, on that branch row.
 # 3. `text`: the pre-battle intro box the floor sees (the row's own `text`
-#    kind) is left undeclared -- the battle beat's body never reads field
-#    message text before dismissing into combat, only re-talk beats do.
+#    kind) is declared when every `text` assertion on the battle row sits
+#    before its `battle` assertion -- the body reads each intro box off the
+#    field message before `advance_to_battle` dismisses it (2026-09-24, C9
+#    grading). A row with text after the battle is left undeclared: the body
+#    has no post-battle field read to back it. Every CH01-CH05 trainer's
+#    battle row has exactly one intro box and nothing after.
 # 4. `item_grant`: only declared when `rider=True` and the body's
 #    before/after bag-count check is for the SAME item the floor's
 #    `item_grant` assertion names (validated via the same internal-name ->
@@ -257,6 +261,49 @@ def _trainer_defeat_flag_settle(
         "%s: post-battle script did not set %s within %d frames",
         beat, defeat_flag, budget,
     )
+
+
+#: Frames to wait for a trainer's intro box: the "!" emote plus a walk across
+#: the trainer's whole sight range (16 frames a tile) with room to spare.
+_INTRO_FRAME_BUDGET = 600
+
+
+def _intro_text_assertions(
+    battle_row_id: str, floor_lookup: FloorLookup,
+) -> tuple[tuple[FloorAssertion, ...], str | None]:
+    """The battle row's pre-battle `text` assertions in source order, and
+    None -- or `()` and the reason `text` can't be declared (point 3)."""
+    try:
+        floor = floor_lookup(battle_row_id)
+    except KeyError as exc:
+        return (), f"no floor for {battle_row_id} ({exc})"
+    if floor.refused:
+        return (), f"floor for {battle_row_id} is refused"
+    battles = [a.list_index for a in floor.assertions if a.kind == "battle"]
+    texts = tuple(sorted(
+        (a for a in floor.assertions if a.kind == "text"), key=lambda a: a.list_index))
+    if not texts:
+        return (), f"floor has no 'text' assertions for {battle_row_id}"
+    if not battles:
+        return (), f"floor has no 'battle' assertion on {battle_row_id} to order text against"
+    after = [a for a in texts if a.list_index > min(battles)]
+    if after:
+        return (), (f"{len(after)} text assertion(s) follow the battle on "
+                    f"{battle_row_id}; the body has no post-battle field read")
+    return texts, None
+
+
+def _assert_floor_text(emu: Emulator, expected: str) -> None:
+    """Assert the open field message against one floor `text` param. The
+    engine expands `{PLAYER}` to the player's name, so a line carrying it is
+    checked as the text either side of the placeholder."""
+    if "{PLAYER}" in expected:
+        before, _, after = expected.partition("{PLAYER}")
+        emu.assert_text_contains(before)
+        if after:
+            emu.assert_text_contains(after)
+    else:
+        emu.assert_text_contains(expected, exact=True)
 
 
 def _approach(emu: Emulator, approach: tuple[int, int]) -> bool:
@@ -434,6 +481,12 @@ def trainer_beats(
             "trainerbattle_single/_rematch, no floor kind models it) or no "
             "branch row's write matches it", beat_prefix, defeat_flag)
 
+    intro_texts, intro_reason = _intro_text_assertions(battle_row_id, resolved_lookup)
+    if intro_reason is None:
+        executed_kinds.add("text")
+    else:
+        logger.info("%s: not declaring 'text' -- %s", beat_prefix, intro_reason)
+
     if rider and rider_item:
         item_reason = _validate_rider_item_grant(
             battle_row_id, rider_item, floor_lookup=resolved_lookup,
@@ -480,6 +533,18 @@ def trainer_beats(
                     "battle check below decides",
                     beat_prefix, approach, exc,
                 )
+        for a in intro_texts:
+            # The box comes up only after the "!" and the trainer's walk to
+            # the player, which can outlast wait_for_field_message's default.
+            if emu.wait_for_field_message(frame_budget=_INTRO_FRAME_BUDGET) is None:
+                shot = emu.screenshot(f"{beat_prefix}_no_intro_text")
+                raise ScenarioError(
+                    f"{beat_prefix}: no intro message box appeared before the "
+                    f"battle; expected {a.param('text')!r} ({shot})")
+            _assert_floor_text(emu, a.param("text"))
+            if a is not intro_texts[-1]:
+                emu.clear_field_message()
+                emu.tap("A")
         assertions.advance_to_battle(emu)
         if not in_battle(emu):
             shot = emu.screenshot(f"{beat_prefix}_no_battle")
@@ -597,14 +662,7 @@ def _register_retalk_beat(
             emu.interact()
         if text_assertions:
             for a in text_assertions:
-                expected = a.param("text")
-                if "{PLAYER}" in expected:
-                    before, _, after = expected.partition("{PLAYER}")
-                    emu.assert_text_contains(before)
-                    if after:
-                        emu.assert_text_contains(after)
-                else:
-                    emu.assert_text_contains(expected, exact=True)
+                _assert_floor_text(emu, a.param("text"))
                 emu.advance_dialog()
         else:
             actual = emu.current_field_message_text()
