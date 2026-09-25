@@ -95,6 +95,12 @@ _PROBE_ENTRIES: dict[str, str] = {
     # the same field `SetMapVarsToTrainerA`/`GetTrainerFlag` read, so it
     # identifies the opponent by the engine's own bookkeeping.
     "off_tbp_opponenta": "offsetof(TrainerBattleParameter, params.opponentA)",
+    # gRematchTable (include/battle_setup.h): the phone_register service fact
+    # (ruling 20) -- a registered trainer's flag is
+    # TRAINER_REGISTERED_FLAGS_START + its row here.
+    "sizeof_rematchtrainer": "sizeof(struct RematchTrainer)",
+    "val_rematch_table_entries": "REMATCH_TABLE_ENTRIES",
+    "val_trainer_registered_flags_start": "TRAINER_REGISTERED_FLAGS_START",
     # struct Main (include/main.h): gMain.callback2, for in-battle detection.
     "off_main_callback2": "offsetof(struct Main, callback2)",
     # gMain.state (include/main.h:36, `u8 state`) -- CB2_WhiteOut's own

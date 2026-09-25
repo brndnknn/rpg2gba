@@ -5,6 +5,7 @@ tape — poll game state (coords, field-controls lock) and act on it, with
 frame-budget timeouts that fail loud with a screenshot. That keeps scenarios
 robust against text-length, timing, and converter changes.
 """
+import functools
 import heapq
 import logging
 import os
@@ -39,6 +40,7 @@ from .offsets import (
 )
 from .symbols import (
     SymbolMap,
+    mart_info_layout,
     static_addr_via_accessor,
     static_fn_via_literal_pool,
     static_ptr_via_accessor,
@@ -732,6 +734,15 @@ class Emulator:
             engine / "pokeemerald.elf",
             self.symbols["ScriptMenu_YesNo"],
         )
+        # `Task_PokemonPicWindow` (script_menu.c): the task `showmonpic`'s
+        # `ScriptMenu_ShowPokemonPic` creates, alive while the picture is up
+        # (the starter selector's reveal, ruling 20). Same literal-pool trick.
+        # The pool sits past the default span; its first code literal is the
+        # task, the one `ScriptMenu_HidePokemonPic` also looks up (checked).
+        self._monpic_task_fn = static_fn_via_literal_pool(
+            engine / "pokeemerald.elf",
+            self.symbols["ScriptMenu_ShowPokemonPic"], span=0xE0,
+        )
         # Text-content decode (Emulator.current_field_message_text,
         # active_printer_texts) -- reuses text_validator.engine_metrics'
         # charmap.txt parser (one source of truth for the char<->byte table,
@@ -1312,6 +1323,54 @@ class Emulator:
         o = self.offsets
         callback2 = self.u32(self.symbols["gMain"] + o["off_main_callback2"])
         return callback2 == (self.symbols["CB2_Overworld"] | 1)
+
+    def _task_active(self, fn: int) -> bool:
+        """`FuncIsActiveTask(fn)` over `gTasks`."""
+        o = self.offsets
+        base = self.symbols["gTasks"]
+        for i in range(o["val_num_tasks"]):
+            task = base + i * o["sizeof_task"]
+            if self.u8(task + o["off_task_is_active"]) and \
+                    self.u32(task + o["off_task_func"]) == fn:
+                return True
+        return False
+
+    def monpic_up(self) -> bool:
+        """True while a `showmonpic` picture window is on screen."""
+        return self._task_active(self._monpic_task_fn)
+
+    @functools.cached_property
+    def _mart_layout(self) -> tuple[int, int, int]:
+        """`symbols.mart_info_layout` for this build (ruling 20)."""
+        return mart_info_layout(self.engine / "pokeemerald.elf",
+                                self.symbols["CreatePokemartMenu"])
+
+    def mart_items(self) -> list[int]:
+        """The item ids the last-opened mart is selling (`sMartInfo`)."""
+        anchor, list_off, count_off = self._mart_layout
+        ptr = self.u32(anchor + list_off)
+        if ptr == 0:
+            return []
+        return [self.u16(ptr + 2 * i) for i in range(self.u16(anchor + count_off))]
+
+    def clear_mart_items(self) -> None:
+        """Zero `sMartInfo`'s item list, so a mart opening afterwards is
+        visible as the pointer being set again."""
+        anchor, list_off, _ = self._mart_layout
+        self.write_u32(anchor + list_off, 0)
+
+    def match_call_registered(self, trainer: str | int) -> bool:
+        """`register_matchcall`'s effect: `SetMatchCallRegisteredFlag`
+        (pokenav_match_call_data.c) sets TRAINER_REGISTERED_FLAGS_START + the
+        trainer's `gRematchTable` row (the row whose first id is the trainer).
+        Fails loud for a trainer with no rematch row."""
+        trainer_id = self.resolve_constant(trainer) if isinstance(trainer, str) else trainer
+        o = self.offsets
+        table = self.symbols["gRematchTable"]
+        for row in range(o["val_rematch_table_entries"]):
+            if self.u16(table + row * o["sizeof_rematchtrainer"]) == trainer_id:
+                return self.flag(o["val_trainer_registered_flags_start"] + row)
+        raise ScenarioError(f"trainer {trainer!r} has no gRematchTable row")
 
     def yesno_prompt_up(self) -> bool:
         """True while a `yesnobox` prompt is on screen awaiting an answer.

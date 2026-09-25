@@ -2607,6 +2607,16 @@ fix and grading rule (b)".
     are reported walk-checked, since no walk picks the RNG. Arms an archetype template
     already owns (trainer win/lose, item-ball bag-full) stay with that template.
 
+20. **A `service` check: the native UI opened, the walk backed out, control came back, plus one
+    fact where the engine leaves one** (operator, 2026-09-25). Facts: mart stock matches the
+    source list; `starter_select` added the picked species; `phone_register` sets what the
+    transpiler emits for registration. Region map, PC and `berry_plant` assert open + hand-back
+    only. On berry trees (operator question): picking is page 0's `pbPickBerry`, whose floor
+    carries the `item_grant` the bag-delta check covers. `berry_plant` is page 1
+    (`pbBerryPlant`, the soil/planting UI the tree becomes after picking), where a walk finds
+    nothing to harvest. Page 0's "Want to pick it?" is a confirm prompt, answered yes under
+    ruling 19; the decline arm isn't walked.
+
 Also on the list, no ruling needed: the starter machine's floor must read the resolver's row
 states, not extraction-time ones (`beat_floor/walk.py:738`, a bug); branch-arm bundling
 (`m033e034_trainer_arms`) needs investigating before anything is decided.

@@ -95,8 +95,13 @@ if TYPE_CHECKING:  # runtime import is lazy so this module works without mGBA bi
 GENERIC_EXECUTED_KINDS: frozenset[str] = frozenset({
     "trigger", "completes", "text",
     "switch_write", "var_write", "self_switch_write", "engine_flag_write",
-    "visual", "heal_party", "var_text", "item_grant", "choice",
+    "visual", "heal_party", "var_text", "item_grant", "choice", "service",
 })
+
+#: Services `_handle_service` can prove opened (ruling 20). Any other service
+#: assertion is left undeclared and its step skipped, so it stays reported.
+SUPPORTED_SERVICES: frozenset[str] = frozenset(
+    {"pc", "region_map", "berry_plant", "mart", "starter_select", "phone_register"})
 
 
 @dataclass(frozen=True)
@@ -188,7 +193,7 @@ _ARRIVAL_TRIGGERS = frozenset({"autorun", "parallel"})
 # already fired and the text was already driven through. Left undeclared,
 # so they stay honestly uncovered (owed to an arrival-cutscene template).
 _NOT_AFTER_THE_FACT = frozenset(
-    {"trigger", "text", "var_text", "heal_party", "item_grant", "choice"})
+    {"trigger", "text", "var_text", "heal_party", "item_grant", "choice", "service"})
 
 
 def _player_facing(emu: "Emulator") -> str:
@@ -421,6 +426,100 @@ def _handle_choice(emu: "Emulator", beat_name: str, step: Step) -> None:
             f"script received {got}, expected {expected} ({shot})")
 
 
+def _phone_trainer(row_id: str, beat_name: str, lookup: FloorLookup, manifest_id: str) -> str:
+    """The trainer a `phone_register` row registers: the one trainer battled
+    on any page of the same event (the register call often sits on the
+    rematch page, the battle on the first). Fails loud on none or several."""
+    from rpg2gba.beat_gen.adapt import _trainer_const_for
+    from rpg2gba.pbs_converter._naming import to_constant
+
+    parsed = parse_row_id(row_id)
+    event_rows = [r.row_id for r in load_chapter_rows(manifest_id)
+                  if r.map_id == parsed.map_id and r.event_id == parsed.event_id]
+    trainers = {
+        (a.param("name"), a.param("trainer_type"))
+        for rid in event_rows for a in lookup(rid).assertions
+        if a.kind == "battle" and a.param("kind") == "trainer"}
+    if len(trainers) != 1:
+        raise ValueError(
+            f"generic_beat: {beat_name}: {row_id} registers a phone contact, but its "
+            f"event battles {sorted(trainers) or 'no trainer'} -- need exactly one")
+    (name, trainer_type), = trainers
+    return _trainer_const_for(name, to_constant("TRAINER_CLASS", trainer_type), row_id=row_id)
+
+
+def _wait_for(emu: "Emulator", cond: Callable[[], bool], frames: int = 600) -> bool:
+    for _ in range(frames):
+        if cond():
+            return True
+        emu.run(1)
+    return cond()
+
+
+def _service_failed(emu: "Emulator", beat_name: str, step: Step, what: str) -> ScenarioError:
+    shot = emu.screenshot(f"{beat_name}_{dict(step.params)['name']}")
+    return ScenarioError(f"{beat_name}: {step.row_id}: {what} ({shot})")
+
+
+def _handle_service(emu: "Emulator", beat_name: str, step: Step) -> None:
+    """Ruling 20: the native UI opened, the walk backed out, and control came
+    back to the script, plus the service's one fact where the engine leaves
+    one. `phone_register` is checked after the page instead (its step carries
+    `trainer` then, added by the body)."""
+    params = dict(step.params)
+    name = params["name"]
+    result_addr = emu.symbols["gSpecialVar_Result"]
+    if name == "pc":
+        # EventScript_PC: boot text, then a multichoice (0xFF while waiting);
+        # B answers MULTI_B_PRESSED -> EventScript_TurnOffPC.
+        emu.write_u16(result_addr, 0)
+        emu.advance_dialog("B", stop=lambda: emu.u16(result_addr) == _MENU_WAITING)
+        if emu.u16(result_addr) != _MENU_WAITING:
+            raise _service_failed(emu, beat_name, step, "the PC menu never came up")
+        emu.tap("B")
+        if emu.u16(result_addr) != emu.resolve_constant("MULTI_B_PRESSED"):
+            raise _service_failed(emu, beat_name, step, "B at the PC menu did not reach it")
+    elif name == "region_map":
+        main_cb2 = emu.symbols["gMain"] + emu.offsets["off_main_callback2"]
+        overworld = emu.symbols["CB2_Overworld"] | 1
+        if not _wait_for(emu, lambda: emu.u32(main_cb2) != overworld):
+            raise _service_failed(emu, beat_name, step, "the region map never opened")
+        for _ in range(40):
+            if emu.u32(main_cb2) == overworld:
+                break
+            emu.tap("B")
+        else:
+            raise _service_failed(emu, beat_name, step, "the region map never handed back")
+    elif name == "berry_plant":
+        if emu.wait_for_field_message() is None:
+            raise _service_failed(emu, beat_name, step, "the berry tree showed nothing")
+        emu.advance_dialog("B")
+    elif name == "mart":
+        # The body cleared sMartInfo's list before the walk: set again = opened.
+        emu.advance_dialog("B", stop=lambda: bool(emu.mart_items()))
+        got = emu.mart_items()
+        if not got:
+            raise _service_failed(emu, beat_name, step, "the mart never opened")
+        expected = [emu.resolve_constant(c) for c in params["consts"]]
+        if got != expected:
+            raise _service_failed(emu, beat_name, step,
+                                  f"the mart sells {got}, expected {expected}")
+        emu.tap("B")  # Quit
+    elif name == "starter_select":
+        emu.advance_dialog("A", stop=emu.monpic_up)
+        if not emu.monpic_up():
+            raise _service_failed(emu, beat_name, step, "the starter reveal never showed")
+    elif name == "phone_register":
+        if "trainer" not in params:
+            raise _service_failed(emu, beat_name, step,
+                                  "phone_register is checked after the page completes")
+        if not emu.match_call_registered(params["trainer"]):
+            raise _service_failed(emu, beat_name, step,
+                                  f"{params['trainer']} is not registered for match call")
+    else:
+        raise _service_failed(emu, beat_name, step, f"no check for service {name!r}")
+
+
 def _handle_item_grant(emu: "Emulator", beat_name: str, step: Step) -> None:
     # Called by `generic_beat`'s body after `completes`, with `const` and
     # `expected_total` added to the floor params (module docstring).
@@ -444,6 +543,7 @@ def _handle_heal_party(emu: "Emulator", beat_name: str, step: Step) -> None:
 
 STEP_HANDLERS.update({
     "choice": _handle_choice,
+    "service": _handle_service,
     "heal_party": _handle_heal_party,
     "item_grant": _handle_item_grant,
     "var_text": _handle_var_text,
@@ -613,6 +713,40 @@ def generic_beat(
         template="generic", floor_lookup=resolved_lookup,
     )
 
+    # service (ruling 20): only the services `_handle_service` can prove are
+    # declared or driven; a mart's stock and a phone registration's trainer
+    # are resolved now; phone_register is checked after `completes`.
+    declared = frozenset(
+        a for a in declared
+        if a.kind != "service" or a.param("name") in SUPPORTED_SERVICES)
+    middle_steps = [
+        s for s in middle_steps
+        if s.kind != "service" or dict(s.params)["name"] in SUPPORTED_SERVICES]
+    phone_steps: list[Step] = []
+    resolved_steps: list[Step] = []
+    for step in middle_steps:
+        name = dict(step.params).get("name") if step.kind == "service" else None
+        if name == "mart":
+            consts = []
+            for item in dict(step.params)["items"]:
+                const = _uranium_item_constants().get(str(item))
+                if const is None:
+                    raise ValueError(
+                        f"generic_beat: {beat_name}: {step.row_id} sells {item!r}, which "
+                        "has no entry in reference/uranium_id_map.json's 'items' table")
+                consts.append(const)
+            step = Step(step.row_id, step.kind, step.list_index,
+                        step.params + (("consts", tuple(consts)),))
+        elif name == "phone_register":
+            phone_steps.append(Step(step.row_id, step.kind, step.list_index, step.params + (
+                ("trainer", _phone_trainer(step.row_id, beat_name, resolved_lookup,
+                                           manifest_chapter_id or chapter_id)),)))
+            continue
+        resolved_steps.append(step)
+    middle_steps = resolved_steps
+    has_mart = any(dict(s.params).get("name") == "mart" for s in middle_steps
+                   if s.kind == "service")
+
     # item_grant: resolved now (an unmapped item fails at import, not
     # mid-walk) and checked after `completes` (module docstring).
     # A random arm's grant may not happen, so it isn't counted (ruling 19).
@@ -646,6 +780,8 @@ def generic_beat(
             # Never on an arrival beat (heal_party is undeclared there).
             assertions.damage_lead(emu, beat_name)
         bag_before = {c: emu.bag_item_quantity(c) for c in sorted(set(grant_const.values()))}
+        if has_mart:
+            emu.clear_mart_items()
         try:
             if not arrival:
                 emu.walk_to(x, y)
@@ -680,6 +816,8 @@ def generic_beat(
             STEP_HANDLERS["item_grant"](emu, beat_name, Step(
                 step.row_id, step.kind, step.list_index,
                 step.params + (("const", const), ("expected_total", expected[const]))))
+        for step in phone_steps:
+            STEP_HANDLERS["service"](emu, beat_name, step)
 
     del body
 

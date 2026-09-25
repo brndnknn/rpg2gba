@@ -316,3 +316,73 @@ def test_choice_handler_catches_a_wrong_answer_reaching_the_script():
     emu = _MenuEmu(yesno=True, results={"A": 0})  # YES pressed, script got NO
     with pytest.raises(ScenarioError, match="script received 0, expected 1"):
         STEP_HANDLERS["choice"](emu, "B1", _choice_step(("Yes", "No"), 0))
+
+
+# --- service (ruling 20) ------------------------------------------------------
+
+
+class _ServiceEmu:
+    def __init__(self, *, mart=(), registered=False):
+        self.symbols = {"gSpecialVar_Result": 0x2000}
+        self.mem = {0x2000: 0}
+        self._mart, self._registered, self.taps = list(mart), registered, []
+
+    def u16(self, addr):
+        return self.mem.get(addr, 0)
+
+    def write_u16(self, addr, value):
+        self.mem[addr] = value
+
+    def advance_dialog(self, key, stop=None):
+        self.mem[0x2000] = 0xFF          # the PC menu comes up
+
+    def tap(self, key):
+        self.taps.append(key)
+        if key == "B" and self.mem[0x2000] == 0xFF:
+            self.mem[0x2000] = 127       # MULTI_B_PRESSED
+
+    def resolve_constant(self, name):
+        return {"MULTI_B_PRESSED": 127, "ITEM_POKE_BALL": 4, "ITEM_POTION": 13}[name]
+
+    def mart_items(self):
+        return self._mart
+
+    def match_call_registered(self, trainer):
+        return self._registered
+
+    def screenshot(self, name):
+        return f"{name}.png"
+
+
+def _service_step(**params):
+    from rpg2gba.playtest.archetypes.generic import Step
+
+    return Step("map068/ev007/p0", "service", 0, tuple(sorted(params.items())))
+
+
+def test_service_pc_reaches_the_menu_and_backs_out():
+    from rpg2gba.playtest.archetypes.generic import STEP_HANDLERS
+
+    emu = _ServiceEmu()
+    STEP_HANDLERS["service"](emu, "B1", _service_step(name="pc"))
+    assert emu.taps == ["B"]
+
+
+def test_service_mart_checks_the_stock():
+    from rpg2gba.playtest.archetypes.generic import STEP_HANDLERS
+    from rpg2gba.playtest.errors import ScenarioError
+
+    step = _service_step(name="mart", consts=("ITEM_POKE_BALL", "ITEM_POTION"))
+    STEP_HANDLERS["service"](_ServiceEmu(mart=[4, 13]), "B1", step)
+    with pytest.raises(ScenarioError, match=r"sells \[4\], expected \[4, 13\]"):
+        STEP_HANDLERS["service"](_ServiceEmu(mart=[4]), "B1", step)
+
+
+def test_service_phone_register_checks_the_match_call_flag():
+    from rpg2gba.playtest.archetypes.generic import STEP_HANDLERS
+    from rpg2gba.playtest.errors import ScenarioError
+
+    step = _service_step(name="phone_register", trainer="TRAINER_RICHEY")
+    STEP_HANDLERS["service"](_ServiceEmu(registered=True), "B1", step)
+    with pytest.raises(ScenarioError, match="not registered for match call"):
+        STEP_HANDLERS["service"](_ServiceEmu(registered=False), "B1", step)

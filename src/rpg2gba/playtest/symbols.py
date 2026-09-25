@@ -93,6 +93,25 @@ def static_fn_via_literal_pool(elf: Path, func_addr: int, *, span: int = 0x40) -
     )
 
 
+def static_data_via_literal_pool(elf: Path, func_addr: int, *, span: int = 0x60) -> int:
+    """Address of a `static EWRAM_DATA` object a global function writes,
+    read out of its literal pool -- `static_fn_via_literal_pool`'s sibling for
+    data. The first pool word inside EWRAM (0x02000000-0x0203FFFF) is taken,
+    so the caller must pick a function whose only EWRAM literal is the
+    object (e.g. `CreatePokemartMenu` for shop.c's `sMartInfo`, whose static
+    setters inline into it). Raises when no pool word is in EWRAM."""
+    out = _disassemble(elf, func_addr, span)
+    for match in re.finditer(r"^\s*[0-9a-f]+:\s*([0-9a-f]{8})\s+\.word",
+                             out, re.MULTILINE):
+        value = int(match.group(1), 16)
+        if 0x02000000 <= value < 0x02040000:
+            return value
+    raise ValueError(
+        f"no EWRAM address in the literal pool at {func_addr:#x} "
+        f"(searched {span:#x} bytes):\n{out}"
+    )
+
+
 def static_ptr_via_accessor(elf: Path, func_addr: int, *, span: int = 0x30) -> int:
     """Address of a static *pointer* read by a global accessor.
 
@@ -115,3 +134,24 @@ def static_ptr_via_accessor(elf: Path, func_addr: int, *, span: int = 0x30) -> i
             f"ldr-literal + deref shape:\n{out}"
         )
     return int(word.group(1), 16)
+
+
+def mart_info_layout(elf: Path, func_addr: int) -> tuple[int, int, int]:
+    """(sMartInfo anchor, itemList offset, itemCount offset), read out of
+    `CreatePokemartMenu`'s own code (`func_addr`). shop.c's `struct MartInfo`
+    is private to that file, so the offset probe can't see it, and the
+    compiler addresses it from an anchor, so the source layout is not the
+    ROM's (measured: +12/+16 from the pool literal, not the source's 8/12).
+    The function stores its argument (the item list) and the counted length
+    through one base register; both offsets come from those stores. Raises
+    if the code no longer has that shape."""
+    out = _disassemble(elf, func_addr, 0x60)
+    arg = re.search(r"movs\s+(r\d+),\s*r0\b", out)
+    base = re.search(r"ldr\s+(r\d+),\s*\[pc,", out)
+    if not arg or not base:
+        raise ValueError(f"CreatePokemartMenu: unexpected shape:\n{out}")
+    store = re.search(rf"\bstr\s+{arg.group(1)},\s*\[{base.group(1)},\s*#(\d+)\]", out)
+    counts = set(re.findall(rf"\bstrh\s+r\d+,\s*\[{base.group(1)},\s*#(\d+)\]", out))
+    if not store or len(counts) != 1:
+        raise ValueError(f"CreatePokemartMenu: can't find the item-list stores:\n{out}")
+    return static_data_via_literal_pool(elf, func_addr), int(store.group(1)), int(counts.pop())

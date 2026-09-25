@@ -557,7 +557,10 @@ SCRIPT_HEAD_EXTRACTORS: dict[str, ScriptHeadExtractor] = {
     # directory / phone-trainer list (pbPhoneRegister / pbPhoneIncrement) --
     # real phone state, not mere presentation (lead review 2026-09-16).
     "pbPhoneRegisterBattle": _service("phone_register"),
-    "pbPhoneRegisterNPC": _service("phone_register"),
+    # Stripped by the transpiler (user-approved 2026-07-05,
+    # `transpiler._PHONE_REGISTER_NPC_STRIP_RE`): the ROM has no such call,
+    # so the floor must not demand one (ruling 20).
+    "pbPhoneRegisterNPC": _no_assertion,
     # createPhoneTrainer builds the local contact object
     # pbPhoneRegisterBattle/customTrainerBattle consume -- no screen, no
     # state write, no assertable effect of its own beyond completion.
