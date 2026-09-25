@@ -2703,12 +2703,28 @@ Regrade **7 → 4**.
   - All three now check "the value read is one of those the write can leave".
   - P11 risk: every var assign in CH01–CH05 is now value-checked for the first time.
 
-**Open, needs a ruling:** `map068/ev001/p1`, the Center nurse's post-white-out heal (CH04,
-hand B16).
-- Its floor is refused `party_model` for `$game_variables[43]=$Trainer.party.length`.
-- Var 43 is read only by the page conditions of events 5/6: empty pages that draw the heal
-  machine's balls. The same page resets it to 0 forty frames later.
-- Every nurse heal has this shape, including CH03's `p0/b0`.
+**Graphics-only party reads (operator ruling 2026-09-25): exempt from ruling (b).**
+- **The case:** `map068/ev001/p1`, the Center nurse's post-white-out heal (CH04, hand B16),
+  was refused `party_model` for `$game_variables[43]=$Trainer.party.length`.
+  - Var 43 is read only by the page conditions of Map068 events 5/6: empty pages that draw
+    the heal machine's balls.
+  - The same page resets it to 0 forty frames later.
+  - Every nurse heal has this shape.
+- **Ruling:** a party read that only drives graphics is exempt.
+- **Built** as `story_state/graphics_vars.py`:
+  - A variable is graphics-only when its only reads across the whole decoded corpus are
+    page conditions of empty pages. The scan covers every map, every common event and the
+    Ruby scripts dump, and the decoded maps match the source's Map*.rxdata one for one.
+  - The corpus gives {43, 131}; var 131 is never written.
+  - In `ruby_subset.search`, a statement `$game_variables[N] = <reads $Trainer.party>` with N
+    graphics-only is dropped from its block, and N comes back as havoc (`SearchResult.havoc`
+    → `writes_from_result`). The rest of the row is modelled as usual, so the nurse's
+    switch-5 write and heal now reach the floor.
+- The generated CH04 claims the Kevlar nurse page in its white-out beat. `whiteout_fork_beat`
+  now declares `text` and reads the landing page's lines from the drain log
+  (`generic._arrival_drain`).
+
+Regrade **1 → 0**: CH01–CH05 all grade clean.
 
 Also on the list, no ruling needed: the starter machine's floor must read the resolver's row
 states, not extraction-time ones (`beat_floor/walk.py:738`, a bug); branch-arm bundling

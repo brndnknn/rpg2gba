@@ -254,6 +254,9 @@ def whiteout_beat(
 #: again once the page has run.
 WHITEOUT_EXECUTED_KINDS: frozenset[str] = frozenset(
     {"trigger", "completes", "switch_write", "heal_party"})
+#: `text` (2026-09-25): the arrival scripts are drained by `settle_field`,
+#: which logs what each drain showed (`Emulator.drains`); the rows' lines are
+#: found there in order, as `generic_beat` does for arrival pages.
 
 
 def whiteout_fork_beat(
@@ -274,8 +277,16 @@ def whiteout_fork_beat(
     from ..beat_floor.lookup import floor_for_row
     from .archetypes import declare_assertions
 
+    from .archetypes.generic import Step
+
+    texts = tuple(
+        Step(a.row_id, a.kind, a.list_index, a.params)
+        for r in rows
+        for a in sorted(floor_for_row(r).assertions, key=lambda a: a.list_index)
+        if a.kind == "text")
     declared = declare_assertions(
-        rows, executed_kinds=WHITEOUT_EXECUTED_KINDS, template="whiteout")
+        rows, executed_kinds=WHITEOUT_EXECUTED_KINDS | ({"text"} if texts else set()),
+        template="whiteout")
     heal_rows = tuple(r for r in rows
                       if any(a.kind == "heal_party" for a in floor_for_row(r).assertions))
     _register_whiteout(
@@ -283,7 +294,8 @@ def whiteout_fork_beat(
         description=(f"White-out lands at {heal_location_id} and runs "
                      f"{', '.join(rows)} ({chapter_id})"),
         heal_locations_json=DEFAULT_HEAL_LOCATIONS_JSON,
-        starting_over_rows=rows, group=group, declared=declared, heal_rows=heal_rows)
+        starting_over_rows=rows, group=group, declared=declared, heal_rows=heal_rows,
+        texts=texts)
 
 
 def _register_whiteout(
@@ -297,6 +309,7 @@ def _register_whiteout(
     group: str | None = None,
     declared: frozenset | None = None,
     heal_rows: tuple[str, ...] = (),
+    texts: tuple = (),
 ) -> None:
     if heal_locations_json.exists():
         # Fail loud now, not 20 minutes into a ROM run (see docstring).
@@ -336,6 +349,10 @@ def _register_whiteout(
                     f"never ran ({', '.join(starting_over_rows)}) ({shot})")
             if heal_rows:
                 assertions.require_lead_healed(emu, beat_name, heal_rows[0])
+            if texts:
+                from .archetypes.generic import _arrival_drain
+
+                _arrival_drain(emu, beat_name, expected.map_const, texts)
             assertions.assert_position_exact(
                 emu, beat_name, (expected.x, expected.y))
         finally:

@@ -383,3 +383,24 @@ def test_whiteout_fork_beat_declares_only_what_it_proves() -> None:
     assert beat.rows == ("map049/ev022/p0",)
     assert {a.kind for a in beat.assertions} == {
         "trigger", "completes", "switch_write", "heal_party"}
+
+
+@pytest.mark.skipif(not Path("output/uranium-build/maps").is_dir(),
+                    reason="no converted corpus on disk")
+def test_whiteout_fork_beat_declares_the_landing_pages_text() -> None:
+    """The Kevlar nurse's Starting Over heal (map068/ev001/p1) speaks: its
+    lines are read back from the drain that ran it, so `text` is declared
+    and the page's floor is covered."""
+    from rpg2gba.beat_floor.coverage import uncovered
+    from rpg2gba.beat_floor.lookup import floor_for_row
+    from rpg2gba.playtest.whiteout import whiteout_fork_beat
+
+    b = ChapterBuilder("CH04", doc="reference/chapters/04-route-02.md")
+    whiteout_fork_beat(b, chapter_id="CH04", beat_name="m068_whiteout", group="g",
+                       rows=("map068/ev001/p1",),
+                       heal_location_id="HEAL_LOCATION_KEVLAR_TOWN_POKEMON_CENTER")
+    beat = b.build().beats[0]
+    assert "text" in {a.kind for a in beat.assertions}
+    walk_checked = {"audio", "visual", "displacement"}   # not graded (ruling 7)
+    assert [a for a in uncovered(floor_for_row("map068/ev001/p1"), beat.assertions)
+            if a.kind not in walk_checked] == []

@@ -42,6 +42,7 @@ from rpg2gba.ruby_subset.evaluate import (
     InputSource,
     evaluate_program,
 )
+from rpg2gba.ruby_subset import ast
 from rpg2gba.ruby_subset.lexer import RubyParseError
 from rpg2gba.ruby_subset.parser import parse_program, script_block_source
 from rpg2gba.story_state.state import (
@@ -146,6 +147,9 @@ class SearchResult:
     reads: frozenset[Key]
     inputs: bool
     refusal: Refusal | None
+    # Keys a graphics-only party read left unknown (`_graphics_party_write`):
+    # the caller havocs them rather than refusing the row.
+    havoc: frozenset[Key] = frozenset()
 
 
 def _empty_result(refusal: Refusal) -> SearchResult:
@@ -213,8 +217,11 @@ class _RunEngine:
         stripped_ce_ids: frozenset[int],
         read_domain: Callable[[Key], "frozenset | None"],
         index_of: dict[int, int] | None = None,
+        graphics_only_vars: frozenset[int] = frozenset(),
     ) -> None:
         self.prefix = prefix
+        self.graphics_only_vars = graphics_only_vars
+        self.havoc: set[Key] = set()
         self._next = 0
         self.world: dict[Key, object] = {}
         self.explicit: set[Key] = set()
@@ -416,12 +423,51 @@ def _exec_text(engine: _RunEngine, commands: list[dict], i: int, idx: int) -> in
     return next_i
 
 
+def _reads_party(node: object) -> bool:
+    """Does this expression read `$Trainer.party` anywhere inside it?"""
+    if isinstance(node, ast.Call) and node.name == "party" and isinstance(
+            node.receiver, ast.GlobalVar) and node.receiver.name == "$Trainer":
+        return True
+    if isinstance(node, ast.Node):
+        return any(_reads_party(getattr(node, f)) for f in node.__dataclass_fields__
+                   if f != "span")
+    if isinstance(node, tuple):
+        return any(_reads_party(n) for n in node)
+    return False
+
+
+def _graphics_party_write(stmt: ast.Node, graphics_only_vars: frozenset[int]) -> int | None:
+    """The variable id when `stmt` is `$game_variables[N] = <reads the party>`
+    and N only drives graphics (`story_state.graphics_vars`, operator ruling
+    2026-09-25): exempt from ruling (b)'s party_model refusal."""
+    if not (isinstance(stmt, ast.Assign) and isinstance(stmt.target, ast.Index)):
+        return None
+    target = stmt.target
+    if not (isinstance(target.receiver, ast.GlobalVar)
+            and target.receiver.name == "$game_variables"
+            and len(target.args) == 1 and isinstance(target.args[0], ast.Int)):
+        return None
+    var_id = target.args[0].value
+    if var_id in graphics_only_vars and _reads_party(stmt.value):
+        return var_id
+    return None
+
+
 def _exec_script(engine: _RunEngine, commands: list[dict], i: int, idx: int) -> int:
     source, next_i = script_block_source(commands, i)
     try:
         program = parse_program(source)
     except RubyParseError as exc:
         raise _Aborted("ruby_parse_error", f"@list[{idx}]: {exc.reason}: {exc}") from None
+    kept = []
+    for stmt in program.statements:
+        var_id = _graphics_party_write(stmt, engine.graphics_only_vars)
+        if var_id is None:
+            kept.append(stmt)
+        else:
+            engine.havoc.add(Variable(var_id))
+    if len(kept) != len(program.statements):
+        program = ast.Program(program.span, tuple(kept))
     oracle = engine.oracle_for(idx)
     result = evaluate_program(program, oracle=oracle, event=(engine.map_id, engine.event_id))
     if result.refusal is not None:
@@ -542,11 +588,13 @@ def _run_once(
     stripped_ce_ids: frozenset[int],
     read_domain: Callable[[Key], "frozenset | None"],
     index_of: dict[int, int] | None = None,
+    graphics_only_vars: frozenset[int] = frozenset(),
 ) -> _RunEngine | _Frontier:
     engine = _RunEngine(
         prefix, map_id=map_id, event_id=event_id,
         common_events_by_id=common_events_by_id, stripped_ce_ids=stripped_ce_ids,
         read_domain=read_domain, index_of=index_of,
+        graphics_only_vars=graphics_only_vars,
     )
     try:
         _exec_commands(engine, commands, frozenset(), forced_index=None)
@@ -568,8 +616,13 @@ def search_scope(
     read_domain: Callable[[Key], "frozenset | None"],
     index_of: dict[int, int] | None = None,
     cap: int = 4096,
+    graphics_only_vars: frozenset[int] = frozenset(),
 ) -> SearchResult:
+    """`graphics_only_vars`: variables a `$game_variables[N] = <party read>`
+    may write without refusing the scope; N comes back in `havoc`
+    (`story_state.graphics_vars`)."""
     values: dict[Key, frozenset] = {}
+    havoc: set[Key] = set()
     always_written: set[Key] | None = None
     write_index: dict[Key, int] = {}
     witnesses: dict[tuple[Key, object], tuple[Choice, ...]] = {}
@@ -598,6 +651,7 @@ def search_scope(
         else:
             always_written &= engine.explicit
         reads.update(engine.read_keys)
+        havoc.update(engine.havoc)
         if engine.has_input or any(
             not c.point.startswith("read ") for c in engine.trace
         ):
@@ -609,7 +663,7 @@ def search_scope(
             prefix, commands, map_id=map_id, event_id=event_id,
             common_events_by_id=common_events_by_id,
             stripped_ce_ids=stripped_ce_ids, read_domain=read_domain,
-            index_of=index_of,
+            index_of=index_of, graphics_only_vars=graphics_only_vars,
         )
         if isinstance(outcome, _Frontier):
             for value in outcome.domain:
@@ -634,4 +688,5 @@ def search_scope(
         reads=frozenset(reads),
         inputs=inputs,
         refusal=None,
+        havoc=frozenset(havoc),
     )

@@ -34,6 +34,7 @@ from rpg2gba.ruby_subset.search import (
     load_stripped_ce_ids,
     search_scope,
 )
+from rpg2gba.story_state.graphics_vars import graphics_only_variables
 from rpg2gba.story_state.state import (
     Assign,
     Key,
@@ -109,6 +110,7 @@ def run_scope(
         stripped_ce_ids=scope.stripped_ce_ids,
         read_domain=read_domain,
         index_of=scope.index_of,
+        graphics_only_vars=graphics_only_variables(),
     )
 
 
@@ -326,11 +328,17 @@ def writes_from_result(
     is unconditional unless the caller says otherwise; a key written on
     only SOME runs is never guaranteed, regardless of what the caller
     says.
+
+    A key in `result.havoc` (a graphics-only variable written from a party
+    read, `story_state.graphics_vars`) is havoc too, whatever else the row
+    wrote to it.
     """
     writes: list[Write] = []
-    havoc: list[Key] = []
+    havoc: list[Key] = sorted(result.havoc, key=repr)
     for key in sorted(result.values, key=repr):
         values = result.values[key]
+        if key in result.havoc:
+            continue
         if any(not isinstance(v, (bool, int)) for v in values):
             havoc.append(key)
             continue

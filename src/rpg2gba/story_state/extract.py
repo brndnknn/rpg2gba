@@ -55,6 +55,7 @@ from rpg2gba.story_state.scope_search import (
 )
 from rpg2gba.ruby_subset.builtins import STATIC_PREDICATES
 from rpg2gba.ruby_subset.search import search_scope
+from rpg2gba.story_state.graphics_vars import graphics_only_variables
 from rpg2gba.story_state.state import (
     Adjust,
     Assign,
@@ -582,6 +583,7 @@ def _extract_scope_writes(
             stripped_ce_ids=stripped_ce_ids,
             read_domain=lambda key: None,
             index_of=index_of if forced_list_index is None else None,
+            graphics_only_vars=graphics_only_variables(),
         )
         label = row_id if row_id is not None else f"ce-scope @list[{forced_list_index}]"
         if result.refusal is None:

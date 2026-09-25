@@ -506,3 +506,38 @@ def test_bambo_search_is_deterministic():
     assert r1.always_written == r2.always_written
     assert r1.witnesses == r2.witnesses
     assert r1.effects == r2.effects
+
+
+# --- graphics-only party reads (operator ruling 2026-09-25) ----------------
+
+
+def _nurse_scope():
+    # The Center nurse's post-white-out heal (map068/ev001/p1), trimmed.
+    return [
+        _cmd(355, ["$game_variables[43]=$Trainer.party.length"]),
+        _cmd(655, ["$game_map.need_refresh=true"]),
+        _cmd(122, [43, 43, 0, 0, 0]),
+        _cmd(121, [5, 5, 1]),
+    ]
+
+
+def _search_nurse(graphics_only_vars):
+    return search_scope(
+        _nurse_scope(), map_id=68, event_id=1, common_events_by_id={},
+        stripped_ce_ids=frozenset(),
+        read_domain=lambda k: frozenset({0}) if k == Variable(43) else None,
+        graphics_only_vars=graphics_only_vars,
+    )
+
+
+def test_a_party_read_into_a_graphics_only_variable_is_havoc_not_a_refusal():
+    result = _search_nurse(frozenset({43}))
+    assert result.refusal is None
+    assert result.havoc == frozenset({Variable(43)})
+    assert result.values[Switch(5)] == frozenset({False})
+
+
+def test_a_party_read_into_any_other_variable_still_refuses():
+    result = _search_nurse(frozenset({44}))
+    assert result.refusal is not None
+    assert result.refusal.code == "party_model"
