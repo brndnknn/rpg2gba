@@ -968,6 +968,9 @@ class _FakeScreenEmu:
     def text_showing(self) -> bool:
         return self.text_drawing
 
+    def current_field_message_text(self) -> str | None:
+        return None   # no transcript in this fake
+
     def text_ready(self) -> bool:
         return self.text_is_ready
 
@@ -1133,6 +1136,9 @@ class _FakeTextEmu:
 
     def text_showing(self) -> bool:
         return self._now[1]
+
+    def current_field_message_text(self) -> str | None:
+        return None   # no transcript in this fake
 
     def text_ready(self) -> bool:
         now = self._now
@@ -1370,7 +1376,19 @@ class _FakeSettleEmu:
     """
 
     def __init__(self, start_locked: bool, relock_at: set[int] = frozenset(),
-                 never_unlocks: bool = False) -> None:
+                 never_unlocks: bool = False,
+                 scripts: list[tuple] | None = None,
+                 already_up: str | None = None) -> None:
+        # `scripts`: per drain, (messages it shows, bag delta it makes[, how
+        # many menus it opens]); `already_up` is a message on screen before
+        # the first drain.
+        self._scripts = list(scripts or [])
+        self.drain_answers: dict[tuple[int, int], list[int]] = {}
+        self._up = already_up
+        self._bag: dict[int, int] = {}
+        self.message_log: list[str] = []
+        self._last_logged: str | None = None
+        self.drains: list = []
         self._locked = start_locked
         self._relock_at = set(relock_at)
         self._never_unlocks = never_unlocks
@@ -1382,8 +1400,23 @@ class _FakeSettleEmu:
     def field_locked(self) -> bool:
         return self._locked
 
-    def advance_dialog(self, key: str = "A") -> int:
+    def current_field_message_text(self) -> str | None:
+        return self._up
+
+    def bag_contents(self) -> dict[int, int]:
+        return dict(self._bag)
+
+    def advance_dialog(self, key: str = "A", answers=None, menus=None) -> int:
         self.advance_dialog_calls.append(key)
+        self._up = None
+        if self._scripts:
+            messages, delta, *rest = self._scripts.pop(0)
+            self.message_log.extend(messages)
+            for item, qty in delta.items():
+                self._bag[item] = self._bag.get(item, 0) + qty
+            for _ in range(rest[0] if rest else 0):
+                answer = answers.pop(0) if answers else 0
+                menus.append((answer, answer, False))
         if not self._never_unlocks:
             self._locked = False
         return 1
@@ -1434,6 +1467,28 @@ def test_settle_field_drains_again_when_a_chained_script_relocks_mid_quiet() -> 
     emu = _FakeSettleEmu(start_locked=True, relock_at={2})  # relock on 2nd poll
     assert _settle(emu, quiet_frames=60) == 2
     assert emu.advance_dialog_calls == ["A", "A"]
+
+
+@needs_mgba
+def test_settle_field_logs_each_drain_with_its_messages_and_bag_delta() -> None:
+    emu = _FakeSettleEmu(start_locked=True, relock_at={2}, already_up="Welcome!",
+                         scripts=[(["Here's a tour."], {}), (["Take these!"], {139: 5})])
+    assert _settle(emu, quiet_frames=60) == 2
+    first, second = emu.drains
+    assert first.map_location == (68, 0)
+    assert first.messages == ("Welcome!", "Here's a tour.")   # the up one first
+    assert second.messages == ("Take these!",)
+    assert (second.bag_before, second.bag_after) == ({}, {139: 5})
+
+
+@needs_mgba
+def test_settle_field_answers_menus_from_the_map_s_planned_answers() -> None:
+    emu = _FakeSettleEmu(start_locked=True, relock_at={2},
+                         scripts=[(["Ready?"], {}, 1), (["Ready now?"], {}, 1)])
+    emu.drain_answers[(68, 0)] = [1]
+    assert _settle(emu, quiet_frames=60) == 2
+    assert [d.menus for d in emu.drains] == [((1, 1, False),), ((0, 0, False),)]
+    assert emu.drain_answers[(68, 0)] == []      # consumed; then the first option
 
 
 @needs_mgba

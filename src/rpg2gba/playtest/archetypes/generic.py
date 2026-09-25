@@ -52,12 +52,26 @@ bag-quantity delta, so the body reads the bag before the walk and, once the
 page completes, hands the handler a step carrying the expected total (the
 before quantity plus every grant of that item in the beat). Checked after
 `completes`, not mid-page: `giveitem` adds the item and then shows its own
-message, so a mid-page read races it. Undeclared on arrival pages.
+message, so a mid-page read races it. On an arrival page it is read from
+the drain log instead (below).
 
 `var_text` (ruling 18) is a `\\v[N]` line: the handler reads the ROM's values
 of the input variables the floor recorded, runs the page's own script through
 the Ruby-subset evaluator (`beat_floor.var_text`) and checks the resulting
-line exactly as `text` does. Undeclared on arrival pages, like `text`.
+line exactly as `text` does. Undeclared on arrival pages: the ROM's input
+values may have moved on by the time the beat reads them.
+
+Arrival pages (autorun/parallel) are drained by the crossing that lands on
+them, so their beat checks after the fact. `Emulator.settle_field` logs
+every script it drains (`Drain`: map, messages shown, bag before/after);
+the beat finds the drain on its map that showed the page's text in order,
+which proves `trigger` and `text`, and checks `item_grant` as that drain's
+bag delta. A page's menus are answered by the drain itself, from the
+answers the beat plans (`Beat.drain_answers`, handed to the emulator by
+the runner), and `choice` is checked from what the drain recorded. A
+page with no text proves `trigger` by its own self-switch
+write. Text is compared as words (`text_matches`): the ROM re-wraps lines
+and expands `{...}` codes.
 
 STATUS: implemented (`assignments/C6/07_generic.md`).
 """
@@ -65,6 +79,7 @@ from __future__ import annotations
 
 import functools
 import os
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -189,11 +204,50 @@ def _flag_registry() -> FlagRegistry:
 
 _PLAYER_TRIGGERS = frozenset({"action", "player_touch", "event_touch"})
 _ARRIVAL_TRIGGERS = frozenset({"autorun", "parallel"})
-# What an arrival page's beat can't observe after the fact: the trigger
-# already fired and the text was already driven through. Left undeclared,
-# so they stay honestly uncovered (owed to an arrival-cutscene template).
+# What an arrival page's beat can't observe live: the crossing that brought
+# the player here already drained the page. `text`, `item_grant`, `trigger`
+# and `choice` come back through the emulator's drain log (`_arrival_drain`)
+# when the page shows text; the rest stay undeclared, so they stay honestly
+# uncovered: a heal or a `\\v[N]` line can't be read back afterwards.
 _NOT_AFTER_THE_FACT = frozenset(
     {"trigger", "text", "var_text", "heal_party", "item_grant", "choice", "service"})
+#: Re-admitted on an arrival page that shows text: its drain is found by
+#: that text, which proves it fired, and carries the bag delta.
+_FROM_THE_DRAIN = frozenset({"trigger", "text", "item_grant", "choice"})
+
+# -- text matching ---------------------------------------------------------
+#
+# The floor holds the source's text; the ROM shows what `format()` re-wrapped
+# and `StringExpandPlaceholders` expanded, decoded with its line breaks as
+# `\n`/`\l`/`\p` tokens (`emulator.decode_text_bytes`). So both sides are
+# compared as words: breaks and runs of spaces are one space, and a `{...}`
+# code in the expected text (a placeholder the ROM expanded, a pause it
+# consumed) matches anything.
+_BREAKS = re.compile(r"\\[nlp]|\s+")
+_CODE = re.compile(r"\{[^}]*\}")
+
+
+def _words(text: str) -> str:
+    return _BREAKS.sub(" ", text).strip()
+
+
+def text_matches(expected: str, actual: str) -> bool:
+    """Does the ROM's decoded `actual` show the floor's `expected` line?"""
+    pieces = [re.escape(_words(p)) for p in _CODE.split(expected)]
+    pattern = r".*?".join(p for p in pieces if p) or r""
+    return re.search(pattern, _words(actual)) is not None
+
+
+def shows_in_order(expected: Sequence[str], messages: Sequence[str]) -> bool:
+    """Every `expected` line matches a message, in order (one message per
+    line; the same line twice in a row counts once, as the emulator's
+    transcript logs it)."""
+    wanted = [t for i, t in enumerate(expected) if i == 0 or t != expected[i - 1]]
+    i = 0
+    for message in messages:
+        if i < len(wanted) and text_matches(wanted[i], message):
+            i += 1
+    return i == len(wanted)
 
 
 def _player_facing(emu: "Emulator") -> str:
@@ -244,7 +298,7 @@ def _handle_text(emu: "Emulator", beat_name: str, step: Step) -> None:
     params = dict(step.params)
     expected = params["text"]
     text = emu.wait_for_field_message()
-    if text is None or expected not in text:
+    if text is None or not text_matches(expected, text):
         shot = emu.screenshot(f"{beat_name}_text_{params.get('index')}")
         raise ScenarioError(
             f"{beat_name}: {step.row_id} message {params.get('index')} "
@@ -252,6 +306,70 @@ def _handle_text(emu: "Emulator", beat_name: str, step: Step) -> None:
         )
     emu.clear_field_message()
     emu.tap("A")
+
+
+def _menu_result_ok(emu: "Emulator", answer: int, result: int, yesno: bool) -> bool:
+    """Did the script receive what answering arm `answer` should give it
+    (the same expectations `_handle_choice` checks live)?"""
+    if yesno:
+        return result == (1 if answer == 0 else 0)
+    if answer < 0:
+        return result == emu.resolve_constant("MULTI_B_PRESSED")
+    return result == answer
+
+
+def _arrival_drain(emu: "Emulator", beat_name: str, map_constant: str,
+                   texts: Sequence[Step],
+                   answers: Sequence[int] = ()):  # noqa: ANN202 -- emulator.Drain
+    """The latest script drained on `map_constant` that showed `texts` in
+    order and answered its menus with `answers` (each read back as the
+    script got it): the arrival page's own firing, whichever beat's
+    crossing drove it. Raises when there is none -- the page never fired
+    this way on this walk."""
+    loc = (emu.resolve_constant(f"MAP_GROUP({map_constant})"),
+           emu.resolve_constant(f"MAP_NUM({map_constant})"))
+    expected = [str(dict(s.params)["text"]) for s in texts]
+    shown = [d for d in reversed(emu.drains)
+             if tuple(d.map_location) == loc and shows_in_order(expected, d.messages)]
+    for drain in shown:
+        menus = drain.menus[:len(answers)]
+        if [m[0] for m in menus] == list(answers) and all(
+                _menu_result_ok(emu, *m) for m in menus):
+            return drain
+    rows = sorted({s.row_id for s in texts})
+    if shown:
+        raise ScenarioError(
+            f"{beat_name}: {rows}'s text showed on {map_constant}, but no such drain "
+            f"answered its menus {list(answers)} as planned (menus seen: "
+            f"{[d.menus for d in shown]})")
+    raise ScenarioError(
+        f"{beat_name}: no script drained on {map_constant} showed {rows}'s "
+        f"{len(expected)} line(s) in order -- the arrival page didn't fire on "
+        f"this walk (last drains: {[d.messages[:1] for d in emu.drains[-3:]]})")
+
+
+def _check_arrival_drain(emu: "Emulator", beat_name: str, map_constant: str,
+                         texts: Sequence[Step], grants: Sequence[Step],
+                         grant_const: dict[str, str], answers: Sequence[int] = ()) -> None:
+    """An arrival page's `text`/`trigger`/`choice`/`item_grant`, read back
+    from the script drained on its map that showed its text and answered
+    its menus as planned: each granted item's bag delta across that drain
+    is the sum of the page's grants of it."""
+    drain = _arrival_drain(emu, beat_name, map_constant, texts, answers)
+    totals: dict[str, int] = {}
+    rows: dict[str, str] = {}
+    for step in grants:
+        params = dict(step.params)
+        const = grant_const[str(params["item"])]
+        totals[const] = totals.get(const, 0) + int(params["quantity"])
+        rows[const] = step.row_id
+    for const, total in sorted(totals.items()):
+        item_id = emu.resolve_constant(const)
+        got = drain.bag_after.get(item_id, 0) - drain.bag_before.get(item_id, 0)
+        if got != total:
+            raise ScenarioError(
+                f"{beat_name}: {rows[const]}: the drain that showed its text added "
+                f"{got} {const}, expected {total}")
 
 
 def _handle_var_text(emu: "Emulator", beat_name: str, step: Step) -> None:
@@ -673,6 +791,11 @@ def generic_beat(
     trigger = dict(trigger_step.params).get("trigger") if trigger_step else None
     faces_target: tuple[int, int] | None = None
     arrival = trigger in _ARRIVAL_TRIGGERS
+    random_rows = {r for r, _ in random_arms}
+    arrival_texts: list[Step] = []
+    arrival_grants: list[Step] = []
+    arrival_answers: tuple[int, ...] = ()
+    arrival_kinds: frozenset[str] = frozenset()
     if arrival:
         # Autorun/parallel: fires on arriving on the map, usually during the
         # crossing that brought the player here (whose settle drains it).
@@ -689,6 +812,26 @@ def generic_beat(
             raise ValueError(f"generic_beat: {beat_name}: a {trigger} page takes "
                              f"approach_prefer='arrive@(x,y)', got {approach_prefer!r}")
         trigger_step = None
+        # Read back from the drain that ran it (`_arrival_drain`): found by
+        # the page's text, which proves it fired, with the bag delta its
+        # grants made. With no text, a write to its own self switch is the
+        # proof it fired (the handler checks it); nothing else is.
+        arrival_texts = [s for s in middle_steps
+                         if s.kind == "text" and s.row_id not in random_rows]
+        if arrival_texts:
+            arrival_kinds = _FROM_THE_DRAIN
+            arrival_grants = [s for s in middle_steps
+                              if s.kind == "item_grant" and s.row_id not in random_rows]
+            # The drain meets the page's menus in source order; a random
+            # arm's menu may not open, so none is planned past one.
+            arrival_answers = tuple(int(dict(s.params)["answer"]) for s in middle_steps
+                                    if s.kind == "choice" and s.row_id not in random_rows)
+        elif page_row_id in resolved_rows and any(
+                s.kind == "self_switch_write" and s.row_id == page_row_id
+                and dict(s.params).get("event_id") == page_row.event_id
+                and dict(s.params).get("value") is True
+                for s in middle_steps):
+            arrival_kinds = frozenset({"trigger"})
         middle_steps = [s for s in middle_steps if s.kind not in _NOT_AFTER_THE_FACT]
     elif trigger in _PLAYER_TRIGGERS and page_row.event_id is not None:
         faces_target = event_cell(cell.map_constant, page_row.event_id)
@@ -709,7 +852,8 @@ def generic_beat(
     random_guard = dict(random_arms)
     declared = declare_assertions(
         tuple(r for r in resolved_rows if r not in random_guard),
-        executed_kinds=GENERIC_EXECUTED_KINDS - (_NOT_AFTER_THE_FACT if arrival else frozenset()),
+        executed_kinds=GENERIC_EXECUTED_KINDS - (
+            _NOT_AFTER_THE_FACT - arrival_kinds if arrival else frozenset()),
         template="generic", floor_lookup=resolved_lookup,
     )
 
@@ -750,8 +894,8 @@ def generic_beat(
     # item_grant: resolved now (an unmapped item fails at import, not
     # mid-walk) and checked after `completes` (module docstring).
     # A random arm's grant may not happen, so it isn't counted (ruling 19).
-    grant_steps = [s for s in middle_steps
-                   if s.kind == "item_grant" and s.row_id not in random_guard]
+    grant_steps = arrival_grants if arrival else [
+        s for s in middle_steps if s.kind == "item_grant" and s.row_id not in random_guard]
     middle_steps = [s for s in middle_steps if s.kind != "item_grant"]
     grant_const: dict[str, str] = {}
     for step in grant_steps:
@@ -768,6 +912,7 @@ def generic_beat(
         f"Generic floor coverage for {', '.join(resolved_rows)} ({chapter_id})",
         map_constant=cell.map_constant, at=(x, y), group=group,
         rows=resolved_rows, assertions=declared,
+        drain_answers=(cell.map_constant, arrival_answers) if arrival_answers else None,
     )
     def body(emu: "Emulator") -> None:
         from rpg2gba.playtest.emulator import WalkInterrupted
@@ -803,6 +948,11 @@ def generic_beat(
             STEP_HANDLERS[step.kind](emu, beat_name, step)
         if completes_step is not None:
             STEP_HANDLERS["completes"](emu, beat_name, completes_step)
+        if arrival:
+            if arrival_texts:
+                _check_arrival_drain(emu, beat_name, cell.map_constant, arrival_texts,
+                                     grant_steps, grant_const, arrival_answers)
+            return
         # One check per item after the page: the bag only shows the sum of
         # that item's grants, so the last grant step carries the total.
         expected = dict(bag_before)

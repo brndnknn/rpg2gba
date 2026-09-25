@@ -527,3 +527,28 @@ def test_chapter_suite_is_green(tmp_path: Path, chapter_name: str) -> None:
                           output_root=tmp_path / "out")
     assert result.verdict in ("pass", "flake"), (
         f"{chapter_name} did not pass: bundle at {result.bundle_dir}")
+
+
+class _AnswerEmu:
+    def __init__(self) -> None:
+        self.drain_answers: dict[tuple[int, int], list[int]] = {}
+
+    def resolve_constant(self, name: str) -> int:
+        return {"MAP_GROUP(MAP_LAB)": 0, "MAP_NUM(MAP_LAB)": 5,
+                "MAP_GROUP(MAP_TOWN)": 0, "MAP_NUM(MAP_TOWN)": 2}[name]
+
+
+def test_install_drain_answers_queues_each_map_s_answers_in_beat_order() -> None:
+    def beat(name: str, answers):
+        return Beat(name=name, description=name, run=lambda emu: None,
+                    drain_answers=answers)
+
+    emu = _AnswerEmu()
+    runner_mod._install_drain_answers(emu, [
+        beat("a", ("MAP_LAB", (1,))), beat("b", None), beat("c", ("MAP_TOWN", (0, 2))),
+        beat("d", ("MAP_LAB", (0,)))])
+    assert emu.drain_answers == {(0, 5): [1, 0], (0, 2): [0, 2]}
+
+
+def test_install_drain_answers_leaves_a_stub_emulator_alone() -> None:
+    runner_mod._install_drain_answers(object(), [])   # no attribute: no error

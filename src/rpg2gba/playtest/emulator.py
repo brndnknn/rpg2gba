@@ -234,6 +234,24 @@ class WalkInterrupted(ScenarioError):
 
 
 @dataclass(frozen=True)
+class Drain:
+    """One script `Emulator.settle_field` drove to its release: the map it
+    ran on (`map_location()`), every message it showed in order, and the bag
+    (item id -> quantity) just before and just after. An arrival page's beat
+    runs after the crossing that drained it, and reads this back to check
+    what the page showed and granted (`generic_beat`, arrival pages)."""
+
+    map_location: tuple[int, int]
+    messages: tuple[str, ...]
+    bag_before: dict[int, int]
+    bag_after: dict[int, int]
+    #: Every menu the drain answered: (answer, `gSpecialVar_Result` after,
+    #: whether it was a yes/no box). Answer is the arm index (0 first, -1
+    #: cancel), as `generic_beat(choice_answers=)` numbers them.
+    menus: tuple[tuple[int, int, bool], ...] = ()
+
+
+@dataclass(frozen=True)
 class ObjectEventState:
     """One decoded `gObjectEvents` slot (ROM_TEST_DEV.md "Harness cannot see
     NPCs").
@@ -755,6 +773,15 @@ class Emulator:
         self._text_frame: "object | None" = None
         self._text_was_drawing = False
         self._frame_pinned = False
+        #: Every field message that started drawing this boot, in order
+        #: (`note_text_frame`), and every script `settle_field` drained.
+        self.message_log: list[str] = []
+        self._last_logged: str | None = None
+        self.drains: list[Drain] = []
+        #: map_location -> the answers still owed to menus drained on that
+        #: map, in walk order (installed by the runner from the beats'
+        #: `drain_answers`; `settle_field` consumes them).
+        self.drain_answers: dict[tuple[int, int], list[int]] = {}
         self.core = mgba.core.load_path(str(rom))
         if self.core is None:
             raise ScenarioError(f"could not load ROM {rom}")
@@ -924,8 +951,19 @@ class Emulator:
         is dismissed inside one 12-frame tap — hence `run`'s `on_frame` hook.
         A gap in sampling costs a missed capture, never a wrong one.
         """
-        finished = self._text_was_drawing and not self.text_showing()
-        self._text_was_drawing = self.text_showing()
+        drawing = self.text_showing()
+        finished = self._text_was_drawing and not drawing
+        started = drawing and not self._text_was_drawing
+        self._text_was_drawing = drawing
+        if started:
+            # The transcript: `gStringVar4` holds the whole message from the
+            # frame it starts drawing. A later page of the same message
+            # re-raises the edge with the same text, so only a change logs
+            # (two identical lines in a row log once).
+            text = self.current_field_message_text()
+            if text is not None and text != self._last_logged:
+                self.message_log.append(text)
+                self._last_logged = text
         if self.screenshot_dir is None or not finished or self._frame_pinned:
             return
         # A box drawn over a fade is no more use for review than a plain black
@@ -1242,6 +1280,25 @@ class Emulator:
                 total += self.u16(slot + o["off_itemslot_quantity"]) ^ key
         return total
 
+    def bag_contents(self) -> dict[int, int]:
+        """Every item in the bag: item id -> total quantity, read the same
+        way as `bag_item_quantity` (all five pockets, decrypted)."""
+        o = self.offsets
+        key = self._encryption_key() & 0xFFFF
+        bag_base = self.sb1 + o["off_sb1_bag"]
+        stride = o["sizeof_itemslot"]
+        out: dict[int, int] = {}
+        for off_key, count_key in Emulator._BAG_POCKETS:
+            pocket_base = bag_base + o[off_key]
+            for i in range(o[count_key]):
+                slot = pocket_base + i * stride
+                item_id = self.u16(slot + o["off_itemslot_itemid"])
+                if item_id == 0:
+                    continue
+                qty = self.u16(slot + o["off_itemslot_quantity"]) ^ key
+                out[item_id] = out.get(item_id, 0) + qty
+        return out
+
     def item_price(self, item: str | int) -> int:
         """`GetItemPrice` (`engine/src/item.c`): `gItemsInfo[item].price`.
         `gItemsInfo` is a plain `const` ROM table, not save state -- no
@@ -1529,6 +1586,7 @@ class Emulator:
         the empty string, which that method reports as `None`.
         """
         self.write_u16(self.symbols["gStringVar4"], 0xFFFF)
+        self._last_logged = None
 
     def active_printer_texts(self) -> dict[int, str]:
         """`window_id -> decoded text` for every live `WINDOW_TEXT_PRINTER`
@@ -2927,8 +2985,31 @@ class Emulator:
             raise ScenarioError(f"interaction did not start a script ({shot})")
         return picked_up
 
+    #: `gSpecialVar_Result` while a multichoice waits for input.
+    _MENU_WAITING = 0xFF
+
+    def _menu_waiting(self) -> bool:
+        return (self.yesno_prompt_up()
+                or self.u16(self.symbols["gSpecialVar_Result"]) == Emulator._MENU_WAITING)
+
+    def _answer_menu(self, answer: int) -> tuple[int, int, bool]:
+        """Answer the open menu with arm `answer` (the same buttons
+        `generic._handle_choice` presses) and read back what the script got."""
+        yesno = self.yesno_prompt_up()
+        if yesno:
+            self.tap("A" if answer == 0 else "B")
+        elif answer < 0:
+            self.tap("B")
+        else:
+            for _ in range(answer):
+                self.tap("DOWN")
+            self.tap("A")
+        return answer, self.u16(self.symbols["gSpecialVar_Result"]), yesno
+
     def advance_dialog(self, key: str = "A", max_taps: int = 1500,
-                       stop: Callable[[], bool] | None = None) -> int:
+                       stop: Callable[[], bool] | None = None,
+                       answers: list[int] | None = None,
+                       menus: list[tuple[int, int, bool]] | None = None) -> int:
         """Mash `key` until the script releases the field controls.
 
         The single dialogue-advancing loop in the harness — every scenario and
@@ -2965,6 +3046,13 @@ class Emulator:
                 shot = self.screenshot("dialog_stuck")
                 raise ScenarioError(
                     f"dialogue never released field controls ({shot})")
+            if menus is not None and (answers or key == "A") and self._menu_waiting():
+                # `menus` given: answer each menu from `answers` (the first
+                # option once they run out, which is what A would pick) and
+                # record it.
+                menus.append(self._answer_menu(answers.pop(0) if answers else 0))
+                taps += 1
+                continue
             self.tap(key)  # samples text frames on every frame it runs
             taps += 1
         self.note_text_frame()
@@ -3004,7 +3092,24 @@ class Emulator:
         drained = 0
         for _ in range(max_rounds):
             if self.field_locked():
-                self.advance_dialog(key=key)
+                where = self.map_location()
+                bag_before = self.bag_contents()
+                mark = len(self.message_log)
+                # A message can finish drawing during frames nothing sampled
+                # (the crossing's own walk): the buffer still holds it, and
+                # only this script can have written it (`advance_dialog` and
+                # `interact` clear it).
+                up = self.current_field_message_text()
+                if up is not None and up != self._last_logged:
+                    self.message_log.append(up)
+                    self._last_logged = up
+                menus: list[tuple[int, int, bool]] = []
+                self.advance_dialog(key=key, answers=self.drain_answers.get(tuple(where)),
+                                    menus=menus)
+                self.drains.append(Drain(
+                    map_location=where, messages=tuple(self.message_log[mark:]),
+                    bag_before=bag_before, bag_after=self.bag_contents(),
+                    menus=tuple(menus)))
                 drained += 1
                 continue
             quiet = 0

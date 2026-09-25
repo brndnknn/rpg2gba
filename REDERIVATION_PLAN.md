@@ -2639,6 +2639,29 @@ fix and grading rule (b)".
     nothing to harvest. Page 0's "Want to pick it?" is a confirm prompt, answered yes under
     ruling 19; the decline arm isn't walked.
 
+**Arrival pages checked through a drain log (built 2026-09-25, build agent's design, no
+ruling).** An autorun/parallel page is drained by the crossing that lands on it (warp
+`_cross`, transit, escort and white-out all call `settle_field`), so its own beat runs after
+the fact.
+- `Emulator` keeps a message transcript: the text is logged on the drawing edge, plus
+  whatever is already up when a drain starts.
+- Each `settle_field` drain records a `Drain`: map, messages, bag before and after, and the
+  menus it answered with `gSpecialVar_Result`.
+- The arrival beat finds the drain on its map that showed its text in order. That proves
+  `trigger` and `text`; `item_grant` is that drain's bag delta.
+- A page with no text proves `trigger` by its own self-switch write.
+- **Menus:** the page's `choice_answers` become `Beat.drain_answers`. The runner queues them
+  per map (`_install_drain_answers`) and the drain answers from them instead of pressing A,
+  so `choice` is checked too. First tried "arrival menus take the first option" instead:
+  that is wrong for Bamb'o's lab autorun (`map050/ev005/p0`). Its first-option arm is refused
+  (`\ch` text), and its "Wait a minute" arm is what orders p2 after p0.
+- **Text matching** (`generic.text_matches`) compares words: `format()` re-wraps lines, and
+  `{…}` codes are expanded or consumed. This also fixes `_handle_text`, whose plain `in`
+  check would have failed every multi-line message at P11.
+
+Regrade **13 → 7**. ROM-unverified until P11: menu detection by `gSpecialVar_Result == 0xFF`
+during a drain, and the transcript's edge sampling.
+
 Also on the list, no ruling needed: the starter machine's floor must read the resolver's row
 states, not extraction-time ones (`beat_floor/walk.py:738`, a bug); branch-arm bundling
 (`m033e034_trainer_arms`) needs investigating before anything is decided.

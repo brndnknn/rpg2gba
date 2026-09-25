@@ -162,6 +162,12 @@ class Beat:
     # hand-written beat), which is distinct from declaring nothing. The
     # checker's ⊇-floor rule compares these against each claimed row's floor.
     assertions: frozenset[FloorAssertion] | None = None
+    # For a beat on an arrival (autorun/parallel) page with menus: the page's
+    # map and the answers its walk gives, in order. The page is drained by
+    # the crossing that lands on it, not by this beat, so the runner hands
+    # these to the emulator up front (`Emulator.drain_answers`) and the
+    # drain answers the page's menus with them instead of pressing A.
+    drain_answers: tuple[str, tuple[int, ...]] | None = None
 
     def archetype_of(self, row_id: str) -> str | None:
         """The archetype this beat claims for `row_id`, or None when it
@@ -389,7 +395,7 @@ def _prefix_beat(owner: str, beat: Beat) -> Beat:
                 description=f"[{owner}] {beat.description}", run=beat.run,
                 locations=beat.locations, entry_at=beat.entry_at,
                 group=prefixed_group, rows=beat.rows, archetype=beat.archetype,
-                assertions=beat.assertions)
+                assertions=beat.assertions, drain_answers=beat.drain_answers)
 
 
 @dataclass
@@ -418,6 +424,7 @@ class ChapterBuilder:
              rows: tuple[str, ...] = (),
              archetype: str | Mapping[str, str] | None = None,
              assertions: frozenset[FloorAssertion] | None = None,
+             drain_answers: tuple[str, tuple[int, ...]] | None = None,
              ) -> Callable[[BeatFn], BeatFn]:
         """Register a beat, optionally declaring where it triggers.
 
@@ -587,7 +594,8 @@ class ChapterBuilder:
                                     run=fn, locations=resolved_locations,
                                     entry_at=entry_at, group=group, rows=rows,
                                     archetype=resolved_archetype,
-                                    assertions=assertions))
+                                    assertions=assertions,
+                                    drain_answers=drain_answers))
             return fn
 
         return decorate

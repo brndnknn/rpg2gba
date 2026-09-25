@@ -240,6 +240,24 @@ class Snapshot:
     blocks: dict[str, bytes]
 
 
+def _install_drain_answers(emu: "Emulator", beats) -> None:  # noqa: ANN001
+    """Hand the emulator every menu answer the arrival pages of `beats` are
+    walked with, per map in beat order (`Beat.drain_answers`). The crossing
+    that lands on such a page drains it; `settle_field` answers from these.
+    A stub emulator without the attribute is left alone."""
+    if not hasattr(emu, "drain_answers"):
+        return
+    plan: dict[tuple[int, int], list[int]] = {}
+    for beat in beats:
+        if beat.drain_answers is None:
+            continue
+        map_constant, answers = beat.drain_answers
+        where = (emu.resolve_constant(f"MAP_GROUP({map_constant})"),
+                 emu.resolve_constant(f"MAP_NUM({map_constant})"))
+        plan.setdefault(where, []).extend(answers)
+    emu.drain_answers = plan
+
+
 def _snapshot(emu: "Emulator", beat_name: str) -> Snapshot:
     return Snapshot(beat=beat_name, player_pos=emu.player_pos(),
                      map_location=emu.map_location(), blocks=dump_save_blocks(emu))
@@ -757,6 +775,7 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
     beats_out: list[BeatOutcome] = []
     try:
         emu = emulator_factory(scratch, engine, shots)
+        _install_drain_answers(emu, chapter.beats[start_idx:])
         emu.run(boot_frames)
         last_snapshot = _snapshot(emu, chapter.beats[start_idx].name)
         # The frame the run starts on is itself worth an eye: a wrong spawn
