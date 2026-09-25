@@ -250,3 +250,69 @@ def test_item_grant_handler_checks_the_bag_total():
     handler(_BagEmu(5), "B1", checked)
     with pytest.raises(ScenarioError, match="bag holds 0 ITEM_POKE_BALL, expected 5"):
         handler(_BagEmu(0), "B1", checked)
+
+
+# --- choice (ruling 19) -------------------------------------------------------
+
+
+class _MenuEmu:
+    """A menu already up; each tap decides what the script receives."""
+
+    def __init__(self, *, yesno: bool, results: dict[str, int]) -> None:
+        self.symbols = {"gSpecialVar_Result": 0x2000}
+        self.result = 0xFF
+        self._yesno, self._results, self.taps = yesno, results, []
+
+    def yesno_prompt_up(self) -> bool:
+        return self._yesno
+
+    def u16(self, addr: int) -> int:
+        return self.result
+
+    def run(self, frames: int) -> None:
+        pass
+
+    def tap(self, key: str) -> None:
+        self.taps.append(key)
+        if key in self._results:
+            self.result = self._results[key]
+
+    def resolve_constant(self, name: str) -> int:
+        return 127
+
+    def screenshot(self, name: str) -> str:
+        return f"{name}.png"
+
+
+def _choice_step(options, answer):
+    from rpg2gba.playtest.archetypes.generic import Step
+
+    return Step("map031/ev014/p0", "choice", 3, (("options", options), ("answer", answer)))
+
+
+def test_choice_handler_answers_a_yesno_and_reads_it_back():
+    from rpg2gba.playtest.archetypes.generic import STEP_HANDLERS
+
+    yes = _MenuEmu(yesno=True, results={"A": 1, "B": 0})
+    STEP_HANDLERS["choice"](yes, "B1", _choice_step(("Yes", "No"), 0))
+    assert yes.taps == ["A"]
+    no = _MenuEmu(yesno=True, results={"A": 1, "B": 0})
+    STEP_HANDLERS["choice"](no, "B1", _choice_step(("Yes", "No"), 1))
+    assert no.taps == ["B"]
+
+
+def test_choice_handler_moves_the_cursor_for_a_multichoice():
+    from rpg2gba.playtest.archetypes.generic import STEP_HANDLERS
+
+    emu = _MenuEmu(yesno=False, results={"A": 2})
+    STEP_HANDLERS["choice"](emu, "B1", _choice_step(("Orchynx", "Raptorch", "Eletux"), 2))
+    assert emu.taps == ["DOWN", "DOWN", "A"]
+
+
+def test_choice_handler_catches_a_wrong_answer_reaching_the_script():
+    from rpg2gba.playtest.archetypes.generic import STEP_HANDLERS
+    from rpg2gba.playtest.errors import ScenarioError
+
+    emu = _MenuEmu(yesno=True, results={"A": 0})  # YES pressed, script got NO
+    with pytest.raises(ScenarioError, match="script received 0, expected 1"):
+        STEP_HANDLERS["choice"](emu, "B1", _choice_step(("Yes", "No"), 0))

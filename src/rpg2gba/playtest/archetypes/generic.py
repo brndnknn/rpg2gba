@@ -95,7 +95,7 @@ if TYPE_CHECKING:  # runtime import is lazy so this module works without mGBA bi
 GENERIC_EXECUTED_KINDS: frozenset[str] = frozenset({
     "trigger", "completes", "text",
     "switch_write", "var_write", "self_switch_write", "engine_flag_write",
-    "visual", "heal_party", "var_text", "item_grant",
+    "visual", "heal_party", "var_text", "item_grant", "choice",
 })
 
 
@@ -187,7 +187,8 @@ _ARRIVAL_TRIGGERS = frozenset({"autorun", "parallel"})
 # What an arrival page's beat can't observe after the fact: the trigger
 # already fired and the text was already driven through. Left undeclared,
 # so they stay honestly uncovered (owed to an arrival-cutscene template).
-_NOT_AFTER_THE_FACT = frozenset({"trigger", "text", "var_text", "heal_party", "item_grant"})
+_NOT_AFTER_THE_FACT = frozenset(
+    {"trigger", "text", "var_text", "heal_party", "item_grant", "choice"})
 
 
 def _player_facing(emu: "Emulator") -> str:
@@ -372,6 +373,54 @@ def _guard_holds(emu: "Emulator", beat_name: str,
     return True
 
 
+#: `gSpecialVar_Result` while a multichoice waits for input.
+_MENU_WAITING = 0xFF
+
+
+def _handle_choice(emu: "Emulator", beat_name: str, step: Step) -> None:
+    """Answer a choice menu and read back what the script received (ruling
+    19). The transpiler emits a two-option choice as `yesnobox` (YES=1,
+    NO/B=0 in `gSpecialVar_Result`) and a longer one as a multichoice (the
+    picked index). `answer` is the arm's choice index, added by the body
+    from `choice_answers`; -1 is the cancel arm, i.e. B."""
+    params = dict(step.params)
+    if "answer" not in params:
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: choice at list[{step.list_index}] has no "
+            "answer -- generic_beat(choice_answers=) must name one")
+    options, answer = tuple(params["options"]), int(params["answer"])
+    result_addr = emu.symbols["gSpecialVar_Result"]
+    yesno = len(options) == 2
+
+    for _ in range(600):
+        if emu.yesno_prompt_up() if yesno else emu.u16(result_addr) == _MENU_WAITING:
+            break
+        emu.run(1)
+    else:
+        shot = emu.screenshot(f"{beat_name}_no_menu")
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: no {'yes/no' if yesno else 'choice'} menu "
+            f"came up for {options!r} ({shot})")
+
+    if yesno:
+        emu.tap("A" if answer == 0 else "B")
+        expected = 1 if answer == 0 else 0
+    elif answer < 0:
+        emu.tap("B")
+        expected = emu.resolve_constant("MULTI_B_PRESSED")
+    else:
+        for _ in range(answer):
+            emu.tap("DOWN")
+        emu.tap("A")
+        expected = answer
+    got = emu.u16(result_addr)
+    if got != expected:
+        shot = emu.screenshot(f"{beat_name}_choice")
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: answered {answer} to {options!r} but the "
+            f"script received {got}, expected {expected} ({shot})")
+
+
 def _handle_item_grant(emu: "Emulator", beat_name: str, step: Step) -> None:
     # Called by `generic_beat`'s body after `completes`, with `const` and
     # `expected_total` added to the floor params (module docstring).
@@ -394,6 +443,7 @@ def _handle_heal_party(emu: "Emulator", beat_name: str, step: Step) -> None:
 
 
 STEP_HANDLERS.update({
+    "choice": _handle_choice,
     "heal_party": _handle_heal_party,
     "item_grant": _handle_item_grant,
     "var_text": _handle_var_text,
@@ -422,12 +472,20 @@ def generic_beat(
     manifest_chapter_id: str | None = None,
     floor_lookup: FloorLookup | None = None,
     random_arms: Sequence[tuple[str, tuple[tuple[int, str, int], ...]]] = (),
+    walk_rows: Sequence[str] = (),
+    choice_answers: Sequence[tuple[int, int]] = (),
 ) -> None:
     """Register one generic beat claiming `rows` (a page row and/or its
     arms). `random_arms` (ruling 19) pairs each RNG-selected arm among
     `rows` with its guard path `((var_id, op, value), ...)`: those arms are
     claimed but not declared, and the body checks only the one whose guard
-    holds on the ROM's values once the page has rolled. With `skip_claimed=True`, rows some earlier beat in `builder`
+    holds on the ROM's values once the page has rolled.
+
+    `walk_rows` (ruling 19) are rows whose steps the body drives, in order,
+    without claiming or declaring them: a beat split off for one choice arm
+    still has to read the page's shared messages to stay in step with the
+    screen. `choice_answers` pairs each choice command's list index with the
+    arm index to answer (-1 for the cancel arm). With `skip_claimed=True`, rows some earlier beat in `builder`
     already claims are dropped first, and if none remain nothing is
     registered. Fails loud (`ValueError`) on a refused floor.
     `manifest_chapter_id=` names a predecessor whose manifest carries the
@@ -443,8 +501,9 @@ def generic_beat(
 
     # Floors first (registration rule): a refused row fails loud before
     # anything is registered.
+    walked_rows = resolved_rows + tuple(r for r in walk_rows if r not in resolved_rows)
     floors: dict[str, RowFloor] = {}
-    for row_id in resolved_rows:
+    for row_id in walked_rows:
         floor = resolved_lookup(row_id)
         if floor.refused:
             raise ValueError(
@@ -489,7 +548,17 @@ def generic_beat(
     # arms), and each arm's floor repeats the page's `trigger`/`completes`.
     # The page runs once, so those two fire once: the first `trigger`, then
     # every other step of every row in source order, then one `completes`.
-    all_steps = [s for row_id in resolved_rows for s in steps_for(floors[row_id])]
+    all_steps = [s for row_id in walked_rows for s in steps_for(floors[row_id])]
+    answers = dict(choice_answers)
+    for i, step in enumerate(all_steps):
+        if step.kind != "choice":
+            continue
+        if step.list_index not in answers:
+            raise ValueError(
+                f"generic_beat: {beat_name}: {step.row_id} has a choice at "
+                f"list[{step.list_index}] and no choice_answers entry for it")
+        all_steps[i] = Step(step.row_id, step.kind, step.list_index,
+                            step.params + (("answer", answers[step.list_index]),))
     triggers = [s for s in all_steps if s.kind == "trigger"]
     trigger_step = triggers[0] if triggers else None
     completes_step = next((s for s in all_steps if s.kind == "completes"), None)

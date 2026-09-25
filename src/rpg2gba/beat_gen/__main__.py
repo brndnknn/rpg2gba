@@ -45,7 +45,7 @@ from rpg2gba.beat_gen.adapt import (
     route_kwargs,
     warp_candidates,
 )
-from rpg2gba.beat_gen.arms import annotate_random_arms, blocked_arms
+from rpg2gba.beat_gen.arms import annotate_random_arms, blocked_arms, split_choice_arms
 from rpg2gba.beat_gen.boundary import inbound_rows, split_outbound
 from rpg2gba.beat_gen.continuity import thread_maps
 from rpg2gba.beat_gen.reach import engine_spawn, reachable_sites
@@ -595,8 +595,18 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         _merge_kwargs(b, {"manifest_chapter_id": predecessor})
         if inbound_ids and set(b.rows) <= inbound_ids else b
         for b in beats)
-    # Ruling 19: RNG-selected arms are claimed but checked on whichever fired.
-    beats = annotate_random_arms(beats, _row_states_for(build_dir), _page_for(build_dir))
+    # Ruling 19: one beat per choice arm, then RNG-selected arms are claimed
+    # but checked on whichever fired.
+    row_states = _row_states_for(build_dir)
+    beats, choice_elsewhere = split_choice_arms(
+        beats,
+        branch_of=lambda rid: rows_by_id[rid].branch if rid in rows_by_id else None,
+        parent_of=lambda rid: row_states(parse_row_id(rid).map_id)[rid].parent_row_id,
+        killed_by=lambda page: (all_verdicts[page].killed_by if page in all_verdicts else ()),
+        choice_openers=lambda rid: [a.list_index for a in floors[rid].assertions
+                                    if a.kind == "choice"],
+    )
+    beats = annotate_random_arms(beats, row_states, _page_for(build_dir))
 
     # 3. Adapt, source half. An arrival nudge nothing lands on never fires
     #    (C9 ruling 3): its whole group (the nudge and its arms) is dropped
@@ -731,7 +741,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         predecessor=predecessor,
         beats=beats,
         refusals=selection.refusals + tuple(cell_refusals),
-        elsewhere=selection.elsewhere + dead_elsewhere,
+        elsewhere=selection.elsewhere + dead_elsewhere + choice_elsewhere,
         order_dependent=story.order_dependent,
         route=route,
     )

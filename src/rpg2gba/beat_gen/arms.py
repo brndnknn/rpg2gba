@@ -139,3 +139,110 @@ def walk_checked(beats: tuple[PlannedBeat, ...]) -> dict[str, str]:
             tests = " and ".join(f"var {v} {op} {x}" for v, op, x in guard)
             out[row_id] = f"random arm ({tests}); the walk checks whichever the RNG picks"
     return out
+
+
+def _descendants(arm: str, rows: Collection[str], parent_of: Callable[[str], str | None]) -> list[str]:
+    out = []
+    for rid in rows:
+        cur = parent_of(rid)
+        while cur is not None:
+            if cur == arm:
+                out.append(rid)
+                break
+            cur = parent_of(cur)
+    return out
+
+
+def split_choice_arms(
+    beats: tuple[PlannedBeat, ...],
+    branch_of: Callable[[str], Any],
+    parent_of: Callable[[str], str | None],
+    killed_by: Callable[[str], Collection[str]],
+    choice_openers: Callable[[str], Collection[int]],
+) -> tuple[tuple[PlannedBeat, ...], tuple[Elsewhere, ...]]:
+    """One beat per choice arm (ruling 19). `branch_of(row_id)` is a
+    manifest row's `BranchRef` (None for a page), `parent_of` its enclosing
+    arm or page, `killed_by(page_row_id)` the rows whose writes end the
+    page, `choice_openers(row_id)` the list indexes of the `choice`
+    assertions on a row's floor. Every generic beat also gets
+    `choice_answers` for each choice it walks. Returns the new beats and the arms no walk can take."""
+    out: list[PlannedBeat] = []
+    unselected: list[Elsewhere] = []
+    pending = list(beats)
+    while pending:
+        beat = pending.pop(0)
+        if beat.template != "generic":
+            out.append(beat)
+            continue
+        walked = beat.rows + tuple(dict(beat.kwargs).get("walk_rows", ()))
+        groups: dict[int, list[str]] = {}
+        for rid in beat.rows:
+            b = branch_of(rid)
+            if b is not None and b.arm_kind in ("choice", "cancel"):
+                groups.setdefault(b.opener_index, []).append(rid)
+        split = next((op for op, arms in sorted(groups.items()) if len(arms) > 1), None)
+        if split is None:
+            out.append(beat)
+            continue
+
+        arms = sorted(groups[split], key=lambda r: (branch_of(r).choice_index is None,
+                                                    branch_of(r).choice_index or 0))
+        subtree = {a: [a, *_descendants(a, beat.rows, parent_of)] for a in arms}
+        in_arms = {r for rows in subtree.values() for r in rows}
+        shared = tuple(r for r in beat.rows if r not in in_arms)
+        page = parse_row_id(arms[0]).owning_page_row_id
+        killers = set(killed_by(page))
+        trunk_kills = bool(killers & set(shared))
+        killing = [a for a in arms if trunk_kills or killers & set(subtree[a])]
+        repeatable = [a for a in arms if a not in killing]
+        last = killing[0] if killing else repeatable.pop()
+        for a in killing[1:]:
+            for rid in subtree[a]:
+                unselected.append(Elsewhere(
+                    rid, "unselected_arm",
+                    detail=f"choice at list[{split}]: answering {branch_of(a).choice_index} "
+                           "ends the page, and another answer is walked instead (ruling 19)"))
+
+        kwargs = dict(beat.kwargs)
+        extra_walk = tuple(kwargs.pop("walk_rows", ()))
+        for i, a in enumerate(repeatable):
+            idx = branch_of(a).choice_index
+            pending.insert(i, dataclasses.replace(
+                beat, name=f"{beat.name}_c{split}a{'x' if idx is None else idx}",
+                rows=tuple(r for r in beat.rows if r in subtree[a]),
+                kwargs=make_kwargs(**kwargs, walk_rows=shared + extra_walk)))
+        pending.insert(len(repeatable), dataclasses.replace(
+            beat, rows=tuple(r for r in beat.rows if r in set(shared) | set(subtree[last])),
+            kwargs=make_kwargs(**kwargs, **({"walk_rows": extra_walk} if extra_walk else {}))))
+    skip = {e.row_id for e in unselected}
+    return (tuple(_with_answers(b, branch_of, choice_openers, skip) for b in out),
+            tuple(unselected))
+
+
+def _with_answers(beat: PlannedBeat, branch_of: Callable[[str], Any],
+                  choice_openers: Callable[[str], Collection[int]],
+                  unselected: Collection[str]) -> PlannedBeat:
+    """Name, for every choice the beat walks, the answer that selects the
+    arm it claims. A choice none of whose arms the beat claims is answered
+    with its lowest arm that isn't `unselected` (0 if it has no arm rows)."""
+    if beat.template != "generic":
+        return beat
+    walked = beat.rows + tuple(dict(beat.kwargs).get("walk_rows", ()))
+    openers = {op for rid in walked for op in choice_openers(rid)}
+    if not openers:
+        return beat
+    answers: dict[int, int] = {}
+    fallback: dict[int, int] = {}
+    for rid in walked:
+        b = branch_of(rid)
+        if b is None or b.arm_kind not in ("choice", "cancel"):
+            continue
+        idx = -1 if b.choice_index is None else b.choice_index
+        if rid in beat.rows:
+            answers[b.opener_index] = idx
+        elif rid not in unselected:
+            fallback[b.opener_index] = min(fallback.get(b.opener_index, idx), idx)
+    answers = {op: answers.get(op, fallback.get(op, 0)) for op in openers}
+    kwargs = dict(beat.kwargs)
+    kwargs["choice_answers"] = tuple(sorted((op, answers.get(op, 0)) for op in openers))
+    return dataclasses.replace(beat, kwargs=make_kwargs(**kwargs))

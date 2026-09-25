@@ -3,7 +3,12 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from rpg2gba.beat_gen.arms import blocked_arms, random_arm_guards, walk_checked
+from rpg2gba.beat_gen.arms import (
+    blocked_arms,
+    random_arm_guards,
+    split_choice_arms,
+    walk_checked,
+)
 from rpg2gba.beat_gen.plan import PlannedBeat, Selection, make_kwargs
 from rpg2gba.story_state.state import Switch, Test, Variable
 
@@ -81,3 +86,45 @@ def test_walk_checked_lists_every_random_arm():
                                                         ((102, "==", 0),)),)))
     assert walk_checked((beat,)) == {
         "map049/ev001/p3/b0": "random arm (var 102 == 0); the walk checks whichever the RNG picks"}
+
+
+# --- choice arms ------------------------------------------------------------
+
+PAGE = "map068/ev003/p0"
+BRANCHES = {
+    f"{PAGE}/b0": SimpleNamespace(arm_kind="choice", choice_index=0, opener_index=3),
+    f"{PAGE}/b1": SimpleNamespace(arm_kind="choice", choice_index=1, opener_index=3),
+    f"{PAGE}/b2": SimpleNamespace(arm_kind="choice", choice_index=2, opener_index=3),
+    f"{PAGE}/b3": SimpleNamespace(arm_kind="then", choice_index=None, opener_index=9),
+}
+PARENT = {f"{PAGE}/b0": PAGE, f"{PAGE}/b1": PAGE, f"{PAGE}/b2": PAGE,
+          f"{PAGE}/b3": f"{PAGE}/b1"}   # b3 is nested in answer 1
+
+
+def _split(rows, killers=()):
+    beat = PlannedBeat(name="m068e003p0", template="generic", map_id=68, rows=rows, group="g")
+    return split_choice_arms(
+        (beat,), branch_of=BRANCHES.get, parent_of=PARENT.get,
+        killed_by=lambda page: killers, choice_openers=lambda rid: [3] if rid == PAGE else [])
+
+
+def test_repeatable_answers_each_get_a_beat_and_the_last_claims_the_page():
+    beats, unselected = _split((PAGE, f"{PAGE}/b0", f"{PAGE}/b1", f"{PAGE}/b3", f"{PAGE}/b2"))
+    assert unselected == ()
+    assert [(b.name, b.rows) for b in beats] == [
+        ("m068e003p0_c3a0", (f"{PAGE}/b0",)),
+        ("m068e003p0_c3a1", (f"{PAGE}/b1", f"{PAGE}/b3")),
+        ("m068e003p0", (PAGE, f"{PAGE}/b2")),
+    ]
+    assert beats[0].kwarg("walk_rows") == (PAGE,)
+    assert [b.kwarg("choice_answers") for b in beats] == [((3, 0),), ((3, 1),), ((3, 2),)]
+    assert {b.group for b in beats} == {"g"}
+
+
+def test_answers_that_end_the_page_run_last_and_only_one_of_them():
+    beats, unselected = _split((PAGE, f"{PAGE}/b0", f"{PAGE}/b1", f"{PAGE}/b3", f"{PAGE}/b2"),
+                               killers={f"{PAGE}/b0", f"{PAGE}/b3"})
+    # b2 repeats; b0 and b1 (via its nested b3) both end the page: b0 is walked last.
+    assert [b.name for b in beats] == ["m068e003p0_c3a2", "m068e003p0"]
+    assert beats[-1].rows == (PAGE, f"{PAGE}/b0")
+    assert sorted(e.row_id for e in unselected) == [f"{PAGE}/b1", f"{PAGE}/b3"]
