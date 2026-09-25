@@ -65,13 +65,20 @@ logger = logging.getLogger(__name__)
 # arrival-position check `_forward`/`_back` always make; `visual`/`audio`
 # assert nothing beyond the page completing (assertion.py's own kind
 # docstrings), which `_cross`'s `emu.settle_field()` drive/observe -- so
-# declaring them is honest, not aspirational. `text`, `item_grant`,
-# `switch_write`, etc. are deliberately absent: nothing in this body reads a
-# text box or a state write, so a warp page that also does one of those
-# stays honestly uncovered for it.
+# declaring them is honest, not aspirational. `text`, `item_grant`, etc.
+# are deliberately absent: nothing in this body reads a text box, so a warp
+# page that also shows one stays honestly uncovered for it.
+#
+# The page's absolute state writes (`_STATE_KINDS`, added 2026-09-25 for the
+# lab exit's switch 104, map050/ev001/p1) are read after the claimed
+# crossing with the generic template's own handlers: the page has finished
+# by then, whichever side of the transfer the write sits on.
+_STATE_KINDS: frozenset[str] = frozenset({
+    "switch_write", "var_write", "self_switch_write",
+})
 _EXECUTED_KINDS: frozenset[str] = frozenset({
     "trigger", "completes", "warp", "visual", "audio",
-})
+}) | _STATE_KINDS
 
 Mechanism = Literal["door", "threshold", "arrow"]
 _MECHANISMS: frozenset[str] = frozenset({"door", "threshold", "arrow"})
@@ -505,6 +512,13 @@ def warp_beat(
         del run_boundary
         return
 
+    from .generic import STEP_HANDLERS, Step
+
+    state_steps = tuple(sorted(
+        (Step(a.row_id, a.kind, a.list_index, a.params)
+         for a in declared if a.kind in _STATE_KINDS),
+        key=lambda st: (st.list_index, st.row_id, st.kind)))
+
     return_crossing: tuple[int, int] | None = None
     return_arrival: tuple[int, int] | None = None
     if crosses_reciprocal:
@@ -600,6 +614,8 @@ def warp_beat(
 
         if not check_arrival_details:
             return
+        for step in state_steps:
+            STEP_HANDLERS[step.kind](emu, beat_name, step)
         if assert_facing:
             assertions.assert_player_facing(emu, beat_name, expected_facing)
         if assert_bgm:

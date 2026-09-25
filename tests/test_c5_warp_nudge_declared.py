@@ -312,3 +312,33 @@ def test_arrival_nudge_beat_body_passes_on_the_correct_displacement(
 
     emu = _FakeEmu(correct, facing="DOWN")
     beat.run(emu)  # must not raise
+
+
+def test_warp_beat_checks_the_page_state_write_after_the_crossing(monkeypatch) -> None:
+    """The lab exit (map050/ev001/p1) turns switch 104 on as it transfers:
+    declared, and read with the generic handler once the player has landed."""
+    from rpg2gba.playtest.archetypes import generic
+
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH01", map_constant="MAP_MOKI_TOWN_PROFESSOR_LAB", map_id=50,
+        event_id=1, page_idx=1, dest_map_constant="MAP_MOKI_TOWN",
+        mechanism="threshold", direction="DOWN", beat_name="W1",
+    )
+    beat = _builder_result_beat(b)
+    assert "switch_write" in {a.kind for a in beat.assertions}
+    assert uncovered(floor_for_row("map050/ev001/p1"), beat.assertions) == ()
+
+    seen: list[tuple[str, object]] = []
+    monkeypatch.setitem(generic.STEP_HANDLERS, "switch_write",
+                        lambda emu, name, step: seen.append(
+                            (step.kind, dict(step.params)["switch_id"])))
+    for helper in ("cross_threshold", "require_map", "assert_position_exact"):
+        monkeypatch.setattr(real_assertions, helper, _noop)
+
+    class _Emu:
+        def settle_field(self):
+            return 0
+
+    beat.run(_Emu())
+    assert seen == [("switch_write", 104)]

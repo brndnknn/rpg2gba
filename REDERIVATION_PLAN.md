@@ -2684,6 +2684,32 @@ no observable identity and stays undeclared.
 
 Regrade **7 → 4**.
 
+**Three more partial claims closed (built 2026-09-25, build agent's design, no ruling).**
+- **Pages the generic template reads in full go generic** (`beat_gen/__main__.py`
+  `_generic_reads_it_better`):
+  - A trainer whose battle sits in an arm: Mawuli, `map068/ev014`, "Wanna fight? → Yes".
+    `trainer_beats` reads intro and identity off the page itself, so it declared neither
+    the text nor the choice. Generic answers the menu per arm and checks the battle there.
+  - A randomized flavour NPC: the TV, `map048/ev011`. `flavour_npc_beat` checks only "one
+    of the lines". Generic checks the roll's write, the arm it picked (ruling 19's random
+    arms) and the trailing line, all in one talk.
+- **State writes on a warp page** (`warp.py` `_STATE_KINDS`): switch/var/self-switch writes
+  are read after the claimed crossing with the generic handlers. The case is the lab exit's
+  switch 104, `map050/ev001/p1`.
+- **A bug the TV exposed:** the floor renders an assign as `op="="`, but `_handle_var_write`
+  compared values only for `"assign"`. No var assign had ever been value-checked.
+  - A write with several possible values (a roll, a branch-dependent assign) renders as a
+    tuple, and the switch handlers' `bool(tuple)` read always True.
+  - All three now check "the value read is one of those the write can leave".
+  - P11 risk: every var assign in CH01–CH05 is now value-checked for the first time.
+
+**Open, needs a ruling:** `map068/ev001/p1`, the Center nurse's post-white-out heal (CH04,
+hand B16).
+- Its floor is refused `party_model` for `$game_variables[43]=$Trainer.party.length`.
+- Var 43 is read only by the page conditions of events 5/6: empty pages that draw the heal
+  machine's balls. The same page resets it to 0 forty frames later.
+- Every nurse heal has this shape, including CH03's `p0/b0`.
+
 Also on the list, no ruling needed: the starter machine's floor must read the resolver's row
 states, not extraction-time ones (`beat_floor/walk.py:738`, a bug); branch-arm bundling
 (`m033e034_trainer_arms`) needs investigating before anything is decided.

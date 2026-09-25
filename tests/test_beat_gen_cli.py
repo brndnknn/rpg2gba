@@ -311,3 +311,29 @@ def test_generate_cli_module_dir_defaults_to_chapters_gen(tmp_path, monkeypatch)
 
     assert result.exit_code == 0, result.output
     assert calls["module_dir"] == cli.DEFAULT_MODULE_DIR
+
+
+def test_a_trainer_battle_in_an_arm_is_not_a_trainer_match():
+    """Mawuli (map068/ev014) fights in the "Wanna fight? -> Yes" arm: the
+    page goes to the generic template, which answers the menu per arm."""
+    from rpg2gba.beat_floor.lookup import floor_for_row
+    from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch
+
+    def match(page):
+        return ArchetypeMatch("trainer", 0, 0, {}, {page: "battle"}, {page: "beat"})
+
+    arm_battle, page_battle = "map068/ev014/p0", "map033/ev053/p0"
+    floors = {r: floor_for_row(r) for r in (arm_battle, page_battle)}
+    assert not cli._battle_on_page(match(arm_battle), floors)
+    assert cli._battle_on_page(match(page_battle), floors)
+
+
+def test_a_randomized_flavour_npc_goes_to_the_generic_template():
+    from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch
+
+    def flavour(variant):
+        return ArchetypeMatch("flavour_npc", 48, 11, {"variant": variant},
+                              {"map048/ev011/p0": "talk"}, {"map048/ev011/p0": "beat"})
+
+    assert cli._generic_reads_it_better(flavour("randomized"), {})
+    assert not cli._generic_reads_it_better(flavour("plain"), {})

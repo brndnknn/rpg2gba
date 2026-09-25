@@ -130,6 +130,26 @@ def _chain_to(binding: ChapterBinding, chapter_id: str) -> list[str]:
     return chain[::-1]
 
 
+def _battle_on_page(match: ArchetypeMatch, floors: Mapping[str, RowFloor]) -> bool:
+    page = next(rid for rid, role in match.roles.items() if role == "battle")
+    return page in floors and any(a.kind == "battle" for a in floors[page].assertions)
+
+
+def _generic_reads_it_better(match: ArchetypeMatch, floors: Mapping[str, RowFloor]) -> bool:
+    """Matches whose page the generic template checks in full and the
+    archetype's template only in part:
+    - a trainer whose battle sits in an arm (Mawuli's "Wanna fight? -> Yes",
+      map068/ev014): generic answers the menu per arm and checks the battle
+      there, while `trainer_beats` reads intro and identity off the page;
+    - a randomized flavour NPC (the TV, map048/ev011): generic checks the
+      roll's write, the arm it picked (ruling 19's random arms) and the
+      lines around it in one talk, while `flavour_npc_beat` checks only
+      "one of the lines"."""
+    if match.archetype == "trainer":
+        return not _battle_on_page(match, floors)
+    return match.archetype == "flavour_npc" and match.params.get("variant") == "randomized"
+
+
 def _match_for(beat: PlannedBeat, matches: Sequence[ArchetypeMatch]) -> ArchetypeMatch:
     """The archetype match an archetype beat was planned from: same
     archetype, and every role row claimed by the beat. By event alone is
@@ -654,7 +674,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     refused_ids = {r.row_id for r in selection.refusals}
     matches = tuple(
         m for m in classify_manifest(inbound) + classify_manifest(rows)
-        if not any(rid.startswith(f"{page}/") for page in m.roles for rid in refused_ids))
+        if not any(rid.startswith(f"{page}/") for page in m.roles for rid in refused_ids)
+        and not _generic_reads_it_better(m, floors))
     fork_rows = tuple(r.row_id for r in selection.owned if r.row_id in fork_owned)
     beats = plan_beats(tuple(r for r in selection.owned if r.row_id not in fork_owned),
                        matches, floors)

@@ -402,6 +402,13 @@ def _handle_var_text(emu: "Emulator", beat_name: str, step: Step) -> None:
                                       (("index", params["index"]), ("text", expected))))
 
 
+def _written(value: object) -> tuple:
+    """The values a write can leave: the floor renders a write that has more
+    than one possible value (a random roll, a branch-dependent assign) as a
+    tuple of them, and a single value bare (`beat_floor.walk`)."""
+    return value if isinstance(value, tuple) else (value,)
+
+
 def _handle_switch_write(emu: "Emulator", beat_name: str, step: Step) -> None:
     params = dict(step.params)
     switch_id = params["switch_id"]
@@ -411,9 +418,9 @@ def _handle_switch_write(emu: "Emulator", beat_name: str, step: Step) -> None:
             f"{beat_name}: {step.row_id}: switch {switch_id} has no minted "
             "FLAG_* name in the persisted flag registry -- not guessing one"
         )
-    expected = bool(params["value"])
+    expected = tuple(bool(v) for v in _written(params["value"]))
     actual = emu.flag(name)
-    if actual != expected:
+    if actual not in expected:
         shot = emu.screenshot(f"{beat_name}_switch_{switch_id}")
         raise ScenarioError(
             f"{beat_name}: {step.row_id}: {name} reads {actual!r}, expected "
@@ -431,14 +438,13 @@ def _handle_var_write(emu: "Emulator", beat_name: str, step: Step) -> None:
             "name in the persisted flag registry -- not guessing one"
         )
     actual = emu.var(name)
-    op = params.get("op")
-    if op in ("assign", "Assign"):
-        expected = params["value"]
-        if actual != expected:
+    if params.get("op") == "=":
+        expected = _written(params["value"])
+        if actual not in expected:
             shot = emu.screenshot(f"{beat_name}_var_{var_id}")
             raise ScenarioError(
                 f"{beat_name}: {step.row_id}: {name} reads {actual!r}, "
-                f"expected {expected!r} after an assign ({shot})"
+                f"expected one of {expected!r} after an assign ({shot})"
             )
     # An "Adjust" op is a relative change; this step has no "before" value
     # to diff against (steps_for is pure, no emulator access), so the
@@ -450,9 +456,9 @@ def _handle_self_switch_write(emu: "Emulator", beat_name: str, step: Step) -> No
     params = dict(step.params)
     map_id = parse_row_id(step.row_id).map_id
     name = self_switch_flag_name(map_id, params["event_id"], str(params["letter"]))
-    expected = bool(params["value"])
+    expected = tuple(bool(v) for v in _written(params["value"]))
     actual = emu.flag(name)
-    if actual != expected:
+    if actual not in expected:
         shot = emu.screenshot(f"{beat_name}_ssa")
         raise ScenarioError(
             f"{beat_name}: {step.row_id}: {name} reads {actual!r}, expected "

@@ -498,3 +498,58 @@ def test_a_heal_after_a_battle_damages_the_lead_after_the_battle(monkeypatch):
     beat.run(_AnyEmu())
     assert calls.index("battle") < calls.index("damage") < calls.index("heal_party")
     assert calls.count("damage") == 1
+
+
+# --- state writes: an assign is value-checked, a multi-valued one by set ------
+
+
+class _StateEmu:
+    def __init__(self, value):
+        self.value = value
+
+    def var(self, name):
+        return self.value
+
+    def flag(self, name):
+        return self.value
+
+    def screenshot(self, name):
+        return f"{name}.png"
+
+
+class _Registry:
+    def get_var(self, var_id):
+        return "VAR_TEST"
+
+    def get_flag(self, switch_id):
+        return "FLAG_TEST"
+
+
+def test_var_write_assign_is_checked_against_every_possible_value(monkeypatch):
+    from rpg2gba.playtest.archetypes.generic import STEP_HANDLERS, Step
+    from rpg2gba.playtest.errors import ScenarioError
+
+    monkeypatch.setattr(generic, "_flag_registry", lambda: _Registry())
+    roll = Step("map048/ev011/p0", "var_write", 0,
+                (("op", "="), ("value", (0, 1, 2)), ("var_id", 1)))
+    STEP_HANDLERS["var_write"](_StateEmu(2), "B1", roll)
+    with pytest.raises(ScenarioError, match="reads 3, expected one of"):
+        STEP_HANDLERS["var_write"](_StateEmu(3), "B1", roll)
+    single = Step("map048/ev011/p0", "var_write", 0,
+                  (("op", "="), ("value", 5), ("var_id", 1)))
+    with pytest.raises(ScenarioError, match="reads 4"):
+        STEP_HANDLERS["var_write"](_StateEmu(4), "B1", single)
+
+
+def test_switch_write_with_both_values_possible_accepts_either(monkeypatch):
+    from rpg2gba.playtest.archetypes.generic import STEP_HANDLERS, Step
+    from rpg2gba.playtest.errors import ScenarioError
+
+    monkeypatch.setattr(generic, "_flag_registry", lambda: _Registry())
+    both = Step("map050/ev019/p0", "switch_write", 0,
+                (("switch_id", 35), ("value", (False, True))))
+    STEP_HANDLERS["switch_write"](_StateEmu(False), "B1", both)
+    STEP_HANDLERS["switch_write"](_StateEmu(True), "B1", both)
+    on = Step("map050/ev019/p0", "switch_write", 0, (("switch_id", 35), ("value", True)))
+    with pytest.raises(ScenarioError, match="reads False"):
+        STEP_HANDLERS["switch_write"](_StateEmu(False), "B1", on)
