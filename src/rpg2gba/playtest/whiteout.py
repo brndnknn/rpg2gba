@@ -239,6 +239,57 @@ def whiteout_beat(
     (`emulator.py`'s own docstring), so they already cover everything a
     later beat could read.
     """
+    _register_whiteout(
+        builder, beat_name=beat_name, heal_location_id=heal_location_id,
+        description=description, heal_locations_json=heal_locations_json,
+        starting_over_rows=starting_over_rows)
+
+
+#: Floor kinds `whiteout_fork_beat` proves for the landing map's Starting
+#: Over page: it ran on arrival (`trigger`), to its end (`completes`), and
+#: cleared switch 5 (`switch_write`) -- all three shown by FLAG_STARTING_OVER
+#: being set when control returns and clear once the arrival scripts drain.
+WHITEOUT_EXECUTED_KINDS: frozenset[str] = frozenset({"trigger", "completes", "switch_write"})
+
+
+def whiteout_fork_beat(
+    builder: ChapterBuilder,
+    *,
+    chapter_id: str,
+    beat_name: str,
+    group: str,
+    rows: tuple[str, ...],
+    heal_location_id: str,
+) -> None:
+    """The generated-module form of `whiteout_beat` (REDERIVATION_PLAN.md
+    §16.3 ruling 15): `rows` are the rows the story model's white-out fork
+    owns on one landing map, `group` the route stop it rides with (it has
+    no tile of its own: the white-out is forced by a RAM write and the
+    snapshot restore puts the player back). Declares the floor kinds it
+    proves (`WHITEOUT_EXECUTED_KINDS`)."""
+    from .archetypes import declare_assertions
+
+    declared = declare_assertions(
+        rows, executed_kinds=WHITEOUT_EXECUTED_KINDS, template="whiteout")
+    _register_whiteout(
+        builder, beat_name=beat_name, heal_location_id=heal_location_id,
+        description=(f"White-out lands at {heal_location_id} and runs "
+                     f"{', '.join(rows)} ({chapter_id})"),
+        heal_locations_json=DEFAULT_HEAL_LOCATIONS_JSON,
+        starting_over_rows=rows, group=group, declared=declared)
+
+
+def _register_whiteout(
+    builder: ChapterBuilder,
+    *,
+    beat_name: str,
+    heal_location_id: str,
+    description: str | None,
+    heal_locations_json: Path,
+    starting_over_rows: tuple[str, ...],
+    group: str | None = None,
+    declared: frozenset | None = None,
+) -> None:
     if heal_locations_json.exists():
         # Fail loud now, not 20 minutes into a ROM run (see docstring).
         load_heal_location(heal_location_id, heal_locations_json)
@@ -256,7 +307,8 @@ def whiteout_beat(
                 "returned from the white-out -- DoWhiteOut's fenced FlagSet "
                 f"is missing from this ROM ({shot})")
 
-    @builder.beat(beat_name, resolved_description, rows=starting_over_rows)
+    @builder.beat(beat_name, resolved_description, rows=starting_over_rows,
+                  group=group, assertions=declared)
     def run(emu: Emulator) -> None:
         expected = load_heal_location(heal_location_id, heal_locations_json)
         state = emu.snapshot_state()

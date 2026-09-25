@@ -1,9 +1,11 @@
 """Offline route solver — turns a `Chapter` (beats/groups) into a `RoutePlan`.
 
 Builds one route node per `BeatGroup` (plus a fixed entry and exit node),
-derives `PrecedenceEdge`s from two sources -- the chapter manifest's recorded
-self-switch read/write pairs, and the corpus-wide warp topology (`world`,
-see `_derive_warp_precedence`) -- and orders the group nodes to minimize tile
+derives `PrecedenceEdge`s from three sources -- the chapter manifest's recorded
+self-switch read/write pairs, the corpus-wide warp topology (`world`,
+see `_derive_warp_precedence`), and the story model's `enabled_by` (global
+switches, variables, engine keys; `_derive_story_precedence`, ruling 16) --
+and orders the group nodes to minimize tile
 cost subject to those precedence constraints and a strong bias against
 crossing a foreign trigger tile.
 
@@ -249,6 +251,38 @@ def _derive_precedence(
     return tuple(sorted(edges, key=lambda e: (e.before, e.after, e.reason)))
 
 
+def _derive_story_precedence(
+    enabled_by: Mapping[str, tuple[tuple[str, ...], ...]], group_by_row: Mapping[str, str],
+) -> tuple[PrecedenceEdge, ...]:
+    """Derive `PrecedenceEdge`s from the story model's `enabled_by`
+    (REDERIVATION_PLAN.md §16.3 ruling 16).
+
+    `enabled_by[row]` is a conjunction of groups; any row in a group enables
+    it. A group with exactly one row that another route group claims gives
+    `before=<that group> -> after=<row's group>`. A group with several
+    alternatives constrains nothing on its own (logged, like a half-claimed
+    self-switch pair); `engine:` markers and rows no group claims are skipped.
+    """
+    edges: set[PrecedenceEdge] = set()
+    for row_id, groups in enabled_by.items():
+        after_group = group_by_row.get(row_id)
+        if after_group is None:
+            continue
+        for alternatives in groups:
+            writers = [w for w in alternatives if not w.startswith("engine:")]
+            if not writers:
+                continue
+            if len(writers) > 1:
+                logger.info("precedence: %s is enabled by any of %s; no edge", row_id, writers)
+                continue
+            before_group = group_by_row.get(writers[0])
+            if before_group is None or before_group == after_group:
+                continue
+            edges.add(PrecedenceEdge(before=before_group, after=after_group,
+                                     reason=f"story:{writers[0]}->{row_id}"))
+    return tuple(sorted(edges, key=lambda e: (e.before, e.after, e.reason)))
+
+
 def _derive_warp_precedence(
     manifest_rows: Sequence[ManifestRow],
     group_by_row: Mapping[str, str],
@@ -427,6 +461,7 @@ def solve_route(
     destination_scripts: frozenset[str] = frozenset(),
     occupancy: Mapping[int, MapOccupancy] | None = None,
     candidates: Mapping[str, tuple[RouteCandidate, ...]] | None = None,
+    enabled_by: Mapping[str, tuple[tuple[str, ...], ...]] | None = None,
 ) -> RoutePlan:
     """Solve a walk order over `chapter`'s OWN beat groups and return a `RoutePlan`.
 
@@ -571,6 +606,7 @@ def solve_route(
         for row_id in gp.rows:
             group_by_row[row_id] = gp.group_id
     self_switch_precedence = _derive_precedence(manifest_rows, group_by_row)
+    story_precedence = _derive_story_precedence(enabled_by or {}, group_by_row)
 
     entry_group_id = next(
         (gp.group_id for gp in group_points if (gp.map_id, gp.cell) == (entry_map, entry_cell)),
@@ -594,7 +630,7 @@ def solve_route(
         )
 
     precedence = tuple(sorted(
-        set(self_switch_precedence) | set(warp_precedence),
+        set(self_switch_precedence) | set(warp_precedence) | set(story_precedence),
         key=lambda e: (e.before, e.after, e.reason),
     ))
 

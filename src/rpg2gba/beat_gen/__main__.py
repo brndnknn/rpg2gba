@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import dataclasses
 import functools
+import json
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -69,6 +70,7 @@ from rpg2gba.beat_gen.review import render_review
 from rpg2gba.beat_gen.seam import SeamCrossing, connection_for, seam_crossings
 from rpg2gba.beat_gen.seed import route_winner
 from rpg2gba.beat_gen.select import select_rows
+from rpg2gba.beat_gen.whiteout import place_whiteout_beats
 from rpg2gba.chapter_atlas.binding import ChapterBinding, load_binding
 from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch, classify_manifest
 from rpg2gba.chapter_manifest.schema import ManifestRow, parse_row_id
@@ -551,7 +553,13 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     matches = tuple(
         m for m in classify_manifest(inbound) + classify_manifest(rows)
         if not any(rid.startswith(f"{page}/") for page in m.roles for rid in refused_ids))
-    beats = plan_beats(selection.owned, matches, floors)
+    # White-out fork rows have no tile; `whiteout.place_whiteout_beats`
+    # places them after ordering (rulings 15-16).
+    fork_owned = {rid for f in story.forks if f.transition == "whiteout"
+                  for rid in f.owned_row_ids}
+    fork_rows = tuple(r.row_id for r in selection.owned if r.row_id in fork_owned)
+    beats = plan_beats(tuple(r for r in selection.owned if r.row_id not in fork_owned),
+                       matches, floors)
     inbound_ids = frozenset(r.row_id for r in inbound)
     beats = tuple(
         _merge_kwargs(b, {"manifest_chapter_id": predecessor})
@@ -644,11 +652,15 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                          for c in r.approach_candidates)
         for r in records if r.approach_candidates
     }
+    # Ruling 16: story-state enablers order beats too. Every chain
+    # chapter's verdicts, since inbound rows are the predecessor's.
+    enabled_by = {v.row_id: v.enabled_by for s in stories.values() for v in s.rows}
     route = solve_route(
         chapter_from_locations(chapter_id, records), chapter_id,
         manifest_rows=all_rows, graphs=graphs, overlays=overlays,
         world=world, map_ids=_load_map_ids(build_dir),
         occupancy=occupancy, candidates=candidates, entry=entry,
+        enabled_by=enabled_by,
     )
 
     # 6. Order, then adapt's route half. A warp whose destination is on no
@@ -675,6 +687,12 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
             world, chain_maps, reachable_sites(entry, graphs, world, chain_maps, occupancy),
             graphs),
     )
+
+    # 8. White-out fork beats ride after their enablers (`beat_gen/whiteout.py`).
+    heal_entries = json.loads(
+        (build_dir / "heal_locations.json").read_text(encoding="utf-8"))["heal_locations"]
+    beats = place_whiteout_beats(beats, fork_rows, enabled_by,
+                                 map_constant_for=_map_constant_for, heal_entries=heal_entries)
 
     return ChapterPlan(
         chapter_id=chapter_id,

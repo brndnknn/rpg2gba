@@ -1197,3 +1197,35 @@ def test_entry_landing_map_needs_no_introducing_warp() -> None:
         "nothing may be required before the chapter's own entry beat on "
         f"account of the map it enters into: {route.precedence}"
     )
+
+
+# --- story precedence (REDERIVATION_PLAN.md §16.3 ruling 16) --------------
+
+
+def test_story_precedence_edges_from_single_writer_groups():
+    from rpg2gba.routing.solver import _derive_story_precedence
+
+    group_by_row = {"map049/ev001/p0": "auntie", "map049/ev002/p1": "door",
+                    "map050/ev019/p0": "starter", "map049/ev022/p0": "whiteout",
+                    "map010/ev001/p0": "a", "map010/ev002/p0": "b"}
+    enabled_by = {
+        # One writer in another group: an edge.
+        "map049/ev002/p1": (("map049/ev001/p0",),),
+        # The engine marker constrains nothing; the real writer does.
+        "map049/ev022/p0": (("engine:whiteout",), ("map050/ev019/p0",)),
+        # Two alternative writers: no edge.
+        "map010/ev002/p0": (("map010/ev001/p0", "map011/ev001/p0"),),
+        # A writer no group claims (another chapter's): no edge.
+        "map010/ev001/p0": (("map099/ev001/p0",),),
+    }
+    edges = _derive_story_precedence(enabled_by, group_by_row)
+    assert [(e.before, e.after) for e in edges] == [("auntie", "door"), ("starter", "whiteout")]
+    assert edges[0].reason == "story:map049/ev001/p0->map049/ev002/p1"
+
+
+def test_story_precedence_ignores_a_writer_in_the_same_group():
+    from rpg2gba.routing.solver import _derive_story_precedence
+
+    group_by_row = {"map001/ev001/p0": "g", "map001/ev001/p1": "g"}
+    assert _derive_story_precedence(
+        {"map001/ev001/p1": (("map001/ev001/p0",),)}, group_by_row) == ()

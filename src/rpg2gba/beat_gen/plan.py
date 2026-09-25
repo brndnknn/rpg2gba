@@ -42,6 +42,8 @@ TemplateName = Literal[
     # travel between beats (C6 part two, `continuity.py`): crosses warps to
     # reach the next beat's map; claims and declares nothing
     "transit",
+    # a white-out fork's landing-map rows (`whiteout.py`, ruling 15)
+    "whiteout",
 ]
 
 ARCHETYPE_TEMPLATES: frozenset[str] = frozenset(
