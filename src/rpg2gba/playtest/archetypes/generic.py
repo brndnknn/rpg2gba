@@ -27,15 +27,7 @@ required minimum. Beyond that, `switch_write`/`var_write`/
 `self_switch_write`/`engine_flag_write`/`visual` are added because each is checkable with a
 single, stateless, absolute read after the row's steps run -- exactly what
 a per-kind `StepHandler(emu, beat_name, step) -> None` can honestly do
-without any state shared across steps. `item_grant` and `battle` are left
-out: `item_grant`'s honest check (`item_ball.py`'s own `grant_beat`) is a
-bag-quantity DELTA, which needs a "before" snapshot taken ahead of the
-row's `trigger` step -- there is no channel for that in this design without
-either mutating `Step` with runtime data (breaking `steps_for`'s purity,
-since the snapshot can only be taken by touching the emulator) or giving
-handlers shared mutable state across steps, which turns "one handler per
-kind" back into "one body per beat" -- exactly what `item_ball.py` already
-is. `battle`'s wild half has no observable identity (no party/species read
+without any state shared across steps. `battle` is left out: its wild half has no observable identity (no party/species read
 in the emulator's public API for anything but the player's own party), so
 a `battle` handler could only ever check the trainer half honestly; left
 out rather than declaring a kind it only partly executes. `audio` is left
@@ -54,6 +46,13 @@ The body sets the lead to 1 HP before firing a page that heals (the one
 "before" action this design allows, taken in the body, not a handler), and
 the handler reads it back at full. An arrival page has already run by the
 time the beat acts, so there it stays undeclared, like `trigger`/`text`.
+
+`item_grant` joined the same day on the same pattern: its honest check is a
+bag-quantity delta, so the body reads the bag before the walk and, once the
+page completes, hands the handler a step carrying the expected total (the
+before quantity plus every grant of that item in the beat). Checked after
+`completes`, not mid-page: `giveitem` adds the item and then shows its own
+message, so a mid-page read races it. Undeclared on arrival pages.
 
 `var_text` (ruling 18) is a `\\v[N]` line: the handler reads the ROM's values
 of the input variables the floor recorded, runs the page's own script through
@@ -76,6 +75,7 @@ from rpg2gba.beat_floor.lookup import floor_for_row as _default_floor_for_row
 from rpg2gba.chapter_manifest.schema import parse_row_id
 from rpg2gba.conversion_agent.flag_registry import FlagRegistry, self_switch_flag_name
 from rpg2gba.playtest import assertions
+from rpg2gba.playtest.archetypes.item_ball import _uranium_item_constants
 from rpg2gba.playtest.archetypes import (
     FloorLookup,
     declare_assertions,
@@ -95,7 +95,7 @@ if TYPE_CHECKING:  # runtime import is lazy so this module works without mGBA bi
 GENERIC_EXECUTED_KINDS: frozenset[str] = frozenset({
     "trigger", "completes", "text",
     "switch_write", "var_write", "self_switch_write", "engine_flag_write",
-    "visual", "heal_party", "var_text",
+    "visual", "heal_party", "var_text", "item_grant",
 })
 
 
@@ -187,7 +187,7 @@ _ARRIVAL_TRIGGERS = frozenset({"autorun", "parallel"})
 # What an arrival page's beat can't observe after the fact: the trigger
 # already fired and the text was already driven through. Left undeclared,
 # so they stay honestly uncovered (owed to an arrival-cutscene template).
-_NOT_AFTER_THE_FACT = frozenset({"trigger", "text", "var_text", "heal_party"})
+_NOT_AFTER_THE_FACT = frozenset({"trigger", "text", "var_text", "heal_party", "item_grant"})
 
 
 def _player_facing(emu: "Emulator") -> str:
@@ -351,6 +351,22 @@ def _handle_visual(emu: "Emulator", beat_name: str, step: Step) -> None:
     return
 
 
+def _handle_item_grant(emu: "Emulator", beat_name: str, step: Step) -> None:
+    # Called by `generic_beat`'s body after `completes`, with `const` and
+    # `expected_total` added to the floor params (module docstring).
+    params = dict(step.params)
+    if "expected_total" not in params:
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: item_grant is checked by generic_beat "
+            "after the page completes, not as a mid-page step")
+    actual = emu.bag_item_quantity(params["const"])
+    if actual != params["expected_total"]:
+        shot = emu.screenshot(f"{beat_name}_item_{params['const'].lower()}")
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: bag holds {actual} {params['const']}, "
+            f"expected {params['expected_total']} after the grant ({shot})")
+
+
 def _handle_heal_party(emu: "Emulator", beat_name: str, step: Step) -> None:
     # The body set the lead to 1 HP before firing the page (module docstring).
     assertions.require_lead_healed(emu, beat_name, step.row_id)
@@ -358,6 +374,7 @@ def _handle_heal_party(emu: "Emulator", beat_name: str, step: Step) -> None:
 
 STEP_HANDLERS.update({
     "heal_party": _handle_heal_party,
+    "item_grant": _handle_item_grant,
     "var_text": _handle_var_text,
     "trigger": _handle_trigger,
     "completes": _handle_completes,
@@ -501,6 +518,20 @@ def generic_beat(
         template="generic", floor_lookup=resolved_lookup,
     )
 
+    # item_grant: resolved now (an unmapped item fails at import, not
+    # mid-walk) and checked after `completes` (module docstring).
+    grant_steps = [s for s in middle_steps if s.kind == "item_grant"]
+    middle_steps = [s for s in middle_steps if s.kind != "item_grant"]
+    grant_const: dict[str, str] = {}
+    for step in grant_steps:
+        item = str(dict(step.params)["item"])
+        const = _uranium_item_constants().get(item)
+        if const is None:
+            raise ValueError(
+                f"generic_beat: {beat_name}: {step.row_id} grants {item!r}, which has "
+                "no entry in reference/uranium_id_map.json's 'items' table")
+        grant_const[item] = const
+
     @builder.beat(
         beat_name,
         f"Generic floor coverage for {', '.join(resolved_rows)} ({chapter_id})",
@@ -516,6 +547,7 @@ def generic_beat(
             # Before the walk: a touch page can fire on the way (below).
             # Never on an arrival beat (heal_party is undeclared there).
             assertions.damage_lead(emu, beat_name)
+        bag_before = {c: emu.bag_item_quantity(c) for c in sorted(set(grant_const.values()))}
         try:
             if not arrival:
                 emu.walk_to(x, y)
@@ -533,6 +565,19 @@ def generic_beat(
             STEP_HANDLERS[step.kind](emu, beat_name, step)
         if completes_step is not None:
             STEP_HANDLERS["completes"](emu, beat_name, completes_step)
+        # One check per item after the page: the bag only shows the sum of
+        # that item's grants, so the last grant step carries the total.
+        expected = dict(bag_before)
+        last_step: dict[str, Step] = {}
+        for step in grant_steps:
+            params = dict(step.params)
+            const = grant_const[str(params["item"])]
+            expected[const] += int(params["quantity"])
+            last_step[const] = step
+        for const, step in sorted(last_step.items()):
+            STEP_HANDLERS["item_grant"](emu, beat_name, Step(
+                step.row_id, step.kind, step.list_index,
+                step.params + (("const", const), ("expected_total", expected[const]))))
 
     del body
 

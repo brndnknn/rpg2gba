@@ -220,3 +220,33 @@ def test_seam_beat_takes_exactly_one_row():
     with pytest.raises(ValueError):
         generic.seam_beat(_builder(), chapter_id="CH04", beat_name="s",
                           rows=("map035/seam/N/map040", "map035/seam/S/map031"))
+
+
+# --- item_grant (2026-09-25) ------------------------------------------------
+
+
+class _BagEmu:
+    def __init__(self, qty: int) -> None:
+        self.qty = qty
+
+    def bag_item_quantity(self, const: str) -> int:
+        return self.qty
+
+    def screenshot(self, name: str) -> str:
+        return f"{name}.png"
+
+
+def test_item_grant_handler_checks_the_bag_total():
+    from rpg2gba.playtest.archetypes.generic import STEP_HANDLERS, Step
+    from rpg2gba.playtest.errors import ScenarioError
+
+    handler = STEP_HANDLERS["item_grant"]
+    floor_params = (("item", "POKeBALL"), ("quantity", 5))
+    # A bare floor step is a misuse: the body must add the before-quantity.
+    with pytest.raises(ScenarioError, match="after the page completes"):
+        handler(_BagEmu(5), "B1", Step("map032/ev009/p2", "item_grant", 160, floor_params))
+    checked = Step("map032/ev009/p2", "item_grant", 160,
+                   floor_params + (("const", "ITEM_POKE_BALL"), ("expected_total", 5)))
+    handler(_BagEmu(5), "B1", checked)
+    with pytest.raises(ScenarioError, match="bag holds 0 ITEM_POKE_BALL, expected 5"):
+        handler(_BagEmu(0), "B1", checked)

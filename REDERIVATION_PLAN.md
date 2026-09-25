@@ -2594,6 +2594,19 @@ fix and grading rule (b)".
     stays refused. Rejected: any-of the alternatives, which passes the exact bug this check
     exists for.
 
+19. **Mutually exclusive arms are split by what selects them** (operator, 2026-09-25). Measured
+    after the ruling 14–18 regen: 101 generated beats claimed two or more exclusive arms of
+    one branch point (8 choice menus, 93 then/else), declaring every arm's assertions, so they
+    graded clean while a ROM walk takes one arm and would fail the rest at P11. Rule:
+    **choice arms** get one beat per arm, each re-triggering the page and answering the menu
+    (yesnobox A/B, multichoice index); arms that leave the page live run first and the arm
+    that advances the story runs last, as the story model decides. **State-condition arms**:
+    the beat claims only the arm the story state selects at that point; the sibling goes to
+    `elsewhere` with its reason. **Random arms** (e.g. Auntie's var-102 chatter,
+    `map049/ev001/p3`): claimed together, but only the shared trunk is declared, and the arms
+    are reported walk-checked, since no walk picks the RNG. Arms an archetype template
+    already owns (trainer win/lose, item-ball bag-full) stay with that template.
+
 Also on the list, no ruling needed: the starter machine's floor must read the resolver's row
 states, not extraction-time ones (`beat_floor/walk.py:738`, a bug); branch-arm bundling
 (`m033e034_trainer_arms`) needs investigating before anything is decided.
