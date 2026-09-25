@@ -57,7 +57,13 @@ def test_ch05_plan_shape(plan):
     inbound = [b for b in plan.beats if dict(b.kwargs).get("manifest_chapter_id") == "CH04"]
     assert [b.name for b in inbound] == [
         "m035e001_warp", "m035e001_arrival_nudge", "m035e001_arrival_nudge_arms"]
-    assert {e.status for e in plan.elsewhere} == {"blocked"}   # the two surf items
+    # The two surf items, the full-bag/white-out arms (ruling 19 step 1), and
+    # the nudges' `onEvent?` else arms: the walk lands on the nudge tile
+    # (steps 4-5, `state_arms`).
+    assert {e.status for e in plan.elsewhere} == {"blocked", "unselected_arm"}
+    assert sorted(e.row_id for e in plan.elsewhere
+                  if e.detail.startswith("not taken on the walk")) == [
+        "map035/ev001/p1/b1", "map036/ev002/p1/b1"]
     assert plan.route is not None
 
 

@@ -30,7 +30,7 @@ import dataclasses
 import functools
 import json
 import logging
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from pathlib import Path
 
 import click
@@ -70,9 +70,11 @@ from rpg2gba.beat_gen.plan import (
 from rpg2gba.beat_gen.review import render_review
 from rpg2gba.beat_gen.seam import SeamCrossing, connection_for, seam_crossings
 from rpg2gba.beat_gen.seed import route_winner
+from rpg2gba.beat_gen.page_sim import Firing
 from rpg2gba.beat_gen.select import select_rows
+from rpg2gba.beat_gen.state_arms import FIRING_TEMPLATES, Taint, fired_pages, select_state_arms
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
-from rpg2gba.story_state.extract import extract_map
+from rpg2gba.story_state.extract import RowState, extract_map
 from rpg2gba.beat_gen.whiteout import place_whiteout_beats
 from rpg2gba.chapter_atlas.binding import ChapterBinding, load_binding
 from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch, classify_manifest
@@ -99,7 +101,7 @@ from rpg2gba.routing.locations import (
 from rpg2gba.routing.pathing import RoutePlanningError, landing_cell
 from rpg2gba.routing.plan import write_plan
 from rpg2gba.routing.solver import RouteCandidate, solve_route
-from rpg2gba.story_state.model import build_chapter_stories
+from rpg2gba.story_state.model import RowVerdict, State, build_chapter_stories
 from rpg2gba.traversal.collision import load_map_json
 from rpg2gba.traversal.graph import MapGraph
 from rpg2gba.traversal.world import WorldGraph
@@ -506,18 +508,80 @@ def _never_fires_elsewhere(
         for b in planned if b.group in dead_groups for row_id in b.rows)
 
 
-def _row_states_for(build_dir: Path):  # noqa: ANN202
-    """map_id -> that map's extracted story row states (cached)."""
+def _row_states_for(build_dir: Path, resolved: Mapping[str, RowState] | None = None):  # noqa: ANN202
+    """map_id -> that map's extracted story row states (cached), with any
+    computed row the story model resolved (`resolved`) in place of its
+    extraction-time placeholder."""
     common_events = json.loads((build_dir / "common_events.json").read_text(encoding="utf-8"))
     ref_dir = Path(__file__).resolve().parents[3] / "reference"
     switch_labels, _ = load_label_tables(
         ref_dir / "uranium_switches.json", ref_dir / "uranium_variables.json")
+    overlay = dict(resolved or {})
 
     @functools.cache
     def states(map_id: int):  # noqa: ANN202
-        return extract_map(map_id, load_map_json(map_id, build_dir / "maps"),
-                           common_events=common_events, switch_labels=switch_labels)
+        out = extract_map(map_id, load_map_json(map_id, build_dir / "maps"),
+                          common_events=common_events, switch_labels=switch_labels)
+        return {rid: overlay.get(rid, rs) for rid, rs in out.items()}
     return states
+
+
+def _event_cell(build_dir: Path):  # noqa: ANN202
+    """page row id -> its event's (x, y) on the map."""
+    @functools.cache
+    def cells(map_id: int) -> dict[int, tuple[int, int]]:
+        data = load_map_json(map_id, build_dir / "maps")
+        return {e["id"]: (e["x"], e["y"]) for e in data.get("events", []) or []}
+
+    def cell(page_row_id: str) -> tuple[int, int] | None:
+        parsed = parse_row_id(page_row_id)
+        return cells(parsed.map_id).get(parsed.event_id)
+    return cell
+
+
+def _firing_for(records: Sequence[BeatLocationRecord], nudge_groups: Collection[str],
+                event_cell):  # noqa: ANN001, ANN202
+    """(beat, page row id) -> the `Firing` the walk makes: the player's cell
+    (a nudge's landing; the picked arrival or approach side's cell; the only
+    candidate), the event's cell, and the beat's choice answers."""
+    by_group = {r.beat_id: r for r in records}
+
+    def firing(beat: PlannedBeat, page_row_id: str) -> Firing:
+        rec = by_group.get(beat.group)
+        kwargs = dict(beat.kwargs)
+        side = kwargs.get("approach_prefer")
+        cell: tuple[int, int] | None = None
+        if rec is not None and beat.group in nudge_groups:
+            cell = (rec.x, rec.y)
+        elif isinstance(side, str) and side.startswith("arrive@("):
+            x, y = side[len("arrive@("):-1].split(",")
+            cell = (int(x), int(y))
+        elif rec is not None:
+            sides = [c for c in rec.approach_candidates if side is None or c.side == side]
+            if len(sides) == 1:
+                cell = (sides[0].x, sides[0].y)
+        return Firing(cell=cell, event_cell=event_cell(page_row_id),
+                      choice_answers=dict(kwargs.get("choice_answers", ())))
+    return firing
+
+
+def _unwalked_taint(beats: Sequence[PlannedBeat], verdicts: Sequence[RowVerdict],
+                    row_states) -> list[Taint]:  # noqa: ANN001
+    """Every write of a live row whose page the walk never fires -- or fires
+    but which keeps running (a parallel page) -- as `state_arms` taint."""
+    fired = {p for b in beats if b.template in FIRING_TEMPLATES for p in fired_pages(b)}
+    out: list[Taint] = []
+    for v in verdicts:
+        if v.status != "live":
+            continue
+        page = parse_row_id(v.row_id).owning_page_row_id or v.row_id
+        states = row_states(parse_row_id(v.row_id).map_id)
+        rs = states.get(v.row_id)
+        if rs is None or (page in fired and states[page].trigger != "parallel"):
+            continue
+        out.extend(rs.writes)
+        out.extend(rs.havoc_keys)
+    return out
 
 
 def _page_for(build_dir: Path):  # noqa: ANN202
@@ -542,9 +606,12 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     predecessor = binding.chapter(chapter_id).predecessor
     successor = binding.successor(chapter_id)
     rows = load_chapter_rows(chapter_id)
+    resolved: dict[str, RowState] = {}
+    seeds: dict[str, State] = {}
     stories = build_chapter_stories(_chain_to(binding, chapter_id), build_dir=build_dir,
                                     chapters_path=DEFAULT_CHAPTERS_PATH,
-                                    winner_for=route_winner(chapter_id, module_dir))
+                                    winner_for=route_winner(chapter_id, module_dir),
+                                    resolved_out=resolved, seed_out=seeds)
     story = stories[chapter_id]
     verdicts = {v.row_id: v for v in story.rows}
     floors: dict[str, RowFloor] = floor_for_chapter(chapter_id, build_dir=build_dir)
@@ -597,7 +664,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         for b in beats)
     # Ruling 19: one beat per choice arm, then RNG-selected arms are claimed
     # but checked on whichever fired.
-    row_states = _row_states_for(build_dir)
+    row_states = _row_states_for(build_dir, resolved)
     beats, choice_elsewhere = split_choice_arms(
         beats,
         branch_of=lambda rid: rows_by_id[rid].branch if rid in rows_by_id else None,
@@ -712,6 +779,16 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     group_order, picks = route_order(route.nodes)
     beats = order_beats(beats, group_order, _picks_with_fallback(records, picks))
     nudge_groups = {b.group for b in beats if b.template == "arrival_nudge"}
+    # 6b. Ruling 19 steps 4-5 (`beat_gen/state_arms.py`): with the order and
+    #     the cells known, keep only the arms the walk's state and position
+    #     select, re-firing a page whose own writes select the rest.
+    beats, state_elsewhere = select_state_arms(
+        beats, seeds[chapter_id], row_states=row_states, page_for=_page_for(build_dir),
+        firing_for=_firing_for(records, nudge_groups, _event_cell(build_dir)),
+        taint=_unwalked_taint(beats, story.rows, row_states),
+        walkable=lambda rid: rid in floors and not floors[rid].refused,
+        choice_openers=lambda rid: [a.list_index for a in floors[rid].assertions
+                                    if a.kind == "choice"] if rid in floors else [])
     beats = tuple(
         _apply_route_kwargs(
             b, boundary=b.template == "warp" and is_boundary_warp(b, floors, chain_maps),
@@ -741,7 +818,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         predecessor=predecessor,
         beats=beats,
         refusals=selection.refusals + tuple(cell_refusals),
-        elsewhere=selection.elsewhere + dead_elsewhere + choice_elsewhere,
+        elsewhere=selection.elsewhere + dead_elsewhere + choice_elsewhere + state_elsewhere,
         order_dependent=story.order_dependent,
         route=route,
     )

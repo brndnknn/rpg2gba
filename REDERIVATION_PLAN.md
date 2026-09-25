@@ -2606,6 +2606,15 @@ fix and grading rule (b)".
     `map049/ev001/p3`): claimed together, but only the shared trunk is declared, and the arms
     are reported walk-checked, since no walk picks the RNG. Arms an archetype template
     already owns (trainer win/lose, item-ball bag-full) stay with that template.
+    *Built 2026-09-25 (steps 4–5, `beat_gen/state_arms.py` + `page_sim.py`):* after the route
+    is ordered, each fired page is interpreted from the chapter's seed state (the
+    predecessor's end state) along the walk. Position arms (`$game_player.x/y`, `onEvent?`) are
+    evaluated at the cell the page fires from, and the berry confirm is answered yes. A page
+    whose own writes select the sibling on the next firing, such as a self-switch toggle NPC,
+    gets a re-fire beat `<name>_r<n>`, the choice-arm rule applied to state. A var the page
+    computes to a value the model can only bound (the lesson's starter-indexed var 1) is read
+    back from the ROM, like the random arms. Writes from pages the walk never fires, and from
+    parallel pages, stay possible, so tests on them are left undecided rather than guessed.
 
 20. **A `service` check: the native UI opened, the walk backed out, control came back, plus one
     fact where the engine leaves one** (operator, 2026-09-25). Facts: mart stock matches the

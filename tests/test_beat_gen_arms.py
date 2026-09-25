@@ -10,7 +10,7 @@ from rpg2gba.beat_gen.arms import (
     walk_checked,
 )
 from rpg2gba.beat_gen.plan import PlannedBeat, Selection, make_kwargs
-from rpg2gba.story_state.state import Switch, Test, Variable
+from rpg2gba.story_state.state import Assign, Switch, Test, Variable
 
 
 def _row(row_id: str, kind: str = "branch"):
@@ -49,9 +49,10 @@ def test_a_blocked_page_row_is_not_an_arm_and_stays():
 
 # --- random arms ------------------------------------------------------------
 
-def _state(parent, *tests):
-    guard = SimpleNamespace(tests=tuple(tests))
-    return SimpleNamespace(parent_row_id=parent, arm_guard=guard)
+def _state(parent, *tests, writes=(), havoc=()):
+    guard = None if parent is None else SimpleNamespace(tests=tuple(tests))
+    return SimpleNamespace(parent_row_id=parent, arm_guard=guard, writes=writes,
+                           havoc_keys=havoc)
 
 
 def test_random_arms_carry_their_guard_path():
@@ -85,7 +86,27 @@ def test_walk_checked_lists_every_random_arm():
                        kwargs=make_kwargs(random_arms=(("map049/ev001/p3/b0",
                                                         ((102, "==", 0),)),)))
     assert walk_checked((beat,)) == {
-        "map049/ev001/p3/b0": "random arm (var 102 == 0); the walk checks whichever the RNG picks"}
+        "map049/ev001/p3/b0":
+            "arm on a rolled or computed value (var 102 == 0); the walk checks whichever fires"}
+
+
+def test_arms_on_a_value_the_page_computes_are_read_back_too():
+    """The lesson's shape (`map032/ev009/p2`): a script sets var 1 from the
+    starter index, which the model can only bound to {0, 1, 2}."""
+    page_id = "map032/ev009/p2"
+    states = {
+        page_id: _state(None, writes=(Assign(Variable(1), frozenset({0, 1, 2}), False, "s", 45),)),
+        f"{page_id}/b4": _state(page_id, Test(Variable(1), "==", 0)),
+        f"{page_id}/b5": _state(page_id, Test(Variable(1), "!=", 0)),
+    }
+    guards = random_arm_guards([f"{page_id}/b4", f"{page_id}/b5"], states, lambda _p: {"list": []})
+    assert guards == {f"{page_id}/b4": ((1, "==", 0),), f"{page_id}/b5": ((1, "!=", 0),)}
+    exact = {**states, page_id: _state(None, writes=(Assign(Variable(1), frozenset({2}), False,
+                                                            "s", 45),))}
+    assert random_arm_guards([f"{page_id}/b4"], exact, lambda _p: {"list": []}) == {}
+    havoc = {**states, page_id: _state(None, havoc=(Variable(1),))}
+    assert set(random_arm_guards([f"{page_id}/b4"], havoc, lambda _p: {"list": []})) == {
+        f"{page_id}/b4"}
 
 
 # --- choice arms ------------------------------------------------------------

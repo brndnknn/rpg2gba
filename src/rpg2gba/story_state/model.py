@@ -1561,13 +1561,17 @@ def build_chapter_stories(
     chapters_path: Path,
     winner_for: Callable[[str, tuple[str, ...]], str | None] | None = None,
     resolved_out: dict[str, RowState] | None = None,
+    seed_out: dict[str, State] | None = None,
 ) -> dict[str, ChapterStory]:
     """Models `chapter_ids` (in chain order, e.g. CH01..CH05) cumulatively.
 
     `resolved_out`, if given, is filled with every computed row on each
     chapter's own maps as resolved in that chapter's pass -- the row state
     the verdicts were built from. `beat_floor` needs it: extraction alone
-    leaves a computed row's placeholder refusal in place.
+    leaves a computed row's placeholder refusal in place. `seed_out`, if
+    given, is filled with each chapter's seed state (its predecessor's
+    refined end state, INTRO's for the first) -- where `beat_gen/state_arms.py`
+    starts its walk-order simulation (ruling 19).
 
     Returns one `ChapterStory` per requested chapter id (plus `"INTRO"`),
     each reporting only the rows on THAT chapter's own maps (§16.3 C2b
@@ -1632,6 +1636,8 @@ def build_chapter_stories(
         maps = binding.chapter(chapter_id).maps
         own_map_ids_by_chapter[chapter_id] = set(maps)
         seed_from_by_chapter[chapter_id] = seed_from
+        if seed_out is not None:
+            seed_out[chapter_id] = dict(seed)
         refusal_cache: dict[str, tuple[str, ...] | None] = {}
         for map_id in maps:
             map_path = build_dir / "maps" / f"Map{map_id:03d}.json"

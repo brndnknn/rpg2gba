@@ -11,7 +11,8 @@ walk takes it, by what selects the arm:
   everything nested in it go to `elsewhere` as `unselected_arm`.
 - **random arms** (`random_arm_guards`): the arm's guard, or an enclosing
   arm's, tests a variable its own page just wrote with a random operand
-  (`122` operand type 2 -- Auntie's var-102 chatter). No walk picks the RNG,
+  (`122` operand type 2 -- Auntie's var-102 chatter) or to a value the story
+  model can only bound (the lesson's starter-indexed var 1). No walk picks it,
   so the beat declares only the trunk; the body reads the variable back from
   the ROM and checks whichever arm fired (`generic_beat(random_arms=)`).
 """
@@ -25,7 +26,7 @@ from rpg2gba.beat_gen.plan import Elsewhere, PlannedBeat, Selection, make_kwargs
 from rpg2gba.chapter_manifest.schema import parse_row_id
 from rpg2gba.story_state.extract import RowState
 from rpg2gba.story_state.model import RowVerdict
-from rpg2gba.story_state.state import Variable
+from rpg2gba.story_state.state import Assign, Variable
 
 _CONTROL_VARIABLES = 122
 _OPERAND_RANDOM = 2
@@ -35,15 +36,24 @@ _OPERAND_RANDOM = 2
 RandomGuard = tuple[tuple[int, str, int], ...]
 
 
-def _random_vars(page: Mapping[str, Any]) -> set[int]:
-    """Variables a page writes with a random operand
-    (`122 [start, end, op, 2, min, max]`)."""
+def _random_vars(page: Mapping[str, Any], page_id: str,
+                 row_states: Mapping[str, RowState]) -> set[int]:
+    """Variables a page writes to a value no walk predicts: a random operand
+    (`122 [start, end, op, 2, min, max]`), or a write the story model can
+    only bound -- more than one possible value, or havoc (the lesson's
+    `$game_variables[1]` from the starter index, `map032/ev009/p2`)."""
     out: set[int] = set()
     for cmd in page.get("list") or []:
         params = cmd.get("parameters") or []
         if cmd.get("code") == _CONTROL_VARIABLES and len(params) >= 4 \
                 and params[3] == _OPERAND_RANDOM:
             out.update(range(params[0], params[1] + 1))
+    for rid, state in row_states.items():
+        if rid != page_id and parse_row_id(rid).owning_page_row_id != page_id:
+            continue
+        out.update(w.key.id for w in state.writes
+                   if isinstance(w.key, Variable) and isinstance(w, Assign) and len(w.values) > 1)
+        out.update(k.id for k in state.havoc_keys if isinstance(k, Variable))
     return out
 
 
@@ -59,7 +69,7 @@ def random_arm_guards(
     out: dict[str, RandomGuard] = {}
     for arm_id in sorted(arm_ids):
         page_id = parse_row_id(arm_id).owning_page_row_id
-        rand = _random_vars(page_for(page_id))
+        rand = _random_vars(page_for(page_id), page_id, row_states)
         if not rand:
             continue
         path: list[tuple[int, str, int]] = []
@@ -137,7 +147,8 @@ def walk_checked(beats: tuple[PlannedBeat, ...]) -> dict[str, str]:
     for beat in beats:
         for row_id, guard in dict(beat.kwargs).get("random_arms", ()):
             tests = " and ".join(f"var {v} {op} {x}" for v, op, x in guard)
-            out[row_id] = f"random arm ({tests}); the walk checks whichever the RNG picks"
+            out[row_id] = (f"arm on a rolled or computed value ({tests}); "
+                           "the walk checks whichever fires")
     return out
 
 
