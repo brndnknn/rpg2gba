@@ -117,6 +117,21 @@ def _never_fires_chunk(plan: ChapterPlan) -> str:
     return "\n".join(lines)
 
 
+def _walk_checked_chunk(plan: ChapterPlan) -> str:
+    """The module-level `WALK_CHECKED` dict (ruling 19): arms a beat claims
+    but doesn't declare, keyed by row id to the reason. Always emitted, `{}`
+    when empty; the grader exempts these rows from rule (b)."""
+    from rpg2gba.beat_gen.arms import walk_checked
+
+    entries = sorted(walk_checked(plan.beats).items())
+    if not entries:
+        return "WALK_CHECKED: dict[str, str] = {}"
+    lines = ["WALK_CHECKED: dict[str, str] = {"]
+    lines.extend(f"    {render_value(r)}: {render_value(d)}," for r, d in entries)
+    lines.append("}")
+    return "\n".join(lines)
+
+
 def _imports(plan: ChapterPlan) -> list[str]:
     """`from <module> import <names>` lines, one per module, both levels
     sorted, for the templates the plan actually uses. Always includes
@@ -167,6 +182,7 @@ def emit_module(plan: ChapterPlan) -> str:
         chunks.append(render_call(chapter_var, plan.chapter_id, beat).rstrip("\n"))
 
     chunks.append(_never_fires_chunk(plan))
+    chunks.append(_walk_checked_chunk(plan))
 
     chunks.append(f"CHAPTER = {chapter_var}.build()")
 

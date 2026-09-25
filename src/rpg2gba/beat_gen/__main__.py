@@ -45,7 +45,7 @@ from rpg2gba.beat_gen.adapt import (
     route_kwargs,
     warp_candidates,
 )
-from rpg2gba.beat_gen.arms import blocked_arms
+from rpg2gba.beat_gen.arms import annotate_random_arms, blocked_arms
 from rpg2gba.beat_gen.boundary import inbound_rows, split_outbound
 from rpg2gba.beat_gen.continuity import thread_maps
 from rpg2gba.beat_gen.reach import engine_spawn, reachable_sites
@@ -71,6 +71,8 @@ from rpg2gba.beat_gen.review import render_review
 from rpg2gba.beat_gen.seam import SeamCrossing, connection_for, seam_crossings
 from rpg2gba.beat_gen.seed import route_winner
 from rpg2gba.beat_gen.select import select_rows
+from rpg2gba.conversion_agent.flag_registry import load_label_tables
+from rpg2gba.story_state.extract import extract_map
 from rpg2gba.beat_gen.whiteout import place_whiteout_beats
 from rpg2gba.chapter_atlas.binding import ChapterBinding, load_binding
 from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch, classify_manifest
@@ -504,6 +506,30 @@ def _never_fires_elsewhere(
         for b in planned if b.group in dead_groups for row_id in b.rows)
 
 
+def _row_states_for(build_dir: Path):  # noqa: ANN202
+    """map_id -> that map's extracted story row states (cached)."""
+    common_events = json.loads((build_dir / "common_events.json").read_text(encoding="utf-8"))
+    ref_dir = Path(__file__).resolve().parents[3] / "reference"
+    switch_labels, _ = load_label_tables(
+        ref_dir / "uranium_switches.json", ref_dir / "uranium_variables.json")
+
+    @functools.cache
+    def states(map_id: int):  # noqa: ANN202
+        return extract_map(map_id, load_map_json(map_id, build_dir / "maps"),
+                           common_events=common_events, switch_labels=switch_labels)
+    return states
+
+
+def _page_for(build_dir: Path):  # noqa: ANN202
+    """page row id -> that page's raw RMXP dict."""
+    def page(page_row_id: str) -> dict:
+        parsed = parse_row_id(page_row_id)
+        data = load_map_json(parsed.map_id, build_dir / "maps")
+        event = next(e for e in data["events"] if e["id"] == parsed.event_id)
+        return event["pages"][parsed.page_idx]
+    return page
+
+
 def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                out_dir: Path = DEFAULT_OUT_DIR,
                module_dir: Path = DEFAULT_MODULE_DIR) -> ChapterPlan:
@@ -569,6 +595,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         _merge_kwargs(b, {"manifest_chapter_id": predecessor})
         if inbound_ids and set(b.rows) <= inbound_ids else b
         for b in beats)
+    # Ruling 19: RNG-selected arms are claimed but checked on whichever fired.
+    beats = annotate_random_arms(beats, _row_states_for(build_dir), _page_for(build_dir))
 
     # 3. Adapt, source half. An arrival nudge nothing lands on never fires
     #    (C9 ruling 3): its whole group (the nudge and its arms) is dropped

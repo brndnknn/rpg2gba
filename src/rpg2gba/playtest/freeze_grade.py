@@ -262,6 +262,7 @@ def _check_floor_ge(
     successor: Chapter | None,
     claimed_by_owner: Mapping[str, tuple[str, list[Beat]]],
     build_dir: Path,
+    walk_checked: Mapping[str, str] = {},
 ) -> ChapterGrade:
     problems: list[str] = []
     deferred: list[str] = []
@@ -270,6 +271,8 @@ def _check_floor_ge(
         _claimed_by_own(_own_beats(successor)) if successor is not None else {})
 
     for row_id, beats in sorted(claimed_by_own.items()):
+        if row_id in walk_checked:
+            continue  # claimed, not declared: a random arm (ruling 19)
         if row_id not in required_rows:
             message = _row_floor_problem(chapter_id, row_id, beats, build_dir=build_dir)
             if message is not None:
@@ -319,12 +322,16 @@ def grade_chapter(
     build_dir: Path,
     successor: Chapter | None = None,
     owners: Sequence[OwnerSuite] = (),
+    walk_checked: Mapping[str, str] = {},
 ) -> ChapterGrade:
     """Pure grade of one chapter. `.problems == []` means the generated suite
     covers the frozen hand suite for `chapter_id`. `successor` is the next
     chapter's generated suite, if one exists (boundary rows, C9 ruling 9);
     `owners` are the other chapters' generated suites in chain order (a
     frozen row another chapter owns and claims, C9 ruling 12).
+    `walk_checked` is the module's `WALK_CHECKED`: rows it claims but, by
+    ruling 19, doesn't declare (random arms) -- rule (a) still applies,
+    rule (b) doesn't.
     All inputs are already loaded; `grade_chapter_from_disk` is the I/O
     wrapper real callers use."""
     own_beats = _own_beats(gen_chapter)
@@ -336,7 +343,7 @@ def grade_chapter(
         chapter_id, required_rows, claimed_by_own, never_fires, claimed_by_owner)
     floor = _check_floor_ge(chapter_id, claimed_by_own, required_rows,
                             successor=successor, claimed_by_owner=claimed_by_owner,
-                            build_dir=build_dir)
+                            build_dir=build_dir, walk_checked=walk_checked)
     return ChapterGrade(problems=row_problems + floor.problems,
                         deferred=floor.deferred,
                         generator_only_partial=floor.generator_only_partial)
@@ -367,6 +374,7 @@ def grade_chapter_from_disk(
         return ChapterGrade(problems=[f"{chapter_id}: no generated chapter module ({exc})"])
     module = load_chapter_module(chapter_id, suite="gen")
     never_fires: Mapping[str, str] = getattr(module, "NEVER_FIRES", {})
+    walk_checked: Mapping[str, str] = getattr(module, "WALK_CHECKED", {})
 
     all_frozen = load_frozen_hand_beats(frozen_path)
     frozen_beats = [b for b in all_frozen if b.chapter == chapter_id]
@@ -390,6 +398,7 @@ def grade_chapter_from_disk(
         build_dir=resolved_build_dir,
         successor=_generated_successor(chapter_id, others),
         owners=owners,
+        walk_checked=walk_checked,
     )
 
 

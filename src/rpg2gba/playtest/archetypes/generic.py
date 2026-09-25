@@ -351,6 +351,27 @@ def _handle_visual(emu: "Emulator", beat_name: str, step: Step) -> None:
     return
 
 
+_OPS: dict[str, Callable[[int, int], bool]] = {
+    "==": lambda a, b: a == b, "!=": lambda a, b: a != b,
+    "<": lambda a, b: a < b, "<=": lambda a, b: a <= b,
+    ">": lambda a, b: a > b, ">=": lambda a, b: a >= b,
+}
+
+
+def _guard_holds(emu: "Emulator", beat_name: str,
+                 guard: tuple[tuple[int, str, int], ...]) -> bool:
+    """A random arm's guard path, read from the ROM's variables (ruling 19)."""
+    for var_id, op, value in guard:
+        name = _flag_registry().get_var(var_id)
+        if name is None:
+            raise ScenarioError(
+                f"{beat_name}: var {var_id} has no minted VAR_* name in the "
+                "persisted flag registry -- not guessing one")
+        if not _OPS[op](emu.var(name), value):
+            return False
+    return True
+
+
 def _handle_item_grant(emu: "Emulator", beat_name: str, step: Step) -> None:
     # Called by `generic_beat`'s body after `completes`, with `const` and
     # `expected_total` added to the floor params (module docstring).
@@ -400,9 +421,13 @@ def generic_beat(
     skip_claimed: bool = False,
     manifest_chapter_id: str | None = None,
     floor_lookup: FloorLookup | None = None,
+    random_arms: Sequence[tuple[str, tuple[tuple[int, str, int], ...]]] = (),
 ) -> None:
     """Register one generic beat claiming `rows` (a page row and/or its
-    arms). With `skip_claimed=True`, rows some earlier beat in `builder`
+    arms). `random_arms` (ruling 19) pairs each RNG-selected arm among
+    `rows` with its guard path `((var_id, op, value), ...)`: those arms are
+    claimed but not declared, and the body checks only the one whose guard
+    holds on the ROM's values once the page has rolled. With `skip_claimed=True`, rows some earlier beat in `builder`
     already claims are dropped first, and if none remain nothing is
     registered. Fails loud (`ValueError`) on a refused floor.
     `manifest_chapter_id=` names a predecessor whose manifest carries the
@@ -512,15 +537,18 @@ def generic_beat(
     else:
         x, y = cell.x, cell.y
 
+    random_guard = dict(random_arms)
     declared = declare_assertions(
-        resolved_rows,
+        tuple(r for r in resolved_rows if r not in random_guard),
         executed_kinds=GENERIC_EXECUTED_KINDS - (_NOT_AFTER_THE_FACT if arrival else frozenset()),
         template="generic", floor_lookup=resolved_lookup,
     )
 
     # item_grant: resolved now (an unmapped item fails at import, not
     # mid-walk) and checked after `completes` (module docstring).
-    grant_steps = [s for s in middle_steps if s.kind == "item_grant"]
+    # A random arm's grant may not happen, so it isn't counted (ruling 19).
+    grant_steps = [s for s in middle_steps
+                   if s.kind == "item_grant" and s.row_id not in random_guard]
     middle_steps = [s for s in middle_steps if s.kind != "item_grant"]
     grant_const: dict[str, str] = {}
     for step in grant_steps:
@@ -543,7 +571,8 @@ def generic_beat(
 
         assertions.require_map(emu, beat_name, cell.map_constant)
         fired_on_the_way = arrival       # an arrival page already ran
-        if any(s.kind == "heal_party" for s in middle_steps):
+        if any(s.kind == "heal_party" and s.row_id not in random_guard
+               for s in middle_steps):
             # Before the walk: a touch page can fire on the way (below).
             # Never on an arrival beat (heal_party is undeclared there).
             assertions.damage_lead(emu, beat_name)
@@ -562,6 +591,10 @@ def generic_beat(
             if trigger_step is not None:
                 STEP_HANDLERS["trigger"](emu, beat_name, trigger_step)
         for step in middle_steps:
+            guard = random_guard.get(step.row_id)
+            if guard is not None and (step.kind == "heal_party"
+                                      or not _guard_holds(emu, beat_name, guard)):
+                continue  # the RNG picked a sibling arm (or: no damage to heal)
             STEP_HANDLERS[step.kind](emu, beat_name, step)
         if completes_step is not None:
             STEP_HANDLERS["completes"](emu, beat_name, completes_step)
