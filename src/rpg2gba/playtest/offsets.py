@@ -319,6 +319,7 @@ _CONSTANT_PROBE_TEMPLATE = """\
 #include "constants/event_objects.h"
 #include "constants/event_object_movement.h"
 #include "constants/songs.h"
+#include "constants/script_menu.h"
 {entries}
 """
 

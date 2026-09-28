@@ -78,3 +78,54 @@ def test_route_between_raising_for_every_target_raises_no_way():
             [_beat("a", 5)], start_map=1, warp_dest={}, nudge_source={},
             route_between=route_between,
         )
+
+
+# -- which transfers a transit hop may cross ---------------------------------
+
+def _page(trigger: int, *codes: int) -> dict:
+    return {"trigger": trigger, "list": [{"code": c, "parameters": []} for c in codes]}
+
+
+def test_stepped_transfers_keeps_touch_pages_and_drops_scripted_scenes(tmp_path):
+    import json
+
+    from rpg2gba.beat_gen.__main__ import _stepped_transfers
+
+    maps = tmp_path / "maps"
+    maps.mkdir()
+    events = [
+        {"id": 1, "pages": [_page(1, 201)]},                 # stairs: player touch
+        {"id": 2, "pages": [_page(1, 101), _page(1, 201)]},  # gated door: a touch page transfers
+        {"id": 3, "pages": [_page(2, 201)]},                 # event touch
+        {"id": 4, "pages": [_page(0, 123, 201)]},            # A-to-read cutscene (the Letter)
+        {"id": 5, "pages": [_page(3, 201)]},                 # autorun scene
+        {"id": 6, "pages": [_page(1, 101)]},                 # touch, no transfer
+    ]
+    (maps / "Map049.json").write_text(json.dumps({"events": events}), encoding="utf-8")
+
+    assert _stepped_transfers(frozenset({49}), tmp_path) == frozenset(
+        {(49, 1), (49, 2), (49, 3)})
+
+
+def test_stepped_transfers_real_map049_excludes_the_letter():
+    """The 2026-09-27 ROM run: CH01's 1F->2F transit pressed DOWN into the
+    Letter (event 21, action-triggered, switch-gated) instead of the stairs
+    (event 3), and never left 1F."""
+    from rpg2gba.beat_gen.__main__ import BUILD_DIR, _stepped_transfers
+
+    if not (BUILD_DIR / "maps" / "Map049.json").exists():
+        pytest.skip("decoded maps not built")
+    stepped = _stepped_transfers(frozenset({49}), BUILD_DIR)
+    assert (49, 3) in stepped
+    assert (49, 21) not in stepped
+
+
+def test_warp_presses_reads_each_warp_beats_side():
+    from rpg2gba.beat_gen.__main__ import _warp_presses
+
+    beats = [
+        PlannedBeat(name="w", template="warp", map_id=48, rows=("map048/ev002/p0",), group="w",
+                    kwargs=make_kwargs(event_id=2, direction="LEFT", map_id=48)),
+        _beat("g", 48),
+    ]
+    assert _warp_presses(beats) == {(48, 2): "LEFT"}

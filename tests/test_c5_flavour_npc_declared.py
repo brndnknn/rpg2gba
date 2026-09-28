@@ -196,6 +196,9 @@ class _FakeEmu:
     def tap(self, key: str = "A") -> None:
         self._index += 1
 
+    def dismiss_message(self) -> None:
+        self._index += 1
+
     def advance_dialog(self, key: str = "A", max_taps: int = 1500, stop=None) -> int:
         self.advance_calls += 1
         return 0
@@ -243,3 +246,48 @@ def test_assert_one_of_fails_when_no_candidate_matches() -> None:
     emu = _FakeEmu(["Something unrelated."])
     with pytest.raises(ScenarioError, match="matches none of its"):
         _assert_one_of(emu, "beat", ("First.", "Second."), "row/p0")
+
+
+# -- Emulator.dismiss_message (2026-09-27 ROM run) ----------------------------
+
+class _PagedBox:
+    """`text_showing` holds while pages remain; each A turns one page."""
+
+    def __init__(self, pages: int) -> None:
+        self.remaining = pages     # pages still to show after the current one
+        self.taps = 0
+
+    _DISMISS_SETTLE_FRAMES = 10
+
+    def text_showing(self) -> bool:
+        return self.remaining > 0
+
+    def run(self, frames: int) -> None:
+        self.settled = frames
+
+    def tap(self, key: str = "A") -> None:
+        self.taps += 1
+        self.remaining = max(0, self.remaining - 1)
+
+    def screenshot(self, name: str) -> str:
+        return name
+
+
+@pytest.mark.parametrize("more_pages,taps", [(0, 1), (1, 2), (3, 4)])
+def test_dismiss_message_turns_every_page_then_one_more(more_pages: int, taps: int) -> None:
+    from rpg2gba.playtest.emulator import Emulator
+
+    box = _PagedBox(more_pages)
+    Emulator.dismiss_message(box)  # type: ignore[arg-type]
+    assert box.taps == taps   # never an extra A that a following menu would take
+
+
+def test_dismiss_message_fails_loud_when_the_box_never_finishes() -> None:
+    from rpg2gba.playtest.emulator import Emulator
+
+    class _Stuck(_PagedBox):
+        def tap(self, key: str = "A") -> None:
+            self.taps += 1
+
+    with pytest.raises(ScenarioError, match="still drawing"):
+        Emulator.dismiss_message(_Stuck(1), max_taps=5)  # type: ignore[arg-type]

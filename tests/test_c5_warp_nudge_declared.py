@@ -219,6 +219,9 @@ class _FakeEmu:
     def settle_field(self, **kwargs) -> int:
         return 0
 
+    def player_pos(self):
+        return (0, 0)
+
     def player_pos(self) -> tuple[int, int]:
         return self._pos
 
@@ -339,6 +342,9 @@ def test_warp_beat_checks_the_page_state_write_after_the_crossing(monkeypatch) -
     class _Emu:
         def settle_field(self):
             return 0
+
+        def player_pos(self):
+            return (0, 0)
 
     beat.run(_Emu())
     assert seen == [("switch_write", 104)]

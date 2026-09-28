@@ -51,10 +51,11 @@ from ...beat_floor.assertion import FloorAssertion, RowFloor
 from ...beat_floor.lookup import floor_for_row as _default_floor_for_row
 from ...chapter_manifest.schema import page_row_id
 from .. import assertions
-from ..cells import approach_to, event_cell
+from ..cells import approach_to, event_cell, event_page_moves, local_id
 from ..errors import ScenarioError
 from ..text_source import page_messages
 from . import FloorLookup, declare_assertions, facing_toward, find_match, load_chapter_rows
+from .generic import text_matches
 
 if TYPE_CHECKING:  # runtime import is lazy so this module works without bindings
     from ...chapter_manifest.schema import ManifestRow
@@ -263,15 +264,8 @@ def flavour_npc_beat(
     )
     def talk(emu: Emulator) -> None:
         assertions.require_map(emu, beat_name, map_constant)
-        emu.walk_to(*approach)
-        emu.face(facing)
-        if not emu.interact(require_script=True):
-            shot = emu.screenshot(f"{beat_name}_no_script")
-            raise ScenarioError(
-                f"{beat_name}: pressing A at {approach} facing {facing} "
-                f"started no script -- {row_id} is an action-triggered page "
-                f"with text, so it must speak ({shot})"
-            )
+        _start_talk(emu, beat_name, map_constant, event_id, page_idx, approach, facing,
+                    f"{row_id} is an action-triggered page with text, so it must speak")
         if derived == "randomized":
             # Which line is genuinely unknown; asserting a particular one
             # would fail one run in N for a correct conversion.
@@ -367,14 +361,8 @@ def flavour_npc_beat(
                 f"-- {beat_name} must run first, and its A press is what "
                 "flips the self-switch"
             )
-        emu.walk_to(*approach)
-        emu.face(facing)
-        if not emu.interact(require_script=True):
-            shot = emu.screenshot(f"{beat_name}_again_no_script")
-            raise ScenarioError(
-                f"{beat_name}_again: the toggled page started no script "
-                f"({shot})"
-            )
+        _start_talk(emu, f"{beat_name}_again", map_constant, event_id, toggled_page_idx,
+                    approach, facing, "the toggled page must speak")
         _walk_text_boxes(emu, f"{beat_name}_again", toggled_row_id, toggled_expected_lines)
 
         if toggled_ssa is not None:
@@ -389,6 +377,27 @@ def flavour_npc_beat(
                 )
 
     del talk_again
+
+
+def _start_talk(
+    emu: Emulator, beat_name: str, map_constant: str, event_id: int, page_idx: int,
+    approach: tuple[int, int], facing: str, why: str,
+) -> None:
+    """Walk to the NPC and press A until its page starts. A page that moves
+    on its own is talked to at its LIVE position (`talk_to_moving_npc`);
+    `approach` is still where the walk heads first, so the route plan and
+    the beat's `at=` stay truthful."""
+    emu.walk_to(*approach)
+    if event_page_moves(map_constant, event_id, page_idx):
+        assertions.talk_to_moving_npc(emu, beat_name, local_id(map_constant, event_id))
+        return
+    emu.face(facing)
+    if not emu.interact(require_script=True):
+        shot = emu.screenshot(f"{beat_name}_no_script")
+        raise ScenarioError(
+            f"{beat_name}: pressing A at {approach} facing {facing} "
+            f"started no script -- {why} ({shot})"
+        )
 
 
 def _walk_text_boxes(
@@ -407,9 +416,11 @@ def _walk_text_boxes(
     for i, expected in enumerate(expected_texts):
         if i > 0:
             emu.clear_field_message()
-            emu.tap("A")
+            emu.dismiss_message()
         text = emu.wait_for_field_message()
-        if text is None or expected not in text:
+        # Word-wise, not a raw substring: the ROM shows the engine's own line
+        # breaks (`\n`/`\l`/`\p`) where the source had a space.
+        if text is None or not text_matches(expected, text):
             shot = emu.screenshot(f"{beat_name}_text_box_{i}")
             raise ScenarioError(
                 f"{beat_name}: message box {i} of {row_id} expected to "

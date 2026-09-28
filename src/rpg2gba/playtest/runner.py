@@ -777,6 +777,12 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
         emu = emulator_factory(scratch, engine, shots)
         _install_drain_answers(emu, chapter.beats[start_idx:])
         emu.run(boot_frames)
+        if start_idx > 0:
+            # A seeded boot has never written `gStringVar4`: zero-filled RAM
+            # decodes as spaces with no terminator, and the first
+            # `settle_field` read raised "no EOS" (2026-09-27, `--from-beat`).
+            # Terminate it so "no message yet" reads as None.
+            emu.clear_field_message()
         last_snapshot = _snapshot(emu, chapter.beats[start_idx].name)
         # The frame the run starts on is itself worth an eye: a wrong spawn
         # map or a botched intro-skip shows up here before any beat runs.

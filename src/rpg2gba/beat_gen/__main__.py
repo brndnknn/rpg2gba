@@ -68,13 +68,14 @@ from rpg2gba.beat_gen.plan import (
     Selection,
     make_kwargs,
 )
-from rpg2gba.beat_gen.review import render_review
+from rpg2gba.beat_gen.review import RowLocation, render_review
 from rpg2gba.beat_gen.seam import SeamCrossing, connection_for, seam_crossings
 from rpg2gba.beat_gen.seed import route_winner
 from rpg2gba.beat_gen.page_sim import Firing
 from rpg2gba.beat_gen.select import select_rows
 from rpg2gba.beat_gen.state_arms import FIRING_TEMPLATES, Taint, fired_pages, select_state_arms
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
+from rpg2gba.conversion_agent.orchestrator import load_map_event_strips
 from rpg2gba.story_state.extract import RowState, extract_map
 from rpg2gba.beat_gen.whiteout import place_whiteout_beats
 from rpg2gba.chapter_atlas.binding import ChapterBinding, load_binding
@@ -103,6 +104,7 @@ from rpg2gba.routing.pathing import RoutePlanningError, landing_cell
 from rpg2gba.routing.plan import write_plan
 from rpg2gba.routing.solver import RouteCandidate, solve_route
 from rpg2gba.story_state.model import RowVerdict, State, build_chapter_stories
+from rpg2gba.tileset_converter.map_constants import load_display_names
 from rpg2gba.traversal.collision import load_map_json
 from rpg2gba.traversal.graph import MapGraph
 from rpg2gba.traversal.world import WorldGraph
@@ -110,6 +112,7 @@ from rpg2gba.traversal.world import WorldGraph
 logger = logging.getLogger(__name__)
 
 BUILD_DIR = Path("output/uranium-build")
+MAP_NAME_OVERRIDES = Path("reference") / "map_name_overrides.json"
 DEFAULT_OUT_DIR = Path("output/beats")
 # Derived from the package's own __file__, not a cwd-relative string, so
 # `generate` writes to the right place regardless of invocation directory.
@@ -318,12 +321,57 @@ _PRESS_INTO = (((0, 1), "UP"), ((0, -1), "DOWN"), ((-1, 0), "RIGHT"), ((1, 0), "
 standing south of it you press UP, and so on. N/S/W/E-side order."""
 
 
+_STEP_TRIGGERS = frozenset({1, 2})
+"""RMXP page triggers a player fires by walking into the event: player touch,
+event touch. Action (0) needs A; autorun (3) and parallel (4) need no step."""
+
+
+def _stepped_transfers(maps: frozenset[int], build_dir: Path) -> frozenset[tuple[int, int]]:
+    """(map id, event id) of every event with a Transfer Player on a page
+    that stepping into the event fires. A transit hop crosses by holding a
+    direction into the tile, so only these are hops; a transfer on an action
+    or autorun page is a scripted scene (Map049's Letter: switch-gated, A to
+    read, then a cutscene move to 2F), which the world graph records as a
+    warp edge all the same (`traversal.warps` keeps every literal 201)."""
+    out: set[tuple[int, int]] = set()
+    for map_id in sorted(maps):
+        for event in load_map_json(map_id, build_dir / "maps").get("events", []):
+            if event and any(
+                    page.get("trigger") in _STEP_TRIGGERS
+                    and any(c.get("code") == 201 for c in page.get("list", []))
+                    for page in event.get("pages", [])):
+                out.add((map_id, event["id"]))
+    return frozenset(out)
+
+
+def _warp_presses(beats: Sequence[PlannedBeat]) -> dict[tuple[int, int], str]:
+    """(map id, event id) -> the direction each warp beat presses into its
+    warp (the side the route solver picked)."""
+    out: dict[tuple[int, int], str] = {}
+    for b in beats:
+        if b.template != "warp":
+            continue
+        kwargs = dict(b.kwargs)
+        out[(b.map_id, int(kwargs["event_id"]))] = str(kwargs["direction"])
+    return out
+
+
 def _route_between(world: WorldGraph, maps: frozenset[int],
                    reach: frozenset[tuple[int, tuple[int, int]]],
-                   graphs: Mapping[int, MapGraph]):  # noqa: ANN202
+                   graphs: Mapping[int, MapGraph], *,
+                   stepped_transfers: frozenset[tuple[int, int]] | None = None,
+                   warp_presses: Mapping[tuple[int, int], str] | None = None):  # noqa: ANN202
     """`continuity.RouteBetween` over this chapter's maps: the fewest warp
     hops from map `a` to map `b`, each crossed from a reachable walkable side
-    of its warp tile. Deterministic: edges are tried in sorted order."""
+    of its warp tile. Deterministic: edges are tried in sorted order.
+
+    `stepped_transfers` (see `_stepped_transfers`) limits `warp` edges to the
+    events a step fires; None keeps every edge (synthetic test worlds).
+    `warp_presses` ((map id, event id) -> press) is the side each warp beat
+    crosses from; a hop over one of those uses it. Otherwise the first
+    reachable side in `_PRESS_INTO` order -- `reach` floods through warp
+    tiles, so that side can be one the live walker can only reach by
+    stepping on the warp (2026-09-27: Map048's stairs, north side (3,2))."""
     def lands_reachably(e) -> bool:  # noqa: ANN001
         """The arrival's LANDING is reachable (a door arrival's destination
         cell is the solid door tile; the player stands one step off it)."""
@@ -337,11 +385,22 @@ def _route_between(world: WorldGraph, maps: frozenset[int],
     edges = sorted(
         (e for m in sorted(maps) for e in world.edges_from(m)
          if e.kind in ("warp", "seam_warp") and e.dst_map in maps
-         and e.src_cell is not None and e.dst_cell is not None and lands_reachably(e)),
+         and e.src_cell is not None and e.dst_cell is not None
+         and (e.kind != "warp" or stepped_transfers is None
+              or (e.src_map, e.event_id) in stepped_transfers)
+         and lands_reachably(e)),
         key=lambda e: (e.src_map, e.dst_map, e.src_cell, e.dst_cell))
 
     def hop_for(edge) -> tuple[str, int, int, str, str] | None:  # noqa: ANN001
         x, y = edge.src_cell
+        press = (warp_presses or {}).get((edge.src_map, edge.event_id))
+        if press is not None:
+            # The warp's own beat already crosses it from the side the route
+            # solver picked (its pathing keeps off warp tiles; `reach` does
+            # not): cross it the same way.
+            dx, dy = next(d for d, p in _PRESS_INTO if p == press)
+            return (_map_constant_for(edge.src_map), x + dx, y + dy, press,
+                    _map_constant_for(edge.dst_map))
         for (dx, dy), press in _PRESS_INTO:
             if (edge.src_map, (x + dx, y + dy)) in reach:
                 return (_map_constant_for(edge.src_map), x + dx, y + dy, press,
@@ -560,6 +619,30 @@ def _event_cell(build_dir: Path):  # noqa: ANN202
     return cell
 
 
+class _ViewerLocator:
+    """`review.Locator` over the build: map names as the map viewer shows
+    them (`map_infos.json` + `map_name_overrides.json`, §4.3) and each row's
+    event tile from the map JSON."""
+
+    def __init__(self, build_dir: Path) -> None:
+        infos = build_dir / "map_infos.json"
+        self._names = load_display_names(infos, MAP_NAME_OVERRIDES) if infos.exists() else {}
+        self._event_cell = _event_cell(build_dir)
+
+    def map_name(self, map_id: int) -> str:
+        return self._names.get(map_id, "")
+
+    def row(self, row_id: str) -> RowLocation:
+        parsed = parse_row_id(row_id)
+        name = self.map_name(parsed.map_id)
+        if parsed.kind in ("page", "branch"):
+            return RowLocation(parsed.map_id, name, self._event_cell(row_id))
+        if parsed.kind == "terrain":
+            return RowLocation(parsed.map_id, name, (parsed.x, parsed.y))
+        return RowLocation(parsed.map_id, name,
+                           note=f"{parsed.direction} edge -> Map{parsed.other_map_id:03d}")
+
+
 def _firing_for(records: Sequence[BeatLocationRecord], nudge_groups: Collection[str],
                 event_cell):  # noqa: ANN001, ANN202
     """(beat, page row id) -> the `Firing` the walk makes: the player's cell
@@ -642,7 +725,9 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     #    predecessor's crossings into this chapter (§10 R2/R3,
     #    `beat_gen/boundary.py`). Inbound beats search the predecessor's
     #    manifest (`manifest_chapter_id=`).
-    selection = split_outbound(select_rows(rows, verdicts, floors), floors, chain_maps,
+    stripped = load_map_event_strips(Path(__file__).resolve().parents[3] / "reference")
+    selection = split_outbound(select_rows(rows, verdicts, floors, stripped=stripped),
+                               floors, chain_maps,
                                successor.id if successor is not None else None)
     inbound: tuple[ManifestRow, ...] = ()
     if predecessor is not None:
@@ -652,7 +737,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                                frozenset(binding.chapter(chapter_id).maps),
                                _chain_maps(binding, predecessor))
         inbound_sel = select_rows(inbound, {v.row_id: v for v in stories[predecessor].rows},
-                                  pred_floors)
+                                  pred_floors, stripped=stripped)
         selection = Selection(owned=inbound_sel.owned + selection.owned,
                               refusals=inbound_sel.refusals + selection.refusals,
                               elsewhere=inbound_sel.elsewhere + selection.elsewhere)
@@ -829,7 +914,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                       for b in beats if b.template == "arrival_nudge"},
         route_between=_route_between(
             world, chain_maps, reachable_sites(entry, graphs, world, chain_maps, occupancy),
-            graphs),
+            graphs, stepped_transfers=_stepped_transfers(chain_maps, build_dir),
+            warp_presses=_warp_presses(beats)),
     )
 
     # 8. White-out fork beats ride after their enablers (`beat_gen/whiteout.py`).
@@ -869,7 +955,8 @@ def write_outputs(plan: ChapterPlan, out_dir: Path, *, module_dir: Path | None =
 
     module_path.write_text(emit_module(plan), encoding="utf-8")
     review_path.write_text(
-        render_review(plan, floor_lookup=lambda row_id: floor_for_row(row_id, build_dir=build_dir)),
+        render_review(plan, floor_lookup=lambda row_id: floor_for_row(row_id, build_dir=build_dir),
+                      locate=_ViewerLocator(build_dir)),
         encoding="utf-8")
     write_plan(plan.route, route_path)
     return [module_path, review_path, route_path]

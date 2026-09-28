@@ -130,3 +130,32 @@ def test_empty_sections_say_so():
     for header in ("## Refusals", "## Elsewhere", "## Order-dependent writes"):
         body = _section(doc, header)[len(header):].strip()
         assert body, f"{header} is silently empty"
+
+
+class _Locate:
+    """Fake `review.Locator`: fixed names, event tile = (event id, page)."""
+
+    NAMES = {49: "Lab", 50: "Aunt House", 32: "Moki Town", 48: "House 2F", 14: "Route"}
+
+    def map_name(self, map_id: int) -> str:
+        return self.NAMES[map_id]
+
+    def row(self, row_id: str) -> review.RowLocation:
+        map_part, ev, *_ = row_id.split("/")
+        map_id = int(map_part[3:])
+        return review.RowLocation(map_id, self.NAMES[map_id], (int(ev[2:]), 1))
+
+
+def test_locator_puts_map_name_and_tile_on_every_row():
+    doc = review.render_review(PLAN, floor_lookup=FLOORS.__getitem__, locate=_Locate())
+    order = _section(doc, "## Order")
+    aunt = next(ln for ln in order.splitlines() if "m050e001p1" in ln)
+    assert "Map050 Aunt House" in aunt and "(1,1)" in aunt
+    assert "### #2 m049e001p2 -- Map049 Lab (1,1)" in _section(doc, "## Assertions")
+    assert "map032/ev020/p0 @ Map032 Moki Town (20,1)" in _section(doc, "## Refusals")
+    assert "map048/ev013/p0 @ Map048 House 2F (13,1)" in _section(doc, "## Elsewhere")
+    assert f"{AUNT} @ Map050 Aunt House (1,1)" in _section(doc, "## Order-dependent writes")
+
+
+def test_without_locator_rows_carry_no_location():
+    assert " @ Map" not in _doc()

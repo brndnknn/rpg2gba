@@ -28,7 +28,7 @@ import pytest
 
 from rpg2gba.chapter_manifest.generator import generate_chapter_manifest
 from rpg2gba.chapter_manifest.schema import ManifestRow, row_to_dict
-from rpg2gba.playtest.archetypes import ChapterArchetypeModel, find_match
+from rpg2gba.playtest.archetypes import ChapterArchetypeModel, facing_toward, find_match
 from rpg2gba.playtest.archetypes.arrival_nudge import arrival_nudge_beat
 from rpg2gba.playtest.archetypes.item_ball import item_ball_beats
 from rpg2gba.playtest.archetypes.trainer import trainer_beats
@@ -850,6 +850,9 @@ def test_warp_beat_start_side_dest_crosses_back_first_and_ends_on_origin(
         def settle_field(self, **kwargs) -> int:
             return 0
 
+        def player_pos(self):
+            return (0, 0)
+
     def _fake_cross_threshold(emu, name, approach, direction, dest_map):
         legs.append((direction, dest_map))
 
@@ -910,6 +913,9 @@ def test_warp_beat_start_side_origin_is_unchanged(
         def settle_field(self, **kwargs) -> int:
             return 0
 
+        def player_pos(self):
+            return (0, 0)
+
     beat.run(_SettleEmu())
 
     assert legs == [
@@ -959,6 +965,9 @@ def test_warp_beat_start_side_dest_without_round_trip_is_two_legs(
     class _SettleEmu:
         def settle_field(self, **kwargs) -> int:
             return 0
+
+        def player_pos(self):
+            return (0, 0)
 
     beat.run(_SettleEmu())
 
@@ -1112,6 +1121,9 @@ def test_warp_beat_end_side_origin_registers_and_walks_forward_then_back(
         def settle_field(self, **kwargs) -> int:
             return 0
 
+        def player_pos(self):
+            return (0, 0)
+
     beat.run(_SettleEmu())
 
     assert legs == [
@@ -1166,3 +1178,57 @@ def test_warp_beat_end_side_with_return_direction_does_not_raise_the_without_rou
         return_direction="UP", end_side="dest",
     )
     assert [beat.name for beat in b.build().beats] == ["W1"]
+
+
+@pytest.mark.parametrize("target,expected", [
+    ((5, 4), "UP"), ((5, 6), "DOWN"), ((4, 5), "LEFT"), ((6, 5), "RIGHT"),
+    ((5, 3), "UP"),  # across a counter, two out
+])
+def test_facing_toward_returns_emulator_key_names(
+    target: tuple[int, int], expected: str,
+) -> None:
+    # The value goes straight to `emu.face` -> `emulator.KEYS`, which is keyed
+    # on uppercase names. A lowercase table (2026-09-15..27) raised
+    # `KeyError: 'up'` on the first beat of the first generated-suite ROM run.
+    assert facing_toward((5, 5), target, caller="test") == expected
+
+
+def test_warp_landing_accepts_the_arrival_nudge_on_its_mat() -> None:
+    """2026-09-27 ROM run: re-entering Moki Town through the player's-house
+    door lands on (28,31), whose switch-22 autorun steps the player to
+    (28,32). The warp template now knows that one nudge; elsewhere, none."""
+    from rpg2gba.beat_floor.lookup import floor_for_row
+    from rpg2gba.playtest.archetypes import load_chapter_rows
+    from rpg2gba.playtest.archetypes.warp import _arrival_nudge_delta
+
+    try:
+        rows = load_chapter_rows("CH01")
+    except FileNotFoundError:
+        pytest.skip("CH01 manifest not available")
+    assert _arrival_nudge_delta("MAP_MOKI_TOWN", (28, 31), rows, floor_for_row) == (0, 1)
+    assert _arrival_nudge_delta("MAP_MOKI_TOWN", (17, 12), rows, floor_for_row) is None
+
+
+def test_event_page_moves_reads_the_source_move_type() -> None:
+    """2026-09-27 ROM run: Moki Town's EV071 walks a custom route (move_type
+    3) and had left its spawn by the time the player pressed A; EV004's page
+    stands still."""
+    from rpg2gba.playtest.cells import event_page_moves
+
+    try:
+        assert event_page_moves("MAP_MOKI_TOWN", 71, 0) is True
+    except (FileNotFoundError, ValueError):
+        pytest.skip("decoded Moki Town map not available")
+    assert event_page_moves("MAP_MOKI_TOWN_PLAYERS_HOUSE_1F", 1, 0) is False
+
+
+def test_event_page_empty_reads_the_source_page() -> None:
+    """Moki Town's `Theo75` (a cutscene actor) has only empty pages; its
+    beat checks that A does nothing. Auntie's first page is not empty."""
+    from rpg2gba.playtest.cells import event_page_empty
+
+    try:
+        assert event_page_empty("MAP_MOKI_TOWN", 75, 0) is True
+    except (FileNotFoundError, ValueError):
+        pytest.skip("decoded Moki Town map not available")
+    assert event_page_empty("MAP_MOKI_TOWN_PLAYERS_HOUSE_1F", 1, 0) is False

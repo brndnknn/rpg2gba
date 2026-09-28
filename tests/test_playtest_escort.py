@@ -24,7 +24,7 @@ DEST_CONST = "MAP_ROUTE_02"
 DEST_UID = 99
 
 APPROACH = (10, 10)
-EVENT_XY = (10, 9)   # north of APPROACH: facing_toward picks "up"
+EVENT_XY = (10, 9)   # north of APPROACH: facing_toward picks "UP"
 
 
 def _builder() -> ChapterBuilder:

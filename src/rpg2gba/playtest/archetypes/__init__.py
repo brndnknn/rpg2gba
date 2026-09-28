@@ -68,11 +68,17 @@ __all__ = [
 # the first three, differing only in their error prefix). CLAUDE.md §4.3 --
 # one source of truth per concept; the repo had just made the same move on
 # five hand-copied `*_constant` helpers, two of which had drifted.
+#
+# Values are the emulator's key names (`emulator.KEYS`), uppercase. The
+# 2026-09-15 consolidation lowercased them, which no unit test could see and
+# which made every template's `emu.face(...)` raise `KeyError: 'up'` on the
+# first ROM run (2026-09-27). `trainer.py`'s live-press table keys on the
+# uppercase names too.
 _DIR_TOWARD: dict[tuple[int, int], str] = {
-    (0, -1): "up",
-    (0, 1): "down",
-    (-1, 0): "left",
-    (1, 0): "right",
+    (0, -1): "UP",
+    (0, 1): "DOWN",
+    (-1, 0): "LEFT",
+    (1, 0): "RIGHT",
 }
 
 

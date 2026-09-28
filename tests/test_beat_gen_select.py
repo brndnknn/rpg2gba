@@ -236,3 +236,18 @@ def test_elsewhere_never_fires_requires_nonempty_detail():
 def test_elsewhere_never_fires_with_detail_is_fine():
     e = Elsewhere("map068/ev012/p1", "never_fires", detail="no warp lands on this cell")
     assert e.detail == "no warp lands on this cell"
+
+
+def test_strip_listed_event_rows_are_stripped_not_owned():
+    """2026-09-27 ROM run: CH01 walked Moki Town's no-port `Luz` lamps
+    (strip_list.json map_events) and found no script to talk to."""
+    from rpg2gba.beat_floor.assertion import RowFloor
+    from rpg2gba.chapter_manifest.schema import ManifestRow
+
+    row = ManifestRow(row_id="map032/ev052/p0", kind="page", map_id=32, content_hash="x",
+                      event_id=52)
+    floor = RowFloor(row_id=row.row_id, trigger="action", assertions=(), refusals=())
+    sel = select.select_rows([row], {}, {row.row_id: floor}, stripped={(32, 52): "Luz"})
+    assert sel.owned == () and sel.refusals == ()
+    assert [(e.row_id, e.status) for e in sel.elsewhere] == [("map032/ev052/p0", "stripped")]
+    assert "Luz" in sel.elsewhere[0].detail

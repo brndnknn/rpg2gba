@@ -258,10 +258,15 @@ def _derive_story_precedence(
     (REDERIVATION_PLAN.md §16.3 ruling 16).
 
     `enabled_by[row]` is a conjunction of groups; any row in a group enables
-    it. A group with exactly one row that another route group claims gives
-    `before=<that group> -> after=<row's group>`. A group with several
-    alternatives constrains nothing on its own (logged, like a half-claimed
-    self-switch pair); `engine:` markers and rows no group claims are skipped.
+    it. Each claimed writer in a group gives `before=<its group> ->
+    after=<row's group>`: with one writer that is exact, and with several
+    alternatives, coming after ALL of them is the order that guarantees one
+    has run. (Until 2026-09-27 a several-writer group gave no edge at all;
+    CH01's Auntie heal page -- var 101 >= 2, written by any of three rows --
+    then floated to before the starter and the ROM run found an empty party.)
+    An alternative no route group claims is dropped; if none is claimed the
+    group constrains nothing. `engine:` markers are skipped. Any edge that
+    would close a cycle is dropped later by `_acyclic_story_edges`.
     """
     edges: set[PrecedenceEdge] = set()
     for row_id, groups in enabled_by.items():
@@ -270,16 +275,12 @@ def _derive_story_precedence(
             continue
         for alternatives in groups:
             writers = [w for w in alternatives if not w.startswith("engine:")]
-            if not writers:
-                continue
-            if len(writers) > 1:
-                logger.info("precedence: %s is enabled by any of %s; no edge", row_id, writers)
-                continue
-            before_group = group_by_row.get(writers[0])
-            if before_group is None or before_group == after_group:
-                continue
-            edges.add(PrecedenceEdge(before=before_group, after=after_group,
-                                     reason=f"story:{writers[0]}->{row_id}"))
+            for writer in writers:
+                before_group = group_by_row.get(writer)
+                if before_group is None or before_group == after_group:
+                    continue
+                edges.add(PrecedenceEdge(before=before_group, after=after_group,
+                                         reason=f"story:{writer}->{row_id}"))
     return tuple(sorted(edges, key=lambda e: (e.before, e.after, e.reason)))
 
 
@@ -353,7 +354,9 @@ def _derive_warp_precedence(
 
     Rule 1 (introducing-warp precedence): for each chapter map X other than
     `entry_map`, find the groups that own a warp landing on X from a chapter
-    map. If exactly one such group G exists, every OTHER group located on X
+    map the player can reach from `entry_map` without entering X (a
+    first-entry warp; a door back out of X's own interiors doesn't count).
+    If exactly one such group G exists, every OTHER group located on X
     must come after G (reason `warp_topology:mapNNN`). Zero or 2+ candidates
     means the constraint can't be expressed singularly; logged at INFO and
     skipped for that map, same discipline as `_derive_precedence`.
@@ -375,9 +378,9 @@ def _derive_warp_precedence(
     map_by_group: dict[str, int] = {gp.group_id: gp.map_id for gp in group_points}
     chapter_maps: set[int] = set(map_by_group.values()) | {entry_map}
 
-    # dst_map -> group_ids owning a warp row that lands on dst_map from a
-    # chapter map.
-    introducers: dict[int, set[str]] = {}
+    # dst_map -> (src_map, group_id) for each warp row that lands on dst_map
+    # from a chapter map.
+    introducers: dict[int, set[tuple[int, str]]] = {}
     # group_id -> dst_maps (outside the chapter) it owns a warp row landing on.
     outbound: dict[str, set[int]] = {}
 
@@ -392,7 +395,7 @@ def _derive_warp_precedence(
         for edge in world.edges_from(row.map_id):
             if edge.kind != "warp" or edge.event_id != row.event_id:
                 continue
-            introducers.setdefault(edge.dst_map, set()).add(group_id)
+            introducers.setdefault(edge.dst_map, set()).add((row.map_id, group_id))
             if edge.dst_map not in chapter_maps:
                 outbound.setdefault(group_id, set()).add(edge.dst_map)
 
@@ -401,36 +404,36 @@ def _derive_warp_precedence(
     # --- rule 1: introducing-warp precedence --------------------------------
 
     # A map needs an "introducing" warp only if the chapter has to let itself
-    # in. Two maps never do: the one the chapter STARTS on, and the one its
-    # declared entry warp LANDS on -- reaching that one is what starting there
-    # means.
+    # in; the one it STARTS on never does. Only a FIRST-ENTRY warp counts --
+    # one whose source map the player can reach from the entry without ever
+    # passing through the map it introduces (`reachable_avoiding`).
     #
-    # Missing the second is not a tie-break, it derives an impossible order.
-    # CH05 enters the Passage Cave from Route 02, and its entry beat B1 claims
-    # `map036/ev001` -- the cave's OUTBOUND event, because that is the only row
-    # CH05's manifest owns at that seam. So B1 does not look like a way *in*,
-    # the rule credited B8 (the 1F<->2F stairs, whose reciprocal does land on
-    # map 36) and emitted `B8 -> B1`: use the stairs before entering the cave.
-    # That forced the whole 1F sweep to run north-first and cross a trainer's
-    # trigger tile twice. While the entry was inside the cave this was masked,
-    # because `entry_map` alone already skipped map 36.
-    # Keyed on the entry MAP, not the entry cell: standing anywhere on map X
-    # you can walk to any warp on map X and cross it, so nothing has to
-    # "introduce" what X warps to. Keying it on the cell was too narrow -- it
-    # held only while the chapter's declared entry happened to BE the warp
-    # tile, and stopped applying the moment CH05's entry became the cell CH04
-    # actually hands over on, two dozen tiles short of the cave mouth.
-    #
-    # Maps deeper in are unaffected: map 37 is reachable only through map 36,
-    # never from the entry map, so it still requires its introducing warp.
-    entry_landing_maps: set[int] = set()
-    if world is not None:
-        for edge in world.edges_from(entry_map):
-            if edge.kind in ("warp", "seam_warp"):
-                entry_landing_maps.add(edge.dst_map)
+    # This replaced (2026-09-27) an exemption for every map the entry map
+    # warps onto, which had been added for CH05: it enters the Passage Cave
+    # from Route 02, its entry beat B1 claims the cave's OUTBOUND event, and
+    # the rule credited B8 (the 1F<->2F stairs, whose reciprocal lands on map
+    # 36) with emitting `B8 -> B1`, an impossible order. First-entry excludes
+    # B8 on its own -- map 37 is reachable only through map 36. The blanket
+    # exemption also hid real gates: CH01's entry map is the player's house,
+    # whose front door onto Moki Town only transfers after Auntie (switch 52),
+    # and with map 32 exempt the generated order left the house first.
 
-    for map_id in sorted(chapter_maps - {entry_map} - entry_landing_maps):
-        candidates = introducers.get(map_id, set())
+    def reachable_avoiding(blocked: int) -> set[int]:
+        """Maps the player can reach from `entry_map` without entering
+        `blocked` (every edge kind; the world is optimistic about gates)."""
+        seen, stack = {entry_map}, [entry_map]
+        while stack:
+            for edge in world.edges_from(stack.pop()):
+                if edge.dst_map != blocked and edge.dst_map not in seen:
+                    seen.add(edge.dst_map)
+                    stack.append(edge.dst_map)
+        return seen
+
+    for map_id in sorted(chapter_maps - {entry_map}):
+        # The exit doors of Moki Town's own interiors all land on map 32, but
+        # every interior is itself reached through map 32: not introducers.
+        before = reachable_avoiding(map_id)
+        candidates = {g for src, g in introducers.get(map_id, set()) if src in before}
         if len(candidates) != 1:
             logger.info(
                 "precedence: warp_topology:map%03d -- %d group(s) own a warp "

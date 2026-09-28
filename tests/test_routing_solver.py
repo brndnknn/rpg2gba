@@ -1126,10 +1126,11 @@ def test_entry_landing_map_needs_no_introducing_warp() -> None:
     """A chapter that STARTS on a warp does not have to let itself in.
 
     The introducing-warp rule skips `entry_map`, because a chapter obviously
-    reaches the map it begins on. It must also skip the map that entry warp
-    LANDS on, for the same reason -- otherwise it looks for a group to
-    "introduce" a map the chapter is already standing in, and credits
-    whichever group happens to own a warp landing there.
+    reaches the map it begins on. For the map its entry warp LANDS on, it
+    must not credit a group whose warp only lands there from DEEPER in -- a
+    first-entry warp is one whose source is reachable without passing
+    through the map (since 2026-09-27; this used to be a blanket exemption
+    for entry landing maps, which also hid gated doors).
 
     CH05 is the case: it enters the Passage Cave from Route 02, and its entry
     beat claims the cave's OUTBOUND event (the only row that seam gives the
@@ -1213,14 +1214,30 @@ def test_story_precedence_edges_from_single_writer_groups():
         "map049/ev002/p1": (("map049/ev001/p0",),),
         # The engine marker constrains nothing; the real writer does.
         "map049/ev022/p0": (("engine:whiteout",), ("map050/ev019/p0",)),
-        # Two alternative writers: no edge.
+        # Two alternative writers: after every claimed one (map011's is
+        # unclaimed, so dropped) -- after all of them guarantees one ran.
         "map010/ev002/p0": (("map010/ev001/p0", "map011/ev001/p0"),),
         # A writer no group claims (another chapter's): no edge.
         "map010/ev001/p0": (("map099/ev001/p0",),),
     }
     edges = _derive_story_precedence(enabled_by, group_by_row)
-    assert [(e.before, e.after) for e in edges] == [("auntie", "door"), ("starter", "whiteout")]
-    assert edges[0].reason == "story:map049/ev001/p0->map049/ev002/p1"
+    assert [(e.before, e.after) for e in edges] == [
+        ("a", "b"), ("auntie", "door"), ("starter", "whiteout")]
+    assert edges[1].reason == "story:map049/ev001/p0->map049/ev002/p1"
+
+
+def test_story_precedence_orders_after_every_alternative_writer():
+    """CH01's Auntie heal page (2026-09-27 ROM run): var 101 >= 2 is written
+    by any of three rows. The heal page comes after all three."""
+    from rpg2gba.routing.solver import _derive_story_precedence
+
+    group_by_row = {"map032/ev009/p2": "ceremony", "map050/ev019/p0": "starter",
+                    "map172/ev004/p0": "pokepod", "map049/ev001/p3": "heal"}
+    edges = _derive_story_precedence(
+        {"map049/ev001/p3": (("map032/ev009/p2", "map050/ev019/p0", "map172/ev004/p0"),)},
+        group_by_row)
+    assert {(e.before, e.after) for e in edges} == {
+        ("ceremony", "heal"), ("starter", "heal"), ("pokepod", "heal")}
 
 
 def test_story_precedence_ignores_a_writer_in_the_same_group():
@@ -1245,3 +1262,42 @@ def test_story_edge_that_closes_a_cycle_is_skipped():
 
     hard = (PrecedenceEdge(before="p2", after="p0", reason="warp_topology:x"),)
     assert _acyclic_story_edges(hard, (p0_to_p2,)) == ()
+
+
+def test_warp_topology_counts_only_first_entry_warps() -> None:
+    """CH01's shape (2026-09-27 ROM run): the house (entry, map 100) opens
+    onto the town (102) through one door; the town's interior (103) also has
+    an exit landing on 102. The interior is only reachable through the town,
+    so its exit is not an introducer, and the house door alone orders every
+    town group -- before the fix, two "introducers" meant no edge at all."""
+    from rpg2gba.routing.solver import _derive_warp_precedence, _GroupPoint
+
+    rows = [
+        _warp_row("map100/ev001/p1", map_id=100, event_id=1),   # house door -> town
+        _warp_row("map102/ev002/p0", map_id=102, event_id=2),   # town door -> interior
+        _warp_row("map103/ev001/p0", map_id=103, event_id=1),   # interior exit -> town
+    ]
+    group_by_row = {"map100/ev001/p1": "HouseDoor", "map102/ev002/p0": "TownDoor",
+                    "map103/ev001/p0": "InteriorExit"}
+    points = [
+        _GroupPoint("HouseDoor", ("HouseDoor",), ("map100/ev001/p1",), 100, (0, 0)),
+        _GroupPoint("TownBeat", ("TownBeat",), (), 102, (1, 0)),
+        _GroupPoint("TownDoor", ("TownDoor",), ("map102/ev002/p0",), 102, (2, 0)),
+        _GroupPoint("InteriorExit", ("InteriorExit",), ("map103/ev001/p0",), 103, (0, 0)),
+    ]
+    world = _world([
+        WorldEdge(src_map=100, dst_map=102, kind="warp", src_cell=(0, 0), dst_cell=(0, 0),
+                  event_id=1),
+        WorldEdge(src_map=102, dst_map=103, kind="warp", src_cell=(2, 0), dst_cell=(0, 0),
+                  event_id=2),
+        WorldEdge(src_map=103, dst_map=102, kind="warp", src_cell=(0, 0), dst_cell=(2, 0),
+                  event_id=1),
+    ], {100, 102, 103})
+
+    edges, _ = _derive_warp_precedence(
+        rows, group_by_row, points, world, entry_map=100, entry_group_id=None,
+        chapter_id="TESTCH", exit_provided=True)
+
+    assert {(e.before, e.after) for e in edges if e.reason == "warp_topology:map102"} == {
+        ("HouseDoor", "TownBeat"), ("HouseDoor", "TownDoor")}
+    assert ("TownDoor", "InteriorExit") in {(e.before, e.after) for e in edges}

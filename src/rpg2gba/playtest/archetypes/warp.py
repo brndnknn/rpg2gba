@@ -54,11 +54,47 @@ from . import (
 )
 
 if TYPE_CHECKING:  # runtime import is lazy so this module works without bindings
+    from collections.abc import Sequence
+
     from ...chapter_manifest.schema import ManifestRow
     from ..chapter import ChapterBuilder
     from ..emulator import Emulator
 
 logger = logging.getLogger(__name__)
+
+
+def _arrival_nudge_delta(
+    map_constant: str, cell: tuple[int, int], rows: "Sequence[ManifestRow]",
+    lookup: FloorLookup,
+) -> tuple[int, int] | None:
+    """The player (dx, dy) an arrival-nudge autorun on `cell` of
+    `map_constant` applies, or None when no such page is in `rows`.
+
+    A warp landing on a door mat that carries one (Moki Town's house doors:
+    switch 22, step the player off the mat) ends one tile on, every time the
+    page is live -- the 2026-09-27 ROM run failed `m032e005_warp` on exactly
+    that. The (dx, dy) is the nudge's own floor displacement, the same one
+    `arrival_nudge_beat` asserts."""
+    from ...chapter_manifest.archetypes import classify_manifest
+    from ..cells import event_cell
+    from .arrival_nudge import _player_displacement
+
+    map_id = map_uranium_id(map_constant)
+    on_map = [r for r in rows if r.map_id == map_id]
+    for match in classify_manifest(on_map):
+        if match.archetype != "arrival_nudge":
+            continue
+        if event_cell(map_constant, match.event_id) != tuple(cell):
+            continue
+        row_id = next(iter(match.roles))
+        found = _player_displacement(
+            row_id, walked_arms(row_id, "displacement", floor_lookup=lookup),
+            floor_lookup=lookup)
+        if found is None:
+            return None
+        params = dict(found[1].params)
+        return int(params["dx"]), int(params["dy"])
+    return None
 
 # Kinds this template's body actually checks (REDERIVATION_PLAN.md sec 16.3
 # C5). `trigger`/`completes` are the row's own bookkeeping; `warp` is the
@@ -543,9 +579,47 @@ def warp_beat(
             resolved_rows=resolved_rows,
         )
 
+    chapter_rows = manifest_rows if manifest_rows is not None else load_chapter_rows(
+        manifest_chapter_id if manifest_chapter_id is not None else chapter_id,
+        manifest_dir=manifest_dir,
+    )
+    landing_nudge = _arrival_nudge_delta(dest_map_constant, landing, chapter_rows, lookup)
+    return_nudge = (_arrival_nudge_delta(map_constant, return_arrival, chapter_rows, lookup)
+                    if return_arrival is not None else None)
+
+    def _assert_landed(emu: Emulator, cell: tuple[int, int],
+                       nudge: tuple[int, int] | None, *,
+                       arrived: tuple[tuple[int, int], int], arrival_cell: tuple[int, int],
+                       ) -> bool:
+        """Exactly `cell` -- or, when an arrival-nudge autorun sits on it,
+        exactly one nudge on (its page may or may not be live; the ROM's
+        state decides, and both outcomes are single cells).
+
+        `arrived` is (the position on the frame the map changed, scripts
+        `settle_field` drained). When the player is elsewhere after settling
+        and an arrival script ran, that script moved them (2026-09-27: the
+        lab's intro scene walks the player from the door to Bambo); the warp
+        is then proven by the map-change position being exactly
+        `arrival_cell`. Returns False in that case (the scene owns the
+        player's final place and facing), else True."""
+        pos = emu.player_pos()
+        if pos == cell:
+            return True
+        if nudge is not None and pos == (cell[0] + nudge[0], cell[1] + nudge[1]):
+            return True
+        at_change, drained = arrived
+        if drained and at_change == arrival_cell:
+            logger.info("%s: landed on %s; an arrival script then moved the player to %s",
+                        beat_name, arrival_cell, pos)
+            return False
+        assertions.assert_position_exact(emu, beat_name, cell)
+        return True
+
     def _cross(emu: Emulator, crossing_cell: tuple[int, int],
                crossing_direction: str | None, dest_map: str,
-               from_map: str) -> None:
+               from_map: str) -> tuple[tuple[int, int], int]:
+        """Cross, then drain arrival scripts. Returns (the player's position
+        on the frame the map changed, the number of scripts drained)."""
         # Proving a warp fired means proving the player LEFT, not just that
         # they are standing on the destination -- when `from_map` and
         # `dest_map` are the same map, `wait_for_map`/`require_map` both
@@ -587,7 +661,8 @@ def warp_beat(
         # hand after their own crossings. A beat that wants to ASSERT an
         # arrival autorun (the `arrival_nudge` archetype) claims that page
         # as its own row and does not go through this template.
-        emu.settle_field()
+        at_change = emu.player_pos()
+        return at_change, emu.settle_field()
 
     def _forward(emu: Emulator, *, check_arrival_details: bool = False) -> None:
         """Cross the CLAIMED warp: origin -> dest.
@@ -598,7 +673,7 @@ def warp_beat(
         reciprocal leg would test the arrival on the wrong map, which is
         the mistake `start_side="dest"` exists to stop making.
         """
-        _cross(emu, crossing, direction, dest_map_constant, map_constant)
+        arrived = _cross(emu, crossing, direction, dest_map_constant, map_constant)
         assertions.require_map(emu, beat_name, dest_map_constant)
         # Exact, not `_assert_near`'s tolerance-1 (task brief point 1):
         # `cells.arrival_cell` and the generic floor's warp target are the
@@ -610,28 +685,30 @@ def warp_beat(
         # check here would hide exactly the one-tile miss that dispatch
         # would catch anyway, just later and with a worse error. `landing` is
         # `arrival` itself unless the floor marks it a door tile (C5b).
-        assertions.assert_position_exact(emu, beat_name, landing)
+        undisturbed = _assert_landed(emu, landing, landing_nudge,
+                                     arrived=arrived, arrival_cell=arrival)
 
         if not check_arrival_details:
             return
         for step in state_steps:
             STEP_HANDLERS[step.kind](emu, beat_name, step)
-        if assert_facing:
+        if assert_facing and undisturbed:
             assertions.assert_player_facing(emu, beat_name, expected_facing)
         if assert_bgm:
             assertions.assert_bgm(emu, beat_name, dest_engine_map_dir)
 
     def _back(emu: Emulator) -> None:
         """Cross the DERIVED reciprocal: dest -> origin."""
-        _cross(emu, return_crossing, return_direction, map_constant,
-               dest_map_constant)
+        arrived = _cross(emu, return_crossing, return_direction, map_constant,
+                         dest_map_constant)
         assertions.require_map(emu, beat_name, map_constant)
         # Same exactness reasoning as `_forward` above -- `return_arrival` is
         # derived through the identical `cells.arrival_cell` call. Unlike the
         # forward leg there is no floor for the (unclaimed) reciprocal row, so
         # a reciprocal that lands on a door tile is NOT offset by the C5b
         # exit step here; that mismatch fails this check loudly in-ROM (P11).
-        assertions.assert_position_exact(emu, beat_name, return_arrival)
+        _assert_landed(emu, return_arrival, return_nudge,
+                       arrived=arrived, arrival_cell=return_arrival)
 
     @builder.beat(
         beat_name,

@@ -106,7 +106,14 @@ from rpg2gba.playtest.archetypes import (
     facing_toward,
     load_chapter_rows,
 )
-from rpg2gba.playtest.cells import approach_to, event_cell, seam_cells
+from rpg2gba.playtest.cells import (
+    approach_to,
+    event_cell,
+    event_page_empty,
+    event_page_moves,
+    local_id,
+    seam_cells,
+)
 from rpg2gba.playtest.chapter import ChapterBuilder
 from rpg2gba.playtest.errors import ScenarioError
 from rpg2gba.routing.locations import cell_for_row
@@ -225,6 +232,9 @@ _NOT_AFTER_THE_FACT = frozenset(
 #: Re-admitted on an arrival page that shows text: its drain is found by
 #: that text, which proves it fired, and carries the bag delta.
 _FROM_THE_DRAIN = frozenset({"trigger", "text", "item_grant", "choice"})
+#: State writes, read back once the page has finished (see the body).
+_STATE_WRITE_KINDS = frozenset(
+    {"switch_write", "var_write", "self_switch_write", "engine_flag_write"})
 
 # -- text matching ---------------------------------------------------------
 #
@@ -316,7 +326,7 @@ def _handle_text(emu: "Emulator", beat_name: str, step: Step) -> None:
             f"expected to contain {expected!r}, got {text!r} ({shot})"
         )
     emu.clear_field_message()
-    emu.tap("A")
+    emu.dismiss_message()
 
 
 def _menu_result_ok(emu: "Emulator", answer: int, result: int, yesno: bool) -> bool:
@@ -858,6 +868,8 @@ def generic_beat(
     # pages fire on their own; the beat stands on the routing point.
     trigger = dict(trigger_step.params).get("trigger") if trigger_step else None
     faces_target: tuple[int, int] | None = None
+    walks_off: int | None = None      # local id of an action NPC that walks on its own
+    empty_page = False                # an action page with no commands: A is a no-op
     arrival = trigger in _ARRIVAL_TRIGGERS
     random_rows = {r for r, _ in random_arms}
     arrival_texts: list[Step] = []
@@ -904,6 +916,12 @@ def generic_beat(
     elif trigger in _PLAYER_TRIGGERS and page_row.event_id is not None:
         faces_target = event_cell(cell.map_constant, page_row.event_id)
         x, y = approach_to(cell.map_constant, page_row.event_id, prefer=approach_prefer)
+        page_idx = parse_row_id(page_row_id).page_idx
+        if trigger == "action" and page_idx is not None:
+            if event_page_empty(cell.map_constant, page_row.event_id, page_idx):
+                empty_page = True
+            elif event_page_moves(cell.map_constant, page_row.event_id, page_idx):
+                walks_off = local_id(cell.map_constant, page_row.event_id)
     elif approach_prefer is not None:
         candidate = next(
             (c for c in cell.approach_candidates if c.side == approach_prefer), None)
@@ -970,6 +988,21 @@ def generic_beat(
     grant_steps = arrival_grants if arrival else [
         s for s in middle_steps if s.kind == "item_grant" and s.row_id not in random_guard]
     middle_steps = [s for s in middle_steps if s.kind != "item_grant"]
+
+    # State writes: checked after `completes` too, once per key at its LAST
+    # write. In source order the check could run while the script still had
+    # movements and waits to go before the write (2026-09-27: Theo's Moki
+    # Town intercept sets event 75's self switch after he walks off, and the
+    # in-order check read it False); a key written twice is checked at the
+    # value it ends on.
+    last_write: dict[tuple, Step] = {}
+    for step in middle_steps:
+        if step.kind in _STATE_WRITE_KINDS:
+            key = (step.kind,) + tuple(sorted(
+                (k, v) for k, v in step.params if k != "value"))
+            last_write[key] = step
+    write_steps = sorted(last_write.values(), key=lambda s: (s.list_index, s.row_id))
+    middle_steps = [s for s in middle_steps if s.kind not in _STATE_WRITE_KINDS]
     grant_const: dict[str, str] = {}
     for step in grant_steps:
         item = str(dict(step.params)["item"])
@@ -1015,11 +1048,28 @@ def generic_beat(
             # template's `_approach` makes the same call); the steps below
             # decide whether it was this page.
             fired_on_the_way = True
+        if empty_page and not fired_on_the_way:
+            # The page is empty: its dispatcher ends at once, so the check
+            # is that pressing A changes nothing (hand CH03's N3 shape).
+            emu.face(facing_toward((x, y), faces_target, caller="generic_beat"))
+            emu.tap("A")
+            emu.run(30)
+            if emu.field_locked():
+                shot = emu.screenshot(f"{beat_name}_unexpected_lock")
+                raise ScenarioError(
+                    f"{beat_name}: {page_row_id} is an empty page, but pressing A "
+                    f"locked the field ({shot})")
+            return
         if not fired_on_the_way:
-            if faces_target is not None:
-                emu.face(facing_toward((x, y), faces_target, caller="generic_beat"))
-            if trigger_step is not None:
-                STEP_HANDLERS["trigger"](emu, beat_name, trigger_step)
+            if walks_off is not None:
+                # An NPC that walks on its own has left `faces_target`;
+                # talk to it where it is now (`cells.event_page_moves`).
+                assertions.talk_to_moving_npc(emu, beat_name, walks_off)
+            else:
+                if faces_target is not None:
+                    emu.face(facing_toward((x, y), faces_target, caller="generic_beat"))
+                if trigger_step is not None:
+                    STEP_HANDLERS["trigger"](emu, beat_name, trigger_step)
         for i, step in enumerate(middle_steps):
             guard = random_guard.get(step.row_id)
             if guard is not None and (step.kind == "heal_party"
@@ -1032,6 +1082,11 @@ def generic_beat(
                 assertions.damage_lead(emu, beat_name)
         if completes_step is not None:
             STEP_HANDLERS["completes"](emu, beat_name, completes_step)
+        for step in write_steps:
+            guard = random_guard.get(step.row_id)
+            if guard is not None and not _guard_holds(emu, beat_name, guard):
+                continue  # the RNG picked a sibling arm
+            STEP_HANDLERS[step.kind](emu, beat_name, step)
         if arrival:
             if arrival_texts:
                 _check_arrival_drain(emu, beat_name, cell.map_constant, arrival_texts,

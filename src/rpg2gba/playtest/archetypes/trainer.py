@@ -544,7 +544,7 @@ def trainer_beats(
             _assert_floor_text(emu, a.param("text"))
             if a is not intro_texts[-1]:
                 emu.clear_field_message()
-                emu.tap("A")
+                emu.dismiss_message()
         assertions.advance_to_battle(emu)
         if not in_battle(emu):
             shot = emu.screenshot(f"{beat_prefix}_no_battle")

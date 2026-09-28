@@ -228,6 +228,9 @@ class FakeEmulator:
     def map_location(self) -> tuple[int, int]:
         return self._map
 
+    def clear_field_message(self) -> None:
+        pass
+
     def field_locked(self) -> bool:
         return self._locked
 

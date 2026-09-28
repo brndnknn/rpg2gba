@@ -1588,6 +1588,35 @@ class Emulator:
         self.write_u16(self.symbols["gStringVar4"], 0xFFFF)
         self._last_logged = None
 
+    _DISMISS_SETTLE_FRAMES = 10
+
+    def dismiss_message(self, max_taps: int = 64) -> None:
+        """Press A through every remaining page of the message on screen,
+        then once more to dismiss its last page -- and no further.
+
+        One tap is not "next message": `format()` wraps a long line onto a
+        second page, and a single A only turns to it (2026-09-27: Map048's
+        TV news line left the next `msgbox` unopened and the beat read
+        None). `text_showing` stays true until the final page's last glyph
+        lands, so tapping while it holds walks the pages, and the one tap
+        after dismisses the box. Stopping there matters: a menu opening next
+        would take a further A as its answer.
+        """
+        for _ in range(max_taps):
+            if not self.text_showing():
+                # The last glyph has landed, but `waitbuttonpress` only
+                # starts on a later script tick and reads a NEW press; an A
+                # already down by then is ignored (Auntie's third box stayed
+                # up in the 2026-09-27 run). Let it get there first.
+                self.run(self._DISMISS_SETTLE_FRAMES)
+                self.tap("A")
+                return
+            self.tap("A")
+        shot = self.screenshot("dismiss_message_stuck")
+        raise ScenarioError(
+            f"dismiss_message: the message box was still drawing after {max_taps} "
+            f"A presses ({shot})")
+
     def active_printer_texts(self) -> dict[int, str]:
         """`window_id -> decoded text` for every live `WINDOW_TEXT_PRINTER`
         node on `sFirstTextPrinter`, covering windows besides the field

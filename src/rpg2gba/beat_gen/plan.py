@@ -96,17 +96,19 @@ class Elsewhere:
     (`never_fires`, C9 ruling 3: an arrival-nudge autorun whose cell no warp
     lands on -- `detail` carries the proof, the `NoArrivalError` message), or
     it is a branch arm the walk does not take where its sibling runs
-    (`unselected_arm`, ruling 19 -- `detail` says what selects it instead)."""
+    (`unselected_arm`, ruling 19 -- `detail` says what selects it instead),
+    or its event is in `strip_list.json`'s `map_events` and the ROM never
+    carries it (`stripped`, 2026-09-27 -- `detail` is the strip entry)."""
 
     row_id: str
     status: Literal["later", "unreachable", "blocked", "boundary", "never_fires",
-                    "unselected_arm"]
+                    "unselected_arm", "stripped"]
     owner: str | None = None             # the owning chapter for `later`/`boundary`, else None
     requires: tuple[str, ...] = ()       # the capabilities, for `blocked`
     detail: str = ""                     # required non-empty for `never_fires`: the proof
 
     def __post_init__(self) -> None:
-        if self.status in ("never_fires", "unselected_arm") and not self.detail:
+        if self.status in ("never_fires", "unselected_arm", "stripped") and not self.detail:
             raise ValueError(f"{self.row_id}: {self.status} requires a non-empty detail")
 
 

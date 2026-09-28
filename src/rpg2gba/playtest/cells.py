@@ -190,6 +190,43 @@ def event_cell(map_constant: str, event_id: int) -> Cell:
     return (event["x"], event["y"])
 
 
+def event_page_moves(map_constant: str, event_id: int, page_idx: int) -> bool:
+    """Does page `page_idx` of event `event_id` walk on its own (RMXP
+    `move_type` random / approach / custom, i.e. anything but fixed)?
+
+    Such an NPC leaves its spawn cell, so an approach derived from
+    `event_cell` goes stale -- talk to it at its live position instead
+    (`assertions.talk_to_moving_npc`; 2026-09-27: Moki Town's EV071 had
+    walked off by the time the player pressed A)."""
+    uid, _graph = _graph_for(map_constant, resolver="event_page_moves")
+    event = _event_lookup(uid, event_id, map_constant=map_constant,
+                          resolver="event_page_moves")
+    pages = event.get("pages") or []
+    if not 0 <= page_idx < len(pages):
+        raise ValueError(
+            f"event_page_moves: {map_constant} event {event_id} has no page "
+            f"{page_idx} ({len(pages)} pages)")
+    return int(pages[page_idx].get("move_type") or 0) != 0
+
+
+def event_page_empty(map_constant: str, event_id: int, page_idx: int) -> bool:
+    """Is page `page_idx` of event `event_id` empty (only the terminating
+    code 0)? Its staged dispatcher lands on a bare `end`, so pressing A runs
+    a script that never locks the field -- `interact()` reads that as "no
+    script". The check for such a page is that nothing happens (hand CH03's
+    N3 on NurseTut; 2026-09-27: generated CH01 hit it on Moki Town's
+    `Theo75`)."""
+    uid, _graph = _graph_for(map_constant, resolver="event_page_empty")
+    event = _event_lookup(uid, event_id, map_constant=map_constant,
+                          resolver="event_page_empty")
+    pages = event.get("pages") or []
+    if not 0 <= page_idx < len(pages):
+        raise ValueError(
+            f"event_page_empty: {map_constant} event {event_id} has no page "
+            f"{page_idx} ({len(pages)} pages)")
+    return all(c.get("code") == 0 for c in pages[page_idx].get("list") or [])
+
+
 def local_id(map_constant: str, event_id: int) -> int:
     """The COMPILED object-event local id for RMXP event `event_id`.
 

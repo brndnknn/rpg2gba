@@ -99,13 +99,21 @@ def select_rows(
     rows: Sequence[ManifestRow],
     verdicts: Mapping[str, RowVerdict],
     floors: Mapping[str, RowFloor],
+    *,
+    stripped: Mapping[tuple[int, int], str | None] | None = None,
 ) -> Selection:
     """Sort every manifest row into owned / refused / elsewhere.
 
     `rows` in manifest order; `verdicts` and `floors` keyed by row id.
     Raises `ValueError` if a row has no floor at all (every manifest row
     has one by construction, C4/C5, so a missing floor is a bug upstream,
-    not a refusal). See the task file for the full rule table."""
+    not a refusal). See the task file for the full rule table.
+
+    `stripped` is `strip_list.json`'s `map_events` ((map, event) ->
+    expect_name, `orchestrator.load_map_event_strips`): those events never
+    reach the ROM, so their rows are `stripped`, ahead of every other rule
+    (2026-09-27: CH01 generated a beat for each of Moki Town's eleven
+    no-port `Luz` lamps, and the ROM run found nothing to talk to)."""
     owned: list[ManifestRow] = []
     refusals: list[Refusal] = []
     elsewhere: list[Elsewhere] = []
@@ -114,6 +122,14 @@ def select_rows(
         floor = floors.get(row.row_id)
         if floor is None:
             raise ValueError(f"{row.row_id}: no floor (upstream bug)")
+
+        # Rule 1: the event is strip-listed.
+        if stripped and row.event_id is not None and (row.map_id, row.event_id) in stripped:
+            name = stripped[(row.map_id, row.event_id)]
+            elsewhere.append(Elsewhere(
+                row.row_id, "stripped",
+                detail=f"strip_list.json map_events ({name or 'unnamed'})"))
+            continue
 
         verdict = verdicts.get(row.row_id)
 
