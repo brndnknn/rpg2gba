@@ -10,6 +10,22 @@
 
 ## Retired Session Summaries
 
+## Archived 2026-09-28 — Last Session Summary entry 2026-09-18c (C6 plan's open questions all answered — no hints needed anywhere)
+
+Docs only.
+A post-C5b check of `C6_GENERATOR_PLAN.md` found that C5b closed only arrival facing. The operator
+then answered every §4 question after each was measured first. **Group A: zero authoring hints and
+no hint store.** Seam cell, stair end (always round-trip), warp press side and event approach side
+are all solver picks from a derived legal set. Direction-conditioned script arms pin the approach
+side. Mechanism, facing and landing are derived, and `_CHAPTER_MAP_START_CELLS` is to be replaced
+by route-derived entry cells. Underivable inputs refuse. B2: an honest refusal list counts as done
+(80/980 rows refuse; CH05 has 0). B3: one order-dependent key in the corpus; the solver decides and
+the review doc lists it. C1: CH05, then CH01, then the rest. C2: the review doc is an operator gate,
+added to CLAUDE.md §9 gate 2. **Finding:** the build stamps every warp source cell as
+`MB_NON_ANIMATED_DOOR`, a step-on warp from any side, so `warp.py`'s door/threshold split doesn't
+match the ROM for CH01–CH05. **Lesson:** a sub-agent told to search named modules misses helpers
+elsewhere (`archetypes.facing_toward`); grep repo-wide before calling something absent.
+
 ## Archived 2026-09-24 — Last Session Summary entry 2026-09-18b (C5b implemented — the invariant test found the deleted overrides were never corrections)
 
 Landed C5b end to end in two commits (engine; pipeline + floor + tests + docs), unit-green, no

@@ -216,15 +216,19 @@ def _legs(
     is its literal implementation, kept as a standalone function so the
     eight combinations can be tested directly without registering a beat.
 
-    When `end_side` is given, the legs are the shortest sequence (at least
-    two, so both directions are always proven) that starts on `start_side`
-    and ends on `end_side` -- which is exactly the legacy `round_trip`/
-    `start_side` shapes for three of the four combos, and new (origin ->
-    origin, "F", "B") for the fourth.
+    2026-09-28 (operator ruling, `investigations/warp-round-trips-and-
+    gated-doors.md`): warp beats are one-way by default. When `end_side` is
+    given and `start_side == "origin"`, `end_side == "dest"` now crosses
+    ONCE (`"F"`) -- the reverse crossing is proven by the reciprocal's own
+    warp beat, not by this one. `end_side == "origin"` is unchanged
+    (`"F", "B"`, the local back-and-forth a through-map needs when the next
+    beat wants the origin back). The `start_side == "dest"` branches are
+    untouched -- mirrored beats still cross the reciprocal first to reach
+    the claimed event, so they always cross both ways.
     """
     if end_side is not None:
         if start_side == "origin":
-            return ("F", "B") if end_side == "origin" else ("F", "B", "F")
+            return ("F",) if end_side == "dest" else ("F", "B")
         return ("B", "F") if end_side == "dest" else ("B", "F", "B")
     if start_side == "origin":
         return ("F", "B", "F") if round_trip else ("F",)
@@ -327,28 +331,33 @@ def warp_beat(
 
     `end_side=` names which map the beat must END on, as an alternative to
     `round_trip`/`start_side` choosing it implicitly. When given, the legs
-    are the shortest sequence (at least two, so both directions are always
-    proven) that starts on `start_side` and ends on `end_side`:
+    are the shortest sequence that starts on `start_side` and ends on
+    `end_side`:
 
     | start_side | end_side | legs      |
     |---|---|---|
     | origin     | origin   | F, B      |
-    | origin     | dest     | F, B, F   |
+    | origin     | dest     | F         |
     | dest       | dest     | B, F      |
     | dest       | origin   | B, F, B   |
 
     (F = the claimed warp, origin -> dest; B = the derived reciprocal,
-    dest -> origin.) Three of these are the legacy `round_trip`/
-    `start_side` shapes under a new name; origin -> origin (F, B) is new --
-    it is what a beat needs when the NEXT beat is back on the warp's own
-    map (for example an arrival nudge observed after returning), which
-    neither `round_trip=True` (ends on the far side, three legs) nor the
-    plain `round_trip=False` default (also ends on the far side, one leg)
-    can produce. `end_side=` always crosses the reciprocal, so it implies
-    `return_direction=` whenever `mechanism` needs one, the same as
-    `round_trip`/`start_side="dest"` do; it is rejected together with
-    `round_trip=True` (two ways to say the same thing) and with
-    `boundary=True` (which never crosses at all).
+    dest -> origin.) 2026-09-28 (operator ruling,
+    `investigations/warp-round-trips-and-gated-doors.md`): warp beats are
+    one-way by default, so origin -> dest is now a LONE forward crossing --
+    the return is proven by the reciprocal's own warp beat elsewhere in the
+    chain, not by this one. origin -> origin (F, B) is the local
+    back-and-forth a beat needs when the NEXT beat is back on the warp's
+    own map (for example an arrival nudge observed after returning, or a
+    through-map the route never crosses again -- CH05's Passage Cave). The
+    `dest` starting rows are unchanged: a mirrored beat always crosses the
+    reciprocal first to reach the claimed event, so both of those still
+    prove both directions. `end_side=` crosses the reciprocal (and so
+    implies `return_direction=` whenever `mechanism` needs one, the same as
+    `round_trip`/`start_side="dest"` do) for every combination EXCEPT
+    origin -> dest, which crosses only the claimed warp; it is rejected
+    together with `round_trip=True` (two ways to say the same thing) and
+    with `boundary=True` (which never crosses at all).
 
     `page_idx=` names the page when more than one page of the event is a
     warp (CH01's map049/ev002 p1 and p3); it becomes `find_match`'s
@@ -415,16 +424,19 @@ def warp_beat(
             "warp_beat: assert_bgm=True requires dest_engine_map_dir= "
             "(the compiled map's directory under engine/data/maps/)"
         )
-    # The reciprocal leg is crossed by BOTH extra modes: `round_trip` adds it
-    # after the claimed crossing, `start_side="dest"` adds it before. Either
-    # one means `return_direction` is load-bearing; neither means it is dead
-    # weight and saying it is a mistake worth failing on.
-    crosses_reciprocal = round_trip or start_side == "dest" or end_side is not None
+    # The reciprocal leg is crossed whenever "B" appears in the leg sequence
+    # `_legs` produces -- computed from the actual legs, not from the flags
+    # directly, because 2026-09-28's one-way-by-default ruling made
+    # `end_side="dest"` with `start_side="origin"` a LONE forward crossing
+    # ("F",) that does not touch the reciprocal at all (see `_legs`'s
+    # docstring). `round_trip` and `start_side="dest"` still always cross it.
+    legs = _legs(start_side, round_trip, end_side)
+    crosses_reciprocal = "B" in legs
     if return_direction is not None and not crosses_reciprocal:
         raise ValueError(
             "warp_beat: return_direction= was given without round_trip=True, "
-            "start_side='dest', or end_side= -- it has no effect on a lone "
-            "forward crossing"
+            "start_side='dest', or an end_side= that crosses the reciprocal "
+            "-- it has no effect on a lone forward crossing"
         )
     if crosses_reciprocal and mechanism in ("threshold", "arrow") and return_direction is None:
         raise ValueError(
@@ -732,7 +744,7 @@ def warp_beat(
         # first forward leg asks for it -- a later forward leg would be
         # re-checking the same landing a second time.
         seen_forward = False
-        for leg in _legs(start_side, round_trip, end_side):
+        for leg in legs:
             if leg == "F":
                 _forward(emu, check_arrival_details=not seen_forward)
                 seen_forward = True

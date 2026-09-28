@@ -184,6 +184,16 @@ pointing at the wrong cell, and the return leg is where arrival nudges actually 
 worked shape, CH05's B1: Route 2 (20,34) → step (20,33) → arrive 1F (17,39) → walk (17,40)
 → arrive Route 2 (20,33), nudge fires → step back onto (20,33) → end inside the cave.
 
+*(Amended 2026-09-28, operator ruling — `investigations/warp-round-trips-and-gated-doors.md`
+"Ruling". Generated chapters: **one-way warp beats, one per direction**, each crossing once.
+The round trip forced every interior to be left before its story let you (the lab exit, gated
+until the starter), and it crossed each door four times where two prove both rows. The return
+warp is still asserted, at its exact landing, by its own beat. Ordering does the rest: a
+dead-end region's exit warps come after its first-visit beats (enter, do the map, leave), and an
+arrival nudge comes after the warp landing on it. A reverse warp the route never crosses
+naturally (a through map, CH05's Passage Cave) keeps a local F,B. A transit may cross a gated
+door only after that door's own warp beat. Hand-authored CH05 keeps the rule below as written.)*
+
 Two corollaries:
 
 - **One physical thing owns both its rows.** Same shape as the sideways staircases

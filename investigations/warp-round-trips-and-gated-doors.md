@@ -145,7 +145,61 @@ warp leg) over a gated door must come after that gate's writers in the solved or
 rather than a ROM-run discovery. Approach 3 stays on the shelf until a chapter actually needs a
 gate that shuts again. The guard is the tripwire that says when.
 
-## Open questions for the operator
+## Ruling (operator, 2026-09-28)
+
+The operator's refinement of Approach 1, accepted after a measured pitfall review:
+
+- **Warp beats are one-way by default.** One beat per direction, each crossing once
+  (origin → dest). The return is the reciprocal's own beat.
+- **Ordering: enter, do the map, leave.** For a dead-end region (maps whose only way out is back to
+  the one parent map — houses, shops, Centers, a house's upstairs nested inside it), the region's
+  exit warps come after every *first-visit* beat in the region. A beat whose enablers include a
+  group outside the region (other than the warps that enter it) is a later-visit beat and is not
+  forced before the exit — the lab's `ev005` second visit, the house's switch-52 scene. Exit edges
+  are added only when they close no cycle (logged otherwise), like story edges. An arrival nudge
+  comes after the warp that lands on it.
+- **Through maps keep a local back-and-forth** only for a reverse warp the route never crosses
+  naturally (CH05 Passage Cave `m036e001`/`m037e001`): the beat crosses, then crosses back via the
+  reciprocal (F,B). That falls out of continuity: a warp ends on its destination unless the next
+  beat needs the origin.
+- **Transit guard:** a transit may cross a gated door only after that door's own warp beat has run
+  in the order; otherwise generation fails loud naming the hop.
+- `BUILD_PLAN.md` §2's round-trip ruling is amended accordingly (dated correction there).
+
+Open questions 1–3 below are answered by this ruling: (1) yes, amend §2; (2) per direction; (3) no
+unclaimed reciprocals exist in CH01–CH05 (43/43) — a future one keeps the F,B back-and-forth.
+
+## Follow-up: the lab guard (2026-09-28, ROM run 18)
+
+With the ruling built, CH01 entered the lab one-way (`m032e003_warp` PASS; 39/40 beats) and then
+failed on `m050e001p0`: the lab exit's pre-starter refusal page ("You have to get your first Pokémon
+now.") expected, "Hey, where are you going?" shown.
+
+**Cause.** That line is `map050/ev002` page 0, an event-touch guard with no condition that pushes
+the player back up. RMXP places it at (10,16). The converter emits it as coord triggers across the
+**whole of row y=16** (x=11–17+, all `Map050_EV002_Dispatch`, `engine/data/maps/MokiTownProfessorLab/
+map.json`). The lab's arrival scene carries the player from the door (14,18) up past that row to the
+professor. So before the starter, the exit tile (14,19) cannot be reached without tripping the guard.
+After the starter, the exit's page 1 (var 101) replaces page 0. **Page 0 never fires on the ROM.**
+
+**Correction to "The problem" above:** run 17's "lab exit refused" was this guard too, not the exit
+door's page 0. The gated-door analysis still stands: the exit's transfer page *is* var-101-gated,
+and the transit guard is still correct.
+
+**Ruling (operator, 2026-09-28): derive `never_fires`, don't strip-list it.** Not built yet. The
+generator's reach (`beat_gen/reach.py`, NPC occupancy only today) must also model:
+
+1. **Coord-trigger rows that turn the player back**, read from the converted map's `coord_events`
+   (the widened cells, not the RMXP event cell). They count while their page is live.
+2. **Arrival-scene displacement**: where the arrival autorun leaves the player. The warp template
+   already tolerates it at run time; the generator doesn't model it. The lab's is (14,18) → (14,8),
+   ROM-confirmed 2026-09-27.
+
+A page whose trigger tile is unreachable under both, for as long as it is the live page, gets the
+existing `never_fires` verdict (`Elsewhere.status`, C9 `no_arrival` precedent) instead of a beat.
+Then re-run CH01 on the ROM (run 19).
+
+## Open questions for the operator (answered 2026-09-28, see Ruling)
 
 1. **Amend §2?** Approach 1 replaces "cross, cross back, cross again" with "cross once when the
    reverse has its own beat". The §2 rationale (catching a wrong return warp; nudges on the

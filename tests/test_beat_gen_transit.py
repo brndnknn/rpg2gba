@@ -14,8 +14,11 @@ def _beat(name: str, map_id: int, template: str = "generic") -> PlannedBeat:
 
 
 def _route_between_factory(table):
-    """table: {(from, to): hops} -> a `route_between` that raises ValueError
-    for any pair not in the table."""
+    """table: {(from, to): route steps} -> a `route_between` that raises
+    ValueError for any pair not in the table. Each route step is
+    `continuity.RouteStep` (src map id, dst map id, hop, event id) --
+    the event id (added 2026-09-28 for the gated-door guard) is a dummy 0
+    in these tests since none of them set `gated_doors=`."""
     def fn(a, b):
         if (a, b) in table:
             return table[(a, b)]
@@ -24,7 +27,7 @@ def _route_between_factory(table):
 
 
 def test_non_warp_beat_on_another_map_gets_a_transit_inserted_before_it():
-    hops = ((2, 1, ("warp", 2, 1, "L", "R")),)
+    hops = ((2, 1, ("warp", 2, 1, "L", "R"), 0),)
     route_between = _route_between_factory({(2, 1): hops})
 
     out = thread_maps(
@@ -52,8 +55,8 @@ def test_arrival_nudge_not_right_after_its_crossing_gets_a_transit_via_its_sourc
     # Player is on map 1, but the nudge beat's source is map 5 -- so the
     # transit must be routed (cur, source) then (source, nudge map), i.e.
     # (1, 5) then (5, 1), not a direct (1, 1) no-op.
-    hop_out = ((1, 5, ("warp", 1, 5, "L", "R")),)
-    hop_back = ((5, 1, ("warp", 5, 1, "R", "L")),)
+    hop_out = ((1, 5, ("warp", 1, 5, "L", "R"), 0),)
+    hop_back = ((5, 1, ("warp", 5, 1, "R", "L"), 0),)
     route_between = _route_between_factory({(1, 5): hop_out, (5, 1): hop_back})
 
     beats = [_beat("a", 1), _beat("n", 1, "arrival_nudge")]

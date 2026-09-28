@@ -1076,9 +1076,12 @@ def test_legs_covers_all_eight_start_round_trip_end_side_combinations() -> None:
     assert _legs("dest", False, None) == ("B", "F")
     assert _legs("dest", True, None) == ("B", "F", "B")
 
-    # New four (end_side given, round_trip always False):
+    # New four (end_side given, round_trip always False). 2026-09-28
+    # (operator ruling, investigations/warp-round-trips-and-gated-doors.md):
+    # origin -> dest is now a LONE forward crossing -- the reverse is
+    # proven by the reciprocal's own warp beat, not a round trip here.
     assert _legs("origin", False, "origin") == ("F", "B")
-    assert _legs("origin", False, "dest") == ("F", "B", "F")
+    assert _legs("origin", False, "dest") == ("F",)
     assert _legs("dest", False, "dest") == ("B", "F")
     assert _legs("dest", False, "origin") == ("B", "F", "B")
 
@@ -1169,15 +1172,74 @@ def test_warp_beat_end_side_with_return_direction_does_not_raise_the_without_rou
 ) -> None:
     """`return_direction=` is load-bearing once `end_side=` crosses the
     reciprocal -- it must not trip the "no effect on a lone forward
-    crossing" guard."""
+    crossing" guard.
+
+    2026-09-28: `start_side="origin", end_side="dest"` no longer crosses the
+    reciprocal (it's the new lone-forward-leg case, see
+    `test_warp_beat_end_side_dest_from_origin_is_now_a_single_forward_leg`
+    below), so this uses `start_side="dest", end_side="dest"` (mirrored,
+    "B", "F") instead -- still a non-`round_trip` mode that crosses the
+    reciprocal, which is what this test is actually about."""
     b = _builder()
     warp_beat(
         b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
         event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
         direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
-        return_direction="UP", end_side="dest",
+        return_direction="UP", start_side="dest", end_side="dest",
     )
     assert [beat.name for beat in b.build().beats] == ["W1"]
+
+
+def test_warp_beat_end_side_dest_from_origin_is_now_a_single_forward_leg(
+    ch05_rows: tuple[ManifestRow, ...], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """2026-09-28 operator ruling: `start_side="origin", end_side="dest"`
+    crosses ONCE -- no reciprocal, so `return_direction=` is now rejected
+    here (it would have no effect), and the walk makes exactly one
+    `cross_threshold` call."""
+    with pytest.raises(ValueError, match="no effect on a lone forward crossing"):
+        warp_beat(
+            _builder(), chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F",
+            map_id=36, event_id=1, dest_map_constant="MAP_ROUTE_02",
+            mechanism="threshold", direction="DOWN", beat_name="W1",
+            manifest_rows=ch05_rows, return_direction="UP", end_side="dest",
+        )
+
+    b = _builder()
+    warp_beat(
+        b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_1F", map_id=36,
+        event_id=1, dest_map_constant="MAP_ROUTE_02", mechanism="threshold",
+        direction="DOWN", beat_name="W1", manifest_rows=ch05_rows,
+        end_side="dest",
+    )
+    beat = b.build().beats[0]
+    assert "(ends on the far side)" in beat.description
+
+    legs: list[tuple[str, str]] = []
+
+    def _fake_cross_threshold(emu, name, approach, direction, dest_map):
+        legs.append((direction, dest_map))
+
+    def _noop(*args, **kwargs):
+        return None
+
+    from rpg2gba.playtest import assertions as real_assertions
+
+    monkeypatch.setattr(real_assertions, "cross_threshold", _fake_cross_threshold)
+    monkeypatch.setattr(real_assertions, "require_map", _noop)
+    monkeypatch.setattr(real_assertions, "assert_near", _noop)
+    monkeypatch.setattr(real_assertions, "assert_position_exact", _noop)
+
+    class _SettleEmu:
+        def settle_field(self, **kwargs) -> int:
+            return 0
+
+        def player_pos(self):
+            return (0, 0)
+
+    beat.run(_SettleEmu())
+
+    assert legs == [("DOWN", "MAP_ROUTE_02")]
 
 
 @pytest.mark.parametrize("target,expected", [

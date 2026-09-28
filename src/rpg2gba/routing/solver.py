@@ -18,7 +18,8 @@ the full contract.
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+import dataclasses
 from dataclasses import dataclass
 
 from ..chapter_manifest.schema import ManifestRow
@@ -251,37 +252,90 @@ def _derive_precedence(
     return tuple(sorted(edges, key=lambda e: (e.before, e.after, e.reason)))
 
 
+@dataclass(frozen=True)
+class _AnyOf:
+    """`after` must come after at least one of `befores` (a story enabler
+    group several rows satisfy alone)."""
+
+    after: str
+    befores: tuple[str, ...]
+    reason: str
+
+
 def _derive_story_precedence(
     enabled_by: Mapping[str, tuple[tuple[str, ...], ...]], group_by_row: Mapping[str, str],
-) -> tuple[PrecedenceEdge, ...]:
-    """Derive `PrecedenceEdge`s from the story model's `enabled_by`
+) -> tuple[tuple[PrecedenceEdge, ...], tuple[_AnyOf, ...]]:
+    """Derive precedence from the story model's `enabled_by`
     (REDERIVATION_PLAN.md §16.3 ruling 16).
 
     `enabled_by[row]` is a conjunction of groups; any row in a group enables
-    it. Each claimed writer in a group gives `before=<its group> ->
-    after=<row's group>`: with one writer that is exact, and with several
-    alternatives, coming after ALL of them is the order that guarantees one
-    has run. (Until 2026-09-27 a several-writer group gave no edge at all;
-    CH01's Auntie heal page -- var 101 >= 2, written by any of three rows --
-    then floated to before the starter and the ROM run found an empty party.)
-    An alternative no route group claims is dropped; if none is claimed the
-    group constrains nothing. `engine:` markers are skipped. Any edge that
-    would close a cycle is dropped later by `_acyclic_story_edges`.
+    it. A group with one claimed writer gives an edge `before=<its group> ->
+    after=<row's group>`; one with several gives an `_AnyOf`: after at least
+    one of them. (Until 2026-09-27 a several-writer group gave no edge at
+    all -- CH01's Auntie heal page floated to before the starter and the ROM
+    run found an empty party. From then to 2026-09-28 it demanded ALL the
+    writers, which held CH01's lab exit -- var 101, written in the lab, in
+    town and in Theo's house -- shut until Theo's house, so the lab could not
+    be left once its own starter had opened it.) A writer no route group
+    claims is dropped; a group the row's own group satisfies constrains
+    nothing; with none claimed, nothing. `engine:` markers are skipped.
+    Cycles are pruned later (`_acyclic_story_edges`, `_feasible_any_of`).
     """
     edges: set[PrecedenceEdge] = set()
+    any_of: set[_AnyOf] = set()
     for row_id, groups in enabled_by.items():
         after_group = group_by_row.get(row_id)
         if after_group is None:
             continue
         for alternatives in groups:
-            writers = [w for w in alternatives if not w.startswith("engine:")]
-            for writer in writers:
-                before_group = group_by_row.get(writer)
-                if before_group is None or before_group == after_group:
-                    continue
-                edges.add(PrecedenceEdge(before=before_group, after=after_group,
+            befores = sorted({group_by_row[w] for w in alternatives
+                              if not w.startswith("engine:") and w in group_by_row})
+            if not befores or after_group in befores:
+                continue
+            if len(befores) == 1:
+                writer = next(w for w in alternatives if group_by_row.get(w) == befores[0])
+                edges.add(PrecedenceEdge(before=befores[0], after=after_group,
                                          reason=f"story:{writer}->{row_id}"))
-    return tuple(sorted(edges, key=lambda e: (e.before, e.after, e.reason)))
+            else:
+                any_of.add(_AnyOf(after=after_group, befores=tuple(befores),
+                                  reason=f"story_any:{row_id}"))
+    return (tuple(sorted(edges, key=lambda e: (e.before, e.after, e.reason))),
+            tuple(sorted(any_of, key=lambda a: (a.after, a.befores, a.reason))))
+
+
+def _feasible_any_of(
+    edges: Sequence[PrecedenceEdge], any_of: Sequence[_AnyOf],
+) -> tuple[tuple[PrecedenceEdge, ...], tuple[_AnyOf, ...]]:
+    """`any_of` minus alternatives that must come after their `after` (a
+    cycle through `edges`). One alternative left becomes an edge; none left
+    drops the constraint (logged, as `_acyclic_story_edges` does)."""
+    succ: dict[str, set[str]] = {}
+    for e in edges:
+        succ.setdefault(e.before, set()).add(e.after)
+
+    def reaches(src: str, dst: str) -> bool:
+        seen, stack = set(), [src]
+        while stack:
+            node = stack.pop()
+            if node == dst:
+                return True
+            if node not in seen:
+                seen.add(node)
+                stack.extend(succ.get(node, ()))
+        return False
+
+    new_edges: list[PrecedenceEdge] = []
+    kept: list[_AnyOf] = []
+    for a in any_of:
+        befores = tuple(b for b in a.befores if not reaches(a.after, b))
+        if not befores:
+            logger.info("precedence: %s -- every alternative comes after %s; skipped",
+                        a.reason, a.after)
+        elif len(befores) == 1:
+            new_edges.append(PrecedenceEdge(before=befores[0], after=a.after, reason=a.reason))
+        else:
+            kept.append(dataclasses.replace(a, befores=befores))
+    return tuple(new_edges), tuple(kept)
 
 
 def _acyclic_story_edges(
@@ -502,6 +556,11 @@ def solve_route(
     occupancy: Mapping[int, MapOccupancy] | None = None,
     candidates: Mapping[str, tuple[RouteCandidate, ...]] | None = None,
     enabled_by: Mapping[str, tuple[tuple[str, ...], ...]] | None = None,
+    soft_precedence: (Sequence[PrecedenceEdge]
+                      | Callable[[Sequence[PrecedenceEdge],
+                                  Sequence[tuple[str, tuple[str, ...]]]],
+                                 Sequence[PrecedenceEdge]]) = (),
+    order_violations: Callable[[Sequence[str]], int] | None = None,
 ) -> RoutePlan:
     """Solve a walk order over `chapter`'s OWN beat groups and return a `RoutePlan`.
 
@@ -596,6 +655,31 @@ def solve_route(
     in a fixed deterministic candidate order, until no reversal improves or
     `_TWO_OPT_MAX_PASSES` is hit.
 
+    `soft_precedence` (default empty) is a caller-supplied batch of
+    `PrecedenceEdge`s merged in on the same footing as story edges: applied
+    AFTER the hard (self-switch, warp) edges and the kept story edges, and
+    only kept if it closes no cycle against everything already accepted
+    (hard + kept story), same discipline as `_acyclic_story_edges` -- a
+    dropped edge is logged at INFO with its own `reason`. An edge naming a
+    `before`/`after` group that isn't one of THIS chapter's own groups is
+    silently ignored (the caller -- `beat_gen.interiors` -- computes edges
+    over a broader region than any one chapter always sees). Intended for
+    interior-exit / arrival-nudge edges (`beat_gen.interiors`,
+    `investigations/warp-round-trips-and-gated-doors.md`'s 2026-09-28
+    ruling: "enter a dead-end interior, do all its beats, leave"). Passing
+    none reproduces prior behaviour exactly. It may also be a callable taking
+    the accepted hard + story edges and the story any-of constraints (`(after,
+    befores)`) and returning the soft edges: the interior-exit rule needs
+    both to tell first-visit beats from later ones.
+
+    `order_violations` (default None) counts, for an order prefix of group
+    ids, how often it breaks a constraint precedence can't state -- "once
+    inside a dead-end region, stay until its exit" (`beat_gen.interiors.
+    region_order_check`) is a disjunction (before the entry OR after the
+    exit), not an edge. The greedy seed places only groups adding the fewest
+    violations (logging when every choice adds one); 2-opt never raises the
+    seed's count.
+
     `solver_method` on the returned plan is always `"greedy+2opt"`.
     """
     effective_map_ids = map_ids if map_ids is not None else _default_map_ids()
@@ -646,7 +730,7 @@ def solve_route(
         for row_id in gp.rows:
             group_by_row[row_id] = gp.group_id
     self_switch_precedence = _derive_precedence(manifest_rows, group_by_row)
-    story_precedence = _derive_story_precedence(enabled_by or {}, group_by_row)
+    story_precedence, story_any_of = _derive_story_precedence(enabled_by or {}, group_by_row)
 
     entry_group_id = next(
         (gp.group_id for gp in group_points if (gp.map_id, gp.cell) == (entry_map, entry_cell)),
@@ -669,9 +753,27 @@ def solve_route(
             context="chapter exit",
         )
 
+    hard_precedence = tuple(self_switch_precedence) + tuple(warp_precedence)
+    kept_story_precedence = _acyclic_story_edges(hard_precedence, story_precedence)
+
+    own_group_ids = {gp.group_id for gp in group_points}
+    soft_edges = (soft_precedence(hard_precedence + kept_story_precedence,
+                                  tuple((a.after, a.befores) for a in story_any_of))
+                  if callable(soft_precedence) else soft_precedence)
+    own_soft_precedence = tuple(
+        e for e in soft_edges
+        if e.before in own_group_ids and e.after in own_group_ids
+    )
+    kept_soft_precedence = _acyclic_story_edges(
+        hard_precedence + kept_story_precedence, own_soft_precedence,
+    )
+
+    any_of_edges, any_of = _feasible_any_of(
+        hard_precedence + kept_story_precedence + kept_soft_precedence, story_any_of)
+
     precedence = tuple(sorted(
-        set(self_switch_precedence) | set(warp_precedence) | set(_acyclic_story_edges(
-            tuple(self_switch_precedence) + tuple(warp_precedence), story_precedence)),
+        set(self_switch_precedence) | set(warp_precedence)
+        | set(kept_story_precedence) | set(kept_soft_precedence) | set(any_of_edges),
         key=lambda e: (e.before, e.after, e.reason),
     ))
 
@@ -715,6 +817,11 @@ def solve_route(
     preds_of: dict[int, set[int]] = {idx: set() for idx in group_indices}
     for before_idx, after_idx in precedence_point_pairs:
         preds_of[after_idx].add(before_idx)
+    any_of_points = [(point_by_group[a.after], frozenset(point_by_group[b] for b in a.befores))
+                     for a in any_of]
+    any_of_by_after: dict[int, list[frozenset[int]]] = {}
+    for after_idx, befores in any_of_points:
+        any_of_by_after.setdefault(after_idx, []).append(befores)
 
     # --- candidate sites per point index -------------------------------
 
@@ -807,7 +914,8 @@ def solve_route(
     while remaining:
         current = placed[-1]
         available = sorted(
-            (idx for idx in remaining if preds_of[idx] <= placed_set),
+            (idx for idx in remaining if preds_of[idx] <= placed_set
+             and all(befores & placed_set for befores in any_of_by_after.get(idx, ()))),
             key=lambda idx: original_order[idx],
         )
         if not available:
@@ -816,6 +924,15 @@ def solve_route(
                 f"next (cycle among {sorted(group_id_at[i] for i in remaining)}); "
                 f"precedence edges: {[e.reason for e in precedence]}"
             )
+        if order_violations is not None:
+            prefix = [group_id_at[i] for i in placed[1:]]
+            counts = {idx: order_violations([*prefix, group_id_at[idx]]) for idx in available}
+            fewest = min(counts.values())
+            if fewest > order_violations(prefix):
+                logger.info("order_violations: every available group breaks the order after "
+                            "%s; placing one of %s anyway", prefix[-1:],
+                            [group_id_at[i] for i in available if counts[i] == fewest])
+            available = [idx for idx in available if counts[idx] == fewest]
 
         layer_by_idx: dict[int, dict[Cell, float]] = {}
         scored: list[tuple[float, int]] = []
@@ -901,9 +1018,19 @@ def solve_route(
     def total_cost(seq: list[int]) -> float | None:
         return _dp_cost(seq)
 
+    def violations(seq: list[int]) -> int:
+        return (0 if order_violations is None
+                else order_violations([group_id_at[i] for i in seq[1:-1]]))
+
+    # 2-opt may not add to what the seed had to break (logged above).
+    seed_violations = violations(sequence)
+
     def precedence_ok(seq: list[int]) -> bool:
         pos = {point: i for i, point in enumerate(seq)}
-        return all(pos[before] < pos[after] for before, after in precedence_point_pairs)
+        return (all(pos[before] < pos[after] for before, after in precedence_point_pairs)
+                and all(min(pos[b] for b in befores) < pos[after]
+                        for after, befores in any_of_points)
+                and violations(seq) <= seed_violations)
 
     passes = 0
     improved = True
@@ -1019,6 +1146,17 @@ def solve_route(
         ))
 
     tile_cost = sum(s.tile_count for s in segments)
+
+    # An any-of constraint is recorded as the edge the solved order used: its
+    # earliest alternative (the plan's schema carries edges only).
+    final_pos = {group_id_at[p]: i for i, p in enumerate(sequence) if p in group_id_at}
+    precedence = tuple(sorted(
+        set(precedence) | {
+            PrecedenceEdge(before=min(a.befores, key=final_pos.__getitem__), after=a.after,
+                           reason=a.reason)
+            for a in any_of},
+        key=lambda e: (e.before, e.after, e.reason),
+    ))
 
     return RoutePlan(
         chapter_id=chapter_id,

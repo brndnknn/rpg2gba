@@ -52,8 +52,11 @@ def test_ch05_is_green(plan):
 def test_ch05_plan_shape(plan):
     assert plan.chapter_id == "CH05" and plan.predecessor == "CH04"
     # 20 own beats + 3 successor claims on CH04's cave mouth (§10 R2/R3,
-    # C6 part two): the warp, its arrival nudge and the nudge's arms.
-    assert len(plan.beats) == 23
+    # C6 part two): the warp, its arrival nudge and the nudge's arms. Plus
+    # 2 transits since one-way warps (2026-09-28 ruling): each reverse warp
+    # ends on its destination for the arrival nudge there, then walks back.
+    assert len(plan.beats) == 25
+    assert sum(b.template == "transit" for b in plan.beats) == 2
     inbound = [b for b in plan.beats if dict(b.kwargs).get("manifest_chapter_id") == "CH04"]
     assert [b.name for b in inbound] == [
         "m035e001_warp", "m035e001_arrival_nudge", "m035e001_arrival_nudge_arms"]
@@ -73,6 +76,7 @@ def test_every_beat_starts_on_the_map_the_player_is_on(plan):
     player's current map."""
     from rpg2gba.beat_gen.__main__ import BUILD_DIR, _warp_dest
     from rpg2gba.beat_floor.walk import floor_for_chapter
+    from rpg2gba.playtest.archetypes import map_uranium_id
 
     floors = {**floor_for_chapter("CH04", build_dir=BUILD_DIR),
               **floor_for_chapter("CH05", build_dir=BUILD_DIR)}
@@ -83,6 +87,9 @@ def test_every_beat_starts_on_the_map_the_player_is_on(plan):
             sides = {"origin": beat.map_id, "dest": _warp_dest(beat, floors)}
             assert cur == sides[kw["start_side"]], beat.name
             cur = sides[kw["end_side"]]
+        elif beat.template == "transit":
+            assert cur == beat.map_id, beat.name
+            cur = map_uranium_id(kw["hops"][-1][4])
         else:
             assert cur == beat.map_id, beat.name
 
@@ -134,7 +141,10 @@ def test_generated_module_imports_and_claims_every_owned_row(plan, written):
     claimed = {r for b in own for r in b.rows}
     planned = {r for b in plan.beats for r in b.rows}
     assert planned <= claimed
-    assert all(b.assertions is not None for b in own)   # a GENERATED module declares
+    # A GENERATED module declares -- except a transit, which claims no rows
+    # and is only the way between two beats (`generic.transit_beat`).
+    transits = {b.name for b in plan.beats if b.template == "transit"}
+    assert all(b.assertions is not None for b in own if b.name not in transits)
 
 
 def test_route_artifact_is_a_loadable_plan(written):

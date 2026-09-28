@@ -1214,30 +1214,47 @@ def test_story_precedence_edges_from_single_writer_groups():
         "map049/ev002/p1": (("map049/ev001/p0",),),
         # The engine marker constrains nothing; the real writer does.
         "map049/ev022/p0": (("engine:whiteout",), ("map050/ev019/p0",)),
-        # Two alternative writers: after every claimed one (map011's is
-        # unclaimed, so dropped) -- after all of them guarantees one ran.
+        # Two alternative writers, one unclaimed (map011's, dropped): the
+        # claimed one alone is an edge.
         "map010/ev002/p0": (("map010/ev001/p0", "map011/ev001/p0"),),
         # A writer no group claims (another chapter's): no edge.
         "map010/ev001/p0": (("map099/ev001/p0",),),
     }
-    edges = _derive_story_precedence(enabled_by, group_by_row)
+    edges, any_of = _derive_story_precedence(enabled_by, group_by_row)
     assert [(e.before, e.after) for e in edges] == [
         ("a", "b"), ("auntie", "door"), ("starter", "whiteout")]
     assert edges[1].reason == "story:map049/ev001/p0->map049/ev002/p1"
+    assert any_of == ()
 
 
-def test_story_precedence_orders_after_every_alternative_writer():
-    """CH01's Auntie heal page (2026-09-27 ROM run): var 101 >= 2 is written
-    by any of three rows. The heal page comes after all three."""
-    from rpg2gba.routing.solver import _derive_story_precedence
+def test_story_precedence_several_writers_is_any_of():
+    """CH01's Auntie heal page: var 101 >= 2 is written by any of three rows,
+    so it comes after at least one of them. (2026-09-27 demanded all three;
+    2026-09-28 found that held CH01's lab exit -- same var, one writer in
+    the lab -- shut until Theo's house.)"""
+    from rpg2gba.routing.solver import _AnyOf, _derive_story_precedence
 
     group_by_row = {"map032/ev009/p2": "ceremony", "map050/ev019/p0": "starter",
                     "map172/ev004/p0": "pokepod", "map049/ev001/p3": "heal"}
-    edges = _derive_story_precedence(
+    edges, any_of = _derive_story_precedence(
         {"map049/ev001/p3": (("map032/ev009/p2", "map050/ev019/p0", "map172/ev004/p0"),)},
         group_by_row)
-    assert {(e.before, e.after) for e in edges} == {
-        ("ceremony", "heal"), ("starter", "heal"), ("pokepod", "heal")}
+    assert edges == ()
+    assert any_of == (_AnyOf(after="heal", befores=("ceremony", "pokepod", "starter"),
+                             reason="story_any:map049/ev001/p3"),)
+
+
+def test_any_of_drops_alternatives_that_close_a_cycle():
+    from rpg2gba.routing.plan import PrecedenceEdge
+    from rpg2gba.routing.solver import _AnyOf, _feasible_any_of
+
+    hard = (PrecedenceEdge(before="x", after="a", reason="t"),)
+    # a must come after x, so "a" can't be x's enabler; y alone is left -> edge.
+    edges, kept = _feasible_any_of(hard, (_AnyOf(after="x", befores=("a", "y"), reason="r"),))
+    assert [(e.before, e.after) for e in edges] == [("y", "x")] and kept == ()
+    # Every alternative after it: dropped.
+    edges, kept = _feasible_any_of(hard, (_AnyOf(after="x", befores=("a",) * 2, reason="r"),))
+    assert edges == () and kept == ()
 
 
 def test_story_precedence_ignores_a_writer_in_the_same_group():
@@ -1245,7 +1262,7 @@ def test_story_precedence_ignores_a_writer_in_the_same_group():
 
     group_by_row = {"map001/ev001/p0": "g", "map001/ev001/p1": "g"}
     assert _derive_story_precedence(
-        {"map001/ev001/p1": (("map001/ev001/p0",),)}, group_by_row) == ()
+        {"map001/ev001/p1": (("map001/ev001/p0",),)}, group_by_row) == ((), ())
 
 
 def test_story_edge_that_closes_a_cycle_is_skipped():
@@ -1301,3 +1318,180 @@ def test_warp_topology_counts_only_first_entry_warps() -> None:
     assert {(e.before, e.after) for e in edges if e.reason == "warp_topology:map102"} == {
         ("HouseDoor", "TownBeat"), ("HouseDoor", "TownDoor")}
     assert ("TownDoor", "InteriorExit") in {(e.before, e.after) for e in edges}
+
+
+# ---------------------------------------------------------------------------
+# soft_precedence (beat_gen.interiors)
+# ---------------------------------------------------------------------------
+
+
+def test_soft_precedence_orders_interior_before_exit() -> None:
+    """`soft_precedence` forces an order the cost function alone would never
+    pick -- the entry->exit direct hop is far cheaper than entry->interior->
+    exit, mirroring the "cost-optimal is wrong" shape of the warp-topology
+    test above."""
+    chapter, map_ids = _chapter_with_groups(
+        ("Interior", "MAP_INT", 101), ("Exit", "MAP_EXIT", 102),
+    )
+
+    w = _World()
+    w.home(100)  # entry
+    w.home(101)  # Interior
+    w.home(102)  # Exit
+    w.home(103)  # route exit
+    w.add(100, 101, 201, 5)   # entry <-> Interior: expensive
+    w.add(100, 102, 202, 1)   # entry <-> Exit: cheap shortcut (the trap)
+    w.add(101, 102, 203, 1)   # Interior <-> Exit: cheap
+    w.add(102, 103, 204, 1)   # Exit <-> route exit: cheap
+
+    soft = (PrecedenceEdge(before="Interior", after="Exit", reason="interior_exit:map100<-map101"),)
+
+    route = solve_route(
+        chapter, "TESTCH", manifest_rows=[],
+        graphs=w.graphs, overlays=w.overlays, world=w.build(),
+        entry=(100, (0, 0)), exit_=(103, (0, 0)), map_ids=map_ids,
+        soft_precedence=soft,
+    )
+
+    assert PrecedenceEdge(
+        before="Interior", after="Exit", reason="interior_exit:map100<-map101",
+    ) in route.precedence
+    group_order = [n.group for n in route.nodes if n.kind == "group"]
+    assert group_order == ["Interior", "Exit"]
+
+
+def test_soft_precedence_edge_closing_a_cycle_is_dropped_and_logged(caplog) -> None:  # noqa: ANN001
+    """A soft edge that would close a cycle against an already-accepted hard
+    edge is dropped (never applied) and logged at INFO -- same discipline as
+    a story edge, never silently changing the plan's precedence."""
+    intro_row = _warp_row("map101/ev005/p0", map_id=101, event_id=5)
+
+    builder = ChapterBuilder("test", doc="reference/chapters/00-test.md")
+
+    @builder.beat("Wintro", "introduces the far map", map_constant="MAP_WINTRO", at=(0, 0),
+                  group="Wintro", rows=(intro_row.row_id,))
+    def wintro(emu) -> None:  # noqa: ANN001
+        pass
+
+    @builder.beat("Bfar", "far-side beat", map_constant="MAP_BFAR", at=(0, 0), group="Bfar")
+    def bfar(emu) -> None:  # noqa: ANN001
+        pass
+
+    chapter = builder.build()
+    map_ids = {"MAP_WINTRO": 101, "MAP_BFAR": 102}
+
+    w = _World()
+    w.home(100)
+    w.home(101)
+    w.home(102)
+    w.home(103)
+    w.add(100, 101, 201, 5)
+    w.add(100, 102, 202, 1)
+    w.add(101, 103, 204, 1)
+    w.add(102, 103, 205, 5)
+
+    edges = w.edges + [
+        WorldEdge(src_map=101, dst_map=102, kind="warp",
+                  src_cell=(0, 0), dst_cell=(0, 0), event_id=5),
+        WorldEdge(src_map=102, dst_map=101, kind="warp",
+                  src_cell=(0, 0), dst_cell=(0, 0), event_id=6),
+    ]
+    world = _world(edges, w.map_ids)
+
+    # The hard warp-topology edge is Wintro -> Bfar (Wintro introduces map
+    # 102). A soft edge asking for the reverse closes a cycle and must be
+    # dropped.
+    soft = (PrecedenceEdge(before="Bfar", after="Wintro", reason="interior_exit:mockcycle"),)
+
+    with caplog.at_level("INFO"):
+        route = solve_route(
+            chapter, "TESTCH", manifest_rows=[intro_row],
+            graphs=w.graphs, overlays=w.overlays, world=world,
+            entry=(100, (0, 0)), exit_=(103, (0, 0)), map_ids=map_ids,
+            soft_precedence=soft,
+        )
+
+    assert PrecedenceEdge(before="Bfar", after="Wintro", reason="interior_exit:mockcycle") \
+        not in route.precedence
+    assert PrecedenceEdge(before="Wintro", after="Bfar", reason="warp_topology:map102") \
+        in route.precedence
+    assert any("interior_exit:mockcycle" in rec.message for rec in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# order_violations
+# ---------------------------------------------------------------------------
+
+
+def _p1_immediately_before_p2_count(seq) -> int:  # noqa: ANN001
+    seq = list(seq)
+    return sum(1 for i in range(len(seq) - 1) if seq[i] == "P1" and seq[i + 1] == "P2")
+
+
+def test_order_violations_keeps_cost_optimal_interleave_out_of_the_solved_order() -> None:
+    """Cost alone wants P1 immediately followed by P2 (E-P1-P2-P3-exit is the
+    cheapest order); `order_violations` counts that adjacency as a break, so
+    the solved order must place something else right after P1 even though it
+    costs more, and end with zero violations."""
+    chapter, map_ids = _chapter_with_groups(
+        ("P1", "MAP_P1", 101), ("P2", "MAP_P2", 102), ("P3", "MAP_P3", 103),
+    )
+
+    w = _World()
+    for mid in (100, 101, 102, 103, 104):  # entry, P1, P2, P3, exit
+        w.home(mid)
+
+    w.add(100, 101, 201, 2)   # E-P1: cheap
+    w.add(100, 102, 202, 10)  # E-P2: expensive
+    w.add(100, 103, 203, 10)  # E-P3: expensive
+    w.add(101, 102, 204, 2)   # P1-P2: cheap
+    w.add(101, 103, 205, 10)  # P1-P3: expensive
+    w.add(102, 103, 206, 2)   # P2-P3: cheap
+    w.add(101, 104, 207, 10)  # P1-exit: expensive
+    w.add(102, 104, 208, 10)  # P2-exit: expensive
+    w.add(103, 104, 209, 2)   # P3-exit: cheap
+
+    route = solve_route(
+        chapter, "TESTCH", manifest_rows=[],
+        graphs=w.graphs, overlays=w.overlays, world=w.build(),
+        entry=(100, (0, 0)), exit_=(104, (0, 0)), map_ids=map_ids,
+        order_violations=_p1_immediately_before_p2_count,
+    )
+
+    group_order = [n.group for n in route.nodes if n.kind == "group"]
+    assert _p1_immediately_before_p2_count(group_order) == 0
+    # the forbidden adjacency (P1, P2, P3) costs 2+2+2+2=8 -- strictly
+    # cheaper than anything a zero-violation order allows, proving the
+    # constraint bit actually steered the solve.
+    assert group_order != ["P1", "P2", "P3"]
+
+
+def test_order_violations_falls_back_and_logs_when_every_group_breaks_it(caplog) -> None:  # noqa: ANN001
+    """An `order_violations` that adds a break no matter which group is
+    placed next must not make the solver fail -- it falls back to precedence
+    alone (placing one of the tied-fewest-violation groups) and logs the
+    decision at INFO."""
+    chapter, map_ids = _chapter_with_groups(("A", "MAP_A", 101))
+    w = _World()
+    w.home(100)
+    w.home(101)
+    w.home(103)
+    w.add(100, 101, 201, 2)
+    w.add(101, 103, 202, 2)
+
+    # Any non-empty prefix counts one violation; the empty prefix counts
+    # none -- so placing the first (and only) group always adds a break.
+    with caplog.at_level("INFO"):
+        route = solve_route(
+            chapter, "TESTCH", manifest_rows=[],
+            graphs=w.graphs, overlays=w.overlays, world=w.build(),
+            entry=(100, (0, 0)), exit_=(103, (0, 0)), map_ids=map_ids,
+            order_violations=lambda seq: 1 if seq else 0,
+        )
+
+    group_order = [n.group for n in route.nodes if n.kind == "group"]
+    assert group_order == ["A"]
+    assert any(
+        "order_violations: every available group breaks the order" in rec.message
+        for rec in caplog.records
+    )

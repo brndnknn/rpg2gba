@@ -49,6 +49,11 @@ from rpg2gba.beat_gen.adapt import (
 from rpg2gba.beat_gen.arms import annotate_random_arms, blocked_arms, split_choice_arms
 from rpg2gba.beat_gen.boundary import inbound_rows, split_outbound
 from rpg2gba.beat_gen.continuity import thread_maps
+from rpg2gba.beat_gen.interiors import (
+    arrival_nudge_edges,
+    interior_exit_edges,
+    region_order_check,
+)
 from rpg2gba.beat_gen.reach import engine_spawn, reachable_sites
 from rpg2gba.beat_gen.emit import emit_module
 from rpg2gba.beat_gen.facing import (
@@ -344,6 +349,39 @@ def _stepped_transfers(maps: frozenset[int], build_dir: Path) -> frozenset[tuple
     return frozenset(out)
 
 
+def _gated_doors(maps: frozenset[int], build_dir: Path) -> frozenset[tuple[int, int]]:
+    """(map id, event id) of every GATED door among `maps`: an event whose
+    player-touch pages don't all transfer (`metadata_wiring.classify_event`'s
+    own "object", not "warp", outcome -- a live non-transfer touch page plus
+    a conditioned transfer page, its own docstring's canonical example is
+    Map049 EV002, the starting house's exit). Reused rather than re-derived
+    (CLAUDE.md §4.3): that function already carries the S1 keep-list rule and
+    the exact reasoning for why a gate must not collapse into an
+    unconditional warp. `slice_ids=maps` -- an out-of-slice transfer here
+    would be a chapter-boundary warp, not a gate, and `classify_event`
+    already returns "skip" for those rather than "object"."""
+    from rpg2gba.tileset_converter.metadata_wiring import classify_event
+
+    out: set[tuple[int, int]] = set()
+    for map_id in sorted(maps):
+        for event in load_map_json(map_id, build_dir / "maps").get("events", []):
+            if not event:
+                continue
+            kind, _ = classify_event(event, maps)
+            if kind == "object" and _event_transfers_present(event):
+                out.add((map_id, event["id"]))
+    return frozenset(out)
+
+
+def _event_transfers_present(event: dict) -> bool:
+    """Does any page of `event` carry a code-201 Transfer Player? Cheap
+    local re-check (`metadata_wiring._event_transfers` is private) so
+    `_gated_doors` only flags "object" events that are actually doors, not
+    every non-warp event on the map."""
+    return any(cmd.get("code") == 201 for page in event.get("pages", []) or []
+               for cmd in page.get("list", []) or [])
+
+
 def _warp_presses(beats: Sequence[PlannedBeat]) -> dict[tuple[int, int], str]:
     """(map id, event id) -> the direction each warp beat presses into its
     warp (the side the route solver picked)."""
@@ -410,7 +448,11 @@ def _route_between(world: WorldGraph, maps: frozenset[int],
     usable = [(e, h) for e in edges if (h := hop_for(e)) is not None]
 
     @functools.cache
-    def route(a: int, b: int) -> tuple[tuple[int, int, tuple[str, int, int, str, str]], ...]:
+    def route(a: int, b: int) -> "tuple[continuity.RouteStep, ...]":
+        # The 4th element of each step is the hop's door event id (the
+        # source map's warp event), which `continuity.thread_maps`' gated-
+        # door guard needs -- `Hop` itself (`generic.transit_beat`'s own
+        # shape) carries no event id, so it rides alongside instead.
         prev: dict[int, tuple[int, tuple]] = {a: (a, ())}
         frontier = [a]
         while frontier and b not in prev:
@@ -418,7 +460,7 @@ def _route_between(world: WorldGraph, maps: frozenset[int],
             for m in frontier:
                 for e, h in usable:
                     if e.src_map == m and e.dst_map not in prev:
-                        prev[e.dst_map] = (m, (e.src_map, e.dst_map, h))
+                        prev[e.dst_map] = (m, (e.src_map, e.dst_map, h, e.event_id))
                         nxt.append(e.dst_map)
             frontier = nxt
         if b not in prev or a == b:
@@ -873,12 +915,28 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     # Ruling 16: story-state enablers order beats too. Every chain
     # chapter's verdicts, since inbound rows are the predecessor's.
     enabled_by = {v.row_id: v.enabled_by for s in stories.values() for v in s.rows}
+    # 2026-09-28 ruling (one-way warps): enter a dead-end interior, do its
+    # first-visit beats, leave; an arrival nudge after the warp landing on it.
+    warp_beats = [b for b in beats if b.template == "warp"]
+    group_map = {b.group: b.map_id for b in reversed(beats)}
+    soft = arrival_nudge_edges(
+        nudge_groups={b.group: (b.map_id, map_uranium_id(dict(b.kwargs)["from_map_constant"]))
+                      for b in beats if b.template == "arrival_nudge"},
+        warp_groups={b.group: (b.map_id, _warp_dest(b, floors)) for b in warp_beats})
+    regions = dict(
+        chapter_maps=frozenset(group_map.values()) | {entry[0]}, entry_map=entry[0],
+        group_map=group_map,
+        group_warps={b.group: ((b.map_id, int(dict(b.kwargs)["event_id"])),)
+                     for b in warp_beats})
     route = solve_route(
         chapter_from_locations(chapter_id, records), chapter_id,
         manifest_rows=all_rows, graphs=graphs, overlays=overlays,
         world=world, map_ids=_load_map_ids(build_dir),
         occupancy=occupancy, candidates=candidates, entry=entry,
         enabled_by=enabled_by,
+        soft_precedence=lambda accepted, any_of: soft + interior_exit_edges(
+            world, **regions, hard_and_story=accepted, any_of=any_of),
+        order_violations=region_order_check(world, **regions),
     )
 
     # 6. Order, then adapt's route half. A warp whose destination is on no
@@ -916,6 +974,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
             world, chain_maps, reachable_sites(entry, graphs, world, chain_maps, occupancy),
             graphs, stepped_transfers=_stepped_transfers(chain_maps, build_dir),
             warp_presses=_warp_presses(beats)),
+        gated_doors=_gated_doors(chain_maps, build_dir),
     )
 
     # 8. White-out fork beats ride after their enablers (`beat_gen/whiteout.py`).
