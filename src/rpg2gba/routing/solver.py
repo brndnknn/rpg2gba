@@ -304,6 +304,30 @@ def _derive_story_precedence(
             tuple(sorted(any_of, key=lambda a: (a.after, a.befores, a.reason))))
 
 
+def _derive_killer_precedence(
+    killed_before: Mapping[str, tuple[str, ...]], group_by_row: Mapping[str, str],
+) -> tuple[PrecedenceEdge, ...]:
+    """Hard `before` edges from `killed_before[row]` = the claimed rows whose
+    write ends `row`'s page (a higher page of its event goes live;
+    `beat_gen.liveness_edges`): `row`'s group must come BEFORE every killer's
+    group -- one edge per killer, so it precedes all of them (the opposite
+    polarity of an any-of enabler). A killer in `row`'s own group constrains
+    nothing; a row or killer no route group claims is skipped. Reason
+    `killer:<writer>-><row>`; cycles are pruned by `_acyclic_story_edges`."""
+    edges: dict[tuple[str, str], PrecedenceEdge] = {}
+    for row_id, writers in killed_before.items():
+        before_group = group_by_row.get(row_id)
+        if before_group is None:
+            continue
+        for writer in writers:
+            after_group = group_by_row.get(writer)
+            if after_group is None or after_group == before_group:
+                continue
+            edges.setdefault((before_group, after_group), PrecedenceEdge(
+                before=before_group, after=after_group, reason=f"killer:{writer}->{row_id}"))
+    return tuple(sorted(edges.values(), key=lambda e: (e.before, e.after, e.reason)))
+
+
 def _feasible_any_of(
     edges: Sequence[PrecedenceEdge], any_of: Sequence[_AnyOf],
 ) -> tuple[tuple[PrecedenceEdge, ...], tuple[_AnyOf, ...]]:
@@ -341,6 +365,7 @@ def _feasible_any_of(
 
 def _acyclic_story_edges(
     hard: Sequence[PrecedenceEdge], story: Sequence[PrecedenceEdge],
+    *, level: int = logging.INFO,
 ) -> tuple[PrecedenceEdge, ...]:
     """The story edges that fit on top of the hard (self-switch, warp) ones.
 
@@ -368,8 +393,8 @@ def _acyclic_story_edges(
     kept: list[PrecedenceEdge] = []
     for e in sorted(story, key=lambda e: (e.before, e.after, e.reason)):
         if reaches(e.after, e.before):
-            logger.info("precedence: %s would close a cycle (%s -> %s); skipped",
-                        e.reason, e.before, e.after)
+            logger.log(level, "precedence: %s would close a cycle (%s -> %s); skipped",
+                       e.reason, e.before, e.after)
             continue
         succ.setdefault(e.before, set()).add(e.after)
         kept.append(e)
@@ -558,6 +583,8 @@ def solve_route(
     candidates: Mapping[str, tuple[RouteCandidate, ...]] | None = None,
     enabled_by: Mapping[str, tuple[tuple[str, ...], ...]] | None = None,
     guard_enabled_by: Mapping[str, tuple[tuple[str, ...], ...]] | None = None,
+    threshold_enabled_by: Mapping[str, tuple[tuple[str, ...], ...]] | None = None,
+    killed_before: Mapping[str, tuple[str, ...]] | None = None,
     soft_precedence: (Sequence[PrecedenceEdge]
                       | Callable[[Sequence[PrecedenceEdge],
                                   Sequence[tuple[str, tuple[str, ...]]]],
@@ -680,6 +707,15 @@ def solve_route(
     edge, several an any-of -- but with reason prefix `guard`, so the route plan
     shows which precedence came from a wall.
 
+    `threshold_enabled_by` (same shape, default none) holds the enabler groups
+    whose candidates were filtered to those that can satisfy the row's
+    threshold (`beat_gen.liveness_edges`); reason prefix `threshold`.
+    `killed_before` (row -> rows, default none) orders a page's beat before
+    every claimed write that makes a higher page of its event live: hard
+    edges, reason `killer:<writer>-><row>`, tried after the story edges; one
+    that would close a cycle is dropped with a WARNING (the plan-time
+    liveness check keeps reporting that page).
+
     `order_violations` (default None) counts, for an order prefix of group
     ids, how often it breaks a constraint precedence can't state -- "once
     inside a dead-end region, stay until its exit" (`beat_gen.interiors.
@@ -741,10 +777,13 @@ def solve_route(
     story_precedence, story_any_of = _derive_story_precedence(enabled_by or {}, group_by_row)
     guard_precedence, guard_any_of = _derive_story_precedence(
         guard_enabled_by or {}, group_by_row, kind="guard")
-    story_precedence = tuple(sorted({*story_precedence, *guard_precedence},
+    threshold_precedence, threshold_any_of = _derive_story_precedence(
+        threshold_enabled_by or {}, group_by_row, kind="threshold")
+    story_precedence = tuple(sorted({*story_precedence, *guard_precedence, *threshold_precedence},
                                     key=lambda e: (e.before, e.after, e.reason)))
-    story_any_of = tuple(sorted({*story_any_of, *guard_any_of},
+    story_any_of = tuple(sorted({*story_any_of, *guard_any_of, *threshold_any_of},
                                 key=lambda a: (a.after, a.befores, a.reason)))
+    killer_precedence = _derive_killer_precedence(killed_before or {}, group_by_row)
 
     entry_group_id = next(
         (gp.group_id for gp in group_points if (gp.map_id, gp.cell) == (entry_map, entry_cell)),
@@ -769,6 +808,9 @@ def solve_route(
 
     hard_precedence = tuple(self_switch_precedence) + tuple(warp_precedence)
     kept_story_precedence = _acyclic_story_edges(hard_precedence, story_precedence)
+    kept_killer_precedence = _acyclic_story_edges(
+        hard_precedence + kept_story_precedence, killer_precedence, level=logging.WARNING)
+    kept_story_precedence = tuple(kept_story_precedence) + kept_killer_precedence
 
     own_group_ids = {gp.group_id for gp in group_points}
     soft_edges = (soft_precedence(hard_precedence + kept_story_precedence,

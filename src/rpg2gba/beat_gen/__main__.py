@@ -60,6 +60,7 @@ from rpg2gba.beat_gen.guard_reach import (
     guard_enabled_by,
     guard_reaches,
 )
+from rpg2gba.beat_gen.liveness_edges import WriteModel, killed_before, split_threshold_enablers
 from rpg2gba.beat_gen.never_fires import (
     MapFacts,
     TOUCH_TRIGGERS,
@@ -1064,6 +1065,20 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     # Ruling 16: story-state enablers order beats too. Every chain
     # chapter's verdicts, since inbound rows are the predecessor's.
     enabled_by = {v.row_id: v.enabled_by for s in stories.values() for v in s.rows}
+    # 2026-09-29 ruling (page liveness): an enabler candidate that can't reach a
+    # `>=` threshold drops out (`threshold:` edges), and a page's beat comes
+    # before every claimed write that lifts a higher page of its event
+    # (`killer:` edges) -- `beat_gen/liveness_edges.py`.
+    def state_of(rid: str):  # noqa: ANN202
+        if not rid.startswith("map"):    # a common-event row / an engine marker: no map state
+            return None
+        return row_states(parse_row_id(rid).map_id).get(rid)
+    claimed_rows = {r for b in beats for r in b.rows}
+    wm = WriteModel(state_of, _page_for(build_dir))
+    story_enabled_by, threshold_by = split_threshold_enablers(
+        enabled_by, wm=wm, seed=seeds[chapter_id], claimed_rows=claimed_rows)
+    killers = killed_before(beats, wm=wm, seed=seeds[chapter_id],
+                            claimed_rows=claimed_rows)
     # 2026-09-28 ruling (one-way warps): enter a dead-end interior, do its
     # first-visit beats, leave; an arrival nudge after the warp landing on it.
     warp_beats = [b for b in beats if b.template == "warp"]
@@ -1082,7 +1097,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         manifest_rows=all_rows, graphs=graphs, overlays=overlays,
         world=world, map_ids=_load_map_ids(build_dir),
         occupancy=occupancy, candidates=candidates, entry=entry,
-        enabled_by=enabled_by,
+        enabled_by=story_enabled_by, threshold_enabled_by=threshold_by, killed_before=killers,
         guard_enabled_by=guard_enabled_by(guard_waits, {r.beat_id: r.rows[0] for r in records}),
         soft_precedence=lambda accepted, any_of: soft + interior_exit_edges(
             world, **regions, hard_and_story=accepted, any_of=any_of),
