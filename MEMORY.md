@@ -291,6 +291,22 @@ Bambo reward thresholds (count-of-owned, not switches/vars) from `213_Bambo_Rewa
 
 ## Last Session Summary
 
+**2026-09-29 (ROM runs 19–21 through the lab — each fix exposed the next layer):** Run 18's
+guard fix led to five generator changes, each committed and suite-green:
+- derived `never_fires`;
+- guard-ordering edges;
+- a plan-time page-liveness check;
+- solver killer/threshold edges;
+- inline `\ch` parsing, plus the professor's No → p2 → Yes round trip.
+
+Then one harness probe fix (starter reveal is speech, not a sprite). CH01 went from 39 to 47 passing
+beats on the ROM. Run 22 is held at the operator's call. **Lessons:** (1) a wrong `never_fires` silently
+satisfies the frozen grade — relabelling p2 honestly is what exposed hand row `map050/ev005/p2`;
+(2) a new check's first real-data run finds its own bugs (same-beat p0→p1, "undecided" read as
+"never") before it finds the codebase's — verify every surprising demotion against the scripts;
+(3) a probe written from a doc (`starter_selector_scene.json`'s stale note) instead of the emitter
+fails on first contact with the ROM.
+
 **2026-09-28 (one-way warps):** The operator proposed one-way warp beats plus "enter, do the map,
 leave" ordering. Sub-agents measured it and built it. Regeneration then exposed two design gaps:
 precedence edges can't say "stay inside until the exit" (now a violation count on the order), and
@@ -299,14 +315,4 @@ guard caught a bad order at generation time that would otherwise have been a ROM
 loud paid for itself on its first run. **Second lesson:** a diagnosis from a ROM message needs the
 source of the message confirmed. "Hey, where are you going?" was a converter-widened guard row, not
 the exit door, and the ROM run proved it.
-
-**2026-09-24 (C8 finished — stage 7 delegated back, stage 5 cleared refusals instead of adding them):**
-The operator dropped the C8 assignment and asked the build agent to finish C8. Stage 7's three tasks
-went to parallel Sonnet agents with disjoint files. The lead took the task-1 design call ("refuse
-precisely") and wrote stage 5. **Finding:** whole-statement parsing would have made the three
-engine-unlock writes *silent*, because the floor has no kind for an `EngineKey` write. The old
-head-based refusal was the only thing keeping them visible. The operator approved a
-new floor kind, `engine_flag_write`, which now asserts them. **Lesson:** when a change
-makes a refusal disappear, check that something downstream *asserts* the fact before counting it
-as a win. A refusal that goes quiet can be a gap that went quiet.
 

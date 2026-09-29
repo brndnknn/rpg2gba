@@ -10,6 +10,17 @@
 
 ## Retired Session Summaries
 
+## Archived 2026-09-29 — Last Session Summary entry 2026-09-24 (C8 finished — stage 7 delegated back, stage 5 cleared refusals instead of adding them)
+
+The operator dropped the C8 assignment and asked the build agent to finish C8. Stage 7's three tasks
+went to parallel Sonnet agents with disjoint files. The lead took the task-1 design call ("refuse
+precisely") and wrote stage 5. **Finding:** whole-statement parsing would have made the three
+engine-unlock writes *silent*, because the floor has no kind for an `EngineKey` write. The old
+head-based refusal was the only thing keeping them visible. The operator approved a
+new floor kind, `engine_flag_write`, which now asserts them. **Lesson:** when a change
+makes a refusal disappear, check that something downstream *asserts* the fact before counting it
+as a win. A refusal that goes quiet can be a gap that went quiet.
+
 ## Archived 2026-09-28 — Last Session Summary entry 2026-09-18c (C6 plan's open questions all answered — no hints needed anywhere)
 
 Docs only.
