@@ -363,12 +363,16 @@ def archetype_kwargs(
     *,
     map_constant_fn: MapConstantFn,
     rows: Sequence[ManifestRow] = (),
+    moved_by_fn: Callable[[int, int], tuple[str, ...]] | None = None,
 ) -> Kwargs:
     """The source-derived kwargs for one archetype beat (sorted, via
     `make_kwargs`). Only keywords the template accepts. Raises `ValueError`
     naming the row if a value can't be derived (a floor without the
     expected assertion, an unknown item, an unmintable trainer). `rows` is
-    the manifest, needed only to find a toggling NPC's revealed page."""
+    the manifest, needed only to find a toggling NPC's revealed page.
+    `moved_by_fn(map_id, event_id)` returns the rows whose scripts move that
+    event (`moved_objects.scene_moved_events`); a flavour NPC with any gets
+    `moved_by=` so its harness may follow the live position (ROM run 24)."""
     fn = _ARCHETYPE_KWARGS.get(match.archetype)
     if fn is None:
         raise ValueError(
@@ -376,6 +380,10 @@ def archetype_kwargs(
             f"beat {beat.name!r}"
         )
     values = fn(beat, match, floors, map_constant_fn, rows)
+    if match.archetype == "flavour_npc" and moved_by_fn is not None:
+        moved_by = moved_by_fn(beat.map_id, match.event_id)
+        if moved_by:
+            values["moved_by"] = moved_by
     return make_kwargs(**values)
 
 

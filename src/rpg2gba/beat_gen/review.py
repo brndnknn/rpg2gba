@@ -241,6 +241,20 @@ def _liveness_problems(plan: ChapterPlan) -> list[str]:
             for p in sorted(plan.liveness_problems, key=lambda p: (p.position, p.page))]
 
 
+def _scene_moved(plan: ChapterPlan, *, locate: Locator | None) -> list[str]:
+    """Flavour beats whose NPC a script moves (`moved_objects`): the harness
+    follows the live position for these; every other beat is strict."""
+    lines = []
+    for beat in plan.beats:
+        moved_by = dict(beat.kwargs).get("moved_by")
+        if moved_by:
+            lines.append(
+                f"- {beat.name}{_at(beat.rows[0], locate)}: event "
+                f"{dict(beat.kwargs)['event_id']} moved by {', '.join(moved_by)}"
+                " -- harness follows the live position")
+    return lines or ["none"]
+
+
 def render_review(plan: ChapterPlan, *, floor_lookup: FloorLookup,
                   locate: Locator | None = None) -> str:
     """The review document as markdown, ending in exactly one newline.
@@ -275,5 +289,9 @@ def render_review(plan: ChapterPlan, *, floor_lookup: FloorLookup,
 
     parts.append("## Liveness order problems")
     parts.extend(_liveness_problems(plan))
+    parts.append("")
+
+    parts.append("## Scene-moved NPCs")
+    parts.extend(_scene_moved(plan, locate=locate))
 
     return "\n".join(parts) + "\n"

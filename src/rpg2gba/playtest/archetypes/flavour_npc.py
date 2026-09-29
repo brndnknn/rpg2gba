@@ -81,6 +81,7 @@ def flavour_npc_beat(
     self_switch_letter: str = "A",
     description: str | None = None,
     approach_prefer: str | None = None,
+    moved_by: tuple[str, ...] = (),
     group: str | None = None,
     manifest_rows: "tuple[ManifestRow, ...] | None" = None,
     manifest_dir=None,
@@ -119,6 +120,11 @@ def flavour_npc_beat(
     `approach_prefer` is passed through to `cells.approach_to` for the
     handful of NPCs reachable from more than one side; `approach_to` fails
     loud naming every candidate when it is needed and omitted.
+
+    `moved_by` is the row ids of pages whose script moves this NPC
+    (`beat_gen.moved_objects`; the generator states it, ROM run 24). Only a
+    beat carrying it may talk to the NPC at its live position when that is
+    not its template cell; without it a displaced NPC fails loud.
 
     `floor_lookup=`, defaulting to `beat_floor.lookup.floor_for_row`, lets
     a caller (chiefly tests) supply an in-memory floor instead of reading
@@ -265,7 +271,8 @@ def flavour_npc_beat(
     def talk(emu: Emulator) -> None:
         assertions.require_map(emu, beat_name, map_constant)
         _start_talk(emu, beat_name, map_constant, event_id, page_idx, approach, facing,
-                    f"{row_id} is an action-triggered page with text, so it must speak")
+                    f"{row_id} is an action-triggered page with text, so it must speak",
+                    moved_by)
         if derived == "randomized":
             # Which line is genuinely unknown; asserting a particular one
             # would fail one run in N for a correct conversion.
@@ -362,7 +369,8 @@ def flavour_npc_beat(
                 "flips the self-switch"
             )
         _start_talk(emu, f"{beat_name}_again", map_constant, event_id, toggled_page_idx,
-                    approach, facing, "the toggled page must speak")
+                    approach, facing, "the toggled page must speak",
+                    moved_by)
         _walk_text_boxes(emu, f"{beat_name}_again", toggled_row_id, toggled_expected_lines)
 
         if toggled_ssa is not None:
@@ -381,15 +389,41 @@ def flavour_npc_beat(
 
 def _start_talk(
     emu: Emulator, beat_name: str, map_constant: str, event_id: int, page_idx: int,
-    approach: tuple[int, int], facing: str, why: str,
+    approach: tuple[int, int], facing: str, why: str, moved_by: tuple[str, ...] = (),
 ) -> None:
     """Walk to the NPC and press A until its page starts. A page that moves
     on its own is talked to at its LIVE position (`talk_to_moving_npc`);
     `approach` is still where the walk heads first, so the route plan and
-    the beat's `at=` stay truthful."""
+    the beat's `at=` stay truthful.
+
+    Otherwise the NPC's live cell is compared with its template cell. Equal:
+    the strict face + interact path. Different and `moved_by` names the
+    scripts that move it: follow it live (ROM run 24 -- the professor's own
+    earlier scene walked him off the template cell). Different with no
+    `moved_by`: nothing in source moves this NPC, so it is misplaced -- a
+    converter or ordering bug -- and this raises instead of pressing A at a
+    cell derived from a position it does not hold."""
     emu.walk_to(*approach)
+    lid = local_id(map_constant, event_id)
     if event_page_moves(map_constant, event_id, page_idx):
-        assertions.talk_to_moving_npc(emu, beat_name, local_id(map_constant, event_id))
+        assertions.talk_to_moving_npc(emu, beat_name, lid)
+        return
+    live_obj = emu.object_event(lid)
+    live = (live_obj.x, live_obj.y)
+    template = event_cell(map_constant, event_id)
+    if live != template:
+        if not moved_by:
+            shot = emu.screenshot(f"{beat_name}_npc_displaced")
+            raise ScenarioError(
+                f"{beat_name}: {map_constant} event {event_id} is at {live}, "
+                f"not its template cell {template}, and no page moves this "
+                f"event -- a misplaced NPC (a converter or ordering bug) ({shot})"
+            )
+        logger.info(
+            "%s: event %d is at %s, template cell %s; moved by %s -- talking "
+            "at its live position", beat_name, event_id, live, template,
+            ", ".join(moved_by))
+        assertions.talk_to_moving_npc(emu, beat_name, lid)
         return
     emu.face(facing)
     if not emu.interact(require_script=True):

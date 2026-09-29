@@ -61,6 +61,7 @@ from rpg2gba.beat_gen.guard_reach import (
     guard_reaches,
 )
 from rpg2gba.beat_gen.liveness_edges import WriteModel, killed_before, split_threshold_enablers
+from rpg2gba.beat_gen.moved_objects import scene_moved_events
 from rpg2gba.beat_gen.never_fires import (
     MapFacts,
     TOUCH_TRIGGERS,
@@ -772,6 +773,18 @@ def _event_cell(build_dir: Path):  # noqa: ANN202
     return cell
 
 
+def _moved_by(build_dir: Path):  # noqa: ANN202
+    """(map id, event id) -> the rows whose scripts move that event."""
+    @functools.cache
+    def moved(map_id: int) -> dict[int, tuple[str, ...]]:
+        data = load_map_json(map_id, build_dir / "maps")
+        return scene_moved_events(map_id, data.get("events", []) or [])
+
+    def moved_by(map_id: int, event_id: int) -> tuple[str, ...]:
+        return moved(map_id).get(event_id, ())
+    return moved_by
+
+
 class _ViewerLocator:
     """`review.Locator` over the build: map names as the map viewer shows
     them (`map_infos.json` + `map_name_overrides.json`, §4.3) and each row's
@@ -970,7 +983,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
             try:
                 b = _merge_kwargs(b, dict(archetype_kwargs(
                     b, _match_for(b, matches), floors,
-                    map_constant_fn=_map_constant_for, rows=all_rows)))
+                    map_constant_fn=_map_constant_for, rows=all_rows,
+                    moved_by_fn=_moved_by(build_dir))))
             except NoArrivalError as exc:
                 dead_groups[b.group] = str(exc)
         elif b.template == "escort":
