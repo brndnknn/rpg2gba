@@ -149,3 +149,26 @@ def test_answers_that_end_the_page_run_last_and_only_one_of_them():
     assert [b.name for b in beats] == ["m068e003p0_c3a2", "m068e003p0"]
     assert beats[-1].rows == (PAGE, f"{PAGE}/b0")
     assert sorted(e.row_id for e in unselected) == [f"{PAGE}/b1", f"{PAGE}/b3"]
+
+
+def test_an_inline_choice_is_answered_like_a_native_one_without_splitting():
+    """`\\ch[...]` menus have no arm rows (the options are answered in place,
+    the answer lands in a game var), so the beat is not split; the floor's
+    `choice` opener still gets its `choice_answers` entry (answer 0)."""
+    from rpg2gba.beat_floor import walk
+
+    row_id = "map001/ev001/p0"
+    commands = [{"code": 101, "parameters": ["Pick one"]},
+                {"code": 401, "parameters": ["\\ch[2,0,<c2=043c3aff>A,\\c[4]B,C]"]}]
+    floors = walk.floor_for_map(
+        1, {"events": [{"id": 1, "pages": [{"trigger": 0, "condition": {}, "list": commands}]}]},
+        common_events=[], switch_labels={}, door_cells={})
+    openers = [a.list_index for a in floors[row_id].assertions if a.kind == "choice"]
+    assert openers == [1]
+    beat = PlannedBeat(name="m001e001p0", template="generic", map_id=1, rows=(row_id,), group="g")
+    beats, unselected = split_choice_arms(
+        (beat,), branch_of=lambda _r: None, parent_of=lambda _r: None,
+        killed_by=lambda _p: (), choice_openers=lambda rid: openers)
+    assert unselected == ()
+    assert [b.name for b in beats] == ["m001e001p0"]
+    assert beats[0].kwarg("choice_answers") == ((1, 0),)

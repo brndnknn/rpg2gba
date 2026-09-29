@@ -88,9 +88,13 @@ Taint = Assign | Adjust | Key
 logger = logging.getLogger(__name__)
 
 
+# Verdict kinds that drop the page's rows from the walk -> their Elsewhere status.
+_DEAD = {"never": "never_fires", "arm_gated": "arm_gated", "self_ended": "unselected_arm"}
+
+
 @dataclasses.dataclass(frozen=True)
 class _Verdict:
-    kind: str        # "never" (bucket a), "killer_first" (b), "enabler_later" (c)
+    kind: str        # "never"/"arm_gated"/"self_ended" (bucket a), "killer_first" (b), "enabler_later" (c)
     detail: str
 
 
@@ -139,12 +143,16 @@ def _holds_test(t: Any, values: Collection) -> bool:
 
 def _dead_verdict(page: str, states: Mapping[str, RowState], state: Mapping,
                   writers: Mapping[Key, tuple[str, str, int]], history: Sequence[Mapping],
-                  later: Sequence[tuple[str, str, int]]) -> _Verdict | None:
+                  later: Sequence[tuple[str, str, int]],
+                  fired_pages: Collection[str] = ()) -> _Verdict | None:
     """None when `page` isn't provably dead in `state` (module docstring);
     otherwise how: `enabler_later` when a later beat's claimed `Assign` row
     would satisfy a failing condition; `killer_first` when the page was live
-    in an earlier state of the walk (`history`); else `never` -- no claimed
-    writer makes it live. `later` is (row id, beat name, beat index)."""
+    in an earlier state of the walk (`history`); `arm_gated` when a row that
+    would enable it is an unwalked arm of a page the route fires (in
+    `fired_pages`) -- reachable on the ROM by answering the other way; else
+    `never` -- no claimed writer makes it live. `later` is (row id, beat
+    name, beat index)."""
     own = states[page]
     pages = own.event_page_row_ids
     result = _page_result(page, states, state)
@@ -164,6 +172,8 @@ def _dead_verdict(page: str, states: Mapping[str, RowState], state: Mapping,
         live = next((p for p in reversed(pages[:pages.index(page)])
                      if _page_result(p, states, state) is True), None)
     enabler: tuple[str, str, int] | None = None
+    self_ended = bool(failing)
+    gating_arms: list[str] = []
     reasons = []
     for t in failing:
         enabler = enabler or next(
@@ -171,10 +181,15 @@ def _dead_verdict(page: str, states: Mapping[str, RowState], state: Mapping,
              if any(isinstance(w, Assign) and w.key == t.key and _holds_test(t, w.values)
                     for w in states[rid].writes)), None)
         killer = writers.get(t.key)
+        self_ended &= killer is not None and killer[0] == page
         unclaimed = sorted(
             rid for rid, rs in states.items() if rs is not own and any(
                 isinstance(w, Assign) and w.key == t.key and _holds_test(t, w.values)
                 for w in rs.writes))
+        gating_arms.extend(
+            rid for rid in unclaimed
+            if (parse_row_id(rid).owning_page_row_id or rid) != rid
+            and parse_row_id(rid).owning_page_row_id in fired_pages)
         now = sorted(_get(state, t.key), key=repr)
         why = (f"{_key(t.key)} was set to {now} by {killer[0]} (beat {killer[1]}, #{killer[2]})"
                if killer else f"{_key(t.key)} is {now} (seed state), never written on the route")
@@ -191,6 +206,15 @@ def _dead_verdict(page: str, states: Mapping[str, RowState], state: Mapping,
     if enabler is not None:
         return _Verdict("enabler_later", f"{detail}; row {enabler[0]} of beat {enabler[1]} "
                                          f"(#{enabler[2]}), later on the route, would enable it")
+    if self_ended:
+        # Its own firing cleared the condition (an arm that ends the page) and
+        # no claimed writer restores it: a later walk of the page's other arms
+        # would find it dead, and the walk that took the ending arm can't also
+        # take the rest of that firing's arms (the round-trip beat's facing
+        # arms, `beat_gen/round_trip.py`).
+        return _Verdict("self_ended", f"{detail}; the page ended itself at an earlier firing "
+                                      "and no claimed row brings it back, so the walk that "
+                                      "took its ending arm doesn't return to it")
     # Conservative: an earlier state where liveness is True OR undecided
     # keeps the page (an indeterminate earlier state is never proof of `never`).
     was_live = next((i for i, h in enumerate(history)
@@ -200,6 +224,9 @@ def _dead_verdict(page: str, states: Mapping[str, RowState], state: Mapping,
         certain_ = _page_result(page, states, history[was_live]) is True
         return _Verdict("killer_first", f"{detail}; it was {'live' if certain_ else 'possibly live'} "
                                         f"at route position {was_live} (before that beat's write)")
+    if gating_arms:
+        return _Verdict("arm_gated", f"{detail}; reachable on the ROM through the unwalked "
+                                     f"arm(s) {sorted(set(gating_arms))} of a page the route fires")
     return _Verdict("never", detail)
 
 
@@ -294,6 +321,10 @@ def select_state_arms(
     decided: dict[str, _Verdict | None] = {}
     history: list[Mapping] = [state]
     problems: list[LivenessProblem] = []
+    # Every page some firing beat claims: an unwalked arm of one of these is
+    # a path the ROM offers that this route answers the other way.
+    route_pages = frozenset(page for b in beats if b.template in FIRING_TEMPLATES
+                            for page in _claimed_pages(b))
 
     for at, beat in enumerate(beats):
         if beat.template not in FIRING_TEMPLATES:
@@ -301,7 +332,7 @@ def select_state_arms(
             history.append(state)
             continue
         claimed_pages = _claimed_pages(beat)
-        gone: dict[str, str] = {}
+        gone: dict[str, tuple[str, str]] = {}   # page -> (Elsewhere status, detail)
         random = {r for r, _ in dict(beat.kwargs).get("random_arms", ())}
         dropped: set[str] = set()
         refires: list[PlannedBeat] = []
@@ -316,21 +347,30 @@ def select_state_arms(
                 # beat's own firing order (a template that fires p0 then p1
                 # applies p0's writes before p1 is judged); a later firing
                 # is a re-fire the arm model below owns.
-                if page_id not in decided:
+                seen_before = page_id in decided
+                if not seen_before:
                     later = [(r, b.name, i) for i, b in enumerate(beats[at + 1:], at + 1)
                              if b.template in FIRING_TEMPLATES for r in b.rows
                              if parse_row_id(r).map_id == parse_row_id(page_id).map_id
                              and r in states and (parse_row_id(r).owning_page_row_id or r) != page_id]
-                    verdict = _dead_verdict(page_id, states, state, writers, history, later)
+                    verdict = _dead_verdict(page_id, states, state, writers, history, later,
+                                            fired_pages=route_pages)
                     decided[page_id] = verdict
-                    if verdict is not None and verdict.kind != "never":
+                    if verdict is not None and verdict.kind not in _DEAD:
                         problems.append(LivenessProblem(
                             beat.name, page_id, verdict.kind, verdict.detail, at))
                         logger.warning("liveness order problem (%s) in %s: %s",
                                        verdict.kind, beat.name, verdict.detail)
                 verdict = decided[page_id]
-                if verdict is not None and verdict.kind == "never":
-                    gone[page_id] = verdict.detail
+                if seen_before and (verdict is None or verdict.kind not in _DEAD):
+                    # A later firing (another group of the same page: choice
+                    # or facing arms) is judged only for the page having ended
+                    # itself; every other order question is the solver's.
+                    again = _dead_verdict(page_id, states, state, writers, history, [],
+                                          fired_pages=route_pages)
+                    verdict = again if again is not None and again.kind == "self_ended" else verdict
+                if verdict is not None and verdict.kind in _DEAD:
+                    gone[page_id] = (_DEAD[verdict.kind], verdict.detail)
                     continue
             if arrival and (beat.group, page_id) in arrival_runs:
                 # An arrival page fired once, on the crossing into the map;
@@ -382,8 +422,8 @@ def select_state_arms(
 
         for rid in beat.rows:
             if (parse_row_id(rid).owning_page_row_id or rid) in gone:
-                elsewhere.append(Elsewhere(
-                    rid, "never_fires", detail=gone[parse_row_id(rid).owning_page_row_id or rid]))
+                status, why = gone[parse_row_id(rid).owning_page_row_id or rid]
+                elsewhere.append(Elsewhere(rid, status, detail=why))
         if dropped or gone:
             kept = tuple(r for r in beat.rows if r not in dropped
                          and (parse_row_id(r).owning_page_row_id or r) not in gone)

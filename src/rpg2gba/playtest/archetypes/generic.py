@@ -540,7 +540,14 @@ def _handle_choice(emu: "Emulator", beat_name: str, step: Step) -> None:
             "answer -- generic_beat(choice_answers=) must name one")
     options, answer = tuple(params["options"]), int(params["answer"])
     result_addr = emu.symbols["gSpecialVar_Result"]
-    yesno = len(options) == 2
+    # An inline `\\ch[...]` menu is always a `dynmultichoice` (never
+    # `yesnobox`), even with two options; its pick is then copied to a game var.
+    inline = bool(params.get("inline"))
+    yesno = len(options) == 2 and not inline
+    if inline and answer < 0 and int(params["if_cancel"]) == 0:
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: inline choice at list[{step.list_index}] "
+            "ignores B (ifCancel 0) -- no cancel arm to answer")
 
     for _ in range(600):
         if emu.yesno_prompt_up() if yesno else emu.u16(result_addr) == _MENU_WAITING:
@@ -569,6 +576,27 @@ def _handle_choice(emu: "Emulator", beat_name: str, step: Step) -> None:
         raise ScenarioError(
             f"{beat_name}: {step.row_id}: answered {answer} to {options!r} but the "
             f"script received {got}, expected {expected} ({shot})")
+    if inline:
+        _check_inline_choice_var(emu, beat_name, step, params, answer)
+
+
+def _check_inline_choice_var(emu: "Emulator", beat_name: str, step: Step,
+                             params: dict, answer: int) -> None:
+    """The transpiled inline choice copies `VAR_RESULT` into the `\\ch`'s own
+    game variable (`if_cancel - 1` on B): read that variable back once the
+    script has run the copy."""
+    name = _flag_registry().get_var(int(params["var_id"]))
+    if name is None:
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: inline choice variable {params['var_id']} has "
+            "no minted VAR_* name in the persisted flag registry -- not guessing one")
+    expected = int(params["if_cancel"]) - 1 if answer < 0 else answer
+    if not _wait_for(emu, lambda: emu.var(name) == expected, frames=120):
+        shot = emu.screenshot(f"{beat_name}_choice_var")
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: answered {answer} to inline choice "
+            f"{tuple(params['options'])!r} but {name} reads {emu.var(name)}, "
+            f"expected {expected} ({shot})")
 
 
 def _phone_trainer(row_id: str, beat_name: str, lookup: FloorLookup, manifest_id: str) -> str:
@@ -858,9 +886,17 @@ def generic_beat(
     triggers = [s for s in all_steps if s.kind == "trigger"]
     trigger_step = triggers[0] if triggers else None
     completes_step = next((s for s in all_steps if s.kind == "completes"), None)
+    # A beat that rides a re-fire in one interaction (a choice round trip: the
+    # page answered, then an autorun of the same event firing at once) walks
+    # each page's steps in turn: list indexes only order steps within a page,
+    # and pages rank by first appearance in `rows` then `walk_rows`.
+    page_rank: dict[str, int] = {}
+    for row_id in walked_rows:
+        page_rank.setdefault(parse_row_id(row_id).owning_page_row_id or row_id, len(page_rank))
     middle_steps = sorted(
         (s for s in all_steps if s.kind not in _FORCED_BUCKET),
-        key=lambda s: (s.list_index, s.kind, s.row_id, repr(s.params)))
+        key=lambda s: (page_rank[parse_row_id(s.row_id).owning_page_row_id or s.row_id],
+                       s.list_index, s.kind, s.row_id, repr(s.params)))
 
     # A player-triggered page is fired from an ADJACENT cell, facing the
     # event: `cell_for_row` puts the routing point ON a touch event's cell,

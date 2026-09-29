@@ -92,6 +92,7 @@ from rpg2gba.beat_gen.seam import SeamCrossing, connection_for, seam_crossings
 from rpg2gba.beat_gen.seed import route_winner
 from rpg2gba.beat_gen.page_sim import Firing
 from rpg2gba.beat_gen.select import select_rows
+from rpg2gba.beat_gen.round_trip import find_round_trip
 from rpg2gba.beat_gen.state_arms import FIRING_TEMPLATES, Taint, fired_pages, select_state_arms
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
 from rpg2gba.conversion_agent.orchestrator import load_map_event_strips
@@ -937,6 +938,11 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     # Ruling 19: one beat per choice arm, then RNG-selected arms are claimed
     # but checked on whichever fired.
     row_states = _row_states_for(build_dir, resolved)
+    arms_by_page: dict[str, list[str]] = {}
+    for r in all_rows:
+        owner = parse_row_id(r.row_id).owning_page_row_id
+        if owner is not None and r.branch is not None:
+            arms_by_page.setdefault(owner, []).append(r.row_id)
     beats, choice_elsewhere = split_choice_arms(
         beats,
         branch_of=lambda rid: rows_by_id[rid].branch if rid in rows_by_id else None,
@@ -944,6 +950,11 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         killed_by=lambda page: (all_verdicts[page].killed_by if page in all_verdicts else ()),
         choice_openers=lambda rid: [a.list_index for a in floors[rid].assertions
                                     if a.kind == "choice"],
+        round_trip=lambda page, loser, walked, claimed: find_round_trip(
+            page, loser, walked, seed=seeds[chapter_id], row_states=row_states,
+            page_for=_page_for(build_dir), branch_of=lambda rid: rows_by_id[rid].branch,
+            arms_of=lambda pg: arms_by_page.get(pg, ()), claimed=claimed,
+            event_cell=_event_cell(build_dir)),
     )
     beats = annotate_random_arms(beats, row_states, _page_for(build_dir))
 

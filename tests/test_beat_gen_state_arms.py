@@ -236,16 +236,28 @@ def _lab_beat(name, template, *rows):
     return PlannedBeat(name=name, template=template, map_id=50, rows=rows, group=name)
 
 
-def test_a_flavour_page_only_an_unclaimed_row_enables_is_demoted(monkeypatch):
+def test_a_flavour_page_only_an_unwalked_arm_enables_is_arm_gated(monkeypatch):
+    # The enabler (the "Yes" arm b2) is an arm of p0, which the route fires
+    # and answers "No": p1 is reachable on the ROM, just not on this route.
     p0 = _lab_beat("p0", "generic", P0)
     p1 = _lab_beat("p1", "flavour_npc", P1)
     beats, elsewhere = _lab((p0, p1), _sets(SS_D), monkeypatch)   # answering "No" sets D
     assert [b.name for b in beats] == ["p0"]
-    assert [(e.row_id, e.status) for e in elsewhere] == [(P1, "never_fires")]
+    assert [(e.row_id, e.status) for e in elsewhere] == [(P1, "arm_gated")]
     detail = elsewhere[0].detail
     assert P1 in detail and "self switch C == True" in detail
     assert f"live page: {P2}" in detail and "self switch D == True" in detail
-    assert B2 in detail and "not walked" in detail
+    assert B2 in detail and "not walked" in detail and "unwalked arm" in detail
+
+
+def test_a_page_whose_only_enabler_sits_on_an_unfired_page_never_fires(monkeypatch):
+    # Nothing claims p0, so b2 is not an arm of a page the route fires: no
+    # answer on this route reaches p1 -- `never_fires`, not `arm_gated`.
+    p1 = _lab_beat("p1", "flavour_npc", P1)
+    beats, elsewhere = _lab((p1,), _sets(SS_D), monkeypatch)
+    assert beats == ()
+    assert [(e.row_id, e.status) for e in elsewhere] == [(P1, "never_fires")]
+    assert "unwalked arm" not in elsewhere[0].detail
 
 
 def test_a_page_whose_enabler_is_claimed_and_ordered_before_is_kept(monkeypatch):
@@ -374,3 +386,22 @@ def test_an_indeterminate_earlier_state_gives_killer_first_never_a_demotion(monk
     assert [b.name for b in out] == ["a", "b", "p1"] and elsewhere == ()
     assert [(q.page, q.kind) for q in problems] == [(P1, "killer_first")]
     assert "possibly live" in problems[0].detail
+
+
+def test_a_page_that_ended_itself_is_not_walked_again_by_another_group(monkeypatch):
+    # p2's own firing clears D (the Yes arm ends the page). A second group of
+    # the same page -- facing arms, split off before the route -- would find it
+    # dead, and no claimed row brings it back: its rows are unselected arms.
+    def stub(page_id, page, states, state, firing):
+        out = dict(state)
+        if page_id == P2:
+            out[SS_D] = frozenset({False})
+        return PageRun(taken=frozenset(), not_taken=frozenset(), undecided=frozenset(),
+                       state=out, exact=True)
+
+    first = _lab_beat("a", "generic", P2)
+    again = _lab_beat("b", "generic", f"{P2}/b1")
+    beats, elsewhere = _lab((first, again), stub, monkeypatch, seed={SS_D: frozenset({True})})
+    assert [b.name for b in beats] == ["a"]
+    assert [(e.row_id, e.status) for e in elsewhere] == [(f"{P2}/b1", "unselected_arm")]
+    assert "ended itself" in elsewhere[0].detail

@@ -153,6 +153,16 @@ class _ExitPage(Exception):
     """115 Exit Event Processing."""
 
 
+class _Jump(Exception):
+    """A 119 whose label isn't a sibling in its own scope: the enclosing
+    scopes look for it (`_Runner._resume_at_label`); if none has it the page
+    is poisoned."""
+
+    def __init__(self, cmd: dict[str, Any]) -> None:
+        super().__init__()
+        self.cmd = cmd
+
+
 class _Poison(Exception):
     """Control flow (or the step budget) was lost -- see module docstring
     and `run_page`'s poison handling."""
@@ -634,6 +644,39 @@ class _Runner:
                     return j
         return None
 
+    def _resume_at_label(self, nodes: list[Node], row_id: str, jump_cmd: dict[str, Any]) -> int | None:
+        """Where to continue in `nodes` after a 119: the position of a sibling
+        label, or -- when the label sits in an arm of a choice or branch that
+        is a sibling here (the professor lab's Ready label, inside the Yes
+        arm of a prompt a re-fire skips) -- the run of that arm from its
+        label, after which control continues past the construct. None when
+        no such label is in this scope."""
+        found = self._find_label(nodes, jump_cmd)
+        if found is not None:
+            return found
+        for j, node in enumerate(nodes):
+            if isinstance(node, ChoiceNode):
+                by_key = self._choice_children(row_id, node.index)
+                arms = [((-1 if ci is None else ci), children) for ci, _t, children in node.arms]
+            elif isinstance(node, IfNode):
+                then_row, else_row = self._if_children(row_id, node.index)
+                arms = [(then_row, node.then), (else_row, node.otherwise or [])]
+                by_key = {then_row: then_row, else_row: else_row}
+            else:
+                continue
+            for key, children in arms:
+                at = self._find_label(children, jump_cmd)
+                if at is None:
+                    continue
+                arm_row = by_key[key]
+                self.taken.add(arm_row)
+                arm_rs = self.row_states.get(arm_row)
+                if arm_rs is not None:
+                    self._enter(arm_rs)
+                self._exec(children[at:], arm_row)
+                return j + 1
+        return None
+
     def _apply_move_step(self, cmd: dict[str, Any]) -> None:
         if self._route_target != -1:
             return
@@ -687,12 +730,20 @@ class _Runner:
         while i < len(nodes):
             node = nodes[i]
             self._step()
-            if isinstance(node, IfNode):
-                self._exec_if(node, row_id)
-            elif isinstance(node, ChoiceNode):
-                self._exec_choice(node, row_id)
-            elif isinstance(node, LoopNode):
-                self._exec_loop(node, row_id)
+            if isinstance(node, (IfNode, ChoiceNode, LoopNode)):
+                try:
+                    if isinstance(node, IfNode):
+                        self._exec_if(node, row_id)
+                    elif isinstance(node, ChoiceNode):
+                        self._exec_choice(node, row_id)
+                    else:
+                        self._exec_loop(node, row_id)
+                except _Jump as jump:
+                    resume = self._resume_at_label(nodes, row_id, jump.cmd)
+                    if resume is None:
+                        raise
+                    i = resume
+                    continue
             else:
                 self._apply_indexed_writes(writes_by_index, node.index)
                 if isinstance(node, Leaf):
@@ -702,9 +753,9 @@ class _Runner:
                     if code == EXIT_EVENT:
                         raise _ExitPage()
                     if code == JUMP_TO_LABEL:
-                        target = self._find_label(nodes, node.cmd)
+                        target = self._resume_at_label(nodes, row_id, node.cmd)
                         if target is None:
-                            raise _Poison()
+                            raise _Jump(node.cmd)
                         i = target
                         continue
                     if _is_player_cmd(node.cmd):
@@ -757,7 +808,7 @@ def run_page(
         # A 113 with no enclosing loop is a malformed page, not our problem
         # to diagnose -- treat it the same as reaching the end of the page.
         pass
-    except _Poison:
+    except (_Poison, _Jump):
         poisoned = True
 
     if poisoned and sum(1 for c in page_cmds if _is_player_cmd(c)) > runner.player_cmds_run:

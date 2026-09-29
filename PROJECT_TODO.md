@@ -17,6 +17,27 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 117. Two-visit events: a route walks only one of two page-ending choice arms -- DONE 2026-09-29
+
+**Resolved the same day** (operator re-ruled: walk the hand's round trip).
+`beat_gen/round_trip.py::find_round_trip` derives it: for an autorun page with exactly two
+page-ending arms, answer the losing arm X, find the live page Q, and find a claimed arm of
+Q that makes the page live again and re-fires into Y. `split_choice_arms` then walks X and
+moves Y's rows into Q's beat. CH01 now runs p0 No (#41), p2 re-offer (#48), p2 Yes riding
+the quiz (#49), then p1 (#50). Grade is clean. Only ev005 matches in CH01–CH05. Left open:
+p2's facing arms b1–b4 are `unselected_arm` (new `self_ended` verdict), none frozen. The
+original entry follows.
+
+The professor (`map050/ev005`) asks "ready for the Trainer Aptitude Test?". "Yes"
+(`p0/b2`) runs the quiz and starter selector and sets self switch C, which makes p1
+live. "No" (`p0/b3`) sets D, which makes p2 live, and p2 re-asks the question;
+`p2/b0` then re-opens p0's "Yes" path. Both arms end the page, so ruling 19 walks
+one. Since `\ch` parsing (2026-09-29) CH01 walks "Yes", the story path, and p2's
+7 rows are `arm_gated` (reachable on the ROM through the unwalked arm, not walked).
+Covering both needs the solver and ruling 19 to express a revisit: No → p2 → p2/b0
+→ Yes → p1. This is the same shape as the one story edge `_acyclic_story_edges`
+skips corpus-wide. Operator: deferred 2026-09-29 (walk Yes, relabel p2).
+
 ### 116. The lab starter scene is refused, so var 101's `+1` is invisible to the walk
 
 `map050/ev019/p0` (the starter scene, `addvar VAR_QUEST_LOG, 1` at

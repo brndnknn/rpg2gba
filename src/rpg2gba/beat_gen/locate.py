@@ -26,6 +26,8 @@ from rpg2gba.routing.locations import (
 )
 from rpg2gba.routing.plan import RouteNode
 
+_ARRIVAL_TRIGGERS = frozenset({"autorun", "parallel"})
+
 CellFn = Callable[[ManifestRow], RowCell]
 SeamFn = Callable[[ManifestRow], tuple[SeamCrossing, ...]]
 MapConstantFn = Callable[[int], str]
@@ -131,13 +133,23 @@ def locate_beats(
 
         cells: list[RowCell] = []
         failure: tuple[str, ValueError] | None = None
+        first = rows_by_id[group_rows[0]]
         for row_id in group_rows:
             row = rows_by_id[row_id]
             try:
-                cells.append(_cell_for_row(row, rows_by_id, cell_fn, seam_fn, map_constant_fn))
+                cell = _cell_for_row(row, rows_by_id, cell_fn, seam_fn, map_constant_fn)
             except ValueError as exc:
                 failure = (row_id, exc)
                 break
+            # A choice round trip (`beat_gen/round_trip.py`) claims an autorun
+            # page's arm in the beat of a player-triggered page of the same
+            # event: the autorun re-fires inside that interaction, so the
+            # player stands where the talk page is talked to.
+            if (row.event_id == first.event_id and row.map_id == first.map_id
+                    and row.trigger in _ARRIVAL_TRIGGERS
+                    and first.trigger not in _ARRIVAL_TRIGGERS):
+                continue
+            cells.append(cell)
 
         if failure is not None:
             bad_row_id, exc = failure

@@ -317,6 +317,52 @@ def test_choice_handler_catches_a_wrong_answer_reaching_the_script():
         STEP_HANDLERS["choice"](emu, "B1", _choice_step(("Yes", "No"), 0))
 
 
+class _InlineMenuEmu(_MenuEmu):
+    """`_MenuEmu` plus the game var the inline choice copies its pick into."""
+
+    def __init__(self, *, var_after: int, **kw) -> None:
+        super().__init__(**kw)
+        self._var_after = var_after
+
+    def var(self, name: str) -> int:
+        assert name == "VAR_TEMP_MOVE_CHOICE"
+        return self._var_after
+
+
+def _inline_step(options, answer, if_cancel=0):
+    from rpg2gba.playtest.archetypes.generic import Step
+
+    return Step("map050/ev005/p0/b2", "choice", 57, (
+        ("answer", answer), ("if_cancel", if_cancel), ("inline", True),
+        ("options", options), ("var_id", 2)))
+
+
+def test_inline_two_option_choice_is_a_multichoice_and_reads_its_var(monkeypatch):
+    from rpg2gba.playtest.archetypes import generic
+
+    class _Reg:
+        def get_var(self, var_id):
+            return "VAR_TEMP_MOVE_CHOICE" if var_id == 2 else None
+
+    monkeypatch.setattr(generic, "_flag_registry", lambda: _Reg())
+    emu = _InlineMenuEmu(yesno=False, results={"A": 1}, var_after=1)
+    generic.STEP_HANDLERS["choice"](emu, "B1", _inline_step(("A", "B"), 1))
+    assert emu.taps == ["DOWN", "A"]   # never the yes/no path, despite two options
+    wrong = _InlineMenuEmu(yesno=False, results={"A": 1}, var_after=0)
+    from rpg2gba.playtest.errors import ScenarioError
+    with pytest.raises(ScenarioError, match="VAR_TEMP_MOVE_CHOICE reads 0, expected 1"):
+        generic.STEP_HANDLERS["choice"](wrong, "B1", _inline_step(("A", "B"), 1))
+
+
+def test_inline_choice_that_ignores_b_has_no_cancel_arm():
+    from rpg2gba.playtest.archetypes.generic import STEP_HANDLERS
+    from rpg2gba.playtest.errors import ScenarioError
+
+    emu = _InlineMenuEmu(yesno=False, results={}, var_after=0)
+    with pytest.raises(ScenarioError, match="ignores B"):
+        STEP_HANDLERS["choice"](emu, "B1", _inline_step(("A", "B", "C"), -1))
+
+
 # --- service (ruling 20) ------------------------------------------------------
 
 

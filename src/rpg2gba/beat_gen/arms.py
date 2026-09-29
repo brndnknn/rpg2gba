@@ -23,6 +23,7 @@ from collections.abc import Callable, Collection, Mapping
 from typing import Any
 
 from rpg2gba.beat_gen.plan import Elsewhere, PlannedBeat, Selection, make_kwargs
+from rpg2gba.beat_gen.round_trip import RoundTrip
 from rpg2gba.chapter_manifest.schema import parse_row_id
 from rpg2gba.story_state.extract import RowState
 from rpg2gba.story_state.model import RowVerdict
@@ -170,15 +171,26 @@ def split_choice_arms(
     parent_of: Callable[[str], str | None],
     killed_by: Callable[[str], Collection[str]],
     choice_openers: Callable[[str], Collection[int]],
+    round_trip: Callable[[str, str, str, Collection[str]], RoundTrip | None] | None = None,
 ) -> tuple[tuple[PlannedBeat, ...], tuple[Elsewhere, ...]]:
     """One beat per choice arm (ruling 19). `branch_of(row_id)` is a
     manifest row's `BranchRef` (None for a page), `parent_of` its enclosing
     arm or page, `killed_by(page_row_id)` the rows whose writes end the
     page, `choice_openers(row_id)` the list indexes of the `choice`
     assertions on a row's floor. Every generic beat also gets
-    `choice_answers` for each choice it walks. Returns the new beats and the arms no walk can take."""
+    `choice_answers` for each choice it walks. Returns the new beats and the arms no walk can take.
+
+    Two page-ending arms normally walk the lowest index and send the other to
+    `unselected_arm`. `round_trip(page, loser, walked, claimed_rows)` may
+    instead name a `RoundTrip` (`beat_gen/round_trip.py`): the loser's writes
+    make another page live whose choice re-fires this page into the walked
+    arm. Then the page's beat walks the loser, and the walked arm's rows move
+    to the beat claiming that other page's re-enabling arm, after its own rows:
+    one interaction, the autorun re-firing before the field is released."""
     out: list[PlannedBeat] = []
     unselected: list[Elsewhere] = []
+    moves: list[tuple[RoundTrip, tuple[str, ...]]] = []
+    all_claimed = {r for b in beats for r in b.rows}
     pending = list(beats)
     while pending:
         beat = pending.pop(0)
@@ -207,7 +219,13 @@ def split_choice_arms(
         killing = [a for a in arms if trunk_kills or killers & set(subtree[a])]
         repeatable = [a for a in arms if a not in killing]
         last = killing[0] if killing else repeatable.pop()
-        for a in killing[1:]:
+        trip = None
+        if round_trip is not None and len(killing) == 2:
+            trip = round_trip(page, killing[1], last, all_claimed)
+        if trip is not None:
+            moves.append((trip, tuple(r for r in beat.rows if r in subtree[last])))
+            last = killing[1]
+        for a in [] if trip is not None else killing[1:]:
             for rid in subtree[a]:
                 unselected.append(Elsewhere(
                     rid, "unselected_arm",
@@ -225,6 +243,22 @@ def split_choice_arms(
         pending.insert(len(repeatable), dataclasses.replace(
             beat, rows=tuple(r for r in beat.rows if r in set(shared) | set(subtree[last])),
             kwargs=make_kwargs(**kwargs, **({"walk_rows": extra_walk} if extra_walk else {}))))
+    for trip, into_rows in moves:
+        at = next((i for i, b in enumerate(out)
+                   if b.template == "generic" and trip.via_arm in b.rows), None)
+        if at is None:
+            raise ValueError(f"round trip {trip.describe()}: no generic beat claims "
+                             f"{trip.via_arm}, which the trip answers")
+        host = out[at]
+        walked = host.rows + tuple(dict(host.kwargs).get("walk_rows", ()))
+        clash = ({op for r in walked for op in choice_openers(r)}
+                 & {op for r in into_rows for op in choice_openers(r)})
+        if clash:
+            raise ValueError(
+                f"round trip {trip.describe()}: {trip.via} and {trip.page} both open a "
+                f"choice at list index {sorted(clash)}, and choice_answers is keyed by "
+                "list index alone")
+        out[at] = dataclasses.replace(host, rows=host.rows + into_rows)
     skip = {e.row_id for e in unselected}
     return (tuple(_with_answers(b, branch_of, choice_openers, skip) for b in out),
             tuple(unselected))

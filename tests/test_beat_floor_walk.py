@@ -417,3 +417,73 @@ def test_real_chapter_floor_rows_match_manifest_rows(chapter):
     manifest_row_ids = {r["row_id"] for r in rows}
     floor_row_ids = set(walk.floor_for_chapter(chapter, build_dir=_BUILD_DIR))
     assert floor_row_ids == manifest_row_ids
+
+
+# --- inline \ch[...] choice ------------------------------------------------
+
+_APTITUDE_PROMPT = ("When you encounter a new\\nkind of Pokémon in the wild,\\n"
+                    "what is your first reaction?")
+_APTITUDE_CH = ("\\ch[2,0,<c2=043c3aff>Attack it right away!,\\c[4]Wait and see what it does.,"
+                "<c2=65467b14>Throw a Poké Ball at it!]")
+
+
+def _inline_commands() -> list[dict]:
+    return [
+        {"code": 101, "parameters": [_APTITUDE_PROMPT]},
+        {"code": 401, "parameters": [_APTITUDE_CH]},
+    ]
+
+
+def test_inline_choice_is_a_prompt_text_plus_a_choice():
+    row = _row(_inline_commands())
+    assert not row.refused, row.refusals
+    text = _only(row, "text")
+    choice = _only(row, "choice")
+    assert "first reaction?" in text.param("text")
+    assert "\\ch" not in text.param("text") and "Attack" not in text.param("text")
+    assert text.param("index") == 0
+    assert text.list_index == 0
+    assert choice.param("options") == (
+        "Attack it right away!", "Wait and see what it does.", "Throw a Poké Ball at it!")
+    assert (choice.param("inline"), choice.param("var_id"), choice.param("if_cancel")) == (True, 2, 0)
+    # The menu comes after its prompt (the last fragment holds the `\ch`).
+    assert choice.list_index == 1 > text.list_index
+
+
+def test_inline_choice_prompt_matches_the_transpiled_msgbox_text():
+    """The transpiler strips `\\b`/`\\C[n]` from the prompt before translating."""
+    commands = [
+        {"code": 101, "parameters": ["Pick a \\bcolour\\C[2]:"]},
+        {"code": 401, "parameters": ["\\ch[5,1,Red,Blue]"]},
+    ]
+    row = _row(commands)
+    assert not row.refused, row.refusals
+    assert "\\" not in _only(row, "text").param("text")
+    choice = _only(row, "choice")
+    assert (choice.param("var_id"), choice.param("if_cancel")) == (5, 1)
+
+
+def test_inline_choice_with_unknown_control_code_in_prompt_still_refuses():
+    commands = [
+        {"code": 101, "parameters": ["Hi \\v[1] there"]},
+        {"code": 401, "parameters": ["\\ch[2,0,A,B]"]},
+    ]
+    row = _row(commands)
+    assert row.refused
+    assert any(r.reason == "text_unnormalizable" for r in row.refusals)
+    assert not any(a.kind in ("text", "choice") for a in row.assertions)
+
+
+def test_inline_choice_with_unknown_tag_in_an_option_still_refuses():
+    commands = [
+        {"code": 101, "parameters": ["Pick"]},
+        {"code": 401, "parameters": ["\\ch[2,0,\\v[3],B]"]},
+    ]
+    row = _row(commands)
+    assert row.refused
+    assert any(r.reason == "text_unnormalizable" for r in row.refusals)
+
+
+def test_unknown_control_code_beside_no_choice_still_refuses():
+    row = _row([{"code": 101, "parameters": ["\\x[1] nope"]}])
+    assert row.refused

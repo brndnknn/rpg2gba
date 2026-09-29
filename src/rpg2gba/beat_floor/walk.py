@@ -48,6 +48,11 @@ from rpg2gba.chapter_manifest.generator import PageScope, detect_stair_cells, it
 from rpg2gba.chapter_manifest.schema import parse_row_id, row_id_sort_key
 from rpg2gba.conversion_agent.deterministic import join_text_lines, translate_text_codes
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
+from rpg2gba.conversion_agent.inline_choice import (
+    InlineChoiceError,
+    has_inline_choice,
+    parse_inline_choice,
+)
 from rpg2gba.playtest.text_source import (
     _char_canon_table,
     _default_engine_dir,
@@ -100,11 +105,67 @@ def _normalize_fragments(fragments: list[str]) -> str:
     control codes, then `text_source.rom_text`).
     Raises `ValueError` on anything neither step recognizes -- the caller
     converts that into a `FloorRefusal(reason="text_unnormalizable")`."""
-    translated = translate_text_codes(join_text_lines(fragments))
+    return _normalize_translated(join_text_lines(fragments), fragments)
+
+
+def _normalize_translated(joined: str, fragments: list[str]) -> str:
+    """The translate + `rom_text` half of `_normalize_fragments`, on already
+    joined text (`fragments` only names the source in the error)."""
+    translated = translate_text_codes(joined)
     if translated is None:
         raise ValueError(
             f"unrecognized control code in fragments {fragments!r}")
     return rom_text(translated.text, _char_canon_table(_default_engine_dir()))
+
+
+def _extract_inline_choice(
+    fragments: list[str], text_list_index: int, choice_list_index: int,
+    index_within_row: int, ctx: ExtractContext,
+) -> ExtractResult:
+    """A Show Text message carrying Essentials' inline ``\\ch[var,ifCancel,
+    opt1,...]`` escape: a `text` assertion for the prompt plus a `choice`
+    assertion for the menu, exactly the pair a 101 + 102 would give (so
+    `beat_gen`'s per-choice handling reads it unchanged).
+
+    Parsing is `conversion_agent.inline_choice.parse_inline_choice` and the
+    prompt is prepared exactly as `transpiler._emit_inline_choice` does (strip
+    ``\\b`` and ``\\C[n]``, strip whitespace, translate) so the text is what
+    the ROM's `msgbox` shows. The `choice` sits at the LAST fragment's list
+    index (where the `\\ch` lives), after the prompt's own, so the step order
+    is prompt then menu. Its params add `inline=True`, `var_id` and `if_cancel`:
+    the ROM's menu is a `dynmultichoice` (never `yesnobox`, whatever the option
+    count) whose pick lands in `VAR_RESULT` and is then copied to the game
+    variable `var_id` (or `if_cancel - 1` on B when `if_cancel` != 0)."""
+    from rpg2gba.conversion_agent.transpiler import _BLUE_TEXT_CODE_RE, _COLOUR_TEXT_CODE_RE
+
+    def refuse(code_index: int, detail: str) -> ExtractResult:
+        return (), (FloorRefusal(
+            row_id=ctx.row_id, reason="text_unnormalizable", list_index=code_index,
+            code=SHOW_TEXT, detail=f"code 101 @list[{code_index}]: {detail}",
+        ),)
+
+    try:
+        choice = parse_inline_choice(join_text_lines(fragments))
+    except InlineChoiceError as exc:
+        return refuse(text_list_index, exc.message)
+    prompt_source = _COLOUR_TEXT_CODE_RE.sub("", _BLUE_TEXT_CODE_RE.sub("", choice.prompt_text)).strip()
+    if not prompt_source:
+        return refuse(text_list_index, f"inline choice with no prompt text: {fragments!r}")
+    try:
+        prompt = _normalize_translated(prompt_source, fragments)
+        options = tuple(_normalize_fragments([o]) for o in choice.options)
+    except ValueError as exc:
+        return refuse(text_list_index, str(exc))
+    return (
+        FloorAssertion(
+            row_id=ctx.row_id, kind="text", list_index=text_list_index, code=SHOW_TEXT,
+            params=make_params(index=index_within_row, text=prompt), tag="text"),
+        FloorAssertion(
+            row_id=ctx.row_id, kind="choice", list_index=choice_list_index, code=SHOW_TEXT,
+            params=make_params(options=list(options), inline=True, var_id=choice.var_id,
+                               if_cancel=choice.if_cancel),
+            tag="text"),
+    ), ()
 
 
 def _text_blocks(commands: list[dict[str, Any]]) -> list[tuple[int, int]]:
@@ -412,6 +473,14 @@ def _walk_commands(
                 params = c.get("parameters") or []
                 fragments.append(str(params[0]) if params else "")
             index_within_row = sum(1 for a in assertions if a.kind in ("text", "var_text"))
+            if has_inline_choice(join_text_lines(fragments)):
+                a, r = _extract_inline_choice(
+                    fragments, list_index, index_of.get(id(commands[end - 1]), -1),
+                    index_within_row, ctx)
+                assertions.extend(a)
+                refusals.extend(r)
+                i = end
+                continue
             try:
                 text = _normalize_fragments(fragments)
             except ValueError as exc:
