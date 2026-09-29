@@ -640,6 +640,24 @@ def _wait_for(emu: "Emulator", cond: Callable[[], bool], frames: int = 600) -> b
     return cond()
 
 
+@functools.lru_cache(maxsize=1)
+def _starter_reveal_lines() -> tuple[str, ...]:
+    """Each starter's reveal line, read and translated exactly as the
+    transpiler emits it (`reference/starter_selector_scene.json`, §4.3)."""
+    from rpg2gba.conversion_agent.transpiler import (
+        _load_starter_selector_scene, translate_text_codes)
+    starters = _load_starter_selector_scene(Path("reference")).get("starters") or []
+    lines: list[str] = []
+    for starter in starters:
+        result = translate_text_codes(starter["reveal"])
+        if result is None:
+            raise ScenarioError(f"starter reveal {starter['reveal']!r} has an untranslatable code")
+        lines.append(result.text)
+    if not lines:
+        raise ScenarioError("reference/starter_selector_scene.json has no starters")
+    return tuple(lines)
+
+
 def _service_failed(emu: "Emulator", beat_name: str, step: Step, what: str) -> ScenarioError:
     shot = emu.screenshot(f"{beat_name}_{dict(step.params)['name']}")
     return ScenarioError(f"{beat_name}: {step.row_id}: {what} ({shot})")
@@ -690,9 +708,21 @@ def _handle_service(emu: "Emulator", beat_name: str, step: Step) -> None:
                                   f"the mart sells {got}, expected {expected}")
         emu.tap("B")  # Quit
     elif name == "starter_select":
-        emu.advance_dialog("A", stop=emu.monpic_up)
-        if not emu.monpic_up():
-            raise _service_failed(emu, beat_name, step, "the starter reveal never showed")
+        # The transpiled reveal is speech only (transpiler
+        # `_emit_starter_selector`, user call 2026-08-01: the sprite is the
+        # gift ceremony's job), so the fact is one of the scene's reveal lines
+        # on screen -- not a mon pic, which this scene never draws. Stop on
+        # it and leave the rest of the page to `completes`.
+        reveals = _starter_reveal_lines()
+
+        def revealed() -> bool:
+            text = emu.current_field_message_text()
+            return text is not None and any(text_matches(r, text) for r in reveals)
+
+        emu.advance_dialog("A", stop=revealed)
+        if not revealed():
+            raise _service_failed(emu, beat_name, step,
+                                  f"no starter reveal line ({reveals}) showed")
     elif name == "phone_register":
         if "trainer" not in params:
             raise _service_failed(emu, beat_name, step,

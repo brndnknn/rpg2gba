@@ -423,6 +423,40 @@ def test_service_mart_checks_the_stock():
         STEP_HANDLERS["service"](_ServiceEmu(mart=[4]), "B1", step)
 
 
+class _StarterEmu(_ServiceEmu):
+    """Shows `messages` one per A press (ROM run 21: the transpiled reveal is
+    speech, then the scene's reveal line -- never a mon pic)."""
+
+    def __init__(self, messages):
+        super().__init__()
+        self._messages, self._at = list(messages), 0
+
+    def current_field_message_text(self):
+        return self._messages[self._at] if self._at < len(self._messages) else None
+
+    def advance_dialog(self, key, stop=None):
+        while self._at < len(self._messages) and not (stop and stop()):
+            self._at += 1
+
+
+def test_service_starter_select_stops_on_a_reveal_line_not_a_mon_pic():
+    from rpg2gba.playtest.archetypes.generic import STEP_HANDLERS
+
+    emu = _StarterEmu(["RED...", "You seem to be a Trainer who likes\\nto play it safe.",
+                       "Orchynx is the\\nbest pick!", "Go ahead and take it, RED."])
+    STEP_HANDLERS["service"](emu, "B1", _service_step(name="starter_select"))
+    assert emu.current_field_message_text() == "Orchynx is the\\nbest pick!"   # left for completes
+
+
+def test_service_starter_select_fails_loud_when_no_reveal_shows():
+    from rpg2gba.playtest.archetypes.generic import STEP_HANDLERS
+    from rpg2gba.playtest.errors import ScenarioError
+
+    emu = _StarterEmu(["RED, are you ready to take the\\nTrainer Aptitude Test?"])
+    with pytest.raises(ScenarioError, match="no starter reveal line"):
+        STEP_HANDLERS["service"](emu, "B1", _service_step(name="starter_select"))
+
+
 def test_service_phone_register_checks_the_match_call_flag():
     from rpg2gba.playtest.archetypes.generic import STEP_HANDLERS
     from rpg2gba.playtest.errors import ScenarioError
