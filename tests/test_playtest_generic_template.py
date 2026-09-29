@@ -425,18 +425,27 @@ def test_service_mart_checks_the_stock():
 
 class _StarterEmu(_ServiceEmu):
     """Shows `messages` one per A press (ROM run 21: the transpiled reveal is
-    speech, then the scene's reveal line -- never a mon pic)."""
+    speech, then the scene's reveal line -- never a mon pic). Like the real
+    `advance_dialog`, wipes the message buffer on exit (ROM run 22)."""
 
     def __init__(self, messages):
         super().__init__()
         self._messages, self._at = list(messages), 0
+        self._cleared = False
 
     def current_field_message_text(self):
-        return self._messages[self._at] if self._at < len(self._messages) else None
+        if self._cleared or self._at >= len(self._messages):
+            return None
+        return self._messages[self._at]
 
     def advance_dialog(self, key, stop=None):
         while self._at < len(self._messages) and not (stop and stop()):
             self._at += 1
+        self._cleared = True
+
+    def dismiss_message(self):
+        self._at += 1
+        self._cleared = False
 
 
 def test_service_starter_select_stops_on_a_reveal_line_not_a_mon_pic():
@@ -445,7 +454,9 @@ def test_service_starter_select_stops_on_a_reveal_line_not_a_mon_pic():
     emu = _StarterEmu(["RED...", "You seem to be a Trainer who likes\\nto play it safe.",
                        "Orchynx is the\\nbest pick!", "Go ahead and take it, RED."])
     STEP_HANDLERS["service"](emu, "B1", _service_step(name="starter_select"))
-    assert emu.current_field_message_text() == "Orchynx is the\\nbest pick!"   # left for completes
+    # Stopped on the reveal and dismissed it: the next text step reads the
+    # line after it (ROM run 23).
+    assert emu.current_field_message_text() == "Go ahead and take it, RED."
 
 
 def test_service_starter_select_fails_loud_when_no_reveal_shows():

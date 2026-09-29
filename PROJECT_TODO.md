@@ -17,6 +17,17 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 118. `emu.face()` steps the player when they already face that way
+
+Pressing the direction the player already faces is a walk in pokeemerald, not
+a turn. ROM run 24 (2026-09-29): `_start_talk` walked to (14,7) arriving facing
+up, then `face("up")` stepped the player to (14,6), so A landed on the lab's
+machine rather than the tile the beat meant. Harmless when the interaction
+target is really in front (it blocks the step), which is the only reason to
+face a direction; it only mislabels a failure that already happened.
+**Operator call: defer until it actually causes a problem.** Fix when needed:
+`face()` skips the press when the facing already matches.
+
 ### 117. Two-visit events: a route walks only one of two page-ending choice arms -- DONE 2026-09-29
 
 **Resolved the same day** (operator re-ruled: walk the hand's round trip).

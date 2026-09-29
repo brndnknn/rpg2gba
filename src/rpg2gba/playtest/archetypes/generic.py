@@ -712,17 +712,27 @@ def _handle_service(emu: "Emulator", beat_name: str, step: Step) -> None:
         # `_emit_starter_selector`, user call 2026-08-01: the sprite is the
         # gift ceremony's job), so the fact is one of the scene's reveal lines
         # on screen -- not a mon pic, which this scene never draws. Stop on
-        # it and leave the rest of the page to `completes`.
+        # it, dismiss it as a text step would, and leave the rest of the page
+        # to the steps after this one.
+        # The hit is latched inside the stop check: `advance_dialog` wipes
+        # `gStringVar4` on exit (`clear_field_message`), so re-reading the
+        # text afterwards always sees nothing (ROM run 22).
         reveals = _starter_reveal_lines()
+        seen: list[str] = []
 
         def revealed() -> bool:
             text = emu.current_field_message_text()
-            return text is not None and any(text_matches(r, text) for r in reveals)
+            if text is not None and any(text_matches(r, text) for r in reveals):
+                seen.append(text)
+            return bool(seen)
 
         emu.advance_dialog("A", stop=revealed)
-        if not revealed():
+        if not seen:
             raise _service_failed(emu, beat_name, step,
                                   f"no starter reveal line ({reveals}) showed")
+        # The reveal box is still up, but its buffer is gone; dismiss it so
+        # the next text step reads the line after it (ROM run 23).
+        emu.dismiss_message()
     elif name == "phone_register":
         if "trainer" not in params:
             raise _service_failed(emu, beat_name, step,
