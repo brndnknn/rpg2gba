@@ -17,6 +17,21 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 116. The lab starter scene is refused, so var 101's `+1` is invisible to the walk
+
+`map050/ev019/p0` (the starter scene, `addvar VAR_QUEST_LOG, 1` at
+`engine/data/maps/MokiTownProfessorLab/scripts.inc:1231`) is a computed row: its
+`pbTrainerBattle(... pbGet(151)+18 ...)` read of var 151 is unresolved, so the
+extractor refuses it (`unparsed_state_write` / `search_unknown_read`) and sets
+`havoc_global`. `beat_gen/page_sim` then widens var 101 to TOP for that firing,
+and every page gated on `VAR_QUEST_LOG >= 1` between the starter and Theo's house
+(`setvar 2`) reads as undecided. The liveness check (`beat_gen/state_arms.py`)
+treats undecided conservatively, so nothing is wrongly demoted. But the killer and
+enabler ordering around var 101 is approximate until this row extracts. Fix is in
+`ruby_subset` / `story_state`: model `pbGet(151)` as a known-range read (the starter
+species var) so the rest of the page's writes survive. Operator: deferred
+2026-09-29.
+
 ### 115. Collapsed warp events still emit a dead Poryscript body
 
 Found 2026-09-18 while inventorying script warps for the warp-facing design

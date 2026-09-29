@@ -158,6 +158,22 @@ class PlannedBeat:
 
 
 @dataclass(frozen=True)
+class LivenessProblem:
+    """A claimed page that is not live at its route position although a
+    claimed writer makes it live at another position: not demoted, reported
+    (review doc "Liveness order problems"). `kind` is `killer_first` (it was
+    live earlier and a write that lifted a higher page, or cleared one of its
+    own conditions, came first) or `enabler_later` (a beat later on the route
+    claims the write that would enable it)."""
+
+    beat: str
+    page: str
+    kind: str
+    detail: str
+    position: int
+
+
+@dataclass(frozen=True)
 class ChapterPlan:
     """Everything the emitter and the review doc need, fully decided."""
 
@@ -168,6 +184,7 @@ class ChapterPlan:
     elsewhere: tuple[Elsewhere, ...] = ()
     order_dependent: tuple[OrderDependentKey, ...] = ()
     route: RoutePlan | None = field(default=None, compare=False)
+    liveness_problems: tuple[LivenessProblem, ...] = ()
 
     def __post_init__(self) -> None:
         names = [b.name for b in self.beats]

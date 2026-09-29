@@ -77,6 +77,7 @@ from rpg2gba.beat_gen.facing import (
 from rpg2gba.beat_gen.group import plan_beats
 from rpg2gba.beat_gen.locate import locate_beats, order_beats, route_order
 from rpg2gba.beat_gen.plan import (
+    LivenessProblem,
     ARCHETYPE_TEMPLATES,
     ChapterPlan,
     Elsewhere,
@@ -838,6 +839,19 @@ def _unwalked_taint(beats: Sequence[PlannedBeat], verdicts: Sequence[RowVerdict]
     return out
 
 
+def _live_order_dependent(keys: Sequence, elsewhere: Sequence[Elsewhere]) -> tuple:
+    """`story.order_dependent` without the writers the liveness check demoted
+    (`state_arms`, they never run on the route); a key left with fewer than
+    two writers no longer depends on the order."""
+    gone = {e.row_id for e in elsewhere if e.status == "never_fires"}
+    out = []
+    for k in keys:
+        writers = tuple(w for w in k.writers if w not in gone)
+        if len(writers) >= 2:
+            out.append(dataclasses.replace(k, writers=writers))
+    return tuple(out)
+
+
 def _page_for(build_dir: Path):  # noqa: ANN202
     """page row id -> that page's raw RMXP dict."""
     def page(page_row_id: str) -> dict:
@@ -1086,8 +1100,9 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     # 6b. Ruling 19 steps 4-5 (`beat_gen/state_arms.py`): with the order and
     #     the cells known, keep only the arms the walk's state and position
     #     select, re-firing a page whose own writes select the rest.
+    liveness_problems: list[LivenessProblem] = []
     beats, state_elsewhere = select_state_arms(
-        beats, seeds[chapter_id], row_states=row_states, page_for=_page_for(build_dir),
+        beats, seeds[chapter_id], order_problems=liveness_problems, row_states=row_states, page_for=_page_for(build_dir),
         firing_for=_firing_for(records, nudge_groups, _event_cell(build_dir)),
         taint=_unwalked_taint(beats, story.rows, row_states),
         walkable=lambda rid: rid in floors and not floors[rid].refused,
@@ -1126,8 +1141,9 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         beats=beats,
         refusals=selection.refusals + tuple(cell_refusals),
         elsewhere=selection.elsewhere + dead_elsewhere + choice_elsewhere + state_elsewhere,
-        order_dependent=story.order_dependent,
+        order_dependent=_live_order_dependent(story.order_dependent, state_elsewhere),
         route=route,
+        liveness_problems=tuple(liveness_problems),
     )
 
 

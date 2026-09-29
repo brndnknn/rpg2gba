@@ -232,6 +232,15 @@ def _order_dependent(plan: ChapterPlan, *, floor_lookup: FloorLookup,
     return lines
 
 
+def _liveness_problems(plan: ChapterPlan) -> list[str]:
+    """Pages kept in the plan that are not their event's live page at their
+    route position (`state_arms`): solver work, not demoted."""
+    if not plan.liveness_problems:
+        return ["none"]
+    return [f"- {p.beat} (#{p.position}) page {p.page}: {p.kind} -- {p.detail}"
+            for p in sorted(plan.liveness_problems, key=lambda p: (p.position, p.page))]
+
+
 def render_review(plan: ChapterPlan, *, floor_lookup: FloorLookup,
                   locate: Locator | None = None) -> str:
     """The review document as markdown, ending in exactly one newline.
@@ -262,5 +271,9 @@ def render_review(plan: ChapterPlan, *, floor_lookup: FloorLookup,
 
     parts.append("## Order-dependent writes")
     parts.extend(_order_dependent(plan, floor_lookup=floor_lookup, locate=locate))
+    parts.append("")
+
+    parts.append("## Liveness order problems")
+    parts.extend(_liveness_problems(plan))
 
     return "\n".join(parts) + "\n"

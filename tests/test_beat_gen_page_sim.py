@@ -467,3 +467,15 @@ def test_npc_facing_stays_undecided():
     row = "map051/ev013/p0"
     result = run_page(row, page, rows, {}, Firing(cell=(5, 6), event_cell=(5, 5)))
     assert result.undecided == {f"{row}/b0", f"{row}/b1"}
+
+
+def test_an_adjust_on_a_definite_value_gives_the_definite_result():
+    page = {"trigger": 0, "condition": dict(_NO_CONDITION),
+            "list": [{"code": 122, "indent": 0, "parameters": [101, 101, 1, 0, 1]},
+                     _blank(indent=0)]}
+    rows = _rows(50, 19, page)
+    firing = Firing(cell=None, event_cell=None)
+    run = run_page("map050/ev019/p0", page, rows, {}, firing)
+    assert run.state[Variable(101)] == frozenset({1})
+    again = run_page("map050/ev019/p0", page, rows, run.state, firing)
+    assert again.state[Variable(101)] == frozenset({2})

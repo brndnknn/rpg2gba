@@ -23,19 +23,43 @@ run on the ROM (a refused autorun, a parallel page), so every write of such a
 page is folded in as a possibility after each firing (`taint`), and a test on
 what it writes is left undecided. A wrong decision here is still caught: the
 beat declares the arm's assertions and the P11 walk checks them.
+
+Page liveness (ROM run 20, 2026-09-29). The same walk decides, the first time
+it fires a claimed page, whether that page is its event's highest live page at
+that point, from the state the claimed writers built (never the story model's
+`enabled_by`). Pages of one beat are judged in the beat's own firing order, so
+a template that fires p0 and then p1 (a trainer's re-talk, an item ball's
+negative check) applies p0's writes before judging p1. A page a definite state
+rules out -- one of its conditions certainly fails, or a higher page's
+conditions certainly hold -- is one of three kinds:
+
+- `never`: no claimed writer makes it live at any earlier position (its
+  enabler is unclaimed or refused). Demoted: its claimed rows become
+  `never_fires` entries whose detail names the page, the failing condition,
+  the live page and the missing enabler, and its writes never enter the state.
+- `killer_first`: it was (or, in an undecided state, may have been) live earlier in the walk, and a write that lifted a
+  higher page came first. Kept, and reported as a `LivenessProblem`.
+- `enabler_later`: a beat later on the route claims the write that would make
+  it live. Kept, and reported.
+
+The last two are solver work (killer edges; `Adjust` writers that never reach a
+`>=` threshold), not this stage's to fix. A state the walk can't pin down (a
+tainted key, a refused page condition) keeps the beat and logs it. One pass in
+walk order is the fixpoint: a demotion only affects beats after it.
 """
 from __future__ import annotations
 
 import dataclasses
+import logging
 from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import Any
 
 from rpg2gba.beat_gen.page_sim import Firing, PageRun, run_page
-from rpg2gba.beat_gen.plan import Elsewhere, PlannedBeat, make_kwargs
+from rpg2gba.beat_gen.plan import Elsewhere, LivenessProblem, PlannedBeat, make_kwargs
 from rpg2gba.chapter_manifest.generator import iter_page_scopes
 from rpg2gba.chapter_manifest.schema import parse_row_id
 from rpg2gba.story_state.extract import RowState
-from rpg2gba.story_state.model import VARIABLE_TOP, _get, _union_values
+from rpg2gba.story_state.model import VARIABLE_TOP, _cmp, _get, _union_values
 from rpg2gba.story_state.state import (
     Adjust,
     Assign,
@@ -60,6 +84,123 @@ _FACING_NAMES = {2: "down", 4: "left", 6: "right", 8: "up"}
 _REFIRES = 3
 
 Taint = Assign | Adjust | Key
+
+logger = logging.getLogger(__name__)
+
+
+@dataclasses.dataclass(frozen=True)
+class _Verdict:
+    kind: str        # "never" (bucket a), "killer_first" (b), "enabler_later" (c)
+    detail: str
+
+
+def _test_result(test: Any, state: Mapping) -> bool | None:
+    """True/False when every value the key can hold agrees on `test`; None
+    when the state doesn't pin it down (a mix, or the havoc'd top)."""
+    values = _get(state, test.key)
+    if VARIABLE_TOP in values:
+        return None
+    results = {_cmp(test.op, v, test.value) for v in values}
+    return results.pop() if len(results) == 1 else None
+
+
+def _page_result(page: str, states: Mapping[str, RowState], state: Mapping) -> bool | None:
+    """Do all of `page`'s conditions hold in `state`: True, False, or None
+    (undecided, including a condition the story model refused)."""
+    rs = states[page]
+    if rs.page_refusals:
+        return None
+    results = [_test_result(t, state) for t in rs.page_tests]
+    if any(r is False for r in results):
+        return False
+    return None if any(r is None for r in results) else True
+
+
+def _tests_text(page: str, states: Mapping[str, RowState]) -> str:
+    tests = states[page].page_tests
+    return " and ".join(f"{_key(t.key)} {t.op} {t.value}" for t in tests) or "no condition"
+
+
+def _claimed_pages(beat: PlannedBeat) -> list[str]:
+    out: list[str] = []
+    for rid in beat.rows:
+        parsed = parse_row_id(rid)
+        page = parsed.owning_page_row_id or rid
+        if parse_row_id(page).kind != "page":
+            raise ValueError(f"{beat.name}: row {rid!r} of a firing beat sits on no page")
+        if page not in out:
+            out.append(page)
+    return out
+
+
+def _holds_test(t: Any, values: Collection) -> bool:
+    return any(_cmp(t.op, v, t.value) for v in values)
+
+
+def _dead_verdict(page: str, states: Mapping[str, RowState], state: Mapping,
+                  writers: Mapping[Key, tuple[str, str, int]], history: Sequence[Mapping],
+                  later: Sequence[tuple[str, str, int]]) -> _Verdict | None:
+    """None when `page` isn't provably dead in `state` (module docstring);
+    otherwise how: `enabler_later` when a later beat's claimed `Assign` row
+    would satisfy a failing condition; `killer_first` when the page was live
+    in an earlier state of the walk (`history`); else `never` -- no claimed
+    writer makes it live. `later` is (row id, beat name, beat index)."""
+    own = states[page]
+    pages = own.event_page_row_ids
+    result = _page_result(page, states, state)
+    higher = list(pages[pages.index(page) + 1:])
+    winner = next((p for p in reversed(higher) if _page_result(p, states, state) is True), None)
+    failing = [t for t in own.page_tests if _test_result(t, state) is False]
+    if result is False and failing:
+        pass
+    elif winner is not None:
+        failing = []
+    else:
+        if result is not True or any(_page_result(p, states, state) is None for p in higher):
+            logger.info("liveness: %s indeterminate at its route position, kept", page)
+        return None
+    live = winner
+    if live is None:
+        live = next((p for p in reversed(pages[:pages.index(page)])
+                     if _page_result(p, states, state) is True), None)
+    enabler: tuple[str, str, int] | None = None
+    reasons = []
+    for t in failing:
+        enabler = enabler or next(
+            ((rid, name, idx) for rid, name, idx in later
+             if any(isinstance(w, Assign) and w.key == t.key and _holds_test(t, w.values)
+                    for w in states[rid].writes)), None)
+        killer = writers.get(t.key)
+        unclaimed = sorted(
+            rid for rid, rs in states.items() if rs is not own and any(
+                isinstance(w, Assign) and w.key == t.key and _holds_test(t, w.values)
+                for w in rs.writes))
+        now = sorted(_get(state, t.key), key=repr)
+        why = (f"{_key(t.key)} was set to {now} by {killer[0]} (beat {killer[1]}, #{killer[2]})"
+               if killer else f"{_key(t.key)} is {now} (seed state), never written on the route")
+        reasons.append(f"{_key(t.key)} {t.op} {t.value} fails: {why}; the rows that could "
+                       f"write it {unclaimed or 'none'} are not walked before it")
+    if not failing:
+        cause = f"the higher page {winner} (needs {_tests_text(winner, states)}) holds"
+    else:
+        cause = "; ".join(reasons)
+    live_text = (f"{live} (needs {_tests_text(live, states)})" if live is not None
+                 else "no page is certainly live")
+    detail = (f"{page} (needs {_tests_text(page, states)}) is not its event's live page at this "
+              f"route position: {cause}; live page: {live_text}")
+    if enabler is not None:
+        return _Verdict("enabler_later", f"{detail}; row {enabler[0]} of beat {enabler[1]} "
+                                         f"(#{enabler[2]}), later on the route, would enable it")
+    # Conservative: an earlier state where liveness is True OR undecided
+    # keeps the page (an indeterminate earlier state is never proof of `never`).
+    was_live = next((i for i, h in enumerate(history)
+                     if _page_result(page, states, h) is not False
+                     and not any(_page_result(p, states, h) is True for p in higher)), None)
+    if was_live is not None:
+        certain_ = _page_result(page, states, history[was_live]) is True
+        return _Verdict("killer_first", f"{detail}; it was {'live' if certain_ else 'possibly live'} "
+                                        f"at route position {was_live} (before that beat's write)")
+    return _Verdict("never", detail)
 
 
 def apply_taint(state: dict, taint: Collection[Taint]) -> dict:
@@ -137,6 +278,7 @@ def select_state_arms(
     taint: Collection[Taint] = (),
     walkable: Callable[[str], bool] = lambda _rid: True,
     choice_openers: Callable[[str], Collection[int]] = lambda _rid: (),
+    order_problems: list[LivenessProblem] | None = None,
 ) -> tuple[tuple[PlannedBeat, ...], tuple[Elsewhere, ...]]:
     """(the beats with state/position-selected arms settled, the arms no
     walk takes). `beats` are in walk order. `firing_for(beat, page_row_id)`
@@ -148,11 +290,18 @@ def select_state_arms(
     arrival_runs: dict[tuple[str, str], PageRun] = {}
     out: list[PlannedBeat] = []
     elsewhere: list[Elsewhere] = []
+    writers: dict[Key, tuple[str, str, int]] = {}
+    decided: dict[str, _Verdict | None] = {}
+    history: list[Mapping] = [state]
+    problems: list[LivenessProblem] = []
 
-    for beat in beats:
+    for at, beat in enumerate(beats):
         if beat.template not in FIRING_TEMPLATES:
             out.append(beat)
+            history.append(state)
             continue
+        claimed_pages = _claimed_pages(beat)
+        gone: dict[str, str] = {}
         random = {r for r, _ in dict(beat.kwargs).get("random_arms", ())}
         dropped: set[str] = set()
         refires: list[PlannedBeat] = []
@@ -162,6 +311,27 @@ def select_state_arms(
             firing = firing_for(beat, page_id)
             arrival = states[page_id].trigger in _ARRIVAL
             before = state
+            if page_id in claimed_pages:
+                # Liveness, at the walk's first firing of the page and in the
+                # beat's own firing order (a template that fires p0 then p1
+                # applies p0's writes before p1 is judged); a later firing
+                # is a re-fire the arm model below owns.
+                if page_id not in decided:
+                    later = [(r, b.name, i) for i, b in enumerate(beats[at + 1:], at + 1)
+                             if b.template in FIRING_TEMPLATES for r in b.rows
+                             if parse_row_id(r).map_id == parse_row_id(page_id).map_id
+                             and r in states and (parse_row_id(r).owning_page_row_id or r) != page_id]
+                    verdict = _dead_verdict(page_id, states, state, writers, history, later)
+                    decided[page_id] = verdict
+                    if verdict is not None and verdict.kind != "never":
+                        problems.append(LivenessProblem(
+                            beat.name, page_id, verdict.kind, verdict.detail, at))
+                        logger.warning("liveness order problem (%s) in %s: %s",
+                                       verdict.kind, beat.name, verdict.detail)
+                verdict = decided[page_id]
+                if verdict is not None and verdict.kind == "never":
+                    gone[page_id] = verdict.detail
+                    continue
             if arrival and (beat.group, page_id) in arrival_runs:
                 # An arrival page fired once, on the crossing into the map;
                 # the group's other beats observe that same firing.
@@ -169,6 +339,9 @@ def select_state_arms(
             else:
                 run = run_page(page_id, page, states, state, firing)
                 state = apply_taint(run.state, taint)
+                for k, v in run.state.items():
+                    if before.get(k, _get(before, k)) != v:
+                        writers[k] = (page_id, beat.name, at)
                 if arrival:
                     arrival_runs[(beat.group, page_id)] = run
             if beat.template not in _ARM_TEMPLATES:
@@ -207,11 +380,19 @@ def select_state_arms(
                     rid, "unselected_arm",
                     detail=f"not taken on the walk: {reasons[rid]} (ruling 19)"))
 
-        if dropped:
-            kept = tuple(r for r in beat.rows if r not in dropped)
+        for rid in beat.rows:
+            if (parse_row_id(rid).owning_page_row_id or rid) in gone:
+                elsewhere.append(Elsewhere(
+                    rid, "never_fires", detail=gone[parse_row_id(rid).owning_page_row_id or rid]))
+        if dropped or gone:
+            kept = tuple(r for r in beat.rows if r not in dropped
+                         and (parse_row_id(r).owning_page_row_id or r) not in gone)
             if kept:
                 out.append(dataclasses.replace(beat, rows=kept))
         else:
             out.append(beat)
         out.extend(refires)
+        history.append(state)
+    if order_problems is not None:
+        order_problems.extend(problems)
     return tuple(out), tuple(elsewhere)
