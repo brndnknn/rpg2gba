@@ -264,6 +264,7 @@ class _AnyOf:
 
 def _derive_story_precedence(
     enabled_by: Mapping[str, tuple[tuple[str, ...], ...]], group_by_row: Mapping[str, str],
+    *, kind: str = "story",
 ) -> tuple[tuple[PrecedenceEdge, ...], tuple[_AnyOf, ...]]:
     """Derive precedence from the story model's `enabled_by`
     (REDERIVATION_PLAN.md §16.3 ruling 16).
@@ -295,10 +296,10 @@ def _derive_story_precedence(
             if len(befores) == 1:
                 writer = next(w for w in alternatives if group_by_row.get(w) == befores[0])
                 edges.add(PrecedenceEdge(before=befores[0], after=after_group,
-                                         reason=f"story:{writer}->{row_id}"))
+                                         reason=f"{kind}:{writer}->{row_id}"))
             else:
                 any_of.add(_AnyOf(after=after_group, befores=tuple(befores),
-                                  reason=f"story_any:{row_id}"))
+                                  reason=f"{kind}_any:{row_id}"))
     return (tuple(sorted(edges, key=lambda e: (e.before, e.after, e.reason))),
             tuple(sorted(any_of, key=lambda a: (a.after, a.befores, a.reason))))
 
@@ -556,6 +557,7 @@ def solve_route(
     occupancy: Mapping[int, MapOccupancy] | None = None,
     candidates: Mapping[str, tuple[RouteCandidate, ...]] | None = None,
     enabled_by: Mapping[str, tuple[tuple[str, ...], ...]] | None = None,
+    guard_enabled_by: Mapping[str, tuple[tuple[str, ...], ...]] | None = None,
     soft_precedence: (Sequence[PrecedenceEdge]
                       | Callable[[Sequence[PrecedenceEdge],
                                   Sequence[tuple[str, tuple[str, ...]]]],
@@ -672,6 +674,12 @@ def solve_route(
     befores)`) and returning the soft edges: the interior-exit rule needs
     both to tell first-visit beats from later ones.
 
+    `guard_enabled_by` (same shape as `enabled_by`, default none) holds beats
+    behind a live coord-trigger guard until a row that ends it
+    (`beat_gen.guard_reach`): derived like story enablers -- one writer group an
+    edge, several an any-of -- but with reason prefix `guard`, so the route plan
+    shows which precedence came from a wall.
+
     `order_violations` (default None) counts, for an order prefix of group
     ids, how often it breaks a constraint precedence can't state -- "once
     inside a dead-end region, stay until its exit" (`beat_gen.interiors.
@@ -731,6 +739,12 @@ def solve_route(
             group_by_row[row_id] = gp.group_id
     self_switch_precedence = _derive_precedence(manifest_rows, group_by_row)
     story_precedence, story_any_of = _derive_story_precedence(enabled_by or {}, group_by_row)
+    guard_precedence, guard_any_of = _derive_story_precedence(
+        guard_enabled_by or {}, group_by_row, kind="guard")
+    story_precedence = tuple(sorted({*story_precedence, *guard_precedence},
+                                    key=lambda e: (e.before, e.after, e.reason)))
+    story_any_of = tuple(sorted({*story_any_of, *guard_any_of},
+                                key=lambda a: (a.after, a.befores, a.reason)))
 
     entry_group_id = next(
         (gp.group_id for gp in group_points if (gp.map_id, gp.cell) == (entry_map, entry_cell)),

@@ -236,12 +236,20 @@ class _Walk:
     the pages the player can fire. Only states in which the page is live are
     nodes; a write that ends the span drops the node."""
 
-    def __init__(self, page_row_id: str, facts: MapFacts, pages: Mapping[int, tuple[str, ...]],
+    def __init__(self, page_row_id: str | None, facts: MapFacts,
+                 pages: Mapping[int, tuple[str, ...]],
                  keys: list[Key], domains: Mapping[Key, tuple[bool | int, ...]],
                  tests_by_key: Mapping[Key, list[Test]], live_states: list[tuple],
                  targets: frozenset[Cell], guards: Mapping[int, frozenset[Cell]],
-                 scenes: list[int]) -> None:
+                 scenes: list[int], *, strict: bool = True) -> None:
+        """`page_row_id` None: no page is under test (guard-reach mode,
+        `beat_gen/guard_reach.py`) and `strict` False: what the walk can't
+        decide is passed through as reachable rather than raised as
+        `_Unproven` -- a reach over-approximation, where the never-fires
+        proof is an under-approximation."""
         self.page = page_row_id
+        self.own_event = _event_of(page_row_id) if page_row_id is not None else None
+        self.strict = strict
         self.facts = facts
         self.pages = pages
         self.keys = keys
@@ -251,7 +259,7 @@ class _Walk:
         self.index = {combo: i for i, combo in enumerate(live_states)}
         self.targets = targets
         self.guards = guards
-        self.enumerated = {_event_of(page_row_id), *guards, *scenes}
+        self.enumerated = {e for e in (self.own_event, *guards, *scenes) if e is not None}
         self.scenes = scenes
         self.coord_owner = {c: e for e, cells in facts.coord_cells.items() for c in cells}
         self.used = _Used(states=len(live_states))
@@ -293,7 +301,7 @@ class _Walk:
                     info.push[c] = ends
                     self.used.guard_cells.setdefault(event, set()).add(c)
         for event, ps in self.pages.items():
-            if event == _event_of(self.page) or event in self.guards:
+            if event == self.own_event or event in self.guards:
                 continue
             live = ([p] if (p := _live_page(ps, facts, assignment)) is not None else []) \
                 if event in self.enumerated else [p for p in ps if facts.candidate(p)]
@@ -382,14 +390,17 @@ class _Walk:
             return
         info = self.info(idx)
         event = self.coord_owner.get(cell)
-        if event == _event_of(self.page):
+        if event is not None and event == self.own_event:
             raise _Unproven(f"{cell} can be stepped on in state {self.assignment(idx)}")
         if event is not None and event in info.guard_page:
             self.touched.add((idx, cell))
             live = info.guard_page[event]
             if cell in info.inexact:
+                if not self.strict:
+                    self.add(idx, cell)
+                    return
                 raise _Unproven(f"{cell}: {info.inexact[cell]}")
-            if _has_code(live, facts, frozenset({_CALL_COMMON_EVENT})):
+            if self.strict and _has_code(live, facts, frozenset({_CALL_COMMON_EVENT})):
                 raise _Unproven(f"{live} runs a common event")
             ends = info.push.get(cell)
             if ends is not None:
@@ -415,7 +426,7 @@ class _Walk:
                 if solid and tile in self.targets:
                     raise _Unproven(f"{tile} can be pressed into from {cell}")
                 # A way out of the map would let the player come back another way.
-                if (tile == cell or solid) and tile in facts.graph.warp_exits:
+                if self.strict and (tile == cell or solid) and tile in facts.graph.warp_exits:
                     raise _Unproven(f"a warp at {tile} is reachable")
             for pid in info.parallels:
                 self.fire_at(idx, cell, pid)
@@ -426,6 +437,12 @@ class _Walk:
         self.used.reached = len({c for _, c in self.reach})
 
     def fire_at(self, idx: int, cell: Cell, page_row_id: str) -> None:
+        if not self.strict:
+            # A transfer takes the player off the map; a common event's writes
+            # are already inlined in the page's rows (`story_state.extract`).
+            if not _has_code(page_row_id, self.facts, frozenset({TRANSFER_PLAYER})):
+                self.transition(idx, cell, page_row_id)
+            return
         if _has_code(page_row_id, self.facts, frozenset({TRANSFER_PLAYER, _CALL_COMMON_EVENT})):
             raise _Unproven(f"{page_row_id} may transfer the player or run a common event")
         self.transition(idx, cell, page_row_id)

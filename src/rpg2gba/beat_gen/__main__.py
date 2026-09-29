@@ -54,6 +54,12 @@ from rpg2gba.beat_gen.interiors import (
     interior_exit_edges,
     region_order_check,
 )
+from rpg2gba.beat_gen.guard_reach import (
+    apply_guard_reach,
+    check_guard_order,
+    guard_enabled_by,
+    guard_reaches,
+)
 from rpg2gba.beat_gen.never_fires import (
     MapFacts,
     TOUCH_TRIGGERS,
@@ -670,16 +676,12 @@ def _page_candidate(verdicts: Mapping[str, RowVerdict], end_state, states: Mappi
     return candidate
 
 
-def _touch_never_fires(
-    beats: Sequence[PlannedBeat], *, row_states, page_for, event_cell, build_dir: Path,
-    graphs: Mapping[int, MapGraph], world: WorldGraph, chain_maps: frozenset[int],
-    entry: tuple[int, tuple[int, int]], occupancy, verdicts: Mapping[str, RowVerdict], end_state,
-) -> tuple[tuple[PlannedBeat, ...], tuple[Elsewhere, ...]]:
-    """Second source of `never_fires` (2026-09-28 ruling, `beat_gen/never_fires.py`):
-    a walked touch page whose coord-trigger cells the walk can't step on
-    while it is live -- guard rows that push the player off, and the cell an
-    arrival scene leaves them on. The page's rows leave the beats and become
-    `never_fires` elsewhere entries carrying the proof."""
+def _map_facts_factory(
+    *, row_states, page_for, event_cell, build_dir: Path, graphs: Mapping[int, MapGraph],
+    world: WorldGraph, chain_maps: frozenset[int], entry: tuple[int, tuple[int, int]], occupancy,
+    verdicts: Mapping[str, RowVerdict], end_state,
+) -> Callable[[int], MapFacts]:
+    """map id -> the `MapFacts` the walk provers read (cached)."""
     facts_cache: dict[int, MapFacts] = {}
     constants = build_dir / "porymap" / "map_constants.json"
 
@@ -695,7 +697,17 @@ def _touch_never_fires(
                 arrivals=_arrival_cells(world, graphs, map_id, chain_maps, entry),
                 candidate=_page_candidate(verdicts, end_state, row_states(map_id)))
         return facts_cache[map_id]
+    return facts_for
 
+
+def _touch_never_fires(
+    beats: Sequence[PlannedBeat], *, row_states, facts_for: Callable[[int], MapFacts],
+) -> tuple[tuple[PlannedBeat, ...], tuple[Elsewhere, ...]]:
+    """Second source of `never_fires` (2026-09-28 ruling, `beat_gen/never_fires.py`):
+    a walked touch page whose coord-trigger cells the walk can't step on
+    while it is live -- guard rows that push the player off, and the cell an
+    arrival scene leaves them on. The page's rows leave the beats and become
+    `never_fires` elsewhere entries carrying the proof."""
     proofs: dict[str, str] = {}
     for b in beats:
         for rid in b.rows:
@@ -958,11 +970,11 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     occupancy = _LazyOccupancy(build_dir)
     # 3c. Touch pages the walk can't step on while they are live (guard rows,
     #     arrival displacement): never_fires, not beats.
-    beats, touch_elsewhere = _touch_never_fires(
-        beats, row_states=row_states, page_for=_page_for(build_dir),
-        event_cell=_event_cell(build_dir), build_dir=build_dir,
-        graphs=graphs, world=world, chain_maps=chain_maps, entry=entry,
+    facts_for = _map_facts_factory(
+        row_states=row_states, page_for=_page_for(build_dir), event_cell=_event_cell(build_dir),
+        build_dir=build_dir, graphs=graphs, world=world, chain_maps=chain_maps, entry=entry,
         occupancy=occupancy, verdicts=all_verdicts, end_state=story.end_state)
+    beats, touch_elsewhere = _touch_never_fires(beats, row_states=row_states, facts_for=facts_for)
     dead_elsewhere = dead_elsewhere + touch_elsewhere
     warp_rows = frozenset(r for b in beats if b.template == "warp" for r in b.rows)
     records, cell_refusals = locate_beats(
@@ -998,6 +1010,25 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                           elsewhere=selection.elsewhere + tuple(
                               Elsewhere(row_id, "later", owner)
                               for row_id, owner in later.items()))
+
+    # 4c. Guard walls (`beat_gen/guard_reach.py`): approach cells the player
+    #     can't reach while a coord guard is live are dropped, or the beat waits
+    #     for a claimed row that ends the guard (2026-09-29, the lab's signs).
+    group_of_row = {r: b.group for b in beats for r in b.rows}
+    guard_cache: dict[int, Sequence] = {}
+
+    def reaches_for(map_id: int):  # noqa: ANN202
+        if map_id not in guard_cache:
+            guard_cache[map_id] = guard_reaches(
+                facts_for(map_id), seed=seeds[chapter_id], default=_default_value)
+        return guard_cache[map_id]
+
+    records, guard_waits = apply_guard_reach(
+        records, reaches_for=reaches_for, map_of=lambda rec: map_uranium_id(rec.map_constant),
+        row_state=lambda rid: row_states(parse_row_id(rid).map_id).get(rid),
+        group_of_row=group_of_row)
+    for wait in guard_waits:
+        logger.info("guard_reach: %s", wait.describe())
 
     # 5. Solve, with the same argument assembly as `routing plan`. The
     #    route starts where the predecessor leaves the player (A5), not at
@@ -1038,6 +1069,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         world=world, map_ids=_load_map_ids(build_dir),
         occupancy=occupancy, candidates=candidates, entry=entry,
         enabled_by=enabled_by,
+        guard_enabled_by=guard_enabled_by(guard_waits, {r.beat_id: r.rows[0] for r in records}),
         soft_precedence=lambda accepted, any_of: soft + interior_exit_edges(
             world, **regions, hard_and_story=accepted, any_of=any_of),
         order_violations=region_order_check(world, **regions),
@@ -1048,6 +1080,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     #    blocker): it stops on the solver's side instead of round-tripping
     #    into a map this chapter's ROM doesn't build.
     group_order, picks = route_order(route.nodes)
+    check_guard_order(guard_waits, group_order, group_of_row)
     beats = order_beats(beats, group_order, _picks_with_fallback(records, picks))
     nudge_groups = {b.group for b in beats if b.template == "arrival_nudge"}
     # 6b. Ruling 19 steps 4-5 (`beat_gen/state_arms.py`): with the order and
