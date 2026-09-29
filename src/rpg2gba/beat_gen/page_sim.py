@@ -91,6 +91,9 @@ _PLAYER = -1
 
 _MAX_STEPS = 2000
 
+_PLAYER_SCRIPT_RE = re.compile(r"game_player|moveto|jumpto|pbMoveRoute|pbTurnTowardEvent")
+_SCRIPT_CODES = (355, 655)
+
 # --- public shapes -----------------------------------------------------
 
 
@@ -125,6 +128,18 @@ class PageRun:
     undecided: frozenset[str]
     state: dict
     exact: bool
+    # Where the player stands when the firing ends, tracked through the
+    # page's player move routes from `Firing.cell`. `cell_exact` is False when
+    # some command that could have moved the player was not (certainly)
+    # executed as read -- an undecided subtree or a lost `goto` holding a
+    # player move route or transfer, or a script naming the player -- in
+    # which case `cell` is only where the walk got to. `cell` is None once a
+    # transfer, a random step or an unknown start loses it.
+    cell: tuple[int, int] | None = None
+    cell_exact: bool = True
+    # Every cell the player's move routes visited, in order (start excluded):
+    # a route blocked by terrain stops somewhere on it.
+    path: tuple[tuple[int, int], ...] = ()
 
 
 # --- control-flow signals -----------------------------------------------
@@ -295,6 +310,35 @@ def _decide_arm(
 _POISON_LEAF_CODES = frozenset({_BREAK_LOOP, EXIT_EVENT, JUMP_TO_LABEL})
 
 
+def _is_player_cmd(cmd: Mapping[str, Any]) -> bool:
+    """A command that repositions the player: a transfer, or a Set Move Route
+    aimed at the player (-1)."""
+    code = cmd.get("code")
+    if code == TRANSFER_PLAYER:
+        return True
+    params = cmd.get("parameters") or []
+    return code == SET_MOVE_ROUTE and bool(params) and params[0] == _PLAYER
+
+
+def _contains_player_cmd(nodes: list[Node]) -> bool:
+    for node in nodes:
+        if isinstance(node, Leaf) and _is_player_cmd(node.cmd):
+            return True
+        if isinstance(node, IfNode):
+            if _contains_player_cmd(node.then):
+                return True
+            if node.otherwise is not None and _contains_player_cmd(node.otherwise):
+                return True
+        elif isinstance(node, ChoiceNode):
+            for _, _, children in node.arms:
+                if _contains_player_cmd(children):
+                    return True
+        elif isinstance(node, LoopNode):
+            if _contains_player_cmd(node.children):
+                return True
+    return False
+
+
 def _contains_poison_code(nodes: list[Node]) -> bool:
     """True if `nodes`, recursively (through nested ifs/choices/loops),
     contains a 113/115/119 leaf -- taking this subtree without knowing
@@ -346,6 +390,9 @@ class _Runner:
         self.global_havoc = False
         self.steps = 0
         self._route_target: int | None = None
+        self.cell_lost = False
+        self.player_cmds_run = 0
+        self.path: list[tuple[int, int]] = []
         self._writes_cache: dict[str, dict[int, tuple[Write, ...]]] = {}
 
         # Structural navigation (which row id is which arm of which
@@ -463,6 +510,8 @@ class _Runner:
                 touched.add(cur)
                 stack.extend(self.scope_children.get(cur, ()))
         self.undecided.update(touched)
+        if any(_contains_player_cmd(nl) for nl in node_lists):
+            self.cell_lost = True
 
         wrote = False
         for r in touched:
@@ -605,6 +654,8 @@ class _Runner:
             dx = sp[0] if len(sp) > 0 else 0
             dy = sp[1] if len(sp) > 1 else 0
             self.cell = (x + dx, y + dy)
+        if self.cell is not None and self.cell != (x, y):
+            self.path.append(self.cell)
         # Any other move sub-command (turn, wait, speed change, ...)
         # doesn't reposition the player.
 
@@ -656,6 +707,8 @@ class _Runner:
                             raise _Poison()
                         i = target
                         continue
+                    if _is_player_cmd(node.cmd):
+                        self.player_cmds_run += 1
                     if code == TRANSFER_PLAYER:
                         self.cell = None
                         tp = node.cmd.get("parameters") or []
@@ -691,6 +744,10 @@ def run_page(
     runner = _Runner(page_row_id, scopes, row_states, state, firing)
     runner._enter(row)
 
+    page_cmds = page.get("list") or []
+    if any(c.get("code") in _SCRIPT_CODES and _PLAYER_SCRIPT_RE.search(
+            str((c.get("parameters") or [""])[0])) for c in page_cmds):
+        runner.cell_lost = True
     poisoned = False
     try:
         runner._exec(tree, page_row_id)
@@ -703,6 +760,8 @@ def run_page(
     except _Poison:
         poisoned = True
 
+    if poisoned and sum(1 for c in page_cmds if _is_player_cmd(c)) > runner.player_cmds_run:
+        runner.cell_lost = True     # control flow lost with a player move still ahead
     if poisoned:
         # Every arm not already proven taken/not-taken is undecided; its
         # writes (and any row still reachable from it) are folded in
@@ -731,5 +790,6 @@ def run_page(
     return PageRun(
         taken=taken_final, not_taken=frozenset(not_taken_final),
         undecided=frozenset(undecided_final), state=dict(runner.state),
-        exact=runner.exact,
+        exact=runner.exact, cell=runner.cell, cell_exact=not runner.cell_lost,
+        path=tuple(runner.path),
     )

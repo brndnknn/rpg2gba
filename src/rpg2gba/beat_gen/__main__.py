@@ -54,6 +54,12 @@ from rpg2gba.beat_gen.interiors import (
     interior_exit_edges,
     region_order_check,
 )
+from rpg2gba.beat_gen.never_fires import (
+    MapFacts,
+    TOUCH_TRIGGERS,
+    coord_cells_by_event,
+    never_fires_proof,
+)
 from rpg2gba.beat_gen.reach import engine_spawn, reachable_sites
 from rpg2gba.beat_gen.emit import emit_module
 from rpg2gba.beat_gen.facing import (
@@ -105,13 +111,22 @@ from rpg2gba.routing.locations import (
     cell_for_row,
     chapter_from_locations,
 )
+from rpg2gba.routing.occupancy import _load_emitted_map, _load_map_constants_entry
 from rpg2gba.routing.pathing import RoutePlanningError, landing_cell
 from rpg2gba.routing.plan import write_plan
 from rpg2gba.routing.solver import RouteCandidate, solve_route
-from rpg2gba.story_state.model import RowVerdict, State, build_chapter_stories
+from rpg2gba.story_state.model import (
+    RowVerdict,
+    State,
+    _cmp,
+    _default_value,
+    _state_key_repr,
+    build_chapter_stories,
+)
 from rpg2gba.tileset_converter.map_constants import load_display_names
 from rpg2gba.traversal.collision import load_map_json
 from rpg2gba.traversal.graph import MapGraph
+from rpg2gba.traversal.triggers import DEFAULT_ENGINE_MAPS_DIR
 from rpg2gba.traversal.world import WorldGraph
 
 logger = logging.getLogger(__name__)
@@ -630,6 +645,87 @@ def _never_fires_elsewhere(
         for b in planned if b.group in dead_groups for row_id in b.rows)
 
 
+def _page_candidate(verdicts: Mapping[str, RowVerdict], end_state, states: Mapping[str, RowState]
+                    ) -> Callable[[str], bool]:
+    """Can this page be the live page at all, within the chapter? A page the
+    story model calls live or undetermined can; one it rules out
+    (`unreachable`, `later`) can't; a `refused` page (its BODY isn't modelled,
+    its condition is) can when every test of its condition is possible in the
+    chapter's saturated end state. A page with no verdict can."""
+    ends = dict(end_state)
+
+    def possible_at_end(test) -> bool:  # noqa: ANN001
+        values = ends.get(_state_key_repr(test.key))
+        if values is None:
+            values = tuple(_default_value(test.key))
+        return "TOP" in values or any(_cmp(test.op, v, test.value) for v in values)
+
+    def candidate(rid: str) -> bool:
+        verdict = verdicts.get(rid)
+        if verdict is None or verdict.status in ("live", "undetermined"):
+            return True
+        if verdict.status == "refused":
+            return all(possible_at_end(t) for t in states[rid].page_tests)
+        return False
+    return candidate
+
+
+def _touch_never_fires(
+    beats: Sequence[PlannedBeat], *, row_states, page_for, event_cell, build_dir: Path,
+    graphs: Mapping[int, MapGraph], world: WorldGraph, chain_maps: frozenset[int],
+    entry: tuple[int, tuple[int, int]], occupancy, verdicts: Mapping[str, RowVerdict], end_state,
+) -> tuple[tuple[PlannedBeat, ...], tuple[Elsewhere, ...]]:
+    """Second source of `never_fires` (2026-09-28 ruling, `beat_gen/never_fires.py`):
+    a walked touch page whose coord-trigger cells the walk can't step on
+    while it is live -- guard rows that push the player off, and the cell an
+    arrival scene leaves them on. The page's rows leave the beats and become
+    `never_fires` elsewhere entries carrying the proof."""
+    facts_cache: dict[int, MapFacts] = {}
+    constants = build_dir / "porymap" / "map_constants.json"
+
+    def facts_for(map_id: int) -> MapFacts:
+        if map_id not in facts_cache:
+            entry_ = _load_map_constants_entry(map_id, constants)
+            emitted = _load_emitted_map(map_id, entry_["dir_name"], DEFAULT_ENGINE_MAPS_DIR)
+            facts_cache[map_id] = MapFacts(
+                map_id=map_id,
+                coord_cells=coord_cells_by_event(map_id, emitted.get("coord_events", [])),
+                states=row_states(map_id), page_for=page_for, event_cell=event_cell,
+                graph=graphs[map_id], blocked=occupancy[map_id].blocked_cells(),
+                arrivals=_arrival_cells(world, graphs, map_id, chain_maps, entry),
+                candidate=_page_candidate(verdicts, end_state, row_states(map_id)))
+        return facts_cache[map_id]
+
+    proofs: dict[str, str] = {}
+    for b in beats:
+        for rid in b.rows:
+            page = parse_row_id(rid).owning_page_row_id or rid
+            if page in proofs or parse_row_id(page).kind != "page":
+                continue
+            states = row_states(parse_row_id(page).map_id)
+            if page not in states or states[page].trigger not in TOUCH_TRIGGERS:
+                continue
+            proof = never_fires_proof(page, facts_for(parse_row_id(page).map_id))
+            if proof is not None:
+                proofs[page] = proof
+                logger.info("never_fires: %s", proof)
+    if not proofs:
+        return tuple(beats), ()
+    kept: list[PlannedBeat] = []
+    elsewhere: list[Elsewhere] = []
+    for b in beats:
+        rows = tuple(r for r in b.rows if (parse_row_id(r).owning_page_row_id or r) not in proofs)
+        elsewhere.extend(
+            Elsewhere(r, "never_fires",
+                      detail=proofs[parse_row_id(r).owning_page_row_id or r])
+            for r in b.rows if r not in rows)
+        if rows == b.rows:
+            kept.append(b)
+        elif rows:
+            kept.append(dataclasses.replace(b, rows=rows))
+    return tuple(kept), tuple(elsewhere)
+
+
 def _row_states_for(build_dir: Path, resolved: Mapping[str, RowState] | None = None):  # noqa: ANN202
     """map_id -> that map's extracted story row states (cached), with any
     computed row the story model resolved (`resolved`) in place of its
@@ -859,6 +955,15 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                                                   build_dir)
     world = _build_world(build_dir)
     entry = _predecessor_end(predecessor) if predecessor is not None else engine_spawn()
+    occupancy = _LazyOccupancy(build_dir)
+    # 3c. Touch pages the walk can't step on while they are live (guard rows,
+    #     arrival displacement): never_fires, not beats.
+    beats, touch_elsewhere = _touch_never_fires(
+        beats, row_states=row_states, page_for=_page_for(build_dir),
+        event_cell=_event_cell(build_dir), build_dir=build_dir,
+        graphs=graphs, world=world, chain_maps=chain_maps, entry=entry,
+        occupancy=occupancy, verdicts=all_verdicts, end_state=story.end_state)
+    dead_elsewhere = dead_elsewhere + touch_elsewhere
     warp_rows = frozenset(r for b in beats if b.template == "warp" for r in b.rows)
     records, cell_refusals = locate_beats(
         beats, rows_by_id,
@@ -879,7 +984,6 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     # 4b. Geography (`beat_gen/reach.py`): a group no site of which the
     #     player can reach from the entry over this chapter's maps belongs
     #     to the first successor whose maps open it.
-    occupancy = _LazyOccupancy(build_dir)
     records, later = _split_unreachable(records, entry, graphs, world, chain_maps,
                                         binding, chapter_id, occupancy, build_dir)
     trimmed: list[PlannedBeat] = []
