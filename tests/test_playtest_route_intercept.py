@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import pytest
 
 from rpg2gba.playtest import assertions
-from rpg2gba.playtest.cells import RouteStep, custom_route_loop
+from rpg2gba.playtest.cells import RouteStep, custom_route_loop, emitted_movement_type
 from rpg2gba.playtest.errors import ScenarioError
 
 
@@ -22,6 +22,20 @@ def test_chyinmunk_route_is_a_closed_rectangle_with_a_through_gap():
 
 def test_a_wandering_npc_has_no_route():
     assert custom_route_loop("MAP_MOKI_TOWN", 10) is None
+
+
+def test_a_route_the_converter_froze_has_no_route():
+    # ROM run 40: ev073's RMXP route stalls on its first step, so the
+    # converter emits it static (FACE_LEFT); the compiled object decides.
+    assert emitted_movement_type("MAP_MOKI_TOWN", 73) == "MOVEMENT_TYPE_FACE_LEFT"
+    assert custom_route_loop("MAP_MOKI_TOWN", 73) is None
+
+
+def test_a_back_and_forth_walker_keeps_its_route():
+    steps = custom_route_loop("MAP_MOKI_TOWN", 27)
+    assert steps is not None
+    assert [s.target for s in steps] == [
+        (46, 34), (47, 34), (48, 34), (47, 34), (46, 34), (45, 34)]
 
 
 # --- the intercept, against a fake walker ---------------------------------

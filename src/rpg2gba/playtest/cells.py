@@ -241,17 +241,27 @@ def custom_route_loop(map_constant: str, event_id: int) -> tuple[RouteStep, ...]
     (`MovementType_UraniumCustomRoute_Callback`), which is what lets a player
     standing on its path stop it (`assertions.talk_to_moving_npc`, ROM run
     36: Moki Town's Chyinmunk). A route that stops holds still anyway; a
-    skippable one skips a blocked step rather than waiting."""
-    from ..tileset_converter.npc_gfx import movement_spec_for, select_boot_page
+    skippable one skips a blocked step rather than waiting.
+
+    Gated first on the COMPILED object's movement type (`emitted_movement_
+    type`): the converter overrides `movement_spec_for` after the fact -- a
+    visible trainer never gets the interpreter, and a route whose RMXP replay
+    stalls before its first move is frozen to a static facing. ROM run 40:
+    Moki Town's ev073 is `MOVEMENT_TYPE_FACE_LEFT` in the ROM, but this read
+    it as a 4-cell loop and the intercept went looking for a walk it never
+    takes."""
+    from ..tileset_converter.npc_gfx import select_boot_page
     from ..tileset_converter.route_bytecode import (
         FLAG_SKIPPABLE, OP_END_LOOP, OP_THROUGH_OFF, OP_THROUGH_ON, OP_WAIT, encode_route)
 
+    if not has_local_id(map_constant, event_id):
+        return None
+    if emitted_movement_type(map_constant, event_id) != "MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE":
+        return None
     uid, _graph = _graph_for(map_constant, resolver="custom_route_loop")
     event = _event_lookup(uid, event_id, map_constant=map_constant, resolver="custom_route_loop")
     page = select_boot_page(event)
     if page is None:
-        return None
-    if movement_spec_for(page).movement_type != "MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE":
         return None
     code = encode_route(page["move_route"], page.get("move_frequency", 3))
     if code is None or code[-1] != OP_END_LOOP or code[1] & FLAG_SKIPPABLE:
@@ -349,6 +359,42 @@ def local_id(map_constant: str, event_id: int) -> int:
             "is stripped) never becomes an object event and has no local id"
         )
     return int(resolved)
+
+
+def _emitted_map_json(map_constant: str) -> dict:
+    """The compiled `data/maps/<Dir>/map.json` whose `id` is `map_constant`,
+    under the engine tree `RPG2GBA_POKEEMERALD` names (read, never set --
+    CLAUDE.md sec 3). Cached per constant; fails loud when no map matches."""
+    cached = _EMITTED_MAP_CACHE.get(map_constant)
+    if cached is not None:
+        return cached
+    maps_dir = Path(os.environ.get("RPG2GBA_POKEEMERALD", "engine")) / "data" / "maps"
+    for path in sorted(maps_dir.glob("*/map.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("id") == map_constant:
+            _EMITTED_MAP_CACHE[map_constant] = data
+            return data
+    raise ValueError(
+        f"emitted_movement_type: no map.json under {maps_dir} has id "
+        f"{map_constant} -- has the map been assembled into the engine tree?")
+
+
+_EMITTED_MAP_CACHE: dict[str, dict] = {}
+
+
+def emitted_movement_type(map_constant: str, event_id: int) -> str:
+    """The `MOVEMENT_TYPE_*` the ROM actually runs for RMXP event `event_id`:
+    its compiled object's `movement_type`, found by local id (`object_events`
+    is 1-indexed by local id). This is the converter's final word, after
+    every override it applies on top of `npc_gfx.movement_spec_for` (trainer
+    approximations, stall/blocked-spawn demotions to a static facing)."""
+    objects = _emitted_map_json(map_constant).get("object_events") or []
+    lid = local_id(map_constant, event_id)
+    if not 1 <= lid <= len(objects):
+        raise ValueError(
+            f"emitted_movement_type: {map_constant} event {event_id} has local "
+            f"id {lid}, but the compiled map has {len(objects)} object events")
+    return objects[lid - 1]["movement_type"]
 
 
 def approach_to(map_constant: str, event_id: int, *, prefer: str | None = None) -> Cell:

@@ -6212,14 +6212,24 @@ enum
 // data[1] (sTypeFuncId) = FSM sub-state. CRITICAL: the normal-walk movement
 // action reuses data[3]/data[4]/data[5] (sDirection/sSpeed/sTimer) as scratch
 // every frame during a step, and SetMovementDelay uses data[3]/data[7] — so the
-// ONLY sprite-data slot safe across BOTH a walk and a wait is data[6]. Pack the
-// program counter (low byte) and the through flag (bit 8) into it; re-read the
-// per-route idle from route[0] each time (no stored slot). (An earlier version
-// kept PC/through in data[4]/[5]; the walk clobbered them after one step — the
-// "NPC only steps when you talk to it" bug.) SoT: custom_route_interpreter.md.
+// ONLY sprite-data slot safe across BOTH a walk and a wait is data[6]. The
+// through flag (bit 8) lives there; re-read the per-route idle from route[0]
+// each time (no stored slot). (An earlier version kept PC/through in
+// data[4]/[5]; the walk clobbered them after one step — the "NPC only steps
+// when you talk to it" bug.) SoT: custom_route_interpreter.md.
+//
+// The program counter lives on the object, in directionSequenceIndex, the
+// field stock WalkSequence keeps its progress in. It is zeroed at spawn, so 0
+// means "not started" (a live PC is always >= 2). This matters because the
+// engine resets EVERY movement type to sTypeFuncId 0 after a talk (release ->
+// ObjectEventClearHeldMovement clears the faceplayer turn). Stock types treat
+// step 0 as "drop the in-flight step" and resume from object state; INIT used
+// to reset the PC too, so a talk mid-route restarted the loop from wherever
+// the NPC stood and shifted its whole path (ROM run 39, Moki Town ev027 found
+// at x=49 on a 45..48 loop). RMXP resumes the route index after unlock.
 #define sRoutePacked data[6]
-#define URANIUM_ROUTE_PC(s)              ((s)->sRoutePacked & 0xFF)
-#define URANIUM_ROUTE_SET_PC(s, v)       ((s)->sRoutePacked = ((s)->sRoutePacked & 0x100) | ((v) & 0xFF))
+#define URANIUM_ROUTE_PC(o)              ((o)->directionSequenceIndex)
+#define URANIUM_ROUTE_SET_PC(o, v)       ((o)->directionSequenceIndex = (v))
 #define URANIUM_ROUTE_THROUGH(s)         ((s)->sRoutePacked & 0x100)
 #define URANIUM_ROUTE_SET_THROUGH(s, on) ((s)->sRoutePacked = (on) ? ((s)->sRoutePacked | 0x100) : ((s)->sRoutePacked & ~0x100))
 // v2 bytecode: route[1] is the flags byte, bit0 = RMXP route.skippable.
@@ -6243,12 +6253,17 @@ static enum Direction UraniumRoute_RmxpDirToEngine(u8 rmxpDir)
 // Enter the per-command idle pause, then the WAIT state. Clamp idle to >= 1:
 // idle 0 (freq-6 routes) would make WaitForMovementDelay's pre-decrement
 // underflow into a ~65k-frame stall; a single-frame gap reads as continuous.
-// Always routing through WAIT also guarantees a per-cycle yield.
+// Return FALSE so the gap is a real yield: UpdateObjectEventCurrentMovement
+// re-runs a callback that returns TRUE within the same frame, so with idle 1
+// the WAIT expired and the next step set singleMovementActive again before
+// the frame ended. lock's Task_FreezeSelectedObjectAndPlayer waits for that
+// flag to clear, so talking to a freq-6 walker hung in `lock` (ROM run 38,
+// Moki Town's Chyinmunk). Yielding here leaves one idle frame per step.
 static bool8 UraniumRoute_BeginIdle(struct Sprite *sprite, u8 idle)
 {
     SetMovementDelay(sprite, idle == 0 ? 1 : idle);
     sprite->sTypeFuncId = URANIUM_ROUTE_STATE_WAIT;
-    return TRUE;
+    return FALSE;
 }
 
 static bool8 MovementType_UraniumCustomRoute_Callback(struct ObjectEvent *objectEvent, struct Sprite *sprite)
@@ -6261,19 +6276,24 @@ static bool8 MovementType_UraniumCustomRoute_Callback(struct ObjectEvent *object
     switch (sprite->sTypeFuncId)
     {
     case URANIUM_ROUTE_STATE_INIT:
+        // Re-entered after every talk too: drop the in-flight step only. First
+        // start (PC 0, set at spawn) is the one place the route is reset.
         ClearObjectEventMovement(objectEvent, sprite);
-        URANIUM_ROUTE_SET_PC(sprite, 2); // byte 0 = idle header, byte 1 = flags; opcodes start at byte 2
-        URANIUM_ROUTE_SET_THROUGH(sprite, FALSE);
+        if (URANIUM_ROUTE_PC(objectEvent) == 0)
+        {
+            URANIUM_ROUTE_SET_PC(objectEvent, 2); // byte 0 = idle header, byte 1 = flags; opcodes start at byte 2
+            URANIUM_ROUTE_SET_THROUGH(sprite, FALSE);
+        }
         sprite->sTypeFuncId = URANIUM_ROUTE_STATE_FETCH_EXEC;
         return TRUE;
 
     case URANIUM_ROUTE_STATE_FETCH_EXEC:
-        pc = URANIUM_ROUTE_PC(sprite);
+        pc = URANIUM_ROUTE_PC(objectEvent);
         op = route[pc];
         switch (op)
         {
         case URANIUM_ROUTE_OP_END_LOOP:
-            URANIUM_ROUTE_SET_PC(sprite, 2);
+            URANIUM_ROUTE_SET_PC(objectEvent, 2);
             return TRUE; // no time cost; loop back and re-fetch immediately
 
         case URANIUM_ROUTE_OP_END_STOP:
@@ -6289,7 +6309,7 @@ static bool8 MovementType_UraniumCustomRoute_Callback(struct ObjectEvent *object
             {
                 if (URANIUM_ROUTE_SKIPPABLE(route))          // skippable: advance past it, idle
                 {
-                    URANIUM_ROUTE_SET_PC(sprite, pc + 1);
+                    URANIUM_ROUTE_SET_PC(objectEvent, pc + 1);
                     return UraniumRoute_BeginIdle(sprite, route[0]);
                 }
                 // Non-skippable (RMXP default): DO NOT advance the PC — retry
@@ -6308,7 +6328,7 @@ static bool8 MovementType_UraniumCustomRoute_Callback(struct ObjectEvent *object
                 sprite->sTypeFuncId = URANIUM_ROUTE_STATE_EXEC_WALK;
                 return TRUE;                                  // PC NOT advanced -> retries same opcode
             }
-            URANIUM_ROUTE_SET_PC(sprite, pc + 1);             // commit only on the success path
+            URANIUM_ROUTE_SET_PC(objectEvent, pc + 1);             // commit only on the success path
             ObjectEventSetSingleMovement(objectEvent, sprite, GetWalkNormalMovementAction(dir));
             objectEvent->singleMovementActive = TRUE; // required: exec advances the walk each frame only while set (WalkBackAndForth_Step2)
             sprite->sTypeFuncId = URANIUM_ROUTE_STATE_EXEC_WALK;
@@ -6320,23 +6340,23 @@ static bool8 MovementType_UraniumCustomRoute_Callback(struct ObjectEvent *object
         case URANIUM_ROUTE_OP_FACE_UP:
             dir = UraniumRoute_RmxpDirToEngine(op - 0x10);
             SetObjectEventDirection(objectEvent, dir);
-            URANIUM_ROUTE_SET_PC(sprite, pc + 1);
+            URANIUM_ROUTE_SET_PC(objectEvent, pc + 1);
             return UraniumRoute_BeginIdle(sprite, route[0]);
 
         case URANIUM_ROUTE_OP_WAIT:
             SetMovementDelay(sprite, route[pc + 1]);
-            URANIUM_ROUTE_SET_PC(sprite, pc + 2);
+            URANIUM_ROUTE_SET_PC(objectEvent, pc + 2);
             sprite->sTypeFuncId = URANIUM_ROUTE_STATE_WAIT;
             return TRUE;
 
         case URANIUM_ROUTE_OP_THROUGH_ON:
             URANIUM_ROUTE_SET_THROUGH(sprite, TRUE);
-            URANIUM_ROUTE_SET_PC(sprite, pc + 1);
+            URANIUM_ROUTE_SET_PC(objectEvent, pc + 1);
             return TRUE; // no time cost
 
         case URANIUM_ROUTE_OP_THROUGH_OFF:
             URANIUM_ROUTE_SET_THROUGH(sprite, FALSE);
-            URANIUM_ROUTE_SET_PC(sprite, pc + 1);
+            URANIUM_ROUTE_SET_PC(objectEvent, pc + 1);
             return TRUE; // no time cost
 
         default:

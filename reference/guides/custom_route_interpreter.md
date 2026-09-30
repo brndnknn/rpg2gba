@@ -43,8 +43,10 @@ random turns (20-26). These need engine primitives v1 doesn't wire.
   reuses `data[3]`=sDirection, `data[4]`=sSpeed, `data[5]`=sTimer as its OWN
   per-frame scratch during a step, and `SetMovementDelay`/`WaitForMovementDelay`
   own `data[3]`/`data[7]`. So the ONLY sprite-data slot safe across BOTH a walk
-  and a wait is **`data[6]`**. The FSM therefore packs **program counter (low
-  byte) + through flag (bit 8) into `data[6]`**, uses `data[1]` = FSM sub-state
+  and a wait is **`data[6]`**. The FSM therefore keeps the **through flag (bit
+  8) in `data[6]`** and the **program counter on the object, in
+  `directionSequenceIndex`** (moved there 2026-09-30, see "Talks resume the
+  route" below), uses `data[1]` = FSM sub-state
   (movement-type state, untouched by actions), `data[7]` = the delay timer (via
   the delay helpers, only live in WAIT), and **re-reads the per-route idle from
   `route[0]`** (no stored slot). Do NOT put persistent FSM state in `data[4]` or
@@ -144,8 +146,10 @@ described `data[4]`=PC / `data[5]`=through / `data[6]`=cached idle; that layout
 was never shipped and does not match the code):**
 
 - `data[1]` (`sTypeFuncId`) = FSM sub-state (see below).
-- `data[6]` (`sRoutePacked`) packs **both** the PC and the through flag: low
-  byte = PC (`URANIUM_ROUTE_PC`/`URANIUM_ROUTE_SET_PC`), bit 8 = through-mode
+- The PC is `objectEvent->directionSequenceIndex`
+  (`URANIUM_ROUTE_PC`/`URANIUM_ROUTE_SET_PC`, taking the object, not the
+  sprite). 0 = not started (zeroed at spawn); a live PC is always >= 2.
+- `data[6]` (`sRoutePacked`) holds the through flag in bit 8
   (`URANIUM_ROUTE_THROUGH`/`URANIUM_ROUTE_SET_THROUGH`). This is the *only*
   sprite-data slot safe across both a walk and a wait — the normal-walk
   movement action clobbers `data[3]`/`data[4]`/`data[5]` every frame as its own
@@ -158,11 +162,11 @@ was never shipped and does not match the code):**
   `URANIUM_ROUTE_SKIPPABLE(route)` whenever a STEP is blocked.
 
 Sub-states (`sprite->sTypeFuncId`, values `URANIUM_ROUTE_STATE_*`):
-- **INIT (0):** `route = sUraniumRoutes[objectEvent->trainerRange_berryTreeId]`;
-  `URANIUM_ROUTE_SET_PC(sprite, 2)` (byte 0 = idle, byte 1 = flags, opcodes
-  start at byte 2); `URANIUM_ROUTE_SET_THROUGH(sprite, FALSE)`; → FETCH_EXEC.
-- **FETCH_EXEC (1):** `pc = URANIUM_ROUTE_PC(sprite)`; `op = route[pc]`:
-  - END_LOOP → `URANIUM_ROUTE_SET_PC(sprite, 2)`; re-enter FETCH_EXEC (no time
+- **INIT (0):** `ClearObjectEventMovement`; only if the PC is 0 (first start):
+  `URANIUM_ROUTE_SET_PC(objEvent, 2)` (byte 0 = idle, byte 1 = flags, opcodes
+  start at byte 2) and `URANIUM_ROUTE_SET_THROUGH(sprite, FALSE)`; → FETCH_EXEC.
+- **FETCH_EXEC (1):** `pc = URANIUM_ROUTE_PC(objEvent)`; `op = route[pc]`:
+  - END_LOOP → `URANIUM_ROUTE_SET_PC(objEvent, 2)`; re-enter FETCH_EXEC (no time
     cost).
   - END_STOP → return FALSE (idle forever).
   - STEP dir → if `!through` and `GetCollisionInDirection(objEvent, dir) !=
@@ -188,6 +192,28 @@ Sub-states (`sprite->sTypeFuncId`, values `URANIUM_ROUTE_STATE_*`):
   walk-in-place naturally re-fetches the *same* STEP opcode on the next
   FETCH_EXEC and retries it.
 - **WAIT (3):** if `WaitForMovementDelay(sprite)` → FETCH_EXEC.
+
+**Every idle yields (corrected 2026-09-30).** `UraniumRoute_BeginIdle` returns
+FALSE, ending the callback loop for the frame. `UpdateObjectEventCurrentMovement`
+re-runs a callback that returns TRUE *within the same frame*, so when it
+returned TRUE a freq-6 walker (idle clamped to 1) went step-done → WAIT (expired
+at once) → next step → `singleMovementActive = TRUE` without ever ending a frame
+idle. `lock`'s `Task_FreezeSelectedObjectAndPlayer` waits for that flag to
+clear, so talking to such a walker hung the game in `lock` (ROM run 38, Moki
+Town's Chyinmunk, blocked or not). The yield costs one frame per step.
+
+**Talks resume the route (corrected 2026-09-30).** The engine resets *every*
+movement type to `sTypeFuncId = 0` after a talk: `release` clears the finished
+`faceplayer` turn via `ObjectEventClearHeldMovement`, which zeroes the
+sub-state. Stock types treat step 0 as "drop the in-flight step" and keep their
+progress on the object (`directionSequenceIndex`, `initialCoords`), so they
+carry on. INIT used to reset the PC as well, so a talk mid-route restarted the
+loop from wherever the NPC stood and shifted its whole path (ROM run 39: Moki
+Town ev027, a 3-right/3-left loop from x=45, found at x=49). The PC now lives
+in `directionSequenceIndex` and INIT resets it only when it is 0, matching
+RMXP, which resumes the route index after unlock. Known residue: `data[6]` does
+not survive a save/load respawn, so a route saved mid-`THROUGH_ON` segment
+resumes with through off.
 
 Direction mapping: RMXP 1/2/3/4 → `DIR_SOUTH/WEST/EAST/NORTH`.
 
