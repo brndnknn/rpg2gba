@@ -15,13 +15,21 @@ from rpg2gba.playtest.errors import ScenarioError
 def test_chyinmunk_route_is_a_closed_rectangle_with_a_through_gap():
     steps = custom_route_loop("MAP_MOKI_TOWN", 8)
     assert steps is not None and len(steps) == 24
-    assert steps[0] == RouteStep((35, 44), (35, 45), "DOWN", False)
+    assert steps[0] == RouteStep((35, 44), (35, 45), "DOWN", False, frames=18)
     assert steps[-1].target == (35, 44)
     assert [s.origin for s in steps if s.through] == [(39, 43), (38, 43)]
 
 
 def test_a_wandering_npc_has_no_route():
     assert custom_route_loop("MAP_MOKI_TOWN", 10) is None
+
+
+def test_a_slow_walker_carries_its_idle_in_each_step():
+    # ROM run 42: ev070 idles 0x66 frames per step; the intercept's budget
+    # has to be sized from that, not a fixed 24 frames a step.
+    steps = custom_route_loop("MAP_MOKI_TOWN", 70)
+    assert steps is not None
+    assert {s.frames for s in steps} == {16 + 0x66 + 1}
 
 
 def test_a_route_the_converter_froze_has_no_route():

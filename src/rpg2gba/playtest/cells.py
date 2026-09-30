@@ -39,7 +39,7 @@ with identical inputs disagree (CLAUDE.md §4.2).
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import os
 from pathlib import Path
 
@@ -215,12 +215,15 @@ class RouteStep:
     """One step of a custom-route walker's loop: it walks `origin` ->
     `target` heading `direction` ("UP"/"DOWN"/"LEFT"/"RIGHT"); `through`
     steps ignore collision, so a player standing on `target` cannot stop
-    them."""
+    them. `frames` is roughly what the step costs the walker in-engine: the
+    16-frame walk, the route's idle after it, and any wait or turn that runs
+    before it."""
 
     origin: Cell
     target: Cell
     direction: str
     through: bool
+    frames: int = 24
 
 
 _ROUTE_STEP = {0x01: ("DOWN", (0, 1)), 0x02: ("LEFT", (-1, 0)),
@@ -266,26 +269,38 @@ def custom_route_loop(map_constant: str, event_id: int) -> tuple[RouteStep, ...]
     code = encode_route(page["move_route"], page.get("move_frequency", 3))
     if code is None or code[-1] != OP_END_LOOP or code[1] & FLAG_SKIPPABLE:
         return None
+    # Per-command idle, clamped to >= 1 and followed by a one-frame yield
+    # (`UraniumRoute_BeginIdle`). ROM run 42: Moki Town's ev070 idles 0x66
+    # frames per step, and a fixed 24-frame guess timed out its intercept.
+    idle = max(1, code[0]) + 1
     steps: list[RouteStep] = []
     cell: Cell = (event["x"], event["y"])
     through = False
+    pending = 0   # waits and turns that run before the next step
     i = 2
     while i < len(code) - 1:
         op = code[i]
         if op in _ROUTE_STEP:
             direction, (dx, dy) = _ROUTE_STEP[op]
             target = (cell[0] + dx, cell[1] + dy)
-            steps.append(RouteStep(cell, target, direction, through))
+            steps.append(RouteStep(cell, target, direction, through,
+                                   pending + 16 + idle))
+            pending = 0
             cell = target
         elif op == OP_THROUGH_ON:
             through = True
         elif op == OP_THROUGH_OFF:
             through = False
         elif op == OP_WAIT:
+            pending += code[i + 1]
             i += 1   # its frame-count operand
+        else:
+            pending += idle   # a turn: idles like a step
         i += 1
     if not steps or cell != (event["x"], event["y"]):
         return None  # a loop that doesn't close drifts; no fixed path to wait on
+    if pending:   # waits after the last step run before the loop's first
+        steps[0] = replace(steps[0], frames=steps[0].frames + pending)
     return tuple(steps)
 
 

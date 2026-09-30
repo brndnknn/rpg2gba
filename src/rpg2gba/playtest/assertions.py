@@ -508,7 +508,6 @@ _TALK_SIDES: tuple[tuple[tuple[int, int], str], ...] = (
 
 _OPPOSITE = {"UP": "DOWN", "DOWN": "UP", "LEFT": "RIGHT", "RIGHT": "LEFT"}
 _INTERCEPT_POLL_FRAMES = 4
-_INTERCEPT_FRAMES_PER_STEP = 24   # a 16-frame walk plus slack for the idle gap
 
 
 def _intercept_route_walker(emu: Emulator, beat: str, local_id: int,
@@ -553,7 +552,7 @@ def _intercept_route_walker(emu: Emulator, beat: str, local_id: int,
         if emu.player_pos() != cell:
             continue
         arrivals = arrivals_by_cell[cell]
-        budget = 2 * len(route) * _INTERCEPT_FRAMES_PER_STEP
+        budget = 2 * sum(s.frames for s in route)   # two laps at the route's own pace
         waited = 0
         while waited <= budget:
             pos = live()
