@@ -126,6 +126,7 @@ from rpg2gba.playtest.cells import (
 from rpg2gba.playtest.chapter import ChapterBuilder
 from rpg2gba.playtest.errors import ScenarioError
 from rpg2gba.routing.locations import cell_for_row
+from rpg2gba.story_state.state import SelfSwitch, Switch, Variable
 
 if TYPE_CHECKING:  # runtime import is lazy so this module works without mGBA bindings
     from rpg2gba.playtest.emulator import Emulator
@@ -437,6 +438,32 @@ def _written(value: object) -> tuple:
     return value if isinstance(value, tuple) else (value,)
 
 
+def _conditional_selected(
+    emu: "Emulator", beat_name: str, step: Step, key: object,
+) -> tuple | None:
+    """For a conditional write (`beat_floor.cond_write`): the value the
+    page's script writes to `key` on the ROM's own input values, as a
+    one-tuple, or None when those inputs leave `key` alone (nothing to
+    check). An unconditional write returns its floor value unchanged."""
+    from rpg2gba.beat_floor.cond_write import evaluated_writes
+
+    params = dict(step.params)
+    if "script" not in params:
+        return _written(params["value"])
+    inputs: dict[int, int] = {}
+    for var_id in params["input_vars"]:
+        name = _flag_registry().get_var(var_id)
+        if name is None:
+            raise ScenarioError(
+                f"{beat_name}: {step.row_id}: var {var_id} has no minted VAR_* "
+                "name in the persisted flag registry -- not guessing one")
+        inputs[var_id] = emu.var(name)
+    writes = evaluated_writes(params["script"], inputs)
+    if key not in writes:
+        return None
+    return (writes[key],)
+
+
 def _handle_switch_write(emu: "Emulator", beat_name: str, step: Step) -> None:
     params = dict(step.params)
     switch_id = params["switch_id"]
@@ -446,7 +473,10 @@ def _handle_switch_write(emu: "Emulator", beat_name: str, step: Step) -> None:
             f"{beat_name}: {step.row_id}: switch {switch_id} has no minted "
             "FLAG_* name in the persisted flag registry -- not guessing one"
         )
-    expected = tuple(bool(v) for v in _written(params["value"]))
+    selected = _conditional_selected(emu, beat_name, step, Switch(switch_id))
+    if selected is None:
+        return
+    expected = tuple(bool(v) for v in selected)
     actual = emu.flag(name)
     if actual not in expected:
         shot = emu.screenshot(f"{beat_name}_switch_{switch_id}")
@@ -467,7 +497,9 @@ def _handle_var_write(emu: "Emulator", beat_name: str, step: Step) -> None:
         )
     actual = emu.var(name)
     if params.get("op") == "=":
-        expected = _written(params["value"])
+        expected = _conditional_selected(emu, beat_name, step, Variable(var_id))
+        if expected is None:
+            return
         if actual not in expected:
             shot = emu.screenshot(f"{beat_name}_var_{var_id}")
             raise ScenarioError(
@@ -484,7 +516,11 @@ def _handle_self_switch_write(emu: "Emulator", beat_name: str, step: Step) -> No
     params = dict(step.params)
     map_id = parse_row_id(step.row_id).map_id
     name = self_switch_flag_name(map_id, params["event_id"], str(params["letter"]))
-    expected = tuple(bool(v) for v in _written(params["value"]))
+    selected = _conditional_selected(
+        emu, beat_name, step, SelfSwitch(map_id, params["event_id"], str(params["letter"])))
+    if selected is None:
+        return
+    expected = tuple(bool(v) for v in selected)
     actual = emu.flag(name)
     if actual not in expected:
         shot = emu.screenshot(f"{beat_name}_ssa")

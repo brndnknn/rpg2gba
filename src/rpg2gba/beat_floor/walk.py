@@ -38,6 +38,7 @@ from rpg2gba.beat_floor.assertion import (
     RowFloor,
     make_params,
 )
+from rpg2gba.beat_floor.cond_write import cond_write_inputs
 from rpg2gba.beat_floor.condition import extract_condition
 from rpg2gba.beat_floor.move_route import extract_move_route
 from rpg2gba.beat_floor.obstacle import obstacle_assertions
@@ -645,7 +646,9 @@ def _render_write_value(values: frozenset) -> Any:
     return tuple(sorted(values, key=repr))
 
 
-def _state_assertions_for_row(row_id: str, row_state: RowState) -> tuple[
+def _state_assertions_for_row(
+    row_id: str, row_state: RowState, scripts_by_index: Mapping[int, str],
+) -> tuple[
     tuple[FloorAssertion, ...], tuple[FloorRefusal, ...],
 ]:
     """Converts one row's `story_state.extract.RowState` writes/refusals
@@ -655,35 +658,69 @@ def _state_assertions_for_row(row_id: str, row_state: RowState) -> tuple[
     creator) becomes `engine_flag_write` on its native `FLAG_SYS_*` (C8 ruling
     (b), added 2026-09-24). Every other `EngineKey` (respawn map, surfing,
     run toggle) and `TempSwitch` writes are per-visit/engine-only state with
-    no `AssertionKind` -- skipped, not mapped."""
+    no `AssertionKind` -- skipped, not mapped.
+
+    A `conditional` assign (written on only some runs) is never asserted as
+    certain: if its source is one of this row's script blocks
+    (`scripts_by_index`, keyed by the block's list index) that reads only
+    game variables, the assertion carries `script` + `input_vars` and the ROM
+    check evaluates it on the ROM's own values (`beat_floor.cond_write`);
+    otherwise it refuses as `conditional_state_write`."""
     assertions: list[FloorAssertion] = []
+    refusals: list[FloorRefusal] = []
+
+    def cond_params(write: Assign) -> tuple[tuple[str, Any], ...] | None:
+        """() for an unconditional write, the condition params for a
+        checkable conditional one, None (after refusing) otherwise."""
+        if not write.conditional:
+            return ()
+        script = scripts_by_index.get(write.list_index)
+        inputs = cond_write_inputs(script) if script is not None else None
+        if script is None or inputs is None:
+            refusals.append(FloorRefusal(
+                row_id=row_id, reason="conditional_state_write",
+                list_index=write.list_index, code=None,
+                detail=f"{write.key!r} written on only some runs ({write.source})",
+            ))
+            return None
+        return make_params(script=script, input_vars=inputs)
+
     for write in row_state.writes:
         key = write.key
         if isinstance(key, Switch):
             if not isinstance(write, Assign):
                 continue  # switches have no arithmetic write form
+            cond = cond_params(write)
+            if cond is None:
+                continue
             assertions.append(FloorAssertion(
                 row_id=row_id, kind="switch_write", list_index=write.list_index,
                 code=121, params=make_params(
-                    switch_id=key.id, value=_render_write_value(write.values)),
+                    switch_id=key.id, value=_render_write_value(write.values), **dict(cond)),
                 tag="state",
             ))
         elif isinstance(key, SelfSwitch):
             if not isinstance(write, Assign):
                 continue
+            cond = cond_params(write)
+            if cond is None:
+                continue
             assertions.append(FloorAssertion(
                 row_id=row_id, kind="self_switch_write", list_index=write.list_index,
                 code=123, params=make_params(
                     event_id=key.event_id, letter=key.letter,
-                    value=_render_write_value(write.values)),
+                    value=_render_write_value(write.values), **dict(cond)),
                 tag="state",
             ))
         elif isinstance(key, Variable):
             if isinstance(write, Assign):
+                cond = cond_params(write)
+                if cond is None:
+                    continue
                 assertions.append(FloorAssertion(
                     row_id=row_id, kind="var_write", list_index=write.list_index,
                     code=122, params=make_params(
-                        var_id=key.id, op="=", value=_render_write_value(write.values)),
+                        var_id=key.id, op="=", value=_render_write_value(write.values), **dict(cond)),
                     tag="state",
                 ))
             else:  # Adjust
@@ -696,6 +733,14 @@ def _state_assertions_for_row(row_id: str, row_state: RowState) -> tuple[
         elif isinstance(key, EngineKey) and key.name in _UNLOCK_FLAGS:
             if not isinstance(write, Assign):
                 continue  # a flag has no arithmetic write form
+            if write.conditional:
+                # The evaluator's EngineKey writes have no ROM-side check yet.
+                refusals.append(FloorRefusal(
+                    row_id=row_id, reason="conditional_state_write",
+                    list_index=write.list_index, code=None,
+                    detail=f"{key!r} written on only some runs ({write.source})",
+                ))
+                continue
             assertions.append(FloorAssertion(
                 row_id=row_id, kind="engine_flag_write", list_index=write.list_index,
                 code=355, params=make_params(
@@ -707,14 +752,14 @@ def _state_assertions_for_row(row_id: str, row_state: RowState) -> tuple[
         else:  # pragma: no cover - exhaustive over story_state.state.Key
             continue
 
-    refusals = tuple(
+    refusals.extend(
         FloorRefusal(
             row_id=row_id, reason="story_state_refusal", list_index=-1, code=None,
             detail=f"{r.code}: {r.detail}",
         )
         for r in row_state.refusals
     )
-    return tuple(assertions), refusals
+    return tuple(assertions), tuple(refusals)
 
 
 # --- row / map / chapter assembly -------------------------------------------
@@ -757,7 +802,12 @@ def _build_row_floor(
 
     row_state = row_states.get(scope.row_id)
     if row_state is not None:
-        sa, sr = _state_assertions_for_row(scope.row_id, row_state)
+        scripts_by_index = {
+            index_of.get(id(scope.commands[start]), -1): "\n".join(
+                str((c.get("parameters") or [""])[0]) for c in scope.commands[start:end])
+            for start, end in _script_blocks(scope.commands)
+        }
+        sa, sr = _state_assertions_for_row(scope.row_id, row_state, scripts_by_index)
         assertions.extend(sa)
         refusals.extend(sr)
 
