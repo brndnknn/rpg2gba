@@ -321,6 +321,23 @@ def test_running_shoes_false_near_miss_still_queues(ctx: T.TranspileContext) -> 
 
 
 # ----------------------------------------------------------------------------
+# $Trainer.pokegear=true -> setflag(FLAG_SYS_POKENAV_GET) (Map172 EV4, ROM run 47)
+# ----------------------------------------------------------------------------
+
+
+def test_pokegear_true_sets_pokenav_flag(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.SCRIPT, ["$Trainer.pokegear=true"])]])
+    assert res.unhandled == []
+    assert "setflag(FLAG_SYS_POKENAV_GET)" in res.text
+
+
+def test_pokegear_false_near_miss_still_queues(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.SCRIPT, ["$Trainer.pokegear=false"])]])
+    assert len(res.unhandled) == 1
+    assert "setflag(FLAG_SYS_POKENAV_GET)" not in res.text
+
+
+# ----------------------------------------------------------------------------
 # Shape 7 — $PokemonGlobal.seenStorageCreator=true -> setflag(FLAG_SYS_PC_LANETTE)
 # (Map031 EV049 page0's single-row form, and the split-across-355/655 form
 # Map031 EV049 page2 / Map042 EV003 actually use — see

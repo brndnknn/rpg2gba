@@ -482,6 +482,16 @@ _SEEN_STORAGE_CREATOR_OPEN_RE = re.compile(
 # (event_data.c:101), which only the special sets.
 _POKEDEX_GRANT_RE = re.compile(r"^\s*\$Trainer\.pokedex\s*=\s*true\s*$")
 
+# $Trainer.pokegear=true — Theo's father hands over the PokéPod (Map172 EV4
+# page0; the only corpus occurrence in the built chapters). Native:
+# FLAG_SYS_POKENAV_GET (engine/include/constants/flags.h:1371), vanilla's own
+# "received the PokéNav" flag, which adds the POKéNAV start-menu entry
+# (engine/src/start_menu.c:345). Same mapping as story_state's
+# `ruby_subset.builtins.ENGINE_ATTRIBUTES` (C8 ruling (b)), which the floor
+# asserts; before this the row queued as UNHANDLED and the flag never set
+# (ROM run 47). Exact literal only; `=false` still queues.
+_POKEGEAR_ON_RE = re.compile(r"^\s*\$Trainer\.pokegear\s*=\s*true\s*$")
+
 # -- Essentials one-line Ruby guards (`<statement> if $game_variables[V]==K`) ---
 # RMXP script rows routinely carry a whole statement plus a trailing modifier-if
 # on one line; the starter grant (Map050 EV019 cmds 9-16) is the canonical case.
@@ -3617,6 +3627,10 @@ class _PageEmitter:
         # _RUNNING_SHOES_ON_RE).
         if _RUNNING_SHOES_ON_RE.match(text):
             return ["setflag(FLAG_SYS_B_DASH)"]
+
+        # $Trainer.pokegear=true — PokéPod/PokéNav unlock (see _POKEGEAR_ON_RE).
+        if _POKEGEAR_ON_RE.match(text):
+            return ["setflag(FLAG_SYS_POKENAV_GET)"]
 
         # setTempSwitchOn("A") — set this event's temp switch (344× corpus).
         m = _SET_TEMP_SWITCH_RE.match(text)
