@@ -10,6 +10,17 @@
 
 ## Retired Session Summaries
 
+## Archived 2026-09-30 — Last Session Summary entry 2026-09-28 (one-way warps)
+
+The operator proposed one-way warp beats plus "enter, do the map,
+leave" ordering. Sub-agents measured it and built it. Regeneration then exposed two design gaps:
+precedence edges can't say "stay inside until the exit" (now a violation count on the order), and
+story ordering after *all* alternative writers is wrong (now any-of). **Lesson:** the new transit
+guard caught a bad order at generation time that would otherwise have been a ROM failure — fail
+loud paid for itself on its first run. **Second lesson:** a diagnosis from a ROM message needs the
+source of the message confirmed. "Hey, where are you going?" was a converter-widened guard row, not
+the exit door, and the ROM run proved it.
+
 ## Archived 2026-09-29 — Last Session Summary entry 2026-09-24 (C8 finished — stage 7 delegated back, stage 5 cleared refusals instead of adding them)
 
 The operator dropped the C8 assignment and asked the build agent to finish C8. Stage 7's three tasks
