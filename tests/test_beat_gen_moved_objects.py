@@ -136,6 +136,7 @@ class _Emu:
 def talk(monkeypatch: pytest.MonkeyPatch) -> list[tuple]:
     live_calls: list[tuple] = []
     monkeypatch.setattr(flavour_npc, "local_id", lambda mc, ev: 3)
+    monkeypatch.setattr(flavour_npc, "has_local_id", lambda mc, ev: True)
     monkeypatch.setattr(flavour_npc, "event_cell", lambda mc, ev: (14, 6))
     monkeypatch.setattr(flavour_npc, "event_page_moves", lambda mc, ev, pg: False)
     monkeypatch.setattr(assertions, "talk_to_moving_npc",
@@ -168,3 +169,25 @@ def test_start_talk_fails_loud_when_unflagged_and_displaced(talk: list[tuple]) -
     with pytest.raises(ScenarioError, match=r"B1.*\(15, 6\).*\(14, 6\).*no page moves"):
         _go(emu)
     assert talk == [] and emu.interacts == 0
+
+
+def test_start_talk_strict_for_a_background_talk_target(
+        talk: list[tuple], monkeypatch: pytest.MonkeyPatch) -> None:
+    # ROM run 25: a sign/bookshelf is no object event, so it has no local id
+    # and no live position; the strict path runs without reading one.
+    monkeypatch.setattr(flavour_npc, "has_local_id", lambda mc, ev: False)
+
+    def no_local_id(mc: str, ev: int) -> int:
+        raise AssertionError("local_id read for a non-object event")
+
+    monkeypatch.setattr(flavour_npc, "local_id", no_local_id)
+    emu = _Emu((99, 99))
+    _go(emu)
+    assert (emu.faced, emu.interacts, talk) == (["UP"], 1, [])
+
+
+def test_has_local_id_on_real_staging() -> None:
+    from rpg2gba.playtest.cells import has_local_id
+    # ROM run 25: map049 ev4 is a background talk target, no object event.
+    assert has_local_id("MAP_MOKI_TOWN_PLAYERS_HOUSE_1F", 4) is False
+    assert has_local_id("MAP_MOKI_TOWN_PROFESSOR_LAB", 5) is True

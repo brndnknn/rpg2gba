@@ -227,6 +227,20 @@ def event_page_empty(map_constant: str, event_id: int, page_idx: int) -> bool:
     return all(c.get("code") == 0 for c in pages[page_idx].get("list") or [])
 
 
+def has_local_id(map_constant: str, event_id: int) -> bool:
+    """Is RMXP event `event_id` an emitted object event (so `local_id`
+    resolves)? False for events that never became one -- a sign or other
+    background talk target, which has no object to move or read live. A map
+    with no local-id table still fails loud, via `local_id`."""
+    try:
+        local_id(map_constant, event_id)
+    except ValueError as exc:
+        if "is not an emitted object event" in str(exc):
+            return False
+        raise
+    return True
+
+
 def local_id(map_constant: str, event_id: int) -> int:
     """The COMPILED object-event local id for RMXP event `event_id`.
 

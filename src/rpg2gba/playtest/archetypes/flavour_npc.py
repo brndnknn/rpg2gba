@@ -51,7 +51,7 @@ from ...beat_floor.assertion import FloorAssertion, RowFloor
 from ...beat_floor.lookup import floor_for_row as _default_floor_for_row
 from ...chapter_manifest.schema import page_row_id
 from .. import assertions
-from ..cells import approach_to, event_cell, event_page_moves, local_id
+from ..cells import approach_to, event_cell, event_page_moves, has_local_id, local_id
 from ..errors import ScenarioError
 from ..text_source import page_messages
 from . import FloorLookup, declare_assertions, facing_toward, find_match, load_chapter_rows
@@ -404,13 +404,18 @@ def _start_talk(
     converter or ordering bug -- and this raises instead of pressing A at a
     cell derived from a position it does not hold."""
     emu.walk_to(*approach)
-    lid = local_id(map_constant, event_id)
     if event_page_moves(map_constant, event_id, page_idx):
-        assertions.talk_to_moving_npc(emu, beat_name, lid)
+        assertions.talk_to_moving_npc(emu, beat_name, local_id(map_constant, event_id))
         return
-    live_obj = emu.object_event(lid)
-    live = (live_obj.x, live_obj.y)
-    template = event_cell(map_constant, event_id)
+    # A background talk target (a sign, a bookshelf) is no object event: it
+    # has no live position to compare, and nothing can move it (ROM run 25).
+    if has_local_id(map_constant, event_id):
+        lid = local_id(map_constant, event_id)
+        live_obj = emu.object_event(lid)
+        live = (live_obj.x, live_obj.y)
+        template = event_cell(map_constant, event_id)
+    else:
+        live = template = None
     if live != template:
         if not moved_by:
             shot = emu.screenshot(f"{beat_name}_npc_displaced")
