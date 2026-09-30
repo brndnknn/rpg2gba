@@ -175,6 +175,15 @@ def test_warp_candidates_skip_walls_and_edges():
     assert [c.side for c in got] == ["east", "south"]
 
 
+def test_warp_candidates_skip_a_neighbouring_warp():
+    # ROM run 51: stacked warps on one edge; standing on the next one fires it.
+    graph = _graph()
+    graph.warp_exits[(1, 0)] = []
+    graph.warp_exits[(1, 2)] = []
+    got = adapt.warp_candidates((1, 1), graph)
+    assert [c.side for c in got] == ["east", "west"]
+
+
 # --- route_kwargs ---------------------------------------------------------------
 
 @pytest.mark.parametrize("side, press, back", [

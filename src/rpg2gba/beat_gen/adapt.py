@@ -412,12 +412,15 @@ def escort_kwargs(
 def warp_candidates(cell: Cell, graph: MapGraph) -> tuple[ApproachCandidate, ...]:
     """Every side a warp cell can be stepped onto from: one candidate per
     walkable orthogonal neighbour, `side` naming where the player stands
-    ("north" = the cell above). In N, E, S, W order."""
+    ("north" = the cell above). In N, E, S, W order. A neighbour that is
+    itself a warp is no place to stand: walking onto it fires that warp
+    (ROM run 51: Moki Town's west exit stacks warps 37/23/36 on
+    (8,43)-(8,45), and event 23's north side was event 37's tile)."""
     x, y = cell
     candidates: list[ApproachCandidate] = []
     for side, (dx, dy) in _SIDE_DELTA.items():
         nx, ny = x + dx, y + dy
-        if not graph.is_walkable((nx, ny)):
+        if not graph.is_walkable((nx, ny)) or (nx, ny) in graph.warp_exits:
             continue
         candidates.append(ApproachCandidate(
             x=nx, y=ny, side=side,
