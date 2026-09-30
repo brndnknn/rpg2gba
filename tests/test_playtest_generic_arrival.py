@@ -57,6 +57,13 @@ def test_text_matches_reflowed_line_breaks():
     assert text_matches(expected, actual)
 
 
+def test_text_matches_a_break_followed_by_a_space_as_one_gap():
+    # ROM run 41: Moki Town's sign.
+    expected = "Moki Town\\n “Town of Fresh Beginnings”"
+    actual = "Moki Town “Town of Fresh Beginnings”"
+    assert text_matches(expected, actual)
+
+
 def test_text_matches_player_wildcard():
     expected = "Hi, {PLAYER}!"
     actual = "Hi, Ash!"

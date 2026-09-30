@@ -258,7 +258,9 @@ _STATE_WRITE_KINDS = frozenset(
 # compared as words: breaks and runs of spaces are one space, and a `{...}`
 # code in the expected text (a placeholder the ROM expanded, a pause it
 # consumed) matches anything.
-_BREAKS = re.compile(r"\\[nlp]|\s+")
+# One RUN of breaks and spaces is one space: a source break followed by a
+# space (Moki Town's sign, `Moki Town\n “Town...`, ROM run 41) is one gap.
+_BREAKS = re.compile(r"(?:\\[nlp]|\s)+")
 _CODE = re.compile(r"\{[^}]*\}")
 
 
