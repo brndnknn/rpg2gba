@@ -646,8 +646,24 @@ def _render_write_value(values: frozenset) -> Any:
     return tuple(sorted(values, key=repr))
 
 
+def _later_arm_writes(row_id: str, row_states: Mapping[str, RowState]) -> dict[Any, int]:
+    """Key -> the last page list index any branch arm under `row_id` (a
+    descendant row, `row_id/bN...`) writes it at. Arm bodies are separate
+    rows, but the ROM check reads a write after the WHOLE page has run."""
+    prefix = row_id + "/"
+    last: dict[Any, int] = {}
+    for rid, state in row_states.items():
+        if not rid.startswith(prefix):
+            continue
+        for write in state.writes:
+            if write.list_index > last.get(write.key, -1):
+                last[write.key] = write.list_index
+    return last
+
+
 def _state_assertions_for_row(
     row_id: str, row_state: RowState, scripts_by_index: Mapping[int, str],
+    later_arm_writes: Mapping[Any, int] | None = None,
 ) -> tuple[
     tuple[FloorAssertion, ...], tuple[FloorRefusal, ...],
 ]:
@@ -665,9 +681,17 @@ def _state_assertions_for_row(
     (`scripts_by_index`, keyed by the block's list index) that reads only
     game variables, the assertion carries `script` + `input_vars` and the ROM
     check evaluates it on the ROM's own values (`beat_floor.cond_write`);
-    otherwise it refuses as `conditional_state_write`."""
+    otherwise it refuses as `conditional_state_write`.
+
+    A write that a branch arm under this row writes again later on the page
+    (`later_arm_writes`) is not the page's final value, and the ROM check
+    reads it after the page completes: it is not asserted here. The arm rows
+    assert their own writes. ROM run 46: Auntie's page (map049/ev001/p2)
+    turns switch 185 ON, then each starter arm turns it OFF again; the
+    trunk asserted ON and the ROM read OFF."""
     assertions: list[FloorAssertion] = []
     refusals: list[FloorRefusal] = []
+    later = later_arm_writes or {}
 
     def cond_params(write: Assign) -> tuple[tuple[str, Any], ...] | None:
         """() for an unconditional write, the condition params for a
@@ -687,6 +711,8 @@ def _state_assertions_for_row(
 
     for write in row_state.writes:
         key = write.key
+        if later.get(key, -1) > write.list_index:
+            continue  # an arm writes it again after this; not the final value
         if isinstance(key, Switch):
             if not isinstance(write, Assign):
                 continue  # switches have no arithmetic write form
@@ -807,7 +833,9 @@ def _build_row_floor(
                 str((c.get("parameters") or [""])[0]) for c in scope.commands[start:end])
             for start, end in _script_blocks(scope.commands)
         }
-        sa, sr = _state_assertions_for_row(scope.row_id, row_state, scripts_by_index)
+        sa, sr = _state_assertions_for_row(
+            scope.row_id, row_state, scripts_by_index,
+            _later_arm_writes(scope.row_id, row_states))
         assertions.extend(sa)
         refusals.extend(sr)
 

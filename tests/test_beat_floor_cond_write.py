@@ -76,6 +76,24 @@ def test_unevaluable_conditional_write_refuses_by_name():
     assert [r.reason for r in refusals] == ["conditional_state_write"]
 
 
+def test_a_write_an_arm_repeats_later_is_not_the_final_value():
+    # ROM run 46: Auntie's page turns 185 ON at list[0], each starter arm
+    # turns it OFF again (list[7], ...), and 104 is written after the arms.
+    on = Assign(Switch(185), frozenset({True}), False, "code 121 @list[0]", 0)
+    after = Assign(Switch(104), frozenset({False}), False, "code 121 @list[30]", 30)
+    (sw,), refusals = walk._state_assertions_for_row(
+        "map049/ev001/p2", _row_state(on, after), {}, {Switch(185): 7, Switch(104): 7})
+    assert refusals == ()
+    assert dict(sw.params)["switch_id"] == 104
+
+
+def test_the_real_auntie_trunk_does_not_assert_185():
+    from rpg2gba.beat_floor.lookup import floor_for_row
+    floor = floor_for_row("map049/ev001/p2")
+    switches = {dict(a.params)["switch_id"] for a in floor.assertions if a.kind == "switch_write"}
+    assert switches == {104}
+
+
 # --- ROM check -------------------------------------------------------------
 
 
