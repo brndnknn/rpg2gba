@@ -1252,6 +1252,12 @@ def generic_beat(
     # (`damage_after`), not before the walk.
     heal_at = next((i for i, s in enumerate(middle_steps)
                     if s.kind == "heal_party" and s.row_id not in random_guard), None)
+    # An action arm with nothing observable (no message, write, grant or
+    # call) cannot prove its script ran; "the field is unlocked after" is
+    # all the ROM can show.
+    silent = (trigger_step is not None
+              and dict(trigger_step.params).get("trigger") == "action"
+              and not (middle_steps or write_steps or grant_steps or phone_steps))
     heals = heal_at is not None
     damage_after = None if heal_at is None else next(
         (i for i in range(heal_at - 1, -1, -1) if middle_steps[i].kind == "battle"), None)
@@ -1303,7 +1309,13 @@ def generic_beat(
             else:
                 if faces_target is not None:
                     emu.face(facing_toward((x, y), faces_target, caller="generic_beat"))
-                if trigger_step is not None:
+                if silent:
+                    # Nothing to see: the script can lock, run and release
+                    # inside one frame, which no poll catches (ROM run 44:
+                    # the lab PC's not-facing-up arm is lock/faceplayer/
+                    # compare/release). The field unlocked after is the check.
+                    emu.interact(require_script=False)
+                elif trigger_step is not None:
                     STEP_HANDLERS["trigger"](emu, beat_name, trigger_step)
         for i, step in enumerate(middle_steps):
             guard = random_guard.get(step.row_id)

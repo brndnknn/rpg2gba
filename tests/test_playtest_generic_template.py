@@ -149,6 +149,47 @@ def test_generic_beat_refused_floor_fails_loud():
                              floor_lookup=lookup)
 
 
+class _SilentEmu:
+    """A field that never shows a lock: the script ran inside one frame."""
+
+    def __init__(self) -> None:
+        self.pos = (0, 0)
+        self.required: list[bool] = []
+
+    def walk_to(self, x: int, y: int) -> None:
+        self.pos = (x, y)
+
+    def face(self, direction: str) -> None:
+        pass
+
+    def player_pos(self) -> tuple[int, int]:
+        return self.pos
+
+    def interact(self, frame_budget: int = 30, *, require_script: bool = True) -> bool:
+        self.required.append(require_script)
+        return False
+
+    def advance_dialog(self) -> None:
+        pass
+
+    def field_locked(self) -> bool:
+        return False
+
+
+def test_generic_beat_does_not_demand_a_visible_script_for_a_silent_arm(monkeypatch):
+    # ROM run 44: the lab PC's not-facing-up arm is lock/faceplayer/compare/
+    # release -- done inside one frame, so no poll ever sees it lock.
+    from rpg2gba.playtest import assertions
+    monkeypatch.setattr(assertions, "require_map", lambda *a, **k: None)
+    emu = _SilentEmu()
+    b = _builder()
+    generic.generic_beat(b, chapter_id="CH01", beat_name="m050e026p0_face_north_east_west",
+                         rows=("map050/ev026/p0/b1",), approach_prefer="north")
+    (beat,) = b.build().beats
+    beat.run(emu)
+    assert emu.required == [False]
+
+
 # --- obstacle_beat --------------------------------------------------------------
 
 ROCKS = ("map032/ev014/p0", "map032/ev015/p0")

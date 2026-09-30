@@ -413,8 +413,9 @@ def _start_talk(
     `moved_by`: nothing in source moves this NPC, so it is misplaced -- a
     converter or ordering bug -- and this raises instead of pressing A at a
     cell derived from a position it does not hold."""
-    route = custom_route_loop(map_constant, event_id)
-    if route is not None and event_page_moves(map_constant, event_id, page_idx):
+    moves = event_page_moves(map_constant, event_id, page_idx)
+    route = custom_route_loop(map_constant, event_id) if moves else None
+    if route is not None:
         # A looping walker's approach cell may sit on its own path (Moki
         # Town's Chyinmunk: (35,43)); the intercept does its own walking.
         assertions.talk_to_moving_npc(
