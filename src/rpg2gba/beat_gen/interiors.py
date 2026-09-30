@@ -108,6 +108,132 @@ def _region_doors(
     return out
 
 
+def _held_regions(
+    world: WorldGraph,
+    chapter_maps: frozenset[int],
+    group_warps: Mapping[str, tuple[tuple[int, int], ...]],
+    gated_doors: frozenset[tuple[int, int]] | None,
+) -> list[tuple[int, frozenset[int], frozenset[str], frozenset[str]]]:
+    """Dead-end regions with an exit warp group; with `gated_doors`, only
+    those whose every exit group's door refuses until a condition is met
+    (`__main__._gated_doors`) -- a region you cannot walk out of early."""
+    out = []
+    for parent, region, entries, exits in _region_doors(world, chapter_maps, group_warps):
+        if not exits:
+            continue
+        if gated_doors is not None and not all(
+                door in gated_doors for g in exits for door in group_warps.get(g, ())):
+            continue
+        out.append((parent, region, entries, exits))
+    return out
+
+
+def _stay_breaks(
+    held: Sequence[tuple[int, frozenset[int], frozenset[str], frozenset[str]]],
+    entry_map: int,
+    group_map: Mapping[str, int],
+) -> Callable[[Sequence[str]], int]:
+    def count(order: Sequence[str]) -> int:
+        active = {i for i, (_, region, _, _) in enumerate(held) if entry_map in region}
+        done: set[int] = set()
+        broken = 0
+        for g in order:
+            for i in sorted(active):
+                _, region, _, exits = held[i]
+                if g in exits or group_map.get(g) not in region:
+                    broken += g not in exits
+                    active.discard(i)
+                    done.add(i)
+            for i, (_, _, entries, _) in enumerate(held):
+                if i not in active and i not in done and g in entries:
+                    active.add(i)
+        return broken
+
+    return count
+
+
+def gated_region_check(
+    world: WorldGraph,
+    *,
+    chapter_maps: frozenset[int],
+    entry_map: int,
+    group_map: Mapping[str, int],
+    group_warps: Mapping[str, tuple[tuple[int, int], ...]],
+    gated_doors: frozenset[tuple[int, int]],
+) -> Callable[[Sequence[str]], int]:
+    """`region_order_check` restricted to regions whose exit is a gated door
+    -- a `solve_route(hard_order_violations=)` count that must stay 0
+    (2026-09-30, operator: "keep you in that gated area until everything
+    that is compatible has been done"). Leaving such a region early is not a
+    detour, it is a walk through a shut door (ROM run 34's regen: CH01 left
+    the lab after the quiz, before the starter opened its exit)."""
+    return _stay_breaks(
+        _held_regions(world, chapter_maps, group_warps, gated_doors), entry_map, group_map)
+
+
+def gated_entry_edges(
+    world: WorldGraph,
+    *,
+    chapter_maps: frozenset[int],
+    entry_map: int,
+    group_map: Mapping[str, int],
+    group_warps: Mapping[str, tuple[tuple[int, int], ...]],
+    gated_doors: frozenset[tuple[int, int]],
+    hard_and_story: Sequence[PrecedenceEdge],
+    any_of: Sequence[tuple[str, tuple[str, ...]]] = (),
+) -> tuple[PrecedenceEdge, ...]:
+    """`before=<outside group>, after=<entry group>` edges that make the
+    hard stay in a gated region satisfiable by a greedy solver.
+
+    Everything the region's exit waits on, transitively, must be done by the
+    time the exit fires; the stay rule forbids leaving to do it, so whatever
+    of it lies outside the region must precede the entry warp. The closure
+    follows `hard_and_story` edges, and through an any-of only the
+    alternatives inside the region (the ones the stay can satisfy): CH01's
+    lab exit waits on `var 101 >= 1` (any of three writers, the rival scene
+    the only one inside), the rival scene waits on the west-exit blocker's
+    page 0 (a killer edge), so the blocker comes before the lab entry.
+
+    A region the chapter starts inside gets no edges -- its only entry warp
+    is a later re-entry, and the hard stay already holds the start."""
+    pred: dict[str, set[str]] = {}
+    for e in hard_and_story:
+        pred.setdefault(e.after, set()).add(e.before)
+    any_of_by_after: dict[str, list[tuple[str, ...]]] = {}
+    for after, befores in any_of:
+        any_of_by_after.setdefault(after, []).append(befores)
+
+    edges: set[PrecedenceEdge] = set()
+    for parent, region, entries, exits in _held_regions(
+            world, chapter_maps, group_warps, gated_doors):
+        if entry_map in region:
+            continue
+
+        def inside(g: str) -> bool:
+            return group_map.get(g) in region
+
+        seen: set[str] = set()
+        stack = list(exits)
+        while stack:
+            node = stack.pop()
+            for before in pred.get(node, ()):
+                if before not in seen:
+                    seen.add(before)
+                    stack.append(before)
+            for befores in any_of_by_after.get(node, ()):
+                for before in (b for b in befores if inside(b)):
+                    if before not in seen:
+                        seen.add(before)
+                        stack.append(before)
+        outside = sorted(g for g in seen if not inside(g) and g not in entries)
+        for before in outside:
+            for entry in sorted(entries):
+                edges.add(PrecedenceEdge(
+                    before=before, after=entry,
+                    reason=f"gated_entry:map{parent:03d}<-map{min(region):03d}"))
+    return tuple(sorted(edges, key=lambda e: (e.before, e.after, e.reason)))
+
+
 def region_order_check(
     world: WorldGraph,
     *,
@@ -129,27 +255,8 @@ def region_order_check(
     between entering and leaving -- a transit back out through a door that
     may still be shut (2026-09-28: CH01's lab, exit gated until the starter,
     the continuity guard caught `m032e075p1`)."""
-    held = [(region, entries, exits)
-            for _, region, entries, exits in _region_doors(world, chapter_maps, group_warps)
-            if exits]
-
-    def count(order: Sequence[str]) -> int:
-        active = {i for i, (region, _, _) in enumerate(held) if entry_map in region}
-        done: set[int] = set()
-        broken = 0
-        for g in order:
-            for i in sorted(active):
-                region, _, exits = held[i]
-                if g in exits or group_map.get(g) not in region:
-                    broken += g not in exits
-                    active.discard(i)
-                    done.add(i)
-            for i, (_, entries, _) in enumerate(held):
-                if i not in active and i not in done and g in entries:
-                    active.add(i)
-        return broken
-
-    return count
+    return _stay_breaks(
+        _held_regions(world, chapter_maps, group_warps, None), entry_map, group_map)
 
 
 def _ancestors(group: str, pred: Mapping[str, set[str]]) -> set[str]:

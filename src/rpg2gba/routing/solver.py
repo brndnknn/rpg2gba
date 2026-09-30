@@ -590,6 +590,10 @@ def solve_route(
                                   Sequence[tuple[str, tuple[str, ...]]]],
                                  Sequence[PrecedenceEdge]]) = (),
     order_violations: Callable[[Sequence[str]], int] | None = None,
+    derived_precedence: Callable[[Sequence[PrecedenceEdge],
+                                  Sequence[tuple[str, tuple[str, ...]]]],
+                                 Sequence[PrecedenceEdge]] | None = None,
+    hard_order_violations: Callable[[Sequence[str]], int] | None = None,
 ) -> RoutePlan:
     """Solve a walk order over `chapter`'s OWN beat groups and return a `RoutePlan`.
 
@@ -724,6 +728,17 @@ def solve_route(
     violations (logging when every choice adds one); 2-opt never raises the
     seed's count.
 
+    `derived_precedence` (default None) is called with the accepted hard +
+    story + killer edges and the story any-ofs, and returns edges that are
+    HARD: one that would close a cycle raises instead of being dropped
+    (`beat_gen.interiors.gated_entry_edges` -- whatever a gated region's exit
+    waits on outside the region precedes the region's entry).
+
+    `hard_order_violations` (default None) is `order_violations` that may
+    never rise: the greedy seed places only groups that keep it unchanged
+    and raises when none does; 2-opt keeps it at 0 (`beat_gen.interiors.
+    gated_region_check` -- no leaving a region through a shut door).
+
     `solver_method` on the returned plan is always `"greedy+2opt"`.
     """
     effective_map_ids = map_ids if map_ids is not None else _default_map_ids()
@@ -813,6 +828,19 @@ def solve_route(
     kept_story_precedence = tuple(kept_story_precedence) + kept_killer_precedence
 
     own_group_ids = {gp.group_id for gp in group_points}
+    if derived_precedence is not None:
+        derived = tuple(
+            e for e in derived_precedence(
+                hard_precedence + kept_story_precedence,
+                tuple((a.after, a.befores) for a in story_any_of))
+            if e.before in own_group_ids and e.after in own_group_ids)
+        kept_derived = _acyclic_story_edges(hard_precedence + kept_story_precedence, derived)
+        dropped = sorted(set(derived) - set(kept_derived), key=lambda e: (e.before, e.after))
+        if dropped:
+            raise RouteSolverError(
+                f"chapter {chapter_id}: derived hard edge(s) close a cycle -- "
+                + "; ".join(f"{e.before} -> {e.after} ({e.reason})" for e in dropped))
+        hard_precedence = hard_precedence + tuple(kept_derived)
     soft_edges = (soft_precedence(hard_precedence + kept_story_precedence,
                                   tuple((a.after, a.befores) for a in story_any_of))
                   if callable(soft_precedence) else soft_precedence)
@@ -828,7 +856,7 @@ def solve_route(
         hard_precedence + kept_story_precedence + kept_soft_precedence, story_any_of)
 
     precedence = tuple(sorted(
-        set(self_switch_precedence) | set(warp_precedence)
+        set(hard_precedence)
         | set(kept_story_precedence) | set(kept_soft_precedence) | set(any_of_edges),
         key=lambda e: (e.before, e.after, e.reason),
     ))
@@ -980,6 +1008,17 @@ def solve_route(
                 f"next (cycle among {sorted(group_id_at[i] for i in remaining)}); "
                 f"precedence edges: {[e.reason for e in precedence]}"
             )
+        if hard_order_violations is not None:
+            prefix = [group_id_at[i] for i in placed[1:]]
+            before = hard_order_violations(prefix)
+            kept = [idx for idx in available
+                    if hard_order_violations([*prefix, group_id_at[idx]]) == before]
+            if not kept:
+                raise RouteSolverError(
+                    f"chapter {chapter_id}: every available group "
+                    f"{[group_id_at[i] for i in available]} leaves a gated region "
+                    f"through its shut exit after {prefix[-1:]}")
+            available = kept
         if order_violations is not None:
             prefix = [group_id_at[i] for i in placed[1:]]
             counts = {idx: order_violations([*prefix, group_id_at[idx]]) for idx in available}
@@ -1086,7 +1125,9 @@ def solve_route(
         return (all(pos[before] < pos[after] for before, after in precedence_point_pairs)
                 and all(min(pos[b] for b in befores) < pos[after]
                         for after, befores in any_of_points)
-                and violations(seq) <= seed_violations)
+                and violations(seq) <= seed_violations
+                and (hard_order_violations is None
+                     or hard_order_violations([group_id_at[i] for i in seq[1:-1]]) == 0))
 
     passes = 0
     improved = True

@@ -8,7 +8,8 @@ test_routing_solver.py`'s style (no `output/`/`engine/` dependency).
 from __future__ import annotations
 
 from rpg2gba.beat_gen.interiors import (
-    arrival_nudge_edges, interior_exit_edges, region_order_check,
+    arrival_nudge_edges, gated_entry_edges, gated_region_check, interior_exit_edges,
+    region_order_check,
 )
 from rpg2gba.routing.plan import PrecedenceEdge
 from rpg2gba.traversal.world import WorldEdge, WorldGraph
@@ -367,3 +368,60 @@ def test_region_order_check_no_exit_group_never_held() -> None:
     )
 
     assert check(["enter", "town_beat", "interior"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# gated regions (2026-09-30): a region whose exit door is shut until a
+# condition is met is held hard, and whatever its exit waits on outside the
+# region comes before its entry -- CH01's lab.
+# ---------------------------------------------------------------------------
+
+
+def _lab():
+    town, lab, outside = 32, 50, 99
+    edges = _door(town, lab, 3, 1) + [WorldEdge(src_map=town, dst_map=outside, kind="connection")]
+    world = _world(edges, {town, lab, outside})
+    regions = dict(
+        chapter_maps=frozenset({town, lab}), entry_map=town,
+        group_map={"lab_in": town, "quiz": lab, "rival": lab, "lab_out": lab,
+                   "blocker": town, "theo_house": town},
+        group_warps={"lab_in": ((town, 3),), "lab_out": ((lab, 1),)},
+    )
+    return world, regions
+
+
+def test_gated_region_check_holds_only_gated_exits() -> None:
+    world, regions = _lab()
+    gated = gated_region_check(world, **regions, gated_doors=frozenset({(50, 1)}))
+    assert gated(["lab_in", "quiz", "rival", "lab_out", "blocker"]) == 0
+    assert gated(["lab_in", "quiz", "blocker", "rival", "lab_out"]) == 1
+    ungated = gated_region_check(world, **regions, gated_doors=frozenset())
+    assert ungated(["lab_in", "quiz", "blocker", "rival", "lab_out"]) == 0
+
+
+def test_gated_entry_edges_follow_the_inside_any_of_alternative() -> None:
+    world, regions = _lab()
+    # The exit waits on var 101 >= 1: any of the rival scene (inside) or
+    # Theo's house (outside); the rival scene waits on the blocker (killer).
+    accepted = [PrecedenceEdge(before="blocker", after="rival", reason="killer:x"),
+                PrecedenceEdge(before="quiz", after="rival", reason="story:y")]
+    any_of = [("lab_out", ("rival", "theo_house"))]
+    edges = gated_entry_edges(world, **regions, gated_doors=frozenset({(50, 1)}),
+                              hard_and_story=accepted, any_of=any_of)
+    assert [(e.before, e.after) for e in edges] == [("blocker", "lab_in")]
+    assert edges[0].reason == "gated_entry:map032<-map050"
+
+
+def test_gated_entry_edges_none_for_an_ungated_region() -> None:
+    world, regions = _lab()
+    accepted = [PrecedenceEdge(before="blocker", after="lab_out", reason="story:z")]
+    assert gated_entry_edges(world, **regions, gated_doors=frozenset(),
+                             hard_and_story=accepted) == ()
+
+
+def test_gated_entry_edges_none_when_the_chapter_starts_inside() -> None:
+    world, regions = _lab()
+    regions["entry_map"] = 50
+    accepted = [PrecedenceEdge(before="blocker", after="lab_out", reason="story:z")]
+    assert gated_entry_edges(world, **regions, gated_doors=frozenset({(50, 1)}),
+                             hard_and_story=accepted) == ()

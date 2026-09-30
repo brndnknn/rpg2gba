@@ -51,6 +51,8 @@ from rpg2gba.beat_gen.boundary import inbound_rows, split_outbound
 from rpg2gba.beat_gen.continuity import thread_maps
 from rpg2gba.beat_gen.interiors import (
     arrival_nudge_edges,
+    gated_entry_edges,
+    gated_region_check,
     interior_exit_edges,
     region_order_check,
 )
@@ -1129,6 +1131,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         group_map=group_map,
         group_warps={b.group: ((b.map_id, int(dict(b.kwargs)["event_id"])),)
                      for b in warp_beats})
+    gated = _gated_doors(chain_maps, build_dir)
     route = solve_route(
         chapter_from_locations(chapter_id, records), chapter_id,
         manifest_rows=all_rows, graphs=graphs, overlays=overlays,
@@ -1139,6 +1142,11 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         soft_precedence=lambda accepted, any_of: soft + interior_exit_edges(
             world, **regions, hard_and_story=accepted, any_of=any_of),
         order_violations=region_order_check(world, **regions),
+        # 2026-09-30 (operator): a region whose exit is a gated door is held
+        # hard, and what its exit waits on outside comes before its entry.
+        derived_precedence=lambda accepted, any_of: gated_entry_edges(
+            world, **regions, gated_doors=gated, hard_and_story=accepted, any_of=any_of),
+        hard_order_violations=gated_region_check(world, **regions, gated_doors=gated),
     )
 
     # 6. Order, then adapt's route half. A warp whose destination is on no
@@ -1178,7 +1186,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
             world, chain_maps, reachable_sites(entry, graphs, world, chain_maps, occupancy),
             graphs, stepped_transfers=_stepped_transfers(chain_maps, build_dir),
             warp_presses=_warp_presses(beats)),
-        gated_doors=_gated_doors(chain_maps, build_dir),
+        gated_doors=gated,
     )
 
     # 8. White-out fork beats ride after their enablers (`beat_gen/whiteout.py`).
