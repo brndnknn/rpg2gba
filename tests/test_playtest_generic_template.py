@@ -650,6 +650,25 @@ def test_generic_beat_declares_a_trainer_battle():
     assert [(a.row_id, a.param("name")) for a in battles] == [(RICHEY[0], "Richey")]
 
 
+def test_battle_consts_are_only_the_staged_parties(monkeypatch):
+    """ROM run 28: trainers.json has every Theo party in the corpus; the
+    early-rival battle can only be one the ROM was built with."""
+    from rpg2gba.beat_gen import adapt
+    from rpg2gba.playtest.archetypes.generic import Step, _battle_consts
+
+    monkeypatch.setattr(adapt, "trainer_consts_for",
+                        lambda name, cls, row_id: ("TRAINER_THEO_10", "TRAINER_THEO_12",
+                                                   "TRAINER_THEO_9"))
+    monkeypatch.setattr(generic, "_staged_trainer_consts",
+                        lambda: frozenset({"TRAINER_THEO_9", "TRAINER_THEO_10"}))
+    step = Step(RIVAL[0], "battle", 106, (("kind", "trainer"), ("name", "Theo"),
+                                          ("trainer_type", "RIVAL")))
+    assert _battle_consts(step, "b") == ("TRAINER_THEO_10", "TRAINER_THEO_9")
+    monkeypatch.setattr(generic, "_staged_trainer_consts", lambda: frozenset())
+    with pytest.raises(ValueError, match="none of .* is staged"):
+        _battle_consts(step, "b")
+
+
 def test_generic_beat_leaves_a_wild_battle_undeclared():
     wild = _a("battle", 3, kind="wild", species="PIDGEY")
     lookup = {NPC: _floor(_a("trigger", -1, trigger="action"), _a("completes", -1), wild)}

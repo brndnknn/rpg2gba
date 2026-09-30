@@ -633,15 +633,38 @@ def _phone_trainer(row_id: str, beat_name: str, lookup: FloorLookup, manifest_id
     return _trainer_const_for(name, to_constant("TRAINER_CLASS", trainer_type), row_id=row_id)
 
 
+@functools.cache
+def _staged_trainer_consts() -> frozenset[str]:
+    """The `TRAINER_*` consts the ROM is built with: the trainer staging
+    manifest's battles (`trainer_converter.stage.write_all`), honoring
+    `RPG2GBA_OUTPUT` like the rest of the pipeline."""
+    root = Path(os.environ.get("RPG2GBA_OUTPUT", "output"))
+    path = root / "uranium-build" / "trainers" / "trainer_manifest.json"
+    if not path.exists():
+        raise ScenarioError(f"generic template: no trainer staging manifest at {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return frozenset(t["trainer_constant"] for t in data["trainers"] if t["kind"] == "battle")
+
+
 def _battle_consts(step: Step, beat_name: str) -> tuple[str, ...]:
-    """The trainers.json consts a trainer `battle` step can be against."""
+    """The trainers.json consts a trainer `battle` step can be against,
+    among those staged into the ROM. trainers.json holds the whole corpus
+    (every later Theo party too, 2026-09-29 ROM run 28: TRAINER_THEO_12 is
+    not in the build), and a party the ROM lacks can't be the one fought.
+    Fails loud when none is staged."""
     from rpg2gba.beat_gen.adapt import trainer_consts_for
     from rpg2gba.pbs_converter._naming import to_constant
 
     params = dict(step.params)
-    return trainer_consts_for(
+    candidates = trainer_consts_for(
         str(params["name"]), to_constant("TRAINER_CLASS", str(params["trainer_type"])),
         row_id=f"{beat_name}: {step.row_id}")
+    staged = tuple(c for c in candidates if c in _staged_trainer_consts())
+    if not staged:
+        raise ValueError(
+            f"generic_beat: {beat_name}: {step.row_id} battles {params['name']!r}, but "
+            f"none of {candidates} is staged into the ROM build")
+    return staged
 
 
 def _wait_for(emu: "Emulator", cond: Callable[[], bool], frames: int = 600) -> bool:
