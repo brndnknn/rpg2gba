@@ -1443,6 +1443,16 @@ def obstacle_beat(
             emu.face(facing)
             before = emu.player_pos()
             emu.interact()
+            # Close the "rugged rock" box first (ROM run 43): left open, the
+            # step below was a no-op that passed vacuously, and the walk to
+            # the next obstacle stalled behind the message.
+            emu.advance_dialog()
+            if emu.field_locked():
+                shot = emu.screenshot(f"{beat_name}_{row_id}_still_locked")
+                raise ScenarioError(
+                    f"{beat_name}: {row_id}: field controls are still locked "
+                    f"after the {capability} obstacle's message ({shot})"
+                )
             moved = assertions.try_step(emu, facing)
             after = emu.player_pos()
             if moved or after != before:

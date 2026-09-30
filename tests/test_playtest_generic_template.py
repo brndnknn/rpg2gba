@@ -156,9 +156,9 @@ ROCKS = ("map032/ev014/p0", "map032/ev015/p0")
 
 def _rock_lookup(capability: str = "rock_smash"):
     def lookup(row_id: str) -> RowFloor:
-        x = 65 if row_id == ROCKS[0] else 66
+        x, y = (65, 45) if row_id == ROCKS[0] else (66, 46)   # the real rocks' cells
         return _floor(_a("trigger", -1, row=row_id, trigger="action"),
-                      _a("blocked_obstacle", -1, row=row_id, x=x, y=45, capability=capability),
+                      _a("blocked_obstacle", -1, row=row_id, x=x, y=y, capability=capability),
                       row=row_id)
     return lookup
 
@@ -172,6 +172,56 @@ def test_obstacle_beat_declares_every_obstacle():
     assert {a.kind for a in beat.assertions} == {"blocked_obstacle"}
     assert {a.row_id for a in beat.assertions} == set(ROCKS)
     assert beat.locations[0].map_constant == "MAP_MOKI_TOWN"
+
+
+class _RockEmu:
+    """Pressing A opens the rock's message and locks the field until
+    `advance_dialog` closes it."""
+
+    def __init__(self) -> None:
+        self.pos = (0, 0)
+        self.locked = False
+        self.stepped_while_locked = False
+
+    def walk_to(self, x: int, y: int) -> None:
+        assert not self.locked, "walked with the rock's message still open"
+        self.pos = (x, y)
+
+    def face(self, direction: str) -> None:
+        pass
+
+    def player_pos(self) -> tuple[int, int]:
+        return self.pos
+
+    def interact(self) -> bool:
+        self.locked = True
+        return True
+
+    def advance_dialog(self) -> None:
+        self.locked = False
+
+    def field_locked(self) -> bool:
+        return self.locked
+
+
+def test_obstacle_beat_closes_the_message_before_stepping(monkeypatch):
+    # ROM run 43: the "rugged rock" box stayed open, so the step was a
+    # vacuous no-op and the walk to the next rock stalled behind it.
+    from rpg2gba.playtest import assertions
+    emu = _RockEmu()
+
+    def try_step(e, facing):
+        e.stepped_while_locked |= e.locked
+        return False
+
+    monkeypatch.setattr(assertions, "require_map", lambda *a, **k: None)
+    monkeypatch.setattr(assertions, "try_step", try_step)
+    b = _builder()
+    generic.obstacle_beat(b, chapter_id="CH01", beat_name="m032obstacle_rock_smash",
+                          rows=ROCKS, capability="rock_smash", floor_lookup=_rock_lookup())
+    (beat,) = b.build().beats
+    beat.run(emu)
+    assert not emu.stepped_while_locked
 
 
 def test_obstacle_beat_capability_mismatch_fails_loud():
