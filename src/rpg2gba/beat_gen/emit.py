@@ -99,18 +99,21 @@ def render_call(chapter_var: str, chapter_id: str, beat: PlannedBeat) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _never_fires_chunk(plan: ChapterPlan) -> str:
+def _never_fires_chunk(plan: ChapterPlan, *, status: str = "never_fires",
+                       name: str = "NEVER_FIRES") -> str:
     """The module-level `NEVER_FIRES` dict (C9 ruling 3): every
     `plan.elsewhere` entry with `status == "never_fires"`, keyed by row id
     to its proof (`detail`). Always emitted, `{}` when empty, sorted by row
     id for determinism -- the C9 grader reads this because it can't re-run
-    the generator to re-derive it."""
+    the generator to re-derive it. The same shape emits `EMPTY_PAGES`
+    (`status="empty_page"`, 2026-09-29 operator ruling: a frozen row whose
+    event is all empty pages is covered without a ROM walk)."""
     entries = sorted(
-        ((e.row_id, e.detail) for e in plan.elsewhere if e.status == "never_fires"),
+        ((e.row_id, e.detail) for e in plan.elsewhere if e.status == status),
         key=lambda kv: kv[0])
     if not entries:
-        return "NEVER_FIRES: dict[str, str] = {}"
-    lines = ["NEVER_FIRES: dict[str, str] = {"]
+        return f"{name}: dict[str, str] = {{}}"
+    lines = [f"{name}: dict[str, str] = {{"]
     lines.extend(
         f"    {render_value(row_id)}: {render_value(detail)},"
         for row_id, detail in entries)
@@ -183,6 +186,7 @@ def emit_module(plan: ChapterPlan) -> str:
         chunks.append(render_call(chapter_var, plan.chapter_id, beat).rstrip("\n"))
 
     chunks.append(_never_fires_chunk(plan))
+    chunks.append(_never_fires_chunk(plan, status="empty_page", name="EMPTY_PAGES"))
     chunks.append(_walk_checked_chunk(plan))
 
     chunks.append(f"CHAPTER = {chapter_var}.build()")

@@ -251,3 +251,34 @@ def test_strip_listed_event_rows_are_stripped_not_owned():
     assert sel.owned == () and sel.refusals == ()
     assert [(e.row_id, e.status) for e in sel.elsewhere] == [("map032/ev052/p0", "stripped")]
     assert "Luz" in sel.elsewhere[0].detail
+
+
+def _page(*codes: int) -> dict:
+    return {"list": [{"code": c} for c in codes]}
+
+
+def test_empty_events_only_when_every_page_is_empty():
+    """ROM run 26: the lab's invisible machine-side cells (one empty page)
+    are empty; an empty page superseding a real one (NurseTut p1, hand
+    CH03 N3) is not -- its beat proves the scene doesn't replay."""
+    map_json = {"events": [
+        None,
+        {"id": 17, "pages": [_page(0)]},
+        {"id": 16, "pages": [_page(101, 0), _page(0)]},
+        {"id": 3, "pages": [_page(0), _page(0)]},
+        {"id": 4, "pages": []},
+    ]}
+    assert select.empty_events(50, map_json) == {(50, 17), (50, 3)}
+
+
+def test_empty_event_rows_are_empty_page_not_owned():
+    from rpg2gba.beat_floor.assertion import RowFloor
+    from rpg2gba.chapter_manifest.schema import ManifestRow
+
+    row = ManifestRow(row_id="map050/ev018/p0", kind="page", map_id=50, content_hash="x",
+                      event_id=18)
+    floor = RowFloor(row_id=row.row_id, trigger="action", assertions=(), refusals=())
+    sel = select.select_rows([row], {}, {row.row_id: floor}, empty={(50, 18)})
+    assert sel.owned == () and sel.refusals == ()
+    assert [(e.row_id, e.status) for e in sel.elsewhere] == [("map050/ev018/p0", "empty_page")]
+    assert sel.elsewhere[0].detail

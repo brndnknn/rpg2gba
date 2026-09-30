@@ -174,22 +174,26 @@ def _check_row_coverage(
     claimed_by_own: Mapping[str, list[Beat]],
     never_fires: Mapping[str, str],
     claimed_by_owner: Mapping[str, tuple[str, list[Beat]]],
+    empty_pages: Mapping[str, str] = {},
 ) -> list[str]:
-    # A beat asserting a row and a proof that the row never runs cannot both
-    # be right; whichever is wrong, the generator emitted a contradiction.
+    # A beat asserting a row and a proof that the row never runs (or runs
+    # nothing) cannot both be right; whichever is wrong, the generator
+    # emitted a contradiction.
     problems: list[str] = [
         f"{chapter_id}: row {row_id!r} is claimed by "
-        f"{[b.name for b in claimed_by_own[row_id]]} AND listed in NEVER_FIRES"
-        for row_id in sorted(set(claimed_by_own) & set(never_fires))
+        f"{[b.name for b in claimed_by_own[row_id]]} AND listed in {name}"
+        for name, listed in (("NEVER_FIRES", never_fires), ("EMPTY_PAGES", empty_pages))
+        for row_id in sorted(set(claimed_by_own) & set(listed))
     ]
     for row_id, sources in sorted(required_rows.items()):
-        if row_id in claimed_by_own or row_id in never_fires or row_id in claimed_by_owner:
+        if (row_id in claimed_by_own or row_id in never_fires
+                or row_id in empty_pages or row_id in claimed_by_owner):
             continue
         problems.append(
             f"{chapter_id}: row {row_id!r}, claimed by {sources}, is not "
             f"claimed by any own beat of the generated {chapter_id}, nor by "
             "the generated chapter whose manifest owns it, and is not in "
-            "NEVER_FIRES")
+            "NEVER_FIRES or EMPTY_PAGES")
     return problems
 
 
@@ -323,8 +327,12 @@ def grade_chapter(
     successor: Chapter | None = None,
     owners: Sequence[OwnerSuite] = (),
     walk_checked: Mapping[str, str] = {},
+    empty_pages: Mapping[str, str] = {},
 ) -> ChapterGrade:
-    """Pure grade of one chapter. `.problems == []` means the generated suite
+    """Pure grade of one chapter. `empty_pages` is the module's
+    `EMPTY_PAGES`: frozen rows in it are covered like `never_fires` ones
+    (2026-09-29 operator ruling; hand CH03's N3 re-talked an all-empty
+    event). `.problems == []` means the generated suite
     covers the frozen hand suite for `chapter_id`. `successor` is the next
     chapter's generated suite, if one exists (boundary rows, C9 ruling 9);
     `owners` are the other chapters' generated suites in chain order (a
@@ -340,7 +348,8 @@ def grade_chapter(
 
     required_rows = _required_rows(chapter_id, frozen_beats, residue_entries)
     row_problems = _check_row_coverage(
-        chapter_id, required_rows, claimed_by_own, never_fires, claimed_by_owner)
+        chapter_id, required_rows, claimed_by_own, never_fires, claimed_by_owner,
+        empty_pages)
     floor = _check_floor_ge(chapter_id, claimed_by_own, required_rows,
                             successor=successor, claimed_by_owner=claimed_by_owner,
                             build_dir=build_dir, walk_checked=walk_checked)
@@ -375,6 +384,7 @@ def grade_chapter_from_disk(
     module = load_chapter_module(chapter_id, suite="gen")
     never_fires: Mapping[str, str] = getattr(module, "NEVER_FIRES", {})
     walk_checked: Mapping[str, str] = getattr(module, "WALK_CHECKED", {})
+    empty_pages: Mapping[str, str] = getattr(module, "EMPTY_PAGES", {})
 
     all_frozen = load_frozen_hand_beats(frozen_path)
     frozen_beats = [b for b in all_frozen if b.chapter == chapter_id]
@@ -399,6 +409,7 @@ def grade_chapter_from_disk(
         successor=_generated_successor(chapter_id, others),
         owners=owners,
         walk_checked=walk_checked,
+        empty_pages=empty_pages,
     )
 
 

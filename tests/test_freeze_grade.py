@@ -122,6 +122,30 @@ def test_row_both_claimed_and_never_fires_is_a_contradiction(monkeypatch):
     assert "NEVER_FIRES" in problems[0] and ROW in problems[0]
 
 
+def _grade_empty(frozen, gen, empty_pages):
+    return freeze_grade.grade_chapter(
+        "CH01", frozen_beats=frozen, residue_entries={}, gen_chapter=gen,
+        never_fires={}, build_dir=BUILD_DIR, empty_pages=empty_pages).problems
+
+
+def test_empty_page_row_satisfies_coverage(monkeypatch):
+    """2026-09-29 ruling: hand CH03's N3 re-talked an all-empty event."""
+    _patch_floor(monkeypatch, {})
+    gen = _chapter("CH01", (_beat("B1", rows=(), assertions=None),))
+    frozen = [_frozen("CH01", "B1", (ROW,))]
+    assert _grade_empty(frozen, gen, {ROW: "every page empty"}) == []
+
+
+def test_row_both_claimed_and_empty_page_is_a_contradiction(monkeypatch):
+    assertion = _warp_assertion()
+    _patch_floor(monkeypatch, {ROW: _floor(assertions=(assertion,))})
+    gen = _chapter("CH01", (_beat("B1", rows=(ROW,), assertions=frozenset({assertion})),))
+    frozen = [_frozen("CH01", "B1", (ROW,))]
+    problems = _grade_empty(frozen, gen, {ROW: "every page empty"})
+    assert len(problems) == 1
+    assert "EMPTY_PAGES" in problems[0] and ROW in problems[0]
+
+
 def test_residue_cited_row_is_graded(monkeypatch):
     _patch_floor(monkeypatch, {})
     gen = _chapter("CH01", (_beat("B1", rows=(), assertions=None),))

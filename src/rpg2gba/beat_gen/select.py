@@ -9,7 +9,7 @@ STATUS: stub (`assignments/C6/01_select.md`).
 """
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 
 from rpg2gba.beat_floor.assertion import RowFloor
 from rpg2gba.beat_gen.plan import Blocker, Elsewhere, Refusal, Selection
@@ -95,12 +95,32 @@ def _is_obstacle_row(floor: RowFloor) -> bool:
     return any(a.kind == "blocked_obstacle" for a in floor.assertions)
 
 
+def empty_events(map_id: int, map_json: Mapping) -> set[tuple[int, int]]:
+    """The (map, event) pairs on one decoded map whose EVERY page is empty
+    (only the terminating code 0). Such an event can show nothing on the
+    ROM whatever the story state -- no page it could switch to does
+    anything -- so its rows are `empty_page`, not walked (2026-09-29
+    operator ruling, ROM run 26: the lab's invisible machine-side cells).
+    An empty page that SUPERSEDES a non-empty one is not in here: its beat
+    proves the earlier scene doesn't replay (hand CH03's N3)."""
+    out: set[tuple[int, int]] = set()
+    for event in map_json.get("events") or []:
+        if not event:
+            continue
+        pages = event.get("pages") or []
+        if pages and all(all(c.get("code") == 0 for c in p.get("list") or [])
+                         for p in pages):
+            out.add((map_id, event["id"]))
+    return out
+
+
 def select_rows(
     rows: Sequence[ManifestRow],
     verdicts: Mapping[str, RowVerdict],
     floors: Mapping[str, RowFloor],
     *,
     stripped: Mapping[tuple[int, int], str | None] | None = None,
+    empty: Collection[tuple[int, int]] = frozenset(),
 ) -> Selection:
     """Sort every manifest row into owned / refused / elsewhere.
 
@@ -113,7 +133,10 @@ def select_rows(
     expect_name, `orchestrator.load_map_event_strips`): those events never
     reach the ROM, so their rows are `stripped`, ahead of every other rule
     (2026-09-27: CH01 generated a beat for each of Moki Town's eleven
-    no-port `Luz` lamps, and the ROM run found nothing to talk to)."""
+    no-port `Luz` lamps, and the ROM run found nothing to talk to).
+
+    `empty` is `empty_events` over the chapter's maps: those events' rows
+    are `empty_page`, right after the strip rule."""
     owned: list[ManifestRow] = []
     refusals: list[Refusal] = []
     elsewhere: list[Elsewhere] = []
@@ -129,6 +152,13 @@ def select_rows(
             elsewhere.append(Elsewhere(
                 row.row_id, "stripped",
                 detail=f"strip_list.json map_events ({name or 'unnamed'})"))
+            continue
+
+        # Rule 1b: every page of the event is empty.
+        if row.event_id is not None and (row.map_id, row.event_id) in empty:
+            elsewhere.append(Elsewhere(
+                row.row_id, "empty_page",
+                detail="every page of the event is empty; nothing to check on the ROM"))
             continue
 
         verdict = verdicts.get(row.row_id)
