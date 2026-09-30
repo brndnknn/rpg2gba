@@ -875,7 +875,8 @@ def _handle_battle(emu: "Emulator", beat_name: str, step: Step) -> None:
         raise ScenarioError(
             f"{beat_name}: {step.row_id}: fought trainer id {actual}, not one of "
             f"{sorted(params['consts'])} ({shot})")
-    win_battle(emu)
+    # Stop at the overworld: the rest of the page is this beat's to check.
+    win_battle(emu, finish_script=False)
     flag_id = emu.resolve_constant("TRAINER_FLAGS_START") + actual
     if not _wait_for(emu, lambda: emu.flag(flag_id), frames=120):
         shot = emu.screenshot(f"{beat_name}_not_defeated")

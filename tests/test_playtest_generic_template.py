@@ -606,7 +606,10 @@ def _battle(monkeypatch, emu, consts=("TRAINER_RICHEY",)):
 
     monkeypatch.setattr(battle, "in_battle", lambda e: not e.won)
 
-    def win(e):
+    def win(e, *, finish_script=True):
+        # The generic template checks the post-battle script's own text, so it
+        # must not have the helper press through it (ROM run 29).
+        assert finish_script is False
         e.won = True
     monkeypatch.setattr(battle, "win_battle", win)
     params = (("kind", "trainer"), ("name", "Richey"), ("trainer_type", "YOUNGSTER"))

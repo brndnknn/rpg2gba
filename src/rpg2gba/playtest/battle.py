@@ -283,6 +283,7 @@ def win_battle(
     start_budget: int = 1800,
     menu_budget: int = 1500,
     end_budget: int = 3000,
+    finish_script: bool = True,
 ) -> list[EnemyMon]:
     """Wait for a battle to start, read + zero the enemy party, submit one
     move, then ride the engine's real battle-end path out to the overworld.
@@ -291,6 +292,11 @@ def win_battle(
     assertions against the converter-owned party contents). Fails loud with
     a screenshot on any budget exhaustion, matching `walk_to`/
     `advance_dialog`.
+
+    `finish_script=False` stops once the battle is over instead of pressing
+    through the script that resumes after it: the generic template still
+    checks that script's text (2026-09-29 ROM run 29, the rival's post-loss
+    lines were consumed here).
     """
     spent = 0
     while not in_battle(emu):
@@ -329,7 +335,7 @@ def win_battle(
         emu.run(20)
         spent += 26
 
-    if emu.field_locked():
+    if finish_script and emu.field_locked():
         # Post-battle script (defeat flag, trainer dialogue) still holds
         # the overworld -- clear it the same way any other dialogue is
         # cleared.
