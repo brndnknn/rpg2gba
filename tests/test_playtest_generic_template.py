@@ -435,6 +435,67 @@ def test_gift_ceremony_runs_where_the_refused_arm_gives(monkeypatch):
     assert calls.index("gift") < calls.index("text")
 
 
+# --- item grants' obtain boxes come up in place (ROM run 48) --------------------
+
+
+class _BoxEmu:
+    """Shows `boxes` one at a time; `dismiss_message` moves to the next."""
+
+    def __init__(self, boxes: list[str]) -> None:
+        self.boxes = list(boxes)
+        self.dismissed = 0
+
+    def wait_for_field_message(self, frame_budget: int = 180) -> str | None:
+        return self.boxes[0] if self.boxes else None
+
+    def clear_field_message(self) -> None:
+        pass
+
+    def dismiss_message(self) -> None:
+        self.dismissed += 1
+        self.boxes.pop(0)
+
+    def screenshot(self, name: str) -> str:
+        return f"{name}.png"
+
+
+def test_item_boxes_get_through_obtain_and_pocket_lines():
+    emu = _BoxEmu(["Obtained 5 Poké Balls!",
+                   "RED put away the Poké Balls\\nin the POKé BALLS POCKET.",
+                   "Poké Balls are necessary for catching Pokémon"])
+    generic._item_boxes(emu, "B1", "map032/ev009/p2")
+    assert emu.dismissed == 2
+    assert emu.boxes == ["Poké Balls are necessary for catching Pokémon"]
+
+
+def test_item_boxes_fail_loud_without_an_obtain_line():
+    from rpg2gba.playtest.errors import ScenarioError
+    with pytest.raises(ScenarioError, match="obtain line"):
+        generic._item_boxes(_BoxEmu(["Poké Balls are necessary"]), "B1", "r")
+
+
+def test_the_professors_poke_balls_come_up_before_the_arms_first_line(monkeypatch):
+    # The grant is the trunk's `pbReceiveItem` condition (list[160]); arm
+    # b16's first line is list[162].
+    from rpg2gba.playtest import assertions
+
+    rows = ("map032/ev009/p2", "map032/ev009/p2/b16")
+    b = _builder()
+    generic.generic_beat(b, chapter_id="CH01", beat_name="m032e009p2", rows=rows,
+                         approach_prefer="south")
+    (beat,) = b.build().beats
+    calls: list[tuple[str, int]] = []
+    monkeypatch.setattr(assertions, "require_map", lambda *a: None)
+    monkeypatch.setattr(generic, "_item_boxes", lambda emu, name, row: calls.append(("boxes", -1)))
+    for kind in generic.STEP_HANDLERS:
+        monkeypatch.setitem(generic.STEP_HANDLERS, kind,
+                            lambda emu, name, step: calls.append((step.kind, step.list_index)))
+    beat.run(_AnyEmu())
+    spoken = [c for c in calls if c[0] in ("text", "boxes")]
+    at = spoken.index(("boxes", -1))
+    assert spoken[at - 1] == ("text", 155) and spoken[at + 1] == ("text", 162)
+
+
 # --- heal_party waits for the heal to land (ROM run 31) -------------------------
 
 

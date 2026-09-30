@@ -243,6 +243,9 @@ _NOT_AFTER_THE_FACT = frozenset(
 #: Not a floor kind: an unclaimed gift arm's ceremony the body gets through
 #: without checking (`generic_beat(gift_ceremonies=)`).
 _GIFT_CEREMONY = "gift_ceremony"
+#: Not a floor kind: where an `item_grant` sits in the page, the ROM shows
+#: its obtain boxes (`_item_boxes`); the bag check itself stays after the page.
+_ITEM_BOXES = "item_boxes"
 #: Re-admitted on an arrival page that shows text: its drain is found by
 #: that text, which proves it fired, and carries the bag delta.
 _FROM_THE_DRAIN = frozenset({"trigger", "text", "item_grant", "choice"})
@@ -862,6 +865,40 @@ def _gift_ceremony(emu: "Emulator", beat_name: str, row_id: str) -> None:
     emu.clear_field_message()
 
 
+#: `giveitem`/`finditem`'s own boxes (engine/data/scripts/obtain_item.inc,
+#: engine/data/text/obtain_item.inc): "Obtained the X!" / "Obtained N Xs!" /
+#: "{PLAYER} found one X!", then "{PLAYER} put away the X in the ... POCKET."
+_ITEM_BOX_OPENERS = ("Obtained", "{PLAYER} found")
+_ITEM_BOX_CLOSER = "{PLAYER} put away the"
+
+
+def _item_boxes(emu: "Emulator", beat_name: str, row_id: str) -> None:
+    """Get through an item grant's obtain boxes where the page gives it
+    (ROM run 48: the Professor's `pbReceiveItem(POKeBALL,5)` opens an arm
+    whose first line came after "Obtained 5 Poké Balls!", and the arm's text
+    step read the obtain box instead). The first box is the obtain line, the
+    last the pocket line; the fanfare plays between them."""
+    text = emu.wait_for_field_message(frame_budget=600)
+    if text is None or not any(text_matches(o, text) for o in _ITEM_BOX_OPENERS):
+        shot = emu.screenshot(f"{beat_name}_no_item_box")
+        raise ScenarioError(
+            f"{beat_name}: {row_id}: expected the item grant's obtain line, got "
+            f"{text!r} ({shot})")
+    for _ in range(3):
+        if text is not None and text_matches(_ITEM_BOX_CLOSER, text):
+            break
+        emu.clear_field_message()
+        emu.dismiss_message()
+        text = emu.wait_for_field_message(frame_budget=600)
+    else:
+        shot = emu.screenshot(f"{beat_name}_no_pocket_box")
+        raise ScenarioError(
+            f"{beat_name}: {row_id}: the item grant's \"put away\" line never "
+            f"came, last box {text!r} ({shot})")
+    emu.clear_field_message()
+    emu.dismiss_message()
+
+
 def _handle_pokemon_grant(emu: "Emulator", beat_name: str, step: Step) -> None:
     """A loud `pbAddPokemon`: its ceremony comes up where the page gives,
     and the party then holds the species. `const` is added to the floor
@@ -1222,7 +1259,10 @@ def generic_beat(
     # A random arm's grant may not happen, so it isn't counted (ruling 19).
     grant_steps = arrival_grants if arrival else [
         s for s in middle_steps if s.kind == "item_grant" and s.row_id not in random_guard]
-    middle_steps = [s for s in middle_steps if s.kind != "item_grant"]
+    # Its obtain boxes still come up where the page gives it, between the
+    # lines around it: an `_ITEM_BOXES` marker holds that place.
+    middle_steps = [Step(s.row_id, _ITEM_BOXES, s.list_index, ()) if s.kind == "item_grant"
+                    else s for s in middle_steps]
 
     # State writes: checked after `completes` too, once per key at its LAST
     # write. In source order the check could run while the script still had
@@ -1324,6 +1364,9 @@ def generic_beat(
                 continue  # the RNG picked a sibling arm (or: no damage to heal)
             if step.kind == _GIFT_CEREMONY:
                 _gift_ceremony(emu, beat_name, step.row_id)
+                continue
+            if step.kind == _ITEM_BOXES:
+                _item_boxes(emu, beat_name, step.row_id)
                 continue
             STEP_HANDLERS[step.kind](emu, beat_name, step)
             if i == damage_after:
