@@ -327,10 +327,16 @@ def _handle_completes(emu: "Emulator", beat_name: str, step: Step) -> None:
         )
 
 
+_TEXT_WAIT_FRAMES = 900
+
+
 def _handle_text(emu: "Emulator", beat_name: str, step: Step) -> None:
     params = dict(step.params)
     expected = params["text"]
-    text = emu.wait_for_field_message()
+    # The script can walk NPCs around between two lines (ROM run 32: Theo's
+    # eight-tile exit before the professor's next line), so the default
+    # 180-frame wait is too short.
+    text = emu.wait_for_field_message(frame_budget=_TEXT_WAIT_FRAMES)
     if text is None or not text_matches(expected, text):
         shot = emu.screenshot(f"{beat_name}_text_{params.get('index')}")
         raise ScenarioError(
