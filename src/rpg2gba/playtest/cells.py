@@ -39,6 +39,7 @@ with identical inputs disagree (CLAUDE.md §4.2).
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 import os
 from pathlib import Path
 
@@ -207,6 +208,75 @@ def event_page_moves(map_constant: str, event_id: int, page_idx: int) -> bool:
             f"event_page_moves: {map_constant} event {event_id} has no page "
             f"{page_idx} ({len(pages)} pages)")
     return int(pages[page_idx].get("move_type") or 0) != 0
+
+
+@dataclass(frozen=True)
+class RouteStep:
+    """One step of a custom-route walker's loop: it walks `origin` ->
+    `target` heading `direction` ("UP"/"DOWN"/"LEFT"/"RIGHT"); `through`
+    steps ignore collision, so a player standing on `target` cannot stop
+    them."""
+
+    origin: Cell
+    target: Cell
+    direction: str
+    through: bool
+
+
+_ROUTE_STEP = {0x01: ("DOWN", (0, 1)), 0x02: ("LEFT", (-1, 0)),
+               0x03: ("RIGHT", (1, 0)), 0x04: ("UP", (0, -1))}
+
+
+def custom_route_loop(map_constant: str, event_id: int) -> tuple[RouteStep, ...] | None:
+    """The steps of event `event_id`'s repeating custom route, or None when
+    its object is not a looping, non-skippable `MOVEMENT_TYPE_URANIUM_
+    CUSTOM_ROUTE` walker.
+
+    Derived with the converter's own functions (CLAUDE.md §4.3): the boot
+    page the object's movement comes from (`npc_gfx.select_boot_page`), its
+    classification (`npc_gfx.movement_spec_for`) and the exact bytecode the
+    ROM interprets (`route_bytecode.encode_route`), walked from the RMXP
+    spawn cell. Only a looping, non-skippable walker qualifies: the engine
+    holds such a walker in place when its next step is blocked
+    (`MovementType_UraniumCustomRoute_Callback`), which is what lets a player
+    standing on its path stop it (`assertions.talk_to_moving_npc`, ROM run
+    36: Moki Town's Chyinmunk). A route that stops holds still anyway; a
+    skippable one skips a blocked step rather than waiting."""
+    from ..tileset_converter.npc_gfx import movement_spec_for, select_boot_page
+    from ..tileset_converter.route_bytecode import (
+        FLAG_SKIPPABLE, OP_END_LOOP, OP_THROUGH_OFF, OP_THROUGH_ON, OP_WAIT, encode_route)
+
+    uid, _graph = _graph_for(map_constant, resolver="custom_route_loop")
+    event = _event_lookup(uid, event_id, map_constant=map_constant, resolver="custom_route_loop")
+    page = select_boot_page(event)
+    if page is None:
+        return None
+    if movement_spec_for(page).movement_type != "MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE":
+        return None
+    code = encode_route(page["move_route"], page.get("move_frequency", 3))
+    if code is None or code[-1] != OP_END_LOOP or code[1] & FLAG_SKIPPABLE:
+        return None
+    steps: list[RouteStep] = []
+    cell: Cell = (event["x"], event["y"])
+    through = False
+    i = 2
+    while i < len(code) - 1:
+        op = code[i]
+        if op in _ROUTE_STEP:
+            direction, (dx, dy) = _ROUTE_STEP[op]
+            target = (cell[0] + dx, cell[1] + dy)
+            steps.append(RouteStep(cell, target, direction, through))
+            cell = target
+        elif op == OP_THROUGH_ON:
+            through = True
+        elif op == OP_THROUGH_OFF:
+            through = False
+        elif op == OP_WAIT:
+            i += 1   # its frame-count operand
+        i += 1
+    if not steps or cell != (event["x"], event["y"]):
+        return None  # a loop that doesn't close drifts; no fixed path to wait on
+    return tuple(steps)
 
 
 def event_page_empty(map_constant: str, event_id: int, page_idx: int) -> bool:

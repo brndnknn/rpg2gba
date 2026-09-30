@@ -117,6 +117,7 @@ from rpg2gba.playtest.archetypes import (
 )
 from rpg2gba.playtest.cells import (
     approach_to,
+    custom_route_loop,
     event_cell,
     event_page_empty,
     event_page_moves,
@@ -1098,6 +1099,7 @@ def generic_beat(
     trigger = dict(trigger_step.params).get("trigger") if trigger_step else None
     faces_target: tuple[int, int] | None = None
     walks_off: int | None = None      # local id of an action NPC that walks on its own
+    walker_route = None               # its looping custom route, if it has one
     empty_page = False                # an action page with no commands: A is a no-op
     arrival = trigger in _ARRIVAL_TRIGGERS
     random_rows = {r for r, _ in random_arms}
@@ -1152,6 +1154,7 @@ def generic_beat(
                 empty_page = True
             elif event_page_moves(cell.map_constant, page_row.event_id, page_idx):
                 walks_off = local_id(cell.map_constant, page_row.event_id)
+                walker_route = custom_route_loop(cell.map_constant, page_row.event_id)
     elif approach_prefer is not None:
         candidate = next(
             (c for c in cell.approach_candidates if c.side == approach_prefer), None)
@@ -1294,7 +1297,7 @@ def generic_beat(
             if walks_off is not None:
                 # An NPC that walks on its own has left `faces_target`;
                 # talk to it where it is now (`cells.event_page_moves`).
-                assertions.talk_to_moving_npc(emu, beat_name, walks_off)
+                assertions.talk_to_moving_npc(emu, beat_name, walks_off, route=walker_route)
             else:
                 if faces_target is not None:
                     emu.face(facing_toward((x, y), faces_target, caller="generic_beat"))

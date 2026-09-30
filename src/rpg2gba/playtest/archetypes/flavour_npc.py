@@ -51,7 +51,14 @@ from ...beat_floor.assertion import FloorAssertion, RowFloor
 from ...beat_floor.lookup import floor_for_row as _default_floor_for_row
 from ...chapter_manifest.schema import page_row_id
 from .. import assertions
-from ..cells import approach_to, event_cell, event_page_moves, has_local_id, local_id
+from ..cells import (
+    approach_to,
+    custom_route_loop,
+    event_cell,
+    event_page_moves,
+    has_local_id,
+    local_id,
+)
 from ..errors import ScenarioError
 from ..text_source import page_messages
 from . import FloorLookup, declare_assertions, facing_toward, find_match, load_chapter_rows
@@ -406,6 +413,13 @@ def _start_talk(
     `moved_by`: nothing in source moves this NPC, so it is misplaced -- a
     converter or ordering bug -- and this raises instead of pressing A at a
     cell derived from a position it does not hold."""
+    route = custom_route_loop(map_constant, event_id)
+    if route is not None and event_page_moves(map_constant, event_id, page_idx):
+        # A looping walker's approach cell may sit on its own path (Moki
+        # Town's Chyinmunk: (35,43)); the intercept does its own walking.
+        assertions.talk_to_moving_npc(
+            emu, beat_name, local_id(map_constant, event_id), route=route)
+        return
     emu.walk_to(*approach)
     if event_page_moves(map_constant, event_id, page_idx):
         assertions.talk_to_moving_npc(emu, beat_name, local_id(map_constant, event_id))

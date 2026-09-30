@@ -59,7 +59,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -67,6 +67,7 @@ from .battle import decrypt_species
 from .errors import ScenarioError
 
 if TYPE_CHECKING:  # runtime import is lazy so this module is importable without bindings
+    from .cells import RouteStep
     from .emulator import Emulator
 
 
@@ -505,9 +506,80 @@ _TALK_SIDES: tuple[tuple[tuple[int, int], str], ...] = (
 )
 
 
+_OPPOSITE = {"UP": "DOWN", "DOWN": "UP", "LEFT": "RIGHT", "RIGHT": "LEFT"}
+_INTERCEPT_POLL_FRAMES = 4
+_INTERCEPT_FRAMES_PER_STEP = 24   # a 16-frame walk plus slack for the idle gap
+
+
+def _intercept_route_walker(emu: Emulator, beat: str, local_id: int,
+                            route: Sequence[RouteStep],
+                            walk: Callable[[int, int], None]) -> None:
+    """Stand on a looping custom-route walker's path and let it come to the
+    player (ROM run 36: Moki Town's Chyinmunk laps a rectangle at the
+    fastest frequency, and chasing its live position lost every race).
+
+    The engine holds a non-skippable walker in place when its next step is
+    blocked (`MovementType_UraniumCustomRoute_Callback`), so a player on a
+    step's `target` stops it one tile away, on that step's `origin`, facing
+    the player. Through steps are skipped: they walk through the player.
+    Candidates are tried nearest first; a cell the walker currently holds
+    or the walk cannot reach is skipped. Fails loud if no path cell can be
+    reached, or if the walker does not arrive within two laps."""
+    player = emu.player_pos()
+    candidates = sorted(
+        {s.target for s in route if not s.through},
+        key=lambda c: (abs(c[0] - player[0]) + abs(c[1] - player[1]), c))
+    arrivals_by_cell = {
+        cell: {s.origin: _OPPOSITE[s.direction] for s in route
+               if s.target == cell and not s.through}
+        for cell in candidates}
+    def live() -> tuple[int, int] | None:
+        # `gObjectEvents` holds only what the camera can see (ROM run 37: a
+        # seeded start off-screen of the loop): absent means "not here yet".
+        try:
+            npc = emu.object_event(local_id)
+        except ScenarioError:
+            return None
+        return (npc.x, npc.y)
+
+    last_seen: tuple[int, int] | None = None
+    for cell in candidates:
+        if live() == cell:
+            continue
+        try:
+            walk(*cell)
+        except ScenarioError:
+            continue
+        if emu.player_pos() != cell:
+            continue
+        arrivals = arrivals_by_cell[cell]
+        budget = 2 * len(route) * _INTERCEPT_FRAMES_PER_STEP
+        waited = 0
+        while waited <= budget:
+            pos = live()
+            last_seen = pos or last_seen
+            facing = arrivals.get(pos) if pos is not None else None
+            if facing is not None:
+                emu.face(facing)
+                if emu.interact(require_script=False):
+                    return
+            emu.run(_INTERCEPT_POLL_FRAMES)
+            waited += _INTERCEPT_POLL_FRAMES
+        shot = emu.screenshot(f"{beat}_intercept_timeout")
+        raise ScenarioError(
+            f"{beat}: waited {budget} frames on {cell} for route walker local id "
+            f"{local_id} to arrive at one of {sorted(arrivals)}; last seen at "
+            f"{last_seen} ({shot})")
+    shot = emu.screenshot(f"{beat}_intercept_unreachable")
+    raise ScenarioError(
+        f"{beat}: no cell of route walker local id {local_id}'s path "
+        f"{candidates} could be reached to intercept it ({shot})")
+
+
 def talk_to_moving_npc(emu: Emulator, beat: str, local_id: int, *,
                        walk: Callable[[int, int], None] | None = None,
-                       attempts: int = 6) -> None:
+                       attempts: int = 6,
+                       route: Sequence[RouteStep] | None = None) -> None:
     """Interact with an NPC that does not stay where it spawned.
 
     A `MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE` walker invalidates a derived
@@ -544,8 +616,15 @@ def talk_to_moving_npc(emu: Emulator, beat: str, local_id: int, *,
     Fails loud, naming the NPC's last seen position, when every attempt is
     exhausted -- an NPC that can never be reached is a finding about the
     map or the route, not something to pass over quietly.
+
+    `route` (`cells.custom_route_loop`) marks a looping custom-route walker:
+    it never stops, so it is intercepted on its path instead of chased
+    (`_intercept_route_walker`).
     """
     walk_to = walk if walk is not None else emu.walk_to
+    if route:
+        _intercept_route_walker(emu, beat, local_id, route, walk_to)
+        return
     last_seen: tuple[int, int] | None = None
     for _ in range(attempts):
         npc = emu.object_event(local_id)
