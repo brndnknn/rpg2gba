@@ -580,6 +580,11 @@ class _BattleEmu:
     def __init__(self, *, opponent=7, trainer=True, flag_after=True):
         self.opponent, self.trainer, self.flag_after = opponent, trainer, flag_after
         self.won = False
+        self.cleared_after_win = False
+
+    def clear_field_message(self):
+        # ROM run 30: the battle's defeat line must not reach the next text step.
+        self.cleared_after_win = self.won
 
     def is_trainer_battle(self):
         return self.trainer
@@ -621,6 +626,7 @@ def _battle(monkeypatch, emu, consts=("TRAINER_RICHEY",)):
 def test_battle_handler_checks_the_trainer_wins_and_reads_the_defeat_flag(monkeypatch):
     emu = _BattleEmu()
     _battle(monkeypatch, emu)
+    assert emu.cleared_after_win
     assert emu.won
 
 

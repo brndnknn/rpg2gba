@@ -876,7 +876,11 @@ def _handle_battle(emu: "Emulator", beat_name: str, step: Step) -> None:
             f"{beat_name}: {step.row_id}: fought trainer id {actual}, not one of "
             f"{sorted(params['consts'])} ({shot})")
     # Stop at the overworld: the rest of the page is this beat's to check.
+    # The battle leaves its own defeat line in the field message buffer
+    # (ROM run 30: "What? B-but I was s'posed to win!"), so clear it before
+    # the next text step reads.
     win_battle(emu, finish_script=False)
+    emu.clear_field_message()
     flag_id = emu.resolve_constant("TRAINER_FLAGS_START") + actual
     if not _wait_for(emu, lambda: emu.flag(flag_id), frames=120):
         shot = emu.screenshot(f"{beat_name}_not_defeated")
