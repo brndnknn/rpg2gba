@@ -324,8 +324,9 @@ def _toggled_page(talk_row: str, floors: Mapping[str, RowFloor],
     """For a toggling NPC: the self-switch its page (or an arm of it)
     writes, and the page of the same event that switch reveals -- the page
     whose own condition is that self-switch. Template defaults ("A", page
-    1) are left implicit. No revealed page: nothing to add (the template's
-    `_again` beat then claims no row). More than one: fail loud."""
+    1) are left implicit. No revealed page: `toggled_page_idx=None`, so the
+    template registers no `_again` beat (the toggle is in-page and its
+    second line is walked by the state arms). More than one: fail loud."""
     letters = sorted({a.param("letter") for rid, f in floors.items()
                       if rid == talk_row or rid.startswith(f"{talk_row}/")
                       for a in f.assertions if a.kind == "self_switch_write"})
@@ -342,7 +343,12 @@ def _toggled_page(talk_row: str, floors: Mapping[str, RowFloor],
     out: dict = {}
     if letter != "A":
         out["self_switch_letter"] = letter
-    if revealed and revealed[0] != 1:
+    if not revealed:
+        # The toggle lives inside the page (a self-switch branch); the state
+        # arms' re-fire beats walk its second line (ROM run 35: the template
+        # default read page 1, an unrelated switch-125 page).
+        out["toggled_page_idx"] = None
+    elif revealed[0] != 1:
         out["toggled_page_idx"] = revealed[0]
     return out
 

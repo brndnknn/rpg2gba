@@ -77,7 +77,7 @@ def flavour_npc_beat(
     beat_name: str,
     variant: str | None = None,
     page_idx: int = 0,
-    toggled_page_idx: int = 1,
+    toggled_page_idx: int | None = 1,
     self_switch_letter: str = "A",
     description: str | None = None,
     approach_prefer: str | None = None,
@@ -104,6 +104,9 @@ def flavour_npc_beat(
     `_again` beat claims it and declares its floor; when it does not (the
     row the pipeline generated refuses, or the manifest has no such page),
     the `_again` beat claims no row, same as before this refactor.
+    `toggled_page_idx=None` says no page is revealed -- the toggle is a
+    self-switch branch inside the page -- and registers no `_again` beat
+    (ROM run 35: map064/ev001's default page 1 is an unrelated page).
 
     `self_switch_letter` is used only to compute the toggled page's flag
     name as a PRECONDITION check on the `_again` beat when the primary
@@ -294,7 +297,7 @@ def flavour_npc_beat(
 
     del talk
 
-    if derived != "toggling":
+    if derived != "toggling" or toggled_page_idx is None:
         return
 
     # The toggling half. Without it the beat proves only that the NPC has a

@@ -133,6 +133,30 @@ def test_single_page_item_ball_reads_its_own_self_switch_write():
     assert got["self_switch_letter"] == "A"
 
 
+@pytest.mark.parametrize(("chapter", "row_id", "expected"), [
+    # map064/ev001: toggles inside page 0 (a self-switch branch); page 1 is
+    # an unrelated switch-125 page. ROM run 35 read it as the second line.
+    ("CH01", "map064/ev001/p0", None),
+    # map073/ev005: page 1's self-switch reveals page 2.
+    ("CH03", "map073/ev005/p1", 2),
+])
+def test_toggling_npc_names_its_revealed_page_or_none(chapter, row_id, expected):
+    from rpg2gba.beat_floor.walk import floor_for_chapter
+    from rpg2gba.chapter_manifest.archetypes import classify_manifest
+    from rpg2gba.playtest.archetypes import load_chapter_rows
+    rows = load_chapter_rows(chapter)
+    m = next(m for m in classify_manifest(rows)
+             if m.archetype == "flavour_npc" and row_id in m.roles)
+    map_id = m.map_id
+    floors = floor_for_chapter(chapter, build_dir=Path("output/uranium-build"))
+    beat = PlannedBeat(name="f", template="flavour_npc", map_id=map_id,
+                       rows=tuple(sorted(m.roles)), group="g")
+    got = dict(adapt.archetype_kwargs(beat, m, floors, map_constant_fn=lambda _: "MAP_X",
+                                      rows=rows))
+    assert got["variant"] == "toggling"
+    assert got["toggled_page_idx"] == expected
+
+
 # --- warp_candidates ------------------------------------------------------------
 
 def _graph(walls: set[tuple[int, int]] = frozenset()) -> MapGraph:
