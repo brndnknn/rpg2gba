@@ -997,3 +997,15 @@ separate processes until fixed. (2) **Measure before believing a subagent's fram
 first full-suite hang was written off as concurrent-pytest interference, which was wrong —
 it is a real blowup that happens to be intermittent, and the SIGABRT thread dump found in
 seconds what two more suite runs would not have.
+
+**2026-09-29 (ROM runs 19–21 through the lab — each fix exposed the next layer):** Run 18's
+guard fix led to five generator changes, each committed and suite-green: derived
+`never_fires`; guard-ordering edges; a plan-time page-liveness check; solver killer/threshold
+edges; inline `\ch` parsing, plus the professor's No → p2 → Yes round trip. Then one harness
+probe fix (starter reveal is speech, not a sprite). CH01 went from 39 to 47 passing beats on
+the ROM. **Lessons:** (1) a wrong `never_fires` silently satisfies the frozen grade —
+relabelling p2 honestly is what exposed hand row `map050/ev005/p2`; (2) a new check's first
+real-data run finds its own bugs (same-beat p0→p1, "undecided" read as "never") before it
+finds the codebase's — verify every surprising demotion against the scripts; (3) a probe
+written from a doc (`starter_selector_scene.json`'s stale note) instead of the emitter fails
+on first contact with the ROM.
