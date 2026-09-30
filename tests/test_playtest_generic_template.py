@@ -344,6 +344,35 @@ def test_gift_ceremony_runs_where_the_refused_arm_gives(monkeypatch):
     assert calls.index("gift") < calls.index("text")
 
 
+# --- heal_party waits for the heal to land (ROM run 31) -------------------------
+
+
+class _HealEmu:
+    """Lead at 1/19 HP; the script's heal lands after `heal_at` frames."""
+
+    def __init__(self, heal_at: int | None) -> None:
+        self.heal_at, self.frame = heal_at, 0
+
+    def run(self, frames: int) -> None:
+        self.frame += frames
+
+    def screenshot(self, name: str) -> str:
+        return f"{name}.png"
+
+
+def test_heal_party_waits_for_the_heal_behind_a_fade(monkeypatch):
+    from rpg2gba.playtest import assertions
+    from rpg2gba.playtest.archetypes.generic import STEP_HANDLERS, Step
+    from rpg2gba.playtest.errors import ScenarioError
+
+    monkeypatch.setattr(assertions, "read_lead_hp", lambda emu: (
+        (19, 19) if emu.heal_at is not None and emu.frame >= emu.heal_at else (1, 19)))
+    step = Step("map050/ev019/p0/b8", "heal_party", 129, ())
+    STEP_HANDLERS["heal_party"](_HealEmu(heal_at=40), "B1", step)
+    with pytest.raises(ScenarioError, match="lead HP is 1/19 after the heal"):
+        STEP_HANDLERS["heal_party"](_HealEmu(heal_at=None), "B1", step)
+
+
 # --- choice (ruling 19) -------------------------------------------------------
 
 

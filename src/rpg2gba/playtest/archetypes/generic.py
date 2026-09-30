@@ -842,7 +842,16 @@ def _uranium_species_constants() -> dict[str, str]:
 
 def _handle_heal_party(emu: "Emulator", beat_name: str, step: Step) -> None:
     # The body set the lead to 1 HP before firing the page (module docstring).
+    # The heal can sit behind fades the script runs after the step before it
+    # (ROM run 31: the professor's fade-out/fade-in around the rival heal), so
+    # give it time to land before reading.
+    _wait_for(emu, lambda: _lead_full(emu), frames=600)
     assertions.require_lead_healed(emu, beat_name, step.row_id)
+
+
+def _lead_full(emu: "Emulator") -> bool:
+    hp, max_hp = assertions.read_lead_hp(emu)
+    return hp == max_hp
 
 
 def _handle_battle(emu: "Emulator", beat_name: str, step: Step) -> None:
