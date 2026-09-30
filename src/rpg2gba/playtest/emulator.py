@@ -1732,7 +1732,13 @@ class Emulator:
         self.run(release, on_frame=self.note_text_frame)
 
     def face(self, direction: str) -> None:
-        # A sub-step press turns in place without moving.
+        # A sub-step press turns in place without moving -- but only when it
+        # IS a turn: pressing the way the player already faces starts a step
+        # at once. ROM run 45: the walk to the lab heal machine's west side
+        # ended facing it, and "facing" it stepped onto the event's cell.
+        player = self.object_event(self.resolve_constant("LOCALID_PLAYER"))
+        if player.facing == direction:
+            return
         self.tap(direction, hold=3, release=8)
 
     def _walk_step(self, direction: str, x: int, y: int) -> tuple[bool, int]:
