@@ -76,6 +76,7 @@ from rpg2gba.beat_gen.facing import (
     pin_records,
     split_facing_arms,
 )
+from rpg2gba.beat_gen.gift_ceremony import annotate_gift_ceremonies
 from rpg2gba.beat_gen.group import plan_beats
 from rpg2gba.beat_gen.locate import locate_beats, order_beats, route_order
 from rpg2gba.beat_gen.plan import (
@@ -1185,6 +1186,10 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         (build_dir / "heal_locations.json").read_text(encoding="utf-8"))["heal_locations"]
     beats = place_whiteout_beats(beats, fork_rows, enabled_by,
                                  map_constant_for=_map_constant_for, heal_entries=heal_entries)
+
+    # 9. A refused gift arm inside a claimed page still runs its ceremony
+    #    (`beat_gen/gift_ceremony.py`).
+    beats = annotate_gift_ceremonies(beats, selection.refusals, floors)
 
     return ChapterPlan(
         chapter_id=chapter_id,

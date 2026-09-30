@@ -251,6 +251,99 @@ def test_item_grant_handler_checks_the_bag_total():
         handler(_BagEmu(0), "B1", checked)
 
 
+# --- pokemon_grant + gift ceremonies (2026-09-29, ROM run 27) -------------------
+
+
+class _GiftEmu:
+    """The transpiler's gift flow: an "obtained" line, then a nickname
+    yes/no that B answers NO and A would answer YES."""
+
+    def __init__(self, text: str | None = "RED obtained Luxi!") -> None:
+        self.text = text
+        self.prompt = True
+        self.taps: list[str] = []
+        self.cleared = False
+
+    def wait_for_field_message(self, frame_budget: int = 180) -> str | None:
+        return self.text
+
+    def yesno_prompt_up(self) -> bool:
+        return self.prompt
+
+    def advance_dialog(self, key: str = "A", stop=None, **_: object) -> int:
+        self.taps.append(f"advance:{key}")
+        return 0
+
+    def tap(self, key: str) -> None:
+        self.taps.append(key)
+        if key == "B":
+            self.prompt = False
+
+    def run(self, frames: int) -> None:
+        pass
+
+    def clear_field_message(self) -> None:
+        self.cleared = True
+
+    def resolve_constant(self, name: str) -> int:
+        return {"SPECIES_LUXI": 7}[name]
+
+    def screenshot(self, name: str) -> str:
+        return f"{name}.png"
+
+
+def test_pokemon_grant_answers_the_nickname_no_and_checks_the_party(monkeypatch):
+    from rpg2gba.playtest import assertions
+    from rpg2gba.playtest.archetypes.generic import STEP_HANDLERS, Step
+    from rpg2gba.playtest.errors import ScenarioError
+
+    handler = STEP_HANDLERS["pokemon_grant"]
+    step = Step("map031/ev050/p0", "pokemon_grant", 4,
+                (("species", "LUXI"), ("level", 5), ("const", "SPECIES_LUXI")))
+    monkeypatch.setattr(assertions, "party_has_species", lambda emu, sid: sid == 7)
+    emu = _GiftEmu()
+    handler(emu, "B1", step)
+    assert emu.taps == ["advance:B", "B"] and emu.cleared and not emu.prompt
+    monkeypatch.setattr(assertions, "party_has_species", lambda emu, sid: False)
+    with pytest.raises(ScenarioError, match="SPECIES_LUXI is not in the party"):
+        handler(_GiftEmu(), "B1", step)
+    with pytest.raises(ScenarioError, match="obtained"):
+        handler(_GiftEmu(text="Something else"), "B1", step)
+
+
+def test_generic_beat_resolves_a_gift_species_and_declares_it():
+    gift = _a("pokemon_grant", 4, species="LUXI", level=5)
+    lookup = {NPC: _floor(_a("trigger", -1, trigger="action"), _a("completes", -1), gift)}
+    b = _builder()
+    generic.generic_beat(b, chapter_id="CH05", beat_name="n", rows=(NPC,),
+                         floor_lookup=lookup.__getitem__)
+    (beat,) = b.build().beats
+    assert "pokemon_grant" in {a.kind for a in beat.assertions}
+
+
+def test_gift_ceremony_runs_where_the_refused_arm_gives(monkeypatch):
+    """The starter page: its give arm (b1, index 9) is refused, but its
+    ceremony comes up before Theo's first line (index 29)."""
+    from rpg2gba.playtest import assertions
+
+    b = _builder()
+    generic.generic_beat(b, chapter_id="CH01", beat_name="m050e019p0", rows=RIVAL,
+                         gift_ceremonies=(9,))
+    (beat,) = b.build().beats
+    assert "map050/ev019/p0/b1" not in beat.rows
+
+    calls: list[str] = []
+    monkeypatch.setattr(assertions, "require_map", lambda *a: None)
+    monkeypatch.setattr(assertions, "damage_lead", lambda *a: None)
+    monkeypatch.setattr(generic, "_gift_ceremony", lambda emu, name, row: calls.append("gift"))
+    for kind in generic.STEP_HANDLERS:
+        monkeypatch.setitem(generic.STEP_HANDLERS, kind,
+                            lambda emu, name, step: calls.append(step.kind))
+    beat.run(_AnyEmu())
+    assert calls.count("gift") == 1
+    assert calls.index("gift") < calls.index("text")
+
+
 # --- choice (ruling 19) -------------------------------------------------------
 
 

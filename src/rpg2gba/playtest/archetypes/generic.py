@@ -33,7 +33,8 @@ assertion stays undeclared. `audio` is left
 out too: `assertion.py`'s own `AssertionKind` comment says it is "not
 checked until audio is mapped" -- `bgm_song_id()` reads BGM only, no SE
 read exists, so this is the code's own standing position, not a new call
-made here. `choice`/`warp`/`pokemon_grant`/`service`/
+made here. `choice`/`warp`/`pokemon_grant`/`service`/ (the first and
+last two since wired, below)
 `displacement`/`event_position`/`erase_event` are each a real, cited
 observation gap in `assignments/C6/research/07_generic.md` §2 -- none
 buys enough (`warp`'s single-page-in-a-multi-step-loop map-change problem
@@ -82,11 +83,19 @@ early-rival battle the engine sets that flag on a loss too, so there the
 won arm's own writes are what prove the win. A page that heals after its
 battle has its lead damaged after the battle, not before the walk.
 
+`pokemon_grant` joined 2026-09-29 (ROM run 27): a loud `pbAddPokemon` is
+the transpiler's gift flow, an "obtained" line then a nickname yes/no. The
+handler gets through it where the page gives, answering NO (A would open the
+naming screen), and reads the species in the party. A refused gift arm that
+still runs inside a claimed page (the starter's var-selected give) gets the
+same walk-through with no check (`gift_ceremonies=`).
+
 STATUS: implemented (`assignments/C6/07_generic.md`).
 """
 from __future__ import annotations
 
 import functools
+import json
 import os
 import re
 from collections.abc import Callable, Sequence
@@ -127,7 +136,7 @@ GENERIC_EXECUTED_KINDS: frozenset[str] = frozenset({
     "trigger", "completes", "text",
     "switch_write", "var_write", "self_switch_write", "engine_flag_write",
     "visual", "heal_party", "var_text", "item_grant", "choice", "service",
-    "battle",
+    "battle", "pokemon_grant",
 })
 
 #: Services `_handle_service` can prove opened (ruling 20). Any other service
@@ -228,7 +237,10 @@ _ARRIVAL_TRIGGERS = frozenset({"autorun", "parallel"})
 # uncovered: a heal or a `\\v[N]` line can't be read back afterwards.
 _NOT_AFTER_THE_FACT = frozenset(
     {"trigger", "text", "var_text", "heal_party", "item_grant", "choice", "service",
-     "battle"})
+     "battle", "pokemon_grant"})
+#: Not a floor kind: an unclaimed gift arm's ceremony the body gets through
+#: without checking (`generic_beat(gift_ceremonies=)`).
+_GIFT_CEREMONY = "gift_ceremony"
 #: Re-admitted on an arrival page that shows text: its drain is found by
 #: that text, which proves it fired, and carries the bag delta.
 _FROM_THE_DRAIN = frozenset({"trigger", "text", "item_grant", "choice"})
@@ -760,6 +772,51 @@ def _handle_item_grant(emu: "Emulator", beat_name: str, step: Step) -> None:
             f"expected {params['expected_total']} after the grant ({shot})")
 
 
+def _gift_ceremony(emu: "Emulator", beat_name: str, row_id: str) -> None:
+    """Get through the transpiler's `pbAddPokemon` flow
+    (`transpiler._emit_give_pokemon`): the "{PLAYER} obtained {species}!"
+    line over its fanfare, then the nickname yes/no, answered NO -- A would
+    commit YES and open the naming screen. B advances plain boxes too, and
+    answers NO if it meets the prompt first."""
+    text = emu.wait_for_field_message(frame_budget=600)
+    if text is None or not text_matches("{PLAYER} obtained", text):
+        shot = emu.screenshot(f"{beat_name}_no_gift")
+        raise ScenarioError(
+            f"{beat_name}: {row_id}: expected the gift's \"obtained\" line, got "
+            f"{text!r} ({shot})")
+    emu.advance_dialog("B", stop=emu.yesno_prompt_up)
+    if emu.yesno_prompt_up():
+        emu.tap("B")
+    if not _wait_for(emu, lambda: not emu.yesno_prompt_up(), frames=120):
+        shot = emu.screenshot(f"{beat_name}_nickname_stuck")
+        raise ScenarioError(
+            f"{beat_name}: {row_id}: the nickname prompt stayed up after B ({shot})")
+    emu.clear_field_message()
+
+
+def _handle_pokemon_grant(emu: "Emulator", beat_name: str, step: Step) -> None:
+    """A loud `pbAddPokemon`: its ceremony comes up where the page gives,
+    and the party then holds the species. `const` is added to the floor
+    params by `generic_beat`."""
+    params = dict(step.params)
+    if "const" not in params:
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: pokemon_grant at list[{step.list_index}] has "
+            "no resolved species const")
+    _gift_ceremony(emu, beat_name, step.row_id)
+    if not assertions.party_has_species(emu, emu.resolve_constant(params["const"])):
+        shot = emu.screenshot(f"{beat_name}_no_{params['const'].lower()}")
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: {params['const']} is not in the party after "
+            f"the gift ({shot})")
+
+
+@functools.cache
+def _uranium_species_constants() -> dict[str, str]:
+    data = json.loads(Path("reference/uranium_id_map.json").read_text(encoding="utf-8"))
+    return dict(data["species"])
+
+
 def _handle_heal_party(emu: "Emulator", beat_name: str, step: Step) -> None:
     # The body set the lead to 1 HP before firing the page (module docstring).
     assertions.require_lead_healed(emu, beat_name, step.row_id)
@@ -810,6 +867,7 @@ STEP_HANDLERS.update({
     "service": _handle_service,
     "heal_party": _handle_heal_party,
     "item_grant": _handle_item_grant,
+    "pokemon_grant": _handle_pokemon_grant,
     "var_text": _handle_var_text,
     "trigger": _handle_trigger,
     "completes": _handle_completes,
@@ -838,6 +896,7 @@ def generic_beat(
     random_arms: Sequence[tuple[str, tuple[tuple[int, str, int], ...]]] = (),
     walk_rows: Sequence[str] = (),
     choice_answers: Sequence[tuple[int, int]] = (),
+    gift_ceremonies: Sequence[int] = (),
 ) -> None:
     """Register one generic beat claiming `rows` (a page row and/or its
     arms). `random_arms` (ruling 19) pairs each RNG-selected arm among
@@ -853,7 +912,10 @@ def generic_beat(
     already claims are dropped first, and if none remain nothing is
     registered. Fails loud (`ValueError`) on a refused floor.
     `manifest_chapter_id=` names a predecessor whose manifest carries the
-    rows (a successor boundary claim, §10 R2), as `find_match` takes it."""
+    rows (a successor boundary claim, §10 R2), as `find_match` takes it.
+    `gift_ceremonies` are the owning page's list indexes where an unclaimed,
+    refused gift arm runs its ceremony (`beat_gen/gift_ceremony.py`): the
+    body answers NO there and checks nothing."""
     resolved_lookup: FloorLookup = (
         floor_lookup if floor_lookup is not None else _default_floor_for_row)
     resolved_rows = tuple(rows)
@@ -923,6 +985,18 @@ def generic_beat(
                 f"list[{step.list_index}] and no choice_answers entry for it")
         all_steps[i] = Step(step.row_id, step.kind, step.list_index,
                             step.params + (("answer", answers[step.list_index]),))
+    for i, step in enumerate(all_steps):
+        if step.kind != "pokemon_grant":
+            continue
+        species = str(dict(step.params)["species"])
+        const = _uranium_species_constants().get(species)
+        if const is None:
+            raise ValueError(
+                f"generic_beat: {beat_name}: {step.row_id} gives {species!r}, which has "
+                "no entry in reference/uranium_id_map.json's 'species' table")
+        all_steps[i] = Step(step.row_id, step.kind, step.list_index,
+                            step.params + (("const", const),))
+    all_steps.extend(Step(page_row_id, _GIFT_CEREMONY, i, ()) for i in gift_ceremonies)
     triggers = [s for s in all_steps if s.kind == "trigger"]
     trigger_step = triggers[0] if triggers else None
     completes_step = next((s for s in all_steps if s.kind == "completes"), None)
@@ -988,7 +1062,8 @@ def generic_beat(
                 and dict(s.params).get("value") is True
                 for s in middle_steps):
             arrival_kinds = frozenset({"trigger"})
-        middle_steps = [s for s in middle_steps if s.kind not in _NOT_AFTER_THE_FACT]
+        middle_steps = [s for s in middle_steps
+                        if s.kind not in _NOT_AFTER_THE_FACT and s.kind != _GIFT_CEREMONY]
     elif trigger in _PLAYER_TRIGGERS and page_row.event_id is not None:
         faces_target = event_cell(cell.map_constant, page_row.event_id)
         x, y = approach_to(cell.map_constant, page_row.event_id, prefer=approach_prefer)
@@ -1151,6 +1226,9 @@ def generic_beat(
             if guard is not None and (step.kind == "heal_party"
                                       or not _guard_holds(emu, beat_name, guard)):
                 continue  # the RNG picked a sibling arm (or: no damage to heal)
+            if step.kind == _GIFT_CEREMONY:
+                _gift_ceremony(emu, beat_name, step.row_id)
+                continue
             STEP_HANDLERS[step.kind](emu, beat_name, step)
             if i == damage_after:
                 # A heal after a battle: damaged now, so the lead fights at
