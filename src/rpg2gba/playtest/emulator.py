@@ -898,7 +898,10 @@ class Emulator:
         if self.screenshot_dir is None:
             return None
         self.screenshot_dir.mkdir(parents=True, exist_ok=True)
-        path = self.screenshot_dir / f"{name}_f{self.frame}.png"
+        # Names are built from row ids, which carry slashes
+        # (`map033/terrain/stairs/57,9`); one file, not a path (ROM run 51:
+        # the save crashed and hid the stair beat's own failure).
+        path = self.screenshot_dir / f"{name.replace('/', '_')}_f{self.frame}.png"
         self.screen.to_pil().convert("RGB").save(path)
         return path
 
