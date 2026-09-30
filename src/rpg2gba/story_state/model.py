@@ -11,7 +11,7 @@ from __future__ import annotations
 import functools
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
@@ -27,6 +27,7 @@ from rpg2gba.story_state.extract import (
     extract_triggered_common_events,
 )
 from rpg2gba.story_state.scope_search import (
+    ComputedScope,
     named_write_targets,
     run_scope,
     self_contained_counters,
@@ -479,7 +480,105 @@ MAX_RESOLVER_PASSES = 8
 _COUNTER_PLACEHOLDER = frozenset({0})
 
 
-def _resolve_computed_row(row: RowState, state: State) -> RowState:
+_ADJUST_OPS = {1: "+", 2: "-", 3: "*", 4: "/", 5: "%"}
+
+
+def _direct_counter_writes(scope: ComputedScope, key: Key) -> list[Write] | None:
+    """`key`'s writes read straight off the scope's `122` commands, or None
+    unless that is the whole story: `key` is a Variable, every touch of it is
+    a constant-operand `122` at the scope's top indent (unconditional), no
+    `111` tests it, and no script, conditional or inlined common event names
+    it."""
+    if not isinstance(key, Variable) or not scope.commands:
+        return None
+    needles = (f"variables[{key.id}]", f"pbGet({key.id})", f"pbSet({key.id}")
+    top = scope.commands[0].get("indent", 0)
+    found: list[Write] = []
+    for cmd in scope.commands:
+        code, params = cmd.get("code"), cmd.get("parameters") or []
+        if any(n in str(p) for p in params for n in needles):
+            return None
+        if code == 111 and params and params[0] == 1 and len(params) > 1 and params[1] == key.id:
+            return None
+        if code == 117 and params:
+            body = scope.common_events_by_id.get(params[0], {})
+            if any(n in json.dumps(body) for n in needles) or _ce_writes_var(body, key.id):
+                return None
+        if code != 122 or not params[0] <= key.id <= params[1]:
+            continue
+        if cmd.get("indent", 0) != top or params[3] != 0:
+            return None
+        list_index = scope.index_of.get(id(cmd), -1)
+        source = f"code 122 @list[{list_index}]"
+        if params[2] == 0:
+            found.append(Assign(key, frozenset({params[4]}), scope.conditional, source, list_index))
+        elif params[2] in _ADJUST_OPS:
+            found.append(Adjust(key, _ADJUST_OPS[params[2]], params[4], scope.conditional,
+                                source, list_index))
+        else:
+            return None
+    return found or None
+
+
+def _self_retiring_counters(
+    row: RowState, rows_by_id: Mapping[str, RowState], seed: State,
+) -> frozenset[Key]:
+    """Counters whose `122` writes are this row's exact story because the row
+    can fire only once (ROM run 34): its only touch of K is a constant add
+    `K += c`, a higher page of its own event is gated on nothing but
+    `K >= t`, every value K starts from reaches `t` after `+c`, and every
+    other writer of K in the chain assigns a value `>= t`. The firing then
+    hands the event to that page for good -- the rival scene's `var 101 += 1`
+    with page 1 on `var101 >= 1`. A repeatable counter (map031/ev014's
+    99-talks Magikarp, one page) fails the test and stays TOP."""
+    if row.computed is None:
+        return frozenset()
+    page_row_id = parse_row_id(row.row_id).owning_page_row_id or row.row_id
+    if page_row_id not in row.event_page_row_ids:
+        return frozenset()
+    higher = row.event_page_row_ids[row.event_page_row_ids.index(page_row_id) + 1:]
+    exact: set[Key] = set()
+    for page_id in higher:
+        page = rows_by_id.get(page_id)
+        if page is None or len(page.page_tests) != 1:
+            continue
+        (test,) = page.page_tests
+        if not isinstance(test.key, Variable) or test.op != ">=":
+            continue
+        key, threshold = test.key, test.value
+        direct = _direct_counter_writes(row.computed, key)
+        if not direct or any(not (isinstance(w, Adjust) and w.op == "+") for w in direct):
+            continue
+        step = sum(w.amount for w in direct)
+        start = _get(seed, key)
+        if VARIABLE_TOP in start or any(v + step < threshold for v in start):
+            continue
+        others_ok = all(
+            isinstance(w, Assign) and all(v >= threshold for v in w.values)
+            for other in rows_by_id.values() if other.row_id != row.row_id
+            for w in other.writes if w.key == key
+        ) and not any(
+            key in other.havoc_keys
+            # an unparsed row could write anything; a computed row's
+            # placeholder havoc is re-derived every resolver pass
+            or (other.havoc_global and other.computed is None)
+            for other in rows_by_id.values() if other.row_id != row.row_id
+        )
+        if others_ok:
+            exact.add(key)
+    return frozenset(exact)
+
+
+def _ce_writes_var(body: Mapping[str, Any], var_id: int) -> bool:
+    return any(
+        cmd.get("code") == 122 and (cmd.get("parameters") or [0, -1])[0] <= var_id
+        <= (cmd.get("parameters") or [0, -1])[1]
+        for cmd in body.get("list", ()))
+
+
+def _resolve_computed_row(
+    row: RowState, state: State, exact_counters: frozenset[Key] = frozenset(),
+) -> RowState:
     """One computed row re-run against `state`, as an ordinary `RowState`.
 
     A row is *computed* when its own scope reads state it does not itself
@@ -531,8 +630,18 @@ def _resolve_computed_row(row: RowState, state: State) -> RowState:
     )
     # A self-contained counter's written values came from the placeholder,
     # not from the game: drop them and mark the counter "could be anything".
+    # Unless the counter is nothing but constant `122`s: then those writes
+    # are its exact story (`_direct_counter_writes`; ROM run 34 -- the rival
+    # scene's `var 101 += 1` as TOP put a CH06 page into CH01).
     writes = tuple(w for w in writes if w.key not in counters)
-    counter_havoc = tuple(sorted((k for k in result.values if k in counters), key=repr))
+    counter_havoc_keys: list[Key] = []
+    for key in sorted((k for k in result.values if k in counters), key=repr):
+        direct = _direct_counter_writes(row.computed, key) if key in exact_counters else None
+        if direct is None:
+            counter_havoc_keys.append(key)
+        else:
+            writes += tuple(direct)
+    counter_havoc = tuple(counter_havoc_keys)
 
     # A key this row both READS and WRITES is a counter: its new value is a
     # function of its own old one. Re-running it against a saturated (union)
@@ -547,6 +656,22 @@ def _resolve_computed_row(row: RowState, state: State) -> RowState:
     # exception and was already handled above (C9 ruling 13).
     self_referential = sorted(
         (k for k in result.values if k in result.reads and k not in counters), key=repr)
+    # Unless the counter is nothing but constant `122`s the row's own flow
+    # never tests: then it IS those writes (an `Adjust` the saturation applies
+    # once per row), and nothing else the row wrote depended on it. Measured:
+    # `map050/ev019/p0`'s `var 101 += 1` -- widening it to TOP made every
+    # `var 101 >= N` page possibly live in CH01 (ROM run 34, PROJECT_TODO #116).
+    recovered: list[Write] = []
+    for key in self_referential:
+        direct = _direct_counter_writes(row.computed, key) if key in exact_counters else None
+        if direct is None:
+            break
+        recovered.extend(direct)
+    else:
+        if self_referential:
+            recovered_keys = set(self_referential)
+            writes = tuple(w for w in writes if w.key not in recovered_keys) + tuple(recovered)
+            self_referential = []
     if self_referential:
         return replace(
             row,
@@ -637,7 +762,9 @@ def resolve_computed_rows(
         for rid in computed_ids:
             if rid not in result.newly_owned or rid in settled:
                 continue  # not live at all, or already at the top
-            resolved = _resolve_computed_row(rows_by_id[rid], result.end_state)
+            resolved = _resolve_computed_row(
+                rows_by_id[rid], result.end_state,
+                _self_retiring_counters(rows_by_id[rid], working, seed))
             if any(r.code.startswith("computed_row_") for r in resolved.refusals):
                 settled.add(rid)
             # Compare only what saturation consumes. A witness trace cites
