@@ -1064,6 +1064,61 @@ def test_walk_to_absorb_wild_gives_up_after_the_cap(monkeypatch) -> None:
         _run_absorb_wild(monkeypatch, emu)
 
 
+class _InteractEmu(_AbsorbWildEmu):
+    """`Emulator.interact` against an encounter already under way (ROM run
+    60): locked, overworld not reading input, a battle `battle_in` frames
+    off. After it, A starts the caller's script."""
+
+    def __init__(self, kind: str | None, battle_in: int, overworld: bool) -> None:
+        super().__init__([])
+        self.kind, self.battle_in, self.locked = kind, battle_in, kind is not None
+        self.overworld = overworld
+        self.pressed: list[str] = []
+        self.message: str | None = None
+
+    def overworld_input_ready(self) -> bool:
+        return self.overworld or not self.locked
+
+    def tap(self, button: str) -> None:
+        self.pressed.append(button)
+        if not self.locked:
+            self.message = "Found an ANTIDOTE!"
+
+    def clear_field_message(self) -> None:
+        self.message = None
+
+    def current_field_message_text(self) -> str | None:
+        return self.message
+
+
+def _interact(monkeypatch, emu: _InteractEmu) -> bool:
+    from rpg2gba.playtest import battle
+    from rpg2gba.playtest.emulator import Emulator
+
+    def _win(e) -> None:
+        e.kind, e.locked = None, False
+
+    monkeypatch.setattr(battle, "win_battle", _win)
+    return Emulator.interact(emu)
+
+
+@needs_mgba
+def test_interact_wins_an_encounter_already_under_way_before_pressing_a(monkeypatch) -> None:
+    emu = _InteractEmu("wild", battle_in=12, overworld=False)
+    assert _interact(monkeypatch, emu)
+    assert emu.settled == 1 and emu.pressed == ["A"] and emu.message
+
+
+@needs_mgba
+def test_interact_leaves_a_lock_under_a_message_box_alone(monkeypatch) -> None:
+    """Overworld still reading input: a scene, not a transition -- no wait,
+    no screenshot, A pressed as before."""
+    emu = _InteractEmu("scene", battle_in=10**6, overworld=True)
+    emu.locked = True
+    assert _interact(monkeypatch, emu)
+    assert emu.settled == 0 and emu.shots == [] and emu.pressed == ["A"]
+
+
 # -- ch02.py's `_effective_trainer_facing`/`_sight_triggered`/
 # `_absorb_stray_wild`/`_step_absorbing` -- the 2026-08-11 route1 B7
 # regression's second and third cuts. Flood is `MOVEMENT_TYPE_LOOK_AROUND`

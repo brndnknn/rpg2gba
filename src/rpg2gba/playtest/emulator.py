@@ -2613,7 +2613,7 @@ class Emulator:
                     _walk_to_once(self, tx, ty, frame_budget, max_sidesteps)
                     return
                 except WalkInterrupted as exc:
-                    if not self._absorb_wild_battle(exc):
+                    if not self._absorb_wild_battle(exc.battle, exc.stopped_at):
                         raise
             shot = self.screenshot("walk_to_wild_cap")
             raise ScenarioError(
@@ -2735,11 +2735,12 @@ class Emulator:
             return "dialogue"
         return "none"
 
-    def _absorb_wild_battle(self, exc: WalkInterrupted) -> bool:
-        """Win `exc`'s battle if it is (or, within `_WILD_BATTLE_WAIT`
-        input-free frames, becomes) a wild one, and settle the overworld.
-        False -- nothing pressed, nothing resolved -- for anything else."""
-        if not exc.battle:
+    def _absorb_wild_battle(self, battle: bool, where: tuple[int, int]) -> bool:
+        """Win the battle under way at `where` if it is (or, when `battle` is
+        False, becomes within `_WILD_BATTLE_WAIT` input-free frames) a wild
+        one, and settle the overworld. False -- nothing pressed, nothing
+        resolved -- for anything else."""
+        if not battle:
             waited = 0
             while waited < _WILD_BATTLE_WAIT and not self._in_battle():
                 if not self.field_locked():
@@ -2748,13 +2749,13 @@ class Emulator:
                 waited += 30
             if not self._in_battle():
                 shot = self.screenshot("walk_to_lock_not_a_battle")
-                logger.info("walk_to: lock at %s is not a battle after %d "
-                            "frames (%s)", exc.stopped_at, waited, shot)
+                logger.info("lock at %s is not a battle after %d frames (%s)",
+                            where, waited, shot)
                 return False
         if self.is_trainer_battle():
             return False
         from . import battle
-        logger.info("walk_to: absorbing a wild battle at %s", self.player_pos())
+        logger.info("absorbing a wild battle at %s", self.player_pos())
         battle.win_battle(self)
         self._wait_for_overworld_return(_BATTLE_SETTLE_BUDGET)
         return True
@@ -3071,7 +3072,20 @@ class Emulator:
         The full budget is still spent either way -- callers rely on
         `interact` doubling as a settle, so this changes the VERDICT, not
         the timing.
+
+        A field already locked BEFORE the press is not this interaction's
+        doing. When it becomes a wild battle it is won first (ROM run 60:
+        Route 1's ev025 ball sits beside grass, an encounter rolled on the
+        arrival step locked the field during `face()`, and the lock was
+        taken for the ball's script while `advance_dialog` mashed through
+        the battle -- 4 of 24 seeded repros). The player keeps its facing
+        through a battle, so A then lands where the caller aimed it. Only a
+        lock with the overworld no longer reading input is waited on (the
+        encounter transition traced that way); a lock under a message box or
+        scene is left exactly as before.
         """
+        if self.field_locked() and not self.overworld_input_ready():
+            self._absorb_wild_battle(self._in_battle(), self.player_pos())
         self.clear_field_message()
         self.tap("A")
         picked_up = False
