@@ -10,6 +10,25 @@
 
 ## Retired Session Summaries
 
+## Archived 2026-10-01 — Last Session Summary entry 2026-09-30 (ROM runs 36–49)
+
+**2026-09-30 (ROM runs 36–49, generated CH01 green 139/139):** One fix per run, each committed
+with a test. **Engine** (custom-route interpreter, `custom_route_interpreter.md`): every idle
+yields (talking to a freq-6 walker hung in `lock`); the route PC lives in
+`objectEvent->directionSequenceIndex` and INIT only resets an unstarted route, because
+`release` → `ObjectEventClearHeldMovement` zeroes *every* movement type's sub-state and our INIT
+re-anchored the loop wherever the NPC stood. **Converter:** `$Trainer.pokegear=true` →
+`setflag(FLAG_SYS_POKENAV_GET)` (was UNHANDLED). **Floor:** a trunk write a descendant arm row
+rewrites later is not asserted (arm bodies are separate rows; the ROM check reads after the whole
+page). **Harness:** intercept only walkers the compiled `map.json` runs as custom routes
+(`cells.emitted_movement_type` — the converter demotes stalled/trainer routes after
+`movement_spec_for`); intercept budget from the route's own idle; text match collapses a
+break+space run; obstacle beat closes the rock's box before stepping; a silent action arm needn't
+show a script; `face()` never presses the way the player already faces (it steps); item grants
+keep an `_ITEM_BOXES` marker in place for `giveitem`'s two boxes. **Lesson:** a ROM run fails on
+the first wrong claim among harness, floor, converter and engine alike — of 13 failures, 9 were
+harness, 1 floor, 1 converter, 2 engine; check the ROM behaviour against RMXP before blaming it.
+
 ## Archived 2026-10-01 — Last Session Summary entry 2026-09-30 (ROM runs 32–34)
 
 **2026-09-30 (ROM runs 32–34, CH01 through the rival scene):** Runs 22–31 (a prior session) had
