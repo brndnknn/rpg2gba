@@ -120,6 +120,7 @@ from rpg2gba.playtest.cells import (
     custom_route_loop,
     event_cell,
     event_page_empty,
+    event_is_sight_trainer,
     event_page_moves,
     local_id,
     seam_cells,
@@ -1144,6 +1145,7 @@ def generic_beat(
     faces_target: tuple[int, int] | None = None
     walks_off: int | None = None      # local id of an action NPC that walks on its own
     walker_route = None               # its looping custom route, if it has one
+    sight_trainer = False             # walks_off is a sight trainer: no approach walk first
     empty_page = False                # an action page with no commands: A is a no-op
     arrival = trigger in _ARRIVAL_TRIGGERS
     random_rows = {r for r, _ in random_arms}
@@ -1199,6 +1201,15 @@ def generic_beat(
             elif event_page_moves(cell.map_constant, page_row.event_id, page_idx):
                 walks_off = local_id(cell.map_constant, page_row.event_id)
                 walker_route = custom_route_loop(cell.map_constant, page_row.event_id)
+            elif (not any(s.kind == "battle" for s in middle_steps)
+                  and event_is_sight_trainer(cell.map_constant, page_row.event_id)):
+                # After its battle (a later page): it may have walked up to
+                # the player and be standing on the approach cell, so talk
+                # to it where it is, without first walking to the cell its
+                # spawn derives. The battle page itself keeps the plain
+                # walk, whose sight interruption is the trigger.
+                walks_off = local_id(cell.map_constant, page_row.event_id)
+                sight_trainer = True
     elif approach_prefer is not None:
         candidate = next(
             (c for c in cell.approach_candidates if c.side == approach_prefer), None)
@@ -1327,7 +1338,7 @@ def generic_beat(
         if has_mart:
             emu.clear_mart_items()
         try:
-            if not arrival:
+            if not arrival and not sight_trainer:
                 emu.walk_to(x, y, absorb_wild=True)
         except WalkInterrupted:
             # An event-touch page can reach the player first (the trainer

@@ -620,7 +620,8 @@ def talk_to_moving_npc(emu: Emulator, beat: str, local_id: int, *,
     it never stops, so it is intercepted on its path instead of chased
     (`_intercept_route_walker`).
     """
-    walk_to = walk if walk is not None else emu.walk_to
+    walk_to = walk if walk is not None else (
+        lambda tx, ty: emu.walk_to(tx, ty, absorb_wild=True))
     if route:
         _intercept_route_walker(emu, beat, local_id, route, walk_to)
         return

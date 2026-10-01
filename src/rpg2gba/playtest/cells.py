@@ -412,6 +412,26 @@ def emitted_movement_type(map_constant: str, event_id: int) -> str:
     return objects[lid - 1]["movement_type"]
 
 
+def event_is_sight_trainer(map_constant: str, event_id: int) -> bool:
+    """Does the ROM run event `event_id` as a sight trainer (its compiled
+    object's `trainer_type` is not `TRAINER_TYPE_NONE`)? Such a trainer
+    walks up to a player it sees and stays there, so after its battle the
+    cell beside its spawn may hold the trainer itself (ROM run 57:
+    Route 1's EV053 stood on (17,10), the approach its spawn derives). An
+    event emitted as no object at all (a sign, the lab PC) is not one; an
+    unstaged map still fails loud through `local_id`."""
+    path = _local_id_table_path(_uranium_id(map_constant, resolver="event_is_sight_trainer"))
+    if path.exists() and str(event_id) not in json.loads(path.read_text(encoding="utf-8")):
+        return False
+    objects = _emitted_map_json(map_constant).get("object_events") or []
+    lid = local_id(map_constant, event_id)
+    if not 1 <= lid <= len(objects):
+        raise ValueError(
+            f"event_is_sight_trainer: {map_constant} event {event_id} has local "
+            f"id {lid}, but the compiled map has {len(objects)} object events")
+    return objects[lid - 1].get("trainer_type", "TRAINER_TYPE_NONE") != "TRAINER_TYPE_NONE"
+
+
 def approach_to(map_constant: str, event_id: int, *, prefer: str | None = None) -> Cell:
     """The cell a player stands on to interact with event `event_id`.
 

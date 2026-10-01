@@ -39,6 +39,14 @@ def test_a_route_the_converter_froze_has_no_route():
     assert custom_route_loop("MAP_MOKI_TOWN", 73) is None
 
 
+def test_sight_trainers_are_read_off_the_compiled_map():
+    # ROM run 57: Route 1's EV053 walks up to a player it sees and stays.
+    from rpg2gba.playtest.cells import event_is_sight_trainer
+    assert event_is_sight_trainer("MAP_ROUTE_01", 53)
+    assert not event_is_sight_trainer("MAP_ROUTE_01", 98)          # flavour NPC
+    assert not event_is_sight_trainer("MAP_MOKI_TOWN_PROFESSOR_LAB", 26)  # the PC: no object
+
+
 def test_a_back_and_forth_walker_keeps_its_route():
     steps = custom_route_loop("MAP_MOKI_TOWN", 27)
     assert steps is not None
