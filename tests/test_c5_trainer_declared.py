@@ -44,9 +44,10 @@ def _builder(name: str = "CHZZ_TEST") -> ChapterBuilder:
 
 def test_ch04_timothy_declared_kinds_and_uncovered() -> None:
     """map035 event 12 (Timothy, CH04): a native `trainerbattle_single`
-    instance -- `defeat_flag` is the native TRAINER_FLAGS bit, so the win
-    branch's `self_switch_write` is correctly left undeclared (module
-    docstring point 2). The battle beat reads the pre-battle intro box, so
+    instance -- `defeat_flag` is the native TRAINER_FLAGS bit, which IS the
+    win arm's self-switch-A write on the ROM, so the battle beat claims that
+    arm and declares its `self_switch_write` (module docstring point 2,
+    2026-09-30 ruling). The battle beat reads the pre-battle intro box, so
     `text` is declared (point 3, 2026-09-24); `audio`/`visual` stay
     undeclared -- walk-checked, not graded (C9 ruling 7)."""
     b = _builder()
@@ -60,13 +61,15 @@ def test_ch04_timothy_declared_kinds_and_uncovered() -> None:
     chapter = b.build()
     battle, retalk = chapter.beats
 
-    assert battle.rows == ("map035/ev012/p0",)
+    assert battle.rows == ("map035/ev012/p0", "map035/ev012/p0/b0")
     battle_kinds = {a.kind for a in battle.assertions}
-    assert battle_kinds == {"trigger", "completes", "battle", "text"}
+    assert battle_kinds == {"trigger", "completes", "battle", "text", "self_switch_write"}
 
     battle_floor = floor_for_row("map035/ev012/p0", build_dir=_BUILD_DIR)
     battle_uncovered = {a.kind for a in uncovered(battle_floor, battle.assertions)}
     assert battle_uncovered == {"audio", "visual"}
+    win_floor = floor_for_row("map035/ev012/p0/b0", build_dir=_BUILD_DIR)
+    assert not uncovered(win_floor, battle.assertions)
 
     assert retalk.rows == ("map035/ev012/p1",)
     retalk_kinds = {a.kind for a in retalk.assertions}
@@ -92,8 +95,9 @@ def test_ch02_marko_declared_kinds_and_uncovered() -> None:
     chapter = b.build()
     battle, retalk = chapter.beats
 
-    assert battle.rows == ("map033/ev009/p0",)
-    assert {a.kind for a in battle.assertions} == {"trigger", "completes", "battle", "text"}
+    assert battle.rows == ("map033/ev009/p0", "map033/ev009/p0/b0")
+    assert {a.kind for a in battle.assertions} == {
+        "trigger", "completes", "battle", "text", "self_switch_write"}
 
     battle_floor = floor_for_row("map033/ev009/p0", build_dir=_BUILD_DIR)
     assert uncovered(battle_floor, battle.assertions)  # non-empty: audio/visual

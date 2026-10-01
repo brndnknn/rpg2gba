@@ -91,11 +91,12 @@ logger = logging.getLogger(__name__)
 #    structurally (`has_self_switch`) but never re-emit it as a checkable
 #    flag write: the native pokeemerald trainer-flags bit
 #    (`TRAINER_FLAGS_START + <trainer_const>`, `ch04.py`'s own
-#    `_trainer_defeat_flag`) takes over instead. There is no `AssertionKind`
-#    for "the native trainer-flags bit got set" -- it isn't a
-#    `story_state.state.Switch`/`SelfSwitch` write at all -- so a
-#    `defeat_flag` matching that native shape declares NOTHING for the win
-#    branch; that is the honest answer, not a gap. A `defeat_flag` that is
+#    `_trainer_defeat_flag`) takes over instead. That bit IS the win arm's
+#    self-switch-A write on the ROM, so a `defeat_flag` matching the native
+#    shape declares the arm's `self_switch_write`, backed by the body's
+#    defeat-flag check (`_native_win_arm`; 2026-09-30 operator ruling,
+#    reversing the earlier "declare nothing" -- left unclaimed, the
+#    generator wrote a beat re-touching a beaten trainer). A `defeat_flag` that is
 #    instead a plain `FLAG_MAP<map>_EVENT<event>_SS<letter>` (reconstructed
 #    via `flag_registry.self_switch_flag_name`, matched against a REAL
 #    `self_switch_write` floor assertion on one of the battle row's branch
@@ -183,7 +184,7 @@ def _defeat_write_declaration(
     here, not silently declared."""
     native = _NATIVE_TRAINER_FLAG_RE.match(defeat_flag)
     if native and native.group(1) == trainer_const:
-        return None
+        return _native_win_arm(battle_row_id, event_id=event_id, floor_lookup=floor_lookup)
     for i in range(8):
         row_id = f"{battle_row_id}/b{i}"
         try:
@@ -201,6 +202,32 @@ def _defeat_write_declaration(
             if expected == defeat_flag:
                 return row_id, "self_switch_write"
     return None
+
+
+def _native_win_arm(
+    battle_row_id: str, *, event_id: int, floor_lookup: FloorLookup,
+) -> tuple[str, str] | None:
+    """The battle row's arm writing the event's own self-switch A ON -- the
+    exact shape `classify_trainer_battle` consumes into the native
+    `TRAINER_FLAGS` bit -- claimed as `self_switch_write`: on the ROM that
+    write IS the trainer flag, and the battle beat checks it latches
+    (2026-09-30 operator ruling, ROM run 54: left unclaimed, the generator
+    gave the arm its own beat, which re-touched a beaten trainer). None
+    unless exactly one arm carries it."""
+    found: list[str] = []
+    for i in range(8):
+        row_id = f"{battle_row_id}/b{i}"
+        try:
+            floor = floor_lookup(row_id)
+        except KeyError:
+            break
+        if floor.refused:
+            continue
+        if any(a.kind == "self_switch_write" and a.param("event_id") == event_id
+               and a.param("letter") == "A" and a.param("value") is True
+               for a in floor.assertions):
+            found.append(row_id)
+    return (found[0], "self_switch_write") if len(found) == 1 else None
 
 
 def _validate_rider_item_grant(

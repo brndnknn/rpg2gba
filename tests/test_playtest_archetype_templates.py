@@ -86,8 +86,9 @@ def test_trainer_beats_registers_battle_and_retalk_in_order() -> None:
     assert names == ["T1", "T1_retalk1"]
 
     battle, retalk = chapter.beats
-    assert battle.archetype == "trainer"
-    assert battle.rows == ("map035/ev012/p0",)
+    # The win arm rides along (the native TRAINER_FLAGS bit is its write).
+    assert battle.rows == ("map035/ev012/p0", "map035/ev012/p0/b0")
+    assert dict(battle.archetype)["map035/ev012/p0"] == "trainer"
     assert retalk.archetype == "trainer"
     assert retalk.rows == ("map035/ev012/p1",)
 
