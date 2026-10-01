@@ -10,6 +10,18 @@
 
 ## Retired Session Summaries
 
+## Archived 2026-10-01 — Last Session Summary entry 2026-09-30 (ROM runs 32–34)
+
+**2026-09-30 (ROM runs 32–34, CH01 through the rival scene):** Runs 22–31 (a prior session) had
+landed harness fixes one per run. This session: the 900-frame text wait (run 32 fix, confirmed by
+run 33) and, operator-ruled, **conditional state writes** — `beat_floor/cond_write.py`; a write
+story_state marks `conditional` now carries `script` + `input_vars` and the ROM check evaluates it
+on the ROM's values (ruling-18 shape), else refuses `conditional_state_write`. Run 34 passes the
+rival scene, then stops at `m050e005p5`. **Lesson:** the floor had the right fact
+(`Assign.conditional`) one call away and dropped it; a may-write asserted as a must-write passes
+the grader and only fails on the ROM. Invocation: `.venv/bin/python -m rpg2gba.playtest run
+--chapter CH01 --suite gen --engine engine --output output/playtest-gen [--from-beat X]`.
+
 ## Archived 2026-09-30 — Last Session Summary entry 2026-09-28 (one-way warps)
 
 The operator proposed one-way warp beats plus "enter, do the map,
