@@ -165,23 +165,34 @@ class _FakeRetalkEmu:
     methods it actually calls, no mgba dependency (mirrors
     `test_playtest_assertions.py`'s `_FakeEmu` convention)."""
 
-    def __init__(self, *, defeat_flag_set: bool, shown_texts: list[str]) -> None:
+    def __init__(self, *, defeat_flag_set: bool, shown_texts: list[str],
+                 trainer_at: tuple[int, int] = (5, 6)) -> None:
         self._defeat_flag_set = defeat_flag_set
         self._shown = shown_texts
         self._idx = 0
         self.screenshots: list[str] = []
+        self.trainer_at = trainer_at
+        self.interacted = 0
 
     def flag(self, _name: str) -> bool:
         return self._defeat_flag_set
 
-    def walk_to(self, _x: int, _y: int, **_kw) -> None:
-        pass
+    def resolve_constant(self, name: str) -> int:
+        assert name == "LOCALID_PLAYER"
+        return 255
 
-    def face(self, _direction: str) -> None:
-        pass
+    def object_event(self, local_id: int):
+        from types import SimpleNamespace
+        if local_id == 255:      # the player, at (5, 5) facing the trainer below
+            return SimpleNamespace(x=5, y=5, facing="DOWN")
+        assert local_id == _TRAINER_LID
+        return SimpleNamespace(x=self.trainer_at[0], y=self.trainer_at[1], facing="UP")
+
+    def walk_to(self, *_a, **_kw) -> None:
+        raise AssertionError("a re-talk never walks (point 5)")
 
     def interact(self) -> None:
-        pass
+        self.interacted += 1
 
     def assert_text_contains(self, expected: str, *, exact: bool = False) -> None:
         actual = self._shown[self._idx]
@@ -208,6 +219,7 @@ class _FakeRetalkEmu:
 
 
 _ROW_ID = "map999/ev001/p1"
+_TRAINER_LID = 7
 
 
 def _text_floor(text: str) -> RowFloor:
@@ -243,8 +255,8 @@ def _register_fake_retalk(floor: RowFloor):
     b = _builder("CHZZ_RETALK")
     _register_retalk_beat(
         b, beat_prefix="TX", page_idx=1, retalk_row_id=_ROW_ID,
-        map_constant="MAP_TEST", approach=(1, 1), facing="down",
-        defeat_flag="FLAG_TEST_DEFEAT", local_id=None, group="TX",
+        map_constant="MAP_TEST", approach=(1, 1),
+        defeat_flag="FLAG_TEST_DEFEAT", local_id=_TRAINER_LID, group="TX",
         floor_lookup=_fake_floor_lookup(floor),
     )
     chapter = b.build()
@@ -273,6 +285,18 @@ def test_retalk_beat_body_passes_when_shown_text_matches_declared() -> None:
     emu = _FakeRetalkEmu(
         defeat_flag_set=True, shown_texts=["Someone tougher than me? Impossible!"])
     beat.run(emu)  # type: ignore[arg-type]  # must not raise
+    assert emu.interacted == 1
+
+
+def test_retalk_presses_a_in_place_and_fails_loud_when_the_trainer_is_not_faced() -> None:
+    """Operator ruling 2026-10-01 (ROM run 59): no walk; the battled trainer
+    must stand on the tile the player faces, else both positions are named."""
+    beat = _register_fake_retalk(_text_floor("Someone tougher than me? Impossible!"))
+    emu = _FakeRetalkEmu(defeat_flag_set=True, shown_texts=["x"], trainer_at=(5, 8))
+    with pytest.raises(ScenarioError, match=r"faces DOWN onto \(5, 6\), but the trainer "
+                                            r"\(local id 7\) stands at \(5, 8\)"):
+        beat.run(emu)  # type: ignore[arg-type]
+    assert emu.interacted == 0
 
 
 # -- (d) intro text: declared only when every text box precedes the battle ----

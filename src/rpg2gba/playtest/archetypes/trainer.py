@@ -18,11 +18,16 @@ generalizes):
 4. Identity: `opponent_trainer_id()` is asserted against the expected
    trainer constant. "A battle started" is never enough -- CH04's B2 fought
    Timothy, not Larrie, and passed under that weaker check.
-5. Re-talk beats read the NPC's LIVE position (`emu.object_event(local_id)`)
-   when `local_id=` is supplied, not its static template cell -- an
-   event-touch trainer's battle walks it toward the player, and
-   `TryOverrideTemplateCoordsForObjectEvent` keeps the moved position
-   (ch04.py's `_press_a_live`).
+5. Re-talk beats press A where the battle beat left the player -- no walk
+   (operator ruling 2026-10-01, ROM run 59). The battle and its re-talks
+   share one route group, so a re-talk always runs straight after its
+   battle; the engine freezes a battled trainer facing the player
+   (`PlayerFaceApproachingTrainer` / `SetTrainerFacingDirection`) and turns
+   the player to it (`PlayerFaceTrainerAfterBattle`). The beat checks the
+   trainer's LIVE position is the tile the player faces, and fails loud
+   naming both if not. It used to walk back to the spawn-derived approach
+   unless an author passed `local_id=`, which the generator never did:
+   Route 1's Flood had walked down to the player, and A hit empty ground.
 6. Post-battle settle is a real script-drain loop
    (`_settle_post_battle_script`), not a bare `field_locked()` check --
    ch03.py's B4 comment: a single guarded check can sample the flag before
@@ -49,6 +54,7 @@ from typing import TYPE_CHECKING
 from .. import assertions
 from ..battle import in_battle, win_battle
 from ..cells import approach_to, event_cell
+from ..cells import local_id as cells_local_id
 from ..errors import ScenarioError
 from . import FloorLookup, declare_assertions, facing_toward, find_match
 from ...beat_floor.assertion import FloorAssertion
@@ -442,12 +448,18 @@ def trainer_beats(
     exactly like every existing chapter module resolves them
     (`emu.resolve_constant`/`assertions.flag_ssa`).
 
-    `local_id=`, if given, makes re-talk beats read the trainer's LIVE
-    position (point 5 above) instead of its static approach cell -- compiled
-    local ids cannot be derived from RMXP data (ch04.py's module docstring),
-    so this is deliberately an opt-in author-measured parameter, not
-    something this template can derive.
+    `local_id=` names the trainer's compiled object, which re-talk beats
+    check stands on the tile the player faces (point 5 above). It defaults
+    to `cells.local_id`'s resolution from the staged local-id table
+    (corrected 2026-10-01: this used to say compiled local ids were
+    underivable).
     """
+    if retalk_pages and double:
+        raise ValueError(
+            f"trainer_beats: {map_constant} event {event_id}: a double battle's "
+            "re-talk can't press A in place -- the player ends facing only one "
+            "of the two trainers (point 5); none exists in CH01-CH05, so this "
+            "shape needs its own design before it is generated")
     match = find_match(
         chapter_id, map_id, event_id, "trainer",
         rows=manifest_rows, manifest_dir=manifest_dir,
@@ -476,6 +488,9 @@ def trainer_beats(
             "should be unreachable given the params check above; if it "
             "fires, the archetype classifier's own invariant broke)"
         )
+
+    if local_id is None and retalk_row_ids:
+        local_id = cells_local_id(map_constant, event_id)
 
     approach = approach_to(map_constant, event_id, prefer=approach_prefer)
     facing = facing_toward(
@@ -623,7 +638,7 @@ def trainer_beats(
         _register_retalk_beat(
             builder, beat_prefix=beat_prefix, page_idx=page_idx,
             retalk_row_id=retalk_row_id,
-            map_constant=map_constant, approach=approach, facing=facing,
+            map_constant=map_constant, approach=approach,
             defeat_flag=defeat_flag, local_id=local_id, group=resolved_group,
             floor_lookup=resolved_lookup,
         )
@@ -632,8 +647,8 @@ def trainer_beats(
 def _register_retalk_beat(
     builder: ChapterBuilder, *, beat_prefix: str, page_idx: int,
     retalk_row_id: str, map_constant: str,
-    approach: tuple[int, int], facing: str, defeat_flag: str,
-    local_id: int | None, group: str, floor_lookup: FloorLookup,
+    approach: tuple[int, int], defeat_flag: str,
+    local_id: int, group: str, floor_lookup: FloorLookup,
 ) -> None:
     name = f"{beat_prefix}_retalk{page_idx}"
 
@@ -681,12 +696,7 @@ def _register_retalk_beat(
                 f"{name} precondition failed: {defeat_flag} not set -- "
                 "the battle beat must run first"
             )
-        if local_id is not None:
-            _press_a_live(emu, name, local_id, facing)
-        else:
-            emu.walk_to(*approach, absorb_wild=True)
-            emu.face(facing)
-            emu.interact()
+        _press_a_in_place(emu, name, local_id)
         if text_assertions:
             for a in text_assertions:
                 _assert_floor_text(emu, a.param("text"))
@@ -709,25 +719,22 @@ def _register_retalk_beat(
     del retalk_beat  # registered via the decorator; nothing else references it
 
 
-def _press_a_live(
-    emu: Emulator, beat: str, local_id: int, facing: str, max_attempts: int = 3,
-) -> None:
-    """Byte-adapted from ch04.py's `_press_a_live` -- reads the NPC's live
-    `gObjectEvents` position rather than trusting its template cell, for a
-    trainer that walked toward the player on trigger and kept the moved
-    position (point 5 in this module's docstring)."""
-    dx, dy = {"DOWN": (0, 1), "UP": (0, -1), "LEFT": (-1, 0), "RIGHT": (1, 0)}[facing]
-    for _ in range(max_attempts):
-        ev = emu.object_event(local_id)
-        emu.walk_to(ev.x - dx, ev.y - dy, absorb_wild=True)
-        emu.face(facing)
-        try:
-            emu.interact()
-            return
-        except ScenarioError:
-            continue
-    shot = emu.screenshot(f"{beat}_live_no_interact")
-    raise ScenarioError(
-        f"{beat}: could not interact with local id {local_id} after "
-        f"{max_attempts} attempts reading its live position ({shot})"
-    )
+_FACING_VECTOR = {"DOWN": (0, 1), "UP": (0, -1), "LEFT": (-1, 0), "RIGHT": (1, 0)}
+
+
+def _press_a_in_place(emu: Emulator, beat: str, local_id: int) -> None:
+    """Point 5: the battled trainer stands on the tile the player faces;
+    press A there. Fails loud, naming both positions, when it doesn't --
+    something moved the player or the trainer between the beats."""
+    player = emu.object_event(emu.resolve_constant("LOCALID_PLAYER"))
+    dx, dy = _FACING_VECTOR[player.facing]
+    faced = (player.x + dx, player.y + dy)
+    trainer = emu.object_event(local_id)
+    if (trainer.x, trainer.y) != faced:
+        shot = emu.screenshot(f"{beat}_trainer_not_faced")
+        raise ScenarioError(
+            f"{beat}: the player at {(player.x, player.y)} faces {player.facing} "
+            f"onto {faced}, but the trainer (local id {local_id}) stands at "
+            f"{(trainer.x, trainer.y)} -- a re-talk presses A where its battle "
+            f"beat left the player ({shot})")
+    emu.interact()
