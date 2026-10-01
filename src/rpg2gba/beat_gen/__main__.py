@@ -95,7 +95,7 @@ from rpg2gba.beat_gen.review import RowLocation, render_review
 from rpg2gba.beat_gen.seam import SeamCrossing, connection_for, seam_crossings
 from rpg2gba.beat_gen.seed import route_winner
 from rpg2gba.beat_gen.page_sim import Firing
-from rpg2gba.beat_gen.select import empty_events, select_rows
+from rpg2gba.beat_gen.select import dropped_events, empty_events, select_rows
 from rpg2gba.beat_gen.round_trip import find_round_trip
 from rpg2gba.beat_gen.state_arms import FIRING_TEMPLATES, Taint, fired_pages, select_state_arms
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
@@ -888,6 +888,15 @@ def _empty_events(rows: Sequence[ManifestRow], build_dir: Path) -> set[tuple[int
     return out
 
 
+def _dropped_events(rows: Sequence[ManifestRow],
+                    build_dir: Path) -> dict[tuple[int, int], str]:
+    """`select.dropped_events` over every map `rows` touch."""
+    out: dict[tuple[int, int], str] = {}
+    for map_id in sorted({r.map_id for r in rows if r.map_id is not None}):
+        out.update(dropped_events(map_id, load_map_json(map_id, build_dir / "maps")))
+    return out
+
+
 def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                out_dir: Path = DEFAULT_OUT_DIR,
                module_dir: Path = DEFAULT_MODULE_DIR) -> ChapterPlan:
@@ -918,7 +927,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     stripped = load_map_event_strips(Path(__file__).resolve().parents[3] / "reference")
     empty = _empty_events(rows, build_dir)
     selection = split_outbound(select_rows(rows, verdicts, floors, stripped=stripped,
-                                           empty=empty),
+                                           empty=empty,
+                                           dropped=_dropped_events(rows, build_dir)),
                                floors, chain_maps,
                                successor.id if successor is not None else None)
     inbound: tuple[ManifestRow, ...] = ()
@@ -930,7 +940,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                                _chain_maps(binding, predecessor))
         inbound_sel = select_rows(inbound, {v.row_id: v for v in stories[predecessor].rows},
                                   pred_floors, stripped=stripped,
-                                  empty=_empty_events(inbound, build_dir))
+                                  empty=_empty_events(inbound, build_dir),
+                                  dropped=_dropped_events(inbound, build_dir))
         selection = Selection(owned=inbound_sel.owned + selection.owned,
                               refusals=inbound_sel.refusals + selection.refusals,
                               elsewhere=inbound_sel.elsewhere + selection.elsewhere)

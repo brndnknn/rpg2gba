@@ -670,6 +670,25 @@ def _event_transfers(event: dict) -> list[tuple[int, int, int, int | None]]:
     return out
 
 
+def blank_touch_drop(event: dict) -> bool:
+    """Does `build_object_events` drop `event` as `DROP_BLANK_TRIGGER1`?
+
+    Its boot page has no graphic and a player-touch trigger, and no page
+    anywhere transfers (a transferring one is a gated door, kept as a
+    coord_event). The one predicate both the converter and `beat_gen`
+    read, so the generator never writes a beat for an event the ROM
+    lacks (ROM run 53: Route 1's surf-cancel tiles, ev143-147). Strip-
+    listed, stair and template events are decided before this test."""
+    page = select_boot_page(event)
+    if page is None:
+        return False
+    return (
+        not page.get("graphic", {}).get("character_name")
+        and page.get("trigger") == TRIGGER_PLAYER_TOUCH
+        and not _event_transfers(event)
+    )
+
+
 def _page_has_transfer(page: dict) -> bool:
     """Does this single page carry a code-201 Transfer Player?"""
     return any(cmd["code"] == TRANSFER_CODE for cmd in page.get("list", []))
@@ -2564,8 +2583,9 @@ def build_object_events(
                 # doc). It is a real, live door: keep it as a coord_event so the
                 # dispatcher picks the page and that page's body runs its own
                 # warp(). Blank player-touch events with NO transfer anywhere
-                # are the original inert shape and still drop.
-                if _event_transfers(event):
+                # are the original inert shape and still drop
+                # (`blank_touch_drop`, which beat_gen reads too).
+                if not blank_touch_drop(event):
                     emit_kind = "coord"
                     gated_door = True
                 else:

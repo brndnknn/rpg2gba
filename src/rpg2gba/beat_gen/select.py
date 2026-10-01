@@ -15,6 +15,8 @@ from rpg2gba.beat_floor.assertion import RowFloor
 from rpg2gba.beat_gen.plan import Blocker, Elsewhere, Refusal, Selection
 from rpg2gba.chapter_manifest.schema import ManifestRow
 from rpg2gba.story_state.model import RowVerdict
+from rpg2gba.tileset_converter.metadata_wiring import blank_touch_drop
+from rpg2gba.tileset_converter.stairs import stair_event_ids
 
 # reason id -> Blocker. Test-pinned (10 reasons; `01_select.md`/research §1d)
 # plus the row-kind-level "no story verdict" reason select.py itself mints.
@@ -114,6 +116,31 @@ def empty_events(map_id: int, map_json: Mapping) -> set[tuple[int, int]]:
     return out
 
 
+def dropped_events(map_id: int, map_json: Mapping) -> dict[tuple[int, int], str]:
+    """(map, event) -> detail for every event on one decoded map that the
+    converter drops as `blank_trigger1` (`metadata_wiring.blank_touch_drop`,
+    the converter's own test). The ROM never carries them, so their rows
+    are `converter_dropped`. The detail quotes the boot page's script so
+    the review doc says what was dropped: the Surf work re-checks the
+    vehicle-cancel ones against the engine's native dismount
+    (PROJECT_TODO.md #119, 2026-09-30 operator ruling)."""
+    out: dict[tuple[int, int], str] = {}
+    # Stair cells drop earlier (`DROP_STAIR`) and are terrain rows, not this.
+    stairs = stair_event_ids(dict(map_json))
+    for event in map_json.get("events") or []:
+        if not event or event["id"] in stairs or not blank_touch_drop(event):
+            continue
+        scripts = [
+            p for page in event.get("pages") or [] for c in page.get("list") or []
+            if c.get("code") in (111, 355, 655)
+            for p in (c.get("parameters") or [])[-1:] if isinstance(p, str)
+        ]
+        out[(map_id, event["id"])] = (
+            "converter drops it (blank_trigger1: blank graphic, player touch, no "
+            "transfer)" + (f"; script: {' / '.join(scripts)}" if scripts else ""))
+    return out
+
+
 def select_rows(
     rows: Sequence[ManifestRow],
     verdicts: Mapping[str, RowVerdict],
@@ -121,6 +148,7 @@ def select_rows(
     *,
     stripped: Mapping[tuple[int, int], str | None] | None = None,
     empty: Collection[tuple[int, int]] = frozenset(),
+    dropped: Mapping[tuple[int, int], str] | None = None,
 ) -> Selection:
     """Sort every manifest row into owned / refused / elsewhere.
 
@@ -136,7 +164,10 @@ def select_rows(
     no-port `Luz` lamps, and the ROM run found nothing to talk to).
 
     `empty` is `empty_events` over the chapter's maps: those events' rows
-    are `empty_page`, right after the strip rule."""
+    are `empty_page`, right after the strip rule.
+
+    `dropped` is `dropped_events` over the chapter's maps: those events'
+    rows are `converter_dropped`, after the empty rule."""
     owned: list[ManifestRow] = []
     refusals: list[Refusal] = []
     elsewhere: list[Elsewhere] = []
@@ -159,6 +190,13 @@ def select_rows(
             elsewhere.append(Elsewhere(
                 row.row_id, "empty_page",
                 detail="every page of the event is empty; nothing to check on the ROM"))
+            continue
+
+        # Rule 1c: the converter drops the event, so the ROM never carries it.
+        if dropped and row.event_id is not None and (row.map_id, row.event_id) in dropped:
+            elsewhere.append(Elsewhere(
+                row.row_id, "converter_dropped",
+                detail=dropped[(row.map_id, row.event_id)]))
             continue
 
         verdict = verdicts.get(row.row_id)

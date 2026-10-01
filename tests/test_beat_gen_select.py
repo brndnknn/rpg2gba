@@ -282,3 +282,46 @@ def test_empty_event_rows_are_empty_page_not_owned():
     assert sel.owned == () and sel.refusals == ()
     assert [(e.row_id, e.status) for e in sel.elsewhere] == [("map050/ev018/p0", "empty_page")]
     assert sel.elsewhere[0].detail
+
+
+def _touch_event(eid: int, *commands: dict, character: str = "") -> dict:
+    return {"id": eid, "x": eid, "y": 11, "name": f"EV{eid:03d}", "pages": [{
+        "trigger": 1, "condition": {}, "graphic": {"character_name": character},
+        "list": [*commands, {"code": 0, "parameters": []}],
+    }]}
+
+
+_SURF_CANCEL = (
+    {"code": 111, "parameters": [12, "$PokemonGlobal.surfing"]},
+    {"code": 355, "parameters": ["Kernel.pbCancelVehicles"]},
+)
+
+
+def test_dropped_events_follow_the_converter_rule():
+    """ROM run 53: Route 1's surf-cancel tiles (blank, player touch, no
+    transfer) never reach the ROM. A transferring one is a gated door and a
+    visible one an object; both are kept, so neither is listed."""
+    map_json = {"events": [
+        None,
+        _touch_event(147, *_SURF_CANCEL),
+        _touch_event(5, {"code": 201, "parameters": [0, 32, 1, 1, 0, 0]}),
+        _touch_event(6, *_SURF_CANCEL, character="trainer_POKEMONTRAINER_Brendan"),
+    ]}
+    got = select.dropped_events(33, map_json)
+    assert list(got) == [(33, 147)]
+    assert "blank_trigger1" in got[(33, 147)]
+    assert "$PokemonGlobal.surfing / Kernel.pbCancelVehicles" in got[(33, 147)]
+
+
+def test_dropped_event_rows_are_converter_dropped_not_owned():
+    from rpg2gba.beat_floor.assertion import RowFloor
+    from rpg2gba.chapter_manifest.schema import ManifestRow
+
+    row = ManifestRow(row_id="map033/ev147/p0", kind="page", map_id=33, content_hash="x",
+                      event_id=147)
+    floor = RowFloor(row_id=row.row_id, trigger="player_touch", assertions=(), refusals=())
+    sel = select.select_rows([row], {}, {row.row_id: floor},
+                             dropped={(33, 147): "converter drops it"})
+    assert sel.owned == () and sel.refusals == ()
+    assert [(e.row_id, e.status) for e in sel.elsewhere] == [
+        ("map033/ev147/p0", "converter_dropped")]

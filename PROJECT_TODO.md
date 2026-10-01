@@ -17,6 +17,23 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 119. Surf work: re-check converter-dropped vehicle tiles against the native dismount
+
+`metadata_wiring.blank_touch_drop` (`DROP_BLANK_TRIGGER1`) drops every
+blank-graphic player-touch event that never transfers, corpus-wide, as inert.
+Some aren't inert: Route 1's ev143-147 (Map033 (43..47,11)) run
+`if $PokemonGlobal.surfing: pbCancelVehicles`. ROM run 53 (2026-09-30) failed
+on them; the operator ruled they become `converter_dropped` rows in beat_gen
+(`select.dropped_events`, detail quotes the script), not strip-listed, so they
+stay visible. **When Surf (or Dive/bike) is converted:** list every
+`converter_dropped` row whose script tests `$PokemonGlobal.surfing`/`diving`/
+`bicycle` or calls `pbCancelVehicles`, and check each against Emerald's own
+dismount (stepping onto land ends Surf). Route 1's five sit one row *inland*
+of the pond's shore row, so native dismount should already cover them -- but
+why Uranium placed them there is unverified. Any that isn't covered needs a
+real coord event, which needs the transpiler's UNHANDLED `$PokemonGlobal.surfing`
+branch handled first.
+
 ### 118. `emu.face()` steps the player when they already face that way
 
 Pressing the direction the player already faces is a walk in pokeemerald, not
